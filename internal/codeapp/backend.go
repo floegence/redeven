@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/floegence/redeven/internal/codeapp/appserver"
+	"github.com/floegence/redeven/internal/codeapp/codeserver"
 	"github.com/floegence/redeven/internal/codeapp/registry"
 	"github.com/floegence/redeven/internal/filesystemscope"
 )
@@ -250,25 +251,38 @@ func (s *Service) CodeRuntimeStatus(ctx context.Context) (appserver.CodeRuntimeS
 	return appserver.CodeRuntimeStatus(s.runtime.Status(ctx)), nil
 }
 
-func (s *Service) CreateCodeRuntimeImportSession(ctx context.Context, manifest appserver.CodeRuntimeArtifactManifest) (appserver.CodeRuntimeImportSession, error) {
+func (s *Service) CreateCodeRuntimeSetupOperation(
+	ctx context.Context,
+	operationID string,
+	installMethod codeserver.BrowserEditorInstallMethod,
+	manifest *appserver.CodeRuntimeArtifactManifest,
+) (appserver.CodeRuntimeSetupOperation, error) {
 	if s == nil || s.runtime == nil {
-		return appserver.CodeRuntimeImportSession{}, errors.New("code runtime not ready")
+		return appserver.CodeRuntimeSetupOperation{}, errors.New("code runtime not ready")
 	}
-	return s.runtime.CreateImportSession(ctx, manifest)
+	return s.runtime.CreateSetupOperation(ctx, operationID, installMethod, manifest)
 }
 
-func (s *Service) AppendCodeRuntimeImportChunk(ctx context.Context, uploadID string, chunkIndex int64, body io.Reader) (appserver.CodeRuntimeImportChunkResult, error) {
+func (s *Service) AppendCodeRuntimeSetupChunk(ctx context.Context, operationID string, chunkIndex int64, body io.Reader) (appserver.CodeRuntimeSetupChunkResult, error) {
 	if s == nil || s.runtime == nil {
-		return appserver.CodeRuntimeImportChunkResult{}, errors.New("code runtime not ready")
+		return appserver.CodeRuntimeSetupChunkResult{}, errors.New("code runtime not ready")
 	}
-	return s.runtime.AppendImportChunk(ctx, uploadID, chunkIndex, body)
+	return s.runtime.AppendSetupOperationChunk(ctx, operationID, chunkIndex, body)
 }
 
-func (s *Service) CompleteCodeRuntimeImportSession(ctx context.Context, uploadID string) (appserver.CodeRuntimeStatus, error) {
+func (s *Service) CompleteCodeRuntimeSetupOperation(ctx context.Context, operationID string) (appserver.CodeRuntimeStatus, error) {
 	if s == nil || s.runtime == nil {
 		return appserver.CodeRuntimeStatus{}, errors.New("code runtime not ready")
 	}
-	status, err := s.runtime.CompleteImportSession(ctx, uploadID)
+	status, err := s.runtime.CompleteSetupOperation(ctx, operationID)
+	return appserver.CodeRuntimeStatus(status), err
+}
+
+func (s *Service) CancelCodeRuntimeSetupOperation(ctx context.Context, operationID string) (appserver.CodeRuntimeStatus, error) {
+	if s == nil || s.runtime == nil {
+		return appserver.CodeRuntimeStatus{}, errors.New("code runtime not ready")
+	}
+	status, err := s.runtime.CancelSetupOperation(ctx, operationID)
 	return appserver.CodeRuntimeStatus(status), err
 }
 

@@ -2574,7 +2574,9 @@
       "installing": "正在安装 Browser Editor...",
       "validating": "正在验证 Browser Editor...",
       "finalizing": "正在完成 Browser Editor 设置...",
-      "default": "设置 Browser Editor..."
+      "default": "设置 Browser Editor...",
+      "resolvingCatalog": "正在查询 Browser Editor 软件包信息...",
+      "downloadingInEnvironment": "此环境正在下载 Browser Editor..."
     },
     "prepare": {
       "description": "Redeven Desktop 将下载最新的 Browser Editor 软件包，在此计算机上缓存一份副本，并将其发送到连接的环境。",
@@ -2611,18 +2613,24 @@
       "continueToOpenCodespace": "继续打开 codespace",
       "continueToStartCodespace": "继续启动 codespace",
       "steps": {
-        "lookup": "检查最新编辑器",
-        "cache": "下载到 Desktop",
-        "upload": "发送到环境",
-        "verify": "校验编辑器"
+        "desktopTransfer": {
+          "catalog": "获取软件包信息",
+          "acquire": "下载到 Desktop",
+          "deliver": "发送到环境",
+          "install": "校验并安装"
+        },
+        "remoteDownload": {
+          "catalog": "获取软件包信息",
+          "acquire": "环境下载",
+          "deliver": "校验软件包",
+          "install": "安装编辑器"
+        }
       },
       "progress": {
         "lookup": "正在检查最新的 Browser Editor 软件包...",
         "downloading": "正在将 Browser Editor 下载到 Desktop...",
         "packageValidation": "正在检查缓存在 Desktop 中的 Browser Editor 软件包...",
         "finishing": "传输已完成。Redeven 正在校验并安装 Browser Editor。",
-        "cacheHit": "正在使用 Desktop 缓存，无需重复下载。",
-        "downloadedBytes": "已下载 {completed} / {total}",
         "uploadedBytes": "已发送 {completed} / {total}",
         "measuring": "正在估算当前步骤的剩余时间...",
         "rateAndEta": "{rate} · 当前步骤预计还需约 {duration}",
@@ -2632,8 +2640,13 @@
         "elapsed": "设置已耗时：{duration}",
         "secondsShort": "{value} 秒",
         "minutesShort": "{value} 分钟",
-        "downloadProgressLabel": "Browser Editor 下载进度",
-        "uploadProgressLabel": "Browser Editor 发送到环境的进度"
+        "uploadProgressLabel": "Browser Editor 发送到环境的进度",
+        "desktopCacheHit": "正在使用 Desktop 缓存，无需重复下载。",
+        "environmentCacheHit": "正在使用环境中已校验的缓存，无需重复下载。",
+        "downloadedToDesktopBytes": "已下载到 Desktop：{completed} / {total}",
+        "downloadedInEnvironmentBytes": "已在环境中下载：{completed} / {total}",
+        "desktopDownloadProgressLabel": "Browser Editor 下载到 Desktop 的进度",
+        "environmentDownloadProgressLabel": "Browser Editor 在环境中的下载进度"
       },
       "failure": {
         "desktopReleaseLookup": "无法检查最新的 Browser Editor。",
@@ -2642,7 +2655,12 @@
         "runtimeImport": "此环境无法接收 Browser Editor 包。",
         "runtimeStatus": "无法刷新 Browser Editor 设置状态。",
         "unknown": "Browser Editor 设置未成功完成。",
-        "desktopReleaseLookupDetail": "{message} Redeven 的更新 catalog 可能暂时不可用。"
+        "desktopReleaseLookupDetail": "{message} Redeven 的更新 catalog 可能暂时不可用。",
+        "remoteCatalog": "此环境无法获取 Browser Editor 软件包信息。",
+        "remoteDownload": "此环境无法下载 Browser Editor 软件包。",
+        "remoteSource": "Browser Editor 软件包来源未获允许。",
+        "packageVerification": "无法校验 Browser Editor 软件包。",
+        "installation": "Browser Editor 软件包已通过校验，但安装未完成。"
       },
       "readinessFailed": "无法检查 Browser Editor 就绪状态。",
       "willOpenAfterSetup": "设置完成后，Redeven 将打开 codespace。",
@@ -2673,6 +2691,19 @@
       "updatedMessage": "此环境现在使用托管版本 {version}。",
       "selectionFailedTitle": "选择失败",
       "versionRemovalFailedTitle": "版本移除失败"
+    },
+    "installMethod": {
+      "label": "安装方式",
+      "desktopTransfer": "Desktop 传输",
+      "remoteDownload": "环境下载",
+      "desktopTransferDescription": "Desktop 下载并校验 Browser Editor 软件包，再通过当前连接将其发送到此环境。",
+      "remoteDownloadDescription": "此环境直接从 Redeven 软件包服务下载并校验 Browser Editor 软件包。",
+      "desktopUnavailable": "当前会话未提供 Desktop 软件包传输通道，因此无法使用 Desktop 传输。",
+      "lockedWhileRunning": "设置进行期间不能更改安装方式。",
+      "desktopPath": "Desktop 网络 → 当前连接 → 环境",
+      "remotePath": "环境网络 → Redeven 软件包服务",
+      "selectedAnnouncement": "已选择安装方式：{method}。",
+      "lastAttempt": "上次尝试的安装方式：{method}。"
     }
   },
   "permissionPolicy": {

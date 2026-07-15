@@ -7,7 +7,6 @@ import {
   DESKTOP_CODE_WORKSPACE_PACKAGE_CHUNK_CHANNEL,
   DESKTOP_CODE_WORKSPACE_PACKAGE_DISPOSE_CHANNEL,
   DESKTOP_CODE_WORKSPACE_PACKAGE_PREPARE_CHANNEL,
-  DESKTOP_CODE_WORKSPACE_PREPARE_CHANNEL,
   DESKTOP_CODE_WORKSPACE_PROGRESS_CHANNEL,
   normalizeDesktopCodeWorkspaceCancelRequest,
   normalizeDesktopCodeWorkspaceCancelResponse,
@@ -17,19 +16,15 @@ import {
   normalizeDesktopCodeWorkspacePackageDisposeResponse,
   normalizeDesktopCodeWorkspacePackagePrepareRequest,
   normalizeDesktopCodeWorkspacePackagePrepareResponse,
-  normalizeDesktopCodeWorkspacePrepareRequest,
-  normalizeDesktopCodeWorkspacePrepareResponse,
   normalizeDesktopCodeWorkspaceProgress,
   type DesktopCodeWorkspaceCancelResponse,
   type DesktopCodeWorkspacePackageChunkResponse,
   type DesktopCodeWorkspacePackageDisposeResponse,
   type DesktopCodeWorkspacePackagePrepareResponse,
-  type DesktopCodeWorkspacePrepareResponse,
   type DesktopCodeWorkspaceProgress,
 } from '../shared/desktopCodeWorkspaceIPC';
 
 export interface DesktopCodeWorkspaceBridge {
-  prepareWorkspaceEngine: (request?: unknown) => Promise<DesktopCodeWorkspacePrepareResponse>;
   prepareWorkspaceEnginePackage: (request?: unknown) => Promise<DesktopCodeWorkspacePackagePrepareResponse>;
   readWorkspaceEnginePackageChunk: (request?: unknown) => Promise<DesktopCodeWorkspacePackageChunkResponse>;
   disposeWorkspaceEnginePackage: (request?: unknown) => Promise<DesktopCodeWorkspacePackageDisposeResponse>;
@@ -45,12 +40,6 @@ declare global {
 
 export function bootstrapDesktopCodeWorkspaceBridge(): void {
   const bridge: DesktopCodeWorkspaceBridge = {
-    prepareWorkspaceEngine: async (request?: unknown) => {
-      const normalized = normalizeDesktopCodeWorkspacePrepareRequest(request);
-      return normalizeDesktopCodeWorkspacePrepareResponse(
-        await ipcRenderer.invoke(DESKTOP_CODE_WORKSPACE_PREPARE_CHANNEL, normalized),
-      );
-    },
     prepareWorkspaceEnginePackage: async (request?: unknown) => {
       const normalized = normalizeDesktopCodeWorkspacePackagePrepareRequest(request);
       if (!normalized) {

@@ -2574,7 +2574,9 @@
       "installing": "Browser Editor installieren...",
       "validating": "Browser Editor wird validiert...",
       "finalizing": "Browser Editor-Setup wird abgeschlossen...",
-      "default": "Browser Editor wird eingerichtet..."
+      "default": "Browser Editor wird eingerichtet...",
+      "resolvingCatalog": "Der Paketkatalog für Browser Editor wird geprüft...",
+      "downloadingInEnvironment": "Diese Umgebung lädt Browser Editor herunter..."
     },
     "prepare": {
       "description": "Redeven Desktop lädt das neueste Browser Editor-Paket herunter, speichert eine Kopie auf diesem Computer zwischen und sendet sie an die verbundene Umgebung.",
@@ -2611,18 +2613,24 @@
       "continueToOpenCodespace": "Mit Öffnen des codespace fortfahren",
       "continueToStartCodespace": "Mit Starten des codespace fortfahren",
       "steps": {
-        "lookup": "Neuesten Editor prüfen",
-        "cache": "Auf Desktop herunterladen",
-        "upload": "An Umgebung senden",
-        "verify": "Editor prüfen"
+        "desktopTransfer": {
+          "catalog": "Paketinformationen abrufen",
+          "acquire": "In Redeven Desktop herunterladen",
+          "deliver": "An Umgebung senden",
+          "install": "Prüfen und installieren"
+        },
+        "remoteDownload": {
+          "catalog": "Paketinformationen abrufen",
+          "acquire": "In der Umgebung herunterladen",
+          "deliver": "Paket prüfen",
+          "install": "Editor installieren"
+        }
       },
       "progress": {
         "lookup": "Das neueste Browser Editor-Paket wird ermittelt...",
         "downloading": "Browser Editor wird in Redeven Desktop heruntergeladen...",
         "packageValidation": "Das in Redeven Desktop zwischengespeicherte Browser Editor-Paket wird geprüft...",
         "finishing": "Die Übertragung ist abgeschlossen. Redeven prüft und installiert Browser Editor.",
-        "cacheHit": "Der Cache von Redeven Desktop wird verwendet. Ein erneuter Download ist nicht erforderlich.",
-        "downloadedBytes": "{completed} von {total} heruntergeladen",
         "uploadedBytes": "{completed} von {total} gesendet",
         "measuring": "Verbleibende Zeit für diesen Schritt wird berechnet...",
         "rateAndEta": "{rate} · Noch etwa {duration} für diesen Schritt",
@@ -2632,8 +2640,13 @@
         "elapsed": "Einrichtung läuft seit {duration}",
         "secondsShort": "{value} s",
         "minutesShort": "{value} Min.",
-        "downloadProgressLabel": "Downloadfortschritt für Browser Editor",
-        "uploadProgressLabel": "Fortschritt bei der Übertragung des Browser Editor-Pakets an die Umgebung"
+        "uploadProgressLabel": "Fortschritt bei der Übertragung des Browser Editor-Pakets an die Umgebung",
+        "desktopCacheHit": "Der Cache von Redeven Desktop wird verwendet. Kein erneuter Download erforderlich.",
+        "environmentCacheHit": "Das geprüfte Paket aus dem Cache der Umgebung wird verwendet. Kein erneuter Download erforderlich.",
+        "downloadedToDesktopBytes": "In Redeven Desktop heruntergeladen: {completed} von {total}",
+        "downloadedInEnvironmentBytes": "In der Umgebung heruntergeladen: {completed} von {total}",
+        "desktopDownloadProgressLabel": "Fortschritt beim Herunterladen des Browser Editor-Pakets in Redeven Desktop",
+        "environmentDownloadProgressLabel": "Fortschritt beim Herunterladen des Browser Editor-Pakets in der Umgebung"
       },
       "failure": {
         "desktopReleaseLookup": "Der neueste Browser Editor konnte nicht überprüft werden.",
@@ -2642,7 +2655,12 @@
         "runtimeImport": "Diese Umgebung konnte das Paket Browser Editor nicht empfangen.",
         "runtimeStatus": "Der Setup-Status von Browser Editor konnte nicht aktualisiert werden.",
         "unknown": "Browser Editor-Setup wurde nicht erfolgreich abgeschlossen.",
-        "desktopReleaseLookupDetail": "{message} Der Redeven update catalog ist möglicherweise vorübergehend nicht verfügbar."
+        "desktopReleaseLookupDetail": "{message} Der Redeven update catalog ist möglicherweise vorübergehend nicht verfügbar.",
+        "remoteCatalog": "Diese Umgebung konnte den Paketkatalog für Browser Editor nicht lesen.",
+        "remoteDownload": "Diese Umgebung konnte das Browser Editor-Paket nicht herunterladen.",
+        "remoteSource": "Die Quelle des Browser Editor-Pakets wurde abgelehnt.",
+        "packageVerification": "Das Browser Editor-Paket konnte nicht überprüft werden.",
+        "installation": "Das Browser Editor-Paket wurde überprüft, die Installation jedoch nicht abgeschlossen."
       },
       "readinessFailed": "Die Bereitschaft von Browser Editor konnte nicht geprüft werden.",
       "willOpenAfterSetup": "Redeven öffnet den codespace nach der Einrichtung.",
@@ -2673,6 +2691,19 @@
       "updatedMessage": "Diese Umgebung verwendet jetzt die verwaltete Version {version}.",
       "selectionFailedTitle": "Auswahl fehlgeschlagen",
       "versionRemovalFailedTitle": "Entfernen der Version fehlgeschlagen"
+    },
+    "installMethod": {
+      "label": "Installationsmethode",
+      "desktopTransfer": "Desktop-Übertragung",
+      "remoteDownload": "Download in der Umgebung",
+      "desktopTransferDescription": "Desktop lädt das Browser Editor-Paket herunter, überprüft es und sendet es über die aktuelle Verbindung an diese Umgebung.",
+      "remoteDownloadDescription": "Diese Umgebung lädt das Browser Editor-Paket direkt vom Paketdienst von Redeven herunter und überprüft es.",
+      "desktopUnavailable": "Die Desktop-Übertragung ist nicht verfügbar, da diese Sitzung keine Desktop-Paket-Bridge bereitstellt.",
+      "lockedWhileRunning": "Die Installationsmethode kann während der Einrichtung nicht geändert werden.",
+      "desktopPath": "Desktop-Netzwerk → aktuelle Verbindung → Umgebung",
+      "remotePath": "Umgebungsnetzwerk → Paketdienst von Redeven",
+      "selectedAnnouncement": "Ausgewählte Installationsmethode: {method}.",
+      "lastAttempt": "Beim letzten Versuch wurde die Installationsmethode „{method}“ verwendet."
     }
   },
   "permissionPolicy": {

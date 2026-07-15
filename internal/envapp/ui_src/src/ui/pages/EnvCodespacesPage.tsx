@@ -25,12 +25,12 @@ import { FlowerContextMenuIcon } from "../icons/FlowerSoftAuraIcon";
 import { useRedevenRpc, type FsFileInfo } from "../protocol/redeven_v1";
 import { Tooltip } from "../primitives/Tooltip";
 import {
-  cancelCodeRuntimeOperation,
   codeRuntimeMissing,
   codeRuntimeOperationRunning,
   codeRuntimePrepareIntent,
   codeRuntimeReady,
   fetchCodeRuntimeStatus,
+  type BrowserEditorInstallMethod,
   type CodeRuntimeStatus,
 } from "../services/codeRuntimeApi";
 import { BrowserEditorSetupActivityPanel } from "./BrowserEditorSetupActivityPanel";
@@ -55,16 +55,16 @@ import {
   openCodespaceWindowInDesktopShell,
   openExternalURLInDesktopShell,
 } from "../services/desktopShellBridge";
+import { desktopCodeWorkspacePrepareAvailable } from "../services/desktopCodeWorkspaceBridge";
 import {
-  cancelWorkspaceEnginePreparation,
-  desktopCodeWorkspacePrepareAvailable,
-  prepareWorkspaceEngineWithDesktop,
-} from "../services/desktopCodeWorkspaceBridge";
+  cancelBrowserEditorSetup,
+  defaultBrowserEditorInstallMethod,
+  prepareBrowserEditorSetup,
+} from "../services/browserEditorSetup";
 import {
   createBrowserEditorSetupOperationID,
   type BrowserEditorSetupProgress,
 } from "../services/browserEditorSetupProgress";
-import { readDesktopSessionContextSnapshot } from "../services/desktopSessionContext";
 import { RedevenLoadingCurtain } from "../primitives/RedevenLoadingCurtain";
 import { buildFilePathFlowerTurnLauncherIntent } from "../utils/filePathAskFlower";
 import { canOpenDirectoryPathInTerminal, openDirectoryInTerminal } from "../utils/openDirectoryInTerminal";
@@ -780,6 +780,9 @@ function CodeRuntimePreparePanel(props: {
   pendingIntent: PendingCodespaceIntent;
   prepareSubmitting: boolean;
   cancelSubmitting: boolean;
+  installMethod: BrowserEditorInstallMethod;
+  desktopTransferAvailable: boolean;
+  onInstallMethodChange: (method: BrowserEditorInstallMethod) => void;
   onPrepare: () => void;
   onCancel: () => void;
   onContinue: () => void;
@@ -798,9 +801,10 @@ function CodeRuntimePreparePanel(props: {
     localFailure: props.localFailure,
     localCancelled: props.localCancelled,
     localProgress: props.localProgress,
+    installMethod: props.installMethod,
     pendingIntent: pendingActivityIntent(),
   });
-  const prepareCopy = () => localizeBrowserEditorPrepareCopy(codeRuntimePrepareIntent(props.status), i18n);
+  const prepareCopy = () => localizeBrowserEditorPrepareCopy(codeRuntimePrepareIntent(props.status), props.installMethod, i18n);
   const activity = () => localizeBrowserEditorSetupActivity(rawActivity(), {
     status: props.status,
     loading: props.loading,
@@ -809,7 +813,7 @@ function CodeRuntimePreparePanel(props: {
     localFailure: props.localFailure,
     localCancelled: props.localCancelled,
     localProgress: props.localProgress,
-    prepareDescription: prepareCopy().description,
+    installMethod: props.installMethod,
     pendingIntent: pendingActivityIntent(),
   }, i18n);
   const runtimeReady = () => codeRuntimeReady(props.status);
@@ -879,6 +883,10 @@ function CodeRuntimePreparePanel(props: {
         cancelSubmitting={props.cancelSubmitting}
         actionLabel={activity().can_retry ? i18n.t("codespaces.prepare.retrySetup") : prepareCopy().actionLabel}
         runningLabel={prepareCopy().runningLabel}
+        installMethod={props.installMethod}
+        desktopTransferAvailable={props.desktopTransferAvailable}
+        installMethodLocked={props.prepareSubmitting || activity().state === "preparing"}
+        onInstallMethodChange={props.onInstallMethodChange}
         onPrepare={props.onPrepare}
         onCancel={props.onCancel}
         onContinue={props.onContinue}
@@ -953,6 +961,9 @@ export function EnvCodespacesPage() {
   const [runtimePrepareOperationID, setRuntimePrepareOperationID] = createSignal<string | null>(null);
   const [runtimePrepareCancelRequestedID, setRuntimePrepareCancelRequestedID] = createSignal<string | null>(null);
   const [runtimePrepareSubmitting, setRuntimePrepareSubmitting] = createSignal(false);
+  const [runtimeInstallMethod, setRuntimeInstallMethod] = createSignal<BrowserEditorInstallMethod>(defaultBrowserEditorInstallMethod());
+  const [runtimePrepareActiveMethod, setRuntimePrepareActiveMethod] = createSignal<BrowserEditorInstallMethod | null>(null);
+  let runtimePrepareAbortController: AbortController | null = null;
   const [runtimeCancelSubmitting, setRuntimeCancelSubmitting] = createSignal(false);
   const [busyActions, setBusyActions] = createSignal<Record<string, CodespaceBusyAction | undefined>>({});
   const [codespaceContextMenu, setCodespaceContextMenu] = createSignal<CodespaceContextMenuState | null>(null);
@@ -1138,9 +1149,13 @@ export function EnvCodespacesPage() {
     setPendingIntent(intent);
   };
 
-  const startWorkspacePrepareFlow = async (reason: "open" | "start" | "settings" | "retry" = "retry") => {
+  const startWorkspacePrepareFlow = async () => {
     const operationID = createBrowserEditorSetupOperationID();
+    const installMethod = runtimeInstallMethod();
+    const abortController = new AbortController();
+    runtimePrepareAbortController = abortController;
     setRuntimePrepareOperationID(operationID);
+    setRuntimePrepareActiveMethod(installMethod);
     setRuntimePrepareCancelRequestedID(null);
     setRuntimePrepareLocalPending(true);
     setRuntimePrepareSubmitting(true);
@@ -1153,14 +1168,11 @@ export function EnvCodespacesPage() {
       updated_at_unix_ms: Date.now(),
     });
     try {
-      if (!desktopCodeWorkspacePrepareAvailable()) {
-        throw new Error(i18n.t("codespaces.prepare.desktopRequired"));
-      }
-      const result = await prepareWorkspaceEngineWithDesktop({
-        reason,
+      const result = await prepareBrowserEditorSetup({
         status: runtimeStatus(),
-        preferSessionUpload: readDesktopSessionContextSnapshot()?.target_route === "remote_desktop",
         operationID,
+        installMethod,
+        signal: abortController.signal,
         onProgress: (progress) => {
           if (runtimePrepareOperationID() === operationID) setRuntimePrepareProgress(progress);
         },
@@ -1179,7 +1191,7 @@ export function EnvCodespacesPage() {
         setRuntimePrepareLocalCancelled(true);
         return;
       }
-      const failure = browserEditorLocalFailureFromError(e);
+      const failure = browserEditorLocalFailureFromError(e, installMethod);
       const intent = pendingIntent();
       setRuntimePrepareLocalFailure(failure);
       notification.error(i18n.t("codespaces.notifications.browserEditorSetupFailedTitle"), failure.message);
@@ -1195,9 +1207,12 @@ export function EnvCodespacesPage() {
       await refetchRuntimeStatus();
     } finally {
       if (runtimePrepareOperationID() === operationID) {
+        runtimePrepareAbortController = null;
         setRuntimePrepareOperationID(null);
+        setRuntimePrepareActiveMethod(null);
         setRuntimePrepareSubmitting(false);
         setRuntimePrepareLocalPending(false);
+        setRuntimeInstallMethod(defaultBrowserEditorInstallMethod());
       }
     }
   };
@@ -1218,19 +1233,19 @@ export function EnvCodespacesPage() {
       name: space.name || space.code_space_id,
       ...(kind === "open" && openTarget ? { open_target: openTarget } : {}),
     });
-    void startWorkspacePrepareFlow(kind);
     return false;
   };
 
   const cancelRuntimePrepareFlow = async () => {
     const operationID = runtimePrepareOperationID();
+    const installMethod = runtimePrepareActiveMethod();
     if (operationID) setRuntimePrepareCancelRequestedID(operationID);
+    runtimePrepareAbortController?.abort();
     setRuntimeCancelSubmitting(true);
     try {
-      await Promise.allSettled([
-        ...(operationID ? [cancelWorkspaceEnginePreparation(operationID)] : []),
-        cancelCodeRuntimeOperation(),
-      ]);
+      if (operationID && installMethod) {
+        await cancelBrowserEditorSetup(operationID, installMethod);
+      }
       if (operationID) setRuntimePrepareLocalCancelled(true);
       await refetchRuntimeStatus();
     } catch (e) {
@@ -1539,8 +1554,11 @@ export function EnvCodespacesPage() {
               pendingIntent={pendingIntent()}
               prepareSubmitting={runtimePrepareSubmitting()}
               cancelSubmitting={runtimeCancelSubmitting()}
+              installMethod={runtimeInstallMethod()}
+              desktopTransferAvailable={desktopCodeWorkspacePrepareAvailable()}
+              onInstallMethodChange={(method) => setRuntimeInstallMethod(method)}
               onPrepare={() => {
-                void startWorkspacePrepareFlow("retry");
+                void startWorkspacePrepareFlow();
               }}
               onCancel={() => {
                 void cancelRuntimePrepareFlow();

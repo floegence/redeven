@@ -32,10 +32,7 @@ type RuntimeControlServiceRoute =
   | 'v1/provider-link'
   | 'v1/provider-link/connect'
   | 'v1/provider-link/disconnect'
-  | 'v1/code-workspace-engine/status'
-  | 'v1/code-workspace-engine/import-sessions'
-  | `v1/code-workspace-engine/import-sessions/${string}/chunks/${number}`
-  | `v1/code-workspace-engine/import-sessions/${string}/complete`;
+  | 'v1/code-workspace-engine/status';
 
 export type RuntimeControlProviderLinkStatus = Readonly<{
   linked?: boolean;
@@ -57,17 +54,6 @@ export type RuntimeControlProviderLinkRequest = Readonly<{
     access_point_origin?: string;
     binding_generation?: number;
   }>;
-}>;
-
-export type CodeWorkspaceEngineImportSessionRequest = Readonly<{
-  manifest: unknown;
-}>;
-
-export type CodeWorkspaceEngineImportChunkResult = Readonly<{
-  upload_id: string;
-  received_bytes: number;
-  expected_bytes: number;
-  next_chunk_index: number;
 }>;
 
 function compact(value: unknown): string {
@@ -260,76 +246,4 @@ export async function getCodeWorkspaceEngineStatus(
 ): Promise<unknown> {
   const envelope = await requestRuntimeControl(endpoint, 'v1/code-workspace-engine/status', { method: 'GET', signal });
   return envelope.data;
-}
-
-export async function createCodeWorkspaceEngineImportSession(
-  endpoint: DesktopRuntimeControlEndpoint,
-  request: CodeWorkspaceEngineImportSessionRequest,
-  signal?: AbortSignal,
-): Promise<unknown> {
-  const envelope = await requestRuntimeControl(endpoint, 'v1/code-workspace-engine/import-sessions', {
-    method: 'POST',
-    body: request,
-    timeoutMs: 60_000,
-    signal,
-  });
-  return envelope.data;
-}
-
-export async function appendCodeWorkspaceEngineImportChunk(
-  endpoint: DesktopRuntimeControlEndpoint,
-  uploadID: string,
-  chunkIndex: number,
-  chunk: Buffer,
-  signal?: AbortSignal,
-): Promise<CodeWorkspaceEngineImportChunkResult> {
-  const cleanUploadID = encodeURIComponent(compact(uploadID));
-  const cleanChunkIndex = Math.max(0, Math.floor(chunkIndex));
-  const envelope = await requestRuntimeControl(
-    endpoint,
-    `v1/code-workspace-engine/import-sessions/${cleanUploadID}/chunks/${cleanChunkIndex}`,
-    {
-      method: 'PUT',
-      rawBody: chunk,
-      contentType: 'application/octet-stream',
-      timeoutMs: 120_000,
-      signal,
-    },
-  );
-  return parseCodeWorkspaceEngineImportChunkResult(envelope.data);
-}
-
-export async function completeCodeWorkspaceEngineImportSession(
-  endpoint: DesktopRuntimeControlEndpoint,
-  uploadID: string,
-  signal?: AbortSignal,
-): Promise<unknown> {
-  const cleanUploadID = encodeURIComponent(compact(uploadID));
-  const envelope = await requestRuntimeControl(
-    endpoint,
-    `v1/code-workspace-engine/import-sessions/${cleanUploadID}/complete`,
-    {
-      method: 'POST',
-      timeoutMs: 120_000,
-      signal,
-    },
-  );
-  return envelope.data;
-}
-
-function parseCodeWorkspaceEngineImportChunkResult(data: unknown): CodeWorkspaceEngineImportChunkResult {
-  const record = data && typeof data === 'object' ? data as Record<string, unknown> : {};
-  const uploadID = compact(record.upload_id);
-  const receivedBytes = Number(record.received_bytes);
-  const expectedBytes = Number(record.expected_bytes);
-  const nextChunkIndex = Number(record.next_chunk_index);
-  if (!uploadID || !Number.isFinite(receivedBytes) || !Number.isFinite(expectedBytes) || !Number.isFinite(nextChunkIndex)) {
-    throw new RuntimeControlError('CODE_WORKSPACE_ENGINE_INVALID_RESPONSE', 'Runtime control did not return a valid workspace engine chunk result.');
-  }
-  return {
-    upload_id: uploadID,
-    received_bytes: Math.max(0, Math.floor(receivedBytes)),
-    expected_bytes: Math.max(0, Math.floor(expectedBytes)),
-    next_chunk_index: Math.max(0, Math.floor(nextChunkIndex)),
-  };
 }

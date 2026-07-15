@@ -219,6 +219,67 @@ describe('code workspace engine release assets', () => {
     expect((await fs.readdir(dir)).filter((name) => name.endsWith('.download.tmp'))).toEqual([]);
   });
 
+  it('allows a multi-interval download to outlive the response header timeout while bytes keep arriving', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-code-workspace-asset-'));
+    tempDirs.push(dir);
+    const archivePath = path.join(dir, 'code-server.tar.gz');
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        setTimeout(() => controller.enqueue(new Uint8Array([1])), 20);
+        setTimeout(() => controller.enqueue(new Uint8Array([2])), 40);
+        setTimeout(() => {
+          controller.enqueue(new Uint8Array([3]));
+          controller.close();
+        }, 60);
+      },
+    }))));
+
+    await expect(ensureCodeWorkspaceEngineArchive({
+      version: '4.109.1',
+      release_tag: 'v4.109.1',
+      release_url: 'https://github.com/coder/code-server/releases/tag/v4.109.1',
+      asset_name: 'code-server-4.109.1-linux-amd64.tar.gz',
+      download_url: 'https://browser-editor-package.example.test/code-server/v4.109.1/code-server-4.109.1-linux-amd64.tar.gz',
+      sha256: '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81',
+      size_bytes: 3,
+      platform: platform(),
+      root_dir_hint: 'code-server-4.109.1-linux-amd64',
+    }, archivePath, {
+      timeout_ms: 10,
+      download_idle_timeout_ms: 30,
+    })).resolves.toMatchObject({ from_cache: false, size_bytes: 3 });
+  });
+
+  it('fails and removes the partial file when the download has no bytes for the idle timeout', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-code-workspace-asset-'));
+    tempDirs.push(dir);
+    const archivePath = path.join(dir, 'code-server.tar.gz');
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => new Response(new ReadableStream<Uint8Array>({
+      start(controller) {
+        init?.signal?.addEventListener('abort', () => {
+          controller.error(new DOMException('aborted', 'AbortError'));
+        }, { once: true });
+      },
+    }))));
+
+    await expect(ensureCodeWorkspaceEngineArchive({
+      version: '4.109.1',
+      release_tag: 'v4.109.1',
+      release_url: 'https://github.com/coder/code-server/releases/tag/v4.109.1',
+      asset_name: 'code-server-4.109.1-linux-amd64.tar.gz',
+      download_url: 'https://browser-editor-package.example.test/code-server/v4.109.1/code-server-4.109.1-linux-amd64.tar.gz',
+      sha256: '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81',
+      size_bytes: 3,
+      platform: platform(),
+      root_dir_hint: 'code-server-4.109.1-linux-amd64',
+    }, archivePath, {
+      timeout_ms: 10,
+      download_idle_timeout_ms: 30,
+    })).rejects.toThrow('Browser Editor package download received no data for 30ms.');
+    await expect(fs.stat(archivePath)).rejects.toMatchObject({ code: 'ENOENT' });
+    expect((await fs.readdir(dir)).filter((name) => name.endsWith('.download.tmp'))).toEqual([]);
+  });
+
   it('rejects a downloaded archive when it does not match the catalog checksum', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-code-workspace-asset-'));
     tempDirs.push(dir);

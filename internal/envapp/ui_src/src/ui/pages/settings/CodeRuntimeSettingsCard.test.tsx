@@ -10,6 +10,7 @@ const i18nTestState = vi.hoisted(() => ({
 
 import { CodeRuntimeSettingsCard, type CodeRuntimeSettingsCardProps } from './CodeRuntimeSettingsCard';
 import { browserEditorLocalFailureFromError } from '../../services/browserEditorSetupActivity';
+import { BrowserEditorSetupError } from '../../services/browserEditorSetupError';
 
 vi.mock('../../i18n', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../i18n')>();
@@ -38,6 +39,8 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   ChevronRight: (props: any) => <span class={props.class} data-testid="chevron-right-icon" />,
   Check: (props: any) => <span class={props.class} data-testid="check-icon" />,
   Code: (props: any) => <span class={props.class} data-testid="code-icon" />,
+  Cloud: (props: any) => <span class={props.class} data-testid="cloud-icon" />,
+  Cpu: (props: any) => <span class={props.class} data-testid="cpu-icon" />,
   RefreshIcon: (props: any) => <span class={props.class} data-testid="refresh-icon" />,
   X: (props: any) => <span class={props.class} data-testid="x-icon" />,
 }));
@@ -169,6 +172,9 @@ function renderCard(host: HTMLElement, overrides: Partial<CodeRuntimeSettingsCar
     cancelLoading: false,
     selectionLoadingVersion: null,
     removeVersionLoading: null,
+    installMethod: 'desktop_transfer',
+    desktopTransferAvailable: true,
+    onInstallMethodChange: () => undefined,
     onRefresh: () => undefined,
     onPrepare: () => undefined,
     onSelectVersion: () => undefined,
@@ -204,7 +210,7 @@ describe('CodeRuntimeSettingsCard', () => {
 
     const tooltipContents = Array.from(host.querySelectorAll('[data-testid="tooltip"]')).map((node) => node.getAttribute('data-content'));
     expect(tooltipContents).toContain('Re-scan the Browser Editor inventory and active runtime.');
-    expect(tooltipContents).toContain('Download and send the latest Browser Editor package to the connected environment.');
+    expect(tooltipContents).toContain('Desktop downloads and verifies the Browser Editor package, then sends it through the current connection to this environment.');
   });
 
   it('renders Browser Editor inventory sections with zh-CN settings copy', () => {
@@ -226,7 +232,7 @@ describe('CodeRuntimeSettingsCard', () => {
 
     const tooltipContents = Array.from(host.querySelectorAll('[data-testid="tooltip"]')).map((node) => node.getAttribute('data-content'));
     expect(tooltipContents).toContain('重新扫描 Browser Editor 库存和活动运行时。');
-    expect(tooltipContents).toContain('下载最新的 Browser Editor 软件包并发送到连接的环境。');
+    expect(tooltipContents).toContain('Desktop 下载并校验 Browser Editor 软件包，再通过当前连接将其发送到此环境。');
   });
 
   it('renders unsupported platform diagnostics in zh-CN without a retry action', () => {
@@ -300,7 +306,7 @@ describe('CodeRuntimeSettingsCard', () => {
     prepareButton?.click();
 
     expect(host.textContent).toContain('Update Browser Editor');
-    expect(host.textContent).toContain('Redeven Desktop will update the Browser Editor');
+    expect(host.textContent).toContain('Desktop downloads and verifies the Browser Editor package');
 
     const confirmButton = Array.from(host.querySelectorAll('button')).filter((button) => button.textContent === 'Update Browser Editor').at(-1);
     confirmButton?.click();
@@ -345,7 +351,7 @@ describe('CodeRuntimeSettingsCard', () => {
         managed_runtime_source: 'none',
         managed_runtime_version: '',
       }),
-      localPrepareFailure: browserEditorLocalFailureFromError(new Error('Redeven Browser Editor catalog lookup failed with HTTP 503.'), () => 123),
+      localPrepareFailure: browserEditorLocalFailureFromError(new BrowserEditorSetupError('desktop_release_lookup', 'Redeven Browser Editor catalog lookup failed with HTTP 503.'), 'desktop_transfer', () => 123),
     });
 
     expect(host.textContent).toContain('Browser Editor');
@@ -378,7 +384,7 @@ describe('CodeRuntimeSettingsCard', () => {
         managed_runtime_source: 'none',
         managed_runtime_version: '',
       }),
-      localPrepareFailure: browserEditorLocalFailureFromError(new Error('Redeven Browser Editor catalog lookup failed with HTTP 503.'), () => 123),
+      localPrepareFailure: browserEditorLocalFailureFromError(new BrowserEditorSetupError('desktop_release_lookup', 'Redeven Browser Editor catalog lookup failed with HTTP 503.'), 'desktop_transfer', () => 123),
     });
 
     expect(host.textContent).toContain('Setup failed');

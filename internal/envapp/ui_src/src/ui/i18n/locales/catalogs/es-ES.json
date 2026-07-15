@@ -2574,7 +2574,9 @@
       "installing": "Instalando Browser Editor...",
       "validating": "Validando Browser Editor...",
       "finalizing": "Finalizando la configuración de Browser Editor...",
-      "default": "Configurando Browser Editor..."
+      "default": "Configurando Browser Editor...",
+      "resolvingCatalog": "Consultando el catálogo de paquetes de Browser Editor...",
+      "downloadingInEnvironment": "Este entorno está descargando Browser Editor..."
     },
     "prepare": {
       "description": "Redeven Desktop descargará el último paquete Browser Editor, almacenará en caché una copia en esta computadora y la enviará al entorno conectado.",
@@ -2611,18 +2613,24 @@
       "continueToOpenCodespace": "Continuar para abrir el codespace",
       "continueToStartCodespace": "Continuar para iniciar el codespace",
       "steps": {
-        "lookup": "Comprobar último editor",
-        "cache": "Descargar en Desktop",
-        "upload": "Enviar al entorno",
-        "verify": "Verificar editor"
+        "desktopTransfer": {
+          "catalog": "Obtener información del paquete",
+          "acquire": "Descargar en Desktop",
+          "deliver": "Enviar al entorno",
+          "install": "Verificar e instalar"
+        },
+        "remoteDownload": {
+          "catalog": "Obtener información del paquete",
+          "acquire": "Descargar en el entorno",
+          "deliver": "Verificar el paquete",
+          "install": "Instalar el editor"
+        }
       },
       "progress": {
         "lookup": "Consultando el paquete más reciente de Browser Editor...",
         "downloading": "Descargando Browser Editor en Desktop...",
         "packageValidation": "Comprobando el paquete de Browser Editor almacenado en la caché de Desktop...",
         "finishing": "Transferencia completada. Redeven está verificando e instalando Browser Editor.",
-        "cacheHit": "Usando la caché de Desktop. No es necesario volver a descargar el paquete.",
-        "downloadedBytes": "Descargados {completed} de {total}",
         "uploadedBytes": "Enviados {completed} de {total}",
         "measuring": "Calculando el tiempo restante para este paso...",
         "rateAndEta": "{rate} · Este paso tardará aproximadamente {duration} más",
@@ -2632,8 +2640,13 @@
         "elapsed": "La configuración lleva {duration}",
         "secondsShort": "{value} s",
         "minutesShort": "{value} min",
-        "downloadProgressLabel": "Progreso de descarga de Browser Editor",
-        "uploadProgressLabel": "Progreso de transferencia de Browser Editor al entorno"
+        "uploadProgressLabel": "Progreso de transferencia de Browser Editor al entorno",
+        "desktopCacheHit": "Usando la caché de Desktop. No es necesario volver a descargar el paquete.",
+        "environmentCacheHit": "Usando la caché verificada del entorno. No es necesario volver a descargar el paquete.",
+        "downloadedToDesktopBytes": "Descarga en Desktop: {completed} de {total}",
+        "downloadedInEnvironmentBytes": "Descarga en el entorno: {completed} de {total}",
+        "desktopDownloadProgressLabel": "Progreso de la descarga de Browser Editor en Desktop",
+        "environmentDownloadProgressLabel": "Progreso de la descarga de Browser Editor en el entorno"
       },
       "failure": {
         "desktopReleaseLookup": "No se pudo comprobar el último Browser Editor.",
@@ -2642,7 +2655,12 @@
         "runtimeImport": "Este entorno no pudo recibir el paquete Browser Editor.",
         "runtimeStatus": "No se pudo actualizar el estado de configuración de Browser Editor. La instalación de",
         "unknown": "Browser Editor no finalizó correctamente.",
-        "desktopReleaseLookupDetail": "{message} El update catalog de Redeven puede no estar disponible temporalmente."
+        "desktopReleaseLookupDetail": "{message} El update catalog de Redeven puede no estar disponible temporalmente.",
+        "remoteCatalog": "Este entorno no pudo consultar el catálogo de Browser Editor.",
+        "remoteDownload": "Este entorno no pudo descargar el paquete de Browser Editor.",
+        "remoteSource": "Se rechazó el origen del paquete de Browser Editor.",
+        "packageVerification": "No se pudo verificar el paquete de Browser Editor.",
+        "installation": "El paquete de Browser Editor se verificó, pero la instalación no terminó."
       },
       "readinessFailed": "No se pudo comprobar si Browser Editor está listo.",
       "willOpenAfterSetup": "Redeven abrirá el codespace después de la configuración.",
@@ -2673,6 +2691,19 @@
       "updatedMessage": "Este entorno ahora usa la versión gestionada {version}.",
       "selectionFailedTitle": "Error de selección",
       "versionRemovalFailedTitle": "Error al eliminar la versión"
+    },
+    "installMethod": {
+      "label": "Método de instalación",
+      "desktopTransfer": "Transferencia desde Desktop",
+      "remoteDownload": "Descarga en el entorno",
+      "desktopTransferDescription": "Desktop descarga y verifica el paquete de Browser Editor y, después, lo envía a este entorno mediante la conexión actual.",
+      "remoteDownloadDescription": "Este entorno descarga y verifica el paquete de Browser Editor directamente desde el servicio de paquetes de Redeven.",
+      "desktopUnavailable": "La transferencia desde Desktop no está disponible porque esta sesión no dispone del puente de paquetes de Desktop.",
+      "lockedWhileRunning": "El método de instalación no se puede cambiar mientras la configuración está en curso.",
+      "desktopPath": "Red de Desktop → conexión actual → entorno",
+      "remotePath": "Red del entorno → servicio de paquetes de Redeven",
+      "selectedAnnouncement": "Método de instalación seleccionado: {method}.",
+      "lastAttempt": "El último intento usó {method}."
     }
   },
   "permissionPolicy": {

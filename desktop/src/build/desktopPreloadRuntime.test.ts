@@ -223,7 +223,6 @@ function snapshotBridgeState() {
       && typeof window.redevenDesktopDownloads?.reveal === 'function'
       && typeof window.redevenDesktopDownloads?.open === 'function',
     hasDesktopCodeWorkspaceBridge: typeof window.redevenDesktopCodeWorkspace === 'object'
-      && typeof window.redevenDesktopCodeWorkspace?.prepareWorkspaceEngine === 'function'
       && typeof window.redevenDesktopCodeWorkspace?.prepareWorkspaceEnginePackage === 'function'
       && typeof window.redevenDesktopCodeWorkspace?.readWorkspaceEnginePackageChunk === 'function'
       && typeof window.redevenDesktopCodeWorkspace?.disposeWorkspaceEnginePackage === 'function',

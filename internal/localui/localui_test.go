@@ -20,6 +20,7 @@ import (
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/agent"
 	appserverpkg "github.com/floegence/redeven/internal/codeapp/appserver"
+	"github.com/floegence/redeven/internal/codeapp/codeserver"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/session"
@@ -77,15 +78,19 @@ func (localUITestBackend) CodeRuntimeStatus(context.Context) (appserverpkg.CodeR
 	return appserverpkg.CodeRuntimeStatus{}, nil
 }
 
-func (localUITestBackend) CreateCodeRuntimeImportSession(context.Context, appserverpkg.CodeRuntimeArtifactManifest) (appserverpkg.CodeRuntimeImportSession, error) {
-	return appserverpkg.CodeRuntimeImportSession{}, nil
+func (localUITestBackend) CreateCodeRuntimeSetupOperation(context.Context, string, codeserver.BrowserEditorInstallMethod, *appserverpkg.CodeRuntimeArtifactManifest) (appserverpkg.CodeRuntimeSetupOperation, error) {
+	return appserverpkg.CodeRuntimeSetupOperation{}, nil
 }
 
-func (localUITestBackend) AppendCodeRuntimeImportChunk(context.Context, string, int64, io.Reader) (appserverpkg.CodeRuntimeImportChunkResult, error) {
-	return appserverpkg.CodeRuntimeImportChunkResult{}, nil
+func (localUITestBackend) AppendCodeRuntimeSetupChunk(context.Context, string, int64, io.Reader) (appserverpkg.CodeRuntimeSetupChunkResult, error) {
+	return appserverpkg.CodeRuntimeSetupChunkResult{}, nil
 }
 
-func (localUITestBackend) CompleteCodeRuntimeImportSession(context.Context, string) (appserverpkg.CodeRuntimeStatus, error) {
+func (localUITestBackend) CompleteCodeRuntimeSetupOperation(context.Context, string) (appserverpkg.CodeRuntimeStatus, error) {
+	return appserverpkg.CodeRuntimeStatus{}, nil
+}
+
+func (localUITestBackend) CancelCodeRuntimeSetupOperation(context.Context, string) (appserverpkg.CodeRuntimeStatus, error) {
 	return appserverpkg.CodeRuntimeStatus{}, nil
 }
 

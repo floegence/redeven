@@ -4,9 +4,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 
 import type { DesktopRuntimeControlEndpoint } from '../shared/runtimeControl';
 import {
-  appendCodeWorkspaceEngineImportChunk,
   connectProviderLink,
-  createCodeWorkspaceEngineImportSession,
   getProviderLinkStatus,
   RuntimeControlError,
   runtimeControlServiceURL,
@@ -195,58 +193,6 @@ describe('runtimeControlClient', () => {
         statusCode: 409,
         message: 'Runtime has active work.',
       });
-  });
-
-  it('creates workspace engine import sessions and uploads binary chunks with indexed PUT routes', async () => {
-    const server = await startServer((request, body, response) => {
-      response.setHeader('Content-Type', 'application/json');
-      if (request.method === 'POST' && request.url === '/__redeven_runtime_control/v1/code-workspace-engine/import-sessions') {
-        response.end(JSON.stringify({
-          ok: true,
-          data: {
-            upload_id: 'upload_1',
-            operation_id: 'upload_1',
-            chunk_size_bytes: 8388608,
-            expected_bytes: 3,
-          },
-        }));
-        return;
-      }
-      if (request.method === 'PUT' && request.url === '/__redeven_runtime_control/v1/code-workspace-engine/import-sessions/upload_1/chunks/2') {
-        response.end(JSON.stringify({
-          ok: true,
-          data: {
-            upload_id: 'upload_1',
-            received_bytes: Buffer.from(body, 'latin1').length,
-            expected_bytes: 3,
-            next_chunk_index: 3,
-          },
-        }));
-        return;
-      }
-      response.writeHead(404, { 'Content-Type': 'application/json' });
-      response.end(JSON.stringify({ ok: false, error: { code: 'NOT_FOUND', message: 'not found' } }));
-    });
-
-    await createCodeWorkspaceEngineImportSession(endpoint(`${server.origin}/__redeven_runtime_control/`), {
-      manifest: { schema_version: 1 },
-    });
-    const chunk = Buffer.from([0, 1, 255]);
-    const result = await appendCodeWorkspaceEngineImportChunk(
-      endpoint(`${server.origin}/__redeven_runtime_control/`),
-      'upload_1',
-      2,
-      chunk,
-    );
-
-    expect(result.next_chunk_index).toBe(3);
-    expect(server.requests[0]?.url).toBe('/__redeven_runtime_control/v1/code-workspace-engine/import-sessions');
-    expect(server.requests[0]?.method).toBe('POST');
-    expect(JSON.parse(server.bodies[0] ?? '{}')).toEqual({ manifest: { schema_version: 1 } });
-    expect(server.requests[1]?.url).toBe('/__redeven_runtime_control/v1/code-workspace-engine/import-sessions/upload_1/chunks/2');
-    expect(server.requests[1]?.method).toBe('PUT');
-    expect(server.requests[1]?.headers['content-type']).toBe('application/octet-stream');
-    expect(server.rawBodies[1]).toEqual(chunk);
   });
 
   it('reports non-JSON success responses as invalid runtime-control protocol responses', async () => {

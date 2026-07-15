@@ -8,13 +8,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/floegence/redeven/internal/agent"
-	"github.com/floegence/redeven/internal/codeapp/appserver"
-	"github.com/floegence/redeven/internal/codeapp/codeserver"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/runtimemanagement"
@@ -23,73 +20,6 @@ import (
 func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
-
-type runtimeControlCodeWorkspaceTestBackend struct {
-	localUITestBackend
-	t                    *testing.T
-	createdManifest      appserver.CodeRuntimeArtifactManifest
-	receivedUploadID     string
-	receivedChunkIndex   int64
-	receivedChunkPayload string
-	completedUploadID    string
-}
-
-func (b *runtimeControlCodeWorkspaceTestBackend) CodeRuntimeStatus(context.Context) (appserver.CodeRuntimeStatus, error) {
-	return appserver.CodeRuntimeStatus{
-		ActiveRuntime: codeserver.RuntimeTargetStatus{
-			DetectionState: codeserver.RuntimeDetectionMissing,
-			Source:         "none",
-		},
-		ManagedRuntime: codeserver.RuntimeTargetStatus{
-			DetectionState: codeserver.RuntimeDetectionMissing,
-			Source:         "managed",
-		},
-		Operation: codeserver.RuntimeOperationStatus{State: codeserver.RuntimeOperationStateIdle},
-	}, nil
-}
-
-func (b *runtimeControlCodeWorkspaceTestBackend) CreateCodeRuntimeImportSession(_ context.Context, manifest appserver.CodeRuntimeArtifactManifest) (appserver.CodeRuntimeImportSession, error) {
-	b.createdManifest = manifest
-	return appserver.CodeRuntimeImportSession{
-		UploadID:       "upload_test",
-		OperationID:    "upload_test",
-		Manifest:       manifest,
-		State:          "receiving",
-		ExpectedBytes:  manifest.Archive.SizeBytes,
-		ChunkSizeBytes: 4 * 1024 * 1024,
-	}, nil
-}
-
-func (b *runtimeControlCodeWorkspaceTestBackend) AppendCodeRuntimeImportChunk(_ context.Context, uploadID string, chunkIndex int64, body io.Reader) (appserver.CodeRuntimeImportChunkResult, error) {
-	raw, err := io.ReadAll(body)
-	if err != nil {
-		b.t.Fatalf("ReadAll() error = %v", err)
-	}
-	b.receivedUploadID = uploadID
-	b.receivedChunkIndex = chunkIndex
-	b.receivedChunkPayload = string(raw)
-	return appserver.CodeRuntimeImportChunkResult{
-		UploadID:       uploadID,
-		ReceivedBytes:  int64(len(raw)),
-		ExpectedBytes:  int64(len(raw)),
-		NextChunkIndex: chunkIndex + 1,
-	}, nil
-}
-
-func (b *runtimeControlCodeWorkspaceTestBackend) CompleteCodeRuntimeImportSession(_ context.Context, uploadID string) (appserver.CodeRuntimeStatus, error) {
-	b.completedUploadID = uploadID
-	return appserver.CodeRuntimeStatus{
-		ActiveRuntime: codeserver.RuntimeTargetStatus{
-			DetectionState: codeserver.RuntimeDetectionReady,
-			Source:         "managed",
-			Version:        "4.109.1",
-		},
-		ManagedRuntimeVersion: "4.109.1",
-		ManagedRuntimeSource:  "managed",
-		Operation:             codeserver.RuntimeOperationStatus{State: codeserver.RuntimeOperationStateSucceeded},
-	}, nil
-}
-
 func newDesktopManagedTestAgent(t *testing.T, cfgPath string) *agent.Agent {
 	t.Helper()
 	policy, err := config.ParsePermissionPolicyPreset("")
@@ -254,94 +184,5 @@ func TestServerRuntimeControlUsesStructuredAuthErrors(t *testing.T) {
 	}
 	if envelope.OK || envelope.Error == nil || envelope.Error.Code != "RUNTIME_CONTROL_METHOD_NOT_ALLOWED" {
 		t.Fatalf("unexpected envelope: %#v", envelope)
-	}
-}
-
-func TestServerRuntimeControlCodeWorkspaceEngineImport(t *testing.T) {
-	cfgPath := writeTestConfig(t)
-	bind, err := ParseBind("127.0.0.1:0")
-	if err != nil {
-		t.Fatalf("ParseBind() error = %v", err)
-	}
-	socketDir, err := os.MkdirTemp("/tmp", "rdv-localui-*")
-	if err != nil {
-		t.Fatalf("MkdirTemp() error = %v", err)
-	}
-	defer func() { _ = os.RemoveAll(socketDir) }()
-
-	backend := &runtimeControlCodeWorkspaceTestBackend{t: t}
-	s := &Server{
-		log:                    discardLogger(),
-		bind:                   bind,
-		configPath:             cfgPath,
-		stateRoot:              filepath.Dir(filepath.Dir(cfgPath)),
-		stateDir:               filepath.Dir(cfgPath),
-		runtimeControlSockPath: filepath.Join(socketDir, "control.sock"),
-		version:                "dev",
-		desktopManaged:         true,
-		desktopOwnerID:         "desktop-owner-state",
-		appServer:              newTestAppServerWithBackend(t, cfgPath, backend),
-		a:                      newDesktopManagedTestAgent(t, cfgPath),
-		pending:                make(map[string]pendingDirect),
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	if err := s.Start(ctx); err != nil {
-		t.Fatalf("Start() error = %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	endpoint := s.RuntimeControlEndpointForDesktopBridge()
-	if endpoint == nil {
-		t.Fatalf("missing runtime-control endpoint")
-	}
-	do := func(method string, path string, body string) *http.Response {
-		t.Helper()
-		req, err := http.NewRequest(method, endpoint.BaseURL+path, strings.NewReader(body))
-		if err != nil {
-			t.Fatalf("NewRequest() error = %v", err)
-		}
-		req.Header.Set("Authorization", "Bearer "+endpoint.Token)
-		req.Header.Set("X-Redeven-Desktop-Owner-ID", endpoint.DesktopOwnerID)
-		if body != "" {
-			req.Header.Set("Content-Type", "application/json")
-		}
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatalf("Do() error = %v", err)
-		}
-		return resp
-	}
-
-	manifestJSON := `{"manifest":{"schema_version":1,"engine":"code-server","version":"4.109.1","source":{"kind":"github_release","asset_name":"code-server-4.109.1-linux-amd64.tar.gz"},"platform":{"os":"linux","arch":"amd64","libc":"glibc","platform_id":"linux-amd64-glibc","supported":true},"archive":{"sha256":"` + strings.Repeat("a", 64) + `","size_bytes":11,"compression":"tar.gz"},"layout":{"binary_relpath":"bin/code-server","root_dir_hint":"code-server-4.109.1-linux-amd64"}}}`
-	createResp := do(http.MethodPost, "/v1/code-workspace-engine/import-sessions", manifestJSON)
-	defer createResp.Body.Close()
-	if createResp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(createResp.Body)
-		t.Fatalf("create status=%d body=%s", createResp.StatusCode, string(body))
-	}
-	if backend.createdManifest.Version != "4.109.1" {
-		t.Fatalf("created manifest version=%q", backend.createdManifest.Version)
-	}
-
-	chunkResp := do(http.MethodPut, "/v1/code-workspace-engine/import-sessions/upload_test/chunks/0", "hello world")
-	defer chunkResp.Body.Close()
-	if chunkResp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(chunkResp.Body)
-		t.Fatalf("chunk status=%d body=%s", chunkResp.StatusCode, string(body))
-	}
-	if backend.receivedUploadID != "upload_test" || backend.receivedChunkIndex != 0 || backend.receivedChunkPayload != "hello world" {
-		t.Fatalf("unexpected chunk capture: upload=%q index=%d payload=%q", backend.receivedUploadID, backend.receivedChunkIndex, backend.receivedChunkPayload)
-	}
-
-	completeResp := do(http.MethodPost, "/v1/code-workspace-engine/import-sessions/upload_test/complete", "")
-	defer completeResp.Body.Close()
-	if completeResp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(completeResp.Body)
-		t.Fatalf("complete status=%d body=%s", completeResp.StatusCode, string(body))
-	}
-	if backend.completedUploadID != "upload_test" {
-		t.Fatalf("completed upload id=%q", backend.completedUploadID)
 	}
 }

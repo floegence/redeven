@@ -2574,7 +2574,9 @@
       "installing": "正在安裝 Browser Editor...",
       "validating": "正在驗證 Browser Editor...",
       "finalizing": "正在完成 Browser Editor 設定...",
-      "default": "正在設定 Browser Editor..."
+      "default": "正在設定 Browser Editor...",
+      "resolvingCatalog": "正在檢查 Browser Editor 套件目錄...",
+      "downloadingInEnvironment": "此環境正在下載 Browser Editor..."
     },
     "prepare": {
       "description": "Redeven Desktop 將下載最新的 Browser Editor 軟體包，並在本電腦上快取一份副本，並將其傳送至連接的環境。",
@@ -2611,18 +2613,24 @@
       "continueToOpenCodespace": "繼續開啟 codespace",
       "continueToStartCodespace": "繼續啟動 codespace",
       "steps": {
-        "lookup": "檢查最新編輯器",
-        "cache": "下載到 Desktop",
-        "upload": "傳送到環境",
-        "verify": "校驗編輯器"
+        "desktopTransfer": {
+          "catalog": "取得套件資訊",
+          "acquire": "下載到 Desktop",
+          "deliver": "傳送到環境",
+          "install": "驗證並安裝"
+        },
+        "remoteDownload": {
+          "catalog": "取得套件資訊",
+          "acquire": "環境下載",
+          "deliver": "驗證套件",
+          "install": "安裝編輯器"
+        }
       },
       "progress": {
         "lookup": "正在檢查最新的 Browser Editor 套件...",
         "downloading": "正在將 Browser Editor 下載到 Desktop...",
         "packageValidation": "正在檢查 Desktop 快取中的 Browser Editor 套件...",
         "finishing": "傳輸已完成。Redeven 正在驗證並安裝 Browser Editor。",
-        "cacheHit": "正在使用 Desktop 快取，無需重複下載。",
-        "downloadedBytes": "已下載 {completed} / {total}",
         "uploadedBytes": "已傳送 {completed} / {total}",
         "measuring": "正在估算目前步驟的剩餘時間...",
         "rateAndEta": "{rate} · 此步驟預計還需 {duration}",
@@ -2632,8 +2640,13 @@
         "elapsed": "設定已耗時：{duration}",
         "secondsShort": "{value} 秒",
         "minutesShort": "{value} 分鐘",
-        "downloadProgressLabel": "Browser Editor 下載進度",
-        "uploadProgressLabel": "Browser Editor 傳送到環境的進度"
+        "uploadProgressLabel": "Browser Editor 傳送到環境的進度",
+        "desktopCacheHit": "正在使用 Desktop 快取，無需重複下載。",
+        "environmentCacheHit": "正在使用環境中已驗證的快取套件，無需重複下載。",
+        "downloadedToDesktopBytes": "已下載到 Desktop：{completed} / {total}",
+        "downloadedInEnvironmentBytes": "已在環境中下載：{completed} / {total}",
+        "desktopDownloadProgressLabel": "Browser Editor 下載到 Desktop 的進度",
+        "environmentDownloadProgressLabel": "Browser Editor 在環境中的下載進度"
       },
       "failure": {
         "desktopReleaseLookup": "無法檢查最新的 Browser Editor。",
@@ -2642,7 +2655,12 @@
         "runtimeImport": "此環境無法接收 Browser Editor 套件。",
         "runtimeStatus": "無法刷新 Browser Editor 設定狀態。",
         "unknown": "Browser Editor 設定未成功完成。",
-        "desktopReleaseLookupDetail": "{message} Redeven 的更新 catalog 可能暫時不可用。"
+        "desktopReleaseLookupDetail": "{message} Redeven 的更新 catalog 可能暫時不可用。",
+        "remoteCatalog": "此環境無法讀取 Browser Editor 套件目錄。",
+        "remoteDownload": "此環境無法下載 Browser Editor 套件。",
+        "remoteSource": "Browser Editor 套件來源遭到拒絕。",
+        "packageVerification": "無法驗證 Browser Editor 套件。",
+        "installation": "Browser Editor 套件已通過驗證，但安裝未完成。"
       },
       "readinessFailed": "無法檢查 Browser Editor 就緒狀態。",
       "willOpenAfterSetup": "設定完成後，Redeven 將開啟 codespace。",
@@ -2673,6 +2691,19 @@
       "updatedMessage": "此環境現在使用托管版本 {version}。",
       "selectionFailedTitle": "選擇失敗",
       "versionRemovalFailedTitle": "版本移除失敗"
+    },
+    "installMethod": {
+      "label": "安裝方式",
+      "desktopTransfer": "Desktop 傳輸",
+      "remoteDownload": "環境下載",
+      "desktopTransferDescription": "Desktop 下載並驗證 Browser Editor 套件，再透過目前的連線傳送到此環境。",
+      "remoteDownloadDescription": "此環境直接從 Redeven 套件服務下載並驗證 Browser Editor 套件。",
+      "desktopUnavailable": "此工作階段未提供 Desktop 套件橋接功能，因此無法使用 Desktop 傳輸。",
+      "lockedWhileRunning": "設定進行期間無法變更安裝方式。",
+      "desktopPath": "Desktop 網路 → 目前連線 → 環境",
+      "remotePath": "環境網路 → Redeven 套件服務",
+      "selectedAnnouncement": "已選擇安裝方式：{method}。",
+      "lastAttempt": "上次嘗試使用的安裝方式為 {method}。"
     }
   },
   "permissionPolicy": {

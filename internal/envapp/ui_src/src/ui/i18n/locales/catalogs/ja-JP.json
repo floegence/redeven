@@ -2574,7 +2574,9 @@
       "installing": "Browser Editor をインストール中...",
       "validating": "Browser Editor を検証中...",
       "finalizing": "Browser Editor セットアップを終了...",
-      "default": "Browser Editor をセットアップ中..."
+      "default": "Browser Editor をセットアップ中...",
+      "resolvingCatalog": "Browser Editor のパッケージカタログを確認中...",
+      "downloadingInEnvironment": "この環境で Browser Editor をダウンロード中..."
     },
     "prepare": {
       "description": "Redeven Desktop は最新のものをダウンロードしますBrowser Editor パッケージを使用して、このコンピューターに 1 つのコピーをキャッシュし、接続された環境に送信します。",
@@ -2611,18 +2613,24 @@
       "continueToOpenCodespace": "codespace を開く操作を続行",
       "continueToStartCodespace": "codespace を起動する操作を続行",
       "steps": {
-        "lookup": "最新エディターを確認",
-        "cache": "Desktop にダウンロード",
-        "upload": "環境へ送信",
-        "verify": "エディターを検証"
+        "desktopTransfer": {
+          "catalog": "パッケージ情報を取得",
+          "acquire": "Desktop にダウンロード",
+          "deliver": "環境へ送信",
+          "install": "検証してインストール"
+        },
+        "remoteDownload": {
+          "catalog": "パッケージ情報を取得",
+          "acquire": "環境でダウンロード",
+          "deliver": "パッケージを検証",
+          "install": "エディターをインストール"
+        }
       },
       "progress": {
         "lookup": "最新の Browser Editor パッケージを確認しています...",
         "downloading": "Browser Editor を Desktop にダウンロードしています...",
         "packageValidation": "Desktop にキャッシュされた Browser Editor パッケージを確認しています...",
         "finishing": "転送が完了しました。Redeven が Browser Editor を検証してインストールしています。",
-        "cacheHit": "Desktop のキャッシュを使用しています。再ダウンロードは不要です。",
-        "downloadedBytes": "ダウンロード済み: {completed} / {total}",
         "uploadedBytes": "送信済み: {completed} / {total}",
         "measuring": "このステップの残り時間を計算しています...",
         "rateAndEta": "{rate} · このステップの完了まで約 {duration}",
@@ -2632,8 +2640,13 @@
         "elapsed": "セットアップの経過時間: {duration}",
         "secondsShort": "{value} 秒",
         "minutesShort": "{value} 分",
-        "downloadProgressLabel": "Browser Editor のダウンロード状況",
-        "uploadProgressLabel": "Browser Editor の環境への転送状況"
+        "uploadProgressLabel": "Browser Editor の環境への転送状況",
+        "desktopCacheHit": "Desktop のキャッシュを使用しています。再ダウンロードは不要です。",
+        "environmentCacheHit": "環境にキャッシュされた検証済みパッケージを使用しています。再ダウンロードは不要です。",
+        "downloadedToDesktopBytes": "Desktop にダウンロード済み: {completed} / {total}",
+        "downloadedInEnvironmentBytes": "環境でダウンロード済み: {completed} / {total}",
+        "desktopDownloadProgressLabel": "Browser Editor の Desktop へのダウンロード進行状況",
+        "environmentDownloadProgressLabel": "Browser Editor の環境内でのダウンロード進行状況"
       },
       "failure": {
         "desktopReleaseLookup": "最新の Browser Editor を確認できませんでした。",
@@ -2642,7 +2655,12 @@
         "runtimeImport": "この環境は Browser Editor パッケージを受信できませんでした。",
         "runtimeStatus": "Browser Editor セットアップ ステータスを更新できませんでした。",
         "unknown": "Browser Editor セットアップが正常に終了しませんでした。",
-        "desktopReleaseLookupDetail": "{message} Redeven の更新 catalog が一時的に利用できない可能性があります。"
+        "desktopReleaseLookupDetail": "{message} Redeven の更新 catalog が一時的に利用できない可能性があります。",
+        "remoteCatalog": "この環境で Browser Editor のカタログを読み取れませんでした。",
+        "remoteDownload": "この環境で Browser Editor パッケージをダウンロードできませんでした。",
+        "remoteSource": "Browser Editor パッケージの取得元が拒否されました。",
+        "packageVerification": "Browser Editor パッケージを検証できませんでした。",
+        "installation": "Browser Editor パッケージの検証には成功しましたが、インストールは完了しませんでした。"
       },
       "readinessFailed": "Browser Editor の準備状態を確認できませんでした。",
       "willOpenAfterSetup": "設定完了後、Redeven が codespace を開きます。",
@@ -2673,6 +2691,19 @@
       "updatedMessage": "この環境は管理対象バージョン {version} を使用しています。",
       "selectionFailedTitle": "選択に失敗しました",
       "versionRemovalFailedTitle": "バージョン削除に失敗しました"
+    },
+    "installMethod": {
+      "label": "インストール方法",
+      "desktopTransfer": "Desktop 経由で転送",
+      "remoteDownload": "環境でダウンロード",
+      "desktopTransferDescription": "Desktop が Browser Editor パッケージをダウンロードして検証し、現在の接続経由でこの環境へ送信します。",
+      "remoteDownloadDescription": "この環境が Redeven のパッケージサービスから Browser Editor パッケージを直接ダウンロードして検証します。",
+      "desktopUnavailable": "このセッションでは Desktop のパッケージ転送ブリッジを利用できないため、Desktop 経由の転送は使用できません。",
+      "lockedWhileRunning": "セットアップの実行中はインストール方法を変更できません。",
+      "desktopPath": "Desktop のネットワーク → 現在の接続 → 環境",
+      "remotePath": "環境のネットワーク → Redeven のパッケージサービス",
+      "selectedAnnouncement": "インストール方法として {method} を選択しました。",
+      "lastAttempt": "前回の試行では {method} を使用しました。"
     }
   },
   "permissionPolicy": {

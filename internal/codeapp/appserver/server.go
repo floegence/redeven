@@ -86,9 +86,10 @@ type Backend interface {
 	StopSpace(ctx context.Context, codeSpaceID string) error
 	ResolveCodeServerPort(ctx context.Context, codeSpaceID string) (int, error)
 	CodeRuntimeStatus(ctx context.Context) (CodeRuntimeStatus, error)
-	CreateCodeRuntimeImportSession(ctx context.Context, manifest CodeRuntimeArtifactManifest) (CodeRuntimeImportSession, error)
-	AppendCodeRuntimeImportChunk(ctx context.Context, uploadID string, chunkIndex int64, body io.Reader) (CodeRuntimeImportChunkResult, error)
-	CompleteCodeRuntimeImportSession(ctx context.Context, uploadID string) (CodeRuntimeStatus, error)
+	CreateCodeRuntimeSetupOperation(ctx context.Context, operationID string, installMethod codeserver.BrowserEditorInstallMethod, manifest *CodeRuntimeArtifactManifest) (CodeRuntimeSetupOperation, error)
+	AppendCodeRuntimeSetupChunk(ctx context.Context, operationID string, chunkIndex int64, body io.Reader) (CodeRuntimeSetupChunkResult, error)
+	CompleteCodeRuntimeSetupOperation(ctx context.Context, operationID string) (CodeRuntimeStatus, error)
+	CancelCodeRuntimeSetupOperation(ctx context.Context, operationID string) (CodeRuntimeStatus, error)
 	SelectCodeRuntimeVersion(ctx context.Context, version string) (CodeRuntimeStatus, error)
 	RemoveCodeRuntimeVersion(ctx context.Context, version string) (CodeRuntimeStatus, error)
 	CancelCodeRuntimeOperation(ctx context.Context) (CodeRuntimeStatus, error)
@@ -156,19 +157,21 @@ type UpdateSpaceRequest struct {
 
 type CodeRuntimeStatus = codeserver.RuntimeStatus
 type CodeRuntimeArtifactManifest = codeserver.WorkspaceEngineArtifactManifest
-type CodeRuntimeImportSession = codeserver.WorkspaceEngineImportSession
-type CodeRuntimeImportChunkResult = codeserver.WorkspaceEngineImportChunkResult
+type CodeRuntimeSetupOperation = codeserver.WorkspaceEngineSetupOperation
+type CodeRuntimeSetupChunkResult = codeserver.WorkspaceEngineSetupChunkResult
 
 type CodeRuntimeVersionRequest struct {
 	Version string `json:"version"`
 }
 
-type CodeRuntimeImportSessionRequest struct {
-	Manifest CodeRuntimeArtifactManifest `json:"manifest"`
+type CodeRuntimeSetupOperationRequest struct {
+	OperationID   string                                `json:"operation_id"`
+	InstallMethod codeserver.BrowserEditorInstallMethod `json:"install_method"`
+	Manifest      *CodeRuntimeArtifactManifest          `json:"manifest,omitempty"`
 }
 
-func codeRuntimeImportUploadIDFromPath(rawPath string, suffix string) string {
-	const prefix = "/_redeven_proxy/api/code-runtime/import-sessions/"
+func codeRuntimeSetupOperationIDFromPath(rawPath string, suffix string) string {
+	const prefix = "/_redeven_proxy/api/code-runtime/setup-operations/"
 	if !strings.HasPrefix(rawPath, prefix) {
 		return ""
 	}
@@ -191,7 +194,7 @@ func codeRuntimeImportUploadIDFromPath(rawPath string, suffix string) string {
 	return strings.TrimSpace(value)
 }
 
-func codeRuntimeImportChunkIndexFromPath(rawPath string) (int64, bool) {
+func codeRuntimeSetupChunkIndexFromPath(rawPath string) (int64, bool) {
 	const marker = "/chunks/"
 	index := strings.Index(rawPath, marker)
 	if index < 0 {
@@ -381,27 +384,6 @@ func (g *Server) CodeRuntimeStatus(ctx context.Context) (CodeRuntimeStatus, erro
 		return CodeRuntimeStatus{}, errors.New("app server not ready")
 	}
 	return g.backend.CodeRuntimeStatus(ctx)
-}
-
-func (g *Server) CreateCodeRuntimeImportSession(ctx context.Context, manifest CodeRuntimeArtifactManifest) (CodeRuntimeImportSession, error) {
-	if g == nil || g.backend == nil {
-		return CodeRuntimeImportSession{}, errors.New("app server not ready")
-	}
-	return g.backend.CreateCodeRuntimeImportSession(ctx, manifest)
-}
-
-func (g *Server) AppendCodeRuntimeImportChunk(ctx context.Context, uploadID string, chunkIndex int64, body io.Reader) (CodeRuntimeImportChunkResult, error) {
-	if g == nil || g.backend == nil {
-		return CodeRuntimeImportChunkResult{}, errors.New("app server not ready")
-	}
-	return g.backend.AppendCodeRuntimeImportChunk(ctx, uploadID, chunkIndex, body)
-}
-
-func (g *Server) CompleteCodeRuntimeImportSession(ctx context.Context, uploadID string) (CodeRuntimeStatus, error) {
-	if g == nil || g.backend == nil {
-		return CodeRuntimeStatus{}, errors.New("app server not ready")
-	}
-	return g.backend.CompleteCodeRuntimeImportSession(ctx, uploadID)
 }
 
 func (g *Server) Start(ctx context.Context) error {
@@ -2745,77 +2727,114 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: status})
 		return
 
-	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/code-runtime/import-sessions":
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/code-runtime/setup-operations":
 		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 		if !ok {
 			return
 		}
-		var body CodeRuntimeImportSessionRequest
+		var body CodeRuntimeSetupOperationRequest
 		dec := json.NewDecoder(r.Body)
 		dec.DisallowUnknownFields()
 		if err := dec.Decode(&body); err != nil {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid request body"})
 			return
 		}
-		session, err := g.backend.CreateCodeRuntimeImportSession(r.Context(), body.Manifest)
-		if err != nil {
-			g.appendAudit(meta, "code_workspace_engine_upload", "failure", nil, err)
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+		var trailing any
+		if err := dec.Decode(&trailing); !errors.Is(err, io.EOF) {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid request body"})
 			return
 		}
-		g.appendAudit(meta, "code_workspace_engine_upload", "success", map[string]any{
-			"upload_id":      session.UploadID,
-			"operation_id":   session.OperationID,
-			"version":        session.Manifest.Version,
-			"expected_bytes": session.ExpectedBytes,
+		operation, err := g.backend.CreateCodeRuntimeSetupOperation(r.Context(), body.OperationID, body.InstallMethod, body.Manifest)
+		if err != nil {
+			g.appendAudit(meta, "browser_editor_setup_create", "failure", map[string]any{
+				"operation_id":   strings.TrimSpace(body.OperationID),
+				"install_method": string(body.InstallMethod),
+			}, err)
+			statusCode := http.StatusBadRequest
+			if strings.Contains(err.Error(), "already running") {
+				statusCode = http.StatusConflict
+			}
+			writeJSON(w, statusCode, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		g.appendAudit(meta, "browser_editor_setup_create", "success", map[string]any{
+			"operation_id":   operation.OperationID,
+			"install_method": string(operation.InstallMethod),
+			"expected_bytes": operation.ExpectedBytes,
 		}, nil)
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: session})
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: operation})
 		return
 
-	case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/code-runtime/import-sessions/") && strings.Contains(r.URL.Path, "/chunks/"):
+	case r.Method == http.MethodPut && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/code-runtime/setup-operations/") && strings.Contains(r.URL.Path, "/chunks/"):
 		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 		if !ok {
 			return
 		}
-		uploadID := codeRuntimeImportUploadIDFromPath(r.URL.Path, "/chunks/")
-		if uploadID == "" {
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing upload id"})
+		operationID := codeRuntimeSetupOperationIDFromPath(r.URL.Path, "/chunks/")
+		if operationID == "" {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing operation id"})
 			return
 		}
-		chunkIndex, ok := codeRuntimeImportChunkIndexFromPath(r.URL.Path)
+		chunkIndex, ok := codeRuntimeSetupChunkIndexFromPath(r.URL.Path)
 		if !ok {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid chunk index"})
 			return
 		}
-		result, err := g.backend.AppendCodeRuntimeImportChunk(r.Context(), uploadID, chunkIndex, r.Body)
+		result, err := g.backend.AppendCodeRuntimeSetupChunk(r.Context(), operationID, chunkIndex, r.Body)
 		if err != nil {
-			g.appendAudit(meta, "code_workspace_engine_upload_chunk", "failure", map[string]any{"upload_id": uploadID}, err)
+			g.appendAudit(meta, "browser_editor_setup_chunk", "failure", map[string]any{
+				"operation_id": operationID,
+				"chunk_index":  chunkIndex,
+			}, err)
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 			return
 		}
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: result})
 		return
 
-	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/code-runtime/import-sessions/") && strings.HasSuffix(r.URL.Path, "/complete"):
+	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/code-runtime/setup-operations/") && strings.HasSuffix(r.URL.Path, "/complete"):
 		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 		if !ok {
 			return
 		}
-		uploadID := codeRuntimeImportUploadIDFromPath(r.URL.Path, "/complete")
-		if uploadID == "" {
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing upload id"})
+		operationID := codeRuntimeSetupOperationIDFromPath(r.URL.Path, "/complete")
+		if operationID == "" {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing operation id"})
 			return
 		}
-		status, err := g.backend.CompleteCodeRuntimeImportSession(r.Context(), uploadID)
+		status, err := g.backend.CompleteCodeRuntimeSetupOperation(r.Context(), operationID)
 		if err != nil {
-			g.appendAudit(meta, "code_workspace_engine_prepare", "failure", map[string]any{"upload_id": uploadID}, err)
+			g.appendAudit(meta, "browser_editor_setup_complete", "failure", map[string]any{"operation_id": operationID}, err)
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 			return
 		}
-		g.appendAudit(meta, "code_workspace_engine_prepare", "success", map[string]any{
-			"upload_id":       uploadID,
+		g.appendAudit(meta, "browser_editor_setup_complete", "success", map[string]any{
+			"operation_id":    operationID,
 			"operation_state": string(status.Operation.State),
 			"version":         status.ManagedRuntimeVersion,
+		}, nil)
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: status})
+		return
+
+	case r.Method == http.MethodPost && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/code-runtime/setup-operations/") && strings.HasSuffix(r.URL.Path, "/cancel"):
+		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+		if !ok {
+			return
+		}
+		operationID := codeRuntimeSetupOperationIDFromPath(r.URL.Path, "/cancel")
+		if operationID == "" {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing operation id"})
+			return
+		}
+		status, err := g.backend.CancelCodeRuntimeSetupOperation(r.Context(), operationID)
+		if err != nil {
+			g.appendAudit(meta, "browser_editor_setup_cancel", "failure", map[string]any{"operation_id": operationID}, err)
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		g.appendAudit(meta, "browser_editor_setup_cancel", "success", map[string]any{
+			"operation_id":    operationID,
+			"operation_state": string(status.Operation.State),
 		}, nil)
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: status})
 		return

@@ -35,20 +35,21 @@ import (
 )
 
 type stubBackend struct {
-	listSpaces                       func(ctx context.Context) ([]SpaceStatus, error)
-	createSpace                      func(ctx context.Context, req CreateSpaceRequest) (*SpaceStatus, error)
-	updateSpace                      func(ctx context.Context, codeSpaceID string, req UpdateSpaceRequest) (*SpaceStatus, error)
-	deleteSpace                      func(ctx context.Context, codeSpaceID string) error
-	startSpace                       func(ctx context.Context, codeSpaceID string) (*SpaceStatus, error)
-	stopSpace                        func(ctx context.Context, codeSpaceID string) error
-	resolveCodeServerPort            func(ctx context.Context, codeSpaceID string) (int, error)
-	codeRuntimeStatus                func(ctx context.Context) (CodeRuntimeStatus, error)
-	createCodeRuntimeImportSession   func(ctx context.Context, manifest CodeRuntimeArtifactManifest) (CodeRuntimeImportSession, error)
-	appendCodeRuntimeImportChunk     func(ctx context.Context, uploadID string, chunkIndex int64, body io.Reader) (CodeRuntimeImportChunkResult, error)
-	completeCodeRuntimeImportSession func(ctx context.Context, uploadID string) (CodeRuntimeStatus, error)
-	selectCodeRuntime                func(ctx context.Context, version string) (CodeRuntimeStatus, error)
-	removeCodeRuntimeVersion         func(ctx context.Context, version string) (CodeRuntimeStatus, error)
-	cancelCodeRuntime                func(ctx context.Context) (CodeRuntimeStatus, error)
+	listSpaces                        func(ctx context.Context) ([]SpaceStatus, error)
+	createSpace                       func(ctx context.Context, req CreateSpaceRequest) (*SpaceStatus, error)
+	updateSpace                       func(ctx context.Context, codeSpaceID string, req UpdateSpaceRequest) (*SpaceStatus, error)
+	deleteSpace                       func(ctx context.Context, codeSpaceID string) error
+	startSpace                        func(ctx context.Context, codeSpaceID string) (*SpaceStatus, error)
+	stopSpace                         func(ctx context.Context, codeSpaceID string) error
+	resolveCodeServerPort             func(ctx context.Context, codeSpaceID string) (int, error)
+	codeRuntimeStatus                 func(ctx context.Context) (CodeRuntimeStatus, error)
+	createCodeRuntimeSetupOperation   func(ctx context.Context, operationID string, installMethod codeserver.BrowserEditorInstallMethod, manifest *CodeRuntimeArtifactManifest) (CodeRuntimeSetupOperation, error)
+	appendCodeRuntimeSetupChunk       func(ctx context.Context, operationID string, chunkIndex int64, body io.Reader) (CodeRuntimeSetupChunkResult, error)
+	completeCodeRuntimeSetupOperation func(ctx context.Context, operationID string) (CodeRuntimeStatus, error)
+	cancelCodeRuntimeSetupOperation   func(ctx context.Context, operationID string) (CodeRuntimeStatus, error)
+	selectCodeRuntime                 func(ctx context.Context, version string) (CodeRuntimeStatus, error)
+	removeCodeRuntimeVersion          func(ctx context.Context, version string) (CodeRuntimeStatus, error)
+	cancelCodeRuntime                 func(ctx context.Context) (CodeRuntimeStatus, error)
 }
 
 func (s *stubBackend) ListSpaces(ctx context.Context) ([]SpaceStatus, error) {
@@ -99,21 +100,27 @@ func (s *stubBackend) CodeRuntimeStatus(ctx context.Context) (CodeRuntimeStatus,
 	}
 	return CodeRuntimeStatus{}, errors.New("not implemented")
 }
-func (s *stubBackend) CreateCodeRuntimeImportSession(ctx context.Context, manifest CodeRuntimeArtifactManifest) (CodeRuntimeImportSession, error) {
-	if s.createCodeRuntimeImportSession != nil {
-		return s.createCodeRuntimeImportSession(ctx, manifest)
+func (s *stubBackend) CreateCodeRuntimeSetupOperation(ctx context.Context, operationID string, installMethod codeserver.BrowserEditorInstallMethod, manifest *CodeRuntimeArtifactManifest) (CodeRuntimeSetupOperation, error) {
+	if s.createCodeRuntimeSetupOperation != nil {
+		return s.createCodeRuntimeSetupOperation(ctx, operationID, installMethod, manifest)
 	}
-	return CodeRuntimeImportSession{}, errors.New("not implemented")
+	return CodeRuntimeSetupOperation{}, errors.New("not implemented")
 }
-func (s *stubBackend) AppendCodeRuntimeImportChunk(ctx context.Context, uploadID string, chunkIndex int64, body io.Reader) (CodeRuntimeImportChunkResult, error) {
-	if s.appendCodeRuntimeImportChunk != nil {
-		return s.appendCodeRuntimeImportChunk(ctx, uploadID, chunkIndex, body)
+func (s *stubBackend) AppendCodeRuntimeSetupChunk(ctx context.Context, operationID string, chunkIndex int64, body io.Reader) (CodeRuntimeSetupChunkResult, error) {
+	if s.appendCodeRuntimeSetupChunk != nil {
+		return s.appendCodeRuntimeSetupChunk(ctx, operationID, chunkIndex, body)
 	}
-	return CodeRuntimeImportChunkResult{}, errors.New("not implemented")
+	return CodeRuntimeSetupChunkResult{}, errors.New("not implemented")
 }
-func (s *stubBackend) CompleteCodeRuntimeImportSession(ctx context.Context, uploadID string) (CodeRuntimeStatus, error) {
-	if s.completeCodeRuntimeImportSession != nil {
-		return s.completeCodeRuntimeImportSession(ctx, uploadID)
+func (s *stubBackend) CompleteCodeRuntimeSetupOperation(ctx context.Context, operationID string) (CodeRuntimeStatus, error) {
+	if s.completeCodeRuntimeSetupOperation != nil {
+		return s.completeCodeRuntimeSetupOperation(ctx, operationID)
+	}
+	return CodeRuntimeStatus{}, errors.New("not implemented")
+}
+func (s *stubBackend) CancelCodeRuntimeSetupOperation(ctx context.Context, operationID string) (CodeRuntimeStatus, error) {
+	if s.cancelCodeRuntimeSetupOperation != nil {
+		return s.cancelCodeRuntimeSetupOperation(ctx, operationID)
 	}
 	return CodeRuntimeStatus{}, errors.New("not implemented")
 }
@@ -343,6 +350,10 @@ func TestServer_CodeRuntimeRoutes(t *testing.T) {
 	var selectCalls int
 	var removeVersionCalls int
 	var cancelCalls int
+	var createSetupCalls int
+	var appendSetupCalls int
+	var completeSetupCalls int
+	var cancelSetupCalls int
 	b := &stubBackend{
 		codeRuntimeStatus: func(ctx context.Context) (CodeRuntimeStatus, error) {
 			return CodeRuntimeStatus{
@@ -361,6 +372,49 @@ func TestServer_CodeRuntimeRoutes(t *testing.T) {
 					State: "idle",
 				},
 			}, nil
+		},
+		createCodeRuntimeSetupOperation: func(ctx context.Context, operationID string, installMethod codeserver.BrowserEditorInstallMethod, manifest *CodeRuntimeArtifactManifest) (CodeRuntimeSetupOperation, error) {
+			createSetupCalls++
+			if operationID != "browser-editor:remote" || installMethod != codeserver.BrowserEditorInstallMethodRemoteDownload || manifest != nil {
+				return CodeRuntimeSetupOperation{}, fmt.Errorf("unexpected setup create: id=%q method=%q manifest=%v", operationID, installMethod, manifest)
+			}
+			return CodeRuntimeSetupOperation{
+				OperationID:   operationID,
+				InstallMethod: installMethod,
+				State:         "running",
+			}, nil
+		},
+		appendCodeRuntimeSetupChunk: func(ctx context.Context, operationID string, chunkIndex int64, body io.Reader) (CodeRuntimeSetupChunkResult, error) {
+			appendSetupCalls++
+			payload, err := io.ReadAll(body)
+			if err != nil {
+				return CodeRuntimeSetupChunkResult{}, err
+			}
+			if operationID != "browser-editor:remote" || chunkIndex != 0 || string(payload) != "chunk" {
+				return CodeRuntimeSetupChunkResult{}, fmt.Errorf("unexpected setup chunk: id=%q index=%d body=%q", operationID, chunkIndex, payload)
+			}
+			return CodeRuntimeSetupChunkResult{
+				OperationID:    operationID,
+				ReceivedBytes:  int64(len(payload)),
+				ExpectedBytes:  int64(len(payload)),
+				NextChunkIndex: 1,
+			}, nil
+		},
+		completeCodeRuntimeSetupOperation: func(ctx context.Context, operationID string) (CodeRuntimeStatus, error) {
+			completeSetupCalls++
+			return CodeRuntimeStatus{Operation: codeserver.RuntimeOperationStatus{
+				OperationID:   operationID,
+				InstallMethod: codeserver.BrowserEditorInstallMethodDesktopTransfer,
+				State:         codeserver.RuntimeOperationStateSucceeded,
+			}}, nil
+		},
+		cancelCodeRuntimeSetupOperation: func(ctx context.Context, operationID string) (CodeRuntimeStatus, error) {
+			cancelSetupCalls++
+			return CodeRuntimeStatus{Operation: codeserver.RuntimeOperationStatus{
+				OperationID:   operationID,
+				InstallMethod: codeserver.BrowserEditorInstallMethodRemoteDownload,
+				State:         codeserver.RuntimeOperationStateCancelled,
+			}}, nil
 		},
 		selectCodeRuntime: func(ctx context.Context, version string) (CodeRuntimeStatus, error) {
 			selectCalls++
@@ -444,6 +498,36 @@ func TestServer_CodeRuntimeRoutes(t *testing.T) {
 	}
 	if !bytes.Contains(statusResp.Body.Bytes(), []byte(`"platform"`)) {
 		t.Fatalf("status body missing platform: %s", statusResp.Body.String())
+	}
+
+	createResp := request(http.MethodPost, "/_redeven_proxy/api/code-runtime/setup-operations", `{"operation_id":"browser-editor:remote","install_method":"remote_download"}`)
+	if createResp.Code != http.StatusOK || createSetupCalls != 1 {
+		t.Fatalf("setup create code=%d calls=%d body=%s", createResp.Code, createSetupCalls, createResp.Body.String())
+	}
+	if !bytes.Contains(createResp.Body.Bytes(), []byte(`"install_method":"remote_download"`)) {
+		t.Fatalf("setup create body missing method: %s", createResp.Body.String())
+	}
+
+	injectedURLResp := request(http.MethodPost, "/_redeven_proxy/api/code-runtime/setup-operations", `{"operation_id":"browser-editor:injected","install_method":"remote_download","download_url":"https://example.com/package.tar.gz"}`)
+	if injectedURLResp.Code != http.StatusBadRequest || createSetupCalls != 1 {
+		t.Fatalf("client URL injection code=%d create_calls=%d body=%s", injectedURLResp.Code, createSetupCalls, injectedURLResp.Body.String())
+	}
+	trailingResp := request(http.MethodPost, "/_redeven_proxy/api/code-runtime/setup-operations", `{"operation_id":"browser-editor:trailing","install_method":"remote_download"} {}`)
+	if trailingResp.Code != http.StatusBadRequest || createSetupCalls != 1 {
+		t.Fatalf("trailing setup JSON code=%d create_calls=%d body=%s", trailingResp.Code, createSetupCalls, trailingResp.Body.String())
+	}
+
+	chunkResp := request(http.MethodPut, "/_redeven_proxy/api/code-runtime/setup-operations/browser-editor:remote/chunks/0", "chunk")
+	if chunkResp.Code != http.StatusOK || appendSetupCalls != 1 {
+		t.Fatalf("setup chunk code=%d calls=%d body=%s", chunkResp.Code, appendSetupCalls, chunkResp.Body.String())
+	}
+	completeResp := request(http.MethodPost, "/_redeven_proxy/api/code-runtime/setup-operations/browser-editor:remote/complete", "")
+	if completeResp.Code != http.StatusOK || completeSetupCalls != 1 {
+		t.Fatalf("setup complete code=%d calls=%d body=%s", completeResp.Code, completeSetupCalls, completeResp.Body.String())
+	}
+	cancelSetupResp := request(http.MethodPost, "/_redeven_proxy/api/code-runtime/setup-operations/browser-editor:remote/cancel", "")
+	if cancelSetupResp.Code != http.StatusOK || cancelSetupCalls != 1 {
+		t.Fatalf("setup cancel code=%d calls=%d body=%s", cancelSetupResp.Code, cancelSetupCalls, cancelSetupResp.Body.String())
 	}
 
 	selectResp := request(http.MethodPost, "/_redeven_proxy/api/code-runtime/select", `{"version":"4.109.1"}`)

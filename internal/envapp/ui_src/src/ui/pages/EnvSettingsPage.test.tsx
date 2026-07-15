@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { render } from 'solid-js/web';
-import { createSignal } from 'solid-js';
+import { Show, createSignal } from 'solid-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EnvSettingsPage } from './EnvSettingsPage';
@@ -78,7 +78,6 @@ const localApiMocks = vi.hoisted(() => ({
 
 const desktopCodeWorkspaceMocks = vi.hoisted(() => ({
   prepareAvailable: vi.fn(() => true),
-  prepareWorkspaceEngine: vi.fn(async () => ({ ok: true, prepared: true })),
   prepareWorkspaceEngineWithDesktop: vi.fn(async (): Promise<any> => ({ ok: true, prepared: true })),
   cancelWorkspaceEnginePreparation: vi.fn(async (): Promise<any> => ({ ok: true, cancelled: true })),
 }));
@@ -90,7 +89,7 @@ const desktopSessionContextMocks = vi.hoisted(() => ({
 let settingsResponse: any = null;
 
 const codeRuntimeMocks = vi.hoisted(() => ({
-  fetchCodeRuntimeStatus: vi.fn(async () => null),
+  fetchCodeRuntimeStatus: vi.fn<() => Promise<any>>(async () => null),
   selectCodeRuntimeVersion: vi.fn(async () => undefined),
   removeCodeRuntimeVersion: vi.fn(async () => undefined),
   cancelCodeRuntimeOperation: vi.fn(async () => undefined),
@@ -124,6 +123,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   ChevronDown: icon('ChevronDown'),
   ChevronLeft: icon('ChevronLeft'),
   Code: icon('Code'),
+  Cloud: icon('Cloud'),
   Copy: icon('Copy'),
   Cpu: icon('Cpu'),
   Database: icon('Database'),
@@ -249,10 +249,13 @@ vi.mock('../services/localApi', () => ({
 }));
 
 vi.mock('../services/desktopCodeWorkspaceBridge', () => ({
-  cancelWorkspaceEnginePreparation: desktopCodeWorkspaceMocks.cancelWorkspaceEnginePreparation,
   desktopCodeWorkspacePrepareAvailable: desktopCodeWorkspaceMocks.prepareAvailable,
-  prepareWorkspaceEngineInDesktop: desktopCodeWorkspaceMocks.prepareWorkspaceEngine,
-  prepareWorkspaceEngineWithDesktop: desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop,
+}));
+
+vi.mock('../services/browserEditorSetup', () => ({
+  cancelBrowserEditorSetup: desktopCodeWorkspaceMocks.cancelWorkspaceEnginePreparation,
+  defaultBrowserEditorInstallMethod: () => (desktopCodeWorkspaceMocks.prepareAvailable() ? 'desktop_transfer' : 'remote_download'),
+  prepareBrowserEditorSetup: desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop,
 }));
 
 vi.mock('../services/desktopSessionContext', () => ({
@@ -321,6 +324,11 @@ vi.mock('./settings/CodeRuntimeSettingsCard', () => ({
       <button type="button" onClick={props.onPrepare} disabled={props.actionLoading}>
         Update browser editor
       </button>
+      <Show when={props.status?.operation?.state === 'running'}>
+        <button type="button" onClick={props.onCancel} disabled={props.cancelLoading}>
+          Cancel runtime operation
+        </button>
+      </Show>
     </section>
   ),
 }));
@@ -445,7 +453,6 @@ describe('EnvSettingsPage', () => {
     envContextMocks.returnFromSettingsOrigin.mockReset();
     desktopCodeWorkspaceMocks.prepareAvailable.mockReset();
     desktopCodeWorkspaceMocks.prepareAvailable.mockReturnValue(true);
-    desktopCodeWorkspaceMocks.prepareWorkspaceEngine.mockReset();
     desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop.mockReset();
     desktopCodeWorkspaceMocks.cancelWorkspaceEnginePreparation.mockReset();
     desktopCodeWorkspaceMocks.cancelWorkspaceEnginePreparation.mockResolvedValue({ ok: true, cancelled: true });
@@ -509,6 +516,10 @@ describe('EnvSettingsPage', () => {
     expect(runtimeGroup?.querySelector('[data-settings-nav-item="debug_console"]')).toBeNull();
     expect(runtimeGroup?.querySelector('[data-settings-nav-item="runtime"]')).not.toBeNull();
     expect(runtimeGroup?.querySelector('[data-settings-nav-item="codespaces"]')).not.toBeNull();
+
+    const responsiveBody = host.querySelector('.redeven-settings-body');
+    expect(responsiveBody?.classList.contains('flex-col')).toBe(true);
+    expect(responsiveBody?.classList.contains('md:flex-row')).toBe(true);
     expect(runtimeGroup?.querySelector('[data-settings-nav-item="logging"]')).not.toBeNull();
 
     const aiGroup = host.querySelector('[data-settings-group="ai_extensions"]');
@@ -620,6 +631,9 @@ describe('EnvSettingsPage', () => {
           refreshCodexStatus: () => undefined,
           codeRuntimeStatus: Object.assign(() => null, { loading: false, error: null, state: 'ready' }) as EnvSettingsPageContextValue['codeRuntimeStatus'],
           refreshCodeRuntimeStatus: () => undefined,
+          codeRuntimeInstallMethod: () => 'desktop_transfer' as const,
+          setCodeRuntimeInstallMethod: () => undefined,
+          desktopCodeRuntimeTransferAvailable: () => true,
           canInteract: () => true,
           canAdmin: () => true,
           activeSection: () => 'ai',
@@ -1035,13 +1049,44 @@ describe('EnvSettingsPage', () => {
     await flushPage();
 
     expect(desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop).toHaveBeenCalledWith(expect.objectContaining({
-      reason: 'settings',
       status: undefined,
-      preferSessionUpload: false,
+      installMethod: 'desktop_transfer',
+      signal: expect.any(AbortSignal),
       operationID: expect.stringMatching(/^browser-editor:/),
       onProgress: expect.any(Function),
     }));
     expect(notificationMocks.error).not.toHaveBeenCalled();
+  });
+
+  it('uses the generic Runtime cancellation path for a running version removal', async () => {
+    protocolMocks.status.mockReturnValue('connected');
+    codeRuntimeMocks.fetchCodeRuntimeStatus.mockResolvedValue({
+      active_runtime: { detection_state: 'ready', present: true, source: 'managed' },
+      managed_runtime: { detection_state: 'ready', present: true, source: 'managed' },
+      managed_prefix: '/runtime',
+      shared_runtime_root: '/shared',
+      managed_runtime_source: 'managed',
+      installed_versions: [],
+      operation: {
+        action: 'remove_local_environment_version',
+        state: 'running',
+      },
+      updated_at_unix_ms: 1,
+    });
+
+    render(() => <EnvSettingsPage />, host);
+    await openSettingsSection(host, 'codespaces');
+    await vi.waitFor(() => {
+      expect(host.textContent).toContain('Cancel runtime operation');
+    });
+
+    const cancelButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Cancel runtime operation'));
+    cancelButton?.click();
+
+    await vi.waitFor(() => {
+      expect(codeRuntimeMocks.cancelCodeRuntimeOperation).toHaveBeenCalledOnce();
+    });
+    expect(desktopCodeWorkspaceMocks.cancelWorkspaceEnginePreparation).not.toHaveBeenCalled();
   });
 
   it('keeps Desktop Browser Editor preparation failures visible on the settings page', async () => {

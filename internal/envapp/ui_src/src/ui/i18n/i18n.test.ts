@@ -648,7 +648,7 @@ describe('Env App i18n dictionaries', () => {
     expect(zhCN.t('codeRuntime.currentEditorSection')).toBe('当前编辑器');
     expect(zhCN.t('codeRuntime.useThisVersion')).toBe('使用此版本');
     expect(zhCN.t('codeRuntime.notes.codespacesUsesSelectedManagedVersion')).toBe('Codespaces 使用选定的托管 Browser Editor 版本。');
-    expect(zhCN.t('codeRuntime.activity.steps.cache')).toBe('下载到 Desktop');
+    expect(zhCN.t('codeRuntime.activity.steps.desktopTransfer.acquire')).toBe('下载到 Desktop');
     expect(zhCN.t('settings.connection.title')).toBe('连接');
     expect(zhCN.t('settings.connection.connectedRuntime')).toBe('已连接到运行时');
     expect(zhCN.t('settings.connection.coreInformation')).toBe('核心信息');
