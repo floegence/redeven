@@ -1,4 +1,8 @@
-import { TerminalSessionsCoordinator, type Logger, type TerminalTransport } from '@floegence/floeterm-terminal-web';
+import {
+  TerminalSessionsCoordinator,
+  type Logger,
+  type TerminalTransport,
+} from '@floegence/floeterm-terminal-web/sessions';
 
 type singleton_state = {
   connId: string;
@@ -7,10 +11,23 @@ type singleton_state = {
 
 let singleton: singleton_state | null = null;
 
-export function getRedevenTerminalSessionsCoordinator(opts: {
-  connId: string;
+export function createRedevenTerminalSessionsCoordinator(opts: {
   transport: TerminalTransport;
   logger?: Logger;
+  pollMs?: number;
+}): TerminalSessionsCoordinator {
+  return new TerminalSessionsCoordinator({
+    transport: opts.transport,
+    pollMs: opts.pollMs ?? 60_000,
+    logger: opts.logger,
+  });
+}
+
+export function getRedevenTerminalSessionsCoordinator(opts: {
+  connId: string;
+  transport?: TerminalTransport;
+  logger?: Logger;
+  pollMs?: number;
 }): TerminalSessionsCoordinator {
   const connId = String(opts.connId ?? '').trim();
   if (!connId) {
@@ -26,10 +43,16 @@ export function getRedevenTerminalSessionsCoordinator(opts: {
     singleton.coordinator.dispose();
   }
 
-  const coordinator = new TerminalSessionsCoordinator({
-    transport: opts.transport,
-    pollMs: 60_000,
+  const coordinator = createRedevenTerminalSessionsCoordinator({
+    transport: opts.transport ?? {
+      attach: async () => { throw new Error('Terminal sessions coordinator transport is unavailable'); },
+      resize: async () => { throw new Error('Terminal sessions coordinator transport is unavailable'); },
+      sendInput: async () => { throw new Error('Terminal sessions coordinator transport is unavailable'); },
+      history: async () => { throw new Error('Terminal sessions coordinator transport is unavailable'); },
+      clear: async () => { throw new Error('Terminal sessions coordinator transport is unavailable'); },
+    },
     logger: opts.logger,
+    pollMs: opts.pollMs,
   });
 
   singleton = { connId, coordinator };

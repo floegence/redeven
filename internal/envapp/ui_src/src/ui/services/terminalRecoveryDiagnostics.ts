@@ -1,6 +1,7 @@
-import type { PagedTerminalOutputFailureCode } from '@floegence/floeterm-terminal-web';
+import type { PagedTerminalOutputFailureCode } from '@floegence/floeterm-terminal-web/history';
 
 import { publishDebugConsoleStructuredEvent } from './debugConsoleCapture';
+import { pseudonymousTerminalSessionRef } from './terminalPerformance';
 
 export type TerminalRecoveryVariant = 'panel' | 'workbench';
 export type TerminalRecoveryPhase = 'initializing' | 'attaching' | 'replaying' | 'interactive' | 'failed';
@@ -30,7 +31,10 @@ export type TerminalRecoveryEventKind =
   | 'degraded'
   | 'blocking'
   | 'resize_decision'
-  | 'live';
+  | 'live'
+  | 'prepared_history_hit'
+  | 'prepared_history_miss'
+  | 'prepared_history_rebased';
 
 export type TerminalRecoveryEventDetail = Readonly<{
   runtime_attach_generation?: number;
@@ -54,26 +58,17 @@ export type TerminalRecoveryEventDetail = Readonly<{
   resize_decision?: TerminalResizeDecision;
   cols?: number;
   rows?: number;
+  prepared_history_bytes?: number;
+  prepared_history_page_count?: number;
 }>;
 
-const sessionRefs = new Map<string, string>();
 const surfaceGenerations = new Map<string, number>();
 const activeTraces = new Map<string, TerminalRecoveryTrace>();
-let nextSessionRef = 0;
 
 function monotonicNow(): number {
   return typeof performance !== 'undefined' && typeof performance.now === 'function'
     ? performance.now()
     : Date.now();
-}
-
-function sessionRefFor(sessionID: string): string {
-  const existing = sessionRefs.get(sessionID);
-  if (existing) return existing;
-  nextSessionRef += 1;
-  const next = `terminal-${String(nextSessionRef).padStart(3, '0')}`;
-  sessionRefs.set(sessionID, next);
-  return next;
 }
 
 function finiteNonNegativeInteger(value: number | undefined): number | undefined {
@@ -109,6 +104,8 @@ function eventDetail(trace: TerminalRecoveryTrace, detail: TerminalRecoveryEvent
     resize_decision: detail.resize_decision,
     cols: finiteNonNegativeInteger(detail.cols),
     rows: finiteNonNegativeInteger(detail.rows),
+    prepared_history_bytes: finiteNonNegativeInteger(detail.prepared_history_bytes),
+    prepared_history_page_count: finiteNonNegativeInteger(detail.prepared_history_page_count),
   };
 }
 
@@ -118,7 +115,7 @@ export function startTerminalRecoveryTrace(
 ): TerminalRecoveryTrace {
   const nextGeneration = (surfaceGenerations.get(sessionID) ?? 0) + 1;
   surfaceGenerations.set(sessionID, nextGeneration);
-  const sessionRef = sessionRefFor(sessionID);
+  const sessionRef = pseudonymousTerminalSessionRef(sessionID);
   const trace: TerminalRecoveryTrace = {
     sessionRef,
     variant,
@@ -188,14 +185,11 @@ export function terminalRecoveryDiagnosticsQuery(
 }
 
 export function releaseTerminalRecoveryDiagnostics(sessionID: string): void {
-  sessionRefs.delete(sessionID);
   surfaceGenerations.delete(sessionID);
   activeTraces.delete(sessionID);
 }
 
 export function resetTerminalRecoveryDiagnosticsForTests(): void {
-  sessionRefs.clear();
   surfaceGenerations.clear();
   activeTraces.clear();
-  nextSessionRef = 0;
 }

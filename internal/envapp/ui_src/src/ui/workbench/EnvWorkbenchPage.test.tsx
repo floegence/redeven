@@ -211,6 +211,9 @@ const contextProbeState = vi.hoisted(() => ({
 }));
 
 const [envId, setEnvId] = createSignal('env-123');
+const [envPermissions, setEnvPermissions] = createSignal({ can_write: true, can_execute: true });
+const [protocolClient, setProtocolClient] = createSignal<object | null>({ id: 'client-1' });
+const [protocolStatus, setProtocolStatus] = createSignal('connected');
 const [workbenchOverviewEntrySeq, setWorkbenchOverviewEntrySeq] = createSignal(0);
 const [workbenchOverviewEntry, setWorkbenchOverviewEntry] = createSignal<any>(null);
 const [workbenchSurfaceActivationSeq, setWorkbenchSurfaceActivationSeq] = createSignal(0);
@@ -472,6 +475,10 @@ function openPreviewResponse(args: {
 vi.mock('../pages/EnvContext', () => ({
   useEnvContext: () => ({
     env_id: envId,
+    env: Object.assign(
+      () => ({ permissions: envPermissions() }),
+      { state: 'ready' },
+    ),
     connectionOverlayVisible: () => false,
     connectionOverlayMessage: () => 'Connecting to runtime...',
     workbenchOverviewEntrySeq,
@@ -498,6 +505,14 @@ vi.mock('../pages/EnvContext', () => ({
         current?.requestId === requestId ? null : current
       ));
     },
+  }),
+}));
+
+vi.mock('@floegence/floe-webapp-protocol', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@floegence/floe-webapp-protocol')>()),
+  useProtocol: () => ({
+    client: protocolClient,
+    status: protocolStatus,
   }),
 }));
 
@@ -730,6 +745,9 @@ describe('EnvWorkbenchPage', () => {
     vi.useFakeTimers();
     ensureCSSEscape();
     setEnvId('env-123');
+    setEnvPermissions({ can_write: true, can_execute: true });
+    setProtocolClient({ id: 'client-1' });
+    setProtocolStatus('connected');
     setWorkbenchOverviewEntry(null);
     setWorkbenchOverviewEntrySeq(0);
     setWorkbenchSurfaceActivation(null);
@@ -3659,6 +3677,128 @@ describe('EnvWorkbenchPage', () => {
 
     expect(surface?.dataset.selectedWidgetId).toBe('');
     expect(surface?.dataset.widgetIds).toBe('');
+  });
+
+  it.each([
+    {
+      name: 'the environment changes',
+      invalidate: () => { setEnvId('env-456'); },
+    },
+    {
+      name: 'process permission is revoked',
+      invalidate: () => { setEnvPermissions({ can_write: false, can_execute: true }); },
+    },
+  ])('drops an in-flight terminal create result after $name', async ({ invalidate }) => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const createDeferred = deferred<any>();
+    const terminalCreateResults: Array<any> = [];
+    let createStarted = false;
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 120,
+      widgets: [runtimeWidget('widget-terminal-1', 'redeven.terminal', 1, 100)],
+      widget_states: [runtimeTerminalState('widget-terminal-1', ['session-1'])],
+    });
+    layoutApiMocks.createWorkbenchTerminalSession.mockImplementation(() => createDeferred.promise);
+    widgetBodyMocks.renderTerminalBody = (bodyProps: any) => {
+      const workbench = useEnvWorkbenchInstancesContext();
+      createEffect(() => {
+        contextProbeState.terminalPanelState = workbench.terminalPanelState(bodyProps.widgetId);
+        if (createStarted) return;
+        createStarted = true;
+        void workbench.createTerminalSession(bodyProps.widgetId, 'repo', '/workspace').then((session) => {
+          terminalCreateResults.push(session);
+        });
+      });
+      return null;
+    };
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+    expect(layoutApiMocks.createWorkbenchTerminalSession).toHaveBeenCalledTimes(1);
+
+    invalidate();
+    await flushMicrotasks();
+    createDeferred.resolve({
+      session: {
+        id: 'session-old-env',
+        name: 'repo',
+        working_dir: '/workspace',
+        created_at_ms: 1,
+        last_active_at_ms: 1,
+        is_active: false,
+      },
+      widget_state: runtimeTerminalState(
+        'widget-terminal-1',
+        ['session-1', 'session-old-env'],
+        2,
+        301,
+      ),
+    });
+    await flushMicrotasks();
+
+    expect(terminalCreateResults).toEqual([null]);
+    expect(contextProbeState.terminalPanelState).toEqual({
+      sessionIds: ['session-1'],
+      activeSessionId: 'session-1',
+    });
+  });
+
+  it.each([
+    {
+      name: 'the environment changes',
+      invalidate: () => { setEnvId('env-456'); },
+    },
+    {
+      name: 'process permission is revoked',
+      invalidate: () => { setEnvPermissions({ can_write: false, can_execute: true }); },
+    },
+  ])('drops an in-flight terminal delete result after $name', async ({ invalidate }) => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const deleteDeferred = deferred<any>();
+    let deleteStarted = false;
+    let deleteCompleted = false;
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 120,
+      widgets: [runtimeWidget('widget-terminal-1', 'redeven.terminal', 1, 100)],
+      widget_states: [runtimeTerminalState('widget-terminal-1', ['session-1', 'session-2'])],
+    });
+    layoutApiMocks.deleteWorkbenchTerminalSession.mockImplementation(() => deleteDeferred.promise);
+    widgetBodyMocks.renderTerminalBody = (bodyProps: any) => {
+      const workbench = useEnvWorkbenchInstancesContext();
+      createEffect(() => {
+        contextProbeState.terminalPanelState = workbench.terminalPanelState(bodyProps.widgetId);
+        if (deleteStarted) return;
+        deleteStarted = true;
+        void workbench.deleteTerminalSession(bodyProps.widgetId, 'session-2').then(() => {
+          deleteCompleted = true;
+        });
+      });
+      return null;
+    };
+
+    mount(() => <EnvWorkbenchPage />, host);
+    await flushMicrotasks();
+    expect(layoutApiMocks.deleteWorkbenchTerminalSession).toHaveBeenCalledWith(
+      'widget-terminal-1',
+      'session-2',
+    );
+
+    invalidate();
+    await flushMicrotasks();
+    deleteDeferred.resolve(runtimeTerminalState('widget-terminal-1', ['session-1'], 2, 302));
+    await flushMicrotasks();
+
+    expect(deleteCompleted).toBe(true);
+    expect(contextProbeState.terminalPanelState).toEqual({
+      sessionIds: ['session-1', 'session-2'],
+      activeSessionId: 'session-1',
+    });
   });
 
   it('uses focus history when a runtime layout projection removes the selected widget', async () => {

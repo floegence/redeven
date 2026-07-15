@@ -1,5 +1,5 @@
 import { Show, createEffect, createMemo, createResource, createSignal, lazy, onCleanup, onMount } from 'solid-js';
-import { createUIFirstSelection, deferAfterPaint, type FloeComponent, useCommand, useLayout, useNotification, useTheme } from '@floegence/floe-webapp-core';
+import { createUIFirstSelection, deferAfterPaint, type FloeComponent, type UIFirstSelectionEvent, useCommand, useLayout, useNotification, useTheme } from '@floegence/floe-webapp-core';
 import { ActivityAppsMain, FloeRegistryRuntime } from '@floegence/floe-webapp-core/app';
 import { NotesOverlayIcon } from '@floegence/floe-webapp-core/notes';
 import {
@@ -105,6 +105,8 @@ import { fileItemFromPath } from './utils/filePreviewItem';
 import { reloadCurrentPage } from './utils/windowNavigation';
 import { resolveEnvSidebarVisibilityMotion, shouldEnvTabOpenSidebar } from './envSidebarVisibilityMotion';
 import { createUIPresentationEventRecorder } from './services/uiPresentationTransactions';
+import { TerminalSessionCatalogProvider } from './services/terminalSessionCatalog';
+import { preloadTerminalFeatureResources } from './services/terminalFeaturePreload';
 import { buildDesktopShellCommandPaletteEntries } from './services/desktopShellCommandPalette';
 import {
   desktopShellBridgeAvailable,
@@ -164,6 +166,12 @@ import {
   type EnvWorkbenchHandoffAnchor,
 } from './envViewMode';
 import { LanguagePreferenceMenu, useI18n } from './i18n';
+
+type EnvActivitySelectionMetadata = Readonly<{
+  source: 'activity-bar' | 'mobile-tab-bar';
+  opts?: Readonly<{ openSidebar?: boolean }>;
+  mobileSidebarOpen?: boolean;
+}>;
 
 const ACTIVE_SURFACE_STORAGE_KEY = 'redeven_envapp_active_tab';
 const DESKTOP_VIEW_MODE_STORAGE_KEY = 'redeven_envapp_desktop_view_mode';
@@ -2418,6 +2426,9 @@ export function EnvAppShell() {
   });
 
   const openSurface = (surfaceId: EnvSurfaceId, options?: EnvOpenSurfaceOptions) => {
+    if (surfaceId === 'terminal') {
+      void preloadTerminalFeatureResources({ reason: 'intent' }).catch(() => undefined);
+    }
     const targetSurface = resolveOpenSurfaceTarget(surfaceId, options);
     setLastRequestedSurface(targetSurface);
 
@@ -3201,13 +3212,21 @@ export function EnvAppShell() {
     />
   );
 
+  const recordActivitySelectionEvent = createUIPresentationEventRecorder<string, EnvActivitySelectionMetadata>({
+    surface: 'activity',
+    source: (event) => event.metadata?.source ?? 'activity-bar',
+  });
+  const handleActivitySelectionEvent = (event: UIFirstSelectionEvent<string, EnvActivitySelectionMetadata>) => {
+    if (event.phase === 'requested' && event.value === 'terminal') {
+      void preloadTerminalFeatureResources({ reason: 'intent' }).catch(() => undefined);
+    }
+    recordActivitySelectionEvent(event);
+  };
+
   const renderActivityShell = () => (
     <Shell
       activitySelectionMode="ui-first"
-      onActivitySelectionEvent={createUIPresentationEventRecorder({
-        surface: 'activity',
-        source: (event) => event.metadata?.source ?? 'activity-bar',
-      })}
+      onActivitySelectionEvent={handleActivitySelectionEvent}
       sidebarMode={layout.sidebarActiveTab() !== 'ai' ? 'auto' : 'hidden'}
       slotClassNames={{
         sidebar: layout.sidebarVisibilityMotion() === 'instant' ? 'transition-none' : undefined,
@@ -3425,7 +3444,8 @@ export function EnvAppShell() {
         consumeAIThreadFocusRequest,
       }}
     >
-      <DownloadContext.Provider value={downloadManager}>
+      <TerminalSessionCatalogProvider>
+        <DownloadContext.Provider value={downloadManager}>
         <FileBrowserSurfaceContext.Provider value={fileBrowserSurfaceContextValue}>
           <FilePreviewContext.Provider value={filePreviewContextValue}>
             <RuntimeUpdateContext.Provider
@@ -3454,7 +3474,8 @@ export function EnvAppShell() {
             </RuntimeUpdateContext.Provider>
           </FilePreviewContext.Provider>
         </FileBrowserSurfaceContext.Provider>
-      </DownloadContext.Provider>
+        </DownloadContext.Provider>
+      </TerminalSessionCatalogProvider>
     </EnvContext.Provider>
   );
 }

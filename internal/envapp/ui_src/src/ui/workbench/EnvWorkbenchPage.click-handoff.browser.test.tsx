@@ -86,6 +86,10 @@ const envContextState = vi.hoisted(() => ({
   consumeWorkbenchSurfaceActivation: vi.fn(),
 }));
 
+const browserProtocolState = vi.hoisted(() => ({
+  client: { id: 'browser-client' },
+}));
+
 async function flushWork() {
   await Promise.resolve();
   await new Promise<void>((resolve) => setTimeout(resolve, 0));
@@ -100,6 +104,10 @@ async function flushWork() {
 vi.mock('../pages/EnvContext', () => ({
   useEnvContext: () => ({
     env_id: () => envContextState.envId,
+    env: Object.assign(
+      () => ({ permissions: { can_write: true, can_execute: true } }),
+      { state: 'ready' },
+    ),
     connectionOverlayVisible: () => false,
     connectionOverlayMessage: () => 'Connecting to runtime...',
     workbenchOverviewEntrySeq: () => 0,
@@ -111,6 +119,14 @@ vi.mock('../pages/EnvContext', () => ({
     consumeWorkbenchOverviewEntry: vi.fn(),
     consumeWorkbenchSurfaceActivation: envContextState.consumeWorkbenchSurfaceActivation,
     consumeWorkbenchFilePreviewActivation: vi.fn(),
+  }),
+}));
+
+vi.mock('@floegence/floe-webapp-protocol', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@floegence/floe-webapp-protocol')>()),
+  useProtocol: () => ({
+    client: () => browserProtocolState.client,
+    status: () => 'connected',
   }),
 }));
 

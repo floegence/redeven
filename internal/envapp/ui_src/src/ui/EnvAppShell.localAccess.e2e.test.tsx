@@ -51,6 +51,10 @@ const pluginApiMocks = vi.hoisted(() => ({
   executePluginLifecycleCommand: vi.fn(async (_command: any) => ({})),
   loadPluginInventoryProjection: vi.fn(),
 }));
+const terminalFeaturePreloadMocks = vi.hoisted(() => ({
+  preloadTerminalFeatureResources: vi.fn(async () => undefined),
+  scheduleTerminalFeaturePreload: vi.fn(() => () => undefined),
+}));
 
 const connectMock = vi.fn(async (_config: Record<string, unknown>) => {
   protocolStatus = 'connected';
@@ -290,6 +294,15 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
         openSidebar,
         source: 'activity-bar',
         isMobile: layoutIsMobile,
+      });
+      props.onActivitySelectionEvent?.({
+        phase: 'requested',
+        value: item.id,
+        metadata: { source: 'activity-bar', opts: { openSidebar } },
+        transactionId: 1,
+        startedAt: 0,
+        timestamp: 0,
+        elapsedMs: 0,
       });
       setSidebarActiveTabMock(item.id, { openSidebar, visibilityMotion });
     };
@@ -543,6 +556,7 @@ vi.mock('./services/controlplaneApi', () => ({
   refreshLocalRuntime: refreshLocalRuntimeMock,
   unlockLocalAccess: unlockLocalAccessMock,
 }));
+vi.mock('./services/terminalFeaturePreload', () => terminalFeaturePreloadMocks);
 
 vi.mock('./accessResume', () => ({
   consumeAccessResumeTokenFromWindow: () => '',
@@ -874,6 +888,8 @@ beforeEach(() => {
       : {}
   ));
   pluginApiMocks.loadPluginInventoryProjection.mockReset();
+  terminalFeaturePreloadMocks.preloadTerminalFeatureResources.mockClear();
+  terminalFeaturePreloadMocks.scheduleTerminalFeaturePreload.mockClear();
   pluginApiMocks.loadPluginInventoryProjection.mockResolvedValue({
     items: [
       {
@@ -963,6 +979,7 @@ describe('EnvAppShell environment entry affordances', () => {
       (host.querySelector('[data-activity-id="files"]') as HTMLButtonElement | null)?.click();
       await flushUntil(() => Boolean(host.querySelector('[data-testid="mock-file-browser"]')));
       await flushUntil(() => !host.querySelector('[data-testid="mock-file-loading"]'));
+      terminalFeaturePreloadMocks.preloadTerminalFeatureResources.mockClear();
 
       const fileBrowser = host.querySelector('[data-testid="mock-file-browser"]') as HTMLElement;
       const pathInput = host.querySelector('[data-testid="mock-file-path"]') as HTMLInputElement;
@@ -981,6 +998,13 @@ describe('EnvAppShell environment entry affordances', () => {
       for (const target of ['terminal', 'monitor', 'ai', 'codex']) {
         (host.querySelector(`[data-activity-id="${target}"]`) as HTMLButtonElement | null)?.click();
         await flushUntil(() => sidebarActiveTabValue === target);
+
+        if (target === 'terminal') {
+          expect(terminalFeaturePreloadMocks.preloadTerminalFeatureResources).toHaveBeenCalledWith({ reason: 'intent' });
+          expect(terminalFeaturePreloadMocks.preloadTerminalFeatureResources.mock.invocationCallOrder.at(-1)).toBeLessThan(
+            setSidebarActiveTabMock.mock.invocationCallOrder.at(-1) ?? Number.POSITIVE_INFINITY,
+          );
+        }
 
         expect(host.querySelector('[data-testid="mock-file-browser"]')).toBe(fileBrowser);
         expect(activitySurfaceLifecycleState.fileMounts).toBe(1);

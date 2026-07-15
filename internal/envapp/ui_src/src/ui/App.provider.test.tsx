@@ -3,11 +3,6 @@
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const protocolMocks = vi.hoisted(() => ({
-  onSessionsChanged: vi.fn(),
-  unsubscribe: vi.fn(),
-}));
-
 vi.mock('@floegence/floe-webapp-core', async () => {
   const { createContext, useContext } = await import('solid-js');
   const NotificationContext = createContext<any>();
@@ -79,18 +74,7 @@ vi.mock('./EnvAppShell', () => ({
   EnvAppShell: () => <main data-testid="env-app-shell" />,
 }));
 
-vi.mock('./protocol/redeven_v1', () => ({
-  redevenV1Contract: {},
-  useRedevenRpc: () => ({
-    terminal: {
-      onSessionsChanged: protocolMocks.onSessionsChanged,
-    },
-  }),
-}));
-
-vi.mock('./services/terminalSessions', () => ({
-  refreshRedevenTerminalSessionsCoordinator: vi.fn(),
-}));
+vi.mock('./protocol/redeven_v1', () => ({ redevenV1Contract: {} }));
 
 vi.mock('./services/uiStorage', () => ({
   createUIStorageAdapter: () => ({}),
@@ -124,24 +108,19 @@ describe('App provider composition', () => {
   beforeEach(() => {
     host = document.createElement('div');
     document.body.appendChild(host);
-    protocolMocks.onSessionsChanged.mockReset();
-    protocolMocks.onSessionsChanged.mockReturnValue(protocolMocks.unsubscribe);
-    protocolMocks.unsubscribe.mockReset();
   });
 
   afterEach(() => {
     document.body.innerHTML = '';
   });
 
-  it('mounts terminal lifecycle sync inside protocol and notification providers', async () => {
+  it('mounts the environment shell inside protocol and notification providers', async () => {
     const { App } = await import('./App');
     const dispose = render(() => <App />, host);
 
     expect(host.querySelector('[data-testid="env-app-shell"]')).not.toBeNull();
     expect(host.querySelector('[data-testid="notification-container"]')).not.toBeNull();
-    expect(protocolMocks.onSessionsChanged).toHaveBeenCalledTimes(1);
 
     dispose();
-    expect(protocolMocks.unsubscribe).toHaveBeenCalledTimes(1);
   });
 });

@@ -9,6 +9,14 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import { PNG } from 'pngjs';
 
+import {
+  assertTerminalCarrierHistoryVisualEvidence,
+  assertTerminalCarrierHistoryVisualMatch,
+  assertTerminalCarrierInteractiveLimit,
+  assertTerminalCarrierP95Limit,
+  terminalCarrierSampleMarkerName,
+} from './terminalCarrierThreshold.mjs';
+
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '../../../..');
 const defaultFixtureBytes = 64 * 1024;
@@ -55,6 +63,15 @@ function sha256(data) {
   return createHash('sha256').update(data).digest('hex');
 }
 
+function pseudonymousTerminalSessionRef(sessionID) {
+  let hash = 2166136261;
+  for (const character of String(sessionID ?? '')) {
+    hash ^= character.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `session-${(hash >>> 0).toString(16)}`;
+}
+
 function analyzeCanvasImage(imageBuffer) {
   const image = PNG.sync.read(imageBuffer);
   const pixelCount = image.width * image.height;
@@ -96,19 +113,6 @@ function analyzeCanvasImage(imageBuffer) {
     inkRatio: pixelCount === 0 ? 0 : (pixelCount - backgroundPixels) / pixelCount,
     grid: Array.from(cellInk, (count, index) => cellPixels[index] === 0 ? 0 : count / cellPixels[index]),
   };
-}
-
-function assertRecoveredHistoryVisual(seedVisual, recoveredVisual) {
-  const meanGridDelta = recoveredVisual.grid.reduce((total, value, index) => (
-    total + Math.abs(value - seedVisual.grid[index])
-  ), 0) / recoveredVisual.grid.length;
-  if (seedVisual.inkRatio < 0.005) throw new Error('seeded terminal history did not produce meaningful canvas content');
-  // Whole-canvas ink ratios vary with surface geometry; the normalized grid is
-  // the cross-surface content comparison, while ink still proves nonblank output.
-  if (recoveredVisual.inkRatio < 0.005 || meanGridDelta > 0.15) {
-    throw new Error(`recovered terminal canvas does not match the seeded history (seed_ink=${seedVisual.inkRatio.toFixed(4)} recovered_ink=${recoveredVisual.inkRatio.toFixed(4)} grid_delta=${meanGridDelta.toFixed(4)})`);
-  }
-  return { meanGridDelta, recoveredInkRatio: recoveredVisual.inkRatio };
 }
 
 class TerminalCarrierStageError extends Error {
@@ -369,6 +373,16 @@ async function seedRetainedSession(page, tempDir, fixtureBytes) {
     await page.locator('[data-testid="terminal-sidebar-add-session"]:visible').first().click();
   }
   await terminalInput(page);
+  const anchorSession = page.locator('button[data-terminal-session-active="true"]:visible').first();
+  const anchorSessionID = await anchorSession.getAttribute('data-terminal-session-id');
+  if (!anchorSessionID) throw new Error('anchor terminal session did not expose its renderer identity');
+
+  await page.locator('[data-testid="terminal-sidebar-add-session"]:visible').first().click();
+  await page.waitForFunction((previousSessionID) => {
+    const active = globalThis.document.querySelector('button[data-terminal-session-active="true"]');
+    return active?.getAttribute('data-terminal-session-id') !== previousSessionID;
+  }, anchorSessionID, { timeout: 15_000 });
+  await terminalInput(page);
   const clearButton = page.locator('button[title="Clear"]:visible').last();
   await clearButton.waitFor({ state: 'visible', timeout: 10_000 });
   await clearButton.click();
@@ -383,7 +397,7 @@ async function seedRetainedSession(page, tempDir, fixtureBytes) {
   if (fixtureBytes === 0) {
     const historyBytes = await waitForHistoryBytes(targetPanel, 0);
     const historyLabel = await targetPanel.locator('text=/^History:/').last().textContent().catch(() => '');
-    return { sessionID, historyBytes, historyLabel: String(historyLabel ?? '').trim(), historyVisual: null };
+    return { anchorSessionID, sessionID, historyBytes, historyLabel: String(historyLabel ?? '').trim(), historyVisual: null };
   }
 
   const markerPath = path.join(tempDir, 'fixture-seeded');
@@ -400,7 +414,7 @@ async function seedRetainedSession(page, tempDir, fixtureBytes) {
   const historyBytes = await waitForHistoryBytes(targetPanel, minimumRetainedBytesForFixture(fixtureBytes));
   const historyVisual = await captureCanvasVisualEvidence(canvas);
   const historyLabel = await targetPanel.locator('text=/^History:/').last().textContent().catch(() => '');
-  return { sessionID, historyBytes, historyLabel: String(historyLabel ?? '').trim(), historyVisual };
+  return { anchorSessionID, sessionID, historyBytes, historyLabel: String(historyLabel ?? '').trim(), historyVisual };
 }
 
 async function selectSurface(page, surface) {
@@ -423,14 +437,15 @@ async function selectSurface(page, surface) {
   }
 }
 
-async function waitForRecoveryMarks(page, surface, notBefore, fixtureBytes) {
-  await page.waitForFunction(({ expectedSurface, minimumStart, requireHistory }) => {
+async function waitForRecoveryMarks(page, surface, notBefore, fixtureBytes, expectedSessionRef = '') {
+  await page.waitForFunction(({ expectedSurface, minimumStart, requireHistory, sessionRef }) => {
     const marks = performance.getEntriesByType('mark')
       .filter((entry) => entry.name.startsWith('redeven:terminal:'));
     const starts = marks.filter((entry) => (
       entry.name.startsWith('redeven:terminal:attach-start:')
       && entry.startTime >= minimumStart
       && entry.detail?.variant === expectedSurface
+      && (!sessionRef || entry.detail?.session_ref === sessionRef)
     ));
     const start = starts.at(-1);
     if (!start) return false;
@@ -454,15 +469,17 @@ async function waitForRecoveryMarks(page, surface, notBefore, fixtureBytes) {
     expectedSurface: surface,
     minimumStart: notBefore,
     requireHistory: fixtureBytes > 0,
+    sessionRef: expectedSessionRef,
   }, { timeout: 30_000 });
 
-  return page.evaluate(({ expectedSurface, minimumStart }) => {
+  return page.evaluate(({ expectedSurface, minimumStart, sessionRef }) => {
     const marks = performance.getEntriesByType('mark')
       .filter((entry) => entry.name.startsWith('redeven:terminal:'));
     const starts = marks.filter((entry) => (
       entry.name.startsWith('redeven:terminal:attach-start:')
       && entry.startTime >= minimumStart
       && entry.detail?.variant === expectedSurface
+      && (!sessionRef || entry.detail?.session_ref === sessionRef)
     ));
     const start = starts.at(-1);
     const sameTrace = (entry) => (
@@ -477,6 +494,7 @@ async function waitForRecoveryMarks(page, surface, notBefore, fixtureBytes) {
     return {
       session_ref: String(start.detail?.session_ref ?? ''),
       surface_generation: Number(start.detail?.surface_generation ?? 0),
+      attach_start_count: starts.length,
       runtime_attach_generation: Number(ack.detail?.runtime_attach_generation ?? 0),
       coordinator_attach_generation: Number(baseline.detail?.coordinator_attach_generation ?? 0),
       history_generation: Number(baseline.detail?.history_generation ?? 0),
@@ -485,13 +503,264 @@ async function waitForRecoveryMarks(page, surface, notBefore, fixtureBytes) {
       history_bytes_fetched: Number(baseline.detail?.history_bytes ?? 0),
       history_reset: Boolean(baseline.detail?.history_reset),
       history_truncated: Boolean(baseline.detail?.history_truncated),
+      cols: Number(start.detail?.cols ?? 0),
+      rows: Number(start.detail?.rows ?? 0),
       snapshot_end_sequence: Number(ack.detail?.snapshot_end_sequence ?? 0),
       covered_through_sequence: Number(baseline.detail?.covered_through_sequence ?? 0),
       attach_ack_ms: ack.startTime - start.startTime,
       baseline_parser_committed_ms: baseline.startTime - start.startTime,
       interactive_ms: interactive.startTime - start.startTime,
     };
-  }, { expectedSurface: surface, minimumStart: notBefore });
+  }, { expectedSurface: surface, minimumStart: notBefore, sessionRef: expectedSessionRef });
+}
+
+async function waitForTerminalPerformanceMark(page, stage, notBefore, sessionRef, timeoutMs = 30_000) {
+  await page.waitForFunction(({ expectedName, minimumStart, expectedSessionRef }) => (
+    performance.getEntriesByName(expectedName, 'mark').some((entry) => (
+      entry.startTime >= minimumStart
+      && entry.detail?.session_ref === expectedSessionRef
+    ))
+  ), {
+    expectedName: `redeven:terminal:${stage}`,
+    minimumStart: notBefore,
+    expectedSessionRef: sessionRef,
+  }, { timeout: timeoutMs });
+
+  return page.evaluate(({ expectedName, minimumStart, expectedSessionRef }) => {
+    const entries = performance.getEntriesByName(expectedName, 'mark').filter((entry) => (
+      entry.startTime >= minimumStart
+      && entry.detail?.session_ref === expectedSessionRef
+    ));
+    const entry = entries.at(-1);
+    return { start_time: entry.startTime, detail: entry.detail };
+  }, {
+    expectedName: `redeven:terminal:${stage}`,
+    minimumStart: notBefore,
+    expectedSessionRef: sessionRef,
+  });
+}
+
+async function waitForTerminalHistoryPrefetchOutcome(page, sessionRef, timeoutMs = 45_000) {
+  const outcomeNames = [
+    'redeven:terminal:history-prefetch-ready',
+    'redeven:terminal:history-prefetch-skipped',
+  ];
+  await page.waitForFunction(({ expectedNames, expectedSessionRef }) => (
+    expectedNames.some((expectedName) => (
+      performance.getEntriesByName(expectedName, 'mark').some((entry) => (
+        entry.detail?.session_ref === expectedSessionRef
+      ))
+    ))
+  ), {
+    expectedNames: outcomeNames,
+    expectedSessionRef: sessionRef,
+  }, { timeout: timeoutMs }).catch(async (error) => {
+    const diagnostics = await page.evaluate((expectedSessionRef) => (
+      performance.getEntriesByType('mark')
+        .filter((entry) => (
+          entry.name.includes('history')
+          && entry.detail?.session_ref === expectedSessionRef
+        ))
+        .map((entry) => ({ name: entry.name, start_time: entry.startTime, detail: entry.detail }))
+    ), sessionRef);
+    throw new Error(
+      `terminal history prefetch did not finish: ${error instanceof Error ? error.message : error}`
+        + `\n${JSON.stringify(diagnostics)}`,
+    );
+  });
+
+  const trace = await page.evaluate(({ expectedNames, expectedSessionRef }) => (
+    performance.getEntriesByType('mark')
+      .filter((entry) => (
+        (expectedNames.includes(entry.name) || entry.name === 'redeven:terminal:history-prefetch-start')
+        && entry.detail?.session_ref === expectedSessionRef
+      ))
+      .map((entry) => ({ name: entry.name, start_time: entry.startTime, detail: entry.detail }))
+      .sort((left, right) => left.start_time - right.start_time)
+  ), {
+    expectedNames: outcomeNames,
+    expectedSessionRef: sessionRef,
+  });
+  const outcome = trace.find((entry) => outcomeNames.includes(entry.name));
+  const started = trace.find((entry) => entry.name === 'redeven:terminal:history-prefetch-start');
+  if (!outcome || !started || started.start_time > outcome.start_time) {
+    throw new Error(`terminal history prefetch marks were not causally ordered: ${JSON.stringify(trace)}`);
+  }
+  if (outcome.name === 'redeven:terminal:history-prefetch-skipped') {
+    throw new Error(`terminal history prefetch was skipped: ${JSON.stringify(trace)}`);
+  }
+  return {
+    start_time: outcome.start_time,
+    started_at: started.start_time,
+    detail: outcome.detail,
+  };
+}
+
+async function runSharedPreparedHistorySample({
+  context,
+  entryURL,
+  fixtureBytes,
+  seeded,
+  tempDir,
+  sampleIndex,
+  maxInteractiveMs,
+}) {
+  const { page, problems } = await openEnvPage(context, entryURL);
+  const sessionRef = pseudonymousTerminalSessionRef(seeded.sessionID);
+  try {
+    const panelStart = await selectSurface(page, 'panel');
+    const panel = page.locator('[data-terminal-panel-variant="panel"]:visible');
+    const panelSession = panel.locator(`button[data-terminal-session-id="${seeded.sessionID}"]`).first();
+    await panelSession.waitFor({ state: 'visible', timeout: 15_000 });
+    let panelTargetStart = panelStart;
+    if (await panelSession.getAttribute('data-terminal-session-active') !== 'true') {
+      panelTargetStart = await page.evaluate(() => performance.now());
+      await panelSession.click();
+    }
+    await terminalInput(panel);
+    const panelRecovery = await waitForRecoveryMarks(
+      page,
+      'panel',
+      panelTargetStart,
+      fixtureBytes,
+      sessionRef,
+    );
+    const prefetch = await waitForTerminalHistoryPrefetchOutcome(
+      page,
+      sessionRef,
+      45_000,
+    );
+    const panelCanvas = panel.locator('.redeven-terminal-surface canvas:visible').last();
+    await panelCanvas.waitFor({ state: 'visible', timeout: 10_000 });
+    const panelBaselineVisual = fixtureBytes > 0
+      ? await captureCanvasVisualEvidence(panelCanvas)
+      : null;
+    const panelBaselineRef = panelBaselineVisual
+      ? terminalCarrierSampleMarkerName('panel-visual-baseline', sampleIndex)
+      : null;
+
+    await selectSurface(page, 'workbench');
+    const workbench = page.locator('[data-terminal-panel-variant="workbench"]:visible');
+    const workbenchSession = workbench.locator(`button[data-terminal-session-id="${seeded.sessionID}"]`).first();
+    await workbenchSession.waitFor({ state: 'visible', timeout: 15_000 });
+    const targetStart = await page.evaluate(() => performance.now());
+    await workbenchSession.click();
+    await page.waitForFunction((targetSessionID) => (
+      Array.from(globalThis.document.querySelectorAll(`button[data-terminal-session-id="${targetSessionID}"]`))
+        .some((button) => button.getAttribute('data-terminal-session-active') === 'true')
+    ), seeded.sessionID, { timeout: 15_000 });
+    const workbenchRecovery = await waitForRecoveryMarks(
+      page,
+      'workbench',
+      targetStart,
+      fixtureBytes,
+      sessionRef,
+    );
+    let prepared;
+    try {
+      prepared = await waitForTerminalPerformanceMark(
+        page,
+        'prepared-history-hit',
+        targetStart,
+        sessionRef,
+      );
+    } catch (error) {
+      const diagnostics = await page.evaluate(() => performance.getEntriesByType('mark')
+        .filter((entry) => entry.name.includes('history'))
+        .map((entry) => ({ name: entry.name, start_time: entry.startTime, detail: entry.detail })));
+      throw new Error(`shared prepared history hit was not observed: ${error instanceof Error ? error.message : error}\n${JSON.stringify(diagnostics)}`);
+    }
+    const rebased = await page.evaluate(({ minimumStart, expectedSessionRef }) => (
+      performance.getEntriesByName('redeven:terminal:prepared-history-rebased', 'mark').some((entry) => (
+        entry.startTime >= minimumStart
+        && entry.detail?.session_ref === expectedSessionRef
+      ))
+    ), { minimumStart: targetStart, expectedSessionRef: sessionRef });
+
+    if (Number(prepared.detail?.byte_length ?? 0) < minimumRetainedBytesForFixture(fixtureBytes)) {
+      throw new Error('shared prepared history did not cover the retained fixture');
+    }
+    if (workbenchRecovery.attach_start_count !== 1) {
+      throw new Error(`shared prepared history started attach ${workbenchRecovery.attach_start_count} times`);
+    }
+    if (workbenchRecovery.covered_through_sequence !== workbenchRecovery.snapshot_end_sequence) {
+      throw new Error('shared prepared history recovery did not reach the attach snapshot boundary');
+    }
+    for (const [field, value] of Object.entries({
+      panel_history_generation: panelRecovery.history_generation,
+      workbench_history_generation: workbenchRecovery.history_generation,
+    })) {
+      if (!Number.isSafeInteger(value) || value <= 0) {
+        throw new Error(`${field} was not recorded in the shared prepared-history trace`);
+      }
+    }
+    if (workbenchRecovery.history_page_count > 1) {
+      throw new Error('shared prepared history required more than one attach-delta history page');
+    }
+    const maximumDeltaBytes = Math.max(terminalReadChunkBytes * 4, Math.floor(seeded.historyBytes / 4));
+    if (workbenchRecovery.history_bytes_fetched > maximumDeltaBytes) {
+      throw new Error(`shared prepared history fetched too much attach delta (${workbenchRecovery.history_bytes_fetched} > ${maximumDeltaBytes})`);
+    }
+    const targetCanvas = workbench.locator('.redeven-terminal-surface canvas:visible').last();
+    await targetCanvas.waitFor({ state: 'visible', timeout: 10_000 });
+    const historyVisualMatch = panelBaselineVisual
+      ? assertTerminalCarrierHistoryVisualEvidence({
+        baselineVisual: panelBaselineVisual,
+        recoveredVisual: await captureCanvasVisualEvidence(targetCanvas),
+        baselineLayout: { cols: panelRecovery.cols, rows: panelRecovery.rows },
+        recoveredLayout: { cols: workbenchRecovery.cols, rows: workbenchRecovery.rows },
+      })
+      : null;
+    const markerName = terminalCarrierSampleMarkerName('input-shared-prepared-history', sampleIndex);
+    const markerPath = path.join(tempDir, markerName);
+    const markerValue = `shared-prepared-input-ok-${sampleIndex}`;
+    const inputProbeStarted = performance.now();
+    await sendTerminalCommand(
+      page,
+      `printf ${shellQuote(markerValue)} > ${shellQuote(markerPath)}`,
+      workbench,
+    );
+    await waitForFile(markerPath, 15_000);
+    const inputProbeMs = performance.now() - inputProbeStarted;
+    assertTerminalCarrierInteractiveLimit({
+      stage: 'shared_prepared_history',
+      interactiveMs: workbenchRecovery.interactive_ms,
+      maxInteractiveMs,
+    });
+    assertPageHealthy(problems);
+    return {
+      status: 'passed',
+      session_ref: sessionRef,
+      prepared_bytes: Number(prepared.detail?.byte_length ?? 0),
+      prepared_pages: Number(prepared.detail?.page_count ?? 0),
+      prepared_rebased: rebased,
+      prefetch_ready_ms: prefetch.start_time,
+      prefetch_started_ms: prefetch.started_at,
+      prefetch_duration_ms: Number(prefetch.detail?.duration_ms ?? 0),
+      attach_start_count: workbenchRecovery.attach_start_count,
+      attach_delta_page_count: workbenchRecovery.history_page_count,
+      attach_delta_bytes: workbenchRecovery.history_bytes_fetched,
+      snapshot_end_sequence: workbenchRecovery.snapshot_end_sequence,
+      covered_through_sequence: workbenchRecovery.covered_through_sequence,
+      history_visual_evidence_passed: historyVisualMatch !== null,
+      history_visual_match: historyVisualMatch?.layouts_match ? true : null,
+      history_visual_baseline: panelBaselineRef,
+      history_visual_comparison: historyVisualMatch?.mode ?? null,
+      history_visual_layouts_match: historyVisualMatch?.layouts_match ?? null,
+      panel_terminal_geometry: { cols: panelRecovery.cols, rows: panelRecovery.rows },
+      workbench_terminal_geometry: { cols: workbenchRecovery.cols, rows: workbenchRecovery.rows },
+      history_visual_mean_grid_delta: historyVisualMatch?.meanGridDelta ?? null,
+      history_visual_ink_ratio: historyVisualMatch?.recoveredInkRatio ?? null,
+      history_visual_baseline_active_grid_ratio: historyVisualMatch?.baselineActiveGridRatio ?? null,
+      history_visual_recovered_active_grid_ratio: historyVisualMatch?.recoveredActiveGridRatio ?? null,
+      history_visual_ink_ratio_scale: historyVisualMatch?.inkRatioScale ?? null,
+      input_probe_ms: inputProbeMs,
+      input_probe_marker: markerName,
+      interactive_ms: workbenchRecovery.interactive_ms,
+    };
+  } finally {
+    await page.close();
+  }
 }
 
 async function runRecoverySample({ context, entryURL, fixtureBytes, seeded, surface, temperature, tempDir, sampleIndex, maxInteractiveMs }) {
@@ -508,7 +777,13 @@ async function runRecoverySample({ context, entryURL, fixtureBytes, seeded, surf
     await targetCanvas.waitFor({ state: 'visible', timeout: 15_000 });
     let marks;
     try {
-      marks = await waitForRecoveryMarks(page, surface, notBefore, fixtureBytes);
+      marks = await waitForRecoveryMarks(
+        page,
+        surface,
+        notBefore,
+        fixtureBytes,
+        pseudonymousTerminalSessionRef(seeded.sessionID),
+      );
     } catch (error) {
       const diagnostics = await page.evaluate(() => ({
         marks: performance.getEntriesByType('mark')
@@ -529,9 +804,20 @@ async function runRecoverySample({ context, entryURL, fixtureBytes, seeded, surf
     })) {
       if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`${field} was not recorded in the recovery trace`);
     }
-    if (maxInteractiveMs > 0 && marks.interactive_ms > maxInteractiveMs) {
-      throw new Error(`interactive recovery exceeded the configured fixed-runner limit`);
-    }
+    const preparedHistoryHit = await page.evaluate(({ minimumStart, expectedSessionRef }) => (
+      performance.getEntriesByName('redeven:terminal:prepared-history-hit', 'mark').some((entry) => (
+        entry.startTime >= minimumStart
+        && entry.detail?.session_ref === expectedSessionRef
+      ))
+    ), {
+      minimumStart: notBefore,
+      expectedSessionRef: pseudonymousTerminalSessionRef(seeded.sessionID),
+    });
+    assertTerminalCarrierInteractiveLimit({
+      stage: `${temperature}_${surface}`,
+      interactiveMs: marks.interactive_ms,
+      maxInteractiveMs,
+    });
     if (
       marks.attach_ack_ms < 0
       || marks.attach_ack_ms > marks.baseline_parser_committed_ms
@@ -542,8 +828,14 @@ async function runRecoverySample({ context, entryURL, fixtureBytes, seeded, surf
     if (marks.covered_through_sequence !== marks.snapshot_end_sequence) {
       throw new Error('terminal recovery coverage did not reach the fixed snapshot end');
     }
-    if (fixtureBytes > 0 && marks.history_bytes_fetched < minimumRetainedBytesForFixture(fixtureBytes)) {
+    if (fixtureBytes > 0 && !preparedHistoryHit && marks.history_bytes_fetched < minimumRetainedBytesForFixture(fixtureBytes)) {
       throw new Error(`terminal recovery fetched fewer history bytes than the fixture requires (fetched=${marks.history_bytes_fetched} required=${minimumRetainedBytesForFixture(fixtureBytes)})`);
+    }
+    if (preparedHistoryHit) {
+      const maximumDeltaBytes = Math.max(terminalReadChunkBytes * 4, Math.floor(seeded.historyBytes / 4));
+      if (marks.history_page_count > 1 || marks.history_bytes_fetched > maximumDeltaBytes) {
+        throw new Error(`prepared terminal recovery exceeded the attach-delta budget (pages=${marks.history_page_count} bytes=${marks.history_bytes_fetched} max_bytes=${maximumDeltaBytes})`);
+      }
     }
     if (fixtureBytes === 0) {
       await page.waitForFunction(() => Array.from(globalThis.document.querySelectorAll('*')).some((element) => (
@@ -564,7 +856,7 @@ async function runRecoverySample({ context, entryURL, fixtureBytes, seeded, surf
     }
     let historyVisualMatch = null;
     if (seeded.historyVisual) {
-      historyVisualMatch = assertRecoveredHistoryVisual(
+      historyVisualMatch = assertTerminalCarrierHistoryVisualMatch(
         seeded.historyVisual,
         await captureCanvasVisualEvidence(targetCanvas),
       );
@@ -595,7 +887,9 @@ async function runRecoverySample({ context, entryURL, fixtureBytes, seeded, surf
       temperature,
       sample_index: sampleIndex,
       ...marks,
+      prepared_history_hit: preparedHistoryHit,
       input_probe_ms: inputProbeMs,
+      history_visual_evidence_passed: historyVisualMatch !== null,
       history_visual_match: historyVisualMatch !== null,
       history_visual_mean_grid_delta: historyVisualMatch?.meanGridDelta ?? null,
       history_visual_ink_ratio: historyVisualMatch?.recoveredInkRatio ?? null,
@@ -612,6 +906,11 @@ async function writeReport(reportPath, report) {
   await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`);
 }
 
+const carrierProgress = {
+  runner: null,
+  sharedPreparedHistorySamples: [],
+};
+
 async function main(options) {
   const tempRoot = process.platform === 'win32' ? os.tmpdir() : '/tmp';
   const tempDir = await mkdtemp(path.join(tempRoot, 'redeven-terminal-carrier-'));
@@ -621,11 +920,48 @@ async function main(options) {
     runtime = await runStage('runtime_start', () => startRuntime(tempDir));
     const entryURL = new URL('_redeven_proxy/env/', runtime.startup.local_ui_url).toString();
     browser = await runStage('browser_launch', () => chromium.launch({ headless: true }));
+    carrierProgress.runner = {
+      platform: process.platform,
+      arch: process.arch,
+      node: process.version,
+      chromium: browser.version(),
+      cpu_count: os.cpus().length,
+    };
     const reusedContext = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     const seed = await openEnvPage(reusedContext, entryURL);
     const seeded = await runStage('fixture_seed', () => seedRetainedSession(seed.page, tempDir, options.fixtureBytes));
     assertPageHealthy(seed.problems);
     await seed.page.close();
+
+    const sharedPreparedHistorySamples = [];
+    for (let sampleIndex = 1; sampleIndex <= options.sharedPreparedSamples; sampleIndex += 1) {
+      const sharedContext = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+      try {
+        const sample = await runStage(
+          `shared_prepared_history_${sampleIndex}`,
+          () => runSharedPreparedHistorySample({
+            context: sharedContext,
+            entryURL,
+            fixtureBytes: options.fixtureBytes,
+            seeded,
+            tempDir,
+            sampleIndex,
+            maxInteractiveMs: options.maxInteractiveMs,
+          }),
+        );
+        const completedSample = { ...sample, sample_index: sampleIndex };
+        sharedPreparedHistorySamples.push(completedSample);
+        carrierProgress.sharedPreparedHistorySamples.push(completedSample);
+      } finally {
+        await sharedContext.close();
+      }
+    }
+    const sharedPreparedHistory = sharedPreparedHistorySamples[0];
+    const sharedPreparedHistoryP95Ms = assertTerminalCarrierP95Limit({
+      stage: 'shared_prepared_history',
+      values: sharedPreparedHistorySamples.map((sample) => sample.interactive_ms),
+      maxP95Ms: options.maxSharedPreparedP95Ms,
+    });
 
     const samples = [];
     for (const surface of ['workbench', 'panel']) {
@@ -674,13 +1010,7 @@ async function main(options) {
         compatibility_epoch: runtime.startup.runtime_service?.compatibility_epoch ?? null,
         effective_run_mode: runtime.startup.effective_run_mode ?? null,
       },
-      runner: {
-        platform: process.platform,
-        arch: process.arch,
-        node: process.version,
-        chromium: browser.version(),
-        cpu_count: os.cpus().length,
-      },
+      runner: carrierProgress.runner,
       fixture: {
         id: fixtureID(options.fixtureBytes),
         requested_bytes: options.fixtureBytes,
@@ -688,13 +1018,24 @@ async function main(options) {
         rendered_history_label: seeded.historyLabel,
       },
       sample_plan: {
+        shared_prepared_history: options.sharedPreparedSamples,
         reused_context_per_surface: options.reusedContextSamples,
         fresh_context_per_surface: options.freshContextSamples,
       },
       threshold: {
         max_interactive_ms: options.maxInteractiveMs > 0 ? options.maxInteractiveMs : null,
         enforced: options.maxInteractiveMs > 0,
+        max_shared_prepared_history_p95_ms: options.maxSharedPreparedP95Ms > 0
+          ? options.maxSharedPreparedP95Ms
+          : null,
+        shared_prepared_history_p95_enforced: options.maxSharedPreparedP95Ms > 0,
       },
+      shared_prepared_history: sharedPreparedHistory,
+      shared_prepared_history_summary: {
+        sample_count: sharedPreparedHistorySamples.length,
+        interactive_p95_ms: sharedPreparedHistoryP95Ms,
+      },
+      shared_prepared_history_samples: sharedPreparedHistorySamples,
       samples,
     };
   } finally {
@@ -716,29 +1057,65 @@ const maxInteractiveMs = parsePositiveInteger(
   '--max-interactive-ms',
   { allowZero: true },
 );
+const maxSharedPreparedP95Ms = parsePositiveInteger(
+  readOption(args, '--max-shared-prepared-p95-ms', '0'),
+  '--max-shared-prepared-p95-ms',
+  { allowZero: true },
+);
 const reusedContextSamples = parsePositiveInteger(
   readOption(args, '--reused-context-samples', '1'),
   '--reused-context-samples',
+  { allowZero: true },
+);
+const sharedPreparedSamples = parsePositiveInteger(
+  readOption(args, '--shared-prepared-samples', '1'),
+  '--shared-prepared-samples',
 );
 const freshContextSamples = parsePositiveInteger(
   readOption(args, '--fresh-context-samples', '1'),
   '--fresh-context-samples',
+  { allowZero: true },
 );
 
-main({ fixtureBytes, maxInteractiveMs, reusedContextSamples, freshContextSamples })
+main({
+  fixtureBytes,
+  maxInteractiveMs,
+  maxSharedPreparedP95Ms,
+  sharedPreparedSamples,
+  reusedContextSamples,
+  freshContextSamples,
+})
   .then(async (report) => {
     await writeReport(reportPath, report);
     process.stdout.write(`${JSON.stringify(report)}\n`);
   })
   .catch(async (error) => {
+    const formattedError = error instanceof Error ? formatErrorWithCauses(error) : String(error);
     const failure = {
       schema_version: 1,
       status: 'failed',
       error_code: 'terminal_carrier_e2e_failed',
       error_stage: error instanceof TerminalCarrierStageError ? error.stage : 'unknown',
+      error: formattedError,
       fixture: { id: fixtureID(fixtureBytes), requested_bytes: fixtureBytes },
+      threshold: {
+        max_interactive_ms: maxInteractiveMs > 0 ? maxInteractiveMs : null,
+        max_shared_prepared_history_p95_ms: maxSharedPreparedP95Ms > 0
+          ? maxSharedPreparedP95Ms
+          : null,
+      },
+      runner: carrierProgress.runner,
+      shared_prepared_history_summary: {
+        sample_count: carrierProgress.sharedPreparedHistorySamples.length,
+        interactive_p95_ms: assertTerminalCarrierP95Limit({
+          stage: 'shared_prepared_history_partial',
+          values: carrierProgress.sharedPreparedHistorySamples.map((sample) => sample.interactive_ms),
+          maxP95Ms: 0,
+        }),
+      },
+      shared_prepared_history_samples: carrierProgress.sharedPreparedHistorySamples,
     };
     await writeReport(reportPath, failure).catch(() => undefined);
-    console.error(error instanceof Error ? formatErrorWithCauses(error) : error);
+    console.error(formattedError);
     process.exitCode = 1;
   });

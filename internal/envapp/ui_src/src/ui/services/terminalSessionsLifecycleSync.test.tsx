@@ -90,6 +90,26 @@ describe('TerminalSessionsLifecycleSync', () => {
     expect(rpcMocks.unsubscribe).toHaveBeenCalledTimes(1);
   });
 
+  it('contains background refresh failures because catalog state owns the error', async () => {
+    const refresh = vi.fn().mockRejectedValue(new Error('temporary disconnect'));
+    render(() => <TerminalSessionsLifecycleSync refresh={refresh} />, host);
+
+    await flushLifecycleSync();
+    await flushLifecycleSync();
+
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels a queued refresh when the lifecycle sync unmounts', async () => {
+    const refresh = vi.fn().mockResolvedValue(undefined);
+    const dispose = render(() => <TerminalSessionsLifecycleSync refresh={refresh} />, host);
+    dispose();
+
+    await flushLifecycleSync();
+
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
   it('notifies once when terminal cleanup fails after the tab is hidden', async () => {
     render(() => <TerminalSessionsLifecycleSync />, host);
     await flushLifecycleSync();

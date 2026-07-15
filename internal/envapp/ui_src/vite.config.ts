@@ -1,11 +1,40 @@
 import path from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
-import { defineConfig } from 'vite';
+import { defineConfig, type Plugin } from 'vite';
 import wasm from 'vite-plugin-wasm';
 import solid from 'vite-plugin-solid';
 
+function normalizeBuildModuleId(moduleId: string): string {
+  const normalized = moduleId.split('?')[0]!.replaceAll('\\', '/').replace(/^\0/u, 'virtual:');
+  const nodeModulesMarker = '/node_modules/';
+  const nodeModulesIndex = normalized.lastIndexOf(nodeModulesMarker);
+  if (nodeModulesIndex >= 0) return normalized.slice(nodeModulesIndex + nodeModulesMarker.length);
+  const relative = path.relative(__dirname, normalized).replaceAll('\\', '/');
+  return relative.startsWith('../') ? normalized : relative;
+}
+
+function chunkModuleManifest(): Plugin {
+  return {
+    name: 'redeven-chunk-module-manifest',
+    generateBundle(_options, bundle) {
+      const chunks = Object.fromEntries(Object.values(bundle)
+        .filter((item) => item.type === 'chunk')
+        .map((item) => [item.fileName, {
+          imports: item.imports,
+          dynamicImports: item.dynamicImports,
+          modules: Object.keys(item.modules).map(normalizeBuildModuleId).sort(),
+        }]));
+      this.emitFile({
+        type: 'asset',
+        fileName: '.vite/chunk-modules.json',
+        source: `${JSON.stringify({ schema_version: 1, chunks }, null, 2)}\n`,
+      });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [wasm(), solid(), tailwindcss()],
+  plugins: [wasm(), solid(), tailwindcss(), chunkModuleManifest()],
   resolve: {
     alias: [
       { find: /^@floegence\/floe-webapp-core\/(icons|layout|loading|ui)$/, replacement: path.resolve(__dirname, 'node_modules/@floegence/floe-webapp-core/dist/$1.js') },
@@ -27,6 +56,7 @@ export default defineConfig({
     target: 'esnext',
     outDir: path.resolve(__dirname, '../ui/dist/env'),
     emptyOutDir: true,
+    manifest: true,
   },
   server: {
     host: true,

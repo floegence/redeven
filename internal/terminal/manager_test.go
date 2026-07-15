@@ -127,13 +127,21 @@ func TestCreateOneHundredSessionsHasNoCountLimit(t *testing.T) {
 	t.Cleanup(m.Cleanup)
 
 	const sessionCount = 100
+	created := make([]*termgo.Session, 0, sessionCount)
 	for index := range sessionCount {
-		if _, err := m.createSession(fmt.Sprintf("terminal-%d", index+1), ""); err != nil {
+		sess, err := m.createSession(fmt.Sprintf("terminal-%d", index+1), "")
+		if err != nil {
 			t.Fatalf("createSession(%d) error = %v", index+1, err)
 		}
+		created = append(created, sess)
 	}
 	if got := len(m.visibleSessionInfos()); got != sessionCount {
 		t.Fatalf("visible sessions = %d, want %d", got, sessionCount)
+	}
+	for index, sess := range created {
+		if sess.IsActive() || sess.PTY != nil || sess.Cmd != nil {
+			t.Fatalf("session %d activated before attach: active=%t pty=%v cmd=%v", index+1, sess.IsActive(), sess.PTY, sess.Cmd)
+		}
 	}
 }
 

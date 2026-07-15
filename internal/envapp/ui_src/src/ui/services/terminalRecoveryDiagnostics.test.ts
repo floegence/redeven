@@ -33,22 +33,26 @@ describe('terminalRecoveryDiagnostics', () => {
       history_chunk_count: 6,
       history_bytes: 512,
       covered_through_sequence: 12,
+      prepared_history_bytes: 256,
+      prepared_history_page_count: 1,
     });
 
     const event = getDebugConsoleClientEventRingSnapshot().events.at(-1);
-    expect(event?.trace_id).toBe('terminal-recovery-terminal-001-1');
+    expect(event?.trace_id).toBe('terminal-recovery-session-40b62f4d-1');
     expect(event?.detail).toMatchObject({
       schema_version: 1,
-      session_ref: 'terminal-001',
+      session_ref: 'session-40b62f4d',
       surface_generation: 1,
       runtime_attach_generation: 6,
       coordinator_attach_generation: 4,
       history_generation: 8,
+      prepared_history_bytes: 256,
+      prepared_history_page_count: 1,
     });
     expect(JSON.stringify(event)).not.toContain('private-session-id');
 
     expect(startTerminalRecoveryTrace('private-session-id', 'workbench')).toMatchObject({
-      sessionRef: 'terminal-001',
+      sessionRef: 'session-40b62f4d',
       surfaceGeneration: 2,
     });
   });
@@ -64,9 +68,9 @@ describe('terminalRecoveryDiagnostics', () => {
       history_generation: 7,
     });
 
-    expect(mark).toHaveBeenCalledWith('redeven:terminal:interactive:terminal-recovery-terminal-001-1', {
+    expect(mark).toHaveBeenCalledWith('redeven:terminal:interactive:terminal-recovery-session-40b62f4d-1', {
       detail: expect.objectContaining({
-        session_ref: 'terminal-001',
+        session_ref: 'session-40b62f4d',
         surface_generation: 1,
         runtime_attach_generation: 5,
         coordinator_attach_generation: 3,
@@ -91,10 +95,10 @@ describe('terminalRecoveryDiagnostics', () => {
       expect.objectContaining({ variant: 'workbench', surface_generation: 2 }),
     ]);
     expect(terminalRecoveryDiagnosticsQuery(panelTrace, 'history_fetch_failed')).toBe(
-      'terminal-001 1 history_fetch_failed',
+      'session-40b62f4d 1 history_fetch_failed',
     );
     expect(terminalRecoveryDiagnosticsQuery(workbenchTrace, 'history_contract_missing')).toBe(
-      'terminal-001 2 history_contract_missing',
+      'session-40b62f4d 2 history_contract_missing',
     );
   });
 });

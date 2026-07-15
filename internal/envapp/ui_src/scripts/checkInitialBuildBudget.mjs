@@ -3,9 +3,12 @@ import path from 'node:path';
 import zlib from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 
+import { analyzeInitialBuildGraph } from './initialBuildGraphPolicy.mjs';
+
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const outputDir = path.resolve(scriptDir, '../../ui/dist/env');
-const htmlPath = path.join(outputDir, 'index.html');
+const manifestPath = path.join(outputDir, '.vite/manifest.json');
+const chunkModulesPath = path.join(outputDir, '.vite/chunk-modules.json');
 const budgets = {
   javascript: 600 * 1024,
   css: 120 * 1024,
@@ -25,33 +28,40 @@ const forbiddenInitialAssets = [
   'CodexProvider',
 ];
 
-if (!fs.existsSync(htmlPath)) {
-  throw new Error(`Env App build output is missing: ${htmlPath}`);
+for (const requiredPath of [manifestPath, chunkModulesPath]) {
+  if (!fs.existsSync(requiredPath)) throw new Error(`Env App build output is missing: ${requiredPath}`);
 }
 
-const html = fs.readFileSync(htmlPath, 'utf8');
-const assetReferences = [...html.matchAll(/(?:src|href)="([^"]+)"/gu)]
-  .map((match) => String(match[1] ?? ''))
-  .filter((reference) => reference.startsWith('/_redeven_proxy/env/'));
-let javascriptBytes = 0;
-let cssBytes = 0;
-let totalBytes = 0;
+const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+const chunkModules = JSON.parse(fs.readFileSync(chunkModulesPath, 'utf8'));
+const graph = analyzeInitialBuildGraph(manifest, chunkModules);
+const javascriptAssets = [...new Set(graph.javascriptAssets)];
+const cssAssets = [...new Set(graph.cssAssets)];
 
-for (const reference of assetReferences) {
-  const relativePath = reference.slice('/_redeven_proxy/env/'.length);
+const compressedBytes = (relativePath) => {
   const filePath = path.join(outputDir, relativePath);
-  const compressedBytes = zlib.gzipSync(fs.readFileSync(filePath), { level: zlib.constants.Z_BEST_COMPRESSION }).byteLength;
-  totalBytes += compressedBytes;
-  if (reference.endsWith('.js')) javascriptBytes += compressedBytes;
-  if (reference.endsWith('.css')) cssBytes += compressedBytes;
-}
+  if (!fs.existsSync(filePath)) throw new Error(`Initial build asset is missing: ${relativePath}`);
+  return zlib.gzipSync(fs.readFileSync(filePath), {
+    level: zlib.constants.Z_BEST_COMPRESSION,
+  }).byteLength;
+};
 
-const forbidden = forbiddenInitialAssets.filter((name) => html.toLowerCase().includes(name.toLowerCase()));
+const javascriptBytes = javascriptAssets.reduce((total, asset) => total + compressedBytes(asset), 0);
+const cssBytes = cssAssets.reduce((total, asset) => total + compressedBytes(asset), 0);
+const totalBytes = javascriptBytes + cssBytes;
+const initialAssets = [...javascriptAssets, ...cssAssets];
+const forbiddenNames = forbiddenInitialAssets.filter((name) => (
+  initialAssets.some((asset) => asset.toLowerCase().includes(name.toLowerCase()))
+));
+const forbiddenModules = graph.forbiddenModules.map((item) => (
+  `forbidden initial module: ${item.path.join(' -> ')} -> ${item.moduleId}`
+));
 const failures = [
   javascriptBytes > budgets.javascript ? `initial JS ${javascriptBytes} > ${budgets.javascript}` : '',
   cssBytes > budgets.css ? `critical CSS ${cssBytes} > ${budgets.css}` : '',
   totalBytes > budgets.total ? `initial total ${totalBytes} > ${budgets.total}` : '',
-  forbidden.length > 0 ? `forbidden initial assets: ${forbidden.join(', ')}` : '',
+  forbiddenNames.length > 0 ? `forbidden initial assets: ${forbiddenNames.join(', ')}` : '',
+  ...forbiddenModules,
 ].filter(Boolean);
 
 if (failures.length > 0) {
@@ -62,5 +72,5 @@ console.log(JSON.stringify({
   initial_javascript_gzip_bytes: javascriptBytes,
   critical_css_gzip_bytes: cssBytes,
   initial_total_gzip_bytes: totalBytes,
-  initial_asset_count: assetReferences.length,
+  initial_asset_count: initialAssets.length,
 }));
