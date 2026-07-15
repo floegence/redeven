@@ -7,7 +7,7 @@ import { DockCpu, DockFolder, DockTerminal, Search } from '@floegence/floe-webap
 import { Show, lazy, type JSX } from 'solid-js';
 
 import { CodexWorkbenchIcon } from '../icons/CodexIcon';
-import { CodespacesGlyph } from '../icons/CodespacesIcon';
+import { CodespacesWorkbenchIcon } from '../icons/CodespacesIcon';
 import { FlowerWorkbenchIcon } from '../icons/FlowerSoftAuraIcon';
 import { useI18n, type I18nHelpers } from '../i18n';
 import { useEnvContext } from '../pages/EnvContext';
@@ -218,26 +218,6 @@ function WebServicesDockIcon(props: { class?: string }) {
   );
 }
 
-function CodespacesDockIcon(props: { class?: string }) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none" width="48" height="48" class={props.class}>
-      <defs>
-        <linearGradient id="cs-bg" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="color-mix(in srgb, var(--card), #1a2038 8%)" />
-          <stop offset="100%" stop-color="color-mix(in srgb, var(--card), #1a2038 18%)" />
-        </linearGradient>
-        <linearGradient id="cs-rim" x1="0" y1="0" x2="0" y2=".35">
-          <stop offset="0%" stop-color="white" stop-opacity=".14" />
-          <stop offset="100%" stop-color="white" stop-opacity="0" />
-        </linearGradient>
-      </defs>
-      <rect x="2" y="2" width="44" height="44" rx="12" fill="url(#cs-bg)" />
-      <rect x="2" y="2" width="44" height="44" rx="12" fill="url(#cs-rim)" />
-      <CodespacesGlyph transform="translate(3.6 4.15) scale(1.55)" foreground="var(--foreground)" />
-    </svg>
-  );
-}
-
 export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
   {
     type: 'redeven.files',
@@ -287,7 +267,7 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
   {
     type: 'redeven.codespaces',
     label: 'Codespaces',
-    icon: CodespacesDockIcon,
+    icon: CodespacesWorkbenchIcon,
     body: CodespacesWidget,
     defaultTitle: 'Codespaces',
     defaultSize: { width: 1040, height: 660 },
