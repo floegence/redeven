@@ -3156,7 +3156,7 @@ describe('FlowerSurface navigation activity', () => {
     expect(runtime.querySelector('.flower-composer [data-flower-approval-action-id="appr-terminal-readonly"]')).toBeTruthy();
   });
 
-  it('refreshes inline activity when message block fields change in place', async () => {
+  it('preserves terminal disclosure identity when canonical completion moves its block', async () => {
     const runningActivity = activityTimeline({
       run_id: 'run-refresh-block',
       turn_id: 'm-refresh-block',
@@ -3173,7 +3173,7 @@ describe('FlowerSurface navigation activity', () => {
         started_at_unix_ms: 6_000,
         label: 'npm test',
         renderer: 'terminal',
-        payload: { command: 'npm test' },
+        payload: { command: 'npm test', output: 'running tests\n' },
       })],
     });
     const completeActivity = activityTimeline({
@@ -3193,7 +3193,7 @@ describe('FlowerSurface navigation activity', () => {
         ended_at_unix_ms: 7_250,
         label: 'npm test',
         renderer: 'terminal',
-        payload: { command: 'npm test', exit_code: 0 },
+        payload: { command: 'npm test', output: 'all tests passed\n', exit_code: 0 },
       })],
     });
     const runningThread = thread({
@@ -3209,10 +3209,7 @@ describe('FlowerSurface navigation activity', () => {
           content: 'Running tests.',
           status: 'complete',
           created_at_ms: 6_100,
-          blocks: [
-            { type: 'markdown', content: 'Running tests.' },
-            runningActivity,
-          ],
+          blocks: [runningActivity],
         },
       ],
     });
@@ -3251,15 +3248,23 @@ describe('FlowerSurface navigation activity', () => {
 
     await wait(440);
     expect(activityButton.getAttribute('aria-expanded')).toBe('true');
+    await waitFor(() => Boolean(runtime.querySelector('.flower-activity-inline-details')));
+    const activityRow = runtime.querySelector('[data-flower-activity-item-id="tool-refresh"]');
+    const activityDetails = runtime.querySelector('.flower-activity-inline-details');
+    const terminalOutput = runtime.querySelector('.flower-activity-terminal-output');
 
     listSnapshot = [completeThread];
     (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
 
     await waitFor(() => runtime.querySelector('.flower-activity-inline-row')?.getAttribute('data-flower-activity-status') === 'success');
+    expect(runtime.querySelector('[data-flower-activity-item-id="tool-refresh"]')).toBe(activityRow);
+    expect(runtime.querySelector('.flower-activity-inline-details')).toBe(activityDetails);
+    expect(runtime.querySelector('.flower-activity-terminal-output')).toBe(terminalOutput);
     expect(activityButton.getAttribute('aria-expanded')).toBe('true');
     expect(runtime.textContent).toContain('Done');
     expect(runtime.textContent).toContain('1s');
     expect(runtime.textContent).toContain('Tests passed.');
+    expect(runtime.textContent).toContain('all tests passed');
     expect(loadThread.mock.calls.length).toBeGreaterThanOrEqual(2);
 
     await wait(1250);

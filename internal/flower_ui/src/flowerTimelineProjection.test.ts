@@ -71,6 +71,71 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
 }
 
 describe('buildFlowerTimelineEntries', () => {
+  it('keeps canonical activity render identity when final projection moves its block', () => {
+    const runningTimeline = activityTimeline({
+      thread_id: 'thread-1',
+      summary: {
+        status: 'running',
+        severity: 'normal',
+        needs_attention: true,
+        total_items: 1,
+        counts: { running: 1 },
+      },
+      items: [activityItem({
+        status: 'running',
+        severity: 'normal',
+        needs_attention: true,
+        renderer: 'terminal',
+        payload: { command: 'npm test', output: 'running\n' },
+      })],
+    });
+    const completedTimeline = activityTimeline({
+      thread_id: 'thread-1',
+      items: [activityItem({
+        renderer: 'terminal',
+        payload: { command: 'npm test', output: 'done\n', exit_code: 0 },
+      })],
+    });
+    const running = buildFlowerTimelineEntries(thread({
+      status: 'running',
+      messages: [{
+        id: 'turn-1',
+        role: 'assistant',
+        content: '',
+        status: 'streaming',
+        created_at_ms: 2,
+        active_cursor: true,
+        blocks: [runningTimeline],
+      }],
+    }));
+    const completed = buildFlowerTimelineEntries(thread({
+      messages: [{
+        id: 'turn-1',
+        role: 'assistant',
+        content: 'Running tests.\n\nDone.',
+        status: 'complete',
+        created_at_ms: 2,
+        blocks: [
+          { type: 'markdown', content: 'Running tests.' },
+          completedTimeline,
+          { type: 'markdown', content: 'Done.' },
+        ],
+      }],
+    }));
+    const runningEntry = running.find((entry) => entry.type === 'message');
+    const completedEntry = completed.find((entry) => entry.type === 'message');
+    const runningActivity = runningEntry?.type === 'message'
+      ? runningEntry.blocks.find((block) => block.type === 'activity')
+      : undefined;
+    const completedActivity = completedEntry?.type === 'message'
+      ? completedEntry.blocks.find((block) => block.type === 'activity')
+      : undefined;
+
+    expect(completedEntry?.key).toBe(runningEntry?.key);
+    expect(completedActivity?.key).toBe(runningActivity?.key);
+    expect(completedActivity?.block_index).toBe(1);
+  });
+
   it('keeps message block order across content, activity, and final content', () => {
     const entries = buildFlowerTimelineEntries(thread({
       messages: [

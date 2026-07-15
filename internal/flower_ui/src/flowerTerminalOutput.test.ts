@@ -56,6 +56,27 @@ describe('terminal visible output', () => {
     );
   });
 
+  it('does not change the primary identity when canonical presentation moves between blocks', () => {
+    const base = {
+      surface_scope: 'test',
+      owner_thread_id: 'thread_1',
+      render_thread_id: 'thread_1',
+      run_id: 'run_1',
+      turn_id: 'turn_1',
+      message_id: 'message_running',
+      block_index: 0,
+      item_id: 'tool:call_1',
+      tool_id: 'call_1',
+      command: 'npm test',
+    };
+
+    expect(terminalVisibleOutputIdentityKey(base)).toBe(terminalVisibleOutputIdentityKey({
+      ...base,
+      message_id: 'message_complete',
+      block_index: 2,
+    }));
+  });
+
   it('appends live output segments without duplicating repeated chunks', () => {
     expect(mergeTerminalVisibleOutput('tick 1\n', 'tick 2\n', 'running')).toBe('tick 1\ntick 2\n');
     expect(mergeTerminalVisibleOutput('tick 1\ntick 2\n', 'tick 2\n', 'running')).toBe('tick 1\ntick 2\n');
@@ -112,9 +133,13 @@ describe('terminal output viewport following', () => {
   it('follows appended output only while the user remains near the bottom', () => {
     expect(TERMINAL_OUTPUT_FOLLOW_THRESHOLD_PX).toBe(24);
     const harness = createViewportHarness();
+    let presentationFrames = 0;
     const controller = createTerminalOutputViewportController({
       requestAnimationFrame: harness.requestAnimationFrame,
       cancelAnimationFrame: harness.cancelAnimationFrame,
+      onPresentationFrame: () => {
+        presentationFrames += 1;
+      },
     });
     controller.bind(harness.viewport);
     harness.flush();
@@ -133,6 +158,7 @@ describe('terminal output viewport following', () => {
     controller.notifyOutputChanged();
     harness.flush();
     expect(harness.scrollTop()).toBe(80);
+    expect(presentationFrames).toBe(3);
 
     harness.setMetrics({ scrollTop: 240 });
     controller.onScroll();
@@ -141,6 +167,7 @@ describe('terminal output viewport following', () => {
     controller.notifyOutputChanged();
     harness.flush();
     expect(harness.scrollTop()).toBe(300);
+    expect(presentationFrames).toBe(4);
     controller.dispose();
   });
 

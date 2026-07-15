@@ -5,6 +5,8 @@ import { page } from 'vitest/browser';
 import { describe, expect, it, vi } from 'vitest';
 
 import type {
+  FlowerLiveEvent,
+  FlowerLiveEventsResponse,
   FlowerTerminalProcessSnapshot,
   FlowerThreadSnapshot,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -84,6 +86,25 @@ function deferred<T>() {
     resolve = resolver;
   });
   return { promise, resolve };
+}
+
+function liveEvent<K extends FlowerLiveEvent['kind']>(
+  threadID: string,
+  seq: number,
+  kind: K,
+  payload: FlowerLiveEvent<K>['payload'],
+): FlowerLiveEvent<K> {
+  return {
+    schema_version: 1,
+    seq,
+    endpoint_id: 'browser-test',
+    thread_id: threadID,
+    run_id: 'run-browser-disclosure',
+    turn_id: 'm-browser-disclosure',
+    at_unix_ms: 10_500,
+    kind,
+    payload,
+  } as FlowerLiveEvent<K>;
 }
 
 function streamingActivityThread(): FlowerThreadSnapshot {
@@ -275,6 +296,93 @@ describe('Flower activity disclosure browser behavior', () => {
 
     await complete();
     expect(button.getAttribute('aria-expanded')).toBe('true');
+    await wait(1050);
+    expect(button.getAttribute('aria-expanded')).toBe('true');
+    await waitFor(() => button.getAttribute('aria-expanded') === 'false');
+    expect(runtime.querySelector('.flower-activity-inline-details')?.getAttribute('data-state')).toBe('closing');
+    await waitFor(() => runtime.querySelector('.flower-activity-inline-details') === null);
+  });
+
+  it('holds final terminal output after canonical replacement moves the activity block', async () => {
+    await page.viewport(1440, 900);
+    const runningThread = streamingActivityThread();
+    const completedActivity = activityTimeline({
+      run_id: 'run-browser-disclosure',
+      turn_id: 'm-browser-disclosure',
+      status: 'success',
+      severity: 'quiet',
+      needs_attention: false,
+      items: [activityItem({
+        item_id: 'tool-browser-disclosure',
+        tool_id: 'tool-browser-disclosure',
+        tool_name: 'terminal.exec',
+        status: 'success',
+        severity: 'quiet',
+        needs_attention: false,
+        label: 'pnpm test:browser',
+        renderer: 'terminal',
+        payload: {
+          command: 'pnpm test:browser',
+          process_id: 'tp-browser-disclosure',
+          status: 'success',
+          output: outputLines(60),
+          last_seq: 60,
+          exit_code: 0,
+        },
+      })],
+    });
+    const liveEvents = deferred<FlowerLiveEventsResponse>();
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [runningThread]),
+      loadThread: vi.fn(async () => liveBootstrap(runningThread, 0)),
+      listThreadLiveEvents: vi.fn(() => liveEvents.promise),
+      readTerminalProcess: vi.fn(async () => ({
+        process_id: 'tp-browser-disclosure',
+        status: 'running',
+        output: outputLines(24),
+        last_seq: 24,
+      })),
+    });
+    const button = await selectDisclosureThread(runtime);
+    await waitFor(() => button.getAttribute('aria-expanded') === 'true');
+    await waitFor(() => runtime.querySelector('.flower-activity-inline-details')?.getAttribute('data-state') === 'open');
+    await waitFor(() => runtime.textContent?.includes('stream line 24') === true);
+    const row = runtime.querySelector('[data-flower-activity-item-id="tool-browser-disclosure"]');
+    const details = runtime.querySelector('.flower-activity-inline-details');
+    const output = runtime.querySelector('.flower-activity-terminal-output') as HTMLElement;
+    expect(output.scrollHeight - output.scrollTop - output.clientHeight).toBeLessThanOrEqual(2);
+
+    liveEvents.resolve({
+      stream_generation: 1,
+      retained_from_seq: 1,
+      next_cursor: 1,
+      events: [liveEvent('thread-browser-disclosure', 1, 'timeline.replaced', {
+        messages: [{
+          id: 'm-browser-disclosure',
+          role: 'assistant',
+          content: 'Running browser checks.\n\nBrowser checks passed.',
+          status: 'complete',
+          created_at_ms: 10_000,
+          blocks: [
+            { type: 'markdown', content: 'Running browser checks.' },
+            completedActivity,
+            { type: 'markdown', content: 'Browser checks passed.' },
+          ],
+        }],
+        stream_generation: 1,
+        snapshot_through_seq: 1,
+        thread_patch: { run_status: 'success' },
+      })],
+    });
+
+    await waitFor(() => runtime.querySelector('.flower-activity-inline-row')?.getAttribute('data-flower-activity-status') === 'success');
+    await waitFor(() => runtime.textContent?.includes('stream line 60') === true);
+    expect(runtime.querySelector('[data-flower-activity-item-id="tool-browser-disclosure"]')).toBe(row);
+    expect(runtime.querySelector('.flower-activity-inline-details')).toBe(details);
+    expect(runtime.querySelector('.flower-activity-terminal-output')).toBe(output);
+    expect(output.scrollHeight - output.scrollTop - output.clientHeight).toBeLessThanOrEqual(2);
+
     await wait(1050);
     expect(button.getAttribute('aria-expanded')).toBe('true');
     await waitFor(() => button.getAttribute('aria-expanded') === 'false');

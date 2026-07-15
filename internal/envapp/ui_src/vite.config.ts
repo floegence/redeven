@@ -38,6 +38,9 @@ export default defineConfig({
     port: 8096,
     strictPort: true,
   },
+  test: {
+    setupFiles: [path.resolve(__dirname, 'src/test/vitestDomPlatform.ts')],
+  },
   worker: {
     format: 'es',
   },

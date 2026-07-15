@@ -131,6 +131,7 @@ function mockAnimationFrames(): Readonly<{
   restore: () => void;
 }> {
   let nextHandle = 1;
+  let nextTimestamp = (typeof performance !== 'undefined' ? performance.now() : Date.now()) + 16;
   const callbacks = new Map<number, FrameRequestCallback>();
   const requestSpy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
     const handle = nextHandle;
@@ -146,7 +147,8 @@ function mockAnimationFrames(): Readonly<{
     if (next.done) return false;
     const [handle, callback] = next.value;
     callbacks.delete(handle);
-    callback(typeof performance !== 'undefined' ? performance.now() : Date.now());
+    callback(nextTimestamp);
+    nextTimestamp += 16;
     return true;
   };
   return {
@@ -3182,9 +3184,16 @@ describe('FlowerSurface navigation threads', () => {
     expect(runtime.querySelector('.flower-scroll-to-latest-float .flower-scroll-to-latest-button')).toBe(button);
     expect(runtime.querySelector('.flower-chat-bottom-dock-track .flower-scroll-to-latest-button')).toBeNull();
 
-    button.click();
+    const frames = mockAnimationFrames();
+    try {
+      button.click();
+      frames.runAll();
+      await flush();
+    } finally {
+      frames.restore();
+    }
 
-    await waitFor(() => scrollMetrics.scrollTop() === 1000);
+    expect(scrollMetrics.scrollTop()).toBe(1000);
     await waitFor(() => !runtime.querySelector('.flower-scroll-to-latest-button'));
   });
 
@@ -3510,8 +3519,15 @@ describe('FlowerSurface navigation threads', () => {
     await waitFor(() => Boolean(runtime.querySelector('.flower-scroll-to-latest-button')));
 
     const button = runtime.querySelector('.flower-scroll-to-latest-button') as HTMLButtonElement;
-    button.click();
-    await waitFor(() => scrollMetrics.scrollTop() === 920);
+    const frames = mockAnimationFrames();
+    try {
+      button.click();
+      frames.runAll();
+      await flush();
+    } finally {
+      frames.restore();
+    }
+    expect(scrollMetrics.scrollTop()).toBe(920);
 
     resumedDeltaReady = true;
     scrollMetrics.setScrollHeight(1280);
