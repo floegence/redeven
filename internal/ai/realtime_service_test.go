@@ -2085,7 +2085,7 @@ func TestFlowerLiveApprovalRequestedCarriesExpectedSeq(t *testing.T) {
 	host.mu.Lock()
 	host.pendingApprovals = nil
 	host.mu.Unlock()
-	r.syncPendingFloretApprovals(ctx, floretEventToolApprovalRejected)
+	r.syncPendingFloretApprovals(ctx, string(floretEventToolApprovalRejected))
 	resolved, err := svc.ListFlowerThreadLiveEvents(ctx, &meta, th.ThreadID, advanced.NextCursor, 10)
 	if err != nil {
 		t.Fatalf("ListFlowerThreadLiveEvents after approval submit: %v", err)

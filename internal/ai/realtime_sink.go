@@ -479,13 +479,26 @@ func (s *Service) broadcastTranscriptMessage(endpointID string, threadID string,
 }
 
 func (s *Service) broadcastThreadSummary(endpointID string, threadID string) {
+	_ = s.broadcastThreadSummaryChecked(endpointID, threadID)
+}
+
+func (s *Service) broadcastThreadSummaryChecked(endpointID string, threadID string) error {
+	ev, err := s.threadSummaryRealtimeEvent(endpointID, threadID)
+	if err != nil {
+		return err
+	}
+	s.broadcastRealtimeEvent(ev)
+	return nil
+}
+
+func (s *Service) threadSummaryRealtimeEvent(endpointID string, threadID string) (RealtimeEvent, error) {
 	if s == nil {
-		return
+		return RealtimeEvent{}, errors.New("nil service")
 	}
 	endpointID = strings.TrimSpace(endpointID)
 	threadID = strings.TrimSpace(threadID)
 	if endpointID == "" || threadID == "" {
-		return
+		return RealtimeEvent{}, errors.New("invalid thread summary identity")
 	}
 
 	s.mu.Lock()
@@ -494,22 +507,24 @@ func (s *Service) broadcastThreadSummary(endpointID string, threadID string) {
 	activeRunID := strings.TrimSpace(s.activeRunByTh[runThreadKey(endpointID, threadID)])
 	s.mu.Unlock()
 	if db == nil {
-		return
+		return RealtimeEvent{}, errors.New("threads store not ready")
 	}
 	if persistTO <= 0 {
 		persistTO = defaultPersistOpTimeout
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), persistTO)
+	defer cancel()
 	th, err := db.GetThread(ctx, endpointID, threadID)
-	if err != nil || th == nil {
-		cancel()
-		return
+	if err != nil {
+		return RealtimeEvent{}, err
+	}
+	if th == nil {
+		return RealtimeEvent{}, errors.New("thread summary target not found")
 	}
 	queuedTurnCount, countErr := db.CountFollowupsByLane(ctx, endpointID, threadID, threadstore.FollowupLaneQueued)
 	if countErr != nil {
-		cancel()
-		return
+		return RealtimeEvent{}, countErr
 	}
 
 	runStatus, runErrorCode, runError := normalizeThreadRunState(th.RunStatus, th.RunErrorCode, th.RunError)
@@ -520,9 +535,8 @@ func (s *Service) broadcastThreadSummary(endpointID string, threadID string) {
 	waitingPrompt := s.threadWaitingPrompt(ctx, th, runStatus)
 	reasoningCapability, _, _ := s.threadReasoningDefaults(ctx, strings.TrimSpace(th.ModelID))
 	reasoningSelection := unmarshalReasoningSelection(th.ReasoningSelectionJSON)
-	cancel()
 
-	ev := RealtimeEvent{
+	return RealtimeEvent{
 		EventType:           RealtimeEventTypeThreadSummary,
 		EndpointID:          endpointID,
 		ThreadID:            threadID,
@@ -543,8 +557,7 @@ func (s *Service) broadcastThreadSummary(endpointID string, threadID string) {
 		ReasoningSelection:  reasoningSelection,
 		ReasoningCapability: reasoningCapability,
 		WaitingPrompt:       waitingPrompt,
-	}
-	s.broadcastRealtimeEvent(ev)
+	}, nil
 }
 
 type aiSinkMsg struct {

@@ -135,7 +135,7 @@ type floretSubagentRuntime struct {
 	parent   *run
 
 	mu                   sync.Mutex
-	host                 flruntime.Host
+	host                 floretSubagentHost
 	hostKey              string
 	closed               bool
 	subagentsPatchQueued map[string]struct{}
@@ -238,7 +238,7 @@ func (s *floretSubagentRuntime) manage(ctx context.Context, toolCallID string, a
 	return out, nil
 }
 
-func (s *floretSubagentRuntime) ensureHost(ctx context.Context) (flruntime.Host, error) {
+func (s *floretSubagentRuntime) ensureHost(ctx context.Context) (floretSubagentHost, error) {
 	parent := s.parentRun()
 	if parent == nil {
 		return nil, errors.New("subagent runtime unavailable")
@@ -310,7 +310,7 @@ func (s *floretSubagentRuntime) hostHasActiveSubagentsLocked(ctx context.Context
 	return false, nil
 }
 
-func (s *floretSubagentRuntime) currentHost() flruntime.Host {
+func (s *floretSubagentRuntime) currentHost() floretSubagentHost {
 	if s == nil {
 		return nil
 	}
@@ -367,7 +367,7 @@ func (s *floretSubagentRuntime) scheduleParentSubagentsPatch(threadID string) {
 	}()
 }
 
-func (s *floretSubagentRuntime) newHostLocked(parent *run, resolved resolvedSubagentRunModel) (flruntime.Host, error) {
+func (s *floretSubagentRuntime) newHostLocked(parent *run, resolved resolvedSubagentRunModel) (floretSubagentHost, error) {
 	if parent == nil {
 		return nil, errors.New("subagent runtime unavailable")
 	}
@@ -868,7 +868,7 @@ func mapToolNames(tools []ToolDef) []string {
 	return out
 }
 
-func ensureFloretThread(ctx context.Context, host flruntime.Host, threadID flruntime.ThreadID) error {
+func ensureFloretThread(ctx context.Context, host floretThreadEnsurer, threadID flruntime.ThreadID) error {
 	if host == nil {
 		return errors.New("subagent host unavailable")
 	}
@@ -1806,7 +1806,7 @@ func (s *floretSubagentRuntime) requireCurrentHostForSpawn(ctx context.Context, 
 	return nil
 }
 
-func (s *floretSubagentRuntime) subagentAgentTypeForTarget(ctx context.Context, host flruntime.Host, target string) (string, error) {
+func (s *floretSubagentRuntime) subagentAgentTypeForTarget(ctx context.Context, host floretSubagentHost, target string) (string, error) {
 	parent := s.parentRun()
 	if parent == nil {
 		return "", errors.New("subagent runtime unavailable")
@@ -1864,7 +1864,7 @@ func (s *floretSubagentRuntime) close(ctx context.Context, _ string, args map[st
 	return trimSubagentToolResult(applySubagentTimeoutFields(out, requestedTimeoutMS, effectiveTimeoutMS, timeoutSource)), nil
 }
 
-func (s *floretSubagentRuntime) closeSubagentWithHost(ctx context.Context, host flruntime.Host, parent *run, target string) (subagentSnapshot, error) {
+func (s *floretSubagentRuntime) closeSubagentWithHost(ctx context.Context, host floretSubagentHost, parent *run, target string) (subagentSnapshot, error) {
 	if host == nil {
 		return subagentSnapshot{}, errors.New("subagent host unavailable")
 	}
@@ -2250,7 +2250,13 @@ func (s *Service) GetFlowerSubagentDetail(ctx context.Context, meta *session.Met
 		}
 		return nil, err
 	}
-	resp := flowerSubagentDetailResponse(detail)
+	resp, err := flowerSubagentDetailResponse(detail)
+	if err != nil {
+		if s.log != nil {
+			s.log.Warn("ai: rejected Floret subagent detail contract", "thread_id", parentThreadID, "child_thread_id", childThreadID, "error", err)
+		}
+		return nil, fmt.Errorf("invalid Floret subagent detail contract: %w", err)
+	}
 	if strings.TrimSpace(resp.Summary.ParentThreadID) != parentThreadID || strings.TrimSpace(resp.Summary.ThreadID) != childThreadID {
 		return nil, sql.ErrNoRows
 	}
@@ -2265,9 +2271,15 @@ func isFloretSubagentNotFoundError(err error) bool {
 	return errors.Is(err, flruntime.ErrSubAgentNotFound)
 }
 
-func flowerSubagentDetailResponse(detail flruntime.SubAgentDetail) FlowerSubagentDetailResponse {
-	contextUsage := flowerSubagentDetailContextUsage(detail.Context)
-	contextCompactions := flowerSubagentDetailContextCompactions(detail.Context)
+func flowerSubagentDetailResponse(detail flruntime.SubAgentDetail) (FlowerSubagentDetailResponse, error) {
+	contextUsage, err := flowerSubagentDetailContextUsage(detail.Context)
+	if err != nil {
+		return FlowerSubagentDetailResponse{}, err
+	}
+	contextCompactions, err := flowerSubagentDetailContextCompactions(detail.Context)
+	if err != nil {
+		return FlowerSubagentDetailResponse{}, err
+	}
 	timelineDecorations := flowerSubagentDetailTimelineDecorations(detail, contextCompactions)
 	return FlowerSubagentDetailResponse{
 		Summary:             flowerSubagentSummary(detail.Snapshot),
@@ -2280,33 +2292,54 @@ func flowerSubagentDetailResponse(detail flruntime.SubAgentDetail) FlowerSubagen
 		HasMore:             detail.HasMore,
 		RetainedFrom:        detail.RetainedFrom,
 		GeneratedAtMs:       timeUnixMS(detail.GeneratedAt),
-	}
+	}, nil
 }
 
-func flowerSubagentDetailContextUsage(contextBlock flruntime.SubAgentDetailContext) *FlowerContextUsage {
+func flowerSubagentDetailContextUsage(contextBlock flruntime.SubAgentDetailContext) (*FlowerContextUsage, error) {
 	if contextBlock.Usage == nil {
-		return nil
+		return nil, nil
 	}
-	usage := flowerContextUsageFromFloret(contextBlock.Usage, strings.TrimSpace(contextBlock.Usage.RunID))
-	return &usage
+	usage, err := flowerContextUsageFromFloret(contextBlock.Usage, strings.TrimSpace(contextBlock.Usage.RunID))
+	if err != nil {
+		return nil, err
+	}
+	return &usage, nil
 }
 
-func flowerSubagentDetailContextCompactions(contextBlock flruntime.SubAgentDetailContext) []FlowerContextCompaction {
+func flowerSubagentDetailContextCompactions(contextBlock flruntime.SubAgentDetailContext) ([]FlowerContextCompaction, error) {
 	if len(contextBlock.Compactions) == 0 {
-		return nil
+		return nil, nil
 	}
 	out := make([]FlowerContextCompaction, 0, len(contextBlock.Compactions))
 	for _, compaction := range contextBlock.Compactions {
-		projected := flowerContextCompactionFromSubagentDetail(compaction)
+		projected, err := flowerContextCompactionFromSubagentDetail(compaction)
+		if err != nil {
+			return nil, err
+		}
 		if strings.TrimSpace(projected.OperationID) == "" {
 			continue
 		}
 		out = append(out, projected)
 	}
-	return out
+	return out, nil
 }
 
-func flowerContextCompactionFromSubagentDetail(compaction flruntime.SubAgentDetailContextCompaction) FlowerContextCompaction {
+func flowerContextCompactionFromSubagentDetail(compaction flruntime.SubAgentDetailContextCompaction) (FlowerContextCompaction, error) {
+	contract := observation.CompactionEvent{
+		Phase:  observation.CompactionPhase(strings.TrimSpace(compaction.Phase)),
+		Status: observation.CompactionStatus(strings.TrimSpace(compaction.Status)),
+	}
+	if err := contract.Validate(); err != nil {
+		return FlowerContextCompaction{}, err
+	}
+	phase, err := normalizeFlowerContextCompactionPhase(contract.Phase)
+	if err != nil {
+		return FlowerContextCompaction{}, err
+	}
+	status, err := normalizeFlowerContextCompactionStatus(contract.Status)
+	if err != nil {
+		return FlowerContextCompaction{}, err
+	}
 	updatedAt := compaction.ObservedAt.UnixMilli()
 	if updatedAt <= 0 {
 		updatedAt = 0
@@ -2315,15 +2348,15 @@ func flowerContextCompactionFromSubagentDetail(compaction flruntime.SubAgentDeta
 		OperationID:         strings.TrimSpace(compaction.OperationID),
 		RunID:               strings.TrimSpace(compaction.RunID),
 		StepIndex:           compaction.Step,
-		Phase:               normalizeFlowerContextCompactionPhase(compaction.Phase),
-		Status:              normalizeFlowerContextCompactionStatus(compaction.Status),
+		Phase:               phase,
+		Status:              status,
 		Trigger:             strings.TrimSpace(compaction.Trigger),
 		Reason:              strings.TrimSpace(compaction.Reason),
 		TokensBefore:        compaction.TokensBefore,
 		TokensAfterEstimate: compaction.TokensAfterEstimate,
 		Error:               strings.TrimSpace(compaction.Error),
 		UpdatedAtMs:         updatedAt,
-	}
+	}, nil
 }
 
 func flowerSubagentDetailTimelineDecorations(detail flruntime.SubAgentDetail, compactions []FlowerContextCompaction) []FlowerTimelineDecoration {
@@ -3015,6 +3048,10 @@ func (s floretSubagentEventSink) EmitEvent(ev flruntime.Event) {
 	if parent == nil {
 		return
 	}
+	if err := validateFloretRuntimeEventContract(ev); err != nil {
+		parent.rejectFloretContract("subagent_event", err)
+		return
+	}
 	parentThreadID := strings.TrimSpace(parent.threadID)
 	eventThreadID := strings.TrimSpace(string(ev.ThreadID))
 	if eventThreadID == "" || eventThreadID == parentThreadID {
@@ -3025,7 +3062,7 @@ func (s floretSubagentEventSink) EmitEvent(ev flruntime.Event) {
 		s.runtime.scheduleParentSubagentsPatch(eventThreadID)
 	}
 	parent.persistRunEvent("delegation.child.event", RealtimeStreamKindLifecycle, map[string]any{
-		"event_type": strings.TrimSpace(ev.Type),
+		"event_type": strings.TrimSpace(string(ev.Type)),
 		"thread_id":  eventThreadID,
 		"turn_id":    strings.TrimSpace(string(ev.TurnID)),
 		"tool_id":    strings.TrimSpace(ev.ToolID),

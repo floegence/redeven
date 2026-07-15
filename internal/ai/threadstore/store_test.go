@@ -2950,7 +2950,7 @@ func TestBuildPreview_AssistantUsesFinalMarkdownAfterControlActivity(t *testing.
 	}
 }
 
-func TestStore_ForkThreadCopiesContextAndClearsRunState(t *testing.T) {
+func TestStore_ForkOperationCopiesContextAndClearsRunState(t *testing.T) {
 	t.Parallel()
 
 	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
@@ -3123,7 +3123,8 @@ func TestStore_ForkThreadCopiesContextAndClearsRunState(t *testing.T) {
 		t.Fatalf("source Flower activity not initialized: %+v", source)
 	}
 
-	forked, err := s.ForkThread(ctx, ForkThreadRequest{
+	forkRequest := ForkThreadRequest{
+		OperationID:           "fork_op_copy_context",
 		EndpointID:            "env_1",
 		SourceThreadID:        "th_src",
 		DestinationThreadID:   "th_fork",
@@ -3131,9 +3132,28 @@ func TestStore_ForkThreadCopiesContextAndClearsRunState(t *testing.T) {
 		CreatedByUserPublicID: "u2",
 		CreatedByUserEmail:    "u2@example.com",
 		CreatedAtUnixMs:       1000,
+	}
+	preparedFork, err := s.PrepareForkOperation(ctx, forkRequest)
+	if err != nil {
+		t.Fatalf("PrepareForkOperation: %v", err)
+	}
+	if strings.Contains(preparedFork.SnapshotJSON, "raw secret") {
+		t.Fatalf("fork snapshot persisted request-user-input secret material")
+	}
+	forked, err := s.CommitForkOperation(ctx, CommitForkOperationRequest{
+		OperationID: forkRequest.OperationID,
+		FloretTurnRefs: []ForkTurnRef{{
+			SourceTurnID:      "turn_src",
+			SourceRunID:       "run_src",
+			DestinationTurnID: "turn_fork",
+			DestinationRunID:  "run_fork",
+			CreatedAtUnixMs:   130,
+		}},
+		FloretResultJSON: `{"operation_id":"fork_op_copy_context","thread":{"id":"th_fork"}}`,
+		UpdatedAtUnixMs:  1001,
 	})
 	if err != nil {
-		t.Fatalf("ForkThread: %v", err)
+		t.Fatalf("CommitForkOperation: %v", err)
 	}
 	if forked.ThreadID != "th_fork" || forked.Title != "Forked" {
 		t.Fatalf("forked thread mismatch: %+v", forked)
@@ -3190,6 +3210,12 @@ func TestStore_ForkThreadCopiesContextAndClearsRunState(t *testing.T) {
 	if got := strings.TrimSpace(fmt.Sprint(timeline["turn_id"])); got != msgs[1].MessageID {
 		t.Fatalf("timeline turn_id=%q, want %q", got, msgs[1].MessageID)
 	}
+	if got := strings.TrimSpace(fmt.Sprint(timeline["run_id"])); got != "run_fork" {
+		t.Fatalf("timeline run_id=%q, want run_fork", got)
+	}
+	if got := strings.TrimSpace(fmt.Sprint(timeline["trace_id"])); got != "run_fork" {
+		t.Fatalf("timeline trace_id=%q, want run_fork", got)
+	}
 	items, ok := timeline["items"].([]any)
 	if !ok || len(items) != 1 {
 		t.Fatalf("timeline items=%#v, want one item", timeline["items"])
@@ -3213,7 +3239,7 @@ func TestStore_ForkThreadCopiesContextAndClearsRunState(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListConversationTurns fork: %v", err)
 	}
-	if len(turns) != 1 || turns[0].RunID != "" || turns[0].UserMessageID != msgs[0].MessageID || turns[0].AssistantMessageID != msgs[1].MessageID {
+	if len(turns) != 1 || turns[0].TurnID != "turn_fork" || turns[0].RunID != "run_fork" || turns[0].UserMessageID != msgs[0].MessageID || turns[0].AssistantMessageID != msgs[1].MessageID {
 		t.Fatalf("fork turns mismatch: %+v messages=%+v", turns, msgs)
 	}
 	if todos, err := s.GetThreadTodosSnapshot(ctx, "env_1", "th_fork"); err != nil {
@@ -3254,7 +3280,7 @@ func TestStore_ForkThreadCopiesContextAndClearsRunState(t *testing.T) {
 	}
 }
 
-func TestStore_ForkThreadUsesFloretTurnRefsWithoutShadowTranscript(t *testing.T) {
+func TestStore_ForkOperationUsesFloretTurnRefsWithoutShadowTranscript(t *testing.T) {
 	t.Parallel()
 
 	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
@@ -3300,7 +3326,8 @@ func TestStore_ForkThreadUsesFloretTurnRefsWithoutShadowTranscript(t *testing.T)
 		t.Fatalf("AppendConversationTurn: %v", err)
 	}
 
-	if _, err := s.ForkThread(ctx, ForkThreadRequest{
+	forkRequest := ForkThreadRequest{
+		OperationID:           "fork_op_floret_refs",
 		EndpointID:            "env_1",
 		SourceThreadID:        "th_src",
 		DestinationThreadID:   "th_fork",
@@ -3308,6 +3335,12 @@ func TestStore_ForkThreadUsesFloretTurnRefsWithoutShadowTranscript(t *testing.T)
 		CreatedByUserPublicID: "u2",
 		CreatedByUserEmail:    "u2@example.com",
 		CreatedAtUnixMs:       300,
+	}
+	if _, err := s.PrepareForkOperation(ctx, forkRequest); err != nil {
+		t.Fatalf("PrepareForkOperation: %v", err)
+	}
+	if _, err := s.CommitForkOperation(ctx, CommitForkOperationRequest{
+		OperationID: forkRequest.OperationID,
 		FloretTurnRefs: []ForkTurnRef{{
 			SourceTurnID:      "turn_src",
 			SourceRunID:       "run_src",
@@ -3315,8 +3348,10 @@ func TestStore_ForkThreadUsesFloretTurnRefsWithoutShadowTranscript(t *testing.T)
 			DestinationRunID:  "run_dest",
 			CreatedAtUnixMs:   120,
 		}},
+		FloretResultJSON: `{"operation_id":"fork_op_floret_refs","thread":{"id":"th_fork"}}`,
+		UpdatedAtUnixMs:  301,
 	}); err != nil {
-		t.Fatalf("ForkThread: %v", err)
+		t.Fatalf("CommitForkOperation: %v", err)
 	}
 
 	msgs, _, _, err := s.ListMessages(ctx, "env_1", "th_fork", 10, 0)

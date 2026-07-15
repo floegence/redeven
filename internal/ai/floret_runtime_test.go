@@ -35,6 +35,12 @@ type concurrentTerminalBatchProvider struct {
 	cwd   string
 }
 
+type failingTurnProvider struct{}
+
+func (failingTurnProvider) StreamTurn(context.Context, ModelGatewayRequest, func(StreamEvent)) (ModelGatewayResult, error) {
+	return ModelGatewayResult{}, errors.New("primary engine failure")
+}
+
 func (p *concurrentTerminalBatchProvider) StreamTurn(_ context.Context, req ModelGatewayRequest, _ func(StreamEvent)) (ModelGatewayResult, error) {
 	p.mu.Lock()
 	p.calls++
@@ -100,19 +106,34 @@ func TestRunFloretHostedTurnExecutesSameResponseTerminalCallsConcurrently(t *tes
 	}
 }
 
-type recordingTurnProjectionReader struct {
-	projection  flruntime.ThreadTurnProjection
-	err         error
-	request     flruntime.ReadTurnProjectionRequest
-	calls       int
-	hadDeadline bool
-}
+func TestRunFloretHostedTurnPreservesEngineErrorAsPrimaryFailure(t *testing.T) {
+	t.Parallel()
 
-func (r *recordingTurnProjectionReader) ReadTurnProjection(ctx context.Context, req flruntime.ReadTurnProjectionRequest) (flruntime.ThreadTurnProjection, error) {
-	r.calls++
-	r.request = req
-	_, r.hadDeadline = ctx.Deadline()
-	return r.projection, r.err
+	r := newRun(runOptions{
+		Log:          slog.New(slog.NewTextHandler(io.Discard, nil)),
+		StateDir:     t.TempDir(),
+		AgentHomeDir: t.TempDir(),
+		WorkingDir:   t.TempDir(),
+		Shell:        "/bin/bash",
+		Service:      &Service{},
+		AIConfig:     &config.AIConfig{},
+		SessionMeta:  &session.Meta{CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true},
+		RunID:        "run_primary_engine_error",
+		EndpointID:   "env_primary_engine_error",
+		ThreadID:     "thread_primary_engine_error",
+		MessageID:    "msg_primary_engine_error",
+	})
+	err := r.runFloretHostedTurn(t.Context(), RunRequest{
+		Model:   "compat/gpt-5-mini",
+		Input:   RunInput{Text: "fail this turn"},
+		Options: RunOptions{PermissionType: config.AIPermissionFullAccess},
+	}, config.AIProvider{ID: "compat", Type: "openai_compatible", BaseURL: "https://example.test/v1"}, "sk-test", "error priority", failingTurnProvider{})
+	if err == nil || !strings.Contains(err.Error(), "primary engine failure") {
+		t.Fatalf("runFloretHostedTurn error=%v, want primary engine failure", err)
+	}
+	if r.getRunErrorCode() == runErrorCodeFloretProjectionUnavailable {
+		t.Fatalf("engine failure was replaced by projection unavailable")
+	}
 }
 
 func (p *capturingTurnProvider) StreamTurn(_ context.Context, req ModelGatewayRequest, _ func(StreamEvent)) (ModelGatewayResult, error) {
@@ -138,61 +159,16 @@ func (p *capturingTurnProvider) firstRequest() ModelGatewayRequest {
 	return p.requests[0]
 }
 
-func TestRetryUnavailableFloretTurnProjectionRecoversCanonicalProjection(t *testing.T) {
+func TestUnavailableFloretTurnProjectionPreservesStreamedMarkdown(t *testing.T) {
 	r := newRun(runOptions{})
-	r.id = "run_projection_retry"
-	r.threadID = "thread_projection_retry"
-	r.messageID = "msg_projection_retry"
-	r.persistOpTimeout = time.Second
-	reader := &recordingTurnProjectionReader{projection: flruntime.ThreadTurnProjection{
-		RunID:    "run_projection_retry",
-		ThreadID: "thread_projection_retry",
-		TurnID:   "msg_projection_retry",
-		TraceID:  "run_projection_retry",
-		Segments: []flruntime.ThreadTurnProjectionSegment{{Kind: flruntime.ThreadTurnProjectionSegmentAssistantText, Text: "canonical reply"}},
-	}}
-	initialErr := fmt.Errorf("%w: injected detail read failure", flruntime.ErrTurnProjectionUnavailable)
-
-	result, runErr, retryErr := r.retryUnavailableFloretTurnProjection(reader, flruntime.TurnResult{
-		ID:     "msg_projection_retry",
-		RunID:  "run_projection_retry",
-		Status: flruntime.TurnStatusCompleted,
-	}, initialErr)
-	if runErr != nil || retryErr != nil {
-		t.Fatalf("runErr=%v retryErr=%v", runErr, retryErr)
-	}
-	if reader.calls != 1 || !reader.hadDeadline {
-		t.Fatalf("reader calls=%d deadline=%v", reader.calls, reader.hadDeadline)
-	}
-	if reader.request.ThreadID != "thread_projection_retry" || reader.request.TurnID != "msg_projection_retry" || reader.request.RunID != "run_projection_retry" {
-		t.Fatalf("request = %#v", reader.request)
-	}
-	if len(result.Projection.Segments) != 1 || result.Projection.Segments[0].Text != "canonical reply" {
-		t.Fatalf("projection = %#v", result.Projection)
-	}
-}
-
-func TestRetryUnavailableFloretTurnProjectionFailurePreservesStreamedMarkdown(t *testing.T) {
-	r := newRun(runOptions{})
-	r.id = "run_projection_retry_failure"
-	r.threadID = "thread_projection_retry_failure"
-	r.messageID = "msg_projection_retry_failure"
+	r.id = "run_projection_unavailable"
+	r.threadID = "thread_projection_unavailable"
+	r.messageID = "msg_projection_unavailable"
 	r.persistOpTimeout = time.Second
 	r.assistantBlocks = []any{&persistedMarkdownBlock{Type: "markdown", Content: "already streamed reply"}}
 	var events []any
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
-	reader := &recordingTurnProjectionReader{err: errors.New("projection still unavailable")}
-	initialErr := fmt.Errorf("%w: injected detail read failure", flruntime.ErrTurnProjectionUnavailable)
-
-	_, runErr, retryErr := r.retryUnavailableFloretTurnProjection(reader, flruntime.TurnResult{
-		ID:     "msg_projection_retry_failure",
-		RunID:  "run_projection_retry_failure",
-		Status: flruntime.TurnStatusCompleted,
-	}, initialErr)
-	if !errors.Is(runErr, flruntime.ErrTurnProjectionUnavailable) || retryErr == nil || reader.calls != 1 {
-		t.Fatalf("runErr=%v retryErr=%v calls=%d", runErr, retryErr, reader.calls)
-	}
-	returned := r.failRunWithCode(runErrorCodeFloretProjectionUnavailable, "", errors.Join(runErr, retryErr))
+	returned := r.failRunWithCode(runErrorCodeFloretProjectionUnavailable, "", errors.New("detail read failed"))
 	if returned == nil || r.getRunErrorCode() != runErrorCodeFloretProjectionUnavailable {
 		t.Fatalf("returned=%v code=%q", returned, r.getRunErrorCode())
 	}
@@ -395,7 +371,7 @@ func TestRunFloretHostedTurnEmitsContextUsageFromPublishedHost(t *testing.T) {
 	}
 	first := usages[0]
 	if first.RunID != r.id ||
-		first.Phase != observation.ContextPhaseProjectedRequest ||
+		first.Phase != string(observation.ContextPhaseProjectedRequest) ||
 		first.InputTokens <= 0 ||
 		first.ContextWindowTokens <= 0 ||
 		strings.TrimSpace(first.PressureStatus) == "" {
@@ -945,8 +921,8 @@ func TestFloretEventSinkProjectsStreamObservationDeltas(t *testing.T) {
 		needNewThinkingBlock:      true,
 	}
 	sink := floretEventSink{run: r}
-	sink.EmitEvent(flruntime.Event{Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationReasoningDelta, Text: "thinking"}})
-	sink.EmitEvent(flruntime.Event{Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationAssistantDelta, Text: "answer"}})
+	sink.EmitEvent(flruntime.Event{Type: observation.EventTypeProviderReasoning, Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationReasoningDelta, Text: "thinking"}})
+	sink.EmitEvent(flruntime.Event{Type: observation.EventTypeProviderDelta, Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationAssistantDelta, Text: "answer"}})
 
 	if len(r.assistantBlocks) != 2 {
 		t.Fatalf("assistantBlocks len=%d, want thinking and markdown: %#v", len(r.assistantBlocks), r.assistantBlocks)
@@ -967,6 +943,58 @@ func TestFloretEventSinkProjectsStreamObservationDeltas(t *testing.T) {
 	}
 }
 
+func TestFloretEventSinkRejectsUnknownContractsBeforePresentation(t *testing.T) {
+	t.Parallel()
+
+	_, r, store, events := newFloretProviderAdapterRunTest(t, reasoningFlowerProvider{})
+	sink := floretEventSink{run: r}
+	sink.EmitEvent(flruntime.Event{
+		Type:   observation.EventType("unknown_event"),
+		Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationAssistantDelta, Text: "must not render"},
+	})
+	sink.EmitEvent(flruntime.Event{
+		Type: observation.EventTypeProviderUsage,
+		ContextStatus: &observation.ContextStatus{
+			Phase:  observation.ContextPhase("unknown_phase"),
+			Status: observation.ContextStatusStable,
+		},
+	})
+	sink.EmitEvent(flruntime.Event{
+		Type:   observation.EventTypeProviderDelta,
+		Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationType("unknown_stream"), Text: "must not render"},
+	})
+	sink.EmitEvent(flruntime.Event{
+		Type:     observation.EventTypeProviderDelta,
+		ThreadID: flruntime.ThreadID(r.threadID),
+		TurnID:   flruntime.TurnID(r.messageID),
+		RunID:    flruntime.RunID(r.id),
+		Stream:   &flruntime.StreamObservation{Type: flruntime.StreamObservationAssistantDelta, Text: "must not render"},
+		Projection: &flruntime.ThreadTurnProjection{
+			ThreadID:       flruntime.ThreadID(r.threadID),
+			TurnID:         flruntime.TurnID(r.messageID),
+			RunID:          flruntime.RunID(r.id),
+			Status:         flruntime.TurnStatusCompleted,
+			ThroughOrdinal: 1,
+			Segments:       []flruntime.ThreadTurnProjectionSegment{{Kind: "unknown"}},
+		},
+	})
+	if len(*events) != 0 || len(r.assistantBlocks) != 0 {
+		t.Fatalf("rejected contracts changed presentation: events=%#v blocks=%#v", *events, r.assistantBlocks)
+	}
+	runEvents, err := store.ListRunEvents(context.Background(), r.endpointID, r.id, 10)
+	if err != nil {
+		t.Fatalf("ListRunEvents: %v", err)
+	}
+	if len(runEvents) != 4 {
+		t.Fatalf("run events=%#v, want four contract rejections", runEvents)
+	}
+	for _, event := range runEvents {
+		if event.EventType != "floret.contract.rejected" || !strings.Contains(event.PayloadJSON, "contract_kind") {
+			t.Fatalf("contract rejection event=%#v", event)
+		}
+	}
+}
+
 func TestFloretEventSinkProjectsToolCallStreamObservationToModelIO(t *testing.T) {
 	t.Parallel()
 
@@ -980,7 +1008,7 @@ func TestFloretEventSinkProjectsToolCallStreamObservationToModelIO(t *testing.T)
 		needNewThinkingBlock:      true,
 	}
 	sink := floretEventSink{run: r}
-	sink.EmitEvent(flruntime.Event{Stream: &flruntime.StreamObservation{
+	sink.EmitEvent(flruntime.Event{Type: observation.EventTypeProviderToolCallDelta, Stream: &flruntime.StreamObservation{
 		Type: flruntime.StreamObservationToolCallDelta,
 		ToolCallStream: &flruntime.ModelToolCallStream{
 			ID:   "call-1",
@@ -1016,6 +1044,7 @@ func TestFloretEventSinkProjectsContextObservations(t *testing.T) {
 	}
 	sink := floretEventSink{run: r}
 	sink.EmitEvent(flruntime.Event{
+		Type:  observation.EventTypeProviderUsage,
 		RunID: "msg_context_projection",
 		ContextStatus: &observation.ContextStatus{
 			RunID:    "msg_context_projection",
@@ -1038,6 +1067,7 @@ func TestFloretEventSinkProjectsContextObservations(t *testing.T) {
 		},
 	})
 	sink.EmitEvent(flruntime.Event{
+		Type:  observation.EventTypeContextCompact,
 		RunID: "run_context_projection",
 		Compaction: &observation.CompactionEvent{
 			RunID:               "run_context_projection",
@@ -1063,10 +1093,10 @@ func TestFloretEventSinkProjectsContextObservations(t *testing.T) {
 		t.Fatalf("events[0]=%T, want streamEventContextUsage", events[0])
 	}
 	if usage.Usage.RunID != "run_context_projection" ||
-		usage.Usage.Phase != observation.ContextPhaseProjectedRequest ||
+		usage.Usage.Phase != string(observation.ContextPhaseProjectedRequest) ||
 		usage.Usage.InputTokens != 600 ||
 		usage.Usage.ContextWindowTokens != 1000 ||
-		usage.Usage.PressureStatus != observation.ContextStatusStable {
+		usage.Usage.PressureStatus != string(observation.ContextStatusStable) {
 		t.Fatalf("usage=%#v", usage.Usage)
 	}
 	compaction, ok := events[1].(streamEventContextCompaction)
@@ -1075,7 +1105,7 @@ func TestFloretEventSinkProjectsContextObservations(t *testing.T) {
 	}
 	if compaction.Compaction.OperationID == "" ||
 		compaction.Compaction.Status != "compacting" ||
-		compaction.Compaction.Phase != observation.CompactionPhaseStart {
+		compaction.Compaction.Phase != string(observation.CompactionPhaseStart) {
 		t.Fatalf("compaction=%#v", compaction.Compaction)
 	}
 }
@@ -1197,8 +1227,8 @@ func TestFloretEventSinkPersistsCompactionDebugWithoutProjectingTimeline(t *test
 	for key, want := range map[string]string{
 		"operation_id":        "op_compact_debug",
 		"request_id":          "req_compact_debug",
-		"stage":               observation.CompactionDebugStageRequestValidation,
-		"status":              observation.CompactionDebugStatusRetrying,
+		"stage":               string(observation.CompactionDebugStageRequestValidation),
+		"status":              string(observation.CompactionDebugStatusRetrying),
 		"provider_state_kind": "responses",
 		"next_action":         "provider_request",
 		"error":               "validation pressure still high",
@@ -1221,8 +1251,8 @@ func TestFloretEventSinkPersistsCompactionDebugWithoutProjectingTimeline(t *test
 	for key, want := range map[string]string{
 		"operation_id": "op_compact_debug",
 		"request_id":   "req_compact_debug",
-		"stage":        observation.CompactionDebugStagePreflight,
-		"status":       observation.CompactionDebugStatusFailed,
+		"stage":        string(observation.CompactionDebugStagePreflight),
+		"status":       string(observation.CompactionDebugStatusFailed),
 		"source":       "slash_command",
 		"error":        "compaction manager is required when context exceeds policy",
 	} {
@@ -1285,10 +1315,10 @@ func TestFloretEventSinkPreservesWhitespaceStreamObservationDeltas(t *testing.T)
 	}
 	sink := floretEventSink{run: r}
 	for _, text := range []string{"foo", " ", "bar", "\n"} {
-		sink.EmitEvent(flruntime.Event{Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationAssistantDelta, Text: text}})
+		sink.EmitEvent(flruntime.Event{Type: observation.EventTypeProviderDelta, Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationAssistantDelta, Text: text}})
 	}
 	for _, text := range []string{"think", " ", "step", "\n"} {
-		sink.EmitEvent(flruntime.Event{Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationReasoningDelta, Text: text}})
+		sink.EmitEvent(flruntime.Event{Type: observation.EventTypeProviderReasoning, Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationReasoningDelta, Text: text}})
 	}
 
 	var markdown *persistedMarkdownBlock
@@ -1314,7 +1344,7 @@ func TestFloretEventSinkRecordsSourceObservations(t *testing.T) {
 
 	r := &run{}
 	sink := floretEventSink{run: r}
-	sink.EmitEvent(flruntime.Event{Sources: []flruntime.SourceRef{{
+	sink.EmitEvent(flruntime.Event{Type: observation.EventTypeProviderSources, Sources: []flruntime.SourceRef{{
 		Title: "Example docs",
 		URL:   "https://example.test/docs",
 	}}})

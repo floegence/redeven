@@ -7,10 +7,10 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 )
 
 type ForkThreadRequest struct {
+	OperationID           string
 	EndpointID            string
 	SourceThreadID        string
 	DestinationThreadID   string
@@ -18,7 +18,6 @@ type ForkThreadRequest struct {
 	CreatedByUserPublicID string
 	CreatedByUserEmail    string
 	CreatedAtUnixMs       int64
-	FloretTurnRefs        []ForkTurnRef
 }
 
 type ForkTurnRef struct {
@@ -27,92 +26,6 @@ type ForkTurnRef struct {
 	DestinationTurnID string
 	DestinationRunID  string
 	CreatedAtUnixMs   int64
-}
-
-func (s *Store) ForkThread(ctx context.Context, req ForkThreadRequest) (*Thread, error) {
-	if s == nil || s.db == nil {
-		return nil, errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	req.EndpointID = strings.TrimSpace(req.EndpointID)
-	req.SourceThreadID = strings.TrimSpace(req.SourceThreadID)
-	req.DestinationThreadID = strings.TrimSpace(req.DestinationThreadID)
-	req.Title = strings.TrimSpace(req.Title)
-	req.CreatedByUserPublicID = strings.TrimSpace(req.CreatedByUserPublicID)
-	req.CreatedByUserEmail = strings.TrimSpace(req.CreatedByUserEmail)
-	if req.EndpointID == "" || req.SourceThreadID == "" || req.DestinationThreadID == "" {
-		return nil, errors.New("invalid fork request")
-	}
-	if req.SourceThreadID == req.DestinationThreadID {
-		return nil, errors.New("fork destination must differ from source")
-	}
-	if len(req.Title) > 200 {
-		return nil, errors.New("title too long")
-	}
-	if req.CreatedAtUnixMs <= 0 {
-		req.CreatedAtUnixMs = time.Now().UnixMilli()
-	}
-
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	var source Thread
-	if err := scanThreadRow(tx.QueryRowContext(ctx, fmt.Sprintf(`
-SELECT
-%s
-FROM ai_threads
-WHERE endpoint_id = ? AND thread_id = ?
-`, threadSelectColumnsSQL), req.EndpointID, req.SourceThreadID), &source); err != nil {
-		return nil, err
-	}
-	title := req.Title
-	if title == "" {
-		title = strings.TrimSpace(source.Title)
-	}
-	if err := insertForkedThreadTx(ctx, tx, req, source, title); err != nil {
-		return nil, err
-	}
-	messageIDMap, err := copyForkTranscriptMessagesTx(ctx, tx, req)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := copyForkConversationTurnsTx(ctx, tx, req, messageIDMap); err != nil {
-		return nil, err
-	}
-	if err := copyForkStructuredInputsTx(ctx, tx, req, messageIDMap); err != nil {
-		return nil, err
-	}
-	if err := copyForkThreadTodosTx(ctx, tx, req); err != nil {
-		return nil, err
-	}
-	if err := copyForkMemoryItemsTx(ctx, tx, req, messageIDMap); err != nil {
-		return nil, err
-	}
-	if err := copyForkUploadRefsTx(ctx, tx, req, messageIDMap); err != nil {
-		return nil, err
-	}
-	if err := copyForkFlowerMetadataTx(ctx, tx, req); err != nil {
-		return nil, err
-	}
-
-	var out Thread
-	if err := scanThreadRow(tx.QueryRowContext(ctx, fmt.Sprintf(`
-SELECT
-%s
-FROM ai_threads
-WHERE endpoint_id = ? AND thread_id = ?
-`, threadSelectColumnsSQL), req.EndpointID, req.DestinationThreadID), &out); err != nil {
-		return nil, err
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	return &out, nil
 }
 
 func insertForkedThreadTx(ctx context.Context, tx *sql.Tx, req ForkThreadRequest, source Thread, title string) error {
@@ -185,338 +98,52 @@ INSERT INTO ai_threads(
 	return err
 }
 
-func copyForkTranscriptMessagesTx(ctx context.Context, tx *sql.Tx, req ForkThreadRequest) (map[string]string, error) {
-	rows, err := tx.QueryContext(ctx, `
-SELECT id, message_id, role, author_user_public_id, author_user_email,
-       status, created_at_unix_ms, updated_at_unix_ms,
-       text_content, message_json
-FROM transcript_messages
-WHERE endpoint_id = ? AND thread_id = ?
-ORDER BY id ASC
-`, req.EndpointID, req.SourceThreadID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	type sourceMessage struct {
-		ID                 int64
-		MessageID          string
-		Role               string
-		AuthorUserPublicID string
-		AuthorUserEmail    string
-		Status             string
-		CreatedAtUnixMs    int64
-		UpdatedAtUnixMs    int64
-		TextContent        string
-		MessageJSON        string
-	}
-	messages := make([]sourceMessage, 0)
-	messageIDMap := map[string]string{}
-	index := 0
-	for rows.Next() {
-		var rec sourceMessage
-		if err := rows.Scan(
-			&rec.ID,
-			&rec.MessageID,
-			&rec.Role,
-			&rec.AuthorUserPublicID,
-			&rec.AuthorUserEmail,
-			&rec.Status,
-			&rec.CreatedAtUnixMs,
-			&rec.UpdatedAtUnixMs,
-			&rec.TextContent,
-			&rec.MessageJSON,
-		); err != nil {
-			return nil, err
-		}
-		rec.MessageID = strings.TrimSpace(rec.MessageID)
-		if rec.MessageID == "" {
-			continue
-		}
-		index++
-		messageIDMap[rec.MessageID] = forkScopedID("msg", req.DestinationThreadID, index)
-		messages = append(messages, rec)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	transcriptIDMap := map[string]string{}
-	for key, value := range messageIDMap {
-		transcriptIDMap[key] = value
-	}
-	transcriptIDMap[req.SourceThreadID] = req.DestinationThreadID
-
-	for _, rec := range messages {
-		nextMessageID := messageIDMap[rec.MessageID]
-		body, err := rewriteMessageJSONForFork(rec.MessageJSON, transcriptIDMap)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := tx.ExecContext(ctx, `
-INSERT INTO transcript_messages(
-  thread_id, endpoint_id, message_id, role,
-  author_user_public_id, author_user_email,
-  status, created_at_unix_ms, updated_at_unix_ms,
-  text_content, message_json
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, req.DestinationThreadID, req.EndpointID, nextMessageID, strings.TrimSpace(rec.Role), strings.TrimSpace(rec.AuthorUserPublicID), strings.TrimSpace(rec.AuthorUserEmail), strings.TrimSpace(rec.Status), rec.CreatedAtUnixMs, rec.UpdatedAtUnixMs, strings.TrimSpace(rec.TextContent), body); err != nil {
-			return nil, err
-		}
-	}
-	return messageIDMap, nil
-}
-
-func copyForkConversationTurnsTx(ctx context.Context, tx *sql.Tx, req ForkThreadRequest, messageIDMap map[string]string) (map[int64]int64, error) {
-	rows, err := tx.QueryContext(ctx, `
-SELECT id, turn_id, run_id, user_message_id, assistant_message_id, created_at_unix_ms
-FROM conversation_turns
-WHERE endpoint_id = ? AND thread_id = ?
-ORDER BY id ASC
-`, req.EndpointID, req.SourceThreadID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	index := 0
-	turnRowIDMap := map[int64]int64{}
-	floretRefs := forkTurnRefsBySource(req.FloretTurnRefs)
-	for rows.Next() {
-		var id int64
-		var turnID string
-		var runID string
-		var userMessageID string
-		var assistantMessageID string
-		var createdAt int64
-		if err := rows.Scan(&id, &turnID, &runID, &userMessageID, &assistantMessageID, &createdAt); err != nil {
-			return nil, err
-		}
-		index++
-		nextTurnID := forkScopedID("turn", req.DestinationThreadID, index)
-		nextRunID := ""
-		nextAssistantID := mappedForkID(assistantMessageID, messageIDMap)
-		if nextAssistantID == strings.TrimSpace(assistantMessageID) && strings.TrimSpace(assistantMessageID) != "" {
-			nextAssistantID = forkScopedID("assistant", req.DestinationThreadID, index)
-		}
-		if ref, ok := forkTurnRefFor(floretRefs, turnID, runID); ok {
-			nextTurnID = strings.TrimSpace(ref.DestinationTurnID)
-			nextRunID = strings.TrimSpace(ref.DestinationRunID)
-			nextAssistantID = nextTurnID
-			if createdAt <= 0 && ref.CreatedAtUnixMs > 0 {
-				createdAt = ref.CreatedAtUnixMs
-			}
-			if nextTurnID == "" || nextRunID == "" {
-				return nil, fmt.Errorf("invalid Floret fork turn ref for %q", strings.TrimSpace(turnID))
-			}
-		}
-		res, err := tx.ExecContext(ctx, `
-INSERT INTO conversation_turns(turn_id, endpoint_id, thread_id, run_id, user_message_id, assistant_message_id, created_at_unix_ms)
-VALUES(?, ?, ?, ?, ?, ?, ?)
-`, nextTurnID, req.EndpointID, req.DestinationThreadID, nextRunID, mappedForkID(userMessageID, messageIDMap), nextAssistantID, createdAt)
-		if err != nil {
-			return nil, err
-		}
-		nextID, err := res.LastInsertId()
-		if err != nil {
-			return nil, err
-		}
-		turnRowIDMap[id] = nextID
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return turnRowIDMap, nil
-}
-
-func forkTurnRefsBySource(refs []ForkTurnRef) map[string]ForkTurnRef {
-	out := make(map[string]ForkTurnRef, len(refs)*2)
+func forkTurnRefsBySource(refs []ForkTurnRef) (map[string]ForkTurnRef, error) {
+	out := make(map[string]ForkTurnRef, len(refs))
+	destinationTurns := make(map[string]struct{}, len(refs))
+	destinationRuns := make(map[string]struct{}, len(refs))
 	for _, ref := range refs {
-		sourceTurnID := strings.TrimSpace(ref.SourceTurnID)
-		if sourceTurnID == "" {
-			continue
+		ref.SourceTurnID = strings.TrimSpace(ref.SourceTurnID)
+		ref.SourceRunID = strings.TrimSpace(ref.SourceRunID)
+		ref.DestinationTurnID = strings.TrimSpace(ref.DestinationTurnID)
+		ref.DestinationRunID = strings.TrimSpace(ref.DestinationRunID)
+		if ref.SourceTurnID == "" || ref.DestinationTurnID == "" {
+			return nil, fmt.Errorf("%w: incomplete Floret turn mapping", ErrForkResultConflict)
 		}
-		sourceRunID := strings.TrimSpace(ref.SourceRunID)
-		out[forkTurnRefKey(sourceTurnID, sourceRunID)] = ref
-		if _, exists := out[forkTurnRefKey(sourceTurnID, "")]; !exists {
-			out[forkTurnRefKey(sourceTurnID, "")] = ref
+		if (ref.SourceRunID == "") != (ref.DestinationRunID == "") {
+			return nil, fmt.Errorf("%w: incomplete Floret run mapping for turn %q", ErrForkResultConflict, ref.SourceTurnID)
 		}
+		if _, exists := out[ref.SourceTurnID]; exists {
+			return nil, fmt.Errorf("%w: duplicate source turn mapping %q", ErrForkResultConflict, ref.SourceTurnID)
+		}
+		if _, exists := destinationTurns[ref.DestinationTurnID]; exists {
+			return nil, fmt.Errorf("%w: duplicate destination turn mapping %q", ErrForkResultConflict, ref.DestinationTurnID)
+		}
+		if ref.DestinationRunID != "" {
+			if _, exists := destinationRuns[ref.DestinationRunID]; exists {
+				return nil, fmt.Errorf("%w: duplicate destination run mapping %q", ErrForkResultConflict, ref.DestinationRunID)
+			}
+			destinationRuns[ref.DestinationRunID] = struct{}{}
+		}
+		out[ref.SourceTurnID] = ref
+		destinationTurns[ref.DestinationTurnID] = struct{}{}
 	}
-	return out
+	return out, nil
 }
 
-func forkTurnRefFor(refs map[string]ForkTurnRef, turnID string, runID string) (ForkTurnRef, bool) {
-	if len(refs) == 0 {
-		return ForkTurnRef{}, false
-	}
+func forkTurnRefFor(refs map[string]ForkTurnRef, turnID string, runID string) (ForkTurnRef, error) {
 	turnID = strings.TrimSpace(turnID)
 	if turnID == "" {
-		return ForkTurnRef{}, false
+		return ForkTurnRef{}, fmt.Errorf("%w: source turn identity is empty", ErrForkResultConflict)
 	}
-	if ref, ok := refs[forkTurnRefKey(turnID, strings.TrimSpace(runID))]; ok {
-		return ref, true
+	ref, ok := refs[turnID]
+	if !ok {
+		return ForkTurnRef{}, fmt.Errorf("%w: missing Floret mapping for source turn %q", ErrForkResultConflict, turnID)
 	}
-	ref, ok := refs[forkTurnRefKey(turnID, "")]
-	return ref, ok
-}
-
-func forkTurnRefKey(turnID string, runID string) string {
-	return strings.TrimSpace(turnID) + "\x00" + strings.TrimSpace(runID)
-}
-
-func copyForkStructuredInputsTx(ctx context.Context, tx *sql.Tx, req ForkThreadRequest, messageIDMap map[string]string) error {
-	rows, err := tx.QueryContext(ctx, `
-SELECT response_message_id, prompt_id, tool_id, reason_code, question_id, header, question_text,
-       selected_choice_id, selected_choice_label, response_text, public_summary, contains_secret, created_at_unix_ms
-FROM structured_user_inputs
-WHERE endpoint_id = ? AND thread_id = ?
-ORDER BY id ASC
-`, req.EndpointID, req.SourceThreadID)
-	if err != nil {
-		return err
+	if ref.SourceRunID != strings.TrimSpace(runID) {
+		return ForkTurnRef{}, fmt.Errorf("%w: source run mapping mismatch for turn %q", ErrForkResultConflict, turnID)
 	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var responseMessageID string
-		var promptID string
-		var toolID string
-		var reasonCode string
-		var questionID string
-		var header string
-		var questionText string
-		var selectedChoiceID string
-		var selectedChoiceLabel string
-		var responseText string
-		var publicSummary string
-		var containsSecret int
-		var createdAt int64
-		if err := rows.Scan(&responseMessageID, &promptID, &toolID, &reasonCode, &questionID, &header, &questionText, &selectedChoiceID, &selectedChoiceLabel, &responseText, &publicSummary, &containsSecret, &createdAt); err != nil {
-			return err
-		}
-		nextResponseID := mappedForkID(responseMessageID, messageIDMap)
-		if strings.TrimSpace(nextResponseID) == "" {
-			continue
-		}
-		if _, err := tx.ExecContext(ctx, `
-INSERT INTO structured_user_inputs(
-  endpoint_id, thread_id, response_message_id,
-  prompt_id, tool_id, reason_code, question_id, header, question_text,
-  selected_choice_id, selected_choice_label, response_text, public_summary, contains_secret, created_at_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, req.EndpointID, req.DestinationThreadID, nextResponseID, strings.TrimSpace(promptID), strings.TrimSpace(toolID), strings.TrimSpace(reasonCode), strings.TrimSpace(questionID), strings.TrimSpace(header), strings.TrimSpace(questionText), strings.TrimSpace(selectedChoiceID), strings.TrimSpace(selectedChoiceLabel), strings.TrimSpace(responseText), strings.TrimSpace(publicSummary), containsSecret, createdAt); err != nil {
-			return err
-		}
-	}
-	return rows.Err()
-}
-
-func copyForkThreadTodosTx(ctx context.Context, tx *sql.Tx, req ForkThreadRequest) error {
-	_, err := tx.ExecContext(ctx, `
-INSERT INTO ai_thread_todos(
-  endpoint_id, thread_id, version, todos_json, updated_at_unix_ms, updated_by_run_id, updated_by_tool_id
-)
-SELECT endpoint_id, ?, version, todos_json, updated_at_unix_ms, '', ''
-FROM ai_thread_todos
-WHERE endpoint_id = ? AND thread_id = ?
-`, req.DestinationThreadID, req.EndpointID, req.SourceThreadID)
-	return err
-}
-
-func copyForkMemoryItemsTx(ctx context.Context, tx *sql.Tx, req ForkThreadRequest, messageIDMap map[string]string) error {
-	rows, err := tx.QueryContext(ctx, `
-SELECT memory_id, scope, kind, content, source_refs_json, importance, freshness, confidence, created_at_unix_ms, updated_at_unix_ms
-FROM memory_items
-WHERE endpoint_id = ? AND thread_id = ?
-ORDER BY updated_at_unix_ms ASC, memory_id ASC
-`, req.EndpointID, req.SourceThreadID)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	index := 0
-	for rows.Next() {
-		var memoryID string
-		var scope string
-		var kind string
-		var content string
-		var sourceRefsJSON string
-		var importance float64
-		var freshness float64
-		var confidence float64
-		var createdAt int64
-		var updatedAt int64
-		if err := rows.Scan(&memoryID, &scope, &kind, &content, &sourceRefsJSON, &importance, &freshness, &confidence, &createdAt, &updatedAt); err != nil {
-			return err
-		}
-		index++
-		memoryID = forkMemoryID(req, memoryID, index)
-		sourceRefsJSON = rewriteOptionalJSONStrings(sourceRefsJSON, messageIDMap)
-		if _, err := tx.ExecContext(ctx, `
-INSERT INTO memory_items(
-  memory_id, endpoint_id, thread_id,
-  scope, kind, content, source_refs_json,
-  importance, freshness, confidence,
-  created_at_unix_ms, updated_at_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, memoryID, req.EndpointID, req.DestinationThreadID, normalizeScope(scope), normalizeMemoryKind(kind), strings.TrimSpace(content), sourceRefsJSON, importance, freshness, confidence, createdAt, updatedAt); err != nil {
-			return err
-		}
-	}
-	return rows.Err()
-}
-
-func copyForkUploadRefsTx(ctx context.Context, tx *sql.Tx, req ForkThreadRequest, messageIDMap map[string]string) error {
-	rows, err := tx.QueryContext(ctx, `
-SELECT upload_id, ref_kind, ref_id, created_at_unix_ms
-FROM ai_upload_refs
-WHERE endpoint_id = ? AND thread_id = ?
-ORDER BY id ASC
-`, req.EndpointID, req.SourceThreadID)
-	if err != nil {
-		return err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var uploadID string
-		var refKind string
-		var refID string
-		var createdAt int64
-		if err := rows.Scan(&uploadID, &refKind, &refID, &createdAt); err != nil {
-			return err
-		}
-		nextRefID := mappedForkID(refID, messageIDMap)
-		if strings.TrimSpace(nextRefID) == "" || nextRefID == strings.TrimSpace(refID) {
-			continue
-		}
-		if _, err := tx.ExecContext(ctx, `
-INSERT INTO ai_upload_refs(endpoint_id, upload_id, thread_id, ref_kind, ref_id, created_at_unix_ms)
-VALUES(?, ?, ?, ?, ?, ?)
-ON CONFLICT(endpoint_id, upload_id, ref_kind, ref_id) DO NOTHING
-`, req.EndpointID, strings.TrimSpace(uploadID), req.DestinationThreadID, normalizeUploadRefKind(refKind), nextRefID, createdAt); err != nil {
-			return err
-		}
-	}
-	return rows.Err()
-}
-
-func copyForkFlowerMetadataTx(ctx context.Context, tx *sql.Tx, req ForkThreadRequest) error {
-	_, err := tx.ExecContext(ctx, `
-INSERT INTO ai_flower_thread_metadata(
-  endpoint_id, thread_id, owner_kind, owner_id, parent_thread_id, parent_run_id,
-  context_json, action_json, updated_at_unix_ms, home_runtime_id, home_runtime_kind,
-  origin_env_public_id, primary_target_id, active_target_ids_json
-)
-SELECT endpoint_id, ?, owner_kind, owner_id, ?, '',
-       context_json, action_json, ?, home_runtime_id, home_runtime_kind,
-       origin_env_public_id, primary_target_id, active_target_ids_json
-FROM ai_flower_thread_metadata
-WHERE endpoint_id = ? AND thread_id = ?
-`, req.DestinationThreadID, req.SourceThreadID, req.CreatedAtUnixMs, req.EndpointID, req.SourceThreadID)
-	return err
+	return ref, nil
 }
 
 func forkMemoryID(req ForkThreadRequest, sourceMemoryID string, index int) string {
@@ -590,26 +217,6 @@ func rewriteMessageJSONForFork(raw string, replacements map[string]string) (stri
 	return string(body), nil
 }
 
-func rewriteOptionalJSONStrings(raw string, replacements map[string]string) string {
-	raw = strings.TrimSpace(raw)
-	if raw == "" || len(replacements) == 0 {
-		if raw == "" {
-			return "[]"
-		}
-		return raw
-	}
-	var value any
-	if err := json.Unmarshal([]byte(raw), &value); err != nil {
-		return raw
-	}
-	value = rewriteJSONIDReferences(value, replacements)
-	body, err := json.Marshal(value)
-	if err != nil {
-		return raw
-	}
-	return string(body)
-}
-
 func rewriteMessageEnvelopeForFork(value any, replacements map[string]string) any {
 	message, ok := value.(map[string]any)
 	if !ok {
@@ -673,7 +280,7 @@ func shouldRewriteForkMessageEnvelopeKey(key string) bool {
 
 func shouldRewriteForkMessageBlockKey(key string) bool {
 	switch strings.TrimSpace(key) {
-	case "message_id", "messageId", "thread_id", "turn_id":
+	case "message_id", "messageId", "thread_id", "threadId", "turn_id", "turnId", "run_id", "runId", "trace_id", "traceId":
 		return true
 	default:
 		return shouldRewriteForkMessageRefKey(key)
@@ -682,7 +289,7 @@ func shouldRewriteForkMessageBlockKey(key string) bool {
 
 func shouldRewriteForkMessageRefKey(key string) bool {
 	switch strings.TrimSpace(key) {
-	case "message_id", "messageId", "response_message_id", "responseMessageId", "user_message_id", "userMessageId", "assistant_message_id", "assistantMessageId":
+	case "message_id", "messageId", "response_message_id", "responseMessageId", "user_message_id", "userMessageId", "assistant_message_id", "assistantMessageId", "thread_id", "threadId", "turn_id", "turnId", "run_id", "runId", "trace_id", "traceId":
 		return true
 	default:
 		return false

@@ -130,7 +130,6 @@ type run struct {
 	runtimeToolCalls   atomic.Int64
 	runtimeTokens      atomic.Int64
 	assistantPersisted atomic.Bool
-	terminalSettlement atomic.Bool
 
 	uploadsDir       string
 	threadsDB        *threadstore.Store
@@ -142,7 +141,7 @@ type run struct {
 
 	mu            sync.Mutex
 	toolApprovals map[string]*toolApprovalRequest
-	floretHost    flruntime.Host
+	floretHost    floretActiveRunHost
 
 	muLifecycle         sync.Mutex
 	lastLifecyclePhase  string
@@ -168,6 +167,9 @@ type run struct {
 	activityFileActionSeq    int64
 	waitingPrompt            *RequestUserInputPrompt
 	providerContinuation     threadstore.ThreadProviderContinuation
+
+	muFloretProjection      sync.Mutex
+	floretProjectionOrdinal map[string]int64
 
 	finalizationReason string
 	currentModelID     string

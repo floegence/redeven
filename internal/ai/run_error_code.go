@@ -8,7 +8,6 @@ import (
 	"net/url"
 	"strings"
 
-	flruntime "github.com/floegence/floret/runtime"
 	openai "github.com/openai/openai-go"
 )
 
@@ -56,9 +55,6 @@ func userFacingRunError(code string, fallback string) string {
 func classifyRunFailureCode(err error, fallback string) string {
 	if err == nil {
 		return strings.TrimSpace(fallback)
-	}
-	if errors.Is(err, flruntime.ErrTurnProjectionUnavailable) {
-		return runErrorCodeFloretProjectionUnavailable
 	}
 	var openAIError *openai.Error
 	if errors.As(err, &openAIError) && openAIError != nil {

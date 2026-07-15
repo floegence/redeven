@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
 	fltools "github.com/floegence/floret/tools"
 
@@ -565,8 +566,8 @@ func TestFloretProviderAdapter_PersistsThinkingInTranscriptOnly(t *testing.T) {
 		resultText:      "Final transcript answer.",
 	})
 	sink := floretEventSink{run: r}
-	sink.EmitEvent(flruntime.Event{Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationReasoningDelta, Text: "Inspecting transcript contract."}})
-	sink.EmitEvent(flruntime.Event{Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationAssistantDelta, Text: "Final transcript answer."}})
+	sink.EmitEvent(flruntime.Event{Type: observation.EventTypeProviderReasoning, Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationReasoningDelta, Text: "Inspecting transcript contract."}})
+	sink.EmitEvent(flruntime.Event{Type: observation.EventTypeProviderDelta, Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationAssistantDelta, Text: "Final transcript answer."}})
 
 	r.assistantCreatedAtUnixMs = 1700000000000
 	assistantJSON, assistantText, assistantAt, err := r.snapshotAssistantMessageJSON()

@@ -101,10 +101,7 @@ func TestFloretSubagentTerminalCleanupSettlesCompletedChildPendingProcess(t *tes
 			{ParentThreadID: flruntime.ThreadID(parentThreadID), ThreadID: flruntime.ThreadID(completedChildThreadID), Status: flruntime.SubAgentStatusCompleted, LatestTurnID: flruntime.TurnID(completedFloretTurnID)},
 			{ParentThreadID: flruntime.ThreadID(parentThreadID), ThreadID: flruntime.ThreadID(runningChildThreadID), Status: flruntime.SubAgentStatusRunning, LatestTurnID: flruntime.TurnID(runningChildTurnID)},
 		},
-		settleResult: flruntime.PendingToolSettlementResult{
-			RunID:      flruntime.RunID(completedFloretRunID),
-			Projection: terminalProcessTestProjection(completedFloretRunID, completedChildThreadID, completedFloretTurnID, "tool_completed"),
-		},
+		settleResult: terminalProcessTestSettlementResult(terminalProcessTestProjection(completedFloretRunID, completedChildThreadID, completedFloretTurnID, "tool_completed")),
 	}
 	completedChildRun := newTerminalProcessTestRun(workspace, svc, store, endpointID, completedChildThreadID, completedChildRunID, completedChildTurnID)
 	completedChildRun.settlementThreadID = completedChildThreadID
@@ -456,7 +453,7 @@ func (h *recordingFloretHost) Close() error {
 	return nil
 }
 
-func openTestFloretHost(t *testing.T, storePath string, fakeResponse string) flruntime.Host {
+func openTestFloretHost(t *testing.T, storePath string, fakeResponse string) *flruntime.Host {
 	t.Helper()
 	store, err := flruntime.OpenSQLiteStore(storePath)
 	if err != nil {
@@ -1319,7 +1316,7 @@ func TestServiceGetFlowerSubagentDetailRequestsRawMessageContent(t *testing.T) {
 					ThreadID:  flruntime.ThreadID("child-detail"),
 					TurnID:    flruntime.TurnID("child-turn"),
 					Kind:      flruntime.SubAgentDetailEventToolActivity,
-					Type:      observation.EventTypeToolActivityUpdated,
+					Type:      string(observation.EventTypeToolActivityUpdated),
 					CreatedAt: now.Add(-35 * time.Second),
 					ToolCall:  &flruntime.SubAgentDetailToolCall{ID: "call-1", Name: "terminal.exec", ArgsHash: "hash-args"},
 					ActivityTimeline: &observation.ActivityTimeline{

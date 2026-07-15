@@ -219,8 +219,8 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 	t.Parallel()
 
-	const floretVersion = "v0.4.0"
-	oldFloretVersions := []string{"v0.3." + "45", "v0.3." + "46", "v0.3." + "47", "v0.3." + "53", "v0.3." + "54", "v0.3." + "55", "v0.3." + "56", "v0.3." + "57", "v0.3." + "58", "v0.3." + "59", "v0.3." + "60", "v0.3." + "61", "v0.3." + "62", "v0.3." + "63", "v0.3." + "64", "v0.3." + "65", "v0.3." + "66", "v0.3." + "67", "v0.3." + "68", "v0.3." + "69", "v0.3." + "70", "v0.3." + "71", "v0.3." + "72", "v0.3." + "73", "v0.3." + "74", "v0.3." + "75", "v0.3." + "76", "v0.3." + "77", "v0.3." + "78", "v0.3." + "79", "v0.3." + "80", "v0.3." + "81", "v0.3." + "82", "v0.3." + "83", "v0.3." + "84", "v0.3." + "85", "v0.3." + "86", "v0.3." + "87", "v0.3." + "88", "v0.3." + "89", "v0.3." + "90"}
+	const floretVersion = "v0.5.0"
+	oldFloretVersions := []string{"v0.4.0", "v0.3." + "45", "v0.3." + "46", "v0.3." + "47", "v0.3." + "53", "v0.3." + "54", "v0.3." + "55", "v0.3." + "56", "v0.3." + "57", "v0.3." + "58", "v0.3." + "59", "v0.3." + "60", "v0.3." + "61", "v0.3." + "62", "v0.3." + "63", "v0.3." + "64", "v0.3." + "65", "v0.3." + "66", "v0.3." + "67", "v0.3." + "68", "v0.3." + "69", "v0.3." + "70", "v0.3." + "71", "v0.3." + "72", "v0.3." + "73", "v0.3." + "74", "v0.3." + "75", "v0.3." + "76", "v0.3." + "77", "v0.3." + "78", "v0.3." + "79", "v0.3." + "80", "v0.3." + "81", "v0.3." + "82", "v0.3." + "83", "v0.3." + "84", "v0.3." + "85", "v0.3." + "86", "v0.3." + "87", "v0.3." + "88", "v0.3." + "89", "v0.3." + "90"}
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
 	goSum := readRepoFile(t, root, "go.sum")
@@ -275,13 +275,18 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"attachment_metadata",
 		},
 		filepath.Join("okf", "ui", "flower-live-timeline.md"): {
-			"ErrTurnProjectionUnavailable",
+			"ThroughOrdinal",
 			"floret_projection_unavailable",
-			"RebuildActivitySummary",
+			"floret.contract.rejected",
+		},
+		filepath.Join("okf", "ai", "flower-thread-fork-coordination.md"): {
+			"ai_thread_fork_operations",
+			"snapshot schema v1",
+			"ForkOperationID",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
 			"flower-model-directed-tool-concurrency",
-			"v0.4.0",
+			"v0.5.0",
 			"execute concurrently",
 			"approval queue",
 			"Permission snapshots",
@@ -676,6 +681,30 @@ func TestFloretMainActivityBoundaryUsesThreadTurnProjection(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("scan ai package: %v", err)
+	}
+}
+
+func TestFloretV05BoundaryRemovesProjectionAndForkFallbacks(t *testing.T) {
+	t.Parallel()
+
+	root := repoRootForTest(t)
+	for _, rel := range []string{
+		filepath.Join("internal", "ai", "floret_runtime.go"),
+		filepath.Join("internal", "ai", "floret_thread_projection.go"),
+		filepath.Join("internal", "ai", "threads.go"),
+	} {
+		content := readRepoFile(t, root, rel)
+		for _, marker := range []string{
+			"ErrTurnProjectionUnavailable",
+			"retryUnavailableFloretTurnProjection",
+			"terminalLifecycleFloor",
+			"markTerminalSettlementProjectionApplied",
+			"deleteFloretForkThread",
+		} {
+			if strings.Contains(content, marker) {
+				t.Fatalf("%s must not retain Floret pre-v0.5 fallback marker %q", rel, marker)
+			}
+		}
 	}
 }
 

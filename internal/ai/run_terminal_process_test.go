@@ -585,9 +585,7 @@ func TestHandleTerminalProcessDoneRequiresSettlementIdentity(t *testing.T) {
 	upsertTerminalProcessTestRun(t, store, "env_1", "thread_child", "run_child_audit", "turn_child_audit")
 
 	host := &recordingFloretHost{
-		settleResult: flruntime.PendingToolSettlementResult{
-			Projection: terminalProcessTestProjection("run_floret_child", "thread_child", "turn_floret_child", "tool_missing_target"),
-		},
+		settleResult: terminalProcessTestSettlementResult(terminalProcessTestProjection("run_floret_child", "thread_child", "turn_floret_child", "tool_missing_target")),
 	}
 	activeRun := &run{id: "run_child_audit", endpointID: "env_1", threadID: "thread_child", messageID: "turn_child_audit"}
 	activeRun.setActiveFloretHost(host)
@@ -636,9 +634,7 @@ func TestHandleTerminalProcessDoneDoesNotPublishCompletionBeforeAuditAck(t *test
 	store := openTerminalProcessTestStore(t)
 	upsertTerminalProcessTestRun(t, store, "env_1", "thread_1", "run_audit_first", "turn_1")
 	host := &recordingFloretHost{
-		settleResult: flruntime.PendingToolSettlementResult{
-			Projection: terminalProcessTestProjection("run_audit_first", "thread_1", "turn_1", "tool_audit_first"),
-		},
+		settleResult: terminalProcessTestSettlementResult(terminalProcessTestProjection("run_audit_first", "thread_1", "turn_1", "tool_audit_first")),
 	}
 	activeRun := &run{id: "run_audit_first", endpointID: "env_1", threadID: "thread_1", messageID: "turn_1"}
 	activeRun.setActiveFloretHost(host)
@@ -701,7 +697,7 @@ func TestToolTerminalReadSettlesOriginalExecWhenWaitObservesCompletion(t *testin
 	svc.runs = map[string]*run{"run_read_settle": r}
 	projection := terminalProcessTestProjection("run_read_settle", "thread_1", "turn_1", "tool_exec")
 	host := &recordingFloretHost{
-		settleResult:   flruntime.PendingToolSettlementResult{Projection: projection},
+		settleResult:   terminalProcessTestSettlementResult(projection),
 		readProjection: projection,
 	}
 	r.setActiveFloretHost(host)
@@ -769,7 +765,7 @@ func TestToolTerminalTerminateSettlesOriginalExec(t *testing.T) {
 	svc.runs = map[string]*run{"run_terminate_settle": r}
 	projection := terminalProcessTestProjection("run_terminate_settle", "thread_1", "turn_1", "tool_exec")
 	host := &recordingFloretHost{
-		settleResult:   flruntime.PendingToolSettlementResult{Projection: projection},
+		settleResult:   terminalProcessTestSettlementResult(projection),
 		readProjection: projection,
 	}
 	r.setActiveFloretHost(host)
@@ -831,7 +827,7 @@ func TestRunTerminalCleanupSettlesPendingProcessesForRun(t *testing.T) {
 	svc.runs = map[string]*run{"run_cleanup": r}
 	projection := terminalProcessTestProjection("run_cleanup", "thread_1", "turn_1", "tool_cleanup_a")
 	host := &recordingFloretHost{
-		settleResult:   flruntime.PendingToolSettlementResult{Projection: projection},
+		settleResult:   terminalProcessTestSettlementResult(projection),
 		readProjection: projection,
 	}
 	r.setActiveFloretHost(host)
@@ -840,15 +836,15 @@ func TestRunTerminalCleanupSettlesPendingProcessesForRun(t *testing.T) {
 	second := startPendingTerminalProcessForTest(t, manager, workspace, "env_1", "thread_1", "run_cleanup", "turn_1", "tool_cleanup_b")
 	otherRun := startPendingTerminalProcessForTest(t, manager, workspace, "env_1", "thread_1", "run_other", "turn_1", "tool_other")
 
-	finalProjection, changed, err := r.cleanupRunTerminalProcesses(host)
+	changed, err := r.cleanupRunTerminalProcesses()
 	if err != nil {
 		t.Fatalf("cleanupRunTerminalProcesses: %v", err)
 	}
 	if !changed {
 		t.Fatalf("cleanupRunTerminalProcesses changed=false, want true")
 	}
-	if finalProjection.RunID != "run_cleanup" {
-		t.Fatalf("projection=%#v, want refreshed run projection", finalProjection)
+	if len(host.readProjectionReqs) != 0 {
+		t.Fatalf("ReadTurnProjection requests=%#v, want no immediate projection refresh", host.readProjectionReqs)
 	}
 	if len(host.settleRequests) != 2 {
 		t.Fatalf("settle requests=%d, want two for this run", len(host.settleRequests))
@@ -902,7 +898,7 @@ func TestServiceCloseSettlesTerminalProcessesBeforeClearingActiveRuns(t *testing
 	r := newTerminalProcessTestRun(workspace, svc, store, "env_1", "thread_1", "run_shutdown", "turn_1")
 	projection := terminalProcessTestProjection("run_shutdown", "thread_1", "turn_1", "tool_shutdown")
 	host := &recordingFloretHost{
-		settleResult:   flruntime.PendingToolSettlementResult{Projection: projection},
+		settleResult:   terminalProcessTestSettlementResult(projection),
 		readProjection: projection,
 	}
 	r.setActiveFloretHost(host)
@@ -982,11 +978,10 @@ func TestRunTerminalCleanupWaitsForInFlightSettlementBeforeProjectionRead(t *tes
 	}
 
 	done := make(chan struct{})
-	var finalProjection flruntime.ThreadTurnProjection
 	var changed bool
 	var cleanupErr error
 	go func() {
-		finalProjection, changed, cleanupErr = r.cleanupRunTerminalProcesses(host)
+		changed, cleanupErr = r.cleanupRunTerminalProcesses()
 		close(done)
 	}()
 	select {
@@ -1006,11 +1001,8 @@ func TestRunTerminalCleanupWaitsForInFlightSettlementBeforeProjectionRead(t *tes
 	if !changed {
 		t.Fatalf("cleanupRunTerminalProcesses changed=false, want true")
 	}
-	if finalProjection.RunID != "run_inflight" {
-		t.Fatalf("projection=%#v, want refreshed run projection", finalProjection)
-	}
-	if len(host.readProjectionReqs) != 1 {
-		t.Fatalf("ReadTurnProjection calls=%d, want one", len(host.readProjectionReqs))
+	if len(host.readProjectionReqs) != 0 {
+		t.Fatalf("ReadTurnProjection requests=%#v, want no immediate projection refresh", host.readProjectionReqs)
 	}
 }
 
@@ -1437,14 +1429,26 @@ func newTerminalProcessTestRun(workspace string, svc *Service, store *threadstor
 
 func terminalProcessTestProjection(runID string, threadID string, turnID string, toolID string) flruntime.ThreadTurnProjection {
 	return flruntime.ThreadTurnProjection{
-		ThreadID: flruntime.ThreadID(threadID),
-		TurnID:   flruntime.TurnID(turnID),
-		RunID:    flruntime.RunID(runID),
-		TraceID:  flruntime.TraceID(runID),
+		ThreadID:       flruntime.ThreadID(threadID),
+		TurnID:         flruntime.TurnID(turnID),
+		RunID:          flruntime.RunID(runID),
+		TraceID:        flruntime.TraceID(runID),
+		Status:         flruntime.TurnStatusCompleted,
+		ThroughOrdinal: 1,
 		Segments: []flruntime.ThreadTurnProjectionSegment{{
 			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
 			ActivityTimeline: floretProjectionTimeline(runID, threadID, turnID, toolID, "terminal.exec"),
 		}},
+	}
+}
+
+func terminalProcessTestSettlementResult(projection flruntime.ThreadTurnProjection) flruntime.PendingToolSettlementResult {
+	return flruntime.PendingToolSettlementResult{
+		ThreadID:         projection.ThreadID,
+		TurnID:           projection.TurnID,
+		RunID:            projection.RunID,
+		ProjectionStatus: flruntime.TurnProjectionStatusReady,
+		Projection:       &projection,
 	}
 }
 

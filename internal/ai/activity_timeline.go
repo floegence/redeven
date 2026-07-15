@@ -180,7 +180,7 @@ func (r *run) recordObservationActivityEvent(ev observation.Event) {
 }
 
 func shouldRecordObservationActivityEvent(ev observation.Event) bool {
-	if strings.TrimSpace(ev.Type) != observation.EventTypeRunEnd {
+	if ev.Type != observation.EventTypeRunEnd {
 		return true
 	}
 	if strings.TrimSpace(ev.Error) != "" {
@@ -192,8 +192,8 @@ func shouldRecordObservationActivityEvent(ev observation.Event) bool {
 		message == "cancelled"
 }
 
-func modelIOEndsBeforeActivity(eventType string) bool {
-	switch strings.TrimSpace(eventType) {
+func modelIOEndsBeforeActivity(eventType observation.EventType) bool {
+	switch eventType {
 	case observation.EventTypeToolCall,
 		observation.EventTypeHostedToolCall,
 		observation.EventTypeToolApprovalRequested,
@@ -216,41 +216,8 @@ func activityTimelineBlockFromValue(value any) (ActivityTimelineBlock, bool) {
 	return ActivityTimelineBlock{}, false
 }
 
-func (r *run) validateActivityTimelineForProjection(timeline observation.ActivityTimeline, source string) bool {
-	if r == nil {
-		return false
-	}
-	if err := observation.ValidateActivityTimeline(timeline); err != nil {
-		r.persistRunEvent("activity.timeline.invalid", RealtimeStreamKindTool, map[string]any{
-			"source": strings.TrimSpace(source),
-			"error":  sanitizeLogText(err.Error(), 240),
-		})
-		return false
-	}
-	return true
-}
-
-func (r *run) normalizeActivityTimeline(timeline observation.ActivityTimeline) observation.ActivityTimeline {
-	if timeline.SchemaVersion <= 0 {
-		timeline.SchemaVersion = observation.ActivityTimelineSchemaVersion
-	}
-	if strings.TrimSpace(timeline.RunID) == "" {
-		timeline.RunID = strings.TrimSpace(r.id)
-	}
-	if strings.TrimSpace(timeline.ThreadID) == "" {
-		timeline.ThreadID = strings.TrimSpace(r.threadID)
-	}
-	if strings.TrimSpace(timeline.TurnID) == "" {
-		timeline.TurnID = strings.TrimSpace(r.messageID)
-	}
-	if strings.TrimSpace(timeline.TraceID) == "" {
-		timeline.TraceID = strings.TrimSpace(r.id)
-	}
-	return timeline
-}
-
-func isActivityObservationEvent(eventType string) bool {
-	switch strings.TrimSpace(eventType) {
+func isActivityObservationEvent(eventType observation.EventType) bool {
+	switch eventType {
 	case observation.EventTypeToolCall,
 		observation.EventTypeToolResult,
 		observation.EventTypeToolApprovalRequested,

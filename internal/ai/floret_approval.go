@@ -307,7 +307,7 @@ func (r *run) publishControlConfirmationRequested(toolID string) {
 	r.publishThreadApprovalState(string(RunStateWaitingApproval))
 }
 
-func (r *run) setActiveFloretHost(host flruntime.Host) {
+func (r *run) setActiveFloretHost(host floretActiveRunHost) {
 	if r == nil {
 		return
 	}
@@ -316,7 +316,7 @@ func (r *run) setActiveFloretHost(host flruntime.Host) {
 	r.mu.Unlock()
 }
 
-func (r *run) activeFloretHost() flruntime.Host {
+func (r *run) activeFloretHost() floretActiveRunHost {
 	if r == nil {
 		return nil
 	}
@@ -463,13 +463,13 @@ func (r *run) publishRunningAfterApprovalIfNoPending(resolvedActionID string) {
 
 func flowerApprovalResolvedStateForFloretReason(reason string) FlowerApprovalState {
 	switch strings.TrimSpace(reason) {
-	case floretEventToolApprovalApproved:
+	case string(floretEventToolApprovalApproved):
 		return FlowerApprovalStateApproved
-	case floretEventToolApprovalRejected:
+	case string(floretEventToolApprovalRejected):
 		return FlowerApprovalStateRejected
-	case floretEventToolApprovalTimedOut:
+	case string(floretEventToolApprovalTimedOut):
 		return FlowerApprovalStateTimedOut
-	case floretEventToolApprovalCanceled:
+	case string(floretEventToolApprovalCanceled):
 		return FlowerApprovalStateCanceled
 	default:
 		return FlowerApprovalStateCanceled
