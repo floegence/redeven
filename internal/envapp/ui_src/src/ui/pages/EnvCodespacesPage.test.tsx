@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { EnvCodespacesPage } from './EnvCodespacesPage';
 import { buildFlowerTurnLauncherCopy } from '../../../../../flower_ui/src/flowerTurnLauncherCopy';
+import { browserEditorSetupError } from '../services/browserEditorSetupError';
 
 const notificationMocks = vi.hoisted(() => ({
   success: vi.fn(),
@@ -38,7 +39,6 @@ const localApiMocks = vi.hoisted(() => ({
 
 const desktopCodeWorkspaceMocks = vi.hoisted(() => ({
   prepareAvailable: vi.fn(() => true),
-  prepareWorkspaceEngine: vi.fn(async () => ({ ok: true, prepared: true })),
   prepareWorkspaceEngineWithDesktop: vi.fn(async (): Promise<any> => ({ ok: true, prepared: true })),
   cancelWorkspaceEnginePreparation: vi.fn(async (): Promise<any> => ({ ok: true, cancelled: true })),
 }));
@@ -64,8 +64,10 @@ vi.mock('@floegence/floe-webapp-core/icons', () => ({
   ChevronDown: (props: any) => <span class={props.class} data-testid="chevron-down-icon" />,
   ChevronRight: (props: any) => <span class={props.class} data-testid="chevron-right-icon" />,
   Code: (props: any) => <span class={props.class} data-testid="code-icon" />,
+  Cloud: (props: any) => <span class={props.class} data-testid="cloud-icon" />,
   ExternalLink: (props: any) => <span class={props.class} data-testid="external-link-icon" />,
   Maximize: (props: any) => <span class={props.class} data-testid="maximize-icon" />,
+  Cpu: (props: any) => <span class={props.class} data-testid="cpu-icon" />,
   Play: (props: any) => <span class={props.class} data-testid="play-icon" />,
   RefreshIcon: (props: any) => <span class={props.class} data-testid="refresh-icon" />,
   Sparkles: (props: any) => <span class={props.class} data-testid="sparkles-icon" />,
@@ -194,10 +196,13 @@ vi.mock('../services/localApi', () => ({
 }));
 
 vi.mock('../services/desktopCodeWorkspaceBridge', () => ({
-  cancelWorkspaceEnginePreparation: desktopCodeWorkspaceMocks.cancelWorkspaceEnginePreparation,
   desktopCodeWorkspacePrepareAvailable: desktopCodeWorkspaceMocks.prepareAvailable,
-  prepareWorkspaceEngineInDesktop: desktopCodeWorkspaceMocks.prepareWorkspaceEngine,
-  prepareWorkspaceEngineWithDesktop: desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop,
+}));
+
+vi.mock('../services/browserEditorSetup', () => ({
+  cancelBrowserEditorSetup: desktopCodeWorkspaceMocks.cancelWorkspaceEnginePreparation,
+  defaultBrowserEditorInstallMethod: () => (desktopCodeWorkspaceMocks.prepareAvailable() ? 'desktop_transfer' : 'remote_download'),
+  prepareBrowserEditorSetup: desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop,
 }));
 
 vi.mock('../services/desktopSessionContext', () => ({
@@ -306,44 +311,11 @@ describe('EnvCodespacesPage', () => {
     runtimeStatusResponse = makeRuntimeStatus();
     desktopCodeWorkspaceMocks.prepareAvailable.mockReset();
     desktopCodeWorkspaceMocks.prepareAvailable.mockReturnValue(true);
-    desktopCodeWorkspaceMocks.prepareWorkspaceEngine.mockReset();
     desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop.mockReset();
     desktopCodeWorkspaceMocks.cancelWorkspaceEnginePreparation.mockReset();
     desktopCodeWorkspaceMocks.cancelWorkspaceEnginePreparation.mockResolvedValue({ ok: true, cancelled: true });
     desktopSessionContextMocks.readSnapshot.mockReset();
     desktopSessionContextMocks.readSnapshot.mockReturnValue(null);
-    desktopCodeWorkspaceMocks.prepareWorkspaceEngine.mockImplementation(async () => {
-      runtimeStatusResponse = makeRuntimeStatus({
-        ...runtimeStatusResponse,
-        active_runtime: {
-          detection_state: 'ready',
-          present: true,
-          source: 'managed',
-          binary_path: '/Users/test/.redeven/shared/code-server/darwin-arm64/versions/4.109.1/bin/code-server',
-          version: '4.109.1',
-        },
-        managed_runtime: {
-          detection_state: 'ready',
-          present: true,
-          source: 'managed',
-          binary_path: '/Users/test/.redeven/shared/code-server/darwin-arm64/versions/4.109.1/bin/code-server',
-          version: '4.109.1',
-        },
-        installed_versions: [
-          {
-            version: '4.109.1',
-            binary_path: '/Users/test/.redeven/shared/code-server/darwin-arm64/versions/4.109.1/bin/code-server',
-            selected_by_local_environment: true,
-            removable: false,
-            detection_state: 'ready',
-          },
-        ],
-        managed_runtime_version: '4.109.1',
-        managed_runtime_source: 'managed',
-        operation: { state: 'succeeded', action: 'prepare_workspace_engine', log_tail: ['Browser Editor is ready.'] },
-      });
-      return { ok: true, prepared: true, status: runtimeStatusResponse };
-    });
     desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop.mockImplementation(async () => {
       runtimeStatusResponse = makeRuntimeStatus({
         ...runtimeStatusResponse,
@@ -512,7 +484,8 @@ describe('EnvCodespacesPage', () => {
     expect(wizard?.textContent).toContain('Browser Editor');
     expect(wizard?.textContent).toContain('Not ready');
     expect(wizard?.textContent).toContain('Set up Browser Editor');
-    expect(wizard?.textContent).toContain('send it to the connected environment');
+    expect(wizard?.textContent).toContain('sends it through the current connection to this environment');
+    expect(wizard?.textContent).toContain('Desktop network → current connection → environment');
     expect(wizard?.getAttribute('data-layout')).toBe('wide');
     expect(wizard?.querySelector('[role="progressbar"]')).toBeNull();
   });
@@ -717,15 +690,20 @@ describe('EnvCodespacesPage', () => {
     startButton?.click();
     await waitForHostText(host, 'Demo Space');
     expect(localApiMocks.fetchLocalApiJSON.mock.calls.filter(([url]) => url === '/_redeven_proxy/api/code-runtime/status').length).toBeGreaterThanOrEqual(2);
+    expect(desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop).not.toHaveBeenCalled();
+
+    const setupButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Set up Browser Editor');
+    expect(setupButton).toBeTruthy();
+    setupButton?.click();
     await vi.waitFor(() => {
       expect(desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop).toHaveBeenCalledTimes(1);
     });
 
     expect(windowOpenSpy).not.toHaveBeenCalled();
     expect(desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop).toHaveBeenCalledWith(expect.objectContaining({
-      reason: 'start',
       status: expect.anything(),
-      preferSessionUpload: false,
+      installMethod: 'desktop_transfer',
+      signal: expect.any(AbortSignal),
       operationID: expect.stringMatching(/^browser-editor:/),
       onProgress: expect.any(Function),
     }));
@@ -756,11 +734,12 @@ describe('EnvCodespacesPage', () => {
       managed_runtime_source: 'none',
       operation: { state: 'idle', log_tail: [] },
     });
-    desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop.mockResolvedValueOnce({
-      ok: false,
-      prepared: false,
-      message: 'Redeven Browser Editor catalog lookup failed with HTTP 503.',
-    });
+    desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop.mockRejectedValueOnce(
+      browserEditorSetupError(
+        'desktop_release_lookup',
+        'Redeven Browser Editor catalog lookup failed with HTTP 503.',
+      ),
+    );
     localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
       if (url === '/_redeven_proxy/api/code-runtime/status') {
         return runtimeStatusResponse;
@@ -793,6 +772,11 @@ describe('EnvCodespacesPage', () => {
     expect(startButton).toBeTruthy();
 
     startButton?.click();
+    await waitForHostText(host, 'Set up Browser Editor');
+
+    const setupButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Set up Browser Editor');
+    expect(setupButton).toBeTruthy();
+    setupButton?.click();
     await waitForHostText(host, 'Redeven Browser Editor catalog lookup failed with HTTP 503.');
 
     const wizard = host.querySelector('[data-testid="browser-editor-setup-activity"]') as HTMLDivElement | null;

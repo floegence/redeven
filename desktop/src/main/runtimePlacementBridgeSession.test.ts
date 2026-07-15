@@ -185,7 +185,7 @@ describe('runtimePlacementBridgeSession', () => {
       await waitForValue(() => writes.length, (count) => count === 1);
 
       socket.write([
-        'POST /__redeven_runtime_control/v1/code-workspace-engine/import-sessions HTTP/1.1',
+        'POST /__redeven_runtime_control/v1/runtime/diagnostics HTTP/1.1',
         'Host: 127.0.0.1',
         'Connection: keep-alive',
         'Content-Length: 2',
@@ -201,7 +201,7 @@ describe('runtimePlacementBridgeSession', () => {
     expect(surfaces).toEqual(['runtime_control']);
     expect(writes).toEqual([
       'GET /v1/code-workspace-engine/status HTTP/1.1',
-      'POST /v1/code-workspace-engine/import-sessions HTTP/1.1',
+      'POST /v1/runtime/diagnostics HTTP/1.1',
     ]);
   });
 
@@ -228,7 +228,7 @@ describe('runtimePlacementBridgeSession', () => {
     try {
       await new Promise<void>((resolve) => socket.once('connect', resolve));
       socket.write([
-        'POST /__redeven_runtime_control/v1/code-workspace-engine/import-sessions HTTP/1.1',
+        'POST /__redeven_runtime_control/v1/runtime/diagnostics HTTP/1.1',
         'Host: 127.0.0.1',
         'Connection: keep-alive',
         'Content-Length: 2',
@@ -245,7 +245,7 @@ describe('runtimePlacementBridgeSession', () => {
       await proxy.close();
     }
 
-    expect(requestLine(writes[0])).toBe('POST /v1/code-workspace-engine/import-sessions HTTP/1.1');
+    expect(requestLine(writes[0])).toBe('POST /v1/runtime/diagnostics HTTP/1.1');
     expect(writes[1].toString('latin1')).toBe('{}');
     expect(requestLine(writes[2])).toBe('GET /v1/code-workspace-engine/status HTTP/1.1');
   });

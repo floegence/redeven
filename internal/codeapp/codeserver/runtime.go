@@ -38,6 +38,13 @@ const (
 	RuntimeOperationActionRemoveLocalEnvironmentVersion RuntimeOperationAction = "remove_local_environment_version"
 )
 
+type BrowserEditorInstallMethod string
+
+const (
+	BrowserEditorInstallMethodDesktopTransfer BrowserEditorInstallMethod = "desktop_transfer"
+	BrowserEditorInstallMethodRemoteDownload  BrowserEditorInstallMethod = "remote_download"
+)
+
 type RuntimeOperationState string
 
 const (
@@ -51,13 +58,15 @@ const (
 type RuntimeOperationStage string
 
 const (
-	RuntimeOperationStagePreparing  RuntimeOperationStage = "preparing"
-	RuntimeOperationStageReceiving  RuntimeOperationStage = "receiving"
-	RuntimeOperationStageVerifying  RuntimeOperationStage = "verifying"
-	RuntimeOperationStageInstalling RuntimeOperationStage = "installing"
-	RuntimeOperationStageRemoving   RuntimeOperationStage = "removing"
-	RuntimeOperationStageValidating RuntimeOperationStage = "validating"
-	RuntimeOperationStageFinalizing RuntimeOperationStage = "finalizing"
+	RuntimeOperationStagePreparing        RuntimeOperationStage = "preparing"
+	RuntimeOperationStageResolvingCatalog RuntimeOperationStage = "resolving_catalog"
+	RuntimeOperationStageReceiving        RuntimeOperationStage = "receiving"
+	RuntimeOperationStageDownloading      RuntimeOperationStage = "downloading"
+	RuntimeOperationStageVerifying        RuntimeOperationStage = "verifying"
+	RuntimeOperationStageInstalling       RuntimeOperationStage = "installing"
+	RuntimeOperationStageRemoving         RuntimeOperationStage = "removing"
+	RuntimeOperationStageValidating       RuntimeOperationStage = "validating"
+	RuntimeOperationStageFinalizing       RuntimeOperationStage = "finalizing"
 )
 
 type RuntimeTargetStatus struct {
@@ -81,21 +90,24 @@ type RuntimeInstalledVersionStatus struct {
 }
 
 type RuntimeOperationStatus struct {
-	Action           RuntimeOperationAction `json:"action,omitempty"`
-	State            RuntimeOperationState  `json:"state"`
-	Stage            RuntimeOperationStage  `json:"stage,omitempty"`
-	TargetVersion    string                 `json:"target_version,omitempty"`
-	LastError        string                 `json:"last_error,omitempty"`
-	LastErrorCode    string                 `json:"last_error_code,omitempty"`
-	StartedAtUnixMs  int64                  `json:"started_at_unix_ms,omitempty"`
-	FinishedAtUnixMs int64                  `json:"finished_at_unix_ms,omitempty"`
-	LogTail          []string               `json:"log_tail,omitempty"`
-	Transfer         *RuntimeTransferStatus `json:"transfer,omitempty"`
+	Action           RuntimeOperationAction     `json:"action,omitempty"`
+	OperationID      string                     `json:"operation_id,omitempty"`
+	InstallMethod    BrowserEditorInstallMethod `json:"install_method,omitempty"`
+	State            RuntimeOperationState      `json:"state"`
+	Stage            RuntimeOperationStage      `json:"stage,omitempty"`
+	TargetVersion    string                     `json:"target_version,omitempty"`
+	LastError        string                     `json:"last_error,omitempty"`
+	LastErrorCode    string                     `json:"last_error_code,omitempty"`
+	StartedAtUnixMs  int64                      `json:"started_at_unix_ms,omitempty"`
+	FinishedAtUnixMs int64                      `json:"finished_at_unix_ms,omitempty"`
+	LogTail          []string                   `json:"log_tail,omitempty"`
+	Transfer         *RuntimeTransferStatus     `json:"transfer,omitempty"`
 }
 
 type RuntimeTransferStatus struct {
 	ReceivedBytes int64 `json:"received_bytes"`
 	ExpectedBytes int64 `json:"expected_bytes"`
+	FromCache     bool  `json:"from_cache,omitempty"`
 }
 
 type RuntimeStatus struct {
@@ -125,23 +137,27 @@ type RuntimeManager struct {
 	stateRoot string
 	now       func() time.Time
 
-	mu                   sync.Mutex
-	importSessionMu      sync.Mutex
-	operationAction      RuntimeOperationAction
-	operationState       RuntimeOperationState
-	operationStage       RuntimeOperationStage
-	lastError            string
-	lastErrorCode        string
-	targetVersion        string
-	operationStartedAt   time.Time
-	operationFinishedAt  time.Time
-	transferReceived     int64
-	transferExpected     int64
-	updatedAt            time.Time
-	logTail              []string
-	cancelOperation      context.CancelFunc
-	operationContext     context.Context
-	activeImportUploadID string
+	mu                    sync.Mutex
+	setupOperationMu      sync.Mutex
+	operationAction       RuntimeOperationAction
+	operationID           string
+	installMethod         BrowserEditorInstallMethod
+	operationState        RuntimeOperationState
+	operationStage        RuntimeOperationStage
+	lastError             string
+	lastErrorCode         string
+	targetVersion         string
+	operationStartedAt    time.Time
+	operationFinishedAt   time.Time
+	transferReceived      int64
+	transferExpected      int64
+	transferFromCache     bool
+	updatedAt             time.Time
+	logTail               []string
+	cancelOperation       context.CancelFunc
+	operationContext      context.Context
+	remoteDownload        remoteDownloadConfig
+	usedSetupOperationIDs map[string]struct{}
 }
 
 type runtimeDetection struct {
@@ -171,12 +187,14 @@ func NewRuntimeManager(opts RuntimeManagerOptions) *RuntimeManager {
 	}
 
 	return &RuntimeManager{
-		log:            logger,
-		stateDir:       stateDir,
-		stateRoot:      strings.TrimSpace(opts.StateRoot),
-		now:            now,
-		operationState: RuntimeOperationStateIdle,
-		updatedAt:      now(),
+		log:                   logger,
+		stateDir:              stateDir,
+		stateRoot:             strings.TrimSpace(opts.StateRoot),
+		now:                   now,
+		operationState:        RuntimeOperationStateIdle,
+		updatedAt:             now(),
+		remoteDownload:        defaultRemoteDownloadConfig(),
+		usedSetupOperationIDs: make(map[string]struct{}),
 	}
 }
 
@@ -222,6 +240,8 @@ func (m *RuntimeManager) Status(ctx context.Context) RuntimeStatus {
 			Platform:              currentWorkspaceEnginePlatform(),
 			Operation: RuntimeOperationStatus{
 				Action:           parts.snapshot.operationAction,
+				OperationID:      parts.snapshot.operationID,
+				InstallMethod:    parts.snapshot.installMethod,
 				State:            parts.snapshot.operationState,
 				Stage:            parts.snapshot.operationStage,
 				TargetVersion:    parts.snapshot.targetVersion,
@@ -230,7 +250,7 @@ func (m *RuntimeManager) Status(ctx context.Context) RuntimeStatus {
 				StartedAtUnixMs:  parts.snapshot.operationStartedAt.UnixMilli(),
 				FinishedAtUnixMs: parts.snapshot.operationFinishedAt.UnixMilli(),
 				LogTail:          append([]string(nil), parts.snapshot.logTail...),
-				Transfer:         runtimeTransferStatus(parts.snapshot.transferReceived, parts.snapshot.transferExpected),
+				Transfer:         runtimeTransferStatus(parts.snapshot.transferReceived, parts.snapshot.transferExpected, parts.snapshot.transferFromCache),
 			},
 			UpdatedAtUnixMs: parts.snapshot.updatedAt.UnixMilli(),
 		}
@@ -268,17 +288,14 @@ func (m *RuntimeManager) CancelOperation(ctx context.Context) RuntimeStatus {
 	running := m.operationState == RuntimeOperationStateRunning
 	action := m.operationAction
 	m.mu.Unlock()
+	if running && action == RuntimeOperationActionPrepareWorkspaceEngine {
+		return m.Status(ctx)
+	}
 	if running && cancel != nil {
 		cancel()
 	}
-	if running && action == RuntimeOperationActionPrepareWorkspaceEngine {
-		_ = m.CancelActiveImportSession(context.Background())
-		m.mu.Lock()
-		stillRunning := m.operationState == RuntimeOperationStateRunning && m.operationAction == RuntimeOperationActionPrepareWorkspaceEngine
-		m.mu.Unlock()
-		if stillRunning {
-			m.finishOperation("", "", true)
-		}
+	if running {
+		m.finishOperation("", "", true)
 	}
 	return m.Status(ctx)
 }
@@ -325,7 +342,7 @@ func (m *RuntimeManager) RemoveLocalEnvironmentVersion(ctx context.Context, vers
 	if version == "" {
 		return RuntimeStatus{}, errors.New("missing version")
 	}
-	opCtx, started := m.startOperation(RuntimeOperationActionRemoveLocalEnvironmentVersion, version)
+	opCtx, started := m.startOperation(RuntimeOperationActionRemoveLocalEnvironmentVersion, version, "", "")
 	if !started {
 		return m.Status(ctx), nil
 	}
@@ -333,7 +350,12 @@ func (m *RuntimeManager) RemoveLocalEnvironmentVersion(ctx context.Context, vers
 	return m.Status(ctx), nil
 }
 
-func (m *RuntimeManager) startOperation(action RuntimeOperationAction, targetVersion string) (context.Context, bool) {
+func (m *RuntimeManager) startOperation(
+	action RuntimeOperationAction,
+	targetVersion string,
+	operationID string,
+	installMethod BrowserEditorInstallMethod,
+) (context.Context, bool) {
 	opCtx, cancel := context.WithCancel(context.Background())
 
 	m.mu.Lock()
@@ -344,6 +366,8 @@ func (m *RuntimeManager) startOperation(action RuntimeOperationAction, targetVer
 	}
 	startedAt := m.now()
 	m.operationAction = action
+	m.operationID = strings.TrimSpace(operationID)
+	m.installMethod = installMethod
 	m.operationState = RuntimeOperationStateRunning
 	m.operationStage = RuntimeOperationStagePreparing
 	m.lastError = ""
@@ -354,31 +378,80 @@ func (m *RuntimeManager) startOperation(action RuntimeOperationAction, targetVer
 	m.operationFinishedAt = time.Time{}
 	m.transferReceived = 0
 	m.transferExpected = 0
+	m.transferFromCache = false
 	m.updatedAt = startedAt
 	m.cancelOperation = cancel
 	m.operationContext = opCtx
-	m.activeImportUploadID = ""
 	return opCtx, true
 }
 
-func (m *RuntimeManager) setActiveImportUploadID(uploadID string) {
+func (m *RuntimeManager) setSetupStage(operationID string, stage RuntimeOperationStage) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.activeImportUploadID = strings.TrimSpace(uploadID)
+	if !m.setupOperationMatchesLocked(operationID) {
+		return false
+	}
+	if m.operationStage == stage {
+		return true
+	}
+	m.operationStage = stage
 	m.updatedAt = m.now()
+	return true
 }
 
-func (m *RuntimeManager) setTransferProgress(receivedBytes int64, expectedBytes int64) {
+func (m *RuntimeManager) setSetupTransferProgress(operationID string, receivedBytes int64, expectedBytes int64, fromCache bool) bool {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	if !m.setupOperationMatchesLocked(operationID) {
+		return false
+	}
 	if expectedBytes <= 0 {
 		m.transferReceived = 0
 		m.transferExpected = 0
+		m.transferFromCache = false
 	} else {
 		m.transferReceived = max(int64(0), min(receivedBytes, expectedBytes))
 		m.transferExpected = expectedBytes
+		m.transferFromCache = fromCache
 	}
 	m.updatedAt = m.now()
+	return true
+}
+
+func (m *RuntimeManager) setSetupTargetVersion(operationID string, version string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.setupOperationMatchesLocked(operationID) {
+		return false
+	}
+	m.targetVersion = strings.TrimSpace(version)
+	m.updatedAt = m.now()
+	return true
+}
+
+func (m *RuntimeManager) setupOperationMatchesLocked(operationID string) bool {
+	return m.operationState == RuntimeOperationStateRunning &&
+		m.operationAction == RuntimeOperationActionPrepareWorkspaceEngine &&
+		strings.TrimSpace(operationID) != "" &&
+		m.operationID == strings.TrimSpace(operationID)
+}
+
+func (m *RuntimeManager) appendSetupLog(operationID string, line string) bool {
+	text := strings.TrimSpace(strings.ReplaceAll(line, "\r", ""))
+	if text == "" {
+		return false
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.setupOperationMatchesLocked(operationID) {
+		return false
+	}
+	m.logTail = append(m.logTail, text)
+	if len(m.logTail) > runtimeLogTailLimit {
+		m.logTail = append([]string(nil), m.logTail[len(m.logTail)-runtimeLogTailLimit:]...)
+	}
+	m.updatedAt = m.now()
+	return true
 }
 
 func (m *RuntimeManager) runRemoveLocalEnvironmentVersion(ctx context.Context, version string) {
@@ -450,6 +523,20 @@ func (m *RuntimeManager) appendLog(line string) {
 func (m *RuntimeManager) finishOperation(errCode string, errMessage string, cancelled bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.finishOperationLocked(errCode, errMessage, cancelled)
+}
+
+func (m *RuntimeManager) finishSetupOperation(operationID string, errCode string, errMessage string, cancelled bool) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if !m.setupOperationMatchesLocked(operationID) {
+		return false
+	}
+	m.finishOperationLocked(errCode, errMessage, cancelled)
+	return true
+}
+
+func (m *RuntimeManager) finishOperationLocked(errCode string, errMessage string, cancelled bool) {
 	if cancelled {
 		m.operationState = RuntimeOperationStateCancelled
 		m.lastError = ""
@@ -463,23 +550,16 @@ func (m *RuntimeManager) finishOperation(errCode string, errMessage string, canc
 		m.lastError = ""
 		m.lastErrorCode = ""
 	}
-	m.operationStage = ""
 	m.operationFinishedAt = m.now()
 	m.updatedAt = m.operationFinishedAt
 	m.cancelOperation = nil
 	m.operationContext = nil
-	m.activeImportUploadID = ""
-}
-
-func (m *RuntimeManager) setTargetVersion(version string) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.targetVersion = strings.TrimSpace(version)
-	m.updatedAt = m.now()
 }
 
 type runtimeSnapshot struct {
 	operationAction     RuntimeOperationAction
+	operationID         string
+	installMethod       BrowserEditorInstallMethod
 	operationState      RuntimeOperationState
 	operationStage      RuntimeOperationStage
 	targetVersion       string
@@ -489,6 +569,7 @@ type runtimeSnapshot struct {
 	operationFinishedAt time.Time
 	transferReceived    int64
 	transferExpected    int64
+	transferFromCache   bool
 	updatedAt           time.Time
 	logTail             []string
 }
@@ -498,6 +579,8 @@ func (m *RuntimeManager) snapshot() runtimeSnapshot {
 	defer m.mu.Unlock()
 	return runtimeSnapshot{
 		operationAction:     m.operationAction,
+		operationID:         m.operationID,
+		installMethod:       m.installMethod,
 		operationState:      m.operationState,
 		operationStage:      m.operationStage,
 		targetVersion:       m.targetVersion,
@@ -507,18 +590,20 @@ func (m *RuntimeManager) snapshot() runtimeSnapshot {
 		operationFinishedAt: m.operationFinishedAt,
 		transferReceived:    m.transferReceived,
 		transferExpected:    m.transferExpected,
+		transferFromCache:   m.transferFromCache,
 		updatedAt:           m.updatedAt,
 		logTail:             append([]string(nil), m.logTail...),
 	}
 }
 
-func runtimeTransferStatus(receivedBytes int64, expectedBytes int64) *RuntimeTransferStatus {
+func runtimeTransferStatus(receivedBytes int64, expectedBytes int64, fromCache bool) *RuntimeTransferStatus {
 	if expectedBytes <= 0 {
 		return nil
 	}
 	return &RuntimeTransferStatus{
 		ReceivedBytes: max(int64(0), min(receivedBytes, expectedBytes)),
 		ExpectedBytes: expectedBytes,
+		FromCache:     fromCache,
 	}
 }
 

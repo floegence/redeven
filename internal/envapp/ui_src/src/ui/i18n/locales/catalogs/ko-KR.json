@@ -2574,7 +2574,9 @@
       "installing": "Browser Editor 설치 중...",
       "validating": "Browser Editor 확인 중...",
       "finalizing": "Browser Editor 설정 완료 중...",
-      "default": "설정 중 Browser Editor..."
+      "default": "설정 중 Browser Editor...",
+      "resolvingCatalog": "Browser Editor 패키지 카탈로그 확인 중...",
+      "downloadingInEnvironment": "이 환경에서 Browser Editor 다운로드 중..."
     },
     "prepare": {
       "description": "Redeven Desktop는 최신 Browser Editor 패키지를 다운로드하고 이 컴퓨터에 복사본 하나를 캐시한 후 연결된 환경으로 보냅니다.",
@@ -2611,18 +2613,24 @@
       "continueToOpenCodespace": "codespace 열기 계속",
       "continueToStartCodespace": "codespace 시작 계속",
       "steps": {
-        "lookup": "최신 편집기 확인",
-        "cache": "Desktop에 다운로드",
-        "upload": "환경으로 보내기",
-        "verify": "편집기 검증"
+        "desktopTransfer": {
+          "catalog": "패키지 정보 가져오기",
+          "acquire": "Desktop에 다운로드",
+          "deliver": "환경으로 보내기",
+          "install": "검증 및 설치"
+        },
+        "remoteDownload": {
+          "catalog": "패키지 정보 가져오기",
+          "acquire": "환경에서 다운로드",
+          "deliver": "패키지 검증",
+          "install": "편집기 설치"
+        }
       },
       "progress": {
         "lookup": "최신 Browser Editor 패키지를 확인하는 중...",
         "downloading": "Browser Editor를 Desktop에 다운로드하는 중...",
         "packageValidation": "Desktop에 캐시된 Browser Editor 패키지를 확인하는 중...",
         "finishing": "전송이 완료되었습니다. Redeven이 Browser Editor를 검증하고 설치하는 중입니다.",
-        "cacheHit": "Desktop 캐시를 사용합니다. 다시 다운로드할 필요가 없습니다.",
-        "downloadedBytes": "{total} 중 {completed} 다운로드됨",
         "uploadedBytes": "{total} 중 {completed} 전송됨",
         "measuring": "이 단계의 남은 시간을 계산하는 중...",
         "rateAndEta": "{rate} · 이 단계 완료까지 약 {duration}",
@@ -2632,8 +2640,13 @@
         "elapsed": "설정 경과 시간: {duration}",
         "secondsShort": "{value}초",
         "minutesShort": "{value}분",
-        "downloadProgressLabel": "Browser Editor 다운로드 진행률",
-        "uploadProgressLabel": "Browser Editor 환경 전송 진행률"
+        "uploadProgressLabel": "Browser Editor 환경 전송 진행률",
+        "desktopCacheHit": "Desktop 캐시를 사용합니다. 다시 다운로드할 필요가 없습니다.",
+        "environmentCacheHit": "환경에 캐시된 검증 완료 패키지를 사용합니다. 다시 다운로드할 필요가 없습니다.",
+        "downloadedToDesktopBytes": "Desktop 다운로드: {completed} / {total}",
+        "downloadedInEnvironmentBytes": "환경 내 다운로드: {completed} / {total}",
+        "desktopDownloadProgressLabel": "Browser Editor를 Desktop에 다운로드하는 진행률",
+        "environmentDownloadProgressLabel": "Browser Editor를 환경에서 다운로드하는 진행률"
       },
       "failure": {
         "desktopReleaseLookup": "최신 Browser Editor를 확인할 수 없습니다.",
@@ -2642,7 +2655,12 @@
         "runtimeImport": "이 환경에서는 Browser Editor 패키지를 수신할 수 없습니다.",
         "runtimeStatus": "Browser Editor 설정 상태를 새로 고칠 수 없습니다.",
         "unknown": "Browser Editor 설정이 성공적으로 완료되지 않았습니다.",
-        "desktopReleaseLookupDetail": "{message} Redeven 업데이트 catalog를 일시적으로 사용할 수 없을 수 있습니다."
+        "desktopReleaseLookupDetail": "{message} Redeven 업데이트 catalog를 일시적으로 사용할 수 없을 수 있습니다.",
+        "remoteCatalog": "이 환경에서 Browser Editor 패키지 카탈로그를 읽을 수 없습니다.",
+        "remoteDownload": "이 환경에서 Browser Editor 패키지를 다운로드할 수 없습니다.",
+        "remoteSource": "Browser Editor 패키지 출처가 허용되지 않았습니다.",
+        "packageVerification": "Browser Editor 패키지를 검증할 수 없습니다.",
+        "installation": "Browser Editor 패키지는 검증되었지만 설치가 완료되지 않았습니다."
       },
       "readinessFailed": "Browser Editor 준비 상태를 확인할 수 없습니다.",
       "willOpenAfterSetup": "설정이 완료되면 Redeven이 codespace를 엽니다.",
@@ -2673,6 +2691,19 @@
       "updatedMessage": "이 환경은 이제 관리 버전 {version}을 사용합니다.",
       "selectionFailedTitle": "선택 실패",
       "versionRemovalFailedTitle": "버전 제거 실패"
+    },
+    "installMethod": {
+      "label": "설치 방식",
+      "desktopTransfer": "Desktop 전송",
+      "remoteDownload": "환경에서 다운로드",
+      "desktopTransferDescription": "Desktop이 Browser Editor 패키지를 다운로드하고 검증한 뒤 현재 연결을 통해 이 환경으로 전송합니다.",
+      "remoteDownloadDescription": "이 환경에서 Redeven 패키지 서비스로부터 Browser Editor 패키지를 직접 다운로드하고 검증합니다.",
+      "desktopUnavailable": "이 세션에는 Desktop 패키지 브리지가 없어 Desktop 전송을 사용할 수 없습니다.",
+      "lockedWhileRunning": "설정 진행 중에는 설치 방식을 변경할 수 없습니다.",
+      "desktopPath": "Desktop 네트워크 → 현재 연결 → 환경",
+      "remotePath": "환경 네트워크 → Redeven 패키지 서비스",
+      "selectedAnnouncement": "선택한 설치 방식: {method}.",
+      "lastAttempt": "마지막 시도에 사용한 설치 방식: {method}."
     }
   },
   "permissionPolicy": {

@@ -4,6 +4,7 @@ import path from 'node:path';
 
 export const CODE_WORKSPACE_ENGINE_CATALOG_LATEST_URL = 'https://version.agent.redeven.com/v1/browser-editor/code-server/latest.json';
 export const DEFAULT_CODE_WORKSPACE_ENGINE_FETCH_TIMEOUT_MS = 60_000;
+export const DEFAULT_CODE_WORKSPACE_ENGINE_DOWNLOAD_IDLE_TIMEOUT_MS = 90_000;
 
 export type CodeWorkspaceEnginePlatform = Readonly<{
   os: 'linux' | 'darwin';
@@ -26,6 +27,7 @@ export type CodeWorkspaceEngineReleaseAsset = Readonly<{
 
 export type CodeWorkspaceEngineFetchPolicy = Readonly<{
   timeout_ms?: number;
+  download_idle_timeout_ms?: number;
   signal?: AbortSignal;
   onProgress?: (progress: CodeWorkspaceEngineArchiveProgress) => void;
 }>;
@@ -72,6 +74,11 @@ function positiveInteger(value: unknown): number {
 function normalizeFetchTimeout(fetchPolicy?: CodeWorkspaceEngineFetchPolicy): number {
   const value = Number(fetchPolicy?.timeout_ms ?? DEFAULT_CODE_WORKSPACE_ENGINE_FETCH_TIMEOUT_MS);
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : DEFAULT_CODE_WORKSPACE_ENGINE_FETCH_TIMEOUT_MS;
+}
+
+function normalizeDownloadIdleTimeout(fetchPolicy?: CodeWorkspaceEngineFetchPolicy): number {
+  const value = Number(fetchPolicy?.download_idle_timeout_ms ?? DEFAULT_CODE_WORKSPACE_ENGINE_DOWNLOAD_IDLE_TIMEOUT_MS);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : DEFAULT_CODE_WORKSPACE_ENGINE_DOWNLOAD_IDLE_TIMEOUT_MS;
 }
 
 function codeWorkspaceFetchCanceledError(): DOMException {
@@ -152,9 +159,9 @@ async function downloadURLToPath(
 ): Promise<void> {
   throwIfCanceled(fetchPolicy?.signal);
   const controller = new AbortController();
-  let timedOut = false;
-  const timer = setTimeout(() => {
-    timedOut = true;
+  const timeoutState: { phase: 'headers' | 'idle' | '' } = { phase: '' };
+  const headerTimer = setTimeout(() => {
+    timeoutState.phase = 'headers';
     controller.abort();
   }, normalizeFetchTimeout(fetchPolicy));
   const abort = () => controller.abort();
@@ -162,6 +169,7 @@ async function downloadURLToPath(
   const tempPath = `${targetPath}.${process.pid}.download.tmp`;
   try {
     const response = await fetch(sourceURL, { signal: controller.signal });
+    clearTimeout(headerTimer);
     if (!response.ok) {
       throw new Error(`Download failed with HTTP ${response.status} for ${sourceURL}.`);
     }
@@ -176,7 +184,16 @@ async function downloadURLToPath(
       }
       for (;;) {
         throwIfCanceled(fetchPolicy?.signal);
-        const part = await reader.read();
+        const idleTimer = setTimeout(() => {
+          timeoutState.phase = 'idle';
+          controller.abort();
+        }, normalizeDownloadIdleTimeout(fetchPolicy));
+        let part: ReadableStreamReadResult<Uint8Array>;
+        try {
+          part = await reader.read();
+        } finally {
+          clearTimeout(idleTimer);
+        }
         if (part.done) break;
         if (!part.value || part.value.byteLength <= 0) continue;
         await handle.write(part.value);
@@ -208,12 +225,18 @@ async function downloadURLToPath(
       throw codeWorkspaceFetchCanceledError();
     }
     const candidate = error as Partial<Error> | undefined;
-    if (timedOut || candidate?.name === 'AbortError') {
-      throw new Error(`Timed out after ${normalizeFetchTimeout(fetchPolicy)}ms downloading ${sourceURL}.`);
+    if (timeoutState.phase === 'headers') {
+      throw new Error(`Timed out after ${normalizeFetchTimeout(fetchPolicy)}ms waiting for ${sourceURL} to respond.`);
+    }
+    if (timeoutState.phase === 'idle') {
+      throw new Error(`Browser Editor package download received no data for ${normalizeDownloadIdleTimeout(fetchPolicy)}ms.`);
+    }
+    if (candidate?.name === 'AbortError') {
+      throw new Error(`Browser Editor package download was interrupted for ${sourceURL}.`);
     }
     throw error;
   } finally {
-    clearTimeout(timer);
+    clearTimeout(headerTimer);
     fetchPolicy?.signal?.removeEventListener('abort', abort);
     await fs.rm(tempPath, { force: true }).catch(() => undefined);
   }

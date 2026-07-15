@@ -3,7 +3,8 @@ import { fetchLocalApiJSON } from './localApi';
 export type CodeRuntimeDetectionState = 'ready' | 'missing' | 'unusable';
 export type CodeRuntimeOperationAction = 'prepare_workspace_engine' | 'remove_local_environment_version' | '';
 export type CodeRuntimeOperationState = 'idle' | 'running' | 'succeeded' | 'failed' | 'cancelled';
-export type CodeRuntimeOperationStage = 'preparing' | 'receiving' | 'verifying' | 'installing' | 'removing' | 'validating' | 'finalizing' | '';
+export type BrowserEditorInstallMethod = 'desktop_transfer' | 'remote_download';
+export type CodeRuntimeOperationStage = 'preparing' | 'resolving_catalog' | 'receiving' | 'downloading' | 'verifying' | 'installing' | 'removing' | 'validating' | 'finalizing' | '';
 
 export type CodeRuntimeTargetStatus = Readonly<{
   detection_state: CodeRuntimeDetectionState;
@@ -27,6 +28,8 @@ export type CodeRuntimeInstalledVersion = Readonly<{
 
 export type CodeRuntimeOperationStatus = Readonly<{
   action?: CodeRuntimeOperationAction;
+  operation_id?: string;
+  install_method?: BrowserEditorInstallMethod;
   state: CodeRuntimeOperationState;
   stage?: CodeRuntimeOperationStage;
   target_version?: string;
@@ -38,6 +41,7 @@ export type CodeRuntimeOperationStatus = Readonly<{
   transfer?: Readonly<{
     received_bytes: number;
     expected_bytes: number;
+    from_cache?: boolean;
   }>;
 }>;
 
@@ -64,15 +68,18 @@ export type CodeRuntimePlatform = Readonly<{
   message?: string;
 }>;
 
-export type CodeRuntimeImportSession = Readonly<{
-  upload_id: string;
+export type CodeRuntimeSetupOperation = Readonly<{
   operation_id: string;
+  install_method: BrowserEditorInstallMethod;
+  state: string;
   chunk_size_bytes: number;
   expected_bytes: number;
+  received_bytes: number;
+  next_chunk_index?: number;
 }>;
 
-export type CodeRuntimeImportChunkResult = Readonly<{
-  upload_id: string;
+export type CodeRuntimeSetupChunkResult = Readonly<{
+  operation_id: string;
   received_bytes: number;
   expected_bytes: number;
   next_chunk_index: number;
@@ -82,31 +89,55 @@ export async function fetchCodeRuntimeStatus(): Promise<CodeRuntimeStatus> {
   return fetchLocalApiJSON<CodeRuntimeStatus>('/_redeven_proxy/api/code-runtime/status', { method: 'GET' });
 }
 
-export async function createCodeRuntimeImportSession(manifest: unknown): Promise<CodeRuntimeImportSession> {
-  return normalizeCodeRuntimeImportSession(await fetchLocalApiJSON<CodeRuntimeImportSession>('/_redeven_proxy/api/code-runtime/import-sessions', {
+export async function createCodeRuntimeSetupOperation(args: Readonly<{
+  operationID: string;
+  installMethod: BrowserEditorInstallMethod;
+  manifest?: unknown;
+  signal?: AbortSignal;
+}>): Promise<CodeRuntimeSetupOperation> {
+  return normalizeCodeRuntimeSetupOperation(await fetchLocalApiJSON<CodeRuntimeSetupOperation>('/_redeven_proxy/api/code-runtime/setup-operations', {
     method: 'POST',
-    body: JSON.stringify({ manifest }),
+    signal: args.signal,
+    body: JSON.stringify({
+      operation_id: args.operationID,
+      install_method: args.installMethod,
+      ...(args.installMethod === 'desktop_transfer' ? { manifest: args.manifest } : {}),
+    }),
   }));
 }
 
-export async function appendCodeRuntimeImportChunk(uploadID: string, chunkIndex: number, chunk: Uint8Array<ArrayBuffer>): Promise<CodeRuntimeImportChunkResult> {
-  const cleanUploadID = encodeURIComponent(String(uploadID ?? '').trim());
+export async function appendCodeRuntimeSetupChunk(
+  operationID: string,
+  chunkIndex: number,
+  chunk: Uint8Array<ArrayBuffer>,
+  signal?: AbortSignal,
+): Promise<CodeRuntimeSetupChunkResult> {
+  const cleanOperationID = encodeURIComponent(String(operationID ?? '').trim());
   const cleanChunkIndex = Math.max(0, Math.floor(chunkIndex));
-  return normalizeCodeRuntimeImportChunkResult(await fetchLocalApiJSON<CodeRuntimeImportChunkResult>(
-    `/_redeven_proxy/api/code-runtime/import-sessions/${cleanUploadID}/chunks/${cleanChunkIndex}`,
+  return normalizeCodeRuntimeSetupChunkResult(await withCodeRuntimeChunkTimeout((timeoutSignal) => fetchLocalApiJSON<CodeRuntimeSetupChunkResult>(
+    `/_redeven_proxy/api/code-runtime/setup-operations/${cleanOperationID}/chunks/${cleanChunkIndex}`,
     {
       method: 'PUT',
+      signal: timeoutSignal,
       headers: {
         'Content-Type': 'application/octet-stream',
       },
       body: chunk,
     },
-  ));
+  ), signal));
 }
 
-export async function completeCodeRuntimeImportSession(uploadID: string): Promise<CodeRuntimeStatus> {
-  const cleanUploadID = encodeURIComponent(String(uploadID ?? '').trim());
-  return fetchLocalApiJSON<CodeRuntimeStatus>(`/_redeven_proxy/api/code-runtime/import-sessions/${cleanUploadID}/complete`, {
+export async function completeCodeRuntimeSetupOperation(operationID: string, signal?: AbortSignal): Promise<CodeRuntimeStatus> {
+  const cleanOperationID = encodeURIComponent(String(operationID ?? '').trim());
+  return fetchLocalApiJSON<CodeRuntimeStatus>(`/_redeven_proxy/api/code-runtime/setup-operations/${cleanOperationID}/complete`, {
+    method: 'POST',
+    signal,
+  });
+}
+
+export async function cancelCodeRuntimeSetupOperation(operationID: string): Promise<CodeRuntimeStatus> {
+  const cleanOperationID = encodeURIComponent(String(operationID ?? '').trim());
+  return fetchLocalApiJSON<CodeRuntimeStatus>(`/_redeven_proxy/api/code-runtime/setup-operations/${cleanOperationID}/cancel`, {
     method: 'POST',
   });
 }
@@ -127,6 +158,30 @@ export async function removeCodeRuntimeVersion(version: string): Promise<CodeRun
 
 export async function cancelCodeRuntimeOperation(): Promise<CodeRuntimeStatus> {
   return fetchLocalApiJSON<CodeRuntimeStatus>('/_redeven_proxy/api/code-runtime/cancel', { method: 'POST' });
+}
+
+const CODE_RUNTIME_CHUNK_TIMEOUT_MS = 5 * 60 * 1000;
+
+async function withCodeRuntimeChunkTimeout<T>(run: (signal: AbortSignal) => Promise<T>, parentSignal?: AbortSignal): Promise<T> {
+  const controller = new AbortController();
+  let timedOut = false;
+  const timeout = globalThis.setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, CODE_RUNTIME_CHUNK_TIMEOUT_MS);
+  const abort = () => controller.abort();
+  parentSignal?.addEventListener('abort', abort, { once: true });
+  try {
+    return await run(controller.signal);
+  } catch (error) {
+    if (timedOut) {
+      throw new Error('The environment did not confirm the Browser Editor package chunk within 5 minutes.');
+    }
+    throw error;
+  } finally {
+    globalThis.clearTimeout(timeout);
+    parentSignal?.removeEventListener('abort', abort);
+  }
 }
 
 export function codeRuntimeReady(status: CodeRuntimeStatus | null | undefined): boolean {
@@ -174,7 +229,6 @@ export type CodeRuntimePrepareCopy = Readonly<{
   confirm_title: string;
   running_label: string;
   tooltip: string;
-  description: string;
 }>;
 
 export function codeRuntimePrepareIntent(status: CodeRuntimeStatus | null | undefined): CodeRuntimePrepareIntent {
@@ -192,7 +246,6 @@ export function codeRuntimePrepareCopy(status: CodeRuntimeStatus | null | undefi
         confirm_title: 'Retry browser editor setup',
         running_label: 'Setting up browser editor...',
         tooltip: 'Retry setting up the browser editor for the connected environment.',
-        description: 'Redeven Desktop will download the latest browser editor package, cache one copy on this computer, and send it to the connected environment.',
       };
     case 'update':
       return {
@@ -201,7 +254,6 @@ export function codeRuntimePrepareCopy(status: CodeRuntimeStatus | null | undefi
         confirm_title: 'Update browser editor',
         running_label: 'Updating browser editor...',
         tooltip: 'Download and send the latest browser editor package to the connected environment.',
-        description: 'Redeven Desktop will download the latest browser editor package, cache one copy on this computer, and send it to the connected environment.',
       };
     case 'setup':
     default:
@@ -211,7 +263,6 @@ export function codeRuntimePrepareCopy(status: CodeRuntimeStatus | null | undefi
         confirm_title: 'Set up browser editor',
         running_label: 'Setting up browser editor...',
         tooltip: 'Set up the browser editor used by Codespaces in the connected environment.',
-        description: 'Redeven Desktop will download the latest browser editor package, cache one copy on this computer, and send it to the connected environment.',
       };
   }
 }
@@ -240,8 +291,12 @@ export function codeRuntimeStageLabel(stage: string | null | undefined, action?:
   switch (normalizedStage) {
     case 'preparing':
       return 'Preparing browser editor...';
+    case 'resolving_catalog':
+      return 'Checking the Browser Editor package catalog...';
     case 'receiving':
       return 'Sending browser editor to this environment...';
+    case 'downloading':
+      return 'This environment is downloading the Browser Editor...';
     case 'verifying':
       return 'Verifying browser editor...';
     case 'installing':
@@ -277,34 +332,48 @@ export function codeRuntimePlatformForDesktop(status: CodeRuntimeStatus | null |
   };
 }
 
-function normalizeCodeRuntimeImportSession(value: unknown): CodeRuntimeImportSession {
+function normalizeCodeRuntimeSetupOperation(value: unknown): CodeRuntimeSetupOperation {
   const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
-  const uploadID = String(record.upload_id ?? '').trim();
-  const operationID = String(record.operation_id ?? '').trim() || uploadID;
+  const operationID = String(record.operation_id ?? '').trim();
+  const installMethod = String(record.install_method ?? '').trim();
   const chunkSizeBytes = Number(record.chunk_size_bytes);
   const expectedBytes = Number(record.expected_bytes);
-  if (!uploadID || !Number.isFinite(chunkSizeBytes) || chunkSizeBytes <= 0 || !Number.isFinite(expectedBytes) || expectedBytes <= 0) {
-    throw new Error('Runtime did not return a valid workspace preparation upload session.');
+  const receivedBytes = Number(record.received_bytes);
+  const nextChunkIndex = Number(record.next_chunk_index);
+  if (
+    !operationID
+    || (installMethod !== 'desktop_transfer' && installMethod !== 'remote_download')
+    || !Number.isFinite(chunkSizeBytes)
+    || chunkSizeBytes < 0
+    || !Number.isFinite(expectedBytes)
+    || expectedBytes < 0
+    || !Number.isFinite(receivedBytes)
+    || receivedBytes < 0
+  ) {
+    throw new Error('Runtime did not return a valid Browser Editor setup operation.');
   }
   return {
-    upload_id: uploadID,
     operation_id: operationID,
+    install_method: installMethod,
+    state: String(record.state ?? '').trim(),
     chunk_size_bytes: Math.floor(chunkSizeBytes),
     expected_bytes: Math.floor(expectedBytes),
+    received_bytes: Math.floor(receivedBytes),
+    ...(Number.isFinite(nextChunkIndex) && nextChunkIndex >= 0 ? { next_chunk_index: Math.floor(nextChunkIndex) } : {}),
   };
 }
 
-function normalizeCodeRuntimeImportChunkResult(value: unknown): CodeRuntimeImportChunkResult {
+function normalizeCodeRuntimeSetupChunkResult(value: unknown): CodeRuntimeSetupChunkResult {
   const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
-  const uploadID = String(record.upload_id ?? '').trim();
+  const operationID = String(record.operation_id ?? '').trim();
   const receivedBytes = Number(record.received_bytes);
   const expectedBytes = Number(record.expected_bytes);
   const nextChunkIndex = Number(record.next_chunk_index);
-  if (!uploadID || !Number.isFinite(receivedBytes) || !Number.isFinite(expectedBytes) || !Number.isFinite(nextChunkIndex)) {
-    throw new Error('Runtime did not return a valid workspace preparation chunk result.');
+  if (!operationID || !Number.isFinite(receivedBytes) || !Number.isFinite(expectedBytes) || !Number.isFinite(nextChunkIndex)) {
+    throw new Error('Runtime did not return a valid Browser Editor setup chunk result.');
   }
   return {
-    upload_id: uploadID,
+    operation_id: operationID,
     received_bytes: Math.max(0, Math.floor(receivedBytes)),
     expected_bytes: Math.max(0, Math.floor(expectedBytes)),
     next_chunk_index: Math.max(0, Math.floor(nextChunkIndex)),

@@ -87,6 +87,9 @@ export function CodespacesSection() {
         canManage={ctx.canManageCodeRuntime()} actionLoading={ctx.codeRuntimeActionLoading()}
         cancelLoading={ctx.codeRuntimeCancelLoading()} selectionLoadingVersion={ctx.codeRuntimeSelectionLoadingVersion()}
         removeVersionLoading={ctx.codeRuntimeRemoveVersionLoading()}
+        installMethod={ctx.codeRuntimeInstallMethod()}
+        desktopTransferAvailable={ctx.desktopCodeRuntimeTransferAvailable()}
+        onInstallMethodChange={ctx.setCodeRuntimeInstallMethod}
         onRefresh={() => ctx.refreshCodeRuntimeStatus()} onPrepare={() => ctx.prepareManagedCodeRuntime()}
         onSelectVersion={(v) => ctx.selectManagedCodeRuntimeVersion(v)} onRemoveVersion={(v) => ctx.removeManagedCodeRuntimeVersion(v)}
         onCancel={() => ctx.cancelManagedCodeRuntimeOperation()}

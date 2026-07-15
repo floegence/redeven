@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -145,8 +144,6 @@ func (s *runtimeControlServer) routes() http.Handler {
 	mux.HandleFunc("/v1/provider-link/connect", s.handleProviderLinkConnect)
 	mux.HandleFunc("/v1/provider-link/disconnect", s.handleProviderLinkDisconnect)
 	mux.HandleFunc("/v1/code-workspace-engine/status", s.handleCodeWorkspaceEngineStatus)
-	mux.HandleFunc("/v1/code-workspace-engine/import-sessions", s.handleCodeWorkspaceEngineImportSession)
-	mux.HandleFunc("/v1/code-workspace-engine/import-sessions/", s.handleCodeWorkspaceEngineImportSessionPath)
 	mux.HandleFunc("/v1/desktop-model-source", s.handleDesktopModelSource)
 	mux.HandleFunc("/v1/desktop-model-source/connect", s.handleDesktopModelSourceConnect)
 	mux.HandleFunc("/v1/desktop-model-source/disconnect", s.handleDesktopModelSourceDisconnect)
@@ -335,10 +332,6 @@ func (s *runtimeControlServer) handleProviderLinkDisconnect(w http.ResponseWrite
 	})
 }
 
-type runtimeControlCodeWorkspaceEngineImportSessionRequest struct {
-	Manifest appserver.CodeRuntimeArtifactManifest `json:"manifest"`
-}
-
 func (s *runtimeControlServer) handleCodeWorkspaceEngineStatus(w http.ResponseWriter, r *http.Request) {
 	if !s.require(w, r) {
 		return
@@ -355,85 +348,6 @@ func (s *runtimeControlServer) handleCodeWorkspaceEngineStatus(w http.ResponseWr
 	status, err := appSrv.CodeRuntimeStatus(r.Context())
 	if err != nil {
 		writeRuntimeControlError(w, http.StatusServiceUnavailable, "CODE_WORKSPACE_ENGINE_STATUS_FAILED", err.Error())
-		return
-	}
-	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{OK: true, Data: status})
-}
-
-func (s *runtimeControlServer) handleCodeWorkspaceEngineImportSession(w http.ResponseWriter, r *http.Request) {
-	if !s.require(w, r) {
-		return
-	}
-	if r.Method != http.MethodPost {
-		writeRuntimeControlError(w, http.StatusMethodNotAllowed, "RUNTIME_CONTROL_METHOD_NOT_ALLOWED", "Method not allowed.")
-		return
-	}
-	appSrv := s.appServerHandler()
-	if appSrv == nil {
-		writeRuntimeControlError(w, http.StatusServiceUnavailable, "CODE_WORKSPACE_ENGINE_UNAVAILABLE", "Code workspace engine is not available.")
-		return
-	}
-	var body runtimeControlCodeWorkspaceEngineImportSessionRequest
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&body); err != nil {
-		writeRuntimeControlError(w, http.StatusBadRequest, "CODE_WORKSPACE_ENGINE_INVALID_REQUEST", "Invalid code workspace engine import request JSON.")
-		return
-	}
-	session, err := appSrv.CreateCodeRuntimeImportSession(r.Context(), body.Manifest)
-	if err != nil {
-		writeRuntimeControlError(w, http.StatusBadRequest, "CODE_WORKSPACE_ENGINE_IMPORT_FAILED", err.Error())
-		return
-	}
-	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{OK: true, Data: session})
-}
-
-func (s *runtimeControlServer) handleCodeWorkspaceEngineImportSessionPath(w http.ResponseWriter, r *http.Request) {
-	if !s.require(w, r) {
-		return
-	}
-	const prefix = "/v1/code-workspace-engine/import-sessions/"
-	rest := strings.TrimPrefix(r.URL.Path, prefix)
-	parts := strings.Split(strings.Trim(rest, "/"), "/")
-	if len(parts) == 3 && parts[1] == "chunks" && r.Method == http.MethodPut {
-		s.handleCodeWorkspaceEngineImportChunk(w, r, parts[0], parts[2])
-		return
-	}
-	if len(parts) == 2 && parts[1] == "complete" && r.Method == http.MethodPost {
-		s.handleCodeWorkspaceEngineImportComplete(w, r, parts[0])
-		return
-	}
-	writeRuntimeControlError(w, http.StatusNotFound, "RUNTIME_CONTROL_NOT_FOUND", "Route not found.")
-}
-
-func (s *runtimeControlServer) handleCodeWorkspaceEngineImportChunk(w http.ResponseWriter, r *http.Request, uploadID string, rawIndex string) {
-	appSrv := s.appServerHandler()
-	if appSrv == nil {
-		writeRuntimeControlError(w, http.StatusServiceUnavailable, "CODE_WORKSPACE_ENGINE_UNAVAILABLE", "Code workspace engine is not available.")
-		return
-	}
-	chunkIndex, err := strconv.ParseInt(strings.TrimSpace(rawIndex), 10, 64)
-	if err != nil || chunkIndex < 0 {
-		writeRuntimeControlError(w, http.StatusBadRequest, "CODE_WORKSPACE_ENGINE_INVALID_CHUNK", "Invalid code workspace engine chunk index.")
-		return
-	}
-	result, err := appSrv.AppendCodeRuntimeImportChunk(r.Context(), uploadID, chunkIndex, r.Body)
-	if err != nil {
-		writeRuntimeControlError(w, http.StatusBadRequest, "CODE_WORKSPACE_ENGINE_UPLOAD_FAILED", err.Error())
-		return
-	}
-	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{OK: true, Data: result})
-}
-
-func (s *runtimeControlServer) handleCodeWorkspaceEngineImportComplete(w http.ResponseWriter, r *http.Request, uploadID string) {
-	appSrv := s.appServerHandler()
-	if appSrv == nil {
-		writeRuntimeControlError(w, http.StatusServiceUnavailable, "CODE_WORKSPACE_ENGINE_UNAVAILABLE", "Code workspace engine is not available.")
-		return
-	}
-	status, err := appSrv.CompleteCodeRuntimeImportSession(r.Context(), uploadID)
-	if err != nil {
-		writeRuntimeControlError(w, http.StatusBadRequest, "CODE_WORKSPACE_ENGINE_PREPARE_FAILED", err.Error())
 		return
 	}
 	writeRuntimeControlJSON(w, http.StatusOK, runtimeControlEnvelope{OK: true, Data: status})

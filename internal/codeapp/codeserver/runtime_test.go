@@ -13,9 +13,17 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
+
+var browserEditorSetupOperationSequence atomic.Int64
+
+func createDesktopSetupOperation(mgr *RuntimeManager, manifest WorkspaceEngineArtifactManifest) (WorkspaceEngineSetupOperation, error) {
+	operationID := fmt.Sprintf("test:browser-editor:%d", browserEditorSetupOperationSequence.Add(1))
+	return mgr.CreateSetupOperation(context.Background(), operationID, BrowserEditorInstallMethodDesktopTransfer, &manifest)
+}
 
 func TestRuntimeManagerStatusDetectsSupportedOverride(t *testing.T) {
 	root := t.TempDir()
@@ -170,7 +178,7 @@ func TestRuntimeManagerInstallPromotesSharedVersionAndSelectsEnvironment(t *test
 		StateRoot: stateRoot,
 	})
 	manifest, archivePath := writeFakeWorkspaceEngineArchive(t, "4.109.1", stateRoot)
-	session, err := mgr.CreateImportSession(context.Background(), manifest)
+	session, err := createDesktopSetupOperation(mgr, manifest)
 	if err != nil {
 		t.Fatalf("CreateImportSession() error = %v", err)
 	}
@@ -178,16 +186,16 @@ func TestRuntimeManagerInstallPromotesSharedVersionAndSelectsEnvironment(t *test
 	if err != nil {
 		t.Fatalf("open archive: %v", err)
 	}
-	if _, err := mgr.AppendImportChunk(context.Background(), session.UploadID, 0, archive); err != nil {
-		t.Fatalf("AppendImportChunk() error = %v", err)
+	if _, err := mgr.AppendSetupOperationChunk(context.Background(), session.OperationID, 0, archive); err != nil {
+		t.Fatalf("AppendSetupOperationChunk() error = %v", err)
 	}
 	if err := archive.Close(); err != nil {
 		t.Fatalf("close archive: %v", err)
 	}
 
-	final, err := mgr.CompleteImportSession(context.Background(), session.UploadID)
+	final, err := mgr.CompleteSetupOperation(context.Background(), session.OperationID)
 	if err != nil {
-		t.Fatalf("CompleteImportSession() error = %v", err)
+		t.Fatalf("CompleteSetupOperation() error = %v", err)
 	}
 	sharedBin := filepath.Join(sharedVersionRoot(stateRoot, "4.109.1"), "bin", codeServerBinaryName())
 	if final.ActiveRuntime.DetectionState != RuntimeDetectionReady {
@@ -229,13 +237,13 @@ func TestRuntimeManagerInstallPreservesSafeRelativeSymlink(t *testing.T) {
 		StateDir:  stateDir,
 		StateRoot: stateRoot,
 	})
-	session, err := mgr.CreateImportSession(context.Background(), manifest)
+	session, err := createDesktopSetupOperation(mgr, manifest)
 	if err != nil {
 		t.Fatalf("CreateImportSession() error = %v", err)
 	}
-	appendArchiveToSession(t, mgr, session.UploadID, archivePath)
-	if _, err := mgr.CompleteImportSession(context.Background(), session.UploadID); err != nil {
-		t.Fatalf("CompleteImportSession() error = %v", err)
+	appendArchiveToSetupOperation(t, mgr, session.OperationID, archivePath)
+	if _, err := mgr.CompleteSetupOperation(context.Background(), session.OperationID); err != nil {
+		t.Fatalf("CompleteSetupOperation() error = %v", err)
 	}
 
 	linkPath := filepath.Join(sharedVersionRoot(stateRoot, version), "node_modules", ".bin", "tsc")
@@ -301,13 +309,13 @@ func TestRuntimeManagerInstallRejectsUnsafeArchiveLinks(t *testing.T) {
 				StateDir:  stateDir,
 				StateRoot: stateRoot,
 			})
-			session, err := mgr.CreateImportSession(context.Background(), manifest)
+			session, err := createDesktopSetupOperation(mgr, manifest)
 			if err != nil {
 				t.Fatalf("CreateImportSession() error = %v", err)
 			}
-			appendArchiveToSession(t, mgr, session.UploadID, archivePath)
-			if _, err := mgr.CompleteImportSession(context.Background(), session.UploadID); err == nil {
-				t.Fatalf("CompleteImportSession() error = nil, want link rejection")
+			appendArchiveToSetupOperation(t, mgr, session.OperationID, archivePath)
+			if _, err := mgr.CompleteSetupOperation(context.Background(), session.OperationID); err == nil {
+				t.Fatalf("CompleteSetupOperation() error = nil, want link rejection")
 			}
 			if _, err := os.Stat(sharedVersionRoot(stateRoot, version)); !errors.Is(err, os.ErrNotExist) {
 				t.Fatalf("unsafe archive should not promote shared version, stat error = %v", err)
@@ -337,13 +345,13 @@ func TestRuntimeManagerInstallDoesNotWriteRegularFilesThroughSymlinkedParent(t *
 		StateDir:  stateDir,
 		StateRoot: stateRoot,
 	})
-	session, err := mgr.CreateImportSession(context.Background(), manifest)
+	session, err := createDesktopSetupOperation(mgr, manifest)
 	if err != nil {
 		t.Fatalf("CreateImportSession() error = %v", err)
 	}
-	appendArchiveToSession(t, mgr, session.UploadID, archivePath)
-	if _, err := mgr.CompleteImportSession(context.Background(), session.UploadID); err == nil {
-		t.Fatalf("CompleteImportSession() error = nil, want symlink parent rejection")
+	appendArchiveToSetupOperation(t, mgr, session.OperationID, archivePath)
+	if _, err := mgr.CompleteSetupOperation(context.Background(), session.OperationID); err == nil {
+		t.Fatalf("CompleteSetupOperation() error = nil, want symlink parent rejection")
 	}
 
 	versionRoot := sharedVersionRoot(stateRoot, version)
@@ -365,27 +373,27 @@ func TestRuntimeManagerInstallReusesExistingSharedVersion(t *testing.T) {
 		StateDir:  firstStateDir,
 		StateRoot: stateRoot,
 	})
-	firstSession, err := first.CreateImportSession(context.Background(), manifest)
+	firstSession, err := createDesktopSetupOperation(first, manifest)
 	if err != nil {
 		t.Fatalf("CreateImportSession(first) error = %v", err)
 	}
-	appendArchiveToSession(t, first, firstSession.UploadID, archivePath)
-	if _, err := first.CompleteImportSession(context.Background(), firstSession.UploadID); err != nil {
-		t.Fatalf("CompleteImportSession(first) error = %v", err)
+	appendArchiveToSetupOperation(t, first, firstSession.OperationID, archivePath)
+	if _, err := first.CompleteSetupOperation(context.Background(), firstSession.OperationID); err != nil {
+		t.Fatalf("CompleteSetupOperation(first) error = %v", err)
 	}
 
 	second := NewRuntimeManager(RuntimeManagerOptions{
 		StateDir:  secondStateDir,
 		StateRoot: stateRoot,
 	})
-	secondSession, err := second.CreateImportSession(context.Background(), manifest)
+	secondSession, err := createDesktopSetupOperation(second, manifest)
 	if err != nil {
 		t.Fatalf("CreateImportSession(second) error = %v", err)
 	}
-	appendArchiveToSession(t, second, secondSession.UploadID, archivePath)
-	final, err := second.CompleteImportSession(context.Background(), secondSession.UploadID)
+	appendArchiveToSetupOperation(t, second, secondSession.OperationID, archivePath)
+	final, err := second.CompleteSetupOperation(context.Background(), secondSession.OperationID)
 	if err != nil {
-		t.Fatalf("CompleteImportSession(second) error = %v", err)
+		t.Fatalf("CompleteSetupOperation(second) error = %v", err)
 	}
 
 	if final.ManagedRuntimeVersion != "4.109.1" {
@@ -426,13 +434,13 @@ func TestRuntimeManagerInstallRollsBackExistingVersionOnInvalidReplacement(t *te
 		StateDir:  stateDir,
 		StateRoot: stateRoot,
 	})
-	session, err := mgr.CreateImportSession(context.Background(), manifest)
+	session, err := createDesktopSetupOperation(mgr, manifest)
 	if err != nil {
 		t.Fatalf("CreateImportSession() error = %v", err)
 	}
-	appendArchiveToSession(t, mgr, session.UploadID, archivePath)
-	if _, err := mgr.CompleteImportSession(context.Background(), session.UploadID); err == nil {
-		t.Fatalf("CompleteImportSession() error = nil, want validation failure")
+	appendArchiveToSetupOperation(t, mgr, session.OperationID, archivePath)
+	if _, err := mgr.CompleteSetupOperation(context.Background(), session.OperationID); err == nil {
+		t.Fatalf("CompleteSetupOperation() error = nil, want validation failure")
 	}
 
 	if _, err := os.Stat(existingBin); err != nil {
@@ -451,7 +459,7 @@ func TestRuntimeManagerInstallRollsBackExistingVersionOnInvalidReplacement(t *te
 	}
 }
 
-func TestRuntimeManagerCancelOperationRemovesActiveImportSession(t *testing.T) {
+func TestRuntimeManagerCancelSetupOperationRemovesActiveTransfer(t *testing.T) {
 	stateDir := t.TempDir()
 	stateRoot := t.TempDir()
 	mgr := NewRuntimeManager(RuntimeManagerOptions{
@@ -459,7 +467,7 @@ func TestRuntimeManagerCancelOperationRemovesActiveImportSession(t *testing.T) {
 		StateRoot: stateRoot,
 	})
 	manifest, archivePath := writeFakeWorkspaceEngineArchive(t, "4.109.1", stateRoot)
-	session, err := mgr.CreateImportSession(context.Background(), manifest)
+	session, err := createDesktopSetupOperation(mgr, manifest)
 	if err != nil {
 		t.Fatalf("CreateImportSession() error = %v", err)
 	}
@@ -475,18 +483,21 @@ func TestRuntimeManagerCancelOperationRemovesActiveImportSession(t *testing.T) {
 	if err := f.Close(); err != nil {
 		t.Fatalf("close archive: %v", err)
 	}
-	if _, err := mgr.AppendImportChunk(context.Background(), session.UploadID, 0, strings.NewReader(string(buf[:n]))); err != nil {
-		t.Fatalf("AppendImportChunk() error = %v", err)
+	if _, err := mgr.AppendSetupOperationChunk(context.Background(), session.OperationID, 0, strings.NewReader(string(buf[:n]))); err != nil {
+		t.Fatalf("AppendSetupOperationChunk() error = %v", err)
 	}
 
-	status := mgr.CancelOperation(context.Background())
+	status, err := mgr.CancelSetupOperation(context.Background(), session.OperationID)
+	if err != nil {
+		t.Fatalf("CancelSetupOperation() error = %v", err)
+	}
 	if status.Operation.State != RuntimeOperationStateCancelled {
 		t.Fatalf("operation.state=%q, want cancelled", status.Operation.State)
 	}
-	if _, err := os.Stat(workspaceEngineUploadSessionPath(stateRoot, session.UploadID)); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(workspaceEngineSetupSessionPath(stateRoot, session.OperationID)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("session file should be removed, err=%v", err)
 	}
-	if _, err := os.Stat(workspaceEngineUploadPartPath(stateRoot, session.UploadID)); !errors.Is(err, os.ErrNotExist) {
+	if _, err := os.Stat(workspaceEngineSetupPartPath(stateRoot, session.OperationID)); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("part file should be removed, err=%v", err)
 	}
 }
@@ -500,27 +511,27 @@ func TestRuntimeManagerRejectsOversizedImportChunkWithoutAppending(t *testing.T)
 	})
 	manifest, _ := writeFakeWorkspaceEngineArchive(t, "4.109.1", stateRoot)
 	manifest.Archive.SizeBytes = int64(defaultWorkspaceEngineChunkSize + 2)
-	session, err := mgr.CreateImportSession(context.Background(), manifest)
+	session, err := createDesktopSetupOperation(mgr, manifest)
 	if err != nil {
 		t.Fatalf("CreateImportSession() error = %v", err)
 	}
 
-	_, err = mgr.AppendImportChunk(context.Background(), session.UploadID, 0, strings.NewReader(strings.Repeat("x", defaultWorkspaceEngineChunkSize+1)))
+	_, err = mgr.AppendSetupOperationChunk(context.Background(), session.OperationID, 0, strings.NewReader(strings.Repeat("x", defaultWorkspaceEngineChunkSize+1)))
 	if err == nil || !strings.Contains(err.Error(), "chunk is too large") {
-		t.Fatalf("AppendImportChunk() error = %v, want chunk too large", err)
+		t.Fatalf("AppendSetupOperationChunk() error = %v, want chunk too large", err)
 	}
-	if stat, statErr := os.Stat(workspaceEngineUploadPartPath(stateRoot, session.UploadID)); statErr == nil && stat.Size() != 0 {
+	if stat, statErr := os.Stat(workspaceEngineSetupPartPath(stateRoot, session.OperationID)); statErr == nil && stat.Size() != 0 {
 		t.Fatalf("oversized chunk should not be appended, part size=%d", stat.Size())
 	} else if statErr != nil && !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("unexpected part stat error: %v", statErr)
 	}
 
-	reloaded, err := loadWorkspaceEngineImportSession(stateRoot, session.UploadID)
-	if err != nil {
-		t.Fatalf("loadWorkspaceEngineImportSession() error = %v", err)
+	status := mgr.Status(context.Background())
+	if status.Operation.State != RuntimeOperationStateFailed || status.Operation.LastErrorCode != "transfer_protocol_failed" {
+		t.Fatalf("operation=%+v, want terminal transfer protocol failure", status.Operation)
 	}
-	if reloaded.ReceivedBytes != 0 || reloaded.NextChunkIndex != 0 {
-		t.Fatalf("session advanced after oversized chunk: received=%d next=%d", reloaded.ReceivedBytes, reloaded.NextChunkIndex)
+	if _, err := os.Stat(workspaceEngineSetupSessionPath(stateRoot, session.OperationID)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("failed transfer session should be removed, err=%v", err)
 	}
 }
 
@@ -533,7 +544,7 @@ func TestRuntimeManagerReportsImportTransferProgress(t *testing.T) {
 	})
 	manifest, _ := writeFakeWorkspaceEngineArchive(t, "4.109.1", stateRoot)
 	manifest.Archive.SizeBytes = 2
-	session, err := mgr.CreateImportSession(context.Background(), manifest)
+	session, err := createDesktopSetupOperation(mgr, manifest)
 	if err != nil {
 		t.Fatalf("CreateImportSession() error = %v", err)
 	}
@@ -542,21 +553,24 @@ func TestRuntimeManagerReportsImportTransferProgress(t *testing.T) {
 		t.Fatalf("initial transfer=%+v, want 0/2", status.Operation.Transfer)
 	}
 
-	if _, err := mgr.AppendImportChunk(context.Background(), session.UploadID, 0, strings.NewReader("x")); err != nil {
-		t.Fatalf("AppendImportChunk() error = %v", err)
+	if _, err := mgr.AppendSetupOperationChunk(context.Background(), session.OperationID, 0, strings.NewReader("x")); err != nil {
+		t.Fatalf("AppendSetupOperationChunk() error = %v", err)
 	}
 	status = mgr.Status(context.Background())
 	if status.Operation.Transfer == nil || status.Operation.Transfer.ReceivedBytes != 1 || status.Operation.Transfer.ExpectedBytes != 2 {
 		t.Fatalf("updated transfer=%+v, want 1/2", status.Operation.Transfer)
 	}
 
-	status = mgr.CancelOperation(context.Background())
+	status, err = mgr.CancelSetupOperation(context.Background(), session.OperationID)
+	if err != nil {
+		t.Fatalf("CancelSetupOperation() error = %v", err)
+	}
 	if status.Operation.Transfer == nil || status.Operation.Transfer.ReceivedBytes != 1 || status.Operation.Transfer.ExpectedBytes != 2 {
 		t.Fatalf("cancelled transfer=%+v, want retained 1/2", status.Operation.Transfer)
 	}
 
 	manifest.Archive.SizeBytes = 3
-	if _, err := mgr.CreateImportSession(context.Background(), manifest); err != nil {
+	if _, err := createDesktopSetupOperation(mgr, manifest); err != nil {
 		t.Fatalf("second CreateImportSession() error = %v", err)
 	}
 	status = mgr.Status(context.Background())
@@ -574,7 +588,7 @@ func TestRuntimeManagerSerializesImportChunkAppend(t *testing.T) {
 	})
 	manifest, _ := writeFakeWorkspaceEngineArchive(t, "4.109.1", stateRoot)
 	manifest.Archive.SizeBytes = 2
-	session, err := mgr.CreateImportSession(context.Background(), manifest)
+	session, err := createDesktopSetupOperation(mgr, manifest)
 	if err != nil {
 		t.Fatalf("CreateImportSession() error = %v", err)
 	}
@@ -587,7 +601,7 @@ func TestRuntimeManagerSerializesImportChunkAppend(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			<-start
-			_, appendErr := mgr.AppendImportChunk(context.Background(), session.UploadID, 0, strings.NewReader("x"))
+			_, appendErr := mgr.AppendSetupOperationChunk(context.Background(), session.OperationID, 0, strings.NewReader("x"))
 			errs <- appendErr
 		}()
 	}
@@ -596,32 +610,23 @@ func TestRuntimeManagerSerializesImportChunkAppend(t *testing.T) {
 	close(errs)
 
 	var successCount int
-	var mismatchCount int
+	var failureCount int
 	for appendErr := range errs {
 		if appendErr == nil {
 			successCount++
 			continue
 		}
-		if strings.Contains(appendErr.Error(), "chunk index mismatch") {
-			mismatchCount++
-		}
+		failureCount++
 	}
-	if successCount != 1 || mismatchCount != 1 {
-		t.Fatalf("concurrent append outcomes success=%d mismatch=%d, want 1/1", successCount, mismatchCount)
+	if successCount != 1 || failureCount != 1 {
+		t.Fatalf("concurrent append outcomes success=%d failure=%d, want 1/1", successCount, failureCount)
 	}
-	reloaded, err := loadWorkspaceEngineImportSession(stateRoot, session.UploadID)
-	if err != nil {
-		t.Fatalf("loadWorkspaceEngineImportSession() error = %v", err)
+	status := mgr.Status(context.Background())
+	if status.Operation.State != RuntimeOperationStateFailed {
+		t.Fatalf("operation.state=%q, want failed after duplicate chunk", status.Operation.State)
 	}
-	if reloaded.ReceivedBytes != 1 || reloaded.NextChunkIndex != 1 {
-		t.Fatalf("session should advance exactly once: received=%d next=%d", reloaded.ReceivedBytes, reloaded.NextChunkIndex)
-	}
-	part, err := os.ReadFile(workspaceEngineUploadPartPath(stateRoot, session.UploadID))
-	if err != nil {
-		t.Fatalf("read part: %v", err)
-	}
-	if string(part) != "x" {
-		t.Fatalf("part=%q, want one chunk", string(part))
+	if _, err := os.Stat(workspaceEngineSetupPartPath(stateRoot, session.OperationID)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("failed transfer part should be removed, err=%v", err)
 	}
 }
 
@@ -889,15 +894,15 @@ func writeFakeWorkspaceEngineArchiveWithEntries(t *testing.T, version string, ro
 	}, archivePath
 }
 
-func appendArchiveToSession(t *testing.T, mgr *RuntimeManager, uploadID string, archivePath string) {
+func appendArchiveToSetupOperation(t *testing.T, mgr *RuntimeManager, operationID string, archivePath string) {
 	t.Helper()
 	f, err := os.Open(archivePath)
 	if err != nil {
 		t.Fatalf("open archive: %v", err)
 	}
 	defer f.Close()
-	if _, err := mgr.AppendImportChunk(context.Background(), uploadID, 0, f); err != nil {
-		t.Fatalf("AppendImportChunk() error = %v", err)
+	if _, err := mgr.AppendSetupOperationChunk(context.Background(), operationID, 0, f); err != nil {
+		t.Fatalf("AppendSetupOperationChunk() error = %v", err)
 	}
 }
 

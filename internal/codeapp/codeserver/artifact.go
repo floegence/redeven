@@ -212,9 +212,6 @@ func installWorkspaceEngineArchive(ctx context.Context, archivePath string, stag
 	if err := validateWorkspaceEngineManifest(manifest, currentWorkspaceEnginePlatform()); err != nil {
 		return err
 	}
-	if err := verifyWorkspaceEngineArchive(archivePath, manifest); err != nil {
-		return err
-	}
 	if ctx == nil {
 		ctx = context.Background()
 	}

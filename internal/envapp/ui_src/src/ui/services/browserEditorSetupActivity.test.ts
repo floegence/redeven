@@ -3,10 +3,11 @@ import { describe, expect, it } from 'vitest';
 import {
   browserEditorLocalFailureFromError,
   buildBrowserEditorSetupActivity,
-  classifyBrowserEditorLocalFailure,
   localizeBrowserEditorSetupActivity,
+  type BrowserEditorSetupFailureSource,
   type BrowserEditorSetupLocalFailure,
 } from './browserEditorSetupActivity';
+import { BrowserEditorSetupError } from './browserEditorSetupError';
 import { type CodeRuntimeStatus } from './codeRuntimeApi';
 import { createTestI18nHelpers as createI18nHelpers } from '../i18n/locales/testDictionaries';
 
@@ -67,13 +68,16 @@ function missingStatus(): CodeRuntimeStatus {
   };
 }
 
-function localFailure(message: string): BrowserEditorSetupLocalFailure {
-  return browserEditorLocalFailureFromError(new Error(message), () => 123);
+function localFailure(
+  message: string,
+  source: BrowserEditorSetupFailureSource = 'unknown',
+): BrowserEditorSetupLocalFailure {
+  return browserEditorLocalFailureFromError(new BrowserEditorSetupError(source, message), 'desktop_transfer', () => 123);
 }
 
 describe('browserEditorSetupActivity', () => {
   it('models a missing editor as an idle setup result', () => {
-    const activity = buildBrowserEditorSetupActivity({ status: missingStatus() });
+    const activity = buildBrowserEditorSetupActivity({ installMethod: 'desktop_transfer', status: missingStatus() });
 
     expect(activity).toMatchObject({
       state: 'missing',
@@ -85,15 +89,15 @@ describe('browserEditorSetupActivity', () => {
     expect(activity.steps.map((step) => step.state)).toEqual(['active', 'pending', 'pending', 'pending']);
   });
 
-  it('classifies Desktop-side release lookup failures for the first setup step', () => {
-    expect(classifyBrowserEditorLocalFailure('Redeven Browser Editor catalog lookup failed with HTTP 503.')).toBe('desktop_release_lookup');
-    expect(classifyBrowserEditorLocalFailure('Redeven Browser Editor catalog is not fully mirrored yet.')).toBe('desktop_release_lookup');
+  it('preserves structured failure sources without inspecting user-facing messages', () => {
+    expect(localFailure('opaque message', 'desktop_release_lookup').source).toBe('desktop_release_lookup');
+    expect(localFailure('catalog words do not classify plain errors').source).toBe('unknown');
   });
 
   it('models Desktop release lookup failures as retryable inline activity', () => {
-    const activity = buildBrowserEditorSetupActivity({
+    const activity = buildBrowserEditorSetupActivity({ installMethod: 'desktop_transfer',
       status: missingStatus(),
-      localFailure: localFailure('Redeven Browser Editor catalog lookup failed with HTTP 503.'),
+      localFailure: localFailure('Redeven Browser Editor catalog lookup failed with HTTP 503.', 'desktop_release_lookup'),
       pendingIntent: { kind: 'start' },
     });
 
@@ -109,20 +113,20 @@ describe('browserEditorSetupActivity', () => {
     expect(activity.detail).toContain('Redeven Browser Editor catalog lookup failed with HTTP 503.');
     expect(activity.detail).toContain('Redeven’s update catalog may be temporarily unavailable.');
     expect(activity.steps.map((step) => [step.id, step.state])).toEqual([
-      ['lookup', 'error'],
-      ['cache', 'pending'],
-      ['upload', 'pending'],
-      ['verify', 'pending'],
+      ['catalog', 'error'],
+      ['acquire', 'pending'],
+      ['deliver', 'pending'],
+      ['install', 'pending'],
     ]);
   });
 
   it.each([
-    ['Browser Editor package download failed.', 'cache'],
-    ['Browser Editor upload failed while sending chunk 2.', 'upload'],
-  ] as const)('maps retryable Desktop failure %s to the %s step', (message, expectedStep) => {
-    const activity = buildBrowserEditorSetupActivity({
+    ['Browser Editor package download failed.', 'desktop_package_cache', 'acquire'],
+    ['Browser Editor upload failed while sending chunk 2.', 'desktop_upload', 'deliver'],
+  ] as const)('maps retryable Desktop failure %s to the %s step', (message, source, expectedStep) => {
+    const activity = buildBrowserEditorSetupActivity({ installMethod: 'desktop_transfer',
       status: missingStatus(),
-      localFailure: localFailure(message),
+      localFailure: localFailure(message, source),
     });
 
     expect(activity.can_retry).toBe(true);
@@ -130,7 +134,7 @@ describe('browserEditorSetupActivity', () => {
   });
 
   it('shows local Desktop pending work before Runtime import starts', () => {
-    const activity = buildBrowserEditorSetupActivity({
+    const activity = buildBrowserEditorSetupActivity({ installMethod: 'desktop_transfer',
       status: missingStatus(),
       localPending: true,
     });
@@ -139,15 +143,17 @@ describe('browserEditorSetupActivity', () => {
     expect(activity.presentation).toBe('progress');
     expect(activity.summary).toBe('Desktop is preparing the Browser Editor.');
     expect(activity.can_cancel).toBe(true);
-    expect(activity.steps[0]).toMatchObject({ id: 'lookup', state: 'active' });
+    expect(activity.steps[0]).toMatchObject({ id: 'catalog', state: 'active' });
   });
 
   it('maps Runtime receiving operations to the upload step', () => {
-    const activity = buildBrowserEditorSetupActivity({
+    const activity = buildBrowserEditorSetupActivity({ installMethod: 'desktop_transfer',
       status: {
         ...missingStatus(),
         operation: {
           action: 'prepare_workspace_engine',
+          operation_id: 'browser-editor:receiving',
+          install_method: 'desktop_transfer',
           state: 'running',
           stage: 'receiving',
           started_at_unix_ms: 10,
@@ -169,15 +175,15 @@ describe('browserEditorSetupActivity', () => {
       total_bytes: 64,
     });
     expect(activity.steps.map((step) => [step.id, step.state])).toEqual([
-      ['lookup', 'done'],
-      ['cache', 'done'],
-      ['upload', 'active'],
-      ['verify', 'pending'],
+      ['catalog', 'done'],
+      ['acquire', 'done'],
+      ['deliver', 'active'],
+      ['install', 'pending'],
     ]);
   });
 
   it('maps Desktop download progress to the cache step without inventing overall progress', () => {
-    const activity = buildBrowserEditorSetupActivity({
+    const activity = buildBrowserEditorSetupActivity({ installMethod: 'desktop_transfer',
       status: missingStatus(),
       localPending: true,
       localProgress: {
@@ -191,17 +197,17 @@ describe('browserEditorSetupActivity', () => {
     });
 
     expect(activity.steps.map((step) => [step.id, step.state])).toEqual([
-      ['lookup', 'done'],
-      ['cache', 'active'],
-      ['upload', 'pending'],
-      ['verify', 'pending'],
+      ['catalog', 'done'],
+      ['acquire', 'active'],
+      ['deliver', 'pending'],
+      ['install', 'pending'],
     ]);
     expect(activity.progress).toMatchObject({ phase: 'download', completed_bytes: 20, total_bytes: 100 });
     expect(activity).not.toHaveProperty('progress_percent');
   });
 
   it('uses Runtime operation failure details when Runtime records the failure', () => {
-    const activity = buildBrowserEditorSetupActivity({
+    const activity = buildBrowserEditorSetupActivity({ installMethod: 'desktop_transfer',
       status: {
         ...missingStatus(),
         operation: {
@@ -223,15 +229,15 @@ describe('browserEditorSetupActivity', () => {
       log_tail: ['verify failed', 'checksum mismatch'],
     });
     expect(activity.steps.map((step) => [step.id, step.state])).toEqual([
-      ['lookup', 'done'],
-      ['cache', 'done'],
-      ['upload', 'done'],
-      ['verify', 'error'],
+      ['catalog', 'done'],
+      ['acquire', 'done'],
+      ['deliver', 'done'],
+      ['install', 'error'],
     ]);
   });
 
   it('models cancelled Runtime setup as a retryable warning result', () => {
-    const activity = buildBrowserEditorSetupActivity({
+    const activity = buildBrowserEditorSetupActivity({ installMethod: 'desktop_transfer',
       status: {
         ...missingStatus(),
         operation: {
@@ -251,11 +257,11 @@ describe('browserEditorSetupActivity', () => {
       can_retry: true,
       error_code: 'operation_cancelled',
     });
-    expect(activity.steps.find((step) => step.state === 'cancelled')?.id).toBe('upload');
+    expect(activity.steps.find((step) => step.state === 'cancelled')?.id).toBe('deliver');
   });
 
   it('prefers Runtime terminal setup failure over stale Desktop local failure', () => {
-    const activity = buildBrowserEditorSetupActivity({
+    const activity = buildBrowserEditorSetupActivity({ installMethod: 'desktop_transfer',
       status: {
         ...missingStatus(),
         operation: {
@@ -266,7 +272,7 @@ describe('browserEditorSetupActivity', () => {
           log_tail: ['verify failed'],
         },
       },
-      localFailure: localFailure('Desktop upload failed.'),
+      localFailure: localFailure('Desktop upload failed.', 'desktop_upload'),
       pendingIntent: { kind: 'open' },
     });
 
@@ -278,7 +284,7 @@ describe('browserEditorSetupActivity', () => {
   });
 
   it('keeps pending intent labels only for states that can continue', () => {
-    const activity = buildBrowserEditorSetupActivity({
+    const activity = buildBrowserEditorSetupActivity({ installMethod: 'desktop_transfer',
       status: makeStatus('idle'),
       pendingIntent: { kind: 'open' },
     });
@@ -301,7 +307,7 @@ describe('browserEditorSetupActivity', () => {
         message: 'This Linux distribution is not supported by the managed code workspace engine.',
       },
     };
-    const raw = buildBrowserEditorSetupActivity({
+    const raw = buildBrowserEditorSetupActivity({ installMethod: 'desktop_transfer',
       status,
       localFailure: localFailure('This Linux Environment is not supported by the managed workspace engine.'),
     });
@@ -310,7 +316,7 @@ describe('browserEditorSetupActivity', () => {
       loading: false,
       localPending: false,
       localFailure: localFailure('This Linux Environment is not supported by the managed workspace engine.'),
-      prepareDescription: 'unused',
+      installMethod: 'desktop_transfer',
     }, createI18nHelpers('zh-CN'));
 
     expect(raw).toMatchObject({
@@ -330,7 +336,7 @@ describe('browserEditorSetupActivity', () => {
   });
 
   it('does not turn version-removal failures into Browser Editor setup failures', () => {
-    const activity = buildBrowserEditorSetupActivity({
+    const activity = buildBrowserEditorSetupActivity({ installMethod: 'desktop_transfer',
       status: {
         ...makeStatus('failed'),
         operation: {

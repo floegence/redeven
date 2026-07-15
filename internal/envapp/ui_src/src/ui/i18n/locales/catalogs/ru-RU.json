@@ -2662,7 +2662,9 @@
       "installing": "Установка Browser Editor...",
       "validating": "Проверка Browser Editor...",
       "finalizing": "Завершение установки Browser Editor...",
-      "default": "Настройка Browser Editor..."
+      "default": "Настройка Browser Editor...",
+      "resolvingCatalog": "Проверка каталога пакетов Browser Editor...",
+      "downloadingInEnvironment": "Это окружение скачивает Browser Editor..."
     },
     "prepare": {
       "description": "Redeven Desktop загрузит последнюю версию пакета Browser Editor, кэширует одну копию на этом компьютере и отправит ее в подключенную среду.",
@@ -2699,18 +2701,24 @@
       "continueToOpenCodespace": "Продолжить открытие codespace",
       "continueToStartCodespace": "Продолжить запуск codespace",
       "steps": {
-        "lookup": "Проверить последний редактор",
-        "cache": "Скачать на Desktop",
-        "upload": "Отправить в окружение",
-        "verify": "Проверить редактор"
+        "desktopTransfer": {
+          "catalog": "Получить сведения о пакете",
+          "acquire": "Скачать на Desktop",
+          "deliver": "Отправить в окружение",
+          "install": "Проверить и установить"
+        },
+        "remoteDownload": {
+          "catalog": "Получить сведения о пакете",
+          "acquire": "Скачать в окружение",
+          "deliver": "Проверить пакет",
+          "install": "Установить редактор"
+        }
       },
       "progress": {
         "lookup": "Проверка последней версии пакета Browser Editor...",
         "downloading": "Скачивание пакета Browser Editor на Desktop...",
         "packageValidation": "Проверка пакета Browser Editor в кэше Desktop...",
         "finishing": "Передача завершена. Redeven проверяет и устанавливает Browser Editor.",
-        "cacheHit": "Используется кэш Desktop. Повторное скачивание не требуется.",
-        "downloadedBytes": "Скачано {completed} из {total}",
         "uploadedBytes": "Отправлено {completed} из {total}",
         "measuring": "Расчёт оставшегося времени для этого этапа...",
         "rateAndEta": "{rate} · Этап завершится примерно через {duration}",
@@ -2720,8 +2728,13 @@
         "elapsed": "Прошло с начала настройки: {duration}",
         "secondsShort": "{value} с",
         "minutesShort": "{value} мин",
-        "downloadProgressLabel": "Ход скачивания пакета Browser Editor",
-        "uploadProgressLabel": "Ход передачи пакета Browser Editor в окружение"
+        "uploadProgressLabel": "Ход передачи пакета Browser Editor в окружение",
+        "desktopCacheHit": "Используется кэш Desktop. Повторное скачивание не требуется.",
+        "environmentCacheHit": "Используется проверенный пакет из кэша окружения. Повторное скачивание не требуется.",
+        "downloadedToDesktopBytes": "Скачано на Desktop: {completed} из {total}",
+        "downloadedInEnvironmentBytes": "Скачано в окружении: {completed} из {total}",
+        "desktopDownloadProgressLabel": "Ход скачивания пакета Browser Editor на Desktop",
+        "environmentDownloadProgressLabel": "Ход скачивания пакета Browser Editor в окружении"
       },
       "failure": {
         "desktopReleaseLookup": "Не удалось проверить последнюю версию Browser Editor.",
@@ -2730,7 +2743,12 @@
         "runtimeImport": "Эта среда не смогла получить пакет Browser Editor.",
         "runtimeStatus": "Не удалось обновить статус установки Browser Editor.",
         "unknown": "Установка Browser Editor не завершилась успешно.",
-        "desktopReleaseLookupDetail": "{message} update catalog Redeven может быть временно недоступен."
+        "desktopReleaseLookupDetail": "{message} update catalog Redeven может быть временно недоступен.",
+        "remoteCatalog": "Окружению не удалось прочитать каталог пакетов Browser Editor.",
+        "remoteDownload": "Окружению не удалось скачать пакет Browser Editor.",
+        "remoteSource": "Источник пакета Browser Editor отклонён.",
+        "packageVerification": "Не удалось проверить пакет Browser Editor.",
+        "installation": "Пакет Browser Editor прошёл проверку, но установка не завершилась."
       },
       "readinessFailed": "Не удалось проверить готовность Browser Editor.",
       "willOpenAfterSetup": "Redeven откроет codespace после настройки.",
@@ -2761,6 +2779,19 @@
       "updatedMessage": "Это окружение теперь использует управляемую версию {version}.",
       "selectionFailedTitle": "Не удалось выбрать",
       "versionRemovalFailedTitle": "Не удалось удалить версию"
+    },
+    "installMethod": {
+      "label": "Способ установки",
+      "desktopTransfer": "Передача через Desktop",
+      "remoteDownload": "Скачивание в окружении",
+      "desktopTransferDescription": "Desktop скачивает и проверяет пакет Browser Editor, а затем передаёт его в это окружение через текущее подключение.",
+      "remoteDownloadDescription": "Это окружение напрямую скачивает и проверяет пакет Browser Editor из сервиса пакетов Redeven.",
+      "desktopUnavailable": "Передача через Desktop недоступна: в этом сеансе нет канала для передачи пакетов через Desktop.",
+      "lockedWhileRunning": "Во время настройки способ установки изменить нельзя.",
+      "desktopPath": "Сеть Desktop → текущее подключение → окружение",
+      "remotePath": "Сеть окружения → сервис пакетов Redeven",
+      "selectedAnnouncement": "Выбранный способ установки: {method}.",
+      "lastAttempt": "В последней попытке использовался способ «{method}»."
     }
   },
   "permissionPolicy": {

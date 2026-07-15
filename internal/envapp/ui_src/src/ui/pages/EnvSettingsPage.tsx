@@ -151,7 +151,7 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
         </Button>
       </div>
 
-      <div class="flex-1 min-h-0 flex">
+      <div class="redeven-settings-body flex-1 min-h-0 flex flex-col md:flex-row">
         <div class="redeven-settings-sidebar hidden md:flex flex-col border-r w-[260px] shrink-0 h-full overflow-hidden">
           <div class="p-3 border-b border-[color-mix(in_srgb,var(--redeven-settings-sidebar-border)_72%,transparent)]">
             <div class="relative">

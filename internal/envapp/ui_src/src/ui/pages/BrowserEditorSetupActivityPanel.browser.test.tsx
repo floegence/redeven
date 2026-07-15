@@ -1,6 +1,7 @@
 import '../../index.css';
 
 import { page } from 'vitest/browser';
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
 
@@ -8,10 +9,10 @@ import type { BrowserEditorSetupActivity } from '../services/browserEditorSetupA
 import { BrowserEditorSetupActivityPanel } from './BrowserEditorSetupActivityPanel';
 
 const steps: BrowserEditorSetupActivity['steps'] = [
-  { id: 'lookup', label: 'Check latest editor', state: 'active' },
-  { id: 'cache', label: 'Download to Desktop', state: 'pending' },
-  { id: 'upload', label: 'Send to environment', state: 'pending' },
-  { id: 'verify', label: 'Verify editor', state: 'pending' },
+  { id: 'catalog', label: 'Get package info', state: 'active' },
+  { id: 'acquire', label: 'Download to Desktop', state: 'pending' },
+  { id: 'deliver', label: 'Send to environment', state: 'pending' },
+  { id: 'install', label: 'Verify and install', state: 'pending' },
 ];
 
 function missingActivity(): BrowserEditorSetupActivity {
@@ -22,6 +23,7 @@ function missingActivity(): BrowserEditorSetupActivity {
     badge_label: 'Not ready',
     badge_variant: 'neutral',
     summary: 'Install the managed Browser Editor before opening a codespace in this environment.',
+    install_method: 'desktop_transfer',
     steps,
     active_step_index: 1,
     step_count: 4,
@@ -70,10 +72,10 @@ function uploadActivity(): BrowserEditorSetupActivity {
     badge_variant: 'info',
     summary: 'Sending Browser Editor to this environment...',
     steps: [
-      { id: 'lookup', label: 'Check latest editor', state: 'done' },
-      { id: 'cache', label: 'Download to Desktop', state: 'done' },
-      { id: 'upload', label: 'Send to environment', state: 'active' },
-      { id: 'verify', label: 'Verify editor', state: 'pending' },
+      { id: 'catalog', label: 'Get package info', state: 'done' },
+      { id: 'acquire', label: 'Download to Desktop', state: 'done' },
+      { id: 'deliver', label: 'Send to environment', state: 'active' },
+      { id: 'install', label: 'Verify and install', state: 'pending' },
     ],
     active_step_index: 3,
     can_cancel: true,
@@ -83,6 +85,34 @@ function uploadActivity(): BrowserEditorSetupActivity {
       state: 'running',
       completed_bytes: 96 * 1024 * 1024,
       total_bytes: 188 * 1024 * 1024,
+      updated_at_unix_ms: Date.now(),
+    },
+  };
+}
+
+function remoteDownloadActivity(): BrowserEditorSetupActivity {
+  return {
+    ...missingActivity(),
+    state: 'preparing',
+    presentation: 'progress',
+    badge_label: 'Preparing',
+    badge_variant: 'info',
+    summary: 'This environment is downloading the Browser Editor...',
+    install_method: 'remote_download',
+    steps: [
+      { id: 'catalog', label: 'Get package info', state: 'done' },
+      { id: 'acquire', label: 'Environment download', state: 'active' },
+      { id: 'deliver', label: 'Verify package', state: 'pending' },
+      { id: 'install', label: 'Install editor', state: 'pending' },
+    ],
+    active_step_index: 2,
+    can_cancel: true,
+    progress: {
+      operation_id: 'browser-editor:remote',
+      phase: 'download',
+      state: 'running',
+      completed_bytes: 64 * 1024 * 1024,
+      total_bytes: 192 * 1024 * 1024,
       updated_at_unix_ms: Date.now(),
     },
   };
@@ -139,11 +169,18 @@ function mountPanel(
   activity: BrowserEditorSetupActivity,
   width: string,
   layout: 'wide' | 'compact' = 'wide',
+  options: Readonly<{
+    installMethod?: 'desktop_transfer' | 'remote_download';
+    desktopTransferAvailable?: boolean;
+    installMethodLocked?: boolean;
+    onInstallMethodChange?: (method: 'desktop_transfer' | 'remote_download') => void;
+  }> = {},
 ) {
   const host = document.createElement('div');
   host.style.width = width;
   host.style.margin = '24px auto';
   document.body.appendChild(host);
+  const [installMethod, setInstallMethod] = createSignal(options.installMethod ?? activity.install_method ?? 'desktop_transfer');
   const dispose = render(
     () => (
       <BrowserEditorSetupActivityPanel
@@ -151,6 +188,13 @@ function mountPanel(
         layout={layout}
         actionLabel="Set up Browser Editor"
         runningLabel="Setting up..."
+        installMethod={installMethod()}
+        desktopTransferAvailable={options.desktopTransferAvailable ?? true}
+        installMethodLocked={options.installMethodLocked}
+        onInstallMethodChange={(method) => {
+          setInstallMethod(method);
+          options.onInstallMethodChange?.(method);
+        }}
         onPrepare={() => undefined}
         onDismiss={() => undefined}
         extraDetails={(
@@ -219,12 +263,77 @@ describe('BrowserEditorSetupActivityPanel rendered layout', () => {
     expect(host.textContent).toContain('Sent 96 MiB of 188 MiB');
     expect(host.textContent).toContain('51%');
     expect(progressbar?.getAttribute('aria-valuenow')).toBe('51');
+    expect(progressbar?.getAttribute('aria-valuetext')).toContain('Sent 96 MiB of 188 MiB');
     expect(host.querySelectorAll('[role="progressbar"]')).toHaveLength(1);
     expect(host.querySelector<HTMLElement>('.browser-editor-setup__progress')?.getAttribute('role')).toBeNull();
     expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth + 1);
 
     const screenshot = await page.screenshot({ save: false });
     expect(screenshot.length).toBeGreaterThan(1_000);
+  });
+
+  it('switches install methods with radiogroup keyboard controls', async () => {
+    await page.viewport(1440, 900);
+    const changes: string[] = [];
+    const { host, dispose } = mountPanel(missingActivity(), '1180px', 'wide', {
+      onInstallMethodChange: (method) => changes.push(method),
+    });
+    cleanup = dispose;
+    await settle();
+
+    const group = host.querySelector<HTMLElement>('[role="radiogroup"]');
+    const radios = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
+    expect(group?.getAttribute('aria-label')).toBe('Installation method');
+    expect(radios).toHaveLength(2);
+    expect(radios[0].getAttribute('aria-checked')).toBe('true');
+    expect(radios[0].tabIndex).toBe(0);
+    expect(radios[1].tabIndex).toBe(-1);
+
+    radios[0].focus();
+    radios[0].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    await settle();
+
+    expect(changes).toEqual(['remote_download']);
+    expect(radios[1].getAttribute('aria-checked')).toBe('true');
+    expect(document.activeElement).toBe(radios[1]);
+    expect(host.textContent).toContain('Environment network → Redeven package service');
+  });
+
+  it('keeps both methods stable at 390px and exposes Desktop unavailability', async () => {
+    await page.viewport(390, 844);
+    const { host, dispose } = mountPanel(missingActivity(), 'calc(100vw - 16px)', 'compact', {
+      installMethod: 'remote_download',
+      desktopTransferAvailable: false,
+    });
+    cleanup = dispose;
+    await settle();
+
+    const selector = host.querySelector<HTMLElement>('.browser-editor-setup__method-selector');
+    const radios = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
+    expect(getComputedStyle(selector!).gridTemplateColumns.split(' ')).toHaveLength(2);
+    expect(radios[0].disabled).toBe(true);
+    expect(radios[0].getAttribute('aria-disabled')).toBe('true');
+    expect(radios[1].getAttribute('aria-checked')).toBe('true');
+    expect(host.textContent).toContain('Environment network → Redeven package service');
+    expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth + 1);
+  });
+
+  it('locks method selection while environment download is running', async () => {
+    await page.viewport(1024, 768);
+    const { host, dispose } = mountPanel(remoteDownloadActivity(), 'calc(100vw - 24px)', 'wide', {
+      installMethod: 'remote_download',
+      installMethodLocked: true,
+    });
+    cleanup = dispose;
+    await settle();
+
+    const group = host.querySelector<HTMLElement>('[role="radiogroup"]');
+    const radios = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
+    expect(group?.getAttribute('aria-readonly')).toBe('true');
+    expect(radios.every((radio) => radio.disabled)).toBe(true);
+    expect(host.textContent).toContain('Downloaded in environment: 64 MiB of 192 MiB');
+    expect(host.querySelector<HTMLElement>('[role="progressbar"]')?.getAttribute('aria-valuenow')).toBe('33');
+    expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth + 1);
   });
 
   it('shows the completion handshake after all bytes are confirmed', async () => {

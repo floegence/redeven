@@ -9,6 +9,7 @@ import {
   codeRuntimeOperationRunning,
   codeRuntimePrepareIntent,
   codeRuntimeReady,
+  type BrowserEditorInstallMethod,
   type CodeRuntimeInstalledVersion,
   type CodeRuntimeStatus,
 } from '../../services/codeRuntimeApi';
@@ -199,6 +200,9 @@ export interface CodeRuntimeSettingsCardProps {
   cancelLoading: boolean;
   selectionLoadingVersion: string | null;
   removeVersionLoading: string | null;
+  installMethod: BrowserEditorInstallMethod;
+  desktopTransferAvailable: boolean;
+  onInstallMethodChange: (method: BrowserEditorInstallMethod) => void;
   onRefresh: () => void;
   onPrepare: () => Promise<void> | void;
   onSelectVersion: (version: string) => Promise<void> | void;
@@ -220,7 +224,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
   const installedVersions = createMemo(() => props.status?.installed_versions ?? []);
   const activeRuntime = createMemo(() => props.status?.active_runtime);
   const prepareIntent = createMemo(() => codeRuntimePrepareIntent(props.status));
-  const localizedPrepareCopy = createMemo(() => localizeBrowserEditorPrepareCopy(prepareIntent(), i18n));
+  const localizedPrepareCopy = createMemo(() => localizeBrowserEditorPrepareCopy(prepareIntent(), props.installMethod, i18n));
   const localPending = createMemo(() => props.actionLoading && !operationRunning());
   const setupActivity = createMemo(() => {
     const activity = buildBrowserEditorSetupActivity({
@@ -229,6 +233,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
       localFailure: props.localPrepareFailure,
       localCancelled: props.localPrepareCancelled,
       localProgress: props.prepareProgress,
+      installMethod: props.installMethod,
     });
     return localizeBrowserEditorSetupActivity(activity, {
       status: props.status,
@@ -237,7 +242,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
       localFailure: props.localPrepareFailure,
       localCancelled: props.localPrepareCancelled,
       localProgress: props.prepareProgress,
-      prepareDescription: localizedPrepareCopy().description,
+      installMethod: props.installMethod,
     }, i18n);
   });
   const setupActivityKey = createMemo(() => [
@@ -252,6 +257,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
     dismissedSetupActivityKey() !== setupActivityKey()
     && (
       platformUnsupported()
+      || !runtimeReady()
       || Boolean(props.localPrepareFailure)
       || Boolean(props.localPrepareCancelled)
       || props.actionLoading
@@ -266,6 +272,9 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
   const prepareActionTooltip = () => localizedPrepareCopy().tooltip;
   const cancelActionLabel = () => i18n.t('common.actions.cancel');
   const cancelActionTooltip = () => i18n.t('codeRuntime.cancelTooltip');
+  const installMethodDescription = () => i18n.t(props.installMethod === 'desktop_transfer'
+    ? 'codeRuntime.installMethod.desktopTransferDescription'
+    : 'codeRuntime.installMethod.remoteDownloadDescription');
 
   const currentRuntimeRows = createMemo<readonly RuntimeDetailRow[]>(() => {
     const active = activeRuntime();
@@ -428,6 +437,10 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
               cancelSubmitting={props.cancelLoading}
               actionLabel={setupActivity().can_retry ? i18n.t('codeRuntime.prepare.retry.actionLabel') : prepareActionLabel()}
               runningLabel={localizedPrepareCopy().runningLabel}
+              installMethod={props.installMethod}
+              desktopTransferAvailable={props.desktopTransferAvailable}
+              installMethodLocked={props.actionLoading || setupActivity().state === 'preparing'}
+              onInstallMethodChange={props.onInstallMethodChange}
               onPrepare={props.canInteract && props.canManage ? () => void props.onPrepare() : undefined}
               onRefresh={props.onRefresh}
               onCancel={props.canInteract && props.canManage ? () => void props.onCancel() : undefined}
@@ -502,7 +515,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
                 <HighlightBlock variant="warning" title={i18n.t('codeRuntime.setupRequiredTitle')}>
                   <div class="space-y-2 text-sm text-muted-foreground">
                     <div>{i18n.t('codeRuntime.setupRequiredDescription')}</div>
-                    <div>{i18n.t('codeRuntime.setupRequiresConfirmation')}</div>
+                    <div>{installMethodDescription()}</div>
                   </div>
                 </HighlightBlock>
               </Show>
@@ -537,9 +550,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
       >
         <div class="space-y-3">
           <p class="text-sm">
-            {prepareIntent() === 'update'
-              ? i18n.t('codeRuntime.confirm.updateDescription')
-              : localizedPrepareCopy().description}
+            {installMethodDescription()}
           </p>
           <p class="text-sm text-muted-foreground">{i18n.t('codeRuntime.confirm.workspaceFilesStay')}</p>
           <div class="grid gap-2 rounded-lg border border-border bg-muted/20 p-3 text-[11px] text-muted-foreground">

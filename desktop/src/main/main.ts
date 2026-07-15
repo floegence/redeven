@@ -27,6 +27,7 @@ import {
 import {
   showDesktopConfirmationDialog,
 } from './desktopConfirmation';
+import { DesktopCodeWorkspacePackageJobStore } from './codeWorkspaceEnginePackageJobs';
 import type { DesktopConfirmationDialogModel } from '../shared/desktopConfirmationContract';
 import { createDesktopI18n } from '../shared/i18n/desktopI18n';
 import {
@@ -179,7 +180,6 @@ import { probeExternalLocalUIHealth, probeExternalLocalUIStartup } from './runti
 import { sshOpenFailureAllowsCachedRefreshRetry } from './sshOpenRetryPolicy';
 import {
   RuntimeControlError,
-  getCodeWorkspaceEngineStatus,
   connectProviderLink,
   disconnectProviderLink,
 } from './runtimeControlClient';
@@ -232,13 +232,7 @@ import {
 import {
   codeWorkspaceEnginePackageCacheRoot,
   prepareCodeWorkspaceEnginePackage,
-  type CodeWorkspaceEnginePackageCacheEntry,
 } from './codeWorkspaceEnginePackageCache';
-import {
-  DEFAULT_CODE_WORKSPACE_ENGINE_UPLOAD_ARCHIVE_LIMIT,
-  DEFAULT_CODE_WORKSPACE_ENGINE_UPLOAD_CHUNK_SIZE,
-  uploadCodeWorkspaceEngineViaRuntimeControl,
-} from './codeWorkspaceEngineTransfer';
 import { PUBLIC_REDEVEN_RELEASE_BASE_URL } from './sshReleaseAssets';
 import { installStdioBrokenPipeGuards } from './stdio';
 import type { StartupReport } from './startup';
@@ -376,15 +370,14 @@ import {
 import {
   DESKTOP_CODE_WORKSPACE_CANCEL_CHANNEL,
   DESKTOP_CODE_WORKSPACE_PACKAGE_CHUNK_CHANNEL,
+  DESKTOP_CODE_WORKSPACE_PACKAGE_CHUNK_SIZE_BYTES,
   DESKTOP_CODE_WORKSPACE_PACKAGE_DISPOSE_CHANNEL,
   DESKTOP_CODE_WORKSPACE_PACKAGE_PREPARE_CHANNEL,
-  DESKTOP_CODE_WORKSPACE_PREPARE_CHANNEL,
   DESKTOP_CODE_WORKSPACE_PROGRESS_CHANNEL,
   normalizeDesktopCodeWorkspaceCancelRequest,
   normalizeDesktopCodeWorkspacePackageChunkRequest,
   normalizeDesktopCodeWorkspacePackageDisposeRequest,
   normalizeDesktopCodeWorkspacePackagePrepareRequest,
-  normalizeDesktopCodeWorkspacePrepareRequest,
   terminalDesktopCodeWorkspaceProgress,
   type DesktopCodeWorkspacePackageChunkResponse,
   type DesktopCodeWorkspacePackageDisposeResponse,
@@ -392,7 +385,6 @@ import {
   type DesktopCodeWorkspaceProgress,
   type DesktopCodeWorkspaceProgressPhase,
   type DesktopCodeWorkspaceProgressSnapshot,
-  type DesktopCodeWorkspacePrepareResponse,
 } from '../shared/desktopCodeWorkspaceIPC';
 import {
   DESKTOP_LAUNCHER_ACTION_PROGRESS_CHANNEL,
@@ -9613,18 +9605,8 @@ function desktopCodeWorkspaceEnginePackageCacheRoot(): string {
 
 type DesktopCodeWorkspaceEnginePackagePlatform = Parameters<typeof prepareCodeWorkspaceEnginePackage>[0]['platform'];
 
-type DesktopCodeWorkspaceEnginePackageJobRecord = Readonly<{
-  jobID: string;
-  archivePath: string;
-  manifest: unknown;
-  archiveSizeBytes: number;
-  chunkSizeBytes: number;
-  fromCache: boolean;
-  createdAtMs: number;
-}>;
-
-const desktopCodeWorkspaceEnginePackageJobs = new Map<string, DesktopCodeWorkspaceEnginePackageJobRecord>();
 const desktopCodeWorkspaceEnginePackageJobTTLMS = 30 * 60 * 1000;
+const desktopCodeWorkspaceEnginePackageArchiveLimitBytes = 2 * 1024 * 1024 * 1024;
 
 type DesktopCodeWorkspacePreparationOperation = Readonly<{
   operationID: string;
@@ -9634,9 +9616,10 @@ type DesktopCodeWorkspacePreparationOperation = Readonly<{
 
 const desktopCodeWorkspacePreparationOperations = new Map<string, DesktopCodeWorkspacePreparationOperation>();
 
-function beginDesktopCodeWorkspacePreparationOperation(operationID: string, webContentsID: number): DesktopCodeWorkspacePreparationOperation {
-  const existing = desktopCodeWorkspacePreparationOperations.get(operationID);
-  existing?.controller.abort();
+function beginDesktopCodeWorkspacePreparationOperation(operationID: string, webContentsID: number): DesktopCodeWorkspacePreparationOperation | null {
+  if (desktopCodeWorkspacePreparationOperations.has(operationID)) {
+    return null;
+  }
   const operation = {
     operationID,
     webContentsID,
@@ -9652,6 +9635,11 @@ function finishDesktopCodeWorkspacePreparationOperation(operation: DesktopCodeWo
   }
 }
 
+const desktopCodeWorkspaceEnginePackageJobs = new DesktopCodeWorkspacePackageJobStore({
+  ttlMS: desktopCodeWorkspaceEnginePackageJobTTLMS,
+  finishOperation: (operation) => finishDesktopCodeWorkspacePreparationOperation(operation as DesktopCodeWorkspacePreparationOperation),
+});
+
 function emitDesktopCodeWorkspaceProgress(
   sender: WebContents,
   operationID: string,
@@ -9663,15 +9651,6 @@ function emitDesktopCodeWorkspaceProgress(
     ...progress,
     updated_at_unix_ms: Date.now(),
   } satisfies DesktopCodeWorkspaceProgress);
-}
-
-function pruneDesktopCodeWorkspaceEnginePackageJobs(): void {
-  const expiresBefore = Date.now() - desktopCodeWorkspaceEnginePackageJobTTLMS;
-  for (const [jobID, job] of desktopCodeWorkspaceEnginePackageJobs.entries()) {
-    if (job.createdAtMs < expiresBefore) {
-      desktopCodeWorkspaceEnginePackageJobs.delete(jobID);
-    }
-  }
 }
 
 async function pruneDesktopRuntimePackageCacheForCurrentRelease(): Promise<void> {
@@ -15978,38 +15957,6 @@ async function manageDesktopUpdateFromShell(webContentsID: number): Promise<Desk
   };
 }
 
-function codeWorkspaceEnginePlatformFromStatus(status: unknown): DesktopCodeWorkspaceEnginePackagePlatform {
-  const record = status && typeof status === 'object' ? status as Record<string, unknown> : {};
-  const platform = record.platform && typeof record.platform === 'object' ? record.platform as Record<string, unknown> : {};
-  const osName = String(platform.os ?? '').trim();
-  const arch = String(platform.arch ?? '').trim();
-  const libc = String(platform.libc ?? '').trim();
-  const platformID = String(platform.platform_id ?? '').trim();
-  if (osName !== 'linux' && osName !== 'darwin') {
-    throw new Error('This Environment is not supported by the managed workspace engine.');
-  }
-  if (arch !== 'amd64' && arch !== 'arm64') {
-    throw new Error('This Environment architecture is not supported by the managed workspace engine.');
-  }
-  if (osName === 'linux' && libc !== '' && libc !== 'glibc' && libc !== 'unknown') {
-    throw new Error('This Linux Environment is not supported by the managed workspace engine.');
-  }
-  return {
-    os: osName,
-    arch,
-    ...(osName === 'linux' ? { libc: libc === 'unknown' ? 'unknown' : 'glibc' } : {}),
-    platform_id: platformID || (osName === 'linux' ? `${osName}-${arch}-${libc || 'glibc'}` : `${osName}-${arch}`),
-  };
-}
-
-function codeWorkspaceEngineReady(status: unknown): boolean {
-  const record = status && typeof status === 'object' ? status as Record<string, unknown> : {};
-  const active = record.active_runtime && typeof record.active_runtime === 'object'
-    ? record.active_runtime as Record<string, unknown>
-    : {};
-  return String(active.detection_state ?? '').trim() === 'ready';
-}
-
 type DesktopCodeWorkspacePreparationContext = Readonly<{
   signal: AbortSignal;
   onProgress: (progress: DesktopCodeWorkspaceProgressSnapshot) => void;
@@ -16018,6 +15965,7 @@ type DesktopCodeWorkspacePreparationContext = Readonly<{
 async function prepareCodeWorkspaceEnginePackageJob(
   platform: DesktopCodeWorkspaceEnginePackagePlatform,
   context: DesktopCodeWorkspacePreparationContext,
+  operation: DesktopCodeWorkspacePreparationOperation,
 ): Promise<DesktopCodeWorkspacePackagePrepareResponse> {
   let currentPhase: DesktopCodeWorkspaceProgressPhase = 'lookup';
   let lastProgress: DesktopCodeWorkspaceProgressSnapshot | undefined;
@@ -16027,12 +15975,13 @@ async function prepareCodeWorkspaceEnginePackageJob(
     context.onProgress(progress);
   };
   try {
-    pruneDesktopCodeWorkspaceEnginePackageJobs();
+    desktopCodeWorkspaceEnginePackageJobs.prune();
     const preparedPackage = await prepareCodeWorkspaceEnginePackage({
       cacheRoot: desktopCodeWorkspaceEnginePackageCacheRoot(),
       platform,
       fetchPolicy: {
         timeout_ms: 60_000,
+        download_idle_timeout_ms: 90_000,
         signal: context.signal,
         onProgress: reportProgress,
       },
@@ -16041,18 +15990,17 @@ async function prepareCodeWorkspaceEnginePackageJob(
     if (!stat.isFile() || stat.size <= 0) {
       throw new Error('Workspace engine package is empty.');
     }
-    if (stat.size > DEFAULT_CODE_WORKSPACE_ENGINE_UPLOAD_ARCHIVE_LIMIT) {
+    if (stat.size > desktopCodeWorkspaceEnginePackageArchiveLimitBytes) {
       throw new Error(`Workspace engine package is too large (${stat.size} bytes).`);
     }
     const jobID = `cwepkg_${crypto.randomBytes(18).toString('base64url')}`;
-    desktopCodeWorkspaceEnginePackageJobs.set(jobID, {
+    desktopCodeWorkspaceEnginePackageJobs.add({
       jobID,
       archivePath: preparedPackage.archive_path,
-      manifest: preparedPackage.manifest,
       archiveSizeBytes: stat.size,
-      chunkSizeBytes: DEFAULT_CODE_WORKSPACE_ENGINE_UPLOAD_CHUNK_SIZE,
-      fromCache: preparedPackage.from_cache,
+      chunkSizeBytes: DESKTOP_CODE_WORKSPACE_PACKAGE_CHUNK_SIZE_BYTES,
       createdAtMs: Date.now(),
+      operation,
     });
     return {
       ok: true,
@@ -16060,7 +16008,7 @@ async function prepareCodeWorkspaceEnginePackageJob(
         job_id: jobID,
         manifest: preparedPackage.manifest,
         archive_size_bytes: stat.size,
-        chunk_size_bytes: DEFAULT_CODE_WORKSPACE_ENGINE_UPLOAD_CHUNK_SIZE,
+        chunk_size_bytes: DESKTOP_CODE_WORKSPACE_PACKAGE_CHUNK_SIZE_BYTES,
         from_cache: preparedPackage.from_cache,
       },
     };
@@ -16072,176 +16020,15 @@ async function prepareCodeWorkspaceEnginePackageJob(
     ));
     return {
       ok: false,
+      error_code: currentPhase === 'lookup' ? 'desktop_release_lookup' : 'desktop_package_cache',
       message: error instanceof Error ? error.message : 'Desktop could not prepare the workspace package.',
     };
   }
 }
 
-async function readCodeWorkspaceEnginePackageJobChunk(
-  jobID: string,
-  offsetBytes: number,
-  lengthBytes: number,
-): Promise<DesktopCodeWorkspacePackageChunkResponse> {
-  pruneDesktopCodeWorkspaceEnginePackageJobs();
-  const job = desktopCodeWorkspaceEnginePackageJobs.get(jobID);
-  if (!job) {
-    return {
-      ok: false,
-      message: 'Workspace package is no longer available.',
-    };
-  }
-  const offset = Math.max(0, Math.floor(offsetBytes));
-  const length = Math.max(1, Math.min(Math.floor(lengthBytes), job.chunkSizeBytes));
-  if (offset > job.archiveSizeBytes) {
-    return {
-      ok: false,
-      message: 'Workspace package chunk offset is out of range.',
-    };
-  }
-  const bytesToRead = Math.min(length, job.archiveSizeBytes - offset);
-  if (bytesToRead <= 0) {
-    return {
-      ok: true,
-      chunk: new Uint8Array(),
-      offset_bytes: offset,
-      length_bytes: 0,
-      done: true,
-    };
-  }
-  const handle = await fs.open(job.archivePath, 'r');
-  try {
-    const buffer = Buffer.alloc(bytesToRead);
-    const { bytesRead } = await handle.read(buffer, 0, bytesToRead, offset);
-    return {
-      ok: true,
-      chunk: new Uint8Array(buffer.subarray(0, bytesRead)),
-      offset_bytes: offset,
-      length_bytes: bytesRead,
-      done: offset + bytesRead >= job.archiveSizeBytes,
-    };
-  } catch (error) {
-    return {
-      ok: false,
-      message: error instanceof Error ? error.message : 'Desktop could not read the workspace package.',
-    };
-  } finally {
-    await handle.close();
-  }
-}
-
 function disposeCodeWorkspaceEnginePackageJob(jobID: string): DesktopCodeWorkspacePackageDisposeResponse {
-  desktopCodeWorkspaceEnginePackageJobs.delete(jobID);
+  desktopCodeWorkspaceEnginePackageJobs.dispose(jobID);
   return { ok: true };
-}
-
-async function prepareCodeWorkspaceEngineFromDesktop(
-  webContentsID: number,
-  context: DesktopCodeWorkspacePreparationContext,
-): Promise<DesktopCodeWorkspacePrepareResponse> {
-  const sessionRecord = sessionRecordForWebContentsID(webContentsID);
-  if (!sessionRecord) {
-    return {
-      ok: false,
-      prepared: false,
-      message: 'Desktop could not resolve this Environment session.',
-    };
-  }
-  const endpoint = sessionRecord.startup.runtime_control;
-  if (!endpoint) {
-    return {
-      ok: false,
-      prepared: false,
-      message: 'Restart this Environment from Desktop, then try opening the workspace again.',
-    };
-  }
-  if (endpoint.desktop_owner_id !== await desktopRuntimeOwnerID()) {
-    return {
-      ok: false,
-      prepared: false,
-      message: 'This Environment is managed by another Desktop instance.',
-    };
-  }
-
-  let currentPhase: DesktopCodeWorkspaceProgressPhase = 'lookup';
-  let lastProgress: DesktopCodeWorkspaceProgressSnapshot | undefined;
-  const reportProgress = (progress: DesktopCodeWorkspaceProgressSnapshot): void => {
-    currentPhase = progress.phase;
-    lastProgress = progress;
-    context.onProgress(progress);
-  };
-  try {
-    const currentStatus = await getCodeWorkspaceEngineStatus(endpoint, context.signal);
-    if (codeWorkspaceEngineReady(currentStatus)) {
-      return {
-        ok: true,
-        prepared: true,
-        status: currentStatus,
-      };
-    }
-    const platform = codeWorkspaceEnginePlatformFromStatus(currentStatus);
-    const preparedPackage: CodeWorkspaceEnginePackageCacheEntry = await prepareCodeWorkspaceEnginePackage({
-      cacheRoot: desktopCodeWorkspaceEnginePackageCacheRoot(),
-      platform,
-      fetchPolicy: {
-        timeout_ms: 60_000,
-        signal: context.signal,
-        onProgress: reportProgress,
-      },
-    });
-    currentPhase = 'upload';
-    const status = await uploadCodeWorkspaceEngineViaRuntimeControl({
-      endpoint,
-      manifest: preparedPackage.manifest,
-      archivePath: preparedPackage.archive_path,
-      maxArchiveBytes: DEFAULT_CODE_WORKSPACE_ENGINE_UPLOAD_ARCHIVE_LIMIT,
-      signal: context.signal,
-      onProgress: (progress) => {
-        reportProgress({
-          phase: 'upload',
-          state: 'running',
-          completed_bytes: progress.completed_bytes,
-          total_bytes: progress.total_bytes,
-        });
-      },
-    });
-    if (lastProgress?.phase === 'upload') {
-      reportProgress({ ...lastProgress, state: 'completed' });
-    }
-    return {
-      ok: true,
-      prepared: true,
-      status,
-      message: preparedPackage.from_cache ? 'Workspace engine was ready from Desktop cache.' : 'Workspace engine prepared.',
-    };
-  } catch (error) {
-    context.onProgress(terminalDesktopCodeWorkspaceProgress(
-      lastProgress,
-      currentPhase,
-      context.signal.aborted ? 'cancelled' : 'failed',
-    ));
-    if (context.signal.aborted) {
-      return {
-        ok: false,
-        prepared: false,
-        cancelled: true,
-        message: 'Browser Editor setup was canceled.',
-      };
-    }
-    const failure = desktopFailureFromError(error, {
-      code: 'workspace_engine_prepare_failed',
-      title: 'Workspace Preparation Failed',
-      summary: 'Desktop could not prepare the workspace engine.',
-      targetLabel: sessionRecord.target.label,
-    });
-    return {
-      ok: false,
-      prepared: false,
-      message: failure.summary,
-      status: {
-        failure,
-      },
-    };
-  }
 }
 
 async function performRuntimeMaintenanceFromShell(
@@ -17514,19 +17301,6 @@ if (!app.requestSingleInstanceLock()) {
       message: 'Unsupported desktop runtime action.',
     };
   });
-  ipcMain.handle(DESKTOP_CODE_WORKSPACE_PREPARE_CHANNEL, async (event, request): Promise<DesktopCodeWorkspacePrepareResponse> => {
-    const normalized = normalizeDesktopCodeWorkspacePrepareRequest(request);
-    const operationID = normalized.operation_id || `cweop_${crypto.randomBytes(18).toString('base64url')}`;
-    const operation = beginDesktopCodeWorkspacePreparationOperation(operationID, event.sender.id);
-    try {
-      return await prepareCodeWorkspaceEngineFromDesktop(event.sender.id, {
-        signal: operation.controller.signal,
-        onProgress: (progress) => emitDesktopCodeWorkspaceProgress(event.sender, operationID, progress),
-      });
-    } finally {
-      finishDesktopCodeWorkspacePreparationOperation(operation);
-    }
-  });
   ipcMain.handle(DESKTOP_CODE_WORKSPACE_PACKAGE_PREPARE_CHANNEL, async (event, request): Promise<DesktopCodeWorkspacePackagePrepareResponse> => {
     const normalized = normalizeDesktopCodeWorkspacePackagePrepareRequest(request);
     if (!normalized) {
@@ -17535,16 +17309,22 @@ if (!app.requestSingleInstanceLock()) {
         message: 'Desktop received an invalid workspace package request.',
       };
     }
-    const operationID = normalized.operation_id || `cweop_${crypto.randomBytes(18).toString('base64url')}`;
+    const operationID = normalized.operation_id;
     const operation = beginDesktopCodeWorkspacePreparationOperation(operationID, event.sender.id);
-    try {
-      return await prepareCodeWorkspaceEnginePackageJob(normalized.platform, {
+    if (!operation) {
+      return {
+        ok: false,
+        message: 'A Browser Editor package preparation with this operation id is already running.',
+      };
+    }
+    const response = await prepareCodeWorkspaceEnginePackageJob(normalized.platform, {
         signal: operation.controller.signal,
         onProgress: (progress) => emitDesktopCodeWorkspaceProgress(event.sender, operationID, progress),
-      });
-    } finally {
+      }, operation);
+    if (!response.ok || !response.job) {
       finishDesktopCodeWorkspacePreparationOperation(operation);
     }
+    return response;
   });
   ipcMain.handle(DESKTOP_CODE_WORKSPACE_PACKAGE_CHUNK_CHANNEL, async (_event, request): Promise<DesktopCodeWorkspacePackageChunkResponse> => {
     const normalized = normalizeDesktopCodeWorkspacePackageChunkRequest(request);
@@ -17554,7 +17334,7 @@ if (!app.requestSingleInstanceLock()) {
         message: 'Desktop received an invalid workspace package chunk request.',
       };
     }
-    return readCodeWorkspaceEnginePackageJobChunk(normalized.job_id, normalized.offset_bytes, normalized.length_bytes);
+    return desktopCodeWorkspaceEnginePackageJobs.read(normalized.job_id, normalized.offset_bytes, normalized.length_bytes);
   });
   ipcMain.handle(DESKTOP_CODE_WORKSPACE_PACKAGE_DISPOSE_CHANNEL, async (_event, request): Promise<DesktopCodeWorkspacePackageDisposeResponse> => {
     const normalized = normalizeDesktopCodeWorkspacePackageDisposeRequest(request);
@@ -17580,6 +17360,8 @@ if (!app.requestSingleInstanceLock()) {
       return { ok: true, cancelled: false };
     }
     operation.controller.abort();
+    desktopCodeWorkspaceEnginePackageJobs.removeForOperation(operation);
+    finishDesktopCodeWorkspacePreparationOperation(operation);
     return { ok: true, cancelled: true };
   });
   ipcMain.on(CANCEL_DESKTOP_SETTINGS_CHANNEL, () => {
