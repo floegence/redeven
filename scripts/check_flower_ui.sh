@@ -35,6 +35,7 @@ main() {
       src/ui/flower/SubagentDetailWindow.test.tsx \
       src/ui/flower/envLocalFlowerSurfaceAdapter.test.ts \
       src/ui/flower/linkedContextNavigation.test.ts \
+      src/ui/widgets/FlowerTurnLauncherWindow.test.tsx \
       src/ui/chat/blocks/ActivityTimelineBlock.test.tsx \
       src/ui/chat/blocks/ShellBlock.test.tsx \
       src/ui/chat/message-list/VirtualMessageList.test.tsx
@@ -66,10 +67,11 @@ main() {
       internal/flower_ui/src/shellCommandHighlight.test.ts
 
     ui_pkg_log ""
-    ui_pkg_log "Flower UI: Chromium approval refresh contract..."
+    ui_pkg_log "Flower UI: Chromium interaction contracts..."
     ui_pkg_run_pnpm run test:browser -- \
       src/ui/FlowerSurface.approvalRefresh.browser.test.tsx \
       src/ui/FlowerSurface.activityDisclosure.browser.test.tsx \
+      src/ui/widgets/FlowerTurnLauncherWindow.browser.test.tsx \
       src/ui/flower/SubagentDetailWindow.boundary.browser.test.tsx
   )
 

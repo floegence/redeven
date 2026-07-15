@@ -28,11 +28,28 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     exiting: () => false,
     state: () => (options.open() ? 'entered' : 'exited'),
   }),
-  Button: (props: any) => (
-    <button type="button" onClick={props.onClick} disabled={props.disabled}>
-      {props.children}
-    </button>
-  ),
+  Button: (props: any) => {
+    const Icon = props.icon;
+    return (
+      <button
+        type="button"
+        class={props.class}
+        data-testid={props['data-testid']}
+        data-variant={props.variant}
+        data-size={props.size}
+        onClick={props.onClick}
+        disabled={props.disabled || props.loading}
+        title={props.title}
+        aria-label={props['aria-label']}
+        aria-busy={props['aria-busy']}
+      >
+        {props.loading
+          ? <span data-testid="button-loading-indicator" class="animate-spin" />
+          : (Icon ? <Icon /> : null)}
+        {props.children}
+      </button>
+    );
+  },
   FloatingWindow: (props: any) => (
     props.open ? (
       <div
@@ -69,7 +86,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     Activity: Icon,
     AlertTriangle: Icon,
     Terminal: Icon,
-    Send: Icon,
+    ArrowUp: () => <span data-testid="arrow-up-icon" />,
   };
 });
 
@@ -161,6 +178,16 @@ async function flushAsync(): Promise<void> {
   await Promise.resolve();
   await new Promise((resolve) => setTimeout(resolve, 0));
   await Promise.resolve();
+}
+
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
 }
 
 function composePrompt(host: HTMLElement, value: string): HTMLTextAreaElement {
@@ -291,7 +318,9 @@ describe('FlowerTurnLauncherWindow', () => {
         />
       </I18nProvider>
     ), host);
-    await flushAsync();
+    await vi.waitFor(() => {
+      expect(host.textContent).toContain('询问 Flower');
+    });
 
     expect(host.textContent).toContain('询问 Flower');
     expect(host.textContent).toContain('工作目录');
@@ -330,6 +359,152 @@ describe('FlowerTurnLauncherWindow', () => {
     expect(editorShell).toBeTruthy();
     expect(inlineSend).toBeTruthy();
     expect(inlineSend && editorShell?.contains(inlineSend)).toBe(true);
+  });
+
+  it('matches the Flower composer circular ArrowUp action', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <FlowerTurnLauncherWindow
+        open
+        intent={{ ...baseIntent, initial_prompt: 'Inspect this context' }}
+        onClose={() => undefined}
+        onSubmit={async () => undefined}
+      />
+    ), host);
+
+    const sendButton = host.querySelector('[data-testid="flower-turn-launcher-inline-send"]') as HTMLButtonElement | null;
+    expect(sendButton).toBeTruthy();
+    expect(sendButton?.dataset.variant).toBe('primary');
+    expect(sendButton?.dataset.size).toBe('icon');
+    expect(sendButton?.className).toContain('flower-composer-submit');
+    expect(sendButton?.className).toContain('flower-turn-launcher-send-btn');
+    expect(sendButton?.className).toContain('rounded-full');
+    expect(sendButton?.querySelector('[data-testid="arrow-up-icon"]')).toBeTruthy();
+    expect(sendButton?.getAttribute('aria-busy')).toBe('false');
+  });
+
+  it('shows immediate loading and blocks duplicate actions after clicking send', async () => {
+    const pending = deferred<void>();
+    const onSubmit = vi.fn(() => pending.promise);
+    const onClose = vi.fn();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <FlowerTurnLauncherWindow
+        open
+        intent={{
+          ...baseIntent,
+          source_surface: 'file_browser',
+          context_items: [{ kind: 'file_path', path: '/Users/demo/project', is_directory: true }],
+        }}
+        onClose={onClose}
+        onSubmit={onSubmit}
+      />
+    ), host);
+
+    const textarea = composePrompt(host, 'Inspect this project');
+    const sendButton = host.querySelector('[data-testid="flower-turn-launcher-inline-send"]') as HTMLButtonElement;
+    const contextButton = host.querySelector('.flower-turn-launcher-message-surface button') as HTMLButtonElement;
+    const closeButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Close');
+
+    sendButton.click();
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(sendButton.disabled).toBe(true);
+    expect(sendButton.getAttribute('aria-busy')).toBe('true');
+    expect(sendButton.getAttribute('aria-label')).toBe('Sending...');
+    expect(sendButton.querySelector('[data-testid="button-loading-indicator"]')).toBeTruthy();
+    expect(textarea.disabled).toBe(true);
+    expect(contextButton.disabled).toBe(true);
+    expect(closeButton?.disabled).toBe(true);
+
+    sendButton.click();
+    textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    contextButton.click();
+    closeButton?.click();
+
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(onClose).not.toHaveBeenCalled();
+
+    pending.resolve();
+    await flushAsync();
+
+    expect(sendButton.disabled).toBe(false);
+    expect(sendButton.getAttribute('aria-busy')).toBe('false');
+    expect(sendButton.querySelector('[data-testid="arrow-up-icon"]')).toBeTruthy();
+    expect(textarea.disabled).toBe(false);
+  });
+
+  it('shows immediate loading after Enter submits the prompt', async () => {
+    const pending = deferred<void>();
+    const onSubmit = vi.fn(() => pending.promise);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <FlowerTurnLauncherWindow
+        open
+        intent={baseIntent}
+        onClose={() => undefined}
+        onSubmit={onSubmit}
+      />
+    ), host);
+
+    const textarea = composePrompt(host, 'Run the checks');
+    textarea.dispatchEvent(new Event('compositionend', { bubbles: true }));
+    textarea.dispatchEvent(new KeyboardEvent('keydown', {
+      key: 'Enter',
+      bubbles: true,
+      cancelable: true,
+    }));
+
+    const sendButton = host.querySelector('[data-testid="flower-turn-launcher-inline-send"]') as HTMLButtonElement;
+    expect(onSubmit).toHaveBeenCalledTimes(1);
+    expect(sendButton.disabled).toBe(true);
+    expect(sendButton.getAttribute('aria-busy')).toBe('true');
+    expect(sendButton.querySelector('[data-testid="button-loading-indicator"]')).toBeTruthy();
+
+    pending.resolve();
+    await flushAsync();
+  });
+
+  it('restores the ArrowUp action and preserves the draft after a failed send', async () => {
+    const firstAttempt = deferred<void>();
+    const onSubmit = vi.fn()
+      .mockImplementationOnce(() => firstAttempt.promise)
+      .mockResolvedValueOnce(undefined);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <FlowerTurnLauncherWindow
+        open
+        intent={baseIntent}
+        onClose={() => undefined}
+        onSubmit={onSubmit}
+      />
+    ), host);
+
+    const textarea = composePrompt(host, 'Keep this draft');
+    const sendButton = host.querySelector('[data-testid="flower-turn-launcher-inline-send"]') as HTMLButtonElement;
+    sendButton.click();
+    firstAttempt.reject(new Error('Runtime unavailable'));
+    await flushAsync();
+
+    expect(host.querySelector('[role="alert"]')?.textContent).toContain('Runtime unavailable');
+    expect(textarea.value).toBe('Keep this draft');
+    expect(textarea.disabled).toBe(false);
+    expect(document.activeElement).toBe(textarea);
+    expect(sendButton.disabled).toBe(false);
+    expect(sendButton.getAttribute('aria-busy')).toBe('false');
+    expect(sendButton.querySelector('[data-testid="arrow-up-icon"]')).toBeTruthy();
+
+    sendButton.click();
+    await flushAsync();
+    expect(onSubmit).toHaveBeenCalledTimes(2);
   });
 
   it('submits the visible composed prompt through the send button', async () => {
