@@ -50,7 +50,7 @@ Compatibility depends on these transport and terminal interfaces staying aligned
 [20] redeven:tests/docker_runtime_e2e/testclient/main.go:67 - Docker Local UI verification explicitly allows plaintext only for loopback.
 [21] redeven:internal/runtimeproxy/runtimeproxy.go:15 - Redeven declares the three embedding-policy response headers blocked by its product adapter.
 [22] redeven:internal/terminal/manager.go:1494 - Runtime history responses map Floeterm coverage snapshot fields without omitting zero values.
-[23] redeven:internal/runtimeservice/compatibility_contract.json:30 - Terminal coverage requires compatibility epoch 6 and a matched v0.8.1 Desktop and Runtime pair.
+[23] redeven:internal/runtimeservice/compatibility_contract.json:35 - Terminal coverage requires compatibility epoch 6 and a matched v0.8.1 Desktop and Runtime pair.
 [24] redeven:internal/terminal/manager.go:1131 - Terminal attachment captures the committed Floeterm history boundary while holding the per-sink routing lock.
 [25] redeven:internal/terminal/manager.go:901 - Live terminal notifications are filtered against each sink's atomic history boundary.
 [26] redeven:internal/terminal/manager.go:679 - Latest accepted attach state rejects stale workers and preserves idempotent activation results before boundary capture.

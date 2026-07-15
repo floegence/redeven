@@ -37,7 +37,7 @@ Gateway does not host plugin management APIs. The `/gateway/v1/*` protocol remai
 [7] redeven:cmd/redeven-gateway/main.go:293 - Gateway service construction receives Desktop bridge, profile target, profile write, pairing, and token options.
 [8] redeven:cmd/redeven-gateway/main.go:495 - CLI help lists the Gateway command set.
 [9] redeven:.github/workflows/release.yml:51 - Release validates the Gateway protocol contract before packaging.
-[10] redeven:internal/runtimeservice/compatibility_contract.json:8 - The current compatibility review records Gateway service decoupling as outside the Runtime Service window.
+[10] redeven:internal/runtimeservice/compatibility_contract.json:32 - The current compatibility review records Gateway lifecycle as unchanged by the Runtime Service compatibility window.
 [11] redeven:spec/openapi/gateway-v1.yaml:1 - The Gateway OpenAPI contract declares OpenAPI 3.1.
 [12] redeven:spec/openapi/gateway-v1.yaml:24 - The Gateway OpenAPI contract declares the `redeven-gateway-v1` version.
 [13] redeven:internal/runtimegateway/protocol/openapi_contract_test.go:73 - The contract test rejects the old runtime-gateway protocol name.
