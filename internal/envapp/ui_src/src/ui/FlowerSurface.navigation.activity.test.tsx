@@ -48,7 +48,7 @@ function selectedThreadID(root: ParentNode): string | null {
   return root.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id') ?? null;
 }
 
-function subagentDropdownRow(root: ParentNode, title = 'Review API contract'): HTMLButtonElement | null {
+function subagentDropdownRow(root: ParentNode, title = 'Review API Contract'): HTMLButtonElement | null {
   return Array.from(root.querySelectorAll('.flower-subagent-dropdown-row'))
     .find((row) => row.textContent?.includes(title)) as HTMLButtonElement | undefined ?? null;
 }
@@ -142,12 +142,68 @@ describe('FlowerSurface navigation activity', () => {
     expect(row?.getAttribute('data-flower-subagent-status')).toBe('running');
     expect(row?.querySelector('.flower-activity-inline-loader')).toBeTruthy();
     expect(row?.querySelector('.flower-subagent-status-dot-running')).toBeNull();
+    expect(dropdown.querySelector('[data-flower-subagent-group="active"] .flower-subagents-dropdown-group-count')?.textContent).toBe('1');
+    expect(dropdown.querySelector('[data-flower-subagent-group="completed"] .flower-subagents-dropdown-group-count')?.textContent).toBe('0');
+    expect(badge.getAttribute('data-running')).toBe('false');
+    await waitFor(() => document.activeElement === row);
 
     window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await waitFor(() => !runtime.querySelector('#flower-subagents-dropdown'));
 
     expect(trigger.getAttribute('aria-expanded')).toBe('false');
     expect(document.activeElement).toBe(trigger);
+  });
+
+  it('groups subagents by lifecycle priority and supports keyboard navigation', async () => {
+    const parentThread = thread({
+      thread_id: 'thread-subagent-keyboard',
+      title: 'Keyboard subagents',
+      subagents: [
+        subagentSummary({ subagent_id: 'child-completed', thread_id: 'child-completed', task_name: 'Completed Review', title: 'Completed Review', status: 'completed', updated_at_ms: 600 }),
+        subagentSummary({ subagent_id: 'child-running', thread_id: 'child-running', task_name: 'Running Review', title: 'Running Review', status: 'running', updated_at_ms: 100 }),
+        subagentSummary({ subagent_id: 'child-queued', thread_id: 'child-queued', task_name: 'Queued Review', title: 'Queued Review', status: 'queued', updated_at_ms: 900 }),
+        subagentSummary({ subagent_id: 'child-failed', thread_id: 'child-failed', task_name: 'Failed Review', title: 'Failed Review', status: 'failed', updated_at_ms: 200 }),
+        subagentSummary({ subagent_id: 'child-waiting', thread_id: 'child-waiting', task_name: 'Waiting Review', title: 'Waiting Review', status: 'waiting_input', updated_at_ms: 300 }),
+        subagentSummary({ subagent_id: 'child-canceled', thread_id: 'child-canceled', task_name: 'Canceled Review', title: 'Canceled Review', status: 'canceled', updated_at_ms: 1000 }),
+      ],
+    });
+    const loadSubagentDetail = vi.fn(async () => subagentDetail());
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [parentThread]),
+      loadThread: vi.fn(async () => liveBootstrap(parentThread)),
+      loadSubagentDetail,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-subagent-keyboard"] button')));
+    (runtime.querySelector('[data-thread-id="thread-subagent-keyboard"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadID(runtime) === 'thread-subagent-keyboard');
+    await waitFor(() => runtime.querySelector('.flower-chat-header-actions .flower-header-icon-badge')?.textContent === '6');
+    const trigger = runtime.querySelector('.flower-chat-header-actions button[title^="Open subagents"]') as HTMLButtonElement;
+    trigger.click();
+    await waitFor(() => runtime.querySelectorAll('.flower-subagent-dropdown-row').length === 6);
+
+    const dropdown = runtime.querySelector('#flower-subagents-dropdown') as HTMLElement;
+    const rows = Array.from(dropdown.querySelectorAll<HTMLButtonElement>('.flower-subagent-dropdown-row'));
+    expect(rows.map((row) => row.getAttribute('data-flower-subagent-status'))).toEqual([
+      'waiting_input', 'running', 'queued', 'failed', 'completed', 'canceled',
+    ]);
+    expect(dropdown.querySelector('[data-flower-subagent-group="active"] .flower-subagents-dropdown-group-count')?.textContent).toBe('3');
+    expect(dropdown.querySelector('[data-flower-subagent-group="completed"] .flower-subagents-dropdown-group-count')?.textContent).toBe('3');
+    expect(rows[4]?.querySelector('.flower-subagent-dropdown-duration')?.textContent).toBe('500ms');
+    await waitFor(() => document.activeElement === rows[0]);
+
+    rows[0]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    expect(document.activeElement).toBe(rows[1]);
+    rows[1]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'End', bubbles: true }));
+    expect(document.activeElement).toBe(rows[5]);
+    rows[5]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Home', bubbles: true }));
+    expect(document.activeElement).toBe(rows[0]);
+    rows[0]?.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+
+    await waitFor(() => Boolean(subagentDetailSurface(runtime)));
+    expect(loadSubagentDetail).toHaveBeenCalledWith('thread-subagent-keyboard', 'child-waiting', 0, 200);
+    expect(selectedThreadID(runtime)).toBe('thread-subagent-keyboard');
   });
 
   it('opens subagent details from the parent header without selecting the child thread', async () => {
@@ -256,7 +312,7 @@ describe('FlowerSurface navigation activity', () => {
 
     expect(runtime.querySelector('.flower-subagents-dropdown-layer')).toBeTruthy();
     expect(runtime.querySelector('.flower-subagents-dropdown')?.getAttribute('role')).toBe('dialog');
-    expect(runtime.textContent).toContain('Review API contract');
+    expect(runtime.textContent).toContain('Review API Contract');
     expect(subagentDropdownRow(runtime)).toBeTruthy();
     expect(subagentDropdownRow(runtime)?.querySelector('.flower-activity-inline-loader')).toBeTruthy();
     expect(runtime.querySelector('.flower-subagent-status-dot-running')).toBeNull();

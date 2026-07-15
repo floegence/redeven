@@ -22,6 +22,7 @@ export type FlowerSubagentPanelItem = Readonly<{
   taskName: string;
   taskDescription: string;
   title: string;
+  displayName: string;
   agentType: string;
   status: FlowerSubagentPanelStatus;
   action: string;
@@ -32,6 +33,60 @@ export type FlowerSubagentPanelItem = Readonly<{
   updatedAtMs: number;
   itemStatus: FlowerActivityItem['status'];
 }>;
+
+const SUBAGENT_NAME_MAX_WORDS = 5;
+const SUBAGENT_NAME_MAX_LENGTH = 48;
+const SUBAGENT_NAME_INITIALISMS = new Map([
+  'ai', 'api', 'cli', 'cpu', 'css', 'gpu', 'html', 'http', 'https', 'id', 'json',
+  'llm', 'mcp', 'okf', 'oss', 'rpc', 'sdk', 'sql', 'ssh', 'ui', 'url', 'ux', 'wasm',
+].map((value) => [value, value.toUpperCase()]));
+
+function taskNameTokens(value: string): readonly string[] {
+  return value
+    .replace(/([a-z0-9])([A-Z])/gu, '$1 $2')
+    .replace(/([A-Z]+)([A-Z][a-z])/gu, '$1 $2')
+    .match(/[A-Za-z0-9]+/gu) ?? [];
+}
+
+function formatTaskNameToken(value: string): string {
+  const initialism = SUBAGENT_NAME_INITIALISMS.get(value.toLowerCase());
+  if (initialism) return initialism;
+  if (/^[A-Z0-9]+$/u.test(value) && /[A-Z]/u.test(value)) return value;
+  const lower = value.toLowerCase();
+  return `${lower.slice(0, 1).toUpperCase()}${lower.slice(1)}`;
+}
+
+export function presentSubagentTaskName(value: string, fallback = ''): string {
+  const raw = trimString(value);
+  const fallbackRaw = trimString(fallback);
+  const primaryTokens = taskNameTokens(raw);
+  const tokens = primaryTokens.length > 0 ? primaryTokens : taskNameTokens(fallbackRaw);
+  if (tokens.length === 0) return fallbackRaw || raw;
+
+  const words: string[] = [];
+  for (const token of tokens) {
+    if (words.length >= SUBAGENT_NAME_MAX_WORDS) break;
+    const word = formatTaskNameToken(token);
+    const candidate = [...words, word].join(' ');
+    if (candidate.length > SUBAGENT_NAME_MAX_LENGTH) {
+      if (words.length === 0) words.push(word.slice(0, SUBAGENT_NAME_MAX_LENGTH));
+      break;
+    }
+    words.push(word);
+  }
+  return words.join(' ') || raw;
+}
+
+export function subagentTaskNameRoleFallback(agentType: string): string {
+  switch (trimString(agentType).toLowerCase()) {
+    case 'worker':
+      return 'Implementation Task';
+    case 'reviewer':
+      return 'Review Task';
+    default:
+      return 'Research Task';
+  }
+}
 
 function numberValue(value: unknown): number {
   const raw = typeof value === 'number' ? value : Number(String(value ?? '').trim());
@@ -70,6 +125,19 @@ function isTerminalStatus(status: FlowerSubagentPanelStatus): boolean {
     || status === 'timed_out';
 }
 
+function statusPriority(status: FlowerSubagentPanelStatus): number {
+  switch (status) {
+    case 'waiting_input': return 0;
+    case 'running': return 1;
+    case 'queued': return 2;
+    case 'unknown': return 3;
+    case 'failed': return 4;
+    case 'timed_out': return 5;
+    case 'completed': return 6;
+    case 'canceled': return 7;
+  }
+}
+
 function subagentUpdatedAtMs(summary: FlowerSubagentSummary): number {
   return numberValue(summary.updated_at_ms) || numberValue(summary.created_at_ms);
 }
@@ -82,6 +150,11 @@ function itemFromSummary(summary: FlowerSubagentSummary, ownerThreadID: string):
   const taskDescription = trimString(summary.task_description);
   const rawTitle = trimString(summary.title);
   const title = rawTitle && rawTitle !== threadID && rawTitle !== subagentID ? rawTitle : taskName;
+  const agentType = trimString(summary.agent_type);
+  const roleFallback = subagentTaskNameRoleFallback(agentType);
+  const displayName = title || taskName
+    ? presentSubagentTaskName(title || taskName, roleFallback)
+    : roleFallback;
   const createdAtMs = numberValue(summary.created_at_ms);
   const updatedAtMs = subagentUpdatedAtMs(summary);
   return {
@@ -91,7 +164,8 @@ function itemFromSummary(summary: FlowerSubagentSummary, ownerThreadID: string):
     taskName,
     taskDescription,
     title: title || threadID,
-    agentType: trimString(summary.agent_type),
+    displayName,
+    agentType,
     status: normalizeStatus(summary.status),
     action: 'inspect',
     canOpen: true,
@@ -112,7 +186,9 @@ export function buildFlowerSubagentPanelItems(thread: FlowerThreadSnapshot | nul
     .sort((left, right) => {
       const activeDelta = Number(!isTerminalStatus(left.status)) - Number(!isTerminalStatus(right.status));
       if (activeDelta !== 0) return -activeDelta;
+      const statusDelta = statusPriority(left.status) - statusPriority(right.status);
+      if (statusDelta !== 0) return statusDelta;
       if (right.updatedAtMs !== left.updatedAtMs) return right.updatedAtMs - left.updatedAtMs;
-      return left.title.localeCompare(right.title);
+      return left.displayName.localeCompare(right.displayName);
     });
 }

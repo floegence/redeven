@@ -2,7 +2,7 @@ import type { Accessor, Component, JSX } from 'solid-js';
 import { For, Show, batch, createEffect, createMemo, createSignal, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
-import { AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, GitBranch, GripVertical, MoreHorizontal, Plus, Settings, Shield, Terminal } from '@floegence/floe-webapp-core/icons';
+import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, GitBranch, GripVertical, MoreHorizontal, Plus, Settings, Shield, Terminal, XCircle } from '@floegence/floe-webapp-core/icons';
 import { Button, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 
 import { writeTextToClipboard } from './clipboard';
@@ -67,6 +67,8 @@ import {
 } from './flowerTimelineProjection';
 import {
   buildFlowerSubagentPanelItems,
+  presentSubagentTaskName,
+  subagentTaskNameRoleFallback,
   type FlowerSubagentPanelItem,
   type FlowerSubagentPanelStatus,
 } from './flowerSubagentProjection';
@@ -265,7 +267,7 @@ const TRANSCRIPT_NEAR_BOTTOM_THRESHOLD_PX = 96;
 const TRANSCRIPT_SCROLL_TO_LATEST_MS = 220;
 const SELECTED_THREAD_TAIL_REVEAL_FALLBACK_MS = 120;
 const SUBAGENT_DETAIL_PAGE_SIZE = 200;
-const SUBAGENT_DROPDOWN_ESTIMATED_SIZE = { width: 368, height: 448 } as const;
+const SUBAGENT_DROPDOWN_ESTIMATED_SIZE = { width: 400, height: 480 } as const;
 const SUBAGENT_DETAIL_TAIL_RUNNING_INTERVAL_MS = 1500;
 const SUBAGENT_DETAIL_TAIL_QUEUED_INTERVAL_MS = 2500;
 const SUBAGENT_DETAIL_TAIL_ERROR_INTERVAL_MS = 4000;
@@ -1998,6 +2000,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const dropdownOpen = subagentDropdownOpen();
     if (!dropdownOpen) return;
     updateSubagentDropdownPosition();
+    const focusFrame = window.requestAnimationFrame(() => {
+      const firstRow = subagentDropdownRows()[0];
+      (firstRow ?? subagentDropdownRef)?.focus();
+    });
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target as Node | null;
       if (!target) return;
@@ -2017,6 +2023,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     window.addEventListener('resize', onReposition);
     window.addEventListener('scroll', onReposition, true);
     onCleanup(() => {
+      window.cancelAnimationFrame(focusFrame);
       window.removeEventListener('pointerdown', onPointerDown);
       window.removeEventListener('keydown', onKeyDown);
       window.removeEventListener('resize', onReposition);
@@ -3199,6 +3206,45 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
   };
 
+  const subagentDropdownRows = (): HTMLButtonElement[] => (
+    Array.from(subagentDropdownRef?.querySelectorAll<HTMLButtonElement>('button[data-flower-subagent-row]') ?? [])
+  );
+
+  const closeSubagentDropdown = (restoreFocus: boolean) => {
+    setSubagentDropdownOpen(false);
+    if (restoreFocus) subagentTriggerRef?.focus();
+  };
+
+  const handleSubagentDropdownKeyDown = (event: KeyboardEvent) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      event.stopPropagation();
+      closeSubagentDropdown(true);
+      return;
+    }
+    if (event.key === 'Enter' || event.key === ' ') {
+      const activeRow = subagentDropdownRows().find((row) => row === document.activeElement);
+      if (!activeRow) return;
+      event.preventDefault();
+      event.stopPropagation();
+      activeRow.click();
+      return;
+    }
+    if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
+
+    const rows = subagentDropdownRows();
+    if (rows.length === 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const activeIndex = rows.findIndex((row) => row === document.activeElement);
+    let nextIndex = activeIndex;
+    if (event.key === 'Home') nextIndex = 0;
+    if (event.key === 'End') nextIndex = rows.length - 1;
+    if (event.key === 'ArrowDown') nextIndex = activeIndex < 0 ? 0 : (activeIndex + 1) % rows.length;
+    if (event.key === 'ArrowUp') nextIndex = activeIndex < 0 ? rows.length - 1 : (activeIndex - 1 + rows.length) % rows.length;
+    rows[nextIndex]?.focus();
+  };
+
   const openSubagents = () => {
     updateSubagentDropdownPosition();
     setSubagentDropdownOpen((open) => !open);
@@ -3809,11 +3855,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   });
   const selectedSubagentItems = createMemo(() => buildFlowerSubagentPanelItems(selectedThread()));
+  const subagentStatusIsActive = (status: FlowerSubagentPanelStatus): boolean => (
+    status === 'waiting_input' || status === 'running' || status === 'queued' || status === 'unknown'
+  );
+  const selectedActiveSubagentItems = createMemo(() => selectedSubagentItems().filter((item) => subagentStatusIsActive(item.status)));
+  const selectedSettledSubagentItems = createMemo(() => selectedSubagentItems().filter((item) => !subagentStatusIsActive(item.status)));
   const selectedRunningSubagentCount = createMemo(() => selectedSubagentItems().filter((item) => item.status === 'running').length);
-  const selectedActiveSubagentCount = createMemo(() => selectedSubagentItems().filter((item) => (
-    item.status === 'queued' || item.status === 'running' || item.status === 'waiting_input'
-  )).length);
-  const selectedSettledSubagentCount = createMemo(() => selectedSubagentItems().length - selectedActiveSubagentCount());
+  const selectedActiveSubagentCount = createMemo(() => selectedActiveSubagentItems().length);
+  const selectedSettledSubagentCount = createMemo(() => selectedSettledSubagentItems().length);
   const activeSubagentItem = createMemo(() => {
     const activeID = trimString(activeSubagentID());
     if (!activeID) return null;
@@ -5625,6 +5674,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       taskName: agent.name,
       taskDescription: agent.description,
       title: agent.name,
+      displayName: presentSubagentTaskName(agent.name, subagentTaskNameRoleFallback(agent.agent_type)),
       agentType: agent.agent_type,
       status: 'unknown',
       action: 'inspect',
@@ -6242,46 +6292,33 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   );
 
   const subagentStatusLabel = (status: FlowerSubagentPanelStatus): string => subagentsCopy().statusLabels[status] ?? subagentsCopy().statusLabels.unknown;
-  const formatSubagentRelativeTime = (updatedAtMs: number): string => {
-    const diffMs = Date.now() - updatedAtMs;
-    const seconds = Math.round(diffMs / 1000);
-    if (seconds < 60) return 'Just now';
-    const minutes = Math.round(seconds / 60);
-    if (minutes < 60) return `${minutes}m ago`;
-    const hours = Math.round(minutes / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.round(hours / 24);
-    if (days < 30) return `${days}d ago`;
-    return new Date(updatedAtMs).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  };
-  const subagentMeta = (item: FlowerSubagentPanelItem): string => (
-    item.updatedAtMs ? formatSubagentRelativeTime(item.updatedAtMs) : ''
-  );
-  const subagentElapsedMeta = (item: FlowerSubagentPanelItem): string => {
-    if (item.status === 'queued' || item.status === 'running' || item.status === 'waiting_input') {
-      const startedAt = item.startedAtMs || item.createdAtMs || 0;
-      const elapsed = startedAt ? formatActivityDuration(Math.max(0, activityClockNow() - startedAt)) : '';
-      return [subagentStatusLabel(item.status).toLowerCase(), elapsed].filter(Boolean).join(' ');
-    }
-    return subagentStatusLabel(item.status).toLowerCase() || subagentMeta(item);
+  const subagentElapsedDuration = (item: FlowerSubagentPanelItem): string => {
+    const startedAt = item.startedAtMs || item.createdAtMs || 0;
+    if (!startedAt) return '';
+    const endedAt = subagentStatusIsActive(item.status)
+      ? activityClockNow()
+      : item.updatedAtMs || startedAt;
+    return formatActivityDuration(Math.max(0, endedAt - startedAt));
   };
   const subagentStatusIndicator = (status: FlowerSubagentPanelStatus) => {
     switch (status) {
       case 'queued':
+        return <Clock class="flower-subagent-status-indicator flower-subagent-status-indicator-queued h-3.5 w-3.5" aria-hidden="true" />;
       case 'running':
-      case 'waiting_input':
         return (
-          <span class={cn('flower-subagent-status-indicator', 'flower-subagent-status-indicator-running')} aria-hidden="true">
+          <span class="flower-subagent-status-indicator flower-subagent-status-indicator-running" aria-hidden="true">
             {activityInlineLoader('flower-subagent-status-loader')}
           </span>
         );
+      case 'waiting_input':
+        return <AlertCircle class="flower-subagent-status-indicator flower-subagent-status-indicator-waiting h-3.5 w-3.5" aria-hidden="true" />;
       case 'completed':
         return <Check class="flower-subagent-status-indicator flower-subagent-status-indicator-completed h-3.5 w-3.5" aria-hidden="true" />;
       case 'failed':
       case 'timed_out':
         return <AlertTriangle class="flower-subagent-status-indicator flower-subagent-status-indicator-failed h-3.5 w-3.5" aria-hidden="true" />;
       case 'canceled':
-        return <AlertTriangle class="flower-subagent-status-indicator flower-subagent-status-indicator-canceled h-3.5 w-3.5" aria-hidden="true" />;
+        return <XCircle class="flower-subagent-status-indicator flower-subagent-status-indicator-canceled h-3.5 w-3.5" aria-hidden="true" />;
       default:
         return <Clock class="flower-subagent-status-indicator flower-subagent-status-indicator-unknown h-3.5 w-3.5" aria-hidden="true" />;
     }
@@ -6292,23 +6329,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return count > 99 ? '99+' : String(count);
   };
   const subagentRowTitle = (item: FlowerSubagentPanelItem): string => (
-    trimString(item.title) || trimString(item.taskName) || trimString(item.threadID || item.subagentID) || subagentsCopy().typeLabels.unknown
-  );
-  const subagentDropdownSummary = (): string => (
-    [
-      `${selectedActiveSubagentCount()} ${subagentsCopy().activeLabel.toLowerCase()}`,
-      `${selectedSettledSubagentCount()} ${subagentsCopy().completedLabel.toLowerCase()}`,
-    ].join(' · ')
+    trimString(item.displayName) || trimString(item.title) || trimString(item.taskName) || trimString(item.threadID || item.subagentID) || subagentsCopy().typeLabels.unknown
   );
   const activeSubagentTitle = createMemo(() => {
     const item = activeSubagentItem();
     if (item) return subagentRowTitle(item);
     const summary = subagentDetail()?.summary;
-    return trimString(summary?.title)
-      || trimString(summary?.task_name)
-      || trimString(summary?.thread_id || summary?.subagent_id)
-      || trimString(activeSubagentID())
-      || subagentsCopy().typeLabels.unknown;
+    const rawTitle = trimString(summary?.title) || trimString(summary?.task_name);
+    const roleFallback = subagentTaskNameRoleFallback(summary?.agent_type || activeSubagentItem()?.agentType || '');
+    return rawTitle ? presentSubagentTaskName(rawTitle, roleFallback) : roleFallback;
   });
   const subagentSummaryStatus = createMemo(() => {
     return subagentStatusLabel(subagentDetailActiveStatus());
@@ -6348,6 +6377,59 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const status = subagentDetailModelIOStatus();
     return status ? modelStatusLabel(status.phase) : '';
   });
+  const subagentDropdownGroup = (
+    kind: 'active' | 'completed',
+    label: Accessor<string>,
+    items: Accessor<readonly FlowerSubagentPanelItem[]>,
+  ) => (
+    <section class="flower-subagents-dropdown-group" data-flower-subagent-group={kind} aria-labelledby={`flower-subagents-${kind}-label`}>
+      <div class="flower-subagents-dropdown-group-header">
+        <span id={`flower-subagents-${kind}-label`}>{label()}</span>
+        <span class="flower-subagents-dropdown-group-count">{items().length}</span>
+      </div>
+      <ul class="flower-subagents-dropdown-group-list">
+        <For each={items()}>
+          {(item) => {
+            const title = () => subagentRowTitle(item);
+            const description = () => trimString(item.taskDescription);
+            const elapsed = () => subagentElapsedDuration(item);
+            return (
+              <li class="flower-subagents-dropdown-list-item">
+                <button
+                  type="button"
+                  class={cn(
+                    'flower-subagent-dropdown-row',
+                    `flower-subagent-dropdown-row-${item.status}`,
+                    activeSubagentID() === trimString(item.threadID || item.subagentID) && 'flower-subagent-dropdown-row-active',
+                  )}
+                  data-flower-subagent-row={selectedSubagentItems().findIndex((candidate) => candidate.key === item.key)}
+                  data-flower-subagent-status={item.status}
+                  aria-label={`${title()}. ${subagentStatusLabel(item.status)}. ${subagentsCopy().openThread}`}
+                  title={[title(), description(), subagentsCopy().openThread].filter(Boolean).join('\n')}
+                  onClick={() => void openSubagentDetail(item)}
+                >
+                  <span class="flower-subagent-dropdown-status">{subagentStatusIndicator(item.status)}</span>
+                  <span class="flower-subagent-dropdown-copy">
+                    <span class="flower-subagent-dropdown-name">{title()}</span>
+                    <Show when={description()}>
+                      {(value) => <span class="flower-subagent-dropdown-description">{value()}</span>}
+                    </Show>
+                  </span>
+                  <span class="flower-subagent-dropdown-meta">
+                    <span class="flower-subagent-dropdown-status-label">{subagentStatusLabel(item.status)}</span>
+                    <Show when={elapsed()}>
+                      {(value) => <span class="flower-subagent-dropdown-duration">{value()}</span>}
+                    </Show>
+                    <ChevronRight class="flower-subagent-dropdown-action h-3.5 w-3.5" aria-hidden="true" />
+                  </span>
+                </button>
+              </li>
+            );
+          }}
+        </For>
+      </ul>
+    </section>
+  );
   const subagentDropdown = () => (
     <Show when={subagentDropdownOpen()}>
       <SurfaceFloatingLayer
@@ -6362,6 +6444,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           role="dialog"
           aria-label={subagentsCopy().title}
           aria-modal="false"
+          tabIndex={-1}
+          onKeyDown={handleSubagentDropdownKeyDown}
         >
           <div class="flower-subagents-dropdown-header">
             <div class="flower-subagents-dropdown-title">
@@ -6370,7 +6454,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             </div>
             <span class="flower-subagents-dropdown-count">{selectedSubagentItems().length}</span>
           </div>
-          <div class="flower-subagents-dropdown-summary">{subagentDropdownSummary()}</div>
+          <div class="flower-subagents-dropdown-summary">
+            <div class="flower-subagents-dropdown-metric" data-tone="active">
+              <span class="flower-subagents-dropdown-metric-mark" aria-hidden="true" />
+              <strong>{selectedActiveSubagentCount()}</strong>
+              <span>{subagentsCopy().activeLabel}</span>
+            </div>
+            <div class="flower-subagents-dropdown-metric" data-tone="completed">
+              <span class="flower-subagents-dropdown-metric-mark" aria-hidden="true" />
+              <strong>{selectedSettledSubagentCount()}</strong>
+              <span>{subagentsCopy().completedLabel}</span>
+            </div>
+          </div>
           <Show
             when={selectedSubagentItems().length > 0}
             fallback={(
@@ -6380,37 +6475,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               </div>
             )}
           >
-            <div class="flower-subagents-dropdown-list" role="list">
-              <For each={selectedSubagentItems()}>
-                {(item, index) => (
-                  <button
-                    type="button"
-                    class={cn(
-                      'flower-subagent-dropdown-row',
-                      `flower-subagent-dropdown-row-${item.status}`,
-                      activeSubagentID() === trimString(item.threadID || item.subagentID) && 'flower-subagent-dropdown-row-active',
-                    )}
-                    data-flower-subagent-row={index()}
-                    data-flower-subagent-status={item.status}
-                    title={subagentsCopy().openThread}
-                    onClick={() => void openSubagentDetail(item)}
-                  >
-                    <span class="flower-subagent-dropdown-status">{subagentStatusIndicator(item.status)}</span>
-                    <span class="flower-subagent-dropdown-copy">
-                      <span class="flower-subagent-dropdown-headline">
-                        <span class="flower-subagent-dropdown-name">{subagentRowTitle(item)}</span>
-                        <span class="flower-subagent-dropdown-time">{subagentElapsedMeta(item)}</span>
-                      </span>
-                      <Show when={item.taskDescription}>
-                        {(description) => <span class="flower-subagent-dropdown-description">{description()}</span>}
-                      </Show>
-                    </span>
-                    <span class="flower-subagent-dropdown-action" aria-hidden="true">
-                      <ChevronRight class="h-3.5 w-3.5" />
-                    </span>
-                  </button>
-                )}
-              </For>
+            <div class="flower-subagents-dropdown-list">
+              {subagentDropdownGroup('active', () => subagentsCopy().activeLabel, selectedActiveSubagentItems)}
+              {subagentDropdownGroup('completed', () => subagentsCopy().completedLabel, selectedSettledSubagentItems)}
             </div>
           </Show>
         </div>
@@ -6814,7 +6881,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 <Show when={selectedSubagentItems().length > 0}>
                   <span
                     class="flower-header-icon-badge"
-                    data-running={selectedRunningSubagentCount() > 0 ? 'true' : 'false'}
+                    data-running={selectedRunningSubagentCount() > 0 && !subagentDropdownOpen() ? 'true' : 'false'}
                     aria-hidden="true"
                   >
                     {subagentBadgeText()}

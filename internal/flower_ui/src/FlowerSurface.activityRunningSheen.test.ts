@@ -165,6 +165,8 @@ describe('Flower activity running sheen', () => {
     const headerRule = cssRule(css, '.flower-chat-header');
     const dropdownLayerRule = cssRule(css, '.flower-subagents-dropdown-layer');
     const dropdownRule = cssRule(css, '.flower-subagents-dropdown');
+    const dropdownRowRule = cssRule(css, '.flower-subagent-dropdown-row');
+    const dropdownRowHoverRule = cssRule(css, '.flower-subagent-dropdown-row:hover');
     const indicatorRule = cssRule(css, '.flower-subagent-status-indicator-running');
     const detailGeometryRule = cssRule(css, "[data-floe-geometry-surface='floating-window']:has(> .flower-subagent-detail-window)");
     const detailWindowRule = cssRule(css, '.flower-subagent-detail-window');
@@ -183,6 +185,13 @@ describe('Flower activity running sheen', () => {
     expect(dropdownLayerRule).toContain('z-index: var(--flower-layer-subagent-dropdown)');
     expect(dropdownRule).toContain('background: color-mix(in srgb, var(--flower-subagents-panel)');
     expect(dropdownRule).toContain('box-shadow:');
+    expect(dropdownRule).toContain('border-radius: 0.5rem');
+    expect(dropdownRule).toContain('animation: flower-subagents-dropdown-enter 120ms');
+    expect(dropdownRowRule).toContain('min-height: 3.875rem');
+    expect(dropdownRowHoverRule).not.toContain('transform:');
+    expect(css).not.toContain('flower-running-text-shimmer');
+    expect(css).toContain(".flower-subagents-dropdown-metric[data-tone='completed']");
+    expect(css).toContain('.flower-subagents-dropdown-group-header');
     expect(indicatorRule).toContain('color: color-mix');
     expect(detailGeometryRule).toContain('--flower-subagent-window-shadow-key: rgb(32 42 55 / 24%)');
     expect(detailGeometryRule).toContain('border-radius: 6px');
