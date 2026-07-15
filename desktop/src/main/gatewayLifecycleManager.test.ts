@@ -37,6 +37,7 @@ import type { GatewayRecord } from './gatewayStore';
 import type { GatewaySecretStore } from './gatewayTrust';
 import { DEFAULT_DESKTOP_SSH_RUNTIME_ROOT } from '../shared/desktopSSH';
 import { desktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
+import { RuntimeLifecycleCoordinator, RuntimeLifecycleInProgressError } from './runtimeLifecycleCoordinator';
 
 function memorySecretStore(seed: readonly (readonly [string, string])[] = []): GatewaySecretStore {
   const values = new Map<string, string>(seed);
@@ -94,6 +95,7 @@ function manager(progress: string[] = [], secretStore = memorySecretStore()): Ga
     temp_root: '/tmp/redeven-temp',
     source_runtime_root: '/Applications/Redeven.app/Contents/Resources',
     desktop_owner_id: vi.fn(async () => 'desktop-owner'),
+    lifecycle_coordinator: new RuntimeLifecycleCoordinator(),
     on_progress: (event) => {
       progress.push(event.phase);
     },
@@ -279,6 +281,7 @@ describe('GatewayLifecycleManager', () => {
       temp_root: '/tmp/redeven-temp',
       source_runtime_root: '/Applications/Redeven.app/Contents/Resources',
       desktop_owner_id: vi.fn(async () => 'desktop-owner'),
+      lifecycle_coordinator: new RuntimeLifecycleCoordinator(),
       session_cache: sessionCache,
     });
 
@@ -371,6 +374,36 @@ describe('GatewayLifecycleManager', () => {
     expect(firstSession).toBe(secondSession);
     expect(lifecycleMocks.ensureManagedGatewayServiceReady).toHaveBeenCalledTimes(1);
     expect(lifecycleMocks.startRuntimePlacementBridgeSession).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects a same-intent Gateway request when lifecycle parameters changed', async () => {
+    let releaseGateway: () => void = () => undefined;
+    lifecycleMocks.ensureManagedGatewayServiceReady.mockImplementation(async () => {
+      await new Promise<void>((resolve) => {
+        releaseGateway = resolve;
+      });
+      return '/opt/redeven/gateway/managed/bin/redeven-gateway';
+    });
+    const record = sshGateway();
+    if (record.connection.kind !== 'ssh_host') {
+      throw new Error('Expected an SSH Gateway test fixture.');
+    }
+    const lifecycle = manager();
+    const first = lifecycle.startGateway(record);
+    await vi.waitFor(() => {
+      expect(lifecycleMocks.ensureManagedGatewayServiceReady).toHaveBeenCalledTimes(1);
+    });
+
+    await expect(lifecycle.startGateway({
+      ...record,
+      connection: {
+        ...record.connection,
+        bootstrap_strategy: 'remote_install',
+      },
+    })).rejects.toBeInstanceOf(RuntimeLifecycleInProgressError);
+
+    releaseGateway();
+    await first;
   });
 
   it('requires explicit start policy only when an SSH Gateway service is installed but stopped', async () => {
@@ -514,6 +547,54 @@ describe('GatewayLifecycleManager', () => {
       stateRoot: '/opt/redeven/gateways/gw_bastion/state',
       releaseTag: 'v1.2.3',
     }));
+  });
+
+  it('does not allow start_if_needed or explicit start to restart a Gateway while stop is active', async () => {
+    let releaseStop: () => void = () => undefined;
+    lifecycleMocks.stopManagedGatewayService.mockImplementation(async () => {
+      await new Promise<void>((resolve) => {
+        releaseStop = resolve;
+      });
+    });
+    const record = sshGateway();
+    const lifecycle = manager();
+    const stop = lifecycle.stopGateway(record);
+    await vi.waitFor(() => {
+      expect(lifecycleMocks.stopManagedGatewayService).toHaveBeenCalledTimes(1);
+    });
+
+    await expect(lifecycle.ensureGatewayReady(record, { startPolicy: 'start_if_needed' }))
+      .rejects.toBeInstanceOf(RuntimeLifecycleInProgressError);
+    await expect(lifecycle.startGateway(record))
+      .rejects.toBeInstanceOf(RuntimeLifecycleInProgressError);
+    expect(lifecycleMocks.ensureManagedGatewayServiceReady).not.toHaveBeenCalled();
+
+    releaseStop();
+    await stop;
+  });
+
+  it('rejects stop, restart, and update while a Gateway start transaction is active', async () => {
+    let releaseStart: () => void = () => undefined;
+    lifecycleMocks.ensureManagedGatewayServiceReady.mockImplementation(async () => {
+      await new Promise<void>((resolve) => {
+        releaseStart = resolve;
+      });
+      return '/opt/redeven/gateway/managed/bin/redeven-gateway';
+    });
+    const record = sshGateway();
+    const lifecycle = manager();
+    const start = lifecycle.startGateway(record);
+    await vi.waitFor(() => {
+      expect(lifecycleMocks.ensureManagedGatewayServiceReady).toHaveBeenCalledTimes(1);
+    });
+
+    await expect(lifecycle.stopGateway(record)).rejects.toBeInstanceOf(RuntimeLifecycleInProgressError);
+    await expect(lifecycle.restartGateway(record)).rejects.toBeInstanceOf(RuntimeLifecycleInProgressError);
+    await expect(lifecycle.updateGateway(record)).rejects.toBeInstanceOf(RuntimeLifecycleInProgressError);
+    expect(lifecycleMocks.stopManagedGatewayService).not.toHaveBeenCalled();
+
+    releaseStart();
+    await start;
   });
 
   it('runs managed Gateway deep probe without opening or starting a bridge', async () => {

@@ -22,6 +22,7 @@ import { sanitizeDesktopChildEnvironment } from './desktopProcessEnvironment';
 import {
   parseDesktopRuntimeProcessInventory,
   parseDesktopRuntimeProcessStopResult,
+  runtimeProcessCommandErrorFromOutput,
   type DesktopRuntimeProcessInventory,
 } from './runtimeProcessInventory';
 
@@ -60,9 +61,17 @@ export type StartManagedRuntimeArgs = Readonly<{
   runtimeProcessIntent?: 'start' | 'restart' | 'update';
   beforeRuntimeReplacement?: () => Promise<void>;
   startupSecretsStdin?: string;
+  signal?: AbortSignal;
   onProgress?: (progress: ManagedRuntimeProgress) => void;
   onLog?: (stream: 'stdout' | 'stderr', chunk: string) => void;
 }>;
+
+export class ManagedRuntimeStartupCleanupError extends Error {
+  constructor(message: string, options: ErrorOptions = {}) {
+    super(message, options);
+    this.name = 'ManagedRuntimeStartupCleanupError';
+  }
+}
 
 export type ManagedRuntimeProgressPhase =
   | 'checking_existing_runtime'
@@ -102,8 +111,31 @@ type RecentLogs = {
   stderr: string;
 };
 
-async function delay(ms: number): Promise<void> {
-  await new Promise((resolve) => setTimeout(resolve, ms));
+function runtimeAbortError(signal: AbortSignal): Error {
+  return signal.reason instanceof Error
+    ? signal.reason
+    : new DOMException('Runtime lifecycle operation was canceled.', 'AbortError');
+}
+
+function throwIfRuntimeAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw runtimeAbortError(signal);
+  }
+}
+
+async function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  throwIfRuntimeAborted(signal);
+  await new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', abort);
+      resolve();
+    }, ms);
+    const abort = () => {
+      clearTimeout(timer);
+      reject(runtimeAbortError(signal!));
+    };
+    signal?.addEventListener('abort', abort, { once: true });
+  });
 }
 
 function appendRecentLog(existing: string, chunk: string): string {
@@ -274,18 +306,11 @@ async function runRuntimeProcessCommand(args: Readonly<{
         resolve(stdout);
         return;
       }
-      let message = stderr.trim();
-      try {
-        const parsed = JSON.parse(stdout || '{}') as Readonly<{ error?: Readonly<{ code?: unknown; message?: unknown }> }>;
-        const errorCode = String(parsed.error?.code ?? '').trim();
-        const errorMessage = String(parsed.error?.message ?? '').trim();
-        if (errorMessage) {
-          message = errorCode ? `${errorCode}: ${errorMessage}` : errorMessage;
-        }
-      } catch {
-        // Preserve stderr from older runtimes that do not implement the machine command.
-      }
-      reject(new Error(message || `Runtime process command exited with code ${code ?? 'unknown'}.`));
+      reject(runtimeProcessCommandErrorFromOutput(
+        stdout,
+        stderr,
+        `Runtime process command exited with code ${code ?? 'unknown'}.`,
+      ));
     });
   });
 }
@@ -385,9 +410,11 @@ async function waitForLaunchReport(
   runtimeAttachTimeoutMs: number,
   logs: RecentLogs,
   getSpawnError: () => Error | null,
+  signal?: AbortSignal,
 ): Promise<LaunchReport> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
+    throwIfRuntimeAborted(signal);
     const spawnError = getSpawnError();
     if (spawnError) {
       throw readinessFailure(`Failed to start redeven: ${spawnError.message}`, logs);
@@ -453,7 +480,7 @@ async function waitForLaunchReport(
       }
       throw readinessFailure('Timed out waiting for redeven desktop launch report.', logs);
     }
-    await delay(STARTUP_REPORT_POLL_MS);
+    await delay(STARTUP_REPORT_POLL_MS, signal);
   }
 }
 
@@ -462,13 +489,56 @@ async function stopChildProcess(child: SpawnedRuntimeProcess, timeoutMs: number)
     return;
   }
 
+  const exitResult = new Promise<'exited' | 'timeout'>((resolve) => {
+    const onExit = () => {
+      clearTimeout(timer);
+      resolve('exited');
+    };
+    const timer = setTimeout(() => {
+      child.removeListener('exit', onExit);
+      resolve('timeout');
+    }, timeoutMs);
+    child.once('exit', onExit);
+  });
   child.kill('SIGTERM');
-  const exitPromise = once(child, 'exit').then(() => undefined);
-  const timeoutPromise = delay(timeoutMs).then(() => 'timeout' as const);
-  const result = await Promise.race([exitPromise, timeoutPromise]);
+  const result = await exitResult;
   if (result === 'timeout' && child.exitCode === null) {
+    const forcedExit = once(child, 'exit').then(() => undefined);
     child.kill('SIGKILL');
-    await exitPromise;
+    await forcedExit;
+  }
+}
+
+async function cleanupManagedRuntimeStartup(args: Readonly<{
+  child: SpawnedRuntimeProcess;
+  reportDir: string;
+  stopTimeoutMs: number;
+  reconcileInventory?: (() => Promise<void>) | null;
+  cause?: unknown;
+}>): Promise<void> {
+  const cleanupErrors: Error[] = [];
+  try {
+    await stopChildProcess(args.child, args.stopTimeoutMs);
+  } catch (error) {
+    cleanupErrors.push(error instanceof Error ? error : new Error(String(error)));
+  }
+  if (args.reconcileInventory) {
+    try {
+      await args.reconcileInventory();
+    } catch (error) {
+      cleanupErrors.push(error instanceof Error ? error : new Error(String(error)));
+    }
+  }
+  try {
+    await fs.rm(args.reportDir, { recursive: true, force: true });
+  } catch (error) {
+    cleanupErrors.push(error instanceof Error ? error : new Error(String(error)));
+  }
+  if (cleanupErrors.length > 0) {
+    throw new ManagedRuntimeStartupCleanupError(
+      `Desktop could not clean up the local runtime startup: ${cleanupErrors.map((item) => item.message).join('; ')}`,
+      { cause: args.cause },
+    );
   }
 }
 
@@ -586,6 +656,7 @@ async function waitForStableRuntimeReadiness(args: Readonly<{
   child: SpawnedRuntimeProcess | null;
   logs: RecentLogs;
   getSpawnError?: () => Error | null;
+  signal?: AbortSignal;
 }>): Promise<StartupReport> {
   const openTimeoutMs = Math.max(0, Math.floor(args.openTimeoutMs));
   const stabilityWindowMs = Math.max(0, Math.floor(args.stabilityWindowMs));
@@ -595,6 +666,7 @@ async function waitForStableRuntimeReadiness(args: Readonly<{
   let latestStartup = args.startup;
 
   for (;;) {
+    throwIfRuntimeAborted(args.signal);
     const spawnError = args.getSpawnError?.() ?? null;
     if (spawnError) {
       throw readinessFailure(`Redeven runtime failed during startup readiness checks: ${spawnError.message}`, args.logs);
@@ -620,7 +692,7 @@ async function waitForStableRuntimeReadiness(args: Readonly<{
       if (latestStartup.runtime_service?.open_readiness?.state === 'blocked' || now >= openDeadline) {
         throw openReadinessFailure;
       }
-      await delay(pollIntervalMs);
+      await delay(pollIntervalMs, args.signal);
       continue;
     }
 
@@ -629,7 +701,7 @@ async function waitForStableRuntimeReadiness(args: Readonly<{
       return latestStartup;
     }
 
-    await delay(pollIntervalMs);
+    await delay(pollIntervalMs, args.signal);
   }
 }
 
@@ -785,6 +857,7 @@ async function writeStartupSecretsToStdin(child: SpawnedRuntimeProcess, envelope
 }
 
 export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promise<ManagedRuntimeLaunch> {
+  throwIfRuntimeAborted(args.signal);
   const mergedEnv = sanitizeDesktopChildEnvironment({
     ...process.env,
     ...args.env,
@@ -813,6 +886,7 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
   );
   let observedInventory: DesktopRuntimeProcessInventory | null = null;
   if (stateRoot && desktopOwnerID) {
+    throwIfRuntimeAborted(args.signal);
     emitManagedRuntimeProgress(
       args.onProgress,
       'discovering_runtime_instances',
@@ -842,6 +916,7 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
     }
     if (runtimeProcessIntent !== 'start') {
       await args.beforeRuntimeReplacement?.();
+      throwIfRuntimeAborted(args.signal);
     }
     if (runtimeProcessIntent !== 'start' && observedInventory.instances.length > 0) {
       emitManagedRuntimeProgress(
@@ -872,6 +947,7 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
     env: mergedEnv,
     timeoutMs: runtimeAttachTimeoutMs,
   });
+  throwIfRuntimeAborted(args.signal);
   if (existingRuntime) {
     assertRuntimePIDAlive(existingRuntime, { stdout: '', stderr: '' });
     const attachPolicy = managedRuntimeAttachPolicy(existingRuntime, {
@@ -961,20 +1037,19 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
   });
 
   const startupSecretsStdin = String(args.startupSecretsStdin ?? '');
-  if (startupSecretsStdin !== '') {
-    try {
-      await writeStartupSecretsToStdin(child, startupSecretsStdin);
-    } catch (error) {
-      await stopChildProcess(child, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS).catch(() => undefined);
-      await fs.rm(reportDir, { recursive: true, force: true }).catch(() => undefined);
-      const message = error instanceof Error ? error.message : String(error);
-      throw readinessFailure(`Failed to send redeven Desktop startup secrets: ${message}`, recentLogs);
-    }
-  } else {
-    child.stdin.end();
-  }
-
   try {
+    throwIfRuntimeAborted(args.signal);
+    if (startupSecretsStdin !== '') {
+      try {
+        await writeStartupSecretsToStdin(child, startupSecretsStdin);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw readinessFailure(`Failed to send redeven Desktop startup secrets: ${message}`, recentLogs);
+      }
+    } else {
+      child.stdin.end();
+    }
+
     emitManagedRuntimeProgress(
       args.onProgress,
       'waiting_for_readiness',
@@ -991,11 +1066,16 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
       runtimeAttachTimeoutMs,
       recentLogs,
       () => spawnError,
+      args.signal,
     );
 
     if (launchReport.status === 'blocked') {
-      await stopChildProcess(child, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS).catch(() => undefined);
-      await fs.rm(reportDir, { recursive: true, force: true }).catch(() => undefined);
+      await cleanupManagedRuntimeStartup({
+        child,
+        reportDir,
+        stopTimeoutMs: args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS,
+        reconcileInventory: inventoryStop,
+      });
       return {
         kind: 'blocked',
         blocked: launchReport,
@@ -1005,8 +1085,11 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
 
     const startup = launchReport.startup;
     if (launchReport.status === 'attached') {
-      await stopChildProcess(child, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS).catch(() => undefined);
-      await fs.rm(reportDir, { recursive: true, force: true }).catch(() => undefined);
+      await cleanupManagedRuntimeStartup({
+        child,
+        reportDir,
+        stopTimeoutMs: args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS,
+      });
       const attachedStartup = await requireAttachableRuntimeReadiness({
         executablePath: args.executablePath,
         stateRoot,
@@ -1073,7 +1156,11 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
           recentLogs,
         );
       }
-      await fs.rm(reportDir, { recursive: true, force: true }).catch(() => undefined);
+      await cleanupManagedRuntimeStartup({
+        child,
+        reportDir,
+        stopTimeoutMs: args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS,
+      });
       assertRuntimePIDAlive(attachedStartup, recentLogs);
       const attachPolicy = managedRuntimeAttachPolicy(attachedStartup, {
         desktopOwnerID: args.desktopOwnerID,
@@ -1131,6 +1218,7 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
       child,
       logs: recentLogs,
       getSpawnError: () => spawnError,
+      signal: args.signal,
     });
     await verifyManagedLocalRuntimeProcessIdentity({
       executablePath: args.executablePath,
@@ -1156,20 +1244,26 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
         reportDir,
         reportFile,
         attached: false,
-        stop: async () => {
-          if (inventoryStop) {
-            await inventoryStop();
-          } else {
-            await stopChildProcess(child, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS);
-          }
-          await fs.rm(reportDir, { recursive: true, force: true });
-        },
+        stop: () => cleanupManagedRuntimeStartup({
+          child,
+          reportDir,
+          stopTimeoutMs: args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS,
+          reconcileInventory: inventoryStop,
+        }),
       },
       spawned: true,
     };
   } catch (error) {
-    await stopChildProcess(child, args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS).catch(() => undefined);
-    await fs.rm(reportDir, { recursive: true, force: true }).catch(() => undefined);
+    if (error instanceof ManagedRuntimeStartupCleanupError) {
+      throw error;
+    }
+    await cleanupManagedRuntimeStartup({
+      child,
+      reportDir,
+      stopTimeoutMs: args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS,
+      reconcileInventory: inventoryStop,
+      cause: error,
+    });
     throw error;
   }
 }

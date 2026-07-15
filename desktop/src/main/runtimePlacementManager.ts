@@ -30,6 +30,7 @@ import { parseLaunchReport } from './launchReport';
 import {
   parseDesktopRuntimeProcessInventory,
   parseDesktopRuntimeProcessStopResult,
+  runtimeProcessCommandErrorFromOutput,
   type DesktopRuntimeProcessInventory,
   type DesktopRuntimeProcessStopResult,
 } from './runtimeProcessInventory';
@@ -172,23 +173,6 @@ function parseContainerRuntimeProcessCommandOutput(
   };
 }
 
-function runtimeProcessCommandErrorMessage(output: ContainerRuntimeProcessCommandOutput, fallback: string): string {
-  const raw = compact(output.stdout);
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw) as Readonly<{ error?: Readonly<{ code?: unknown; message?: unknown }> }>;
-      const code = compact(parsed.error?.code);
-      const message = compact(parsed.error?.message);
-      if (message) {
-        return code ? `${code}: ${message}` : message;
-      }
-    } catch {
-      // Older runtimes print CLI help instead of the versioned error envelope.
-    }
-  }
-  return compact(output.stderr) || fallback;
-}
-
 function containerRuntimeProcessCommandNeedsHelper(output: ContainerRuntimeProcessCommandOutput): boolean {
   if (output.exitCode === 127) {
     return true;
@@ -233,10 +217,11 @@ async function runContainerRuntimeProcessCommand(
     return installedOutput.stdout;
   }
   if (!containerRuntimeProcessCommandNeedsHelper(installedOutput)) {
-    throw new Error(runtimeProcessCommandErrorMessage(
-      installedOutput,
+    throw runtimeProcessCommandErrorFromOutput(
+      installedOutput.stdout,
+      installedOutput.stderr,
       `Desktop could not ${operation === 'inventory' ? 'inspect' : 'stop'} the container runtime processes.`,
-    ));
+    );
   }
 
   let platform = args.platform;
@@ -267,10 +252,11 @@ async function runContainerRuntimeProcessCommand(
   });
   const helperOutput = parseContainerRuntimeProcessCommandOutput(helperResult);
   if (helperOutput.exitCode !== 0) {
-    throw new Error(runtimeProcessCommandErrorMessage(
-      helperOutput,
+    throw runtimeProcessCommandErrorFromOutput(
+      helperOutput.stdout,
+      helperOutput.stderr,
       `Desktop runtime helper could not ${operation === 'inventory' ? 'inspect' : 'stop'} the container runtime processes.`,
-    ));
+    );
   }
   return helperOutput.stdout;
 }

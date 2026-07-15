@@ -51,8 +51,36 @@ export type DesktopRuntimeProcessStopResult = Readonly<{
   stopped?: readonly DesktopRuntimeProcessInstance[];
 }>;
 
+export class RuntimeProcessCommandError extends Error {
+  constructor(readonly code: string, message: string) {
+    super(message);
+    this.name = 'RuntimeProcessCommandError';
+  }
+}
+
 function compact(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+export function runtimeProcessCommandErrorFromOutput(
+  stdout: unknown,
+  stderr: unknown,
+  fallback: string,
+): Error {
+  const raw = compact(stdout);
+  if (raw !== '') {
+    try {
+      const parsed = JSON.parse(raw) as Readonly<{ error?: Readonly<{ code?: unknown; message?: unknown }> }>;
+      const code = compact(parsed.error?.code);
+      const message = compact(parsed.error?.message);
+      if (message !== '') {
+        return new RuntimeProcessCommandError(code || 'runtime_process_command_failed', message);
+      }
+    } catch {
+      // Older runtimes may print CLI help instead of the machine error envelope.
+    }
+  }
+  return new Error(compact(stderr) || fallback);
 }
 
 function nonNegativeInteger(value: unknown): number {

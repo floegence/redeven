@@ -98,6 +98,13 @@ export function launcherActionFailurePresentation(
     };
   }
   switch (failure.code) {
+    case 'runtime_lifecycle_in_progress':
+      return {
+        message: i18n.t('toast.runtimeLifecycleInProgress'),
+        tone: 'info',
+        refresh_snapshot: refreshSnapshot,
+        delivery,
+      };
     case 'session_stale':
       return {
         message: i18n.t('toast.sessionStale'),

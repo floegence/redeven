@@ -85,6 +85,8 @@ export type DesktopShellRuntimeActionRequest = Readonly<{
 export type DesktopShellRuntimeActionResponse = Readonly<{
   ok: boolean;
   started: boolean;
+  code?: 'runtime_lifecycle_in_progress' | 'runtime_lifecycle_conflict';
+  operation_key?: string;
   message?: string;
   failure?: DesktopOperationFailurePresentation;
 }>;
@@ -157,9 +159,15 @@ export function normalizeDesktopShellRuntimeActionResponse(value: unknown): Desk
   const candidate = value as Partial<DesktopShellRuntimeActionResponse>;
   const failure = normalizeDesktopOperationFailurePresentation(candidate.failure);
   const message = failure?.summary || String(candidate.message ?? '').trim();
+  const code = candidate.code === 'runtime_lifecycle_in_progress' || candidate.code === 'runtime_lifecycle_conflict'
+    ? candidate.code
+    : undefined;
+  const operationKey = String(candidate.operation_key ?? '').trim() || undefined;
   return {
     ok: candidate.ok === true,
     started: candidate.started === true,
+    ...(code ? { code } : {}),
+    ...(operationKey ? { operation_key: operationKey } : {}),
     message: message || undefined,
     ...(failure ? { failure } : {}),
   };

@@ -163,6 +163,8 @@ export type DesktopLauncherActionFailureCode =
   | 'environment_status_stale'
   | 'runtime_not_started'
   | 'runtime_not_ready'
+  | 'runtime_lifecycle_in_progress'
+  | 'runtime_lifecycle_conflict'
   | 'control_plane_missing'
   | 'control_plane_environment_missing'
   | 'provider_environment_removed'

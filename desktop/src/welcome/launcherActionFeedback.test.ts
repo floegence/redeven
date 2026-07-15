@@ -35,6 +35,22 @@ describe('launcherActionFeedback', () => {
     });
   });
 
+  it('turns lifecycle ownership collisions into an informational progress handoff', () => {
+    expect(launcherActionFailurePresentation(i18n, {
+      ok: false,
+      code: 'runtime_lifecycle_in_progress',
+      scope: 'environment',
+      message: 'raw lifecycle conflict',
+      operation_key: 'local:host:local',
+      should_refresh_snapshot: true,
+    })).toEqual({
+      message: 'Another Runtime lifecycle operation is already in progress.',
+      tone: 'info',
+      refresh_snapshot: true,
+      delivery: 'toast',
+    });
+  });
+
   it('keeps provider and control-plane failures toast-oriented', () => {
     expect(launcherActionFailurePresentation(i18n, {
       ok: false,

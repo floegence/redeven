@@ -44,4 +44,24 @@ describe('operationFailureI18n', () => {
     expect(localizedOperationFailureDetail(i18n, failure)).toContain('未能在就绪检查截止时间内完成健康检查');
     expect(localizedOperationFailureRecoveryHint(i18n, failure)).toBe('确认远程运行时可以正常响应，然后重新打开该环境。');
   });
+
+  it('localizes lifecycle conflicts without exposing raw process inventory errors', () => {
+    const failure: DesktopOperationFailurePresentation = {
+      code: 'runtime_lifecycle_conflict',
+      severity: 'error',
+      title: 'Runtime Changed During Operation',
+      summary: 'raw summary',
+      summary_key: 'progress.runtimeLifecycleConflictSummary',
+      detail: 'runtime_inventory_changed: pid changed',
+      detail_key: 'progress.runtimeLifecycleConflictDetail',
+      recovery_hint: 'raw recovery',
+      recovery_hint_key: 'progress.runtimeLifecycleConflictRecoveryHint',
+    };
+    const i18n = createDesktopI18n('zh-CN');
+
+    expect(localizedOperationFailureTitle(i18n, failure)).toBe('操作期间运行时发生变化');
+    expect(localizedOperationFailureSummary(i18n, failure)).toContain('另一个生命周期控制方');
+    expect(localizedOperationFailureDetail(i18n, failure)).not.toContain('pid changed');
+    expect(localizedOperationFailureRecoveryHint(i18n, failure)).toContain('刷新运行时状态');
+  });
 });

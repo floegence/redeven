@@ -21,6 +21,7 @@ import {
 import {
   parseDesktopRuntimeProcessInventory,
   parseDesktopRuntimeProcessStopResult,
+  runtimeProcessCommandErrorFromOutput,
   type DesktopRuntimeProcessInventory,
   type DesktopRuntimeProcessStopResult,
 } from './runtimeProcessInventory';
@@ -1388,23 +1389,6 @@ export async function probeManagedSSHRuntimeStatus(
   }
 }
 
-function runtimeProcessCommandFailureMessage(result: SSHCommandResult, fallback: string): string {
-  const raw = compact(result.stdout);
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw) as Readonly<{ error?: Readonly<{ code?: unknown; message?: unknown }> }>;
-      const code = compact(parsed.error?.code);
-      const message = compact(parsed.error?.message);
-      if (message) {
-        return code ? `${code}: ${message}` : message;
-      }
-    } catch {
-      // The command may be an older runtime that printed CLI help instead of JSON.
-    }
-  }
-  return compact(result.stderr) || fallback;
-}
-
 function runtimeProcessCommandNeedsUploadedHelper(result: SSHCommandResult): boolean {
   if (result.exit_code === 127) {
     return true;
@@ -1483,10 +1467,11 @@ async function runManagedSSHRuntimeProcessCommand(
       return installedResult.stdout;
     }
     if (!runtimeProcessCommandNeedsUploadedHelper(installedResult)) {
-      throw new Error(runtimeProcessCommandFailureMessage(
-        installedResult,
+      throw runtimeProcessCommandErrorFromOutput(
+        installedResult.stdout,
+        installedResult.stderr,
         `Desktop could not ${operation === 'inventory' ? 'inspect' : 'stop'} the SSH runtime processes.`,
-      ));
+      );
     }
 
     if (compact(args.preparedHelperBinaryPath) !== '') {
@@ -1513,10 +1498,11 @@ async function runManagedSSHRuntimeProcessCommand(
         args.signal,
       );
       if (preparedHelperResult.exit_code !== 0) {
-        throw new Error(runtimeProcessCommandFailureMessage(
-          preparedHelperResult,
+        throw runtimeProcessCommandErrorFromOutput(
+          preparedHelperResult.stdout,
+          preparedHelperResult.stderr,
           `Prepared Desktop runtime helper could not ${operation === 'inventory' ? 'inspect' : 'stop'} the SSH runtime processes.`,
-        ));
+        );
       }
       return preparedHelperResult.stdout;
     }
@@ -1536,7 +1522,11 @@ async function runManagedSSHRuntimeProcessCommand(
       args.signal,
     );
     if (platformResult.exit_code !== 0) {
-      throw new Error(runtimeProcessCommandFailureMessage(platformResult, 'Desktop could not detect the SSH host platform for runtime reconciliation.'));
+      throw runtimeProcessCommandErrorFromOutput(
+        platformResult.stdout,
+        platformResult.stderr,
+        'Desktop could not detect the SSH host platform for runtime reconciliation.',
+      );
     }
     const platformLines = platformResult.stdout.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean);
     if (platformLines.length < 2) {
@@ -1574,10 +1564,11 @@ async function runManagedSSHRuntimeProcessCommand(
       args.signal,
     );
     if (helperResult.exit_code !== 0) {
-      throw new Error(runtimeProcessCommandFailureMessage(
-        helperResult,
+      throw runtimeProcessCommandErrorFromOutput(
+        helperResult.stdout,
+        helperResult.stderr,
         `Desktop runtime helper could not ${operation === 'inventory' ? 'inspect' : 'stop'} the SSH runtime processes.`,
-      ));
+      );
     }
     return helperResult.stdout;
   } finally {

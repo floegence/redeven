@@ -1060,7 +1060,7 @@ describe('launcherBusyState', () => {
     });
   });
 
-  it('selects only active explicit Flower warmup start progress', () => {
+  it('selects active Flower warmup start, restart, and update progress', () => {
     const warmupStart = localRuntimeLifecycleActionProgress({
       status: 'running',
       action: 'start_environment_runtime',
@@ -1092,11 +1092,20 @@ describe('launcherBusyState', () => {
       title: 'Restarting runtime',
       presentationContext: 'flower_warmup',
     });
+    const updateWarmup = localRuntimeLifecycleActionProgress({
+      status: 'running',
+      action: 'update_environment_runtime',
+      operation: 'update',
+      phase: 'starting_runtime_process',
+      title: 'Updating runtime',
+      presentationContext: 'flower_warmup',
+    });
 
     expect(selectedFlowerWarmupProgress(warmupStart)).toBe(warmupStart);
     expect(selectedFlowerWarmupProgress(plainStart)).toBeNull();
     expect(selectedFlowerWarmupProgress(terminalWarmup)).toBeNull();
-    expect(selectedFlowerWarmupProgress(restartWarmup)).toBeNull();
+    expect(selectedFlowerWarmupProgress(restartWarmup)).toBe(restartWarmup);
+    expect(selectedFlowerWarmupProgress(updateWarmup)).toBe(updateWarmup);
     expect(selectedFlowerWarmupProgress(null)).toBeNull();
   });
 

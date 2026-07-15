@@ -14,6 +14,8 @@ The Gateway CLI exposes `serve`, `desktop-bridge`, `service-status`, `service-st
 
 The Gateway HTTP JSON protocol source contract is `spec/openapi/gateway-v1.yaml`. That OpenAPI file describes the `/gateway/v1/*` wire surface, request/response envelopes, schema variants, auth headers, the managed bridge token boundary, and the `redeven-gateway-v1` protocol version. The contract is checked by `internal/runtimegateway/protocol/openapi_contract_test.go` and by `scripts/check_gateway_protocol_contract.sh`, so Go service routes, Desktop client routes, enums, envelope shape, and protocol literals cannot drift silently.
 
+Desktop coordinates managed Gateway Start, Stop, Restart, Update, background sync, and `start_if_needed` through the same physical-target lifecycle coordinator used for Env Runtime placement. Gateway retains its own service commands and does not enter Runtime Process Inventory, but lifecycle ownership is shared: identical starts coalesce, incompatible actions fail with the active operation key, and automatic ensure waits for Start, Restart, or Update while refusing to run through Stop. Gateway launcher progress uses the physical service target id for every lifecycle action rather than parallel action-suffixed keys. Bridge attachment has a separate same-target coalescing task because it is an attachment resource, not lifecycle authority.
+
 For URL environment profiles, each open-session creates an isolated local-direct listener and returns a signed artifact URL rooted at a random profile access path on that listener. The main Gateway protocol host does not proxy profile traffic, and open-session does not install browser cookies. Requests must either use the random artifact path or prove a same-origin navigation chain from it, so probing the listener port without the artifact URL cannot reach the target. The listener lifetime is capped by the signed artifact expiry and it is also closed on profile update/delete or Gateway server shutdown. Target-site cookies are captured in a per-open-session server-side cookie jar, browser-supplied cookies and authorization headers are stripped before proxying, target `Set-Cookie` and service-worker scope headers are removed from browser responses.
 
 # Boundaries
@@ -52,3 +54,7 @@ Gateway does not host plugin management APIs. The `/gateway/v1/*` protocol remai
 [22] redeven:spec/openapi/gateway-v1.yaml:111 - Gateway open-session is an environment artifact endpoint, not a plugin grant endpoint.
 [23] redeven:spec/openapi/gateway-v1.yaml:140 - Gateway profile management lives under Gateway environment profile routes.
 [24] redeven:spec/openapi/gateway-v1.yaml:202 - Gateway lifecycle requests are environment lifecycle operations.
+[25] redeven:desktop/src/main/gatewayLifecycleManager.ts:336 - Gateway automatic ensure waits for ready-producing lifecycle work and rejects active Stop.
+[26] redeven:desktop/src/main/gatewayLifecycleManager.ts:384 - Managed Gateway Start, Stop, Restart, and Update enter one coordinator transaction.
+[27] redeven:desktop/src/main/gatewayLifecycleManager.ts:470 - Bridge attachment coalescing remains separate from lifecycle ownership.
+[28] redeven:desktop/src/main/main.ts:6304 - Gateway foreground lifecycle progress uses the physical target id as its operation key.

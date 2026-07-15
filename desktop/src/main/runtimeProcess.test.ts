@@ -7,6 +7,10 @@ import { describe, expect, it } from 'vitest';
 import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
 import { DesktopOperationFailureError } from './desktopOperationFailure';
 import { launchStartedFreshManagedRuntime, startManagedRuntime } from './runtimeProcess';
+import {
+  RuntimeProcessCommandError,
+  runtimeProcessCommandErrorFromOutput,
+} from './runtimeProcessInventory';
 import { parseStartupReport } from './startup';
 
 function runtimeStatusPayloadForEpoch(
@@ -68,6 +72,21 @@ function runtimeStatusPayload(
 async function writeJSON(file: string, value: unknown): Promise<void> {
   await fs.mkdir(path.dirname(file), { recursive: true });
   await fs.writeFile(file, `${JSON.stringify(value, null, 2)}\n`, 'utf8');
+}
+
+async function waitForFile(file: string): Promise<void> {
+  const deadline = Date.now() + 5_000;
+  for (;;) {
+    try {
+      await fs.stat(file);
+      return;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT' || Date.now() >= deadline) {
+        throw error;
+      }
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
 }
 
 function processInventoryPayload(input: Readonly<{
@@ -268,7 +287,11 @@ server.listen(0, '127.0.0.1', () => {
       summary: { current_owned: 1, legacy_owned: 0, legacy_ownerless: 0, foreign_owner: 0, ambiguous: 0, stoppable: 1, blocking: 0 },
     });
   }
-  writeJSON(reportFile, payload);
+  if (mode === 'delayed_report') {
+    setTimeout(() => writeJSON(reportFile, payload), 5_000);
+  } else {
+    writeJSON(reportFile, payload);
+  }
 });
 
 function stopRuntime() {
@@ -282,6 +305,26 @@ process.on('SIGTERM', stopRuntime);
 }
 
 describe('runtimeProcess', () => {
+  it('preserves structured runtime inventory command conflicts', () => {
+    const error = runtimeProcessCommandErrorFromOutput(
+      JSON.stringify({
+        schema_version: 1,
+        error: {
+          code: 'runtime_inventory_changed',
+          message: 'runtime process inventory changed before stop',
+        },
+      }),
+      '',
+      'fallback',
+    );
+
+    expect(error).toBeInstanceOf(RuntimeProcessCommandError);
+    expect(error).toMatchObject({
+      code: 'runtime_inventory_changed',
+      message: 'runtime process inventory changed before stop',
+    });
+  });
+
   it('parses the startup report payload returned by the bundled runtime', () => {
     expect(parseStartupReport(JSON.stringify({
       local_ui_url: 'http://127.0.0.1:43123/',
@@ -629,6 +672,45 @@ describe('runtimeProcess', () => {
         'runtime_ready',
       ]);
       await launch.managedRuntime.stop();
+    } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('cancels a spawned local runtime and verifies empty inventory before settling', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-'));
+    const stateRoot = path.join(dir, 'state');
+    const inventoryFile = path.join(dir, 'inventory.json');
+    const statusFile = path.join(dir, 'status.json');
+    const executablePath = await writeFakeRuntimeExecutable(dir);
+    const controller = new AbortController();
+    try {
+      const launch = startManagedRuntime({
+        executablePath,
+        runtimeArgs: ['--state-root', stateRoot],
+        stateRoot,
+        desktopOwnerID: 'desktop-owner-1',
+        env: {
+          REDEVEN_DESKTOP_OWNER_ID: 'desktop-owner-1',
+          REDEVEN_TEST_RUNTIME_MODE: 'delayed_report',
+          REDEVEN_TEST_STATUS_FILE: statusFile,
+          REDEVEN_TEST_PROCESS_INVENTORY_FILE: inventoryFile,
+        },
+        tempRoot: dir,
+        signal: controller.signal,
+      });
+      await waitForFile(inventoryFile);
+      const inventory = JSON.parse(await fs.readFile(inventoryFile, 'utf8')) as { instances?: Array<{ pid?: number }> };
+      const pid = Number(inventory.instances?.[0]?.pid ?? 0);
+      expect(pid).toBeGreaterThan(0);
+
+      controller.abort(new DOMException('User canceled startup.', 'AbortError'));
+
+      await expect(launch).rejects.toMatchObject({ name: 'AbortError' });
+      await expect(fs.stat(inventoryFile)).rejects.toMatchObject({ code: 'ENOENT' });
+      await expect(fs.stat(statusFile)).rejects.toMatchObject({ code: 'ENOENT' });
+      expect((await fs.readdir(dir)).filter((entry) => entry.startsWith('redeven-desktop-'))).toEqual([]);
+      expect(() => process.kill(pid, 0)).toThrow();
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }
