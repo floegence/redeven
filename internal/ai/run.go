@@ -4498,7 +4498,9 @@ func (r *run) terminalProcessForTool(processID string) (*terminalProcess, error)
 		strings.TrimSpace(snapshot.ThreadID) != strings.TrimSpace(r.threadID) {
 		return nil, errors.New("terminal process not found")
 	}
-	_ = proc.publishDone()
+	if err := proc.publishDone(); err != nil {
+		return nil, err
+	}
 	return proc, nil
 }
 
@@ -4513,7 +4515,9 @@ func (r *run) toolTerminalRead(processID string, afterSeq int64, waitMS int64, m
 		WaitMS:    waitMS,
 		MaxBytes:  maxBytes,
 	})
-	_ = proc.publishDone()
+	if err := proc.publishDone(); err != nil {
+		return nil, err
+	}
 	return terminalProcessResultPayload(snapshot), nil
 }
 
@@ -4532,7 +4536,9 @@ func (r *run) toolTerminalWrite(processID string, input string) (any, error) {
 	if err != nil {
 		return terminalProcessResultPayload(snapshot), err
 	}
-	_ = proc.publishDone()
+	if err := proc.publishDone(); err != nil {
+		return terminalProcessResultPayload(snapshot), err
+	}
 	payload := terminalProcessResultPayload(snapshot)
 	payload["input_bytes"] = len(input)
 	return payload, nil
@@ -4547,7 +4553,9 @@ func (r *run) toolTerminalTerminate(processID string) (any, error) {
 	if err != nil {
 		return terminalProcessResultPayload(snapshot), err
 	}
-	_ = proc.publishDone()
+	if err := proc.publishDone(); err != nil {
+		return terminalProcessResultPayload(snapshot), err
+	}
 	payload := terminalProcessResultPayload(snapshot)
 	payload["terminated"] = true
 	return payload, nil

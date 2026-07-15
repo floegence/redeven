@@ -5236,7 +5236,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const terminal = block.terminal;
     const [commandExpanded, setCommandExpanded] = createSignal(false);
     const [commandCopied, setCommandCopied] = createSignal(false);
-    const [liveStatus, setLiveStatus] = createSignal<FlowerActivityStatus | ''>('');
     const [liveLastSeq, setLiveLastSeq] = createSignal<number | undefined>(terminal.last_seq);
     const [liveError, setLiveError] = createSignal('');
     const outputViewport = createTerminalOutputViewportController();
@@ -5273,7 +5272,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       processID() !== '' &&
       (terminal.status === 'running' || terminal.status === 'pending')
     );
-    const displayStatus = () => liveStatus() || terminal.status;
+    const displayStatus = () => terminal.status;
     const visibleOutput = () => terminalVisibleOutputStore.merge(
       terminalIdentity(),
       liveOutput(),
@@ -5312,18 +5311,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
     const applyTerminalSnapshot = (snapshot: FlowerTerminalProcessSnapshot) => {
       const output = terminalSnapshotOutput(snapshot);
-      const status = normalizeTerminalSnapshotStatus(snapshot.status) || displayStatus();
       const mergedOutput = terminalVisibleOutputStore.merge(
         terminalIdentity(),
         liveOutput(),
         output,
-        status,
+        displayStatus(),
       );
       if (mergedOutput !== liveOutput()) {
         setLiveOutput(mergedOutput);
-      }
-      if (status) {
-        setLiveStatus(status);
       }
       if (typeof snapshot.last_seq === 'number' && Number.isFinite(snapshot.last_seq)) {
         setLiveLastSeq(Math.max(0, Math.floor(snapshot.last_seq)));
@@ -5347,8 +5342,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           if (disposed) return;
           setLiveError('');
           applyTerminalSnapshot(snapshot);
-          const status = normalizeTerminalSnapshotStatus(snapshot.status);
-          if (status && status !== 'running' && status !== 'pending') return;
+          const processStatus = normalizeTerminalSnapshotStatus(snapshot.status);
+          if (processStatus && processStatus !== 'running' && processStatus !== 'pending') return;
         } catch (error) {
           if (!disposed) setLiveError(getErrorMessage(error));
         }

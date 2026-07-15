@@ -4225,7 +4225,9 @@ html.dark .flower-component-shell {
 }
 
 .flower-activity-terminal-output {
-  max-height: 16rem;
+  /* Five terminal line boxes plus the block's vertical padding. */
+  box-sizing: border-box;
+  max-height: 6.640625rem;
   min-width: 0;
   overflow: auto;
   background: #0d1117;

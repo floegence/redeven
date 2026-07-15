@@ -1044,7 +1044,7 @@ func TestApplyFloretPendingToolSettlementProjectionDoesNotPersistAssistantMessag
 	}
 	timeline.Items[0].Status = observation.ActivityStatusCanceled
 	timeline.Items[0].Severity = observation.ActivitySeverityWarning
-	err = svc.applyFloretPendingToolSettlementProjection(ctx, meta.EndpointID, thread.ThreadID, runID, messageID, flruntime.ThreadTurnProjection{
+	settledProjection := flruntime.ThreadTurnProjection{
 		ThreadID: flruntime.ThreadID(thread.ThreadID),
 		TurnID:   flruntime.TurnID(messageID),
 		RunID:    flruntime.RunID(runID),
@@ -1053,7 +1053,24 @@ func TestApplyFloretPendingToolSettlementProjectionDoesNotPersistAssistantMessag
 			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
 			ActivityTimeline: timeline,
 		}},
-	})
+	}
+	failedCtx, cancel := context.WithCancel(ctx)
+	cancel()
+	err = svc.applyFloretPendingToolSettlementProjection(failedCtx, meta.EndpointID, thread.ThreadID, runID, messageID, settledProjection)
+	if err == nil {
+		t.Fatalf("apply settlement projection succeeded with canceled canonical build context")
+	}
+	failedResp, listErr := svc.ListFlowerThreadLiveEvents(ctx, meta, thread.ThreadID, 0, 50)
+	if listErr != nil {
+		t.Fatalf("ListFlowerThreadLiveEvents after failed publication: %v", listErr)
+	}
+	for _, event := range failedResp.Events {
+		if event.Kind == FlowerLiveTimelineReplaced {
+			t.Fatalf("failed canonical build produced timeline.replaced: %#v", event)
+		}
+	}
+
+	err = svc.applyFloretPendingToolSettlementProjection(ctx, meta.EndpointID, thread.ThreadID, runID, messageID, settledProjection)
 	if err != nil {
 		t.Fatalf("apply settlement projection: %v", err)
 	}

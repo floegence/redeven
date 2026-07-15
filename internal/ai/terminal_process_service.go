@@ -43,7 +43,9 @@ func (s *Service) ReadTerminalProcess(ctx context.Context, meta *session.Meta, r
 	if err := validateTerminalProcessAccess(meta, strings.TrimSpace(runID), snapshot); err != nil {
 		return nil, err
 	}
-	_ = proc.publishDone()
+	if err := proc.publishDone(); err != nil {
+		return nil, err
+	}
 	return &snapshot, nil
 }
 
@@ -66,12 +68,16 @@ func (s *Service) WriteTerminalProcess(ctx context.Context, meta *session.Meta, 
 	if err := validateTerminalProcessAccess(meta, strings.TrimSpace(runID), before); err != nil {
 		return nil, err
 	}
-	_ = proc.publishDone()
+	if err := proc.publishDone(); err != nil {
+		return nil, err
+	}
 	snapshot, err := proc.Write(input)
 	if err != nil {
 		return &snapshot, err
 	}
-	_ = proc.publishDone()
+	if err := proc.publishDone(); err != nil {
+		return nil, err
+	}
 	return &snapshot, nil
 }
 
@@ -91,12 +97,16 @@ func (s *Service) TerminateTerminalProcess(ctx context.Context, meta *session.Me
 	if err := validateTerminalProcessAccess(meta, strings.TrimSpace(runID), before); err != nil {
 		return nil, err
 	}
-	_ = proc.publishDone()
+	if err := proc.publishDone(); err != nil {
+		return nil, err
+	}
 	snapshot, err := proc.Terminate()
 	if err != nil {
 		return &snapshot, err
 	}
-	_ = proc.publishDone()
+	if err := proc.publishDone(); err != nil {
+		return nil, err
+	}
 	return &snapshot, nil
 }
 
