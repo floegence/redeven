@@ -5,11 +5,18 @@ import { useRedevenRpc } from '../protocol/redeven_v1';
 import type { TerminalSessionsChangedEvent } from '../protocol/redeven_v1';
 import { refreshRedevenTerminalSessionsCoordinator } from './terminalSessions';
 
-export function TerminalSessionsLifecycleSync() {
+export type TerminalSessionsLifecycleSyncProps = Readonly<{
+  refresh?: () => Promise<void>;
+  removeSession?: (sessionId: string) => void;
+  refreshOnConnect?: boolean;
+}>;
+
+export function TerminalSessionsLifecycleSync(props: TerminalSessionsLifecycleSyncProps = {}) {
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
   const notification = useNotification();
   const hiddenFailureNotified = new Set<string>();
+  let disposed = false;
 
   let scheduled = false;
   const scheduleRefresh = () => {
@@ -18,7 +25,8 @@ export function TerminalSessionsLifecycleSync() {
 
     Promise.resolve().then(() => {
       scheduled = false;
-      void refreshRedevenTerminalSessionsCoordinator();
+      if (disposed) return;
+      void (props.refresh?.() ?? refreshRedevenTerminalSessionsCoordinator()).catch(() => undefined);
     });
   };
 
@@ -45,20 +53,28 @@ export function TerminalSessionsLifecycleSync() {
 
   createEffect(() => {
     const client = protocol.client();
-    if (!client) return;
+    const status = (protocol as typeof protocol & { status?: () => string }).status?.() ?? 'connected';
+    if (!client || status !== 'connected') return;
 
     // Ensure the sessions list converges quickly on connect/reconnect.
-    scheduleRefresh();
+    if (props.refreshOnConnect !== false) scheduleRefresh();
 
     const unsub = rpc.terminal.onSessionsChanged((event) => {
       resetHiddenCloseFailureNotification(event);
       notifyHiddenCloseFailure(event);
+      if (event.sessionId && (event.reason === 'deleted' || event.reason === 'closed')) {
+        props.removeSession?.(event.sessionId);
+      }
       scheduleRefresh();
     });
 
     onCleanup(() => {
       unsub();
     });
+  });
+
+  onCleanup(() => {
+    disposed = true;
   });
 
   return null;

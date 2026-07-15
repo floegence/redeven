@@ -28,6 +28,7 @@ import {
   getOrCreateTerminalConnId,
 } from '../services/terminalTransport';
 import { disposeRedevenTerminalSessionsCoordinator, getRedevenTerminalSessionsCoordinator } from '../services/terminalSessions';
+import { useTerminalSessionCatalog } from '../services/terminalSessionCatalog';
 import {
   ensureTerminalPreferencesInitialized,
   TERMINAL_MAX_FONT_SIZE,
@@ -80,6 +81,10 @@ import {
 import {
   releaseTerminalRecoveryDiagnostics,
 } from '../services/terminalRecoveryDiagnostics';
+import {
+  markTerminalPerformance,
+  pseudonymousTerminalSessionRef,
+} from '../services/terminalPerformance';
 import {
   TerminalSessionRuntime,
   type TerminalSessionRuntimeActions,
@@ -242,6 +247,8 @@ type TerminalSessionWorkStateMap = Record<string, TerminalSessionWorkState>;
 
 type pending_terminal_session = {
   id: string;
+  operationSequence: number;
+  createdAtMs: number;
   name: string;
   workingDir: string;
   visibleSessionIdsAtCreate: string[];
@@ -271,6 +278,12 @@ type terminal_panel_created_session = {
   sessionId: string;
   session: TerminalSessionInfo | null;
 };
+
+type terminal_session_mutation_fence = Readonly<{
+  envId: string;
+  connectionEpoch: number;
+  protocolClient: object | null;
+}>;
 
 function waitForTerminalUiPaint(): Promise<void> {
   return new Promise((resolve) => deferAfterPaint(resolve));
@@ -554,15 +567,35 @@ function terminalSessionMatchesPendingSession(
   return !sessionWorkingDir || !pendingWorkingDir || sessionWorkingDir === pendingWorkingDir;
 }
 
-function resolvePendingTerminalSessions(
+function pendingTerminalSessionsCompete(
+  left: pending_terminal_session,
+  right: pending_terminal_session,
+): boolean {
+  return normalizeTerminalSessionMatchName(left.name) === normalizeTerminalSessionMatchName(right.name)
+    && normalizeTerminalSessionMatchWorkingDir(left.workingDir) === normalizeTerminalSessionMatchWorkingDir(right.workingDir);
+}
+
+export function resolvePendingTerminalSessions(
   pendingSessions: readonly pending_terminal_session[],
   visibleSessions: readonly TerminalSessionInfo[],
+  authoritativeSessionIds: ReadonlySet<string> = new Set<string>(),
 ): resolved_pending_terminal_session[] {
-  const claimedSessionIds = new Set<string>();
+  const claimedSessionIds = new Set(authoritativeSessionIds);
   const resolved: resolved_pending_terminal_session[] = [];
 
-  for (const pendingSession of pendingSessions) {
-    const session = visibleSessions.find((candidate) => (
+  const orderedPending = pendingSessions
+    .filter((session) => session.status === 'creating')
+    .sort((left, right) => (
+      left.operationSequence - right.operationSequence
+        || left.createdAtMs - right.createdAtMs
+        || left.id.localeCompare(right.id)
+    ));
+  const orderedVisible = [...visibleSessions].sort((left, right) => (
+    left.createdAtMs - right.createdAtMs
+      || left.id.localeCompare(right.id)
+  ));
+  for (const pendingSession of orderedPending) {
+    const session = orderedVisible.find((candidate) => (
       !claimedSessionIds.has(candidate.id)
         && terminalSessionMatchesPendingSession(candidate, pendingSession)
     ));
@@ -757,6 +790,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [terminalSidebarMenu, setTerminalSidebarMenu] = createSignal<terminal_sidebar_context_menu>(null);
   let terminalSidebarMenuEl: HTMLDivElement | null = null;
   const [copiedSidebarPathSessionId, setCopiedSidebarPathSessionId] = createSignal<string | null>(null);
+  let mirroredCatalogError: string | null = null;
   let sidebarPathCopyResetTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   const [terminalContextMenuHostEl, setTerminalContextMenuHostEl] = createSignal<HTMLDivElement | null>(null);
 
@@ -765,11 +799,14 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   ensureTerminalPreferencesInitialized(floe.persist);
   const terminalPrefs = useTerminalPreferences();
+  const terminalCatalog = useTerminalSessionCatalog();
 
   const attachGenerationScope = protocol.rpcTransport?.() ?? protocol;
   const transport = createRedevenTerminalTransport(rpc, connId, attachGenerationScope);
   const eventSource = createRedevenTerminalEventSource(rpc);
-  const sessionsCoordinator = getRedevenTerminalSessionsCoordinator({ connId, transport, logger: buildLogger() });
+  const fallbackSessionsCoordinator = terminalCatalog
+    ? null
+    : getRedevenTerminalSessionsCoordinator({ connId, transport, logger: buildLogger() });
   const terminalWorkingSet = createTerminalAdaptiveWorkingSetManager({
     deviceMemoryGiB: typeof navigator === 'undefined'
       ? undefined
@@ -777,6 +814,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
   const workingSetRuntimeDisposers = new Map<string, () => void>();
   let disposed = false;
+  let nextCreateOperationSequence = 0;
+  let lastSidebarPresentedEpoch = -1;
+  const [authoritativelyClaimedSessionIds, setAuthoritativelyClaimedSessionIds] = createSignal<ReadonlySet<string>>(
+    new Set<string>(),
+  );
   createEffect(() => {
     transport.syncConnectionEpoch(protocol.client() ?? null);
   });
@@ -791,13 +833,35 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     }
   });
 
-  const connected = () => Boolean(protocol.client());
+  const connected = () => protocol.status() === 'connected' && Boolean(protocol.client());
   const viewActive = () => view.active();
   const workbenchSelected = () => variant !== 'workbench' || props.workbenchSelected !== false;
   const terminalFocusOwner = () => viewActive() && workbenchSelected();
   const isEmbeddedWidget = Boolean(String(widgetId ?? '').trim());
   const permissionReady = () => env.env.state === 'ready';
   const canBrowseFiles = createMemo(() => connected() && permissionReady() && Boolean(env.env()?.permissions?.can_read));
+
+  const captureSessionMutationFence = (): terminal_session_mutation_fence => ({
+    envId: String(env.env_id() ?? '').trim(),
+    connectionEpoch: terminalCatalog?.connectionEpoch() ?? 0,
+    protocolClient: protocol.client(),
+  });
+
+  const sessionMutationFenceIsCurrent = (fence: terminal_session_mutation_fence): boolean => (
+    !disposed
+    && connected()
+    && permissionReady()
+    && canLaunchProcess(env.env()?.permissions)
+    && String(env.env_id() ?? '').trim() === fence.envId
+    && protocol.client() === fence.protocolClient
+    && (terminalCatalog?.connectionEpoch() ?? 0) === fence.connectionEpoch
+  );
+
+  createEffect(() => {
+    if (!terminalCatalog) return;
+    terminalCatalog.setSurfaceActive(panelId, connected() && viewActive() && workbenchSelected());
+    onCleanup(() => terminalCatalog.setSurfaceActive(panelId, false));
+  });
 
   createEffect(() => {
     if (terminalFocusOwner()) return;
@@ -1002,13 +1066,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [optimisticTerminalSessions, setOptimisticTerminalSessions] = createSignal<TerminalSessionInfo[]>([]);
   const [optimisticClosingSessionIds, setOptimisticClosingSessionIds] = createSignal<Set<string>>(new Set());
   const [pendingTerminalSessions, setPendingTerminalSessions] = createSignal<pending_terminal_session[]>([]);
-  const [sessionsHydrated, setSessionsHydrated] = createSignal(false);
-  const [sessionsLoading, setSessionsLoading] = createSignal(false);
+  const [sessionsHydrated, setSessionsHydrated] = createSignal(terminalCatalog?.hydrated() ?? false);
+  const [sessionsLoading, setSessionsLoading] = createSignal(terminalCatalog?.loading() ?? false);
   const [localActiveSessionId, setLocalActiveSessionId] = createSignal<string | null>(readActiveSessionId(activeSessionStorageKey));
   const [localActivePendingSessionId, setLocalActivePendingSessionId] = createSignal<string | null>(null);
   const [optimisticActiveDisplaySessionId, setOptimisticActiveDisplaySessionId] = createSignal<string | null>(null);
   const [mountedSessionIds, setMountedSessionIds] = createSignal<Set<string>>(new Set());
-  const [scheduledMountSessionIds, setScheduledMountSessionIds] = createSignal<Set<string>>(new Set());
   const [retainedClosingSessions, setRetainedClosingSessions] = createSignal<Record<string, TerminalSessionInfo>>({});
   const [error, setError] = createSignal<string | null>(null);
   const [mobileKeyboardVisible, setMobileKeyboardVisible] = createSignal(
@@ -1038,14 +1101,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const actionsRegistry = new Map<string, TerminalSessionRuntimeActions>();
   const mobileKeyboardPathCache = new Map<string, TerminalMobileKeyboardPathEntry[]>();
   const mobileKeyboardPackageScriptsCache = new Map<string, TerminalMobileKeyboardScript[]>();
-  const deferredInitialMountSessionIds = new Set<string>();
-  const scheduledMountSelectionEpochs = new Map<string, number>();
-  let activeDisplaySelectionEpoch = 0;
   const selectOptimisticActiveDisplaySessionId = (sessionId: string | null) => {
     const normalizedSessionId = String(sessionId ?? '').trim() || null;
-    if (activeDisplaySessionId() !== normalizedSessionId) {
-      activeDisplaySelectionEpoch += 1;
-    }
     setOptimisticActiveDisplaySessionId(normalizedSessionId);
   };
   const tabActivityTracker = createTerminalTabActivityTracker({
@@ -1147,7 +1204,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const resolvedPendingTerminalSessions = createMemo<resolved_pending_terminal_session[]>(() => (
-    resolvePendingTerminalSessions(pendingTerminalSessions(), sessions())
+    resolvePendingTerminalSessions(
+      pendingTerminalSessions(),
+      sessions(),
+      authoritativelyClaimedSessionIds(),
+    )
   ));
 
   const resolvedPendingTerminalSessionByPendingId = (pendingSessionId: string): resolved_pending_terminal_session | null => {
@@ -1167,6 +1228,22 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     && visiblePendingTerminalSessions().length === 0
     && (!sessionsHydrated() || sessionsLoading())
   ));
+
+  createEffect(() => {
+    if (!sessionsHydrated()) return;
+    const epoch = terminalCatalog?.connectionEpoch() ?? 0;
+    const sessionCount = sessions().length;
+    if (lastSidebarPresentedEpoch === epoch) return;
+    const frame = requestAnimationFrame(() => {
+      if (lastSidebarPresentedEpoch === epoch) return;
+      lastSidebarPresentedEpoch = epoch;
+      markTerminalPerformance('sidebar-presented', {
+        connection_epoch: epoch,
+        session_count: sessionCount,
+      });
+    });
+    onCleanup(() => cancelAnimationFrame(frame));
+  });
 
   const visiblePendingTerminalSessionById = (sessionId: string): pending_terminal_session | null => {
     const normalizedSessionId = String(sessionId ?? '').trim();
@@ -1249,27 +1326,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     onCleanup(() => document.removeEventListener('visibilitychange', handleTerminalPageVisibility));
   }
 
-  createEffect(() => {
-    const activeId = activeSessionId();
-    for (const scheduledSessionId of [...scheduledMountSelectionEpochs.keys()]) {
-      if (scheduledSessionId !== activeId) {
-        scheduledMountSelectionEpochs.delete(scheduledSessionId);
-      }
-    }
-    setScheduledMountSessionIds((prev) => {
-      let changed = false;
-      const next = new Set<string>();
-      for (const scheduledSessionId of prev) {
-        if (scheduledSessionId === activeId) {
-          next.add(scheduledSessionId);
-        } else {
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
-  });
-
   const activePendingSession = createMemo<pending_terminal_session | null>(() => {
     const activeId = activeDisplaySessionId();
     if (!activeId) return null;
@@ -1295,56 +1351,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const markSessionMounted = (sessionId: string) => {
     const normalizedSessionId = String(sessionId ?? '').trim();
     if (!normalizedSessionId) return;
-    deferredInitialMountSessionIds.delete(normalizedSessionId);
-    setScheduledMountSessionIds((prev) => {
-      if (!prev.has(normalizedSessionId)) return prev;
-      const next = new Set(prev);
-      next.delete(normalizedSessionId);
-      return next;
-    });
     setMountedSessionIds((prev) => {
       if (prev.has(normalizedSessionId)) return prev;
       const next = new Set(prev);
       next.add(normalizedSessionId);
       return next;
-    });
-  };
-
-  const deferInitialSessionMount = (sessionId: string) => {
-    const normalizedSessionId = String(sessionId ?? '').trim();
-    if (!normalizedSessionId) return;
-    deferredInitialMountSessionIds.add(normalizedSessionId);
-  };
-
-  const scheduleSessionMountAfterPaint = (sessionId: string) => {
-    const normalizedSessionId = String(sessionId ?? '').trim();
-    if (!normalizedSessionId) return;
-    if (mountedSessionIds().has(normalizedSessionId)) return;
-    const selectionEpoch = activeDisplaySelectionEpoch;
-    scheduledMountSelectionEpochs.set(normalizedSessionId, selectionEpoch);
-    if (scheduledMountSessionIds().has(normalizedSessionId)) return;
-
-    setScheduledMountSessionIds((prev) => {
-      if (prev.has(normalizedSessionId)) return prev;
-      const next = new Set(prev);
-      next.add(normalizedSessionId);
-      return next;
-    });
-
-    void waitForTerminalUiPaint().then(() => {
-      const scheduledSelectionEpoch = scheduledMountSelectionEpochs.get(normalizedSessionId);
-      scheduledMountSelectionEpochs.delete(normalizedSessionId);
-      setScheduledMountSessionIds((prev) => {
-        if (!prev.has(normalizedSessionId)) return prev;
-        const next = new Set(prev);
-        next.delete(normalizedSessionId);
-        return next;
-      });
-      if (disposed) return;
-      if (scheduledSelectionEpoch !== activeDisplaySelectionEpoch) return;
-      if (activeSessionId() !== normalizedSessionId) return;
-      if (!sessions().some((session) => session.id === normalizedSessionId)) return;
-      markSessionMounted(normalizedSessionId);
     });
   };
 
@@ -1392,7 +1403,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const activateResolvedPendingSession = (resolved: resolved_pending_terminal_session) => {
-    deferInitialSessionMount(resolved.sessionId);
+    markSessionMounted(resolved.sessionId);
     ensureSessionInGroup(resolved.sessionId);
     selectOptimisticActiveDisplaySessionId(resolved.sessionId);
     setActiveRealSessionId(resolved.sessionId);
@@ -1410,11 +1421,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       activateResolvedPendingSession(activeResolvedSession);
     }
 
-    const resolvedPendingIds = new Set(resolvedSessions.map((session) => session.pendingSessionId));
-    setPendingTerminalSessions((previous) => {
-      const next = previous.filter((session) => !resolvedPendingIds.has(session.id));
-      return next.length === previous.length ? previous : next;
-    });
   });
 
   const setActiveSessionId = (value: string | null) => {
@@ -1506,6 +1512,15 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const handleTerminalInteractive = (sessionId: string) => {
+    markTerminalPerformance('session-interactive', {
+      session_ref: pseudonymousTerminalSessionRef(sessionId),
+      variant,
+    });
+    terminalCatalog?.updateSessionMeta(sessionId, {
+      isActive: true,
+      lastActiveAtMs: Date.now(),
+    });
+    terminalCatalog?.startHistoryWarmup();
     const intent = pendingTerminalFocusIntent;
     if (!intent || intent.sessionId !== sessionId) return;
     tryPendingTerminalFocus(intent);
@@ -1632,7 +1647,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const handleNameUpdate = (sessionId: string, newName: string, workingDir: string) => {
-    sessionsCoordinator.updateSessionMeta(sessionId, { name: newName, workingDir });
+    if (terminalCatalog) {
+      terminalCatalog.updateSessionMeta(sessionId, { name: newName, workingDir });
+    } else {
+      fallbackSessionsCoordinator?.updateSessionMeta(sessionId, { name: newName, workingDir });
+    }
   };
 
   const handleThemeChange = (value: string) => {
@@ -1713,7 +1732,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   createEffect(() => {
-    const unsub = sessionsCoordinator.subscribe(handleSessionsSnapshot);
+    if (terminalCatalog) {
+      handleSessionsSnapshot([...terminalCatalog.sessions()]);
+      return;
+    }
+    const unsub = fallbackSessionsCoordinator?.subscribe(handleSessionsSnapshot);
+    if (!unsub) return;
     onCleanup(() => unsub());
   });
 
@@ -1746,7 +1770,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (event.kind === 'cwd-update') {
       const workingDir = normalizeAskFlowerAbsolutePath(event.workingDir);
       if (workingDir) {
-        sessionsCoordinator.updateSessionMeta(sessionId, { workingDir });
+        if (terminalCatalog) {
+          terminalCatalog.updateSessionMeta(sessionId, { workingDir });
+        } else {
+          fallbackSessionsCoordinator?.updateSessionMeta(sessionId, { workingDir });
+        }
       }
       return;
     }
@@ -2225,7 +2253,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (!connected()) return;
     setSessionsLoading(true);
     try {
-      await sessionsCoordinator.refresh();
+      await (terminalCatalog?.refresh() ?? fallbackSessionsCoordinator?.refresh());
     } catch (e) {
       if (handleExecuteDenied(e)) return;
       setError(e instanceof Error ? e.message : String(e));
@@ -2238,14 +2266,18 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const handleTerminalSessionGone = (sessionId: string) => {
     transport.forgetSession(sessionId);
     prevAuthoritativeSessionIds.delete(sessionId);
-    handleSessionsSnapshot(allSessions().filter((session) => session.id !== sessionId));
+    if (terminalCatalog) {
+      terminalCatalog.removeSession(sessionId);
+    } else {
+      handleSessionsSnapshot(allSessions().filter((session) => session.id !== sessionId));
+    }
     setOptimisticClosingSessionIds((previous) => {
       if (previous.has(sessionId)) return previous;
       const next = new Set(previous);
       next.add(sessionId);
       return next;
     });
-    void sessionsCoordinator.refresh().catch(() => undefined);
+    void (terminalCatalog?.refresh() ?? fallbackSessionsCoordinator?.refresh() ?? Promise.resolve()).catch(() => undefined);
   };
 
   const activateSession = (sessionId: string) => {
@@ -2310,29 +2342,29 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return realSessions.find((session) => session.id !== normalizedSessionId)?.id ?? null;
   };
 
-  const createPanelSession = async (name: string | undefined, workingDir: string): Promise<string | null> => {
+  const createPanelSession = async (
+    name: string | undefined,
+    workingDir: string,
+  ): Promise<terminal_panel_created_session | null> => {
     const normalizedWorkingDir = normalizeAskFlowerAbsolutePath(String(workingDir ?? '').trim()) || agentHomePathAbs() || '';
     if (props.sessionOperations) {
-      const result = normalizeTerminalPanelSessionCreateResult(
+      return normalizeTerminalPanelSessionCreateResult(
         await props.sessionOperations.createSession(name, normalizedWorkingDir),
       );
-      if (!result) return null;
-      if (result.session) {
-        mergeOptimisticTerminalSession(result.session);
-        void sessionsCoordinator.refresh().catch(() => undefined);
-      } else {
-        await sessionsCoordinator.refresh();
-      }
-      return result.sessionId;
     }
 
-    const session = await sessionsCoordinator.createSession(String(name ?? '').trim(), normalizedWorkingDir);
-    return String(session?.id ?? '').trim() || null;
+    const sessionCoordinator = terminalCatalog?.getCoordinator() ?? fallbackSessionsCoordinator;
+    if (!sessionCoordinator) return null;
+    const session = await sessionCoordinator.createSession(String(name ?? '').trim(), normalizedWorkingDir);
+    return normalizeTerminalPanelSessionCreateResult(session);
   };
 
   const createPendingSession = (name: string | undefined, workingDir: string): pending_terminal_session => {
+    const operationSequence = ++nextCreateOperationSequence;
     const pendingSession: pending_terminal_session = {
       id: createClientId('pending-terminal'),
+      operationSequence,
+      createdAtMs: Date.now(),
       name: String(name ?? '').trim() || i18n.t('terminal.title'),
       workingDir: normalizeAskFlowerAbsolutePath(String(workingDir ?? '').trim()) || agentHomePathAbs() || '',
       visibleSessionIdsAtCreate: sessions().map((session) => session.id),
@@ -2343,6 +2375,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       setLocalActivePendingSessionId(pendingSession.id);
       selectOptimisticActiveDisplaySessionId(pendingSession.id);
     });
+    markTerminalPerformance('create-intent', { operation_sequence: operationSequence });
     return pendingSession;
   };
 
@@ -2382,36 +2415,85 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const normalizedSessionId = String(sessionId ?? '').trim();
     if (!normalizedPendingSessionId || !normalizedSessionId) return;
 
+    setAuthoritativelyClaimedSessionIds((previous) => {
+      if (previous.has(normalizedSessionId)) return previous;
+      const next = new Set(previous);
+      next.add(normalizedSessionId);
+      return next;
+    });
+
     if (!pendingTerminalSessionById(normalizedPendingSessionId)) {
-      deferInitialSessionMount(normalizedSessionId);
+      markSessionMounted(normalizedSessionId);
       activateSession(normalizedSessionId);
       return;
     }
     removePendingSession(normalizedPendingSessionId);
-    deferInitialSessionMount(normalizedSessionId);
+    markSessionMounted(normalizedSessionId);
     activateSession(normalizedSessionId);
   };
 
   const findResolvedSessionForRemovedPendingSession = (pendingSession: pending_terminal_session): string | null => {
-    const session = sessions().find((candidate) => terminalSessionMatchesPendingSession(candidate, pendingSession));
+    const authoritativeSessionIds = authoritativelyClaimedSessionIds();
+    const session = sessions()
+      .filter((candidate) => (
+        !authoritativeSessionIds.has(candidate.id)
+          && terminalSessionMatchesPendingSession(candidate, pendingSession)
+      ))
+      .sort((left, right) => left.createdAtMs - right.createdAtMs || left.id.localeCompare(right.id))[0];
     return String(session?.id ?? '').trim() || null;
   };
 
   const beginCreateSession = async (name: string | undefined, workingDir: string): Promise<string | null> => {
     const pendingSession = createPendingSession(name, workingDir);
+    terminalCatalog?.getCoordinator();
+    const createFence = captureSessionMutationFence();
     // Let the optimistic tab reach the screen before starting the heavier RPC/state reconciliation path.
     await waitForTerminalUiPaint();
-    if (disposed || !pendingTerminalSessionById(pendingSession.id)) return null;
+    markTerminalPerformance('pending-row-painted', { operation_sequence: pendingSession.operationSequence });
+    if (!pendingTerminalSessionById(pendingSession.id)) return null;
+    if (!sessionMutationFenceIsCurrent(createFence)) {
+      removePendingSession(pendingSession.id);
+      return null;
+    }
     try {
-      const sessionId = await createPanelSession(name, pendingSession.workingDir);
-      if (!sessionId) throw new Error(i18n.t('terminal.invalidCreateResponse'));
+      const result = await createPanelSession(name, pendingSession.workingDir);
+      if (!sessionMutationFenceIsCurrent(createFence)) {
+        removePendingSession(pendingSession.id);
+        return null;
+      }
+      if (!result) throw new Error(i18n.t('terminal.invalidCreateResponse'));
+      if (result.session) {
+        mergeOptimisticTerminalSession(result.session);
+        terminalCatalog?.upsertSession(result.session);
+      } else {
+        await (terminalCatalog?.refresh() ?? fallbackSessionsCoordinator?.refresh());
+        if (!sessionMutationFenceIsCurrent(createFence)) {
+          removePendingSession(pendingSession.id);
+          return null;
+        }
+      }
+      const sessionId = result.sessionId;
+      markTerminalPerformance('create-ack', {
+        operation_sequence: pendingSession.operationSequence,
+        session_ref: pseudonymousTerminalSessionRef(sessionId),
+      });
       resolvePendingSession(pendingSession.id, sessionId);
       return sessionId;
     } catch (e) {
-      const resolvedSessionId = findResolvedSessionForRemovedPendingSession(pendingSession);
+      if (!sessionMutationFenceIsCurrent(createFence)) {
+        removePendingSession(pendingSession.id);
+        return null;
+      }
+      const hasCompetingCreate = pendingTerminalSessions().some((candidate) => (
+        candidate.id !== pendingSession.id
+          && candidate.status === 'creating'
+          && pendingTerminalSessionsCompete(candidate, pendingSession)
+      ));
+      const resolvedSessionId = hasCompetingCreate
+        ? null
+        : findResolvedSessionForRemovedPendingSession(pendingSession);
       if (resolvedSessionId) {
-        deferInitialSessionMount(resolvedSessionId);
-        activateSession(resolvedSessionId);
+        resolvePendingSession(pendingSession.id, resolvedSessionId);
         return resolvedSessionId;
       }
       if (handleExecuteDenied(e)) {
@@ -2469,6 +2551,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     setError(null);
 
     try {
+      terminalCatalog?.invalidateHistory(sid, 'clear');
       await transport.clear(sid);
       const actions = actionsRegistry.get(sid);
       if (actions && !await actions.resetAfterClear()) return;
@@ -2535,12 +2618,16 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const closeSession = (id: string) => {
     void (async () => {
       const normalizedSessionId = String(id ?? '').trim();
+      let deleteFence: terminal_session_mutation_fence | null = null;
       try {
         if (!normalizedSessionId) return;
         if (pendingTerminalSessionById(normalizedSessionId)) {
           removePendingSession(normalizedSessionId);
           return;
         }
+        terminalCatalog?.getCoordinator();
+        deleteFence = captureSessionMutationFence();
+        if (!sessionMutationFenceIsCurrent(deleteFence)) return;
 
         const nextActiveSessionId = activeDisplaySessionId() === normalizedSessionId
           ? pickActiveSessionAfterClose(normalizedSessionId)
@@ -2553,18 +2640,33 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         }
 
         await waitForTerminalUiPaint();
-        if (disposed) return;
+        if (!sessionMutationFenceIsCurrent(deleteFence)) {
+          setOptimisticSessionClosing(normalizedSessionId, false);
+          return;
+        }
 
         if (props.sessionOperations) {
           await props.sessionOperations.deleteSession(normalizedSessionId);
-          void sessionsCoordinator.refresh().catch(() => undefined);
+          if (!sessionMutationFenceIsCurrent(deleteFence)) {
+            setOptimisticSessionClosing(normalizedSessionId, false);
+            return;
+          }
+          terminalCatalog?.removeSession(normalizedSessionId);
         } else {
-          await sessionsCoordinator.deleteSession(normalizedSessionId);
+          const sessionCoordinator = terminalCatalog?.getCoordinator() ?? fallbackSessionsCoordinator;
+          if (!sessionCoordinator) throw new Error('Terminal session catalog is unavailable');
+          await sessionCoordinator.deleteSession(normalizedSessionId);
+          if (!sessionMutationFenceIsCurrent(deleteFence)) {
+            setOptimisticSessionClosing(normalizedSessionId, false);
+            return;
+          }
+          if (terminalCatalog) await terminalCatalog.refresh();
         }
         transport.forgetSession(normalizedSessionId);
       } catch (e) {
         setOptimisticSessionClosing(normalizedSessionId, false);
-        void sessionsCoordinator.refresh().catch(() => undefined);
+        if (deleteFence && !sessionMutationFenceIsCurrent(deleteFence)) return;
+        void (terminalCatalog?.refresh() ?? fallbackSessionsCoordinator?.refresh() ?? Promise.resolve()).catch(() => undefined);
         if (handleExecuteDenied(e)) return;
         setError(e instanceof Error ? e.message : String(e));
       }
@@ -2572,6 +2674,20 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   createEffect(() => {
+    if (terminalCatalog) {
+      setSessionsHydrated(terminalCatalog.hydrated());
+      setSessionsLoading(terminalCatalog.loading());
+      const catalogError = terminalCatalog.error();
+      if (catalogError) {
+        mirroredCatalogError = catalogError;
+        setError(catalogError);
+      } else if (mirroredCatalogError) {
+        const previousCatalogError = mirroredCatalogError;
+        mirroredCatalogError = null;
+        setError((current) => current === previousCatalogError ? null : current);
+      }
+      return;
+    }
     const client = protocol.client();
     if (!client) {
       batch(() => {
@@ -2588,7 +2704,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     });
     void (async () => {
       try {
-        await sessionsCoordinator.refresh();
+        await fallbackSessionsCoordinator?.refresh();
       } catch (e) {
         if (cancelled) return;
         if (handleExecuteDenied(e)) return;
@@ -2630,15 +2746,14 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (!sessions().some((s) => s.id === id)) return;
     if (mountedSessionIds().has(id)) return;
 
-    const shouldDeferInitialMount = deferredInitialMountSessionIds.has(id);
-    if (!mountedInitialActiveSession && !shouldDeferInitialMount) {
+    if (!mountedInitialActiveSession) {
       mountedInitialActiveSession = true;
       markSessionMounted(id);
       return;
     }
 
     mountedInitialActiveSession = true;
-    scheduleSessionMountAfterPaint(id);
+    markSessionMounted(id);
   });
 
   createEffect(() => {
@@ -3773,6 +3888,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                               onVisibleOutput={handleVisibleOutput}
                               onTerminalFileLinkOpen={openTerminalFileLinkTarget}
                               onNameUpdate={handleNameUpdate}
+                              requestPreparedHistory={terminalCatalog?.requestPreparedHistory}
                             />
                           </TabPanel>
                         </Show>
@@ -4060,12 +4176,17 @@ export function TerminalPanel(props: TerminalPanelProps = {}) {
   const i18n = useI18n();
   const protocol = useProtocol();
   const ctx = useEnvContext();
+  const terminalCatalog = useTerminalSessionCatalog();
 
   const [executeDenied, setExecuteDenied] = createSignal(false);
 
   const permissionReady = () => ctx.env.state === 'ready';
   const processLaunchAllowed = () => canLaunchProcess(ctx.env()?.permissions);
-  const noExecute = createMemo(() => executeDenied() || (permissionReady() && !processLaunchAllowed()));
+  const noExecute = createMemo(() => (
+    executeDenied()
+    || terminalCatalog?.permissionDenied?.()
+    || (permissionReady() && !processLaunchAllowed())
+  ));
 
   createEffect(() => {
     // Reset when disconnected so users can reconnect after policy changes.
@@ -4076,7 +4197,8 @@ export function TerminalPanel(props: TerminalPanelProps = {}) {
 
   createEffect(() => {
     if (noExecute()) {
-      disposeRedevenTerminalSessionsCoordinator();
+      if (terminalCatalog) terminalCatalog.clearForPermissionDenied();
+      else disposeRedevenTerminalSessionsCoordinator();
     }
   });
 

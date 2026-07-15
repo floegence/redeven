@@ -10,14 +10,17 @@ import {
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type { TerminalSessionInfo } from '@floegence/floeterm-terminal-web';
 import { LayoutDashboard, Maximize, Minus } from '@floegence/floe-webapp-core/icons';
+import { useProtocol } from '@floegence/floe-webapp-protocol';
 import { batch, createEffect, createMemo, createSignal, onCleanup, Show, untrack } from 'solid-js';
 import { Portal } from 'solid-js/web';
 
 import { basenameFromAbsolutePath, normalizeAbsolutePath } from '../utils/askFlowerPath';
+import { canLaunchProcess } from '../utils/permission';
 import { envWidgetTypeForSurface, type EnvWorkbenchHandoffAnchor } from '../envViewMode';
 import { useI18n } from '../i18n';
 import { useEnvContext } from '../pages/EnvContext';
 import { isDesktopStateStorageAvailable, readUIStorageJSON, writeUIStorageJSON } from '../services/uiStorage';
+import { useTerminalSessionCatalog } from '../services/terminalSessionCatalog';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 import { resolveEnvAppStorageBinding } from '../services/uiPersistence';
 import {
@@ -113,6 +116,12 @@ const WORKBENCH_LAYOUT_FAST_FLUSH_DELAY_MS = 16;
 const WORKBENCH_WIDGET_VISIBLE_MIN_PX = 24;
 
 type WorkbenchViewportActivationPolicy = 'preserve' | 'center';
+
+type WorkbenchTerminalMutationFence = Readonly<{
+  envId: string;
+  connectionEpoch: number;
+  protocolClient: object | null;
+}>;
 
 type WorkbenchActivationWidgetSnapshot = Readonly<{
   created: boolean;
@@ -673,6 +682,8 @@ function waitForAbortOrTimeout(signal: AbortSignal, timeoutMs: number): Promise<
 
 export function EnvWorkbenchPage() {
   const env = useEnvContext();
+  const protocol = useProtocol();
+  const terminalCatalog = useTerminalSessionCatalog();
   const i18n = useI18n();
   const fileFallbackName = () => i18n.t('filePreview.fileFallback');
   const filesFallbackTitle = () => i18n.t('workbench.widgets.files.defaultTitle');
@@ -729,6 +740,22 @@ export function EnvWorkbenchPage() {
   const terminalVisualCoordinator = createWorkbenchTerminalVisualCoordinator();
   const surfaceLayoutInteractionReleases: Array<() => void> = [];
   let surfaceViewportInteractionRelease: (() => void) | null = null;
+
+  const captureTerminalMutationFence = (): WorkbenchTerminalMutationFence => ({
+    envId: String(env.env_id() ?? '').trim(),
+    connectionEpoch: terminalCatalog?.connectionEpoch() ?? 0,
+    protocolClient: protocol.client(),
+  });
+
+  const terminalMutationFenceIsCurrent = (fence: WorkbenchTerminalMutationFence): boolean => (
+    protocol.status() === 'connected'
+    && Boolean(protocol.client())
+    && protocol.client() === fence.protocolClient
+    && String(env.env_id() ?? '').trim() === fence.envId
+    && (terminalCatalog?.connectionEpoch() ?? 0) === fence.connectionEpoch
+    && env.env.state === 'ready'
+    && canLaunchProcess(env.env()?.permissions)
+  );
 
   const runtimeWidgetStateById = createMemo(() => runtimeWorkbenchWidgetStateById(runtimeSnapshot().widget_states));
   const runtimeFilesWidgetStateById = createMemo<Record<string, RuntimeWorkbenchWidgetState>>(() => Object.fromEntries(
@@ -2344,7 +2371,12 @@ export function EnvWorkbenchPage() {
     },
     createTerminalSession: async (widgetId, name, workingDir) => {
       const normalizedWidgetId = compact(widgetId);
-      if (!normalizedWidgetId || !runtimeTerminalWidgetReady(normalizedWidgetId)) {
+      const mutationFence = captureTerminalMutationFence();
+      if (
+        !normalizedWidgetId
+        || !runtimeTerminalWidgetReady(normalizedWidgetId)
+        || !terminalMutationFenceIsCurrent(mutationFence)
+      ) {
         return null;
       }
       try {
@@ -2353,10 +2385,13 @@ export function EnvWorkbenchPage() {
           working_dir: normalizeAbsolutePath(workingDir) || undefined,
         });
         if (
-          terminalWidgetClosing(normalizedWidgetId)
+          !terminalMutationFenceIsCurrent(mutationFence)
+          || terminalWidgetClosing(normalizedWidgetId)
           || !workbenchState().widgets.some((widget) => widget.id === normalizedWidgetId && widget.type === 'redeven.terminal')
         ) {
-          scheduleWorkbenchTerminalWidgetSessionClose(normalizedWidgetId);
+          if (terminalWidgetClosing(normalizedWidgetId)) {
+            scheduleWorkbenchTerminalWidgetSessionClose(normalizedWidgetId);
+          }
           return null;
         }
         applyRuntimeWidgetState(result.widget_state);
@@ -2369,6 +2404,9 @@ export function EnvWorkbenchPage() {
         }
         return normalizeRuntimeTerminalSessionInfo(result.session);
       } catch (error) {
+        if (!terminalMutationFenceIsCurrent(mutationFence)) {
+          return null;
+        }
         if (terminalWidgetClosing(normalizedWidgetId)) {
           scheduleWorkbenchTerminalWidgetSessionClose(normalizedWidgetId);
           return null;
@@ -2380,11 +2418,18 @@ export function EnvWorkbenchPage() {
     deleteTerminalSession: async (widgetId, sessionId) => {
       const normalizedWidgetId = compact(widgetId);
       const normalizedSessionId = compact(sessionId);
-      if (!normalizedWidgetId || !normalizedSessionId || !runtimeTerminalWidgetReady(normalizedWidgetId)) {
+      const mutationFence = captureTerminalMutationFence();
+      if (
+        !normalizedWidgetId
+        || !normalizedSessionId
+        || !runtimeTerminalWidgetReady(normalizedWidgetId)
+        || !terminalMutationFenceIsCurrent(mutationFence)
+      ) {
         return;
       }
       try {
         const state = await deleteWorkbenchTerminalSession(normalizedWidgetId, normalizedSessionId);
+        if (!terminalMutationFenceIsCurrent(mutationFence)) return;
         applyRuntimeWidgetState(state);
         const nextSessionIds = state.state.kind === 'terminal' ? state.state.session_ids : [];
         const currentActiveSessionId = instanceState().terminalPanelsByWidgetId[normalizedWidgetId]?.activeSessionId ?? null;
@@ -2394,6 +2439,7 @@ export function EnvWorkbenchPage() {
           currentActiveSessionId === normalizedSessionId ? null : currentActiveSessionId,
         );
       } catch (error) {
+        if (!terminalMutationFenceIsCurrent(mutationFence)) return;
         console.warn('Failed to delete workbench terminal session:', error);
         throw error;
       }

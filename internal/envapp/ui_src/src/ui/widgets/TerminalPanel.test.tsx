@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LOCAL_INTERACTION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
 import { RpcError } from '@floegence/floe-webapp-protocol';
 
-import { TerminalPanel } from './TerminalPanel';
+import { TerminalPanel, resolvePendingTerminalSessions } from './TerminalPanel';
 import { shouldPublishTerminalOutputCoverage } from './TerminalSessionRuntime';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_ATTR } from '../workbench/surface/workbenchTextSelectionSurface';
 import {
@@ -14,9 +14,15 @@ import {
   resetDebugConsoleCaptureForTests,
 } from '../services/debugConsoleCapture';
 import { resetTerminalRecoveryDiagnosticsForTests } from '../services/terminalRecoveryDiagnostics';
+import { TerminalSessionCatalogContext } from '../services/terminalSessionCatalog';
 
 const layoutState = vi.hoisted(() => ({
   mobile: false,
+}));
+
+const terminalProtocolState = vi.hoisted(() => ({
+  client: { id: 'protocol-client' } as object | null,
+  status: 'connected',
 }));
 
 describe('terminal output coverage publication', () => {
@@ -28,9 +34,89 @@ describe('terminal output coverage publication', () => {
   });
 });
 
+describe('terminal pending session correlation', () => {
+  it('matches concurrent same-name creates by local operation FIFO and canonical creation time', () => {
+    const pending = [
+      {
+        id: 'pending-2',
+        operationSequence: 2,
+        createdAtMs: 20,
+        name: 'Terminal',
+        workingDir: '/workspace',
+        visibleSessionIdsAtCreate: [],
+        status: 'creating' as const,
+      },
+      {
+        id: 'pending-1',
+        operationSequence: 1,
+        createdAtMs: 10,
+        name: 'Terminal',
+        workingDir: '/workspace',
+        visibleSessionIdsAtCreate: [],
+        status: 'creating' as const,
+      },
+    ];
+    const sessions = [
+      { id: 'session-late', name: 'Terminal', workingDir: '/workspace', createdAtMs: 40, lastActiveAtMs: 40, isActive: true },
+      { id: 'session-early', name: 'Terminal', workingDir: '/workspace', createdAtMs: 30, lastActiveAtMs: 30, isActive: true },
+    ];
+    expect(resolvePendingTerminalSessions(pending, sessions).map((entry) => [entry.pendingSessionId, entry.sessionId])).toEqual([
+      ['pending-1', 'session-early'],
+      ['pending-2', 'session-late'],
+    ]);
+  });
+
+  it('does not assign an authoritatively claimed session to another pending create', () => {
+    const pending = [
+      {
+        id: 'pending-1',
+        operationSequence: 1,
+        createdAtMs: 10,
+        name: 'Terminal',
+        workingDir: '/workspace',
+        visibleSessionIdsAtCreate: [],
+        status: 'creating' as const,
+      },
+      {
+        id: 'pending-2',
+        operationSequence: 2,
+        createdAtMs: 20,
+        name: 'Terminal',
+        workingDir: '/workspace',
+        visibleSessionIdsAtCreate: [],
+        status: 'creating' as const,
+      },
+    ];
+    const sessions = [
+      { id: 'session-2', name: 'Terminal', workingDir: '/workspace', createdAtMs: 30, lastActiveAtMs: 30, isActive: true },
+    ];
+
+    expect(resolvePendingTerminalSessions(pending, sessions, new Set(['session-2']))).toEqual([]);
+  });
+
+  it('never hides a failed create by matching it to a canonical session', () => {
+    const pending = [{
+      id: 'pending-1',
+      operationSequence: 1,
+      createdAtMs: 10,
+      name: 'Terminal',
+      workingDir: '/workspace',
+      visibleSessionIdsAtCreate: [],
+      status: 'failed' as const,
+    }];
+    const sessions = [
+      { id: 'session-2', name: 'Terminal', workingDir: '/workspace', createdAtMs: 30, lastActiveAtMs: 30, isActive: true },
+    ];
+
+    expect(resolvePendingTerminalSessions(pending, sessions)).toEqual([]);
+  });
+});
+
 const widgetState = vi.hoisted(() => ({
   currentWidgetId: null as string | null,
 }));
+
+const clientIdState = vi.hoisted(() => ({ next: 0 }));
 
 const viewActivationState = vi.hoisted(() => ({
   missing: false,
@@ -136,6 +222,7 @@ const terminalEnvPermissionsState = vi.hoisted(() => ({
   canExecute: true,
 }));
 const envContextState = vi.hoisted(() => ({
+  envId: 'env-1',
   viewMode: 'activity' as 'activity' | 'workbench',
 }));
 
@@ -649,8 +736,8 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
 vi.mock('@floegence/floe-webapp-protocol', async () => ({
   ...await vi.importActual<typeof import('@floegence/floe-webapp-protocol')>('@floegence/floe-webapp-protocol'),
   useProtocol: () => ({
-    client: () => ({ id: 'protocol-client' }),
-    status: () => 'connected',
+    client: () => terminalProtocolState.client,
+    status: () => terminalProtocolState.status,
   }),
 }));
 
@@ -1032,6 +1119,7 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
     let baselineWaiters: Array<(value: any) => void> = [];
     let activeWriters = 0;
     let writerQuiescenceWaiters: Array<() => void> = [];
+    let preparedHistoryOutcome = { status: 'not-provided', rebased: false };
 
     const snapshot = () => ({
       state,
@@ -1046,6 +1134,7 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
       lastError: null,
       attachGeneration: generation,
       disposed,
+      preparedHistoryOutcome,
     });
     const setState = (next: string) => {
       state = next;
@@ -1199,14 +1288,26 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
       pendingAttachStartSequence = startSequence;
       baselineReady = false;
       failure = null;
+      preparedHistoryOutcome = { status: 'not-provided', rebased: false };
       coveredThroughSequence = Math.max(0, startSequence - 1);
       pipeline.reset({ startSequence: coveredThroughSequence + 1 });
       setState('idle');
       return run;
     };
 
-    const completeAttach = async (run: number, snapshotEndSequence?: number) => {
-      outputCoordinatorCompleteAttachSpy(run, snapshotEndSequence);
+    const completeAttach = async (run: number, snapshotEndSequence?: number, attachOptions?: unknown) => {
+      if (attachOptions === undefined) {
+        outputCoordinatorCompleteAttachSpy(run, snapshotEndSequence);
+      } else {
+        outputCoordinatorCompleteAttachSpy(run, snapshotEndSequence, attachOptions);
+      }
+      const prepared = (attachOptions as { preparedHistory?: any } | undefined)?.preparedHistory;
+      if (prepared) {
+        preparedHistoryOutcome = { status: 'accepted', rebased: false };
+        await writeChunks(prepared.chunks.map((chunk: any) => ({ ...chunk, source: 'history' })));
+        coveredThroughSequence = prepared.coveredThroughSequence;
+        pendingAttachStartSequence = coveredThroughSequence + 1;
+      }
       await replay(
         pendingAttachStartSequence,
         false,
@@ -1256,6 +1357,7 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
         generation += 1;
         baselineReady = false;
         failure = null;
+        preparedHistoryOutcome = { status: 'not-provided', rebased: false };
         retained = [];
         coveredThroughSequence = Math.max(0, startSequence - 1);
         pipeline.reset({ startSequence: coveredThroughSequence + 1 });
@@ -1396,6 +1498,7 @@ vi.mock('../pages/EnvContext', () => {
 
   return {
     useEnvContext: () => ({
+      env_id: () => envContextState.envId,
       env: envAccessor,
       viewMode: () => envContextState.viewMode,
       openFlowerTurnLauncher: openFlowerTurnLauncherSpy,
@@ -1438,7 +1541,7 @@ vi.mock('../utils/permission', () => ({
 }));
 
 vi.mock('../utils/clientId', () => ({
-  createClientId: () => 'ask-flower-id',
+  createClientId: () => `test-client-id-${++clientIdState.next}`,
 }));
 
 vi.mock('./PermissionEmptyState', () => ({
@@ -1718,6 +1821,9 @@ describe('TerminalPanel', () => {
     terminalViewportRectState.top = 24;
     terminalViewportRectState.width = 320;
     terminalViewportRectState.bottom = 320;
+    terminalProtocolState.client = { id: 'protocol-client' };
+    terminalProtocolState.status = 'connected';
+    envContextState.envId = 'env-1';
     envContextState.viewMode = 'activity';
     terminalEnvPermissionsState.canRead = true;
     terminalEnvPermissionsState.canWrite = true;
@@ -1834,6 +1940,7 @@ describe('TerminalPanel', () => {
     sessionsCoordinatorMocks.createSession.mockClear();
     sessionsCoordinatorMocks.deleteSession.mockClear();
     sessionsCoordinatorMocks.updateSessionMeta.mockClear();
+    clientIdState.next = 0;
 
     installRequestAnimationFrameMock();
     if (typeof PointerEvent === 'undefined') {
@@ -2069,8 +2176,8 @@ describe('TerminalPanel', () => {
 
     expect(findTerminalTab(host, 'Terminal 2')?.dataset.terminalSessionActive).toBe('true');
     expect(host.querySelector('[data-testid="terminal-status-bar"]')?.textContent).toContain('Session: session-2');
-    expect(host.querySelector('[data-terminal-deferred-surface="true"]')).toBeTruthy();
-    expect(terminalCoreInstances).toHaveLength(1);
+    expect(host.querySelector('[data-terminal-deferred-surface="true"]')).toBeNull();
+    expect(terminalCoreInstances).toHaveLength(2);
 
     await settleTerminalPanelAfterPaint();
 
@@ -2882,7 +2989,7 @@ describe('TerminalPanel', () => {
     expect(diagnosticsButton).toBeTruthy();
     diagnosticsButton?.click();
     expect(openDebugConsoleSpy).toHaveBeenCalledWith({
-      query: expect.stringMatching(/^terminal-\d+ \d+ history_fetch_failed$/u),
+      query: expect.stringMatching(/^session-[0-9a-f]+ \d+ history_fetch_failed$/u),
     });
 
     retryButton?.click();
@@ -4360,11 +4467,11 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     expect(host.querySelector('[data-testid="terminal-status-bar"]')?.textContent).toContain('Session: session-2');
-    expect(host.querySelector('[data-terminal-deferred-surface="true"]')).toBeTruthy();
+    expect(host.querySelector('[data-terminal-deferred-surface="true"]')).toBeNull();
     expect(terminalEventSourceState.dataHandlers.get('session-1')?.size).toBe(1);
-    expect(terminalEventSourceState.dataHandlers.get('session-2')?.size ?? 0).toBe(0);
-    expect(terminalCoreInstances).toHaveLength(1);
-    expect(transportMocks.attach.mock.calls.every((call) => call[0] !== 'session-2')).toBe(true);
+    expect(terminalEventSourceState.dataHandlers.get('session-2')?.size ?? 0).toBe(1);
+    expect(terminalCoreInstances).toHaveLength(2);
+    expect(transportMocks.attach.mock.calls.some((call) => call[0] === 'session-2')).toBe(true);
 
     await settleTerminalPanelAfterPaint();
 
@@ -4526,6 +4633,187 @@ describe('TerminalPanel', () => {
     expect(transportMocks.forgetSession).toHaveBeenCalledWith('session-2');
   });
 
+  it('drops a late workbench create response after process permission is revoked', async () => {
+    let resolveCreate!: (session: typeof terminalSessionsState.sessions[number]) => void;
+    const sessionOperations = {
+      createSession: vi.fn(async () => await new Promise<typeof terminalSessionsState.sessions[number]>((resolve) => {
+        resolveCreate = resolve;
+      })),
+      deleteSession: vi.fn().mockResolvedValue(undefined),
+    };
+    const upsertSession = vi.fn();
+    const catalog = {
+      sessions: () => terminalSessionsState.sessions,
+      hydrated: () => true,
+      loading: () => false,
+      stale: () => false,
+      error: () => null,
+      connectionEpoch: () => 1,
+      coordinator: () => sessionsCoordinatorMocks,
+      getCoordinator: () => sessionsCoordinatorMocks,
+      refresh: sessionsCoordinatorMocks.refresh,
+      upsertSession,
+      removeSession: vi.fn(),
+      updateSessionMeta: vi.fn(),
+      clearForPermissionDenied: vi.fn(),
+      requestPreparedHistory: vi.fn().mockResolvedValue(null),
+      startHistoryWarmup: vi.fn(),
+      invalidateHistory: vi.fn(),
+      setSurfaceActive: vi.fn(),
+    } as any;
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <TerminalSessionCatalogContext.Provider value={catalog}>
+        <TerminalPanel variant="workbench" sessionOperations={sessionOperations} />
+      </TerminalSessionCatalogContext.Provider>
+    ), host);
+    await settleTerminalPanel();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-sidebar-add-session"]')?.click();
+    await settleTerminalPanelAfterPaint();
+    expect(sessionOperations.createSession).toHaveBeenCalledTimes(1);
+
+    terminalEnvPermissionsState.canWrite = false;
+    resolveCreate({
+      id: 'session-late',
+      name: 'Terminal 2',
+      workingDir: '/workspace',
+      createdAtMs: 2,
+      isActive: true,
+      lastActiveAtMs: 20,
+    });
+    await settleTerminalPanel();
+
+    expect(upsertSession).not.toHaveBeenCalled();
+    expect(host.querySelector('[data-testid="close-session-session-late"]')).toBeNull();
+    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).toBeNull();
+    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'failed')).toBeNull();
+  });
+
+  it('drops a late workbench create response after the environment changes', async () => {
+    let resolveCreate!: (session: typeof terminalSessionsState.sessions[number] | null) => void;
+    const sessionOperations = {
+      createSession: vi.fn(async () => await new Promise<typeof terminalSessionsState.sessions[number] | null>((resolve) => {
+        resolveCreate = resolve;
+      })),
+      deleteSession: vi.fn().mockResolvedValue(undefined),
+    };
+    const upsertSession = vi.fn();
+    const catalog = {
+      sessions: () => terminalSessionsState.sessions,
+      hydrated: () => true,
+      loading: () => false,
+      stale: () => false,
+      error: () => null,
+      connectionEpoch: () => 1,
+      coordinator: () => sessionsCoordinatorMocks,
+      getCoordinator: () => sessionsCoordinatorMocks,
+      refresh: sessionsCoordinatorMocks.refresh,
+      upsertSession,
+      removeSession: vi.fn(),
+      updateSessionMeta: vi.fn(),
+      clearForPermissionDenied: vi.fn(),
+      requestPreparedHistory: vi.fn().mockResolvedValue(null),
+      startHistoryWarmup: vi.fn(),
+      invalidateHistory: vi.fn(),
+      setSurfaceActive: vi.fn(),
+    } as any;
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <TerminalSessionCatalogContext.Provider value={catalog}>
+        <TerminalPanel variant="workbench" sessionOperations={sessionOperations} />
+      </TerminalSessionCatalogContext.Provider>
+    ), host);
+    await settleTerminalPanel();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-sidebar-add-session"]')?.click();
+    await settleTerminalPanelAfterPaint();
+    expect(sessionOperations.createSession).toHaveBeenCalledTimes(1);
+
+    envContextState.envId = 'env-2';
+    resolveCreate(null);
+    await settleTerminalPanel();
+
+    expect(upsertSession).not.toHaveBeenCalled();
+    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).toBeNull();
+    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'failed')).toBeNull();
+  });
+
+  it.each([
+    {
+      name: 'process permission is revoked',
+      invalidate: () => { terminalEnvPermissionsState.canWrite = false; },
+    },
+    {
+      name: 'the environment changes',
+      invalidate: () => { envContextState.envId = 'env-2'; },
+    },
+  ])('does not apply a late workbench delete after $name', async ({ invalidate }) => {
+    terminalSessionsState.sessions = [
+      terminalSessionsState.sessions[0]!,
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace/repo',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+    ];
+    let resolveDelete!: () => void;
+    const sessionOperations = {
+      createSession: vi.fn(),
+      deleteSession: vi.fn(async () => await new Promise<void>((resolve) => {
+        resolveDelete = resolve;
+      })),
+    };
+    const removeSession = vi.fn();
+    const catalog = {
+      sessions: () => terminalSessionsState.sessions,
+      hydrated: () => true,
+      loading: () => false,
+      stale: () => false,
+      error: () => null,
+      connectionEpoch: () => 1,
+      coordinator: () => sessionsCoordinatorMocks,
+      getCoordinator: () => sessionsCoordinatorMocks,
+      refresh: sessionsCoordinatorMocks.refresh,
+      upsertSession: vi.fn(),
+      removeSession,
+      updateSessionMeta: vi.fn(),
+      clearForPermissionDenied: vi.fn(),
+      requestPreparedHistory: vi.fn().mockResolvedValue(null),
+      startHistoryWarmup: vi.fn(),
+      invalidateHistory: vi.fn(),
+      setSurfaceActive: vi.fn(),
+    } as any;
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <TerminalSessionCatalogContext.Provider value={catalog}>
+        <TerminalPanel variant="workbench" sessionOperations={sessionOperations} />
+      </TerminalSessionCatalogContext.Provider>
+    ), host);
+    await settleTerminalPanel();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="close-session-session-2"]')?.click();
+    await settleTerminalPanelAfterPaint();
+    expect(sessionOperations.deleteSession).toHaveBeenCalledWith('session-2');
+
+    invalidate();
+    resolveDelete();
+    await settleTerminalPanel();
+
+    expect(removeSession).not.toHaveBeenCalled();
+    expect(transportMocks.forgetSession).not.toHaveBeenCalledWith('session-2');
+    expect(host.querySelector('[data-testid="close-session-session-2"]')).not.toBeNull();
+  });
+
   it('closes an unmounted terminal tab without mounting it first', async () => {
     terminalSessionsState.sessions = [
       {
@@ -4591,6 +4879,65 @@ describe('TerminalPanel', () => {
     expect(terminalCoreInstances).toHaveLength(1);
     expect(transportMocks.attach.mock.calls.every((call) => call[0] !== 'session-2')).toBe(true);
     expect(transportMocks.forgetSession).toHaveBeenCalledWith('session-2');
+  });
+
+  it('joins the catalog refresh started by coordinator deletion', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace/repo',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+    ];
+    const catalogRefresh = vi.fn().mockResolvedValue(undefined);
+    const catalog = {
+      sessions: () => terminalSessionsState.sessions,
+      hydrated: () => true,
+      loading: () => false,
+      stale: () => false,
+      error: () => null,
+      connectionEpoch: () => 1,
+      coordinator: () => sessionsCoordinatorMocks,
+      getCoordinator: () => sessionsCoordinatorMocks,
+      refresh: catalogRefresh,
+      upsertSession: vi.fn(),
+      removeSession: vi.fn(),
+      updateSessionMeta: vi.fn(),
+      clearForPermissionDenied: vi.fn(),
+      requestPreparedHistory: vi.fn().mockResolvedValue(null),
+      startHistoryWarmup: vi.fn(),
+      invalidateHistory: vi.fn(),
+      setSurfaceActive: vi.fn(),
+    } as any;
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <TerminalSessionCatalogContext.Provider value={catalog}>
+        <TerminalPanel variant="workbench" />
+      </TerminalSessionCatalogContext.Provider>
+    ), host);
+    await settleTerminalPanel();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="close-session-session-2"]')?.click();
+    await settleTerminalPanelAfterPaint();
+
+    expect(sessionsCoordinatorMocks.deleteSession).toHaveBeenCalledWith('session-2');
+    expect(catalogRefresh).toHaveBeenCalledTimes(1);
+    expect(sessionsCoordinatorMocks.deleteSession.mock.invocationCallOrder[0]).toBeLessThan(
+      catalogRefresh.mock.invocationCallOrder[0] ?? Number.POSITIVE_INFINITY,
+    );
   });
 
   it('creates a new terminal session without sending a fixed 80x24 create size', async () => {
@@ -4687,9 +5034,9 @@ describe('TerminalPanel', () => {
     expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).toBeNull();
     expect(host.querySelector('[data-testid="close-session-session-2"]')).toBeTruthy();
     expect(host.querySelector('[data-testid="terminal-status-bar"]')?.textContent).toContain('Session: session-2');
-    expect(host.querySelector('[data-terminal-deferred-surface="true"]')).toBeTruthy();
-    expect(terminalCoreInstances).toHaveLength(1);
-    expect(transportMocks.attach.mock.calls.every((call) => call[0] !== 'session-2')).toBe(true);
+    expect(host.querySelector('[data-terminal-deferred-surface="true"]')).toBeNull();
+    expect(terminalCoreInstances).toHaveLength(2);
+    expect(transportMocks.attach.mock.calls.some((call) => call[0] === 'session-2')).toBe(true);
 
     await settleTerminalPanelAfterPaint();
 
@@ -4747,6 +5094,179 @@ describe('TerminalPanel', () => {
     expect(findTerminalTabs(host, 'Terminal 2')).toHaveLength(1);
     expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).toBeNull();
     expect(host.querySelector('[data-testid="close-session-session-2"]')).toBeTruthy();
+  });
+
+  it('fully settles a single pending create when snapshot self-heals an RPC failure', async () => {
+    let rejectCreate!: (error: Error) => void;
+    sessionsCoordinatorMocks.createSession.mockImplementationOnce(async () => (
+      await new Promise<typeof terminalSessionsState.sessions[number]>((_resolve, reject) => {
+        rejectCreate = reject;
+      })
+    ));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-sidebar-add-session"]')?.click();
+    await settleTerminalPanelAfterPaint();
+    const canonicalSession = {
+      id: 'session-2',
+      name: 'Terminal 2',
+      workingDir: '/workspace',
+      createdAtMs: 2,
+      isActive: true,
+      lastActiveAtMs: 20,
+    };
+    terminalSessionsState.sessions = [
+      { ...terminalSessionsState.sessions[0]!, isActive: false },
+      canonicalSession,
+    ];
+    publishTerminalSessions();
+    await settleTerminalPanel();
+
+    rejectCreate(new Error('create response lost'));
+    await settleTerminalPanel();
+    expect(findTerminalTabs(host, 'Terminal 2')).toHaveLength(1);
+    expect(findPendingTerminalTabStatus(host, 'Terminal 2', 'creating')).toBeNull();
+
+    terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    publishTerminalSessions();
+    await settleTerminalPanel();
+
+    expect(findTerminalTab(host, 'Terminal 2')).toBeUndefined();
+    expect(host.textContent).not.toContain('Creating terminal...');
+  });
+
+  it('keeps the failed FIFO intent when a later same-name create authoritatively claims the snapshot session', async () => {
+    terminalSessionsState.sessions = [{
+      id: 'session-1',
+      name: 'Terminal 1',
+      workingDir: '/workspace/redeven',
+      createdAtMs: 1,
+      isActive: true,
+      lastActiveAtMs: 10,
+    }];
+    let rejectFirstCreate!: (error: Error) => void;
+    let resolveSecondCreate!: (session: typeof terminalSessionsState.sessions[number]) => void;
+    sessionsCoordinatorMocks.createSession
+      .mockImplementationOnce(async () => (
+        await new Promise<typeof terminalSessionsState.sessions[number]>((_resolve, reject) => {
+          rejectFirstCreate = reject;
+        })
+      ))
+      .mockImplementationOnce(async () => (
+        await new Promise<typeof terminalSessionsState.sessions[number]>((resolve) => {
+          resolveSecondCreate = resolve;
+        })
+      ));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    let menu = await openSidebarContextMenu(host, 'Terminal 1');
+    findContextMenuButton(menu, 'Duplicate session')?.click();
+    await settleTerminalPanelAfterPaint();
+    menu = await openSidebarContextMenu(host, 'Terminal 1');
+    findContextMenuButton(menu, 'Duplicate session')?.click();
+    await settleTerminalPanelAfterPaint();
+    expect(sessionsCoordinatorMocks.createSession).toHaveBeenCalledTimes(2);
+
+    const canonicalSession = {
+      id: 'session-2',
+      name: 'redeven',
+      workingDir: '/workspace/redeven',
+      createdAtMs: 2,
+      isActive: true,
+      lastActiveAtMs: 20,
+    };
+    terminalSessionsState.sessions = [
+      { ...terminalSessionsState.sessions[0]!, isActive: false },
+      canonicalSession,
+    ];
+    publishTerminalSessions();
+    await settleTerminalPanel();
+
+    resolveSecondCreate(canonicalSession);
+    await settleTerminalPanel();
+    rejectFirstCreate(new Error('first create failed'));
+    await settleTerminalPanel();
+
+    const redevenTabs = findTerminalTabs(host, 'redeven');
+    expect(redevenTabs).toHaveLength(2);
+    expect(redevenTabs.some((tab) => (
+      tab.parentElement?.querySelector('[data-terminal-tab-status="failed"]') !== null
+    ))).toBe(true);
+    expect(host.querySelector('[data-testid="close-session-session-2"]')).toBeTruthy();
+    expect(host.textContent).toContain('first create failed');
+    expect(Array.from(host.querySelectorAll('button')).some((node) => node.textContent === 'Retry')).toBe(true);
+  });
+
+  it('keeps the failed FIFO intent when its failure precedes the later authoritative ack', async () => {
+    terminalSessionsState.sessions = [{
+      id: 'session-1',
+      name: 'Terminal 1',
+      workingDir: '/workspace/redeven',
+      createdAtMs: 1,
+      isActive: true,
+      lastActiveAtMs: 10,
+    }];
+    let rejectFirstCreate!: (error: Error) => void;
+    let resolveSecondCreate!: (session: typeof terminalSessionsState.sessions[number]) => void;
+    sessionsCoordinatorMocks.createSession
+      .mockImplementationOnce(async () => (
+        await new Promise<typeof terminalSessionsState.sessions[number]>((_resolve, reject) => {
+          rejectFirstCreate = reject;
+        })
+      ))
+      .mockImplementationOnce(async () => (
+        await new Promise<typeof terminalSessionsState.sessions[number]>((resolve) => {
+          resolveSecondCreate = resolve;
+        })
+      ));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    let menu = await openSidebarContextMenu(host, 'Terminal 1');
+    findContextMenuButton(menu, 'Duplicate session')?.click();
+    await settleTerminalPanelAfterPaint();
+    menu = await openSidebarContextMenu(host, 'Terminal 1');
+    findContextMenuButton(menu, 'Duplicate session')?.click();
+    await settleTerminalPanelAfterPaint();
+
+    const canonicalSession = {
+      id: 'session-2',
+      name: 'redeven',
+      workingDir: '/workspace/redeven',
+      createdAtMs: 2,
+      isActive: true,
+      lastActiveAtMs: 20,
+    };
+    terminalSessionsState.sessions = [
+      { ...terminalSessionsState.sessions[0]!, isActive: false },
+      canonicalSession,
+    ];
+    publishTerminalSessions();
+    await settleTerminalPanel();
+
+    rejectFirstCreate(new Error('first create failed'));
+    await settleTerminalPanel();
+    resolveSecondCreate(canonicalSession);
+    await settleTerminalPanel();
+
+    const redevenTabs = findTerminalTabs(host, 'redeven');
+    expect(redevenTabs).toHaveLength(2);
+    expect(redevenTabs.some((tab) => (
+      tab.parentElement?.querySelector('[data-terminal-tab-status="failed"]') !== null
+    ))).toBe(true);
+    expect(host.querySelector('[data-testid="close-session-session-2"]')).toBeTruthy();
+    expect(host.textContent).toContain('first create failed');
   });
 
   it('keeps a failed optimistic terminal tab in place with retry and dismiss actions', async () => {
@@ -5981,6 +6501,72 @@ describe('TerminalPanel', () => {
     expect(core?.write).not.toHaveBeenCalled();
   });
 
+  it('passes an Env prepared-history seed to the visible attach without rewriting it', async () => {
+    terminalSessionsState.sessions = terminalSessionsState.sessions.map((session) => ({
+      ...session,
+      isActive: false,
+    }));
+    const preparedHistory = {
+      chunks: [{ sequence: 1, timestampMs: 1, data: textEncoder.encode('seed') }],
+      requestedStartSequence: 0,
+      firstRetainedSequence: 1,
+      coveredThroughSequence: 1,
+      snapshotEndSequence: 1,
+      historyGeneration: 2,
+      byteLength: 4,
+      pageCount: 1,
+      complete: true,
+    } as const;
+    const requestPreparedHistory = vi.fn().mockResolvedValue(preparedHistory);
+    const startHistoryWarmup = vi.fn();
+    const updateSessionMeta = vi.fn();
+    const catalog = {
+      sessions: () => terminalSessionsState.sessions,
+      hydrated: () => true,
+      loading: () => false,
+      stale: () => false,
+      error: () => null,
+      connectionEpoch: () => 1,
+      coordinator: () => sessionsCoordinatorMocks,
+      getCoordinator: () => sessionsCoordinatorMocks,
+      refresh: sessionsCoordinatorMocks.refresh,
+      upsertSession: vi.fn(),
+      removeSession: vi.fn(),
+      updateSessionMeta,
+      clearForPermissionDenied: vi.fn(),
+      requestPreparedHistory,
+      startHistoryWarmup,
+      invalidateHistory: vi.fn(),
+      setSurfaceActive: vi.fn(),
+    } as any;
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    transportMocks.attach.mockResolvedValueOnce({ historyBoundarySequence: 1 });
+
+    render(() => (
+      <TerminalSessionCatalogContext.Provider value={catalog}>
+        <TerminalPanel variant="workbench" />
+      </TerminalSessionCatalogContext.Provider>
+    ), host);
+    await settleTerminalPanel();
+
+    expect(requestPreparedHistory).toHaveBeenCalledWith('session-1');
+    await waitForTerminalPanelCondition(() => {
+        expect(outputCoordinatorCompleteAttachSpy).toHaveBeenCalledWith(
+        expect.any(Number),
+        1,
+        { preparedHistory },
+      );
+    });
+    expect(transportMocks.historyPage.mock.calls.some((call) => call[1] <= 1)).toBe(false);
+    expect(updateSessionMeta).toHaveBeenCalledWith('session-1', {
+      isActive: true,
+      lastActiveAtMs: expect.any(Number),
+    });
+    expect(startHistoryWarmup).toHaveBeenCalled();
+    expect(updateSessionMeta.mock.invocationCallOrder[0]).toBeLessThan(startHistoryWarmup.mock.invocationCallOrder[0]);
+  });
+
   it('replays terminal history page-by-page and shows progress while a later page is loading', async () => {
     vi.useFakeTimers();
     installRequestAnimationFrameMock('timer');
@@ -7128,9 +7714,9 @@ describe('TerminalPanel', () => {
     expect(event.defaultPrevented).toBe(true);
     expect(findTerminalTab(host, 'Terminal 2')?.dataset.terminalSessionActive).toBe('true');
     expect(host.querySelector('[data-testid="terminal-status-bar"]')?.textContent).toContain('Session: session-2');
-    expect(host.querySelector('[data-terminal-deferred-surface="true"]')).toBeTruthy();
-    expect(terminalCoreInstances).toHaveLength(1);
-    expect(transportMocks.attach.mock.calls.every((call) => call[0] !== 'session-2')).toBe(true);
+    expect(host.querySelector('[data-terminal-deferred-surface="true"]')).toBeNull();
+    expect(terminalCoreInstances).toHaveLength(2);
+    expect(transportMocks.attach.mock.calls.some((call) => call[0] === 'session-2')).toBe(true);
 
     await settleTerminalPanelAfterPaint();
 
@@ -7201,6 +7787,53 @@ describe('TerminalPanel', () => {
     expect(findTerminalTab(host, 'Terminal 1')?.dataset.terminalSessionActive).toBe('true');
     expect(terminalCoreInstances).toHaveLength(1);
     expect(transportMocks.attach.mock.calls.every((call) => call[0] !== 'session-2' && call[0] !== 'session-3')).toBe(true);
+  });
+
+  it('mounts only the final cold target during a rapid A to B to C switch', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace/repo',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+      {
+        id: 'session-3',
+        name: 'Terminal 3',
+        workingDir: '/workspace/logs',
+        createdAtMs: 3,
+        isActive: false,
+        lastActiveAtMs: 3,
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement;
+    transportMocks.attach.mockClear();
+
+    dispatchTerminalKeydown(terminalSurface, { ctrlKey: true, key: '2' });
+    dispatchTerminalKeydown(terminalSurface, { ctrlKey: true, key: '3' });
+
+    expect(findActiveTerminalTab(host)?.textContent).toContain('Terminal 3');
+    expect(terminalCoreInstances).toHaveLength(1);
+    await settleTerminalPanelAfterPaint();
+
+    expect(findActiveTerminalTab(host)?.textContent).toContain('Terminal 3');
+    expect(terminalCoreInstances).toHaveLength(2);
+    expect(transportMocks.attach.mock.calls.map((call) => call[0])).toEqual(['session-3']);
   });
 
   it('does not prevent default for terminal digit shortcuts outside the visible tab range', async () => {

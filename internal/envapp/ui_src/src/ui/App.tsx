@@ -24,7 +24,6 @@ import {
 import { installDesktopEmbeddedDragRegionSync } from './services/desktopEmbeddedDragRegions';
 import { installDesktopWindowChromeDocumentSync } from './services/desktopWindowChrome';
 import { resolveEnvAppStorageBinding } from './services/uiPersistence';
-import { TerminalSessionsLifecycleSync } from './services/terminalSessionsLifecycleSync';
 import { requestWorkbenchRenderTransaction } from './workbench/workbenchRenderBoundary';
 import { I18nProvider, useI18n, type I18nHelpers } from './i18n';
 
@@ -206,7 +205,6 @@ function EnvAppProviders() {
                   <LayoutProvider>
                     <WidgetRegistryProvider>
                       <CommandProvider>
-                        <TerminalSessionsLifecycleSync />
                         <EnvAppShell />
                         <CommandPalette />
                         <NotificationContainer />

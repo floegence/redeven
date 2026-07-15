@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { createContext, createSignal } from 'solid-js';
+import { createContext, createSignal, useContext } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -183,6 +183,10 @@ vi.mock('./protocol/redeven_v1', () => ({
       subscribeThread: vi.fn(async () => undefined),
       sendUserTurn: vi.fn(async () => undefined),
     },
+    terminal: {
+      listSessions: vi.fn(async () => ({ sessions: [] })),
+      onSessionsChanged: vi.fn(() => () => undefined),
+    },
   }),
 }));
 
@@ -244,7 +248,13 @@ vi.mock('./services/localApi', () => ({
   unlockEnvAppAccess: unlockEnvAppAccessMock,
 }));
 vi.mock('./services/sandboxWindowRegistry', () => ({ getSandboxWindowInfo: () => null }));
-vi.mock('./pages/EnvContext', () => ({ EnvContext: createContext({}) }));
+vi.mock('./pages/EnvContext', () => {
+  const EnvContext = createContext<any>({});
+  return {
+    EnvContext,
+    useEnvContext: () => useContext(EnvContext),
+  };
+});
 vi.mock('./pages/AIChatContext', () => ({
   AIChatContext: createContext({}),
   createAIChatContextValue: () => ({}),

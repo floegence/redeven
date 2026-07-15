@@ -13,17 +13,18 @@
     "check:workbench-wheel": "node scripts/checkWorkbenchWheelContract.mjs",
     "preview": "vite preview --host 0.0.0.0 --port 8096",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run --environment=node --exclude \"src/**/*.browser.test.tsx\" --maxWorkers=2 --testTimeout=10000",
+    "test": "node --test scripts/initialBuildGraphPolicy.node-test.mjs scripts/terminalCarrierThreshold.node-test.mjs && vitest run --environment=node --exclude \"src/**/*.browser.test.tsx\" --maxWorkers=2 --testTimeout=10000",
     "test:browser": "node scripts/runVitestBrowser.mjs",
     "test:built-dist-shell": "node scripts/checkPackagedRenderer.mjs",
-    "test:terminal-carrier": "node scripts/checkTerminalRecoveryCarrier.mjs"
+    "test:terminal-carrier": "node scripts/checkTerminalRecoveryCarrier.mjs",
+    "test:terminal-performance": "node scripts/checkTerminalInteractionPerformance.mjs"
   },
   "dependencies": {
     "@chenglou/pretext": "^0.0.5",
     "@floegence/floe-webapp-boot": "^0.37.2",
     "@floegence/floe-webapp-core": "^0.37.2",
     "@floegence/floe-webapp-protocol": "^0.37.2",
-    "@floegence/floeterm-terminal-web": "^0.5.19",
+    "@floegence/floeterm-terminal-web": "^0.5.22",
     "@floegence/flowersec-core": "^0.21.1",
     "@floegence/redevplugin-ui": "0.1.5",
     "@fontsource/iosevka": "^5.2.5",

@@ -5,6 +5,10 @@ import type {
   TerminalSessionInfo,
   TerminalTransport,
 } from '@floegence/floeterm-terminal-web';
+import type {
+  PagedTerminalHistoryPage,
+  PagedTerminalHistoryRequest,
+} from '@floegence/floeterm-terminal-web/history';
 import type { RedevenV1Rpc } from '../protocol/redeven_v1';
 import { ProtocolNotConnectedError, RpcError } from '@floegence/floe-webapp-protocol';
 import { publishTerminalResizeDecision } from './terminalRecoveryDiagnostics';
@@ -51,6 +55,47 @@ export type TerminalHistoryPageOptions = Readonly<{
   historyGeneration?: number;
 }>;
 
+export function createRedevenPagedHistoryFetcher(
+  rpc: RedevenV1Rpc,
+  sessionId: string,
+): (request: PagedTerminalHistoryRequest) => Promise<PagedTerminalHistoryPage> {
+  const normalizedSessionId = String(sessionId ?? '').trim();
+  const cancelled = () => {
+    const error = new Error('The history request was cancelled.');
+    error.name = 'AbortError';
+    return error;
+  };
+  return async (request) => {
+    if (request.signal.aborted) throw cancelled();
+    const startSeq = typeof request.cursor === 'number' ? request.cursor : request.startSequence;
+    const endSeq = request.endSequence ?? -1;
+    const response = await rpc.terminal.history({
+      sessionId: normalizedSessionId,
+      startSeq,
+      endSeq,
+      historyGeneration: request.historyGeneration,
+      limitChunks: TERMINAL_HISTORY_PAGE_LIMIT_CHUNKS,
+      maxBytes: request.maxBytes ?? TERMINAL_HISTORY_PAGE_MAX_BYTES,
+    });
+    if (request.signal.aborted) throw cancelled();
+    const chunks: TerminalDataChunk[] = Array.isArray(response?.chunks) ? response.chunks : [];
+    return {
+      chunks,
+      hasMore: Boolean(response?.hasMore ?? false),
+      nextCursor: Number.isSafeInteger(response?.nextStartSeq) ? response.nextStartSeq : undefined,
+      firstAvailableSequence: Number.isSafeInteger(response?.firstSequence) ? response.firstSequence : undefined,
+      firstRetainedSequence: response?.firstRetainedSequence,
+      coveredThroughSequence: Number(response?.coveredThroughSequence ?? response?.lastSequence ?? 0),
+      snapshotEndSequence: response?.snapshotEndSequence,
+      historyGeneration: response?.historyGeneration,
+      historyReset: Boolean(response?.historyReset ?? false),
+      historyTruncated: Boolean(response?.historyTruncated ?? false),
+      coveredBytes: Number(response?.coveredBytes ?? 0),
+      totalBytes: Number(response?.totalBytes ?? 0),
+    };
+  };
+}
+
 export type RedevenTerminalTransport = TerminalTransport & {
   attachWithHistoryBoundary: (
     sessionId: string,
@@ -68,6 +113,39 @@ export type RedevenTerminalTransport = TerminalTransport & {
   syncConnectionEpoch: (key: object | null) => void;
   dispose: () => void;
 };
+
+/**
+ * Catalog operations never own a renderer, resize lease, or PTY attachment.
+ * Keeping this transport separate prevents eager directory hydration from
+ * allocating the per-surface resources used by visible terminal runtimes.
+ */
+export function createRedevenTerminalCatalogTransport(rpc: RedevenV1Rpc): TerminalTransport {
+  const unsupported = (operation: string): never => {
+    throw new Error(`Terminal catalog transport does not support ${operation}`);
+  };
+
+  return {
+    attach: async () => unsupported('attach'),
+    resize: async () => unsupported('resize'),
+    sendInput: async () => unsupported('sendInput'),
+    history: async () => unsupported('history'),
+    clear: async () => unsupported('clear'),
+    listSessions: async () => {
+      const response = await rpc.terminal.listSessions();
+      return Array.isArray(response?.sessions) ? response.sessions : [];
+    },
+    createSession: async (name, workingDir) => {
+      const response = await rpc.terminal.createSession({
+        name: name?.trim() ? name.trim() : undefined,
+        workingDir: workingDir?.trim() ? workingDir.trim() : undefined,
+      });
+      return response.session;
+    },
+    deleteSession: async (sessionId) => {
+      await rpc.terminal.deleteSession({ sessionId });
+    },
+  };
+}
 
 const TERMINAL_HISTORY_PAGE_LIMIT_CHUNKS = 2048;
 const TERMINAL_HISTORY_PAGE_MAX_BYTES = 512 * 1024;

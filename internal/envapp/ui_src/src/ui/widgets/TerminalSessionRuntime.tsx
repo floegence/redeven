@@ -9,6 +9,7 @@ import {
   type PagedTerminalHistoryPage,
   type PagedTerminalOutputFailureCode,
   type PagedTerminalOutputSnapshot,
+  type PreparedPagedTerminalHistory,
   type TerminalAppearance,
   type TerminalEventSource,
   type TerminalResponsiveConfig,
@@ -42,6 +43,10 @@ import {
   type TerminalRecoveryPhase,
   type TerminalRecoveryTrace,
 } from '../services/terminalRecoveryDiagnostics';
+import {
+  markTerminalPerformance,
+  pseudonymousTerminalSessionRef,
+} from '../services/terminalPerformance';
 
 type SessionLoadingState = 'idle' | 'initializing' | 'attaching' | 'loading_history' | 'waiting_for_ownership' | 'reconnecting';
 
@@ -143,6 +148,7 @@ export type TerminalSessionRuntimeProps = Readonly<{
   ) => void;
   onTerminalFileLinkOpen?: (target: TerminalResolvedLinkTarget) => Promise<void> | void;
   onNameUpdate?: (sessionId: string, newName: string, workingDir: string) => void;
+  requestPreparedHistory?: (sessionId: string) => Promise<PreparedPagedTerminalHistory | null>;
 }>;
 
 export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
@@ -927,9 +933,10 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
 
     const core = createCore(id, target);
     const coordinator = ensureOutputCoordinator(id);
+    const preparedHistoryPromise = props.requestPreparedHistory?.(id) ?? null;
 
     try {
-      await core.initialize();
+      await core.initialize({ priority: 'interactive' });
       if (seq !== initSeq) return;
 
       // After core.initialize(), the underlying terminal instance is ready: re-register to keep the outer registry consistent.
@@ -989,11 +996,63 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       outputProjection.reset();
       try {
         markTerminalRecoveryMilestone(trace, 'baseline-queued');
-        void coordinator.completeAttach(coordinatorAttachGeneration, historyBoundarySequence);
+        const preparedHistory = preparedHistoryPromise
+          ? await preparedHistoryPromise.catch(() => null)
+          : null;
+        if (seq !== initSeq) return;
+        void coordinator.completeAttach(
+          coordinatorAttachGeneration,
+          historyBoundarySequence,
+          preparedHistory ? { preparedHistory } : undefined,
+        );
         const baseline = await coordinator.waitForBaseline();
         if (!baseline.baselineReady) {
           reportBlockingFailure(baseline.failure?.code ?? 'terminal_unavailable');
           throw new Error('Terminal history baseline unavailable');
+        }
+        if (preparedHistoryPromise) {
+          const preparedHistoryOutcome = baseline.preparedHistoryOutcome;
+          const preparedHistoryHit = preparedHistory !== null
+            && preparedHistoryOutcome?.status === 'accepted';
+          const preparedHistoryRebased = preparedHistory !== null
+            && preparedHistoryOutcome?.rebased === true;
+          if (preparedHistoryRebased) {
+            markTerminalPerformance('prepared-history-rebased', {
+              session_ref: pseudonymousTerminalSessionRef(id),
+              variant: props.variant,
+              history_generation: preparedHistory.historyGeneration,
+              byte_length: preparedHistory.byteLength,
+              page_count: preparedHistory.pageCount,
+            });
+            publishTerminalRecoveryEvent(trace, 'prepared_history_rebased', {
+              history_generation: preparedHistory.historyGeneration,
+              prepared_history_bytes: preparedHistory.byteLength,
+              prepared_history_page_count: preparedHistory.pageCount,
+            });
+          }
+          markTerminalPerformance(
+            preparedHistoryHit ? 'prepared-history-hit' : 'prepared-history-miss',
+            {
+              session_ref: pseudonymousTerminalSessionRef(id),
+              variant: props.variant,
+              byte_length: preparedHistory?.byteLength,
+              page_count: preparedHistory?.pageCount,
+              delta_byte_length: historyBytes,
+              delta_page_count: historyPageCount,
+            },
+          );
+          publishTerminalRecoveryEvent(
+            trace,
+            preparedHistoryHit ? 'prepared_history_hit' : 'prepared_history_miss',
+            preparedHistory
+              ? {
+                prepared_history_bytes: preparedHistory.byteLength,
+                prepared_history_page_count: preparedHistory.pageCount,
+                history_bytes: historyBytes,
+                history_page_count: historyPageCount,
+              }
+              : {},
+          );
         }
         markTerminalRecoveryMilestone(trace, 'baseline-parser-committed', {
           coordinator_attach_generation: baseline.attachGeneration,
@@ -1125,7 +1184,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     const coordinator = ensureOutputCoordinator(id);
 
     try {
-      await core.initialize();
+      await core.initialize({ priority: 'interactive' });
       if (seq !== initSeq) return;
       props.registerCore(id, core);
       applyTerminalAppearance(core, buildTerminalAppearance(), { forceResize: true });
