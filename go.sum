@@ -60,8 +60,8 @@ github.com/floegence/floeterm/terminal-go v0.4.26 h1:dGq8fEi7aB8bYSPVMMWsh7fRF3N
 github.com/floegence/floeterm/terminal-go v0.4.26/go.mod h1:MMRZG0JBuR8VCIKoL6D9Cs5yHdcclwdpB6de6MWKp9M=
 github.com/floegence/floret v0.4.0 h1:uoF/UsV+z5Ds8+jX4+MIX+9J3AdK8gvAHxYsMSqAF0Q=
 github.com/floegence/floret v0.4.0/go.mod h1:u2oNhsSB8OppYPHo/cTmXITL+3pxv7ckjYDiq3SjoCg=
-github.com/floegence/flowersec/flowersec-go v0.20.2 h1:Krr5KChLWGf182vlslwQdDMYC373WODKa44Wv73l9t8=
-github.com/floegence/flowersec/flowersec-go v0.20.2/go.mod h1:8fe+3zfbt5JbJkhCtP6+HziydFLCr4l+h4vYpi9qaWs=
+github.com/floegence/flowersec/flowersec-go v0.21.1 h1:Cy3nICxi6V+MyP0jg/5j03owYmjfUb6GAZDZPXTFqO4=
+github.com/floegence/flowersec/flowersec-go v0.21.1/go.mod h1:8fe+3zfbt5JbJkhCtP6+HziydFLCr4l+h4vYpi9qaWs=
 github.com/floegence/redevplugin v0.1.1 h1:mweJNZ4EzHtCLLDkyNsbNkX2VEYKM3+GN+rM11i21Fg=
 github.com/floegence/redevplugin v0.1.1/go.mod h1:1IfrTfG9ibHdgUhAmctVo17aSWYOa8fTtklrf6/qT+4=
 github.com/go-logr/logr v1.4.2 h1:6pFjapn8bFcIbiKo3XT4j/BhANplGihG6tvd+8rYgrY=
