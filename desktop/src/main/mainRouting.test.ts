@@ -524,7 +524,6 @@ describe('main routing', () => {
     expect(openSSHSrc).toContain('const reusedFreshPreflight = canReuseFreshSSHOpenPreflight(cachedHealth, readyRecord);');
     expect(openSSHSrc).toContain('if (!reusedFreshPreflight) {');
     expect(openSSHSrc).toContain('if (!reusedFreshPreflight || !cachedSSHOpenFailureAllowsRefreshRetry(error)) {');
-    expect(mainSrc).toContain("error.presentation.code === 'ssh_forward_unavailable'");
     expect(mainSrc).toContain('if (!sessionRecord.env_app_ready || !sessionRecord.desktop_model_source_settled) {');
     expect(mainSrc).toContain('resolveSessionInitialLoadWhenReady(sessionRecord);');
     expect(mainSrc).toContain("'environment_open_timing'");

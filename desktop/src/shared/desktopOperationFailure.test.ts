@@ -94,4 +94,36 @@ describe('desktopOperationFailure', () => {
       summary: 'Update Desktop before opening this environment.',
     })?.code).toBe('desktop_update_required');
   });
+
+  it.each([
+    'ssh_forward_unavailable',
+    'ssh_forward_verification_timed_out',
+    'ssh_forward_network_failed',
+    'ssh_forward_invalid_response',
+  ] as const)('preserves the typed SSH forward failure code %s', (code) => {
+    expect(normalizeDesktopOperationFailurePresentation({
+      code,
+      severity: 'error',
+      title: 'SSH forward failure',
+      summary: 'Desktop could not verify the forwarded Runtime.',
+    })?.code).toBe(code);
+  });
+
+  it('includes sanitized forward probe diagnostics in clipboard output', () => {
+    const text = formatDesktopOperationFailureForClipboard({
+      code: 'ssh_forward_network_failed',
+      severity: 'error',
+      title: 'Forwarded Runtime Unreachable',
+      summary: 'The forwarded Runtime connection failed.',
+      diagnostics: [{
+        channel: 'forward_probe',
+        label: 'SSH forward probe',
+        text: 'failure_type=network_error\nerror_code=ECONNRESET\nattempts=3\nrequest_budget_ms=450\nelapsed_ms=450',
+      }],
+    });
+
+    expect(text).toContain('SSH forward probe (forward_probe):');
+    expect(text).toContain('failure_type=network_error');
+    expect(text).toContain('error_code=ECONNRESET');
+  });
 });

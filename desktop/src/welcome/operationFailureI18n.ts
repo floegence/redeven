@@ -24,6 +24,12 @@ function failureTitleKey(failure: DesktopOperationFailurePresentation): DesktopT
       return 'progress.sshRuntimeInstallFailedTitle';
     case 'ssh_forward_unavailable':
       return 'progress.sshForwardUnavailableTitle';
+    case 'ssh_forward_verification_timed_out':
+      return 'progress.sshForwardVerificationTimedOutTitle';
+    case 'ssh_forward_network_failed':
+      return 'progress.sshForwardNetworkFailedTitle';
+    case 'ssh_forward_invalid_response':
+      return 'progress.sshForwardInvalidResponseTitle';
     case 'local_runtime_launch_failed':
     case 'container_runtime_launch_failed':
     case 'ssh_runtime_launch_failed':
@@ -66,6 +72,12 @@ function failureSummaryKey(failure: DesktopOperationFailurePresentation): Deskto
       return 'progress.sshRuntimeInstallFailedSummary';
     case 'ssh_forward_unavailable':
       return 'progress.sshForwardUnavailableSummary';
+    case 'ssh_forward_verification_timed_out':
+      return 'progress.sshForwardVerificationTimedOutSummary';
+    case 'ssh_forward_network_failed':
+      return 'progress.sshForwardNetworkFailedSummary';
+    case 'ssh_forward_invalid_response':
+      return 'progress.sshForwardInvalidResponseSummary';
     case 'local_runtime_launch_failed':
     case 'container_runtime_launch_failed':
     case 'ssh_runtime_launch_failed':
