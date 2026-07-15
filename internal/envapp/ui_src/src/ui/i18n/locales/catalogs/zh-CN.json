@@ -3439,6 +3439,8 @@
       "runErrorRuntimeRestarted": "本地运行时在本次回复完成前重启了。请在运行时就绪后重新开始回复。",
       "messageErrorTitle": "消息失败",
       "messageErrorFallback": "这条消息失败时，Flower 尚未生成可见文本。",
+      "projectionUnavailableTitle": "回复不可用",
+      "projectionUnavailableDescription": "无法加载本轮已保存的回复。",
       "copyCode": "复制代码",
       "codeCopied": "已复制",
       "showFullCommand": "显示完整命令",

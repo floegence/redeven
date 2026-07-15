@@ -176,6 +176,10 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
         fallback: t(i18n, k('chat.compactionDividerFallback')),
         tokenChange: (before, after) => t(i18n, k('chat.compactionDividerTokenChange'), { before, after }),
       },
+      projectionUnavailable: {
+        title: t(i18n, k('chat.projectionUnavailableTitle')),
+        description: t(i18n, k('chat.projectionUnavailableDescription')),
+      },
       conversationsAria: t(i18n, k('chat.conversationsAria')),
       resizeConversationsLabel: t(i18n, k('chat.resizeConversationsLabel')),
       entryLabel: t(i18n, k('chat.entryLabel')),

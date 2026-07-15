@@ -22,6 +22,21 @@ type threadTimelineMessage struct {
 	SortKey     int64
 	SourceRank  int
 	MessageJSON json.RawMessage
+	Decoration  *FlowerTimelineDecoration
+}
+
+type floretProjectionOutcomeStatus string
+
+const (
+	floretProjectionOutcomeReady       floretProjectionOutcomeStatus = "ready"
+	floretProjectionOutcomeUnavailable floretProjectionOutcomeStatus = "unavailable"
+)
+
+type floretProjectionOutcome struct {
+	Status            floretProjectionOutcomeStatus
+	MessageJSON       json.RawMessage
+	CreatedAt         int64
+	UnavailableReason FlowerTurnProjectionUnavailableReason
 }
 
 func (s *Service) listThreadTimelineMessages(ctx context.Context, endpointID string, threadID string, limit int, beforeRowID int64) ([]threadTimelineMessage, int64, bool, error) {
@@ -29,15 +44,16 @@ func (s *Service) listThreadTimelineMessages(ctx context.Context, endpointID str
 	if err != nil {
 		return nil, 0, false, err
 	}
+	messages := timelineMessageItems(items)
 	if limit <= 0 {
 		limit = 200
 	}
 	if limit > 500 {
 		limit = 500
 	}
-	end := len(items)
+	end := len(messages)
 	if beforeRowID != 0 {
-		for i, item := range items {
+		for i, item := range messages {
 			if item.RowID == beforeRowID {
 				end = i
 				break
@@ -48,11 +64,12 @@ func (s *Service) listThreadTimelineMessages(ctx context.Context, endpointID str
 	if start < 0 {
 		start = 0
 	}
-	out := append([]threadTimelineMessage(nil), items[start:end]...)
+	pageMessages := append([]threadTimelineMessage(nil), messages[start:end]...)
+	out := timelinePageWithRelatedDecorations(items, pageMessages)
 	nextBefore := int64(0)
 	hasMore := start > 0
-	if hasMore && len(out) > 0 {
-		nextBefore = out[0].RowID
+	if hasMore && len(pageMessages) > 0 {
+		nextBefore = pageMessages[0].RowID
 	}
 	return out, nextBefore, hasMore, nil
 }
@@ -62,6 +79,7 @@ func (s *Service) listThreadTimelineMessagesAfter(ctx context.Context, endpointI
 	if err != nil {
 		return nil, 0, false, err
 	}
+	messages := timelineMessageItems(items)
 	if limit <= 0 {
 		limit = 200
 	}
@@ -70,11 +88,11 @@ func (s *Service) listThreadTimelineMessagesAfter(ctx context.Context, endpointI
 	}
 	start := 0
 	if tail {
-		if len(items) > limit {
-			start = len(items) - limit
+		if len(messages) > limit {
+			start = len(messages) - limit
 		}
 	} else if afterRowID != 0 {
-		for i, item := range items {
+		for i, item := range messages {
 			if item.RowID == afterRowID {
 				start = i + 1
 				break
@@ -82,16 +100,54 @@ func (s *Service) listThreadTimelineMessagesAfter(ctx context.Context, endpointI
 		}
 	}
 	end := start + limit
-	if end > len(items) {
-		end = len(items)
+	if end > len(messages) {
+		end = len(messages)
 	}
-	out := append([]threadTimelineMessage(nil), items[start:end]...)
+	pageMessages := append([]threadTimelineMessage(nil), messages[start:end]...)
+	out := timelinePageWithRelatedDecorations(items, pageMessages)
 	nextAfter := int64(0)
-	if len(out) > 0 {
-		nextAfter = out[len(out)-1].RowID
+	if len(pageMessages) > 0 {
+		nextAfter = pageMessages[len(pageMessages)-1].RowID
 	}
-	hasMore := end < len(items)
+	hasMore := end < len(messages)
 	return out, nextAfter, hasMore, nil
+}
+
+func timelineMessageItems(items []threadTimelineMessage) []threadTimelineMessage {
+	messages := make([]threadTimelineMessage, 0, len(items))
+	for _, item := range items {
+		if item.Decoration == nil {
+			messages = append(messages, item)
+		}
+	}
+	return messages
+}
+
+func timelinePageWithRelatedDecorations(items []threadTimelineMessage, pageMessages []threadTimelineMessage) []threadTimelineMessage {
+	if len(pageMessages) == 0 {
+		return nil
+	}
+	messageRows := make(map[int64]struct{}, len(pageMessages))
+	messageIDs := make(map[string]struct{}, len(pageMessages))
+	for _, item := range pageMessages {
+		messageRows[item.RowID] = struct{}{}
+		if messageID := strings.TrimSpace(item.MessageID); messageID != "" {
+			messageIDs[messageID] = struct{}{}
+		}
+	}
+	out := make([]threadTimelineMessage, 0, len(pageMessages))
+	for _, item := range items {
+		if item.Decoration == nil {
+			if _, ok := messageRows[item.RowID]; ok {
+				out = append(out, item)
+			}
+			continue
+		}
+		if _, ok := messageIDs[strings.TrimSpace(item.Decoration.Anchor.MessageID)]; ok {
+			out = append(out, item)
+		}
+	}
+	return out
 }
 
 func (s *Service) loadThreadTimelineMessages(ctx context.Context, endpointID string, threadID string) ([]threadTimelineMessage, error) {
@@ -243,21 +299,38 @@ func (s *Service) loadThreadTimelineMessages(ctx context.Context, endpointID str
 		defer host.Close()
 	}
 	for _, candidate := range projectionTurns {
-		raw, createdAt, ok, err := s.floretProjectionMessageJSON(ctx, host, endpointID, threadID, candidate.turn)
+		outcome, err := s.floretProjectionMessage(ctx, host, endpointID, threadID, candidate.turn)
 		if err != nil {
 			return nil, err
 		}
-		if !ok {
-			continue
+		sortKey := messageSortKey(candidate.rawID, (maxMessageRowID+candidate.turn.ID)*4+1)
+		rowID := floretSyntheticRowIDBase + candidate.turn.ID
+		switch outcome.Status {
+		case floretProjectionOutcomeReady:
+			items = append(items, threadTimelineMessage{
+				RowID:       rowID,
+				MessageID:   candidate.rawID,
+				CreatedAt:   outcome.CreatedAt,
+				SortKey:     sortKey,
+				SourceRank:  1,
+				MessageJSON: outcome.MessageJSON,
+			})
+		case floretProjectionOutcomeUnavailable:
+			decoration, err := projectionUnavailableDecoration(candidate.turn, outcome.UnavailableReason)
+			if err != nil {
+				return nil, err
+			}
+			items = append(items, threadTimelineMessage{
+				RowID:      rowID,
+				MessageID:  candidate.rawID,
+				CreatedAt:  outcome.CreatedAt,
+				SortKey:    sortKey,
+				SourceRank: 1,
+				Decoration: &decoration,
+			})
+		default:
+			return nil, fmt.Errorf("unsupported Floret projection outcome %q", outcome.Status)
 		}
-		items = append(items, threadTimelineMessage{
-			RowID:       floretSyntheticRowIDBase + candidate.turn.ID,
-			MessageID:   candidate.rawID,
-			CreatedAt:   createdAt,
-			SortKey:     messageSortKey(candidate.rawID, (maxMessageRowID+candidate.turn.ID)*4+1),
-			SourceRank:  1,
-			MessageJSON: raw,
-		})
 	}
 
 	sort.SliceStable(items, func(i, j int) bool {
@@ -334,14 +407,14 @@ func loadAllThreadTimelineConversationTurns(ctx context.Context, db *threadstore
 	return out, nil
 }
 
-func (s *Service) floretProjectionMessageJSON(ctx context.Context, host floretProjectionReader, endpointID string, threadID string, turn threadstore.ConversationTurn) (json.RawMessage, int64, bool, error) {
+func (s *Service) floretProjectionMessage(ctx context.Context, host floretProjectionReader, endpointID string, threadID string, turn threadstore.ConversationTurn) (floretProjectionOutcome, error) {
 	if host == nil {
-		return nil, 0, false, nil
+		return floretProjectionOutcome{}, errors.New("Floret projection reader is required")
 	}
 	turnID := strings.TrimSpace(turn.TurnID)
 	runID := strings.TrimSpace(turn.RunID)
 	if turnID == "" || runID == "" {
-		return nil, 0, false, nil
+		return floretProjectionOutcome{}, errors.New("Floret projection identity is incomplete")
 	}
 	projection, err := host.ReadTurnProjection(ctx, flruntime.ReadTurnProjectionRequest{
 		ThreadID: flruntime.ThreadID(strings.TrimSpace(threadID)),
@@ -350,9 +423,9 @@ func (s *Service) floretProjectionMessageJSON(ctx context.Context, host floretPr
 	})
 	if err != nil {
 		if errors.Is(err, flruntime.ErrThreadNotFound) || errors.Is(err, flruntime.ErrTurnNotFound) || errors.Is(err, flruntime.ErrRunNotFound) {
-			return nil, 0, false, nil
+			return unavailableFloretProjectionOutcome(turn, FlowerTurnProjectionUnavailableNotFound), nil
 		}
-		return nil, 0, false, err
+		return floretProjectionOutcome{}, err
 	}
 	createdAt := turn.CreatedAtUnixMs
 	if createdAt <= 0 && !projection.ProjectedAt.IsZero() {
@@ -373,35 +446,64 @@ func (s *Service) floretProjectionMessageJSON(ctx context.Context, host floretPr
 		if s.log != nil {
 			s.log.Warn("ai: Floret contract rejected", "contract_kind", "turn_projection_history", "endpoint_id", strings.TrimSpace(endpointID), "thread_id", strings.TrimSpace(threadID), "run_id", runID, "error", sanitizeLogText(err.Error(), 240))
 		}
-		return nil, 0, false, nil
+		return unavailableFloretProjectionOutcome(turn, FlowerTurnProjectionUnavailableInvalidContract), nil
 	}
 	status, err := snapshotStatusForFloretProjection(projection)
 	if err != nil {
-		return nil, 0, false, err
+		return unavailableFloretProjectionOutcome(turn, FlowerTurnProjectionUnavailableInvalidContract), nil
 	}
 	blocks, valid := projectionRun.flowerBlocksFromFloretThreadProjectionChecked(projection)
 	if !valid {
-		return nil, 0, false, nil
+		return unavailableFloretProjectionOutcome(turn, FlowerTurnProjectionUnavailableInvalidContract), nil
 	}
 	if len(blocks) == 0 {
-		return nil, 0, false, nil
+		return unavailableFloretProjectionOutcome(turn, FlowerTurnProjectionUnavailableNotRenderable), nil
 	}
 	projectionRun.assistantBlocks = blocks
 	raw, _, at, err := projectionRun.snapshotAssistantMessageJSONWithStatus(status)
 	if err != nil {
-		return nil, 0, false, err
+		return floretProjectionOutcome{}, err
 	}
 	if at > 0 {
 		createdAt = at
 	}
 	sanitized, err := SanitizeActivityTimelineMessageJSON(string(raw))
 	if err != nil {
-		return nil, 0, false, err
+		return floretProjectionOutcome{}, err
 	}
 	if len(sanitized) == 0 {
-		return nil, 0, false, nil
+		return unavailableFloretProjectionOutcome(turn, FlowerTurnProjectionUnavailableNotRenderable), nil
 	}
-	return sanitized, createdAt, true, nil
+	return floretProjectionOutcome{Status: floretProjectionOutcomeReady, MessageJSON: sanitized, CreatedAt: createdAt}, nil
+}
+
+func unavailableFloretProjectionOutcome(turn threadstore.ConversationTurn, reason FlowerTurnProjectionUnavailableReason) floretProjectionOutcome {
+	return floretProjectionOutcome{Status: floretProjectionOutcomeUnavailable, CreatedAt: turn.CreatedAtUnixMs, UnavailableReason: reason}
+}
+
+func projectionUnavailableDecoration(turn threadstore.ConversationTurn, reason FlowerTurnProjectionUnavailableReason) (FlowerTimelineDecoration, error) {
+	turnID := strings.TrimSpace(turn.TurnID)
+	runID := strings.TrimSpace(turn.RunID)
+	userMessageID := strings.TrimSpace(turn.UserMessageID)
+	expectedMessageID := strings.TrimSpace(turn.AssistantMessageID)
+	if turnID == "" || runID == "" || userMessageID == "" || expectedMessageID == "" || !reason.Valid() {
+		return FlowerTimelineDecoration{}, errors.New("projection unavailable decoration identity is incomplete")
+	}
+	decoration := FlowerTimelineDecoration{
+		DecorationID: "turn-projection-unavailable:" + turnID,
+		Kind:         FlowerTimelineDecorationTurnProjectionUnavailable,
+		Anchor:       FlowerTimelineAnchor{TargetKind: "message", MessageID: userMessageID, Edge: "after"},
+		ProjectionUnavailable: &FlowerTurnProjectionUnavailable{
+			TurnID:            turnID,
+			RunID:             runID,
+			ExpectedMessageID: expectedMessageID,
+			Reason:            reason,
+		},
+	}
+	if err := decoration.Validate(); err != nil {
+		return FlowerTimelineDecoration{}, err
+	}
+	return decoration, nil
 }
 
 func snapshotStatusForFloretProjection(projection flruntime.ThreadTurnProjection) (string, error) {

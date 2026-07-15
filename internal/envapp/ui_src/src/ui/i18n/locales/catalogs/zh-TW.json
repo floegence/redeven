@@ -3480,6 +3480,8 @@
       "compactionDividerNoop": "上下文無需壓縮",
       "compactionDividerFallback": "上下文檢查點",
       "compactionDividerTokenChange": "{before} 壓縮至 {after}",
+      "projectionUnavailableTitle": "回應無法使用",
+      "projectionUnavailableDescription": "無法載入此輪已儲存的回應。",
       "toolStatusPending": "待處理",
       "toolStatusRunning": "執行中",
       "toolStatusWaiting": "等待中",

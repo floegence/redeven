@@ -200,10 +200,11 @@ func (s *Service) GetFlowerThreadLiveBootstrap(ctx context.Context, meta *sessio
 	state = s.mergePersistedDelegatedApprovalState(ctx, endpointID, threadID, state)
 	normalizeFlowerApprovalQueueActions(&state)
 
-	timeline, err := s.buildFlowerTimelineMessages(ctx, endpointID, threadID, state)
+	timeline, err := s.buildFlowerTimelineProjection(ctx, endpointID, threadID, state)
 	if err != nil {
 		return nil, err
 	}
+	state.TimelineDecorations = timeline.TimelineDecorations
 
 	return &FlowerLiveBootstrapResponse{
 		SchemaVersion:    FlowerLiveSchemaVersion,
@@ -213,7 +214,7 @@ func (s *Service) GetFlowerThreadLiveBootstrap(ctx context.Context, meta *sessio
 		Cursor:           cursor,
 		RetainedFromSeq:  retainedFromSeq,
 		Thread:           *thread,
-		TimelineMessages: timeline,
+		TimelineMessages: timeline.Messages,
 		LiveState:        state,
 		GeneratedAtMs:    time.Now().UnixMilli(),
 	}, nil
@@ -467,9 +468,14 @@ func mergeFlowerTimelineDecoration(decorations []FlowerTimelineDecoration, persi
 	return append(out, persisted)
 }
 
-func (s *Service) buildFlowerTimelineMessages(ctx context.Context, endpointID string, threadID string, state FlowerLiveMaterializedState) ([]FlowerTimelineMessage, error) {
+type flowerTimelineProjection struct {
+	Messages            []FlowerTimelineMessage
+	TimelineDecorations []FlowerTimelineDecoration
+}
+
+func (s *Service) buildFlowerTimelineProjection(ctx context.Context, endpointID string, threadID string, state FlowerLiveMaterializedState) (flowerTimelineProjection, error) {
 	if s == nil {
-		return nil, errors.New("nil service")
+		return flowerTimelineProjection{}, errors.New("nil service")
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -477,19 +483,30 @@ func (s *Service) buildFlowerTimelineMessages(ctx context.Context, endpointID st
 	endpointID = strings.TrimSpace(endpointID)
 	threadID = strings.TrimSpace(threadID)
 	if endpointID == "" || threadID == "" {
-		return nil, errors.New("invalid request")
+		return flowerTimelineProjection{}, errors.New("invalid request")
 	}
 
 	msgs, err := s.loadThreadTimelineMessages(ctx, endpointID, threadID)
 	if err != nil {
-		return nil, err
+		return flowerTimelineProjection{}, err
 	}
 	persistedByID := make(map[string]FlowerTimelineMessage, len(msgs))
 	persistedOrder := make([]string, 0, len(msgs))
+	projectionDecorations := make([]FlowerTimelineDecoration, 0)
 	for _, msg := range msgs {
+		if msg.Decoration != nil {
+			if err := msg.Decoration.Validate(); err != nil {
+				return flowerTimelineProjection{}, fmt.Errorf("invalid persisted timeline decoration: %w", err)
+			}
+			projectionDecorations = append(projectionDecorations, *msg.Decoration)
+			continue
+		}
+		if len(msg.MessageJSON) == 0 {
+			return flowerTimelineProjection{}, errors.New("timeline item has neither message nor decoration")
+		}
 		timelineMsg, ok, err := flowerTimelineMessageFromRaw(msg.MessageID, "", "", msg.CreatedAt, msg.MessageJSON)
 		if err != nil {
-			return nil, err
+			return flowerTimelineProjection{}, err
 		}
 		if !ok {
 			continue
@@ -529,6 +546,42 @@ func (s *Service) buildFlowerTimelineMessages(ctx context.Context, endpointID st
 	for _, messageID := range liveIDs {
 		appendByID(messageID)
 	}
+	decorations, err := mergeFlowerTimelineDecorationsStrict(state.TimelineDecorations, projectionDecorations)
+	if err != nil {
+		return flowerTimelineProjection{}, err
+	}
+	return flowerTimelineProjection{Messages: out, TimelineDecorations: decorations}, nil
+}
+
+func (s *Service) buildFlowerTimelineMessages(ctx context.Context, endpointID string, threadID string, state FlowerLiveMaterializedState) ([]FlowerTimelineMessage, error) {
+	projection, err := s.buildFlowerTimelineProjection(ctx, endpointID, threadID, state)
+	if err != nil {
+		return nil, err
+	}
+	return projection.Messages, nil
+}
+
+func mergeFlowerTimelineDecorationsStrict(current []FlowerTimelineDecoration, additions []FlowerTimelineDecoration) ([]FlowerTimelineDecoration, error) {
+	out := cloneFlowerTimelineDecorations(current)
+	indexByID := make(map[string]int, len(out))
+	for i, decoration := range out {
+		if err := decoration.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid live timeline decoration: %w", err)
+		}
+		indexByID[strings.TrimSpace(decoration.DecorationID)] = i
+	}
+	for _, decoration := range additions {
+		if err := decoration.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid projected timeline decoration: %w", err)
+		}
+		decorationID := strings.TrimSpace(decoration.DecorationID)
+		if i, ok := indexByID[decorationID]; ok {
+			out[i] = decoration
+			continue
+		}
+		indexByID[decorationID] = len(out)
+		out = append(out, decoration)
+	}
 	return out, nil
 }
 
@@ -551,19 +604,20 @@ func (s *Service) publishFlowerCanonicalTimelineReplacement(ctx context.Context,
 	snapshotThroughSeq := s.flowerLiveCursorLocked(endpointID, threadID)
 	s.mu.Unlock()
 
-	timeline, err := s.buildFlowerTimelineMessages(ctx, endpointID, threadID, state)
+	timeline, err := s.buildFlowerTimelineProjection(ctx, endpointID, threadID, state)
 	if err != nil {
 		return err
 	}
+	state.TimelineDecorations = timeline.TimelineDecorations
 	payload := FlowerLiveTimelineReplacedPayload{
-		Messages:            timeline,
+		Messages:            timeline.Messages,
 		StreamGeneration:    streamGeneration,
 		SnapshotThroughSeq:  snapshotThroughSeq,
 		ThreadPatch:         cloneFlowerLiveThreadPatch(state.ThreadPatch),
 		LiveState:           cloneFlowerLiveMaterializedState(state),
 		ContextUsage:        cloneFlowerContextUsage(state.ContextUsage),
 		ContextCompactions:  cloneFlowerContextCompactions(state.ContextCompactions),
-		TimelineDecorations: cloneFlowerTimelineDecorations(state.TimelineDecorations),
+		TimelineDecorations: cloneFlowerTimelineDecorations(timeline.TimelineDecorations),
 	}
 	s.appendFlowerLiveEvent(FlowerLiveEvent{
 		EndpointID: strings.TrimSpace(endpointID),
@@ -1213,9 +1267,7 @@ func normalizeFlowerTimelineDecorationForEvent(stream *flowerLiveThreadStream, c
 	}
 	decorationID := "context-compaction:" + operationID
 	decoration.DecorationID = decorationID
-	if strings.TrimSpace(decoration.Kind) == "" {
-		decoration.Kind = "context_compaction"
-	}
+	decoration.Kind = FlowerTimelineDecorationContextCompaction
 	decoration.Compaction = compaction
 	if stream != nil {
 		for _, existing := range stream.State.TimelineDecorations {
@@ -1785,9 +1837,7 @@ func upsertFlowerContextCompaction(state *FlowerLiveMaterializedState, compactio
 
 	decorationID := "context-compaction:" + operationID
 	decoration.DecorationID = decorationID
-	if strings.TrimSpace(decoration.Kind) == "" {
-		decoration.Kind = "context_compaction"
-	}
+	decoration.Kind = FlowerTimelineDecorationContextCompaction
 	if strings.TrimSpace(decoration.Compaction.OperationID) == "" || decoration.Compaction.UpdatedAtMs < compaction.UpdatedAtMs {
 		decoration.Compaction = compaction
 	}
@@ -1806,16 +1856,7 @@ func upsertFlowerContextCompaction(state *FlowerLiveMaterializedState, compactio
 }
 
 func validFlowerTimelineDecoration(decoration FlowerTimelineDecoration) bool {
-	if strings.TrimSpace(decoration.DecorationID) == "" {
-		return false
-	}
-	if strings.TrimSpace(decoration.Kind) != "context_compaction" {
-		return false
-	}
-	if strings.TrimSpace(decoration.Compaction.OperationID) == "" {
-		return false
-	}
-	return validFlowerTimelineAnchor(decoration.Anchor)
+	return decoration.Validate() == nil
 }
 
 func validFlowerTimelineAnchor(anchor FlowerTimelineAnchor) bool {

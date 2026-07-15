@@ -203,20 +203,43 @@ export type FlowerTimelineAnchorTargetKind = 'message' | 'block' | 'activity_ite
 export type FlowerTimelineAnchorEdge = 'before' | 'after';
 
 export type FlowerTimelineAnchor = Readonly<{
-  target_kind: FlowerTimelineAnchorTargetKind | string;
+  target_kind: FlowerTimelineAnchorTargetKind;
   message_id: string;
   block_index?: number;
   activity_item_id?: string;
-  edge: FlowerTimelineAnchorEdge | string;
+  edge: FlowerTimelineAnchorEdge;
 }>;
 
-export type FlowerTimelineDecoration = Readonly<{
+export type FlowerTurnProjectionUnavailableReason = 'not_found' | 'invalid_contract' | 'not_renderable';
+
+export type FlowerTurnProjectionUnavailable = Readonly<{
+  turn_id: string;
+  run_id: string;
+  expected_message_id: string;
+  reason: FlowerTurnProjectionUnavailableReason;
+}>;
+
+export type FlowerContextCompactionTimelineDecoration = Readonly<{
   decoration_id: string;
-  kind: 'context_compaction' | string;
+  kind: 'context_compaction';
   anchor: FlowerTimelineAnchor;
   ordinal: number;
   compaction: FlowerContextCompaction;
+  projection_unavailable?: never;
 }>;
+
+export type FlowerTurnProjectionUnavailableTimelineDecoration = Readonly<{
+  decoration_id: string;
+  kind: 'turn_projection_unavailable';
+  anchor: FlowerTimelineAnchor;
+  ordinal: number;
+  compaction?: never;
+  projection_unavailable: FlowerTurnProjectionUnavailable;
+}>;
+
+export type FlowerTimelineDecoration =
+  | FlowerContextCompactionTimelineDecoration
+  | FlowerTurnProjectionUnavailableTimelineDecoration;
 
 export type FlowerActivityStatus =
   | 'pending'
@@ -758,7 +781,7 @@ export type FlowerLiveUsageUpdatedPayload = Readonly<{
 
 export type FlowerLiveContextCompactionUpdatedPayload = Readonly<{
   compaction: FlowerContextCompaction;
-  timeline_decoration: FlowerTimelineDecoration;
+  timeline_decoration: FlowerContextCompactionTimelineDecoration;
 }>;
 
 export type FlowerLiveModelIOUpdatedPayload = Readonly<{

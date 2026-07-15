@@ -2,6 +2,9 @@ package ai
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
 
 	"github.com/floegence/redeven/internal/config"
 )
@@ -519,12 +522,135 @@ type FlowerTimelineAnchor struct {
 	Edge           string `json:"edge"`
 }
 
+type FlowerTimelineDecorationKind string
+
+const (
+	FlowerTimelineDecorationContextCompaction         FlowerTimelineDecorationKind = "context_compaction"
+	FlowerTimelineDecorationTurnProjectionUnavailable FlowerTimelineDecorationKind = "turn_projection_unavailable"
+)
+
+type FlowerTurnProjectionUnavailableReason string
+
+const (
+	FlowerTurnProjectionUnavailableNotFound        FlowerTurnProjectionUnavailableReason = "not_found"
+	FlowerTurnProjectionUnavailableInvalidContract FlowerTurnProjectionUnavailableReason = "invalid_contract"
+	FlowerTurnProjectionUnavailableNotRenderable   FlowerTurnProjectionUnavailableReason = "not_renderable"
+)
+
+func (reason FlowerTurnProjectionUnavailableReason) Valid() bool {
+	switch reason {
+	case FlowerTurnProjectionUnavailableNotFound, FlowerTurnProjectionUnavailableInvalidContract, FlowerTurnProjectionUnavailableNotRenderable:
+		return true
+	default:
+		return false
+	}
+}
+
+type FlowerTurnProjectionUnavailable struct {
+	TurnID            string                                `json:"turn_id"`
+	RunID             string                                `json:"run_id"`
+	ExpectedMessageID string                                `json:"expected_message_id"`
+	Reason            FlowerTurnProjectionUnavailableReason `json:"reason"`
+}
+
 type FlowerTimelineDecoration struct {
-	DecorationID string                  `json:"decoration_id"`
-	Kind         string                  `json:"kind"`
-	Anchor       FlowerTimelineAnchor    `json:"anchor"`
-	Ordinal      int                     `json:"ordinal"`
-	Compaction   FlowerContextCompaction `json:"compaction"`
+	DecorationID          string                           `json:"decoration_id"`
+	Kind                  FlowerTimelineDecorationKind     `json:"kind"`
+	Anchor                FlowerTimelineAnchor             `json:"anchor"`
+	Ordinal               int                              `json:"ordinal"`
+	Compaction            FlowerContextCompaction          `json:"-"`
+	ProjectionUnavailable *FlowerTurnProjectionUnavailable `json:"-"`
+	compactionPresent     bool
+	projectionPresent     bool
+}
+
+func (decoration FlowerTimelineDecoration) Validate() error {
+	if strings.TrimSpace(decoration.DecorationID) == "" {
+		return errors.New("timeline decoration id is required")
+	}
+	if !validFlowerTimelineAnchor(decoration.Anchor) {
+		return errors.New("timeline decoration requires a valid anchor")
+	}
+	switch decoration.Kind {
+	case FlowerTimelineDecorationContextCompaction:
+		if strings.TrimSpace(decoration.Compaction.OperationID) == "" {
+			return errors.New("context compaction decoration requires compaction payload")
+		}
+		if decoration.ProjectionUnavailable != nil || decoration.projectionPresent {
+			return errors.New("context compaction decoration must not include projection unavailable payload")
+		}
+	case FlowerTimelineDecorationTurnProjectionUnavailable:
+		if strings.TrimSpace(decoration.Compaction.OperationID) != "" || decoration.compactionPresent {
+			return errors.New("projection unavailable decoration must not include compaction payload")
+		}
+		payload := decoration.ProjectionUnavailable
+		if decoration.Anchor.TargetKind != "message" || decoration.Anchor.Edge != "after" {
+			return errors.New("projection unavailable decoration must follow a message")
+		}
+		if payload == nil || strings.TrimSpace(payload.TurnID) == "" || strings.TrimSpace(payload.RunID) == "" || strings.TrimSpace(payload.ExpectedMessageID) == "" || !payload.Reason.Valid() {
+			return errors.New("projection unavailable decoration requires a valid payload")
+		}
+	default:
+		return fmt.Errorf("unsupported timeline decoration kind %q", decoration.Kind)
+	}
+	return nil
+}
+
+func (decoration FlowerTimelineDecoration) MarshalJSON() ([]byte, error) {
+	if err := decoration.Validate(); err != nil {
+		return nil, err
+	}
+	type wire struct {
+		DecorationID          string                           `json:"decoration_id"`
+		Kind                  FlowerTimelineDecorationKind     `json:"kind"`
+		Anchor                FlowerTimelineAnchor             `json:"anchor"`
+		Ordinal               int                              `json:"ordinal"`
+		Compaction            *FlowerContextCompaction         `json:"compaction,omitempty"`
+		ProjectionUnavailable *FlowerTurnProjectionUnavailable `json:"projection_unavailable,omitempty"`
+	}
+	out := wire{DecorationID: decoration.DecorationID, Kind: decoration.Kind, Anchor: decoration.Anchor, Ordinal: decoration.Ordinal, ProjectionUnavailable: decoration.ProjectionUnavailable}
+	if decoration.Kind == FlowerTimelineDecorationContextCompaction {
+		compaction := decoration.Compaction
+		out.Compaction = &compaction
+	}
+	return json.Marshal(out)
+}
+
+func (decoration *FlowerTimelineDecoration) UnmarshalJSON(data []byte) error {
+	if decoration == nil {
+		return errors.New("nil timeline decoration")
+	}
+	type wire struct {
+		DecorationID          string                           `json:"decoration_id"`
+		Kind                  FlowerTimelineDecorationKind     `json:"kind"`
+		Anchor                FlowerTimelineAnchor             `json:"anchor"`
+		Ordinal               int                              `json:"ordinal"`
+		Compaction            *FlowerContextCompaction         `json:"compaction"`
+		ProjectionUnavailable *FlowerTurnProjectionUnavailable `json:"projection_unavailable"`
+	}
+	var in wire
+	if err := json.Unmarshal(data, &in); err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	_, compactionPresent := fields["compaction"]
+	_, projectionPresent := fields["projection_unavailable"]
+	*decoration = FlowerTimelineDecoration{
+		DecorationID:          in.DecorationID,
+		Kind:                  in.Kind,
+		Anchor:                in.Anchor,
+		Ordinal:               in.Ordinal,
+		ProjectionUnavailable: in.ProjectionUnavailable,
+		compactionPresent:     compactionPresent,
+		projectionPresent:     projectionPresent,
+	}
+	if in.Compaction != nil {
+		decoration.Compaction = *in.Compaction
+	}
+	return decoration.Validate()
 }
 
 type FlowerTimelineMessage struct {

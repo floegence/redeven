@@ -3572,6 +3572,8 @@
       "compactionDividerNoop": "Сжатие контекста не требуется",
       "compactionDividerFallback": "Контрольная точка контекста",
       "compactionDividerTokenChange": "{before} до {after}",
+      "projectionUnavailableTitle": "Ответ недоступен",
+      "projectionUnavailableDescription": "Сохранённый ответ на этот запрос не удалось загрузить.",
       "toolStatusPending": "Ожидает",
       "toolStatusRunning": "Выполняется",
       "toolStatusWaiting": "Ожидание",

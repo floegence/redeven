@@ -335,6 +335,40 @@ describe('buildFlowerTimelineEntries', () => {
     expect(divider.decoration.compaction.status).toBe('compacted');
   });
 
+  it('inserts unavailable projection entries after the user message without creating an assistant message', () => {
+    const entries = buildFlowerTimelineEntries(thread({
+      messages: [{
+        id: 'user-1',
+        role: 'user',
+        content: 'Hello',
+        status: 'complete',
+        created_at_ms: 1,
+      }],
+      timeline_decorations: [{
+        decoration_id: 'turn-projection-unavailable:turn-1',
+        kind: 'turn_projection_unavailable',
+        anchor: {
+          target_kind: 'message',
+          message_id: 'user-1',
+          edge: 'after',
+        },
+        ordinal: 0,
+        projection_unavailable: {
+          turn_id: 'turn-1',
+          run_id: 'run-1',
+          expected_message_id: 'assistant-1',
+          reason: 'not_found',
+        },
+      }],
+    }));
+
+    expect(entries.map((entry) => entry.type)).toEqual(['message', 'turn_projection_unavailable']);
+    expect(entries.filter((entry) => entry.type === 'message')).toHaveLength(1);
+    const unavailable = entries[1];
+    if (unavailable?.type !== 'turn_projection_unavailable') throw new Error('expected unavailable projection entry');
+    expect(unavailable.decoration.projection_unavailable.expected_message_id).toBe('assistant-1');
+  });
+
   it('inserts context compaction decorations between activity items', () => {
     const entries = buildFlowerTimelineEntries(thread({
       messages: [
@@ -572,8 +606,8 @@ describe('buildFlowerTimelineEntries', () => {
     expect(divider.decoration.compaction.operation_id).toBe('natural-threshold');
   });
 
-  it('skips context compaction decorations without a valid anchor', () => {
-    const entries = buildFlowerTimelineEntries(thread({
+  it('rejects context compaction decorations without a valid anchor', () => {
+    expect(() => buildFlowerTimelineEntries(thread({
       messages: [
         {
           id: 'assistant-1',
@@ -600,9 +634,7 @@ describe('buildFlowerTimelineEntries', () => {
           updated_at_ms: 3,
         },
       }],
-    }));
-
-    expect(entries.map((entry) => entry.type)).toEqual(['message']);
+    }))).toThrow(/valid timeline anchor/);
   });
 
   it('does not render empty activity timeline blocks', () => {

@@ -35,6 +35,7 @@ func TestListThreadMessagesDoesNotSynthesizeSuccessfulTerminalProjection(t *test
 	if len(listed.Messages) != 1 {
 		t.Fatalf("messages=%d, want only persisted user message", len(listed.Messages))
 	}
+	assertProjectionUnavailableDecoration(t, listed.TimelineDecorations, "msg_user", "msg_assistant", "run_missing_projection", FlowerTurnProjectionUnavailableNotFound)
 }
 
 func TestListThreadMessagesDoesNotSynthesizeFailedTerminalProjection(t *testing.T) {
@@ -63,6 +64,7 @@ func TestListThreadMessagesDoesNotSynthesizeFailedTerminalProjection(t *testing.
 	if len(listed.Messages) != 1 {
 		t.Fatalf("messages=%d, want only persisted user message", len(listed.Messages))
 	}
+	assertProjectionUnavailableDecoration(t, listed.TimelineDecorations, "msg_user", "msg_assistant", "run_failed_projection", FlowerTurnProjectionUnavailableNotFound)
 }
 
 func TestListThreadMessagesDoesNotSynthesizeRuntimeRestartedCanceledProjection(t *testing.T) {
@@ -91,6 +93,7 @@ func TestListThreadMessagesDoesNotSynthesizeRuntimeRestartedCanceledProjection(t
 	if len(listed.Messages) != 1 {
 		t.Fatalf("messages=%d, want only persisted user message", len(listed.Messages))
 	}
+	assertProjectionUnavailableDecoration(t, listed.TimelineDecorations, "msg_user", "msg_assistant", "run_canceled_projection", FlowerTurnProjectionUnavailableNotFound)
 }
 
 func TestListThreadMessagesDoesNotSynthesizeTimedOutTerminalProjection(t *testing.T) {
@@ -116,6 +119,95 @@ func TestListThreadMessagesDoesNotSynthesizeTimedOutTerminalProjection(t *testin
 	}
 	if len(listed.Messages) != 1 {
 		t.Fatalf("messages=%d, want only persisted user message", len(listed.Messages))
+	}
+	assertProjectionUnavailableDecoration(t, listed.TimelineDecorations, "msg_user", "msg_assistant", "run_timed_out_projection", FlowerTurnProjectionUnavailableNotFound)
+}
+
+func TestListThreadMessagesPaginatesMessagesWithTheirUnavailableDecorations(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc := newTestService(t, nil)
+	meta := timelineReadPathMeta("env_projection_pagination")
+	thread, err := svc.CreateThread(ctx, meta, "projection pagination", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	for i := 1; i <= 2; i++ {
+		userMessageID := fmt.Sprintf("msg_user_%d", i)
+		assistantMessageID := fmt.Sprintf("msg_assistant_%d", i)
+		runID := fmt.Sprintf("run_projection_%d", i)
+		appendTimelineReadPathUserMessage(t, ctx, svc.threadsDB, meta.EndpointID, thread.ThreadID, userMessageID, "hello", int64(i*1000))
+		appendTimelineReadPathTurn(t, ctx, svc.threadsDB, meta.EndpointID, thread.ThreadID, runID, userMessageID, assistantMessageID, threadstore.RunRecord{
+			State:           string(RunStateSuccess),
+			StartedAtUnixMs: int64(i * 1000),
+			EndedAtUnixMs:   int64(i*1000 + 500),
+		})
+	}
+
+	latest, err := svc.ListThreadMessages(ctx, meta, thread.ThreadID, 1, 0)
+	if err != nil {
+		t.Fatalf("ListThreadMessages latest: %v", err)
+	}
+	if len(latest.Messages) != 1 || timelineMessageIDForTest(t, latest.Messages[0]) != "msg_user_2" {
+		t.Fatalf("latest messages=%+v, want msg_user_2", latest.Messages)
+	}
+	if latest.TotalReturned != 1 || !latest.HasMore || latest.NextBeforeID <= 0 {
+		t.Fatalf("latest pagination=%+v", latest)
+	}
+	assertProjectionUnavailableDecoration(t, latest.TimelineDecorations, "msg_user_2", "msg_assistant_2", "run_projection_2", FlowerTurnProjectionUnavailableNotFound)
+
+	older, err := svc.ListThreadMessages(ctx, meta, thread.ThreadID, 1, latest.NextBeforeID)
+	if err != nil {
+		t.Fatalf("ListThreadMessages older: %v", err)
+	}
+	if len(older.Messages) != 1 || timelineMessageIDForTest(t, older.Messages[0]) != "msg_user_1" {
+		t.Fatalf("older messages=%+v, want msg_user_1", older.Messages)
+	}
+	if older.TotalReturned != 1 || older.HasMore || older.NextBeforeID != 0 {
+		t.Fatalf("older pagination=%+v", older)
+	}
+	assertProjectionUnavailableDecoration(t, older.TimelineDecorations, "msg_user_1", "msg_assistant_1", "run_projection_1", FlowerTurnProjectionUnavailableNotFound)
+}
+
+func TestListThreadTimelineMessagesAfterKeepsUnavailableDecorationWithAnchorPage(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc := newTestService(t, nil)
+	meta := timelineReadPathMeta("env_projection_after_pagination")
+	thread, err := svc.CreateThread(ctx, meta, "projection after pagination", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	for i := 1; i <= 2; i++ {
+		userMessageID := fmt.Sprintf("msg_user_%d", i)
+		assistantMessageID := fmt.Sprintf("msg_assistant_%d", i)
+		runID := fmt.Sprintf("run_projection_%d", i)
+		appendTimelineReadPathUserMessage(t, ctx, svc.threadsDB, meta.EndpointID, thread.ThreadID, userMessageID, "hello", int64(i*1000))
+		appendTimelineReadPathTurn(t, ctx, svc.threadsDB, meta.EndpointID, thread.ThreadID, runID, userMessageID, assistantMessageID, threadstore.RunRecord{
+			State:           string(RunStateSuccess),
+			StartedAtUnixMs: int64(i * 1000),
+			EndedAtUnixMs:   int64(i*1000 + 500),
+		})
+	}
+
+	first, nextAfter, hasMore, err := svc.listThreadTimelineMessagesAfter(ctx, meta.EndpointID, thread.ThreadID, 1, 0, false)
+	if err != nil {
+		t.Fatalf("listThreadTimelineMessagesAfter first: %v", err)
+	}
+	assertTimelinePageMessageAndDecoration(t, first, "msg_user_1", "run_projection_1")
+	if nextAfter <= 0 || !hasMore {
+		t.Fatalf("first nextAfter=%d hasMore=%t", nextAfter, hasMore)
+	}
+
+	second, finalAfter, hasMore, err := svc.listThreadTimelineMessagesAfter(ctx, meta.EndpointID, thread.ThreadID, 1, nextAfter, false)
+	if err != nil {
+		t.Fatalf("listThreadTimelineMessagesAfter second: %v", err)
+	}
+	assertTimelinePageMessageAndDecoration(t, second, "msg_user_2", "run_projection_2")
+	if finalAfter <= nextAfter || hasMore {
+		t.Fatalf("second finalAfter=%d nextAfter=%d hasMore=%t", finalAfter, nextAfter, hasMore)
 	}
 }
 
@@ -159,6 +251,7 @@ func TestGetFlowerThreadLiveBootstrapKeepsTimelineReadableWhenFailedTurnLacksPro
 	if got := bootstrap.TimelineMessages[2]; got.Status != "streaming" || !got.ActiveCursor || got.Content != "new reply partial" {
 		t.Fatalf("live assistant message=%+v", got)
 	}
+	assertProjectionUnavailableDecoration(t, bootstrap.LiveState.TimelineDecorations, "msg_user_1", "msg_assistant_1", "run_failed_projection", FlowerTurnProjectionUnavailableNotFound)
 }
 
 func TestListThreadMessagesAllowsRunningFloretTurnWithoutProjection(t *testing.T) {
@@ -183,6 +276,9 @@ func TestListThreadMessagesAllowsRunningFloretTurnWithoutProjection(t *testing.T
 	if len(listed.Messages) != 1 {
 		t.Fatalf("messages=%d, want only persisted user message while run is live", len(listed.Messages))
 	}
+	if len(listed.TimelineDecorations) != 0 {
+		t.Fatalf("running turn decorations=%+v, want none", listed.TimelineDecorations)
+	}
 }
 
 func TestFloretProjectionHistoryRejectsUnknownProjectionContract(t *testing.T) {
@@ -197,16 +293,55 @@ func TestFloretProjectionHistoryRejectsUnknownProjectionContract(t *testing.T) {
 		ThroughOrdinal: 1,
 		Segments:       []flruntime.ThreadTurnProjectionSegment{{Kind: "unknown"}},
 	}}
-	raw, _, ok, err := svc.floretProjectionMessageJSON(t.Context(), host, "env_history_contract", "thread_history_contract", threadstore.ConversationTurn{
-		TurnID:          "turn_history_contract",
-		RunID:           "run_history_contract",
-		CreatedAtUnixMs: 1000,
+	outcome, err := svc.floretProjectionMessage(t.Context(), host, "env_history_contract", "thread_history_contract", threadstore.ConversationTurn{
+		TurnID:             "turn_history_contract",
+		RunID:              "run_history_contract",
+		UserMessageID:      "user_history_contract",
+		AssistantMessageID: "assistant_history_contract",
+		CreatedAtUnixMs:    1000,
 	})
 	if err != nil {
-		t.Fatalf("floretProjectionMessageJSON: %v", err)
+		t.Fatalf("floretProjectionMessage: %v", err)
 	}
-	if ok || len(raw) != 0 {
-		t.Fatalf("invalid projection produced history message: ok=%t raw=%s", ok, string(raw))
+	if outcome.Status != floretProjectionOutcomeUnavailable || outcome.UnavailableReason != FlowerTurnProjectionUnavailableInvalidContract || len(outcome.MessageJSON) != 0 {
+		t.Fatalf("invalid projection outcome=%+v", outcome)
+	}
+}
+
+func assertProjectionUnavailableDecoration(t *testing.T, decorations []FlowerTimelineDecoration, userMessageID string, assistantMessageID string, runID string, reason FlowerTurnProjectionUnavailableReason) {
+	t.Helper()
+	if len(decorations) != 1 {
+		t.Fatalf("decorations=%+v, want one unavailable projection", decorations)
+	}
+	decoration := decorations[0]
+	if decoration.Kind != FlowerTimelineDecorationTurnProjectionUnavailable || decoration.Anchor.TargetKind != "message" || decoration.Anchor.MessageID != userMessageID || decoration.Anchor.Edge != "after" {
+		t.Fatalf("decoration=%+v", decoration)
+	}
+	if decoration.ProjectionUnavailable == nil || decoration.ProjectionUnavailable.RunID != runID || decoration.ProjectionUnavailable.ExpectedMessageID != assistantMessageID || decoration.ProjectionUnavailable.Reason != reason {
+		t.Fatalf("projection unavailable=%+v", decoration.ProjectionUnavailable)
+	}
+}
+
+func assertTimelinePageMessageAndDecoration(t *testing.T, items []threadTimelineMessage, userMessageID string, runID string) {
+	t.Helper()
+	messageCount := 0
+	decorationCount := 0
+	for _, item := range items {
+		if item.Decoration == nil {
+			messageCount++
+			if item.MessageID != userMessageID {
+				t.Fatalf("page message id=%q, want %q", item.MessageID, userMessageID)
+			}
+			continue
+		}
+		decorationCount++
+		decoration := item.Decoration
+		if decoration.Anchor.MessageID != userMessageID || decoration.ProjectionUnavailable == nil || decoration.ProjectionUnavailable.RunID != runID {
+			t.Fatalf("page decoration=%+v", decoration)
+		}
+	}
+	if messageCount != 1 || decorationCount != 1 {
+		t.Fatalf("page items=%+v, want one message and one decoration", items)
 	}
 }
 

@@ -430,9 +430,11 @@ export function toWireAIListMessagesRequest(req: AIListMessagesRequest): wire_ai
 
 export function fromWireAIListMessagesResponse(resp: wire_ai_list_messages_resp): AIListMessagesResponse {
   const items = Array.isArray(resp?.messages) ? resp.messages.map(fromWireTranscriptMessageItem).filter(Boolean) as AITranscriptMessageItem[] : [];
+  const timelineDecorations = Array.isArray(resp?.timeline_decorations) ? [...resp.timeline_decorations] : undefined;
   const next = Number(resp?.next_after_row_id ?? 0);
   return {
     messages: items,
+    ...(timelineDecorations !== undefined ? { timelineDecorations } : {}),
     nextAfterRowId: Number.isFinite(next) && next > 0 ? next : undefined,
     hasMore: Boolean(resp?.has_more ?? false),
   };

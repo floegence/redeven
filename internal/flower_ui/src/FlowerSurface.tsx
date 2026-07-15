@@ -15,6 +15,7 @@ import {
   type PendingFlowerTurn,
 } from './flowerPendingTurns';
 import { FlowerContextCompactionDivider } from './chat/FlowerContextCompactionDivider';
+import { FlowerTurnProjectionUnavailable } from './chat/FlowerTurnProjectionUnavailable';
 import { FlowerComposerContextIndicator } from './chat/FlowerComposerContextIndicator';
 import type { FlowerComposerContextUsageFreshness } from './chat/flowerContextPresentation';
 import { FlowerEmptyState } from './chat/FlowerEmptyState';
@@ -165,7 +166,7 @@ type PendingContextCompactionDecoration = Readonly<{
   thread_id: string;
   started_at_ms: number;
   known_operation_ids: readonly string[];
-  decoration: FlowerTimelineDecoration;
+  decoration: Extract<FlowerTimelineDecoration, { kind: 'context_compaction' }>;
 }>;
 type SelectedThreadLiveRequest = Readonly<{
   token: number;
@@ -6285,6 +6286,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return <FlowerContextCompactionDivider decoration={decoration()} copy={copy()} />;
   };
 
+  const projectionUnavailableEntry = (entry: Accessor<Extract<FlowerTimelineEntry, { type: 'turn_projection_unavailable' }>>) => {
+    const decoration = createMemo(() => entry().decoration);
+    return <FlowerTurnProjectionUnavailable decoration={decoration()} copy={copy()} />;
+  };
+
   const inputRequestEntry = (entry: Accessor<FlowerTimelineEntry>) => {
     const request = createMemo(() => {
       const value = entry();
@@ -6315,6 +6321,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return messageEntry(() => entry() as Extract<FlowerTimelineEntry, { type: 'message' }>);
       case 'context_compaction':
         return compactionDividerEntry(() => entry() as Extract<FlowerTimelineEntry, { type: 'context_compaction' }>);
+      case 'turn_projection_unavailable':
+        return projectionUnavailableEntry(() => entry() as Extract<FlowerTimelineEntry, { type: 'turn_projection_unavailable' }>);
       case 'input_request':
         return inputRequestEntry(entry);
       case 'error':

@@ -238,15 +238,26 @@ function sameContextCompactions(
 }
 
 function sameTimelineDecoration(left: FlowerTimelineDecoration, right: FlowerTimelineDecoration): boolean {
-  return left.decoration_id === right.decoration_id
+  if (left.kind !== right.kind) return false;
+  const common = left.decoration_id === right.decoration_id
     && left.kind === right.kind
     && left.anchor.target_kind === right.anchor.target_kind
     && left.anchor.message_id === right.anchor.message_id
     && Number(left.anchor.block_index ?? -1) === Number(right.anchor.block_index ?? -1)
     && sameOptionalString(left.anchor.activity_item_id, right.anchor.activity_item_id)
     && left.anchor.edge === right.anchor.edge
-    && Number(left.ordinal) === Number(right.ordinal)
-    && sameContextCompaction(left.compaction, right.compaction);
+    && Number(left.ordinal) === Number(right.ordinal);
+  if (!common) return false;
+  if (left.kind === 'context_compaction' && right.kind === 'context_compaction') {
+    return sameContextCompaction(left.compaction, right.compaction);
+  }
+  if (left.kind === 'turn_projection_unavailable' && right.kind === 'turn_projection_unavailable') {
+    return left.projection_unavailable.turn_id === right.projection_unavailable.turn_id
+      && left.projection_unavailable.run_id === right.projection_unavailable.run_id
+      && left.projection_unavailable.expected_message_id === right.projection_unavailable.expected_message_id
+      && left.projection_unavailable.reason === right.projection_unavailable.reason;
+  }
+  return false;
 }
 
 function sameTimelineDecorations(

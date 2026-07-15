@@ -39,7 +39,12 @@ export type FlowerTimelineEntry =
   | Readonly<{
     type: 'context_compaction';
     key: string;
-    decoration: FlowerTimelineDecoration;
+    decoration: Extract<FlowerTimelineDecoration, { kind: 'context_compaction' }>;
+  }>
+  | Readonly<{
+    type: 'turn_projection_unavailable';
+    key: string;
+    decoration: Extract<FlowerTimelineDecoration, { kind: 'turn_projection_unavailable' }>;
   }>
   | Readonly<{
     type: 'error';
@@ -189,14 +194,36 @@ function decorationSortKey(decoration: FlowerTimelineDecoration): string {
   ].join(':');
 }
 
-function timelineDecorationEntry(decoration: FlowerTimelineDecoration): FlowerTimelineEntry | null {
-  if (decoration.kind !== 'context_compaction') return null;
-  if (!trimString(decoration.decoration_id) || !trimString(decoration.compaction.operation_id)) return null;
-  return {
-    type: 'context_compaction',
-    key: `timeline-decoration:${decoration.decoration_id}`,
-    decoration,
-  };
+type FlowerTimelineDecorationEntry = Extract<FlowerTimelineEntry, { type: 'context_compaction' | 'turn_projection_unavailable' }>;
+
+function timelineDecorationEntry(decoration: FlowerTimelineDecoration): FlowerTimelineDecorationEntry {
+  if (!trimString(decoration.decoration_id)) {
+    throw new Error('Flower contract error: timeline decoration requires decoration_id.');
+  }
+  switch (decoration.kind) {
+    case 'context_compaction':
+      if (!trimString(decoration.compaction.operation_id)) {
+        throw new Error('Flower contract error: context compaction decoration requires compaction payload.');
+      }
+      return {
+        type: 'context_compaction',
+        key: `timeline-decoration:${decoration.decoration_id}`,
+        decoration,
+      };
+    case 'turn_projection_unavailable':
+      if (
+        !trimString(decoration.projection_unavailable.turn_id)
+        || !trimString(decoration.projection_unavailable.run_id)
+        || !trimString(decoration.projection_unavailable.expected_message_id)
+      ) {
+        throw new Error('Flower contract error: unavailable projection decoration requires projection payload.');
+      }
+      return {
+        type: 'turn_projection_unavailable',
+        key: `timeline-decoration:${decoration.decoration_id}`,
+        decoration,
+      };
+  }
 }
 
 function timelineAnchorKey(decoration: FlowerTimelineDecoration): string {
@@ -204,7 +231,9 @@ function timelineAnchorKey(decoration: FlowerTimelineDecoration): string {
   const targetKind = trimString(anchor.target_kind);
   const messageID = trimString(anchor.message_id);
   const edge = trimString(anchor.edge);
-  if (!messageID || (edge !== 'before' && edge !== 'after')) return '';
+  if (!messageID || (edge !== 'before' && edge !== 'after')) {
+    throw new Error('Flower contract error: timeline decoration requires a valid timeline anchor.');
+  }
   if (targetKind === 'message') {
     return `message:${messageID}:${edge}`;
   }
@@ -214,21 +243,19 @@ function timelineAnchorKey(decoration: FlowerTimelineDecoration): string {
   if (targetKind === 'activity_item' && anchor.block_index !== undefined && trimString(anchor.activity_item_id)) {
     return `activity-item:${messageID}:${Math.max(0, Math.floor(Number(anchor.block_index)))}:${trimString(anchor.activity_item_id)}:${edge}`;
   }
-  return '';
+  throw new Error('Flower contract error: timeline decoration requires a valid timeline anchor.');
 }
 
 function decorationsByTimelineAnchor(
   decorations: readonly FlowerTimelineDecoration[],
-): ReadonlyMap<string, readonly Extract<FlowerTimelineEntry, { type: 'context_compaction' }>[]> {
-  const byAnchor = new Map<string, Extract<FlowerTimelineEntry, { type: 'context_compaction' }>[]>();
+): ReadonlyMap<string, readonly FlowerTimelineDecorationEntry[]> {
+  const byAnchor = new Map<string, FlowerTimelineDecorationEntry[]>();
   const entries = decorations
     .map(timelineDecorationEntry)
-    .filter((entry): entry is Extract<FlowerTimelineEntry, { type: 'context_compaction' }> => entry != null)
     .sort((left, right) => decorationSortKey(left.decoration).localeCompare(decorationSortKey(right.decoration)));
 
   for (const entry of entries) {
     const key = timelineAnchorKey(entry.decoration);
-    if (!key) continue;
     byAnchor.set(key, [...(byAnchor.get(key) ?? []), entry]);
   }
 
@@ -236,9 +263,9 @@ function decorationsByTimelineAnchor(
 }
 
 function timelineAnchorEntries(
-  decorations: ReadonlyMap<string, readonly Extract<FlowerTimelineEntry, { type: 'context_compaction' }>[]>,
+  decorations: ReadonlyMap<string, readonly FlowerTimelineDecorationEntry[]>,
   key: string,
-): readonly Extract<FlowerTimelineEntry, { type: 'context_compaction' }>[] {
+): readonly FlowerTimelineDecorationEntry[] {
   return decorations.get(key) ?? [];
 }
 
@@ -261,10 +288,10 @@ function messageSegmentEntry(
 function messageTimelineEntries(
   threadID: string,
   message: FlowerChatMessage,
-  decorations: ReadonlyMap<string, readonly Extract<FlowerTimelineEntry, { type: 'context_compaction' }>[]>,
+  decorations: ReadonlyMap<string, readonly FlowerTimelineDecorationEntry[]>,
 ): readonly FlowerTimelineEntry[] {
   const blocks = contentBlocksFromMessage(threadID, message);
-  type RawTimelineEntry = readonly FlowerRenderableMessageBlock[] | Extract<FlowerTimelineEntry, { type: 'context_compaction' }>;
+  type RawTimelineEntry = readonly FlowerRenderableMessageBlock[] | FlowerTimelineDecorationEntry;
   const isMessageSegment = (entry: RawTimelineEntry): entry is readonly FlowerRenderableMessageBlock[] => Array.isArray(entry);
   const rawEntries: RawTimelineEntry[] = [];
   let currentBlocks: FlowerRenderableMessageBlock[] = [];
@@ -287,7 +314,7 @@ function messageTimelineEntries(
       currentBlocks = [];
     }
   };
-  const addDecorations = (entries: readonly Extract<FlowerTimelineEntry, { type: 'context_compaction' }>[]) => {
+  const addDecorations = (entries: readonly FlowerTimelineDecorationEntry[]) => {
     if (entries.length === 0) return;
     flushMessageSegment();
     rawEntries.push(...entries);

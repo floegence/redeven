@@ -31,6 +31,7 @@ main() {
       src/ui/FlowerSurface.navigation.threads.test.tsx \
       src/ui/FlowerSurface.navigation.structuredInput.test.tsx \
       src/ui/flower/FlowerChatContextChips.test.tsx \
+      src/ui/flower/FlowerTurnProjectionUnavailable.test.tsx \
       src/ui/flower/activityDisclosure.test.ts \
       src/ui/flower/SubagentDetailWindow.test.tsx \
       src/ui/flower/envLocalFlowerSurfaceAdapter.test.ts \

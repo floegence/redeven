@@ -1,5 +1,5 @@
 import type { ContextActionEnvelope } from '../../../contextActions/protocol';
-import type { FlowerReasoningSelection } from '../../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerReasoningSelection, FlowerTimelineDecoration } from '../../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
 export type wire_ai_attachment = {
   name: string;
@@ -207,6 +207,7 @@ export type wire_ai_transcript_message_item = {
 
 export type wire_ai_list_messages_resp = {
   messages: wire_ai_transcript_message_item[];
+  timeline_decorations?: FlowerTimelineDecoration[];
   next_after_row_id?: number;
   has_more?: boolean;
 };

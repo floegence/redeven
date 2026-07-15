@@ -98,6 +98,8 @@ export const flowerSurfaceEnUS = {
     compactionDividerNoop: 'Context does not need compression',
     compactionDividerFallback: 'Context checkpoint',
     compactionDividerTokenChange: '{before} -> {after}',
+    projectionUnavailableTitle: 'Response unavailable',
+    projectionUnavailableDescription: 'The saved response for this turn could not be loaded.',
     toolStatusPending: 'Pending',
     toolStatusRunning: 'Running',
     toolStatusWaiting: 'Waiting',

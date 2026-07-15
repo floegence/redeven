@@ -297,10 +297,11 @@ type PatchThreadRequest struct {
 }
 
 type ListThreadMessagesResponse struct {
-	Messages      []any `json:"messages"`
-	NextBeforeID  int64 `json:"next_before_id,omitempty"`
-	HasMore       bool  `json:"has_more,omitempty"`
-	TotalReturned int   `json:"total_returned,omitempty"`
+	Messages            []any                      `json:"messages"`
+	TimelineDecorations []FlowerTimelineDecoration `json:"timeline_decorations,omitempty"`
+	NextBeforeID        int64                      `json:"next_before_id,omitempty"`
+	HasMore             bool                       `json:"has_more,omitempty"`
+	TotalReturned       int                        `json:"total_returned,omitempty"`
 }
 
 type AppendThreadMessageRequest struct {
