@@ -4,7 +4,7 @@ import type {
   FlowerSubagentSummary,
   FlowerThreadSnapshot,
 } from './contracts/flowerSurfaceContracts';
-import { buildFlowerSubagentPanelItems } from './flowerSubagentProjection';
+import { buildFlowerSubagentPanelItems, presentSubagentTaskName } from './flowerSubagentProjection';
 
 function summary(overrides: Partial<FlowerSubagentSummary>): FlowerSubagentSummary {
   const threadID = String(overrides.thread_id ?? overrides.subagent_id ?? 'child-1');
@@ -72,6 +72,8 @@ describe('buildFlowerSubagentPanelItems', () => {
         summary({ thread_id: 'done-new', task_name: 'Done new', status: 'completed', updated_at_ms: 500 }),
         summary({ thread_id: 'running-old', task_name: 'Running old', status: 'running', updated_at_ms: 100 }),
         summary({ thread_id: 'waiting-new', task_name: 'Waiting new', status: 'waiting_input', updated_at_ms: 300 }),
+        summary({ thread_id: 'queued-newest', task_name: 'Queued newest', status: 'queued', updated_at_ms: 600 }),
+        summary({ thread_id: 'failed-old', task_name: 'Failed old', status: 'failed', updated_at_ms: 100 }),
         summary({ thread_id: 'done-old', task_name: 'Done old', status: 'completed', updated_at_ms: 200 }),
       ],
     }));
@@ -79,6 +81,8 @@ describe('buildFlowerSubagentPanelItems', () => {
     expect(items.map((item) => [item.threadID, item.status])).toEqual([
       ['waiting-new', 'waiting_input'],
       ['running-old', 'running'],
+      ['queued-newest', 'queued'],
+      ['failed-old', 'failed'],
       ['done-new', 'completed'],
       ['done-old', 'completed'],
     ]);
@@ -161,6 +165,7 @@ describe('buildFlowerSubagentPanelItems', () => {
       threadID: 'child-1',
       subagentID: 'child-1',
       title: 'Review prompts',
+      displayName: 'Review Prompts',
       taskDescription: 'Review prompt copy.',
       status: 'canceled',
       action: 'inspect',
@@ -168,5 +173,43 @@ describe('buildFlowerSubagentPanelItems', () => {
     });
     expect(items[0] as Record<string, unknown>).not.toHaveProperty('lastMessage');
     expect(items[0] as Record<string, unknown>).not.toHaveProperty('waitingPrompt');
+  });
+
+  it('uses an English role fallback when a historical name has no English words', () => {
+    const items = buildFlowerSubagentPanelItems(thread({
+      subagents: [
+        summary({
+          thread_id: 'child-review',
+          subagent_id: 'child-review',
+          title: '检查安全边界',
+          task_name: '检查安全边界',
+          agent_type: 'reviewer',
+        }),
+        summary({
+          thread_id: 'child-worker',
+          subagent_id: 'child-worker',
+          title: '',
+          task_name: '',
+          agent_type: 'worker',
+        }),
+      ],
+    }));
+
+    expect(items.map((item) => item.displayName)).toEqual(['Implementation Task', 'Review Task']);
+  });
+});
+
+describe('presentSubagentTaskName', () => {
+  it('humanizes legacy task names and preserves technical initialisms', () => {
+    expect(presentSubagentTaskName('ai_research')).toBe('AI Research');
+    expect(presentSubagentTaskName('ai_oss_projects')).toBe('AI OSS Projects');
+    expect(presentSubagentTaskName('ai-industry-news')).toBe('AI Industry News');
+    expect(presentSubagentTaskName('APIContractReview')).toBe('API Contract Review');
+    expect(presentSubagentTaskName('检查安全边界', 'Review Task')).toBe('Review Task');
+  });
+
+  it('limits display names to five words and 48 characters', () => {
+    expect(presentSubagentTaskName('review the public API contract implementation details')).toBe('Review The Public API Contract');
+    expect(presentSubagentTaskName('supercalifragilisticexpialidocioussupercalifragilistic review')).toHaveLength(48);
   });
 });

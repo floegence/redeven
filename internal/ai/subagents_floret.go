@@ -896,10 +896,6 @@ func (s *floretSubagentRuntime) spawn(ctx context.Context, toolCallID string, ar
 		return nil, err
 	}
 	agentType := normalizeSubagentAgentType(anyToString(args["agent_type"]))
-	taskName := strings.TrimSpace(anyToString(args["task_name"]))
-	if taskName == "" {
-		taskName = strings.TrimSpace(anyToString(args["title"]))
-	}
 	taskDescription := strings.TrimSpace(anyToString(args["task_description"]))
 	if taskDescription == "" {
 		return nil, errors.New("subagents spawn requires task_description")
@@ -909,9 +905,14 @@ func (s *floretSubagentRuntime) spawn(ctx context.Context, toolCallID string, ar
 	if message == "" {
 		message = objective
 	}
-	if taskName == "" {
-		taskName = deriveSubagentTaskName(message)
-	}
+	taskName := resolveSubagentTaskName(
+		anyToString(args["task_name"]),
+		anyToString(args["title"]),
+		taskDescription,
+		message,
+		objective,
+		agentType,
+	)
 	contextMode := normalizeSubagentContextMode(anyToString(args["context_mode"]))
 	forkMode := subagentForkModeForContextMode(contextMode)
 	childThreadID, err := NewThreadID()
@@ -2918,21 +2919,6 @@ func isValidSubagentAgentType(agentType string) bool {
 	default:
 		return false
 	}
-}
-
-func deriveSubagentTaskName(message string) string {
-	words := strings.Fields(strings.TrimSpace(message))
-	if len(words) == 0 {
-		return "subagent"
-	}
-	if len(words) > 6 {
-		words = words[:6]
-	}
-	name := strings.Join(words, " ")
-	if len([]rune(name)) > 80 {
-		name = string([]rune(name)[:80])
-	}
-	return strings.TrimSpace(name)
 }
 
 func timeUnixMS(t time.Time) int64 {

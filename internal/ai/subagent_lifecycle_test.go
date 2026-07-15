@@ -694,17 +694,33 @@ func TestFloretSubagentsSpawnPersistsAndLabelsDistinctChildRunID(t *testing.T) {
 		return "provider-key", strings.TrimSpace(providerID) == "compat", nil
 	}
 	freezePermissionPolicyTestSnapshot(t, parent)
+	if err := store.CreateThread(context.Background(), threadstore.Thread{
+		ThreadID:   parent.threadID,
+		EndpointID: parent.endpointID,
+		Title:      "subagent spawn identity",
+	}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	parent.persistRunRecord(RunStateRunning, "", "", time.Now().UnixMilli(), 0)
 
 	host := &recordingFloretHost{}
 	runtime := &floretSubagentRuntime{parent: parent, host: host}
 	spawnToolCallID := "tool_subagents_spawn_identity"
-	if _, err := runtime.spawn(context.Background(), spawnToolCallID, map[string]any{
+	spawnResult, err := runtime.spawn(context.Background(), spawnToolCallID, map[string]any{
 		"agent_type":       "worker",
-		"task_name":        "identity check",
+		"task_name":        "identity_check",
 		"task_description": "Check child approval identity.",
 		"message":          "check child approval identity",
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("spawn: %v", err)
+	}
+	if got := strings.TrimSpace(anyToString(spawnResult["task_name"])); got != "Identity Check" {
+		t.Fatalf("spawn result task_name=%q, want canonical human-facing name", got)
+	}
+	spawnItems := subagentItemsFromAny(spawnResult["items"])
+	if len(spawnItems) != 1 || strings.TrimSpace(anyToString(spawnItems[0]["task_name"])) != "Identity Check" {
+		t.Fatalf("spawn result items=%#v, want canonical task_name", spawnItems)
 	}
 
 	host.mu.Lock()
@@ -713,6 +729,29 @@ func TestFloretSubagentsSpawnPersistsAndLabelsDistinctChildRunID(t *testing.T) {
 	}
 	spawnReq := host.spawnRequests[0]
 	host.mu.Unlock()
+	if got := strings.TrimSpace(spawnReq.TaskName); got != "Identity Check" {
+		t.Fatalf("spawn TaskName=%q, want canonical human-facing name", got)
+	}
+
+	events, err := store.ListRunEvents(context.Background(), parent.endpointID, parent.id, 50)
+	if err != nil {
+		t.Fatalf("ListRunEvents: %v", err)
+	}
+	spawnEventTaskName := ""
+	for _, event := range events {
+		if event.EventType != "delegation.spawn" {
+			continue
+		}
+		var payload map[string]any
+		if err := json.Unmarshal([]byte(event.PayloadJSON), &payload); err != nil {
+			t.Fatalf("decode delegation.spawn payload: %v", err)
+		}
+		spawnEventTaskName = strings.TrimSpace(anyToString(payload["task_name"]))
+		break
+	}
+	if spawnEventTaskName != "Identity Check" {
+		t.Fatalf("delegation.spawn task_name=%q, want canonical human-facing name", spawnEventTaskName)
+	}
 
 	childThreadID := strings.TrimSpace(string(spawnReq.ThreadID))
 	childRunID := strings.TrimSpace(spawnReq.Labels.Host[subagentToolHostContextChildRunIDKey])

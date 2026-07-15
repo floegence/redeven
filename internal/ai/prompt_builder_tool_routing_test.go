@@ -108,6 +108,15 @@ func TestBuildLayeredSystemPrompt_UsesCanonicalToolNamesAndTerminalLimits(t *tes
 	assertPromptNotContains(t, prompt, "file_read")
 }
 
+func TestBuildLayeredSystemPrompt_RequiresHumanReadableSubagentNames(t *testing.T) {
+	t.Parallel()
+
+	prompt := buildPromptForToolRoutingTest(t)
+	assertPromptContains(t, prompt, "task_name is a human-facing English label")
+	assertPromptContains(t, prompt, "Safety Review, API Contract Review, or AI Research")
+	assertPromptContains(t, prompt, "never use snake_case, kebab-case")
+}
+
 func TestBuildLayeredSystemPrompt_ReadonlyRoutesThroughReadonlyExclusiveTools(t *testing.T) {
 	t.Parallel()
 

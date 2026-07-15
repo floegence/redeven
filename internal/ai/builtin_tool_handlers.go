@@ -423,8 +423,16 @@ func subagentsToolInputSchema() map[string]any {
 				"type": "string",
 				"enum": []string{"spawn", "send_input", "wait", "list", "inspect", "close", "close_all"},
 			},
-			"task_name":        map[string]any{"type": "string", "maxLength": 140},
-			"title":            map[string]any{"type": "string", "maxLength": 140},
+			"task_name": map[string]any{
+				"type":        "string",
+				"maxLength":   140,
+				"description": "Short human-facing English name with 1-5 Title Case words, for example Safety Review or API Contract Review. Never use snake_case or kebab-case.",
+			},
+			"title": map[string]any{
+				"type":        "string",
+				"maxLength":   140,
+				"description": "Legacy alias for task_name. New spawn calls should use task_name.",
+			},
 			"task_description": map[string]any{"type": "string", "maxLength": 500},
 			"message":          map[string]any{"type": "string", "maxLength": 4000},
 			"objective":        map[string]any{"type": "string", "maxLength": 4000},
@@ -776,7 +784,7 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:         "subagents",
-			Description:  "Manage parent-owned subagents. Use spawn with task_name, required task_description, agent_type, and message to start a durable child thread, wait/list/inspect to observe it, send_input to steer or interrupt, and close/close_all to stop child threads.",
+			Description:  "Manage parent-owned subagents. Use spawn with a short 1-5 word English Title Case task_name such as Safety Review, required task_description, agent_type, and message to start a durable child thread. Never use snake_case or kebab-case names. Use wait/list/inspect to observe children, send_input to steer or interrupt, and close/close_all to stop child threads.",
 			InputSchema:  toSchema(subagentsToolInputSchema()),
 			Mutating:     false,
 			Visibility:   ToolVisibilityDelegationControl,
