@@ -16,12 +16,12 @@ func TestCurrentCompatibilityContractIsValid(t *testing.T) {
 	if contract.CompatibilityEpoch <= 0 {
 		t.Fatalf("CompatibilityEpoch = %d, want positive", contract.CompatibilityEpoch)
 	}
-	if contract.CompatibilityEpoch != 6 {
-		t.Fatalf("CompatibilityEpoch = %d, want terminal history coverage epoch 6", contract.CompatibilityEpoch)
+	if contract.CompatibilityEpoch != 7 {
+		t.Fatalf("CompatibilityEpoch = %d, want Flower live contract epoch 7", contract.CompatibilityEpoch)
 	}
-	if contract.MinimumDesktopVersion != "v0.8.1" || contract.MinimumRuntimeVersion != "v0.8.1" {
+	if contract.MinimumDesktopVersion != "v0.9.0" || contract.MinimumRuntimeVersion != "v0.9.0" {
 		t.Fatalf(
-			"minimum versions = Desktop %q Runtime %q, want matched v0.8.1 pair",
+			"minimum versions = Desktop %q Runtime %q, want matched v0.9.0 pair",
 			contract.MinimumDesktopVersion,
 			contract.MinimumRuntimeVersion,
 		)

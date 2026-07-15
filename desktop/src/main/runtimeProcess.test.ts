@@ -4,14 +4,16 @@ import path from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
+import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
 import { DesktopOperationFailureError } from './desktopOperationFailure';
 import { launchStartedFreshManagedRuntime, startManagedRuntime } from './runtimeProcess';
 import { parseStartupReport } from './startup';
 
-function runtimeStatusPayload(
+function runtimeStatusPayloadForEpoch(
   baseURL: string,
-  readiness: 'starting' | 'openable' = 'openable',
-  runtimeServiceOverrides: Record<string, unknown> = {},
+  readiness: 'starting' | 'openable',
+  runtimeServiceOverrides: Record<string, unknown>,
+  compatibilityEpoch: number,
 ): Record<string, unknown> {
   const activeWorkload = runtimeServiceOverrides.active_workload
     && typeof runtimeServiceOverrides.active_workload === 'object'
@@ -37,7 +39,7 @@ function runtimeStatusPayload(
     pid: process.pid,
     runtime_service: {
       protocol_version: 'redeven-runtime-v1',
-      compatibility_epoch: 6,
+      compatibility_epoch: compatibilityEpoch,
       service_owner: 'desktop',
       desktop_managed: true,
       effective_run_mode: 'local',
@@ -48,6 +50,19 @@ function runtimeStatusPayload(
       active_workload: activeWorkload,
     },
   };
+}
+
+function runtimeStatusPayload(
+  baseURL: string,
+  readiness: 'starting' | 'openable' = 'openable',
+  runtimeServiceOverrides: Record<string, unknown> = {},
+): Record<string, unknown> {
+  return runtimeStatusPayloadForEpoch(
+    baseURL,
+    readiness,
+    runtimeServiceOverrides,
+    RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
+  );
 }
 
 async function writeJSON(file: string, value: unknown): Promise<void> {
@@ -234,7 +249,12 @@ const server = http.createServer((request, response) => {
 server.listen(0, '127.0.0.1', () => {
   const address = server.address();
   const baseURL = 'http://127.0.0.1:' + address.port + '/';
-  const payload = ${runtimeStatusPayload.toString()}(baseURL, mode === 'starting_then_openable' ? 'starting' : 'openable');
+  const payload = ${runtimeStatusPayloadForEpoch.toString()}(
+    baseURL,
+    mode === 'starting_then_openable' ? 'starting' : 'openable',
+    {},
+    ${RUNTIME_SERVICE_COMPATIBILITY_EPOCH},
+  );
   payload.pid = process.pid;
   if (statusFile) {
     writeJSON(statusFile, payload);
