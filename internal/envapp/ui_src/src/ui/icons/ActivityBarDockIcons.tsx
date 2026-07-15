@@ -1,4 +1,4 @@
-import { CodespacesGlyph } from './CodespacesIcon';
+import { CodespacesActivityBarGlyph } from './CodespacesIcon';
 
 export function ActivityBarTerminalIcon(props: { class?: string }) {
   return (
@@ -58,7 +58,7 @@ export function ActivityBarMonitorIcon(props: { class?: string }) {
 export function ActivityBarCodespacesIcon(props: { class?: string }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" style={{ width: '1.5rem', height: '1.5rem' }} class={props.class} aria-hidden="true">
-      <CodespacesGlyph transform="translate(0.15 0.48) scale(.9)" />
+      <CodespacesActivityBarGlyph />
     </svg>
   );
 }
