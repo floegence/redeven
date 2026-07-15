@@ -128,13 +128,16 @@ describe('Flower activity running sheen', () => {
     const clipRule = cssRule(css, '.flower-activity-inline-details-clip');
     const contentRule = cssRule(css, '.flower-activity-inline-details-content');
 
-    expect(disclosureRule).toContain('grid-template-rows: 0fr');
-    expect(disclosureRule).toContain('grid-template-rows 220ms cubic-bezier(0.22, 1, 0.36, 1)');
+    expect(disclosureRule).toContain('height: 0');
+    expect(disclosureRule).toContain('height 280ms cubic-bezier(0.22, 1, 0.36, 1)');
+    expect(disclosureRule).toContain('overflow: hidden');
     expect(disclosureRule).not.toContain('max-height:');
-    expect(css).toContain(".flower-activity-inline-details[data-state='open'] {");
-    expect(css).toContain('grid-template-rows: 1fr;');
+    expect(css).toContain(".flower-activity-inline-details[data-state='opening'] {");
+    expect(css).toContain('height 360ms cubic-bezier(0.22, 1, 0.36, 1)');
+    expect(css).toContain('height 300ms ease-in-out');
+    expect(css).toContain(".flower-activity-inline-details[data-layout-motion='resizing'] {");
+    expect(css).toContain('will-change: height, opacity, transform');
     expect(clipRule).toContain('min-height: 0');
-    expect(clipRule).toContain('overflow: hidden');
     expect(contentRule).toContain('max-height: min(42rem, 72vh)');
     expect(contentRule).toContain('overflow: auto');
   });

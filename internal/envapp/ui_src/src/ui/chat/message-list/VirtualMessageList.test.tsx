@@ -11,10 +11,16 @@ let currentScrollRequest: { seq: number; reason?: 'bootstrap' | 'thread_switch' 
 
 const scrollToBottomMock = vi.fn();
 const loadMoreHistoryMock = vi.fn();
-const setMessageHeightMock = vi.fn();
-const getMessageHeightMock = vi.fn(() => 120);
+const messageHeights = new Map<string, number>();
+const virtualItemHeights = new Map<number, number>();
+const setMessageHeightMock = vi.fn((messageId: string, height: number) => {
+  messageHeights.set(messageId, height);
+});
+const getMessageHeightMock = vi.fn((messageId: string) => messageHeights.get(messageId) ?? 120);
 const onScrollMock = vi.fn();
-const setItemHeightMock = vi.fn();
+const setItemHeightMock = vi.fn((index: number, height: number) => {
+  virtualItemHeights.set(index, height);
+});
 let virtualScrollElement: HTMLElement | null = null;
 
 type MockResizeObserverInstance = {
@@ -42,28 +48,42 @@ vi.mock('../ChatProvider', () => ({
 }));
 
 vi.mock('../hooks/useVirtualList', () => ({
-  useVirtualList: () => ({
-    containerRef: vi.fn(),
-    scrollRef: (element: HTMLElement) => {
-      virtualScrollElement = element;
-    },
-    onScroll: onScrollMock,
-    virtualItems: () => currentMessages.map((message, index) => ({ index, key: message.id, start: index * 120, size: 120, end: (index + 1) * 120 })),
-    visibleRange: () => ({ start: 0, end: Math.max(0, currentMessages.length - 1) }),
-    paddingTop: () => 0,
-    paddingBottom: () => 0,
-    getItemOffset: (index: number) => index * 120,
-    setItemHeight: setItemHeightMock,
-    scrollToBottom: () => {
-      if (virtualScrollElement) {
-        virtualScrollElement.scrollTop = Math.max(
-          0,
-          virtualScrollElement.scrollHeight - virtualScrollElement.clientHeight,
-        );
+  useVirtualList: () => {
+    const itemSize = (index: number) => virtualItemHeights.get(index) ?? 120;
+    const itemOffset = (index: number) => {
+      let offset = 0;
+      for (let itemIndex = 0; itemIndex < index; itemIndex += 1) {
+        offset += itemSize(itemIndex);
       }
-      scrollToBottomMock();
-    },
-  }),
+      return offset;
+    };
+    return {
+      containerRef: vi.fn(),
+      scrollRef: (element: HTMLElement) => {
+        virtualScrollElement = element;
+      },
+      onScroll: onScrollMock,
+      virtualItems: () => currentMessages.map((message, index) => {
+        const start = itemOffset(index);
+        const size = itemSize(index);
+        return { index, key: message.id, start, size, end: start + size };
+      }),
+      visibleRange: () => ({ start: 0, end: Math.max(0, currentMessages.length - 1) }),
+      paddingTop: () => 0,
+      paddingBottom: () => 0,
+      getItemOffset: itemOffset,
+      setItemHeight: setItemHeightMock,
+      scrollToBottom: () => {
+        if (virtualScrollElement) {
+          virtualScrollElement.scrollTop = Math.max(
+            0,
+            virtualScrollElement.scrollHeight - virtualScrollElement.clientHeight,
+          );
+        }
+        scrollToBottomMock();
+      },
+    };
+  },
 }));
 
 vi.mock('../message/MessageItem', () => ({
@@ -138,6 +158,8 @@ describe('VirtualMessageList', () => {
     currentScrollRequest = null;
     virtualScrollElement = null;
     resizeObserverInstances.length = 0;
+    messageHeights.clear();
+    virtualItemHeights.clear();
 
     const raf = (callback: FrameRequestCallback) => window.setTimeout(() => callback(performance.now()), 0);
     vi.stubGlobal('requestAnimationFrame', raf);
@@ -172,7 +194,7 @@ describe('VirtualMessageList', () => {
     document.body.innerHTML = '';
   });
 
-  it('keeps follow-bottom active when the active assistant row grows', async () => {
+  it('keeps follow-bottom active across intermediate active-row height frames', async () => {
     const mod = await import('./VirtualMessageList');
     currentMessages = [
       {
@@ -223,6 +245,13 @@ describe('VirtualMessageList', () => {
       scrollToBottomMock.mockClear();
       onScrollMock.mockClear();
 
+      scrollHeight = 560;
+      triggerResize(item!, 160);
+      await flushAsync();
+
+      expect(setMessageHeightMock).toHaveBeenCalledWith('active-run:thread-1', 160);
+      expect(scrollTop).toBe(160);
+
       scrollHeight = 620;
       triggerResize(item!, 220);
       await flushAsync();
@@ -231,6 +260,85 @@ describe('VirtualMessageList', () => {
       expect(scrollTop).toBe(220);
       expect(scrollToBottomMock).not.toHaveBeenCalled();
       expect(onScrollMock).toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('preserves a paused viewport anchor across intermediate active-row height frames', async () => {
+    const mod = await import('./VirtualMessageList');
+    currentMessages = [
+      {
+        id: 'm_anchor_1',
+        role: 'assistant',
+        status: 'streaming',
+        timestamp: 100,
+        blocks: [{ type: 'markdown', content: 'Growing tool detail' }],
+      },
+      {
+        id: 'm_anchor_2',
+        role: 'assistant',
+        status: 'complete',
+        timestamp: 200,
+        blocks: [{ type: 'markdown', content: 'Viewport anchor' }],
+      },
+      {
+        id: 'm_anchor_3',
+        role: 'assistant',
+        status: 'complete',
+        timestamp: 300,
+        blocks: [{ type: 'markdown', content: 'Later content' }],
+      },
+    ];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => <mod.VirtualMessageList />, host);
+
+    try {
+      await flushAsync();
+
+      const scroller = host.querySelector('.chat-message-list-scroll') as HTMLDivElement | null;
+      const firstItem = host.querySelector('.chat-message-list-item') as HTMLDivElement | null;
+      expect(scroller).toBeTruthy();
+      expect(firstItem).toBeTruthy();
+
+      let scrollTop = 0;
+      let scrollHeight = 700;
+      const clientHeight = 300;
+      Object.defineProperty(scroller!, 'scrollHeight', {
+        configurable: true,
+        get: () => scrollHeight,
+      });
+      Object.defineProperty(scroller!, 'clientHeight', {
+        configurable: true,
+        get: () => clientHeight,
+      });
+      Object.defineProperty(scroller!, 'scrollTop', {
+        configurable: true,
+        get: () => scrollTop,
+        set: (value) => {
+          scrollTop = Number(value);
+        },
+      });
+
+      triggerResize(scroller!, clientHeight);
+      await flushAsync();
+
+      scrollTop = 150;
+      scroller!.dispatchEvent(new Event('scroll'));
+      await flushAsync();
+
+      scrollHeight = 740;
+      triggerResize(firstItem!, 160);
+      await flushAsync();
+      expect(scrollTop).toBe(190);
+
+      scrollHeight = 780;
+      triggerResize(firstItem!, 200);
+      await flushAsync();
+      expect(scrollTop).toBe(230);
+      expect(scrollTop).toBeLessThan(scrollHeight - clientHeight);
     } finally {
       dispose();
     }

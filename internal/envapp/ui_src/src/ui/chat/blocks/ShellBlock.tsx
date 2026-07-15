@@ -7,6 +7,7 @@ import { writeTextToClipboard } from '../../utils/clipboard';
 import { ActivityStatusIcon, type ActivityStatus } from '../status/ActivityLine';
 import { useI18n } from '../../i18n';
 import {
+  createTerminalOutputViewportController,
   createTerminalVisibleOutputStore,
   terminalListeningPlaceholderVisible,
   terminalVisibleOutputIdentityKey,
@@ -361,6 +362,7 @@ function terminalProcessURL(runID: string, processID: string, action: 'read' | '
 export const ShellBlock: Component<ShellBlockProps> = (props) => {
   const i18n = useI18n();
   const localVisibleOutputStore = createTerminalVisibleOutputStore(20);
+  const outputViewport = createTerminalOutputViewportController();
   const [expanded, setExpanded] = createSignal(false);
   const [loadingOutput, setLoadingOutput] = createSignal(false);
   const [loadedOutput, setLoadedOutput] = createSignal<string | undefined>(undefined);
@@ -539,6 +541,12 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
   });
 
   createEffect(() => {
+    if (!expanded()) return;
+    resolvedOutput();
+    outputViewport.notifyOutputChanged();
+  });
+
+  createEffect(() => {
     if (!hasOutputRef() && !canUseProcessControls()) return;
     if (displayStatus() !== 'running') return;
     let disposed = false;
@@ -680,6 +688,7 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
   };
 
   onCleanup(() => {
+    outputViewport.dispose();
     if (commandCopiedResetTimer != null) {
       window.clearTimeout(commandCopiedResetTimer);
     }
@@ -766,7 +775,12 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
               <Show
                 when={displayStatus() === 'running' || loadingOutput() || loadAttempted() || loadError()}
               >
-                <div class={cn('chat-shell-output', loadError() ? 'chat-shell-output-error' : 'chat-shell-output-muted')}>
+                <div
+                  ref={outputViewport.bind}
+                  class={cn('chat-shell-output', loadError() ? 'chat-shell-output-error' : 'chat-shell-output-muted')}
+                  onScroll={outputViewport.onScroll}
+                  onWheel={outputViewport.onWheel}
+                >
                   <pre>
                     {terminalListeningPlaceholderVisible(resolvedOutput(), displayStatus())
                       ? i18n.t('shellBlock.waitingForOutput')
@@ -781,10 +795,13 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
             }
           >
             <div
+              ref={outputViewport.bind}
               class={cn(
                 'chat-shell-output',
                 displayStatus() === 'error' && 'chat-shell-output-error',
               )}
+              onScroll={outputViewport.onScroll}
+              onWheel={outputViewport.onWheel}
             >
               <pre>{resolvedOutput()}</pre>
             </div>

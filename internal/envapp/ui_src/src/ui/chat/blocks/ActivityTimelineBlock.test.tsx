@@ -270,7 +270,7 @@ describe('ActivityTimelineBlock', () => {
     expect(shell?.getAttribute('data-state')).toBe('closing');
     expect(host.querySelector('.chat-activity-detail-panel')).not.toBeNull();
 
-    await waitMs(220);
+    await waitMs(390);
 
     expect(shell?.getAttribute('data-state')).toBe('closed');
     expect(host.querySelector('.chat-activity-detail-panel')).toBeNull();
@@ -307,7 +307,7 @@ describe('ActivityTimelineBlock', () => {
     const summary = host.querySelector('.chat-activity-timeline-summary') as HTMLButtonElement;
     expect(summary.getAttribute('aria-expanded')).toBe('false');
 
-    await waitMs(340);
+    await waitMs(440);
     expect(summary.getAttribute('aria-expanded')).toBe('true');
     expect(host.querySelector('.chat-activity-items-presence')?.getAttribute('data-state')).toMatch(/opening|open/);
 
@@ -315,11 +315,11 @@ describe('ActivityTimelineBlock', () => {
     await flushAsync();
     expect(summary.getAttribute('aria-expanded')).toBe('true');
 
-    await waitMs(1050);
+    await waitMs(1250);
     expect(summary.getAttribute('aria-expanded')).toBe('false');
     expect(host.querySelector('.chat-activity-items-presence')?.getAttribute('data-state')).toBe('closing');
 
-    await waitMs(230);
+    await waitMs(390);
     expect(host.querySelector('.chat-activity-items-presence')).toBeNull();
   });
 

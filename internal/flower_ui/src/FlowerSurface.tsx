@@ -85,10 +85,11 @@ import {
 } from './flowerActivityPresentation';
 import {
   createFlowerActivityDisclosureController,
-  createFlowerActivityDisclosurePresence,
+  createFlowerActivityDisclosureMotion,
   flowerActivityDisclosureIntent,
 } from './activityDisclosure';
 import {
+  createTerminalOutputViewportController,
   createTerminalVisibleOutputStore,
   terminalListeningPlaceholderVisible,
   type TerminalVisibleOutputIdentity,
@@ -5189,6 +5190,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const [liveStatus, setLiveStatus] = createSignal<FlowerActivityStatus | ''>('');
     const [liveLastSeq, setLiveLastSeq] = createSignal<number | undefined>(terminal.last_seq);
     const [liveError, setLiveError] = createSignal('');
+    const outputViewport = createTerminalOutputViewportController();
     let commandCopyResetTimer: number | undefined;
     const command = () => trimString(terminal.command);
     const commandPanelID = () => `flower-terminal-command-${[
@@ -5316,7 +5318,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       });
     });
 
+    createEffect(() => {
+      displayOutput();
+      outputViewport.notifyOutputChanged();
+    });
+
     onCleanup(() => {
+      outputViewport.dispose();
       if (commandCopyResetTimer !== undefined) {
         window.clearTimeout(commandCopyResetTimer);
       }
@@ -5384,7 +5392,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             </pre>
           </div>
         </Show>
-        <div class={cn('flower-activity-terminal-output', muted() && 'flower-activity-terminal-output-muted')}>
+        <div
+          ref={outputViewport.bind}
+          class={cn('flower-activity-terminal-output', muted() && 'flower-activity-terminal-output-muted')}
+          onScroll={outputViewport.onScroll}
+          onWheel={outputViewport.onWheel}
+        >
           <pre>{displayOutput()}</pre>
         </div>
       </section>
@@ -5757,9 +5770,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const expandable = createMemo(() => hasDetails() && !activityItemAwaitingApproval(item()));
     let toggleButtonRef: HTMLButtonElement | undefined;
     let detailPanelRef: HTMLDivElement | undefined;
-    const disclosure = createFlowerActivityDisclosurePresence(
+    const disclosure = createFlowerActivityDisclosureMotion(
       () => open() && expandable(),
       {
+        animateContentResize: true,
+        reducedMotion: reducedMotionPreferred,
+        onLayoutFrame: scheduleTranscriptTailScroll,
         onBeforeClose: () => {
           if (detailPanelRef && detailPanelRef.contains(document.activeElement)) {
             toggleButtonRef?.focus();
@@ -5823,14 +5839,22 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </div>
         <Show when={disclosure.mounted() && expandable()}>
           <div
-            ref={detailPanelRef}
+            ref={(node) => {
+              detailPanelRef = node;
+              disclosure.bindViewport(node);
+            }}
             class="flower-activity-inline-details"
             data-state={disclosure.state()}
+            data-layout-motion={disclosure.layoutMotion()}
+            style={{ height: disclosure.height() }}
             onPointerDown={disclosureControl.retainOpen}
             onFocusIn={disclosureControl.retainOpen}
+            onWheel={disclosureControl.retainOpen}
+            onTouchStart={disclosureControl.retainOpen}
+            onTransitionEnd={disclosure.onTransitionEnd}
           >
             <div class="flower-activity-inline-details-clip">
-              <div class="flower-activity-inline-details-content">
+              <div ref={disclosure.bindContent} class="flower-activity-inline-details-content">
                 <For each={presentation().detailBlocks}>
                   {(block) => activityDetailBlock(messageID(), blockIndex(), item(), timeline(), block)}
                 </For>

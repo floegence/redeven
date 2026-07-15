@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  createTerminalOutputViewportController,
   createTerminalVisibleOutputStore,
   mergeTerminalVisibleOutput,
+  TERMINAL_OUTPUT_FOLLOW_THRESHOLD_PX,
   terminalListeningPlaceholderVisible,
   terminalVisibleOutputIdentityKey,
 } from './flowerTerminalOutput';
@@ -57,5 +59,103 @@ describe('terminal visible output', () => {
   it('appends live output segments without duplicating repeated chunks', () => {
     expect(mergeTerminalVisibleOutput('tick 1\n', 'tick 2\n', 'running')).toBe('tick 1\ntick 2\n');
     expect(mergeTerminalVisibleOutput('tick 1\ntick 2\n', 'tick 2\n', 'running')).toBe('tick 1\ntick 2\n');
+  });
+});
+
+describe('terminal output viewport following', () => {
+  function createViewportHarness() {
+    const callbacks = new Map<number, FrameRequestCallback>();
+    let nextHandle = 1;
+    let scrollHeight = 300;
+    let clientHeight = 200;
+    let scrollTop = 100;
+    const viewport = {
+      get scrollHeight() {
+        return scrollHeight;
+      },
+      get clientHeight() {
+        return clientHeight;
+      },
+      get scrollTop() {
+        return scrollTop;
+      },
+      set scrollTop(value: number) {
+        scrollTop = value;
+      },
+    } as HTMLElement;
+    return {
+      viewport,
+      requestAnimationFrame(callback: FrameRequestCallback): number {
+        const handle = nextHandle;
+        nextHandle += 1;
+        callbacks.set(handle, callback);
+        return handle;
+      },
+      cancelAnimationFrame(handle: number) {
+        callbacks.delete(handle);
+      },
+      flush() {
+        const pending = [...callbacks.entries()];
+        callbacks.clear();
+        pending.forEach(([, callback]) => callback(16));
+      },
+      setMetrics(next: { scrollHeight?: number; clientHeight?: number; scrollTop?: number }) {
+        scrollHeight = next.scrollHeight ?? scrollHeight;
+        clientHeight = next.clientHeight ?? clientHeight;
+        scrollTop = next.scrollTop ?? scrollTop;
+      },
+      scrollTop: () => scrollTop,
+      pendingFrames: () => callbacks.size,
+    };
+  }
+
+  it('follows appended output only while the user remains near the bottom', () => {
+    expect(TERMINAL_OUTPUT_FOLLOW_THRESHOLD_PX).toBe(24);
+    const harness = createViewportHarness();
+    const controller = createTerminalOutputViewportController({
+      requestAnimationFrame: harness.requestAnimationFrame,
+      cancelAnimationFrame: harness.cancelAnimationFrame,
+    });
+    controller.bind(harness.viewport);
+    harness.flush();
+
+    harness.setMetrics({ scrollHeight: 380 });
+    controller.notifyOutputChanged();
+    harness.flush();
+    expect(harness.scrollTop()).toBe(180);
+
+    controller.onWheel({ deltaY: -24 });
+    harness.setMetrics({ scrollTop: 80 });
+    controller.onScroll();
+    expect(controller.followingLatest()).toBe(false);
+
+    harness.setMetrics({ scrollHeight: 440 });
+    controller.notifyOutputChanged();
+    harness.flush();
+    expect(harness.scrollTop()).toBe(80);
+
+    harness.setMetrics({ scrollTop: 240 });
+    controller.onScroll();
+    expect(controller.followingLatest()).toBe(true);
+    harness.setMetrics({ scrollHeight: 500 });
+    controller.notifyOutputChanged();
+    harness.flush();
+    expect(harness.scrollTop()).toBe(300);
+    controller.dispose();
+  });
+
+  it('coalesces pending output updates and cancels scheduled work on disposal', () => {
+    const harness = createViewportHarness();
+    const controller = createTerminalOutputViewportController({
+      requestAnimationFrame: harness.requestAnimationFrame,
+      cancelAnimationFrame: harness.cancelAnimationFrame,
+    });
+    controller.bind(harness.viewport);
+    controller.notifyOutputChanged();
+    controller.notifyOutputChanged();
+    expect(harness.pendingFrames()).toBe(1);
+
+    controller.dispose();
+    expect(harness.pendingFrames()).toBe(0);
   });
 });

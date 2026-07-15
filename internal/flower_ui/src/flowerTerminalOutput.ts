@@ -22,6 +22,74 @@ export interface TerminalVisibleOutputStore {
   clear(): void;
 }
 
+export const TERMINAL_OUTPUT_FOLLOW_THRESHOLD_PX = 24;
+
+export type TerminalOutputViewportController = Readonly<{
+  bind: (node: HTMLElement) => void;
+  notifyOutputChanged: () => void;
+  onScroll: () => void;
+  onWheel: (event: Pick<WheelEvent, 'deltaY'>) => void;
+  followingLatest: () => boolean;
+  dispose: () => void;
+}>;
+
+export type TerminalOutputViewportControllerOptions = Readonly<{
+  thresholdPx?: number;
+  requestAnimationFrame?: (callback: FrameRequestCallback) => number;
+  cancelAnimationFrame?: (handle: number) => void;
+}>;
+
+export function createTerminalOutputViewportController(
+  options: TerminalOutputViewportControllerOptions = {},
+): TerminalOutputViewportController {
+  const thresholdPx = Math.max(0, options.thresholdPx ?? TERMINAL_OUTPUT_FOLLOW_THRESHOLD_PX);
+  const requestFrame = options.requestAnimationFrame ?? ((callback: FrameRequestCallback) => window.requestAnimationFrame(callback));
+  const cancelFrame = options.cancelAnimationFrame ?? ((handle: number) => window.cancelAnimationFrame(handle));
+  let viewport: HTMLElement | undefined;
+  let frame: number | undefined;
+  let followsLatest = true;
+
+  const distanceToBottom = (): number => {
+    if (!viewport) return 0;
+    return Math.max(0, viewport.scrollHeight - viewport.scrollTop - viewport.clientHeight);
+  };
+  const nearBottom = (): boolean => distanceToBottom() <= thresholdPx;
+  const cancelScheduled = () => {
+    if (frame === undefined) return;
+    cancelFrame(frame);
+    frame = undefined;
+  };
+  const notifyOutputChanged = () => {
+    if (!viewport || !followsLatest || frame !== undefined) return;
+    frame = requestFrame(() => {
+      frame = undefined;
+      if (!viewport || !followsLatest) return;
+      viewport.scrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+    });
+  };
+
+  return {
+    bind: (node) => {
+      viewport = node;
+      notifyOutputChanged();
+    },
+    notifyOutputChanged,
+    onScroll: () => {
+      followsLatest = nearBottom();
+    },
+    onWheel: (event) => {
+      if (event.deltaY < 0) {
+        followsLatest = false;
+      }
+    },
+    followingLatest: () => followsLatest,
+    dispose: () => {
+      cancelScheduled();
+      viewport = undefined;
+    },
+  };
+}
+
 function normalizeOutput(value: unknown): string {
   return String(value ?? '').replace(/\r\n?/g, '\n');
 }
