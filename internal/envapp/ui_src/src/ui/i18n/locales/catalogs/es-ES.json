@@ -2616,6 +2616,25 @@
         "upload": "Enviar al entorno",
         "verify": "Verificar editor"
       },
+      "progress": {
+        "lookup": "Consultando el paquete más reciente de Browser Editor...",
+        "downloading": "Descargando Browser Editor en Desktop...",
+        "packageValidation": "Comprobando el paquete de Browser Editor almacenado en la caché de Desktop...",
+        "finishing": "Transferencia completada. Redeven está verificando e instalando Browser Editor.",
+        "cacheHit": "Usando la caché de Desktop. No es necesario volver a descargar el paquete.",
+        "downloadedBytes": "Descargados {completed} de {total}",
+        "uploadedBytes": "Enviados {completed} de {total}",
+        "measuring": "Calculando el tiempo restante para este paso...",
+        "rateAndEta": "{rate} · Este paso tardará aproximadamente {duration} más",
+        "stalled": "No se ha confirmado ningún avance en los últimos 15 segundos. Seguimos esperando al entorno.",
+        "awaitingConfirmation": "Transferencia completada. Esperando a que el entorno confirme la recepción.",
+        "lookupEstimate": "El tamaño del paquete y una estimación aparecerán cuando se encuentre el editor más reciente.",
+        "elapsed": "La configuración lleva {duration}",
+        "secondsShort": "{value} s",
+        "minutesShort": "{value} min",
+        "downloadProgressLabel": "Progreso de descarga de Browser Editor",
+        "uploadProgressLabel": "Progreso de transferencia de Browser Editor al entorno"
+      },
       "failure": {
         "desktopReleaseLookup": "No se pudo comprobar el último Browser Editor.",
         "desktopPackageCache": "No se pudo almacenar en caché el paquete Browser Editor en Desktop.",

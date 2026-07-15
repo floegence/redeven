@@ -524,6 +524,47 @@ func TestRuntimeManagerRejectsOversizedImportChunkWithoutAppending(t *testing.T)
 	}
 }
 
+func TestRuntimeManagerReportsImportTransferProgress(t *testing.T) {
+	stateDir := t.TempDir()
+	stateRoot := t.TempDir()
+	mgr := NewRuntimeManager(RuntimeManagerOptions{
+		StateDir:  stateDir,
+		StateRoot: stateRoot,
+	})
+	manifest, _ := writeFakeWorkspaceEngineArchive(t, "4.109.1", stateRoot)
+	manifest.Archive.SizeBytes = 2
+	session, err := mgr.CreateImportSession(context.Background(), manifest)
+	if err != nil {
+		t.Fatalf("CreateImportSession() error = %v", err)
+	}
+	status := mgr.Status(context.Background())
+	if status.Operation.Transfer == nil || status.Operation.Transfer.ReceivedBytes != 0 || status.Operation.Transfer.ExpectedBytes != 2 {
+		t.Fatalf("initial transfer=%+v, want 0/2", status.Operation.Transfer)
+	}
+
+	if _, err := mgr.AppendImportChunk(context.Background(), session.UploadID, 0, strings.NewReader("x")); err != nil {
+		t.Fatalf("AppendImportChunk() error = %v", err)
+	}
+	status = mgr.Status(context.Background())
+	if status.Operation.Transfer == nil || status.Operation.Transfer.ReceivedBytes != 1 || status.Operation.Transfer.ExpectedBytes != 2 {
+		t.Fatalf("updated transfer=%+v, want 1/2", status.Operation.Transfer)
+	}
+
+	status = mgr.CancelOperation(context.Background())
+	if status.Operation.Transfer == nil || status.Operation.Transfer.ReceivedBytes != 1 || status.Operation.Transfer.ExpectedBytes != 2 {
+		t.Fatalf("cancelled transfer=%+v, want retained 1/2", status.Operation.Transfer)
+	}
+
+	manifest.Archive.SizeBytes = 3
+	if _, err := mgr.CreateImportSession(context.Background(), manifest); err != nil {
+		t.Fatalf("second CreateImportSession() error = %v", err)
+	}
+	status = mgr.Status(context.Background())
+	if status.Operation.Transfer == nil || status.Operation.Transfer.ReceivedBytes != 0 || status.Operation.Transfer.ExpectedBytes != 3 {
+		t.Fatalf("reset transfer=%+v, want 0/3", status.Operation.Transfer)
+	}
+}
+
 func TestRuntimeManagerSerializesImportChunkAppend(t *testing.T) {
 	stateDir := t.TempDir()
 	stateRoot := t.TempDir()

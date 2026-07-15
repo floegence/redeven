@@ -90,6 +90,12 @@ type RuntimeOperationStatus struct {
 	StartedAtUnixMs  int64                  `json:"started_at_unix_ms,omitempty"`
 	FinishedAtUnixMs int64                  `json:"finished_at_unix_ms,omitempty"`
 	LogTail          []string               `json:"log_tail,omitempty"`
+	Transfer         *RuntimeTransferStatus `json:"transfer,omitempty"`
+}
+
+type RuntimeTransferStatus struct {
+	ReceivedBytes int64 `json:"received_bytes"`
+	ExpectedBytes int64 `json:"expected_bytes"`
 }
 
 type RuntimeStatus struct {
@@ -129,6 +135,8 @@ type RuntimeManager struct {
 	targetVersion        string
 	operationStartedAt   time.Time
 	operationFinishedAt  time.Time
+	transferReceived     int64
+	transferExpected     int64
 	updatedAt            time.Time
 	logTail              []string
 	cancelOperation      context.CancelFunc
@@ -222,6 +230,7 @@ func (m *RuntimeManager) Status(ctx context.Context) RuntimeStatus {
 				StartedAtUnixMs:  parts.snapshot.operationStartedAt.UnixMilli(),
 				FinishedAtUnixMs: parts.snapshot.operationFinishedAt.UnixMilli(),
 				LogTail:          append([]string(nil), parts.snapshot.logTail...),
+				Transfer:         runtimeTransferStatus(parts.snapshot.transferReceived, parts.snapshot.transferExpected),
 			},
 			UpdatedAtUnixMs: parts.snapshot.updatedAt.UnixMilli(),
 		}
@@ -343,6 +352,8 @@ func (m *RuntimeManager) startOperation(action RuntimeOperationAction, targetVer
 	m.logTail = nil
 	m.operationStartedAt = startedAt
 	m.operationFinishedAt = time.Time{}
+	m.transferReceived = 0
+	m.transferExpected = 0
 	m.updatedAt = startedAt
 	m.cancelOperation = cancel
 	m.operationContext = opCtx
@@ -354,6 +365,19 @@ func (m *RuntimeManager) setActiveImportUploadID(uploadID string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.activeImportUploadID = strings.TrimSpace(uploadID)
+	m.updatedAt = m.now()
+}
+
+func (m *RuntimeManager) setTransferProgress(receivedBytes int64, expectedBytes int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if expectedBytes <= 0 {
+		m.transferReceived = 0
+		m.transferExpected = 0
+	} else {
+		m.transferReceived = max(int64(0), min(receivedBytes, expectedBytes))
+		m.transferExpected = expectedBytes
+	}
 	m.updatedAt = m.now()
 }
 
@@ -463,6 +487,8 @@ type runtimeSnapshot struct {
 	lastErrorCode       string
 	operationStartedAt  time.Time
 	operationFinishedAt time.Time
+	transferReceived    int64
+	transferExpected    int64
 	updatedAt           time.Time
 	logTail             []string
 }
@@ -479,8 +505,20 @@ func (m *RuntimeManager) snapshot() runtimeSnapshot {
 		lastErrorCode:       m.lastErrorCode,
 		operationStartedAt:  m.operationStartedAt,
 		operationFinishedAt: m.operationFinishedAt,
+		transferReceived:    m.transferReceived,
+		transferExpected:    m.transferExpected,
 		updatedAt:           m.updatedAt,
 		logTail:             append([]string(nil), m.logTail...),
+	}
+}
+
+func runtimeTransferStatus(receivedBytes int64, expectedBytes int64) *RuntimeTransferStatus {
+	if expectedBytes <= 0 {
+		return nil
+	}
+	return &RuntimeTransferStatus{
+		ReceivedBytes: max(int64(0), min(receivedBytes, expectedBytes)),
+		ExpectedBytes: expectedBytes,
 	}
 }
 

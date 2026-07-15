@@ -2,15 +2,49 @@ export const DESKTOP_CODE_WORKSPACE_PREPARE_CHANNEL = 'redeven-desktop:code-work
 export const DESKTOP_CODE_WORKSPACE_PACKAGE_PREPARE_CHANNEL = 'redeven-desktop:code-workspace-package-prepare';
 export const DESKTOP_CODE_WORKSPACE_PACKAGE_CHUNK_CHANNEL = 'redeven-desktop:code-workspace-package-chunk';
 export const DESKTOP_CODE_WORKSPACE_PACKAGE_DISPOSE_CHANNEL = 'redeven-desktop:code-workspace-package-dispose';
+export const DESKTOP_CODE_WORKSPACE_PROGRESS_CHANNEL = 'redeven-desktop:code-workspace-progress';
+export const DESKTOP_CODE_WORKSPACE_CANCEL_CHANNEL = 'redeven-desktop:code-workspace-cancel';
+
+export type DesktopCodeWorkspaceProgressPhase = 'lookup' | 'download' | 'package_validation' | 'upload';
+export type DesktopCodeWorkspaceProgressState = 'running' | 'completed' | 'cancelled' | 'failed';
+
+export type DesktopCodeWorkspaceProgress = Readonly<{
+  operation_id: string;
+  phase: DesktopCodeWorkspaceProgressPhase;
+  state: DesktopCodeWorkspaceProgressState;
+  completed_bytes?: number;
+  total_bytes?: number;
+  from_cache?: boolean;
+  updated_at_unix_ms: number;
+}>;
+
+export type DesktopCodeWorkspaceProgressSnapshot = Omit<
+  DesktopCodeWorkspaceProgress,
+  'operation_id' | 'updated_at_unix_ms'
+>;
+
+export function terminalDesktopCodeWorkspaceProgress(
+  lastProgress: DesktopCodeWorkspaceProgressSnapshot | undefined,
+  phase: DesktopCodeWorkspaceProgressPhase,
+  state: Extract<DesktopCodeWorkspaceProgressState, 'cancelled' | 'failed'>,
+): DesktopCodeWorkspaceProgressSnapshot {
+  return {
+    ...(lastProgress?.phase === phase ? lastProgress : {}),
+    phase,
+    state,
+  };
+}
 
 export type DesktopCodeWorkspacePrepareRequest = Readonly<{
   reason?: 'open' | 'start' | 'settings' | 'retry';
   prefer_session_upload?: boolean;
+  operation_id?: string;
 }>;
 
 export type DesktopCodeWorkspacePrepareResponse = Readonly<{
   ok: boolean;
   prepared: boolean;
+  cancelled?: boolean;
   message?: string;
   status?: unknown;
 }>;
@@ -24,6 +58,7 @@ export type DesktopCodeWorkspacePlatform = Readonly<{
 
 export type DesktopCodeWorkspacePackagePrepareRequest = Readonly<{
   platform: DesktopCodeWorkspacePlatform;
+  operation_id?: string;
 }>;
 
 export type DesktopCodeWorkspacePackageJob = Readonly<{
@@ -64,6 +99,16 @@ export type DesktopCodeWorkspacePackageDisposeResponse = Readonly<{
   message?: string;
 }>;
 
+export type DesktopCodeWorkspaceCancelRequest = Readonly<{
+  operation_id: string;
+}>;
+
+export type DesktopCodeWorkspaceCancelResponse = Readonly<{
+  ok: boolean;
+  cancelled: boolean;
+  message?: string;
+}>;
+
 function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
@@ -87,6 +132,11 @@ function normalizeNonNegativeInteger(value: unknown): number | undefined {
 function normalizeJobID(value: unknown): string {
   const jobID = compact(value);
   return jobID.length > 0 && jobID.length <= 160 ? jobID : '';
+}
+
+function normalizeOperationID(value: unknown): string {
+  const operationID = compact(value);
+  return operationID.length > 0 && operationID.length <= 160 ? operationID : '';
 }
 
 function normalizeDesktopCodeWorkspacePlatform(value: unknown): DesktopCodeWorkspacePlatform | null {
@@ -117,14 +167,19 @@ export function normalizeDesktopCodeWorkspacePrepareRequest(value: unknown): Des
   const record = value && typeof value === 'object' ? value as Partial<DesktopCodeWorkspacePrepareRequest> : {};
   const reason = compact(record.reason);
   const preferSessionUpload = record.prefer_session_upload === true;
+  const operationID = normalizeOperationID(record.operation_id);
+  const common = {
+    ...(preferSessionUpload ? { prefer_session_upload: true } : {}),
+    ...(operationID ? { operation_id: operationID } : {}),
+  };
   switch (reason) {
     case 'open':
     case 'start':
     case 'settings':
     case 'retry':
-      return { reason, ...(preferSessionUpload ? { prefer_session_upload: true } : {}) };
+      return { reason, ...common };
     default:
-      return preferSessionUpload ? { prefer_session_upload: true } : {};
+      return common;
   }
 }
 
@@ -140,6 +195,7 @@ export function normalizeDesktopCodeWorkspacePrepareResponse(value: unknown): De
   return {
     ok: record.ok === true,
     prepared: record.prepared === true,
+    ...(record.cancelled === true ? { cancelled: true } : {}),
     message: compact(record.message) || undefined,
     status: record.status,
   };
@@ -148,7 +204,8 @@ export function normalizeDesktopCodeWorkspacePrepareResponse(value: unknown): De
 export function normalizeDesktopCodeWorkspacePackagePrepareRequest(value: unknown): DesktopCodeWorkspacePackagePrepareRequest | null {
   const record = value && typeof value === 'object' ? value as Partial<DesktopCodeWorkspacePackagePrepareRequest> : {};
   const platform = normalizeDesktopCodeWorkspacePlatform(record.platform);
-  return platform ? { platform } : null;
+  const operationID = normalizeOperationID(record.operation_id);
+  return platform ? { platform, ...(operationID ? { operation_id: operationID } : {}) } : null;
 }
 
 export function normalizeDesktopCodeWorkspacePackagePrepareResponse(value: unknown): DesktopCodeWorkspacePackagePrepareResponse {
@@ -220,6 +277,55 @@ export function normalizeDesktopCodeWorkspacePackageDisposeResponse(value: unkno
   return {
     ok: record.ok === true,
     message: compact(record.message) || undefined,
+  };
+}
+
+export function normalizeDesktopCodeWorkspaceCancelRequest(value: unknown): DesktopCodeWorkspaceCancelRequest | null {
+  const record = value && typeof value === 'object' ? value as Partial<DesktopCodeWorkspaceCancelRequest> : {};
+  const operationID = normalizeOperationID(record.operation_id);
+  return operationID ? { operation_id: operationID } : null;
+}
+
+export function normalizeDesktopCodeWorkspaceCancelResponse(value: unknown): DesktopCodeWorkspaceCancelResponse {
+  if (!value || typeof value !== 'object') {
+    return {
+      ok: false,
+      cancelled: false,
+      message: 'Desktop could not cancel workspace preparation.',
+    };
+  }
+  const record = value as Partial<DesktopCodeWorkspaceCancelResponse>;
+  return {
+    ok: record.ok === true,
+    cancelled: record.cancelled === true,
+    message: compact(record.message) || undefined,
+  };
+}
+
+export function normalizeDesktopCodeWorkspaceProgress(value: unknown): DesktopCodeWorkspaceProgress | null {
+  const record = value && typeof value === 'object' ? value as Partial<DesktopCodeWorkspaceProgress> : {};
+  const operationID = normalizeOperationID(record.operation_id);
+  const phase = compact(record.phase);
+  const state = compact(record.state);
+  const completedBytes = normalizeNonNegativeInteger(record.completed_bytes);
+  const totalBytes = normalizePositiveInteger(record.total_bytes);
+  const updatedAtUnixMS = normalizePositiveInteger(record.updated_at_unix_ms);
+  if (
+    !operationID
+    || (phase !== 'lookup' && phase !== 'download' && phase !== 'package_validation' && phase !== 'upload')
+    || (state !== 'running' && state !== 'completed' && state !== 'cancelled' && state !== 'failed')
+    || updatedAtUnixMS === undefined
+  ) {
+    return null;
+  }
+  return {
+    operation_id: operationID,
+    phase,
+    state,
+    ...(completedBytes !== undefined ? { completed_bytes: completedBytes } : {}),
+    ...(totalBytes !== undefined ? { total_bytes: totalBytes } : {}),
+    ...(record.from_cache === true ? { from_cache: true } : {}),
+    updated_at_unix_ms: updatedAtUnixMS,
   };
 }
 

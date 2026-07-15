@@ -1,10 +1,16 @@
-import { For, Show, createMemo, createSignal, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { AlertTriangle, Check, ChevronDown, ChevronRight, Code, RefreshIcon, X } from '@floegence/floe-webapp-core/icons';
 import { Button, Tag } from '@floegence/floe-webapp-core/ui';
 
 import { type BrowserEditorSetupActivity } from '../services/browserEditorSetupActivity';
 import { useI18n } from '../i18n';
+import {
+  BrowserEditorTransferEstimator,
+  PROGRESS_TEXT_REFRESH_INTERVAL_MS,
+  shouldRefreshBrowserEditorProgressText,
+  type BrowserEditorSetupProgress,
+} from '../services/browserEditorSetupProgress';
 
 export type BrowserEditorSetupActivityPanelProps = Readonly<{
   activity: BrowserEditorSetupActivity;
@@ -77,6 +83,26 @@ function hasActions(activity: BrowserEditorSetupActivity, props: BrowserEditorSe
   );
 }
 
+function formatProgressBytes(bytes: number, formatNumber: (value: number, options?: Intl.NumberFormatOptions) => string): string {
+  const safeBytes = Math.max(0, Number(bytes) || 0);
+  const units = ['B', 'KiB', 'MiB', 'GiB'] as const;
+  let value = safeBytes;
+  let unitIndex = 0;
+  while (value >= 1024 && unitIndex < units.length - 1) {
+    value /= 1024;
+    unitIndex += 1;
+  }
+  return `${formatNumber(value, { maximumFractionDigits: unitIndex === 0 ? 0 : 1 })} ${units[unitIndex]}`;
+}
+
+function roundedPercent(completedBytes: number | undefined, totalBytes: number | undefined): number {
+  const completed = Math.max(0, Number(completedBytes) || 0);
+  const total = Math.max(0, Number(totalBytes) || 0);
+  if (total <= 0) return 0;
+  if (completed >= total) return 100;
+  return Math.min(99, Math.floor((completed / total) * 100));
+}
+
 export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivityPanelProps) {
   const i18n = useI18n();
   const activity = () => props.activity;
@@ -86,6 +112,114 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
   const actionLabel = createMemo(() => (props.prepareSubmitting ? props.runningLabel : props.actionLabel));
   const showActions = createMemo(() => hasActions(activity(), props));
   const [detailsOpen, setDetailsOpen] = createSignal(false);
+  const [nowMS, setNowMS] = createSignal(Date.now());
+  const [progressTextSnapshot, setProgressTextSnapshot] = createSignal<BrowserEditorSetupProgress | null>(null);
+  const transferEstimator = new BrowserEditorTransferEstimator();
+  let latestProgress: BrowserEditorSetupProgress | null = null;
+  let lastProgressTextRefreshMS = 0;
+
+  createEffect(() => {
+    const progress = activity().progress;
+    if (!progress) {
+      latestProgress = null;
+      lastProgressTextRefreshMS = 0;
+      setProgressTextSnapshot(null);
+      return;
+    }
+    const now = Date.now();
+    transferEstimator.update(progress, now);
+    const shouldRefresh = shouldRefreshBrowserEditorProgressText(
+      latestProgress,
+      progress,
+      now - lastProgressTextRefreshMS,
+    );
+    latestProgress = progress;
+    if (shouldRefresh) {
+      lastProgressTextRefreshMS = now;
+      setProgressTextSnapshot(progress);
+      setNowMS(now);
+    }
+  });
+
+  createEffect(() => {
+    const progress = activity().progress;
+    if (!progress || progress.state !== 'running') return;
+    const timer = window.setInterval(() => {
+      const progressSnapshot = latestProgress;
+      if (!progressSnapshot) return;
+      const now = Date.now();
+      lastProgressTextRefreshMS = now;
+      setProgressTextSnapshot(progressSnapshot);
+      setNowMS(now);
+    }, PROGRESS_TEXT_REFRESH_INTERVAL_MS);
+    onCleanup(() => window.clearInterval(timer));
+  });
+
+  const progressForText = createMemo(() => progressTextSnapshot() ?? activity().progress ?? null);
+
+  const progressMetrics = createMemo(() => {
+    const progress = progressForText();
+    return progress ? transferEstimator.metrics(progress, nowMS()) : null;
+  });
+  const hasMeasuredTransfer = createMemo(() => {
+    const progress = activity().progress;
+    return Boolean(
+      progress
+      && (progress.phase === 'download' || progress.phase === 'upload')
+      && Number(progress.total_bytes) > 0
+      && Number(progress.completed_bytes) >= 0,
+    );
+  });
+  const elapsedLabel = createMemo(() => {
+    const seconds = progressMetrics()?.elapsed_seconds ?? 0;
+    return i18n.t('codeRuntime.activity.progress.elapsed', {
+      duration: seconds < 60
+        ? i18n.t('codeRuntime.activity.progress.secondsShort', { value: i18n.formatNumber(seconds) })
+        : i18n.t('codeRuntime.activity.progress.minutesShort', { value: i18n.formatNumber(Math.floor(seconds / 60)) }),
+    });
+  });
+  const transferSummary = createMemo(() => {
+    const progress = progressForText();
+    if (!progress || !hasMeasuredTransfer()) return '';
+    const completed = formatProgressBytes(progress.completed_bytes ?? 0, i18n.formatNumber);
+    const total = formatProgressBytes(progress.total_bytes ?? 0, i18n.formatNumber);
+    return i18n.t(
+      progress.phase === 'download'
+        ? 'codeRuntime.activity.progress.downloadedBytes'
+        : 'codeRuntime.activity.progress.uploadedBytes',
+      { completed, total },
+    );
+  });
+  const progressDetail = createMemo(() => {
+    const progress = progressForText();
+    const metrics = progressMetrics();
+    if (!progress || !metrics) return '';
+    if (progress.from_cache && (progress.phase === 'download' || progress.phase === 'package_validation')) {
+      return i18n.t('codeRuntime.activity.progress.cacheHit');
+    }
+    if (metrics.awaiting_confirmation) return i18n.t('codeRuntime.activity.progress.awaitingConfirmation');
+    if (metrics.stalled) return i18n.t('codeRuntime.activity.progress.stalled');
+    if (metrics.bytes_per_second && metrics.eta_seconds !== undefined) {
+      const rate = `${formatProgressBytes(metrics.bytes_per_second, i18n.formatNumber)}/s`;
+      const etaSeconds = Math.max(1, metrics.eta_seconds);
+      const duration = etaSeconds < 90
+        ? i18n.t('codeRuntime.activity.progress.secondsShort', {
+          value: i18n.formatNumber(Math.max(5, Math.round(etaSeconds / 5) * 5)),
+        })
+        : i18n.t('codeRuntime.activity.progress.minutesShort', {
+          value: i18n.formatNumber(Math.max(1, Math.round(etaSeconds / 60))),
+        });
+      return i18n.t('codeRuntime.activity.progress.rateAndEta', { rate, duration });
+    }
+    if (hasMeasuredTransfer() && progress.state === 'running') return i18n.t('codeRuntime.activity.progress.measuring');
+    if (progress.phase === 'lookup') return i18n.t('codeRuntime.activity.progress.lookupEstimate');
+    if (progress.phase === 'package_validation') return i18n.t('codeRuntime.activity.progress.packageValidation');
+    return i18n.t('codeRuntime.activity.progress.finishing');
+  });
+  const progressTextPercent = createMemo(() => {
+    const progress = progressForText();
+    return roundedPercent(progress?.completed_bytes, progress?.total_bytes);
+  });
 
   return (
     <section
@@ -169,15 +303,7 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
               <div
                 class="browser-editor-setup__progress"
                 data-layout={layout()}
-                role="progressbar"
                 aria-label={i18n.t('codeRuntime.setupProgress')}
-                aria-valuemin={1}
-                aria-valuemax={activity().step_count}
-                aria-valuenow={activity().active_step_index}
-                aria-valuetext={i18n.t('codeRuntime.stepProgress', {
-                  current: activity().active_step_index,
-                  total: activity().step_count,
-                })}
               >
                 <div class="browser-editor-setup__secondary-heading">{i18n.t('codeRuntime.setupProgress')}</div>
                 <div class="browser-editor-setup__steps" data-layout={layout()}>
@@ -200,6 +326,40 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
                     )}
                   </For>
                 </div>
+                <Show when={activity().progress}>
+                  {(progress) => (
+                    <div class="browser-editor-setup__stage-progress" aria-live="off">
+                      <Show when={hasMeasuredTransfer()}>
+                        <div class="browser-editor-setup__stage-progress-head">
+                          <span>{transferSummary()}</span>
+                          <span class="browser-editor-setup__stage-progress-percent">
+                            {i18n.formatNumber(progressTextPercent())}%
+                          </span>
+                        </div>
+                        <div
+                          class="browser-editor-setup__stage-progress-track"
+                          role="progressbar"
+                          aria-label={progress().phase === 'download'
+                            ? i18n.t('codeRuntime.activity.progress.downloadProgressLabel')
+                            : i18n.t('codeRuntime.activity.progress.uploadProgressLabel')}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={roundedPercent(progress().completed_bytes, progress().total_bytes)}
+                          aria-valuetext={[transferSummary(), progressDetail()].filter(Boolean).join('. ')}
+                        >
+                          <span
+                            class="browser-editor-setup__stage-progress-value"
+                            style={{ width: `${roundedPercent(progress().completed_bytes, progress().total_bytes)}%` }}
+                          />
+                        </div>
+                      </Show>
+                      <div class="browser-editor-setup__stage-progress-meta">
+                        <span>{progressDetail()}</span>
+                        <span class="browser-editor-setup__stage-progress-elapsed">{elapsedLabel()}</span>
+                      </div>
+                    </div>
+                  )}
+                </Show>
               </div>
             }
           >

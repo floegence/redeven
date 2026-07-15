@@ -40,6 +40,7 @@ const desktopCodeWorkspaceMocks = vi.hoisted(() => ({
   prepareAvailable: vi.fn(() => true),
   prepareWorkspaceEngine: vi.fn(async () => ({ ok: true, prepared: true })),
   prepareWorkspaceEngineWithDesktop: vi.fn(async (): Promise<any> => ({ ok: true, prepared: true })),
+  cancelWorkspaceEnginePreparation: vi.fn(async (): Promise<any> => ({ ok: true, cancelled: true })),
 }));
 
 const desktopSessionContextMocks = vi.hoisted(() => ({
@@ -193,6 +194,7 @@ vi.mock('../services/localApi', () => ({
 }));
 
 vi.mock('../services/desktopCodeWorkspaceBridge', () => ({
+  cancelWorkspaceEnginePreparation: desktopCodeWorkspaceMocks.cancelWorkspaceEnginePreparation,
   desktopCodeWorkspacePrepareAvailable: desktopCodeWorkspaceMocks.prepareAvailable,
   prepareWorkspaceEngineInDesktop: desktopCodeWorkspaceMocks.prepareWorkspaceEngine,
   prepareWorkspaceEngineWithDesktop: desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop,
@@ -306,6 +308,8 @@ describe('EnvCodespacesPage', () => {
     desktopCodeWorkspaceMocks.prepareAvailable.mockReturnValue(true);
     desktopCodeWorkspaceMocks.prepareWorkspaceEngine.mockReset();
     desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop.mockReset();
+    desktopCodeWorkspaceMocks.cancelWorkspaceEnginePreparation.mockReset();
+    desktopCodeWorkspaceMocks.cancelWorkspaceEnginePreparation.mockResolvedValue({ ok: true, cancelled: true });
     desktopSessionContextMocks.readSnapshot.mockReset();
     desktopSessionContextMocks.readSnapshot.mockReturnValue(null);
     desktopCodeWorkspaceMocks.prepareWorkspaceEngine.mockImplementation(async () => {
@@ -510,7 +514,7 @@ describe('EnvCodespacesPage', () => {
     expect(wizard?.textContent).toContain('Set up Browser Editor');
     expect(wizard?.textContent).toContain('send it to the connected environment');
     expect(wizard?.getAttribute('data-layout')).toBe('wide');
-    expect(wizard?.querySelector('[role="progressbar"]')?.getAttribute('aria-valuetext')).toBe('Step 1 of 4');
+    expect(wizard?.querySelector('[role="progressbar"]')).toBeNull();
   });
 
   it('shows unsupported Linux platforms as non-retryable diagnostics while keeping the empty state', async () => {
@@ -718,11 +722,13 @@ describe('EnvCodespacesPage', () => {
     });
 
     expect(windowOpenSpy).not.toHaveBeenCalled();
-    expect(desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop).toHaveBeenCalledWith({
+    expect(desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop).toHaveBeenCalledWith(expect.objectContaining({
       reason: 'start',
       status: expect.anything(),
       preferSessionUpload: false,
-    });
+      operationID: expect.stringMatching(/^browser-editor:/),
+      onProgress: expect.any(Function),
+    }));
     expect(localApiMocks.fetchLocalApiJSON).not.toHaveBeenCalledWith('/_redeven_proxy/api/code-runtime/install', expect.anything());
     expect(localApiMocks.fetchLocalApiJSON).not.toHaveBeenCalledWith('/_redeven_proxy/api/spaces/space-1/start', expect.anything());
 

@@ -138,7 +138,7 @@ describe('browserEditorSetupActivity', () => {
     expect(activity.state).toBe('preparing');
     expect(activity.presentation).toBe('progress');
     expect(activity.summary).toBe('Desktop is preparing the Browser Editor.');
-    expect(activity.can_cancel).toBe(false);
+    expect(activity.can_cancel).toBe(true);
     expect(activity.steps[0]).toMatchObject({ id: 'lookup', state: 'active' });
   });
 
@@ -150,6 +150,8 @@ describe('browserEditorSetupActivity', () => {
           action: 'prepare_workspace_engine',
           state: 'running',
           stage: 'receiving',
+          started_at_unix_ms: 10,
+          transfer: { received_bytes: 32, expected_bytes: 64 },
           log_tail: ['Receiving Browser Editor package from Desktop.'],
         },
       },
@@ -160,12 +162,42 @@ describe('browserEditorSetupActivity', () => {
     expect(activity.can_cancel).toBe(true);
     expect(activity.show_log).toBe(true);
     expect(activity.log_tail).toEqual(['Receiving Browser Editor package from Desktop.']);
+    expect(activity.progress).toMatchObject({
+      phase: 'upload',
+      state: 'running',
+      completed_bytes: 32,
+      total_bytes: 64,
+    });
     expect(activity.steps.map((step) => [step.id, step.state])).toEqual([
       ['lookup', 'done'],
       ['cache', 'done'],
       ['upload', 'active'],
       ['verify', 'pending'],
     ]);
+  });
+
+  it('maps Desktop download progress to the cache step without inventing overall progress', () => {
+    const activity = buildBrowserEditorSetupActivity({
+      status: missingStatus(),
+      localPending: true,
+      localProgress: {
+        operation_id: 'browser-editor:1',
+        phase: 'download',
+        state: 'running',
+        completed_bytes: 20,
+        total_bytes: 100,
+        updated_at_unix_ms: 10,
+      },
+    });
+
+    expect(activity.steps.map((step) => [step.id, step.state])).toEqual([
+      ['lookup', 'done'],
+      ['cache', 'active'],
+      ['upload', 'pending'],
+      ['verify', 'pending'],
+    ]);
+    expect(activity.progress).toMatchObject({ phase: 'download', completed_bytes: 20, total_bytes: 100 });
+    expect(activity).not.toHaveProperty('progress_percent');
   });
 
   it('uses Runtime operation failure details when Runtime records the failure', () => {

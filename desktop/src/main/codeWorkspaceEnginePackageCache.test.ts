@@ -102,7 +102,12 @@ describe('code workspace engine package cache', () => {
     tempDirs.push(cacheRoot);
     const fetchMock = vi.mocked(fetch);
 
-    const first = await prepareCodeWorkspaceEnginePackage({ cacheRoot, platform: platform() });
+    const progress = vi.fn();
+    const first = await prepareCodeWorkspaceEnginePackage({
+      cacheRoot,
+      platform: platform(),
+      fetchPolicy: { onProgress: progress },
+    });
     expect(first.manifest.version).toBe('4.109.1');
     expect(first.manifest.archive).toEqual({
       sha256: archiveSHA('4.109.1'),
@@ -111,6 +116,12 @@ describe('code workspace engine package cache', () => {
     });
     expect(fetchMock).toHaveBeenCalledWith(CODE_WORKSPACE_ENGINE_CATALOG_LATEST_URL, expect.anything());
     expect(fetchMock.mock.calls.map(([url]) => String(url))).not.toContain('https://api.github.com/repos/coder/code-server/releases/latest');
+    expect(progress.mock.calls.map(([item]) => [item.phase, item.state])).toEqual(expect.arrayContaining([
+      ['lookup', 'running'],
+      ['lookup', 'completed'],
+      ['download', 'completed'],
+      ['package_validation', 'completed'],
+    ]));
 
     latestVersion = '4.110.0';
     const second = await prepareCodeWorkspaceEnginePackage({ cacheRoot, platform: platform() });

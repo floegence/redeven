@@ -25,7 +25,6 @@ function missingActivity(): BrowserEditorSetupActivity {
     steps,
     active_step_index: 1,
     step_count: 4,
-    progress_percent: 14,
     can_retry: false,
     can_cancel: false,
     can_continue: false,
@@ -58,6 +57,45 @@ function unsupportedActivity(): BrowserEditorSetupActivity {
       requirement: 'linux_glibc',
       detected_label: 'Linux / amd64 / musl',
       required_label: 'Linux with glibc on amd64 or arm64',
+    },
+  };
+}
+
+function uploadActivity(): BrowserEditorSetupActivity {
+  return {
+    ...missingActivity(),
+    state: 'preparing',
+    presentation: 'progress',
+    badge_label: 'Preparing',
+    badge_variant: 'info',
+    summary: 'Sending Browser Editor to this environment...',
+    steps: [
+      { id: 'lookup', label: 'Check latest editor', state: 'done' },
+      { id: 'cache', label: 'Download to Desktop', state: 'done' },
+      { id: 'upload', label: 'Send to environment', state: 'active' },
+      { id: 'verify', label: 'Verify editor', state: 'pending' },
+    ],
+    active_step_index: 3,
+    can_cancel: true,
+    progress: {
+      operation_id: 'browser-editor:1',
+      phase: 'upload',
+      state: 'running',
+      completed_bytes: 96 * 1024 * 1024,
+      total_bytes: 188 * 1024 * 1024,
+      updated_at_unix_ms: Date.now(),
+    },
+  };
+}
+
+function awaitingConfirmationActivity(): BrowserEditorSetupActivity {
+  const activity = uploadActivity();
+  return {
+    ...activity,
+    progress: {
+      ...activity.progress!,
+      completed_bytes: activity.progress!.total_bytes,
+      state: 'running',
     },
   };
 }
@@ -169,6 +207,35 @@ describe('BrowserEditorSetupActivityPanel rendered layout', () => {
 
     const screenshot = await page.screenshot({ save: false });
     expect(screenshot.length).toBeGreaterThan(1_000);
+  });
+
+  it('renders exact transfer progress without reusing the stage stepper as a percentage', async () => {
+    await page.viewport(1440, 900);
+    const { host, dispose } = mountPanel(uploadActivity(), '1180px');
+    cleanup = dispose;
+    await settle();
+
+    const progressbar = host.querySelector<HTMLElement>('.browser-editor-setup__stage-progress-track');
+    expect(host.textContent).toContain('Sent 96 MiB of 188 MiB');
+    expect(host.textContent).toContain('51%');
+    expect(progressbar?.getAttribute('aria-valuenow')).toBe('51');
+    expect(host.querySelectorAll('[role="progressbar"]')).toHaveLength(1);
+    expect(host.querySelector<HTMLElement>('.browser-editor-setup__progress')?.getAttribute('role')).toBeNull();
+    expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth + 1);
+
+    const screenshot = await page.screenshot({ save: false });
+    expect(screenshot.length).toBeGreaterThan(1_000);
+  });
+
+  it('shows the completion handshake after all bytes are confirmed', async () => {
+    await page.viewport(1440, 900);
+    const { host, dispose } = mountPanel(awaitingConfirmationActivity(), '1180px');
+    cleanup = dispose;
+    await settle();
+
+    expect(host.textContent).toContain('Sent 188 MiB of 188 MiB');
+    expect(host.textContent).toContain('Transfer complete. Waiting for the environment to confirm receipt.');
+    expect(host.querySelector<HTMLElement>('.browser-editor-setup__stage-progress-track')?.getAttribute('aria-valuenow')).toBe('100');
   });
 
   it('stays within 1920x1080 and 1024x768 desktop viewports', async () => {
@@ -296,7 +363,7 @@ describe('BrowserEditorSetupActivityPanel rendered layout', () => {
 
   it('collapses the wide panel and stepper without overflow on a narrow viewport', async () => {
     await page.viewport(390, 844);
-    const { host, dispose } = mountPanel(missingActivity(), 'calc(100vw - 24px)');
+    const { host, dispose } = mountPanel(uploadActivity(), 'calc(100vw - 24px)');
     cleanup = dispose;
     await settle();
 
@@ -307,6 +374,8 @@ describe('BrowserEditorSetupActivityPanel rendered layout', () => {
     expect(stepsElement && getComputedStyle(stepsElement).gridTemplateColumns.split(' ')).toHaveLength(1);
     expect(panel?.scrollWidth).toBeLessThanOrEqual((panel?.clientWidth ?? 0) + 1);
     expect((panel?.getBoundingClientRect().right ?? Number.POSITIVE_INFINITY)).toBeLessThanOrEqual(window.innerWidth);
+    expect(panel?.querySelector<HTMLElement>('.browser-editor-setup__stage-progress-meta')?.scrollWidth)
+      .toBeLessThanOrEqual((panel?.querySelector<HTMLElement>('.browser-editor-setup__stage-progress-meta')?.clientWidth ?? 0) + 1);
 
     const screenshot = await page.screenshot({ save: false });
     expect(screenshot.length).toBeGreaterThan(1_000);

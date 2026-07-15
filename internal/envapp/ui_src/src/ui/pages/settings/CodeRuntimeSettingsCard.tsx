@@ -19,6 +19,7 @@ import {
   localizeBrowserEditorSetupActivity,
   type BrowserEditorSetupLocalFailure,
 } from '../../services/browserEditorSetupActivity';
+import type { BrowserEditorSetupProgress } from '../../services/browserEditorSetupProgress';
 import { Tooltip } from '../../primitives/Tooltip';
 import { BrowserEditorSetupActivityPanel } from '../BrowserEditorSetupActivityPanel';
 import { SettingsSection, SettingsKeyValueTable, SettingsPill } from './SettingsPrimitives';
@@ -190,6 +191,8 @@ export interface CodeRuntimeSettingsCardProps {
   loading: boolean;
   error?: string | null;
   localPrepareFailure?: BrowserEditorSetupLocalFailure | null;
+  localPrepareCancelled?: boolean;
+  prepareProgress?: BrowserEditorSetupProgress | null;
   canInteract: boolean;
   canManage: boolean;
   actionLoading: boolean;
@@ -224,12 +227,16 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
       status: props.status,
       localPending: localPending(),
       localFailure: props.localPrepareFailure,
+      localCancelled: props.localPrepareCancelled,
+      localProgress: props.prepareProgress,
     });
     return localizeBrowserEditorSetupActivity(activity, {
       status: props.status,
       loading: props.loading,
       localPending: localPending(),
       localFailure: props.localPrepareFailure,
+      localCancelled: props.localPrepareCancelled,
+      localProgress: props.prepareProgress,
       prepareDescription: localizedPrepareCopy().description,
     }, i18n);
   });
@@ -246,6 +253,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
     && (
       platformUnsupported()
       || Boolean(props.localPrepareFailure)
+      || Boolean(props.localPrepareCancelled)
       || props.actionLoading
       || (prepareOperationActive() && (operationRunning() || operationNeedsAttention()))
     )

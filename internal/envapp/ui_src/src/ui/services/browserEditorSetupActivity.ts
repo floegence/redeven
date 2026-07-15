@@ -11,6 +11,7 @@ import {
   type CodeRuntimeStatus,
 } from './codeRuntimeApi';
 import { type I18nHelpers } from '../i18n';
+import type { BrowserEditorSetupProgress, BrowserEditorSetupProgressPhase } from './browserEditorSetupProgress';
 
 export type BrowserEditorSetupFailureSource =
   | 'desktop_release_lookup'
@@ -66,7 +67,7 @@ export type BrowserEditorSetupActivity = Readonly<{
   steps: readonly BrowserEditorSetupStep[];
   active_step_index: number;
   step_count: number;
-  progress_percent: number;
+  progress?: BrowserEditorSetupProgress;
   can_retry: boolean;
   can_cancel: boolean;
   can_continue: boolean;
@@ -210,6 +211,52 @@ function runtimeStageStepID(stage: CodeRuntimeOperationStage | string | null | u
   }
 }
 
+function progressStepID(phase: BrowserEditorSetupProgressPhase): BrowserEditorSetupStepID {
+  switch (phase) {
+    case 'lookup':
+      return 'lookup';
+    case 'download':
+    case 'package_validation':
+      return 'cache';
+    case 'upload':
+      return 'upload';
+    case 'verify':
+    case 'install':
+    case 'finalize':
+    default:
+      return 'verify';
+  }
+}
+
+function runtimeProgress(status: CodeRuntimeStatus | null | undefined): BrowserEditorSetupProgress | undefined {
+  const operation = status?.operation;
+  if (!operation || operation.state !== 'running' || !runtimeOperationBelongsToBrowserEditorSetup(operation.action)) return undefined;
+  const startedAt = Math.max(0, Math.floor(operation.started_at_unix_ms ?? status?.updated_at_unix_ms ?? Date.now()));
+  const updatedAt = Math.max(startedAt, Math.floor(status?.updated_at_unix_ms ?? Date.now()));
+  switch (clean(operation.stage)) {
+    case 'receiving':
+      return {
+        operation_id: `runtime:${startedAt}`,
+        phase: 'upload',
+        state: 'running',
+        ...(operation.transfer ? {
+          completed_bytes: operation.transfer.received_bytes,
+          total_bytes: operation.transfer.expected_bytes,
+        } : {}),
+        updated_at_unix_ms: updatedAt,
+      };
+    case 'verifying':
+      return { operation_id: `runtime:${startedAt}`, phase: 'verify', state: 'running', updated_at_unix_ms: updatedAt };
+    case 'installing':
+      return { operation_id: `runtime:${startedAt}`, phase: 'install', state: 'running', updated_at_unix_ms: updatedAt };
+    case 'finalizing':
+      return { operation_id: `runtime:${startedAt}`, phase: 'finalize', state: 'running', updated_at_unix_ms: updatedAt };
+    case 'preparing':
+    default:
+      return { operation_id: `runtime:${startedAt}`, phase: 'download', state: 'running', updated_at_unix_ms: updatedAt };
+  }
+}
+
 function runtimeOperationBelongsToBrowserEditorSetup(action: string | null | undefined): boolean {
   return clean(action) === 'prepare_workspace_engine';
 }
@@ -233,16 +280,6 @@ function stepsFor(activeStepID: BrowserEditorSetupStepID, state: 'active' | 'err
       state: stepState,
     };
   });
-}
-
-function progressPercent(activeStepID: BrowserEditorSetupStepID, state: BrowserEditorSetupActivityState): number {
-  if (state === 'ready') return 100;
-  const index = stepIndexForID(activeStepID);
-  const count = browserEditorStepDefs.length;
-  if (state === 'failed' || state === 'cancelled') {
-    return Math.round((index / count) * 100);
-  }
-  return Math.round(((index + 0.55) / count) * 100);
 }
 
 function desktopFailureSummary(failure: BrowserEditorSetupLocalFailure): string {
@@ -312,6 +349,7 @@ function baseActivity(args: Readonly<{
   errorCode?: string;
   platformDiagnosis?: BrowserEditorSetupPlatformDiagnosis;
   pendingActionLabel?: string;
+  progress?: BrowserEditorSetupProgress;
 }>): BrowserEditorSetupActivity {
   const badge = badgeForState(args.state);
   const activeIndex = stepIndexForID(args.activeStepID);
@@ -325,7 +363,7 @@ function baseActivity(args: Readonly<{
     steps: args.steps,
     active_step_index: activeIndex + 1,
     step_count: browserEditorStepDefs.length,
-    progress_percent: progressPercent(args.activeStepID, args.state),
+    ...(args.progress ? { progress: args.progress } : {}),
     can_retry: Boolean(args.canRetry),
     can_cancel: Boolean(args.canCancel),
     can_continue: Boolean(args.canContinue),
@@ -343,6 +381,8 @@ export function buildBrowserEditorSetupActivity(args: Readonly<{
   error?: string | null;
   localPending?: boolean;
   localFailure?: BrowserEditorSetupLocalFailure | null;
+  localCancelled?: boolean;
+  localProgress?: BrowserEditorSetupProgress | null;
   pendingIntent?: BrowserEditorPendingIntent;
 }>): BrowserEditorSetupActivity {
   const status = args.status;
@@ -374,7 +414,8 @@ export function buildBrowserEditorSetupActivity(args: Readonly<{
   }
 
   if (setupOperation && codeRuntimeOperationRunning(status)) {
-    const stepID = runtimeStageStepID(operation?.stage);
+    const progress = runtimeProgress(status);
+    const stepID = progress ? progressStepID(progress.phase) : runtimeStageStepID(operation?.stage);
     return baseActivity({
       state: 'preparing',
       summary: codeRuntimeStageLabel(operation?.stage, operation?.action),
@@ -384,6 +425,7 @@ export function buildBrowserEditorSetupActivity(args: Readonly<{
       canCancel: true,
       showLog: true,
       logTail,
+      progress,
     });
   }
 
@@ -416,7 +458,8 @@ export function buildBrowserEditorSetupActivity(args: Readonly<{
   }
 
   if (args.localFailure) {
-    const stepID = localFailureStepID(args.localFailure.source);
+    const progress = args.localProgress ?? undefined;
+    const stepID = progress ? progressStepID(progress.phase) : localFailureStepID(args.localFailure.source);
     return baseActivity({
       state: 'failed',
       summary: desktopFailureSummary(args.localFailure),
@@ -425,16 +468,33 @@ export function buildBrowserEditorSetupActivity(args: Readonly<{
       activeStepID: stepID,
       canRetry: true,
       errorCode: args.localFailure.source === 'unknown' ? undefined : args.localFailure.source,
+      progress: progress ? { ...progress, state: 'failed' } : undefined,
+    });
+  }
+
+  if (args.localCancelled) {
+    const stepID = args.localProgress ? progressStepID(args.localProgress.phase) : 'lookup';
+    return baseActivity({
+      state: 'cancelled',
+      summary: 'Browser Editor setup was cancelled before it finished.',
+      steps: stepsFor(stepID, 'cancelled'),
+      activeStepID: stepID,
+      canRetry: true,
+      progress: args.localProgress ? { ...args.localProgress, state: 'cancelled' } : undefined,
     });
   }
 
   if (args.localPending) {
+    const progress = args.localProgress ?? undefined;
+    const stepID = progress ? progressStepID(progress.phase) : 'lookup';
     return baseActivity({
       state: 'preparing',
       summary: 'Desktop is preparing the Browser Editor.',
       detail: 'Setup starts only after your explicit request. Redeven will not retry automatically if it fails.',
-      steps: stepsFor('lookup', 'active'),
-      activeStepID: 'lookup',
+      steps: stepsFor(stepID, 'active'),
+      activeStepID: stepID,
+      canCancel: true,
+      progress,
     });
   }
 
@@ -531,6 +591,28 @@ function localizedLocalFailureDetail(failure: BrowserEditorSetupLocalFailure, i1
   return failure.message;
 }
 
+function localizedProgressSummary(progress: BrowserEditorSetupProgress, i18n: I18nHelpers): string {
+  switch (progress.phase) {
+    case 'lookup':
+      return i18n.t('codeRuntime.activity.progress.lookup');
+    case 'download':
+      return progress.from_cache
+        ? i18n.t('codeRuntime.activity.progress.cacheHit')
+        : i18n.t('codeRuntime.activity.progress.downloading');
+    case 'package_validation':
+      return i18n.t('codeRuntime.activity.progress.packageValidation');
+    case 'upload':
+      return i18n.t('codeRuntime.stage.receiving');
+    case 'verify':
+      return i18n.t('codeRuntime.stage.verifying');
+    case 'install':
+      return i18n.t('codeRuntime.stage.installing');
+    case 'finalize':
+    default:
+      return i18n.t('codeRuntime.stage.finalizing');
+  }
+}
+
 function localizedPlatformRequirement(requirement: BrowserEditorSetupPlatformRequirement, i18n: I18nHelpers): string {
   switch (requirement) {
     case 'linux_glibc':
@@ -562,6 +644,8 @@ export function localizeBrowserEditorSetupActivity(
     error?: string | null;
     localPending: boolean;
     localFailure: BrowserEditorSetupLocalFailure | null | undefined;
+    localCancelled?: boolean;
+    localProgress?: BrowserEditorSetupProgress | null;
     prepareDescription: string;
     pendingIntent?: BrowserEditorPendingIntent;
   }>,
@@ -589,6 +673,9 @@ export function localizeBrowserEditorSetupActivity(
   } else if (args.error) {
     summary = i18n.t('codeRuntime.activity.readinessFailed');
     detail = args.error;
+  } else if (args.localCancelled) {
+    summary = i18n.t('codeRuntime.activity.cancelledSummary');
+    detail = undefined;
   } else if (args.localFailure) {
     summary = localizedLocalFailureSummary(args.localFailure, i18n);
     detail = localizedLocalFailureDetail(args.localFailure, i18n);
@@ -602,7 +689,9 @@ export function localizeBrowserEditorSetupActivity(
     summary = i18n.t('codeRuntime.activity.cancelledSummary');
     detail = operation.last_error || undefined;
   } else if (args.localPending) {
-    summary = i18n.t('codeRuntime.activity.desktopPreparing');
+    summary = args.localProgress
+      ? localizedProgressSummary(args.localProgress, i18n)
+      : i18n.t('codeRuntime.activity.desktopPreparing');
     detail = i18n.t('codeRuntime.activity.explicitRequestDetail');
   } else if (args.status?.active_runtime.detection_state === 'ready') {
     summary = i18n.t('codeRuntime.activity.readyWithPath', { path: args.status.active_runtime.binary_path ?? '-' });
