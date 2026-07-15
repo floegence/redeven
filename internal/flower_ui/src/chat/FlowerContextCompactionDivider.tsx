@@ -12,7 +12,7 @@ function FlowerContextCompactionRunningIcon() {
 }
 
 export function FlowerContextCompactionDivider(props: {
-  decoration: FlowerTimelineDecoration;
+  decoration: Extract<FlowerTimelineDecoration, { kind: 'context_compaction' }>;
   copy: FlowerSurfaceCopy;
 }) {
   const compaction = createMemo(() => props.decoration.compaction);

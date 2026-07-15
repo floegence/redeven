@@ -1091,17 +1091,22 @@ func (s *Service) ListThreadMessages(ctx context.Context, meta *session.Meta, th
 		return nil, err
 	}
 	out := &ListThreadMessagesResponse{
-		Messages:      make([]any, 0, len(msgs)),
-		NextBeforeID:  nextBeforeID,
-		HasMore:       hasMore,
-		TotalReturned: len(msgs),
+		Messages:            make([]any, 0, len(msgs)),
+		TimelineDecorations: make([]FlowerTimelineDecoration, 0),
+		NextBeforeID:        nextBeforeID,
+		HasMore:             hasMore,
 	}
 	for _, m := range msgs {
+		if m.Decoration != nil {
+			out.TimelineDecorations = append(out.TimelineDecorations, *m.Decoration)
+			continue
+		}
 		if len(m.MessageJSON) == 0 {
 			continue
 		}
 		out.Messages = append(out.Messages, m.MessageJSON)
 	}
+	out.TotalReturned = len(out.Messages)
 	return out, nil
 }
 

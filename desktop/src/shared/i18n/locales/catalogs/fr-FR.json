@@ -97,6 +97,8 @@
       "compactionDividerNoop": "Compression du contexte inutile",
       "compactionDividerFallback": "Point de contrôle du contexte",
       "compactionDividerTokenChange": "{before} vers {after}",
+      "projectionUnavailableTitle": "Réponse indisponible",
+      "projectionUnavailableDescription": "La réponse enregistrée pour ce tour n’a pas pu être chargée.",
       "toolStatusPending": "En attente",
       "toolStatusRunning": "En cours",
       "toolStatusWaiting": "En attente",

@@ -97,6 +97,8 @@
       "compactionDividerNoop": "Kontext muss nicht komprimiert werden",
       "compactionDividerFallback": "Kontext-Prüfpunkt",
       "compactionDividerTokenChange": "{before} auf {after}",
+      "projectionUnavailableTitle": "Antwort nicht verfügbar",
+      "projectionUnavailableDescription": "Die gespeicherte Antwort für diesen Dialogschritt konnte nicht geladen werden.",
       "toolStatusPending": "Ausstehend",
       "toolStatusRunning": "Läuft",
       "toolStatusWaiting": "Wartet",

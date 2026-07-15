@@ -3480,6 +3480,8 @@
       "compactionDividerNoop": "컨텍스트 압축이 필요하지 않음",
       "compactionDividerFallback": "컨텍스트 체크포인트",
       "compactionDividerTokenChange": "{before}에서 {after}로",
+      "projectionUnavailableTitle": "응답을 사용할 수 없음",
+      "projectionUnavailableDescription": "이 턴에 저장된 응답을 불러오지 못했습니다.",
       "toolStatusPending": "대기",
       "toolStatusRunning": "실행 중",
       "toolStatusWaiting": "기다리는 중",

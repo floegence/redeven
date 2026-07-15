@@ -97,6 +97,8 @@
       "compactionDividerNoop": "コンテキスト圧縮は不要です",
       "compactionDividerFallback": "コンテキストチェックポイント",
       "compactionDividerTokenChange": "{before} から {after} へ",
+      "projectionUnavailableTitle": "応答を利用できません",
+      "projectionUnavailableDescription": "このターンの保存済み応答を読み込めませんでした。",
       "toolStatusPending": "保留中",
       "toolStatusRunning": "実行中",
       "toolStatusWaiting": "待機中",

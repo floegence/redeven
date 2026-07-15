@@ -137,6 +137,41 @@ function mapperOptions() {
   };
 }
 
+function rawBootstrapWithTimelineDecoration(decoration: unknown) {
+  return {
+    schema_version: 1,
+    endpoint_id: 'runtime',
+    thread_id: 'th-live',
+    cursor: 1,
+    retained_from_seq: 1,
+    thread: {
+      thread_id: 'th-live',
+      title: 'Live thread',
+      model_id: 'openai/gpt-5.2',
+      working_dir: '/workspace',
+      created_at_unix_ms: 1000,
+      updated_at_unix_ms: 1000,
+      run_status: 'success',
+      read_status: readStatus(),
+    },
+    timeline_messages: [{
+      id: 'msg-user',
+      role: 'user',
+      content: 'Hello',
+      status: 'complete',
+      created_at_ms: 1000,
+    }],
+    read_status: readStatus(),
+    live_state: {
+      thread_patch: {},
+      runs: {},
+      timeline_decorations: [decoration],
+      approval_actions: {},
+      input_requests: {},
+    },
+  };
+}
+
 function bootstrapWithLiveAssistant(overrides: Partial<FlowerChatMessage> = {}): FlowerLiveBootstrap {
   const baseThread = thread();
   const assistant: FlowerChatMessage = {
@@ -363,6 +398,59 @@ describe('Flower live projection', () => {
         input_requests: {},
       },
     }, mapperOptions())).toThrow(/timeline_decorations requires valid decoration payloads/);
+  });
+
+  it.each([
+    ['missing kind', {
+      decoration_id: 'context-compaction:compact-1',
+      anchor: { target_kind: 'message', message_id: 'msg-user', edge: 'after' },
+      ordinal: 0,
+      compaction: { operation_id: 'compact-1', phase: 'complete', status: 'compacted', updated_at_ms: 2000 },
+    }],
+    ['unknown kind', {
+      decoration_id: 'unknown:1',
+      kind: 'unknown',
+      anchor: { target_kind: 'message', message_id: 'msg-user', edge: 'after' },
+      ordinal: 0,
+      compaction: { operation_id: 'compact-1', phase: 'complete', status: 'compacted', updated_at_ms: 2000 },
+    }],
+    ['mixed payloads', {
+      decoration_id: 'turn-projection-unavailable:turn-1',
+      kind: 'turn_projection_unavailable',
+      anchor: { target_kind: 'message', message_id: 'msg-user', edge: 'after' },
+      ordinal: 0,
+      compaction: { operation_id: 'compact-1', phase: 'complete', status: 'compacted', updated_at_ms: 2000 },
+      projection_unavailable: {
+        turn_id: 'turn-1',
+        run_id: 'run-1',
+        expected_message_id: 'msg-assistant',
+        reason: 'not_found',
+      },
+    }],
+  ])('rejects %s timeline decoration contracts', (_name, decoration) => {
+    expect(() => mapFlowerLiveBootstrap(rawBootstrapWithTimelineDecoration(decoration), mapperOptions()))
+      .toThrow(/timeline_decorations requires valid decoration payloads/);
+  });
+
+  it('maps unavailable projection decorations without synthesizing an assistant message', () => {
+    const mapped = mapFlowerLiveBootstrap(rawBootstrapWithTimelineDecoration({
+      decoration_id: 'turn-projection-unavailable:turn-1',
+      kind: 'turn_projection_unavailable',
+      anchor: { target_kind: 'message', message_id: 'msg-user', edge: 'after' },
+      ordinal: 0,
+      projection_unavailable: {
+        turn_id: 'turn-1',
+        run_id: 'run-1',
+        expected_message_id: 'msg-assistant',
+        reason: 'not_found',
+      },
+    }), mapperOptions());
+
+    expect(mapped.timeline_messages.map((message) => message.id)).toEqual(['msg-user']);
+    expect(mapped.live_state.timeline_decorations).toEqual([expect.objectContaining({
+      kind: 'turn_projection_unavailable',
+      projection_unavailable: expect.objectContaining({ expected_message_id: 'msg-assistant', reason: 'not_found' }),
+    })]);
   });
 
   it('maps and applies live context usage and compaction events', () => {
@@ -897,7 +985,10 @@ describe('Flower live projection', () => {
     });
     expect(compacted.thread.context_compactions).toHaveLength(1);
     expect(compacted.thread.timeline_decorations).toHaveLength(1);
-    expect(compacted.thread.timeline_decorations?.[0]?.compaction.status).toBe('compacted');
+    const compactedDecoration = compacted.thread.timeline_decorations?.[0];
+    expect(compactedDecoration?.kind).toBe('context_compaction');
+    if (compactedDecoration?.kind !== 'context_compaction') throw new Error('expected context compaction decoration');
+    expect(compactedDecoration.compaction.status).toBe('compacted');
 
     const blockStarted = applyFlowerLiveEvent(compacted.thread, compacted.cursor, event(3, 'message.block_started', {
       message_id: 'assistant-live',

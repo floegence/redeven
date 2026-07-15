@@ -3480,6 +3480,8 @@
       "compactionDividerNoop": "O contexto não precisa de compressão",
       "compactionDividerFallback": "Ponto de controle de contexto",
       "compactionDividerTokenChange": "{before} para {after}",
+      "projectionUnavailableTitle": "Resposta indisponível",
+      "projectionUnavailableDescription": "Não foi possível carregar a resposta salva para este turno.",
       "toolStatusPending": "Pendente",
       "toolStatusRunning": "Em execução",
       "toolStatusWaiting": "Aguardando",

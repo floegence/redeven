@@ -103,9 +103,10 @@ type aiListMessagesReq struct {
 }
 
 type aiListMessagesResp struct {
-	Messages       []aiTranscriptMessageItem `json:"messages"`
-	NextAfterRowID int64                     `json:"next_after_row_id,omitempty"`
-	HasMore        bool                      `json:"has_more,omitempty"`
+	Messages            []aiTranscriptMessageItem `json:"messages"`
+	TimelineDecorations []FlowerTimelineDecoration `json:"timeline_decorations,omitempty"`
+	NextAfterRowID      int64                     `json:"next_after_row_id,omitempty"`
+	HasMore             bool                      `json:"has_more,omitempty"`
 }
 
 type aiTranscriptMessageItem struct {
@@ -306,11 +307,16 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 		}
 
 		out := &aiListMessagesResp{
-			Messages:       make([]aiTranscriptMessageItem, 0, len(msgs)),
-			NextAfterRowID: nextAfter,
-			HasMore:        hasMore,
+			Messages:            make([]aiTranscriptMessageItem, 0, len(msgs)),
+			TimelineDecorations: make([]FlowerTimelineDecoration, 0),
+			NextAfterRowID:      nextAfter,
+			HasMore:             hasMore,
 		}
 		for _, m := range msgs {
+			if m.Decoration != nil {
+				out.TimelineDecorations = append(out.TimelineDecorations, *m.Decoration)
+				continue
+			}
 			if len(m.MessageJSON) == 0 {
 				continue
 			}

@@ -1,6 +1,6 @@
 import type { StreamEvent } from '../../../chat';
 import type { ContextActionEnvelope } from '../../../contextActions/protocol';
-import type { FlowerReasoningSelection } from '../../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerReasoningSelection, FlowerTimelineDecoration } from '../../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
 export type AIRealtimeEventType = 'stream_event' | 'thread_state' | 'transcript_message' | 'transcript_reset' | 'thread_summary';
 
@@ -181,6 +181,7 @@ export type AIListMessagesRequest = {
 
 export type AIListMessagesResponse = {
   messages: AITranscriptMessageItem[];
+  timelineDecorations?: readonly FlowerTimelineDecoration[];
   nextAfterRowId?: number;
   hasMore?: boolean;
 };

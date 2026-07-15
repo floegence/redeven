@@ -39,6 +39,7 @@ import type {
   FlowerLiveResyncRequiredPayload,
   FlowerContextCompaction,
   FlowerContextUsage,
+  FlowerTimelineAnchor,
   FlowerTimelineDecoration,
   FlowerModelIOPhase,
   FlowerModelIOStatus,
@@ -323,7 +324,7 @@ function mapContextCompaction(raw: unknown): FlowerContextCompaction | null {
   };
 }
 
-function mapTimelineAnchor(raw: unknown) {
+function mapTimelineAnchor(raw: unknown): FlowerTimelineAnchor | null {
   const record = recordValue(raw);
   if (!record) return null;
   const targetKind = trim(record.target_kind);
@@ -353,17 +354,45 @@ function mapTimelineAnchor(raw: unknown) {
 function mapTimelineDecoration(raw: unknown): FlowerTimelineDecoration | null {
   const record = recordValue(raw);
   if (!record) return null;
-  const compaction = mapContextCompaction(record.compaction);
   const anchor = mapTimelineAnchor(record.anchor);
-  const decorationID = trim(record.decoration_id) || (compaction ? `context-compaction:${compaction.operation_id}` : '');
-  if (!decorationID || !compaction || !anchor) return null;
-  return {
+  const decorationID = trim(record.decoration_id);
+  const kind = trim(record.kind);
+  if (!decorationID || !anchor) return null;
+  const base = {
     decoration_id: decorationID,
-    kind: trim(record.kind) || 'context_compaction',
     anchor,
     ordinal: integerOrZero(record.ordinal),
-    compaction,
   };
+  if (kind === 'context_compaction') {
+    const compaction = mapContextCompaction(record.compaction);
+    if (!compaction || record.projection_unavailable !== undefined) return null;
+    return { ...base, kind, compaction };
+  }
+  if (kind === 'turn_projection_unavailable') {
+    const payload = recordValue(record.projection_unavailable);
+    const reason = trim(payload?.reason);
+    if (
+      record.compaction !== undefined
+      || !payload
+      || !trim(payload.turn_id)
+      || !trim(payload.run_id)
+      || !trim(payload.expected_message_id)
+      || (reason !== 'not_found' && reason !== 'invalid_contract' && reason !== 'not_renderable')
+      || anchor.target_kind !== 'message'
+      || anchor.edge !== 'after'
+    ) return null;
+    return {
+      ...base,
+      kind,
+      projection_unavailable: {
+        turn_id: trim(payload.turn_id),
+        run_id: trim(payload.run_id),
+        expected_message_id: trim(payload.expected_message_id),
+        reason,
+      },
+    };
+  }
+  return null;
 }
 
 function mapContextCompactions(raw: unknown): readonly FlowerContextCompaction[] | undefined {

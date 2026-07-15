@@ -335,6 +335,10 @@ export type FlowerSurfaceCopy = Readonly<{
       fallback: string;
       tokenChange: (before: string, after: string) => string;
     }>;
+    projectionUnavailable: Readonly<{
+      title: string;
+      description: string;
+    }>;
     toolStatuses: Readonly<Record<'pending' | 'running' | 'waiting' | 'success' | 'error' | 'canceled', string>>;
     toolApprovalRequired: string;
     toolApprovalStates: Readonly<Record<FlowerActivityApprovalState, string>>;
@@ -496,6 +500,10 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
       noop: 'Context does not need compression',
       fallback: 'Context checkpoint',
       tokenChange: (before, after) => `${before} to ${after}`,
+    },
+    projectionUnavailable: {
+      title: 'Response unavailable',
+      description: 'The saved response for this turn could not be loaded.',
     },
     toolStatuses: {
       pending: 'Pending',
