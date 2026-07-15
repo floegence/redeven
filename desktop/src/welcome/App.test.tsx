@@ -1766,7 +1766,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("props.i18n.t('progress.copyLog')");
     expect(appSrc).toContain('<Stop class="h-3.5 w-3.5" />');
     expect(appSrc).toContain('localizedProgressInterruptLabel(props.i18n, props.progress)');
-    expect(appSrc).toContain("class={shimmerBlocked() ? 'redeven-blocked-shimmer-overlay' : 'redeven-loading-shimmer-overlay'}");
+    expect(appSrc).toContain("class={shimmerBlocked() ? 'redeven-blocked-shimmer-overlay' : 'redeven-welcome-loading-shimmer-overlay'}");
     expect(appSrc).not.toContain('disabled={props.loading && !hasOpenConnectionProgress() && !hasRuntimeLifecycleProgress()}');
     expect(appSrc).not.toContain('disabled={props.loading && popoverPrimaryRunsAction()}');
     expect(appSrc).toContain('disabled={props.loading && !primaryProgressPresentation()}');
@@ -1777,9 +1777,54 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('props.setGuidanceSession(startEnvironmentGuidanceIntent(');
     expect(appSrc).not.toContain('function environmentActionOpensRuntimeLifecycleProgress(action: EnvironmentActionModel): boolean');
     expect(appSrc).not.toContain('props.onPrimaryActionGuidanceOpenChange(environmentActionOpensRuntimeLifecycleProgress(action));');
-    expect(styles).toContain('.redeven-loading-shimmer-overlay');
+    expect(styles).toContain('.redeven-welcome-loading-shimmer-overlay');
     expect(styles).toContain('.redeven-blocked-shimmer-overlay');
     expect(appSrc).not.toContain('Cancel\n                      </Button>\n                    </Show>');
+  });
+
+  it('adapts Welcome loading shimmer contrast to primary and surface buttons', () => {
+    const appSrc = readWelcomeSource();
+    const styles = readWelcomeStyles();
+    const primaryRule = cssRuleBlock(styles, '.redeven-welcome-loading-shimmer-overlay');
+    const surfaceRule = cssRuleBlock(
+      styles,
+      ".redeven-welcome-loading-shimmer-overlay[data-shimmer-surface='surface']",
+    );
+    const darkPrimaryRule = cssRuleBlock(styles, '.dark .redeven-welcome-loading-shimmer-overlay');
+    const darkSurfaceRule = cssRuleBlock(
+      styles,
+      ".dark .redeven-welcome-loading-shimmer-overlay[data-shimmer-surface='surface']",
+    );
+    const shimmerRule = cssRuleBlock(styles, '.redeven-welcome-loading-shimmer-overlay::after');
+
+    expect(appSrc).toContain('function welcomeLoadingShimmerSurface(');
+    expect(appSrc).toContain("return variant === 'outline' ? 'surface' : 'primary';");
+    expect(appSrc).toContain("item.emphasis === 'primary' ? 'default' : 'outline'");
+    expect(appSrc).toContain('welcomeLoadingShimmerSurface(props.presentation.primary_action.variant)');
+    expect(appSrc).toContain('data-shimmer-surface="primary"');
+    expect(appSrc).toContain('aria-hidden="true"');
+    expect(appSrc).not.toContain('class="redeven-loading-shimmer-overlay"');
+
+    expect(primaryRule).toContain('var(--primary-foreground) 12%');
+    expect(primaryRule).toContain('var(--primary-foreground) 36%');
+    expect(darkPrimaryRule).toContain('var(--primary-foreground) 18%');
+    expect(darkPrimaryRule).toContain('var(--primary-foreground) 48%');
+    expect(surfaceRule).toContain('var(--foreground) 10%');
+    expect(surfaceRule).toContain('var(--foreground) 30%');
+    expect(darkSurfaceRule).toContain('var(--foreground) 12%');
+    expect(darkSurfaceRule).toContain('var(--foreground) 36%');
+    expect(shimmerRule).toContain('105deg');
+    expect(shimmerRule).toContain('width: 55%');
+    expect(shimmerRule).toContain('transform: translate3d(-100%, 0, 0)');
+    expect(shimmerRule).toContain('will-change: transform');
+    expect(shimmerRule).toContain('animation: redeven-welcome-loading-shimmer 2.2s linear infinite');
+    expect(shimmerRule).not.toContain('mix-blend-mode');
+    expect(styles).toContain('@keyframes redeven-welcome-loading-shimmer');
+    expect(styles).toContain('transform: translate3d(185%, 0, 0)');
+    expect(styles).not.toContain('@keyframes redeven-loading-shimmer');
+    expect(styles).toMatch(
+      /@media \(prefers-reduced-motion: reduce\)[\s\S]*\.redeven-welcome-loading-shimmer-overlay::after,\s*\.redeven-blocked-shimmer-overlay::after \{\s*display: none;\s*animation: none;/u,
+    );
   });
 
   it('includes Control Plane management copy inside the launcher source', () => {
