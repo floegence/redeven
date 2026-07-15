@@ -31,6 +31,8 @@ describe('desktopShellRuntimeIPC', () => {
     expect(normalizeDesktopShellRuntimeActionResponse({
       ok: false,
       started: false,
+      code: 'runtime_lifecycle_in_progress',
+      operation_key: 'local:host:local',
       message: 'control_stderr:',
       failure: {
         code: 'ssh_runtime_launch_failed',
@@ -46,6 +48,8 @@ describe('desktopShellRuntimeIPC', () => {
     })).toEqual({
       ok: false,
       started: false,
+      code: 'runtime_lifecycle_in_progress',
+      operation_key: 'local:host:local',
       message: 'SSH connection to "dify" failed.',
       failure: {
         code: 'ssh_runtime_launch_failed',

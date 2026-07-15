@@ -958,7 +958,9 @@ describe('DesktopWelcomeShell', () => {
     expect(gatewayCardSrc).toContain('fallback={(\n                  <GatewayActionPanel');
     expect(gatewayCardSrc).toContain('<EnvironmentProgressPanel');
     expect(gatewayCardSrc).not.toContain('redeven-popover-panel-collapse');
-    expect(appSrc).toContain("if (trimString(failure.operation_key) !== '') {\n        return;\n      }");
+    expect(appSrc).toContain("if (failure.code === 'runtime_lifecycle_in_progress' && activeOperationKey !== '') {");
+    expect(appSrc).toContain("subject_kind: 'gateway',");
+    expect(appSrc).toContain('lifecycleProgressFocusRequest={props.lifecycleProgressFocusRequest}');
     expect(appSrc).not.toContain('const quickSecondaryActions = createMemo(() => secondaryActions().slice(0, 1));');
     expect(appSrc).not.toContain('const overflowSecondaryActions = createMemo(() => secondaryActions().slice(quickSecondaryActions().length));');
     expect(appSrc).toContain('class="redeven-gateway-card__catalog-summary"');
@@ -1595,11 +1597,42 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('.redeven-action-popover__notice');
   });
 
+  it('blocks every lifecycle action for a target while its lifecycle progress is active', () => {
+    const appSrc = readWelcomeSource();
+    const environmentBusyStart = appSrc.indexOf('function isEnvironmentActionBusy(');
+    const environmentBusyEnd = appSrc.indexOf('function blockedPrimaryActionTriggerLabel(', environmentBusyStart);
+    const environmentBusySrc = appSrc.slice(environmentBusyStart, environmentBusyEnd);
+    for (const intent of ['start_runtime', 'stop_runtime', 'restart_runtime', 'update_runtime']) {
+      expect(environmentBusySrc).toContain(`action.intent === '${intent}'`);
+    }
+    expect(environmentBusySrc).toContain('launcherProgressBlocksPrimaryAction(runtimeLifecycleProgress)');
+
+    const gatewayBusyStart = appSrc.indexOf('function gatewaySourceActionBusy(');
+    const gatewayBusyEnd = appSrc.indexOf('function gatewaySourceActionIcon(', gatewayBusyStart);
+    const gatewayBusySrc = appSrc.slice(gatewayBusyStart, gatewayBusyEnd);
+    for (const action of ['start_gateway', 'stop_gateway', 'restart_gateway', 'update_gateway']) {
+      expect(gatewayBusySrc).toContain(`actionKind === '${action}'`);
+    }
+    expect(gatewayBusySrc).toContain("progress.status !== 'canceled'");
+
+    const operationKeyStart = appSrc.indexOf('function gatewayOperationKeyForAction(');
+    const operationKeyEnd = appSrc.indexOf('function pendingGatewayRefreshProgress(', operationKeyStart);
+    const operationKeySrc = appSrc.slice(operationKeyStart, operationKeyEnd);
+    expect(operationKeySrc).toContain('return targetID || undefined;');
+    expect(operationKeySrc).not.toContain('`${targetID}:${operation}`');
+  });
+
   it('renders lifecycle and Open connection progress inside the Open popup instead of the old SSH activity overlay', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
 
     expect(appSrc).toContain('const activeActionProgress = createMemo(() => [');
+    expect(appSrc).toContain("if (failure.code === 'runtime_lifecycle_in_progress' && activeOperationKey !== '') {");
+    expect(appSrc).toContain("subject_kind: 'environment',");
+    expect(appSrc).toContain('started_at_unix_ms: activeProgress.started_at_unix_ms ?? 0,');
+    expect(appSrc).toContain('(progress?.started_at_unix_ms ?? 0) !== request.started_at_unix_ms');
+    expect(appSrc).toContain('setLifecycleProgressOpen(environment.id, true);');
+    expect(appSrc).toContain('props.consumeLifecycleProgressFocusRequest(request.request_id);');
     expect(appSrc).toContain('...snapshot().action_progress,');
     expect(appSrc).toContain('...retainedGatewayFailures().filter');
     expect(appSrc).toContain('reconcileBusyStateWithActionProgressSnapshot');

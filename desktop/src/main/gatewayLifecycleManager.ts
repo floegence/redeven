@@ -39,6 +39,12 @@ import {
   type GatewayServiceDeepProbe,
   type GatewayServiceProgress,
 } from './gatewayServiceHost';
+import {
+  RuntimeLifecycleCoordinator,
+  runtimeLifecycleFingerprint,
+  runtimeLifecycleTargetKey,
+  type RuntimeLifecycleIntent,
+} from './runtimeLifecycleCoordinator';
 
 export type GatewayLifecycleSession = Readonly<{
   target_id: string;
@@ -109,6 +115,7 @@ export type GatewayLifecycleManagerOptions = Readonly<{
   asset_cache_root: string;
   temp_root: string;
   desktop_owner_id: () => Promise<string>;
+  lifecycle_coordinator: RuntimeLifecycleCoordinator;
   source_runtime_root?: string;
   target_commit?: string;
   session_cache?: Map<string, GatewayLifecycleSession>;
@@ -118,10 +125,27 @@ export type GatewayLifecycleManagerOptions = Readonly<{
 
 export class GatewayLifecycleManager {
   private readonly sessions: Map<string, GatewayLifecycleSession>;
-  private readonly pendingStartTasks = new Map<string, Promise<GatewayLifecycleSession>>();
+  private readonly pendingBridgeTasks = new Map<string, Promise<GatewayLifecycleSession>>();
 
   constructor(private readonly options: GatewayLifecycleManagerOptions) {
     this.sessions = options.session_cache ?? new Map();
+  }
+
+  activeLifecycle(record: GatewayRecord) {
+    if (record.connection.kind === 'url') {
+      return null;
+    }
+    return this.options.lifecycle_coordinator.active(gatewayLifecycleCoordinatorTargetKey(record));
+  }
+
+  lifecycleFingerprint(record: GatewayRecord, intent: RuntimeLifecycleIntent): string {
+    return runtimeLifecycleFingerprint({
+      intent,
+      gateway_id: record.gateway_id,
+      connection: record.connection,
+      runtime_release_tag: this.options.runtime_release_tag,
+      target_commit: this.options.target_commit ?? '',
+    });
   }
 
   async catalog(record: GatewayRecord, options: Readonly<{ timeoutMs?: number; signal?: AbortSignal; startPolicy?: GatewayStartPolicy; onProgress?: GatewayLifecycleProgressSink }> = {}): Promise<GatewayCatalogResponse> {
@@ -328,6 +352,10 @@ export class GatewayLifecycleManager {
       throw new GatewayNotManageableError();
     }
     const targetID = gatewayLifecycleTargetID(record);
+    const lifecycleTargetKey = gatewayLifecycleCoordinatorTargetKey(record);
+    if (this.options.lifecycle_coordinator.active(lifecycleTargetKey)) {
+      await this.options.lifecycle_coordinator.waitForReadyMutation(lifecycleTargetKey);
+    }
     const existing = this.sessions.get(targetID);
     if (existing) {
       return existing;
@@ -363,22 +391,38 @@ export class GatewayLifecycleManager {
     throw new GatewayServiceStartRequiredError(serviceState);
   }
 
-  async startGateway(record: GatewayRecord, options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink }> = {}): Promise<GatewayLifecycleSession> {
+  async startGateway(record: GatewayRecord, options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink; operationKey?: string }> = {}): Promise<GatewayLifecycleSession> {
     if (record.connection.kind === 'url') {
       throw new GatewayNotManageableError();
     }
-    const targetID = gatewayLifecycleTargetID(record);
-    const pending = this.pendingStartTasks.get(targetID);
-    if (pending) {
-      return pending;
-    }
-    return this.ensureBridgeSession(record, options);
+    return this.runLifecycle(record, 'start', options, (signal) => this.ensureBridgeSession(record, { ...options, signal }));
   }
 
-  async stopGateway(record: GatewayRecord, options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink }> = {}): Promise<void> {
+  async stopGateway(record: GatewayRecord, options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink; operationKey?: string }> = {}): Promise<void> {
     if (record.connection.kind === 'url') {
       throw new GatewayNotManageableError();
     }
+    return this.runLifecycle(record, 'stop', options, (signal) => this.stopGatewayUncoordinated(record, { ...options, signal }));
+  }
+
+  async restartGateway(record: GatewayRecord, options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink; operationKey?: string }> = {}): Promise<GatewayLifecycleSession> {
+    if (record.connection.kind === 'url') {
+      throw new GatewayNotManageableError();
+    }
+    return this.runLifecycle(record, 'restart', options, async (signal) => {
+      await this.stopGatewayUncoordinated(record, { ...options, signal });
+      return this.ensureBridgeSession(record, { ...options, signal });
+    });
+  }
+
+  async updateGateway(record: GatewayRecord, options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink; operationKey?: string }> = {}): Promise<GatewayLifecycleSession> {
+    if (record.connection.kind === 'url') {
+      throw new GatewayNotManageableError();
+    }
+    return this.runLifecycle(record, 'update', options, (signal) => this.updateGatewayUncoordinated(record, { ...options, signal }));
+  }
+
+  private async stopGatewayUncoordinated(record: GatewayRecord, options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink }> = {}): Promise<void> {
     await this.clear(record);
     const sshPassword = await this.gatewaySSHPassword(record);
     await stopManagedGatewayService({
@@ -397,15 +441,7 @@ export class GatewayLifecycleManager {
     });
   }
 
-  async restartGateway(record: GatewayRecord, options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink }> = {}): Promise<GatewayLifecycleSession> {
-    await this.stopGateway(record, options);
-    return this.startGateway(record, options);
-  }
-
-  async updateGateway(record: GatewayRecord, options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink }> = {}): Promise<GatewayLifecycleSession> {
-    if (record.connection.kind === 'url') {
-      throw new GatewayNotManageableError();
-    }
+  private async updateGatewayUncoordinated(record: GatewayRecord, options: Readonly<{ signal?: AbortSignal; onProgress?: GatewayLifecycleProgressSink }> = {}): Promise<GatewayLifecycleSession> {
     const placement = gatewayPlacement(record);
     const sshPassword = await this.gatewaySSHPassword(record);
     await this.clear(record);
@@ -435,7 +471,7 @@ export class GatewayLifecycleManager {
 
   async clear(record: GatewayRecord): Promise<void> {
     const key = gatewayLifecycleTargetID(record);
-    await this.pendingStartTasks.get(key)?.catch(() => undefined);
+    await this.pendingBridgeTasks.get(key)?.catch(() => undefined);
     const existing = this.sessions.get(key);
     this.sessions.delete(key);
     await existing?.bridge_session.disconnect().catch(() => undefined);
@@ -447,7 +483,7 @@ export class GatewayLifecycleManager {
     if (existing) {
       return existing;
     }
-    const pending = this.pendingStartTasks.get(targetID);
+    const pending = this.pendingBridgeTasks.get(targetID);
     if (pending) {
       return pending;
     }
@@ -459,12 +495,29 @@ export class GatewayLifecycleManager {
       });
       return this.openBridgeSession(record, gatewayBinaryPath, options);
     })().finally(() => {
-      if (this.pendingStartTasks.get(targetID) === task) {
-        this.pendingStartTasks.delete(targetID);
+      if (this.pendingBridgeTasks.get(targetID) === task) {
+        this.pendingBridgeTasks.delete(targetID);
       }
     });
-    this.pendingStartTasks.set(targetID, task);
+    this.pendingBridgeTasks.set(targetID, task);
     return task;
+  }
+
+  private runLifecycle<T>(
+    record: GatewayRecord,
+    intent: RuntimeLifecycleIntent,
+    options: Readonly<{ operationKey?: string; signal?: AbortSignal }>,
+    execute: (signal: AbortSignal) => Promise<T>,
+  ): Promise<T> {
+    const targetID = gatewayLifecycleTargetID(record);
+    return this.options.lifecycle_coordinator.run({
+      target_key: gatewayLifecycleCoordinatorTargetKey(record),
+      intent,
+      fingerprint: this.lifecycleFingerprint(record, intent),
+      operation_key: options.operationKey ?? targetID,
+      signal: options.signal,
+      execute,
+    });
   }
 
   private async openBridgeSession(
@@ -646,6 +699,10 @@ function gatewayLifecycleTargetID(record: GatewayRecord): string {
     return `gateway:url:${record.gateway_id}`;
   }
   return desktopRuntimeTargetID(gatewayHostAccess(record), gatewayPlacement(record), record.gateway_id);
+}
+
+function gatewayLifecycleCoordinatorTargetKey(record: GatewayRecord): string {
+  return runtimeLifecycleTargetKey(gatewayHostAccess(record), gatewayPlacement(record));
 }
 
 function notApplicableServiceState(): DesktopGatewayServiceState {

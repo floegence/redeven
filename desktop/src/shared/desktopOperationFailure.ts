@@ -14,6 +14,8 @@ export type DesktopFailureCode =
   | 'ssh_forward_invalid_response'
   | 'local_runtime_launch_failed'
   | 'local_runtime_stop_failed'
+  | 'runtime_cleanup_failed'
+  | 'runtime_lifecycle_conflict'
   | 'container_runtime_launch_failed'
   | 'container_runtime_stop_failed'
   | 'gateway_package_prepare_failed'
@@ -66,6 +68,8 @@ function normalizeFailureCode(value: unknown): DesktopFailureCode {
     case 'ssh_forward_invalid_response':
     case 'local_runtime_launch_failed':
     case 'local_runtime_stop_failed':
+    case 'runtime_cleanup_failed':
+    case 'runtime_lifecycle_conflict':
     case 'container_runtime_launch_failed':
     case 'container_runtime_stop_failed':
     case 'gateway_package_prepare_failed':

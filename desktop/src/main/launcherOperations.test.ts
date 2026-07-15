@@ -2,9 +2,31 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { openConnectionProgress } from '../shared/desktopOpenConnectionProgress';
 import { runtimeLifecycleProgress } from '../shared/desktopRuntimeLifecycleProgress';
-import { LauncherOperationRegistry } from './launcherOperations';
+import { LauncherOperationConflictError, LauncherOperationRegistry } from './launcherOperations';
 
 describe('LauncherOperationRegistry', () => {
+  it('refuses to overwrite an active operation attempt', () => {
+    const registry = new LauncherOperationRegistry();
+    registry.create({
+      operation_key: 'runtime-a',
+      action: 'start_environment_runtime',
+      subject_kind: 'local_environment',
+      subject_id: 'local',
+      phase: 'starting',
+      title: 'Starting',
+      detail: 'Starting runtime.',
+    });
+    expect(() => registry.create({
+      operation_key: 'runtime-a',
+      action: 'stop_environment_runtime',
+      subject_kind: 'local_environment',
+      subject_id: 'local',
+      phase: 'stopping',
+      title: 'Stopping',
+      detail: 'Stopping runtime.',
+    })).toThrow(LauncherOperationConflictError);
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -215,6 +237,7 @@ describe('LauncherOperationRegistry', () => {
       }),
       cancelable: false,
     });
+    registry.finish(operationKey, 'succeeded');
 
     const second = registry.create({
       operation_key: operationKey,
@@ -308,6 +331,7 @@ describe('LauncherOperationRegistry', () => {
       }),
       cancelable: false,
     });
+    registry.finish(operationKey, 'succeeded');
     const second = registry.create({
       operation_key: operationKey,
       action: 'update_environment_runtime',
@@ -443,7 +467,7 @@ describe('LauncherOperationRegistry', () => {
     }));
   });
 
-  it('still aborts a deleted-subject operation after the UI cancel affordance is removed', () => {
+  it('does not abort an operation after it enters a non-cancelable mutation stage', () => {
     const registry = new LauncherOperationRegistry();
     const operation = registry.create({
       operation_key: 'ssh:devbox:default:key_agent:remote_default',
@@ -457,17 +481,14 @@ describe('LauncherOperationRegistry', () => {
     });
     const signal = registry.operationSignal(operation.operation_key);
 
-    registry.markSubjectDeleted('ssh_environment', operation.subject_id, {
-      cancelable: false,
-      deleted_subject: true,
-    });
-    const canceled = registry.cancel(operation.operation_key, 'Connection removed. Desktop is canceling the SSH startup task in the background.');
+    registry.update(operation.operation_key, { cancelable: false });
+    registry.markSubjectDeleted('ssh_environment', operation.subject_id);
+    const canceled = registry.cancel(operation.operation_key, 'Connection removed.');
 
-    expect(signal?.aborted).toBe(true);
-    expect(canceled).toEqual(expect.objectContaining({
-      status: 'canceling',
-      phase: 'canceling_deleted_connection',
-      title: 'Connection removed',
+    expect(signal?.aborted).toBe(false);
+    expect(canceled).toBeNull();
+    expect(registry.get(operation.operation_key)).toEqual(expect.objectContaining({
+      status: 'running',
       cancelable: false,
       deleted_subject: true,
     }));

@@ -40,6 +40,10 @@ function failureTitleKey(failure: DesktopOperationFailurePresentation): DesktopT
     case 'container_runtime_stop_failed':
     case 'ssh_runtime_stop_failed':
       return 'progress.runtimeStopFailedTitle';
+    case 'runtime_cleanup_failed':
+      return 'progress.runtimeCleanupFailedTitle';
+    case 'runtime_lifecycle_conflict':
+      return 'progress.runtimeLifecycleConflictTitle';
     case 'runtime_host_command_failed':
       return 'progress.runtimeHostCommandFailedTitle';
     case 'runtime_update_required':
@@ -88,6 +92,10 @@ function failureSummaryKey(failure: DesktopOperationFailurePresentation): Deskto
     case 'container_runtime_stop_failed':
     case 'ssh_runtime_stop_failed':
       return 'progress.runtimeStopFailedSummary';
+    case 'runtime_cleanup_failed':
+      return 'progress.runtimeCleanupFailedSummary';
+    case 'runtime_lifecycle_conflict':
+      return 'progress.runtimeLifecycleConflictSummary';
     case 'runtime_host_command_failed':
       return 'progress.runtimeHostCommandFailedSummary';
     case 'environment_open_failed':
@@ -132,6 +140,9 @@ export function localizedOperationFailureDetail(
   if (failure.detail_key) {
     return i18n.t(failure.detail_key, failureParams(failure));
   }
+  if (failure.code === 'runtime_lifecycle_conflict') {
+    return i18n.t('progress.runtimeLifecycleConflictDetail');
+  }
   return i18n.locale === 'en-US' ? compact(failure.detail) : '';
 }
 
@@ -141,6 +152,9 @@ export function localizedOperationFailureRecoveryHint(
 ): string {
   if (failure.recovery_hint_key) {
     return i18n.t(failure.recovery_hint_key, failureParams(failure));
+  }
+  if (failure.code === 'runtime_lifecycle_conflict') {
+    return i18n.t('progress.runtimeLifecycleConflictRecoveryHint');
   }
   return i18n.locale === 'en-US' ? compact(failure.recovery_hint) : '';
 }

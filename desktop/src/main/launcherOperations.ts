@@ -51,6 +51,13 @@ export type LauncherOperationAttemptIdentity = Readonly<{
   started_at_unix_ms: number;
 }>;
 
+export class LauncherOperationConflictError extends Error {
+  constructor(readonly operation_key: string) {
+    super(`Launcher operation ${operation_key} is already active.`);
+    this.name = 'LauncherOperationConflictError';
+  }
+}
+
 export type LauncherOperationUpdatePatch = Partial<Omit<
   DesktopLauncherOperationSnapshot,
   'operation_key' | 'action' | 'started_at_unix_ms' | 'subject_kind' | 'subject_id' | 'subject_generation'
@@ -67,6 +74,12 @@ function compact(value: unknown): string {
 
 function subjectKey(kind: DesktopLauncherOperationSubjectKind, id: string): string {
   return `${kind}:${compact(id)}`;
+}
+
+function operationIsActive(snapshot: DesktopLauncherOperationSnapshot): boolean {
+  return snapshot.status === 'running'
+    || snapshot.status === 'canceling'
+    || snapshot.status === 'cleanup_running';
 }
 
 function operationProgress(snapshot: DesktopLauncherOperationSnapshot): DesktopLauncherActionProgress {
@@ -287,6 +300,10 @@ export class LauncherOperationRegistry {
     if (subjectID === '') {
       throw new Error('Launcher operation subject id is required.');
     }
+    const existing = this.operationsByKey.get(operationKey);
+    if (existing && operationIsActive(existing)) {
+      throw new LauncherOperationConflictError(operationKey);
+    }
 
     const snapshot: DesktopLauncherOperationSnapshot = {
       operation_key: operationKey,
@@ -485,7 +502,7 @@ export class LauncherOperationRegistry {
     const key = compact(operationKey);
     const snapshot = this.operationsByKey.get(key);
     const controller = this.abortControllersByKey.get(key);
-    if (!snapshot || (!snapshot.cancelable && !(snapshot.deleted_subject && controller))) {
+    if (!snapshot?.cancelable) {
       return null;
     }
     if (controller && !controller.signal.aborted) {

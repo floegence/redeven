@@ -545,6 +545,14 @@ type EnvironmentFailureState = Readonly<{
   failure: DesktopOperationFailurePresentation;
 }>;
 
+type LifecycleProgressFocusRequest = Readonly<{
+  request_id: number;
+  operation_key: string;
+  started_at_unix_ms: number;
+  subject_kind: 'environment' | 'gateway';
+  subject_id: string;
+}>;
+
 type RuntimeLauncherActionKind =
   | 'start_environment_runtime'
   | 'restart_environment_runtime'
@@ -2852,9 +2860,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [gatewayQuery, setGatewayQuery] = createSignal('');
   const [activeCenterTab, setActiveCenterTab] = createSignal<EnvironmentCenterTab>('environments');
   const [environmentFailures, setEnvironmentFailures] = createSignal<ReadonlyMap<string, EnvironmentFailureState>>(new Map());
+  const [lifecycleProgressFocusRequest, setLifecycleProgressFocusRequest] = createSignal<LifecycleProgressFocusRequest | null>(null);
   const actionToastTimers = new Map<number, number>();
   const liveActionProgressTimers = new Map<string, number>();
   let nextActionToastID = 0;
+  let lifecycleProgressFocusRequestSequence = 0;
   let settingsErrorRef: HTMLElement | undefined;
   let sshConfigHostsLoading = false;
   let runtimeContainerOptionsRequestID = 0;
@@ -3564,8 +3574,61 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         return;
       }
     }
+    const activeOperationKey = trimString(failure.operation_key);
+    if (failure.code === 'runtime_lifecycle_in_progress' && activeOperationKey !== '') {
+      const activeProgress = activeActionProgress().find((progress) => (
+        trimString(progress.operation_key) === activeOperationKey
+        && progress.lifecycle_progress !== undefined
+        && (
+          progress.status === 'running'
+          || progress.status === 'canceling'
+          || progress.status === 'cleanup_running'
+        )
+      ));
+      if (!activeProgress) {
+        return;
+      }
+      const gatewayID = trimString(
+        failure.gateway_id
+        || (activeProgress?.subject_kind === 'gateway' ? activeProgress.gateway_id || activeProgress.subject_id : ''),
+      );
+      if (failure.scope === 'gateway' && gatewayID !== '') {
+        setActiveCenterTab('gateways');
+        setGatewaySourceFilter('');
+        setGatewayQuery('');
+        lifecycleProgressFocusRequestSequence += 1;
+        setLifecycleProgressFocusRequest({
+          request_id: lifecycleProgressFocusRequestSequence,
+          operation_key: activeOperationKey,
+          started_at_unix_ms: activeProgress.started_at_unix_ms ?? 0,
+          subject_kind: 'gateway',
+          subject_id: gatewayID,
+        });
+        return;
+      }
+      const environmentID = trimString(
+        requestEnvID
+        || failure.environment_id
+        || activeProgress?.environment_id
+        || (activeProgress?.subject_kind === 'local_environment' ? activeProgress.subject_id : ''),
+      );
+      if (environmentID) {
+        setActiveCenterTab('environments');
+        setLibrarySourceFilter('');
+        setLibraryQuery('');
+        lifecycleProgressFocusRequestSequence += 1;
+        setLifecycleProgressFocusRequest({
+          request_id: lifecycleProgressFocusRequestSequence,
+          operation_key: activeOperationKey,
+          started_at_unix_ms: activeProgress.started_at_unix_ms ?? 0,
+          subject_kind: 'environment',
+          subject_id: environmentID,
+        });
+      }
+      return;
+    }
     if (failure.scope === 'gateway' && trimString(failure.gateway_id) !== '') {
-      if (trimString(failure.operation_key) !== '') {
+      if (activeOperationKey !== '') {
         return;
       }
       const retained = retainedGatewayFailureProgress(i18n(), failure, request, presentation);
@@ -6084,6 +6147,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               gatewaySourceFilter={gatewaySourceFilter()}
               gatewayQuery={gatewayQuery()}
               gatewayEntries={gatewayEntries()}
+              lifecycleProgressFocusRequest={lifecycleProgressFocusRequest()}
+              consumeLifecycleProgressFocusRequest={(requestID) => {
+                setLifecycleProgressFocusRequest((current) => (
+                  current?.request_id === requestID ? null : current
+                ));
+              }}
               setLibrarySourceFilter={setLibrarySourceFilter}
               setLibraryQuery={setLibraryQuery}
               setGatewaySourceFilter={setGatewaySourceFilter}
@@ -6610,6 +6679,8 @@ function ConnectEnvironmentSurface(props: Readonly<{
   gatewaySourceFilter: string;
   gatewayQuery: string;
   gatewayEntries: readonly DesktopEnvironmentEntry[];
+  lifecycleProgressFocusRequest: LifecycleProgressFocusRequest | null;
+  consumeLifecycleProgressFocusRequest: (requestID: number) => void;
   setLibrarySourceFilter: (value: string) => void;
   setLibraryQuery: (value: string) => void;
   setGatewaySourceFilter: (value: string) => void;
@@ -7001,6 +7072,8 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 layoutReferenceCardCount={layoutReferenceEnvironmentCardCount()}
                 busyState={props.busyState}
                 actionProgress={props.actionProgress}
+                lifecycleProgressFocusRequest={props.lifecycleProgressFocusRequest}
+                consumeLifecycleProgressFocusRequest={props.consumeLifecycleProgressFocusRequest}
                 openCreateConnectionDialog={props.openCreateConnectionDialog}
                 openEnvironment={props.openEnvironment}
                 runLocalEnvironmentAction={props.runLocalEnvironmentAction}
@@ -7040,6 +7113,8 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 gatewayEntries={props.gatewayEntries}
                 busyState={props.busyState}
                 actionProgress={props.actionProgress}
+                lifecycleProgressFocusRequest={props.lifecycleProgressFocusRequest}
+                consumeLifecycleProgressFocusRequest={props.consumeLifecycleProgressFocusRequest}
                 gatewaySourceFilter={props.gatewaySourceFilter}
                 gatewayQuery={props.gatewayQuery}
                 openCreateGatewaySetup={props.openCreateGatewaySetup}
@@ -7067,6 +7142,8 @@ function EnvironmentCardsPanel(props: Readonly<{
   layoutReferenceCardCount: number;
   busyState: DesktopLauncherBusyState;
   actionProgress: readonly DesktopLauncherActionProgress[];
+  lifecycleProgressFocusRequest: LifecycleProgressFocusRequest | null;
+  consumeLifecycleProgressFocusRequest: (requestID: number) => void;
   openCreateConnectionDialog: (message?: string, preferredKind?: ConnectionDialogKind) => void;
   openEnvironment: (
     environment: DesktopEnvironmentEntry,
@@ -7228,6 +7305,32 @@ function EnvironmentCardsPanel(props: Readonly<{
         : closeEnvironmentLifecycleDisclosure(current, environmentID)
     ));
   };
+
+  let handledLifecycleProgressFocusRequestID = 0;
+  createEffect(() => {
+    const request = props.lifecycleProgressFocusRequest;
+    if (
+      !request
+      || request.subject_kind !== 'environment'
+      || request.request_id === handledLifecycleProgressFocusRequestID
+    ) {
+      return;
+    }
+    const environment = props.entries.find((entry) => entry.id === request.subject_id);
+    if (!environment) {
+      return;
+    }
+    const progress = selectedSnapshotRuntimeLifecycleProgressForEnvironment(environment, props.actionProgress);
+    if (
+      trimString(progress?.operation_key) !== request.operation_key
+      || (progress?.started_at_unix_ms ?? 0) !== request.started_at_unix_ms
+    ) {
+      return;
+    }
+    handledLifecycleProgressFocusRequestID = request.request_id;
+    setLifecycleProgressOpen(environment.id, true);
+    props.consumeLifecycleProgressFocusRequest(request.request_id);
+  });
 
   const beginLifecycleProgressDisclosure = (
     environmentID: string,
@@ -7929,6 +8032,15 @@ function isEnvironmentActionBusy(
   environmentID: string,
   runtimeLifecycleProgress?: DesktopLauncherActionProgress | null,
 ): boolean {
+  if (
+    (action.intent === 'start_runtime'
+      || action.intent === 'stop_runtime'
+      || action.intent === 'restart_runtime'
+      || action.intent === 'update_runtime')
+    && launcherProgressBlocksPrimaryAction(runtimeLifecycleProgress)
+  ) {
+    return true;
+  }
   if (!busyState) {
     return false;
   }
@@ -10374,6 +10486,8 @@ function GatewaySourcesPanel(props: Readonly<{
   gatewayEntries: readonly DesktopEnvironmentEntry[];
   busyState: DesktopLauncherBusyState;
   actionProgress: readonly DesktopLauncherActionProgress[];
+  lifecycleProgressFocusRequest: LifecycleProgressFocusRequest | null;
+  consumeLifecycleProgressFocusRequest: (requestID: number) => void;
   gatewaySourceFilter: string;
   gatewayQuery: string;
   openCreateGatewaySetup: (gateway?: DesktopGatewaySource, focusSection?: DesktopGatewayResolveFocus) => void;
@@ -10512,6 +10626,8 @@ function GatewaySourcesPanel(props: Readonly<{
                   setForegroundAction={(next) => setForegroundGatewayAction(gatewayID, next)}
                   busyState={props.busyState}
                   actionProgress={props.actionProgress}
+                  lifecycleProgressFocusRequest={props.lifecycleProgressFocusRequest}
+                  consumeLifecycleProgressFocusRequest={props.consumeLifecycleProgressFocusRequest}
                   actionPopoverOpen={gatewaySourceOverlayOpenFor(activeGatewayOverlayState(), 'action_popover', gatewayID)}
                   onActionPopoverOpenChange={(open) => setGatewayActionPopoverOpen(gatewayID, open)}
                   moreActionsMenuOpen={gatewaySourceOverlayOpenFor(activeGatewayOverlayState(), 'more_actions_menu', gatewayID)}
@@ -10639,9 +10755,8 @@ function gatewayOperationKeyForAction(gateway: DesktopGatewaySource, action: Gat
     case 'stop_gateway':
     case 'restart_gateway':
     case 'update_gateway': {
-      const operation = gatewayOperationNameForAction(action);
       const targetID = gatewayServiceFallbackTargetID(gateway);
-      return operation && targetID ? `${targetID}:${operation}` : undefined;
+      return targetID || undefined;
     }
     default:
       return undefined;
@@ -11125,6 +11240,43 @@ function gatewaySourceActionForLauncherRequest(request: DesktopLauncherActionReq
   }
 }
 
+function gatewaySourceActionForLifecycleProgress(
+  progress: DesktopLauncherActionProgress | null | undefined,
+): GatewaySourceActionModel | null {
+  switch (progress?.action) {
+    case 'start_gateway':
+      return {
+        intent: 'start_gateway',
+        label: 'Start Gateway',
+        enabled: true,
+        variant: 'default',
+      };
+    case 'stop_gateway':
+      return {
+        intent: 'stop_gateway',
+        label: 'Stop Gateway',
+        enabled: true,
+        variant: 'default',
+      };
+    case 'restart_gateway':
+      return {
+        intent: 'restart_gateway',
+        label: 'Restart Gateway',
+        enabled: true,
+        variant: 'default',
+      };
+    case 'update_gateway':
+      return {
+        intent: 'update_gateway',
+        label: 'Update Gateway',
+        enabled: true,
+        variant: 'default',
+      };
+    default:
+      return null;
+  }
+}
+
 function GatewaySourceCard(props: Readonly<{
   i18n: DesktopI18n;
   gateway: DesktopGatewaySource;
@@ -11135,6 +11287,8 @@ function GatewaySourceCard(props: Readonly<{
   ) => void;
   busyState: DesktopLauncherBusyState;
   actionProgress: readonly DesktopLauncherActionProgress[];
+  lifecycleProgressFocusRequest: LifecycleProgressFocusRequest | null;
+  consumeLifecycleProgressFocusRequest: (requestID: number) => void;
   actionPopoverOpen: boolean;
   onActionPopoverOpenChange: (open: boolean) => void;
   moreActionsMenuOpen: boolean;
@@ -11353,6 +11507,15 @@ function GatewaySourceCard(props: Readonly<{
     const progress = selectedGatewayOperationProgress();
     return progress;
   });
+  const activeGatewayLifecycleProgress = createMemo(() => selectForegroundGatewayProgress(
+    props.actionProgress.filter((progress) => (
+      gatewaySourceMatchesRuntimeLifecycleProgress(props.gateway.gateway_id, progress)
+      && gatewayProgressIsActive(progress)
+    )),
+  ));
+  const gatewayLifecycleBusyProgress = createMemo(() => (
+    visibleGatewayProgress() ?? activeGatewayLifecycleProgress()
+  ));
   const displayedPrimaryAction = createMemo(() => {
     const foreground = foregroundAction();
     const progress = visibleGatewayProgress();
@@ -11410,7 +11573,7 @@ function GatewaySourceCard(props: Readonly<{
     props.busyState,
     props.gateway.gateway_id,
     displayedPrimaryAction(),
-    visibleGatewayProgress(),
+    gatewayLifecycleBusyProgress(),
     foregroundAction(),
   ));
   const progressPresentation = createMemo(() => localizedPrimaryProgressPresentation(
@@ -11475,7 +11638,7 @@ function GatewaySourceCard(props: Readonly<{
       props.busyState,
       props.gateway.gateway_id,
       action,
-      visibleGatewayProgress(),
+      gatewayLifecycleBusyProgress(),
       foreground,
     );
   };
@@ -11720,6 +11883,32 @@ function GatewaySourceCard(props: Readonly<{
     });
     clearForegroundPendingProgress();
   };
+  let handledLifecycleProgressFocusRequestID = 0;
+  createEffect(() => {
+    const request = props.lifecycleProgressFocusRequest;
+    if (
+      !request
+      || request.subject_kind !== 'gateway'
+      || request.subject_id !== props.gateway.gateway_id
+      || request.request_id === handledLifecycleProgressFocusRequestID
+    ) {
+      return;
+    }
+    const progress = selectForegroundGatewayProgress(props.actionProgress.filter((candidate) => (
+      trimString(candidate.operation_key) === request.operation_key
+      && (candidate.started_at_unix_ms ?? 0) === request.started_at_unix_ms
+      && gatewayProgressMatchesSubject(props.gateway.gateway_id, candidate)
+      && gatewayProgressIsActive(candidate)
+    )));
+    const action = gatewaySourceActionForLifecycleProgress(progress);
+    if (!progress || !action) {
+      return;
+    }
+    handledLifecycleProgressFocusRequestID = request.request_id;
+    rememberForegroundProgress(action, progress);
+    props.onActionPopoverOpenChange(true);
+    props.consumeLifecycleProgressFocusRequest(request.request_id);
+  });
   const rememberForegroundRequest = (
     action: GatewaySourceActionModel,
     request: DesktopLauncherActionRequest,
@@ -12461,6 +12650,19 @@ function gatewaySourceActionBusy(
   const actionKind = gatewaySourceLauncherActionKind(action);
   if (actionKind === null) {
     return false;
+  }
+  if (
+    progress?.lifecycle_progress
+    && (actionKind === 'start_gateway'
+      || actionKind === 'stop_gateway'
+      || actionKind === 'restart_gateway'
+      || actionKind === 'update_gateway')
+    && progress.status !== 'failed'
+    && progress.status !== 'cleanup_failed'
+    && progress.status !== 'succeeded'
+    && progress.status !== 'canceled'
+  ) {
+    return true;
   }
   if (
     progress?.action === actionKind

@@ -391,11 +391,18 @@ export function selectedSnapshotRuntimeLifecycleProgressForEnvironment(
 export function selectedFlowerWarmupProgress(
   progress: DesktopLauncherActionProgress | null | undefined,
 ): DesktopLauncherActionProgress | null {
+  const lifecycleOperation = progress?.lifecycle_progress?.operation;
+  const actionMatchesOperation = progress?.action === 'start_environment_runtime'
+    ? lifecycleOperation === 'start'
+    : progress?.action === 'restart_environment_runtime'
+      ? lifecycleOperation === 'restart'
+      : progress?.action === 'update_environment_runtime'
+        ? lifecycleOperation === 'update'
+        : false;
   if (
     !progress
     || progress.presentation_context !== 'flower_warmup'
-    || progress.action !== 'start_environment_runtime'
-    || progress.lifecycle_progress?.operation !== 'start'
+    || !actionMatchesOperation
     || !launcherProgressBlocksPrimaryAction(progress)
   ) {
     return null;
