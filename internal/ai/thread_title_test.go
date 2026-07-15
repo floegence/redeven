@@ -268,8 +268,8 @@ func TestScheduleAutoThreadTitle_PopulatesUntitledThread(t *testing.T) {
 			if th.TitlePromptVersion != autoThreadTitlePromptVersion {
 				t.Fatalf("TitlePromptVersion=%q, want %q", th.TitlePromptVersion, autoThreadTitlePromptVersion)
 			}
-			if mock.count() == 0 {
-				t.Fatalf("requestCount=0, want >=1")
+			if got := mock.count(); got != 1 {
+				t.Fatalf("requestCount=%d, want 1", got)
 			}
 			payloads := mock.requestPayloads()
 			if len(payloads) == 0 {

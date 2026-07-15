@@ -34,13 +34,6 @@ type floretEventSink struct {
 	run *run
 }
 
-func floretEventMetadataString(metadata map[string]any, key string) string {
-	if metadata == nil {
-		return ""
-	}
-	return strings.TrimSpace(anyToString(metadata[key]))
-}
-
 func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	r := s.run
 	if r == nil {
@@ -85,9 +78,11 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	case floretEventProviderFinish:
 		r.updateModelIOStatus(FlowerModelIOPhaseFinalizing, ev.Step)
 		r.persistRunEvent("floret.provider.finish", RealtimeStreamKindLifecycle, map[string]any{
-			"step_index":    ev.Step,
-			"finish_reason": strings.TrimSpace(ev.FinishReason),
-			"metadata":      ev.Metadata,
+			"step_index":        ev.Step,
+			"finish_reason":     strings.TrimSpace(string(ev.FinishReason)),
+			"raw_finish_reason": strings.TrimSpace(ev.RawFinishReason),
+			"finish_inferred":   ev.FinishInferred,
+			"metadata":          ev.Metadata,
 		})
 	case floretEventProviderRetry:
 		r.updateModelIOStatus(FlowerModelIOPhaseRetrying, ev.Step)
@@ -108,7 +103,7 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 			"step_index":          ev.Step,
 			"message":             strings.TrimSpace(ev.Message),
 			"detail":              strings.TrimSpace(ev.Result),
-			"continuation_reason": floretEventMetadataString(ev.Metadata, "continuation_reason"),
+			"continuation_reason": strings.TrimSpace(string(ev.ContinuationReason)),
 			"metadata":            ev.Metadata,
 		})
 	case floretEventBudgetExceeded:
@@ -122,17 +117,23 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	case floretEventStepEnd:
 		r.persistRunEvent("floret.step.end", RealtimeStreamKindLifecycle, map[string]any{
 			"step_index":          ev.Step,
-			"finish_reason":       strings.TrimSpace(ev.FinishReason),
-			"completion_reason":   floretEventMetadataString(ev.Metadata, "completion_reason"),
-			"continuation_reason": floretEventMetadataString(ev.Metadata, "continuation_reason"),
+			"finish_reason":       strings.TrimSpace(string(ev.FinishReason)),
+			"raw_finish_reason":   strings.TrimSpace(ev.RawFinishReason),
+			"finish_inferred":     ev.FinishInferred,
+			"completion_reason":   strings.TrimSpace(string(ev.CompletionReason)),
+			"continuation_reason": strings.TrimSpace(string(ev.ContinuationReason)),
 			"metadata":            ev.Metadata,
 		})
 	case floretEventRunEnd:
 		r.clearModelIOStatus()
 		r.persistRunEvent("floret.run.end", RealtimeStreamKindLifecycle, map[string]any{
-			"finish_reason": strings.TrimSpace(ev.FinishReason),
-			"error":         strings.TrimSpace(ev.Error),
-			"metadata":      ev.Metadata,
+			"finish_reason":       strings.TrimSpace(string(ev.FinishReason)),
+			"raw_finish_reason":   strings.TrimSpace(ev.RawFinishReason),
+			"finish_inferred":     ev.FinishInferred,
+			"completion_reason":   strings.TrimSpace(string(ev.CompletionReason)),
+			"continuation_reason": strings.TrimSpace(string(ev.ContinuationReason)),
+			"error":               strings.TrimSpace(ev.Error),
+			"metadata":            ev.Metadata,
 		})
 	case floretEventToolApprovalRequested, floretEventToolApprovalApproved, floretEventToolApprovalRejected, floretEventToolApprovalTimedOut, floretEventToolApprovalCanceled:
 		if ev.Type != floretEventToolApprovalRequested {
@@ -731,7 +732,7 @@ func (r *run) applyFloretStreamObservation(stream *flruntime.StreamObservation) 
 		r.updateModelIOStatus(FlowerModelIOPhaseFinalizing, stream.Attempt)
 		r.persistRunEvent("floret.provider.stream.done", RealtimeStreamKindLifecycle, map[string]any{
 			"attempt":              stream.Attempt,
-			"finish_reason":        strings.TrimSpace(stream.FinishReason),
+			"finish_reason":        strings.TrimSpace(string(stream.FinishReason)),
 			"raw_finish_reason":    strings.TrimSpace(stream.RawFinishReason),
 			"finish_inferred":      stream.FinishInferred,
 			"stream_reason_detail": strings.TrimSpace(stream.Reason),

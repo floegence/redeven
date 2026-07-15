@@ -162,6 +162,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		Approver:             floretToolApproverForRun(r),
 		Sink:                 floretEventSink{run: r},
 		ToolSurfaceProvider:  toolSurfaceProvider,
+		ThreadTitleMode:      flruntime.ThreadTitleModeHostOwned,
 		LoopLimits: flruntime.LoopLimits{
 			NoProgressLimit:    2,
 			DuplicateToolLimit: 3,
@@ -519,7 +520,7 @@ func redevenFloretGatewayIdentity(providerID string, modelName string) flruntime
 }
 
 func floretFailureFinishReason(result flruntime.TurnResult) string {
-	finishReason := normalizeReplyFinishReason(result.FinishReason)
+	finishReason := normalizeReplyFinishReason(string(result.FinishReason))
 	if finishReason == "unknown" {
 		finishReason = normalizeReplyFinishReason(result.RawFinishReason)
 	}

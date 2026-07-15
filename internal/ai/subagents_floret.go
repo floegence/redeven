@@ -443,6 +443,7 @@ func (s *floretSubagentRuntime) newHostLocked(parent *run, resolved resolvedSuba
 		Sink:                 floretSubagentEventSink{runtime: s},
 		ToolSurfaceProvider:  surfaceProvider,
 		SubAgentRunTimeout:   subagentRunTimeout,
+		ThreadTitleMode:      flruntime.ThreadTitleModeHostOwned,
 		LoopLimits: flruntime.LoopLimits{
 			NoProgressLimit:    2,
 			DuplicateToolLimit: 3,
