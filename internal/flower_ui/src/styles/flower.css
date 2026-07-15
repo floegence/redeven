@@ -5830,33 +5830,108 @@ html.dark .flower-component-shell {
   opacity: 0.45;
 }
 
+[data-floe-geometry-surface='floating-window']:has(> .flower-subagent-detail-window) {
+  --flower-subagent-window-shadow-key: rgb(32 42 55 / 24%);
+  --flower-subagent-window-shadow-ambient: rgb(32 42 55 / 12%);
+  border-radius: 6px;
+  box-shadow:
+    0 4px 14px -4px var(--flower-subagent-window-shadow-key),
+    0 28px 64px -20px var(--flower-subagent-window-shadow-ambient);
+  transition: box-shadow 140ms ease;
+}
+
+[data-floe-geometry-surface='floating-window']:has(
+  > .flower-subagent-detail-window[data-floe-floating-window-state='active']
+) {
+  --flower-subagent-window-shadow-key: rgb(32 42 55 / 30%);
+  --flower-subagent-window-shadow-ambient: rgb(32 42 55 / 16%);
+}
+
+.dark [data-floe-geometry-surface='floating-window']:has(> .flower-subagent-detail-window),
+html.dark [data-floe-geometry-surface='floating-window']:has(> .flower-subagent-detail-window) {
+  --flower-subagent-window-shadow-key: rgb(0 0 0 / 68%);
+  --flower-subagent-window-shadow-ambient: rgb(0 0 0 / 42%);
+}
+
+.dark [data-floe-geometry-surface='floating-window']:has(
+  > .flower-subagent-detail-window[data-floe-floating-window-state='active']
+),
+html.dark [data-floe-geometry-surface='floating-window']:has(
+  > .flower-subagent-detail-window[data-floe-floating-window-state='active']
+) {
+  --flower-subagent-window-shadow-key: rgb(0 0 0 / 76%);
+  --flower-subagent-window-shadow-ambient: rgb(0 0 0 / 48%);
+}
+
 .flower-subagent-detail-window {
-  --flower-subagent-window-surface: color-mix(in srgb, var(--redeven-surface-panel, var(--card)) 96%, black 4%);
-  --flower-subagent-window-surface-soft: color-mix(in srgb, var(--redeven-surface-panel-soft, var(--card)) 88%, transparent);
-  --flower-subagent-window-surface-raised: color-mix(in srgb, var(--redeven-surface-panel-elevated, var(--card)) 94%, black 6%);
-  --flower-subagent-window-border: color-mix(in srgb, var(--redeven-surface-panel-border, var(--border)) 78%, transparent);
-  --flower-subagent-window-border-soft: color-mix(in srgb, var(--redeven-surface-panel-border, var(--border)) 42%, transparent);
+  --flower-subagent-window-surface: #fbf9f6;
+  --flower-subagent-window-surface-soft: #f5f2ee;
+  --flower-subagent-window-surface-band: #f7f4f1;
+  --flower-subagent-window-surface-raised: #fffdfa;
+  --flower-subagent-window-border: #8c857d;
+  --flower-subagent-window-border-active: #7f7871;
+  --flower-subagent-window-border-soft: #d3cdc6;
+  --flower-subagent-window-edge-highlight: rgb(255 255 255 / 90%);
+  --flower-subagent-window-edge-highlight-soft: rgb(255 255 255 / 58%);
+  --flower-subagent-window-edge-shade: rgb(32 42 55 / 18%);
+  --flower-subagent-window-edge-shade-soft: rgb(32 42 55 / 10%);
   --flower-subagent-window-text: color-mix(in srgb, var(--foreground) 94%, white 6%);
   --flower-subagent-window-muted: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground) 12%);
   --flower-subagent-window-accent: #789d98;
   --flower-subagent-window-success: #65a479;
   --flower-subagent-window-warning: #c59a58;
   --flower-subagent-window-danger: #cc746d;
-  border-color: var(--flower-subagent-window-border);
+  border: 1px solid var(--flower-subagent-window-border);
+  border-radius: 6px;
   background: var(--flower-subagent-window-surface);
   color: var(--flower-subagent-window-text);
   box-shadow:
-    0 1px 0 color-mix(in srgb, white 4%, transparent) inset,
-    0 18px 46px -22px color-mix(in srgb, black 60%, transparent),
-    0 38px 90px -42px color-mix(in srgb, black 72%, transparent);
+    0 1px 0 var(--flower-subagent-window-edge-highlight) inset,
+    1px 0 0 var(--flower-subagent-window-edge-highlight-soft) inset,
+    0 -1px 0 var(--flower-subagent-window-edge-shade) inset,
+    -1px 0 0 var(--flower-subagent-window-edge-shade-soft) inset;
 }
 
-.flower-subagent-detail-window [data-floe-floating-window-titlebar='true'] {
+.dark .flower-subagent-detail-window,
+html.dark .flower-subagent-detail-window {
+  --flower-subagent-window-surface: #343840;
+  --flower-subagent-window-surface-soft: #30343c;
+  --flower-subagent-window-surface-band: #393e47;
+  --flower-subagent-window-surface-raised: #40454f;
+  --flower-subagent-window-border: #757e8a;
+  --flower-subagent-window-border-active: #89929e;
+  --flower-subagent-window-border-soft: #4c535f;
+  --flower-subagent-window-edge-highlight: rgb(255 255 255 / 9%);
+  --flower-subagent-window-edge-highlight-soft: rgb(255 255 255 / 5%);
+  --flower-subagent-window-edge-shade: rgb(0 0 0 / 34%);
+  --flower-subagent-window-edge-shade-soft: rgb(0 0 0 / 20%);
+}
+
+.flower-subagent-detail-window[data-floe-floating-window-state='active'] {
+  border-color: var(--flower-subagent-window-border-active);
+  box-shadow:
+    0 1px 0 var(--flower-subagent-window-edge-highlight) inset,
+    1px 0 0 var(--flower-subagent-window-edge-highlight-soft) inset,
+    0 -1px 0 var(--flower-subagent-window-edge-shade) inset,
+    -1px 0 0 var(--flower-subagent-window-edge-shade-soft) inset;
+}
+
+.flower-subagent-detail-window[data-floe-floating-window-state='inactive'] {
+  border-color: var(--flower-subagent-window-border);
+  box-shadow:
+    0 1px 0 var(--flower-subagent-window-edge-highlight) inset,
+    1px 0 0 var(--flower-subagent-window-edge-highlight-soft) inset,
+    0 -1px 0 var(--flower-subagent-window-edge-shade) inset,
+    -1px 0 0 var(--flower-subagent-window-edge-shade-soft) inset;
+}
+
+.flower-subagent-detail-window[data-floe-floating-window-surface='true'] [data-floe-floating-window-titlebar='true'] {
   min-width: 0;
   height: 2.5rem;
   border-color: var(--flower-subagent-window-border-soft);
   background: var(--flower-subagent-window-surface-raised);
   padding-inline: 0.875rem 0.625rem;
+  box-shadow: 0 1px 0 var(--flower-subagent-window-edge-highlight-soft) inset;
 }
 
 .flower-subagent-detail-window [data-floe-floating-window-titlebar='true'] h2 {
@@ -5890,7 +5965,7 @@ html.dark .flower-component-shell {
   align-items: start;
   gap: 0.75rem;
   border-bottom: 1px solid var(--flower-subagent-window-border-soft);
-  background: var(--flower-subagent-window-surface-raised);
+  background: var(--flower-subagent-window-surface-band);
   padding: 0.75rem 1rem 0.8rem;
 }
 
@@ -6460,7 +6535,7 @@ html.dark .flower-component-shell {
   align-items: center;
   gap: 0.65rem;
   border-top: 1px solid var(--flower-subagent-window-border-soft);
-  background: var(--flower-subagent-window-surface-raised);
+  background: var(--flower-subagent-window-surface-band);
   padding: 0.48rem 0.75rem;
 }
 
@@ -6630,6 +6705,10 @@ html.dark .flower-component-shell {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  [data-floe-geometry-surface='floating-window']:has(> .flower-subagent-detail-window) {
+    transition: none !important;
+  }
+
   .flower-subagent-detail-loading-row,
   .flower-subagent-detail-tail-pulse {
     animation: none !important;
