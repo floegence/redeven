@@ -32,13 +32,11 @@ func (r *run) applyFloretThreadProjectionInternal(projection flruntime.ThreadTur
 		r.muFloretProjection.Unlock()
 		return false
 	}
-	blocks, valid := r.flowerBlocksFromFloretThreadProjectionChecked(projection)
-	if !valid {
+	blocks, err := r.flowerBlocksFromFloretThreadProjection(projection)
+	if err != nil {
 		r.muFloretProjection.Unlock()
+		r.rejectFloretContract("turn_projection", err)
 		return false
-	}
-	if len(blocks) == 0 {
-		blocks = []any{&persistedMarkdownBlock{Type: "markdown", Content: ""}}
 	}
 	r.mu.Lock()
 	r.nextBlockIndex = len(blocks)
@@ -80,48 +78,11 @@ func (r *run) validateFloretThreadProjection(projection flruntime.ThreadTurnProj
 	if r == nil {
 		return errors.New("nil run")
 	}
+	if err := projection.Validate(); err != nil {
+		return err
+	}
 	if !r.floretThreadProjectionMatchesRun(projection) {
 		return errors.New("Floret turn projection identity mismatch")
-	}
-	return validateFloretThreadProjectionContract(projection)
-}
-
-func validateFloretThreadProjectionContract(projection flruntime.ThreadTurnProjection) error {
-	if strings.TrimSpace(string(projection.ThreadID)) == "" || strings.TrimSpace(string(projection.TurnID)) == "" || strings.TrimSpace(string(projection.RunID)) == "" {
-		return errors.New("Floret turn projection identity is incomplete")
-	}
-	if projection.ThroughOrdinal <= 0 {
-		return fmt.Errorf("Floret turn projection ordinal must be positive, got %d", projection.ThroughOrdinal)
-	}
-	switch projection.Status {
-	case flruntime.TurnStatusCompleted, flruntime.TurnStatusWaiting, flruntime.TurnStatusFailed, flruntime.TurnStatusCancelled:
-	default:
-		return fmt.Errorf("unsupported Floret turn projection status %q", projection.Status)
-	}
-	for index, segment := range projection.Segments {
-		switch segment.Kind {
-		case flruntime.ThreadTurnProjectionSegmentAssistantText:
-		case flruntime.ThreadTurnProjectionSegmentActivityTimeline:
-			if segment.ActivityTimeline == nil {
-				return fmt.Errorf("Floret turn projection segment %d is missing activity timeline", index)
-			}
-			if err := observation.ValidateActivityTimeline(*segment.ActivityTimeline); err != nil {
-				return fmt.Errorf("invalid Floret activity timeline at segment %d: %w", index, err)
-			}
-		case flruntime.ThreadTurnProjectionSegmentControlSignal:
-			if segment.Signal == nil && strings.TrimSpace(segment.Text) == "" {
-				return fmt.Errorf("Floret turn projection segment %d is missing control signal content", index)
-			}
-			if segment.Signal != nil {
-				switch strings.TrimSpace(segment.Signal.Name) {
-				case "ask_user", "task_complete":
-				default:
-					return fmt.Errorf("unsupported Floret control signal %q at segment %d", segment.Signal.Name, index)
-				}
-			}
-		default:
-			return fmt.Errorf("unsupported Floret turn projection segment kind %q", segment.Kind)
-		}
 	}
 	return nil
 }
@@ -157,17 +118,15 @@ func projectionIdentityMatchesRun(projectionRunID string, projectionThreadID str
 	return projectionRunID == runID && projectionThreadID == threadID && projectionTurnID == turnID
 }
 
-func (r *run) flowerBlocksFromFloretThreadProjection(projection flruntime.ThreadTurnProjection) []any {
-	blocks, _ := r.flowerBlocksFromFloretThreadProjectionChecked(projection)
-	return blocks
-}
-
-func (r *run) flowerBlocksFromFloretThreadProjectionChecked(projection flruntime.ThreadTurnProjection) ([]any, bool) {
-	if r == nil || len(projection.Segments) == 0 {
-		return nil, true
+func (r *run) flowerBlocksFromFloretThreadProjection(projection flruntime.ThreadTurnProjection) ([]any, error) {
+	if r == nil {
+		return nil, errors.New("nil run")
+	}
+	if len(projection.Segments) == 0 {
+		return nil, nil
 	}
 	blocks := make([]any, 0, len(projection.Segments))
-	for _, segment := range projection.Segments {
+	for index, segment := range projection.Segments {
 		switch segment.Kind {
 		case flruntime.ThreadTurnProjectionSegmentAssistantText:
 			if strings.TrimSpace(segment.Text) == "" {
@@ -176,20 +135,17 @@ func (r *run) flowerBlocksFromFloretThreadProjectionChecked(projection flruntime
 			blocks = append(blocks, &persistedMarkdownBlock{Type: "markdown", Content: segment.Text})
 		case flruntime.ThreadTurnProjectionSegmentActivityTimeline:
 			if segment.ActivityTimeline == nil {
-				return nil, false
-			}
-			if err := observation.ValidateActivityTimeline(*segment.ActivityTimeline); err != nil {
-				return nil, false
+				return nil, fmt.Errorf("Floret turn projection segment %d is missing activity timeline", index)
 			}
 			timeline := *observation.CloneActivityTimeline(segment.ActivityTimeline)
 			blocks = append(blocks, r.newActivityTimelineBlock(timeline, r.activityTimelineFileActions(timeline)))
 		case flruntime.ThreadTurnProjectionSegmentControlSignal:
 			continue
 		default:
-			return nil, false
+			return nil, fmt.Errorf("unsupported Floret turn projection segment kind %q at segment %d", segment.Kind, index)
 		}
 	}
-	return blocks, true
+	return blocks, nil
 }
 
 func (s *Service) settlePendingToolWithActiveFloretRun(ctx context.Context, endpointID string, threadID string, req flruntime.PendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {
@@ -245,7 +201,7 @@ func (s *Service) applyFloretPendingToolSettlementProjection(ctx context.Context
 	if err := settled.ValidateProjection(); err != nil {
 		return fmt.Errorf("invalid pending tool settlement projection outcome: %w", err)
 	}
-	if settled.ProjectionStatus == flruntime.TurnProjectionStatusUnavailable {
+	if settled.ProjectionAvailability == flruntime.TurnProjectionAvailabilityUnavailable {
 		if active := s.runForFloretSettlement(endpointID, threadID, runID); active != nil {
 			active.persistRunEvent("floret.projection.unavailable", RealtimeStreamKindLifecycle, map[string]any{
 				"source": "pending_tool_settlement",

@@ -1,11 +1,14 @@
 package session
 
 import (
+	"bufio"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"golang.org/x/mod/modfile"
 )
 
 func TestFlowersecDependencyUsesPublishedRelease(t *testing.T) {
@@ -219,36 +222,73 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 	t.Parallel()
 
-	const floretVersion = "v0.6.0"
-	oldFloretVersions := []string{"v0.5.0", "v0.4.0", "v0.3." + "45", "v0.3." + "46", "v0.3." + "47", "v0.3." + "53", "v0.3." + "54", "v0.3." + "55", "v0.3." + "56", "v0.3." + "57", "v0.3." + "58", "v0.3." + "59", "v0.3." + "60", "v0.3." + "61", "v0.3." + "62", "v0.3." + "63", "v0.3." + "64", "v0.3." + "65", "v0.3." + "66", "v0.3." + "67", "v0.3." + "68", "v0.3." + "69", "v0.3." + "70", "v0.3." + "71", "v0.3." + "72", "v0.3." + "73", "v0.3." + "74", "v0.3." + "75", "v0.3." + "76", "v0.3." + "77", "v0.3." + "78", "v0.3." + "79", "v0.3." + "80", "v0.3." + "81", "v0.3." + "82", "v0.3." + "83", "v0.3." + "84", "v0.3." + "85", "v0.3." + "86", "v0.3." + "87", "v0.3." + "88", "v0.3." + "89", "v0.3." + "90"}
+	const (
+		floretModule  = "github.com/floegence/floret"
+		floretVersion = "v0.7.0"
+	)
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
 	goSum := readRepoFile(t, root, "go.sum")
 	notices := readRepoFile(t, root, "THIRD_PARTY_NOTICES.md")
 
-	if !strings.Contains(goMod, "github.com/floegence/floret "+floretVersion) {
-		t.Fatalf("go.mod must depend on floret %s", floretVersion)
+	parsedMod, err := modfile.Parse("go.mod", []byte(goMod), nil)
+	if err != nil {
+		t.Fatalf("parse go.mod: %v", err)
 	}
-	assertNoLocalGoModuleReference(t, "go.mod", goMod, "github.com/floegence/floret", "floret")
-	if !strings.Contains(goSum, "github.com/floegence/floret "+floretVersion+" ") {
-		t.Fatalf("go.sum must include floret %s module checksum", floretVersion)
-	}
-	if !strings.Contains(goSum, "github.com/floegence/floret "+floretVersion+"/go.mod ") {
-		t.Fatalf("go.sum must include floret %s go.mod checksum", floretVersion)
-	}
-	assertNoLocalGoModuleReference(t, "go.sum", goSum, "github.com/floegence/floret", "floret")
-	if !strings.Contains(notices, "| github.com/floegence/floret | "+floretVersion+" |") {
-		t.Fatalf("THIRD_PARTY_NOTICES.md must include floret %s", floretVersion)
-	}
-	if !strings.Contains(notices, "github.com/floegence/floret@"+floretVersion) {
-		t.Fatalf("THIRD_PARTY_NOTICES.md must link floret %s", floretVersion)
-	}
-	for _, oldFloretVersion := range oldFloretVersions {
-		if strings.Contains(goMod, "github.com/floegence/floret "+oldFloretVersion) ||
-			strings.Contains(goSum, "github.com/floegence/floret "+oldFloretVersion) ||
-			strings.Contains(notices, "github.com/floegence/floret@"+oldFloretVersion) {
-			t.Fatalf("repository must not retain old floret %s dependency markers", oldFloretVersion)
+	var requiredVersions []string
+	for _, requirement := range parsedMod.Require {
+		if requirement.Mod.Path == floretModule {
+			requiredVersions = append(requiredVersions, requirement.Mod.Version)
 		}
+	}
+	if len(requiredVersions) != 1 || requiredVersions[0] != floretVersion {
+		t.Fatalf("go.mod Floret requirements=%v, want only %s", requiredVersions, floretVersion)
+	}
+	assertNoLocalGoModuleReference(t, "go.mod", goMod, floretModule, "floret")
+
+	wantSumVersions := map[string]bool{
+		floretVersion:             false,
+		floretVersion + "/go.mod": false,
+	}
+	scanner := bufio.NewScanner(strings.NewReader(goSum))
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) < 2 || fields[0] != floretModule {
+			continue
+		}
+		if _, ok := wantSumVersions[fields[1]]; !ok {
+			t.Fatalf("go.sum contains unexpected Floret version %q", fields[1])
+		}
+		wantSumVersions[fields[1]] = true
+	}
+	if err := scanner.Err(); err != nil {
+		t.Fatalf("scan go.sum: %v", err)
+	}
+	for version, found := range wantSumVersions {
+		if !found {
+			t.Fatalf("go.sum is missing Floret checksum for %s", version)
+		}
+	}
+	assertNoLocalGoModuleReference(t, "go.sum", goSum, floretModule, "floret")
+
+	var noticeRows [][]string
+	for _, line := range strings.Split(notices, "\n") {
+		if !strings.HasPrefix(strings.TrimSpace(line), "|") {
+			continue
+		}
+		columns := strings.Split(line, "|")
+		if len(columns) < 7 || strings.TrimSpace(columns[1]) != floretModule {
+			continue
+		}
+		noticeRows = append(noticeRows, columns)
+	}
+	if len(noticeRows) != 1 {
+		t.Fatalf("THIRD_PARTY_NOTICES.md Floret rows=%d, want one", len(noticeRows))
+	}
+	noticeVersion := strings.TrimSpace(noticeRows[0][2])
+	noticeSource := strings.TrimSpace(noticeRows[0][5])
+	if noticeVersion != floretVersion || noticeSource != "https://pkg.go.dev/"+floretModule+"@"+floretVersion {
+		t.Fatalf("THIRD_PARTY_NOTICES.md Floret row version=%q source=%q", noticeVersion, noticeSource)
 	}
 }
 
@@ -285,7 +325,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"ForkOperationID",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
-			"v0.6.0",
+			"v0.7.0",
 			"host-owned thread titles",
 			"typed event fields",
 			"turn_projection_unavailable",

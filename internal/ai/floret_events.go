@@ -148,42 +148,11 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 }
 
 func (r *run) validateFloretRuntimeEvent(ev flruntime.Event) error {
-	if err := validateFloretRuntimeEventContract(ev); err != nil {
+	if err := ev.Validate(); err != nil {
 		return err
 	}
 	if ev.Projection != nil && !r.floretThreadProjectionMatchesRun(*ev.Projection) {
 		return errors.New("Floret event projection identity mismatch")
-	}
-	return nil
-}
-
-func validateFloretRuntimeEventContract(ev flruntime.Event) error {
-	if err := ev.Validate(); err != nil {
-		return err
-	}
-	if ev.Stream != nil {
-		switch ev.Stream.Type {
-		case flruntime.StreamObservationAssistantDelta,
-			flruntime.StreamObservationReasoningDelta,
-			flruntime.StreamObservationToolCallStart,
-			flruntime.StreamObservationToolCallDelta,
-			flruntime.StreamObservationToolCallEnd,
-			flruntime.StreamObservationModelRetry,
-			flruntime.StreamObservationModelStreamDone,
-			flruntime.StreamObservationModelStreamAbort:
-		default:
-			return fmt.Errorf("unsupported Floret stream observation type %q", ev.Stream.Type)
-		}
-	}
-	if ev.ActivityTimeline != nil {
-		if err := observation.ValidateActivityTimeline(*ev.ActivityTimeline); err != nil {
-			return fmt.Errorf("invalid Floret event activity timeline: %w", err)
-		}
-	}
-	if ev.Projection != nil {
-		if err := validateFloretThreadProjectionContract(*ev.Projection); err != nil {
-			return fmt.Errorf("invalid Floret event projection: %w", err)
-		}
 	}
 	return nil
 }

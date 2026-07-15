@@ -448,12 +448,15 @@ func (s *Service) floretProjectionMessage(ctx context.Context, host floretProjec
 		}
 		return unavailableFloretProjectionOutcome(turn, FlowerTurnProjectionUnavailableInvalidContract), nil
 	}
+	if !projection.Status.IsTerminal() {
+		return unavailableFloretProjectionOutcome(turn, FlowerTurnProjectionUnavailableInvalidContract), nil
+	}
 	status, err := snapshotStatusForFloretProjection(projection)
 	if err != nil {
 		return unavailableFloretProjectionOutcome(turn, FlowerTurnProjectionUnavailableInvalidContract), nil
 	}
-	blocks, valid := projectionRun.flowerBlocksFromFloretThreadProjectionChecked(projection)
-	if !valid {
+	blocks, err := projectionRun.flowerBlocksFromFloretThreadProjection(projection)
+	if err != nil {
 		return unavailableFloretProjectionOutcome(turn, FlowerTurnProjectionUnavailableInvalidContract), nil
 	}
 	if len(blocks) == 0 {

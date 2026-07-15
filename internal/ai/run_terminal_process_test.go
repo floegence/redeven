@@ -1444,11 +1444,11 @@ func terminalProcessTestProjection(runID string, threadID string, turnID string,
 
 func terminalProcessTestSettlementResult(projection flruntime.ThreadTurnProjection) flruntime.PendingToolSettlementResult {
 	return flruntime.PendingToolSettlementResult{
-		ThreadID:         projection.ThreadID,
-		TurnID:           projection.TurnID,
-		RunID:            projection.RunID,
-		ProjectionStatus: flruntime.TurnProjectionStatusReady,
-		Projection:       &projection,
+		ThreadID:               projection.ThreadID,
+		TurnID:                 projection.TurnID,
+		RunID:                  projection.RunID,
+		ProjectionAvailability: flruntime.TurnProjectionAvailabilityReady,
+		Projection:             &projection,
 	}
 }
 

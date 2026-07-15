@@ -6,12 +6,13 @@ require (
 	github.com/anthropics/anthropic-sdk-go v1.22.1
 	github.com/creack/pty v1.1.24
 	github.com/floegence/floeterm/terminal-go v0.4.26
-	github.com/floegence/floret v0.6.0
+	github.com/floegence/floret v0.7.0
 	github.com/floegence/flowersec/flowersec-go v0.21.1
 	github.com/floegence/redevplugin v0.1.1
 	github.com/gorilla/websocket v1.5.3
 	github.com/openai/openai-go v1.12.0
 	github.com/shirou/gopsutil/v4 v4.25.12
+	golang.org/x/mod v0.36.0
 	golang.org/x/sys v0.46.0
 	golang.org/x/term v0.44.0
 	gopkg.in/yaml.v3 v3.0.1
