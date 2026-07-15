@@ -16,8 +16,8 @@ func TestFlowersecDependencyUsesPublishedRelease(t *testing.T) {
 	goSum := readRepoFile(t, root, "go.sum")
 	notices := readRepoFile(t, root, "THIRD_PARTY_NOTICES.md")
 
-	if !strings.Contains(goMod, "github.com/floegence/flowersec/flowersec-go v0.20.2") {
-		t.Fatalf("go.mod must depend on flowersec-go v0.20.2")
+	if !strings.Contains(goMod, "github.com/floegence/flowersec/flowersec-go v0.21.1") {
+		t.Fatalf("go.mod must depend on flowersec-go v0.21.1")
 	}
 	if strings.Contains(goMod, "\nreplace ") || strings.Contains(goMod, "\nreplace(") {
 		t.Fatalf("go.mod must not use replace directives")
@@ -26,21 +26,21 @@ func TestFlowersecDependencyUsesPublishedRelease(t *testing.T) {
 		t.Fatalf("go.mod must not reference local flowersec checkouts")
 	}
 
-	if !strings.Contains(goSum, "github.com/floegence/flowersec/flowersec-go v0.20.2 ") {
-		t.Fatalf("go.sum must include flowersec-go v0.20.2 module checksum")
+	if !strings.Contains(goSum, "github.com/floegence/flowersec/flowersec-go v0.21.1 ") {
+		t.Fatalf("go.sum must include flowersec-go v0.21.1 module checksum")
 	}
-	if !strings.Contains(goSum, "github.com/floegence/flowersec/flowersec-go v0.20.2/go.mod ") {
-		t.Fatalf("go.sum must include flowersec-go v0.20.2 go.mod checksum")
+	if !strings.Contains(goSum, "github.com/floegence/flowersec/flowersec-go v0.21.1/go.mod ") {
+		t.Fatalf("go.sum must include flowersec-go v0.21.1 go.mod checksum")
 	}
 
-	if !strings.Contains(notices, "github.com/floegence/flowersec/flowersec-go | v0.20.2") {
-		t.Fatalf("THIRD_PARTY_NOTICES.md must list flowersec-go v0.20.2")
+	if !strings.Contains(notices, "github.com/floegence/flowersec/flowersec-go | v0.21.1") {
+		t.Fatalf("THIRD_PARTY_NOTICES.md must list flowersec-go v0.21.1")
 	}
-	if !strings.Contains(notices, "flowersec-go@v0.20.2") {
-		t.Fatalf("THIRD_PARTY_NOTICES.md must link to flowersec-go@v0.20.2")
+	if !strings.Contains(notices, "flowersec-go@v0.21.1") {
+		t.Fatalf("THIRD_PARTY_NOTICES.md must link to flowersec-go@v0.21.1")
 	}
-	if !strings.Contains(notices, "@floegence/flowersec-core | 0.20.2") {
-		t.Fatalf("THIRD_PARTY_NOTICES.md must list @floegence/flowersec-core 0.20.2")
+	if !strings.Contains(notices, "@floegence/flowersec-core | 0.21.1") {
+		t.Fatalf("THIRD_PARTY_NOTICES.md must list @floegence/flowersec-core 0.21.1")
 	}
 	if strings.Contains(notices, "flowersec-core | 0.19.7") {
 		t.Fatalf("THIRD_PARTY_NOTICES.md must not retain @floegence/flowersec-core 0.19.7")
@@ -136,43 +136,43 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 	root := repoRootForTest(t)
 	expectedPackages := map[string][]string{
 		"desktop/package.json": {
-			"\"@floegence/floe-webapp-core\": \"^0.37.1\"",
+			"\"@floegence/floe-webapp-core\": \"^0.37.2\"",
 		},
 		"desktop/package-lock.json": {
-			"floe-webapp-core-0.37.1.tgz",
+			"floe-webapp-core-0.37.2.tgz",
 		},
 		"desktop/pnpm-lock.yaml": {
-			"@floegence/floe-webapp-core@0.37.1",
+			"@floegence/floe-webapp-core@0.37.2",
 		},
 		"internal/envapp/ui_src/package.json": {
-			"\"@floegence/floe-webapp-boot\": \"^0.37.1\"",
-			"\"@floegence/floe-webapp-core\": \"^0.37.1\"",
-			"\"@floegence/floe-webapp-protocol\": \"^0.37.1\"",
-			"\"@floegence/flowersec-core\": \"^0.20.2\"",
+			"\"@floegence/floe-webapp-boot\": \"^0.37.2\"",
+			"\"@floegence/floe-webapp-core\": \"^0.37.2\"",
+			"\"@floegence/floe-webapp-protocol\": \"^0.37.2\"",
+			"\"@floegence/flowersec-core\": \"^0.21.1\"",
 		},
 		"internal/envapp/ui_src/package-lock.json": {
-			"floe-webapp-boot-0.37.1.tgz",
-			"floe-webapp-core-0.37.1.tgz",
-			"floe-webapp-protocol-0.37.1.tgz",
-			"flowersec-core-0.20.2.tgz",
+			"floe-webapp-boot-0.37.2.tgz",
+			"floe-webapp-core-0.37.2.tgz",
+			"floe-webapp-protocol-0.37.2.tgz",
+			"flowersec-core-0.21.1.tgz",
 		},
 		"internal/envapp/ui_src/pnpm-lock.yaml": {
-			"@floegence/floe-webapp-boot@0.37.1",
-			"@floegence/floe-webapp-core@0.37.1",
-			"@floegence/floe-webapp-protocol@0.37.1",
-			"@floegence/flowersec-core@0.20.2",
+			"@floegence/floe-webapp-boot@0.37.2",
+			"@floegence/floe-webapp-core@0.37.2",
+			"@floegence/floe-webapp-protocol@0.37.2",
+			"@floegence/flowersec-core@0.21.1",
 		},
 		"internal/codeapp/ui_src/package.json": {
-			"\"@floegence/flowersec-core\": \"^0.20.2\"",
+			"\"@floegence/flowersec-core\": \"^0.21.1\"",
 		},
 		"internal/codeapp/ui_src/package-lock.json": {
-			"flowersec-core-0.20.2.tgz",
+			"flowersec-core-0.21.1.tgz",
 		},
 		"THIRD_PARTY_NOTICES.md": {
-			"@floegence/floe-webapp-boot | 0.37.1",
-			"@floegence/floe-webapp-core | 0.37.1",
-			"@floegence/floe-webapp-protocol | 0.37.1",
-			"@floegence/flowersec-core | 0.20.2",
+			"@floegence/floe-webapp-boot | 0.37.2",
+			"@floegence/floe-webapp-core | 0.37.2",
+			"@floegence/floe-webapp-protocol | 0.37.2",
+			"@floegence/flowersec-core | 0.21.1",
 		},
 	}
 	for file, expectedMarkers := range expectedPackages {
