@@ -299,14 +299,19 @@ async function openEnvPage(context, entryURL) {
   return { page, problems };
 }
 
-async function terminalInput(scope) {
-  const input = scope.locator('.redeven-terminal-surface textarea[aria-label="Terminal input"]:visible').last();
+async function terminalInput(page, scope = page) {
+  const focusHost = scope.locator(
+    '.redeven-terminal-surface [contenteditable="true"][aria-label="Terminal input"]:visible',
+  ).last();
+  await focusHost.waitFor({ state: 'visible', timeout: 15_000 });
+  await focusHost.evaluate((element) => element.focus({ preventScroll: true }));
+  const input = page.locator('body > textarea[aria-label="Terminal input"]:focus');
   await input.waitFor({ state: 'attached', timeout: 15_000 });
   return input;
 }
 
 async function sendTerminalCommand(page, command, scope = page) {
-  const input = await terminalInput(scope);
+  const input = await terminalInput(page, scope);
   await input.focus();
   await page.keyboard.insertText(command);
   await page.keyboard.press('Enter');
@@ -617,7 +622,7 @@ async function runSharedPreparedHistorySample({
       panelTargetStart = await page.evaluate(() => performance.now());
       await panelSession.click();
     }
-    await terminalInput(panel);
+    await terminalInput(page, panel);
     const panelRecovery = await waitForRecoveryMarks(
       page,
       'panel',
@@ -771,9 +776,8 @@ async function runRecoverySample({ context, entryURL, fixtureBytes, seeded, surf
     const sessionButton = targetPanel.locator(`button[data-terminal-session-id="${seeded.sessionID}"]`).first();
     await sessionButton.waitFor({ state: 'visible', timeout: 15_000 });
     await sessionButton.click();
-    const targetInput = targetPanel.locator('.redeven-terminal-surface textarea[aria-label="Terminal input"]:visible').last();
     const targetCanvas = targetPanel.locator('.redeven-terminal-surface canvas:visible').last();
-    await targetInput.waitFor({ state: 'attached', timeout: 15_000 });
+    await terminalInput(page, targetPanel);
     await targetCanvas.waitFor({ state: 'visible', timeout: 15_000 });
     let marks;
     try {
