@@ -159,6 +159,12 @@ func (p *capturingTurnProvider) firstRequest() ModelGatewayRequest {
 	return p.requests[0]
 }
 
+func (p *capturingTurnProvider) requestCount() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return len(p.requests)
+}
+
 func TestUnavailableFloretTurnProjectionPreservesStreamedMarkdown(t *testing.T) {
 	r := newRun(runOptions{})
 	r.id = "run_projection_unavailable"
@@ -363,6 +369,9 @@ func TestRunFloretHostedTurnEmitsContextUsageFromPublishedHost(t *testing.T) {
 	}, "sk-test", "verify context usage", provider)
 	if err != nil {
 		t.Fatalf("runFloretHostedTurn: %v", err)
+	}
+	if got := provider.requestCount(); got != 1 {
+		t.Fatalf("provider request count=%d, want 1 hosted turn request and no implicit Floret title request", got)
 	}
 
 	usages := contextUsagesFromStreamEvents(events)

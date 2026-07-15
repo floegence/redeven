@@ -807,6 +807,7 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 		ModelGatewayIdentity: redevenFloretGatewayIdentity(providerCfg.ID, modelCapability.WireModelName),
 		Store:                store,
 		Sink:                 floretEventSink{run: r},
+		ThreadTitleMode:      flruntime.ThreadTitleModeHostOwned,
 		LoopLimits: flruntime.LoopLimits{
 			NoProgressLimit:    2,
 			DuplicateToolLimit: 3,
