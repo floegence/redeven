@@ -1,7 +1,7 @@
 import type { Component } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { Activity, AlertTriangle, FileText, Folder, Paperclip, Send, Terminal } from '@floegence/floe-webapp-core/icons';
+import { Activity, AlertTriangle, ArrowUp, FileText, Folder, Paperclip, Terminal } from '@floegence/floe-webapp-core/icons';
 import { Button, FloatingWindow } from '@floegence/floe-webapp-core/ui';
 
 import type {
@@ -433,7 +433,12 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
                       <div class="flower-turn-launcher-editor min-w-0 flex-1">
                         <div class="flower-turn-launcher-heading mb-0.5 flex items-center justify-between gap-2">
                           <div class="text-[11px] font-semibold uppercase tracking-[0.12em] text-primary/70">{copyValue(props.copy, 'you_label')}</div>
-                          <span class="text-[11px] text-muted-foreground">
+                          <span
+                            class="text-[11px] text-muted-foreground"
+                            role="status"
+                            aria-live="polite"
+                            aria-atomic="true"
+                          >
                             {sending() ? copyValue(props.copy, 'sending') : copyValue(props.copy, 'reply_to_flower_label')}
                           </span>
                         </div>
@@ -473,17 +478,19 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
                             </div>
                           </Show>
 
-                          <button
+                          <Button
                             data-testid="flower-turn-launcher-inline-send"
-                            type="button"
-                            class={`chat-input-send-btn flower-chat-input-send-btn flower-turn-launcher-send-btn ${canSubmit() ? 'chat-input-send-btn-active cursor-pointer' : 'cursor-not-allowed'}`}
+                            variant="primary"
+                            size="icon"
+                            icon={ArrowUp}
+                            class="flower-composer-submit flower-turn-launcher-send-btn rounded-full"
                             onClick={() => void submit()}
                             disabled={!canSubmit()}
-                            title={copyValue(props.copy, 'send_turn')}
-                            aria-label={copyValue(props.copy, 'send_turn')}
-                          >
-                            <Send class="size-3.5" />
-                          </button>
+                            loading={sending()}
+                            aria-busy={sending() ? 'true' : 'false'}
+                            title={copyValue(props.copy, sending() ? 'sending' : 'send_turn')}
+                            aria-label={copyValue(props.copy, sending() ? 'sending' : 'send_turn')}
+                          />
                         </div>
 
                         <Show when={launchError()}>
