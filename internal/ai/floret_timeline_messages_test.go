@@ -12,7 +12,7 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
-func TestListThreadMessagesErrorsWhenSuccessfulTerminalFloretProjectionIsMissing(t *testing.T) {
+func TestListThreadMessagesDoesNotSynthesizeSuccessfulTerminalProjection(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -28,13 +28,16 @@ func TestListThreadMessagesErrorsWhenSuccessfulTerminalFloretProjectionIsMissing
 		EndedAtUnixMs: 2000,
 	})
 
-	_, err = svc.ListThreadMessages(ctx, meta, thread.ThreadID, 20, 0)
-	if err == nil || !strings.Contains(err.Error(), "missing Floret projection") {
-		t.Fatalf("ListThreadMessages err=%v, want missing Floret projection", err)
+	listed, err := svc.ListThreadMessages(ctx, meta, thread.ThreadID, 20, 0)
+	if err != nil {
+		t.Fatalf("ListThreadMessages: %v", err)
+	}
+	if len(listed.Messages) != 1 {
+		t.Fatalf("messages=%d, want only persisted user message", len(listed.Messages))
 	}
 }
 
-func TestListThreadMessagesProjectsFailedTerminalRunWhenFloretProjectionIsMissing(t *testing.T) {
+func TestListThreadMessagesDoesNotSynthesizeFailedTerminalProjection(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -57,27 +60,12 @@ func TestListThreadMessagesProjectsFailedTerminalRunWhenFloretProjectionIsMissin
 	if err != nil {
 		t.Fatalf("ListThreadMessages: %v", err)
 	}
-	if len(listed.Messages) != 2 {
-		t.Fatalf("messages=%d, want user message plus terminal diagnostic", len(listed.Messages))
-	}
-	diag := decodeTimelineDiagnosticForTest(t, listed.Messages[1])
-	if diag.ID != "msg_assistant" || diag.Role != "assistant" || diag.Status != "error" {
-		t.Fatalf("diagnostic identity/status=%+v", diag)
-	}
-	if !strings.Contains(diag.Error, "Flower could not finish this turn because the orchestration engine failed.") {
-		t.Fatalf("diagnostic error=%q, want Floret engine user-facing copy", diag.Error)
-	}
-	if len(diag.Blocks) != 1 || diag.Blocks[0].Type != "markdown" || !strings.Contains(diag.Blocks[0].Content, diag.Error) {
-		t.Fatalf("diagnostic blocks=%+v, want one markdown block with diagnostic text", diag.Blocks)
-	}
-	for _, block := range diag.Blocks {
-		if block.Type == "activity-timeline" {
-			t.Fatalf("diagnostic blocks=%+v, want no Floret activity projection", diag.Blocks)
-		}
+	if len(listed.Messages) != 1 {
+		t.Fatalf("messages=%d, want only persisted user message", len(listed.Messages))
 	}
 }
 
-func TestListThreadMessagesProjectsRuntimeRestartedCanceledRunWhenFloretProjectionIsMissing(t *testing.T) {
+func TestListThreadMessagesDoesNotSynthesizeRuntimeRestartedCanceledProjection(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -100,24 +88,12 @@ func TestListThreadMessagesProjectsRuntimeRestartedCanceledRunWhenFloretProjecti
 	if err != nil {
 		t.Fatalf("ListThreadMessages: %v", err)
 	}
-	if len(listed.Messages) != 2 {
-		t.Fatalf("messages=%d, want user message plus canceled diagnostic", len(listed.Messages))
-	}
-	diag := decodeTimelineDiagnosticForTest(t, listed.Messages[1])
-	if diag.ID != "msg_assistant" || diag.Role != "assistant" || diag.Status != "canceled" {
-		t.Fatalf("diagnostic identity/status=%+v", diag)
-	}
-	if !strings.Contains(diag.Error, threadstore.RuntimeRestartedRunErrorMessage) {
-		t.Fatalf("diagnostic error=%q, want runtime restart copy", diag.Error)
-	}
-	for _, block := range diag.Blocks {
-		if block.Type == "activity-timeline" {
-			t.Fatalf("diagnostic blocks=%+v, want no Floret activity projection", diag.Blocks)
-		}
+	if len(listed.Messages) != 1 {
+		t.Fatalf("messages=%d, want only persisted user message", len(listed.Messages))
 	}
 }
 
-func TestListThreadMessagesProjectsTimedOutTerminalRunWhenFloretProjectionIsMissing(t *testing.T) {
+func TestListThreadMessagesDoesNotSynthesizeTimedOutTerminalProjection(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -138,20 +114,8 @@ func TestListThreadMessagesProjectsTimedOutTerminalRunWhenFloretProjectionIsMiss
 	if err != nil {
 		t.Fatalf("ListThreadMessages: %v", err)
 	}
-	if len(listed.Messages) != 2 {
-		t.Fatalf("messages=%d, want user message plus timed out diagnostic", len(listed.Messages))
-	}
-	diag := decodeTimelineDiagnosticForTest(t, listed.Messages[1])
-	if diag.ID != "msg_assistant" || diag.Role != "assistant" || diag.Status != "error" {
-		t.Fatalf("diagnostic identity/status=%+v", diag)
-	}
-	if !strings.Contains(diag.Error, "Flower timed out before this reply finished.") {
-		t.Fatalf("diagnostic error=%q, want timeout copy", diag.Error)
-	}
-	for _, block := range diag.Blocks {
-		if block.Type == "activity-timeline" {
-			t.Fatalf("diagnostic blocks=%+v, want no Floret activity projection", diag.Blocks)
-		}
+	if len(listed.Messages) != 1 {
+		t.Fatalf("messages=%d, want only persisted user message", len(listed.Messages))
 	}
 }
 
@@ -188,14 +152,11 @@ func TestGetFlowerThreadLiveBootstrapKeepsTimelineReadableWhenFailedTurnLacksPro
 	for _, message := range bootstrap.TimelineMessages {
 		gotIDs = append(gotIDs, message.MessageID)
 	}
-	wantIDs := []string{"msg_user_1", "msg_assistant_1", "msg_user_2", "msg_assistant_2"}
+	wantIDs := []string{"msg_user_1", "msg_user_2", "msg_assistant_2"}
 	if strings.Join(gotIDs, ",") != strings.Join(wantIDs, ",") {
 		t.Fatalf("timeline ids=%v, want %v", gotIDs, wantIDs)
 	}
-	if got := bootstrap.TimelineMessages[1]; got.Status != "error" || !strings.Contains(got.Content, "orchestration engine failed") {
-		t.Fatalf("failed diagnostic message=%+v", got)
-	}
-	if got := bootstrap.TimelineMessages[3]; got.Status != "streaming" || !got.ActiveCursor || got.Content != "new reply partial" {
+	if got := bootstrap.TimelineMessages[2]; got.Status != "streaming" || !got.ActiveCursor || got.Content != "new reply partial" {
 		t.Fatalf("live assistant message=%+v", got)
 	}
 }
@@ -221,6 +182,31 @@ func TestListThreadMessagesAllowsRunningFloretTurnWithoutProjection(t *testing.T
 	}
 	if len(listed.Messages) != 1 {
 		t.Fatalf("messages=%d, want only persisted user message while run is live", len(listed.Messages))
+	}
+}
+
+func TestFloretProjectionHistoryRejectsUnknownProjectionContract(t *testing.T) {
+	t.Parallel()
+
+	svc := newTestService(t, nil)
+	host := &recordingFloretHost{readProjection: flruntime.ThreadTurnProjection{
+		ThreadID:       "thread_history_contract",
+		TurnID:         "turn_history_contract",
+		RunID:          "run_history_contract",
+		Status:         flruntime.TurnStatusCompleted,
+		ThroughOrdinal: 1,
+		Segments:       []flruntime.ThreadTurnProjectionSegment{{Kind: "unknown"}},
+	}}
+	raw, _, ok, err := svc.floretProjectionMessageJSON(t.Context(), host, "env_history_contract", "thread_history_contract", threadstore.ConversationTurn{
+		TurnID:          "turn_history_contract",
+		RunID:           "run_history_contract",
+		CreatedAtUnixMs: 1000,
+	})
+	if err != nil {
+		t.Fatalf("floretProjectionMessageJSON: %v", err)
+	}
+	if ok || len(raw) != 0 {
+		t.Fatalf("invalid projection produced history message: ok=%t raw=%s", ok, string(raw))
 	}
 }
 
@@ -522,25 +508,4 @@ func timelineMessageIDForTest(t *testing.T, message any) string {
 		t.Fatalf("decode timeline message id %s: %v", string(raw), err)
 	}
 	return strings.TrimSpace(rec.ID)
-}
-
-type timelineDiagnosticForTest struct {
-	ID     string `json:"id"`
-	Role   string `json:"role"`
-	Status string `json:"status"`
-	Error  string `json:"error"`
-	Blocks []struct {
-		Type    string `json:"type"`
-		Content string `json:"content"`
-	} `json:"blocks"`
-}
-
-func decodeTimelineDiagnosticForTest(t *testing.T, message any) timelineDiagnosticForTest {
-	t.Helper()
-	raw := threadMessageRawForTest(t, message)
-	var rec timelineDiagnosticForTest
-	if err := json.Unmarshal(raw, &rec); err != nil {
-		t.Fatalf("decode timeline diagnostic %s: %v", string(raw), err)
-	}
-	return rec
 }

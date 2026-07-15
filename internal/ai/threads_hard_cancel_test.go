@@ -696,16 +696,18 @@ func TestFloretTerminalProjectionUpdatesCanceledBoundaryWithoutTranscriptShadow(
 			Severity: observation.ActivitySeverityWarning,
 		}},
 	}
-	if !r.applyFloretTerminalThreadProjection(flruntime.ThreadTurnProjection{
-		ThreadID: flruntime.ThreadID(th.ThreadID),
-		TurnID:   flruntime.TurnID(assistantID),
-		RunID:    flruntime.RunID(runID),
-		TraceID:  flruntime.TraceID(runID),
+	if !r.applyFloretThreadProjectionInternal(flruntime.ThreadTurnProjection{
+		ThreadID:       flruntime.ThreadID(th.ThreadID),
+		TurnID:         flruntime.TurnID(assistantID),
+		RunID:          flruntime.RunID(runID),
+		TraceID:        flruntime.TraceID(runID),
+		Status:         flruntime.TurnStatusCancelled,
+		ThroughOrdinal: 1,
 		Segments: []flruntime.ThreadTurnProjectionSegment{{
 			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
 			ActivityTimeline: &timeline,
 		}},
-	}) {
+	}, false, true) {
 		t.Fatalf("terminal projection returned false")
 	}
 	if len(r.assistantBlocks) != 1 {

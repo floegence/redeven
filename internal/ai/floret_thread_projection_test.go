@@ -23,10 +23,12 @@ func TestFloretThreadProjectionPersistsFullAssistantContentAfterActivity(t *test
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
 
 	if !r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
-		ThreadID: "thread_full_projection",
-		TurnID:   "msg_full_projection",
-		RunID:    "run_full_projection",
-		TraceID:  "run_full_projection",
+		ThreadID:       "thread_full_projection",
+		TurnID:         "msg_full_projection",
+		RunID:          "run_full_projection",
+		TraceID:        "run_full_projection",
+		Status:         flruntime.TurnStatusCompleted,
+		ThroughOrdinal: 1,
 		Segments: []flruntime.ThreadTurnProjectionSegment{
 			{
 				Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
@@ -116,15 +118,17 @@ func TestFloretTurnResultProjectionDoesNotDowngradeFullAssistantMarkdown(t *test
 	r.threadID = "thread_full_result_projection"
 	r.messageID = "msg_full_result_projection"
 	r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
-		ThreadID: "thread_full_result_projection",
-		TurnID:   "msg_full_result_projection",
-		RunID:    "run_full_result_projection",
-		TraceID:  "run_full_result_projection",
+		ThreadID:       "thread_full_result_projection",
+		TurnID:         "msg_full_result_projection",
+		RunID:          "run_full_result_projection",
+		TraceID:        "run_full_result_projection",
+		Status:         flruntime.TurnStatusCompleted,
+		ThroughOrdinal: 1,
 		Segments: []flruntime.ThreadTurnProjectionSegment{
 			{Kind: flruntime.ThreadTurnProjectionSegmentAssistantText, Text: fullAnswer},
 		},
 	})
-	if !r.applyFloretThreadProjection(result.Projection) {
+	if result.Projection == nil || !r.applyFloretThreadProjection(*result.Projection) {
 		t.Fatalf("completed turn projection was not applied: %#v", result.Projection)
 	}
 	rawJSON, assistantText, _, err := r.snapshotAssistantMessageJSON()
@@ -164,10 +168,12 @@ func TestFloretEventProjectionReplacesDuplicateLiveActivityTail(t *testing.T) {
 		ThreadID: "thread_live_projection",
 		TurnID:   "msg_live_projection",
 		Projection: &flruntime.ThreadTurnProjection{
-			ThreadID: "thread_live_projection",
-			TurnID:   "msg_live_projection",
-			RunID:    "run_live_projection",
-			TraceID:  "run_live_projection",
+			ThreadID:       "thread_live_projection",
+			TurnID:         "msg_live_projection",
+			RunID:          "run_live_projection",
+			TraceID:        "run_live_projection",
+			Status:         flruntime.TurnStatusCompleted,
+			ThroughOrdinal: 1,
 			Segments: []flruntime.ThreadTurnProjectionSegment{
 				{
 					Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
@@ -199,8 +205,9 @@ func TestFloretEventProjectionReplacesDuplicateLiveActivityTail(t *testing.T) {
 func TestSettlePendingToolWithActiveFloretRunUsesActiveHost(t *testing.T) {
 	host := &recordingFloretHost{
 		settleResult: flruntime.PendingToolSettlementResult{
-			RunID: "run_terminal",
-			Projection: flruntime.ThreadTurnProjection{
+			RunID:            "run_terminal",
+			ProjectionStatus: flruntime.TurnProjectionStatusReady,
+			Projection: &flruntime.ThreadTurnProjection{
 				RunID: "run_terminal",
 			},
 		},
@@ -240,8 +247,9 @@ func TestSettlePendingToolWithActiveFloretRunUsesActiveHost(t *testing.T) {
 func TestSettlePendingToolWithDetachedRunUsesRunHost(t *testing.T) {
 	host := &recordingFloretHost{
 		settleResult: flruntime.PendingToolSettlementResult{
-			RunID: "run_terminal",
-			Projection: flruntime.ThreadTurnProjection{
+			RunID:            "run_terminal",
+			ProjectionStatus: flruntime.TurnProjectionStatusReady,
+			Projection: &flruntime.ThreadTurnProjection{
 				RunID:    "run_terminal",
 				ThreadID: "thread_terminal",
 				TurnID:   "turn_terminal",
@@ -362,7 +370,7 @@ func TestFlowerBlocksFromFloretThreadProjectionKeepsRequestedApprovalWaiting(t *
 				ThreadID:  "thread_waiting_approval",
 				TurnID:    "msg_waiting_approval",
 				Kind:      flruntime.ThreadDetailEventApproval,
-				Type:      observation.EventTypeToolApprovalRequested,
+				Type:      string(observation.EventTypeToolApprovalRequested),
 				CreatedAt: now,
 				Approval:  &flruntime.ThreadDetailApproval{State: "requested", ToolID: "exec-1", ToolName: "terminal.exec"},
 				ActivityTimeline: floretProjectionApprovalTimeline(
@@ -453,7 +461,7 @@ func TestFlowerBlocksFromFloretThreadProjectionKeepsQueuedSiblingPending(t *test
 				ThreadID:  "thread_batch_approval",
 				TurnID:    "msg_batch_approval",
 				Kind:      flruntime.ThreadDetailEventApproval,
-				Type:      observation.EventTypeToolApprovalRequested,
+				Type:      string(observation.EventTypeToolApprovalRequested),
 				CreatedAt: now.Add(10 * time.Millisecond),
 				Approval:  &flruntime.ThreadDetailApproval{State: "requested", ToolID: "call-newsapi", ToolName: "terminal.exec"},
 			},
@@ -607,10 +615,12 @@ func TestApplyFloretThreadProjectionRejectsInvalidActivityWithoutClearingLiveBlo
 	r.nextBlockIndex = len(r.assistantBlocks)
 
 	applied := r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
-		RunID:    "run_invalid_projection",
-		ThreadID: "thread_invalid_projection",
-		TurnID:   "msg_invalid_projection",
-		TraceID:  "run_invalid_projection",
+		RunID:          "run_invalid_projection",
+		ThreadID:       "thread_invalid_projection",
+		TurnID:         "msg_invalid_projection",
+		TraceID:        "run_invalid_projection",
+		Status:         flruntime.TurnStatusCompleted,
+		ThroughOrdinal: 1,
 		Segments: []flruntime.ThreadTurnProjectionSegment{{
 			Kind: flruntime.ThreadTurnProjectionSegmentActivityTimeline,
 			ActivityTimeline: floretProjectionInvalidRequestedApprovalTimeline(
@@ -634,6 +644,104 @@ func TestApplyFloretThreadProjectionRejectsInvalidActivityWithoutClearingLiveBlo
 	}
 }
 
+func TestApplyFloretThreadProjectionAdvancesOrdinalOnlyAfterSuccessfulMapping(t *testing.T) {
+	t.Parallel()
+
+	r := newRun(runOptions{})
+	r.id = "run_projection_cursor"
+	r.threadID = "thread_projection_cursor"
+	r.messageID = "turn_projection_cursor"
+	invalid := flruntime.ThreadTurnProjection{
+		RunID:          "run_projection_cursor",
+		ThreadID:       "thread_projection_cursor",
+		TurnID:         "turn_projection_cursor",
+		TraceID:        "run_projection_cursor",
+		Status:         flruntime.TurnStatusCompleted,
+		ThroughOrdinal: 2,
+		Segments: []flruntime.ThreadTurnProjectionSegment{{
+			Kind: "unknown",
+		}},
+	}
+	if r.applyFloretThreadProjection(invalid) {
+		t.Fatalf("invalid projection applied")
+	}
+	valid := invalid
+	valid.Segments = []flruntime.ThreadTurnProjectionSegment{{Kind: flruntime.ThreadTurnProjectionSegmentAssistantText, Text: "ordinal two"}}
+	if !r.applyFloretThreadProjection(valid) {
+		t.Fatalf("valid projection at rejected ordinal was not applied")
+	}
+	if r.applyFloretThreadProjection(valid) {
+		t.Fatalf("equal ordinal projection applied twice")
+	}
+	newer := valid
+	newer.ThroughOrdinal = 3
+	newer.Segments = []flruntime.ThreadTurnProjectionSegment{{Kind: flruntime.ThreadTurnProjectionSegmentAssistantText, Text: "ordinal three"}}
+	if !r.applyFloretThreadProjection(newer) {
+		t.Fatalf("newer projection was not applied")
+	}
+	block, ok := r.assistantBlocks[0].(*persistedMarkdownBlock)
+	if !ok || block.Content != "ordinal three" {
+		t.Fatalf("assistant block=%T %#v", r.assistantBlocks[0], r.assistantBlocks[0])
+	}
+}
+
+func TestApplyFloretThreadProjectionRejectsUnknownTypedControlSignal(t *testing.T) {
+	t.Parallel()
+
+	r := newRun(runOptions{})
+	r.id = "run_unknown_projection_signal"
+	r.threadID = "thread_unknown_projection_signal"
+	r.messageID = "turn_unknown_projection_signal"
+	if r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
+		RunID:          "run_unknown_projection_signal",
+		ThreadID:       "thread_unknown_projection_signal",
+		TurnID:         "turn_unknown_projection_signal",
+		Status:         flruntime.TurnStatusCompleted,
+		ThroughOrdinal: 1,
+		Segments: []flruntime.ThreadTurnProjectionSegment{{
+			Kind: flruntime.ThreadTurnProjectionSegmentControlSignal,
+			Signal: &flruntime.ThreadTurnProjectionSignal{
+				Name:   "legacy_unknown_signal",
+				CallID: "call_unknown_projection_signal",
+			},
+		}},
+	}) {
+		t.Fatalf("projection with unknown typed control signal applied")
+	}
+	if len(r.assistantBlocks) != 0 {
+		t.Fatalf("unknown control signal changed assistant blocks: %#v", r.assistantBlocks)
+	}
+}
+
+func TestPendingToolSettlementUnavailableDoesNotReadOrSynthesizeProjection(t *testing.T) {
+	ctx := context.Background()
+	svc := newTestService(t, nil)
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(ctx, meta, "projection unavailable", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	err = svc.applyFloretPendingToolSettlementProjection(ctx, meta.EndpointID, thread.ThreadID, "run_unavailable", "turn_unavailable", flruntime.PendingToolSettlementResult{
+		ThreadID:         flruntime.ThreadID(thread.ThreadID),
+		TurnID:           "turn_unavailable",
+		RunID:            "run_unavailable",
+		ProjectionStatus: flruntime.TurnProjectionStatusUnavailable,
+		ProjectionError:  "detail read failed",
+	})
+	if err != nil {
+		t.Fatalf("apply unavailable settlement: %v", err)
+	}
+	resp, err := svc.ListFlowerThreadLiveEvents(ctx, meta, thread.ThreadID, 0, 20)
+	if err != nil {
+		t.Fatalf("ListFlowerThreadLiveEvents: %v", err)
+	}
+	for _, event := range resp.Events {
+		if event.Kind == FlowerLiveTimelineReplaced {
+			t.Fatalf("unavailable settlement synthesized timeline replacement: %#v", event)
+		}
+	}
+}
+
 func TestApplyFloretThreadProjectionReplacesStreamedBlocks(t *testing.T) {
 	t.Parallel()
 
@@ -651,10 +759,12 @@ func TestApplyFloretThreadProjectionReplacesStreamedBlocks(t *testing.T) {
 	r.nextBlockIndex = len(r.assistantBlocks)
 
 	if !r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
-		RunID:    "run_projection",
-		ThreadID: "thread_projection",
-		TurnID:   "msg_projection",
-		TraceID:  "run_projection",
+		RunID:          "run_projection",
+		ThreadID:       "thread_projection",
+		TurnID:         "msg_projection",
+		TraceID:        "run_projection",
+		Status:         flruntime.TurnStatusCompleted,
+		ThroughOrdinal: 1,
 		Segments: []flruntime.ThreadTurnProjectionSegment{
 			{Kind: flruntime.ThreadTurnProjectionSegmentAssistantText, Text: "Canonical intro."},
 			{Kind: flruntime.ThreadTurnProjectionSegmentActivityTimeline, ActivityTimeline: floretProjectionTimeline("run_projection", "thread_projection", "msg_projection", "call-1", "terminal.exec")},
@@ -698,10 +808,12 @@ func TestApplyFloretThreadProjectionClearsStreamedBlocksWhenEmpty(t *testing.T) 
 	r.nextBlockIndex = len(r.assistantBlocks)
 
 	if !r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
-		RunID:    "run_empty_projection",
-		ThreadID: "thread_empty_projection",
-		TurnID:   "msg_empty_projection",
-		TraceID:  "run_empty_projection",
+		RunID:          "run_empty_projection",
+		ThreadID:       "thread_empty_projection",
+		TurnID:         "msg_empty_projection",
+		TraceID:        "run_empty_projection",
+		Status:         flruntime.TurnStatusCompleted,
+		ThroughOrdinal: 1,
 	}) {
 		t.Fatalf("projection returned false")
 	}
@@ -763,79 +875,56 @@ func TestApplyFloretThreadProjectionRejectsMissingOrMismatchedIdentityWithoutCle
 	}
 }
 
-func TestApplyFloretThreadProjectionDoesNotDowngradeSettledTerminalItem(t *testing.T) {
+func TestApplyFloretThreadProjectionIgnoresOlderOrdinalAfterSettlement(t *testing.T) {
 	t.Parallel()
 
-	for _, runStatus := range []observation.ActivityStatus{
-		observation.ActivityStatusSuccess,
-		observation.ActivityStatusError,
-		observation.ActivityStatusCanceled,
-	} {
-		runStatus := runStatus
-		t.Run(string(runStatus), func(t *testing.T) {
-			t.Parallel()
+	r := newRun(runOptions{})
+	r.id = "run_terminal_ordinal"
+	r.threadID = "thread_terminal_ordinal"
+	r.messageID = "msg_terminal_ordinal"
 
-			r := newRun(runOptions{})
-			r.id = "run_terminal_floor"
-			r.threadID = "thread_terminal_floor"
-			r.messageID = "msg_terminal_floor"
+	settledTimeline := floretProjectionTimeline("run_terminal_ordinal", "thread_terminal_ordinal", "msg_terminal_ordinal", "exec-1", "terminal.exec")
+	settledTimeline.Items[0].Label = "printf done"
+	settledTimeline.Items[0].Renderer = observation.ActivityRendererTerminal
+	settledTimeline.Items[0].Payload = map[string]any{"command": "printf done", "output": "done"}
+	if !r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
+		ThreadID:       "thread_terminal_ordinal",
+		TurnID:         "msg_terminal_ordinal",
+		RunID:          "run_terminal_ordinal",
+		TraceID:        "run_terminal_ordinal",
+		Status:         flruntime.TurnStatusCompleted,
+		ThroughOrdinal: 2,
+		Segments: []flruntime.ThreadTurnProjectionSegment{{
+			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
+			ActivityTimeline: settledTimeline,
+		}},
+	}) {
+		t.Fatalf("settled projection was not applied")
+	}
 
-			settledTimeline := floretProjectionTimeline("run_terminal_floor", "thread_terminal_floor", "msg_terminal_floor", "exec-1", "terminal.exec")
-			settledTimeline.Summary.Status = runStatus
-			settledTimeline.Summary.DurationMS = 987
-			settledTimeline.Items[0].Label = "printf done"
-			settledTimeline.Items[0].Renderer = observation.ActivityRendererTerminal
-			settledTimeline.Items[0].Payload = map[string]any{"command": "printf done", "output": "done"}
-			if !r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
-				ThreadID: "thread_terminal_floor",
-				TurnID:   "msg_terminal_floor",
-				RunID:    "run_terminal_floor",
-				TraceID:  "run_terminal_floor",
-				Segments: []flruntime.ThreadTurnProjectionSegment{{
-					Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
-					ActivityTimeline: settledTimeline,
-				}},
-			}) {
-				t.Fatalf("settled projection was not applied")
-			}
+	runningTimeline := floretRunningProjectionTimeline("run_terminal_ordinal", "thread_terminal_ordinal", "msg_terminal_ordinal", "exec-1")
+	if r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
+		ThreadID:       "thread_terminal_ordinal",
+		TurnID:         "msg_terminal_ordinal",
+		RunID:          "run_terminal_ordinal",
+		TraceID:        "run_terminal_ordinal",
+		Status:         flruntime.TurnStatusWaiting,
+		ThroughOrdinal: 1,
+		Segments: []flruntime.ThreadTurnProjectionSegment{{
+			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
+			ActivityTimeline: runningTimeline,
+		}},
+	}) {
+		t.Fatalf("older running projection was applied")
+	}
 
-			runningTimeline := floretRunningProjectionTimeline("run_terminal_floor", "thread_terminal_floor", "msg_terminal_floor", "exec-1")
-			runningTimeline.Summary.Status = runStatus
-			runningTimeline.Summary.DurationMS = 987
-			if !r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
-				ThreadID: "thread_terminal_floor",
-				TurnID:   "msg_terminal_floor",
-				RunID:    "run_terminal_floor",
-				TraceID:  "run_terminal_floor",
-				Segments: []flruntime.ThreadTurnProjectionSegment{{
-					Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
-					ActivityTimeline: runningTimeline,
-				}},
-			}) {
-				t.Fatalf("running projection was not applied")
-			}
-
-			if len(r.assistantBlocks) != 1 {
-				t.Fatalf("assistantBlocks=%#v, want one activity block", r.assistantBlocks)
-			}
-			block, ok := r.assistantBlocks[0].(ActivityTimelineBlock)
-			if !ok {
-				t.Fatalf("assistant block=%T, want activity timeline", r.assistantBlocks[0])
-			}
-			item := activityBlockItemByToolID(t, block, "exec-1")
-			if item.Status != observation.ActivityStatusSuccess {
-				t.Fatalf("terminal item status=%q, want success", item.Status)
-			}
-			if block.Summary.Status != runStatus || block.Summary.Counts.Running != 0 || block.Summary.Counts.Success != 1 {
-				t.Fatalf("summary=%#v, want status %q with one success", block.Summary, runStatus)
-			}
-			if block.Summary.DurationMS != 987 {
-				t.Fatalf("summary duration=%d, want 987", block.Summary.DurationMS)
-			}
-			if got := anyToString(item.Payload["output"]); got != "done" {
-				t.Fatalf("terminal payload output=%q, want preserved success payload", got)
-			}
-		})
+	block, ok := r.assistantBlocks[0].(ActivityTimelineBlock)
+	if !ok {
+		t.Fatalf("assistant block=%T, want activity timeline", r.assistantBlocks[0])
+	}
+	item := activityBlockItemByToolID(t, block, "exec-1")
+	if item.Status != observation.ActivityStatusSuccess || anyToString(item.Payload["output"]) != "done" {
+		t.Fatalf("terminal item=%#v, want settled result preserved by ordinal", item)
 	}
 }
 
@@ -853,10 +942,12 @@ func TestApplyFloretThreadProjectionAcceptsSettlementIdentityForChildRun(t *test
 	timeline := floretProjectionTimeline("run_floret_execution", "thread_child", "turn_floret_execution", "exec-1", "terminal.exec")
 	timeline.Items[0].Label = "printf child"
 	if !r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
-		ThreadID: "thread_child",
-		TurnID:   "turn_floret_execution",
-		RunID:    "run_floret_execution",
-		TraceID:  "run_floret_execution",
+		ThreadID:       "thread_child",
+		TurnID:         "turn_floret_execution",
+		RunID:          "run_floret_execution",
+		TraceID:        "run_floret_execution",
+		Status:         flruntime.TurnStatusCompleted,
+		ThroughOrdinal: 1,
 		Segments: []flruntime.ThreadTurnProjectionSegment{{
 			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
 			ActivityTimeline: timeline,
@@ -947,16 +1038,18 @@ func TestFloretTerminalThreadProjectionUpdatesDetachedSnapshotWithoutStream(t *t
 	timeline.Items[0].Status = observation.ActivityStatusCanceled
 	timeline.Items[0].Severity = observation.ActivitySeverityWarning
 
-	if !r.applyFloretTerminalThreadProjection(flruntime.ThreadTurnProjection{
-		ThreadID: "thread_terminal_projection",
-		TurnID:   "msg_terminal_projection",
-		RunID:    "run_terminal_projection",
-		TraceID:  "run_terminal_projection",
+	if !r.applyFloretThreadProjectionInternal(flruntime.ThreadTurnProjection{
+		ThreadID:       "thread_terminal_projection",
+		TurnID:         "msg_terminal_projection",
+		RunID:          "run_terminal_projection",
+		TraceID:        "run_terminal_projection",
+		Status:         flruntime.TurnStatusCancelled,
+		ThroughOrdinal: 1,
 		Segments: []flruntime.ThreadTurnProjectionSegment{{
 			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
 			ActivityTimeline: timeline,
 		}},
-	}) {
+	}, false, true) {
 		t.Fatalf("terminal projection returned false")
 	}
 	if len(events) != 0 {
@@ -981,16 +1074,18 @@ func TestFloretTerminalThreadProjectionRejectsMismatchedRun(t *testing.T) {
 	r.assistantBlocks = []any{&persistedMarkdownBlock{Type: "markdown", Content: "canceled"}}
 	r.markDetached()
 
-	if r.applyFloretTerminalThreadProjection(flruntime.ThreadTurnProjection{
-		ThreadID: "thread_terminal_projection",
-		TurnID:   "msg_terminal_projection",
-		RunID:    "other_run",
-		TraceID:  "other_run",
+	if r.applyFloretThreadProjectionInternal(flruntime.ThreadTurnProjection{
+		ThreadID:       "thread_terminal_projection",
+		TurnID:         "msg_terminal_projection",
+		RunID:          "other_run",
+		TraceID:        "other_run",
+		Status:         flruntime.TurnStatusCancelled,
+		ThroughOrdinal: 1,
 		Segments: []flruntime.ThreadTurnProjectionSegment{{
 			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
 			ActivityTimeline: floretProjectionTimeline("other_run", "thread_terminal_projection", "msg_terminal_projection", "exec-1", "terminal.exec"),
 		}},
-	}) {
+	}, false, true) {
 		t.Fatalf("terminal projection with mismatched run returned true")
 	}
 	block, ok := r.assistantBlocks[0].(*persistedMarkdownBlock)
@@ -1045,18 +1140,27 @@ func TestApplyFloretPendingToolSettlementProjectionDoesNotPersistAssistantMessag
 	timeline.Items[0].Status = observation.ActivityStatusCanceled
 	timeline.Items[0].Severity = observation.ActivitySeverityWarning
 	settledProjection := flruntime.ThreadTurnProjection{
-		ThreadID: flruntime.ThreadID(thread.ThreadID),
-		TurnID:   flruntime.TurnID(messageID),
-		RunID:    flruntime.RunID(runID),
-		TraceID:  flruntime.TraceID(runID),
+		ThreadID:       flruntime.ThreadID(thread.ThreadID),
+		TurnID:         flruntime.TurnID(messageID),
+		RunID:          flruntime.RunID(runID),
+		TraceID:        flruntime.TraceID(runID),
+		Status:         flruntime.TurnStatusCancelled,
+		ThroughOrdinal: 2,
 		Segments: []flruntime.ThreadTurnProjectionSegment{{
 			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
 			ActivityTimeline: timeline,
 		}},
 	}
+	settled := flruntime.PendingToolSettlementResult{
+		ThreadID:         flruntime.ThreadID(thread.ThreadID),
+		TurnID:           flruntime.TurnID(messageID),
+		RunID:            flruntime.RunID(runID),
+		ProjectionStatus: flruntime.TurnProjectionStatusReady,
+		Projection:       &settledProjection,
+	}
 	failedCtx, cancel := context.WithCancel(ctx)
 	cancel()
-	err = svc.applyFloretPendingToolSettlementProjection(failedCtx, meta.EndpointID, thread.ThreadID, runID, messageID, settledProjection)
+	err = svc.applyFloretPendingToolSettlementProjection(failedCtx, meta.EndpointID, thread.ThreadID, runID, messageID, settled)
 	if err == nil {
 		t.Fatalf("apply settlement projection succeeded with canceled canonical build context")
 	}
@@ -1070,7 +1174,7 @@ func TestApplyFloretPendingToolSettlementProjectionDoesNotPersistAssistantMessag
 		}
 	}
 
-	err = svc.applyFloretPendingToolSettlementProjection(ctx, meta.EndpointID, thread.ThreadID, runID, messageID, settledProjection)
+	err = svc.applyFloretPendingToolSettlementProjection(ctx, meta.EndpointID, thread.ThreadID, runID, messageID, settled)
 	if err != nil {
 		t.Fatalf("apply settlement projection: %v", err)
 	}
@@ -1126,25 +1230,36 @@ func TestApplyFloretPendingToolSettlementProjectionPublishesTimelineReplacement(
 		Payload:    mustFlowerPayload(FlowerLiveRunStartedPayload{RunID: runID, TurnID: messageID, MessageID: messageID, Status: string(RunStateRunning)}),
 	})
 	activeRun.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
-		ThreadID: flruntime.ThreadID(thread.ThreadID),
-		TurnID:   flruntime.TurnID(messageID),
-		RunID:    flruntime.RunID(runID),
-		TraceID:  flruntime.TraceID(runID),
+		ThreadID:       flruntime.ThreadID(thread.ThreadID),
+		TurnID:         flruntime.TurnID(messageID),
+		RunID:          flruntime.RunID(runID),
+		TraceID:        flruntime.TraceID(runID),
+		Status:         flruntime.TurnStatusWaiting,
+		ThroughOrdinal: 1,
 		Segments: []flruntime.ThreadTurnProjectionSegment{{
 			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
 			ActivityTimeline: floretRunningProjectionTimeline(runID, thread.ThreadID, messageID, "exec-1"),
 		}},
 	})
 
-	err = svc.applyFloretPendingToolSettlementProjection(ctx, meta.EndpointID, thread.ThreadID, runID, messageID, flruntime.ThreadTurnProjection{
-		ThreadID: flruntime.ThreadID(thread.ThreadID),
-		TurnID:   flruntime.TurnID(messageID),
-		RunID:    flruntime.RunID(runID),
-		TraceID:  flruntime.TraceID(runID),
+	settledProjection := flruntime.ThreadTurnProjection{
+		ThreadID:       flruntime.ThreadID(thread.ThreadID),
+		TurnID:         flruntime.TurnID(messageID),
+		RunID:          flruntime.RunID(runID),
+		TraceID:        flruntime.TraceID(runID),
+		Status:         flruntime.TurnStatusCompleted,
+		ThroughOrdinal: 2,
 		Segments: []flruntime.ThreadTurnProjectionSegment{{
 			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
 			ActivityTimeline: floretProjectionTimeline(runID, thread.ThreadID, messageID, "exec-1", "terminal.exec"),
 		}},
+	}
+	err = svc.applyFloretPendingToolSettlementProjection(ctx, meta.EndpointID, thread.ThreadID, runID, messageID, flruntime.PendingToolSettlementResult{
+		ThreadID:         flruntime.ThreadID(thread.ThreadID),
+		TurnID:           flruntime.TurnID(messageID),
+		RunID:            flruntime.RunID(runID),
+		ProjectionStatus: flruntime.TurnProjectionStatusReady,
+		Projection:       &settledProjection,
 	})
 	if err != nil {
 		t.Fatalf("apply settlement projection: %v", err)

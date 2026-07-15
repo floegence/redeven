@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -11,25 +12,29 @@ import (
 )
 
 func (r *run) applyFloretThreadProjection(projection flruntime.ThreadTurnProjection) bool {
-	return r.applyFloretThreadProjectionInternal(projection, true, false, true)
+	return r.applyFloretThreadProjectionInternal(projection, true, false)
 }
 
-func (r *run) applyFloretTerminalThreadProjection(projection flruntime.ThreadTurnProjection) bool {
-	return r.applyFloretThreadProjectionInternal(projection, false, true, true)
-}
-
-func (r *run) applyFloretThreadProjectionInternal(projection flruntime.ThreadTurnProjection, emit bool, allowDetached bool, requireIdentity bool) bool {
+func (r *run) applyFloretThreadProjectionInternal(projection flruntime.ThreadTurnProjection, emit bool, allowDetached bool) bool {
 	if r == nil {
 		return false
 	}
 	if !allowDetached && !r.acceptsPresentationUpdates() {
 		return false
 	}
-	if !r.floretThreadProjectionMatchesRun(projection, requireIdentity) {
+	if err := r.validateFloretThreadProjection(projection); err != nil {
+		r.rejectFloretContract("turn_projection", err)
+		return false
+	}
+	projectionKey := floretProjectionIdentityKey(projection)
+	r.muFloretProjection.Lock()
+	if projection.ThroughOrdinal <= r.floretProjectionOrdinal[projectionKey] {
+		r.muFloretProjection.Unlock()
 		return false
 	}
 	blocks, valid := r.flowerBlocksFromFloretThreadProjectionChecked(projection)
 	if !valid {
+		r.muFloretProjection.Unlock()
 		return false
 	}
 	if len(blocks) == 0 {
@@ -46,10 +51,14 @@ func (r *run) applyFloretThreadProjectionInternal(projection flruntime.ThreadTur
 	if r.assistantCreatedAtUnixMs == 0 {
 		r.assistantCreatedAtUnixMs = time.Now().UnixMilli()
 	}
-	blocks = r.blocksWithTerminalLifecycleFloorLocked(blocks)
 	oldLen := len(r.assistantBlocks)
 	r.assistantBlocks = blocks
 	r.muAssistant.Unlock()
+	if r.floretProjectionOrdinal == nil {
+		r.floretProjectionOrdinal = map[string]int64{}
+	}
+	r.floretProjectionOrdinal[projectionKey] = projection.ThroughOrdinal
+	r.muFloretProjection.Unlock()
 	if !emit {
 		return true
 	}
@@ -67,134 +76,72 @@ func (r *run) applyFloretThreadProjectionInternal(projection flruntime.ThreadTur
 	return true
 }
 
-func (r *run) markTerminalSettlementProjectionApplied() {
+func (r *run) validateFloretThreadProjection(projection flruntime.ThreadTurnProjection) error {
 	if r == nil {
-		return
+		return errors.New("nil run")
 	}
-	r.terminalSettlement.Store(true)
+	if !r.floretThreadProjectionMatchesRun(projection) {
+		return errors.New("Floret turn projection identity mismatch")
+	}
+	return validateFloretThreadProjectionContract(projection)
 }
 
-func (r *run) hasTerminalSettlementProjectionApplied() bool {
-	return r != nil && r.terminalSettlement.Load()
-}
-
-func (r *run) blocksWithTerminalLifecycleFloorLocked(blocks []any) []any {
-	if r == nil || len(blocks) == 0 || len(r.assistantBlocks) == 0 {
-		return blocks
+func validateFloretThreadProjectionContract(projection flruntime.ThreadTurnProjection) error {
+	if strings.TrimSpace(string(projection.ThreadID)) == "" || strings.TrimSpace(string(projection.TurnID)) == "" || strings.TrimSpace(string(projection.RunID)) == "" {
+		return errors.New("Floret turn projection identity is incomplete")
 	}
-	floor := r.terminalLifecycleFloorItemsLocked()
-	if len(floor) == 0 {
-		return blocks
+	if projection.ThroughOrdinal <= 0 {
+		return fmt.Errorf("Floret turn projection ordinal must be positive, got %d", projection.ThroughOrdinal)
 	}
-
-	var out []any
-	for idx, raw := range blocks {
-		block, ok := activityTimelineBlockFromValue(raw)
-		if !ok || len(block.Items) == 0 {
-			continue
-		}
-		timeline := observation.CloneActivityTimeline(&block.ActivityTimeline)
-		if timeline == nil {
-			continue
-		}
-		changed := false
-		for itemIdx, item := range timeline.Items {
-			key := terminalLifecycleItemKey(item)
-			if key == "" || !terminalActivityStatusCanBeDowngraded(item.Status) {
-				continue
-			}
-			preserved, ok := floor[key]
-			if !ok {
-				continue
-			}
-			timeline.Items[itemIdx] = preserved
-			changed = true
-		}
-		if !changed {
-			continue
-		}
-		timeline.Summary = observation.RebuildActivitySummary(*timeline)
-		block.ActivityTimeline = *timeline
-		if out == nil {
-			out = make([]any, len(blocks))
-			copy(out, blocks)
-		}
-		out[idx] = block
-	}
-	if out == nil {
-		return blocks
-	}
-	return out
-}
-
-func (r *run) terminalLifecycleFloorItemsLocked() map[string]observation.ActivityItem {
-	if r == nil {
-		return nil
-	}
-	out := map[string]observation.ActivityItem{}
-	for _, raw := range r.assistantBlocks {
-		block, ok := activityTimelineBlockFromValue(raw)
-		if !ok || len(block.Items) == 0 {
-			continue
-		}
-		timeline := observation.CloneActivityTimeline(&block.ActivityTimeline)
-		if timeline == nil {
-			continue
-		}
-		for _, item := range timeline.Items {
-			key := terminalLifecycleItemKey(item)
-			if key == "" || !terminalActivityStatusIsTerminal(item.Status) {
-				continue
-			}
-			out[key] = item
-		}
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-func terminalLifecycleItemKey(item observation.ActivityItem) string {
-	if strings.TrimSpace(item.ToolName) != "terminal.exec" {
-		return ""
-	}
-	if toolID := strings.TrimSpace(item.ToolID); toolID != "" {
-		return toolID
-	}
-	itemID := strings.TrimSpace(item.ItemID)
-	if strings.HasPrefix(itemID, "tool:") {
-		itemID = strings.TrimSpace(strings.TrimPrefix(itemID, "tool:"))
-	}
-	return itemID
-}
-
-func terminalActivityStatusIsTerminal(status observation.ActivityStatus) bool {
-	switch status {
-	case observation.ActivityStatusSuccess, observation.ActivityStatusError, observation.ActivityStatusCanceled:
-		return true
+	switch projection.Status {
+	case flruntime.TurnStatusCompleted, flruntime.TurnStatusWaiting, flruntime.TurnStatusFailed, flruntime.TurnStatusCancelled:
 	default:
-		return false
+		return fmt.Errorf("unsupported Floret turn projection status %q", projection.Status)
 	}
+	for index, segment := range projection.Segments {
+		switch segment.Kind {
+		case flruntime.ThreadTurnProjectionSegmentAssistantText:
+		case flruntime.ThreadTurnProjectionSegmentActivityTimeline:
+			if segment.ActivityTimeline == nil {
+				return fmt.Errorf("Floret turn projection segment %d is missing activity timeline", index)
+			}
+			if err := observation.ValidateActivityTimeline(*segment.ActivityTimeline); err != nil {
+				return fmt.Errorf("invalid Floret activity timeline at segment %d: %w", index, err)
+			}
+		case flruntime.ThreadTurnProjectionSegmentControlSignal:
+			if segment.Signal == nil && strings.TrimSpace(segment.Text) == "" {
+				return fmt.Errorf("Floret turn projection segment %d is missing control signal content", index)
+			}
+			if segment.Signal != nil {
+				switch strings.TrimSpace(segment.Signal.Name) {
+				case "ask_user", "task_complete":
+				default:
+					return fmt.Errorf("unsupported Floret control signal %q at segment %d", segment.Signal.Name, index)
+				}
+			}
+		default:
+			return fmt.Errorf("unsupported Floret turn projection segment kind %q", segment.Kind)
+		}
+	}
+	return nil
 }
 
-func terminalActivityStatusCanBeDowngraded(status observation.ActivityStatus) bool {
-	switch status {
-	case observation.ActivityStatusPending, observation.ActivityStatusRunning, observation.ActivityStatusWaiting:
-		return true
-	default:
-		return false
-	}
+func floretProjectionIdentityKey(projection flruntime.ThreadTurnProjection) string {
+	return strings.Join([]string{
+		strings.TrimSpace(string(projection.ThreadID)),
+		strings.TrimSpace(string(projection.TurnID)),
+		strings.TrimSpace(string(projection.RunID)),
+	}, "\x00")
 }
 
-func (r *run) floretThreadProjectionMatchesRun(projection flruntime.ThreadTurnProjection, requireIdentity bool) bool {
+func (r *run) floretThreadProjectionMatchesRun(projection flruntime.ThreadTurnProjection) bool {
 	if r == nil {
 		return false
 	}
 	runID := strings.TrimSpace(string(projection.RunID))
 	threadID := strings.TrimSpace(string(projection.ThreadID))
 	turnID := strings.TrimSpace(string(projection.TurnID))
-	if requireIdentity && (runID == "" || threadID == "" || turnID == "") {
+	if runID == "" || threadID == "" || turnID == "" {
 		return false
 	}
 	if projectionIdentityMatchesRun(runID, threadID, turnID, strings.TrimSpace(r.id), strings.TrimSpace(r.threadID), strings.TrimSpace(r.messageID)) {
@@ -228,16 +175,18 @@ func (r *run) flowerBlocksFromFloretThreadProjectionChecked(projection flruntime
 			}
 			blocks = append(blocks, &persistedMarkdownBlock{Type: "markdown", Content: segment.Text})
 		case flruntime.ThreadTurnProjectionSegmentActivityTimeline:
-			if segment.ActivityTimeline == nil || len(segment.ActivityTimeline.Items) == 0 {
-				continue
-			}
-			timeline := r.normalizeActivityTimeline(*segment.ActivityTimeline)
-			if !r.validateActivityTimelineForProjection(timeline, "floret_thread_projection") {
+			if segment.ActivityTimeline == nil {
 				return nil, false
 			}
+			if err := observation.ValidateActivityTimeline(*segment.ActivityTimeline); err != nil {
+				return nil, false
+			}
+			timeline := *observation.CloneActivityTimeline(segment.ActivityTimeline)
 			blocks = append(blocks, r.newActivityTimelineBlock(timeline, r.activityTimelineFileActions(timeline)))
 		case flruntime.ThreadTurnProjectionSegmentControlSignal:
 			continue
+		default:
+			return nil, false
 		}
 	}
 	return blocks, true
@@ -289,17 +238,32 @@ func (s *Service) runForFloretSettlement(endpointID string, threadID string, run
 	return r
 }
 
-func (s *Service) applyFloretPendingToolSettlementProjection(ctx context.Context, endpointID string, threadID string, runID string, messageID string, projection flruntime.ThreadTurnProjection) error {
+func (s *Service) applyFloretPendingToolSettlementProjection(ctx context.Context, endpointID string, threadID string, runID string, messageID string, settled flruntime.PendingToolSettlementResult) error {
 	if s == nil {
 		return errors.New("nil service")
 	}
-	if active := s.runForFloretSettlement(endpointID, threadID, runID); active != nil {
-		active.markTerminalSettlementProjectionApplied()
-		if active.acceptsPresentationUpdates() {
-			active.applyFloretThreadProjection(projection)
-		} else {
-			active.applyFloretTerminalThreadProjection(projection)
+	if err := settled.ValidateProjection(); err != nil {
+		return fmt.Errorf("invalid pending tool settlement projection outcome: %w", err)
+	}
+	if settled.ProjectionStatus == flruntime.TurnProjectionStatusUnavailable {
+		if active := s.runForFloretSettlement(endpointID, threadID, runID); active != nil {
+			active.persistRunEvent("floret.projection.unavailable", RealtimeStreamKindLifecycle, map[string]any{
+				"source": "pending_tool_settlement",
+				"error":  sanitizeLogText(settled.ProjectionError, 240),
+			})
 		}
+		s.broadcastThreadSummary(endpointID, threadID)
+		if s.threadMgr != nil {
+			s.threadMgr.Wake(endpointID, threadID)
+		}
+		return nil
+	}
+	projection := settled.Projection
+	if projection == nil {
+		return errors.New("ready pending tool settlement is missing projection")
+	}
+	if active := s.runForFloretSettlement(endpointID, threadID, runID); active != nil {
+		active.applyFloretThreadProjectionInternal(*projection, active.acceptsPresentationUpdates(), true)
 	}
 	if err := s.publishFlowerCanonicalTimelineReplacement(ctx, endpointID, threadID, runID, messageID, "terminal_settlement"); err != nil {
 		return err

@@ -147,6 +147,7 @@ type Service struct {
 	terminalProcesses  *terminalProcessManager
 
 	threadTitleCoordinator *autoThreadTitleCoordinator
+	threadForkBroadcastMu  sync.Mutex
 	maintenanceStopCh      chan struct{}
 	maintenanceDoneCh      chan struct{}
 	compactionScheduled    bool
@@ -706,7 +707,7 @@ func (s *Service) updateThreadLastMessagePreviewFromRun(ctx context.Context, db 
 	return db.UpdateThreadLastMessagePreview(pctx, endpointID, threadID, preview, atUnixMs, updatedByID, updatedByEmail)
 }
 
-func (s *Service) openFloretMaintenanceHost() (flruntime.ThreadMaintenanceHost, error) {
+func (s *Service) openFloretMaintenanceHost() (*flruntime.ThreadMaintenanceHost, error) {
 	if s == nil {
 		return nil, errors.New("nil service")
 	}

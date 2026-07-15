@@ -9,7 +9,7 @@ import (
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore"
-	threadstoreCurrentSchemaVersion = 37
+	threadstoreCurrentSchemaVersion = 38
 )
 
 // CurrentSchemaVersion returns the latest threadstore schema version expected by migrations.
@@ -65,6 +65,7 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 			{FromVersion: 34, ToVersion: 35, Apply: migrateThreadstoreToV35},
 			{FromVersion: 35, ToVersion: 36, Apply: migrateThreadstoreToV36},
 			{FromVersion: 36, ToVersion: 37, Apply: migrateThreadstoreToV37},
+			{FromVersion: 37, ToVersion: 38, Apply: migrateThreadstoreToV38},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -294,6 +295,34 @@ func migrateThreadstoreToV36(tx *sql.Tx) error {
 
 func migrateThreadstoreToV37(tx *sql.Tx) error {
 	return nil
+}
+
+func migrateThreadstoreToV38(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+CREATE TABLE IF NOT EXISTS ai_thread_fork_operations (
+  operation_id TEXT PRIMARY KEY,
+  endpoint_id TEXT NOT NULL,
+  source_thread_id TEXT NOT NULL,
+  destination_thread_id TEXT NOT NULL UNIQUE,
+  request_fingerprint TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('pending', 'committed', 'failed')),
+  snapshot_schema_version INTEGER NOT NULL,
+  snapshot_json TEXT NOT NULL,
+  floret_result_json TEXT NOT NULL DEFAULT '',
+  retry_count INTEGER NOT NULL DEFAULT 0,
+  error_code TEXT NOT NULL DEFAULT '',
+  error_message TEXT NOT NULL DEFAULT '',
+  source_broadcasted_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  destination_broadcasted_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  created_at_unix_ms INTEGER NOT NULL,
+  updated_at_unix_ms INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ai_thread_fork_operations_status_updated
+ON ai_thread_fork_operations(status, updated_at_unix_ms ASC, operation_id ASC);
+CREATE INDEX IF NOT EXISTS idx_ai_thread_fork_operations_source
+ON ai_thread_fork_operations(endpoint_id, source_thread_id, created_at_unix_ms DESC);
+`)
+	return err
 }
 
 func ensureAIThreadsModelIDTx(tx *sql.Tx) error {
@@ -1144,6 +1173,7 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		"ai_delegated_approval_events",
 		"ai_delegated_approval_outbox",
 		"ai_delegated_approval_idempotency",
+		"ai_thread_fork_operations",
 	}
 	for _, tableName := range requiredTables {
 		exists, err := sqliteutil.TableExistsTx(tx, tableName)
@@ -1301,6 +1331,13 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 			"actor_scope", "idempotency_key", "endpoint_id", "parent_thread_id",
 			"action_id", "ref_hash", "approved", "response_json", "created_at_unix_ms",
 		},
+		"ai_thread_fork_operations": {
+			"operation_id", "endpoint_id", "source_thread_id", "destination_thread_id",
+			"request_fingerprint", "status", "snapshot_schema_version", "snapshot_json",
+			"floret_result_json", "retry_count", "error_code", "error_message",
+			"source_broadcasted_at_unix_ms", "destination_broadcasted_at_unix_ms",
+			"created_at_unix_ms", "updated_at_unix_ms",
+		},
 	}
 	for tableName, columns := range requiredColumns {
 		for _, columnName := range columns {
@@ -1359,6 +1396,8 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		"idx_ai_delegated_approval_events_action",
 		"idx_ai_delegated_approval_outbox_pending",
 		"idx_ai_delegated_approval_idempotency_action",
+		"idx_ai_thread_fork_operations_status_updated",
+		"idx_ai_thread_fork_operations_source",
 	}
 	for _, indexName := range requiredIndexes {
 		exists, err := sqliteutil.IndexExistsTx(tx, indexName)

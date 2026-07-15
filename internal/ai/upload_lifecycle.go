@@ -312,10 +312,24 @@ func (s *Service) runBackgroundMaintenance(reason string) {
 		if s.log != nil {
 			s.log.Warn("ai upload maintenance failed", "reason", reason, "error", err)
 		}
-		return
-	}
-	if n > 0 && s.log != nil {
+	} else if n > 0 && s.log != nil {
 		s.log.Info("ai upload maintenance reclaimed uploads", "reason", reason, "count", n)
+	}
+	forks, forkErr := s.replayPendingThreadForkOperations(ctx)
+	if forkErr != nil {
+		if s.log != nil {
+			s.log.Warn("ai thread fork replay failed", "reason", reason, "error", forkErr)
+		}
+	} else if forks > 0 && s.log != nil {
+		s.log.Info("ai thread fork replay completed", "reason", reason, "count", forks)
+	}
+	broadcasts, broadcastErr := s.publishUnbroadcastThreadForkOperations(ctx)
+	if broadcastErr != nil {
+		if s.log != nil {
+			s.log.Warn("ai thread fork broadcast recovery failed", "reason", reason, "error", broadcastErr)
+		}
+	} else if broadcasts > 0 && s.log != nil {
+		s.log.Info("ai thread fork broadcast recovery completed", "reason", reason, "count", broadcasts)
 	}
 }
 

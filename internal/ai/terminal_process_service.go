@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -170,6 +171,12 @@ func (s *Service) handleTerminalProcessDone(snapshot terminalProcessSnapshot) er
 		}
 		return err
 	}
+	if err := settled.ValidateProjection(); err != nil {
+		if active := s.runForFloretSettlement(snapshot.EndpointID, snapshot.ThreadID, snapshot.RunID); active != nil {
+			active.rejectFloretContract("pending_tool_settlement_projection_outcome", err)
+		}
+		return fmt.Errorf("invalid Floret pending tool settlement projection outcome: %w", err)
+	}
 	startedAt := snapshot.StartedAtUnixMs
 	if startedAt <= 0 {
 		startedAt = time.Now().UnixMilli()
@@ -212,7 +219,7 @@ func (s *Service) handleTerminalProcessDone(snapshot terminalProcessSnapshot) er
 		}
 		return err
 	}
-	if err := s.applyFloretPendingToolSettlementProjection(context.Background(), snapshot.EndpointID, snapshot.ThreadID, snapshot.RunID, snapshot.TurnID, settled.Projection); err != nil {
+	if err := s.applyFloretPendingToolSettlementProjection(context.Background(), snapshot.EndpointID, snapshot.ThreadID, snapshot.RunID, snapshot.TurnID, settled); err != nil {
 		if s.log != nil {
 			s.log.Warn("ai: apply terminal settlement projection failed", "run_id", snapshot.RunID, "tool_id", snapshot.ToolID, "error", err)
 		}

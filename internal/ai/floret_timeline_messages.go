@@ -233,7 +233,7 @@ func (s *Service) loadThreadTimelineMessages(ctx context.Context, endpointID str
 		}
 		projectionTurns = append(projectionTurns, projectionTurn{turn: turn, run: run, rawID: turnID})
 	}
-	var host flruntime.ThreadMaintenanceHost
+	var host *flruntime.ThreadMaintenanceHost
 	if len(projectionTurns) > 0 {
 		var hostErr error
 		host, hostErr = s.openFloretMaintenanceHost()
@@ -243,18 +243,12 @@ func (s *Service) loadThreadTimelineMessages(ctx context.Context, endpointID str
 		defer host.Close()
 	}
 	for _, candidate := range projectionTurns {
-		raw, createdAt, ok, err := s.floretProjectionMessageJSON(ctx, host, endpointID, threadID, candidate.turn, candidate.run)
+		raw, createdAt, ok, err := s.floretProjectionMessageJSON(ctx, host, endpointID, threadID, candidate.turn)
 		if err != nil {
 			return nil, err
 		}
 		if !ok {
-			raw, createdAt, ok, err = missingTerminalProjectionMessageJSON(candidate.turn, candidate.run)
-			if err != nil {
-				return nil, err
-			}
-			if !ok {
-				return nil, fmt.Errorf("missing Floret projection for terminal turn %q", candidate.rawID)
-			}
+			continue
 		}
 		items = append(items, threadTimelineMessage{
 			RowID:       floretSyntheticRowIDBase + candidate.turn.ID,
@@ -340,7 +334,7 @@ func loadAllThreadTimelineConversationTurns(ctx context.Context, db *threadstore
 	return out, nil
 }
 
-func (s *Service) floretProjectionMessageJSON(ctx context.Context, host flruntime.ThreadMaintenanceHost, endpointID string, threadID string, turn threadstore.ConversationTurn, runRecord *threadstore.RunRecord) (json.RawMessage, int64, bool, error) {
+func (s *Service) floretProjectionMessageJSON(ctx context.Context, host floretProjectionReader, endpointID string, threadID string, turn threadstore.ConversationTurn) (json.RawMessage, int64, bool, error) {
 	if host == nil {
 		return nil, 0, false, nil
 	}
@@ -361,13 +355,12 @@ func (s *Service) floretProjectionMessageJSON(ctx context.Context, host flruntim
 		return nil, 0, false, err
 	}
 	createdAt := turn.CreatedAtUnixMs
-	if createdAt <= 0 && !projection.Projected.IsZero() {
-		createdAt = projection.Projected.UnixMilli()
+	if createdAt <= 0 && !projection.ProjectedAt.IsZero() {
+		createdAt = projection.ProjectedAt.UnixMilli()
 	}
 	if createdAt <= 0 {
 		createdAt = time.Now().UnixMilli()
 	}
-	status := snapshotStatusForFloretProjection(projection, runRecord)
 	projectionRun := &run{
 		id:                       runID,
 		endpointID:               strings.TrimSpace(endpointID),
@@ -376,7 +369,20 @@ func (s *Service) floretProjectionMessageJSON(ctx context.Context, host flruntim
 		service:                  s,
 		assistantCreatedAtUnixMs: createdAt,
 	}
-	blocks := projectionRun.flowerBlocksFromFloretThreadProjection(projection)
+	if err := projectionRun.validateFloretThreadProjection(projection); err != nil {
+		if s.log != nil {
+			s.log.Warn("ai: Floret contract rejected", "contract_kind", "turn_projection_history", "endpoint_id", strings.TrimSpace(endpointID), "thread_id", strings.TrimSpace(threadID), "run_id", runID, "error", sanitizeLogText(err.Error(), 240))
+		}
+		return nil, 0, false, nil
+	}
+	status, err := snapshotStatusForFloretProjection(projection)
+	if err != nil {
+		return nil, 0, false, err
+	}
+	blocks, valid := projectionRun.flowerBlocksFromFloretThreadProjectionChecked(projection)
+	if !valid {
+		return nil, 0, false, nil
+	}
 	if len(blocks) == 0 {
 		return nil, 0, false, nil
 	}
@@ -398,105 +404,18 @@ func (s *Service) floretProjectionMessageJSON(ctx context.Context, host flruntim
 	return sanitized, createdAt, true, nil
 }
 
-func missingTerminalProjectionMessageJSON(turn threadstore.ConversationTurn, runRecord *threadstore.RunRecord) (json.RawMessage, int64, bool, error) {
-	if runRecord == nil {
-		return nil, 0, false, nil
-	}
-	turnID := strings.TrimSpace(turn.TurnID)
-	if turnID == "" {
-		return nil, 0, false, nil
-	}
-	status := snapshotStatusForRunState(runRecord)
-	switch NormalizeRunState(runRecord.State) {
-	case RunStateFailed, RunStateCanceled, RunStateTimedOut:
-	default:
-		return nil, 0, false, nil
-	}
-	createdAt := turn.CreatedAtUnixMs
-	if createdAt <= 0 {
-		createdAt = runRecord.EndedAtUnixMs
-	}
-	if createdAt <= 0 {
-		createdAt = runRecord.StartedAtUnixMs
-	}
-	if createdAt <= 0 {
-		createdAt = time.Now().UnixMilli()
-	}
-	text := terminalProjectionDiagnosticText(runRecord)
-	raw, err := json.Marshal(persistedMessage{
-		ID:        turnID,
-		Role:      "assistant",
-		Status:    status,
-		Timestamp: createdAt,
-		Error:     text,
-		Blocks: []any{&persistedMarkdownBlock{
-			Type:    "markdown",
-			Content: text,
-		}},
-	})
-	if err != nil {
-		return nil, 0, false, err
-	}
-	sanitized, err := SanitizeActivityTimelineMessageJSON(string(raw))
-	if err != nil {
-		return nil, 0, false, err
-	}
-	if len(sanitized) == 0 {
-		return nil, 0, false, nil
-	}
-	return sanitized, createdAt, true, nil
-}
-
-func terminalProjectionDiagnosticText(runRecord *threadstore.RunRecord) string {
-	if runRecord == nil {
-		return "Flower could not finish this reply."
-	}
-	code := strings.TrimSpace(runRecord.ErrorCode)
-	fallback := strings.TrimSpace(runRecord.ErrorMessage)
-	if code != "" || fallback != "" {
-		message := userFacingRunError(code, fallback)
-		if strings.TrimSpace(message) != "" {
-			return strings.TrimSpace(message)
-		}
-	}
-	switch NormalizeRunState(runRecord.State) {
-	case RunStateCanceled:
-		return "Flower stopped before this reply finished."
-	case RunStateTimedOut:
-		return "Flower timed out before this reply finished."
-	default:
-		return "Flower could not finish this reply."
-	}
-}
-
-func snapshotStatusForRunState(run *threadstore.RunRecord) string {
-	if run == nil {
-		return "complete"
-	}
-	switch NormalizeRunState(run.State) {
-	case RunStateCanceled:
-		return "canceled"
-	case RunStateFailed, RunStateTimedOut:
-		return "error"
-	case RunStateAccepted, RunStateRunning, RunStateWaitingApproval, RunStateRecovering, RunStateFinalizing, RunStateWaitingUser:
-		return "streaming"
-	default:
-		return "complete"
-	}
-}
-
-func snapshotStatusForFloretProjection(projection flruntime.ThreadTurnProjection, run *threadstore.RunRecord) string {
+func snapshotStatusForFloretProjection(projection flruntime.ThreadTurnProjection) (string, error) {
 	switch projection.Status {
 	case flruntime.TurnStatusCancelled:
-		return "canceled"
+		return "canceled", nil
 	case flruntime.TurnStatusFailed:
-		return "error"
+		return "error", nil
 	case flruntime.TurnStatusWaiting:
-		return "streaming"
+		return "streaming", nil
 	case flruntime.TurnStatusCompleted:
-		return "complete"
+		return "complete", nil
 	default:
-		return snapshotStatusForRunState(run)
+		return "", fmt.Errorf("unsupported Floret turn projection status %q", projection.Status)
 	}
 }
 
