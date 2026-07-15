@@ -26,6 +26,23 @@ import {
 import { isPluralMessage, type TranslationLeaf, type TranslationTree } from './messageTypes';
 import { enUS } from './locales/en-US';
 
+type ReadmeLocaleManifest = Readonly<{
+  locales: readonly Readonly<{
+    locale: string;
+    native_name: string;
+    english_name: string;
+  }>[];
+  quality_rules: Readonly<{
+    zh_tw_forbidden_simplified_characters: string;
+    forbidden_generic_english_terms: readonly string[];
+  }>;
+}>;
+
+const README_LOCALE_MANIFEST = JSON.parse(fs.readFileSync(
+  path.resolve(__dirname, '../../../../assets/readme/locales.json'),
+  'utf8',
+)) as ReadmeLocaleManifest;
+
 const DESKTOP_TRANSLATION_ROOTS = new Set(
   Object.keys(enUS).filter((key) => key !== 'plural'),
 );
@@ -93,6 +110,23 @@ function collectLiteralTranslationKeysFromSource(root: string): ReadonlyMap<stri
 }
 
 describe('Desktop shared i18n locale metadata', () => {
+  it('keeps README locales aligned with the Desktop language switcher', () => {
+    expect(README_LOCALE_MANIFEST.locales.map((locale) => locale.locale)).toEqual([
+      ...REDEVEN_SUPPORTED_LOCALES,
+    ]);
+    for (const locale of REDEVEN_SUPPORTED_LOCALES) {
+      const readmeLocale = README_LOCALE_MANIFEST.locales.find((entry) => entry.locale === locale);
+      expect(readmeLocale).toMatchObject({
+        native_name: REDEVEN_LOCALE_META[locale].native_name,
+        english_name: REDEVEN_LOCALE_META[locale].english_name,
+      });
+    }
+    expect(README_LOCALE_MANIFEST.quality_rules.zh_tw_forbidden_simplified_characters)
+      .toBe(REDEVEN_I18N_ZH_TW_FORBIDDEN_SIMPLIFIED_CHARACTERS);
+    expect(README_LOCALE_MANIFEST.quality_rules.forbidden_generic_english_terms)
+      .toEqual([...REDEVEN_I18N_FORBIDDEN_GENERIC_ENGLISH_TERMS]);
+  });
+
   it('defines ten real locales plus the system preference in stable order', () => {
     expect(REDEVEN_SUPPORTED_LOCALES).toEqual([
       'en-US',

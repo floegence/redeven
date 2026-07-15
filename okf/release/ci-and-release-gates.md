@@ -1,25 +1,25 @@
 ---
 type: Release Contract
 title: CI and release gates
-description: Redeven release confidence comes from shell checks, OKF validation, UI checks, ReDevPlugin integration gates, assets, Go tests, and lint.
+description: Redeven release confidence comes from README localization checks, shell checks, OKF validation, UI checks, ReDevPlugin integration gates, assets, Go tests, and lint.
 tags: [release, ci, quality, okf]
-timestamp: 2026-07-07T00:00:00Z
+timestamp: 2026-07-14T00:00:00Z
 ---
 
 Redeven keeps CI and local release checks aligned around source validation,
-generated asset determinism, ReDevPlugin dependency boundaries, UI behavior,
-embedded assets, Go tests, and lint. OKF is part of that gate, not optional
-documentation.
+README localization parity, generated asset determinism, ReDevPlugin dependency
+boundaries, UI behavior, embedded assets, Go tests, and lint. OKF is part of
+that gate, not optional documentation.
 
 # Mechanism
 
 CI has a dedicated OKF bundle check that validates source integrity and verifies
 checked-in dist files. The main check installs Go, Node, corepack,
-golangci-lint, gitleaks, and ripgrep, then runs shell syntax checks,
-third-party notice validation, open-source hygiene, release note generator
-tests, Runtime Service compatibility checks, embedded asset builds, the
-ReDevPlugin integration gate, Gateway protocol contract checks, the Floret
-dependency boundary guard, Flower protocol checks, Flower UI behavior
+golangci-lint, gitleaks, and ripgrep, then runs the README localization contract,
+shell syntax checks, third-party notice validation, open-source hygiene, release
+note generator tests, Runtime Service compatibility checks, embedded asset
+builds, the ReDevPlugin integration gate, Gateway protocol contract checks, the
+Floret dependency boundary guard, Flower protocol checks, Flower UI behavior
 contracts, UI lint, Desktop checks, Go tests, and golangci-lint. Embedded asset
 builds intentionally precede focused Go gates that import Env App or Code App
 embed packages because fresh checkouts do not contain ignored UI `dist/`
@@ -27,6 +27,17 @@ directories. Before the Flower UI gate, CI installs the lockfile-selected
 Playwright Chromium runtime and its Linux dependencies so the committed browser
 contract runs on a fresh GitHub runner instead of depending on a pre-populated
 browser cache.
+
+The canonical English `README.md` and every product-supported
+`README.<locale>.md` are bound by `assets/readme/locales.json`. The lightweight
+Node contract verifies locale order, language navigation, section anchors,
+heading and link parity, local targets, executable command literals, protected
+terms, fixed English domain-term forms, Traditional Chinese character rules, content hashes, and the repository
+Markdown allowlist. Desktop and Env App locale tests independently bind the
+manifest to their language switchers. Feature work may carry translations with
+`pending_subagent_review`, but the CI invocation uses `--require-reviewed`, so
+no translation can enter `main` without current source/content hashes and an
+independent locale-review subagent approval recorded in the manifest.
 
 ReDevPlugin consumption is a published dependency gate, not a source sync. The
 dependency boundary script rejects `../redevplugin`, `go.work`, Go `replace`,
@@ -106,6 +117,12 @@ removed `internal/okf` or knowledge paths. Gateway protocol drift must fail
 before Gateway binaries are packaged because `spec/openapi/gateway-v1.yaml` is
 the active source contract for the Gateway HTTP API.
 
+Localized README files are public product documentation, not an alternate
+knowledge corpus. English remains canonical, localized files cannot introduce
+locale-only product or architecture claims, and the exact machine-consumed
+`SKILL.md` exception declared by the README manifest does not permit general
+Markdown documentation outside OKF.
+
 Unreleased ReDevPlugin behavior is not a valid Redeven integration target.
 Feature branches may explore adapters against parallel upstream work, but
 committed Redeven code and release validation must consume published
@@ -127,7 +144,7 @@ Flower lifecycle fixes that belong to Floret must ship as a published
 [5] redeven:.github/workflows/ci-check.yml:109 - CI runs the ReDevPlugin integration gate after embedded assets are generated.
 [6] redeven:.github/workflows/ci-check.yml:116 - CI runs the Floret dependency boundary guard before Flower protocol and UI checks.
 [7] redeven:.github/workflows/ci-check.yml:122 - CI installs the lockfile-selected Playwright Chromium runtime before Flower UI browser contracts.
-[8] redeven:AGENTS.md:714 - Repository local quality gates include OKF integrity, dist verification, assets, Go tests, and golangci-lint.
+[8] redeven:AGENTS.md:736 - Repository local quality gates include README review enforcement, OKF integrity, dist verification, assets, Go tests, and golangci-lint.
 [9] redeven:scripts/check_redevplugin_dependency_boundary.sh:1 - The local boundary script rejects local ReDevPlugin wiring and copied platform-core paths.
 [10] redeven:scripts/check_floret_dependency_boundary.sh:1 - The Floret boundary script rejects local Floret wiring, internal imports, and direct schema access.
 [11] redeven:scripts/check_plugin_integration.sh:44 - The integration gate requires embedded UI asset directories before Go embed tests.
@@ -142,3 +159,7 @@ Flower lifecycle fixes that belong to Floret must ship as a published
 [20] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx:807 - EnvAppShell tests bind plugin center and plugin surface Activity placement.
 [21] redeven:internal/codeapp/appserver/server_test.go:733 - AppServer tests bind Env App management delegation to the plugin handler.
 [22] redeven:internal/codeapp/appserver/server_test.go:833 - AppServer tests bind plugin sandbox route delegation to the plugin handler.
+[23] redeven:.github/workflows/ci-check.yml:52 - CI runs README localization unit tests and requires completed locale-review subagent approvals.
+[24] redeven:scripts/check_readme_localizations.mjs:1 - The README contract validates structure, links, literals, hashes, language quality, and review state.
+[25] redeven:assets/readme/locales.json:1 - The README locale manifest declares language order, file mappings, review hashes, and the shared visual exception.
+[26] redeven:AGENTS.md:201 - Repository rules define English canonical ownership and the README locale-review subagent gate.

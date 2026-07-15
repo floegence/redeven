@@ -4,6 +4,21 @@
 
 # Redeven
 
+<!-- readme-locales:start -->
+<p align="center">
+  <strong>English</strong> |
+  <a href="README.zh-CN.md">简体中文</a> |
+  <a href="README.zh-TW.md">繁體中文</a> |
+  <a href="README.ja-JP.md">日本語</a> |
+  <a href="README.ko-KR.md">한국어</a> |
+  <a href="README.de-DE.md">Deutsch</a> |
+  <a href="README.fr-FR.md">Français</a> |
+  <a href="README.es-ES.md">Español</a> |
+  <a href="README.pt-BR.md">Português do Brasil</a> |
+  <a href="README.ru-RU.md">Русский</a>
+</p>
+<!-- readme-locales:end -->
+
 <p align="center">
   <strong>Your computers &amp; servers, in one browser tab.</strong><br>
   Terminal, file browser, IDE, and AI —
@@ -25,6 +40,9 @@
   <a href="https://github.com/floegence/redeven/releases"><img alt="Releases" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
 </p>
 
+<!-- readme-section:what-is-redeven -->
+<a id="what-is-redeven"></a>
+
 ## What is Redeven?
 
 Redeven is a single binary that brings your computers and servers into one browser tab. Instead of juggling SSH terminals, file browsers, monitoring dashboards, port forwarding, and IDE windows, you get one unified workspace on the hardware you already control.
@@ -37,9 +55,15 @@ It runs on your machine, your remote servers, or any reachable SSH host. Your fi
 
 ![Redeven architecture overview](assets/readme/architecture-overview.png)
 
+<!-- readme-section:quick-start -->
+<a id="quick-start"></a>
+
 ## Quick start
 
 Two paths to get started: Desktop (recommended for most users) or CLI.
+
+<!-- readme-section:desktop-app -->
+<a id="desktop-app"></a>
 
 ### Desktop App
 
@@ -48,6 +72,9 @@ Two paths to get started: Desktop (recommended for most users) or CLI.
 3. Start working — the workspace opens in your browser automatically.
 
 For remote machines: Desktop can auto-install the matching Redeven release over SSH, then explicitly connect that managed SSH runtime to a provider Environment when you choose to. No manual setup on the remote host.
+
+<!-- readme-section:cli -->
+<a id="cli"></a>
 
 ### CLI
 
@@ -85,6 +112,9 @@ Interactive terminals use Redeven's rich runtime presentation by default: a comp
 | Desktop-managed runtime | `redeven run --mode desktop --desktop-managed --presentation machine --local-ui-bind localhost:23998` |
 | Access from another device | Keep Local UI on loopback and use Redeven Desktop, SSH forwarding, or a Flowersec secure tunnel. |
 
+<!-- readme-section:what-you-can-do -->
+<a id="what-you-can-do"></a>
+
 ## What you can do
 
 | Surface | What it gives you |
@@ -97,6 +127,9 @@ Interactive terminals use Redeven's rich runtime presentation by default: a comp
 | Flower and Codex | Optional AI surfaces that use runtime-validated tools and local model/host configuration. |
 | Desktop | Native launcher for local, provider-hosted, SSH-bootstrapped, and saved Local UI environments. |
 
+<!-- readme-section:security -->
+<a id="security"></a>
+
 ## Security, without stealing the spotlight
 
 Redeven leads with capability, but the runtime is still the trust boundary because it owns the real host.
@@ -108,11 +141,17 @@ Redeven leads with capability, but the runtime is still the trust boundary becau
 - Local config, E2EE material, audit logs, and diagnostics stay in the endpoint state directory.
 - GitHub Releases remain the public source of truth for binaries, checksums, signatures, and OKF verification assets.
 
+<!-- readme-section:documentation -->
+<a id="documentation"></a>
+
 ## Documentation
 
 Redeven keeps maintained repository knowledge in [OKF v0.1](okf/index.md). The OKF corpus is generated from current source-level behavior and is embedded into the runtime for `okf.search`.
 
-Machine-readable provider integration surface lives in [spec/openapi/rcpp-v2.yaml](spec/openapi/rcpp-v2.yaml). Root-level maintained Markdown is intentionally limited to `AGENTS.md`, `README.md`, and `THIRD_PARTY_NOTICES.md`.
+Machine-readable provider integration surface lives in [spec/openapi/rcpp-v2.yaml](spec/openapi/rcpp-v2.yaml). Outside OKF, maintained Markdown is intentionally limited to `AGENTS.md`, `THIRD_PARTY_NOTICES.md`, the canonical `README.md`, and the supported `README.<locale>.md` translations declared in `assets/readme/locales.json`.
+
+<!-- readme-section:for-developers -->
+<a id="for-developers"></a>
 
 ## For developers
 
@@ -121,12 +160,18 @@ Build, lint, and verify from source.
 <details>
 <summary>Build from source</summary>
 
+<!-- readme-section:prerequisites -->
+<a id="prerequisites"></a>
+
 ### Prerequisites
 
 - Go `1.26.3`
 - Node.js `24`
 - npm
 - pnpm or Node.js `corepack`
+
+<!-- readme-section:build -->
+<a id="build"></a>
 
 ### Build
 
@@ -136,6 +181,9 @@ Build, lint, and verify from source.
 ./scripts/build_assets.sh
 go build -o redeven ./cmd/redeven
 ```
+
+<!-- readme-section:local-guardrails -->
+<a id="local-guardrails"></a>
 
 ### Local guardrails
 
@@ -164,9 +212,15 @@ Notes:
 
 </details>
 
+<!-- readme-section:license -->
+<a id="license"></a>
+
 ## License
 
 Redeven is licensed under the [MIT License](LICENSE). Third-party dependency notices are tracked in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md); release archives and Desktop packages include these files alongside the runtime artifacts.
+
+<!-- readme-section:open-source-scope -->
+<a id="open-source-scope"></a>
 
 ## Open-source scope
 

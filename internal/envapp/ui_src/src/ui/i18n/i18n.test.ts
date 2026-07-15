@@ -35,6 +35,23 @@ import {
 } from './terminology';
 import type { EnvAppTranslationShape } from './locales';
 
+type ReadmeLocaleManifest = Readonly<{
+  locales: readonly Readonly<{
+    locale: string;
+    native_name: string;
+    english_name: string;
+  }>[];
+  quality_rules: Readonly<{
+    zh_tw_forbidden_simplified_characters: string;
+    forbidden_generic_english_terms: readonly string[];
+  }>;
+}>;
+
+const README_LOCALE_MANIFEST = JSON.parse(fs.readFileSync(
+  path.resolve(process.cwd(), '../../../assets/readme/locales.json'),
+  'utf8',
+)) as ReadmeLocaleManifest;
+
 type MessageLeaf = string | Readonly<Record<string, string>> | readonly unknown[];
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
@@ -185,6 +202,23 @@ function expandDynamicTranslationKeys(keys: ReadonlyMap<string, readonly string[
 }
 
 describe('Env App i18n metadata', () => {
+  it('keeps README locales aligned with the Env App language switcher', () => {
+    expect(README_LOCALE_MANIFEST.locales.map((locale) => locale.locale)).toEqual([
+      ...SUPPORTED_LOCALES,
+    ]);
+    for (const locale of SUPPORTED_LOCALES) {
+      const readmeLocale = README_LOCALE_MANIFEST.locales.find((entry) => entry.locale === locale);
+      expect(readmeLocale).toMatchObject({
+        native_name: LOCALE_META[locale].nativeName,
+        english_name: LOCALE_META[locale].englishName,
+      });
+    }
+    expect(README_LOCALE_MANIFEST.quality_rules.zh_tw_forbidden_simplified_characters)
+      .toBe(ZH_TW_FORBIDDEN_SIMPLIFIED_CHARACTERS);
+    expect(README_LOCALE_MANIFEST.quality_rules.forbidden_generic_english_terms)
+      .toEqual([...FORBIDDEN_GENERIC_ENGLISH_TERMS]);
+  });
+
   it('defines ten real locales plus a separate system preference mode', () => {
     expect(SUPPORTED_LOCALES).toEqual([
       'en-US',

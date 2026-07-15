@@ -1,0 +1,204 @@
+{
+  "schema_version": 1,
+  "source": {
+    "locale": "en-US",
+    "file": "README.md"
+  },
+  "sections": [
+    { "id": "what-is-redeven", "level": 2 },
+    { "id": "quick-start", "level": 2 },
+    { "id": "desktop-app", "level": 3 },
+    { "id": "cli", "level": 3 },
+    { "id": "what-you-can-do", "level": 2 },
+    { "id": "security", "level": 2 },
+    { "id": "documentation", "level": 2 },
+    { "id": "for-developers", "level": 2 },
+    { "id": "prerequisites", "level": 3 },
+    { "id": "build", "level": 3 },
+    { "id": "local-guardrails", "level": 3 },
+    { "id": "license", "level": 2 },
+    { "id": "open-source-scope", "level": 2 }
+  ],
+  "required_literals": [
+    "Redeven",
+    "Redeven Desktop",
+    "Flowersec",
+    "Flower",
+    "Codex",
+    "Workbench",
+    "Browser Editor",
+    "Local UI",
+    "E2EE",
+    "OKF v0.1",
+    "flowersec-go/v0.20.2",
+    "REDEVEN_BOOTSTRAP_TICKET",
+    "REDEVEN_LOCAL_UI_PASSWORD",
+    "README.<locale>.md",
+    "assets/readme/locales.json"
+  ],
+  "quality_rules": {
+    "zh_tw_forbidden_simplified_characters": "这为发后里么个与门开关见览复务体进过还从无现将应类级仅启则处时实问载设线别确许组数选达边导创删击图广录补临协权术稳运连换",
+    "forbidden_generic_english_terms": [
+      "Runtime",
+      "Workspace",
+      "Environment",
+      "Files",
+      "Local Environment",
+      "Control Plane"
+    ],
+    "fixed_english_term_families": [
+      {
+        "canonical": "Provider",
+        "forms": ["Provider", "Providers", "provider", "providers"]
+      }
+    ]
+  },
+  "shared_visual_exceptions": [
+    {
+      "path": "assets/readme/architecture-overview.png",
+      "language": "en-US",
+      "used_by": "all-locales",
+      "reason": "The existing branded architecture image has no editable source; each localized README provides localized surrounding copy and alternative text."
+    }
+  ],
+  "tracked_markdown_exceptions": [
+    {
+      "path": "internal/ai/system_skills/redeven-environment/SKILL.md",
+      "reason": "This is a machine-consumed runtime skill source, not maintained repository knowledge documentation."
+    }
+  ],
+  "locales": [
+    {
+      "locale": "en-US",
+      "native_name": "English",
+      "english_name": "English",
+      "file": "README.md"
+    },
+    {
+      "locale": "zh-CN",
+      "native_name": "简体中文",
+      "english_name": "Simplified Chinese",
+      "file": "README.zh-CN.md",
+      "review": {
+        "status": "reviewed",
+        "source_sha256": "a9af2b95fa90d81f61f6c6bd8d0da69b9ef4acee4cdbbb4bb06be655113894ba",
+        "content_sha256": "8e431942344566c0db35f722deaba2827a7101d1514c274d3752af09e3719187",
+        "method": "subagent",
+        "reviewed_by": "subagent:readme_review_cjk",
+        "reviewed_at": "2026-07-15"
+      }
+    },
+    {
+      "locale": "zh-TW",
+      "native_name": "繁體中文",
+      "english_name": "Traditional Chinese",
+      "file": "README.zh-TW.md",
+      "review": {
+        "status": "reviewed",
+        "source_sha256": "a9af2b95fa90d81f61f6c6bd8d0da69b9ef4acee4cdbbb4bb06be655113894ba",
+        "content_sha256": "3aa772f78af96db2540b6d52c01078bed2fe7c2ff4b71121e0ebe2b9494773fd",
+        "method": "subagent",
+        "reviewed_by": "subagent:readme_review_cjk",
+        "reviewed_at": "2026-07-15"
+      }
+    },
+    {
+      "locale": "ja-JP",
+      "native_name": "日本語",
+      "english_name": "Japanese",
+      "file": "README.ja-JP.md",
+      "review": {
+        "status": "reviewed",
+        "source_sha256": "a9af2b95fa90d81f61f6c6bd8d0da69b9ef4acee4cdbbb4bb06be655113894ba",
+        "content_sha256": "143f15bb44743d155147beb5d4ab8089002d12bd3b0a7a18a19101558134df53",
+        "method": "subagent",
+        "reviewed_by": "subagent:readme_review_cjk",
+        "reviewed_at": "2026-07-15"
+      }
+    },
+    {
+      "locale": "ko-KR",
+      "native_name": "한국어",
+      "english_name": "Korean",
+      "file": "README.ko-KR.md",
+      "review": {
+        "status": "reviewed",
+        "source_sha256": "a9af2b95fa90d81f61f6c6bd8d0da69b9ef4acee4cdbbb4bb06be655113894ba",
+        "content_sha256": "dce37a564f500064ef5ae68b889e72e91ee48cdfec06a1555fd18b0789d6cbf3",
+        "method": "subagent",
+        "reviewed_by": "subagent:readme_review_kdf",
+        "reviewed_at": "2026-07-15"
+      }
+    },
+    {
+      "locale": "de-DE",
+      "native_name": "Deutsch",
+      "english_name": "German",
+      "file": "README.de-DE.md",
+      "review": {
+        "status": "reviewed",
+        "source_sha256": "a9af2b95fa90d81f61f6c6bd8d0da69b9ef4acee4cdbbb4bb06be655113894ba",
+        "content_sha256": "fd6647bfaede1b13c356fce8082a656b3d079717d447d0c34b21d203f9ba4023",
+        "method": "subagent",
+        "reviewed_by": "subagent:readme_review_kdf",
+        "reviewed_at": "2026-07-15"
+      }
+    },
+    {
+      "locale": "fr-FR",
+      "native_name": "Français",
+      "english_name": "French",
+      "file": "README.fr-FR.md",
+      "review": {
+        "status": "reviewed",
+        "source_sha256": "a9af2b95fa90d81f61f6c6bd8d0da69b9ef4acee4cdbbb4bb06be655113894ba",
+        "content_sha256": "cebc5d7e79981cc972027ff1377083eb803e743ab556217ba40ef01dce9a79a9",
+        "method": "subagent",
+        "reviewed_by": "subagent:readme_review_kdf",
+        "reviewed_at": "2026-07-15"
+      }
+    },
+    {
+      "locale": "es-ES",
+      "native_name": "Español",
+      "english_name": "Spanish",
+      "file": "README.es-ES.md",
+      "review": {
+        "status": "reviewed",
+        "source_sha256": "a9af2b95fa90d81f61f6c6bd8d0da69b9ef4acee4cdbbb4bb06be655113894ba",
+        "content_sha256": "26d96d268267681d358d323398741ac3ca7b2819b07248c76a505b8a924bc5ba",
+        "method": "subagent",
+        "reviewed_by": "subagent:readme_review_epr",
+        "reviewed_at": "2026-07-15"
+      }
+    },
+    {
+      "locale": "pt-BR",
+      "native_name": "Português do Brasil",
+      "english_name": "Brazilian Portuguese",
+      "file": "README.pt-BR.md",
+      "review": {
+        "status": "reviewed",
+        "source_sha256": "a9af2b95fa90d81f61f6c6bd8d0da69b9ef4acee4cdbbb4bb06be655113894ba",
+        "content_sha256": "532033d3f4ef7cfea3161a9581b72e2ac43aef2d4f6d7f517ffeacebd2415171",
+        "method": "subagent",
+        "reviewed_by": "subagent:readme_review_epr",
+        "reviewed_at": "2026-07-15"
+      }
+    },
+    {
+      "locale": "ru-RU",
+      "native_name": "Русский",
+      "english_name": "Russian",
+      "file": "README.ru-RU.md",
+      "review": {
+        "status": "reviewed",
+        "source_sha256": "a9af2b95fa90d81f61f6c6bd8d0da69b9ef4acee4cdbbb4bb06be655113894ba",
+        "content_sha256": "0ffe12b3e698d13ef9cb07d5f937ee1446bcfb1db624928cd3d08687f91acb81",
+        "method": "subagent",
+        "reviewed_by": "subagent:readme_review_epr",
+        "reviewed_at": "2026-07-15"
+      }
+    }
+  ]
+}
