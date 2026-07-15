@@ -2871,16 +2871,19 @@ pre,
 /*
  * Loading animation keyframes — shimmer sweep for action buttons.
  */
-@keyframes redeven-loading-shimmer {
+@keyframes redeven-welcome-loading-shimmer {
   0% {
-    background-position: 100% 0;
+    transform: translate3d(-100%, 0, 0);
   }
   100% {
-    background-position: -100% 0;
+    transform: translate3d(185%, 0, 0);
   }
 }
 
-.redeven-loading-shimmer-overlay {
+.redeven-welcome-loading-shimmer-overlay {
+  --redeven-welcome-loading-shimmer-soft: color-mix(in srgb, var(--primary-foreground) 12%, transparent);
+  --redeven-welcome-loading-shimmer-core: color-mix(in srgb, var(--primary-foreground) 36%, transparent);
+
   position: absolute;
   inset: 0;
   overflow: hidden;
@@ -2889,23 +2892,40 @@ pre,
   z-index: 1;
 }
 
-.redeven-loading-shimmer-overlay::after {
+.dark .redeven-welcome-loading-shimmer-overlay {
+  --redeven-welcome-loading-shimmer-soft: color-mix(in srgb, var(--primary-foreground) 18%, transparent);
+  --redeven-welcome-loading-shimmer-core: color-mix(in srgb, var(--primary-foreground) 48%, transparent);
+}
+
+.redeven-welcome-loading-shimmer-overlay[data-shimmer-surface='surface'] {
+  --redeven-welcome-loading-shimmer-soft: color-mix(in srgb, var(--foreground) 10%, transparent);
+  --redeven-welcome-loading-shimmer-core: color-mix(in srgb, var(--foreground) 30%, transparent);
+}
+
+.dark .redeven-welcome-loading-shimmer-overlay[data-shimmer-surface='surface'] {
+  --redeven-welcome-loading-shimmer-soft: color-mix(in srgb, var(--foreground) 12%, transparent);
+  --redeven-welcome-loading-shimmer-core: color-mix(in srgb, var(--foreground) 36%, transparent);
+}
+
+.redeven-welcome-loading-shimmer-overlay::after {
   content: '';
   position: absolute;
-  inset: 0;
-  mix-blend-mode: overlay;
+  top: -20%;
+  bottom: -20%;
+  left: 0;
+  width: 55%;
   background: linear-gradient(
     105deg,
     transparent 0%,
-    transparent 25%,
-    rgba(255, 255, 255, 0.04) 34%,
-    rgba(255, 255, 255, 0.35) 50%,
-    rgba(255, 255, 255, 0.04) 66%,
-    transparent 75%,
+    var(--redeven-welcome-loading-shimmer-soft) 28%,
+    var(--redeven-welcome-loading-shimmer-core) 44%,
+    var(--redeven-welcome-loading-shimmer-core) 56%,
+    var(--redeven-welcome-loading-shimmer-soft) 72%,
     transparent 100%
   );
-  background-size: 200% 100%;
-  animation: redeven-loading-shimmer 3s linear infinite;
+  transform: translate3d(-100%, 0, 0);
+  will-change: transform;
+  animation: redeven-welcome-loading-shimmer 2.2s linear infinite;
 }
 
 /* ─── dialog section animations ─── */
@@ -3585,9 +3605,10 @@ pre,
     transition-duration: 1ms;
   }
 
-  .redeven-loading-shimmer-overlay::after,
+  .redeven-welcome-loading-shimmer-overlay::after,
   .redeven-blocked-shimmer-overlay::after {
-    animation-duration: 1ms;
+    display: none;
+    animation: none;
   }
 
   .redeven-environment-progress__step-dot[data-state='active'] {

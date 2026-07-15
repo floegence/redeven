@@ -8826,7 +8826,11 @@ function EnvironmentPrimaryActionPanel(props: Readonly<{
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.25 }}
-                        class="redeven-loading-shimmer-overlay"
+                        class="redeven-welcome-loading-shimmer-overlay"
+                        data-shimmer-surface={welcomeLoadingShimmerSurface(
+                          item.emphasis === 'primary' ? 'default' : 'outline',
+                        )}
+                        aria-hidden="true"
                       />
                     </Show>
                   </Presence>
@@ -8863,6 +8867,12 @@ function splitMenuIcon(intent: EnvironmentActionIntent): ((props?: { class?: str
     default:
       return null;
   }
+}
+
+function welcomeLoadingShimmerSurface(
+  variant: EnvironmentActionModel['variant'],
+): 'primary' | 'surface' {
+  return variant === 'outline' ? 'surface' : 'primary';
 }
 
 function splitMenuItemToneData(intent: EnvironmentActionIntent): string {
@@ -9301,7 +9311,11 @@ function EnvironmentSplitActionButton(props: Readonly<{
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.25 }}
-              class={shimmerBlocked() ? 'redeven-blocked-shimmer-overlay' : 'redeven-loading-shimmer-overlay'}
+              class={shimmerBlocked() ? 'redeven-blocked-shimmer-overlay' : 'redeven-welcome-loading-shimmer-overlay'}
+              data-shimmer-surface={shimmerBlocked()
+                ? undefined
+                : welcomeLoadingShimmerSurface(props.presentation.primary_action.variant)}
+              aria-hidden="true"
             />
           </Show>
         </Presence>
@@ -12399,7 +12413,9 @@ function GatewayActionPanel(props: Readonly<{
                     animate={{ opacity: 1 }}
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.2 }}
-                    class="redeven-loading-shimmer-overlay"
+                    class="redeven-welcome-loading-shimmer-overlay"
+                    data-shimmer-surface="primary"
+                    aria-hidden="true"
                   />
                 </Show>
               </Presence>
