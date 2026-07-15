@@ -3190,7 +3190,7 @@ describe('FlowerSurface navigation activity', () => {
     const activityButton = runtime.querySelector('.flower-activity-inline-button') as HTMLButtonElement;
     expect(activityButton.getAttribute('aria-expanded')).toBe('false');
 
-    await wait(340);
+    await wait(440);
     expect(activityButton.getAttribute('aria-expanded')).toBe('true');
 
     listSnapshot = [completeThread];
@@ -3203,10 +3203,10 @@ describe('FlowerSurface navigation activity', () => {
     expect(runtime.textContent).toContain('Tests passed.');
     expect(loadThread.mock.calls.length).toBeGreaterThanOrEqual(2);
 
-    await wait(1050);
+    await wait(1250);
     expect(activityButton.getAttribute('aria-expanded')).toBe('false');
     expect(runtime.querySelector('.flower-activity-inline-details')?.getAttribute('data-state')).toBe('closing');
-    await wait(230);
+    await wait(390);
     expect(runtime.querySelector('.flower-activity-inline-details')).toBeNull();
   });
 

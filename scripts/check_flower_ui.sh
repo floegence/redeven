@@ -36,7 +36,8 @@ main() {
       src/ui/flower/envLocalFlowerSurfaceAdapter.test.ts \
       src/ui/flower/linkedContextNavigation.test.ts \
       src/ui/chat/blocks/ActivityTimelineBlock.test.tsx \
-      src/ui/chat/blocks/ShellBlock.test.tsx
+      src/ui/chat/blocks/ShellBlock.test.tsx \
+      src/ui/chat/message-list/VirtualMessageList.test.tsx
 
     ui_pkg_log ""
     ui_pkg_log "Flower UI: shared timeline projection contracts..."
@@ -47,6 +48,7 @@ main() {
       internal/flower_ui/src/flowerSubagentProjection.test.ts \
       internal/flower_ui/src/flowerThreadListRefresh.test.ts \
       internal/flower_ui/src/flowerPendingTurns.test.ts \
+      internal/flower_ui/src/flowerTerminalOutput.test.ts \
       internal/flower_ui/src/runtimeFlowerSurfaceAdapter.test.ts \
       internal/flower_ui/src/filePicker/directoryPickerTree.test.ts \
       internal/flower_ui/src/filePicker/createDirectoryPickerDataSource.test.ts \

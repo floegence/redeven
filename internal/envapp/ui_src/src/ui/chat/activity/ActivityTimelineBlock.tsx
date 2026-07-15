@@ -15,7 +15,7 @@ import {
 } from '../../../../../../flower_ui/src/flowerActivityPresentation';
 import {
   createFlowerActivityDisclosureController,
-  createFlowerActivityDisclosurePresence,
+  createFlowerActivityDisclosureMotion,
   flowerActivityDisclosureIntent,
 } from '../../../../../../flower_ui/src/activityDisclosure';
 import type { FlowerActivityItem, FlowerActivityRenderer } from '../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -728,7 +728,7 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
     onManualOpenChange: setOpen,
   });
   const expanded = timelineDisclosureControl.open;
-  const timelineDisclosure = createFlowerActivityDisclosurePresence(() => expanded() && hasItems());
+  const timelineDisclosure = createFlowerActivityDisclosureMotion(() => expanded() && hasItems());
   const fileActions = createMemo(() => props.block.file_actions as FlowerActivityFileActions | undefined);
   const itemKeys = createMemo(() => items().map((item, index) => itemKey(item, index)));
   const itemsByKey = createMemo(() => new Map(itemKeys().map((key, index) => [key, { item: items()[index], index }] as const)));
@@ -753,12 +753,22 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
         </button>
 
         <Show when={timelineDisclosure.mounted()}>
-          <div class="chat-activity-items-presence" data-state={timelineDisclosure.state()}>
+          <div
+            ref={timelineDisclosure.bindViewport}
+            class="chat-activity-items-presence"
+            data-state={timelineDisclosure.state()}
+            data-layout-motion={timelineDisclosure.layoutMotion()}
+            style={{ height: timelineDisclosure.height() }}
+            onTransitionEnd={timelineDisclosure.onTransitionEnd}
+          >
             <div class="chat-activity-items-clip">
               <div
+                ref={timelineDisclosure.bindContent}
                 class="chat-activity-items"
                 onPointerDown={timelineDisclosureControl.retainOpen}
                 onFocusIn={timelineDisclosureControl.retainOpen}
+                onWheel={timelineDisclosureControl.retainOpen}
+                onTouchStart={timelineDisclosureControl.retainOpen}
               >
                 <For each={itemKeys()}>
                   {(itemKeyValue) => {
@@ -792,9 +802,10 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
                           });
                           let itemButtonRef: HTMLDivElement | undefined;
                           let detailPanelRef: HTMLDivElement | undefined;
-                          const disclosure = createFlowerActivityDisclosurePresence(
+                          const disclosure = createFlowerActivityDisclosureMotion(
                             () => isOpen() && hasDetails(),
                             {
+                              animateContentResize: true,
                               onBeforeClose: () => {
                                 if (detailPanelRef && detailPanelRef.contains(document.activeElement)) {
                                   itemButtonRef?.focus();
@@ -864,15 +875,23 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
                               </div>
                               <Show when={disclosure.mounted() && hasDetails()}>
                                 <div
-                                  ref={detailPanelRef}
+                                  ref={(node) => {
+                                    detailPanelRef = node;
+                                    disclosure.bindViewport(node);
+                                  }}
                                   id={panelId()}
                                   class="chat-activity-detail-panel"
                                   data-state={disclosure.state()}
+                                  data-layout-motion={disclosure.layoutMotion()}
+                                  style={{ height: disclosure.height() }}
                                   onPointerDown={itemDisclosureControl.retainOpen}
                                   onFocusIn={itemDisclosureControl.retainOpen}
+                                  onWheel={itemDisclosureControl.retainOpen}
+                                  onTouchStart={itemDisclosureControl.retainOpen}
+                                  onTransitionEnd={disclosure.onTransitionEnd}
                                 >
                                   <div class="chat-activity-detail-panel-clip">
-                                    <div class="chat-activity-detail-panel-content">
+                                    <div ref={disclosure.bindContent} class="chat-activity-detail-panel-content">
                                       <div class="chat-activity-detail-sections">
                                         <Index each={presentation().detailBlocks}>
                                           {(block) => (
