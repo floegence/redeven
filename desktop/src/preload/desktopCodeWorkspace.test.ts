@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const exposeInMainWorld = vi.fn();
 const ipcRendererInvoke = vi.fn();
+const ipcRendererOn = vi.fn();
+const ipcRendererRemoveListener = vi.fn();
 
 vi.mock('electron', () => ({
   contextBridge: {
@@ -9,6 +11,8 @@ vi.mock('electron', () => ({
   },
   ipcRenderer: {
     invoke: ipcRendererInvoke,
+    on: ipcRendererOn,
+    removeListener: ipcRendererRemoveListener,
   },
 }));
 
@@ -17,6 +21,40 @@ describe('bootstrapDesktopCodeWorkspaceBridge', () => {
     vi.resetModules();
     exposeInMainWorld.mockReset();
     ipcRendererInvoke.mockReset();
+    ipcRendererOn.mockReset();
+    ipcRendererRemoveListener.mockReset();
+  });
+
+  it('normalizes progress events and exposes operation cancellation', async () => {
+    ipcRendererInvoke.mockResolvedValue({ ok: true, cancelled: true });
+    const { bootstrapDesktopCodeWorkspaceBridge } = await import('./desktopCodeWorkspace');
+
+    bootstrapDesktopCodeWorkspaceBridge();
+
+    const [, bridge] = exposeInMainWorld.mock.calls[0] ?? [];
+    const listener = vi.fn();
+    const unsubscribe = bridge.subscribeWorkspaceEngineProgress(listener);
+    const [, wrappedListener] = ipcRendererOn.mock.calls[0] ?? [];
+    wrappedListener({}, {
+      operation_id: 'browser-editor:1',
+      phase: 'upload',
+      state: 'running',
+      completed_bytes: 8,
+      total_bytes: 16,
+      updated_at_unix_ms: 123,
+    });
+    wrappedListener({}, { operation_id: '', phase: 'upload', state: 'running' });
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith(expect.objectContaining({ completed_bytes: 8, total_bytes: 16 }));
+    await expect(bridge.cancelWorkspaceEnginePreparation({ operation_id: 'browser-editor:1' }))
+      .resolves.toEqual({ ok: true, cancelled: true, message: undefined });
+    expect(ipcRendererInvoke).toHaveBeenCalledWith('redeven-desktop:code-workspace-cancel', {
+      operation_id: 'browser-editor:1',
+    });
+
+    unsubscribe();
+    expect(ipcRendererRemoveListener).toHaveBeenCalledWith('redeven-desktop:code-workspace-progress', wrappedListener);
   });
 
   it('forwards explicit workspace preparation requests to electron main', async () => {

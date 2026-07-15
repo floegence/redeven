@@ -87,6 +87,7 @@ func (m *RuntimeManager) CreateImportSession(ctx context.Context, manifest Works
 	}
 	m.setActiveImportUploadID(session.UploadID)
 	m.setStage(RuntimeOperationStageReceiving)
+	m.setTransferProgress(0, session.ExpectedBytes)
 	m.appendLog("Receiving workspace engine package from Desktop.")
 	return session, nil
 }
@@ -152,6 +153,7 @@ func (m *RuntimeManager) AppendImportChunk(ctx context.Context, uploadID string,
 	if err := saveWorkspaceEngineImportSession(m.stateRoot, session); err != nil {
 		return WorkspaceEngineImportChunkResult{}, err
 	}
+	m.setTransferProgress(session.ReceivedBytes, session.ExpectedBytes)
 	return WorkspaceEngineImportChunkResult{
 		UploadID:       session.UploadID,
 		ReceivedBytes:  session.ReceivedBytes,

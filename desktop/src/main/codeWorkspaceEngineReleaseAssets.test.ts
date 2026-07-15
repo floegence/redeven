@@ -161,6 +161,7 @@ describe('code workspace engine release assets', () => {
     await fs.writeFile(archivePath, Buffer.from([9, 8, 7]));
     const fetchMock = vi.mocked(fetch);
 
+    const progress = vi.fn();
     const out = await ensureCodeWorkspaceEngineArchive({
       version: '4.109.1',
       release_tag: 'v4.109.1',
@@ -171,11 +172,51 @@ describe('code workspace engine release assets', () => {
       size_bytes: 3,
       platform: platform(),
       root_dir_hint: 'code-server-4.109.1-linux-amd64',
-    }, archivePath);
+    }, archivePath, { onProgress: progress });
 
     expect(out.from_cache).toBe(true);
     expect(out.size_bytes).toBe(3);
     expect(fetchMock).not.toHaveBeenCalledWith('https://browser-editor-package.example.test/code-server/v4.109.1/code-server-4.109.1-linux-amd64.tar.gz', expect.anything());
+    expect(progress).toHaveBeenCalledWith(expect.objectContaining({
+      phase: 'download',
+      state: 'completed',
+      completed_bytes: 3,
+      total_bytes: 3,
+      from_cache: true,
+    }));
+  });
+
+  it('streams download progress and removes a partial file when cancelled', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-code-workspace-asset-'));
+    tempDirs.push(dir);
+    const archivePath = path.join(dir, 'code-server.tar.gz');
+    const controller = new AbortController();
+    const progress: Array<Readonly<{ phase: string; state: string; completed_bytes?: number }>> = [];
+
+    await expect(ensureCodeWorkspaceEngineArchive({
+      version: '4.109.1',
+      release_tag: 'v4.109.1',
+      release_url: 'https://github.com/coder/code-server/releases/tag/v4.109.1',
+      asset_name: 'code-server-4.109.1-linux-amd64.tar.gz',
+      download_url: 'https://browser-editor-package.example.test/code-server/v4.109.1/code-server-4.109.1-linux-amd64.tar.gz',
+      sha256: '039058c6f2c0cb492c533b0a4d14ef77cc0f78abccced5287d84a1a2011cfb81',
+      size_bytes: 3,
+      platform: platform(),
+      root_dir_hint: 'code-server-4.109.1-linux-amd64',
+    }, archivePath, {
+      signal: controller.signal,
+      onProgress: (item) => {
+        progress.push(item);
+        if (item.phase === 'download' && Number(item.completed_bytes) > 0) controller.abort();
+      },
+    })).rejects.toThrow('Browser Editor setup was canceled while downloading the package.');
+
+    expect(progress).toEqual(expect.arrayContaining([
+      expect.objectContaining({ phase: 'download', state: 'running', completed_bytes: 0 }),
+      expect.objectContaining({ phase: 'download', state: 'running', completed_bytes: 3 }),
+    ]));
+    await expect(fs.stat(archivePath)).rejects.toMatchObject({ code: 'ENOENT' });
+    expect((await fs.readdir(dir)).filter((name) => name.endsWith('.download.tmp'))).toEqual([]);
   });
 
   it('rejects a downloaded archive when it does not match the catalog checksum', async () => {

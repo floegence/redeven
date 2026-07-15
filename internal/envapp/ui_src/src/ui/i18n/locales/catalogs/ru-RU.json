@@ -2704,6 +2704,25 @@
         "upload": "Отправить в окружение",
         "verify": "Проверить редактор"
       },
+      "progress": {
+        "lookup": "Проверка последней версии пакета Browser Editor...",
+        "downloading": "Скачивание пакета Browser Editor на Desktop...",
+        "packageValidation": "Проверка пакета Browser Editor в кэше Desktop...",
+        "finishing": "Передача завершена. Redeven проверяет и устанавливает Browser Editor.",
+        "cacheHit": "Используется кэш Desktop. Повторное скачивание не требуется.",
+        "downloadedBytes": "Скачано {completed} из {total}",
+        "uploadedBytes": "Отправлено {completed} из {total}",
+        "measuring": "Расчёт оставшегося времени для этого этапа...",
+        "rateAndEta": "{rate} · Этап завершится примерно через {duration}",
+        "stalled": "Подтверждённый прогресс не обновлялся 15 секунд. Продолжаем ждать ответа от окружения.",
+        "awaitingConfirmation": "Передача завершена. Ожидаем, пока окружение подтвердит получение.",
+        "lookupEstimate": "Размер пакета и оценка времени появятся после того, как будет найдена последняя версия Browser Editor.",
+        "elapsed": "Прошло с начала настройки: {duration}",
+        "secondsShort": "{value} с",
+        "minutesShort": "{value} мин",
+        "downloadProgressLabel": "Ход скачивания пакета Browser Editor",
+        "uploadProgressLabel": "Ход передачи пакета Browser Editor в окружение"
+      },
       "failure": {
         "desktopReleaseLookup": "Не удалось проверить последнюю версию Browser Editor.",
         "desktopPackageCache": "Не удалось кэшировать пакет Browser Editor на Desktop.",

@@ -4965,6 +4965,65 @@ html.dark .browser-editor-setup {
   padding-bottom: 0.6rem;
 }
 
+.browser-editor-setup__stage-progress {
+  min-width: 0;
+  margin-top: 1.1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid color-mix(in srgb, var(--browser-editor-section-divider) 72%, transparent);
+}
+
+.browser-editor-setup__stage-progress-head,
+.browser-editor-setup__stage-progress-meta {
+  display: flex;
+  min-width: 0;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.browser-editor-setup__stage-progress-head {
+  font-size: 0.7rem;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--foreground) 82%, var(--muted-foreground) 18%);
+}
+
+.browser-editor-setup__stage-progress-percent,
+.browser-editor-setup__stage-progress-elapsed {
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.browser-editor-setup__stage-progress-track {
+  position: relative;
+  width: 100%;
+  height: 0.3rem;
+  overflow: hidden;
+  margin-top: 0.5rem;
+  border-radius: 0.15rem;
+  background: color-mix(in srgb, var(--border) 62%, transparent);
+}
+
+.browser-editor-setup__stage-progress-value {
+  position: absolute;
+  inset: 0 auto 0 0;
+  min-width: 0;
+  border-radius: inherit;
+  background: color-mix(in srgb, var(--primary) 76%, var(--foreground) 24%);
+  transition: width 240ms ease;
+}
+
+.browser-editor-setup__stage-progress-meta {
+  margin-top: 0.55rem;
+  font-size: 0.66rem;
+  line-height: 1.5;
+  color: var(--muted-foreground);
+}
+
+.browser-editor-setup__stage-progress-meta > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .browser-editor-setup__step-label[data-state='done'],
 .browser-editor-setup__step-label[data-state='active'] {
   color: var(--foreground);
@@ -5191,6 +5250,13 @@ html.dark .browser-editor-setup {
 
   .browser-editor-setup__detail-row:last-child {
     border-bottom: 0;
+  }
+
+  .browser-editor-setup__stage-progress-head,
+  .browser-editor-setup__stage-progress-meta {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.25rem;
   }
 
   .browser-editor-setup__details-trigger,

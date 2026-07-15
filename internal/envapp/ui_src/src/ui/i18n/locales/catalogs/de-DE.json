@@ -2616,6 +2616,25 @@
         "upload": "An Umgebung senden",
         "verify": "Editor prüfen"
       },
+      "progress": {
+        "lookup": "Das neueste Browser Editor-Paket wird ermittelt...",
+        "downloading": "Browser Editor wird in Redeven Desktop heruntergeladen...",
+        "packageValidation": "Das in Redeven Desktop zwischengespeicherte Browser Editor-Paket wird geprüft...",
+        "finishing": "Die Übertragung ist abgeschlossen. Redeven prüft und installiert Browser Editor.",
+        "cacheHit": "Der Cache von Redeven Desktop wird verwendet. Ein erneuter Download ist nicht erforderlich.",
+        "downloadedBytes": "{completed} von {total} heruntergeladen",
+        "uploadedBytes": "{completed} von {total} gesendet",
+        "measuring": "Verbleibende Zeit für diesen Schritt wird berechnet...",
+        "rateAndEta": "{rate} · Noch etwa {duration} für diesen Schritt",
+        "stalled": "Seit 15 Sekunden wurden keine weiteren Daten bestätigt. Es wird weiterhin auf eine Antwort der Umgebung gewartet.",
+        "awaitingConfirmation": "Übertragung abgeschlossen. Die Empfangsbestätigung der Umgebung steht noch aus.",
+        "lookupEstimate": "Paketgröße und voraussichtliche Dauer werden angezeigt, sobald das neueste Browser Editor-Paket ermittelt wurde.",
+        "elapsed": "Einrichtung läuft seit {duration}",
+        "secondsShort": "{value} s",
+        "minutesShort": "{value} Min.",
+        "downloadProgressLabel": "Downloadfortschritt für Browser Editor",
+        "uploadProgressLabel": "Fortschritt bei der Übertragung des Browser Editor-Pakets an die Umgebung"
+      },
       "failure": {
         "desktopReleaseLookup": "Der neueste Browser Editor konnte nicht überprüft werden.",
         "desktopPackageCache": "Das Browser Editor-Paket konnte auf Desktop nicht zwischengespeichert werden.",

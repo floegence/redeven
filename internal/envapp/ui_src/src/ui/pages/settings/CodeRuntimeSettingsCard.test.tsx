@@ -322,7 +322,7 @@ describe('CodeRuntimeSettingsCard', () => {
 
     expect(host.textContent).toContain('Retry setup');
     expect(host.textContent).toContain('Download failed.');
-    expect(host.querySelector('[role="progressbar"]')?.getAttribute('aria-valuetext')).toBe('Step 2 of 4');
+    expect(host.querySelector('[role="progressbar"]')).toBeNull();
     expect(host.querySelector('[data-testid="browser-editor-setup-activity"]')?.getAttribute('data-layout')).toBe('compact');
   });
 

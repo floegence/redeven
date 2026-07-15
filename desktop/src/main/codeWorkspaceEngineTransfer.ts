@@ -44,6 +44,8 @@ export async function uploadCodeWorkspaceEngineViaRuntimeControl(args: Readonly<
   manifest: CodeWorkspaceEngineArtifactManifest;
   archivePath: string;
   maxArchiveBytes?: number;
+  signal?: AbortSignal;
+  onProgress?: (progress: Readonly<{ completed_bytes: number; total_bytes: number }>) => void;
 }>): Promise<unknown> {
   const stat = await fs.stat(args.archivePath);
   const archiveLimit = Math.max(1, Math.floor(args.maxArchiveBytes ?? DEFAULT_CODE_WORKSPACE_ENGINE_UPLOAD_ARCHIVE_LIMIT));
@@ -55,31 +57,40 @@ export async function uploadCodeWorkspaceEngineViaRuntimeControl(args: Readonly<
   }
   const session = parseImportSession(await createCodeWorkspaceEngineImportSession(args.endpoint, {
     manifest: args.manifest,
-  }));
+  }, args.signal));
   const requestedChunkSize = Math.max(1, Math.floor(session.chunk_size_bytes || DEFAULT_CODE_WORKSPACE_ENGINE_UPLOAD_CHUNK_SIZE));
   const chunkSize = Math.min(requestedChunkSize, DEFAULT_CODE_WORKSPACE_ENGINE_UPLOAD_CHUNK_SIZE);
   const handle = await fs.open(args.archivePath, 'r');
   try {
+    args.onProgress?.({ completed_bytes: 0, total_bytes: stat.size });
     const buffer = Buffer.alloc(chunkSize);
     let offset = 0;
     let chunkIndex = 0;
     while (offset < stat.size) {
+      if (args.signal?.aborted) {
+        throw new DOMException('Workspace engine package upload was canceled.', 'AbortError');
+      }
       const length = Math.min(chunkSize, stat.size - offset);
       const { bytesRead } = await handle.read(buffer, 0, length, offset);
       if (bytesRead <= 0) {
         throw new Error('Workspace engine package upload stopped before all bytes were read.');
       }
-      await appendCodeWorkspaceEngineImportChunk(
+      const progress = await appendCodeWorkspaceEngineImportChunk(
         args.endpoint,
         session.upload_id,
         chunkIndex,
         Buffer.from(buffer.subarray(0, bytesRead)),
+        args.signal,
       );
-      offset += bytesRead;
-      chunkIndex++;
+      offset = progress.received_bytes;
+      args.onProgress?.({
+        completed_bytes: progress.received_bytes,
+        total_bytes: progress.expected_bytes || stat.size,
+      });
+      chunkIndex = progress.next_chunk_index;
     }
   } finally {
     await handle.close();
   }
-  return completeCodeWorkspaceEngineImportSession(args.endpoint, session.upload_id);
+  return completeCodeWorkspaceEngineImportSession(args.endpoint, session.upload_id, args.signal);
 }

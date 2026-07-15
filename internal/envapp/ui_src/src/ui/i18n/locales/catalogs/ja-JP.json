@@ -2616,6 +2616,25 @@
         "upload": "環境へ送信",
         "verify": "エディターを検証"
       },
+      "progress": {
+        "lookup": "最新の Browser Editor パッケージを確認しています...",
+        "downloading": "Browser Editor を Desktop にダウンロードしています...",
+        "packageValidation": "Desktop にキャッシュされた Browser Editor パッケージを確認しています...",
+        "finishing": "転送が完了しました。Redeven が Browser Editor を検証してインストールしています。",
+        "cacheHit": "Desktop のキャッシュを使用しています。再ダウンロードは不要です。",
+        "downloadedBytes": "ダウンロード済み: {completed} / {total}",
+        "uploadedBytes": "送信済み: {completed} / {total}",
+        "measuring": "このステップの残り時間を計算しています...",
+        "rateAndEta": "{rate} · このステップの完了まで約 {duration}",
+        "stalled": "確認済みの進捗が 15 秒間更新されていません。引き続き環境からの応答を待っています。",
+        "awaitingConfirmation": "転送が完了しました。環境からの受信確認を待っています。",
+        "lookupEstimate": "最新のエディターが見つかると、パッケージのサイズと推定時間が表示されます。",
+        "elapsed": "セットアップの経過時間: {duration}",
+        "secondsShort": "{value} 秒",
+        "minutesShort": "{value} 分",
+        "downloadProgressLabel": "Browser Editor のダウンロード状況",
+        "uploadProgressLabel": "Browser Editor の環境への転送状況"
+      },
       "failure": {
         "desktopReleaseLookup": "最新の Browser Editor を確認できませんでした。",
         "desktopPackageCache": "Browser Editor パッケージを Desktop にキャッシュできませんでした。",

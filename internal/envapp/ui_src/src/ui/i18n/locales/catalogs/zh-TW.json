@@ -2616,6 +2616,25 @@
         "upload": "傳送到環境",
         "verify": "校驗編輯器"
       },
+      "progress": {
+        "lookup": "正在檢查最新的 Browser Editor 套件...",
+        "downloading": "正在將 Browser Editor 下載到 Desktop...",
+        "packageValidation": "正在檢查 Desktop 快取中的 Browser Editor 套件...",
+        "finishing": "傳輸已完成。Redeven 正在驗證並安裝 Browser Editor。",
+        "cacheHit": "正在使用 Desktop 快取，無需重複下載。",
+        "downloadedBytes": "已下載 {completed} / {total}",
+        "uploadedBytes": "已傳送 {completed} / {total}",
+        "measuring": "正在估算目前步驟的剩餘時間...",
+        "rateAndEta": "{rate} · 此步驟預計還需 {duration}",
+        "stalled": "已連續 15 秒未收到新的進度確認。仍在等待環境回應。",
+        "awaitingConfirmation": "傳輸已完成，正在等待環境確認已收到套件。",
+        "lookupEstimate": "找到最新的 Browser Editor 套件後，將顯示套件大小與預估時間。",
+        "elapsed": "設定已耗時：{duration}",
+        "secondsShort": "{value} 秒",
+        "minutesShort": "{value} 分鐘",
+        "downloadProgressLabel": "Browser Editor 下載進度",
+        "uploadProgressLabel": "Browser Editor 傳送到環境的進度"
+      },
       "failure": {
         "desktopReleaseLookup": "無法檢查最新的 Browser Editor。",
         "desktopPackageCache": "無法在 Desktop 上快取 Browser Editor 套件。",

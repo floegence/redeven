@@ -35,6 +35,10 @@ export type CodeRuntimeOperationStatus = Readonly<{
   started_at_unix_ms?: number;
   finished_at_unix_ms?: number;
   log_tail?: string[];
+  transfer?: Readonly<{
+    received_bytes: number;
+    expected_bytes: number;
+  }>;
 }>;
 
 export type CodeRuntimeStatus = Readonly<{

@@ -129,7 +129,9 @@ export async function prepareCodeWorkspaceEnginePackage(args: Readonly<{
   platform: CodeWorkspaceEnginePlatform;
   fetchPolicy?: CodeWorkspaceEngineFetchPolicy;
 }>): Promise<CodeWorkspaceEnginePackageCacheEntry> {
+  args.fetchPolicy?.onProgress?.({ phase: 'lookup', state: 'running' });
   const asset = await resolveLatestCodeWorkspaceEngineReleaseAsset(args.platform, args.fetchPolicy);
+  args.fetchPolicy?.onProgress?.({ phase: 'lookup', state: 'completed' });
   const platformKey = platformCacheKey(args.platform);
   const cacheDir = path.join(args.cacheRoot, platformKey, asset.version);
   const archivePath = path.join(cacheDir, asset.asset_name);

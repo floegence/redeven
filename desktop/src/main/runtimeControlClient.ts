@@ -121,6 +121,7 @@ function requestRuntimeControl(
     rawBody?: Buffer;
     contentType?: string;
     timeoutMs?: number;
+    signal?: AbortSignal;
   }>,
 ): Promise<RuntimeControlEnvelope> {
   const baseURL = compact(endpoint.base_url);
@@ -139,6 +140,10 @@ function requestRuntimeControl(
   const body = options.rawBody ?? (options.body == null ? Buffer.alloc(0) : Buffer.from(JSON.stringify(options.body), 'utf8'));
   const requestImpl = url.protocol === 'https:' ? https.request : http.request;
   return new Promise((resolve, reject) => {
+    if (options.signal?.aborted) {
+      reject(new RuntimeControlError('RUNTIME_CONTROL_CANCELED', 'Runtime control request was canceled.'));
+      return;
+    }
     const req = requestImpl(url, {
       method: options.method,
       timeout: Math.max(1, Math.floor(options.timeoutMs ?? 20_000)),
@@ -194,6 +199,13 @@ function requestRuntimeControl(
         ? error
         : new RuntimeControlError('RUNTIME_CONTROL_UNREACHABLE', error.message || 'Desktop could not reach Runtime control.'));
     });
+    const abort = () => {
+      req.destroy(new RuntimeControlError('RUNTIME_CONTROL_CANCELED', 'Runtime control request was canceled.'));
+    };
+    options.signal?.addEventListener('abort', abort, { once: true });
+    req.once('close', () => {
+      options.signal?.removeEventListener('abort', abort);
+    });
     if (body.length > 0) {
       req.write(body);
     }
@@ -244,19 +256,22 @@ export async function disconnectProviderLink(
 
 export async function getCodeWorkspaceEngineStatus(
   endpoint: DesktopRuntimeControlEndpoint,
+  signal?: AbortSignal,
 ): Promise<unknown> {
-  const envelope = await requestRuntimeControl(endpoint, 'v1/code-workspace-engine/status', { method: 'GET' });
+  const envelope = await requestRuntimeControl(endpoint, 'v1/code-workspace-engine/status', { method: 'GET', signal });
   return envelope.data;
 }
 
 export async function createCodeWorkspaceEngineImportSession(
   endpoint: DesktopRuntimeControlEndpoint,
   request: CodeWorkspaceEngineImportSessionRequest,
+  signal?: AbortSignal,
 ): Promise<unknown> {
   const envelope = await requestRuntimeControl(endpoint, 'v1/code-workspace-engine/import-sessions', {
     method: 'POST',
     body: request,
     timeoutMs: 60_000,
+    signal,
   });
   return envelope.data;
 }
@@ -266,6 +281,7 @@ export async function appendCodeWorkspaceEngineImportChunk(
   uploadID: string,
   chunkIndex: number,
   chunk: Buffer,
+  signal?: AbortSignal,
 ): Promise<CodeWorkspaceEngineImportChunkResult> {
   const cleanUploadID = encodeURIComponent(compact(uploadID));
   const cleanChunkIndex = Math.max(0, Math.floor(chunkIndex));
@@ -277,6 +293,7 @@ export async function appendCodeWorkspaceEngineImportChunk(
       rawBody: chunk,
       contentType: 'application/octet-stream',
       timeoutMs: 120_000,
+      signal,
     },
   );
   return parseCodeWorkspaceEngineImportChunkResult(envelope.data);
@@ -285,6 +302,7 @@ export async function appendCodeWorkspaceEngineImportChunk(
 export async function completeCodeWorkspaceEngineImportSession(
   endpoint: DesktopRuntimeControlEndpoint,
   uploadID: string,
+  signal?: AbortSignal,
 ): Promise<unknown> {
   const cleanUploadID = encodeURIComponent(compact(uploadID));
   const envelope = await requestRuntimeControl(
@@ -293,6 +311,7 @@ export async function completeCodeWorkspaceEngineImportSession(
     {
       method: 'POST',
       timeoutMs: 120_000,
+      signal,
     },
   );
   return envelope.data;

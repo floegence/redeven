@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, powerMonitor, safeStorage, session, shell, type MessageBoxOptions } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, powerMonitor, safeStorage, session, shell, type MessageBoxOptions, type WebContents } from 'electron';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import http from 'node:http';
@@ -365,17 +365,24 @@ import {
   normalizeDesktopDownloadWriteRequest,
 } from '../shared/desktopDownloadIPC';
 import {
+  DESKTOP_CODE_WORKSPACE_CANCEL_CHANNEL,
   DESKTOP_CODE_WORKSPACE_PACKAGE_CHUNK_CHANNEL,
   DESKTOP_CODE_WORKSPACE_PACKAGE_DISPOSE_CHANNEL,
   DESKTOP_CODE_WORKSPACE_PACKAGE_PREPARE_CHANNEL,
   DESKTOP_CODE_WORKSPACE_PREPARE_CHANNEL,
+  DESKTOP_CODE_WORKSPACE_PROGRESS_CHANNEL,
+  normalizeDesktopCodeWorkspaceCancelRequest,
   normalizeDesktopCodeWorkspacePackageChunkRequest,
   normalizeDesktopCodeWorkspacePackageDisposeRequest,
   normalizeDesktopCodeWorkspacePackagePrepareRequest,
   normalizeDesktopCodeWorkspacePrepareRequest,
+  terminalDesktopCodeWorkspaceProgress,
   type DesktopCodeWorkspacePackageChunkResponse,
   type DesktopCodeWorkspacePackageDisposeResponse,
   type DesktopCodeWorkspacePackagePrepareResponse,
+  type DesktopCodeWorkspaceProgress,
+  type DesktopCodeWorkspaceProgressPhase,
+  type DesktopCodeWorkspaceProgressSnapshot,
   type DesktopCodeWorkspacePrepareResponse,
 } from '../shared/desktopCodeWorkspaceIPC';
 import {
@@ -9430,6 +9437,45 @@ type DesktopCodeWorkspaceEnginePackageJobRecord = Readonly<{
 const desktopCodeWorkspaceEnginePackageJobs = new Map<string, DesktopCodeWorkspaceEnginePackageJobRecord>();
 const desktopCodeWorkspaceEnginePackageJobTTLMS = 30 * 60 * 1000;
 
+type DesktopCodeWorkspacePreparationOperation = Readonly<{
+  operationID: string;
+  webContentsID: number;
+  controller: AbortController;
+}>;
+
+const desktopCodeWorkspacePreparationOperations = new Map<string, DesktopCodeWorkspacePreparationOperation>();
+
+function beginDesktopCodeWorkspacePreparationOperation(operationID: string, webContentsID: number): DesktopCodeWorkspacePreparationOperation {
+  const existing = desktopCodeWorkspacePreparationOperations.get(operationID);
+  existing?.controller.abort();
+  const operation = {
+    operationID,
+    webContentsID,
+    controller: new AbortController(),
+  };
+  desktopCodeWorkspacePreparationOperations.set(operationID, operation);
+  return operation;
+}
+
+function finishDesktopCodeWorkspacePreparationOperation(operation: DesktopCodeWorkspacePreparationOperation): void {
+  if (desktopCodeWorkspacePreparationOperations.get(operation.operationID) === operation) {
+    desktopCodeWorkspacePreparationOperations.delete(operation.operationID);
+  }
+}
+
+function emitDesktopCodeWorkspaceProgress(
+  sender: WebContents,
+  operationID: string,
+  progress: Omit<DesktopCodeWorkspaceProgress, 'operation_id' | 'updated_at_unix_ms'>,
+): void {
+  if (sender.isDestroyed()) return;
+  sender.send(DESKTOP_CODE_WORKSPACE_PROGRESS_CHANNEL, {
+    operation_id: operationID,
+    ...progress,
+    updated_at_unix_ms: Date.now(),
+  } satisfies DesktopCodeWorkspaceProgress);
+}
+
 function pruneDesktopCodeWorkspaceEnginePackageJobs(): void {
   const expiresBefore = Date.now() - desktopCodeWorkspaceEnginePackageJobTTLMS;
   for (const [jobID, job] of desktopCodeWorkspaceEnginePackageJobs.entries()) {
@@ -15541,9 +15587,22 @@ function codeWorkspaceEngineReady(status: unknown): boolean {
   return String(active.detection_state ?? '').trim() === 'ready';
 }
 
+type DesktopCodeWorkspacePreparationContext = Readonly<{
+  signal: AbortSignal;
+  onProgress: (progress: DesktopCodeWorkspaceProgressSnapshot) => void;
+}>;
+
 async function prepareCodeWorkspaceEnginePackageJob(
   platform: DesktopCodeWorkspaceEnginePackagePlatform,
+  context: DesktopCodeWorkspacePreparationContext,
 ): Promise<DesktopCodeWorkspacePackagePrepareResponse> {
+  let currentPhase: DesktopCodeWorkspaceProgressPhase = 'lookup';
+  let lastProgress: DesktopCodeWorkspaceProgressSnapshot | undefined;
+  const reportProgress = (progress: DesktopCodeWorkspaceProgressSnapshot): void => {
+    currentPhase = progress.phase;
+    lastProgress = progress;
+    context.onProgress(progress);
+  };
   try {
     pruneDesktopCodeWorkspaceEnginePackageJobs();
     const preparedPackage = await prepareCodeWorkspaceEnginePackage({
@@ -15551,6 +15610,8 @@ async function prepareCodeWorkspaceEnginePackageJob(
       platform,
       fetchPolicy: {
         timeout_ms: 60_000,
+        signal: context.signal,
+        onProgress: reportProgress,
       },
     });
     const stat = await fs.stat(preparedPackage.archive_path);
@@ -15581,6 +15642,11 @@ async function prepareCodeWorkspaceEnginePackageJob(
       },
     };
   } catch (error) {
+    context.onProgress(terminalDesktopCodeWorkspaceProgress(
+      lastProgress,
+      currentPhase,
+      context.signal.aborted ? 'cancelled' : 'failed',
+    ));
     return {
       ok: false,
       message: error instanceof Error ? error.message : 'Desktop could not prepare the workspace package.',
@@ -15645,7 +15711,10 @@ function disposeCodeWorkspaceEnginePackageJob(jobID: string): DesktopCodeWorkspa
   return { ok: true };
 }
 
-async function prepareCodeWorkspaceEngineFromDesktop(webContentsID: number): Promise<DesktopCodeWorkspacePrepareResponse> {
+async function prepareCodeWorkspaceEngineFromDesktop(
+  webContentsID: number,
+  context: DesktopCodeWorkspacePreparationContext,
+): Promise<DesktopCodeWorkspacePrepareResponse> {
   const sessionRecord = sessionRecordForWebContentsID(webContentsID);
   if (!sessionRecord) {
     return {
@@ -15670,8 +15739,15 @@ async function prepareCodeWorkspaceEngineFromDesktop(webContentsID: number): Pro
     };
   }
 
+  let currentPhase: DesktopCodeWorkspaceProgressPhase = 'lookup';
+  let lastProgress: DesktopCodeWorkspaceProgressSnapshot | undefined;
+  const reportProgress = (progress: DesktopCodeWorkspaceProgressSnapshot): void => {
+    currentPhase = progress.phase;
+    lastProgress = progress;
+    context.onProgress(progress);
+  };
   try {
-    const currentStatus = await getCodeWorkspaceEngineStatus(endpoint);
+    const currentStatus = await getCodeWorkspaceEngineStatus(endpoint, context.signal);
     if (codeWorkspaceEngineReady(currentStatus)) {
       return {
         ok: true,
@@ -15685,14 +15761,29 @@ async function prepareCodeWorkspaceEngineFromDesktop(webContentsID: number): Pro
       platform,
       fetchPolicy: {
         timeout_ms: 60_000,
+        signal: context.signal,
+        onProgress: reportProgress,
       },
     });
+    currentPhase = 'upload';
     const status = await uploadCodeWorkspaceEngineViaRuntimeControl({
       endpoint,
       manifest: preparedPackage.manifest,
       archivePath: preparedPackage.archive_path,
       maxArchiveBytes: DEFAULT_CODE_WORKSPACE_ENGINE_UPLOAD_ARCHIVE_LIMIT,
+      signal: context.signal,
+      onProgress: (progress) => {
+        reportProgress({
+          phase: 'upload',
+          state: 'running',
+          completed_bytes: progress.completed_bytes,
+          total_bytes: progress.total_bytes,
+        });
+      },
     });
+    if (lastProgress?.phase === 'upload') {
+      reportProgress({ ...lastProgress, state: 'completed' });
+    }
     return {
       ok: true,
       prepared: true,
@@ -15700,6 +15791,19 @@ async function prepareCodeWorkspaceEngineFromDesktop(webContentsID: number): Pro
       message: preparedPackage.from_cache ? 'Workspace engine was ready from Desktop cache.' : 'Workspace engine prepared.',
     };
   } catch (error) {
+    context.onProgress(terminalDesktopCodeWorkspaceProgress(
+      lastProgress,
+      currentPhase,
+      context.signal.aborted ? 'cancelled' : 'failed',
+    ));
+    if (context.signal.aborted) {
+      return {
+        ok: false,
+        prepared: false,
+        cancelled: true,
+        message: 'Browser Editor setup was canceled.',
+      };
+    }
     const failure = desktopFailureFromError(error, {
       code: 'workspace_engine_prepare_failed',
       title: 'Workspace Preparation Failed',
@@ -16994,10 +17098,18 @@ if (!app.requestSingleInstanceLock()) {
   });
   ipcMain.handle(DESKTOP_CODE_WORKSPACE_PREPARE_CHANNEL, async (event, request): Promise<DesktopCodeWorkspacePrepareResponse> => {
     const normalized = normalizeDesktopCodeWorkspacePrepareRequest(request);
-    void normalized;
-    return prepareCodeWorkspaceEngineFromDesktop(event.sender.id);
+    const operationID = normalized.operation_id || `cweop_${crypto.randomBytes(18).toString('base64url')}`;
+    const operation = beginDesktopCodeWorkspacePreparationOperation(operationID, event.sender.id);
+    try {
+      return await prepareCodeWorkspaceEngineFromDesktop(event.sender.id, {
+        signal: operation.controller.signal,
+        onProgress: (progress) => emitDesktopCodeWorkspaceProgress(event.sender, operationID, progress),
+      });
+    } finally {
+      finishDesktopCodeWorkspacePreparationOperation(operation);
+    }
   });
-  ipcMain.handle(DESKTOP_CODE_WORKSPACE_PACKAGE_PREPARE_CHANNEL, async (_event, request): Promise<DesktopCodeWorkspacePackagePrepareResponse> => {
+  ipcMain.handle(DESKTOP_CODE_WORKSPACE_PACKAGE_PREPARE_CHANNEL, async (event, request): Promise<DesktopCodeWorkspacePackagePrepareResponse> => {
     const normalized = normalizeDesktopCodeWorkspacePackagePrepareRequest(request);
     if (!normalized) {
       return {
@@ -17005,7 +17117,16 @@ if (!app.requestSingleInstanceLock()) {
         message: 'Desktop received an invalid workspace package request.',
       };
     }
-    return prepareCodeWorkspaceEnginePackageJob(normalized.platform);
+    const operationID = normalized.operation_id || `cweop_${crypto.randomBytes(18).toString('base64url')}`;
+    const operation = beginDesktopCodeWorkspacePreparationOperation(operationID, event.sender.id);
+    try {
+      return await prepareCodeWorkspaceEnginePackageJob(normalized.platform, {
+        signal: operation.controller.signal,
+        onProgress: (progress) => emitDesktopCodeWorkspaceProgress(event.sender, operationID, progress),
+      });
+    } finally {
+      finishDesktopCodeWorkspacePreparationOperation(operation);
+    }
   });
   ipcMain.handle(DESKTOP_CODE_WORKSPACE_PACKAGE_CHUNK_CHANNEL, async (_event, request): Promise<DesktopCodeWorkspacePackageChunkResponse> => {
     const normalized = normalizeDesktopCodeWorkspacePackageChunkRequest(request);
@@ -17026,6 +17147,22 @@ if (!app.requestSingleInstanceLock()) {
       };
     }
     return disposeCodeWorkspaceEnginePackageJob(normalized.job_id);
+  });
+  ipcMain.handle(DESKTOP_CODE_WORKSPACE_CANCEL_CHANNEL, async (event, request) => {
+    const normalized = normalizeDesktopCodeWorkspaceCancelRequest(request);
+    if (!normalized) {
+      return {
+        ok: false,
+        cancelled: false,
+        message: 'Desktop received an invalid workspace preparation cancellation request.',
+      };
+    }
+    const operation = desktopCodeWorkspacePreparationOperations.get(normalized.operation_id);
+    if (!operation || operation.webContentsID !== event.sender.id) {
+      return { ok: true, cancelled: false };
+    }
+    operation.controller.abort();
+    return { ok: true, cancelled: true };
   });
   ipcMain.on(CANCEL_DESKTOP_SETTINGS_CHANNEL, () => {
     setLauncherViewState({

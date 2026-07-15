@@ -27,6 +27,15 @@ export type CodeWorkspaceEngineReleaseAsset = Readonly<{
 export type CodeWorkspaceEngineFetchPolicy = Readonly<{
   timeout_ms?: number;
   signal?: AbortSignal;
+  onProgress?: (progress: CodeWorkspaceEngineArchiveProgress) => void;
+}>;
+
+export type CodeWorkspaceEngineArchiveProgress = Readonly<{
+  phase: 'lookup' | 'download' | 'package_validation';
+  state: 'running' | 'completed';
+  completed_bytes?: number;
+  total_bytes?: number;
+  from_cache?: boolean;
 }>;
 
 type CodeWorkspaceEngineCatalogPlatform = Readonly<{
@@ -138,6 +147,7 @@ async function fetchJSON(sourceURL: string, fetchPolicy?: CodeWorkspaceEngineFet
 async function downloadURLToPath(
   sourceURL: string,
   targetPath: string,
+  expectedBytes: number,
   fetchPolicy?: CodeWorkspaceEngineFetchPolicy,
 ): Promise<void> {
   throwIfCanceled(fetchPolicy?.signal);
@@ -155,10 +165,43 @@ async function downloadURLToPath(
     if (!response.ok) {
       throw new Error(`Download failed with HTTP ${response.status} for ${sourceURL}.`);
     }
-    const data = Buffer.from(await response.arrayBuffer());
-    throwIfCanceled(fetchPolicy?.signal);
     await fs.mkdir(path.dirname(targetPath), { recursive: true });
-    await fs.writeFile(tempPath, data);
+    const handle = await fs.open(tempPath, 'w', 0o600);
+    let completedBytes = 0;
+    let lastReportedAt = 0;
+    try {
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error(`Download response did not include a body for ${sourceURL}.`);
+      }
+      for (;;) {
+        throwIfCanceled(fetchPolicy?.signal);
+        const part = await reader.read();
+        if (part.done) break;
+        if (!part.value || part.value.byteLength <= 0) continue;
+        await handle.write(part.value);
+        completedBytes += part.value.byteLength;
+        const now = Date.now();
+        if (now - lastReportedAt >= 250) {
+          fetchPolicy?.onProgress?.({
+            phase: 'download',
+            state: 'running',
+            completed_bytes: completedBytes,
+            total_bytes: expectedBytes,
+          });
+          lastReportedAt = now;
+        }
+      }
+    } finally {
+      await handle.close();
+    }
+    throwIfCanceled(fetchPolicy?.signal);
+    fetchPolicy?.onProgress?.({
+      phase: 'download',
+      state: 'completed',
+      completed_bytes: completedBytes,
+      total_bytes: expectedBytes,
+    });
     await fs.rename(tempPath, targetPath);
   } catch (error) {
     if (fetchPolicy?.signal?.aborted) {
@@ -268,8 +311,28 @@ export async function ensureCodeWorkspaceEngineArchive(
   const existing = await fs.stat(archivePath).catch(() => null);
   const fromCache = Boolean(existing?.isFile() && existing.size > 0);
   if (!fromCache) {
-    await downloadURLToPath(asset.download_url, archivePath, fetchPolicy);
+    fetchPolicy?.onProgress?.({
+      phase: 'download',
+      state: 'running',
+      completed_bytes: 0,
+      total_bytes: asset.size_bytes,
+    });
+    await downloadURLToPath(asset.download_url, archivePath, asset.size_bytes, fetchPolicy);
+  } else {
+    fetchPolicy?.onProgress?.({
+      phase: 'download',
+      state: 'completed',
+      completed_bytes: existing?.size ?? asset.size_bytes,
+      total_bytes: asset.size_bytes,
+      from_cache: true,
+    });
   }
+  fetchPolicy?.onProgress?.({
+    phase: 'package_validation',
+    state: 'running',
+    total_bytes: asset.size_bytes,
+    from_cache: fromCache,
+  });
   const [sha256, stat] = await Promise.all([sha256File(archivePath), fs.stat(archivePath)]);
   if (asset.sha256 && sha256 !== asset.sha256) {
     await fs.rm(archivePath, { force: true }).catch(() => undefined);
@@ -279,6 +342,13 @@ export async function ensureCodeWorkspaceEngineArchive(
     await fs.rm(archivePath, { force: true }).catch(() => undefined);
     throw new Error('Downloaded Browser Editor package size did not match the Redeven catalog.');
   }
+  fetchPolicy?.onProgress?.({
+    phase: 'package_validation',
+    state: 'completed',
+    completed_bytes: stat.size,
+    total_bytes: asset.size_bytes,
+    from_cache: fromCache,
+  });
   return {
     archive_path: archivePath,
     sha256,

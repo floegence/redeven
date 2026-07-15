@@ -80,6 +80,7 @@ const desktopCodeWorkspaceMocks = vi.hoisted(() => ({
   prepareAvailable: vi.fn(() => true),
   prepareWorkspaceEngine: vi.fn(async () => ({ ok: true, prepared: true })),
   prepareWorkspaceEngineWithDesktop: vi.fn(async (): Promise<any> => ({ ok: true, prepared: true })),
+  cancelWorkspaceEnginePreparation: vi.fn(async (): Promise<any> => ({ ok: true, cancelled: true })),
 }));
 
 const desktopSessionContextMocks = vi.hoisted(() => ({
@@ -248,6 +249,7 @@ vi.mock('../services/localApi', () => ({
 }));
 
 vi.mock('../services/desktopCodeWorkspaceBridge', () => ({
+  cancelWorkspaceEnginePreparation: desktopCodeWorkspaceMocks.cancelWorkspaceEnginePreparation,
   desktopCodeWorkspacePrepareAvailable: desktopCodeWorkspaceMocks.prepareAvailable,
   prepareWorkspaceEngineInDesktop: desktopCodeWorkspaceMocks.prepareWorkspaceEngine,
   prepareWorkspaceEngineWithDesktop: desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop,
@@ -445,6 +447,8 @@ describe('EnvSettingsPage', () => {
     desktopCodeWorkspaceMocks.prepareAvailable.mockReturnValue(true);
     desktopCodeWorkspaceMocks.prepareWorkspaceEngine.mockReset();
     desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop.mockReset();
+    desktopCodeWorkspaceMocks.cancelWorkspaceEnginePreparation.mockReset();
+    desktopCodeWorkspaceMocks.cancelWorkspaceEnginePreparation.mockResolvedValue({ ok: true, cancelled: true });
     desktopSessionContextMocks.readSnapshot.mockReset();
     desktopSessionContextMocks.readSnapshot.mockReturnValue(null);
     host = document.createElement('div');
@@ -651,6 +655,8 @@ describe('EnvSettingsPage', () => {
           codeRuntimeSelectionLoadingVersion: () => null,
           codeRuntimeRemoveVersionLoading: () => null,
           codeRuntimeLocalPrepareFailure: () => null,
+          codeRuntimeLocalPrepareCancelled: () => false,
+          codeRuntimePrepareProgress: () => null,
           canManageCodeRuntime: () => false,
           prepareManagedCodeRuntime: () => undefined,
           cancelManagedCodeRuntimeOperation: () => undefined,
@@ -1028,11 +1034,13 @@ describe('EnvSettingsPage', () => {
     button?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await flushPage();
 
-    expect(desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop).toHaveBeenCalledWith({
+    expect(desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop).toHaveBeenCalledWith(expect.objectContaining({
       reason: 'settings',
       status: undefined,
       preferSessionUpload: false,
-    });
+      operationID: expect.stringMatching(/^browser-editor:/),
+      onProgress: expect.any(Function),
+    }));
     expect(notificationMocks.error).not.toHaveBeenCalled();
   });
 

@@ -19,7 +19,15 @@ import {
   browserEditorLocalFailureFromError,
   type BrowserEditorSetupLocalFailure,
 } from '../../services/browserEditorSetupActivity';
-import { desktopCodeWorkspacePrepareAvailable, prepareWorkspaceEngineWithDesktop } from '../../services/desktopCodeWorkspaceBridge';
+import {
+  cancelWorkspaceEnginePreparation,
+  desktopCodeWorkspacePrepareAvailable,
+  prepareWorkspaceEngineWithDesktop,
+} from '../../services/desktopCodeWorkspaceBridge';
+import {
+  createBrowserEditorSetupOperationID,
+  type BrowserEditorSetupProgress,
+} from '../../services/browserEditorSetupProgress';
 import { readDesktopSessionContextSnapshot } from '../../services/desktopSessionContext';
 import { useEnvContext, type EnvSettingsSection } from '../EnvContext';
 import type { AgentSettingsResponse, CodexHostStatus, SettingsUpdateResponse } from './types';
@@ -113,6 +121,8 @@ export interface EnvSettingsPageContextValue {
   codeRuntimeSelectionLoadingVersion: Accessor<string | null>;
   codeRuntimeRemoveVersionLoading: Accessor<string | null>;
   codeRuntimeLocalPrepareFailure: Accessor<any>;
+  codeRuntimeLocalPrepareCancelled: Accessor<boolean>;
+  codeRuntimePrepareProgress: Accessor<BrowserEditorSetupProgress | null>;
   canManageCodeRuntime: Accessor<boolean>;
   prepareManagedCodeRuntime: () => void;
   cancelManagedCodeRuntimeOperation: () => void;
@@ -203,6 +213,10 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element; initialS
   const [codeRuntimeActionLoading, setCodeRuntimeActionLoading] = createSignal(false);
   const [codeRuntimeCancelLoading, setCodeRuntimeCancelLoading] = createSignal(false);
   const [codeRuntimeLocalPrepareFailure, setCodeRuntimeLocalPrepareFailure] = createSignal<BrowserEditorSetupLocalFailure | null>(null);
+  const [codeRuntimeLocalPrepareCancelled, setCodeRuntimeLocalPrepareCancelled] = createSignal(false);
+  const [codeRuntimePrepareProgress, setCodeRuntimePrepareProgress] = createSignal<BrowserEditorSetupProgress | null>(null);
+  const [codeRuntimePrepareOperationID, setCodeRuntimePrepareOperationID] = createSignal<string | null>(null);
+  const [codeRuntimePrepareCancelRequestedID, setCodeRuntimePrepareCancelRequestedID] = createSignal<string | null>(null);
   const [codeRuntimeSelectionLoadingVersion, setCodeRuntimeSelectionLoadingVersion] = createSignal<string | null>(null);
   const [codeRuntimeRemoveVersionLoading, setCodeRuntimeRemoveVersionLoading] = createSignal<string | null>(null);
   const [pendingRuntimeSuccessAction, setPendingRuntimeSuccessAction] = createSignal<'' | 'prepare_workspace_engine' | 'remove_local_environment_version'>('');
@@ -217,7 +231,10 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element; initialS
   createEffect(() => {
     const status = codeRuntimeStatus();
     if (!status) return;
-    if (codeRuntimeOperationSucceeded(status)) setCodeRuntimeLocalPrepareFailure(null);
+    if (codeRuntimeOperationSucceeded(status)) {
+      setCodeRuntimeLocalPrepareFailure(null);
+      setCodeRuntimeLocalPrepareCancelled(false);
+    }
   });
 
   createEffect(() => {
@@ -268,9 +285,19 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element; initialS
   const startRestart = async () => {};
   const startUpgrade = async () => {};
   const prepareManagedCodeRuntime = async () => {
+    const operationID = createBrowserEditorSetupOperationID();
+    setCodeRuntimePrepareOperationID(operationID);
+    setCodeRuntimePrepareCancelRequestedID(null);
     setCodeRuntimeActionLoading(true);
     setPendingRuntimeSuccessAction('prepare_workspace_engine');
     setCodeRuntimeLocalPrepareFailure(null);
+    setCodeRuntimeLocalPrepareCancelled(false);
+    setCodeRuntimePrepareProgress({
+      operation_id: operationID,
+      phase: 'lookup',
+      state: 'running',
+      updated_at_unix_ms: Date.now(),
+    });
     try {
       if (!desktopCodeWorkspacePrepareAvailable()) {
         throw new Error(i18n.t('codeRuntime.notifications.desktopRequiredToSetup'));
@@ -279,24 +306,46 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element; initialS
         reason: 'settings',
         status: codeRuntimeStatus(),
         preferSessionUpload: readDesktopSessionContextSnapshot()?.target_route === 'remote_desktop',
+        operationID,
+        onProgress: (progress) => {
+          if (codeRuntimePrepareOperationID() === operationID) setCodeRuntimePrepareProgress(progress);
+        },
       });
+      if (result.cancelled || codeRuntimePrepareCancelRequestedID() === operationID) {
+        setPendingRuntimeSuccessAction('');
+        setCodeRuntimeLocalPrepareCancelled(true);
+        return;
+      }
       if (!result.ok || !result.prepared) {
         throw new Error(result.message || i18n.t('codeRuntime.notifications.setupDidNotFinish'));
       }
       await refetchCodeRuntimeStatus();
     } catch (e) {
       setPendingRuntimeSuccessAction('');
+      if (codeRuntimePrepareCancelRequestedID() === operationID) {
+        setCodeRuntimeLocalPrepareCancelled(true);
+        return;
+      }
       const failure = browserEditorLocalFailureFromError(e);
       setCodeRuntimeLocalPrepareFailure(failure);
       notify.error(i18n.t('codeRuntime.notifications.setupFailedTitle'), failure.message);
     } finally {
-      setCodeRuntimeActionLoading(false);
+      if (codeRuntimePrepareOperationID() === operationID) {
+        setCodeRuntimePrepareOperationID(null);
+        setCodeRuntimeActionLoading(false);
+      }
     }
   };
   const cancelManagedCodeRuntimeOperation = async () => {
+    const operationID = codeRuntimePrepareOperationID();
+    if (operationID) setCodeRuntimePrepareCancelRequestedID(operationID);
     setCodeRuntimeCancelLoading(true);
     try {
-      await cancelCodeRuntimeOperation();
+      await Promise.allSettled([
+        ...(operationID ? [cancelWorkspaceEnginePreparation(operationID)] : []),
+        cancelCodeRuntimeOperation(),
+      ]);
+      if (operationID) setCodeRuntimeLocalPrepareCancelled(true);
       await refetchCodeRuntimeStatus();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -353,7 +402,7 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element; initialS
     refreshSettingsPage,
     codeRuntimeActionLoading, codeRuntimeCancelLoading,
     codeRuntimeSelectionLoadingVersion, codeRuntimeRemoveVersionLoading,
-    codeRuntimeLocalPrepareFailure, canManageCodeRuntime,
+    codeRuntimeLocalPrepareFailure, codeRuntimeLocalPrepareCancelled, codeRuntimePrepareProgress, canManageCodeRuntime,
     prepareManagedCodeRuntime, cancelManagedCodeRuntimeOperation,
     selectManagedCodeRuntimeVersion, removeManagedCodeRuntimeVersion,
     showLoadingCurtain, hideLoadingCurtain,

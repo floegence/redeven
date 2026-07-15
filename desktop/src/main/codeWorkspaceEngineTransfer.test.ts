@@ -3,7 +3,7 @@ import http from 'node:http';
 import os from 'node:os';
 import path from 'node:path';
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { DesktopRuntimeControlEndpoint } from '../shared/runtimeControl';
 import type { CodeWorkspaceEngineArtifactManifest } from './codeWorkspaceEnginePackageCache';
@@ -64,7 +64,21 @@ async function startServer(): Promise<TestServer> {
   const server = http.createServer((request, response) => {
     requests.push(request);
     response.setHeader('Content-Type', 'application/json');
-    response.end(JSON.stringify({ ok: true, data: {} }));
+    if (request.method === 'POST' && request.url === '/v1/code-workspace-engine/import-sessions') {
+      response.end(JSON.stringify({
+        ok: true,
+        data: { upload_id: 'upload_1', operation_id: 'upload_1', chunk_size_bytes: 8, expected_bytes: 3 },
+      }));
+      return;
+    }
+    if (request.method === 'PUT' && request.url === '/v1/code-workspace-engine/import-sessions/upload_1/chunks/0') {
+      response.end(JSON.stringify({
+        ok: true,
+        data: { upload_id: 'upload_1', received_bytes: 3, expected_bytes: 3, next_chunk_index: 1 },
+      }));
+      return;
+    }
+    response.end(JSON.stringify({ ok: true, data: { operation: { state: 'succeeded' } } }));
   });
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
@@ -117,5 +131,31 @@ describe('code workspace engine transfer', () => {
       maxArchiveBytes: 2,
     })).rejects.toThrow('Workspace engine package is too large (3 bytes).');
     expect(server.requests).toHaveLength(0);
+  });
+
+  it('reports Runtime-confirmed upload bytes', async () => {
+    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-code-workspace-transfer-'));
+    tempDirs.push(tempDir);
+    const archivePath = path.join(tempDir, 'code-server.tar.gz');
+    await fs.writeFile(archivePath, Buffer.from([1, 2, 3]));
+    const server = await startServer();
+    const progress = vi.fn();
+
+    await uploadCodeWorkspaceEngineViaRuntimeControl({
+      endpoint: endpoint(server.origin),
+      manifest: manifest(),
+      archivePath,
+      onProgress: progress,
+    });
+
+    expect(progress.mock.calls.map(([item]) => item)).toEqual([
+      { completed_bytes: 0, total_bytes: 3 },
+      { completed_bytes: 3, total_bytes: 3 },
+    ]);
+    expect(server.requests.map((request) => `${request.method} ${request.url}`)).toEqual([
+      'POST /v1/code-workspace-engine/import-sessions',
+      'PUT /v1/code-workspace-engine/import-sessions/upload_1/chunks/0',
+      'POST /v1/code-workspace-engine/import-sessions/upload_1/complete',
+    ]);
   });
 });

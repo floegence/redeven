@@ -80,7 +80,10 @@ export function CodespacesSection() {
     <div class="space-y-4">
       <CodeRuntimeSettingsCard
         status={ctx.codeRuntimeStatus()} loading={ctx.codeRuntimeStatus.loading} error={null}
-        localPrepareFailure={ctx.codeRuntimeLocalPrepareFailure()} canInteract={ctx.canInteract()}
+        localPrepareFailure={ctx.codeRuntimeLocalPrepareFailure()}
+        localPrepareCancelled={ctx.codeRuntimeLocalPrepareCancelled()}
+        prepareProgress={ctx.codeRuntimePrepareProgress()}
+        canInteract={ctx.canInteract()}
         canManage={ctx.canManageCodeRuntime()} actionLoading={ctx.codeRuntimeActionLoading()}
         cancelLoading={ctx.codeRuntimeCancelLoading()} selectionLoadingVersion={ctx.codeRuntimeSelectionLoadingVersion()}
         removeVersionLoading={ctx.codeRuntimeRemoveVersionLoading()}

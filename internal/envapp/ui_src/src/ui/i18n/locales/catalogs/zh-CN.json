@@ -2616,6 +2616,25 @@
         "upload": "发送到环境",
         "verify": "校验编辑器"
       },
+      "progress": {
+        "lookup": "正在检查最新的 Browser Editor 软件包...",
+        "downloading": "正在将 Browser Editor 下载到 Desktop...",
+        "packageValidation": "正在检查缓存在 Desktop 中的 Browser Editor 软件包...",
+        "finishing": "传输已完成。Redeven 正在校验并安装 Browser Editor。",
+        "cacheHit": "正在使用 Desktop 缓存，无需重复下载。",
+        "downloadedBytes": "已下载 {completed} / {total}",
+        "uploadedBytes": "已发送 {completed} / {total}",
+        "measuring": "正在估算当前步骤的剩余时间...",
+        "rateAndEta": "{rate} · 当前步骤预计还需约 {duration}",
+        "stalled": "已连续 15 秒没有收到新的传输确认，仍在等待环境响应。",
+        "awaitingConfirmation": "传输已完成，正在等待环境确认接收。",
+        "lookupEstimate": "获取到最新编辑器信息后，将显示软件包大小和预计所需时间。",
+        "elapsed": "设置已耗时：{duration}",
+        "secondsShort": "{value} 秒",
+        "minutesShort": "{value} 分钟",
+        "downloadProgressLabel": "Browser Editor 下载进度",
+        "uploadProgressLabel": "Browser Editor 发送到环境的进度"
+      },
       "failure": {
         "desktopReleaseLookup": "无法检查最新的 Browser Editor。",
         "desktopPackageCache": "无法在 Desktop 上缓存 Browser Editor 包。",

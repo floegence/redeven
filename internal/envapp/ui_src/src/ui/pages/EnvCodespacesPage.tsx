@@ -55,7 +55,15 @@ import {
   openCodespaceWindowInDesktopShell,
   openExternalURLInDesktopShell,
 } from "../services/desktopShellBridge";
-import { desktopCodeWorkspacePrepareAvailable, prepareWorkspaceEngineWithDesktop } from "../services/desktopCodeWorkspaceBridge";
+import {
+  cancelWorkspaceEnginePreparation,
+  desktopCodeWorkspacePrepareAvailable,
+  prepareWorkspaceEngineWithDesktop,
+} from "../services/desktopCodeWorkspaceBridge";
+import {
+  createBrowserEditorSetupOperationID,
+  type BrowserEditorSetupProgress,
+} from "../services/browserEditorSetupProgress";
 import { readDesktopSessionContextSnapshot } from "../services/desktopSessionContext";
 import { RedevenLoadingCurtain } from "../primitives/RedevenLoadingCurtain";
 import { buildFilePathFlowerTurnLauncherIntent } from "../utils/filePathAskFlower";
@@ -767,6 +775,8 @@ function CodeRuntimePreparePanel(props: {
   loading: boolean;
   error?: string | null;
   localFailure?: BrowserEditorSetupLocalFailure | null;
+  localCancelled: boolean;
+  localProgress?: BrowserEditorSetupProgress | null;
   pendingIntent: PendingCodespaceIntent;
   prepareSubmitting: boolean;
   cancelSubmitting: boolean;
@@ -786,6 +796,8 @@ function CodeRuntimePreparePanel(props: {
     error: props.error,
     localPending: localPending(),
     localFailure: props.localFailure,
+    localCancelled: props.localCancelled,
+    localProgress: props.localProgress,
     pendingIntent: pendingActivityIntent(),
   });
   const prepareCopy = () => localizeBrowserEditorPrepareCopy(codeRuntimePrepareIntent(props.status), i18n);
@@ -795,6 +807,8 @@ function CodeRuntimePreparePanel(props: {
     error: props.error,
     localPending: localPending(),
     localFailure: props.localFailure,
+    localCancelled: props.localCancelled,
+    localProgress: props.localProgress,
     prepareDescription: prepareCopy().description,
     pendingIntent: pendingActivityIntent(),
   }, i18n);
@@ -934,6 +948,10 @@ export function EnvCodespacesPage() {
   const [pendingIntent, setPendingIntent] = createSignal<PendingCodespaceIntent>(null);
   const [runtimePrepareLocalPending, setRuntimePrepareLocalPending] = createSignal(false);
   const [runtimePrepareLocalFailure, setRuntimePrepareLocalFailure] = createSignal<BrowserEditorSetupLocalFailure | null>(null);
+  const [runtimePrepareLocalCancelled, setRuntimePrepareLocalCancelled] = createSignal(false);
+  const [runtimePrepareProgress, setRuntimePrepareProgress] = createSignal<BrowserEditorSetupProgress | null>(null);
+  const [runtimePrepareOperationID, setRuntimePrepareOperationID] = createSignal<string | null>(null);
+  const [runtimePrepareCancelRequestedID, setRuntimePrepareCancelRequestedID] = createSignal<string | null>(null);
   const [runtimePrepareSubmitting, setRuntimePrepareSubmitting] = createSignal(false);
   const [runtimeCancelSubmitting, setRuntimeCancelSubmitting] = createSignal(false);
   const [busyActions, setBusyActions] = createSignal<Record<string, CodespaceBusyAction | undefined>>({});
@@ -1027,6 +1045,7 @@ export function EnvCodespacesPage() {
   createEffect(() => {
     if (codeRuntimeReady(runtimeStatus())) {
       setRuntimePrepareLocalFailure(null);
+      setRuntimePrepareLocalCancelled(false);
     }
   });
 
@@ -1120,9 +1139,19 @@ export function EnvCodespacesPage() {
   };
 
   const startWorkspacePrepareFlow = async (reason: "open" | "start" | "settings" | "retry" = "retry") => {
+    const operationID = createBrowserEditorSetupOperationID();
+    setRuntimePrepareOperationID(operationID);
+    setRuntimePrepareCancelRequestedID(null);
     setRuntimePrepareLocalPending(true);
     setRuntimePrepareSubmitting(true);
     setRuntimePrepareLocalFailure(null);
+    setRuntimePrepareLocalCancelled(false);
+    setRuntimePrepareProgress({
+      operation_id: operationID,
+      phase: "lookup",
+      state: "running",
+      updated_at_unix_ms: Date.now(),
+    });
     try {
       if (!desktopCodeWorkspacePrepareAvailable()) {
         throw new Error(i18n.t("codespaces.prepare.desktopRequired"));
@@ -1131,13 +1160,25 @@ export function EnvCodespacesPage() {
         reason,
         status: runtimeStatus(),
         preferSessionUpload: readDesktopSessionContextSnapshot()?.target_route === "remote_desktop",
+        operationID,
+        onProgress: (progress) => {
+          if (runtimePrepareOperationID() === operationID) setRuntimePrepareProgress(progress);
+        },
       });
+      if (result.cancelled || runtimePrepareCancelRequestedID() === operationID) {
+        setRuntimePrepareLocalCancelled(true);
+        return;
+      }
       if (!result.ok || !result.prepared) {
         throw new Error(result.message || i18n.t("codespaces.prepare.setupDidNotFinish"));
       }
       await refetchRuntimeStatus();
       await continuePendingIntent();
     } catch (e) {
+      if (runtimePrepareCancelRequestedID() === operationID) {
+        setRuntimePrepareLocalCancelled(true);
+        return;
+      }
       const failure = browserEditorLocalFailureFromError(e);
       const intent = pendingIntent();
       setRuntimePrepareLocalFailure(failure);
@@ -1153,8 +1194,11 @@ export function EnvCodespacesPage() {
       }
       await refetchRuntimeStatus();
     } finally {
-      setRuntimePrepareSubmitting(false);
-      setRuntimePrepareLocalPending(false);
+      if (runtimePrepareOperationID() === operationID) {
+        setRuntimePrepareOperationID(null);
+        setRuntimePrepareSubmitting(false);
+        setRuntimePrepareLocalPending(false);
+      }
     }
   };
 
@@ -1179,9 +1223,15 @@ export function EnvCodespacesPage() {
   };
 
   const cancelRuntimePrepareFlow = async () => {
+    const operationID = runtimePrepareOperationID();
+    if (operationID) setRuntimePrepareCancelRequestedID(operationID);
     setRuntimeCancelSubmitting(true);
     try {
-      await cancelCodeRuntimeOperation();
+      await Promise.allSettled([
+        ...(operationID ? [cancelWorkspaceEnginePreparation(operationID)] : []),
+        cancelCodeRuntimeOperation(),
+      ]);
+      if (operationID) setRuntimePrepareLocalCancelled(true);
       await refetchRuntimeStatus();
     } catch (e) {
       notification.error(i18n.t("codespaces.notifications.cancelPreparationFailedTitle"), e instanceof Error ? e.message : String(e));
@@ -1484,6 +1534,8 @@ export function EnvCodespacesPage() {
               loading={runtimeStatus.loading}
               error={null}
               localFailure={runtimePrepareLocalFailure()}
+              localCancelled={runtimePrepareLocalCancelled()}
+              localProgress={runtimePrepareProgress()}
               pendingIntent={pendingIntent()}
               prepareSubmitting={runtimePrepareSubmitting()}
               cancelSubmitting={runtimeCancelSubmitting()}
