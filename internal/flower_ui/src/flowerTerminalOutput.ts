@@ -37,6 +37,7 @@ export type TerminalOutputViewportControllerOptions = Readonly<{
   thresholdPx?: number;
   requestAnimationFrame?: (callback: FrameRequestCallback) => number;
   cancelAnimationFrame?: (handle: number) => void;
+  onPresentationFrame?: () => void;
 }>;
 
 export function createTerminalOutputViewportController(
@@ -60,17 +61,21 @@ export function createTerminalOutputViewportController(
     frame = undefined;
   };
   const notifyOutputChanged = () => {
-    if (!viewport || !followsLatest || frame !== undefined) return;
+    if (!viewport || frame !== undefined) return;
     frame = requestFrame(() => {
       frame = undefined;
-      if (!viewport || !followsLatest) return;
-      viewport.scrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+      if (!viewport) return;
+      if (followsLatest) {
+        viewport.scrollTop = Math.max(0, viewport.scrollHeight - viewport.clientHeight);
+      }
+      options.onPresentationFrame?.();
     });
   };
 
   return {
     bind: (node) => {
       viewport = node;
+      followsLatest = true;
       notifyOutputChanged();
     },
     notifyOutputChanged,
@@ -127,7 +132,7 @@ export function terminalVisibleOutputIdentityKey(identity: TerminalVisibleOutput
 
   const threadScope = [scope, ownerThreadID, renderThreadID].join('\x1f');
   if (runID && (toolID || itemID)) {
-    return [threadScope, runID, turnID, messageID, blockIndex, toolID || itemID, itemID].join('\x1e');
+    return [threadScope, runID, turnID, toolID || itemID, itemID].join('\x1e');
   }
   if (messageID && blockIndex) {
     return [threadScope, runID, turnID, messageID, blockIndex, itemID || toolID, commandHash].join('\x1e');

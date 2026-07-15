@@ -12,9 +12,12 @@ import {
   FLOWER_ACTIVITY_RESIZE_DURATION_MS,
   FLOWER_ACTIVITY_SETTLE_HOLD_MS,
   flowerActivityDisclosureIntent,
+  type FlowerActivityDisclosureAnimation,
   type FlowerActivityDisclosureController,
   type FlowerActivityDisclosureIntent,
   type FlowerActivityDisclosureMotion,
+  type FlowerActivityDisclosureMotionPlatform,
+  type FlowerActivityDisclosurePresentation,
 } from '../../../../../flower_ui/src/activityDisclosure';
 
 type ControllerHarness = Readonly<{
@@ -27,6 +30,7 @@ type ControllerHarness = Readonly<{
 function createControllerHarness(
   initialIntent: FlowerActivityDisclosureIntent,
   reducedMotion = false,
+  settleAnchor: 'intent' | 'presentation' = 'intent',
 ): ControllerHarness {
   const [intent, setIntent] = createSignal(initialIntent);
   const [manualOpen, setManualOpen] = createSignal<boolean | undefined>(undefined);
@@ -39,6 +43,7 @@ function createControllerHarness(
       manualOpen,
       onManualOpenChange: setManualOpen,
       reducedMotion: () => reducedMotion,
+      settle: { anchor: settleAnchor },
     });
   });
   return { control, dispose, setIntent, setManualOpen };
@@ -101,6 +106,39 @@ describe('createFlowerActivityDisclosureController', () => {
     await vi.advanceTimersByTimeAsync(1000);
 
     expect(harness.control.open()).toBe(true);
+    harness.dispose();
+  });
+
+  it('starts presentation-anchored hold only after settled content is presented', async () => {
+    vi.useFakeTimers();
+    const harness = createControllerHarness('active', false, 'presentation');
+
+    await vi.advanceTimersByTimeAsync(FLOWER_ACTIVITY_AUTO_OPEN_DELAY_MS);
+    harness.setIntent('settled');
+    await vi.advanceTimersByTimeAsync(FLOWER_ACTIVITY_SETTLE_HOLD_MS * 2);
+    expect(harness.control.open()).toBe(true);
+
+    harness.control.markSettledPresentation();
+    await vi.advanceTimersByTimeAsync(FLOWER_ACTIVITY_SETTLE_HOLD_MS - 1);
+    expect(harness.control.open()).toBe(true);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(harness.control.open()).toBe(false);
+    harness.dispose();
+  });
+
+  it('restarts presentation-anchored hold for the latest settled output frame', async () => {
+    vi.useFakeTimers();
+    const harness = createControllerHarness('active', false, 'presentation');
+
+    await vi.advanceTimersByTimeAsync(FLOWER_ACTIVITY_AUTO_OPEN_DELAY_MS);
+    harness.setIntent('settled');
+    harness.control.markSettledPresentation();
+    await vi.advanceTimersByTimeAsync(900);
+    harness.control.markSettledPresentation();
+    await vi.advanceTimersByTimeAsync(900);
+    expect(harness.control.open()).toBe(true);
+    await vi.advanceTimersByTimeAsync(300);
+    expect(harness.control.open()).toBe(false);
     harness.dispose();
   });
 
@@ -191,84 +229,110 @@ describe('createFlowerActivityDisclosureController', () => {
   });
 });
 
-type ResizeObserverRecord = Readonly<{
-  callback: ResizeObserverCallback;
-  elements: Set<Element>;
-}>;
+class ControlledDisclosureAnimation implements FlowerActivityDisclosureAnimation {
+  private resolveFinished!: () => void;
+  private rejectFinished!: () => void;
+  private state: AnimationPlayState = 'running';
+  readonly finished = new Promise<void>((resolve, reject) => {
+    this.resolveFinished = resolve;
+    this.rejectFinished = reject;
+  });
 
-function createRafHarness() {
-  const callbacks = new Map<number, FrameRequestCallback>();
-  let nextHandle = 1;
-  let nextTimestamp = performance.now() + 16;
-  return {
-    requestAnimationFrame(callback: FrameRequestCallback): number {
-      const handle = nextHandle;
-      nextHandle += 1;
-      callbacks.set(handle, callback);
+  constructor(
+    readonly keyframes: Keyframe[],
+    readonly options: KeyframeAnimationOptions,
+    private readonly onFinish: (keyframe: Keyframe) => void,
+  ) {}
+
+  get playState(): AnimationPlayState {
+    return this.state;
+  }
+
+  finish(): void {
+    if (this.state !== 'running') return;
+    this.state = 'finished';
+    this.onFinish(this.keyframes[this.keyframes.length - 1] ?? {});
+    this.resolveFinished();
+  }
+
+  cancel(): void {
+    if (this.state !== 'running') return;
+    this.state = 'idle';
+    this.rejectFinished();
+  }
+}
+
+function createMotionPlatformHarness() {
+  const frames = new Map<number, FrameRequestCallback>();
+  const resizeCallbacks = new Map<Element, () => void>();
+  const animations: ControlledDisclosureAnimation[] = [];
+  let nextFrame = 1;
+  let timestamp = 16;
+  let presentation: FlowerActivityDisclosurePresentation = {
+    height: 0,
+    opacity: 0,
+    transform: 'translateY(-2px)',
+  };
+
+  const platform: FlowerActivityDisclosureMotionPlatform = {
+    requestAnimationFrame(callback) {
+      const handle = nextFrame;
+      nextFrame += 1;
+      frames.set(handle, callback);
       return handle;
     },
-    cancelAnimationFrame(handle: number): void {
-      callbacks.delete(handle);
+    cancelAnimationFrame(handle) {
+      frames.delete(handle);
     },
-    flushNext(): void {
-      const entry = callbacks.entries().next().value as [number, FrameRequestCallback] | undefined;
+    observeResize(node, callback) {
+      resizeCallbacks.set(node, callback);
+      return () => resizeCallbacks.delete(node);
+    },
+    readPresentation() {
+      return presentation;
+    },
+    animate(_node, keyframes, animationOptions) {
+      const animation = new ControlledDisclosureAnimation(keyframes, animationOptions, (keyframe) => {
+        presentation = {
+          height: Number.parseFloat(String(keyframe.height ?? 0)) || 0,
+          opacity: Number.parseFloat(String(keyframe.opacity ?? 0)) || 0,
+          transform: String(keyframe.transform ?? 'translateY(0px)'),
+        };
+      });
+      animations.push(animation);
+      return animation;
+    },
+  };
+
+  return {
+    platform,
+    animations,
+    flushFrame() {
+      const entry = frames.entries().next().value as [number, FrameRequestCallback] | undefined;
       if (!entry) return;
-      callbacks.delete(entry[0]);
-      entry[1](nextTimestamp);
-      nextTimestamp += 16;
+      frames.delete(entry[0]);
+      entry[1](timestamp);
+      timestamp += 16;
     },
-    flushAll(limit = 200): void {
-      let remaining = limit;
-      while (callbacks.size > 0 && remaining > 0) {
-        this.flushNext();
+    triggerResize(node: Element) {
+      const callback = resizeCallbacks.get(node);
+      if (!callback) throw new Error('ResizeObserver target not found');
+      callback();
+    },
+    setPresentation(next: FlowerActivityDisclosurePresentation) {
+      presentation = next;
+    },
+    flushUntilAnimationCount(count: number) {
+      let remaining = 20;
+      while (animations.length < count && frames.size > 0 && remaining > 0) {
+        this.flushFrame();
         remaining -= 1;
       }
-      if (callbacks.size > 0) throw new Error('RAF queue did not settle');
+      if (animations.length < count) throw new Error(`Expected ${count} animations, received ${animations.length}`);
     },
-    count: () => callbacks.size,
+    pendingFrames: () => frames.size,
+    observedElements: () => resizeCallbacks.size,
   };
-}
-
-function installResizeObserverHarness(records: ResizeObserverRecord[]) {
-  vi.stubGlobal('ResizeObserver', class {
-    private readonly record: ResizeObserverRecord;
-
-    constructor(callback: ResizeObserverCallback) {
-      this.record = { callback, elements: new Set<Element>() };
-      records.push(this.record);
-    }
-
-    observe = (element: Element) => {
-      this.record.elements.add(element);
-    };
-
-    unobserve = (element: Element) => {
-      this.record.elements.delete(element);
-    };
-
-    disconnect = () => {
-      this.record.elements.clear();
-    };
-  });
-}
-
-function triggerResize(records: ResizeObserverRecord[], target: Element, height: number): void {
-  const record = records.find((candidate) => candidate.elements.has(target));
-  if (!record) throw new Error('ResizeObserver target not found');
-  record.callback([{
-    target,
-    contentRect: {
-      width: 0,
-      height,
-      x: 0,
-      y: 0,
-      top: 0,
-      left: 0,
-      right: 0,
-      bottom: height,
-      toJSON: () => ({}),
-    },
-  } as ResizeObserverEntry], {} as ResizeObserver);
 }
 
 type MotionHarness = Readonly<{
@@ -279,6 +343,7 @@ type MotionHarness = Readonly<{
   setOpen: (open: boolean) => void;
   setReducedMotion: (reduced: boolean) => void;
   setContentHeight: (height: number) => void;
+  platform: ReturnType<typeof createMotionPlatformHarness>;
 }>;
 
 function createMotionHarness(initialOpen = false, initialReducedMotion = false): MotionHarness {
@@ -289,11 +354,10 @@ function createMotionHarness(initialOpen = false, initialReducedMotion = false):
   viewport.appendChild(content);
   document.body.appendChild(viewport);
   let contentHeight = 120;
+  const platform = createMotionPlatformHarness();
   let dispose: () => void = () => undefined;
   let motion!: FlowerActivityDisclosureMotion;
 
-  Object.defineProperty(content, 'offsetHeight', { configurable: true, get: () => contentHeight });
-  Object.defineProperty(content, 'scrollHeight', { configurable: true, get: () => contentHeight });
   content.getBoundingClientRect = () => ({
     width: 320,
     height: contentHeight,
@@ -305,27 +369,12 @@ function createMotionHarness(initialOpen = false, initialReducedMotion = false):
     bottom: contentHeight,
     toJSON: () => ({}),
   });
-  viewport.getBoundingClientRect = () => {
-    const rawHeight = motion?.height() ?? '0px';
-    const measuredHeight = rawHeight === 'auto' ? contentHeight : Number.parseFloat(rawHeight) || 0;
-    return {
-      width: 320,
-      height: measuredHeight,
-      x: 0,
-      y: 0,
-      top: 0,
-      left: 0,
-      right: 320,
-      bottom: measuredHeight,
-      toJSON: () => ({}),
-    };
-  };
-
   createRoot((rootDispose) => {
     dispose = rootDispose;
     motion = createFlowerActivityDisclosureMotion(open, {
       animateContentResize: true,
       reducedMotion,
+      platform: platform.platform,
     });
     motion.bindViewport(viewport);
     motion.bindContent(content);
@@ -341,6 +390,7 @@ function createMotionHarness(initialOpen = false, initialReducedMotion = false):
     setContentHeight: (height) => {
       contentHeight = height;
     },
+    platform,
   };
 }
 
@@ -353,13 +403,7 @@ describe('createFlowerActivityDisclosureMotion', () => {
     expect(FLOWER_ACTIVITY_CLOSE_DURATION_MS).toBe(300);
   });
 
-  it('measures opening height and retargets consecutive content changes', () => {
-    vi.useFakeTimers();
-    const resizeRecords: ResizeObserverRecord[] = [];
-    const raf = createRafHarness();
-    installResizeObserverHarness(resizeRecords);
-    vi.stubGlobal('requestAnimationFrame', raf.requestAnimationFrame);
-    vi.stubGlobal('cancelAnimationFrame', raf.cancelAnimationFrame);
+  it('measures opening height and retargets consecutive content changes', async () => {
     const harness = createMotionHarness();
 
     harness.setOpen(true);
@@ -367,114 +411,93 @@ describe('createFlowerActivityDisclosureMotion', () => {
     expect(harness.motion.state()).toBe('opening');
     expect(harness.motion.height()).toBe('0px');
 
-    raf.flushNext();
-    raf.flushNext();
+    harness.platform.flushFrame();
     expect(harness.motion.height()).toBe('120px');
-
-    harness.motion.onTransitionEnd({
-      target: harness.viewport,
-      propertyName: 'height',
-    } as unknown as TransitionEvent);
+    expect(harness.platform.animations[0]?.options.duration).toBe(FLOWER_ACTIVITY_OPEN_DURATION_MS);
+    harness.platform.animations[0]?.finish();
+    await Promise.resolve();
     expect(harness.motion.state()).toBe('open');
-    raf.flushAll();
 
     harness.setContentHeight(210);
-    triggerResize(resizeRecords, harness.content, 210);
-    raf.flushNext();
+    harness.platform.triggerResize(harness.content);
+    harness.platform.flushFrame();
     expect(harness.motion.height()).toBe('210px');
     expect(harness.motion.layoutMotion()).toBe('resizing');
-    raf.flushAll();
+    expect(harness.platform.animations[1]?.options.duration).toBe(FLOWER_ACTIVITY_RESIZE_DURATION_MS);
 
+    harness.platform.setPresentation({ height: 168, opacity: 1, transform: 'translateY(0px)' });
     harness.setContentHeight(268);
-    triggerResize(resizeRecords, harness.content, 268);
-    raf.flushAll();
+    harness.platform.triggerResize(harness.content);
+    harness.platform.flushUntilAnimationCount(3);
+    expect(harness.platform.animations[1]?.playState).toBe('idle');
+    expect(harness.platform.animations[2]?.keyframes[0]?.height).toBe('168px');
+    harness.platform.animations[2]?.finish();
+    await Promise.resolve();
     expect(harness.motion.height()).toBe('268px');
 
     harness.setContentHeight(156);
-    triggerResize(resizeRecords, harness.content, 156);
-    raf.flushAll();
+    harness.platform.triggerResize(harness.content);
+    harness.platform.flushUntilAnimationCount(4);
+    harness.platform.animations[3]?.finish();
+    await Promise.resolve();
     expect(harness.motion.height()).toBe('156px');
     harness.dispose();
   });
 
-  it('keeps closing content mounted, supports reopening, and unmounts after height transition', () => {
-    vi.useFakeTimers();
-    const resizeRecords: ResizeObserverRecord[] = [];
-    const raf = createRafHarness();
-    installResizeObserverHarness(resizeRecords);
-    vi.stubGlobal('requestAnimationFrame', raf.requestAnimationFrame);
-    vi.stubGlobal('cancelAnimationFrame', raf.cancelAnimationFrame);
+  it('keeps closing content mounted, supports reopening, and unmounts after animation completion', async () => {
     const harness = createMotionHarness(true);
-    raf.flushNext();
-    raf.flushNext();
-    harness.motion.onTransitionEnd({ target: harness.viewport, propertyName: 'height' } as unknown as TransitionEvent);
+    harness.platform.flushFrame();
+    harness.platform.animations[0]?.finish();
+    await Promise.resolve();
 
     harness.setOpen(false);
     expect(harness.motion.state()).toBe('closing');
     expect(harness.motion.mounted()).toBe(true);
-    raf.flushAll();
     expect(harness.motion.height()).toBe('0px');
 
+    harness.platform.setPresentation({ height: 72, opacity: 0.6, transform: 'translateY(-1px)' });
     harness.setOpen(true);
     expect(harness.motion.state()).toBe('opening');
     expect(harness.motion.mounted()).toBe(true);
-    raf.flushAll();
-    harness.motion.onTransitionEnd({ target: harness.viewport, propertyName: 'height' } as unknown as TransitionEvent);
+    expect(harness.platform.animations[1]?.playState).toBe('idle');
+    harness.platform.flushFrame();
+    expect(harness.platform.animations[2]?.keyframes[0]?.height).toBe('72px');
+    harness.platform.animations[2]?.finish();
+    await Promise.resolve();
     expect(harness.motion.state()).toBe('open');
 
     harness.setOpen(false);
-    raf.flushAll();
-    harness.motion.onTransitionEnd({ target: harness.viewport, propertyName: 'height' } as unknown as TransitionEvent);
+    expect(harness.platform.animations[3]?.options.duration).toBe(FLOWER_ACTIVITY_CLOSE_DURATION_MS);
+    harness.platform.animations[3]?.finish();
+    await Promise.resolve();
     expect(harness.motion.state()).toBe('closed');
     expect(harness.motion.mounted()).toBe(false);
     harness.dispose();
   });
 
-  it('uses instant auto-height layout for reduced motion and without ResizeObserver', () => {
-    vi.useFakeTimers();
-    const raf = createRafHarness();
-    vi.stubGlobal('requestAnimationFrame', raf.requestAnimationFrame);
-    vi.stubGlobal('cancelAnimationFrame', raf.cancelAnimationFrame);
-    vi.stubGlobal('ResizeObserver', undefined);
-    const fallback = createMotionHarness();
-
-    fallback.setOpen(true);
-    raf.flushNext();
-    raf.flushNext();
-    fallback.motion.onTransitionEnd({ target: fallback.viewport, propertyName: 'height' } as unknown as TransitionEvent);
-    expect(fallback.motion.height()).toBe('auto');
-    fallback.dispose();
-
-    const reducedRecords: ResizeObserverRecord[] = [];
-    installResizeObserverHarness(reducedRecords);
+  it('commits measured pixel height without animation for reduced motion', () => {
     const reduced = createMotionHarness(false, true);
     reduced.setOpen(true);
     expect(reduced.motion.state()).toBe('open');
-    expect(reduced.motion.height()).toBe('auto');
+    expect(reduced.motion.height()).toBe('120px');
+    expect(reduced.platform.animations).toHaveLength(0);
     reduced.setOpen(false);
     expect(reduced.motion.state()).toBe('closed');
     expect(reduced.motion.mounted()).toBe(false);
     reduced.dispose();
   });
 
-  it('cleans observers, timers, and animation frames on disposal', () => {
-    vi.useFakeTimers();
-    const resizeRecords: ResizeObserverRecord[] = [];
-    const raf = createRafHarness();
-    installResizeObserverHarness(resizeRecords);
-    vi.stubGlobal('requestAnimationFrame', raf.requestAnimationFrame);
-    vi.stubGlobal('cancelAnimationFrame', raf.cancelAnimationFrame);
+  it('cleans observers, animations, and animation frames on disposal', () => {
     const harness = createMotionHarness();
 
     harness.setOpen(true);
-    raf.flushNext();
-    raf.flushNext();
-    expect(raf.count()).toBeGreaterThan(0);
-    expect(vi.getTimerCount()).toBeGreaterThan(0);
+    harness.platform.flushFrame();
+    expect(harness.platform.pendingFrames()).toBeGreaterThan(0);
+    expect(harness.platform.animations[0]?.playState).toBe('running');
     harness.dispose();
 
-    expect(raf.count()).toBe(0);
-    expect(vi.getTimerCount()).toBe(0);
-    expect(resizeRecords.every((record) => record.elements.size === 0)).toBe(true);
+    expect(harness.platform.pendingFrames()).toBe(0);
+    expect(harness.platform.animations[0]?.playState).toBe('idle');
+    expect(harness.platform.observedElements()).toBe(0);
   });
 });

@@ -85,6 +85,7 @@ import {
   type FlowerActivityTitle,
   type FlowerActivityTodoStatus,
 } from './flowerActivityPresentation';
+import { flowerActivityIdentity } from './flowerActivityIdentity';
 import {
   createFlowerActivityDisclosureController,
   createFlowerActivityDisclosureMotion,
@@ -5086,9 +5087,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return seconds > 0 ? `${minutes}m ${seconds}s` : `${minutes}m`;
   };
 
-  const activityItemKey = (timeline: FlowerActivityTimelineBlock, item: FlowerActivityItem, blockKey: string, index: number): string => (
-    [selectedThreadID(), blockKey, timeline.run_id, timeline.turn_id, item.item_id, String(index)].map(trimString).filter(Boolean).join(':')
-  );
+  const activityItemKey = (messageID: string, timeline: FlowerActivityTimelineBlock, item: FlowerActivityItem): string => flowerActivityIdentity({
+    threadID: timeline.thread_id || selectedThreadID(),
+    runID: timeline.run_id,
+    turnID: timeline.turn_id || messageID,
+    itemID: item.item_id,
+  });
 
   const activityItemHasVisiblePayload = (item: FlowerActivityItem): boolean => {
     const label = trimString(item.label);
@@ -5229,50 +5233,63 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     toolID: string;
   }>;
 
-  const terminalOutputBlock = (
-    context: FlowerTerminalOutputContext,
-    block: Extract<FlowerActivityDetailBlock, { kind: 'terminal_output' }>,
-  ) => {
-    const terminal = block.terminal;
+  type FlowerTerminalOutputBlockProps = Readonly<{
+    context: Accessor<FlowerTerminalOutputContext>;
+    block: Accessor<Extract<FlowerActivityDetailBlock, { kind: 'terminal_output' }>>;
+    canonicalStatus: Accessor<FlowerActivityStatus>;
+    onSettledPresentation: () => void;
+  }>;
+  type FlowerNonTerminalDetailBlock = Exclude<FlowerActivityDetailBlock, { kind: 'terminal_output' }>;
+
+  const TerminalOutputBlock: Component<FlowerTerminalOutputBlockProps> = (detailProps) => {
+    const terminal = () => detailProps.block().terminal;
     const [commandExpanded, setCommandExpanded] = createSignal(false);
     const [commandCopied, setCommandCopied] = createSignal(false);
-    const [liveLastSeq, setLiveLastSeq] = createSignal<number | undefined>(terminal.last_seq);
+    const [liveLastSeq, setLiveLastSeq] = createSignal<number | undefined>(terminal().last_seq);
     const [liveError, setLiveError] = createSignal('');
-    const outputViewport = createTerminalOutputViewportController();
-    let commandCopyResetTimer: number | undefined;
-    const command = () => trimString(terminal.command);
-    const commandPanelID = () => `flower-terminal-command-${[
-      context.ownerThreadID,
-      context.renderThreadID,
-      context.messageID,
-      String(context.blockIndex),
-      context.itemID,
-      context.toolID,
-    ].map((part) => trimString(part).replace(/[^a-zA-Z0-9_-]+/g, '-')).filter(Boolean).join('-') || 'detail'}`;
-    const processID = () => trimString(terminal.process_id);
-    const terminalIdentity = (): TerminalVisibleOutputIdentity => ({
-      surface_scope: 'flower-surface',
-      owner_thread_id: context.ownerThreadID,
-      render_thread_id: context.renderThreadID,
-      run_id: context.runID,
-      turn_id: context.turnID,
-      message_id: context.messageID,
-      block_index: context.blockIndex,
-      item_id: context.itemID,
-      tool_id: context.toolID,
-      process_id: processID(),
-      command: terminal.command,
+    const outputViewport = createTerminalOutputViewportController({
+      onPresentationFrame: () => {
+        const status = detailProps.canonicalStatus();
+        if (status === 'success' || status === 'canceled') {
+          detailProps.onSettledPresentation();
+        }
+      },
     });
-    const payloadOutput = () => String(terminal.output || terminal.latest_output || '').replace(/\r\n?/g, '\n');
-    const initialOutput = terminalVisibleOutputStore.merge(terminalIdentity(), '', payloadOutput(), terminal.status);
+    let commandCopyResetTimer: number | undefined;
+    const command = () => trimString(terminal().command);
+    const commandPanelID = () => `flower-terminal-command-${flowerActivityIdentity({
+      threadID: detailProps.context().ownerThreadID,
+      runID: detailProps.context().runID,
+      turnID: detailProps.context().turnID,
+      itemID: detailProps.context().itemID,
+    }).replace(/[^a-zA-Z0-9_-]+/g, '-')}`;
+    const processID = () => trimString(terminal().process_id);
+    const terminalIdentity = (): TerminalVisibleOutputIdentity => {
+      const context = detailProps.context();
+      return {
+        surface_scope: 'flower-surface',
+        owner_thread_id: context.ownerThreadID,
+        render_thread_id: context.renderThreadID,
+        run_id: context.runID,
+        turn_id: context.turnID,
+        message_id: context.messageID,
+        block_index: context.blockIndex,
+        item_id: context.itemID,
+        tool_id: context.toolID,
+        process_id: processID(),
+        command: terminal().command,
+      };
+    };
+    const payloadOutput = () => String(terminal().output || terminal().latest_output || '').replace(/\r\n?/g, '\n');
+    const initialOutput = terminalVisibleOutputStore.merge(terminalIdentity(), '', payloadOutput(), detailProps.canonicalStatus());
     const [liveOutput, setLiveOutput] = createSignal(initialOutput);
     const canReadLiveOutput = () => (
       !!props.adapter.readTerminalProcess &&
-      context.runID !== '' &&
+      detailProps.context().runID !== '' &&
       processID() !== '' &&
-      (terminal.status === 'running' || terminal.status === 'pending')
+      (detailProps.canonicalStatus() === 'running' || detailProps.canonicalStatus() === 'pending')
     );
-    const displayStatus = () => terminal.status;
+    const displayStatus = detailProps.canonicalStatus;
     const visibleOutput = () => terminalVisibleOutputStore.merge(
       terminalIdentity(),
       liveOutput(),
@@ -5284,7 +5301,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (output.trim()) return output;
       if (liveError()) return `Live output unavailable: ${liveError()}`;
       if (canReadLiveOutput() && terminalListeningPlaceholderVisible(output, displayStatus())) return 'Listening for output...';
-      if ((terminal.status === 'running' || terminal.status === 'pending') && processID() === '') {
+      if ((displayStatus() === 'running' || displayStatus() === 'pending') && processID() === '') {
         return 'Live output handle is not available yet.';
       }
       return 'No output captured.';
@@ -5333,9 +5350,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         if (disposed || !canReadLiveOutput() || !props.adapter.readTerminalProcess) return;
         try {
           const snapshot = await props.adapter.readTerminalProcess({
-            run_id: context.runID,
+            run_id: detailProps.context().runID,
             process_id: processID(),
-            after_seq: untrack(() => liveLastSeq()) ?? terminal.last_seq ?? undefined,
+            after_seq: untrack(() => liveLastSeq()) ?? terminal().last_seq ?? undefined,
             wait_ms: 1000,
             max_bytes: 1_000_000,
           });
@@ -5363,7 +5380,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
 
     createEffect(() => {
+      const canonicalLastSeq = terminal().last_seq;
+      if (typeof canonicalLastSeq === 'number' && Number.isFinite(canonicalLastSeq)) {
+        setLiveLastSeq((current) => Math.max(current ?? 0, Math.max(0, Math.floor(canonicalLastSeq))));
+      }
+    });
+
+    createEffect(() => {
       displayOutput();
+      displayStatus();
       outputViewport.notifyOutputChanged();
     });
 
@@ -5384,7 +5409,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <span class="flower-activity-terminal-prompt" aria-hidden="true">$</span>
           <span class="flower-activity-terminal-command">
             <FlowerShellCommandHighlight
-              command={terminal.command}
+              command={terminal().command}
               class="flower-activity-terminal-command-code"
               tokenClassPrefix="flower-activity-terminal-command-token"
             />
@@ -5738,7 +5763,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     blockIndex: number,
     item: FlowerActivityItem,
     timeline: FlowerActivityTimelineBlock,
-    block: FlowerActivityDetailBlock,
+    block: FlowerNonTerminalDetailBlock,
   ) => {
     if (block.kind === 'error') return errorDetailBlock(block);
     if (block.kind === 'subagents') return subagentsDetailBlock(block);
@@ -5770,18 +5795,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         </div>
       );
     }
-    if (block.kind === 'terminal_output') {
-      return terminalOutputBlock({
-        ownerThreadID: trimString(selectedThreadID()),
-        renderThreadID: trimString(timeline.thread_id) || trimString(selectedThreadDetailID()) || trimString(selectedThreadID()),
-        runID: trimString(timeline.run_id),
-        turnID: trimString(timeline.turn_id),
-        messageID,
-        blockIndex,
-        itemID: trimString(item.item_id),
-        toolID: trimString(item.tool_id),
-      }, block);
-    }
     if (block.kind === 'web_search') return webSearchBlock(block);
     if (block.kind === 'question') return questionBlock(block);
     if (block.kind === 'completion') return completionBlock(block);
@@ -5795,10 +5808,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     blockIndex: Accessor<number>,
     timeline: Accessor<FlowerActivityTimelineBlock>,
     item: Accessor<FlowerActivityItem>,
-    blockKey: Accessor<string>,
-    index: Accessor<number>,
   ) => {
-    const disclosureKey = createMemo(() => activityItemKey(timeline(), item(), blockKey(), index()));
+    const disclosureKey = createMemo(() => activityItemKey(messageID(), timeline(), item()));
+    const presentation = createMemo(() => presentFlowerActivityItem(item(), timeline().file_actions, { subagents: subagentsCopy() }));
+    const terminalDisclosure = presentation().detailBlocks.some((block) => block.kind === 'terminal_output');
+    const detailKeys = createMemo(() => presentation().detailBlocks.map((block) => `${disclosureKey()}:${block.kind}`));
+    const detailsByKey = createMemo(() => {
+      const blocks = presentation().detailBlocks;
+      return new Map<string, FlowerActivityDetailBlock>(blocks.map((block) => [`${disclosureKey()}:${block.kind}`, block]));
+    });
     const disclosureControl = createFlowerActivityDisclosureController({
       intent: () => flowerActivityDisclosureIntent(item()),
       manualOpen: () => openActivityRuns()[disclosureKey()],
@@ -5807,9 +5825,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         setOpenActivityRuns((current) => ({ ...current, [key]: open }));
       },
       reducedMotion: reducedMotionPreferred,
+      settle: terminalDisclosure ? { anchor: 'presentation' } : { anchor: 'intent' },
     });
     const open = disclosureControl.open;
-    const presentation = createMemo(() => presentFlowerActivityItem(item(), timeline().file_actions, { subagents: subagentsCopy() }));
     const subagentsDetail = createMemo(() => subagentsDetailForPresentation(presentation()));
     const hasDetails = createMemo(() => presentation().detailBlocks.length > 0);
     const expandable = createMemo(() => hasDetails() && !activityItemAwaitingApproval(item()));
@@ -5896,12 +5914,50 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             onFocusIn={disclosureControl.retainOpen}
             onWheel={disclosureControl.retainOpen}
             onTouchStart={disclosureControl.retainOpen}
-            onTransitionEnd={disclosure.onTransitionEnd}
           >
             <div class="flower-activity-inline-details-clip">
               <div ref={disclosure.bindContent} class="flower-activity-inline-details-content">
-                <For each={presentation().detailBlocks}>
-                  {(block) => activityDetailBlock(messageID(), blockIndex(), item(), timeline(), block)}
+                <For each={detailKeys()}>
+                  {(detailKey) => {
+                    const block = createMemo(() => detailsByKey().get(detailKey)!);
+                    const terminalBlock = createMemo(() => (
+                      block().kind === 'terminal_output'
+                        ? block() as Extract<FlowerActivityDetailBlock, { kind: 'terminal_output' }>
+                        : null
+                    ));
+                    return (
+                      <>
+                        <Show when={terminalBlock()}>
+                          {(value) => (
+                            <TerminalOutputBlock
+                              context={() => ({
+                                ownerThreadID: trimString(selectedThreadID()),
+                                renderThreadID: trimString(timeline().thread_id) || trimString(selectedThreadDetailID()) || trimString(selectedThreadID()),
+                                runID: trimString(timeline().run_id),
+                                turnID: trimString(timeline().turn_id),
+                                messageID: messageID(),
+                                blockIndex: blockIndex(),
+                                itemID: trimString(item().item_id),
+                                toolID: trimString(item().tool_id),
+                              })}
+                              block={value}
+                              canonicalStatus={() => item().status}
+                              onSettledPresentation={disclosureControl.markSettledPresentation}
+                            />
+                          )}
+                        </Show>
+                        <Show when={!terminalBlock()}>
+                          {activityDetailBlock(
+                            messageID(),
+                            blockIndex(),
+                            item(),
+                            timeline(),
+                            block() as FlowerNonTerminalDetailBlock,
+                          )}
+                        </Show>
+                      </>
+                    );
+                  }}
                 </For>
               </div>
             </div>
@@ -5915,13 +5971,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     messageID: Accessor<string>,
     blockIndex: Accessor<number>,
     block: Accessor<FlowerActivityTimelineBlock>,
-    blockKey: Accessor<string>,
   ) => {
     const visibleItems = createMemo(() => block().items.filter(activityItemVisible));
-    const visibleItemKeys = createMemo(() => visibleItems().map((item, index) => activityItemKey(block(), item, blockKey(), index)));
+    const visibleItemKeys = createMemo(() => visibleItems().map((item) => activityItemKey(messageID(), block(), item)));
     const visibleItemsByKey = createMemo(() => {
       const items = visibleItems();
-      return new Map(visibleItemKeys().map((key, index) => [key, { item: items[index], index }] as const));
+      return new Map(visibleItemKeys().map((key, index) => [key, items[index]] as const));
     });
 
     return (
@@ -5932,13 +5987,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               const visibleItem = createMemo(() => visibleItemsByKey().get(itemKey) ?? null);
               return (
                 <Show when={visibleItem()}>
-                  {(value) => activityRow(
+                  {(item) => activityRow(
                     messageID,
                     blockIndex,
                     block,
-                    () => value().item,
-                    blockKey,
-                    () => value().index,
+                    item,
                   )}
                 </Show>
               );
@@ -6062,7 +6115,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           () => message().id,
           () => activityBlockValue().block_index,
           () => activityBlockValue().block,
-          () => activityBlockValue().key,
         )}
       </Show>
     );

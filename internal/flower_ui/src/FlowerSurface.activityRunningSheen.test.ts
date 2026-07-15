@@ -133,17 +133,17 @@ describe('Flower activity running sheen', () => {
     const contentRule = cssRule(css, '.flower-activity-inline-details-content');
 
     expect(disclosureRule).toContain('height: 0');
-    expect(disclosureRule).toContain('height 280ms cubic-bezier(0.22, 1, 0.36, 1)');
     expect(disclosureRule).toContain('overflow: hidden');
+    expect(disclosureRule).not.toContain('transition:');
     expect(disclosureRule).not.toContain('max-height:');
-    expect(css).toContain(".flower-activity-inline-details[data-state='opening'] {");
-    expect(css).toContain('height 360ms cubic-bezier(0.22, 1, 0.36, 1)');
-    expect(css).toContain('height 300ms ease-in-out');
+    expect(css).toContain(".flower-activity-inline-details[data-state='opening'],");
     expect(css).toContain(".flower-activity-inline-details[data-layout-motion='resizing'] {");
     expect(css).toContain('will-change: height, opacity, transform');
     expect(clipRule).toContain('min-height: 0');
+    expect(contentRule).toContain('box-sizing: border-box');
     expect(contentRule).toContain('max-height: min(42rem, 72vh)');
     expect(contentRule).toContain('overflow: auto');
+    expect(contentRule).toContain('padding: 0.125rem 0 0.25rem 0.625rem');
   });
 
   it('animates only the subagent badge ring when a subagent is running', () => {

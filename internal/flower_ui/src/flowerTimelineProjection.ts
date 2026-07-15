@@ -6,6 +6,7 @@ import type {
   FlowerThreadError,
   FlowerThreadSnapshot,
 } from './contracts/flowerSurfaceContracts';
+import { flowerActivityIdentity } from './flowerActivityIdentity';
 import { trimString } from './flowerSurfaceModel';
 
 export type FlowerRenderableMessageBlock =
@@ -105,15 +106,27 @@ export function flowerMessageSignature(message: FlowerChatMessage): string {
   ].join('\x1e');
 }
 
-function contentBlocksFromMessage(message: FlowerChatMessage): readonly FlowerRenderableMessageBlock[] {
+function activityRenderableKey(threadID: string, messageID: string, block: FlowerActivityTimelineBlock): string {
+  const firstItem = block.items[0];
+  if (!firstItem) {
+    throw new Error('Flower activity block requires at least one item.');
+  }
+  return `activity:${flowerActivityIdentity({
+    threadID: block.thread_id || threadID,
+    runID: block.run_id,
+    turnID: block.turn_id || messageID,
+    itemID: firstItem.item_id,
+  })}`;
+}
+
+function contentBlocksFromMessage(threadID: string, message: FlowerChatMessage): readonly FlowerRenderableMessageBlock[] {
   const projectedBlocks = (message.blocks ?? []).flatMap((block, index): readonly FlowerRenderableMessageBlock[] => {
-    const key = `${message.id}:block:${index}`;
     if (block.type === 'activity-timeline') {
       if (block.items.length === 0) return [];
-      return [{ type: 'activity', key, block_index: index, block }];
+      return [{ type: 'activity', key: activityRenderableKey(threadID, message.id, block), block_index: index, block }];
     }
     const content = trimString(block.content);
-    return content ? [{ type: 'content', key, block_index: index, block_type: block.type, content }] : [];
+    return content ? [{ type: 'content', key: `${message.id}:block:${index}`, block_index: index, block_type: block.type, content }] : [];
   });
   if (projectedBlocks.length > 0) return projectedBlocks;
 
@@ -139,6 +152,7 @@ function activityCounts(items: readonly FlowerActivityTimelineBlock['items'][num
 }
 
 function activityBlockSlice(
+  threadID: string,
   messageID: string,
   block: Extract<FlowerRenderableMessageBlock, { type: 'activity' }>,
   start: number,
@@ -148,9 +162,10 @@ function activityBlockSlice(
   const to = Math.max(from, Math.min(block.block.items.length, Math.floor(end)));
   const items = block.block.items.slice(from, to);
   if (items.length === 0) return null;
-  const key = from === 0 && to === block.block.items.length
-    ? block.key
-    : `${messageID}:block:${block.block_index}:items:${from}-${to}`;
+  const key = activityRenderableKey(threadID, messageID, {
+    ...block.block,
+    items,
+  });
   return {
     type: 'activity',
     key,
@@ -234,19 +249,21 @@ function messageSegmentEntry(
   totalSegments: number,
 ): Extract<FlowerTimelineEntry, { type: 'message' }> | null {
   if (blocks.length === 0 && message.status !== 'error' && message.active_cursor !== true) return null;
+  const activity = blocks.find((block): block is Extract<FlowerRenderableMessageBlock, { type: 'activity' }> => block.type === 'activity');
   return {
     type: 'message',
-    key: totalSegments <= 1 ? `message:${message.id}` : `message:${message.id}:segment:${segmentIndex}`,
+    key: activity?.key ?? (totalSegments <= 1 ? `message:${message.id}` : `message:${message.id}:segment:${segmentIndex}`),
     message,
     blocks,
   };
 }
 
 function messageTimelineEntries(
+  threadID: string,
   message: FlowerChatMessage,
   decorations: ReadonlyMap<string, readonly Extract<FlowerTimelineEntry, { type: 'context_compaction' }>[]>,
 ): readonly FlowerTimelineEntry[] {
-  const blocks = contentBlocksFromMessage(message);
+  const blocks = contentBlocksFromMessage(threadID, message);
   type RawTimelineEntry = readonly FlowerRenderableMessageBlock[] | Extract<FlowerTimelineEntry, { type: 'context_compaction' }>;
   const isMessageSegment = (entry: RawTimelineEntry): entry is readonly FlowerRenderableMessageBlock[] => Array.isArray(entry);
   const rawEntries: RawTimelineEntry[] = [];
@@ -257,7 +274,7 @@ function messageTimelineEntries(
 
   const flushActivity = () => {
     if (!activeActivityBlock) return;
-    const sliced = activityBlockSlice(message.id, activeActivityBlock, activeActivityStart, activeActivityEnd);
+    const sliced = activityBlockSlice(threadID, message.id, activeActivityBlock, activeActivityStart, activeActivityEnd);
     if (sliced) currentBlocks.push(sliced);
     activeActivityBlock = null;
     activeActivityStart = 0;
@@ -328,7 +345,7 @@ export function buildFlowerTimelineEntries(thread: FlowerThreadSnapshot | null |
     const projectedMessage = activeCursor === message.active_cursor
       ? message
       : { ...message, active_cursor: activeCursor };
-    return messageTimelineEntries(projectedMessage, decorations);
+    return messageTimelineEntries(thread.thread_id, projectedMessage, decorations);
   });
   if (thread.status === 'waiting_user' && thread.input_request) {
     entries.push({

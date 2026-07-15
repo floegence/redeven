@@ -1,4 +1,4 @@
-import { For, Index, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import { For, Show, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
 import type { Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { ExternalLink, FileText, FolderOpen } from '@floegence/floe-webapp-core/icons';
@@ -18,6 +18,7 @@ import {
   createFlowerActivityDisclosureMotion,
   flowerActivityDisclosureIntent,
 } from '../../../../../../flower_ui/src/activityDisclosure';
+import { flowerActivityIdentity } from '../../../../../../flower_ui/src/flowerActivityIdentity';
 import type { FlowerActivityItem, FlowerActivityRenderer } from '../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { formatGitPatchLineNumber, getGitPatchRenderSnapshot, type GitPatchRenderedLine } from '../../../../../../flower_ui/src/gitPatch';
 import type { TerminalVisibleOutputStore } from '../../../../../../flower_ui/src/flowerTerminalOutput';
@@ -69,10 +70,6 @@ function isBlockingItem(item: ActivityItem): boolean {
   return (item.requires_approval === true && item.approval_state === 'requested')
     || item.status === 'waiting'
     || item.severity === 'blocking';
-}
-
-function itemKey(item: ActivityItem, index: number): string {
-  return String(item.item_id || item.tool_id || index).trim() || String(index);
 }
 
 function hasTextSelection(): boolean {
@@ -730,8 +727,14 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
   const expanded = timelineDisclosureControl.open;
   const timelineDisclosure = createFlowerActivityDisclosureMotion(() => expanded() && hasItems());
   const fileActions = createMemo(() => props.block.file_actions as FlowerActivityFileActions | undefined);
-  const itemKeys = createMemo(() => items().map((item, index) => itemKey(item, index)));
-  const itemsByKey = createMemo(() => new Map(itemKeys().map((key, index) => [key, { item: items()[index], index }] as const)));
+  const itemIdentity = (item: ActivityItem): string => flowerActivityIdentity({
+    threadID: props.block.thread_id,
+    runID: props.block.run_id,
+    turnID: props.block.turn_id || props.messageId,
+    itemID: item.item_id,
+  });
+  const itemKeys = createMemo(() => items().map(itemIdentity));
+  const itemsByKey = createMemo(() => new Map(itemKeys().map((key, index) => [key, items()[index]] as const)));
 
   return (
     <Show when={hasItems()}>
@@ -759,7 +762,6 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
             data-state={timelineDisclosure.state()}
             data-layout-motion={timelineDisclosure.layoutMotion()}
             style={{ height: timelineDisclosure.height() }}
-            onTransitionEnd={timelineDisclosure.onTransitionEnd}
           >
             <div class="chat-activity-items-clip">
               <div
@@ -776,9 +778,14 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
                     return (
                       <Show when={itemRecord()}>
                         {(record) => {
-                          const item = createMemo(() => record().item);
-                          const id = createMemo(() => itemKey(item(), record().index));
+                          const item = createMemo(() => record());
+                          const id = createMemo(() => itemIdentity(item()));
                           const presentation = createMemo(() => presentFlowerActivityItem(flowerItem(item()), fileActions()));
+                          const detailKeys = createMemo(() => presentation().detailBlocks.map((block) => `${id()}:${block.kind}`));
+                          const detailsByKey = createMemo(() => {
+                            const blocks = presentation().detailBlocks;
+                            return new Map<string, FlowerActivityDetailBlock>(blocks.map((block) => [`${id()}:${block.kind}`, block]));
+                          });
                           const itemDisclosureControl = createFlowerActivityDisclosureController({
                             intent: () => {
                               const intent = flowerActivityDisclosureIntent(item());
@@ -793,7 +800,7 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
                           const isOpen = itemDisclosureControl.open;
                           const hasDetails = createMemo(() => presentation().detailBlocks.length > 0);
                           const itemMeta = createMemo(() => [presentation().meta, subagentElapsedText(presentation(), clockNow())].filter(Boolean).join(' · '));
-                          const panelId = createMemo(() => `activity-detail-${props.blockIndex}-${id().replace(/[^a-zA-Z0-9_-]/g, '-')}`);
+                          const panelId = createMemo(() => `activity-detail-${id().replace(/[^a-zA-Z0-9_-]/g, '-')}`);
                           const rowFileAction = createMemo(() => {
                             const primary = presentation().primaryAction;
                             if (primary) return primary;
@@ -816,7 +823,8 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
                           return (
                             <div
                               class={cn('chat-activity-item-shell', isOpen() && hasDetails() && 'chat-activity-item-shell-expanded', subagentsDetailForPresentation(presentation()) && 'chat-activity-item-shell-subagents')}
-                              data-item-id={id()}
+                              data-item-id={item().item_id}
+                              data-activity-identity={id()}
                               data-state={disclosure.state()}
                             >
                               <div
@@ -888,13 +896,14 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
                                   onFocusIn={itemDisclosureControl.retainOpen}
                                   onWheel={itemDisclosureControl.retainOpen}
                                   onTouchStart={itemDisclosureControl.retainOpen}
-                                  onTransitionEnd={disclosure.onTransitionEnd}
                                 >
                                   <div class="chat-activity-detail-panel-clip">
                                     <div ref={disclosure.bindContent} class="chat-activity-detail-panel-content">
                                       <div class="chat-activity-detail-sections">
-                                        <Index each={presentation().detailBlocks}>
-                                          {(block) => (
+                                        <For each={detailKeys()}>
+                                          {(detailKey) => {
+                                            const block = createMemo(() => detailsByKey().get(detailKey)!);
+                                            return (
                                             <DetailBlock
                                               block={block()}
                                               item={item()}
@@ -909,8 +918,9 @@ export const ActivityTimelineBlock: Component<ActivityTimelineBlockProps> = (pro
                                               onBrowseDirectory={props.onBrowseDirectory}
                                               onOpenSubagentMessages={props.onOpenSubagentMessages}
                                             />
-                                          )}
-                                        </Index>
+                                            );
+                                          }}
+                                        </For>
                                       </div>
                                     </div>
                                   </div>
