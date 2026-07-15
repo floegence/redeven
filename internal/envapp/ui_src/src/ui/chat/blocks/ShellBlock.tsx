@@ -368,7 +368,6 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
   const [loadedOutput, setLoadedOutput] = createSignal<string | undefined>(undefined);
   const [loadError, setLoadError] = createSignal('');
   const [loadAttempted, setLoadAttempted] = createSignal(false);
-  const [runtimeStatus, setRuntimeStatus] = createSignal<'success' | 'error' | undefined>(undefined);
   const [runtimeProcessId, setRuntimeProcessId] = createSignal<string | undefined>(undefined);
   const [runtimeLastSeq, setRuntimeLastSeq] = createSignal<number | undefined>(undefined);
   const [terminalInput, setTerminalInput] = createSignal('');
@@ -389,7 +388,7 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
     String(props.outputRef?.runId ?? '').trim().length > 0 &&
     String(props.outputRef?.toolId ?? '').trim().length > 0;
   const displayProcessId = () => String(props.processId ?? runtimeProcessId() ?? '').trim();
-  const displayStatus = () => (props.status === 'running' ? runtimeStatus() ?? 'running' : props.status);
+  const displayStatus = () => props.status;
   const displayLastSeq = () => runtimeLastSeq();
   const visibleOutputStore = () => props.outputStore ?? localVisibleOutputStore;
   const outputIdentity = (): TerminalVisibleOutputIdentity => ({
@@ -403,8 +402,8 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
   const outputIdentityKey = () => terminalVisibleOutputIdentityKey(outputIdentity());
   const propOutput = () => props.output ?? props.latestOutput ?? '';
   const resolvedOutput = () => visibleOutputStore().merge(outputIdentity(), loadedOutput(), propOutput(), displayStatus());
-  const applyLoadedOutput = (output: string, status?: ShellBlockProps['status']) => {
-    const merged = visibleOutputStore().merge(outputIdentity(), loadedOutput(), output, status ?? displayStatus());
+  const applyLoadedOutput = (output: string) => {
+    const merged = visibleOutputStore().merge(outputIdentity(), loadedOutput(), output, displayStatus());
     setLoadedOutput(merged || undefined);
   };
   const hasOutput = () => String(resolvedOutput() ?? '').trim().length > 0;
@@ -417,7 +416,6 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
     const nextOutputIdentityKey = outputIdentityKey();
     if (nextOutputIdentityKey === lastOutputIdentityKey) return;
     lastOutputIdentityKey = nextOutputIdentityKey;
-    setRuntimeStatus(undefined);
     setRuntimeProcessId(undefined);
     setRuntimeLastSeq(undefined);
     setTerminalInput('');
@@ -500,11 +498,7 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
     stderr: String(data.stderr ?? ''),
   });
 
-  const applyRuntimeMetadata = (data: TerminalToolOutputPayload) => {
-    const normalizedStatus = normalizeShellStatus(data.status);
-    if (normalizedStatus === 'success' || normalizedStatus === 'error') {
-      setRuntimeStatus(normalizedStatus);
-    }
+  const applyProcessMetadata = (data: TerminalToolOutputPayload) => {
     if (typeof data.process_id === 'string' && data.process_id.trim()) {
       setRuntimeProcessId(data.process_id.trim());
     }
@@ -524,9 +518,9 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
       const data = canUseProcessControls()
         ? await fetchProcessOutput(0)
         : await fetchToolOutput(false);
-      applyRuntimeMetadata(data);
+      applyProcessMetadata(data);
       const output = outputFromPayload(data);
-      applyLoadedOutput(output, normalizeShellStatus(data.status) ?? displayStatus());
+      applyLoadedOutput(output);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       setLoadError(message || i18n.t('shellBlock.failedToLoadOutput'));
@@ -559,16 +553,16 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
           ? await fetchProcessOutput(TERMINAL_STATUS_POLL_INTERVAL_MS)
           : await fetchToolOutput(true);
         if (disposed) return;
-        applyRuntimeMetadata(data);
-        const status = normalizeShellStatus(data.status);
+        applyProcessMetadata(data);
+        const processStatus = normalizeShellStatus(data.status);
         if (expanded()) {
           const output = outputFromPayload(data);
-          applyLoadedOutput(output, status ?? displayStatus());
+          applyLoadedOutput(output);
         }
-        if (status && status !== 'running') {
+        if (processStatus && processStatus !== 'running') {
           if (expanded()) {
             const output = outputFromPayload(data);
-            applyLoadedOutput(output, status);
+            applyLoadedOutput(output);
           }
           return;
         }
@@ -642,9 +636,9 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
         throw new Error(String(payload?.error ?? `HTTP ${resp.status}`));
       }
       const data = (payload?.data ?? {}) as TerminalToolOutputPayload;
-      applyRuntimeMetadata(data);
+      applyProcessMetadata(data);
       const output = outputFromPayload(data);
-      applyLoadedOutput(output, normalizeShellStatus(data.status) ?? displayStatus());
+      applyLoadedOutput(output);
       setTerminalInput('');
     } catch (err) {
       setTerminalActionError(err instanceof Error ? err.message : String(err));
@@ -675,11 +669,9 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
         throw new Error(String(payload?.error ?? `HTTP ${resp.status}`));
       }
       const data = (payload?.data ?? {}) as TerminalToolOutputPayload;
-      applyRuntimeMetadata(data);
-      const status = normalizeShellStatus(data.status);
-      if (status) setRuntimeStatus(status === 'running' ? undefined : status);
+      applyProcessMetadata(data);
       const output = outputFromPayload(data);
-      applyLoadedOutput(output, status ?? displayStatus());
+      applyLoadedOutput(output);
     } catch (err) {
       setTerminalActionError(err instanceof Error ? err.message : String(err));
     } finally {

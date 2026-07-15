@@ -238,4 +238,35 @@ describe('ShellBlock', () => {
     expect(host.textContent).not.toContain('No output captured');
     dispose();
   });
+
+  it('keeps canonical running presentation when process polling has already completed', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      text: async () => JSON.stringify({
+        ok: true,
+        data: {
+          status: 'success',
+          process_id: 'tp_complete',
+          output: 'done\n',
+          last_seq: 1,
+          total_bytes: 5,
+        },
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { host, dispose } = renderShellBlock({
+      command: 'printf done',
+      outputRef: { runId: 'run_complete', toolId: 'tool_complete' },
+      processId: 'tp_complete',
+      status: 'running',
+    });
+
+    await waitForCondition(() => {
+      expect(fetchMock).toHaveBeenCalled();
+    });
+    expect(host.querySelector('.chat-shell-block')?.classList.contains('chat-shell-block-running')).toBe(true);
+    expect(host.querySelector('.chat-shell-block')?.classList.contains('chat-shell-block-success')).toBe(false);
+    dispose();
+  });
 });

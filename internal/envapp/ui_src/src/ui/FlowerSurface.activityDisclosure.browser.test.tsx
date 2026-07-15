@@ -147,6 +147,35 @@ function sampleHeights(element: HTMLElement, durationMs: number): Promise<number
   });
 }
 
+async function terminalOutputHeights(className: string, lineCounts: readonly number[]): Promise<{
+  heights: number[];
+  clientHeights: number[];
+  scrollHeights: number[];
+}> {
+  const viewport = document.createElement('div');
+  viewport.className = className;
+  viewport.style.width = '24rem';
+  const pre = document.createElement('pre');
+  viewport.append(pre);
+  document.body.append(viewport);
+  const heights: number[] = [];
+  const clientHeights: number[] = [];
+  const scrollHeights: number[] = [];
+
+  try {
+    for (const count of lineCounts) {
+      pre.textContent = outputLines(count);
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      heights.push(viewport.getBoundingClientRect().height);
+      clientHeights.push(viewport.clientHeight);
+      scrollHeights.push(viewport.scrollHeight);
+    }
+  } finally {
+    viewport.remove();
+  }
+  return { heights, clientHeights, scrollHeights };
+}
+
 async function selectDisclosureThread(runtime: HTMLElement): Promise<HTMLButtonElement> {
   await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-browser-disclosure"] button')));
   (runtime.querySelector('[data-thread-id="thread-browser-disclosure"] button') as HTMLButtonElement).click();
@@ -169,6 +198,38 @@ function dispatchDisclosureIntervention(target: HTMLElement, intervention: typeo
 }
 
 describe('Flower activity disclosure browser behavior', () => {
+  it('caps Flower and Env App terminal output at five visual lines', async () => {
+    await page.viewport(1440, 900);
+    const lineCounts = [1, 3, 5, 6, 20, 100] as const;
+
+    for (const className of ['flower-activity-terminal-output', 'chat-shell-output']) {
+      const { heights, clientHeights, scrollHeights } = await terminalOutputHeights(className, lineCounts);
+      expect(heights[1]).toBeGreaterThan(heights[0] + 10);
+      expect(heights[2]).toBeGreaterThan(heights[1] + 10);
+      for (const height of heights.slice(3)) {
+        expect(Math.abs(height - heights[2]), `${className} heights: ${heights.join(', ')}`).toBeLessThanOrEqual(1);
+      }
+      expect(scrollHeights[2]).toBeLessThanOrEqual(clientHeights[2]);
+      expect(scrollHeights[3]).toBeGreaterThan(clientHeights[3]);
+      expect(scrollHeights[5]).toBeGreaterThan(scrollHeights[4]);
+    }
+
+    await page.viewport(768, 900);
+    const viewport = document.createElement('div');
+    viewport.className = 'flower-activity-terminal-output';
+    viewport.style.width = '12rem';
+    const pre = document.createElement('pre');
+    pre.textContent = 'long-output-token '.repeat(120);
+    viewport.append(pre);
+    document.body.append(viewport);
+    try {
+      expect(viewport.scrollHeight).toBeGreaterThan(viewport.clientHeight);
+      expect(viewport.scrollWidth).toBeLessThanOrEqual(viewport.clientWidth + 1);
+    } finally {
+      viewport.remove();
+    }
+  });
+
   it('never mounts details for activity that settles inside the open delay', async () => {
     await page.viewport(1440, 900);
     const { runtime, complete } = renderDisclosureThread();

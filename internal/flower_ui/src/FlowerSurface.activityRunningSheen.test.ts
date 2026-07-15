@@ -42,7 +42,11 @@ describe('Flower activity running sheen', () => {
     expect(fullCommandRule).toContain('white-space: pre-wrap');
     expect(fullCommandRule).toContain('overflow-wrap: anywhere');
     expect(outputRule).toContain('font-family: var(--flower-activity-terminal-font)');
-    expect(outputRule).toContain('max-height: 16rem');
+    expect(outputRule).toContain('font-size: 0.71875rem');
+    expect(outputRule).toContain('line-height: 1.5');
+    expect(outputRule).toContain('padding: 0.625rem');
+    expect(outputRule).toContain('box-sizing: border-box');
+    expect(outputRule).toContain('max-height: 6.640625rem');
     expect(css).toContain('.flower-activity-terminal-command-code');
     expect(css).not.toContain('.flower-activity-terminal-chips');
     expect(css).not.toContain('.flower-activity-terminal-chip');

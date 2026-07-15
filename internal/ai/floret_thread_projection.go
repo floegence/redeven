@@ -301,8 +301,8 @@ func (s *Service) applyFloretPendingToolSettlementProjection(ctx context.Context
 			active.applyFloretTerminalThreadProjection(projection)
 		}
 	}
-	if err := s.publishFlowerCanonicalTimelineReplacement(ctx, endpointID, threadID, runID, messageID, "terminal_settlement"); err != nil && s.log != nil {
-		s.log.Warn("ai: publish terminal settlement Flower timeline replacement failed", "run_id", runID, "thread_id", threadID, "error", err)
+	if err := s.publishFlowerCanonicalTimelineReplacement(ctx, endpointID, threadID, runID, messageID, "terminal_settlement"); err != nil {
+		return err
 	}
 	s.broadcastThreadSummary(endpointID, threadID)
 	if s.threadMgr != nil {

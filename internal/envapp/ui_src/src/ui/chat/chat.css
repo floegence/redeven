@@ -691,7 +691,7 @@ pre.chat-md-code-block code { display: block; padding: 0.875rem 1rem; font-size:
 .chat-shell-toggle { display: flex; align-items: center; flex-shrink: 0; color: #8b949e; transform: rotate(-90deg); transition: transform 180ms ease; }
 .chat-shell-toggle-open { transform: rotate(0deg); }
 .chat-shell-output-panel { min-height: 0; }
-.chat-shell-output { padding: 0.75rem 0.875rem; font-size: 0.75rem; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; overflow-x: auto; max-height: 16rem; overflow-y: auto; line-height: 1.5; border-top: 1px solid #2d333b; background-color: #0d1117; }
+.chat-shell-output { box-sizing: border-box; padding: 0.75rem 0.875rem; font-size: 0.75rem; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; overflow-x: auto; max-height: 7.1875rem; overflow-y: auto; line-height: 1.5; border-top: 1px solid #2d333b; background-color: #0d1117; }
 .chat-shell-output pre { margin: 0; white-space: pre-wrap; word-break: break-word; }
 .chat-shell-output-muted { color: #8b949e; }
 .chat-shell-output-error { color: #ff9b97; }

@@ -380,6 +380,158 @@ func TestReadTerminalProcessPublishesDoneOnlyAfterAccessValidation(t *testing.T)
 	}
 }
 
+func TestTerminalProcessServicesWithholdTerminalSnapshotUntilSettlementAcknowledged(t *testing.T) {
+	workspace := t.TempDir()
+	meta := &session.Meta{EndpointID: "env_owner", CanRead: true, CanWrite: true, CanExecute: true}
+
+	tests := []struct {
+		name string
+		call func(*Service, string) (*terminalProcessSnapshot, error)
+	}{
+		{
+			name: "read",
+			call: func(svc *Service, processID string) (*terminalProcessSnapshot, error) {
+				return svc.ReadTerminalProcess(context.Background(), meta, "run_owner", processID, 0, 0, 0)
+			},
+		},
+		{
+			name: "write",
+			call: func(svc *Service, processID string) (*terminalProcessSnapshot, error) {
+				return svc.WriteTerminalProcess(context.Background(), meta, "run_owner", processID, "input\n")
+			},
+		},
+		{
+			name: "terminate",
+			call: func(svc *Service, processID string) (*terminalProcessSnapshot, error) {
+				return svc.TerminateTerminalProcess(context.Background(), meta, "run_owner", processID)
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var settlements atomic.Int32
+			manager := newTerminalProcessManager(func(terminalProcessSnapshot) error {
+				settlements.Add(1)
+				return errors.New("canonical settlement unavailable")
+			})
+			defer manager.Close()
+
+			proc, err := manager.Start(terminalProcessStartRequest{
+				EndpointID:         "env_owner",
+				ThreadID:           "thread_owner",
+				RunID:              "run_owner",
+				TurnID:             "turn_owner",
+				SettlementThreadID: "thread_owner",
+				SettlementRunID:    "run_owner",
+				SettlementTurnID:   "turn_owner",
+				ToolID:             "tool_owner",
+				ToolName:           "terminal.exec",
+				Command:            "printf owner-output",
+				CwdAbs:             workspace,
+				Shell:              "/bin/bash",
+			})
+			if err != nil {
+				t.Fatalf("Start: %v", err)
+			}
+			snapshot := proc.WaitForYield(1000)
+			if snapshot.Status != terminalProcessStatusSuccess {
+				t.Fatalf("status=%q, want success", snapshot.Status)
+			}
+			proc.mu.Lock()
+			proc.pending = true
+			proc.mu.Unlock()
+
+			svc := &Service{terminalProcesses: manager}
+			returned, err := tt.call(svc, snapshot.ProcessID)
+			if err == nil || !strings.Contains(err.Error(), "canonical settlement unavailable") {
+				t.Fatalf("call err=%v, want canonical settlement error", err)
+			}
+			if returned != nil {
+				t.Fatalf("call returned terminal snapshot before settlement acknowledgement: %#v", returned)
+			}
+			if got := settlements.Load(); got != 1 {
+				t.Fatalf("settlements=%d, want one", got)
+			}
+			proc.mu.Lock()
+			acknowledged := proc.settlementAcknowledged
+			proc.mu.Unlock()
+			if acknowledged {
+				t.Fatalf("process acknowledged failed settlement")
+			}
+		})
+	}
+}
+
+func TestReadTerminalProcessWaitsForInFlightSettlementAcknowledgement(t *testing.T) {
+	workspace := t.TempDir()
+	settlementStarted := make(chan struct{})
+	releaseSettlement := make(chan struct{})
+	manager := newTerminalProcessManager(func(terminalProcessSnapshot) error {
+		close(settlementStarted)
+		<-releaseSettlement
+		return nil
+	})
+	defer manager.Close()
+
+	proc, err := manager.Start(terminalProcessStartRequest{
+		EndpointID:         "env_owner",
+		ThreadID:           "thread_owner",
+		RunID:              "run_owner",
+		TurnID:             "turn_owner",
+		SettlementThreadID: "thread_owner",
+		SettlementRunID:    "run_owner",
+		SettlementTurnID:   "turn_owner",
+		ToolID:             "tool_owner",
+		ToolName:           "terminal.exec",
+		Command:            "printf owner-output",
+		CwdAbs:             workspace,
+		Shell:              "/bin/bash",
+	})
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	snapshot := proc.WaitForYield(1000)
+	if snapshot.Status != terminalProcessStatusSuccess {
+		t.Fatalf("status=%q, want success", snapshot.Status)
+	}
+
+	go proc.MarkPending()
+	select {
+	case <-settlementStarted:
+	case <-time.After(3 * time.Second):
+		t.Fatalf("settlement did not start")
+	}
+
+	svc := &Service{terminalProcesses: manager}
+	meta := &session.Meta{EndpointID: "env_owner", CanRead: true, CanWrite: true, CanExecute: true}
+	done := make(chan struct{})
+	var returned *terminalProcessSnapshot
+	var readErr error
+	go func() {
+		returned, readErr = svc.ReadTerminalProcess(context.Background(), meta, "run_owner", snapshot.ProcessID, 0, 0, 0)
+		close(done)
+	}()
+	select {
+	case <-done:
+		t.Fatalf("terminal read returned before settlement acknowledgement: snapshot=%#v err=%v", returned, readErr)
+	case <-time.After(50 * time.Millisecond):
+	}
+
+	close(releaseSettlement)
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatalf("terminal read did not return after settlement acknowledgement")
+	}
+	if readErr != nil {
+		t.Fatalf("ReadTerminalProcess: %v", readErr)
+	}
+	if returned == nil || returned.Status != terminalProcessStatusSuccess {
+		t.Fatalf("terminal read snapshot=%#v, want acknowledged success", returned)
+	}
+}
+
 func TestHandleTerminalProcessDoneDoesNotAuditBeforeSettlement(t *testing.T) {
 	store := openTerminalProcessTestStore(t)
 	defer func() { _ = store.Close() }()

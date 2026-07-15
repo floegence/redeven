@@ -577,7 +577,10 @@ func (p *terminalProcess) publishDone() error {
 		return nil
 	}
 	p.mu.Lock()
-	if !p.pending || p.settlementAcknowledged || p.settlementInFlight || p.status == terminalProcessStatusRunning {
+	for p.settlementInFlight {
+		p.cond.Wait()
+	}
+	if !p.pending || p.settlementAcknowledged || p.status == terminalProcessStatusRunning {
 		p.mu.Unlock()
 		return nil
 	}

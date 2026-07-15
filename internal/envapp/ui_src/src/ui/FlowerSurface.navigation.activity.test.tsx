@@ -1529,7 +1529,7 @@ describe('FlowerSurface navigation activity', () => {
       }
       return {
         process_id: 'tp_live_terminal',
-        status: 'running',
+        status: 'success',
         output: '',
         last_seq: 2,
         total_bytes: 14,
@@ -1650,6 +1650,9 @@ describe('FlowerSurface navigation activity', () => {
     expect(runtime.textContent).toContain('tick 1');
     expect(runtime.textContent).toContain('tick 2');
     expect(runtime.textContent).not.toContain('Listening for output...');
+    expect(runtime.querySelector('[data-flower-activity-item-id="terminal-live"]')?.getAttribute('data-flower-activity-status')).toBe('running');
+    expect(runtime.querySelector('[data-flower-activity-terminal-panel]')?.classList.contains('flower-activity-terminal-panel-running')).toBe(true);
+    expect(runtime.querySelector('[data-flower-activity-terminal-panel]')?.classList.contains('flower-activity-terminal-panel-success')).toBe(false);
     expect(runtime.querySelector('[data-flower-activity-terminal-panel] input')).toBeNull();
   });
 

@@ -3294,11 +3294,12 @@ html.dark .redeven-codex-workbench-icon {
 }
 
 .chat-shell-output {
+  box-sizing: border-box;
   padding: 0.75rem 0.875rem;
   font-size: 0.75rem;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   overflow-x: auto;
-  max-height: 16rem;
+  max-height: 7.1875rem;
   overflow-y: auto;
   line-height: 1.5;
   border-top: 1px solid #2d333b;
