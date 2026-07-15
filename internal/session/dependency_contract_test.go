@@ -219,8 +219,8 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 	t.Parallel()
 
-	const floretVersion = "v0.5.0"
-	oldFloretVersions := []string{"v0.4.0", "v0.3." + "45", "v0.3." + "46", "v0.3." + "47", "v0.3." + "53", "v0.3." + "54", "v0.3." + "55", "v0.3." + "56", "v0.3." + "57", "v0.3." + "58", "v0.3." + "59", "v0.3." + "60", "v0.3." + "61", "v0.3." + "62", "v0.3." + "63", "v0.3." + "64", "v0.3." + "65", "v0.3." + "66", "v0.3." + "67", "v0.3." + "68", "v0.3." + "69", "v0.3." + "70", "v0.3." + "71", "v0.3." + "72", "v0.3." + "73", "v0.3." + "74", "v0.3." + "75", "v0.3." + "76", "v0.3." + "77", "v0.3." + "78", "v0.3." + "79", "v0.3." + "80", "v0.3." + "81", "v0.3." + "82", "v0.3." + "83", "v0.3." + "84", "v0.3." + "85", "v0.3." + "86", "v0.3." + "87", "v0.3." + "88", "v0.3." + "89", "v0.3." + "90"}
+	const floretVersion = "v0.6.0"
+	oldFloretVersions := []string{"v0.5.0", "v0.4.0", "v0.3." + "45", "v0.3." + "46", "v0.3." + "47", "v0.3." + "53", "v0.3." + "54", "v0.3." + "55", "v0.3." + "56", "v0.3." + "57", "v0.3." + "58", "v0.3." + "59", "v0.3." + "60", "v0.3." + "61", "v0.3." + "62", "v0.3." + "63", "v0.3." + "64", "v0.3." + "65", "v0.3." + "66", "v0.3." + "67", "v0.3." + "68", "v0.3." + "69", "v0.3." + "70", "v0.3." + "71", "v0.3." + "72", "v0.3." + "73", "v0.3." + "74", "v0.3." + "75", "v0.3." + "76", "v0.3." + "77", "v0.3." + "78", "v0.3." + "79", "v0.3." + "80", "v0.3." + "81", "v0.3." + "82", "v0.3." + "83", "v0.3." + "84", "v0.3." + "85", "v0.3." + "86", "v0.3." + "87", "v0.3." + "88", "v0.3." + "89", "v0.3." + "90"}
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
 	goSum := readRepoFile(t, root, "go.sum")
@@ -285,11 +285,11 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"ForkOperationID",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
-			"flower-model-directed-tool-concurrency",
-			"v0.5.0",
-			"execute concurrently",
-			"approval queue",
-			"Permission snapshots",
+			"v0.6.0",
+			"host-owned thread titles",
+			"typed event fields",
+			"turn_projection_unavailable",
+			"persistent replayable operation",
 			"redeven-runtime-v1",
 		},
 	}
@@ -418,6 +418,65 @@ func TestFloretGatewayBoundaryUsesGatewayIdentity(t *testing.T) {
 		}
 		if !strings.Contains(content, "ModelGatewayIdentity:") {
 			t.Fatalf("%s must pass Floret ModelGatewayIdentity for gateway-backed hosts", rel)
+		}
+		if !strings.Contains(content, "ThreadTitleMode:") || !strings.Contains(content, "flruntime.ThreadTitleModeHostOwned") {
+			t.Fatalf("%s must declare Redeven ownership of thread titles", rel)
+		}
+	}
+}
+
+func TestFloretLifecycleReasonsUseTypedFields(t *testing.T) {
+	t.Parallel()
+
+	root := repoRootForTest(t)
+	content := readRepoFile(t, root, filepath.Join("internal", "ai", "floret_events.go"))
+	for _, marker := range []string{
+		"floretEvent" + "MetadataString",
+		"floretEventMetadataString(ev.Metadata, \"completion_reason\")",
+		"floretEventMetadataString(ev.Metadata, \"continuation_reason\")",
+	} {
+		if strings.Contains(content, marker) {
+			t.Fatalf("floret_events.go must consume typed lifecycle reasons instead of marker %q", marker)
+		}
+	}
+	for _, marker := range []string{"ev.CompletionReason", "ev.ContinuationReason", "ev.RawFinishReason", "ev.FinishInferred"} {
+		if !strings.Contains(content, marker) {
+			t.Fatalf("floret_events.go missing typed lifecycle field %q", marker)
+		}
+	}
+}
+
+func TestFlowerThreadDeleteUsesPersistentReplayWithoutCompensation(t *testing.T) {
+	t.Parallel()
+
+	root := repoRootForTest(t)
+	for rel, markers := range map[string][]string{
+		filepath.Join("internal", "threadreadstate", "store.go"): {
+			"Restore" + "Records",
+		},
+		filepath.Join("internal", "codeapp", "appserver", "thread_read_state.go"): {
+			"restoreFlower" + "ThreadReadState",
+			"deleteFlowerThreadWith" + "ReadStateCleanup",
+		},
+		filepath.Join("internal", "ai", "thread_delete_operation.go"): {
+			"Close" + "SubAgents",
+		},
+	} {
+		content := readRepoFile(t, root, rel)
+		for _, marker := range markers {
+			if strings.Contains(content, marker) {
+				t.Fatalf("%s must not retain thread delete compensation marker %q", rel, marker)
+			}
+		}
+	}
+	prepareSource := readRepoFile(t, root, filepath.Join("internal", "ai", "threads.go"))
+	if !strings.Contains(prepareSource, "PrepareThreadDeleteOperation") {
+		t.Fatalf("threads.go must persist the thread delete operation before replay")
+	}
+	operationSource := readRepoFile(t, root, filepath.Join("internal", "ai", "thread_delete_operation.go"))
+	for _, marker := range []string{"ConfirmThreadDeleteFilesCleaned", "ConfirmThreadDeleteFloretDeleted", "ConfirmThreadDeleteReadStateDeleted"} {
+		if !strings.Contains(operationSource, marker) {
+			t.Fatalf("thread delete replay missing persistent step %q", marker)
 		}
 	}
 }

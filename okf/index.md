@@ -48,6 +48,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 - [AI tool runtime](ai/ai-tool-runtime.md) - Builtin tool registry, permission checks, and activity projection.
 - [Flower thread fork coordination](ai/flower-thread-fork-coordination.md) - Fixed product snapshots and replayable Floret fork operations.
+- [Flower thread deletion coordination](ai/flower-thread-deletion-coordination.md) - Persistent product deletion snapshots and ordered replay across files, Floret, and user read state.
 - [Flower plugin generation](ai/flower-plugin-generation.md) - Generated plugin flows through Floret approval and ReDevPlugin lifecycle APIs.
 - [Flower context action records](ai/flower-context-action-records.md) - Ask Flower launcher context validation, persistence, and UI badge projection.
 - [Redeven environment operations](ai/redeven-env-operations.md) - Product boundary for Flower and automation environment lifecycle requests.
