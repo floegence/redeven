@@ -307,6 +307,14 @@ func (s *Service) runBackgroundMaintenance(reason string) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), uploadCleanupSweepTimeout)
 	defer cancel()
+	deletes, deleteErr := s.replayPendingThreadDeletes(ctx, threadDeleteReplayBatchSize)
+	if deleteErr != nil {
+		if s.log != nil {
+			s.log.Warn("ai thread delete replay failed", "reason", reason, "error", deleteErr)
+		}
+	} else if deletes > 0 && s.log != nil {
+		s.log.Info("ai thread delete replay completed", "reason", reason, "count", deletes)
+	}
 	n, err := s.sweepPendingUploads(ctx)
 	if err != nil {
 		if s.log != nil {

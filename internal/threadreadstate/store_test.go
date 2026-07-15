@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
-	"reflect"
 	"testing"
 
 	"github.com/floegence/redeven/internal/persistence/sqliteutil"
@@ -225,7 +224,7 @@ func TestStore_EnsureCodexSeedsMissingBaselineAndAdvanceIsMonotonic(t *testing.T
 	}
 }
 
-func TestStore_DeleteThreadRemovesSurfaceRecordsAndRestoreRecords(t *testing.T) {
+func TestStore_DeleteThreadRemovesSurfaceRecordsIdempotently(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -268,50 +267,33 @@ func TestStore_DeleteThreadRemovesSurfaceRecordsAndRestoreRecords(t *testing.T) 
 		t.Fatalf("EnsureCodex(user_1): %v", err)
 	}
 
-	deleted, err := store.DeleteThread(ctx, "env_1", SurfaceFlower, "th_1")
-	if err != nil {
+	if err := store.DeleteThread(ctx, "env_1", SurfaceFlower, "th_1"); err != nil {
 		t.Fatalf("DeleteThread(flower): %v", err)
 	}
-	if len(deleted) != 2 {
-		t.Fatalf("len(deleted)=%d, want 2", len(deleted))
+	var flowerRows int
+	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM thread_read_state WHERE endpoint_id = ? AND surface = ? AND thread_id = ?`, "env_1", string(SurfaceFlower), "th_1").Scan(&flowerRows); err != nil {
+		t.Fatalf("count Flower rows: %v", err)
 	}
-	if deleted[0].ScopeID != "user_1" || deleted[1].ScopeID != "user_2" {
-		t.Fatalf("deleted scopes=%+v, want user_1 and user_2", deleted)
+	if flowerRows != 0 {
+		t.Fatalf("Flower rows=%d, want 0", flowerRows)
 	}
 
-	redeleted, err := store.DeleteThread(ctx, "env_1", SurfaceFlower, "th_1")
-	if err != nil {
+	if err := store.DeleteThread(ctx, "env_1", SurfaceFlower, "th_1"); err != nil {
 		t.Fatalf("DeleteThread(flower, second): %v", err)
 	}
-	if len(redeleted) != 0 {
-		t.Fatalf("len(redeleted)=%d, want 0", len(redeleted))
-	}
 
-	codexDeleted, err := store.DeleteThread(ctx, "env_1", SurfaceCodex, "th_1")
-	if err != nil {
+	if err := store.DeleteThread(ctx, "env_1", SurfaceCodex, "th_1"); err != nil {
 		t.Fatalf("DeleteThread(codex): %v", err)
 	}
-	if len(codexDeleted) != 1 {
-		t.Fatalf("len(codexDeleted)=%d, want 1", len(codexDeleted))
-	}
 
-	if err := store.RestoreRecords(ctx, deleted); err != nil {
-		t.Fatalf("RestoreRecords: %v", err)
-	}
-	restoredDeleted, err := store.DeleteThread(ctx, "env_1", SurfaceFlower, "th_1")
-	if err != nil {
-		t.Fatalf("DeleteThread(flower after restore): %v", err)
-	}
-	if !reflect.DeepEqual(restoredDeleted, deleted) {
-		t.Fatalf("restoredDeleted=%+v, want %+v", restoredDeleted, deleted)
-	}
-
-	otherDeleted, err := store.DeleteThread(ctx, "env_1", SurfaceFlower, "th_other")
-	if err != nil {
+	if err := store.DeleteThread(ctx, "env_1", SurfaceFlower, "th_other"); err != nil {
 		t.Fatalf("DeleteThread(flower other): %v", err)
 	}
-	if len(otherDeleted) != 1 || otherDeleted[0].ScopeID != "user_1" {
-		t.Fatalf("otherDeleted=%+v, want one user_1 scope record", otherDeleted)
+	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM thread_read_state WHERE endpoint_id = ? AND surface = ? AND thread_id = ?`, "env_1", string(SurfaceFlower), "th_other").Scan(&flowerRows); err != nil {
+		t.Fatalf("count other Flower rows: %v", err)
+	}
+	if flowerRows != 0 {
+		t.Fatalf("other Flower rows=%d, want 0", flowerRows)
 	}
 }
 

@@ -46,6 +46,15 @@ type floretForkHost interface {
 	ForkThread(context.Context, flruntime.ForkThreadRequest) (flruntime.ForkThreadResult, error)
 }
 
+type ThreadMaintenanceHost interface {
+	DeleteThread(context.Context, flruntime.ThreadID) error
+	Close() error
+}
+
+type FlowerReadStateCleaner interface {
+	DeleteFlowerThreadReadState(context.Context, string, string) error
+}
+
 type floretSubagentHost interface {
 	floretThreadEnsurer
 	floretSubagentsCloser

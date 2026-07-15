@@ -89,6 +89,9 @@ type Options struct {
 	//
 	// It should read from a local secrets store, not from config.json.
 	ResolveWebSearchProviderAPIKey func(providerID string) (string, bool, error)
+
+	FlowerReadStateCleaner    FlowerReadStateCleaner
+	OpenThreadMaintenanceHost func() (ThreadMaintenanceHost, error)
 }
 
 type Service struct {
@@ -146,11 +149,13 @@ type Service struct {
 	skillManager       *skillManager
 	terminalProcesses  *terminalProcessManager
 
-	threadTitleCoordinator *autoThreadTitleCoordinator
-	threadForkBroadcastMu  sync.Mutex
-	maintenanceStopCh      chan struct{}
-	maintenanceDoneCh      chan struct{}
-	compactionScheduled    bool
+	threadTitleCoordinator    *autoThreadTitleCoordinator
+	flowerReadStateCleaner    FlowerReadStateCleaner
+	openDeleteMaintenanceHost func() (ThreadMaintenanceHost, error)
+	threadForkBroadcastMu     sync.Mutex
+	maintenanceStopCh         chan struct{}
+	maintenanceDoneCh         chan struct{}
+	compactionScheduled       bool
 }
 
 var flowerLiveGenerationSeed atomic.Int64
@@ -334,6 +339,8 @@ func NewService(opts Options) (*Service, error) {
 		contextRepo:                  contextRepo,
 		capabilityResolver:           capabilityResolver,
 		skillManager:                 newSkillManager(agentHomeDir, strings.TrimSpace(opts.StateDir)),
+		flowerReadStateCleaner:       opts.FlowerReadStateCleaner,
+		openDeleteMaintenanceHost:    opts.OpenThreadMaintenanceHost,
 		maintenanceStopCh:            make(chan struct{}),
 		maintenanceDoneCh:            make(chan struct{}),
 	}
@@ -343,6 +350,14 @@ func NewService(opts Options) (*Service, error) {
 	}
 	svc.threadMgr = newThreadManager(svc)
 	svc.threadTitleCoordinator = newAutoThreadTitleCoordinator(svc)
+	deleteReplayCtx, cancelDeleteReplay := context.WithTimeout(context.Background(), persistTO)
+	deleteReplayCount, deleteReplayErr := svc.replayPendingThreadDeletes(deleteReplayCtx, threadDeleteReplayBatchSize)
+	cancelDeleteReplay()
+	if deleteReplayErr != nil {
+		logger.Warn("ai: pending thread delete recovery failed", "error", deleteReplayErr)
+	} else if deleteReplayCount > 0 {
+		logger.Info("ai: pending thread delete recovery completed", "count", deleteReplayCount)
+	}
 	if svc.threadTitleCoordinator != nil {
 		svc.threadTitleCoordinator.ScheduleRecovery()
 	}
@@ -584,62 +599,6 @@ func (s *Service) closeThreadSubagentsWithMaintenanceHost(ctx context.Context, t
 		ParentThreadID: flruntime.ThreadID(threadID),
 		Reason:         "parent_stop",
 	})
-}
-
-func (s *Service) deleteFloretThreadTree(ctx context.Context, meta *session.Meta, th threadstore.Thread, timeout time.Duration) error {
-	if s == nil {
-		return nil
-	}
-	threadID := strings.TrimSpace(th.ThreadID)
-	endpointID := ""
-	if meta != nil {
-		endpointID = strings.TrimSpace(meta.EndpointID)
-	}
-	if endpointID == "" || threadID == "" {
-		return nil
-	}
-	if timeout <= 0 {
-		timeout = defaultPersistOpTimeout
-	}
-	thKey := runThreadKey(endpointID, threadID)
-	runtime := s.removeThreadSubagentRuntime(thKey)
-	opCtx, cancel := context.WithTimeout(ctxOrBackground(ctx), timeout)
-	defer cancel()
-	if runtime != nil {
-		defer runtime.release()
-		host := runtime.currentHost()
-		if host != nil {
-			runtime.closeAllExisting(opCtx)
-			return host.DeleteThread(opCtx, flruntime.ThreadID(threadID))
-		}
-	}
-	return s.deleteFloretThreadTreeWithMaintenanceHost(opCtx, threadID)
-}
-
-func (s *Service) deleteFloretThreadTreeWithMaintenanceHost(ctx context.Context, threadID string) error {
-	if s == nil {
-		return nil
-	}
-	threadID = strings.TrimSpace(threadID)
-	if threadID == "" {
-		return nil
-	}
-	host, err := s.openFloretMaintenanceHost()
-	if err != nil {
-		return err
-	}
-	defer host.Close()
-	_, _ = host.CloseSubAgents(ctx, flruntime.CloseSubAgentsRequest{
-		ParentThreadID: flruntime.ThreadID(threadID),
-		Reason:         "parent_delete",
-	})
-	if err := host.DeleteThread(ctx, flruntime.ThreadID(threadID)); err != nil {
-		if isFloretThreadNotFoundError(err) {
-			return nil
-		}
-		return err
-	}
-	return nil
 }
 
 func isFloretThreadNotFoundError(err error) bool {

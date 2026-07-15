@@ -153,9 +153,9 @@ func (s *Store) DeleteThread(
 	endpointID string,
 	surface Surface,
 	threadID string,
-) ([]Record, error) {
+) error {
 	if s == nil || s.db == nil {
-		return nil, errors.New("thread read state store not initialized")
+		return errors.New("thread read state store not initialized")
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -166,56 +166,17 @@ func (s *Store) DeleteThread(
 		ThreadID:   threadID,
 	})
 	if err != nil {
-		return nil, err
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	records, err := loadThreadScopeRecordsTx(ctx, tx, scope)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := tx.ExecContext(ctx, `
-DELETE FROM thread_read_state
-WHERE endpoint_id = ? AND surface = ? AND thread_id = ?
-`, scope.EndpointID, string(scope.Surface), scope.ThreadID); err != nil {
-		return nil, err
-	}
-	if err := tx.Commit(); err != nil {
-		return nil, err
-	}
-	return records, nil
-}
-
-func (s *Store) RestoreRecords(ctx context.Context, records []Record) error {
-	if s == nil || s.db == nil {
-		return errors.New("thread read state store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if len(records) == 0 {
-		return nil
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
 		return err
 	}
-	defer func() { _ = tx.Rollback() }()
+	_, err = s.db.ExecContext(ctx, `
+DELETE FROM thread_read_state
+WHERE endpoint_id = ? AND surface = ? AND thread_id = ?
+`, scope.EndpointID, string(scope.Surface), scope.ThreadID)
+	return err
+}
 
-	for _, record := range records {
-		record, err = normalizeRecord(record)
-		if err != nil {
-			return err
-		}
-		if err := upsertRecordTx(ctx, tx, record); err != nil {
-			return err
-		}
-	}
-	return tx.Commit()
+func (s *Store) DeleteFlowerThreadReadState(ctx context.Context, endpointID string, threadID string) error {
+	return s.DeleteThread(ctx, endpointID, SurfaceFlower, threadID)
 }
 
 type recordKey struct {
@@ -424,36 +385,6 @@ WHERE endpoint_id = ? AND scope_id = ? AND surface = ? AND thread_id IN (` + str
 	return out, nil
 }
 
-func loadThreadScopeRecordsTx(ctx context.Context, tx *sql.Tx, scope threadScopeKey) ([]Record, error) {
-	rows, err := tx.QueryContext(ctx, `
-SELECT endpoint_id, scope_id, surface, thread_id,
-       last_seen_activity_revision,
-       last_read_message_at_unix_ms, last_seen_waiting_prompt_id,
-       last_read_updated_at_unix_s, last_seen_activity_signature,
-       updated_at_unix_ms
-FROM thread_read_state
-WHERE endpoint_id = ? AND surface = ? AND thread_id = ?
-ORDER BY scope_id ASC
-`, scope.EndpointID, string(scope.Surface), scope.ThreadID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	out := make([]Record, 0)
-	for rows.Next() {
-		record, err := scanRecord(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, record)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func upsertRecordTx(ctx context.Context, tx *sql.Tx, record Record) error {
 	_, err := tx.ExecContext(ctx, `
 INSERT INTO thread_read_state (
@@ -579,28 +510,6 @@ func normalizeThreadScope(scope threadScopeKey) (threadScopeKey, error) {
 		return threadScopeKey{}, errors.New("missing thread_id")
 	}
 	return scope, nil
-}
-
-func normalizeRecord(record Record) (Record, error) {
-	key, err := normalizeKey(recordKey{
-		EndpointID: record.EndpointID,
-		ScopeID:    record.ScopeID,
-		Surface:    record.Surface,
-		ThreadID:   record.ThreadID,
-	})
-	if err != nil {
-		return Record{}, err
-	}
-	record.EndpointID = key.EndpointID
-	record.ScopeID = key.ScopeID
-	record.Surface = key.Surface
-	record.ThreadID = key.ThreadID
-	if record.LastSeenActivityRevision < 0 {
-		record.LastSeenActivityRevision = 0
-	}
-	record.LastSeenWaitingPromptID = strings.TrimSpace(record.LastSeenWaitingPromptID)
-	record.LastSeenActivitySignature = strings.TrimSpace(record.LastSeenActivitySignature)
-	return record, nil
 }
 
 func normalizeSurface(surface Surface) Surface {
