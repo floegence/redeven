@@ -4,6 +4,7 @@ set -euo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
+node scripts/check_readme_localizations.mjs
 ./scripts/open_source_hygiene_check.sh --staged
 ./scripts/build_assets.sh
 ./scripts/check_plugin_integration.sh --ci

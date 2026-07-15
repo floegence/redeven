@@ -183,6 +183,7 @@ Rules:
 - Non-English text is allowed only when it is necessary for product internationalization, including:
   - locale dictionaries and localized UI copy;
   - locale metadata such as native language names;
+  - localized `README.<locale>.md` files declared in `assets/readme/locales.json`;
   - language-sensitive tests, snapshots, and fixtures;
   - documented examples that explicitly validate Unicode, locale resolution, or translated UI behavior.
 - When non-English text is added for i18n, keep it scoped to the relevant locale, resource, or test file and document the reason in English when the purpose is not obvious.
@@ -195,7 +196,17 @@ Rules:
 - User-visible JSX text, titles, tooltips, placeholders, empty states, notifications, and accessibility labels must use i18n keys. User content, AI output, terminal output, filenames, commands, code, and protocol fields remain literal.
 - Any identical-English exception must be a named product, a documented technical term, a code literal, or a native same-spelling term. Broad module-level allowlists are not permitted.
 - Translation changes must keep dictionary shape, placeholders, rich text, and locale-specific plural forms aligned with `en-US`; Traditional Chinese must not inherit Simplified Chinese copy.
-- Each locale requires review by a native speaker familiar with developer tools before release. Automated checks are necessary but are not a substitute for linguistic sign-off.
+- Each locale requires an independent locale-review subagent instructed to perform native-language-quality review and familiar with developer-tool terminology before integration. The implementation agent must not self-review a locale; the review subagent must compare semantic parity, terminology, naturalness, and protected literals against the canonical source and report actionable findings before approval.
+
+## README Localization Quality
+
+- `README.md` is the canonical `en-US` source. Localized README files mirror its product claims, structure, links, commands, and versioned literals; they must not add locale-only behavior or architecture claims.
+- Supported translations live at the repository root as `README.<locale>.md`. Their locale set and order must exactly match the Desktop and Env App language switchers and the manifest in `assets/readme/locales.json`.
+- Every README must provide the same native-name language selector, stable section anchors, heading structure, link targets, executable command content, protected product terms, and documented fixed English domain terms. Explanatory prose and shell comments may be localized; commands, flags, paths, URLs, environment variables, protocol fields, version identifiers, and the matching `Provider` term forms remain literal.
+- The existing `assets/readme/architecture-overview.png` is the only shared English visual exception. Localized README files must provide localized alternative text and surrounding explanation, and new shared visual exceptions require an explicit manifest entry and review.
+- Each non-English README records the canonical source hash, localized content hash, review status, review method, reviewer subagent identifier, and review date in `assets/readme/locales.json`. Any canonical or localized content change invalidates the corresponding review metadata.
+- `pending_subagent_review` is allowed only on an unmerged feature branch. Before integration, every non-English README must be marked `reviewed` through an independent `subagent` review, the `reviewed_by` value must identify the locale-review subagent, and `node scripts/check_readme_localizations.mjs --require-reviewed` must pass.
+- Run `node --test scripts/check_readme_localizations.test.mjs` and `node scripts/check_readme_localizations.mjs` while editing README translations. Do not weaken structural, link, literal, Traditional Chinese, hash, or review checks to make a draft pass.
 
 ## OKF Maintenance Contract
 
@@ -206,7 +217,8 @@ Rules:
 - After changing OKF source files, regenerate and commit `okf/dist/okf_bundle.json`, `okf/dist/okf_bundle.manifest.json`, and `okf/dist/okf_bundle.sha256`.
 - Run `./scripts/okf/check_source_integrity.sh` and `./scripts/build_okf_bundle.sh --verify-only` before integration whenever OKF source or bundle output may be affected.
 - Do not restore `docs/`, `spec/design/`, `spec/protocol/*.md`, or old root-level product Markdown files.
-- The only maintained non-OKF Markdown files are `AGENTS.md`, `README.md`, and `THIRD_PARTY_NOTICES.md`.
+- The only maintained human-facing non-OKF Markdown files are `AGENTS.md`, `THIRD_PARTY_NOTICES.md`, `README.md`, and the supported `README.<locale>.md` files declared in `assets/readme/locales.json`.
+- Machine-consumed Markdown source files named explicitly in `assets/readme/locales.json` are active runtime inputs rather than repository knowledge documents. Do not use that narrow exception to introduce general product or developer documentation outside OKF.
 - Machine-readable protocol assets may live outside OKF when they are active source contracts, for example `spec/openapi/*.yaml`.
 
 ## AI Design Principles
@@ -747,6 +759,8 @@ Run the CI-aligned checks and local-only pre-commit checks before integration:
 - `bash -n scripts/install_git_hooks.sh`
 - `bash -n .githooks/pre-commit`
 - `node scripts/generate_third_party_notices.mjs --check`
+- `node --test scripts/check_readme_localizations.test.mjs`
+- `node scripts/check_readme_localizations.mjs --require-reviewed`
 - `./scripts/lint_ui.sh`
 - `./scripts/test_generate_release_notes.sh`
 - `./scripts/check_runtime_compatibility_contract.sh --source-only`

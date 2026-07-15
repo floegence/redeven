@@ -49,6 +49,11 @@ jobs:
       - name: Enable corepack
         run: corepack enable
 
+      - name: README localization contract
+        run: |
+          node --test scripts/check_readme_localizations.test.mjs
+          node scripts/check_readme_localizations.mjs --require-reviewed
+
       - name: Install golangci-lint
         run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.5
 
