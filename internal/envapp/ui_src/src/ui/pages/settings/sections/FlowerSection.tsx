@@ -292,7 +292,7 @@ export function FlowerSection() {
           badge={desktopModelSource()?.available ? i18n.t('flowerSettings.activeBadge') : i18n.t('flowerSettings.desktopModelSourceNeedsAttention')}
           badgeVariant={desktopModelSource()?.available ? 'success' : 'warning'}
         >
-          <div class="redeven-settings-choice redeven-settings-choice--selected rounded-xl border p-5">
+          <div class="redeven-settings-choice redeven-settings-choice--selected-neutral rounded-xl border p-5">
             <div class="flex items-start gap-4">
               <div class="redeven-settings-inset flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl border">
                 <Zap class="h-6 w-6 text-primary" />
@@ -327,26 +327,28 @@ export function FlowerSection() {
         </>}
       >
         {/* Hero: Current model */}
-        <div class="redeven-settings-choice redeven-settings-choice--selected rounded-xl border p-5">
+        <div class="redeven-settings-choice redeven-settings-choice--selected-neutral rounded-xl border p-5">
           <div class="text-[11px] font-medium text-muted-foreground mb-3 uppercase tracking-wider">{i18n.t('flowerSettings.currentModelTitle')}</div>
-          <div class="flex items-center gap-4">
-            <div class="redeven-settings-inset flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl border">
-              <Show when={aiCurrentModelOption()} fallback={<Bot class="h-6 w-6 text-muted-foreground" />}>
-                <ProviderBrandIcon type={providers().find((p) => currentModelID().startsWith(String(p.id ?? '').trim() + '/'))?.type ?? 'openai'} class="h-6 w-6" />
-              </Show>
-            </div>
-            <div class="min-w-0 flex-1">
-              <Show when={aiCurrentModelOption()} fallback={<div class="text-base font-semibold text-muted-foreground">{i18n.t('flowerSettings.noModelSelected')}</div>}>
-                <div class="text-base font-semibold text-foreground">{aiCurrentModelOption()!.label}</div>
-                <div class="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
-                  <DotIndicator active label={i18n.t('flowerSettings.textCapability')} />
-                  <Show when={aiCurrentModelOption()?.supportsImageInput}><DotIndicator active label={i18n.t('flowerSettings.imageInputCapability')} /></Show>
-                </div>
-              </Show>
+          <div class="flex flex-col gap-4 sm:flex-row sm:items-center">
+            <div class="flex min-w-0 flex-1 items-center gap-4">
+              <div class="redeven-settings-inset flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl border">
+                <Show when={aiCurrentModelOption()} fallback={<Bot class="h-6 w-6 text-muted-foreground" />}>
+                  <ProviderBrandIcon type={providers().find((p) => currentModelID().startsWith(String(p.id ?? '').trim() + '/'))?.type ?? 'openai'} class="h-6 w-6" />
+                </Show>
+              </div>
+              <div class="min-w-0 flex-1">
+                <Show when={aiCurrentModelOption()} fallback={<div class="text-base font-semibold text-muted-foreground">{i18n.t('flowerSettings.noModelSelected')}</div>}>
+                  <div class="break-words text-base font-semibold text-foreground">{aiCurrentModelOption()!.label}</div>
+                  <div class="mt-1 flex items-center gap-3 text-[11px] text-muted-foreground">
+                    <DotIndicator active label={i18n.t('flowerSettings.textCapability')} />
+                    <Show when={aiCurrentModelOption()?.supportsImageInput}><DotIndicator active label={i18n.t('flowerSettings.imageInputCapability')} /></Show>
+                  </div>
+                </Show>
+              </div>
             </div>
             <Select value={currentModelID()} options={aiModelOptions().map((it) => ({ value: it.id, label: it.label }))}
               onChange={(v) => { const nid = String(v ?? '').trim(); if (!aiModelOptions().some((option) => option.id === nid)) return; const pid = String(currentModelID() ?? '').trim(); if (nid === pid) return; setCurrentModelID(nid); if (!dirty() && !saving()) { void saveAICurrentModelDirectly(nid, pid); return; } setDirty(true); }}
-              placeholder={i18n.t('flowerSettings.selectModelPlaceholder')} class="w-56" disabled={!ctx.canInteract() || aiModelOptions().length === 0 || saving()} />
+              placeholder={i18n.t('flowerSettings.selectModelPlaceholder')} class="w-full sm:w-56" disabled={!ctx.canInteract() || aiModelOptions().length === 0 || saving()} />
           </div>
         </div>
 
@@ -358,7 +360,7 @@ export function FlowerSection() {
               {(kind) => {
                 const copy = () => permissionTypeCopy(i18n, kind);
                 return (
-                  <button ref={(el) => { permissionButtonRefs.set(kind, el); }} type="button" class={cn('redeven-settings-choice group flex cursor-pointer flex-col gap-2 rounded-xl border px-4 py-3.5 text-left', permissionType() === kind && 'redeven-settings-choice--selected', !ctx.canInteract() && 'cursor-not-allowed opacity-50')}
+                  <button ref={(el) => { permissionButtonRefs.set(kind, el); }} type="button" class={cn('redeven-settings-choice group flex cursor-pointer flex-col gap-2 rounded-xl border px-4 py-3.5 text-left', permissionType() === kind && 'redeven-settings-choice--selected-neutral', !ctx.canInteract() && 'cursor-not-allowed opacity-50')}
                     role="radio" aria-checked={permissionType() === kind}
                     tabIndex={permissionType() === kind ? 0 : -1}
                     onKeyDown={onPermissionTypeKeyDown}
@@ -394,7 +396,7 @@ export function FlowerSection() {
               const isDef = () => currentModelID().startsWith(`${pid()}/`); const keyOk = () => providerKeySet()?.[pid()];
               const wss = () => providerWebSearchSummary(provider, i18n);
               return (
-                <div class={cn('redeven-settings-choice rounded-xl border p-4', isDef() && 'redeven-settings-choice--selected')}>
+                <div class={cn('redeven-settings-choice rounded-xl border p-4', isDef() && 'redeven-settings-choice--selected-neutral')}>
                   <div class="flex items-start gap-3">
                     <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-muted"><ProviderBrandIcon type={provider.type} class="h-5 w-5" /></div>
                     <div class="min-w-0 flex-1">

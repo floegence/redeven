@@ -317,6 +317,8 @@
   --redeven-settings-selection-bg: #e8f0fe;
   --redeven-settings-selection-fg: #1e4f91;
   --redeven-settings-selection-indicator: #3b82f6;
+  --redeven-settings-choice-selected-bg: #f1f3f5;
+  --redeven-settings-choice-selected-border: #aeb7c2;
   --redeven-settings-control-border: #8793a5;
   --redeven-settings-section-shadow:
     0 1px 2px rgb(15 23 42 / 4%),
@@ -394,6 +396,8 @@ html.dark {
   --redeven-settings-selection-bg: #22324a;
   --redeven-settings-selection-fg: #dceaff;
   --redeven-settings-selection-indicator: #6ea8fe;
+  --redeven-settings-choice-selected-bg: #262b32;
+  --redeven-settings-choice-selected-border: #4c5664;
   --redeven-settings-control-border: #68788f;
   --redeven-settings-section-shadow: none;
   --redeven-surface-panel-border: color-mix(in srgb, var(--border) 82%, #616976 18%);
@@ -2021,6 +2025,12 @@ html.dark .env-debug-console-switch[data-state='checked'] {
 .redeven-settings-choice--selected:hover:not(:disabled):not([aria-disabled='true']) {
   border-color: var(--redeven-settings-selection-indicator) !important;
   background: var(--redeven-settings-selection-bg) !important;
+}
+
+.redeven-settings-choice--selected-neutral,
+.redeven-settings-choice--selected-neutral:hover:not(:disabled):not([aria-disabled='true']) {
+  border-color: var(--redeven-settings-choice-selected-border) !important;
+  background: var(--redeven-settings-choice-selected-bg) !important;
 }
 
 .redeven-settings-list {

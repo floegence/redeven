@@ -15,6 +15,12 @@ function readEnvAppEntryCss(): string {
   return fs.readFileSync(path.resolve(dir, '../index.css'), 'utf8');
 }
 
+function readFlowerSettingsSource(): string {
+  const here = fileURLToPath(import.meta.url);
+  const dir = path.dirname(here);
+  return fs.readFileSync(path.resolve(dir, '../ui/pages/settings/sections/FlowerSection.tsx'), 'utf8');
+}
+
 function relativeLuminance(hex: string): number {
   const channels = hex.match(/[a-f\d]{2}/gi)?.map((channel) => Number.parseInt(channel, 16) / 255) ?? [];
   const linear = channels.map((channel) => (
@@ -151,6 +157,8 @@ describe('Redeven Env App surface theme contract', () => {
       '--redeven-settings-note-fg: #667085;',
       '--redeven-settings-selection-bg: #e8f0fe;',
       '--redeven-settings-selection-indicator: #3b82f6;',
+      '--redeven-settings-choice-selected-bg: #f1f3f5;',
+      '--redeven-settings-choice-selected-border: #aeb7c2;',
       '--redeven-settings-control-border: #8793a5;',
       '--redeven-settings-header-bg: #141820;',
       '--redeven-settings-sidebar-bg: #141820;',
@@ -165,6 +173,8 @@ describe('Redeven Env App surface theme contract', () => {
       '--redeven-settings-note-fg: #94a3b8;',
       '--redeven-settings-selection-bg: #22324a;',
       '--redeven-settings-selection-indicator: #6ea8fe;',
+      '--redeven-settings-choice-selected-bg: #262b32;',
+      '--redeven-settings-choice-selected-border: #4c5664;',
       '--redeven-settings-control-border: #68788f;',
     ]) {
       expect(src).toContain(token);
@@ -176,6 +186,18 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('.redeven-settings-nav-item--active,');
     expect(src).not.toContain('--redeven-settings-content-bg: #fffdfa;');
     expect(src).not.toContain('--redeven-settings-card-bg: #363b45;');
+  });
+
+  it('uses neutral selection surfaces for large Flower choices without weakening blue navigation state', () => {
+    const css = readRedevenCss();
+    const flower = readFlowerSettingsSource();
+
+    expect(css).toContain('.redeven-settings-choice--selected-neutral,');
+    expect(css).toContain('border-color: var(--redeven-settings-choice-selected-border) !important;');
+    expect(css).toContain('background: var(--redeven-settings-choice-selected-bg) !important;');
+    expect(css).toContain('background: var(--redeven-settings-selection-bg) !important;');
+    expect(flower.match(/redeven-settings-choice--selected-neutral/g)).toHaveLength(4);
+    expect(flower).not.toContain("&& 'redeven-settings-choice--selected'");
   });
 
   it('keeps settings text and control boundaries above their accessibility thresholds', () => {
