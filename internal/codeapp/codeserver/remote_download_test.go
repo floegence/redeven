@@ -346,20 +346,21 @@ func TestRemoteDownloadSetupUsesVerifiedCacheAndReportsMonotonicProgress(t *test
 }
 
 type blockingResponseBody struct {
-	ctx     context.Context
-	started chan struct{}
-	once    sync.Once
-	closed  atomic.Bool
+	ctx       context.Context
+	started   chan struct{}
+	closed    chan struct{}
+	startOnce sync.Once
+	closeOnce sync.Once
 }
 
 func (body *blockingResponseBody) Read([]byte) (int, error) {
-	body.once.Do(func() { close(body.started) })
+	body.startOnce.Do(func() { close(body.started) })
 	<-body.ctx.Done()
 	return 0, body.ctx.Err()
 }
 
 func (body *blockingResponseBody) Close() error {
-	body.closed.Store(true)
+	body.closeOnce.Do(func() { close(body.closed) })
 	return nil
 }
 
@@ -394,7 +395,11 @@ func TestRemoteDownloadIdleTimeoutAndCancellationCleanTemporaryFiles(t *testing.
 				if request.URL.Host == catalogHost {
 					return &http.Response{StatusCode: http.StatusOK, Header: make(http.Header), Body: io.NopCloser(bytes.NewReader(catalogBody)), Request: request}, nil
 				}
-				packageBody = &blockingResponseBody{ctx: request.Context(), started: started}
+				packageBody = &blockingResponseBody{
+					ctx:     request.Context(),
+					started: started,
+					closed:  make(chan struct{}),
+				}
 				return &http.Response{
 					StatusCode:    http.StatusOK,
 					Header:        make(http.Header),
@@ -425,7 +430,12 @@ func TestRemoteDownloadIdleTimeoutAndCancellationCleanTemporaryFiles(t *testing.
 			if _, err := os.Stat(tempPath); !errors.Is(err, os.ErrNotExist) {
 				t.Fatalf("temporary download should be removed, err=%v", err)
 			}
-			if packageBody == nil || !packageBody.closed.Load() {
+			if packageBody == nil {
+				t.Fatal("package response body was not created")
+			}
+			select {
+			case <-packageBody.closed:
+			case <-time.After(5 * time.Second):
 				t.Fatal("package response body was not closed")
 			}
 		})
