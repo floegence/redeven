@@ -365,9 +365,9 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
 
   const busy = createMemo(() => operationRunning() || props.actionLoading || Boolean(props.selectionLoadingVersion) || Boolean(props.removeVersionLoading));
 
-  const confirmPrepare = async () => {
-    await props.onPrepare();
+  const confirmPrepare = () => {
     setPrepareConfirmOpen(false);
+    return props.onPrepare();
   };
 
   const openPrepareConfirmation = () => {
