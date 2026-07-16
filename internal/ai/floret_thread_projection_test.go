@@ -465,116 +465,6 @@ func lastActivityBlockFromFlowerLiveEvents(events []FlowerLiveEvent) (ActivityTi
 	return ActivityTimelineBlock{}, false
 }
 
-func TestSettlePendingToolWithActiveFloretRunUsesActiveHost(t *testing.T) {
-	host := &recordingFloretHost{
-		settleResult: flruntime.PendingToolSettlementResult{
-			RunID:                  "run_terminal",
-			ProjectionAvailability: flruntime.TurnProjectionAvailabilityReady,
-			Projection: &flruntime.ThreadTurnProjection{
-				RunID: "run_terminal",
-			},
-		},
-	}
-	activeRun := &run{id: "run_terminal", endpointID: "env_terminal", threadID: "thread_terminal"}
-	activeRun.setActiveFloretHost(host)
-	svc := &Service{
-		activeRunByTh: map[string]string{runThreadKey("env_terminal", "thread_terminal"): "run_terminal"},
-		runs:          map[string]*run{"run_terminal": activeRun},
-	}
-	req := flruntime.PendingToolSettlementRequest{
-		RunID:      "run_terminal",
-		TurnID:     "turn_terminal",
-		ToolCallID: "call_terminal",
-		ToolName:   "terminal.exec",
-		Handle:     "tp_terminal",
-		Status:     flruntime.PendingToolSettlementCompleted,
-		Summary:    "Terminal process completed",
-	}
-
-	result, err := svc.settlePendingToolWithActiveFloretRun(context.Background(), "env_terminal", "thread_terminal", req)
-	if err != nil {
-		t.Fatalf("settlePendingToolWithActiveFloretRun: %v", err)
-	}
-	if result.RunID != "run_terminal" {
-		t.Fatalf("result=%#v, want active host result", result)
-	}
-	if len(host.settleRequests) != 1 {
-		t.Fatalf("settle requests=%#v, want one", host.settleRequests)
-	}
-	got := host.settleRequests[0]
-	if got.ToolCallID != "call_terminal" || got.Handle != "tp_terminal" {
-		t.Fatalf("settle request=%#v", got)
-	}
-}
-
-func TestSettlePendingToolWithDetachedRunUsesRunHost(t *testing.T) {
-	host := &recordingFloretHost{
-		settleResult: flruntime.PendingToolSettlementResult{
-			RunID:                  "run_terminal",
-			ProjectionAvailability: flruntime.TurnProjectionAvailabilityReady,
-			Projection: &flruntime.ThreadTurnProjection{
-				RunID:    "run_terminal",
-				ThreadID: "thread_terminal",
-				TurnID:   "turn_terminal",
-			},
-		},
-	}
-	activeRun := &run{id: "run_terminal", endpointID: "env_terminal", threadID: "thread_terminal"}
-	activeRun.setActiveFloretHost(host)
-	activeRun.markDetached()
-	svc := &Service{
-		activeRunByTh: map[string]string{},
-		runs:          map[string]*run{"run_terminal": activeRun},
-	}
-	req := flruntime.PendingToolSettlementRequest{
-		RunID:      "run_terminal",
-		TurnID:     "turn_terminal",
-		ToolCallID: "call_terminal",
-		ToolName:   "terminal.exec",
-		Handle:     "tp_terminal",
-		Status:     flruntime.PendingToolSettlementCanceled,
-		Summary:    "Terminal process canceled",
-	}
-
-	result, err := svc.settlePendingToolWithActiveFloretRun(context.Background(), "env_terminal", "thread_terminal", req)
-	if err != nil {
-		t.Fatalf("settlePendingToolWithActiveFloretRun: %v", err)
-	}
-	if result.RunID != "run_terminal" {
-		t.Fatalf("result=%#v, want detached run host result", result)
-	}
-	if len(host.settleRequests) != 1 {
-		t.Fatalf("settle requests=%#v, want one", host.settleRequests)
-	}
-}
-
-func TestSettlePendingToolWithoutActiveHostUsesMaintenanceHost(t *testing.T) {
-	svc := &Service{
-		stateDir:      t.TempDir(),
-		activeRunByTh: map[string]string{runThreadKey("env_terminal", "thread_terminal"): "run_terminal"},
-		runs: map[string]*run{
-			"run_terminal": &run{id: "run_terminal", endpointID: "env_terminal", threadID: "thread_terminal"},
-		},
-	}
-	req := flruntime.PendingToolSettlementRequest{
-		RunID:      "run_terminal",
-		TurnID:     "turn_terminal",
-		ToolCallID: "call_terminal",
-		ToolName:   "terminal.exec",
-		Handle:     "tp_terminal",
-		Status:     flruntime.PendingToolSettlementCompleted,
-		Summary:    "Terminal process completed",
-	}
-
-	_, err := svc.settlePendingToolWithActiveFloretRun(context.Background(), "env_terminal", "thread_terminal", req)
-	if err == nil {
-		t.Fatalf("settlePendingToolWithActiveFloretRun succeeded without a seeded Floret pending target")
-	}
-	if strings.Contains(err.Error(), "active floret settlement host unavailable") {
-		t.Fatalf("settlement kept old active-host-only failure: %v", err)
-	}
-}
-
 func TestFlowerBlocksFromFloretThreadProjectionInterleavesTextAndActivity(t *testing.T) {
 	t.Parallel()
 
@@ -998,13 +888,15 @@ func TestPendingToolSettlementUnavailableDoesNotReadOrSynthesizeProjection(t *te
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	err = svc.applyFloretPendingToolSettlementProjection(ctx, meta.EndpointID, thread.ThreadID, "run_unavailable", "turn_unavailable", flruntime.PendingToolSettlementResult{
-		ThreadID:               flruntime.ThreadID(thread.ThreadID),
-		TurnID:                 "turn_unavailable",
-		RunID:                  "run_unavailable",
-		ProjectionAvailability: flruntime.TurnProjectionAvailabilityUnavailable,
-		ProjectionError:        "detail read failed",
-	})
+	target := flruntime.PendingToolSettlementTarget{
+		ThreadID:   flruntime.ThreadID(thread.ThreadID),
+		TurnID:     "turn_unavailable",
+		RunID:      "run_unavailable",
+		ToolCallID: "tool_unavailable",
+		ToolName:   "terminal.exec",
+		Handle:     "process_unavailable",
+	}
+	err = svc.applyFloretPendingToolSettlementProjection(ctx, meta.EndpointID, thread.ThreadID, "run_unavailable", "turn_unavailable", pendingToolSettlementResultForTest(target, flruntime.TurnProjectionAvailabilityUnavailable, nil, "detail read failed"))
 	if err != nil {
 		t.Fatalf("apply unavailable settlement: %v", err)
 	}
@@ -1424,13 +1316,15 @@ func TestApplyFloretPendingToolSettlementProjectionDoesNotPersistAssistantMessag
 			ActivityTimeline: timeline,
 		}},
 	}
-	settled := flruntime.PendingToolSettlementResult{
-		ThreadID:               flruntime.ThreadID(thread.ThreadID),
-		TurnID:                 flruntime.TurnID(messageID),
-		RunID:                  flruntime.RunID(runID),
-		ProjectionAvailability: flruntime.TurnProjectionAvailabilityReady,
-		Projection:             &settledProjection,
+	settlementTarget := flruntime.PendingToolSettlementTarget{
+		ThreadID:   flruntime.ThreadID(thread.ThreadID),
+		TurnID:     flruntime.TurnID(messageID),
+		RunID:      flruntime.RunID(runID),
+		ToolCallID: "exec-cancelled",
+		ToolName:   "terminal.exec",
+		Handle:     "process-cancelled",
 	}
+	settled := pendingToolSettlementResultForTest(settlementTarget, flruntime.TurnProjectionAvailabilityReady, &settledProjection, "")
 	failedCtx, cancel := context.WithCancel(ctx)
 	cancel()
 	err = svc.applyFloretPendingToolSettlementProjection(failedCtx, meta.EndpointID, thread.ThreadID, runID, messageID, settled)
@@ -1527,13 +1421,15 @@ func TestApplyFloretPendingToolSettlementProjectionPublishesTimelineReplacement(
 			ActivityTimeline: floretProjectionTimeline(runID, thread.ThreadID, messageID, "exec-1", "terminal.exec"),
 		}},
 	}
-	err = svc.applyFloretPendingToolSettlementProjection(ctx, meta.EndpointID, thread.ThreadID, runID, messageID, flruntime.PendingToolSettlementResult{
-		ThreadID:               flruntime.ThreadID(thread.ThreadID),
-		TurnID:                 flruntime.TurnID(messageID),
-		RunID:                  flruntime.RunID(runID),
-		ProjectionAvailability: flruntime.TurnProjectionAvailabilityReady,
-		Projection:             &settledProjection,
-	})
+	settlementTarget := flruntime.PendingToolSettlementTarget{
+		ThreadID:   flruntime.ThreadID(thread.ThreadID),
+		TurnID:     flruntime.TurnID(messageID),
+		RunID:      flruntime.RunID(runID),
+		ToolCallID: "exec-1",
+		ToolName:   "terminal.exec",
+		Handle:     "process-1",
+	}
+	err = svc.applyFloretPendingToolSettlementProjection(ctx, meta.EndpointID, thread.ThreadID, runID, messageID, pendingToolSettlementResultForTest(settlementTarget, flruntime.TurnProjectionAvailabilityReady, &settledProjection, ""))
 	if err != nil {
 		t.Fatalf("apply settlement projection: %v", err)
 	}

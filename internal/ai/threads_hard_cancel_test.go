@@ -2,7 +2,6 @@ package ai
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"io"
@@ -95,17 +94,7 @@ func TestService_DeleteThreadForce_DoesNotWaitForRunExit(t *testing.T) {
 		doneCh:           make(chan struct{}),
 	}
 	stuck.persistRunRecord(RunStateRunning, "", "", time.Now().UnixMilli(), 0)
-	stuck.persistToolCall(threadstore.ToolCallRecord{RunID: runID, ToolID: "tool_force_delete_test", ToolName: "terminal.exec", Status: "running"})
 	stuck.persistRunEvent("run.start", RealtimeStreamKindLifecycle, nil)
-	stuck.persistExecutionSpan(threadstore.ExecutionSpanRecord{
-		SpanID:     "span_force_delete_test",
-		EndpointID: meta.EndpointID,
-		ThreadID:   th.ThreadID,
-		RunID:      runID,
-		Kind:       "run",
-		Name:       "run",
-		Status:     "running",
-	})
 	if _, err := svc.threadsDB.AppendMessage(ctx, meta.EndpointID, th.ThreadID, threadstore.Message{
 		MessageID:   "transcript_force_delete_test",
 		Role:        "user",
@@ -121,17 +110,7 @@ func TestService_DeleteThreadForce_DoesNotWaitForRunExit(t *testing.T) {
 		defer close(runExited)
 		<-releaseRun
 		stuck.persistRunRecord(RunStateSuccess, "", "", time.Now().Add(-time.Second).UnixMilli(), time.Now().UnixMilli())
-		stuck.persistToolCall(threadstore.ToolCallRecord{RunID: runID, ToolID: "tool_force_delete_late", ToolName: "terminal.exec", Status: "success"})
 		stuck.persistRunEvent("run.end", RealtimeStreamKindLifecycle, map[string]any{"state": "success"})
-		stuck.persistExecutionSpan(threadstore.ExecutionSpanRecord{
-			SpanID:     "span_force_delete_late",
-			EndpointID: meta.EndpointID,
-			ThreadID:   th.ThreadID,
-			RunID:      runID,
-			Kind:       "run",
-			Name:       "run",
-			Status:     "success",
-		})
 		_, _ = svc.threadsDB.AppendMessage(context.Background(), meta.EndpointID, th.ThreadID, threadstore.Message{
 			MessageID:   "transcript_force_delete_late",
 			Role:        "assistant",
@@ -176,18 +155,10 @@ func TestService_DeleteThreadForce_DoesNotWaitForRunExit(t *testing.T) {
 	} else if got != nil {
 		t.Fatalf("run reappeared after delete: %+v", got)
 	}
-	if got, err := svc.threadsDB.GetToolCall(ctx, meta.EndpointID, runID, "tool_force_delete_late"); !errors.Is(err, sql.ErrNoRows) || got != nil {
-		t.Fatalf("late tool call got=%+v err=%v, want no row", got, err)
-	}
 	if events, err := svc.threadsDB.ListRunEvents(ctx, meta.EndpointID, runID, 20); err != nil {
 		t.Fatalf("ListRunEvents after released run: %v", err)
 	} else if len(events) != 0 {
 		t.Fatalf("run events reappeared after delete: %+v", events)
-	}
-	if spans, err := svc.threadsDB.ListExecutionSpansByRun(ctx, meta.EndpointID, runID, 20); err != nil {
-		t.Fatalf("ListExecutionSpansByRun after released run: %v", err)
-	} else if len(spans) != 0 {
-		t.Fatalf("execution spans reappeared after delete: %+v", spans)
 	}
 	if messages, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 20, 0); err != nil {
 		t.Fatalf("ListMessages after released run: %v", err)

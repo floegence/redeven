@@ -30,7 +30,6 @@ type ThreadCheckpointRecord struct {
 
 	TranscriptMaxID int64 `json:"transcript_max_id"`
 	TurnsMaxID      int64 `json:"turns_max_id"`
-	ToolCallsMaxID  int64 `json:"tool_calls_max_id"`
 	RunEventsMaxID  int64 `json:"run_events_max_id"`
 }
 
@@ -38,7 +37,6 @@ type threadCheckpointDerivedSnapshot struct {
 	MemoryItems             []MemoryItemRecord                   `json:"memory_items"`
 	ThreadTodos             *ThreadTodosSnapshot                 `json:"thread_todos,omitempty"`
 	ThreadState             *ThreadState                         `json:"thread_state,omitempty"`
-	ExecutionSpans          []ExecutionSpanRecord                `json:"execution_spans"`
 	StructuredUserInputs    []StructuredUserInputRecord          `json:"structured_user_inputs"`
 	RequestUserInputSecrets []RequestUserInputSecretAnswerRecord `json:"request_user_input_secret_answers"`
 	RunIDs                  []string                             `json:"run_ids"`
@@ -123,15 +121,6 @@ func (s *Store) CreateThreadCheckpoint(ctx context.Context, endpointID string, t
 	if err != nil {
 		return out, err
 	}
-	toolCallsMaxID, err := maxInt64Tx(ctx, tx, `
-SELECT COALESCE(MAX(tc.id), 0)
-FROM ai_tool_calls tc
-JOIN ai_runs r ON r.run_id = tc.run_id
-WHERE r.endpoint_id = ? AND r.thread_id = ?
-`, endpointID, threadID)
-	if err != nil {
-		return out, err
-	}
 	now := time.Now().UnixMilli()
 	if now <= 0 {
 		now = 1
@@ -141,9 +130,9 @@ WHERE r.endpoint_id = ? AND r.thread_id = ?
 INSERT INTO ai_thread_checkpoints(
   checkpoint_id, endpoint_id, thread_id, run_id, kind, created_at_unix_ms,
   thread_json, derived_json, workspace_json,
-  transcript_max_id, turns_max_id, tool_calls_max_id, run_events_max_id
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, checkpointID, endpointID, threadID, runID, kind, now, threadJSON, derivedJSON, "", transcriptMaxID, turnsMaxID, toolCallsMaxID, runEventsMaxID); err != nil {
+  transcript_max_id, turns_max_id, run_events_max_id
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`, checkpointID, endpointID, threadID, runID, kind, now, threadJSON, derivedJSON, "", transcriptMaxID, turnsMaxID, runEventsMaxID); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "unique") {
 			// Idempotency: treat a duplicate checkpoint_id insert as success.
 		} else {
@@ -167,7 +156,6 @@ INSERT INTO ai_thread_checkpoints(
 		WorkspaceJSON:   "",
 		TranscriptMaxID: transcriptMaxID,
 		TurnsMaxID:      turnsMaxID,
-		ToolCallsMaxID:  toolCallsMaxID,
 		RunEventsMaxID:  runEventsMaxID,
 	}
 	return out, nil
@@ -189,7 +177,7 @@ func (s *Store) GetLatestThreadCheckpoint(ctx context.Context, endpointID string
 	err := s.db.QueryRowContext(ctx, `
 SELECT checkpoint_id, endpoint_id, thread_id, run_id, kind, created_at_unix_ms,
        thread_json, derived_json, workspace_json,
-       transcript_max_id, turns_max_id, tool_calls_max_id, run_events_max_id
+       transcript_max_id, turns_max_id, run_events_max_id
 FROM ai_thread_checkpoints
 WHERE endpoint_id = ? AND thread_id = ?
 ORDER BY created_at_unix_ms DESC, checkpoint_id DESC
@@ -206,7 +194,6 @@ LIMIT 1
 		&rec.WorkspaceJSON,
 		&rec.TranscriptMaxID,
 		&rec.TurnsMaxID,
-		&rec.ToolCallsMaxID,
 		&rec.RunEventsMaxID,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -250,7 +237,7 @@ func (s *Store) GetThreadCheckpoint(ctx context.Context, endpointID string, thre
 	err := s.db.QueryRowContext(ctx, `
 SELECT checkpoint_id, endpoint_id, thread_id, run_id, kind, created_at_unix_ms,
        thread_json, derived_json, workspace_json,
-       transcript_max_id, turns_max_id, tool_calls_max_id, run_events_max_id
+       transcript_max_id, turns_max_id, run_events_max_id
 FROM ai_thread_checkpoints
 WHERE endpoint_id = ? AND thread_id = ? AND checkpoint_id = ?
 `, endpointID, threadID, checkpointID).Scan(
@@ -265,7 +252,6 @@ WHERE endpoint_id = ? AND thread_id = ? AND checkpoint_id = ?
 		&rec.WorkspaceJSON,
 		&rec.TranscriptMaxID,
 		&rec.TurnsMaxID,
-		&rec.ToolCallsMaxID,
 		&rec.RunEventsMaxID,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -450,7 +436,6 @@ func (s *Store) snapshotThreadDerivedTx(ctx context.Context, tx *sql.Tx, endpoin
 		MemoryItems:             nil,
 		ThreadTodos:             nil,
 		ThreadState:             nil,
-		ExecutionSpans:          nil,
 		StructuredUserInputs:    nil,
 		RequestUserInputSecrets: nil,
 		RunIDs:                  nil,
@@ -547,44 +532,6 @@ WHERE endpoint_id = ? AND thread_id = ?
 	} else if !errors.Is(stErr, sql.ErrNoRows) {
 		return out, stErr
 	}
-
-	// Execution spans.
-	erows, err := tx.QueryContext(ctx, `
-SELECT span_id, endpoint_id, thread_id, run_id,
-       kind, name, status, payload_json,
-       started_at_unix_ms, ended_at_unix_ms, updated_at_unix_ms
-FROM execution_spans
-WHERE endpoint_id = ? AND thread_id = ?
-ORDER BY started_at_unix_ms ASC, span_id ASC
-`, endpointID, threadID)
-	if err != nil {
-		return out, err
-	}
-	for erows.Next() {
-		var rec ExecutionSpanRecord
-		if err := erows.Scan(
-			&rec.SpanID,
-			&rec.EndpointID,
-			&rec.ThreadID,
-			&rec.RunID,
-			&rec.Kind,
-			&rec.Name,
-			&rec.Status,
-			&rec.PayloadJSON,
-			&rec.StartedAtUnixMs,
-			&rec.EndedAtUnixMs,
-			&rec.UpdatedAtUnixMs,
-		); err != nil {
-			_ = erows.Close()
-			return out, err
-		}
-		out.ExecutionSpans = append(out.ExecutionSpans, rec)
-	}
-	if err := erows.Err(); err != nil {
-		_ = erows.Close()
-		return out, err
-	}
-	_ = erows.Close()
 
 	suiRows, err := tx.QueryContext(ctx, `
 SELECT id, endpoint_id, thread_id, response_message_id,

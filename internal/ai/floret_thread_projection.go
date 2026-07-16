@@ -148,31 +148,7 @@ func (r *run) flowerBlocksFromFloretThreadProjection(projection flruntime.Thread
 	return blocks, nil
 }
 
-func (s *Service) settlePendingToolWithActiveFloretRun(ctx context.Context, endpointID string, threadID string, req flruntime.PendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {
-	return s.settlePendingToolWithActiveRedevenRun(ctx, endpointID, threadID, string(req.RunID), req)
-}
-
-func (s *Service) settlePendingToolWithActiveRedevenRun(ctx context.Context, endpointID string, threadID string, redevenRunID string, req flruntime.PendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {
-	if s == nil {
-		return flruntime.PendingToolSettlementResult{}, errors.New("nil service")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if active := s.runForFloretSettlement(endpointID, threadID, redevenRunID); active != nil {
-		if host := active.activeFloretHost(); host != nil {
-			return host.SettlePendingTool(ctx, req)
-		}
-	}
-	host, err := s.openFloretMaintenanceHost()
-	if err != nil {
-		return flruntime.PendingToolSettlementResult{}, err
-	}
-	defer host.Close()
-	return host.SettlePendingTool(ctx, req)
-}
-
-func (s *Service) runForFloretSettlement(endpointID string, threadID string, runID string) *run {
+func (s *Service) activeRunForFloretProjection(endpointID string, threadID string, runID string) *run {
 	if s == nil {
 		return nil
 	}
@@ -202,7 +178,7 @@ func (s *Service) applyFloretPendingToolSettlementProjection(ctx context.Context
 		return fmt.Errorf("invalid pending tool settlement projection outcome: %w", err)
 	}
 	if settled.ProjectionAvailability == flruntime.TurnProjectionAvailabilityUnavailable {
-		if active := s.runForFloretSettlement(endpointID, threadID, runID); active != nil {
+		if active := s.activeRunForFloretProjection(endpointID, threadID, runID); active != nil {
 			active.persistRunEvent("floret.projection.unavailable", RealtimeStreamKindLifecycle, map[string]any{
 				"source": "pending_tool_settlement",
 				"error":  sanitizeLogText(settled.ProjectionError, 240),
@@ -218,7 +194,7 @@ func (s *Service) applyFloretPendingToolSettlementProjection(ctx context.Context
 	if projection == nil {
 		return errors.New("ready pending tool settlement is missing projection")
 	}
-	if active := s.runForFloretSettlement(endpointID, threadID, runID); active != nil {
+	if active := s.activeRunForFloretProjection(endpointID, threadID, runID); active != nil {
 		active.applyFloretThreadProjectionInternal(*projection, active.acceptsPresentationUpdates(), true)
 	}
 	if err := s.publishFlowerCanonicalTimelineReplacement(ctx, endpointID, threadID, runID, messageID, "terminal_settlement"); err != nil {

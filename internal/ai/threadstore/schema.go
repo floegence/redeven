@@ -9,7 +9,7 @@ import (
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore"
-	threadstoreCurrentSchemaVersion = 39
+	threadstoreCurrentSchemaVersion = 40
 )
 
 // CurrentSchemaVersion returns the latest threadstore schema version expected by migrations.
@@ -67,6 +67,7 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 			{FromVersion: 36, ToVersion: 37, Apply: migrateThreadstoreToV37},
 			{FromVersion: 37, ToVersion: 38, Apply: migrateThreadstoreToV38},
 			{FromVersion: 38, ToVersion: 39, Apply: migrateThreadstoreToV39},
+			{FromVersion: 39, ToVersion: 40, Apply: migrateThreadstoreToV40},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
@@ -363,6 +364,11 @@ END;
 	return err
 }
 
+func migrateThreadstoreToV40(tx *sql.Tx) error {
+	_ = tx
+	return nil
+}
+
 func ensureAIThreadsModelIDTx(tx *sql.Tx) error {
 	return ensureColumnTx(tx, "ai_threads", "model_id", `ALTER TABLE ai_threads ADD COLUMN model_id TEXT NOT NULL DEFAULT ''`)
 }
@@ -593,25 +599,6 @@ CREATE TABLE IF NOT EXISTS ai_runs (
 );
 CREATE INDEX IF NOT EXISTS idx_ai_runs_endpoint_thread_updated ON ai_runs(endpoint_id, thread_id, updated_at_unix_ms DESC);
 
-CREATE TABLE IF NOT EXISTS ai_tool_calls (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  run_id TEXT NOT NULL,
-  tool_id TEXT NOT NULL,
-  tool_name TEXT NOT NULL,
-  status TEXT NOT NULL,
-  args_json TEXT NOT NULL DEFAULT '{}',
-  result_json TEXT NOT NULL DEFAULT '',
-  error_code TEXT NOT NULL DEFAULT '',
-  error_message TEXT NOT NULL DEFAULT '',
-  retryable INTEGER NOT NULL DEFAULT 0,
-  recovery_action TEXT NOT NULL DEFAULT '',
-  started_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  ended_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  latency_ms INTEGER NOT NULL DEFAULT 0,
-  UNIQUE(run_id, tool_id)
-);
-CREATE INDEX IF NOT EXISTS idx_ai_tool_calls_run_id ON ai_tool_calls(run_id, id ASC);
-
 CREATE TABLE IF NOT EXISTS ai_run_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   endpoint_id TEXT NOT NULL,
@@ -722,22 +709,6 @@ CREATE TABLE IF NOT EXISTS conversation_turns (
 CREATE INDEX IF NOT EXISTS idx_conversation_turns_thread_id ON conversation_turns(endpoint_id, thread_id, id ASC);
 CREATE INDEX IF NOT EXISTS idx_conversation_turns_run_id ON conversation_turns(run_id, id ASC);
 
-CREATE TABLE IF NOT EXISTS execution_spans (
-  span_id TEXT PRIMARY KEY,
-  endpoint_id TEXT NOT NULL,
-  thread_id TEXT NOT NULL,
-  run_id TEXT NOT NULL,
-  kind TEXT NOT NULL DEFAULT 'system',
-  name TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'running',
-  payload_json TEXT NOT NULL DEFAULT '{}',
-  started_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  ended_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  updated_at_unix_ms INTEGER NOT NULL DEFAULT 0
-);
-CREATE INDEX IF NOT EXISTS idx_execution_spans_thread_started ON execution_spans(endpoint_id, thread_id, started_at_unix_ms DESC, span_id DESC);
-CREATE INDEX IF NOT EXISTS idx_execution_spans_run_started ON execution_spans(endpoint_id, run_id, started_at_unix_ms ASC, span_id ASC);
-
 CREATE TABLE IF NOT EXISTS memory_items (
   memory_id TEXT PRIMARY KEY,
   endpoint_id TEXT NOT NULL,
@@ -826,7 +797,6 @@ CREATE TABLE IF NOT EXISTS ai_thread_checkpoints (
   workspace_json TEXT NOT NULL DEFAULT '',
   transcript_max_id INTEGER NOT NULL DEFAULT 0,
   turns_max_id INTEGER NOT NULL DEFAULT 0,
-  tool_calls_max_id INTEGER NOT NULL DEFAULT 0,
   run_events_max_id INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_ai_thread_checkpoints_thread_created ON ai_thread_checkpoints(endpoint_id, thread_id, created_at_unix_ms DESC, checkpoint_id DESC);
@@ -1187,7 +1157,6 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		"ai_threads",
 		"ai_messages",
 		"ai_runs",
-		"ai_tool_calls",
 		"ai_run_events",
 		"ai_thread_state",
 		"ai_thread_todos",
@@ -1197,7 +1166,6 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		"conversation_turns",
 		"structured_user_inputs",
 		"request_user_input_secret_answers",
-		"execution_spans",
 		"memory_items",
 		"provider_capabilities",
 		"ai_uploads",
@@ -1223,7 +1191,7 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 			return fmt.Errorf("missing table %q", tableName)
 		}
 	}
-	for _, tableName := range []string{"memory_embeddings"} {
+	for _, tableName := range []string{"memory_embeddings", "ai_tool_calls", "execution_spans"} {
 		exists, err := sqliteutil.TableExistsTx(tx, tableName)
 		if err != nil {
 			return err
@@ -1255,11 +1223,6 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 			"error_message", "attempt_count", "started_at_unix_ms", "ended_at_unix_ms",
 			"updated_at_unix_ms",
 		},
-		"ai_tool_calls": {
-			"id", "run_id", "tool_id", "tool_name", "status", "args_json", "result_json",
-			"error_code", "error_message", "retryable", "recovery_action", "started_at_unix_ms",
-			"ended_at_unix_ms", "latency_ms",
-		},
 		"ai_run_events": {
 			"id", "endpoint_id", "thread_id", "run_id", "stream_kind", "event_type",
 			"payload_json", "at_unix_ms",
@@ -1277,7 +1240,7 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		"ai_thread_checkpoints": {
 			"checkpoint_id", "endpoint_id", "thread_id", "run_id", "kind", "created_at_unix_ms",
 			"thread_json", "derived_json", "workspace_json", "transcript_max_id",
-			"turns_max_id", "tool_calls_max_id", "run_events_max_id",
+			"turns_max_id", "run_events_max_id",
 		},
 		"ai_queued_turns": {
 			"queue_id", "endpoint_id", "thread_id", "channel_id", "lane", "sort_index",
@@ -1293,10 +1256,6 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		"conversation_turns": {
 			"id", "turn_id", "endpoint_id", "thread_id", "run_id", "user_message_id",
 			"assistant_message_id", "created_at_unix_ms",
-		},
-		"execution_spans": {
-			"span_id", "endpoint_id", "thread_id", "run_id", "kind", "name", "status",
-			"payload_json", "started_at_unix_ms", "ended_at_unix_ms", "updated_at_unix_ms",
 		},
 		"memory_items": {
 			"memory_id", "endpoint_id", "thread_id", "scope", "kind", "content",
@@ -1395,13 +1354,17 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 			}
 		}
 	}
+	if has, err := sqliteutil.ColumnExistsTx(tx, "ai_thread_checkpoints", "tool_calls_max_id"); err != nil {
+		return err
+	} else if has {
+		return fmt.Errorf("unexpected legacy column %q on %q", "tool_calls_max_id", "ai_thread_checkpoints")
+	}
 
 	requiredIndexes := []string{
 		"idx_ai_threads_endpoint_updated",
 		"idx_ai_threads_endpoint_pinned_created",
 		"idx_ai_messages_thread_id",
 		"idx_ai_runs_endpoint_thread_updated",
-		"idx_ai_tool_calls_run_id",
 		"idx_ai_run_events_run_id",
 		"idx_ai_run_events_endpoint_thread",
 		"idx_ai_thread_todos_updated",
@@ -1413,8 +1376,6 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 		"idx_transcript_messages_thread_id",
 		"idx_conversation_turns_thread_id",
 		"idx_conversation_turns_run_id",
-		"idx_execution_spans_thread_started",
-		"idx_execution_spans_run_started",
 		"idx_memory_items_thread_updated",
 		"idx_memory_items_scope_kind",
 		"idx_structured_user_inputs_recent",

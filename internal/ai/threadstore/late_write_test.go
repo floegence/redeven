@@ -29,14 +29,8 @@ func TestStore_RejectsLateThreadScopedWritesAfterDelete(t *testing.T) {
 	if err := store.UpsertRun(ctx, RunRecord{RunID: runID, EndpointID: endpointID, ThreadID: threadID, State: "running"}); err != nil {
 		t.Fatalf("UpsertRun: %v", err)
 	}
-	if err := store.UpsertToolCall(ctx, ToolCallRecord{RunID: runID, ToolID: "tool_before_delete", ToolName: "terminal.exec", Status: "running"}); err != nil {
-		t.Fatalf("UpsertToolCall: %v", err)
-	}
 	if err := store.AppendRunEvent(ctx, RunEventRecord{EndpointID: endpointID, ThreadID: threadID, RunID: runID, EventType: "run.start"}); err != nil {
 		t.Fatalf("AppendRunEvent: %v", err)
-	}
-	if err := store.UpsertExecutionSpan(ctx, ExecutionSpanRecord{SpanID: "span_before_delete", EndpointID: endpointID, ThreadID: threadID, RunID: runID, Kind: "run", Name: "run", Status: "running"}); err != nil {
-		t.Fatalf("UpsertExecutionSpan: %v", err)
 	}
 	if _, err := store.AppendMessage(ctx, endpointID, threadID, Message{
 		MessageID:   "message_before_delete",
@@ -61,9 +55,7 @@ func TestStore_RejectsLateThreadScopedWritesAfterDelete(t *testing.T) {
 	}
 
 	assertLateWriteRejected(t, "run", store.UpsertRun(ctx, RunRecord{RunID: runID, EndpointID: endpointID, ThreadID: threadID, State: "success"}))
-	assertLateWriteRejected(t, "tool call", store.UpsertToolCall(ctx, ToolCallRecord{RunID: runID, ToolID: "tool_after_delete", ToolName: "terminal.exec", Status: "success"}))
 	assertLateWriteRejected(t, "run event", store.AppendRunEvent(ctx, RunEventRecord{EndpointID: endpointID, ThreadID: threadID, RunID: runID, EventType: "run.end"}))
-	assertLateWriteRejected(t, "execution span", store.UpsertExecutionSpan(ctx, ExecutionSpanRecord{SpanID: "span_after_delete", EndpointID: endpointID, ThreadID: threadID, RunID: runID, Kind: "run", Name: "run", Status: "success"}))
 	assertLateWriteRejected(t, "thread state", store.UpsertThreadState(ctx, ThreadState{EndpointID: endpointID, ThreadID: threadID, OpenGoal: "late goal"}))
 	assertLateWriteRejected(t, "provider continuation", store.SetThreadProviderContinuation(ctx, endpointID, threadID, ThreadProviderContinuation{
 		State:      ProviderContinuationState{Kind: "openai_responses", ID: "resp_late"},
@@ -84,9 +76,7 @@ func TestStore_RejectsLateThreadScopedWritesAfterDelete(t *testing.T) {
 	counts := map[string]int{
 		"threads":              countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_threads WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"runs":                 countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_runs WHERE run_id = ?`, runID),
-		"tool calls":           countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_tool_calls WHERE run_id = ?`, runID),
 		"run events":           countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_run_events WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
-		"execution spans":      countRowsForTest(t, store.db, `SELECT COUNT(1) FROM execution_spans WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"transcript messages":  countRowsForTest(t, store.db, `SELECT COUNT(1) FROM transcript_messages WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"thread state":         countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_thread_state WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"thread todos":         countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_thread_todos WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),

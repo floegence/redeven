@@ -328,12 +328,6 @@ function shellActivityStatus(status: ShellBlockProps['status']): ActivityStatus 
   return 'success';
 }
 
-function terminalOutputURL(runID: string, toolID: string, metaOnly: boolean): string {
-  const base = `/_redeven_proxy/api/ai/runs/${encodeURIComponent(runID)}/tools/${encodeURIComponent(toolID)}/output`;
-  if (!metaOnly) return base;
-  return `${base}?meta_only=1`;
-}
-
 function terminalProcessURL(runID: string, processID: string, action: 'read' | 'write' | 'terminate', query?: Record<string, string | number | undefined>): string {
   const base = `/_redeven_proxy/api/ai/runs/${encodeURIComponent(runID)}/terminal/${encodeURIComponent(processID)}/${action}`;
   const params = new URLSearchParams();
@@ -350,10 +344,8 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
   const localVisibleOutputStore = createTerminalVisibleOutputStore(20);
   const outputViewport = createTerminalOutputViewportController();
   const [expanded, setExpanded] = createSignal(false);
-  const [loadingOutput, setLoadingOutput] = createSignal(false);
   const [loadedOutput, setLoadedOutput] = createSignal<string | undefined>(undefined);
   const [loadError, setLoadError] = createSignal('');
-  const [loadAttempted, setLoadAttempted] = createSignal(false);
   const [runtimeProcessId, setRuntimeProcessId] = createSignal<string | undefined>(undefined);
   const [runtimeLastSeq, setRuntimeLastSeq] = createSignal<number>(Math.max(0, Math.floor(Number(props.lastSeq ?? 0))));
   const [terminalInput, setTerminalInput] = createSignal('');
@@ -370,9 +362,6 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
   const commandPreview = createMemo(() => summarizeCommandPreview(props.command));
   const commandPreviewTokens = createMemo(() => tokenizeShellCommand(commandPreview()));
 
-  const hasOutputRef = () =>
-    String(props.outputRef?.runId ?? '').trim().length > 0 &&
-    String(props.outputRef?.toolId ?? '').trim().length > 0;
   const displayProcessId = () => String(props.processId ?? runtimeProcessId() ?? '').trim();
   const displayStatus = () => props.status;
   const displayLastSeq = runtimeLastSeq;
@@ -390,7 +379,8 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
   const resolvedOutput = () => loadedOutput() ?? propOutput();
   const hasOutput = () => String(resolvedOutput() ?? '').trim().length > 0;
   const canUseProcessControls = () => displayProcessId() !== '' && String(props.outputRef?.runId ?? '').trim() !== '';
-  const canToggle = () => hasOutput() || hasOutputRef() || canUseProcessControls() || displayStatus() === 'running';
+  const canReadLiveProcess = () => canUseProcessControls() && displayStatus() === 'running';
+  const canToggle = () => hasOutput() || canUseProcessControls() || displayStatus() === 'running';
   const showCommandDetails = createMemo(() => normalizedCommand().length > 0);
 
   let lastOutputIdentityKey = outputIdentityKey();
@@ -405,8 +395,6 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
     setTerminalActionError('');
     setLoadedOutput(undefined);
     setLoadError('');
-    setLoadAttempted(false);
-    setLoadingOutput(false);
     setExpanded(false);
     setCommandDetailsOpen(false);
     setCommandCopied(false);
@@ -425,28 +413,6 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
       default:
         return 'chat-shell-block-success';
     }
-  };
-
-  const fetchToolOutput = async (metaOnly: boolean): Promise<TerminalToolOutputPayload> => {
-    const runID = String(props.outputRef?.runId ?? '').trim();
-    const toolID = String(props.outputRef?.toolId ?? '').trim();
-    if (!runID || !toolID) return {};
-
-    const resp = await fetch(
-      terminalOutputURL(runID, toolID, metaOnly),
-      await prepareLocalApiRequestInit({ method: 'GET' }),
-    );
-    const raw = await resp.text();
-    let payload: any = null;
-    try {
-      payload = raw ? JSON.parse(raw) : null;
-    } catch {
-      payload = null;
-    }
-    if (!resp.ok || payload?.ok === false) {
-      throw new Error(String(payload?.error ?? `HTTP ${resp.status}`));
-    }
-    return (payload?.data ?? {}) as TerminalToolOutputPayload;
   };
 
   const fetchProcessOutput = async (afterSeq: number): Promise<TerminalToolOutputPayload> => {
@@ -480,11 +446,11 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
     }
   };
 
-	const applyProcessCursor = (data: TerminalToolOutputPayload) => {
-	  if (typeof data.last_seq === 'number' && Number.isFinite(data.last_seq)) {
-		setRuntimeLastSeq(Math.max(0, Math.floor(data.last_seq)));
-	  }
-	};
+  const applyProcessCursor = (data: TerminalToolOutputPayload) => {
+    if (typeof data.last_seq === 'number' && Number.isFinite(data.last_seq)) {
+      setRuntimeLastSeq(Math.max(0, Math.floor(data.last_seq)));
+    }
+  };
 
   const outputFrameFromPayload = (data: TerminalToolOutputPayload) => ({
     output: outputFromPayload(data),
@@ -496,13 +462,13 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
   const applyProcessSnapshot = (data: TerminalToolOutputPayload) => {
     const output = visibleOutputStore().replaceSnapshot(outputIdentity(), outputFrameFromPayload(data));
     setLoadedOutput(output || undefined);
-	applyProcessCursor(data);
+    applyProcessCursor(data);
   };
 
   const applyProcessDelta = (data: TerminalToolOutputPayload) => {
     const output = visibleOutputStore().appendDelta(outputIdentity(), outputFrameFromPayload(data));
     setLoadedOutput(output || undefined);
-	applyProcessCursor(data);
+    applyProcessCursor(data);
   };
 
   createEffect(() => {
@@ -519,37 +485,6 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
     setRuntimeLastSeq((current) => Math.max(current, lastSeq));
   });
 
-  const ensureOutputLoaded = async () => {
-    if (resolvedOutput() || loadingOutput() || loadAttempted()) return;
-    if (!hasOutputRef() && !canUseProcessControls()) return;
-	if (canUseProcessControls() && displayStatus() === 'running') return;
-
-    setLoadingOutput(true);
-    setLoadError('');
-    setLoadAttempted(true);
-    try {
-      const data = canUseProcessControls()
-        ? await fetchProcessOutput(displayLastSeq())
-        : await fetchToolOutput(false);
-      applyProcessMetadata(data);
-      if (canUseProcessControls()) {
-        applyProcessDelta(data);
-      } else {
-        applyProcessSnapshot(data);
-      }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      setLoadError(message || i18n.t('shellBlock.failedToLoadOutput'));
-    } finally {
-      setLoadingOutput(false);
-    }
-  };
-
-  createEffect(() => {
-    if (!expanded()) return;
-    void ensureOutputLoaded();
-  });
-
   createEffect(() => {
     if (!expanded()) return;
     resolvedOutput();
@@ -557,26 +492,24 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
   });
 
   createEffect(() => {
-    if (!hasOutputRef() && !canUseProcessControls()) return;
-    if (displayStatus() !== 'running') return;
+    if (!canReadLiveProcess()) return;
     let disposed = false;
     let timer: number | null = null;
 
     const pollStatus = async () => {
       if (disposed) return;
       try {
-        const data = canUseProcessControls()
-          ? await fetchProcessOutput(displayLastSeq())
-          : await fetchToolOutput(true);
+        const data = await fetchProcessOutput(displayLastSeq());
         if (disposed) return;
         applyProcessMetadata(data);
         const processStatus = normalizeShellStatus(data.status);
-        if (canUseProcessControls()) applyProcessDelta(data);
+        applyProcessDelta(data);
         if (processStatus && processStatus !== 'running') {
           return;
         }
       } catch (error) {
-        setLoadError(error instanceof Error ? error.message : String(error));
+        console.warn('terminal live output unavailable', error);
+        setLoadError(i18n.t('shellBlock.liveOutputUnavailable'));
         return;
       }
       if (!disposed && displayStatus() === 'running') {
@@ -597,13 +530,7 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
 
   const handleToggleOutput = () => {
     if (!canToggle()) return;
-    setExpanded((value) => {
-      const next = !value;
-      if (next) {
-        void ensureOutputLoaded();
-      }
-      return next;
-    });
+    setExpanded((value) => !value);
   };
 
   const handleCopyCommand = async (): Promise<void> => {
@@ -650,7 +577,8 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
       applyProcessSnapshot(data);
       setTerminalInput('');
     } catch (err) {
-      setTerminalActionError(err instanceof Error ? err.message : String(err));
+      console.warn('terminal input failed', err);
+      setTerminalActionError(i18n.t('shellBlock.actionFailed'));
     } finally {
       setTerminalActionBusy(false);
     }
@@ -681,7 +609,8 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
       applyProcessMetadata(data);
       applyProcessSnapshot(data);
     } catch (err) {
-      setTerminalActionError(err instanceof Error ? err.message : String(err));
+      console.warn('terminal termination failed', err);
+      setTerminalActionError(i18n.t('shellBlock.actionFailed'));
     } finally {
       setTerminalActionBusy(false);
     }
@@ -776,7 +705,7 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
             when={resolvedOutput()}
             fallback={
               <Show
-                when={displayStatus() === 'running' || loadingOutput() || loadAttempted() || loadError()}
+                when={displayStatus() === 'running' || loadError()}
               >
                 <div
                   ref={outputViewport.bind}
@@ -785,13 +714,11 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
                   onWheel={outputViewport.onWheel}
                 >
                   <pre>
-                    {terminalListeningPlaceholderVisible(resolvedOutput(), displayStatus())
-                      ? i18n.t('shellBlock.waitingForOutput')
-                      : loadingOutput()
-                        ? i18n.t('shellBlock.loadingOutput')
-                        : loadError()
-                          ? i18n.t('shellBlock.outputError', { message: loadError() })
-                          : i18n.t('shellBlock.noOutputCaptured')}
+                    {loadError()
+                      ? loadError()
+                      : terminalListeningPlaceholderVisible(resolvedOutput(), displayStatus())
+                        ? i18n.t('shellBlock.waitingForOutput')
+                        : i18n.t('shellBlock.noOutputCaptured')}
                   </pre>
                 </div>
               </Show>
@@ -843,7 +770,7 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
             <Show when={terminalActionError()}>
               {(message) => (
                 <div class="chat-shell-action-error">
-                  {i18n.t('shellBlock.actionError', { message: message() })}
+                  {message()}
                 </div>
               )}
             </Show>

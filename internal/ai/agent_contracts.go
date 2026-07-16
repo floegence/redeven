@@ -214,34 +214,26 @@ type LoopDetector interface {
 }
 
 type runtimeState struct {
-	PendingToolCalls      []ToolCall        `json:"pending_tool_calls,omitempty"`
-	ToolCallLedger        map[string]string `json:"tool_call_ledger,omitempty"`
-	BlockedEvidenceRefs   []string          `json:"blocked_evidence_refs,omitempty"`
-	RecentErrors          []string          `json:"recent_errors,omitempty"`
-	NoProgressSignatures  []string          `json:"no_progress_signatures,omitempty"`
-	PendingUserInputQueue []string          `json:"pending_user_input_queue,omitempty"`
-	CompletedActionFacts  []string          `json:"completed_action_facts,omitempty"`
-	BlockedActionFacts    []string          `json:"blocked_action_facts,omitempty"`
-	ActiveObjectiveDigest string            `json:"active_objective_digest,omitempty"`
-	EstimateSource        string            `json:"estimate_source,omitempty"`
-	TodoTrackingEnabled   bool              `json:"todo_tracking_enabled,omitempty"`
-	TodoTotalCount        int               `json:"todo_total_count,omitempty"`
-	TodoOpenCount         int               `json:"todo_open_count,omitempty"`
-	TodoInProgressCount   int               `json:"todo_in_progress_count,omitempty"`
-	TodoSnapshotVersion   int64             `json:"todo_snapshot_version,omitempty"`
-	TodoLastUpdatedRound  int               `json:"todo_last_updated_round,omitempty"`
+	PendingToolCalls      []ToolCall `json:"pending_tool_calls,omitempty"`
+	RecentErrors          []string   `json:"recent_errors,omitempty"`
+	NoProgressSignatures  []string   `json:"no_progress_signatures,omitempty"`
+	PendingUserInputQueue []string   `json:"pending_user_input_queue,omitempty"`
+	ActiveObjectiveDigest string     `json:"active_objective_digest,omitempty"`
+	EstimateSource        string     `json:"estimate_source,omitempty"`
+	TodoTrackingEnabled   bool       `json:"todo_tracking_enabled,omitempty"`
+	TodoTotalCount        int        `json:"todo_total_count,omitempty"`
+	TodoOpenCount         int        `json:"todo_open_count,omitempty"`
+	TodoInProgressCount   int        `json:"todo_in_progress_count,omitempty"`
+	TodoSnapshotVersion   int64      `json:"todo_snapshot_version,omitempty"`
+	TodoLastUpdatedRound  int        `json:"todo_last_updated_round,omitempty"`
 }
 
 func newRuntimeState(objective string) runtimeState {
 	return runtimeState{
 		PendingToolCalls:      make([]ToolCall, 0, 4),
-		ToolCallLedger:        make(map[string]string),
-		BlockedEvidenceRefs:   make([]string, 0, 8),
 		RecentErrors:          make([]string, 0, 4),
 		NoProgressSignatures:  make([]string, 0, 8),
 		PendingUserInputQueue: make([]string, 0, 2),
-		CompletedActionFacts:  make([]string, 0, 8),
-		BlockedActionFacts:    make([]string, 0, 8),
 		ActiveObjectiveDigest: strings.TrimSpace(objective),
 		TodoLastUpdatedRound:  -1,
 	}

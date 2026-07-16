@@ -19,7 +19,6 @@ import (
 	flruntime "github.com/floegence/floret/runtime"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/ai/threadstore"
-	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -148,8 +147,8 @@ func (p *terminalTerminationHostedProvider) snapshot() (int, string, []ToolCall)
 func TestRunFloretHostedTurnExecutesSameResponseTerminalCallsConcurrently(t *testing.T) {
 	t.Parallel()
 	workspace := t.TempDir()
-	manager := newTerminalProcessManager(nil)
-	t.Cleanup(manager.Close)
+	manager := newTerminalProcessManager()
+	t.Cleanup(func() { _ = manager.Close(context.Background()) })
 	svc := &Service{terminalProcesses: manager}
 	r := newRun(runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -194,8 +193,8 @@ func TestRunFloretHostedTurnTerminatesPendingCommandWithoutCompensation(t *testi
 		t.Fatalf("UpdateThreadPermissionType: %v", err)
 	}
 
-	manager := newTerminalProcessManager(nil)
-	t.Cleanup(manager.Close)
+	manager := newTerminalProcessManager()
+	t.Cleanup(func() { _ = manager.Close(context.Background()) })
 	svc := &Service{
 		stateDir:          t.TempDir(),
 		threadsDB:         store,
@@ -205,7 +204,6 @@ func TestRunFloretHostedTurnTerminatesPendingCommandWithoutCompensation(t *testi
 		runs:              map[string]*run{},
 		activeRunByTh:     map[string]string{runThreadKey(endpointID, threadID): runID},
 	}
-	manager.onDone = svc.handleTerminalProcessDone
 	r := newRun(runOptions{
 		Log:              slog.New(slog.NewTextHandler(io.Discard, nil)),
 		StateDir:         svc.stateDir,
@@ -284,13 +282,6 @@ func TestRunFloretHostedTurnTerminatesPendingCommandWithoutCompensation(t *testi
 	}
 	if terminateItem.Payload["process_id"] != processID || strings.TrimSpace(processID) == "" {
 		t.Fatalf("terminal.terminate payload=%#v process_id=%q", terminateItem.Payload, processID)
-	}
-	record, err := store.GetToolCall(context.Background(), endpointID, runID, "tool_exec_pending")
-	if err != nil {
-		t.Fatalf("GetToolCall: %v", err)
-	}
-	if record.Status != toolCallStatusError || record.ErrorCode != string(aitools.ErrorCodeCanceled) {
-		t.Fatalf("terminal.exec audit=%#v, want canceled", record)
 	}
 }
 

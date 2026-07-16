@@ -1508,8 +1508,8 @@ func TestFloretToolRegistryKeepsTerminalExecOnLocalRuntime(t *testing.T) {
 	t.Parallel()
 
 	executor := &recordingTargetToolExecutor{}
-	manager := newTerminalProcessManager(nil)
-	defer manager.Close()
+	manager := newTerminalProcessManager()
+	defer func() { _ = manager.Close(context.Background()) }()
 	r := newRun(runOptions{
 		AgentHomeDir:       t.TempDir(),
 		SessionMeta:        &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
@@ -1521,6 +1521,8 @@ func TestFloretToolRegistryKeepsTerminalExecOnLocalRuntime(t *testing.T) {
 		ToolTargetPolicy:   ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget, DefaultTargetID: "provider:https%3A%2F%2Fredeven.test:env:target_1"},
 		TargetToolExecutor: executor,
 	})
+	owner := &terminalProcessTestOwner{}
+	r.setPendingToolSettlementOwnerResolver(func() floretPendingToolSettler { return owner })
 	registry, err := buildFloretToolRegistry(r, []ToolDef{{
 		Name:        "terminal.exec",
 		Description: "Execute a shell command.",
@@ -1557,8 +1559,8 @@ func TestFloretToolRegistryKeepsTerminalExecOnLocalRuntime(t *testing.T) {
 }
 
 func TestFloretToolRegistryPublishesTerminalProcessActivityUpdateBeforeYieldResult(t *testing.T) {
-	manager := newTerminalProcessManager(nil)
-	defer manager.Close()
+	manager := newTerminalProcessManager()
+	defer func() { _ = manager.Close(context.Background()) }()
 	r := newRun(runOptions{
 		AgentHomeDir: t.TempDir(),
 		SessionMeta:  &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
@@ -1568,6 +1570,8 @@ func TestFloretToolRegistryPublishesTerminalProcessActivityUpdateBeforeYieldResu
 		MessageID:    "turn_terminal_activity",
 		Service:      &Service{terminalProcesses: manager},
 	})
+	owner := &terminalProcessTestOwner{}
+	r.setPendingToolSettlementOwnerResolver(func() floretPendingToolSettler { return owner })
 	registry, err := buildFloretToolRegistry(r, []ToolDef{{
 		Name:        "terminal.exec",
 		Description: "Execute a shell command.",
@@ -1794,8 +1798,8 @@ func TestFloretToolRegistryUsesExplicitChildHostIdentityForSubagentTools(t *test
 		}
 	}
 
-	manager := newTerminalProcessManager(nil)
-	defer manager.Close()
+	manager := newTerminalProcessManager()
+	defer func() { _ = manager.Close(context.Background()) }()
 	r := newRun(runOptions{
 		Log:              slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
 		RunID:            "run_parent",
@@ -1809,6 +1813,8 @@ func TestFloretToolRegistryUsesExplicitChildHostIdentityForSubagentTools(t *test
 		SessionMeta:      &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
 		PersistOpTimeout: 5 * time.Second,
 	})
+	owner := &terminalProcessTestOwner{}
+	r.setPendingToolSettlementOwnerResolver(func() floretPendingToolSettler { return owner })
 	registry, err := buildFloretToolRegistry(r, []ToolDef{{
 		Name: "terminal.exec",
 		InputSchema: json.RawMessage(
@@ -1842,36 +1848,22 @@ func TestFloretToolRegistryUsesExplicitChildHostIdentityForSubagentTools(t *test
 		t.Fatalf("registry result error text=%q structured=%#v", result.Text, result.Structured)
 	}
 
-	childCall, err := store.GetToolCall(ctx, "env_test", childRunID, "call_child_pwd")
-	if err != nil {
-		t.Fatalf("GetToolCall child: %v", err)
+	childProcesses := manager.ProcessesForRun("env_test", "thread_child", childRunID)
+	if len(childProcesses) != 1 {
+		t.Fatalf("child processes=%d, want 1", len(childProcesses))
 	}
-	if childCall == nil || childCall.RunID != childRunID {
-		t.Fatalf("child tool call=%#v", childCall)
+	if parentProcesses := manager.ProcessesForRun("env_test", "thread_parent", "run_parent"); len(parentProcesses) != 0 {
+		t.Fatalf("child terminal process leaked to parent run: %#v", parentProcesses)
 	}
-	if _, err := store.GetToolCall(ctx, "env_test", "run_parent", "call_child_pwd"); err == nil {
-		t.Fatalf("child tool call must not be persisted under parent run")
+	childProcesses[0].mu.Lock()
+	target := childProcesses[0].settlementTarget
+	boundOwner := childProcesses[0].settlementOwner
+	childProcesses[0].mu.Unlock()
+	if target.ThreadID != "thread_child" || target.RunID != "floret_exec_child_identity" || target.TurnID != "turn_child" || target.ToolCallID != "call_child_pwd" {
+		t.Fatalf("child settlement target=%#v", target)
 	}
-	childSpans, err := store.ListRecentExecutionSpansByThread(ctx, "env_test", "thread_child", 10)
-	if err != nil {
-		t.Fatalf("ListRecentExecutionSpansByThread child: %v", err)
-	}
-	if len(childSpans) == 0 {
-		t.Fatalf("missing child execution span")
-	}
-	for _, span := range childSpans {
-		if span.RunID != childRunID || span.ThreadID != "thread_child" {
-			t.Fatalf("child span persisted with parent identity: %#v", span)
-		}
-	}
-	parentSpans, err := store.ListRecentExecutionSpansByThread(ctx, "env_test", "thread_parent", 10)
-	if err != nil {
-		t.Fatalf("ListRecentExecutionSpansByThread parent: %v", err)
-	}
-	for _, span := range parentSpans {
-		if span.Name == "terminal.exec" && strings.Contains(span.SpanID, "call_child_pwd") {
-			t.Fatalf("child terminal span leaked to parent thread: %#v", span)
-		}
+	if boundOwner != owner {
+		t.Fatalf("child settlement owner=%T, want explicit child host owner", boundOwner)
 	}
 }
 

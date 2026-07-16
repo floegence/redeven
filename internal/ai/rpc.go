@@ -103,10 +103,10 @@ type aiListMessagesReq struct {
 }
 
 type aiListMessagesResp struct {
-	Messages            []aiTranscriptMessageItem `json:"messages"`
+	Messages            []aiTranscriptMessageItem  `json:"messages"`
 	TimelineDecorations []FlowerTimelineDecoration `json:"timeline_decorations,omitempty"`
-	NextAfterRowID      int64                     `json:"next_after_row_id,omitempty"`
-	HasMore             bool                      `json:"has_more,omitempty"`
+	NextAfterRowID      int64                      `json:"next_after_row_id,omitempty"`
+	HasMore             bool                       `json:"has_more,omitempty"`
 }
 
 type aiTranscriptMessageItem struct {

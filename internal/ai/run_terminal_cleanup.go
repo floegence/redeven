@@ -23,7 +23,7 @@ func (r *run) cleanupRunTerminalProcesses() (bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), r.persistTimeout())
 	defer cancel()
 	for _, proc := range processes {
-		settled, err := proc.settlePendingForRunEnd(ctx)
+		settled, err := proc.finalizePendingForRunEnd(ctx)
 		if settled {
 			settledAny = true
 		}

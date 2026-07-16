@@ -2095,6 +2095,16 @@ func auditURLHost(raw string) (scheme string, host string) {
 	return strings.TrimSpace(u.Scheme), strings.TrimSpace(u.Host)
 }
 
+func terminalProcessAuditDetail(processID string, inputBytes *int) map[string]any {
+	detail := map[string]any{
+		"process_id": strings.TrimSpace(processID),
+	}
+	if inputBytes != nil {
+		detail["input_bytes"] = *inputBytes
+	}
+	return detail
+}
+
 func parseOptionalInt64Query(r *http.Request, name string) (int64, error) {
 	if r == nil {
 		return 0, nil
@@ -4935,20 +4945,11 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				}
 				out, err := g.ai.ReadTerminalProcess(r.Context(), meta, runID, processID, afterSeq)
 				if err != nil {
-					g.appendAudit(meta, "ai_terminal_process_read", "failure", map[string]any{
-						"run_id":     runID,
-						"process_id": processID,
-					}, err)
-					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+					g.appendAudit(meta, "ai_terminal_process_read", "failure", terminalProcessAuditDetail(processID, nil), err)
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "terminal live output unavailable"})
 					return
 				}
-				g.appendAudit(meta, "ai_terminal_process_read", "success", map[string]any{
-					"run_id":      runID,
-					"process_id":  processID,
-					"status":      strings.TrimSpace(out.Status),
-					"last_seq":    out.LastSeq,
-					"total_bytes": out.TotalBytes,
-				}, nil)
+				g.appendAudit(meta, "ai_terminal_process_read", "success", terminalProcessAuditDetail(processID, nil), nil)
 				writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
 				return
 
@@ -4971,21 +4972,13 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				out, err := g.ai.WriteTerminalProcess(r.Context(), meta, runID, processID, body.Input)
+				inputBytes := len(body.Input)
 				if err != nil {
-					g.appendAudit(meta, "ai_terminal_process_write", "failure", map[string]any{
-						"run_id":      runID,
-						"process_id":  processID,
-						"input_bytes": len(body.Input),
-					}, err)
-					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+					g.appendAudit(meta, "ai_terminal_process_write", "failure", terminalProcessAuditDetail(processID, &inputBytes), err)
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "terminal action failed"})
 					return
 				}
-				g.appendAudit(meta, "ai_terminal_process_write", "success", map[string]any{
-					"run_id":      runID,
-					"process_id":  processID,
-					"input_bytes": len(body.Input),
-					"status":      strings.TrimSpace(out.Status),
-				}, nil)
+				g.appendAudit(meta, "ai_terminal_process_write", "success", terminalProcessAuditDetail(processID, &inputBytes), nil)
 				writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
 				return
 
@@ -4996,18 +4989,11 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				}
 				out, err := g.ai.TerminateTerminalProcess(r.Context(), meta, runID, processID)
 				if err != nil {
-					g.appendAudit(meta, "ai_terminal_process_terminate", "failure", map[string]any{
-						"run_id":     runID,
-						"process_id": processID,
-					}, err)
-					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+					g.appendAudit(meta, "ai_terminal_process_terminate", "failure", terminalProcessAuditDetail(processID, nil), err)
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "terminal action failed"})
 					return
 				}
-				g.appendAudit(meta, "ai_terminal_process_terminate", "success", map[string]any{
-					"run_id":     runID,
-					"process_id": processID,
-					"status":     strings.TrimSpace(out.Status),
-				}, nil)
+				g.appendAudit(meta, "ai_terminal_process_terminate", "success", terminalProcessAuditDetail(processID, nil), nil)
 				writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
 				return
 
@@ -5015,81 +5001,6 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 				return
 			}
-		}
-
-		if r.Method == http.MethodGet && len(parts) == 4 && action == "tools" && strings.TrimSpace(parts[3]) == "output" {
-			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
-			if !ok {
-				return
-			}
-			metaOnly := false
-			switch strings.ToLower(strings.TrimSpace(r.URL.Query().Get("meta_only"))) {
-			case "1", "true", "yes", "y", "on":
-				metaOnly = true
-			}
-			toolID := strings.TrimSpace(parts[2])
-			if toolID == "" {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing tool_id"})
-				return
-			}
-			out, err := g.ai.GetTerminalToolOutput(r.Context(), meta, runID, toolID)
-			if err != nil {
-				g.appendAudit(meta, "ai_terminal_output", "failure", map[string]any{
-					"run_id":  runID,
-					"tool_id": toolID,
-				}, err)
-				status := http.StatusBadRequest
-				if errors.Is(err, sql.ErrNoRows) {
-					status = http.StatusNotFound
-				}
-				writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
-				return
-			}
-			if metaOnly {
-				// Default terminal view only needs status/metadata; output is fetched lazily when expanded.
-				out.Output = ""
-			}
-			g.appendAudit(meta, "ai_terminal_output", "success", map[string]any{
-				"run_id":      runID,
-				"tool_id":     toolID,
-				"status":      strings.TrimSpace(out.Status),
-				"output_size": len(out.Output),
-			}, nil)
-			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
-			return
-		}
-
-		if r.Method == http.MethodGet && len(parts) == 4 && action == "tools" && strings.TrimSpace(parts[3]) == "detail" {
-			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
-			if !ok {
-				return
-			}
-			toolID := strings.TrimSpace(parts[2])
-			if toolID == "" {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing tool_id"})
-				return
-			}
-			out, err := g.ai.GetToolDetail(r.Context(), meta, runID, toolID)
-			if err != nil {
-				g.appendAudit(meta, "ai_tool_detail", "failure", map[string]any{
-					"run_id":  runID,
-					"tool_id": toolID,
-				}, err)
-				status := http.StatusBadRequest
-				if errors.Is(err, sql.ErrNoRows) {
-					status = http.StatusNotFound
-				}
-				writeJSON(w, status, apiResp{OK: false, Error: err.Error()})
-				return
-			}
-			g.appendAudit(meta, "ai_tool_detail", "success", map[string]any{
-				"run_id":    runID,
-				"tool_id":   toolID,
-				"tool_name": strings.TrimSpace(out.ToolName),
-				"status":    strings.TrimSpace(out.Status),
-			}, nil)
-			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
-			return
 		}
 
 		if r.Method == http.MethodGet && action == "events" {

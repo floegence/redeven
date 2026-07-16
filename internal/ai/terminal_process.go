@@ -14,22 +14,23 @@ import (
 	"time"
 
 	"github.com/creack/pty"
+	flruntime "github.com/floegence/floret/runtime"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/processenv"
 )
 
 const (
-	terminalProcessDefaultYieldMS    = 1000
-	terminalProcessMaxYieldMS        = 30_000
-	terminalProcessOutputChunkBytes  = 4_000
-	terminalProcessModelReadWaitMS   = 5_000
-	terminalProcessModelReadBytes    = 8_000
-	terminalProcessUIReadWaitMS      = 1_000
-	terminalProcessUIReadBytes       = 256_000
-	terminalProcessTailCapBytes      = 1_000_000
-	terminalProcessOutputDrainWait   = 500 * time.Millisecond
-	terminalProcessMaxRuntime        = 30 * time.Minute
-	terminalProcessMaxActive         = 64
+	terminalProcessDefaultYieldMS   = 1000
+	terminalProcessMaxYieldMS       = 30_000
+	terminalProcessOutputChunkBytes = 4_000
+	terminalProcessModelReadWaitMS  = 5_000
+	terminalProcessModelReadBytes   = 8_000
+	terminalProcessUIReadWaitMS     = 1_000
+	terminalProcessUIReadBytes      = 256_000
+	terminalProcessTailCapBytes     = 1_000_000
+	terminalProcessOutputDrainWait  = 500 * time.Millisecond
+	terminalProcessMaxRuntime       = 30 * time.Minute
+	terminalProcessMaxActive        = 64
 )
 
 const (
@@ -43,25 +44,27 @@ type terminalProcessManager struct {
 	mu        sync.Mutex
 	processes map[string]*terminalProcess
 	active    int
-	onDone    func(terminalProcessSnapshot) error
 }
 
 type terminalProcessStartRequest struct {
-	EndpointID         string
-	ThreadID           string
-	RunID              string
-	TurnID             string
-	SettlementThreadID string
-	SettlementRunID    string
-	SettlementTurnID   string
-	ToolID             string
-	ToolName           string
-	Command            string
-	Stdin              string
-	CwdAbs             string
-	Shell              string
-	Env                []string
+	ProcessID        string
+	EndpointID       string
+	ThreadID         string
+	RunID            string
+	TurnID           string
+	SettlementOwner  floretPendingToolSettler
+	SettlementTarget flruntime.PendingToolSettlementTarget
+	Finalize         terminalProcessFinalizeFunc
+	ToolID           string
+	ToolName         string
+	Command          string
+	Stdin            string
+	CwdAbs           string
+	Shell            string
+	Env              []string
 }
+
+type terminalProcessFinalizeFunc func(floretPendingToolSettler, flruntime.PendingToolSettlementTarget, terminalProcessSnapshot) error
 
 type terminalProcessReadRequest struct {
 	ProcessID string
@@ -76,74 +79,72 @@ type terminalProcessOutputChunk struct {
 }
 
 type terminalProcessSnapshot struct {
-	ProcessID  string `json:"process_id"`
-	EndpointID string `json:"endpoint_id,omitempty"`
-	ThreadID   string `json:"thread_id,omitempty"`
-	RunID      string `json:"run_id,omitempty"`
-	TurnID     string `json:"turn_id,omitempty"`
-	// Settlement*ID is the Floret execution target for host-owned pending work.
-	// It is intentionally internal-only and must not fall back at settlement time.
-	SettlementThreadID string             `json:"-"`
-	SettlementRunID    string             `json:"-"`
-	SettlementTurnID   string             `json:"-"`
-	ToolID             string             `json:"tool_id,omitempty"`
-	ToolName           string             `json:"tool_name,omitempty"`
-	Command            string             `json:"command"`
-	Cwd                string             `json:"cwd"`
-	Status             string             `json:"status"`
-	Output             string             `json:"output"`
-	FirstSeq           int64              `json:"first_seq"`
-	LastSeq            int64              `json:"last_seq"`
-	LatestSeq          int64              `json:"latest_seq"`
-	HasMore            bool               `json:"has_more"`
-	TotalBytes         int64              `json:"total_bytes"`
-	Truncated          bool               `json:"truncated"`
-	StartedAtUnixMs    int64              `json:"started_at_ms"`
-	EndedAtUnixMs      int64              `json:"ended_at_ms,omitempty"`
-	DurationMS         int64              `json:"duration_ms,omitempty"`
-	ExitCode           int                `json:"exit_code,omitempty"`
-	ExecutionLocation  string             `json:"execution_location"`
-	Error              *aitools.ToolError `json:"error,omitempty"`
+	ProcessID         string             `json:"process_id"`
+	EndpointID        string             `json:"endpoint_id,omitempty"`
+	ThreadID          string             `json:"thread_id,omitempty"`
+	RunID             string             `json:"run_id,omitempty"`
+	TurnID            string             `json:"turn_id,omitempty"`
+	ToolID            string             `json:"tool_id,omitempty"`
+	ToolName          string             `json:"tool_name,omitempty"`
+	Command           string             `json:"command"`
+	Cwd               string             `json:"cwd"`
+	Status            string             `json:"status"`
+	Output            string             `json:"output"`
+	FirstSeq          int64              `json:"first_seq"`
+	LastSeq           int64              `json:"last_seq"`
+	LatestSeq         int64              `json:"latest_seq"`
+	HasMore           bool               `json:"has_more"`
+	TotalBytes        int64              `json:"total_bytes"`
+	Truncated         bool               `json:"truncated"`
+	StartedAtUnixMs   int64              `json:"started_at_ms"`
+	EndedAtUnixMs     int64              `json:"ended_at_ms,omitempty"`
+	DurationMS        int64              `json:"duration_ms,omitempty"`
+	ExitCode          int                `json:"exit_code,omitempty"`
+	ExecutionLocation string             `json:"execution_location"`
+	Error             *aitools.ToolError `json:"error,omitempty"`
 }
 
 type terminalProcess struct {
-	mu                     sync.Mutex
-	cond                   *sync.Cond
-	manager                *terminalProcessManager
-	id                     string
-	endpointID             string
-	threadID               string
-	runID                  string
-	turnID                 string
-	settlementThreadID     string
-	settlementRunID        string
-	settlementTurnID       string
-	toolID                 string
-	toolName               string
-	command                string
-	cwd                    string
-	cmd                    *exec.Cmd
-	tty                    *os.File
-	readDone               chan struct{}
-	startedAt              time.Time
-	endedAt                time.Time
-	status                 string
-	exitCode               int
-	err                    *aitools.ToolError
-	outputChunks           []terminalProcessOutputChunk
-	retainedBytes          int
-	lastSeq                int64
-	total                  int64
-	truncated              bool
-	pending                bool
-	settlementAcknowledged bool
-	settlementInFlight     bool
+	mu                   sync.Mutex
+	cond                 *sync.Cond
+	manager              *terminalProcessManager
+	id                   string
+	endpointID           string
+	threadID             string
+	runID                string
+	turnID               string
+	settlementOwner      floretPendingToolSettler
+	settlementTarget     flruntime.PendingToolSettlementTarget
+	finalize             terminalProcessFinalizeFunc
+	toolID               string
+	toolName             string
+	command              string
+	cwd                  string
+	cmd                  *exec.Cmd
+	tty                  *os.File
+	readDone             chan struct{}
+	startedAt            time.Time
+	endedAt              time.Time
+	status               string
+	exitCode             int
+	err                  *aitools.ToolError
+	outputChunks         []terminalProcessOutputChunk
+	retainedBytes        int
+	lastSeq              int64
+	total                int64
+	truncated            bool
+	pending              bool
+	reaped               bool
+	terminationRequested bool
+	reapedDone           chan struct{}
+	finalizeOnce         sync.Once
+	finalizationDone     chan struct{}
+	finalizationErr      error
 }
 
-func newTerminalProcessManager(onDone func(terminalProcessSnapshot) error) *terminalProcessManager {
+func newTerminalProcessManager() *terminalProcessManager {
 	return &terminalProcessManager{
 		processes: make(map[string]*terminalProcess),
-		onDone:    onDone,
 	}
 }
 
@@ -166,15 +167,29 @@ func (m *terminalProcessManager) Start(req terminalProcessStartRequest) (*termin
 	if cwd == "" {
 		return nil, errors.New("missing terminal working directory")
 	}
-	settlementThreadID := strings.TrimSpace(req.SettlementThreadID)
-	settlementRunID := strings.TrimSpace(req.SettlementRunID)
-	settlementTurnID := strings.TrimSpace(req.SettlementTurnID)
-	if settlementThreadID == "" || settlementRunID == "" || settlementTurnID == "" {
+	processID := strings.TrimSpace(req.ProcessID)
+	if processID == "" {
+		return nil, errors.New("terminal process id is required")
+	}
+	if req.SettlementOwner == nil {
+		return nil, errors.New("terminal process settlement owner is required")
+	}
+	if req.Finalize == nil {
+		return nil, errors.New("terminal process finalizer is required")
+	}
+	target := req.SettlementTarget
+	if strings.TrimSpace(string(target.ThreadID)) == "" ||
+		strings.TrimSpace(string(target.TurnID)) == "" ||
+		strings.TrimSpace(string(target.RunID)) == "" ||
+		strings.TrimSpace(target.ToolCallID) == "" ||
+		strings.TrimSpace(target.ToolName) == "" ||
+		strings.TrimSpace(target.Handle) == "" {
 		return nil, errors.New("terminal process settlement target incomplete")
 	}
-	id, err := newTerminalProcessID()
-	if err != nil {
-		return nil, err
+	if strings.TrimSpace(target.Handle) != processID ||
+		strings.TrimSpace(target.ToolCallID) != strings.TrimSpace(req.ToolID) ||
+		strings.TrimSpace(target.ToolName) != firstNonEmptyString(req.ToolName, "terminal.exec") {
+		return nil, errors.New("terminal process settlement target mismatch")
 	}
 
 	m.mu.Lock()
@@ -197,30 +212,32 @@ func (m *terminalProcessManager) Start(req terminalProcessStartRequest) (*termin
 		return nil, err
 	}
 	proc := &terminalProcess{
-		manager:            m,
-		id:                 id,
-		endpointID:         strings.TrimSpace(req.EndpointID),
-		threadID:           strings.TrimSpace(req.ThreadID),
-		runID:              strings.TrimSpace(req.RunID),
-		turnID:             strings.TrimSpace(req.TurnID),
-		settlementThreadID: settlementThreadID,
-		settlementRunID:    settlementRunID,
-		settlementTurnID:   settlementTurnID,
-		toolID:             strings.TrimSpace(req.ToolID),
-		toolName:           firstNonEmptyString(req.ToolName, "terminal.exec"),
-		command:            command,
-		cwd:                cwd,
-		cmd:                cmd,
-		tty:                tty,
-		readDone:           make(chan struct{}),
-		startedAt:          time.Now(),
-		status:             terminalProcessStatusRunning,
-		exitCode:           0,
+		manager:          m,
+		id:               processID,
+		endpointID:       strings.TrimSpace(req.EndpointID),
+		threadID:         strings.TrimSpace(req.ThreadID),
+		runID:            strings.TrimSpace(req.RunID),
+		turnID:           strings.TrimSpace(req.TurnID),
+		settlementOwner:  req.SettlementOwner,
+		settlementTarget: target,
+		finalize:         req.Finalize,
+		toolID:           strings.TrimSpace(req.ToolID),
+		toolName:         firstNonEmptyString(req.ToolName, "terminal.exec"),
+		command:          command,
+		cwd:              cwd,
+		cmd:              cmd,
+		tty:              tty,
+		readDone:         make(chan struct{}),
+		reapedDone:       make(chan struct{}),
+		finalizationDone: make(chan struct{}),
+		startedAt:        time.Now(),
+		status:           terminalProcessStatusRunning,
+		exitCode:         0,
 	}
 	proc.cond = sync.NewCond(&proc.mu)
 
 	m.mu.Lock()
-	m.processes[id] = proc
+	m.processes[processID] = proc
 	m.mu.Unlock()
 
 	go proc.readLoop()
@@ -298,17 +315,20 @@ func (m *terminalProcessManager) Write(processID string, input string) (terminal
 	return proc.Write(input)
 }
 
-func (m *terminalProcessManager) Terminate(processID string) (terminalProcessSnapshot, error) {
+func (m *terminalProcessManager) Terminate(ctx context.Context, processID string) (terminalProcessSnapshot, error) {
 	proc, ok := m.Get(processID)
 	if !ok {
 		return terminalProcessSnapshot{}, errors.New("terminal process not found")
 	}
-	return proc.Terminate()
+	return proc.Terminate(ctx)
 }
 
-func (m *terminalProcessManager) Close() {
+func (m *terminalProcessManager) Close(ctx context.Context) error {
 	if m == nil {
-		return
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
 	}
 	m.mu.Lock()
 	processes := make([]*terminalProcess, 0, len(m.processes))
@@ -318,10 +338,13 @@ func (m *terminalProcessManager) Close() {
 		}
 	}
 	m.mu.Unlock()
+	var errs []error
 	for _, proc := range processes {
-		_, _ = proc.Terminate()
-		_ = proc.publishDone()
+		if _, err := proc.Terminate(ctx); err != nil {
+			errs = append(errs, err)
+		}
 	}
+	return errors.Join(errs...)
 }
 
 func (p *terminalProcess) MarkPending() terminalProcessSnapshot {
@@ -332,7 +355,7 @@ func (p *terminalProcess) MarkPending() terminalProcessSnapshot {
 	p.pending = true
 	snapshot := p.snapshotLocked(terminalProcessTailCapBytes)
 	p.mu.Unlock()
-	_ = p.publishDone()
+	p.startFinalizationIfReady()
 	return snapshot
 }
 
@@ -415,7 +438,7 @@ func (p *terminalProcess) WaitForYieldContext(ctx context.Context, yieldMS int64
 	for p.status == terminalProcessStatusRunning {
 		if ctx.Err() != nil {
 			p.mu.Unlock()
-			snapshot, _ := p.Terminate()
+			snapshot, _ := p.Terminate(context.Background())
 			return snapshot
 		}
 		remaining := time.Until(deadline)
@@ -432,7 +455,7 @@ func (p *terminalProcess) WaitForYieldContext(ctx context.Context, yieldMS int64
 	}
 	if ctx.Err() != nil && p.status == terminalProcessStatusRunning {
 		p.mu.Unlock()
-		snapshot, _ := p.Terminate()
+		snapshot, _ := p.Terminate(context.Background())
 		return snapshot
 	}
 	snapshot := p.snapshotLocked(terminalProcessTailCapBytes)
@@ -461,25 +484,49 @@ func (p *terminalProcess) Write(input string) (terminalProcessSnapshot, error) {
 	return p.Snapshot(), nil
 }
 
-func (p *terminalProcess) Terminate() (terminalProcessSnapshot, error) {
+func (p *terminalProcess) Terminate(ctx context.Context) (terminalProcessSnapshot, error) {
 	if p == nil {
 		return terminalProcessSnapshot{}, errors.New("terminal process not found")
 	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	p.mu.Lock()
-	if p.status != terminalProcessStatusRunning {
-		snapshot := p.snapshotLocked(terminalProcessTailCapBytes)
-		p.mu.Unlock()
-		return snapshot, nil
+	requestTermination := p.status == terminalProcessStatusRunning && !p.terminationRequested
+	if requestTermination {
+		p.terminationRequested = true
 	}
 	cmd := p.cmd
-	p.status = terminalProcessStatusCanceled
-	p.err = &aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Terminal process was canceled", Retryable: false}
-	p.endedAt = time.Now()
-	p.cond.Broadcast()
+	reaped := p.reaped
 	p.mu.Unlock()
-	err := terminateTerminalExecProcessTree(cmd)
-	snapshot := p.Snapshot()
-	return snapshot, err
+
+	var terminateErr error
+	if requestTermination && cmd != nil {
+		terminateErr = terminateTerminalExecProcessTree(cmd)
+	}
+	if !reaped {
+		select {
+		case <-p.reapedDone:
+		case <-ctx.Done():
+			return p.Snapshot(), errors.Join(terminateErr, ctx.Err())
+		}
+	}
+	p.startFinalizationIfReady()
+	p.mu.Lock()
+	pending := p.pending
+	p.mu.Unlock()
+	if pending {
+		select {
+		case <-p.finalizationDone:
+		case <-ctx.Done():
+			return p.Snapshot(), errors.Join(terminateErr, ctx.Err())
+		}
+	}
+	p.mu.Lock()
+	finalizationErr := p.finalizationErr
+	snapshot := p.snapshotLocked(terminalProcessTailCapBytes)
+	p.mu.Unlock()
+	return snapshot, errors.Join(terminateErr, finalizationErr)
 }
 
 func (p *terminalProcess) readLoop() {
@@ -525,7 +572,12 @@ func (p *terminalProcess) waitLoop() {
 		}
 	}
 	p.mu.Lock()
-	if p.status == terminalProcessStatusRunning {
+	if p.terminationRequested {
+		p.status = terminalProcessStatusCanceled
+		p.err = &aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Terminal process was canceled", Retryable: false}
+		p.exitCode = exitCode
+		p.endedAt = time.Now()
+	} else if p.status == terminalProcessStatusRunning {
 		p.status = status
 		p.exitCode = exitCode
 		p.endedAt = time.Now()
@@ -534,10 +586,12 @@ func (p *terminalProcess) waitLoop() {
 			p.err = toolErr
 		}
 	}
+	p.reaped = true
 	p.cond.Broadcast()
 	p.mu.Unlock()
+	close(p.reapedDone)
 	p.managerProcessEnded()
-	_ = p.publishDone()
+	p.startFinalizationIfReady()
 }
 
 func (p *terminalProcess) waitForOutputDrain() {
@@ -563,7 +617,7 @@ func (p *terminalProcess) maxRuntimeLoop() {
 	running := p.status == terminalProcessStatusRunning
 	p.mu.Unlock()
 	if running {
-		_, _ = p.Terminate()
+		_, _ = p.Terminate(context.Background())
 	}
 }
 
@@ -602,84 +656,49 @@ func (p *terminalProcess) managerProcessEnded() {
 	p.manager.mu.Unlock()
 }
 
-func (p *terminalProcess) publishDone() error {
-	if p == nil || p.manager == nil {
-		return nil
-	}
-	p.mu.Lock()
-	for p.settlementInFlight {
-		p.cond.Wait()
-	}
-	if !p.pending || p.settlementAcknowledged || p.status == terminalProcessStatusRunning {
-		p.mu.Unlock()
-		return nil
-	}
-	if p.manager.onDone == nil {
-		p.settlementAcknowledged = true
-		p.cond.Broadcast()
-		p.mu.Unlock()
-		return nil
-	}
-	p.settlementInFlight = true
-	snapshot := p.snapshotLocked(terminalProcessTailCapBytes)
-	p.cond.Broadcast()
-	p.mu.Unlock()
-	err := p.manager.onDone(snapshot)
-	p.mu.Lock()
-	if err == nil {
-		p.settlementAcknowledged = true
-	}
-	p.settlementInFlight = false
-	p.cond.Broadcast()
-	p.mu.Unlock()
-	return err
-}
-
-func (p *terminalProcess) settlePendingForRunEnd(ctx context.Context) (bool, error) {
+func (p *terminalProcess) finalizePendingForRunEnd(ctx context.Context) (bool, error) {
 	if p == nil {
 		return false, nil
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	stopWake := context.AfterFunc(ctx, func() {
-		p.mu.Lock()
-		p.cond.Broadcast()
-		p.mu.Unlock()
-	})
-	defer stopWake()
-
 	p.mu.Lock()
 	if !p.pending {
 		p.mu.Unlock()
 		return false, nil
 	}
-	for p.settlementInFlight {
-		if err := ctx.Err(); err != nil {
-			p.mu.Unlock()
-			return true, err
-		}
-		p.cond.Wait()
-	}
-	if p.settlementAcknowledged {
-		p.mu.Unlock()
-		return true, nil
-	}
-	running := p.status == terminalProcessStatusRunning
 	p.mu.Unlock()
+	_, err := p.Terminate(ctx)
+	return true, err
+}
 
-	var terminateErr error
-	if running {
-		_, terminateErr = p.Terminate()
+func (p *terminalProcess) startFinalizationIfReady() {
+	if p == nil {
+		return
 	}
-	publishErr := p.publishDone()
-	if publishErr != nil {
-		if terminateErr != nil {
-			return true, errors.Join(terminateErr, publishErr)
-		}
-		return true, publishErr
+	p.mu.Lock()
+	ready := p.pending && p.reaped
+	p.mu.Unlock()
+	if !ready {
+		return
 	}
-	return true, nil
+	p.finalizeOnce.Do(func() {
+		go func() {
+			p.mu.Lock()
+			owner := p.settlementOwner
+			target := p.settlementTarget
+			finalize := p.finalize
+			snapshot := p.snapshotLocked(terminalProcessTailCapBytes)
+			p.mu.Unlock()
+			err := finalize(owner, target, snapshot)
+			p.mu.Lock()
+			p.finalizationErr = err
+			p.cond.Broadcast()
+			p.mu.Unlock()
+			close(p.finalizationDone)
+		}()
+	})
 }
 
 func (p *terminalProcess) snapshotLocked(maxBytes int64) terminalProcessSnapshot {
@@ -780,32 +799,29 @@ func (p *terminalProcess) snapshotWithOutputLocked(output string, firstSeq int64
 		err = &cp
 	}
 	return terminalProcessSnapshot{
-		ProcessID:          p.id,
-		EndpointID:         p.endpointID,
-		ThreadID:           p.threadID,
-		RunID:              p.runID,
-		TurnID:             p.turnID,
-		SettlementThreadID: p.settlementThreadID,
-		SettlementRunID:    p.settlementRunID,
-		SettlementTurnID:   p.settlementTurnID,
-		ToolID:             p.toolID,
-		ToolName:           p.toolName,
-		Command:            p.command,
-		Cwd:                p.cwd,
-		Status:             p.status,
-		Output:             output,
-		FirstSeq:           firstSeq,
-		LastSeq:            lastSeq,
-		LatestSeq:          latestSeq,
-		HasMore:            hasMore,
-		TotalBytes:         p.total,
-		Truncated:          truncated,
-		StartedAtUnixMs:    startedAtUnixMs,
-		EndedAtUnixMs:      endedAtUnixMs,
-		DurationMS:         duration,
-		ExitCode:           p.exitCode,
-		ExecutionLocation:  ToolTargetModeLocalRuntime,
-		Error:              err,
+		ProcessID:         p.id,
+		EndpointID:        p.endpointID,
+		ThreadID:          p.threadID,
+		RunID:             p.runID,
+		TurnID:            p.turnID,
+		ToolID:            p.toolID,
+		ToolName:          p.toolName,
+		Command:           p.command,
+		Cwd:               p.cwd,
+		Status:            p.status,
+		Output:            output,
+		FirstSeq:          firstSeq,
+		LastSeq:           lastSeq,
+		LatestSeq:         latestSeq,
+		HasMore:           hasMore,
+		TotalBytes:        p.total,
+		Truncated:         truncated,
+		StartedAtUnixMs:   startedAtUnixMs,
+		EndedAtUnixMs:     endedAtUnixMs,
+		DurationMS:        duration,
+		ExitCode:          p.exitCode,
+		ExecutionLocation: ToolTargetModeLocalRuntime,
+		Error:             err,
 	}
 }
 

@@ -76,7 +76,7 @@ func (h *builtInToolHandler) Execute(ctx context.Context, call ToolCall) (ToolRe
 		return ToolResult{}, err
 	}
 	if outcome == nil {
-		return ToolResult{ToolID: call.ID, ToolName: toolName, Status: toolResultStatusError, Summary: "tool.error", Details: "empty tool outcome"}, nil
+		return ToolResult{ToolID: call.ID, ToolName: toolName, Status: toolResultStatusError, Summary: "Tool failed", Details: "empty tool outcome"}, nil
 	}
 	if outcome.Pending != nil {
 		data, truncated := normalizeTruncatedToolPayload(toolName, outcome.Result)
@@ -107,7 +107,7 @@ func (h *builtInToolHandler) Execute(ctx context.Context, call ToolCall) (ToolRe
 		outcome.ToolError.Normalize()
 	}
 	status := toolResultStatusError
-	summary := "tool.error"
+	summary := "Tool failed"
 	details := ""
 	if outcome.ToolError != nil {
 		details = strings.TrimSpace(outcome.ToolError.Message)

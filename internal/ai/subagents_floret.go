@@ -397,6 +397,7 @@ func (s *floretSubagentRuntime) newHostLocked(parent *run, resolved resolvedSuba
 
 	modelCapability := resolved.Capability
 	childRun := parent.subagentChildRun()
+	childRun.setPendingToolSettlementOwnerResolver(func() floretPendingToolSettler { return s.currentHost() })
 	registry := NewInMemoryToolRegistry()
 	if err := registerBuiltInTools(registry, childRun); err != nil {
 		return nil, err
@@ -696,6 +697,7 @@ func (s *floretSubagentRuntime) dynamicSubagentToolSurfaceProvider(state *floret
 		if childRun == nil {
 			return flruntime.ToolSurface{}, errors.New("subagent child runtime unavailable")
 		}
+		childRun.setPendingToolSettlementOwnerResolver(func() floretPendingToolSettler { return s.currentHost() })
 		childThreadID := strings.TrimSpace(string(req.ThreadID))
 		if childThreadID == "" {
 			childThreadID = strings.TrimSpace(req.HostContext[subagentToolHostContextChildThreadIDKey])
@@ -2000,7 +2002,7 @@ func (s *floretSubagentRuntime) cleanupTerminalProcessesForSnapshots(ctx context
 			continue
 		}
 		for _, proc := range manager.ProcessesForRun(endpointID, childThreadID, childRunID) {
-			settled, err := proc.settlePendingForRunEnd(ctx)
+			settled, err := proc.finalizePendingForRunEnd(ctx)
 			if settled {
 				cleaned++
 			}
@@ -3062,13 +3064,4 @@ func (s floretSubagentEventSink) EmitEvent(ev flruntime.Event) {
 	if s.runtime != nil {
 		s.runtime.scheduleParentSubagentsPatch(eventThreadID)
 	}
-	parent.persistRunEvent("delegation.child.event", RealtimeStreamKindLifecycle, map[string]any{
-		"event_type": strings.TrimSpace(string(ev.Type)),
-		"thread_id":  eventThreadID,
-		"turn_id":    strings.TrimSpace(string(ev.TurnID)),
-		"tool_id":    strings.TrimSpace(ev.ToolID),
-		"tool_name":  strings.TrimSpace(ev.ToolName),
-		"step_index": ev.Step,
-		"error":      strings.TrimSpace(ev.Error),
-	})
 }

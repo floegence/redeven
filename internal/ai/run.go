@@ -2,8 +2,6 @@ package ai
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -139,9 +137,10 @@ type run struct {
 	w             http.ResponseWriter
 	stream        *ndjsonStream
 
-	mu            sync.Mutex
-	toolApprovals map[string]*toolApprovalRequest
-	floretHost    floretActiveRunHost
+	mu                      sync.Mutex
+	toolApprovals           map[string]*toolApprovalRequest
+	floretHost              floretActiveRunHost
+	settlementOwnerResolver func() floretPendingToolSettler
 
 	muLifecycle         sync.Mutex
 	lastLifecyclePhase  string
@@ -1103,32 +1102,6 @@ func (r *run) persistRunEvent(eventType string, streamKind RealtimeStreamKind, p
 	}
 }
 
-func (r *run) persistToolCall(rec threadstore.ToolCallRecord) {
-	if r == nil || r.threadsDB == nil {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), r.persistTimeout())
-	defer cancel()
-	_ = r.threadsDB.UpsertToolCall(ctx, rec)
-}
-
-func executionSpanID(runID string, name string, token string) string {
-	runID = strings.TrimSpace(runID)
-	name = strings.TrimSpace(name)
-	token = strings.TrimSpace(token)
-	sum := sha256.Sum256([]byte(runID + "|" + name + "|" + token))
-	return "span_" + hex.EncodeToString(sum[:12])
-}
-
-func (r *run) persistExecutionSpan(rec threadstore.ExecutionSpanRecord) {
-	if r == nil || r.threadsDB == nil {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), r.persistTimeout())
-	defer cancel()
-	_ = r.threadsDB.UpsertExecutionSpan(ctx, rec)
-}
-
 func sanitizeLogText(raw string, maxRunes int) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -1229,89 +1202,6 @@ func redactToolArgsForLog(toolName string, args map[string]any) map[string]any {
 	out := make(map[string]any, len(args))
 	for k, v := range args {
 		out[k] = redactAnyForLog(k, v, 0)
-	}
-	return out
-}
-
-func summarizeStdinForPersist(in string) map[string]any {
-	if in == "" {
-		return map[string]any{"redacted": true, "bytes": 0, "lines": 0}
-	}
-	lines := 1 + strings.Count(in, "\n")
-	return map[string]any{
-		"redacted": true,
-		"bytes":    len(in),
-		"lines":    lines,
-	}
-}
-
-func redactAnyForPersist(key string, in any, depth int) any {
-	if depth > 4 {
-		return "[omitted]"
-	}
-	if strings.EqualFold(strings.TrimSpace(key), "stdin") {
-		switch v := in.(type) {
-		case string:
-			return summarizeStdinForPersist(v)
-		case []byte:
-			if len(v) == 0 {
-				return map[string]any{"redacted": true, "bytes": 0}
-			}
-			return map[string]any{"redacted": true, "bytes": len(v)}
-		default:
-			if in == nil {
-				return nil
-			}
-			return "[redacted]"
-		}
-	}
-	if isSensitiveLogKey(key) {
-		switch v := in.(type) {
-		case string:
-			return fmt.Sprintf("[redacted:%d chars]", utf8.RuneCountInString(v))
-		case []byte:
-			return fmt.Sprintf("[redacted:%d bytes]", len(v))
-		default:
-			return "[redacted]"
-		}
-	}
-	switch v := in.(type) {
-	case string:
-		return v
-	case []byte:
-		return fmt.Sprintf("[bytes:%d]", len(v))
-	case map[string]any:
-		out := make(map[string]any, len(v))
-		for k, vv := range v {
-			out[k] = redactAnyForPersist(k, vv, depth+1)
-		}
-		return out
-	case []any:
-		limit := len(v)
-		if limit > 8 {
-			limit = 8
-		}
-		out := make([]any, 0, limit+1)
-		for i := 0; i < limit; i++ {
-			out = append(out, redactAnyForPersist("", v[i], depth+1))
-		}
-		if len(v) > limit {
-			out = append(out, fmt.Sprintf("[... %d more items]", len(v)-limit))
-		}
-		return out
-	default:
-		return in
-	}
-}
-
-func redactToolArgsForPersist(toolName string, args map[string]any) map[string]any {
-	_ = toolName
-	if args == nil {
-		return map[string]any{}
-	}
-	out := make(map[string]any, len(args))
-	for k, v := range args {
-		out[k] = redactAnyForPersist(k, v, 0)
 	}
 	return out
 }
@@ -2071,18 +1961,6 @@ func isMutatingInvocation(toolName string, args map[string]any) bool {
 	return aitools.IsMutatingForInvocation(toolName, args)
 }
 
-func marshalPersistJSON(v any) string {
-	b, err := json.Marshal(v)
-	if err != nil || len(b) == 0 {
-		return "{}"
-	}
-	out := strings.TrimSpace(string(b))
-	if out == "" {
-		return "{}"
-	}
-	return out
-}
-
 type toolCallOutcome struct {
 	Success        bool
 	ToolName       string
@@ -2096,55 +1974,8 @@ type toolCallOutcome struct {
 type toolActivityUpdater func(activity *observation.ActivityPresentation, metadata map[string]any)
 
 const (
-	toolCallStatusPending = "pending"
 	toolCallStatusRunning = "running"
-	toolCallStatusSuccess = "success"
-	toolCallStatusError   = "error"
 )
-
-func (r *run) persistToolCallSnapshot(toolID string, toolName string, status string, args map[string]any, result any, toolErr *aitools.ToolError, recoveryAction string, startedAt time.Time, endedAt time.Time) {
-	if r == nil {
-		return
-	}
-	argsRedacted := any(redactAnyForLog("args", args, 0))
-	if strings.TrimSpace(toolName) == "terminal.exec" {
-		argsRedacted = redactAnyForPersist("args", args, 0)
-	}
-	argsPersist := marshalPersistJSON(argsRedacted)
-	resultPersist := ""
-	if result != nil {
-		resultRedacted := any(redactAnyForLog("result", result, 0))
-		if strings.TrimSpace(toolName) == "terminal.exec" {
-			resultRedacted = redactAnyForPersist("result", result, 0)
-		}
-		resultPersist = marshalPersistJSON(resultRedacted)
-	}
-	errCode := ""
-	errMsg := ""
-	retryable := false
-	if toolErr != nil {
-		toolErr.Normalize()
-		errCode = string(toolErr.Code)
-		errMsg = toolErr.Message
-		retryable = toolErr.Retryable
-	}
-	rec := threadstore.ToolCallRecord{
-		RunID:           strings.TrimSpace(r.id),
-		ToolID:          strings.TrimSpace(toolID),
-		ToolName:        strings.TrimSpace(toolName),
-		Status:          strings.TrimSpace(status),
-		ArgsJSON:        argsPersist,
-		ResultJSON:      resultPersist,
-		ErrorCode:       errCode,
-		ErrorMessage:    errMsg,
-		Retryable:       retryable,
-		RecoveryAction:  strings.TrimSpace(recoveryAction),
-		StartedAtUnixMs: startedAt.UnixMilli(),
-		EndedAtUnixMs:   endedAt.UnixMilli(),
-		LatencyMS:       endedAt.Sub(startedAt).Milliseconds(),
-	}
-	r.persistToolCall(rec)
-}
 
 func toolStartActivityPresentation(toolName string, args map[string]any) *observation.ActivityPresentation {
 	toolName = strings.TrimSpace(toolName)
@@ -2302,11 +2133,6 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	}
 	r.recordRuntimeToolCall()
 
-	argsForPersist := args
-	if toolName == "terminal.exec" {
-		argsForPersist = redactToolArgsForPersist(toolName, args)
-	}
-
 	outcome := &toolCallOutcome{
 		Success:        false,
 		ToolName:       toolName,
@@ -2315,40 +2141,12 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 		RecoveryAction: "",
 	}
 	mutating := isMutatingInvocation(toolName, args)
-	toolStartedAt := time.Now()
-	toolSpanID := executionSpanID(r.id, toolName, toolID)
-	r.persistRunEvent("tool.call", RealtimeStreamKindTool, map[string]any{
-		"tool_id":   toolID,
-		"tool_name": toolName,
-		"args":      redactAnyForLog("args", args, 0),
-	})
-	toolCallPayload := map[string]any{
-		"tool_id":   toolID,
-		"tool_name": toolName,
-		"args":      redactAnyForLog("args", args, 0),
-	}
-	toolCallPayloadJSON := marshalPersistJSON(toolCallPayload)
-	r.persistExecutionSpan(threadstore.ExecutionSpanRecord{
-		SpanID:          toolSpanID,
-		EndpointID:      strings.TrimSpace(r.endpointID),
-		ThreadID:        strings.TrimSpace(r.threadID),
-		RunID:           strings.TrimSpace(r.id),
-		Kind:            "tool",
-		Name:            toolName,
-		Status:          "started",
-		PayloadJSON:     toolCallPayloadJSON,
-		StartedAtUnixMs: toolStartedAt.UnixMilli(),
-		UpdatedAtUnixMs: toolStartedAt.UnixMilli(),
-	})
 
 	r.debug("ai.run.tool.call",
 		"tool_id", toolID,
 		"tool_name", toolName,
 		"args_preview", previewAnyForLog(redactToolArgsForLog(toolName, args), 512),
 	)
-
-	persistResult := any(nil)
-	r.persistToolCallSnapshot(toolID, toolName, toolCallStatusPending, argsForPersist, persistResult, nil, "", toolStartedAt, time.Now())
 
 	setToolError := func(toolErr *aitools.ToolError, recoveryAction string, partialResult any) {
 		if toolErr == nil {
@@ -2378,37 +2176,6 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 				"error", toolErr.Message,
 			)
 		}
-		errorResult := partialResult
-		errorAt := time.Now()
-		r.persistToolCallSnapshot(toolID, toolName, toolCallStatusError, argsForPersist, errorResult, toolErr, recoveryAction, toolStartedAt, errorAt)
-		r.persistRunEvent("tool.error", RealtimeStreamKindTool, map[string]any{
-			"tool_id":   toolID,
-			"tool_name": toolName,
-			"error":     toolErr,
-		})
-		errPayload := map[string]any{
-			"tool_id":         toolID,
-			"tool_name":       toolName,
-			"status":          "failed",
-			"error":           toolErr,
-			"recovery_action": strings.TrimSpace(recoveryAction),
-		}
-		if partialResult != nil {
-			errPayload["result"] = redactAnyForLog("result", partialResult, 0)
-		}
-		r.persistExecutionSpan(threadstore.ExecutionSpanRecord{
-			SpanID:          toolSpanID,
-			EndpointID:      strings.TrimSpace(r.endpointID),
-			ThreadID:        strings.TrimSpace(r.threadID),
-			RunID:           strings.TrimSpace(r.id),
-			Kind:            "tool",
-			Name:            toolName,
-			Status:          "failed",
-			PayloadJSON:     marshalPersistJSON(errPayload),
-			StartedAtUnixMs: toolStartedAt.UnixMilli(),
-			EndedAtUnixMs:   time.Now().UnixMilli(),
-			UpdatedAtUnixMs: time.Now().UnixMilli(),
-		})
 	}
 
 	// Detached runs are hard-canceled (e.g. replaced by a new user turn). Prevent them from
@@ -2431,7 +2198,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	}
 
 	if toolName == "terminal.exec" {
-		terminalOutcome, terminalErr := r.handleTerminalExecProcessTool(ctx, meta, toolID, args, argsForPersist, toolStartedAt, toolSpanID, activityUpdater)
+		terminalOutcome, terminalErr := r.handleTerminalExecProcessTool(ctx, meta, toolID, args, activityUpdater)
 		if terminalErr != nil {
 			setToolError(terminalErr, "", terminalOutcome.Result)
 			return outcome, nil
@@ -2442,8 +2209,6 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	r.debug("ai.run.tool.exec.start", "tool_id", toolID, "tool_name", toolName)
 	endBusy := r.beginBusy()
 	defer endBusy()
-	persistResult = nil
-	r.persistToolCallSnapshot(toolID, toolName, toolCallStatusRunning, argsForPersist, persistResult, nil, "", toolStartedAt, time.Now())
 	result, toolErrRaw := r.execTool(ctx, meta, toolID, toolName, args)
 	if toolErrRaw != nil {
 		if errors.Is(toolErrRaw, context.Canceled) {
@@ -2468,32 +2233,6 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 			r.recordWebSearchSources(parsed)
 		}
 	}
-	resultAt := time.Now()
-	r.persistToolCallSnapshot(toolID, toolName, toolCallStatusSuccess, argsForPersist, result, nil, "", toolStartedAt, resultAt)
-	r.persistRunEvent("tool.result", RealtimeStreamKindTool, map[string]any{
-		"tool_id":   toolID,
-		"tool_name": toolName,
-		"status":    "success",
-	})
-	successPayload := map[string]any{
-		"tool_id":   toolID,
-		"tool_name": toolName,
-		"status":    "success",
-		"result":    redactAnyForLog("result", result, 0),
-	}
-	r.persistExecutionSpan(threadstore.ExecutionSpanRecord{
-		SpanID:          toolSpanID,
-		EndpointID:      strings.TrimSpace(r.endpointID),
-		ThreadID:        strings.TrimSpace(r.threadID),
-		RunID:           strings.TrimSpace(r.id),
-		Kind:            "tool",
-		Name:            toolName,
-		Status:          "success",
-		PayloadJSON:     marshalPersistJSON(successPayload),
-		StartedAtUnixMs: toolStartedAt.UnixMilli(),
-		EndedAtUnixMs:   time.Now().UnixMilli(),
-		UpdatedAtUnixMs: time.Now().UnixMilli(),
-	})
 	r.debug("ai.run.tool.result",
 		"tool_id", toolID,
 		"tool_name", toolName,
@@ -3131,7 +2870,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		if utf8.RuneCountInString(description) > terminalDescriptionMaxRunes {
 			return nil, errors.New("invalid args: description is too long")
 		}
-		return r.toolTerminalTerminate(p.ProcessID)
+		return r.toolTerminalTerminate(ctx, p.ProcessID)
 
 	case "web.search":
 		if meta == nil || !meta.CanRead {
@@ -4342,7 +4081,7 @@ func clampTerminalExecYieldMS(value int) int64 {
 	return int64(value)
 }
 
-func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.Meta, toolID string, args map[string]any, argsForPersist map[string]any, toolStartedAt time.Time, toolSpanID string, activityUpdater toolActivityUpdater) (*toolCallOutcome, *aitools.ToolError) {
+func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.Meta, toolID string, args map[string]any, activityUpdater toolActivityUpdater) (*toolCallOutcome, *aitools.ToolError) {
 	outcome := &toolCallOutcome{
 		Success:  false,
 		ToolName: "terminal.exec",
@@ -4387,6 +4126,22 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 	if manager == nil {
 		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "terminal process manager unavailable", Retryable: true}
 	}
+	settlementOwner := r.pendingToolSettlementOwner()
+	if settlementOwner == nil {
+		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "terminal process settlement owner unavailable", Retryable: false}
+	}
+	processID, err := newTerminalProcessID()
+	if err != nil {
+		return outcome, aitools.ClassifyError(aitools.Invocation{ToolName: "terminal.exec", Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, err)
+	}
+	settlementTarget := flruntime.PendingToolSettlementTarget{
+		ThreadID:   flruntime.ThreadID(strings.TrimSpace(r.settlementThreadID)),
+		TurnID:     flruntime.TurnID(strings.TrimSpace(r.settlementTurnID)),
+		RunID:      flruntime.RunID(strings.TrimSpace(r.settlementRunID)),
+		ToolCallID: strings.TrimSpace(toolID),
+		ToolName:   "terminal.exec",
+		Handle:     processID,
+	}
 	shell := strings.TrimSpace(r.shell)
 	if shell == "" {
 		shell = "/bin/bash"
@@ -4397,20 +4152,21 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 	defer endBusy()
 
 	proc, err := manager.Start(terminalProcessStartRequest{
-		EndpointID:         strings.TrimSpace(r.endpointID),
-		ThreadID:           strings.TrimSpace(r.threadID),
-		RunID:              strings.TrimSpace(r.id),
-		TurnID:             strings.TrimSpace(r.messageID),
-		SettlementThreadID: strings.TrimSpace(r.settlementThreadID),
-		SettlementRunID:    strings.TrimSpace(r.settlementRunID),
-		SettlementTurnID:   strings.TrimSpace(r.settlementTurnID),
-		ToolID:             strings.TrimSpace(toolID),
-		ToolName:           "terminal.exec",
-		Command:            parsed.Command,
-		Stdin:              parsed.Stdin,
-		CwdAbs:             cwdAbs,
-		Shell:              shell,
-		Env:                prependRedevenBinToEnv(processenv.Current()),
+		ProcessID:        processID,
+		EndpointID:       strings.TrimSpace(r.endpointID),
+		ThreadID:         strings.TrimSpace(r.threadID),
+		RunID:            strings.TrimSpace(r.id),
+		TurnID:           strings.TrimSpace(r.messageID),
+		SettlementOwner:  settlementOwner,
+		SettlementTarget: settlementTarget,
+		Finalize:         r.service.finalizeTerminalProcess,
+		ToolID:           strings.TrimSpace(toolID),
+		ToolName:         "terminal.exec",
+		Command:          parsed.Command,
+		Stdin:            parsed.Stdin,
+		CwdAbs:           cwdAbs,
+		Shell:            shell,
+		Env:              prependRedevenBinToEnv(processenv.Current()),
 	})
 	if err != nil {
 		return outcome, aitools.ClassifyError(aitools.Invocation{ToolName: "terminal.exec", Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, err)
@@ -4425,19 +4181,6 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 	if snapshot.Status == terminalProcessStatusRunning {
 		snapshot = proc.MarkPending()
 		result = terminalProcessResultPayload(snapshot)
-		r.persistToolCallSnapshot(toolID, "terminal.exec", toolCallStatusRunning, argsForPersist, result, nil, "", toolStartedAt, time.Now())
-		r.persistExecutionSpan(threadstore.ExecutionSpanRecord{
-			SpanID:          toolSpanID,
-			EndpointID:      strings.TrimSpace(r.endpointID),
-			ThreadID:        strings.TrimSpace(r.threadID),
-			RunID:           strings.TrimSpace(r.id),
-			Kind:            "tool",
-			Name:            "terminal.exec",
-			Status:          "running",
-			PayloadJSON:     marshalPersistJSON(map[string]any{"tool_id": toolID, "tool_name": "terminal.exec", "status": "running", "result": redactAnyForLog("result", result, 0)}),
-			StartedAtUnixMs: toolStartedAt.UnixMilli(),
-			UpdatedAtUnixMs: time.Now().UnixMilli(),
-		})
 		outcome.Result = result
 		outcome.Pending = &PendingToolResult{
 			Handle:      snapshot.ProcessID,
@@ -4461,27 +4204,6 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "Terminal process failed", Retryable: false, Meta: map[string]any{"process_id": snapshot.ProcessID}}
 	}
 
-	resultAt := time.Now()
-	r.persistToolCallSnapshot(toolID, "terminal.exec", toolCallStatusSuccess, argsForPersist, result, nil, "", toolStartedAt, resultAt)
-	r.persistRunEvent("tool.result", RealtimeStreamKindTool, map[string]any{
-		"tool_id":    toolID,
-		"tool_name":  "terminal.exec",
-		"status":     "success",
-		"process_id": snapshot.ProcessID,
-	})
-	r.persistExecutionSpan(threadstore.ExecutionSpanRecord{
-		SpanID:          toolSpanID,
-		EndpointID:      strings.TrimSpace(r.endpointID),
-		ThreadID:        strings.TrimSpace(r.threadID),
-		RunID:           strings.TrimSpace(r.id),
-		Kind:            "tool",
-		Name:            "terminal.exec",
-		Status:          "success",
-		PayloadJSON:     marshalPersistJSON(map[string]any{"tool_id": toolID, "tool_name": "terminal.exec", "status": "success", "result": redactAnyForLog("result", result, 0)}),
-		StartedAtUnixMs: toolStartedAt.UnixMilli(),
-		EndedAtUnixMs:   resultAt.UnixMilli(),
-		UpdatedAtUnixMs: resultAt.UnixMilli(),
-	})
 	outcome.Success = true
 	outcome.Result = result
 	return outcome, nil
@@ -4508,9 +4230,6 @@ func (r *run) terminalProcessForTool(processID string) (*terminalProcess, error)
 		strings.TrimSpace(snapshot.ThreadID) != strings.TrimSpace(r.threadID) {
 		return nil, errors.New("terminal process not found")
 	}
-	if err := proc.publishDone(); err != nil {
-		return nil, err
-	}
 	return proc, nil
 }
 
@@ -4526,9 +4245,6 @@ func (r *run) toolTerminalRead(processID string, afterSeq int64) (any, error) {
 		MaxBytes:  terminalProcessModelReadBytes,
 	})
 	if err != nil {
-		return nil, err
-	}
-	if err := proc.publishDone(); err != nil {
 		return nil, err
 	}
 	return terminalProcessResultPayload(snapshot), nil
@@ -4549,24 +4265,18 @@ func (r *run) toolTerminalWrite(processID string, input string) (any, error) {
 	if err != nil {
 		return terminalProcessResultPayload(snapshot), err
 	}
-	if err := proc.publishDone(); err != nil {
-		return terminalProcessResultPayload(snapshot), err
-	}
 	payload := terminalProcessResultPayload(snapshot)
 	payload["input_bytes"] = len(input)
 	return payload, nil
 }
 
-func (r *run) toolTerminalTerminate(processID string) (any, error) {
+func (r *run) toolTerminalTerminate(ctx context.Context, processID string) (any, error) {
 	proc, err := r.terminalProcessForTool(processID)
 	if err != nil {
 		return nil, err
 	}
-	snapshot, err := proc.Terminate()
+	snapshot, err := proc.Terminate(ctx)
 	if err != nil {
-		return terminalProcessResultPayload(snapshot), err
-	}
-	if err := proc.publishDone(); err != nil {
 		return terminalProcessResultPayload(snapshot), err
 	}
 	payload := terminalProcessResultPayload(snapshot)

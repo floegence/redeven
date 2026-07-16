@@ -618,9 +618,12 @@ provider credentials, provider profiles, provider-specific persistence, session
 grants, filesystem scope, target routing, approval UI, and product modes.
 
 Floret owns the reusable agent-engine lifecycle consumed by Redeven: provider
-loop execution, tool dispatch lifecycle, tool permission/resource/approval
-lifecycle, runtime streaming observation, core control-signal handling, and
-opaque model state lifecycle.
+loop execution, tool call identity, tool dispatch and settlement lifecycle,
+tool status/result/error persistence, Activity projection, tool
+permission/resource/approval lifecycle, runtime streaming observation, core
+control-signal handling, and opaque model state lifecycle. Floret public
+runtime APIs and projections are the single persistent source of truth for
+tool lifecycle state.
 
 Redeven code must not bypass those Floret lifecycles:
 - tool approval must flow through Floret `PermissionSpec`, resource extraction,
@@ -638,12 +641,22 @@ Redeven code must not bypass those Floret lifecycles:
   model state envelope, including `Attributes`; Redeven may match provider,
   model, base URL, and state kind, but must not truncate or interpret the
   opaque attributes;
-- Redeven tool execution records, `ai_tool_calls`, run events, and execution
-  spans are audit/query records only. Flower UI tool activity must come from
-  Floret `ActivityTimeline` projection, with any detail lookup keyed from that
-  timeline rather than generated from audit tables;
+- Redeven must not persist, mirror, map into another database, or reconstruct
+  Floret tool identity, arguments, lifecycle status, result, error, completion
+  output, or Activity state. It must not query or edit Floret-managed storage;
+- Redeven may retain product-owned audit records for user operations, policy,
+  routing, and permissions, but those records must not contain a queryable copy
+  of Floret tool state and must never become a Flower UI or evaluation source;
+- a Redeven-owned pending process must bind its exact Floret settlement target
+  and the creating Host before the process starts. Terminal reads and writes are
+  PTY-only operations; final settlement goes once through that bound Host and
+  never through run lookup, Host guessing, or a maintenance fallback;
+- completed Flower tool status, output, exit code, duration, and errors must
+  come from Floret `ThreadTurnProjection` Activity payloads. Redeven process
+  reads are allowed only while the corresponding PTY is running;
 - activity presentation must use Redeven's `ToolPresentationSpec` projection as
-  the single product display source.
+  the single product display policy and must travel with the Floret tool call,
+  not as separately persisted presentation state.
 
 Flower read state is user scoped. Live thread patches returned through appserver
 must carry the current `read_status` when thread activity changes, so a running

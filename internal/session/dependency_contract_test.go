@@ -224,7 +224,7 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 
 	const (
 		floretModule  = "github.com/floegence/floret"
-		floretVersion = "v0.8.1"
+		floretVersion = "v0.9.0"
 	)
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
@@ -325,11 +325,12 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"ForkOperationID",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
-			"v0.8.1",
+			"v0.9.0",
+			"single persistent source of truth",
 			"host-owned thread titles",
 			"typed event fields",
 			"turn_projection_unavailable",
-			"persistent replayable operation",
+			"Thread deletion persists an immutable cleanup snapshot",
 			"redeven-runtime-v1",
 		},
 	}
@@ -819,9 +820,84 @@ func TestTerminalProcessUsesFloretSettlementGateway(t *testing.T) {
 		"open" + "FloretLifecycleHost",
 		"persist" + "TerminalSettlementProjection",
 		"snapshotAssistantMessageJSONWithStatus(\"complete\")",
+		"open" + "FloretMaintenanceHost",
+		"settlePendingToolWith" + "ActiveRedevenRun",
+		"runForFloret" + "Settlement",
 	} {
 		if strings.Contains(content, marker) {
 			t.Fatalf("terminal_process_service.go must hand pending settlements to the Floret integration gateway instead of retaining marker %q", marker)
+		}
+	}
+}
+
+func TestFlowerDoesNotPersistOrRebuildFloretToolState(t *testing.T) {
+	t.Parallel()
+
+	root := repoRootForTest(t)
+	productionRoots := []string{
+		filepath.Join(root, "internal", "ai"),
+		filepath.Join(root, "internal", "codeapp", "appserver"),
+		filepath.Join(root, "cmd", "ai-loop-eval"),
+	}
+	forbidden := []string{
+		"ToolCall" + "Record",
+		"ExecutionSpan" + "Record",
+		"Upsert" + "ToolCall",
+		"Get" + "ToolCall",
+		"List" + "ToolCalls",
+		"Append" + "ExecutionSpan",
+		"List" + "ExecutionSpans",
+		"GetTerminal" + "ToolOutput",
+		"GetTool" + "Detail",
+		"ToolCall" + "Ledger",
+		"CompletedAction" + "Facts",
+		"BlockedAction" + "Facts",
+		"BlockedEvidence" + "Refs",
+		"\"tool.call\"",
+		"\"tool.result\"",
+		"\"tool.error\"",
+		"\"floret.tool.lifecycle\"",
+		"\"delegation.child.event\"",
+	}
+	for _, scanRoot := range productionRoots {
+		err := filepath.WalkDir(scanRoot, func(path string, entry fs.DirEntry, err error) error {
+			if err != nil {
+				return err
+			}
+			if entry.IsDir() {
+				return nil
+			}
+			if filepath.Ext(path) != ".go" || strings.HasSuffix(path, "_test.go") {
+				return nil
+			}
+			if path == filepath.Join(root, "internal", "ai", "threadstore", "schema.go") {
+				return nil
+			}
+			content, readErr := os.ReadFile(path)
+			if readErr != nil {
+				return readErr
+			}
+			for _, marker := range forbidden {
+				if strings.Contains(string(content), marker) {
+					rel, _ := filepath.Rel(root, path)
+					t.Fatalf("%s must not retain Floret tool-state mirror marker %q", rel, marker)
+				}
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatalf("scan %s: %v", scanRoot, err)
+		}
+	}
+
+	serverSource := readRepoFile(t, root, "internal", "codeapp", "appserver", "server.go")
+	for _, marker := range []string{
+		"ai_terminal_" + "output",
+		"ai_tool_" + "detail",
+		"meta_" + "only",
+	} {
+		if strings.Contains(serverSource, marker) {
+			t.Fatalf("AppServer must not retain removed tool-state API marker %q", marker)
 		}
 	}
 }

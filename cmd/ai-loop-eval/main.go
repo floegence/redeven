@@ -19,7 +19,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/floegence/redeven/internal/ai"
-	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/settings"
@@ -62,9 +61,19 @@ type taskResult struct {
 	FinalizationReasons []string             `json:"finalization_reasons,omitempty"`
 	EvidencePaths       []string             `json:"evidence_paths,omitempty"`
 
-	rawThread    *ai.ThreadView               `json:"-"`
-	rawTodos     *ai.ThreadTodosView          `json:"-"`
-	rawToolCalls []threadstore.ToolCallRecord `json:"-"`
+	rawThread    *ai.ThreadView      `json:"-"`
+	rawTodos     *ai.ThreadTodosView `json:"-"`
+	rawToolCalls []canonicalToolCall `json:"-"`
+}
+
+type canonicalToolCall struct {
+	RunID          string
+	ToolID         string
+	ToolName       string
+	Status         string
+	ErrorCode      string
+	RecoveryAction string
+	ArgsJSON       string
 }
 
 type threadStateSummary struct {
@@ -657,10 +666,6 @@ func runTask(
 				switch eventType {
 				case "turn.attempt.started":
 					metrics.AttemptCount++
-				case "tool.call":
-					metrics.ToolCallCount++
-				case "tool.error":
-					metrics.ToolErrorCount++
 				case "turn.recovery.triggered":
 					metrics.RecoveryCount++
 				case "completion.attempt":
@@ -707,9 +712,17 @@ func runTask(
 	if todoErr != nil {
 		todoView = nil
 	}
-	toolCalls, toolErr := svc.ListRecentThreadToolCalls(context.Background(), meta, thread.ThreadID, 200)
-	if toolErr != nil {
-		toolCalls = nil
+	toolCalls := loadCanonicalToolCalls(context.Background(), svc, meta, thread.ThreadID)
+	for index := range turns {
+		for _, call := range toolCalls {
+			if strings.TrimSpace(call.RunID) != strings.TrimSpace(turns[index].RunID) {
+				continue
+			}
+			turns[index].ToolCallCount++
+			if canonicalToolStatusFailed(call.Status) {
+				turns[index].ToolErrorCount++
+			}
+		}
 	}
 
 	finalText := extractLatestAssistantText(ctx, svc, meta, thread.ThreadID)
@@ -886,7 +899,7 @@ func summarizeThreadState(thread *ai.ThreadView) threadStateSummary {
 	return out
 }
 
-func summarizeToolCalls(calls []threadstore.ToolCallRecord) []toolCallSummary {
+func summarizeToolCalls(calls []canonicalToolCall) []toolCallSummary {
 	if len(calls) == 0 {
 		return nil
 	}
@@ -902,6 +915,112 @@ func summarizeToolCalls(calls []threadstore.ToolCallRecord) []toolCallSummary {
 		})
 	}
 	return out
+}
+
+func loadCanonicalToolCalls(ctx context.Context, svc *ai.Service, meta *session.Meta, threadID string) []canonicalToolCall {
+	if svc == nil || meta == nil || strings.TrimSpace(threadID) == "" {
+		return nil
+	}
+	pages := make([][]any, 0, 2)
+	beforeID := int64(0)
+	for total := 0; total < 1000; {
+		page, err := svc.ListThreadMessages(ctx, meta, threadID, 200, beforeID)
+		if err != nil || page == nil || len(page.Messages) == 0 {
+			break
+		}
+		pages = append(pages, page.Messages)
+		total += len(page.Messages)
+		if !page.HasMore || page.NextBeforeID <= 0 || page.NextBeforeID == beforeID {
+			break
+		}
+		beforeID = page.NextBeforeID
+	}
+	return canonicalToolCallsFromMessagePages(pages)
+}
+
+func canonicalToolCallsFromMessagePages(pages [][]any) []canonicalToolCall {
+	out := make([]canonicalToolCall, 0, 32)
+	indexByIdentity := make(map[string]int)
+	for pageIndex := len(pages) - 1; pageIndex >= 0; pageIndex-- {
+		for _, rawMessage := range pages[pageIndex] {
+			encoded, err := json.Marshal(rawMessage)
+			if err != nil {
+				continue
+			}
+			var message struct {
+				Blocks []json.RawMessage `json:"blocks"`
+			}
+			if err := json.Unmarshal(encoded, &message); err != nil {
+				continue
+			}
+			for _, rawBlock := range message.Blocks {
+				var block struct {
+					Type  string `json:"type"`
+					RunID string `json:"run_id"`
+					Items []struct {
+						ToolID   string         `json:"tool_id"`
+						ToolName string         `json:"tool_name"`
+						Status   string         `json:"status"`
+						Payload  map[string]any `json:"payload"`
+					} `json:"items"`
+				}
+				if json.Unmarshal(rawBlock, &block) != nil || strings.TrimSpace(block.Type) != "activity-timeline" {
+					continue
+				}
+				for _, item := range block.Items {
+					toolID := strings.TrimSpace(item.ToolID)
+					toolName := strings.TrimSpace(item.ToolName)
+					if toolID == "" || toolName == "" {
+						continue
+					}
+					call := canonicalToolCall{
+						RunID:          strings.TrimSpace(block.RunID),
+						ToolID:         toolID,
+						ToolName:       toolName,
+						Status:         strings.TrimSpace(item.Status),
+						RecoveryAction: strings.TrimSpace(payloadString(item.Payload, "recovery_action")),
+						ArgsJSON:       canonicalPayloadJSON(item.Payload),
+					}
+					if errorPayload, ok := item.Payload["error"].(map[string]any); ok {
+						call.ErrorCode = strings.TrimSpace(payloadString(errorPayload, "code"))
+					}
+					identity := call.RunID + "\x00" + call.ToolID
+					if index, exists := indexByIdentity[identity]; exists {
+						out[index] = call
+						continue
+					}
+					indexByIdentity[identity] = len(out)
+					out = append(out, call)
+				}
+			}
+		}
+	}
+	return out
+}
+
+func canonicalPayloadJSON(payload map[string]any) string {
+	if len(payload) == 0 {
+		return "{}"
+	}
+	encoded, err := json.Marshal(payload)
+	if err != nil {
+		return "{}"
+	}
+	return string(encoded)
+}
+
+func payloadString(payload map[string]any, key string) string {
+	value, _ := payload[key].(string)
+	return value
+}
+
+func canonicalToolStatusFailed(status string) bool {
+	switch normalizeName(status) {
+	case "error", "failed", "canceled", "cancelled", "timed_out", "timeout", "aborted":
+		return true
+	default:
+		return false
+	}
 }
 
 func buildTodoSnapshotSummary(view *ai.ThreadTodosView) *todoSnapshotSummary {

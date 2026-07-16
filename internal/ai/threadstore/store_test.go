@@ -1850,7 +1850,7 @@ PRAGMA user_version=1;
 		t.Fatalf("missing migrated queued turn column %q", "context_action_json")
 	}
 
-	for _, table := range []string{"ai_runs", "ai_tool_calls", "ai_run_events", "ai_thread_todos", "ai_thread_checkpoints", "transcript_messages", "conversation_turns", "execution_spans", "memory_items", "provider_capabilities", "structured_user_inputs", "request_user_input_secret_answers", "ai_flower_thread_metadata", "ai_flower_transfers", "ai_flower_handoffs"} {
+	for _, table := range []string{"ai_runs", "ai_run_events", "ai_thread_todos", "ai_thread_checkpoints", "transcript_messages", "conversation_turns", "memory_items", "provider_capabilities", "structured_user_inputs", "request_user_input_secret_answers", "ai_flower_thread_metadata", "ai_flower_transfers", "ai_flower_handoffs"} {
 		var exists int
 		if err := s.db.QueryRowContext(ctx, `
 SELECT COUNT(1)
@@ -1863,8 +1863,13 @@ WHERE type = 'table' AND name = ?
 			t.Fatalf("missing migrated table %q", table)
 		}
 	}
-	if tableExistsForTest(t, s.db, "memory_embeddings") {
-		t.Fatalf("memory_embeddings should be removed from the current schema")
+	for _, table := range []string{"memory_embeddings", "ai_tool_calls", "execution_spans"} {
+		if tableExistsForTest(t, s.db, table) {
+			t.Fatalf("%s should be absent from the current schema", table)
+		}
+	}
+	if tableHasColumnForTest(t, s.db, "ai_thread_checkpoints", "tool_calls_max_id") {
+		t.Fatalf("tool_calls_max_id should be absent from the current checkpoint schema")
 	}
 
 	var version int
@@ -2186,7 +2191,6 @@ func TestStore_MigrateFromV9ScrubsLegacyModelDefaultToken(t *testing.T) {
 	t.Parallel()
 
 	legacyToken := strings.Join([]string{"is", "default"}, "_")
-	toolCallPayload := strings.Replace(`{"TOKEN":true}`, "TOKEN", legacyToken, 1)
 	runEventPayload := strings.Replace(`{"legacy":"TOKEN"}`, "TOKEN", legacyToken, 1)
 
 	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
@@ -2208,12 +2212,6 @@ func TestStore_MigrateFromV9ScrubsLegacyModelDefaultToken(t *testing.T) {
 		t.Fatalf("set user_version: %v", err)
 	}
 	if _, err := raw.Exec(`
-INSERT INTO ai_tool_calls(run_id, tool_id, tool_name, status, result_json)
-VALUES(?, ?, ?, ?, ?)
-`, "run_legacy", "tool_legacy", "terminal.exec", "succeeded", toolCallPayload); err != nil {
-		t.Fatalf("seed tool call: %v", err)
-	}
-	if _, err := raw.Exec(`
 INSERT INTO ai_run_events(endpoint_id, thread_id, run_id, event_type, payload_json)
 VALUES(?, ?, ?, ?, ?)
 `, "env_legacy", "th_legacy", "run_legacy", "stream_event", runEventPayload); err != nil {
@@ -2230,21 +2228,6 @@ VALUES(?, ?, ?, ?, ?)
 	defer func() { _ = s.Close() }()
 
 	ctx := context.Background()
-
-	var cleanedToolCall string
-	if err := s.db.QueryRowContext(ctx, `
-SELECT result_json
-FROM ai_tool_calls
-WHERE run_id = 'run_legacy' AND tool_id = 'tool_legacy'
-`).Scan(&cleanedToolCall); err != nil {
-		t.Fatalf("load tool call: %v", err)
-	}
-	if strings.Contains(cleanedToolCall, legacyToken) {
-		t.Fatalf("tool call result_json still contains legacy token: %s", cleanedToolCall)
-	}
-	if !strings.Contains(cleanedToolCall, "current_model_id") {
-		t.Fatalf("tool call result_json not rewritten: %s", cleanedToolCall)
-	}
 
 	var cleanedEvent string
 	if err := s.db.QueryRowContext(ctx, `
@@ -2407,21 +2390,6 @@ INSERT INTO ai_messages(
 	}); err != nil {
 		t.Fatalf("UpsertMemoryItem: %v", err)
 	}
-	if err := s.UpsertExecutionSpan(ctx, ExecutionSpanRecord{
-		SpanID:          "span_1",
-		EndpointID:      endpointID,
-		ThreadID:        threadID,
-		RunID:           "run_1",
-		Kind:            "tool",
-		Name:            "terminal.exec",
-		Status:          "success",
-		PayloadJSON:     `{"ok":true}`,
-		StartedAtUnixMs: 107,
-		EndedAtUnixMs:   107,
-		UpdatedAtUnixMs: 107,
-	}); err != nil {
-		t.Fatalf("UpsertExecutionSpan: %v", err)
-	}
 	if err := s.UpsertThreadState(ctx, ThreadState{
 		EndpointID:           endpointID,
 		ThreadID:             threadID,
@@ -2464,23 +2432,12 @@ INSERT INTO ai_messages(
 	}); err != nil {
 		t.Fatalf("UpsertRun: %v", err)
 	}
-	if err := s.UpsertToolCall(ctx, ToolCallRecord{
-		RunID:           "run_1",
-		ToolID:          "tool_1",
-		ToolName:        "terminal.exec",
-		Status:          "success",
-		ResultJSON:      `{"stdout":"ok"}`,
-		StartedAtUnixMs: 111,
-		EndedAtUnixMs:   112,
-	}); err != nil {
-		t.Fatalf("UpsertToolCall: %v", err)
-	}
 	if err := s.AppendRunEvent(ctx, RunEventRecord{
 		EndpointID:  endpointID,
 		ThreadID:    threadID,
 		RunID:       "run_1",
-		EventType:   "tool.result",
-		StreamKind:  "tool",
+		EventType:   "run.end",
+		StreamKind:  "lifecycle",
 		PayloadJSON: `{"ok":true}`,
 		AtUnixMs:    113,
 	}); err != nil {
@@ -2554,7 +2511,6 @@ INSERT INTO ai_messages(
 		"structured_user_inputs":            countRowsForTest(t, s.db, `SELECT COUNT(1) FROM structured_user_inputs WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"request_user_input_secret_answers": countRowsForTest(t, s.db, `SELECT COUNT(1) FROM request_user_input_secret_answers WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"memory_items":                      countRowsForTest(t, s.db, `SELECT COUNT(1) FROM memory_items WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
-		"execution_spans":                   countRowsForTest(t, s.db, `SELECT COUNT(1) FROM execution_spans WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"ai_thread_state":                   countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_thread_state WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"ai_thread_todos":                   countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_thread_todos WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"ai_queued_turns":                   countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_queued_turns WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
@@ -2564,12 +2520,6 @@ INSERT INTO ai_messages(
 		"ai_flower_thread_metadata":         countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_flower_thread_metadata WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"ai_flower_transfers":               countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_flower_transfers WHERE endpoint_id = ? AND (source_thread_id = ? OR destination_thread_id = ?)`, endpointID, threadID, threadID),
 		"ai_flower_handoffs":                countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_flower_handoffs WHERE endpoint_id = ? AND (source_thread_id = ? OR destination_thread_id = ?)`, endpointID, threadID, threadID),
-		"ai_tool_calls": countRowsForTest(t, s.db, `
-SELECT COUNT(1)
-FROM ai_tool_calls tc
-JOIN ai_runs r ON r.run_id = tc.run_id
-WHERE r.endpoint_id = ? AND r.thread_id = ?
-`, endpointID, threadID),
 	}
 	for table, count := range threadScopedCounts {
 		if count != 0 {
@@ -2719,165 +2669,6 @@ func TestStore_UpdateTranscriptMessageJSONByRowID_DoesNotTouchThreadUpdatedAt(t 
 	}
 	if gotJSON != nextJSON {
 		t.Fatalf("message_json=%q, want %q", gotJSON, nextJSON)
-	}
-}
-
-func TestStore_ListRecentThreadToolCalls(t *testing.T) {
-	t.Parallel()
-
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	s, err := Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	ctx := context.Background()
-	for _, threadID := range []string{"th_1", "th_other"} {
-		if err := s.CreateThread(ctx, Thread{ThreadID: threadID, EndpointID: "env_1", Title: threadID}); err != nil {
-			t.Fatalf("CreateThread %s: %v", threadID, err)
-		}
-	}
-
-	if err := s.UpsertRun(ctx, RunRecord{
-		RunID:      "run_a",
-		EndpointID: "env_1",
-		ThreadID:   "th_1",
-		MessageID:  "msg_a",
-		State:      "running",
-	}); err != nil {
-		t.Fatalf("UpsertRun run_a: %v", err)
-	}
-	if err := s.UpsertToolCall(ctx, ToolCallRecord{
-		RunID:      "run_a",
-		ToolID:     "tool_a",
-		ToolName:   "terminal.exec",
-		Status:     "success",
-		ArgsJSON:   `{"command":"pwd","cwd":"/"}`,
-		ResultJSON: `{"stdout":"/\n","exit_code":0}`,
-	}); err != nil {
-		t.Fatalf("UpsertToolCall tool_a: %v", err)
-	}
-
-	if err := s.UpsertRun(ctx, RunRecord{
-		RunID:      "run_b",
-		EndpointID: "env_1",
-		ThreadID:   "th_1",
-		MessageID:  "msg_b",
-		State:      "running",
-	}); err != nil {
-		t.Fatalf("UpsertRun run_b: %v", err)
-	}
-	if err := s.UpsertToolCall(ctx, ToolCallRecord{
-		RunID:        "run_b",
-		ToolID:       "tool_b",
-		ToolName:     "terminal.exec",
-		Status:       "error",
-		ArgsJSON:     `{"command":"rg \"TODO\" .","cwd":"/tmp"}`,
-		ErrorCode:    "INVALID_PATH",
-		ErrorMessage: "path must be absolute",
-	}); err != nil {
-		t.Fatalf("UpsertToolCall tool_b: %v", err)
-	}
-
-	if err := s.UpsertRun(ctx, RunRecord{
-		RunID:      "run_other",
-		EndpointID: "env_1",
-		ThreadID:   "th_other",
-		MessageID:  "msg_other",
-		State:      "running",
-	}); err != nil {
-		t.Fatalf("UpsertRun run_other: %v", err)
-	}
-	if err := s.UpsertToolCall(ctx, ToolCallRecord{
-		RunID:    "run_other",
-		ToolID:   "tool_other",
-		ToolName: "apply_patch",
-		Status:   "success",
-		ArgsJSON: `{"patch":"diff --git a/a.txt b/a.txt"}`,
-	}); err != nil {
-		t.Fatalf("UpsertToolCall tool_other: %v", err)
-	}
-
-	recs, err := s.ListRecentThreadToolCalls(ctx, "env_1", "th_1", 10)
-	if err != nil {
-		t.Fatalf("ListRecentThreadToolCalls: %v", err)
-	}
-	if len(recs) != 2 {
-		t.Fatalf("len(recs)=%d, want 2", len(recs))
-	}
-	if recs[0].RunID != "run_a" || recs[0].ToolID != "tool_a" {
-		t.Fatalf("recs[0]=%+v, want run_a/tool_a", recs[0])
-	}
-	if recs[1].RunID != "run_b" || recs[1].ToolID != "tool_b" {
-		t.Fatalf("recs[1]=%+v, want run_b/tool_b", recs[1])
-	}
-
-	latestOnly, err := s.ListRecentThreadToolCalls(ctx, "env_1", "th_1", 1)
-	if err != nil {
-		t.Fatalf("ListRecentThreadToolCalls latest: %v", err)
-	}
-	if len(latestOnly) != 1 {
-		t.Fatalf("len(latestOnly)=%d, want 1", len(latestOnly))
-	}
-	if latestOnly[0].RunID != "run_b" || latestOnly[0].ToolID != "tool_b" {
-		t.Fatalf("latestOnly[0]=%+v, want run_b/tool_b", latestOnly[0])
-	}
-}
-
-func TestStore_GetToolCall(t *testing.T) {
-	t.Parallel()
-
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	s, err := Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	ctx := context.Background()
-	if err := s.CreateThread(ctx, Thread{ThreadID: "th_1", EndpointID: "env_1", Title: "th_1"}); err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-	if err := s.UpsertRun(ctx, RunRecord{
-		RunID:      "run_a",
-		EndpointID: "env_1",
-		ThreadID:   "th_1",
-		MessageID:  "msg_a",
-		State:      "running",
-	}); err != nil {
-		t.Fatalf("UpsertRun: %v", err)
-	}
-	if err := s.UpsertToolCall(ctx, ToolCallRecord{
-		RunID:      "run_a",
-		ToolID:     "tool_a",
-		ToolName:   "terminal.exec",
-		Status:     "success",
-		ArgsJSON:   `{"command":"pwd","cwd":"/tmp"}`,
-		ResultJSON: `{"stdout":"ok\n","exit_code":0}`,
-	}); err != nil {
-		t.Fatalf("UpsertToolCall: %v", err)
-	}
-
-	rec, err := s.GetToolCall(ctx, "env_1", "run_a", "tool_a")
-	if err != nil {
-		t.Fatalf("GetToolCall: %v", err)
-	}
-	if rec == nil {
-		t.Fatalf("GetToolCall returned nil record")
-	}
-	if rec.ToolName != "terminal.exec" {
-		t.Fatalf("ToolName=%q, want terminal.exec", rec.ToolName)
-	}
-	if rec.ResultJSON != `{"stdout":"ok\n","exit_code":0}` {
-		t.Fatalf("ResultJSON=%q", rec.ResultJSON)
-	}
-
-	if _, err := s.GetToolCall(ctx, "env_1", "run_a", "missing"); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("GetToolCall missing err=%v, want sql.ErrNoRows", err)
-	}
-	if _, err := s.GetToolCall(ctx, "env_2", "run_a", "tool_a"); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("GetToolCall endpoint mismatch err=%v, want sql.ErrNoRows", err)
 	}
 }
 
@@ -3077,21 +2868,6 @@ func TestStore_ForkOperationCopiesContextAndClearsRunState(t *testing.T) {
 	if err := s.SetThreadOpenGoal(ctx, "env_1", "th_src", "finish the forkable task"); err != nil {
 		t.Fatalf("SetThreadOpenGoal: %v", err)
 	}
-	if err := s.UpsertExecutionSpan(ctx, ExecutionSpanRecord{
-		SpanID:          "span_src",
-		EndpointID:      "env_1",
-		ThreadID:        "th_src",
-		RunID:           "run_src",
-		Kind:            "tool",
-		Name:            "terminal.exec",
-		Status:          "success",
-		PayloadJSON:     `{"stdout":"ok"}`,
-		StartedAtUnixMs: 156,
-		EndedAtUnixMs:   157,
-		UpdatedAtUnixMs: 157,
-	}); err != nil {
-		t.Fatalf("UpsertExecutionSpan: %v", err)
-	}
 	if err := s.UpsertRun(ctx, RunRecord{RunID: "run_src", EndpointID: "env_1", ThreadID: "th_src", State: "success"}); err != nil {
 		t.Fatalf("UpsertRun: %v", err)
 	}
@@ -3259,11 +3035,6 @@ func TestStore_ForkOperationCopiesContextAndClearsRunState(t *testing.T) {
 	}
 	if secrets := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM request_user_input_secret_answers WHERE endpoint_id = ? AND thread_id = ?`, "env_1", "th_fork"); secrets != 0 {
 		t.Fatalf("fork secret answers=%d, want 0", secrets)
-	}
-	if spans, err := s.ListRecentExecutionSpansByThread(ctx, "env_1", "th_fork", 10); err != nil {
-		t.Fatalf("ListRecentExecutionSpansByThread fork: %v", err)
-	} else if len(spans) != 0 {
-		t.Fatalf("fork execution spans=%+v, want none", spans)
 	}
 	if refs := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_upload_refs WHERE endpoint_id = ? AND thread_id = ?`, "env_1", "th_fork"); refs != 1 {
 		t.Fatalf("fork upload refs=%d, want 1", refs)

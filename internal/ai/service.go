@@ -344,7 +344,7 @@ func NewService(opts Options) (*Service, error) {
 		maintenanceStopCh:            make(chan struct{}),
 		maintenanceDoneCh:            make(chan struct{}),
 	}
-	svc.terminalProcesses = newTerminalProcessManager(svc.handleTerminalProcessDone)
+	svc.terminalProcesses = newTerminalProcessManager()
 	if svc.skillManager != nil {
 		svc.skillManager.Discover()
 	}
@@ -459,8 +459,15 @@ func (s *Service) Close() error {
 	if coordinator != nil {
 		coordinator.Close()
 	}
+	waitTO := s.persistOpTO
+	if waitTO <= 0 {
+		waitTO = defaultPersistOpTimeout
+	}
+	var terminalCloseErr error
 	if terminalProcesses != nil {
-		terminalProcesses.Close()
+		closeCtx, closeCancel := context.WithTimeout(context.Background(), waitTO)
+		terminalCloseErr = terminalProcesses.Close(closeCtx)
+		closeCancel()
 	}
 	if maintenanceStopCh != nil {
 		close(maintenanceStopCh)
@@ -476,10 +483,6 @@ func (s *Service) Close() error {
 	}
 	for _, compaction := range idleCompactions {
 		s.cancelIdleThreadCompactionWithBroadcast(compaction.endpointID, compaction.threadID)
-	}
-	waitTO := s.persistOpTO
-	if waitTO <= 0 {
-		waitTO = defaultPersistOpTimeout
 	}
 	for _, compaction := range idleCompactions {
 		waitCtx, waitCancel := context.WithTimeout(context.Background(), waitTO)
@@ -506,9 +509,9 @@ func (s *Service) Close() error {
 		runtime.release()
 	}
 	if ts != nil {
-		return ts.Close()
+		return errors.Join(terminalCloseErr, ts.Close())
 	}
-	return nil
+	return terminalCloseErr
 }
 
 func (s *Service) ensureThreadSubagentRuntimeLocked(thKey string, r *run) subagentRuntime {

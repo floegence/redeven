@@ -19,7 +19,6 @@ import (
 	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/ai/threadstore"
-	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/websearch"
 )
@@ -62,15 +61,14 @@ func TestFloretSubagentTerminalCleanupSettlesCompletedChildPendingProcess(t *tes
 	workspace := t.TempDir()
 	store := openTerminalProcessTestStore(t)
 	defer func() { _ = store.Close() }()
-	manager := newTerminalProcessManager(nil)
-	defer manager.Close()
+	manager := newTerminalProcessManager()
+	defer func() { _ = manager.Close(context.Background()) }()
 	svc := &Service{
 		threadsDB:         store,
 		terminalProcesses: manager,
 		log:               slog.Default(),
 		persistOpTO:       5 * time.Second,
 	}
-	manager.onDone = svc.handleTerminalProcessDone
 
 	endpointID := "env_subagent_cleanup"
 	parentThreadID := "parent_thread_cleanup"
@@ -112,8 +110,8 @@ func TestFloretSubagentTerminalCleanupSettlesCompletedChildPendingProcess(t *tes
 
 	runtime := newFloretSubagentRuntime(parent)
 	runtime.host = host
-	completedProc := startPendingTerminalProcessForTestWithSettlement(t, manager, workspace, endpointID, completedChildThreadID, completedChildRunID, completedChildTurnID, completedFloretRunID, completedFloretTurnID, "tool_completed")
-	runningProc := startPendingTerminalProcessForTest(t, manager, workspace, endpointID, runningChildThreadID, runningChildRunID, runningChildTurnID, "tool_running")
+	completedProc := startPendingTerminalProcessForTestWithSettlement(t, manager, host, workspace, endpointID, completedChildThreadID, completedChildRunID, completedChildTurnID, completedFloretRunID, completedFloretTurnID, "tool_completed")
+	runningProc := startPendingTerminalProcessForTest(t, manager, host, workspace, endpointID, runningChildThreadID, runningChildRunID, runningChildTurnID, "tool_running")
 
 	if err := runtime.cleanupTerminalProcessesForTerminalSubagents(context.Background()); err != nil {
 		t.Fatalf("cleanupTerminalProcessesForTerminalSubagents: %v", err)
@@ -125,10 +123,10 @@ func TestFloretSubagentTerminalCleanupSettlesCompletedChildPendingProcess(t *tes
 	if len(settleRequests) != 1 {
 		t.Fatalf("settle requests=%d, want 1", len(settleRequests))
 	}
-	if settleRequests[0].ThreadID != flruntime.ThreadID(completedChildThreadID) ||
-		settleRequests[0].RunID != flruntime.RunID(completedFloretRunID) ||
-		settleRequests[0].TurnID != flruntime.TurnID(completedFloretTurnID) ||
-		settleRequests[0].ToolCallID != "tool_completed" ||
+	if settleRequests[0].Target.ThreadID != flruntime.ThreadID(completedChildThreadID) ||
+		settleRequests[0].Target.RunID != flruntime.RunID(completedFloretRunID) ||
+		settleRequests[0].Target.TurnID != flruntime.TurnID(completedFloretTurnID) ||
+		settleRequests[0].Target.ToolCallID != "tool_completed" ||
 		settleRequests[0].Status != flruntime.PendingToolSettlementCanceled {
 		t.Fatalf("settle request=%#v, want completed child terminal cancellation", settleRequests[0])
 	}
@@ -136,22 +134,12 @@ func TestFloretSubagentTerminalCleanupSettlesCompletedChildPendingProcess(t *tes
 	if completedSnapshot.Status != terminalProcessStatusCanceled {
 		t.Fatalf("completed child terminal status=%q, want canceled", completedSnapshot.Status)
 	}
-	if completedSnapshot.RunID != completedChildRunID ||
-		completedSnapshot.SettlementRunID != completedFloretRunID ||
-		completedSnapshot.TurnID != completedChildTurnID ||
-		completedSnapshot.SettlementTurnID != completedFloretTurnID {
-		t.Fatalf("completed child snapshot identities=%#v, want audit and Floret settlement identities preserved", completedSnapshot)
+	if completedSnapshot.RunID != completedChildRunID || completedSnapshot.TurnID != completedChildTurnID {
+		t.Fatalf("completed child product identity=%#v", completedSnapshot)
 	}
 	runningSnapshot := runningProc.Snapshot()
 	if runningSnapshot.Status != terminalProcessStatusRunning {
 		t.Fatalf("running child terminal status=%q, want running", runningSnapshot.Status)
-	}
-	rec, err := store.GetToolCall(context.Background(), endpointID, completedChildRunID, "tool_completed")
-	if err != nil {
-		t.Fatalf("GetToolCall completed child: %v", err)
-	}
-	if rec.Status != toolCallStatusError || rec.ErrorCode != string(aitools.ErrorCodeCanceled) {
-		t.Fatalf("completed child audit record=%#v, want canceled error", rec)
 	}
 }
 
@@ -260,7 +248,14 @@ func (h *recordingFloretHost) SettlePendingTool(_ context.Context, req flruntime
 	if h.settleErr != nil {
 		return flruntime.PendingToolSettlementResult{}, h.settleErr
 	}
-	return h.settleResult, nil
+	result := h.settleResult
+	if strings.TrimSpace(string(result.Target.ThreadID)) == "" {
+		result.Target = req.Target
+	}
+	if strings.TrimSpace(string(result.Event.ThreadID)) == "" {
+		result.Event = pendingToolSettlementResultForTest(result.Target, result.ProjectionAvailability, result.Projection, result.ProjectionError).Event
+	}
+	return result, nil
 }
 
 func (h *recordingFloretHost) SpawnSubAgent(_ context.Context, req flruntime.SpawnSubAgentRequest) (flruntime.SubAgentSnapshot, error) {
@@ -1779,7 +1774,7 @@ func TestServiceGetFlowerSubagentDetailRejectsWrongParentBeforeRuntime(t *testin
 	}
 }
 
-func TestSubagentEventSinkAcceptsValidRunningChildProjection(t *testing.T) {
+func TestSubagentEventSinkDoesNotPersistChildToolLifecycle(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -1822,17 +1817,13 @@ func TestSubagentEventSinkAcceptsValidRunningChildProjection(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListRunEvents: %v", err)
 	}
-	childEvents := 0
 	for _, recorded := range runEvents {
 		switch recorded.EventType {
 		case "floret.contract.rejected":
 			t.Fatalf("valid child projection was rejected: %#v", recorded)
 		case "delegation.child.event":
-			childEvents++
+			t.Fatalf("child Floret lifecycle was mirrored into Redeven run events: %#v", recorded)
 		}
-	}
-	if childEvents != 1 {
-		t.Fatalf("delegation child events=%d, want one: %#v", childEvents, runEvents)
 	}
 }
 
