@@ -2,7 +2,7 @@ import { For, Show, createMemo, createSignal, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Tag, Button, type TagProps } from '@floegence/floe-webapp-core/ui';
 import { Copy, Check } from '@floegence/floe-webapp-core/icons';
-import { redevenDividerRoleClass, redevenSegmentedItemClass, redevenSurfaceRoleClass } from '../../utils/redevenSurfaceRoles';
+import { redevenSegmentedItemClass, redevenSurfaceRoleClass } from '../../utils/redevenSurfaceRoles';
 import { useI18n } from '../../i18n';
 
 export type ViewMode = 'ui' | 'json';
@@ -95,7 +95,7 @@ export interface SettingsCardProps {
 
 export function SettingsSection(props: SettingsCardProps) {
   return (
-    <section class="redeven-settings-section rounded-lg border p-5 shadow-sm" data-settings-card={props.title}>
+    <section class="redeven-settings-section rounded-lg border p-5" data-settings-card={props.title}>
       <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div class="flex min-w-0 items-start gap-3">
           <span class="redeven-settings-section__icon mt-0.5 inline-flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md">
@@ -110,7 +110,7 @@ export function SettingsSection(props: SettingsCardProps) {
                 </Tag>
               </Show>
             </div>
-            <p class="mt-0.5 break-words text-xs leading-relaxed text-muted-foreground">{props.description}</p>
+            <p class="redeven-settings-note mt-0.5 break-words text-xs leading-relaxed">{props.description}</p>
           </div>
         </div>
         <Show when={props.actions}>
@@ -139,7 +139,7 @@ export function FieldLabel(props: { children: string; hint?: string }) {
     <div class="mb-1.5">
       <label class="text-xs font-medium text-foreground">{props.children}</label>
       <Show when={props.hint}>
-        <span class="ml-1.5 text-xs text-muted-foreground">({props.hint})</span>
+        <span class="redeven-settings-note ml-1.5 text-xs">({props.hint})</span>
       </Show>
     </div>
   );
@@ -153,8 +153,8 @@ export function SectionGroup(props: { title: string; children: JSX.Element; grou
   return (
     <div class="space-y-4" data-settings-group={props.groupId}>
       <div class="flex items-center gap-3 pt-2">
-        <h2 class="whitespace-nowrap text-[11px] font-semibold uppercase tracking-widest text-muted-foreground">{props.title}</h2>
-        <div class="h-px flex-1 bg-border/50" />
+        <h2 class="redeven-settings-label whitespace-nowrap text-[11px] font-semibold uppercase tracking-widest">{props.title}</h2>
+        <div class="h-px flex-1 bg-[var(--redeven-settings-divider)]" />
       </div>
       {props.children}
     </div>
@@ -167,7 +167,7 @@ export function SubSectionHeader(props: { title: string; description?: string; a
       <div>
         <div class="text-sm font-semibold text-foreground">{props.title}</div>
         <Show when={props.description}>
-          <p class="mt-0.5 text-xs text-muted-foreground">{props.description}</p>
+          <p class="redeven-settings-note mt-0.5 text-xs">{props.description}</p>
         </Show>
       </div>
       <Show when={props.actions}>
@@ -181,8 +181,7 @@ export function JSONEditor(props: { value: string; onChange: (v: string) => void
   return (
     <textarea
       class={cn(
-        'w-full resize-y rounded-lg border px-3 py-2.5 font-mono text-xs focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20 disabled:bg-muted/50 disabled:opacity-50',
-        redevenSurfaceRoleClass('controlMuted'),
+        'redeven-settings-control w-full resize-y rounded-lg border px-3 py-2.5 font-mono text-xs focus:outline-none focus:ring-2 focus:ring-[color-mix(in_srgb,var(--redeven-settings-selection-indicator)_24%,transparent)] disabled:opacity-50',
       )}
       style={{ 'min-height': `${(props.rows ?? 6) * 1.5}rem` }}
       value={props.value}
@@ -199,6 +198,10 @@ export function SettingsPill(props: { tone?: 'default' | 'success' | 'warning' |
       {props.children}
     </Tag>
   );
+}
+
+export function SettingsList(props: { children: JSX.Element; class?: string }) {
+  return <div class={cn('redeven-settings-list overflow-hidden rounded-lg border', props.class)}>{props.children}</div>;
 }
 
 export function SettingRow(props: {
@@ -236,7 +239,7 @@ export function SettingRow(props: {
           <div class="min-w-0">
             <div class="text-sm font-semibold tracking-tight text-foreground">{props.title}</div>
             <Show when={props.description}>
-              <p class="mt-0.5 text-xs leading-relaxed text-muted-foreground">{props.description}</p>
+              <p class="redeven-settings-note mt-0.5 text-xs leading-relaxed">{props.description}</p>
             </Show>
           </div>
         </div>
@@ -267,16 +270,16 @@ export function SectionCollapse(props: {
   children: JSX.Element;
 }) {
   return (
-    <div class={cn('rounded-lg border', redevenSurfaceRoleClass('panel'))}>
+    <div class="redeven-settings-inset rounded-lg border">
       <button
         type="button"
-        class="flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-2.5 text-left transition hover:bg-muted/40 disabled:cursor-not-allowed disabled:opacity-60"
+        class="flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-2.5 text-left transition hover:bg-[var(--redeven-settings-row-hover-bg)] disabled:cursor-not-allowed disabled:opacity-60"
         onClick={() => props.onOpenChange(!props.open)}
       >
         <span class="min-w-0">
           <span class="block text-sm font-semibold text-foreground">{props.title}</span>
           <Show when={props.description}>
-            <span class="mt-0.5 block text-xs text-muted-foreground">{props.description}</span>
+            <span class="redeven-settings-note mt-0.5 block text-xs">{props.description}</span>
           </Show>
         </span>
         <span class="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md border text-xs text-muted-foreground">
@@ -284,7 +287,7 @@ export function SectionCollapse(props: {
         </span>
       </button>
       <Show when={props.open}>
-        <div class={cn('border-t p-3', redevenDividerRoleClass())}>{props.children}</div>
+        <div class="border-t border-[var(--redeven-settings-divider)] p-3">{props.children}</div>
       </Show>
     </div>
   );
@@ -294,7 +297,7 @@ export const AdvancedCollapse = SectionCollapse;
 
 export function SettingsTable(props: { children: JSX.Element; minWidthClass?: string; class?: string; stickyHeader?: boolean }) {
   return (
-    <div class={cn('overflow-auto rounded-lg border', redevenSurfaceRoleClass('panel'), props.class)}>
+    <div class={cn('redeven-settings-table overflow-auto rounded-lg border', props.class)}>
       <table class={`w-full text-xs align-top ${props.minWidthClass ?? ''}`}>
         {props.children}
       </table>
@@ -303,11 +306,11 @@ export function SettingsTable(props: { children: JSX.Element; minWidthClass?: st
 }
 
 export function SettingsTableHead(props: { children: JSX.Element; sticky?: boolean }) {
-  return <thead class={`${props.sticky ? 'sticky top-0 z-10 bg-[color-mix(in_srgb,var(--redeven-settings-row-bg)_94%,transparent)] backdrop-blur-sm' : ''} text-muted-foreground`}>{props.children}</thead>;
+  return <thead class={props.sticky ? 'sticky top-0 z-10' : ''}>{props.children}</thead>;
 }
 
 export function SettingsTableHeaderRow(props: { children: JSX.Element }) {
-  return <tr class={cn('border-b text-left', redevenDividerRoleClass('strong'))}>{props.children}</tr>;
+  return <tr class="redeven-settings-table__header-row border-b text-left">{props.children}</tr>;
 }
 
 export function SettingsTableHeaderCell(props: { children: JSX.Element; align?: 'left' | 'center' | 'right'; class?: string }) {
@@ -319,8 +322,19 @@ export function SettingsTableBody(props: { children: JSX.Element }) {
   return <tbody>{props.children}</tbody>;
 }
 
-export function SettingsTableRow(props: { children: JSX.Element; selected?: boolean; class?: string }) {
-  return <tr class={cn('border-b last:border-b-0', redevenDividerRoleClass(), props.selected ? 'bg-muted/30' : '', props.class)}>{props.children}</tr>;
+export function SettingsTableRow(props: { children: JSX.Element; selected?: boolean; interactive?: boolean; class?: string }) {
+  return (
+    <tr
+      class={cn(
+        'redeven-settings-table__row border-b last:border-b-0',
+        props.selected && 'redeven-settings-table__row--selected',
+        props.interactive && 'redeven-settings-table__row--interactive',
+        props.class,
+      )}
+    >
+      {props.children}
+    </tr>
+  );
 }
 
 export function SettingsTableCell(props: { children: JSX.Element; align?: 'left' | 'center' | 'right'; class?: string }) {
@@ -331,7 +345,7 @@ export function SettingsTableCell(props: { children: JSX.Element; align?: 'left'
 export function SettingsTableEmptyRow(props: { colSpan: number; children: JSX.Element }) {
   return (
     <tr>
-      <td colSpan={props.colSpan} class="px-3 py-8 text-center text-[11px] text-muted-foreground">
+      <td colSpan={props.colSpan} class="redeven-settings-note px-3 py-8 text-center text-[11px]">
         {props.children}
       </td>
     </tr>
@@ -356,9 +370,9 @@ export function SettingsKeyValueTable(props: {
         <For each={props.rows}>
           {(row) => (
             <SettingsTableRow>
-              <SettingsTableCell class="whitespace-nowrap font-medium text-muted-foreground">{row.label}</SettingsTableCell>
+              <SettingsTableCell class="redeven-settings-label whitespace-nowrap font-medium">{row.label}</SettingsTableCell>
               <SettingsTableCell class={row.mono ? 'font-mono text-[11px] leading-relaxed break-all' : 'break-words'}>{row.value}</SettingsTableCell>
-              <SettingsTableCell class="break-words text-[11px] text-muted-foreground">{row.note ?? '—'}</SettingsTableCell>
+              <SettingsTableCell class="redeven-settings-note break-words text-[11px]">{row.note ?? '—'}</SettingsTableCell>
             </SettingsTableRow>
           )}
         </For>
@@ -402,8 +416,8 @@ export function SummaryMetric(props: SummaryMetricDef) {
       type="button"
       class={cn(
         'flex items-center gap-2.5 rounded-xl border px-3.5 py-2.5 text-left transition-all duration-150',
-        redevenSurfaceRoleClass('panel'),
-        props.onClick ? 'cursor-pointer hover:border-primary/30 hover:bg-muted/30 hover:shadow-sm' : 'cursor-default',
+        'redeven-settings-inset',
+        props.onClick ? 'cursor-pointer hover:bg-[var(--redeven-settings-row-hover-bg)]' : 'cursor-default',
       )}
       onClick={() => props.onClick?.()}
       disabled={!props.onClick}
@@ -413,7 +427,7 @@ export function SummaryMetric(props: SummaryMetricDef) {
       </div>
       <div class="min-w-0">
         <div class="text-sm font-semibold tracking-tight text-foreground">{props.value}</div>
-        <div class="truncate text-[10px] text-muted-foreground">{props.label}</div>
+        <div class="redeven-settings-note truncate text-[10px]">{props.label}</div>
       </div>
     </button>
   );
@@ -641,7 +655,7 @@ export function CardRow(props: {
   children: JSX.Element;
 }) {
   return (
-    <div class="rounded-lg border border-border/50 p-3 transition-colors hover:border-border/80">
+    <div class="redeven-settings-inset rounded-lg border p-3">
       <div class="flex items-center justify-between gap-3 mb-2">
         <div class="flex items-center gap-2 min-w-0">
           <span class="text-xs font-medium text-foreground truncate">{props.label}</span>

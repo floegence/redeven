@@ -34,7 +34,7 @@ export function CodexSection() {
     >
       <Show when={!loaded() || hostOk()}>
         <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <div class={cn('rounded-xl border p-4', hostOk() ? 'border-success/30 bg-success/5' : 'border-border/50 bg-background')}>
+          <div class={cn('rounded-xl border p-4', hostOk() ? 'border-success/30 bg-success/5' : 'redeven-settings-inset')}>
             <div class="flex items-center gap-3">
               <div class={cn('flex h-10 w-10 items-center justify-center rounded-full', hostOk() ? 'bg-success/15' : 'bg-muted')}>
                 <Code class={cn('h-5 w-5', hostOk() ? 'text-success' : 'text-muted-foreground')} />
@@ -47,7 +47,7 @@ export function CodexSection() {
               </div>
             </div>
           </div>
-          <div class={cn('rounded-xl border p-4', bridgeOk() ? 'border-success/30 bg-success/5' : 'border-border/50 bg-background')}>
+          <div class={cn('rounded-xl border p-4', bridgeOk() ? 'border-success/30 bg-success/5' : 'redeven-settings-inset')}>
             <div class="flex items-center gap-3">
               <div class={cn('flex h-10 w-10 items-center justify-center rounded-full', bridgeOk() ? 'bg-success/15' : 'bg-muted')}>
                 <Link class={cn('h-5 w-5', bridgeOk() ? 'text-success' : 'text-muted-foreground')} />
@@ -64,7 +64,7 @@ export function CodexSection() {
       </Show>
 
       <Show when={loaded() && !hostOk()}>
-        <div class="flex items-center gap-3 rounded-xl border border-border/50 bg-muted/20 p-4">
+        <div class="redeven-settings-inset flex items-center gap-3 rounded-xl border p-4">
           <Code class="h-5 w-5 text-muted-foreground" />
           <div class="text-sm text-muted-foreground">{i18n.t('codexSettings.installNotice')}</div>
         </div>
@@ -80,7 +80,7 @@ export function CodexSection() {
           技术详情
         </button>
         <Show when={showDetails()}>
-          <div class="mt-2 rounded-lg border border-border/40 bg-muted/20 px-4 py-3 space-y-2.5">
+          <div class="redeven-settings-inset mt-2 space-y-2.5 rounded-lg border px-4 py-3">
             <div class="flex min-w-0 items-start gap-2">
               <Code class="mt-0.5 h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" />
               <div class="min-w-0">

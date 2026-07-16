@@ -113,7 +113,7 @@ export function RuntimeStatusSection() {
     >
       {/* Metric cards */}
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div class={cn('rounded-xl border p-4', statusOnline() ? 'border-success/30 bg-success/5' : 'border-border/50 bg-background')}>
+        <div class={cn('rounded-xl border p-4', statusOnline() ? 'border-success/30 bg-success/5' : 'redeven-settings-inset')}>
           <div class="flex items-center gap-2.5 mb-1">
             <span class={cn('flex h-8 w-8 items-center justify-center rounded-lg', statusOnline() ? 'bg-success/15 text-success' : 'bg-muted text-muted-foreground')}>
               <Activity class="h-4 w-4" />
@@ -122,7 +122,7 @@ export function RuntimeStatusSection() {
           </div>
           <div class="text-[11px] text-muted-foreground">运行状态</div>
         </div>
-        <div class="rounded-xl border border-border/50 bg-background p-4">
+        <div class="redeven-settings-inset rounded-xl border p-4">
           <div class="mb-1 flex items-center gap-2.5">
             <span class="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
               <Cpu class="h-4 w-4" />
@@ -131,7 +131,7 @@ export function RuntimeStatusSection() {
           </div>
           <div class="text-[11px] text-muted-foreground">{i18n.t('runtimeStatus.currentVersion')}</div>
         </div>
-        <div class={cn('rounded-xl border p-4', compatOk() ? 'border-success/30 bg-success/5' : 'border-border/50 bg-background')}>
+        <div class={cn('rounded-xl border p-4', compatOk() ? 'border-success/30 bg-success/5' : 'redeven-settings-inset')}>
           <div class="flex items-center gap-2.5 mb-1">
             <span class={cn('flex h-8 w-8 items-center justify-center rounded-lg', compatOk() ? 'bg-success/15 text-success' : 'bg-warning/15 text-warning')}>
               <ShieldCheck class="h-4 w-4" />
@@ -144,7 +144,7 @@ export function RuntimeStatusSection() {
 
       {/* Detail groups */}
       <div class="mt-5 space-y-4">
-        <div class="rounded-xl border border-border/50 bg-background px-4 py-3">
+        <div class="redeven-settings-inset rounded-xl border px-4 py-3">
           <div class="mb-3 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
             <Cpu class="h-3.5 w-3.5" />
             <span>{i18n.t('runtimeStatus.currentVersion')}</span>
@@ -165,7 +165,7 @@ export function RuntimeStatusSection() {
           </div>
         </div>
 
-        <div class="rounded-xl border border-border/50 bg-background px-4 py-3">
+        <div class="redeven-settings-inset rounded-xl border px-4 py-3">
           <div class="mb-3 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
             <Activity class="h-3.5 w-3.5" />
             <span>负载与兼容性</span>
@@ -204,7 +204,7 @@ export function RuntimeStatusSection() {
       </Show>
 
       {/* Status messages */}
-      <div class="mt-4 pt-4 border-t border-border/20 space-y-1.5">
+      <div class="mt-4 space-y-1.5 border-t border-[var(--redeven-settings-divider)] pt-4">
         <Show when={ctx.upgradeState().requiresTargetVersion && ctx.targetUpgradeVersion() && !ctx.targetUpgradeVersionValid()}>
           <div class="text-[11px] text-destructive">{i18n.t('runtimeStatus.validReleaseTagHint')}</div>
         </Show>

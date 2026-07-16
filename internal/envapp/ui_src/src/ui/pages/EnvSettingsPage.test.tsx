@@ -401,6 +401,7 @@ vi.mock('./settings/SettingsPrimitives', () => ({
       ))}
     </div>
   ),
+  SettingsList: (props: any) => <div>{props.children}</div>,
   SettingsPill: (props: any) => <span>{props.children}</span>,
   SettingRow: (props: any) => (
     <div>
@@ -508,6 +509,8 @@ describe('EnvSettingsPage', () => {
       .map((node) => node.textContent?.trim() ?? '')
       .filter((label) => navLabels.includes(label));
     expect(renderedNavLabels).toEqual(navLabels);
+    expect(host.querySelector('[data-settings-nav-item="config"]')?.getAttribute('aria-current')).toBe('page');
+    expect(host.querySelector('[data-settings-nav-item="connection"]')?.hasAttribute('aria-current')).toBe(false);
 
     expect(host.querySelector('[data-settings-card="Config File"]')).toBeTruthy();
     expect(host.textContent).not.toContain('Language preference');
@@ -536,6 +539,8 @@ describe('EnvSettingsPage', () => {
 
     await openSettingsSection(host, 'codespaces');
     expect(host.querySelector('[data-settings-card="Browser Editor"]')).toBeTruthy();
+    expect(host.querySelector('[data-settings-nav-item="codespaces"]')?.getAttribute('aria-current')).toBe('page');
+    expect(host.querySelector('[data-settings-nav-item="config"]')?.hasAttribute('aria-current')).toBe(false);
   });
 
   it('opens Runtime Settings on the existing Config File section by default', async () => {

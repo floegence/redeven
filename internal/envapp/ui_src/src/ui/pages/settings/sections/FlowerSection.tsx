@@ -9,7 +9,6 @@ import { SettingsSection, AutoSaveIndicator, SubSectionHeader, DotIndicator } fr
 import { AIProviderDialog } from '../AIProviderDialog';
 import { ProviderBrandIcon } from '../ProviderBrandIcon';
 import { localizedProviderBuiltInWebSearchLabel } from '../providerWebSearchI18n';
-import { redevenSurfaceRoleClass } from '../../../utils/redevenSurfaceRoles';
 import { formatUnknownError } from '../../../maintenance/shared';
 import { normalizeFlowerReasoningCapability, serializeFlowerReasoningSelection } from '../../../../../../../flower_ui/src/reasoning';
 import {
@@ -293,9 +292,9 @@ export function FlowerSection() {
           badge={desktopModelSource()?.available ? i18n.t('flowerSettings.activeBadge') : i18n.t('flowerSettings.desktopModelSourceNeedsAttention')}
           badgeVariant={desktopModelSource()?.available ? 'success' : 'warning'}
         >
-          <div class="rounded-xl border border-primary/20 bg-primary/5 p-5">
+          <div class="redeven-settings-choice redeven-settings-choice--selected rounded-xl border p-5">
             <div class="flex items-start gap-4">
-              <div class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-background border border-border/50">
+              <div class="redeven-settings-inset flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl border">
                 <Zap class="h-6 w-6 text-primary" />
               </div>
               <div class="min-w-0 flex-1">
@@ -328,10 +327,10 @@ export function FlowerSection() {
         </>}
       >
         {/* Hero: Current model */}
-        <div class="rounded-xl border border-primary/20 bg-primary/5 p-5">
+        <div class="redeven-settings-choice redeven-settings-choice--selected rounded-xl border p-5">
           <div class="text-[11px] font-medium text-muted-foreground mb-3 uppercase tracking-wider">{i18n.t('flowerSettings.currentModelTitle')}</div>
           <div class="flex items-center gap-4">
-            <div class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-background border border-border/50">
+            <div class="redeven-settings-inset flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl border">
               <Show when={aiCurrentModelOption()} fallback={<Bot class="h-6 w-6 text-muted-foreground" />}>
                 <ProviderBrandIcon type={providers().find((p) => currentModelID().startsWith(String(p.id ?? '').trim() + '/'))?.type ?? 'openai'} class="h-6 w-6" />
               </Show>
@@ -359,7 +358,7 @@ export function FlowerSection() {
               {(kind) => {
                 const copy = () => permissionTypeCopy(i18n, kind);
                 return (
-                  <button ref={(el) => { permissionButtonRefs.set(kind, el); }} type="button" class={cn('group flex cursor-pointer flex-col gap-2 rounded-xl border px-4 py-3.5 text-left transition-all', redevenSurfaceRoleClass('panel'), permissionType() === kind && 'border-primary/70 bg-primary/5', !ctx.canInteract() && 'cursor-not-allowed opacity-50')}
+                  <button ref={(el) => { permissionButtonRefs.set(kind, el); }} type="button" class={cn('redeven-settings-choice group flex cursor-pointer flex-col gap-2 rounded-xl border px-4 py-3.5 text-left', permissionType() === kind && 'redeven-settings-choice--selected', !ctx.canInteract() && 'cursor-not-allowed opacity-50')}
                     role="radio" aria-checked={permissionType() === kind}
                     tabIndex={permissionType() === kind ? 0 : -1}
                     onKeyDown={onPermissionTypeKeyDown}
@@ -395,7 +394,7 @@ export function FlowerSection() {
               const isDef = () => currentModelID().startsWith(`${pid()}/`); const keyOk = () => providerKeySet()?.[pid()];
               const wss = () => providerWebSearchSummary(provider, i18n);
               return (
-                <div class={cn('rounded-xl border bg-background p-4 transition-all', redevenSurfaceRoleClass('panel'), isDef() && 'border-l-[3px] border-l-primary pl-[13px]')}>
+                <div class={cn('redeven-settings-choice rounded-xl border p-4', isDef() && 'redeven-settings-choice--selected')}>
                   <div class="flex items-start gap-3">
                     <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-muted"><ProviderBrandIcon type={provider.type} class="h-5 w-5" /></div>
                     <div class="min-w-0 flex-1">
@@ -403,7 +402,7 @@ export function FlowerSection() {
                         <div class="flex items-center gap-2 min-w-0">
                           <span class="text-sm font-semibold text-foreground truncate">{dn()}</span>
                           <span class="text-[11px] text-muted-foreground">{localizedProviderTypeLabel(provider.type, i18n.locale())}</span>
-                          <Show when={isDef()}><span class="flex-shrink-0 rounded-full bg-primary/15 px-1.5 py-px text-[10px] font-medium text-primary">{i18n.t('flowerSettings.activeProviderBadge')}</span></Show>
+                          <Show when={isDef()}><span class="flex-shrink-0 rounded-full bg-[var(--redeven-settings-selection-bg)] px-1.5 py-px text-[10px] font-medium text-[var(--redeven-settings-selection-fg)]">{i18n.t('flowerSettings.activeProviderBadge')}</span></Show>
                         </div>
                         <div class="flex items-center flex-shrink-0">
                           <Button size="icon" variant="ghost" class="h-7 w-7 text-muted-foreground hover:text-foreground" onClick={() => openAIProviderDialog(index())} disabled={!ctx.canInteract()} aria-label={i18n.t('flowerSettings.editProvider')}><Pencil class="h-3.5 w-3.5" /></Button>

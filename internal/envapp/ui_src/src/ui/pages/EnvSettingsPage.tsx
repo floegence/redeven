@@ -161,7 +161,7 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
                 value={ctx.searchQuery()}
                 onInput={(e) => ctx.setSearchQuery(e.currentTarget.value)}
                 placeholder={i18n.t('settings.searchPlaceholder')}
-                class="redeven-settings-search w-full rounded-md border py-1.5 pl-8 pr-7 text-xs placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                class="redeven-settings-search w-full rounded-md border py-1.5 pl-8 pr-7 text-xs placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-[color-mix(in_srgb,var(--redeven-settings-selection-indicator)_24%,transparent)]"
               />
               <Show when={ctx.searchQuery()}>
                 <button
@@ -200,15 +200,16 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
                             <button
                               type="button"
                               class={cn(
-                                'redeven-settings-nav-item w-full flex items-center gap-2.5 px-3 py-1.5 text-left text-xs transition-colors cursor-pointer',
+                                'redeven-settings-nav-item w-full flex items-center gap-2.5 border-r-2 px-3 py-1.5 text-left text-xs transition-colors cursor-pointer',
                                 isActive()
-                                  ? 'bg-primary/10 text-primary font-medium border-r-2 border-primary'
-                                  : 'text-muted-foreground hover:bg-muted/50 hover:text-foreground border-r-2 border-transparent',
+                                  ? 'redeven-settings-nav-item--active font-medium'
+                                  : 'redeven-settings-note border-transparent',
                               )}
                               onClick={() => sectionSelection.request(item.id)}
+                              aria-current={isActive() ? 'page' : undefined}
                               data-settings-nav-item={item.id}
                             >
-                              <Icon class={cn('h-3.5 w-3.5 shrink-0', isActive() ? 'text-primary' : 'text-muted-foreground')} />
+                              <Icon class="h-3.5 w-3.5 shrink-0" />
                               <span class="truncate">{item.label}</span>
                             </button>
                           );
