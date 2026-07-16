@@ -59,10 +59,15 @@ func startRuntimeProcessHelper(
 ) *exec.Cmd {
 	t.Helper()
 	command := exec.Command(executable, "run", "--mode", "desktop", "--desktop-managed", "--state-root", stateRoot)
-	command.Env = append(os.Environ(),
-		"REDEVEN_TEST_READY_FILE="+readyFile,
-		desktopOwnerIDEnvName+"="+ownerID,
-	)
+	for _, entry := range os.Environ() {
+		if !strings.HasPrefix(entry, desktopOwnerIDEnvName+"=") {
+			command.Env = append(command.Env, entry)
+		}
+	}
+	command.Env = append(command.Env, "REDEVEN_TEST_READY_FILE="+readyFile)
+	if ownerID != "" {
+		command.Env = append(command.Env, desktopOwnerIDEnvName+"="+ownerID)
+	}
 	if err := command.Start(); err != nil {
 		t.Fatal(err)
 	}
@@ -123,7 +128,7 @@ func TestRuntimeProcessInventoryRequiresConfirmationForOwnerlessCurrentProcess(t
 	runtimeRoot := filepath.Join(root, ".redeven")
 	executable := filepath.Join(runtimeRoot, "runtime", "managed", "bin", "redeven")
 	buildRuntimeProcessHelper(t, executable)
-	current := startRuntimeProcessHelper(t, executable, runtimeRoot, "desktop-owner", filepath.Join(root, "current.ready"))
+	current := startRuntimeProcessHelper(t, executable, runtimeRoot, "", filepath.Join(root, "current.ready"))
 	ownerless := startRuntimeProcessHelper(t, executable, runtimeRoot, "", filepath.Join(root, "ownerless.ready"))
 	writeRuntimeProcessLock(t, runtimeRoot, current.Process.Pid, "desktop-owner")
 	if err := os.RemoveAll(filepath.Join(runtimeRoot, "local-environment")); err != nil {
@@ -146,8 +151,9 @@ func TestRuntimeProcessInventoryRequiresConfirmationForOwnerlessCurrentProcess(t
 	if inventory.Summary.Automatic != 0 || inventory.Summary.ConfirmedTakeover != 2 || inventory.Summary.Blocked != 0 {
 		t.Fatalf("summary = %#v", inventory.Summary)
 	}
-	if _, err := StopRuntimeProcesses(context.Background(), options, inventory.InventoryDigest, 2*time.Second); RuntimeProcessErrorCode(err) != RuntimeProcessErrorTakeoverRequired {
-		t.Fatalf("automatic stop error = %v", err)
+	automaticResult, err := StopRuntimeProcesses(context.Background(), options, inventory.InventoryDigest, 2*time.Second)
+	if RuntimeProcessErrorCode(err) != RuntimeProcessErrorTakeoverRequired {
+		t.Fatalf("automatic stop error = %v, initial = %#v, observed = %#v", err, inventory, automaticResult.Before)
 	}
 	result, err := StopRuntimeProcessesWithMode(
 		context.Background(),
