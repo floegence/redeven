@@ -855,11 +855,10 @@ export function EnvAppShell() {
     debugConsole.show(options);
   };
 
+  const pluginInventorySource = () => __REDEVEN_PLUGIN_UI_ENABLED__ && pluginsPanelOpen();
   const [pluginInventoryProjection, { refetch: refetchPluginInventory }] = createResource(
-    pluginsPanelOpen,
-    async (open) => (open
-      ? (await import('./plugins/pluginApi')).loadPluginInventoryProjection()
-      : { items: [] }),
+    pluginInventorySource,
+    async () => (await import('./plugins/pluginApi')).loadPluginInventoryProjection(),
   );
 
   const pluginPanelModel = createMemo(() => buildPluginPanelModel(
@@ -869,6 +868,7 @@ export function EnvAppShell() {
   ));
 
   const openPluginCenter = (selectedPluginID?: string) => {
+    if (!__REDEVEN_PLUGIN_UI_ENABLED__) return;
     setPluginsPanelOpen(false);
     setActivePluginSurface(null);
     setPluginCenterSelectedPluginID(selectedPluginID);
@@ -887,6 +887,7 @@ export function EnvAppShell() {
   };
 
   const openPluginSurface = async (target: PluginSurfaceLaunchTarget) => {
+    if (!__REDEVEN_PLUGIN_UI_ENABLED__) return;
     setPluginsPanelOpen(false);
     setPluginCenterSelectedPluginID(undefined);
     try {
@@ -907,6 +908,7 @@ export function EnvAppShell() {
   };
 
   const handlePluginCenterCommand = async (command: PluginLifecycleCommand) => {
+    if (!__REDEVEN_PLUGIN_UI_ENABLED__) return;
     if (command.type === 'open_surface') {
       await openPluginSurface({
         pluginInstanceID: command.pluginInstanceID,
@@ -2253,37 +2255,39 @@ export function EnvAppShell() {
       component: () => <CodexActivitySurface sidebarHost={codexSidebarHost} />,
       sidebar: { order: 7, fullScreen: false, renderIn: 'main' },
     });
-    list.push({
-      id: PLUGIN_CENTER_ACTIVITY_ID,
-      name: 'Plugin Center',
-      icon: Grid3x3,
-      component: () => (
-        <PluginCenterView
-          selectedPluginID={pluginCenterSelectedPluginID()}
-          canManagePlugins={protocol.status() === 'connected' && canAdmin()}
-          canOpenPluginSurfaces={protocol.status() === 'connected' && canAdmin()}
-          onCommand={handlePluginCenterCommand}
-          onClose={closePluginCenter}
-        />
-      ),
-      sidebar: { order: 98, fullScreen: true },
-    });
-    list.push({
-      id: PLUGIN_SURFACE_ACTIVITY_ID,
-      name: 'Plugin Surface',
-      icon: Grid3x3,
-      component: () => {
-        const surface = activePluginSurface();
-        return surface ? (
-          <PluginSurfaceFrame surface={surface} onClose={closePluginSurface} />
-        ) : (
-          <div data-plugin-surface-empty class="flex h-full items-center justify-center text-sm text-muted-foreground">
-                      {i18n.t('uiCopy.shell.noPluginSurface')}
-          </div>
-        );
-      },
-      sidebar: { order: 99, fullScreen: true },
-    });
+    if (__REDEVEN_PLUGIN_UI_ENABLED__) {
+      list.push({
+        id: PLUGIN_CENTER_ACTIVITY_ID,
+        name: 'Plugin Center',
+        icon: Grid3x3,
+        component: () => (
+          <PluginCenterView
+            selectedPluginID={pluginCenterSelectedPluginID()}
+            canManagePlugins={protocol.status() === 'connected' && canAdmin()}
+            canOpenPluginSurfaces={protocol.status() === 'connected' && canAdmin()}
+            onCommand={handlePluginCenterCommand}
+            onClose={closePluginCenter}
+          />
+        ),
+        sidebar: { order: 98, fullScreen: true },
+      });
+      list.push({
+        id: PLUGIN_SURFACE_ACTIVITY_ID,
+        name: 'Plugin Surface',
+        icon: Grid3x3,
+        component: () => {
+          const surface = activePluginSurface();
+          return surface ? (
+            <PluginSurfaceFrame surface={surface} onClose={closePluginSurface} />
+          ) : (
+            <div data-plugin-surface-empty class="flex h-full items-center justify-center text-sm text-muted-foreground">
+              {i18n.t('uiCopy.shell.noPluginSurface')}
+            </div>
+          );
+        },
+        sidebar: { order: 99, fullScreen: true },
+      });
+    }
     list.push({ id: 'settings', name: i18n.t('shell.nav.runtimeSettings'), icon: Settings, component: EnvSettingsPage, sidebar: { order: 100, fullScreen: true } });
     return list;
   });
@@ -2517,7 +2521,9 @@ export function EnvAppShell() {
         : { id: 'files', icon: ActivityBarFolderIcon, label: i18n.t('shell.nav.fileBrowser'), collapseBehavior: 'preserve' },
       { id: 'codespaces', icon: ActivityBarCodespacesIcon, label: i18n.t('shell.nav.codespaces'), collapseBehavior: 'preserve' },
       { id: 'ports', icon: ActivityBarPortsIcon, label: i18n.t('shell.nav.webServices'), collapseBehavior: 'preserve' },
-      {
+    );
+    if (__REDEVEN_PLUGIN_UI_ENABLED__) {
+      items.push({
         id: 'plugins',
         icon: Grid3x3,
         label: i18n.t('uiCopy.plugin.panelTitle'),
@@ -2526,8 +2532,8 @@ export function EnvAppShell() {
           setPluginsPanelOpen((open) => !open);
           void refetchPluginInventory();
         },
-      },
-    );
+      });
+    }
     if (canUseFlower()) {
       items.push({
         id: 'ai',
@@ -3336,7 +3342,7 @@ export function EnvAppShell() {
       <Show when={fileBrowserSurfaceHostRequested()}>
         <FileBrowserSurfaceHost />
       </Show>
-      <Show when={pluginsPanelOpen()}>
+      <Show when={__REDEVEN_PLUGIN_UI_ENABLED__ && pluginsPanelOpen()}>
         <PluginPanel
           open
           model={pluginPanelModel()}

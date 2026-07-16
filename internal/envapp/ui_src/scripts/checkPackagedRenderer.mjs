@@ -20,6 +20,16 @@ function parseReportPath(args) {
   return path.resolve(value);
 }
 
+function parsePluginEntryExpectation(args) {
+  const index = args.indexOf('--expect-plugin-entry');
+  if (index === -1) return 'hidden';
+  const value = String(args[index + 1] ?? '').trim();
+  if (value !== 'hidden' && value !== 'visible') {
+    throw new Error('--expect-plugin-entry requires hidden or visible');
+  }
+  return value;
+}
+
 function contentType(filePath) {
   switch (path.extname(filePath).toLowerCase()) {
     case '.css': return 'text/css; charset=utf-8';
@@ -59,6 +69,10 @@ async function createBuiltDistServer() {
           effective_run_mode: 'local',
           direct_ws_url: baseURL.replace(/^http/, 'ws') + '_redeven_direct/ws',
         });
+        return;
+      }
+      if (requestURL.pathname === '/_redeven_proxy/api/plugins/catalog') {
+        jsonResponse(response, { plugins: [] });
         return;
       }
 
@@ -109,7 +123,9 @@ async function createBuiltDistServer() {
 }
 
 async function main() {
-  const reportPath = parseReportPath(process.argv.slice(2));
+  const args = process.argv.slice(2);
+  const reportPath = parseReportPath(args);
+  const pluginEntryExpectation = parsePluginEntryExpectation(args);
   const indexHTML = await readFile(path.join(distDir, 'index.html'), 'utf8');
   const initialAssetPaths = Array.from(indexHTML.matchAll(/(?:src|href)="(\/_redeven_proxy\/env\/assets\/[^"]+)"/g))
     .map((match) => match[1]);
@@ -128,11 +144,15 @@ async function main() {
   const server = await createBuiltDistServer();
   const browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  await page.addInitScript(() => {
+    globalThis.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+  });
   const consoleProblems = [];
   const pageErrors = [];
   const requestFailures = [];
   const badResponses = [];
   const loadedAssets = new Map();
+  const pluginRequests = [];
 
   page.on('console', (message) => {
     if (message.type() === 'error' || message.type() === 'warning') {
@@ -145,6 +165,12 @@ async function main() {
       path: new URL(request.url()).pathname,
       error: request.failure()?.errorText ?? 'request failed',
     });
+  });
+  page.on('request', (request) => {
+    const requestPath = new URL(request.url()).pathname;
+    if (requestPath.startsWith('/_redeven_proxy/api/plugins')) {
+      pluginRequests.push({ method: request.method(), path: requestPath });
+    }
   });
   page.on('response', (response) => {
     const responseURL = new URL(response.url());
@@ -172,6 +198,35 @@ async function main() {
     }));
     if (rootSnapshot.childElementCount === 0 || rootSnapshot.textLength === 0) {
       throw new Error(`built Env App root is blank: ${JSON.stringify(rootSnapshot)}`);
+    }
+
+    const pluginEntry = page.getByRole('button', { name: 'Plugins', exact: true });
+    const pluginEntryCount = await pluginEntry.count();
+    let pluginPanelTileCount = 0;
+    if (pluginEntryExpectation === 'visible') {
+      if (pluginEntryCount !== 1) {
+        throw new Error(`development Plugin entry count = ${pluginEntryCount}, expected 1`);
+      }
+      await pluginEntry.click();
+      const pluginCenterTile = page.locator('[data-plugin-panel-tile="plugin-center"]');
+      await pluginCenterTile.waitFor({ state: 'visible', timeout: 10_000 });
+      pluginPanelTileCount = await pluginCenterTile.count();
+    } else {
+      if (pluginEntryCount !== 0) {
+        throw new Error(`production Plugin entry count = ${pluginEntryCount}, expected 0`);
+      }
+      const exposedPluginSurfaceCount = await page.locator([
+        '[data-plugin-panel-tile]',
+        '[data-plugin-center-view]',
+        '[data-plugin-surface-host]',
+        '[data-plugin-surface-empty]',
+      ].join(',')).count();
+      if (exposedPluginSurfaceCount !== 0) {
+        throw new Error(`production Plugin surface count = ${exposedPluginSurfaceCount}, expected 0`);
+      }
+      if (pluginRequests.length !== 0) {
+        throw new Error(`production Plugin request count = ${pluginRequests.length}, expected 0`);
+      }
     }
 
     const overlayCount = await page.locator([
@@ -214,6 +269,12 @@ async function main() {
       title,
       root: rootSnapshot,
       framework_overlay_count: overlayCount,
+      plugin_ui: {
+        expected_entry: pluginEntryExpectation,
+        entry_count: pluginEntryCount,
+        panel_center_tile_count: pluginPanelTileCount,
+        request_count: pluginRequests.length,
+      },
       assets: {
         css: loadedKinds.css.map((value) => path.basename(value)),
         js: loadedKinds.js.map((value) => path.basename(value)),
