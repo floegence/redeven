@@ -30,8 +30,11 @@ func TestRunCLIHelp(t *testing.T) {
 			"Quick start:",
 			"env         Inspect and plan Redeven environment lifecycle operations.",
 			"targets     Inspect Redeven targets for local automation.",
-			"redeven bootstrap --provider-origin https://redeven.test --controlplane https://dev.redeven.test --env-id env_123 --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket",
-			"redeven run --mode local",
+			"Start the Local UI on this device:",
+			"redeven run",
+			"Open http://localhost:23998 in your browser.",
+			"No bootstrap or control-plane configuration is required.",
+			"Local UI stays on loopback and is available only from this device.",
 		)
 	})
 
@@ -46,9 +49,13 @@ func TestRunCLIHelp(t *testing.T) {
 		assertContainsAll(t, stdout,
 			"redeven run",
 			"Modes:",
+			"local     Start the Local UI only. No bootstrap is required. This is the default.",
 			"Local Environment state rules:",
 			"Local UI bind rules:",
 			"Always start the Local UI. Connect to the control plane only when bootstrap config is already valid.",
+			"Run mode (default: local).",
+			"run `redeven bootstrap` once, then use `redeven run --mode hybrid`.",
+			"pass --mode hybrid, --provider-origin, --controlplane, --env-id, and a one-time bootstrap ticket",
 			"--state-root <path>",
 			"--presentation <auto|rich|plain|machine>",
 			"Accepted examples: localhost:23998, 127.0.0.1:24000, 127.42.0.9:24000, 127.0.0.1:0, [::1]:24000",
@@ -153,7 +160,7 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		assertContainsAll(t, stderr,
 			"unknown flag for `redeven run`: --local-ui-port",
 			"Hint: `--local-ui-port` was replaced by `--local-ui-bind <host:port>`.",
-			"Example: redeven run --mode hybrid --local-ui-bind 127.0.0.1:24000",
+			"Example: redeven run --local-ui-bind 127.0.0.1:24000",
 		)
 	})
 
@@ -230,7 +237,7 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		assertContainsAll(t, stderr,
 			"invalid value for `--mode`: bad",
 			"Allowed values: remote, hybrid, local, desktop.",
-			"Example: redeven run --mode hybrid",
+			"Example: redeven run --mode local",
 		)
 	})
 
@@ -242,7 +249,7 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		assertContainsAll(t, stderr,
 			"invalid value for `--presentation`: cinematic",
 			"Allowed values: auto, rich, plain, machine.",
-			"Example: redeven run --mode hybrid --presentation rich",
+			"Example: redeven run --presentation rich",
 		)
 	})
 
@@ -457,6 +464,17 @@ func TestResolveRunStateLayoutUsesLocalEnvironmentLayoutForInlineBootstrap(t *te
 	}
 	if layout.ConfigPath != filepath.Join(stateRoot, "local-environment", "config.json") {
 		t.Fatalf("ConfigPath = %q", layout.ConfigPath)
+	}
+}
+
+func TestDefaultRunModeIsLocal(t *testing.T) {
+	if defaultRunMode != runModeLocal {
+		t.Fatalf("defaultRunMode = %q, want %q", defaultRunMode, runModeLocal)
+	}
+
+	policy := resolveRuntimeLaunchPolicy(defaultRunMode, false, true)
+	if !policy.localUIEnabled || policy.controlChannelEnabled || policy.effectiveRunMode != runModeLocal || policy.remoteEnabled {
+		t.Fatalf("default run policy = %#v, want local-only", policy)
 	}
 }
 

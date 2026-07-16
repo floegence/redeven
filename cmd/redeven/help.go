@@ -15,7 +15,7 @@ const (
 )
 
 func rootHelpText() string {
-	return strings.TrimLeft(fmt.Sprintf(`
+	return strings.TrimLeft(`
 redeven
 
 Redeven runtime and Local UI launcher.
@@ -45,21 +45,15 @@ Commands:
   help        Show detailed help and startup examples.
 
 Quick start:
-  Bind the Local Environment once, then run:
-    redeven bootstrap --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket
-    redeven run --mode hybrid
+  Start the Local UI on this device:
+    redeven run
 
-  Local-only mode on this device:
-    redeven run --mode local
-
-  Access this Local Environment from another device:
-    Use Redeven Desktop, SSH port forwarding, or a Flowersec secure tunnel.
-
-  One-shot Local Environment rebind without a separate bootstrap step:
-    redeven run --mode hybrid --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket
+  Open http://localhost:23998 in your browser.
+  No bootstrap or control-plane configuration is required.
+  Local UI stays on loopback and is available only from this device.
 
 Run redeven help <command> for detailed usage.
-`, exampleProviderOrigin, exampleControlplaneURL, exampleEnvID), "\n")
+`, "\n")
 }
 
 func desktopBridgeHelpText() string {
@@ -246,12 +240,12 @@ Usage:
 Modes:
   remote    Connect to the control plane only. No Local UI is started.
   hybrid    Connect to the control plane and start the Local UI.
-  local     Start the Local UI only. No bootstrap is required.
+  local     Start the Local UI only. No bootstrap is required. This is the default.
   desktop   Always start the Local UI. Connect to the control plane only when bootstrap config is already valid.
 
 Bootstrap rules:
   - Recommended flow: run %[4]s once, then use %[5]s.
-  - One-shot flow: pass --provider-origin, --controlplane, --env-id, and a one-time bootstrap ticket to %[5]s.
+  - One-shot flow: pass --mode hybrid, --provider-origin, --controlplane, --env-id, and a one-time bootstrap ticket to %[6]s.
 
 Local Environment state rules:
   - Redeven uses one Local Environment state at ~/.redeven/local-environment.
@@ -278,7 +272,7 @@ Rich terminal controls:
 
 Flags:
   --mode <remote|hybrid|local|desktop>
-                                    Run mode (default: remote).
+                                    Run mode (default: local).
   --local-ui-bind <host:port>       Local UI bind address (default: localhost:23998).
   --provider-origin <url>           Provider authority origin for one-shot bootstrap.
   --controlplane <url>              Access point controlplane base URL for one-shot bootstrap.
@@ -297,20 +291,20 @@ Flags:
                                     Startup presentation (default: auto).
 
 Examples:
+  Local-only mode (default):
+    redeven run
+
+  Local-only mode with a hidden interactive password prompt:
+    redeven run --password-prompt
+
+  Local-only mode with stdin from a protected secret source:
+    redeven run --password-stdin < /run/secrets/redeven-local-ui-password
+
   Remote mode:
     redeven run --mode remote
 
   Hybrid mode after a separate bootstrap:
     redeven run --mode hybrid
-
-  Local-only mode:
-    redeven run --mode local
-
-  Local-only mode with a hidden interactive password prompt:
-    redeven run --mode local --password-prompt
-
-  Local-only mode with stdin from a protected secret source:
-    redeven run --mode local --password-stdin < /run/secrets/redeven-local-ui-password
 
   Desktop shell mode:
     redeven run --mode desktop --desktop-managed --presentation machine --local-ui-bind 127.0.0.1:0
@@ -325,7 +319,7 @@ Environment fallback:
   Secret managers, CI runners, and container orchestrators may inject
   REDEVEN_LOCAL_UI_PASSWORD or REDEVEN_BOOTSTRAP_TICKET directly. Environment
   variables can still be observed by same-user processes, debuggers, and the host platform.
-`, exampleProviderOrigin, exampleControlplaneURL, exampleEnvID, "`redeven bootstrap`", "`redeven run`"), "\n")
+`, exampleProviderOrigin, exampleControlplaneURL, exampleEnvID, "`redeven bootstrap`", "`redeven run --mode hybrid`", "`redeven run`"), "\n")
 }
 
 func searchHelpText() string {
@@ -867,7 +861,7 @@ func translateFlagParseError(commandPath string, err error) (string, []string) {
 		if commandPath == "run" && name == "local-ui-port" {
 			details = append(details,
 				"Hint: `--local-ui-port` was replaced by `--local-ui-bind <host:port>`.",
-				"Example: redeven run --mode hybrid --local-ui-bind 127.0.0.1:24000",
+				"Example: redeven run --local-ui-bind 127.0.0.1:24000",
 			)
 		}
 		return message, details

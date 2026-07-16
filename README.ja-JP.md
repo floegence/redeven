@@ -21,8 +21,8 @@
 
 <p align="center">
   <strong>コンピューターとサーバーを、1 つのブラウザータブに。</strong><br>
-  ターミナル、ファイルブラウザー、IDE、AI を、
-  <br>すべて自分のハードウェア上で動作し、エンドツーエンドで暗号化されます。
+  ターミナル、ファイルブラウザー、IDE、AI のすべてが、
+  <br>自分のハードウェア上で動作し、エンドツーエンドで暗号化されます。
 </p>
 
 <p align="center">
@@ -82,35 +82,15 @@ Redeven は、コンピューターとサーバーを 1 つのブラウザータ
 # 1. インストール
 curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
 
-# 2. ブートストラップ（初回のみ。保護されたシークレットファイルからチケットを読み取る）
-redeven bootstrap \
-  --provider-origin https://<your-provider> \
-  --controlplane https://<your-access-point> \
-  --env-id <env_public_id> \
-  --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket
+# 2. 実行
+redeven run
 
-# 3. 実行
-redeven run --mode hybrid
-
-# 4. ブラウザーで http://localhost:23998 を開く。
+# 3. ブラウザーで http://localhost:23998 を開く。
 ```
 
-ブートストラップは、シークレットを含まないローカル環境メタデータを `~/.redeven/local-environment/config.json` に、ランタイム認証情報を権限制限された `~/.redeven/local-environment/secrets.json` に書き込みます。OS ユーザーごとに 1 つのローカル環境 ID があり、一度に 1 つの provider 環境へ関連付けられます。Desktop とブラウザーのフローは、同じワンタイムチケット契約を使用します。
+初めて `redeven run` を実行すると、`~/.redeven/local-environment/` にローカル状態が初期化され、ローカルモードで起動します。ブートストラップやコントロールプレーンの設定は不要です。Local UI は `localhost:23998` でのみ待ち受け、このデバイスからだけ利用できます。LAN や公開ネットワークからの直接アクセスには対応していません。Ctrl+C でランタイムを停止できます。
 
-対話形式の初回セットアップでは、上記の `--bootstrap-ticket-file ...` を `--bootstrap-ticket-stdin` に置き換えてください。Redeven はチケットをエコーせずに入力を求めます。stdin がパイプまたはリダイレクトの場合、同じフラグがプロンプトを表示せずにチケットを直接読み取ります。
-
-自動化、シークレットマネージャー、CI ランナー、コンテナーオーケストレーターでは、`REDEVEN_BOOTSTRAP_TICKET` と `REDEVEN_LOCAL_UI_PASSWORD` を直接注入できます。環境変数は同一ユーザーのプロセス、デバッガー、ホストプラットフォームから観測できるため、対話利用では非表示プロンプト、stdin、または保護されたシークレットファイルを優先してください。
-
-対話型ターミナルでは、Redeven のリッチなランタイム表示が既定で使われます。コンパクトなアニメーション文字マーク、ランタイムのバージョンとプロトコル詳細、アクティブなセッションとワークロードの件数、Local UI と環境の URL、実際のランタイムログの追尾表示、対処可能な警告およびエラーパネルが表示されます。矢印キーでコントロールプレーン、セッション、ログの間を移動します。セッションで Enter を押すと、絞り込み可能なアクティブセッションビューが開きます。ログで Enter を押すとランタイムログ全体が開き、コントロールプレーンで Enter を押すと接続、切断、またはブートストラップの設定項目が開きます。Esc で戻り、Ctrl+C でランタイムを停止します。非対話型シェルはプレーンテキストにフォールバックし、Desktop 管理の起動ではターミナル UI の代わりに、構造化された起動レポートを持つマシン表示契約を使用します。
-
-**実行モード早見表：**
-
-| 目的 | コマンド |
-|---|---|
-| Local UI のみ（このデバイス） | `redeven run --mode local` |
-| Local UI + リモート制御チャネル | `redeven run --mode hybrid` |
-| Desktop 管理のランタイム | `redeven run --mode desktop --desktop-managed --presentation machine --local-ui-bind localhost:23998` |
-| 別のデバイスからアクセス | Local UI はループバックでのみ待ち受けるようにし、Redeven Desktop、SSH フォワーディング、または Flowersec セキュアトンネルを使用します。 |
+その他の実行モードや任意のローカルパスワード保護については、`redeven help run` を実行してください。
 
 <!-- readme-section:what-you-can-do -->
 <a id="what-you-can-do"></a>

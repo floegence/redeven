@@ -82,35 +82,15 @@ Für entfernte Rechner kann Desktop die passende Redeven-Version automatisch üb
 # 1. Installieren
 curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
 
-# 2. Bootstrap ausführen (einmalig, Ticket aus einer geschützten Secret-Datei lesen)
-redeven bootstrap \
-  --provider-origin https://<your-provider> \
-  --controlplane https://<your-access-point> \
-  --env-id <env_public_id> \
-  --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket
+# 2. Starten
+redeven run
 
-# 3. Starten
-redeven run --mode hybrid
-
-# 4. http://localhost:23998 im Browser öffnen.
+# 3. http://localhost:23998 im Browser öffnen.
 ```
 
-Der Bootstrap schreibt nicht geheime Metadaten der lokalen Umgebung nach `~/.redeven/local-environment/config.json` und Laufzeit-Zugangsdaten in die zugriffsbeschränkte Datei `~/.redeven/local-environment/secrets.json`. Jeder Betriebssystembenutzer besitzt genau eine Identität für die lokale Umgebung, die zu einem Zeitpunkt an genau eine provider-Umgebung gebunden ist. Desktop und Browser verwenden denselben Vertrag für einmalige Tickets.
+Beim ersten Aufruf von `redeven run` wird der lokale Zustand unter `~/.redeven/local-environment/` initialisiert und Redeven im lokalen Modus gestartet. Weder Bootstrap noch eine Konfiguration der Steuerungsebene sind erforderlich. Local UI lauscht ausschließlich auf `localhost:23998` und ist nur auf diesem Gerät verfügbar; ein direkter Zugriff aus dem LAN oder öffentlichen Netz wird nicht unterstützt. Strg+C beendet die Laufzeit.
 
-Ersetze für eine interaktive einmalige Einrichtung die obige Option `--bootstrap-ticket-file ...` durch `--bootstrap-ticket-stdin`. Redeven fragt dann nach dem Ticket, ohne die Eingabe anzuzeigen. Wenn stdin eine Pipe oder Umleitung ist, liest dieselbe Option das Ticket direkt und ohne Eingabeaufforderung.
-
-Automatisierungssysteme, Secret-Manager, CI-Runner und Container-Orchestratoren können `REDEVEN_BOOTSTRAP_TICKET` und `REDEVEN_LOCAL_UI_PASSWORD` direkt bereitstellen. Umgebungsvariablen bleiben für Prozesse desselben Benutzers, Debugger und die Hostplattform sichtbar. Für interaktive Verwendung sind daher verdeckte Eingaben, stdin oder geschützte Secret-Dateien vorzuziehen.
-
-Interaktive Terminals verwenden standardmäßig die umfangreiche Laufzeitdarstellung von Redeven: eine kompakte animierte Zeichenmarke, Laufzeit- und Protokolldetails, die Anzahl aktiver Sitzungen und Workloads, URLs für Local UI und Umgebung, echte Laufzeitprotokolle sowie direkt umsetzbare Warnungs- und Fehlerbereiche. Mit den Pfeiltasten wechselst du zwischen Steuerungsebene, Sitzungen und Logs. Enter auf Sitzungen öffnet eine filterbare Ansicht aktiver Sitzungen, Enter auf Logs erweitert das vollständige Laufzeitprotokoll und Enter auf der Steuerungsebene öffnet Verbinden, Trennen oder die Bootstrap-Einstellungen. Esc führt zurück und Strg+C beendet die Laufzeit. Nicht interaktive Shells verwenden Klartext. Von Desktop verwaltete Starts verwenden statt einer Terminaloberfläche den Maschinen-Darstellungsvertrag mit strukturierten Startberichten.
-
-**Ausführungsmodi auf einen Blick:**
-
-| Ziel | Befehl |
-|---|---|
-| Nur Local UI auf diesem Gerät | `redeven run --mode local` |
-| Local UI und Fernsteuerungskanal | `redeven run --mode hybrid` |
-| Von Desktop verwaltete Laufzeit | `redeven run --mode desktop --desktop-managed --presentation machine --local-ui-bind localhost:23998` |
-| Zugriff von einem anderen Gerät | Local UI auf Loopback belassen und Redeven Desktop, SSH-Weiterleitung oder einen sicheren Flowersec-Tunnel verwenden. |
+Weitere Ausführungsmodi und den optionalen lokalen Passwortschutz beschreibt `redeven help run`.
 
 <!-- readme-section:what-you-can-do -->
 <a id="what-you-can-do"></a>

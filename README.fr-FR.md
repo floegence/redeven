@@ -82,35 +82,15 @@ Pour les machines distantes, Desktop peut installer automatiquement la version c
 # 1. Installer
 curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
 
-# 2. Initialiser une fois, en lisant le ticket depuis un fichier de secret protégé
-redeven bootstrap \
-  --provider-origin https://<your-provider> \
-  --controlplane https://<your-access-point> \
-  --env-id <env_public_id> \
-  --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket
+# 2. Exécuter
+redeven run
 
-# 3. Exécuter
-redeven run --mode hybrid
-
-# 4. Ouvrir http://localhost:23998 dans votre navigateur.
+# 3. Ouvrir http://localhost:23998 dans votre navigateur.
 ```
 
-L'initialisation écrit les métadonnées non secrètes de l'environnement local dans `~/.redeven/local-environment/config.json` et les identifiants de l'environnement d'exécution dans le fichier à accès restreint `~/.redeven/local-environment/secrets.json`. Chaque utilisateur du système d'exploitation possède une identité d'environnement local, liée à un seul environnement provider à la fois. Les parcours Desktop et navigateur utilisent le même contrat de ticket à usage unique.
+Lors de sa première exécution, `redeven run` initialise l'état local dans `~/.redeven/local-environment/` et démarre en mode local. Aucun amorçage ni aucune configuration du plan de contrôle n'est nécessaire. Local UI écoute uniquement sur `localhost:23998` et n'est disponible que depuis cet appareil ; l'accès direct depuis le LAN ou un réseau public n'est pas pris en charge. Ctrl+C arrête l'environnement d'exécution.
 
-Pour une configuration interactive ponctuelle, remplacez l'option `--bootstrap-ticket-file ...` ci-dessus par `--bootstrap-ticket-stdin`. Redeven demande alors le ticket sans l'afficher. Lorsque stdin provient d'un tube ou d'une redirection, la même option lit directement le ticket sans afficher d'invite.
-
-Les systèmes d'automatisation, gestionnaires de secrets, agents CI et orchestrateurs de conteneurs peuvent injecter directement `REDEVEN_BOOTSTRAP_TICKET` et `REDEVEN_LOCAL_UI_PASSWORD`. Les variables d'environnement restent observables par les processus du même utilisateur, les débogueurs et la plateforme hôte. Pour un usage interactif, préférez donc une invite masquée, stdin ou des fichiers de secrets protégés.
-
-Les terminaux interactifs utilisent par défaut la présentation enrichie de l'environnement d'exécution Redeven : une marque animée compacte, les détails de version et de protocole, le nombre de sessions et de charges de travail actives, les URL de Local UI et de l'environnement, le suivi réel des journaux et des panneaux d'avertissement ou d'erreur exploitables. Utilisez les flèches pour passer entre le plan de contrôle, les sessions et les journaux. Appuyez sur Entrée dans Sessions pour ouvrir une vue filtrable des sessions actives, dans Journaux pour développer le journal complet, ou dans Plan de contrôle pour vous connecter, vous déconnecter ou ouvrir les champs d'initialisation. Échap permet de revenir en arrière et Ctrl+C arrête l'environnement d'exécution. Les shells non interactifs reviennent au texte brut. Les démarrages gérés par Desktop utilisent le contrat de présentation machine avec des rapports de démarrage structurés plutôt que l'interface du terminal.
-
-**Modes d'exécution en bref :**
-
-| Objectif | Commande |
-|---|---|
-| Local UI uniquement sur cet appareil | `redeven run --mode local` |
-| Local UI et canal de contrôle distant | `redeven run --mode hybrid` |
-| Environnement d'exécution géré par Desktop | `redeven run --mode desktop --desktop-managed --presentation machine --local-ui-bind localhost:23998` |
-| Accès depuis un autre appareil | Conservez Local UI sur l'adresse de bouclage et utilisez Redeven Desktop, une redirection SSH ou un tunnel sécurisé Flowersec. |
+Pour découvrir les autres modes d'exécution et la protection locale facultative par mot de passe, exécutez `redeven help run`.
 
 <!-- readme-section:what-you-can-do -->
 <a id="what-you-can-do"></a>
