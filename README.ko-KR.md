@@ -82,35 +82,15 @@ Redeven은 컴퓨터와 서버를 하나의 브라우저 탭으로 가져오는 
 # 1. 설치
 curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
 
-# 2. 부트스트랩(최초 한 번, 보호된 시크릿 파일에서 티켓 읽기)
-redeven bootstrap \
-  --provider-origin https://<your-provider> \
-  --controlplane https://<your-access-point> \
-  --env-id <env_public_id> \
-  --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket
+# 2. 실행
+redeven run
 
-# 3. 실행
-redeven run --mode hybrid
-
-# 4. 브라우저에서 http://localhost:23998 열기
+# 3. 브라우저에서 http://localhost:23998 열기
 ```
 
-부트스트랩은 시크릿이 아닌 로컬 환경 메타데이터를 `~/.redeven/local-environment/config.json`에 기록하고, 런타임 자격 증명을 권한이 제한된 `~/.redeven/local-environment/secrets.json`에 기록합니다. OS 사용자마다 하나의 로컬 환경 ID를 가지며 한 번에 하나의 provider 환경에 연결됩니다. Desktop과 브라우저 흐름은 동일한 일회용 티켓 계약을 사용합니다.
+`redeven run`을 처음 실행하면 `~/.redeven/local-environment/`에 로컬 상태를 초기화하고 로컬 모드로 시작합니다. 부트스트랩이나 컨트롤 플레인 설정은 필요하지 않습니다. Local UI는 `localhost:23998`에서만 연결을 수신하므로 이 기기에서만 사용할 수 있습니다. LAN 또는 공용 네트워크를 통한 직접 접근은 지원하지 않습니다. Ctrl+C를 누르면 런타임이 중지됩니다.
 
-대화형 일회성 설정을 사용하려면 위의 `--bootstrap-ticket-file ...`을 `--bootstrap-ticket-stdin`으로 바꾸세요. 그러면 Redeven이 티켓을 화면에 표시하지 않고 입력을 요청합니다. stdin이 파이프나 리디렉션인 경우 동일한 플래그가 프롬프트를 출력하지 않고 티켓을 직접 읽습니다.
-
-자동화, 시크릿 관리자, CI 실행기, 컨테이너 오케스트레이터는 `REDEVEN_BOOTSTRAP_TICKET`과 `REDEVEN_LOCAL_UI_PASSWORD`를 직접 주입할 수 있습니다. 환경 변수는 동일 사용자 프로세스, 디버거, 호스트 플랫폼에서 계속 관찰될 수 있으므로 대화형 사용에서는 숨김 프롬프트, stdin 또는 보호된 시크릿 파일을 우선 사용하세요.
-
-대화형 터미널은 기본적으로 Redeven의 풍부한 런타임 화면을 사용합니다. 간결한 애니메이션 캐릭터 마크, 런타임 버전과 프로토콜 세부 정보, 활성 세션과 워크로드 수, Local UI와 환경 URL, 실제 런타임 로그 추적, 조치 가능한 경고 및 오류 패널을 제공합니다. 화살표 키로 컨트롤 플레인, 세션, 로그 사이를 이동합니다. 세션에서 Enter를 누르면 필터링 가능한 활성 세션 보기가 열리고, 로그에서 Enter를 누르면 전체 런타임 로그가 펼쳐지며, 컨트롤 플레인에서 Enter를 누르면 연결, 연결 해제 또는 부트스트랩 설정 필드를 열 수 있습니다. Esc를 눌러 돌아가고 Ctrl+C로 런타임을 중지합니다. 비대화형 셸은 일반 텍스트로 전환되며, Desktop 관리형 시작은 터미널 UI 대신 구조화된 시작 보고서가 포함된 머신 프레젠테이션 계약을 사용합니다.
-
-**실행 모드 한눈에 보기:**
-
-| 목적 | 명령 |
-|---|---|
-| Local UI만 사용(이 기기) | `redeven run --mode local` |
-| Local UI + 원격 제어 채널 | `redeven run --mode hybrid` |
-| Desktop 관리형 런타임 | `redeven run --mode desktop --desktop-managed --presentation machine --local-ui-bind localhost:23998` |
-| 다른 기기에서 접근 | Local UI를 루프백에 유지하고 Redeven Desktop, SSH 포워딩 또는 Flowersec 보안 터널을 사용합니다. |
+다른 실행 모드와 선택적 로컬 암호 보호에 관한 내용은 `redeven help run`에서 확인할 수 있습니다.
 
 <!-- readme-section:what-you-can-do -->
 <a id="what-you-can-do"></a>

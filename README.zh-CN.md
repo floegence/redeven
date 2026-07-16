@@ -82,35 +82,15 @@ Redeven 是一个单文件二进制程序，可将您的电脑和服务器汇集
 # 1. 安装
 curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
 
-# 2. 引导初始化（仅一次，从受保护的机密文件中读取票据）
-redeven bootstrap \
-  --provider-origin https://<your-provider> \
-  --controlplane https://<your-access-point> \
-  --env-id <env_public_id> \
-  --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket
+# 2. 运行
+redeven run
 
-# 3. 运行
-redeven run --mode hybrid
-
-# 4. 在浏览器中打开 http://localhost:23998。
+# 3. 在浏览器中打开 http://localhost:23998。
 ```
 
-引导初始化会将不含机密信息的本地环境元数据写入 `~/.redeven/local-environment/config.json`，并将运行时凭据写入权限受限的 `~/.redeven/local-environment/secrets.json`。每个操作系统用户拥有一个本地环境身份，并且同一时间只能绑定到一个 provider 环境。Desktop 与浏览器流程使用相同的一次性票据契约。
+首次执行 `redeven run` 会初始化 `~/.redeven/local-environment/` 下的本地状态，并以本地模式启动。无需进行引导初始化或控制平面配置。Local UI 仅监听 `localhost:23998`，只能从当前设备访问；不支持从局域网或公网直接访问。按 Ctrl+C 可停止运行时。
 
-如需交互式的一次性设置，请将上面的 `--bootstrap-ticket-file ...` 替换为 `--bootstrap-ticket-stdin`。Redeven 随后会提示输入票据，并且不会回显。当 stdin 来自管道或重定向时，同一参数会直接读取票据而不显示提示。
-
-对于自动化、机密管理系统、CI 运行器和容器编排器，可以直接注入 `REDEVEN_BOOTSTRAP_TICKET` 和 `REDEVEN_LOCAL_UI_PASSWORD`。环境变量仍可能被同一用户的进程、调试器和主机平台观察到，因此交互式使用时应优先选择隐藏输入、stdin 或受保护的机密文件。
-
-交互式终端默认使用 Redeven 的增强运行时界面：紧凑的动态字符标识、运行时版本和协议详情、活动会话与工作负载数量、Local UI 和环境 URL、实时运行时日志跟踪，以及可直接处理的警告和错误面板。使用方向键在控制平面、会话和日志之间移动；在会话上按 Enter 可打开支持筛选的活动会话视图，在日志上按 Enter 可展开完整运行时日志，在控制平面上按 Enter 可连接、断开或打开引导设置字段；按 Esc 返回，按 Ctrl+C 停止运行时。非交互式 shell 会退回纯文本输出，Desktop 托管的启动则使用机器展示契约和结构化启动报告，而不是终端 UI。
-
-**运行模式速览：**
-
-| 目标 | 命令 |
-|---|---|
-| 仅 Local UI（当前设备） | `redeven run --mode local` |
-| Local UI + 远程控制通道 | `redeven run --mode hybrid` |
-| Desktop 托管运行时 | `redeven run --mode desktop --desktop-managed --presentation machine --local-ui-bind localhost:23998` |
-| 从另一台设备访问 | 保持 Local UI 仅监听回环地址，并使用 Redeven Desktop、SSH 转发或 Flowersec 安全隧道。 |
+如需了解其他运行模式或可选的本地密码保护，请运行 `redeven help run`。
 
 <!-- readme-section:what-you-can-do -->
 <a id="what-you-can-do"></a>

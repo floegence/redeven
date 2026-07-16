@@ -228,7 +228,7 @@ func (c *cli) runCmd(args []string) int {
 	bootstrapTicketFile := fs.String("bootstrap-ticket-file", "", "File path holding the one-time bootstrap ticket")
 	permissionPolicy := fs.String("permission-policy", "", "Local permission policy preset: execute_read (no general shell/process)|read_only|execute_read_write (optional; applies when bootstrapping)")
 	stateRoot := fs.String("state-root", "", "State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven)")
-	modeRaw := fs.String("mode", "remote", "Run mode: remote|hybrid|local|desktop")
+	modeRaw := fs.String("mode", string(defaultRunMode), "Run mode: remote|hybrid|local|desktop")
 	localUIBindRaw := fs.String("local-ui-bind", localui.DefaultBind, "Local UI bind address (default: localhost:23998)")
 	passwordPrompt := fs.Bool("password-prompt", false, "Prompt for the Local UI access password without echo")
 	passwordStdin := fs.Bool("password-stdin", false, "Read the access password from stdin")
@@ -256,7 +256,7 @@ func (c *cli) runCmd(args []string) int {
 			fmt.Sprintf("invalid value for `--presentation`: %s", strings.TrimSpace(*presentationRaw)),
 			[]string{
 				"Allowed values: auto, rich, plain, machine.",
-				"Example: redeven run --mode hybrid --presentation rich",
+				"Example: redeven run --presentation rich",
 			},
 			runHelpText(),
 		)
@@ -270,7 +270,7 @@ func (c *cli) runCmd(args []string) int {
 			fmt.Sprintf("invalid value for `--mode`: %s", strings.TrimSpace(*modeRaw)),
 			[]string{
 				"Allowed values: remote, hybrid, local, desktop.",
-				"Example: redeven run --mode hybrid",
+				"Example: redeven run --mode local",
 			},
 			runHelpText(),
 		)
@@ -733,7 +733,7 @@ func (c *cli) runCmd(args []string) int {
 				desktopLaunchCodeStartupFailed,
 				fmt.Sprintf("failed to start local ui: %v", err),
 				1,
-				"Start Redeven on another local port, for example: redeven run --mode hybrid --local-ui-bind 127.0.0.1:24000",
+				"Start Redeven on another local port, for example: redeven run --local-ui-bind 127.0.0.1:24000",
 			)
 		}
 		localUIBindLabel = srv.ListenLabel()
@@ -930,6 +930,7 @@ const (
 	runModeHybrid  runMode = "hybrid"
 	runModeLocal   runMode = "local"
 	runModeDesktop runMode = "desktop"
+	defaultRunMode runMode = runModeLocal
 )
 
 type runtimeLaunchPolicy struct {

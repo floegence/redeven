@@ -31,8 +31,6 @@
     "E2EE",
     "OKF v0.1",
     "flowersec-go/v0.20.2",
-    "REDEVEN_BOOTSTRAP_TICKET",
-    "REDEVEN_LOCAL_UI_PASSWORD",
     "README.<locale>.md",
     "assets/readme/locales.json"
   ],
@@ -81,11 +79,11 @@
       "file": "README.zh-CN.md",
       "review": {
         "status": "reviewed",
-        "source_sha256": "a9af2b95fa90d81f61f6c6bd8d0da69b9ef4acee4cdbbb4bb06be655113894ba",
-        "content_sha256": "8e431942344566c0db35f722deaba2827a7101d1514c274d3752af09e3719187",
+        "source_sha256": "f1ea12d32cbc69711d6c3f5d8852fdc4527922ae54cf438d585cb7e639a8b993",
+        "content_sha256": "3175ae271e0a778cb6b4c1f89fa5d177bc9de3f0430609bcfd0280e522ed4634",
         "method": "subagent",
-        "reviewed_by": "subagent:readme_review_cjk",
-        "reviewed_at": "2026-07-15"
+        "reviewed_by": "subagent:review_zh_cn",
+        "reviewed_at": "2026-07-16"
       }
     },
     {
@@ -95,11 +93,11 @@
       "file": "README.zh-TW.md",
       "review": {
         "status": "reviewed",
-        "source_sha256": "a9af2b95fa90d81f61f6c6bd8d0da69b9ef4acee4cdbbb4bb06be655113894ba",
-        "content_sha256": "3aa772f78af96db2540b6d52c01078bed2fe7c2ff4b71121e0ebe2b9494773fd",
+        "source_sha256": "f1ea12d32cbc69711d6c3f5d8852fdc4527922ae54cf438d585cb7e639a8b993",
+        "content_sha256": "301f11be9ace0bfe800704f1c0e68f52efd2e40b810acaaec5aa74696e6c9cd2",
         "method": "subagent",
-        "reviewed_by": "subagent:readme_review_cjk",
-        "reviewed_at": "2026-07-15"
+        "reviewed_by": "subagent:review_zh_tw",
+        "reviewed_at": "2026-07-16"
       }
     },
     {
@@ -109,11 +107,11 @@
       "file": "README.ja-JP.md",
       "review": {
         "status": "reviewed",
-        "source_sha256": "a9af2b95fa90d81f61f6c6bd8d0da69b9ef4acee4cdbbb4bb06be655113894ba",
-        "content_sha256": "143f15bb44743d155147beb5d4ab8089002d12bd3b0a7a18a19101558134df53",
+        "source_sha256": "f1ea12d32cbc69711d6c3f5d8852fdc4527922ae54cf438d585cb7e639a8b993",
+        "content_sha256": "fa0d4668e15ac7d5bc9069e9b84995735494668d34595a8e585b02e3008d3063",
         "method": "subagent",
-        "reviewed_by": "subagent:readme_review_cjk",
-        "reviewed_at": "2026-07-15"
+        "reviewed_by": "subagent:review_ja_jp",
+        "reviewed_at": "2026-07-16"
       }
     },
     {
@@ -123,11 +121,11 @@
       "file": "README.ko-KR.md",
       "review": {
         "status": "reviewed",
-        "source_sha256": "a9af2b95fa90d81f61f6c6bd8d0da69b9ef4acee4cdbbb4bb06be655113894ba",
-        "content_sha256": "dce37a564f500064ef5ae68b889e72e91ee48cdfec06a1555fd18b0789d6cbf3",
+        "source_sha256": "f1ea12d32cbc69711d6c3f5d8852fdc4527922ae54cf438d585cb7e639a8b993",
+        "content_sha256": "a12ca225214af3876bcd00a02f7d4b41591d17d82cf1ee849874eb1acbd792ca",
         "method": "subagent",
-        "reviewed_by": "subagent:readme_review_kdf",
-        "reviewed_at": "2026-07-15"
+        "reviewed_by": "subagent:review_ko_kr",
+        "reviewed_at": "2026-07-16"
       }
     },
     {
@@ -137,11 +135,11 @@
       "file": "README.de-DE.md",
       "review": {
         "status": "reviewed",
-        "source_sha256": "a9af2b95fa90d81f61f6c6bd8d0da69b9ef4acee4cdbbb4bb06be655113894ba",
-        "content_sha256": "fd6647bfaede1b13c356fce8082a656b3d079717d447d0c34b21d203f9ba4023",
+        "source_sha256": "f1ea12d32cbc69711d6c3f5d8852fdc4527922ae54cf438d585cb7e639a8b993",
+        "content_sha256": "050bf99eca0a732dd33f86be8d243dde44a7ead1f8000376e603333c839d26b6",
         "method": "subagent",
-        "reviewed_by": "subagent:readme_review_kdf",
-        "reviewed_at": "2026-07-15"
+        "reviewed_by": "subagent:review_de_de",
+        "reviewed_at": "2026-07-16"
       }
     },
     {
@@ -151,11 +149,11 @@
       "file": "README.fr-FR.md",
       "review": {
         "status": "reviewed",
-        "source_sha256": "a9af2b95fa90d81f61f6c6bd8d0da69b9ef4acee4cdbbb4bb06be655113894ba",
-        "content_sha256": "cebc5d7e79981cc972027ff1377083eb803e743ab556217ba40ef01dce9a79a9",
+        "source_sha256": "f1ea12d32cbc69711d6c3f5d8852fdc4527922ae54cf438d585cb7e639a8b993",
+        "content_sha256": "f2f647466d7630313b5a97a636101cd454640bdb6fa8b9f68d5979d5695d37f9",
         "method": "subagent",
-        "reviewed_by": "subagent:readme_review_kdf",
-        "reviewed_at": "2026-07-15"
+        "reviewed_by": "subagent:review_fr_fr",
+        "reviewed_at": "2026-07-16"
       }
     },
     {
@@ -165,11 +163,11 @@
       "file": "README.es-ES.md",
       "review": {
         "status": "reviewed",
-        "source_sha256": "a9af2b95fa90d81f61f6c6bd8d0da69b9ef4acee4cdbbb4bb06be655113894ba",
-        "content_sha256": "26d96d268267681d358d323398741ac3ca7b2819b07248c76a505b8a924bc5ba",
+        "source_sha256": "f1ea12d32cbc69711d6c3f5d8852fdc4527922ae54cf438d585cb7e639a8b993",
+        "content_sha256": "af783373b082e85a439a06177684c19f8da936a281e6c8e4899951fadc360be4",
         "method": "subagent",
-        "reviewed_by": "subagent:readme_review_epr",
-        "reviewed_at": "2026-07-15"
+        "reviewed_by": "subagent:review_es_es",
+        "reviewed_at": "2026-07-16"
       }
     },
     {
@@ -179,11 +177,11 @@
       "file": "README.pt-BR.md",
       "review": {
         "status": "reviewed",
-        "source_sha256": "a9af2b95fa90d81f61f6c6bd8d0da69b9ef4acee4cdbbb4bb06be655113894ba",
-        "content_sha256": "532033d3f4ef7cfea3161a9581b72e2ac43aef2d4f6d7f517ffeacebd2415171",
+        "source_sha256": "f1ea12d32cbc69711d6c3f5d8852fdc4527922ae54cf438d585cb7e639a8b993",
+        "content_sha256": "6d4499085d41ac32b049dffeb01cb477ede335f64a4deec53e3adedaed29d038",
         "method": "subagent",
-        "reviewed_by": "subagent:readme_review_epr",
-        "reviewed_at": "2026-07-15"
+        "reviewed_by": "subagent:review_pt_br",
+        "reviewed_at": "2026-07-16"
       }
     },
     {
@@ -193,11 +191,11 @@
       "file": "README.ru-RU.md",
       "review": {
         "status": "reviewed",
-        "source_sha256": "a9af2b95fa90d81f61f6c6bd8d0da69b9ef4acee4cdbbb4bb06be655113894ba",
-        "content_sha256": "0ffe12b3e698d13ef9cb07d5f937ee1446bcfb1db624928cd3d08687f91acb81",
+        "source_sha256": "f1ea12d32cbc69711d6c3f5d8852fdc4527922ae54cf438d585cb7e639a8b993",
+        "content_sha256": "0e5c97eafcc474e36b0fe0958c1dd66a6f38a2e886a03ccd096c393163643a08",
         "method": "subagent",
-        "reviewed_by": "subagent:readme_review_epr",
-        "reviewed_at": "2026-07-15"
+        "reviewed_by": "subagent:review_ru_ru",
+        "reviewed_at": "2026-07-16"
       }
     }
   ]

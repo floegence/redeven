@@ -82,35 +82,15 @@ For remote machines: Desktop can auto-install the matching Redeven release over 
 # 1. Install
 curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
 
-# 2. Bootstrap (one-time, read the ticket from a protected secret file)
-redeven bootstrap \
-  --provider-origin https://<your-provider> \
-  --controlplane https://<your-access-point> \
-  --env-id <env_public_id> \
-  --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket
+# 2. Run
+redeven run
 
-# 3. Run
-redeven run --mode hybrid
-
-# 4. Open http://localhost:23998 in your browser.
+# 3. Open http://localhost:23998 in your browser.
 ```
 
-Bootstrap writes non-secret Local Environment metadata to `~/.redeven/local-environment/config.json` and runtime credentials to the permission-restricted `~/.redeven/local-environment/secrets.json`. Each OS user has one Local Environment identity, bound to one provider Environment at a time. Desktop and browser flows use the same one-time ticket contract.
+The first `redeven run` initializes local state under `~/.redeven/local-environment/` and starts in local mode. No bootstrap or control-plane configuration is required. Local UI listens on `localhost:23998` and is available only from this device; direct LAN or public-network access is not supported. Press Ctrl+C to stop the runtime.
 
-For an interactive one-time setup, replace `--bootstrap-ticket-file ...` above with `--bootstrap-ticket-stdin`. Redeven then prompts for the ticket without echoing it. When stdin is a pipe or redirect, the same flag reads the ticket directly without printing a prompt.
-
-For automation, secret managers, CI runners, and container orchestrators may inject `REDEVEN_BOOTSTRAP_TICKET` and `REDEVEN_LOCAL_UI_PASSWORD` directly. Environment variables remain observable to same-user processes, debuggers, and the host platform, so prefer hidden prompts, stdin, or protected secret files for interactive use.
-
-Interactive terminals use Redeven's rich runtime presentation by default: a compact animated character mark, runtime version/protocol details, active session/workload counts, Local UI and Environment URLs, real runtime log tailing, and actionable warning/error panels. Use the arrow keys to move between Control plane, Sessions, and Logs. Press Enter on Sessions to open a filterable active-session view, Enter on Logs to expand the full runtime log view, Enter on Control plane to connect, disconnect, or open the bootstrap setup fields, Esc to return, and Ctrl+C to stop the runtime. Non-interactive shells fall back to plain text, and Desktop-managed launches use the machine presentation contract with structured startup reports instead of terminal UI.
-
-**Run modes at a glance:**
-
-| Goal | Command |
-|---|---|
-| Local UI only (this device) | `redeven run --mode local` |
-| Local UI + remote control channel | `redeven run --mode hybrid` |
-| Desktop-managed runtime | `redeven run --mode desktop --desktop-managed --presentation machine --local-ui-bind localhost:23998` |
-| Access from another device | Keep Local UI on loopback and use Redeven Desktop, SSH forwarding, or a Flowersec secure tunnel. |
+Run `redeven help run` for other run modes and optional local password protection.
 
 <!-- readme-section:what-you-can-do -->
 <a id="what-you-can-do"></a>

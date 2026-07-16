@@ -82,35 +82,15 @@ Para máquinas remotas, o Desktop pode instalar automaticamente a versão corres
 # 1. Instalar
 curl -fsSL https://raw.githubusercontent.com/floegence/redeven/main/scripts/install.sh | sh
 
-# 2. Inicializar uma vez, lendo o ticket de um arquivo de segredo protegido
-redeven bootstrap \
-  --provider-origin https://<your-provider> \
-  --controlplane https://<your-access-point> \
-  --env-id <env_public_id> \
-  --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket
+# 2. Executar
+redeven run
 
-# 3. Executar
-redeven run --mode hybrid
-
-# 4. Abrir http://localhost:23998 no navegador.
+# 3. Abrir http://localhost:23998 no navegador.
 ```
 
-A inicialização grava metadados não secretos do ambiente local em `~/.redeven/local-environment/config.json` e credenciais do ambiente de execução no arquivo com permissões restritas `~/.redeven/local-environment/secrets.json`. Cada usuário do sistema operacional tem uma identidade de ambiente local, vinculada a um único ambiente de provider por vez. Os fluxos do Desktop e do navegador usam o mesmo contrato de ticket de uso único.
+Na primeira execução, `redeven run` inicializa o estado local em `~/.redeven/local-environment/` e inicia no modo local. Não é necessário executar o bootstrap nem configurar o plano de controle. A Local UI escuta em `localhost:23998` e só pode ser acessada a partir deste dispositivo; não há suporte para acesso direto pela LAN ou por redes públicas. Pressione Ctrl+C para interromper o ambiente de execução.
 
-Para uma configuração interativa única, substitua `--bootstrap-ticket-file ...` acima por `--bootstrap-ticket-stdin`. O Redeven solicitará o ticket sem exibi-lo. Quando stdin vier de um pipe ou redirecionamento, a mesma opção lerá o ticket diretamente sem exibir nenhuma mensagem.
-
-Automações, gerenciadores de segredos, executores de CI e orquestradores de contêineres podem injetar `REDEVEN_BOOTSTRAP_TICKET` e `REDEVEN_LOCAL_UI_PASSWORD` diretamente. Variáveis de ambiente continuam observáveis por processos do mesmo usuário, depuradores e pela plataforma host. Em uso interativo, prefira entrada sem eco, stdin ou arquivos de segredo protegidos.
-
-Terminais interativos usam por padrão a apresentação avançada do ambiente de execução do Redeven: uma marca compacta e animada formada por caracteres, detalhes de versão e protocolo, contagens de sessões e cargas de trabalho ativas, URLs da Local UI e do ambiente, acompanhamento real dos logs do ambiente de execução e painéis acionáveis de aviso e erro. Use as teclas de seta para alternar entre plano de controle, sessões e logs. Pressione Enter em Sessões para abrir uma lista filtrável de sessões ativas, em Logs para expandir o log completo do ambiente de execução ou em Plano de controle para conectar, desconectar ou abrir os campos de inicialização. Esc retorna e Ctrl+C interrompe o ambiente de execução. Shells não interativos usam texto simples. Inicializações gerenciadas pelo Desktop usam o contrato de apresentação para máquinas, com relatórios de início estruturados, em vez da interface de terminal.
-
-**Resumo dos modos de execução:**
-
-| Objetivo | Comando |
-|---|---|
-| Somente Local UI neste dispositivo | `redeven run --mode local` |
-| Local UI e canal de controle remoto | `redeven run --mode hybrid` |
-| Ambiente de execução gerenciado pelo Desktop | `redeven run --mode desktop --desktop-managed --presentation machine --local-ui-bind localhost:23998` |
-| Acesso de outro dispositivo | Mantenha a Local UI no loopback e use Redeven Desktop, encaminhamento SSH ou um túnel seguro do Flowersec. |
+Execute `redeven help run` para conhecer outros modos de execução e a proteção local opcional por senha.
 
 <!-- readme-section:what-you-can-do -->
 <a id="what-you-can-do"></a>
@@ -148,7 +128,7 @@ O Redeven prioriza os recursos, mas o ambiente de execução continua sendo o li
 
 O Redeven mantém o conhecimento do repositório em [OKF v0.1](okf/index.md). O corpus OKF é gerado a partir do comportamento atual do código-fonte e incorporado ao ambiente de execução para `okf.search`.
 
-A superfície de integração com provider legível por máquina fica em [spec/openapi/rcpp-v2.yaml](spec/openapi/rcpp-v2.yaml). Fora do OKF, os arquivos Markdown mantidos são deliberadamente limitados a `AGENTS.md`, `THIRD_PARTY_NOTICES.md`, ao `README.md` canônico e às traduções compatíveis `README.<locale>.md` declaradas em `assets/readme/locales.json`.
+A superfície de integração com provider legível por máquina fica em [spec/openapi/rcpp-v2.yaml](spec/openapi/rcpp-v2.yaml). Fora do OKF, os arquivos Markdown mantidos são deliberadamente limitados a `AGENTS.md`, `THIRD_PARTY_NOTICES.md`, ao `README.md` canônico e às traduções mantidas `README.<locale>.md` declaradas em `assets/readme/locales.json`.
 
 <!-- readme-section:for-developers -->
 <a id="for-developers"></a>

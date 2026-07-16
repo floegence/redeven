@@ -10,7 +10,7 @@ timestamp: 2026-06-17T00:00:00Z
 
 # Mechanism
 
-The run command parses `--mode`, `--local-ui-bind`, `--desktop-managed`, `--startup-report-file`, and `--presentation`, rejects Desktop-managed startup unless the presentation contract is machine-compatible, initializes a `runtimepresentation.Reporter`, emits phase events as state, lock, bootstrap, config, control, and Local UI phases progress, and writes a Desktop launch report when a Desktop-managed Local UI becomes ready.
+The run command parses `--mode`, `--local-ui-bind`, `--desktop-managed`, `--startup-report-file`, and `--presentation`. When `--mode` is omitted, it defaults to local mode, starts the loopback-only Local UI, and does not require bootstrap configuration or enable the control channel. Explicit remote, hybrid, local, and desktop modes retain their mode-specific behavior. The command rejects Desktop-managed startup unless the presentation contract is machine-compatible, initializes a `runtimepresentation.Reporter`, emits phase events as state, lock, bootstrap, config, control, and Local UI phases progress, and writes a Desktop launch report when a Desktop-managed Local UI becomes ready.
 
 Startup secrets never use literal command-line values. Ordinary CLI startup accepts hidden password prompting, stdin, protected files, or the fixed `REDEVEN_LOCAL_UI_PASSWORD` and `REDEVEN_BOOTSTRAP_TICKET` environment fallbacks. `--bootstrap-ticket-stdin` reads without echo when stdin is an interactive terminal, while preserving prompt-free pipe and redirect behavior for automation. Explicit sources override fixed environment values, empty environment values are ignored, and both fixed variables plus the legacy Desktop ticket variable are removed from the process environment before any command can start a child process. Diagnostics record only the source category. Desktop-managed machine startup instead sends one version 1 JSON envelope through private stdin, with a 64 KiB limit and a hard conflict against every other secret source.
 
@@ -20,7 +20,7 @@ Desktop readiness must come from the machine presentation and startup-report con
 
 # Citations
 
-[1] redeven:cmd/redeven/main.go:222 - Run mode is parsed as remote, hybrid, local, or desktop.
+[1] redeven:cmd/redeven/main.go:222 - Run mode defaults to local and accepts explicit remote, hybrid, local, or desktop values.
 [2] redeven:cmd/redeven/main.go:228 - Desktop-managed runs are explicit CLI state.
 [3] redeven:cmd/redeven/main.go:229 - Startup reports are written to a caller-provided file.
 [4] redeven:cmd/redeven/main.go:310 - Desktop-managed startup and startup reports require machine-compatible presentation.
