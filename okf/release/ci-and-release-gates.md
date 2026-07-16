@@ -3,7 +3,7 @@ type: Release Contract
 title: CI and release gates
 description: Redeven release confidence comes from README localization checks, shell checks, OKF validation, UI checks, ReDevPlugin integration gates, assets, Go tests, and lint.
 tags: [release, ci, quality, okf]
-timestamp: 2026-07-14T00:00:00Z
+timestamp: 2026-07-16T00:00:00Z
 ---
 
 Redeven keeps CI and local release checks aligned around source validation,
@@ -69,6 +69,13 @@ and update bucketing. The plugin API tests bind the UI wrapper to
 install/update through `package_base64 + trust_state=bundled`, and the absence
 of URL, file, unsigned local, or developer install helpers.
 
+The built Env App renderer smoke is the production exposure gate. Its default
+expectation requires the Activity Bar Plugin entry, Plugin Panel, Plugin Center,
+and Plugin Surface to be absent and observes that startup issues no plugin API
+request. The same smoke can opt into a visible expectation for an explicitly
+flagged development build, click the Plugin entry, and require the Plugin Center
+tile to render. Release automation uses only the default hidden expectation.
+
 Plugin Panel and Plugin Center component tests bind the app-grid entry,
 pointer cursor affordance, outside-click ordering, dedicated management shell,
 local search, details selection, official-only management copy, management
@@ -76,13 +83,13 @@ action disabling for users without management authority, official install,
 update, enable, disable, uninstall, and enabled-plugin Open behavior. Settings
 structure tests bind Plugin Center's absence from Runtime Settings navigation.
 
-Shell integration tests bind the panel `Plugin Center` tile to the dedicated
-Activity main-surface view without entering Runtime Settings or rendering a
-floating overlay. Disabled or attention-needed plugin tiles route to matching
-Plugin Center details. Enabled plugin tiles call the ReDevPlugin surface open
-lifecycle API and render the internal `plugin-surface` Activity with
-`PluginSurfaceFrame`. Closing Plugin Center or Plugin Surface returns to the
-last normal Activity surface.
+Shell integration tests run with the development build feature enabled and bind
+the panel `Plugin Center` tile to the dedicated Activity main-surface view
+without entering Runtime Settings or rendering a floating overlay. Disabled or
+attention-needed plugin tiles route to matching Plugin Center details. Enabled
+plugin tiles call the ReDevPlugin surface open lifecycle API and render the
+internal `plugin-surface` Activity with `PluginSurfaceFrame`. Closing Plugin
+Center or Plugin Surface returns to the last normal Activity surface.
 
 `PluginSurfaceFrame` tests bind asset bootstrap, iframe asset URL construction,
 published `PluginSurfaceHost` mounting, SDK platform-path rewriting to

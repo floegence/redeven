@@ -26,6 +26,7 @@ Usage: ./scripts/dev_desktop.sh [options] [-- <electron-args>]
 
 Build and start Redeven Desktop from this checkout/worktree. The bundled runtime
 is built from the same uncommitted source tree before Electron starts.
+The embedded Env App Plugin UI is enabled for this development launch.
 
 Options:
   --no-devtools             Do not open Desktop DevTools automatically.
@@ -368,6 +369,7 @@ start_desktop() {
   ui_pkg_log "Starting Redeven Desktop from the current checkout..."
   ui_pkg_log "ROOT_DIR: $ROOT_DIR"
   ui_pkg_log "DESKTOP_DIR: $DESKTOP_DIR"
+  ui_pkg_log "Env App Plugin UI: enabled for development"
   ssh_runtime_release_tag="$(resolve_ssh_runtime_release_tag)"
   if [ -n "$ssh_runtime_release_tag" ]; then
     ui_pkg_log "SSH runtime release tag: $ssh_runtime_release_tag"
@@ -423,6 +425,7 @@ start_desktop() {
     fi
     export REDEVEN_DESKTOP_BUNDLE_COMMIT="${REDEVEN_DESKTOP_BUNDLE_COMMIT:-$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)}"
     export REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT="${REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT:-$ROOT_DIR}"
+    export REDEVEN_ENVAPP_ENABLE_PLUGIN_UI=1
     npm run build
     npm run prepare:bundled-runtime
     exec "${cmd[@]}"

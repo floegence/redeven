@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Plugin platform integration
 description: Redeven integrates released ReDevPlugin artifacts through Local UI, AppServer, product adapters, official package bundling, and Env App placement.
 tags: [architecture, plugins, local-ui, redevplugin]
-timestamp: 2026-07-06T00:00:00Z
+timestamp: 2026-07-16T00:00:00Z
 ---
 
 Redeven plugin-platform integration is host-product glue over released
@@ -16,9 +16,11 @@ At the current source baseline, Redeven consumes
 through `internal/redevpluginintegration`. That integration configures durable
 Host stores, policy/session/security adapters, runtime artifact resolution,
 observability fanout, official package trust policy, and Redeven-owned
-business capabilities. Env App adds the product entrypoints: an Activity Bar
+business capabilities. Env App contains product entrypoints for an Activity Bar
 Plugins panel, a dedicated Plugin Center Activity, and an internal plugin
-surface Activity.
+surface Activity, but currently registers them only in explicit development
+builds. Production Env App builds omit every plugin user entry while retaining
+the backend platform integration.
 
 # Mechanism
 
@@ -45,6 +47,14 @@ handshake validation, bridge-token requests, RPC forwarding, confirmation
 request handling, and lifecycle disposal. Redeven must not turn the frame into
 a copied manifest parser, registry, generated SDK, storage broker, stream
 broker, or runtime implementation.
+
+Plugin UI exposure is a compile-time product decision. Vite serve enables it,
+and Redeven-owned development Desktop/runtime launchers enable production-style
+local builds with `REDEVEN_ENVAPP_ENABLE_PLUGIN_UI=1`. Ordinary asset builds and
+release automation do not set that value, so the Env App does not register the
+Plugin Panel, Plugin Center, or Plugin Surface. This visibility gate does not
+disable or bypass the released ReDevPlugin host, route, security, runtime, or
+business-adapter contracts.
 
 Local UI separates Env App under `/_redeven_proxy/*` from direct sessions
 served by the agent after E2EE handshake. Plugin management requests under
