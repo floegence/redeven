@@ -1,5 +1,6 @@
 import type { DesktopRuntimeControlStatus } from './desktopRuntimePresence';
 import {
+  desktopRuntimeMaintenanceRequiresProcessTakeover,
   desktopRuntimeMaintenanceRequiresRestart,
   desktopRuntimeMaintenanceRequiresUpdate,
   type DesktopRuntimeMaintenanceRequirement,
@@ -159,6 +160,7 @@ export function buildDesktopRuntimeOperationPlans(
   const requiresUpdate = packageRequiresUpdate(input.package_state);
   const maintenance = input.maintenance;
   const restartMaintenance = desktopRuntimeMaintenanceRequiresRestart(maintenance);
+  const processTakeoverMaintenance = desktopRuntimeMaintenanceRequiresProcessTakeover(maintenance);
   const updateMaintenance = desktopRuntimeMaintenanceRequiresUpdate(maintenance);
   const openConnectionRequired = input.open_connection_required === true;
   const updateAvailable = requiresUpdate || updateMaintenance;
@@ -229,6 +231,7 @@ export function buildDesktopRuntimeOperationPlans(
       hasManagement ? input.running ? 'available' : 'unavailable' : 'hidden',
       method,
       {
+        requiresConfirmation: processTakeoverMaintenance,
         reasonCode: input.running ? undefined : 'runtime_not_started',
         message: input.running ? activeWorkMessage(input.runtime_service) : 'Runtime is not running.',
         menuVisibility: hasManagement ? 'stable' : 'hidden',
@@ -243,6 +246,7 @@ export function buildDesktopRuntimeOperationPlans(
         : 'hidden',
       method,
       {
+        requiresConfirmation: processTakeoverMaintenance,
         reasonCode: managementBlocked
           ? 'runtime_target_unavailable'
           : undefined,
@@ -263,6 +267,7 @@ export function buildDesktopRuntimeOperationPlans(
         : 'hidden',
       updateMethod,
       {
+        requiresConfirmation: processTakeoverMaintenance,
         reasonCode: updateAvailable ? 'runtime_update_required' : undefined,
         label: updateMethod === 'desktop_local_update_handoff' ? 'Update Redeven Desktop' : undefined,
         message: managementBlocked ? managementBlockedStatus.message : maintenance?.message ?? updateMessage,

@@ -92,15 +92,17 @@ async function waitForFile(file: string): Promise<void> {
 function processInventoryPayload(input: Readonly<{
   stateRoot: string;
   executablePath: string;
-  classification: 'current_owned' | 'legacy_owned' | 'legacy_ownerless' | 'foreign_owner' | 'ambiguous';
+  authority: 'automatic' | 'confirmed_takeover' | 'blocked';
+  ownerStatus?: 'current' | 'missing' | 'foreign';
   ownerID?: string;
   pid?: number;
 }>): Record<string, unknown> {
-  const stoppable = input.classification === 'current_owned'
-    || input.classification === 'legacy_owned'
-    || input.classification === 'legacy_ownerless';
+  const automatic = input.authority === 'automatic';
+  const confirmedTakeover = input.authority === 'confirmed_takeover';
+  const blocked = input.authority === 'blocked';
+  const ownerStatus = input.ownerStatus ?? (automatic ? 'current' : confirmedTakeover ? 'foreign' : 'missing');
   return {
-    schema_version: 1,
+    schema_version: 2,
     scope: {
       runtime_root: input.stateRoot,
       state_root: input.stateRoot,
@@ -116,18 +118,17 @@ function processInventoryPayload(input: Readonly<{
       executable_path: input.executablePath,
       executable_device: 1,
       executable_inode: 2,
-      classification: input.classification,
-      stoppable,
-      ...(stoppable ? {} : { reason_code: 'runtime_owned_by_another_desktop' }),
+      identity_status: blocked ? 'incomplete' : 'verified',
+      owner_status: ownerStatus,
+      layout_status: blocked ? 'unknown' : 'current',
+      owner_evidence: input.ownerID ? 'process_environment' : 'missing',
+      stop_authority: input.authority,
+      ...(!automatic ? { reason_code: confirmedTakeover ? 'runtime_owned_by_another_desktop' : 'runtime_identity_incomplete' } : {}),
     }],
     summary: {
-      current_owned: input.classification === 'current_owned' ? 1 : 0,
-      legacy_owned: input.classification === 'legacy_owned' ? 1 : 0,
-      legacy_ownerless: input.classification === 'legacy_ownerless' ? 1 : 0,
-      foreign_owner: input.classification === 'foreign_owner' ? 1 : 0,
-      ambiguous: input.classification === 'ambiguous' ? 1 : 0,
-      stoppable: stoppable ? 1 : 0,
-      blocking: stoppable ? 0 : 1,
+      automatic: automatic ? 1 : 0,
+      confirmed_takeover: confirmedTakeover ? 1 : 0,
+      blocked: blocked ? 1 : 0,
     },
   };
 }
@@ -159,7 +160,7 @@ const inventoryFile = process.env.REDEVEN_TEST_PROCESS_INVENTORY_FILE;
 
 function emptyInventory() {
   return {
-    schema_version: 1,
+    schema_version: 2,
     scope: {
       runtime_root: argValue('--runtime-root') || argValue('--state-root') || process.cwd(),
       state_root: argValue('--state-root') || process.cwd(),
@@ -168,7 +169,7 @@ function emptyInventory() {
     },
     inventory_digest: 'b'.repeat(64),
     instances: [],
-    summary: { current_owned: 0, legacy_owned: 0, legacy_ownerless: 0, foreign_owner: 0, ambiguous: 0, stoppable: 0, blocking: 0 },
+    summary: { automatic: 0, confirmed_takeover: 0, blocked: 0 },
   };
 }
 
@@ -186,7 +187,7 @@ if (process.argv[2] === 'desktop-runtime-stop') {
   const before = readInventory();
   const expectedDigest = argValue('--expected-inventory-digest');
   if (expectedDigest !== before.inventory_digest) {
-    process.stdout.write(JSON.stringify({ schema_version: 1, error: { code: 'runtime_inventory_changed', message: 'runtime process inventory changed before stop' } }) + '\\n');
+    process.stdout.write(JSON.stringify({ schema_version: before.schema_version, error: { code: 'runtime_inventory_changed', message: 'runtime process inventory changed before stop' } }) + '\\n');
     process.exit(1);
   }
   for (const instance of before.instances || []) {
@@ -195,7 +196,7 @@ if (process.argv[2] === 'desktop-runtime-stop') {
   if (inventoryFile) fs.rmSync(inventoryFile, { force: true });
   if (statusFile) fs.rmSync(statusFile, { force: true });
   const after = emptyInventory();
-  process.stdout.write(JSON.stringify({ schema_version: 1, before, after, stopped: before.instances || [] }) + '\\n');
+  process.stdout.write(JSON.stringify({ schema_version: before.schema_version, before, after, stopped: before.instances || [] }) + '\\n');
   process.exit(0);
 }
 
@@ -280,11 +281,11 @@ server.listen(0, '127.0.0.1', () => {
   }
   if (inventoryFile) {
     writeJSON(inventoryFile, {
-      schema_version: 1,
+      schema_version: 2,
       scope: { runtime_root: argValue('--state-root') || process.cwd(), state_root: argValue('--state-root') || process.cwd(), desktop_owner_id: process.env.REDEVEN_DESKTOP_OWNER_ID || 'desktop-owner-1', user_identity: process.env.USER || 'tester' },
       inventory_digest: 'a'.repeat(64),
-      instances: [{ pid: process.pid, process_started_at_unix_ms: Date.now(), desktop_owner_id: process.env.REDEVEN_DESKTOP_OWNER_ID || 'desktop-owner-1', state_root: argValue('--state-root') || process.cwd(), executable_path: process.argv[1], executable_device: 1, executable_inode: process.pid + 1000, classification: 'current_owned', stoppable: true }],
-      summary: { current_owned: 1, legacy_owned: 0, legacy_ownerless: 0, foreign_owner: 0, ambiguous: 0, stoppable: 1, blocking: 0 },
+      instances: [{ pid: process.pid, process_started_at_unix_ms: Date.now(), desktop_owner_id: process.env.REDEVEN_DESKTOP_OWNER_ID || 'desktop-owner-1', state_root: argValue('--state-root') || process.cwd(), executable_path: process.argv[1], executable_device: 1, executable_inode: process.pid + 1000, identity_status: 'verified', owner_status: 'current', layout_status: 'current', owner_evidence: 'process_environment', stop_authority: 'automatic' }],
+      summary: { automatic: 1, confirmed_takeover: 0, blocked: 0 },
     });
   }
   if (mode === 'delayed_report') {
@@ -308,7 +309,7 @@ describe('runtimeProcess', () => {
   it('preserves structured runtime inventory command conflicts', () => {
     const error = runtimeProcessCommandErrorFromOutput(
       JSON.stringify({
-        schema_version: 1,
+        schema_version: 2,
         error: {
           code: 'runtime_inventory_changed',
           message: 'runtime process inventory changed before stop',
@@ -354,7 +355,7 @@ describe('runtimeProcess', () => {
     });
   });
 
-  it('blocks Start when a historical local runtime process is alive but status is unavailable', async () => {
+  it('blocks Start when a local Runtime process has incomplete identity', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-'));
     const stateRoot = path.join(dir, 'state');
     const inventoryFile = path.join(dir, 'inventory.json');
@@ -362,8 +363,8 @@ describe('runtimeProcess', () => {
     const executablePath = await writeFakeRuntimeExecutable(dir);
     await writeJSON(inventoryFile, processInventoryPayload({
       stateRoot,
-      executablePath: path.join(stateRoot, 'runtime', 'releases', 'v0.5.0', 'bin', 'redeven'),
-      classification: 'legacy_ownerless',
+      executablePath,
+      authority: 'blocked',
     }));
     try {
       await expect(startManagedRuntime({
@@ -377,14 +378,15 @@ describe('runtimeProcess', () => {
           REDEVEN_TEST_PROCESS_INVENTORY_FILE: inventoryFile,
         },
         tempRoot: dir,
-      })).rejects.toThrow('historical process');
+        runtimeAttachTimeoutMs: 5_000,
+      })).rejects.toMatchObject({ name: 'RuntimeProcessIdentityBlockedError' });
       await expect(fs.stat(statusFile)).rejects.toMatchObject({ code: 'ENOENT' });
     } finally {
       await fs.rm(dir, { recursive: true, force: true });
     }
   });
 
-  it('reconciles historical local runtime processes before Restart even when status is unavailable', async () => {
+  it('reconciles verified current-owner Runtime processes before Restart', async () => {
     const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-'));
     const stateRoot = path.join(dir, 'state');
     const inventoryFile = path.join(dir, 'inventory.json');
@@ -393,8 +395,10 @@ describe('runtimeProcess', () => {
     const progressPhases: string[] = [];
     await writeJSON(inventoryFile, processInventoryPayload({
       stateRoot,
-      executablePath: path.join(stateRoot, 'local-environment', 'state', 'local-environment', 'redeven'),
-      classification: 'legacy_ownerless',
+      executablePath,
+      authority: 'automatic',
+      ownerStatus: 'current',
+      ownerID: 'desktop-owner-1',
     }));
     let launch: Awaited<ReturnType<typeof startManagedRuntime>> | null = null;
     try {
@@ -418,7 +422,7 @@ describe('runtimeProcess', () => {
       expect(launch.kind).toBe('ready');
       expect(progressPhases).toEqual(expect.arrayContaining([
         'discovering_runtime_instances',
-        'stopping_legacy_runtimes',
+        'stopping_runtime_process',
         'verifying_runtime_inventory',
         'starting_runtime',
       ]));
@@ -440,7 +444,8 @@ describe('runtimeProcess', () => {
     await writeJSON(inventoryFile, processInventoryPayload({
       stateRoot,
       executablePath,
-      classification: 'foreign_owner',
+      authority: 'confirmed_takeover',
+      ownerStatus: 'foreign',
       ownerID: 'another-owner',
     }));
     try {
@@ -452,9 +457,55 @@ describe('runtimeProcess', () => {
         runtimeProcessIntent: 'restart',
         env: { REDEVEN_TEST_PROCESS_INVENTORY_FILE: inventoryFile },
         tempRoot: dir,
-      })).rejects.toThrow('cannot be safely reconciled');
+      })).rejects.toMatchObject({ name: 'RuntimeProcessTakeoverRequiredError' });
       await expect(fs.stat(inventoryFile)).resolves.toBeDefined();
     } finally {
+      await fs.rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('restarts a verified foreign local Runtime only with matching takeover confirmation', async () => {
+    const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-process-'));
+    const stateRoot = path.join(dir, 'state');
+    const inventoryFile = path.join(dir, 'inventory.json');
+    const statusFile = path.join(dir, 'status.json');
+    const executablePath = await writeFakeRuntimeExecutable(dir);
+    await writeJSON(inventoryFile, processInventoryPayload({
+      stateRoot,
+      executablePath,
+      authority: 'confirmed_takeover',
+      ownerStatus: 'foreign',
+      ownerID: 'another-owner',
+    }));
+    let launch: Awaited<ReturnType<typeof startManagedRuntime>> | null = null;
+    try {
+      launch = await startManagedRuntime({
+        executablePath,
+        runtimeArgs: ['--state-root', stateRoot],
+        stateRoot,
+        desktopOwnerID: 'desktop-owner-1',
+        runtimeProcessIntent: 'restart',
+        runtimeProcessReconciliation: {
+          mode: 'confirmed_takeover',
+          expected_inventory_digest: 'a'.repeat(64),
+        },
+        env: {
+          REDEVEN_DESKTOP_OWNER_ID: 'desktop-owner-1',
+          REDEVEN_TEST_STATUS_FILE: statusFile,
+          REDEVEN_TEST_PROCESS_INVENTORY_FILE: inventoryFile,
+        },
+        tempRoot: dir,
+        runtimeAttachTimeoutMs: 5_000,
+        runtimeStabilityWindowMs: 20,
+        runtimeStabilityPollMs: 10,
+      });
+      expect(launch.kind).toBe('ready');
+      const finalInventory = JSON.parse(await fs.readFile(inventoryFile, 'utf8')) as { instances?: Array<{ desktop_owner_id?: string }> };
+      expect(finalInventory.instances?.[0]?.desktop_owner_id).toBe('desktop-owner-1');
+    } finally {
+      if (launch?.kind === 'ready') {
+        await launch.managedRuntime.stop().catch(() => undefined);
+      }
       await fs.rm(dir, { recursive: true, force: true });
     }
   });

@@ -27,7 +27,10 @@ const (
 	ubuntuImage         = "ubuntu:24.04"
 	containerStateRoot  = "/root/.redeven-e2e"
 	containerRedeven    = "/usr/local/bin/redeven"
-	upgradedRedeven     = "/root/.redeven-e2e/runtime/releases/v9.9.9-e2e/bin/redeven"
+	managedRedeven      = containerStateRoot + "/runtime/managed/bin/redeven"
+	managedRuntimeStamp = containerStateRoot + "/runtime/managed/managed-runtime.stamp"
+	stagedUpgrade       = "/tmp/redeven-upgraded"
+	runtimeLockPath     = containerStateRoot + "/local-environment/agent.lock"
 	containerHelper     = "/tmp/redeven-e2e-client"
 	targetVersion       = "v9.9.9-e2e"
 	desktopOwnerID      = "redeven-docker-e2e-desktop-owner"
@@ -140,9 +143,9 @@ func TestDockerUbuntuDesktopRuntimeLifecycle(t *testing.T) {
 	f.detectContainerArch(ctx)
 	f.buildBinaries(ctx)
 	f.assertRuntimeNotStarted(ctx)
-	f.assertInventoryReconcilesHistoricalRuntime(ctx)
+	f.assertInventoryRequiresConfirmedTakeover(ctx)
 
-	f.startRuntime(ctx, containerRedeven)
+	f.startRuntime(ctx)
 	initial := f.waitReady(ctx)
 	initialPing := f.runHelper(ctx, initial.LocalUIURL, "ping", "")
 	if initialPing.Ping == nil || initialPing.Ping.ProcessStartedAtMs <= 0 {
@@ -172,7 +175,7 @@ func TestDockerUbuntuDesktopRuntimeLifecycle(t *testing.T) {
 
 	stoppedAfterStop := f.stopRuntime(ctx)
 	f.assertStoppedRuntimeStatus(stoppedAfterStop)
-	f.startRuntime(ctx, containerRedeven)
+	f.startRuntime(ctx)
 	afterManualStart := f.waitPingAfter(ctx, afterRestart.ProcessStartedAtMs)
 
 	if _, err := f.tryHelper(ctx, afterManualStart.LocalUIURL, "upgrade", targetVersion); err == nil || !strings.Contains(err.Error(), "upgrade not supported") {
@@ -384,11 +387,14 @@ func (f *fixture) buildBinaries(ctx context.Context) {
 	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", helperOut, f.containerName+":"+containerHelper); err != nil {
 		f.t.Fatalf("copy helper: %v", err)
 	}
-	f.dockerExec(ctx, nil, "mkdir", "-p", filepath.Dir(upgradedRedeven))
-	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", upgradedRedevenOut, f.containerName+":"+upgradedRedeven); err != nil {
+	f.dockerExec(ctx, nil, "mkdir", "-p", filepath.Dir(managedRedeven))
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", redevenOut, f.containerName+":"+managedRedeven); err != nil {
+		f.t.Fatalf("copy managed redeven: %v", err)
+	}
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", upgradedRedevenOut, f.containerName+":"+stagedUpgrade); err != nil {
 		f.t.Fatalf("copy upgraded redeven: %v", err)
 	}
-	f.dockerExec(ctx, nil, "chmod", "0755", containerRedeven, upgradedRedeven, containerHelper)
+	f.dockerExec(ctx, nil, "chmod", "0755", containerRedeven, managedRedeven, stagedUpgrade, containerHelper)
 }
 
 func (f *fixture) assertNetworkExposureStartFailures(ctx context.Context, passwordPath string) {
@@ -461,43 +467,37 @@ func (f *fixture) waitNetworkExposureReady(ctx context.Context, reportPath strin
 	return launchReport{}
 }
 
-func (f *fixture) startRuntime(ctx context.Context, binaryPath string) {
+func (f *fixture) startRuntime(ctx context.Context) {
+	f.startRuntimeWithOwner(ctx, desktopOwnerID)
+}
+
+func (f *fixture) startOwnerlessRuntime(ctx context.Context) {
+	f.startRuntimeWithOwner(ctx, "")
+}
+
+func (f *fixture) startRuntimeWithOwner(ctx context.Context, ownerID string) {
 	f.t.Helper()
 	args := []string{
 		"exec", "-d",
-		"--env", "REDEVEN_DESKTOP_OWNER_ID=" + desktopOwnerID,
+	}
+	if ownerID != "" {
+		args = append(args, "--env", "REDEVEN_DESKTOP_OWNER_ID="+ownerID)
+	}
+	args = append(args,
 		f.containerName,
-		binaryPath,
+		managedRedeven,
 		"run",
 		"--mode", "desktop",
 		"--desktop-managed",
 		"--state-root", containerStateRoot,
 		"--local-ui-bind", "127.0.0.1:0",
-	}
+	)
 	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", args...); err != nil {
 		f.t.Fatalf("start runtime: %v", err)
 	}
 }
 
-func (f *fixture) startHistoricalRuntime(ctx context.Context) {
-	f.t.Helper()
-	legacyStateRoot := filepath.Join(containerStateRoot, "instances", "envinst_gzcom_fixture", "state")
-	args := []string{
-		"exec", "-d",
-		f.containerName,
-		upgradedRedeven,
-		"run",
-		"--mode", "desktop",
-		"--desktop-managed",
-		"--state-root", legacyStateRoot,
-		"--local-ui-bind", "127.0.0.1:0",
-	}
-	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", args...); err != nil {
-		f.t.Fatalf("start historical runtime: %v", err)
-	}
-}
-
-func (f *fixture) assertInventoryReconcilesHistoricalRuntime(ctx context.Context) {
+func (f *fixture) assertInventoryRequiresConfirmedTakeover(ctx context.Context) {
 	f.t.Helper()
 	isolationContainer := f.containerName + "-isolation"
 	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "run", "-d", "--name", isolationContainer, ubuntuImage, "sleep", "infinity"); err != nil {
@@ -506,17 +506,22 @@ func (f *fixture) assertInventoryReconcilesHistoricalRuntime(ctx context.Context
 	defer func() {
 		_, _ = f.runHost(context.Background(), f.repoRoot, nil, "docker", "rm", "-f", isolationContainer)
 	}()
-	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", filepath.Join(f.tempRoot, "redeven-linux"), isolationContainer+":"+containerRedeven); err != nil {
-		f.t.Fatalf("copy isolation runtime: %v", err)
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "exec", "-i", isolationContainer, "mkdir", "-p", filepath.Dir(managedRedeven)); err != nil {
+		f.t.Fatalf("prepare isolation runtime directory: %v", err)
 	}
-	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "exec", "-i", isolationContainer, "chmod", "0755", containerRedeven); err != nil {
+	for _, path := range []string{containerRedeven, managedRedeven} {
+		if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", filepath.Join(f.tempRoot, "redeven-linux"), isolationContainer+":"+path); err != nil {
+			f.t.Fatalf("copy isolation runtime to %s: %v", path, err)
+		}
+	}
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "exec", "-i", isolationContainer, "chmod", "0755", containerRedeven, managedRedeven); err != nil {
 		f.t.Fatalf("prepare isolation runtime: %v", err)
 	}
 	if _, err := f.runHost(ctx, f.repoRoot, nil,
 		"docker", "exec", "-d",
 		"--env", "REDEVEN_DESKTOP_OWNER_ID="+desktopOwnerID,
 		isolationContainer,
-		containerRedeven, "run",
+		managedRedeven, "run",
 		"--mode", "desktop",
 		"--desktop-managed",
 		"--state-root", containerStateRoot,
@@ -528,42 +533,60 @@ func (f *fixture) assertInventoryReconcilesHistoricalRuntime(ctx context.Context
 	var isolationInventory runtimemanagement.RuntimeProcessInventory
 	for time.Now().Before(isolationDeadline) {
 		isolationInventory = f.runtimeInventoryInContainer(ctx, isolationContainer)
-		if isolationInventory.Summary.CurrentOwned == 1 {
+		if isolationInventory.Summary.Automatic == 1 {
 			break
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
-	if isolationInventory.Summary.CurrentOwned != 1 {
+	if isolationInventory.Summary.Automatic != 1 {
 		f.t.Fatalf("isolation runtime inventory did not become ready: %#v", isolationInventory)
 	}
 
-	f.startRuntime(ctx, containerRedeven)
-	f.waitReady(ctx)
-	f.startHistoricalRuntime(ctx)
+	f.startOwnerlessRuntime(ctx)
 	deadline := time.Now().Add(20 * time.Second)
 	var inventory runtimemanagement.RuntimeProcessInventory
 	for time.Now().Before(deadline) {
 		inventory = f.runtimeInventory(ctx)
-		if inventory.Summary.CurrentOwned == 1 && inventory.Summary.LegacyOwnerless == 1 {
+		if inventory.Summary.ConfirmedTakeover == 1 {
 			break
 		}
 		time.Sleep(250 * time.Millisecond)
 	}
-	if inventory.Summary.CurrentOwned != 1 || inventory.Summary.LegacyOwnerless != 1 || len(inventory.Instances) != 2 {
+	if inventory.Summary.ConfirmedTakeover != 1 || inventory.Summary.Blocked != 0 || len(inventory.Instances) != 1 {
 		f.dumpContainerDiagnostics(ctx)
-		f.t.Fatalf("runtime inventory did not find current and ownerless historical instances: %#v", inventory)
+		f.t.Fatalf("runtime inventory did not require confirmed takeover: %#v", inventory)
 	}
-	f.stopRuntime(ctx)
+	f.dockerExec(ctx, nil, "rm", "-f", runtimeLockPath)
+	inventory = f.runtimeInventory(ctx)
+	instance := inventory.Instances[0]
+	if inventory.Summary.ConfirmedTakeover != 1 || instance.IdentityStatus != runtimemanagement.RuntimeProcessIdentityVerified ||
+		instance.OwnerStatus != runtimemanagement.RuntimeProcessOwnerMissing || instance.LayoutStatus != runtimemanagement.RuntimeProcessLayoutCurrent ||
+		instance.OwnerEvidence != runtimemanagement.RuntimeProcessOwnerEvidenceMissing || instance.StopAuthority != runtimemanagement.RuntimeProcessStopConfirmedTakeover {
+		f.t.Fatalf("ownerless runtime inventory after lease removal = %#v", inventory)
+	}
+	if err := f.stopRuntimeInventoryInContainer(ctx, f.containerName, inventory, runtimemanagement.RuntimeProcessReconciliationAutomatic); err == nil ||
+		!strings.Contains(err.Error(), runtimemanagement.RuntimeProcessErrorTakeoverRequired) {
+		f.t.Fatalf("automatic stop error = %v, want %s", err, runtimemanagement.RuntimeProcessErrorTakeoverRequired)
+	}
+	if err := f.stopRuntimeInventoryInContainer(ctx, f.containerName, inventory, runtimemanagement.RuntimeProcessReconciliationConfirmedTakeover); err != nil {
+		f.t.Fatalf("confirmed takeover stop: %v", err)
+	}
+	if after := f.runtimeInventory(ctx); len(after.Instances) != 0 {
+		f.t.Fatalf("confirmed takeover left target processes: %#v", after)
+	}
 	isolationAfter := f.runtimeInventoryInContainer(ctx, isolationContainer)
-	if isolationAfter.Summary.CurrentOwned != 1 || len(isolationAfter.Instances) != 1 {
+	if isolationAfter.Summary.Automatic != 1 || len(isolationAfter.Instances) != 1 {
 		f.t.Fatalf("stopping the target container affected the isolation container: %#v", isolationAfter)
 	}
-	f.stopRuntimeInventoryInContainer(ctx, isolationContainer, isolationAfter)
+	if err := f.stopRuntimeInventoryInContainer(ctx, isolationContainer, isolationAfter, runtimemanagement.RuntimeProcessReconciliationAutomatic); err != nil {
+		f.t.Fatalf("stop isolation inventory: %v", err)
+	}
 }
 
 func (f *fixture) performDesktopOwnedUpgrade(ctx context.Context) {
 	f.t.Helper()
 	f.stopRuntime(ctx)
+	f.dockerExec(ctx, nil, "cp", stagedUpgrade, managedRedeven)
 	stamp := strings.Join([]string{
 		"schema_version=1",
 		"managed_by=redeven-desktop",
@@ -571,36 +594,19 @@ func (f *fixture) performDesktopOwnedUpgrade(ctx context.Context) {
 		"install_strategy=desktop_upload",
 		"",
 	}, "\n")
-	f.dockerExec(ctx, strings.NewReader(stamp), "sh", "-c", "cat > "+filepath.Dir(upgradedRedeven)+"/../managed-runtime.stamp")
-	f.startRuntime(ctx, upgradedRedeven)
+	f.dockerExec(ctx, strings.NewReader(stamp), "sh", "-c", "cat > "+managedRuntimeStamp)
+	f.startRuntime(ctx)
 }
 
 func (f *fixture) stopRuntime(ctx context.Context) launchReport {
 	f.t.Helper()
 	inventory := f.runtimeInventory(ctx)
-	if inventory.Summary.Blocking > 0 {
+	if inventory.Summary.Blocked > 0 {
 		f.t.Fatalf("runtime inventory contains blocking instances: %#v", inventory)
 	}
 	if len(inventory.Instances) > 0 {
-		result := f.dockerExec(ctx, nil,
-			containerRedeven,
-			"desktop-runtime-stop",
-			"--runtime-root", containerStateRoot,
-			"--state-root", containerStateRoot,
-			"--desktop-owner-id", desktopOwnerID,
-			"--current-executable", containerRedeven,
-			"--include-known-legacy",
-			"--all-matching",
-			"--expected-inventory-digest", inventory.InventoryDigest,
-			"--grace-period", "10s",
-			"--json",
-		)
-		var stopped runtimemanagement.RuntimeProcessStopResult
-		if err := json.Unmarshal([]byte(result.Stdout), &stopped); err != nil {
-			f.t.Fatalf("decode desktop-runtime-stop result: %v; stdout=%q", err, result.Stdout)
-		}
-		if len(stopped.After.Instances) != 0 {
-			f.t.Fatalf("runtime stop left matching processes: %#v", stopped.After)
+		if err := f.stopRuntimeInventoryInContainer(ctx, f.containerName, inventory, runtimemanagement.RuntimeProcessReconciliationAutomatic); err != nil {
+			f.t.Fatalf("stop runtime inventory: %v", err)
 		}
 	}
 	deadline := time.Now().Add(15 * time.Second)
@@ -625,8 +631,7 @@ func (f *fixture) runtimeInventory(ctx context.Context) runtimemanagement.Runtim
 		"--runtime-root", containerStateRoot,
 		"--state-root", containerStateRoot,
 		"--desktop-owner-id", desktopOwnerID,
-		"--current-executable", containerRedeven,
-		"--include-known-legacy",
+		"--current-executable", managedRedeven,
 	)
 	var inventory runtimemanagement.RuntimeProcessInventory
 	if err := json.Unmarshal([]byte(result.Stdout), &inventory); err != nil {
@@ -644,8 +649,7 @@ func (f *fixture) runtimeInventoryInContainer(ctx context.Context, containerName
 		"--runtime-root", containerStateRoot,
 		"--state-root", containerStateRoot,
 		"--desktop-owner-id", desktopOwnerID,
-		"--current-executable", containerRedeven,
-		"--include-known-legacy",
+		"--current-executable", managedRedeven,
 	)
 	if err != nil {
 		return runtimemanagement.RuntimeProcessInventory{}
@@ -661,10 +665,11 @@ func (f *fixture) stopRuntimeInventoryInContainer(
 	ctx context.Context,
 	containerName string,
 	inventory runtimemanagement.RuntimeProcessInventory,
-) {
+	mode runtimemanagement.RuntimeProcessReconciliationMode,
+) error {
 	f.t.Helper()
 	if len(inventory.Instances) == 0 {
-		return
+		return nil
 	}
 	result, err := f.runHost(ctx, f.repoRoot, nil,
 		"docker", "exec", "-i", containerName,
@@ -673,23 +678,24 @@ func (f *fixture) stopRuntimeInventoryInContainer(
 		"--runtime-root", containerStateRoot,
 		"--state-root", containerStateRoot,
 		"--desktop-owner-id", desktopOwnerID,
-		"--current-executable", containerRedeven,
-		"--include-known-legacy",
+		"--current-executable", managedRedeven,
+		"--reconciliation-mode", string(mode),
 		"--all-matching",
 		"--expected-inventory-digest", inventory.InventoryDigest,
 		"--grace-period", "10s",
 		"--json",
 	)
 	if err != nil {
-		f.t.Fatalf("stop isolation inventory: %v", err)
+		return err
 	}
 	var stopped runtimemanagement.RuntimeProcessStopResult
 	if err := json.Unmarshal([]byte(result.Stdout), &stopped); err != nil {
-		f.t.Fatalf("decode isolation stop: %v; stdout=%q", err, result.Stdout)
+		return fmt.Errorf("decode runtime stop: %w; stdout=%q", err, result.Stdout)
 	}
 	if len(stopped.After.Instances) != 0 {
-		f.t.Fatalf("isolation runtime stop left processes: %#v", stopped.After)
+		return fmt.Errorf("runtime stop left processes: %#v", stopped.After)
 	}
+	return nil
 }
 
 func (f *fixture) recoverRuntimeAfterManagementSocketLoss(ctx context.Context, previousProcessStartedAtMs int64) pingSnapshot {
@@ -716,7 +722,7 @@ func (f *fixture) recoverRuntimeAfterManagementSocketLoss(ctx context.Context, p
 		f.t.Fatalf("blocked diagnostics = %#v, want live_process_without_management_socket/management_socket_unreachable", blocked.Diagnostics)
 	}
 	f.stopRuntime(ctx)
-	f.startRuntime(ctx, containerRedeven)
+	f.startRuntime(ctx)
 	return f.waitPingAfter(ctx, previousProcessStartedAtMs)
 }
 
@@ -1014,7 +1020,7 @@ func (f *fixture) runSecondRuntimeAttach(ctx context.Context) launchReport {
 		"docker", "exec", "-i",
 		"--env", "REDEVEN_DESKTOP_OWNER_ID="+desktopOwnerID,
 		f.containerName,
-		containerRedeven, "run",
+		managedRedeven, "run",
 		"--mode", "desktop",
 		"--desktop-managed",
 		"--state-root", containerStateRoot,

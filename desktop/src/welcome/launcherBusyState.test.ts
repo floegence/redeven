@@ -890,7 +890,7 @@ describe('launcherBusyState', () => {
       subject_id: 'local',
       phase: 'checking_existing_runtime',
       title: 'Checking existing runtime',
-      detail: 'Desktop is checking whether a compatible local runtime is already running.',
+      detail: 'Desktop is checking whether a verified current local Runtime is already running.',
       lifecycle_progress: runtimeLifecycleProgress({
         location: 'local_host',
         phase: 'checking_existing_runtime',

@@ -466,6 +466,19 @@ describe('environmentProgressPrimaryPresentation', () => {
 });
 
 describe('selectEnvironmentPanelProgress', () => {
+  it('presents takeover confirmation as terminal attention instead of active work', () => {
+    const progress = lifecycleActionProgress({
+      action: 'restart_environment_runtime',
+      status: 'needs_confirmation',
+      startedAt: 200,
+      updatedAt: 210,
+    });
+    expect(environmentProgressPrimaryPresentation(progress)).toMatchObject({
+      kind: 'attention_trigger',
+      label: 'Review required',
+    });
+  });
+
   it('uses an active runtime operation instead of a stale Open failure', () => {
     const staleOpenFailure = openConnectionProgress('failed', { startedAt: 100, updatedAt: 110 });
     const runtimeRunning = lifecycleActionProgress({

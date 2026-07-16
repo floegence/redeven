@@ -108,8 +108,6 @@ Flags:
   --state-root <path>               Current Runtime state root.
   --desktop-owner-id <id>           Expected Desktop owner identity.
   --current-executable <path>       Expected current runtime binary; repeatable.
-  --include-known-legacy            Include built-in historical Desktop layouts.
-  --legacy-runtime-root <path>      Additional historical root; repeatable.
 `, "\n")
 }
 
@@ -127,12 +125,11 @@ Flags:
   --state-root <path>              State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).
   --probe-timeout <duration>       Runtime health probe timeout.
   --grace-period <duration>        Time to wait after requesting runtime shutdown.
-  --all-matching                   Stop every safely matched current or legacy instance.
+  --all-matching                   Stop every verified matching Runtime instance.
   --runtime-root <path>            Managed runtime package root.
   --desktop-owner-id <id>          Expected Desktop owner identity.
+  --reconciliation-mode <mode>     automatic or confirmed_takeover.
   --current-executable <path>      Expected current runtime binary; repeatable.
-  --include-known-legacy           Include built-in historical Desktop layouts.
-  --legacy-runtime-root <path>     Additional historical root; repeatable.
   --expected-inventory-digest <d>  Inventory digest required by --all-matching.
   --json                           Write a versioned machine-readable result.
 `, "\n")

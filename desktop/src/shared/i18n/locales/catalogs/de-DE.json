@@ -1175,6 +1175,41 @@
     "validationRuntimeRootRequired": "-Ausführungsumgebung ist erforderlich.",
     "validationSshPasswordRequired": "Für Passwortauthentifizierung ist ein SSH-Passwort erforderlich."
   },
+  "runtimeTakeover": {
+    "forceRestartTitle": "Neustart dieser Laufzeit erzwingen?",
+    "forceStopTitle": "Stoppen dieser Laufzeit erzwingen?",
+    "forceRestartAction": "Neustart erzwingen",
+    "forceStopAction": "Stoppen erzwingen",
+    "reviewRequired": "Überprüfung erforderlich",
+    "progressTitle": "Übernahme der Laufzeit bestätigen",
+    "progressRestartDetail": "Überprüfen Sie die verifizierten Laufzeitprozesse, bevor Sie den Neustart erzwingen.",
+    "progressStopDetail": "Überprüfen Sie die verifizierten Laufzeitprozesse, bevor Sie das Stoppen dieser Laufzeit erzwingen.",
+    "warningTitle": "Verifizierte Laufzeitprozesse werden beendet ({count})",
+    "warningDescription": "Die Prozessidentität wurde verifiziert, aber es fehlen Nachweise für die Zuordnung zu diesem Desktop oder die vorhandenen Nachweise weisen auf einen anderen Desktop hin. Aktive Terminals, laufende Jobs und nicht gespeicherte Arbeit können verloren gehen.",
+    "targetLabel": "Laufzeitziel",
+    "locationLabel": "Ausführungsort",
+    "processAriaLabel": "Laufzeitprozess {pid}",
+    "startedLabel": "Gestartet",
+    "ownerEvidenceLabel": "Nachweis der Desktop-Zuordnung",
+    "stateRootLabel": "Stammverzeichnis der Zustandsdaten",
+    "versionLabel": "Laufzeitversion",
+    "authorizationNotice": "Diese Bestätigung gilt ausschließlich für die hier angezeigte Prozessliste. Wenn sich die Identität eines Prozesses ändert, bricht Desktop den Vorgang ab und fordert Sie auf, die aktualisierten Prozessdaten erneut zu überprüfen.",
+    "location": {
+      "local_host": "Dieser Mac",
+      "ssh_host": "SSH-Host",
+      "local_container": "Lokaler Container",
+      "ssh_container": "Container auf einem SSH-Host"
+    },
+    "ownerStatus": {
+      "missing": "Desktop-Zuordnung nicht nachgewiesen",
+      "foreign": "Gehört zu einem anderen Desktop"
+    },
+    "ownerEvidence": {
+      "process_environment": "Anhand der Prozessumgebung bestätigt",
+      "runtime_lock": "Anhand der Laufzeitsperre bestätigt",
+      "missing": "Kein Nachweis der Desktop-Zuordnung verfügbar"
+    }
+  },
   "confirm": {
     "deleteConnectionTitle": "Verbindung löschen",
     "deleteConnectionConfirm": "Verbindung löschen",

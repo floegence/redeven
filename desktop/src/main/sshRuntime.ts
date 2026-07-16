@@ -21,10 +21,14 @@ import {
 import {
   parseDesktopRuntimeProcessInventory,
   parseDesktopRuntimeProcessStopResult,
+  requireDesktopRuntimeProcessReconciliation,
+  desktopRuntimeProcessInventoryHasSingleCurrentOwner,
+  desktopRuntimeProcessStopTargetCount,
   runtimeProcessCommandErrorFromOutput,
   type DesktopRuntimeProcessInventory,
   type DesktopRuntimeProcessStopResult,
 } from './runtimeProcessInventory';
+import type { DesktopRuntimeProcessReconciliation } from '../shared/desktopRuntimeProcessTakeover';
 import {
   DEFAULT_RUNTIME_PROBE_TIMEOUT_MS,
   probeExternalLocalUIHealth,
@@ -46,7 +50,6 @@ import {
   desktopSSHAuthority,
   normalizeDesktopSSHEnvironmentDetails,
   type DesktopSSHAuthMode,
-  type DesktopSSHBootstrapStrategy,
   type DesktopSSHEnvironmentDetails,
 } from '../shared/desktopSSH';
 import {
@@ -119,7 +122,7 @@ export type ManagedSSHRuntimeProcessInventoryArgs = Readonly<{
   tempRoot?: string;
   assetCacheRoot: string;
   sourceRuntimeRoot?: string;
-  preparedHelperBinaryPath?: string;
+  runtimeProcessReconciliation?: DesktopRuntimeProcessReconciliation;
   connectTimeoutSeconds?: number;
   signal?: AbortSignal;
   onLog?: StartManagedSSHRuntimeArgs['onLog'];
@@ -161,7 +164,6 @@ export type DesktopSSHRuntimeProgressPhase =
   | 'ssh_uploading_archive'
   | 'ssh_installing_upload'
   | 'ssh_discovering_runtime_instances'
-  | 'ssh_stopping_legacy_runtimes'
   | 'ssh_stopping_runtime_process'
   | 'ssh_verifying_runtime_inventory'
   | 'ssh_activating_runtime_package'
@@ -214,26 +216,6 @@ type SSHForwardPairFailure = Readonly<{
   role: 'local_ui' | 'runtime_control';
   failure: SSHLocalForwardFailure;
 }>;
-
-class DesktopSSHUploadAssetPreparationError extends DesktopOperationFailureError {
-  constructor(
-    failure: string | DesktopOperationFailurePresentation,
-    options: Readonly<{ cause?: unknown }> = {},
-  ) {
-    const presentation = typeof failure === 'string'
-      ? desktopOperationFailurePresentation({
-          code: 'ssh_runtime_launch_failed',
-          title: 'Runtime package preparation failed',
-          summary: failure,
-        })
-      : failure;
-    super(presentation, {
-      cause: options.cause,
-      runtimeLifecycleStepID: 'preparing_runtime_package',
-    });
-    this.name = 'DesktopSSHUploadAssetPreparationError';
-  }
-}
 
 export class DesktopSSHRuntimeCanceledError extends Error {
   constructor(message = 'SSH runtime startup was canceled.') {
@@ -311,6 +293,7 @@ export type StartManagedSSHRuntimeArgs = Readonly<{
   assetCacheRoot?: string;
   forceRuntimeUpdate?: boolean;
   runtimeProcessIntent?: 'start' | 'restart' | 'update';
+  runtimeProcessReconciliation?: DesktopRuntimeProcessReconciliation;
   allowActiveWorkReplacement?: boolean;
   startupTimeoutMs?: number;
   stopTimeoutMs?: number;
@@ -717,82 +700,10 @@ function buildManagedSSHRuntimePathShell(targetReleaseTagArg = '2'): string {
 
 function buildManagedSSHRuntimeProbeShell(): string {
   return [
-    'allow_legacy_migration="${allow_legacy_migration:-0}"',
     'probe_status=""',
     'probe_reason=""',
     'slot_release_tag=""',
     'reported_release_tag=""',
-    'legacy_release_layout_present() {',
-    '  legacy_releases_root="${runtime_root%/}/runtime/releases"',
-    '  [ -d "$legacy_releases_root" ] || return 1',
-    '  for legacy_candidate in "$legacy_releases_root"/*; do',
-    '    [ -d "$legacy_candidate" ] && return 0',
-    '  done',
-    '  return 1',
-    '}',
-    'legacy_runtime_is_valid() {',
-    '  legacy_root="$1"',
-    '  legacy_binary="${legacy_root}/bin/redeven"',
-    `  legacy_stamp="\${legacy_root}/${MANAGED_SSH_RUNTIME_STAMP_FILENAME}"`,
-    '  legacy_slot_release_tag=""',
-    '  legacy_reported_release_tag=""',
-    '  if [ ! -x "$legacy_binary" ] || [ ! -f "$legacy_stamp" ]; then',
-    '    return 1',
-    '  fi',
-    `  if ! grep -Fx "schema_version=1" "$legacy_stamp" >/dev/null 2>&1; then`,
-    '    return 1',
-    '  fi',
-    '  if ! grep -Fx "managed_by=redeven-desktop" "$legacy_stamp" >/dev/null 2>&1; then',
-    '    return 1',
-    '  fi',
-    '  while IFS= read -r legacy_stamp_line; do',
-    '    case "$legacy_stamp_line" in',
-    '      runtime_release_tag=*) legacy_slot_release_tag="${legacy_stamp_line#runtime_release_tag=}" ;;',
-    '    esac',
-    '  done < "$legacy_stamp"',
-    '  case "$legacy_slot_release_tag" in',
-    '    "") return 1 ;;',
-    '    v*) ;;',
-    '    *) legacy_slot_release_tag="v$legacy_slot_release_tag" ;;',
-    '  esac',
-    '  if ! legacy_version_output="$("$legacy_binary" version 2>/dev/null)"; then',
-    '    return 1',
-    '  fi',
-    '  set -- $legacy_version_output',
-    '  if [ "${1:-}" != "redeven" ] || [ -z "${2:-}" ]; then',
-    '    return 1',
-    '  fi',
-    '  legacy_reported_release_tag="$2"',
-    '  case "$legacy_reported_release_tag" in v*) ;; *) legacy_reported_release_tag="v$legacy_reported_release_tag" ;; esac',
-    '  [ "$legacy_slot_release_tag" = "$legacy_reported_release_tag" ]',
-    '}',
-    'copy_legacy_runtime_to_slot() {',
-    '  legacy_root="$1"',
-    '  mkdir -p "$bin_dir"',
-    '  cp "${legacy_root}/bin/redeven" "$binary"',
-    '  chmod +x "$binary"',
-    '  write_runtime_stamp "desktop_upload" "$legacy_slot_release_tag"',
-    '  cleanup_legacy_releases',
-    '}',
-    'maybe_migrate_legacy_runtime() {',
-    '  legacy_releases_root="${runtime_root%/}/runtime/releases"',
-    '  [ ! -e "$binary" ] || return 0',
-    '  [ -d "$legacy_releases_root" ] || return 1',
-    '  legacy_candidate_count=0',
-    '  legacy_candidate_root=""',
-    '  for legacy_candidate in "$legacy_releases_root"/*; do',
-    '    [ -d "$legacy_candidate" ] || continue',
-    '    if legacy_runtime_is_valid "$legacy_candidate"; then',
-    '      legacy_candidate_count=$((legacy_candidate_count + 1))',
-    '      legacy_candidate_root="$legacy_candidate"',
-    '    fi',
-    '  done',
-    '  if [ "$legacy_candidate_count" -ne 1 ]; then',
-    '    return 1',
-    '  fi',
-    '  legacy_runtime_is_valid "$legacy_candidate_root" || return 1',
-    '  copy_legacy_runtime_to_slot "$legacy_candidate_root"',
-    '}',
     'read_install_strategy_line() {',
     '  install_strategy_line=""',
     '  while IFS= read -r stamp_line; do',
@@ -805,15 +716,7 @@ function buildManagedSSHRuntimeProbeShell(): string {
     '  done < "$stamp_path"',
     '}',
     'runtime_is_compatible() {',
-    '  if [ ! -e "$binary" ] && [ "$allow_legacy_migration" = "1" ]; then',
-    '    maybe_migrate_legacy_runtime || true',
-    '  fi',
     '  if [ ! -e "$binary" ]; then',
-    '    if legacy_release_layout_present; then',
-    '      probe_status="stamp_invalid"',
-    '      probe_reason="legacy managed runtime layout is not deterministically migratable; use Update runtime to replace it"',
-    '      return 1',
-    '    fi',
     '    probe_status="missing_binary"',
     '    probe_reason="managed runtime binary is missing"',
     '    return 1',
@@ -910,14 +813,6 @@ function buildManagedSSHRuntimeStampShell(): string {
   ].join('\n');
 }
 
-function buildManagedSSHRuntimeCleanupShell(): string {
-  return [
-    'cleanup_legacy_releases() {',
-    '  rm -rf "${runtime_root%/}/runtime/releases"',
-    '}',
-  ].join('\n');
-}
-
 function buildManagedSSHRuntimeSwitchShell(): string {
   return [
     'switch_staged_runtime() {',
@@ -954,9 +849,7 @@ export function buildManagedSSHRuntimeProbeScript(): string {
     'set -eu',
     buildRemoteInstallRootShell(),
     buildManagedSSHRuntimePathShell(),
-    'allow_legacy_migration="${3:-0}"',
     buildManagedSSHRuntimeStampShell(),
-    buildManagedSSHRuntimeCleanupShell(),
     buildManagedSSHRuntimeProbeShell(),
     'runtime_is_compatible || true',
     "printf 'status=%s\\n' \"$probe_status\"",
@@ -1112,10 +1005,8 @@ export function buildManagedSSHActivatePreparedRuntimeScript(): string {
     '  echo "prepared Redeven binary version changed before activation" >&2',
     '  exit 1',
     'fi',
-    buildManagedSSHRuntimeCleanupShell(),
     buildManagedSSHRuntimeSwitchShell(),
     'switch_staged_runtime',
-    'cleanup_legacy_releases',
   ].join('\n');
 }
 
@@ -1178,37 +1069,7 @@ function buildManagedSSHRuntimeStatusScript(): string {
   ].join('\n');
 }
 
-export function buildManagedSSHRuntimeInventoryScript(): string {
-  return [
-    'set -eu',
-    buildRemoteInstallRootShell(),
-    buildRemoteStateRootShell(),
-    buildManagedSSHRuntimePathShell('3'),
-    'desktop_owner_id="${4:-}"',
-    'if [ ! -x "$binary" ]; then',
-    '  exit 127',
-    'fi',
-    'exec "$binary" desktop-runtime-inventory --runtime-root "$runtime_root" --state-root "$state_root" --desktop-owner-id "$desktop_owner_id" --current-executable "$binary" --include-known-legacy',
-  ].join('\n');
-}
-
-export function buildManagedSSHRuntimeInventoryStopScript(): string {
-  return [
-    'set -eu',
-    buildRemoteInstallRootShell(),
-    buildRemoteStateRootShell(),
-    buildManagedSSHRuntimePathShell('3'),
-    'desktop_owner_id="${4:-}"',
-    'inventory_digest="${5:-}"',
-    'grace_period="${6:-5s}"',
-    'if [ ! -x "$binary" ]; then',
-    '  exit 127',
-    'fi',
-    'exec "$binary" desktop-runtime-stop --runtime-root "$runtime_root" --state-root "$state_root" --desktop-owner-id "$desktop_owner_id" --current-executable "$binary" --include-known-legacy --all-matching --expected-inventory-digest "$inventory_digest" --grace-period "$grace_period" --json',
-  ].join('\n');
-}
-
-function buildManagedSSHUploadedRuntimeHelperScript(): string {
+function buildManagedSSHRuntimeProcessHelperScript(): string {
   return [
     'set -eu',
     buildRemoteInstallRootShell(),
@@ -1217,6 +1078,7 @@ function buildManagedSSHUploadedRuntimeHelperScript(): string {
     'desktop_owner_id="${4:-}"',
     'inventory_digest="${5:-}"',
     'grace_period="${6:-5s}"',
+    'reconciliation_mode="${7:-automatic}"',
     'maintenance_root="${runtime_root%/}/runtime/maintenance"',
     'mkdir -p "$maintenance_root"',
     'helper_root="$(mktemp -d "${maintenance_root%/}/process-helper.XXXXXX")"',
@@ -1228,51 +1090,20 @@ function buildManagedSSHUploadedRuntimeHelperScript(): string {
     'binary="${helper_root}/redeven"',
     'managed_binary="${runtime_root%/}/runtime/managed/bin/redeven"',
     'if [ ! -x "$binary" ]; then',
-    '  echo "uploaded runtime helper is missing redeven" >&2',
+    '  echo "Desktop runtime process helper is missing redeven" >&2',
     '  exit 1',
     'fi',
     'case "$operation" in',
     '  inventory)',
-    '    "$binary" desktop-runtime-inventory --runtime-root "$runtime_root" --state-root "$state_root" --desktop-owner-id "$desktop_owner_id" --current-executable "$managed_binary" --include-known-legacy',
+    '    "$binary" desktop-runtime-inventory --runtime-root "$runtime_root" --state-root "$state_root" --desktop-owner-id "$desktop_owner_id" --current-executable "$managed_binary"',
     '    ;;',
     '  stop)',
-    '    "$binary" desktop-runtime-stop --runtime-root "$runtime_root" --state-root "$state_root" --desktop-owner-id "$desktop_owner_id" --current-executable "$managed_binary" --include-known-legacy --all-matching --expected-inventory-digest "$inventory_digest" --grace-period "$grace_period" --json',
+    '    "$binary" desktop-runtime-stop --runtime-root "$runtime_root" --state-root "$state_root" --desktop-owner-id "$desktop_owner_id" --current-executable "$managed_binary" --reconciliation-mode "$reconciliation_mode" --all-matching --expected-inventory-digest "$inventory_digest" --grace-period "$grace_period" --json',
     '    ;;',
     '  *)',
     '    echo "runtime helper operation is invalid" >&2',
     '    exit 2',
     '    ;;',
-    'esac',
-  ].join('\n');
-}
-
-function buildManagedSSHPreparedRuntimeHelperScript(): string {
-  return [
-    'set -eu',
-    buildRemoteInstallRootShell(),
-    buildRemoteStateRootShell(),
-    buildManagedSSHRuntimePathShell('3'),
-    'operation="${3:-}"',
-    'desktop_owner_id="${4:-}"',
-    'inventory_digest="${5:-}"',
-    'grace_period="${6:-5s}"',
-    'helper_binary="${7:-}"',
-    'case "$helper_binary" in',
-    '  "${managed_root}.staging."*/bin/redeven) ;;',
-    '  *) echo "prepared runtime helper path is outside the managed staging layout" >&2; exit 1 ;;',
-    'esac',
-    'if [ ! -x "$helper_binary" ]; then',
-    '  echo "prepared runtime helper is missing redeven" >&2',
-    '  exit 1',
-    'fi',
-    'case "$operation" in',
-    '  inventory)',
-    '    "$helper_binary" desktop-runtime-inventory --runtime-root "$runtime_root" --state-root "$state_root" --desktop-owner-id "$desktop_owner_id" --current-executable "$binary" --include-known-legacy',
-    '    ;;',
-    '  stop)',
-    '    "$helper_binary" desktop-runtime-stop --runtime-root "$runtime_root" --state-root "$state_root" --desktop-owner-id "$desktop_owner_id" --current-executable "$binary" --include-known-legacy --all-matching --expected-inventory-digest "$inventory_digest" --grace-period "$grace_period" --json',
-    '    ;;',
-    '  *) echo "runtime helper operation is invalid" >&2; exit 2 ;;',
     'esac',
   ].join('\n');
 }
@@ -1389,27 +1220,6 @@ export async function probeManagedSSHRuntimeStatus(
   }
 }
 
-function runtimeProcessCommandNeedsUploadedHelper(result: SSHCommandResult): boolean {
-  if (result.exit_code === 127) {
-    return true;
-  }
-  if (result.exit_code !== 1 && result.exit_code !== 2) {
-    return false;
-  }
-  const raw = compact(result.stdout);
-  if (raw) {
-    try {
-      const parsed = JSON.parse(raw) as Readonly<{ error?: unknown }>;
-      if (parsed.error) {
-        return false;
-      }
-    } catch {
-      // Older runtimes do not know the inventory command and print text help.
-    }
-  }
-  return true;
-}
-
 async function runManagedSSHRuntimeProcessCommand(
   args: ManagedSSHRuntimeProcessInventoryArgs,
   operation: 'inventory' | 'stop',
@@ -1438,75 +1248,7 @@ async function runManagedSSHRuntimeProcessCommand(
     askPassScriptPath: await createSSHAskPassScript(tempDir, target.auth_mode),
     password: args.sshPassword,
   };
-  const script = operation === 'inventory'
-    ? buildManagedSSHRuntimeInventoryScript()
-    : buildManagedSSHRuntimeInventoryStopScript();
-  const scriptArgs = [
-    target.runtime_root,
-    args.runtimeStateRoot ?? target.runtime_root,
-    runtimeReleaseTag,
-    desktopOwnerID,
-    ...(operation === 'stop' ? [inventoryDigest, `${Math.max(1, Math.ceil(gracePeriodMs / 1000))}s`] : []),
-  ];
   try {
-    const installedResult = await runSSHOnce(
-      sshBinary,
-      [
-        ...sshStandaloneArgs(connectTimeoutSeconds, auth.mode),
-        ...sshTargetArgs(target),
-        remoteShellCommand(script, `redeven-ssh-runtime-${operation}`, scriptArgs),
-      ],
-      auth,
-      logs,
-      'control_stderr',
-      args.onLog,
-      undefined,
-      args.signal,
-    );
-    if (installedResult.exit_code === 0) {
-      return installedResult.stdout;
-    }
-    if (!runtimeProcessCommandNeedsUploadedHelper(installedResult)) {
-      throw runtimeProcessCommandErrorFromOutput(
-        installedResult.stdout,
-        installedResult.stderr,
-        `Desktop could not ${operation === 'inventory' ? 'inspect' : 'stop'} the SSH runtime processes.`,
-      );
-    }
-
-    if (compact(args.preparedHelperBinaryPath) !== '') {
-      const preparedHelperResult = await runSSHOnce(
-        sshBinary,
-        [
-          ...sshStandaloneArgs(connectTimeoutSeconds, auth.mode),
-          ...sshTargetArgs(target),
-          remoteShellCommand(buildManagedSSHPreparedRuntimeHelperScript(), 'redeven-ssh-runtime-prepared-helper', [
-            target.runtime_root,
-            args.runtimeStateRoot ?? target.runtime_root,
-            operation,
-            desktopOwnerID,
-            inventoryDigest,
-            `${Math.max(1, Math.ceil(gracePeriodMs / 1000))}s`,
-            compact(args.preparedHelperBinaryPath),
-          ]),
-        ],
-        auth,
-        logs,
-        'control_stderr',
-        args.onLog,
-        undefined,
-        args.signal,
-      );
-      if (preparedHelperResult.exit_code !== 0) {
-        throw runtimeProcessCommandErrorFromOutput(
-          preparedHelperResult.stdout,
-          preparedHelperResult.stderr,
-          `Prepared Desktop runtime helper could not ${operation === 'inventory' ? 'inspect' : 'stop'} the SSH runtime processes.`,
-        );
-      }
-      return preparedHelperResult.stdout;
-    }
-
     const platformResult = await runSSHOnce(
       sshBinary,
       [
@@ -1547,13 +1289,14 @@ async function runManagedSSHRuntimeProcessCommand(
       [
         ...sshStandaloneArgs(connectTimeoutSeconds, auth.mode),
         ...sshTargetArgs(target),
-        remoteShellCommand(buildManagedSSHUploadedRuntimeHelperScript(), 'redeven-ssh-runtime-helper', [
+        remoteShellCommand(buildManagedSSHRuntimeProcessHelperScript(), 'redeven-ssh-runtime-process-helper', [
           target.runtime_root,
           args.runtimeStateRoot ?? target.runtime_root,
           operation,
           desktopOwnerID,
           inventoryDigest,
           `${Math.max(1, Math.ceil(gracePeriodMs / 1000))}s`,
+          args.runtimeProcessReconciliation?.mode ?? 'automatic',
         ]),
       ],
       auth,
@@ -1567,7 +1310,7 @@ async function runManagedSSHRuntimeProcessCommand(
       throw runtimeProcessCommandErrorFromOutput(
         helperResult.stdout,
         helperResult.stderr,
-        `Desktop runtime helper could not ${operation === 'inventory' ? 'inspect' : 'stop'} the SSH runtime processes.`,
+        `Desktop runtime process helper could not ${operation === 'inventory' ? 'inspect' : 'stop'} the SSH runtime processes.`,
       );
     }
     return helperResult.stdout;
@@ -2403,7 +2146,6 @@ async function probeRemoteRuntimeCompatibility(args: Readonly<{
   connectTimeoutSeconds: number;
   auth: SSHCommandAuthContext;
   runtimeReleaseTag: string;
-  allowLegacyMigration?: boolean;
   logs: MutableRecentLogs;
   onLog: StartManagedSSHRuntimeArgs['onLog'];
   onProgress: StartManagedSSHRuntimeArgs['onProgress'];
@@ -2424,7 +2166,6 @@ async function probeRemoteRuntimeCompatibility(args: Readonly<{
       remoteShellCommand(buildManagedSSHRuntimeProbeScript(), 'redeven-ssh-runtime-probe', [
         args.target.runtime_root,
         args.runtimeReleaseTag,
-        args.allowLegacyMigration === true ? '1' : '0',
       ]),
     ],
     args.auth,
@@ -2606,17 +2347,6 @@ async function removeRemotePath(args: Readonly<{
   ).catch(() => undefined);
 }
 
-function installStrategyOrder(strategy: DesktopSSHBootstrapStrategy): readonly RemoteInstallStrategy[] {
-  switch (strategy) {
-    case 'desktop_upload':
-      return ['desktop_upload'];
-    case 'remote_install':
-      return ['remote_install'];
-    default:
-      return ['desktop_upload', 'remote_install'];
-  }
-}
-
 function resolveDesktopSSHReleaseFetchPolicy(startupTimeoutMs: number, connectTimeoutSeconds: number): DesktopSSHReleaseFetchPolicy {
   return {
     timeout_ms: Math.max(
@@ -2701,42 +2431,32 @@ async function prepareDesktopSSHUploadAsset(args: Readonly<{
   onProgress: StartManagedSSHRuntimeArgs['onProgress'];
   signal?: AbortSignal;
 }>): Promise<PreparedDesktopSSHUploadAsset> {
-  try {
-    throwIfSSHRuntimeCanceled(args.signal);
-    emitSSHRuntimeProgress(
-      args.onProgress,
-      'ssh_preparing_upload',
-      'Preparing local runtime package',
-      `Desktop is locating the ${args.platform.platform_label} Redeven ${args.runtimeReleaseTag} archive for upload.`,
-    );
-    const asset = await prepareDesktopRuntimeUploadAsset({
-      runtimeReleaseTag: args.runtimeReleaseTag,
-      releaseBaseURL: args.target.release_base_url,
-      assetCacheRoot: args.assetCacheRoot,
-      sourceRuntimeRoot: args.sourceRuntimeRoot,
-      platform: args.platform,
-      fetchPolicy: {
-        ...args.fetchPolicy,
-        signal: args.signal,
-      },
+  throwIfSSHRuntimeCanceled(args.signal);
+  emitSSHRuntimeProgress(
+    args.onProgress,
+    'ssh_preparing_upload',
+    'Preparing local runtime package',
+    `Desktop is locating the ${args.platform.platform_label} Redeven ${args.runtimeReleaseTag} archive for upload.`,
+  );
+  const asset = await prepareDesktopRuntimeUploadAsset({
+    runtimeReleaseTag: args.runtimeReleaseTag,
+    releaseBaseURL: args.target.release_base_url,
+    assetCacheRoot: args.assetCacheRoot,
+    sourceRuntimeRoot: args.sourceRuntimeRoot,
+    platform: args.platform,
+    fetchPolicy: {
+      ...args.fetchPolicy,
       signal: args.signal,
-    });
-    emitSSHRuntimeProgress(
-      args.onProgress,
-      'ssh_preparing_upload',
-      desktopSSHUploadAssetPreparedTitle(asset),
-      desktopSSHUploadAssetPreparedDetail(asset, args.platform, args.runtimeReleaseTag),
-    );
-    return asset;
-  } catch (error) {
-    if (error instanceof DesktopOperationFailureError) {
-      throw new DesktopSSHUploadAssetPreparationError(error.presentation, { cause: error });
-    }
-    throw new DesktopSSHUploadAssetPreparationError(
-      `Desktop could not prepare the ${args.platform.platform_label} Redeven runtime package locally: ${error instanceof Error ? error.message : String(error)}`,
-      { cause: error },
-    );
-  }
+    },
+    signal: args.signal,
+  });
+  emitSSHRuntimeProgress(
+    args.onProgress,
+    'ssh_preparing_upload',
+    desktopSSHUploadAssetPreparedTitle(asset),
+    desktopSSHUploadAssetPreparedDetail(asset, args.platform, args.runtimeReleaseTag),
+  );
+  return asset;
 }
 
 function desktopSSHUploadAssetPreparedTitle(asset: PreparedDesktopSSHUploadAsset): string {
@@ -2895,7 +2615,6 @@ async function prepareRemoteRuntimePackage(args: Readonly<{
   const packageIntent = args.packageIntent ?? (args.forceRuntimeUpdate === true ? 'replace_with_desktop_target' : 'install_if_missing');
   const initialProbe = await probeRemoteRuntimeCompatibility({
     ...args,
-    allowLegacyMigration: packageIntent !== 'replace_with_desktop_target',
   });
   const shouldReplaceRuntimePackage = packageIntent === 'replace_with_desktop_target';
   if (initialProbe.status === 'ready' && !shouldReplaceRuntimePackage) {
@@ -2908,73 +2627,34 @@ async function prepareRemoteRuntimePackage(args: Readonly<{
     throw new Error(describeManagedSSHRuntimeProbeResult(initialProbe));
   }
 
-  const failures: string[] = [
-    shouldReplaceRuntimePackage
-      ? `existing runtime will be replaced: ${describeManagedSSHRuntimeProbeResult(initialProbe)}`
-      : `existing runtime: ${describeManagedSSHRuntimeProbeResult(initialProbe)}`,
-  ];
-  for (const strategy of installStrategyOrder(args.target.bootstrap_strategy)) {
-    try {
-      if (strategy === 'desktop_upload') {
-        const platform = await probeRemotePlatform(args);
-        let preparedUpload: PreparedDesktopSSHUploadAsset;
-        try {
-          preparedUpload = await prepareDesktopSSHUploadAsset({
-            target: args.target,
-            runtimeReleaseTag: args.runtimeReleaseTag,
-            assetCacheRoot: args.assetCacheRoot,
-            sourceRuntimeRoot: args.sourceRuntimeRoot,
-            platform,
-            fetchPolicy: args.fetchPolicy,
-            onProgress: args.onProgress,
-            signal: args.signal,
-          });
-        } catch (error) {
-          if (args.target.bootstrap_strategy === 'auto' && error instanceof DesktopSSHUploadAssetPreparationError) {
-            failures.push(`${strategy}: ${error.message}`);
-            continue;
-          }
-          throw error;
-        }
-        const prepared = await prepareRemoteRuntimeViaDesktopUpload({
-          sshBinary: args.sshBinary,
-          target: args.target,
-          controlSocketPath: args.controlSocketPath,
-          connectTimeoutSeconds: args.connectTimeoutSeconds,
-          auth: args.auth,
-          runtimeReleaseTag: args.runtimeReleaseTag,
-          platform,
-          archiveData: preparedUpload.archiveData,
-          logs: args.logs,
-          onLog: args.onLog,
-          onProgress: args.onProgress,
-          signal: args.signal,
-        });
-        return prepared;
-      }
-
-      return await prepareRemoteRuntimeViaRemoteInstall(args);
-    } catch (error) {
-      failures.push(`${strategy}: ${error instanceof Error ? error.message : String(error)}`);
-      if (strategy === 'desktop_upload' && args.target.bootstrap_strategy === 'auto') {
-        throw error;
-      }
-    }
+  if (args.target.bootstrap_strategy === 'remote_install') {
+    return prepareRemoteRuntimeViaRemoteInstall(args);
   }
-
-  const attempts = failures.map((failure) => `- ${failure}`).join('\n');
-  throw readinessFailure(
-    `Desktop could not prepare the remote Redeven runtime over SSH.\n\nAttempts:\n${attempts}`,
-    args.logs,
-    {
-      code: 'ssh_runtime_install_failed',
-      title: 'SSH Runtime Install Failed',
-      summary: 'Desktop could not install the remote Redeven runtime over SSH.',
-      detail: attempts,
-      recoveryHint: 'Review the install attempt details and check SSH permissions, network access, runtime root, and disk space.',
-      targetLabel: desktopSSHAuthority(args.target),
-    },
-  );
+  const platform = await probeRemotePlatform(args);
+  const preparedUpload = await prepareDesktopSSHUploadAsset({
+    target: args.target,
+    runtimeReleaseTag: args.runtimeReleaseTag,
+    assetCacheRoot: args.assetCacheRoot,
+    sourceRuntimeRoot: args.sourceRuntimeRoot,
+    platform,
+    fetchPolicy: args.fetchPolicy,
+    onProgress: args.onProgress,
+    signal: args.signal,
+  });
+  return prepareRemoteRuntimeViaDesktopUpload({
+    sshBinary: args.sshBinary,
+    target: args.target,
+    controlSocketPath: args.controlSocketPath,
+    connectTimeoutSeconds: args.connectTimeoutSeconds,
+    auth: args.auth,
+    runtimeReleaseTag: args.runtimeReleaseTag,
+    platform,
+    archiveData: preparedUpload.archiveData,
+    logs: args.logs,
+    onLog: args.onLog,
+    onProgress: args.onProgress,
+    signal: args.signal,
+  });
 }
 
 async function activatePreparedRemoteRuntimePackage(args: Readonly<{
@@ -3432,11 +3112,10 @@ async function startManagedSSHRuntimeInternal(
           sourceRuntimeRoot: args.sourceRuntimeRoot,
           connectTimeoutSeconds,
           onLog: args.onLog,
+          runtimeProcessReconciliation: args.runtimeProcessReconciliation,
         };
         const inventory = await inspectManagedSSHRuntimeProcesses(processArgs);
-        if (inventory.summary.blocking > 0) {
-          throw new Error('SSH runtime process inventory contains an instance whose identity or owner cannot be safely stopped.');
-        }
+        requireDesktopRuntimeProcessReconciliation(inventory, args.runtimeProcessReconciliation);
         if (inventory.instances.length > 0) {
           await stopManagedSSHRuntimeProcesses(processArgs, inventory, stopTimeoutMs);
         }
@@ -3494,44 +3173,30 @@ async function startManagedSSHRuntimeInternal(
       tempRoot,
       assetCacheRoot,
       sourceRuntimeRoot: args.sourceRuntimeRoot,
-      preparedHelperBinaryPath: preparedRuntimePackage ? `${preparedRuntimePackage.stagingRoot}/bin/redeven` : undefined,
       connectTimeoutSeconds,
       onLog: args.onLog,
       onProgress: args.onProgress,
+      runtimeProcessReconciliation: args.runtimeProcessReconciliation,
     };
     emitSSHRuntimeProgress(
       args.onProgress,
       'ssh_discovering_runtime_instances',
       'Discovering runtime processes',
-      'Desktop is identifying current and historical runtime processes on the SSH host.',
+      'Desktop is verifying Runtime process identities on the SSH host.',
     );
     const processInventory = await inspectManagedSSHRuntimeProcesses(processArgs);
-    if (processInventory.summary.blocking > 0) {
+    requireDesktopRuntimeProcessReconciliation(processInventory, args.runtimeProcessReconciliation);
+    if (runtimeProcessIntent === 'start' && processInventory.summary.automatic > 1) {
       const maintenance = buildDesktopRuntimeMaintenanceRequirement({
         kind: 'runtime_restart_required',
         required_for: 'open',
         recovery_action: 'restart_runtime',
         can_desktop_start: false,
-        can_desktop_restart: false,
-        has_active_work: true,
-        active_work_label: 'Runtime process ownership requires review',
-        target_runtime_version: runtimeReleaseTag,
-        message: `Desktop found ${processInventory.summary.blocking} SSH runtime process(es) whose identity or owner cannot be safely reconciled.`,
-      });
-      throw new DesktopSSHRuntimeMaintenanceRequiredError(maintenance.message, maintenance);
-    }
-    const legacyProcessCount = processInventory.summary.legacy_owned + processInventory.summary.legacy_ownerless;
-    if (runtimeProcessIntent === 'start' && (legacyProcessCount > 0 || processInventory.summary.current_owned > 1)) {
-      const maintenance = buildDesktopRuntimeMaintenanceRequirement({
-        kind: 'runtime_restart_required',
-        required_for: 'open',
-        recovery_action: 'restart_runtime',
-        can_desktop_start: false,
-        can_desktop_restart: processInventory.summary.stoppable > 0,
+        can_desktop_restart: true,
         has_active_work: true,
         active_work_label: 'Runtime process reconciliation required',
         target_runtime_version: runtimeReleaseTag,
-        message: `Desktop found ${processInventory.instances.length} live SSH runtime process(es), including ${legacyProcessCount} historical process(es). Restart or update this runtime before opening it.`,
+        message: `Desktop found ${processInventory.summary.automatic} verified SSH Runtime processes for this target. Restart or update this Runtime before opening it.`,
       });
       throw new DesktopSSHRuntimeMaintenanceRequiredError(maintenance.message, maintenance);
     }
@@ -3541,9 +3206,9 @@ async function startManagedSSHRuntimeInternal(
     if (runtimeProcessIntent !== 'start' && processInventory.instances.length > 0) {
       emitSSHRuntimeProgress(
         args.onProgress,
-        legacyProcessCount > 0 ? 'ssh_stopping_legacy_runtimes' : 'ssh_stopping_runtime_process',
-        legacyProcessCount > 0 ? 'Stopping historical runtime processes' : 'Stopping runtime process',
-        `Desktop is stopping ${processInventory.summary.stoppable} verified SSH runtime process(es).`,
+        'ssh_stopping_runtime_process',
+        'Stopping Runtime processes',
+        `Desktop is stopping ${desktopRuntimeProcessStopTargetCount(processInventory, args.runtimeProcessReconciliation)} verified SSH Runtime process(es).`,
       );
       await stopManagedSSHRuntimeProcesses(processArgs, processInventory, stopTimeoutMs);
       emitSSHRuntimeProgress(
@@ -3561,7 +3226,6 @@ async function startManagedSSHRuntimeInternal(
       preparedRuntimePackage = null;
       const activatedProbe = await probeRemoteRuntimeCompatibility({
         ...packageArgs,
-        allowLegacyMigration: false,
       });
       if (activatedProbe.status !== 'ready') {
         throw new Error(describeManagedSSHRuntimeProbeResult(activatedProbe));
@@ -3665,9 +3329,11 @@ async function startManagedSSHRuntimeInternal(
         sourceRuntimeRoot: args.sourceRuntimeRoot,
         connectTimeoutSeconds,
         onLog: args.onLog,
+        runtimeProcessReconciliation: args.runtimeProcessReconciliation,
       };
       const replacementInventory = await inspectManagedSSHRuntimeProcesses(replacementProcessArgs);
-      if (replacementInventory.summary.blocking > 0 || replacementInventory.instances.length === 0) {
+      requireDesktopRuntimeProcessReconciliation(replacementInventory, args.runtimeProcessReconciliation);
+      if (replacementInventory.instances.length === 0) {
         throw new Error('Desktop could not verify the SSH runtime process inventory before replacement.');
       }
       await stopManagedSSHRuntimeProcesses(replacementProcessArgs, replacementInventory, stopTimeoutMs);
@@ -3695,8 +3361,9 @@ async function startManagedSSHRuntimeInternal(
       ? runtimeReleaseTag
       : normalizeRuntimeReleaseTag(remoteStartup.runtime_service?.runtime_version ?? runtimeReleaseTag);
     const finalIdentityIssues = [
-      ...(finalInventory.summary.blocking > 0 ? [`blocking=${finalInventory.summary.blocking}`] : []),
-      ...(finalInventory.summary.current_owned !== 1 ? [`current=${finalInventory.summary.current_owned}`] : []),
+      ...(finalInventory.summary.blocked > 0 ? [`blocked=${finalInventory.summary.blocked}`] : []),
+      ...(finalInventory.summary.confirmed_takeover > 0 ? [`takeover=${finalInventory.summary.confirmed_takeover}`] : []),
+      ...(!desktopRuntimeProcessInventoryHasSingleCurrentOwner(finalInventory) ? ['current_owner=invalid'] : []),
       ...(finalInventory.instances.length !== 1 ? [`instances=${finalInventory.instances.length}`] : []),
       ...(!finalInstance ? ['instance=missing'] : []),
       ...(finalInstance && finalInstance.pid !== remoteStartup.pid ? [`pid=${finalInstance.pid}, expected=${remoteStartup.pid}`] : []),

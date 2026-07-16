@@ -2242,12 +2242,36 @@ describe('DesktopWelcomeShell', () => {
     expect((styles.match(/100dvh/g) ?? []).length).toBe(1);
 
     expect((appSrc.match(/<ConfirmDialog\b/g) ?? []).length).toBe(3);
-    expect((appSrc.match(/<Dialog\b/g) ?? []).length).toBe(5);
+    expect((appSrc.match(/<Dialog\b/g) ?? []).length).toBe(6);
     expect((appSrc.match(/class=\{LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS\}/g) ?? []).length).toBe(1);
     expect((appSrc.match(/class=\{CONNECTION_DIALOG_CLASS\}/g) ?? []).length).toBe(2);
     expect(appSrc).toContain('function ControlPlaneDialog');
     expect(appSrc).toContain("title={props.i18n.t('connectionDialog.addProviderTitle')}");
     expect(appSrc).toContain('open={providerRuntimeLinkDialogOpen()}');
+  });
+
+  it('uses a digest-bound destructive Runtime takeover dialog without an error toast', () => {
+    const appSrc = readWelcomeSource();
+    expect(appSrc).toContain("failure.code === 'confirmation_required'");
+    expect(appSrc).toContain('failure.runtime_process_takeover');
+    expect(appSrc).toContain('failure.continuation_action');
+    expect(appSrc).toContain('setRuntimeProcessTakeoverDialog({');
+    expect(appSrc).toContain('data-floe-autofocus');
+    expect(appSrc).toContain('variant="destructive"');
+    expect(appSrc).toContain("i18n().t('runtimeTakeover.forceRestartTitle')");
+    expect(appSrc).toContain('state_root');
+    expect(appSrc).toContain('process_started_at_unix_ms');
+    expect(appSrc).toContain('owner_evidence');
+    expect(appSrc.indexOf("failure.code === 'confirmation_required'")).toBeLessThan(appSrc.indexOf('const presentation = launcherActionFailurePresentation'));
+  });
+
+  it('localizes structured local Runtime target details', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain("progress?.location === 'local_host'");
+    expect(appSrc).toContain("i18n.t('environmentFacts.thisDevice')");
+    expect(appSrc).toContain('const runtimeTargetDetail = createMemo');
+    expect(appSrc).toContain('const openTargetDetail = createMemo');
   });
 
   it('uses Gateway-specific deletion copy for Gateway-owned profiles', () => {

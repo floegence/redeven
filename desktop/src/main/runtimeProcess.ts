@@ -22,9 +22,13 @@ import { sanitizeDesktopChildEnvironment } from './desktopProcessEnvironment';
 import {
   parseDesktopRuntimeProcessInventory,
   parseDesktopRuntimeProcessStopResult,
+  requireDesktopRuntimeProcessReconciliation,
+  desktopRuntimeProcessInventoryHasSingleCurrentOwner,
+  desktopRuntimeProcessStopTargetCount,
   runtimeProcessCommandErrorFromOutput,
   type DesktopRuntimeProcessInventory,
 } from './runtimeProcessInventory';
+import type { DesktopRuntimeProcessReconciliation } from '../shared/desktopRuntimeProcessTakeover';
 
 const STARTUP_REPORT_POLL_MS = 100;
 const DEFAULT_STARTUP_TIMEOUT_MS = 30_000;
@@ -59,6 +63,7 @@ export type StartManagedRuntimeArgs = Readonly<{
   desktopOwnerID?: string;
   forceRuntimeUpdate?: boolean;
   runtimeProcessIntent?: 'start' | 'restart' | 'update';
+  runtimeProcessReconciliation?: DesktopRuntimeProcessReconciliation;
   beforeRuntimeReplacement?: () => Promise<void>;
   startupSecretsStdin?: string;
   signal?: AbortSignal;
@@ -76,7 +81,6 @@ export class ManagedRuntimeStartupCleanupError extends Error {
 export type ManagedRuntimeProgressPhase =
   | 'checking_existing_runtime'
   | 'discovering_runtime_instances'
-  | 'stopping_legacy_runtimes'
   | 'stopping_runtime_process'
   | 'verifying_runtime_inventory'
   | 'starting_runtime'
@@ -330,7 +334,6 @@ export async function inspectLocalManagedRuntimeProcesses(args: Readonly<{
       '--state-root', args.stateRoot,
       '--desktop-owner-id', args.desktopOwnerID,
       '--current-executable', args.executablePath,
-      '--include-known-legacy',
     ],
     env: args.env,
     timeoutMs: args.timeoutMs ?? DEFAULT_RUNTIME_ATTACH_TIMEOUT_MS,
@@ -344,6 +347,7 @@ export async function stopLocalManagedRuntimeProcesses(args: Readonly<{
   env: NodeJS.ProcessEnv;
   inventory: DesktopRuntimeProcessInventory;
   timeoutMs: number;
+  reconciliation?: DesktopRuntimeProcessReconciliation;
 }>): Promise<ReturnType<typeof parseDesktopRuntimeProcessStopResult>> {
   const result = parseDesktopRuntimeProcessStopResult(await runRuntimeProcessCommand({
     executablePath: args.executablePath,
@@ -353,9 +357,9 @@ export async function stopLocalManagedRuntimeProcesses(args: Readonly<{
       '--state-root', args.stateRoot,
       '--desktop-owner-id', args.desktopOwnerID,
       '--current-executable', args.executablePath,
-      '--include-known-legacy',
       '--all-matching',
       '--expected-inventory-digest', args.inventory.inventory_digest,
+      '--reconciliation-mode', args.reconciliation?.mode ?? 'automatic',
       '--grace-period', `${Math.max(1, Math.ceil(args.timeoutMs / 1000))}s`,
       '--json',
     ],
@@ -377,9 +381,7 @@ function localManagedRuntimeStop(args: Readonly<{
 }>): () => Promise<void> {
   return async () => {
     const inventory = await inspectLocalManagedRuntimeProcesses(args);
-    if (inventory.summary.blocking > 0) {
-      throw new Error('Local runtime process inventory contains an instance whose identity or owner cannot be safely stopped.');
-    }
+    requireDesktopRuntimeProcessReconciliation(inventory);
     if (inventory.instances.length === 0) {
       return;
     }
@@ -806,8 +808,9 @@ async function verifyManagedLocalRuntimeProcessIdentity(args: Readonly<{
   const instance = inventory.instances[0];
   const expectedVersion = String(args.startup.runtime_service?.runtime_version ?? '').trim();
   const issues = [
-    ...(inventory.summary.blocking > 0 ? [`blocking=${inventory.summary.blocking}`] : []),
-    ...(inventory.summary.current_owned !== 1 ? [`current=${inventory.summary.current_owned}`] : []),
+    ...(inventory.summary.blocked > 0 ? [`blocked=${inventory.summary.blocked}`] : []),
+    ...(inventory.summary.confirmed_takeover > 0 ? [`takeover=${inventory.summary.confirmed_takeover}`] : []),
+    ...(!desktopRuntimeProcessInventoryHasSingleCurrentOwner(inventory) ? ['current_owner=invalid'] : []),
     ...(inventory.instances.length !== 1 ? [`instances=${inventory.instances.length}`] : []),
     ...(!instance ? ['instance=missing'] : []),
     ...(instance && instance.pid !== args.startup.pid ? [`pid=${instance.pid}, expected=${args.startup.pid}`] : []),
@@ -882,7 +885,7 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
     args.onProgress,
     'checking_existing_runtime',
     'Checking existing runtime',
-    'Desktop is checking whether a compatible local runtime is already running.',
+    'Desktop is checking whether a verified current local Runtime is already running.',
   );
   let observedInventory: DesktopRuntimeProcessInventory | null = null;
   if (stateRoot && desktopOwnerID) {
@@ -891,7 +894,7 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
       args.onProgress,
       'discovering_runtime_instances',
       'Discovering runtime processes',
-      'Desktop is identifying current and historical local runtime processes.',
+      'Desktop is verifying local Runtime process identities.',
     );
     observedInventory = await inspectLocalManagedRuntimeProcesses({
       executablePath: args.executablePath,
@@ -900,17 +903,10 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
       env: mergedEnv,
       timeoutMs: runtimeAttachTimeoutMs,
     });
-    if (observedInventory.summary.blocking > 0) {
+    requireDesktopRuntimeProcessReconciliation(observedInventory, args.runtimeProcessReconciliation);
+    if (runtimeProcessIntent === 'start' && observedInventory.instances.length > 1) {
       throw readinessFailure(
-        'Desktop found a local runtime process whose identity or owner cannot be safely reconciled.',
-        { stdout: '', stderr: '' },
-      );
-    }
-    const legacyCount = observedInventory.summary.legacy_owned + observedInventory.summary.legacy_ownerless;
-    const replacementRequired = legacyCount > 0 || observedInventory.summary.current_owned > 1;
-    if (runtimeProcessIntent === 'start' && replacementRequired) {
-      throw readinessFailure(
-        `Desktop found ${observedInventory.instances.length} local runtime processes, including ${legacyCount} historical process(es). Restart or update the runtime before opening it.`,
+        `Desktop found ${observedInventory.instances.length} verified local Runtime processes. Restart or update the Runtime before opening it.`,
         { stdout: '', stderr: '' },
       );
     }
@@ -921,9 +917,9 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
     if (runtimeProcessIntent !== 'start' && observedInventory.instances.length > 0) {
       emitManagedRuntimeProgress(
         args.onProgress,
-        legacyCount > 0 ? 'stopping_legacy_runtimes' : 'stopping_runtime_process',
-        legacyCount > 0 ? 'Stopping historical runtime processes' : 'Stopping runtime process',
-        `Desktop is stopping ${observedInventory.summary.stoppable} verified local runtime process(es).`,
+        'stopping_runtime_process',
+        'Stopping Runtime processes',
+        `Desktop is stopping ${desktopRuntimeProcessStopTargetCount(observedInventory, args.runtimeProcessReconciliation)} verified local Runtime process(es).`,
       );
       await stopLocalManagedRuntimeProcesses({
         executablePath: args.executablePath,
@@ -932,6 +928,7 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
         env: mergedEnv,
         inventory: observedInventory,
         timeoutMs: args.stopTimeoutMs ?? DEFAULT_STOP_TIMEOUT_MS,
+        reconciliation: args.runtimeProcessReconciliation,
       });
       emitManagedRuntimeProgress(
         args.onProgress,
@@ -962,7 +959,7 @@ export async function startManagedRuntime(args: StartManagedRuntimeArgs): Promis
         args.onProgress,
         'waiting_for_readiness',
         'Checking runtime readiness',
-        'Desktop found a compatible local runtime and is checking whether it can open the Environment App.',
+        'Desktop found a verified current local Runtime and is checking whether it can open the Environment App.',
       );
       if (!runtimeServiceAllowsOpenAttempt(existingRuntime.runtime_service)) {
         assertRuntimeOpenable(existingRuntime, { stdout: '', stderr: '' });
@@ -1300,8 +1297,8 @@ export async function attachManagedRuntimeFromStatus(args: Readonly<{
         timeoutMs: args.runtimeAttachTimeoutMs ?? DEFAULT_RUNTIME_ATTACH_TIMEOUT_MS,
       })
     : null;
-  if (inventory?.summary.blocking) {
-    throw new Error('Local runtime process inventory contains an instance whose identity or owner cannot be safely reconciled.');
+  if (inventory) {
+    requireDesktopRuntimeProcessReconciliation(inventory);
   }
   const startup = await loadManagedRuntimeStartupFromStatus({
     executablePath: args.executablePath,

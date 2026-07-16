@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -17,9 +16,17 @@ import (
 const (
 	RuntimeProcessErrorInventoryChanged = "runtime_inventory_changed"
 	RuntimeProcessErrorInventoryBlocked = "runtime_inventory_blocked"
+	RuntimeProcessErrorTakeoverRequired = "runtime_takeover_confirmation_required"
 	RuntimeProcessErrorIdentityChanged  = "runtime_process_identity_changed"
 	RuntimeProcessErrorLeaseCleanup     = "runtime_lock_cleanup_failed"
 	RuntimeProcessErrorStopTimeout      = "runtime_stop_timeout"
+)
+
+type RuntimeProcessReconciliationMode string
+
+const (
+	RuntimeProcessReconciliationAutomatic         RuntimeProcessReconciliationMode = "automatic"
+	RuntimeProcessReconciliationConfirmedTakeover RuntimeProcessReconciliationMode = "confirmed_takeover"
 )
 
 type RuntimeProcessOperationError struct {
@@ -127,6 +134,28 @@ func verifyRuntimeProcessInstance(
 	return nil
 }
 
+func verifyRuntimeProcessInventoryBeforeSignals(
+	expected RuntimeProcessInventory,
+	observed RuntimeProcessInventory,
+) error {
+	if observed.InventoryDigest == expected.InventoryDigest {
+		return nil
+	}
+	for _, expectedInstance := range expected.Instances {
+		observedInstance, exists := inventoryInstanceByPID(observed, expectedInstance.PID)
+		if exists && !runtimeProcessInstancesEqual(expectedInstance, observedInstance) {
+			return runtimeProcessOperationError(
+				RuntimeProcessErrorIdentityChanged,
+				fmt.Sprintf("runtime process %d changed identity before the stop signal set was committed", expectedInstance.PID),
+			)
+		}
+	}
+	return runtimeProcessOperationError(
+		RuntimeProcessErrorInventoryChanged,
+		"runtime process inventory changed before the stop signal set was committed",
+	)
+}
+
 func remainingExpectedRuntimeProcesses(
 	inventory RuntimeProcessInventory,
 	expected []RuntimeProcessInstance,
@@ -170,55 +199,69 @@ func stopRuntimeProcesses(
 	options RuntimeProcessInventoryOptions,
 	expectedDigest string,
 	gracePeriod time.Duration,
+	reconciliationMode RuntimeProcessReconciliationMode,
 ) (RuntimeProcessStopResult, error) {
 	before, err := controller.Inspect(ctx, options)
 	if err != nil {
 		return RuntimeProcessStopResult{}, err
 	}
+	schemaVersion := before.SchemaVersion
 	if strings.TrimSpace(expectedDigest) == "" || before.InventoryDigest != strings.TrimSpace(expectedDigest) {
-		return RuntimeProcessStopResult{SchemaVersion: RuntimeProcessInventorySchemaVersion, Before: before}, runtimeProcessOperationError(
+		return RuntimeProcessStopResult{SchemaVersion: schemaVersion, Before: before}, runtimeProcessOperationError(
 			RuntimeProcessErrorInventoryChanged,
 			"runtime process inventory changed before the stop operation began",
 		)
 	}
-	if RuntimeProcessInventoryHasBlockingInstances(before) {
-		return RuntimeProcessStopResult{SchemaVersion: RuntimeProcessInventorySchemaVersion, Before: before}, runtimeProcessOperationError(
+	if reconciliationMode == "" {
+		reconciliationMode = RuntimeProcessReconciliationAutomatic
+	}
+	if reconciliationMode != RuntimeProcessReconciliationAutomatic && reconciliationMode != RuntimeProcessReconciliationConfirmedTakeover {
+		return RuntimeProcessStopResult{SchemaVersion: schemaVersion, Before: before}, runtimeProcessOperationError(
 			RuntimeProcessErrorInventoryBlocked,
-			"runtime process inventory contains an instance whose identity or owner cannot be safely stopped",
+			"runtime process reconciliation mode is invalid",
 		)
 	}
-	targets := make([]RuntimeProcessInstance, 0, before.Summary.Stoppable)
+	if before.Summary.Blocked > 0 {
+		return RuntimeProcessStopResult{SchemaVersion: schemaVersion, Before: before}, runtimeProcessOperationError(
+			RuntimeProcessErrorInventoryBlocked,
+			"runtime process inventory contains an instance whose core identity cannot be safely verified",
+		)
+	}
+	if reconciliationMode == RuntimeProcessReconciliationAutomatic && before.Summary.ConfirmedTakeover > 0 {
+		return RuntimeProcessStopResult{SchemaVersion: schemaVersion, Before: before}, runtimeProcessOperationError(
+			RuntimeProcessErrorTakeoverRequired,
+			"runtime process inventory requires explicit confirmed takeover",
+		)
+	}
+	targets := make([]RuntimeProcessInstance, 0, len(before.Instances))
 	for _, instance := range before.Instances {
-		if instance.Stoppable {
+		if instance.StopAuthority == RuntimeProcessStopAutomatic ||
+			(reconciliationMode == RuntimeProcessReconciliationConfirmedTakeover && instance.StopAuthority == RuntimeProcessStopConfirmedTakeover) {
 			targets = append(targets, instance)
 		}
 	}
 	if len(targets) == 0 {
 		return RuntimeProcessStopResult{
-			SchemaVersion: RuntimeProcessInventorySchemaVersion,
+			SchemaVersion: schemaVersion,
 			Before:        before,
 			After:         before,
 		}, nil
 	}
-	for _, target := range targets {
-		if err := verifyRuntimeProcessInstance(ctx, controller, options, target); err != nil {
-			if errors.Is(err, os.ErrProcessDone) {
-				return RuntimeProcessStopResult{SchemaVersion: RuntimeProcessInventorySchemaVersion, Before: before}, runtimeProcessOperationError(
-					RuntimeProcessErrorInventoryChanged,
-					fmt.Sprintf("runtime process %d exited before the stop signal set was committed", target.PID),
-				)
-			}
-			return RuntimeProcessStopResult{SchemaVersion: RuntimeProcessInventorySchemaVersion, Before: before}, err
-		}
-	}
 	leaseSnapshots, err := captureRuntimeProcessLeaseSnapshots(targets)
 	if err != nil {
-		return RuntimeProcessStopResult{SchemaVersion: RuntimeProcessInventorySchemaVersion, Before: before}, err
+		return RuntimeProcessStopResult{SchemaVersion: schemaVersion, Before: before}, err
+	}
+	committed, err := controller.Inspect(ctx, options)
+	if err != nil {
+		return RuntimeProcessStopResult{SchemaVersion: schemaVersion, Before: before}, err
+	}
+	if err := verifyRuntimeProcessInventoryBeforeSignals(before, committed); err != nil {
+		return RuntimeProcessStopResult{SchemaVersion: schemaVersion, Before: before, After: committed}, err
 	}
 	for _, target := range targets {
 		if err := controller.Interrupt(target.PID); err != nil && !errors.Is(err, os.ErrProcessDone) {
 			return RuntimeProcessStopResult{
-				SchemaVersion:  RuntimeProcessInventorySchemaVersion,
+				SchemaVersion:  schemaVersion,
 				Before:         before,
 				leaseSnapshots: leaseSnapshots,
 			}, err
@@ -229,25 +272,25 @@ func stopRuntimeProcesses(
 	}
 	afterGrace, remaining, err := waitForRuntimeProcesses(ctx, controller, options, targets, gracePeriod)
 	if err != nil {
-		return RuntimeProcessStopResult{SchemaVersion: RuntimeProcessInventorySchemaVersion, Before: before}, err
+		return RuntimeProcessStopResult{SchemaVersion: schemaVersion, Before: before}, err
 	}
 	for _, target := range remaining {
 		if err := verifyRuntimeProcessInstance(ctx, controller, options, target); err != nil {
 			if errors.Is(err, os.ErrProcessDone) {
 				continue
 			}
-			return RuntimeProcessStopResult{SchemaVersion: RuntimeProcessInventorySchemaVersion, Before: before, After: afterGrace}, err
+			return RuntimeProcessStopResult{SchemaVersion: schemaVersion, Before: before, After: afterGrace}, err
 		}
 		if err := controller.Kill(target.PID); err != nil && !errors.Is(err, os.ErrProcessDone) {
-			return RuntimeProcessStopResult{SchemaVersion: RuntimeProcessInventorySchemaVersion, Before: before, After: afterGrace}, err
+			return RuntimeProcessStopResult{SchemaVersion: schemaVersion, Before: before, After: afterGrace}, err
 		}
 	}
 	after, remaining, err := waitForRuntimeProcesses(ctx, controller, options, targets, 5*time.Second)
 	if err != nil {
-		return RuntimeProcessStopResult{SchemaVersion: RuntimeProcessInventorySchemaVersion, Before: before, After: afterGrace}, err
+		return RuntimeProcessStopResult{SchemaVersion: schemaVersion, Before: before, After: afterGrace}, err
 	}
 	result := RuntimeProcessStopResult{
-		SchemaVersion:  RuntimeProcessInventorySchemaVersion,
+		SchemaVersion:  schemaVersion,
 		Before:         before,
 		After:          after,
 		Stopped:        append([]RuntimeProcessInstance(nil), targets...),
@@ -277,11 +320,7 @@ func runtimeProcessLeaseIdentity(body []byte) (int, string, bool) {
 	if json.Unmarshal(body, &metadata) == nil && metadata.PID > 0 {
 		return metadata.PID, strings.TrimSpace(metadata.InstanceID), true
 	}
-	pid, err := strconv.Atoi(trimmed)
-	if err != nil || pid <= 0 {
-		return 0, "", false
-	}
-	return pid, "", true
+	return 0, "", false
 }
 
 func runtimeProcessTargetPIDsByStateRoot(instances []RuntimeProcessInstance) map[string]map[int]struct{} {
@@ -445,12 +484,28 @@ func StopRuntimeProcesses(
 	expectedDigest string,
 	gracePeriod time.Duration,
 ) (RuntimeProcessStopResult, error) {
+	return StopRuntimeProcessesWithMode(
+		ctx,
+		options,
+		expectedDigest,
+		gracePeriod,
+		RuntimeProcessReconciliationAutomatic,
+	)
+}
+
+func StopRuntimeProcessesWithMode(
+	ctx context.Context,
+	options RuntimeProcessInventoryOptions,
+	expectedDigest string,
+	gracePeriod time.Duration,
+	reconciliationMode RuntimeProcessReconciliationMode,
+) (RuntimeProcessStopResult, error) {
 	normalized, err := normalizeRuntimeInventoryOptions(options)
 	if err != nil {
 		return RuntimeProcessStopResult{}, err
 	}
 	controller := systemRuntimeProcessController{}
-	result, err := stopRuntimeProcesses(ctx, controller, normalized, expectedDigest, gracePeriod)
+	result, err := stopRuntimeProcesses(ctx, controller, normalized, expectedDigest, gracePeriod, reconciliationMode)
 	if err != nil {
 		return result, err
 	}

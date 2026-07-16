@@ -202,4 +202,20 @@ describe('desktopRuntimeHealth', () => {
       message: 'nope',
     })).toBeUndefined();
   });
+
+  it('normalizes verified process takeover as restart maintenance', () => {
+    expect(normalizeDesktopRuntimeMaintenanceRequirement({
+      kind: 'runtime_process_takeover_required',
+      required_for: 'open',
+      can_desktop_start: false,
+      can_desktop_restart: true,
+      has_active_work: true,
+      active_work_label: 'Active work may be interrupted',
+      message: 'Review the verified Runtime processes.',
+    })).toMatchObject({
+      kind: 'runtime_process_takeover_required',
+      recovery_action: 'restart_runtime',
+      can_desktop_restart: true,
+    });
+  });
 });
