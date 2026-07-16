@@ -2108,15 +2108,17 @@ describe('DesktopWelcomeShell', () => {
 
   it('closes Local Environment Settings after a successful save', () => {
     const appSrc = readWelcomeSource();
-    const saveStart = appSrc.indexOf('async function saveSettings()');
+    const saveStart = appSrc.indexOf('async function saveSettings(options: Readonly<{');
     const saveEnd = appSrc.indexOf('function cancelSettings()', saveStart);
     const saveSrc = appSrc.slice(saveStart, saveEnd);
 
     expect(saveSrc).toContain("showActionToast(i18n().t('toast.settingsSaved'));");
     expect(saveSrc).toContain('cancelSettings();');
+    expect(saveSrc).toContain("await restartEnvironmentRuntime(restartEnvironment, 'connect');");
     expect(saveSrc.indexOf('if (!result.ok)')).toBeLessThan(saveSrc.indexOf('cancelSettings();'));
     expect(saveSrc.indexOf('return;')).toBeLessThan(saveSrc.indexOf('cancelSettings();'));
     expect(saveSrc.indexOf('cancelSettings();')).toBeLessThan(saveSrc.indexOf('await refreshSnapshot();'));
+    expect(saveSrc.indexOf('cancelSettings();')).toBeLessThan(saveSrc.indexOf('await restartEnvironmentRuntime'));
     expect(saveSrc).toContain("showActionToast(getErrorMessage(error) || i18n().t('toast.actionFailedFallback'), 'error');");
   });
 
@@ -2128,6 +2130,28 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("props.i18n.t('settings.detailsTitle')");
     expect(appSrc).toContain("props.i18n.t('settings.runtimeLabel')");
     expect(appSrc).toContain("props.i18n.t('settings.accessSecurityTitle')");
+  });
+
+  it('keeps plaintext network review inside the settings dialog with focus restoration', () => {
+    const appSrc = readWelcomeSource();
+    const dialogStart = appSrc.indexOf('function LocalEnvironmentSettingsDialog');
+    const dialogEnd = appSrc.indexOf('function ConnectionDialog', dialogStart);
+    const dialogSrc = appSrc.slice(dialogStart, dialogEnd);
+
+    expect(dialogSrc).toContain("const [step, setStep] = createSignal<'edit' | 'review'>('edit')");
+    expect(dialogSrc).toContain("props.i18n.t('settings.plaintextNetworkExposureTitle')");
+    expect(dialogSrc).toContain("props.i18n.t('settings.reviewPlaintextExposureTitle')");
+    expect(dialogSrc).toContain("props.i18n.t('settings.plaintextExposureBoundary')");
+    expect(dialogSrc).toContain("props.i18n.t('settings.acceptPlaintextExposureRisk')");
+    expect(dialogSrc).toContain("props.i18n.t('settings.enablePlaintextNetworkAccess')");
+    expect(dialogSrc).toContain("props.i18n.t('settings.saveAndRestart')");
+    expect(dialogSrc).toContain('desktopSettingsDraftRequiresRuntimeRestart(props.baselineSnapshot.draft, props.draft)');
+    expect(dialogSrc).toContain('props.runtimeRestartAvailable && restartRequired()');
+    expect(dialogSrc).toContain('restartRuntime: showRestartAction()');
+    expect(dialogSrc).toContain('disabled={!riskAccepted() || !accessModel().password_configured}');
+    expect(dialogSrc).toContain('queueMicrotask(() => reviewHeadingRef?.focus())');
+    expect(dialogSrc).toContain('queueMicrotask(() => reviewTriggerRef?.focus())');
+    expect(dialogSrc).not.toContain('<ConfirmDialog');
   });
 
   it('exposes auto status detection only on non-provider runtime forms', () => {

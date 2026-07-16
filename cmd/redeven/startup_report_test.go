@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/floegence/redeven/internal/runtimemanagement"
 	"github.com/floegence/redeven/internal/runtimeservice"
 )
 
@@ -16,6 +17,7 @@ func TestWriteDesktopLaunchReportReady(t *testing.T) {
 		LocalUIURL:       "http://127.0.0.1:43210/",
 		LocalUIURLs:      []string{"http://127.0.0.1:43210/", "", "http://127.0.0.1:43210/"},
 		PasswordRequired: true,
+		Exposure:         runtimemanagement.NewLocalUIExposure(false, true),
 		EffectiveRunMode: "hybrid",
 		RemoteEnabled:    true,
 		DesktopManaged:   true,

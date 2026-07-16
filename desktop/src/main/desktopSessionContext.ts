@@ -1,7 +1,11 @@
 import type { DesktopSessionContextSnapshot } from '../shared/desktopSessionContextIPC';
 import type { DesktopSessionTarget } from './desktopTarget';
+import type { LocalUIExposure } from '../shared/localUIExposure';
 
-export function desktopSessionContextSnapshotFromTarget(target: DesktopSessionTarget | null): DesktopSessionContextSnapshot | null {
+export function desktopSessionContextSnapshotFromTarget(
+  target: DesktopSessionTarget | null,
+  localUIExposure?: LocalUIExposure,
+): DesktopSessionContextSnapshot | null {
   if (!target) {
     return null;
   }
@@ -19,6 +23,7 @@ export function desktopSessionContextSnapshotFromTarget(target: DesktopSessionTa
       ...(target.provider_origin ? { provider_origin: target.provider_origin } : {}),
       ...(target.provider_id ? { provider_id: target.provider_id } : {}),
       ...(target.env_public_id ? { env_public_id: target.env_public_id } : {}),
+      ...(localUIExposure ? { local_ui_exposure: localUIExposure } : {}),
     };
   }
 
@@ -34,5 +39,6 @@ export function desktopSessionContextSnapshotFromTarget(target: DesktopSessionTa
         ? 'runtime_gateway'
         : 'external_local_ui',
     label: target.label,
+    ...(localUIExposure ? { local_ui_exposure: localUIExposure } : {}),
   };
 }

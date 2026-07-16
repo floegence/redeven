@@ -456,6 +456,24 @@
       "retryLater": "Trop de tentatives incorrectes. Attendez la fin du délai, puis réessayez."
     }
   },
+  "networkExposure": {
+    "title": "L’exposition réseau en clair est active",
+    "summary": "Mot de passe activé ; pas de TLS. À utiliser uniquement sur un réseau de confiance.",
+    "viewDetails": "Afficher les détails de sécurité",
+    "dontRemindAgain": "Ne plus me le rappeler",
+    "dismissWarning": "Fermer l’avertissement",
+    "detailsTitle": "Périmètre de sécurité du réseau en clair",
+    "detailsDescription": "Consultez ce que cette connexion Local UI protège et ce qui reste visible sur le réseau.",
+    "accessURLs": "URL d’accès",
+    "transport": "Transport",
+    "httpNoTLS": "HTTP, sans TLS",
+    "authentication": "Authentification",
+    "passwordEnabled": "Mot de passe activé",
+    "securityBoundary": "Le mot de passe, les cookies, les ressources de la page et le trafic HTTP non protégé par Flowersec peuvent être interceptés ou modifiés. Le chiffrement de bout en bout de Flowersec ne commence qu’une fois le handshake terminé.",
+    "close": "Fermer",
+    "policyUnavailable": "La politique de sécurité pour le réseau en clair n’est pas disponible.",
+    "policyError": "Impossible de créer la politique de sécurité pour le réseau en clair : {message}"
+  },
   "aiChrome": {
     "flowerTitle": "Flower",
     "codexTitle": "Codex",

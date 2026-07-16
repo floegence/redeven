@@ -7,6 +7,7 @@ import {
   type DesktopLocalEnvironmentStateLayout,
 } from './statePaths';
 import { sanitizeDesktopChildEnvironment } from './desktopProcessEnvironment';
+import { canonicalLocalUIBind, isLoopbackOnlyBind, parseLocalUIBind } from './localUIBind';
 
 export const DESKTOP_OWNER_ID_ENV_NAME = 'REDEVEN_DESKTOP_OWNER_ID';
 export { RUNTIME_SECRET_ENV_NAMES } from './desktopProcessEnvironment';
@@ -44,12 +45,21 @@ function resolvedRuntimeBootstrap(
   return bootstrap ?? null;
 }
 
+function acknowledgementMatchesBind(raw: string | undefined, canonicalBind: string): boolean {
+  try {
+    return canonicalLocalUIBind(String(raw ?? '')) === canonicalBind;
+  } catch {
+    return false;
+  }
+}
+
 export function buildDesktopRuntimeArgs(
   environment: DesktopLocalEnvironmentState,
   options: BuildDesktopRuntimeArgsOptions = {},
 ): string[] {
   const access = localEnvironmentAccess(environment);
-  const localUIBind = String(options.localUIBind ?? access.local_ui_bind).trim() || access.local_ui_bind;
+  const localUIBind = canonicalLocalUIBind(String(options.localUIBind ?? access.local_ui_bind).trim() || access.local_ui_bind);
+  const parsedBind = parseLocalUIBind(localUIBind);
   const args = [
     'run',
     '--mode',
@@ -60,6 +70,16 @@ export function buildDesktopRuntimeArgs(
     '--local-ui-bind',
     localUIBind,
   ];
+  if (!isLoopbackOnlyBind(parsedBind)) {
+    const acknowledgement = access.plaintext_network_exposure_acknowledgement;
+    if (!access.local_ui_password_configured || String(access.local_ui_password ?? '') === '') {
+      throw new Error('Network Local UI access requires a configured password.');
+    }
+    if (acknowledgement?.version !== 1 || !acknowledgementMatchesBind(acknowledgement.bind, localUIBind)) {
+      throw new Error('Review network exposure before starting this Local Environment.');
+    }
+    args.push('--acknowledge-plaintext-network-exposure');
+  }
   const stateRoot = String(options.stateRoot ?? '').trim();
   if (stateRoot !== '') {
     args.push('--state-root', stateRoot);

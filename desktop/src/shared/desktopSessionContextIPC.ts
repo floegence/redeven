@@ -1,3 +1,5 @@
+import type { LocalUIExposure } from './localUIExposure';
+
 export const DESKTOP_SESSION_CONTEXT_GET_CHANNEL = 'redeven-desktop:session-context-get';
 export const DESKTOP_SESSION_APP_READY_CHANNEL = 'redeven-desktop:session-app-ready';
 
@@ -11,6 +13,7 @@ export type DesktopSessionContextSnapshot = Readonly<{
   provider_id?: string;
   env_public_id?: string;
   label?: string;
+  local_ui_exposure?: LocalUIExposure;
 }>;
 
 export type DesktopSessionAppReadyState = 'access_gate_interactive' | 'runtime_connected';

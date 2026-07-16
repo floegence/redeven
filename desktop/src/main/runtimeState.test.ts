@@ -12,6 +12,11 @@ import type { StartupReport } from './startup';
 import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
 
 const validEnvAppShellHTML = '<!doctype html><html><body><div id="root"></div><script type="module" src="/_redeven_proxy/env/assets/index.js"></script></body></html>';
+const loopbackExposure = {
+  scope: 'loopback',
+  transport: 'plaintext',
+  password_required: false,
+} as const;
 
 function openableHealthPayload(startedAtUnixMS: number): string {
   return JSON.stringify({
@@ -19,6 +24,7 @@ function openableHealthPayload(startedAtUnixMS: number): string {
     data: {
       status: 'online',
       password_required: false,
+      exposure: loopbackExposure,
       started_at_unix_ms: startedAtUnixMS,
       runtime_service: {
         runtime_version: 'v0.0.0-dev',
@@ -77,6 +83,7 @@ describe('runtimeState', () => {
           data: {
             status: 'online',
             password_required: false,
+            exposure: loopbackExposure,
             runtime_service: {
               runtime_version: 'v2.0.0',
               service_owner: 'external',
@@ -114,6 +121,7 @@ describe('runtimeState', () => {
         local_ui_url: `http://127.0.0.1:${address.port}/`,
         local_ui_urls: [`http://127.0.0.1:${address.port}/`],
         password_required: false,
+        exposure: loopbackExposure,
         runtime_service: {
           runtime_version: 'v2.0.0',
           runtime_commit: undefined,
@@ -253,6 +261,7 @@ describe('runtimeState', () => {
           data: {
             status: 'online',
             password_required: false,
+            exposure: loopbackExposure,
             runtime_service: {
               runtime_version: 'v0.0.0-dev',
               compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,
@@ -326,6 +335,7 @@ describe('runtimeState', () => {
           data: {
             status: 'online',
             password_required: false,
+            exposure: loopbackExposure,
             runtime_service: {
               runtime_version: 'v0.0.0-dev',
               compatibility_epoch: RUNTIME_SERVICE_COMPATIBILITY_EPOCH,

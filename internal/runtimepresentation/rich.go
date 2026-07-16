@@ -83,6 +83,10 @@ func (r *Renderer) buildRichPanel(event Event) string {
 		b.WriteString(richLine(width, "├", "┤", "─"))
 		b.WriteString(r.richCompactAccessRows(width, event, scenario))
 	}
+	if event.Snapshot.LocalUIExposure.IsNetwork() {
+		b.WriteString(richLine(width, "├", "┤", "─"))
+		b.WriteString(r.richExposureRows(width, event, compact))
+	}
 	b.WriteString(richLine(width, "├", "┤", "─"))
 	logLimit := 3
 	if compact {
@@ -502,6 +506,27 @@ func (r *Renderer) richCompactAccessRows(width int, event Event, scenario richSc
 		r.richMuted("Env") + "    " + r.richColor(richAccent) + valueOr(envURL, "not connected") + richReset(r.cfg.Color),
 	}
 	return richPlainRows(width, rows)
+}
+
+func (r *Renderer) richExposureRows(width int, event Event, compact bool) string {
+	s := event.Snapshot
+	urls := strings.Join(s.LocalUIURLs, ", ")
+	if urls == "" {
+		urls = "resolving network interfaces"
+	}
+	lines := []string{
+		r.richColor(richYellow) + "PLAINTEXT NETWORK EXPOSURE" + richReset(r.cfg.Color),
+		"Listen  " + valueOr(s.LocalUIBind, "not started"),
+		"URLs    " + urls,
+		"TLS     disabled  ·  Password  enabled",
+	}
+	if compact {
+		lines = []string{
+			r.richColor(richYellow) + "PLAINTEXT NETWORK EXPOSURE" + richReset(r.cfg.Color),
+			"TLS disabled  ·  Password enabled  ·  " + urls,
+		}
+	}
+	return richPlainRows(width, lines)
 }
 
 func (r *Renderer) richControlPlaneSetupRows(width int) string {

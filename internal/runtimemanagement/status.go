@@ -56,6 +56,7 @@ type RuntimeAttachEndpoint struct {
 	LocalUIURLs      []string                `json:"local_ui_urls,omitempty"`
 	RuntimeControl   *RuntimeControlEndpoint `json:"runtime_control,omitempty"`
 	PasswordRequired bool                    `json:"password_required"`
+	Exposure         LocalUIExposure         `json:"exposure"`
 }
 
 type RuntimeAttachDiagnostics struct {

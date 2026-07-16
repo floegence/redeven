@@ -456,6 +456,24 @@
     "reloadPageAction": "重新載入頁面",
     "notice": "在互動功能繼續之前，密碼驗證會保留在執行時期管理的會話中。"
   },
+  "networkExposure": {
+    "title": "明文網路暴露已啟用",
+    "summary": "已啟用密碼；未啟用 TLS。僅限在受信任的網路上使用。",
+    "viewDetails": "檢視安全性詳情",
+    "dontRemindAgain": "不再提醒",
+    "dismissWarning": "關閉警告",
+    "detailsTitle": "明文網路的安全邊界",
+    "detailsDescription": "檢視此 Local UI 連線保護的內容，以及哪些內容在網路上仍為明文可見。",
+    "accessURLs": "存取 URL",
+    "transport": "傳輸方式",
+    "httpNoTLS": "HTTP，無 TLS",
+    "authentication": "身分驗證",
+    "passwordEnabled": "已啟用密碼",
+    "securityBoundary": "密碼、Cookie、頁面資源及未受 Flowersec 保護的 HTTP 流量都可能遭攔截或竄改。Flowersec 端對端加密只會在握手完成後開始。",
+    "close": "關閉",
+    "policyUnavailable": "明文網路安全性原則目前不可用。",
+    "policyError": "無法建立明文網路安全性原則：{message}"
+  },
   "aiChrome": {
     "flowerTitle": "Flower",
     "codexTitle": "Codex",

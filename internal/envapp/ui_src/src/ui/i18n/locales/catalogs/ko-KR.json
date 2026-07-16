@@ -456,6 +456,24 @@
     "reloadPageAction": "페이지 다시 불러오기",
     "notice": "암호 확인은 대화형 기능이 계속되기 전에 런타임 관리 세션 내에 유지됩니다."
   },
+  "networkExposure": {
+    "title": "평문 HTTP가 네트워크에 노출되어 있습니다",
+    "summary": "비밀번호로 접근만 제어하며 TLS는 사용하지 않습니다. 신뢰할 수 있는 네트워크에서만 사용하세요.",
+    "viewDetails": "보안 세부 정보 보기",
+    "dontRemindAgain": "다시 표시하지 않기",
+    "dismissWarning": "경고 닫기",
+    "detailsTitle": "평문 HTTP 연결의 보안 경계",
+    "detailsDescription": "이 Local UI 연결이 무엇을 보호하고 무엇이 네트워크에 그대로 노출되는지 확인하세요.",
+    "accessURLs": "접속 URL",
+    "transport": "전송 방식",
+    "httpNoTLS": "HTTP, TLS 없음",
+    "authentication": "인증",
+    "passwordEnabled": "비밀번호 사용",
+    "securityBoundary": "비밀번호, 쿠키, 페이지 리소스와 Flowersec으로 보호되지 않는 HTTP 트래픽은 공격자가 가로채거나 변조할 수 있습니다. Flowersec 종단 간 암호화(E2EE)는 핸드셰이크가 완료된 뒤에만 시작됩니다.",
+    "close": "닫기",
+    "policyUnavailable": "평문 네트워크 보안 정책을 사용할 수 없습니다.",
+    "policyError": "평문 네트워크 보안 정책을 생성하지 못했습니다: {message}"
+  },
   "aiChrome": {
     "flowerTitle": "Flower",
     "codexTitle": "Codex",

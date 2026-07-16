@@ -1,6 +1,10 @@
 package runtimepresentation
 
-import "time"
+import (
+	"time"
+
+	"github.com/floegence/redeven/internal/runtimemanagement"
+)
 
 type Phase string
 
@@ -53,6 +57,7 @@ type Snapshot struct {
 	StateDir                 string
 	LocalUIBind              string
 	LocalUIURLs              []string
+	LocalUIExposure          runtimemanagement.LocalUIExposure
 	EnvironmentURL           string
 	RuntimeControlSocketPath string
 }

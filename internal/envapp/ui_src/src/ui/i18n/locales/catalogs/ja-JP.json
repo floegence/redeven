@@ -456,6 +456,24 @@
     "reloadPageAction": "ページを再読み込み",
     "notice": "パスワード検証は、対話型機能が続行される前に、ランタイム管理セッション内に留まります。"
   },
+  "networkExposure": {
+    "title": "平文 HTTP によるネットワーク公開が有効です",
+    "summary": "パスワードは有効ですが、TLS は無効です。信頼できるネットワークでのみ使用してください。",
+    "viewDetails": "セキュリティの詳細を表示",
+    "dontRemindAgain": "今後表示しない",
+    "dismissWarning": "警告を閉じる",
+    "detailsTitle": "平文 HTTP によるネットワーク公開のセキュリティ境界",
+    "detailsDescription": "この Local UI 接続で保護される範囲と、ネットワーク上で引き続き可視となる情報を確認してください。",
+    "accessURLs": "アクセス URL",
+    "transport": "トランスポート",
+    "httpNoTLS": "HTTP、TLS なし",
+    "authentication": "認証",
+    "passwordEnabled": "パスワード有効",
+    "securityBoundary": "パスワード、Cookie、ページリソース、および Flowersec で保護されていない HTTP 通信は、傍受または改ざんされる可能性があります。Flowersec のエンドツーエンド暗号化は、ハンドシェイクの完了後にのみ開始されます。",
+    "close": "閉じる",
+    "policyUnavailable": "ネットワーク向け平文通信のセキュリティポリシーを利用できません。",
+    "policyError": "ネットワーク向け平文通信のセキュリティポリシーを作成できませんでした: {message}"
+  },
   "aiChrome": {
     "flowerTitle": "Flower",
     "codexTitle": "Codex",

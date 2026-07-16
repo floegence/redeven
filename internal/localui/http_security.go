@@ -2,6 +2,7 @@ package localui
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"net"
@@ -23,23 +24,54 @@ func (s *Server) configureNetworkAuthorities(listeners []net.Listener) error {
 	if s == nil {
 		return nil
 	}
-	allowed := make(map[string]struct{}, len(listeners)+1)
+	resolver := s.resolveAccessHosts
+	if resolver == nil {
+		resolver = resolveNetworkAccessHosts
+	}
+	accessHosts, err := resolver(s.bind)
+	if err != nil {
+		return err
+	}
+	if s.bind.IsNetworkExposure() && len(accessHosts) == 0 {
+		return fmt.Errorf("no active non-loopback unicast address is available for %s", s.bind.ListenLabel())
+	}
+
+	allowed := make(map[string]struct{}, len(listeners)+len(accessHosts))
+	displayURLs := make([]string, 0, len(accessHosts))
 	for _, listener := range listeners {
 		if listener == nil {
 			return fmt.Errorf("missing Local UI listener")
 		}
 		addr, ok := listener.Addr().(*net.TCPAddr)
 		if !ok || addr == nil || addr.IP == nil {
-			return fmt.Errorf("Local UI listener must use a loopback TCP address")
+			return fmt.Errorf("Local UI listener must use a TCP address")
 		}
 		parsedAddr, err := netip.ParseAddr(addr.IP.String())
-		if err != nil || addr.Port <= 0 || addr.Zone != "" || !parsedAddr.IsLoopback() {
-			return fmt.Errorf("Local UI listener must use a loopback TCP address")
+		if err != nil || addr.Port <= 0 || addr.Zone != "" || parsedAddr.Is4In6() {
+			return fmt.Errorf("Local UI listener has an invalid TCP address")
 		}
-		host := parsedAddr.String()
-		allowed[net.JoinHostPort(host, strconv.Itoa(addr.Port))] = struct{}{}
-		if s.bind.localhost {
-			allowed[net.JoinHostPort("localhost", strconv.Itoa(addr.Port))] = struct{}{}
+		if s.bind.IsLoopbackOnly() {
+			if !parsedAddr.IsLoopback() {
+				return fmt.Errorf("loopback Local UI bind resolved to a non-loopback listener")
+			}
+			host := parsedAddr.String()
+			allowed[net.JoinHostPort(host, strconv.Itoa(addr.Port))] = struct{}{}
+			if s.bind.localhost {
+				allowed[net.JoinHostPort("localhost", strconv.Itoa(addr.Port))] = struct{}{}
+			}
+			continue
+		}
+		if s.bind.IsWildcard() {
+			if !parsedAddr.IsUnspecified() {
+				return fmt.Errorf("wildcard Local UI bind resolved to a non-wildcard listener")
+			}
+		} else if parsedAddr.String() != s.bind.Host() {
+			return fmt.Errorf("Local UI listener address %s does not match bind %s", parsedAddr, s.bind.Host())
+		}
+		for _, host := range accessHosts {
+			authority := net.JoinHostPort(host.String(), strconv.Itoa(addr.Port))
+			allowed[authority] = struct{}{}
+			displayURLs = append(displayURLs, formatHTTPURL(host.String(), addr.Port))
 		}
 	}
 	if len(allowed) == 0 {
@@ -47,11 +79,12 @@ func (s *Server) configureNetworkAuthorities(listeners []net.Listener) error {
 	}
 	s.authorityMu.Lock()
 	s.networkAuthorities = allowed
+	s.displayURLs = dedupeStrings(displayURLs)
 	s.authorityMu.Unlock()
 	return nil
 }
 
-func canonicalLoopbackAuthority(raw string) (string, error) {
+func canonicalLocalUIAuthority(raw string) (string, error) {
 	value := strings.TrimSpace(raw)
 	if value == "" || strings.ContainsAny(value, "@/?#%") {
 		return "", fmt.Errorf("invalid authority")
@@ -69,39 +102,73 @@ func canonicalLoopbackAuthority(raw string) (string, error) {
 	}
 	addr, err := netip.ParseAddr(host)
 	if err != nil {
-		return "", fmt.Errorf("authority host must be a loopback literal")
+		return "", fmt.Errorf("authority host must be an IP literal")
 	}
-	if addr.Zone() != "" || addr.Is4In6() || !addr.IsLoopback() {
-		return "", fmt.Errorf("authority host must be loopback")
+	if addr.Zone() != "" || addr.Is4In6() || addr.IsUnspecified() || addr.IsMulticast() || addr.IsLinkLocalUnicast() || addr.IsLinkLocalMulticast() {
+		return "", fmt.Errorf("invalid authority host")
+	}
+	if !addr.IsLoopback() && !eligibleNetworkAccessAddress(addr) {
+		return "", fmt.Errorf("invalid authority host")
 	}
 	return net.JoinHostPort(addr.String(), strconv.Itoa(port)), nil
 }
 
+func canonicalLoopbackAuthority(raw string) (string, error) {
+	canonical, err := canonicalLocalUIAuthority(raw)
+	if err != nil {
+		return "", err
+	}
+	host, _, err := net.SplitHostPort(canonical)
+	if err != nil || strings.EqualFold(host, "localhost") {
+		return canonical, err
+	}
+	addr, err := netip.ParseAddr(host)
+	if err != nil || !addr.IsLoopback() {
+		return "", fmt.Errorf("authority host must be loopback")
+	}
+	return canonical, nil
+}
+
 func (s *Server) isAllowedNetworkAuthority(raw string) bool {
-	canonical, err := canonicalLoopbackAuthority(raw)
+	canonical, err := canonicalLocalUIAuthority(raw)
 	if err != nil || s == nil {
 		return false
 	}
 	s.authorityMu.RLock()
-	_, exact := s.networkAuthorities[canonical]
-	configured := len(s.networkAuthorities) > 0
+	_, allowed := s.networkAuthorities[canonical]
 	s.authorityMu.RUnlock()
-	if exact {
-		return true
-	}
-	// Desktop, SSH, and container bridges terminate on a different local port but
-	// preserve a canonical loopback authority. Arbitrary DNS names remain rejected.
-	return configured
+	return allowed
 }
 
-func (s *Server) isTrustedOrAllowedAuthority(raw string) bool {
-	if _, err := canonicalLoopbackAuthority(raw); err != nil || s == nil {
+type localUIRequestTrustKey struct{}
+
+func withTrustedLocalUIBridge(r *http.Request) *http.Request {
+	return r.WithContext(context.WithValue(r.Context(), localUIRequestTrustKey{}, true))
+}
+
+func isTrustedLocalUIBridge(r *http.Request) bool {
+	trusted, _ := r.Context().Value(localUIRequestTrustKey{}).(bool)
+	return trusted
+}
+
+func (s *Server) isTrustedOrAllowedAuthority(r *http.Request) bool {
+	if r == nil || s == nil {
 		return false
+	}
+	if isTrustedLocalUIBridge(r) {
+		_, err := canonicalLoopbackAuthority(r.Host)
+		return err == nil
 	}
 	s.authorityMu.RLock()
 	configured := len(s.networkAuthorities) > 0
 	s.authorityMu.RUnlock()
-	return !configured || s.isAllowedNetworkAuthority(raw)
+	if configured {
+		return s.isAllowedNetworkAuthority(r.Host)
+	}
+	// Direct handler use is limited to in-process tests and trusted embeddings.
+	// Public listeners always install networkHandler after configuring authorities.
+	_, err := canonicalLocalUIAuthority(r.Host)
+	return err == nil
 }
 
 func (s *Server) networkHandler() http.Handler {
@@ -209,7 +276,7 @@ func strictSameOriginWSRequest(r *http.Request, requireOrigin bool) bool {
 	if r == nil {
 		return false
 	}
-	expected, err := canonicalLoopbackAuthority(r.Host)
+	expected, err := canonicalLocalUIAuthority(r.Host)
 	if err != nil {
 		return false
 	}
@@ -228,6 +295,19 @@ func strictSameOriginWSRequest(r *http.Request, requireOrigin bool) bool {
 	if !strings.EqualFold(strings.TrimSpace(origin.Scheme), expectedScheme) {
 		return false
 	}
-	actual, err := canonicalLoopbackAuthority(origin.Host)
+	actual, err := canonicalLocalUIAuthority(origin.Host)
 	return err == nil && actual == expected
+}
+
+func dedupeStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	result := make([]string, 0, len(values))
+	for _, value := range values {
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		result = append(result, value)
+	}
+	return result
 }

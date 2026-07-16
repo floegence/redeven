@@ -3,6 +3,7 @@ import { createUIFirstSelection, deferAfterPaint, type FloeComponent, type UIFir
 import { ActivityAppsMain, FloeRegistryRuntime } from '@floegence/floe-webapp-core/app';
 import { NotesOverlayIcon } from '@floegence/floe-webapp-core/notes';
 import {
+  AlertTriangle,
   Activity,
   Code,
   Copy,
@@ -14,9 +15,12 @@ import {
   Refresh,
   Search,
   Settings,
+  Shield,
   Sun,
   Terminal,
+  X,
 } from '@floegence/floe-webapp-core/icons';
+import { Button, Dialog } from '@floegence/floe-webapp-core/ui';
 import { CodexNavigationIcon } from './icons/CodexIcon';
 import {
   ActivityBarCodespacesIcon,
@@ -45,7 +49,6 @@ import {
   createProxyRuntimeTunnelReconnectConfig,
 } from '@floegence/floe-webapp-boot';
 import {
-  AllowPlaintextForLoopback,
   RequireTLS,
   type ClientObserverLike,
 } from '@floegence/flowersec-core';
@@ -156,6 +159,11 @@ import { notifyDesktopSessionAppReady, readDesktopSessionContextSnapshot } from 
 import { controlPlaneOriginFromSandboxLocation } from './services/sandboxOrigins';
 import { readUIStorageItem, writeUIStorageItem } from './services/uiStorage';
 import { requestWorkbenchRenderTransaction } from './workbench/workbenchRenderBoundary';
+import { resolveLocalTransportSecurityPolicy } from './security/localTransportSecurity';
+import {
+  readNetworkExposureWarningSuppressed,
+  suppressNetworkExposureWarning,
+} from './security/networkExposureWarningPreference';
 import {
   ENV_DEFAULT_SURFACE_ID,
   isEnvSurfaceId,
@@ -178,6 +186,7 @@ const DESKTOP_VIEW_MODE_STORAGE_KEY = 'redeven_envapp_desktop_view_mode';
 const ACCESS_RESUME_TIMEOUT_MS = 15_000;
 const WORKBENCH_HANDOFF_ANCHOR_MAX_AGE_MS = 1_500;
 const NOTES_OVERLAY_KEYBIND = 'mod+.';
+
 const PLUGIN_CENTER_ACTIVITY_ID = 'plugin-center';
 const PLUGIN_SURFACE_ACTIVITY_ID = 'plugin-surface';
 const FLOWERSEC_CONNECT_RESOURCES = {
@@ -457,6 +466,8 @@ export function EnvAppShell() {
   const layout = useLayout();
   const theme = useTheme();
   const i18n = useI18n();
+  const localTransportSecurity = resolveLocalTransportSecurityPolicy(window.location.hostname);
+  const initialDesktopSessionContext = readDesktopSessionContextSnapshot();
   const shellTheme = desktopThemeBridge();
   const toggleThemeWithRenderBoundary = () => {
     requestWorkbenchRenderTransaction('theme');
@@ -516,6 +527,11 @@ export function EnvAppShell() {
   const [remoteAccessResumeToken, setRemoteAccessResumeToken] = createSignal(initialAccessResumeToken);
   const [remoteAccessRetryUntilMs, setRemoteAccessRetryUntilMs] = createSignal(0);
   const [accessRetryNowMs, setAccessRetryNowMs] = createSignal(Date.now());
+  const [networkSecurityDetailsOpen, setNetworkSecurityDetailsOpen] = createSignal(false);
+  const [networkExposureWarningDismissed, setNetworkExposureWarningDismissed] = createSignal(false);
+  const [networkExposureWarningSuppressed, setNetworkExposureWarningSuppressed] = createSignal(
+    readNetworkExposureWarningSuppressed(),
+  );
 
   let accessPasswordInput: HTMLInputElement | undefined;
 
@@ -530,6 +546,22 @@ export function EnvAppShell() {
   const accessRetryRemainingMs = createMemo(() => Math.max(0, accessRetryUntilMs() - accessRetryNowMs()));
   const accessRetryActive = createMemo(() => accessRetryRemainingMs() > 0);
   const accessPasswordRequired = createMemo(() => Boolean(accessStatus()?.password_required));
+  const networkExposureActive = createMemo(() => (
+    (localTransportSecurity.network && window.location.protocol === 'http:')
+    || localAccessStatus()?.exposure?.scope === 'network'
+    || initialDesktopSessionContext?.local_ui_exposure?.scope === 'network'
+  ));
+  const networkExposureURLs = createMemo(() => {
+    const reported = localAccessStatus()?.urls?.map((value) => String(value ?? '').trim()).filter(Boolean) ?? [];
+    if (reported.length > 0) return reported;
+    if (localTransportSecurity.network) return [`${window.location.origin}/`];
+    return [];
+  });
+  const networkExposureWarningVisible = createMemo(() => (
+    networkExposureActive()
+    && !networkExposureWarningDismissed()
+    && !networkExposureWarningSuppressed()
+  ));
   const accessServerUnlocked = createMemo(() => Boolean(accessStatus()?.unlocked));
   const accessPending = createMemo(() => !accessChecked());
   const [accessRecoveryBusy, setAccessRecoveryBusy] = createSignal(false);
@@ -609,7 +641,12 @@ export function EnvAppShell() {
 
   const markCurrentAccessLocked = (message: string) => {
     if (isLocalMode()) {
-      setLocalAccessStatus({ password_required: true, unlocked: false });
+      setLocalAccessStatus((current) => ({
+        password_required: true,
+        unlocked: false,
+        ...(current?.exposure ? { exposure: current.exposure } : {}),
+        ...(current?.urls ? { urls: current.urls } : {}),
+      }));
       setLocalAccessChecked(true);
       clearLocalAccessResumeToken();
     } else {
@@ -702,6 +739,12 @@ export function EnvAppShell() {
   );
 
   const [manualError, setManualError] = createSignal<string | null>(null);
+
+  createEffect(() => {
+    if (isLocalMode() && localTransportSecurity.error) {
+      setManualError(i18n.t('networkExposure.policyError', { message: localTransportSecurity.error }));
+    }
+  });
   const [connectionAttemptSeq, setConnectionAttemptSeq] = createSignal(0);
   const [auditOpen, setAuditOpen] = createSignal(false);
   const canViewAudit = createMemo(() => Boolean(env()?.permissions?.can_admin));
@@ -1453,16 +1496,16 @@ export function EnvAppShell() {
     });
   };
 
-  const localProtocolConnectConfig: ProtocolConnectConfig = createArtifactDirectReconnectConfig({
+  const localProtocolConnectConfig: ProtocolConnectConfig | null = localTransportSecurity.policy ? createArtifactDirectReconnectConfig({
     source: { kind: 'refreshable', acquire: mintLocalDirectConnectArtifact },
     observer,
     connect: {
       ...FLOWERSEC_CONNECT_RESOURCES,
       liveness: { intervalMs: 15_000, timeoutMs: 10_000 },
-      transportSecurityPolicy: AllowPlaintextForLoopback,
+      transportSecurityPolicy: localTransportSecurity.policy,
     },
     autoReconnect: LOCAL_FAST_RECONNECT_POLICY,
-  });
+  }) : null;
   const remoteProtocolConnectConfig: ProtocolConnectConfig = createProxyRuntimeTunnelReconnectConfig({
     source: { kind: 'refreshable', acquire: acquireRemoteArtifact },
     observer,
@@ -1494,6 +1537,9 @@ export function EnvAppShell() {
 
     try {
       if (isLocalMode()) {
+        if (!localProtocolConnectConfig) {
+          throw new Error(localTransportSecurity.error || i18n.t('networkExposure.policyUnavailable'));
+        }
         setLocalAccessChannelReady(false);
         await fn(localProtocolConnectConfig);
         if (accessRecoverySeq !== attemptKey) return;
@@ -1876,11 +1922,19 @@ export function EnvAppShell() {
       accessResumeClient = null;
 
       if (isLocalMode()) {
-        setLocalAccessStatus({ password_required: true, unlocked: true });
+        setLocalAccessStatus((current) => ({
+          password_required: true,
+          unlocked: true,
+          ...(current?.exposure ? { exposure: current.exposure } : {}),
+          ...(current?.urls ? { urls: current.urls } : {}),
+        }));
         setLocalAccessChecked(true);
         const refreshedRuntime = await refreshLocalRuntime();
         if (refreshedRuntime) {
           setLocalRuntime(refreshedRuntime);
+          if (refreshedRuntime.access_status) {
+            setLocalAccessStatus(refreshedRuntime.access_status);
+          }
         }
       } else {
         const nextStatus = await getEnvAppAccessStatus();
@@ -3218,6 +3272,87 @@ export function EnvAppShell() {
     />
   );
 
+  const dismissNetworkExposureWarning = () => {
+    setNetworkExposureWarningDismissed(true);
+  };
+
+  const permanentlySuppressNetworkExposureWarning = () => {
+    suppressNetworkExposureWarning();
+    setNetworkExposureWarningSuppressed(true);
+    setNetworkSecurityDetailsOpen(false);
+  };
+
+  const renderNetworkExposureWarning = () => (
+    <Show when={networkExposureWarningVisible()}>
+      <div class="flex min-h-11 shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-warning/30 bg-warning/10 px-3 py-2 text-warning-foreground transition-colors duration-150 sm:flex-nowrap sm:px-4" role="status" data-testid="network-exposure-warning">
+        <AlertTriangle class="h-4 w-4 shrink-0 text-warning" />
+        <div class="min-w-0 flex-[1_1_16rem] text-xs sm:flex sm:items-baseline sm:gap-2">
+          <div class="font-semibold text-foreground">{i18n.t('networkExposure.title')}</div>
+          <div class="mt-0.5 text-muted-foreground sm:mt-0">{i18n.t('networkExposure.summary')}</div>
+        </div>
+        <div class="ml-auto flex w-full flex-wrap items-center justify-end gap-1 sm:w-auto sm:flex-nowrap">
+          <Button size="xs" variant="outline" class="shrink-0 border-warning/30 bg-background/80 text-foreground hover:bg-background" onClick={() => setNetworkSecurityDetailsOpen(true)}>
+            {i18n.t('networkExposure.viewDetails')}
+          </Button>
+          <Button
+            size="xs"
+            variant="ghost"
+            class="shrink-0 text-muted-foreground hover:text-foreground"
+            data-testid="network-exposure-dont-remind"
+            onClick={permanentlySuppressNetworkExposureWarning}
+          >
+            {i18n.t('networkExposure.dontRemindAgain')}
+          </Button>
+          <Tooltip content={i18n.t('networkExposure.dismissWarning')} placement="bottom" delay={0}>
+            <Button
+              size="icon"
+              variant="ghost"
+              class="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+              aria-label={i18n.t('networkExposure.dismissWarning')}
+              data-testid="network-exposure-dismiss"
+              onClick={dismissNetworkExposureWarning}
+            >
+              <X class="h-3.5 w-3.5" />
+            </Button>
+          </Tooltip>
+        </div>
+      </div>
+    </Show>
+  );
+
+  const renderNetworkSecurityDetails = () => (
+    <Dialog
+      open={networkSecurityDetailsOpen()}
+      onOpenChange={setNetworkSecurityDetailsOpen}
+      title={i18n.t('networkExposure.detailsTitle')}
+      description={i18n.t('networkExposure.detailsDescription')}
+      class="redeven-network-security-details sm:max-w-lg"
+      footer={(
+        <Button size="sm" variant="outline" onClick={() => setNetworkSecurityDetailsOpen(false)}>
+          {i18n.t('networkExposure.close')}
+        </Button>
+      )}
+    >
+      <div class="space-y-4 text-xs">
+        <dl class="grid grid-cols-[minmax(7rem,0.55fr)_minmax(0,1.45fr)] gap-x-4 gap-y-3">
+          <dt class="text-muted-foreground">{i18n.t('networkExposure.accessURLs')}</dt>
+          <dd class="space-y-1 font-mono text-foreground">
+            <Show when={networkExposureURLs().length > 0} fallback={<span>{window.location.origin}/</span>}>
+              {networkExposureURLs().map((url) => <div class="break-all">{url}</div>)}
+            </Show>
+          </dd>
+          <dt class="text-muted-foreground">{i18n.t('networkExposure.transport')}</dt>
+          <dd class="text-foreground">{i18n.t('networkExposure.httpNoTLS')}</dd>
+          <dt class="text-muted-foreground">{i18n.t('networkExposure.authentication')}</dt>
+          <dd class="flex items-center gap-1.5 text-foreground"><Shield class="h-3.5 w-3.5 text-success" />{i18n.t('networkExposure.passwordEnabled')}</dd>
+        </dl>
+        <div class="border-t border-border pt-4 leading-5 text-muted-foreground">
+          {i18n.t('networkExposure.securityBoundary')}
+        </div>
+      </div>
+    </Dialog>
+  );
+
   const recordActivitySelectionEvent = createUIPresentationEventRecorder<string, EnvActivitySelectionMetadata>({
     surface: 'activity',
     source: (event) => event.metadata?.source ?? 'activity-bar',
@@ -3231,6 +3366,7 @@ export function EnvAppShell() {
 
   const renderActivityShell = () => (
     <Shell
+      class="!h-full"
       activitySelectionMode="ui-first"
       onActivitySelectionEvent={handleActivitySelectionEvent}
       sidebarMode={layout.sidebarActiveTab() !== 'ai' ? 'auto' : 'hidden'}
@@ -3375,23 +3511,27 @@ export function EnvAppShell() {
 
   const renderMainShell = () => (
     <>
-      <KeepAliveStack
-        class="h-screen min-h-0"
-        activeId={viewMode()}
-        activationMode="after-paint"
-        views={[
-          { id: 'activity', render: renderActivityShell },
-          {
-            id: 'workbench',
-            render: () => (
-              <DisplayModePageShell logo={<ShellLogo />} actions={<HeaderActions />}>
-                {renderWorkbenchContent()}
-              </DisplayModePageShell>
-            ),
-          },
-        ]}
-      />
+      <div class="flex h-screen min-h-0 flex-col">
+        {renderNetworkExposureWarning()}
+        <KeepAliveStack
+          class="redeven-env-shell-stage min-h-0 flex-1"
+          activeId={viewMode()}
+          activationMode="after-paint"
+          views={[
+            { id: 'activity', render: renderActivityShell },
+            {
+              id: 'workbench',
+              render: () => (
+                <DisplayModePageShell logo={<ShellLogo />} actions={<HeaderActions />}>
+                  {renderWorkbenchContent()}
+                </DisplayModePageShell>
+              ),
+            },
+          ]}
+        />
+      </div>
       {renderNotesOverlay()}
+      {renderNetworkSecurityDetails()}
     </>
   );
 

@@ -456,6 +456,24 @@
       "retryLater": "Demasiados intentos incorrectos. Espera a que termine el enfriamiento e inténtalo de nuevo."
     }
   },
+  "networkExposure": {
+    "title": "La exposición de red con HTTP sin cifrar está activa",
+    "summary": "La autenticación mediante contraseña solo controla el acceso; no hay TLS. Úsalo solo en una red de confianza.",
+    "viewDetails": "Ver detalles de seguridad",
+    "dontRemindAgain": "No volver a avisar",
+    "dismissWarning": "Cerrar aviso",
+    "detailsTitle": "Perímetro de seguridad de HTTP sin cifrar",
+    "detailsDescription": "Revisa qué protege esta conexión de Local UI y qué sigue siendo visible en la red.",
+    "accessURLs": "URLs de acceso",
+    "transport": "Transporte",
+    "httpNoTLS": "HTTP, sin TLS",
+    "authentication": "Autenticación",
+    "passwordEnabled": "Contraseña habilitada (solo control de acceso)",
+    "securityBoundary": "La contraseña, las cookies, los recursos de la página y el tráfico HTTP no protegido por Flowersec pueden ser interceptados o modificados. El cifrado de extremo a extremo (E2EE) de Flowersec solo comienza una vez completado el handshake.",
+    "close": "Cerrar",
+    "policyUnavailable": "La política de seguridad para HTTP sin cifrar en red no está disponible.",
+    "policyError": "No se pudo crear la política de seguridad para HTTP sin cifrar en red: {message}"
+  },
   "aiChrome": {
     "flowerTitle": "Flower",
     "codexTitle": "Codex",

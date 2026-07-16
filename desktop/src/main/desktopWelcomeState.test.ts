@@ -2099,6 +2099,7 @@ describe('desktopWelcomeState', () => {
       local_ui_bind: '127.0.0.1:0',
       local_ui_password: '',
       local_ui_password_mode: 'replace',
+      plaintext_network_exposure_acknowledgement_bind: '',
       auto_runtime_probe_enabled: true,
     });
     expect(snapshot.settings_surface.auto_runtime_probe_configurable).toBe(false);
@@ -2126,6 +2127,33 @@ describe('desktopWelcomeState', () => {
 
     expect(snapshot.settings_surface.current_runtime_url).toBe('http://localhost:23998/');
     expect(snapshot.settings_surface.next_start_address_display).toBe('localhost:23998');
+  });
+
+  it('threads a verified managed Runtime url into settings without requiring an open environment window', () => {
+    const local = testLocalEnvironment({
+      access: {
+        local_ui_bind: 'localhost:23998',
+        local_ui_password: '',
+        local_ui_password_configured: false,
+      },
+    });
+
+    const presence = localRuntimePresence({
+      local_ui_url: 'http://localhost:23998/',
+      started_at_unix_ms: 1_700_000_000_000,
+    });
+    const snapshot = buildDesktopWelcomeSnapshot({
+      preferences: testDesktopPreferences({
+        local_environment: local,
+      }),
+      managedRuntimePresenceByTargetID: {
+        [presence.target_id]: presence,
+      },
+      surface: 'environment_settings',
+      selectedEnvironmentID: local.id,
+    });
+
+    expect(snapshot.settings_surface.current_runtime_url).toBe('http://localhost:23998/');
   });
 
   it('keeps provider cards remote-only while summarizing linked managed runtimes', () => {

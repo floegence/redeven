@@ -10,9 +10,9 @@ Redeven runtime builds control and data sessions on Flowersec client and endpoin
 
 # Mechanism
 
-The released runtime dependency set includes Floeterm terminal-go v0.4.26 and Flowersec Go v0.21.1.
+The released runtime dependency set includes Floeterm terminal-go v0.4.26 and Flowersec Go v0.23.0.
 
-Redeven pins released `flowersec-go` and `terminal-go` versions in `go.mod`. The runtime consumes Flowersec Go v0.21.1 and the browser surfaces consume Flowersec Core v0.21.1 through published packages only. The agent connects the remote control channel through `fsclient.ConnectDirect` and opens remote data sessions through `endpoint.ConnectTunnel`; both calls explicitly select Flowersec `RequireTLS`. Env App tunnel reconnects select the matching TypeScript policy, while Local UI direct reconnects explicitly select `AllowPlaintextForLoopback`. The Docker Local UI integration client makes the same loopback-only exception. Product code therefore does not depend on the library default and cannot silently accept remote `ws://` transport.
+Redeven pins released `flowersec-go` and `terminal-go` versions in `go.mod`. The runtime consumes Flowersec Go v0.23.0 and the browser surfaces consume Flowersec Core v0.23.0 through published packages only. The agent connects the remote control channel through `fsclient.ConnectDirect` and opens remote data sessions through `endpoint.ConnectTunnel`; both calls explicitly select Flowersec `RequireTLS`. Env App tunnel reconnects select the matching TypeScript policy. Local UI direct reconnects use `AllowPlaintextForLoopback` for loopback locations and Flowersec's host-scoped `createNetworkPlaintextPolicy` for an explicitly acknowledged non-loopback IP location. The network policy accepts only that exact IP and includes `PlaintextRiskAcceptance.acceptPreE2ECredentialExposure`; policy construction failure blocks the connection without a permissive retry. The Docker Local UI integration client applies the same selection so its two-container network test proves the published host-scoped policy rather than unrestricted plaintext. Product code therefore does not depend on the library default and cannot silently accept unrelated remote `ws://` transport.
 
 Flowersec proxy requests use the validated browser source and origin context; payload-provided external origins are ignored, and opaque origins do not become forwarded request metadata. The Go HTTP proxy returns the first 3xx response with its original `Location` instead of following redirects. Browser Service Worker streams use one outstanding `chunk_credit_v1` credit per pull when both sides advertise the capability, while legacy workers retain their previous behavior; cancellation wakes waiting consumers. The optional Yamux stream write queue budget defaults to 4 MiB and is released after each write so an exhausted stream can recover. Reconnect paths share the active promise for the same configuration, including during backoff, preventing duplicate connection attempts without adding a global scheduler.
 
@@ -30,7 +30,7 @@ After the first visible Runtime reaches interactive state, the Env warmup queue 
 
 # Boundaries
 
-Compatibility depends on these transport and terminal interfaces staying aligned across released versions. Redeven compatibility epoch 6 requires Desktop and Runtime v0.8.1 or newer because the published v0.8.0 release still uses epoch 5 and cannot prove the terminal baseline when a Runtime omits explicit coverage metadata. Replacing or bypassing the published contracts can break control and data channel behavior, liveness teardown, bounded RPC dispatch, sparse history coverage, command lifecycle events, or terminal session lifecycle. ConnectArtifact v1, E2EE record framing, Yamux frames, and Redeven business RPC payloads remain owned by their existing upstream or product contracts; the v0.21.1 dependency update does not add Redeven business concepts to Flowersec. History and session diagnostics are observability signals only: neither Redeven nor Floeterm may use session count to reject creation, automatically close a PTY, or pause an existing session. Frontend renderer hibernation is not a runtime lifecycle transition: disposing an inactive `TerminalCore` must leave the terminal-go session and PTY running, and later snapshot or paged-history recovery resumes only the visual consumer.
+Compatibility depends on these transport and terminal interfaces staying aligned across released versions. Redeven compatibility epoch 8 requires Desktop and Runtime v0.10.0 or newer because Local UI exposure is now a startup and status contract shared by both processes. Replacing or bypassing the published contracts can break control and data channel behavior, liveness teardown, bounded RPC dispatch, plaintext network admission, sparse history coverage, command lifecycle events, or terminal session lifecycle. ConnectArtifact v1, E2EE record framing, Yamux frames, and Redeven business RPC payloads remain owned by their existing upstream or product contracts; the v0.23.0 dependency update does not add Redeven business concepts to Flowersec. History and session diagnostics are observability signals only: neither Redeven nor Floeterm may use session count to reject creation, automatically close a PTY, or pause an existing session. Frontend renderer hibernation is not a runtime lifecycle transition: disposing an inactive `TerminalCore` must leave the terminal-go session and PTY running, and later snapshot or paged-history recovery resumes only the visual consumer.
 
 # Citations
 
@@ -45,10 +45,10 @@ Compatibility depends on these transport and terminal interfaces staying aligned
 [9] redeven:internal/terminal/manager.go:207 - Floeterm default providers own shell arguments, init files, and command lifecycle markers.
 [10] redeven:internal/terminal/lifecycle.go:190 - Concurrent delete callers join one session-scoped in-flight cleanup operation.
 [11] redeven:AGENTS.md:173 - Repository rules require published upstream releases instead of local sibling checkouts.
-[12] redeven:go.mod:10 - Redeven consumes published flowersec-go v0.21.1.
+[12] redeven:go.mod:10 - Redeven consumes published flowersec-go v0.23.0.
 [13] redeven:internal/agent/agent.go:547 - Remote direct control connections explicitly require TLS.
 [14] redeven:internal/agent/agent.go:1018 - Remote tunnel sessions explicitly require TLS.
-[15] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1446 - Local direct reconnects explicitly allow plaintext only for loopback literals.
+[15] redeven:internal/envapp/ui_src/src/ui/security/localTransportSecurity.ts:22 - Local direct reconnects select loopback-only or exact network-IP plaintext policy from the browser hostname.
 [16] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1455 - Remote tunnel reconnects explicitly require TLS.
 [17] redeven:internal/agent/agent.go:543 - Remote control connections configure acknowledged Yamux liveness.
 [18] redeven:internal/agent/agent.go:1264 - Runtime RPC streams use explicit bounded server options.
@@ -56,7 +56,7 @@ Compatibility depends on these transport and terminal interfaces staying aligned
 [20] redeven:tests/docker_runtime_e2e/testclient/main.go:67 - Docker Local UI verification explicitly allows plaintext only for loopback.
 [21] redeven:internal/runtimeproxy/runtimeproxy.go:15 - Redeven declares the three embedding-policy response headers blocked by its product adapter.
 [22] redeven:internal/terminal/manager.go:1494 - Runtime history responses map Floeterm coverage snapshot fields without omitting zero values.
-[23] redeven:internal/runtimeservice/compatibility_contract.json:35 - Terminal coverage requires compatibility epoch 6 and a matched v0.8.1 Desktop and Runtime pair.
+[23] redeven:internal/runtimeservice/compatibility_contract.json:2 - Local UI exposure requires compatibility epoch 8 and a matched v0.10.0 Desktop and Runtime pair.
 [24] redeven:internal/terminal/manager.go:1131 - Terminal attachment captures the committed Floeterm history boundary while holding the per-sink routing lock.
 [25] redeven:internal/terminal/manager.go:901 - Live terminal notifications are filtered against each sink's atomic history boundary.
 [26] redeven:internal/terminal/manager.go:679 - Latest accepted attach state rejects stale workers and preserves idempotent activation results before boundary capture.

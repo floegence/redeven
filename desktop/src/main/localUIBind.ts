@@ -54,11 +54,60 @@ function isIPv4Wildcard(host: string): boolean {
 }
 
 function normalizePort(raw: string): number {
-  const port = Number.parseInt(String(raw ?? '').trim(), 10);
-  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+  const value = String(raw ?? '').trim();
+  if (!/^(0|[1-9][0-9]*)$/.test(value)) {
+    throw new Error(`invalid port "${raw}"`);
+  }
+  const port = Number.parseInt(value, 10);
+  if (!Number.isInteger(port) || port < 0 || port > 65535 || String(port) !== value) {
     throw new Error(`invalid port "${raw}"`);
   }
   return port;
+}
+
+function canonicalIPv4(host: string): string {
+  const parts = host.split('.');
+  if (parts.length !== 4) {
+    throw new Error('host must be a canonical IPv4 or IPv6 literal');
+  }
+  const values = parts.map((part) => {
+    if (!/^(0|[1-9][0-9]*)$/.test(part)) {
+      throw new Error('host must be a canonical IPv4 or IPv6 literal');
+    }
+    const value = Number(part);
+    if (!Number.isInteger(value) || value < 0 || value > 255 || String(value) !== part) {
+      throw new Error('host must be a canonical IPv4 or IPv6 literal');
+    }
+    return value;
+  });
+  return values.join('.');
+}
+
+function canonicalIPv6(host: string): string {
+  if (host.includes('%')) {
+    throw new Error('host must be a canonical IPv4 or IPv6 literal without a zone');
+  }
+  const normalized = new URL(`http://[${host}]/`).hostname.slice(1, -1).toLowerCase();
+  if (normalized.startsWith('::ffff:')) {
+    throw new Error('IPv4-mapped IPv6 hosts are not supported');
+  }
+  return normalized;
+}
+
+function isEligibleIPv4NetworkHost(host: string): boolean {
+  const [first, second, third, fourth] = host.split('.').map(Number);
+  if (first === 0 || first === 127 || first >= 224 || (first === 169 && second === 254)) {
+    return false;
+  }
+  return !(first === 255 && second === 255 && third === 255 && fourth === 255);
+}
+
+function isEligibleIPv6NetworkHost(host: string): boolean {
+  const firstGroup = Number.parseInt(host.split(':', 1)[0] || '0', 16);
+  return host !== '::'
+    && host !== '::1'
+    && !host.startsWith('ff')
+    && (firstGroup < 0xfe80 || firstGroup > 0xfebf);
 }
 
 export function parseLocalUIBind(raw: string): LocalUIBindSpec {
@@ -88,15 +137,39 @@ export function parseLocalUIBind(raw: string): LocalUIBindSpec {
   if (ipFamily === 0) {
     throw new Error('host must be localhost or an IP literal');
   }
+  const canonicalHost = ipFamily === 4 ? canonicalIPv4(host) : canonicalIPv6(host);
+  const wildcard = ipFamily === 4 ? isIPv4Wildcard(canonicalHost) : canonicalHost === '::';
+  const loopback = ipFamily === 4 ? isIPv4Loopback(canonicalHost) : canonicalHost === '::1';
+  if (!loopback && !wildcard) {
+    const eligible = ipFamily === 4
+      ? isEligibleIPv4NetworkHost(canonicalHost)
+      : isEligibleIPv6NetworkHost(canonicalHost);
+    if (!eligible) {
+      throw new Error('network host must be a non-loopback unicast IP address');
+    }
+  }
+  if (!loopback && port === 0) {
+    throw new Error('network exposure requires a fixed port');
+  }
 
   return {
-    host,
+    host: canonicalHost,
     port,
     localhost: false,
-    wildcard: ipFamily === 4 ? isIPv4Wildcard(host) : host === '::',
-    loopback: ipFamily === 4 ? isIPv4Loopback(host) : host === '::1',
+    wildcard,
+    loopback,
     family: ipFamily === 4 ? 'ipv4' : 'ipv6',
   };
+}
+
+export function formatLocalUIBind(bind: LocalUIBindSpec): string {
+  return bind.family === 'ipv6'
+    ? `[${bind.host}]:${bind.port}`
+    : `${bind.host}:${bind.port}`;
+}
+
+export function canonicalLocalUIBind(raw: string): string {
+  return formatLocalUIBind(parseLocalUIBind(raw));
 }
 
 export function isLoopbackOnlyBind(bind: LocalUIBindSpec): boolean {

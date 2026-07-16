@@ -456,6 +456,24 @@
       "retryLater": "Muitas tentativas incorretas. Aguarde o intervalo de espera e tente novamente."
     }
   },
+  "networkExposure": {
+    "title": "A exposição de rede sem criptografia está ativa",
+    "summary": "A senha está ativada, mas não há TLS. Use somente em uma rede confiável.",
+    "viewDetails": "Ver detalhes de segurança",
+    "dontRemindAgain": "Não mostrar novamente",
+    "dismissWarning": "Fechar aviso",
+    "detailsTitle": "Limite de segurança da rede sem criptografia",
+    "detailsDescription": "Veja o que esta conexão da Local UI protege e o que continua visível na rede.",
+    "accessURLs": "URLs de acesso",
+    "transport": "Transporte",
+    "httpNoTLS": "HTTP, sem TLS",
+    "authentication": "Autenticação",
+    "passwordEnabled": "Senha ativada",
+    "securityBoundary": "A senha, os cookies, os recursos da página e o tráfego HTTP não protegido pelo Flowersec podem ser interceptados ou modificados. A criptografia de ponta a ponta do Flowersec começa somente após a conclusão do handshake.",
+    "close": "Fechar",
+    "policyUnavailable": "A política de segurança para rede sem criptografia não está disponível.",
+    "policyError": "Não foi possível criar a política de segurança para rede sem criptografia: {message}"
+  },
   "aiChrome": {
     "flowerTitle": "Flower",
     "codexTitle": "Codex",

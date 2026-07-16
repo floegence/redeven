@@ -58,8 +58,9 @@ func TestRunCLIHelp(t *testing.T) {
 			"pass --mode hybrid, --provider-origin, --controlplane, --env-id, and a one-time bootstrap ticket",
 			"--state-root <path>",
 			"--presentation <auto|rich|plain|machine>",
-			"Accepted examples: localhost:23998, 127.0.0.1:24000, 127.42.0.9:24000, 127.0.0.1:0, [::1]:24000",
-			"Local UI is permanently loopback-only.",
+			"Loopback examples: localhost:23998, 127.0.0.1:24000, 127.0.0.1:0, [::1]:24000",
+			"Network examples: 192.168.1.20:23998, 0.0.0.0:23998, [2001:db8::20]:23998, [::]:23998",
+			"Network binds require a fixed port, password authentication, and --acknowledge-plaintext-network-exposure.",
 		)
 	})
 
@@ -271,8 +272,8 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		}
 		assertContainsAll(t, stderr,
 			"invalid value for `--local-ui-bind`: host must be localhost or an IP literal",
-			"Accepted examples: localhost:23998, 127.0.0.1:24000, 127.42.0.9:24000, 127.0.0.1:0, [::1]:24000.",
-			"For access from another device, use Redeven Desktop, SSH forwarding, or a Flowersec secure tunnel.",
+			"Accepted examples: localhost:23998, 127.0.0.1:0, 192.168.1.20:23998, 0.0.0.0:23998, [2001:db8::20]:23998, [::]:23998.",
+			"Non-loopback binds require a fixed port, a Local UI password, and --acknowledge-plaintext-network-exposure.",
 		)
 	})
 
@@ -283,7 +284,7 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		}
 		assertContainsAll(t, stderr,
 			"invalid value for `--local-ui-bind`: localhost:0 is not supported; use 127.0.0.1:0 or [::1]:0",
-			"Accepted examples: localhost:23998, 127.0.0.1:24000, 127.42.0.9:24000, 127.0.0.1:0, [::1]:24000.",
+			"Accepted examples: localhost:23998, 127.0.0.1:0, 192.168.1.20:23998, 0.0.0.0:23998, [2001:db8::20]:23998, [::]:23998.",
 		)
 	})
 
@@ -309,15 +310,39 @@ func TestRunCLIStartupGuidanceErrors(t *testing.T) {
 		)
 	})
 
-	t.Run("non loopback bind is rejected with secure access alternatives", func(t *testing.T) {
+	t.Run("network bind requires explicit acknowledgement", func(t *testing.T) {
 		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--local-ui-bind", "0.0.0.0:12345")
 		if code != 2 {
 			t.Fatalf("exit code = %d, want 2", code)
 		}
 		assertContainsAll(t, stderr,
-			"invalid value for `--local-ui-bind`: Local UI is loopback-only; use localhost, 127.0.0.0/8, or ::1",
-			"For access from another device, use Redeven Desktop, SSH forwarding, or a Flowersec secure tunnel.",
+			"network Local UI exposure requires `--acknowledge-plaintext-network-exposure`",
+			"Plaintext HTTP does not protect passwords, cookies, page resources, or non-Flowersec traffic",
 		)
+	})
+
+	t.Run("network bind requires password after acknowledgement", func(t *testing.T) {
+		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--local-ui-bind", "192.168.1.20:12345", "--acknowledge-plaintext-network-exposure")
+		if code != 2 {
+			t.Fatalf("exit code = %d, want 2", code)
+		}
+		assertContainsAll(t, stderr, "network Local UI exposure requires a non-empty access password")
+	})
+
+	t.Run("loopback bind rejects network acknowledgement", func(t *testing.T) {
+		code, _, stderr := runCLITest(t, "run", "--mode", "local", "--acknowledge-plaintext-network-exposure")
+		if code != 2 {
+			t.Fatalf("exit code = %d, want 2", code)
+		}
+		assertContainsAll(t, stderr, "`--acknowledge-plaintext-network-exposure` is invalid for a loopback Local UI bind")
+	})
+
+	t.Run("remote mode rejects network acknowledgement", func(t *testing.T) {
+		code, _, stderr := runCLITest(t, "run", "--mode", "remote", "--local-ui-bind", "192.168.1.20:12345", "--acknowledge-plaintext-network-exposure")
+		if code != 2 {
+			t.Fatalf("exit code = %d, want 2", code)
+		}
+		assertContainsAll(t, stderr, "`--acknowledge-plaintext-network-exposure` requires a Local UI run mode")
 	})
 
 	t.Run("multiple password sources explain the conflict", func(t *testing.T) {

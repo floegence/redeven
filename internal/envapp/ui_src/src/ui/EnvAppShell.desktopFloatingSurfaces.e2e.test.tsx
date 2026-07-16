@@ -157,11 +157,30 @@ vi.mock('@floegence/floe-webapp-core/layout', async (importOriginal) => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
+  Button: (props: any) => (
+    <button
+      type="button"
+      class={props.class}
+      data-testid={props['data-testid']}
+      aria-label={props['aria-label']}
+      onClick={props.onClick}
+    >
+      {props.children}
+    </button>
+  ),
   createFloatingPresence: (options: { open: () => boolean }) => ({
     mounted: () => Boolean(options.open()),
     exiting: () => false,
     state: () => (options.open() ? 'entered' : 'exited'),
   }),
+  Dialog: (props: any) => (
+    <Show when={props.open}>
+      <div role="dialog" aria-label={props.title}>
+        {props.children}
+        {props.footer}
+      </div>
+    </Show>
+  ),
   Dropdown: (props: any) => <>{props.trigger}</>,
   SegmentedControl: () => <div />,
   Tooltip: (props: any) => <>{props.children}</>,
@@ -484,8 +503,10 @@ vi.mock('./services/desktopTheme', () => ({
 }));
 vi.mock('./services/sandboxOrigins', () => ({ controlPlaneOriginFromSandboxLocation: () => 'https://console.example.com' }));
 vi.mock('./services/uiStorage', () => ({
+  readRendererScopedUIStorageJSON: vi.fn((_key: string, fallback: unknown) => fallback),
   readUIStorageJSON: vi.fn(() => null),
   readUIStorageItem: vi.fn((key: string) => (key === 'redeven_envapp_desktop_view_mode' ? desktopViewMode : null)),
+  writeRendererScopedUIStorageJSON: vi.fn(),
   writeRendererScopedUIStorageItem: vi.fn(),
   writeUIStorageItem: vi.fn(),
 }));

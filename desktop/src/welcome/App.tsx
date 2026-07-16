@@ -172,6 +172,7 @@ import {
   applyDesktopAccessFixedPortToDraft,
   applyDesktopAccessModeToDraft,
   desktopPasswordStateTranslationKey,
+  desktopSettingsDraftRequiresRuntimeRestart,
   deriveDesktopAccessDraftModel,
 } from '../shared/desktopAccessModel';
 import {
@@ -780,6 +781,7 @@ function localizedEnvironmentStatusLabel(i18n: DesktopI18n, label: string): stri
     REMOVED: 'environmentStatus.removed',
     'REFRESH NEEDED': 'environmentStatus.refreshNeeded',
     'RUNTIME OFFLINE': 'environmentStatus.runtimeOffline',
+    'REVIEW NETWORK EXPOSURE': 'environmentStatus.reviewNetworkExposure',
     'MANUAL AUTH REQUIRED': 'environmentStatus.manualAuthRequired',
     UNVERIFIED: 'environmentStatus.unverified',
     'SETUP REQUIRED': 'environmentStatus.setupRequired',
@@ -841,6 +843,7 @@ function localizedEnvironmentActionLabel(i18n: DesktopI18n, label: string): stri
     'Refresh Runtime status': 'environmentAction.refreshRuntimeStatus',
     'Refresh provider status': 'environmentAction.refreshProviderStatus',
     'Refresh Gateway status': 'environmentAction.refreshStatus',
+    'Review network exposure': 'settings.reviewExposure',
     'Refresh catalog': 'common.refresh',
     'Enable Gateway': 'environmentCenter.gatewayActionEnable',
     'Disable Gateway': 'environmentCenter.gatewayActionDisable',
@@ -2881,6 +2884,11 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       ?? snapshot().environments.find((environment) => environment.kind === 'provider_environment')
       ?? null
   ));
+  const settingsRuntimeRestartAvailable = createMemo(() => {
+    const environment = selectedSettingsEnvironmentEntry();
+    return environment?.kind === 'local_environment'
+      && environment.runtime_operations.restart.availability === 'available';
+  });
   const controlPlanes = createMemo(() => snapshot().control_planes);
   const libraryLocalEntryCount = createMemo(() => (
     environmentLibraryCount(snapshot(), '', LOCAL_ENVIRONMENT_LIBRARY_FILTER)
@@ -4957,6 +4965,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         return updateEnvironmentRuntime(environment, action, errorTarget);
       case 'refresh_runtime':
         return refreshEnvironmentRuntime(environment, errorTarget);
+      case 'review_network_exposure':
+        openSettingsSurface(environment.id);
+        return true;
       case 'reconnect_provider':
         return reconnectProviderForEnvironment(environment, action, errorTarget);
       case 'connect_provider_runtime':
@@ -5176,8 +5187,16 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     }));
   }
 
-  async function saveSettings(): Promise<void> {
+  async function saveSettings(options: Readonly<{
+    acknowledgedBind?: string;
+    restartRuntime?: boolean;
+  }> = {}): Promise<void> {
     setSettingsError('');
+    const restartEnvironment = options.restartRuntime ? selectedSettingsEnvironmentEntry() : null;
+    if (options.restartRuntime && restartEnvironment?.kind !== 'local_environment') {
+      setSettingsError(i18n().t('environmentCenter.resolveRuntimeTargetError'));
+      return;
+    }
     setBusyState({
       action: 'save_settings',
       environment_id: '',
@@ -5188,13 +5207,21 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       progress: null,
     });
     try {
-      const result = await props.runtime.settings.save(draft());
+      const result = await props.runtime.settings.save({
+        ...draft(),
+        plaintext_network_exposure_acknowledgement_bind: trimString(options.acknowledgedBind)
+          || draft().plaintext_network_exposure_acknowledgement_bind
+          || '',
+      });
       if (!result.ok) {
         setSettingsError(result.error);
         return;
       }
       showActionToast(i18n().t('toast.settingsSaved'));
       cancelSettings();
+      if (restartEnvironment?.kind === 'local_environment') {
+        await restartEnvironmentRuntime(restartEnvironment, 'connect');
+      }
       try {
         const nextSnapshot = await refreshSnapshot();
         setSettingsDraftSession(createDesktopSettingsDraftSession(nextSnapshot.settings_surface));
@@ -6310,6 +6337,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         applyAccessFixedPort={applyAccessFixedPort}
         toggleAutoPort={toggleAutoPort}
         saveSettings={saveSettings}
+        runtimeRestartAvailable={settingsRuntimeRestartAvailable()}
         cancelSettings={cancelSettings}
         clearStoredLocalUIPassword={clearStoredLocalUIPassword}
       />
@@ -8972,6 +9000,8 @@ function splitMenuIcon(intent: EnvironmentActionIntent): ((props?: { class?: str
       return Refresh;
     case 'refresh_runtime':
       return Refresh;
+    case 'review_network_exposure':
+      return AlertTriangle;
     case 'connect_provider_runtime':
       return ShieldCheck;
     case 'disconnect_provider_runtime':
@@ -8993,6 +9023,7 @@ function splitMenuItemToneData(intent: EnvironmentActionIntent): string {
       return 'danger';
     case 'start_runtime':
     case 'connect_provider_runtime':
+    case 'review_network_exposure':
       return 'primary';
     case 'disconnect_provider_runtime':
       return 'accent';
@@ -12831,11 +12862,17 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
   applyAccessMode: (mode: DesktopAccessMode) => void;
   applyAccessFixedPort: (portText: string) => void;
   toggleAutoPort: (enabled: boolean) => void;
-  saveSettings: () => Promise<void>;
+  saveSettings: (options?: Readonly<{
+    acknowledgedBind?: string;
+    restartRuntime?: boolean;
+  }>) => Promise<void>;
+  runtimeRestartAvailable: boolean;
   cancelSettings: () => void;
   clearStoredLocalUIPassword: () => void;
 }>) {
   const [accessModeOverride, setAccessModeOverride] = createSignal<DesktopAccessMode | null>(null);
+  const [step, setStep] = createSignal<'edit' | 'review'>('edit');
+  const [riskAccepted, setRiskAccepted] = createSignal(false);
   const accessModelOptions = createMemo(() => ({
     current_runtime_url: props.snapshot.current_runtime_url,
     local_ui_password_configured: props.baselineSnapshot.local_ui_password_configured,
@@ -12862,10 +12899,14 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
     && !accessModel().password_required
   ));
   let previousBaselineKey = '';
+  let reviewHeadingRef: HTMLHeadingElement | undefined;
+  let reviewTriggerRef: HTMLButtonElement | undefined;
 
   createEffect(() => {
     if (!props.open) {
       setAccessModeOverride(null);
+      setStep('edit');
+      setRiskAccepted(false);
     }
   });
 
@@ -12881,6 +12922,8 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
     ].join(':');
     if (previousBaselineKey !== '' && previousBaselineKey !== baselineKey) {
       setAccessModeOverride(null);
+      setStep('edit');
+      setRiskAccepted(false);
     }
     previousBaselineKey = baselineKey;
   });
@@ -12888,6 +12931,35 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
   // See ConnectionDialog: memoize the open boolean so that identity churn
   // upstream never re-triggers the overlay-mask focus trap mid-typing.
   const isOpen = createMemo(() => props.open);
+  const primaryActionNeedsReview = createMemo(() => (
+    accessModel().network_exposure && !accessModel().network_exposure_acknowledged
+  ));
+  const restartRequired = createMemo(() => (
+    primaryActionNeedsReview()
+    || desktopSettingsDraftRequiresRuntimeRestart(props.baselineSnapshot.draft, props.draft)
+  ));
+  const showRestartAction = createMemo(() => props.runtimeRestartAvailable && restartRequired());
+  const reachableInterfaces = createMemo(() => {
+    const host = accessModel().bind_host;
+    if (host === '0.0.0.0') {
+      return props.i18n.t('settings.allActiveIPv4Interfaces');
+    }
+    if (host === '::') {
+      return props.i18n.t('settings.allActiveIPv6Interfaces');
+    }
+    return props.i18n.t('settings.interfaceForAddress', { address: host });
+  });
+
+  function beginReview(): void {
+    setRiskAccepted(false);
+    setStep('review');
+    queueMicrotask(() => reviewHeadingRef?.focus());
+  }
+
+  function returnToEdit(): void {
+    setStep('edit');
+    queueMicrotask(() => reviewTriggerRef?.focus());
+  }
 
   return (
     <Dialog
@@ -12901,255 +12973,387 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
       class={LOCAL_ENVIRONMENT_SETTINGS_DIALOG_CLASS}
       footer={(
         <div class="flex justify-end gap-2">
-          <Button size="sm" variant="outline" onClick={props.cancelSettings}>
-            {props.i18n.t('common.cancel')}
-          </Button>
-          <Button
-            size="sm"
-            variant="default"
-            loading={busyStateMatchesAction(props.busyState, 'save_settings')}
-            aria-label={settingsSaveLabel()}
-            title={settingsSaveLabel()}
-            onClick={() => {
-              void props.saveSettings();
-            }}
+          <Show
+            when={step() === 'review'}
+            fallback={(
+              <>
+                <Button size="sm" variant="outline" onClick={props.cancelSettings}>
+                  {props.i18n.t('common.cancel')}
+                </Button>
+                <Show when={showRestartAction()}>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    loading={busyStateMatchesAction(props.busyState, 'save_settings')}
+                    aria-label={settingsSaveLabel()}
+                    title={settingsSaveLabel()}
+                    onClick={() => {
+                      void props.saveSettings();
+                    }}
+                  >
+                    {props.i18n.t('common.save')}
+                  </Button>
+                </Show>
+                <Button
+                  ref={reviewTriggerRef}
+                  size="sm"
+                  variant="default"
+                  loading={busyStateMatchesAction(props.busyState, 'save_settings')}
+                  aria-label={primaryActionNeedsReview()
+                    ? props.i18n.t('settings.reviewExposure')
+                    : showRestartAction()
+                      ? props.i18n.t('settings.saveAndRestartEnvironmentSettings', { label: settingsEnvironmentLabel() })
+                      : settingsSaveLabel()}
+                  title={primaryActionNeedsReview()
+                    ? props.i18n.t('settings.reviewExposure')
+                    : showRestartAction()
+                      ? props.i18n.t('settings.saveAndRestartEnvironmentSettings', { label: settingsEnvironmentLabel() })
+                      : settingsSaveLabel()}
+                  onClick={() => {
+                    if (primaryActionNeedsReview()) {
+                      beginReview();
+                      return;
+                    }
+                    void props.saveSettings({ restartRuntime: showRestartAction() });
+                  }}
+                >
+                  <Show when={!primaryActionNeedsReview() && showRestartAction()}>
+                    <Refresh class="mr-1.5 h-3.5 w-3.5" />
+                  </Show>
+                  {primaryActionNeedsReview()
+                    ? props.i18n.t('settings.reviewExposure')
+                    : showRestartAction()
+                      ? props.i18n.t('settings.saveAndRestart')
+                      : props.i18n.t('common.save')}
+                </Button>
+              </>
+            )}
           >
-            {props.i18n.t('common.save')}
-          </Button>
+            <Button size="sm" variant="outline" onClick={returnToEdit}>
+              <ArrowLeft class="mr-1.5 h-3.5 w-3.5" />
+              {props.i18n.t('common.back')}
+            </Button>
+            <Show when={showRestartAction()}>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!riskAccepted() || !accessModel().password_configured}
+                loading={busyStateMatchesAction(props.busyState, 'save_settings')}
+                onClick={() => {
+                  void props.saveSettings({ acknowledgedBind: props.draft.local_ui_bind });
+                }}
+              >
+                {props.i18n.t('settings.enablePlaintextNetworkAccess')}
+              </Button>
+            </Show>
+            <Button
+              size="sm"
+              variant="default"
+              disabled={!riskAccepted() || !accessModel().password_configured}
+              loading={busyStateMatchesAction(props.busyState, 'save_settings')}
+              onClick={() => {
+                void props.saveSettings({
+                  acknowledgedBind: props.draft.local_ui_bind,
+                  restartRuntime: showRestartAction(),
+                });
+              }}
+            >
+              <Show when={showRestartAction()}>
+                <Refresh class="mr-1.5 h-3.5 w-3.5" />
+              </Show>
+              {showRestartAction()
+                ? props.i18n.t('settings.saveAndRestart')
+                : props.i18n.t('settings.enablePlaintextNetworkAccess')}
+            </Button>
+          </Show>
         </div>
       )}
     >
-      <div class="space-y-6">
-        <div class="redeven-settings-statusbar overflow-hidden rounded-md border border-border">
-          <div class="grid divide-y divide-border sm:grid-cols-[1fr_auto_1fr] sm:divide-x sm:divide-y-0">
-            <div class="flex items-start gap-3 px-4 py-3">
-              <div class={cn(
-                'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-colors',
-                accessModel().current_runtime_url !== ''
-                  ? 'border-success/30 bg-success/10 text-success'
-                  : 'border-border/60 bg-muted/30 text-muted-foreground',
-              )}>
-                <div class={cn(
-                  'h-1.5 w-1.5 rounded-full',
-                  accessModel().current_runtime_url !== '' ? 'bg-success' : 'bg-muted-foreground/50',
-                )} />
-              </div>
-              <div class="min-w-0 flex-1">
-                <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{props.i18n.t('settings.runtimeLabel')}</div>
-                <div class={cn(
-                  'mt-0.5 truncate text-xs font-medium text-foreground',
-                  runtimeAddress().primary_monospace && 'font-mono text-[12px]',
-                )}>
-                  {runtimeAddress().primary}
-                </div>
-              </div>
-            </div>
-            <div class="hidden items-center justify-center px-4 text-muted-foreground sm:flex">
-              <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
-              </svg>
-            </div>
-            <div class="flex items-start gap-3 px-4 py-3">
-              <div class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-primary/25 bg-primary/10 text-primary">
-                {(() => {
-                  const Icon = accessModeIcon(accessModel().access_mode);
-                  return <Icon class="h-3.5 w-3.5" />;
-                })()}
-              </div>
-              <div class="min-w-0 flex-1">
-                <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{props.i18n.t('settings.nextStartLabel')}</div>
-                <div class="mt-0.5 flex items-baseline gap-1.5">
+      <Show
+        when={step() === 'review'}
+        fallback={(
+          <div class="space-y-6">
+            <div class="redeven-settings-statusbar overflow-hidden rounded-md border border-border">
+              <div class="grid divide-y divide-border sm:grid-cols-[1fr_auto_1fr] sm:divide-x sm:divide-y-0">
+                <div class="flex items-start gap-3 px-4 py-3">
                   <div class={cn(
-                    'truncate text-xs font-medium text-foreground',
-                    nextStartAddress().primary_monospace && 'font-mono text-[12px]',
+                    'mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border transition-colors',
+                    accessModel().current_runtime_url !== ''
+                      ? 'border-success/30 bg-success/10 text-success'
+                      : 'border-border/60 bg-muted/30 text-muted-foreground',
                   )}>
-                    {nextStartAddress().primary}
+                    <div class={cn(
+                      'h-1.5 w-1.5 rounded-full',
+                      accessModel().current_runtime_url !== '' ? 'bg-success' : 'bg-muted-foreground/50',
+                    )} />
                   </div>
-                  <Show when={nextStartAddress().hint}>
-                    <div class="truncate text-[11px] text-muted-foreground">{nextStartAddress().hint}</div>
-                  </Show>
+                  <div class="min-w-0 flex-1">
+                    <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{props.i18n.t('settings.runtimeLabel')}</div>
+                    <div class={cn(
+                      'mt-0.5 truncate text-xs font-medium text-foreground',
+                      runtimeAddress().primary_monospace && 'font-mono text-[12px]',
+                    )}>
+                      {runtimeAddress().primary}
+                    </div>
+                  </div>
+                </div>
+                <div class="hidden items-center justify-center px-4 text-muted-foreground sm:flex">
+                  <svg class="h-4 w-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                  </svg>
+                </div>
+                <div class="flex items-start gap-3 px-4 py-3">
+                  <div class="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-primary/25 bg-primary/10 text-primary">
+                    {(() => {
+                      const Icon = accessModeIcon(accessModel().access_mode);
+                      return <Icon class="h-3.5 w-3.5" />;
+                    })()}
+                  </div>
+                  <div class="min-w-0 flex-1">
+                    <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{props.i18n.t('settings.nextStartLabel')}</div>
+                    <div class="mt-0.5 flex items-baseline gap-1.5">
+                      <div class={cn(
+                        'truncate text-xs font-medium text-foreground',
+                        nextStartAddress().primary_monospace && 'font-mono text-[12px]',
+                      )}>
+                        {nextStartAddress().primary}
+                      </div>
+                      <Show when={nextStartAddress().hint}>
+                        <div class="truncate text-[11px] text-muted-foreground">{nextStartAddress().hint}</div>
+                      </Show>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        </div>
 
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{props.i18n.t('settings.accessSecurityTitle')}</div>
-            <div class="mt-1 text-sm text-foreground">{props.i18n.t('settings.accessSecurityDescription')}</div>
-          </div>
-          <div class="flex flex-wrap items-center gap-1.5">
-            <Tag variant={passwordStateTagVariant(accessModel().password_state_tone)} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-              {compactLocalizedPasswordStateTagLabel(props.i18n, accessModel().password_state_id)}
-            </Tag>
-          </div>
-        </div>
-
-        <div class="space-y-6">
-            <section>
-              <SettingsSectionHeader
-                label={props.i18n.t('settings.visibilityTitle')}
-                hint={props.i18n.t('settings.visibilityDescription')}
-              />
-              <div
-                role="radiogroup"
-                aria-label={props.i18n.t('settings.visibilityTitle')}
-                class="mt-3 grid gap-3 sm:grid-cols-3"
-              >
-                <For each={props.baselineSnapshot.access_mode_options}>
-                  {(option) => {
-                    const selected = createMemo(() => accessModel().access_mode === option.value);
-                    const localizedOption = createMemo(() => localizedAccessModeOption(props.i18n, option));
-                    const Icon = accessModeIcon(option.value);
-                    return (
-                      <button
-                        type="button"
-                        role="radio"
-                        aria-checked={selected()}
-                        class={cn(
-                          'redeven-visibility-card group relative flex cursor-pointer flex-col gap-2 rounded-md border px-4 py-3.5 text-left transition-[border-color,background-color,box-shadow] duration-150',
-                          selected()
-                            ? 'border-primary/60 bg-primary/10 shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_32%,transparent)_inset]'
-                            : 'redeven-tile border-border hover:-translate-y-[1px] hover:border-primary/25 hover:bg-muted/15 hover:shadow-[0_6px_20px_-12px_color-mix(in_srgb,var(--foreground)_26%,transparent)]',
-                        )}
-                        onClick={() => {
-                          if (option.value === 'custom_exposure') {
-                            setAccessModeOverride('custom_exposure');
-                            props.applyAccessMode(option.value);
-                            return;
-                          }
-                          setAccessModeOverride(null);
-                          props.applyAccessMode(option.value);
-                        }}
-                      >
-                        <div class="flex items-start justify-between gap-3">
-                          <div class={cn(
-                            'flex h-9 w-9 shrink-0 items-center justify-center rounded-md border transition-colors',
-                            selected()
-                              ? 'border-primary/40 bg-primary/15 text-primary'
-                              : 'border-border/70 bg-muted/25 text-muted-foreground group-hover:border-primary/25 group-hover:text-foreground',
-                          )}>
-                            <Icon class="h-4 w-4" />
-                          </div>
-                          <div class={cn(
-                            'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors',
-                            selected()
-                              ? 'border-primary bg-primary text-primary-foreground'
-                              : 'border-border/80 bg-background group-hover:border-primary/40',
-                          )}>
-                            <Show when={selected()}>
-                              <Check class="h-2.5 w-2.5" />
-                            </Show>
-                          </div>
-                        </div>
-                        <div class="mt-1 text-sm font-semibold text-foreground">{localizedOption().label}</div>
-                        <div class="text-[11px] leading-[1.55] text-muted-foreground">{localizedOption().description}</div>
-                      </button>
-                    );
-                  }}
-                </For>
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{props.i18n.t('settings.accessSecurityTitle')}</div>
+                <div class="mt-1 text-sm text-foreground">{props.i18n.t('settings.accessSecurityDescription')}</div>
               </div>
-            </section>
+              <div class="flex flex-wrap items-center gap-1.5">
+                <Tag variant={passwordStateTagVariant(accessModel().password_state_tone)} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
+                  {compactLocalizedPasswordStateTagLabel(props.i18n, accessModel().password_state_id)}
+                </Tag>
+              </div>
+            </div>
 
-            <section>
-              <SettingsSectionHeader
-                label={props.i18n.t('settings.detailsTitle')}
-                hint={props.i18n.t('settings.detailsDescription', {
-                  address: addressCardTitle().toLowerCase(),
-                  protection: protectionCardTitle().toLowerCase(),
-                })}
-              />
-              <div class="mt-3 grid gap-3 sm:grid-cols-2">
-                <div class={LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS}>
-                  <SettingsCardHeading title={addressCardTitle()} help={addressCardHelp()} i18n={props.i18n} />
-                  <div class="mt-3 space-y-3">
-                    <Show
-                      when={accessModel().access_mode === 'custom_exposure'}
-                      fallback={(
-                        <>
-                          <label class="block">
-                            <span class="sr-only">{props.i18n.t('settings.portLabel')}</span>
-                            <Input
-                              value={accessModel().fixed_port_value}
-                              inputMode="numeric"
-                              disabled={accessModel().port_mode === 'auto'}
-                              size="sm"
-                              class="w-full"
-                              aria-label={props.i18n.t('settings.portLabel')}
-                              placeholder="23998"
-                              onInput={(event) => props.applyAccessFixedPort(event.currentTarget.value)}
-                            />
-                          </label>
-                          <Show when={accessModel().access_mode === 'local_only'}>
-                            <div class="rounded-md border border-dashed border-border/60 bg-muted/10 px-3 py-2.5">
-                              <Checkbox
-                                checked={accessModel().port_mode === 'auto'}
-                                onChange={props.toggleAutoPort}
-                                label={props.i18n.t('settings.autoSelectPort')}
-                                size="sm"
-                              />
-                            </div>
-                          </Show>
-                        </>
-                      )}
-                    >
-                      <SettingsFieldInput
-                        field={props.baselineSnapshot.host_fields[0]!}
-                        value={props.draft.local_ui_bind}
-                        updateDraftField={props.updateDraftField}
-                        sectionTitle={addressCardTitle()}
-                        i18n={props.i18n}
-                      />
-                    </Show>
+            <div class="space-y-6">
+              <Show when={accessModel().network_exposure}>
+                <div class="flex items-start gap-3 rounded-md border border-warning/30 bg-warning/10 px-4 py-3 text-warning-foreground transition-colors duration-150" role="status">
+                  <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-warning" />
+                  <div class="min-w-0">
+                    <div class="text-sm font-semibold text-foreground">{props.i18n.t('settings.plaintextNetworkExposureTitle')}</div>
+                    <div class="mt-0.5 text-[11px] leading-[1.55] text-muted-foreground">{props.i18n.t('settings.plaintextNetworkExposureSummary')}</div>
                   </div>
                 </div>
+              </Show>
+              <section>
+                <SettingsSectionHeader
+                  label={props.i18n.t('settings.visibilityTitle')}
+                  hint={props.i18n.t('settings.visibilityDescription')}
+                />
+                <div
+                  role="radiogroup"
+                  aria-label={props.i18n.t('settings.visibilityTitle')}
+                  class="mt-3 grid gap-3 sm:grid-cols-3"
+                >
+                  <For each={props.baselineSnapshot.access_mode_options}>
+                    {(option) => {
+                      const selected = createMemo(() => accessModel().access_mode === option.value);
+                      const localizedOption = createMemo(() => localizedAccessModeOption(props.i18n, option));
+                      const Icon = accessModeIcon(option.value);
+                      return (
+                        <button
+                          type="button"
+                          role="radio"
+                          aria-checked={selected()}
+                          class={cn(
+                            'redeven-visibility-card group relative flex cursor-pointer flex-col gap-2 rounded-md border px-4 py-3.5 text-left transition-[border-color,background-color,box-shadow] duration-150',
+                            selected()
+                              ? 'border-primary/60 bg-primary/10 shadow-[0_0_0_1px_color-mix(in_srgb,var(--primary)_32%,transparent)_inset]'
+                              : 'redeven-tile border-border hover:-translate-y-[1px] hover:border-primary/25 hover:bg-muted/15 hover:shadow-[0_6px_20px_-12px_color-mix(in_srgb,var(--foreground)_26%,transparent)]',
+                          )}
+                          onClick={() => {
+                            if (option.value === 'custom_exposure') {
+                              setAccessModeOverride('custom_exposure');
+                              props.applyAccessMode(option.value);
+                              return;
+                            }
+                            setAccessModeOverride(null);
+                            props.applyAccessMode(option.value);
+                          }}
+                        >
+                          <div class="flex items-start justify-between gap-3">
+                            <div class={cn(
+                              'flex h-9 w-9 shrink-0 items-center justify-center rounded-md border transition-colors',
+                              selected()
+                                ? 'border-primary/40 bg-primary/15 text-primary'
+                                : 'border-border/70 bg-muted/25 text-muted-foreground group-hover:border-primary/25 group-hover:text-foreground',
+                            )}>
+                              <Icon class="h-4 w-4" />
+                            </div>
+                            <div class={cn(
+                              'flex h-4 w-4 shrink-0 items-center justify-center rounded-full border transition-colors',
+                              selected()
+                                ? 'border-primary bg-primary text-primary-foreground'
+                                : 'border-border/80 bg-background group-hover:border-primary/40',
+                            )}>
+                              <Show when={selected()}>
+                                <Check class="h-2.5 w-2.5" />
+                              </Show>
+                            </div>
+                          </div>
+                          <div class="mt-1 text-sm font-semibold text-foreground">{localizedOption().label}</div>
+                          <div class="text-[11px] leading-[1.55] text-muted-foreground">{localizedOption().description}</div>
+                        </button>
+                      );
+                    }}
+                  </For>
+                </div>
+              </section>
 
-                <div class={LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS}>
-                  <SettingsCardHeading title={protectionCardTitle()} help={protectionCardHelp()} i18n={props.i18n} />
-                  <div class="mt-3">
-                    <Show
-                      when={accessModel().access_mode === 'local_only'}
-                      fallback={(
-                        <LocalUIPasswordField
-                          snapshot={props.baselineSnapshot}
-                          draft={props.draft}
-                          passwordStateID={accessModel().password_state_id}
-                          passwordStateTone={accessModel().password_state_tone}
-                          localUIPasswordCanClear={localUIPasswordCanClear()}
+              <section>
+                <SettingsSectionHeader
+                  label={props.i18n.t('settings.detailsTitle')}
+                  hint={props.i18n.t('settings.detailsDescription', {
+                    address: addressCardTitle().toLowerCase(),
+                    protection: protectionCardTitle().toLowerCase(),
+                  })}
+                />
+                <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div class={LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS}>
+                    <SettingsCardHeading title={addressCardTitle()} help={addressCardHelp()} i18n={props.i18n} />
+                    <div class="mt-3 space-y-3">
+                      <Show
+                        when={accessModel().access_mode === 'custom_exposure'}
+                        fallback={(
+                          <>
+                            <label class="block">
+                              <span class="sr-only">{props.i18n.t('settings.portLabel')}</span>
+                              <Input
+                                value={accessModel().fixed_port_value}
+                                inputMode="numeric"
+                                disabled={accessModel().port_mode === 'auto'}
+                                size="sm"
+                                class="w-full"
+                                aria-label={props.i18n.t('settings.portLabel')}
+                                placeholder="23998"
+                                onInput={(event) => props.applyAccessFixedPort(event.currentTarget.value)}
+                              />
+                            </label>
+                            <Show when={accessModel().access_mode === 'local_only'}>
+                              <div class="rounded-md border border-dashed border-border/60 bg-muted/10 px-3 py-2.5">
+                                <Checkbox
+                                  checked={accessModel().port_mode === 'auto'}
+                                  onChange={props.toggleAutoPort}
+                                  label={props.i18n.t('settings.autoSelectPort')}
+                                  size="sm"
+                                />
+                              </div>
+                            </Show>
+                          </>
+                        )}
+                      >
+                        <SettingsFieldInput
+                          field={props.baselineSnapshot.host_fields[0]!}
+                          value={props.draft.local_ui_bind}
                           updateDraftField={props.updateDraftField}
-                          clearStoredLocalUIPassword={props.clearStoredLocalUIPassword}
-                          sectionTitle={protectionCardTitle()}
+                          sectionTitle={addressCardTitle()}
                           i18n={props.i18n}
                         />
-                      )}
-                    >
-                      <div class="flex items-start gap-2.5 rounded-md border border-dashed border-border/60 bg-muted/10 px-3 py-2.5">
-                        <Shield class="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                        <div class="text-[11px] leading-[1.55] text-muted-foreground">
-                          {props.i18n.t('settings.localOnlyProtectionNote')}
+                      </Show>
+                    </div>
+                  </div>
+
+                  <div class={LOCAL_ENVIRONMENT_SETTINGS_CARD_CLASS}>
+                    <SettingsCardHeading title={protectionCardTitle()} help={protectionCardHelp()} i18n={props.i18n} />
+                    <div class="mt-3">
+                      <Show
+                        when={accessModel().access_mode === 'local_only'}
+                        fallback={(
+                          <LocalUIPasswordField
+                            snapshot={props.baselineSnapshot}
+                            draft={props.draft}
+                            passwordStateID={accessModel().password_state_id}
+                            passwordStateTone={accessModel().password_state_tone}
+                            localUIPasswordCanClear={localUIPasswordCanClear()}
+                            updateDraftField={props.updateDraftField}
+                            clearStoredLocalUIPassword={props.clearStoredLocalUIPassword}
+                            sectionTitle={protectionCardTitle()}
+                            i18n={props.i18n}
+                          />
+                        )}
+                      >
+                        <div class="flex items-start gap-2.5 rounded-md border border-dashed border-border/60 bg-muted/10 px-3 py-2.5">
+                          <Shield class="mt-0.5 h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                          <div class="text-[11px] leading-[1.55] text-muted-foreground">
+                            {props.i18n.t('settings.localOnlyProtectionNote')}
+                          </div>
                         </div>
-                      </div>
-                    </Show>
+                      </Show>
+                    </div>
                   </div>
                 </div>
+              </section>
+
+            </div>
+
+            <Show when={props.settingsError}>
+              <div
+                ref={props.settingsErrorRef}
+                tabIndex={-1}
+                id="settings-error"
+                role="alert"
+                class="rounded-md border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive outline-none"
+              >
+                {props.settingsError}
               </div>
-            </section>
-
-        </div>
-
-        <Show when={props.settingsError}>
-          <div
-            ref={props.settingsErrorRef}
-            tabIndex={-1}
-            id="settings-error"
-            role="alert"
-            class="rounded-md border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive outline-none"
-          >
-            {props.settingsError}
+            </Show>
           </div>
-        </Show>
-      </div>
+        )}
+      >
+        <div class="space-y-5">
+          <div class="flex items-start gap-3 border-b border-border pb-4">
+            <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-warning/30 bg-warning/10 text-warning">
+              <AlertTriangle class="h-4 w-4" />
+            </div>
+            <div class="min-w-0">
+              <h3 ref={reviewHeadingRef} tabIndex={-1} class="text-sm font-semibold text-foreground outline-none">{props.i18n.t('settings.reviewPlaintextExposureTitle')}</h3>
+              <p class="mt-1 text-xs leading-5 text-muted-foreground">{props.i18n.t('settings.reviewPlaintextExposureDescription')}</p>
+            </div>
+          </div>
+
+          <dl class="grid grid-cols-[minmax(9rem,0.7fr)_minmax(0,1.3fr)] gap-x-5 gap-y-3 text-xs">
+            <dt class="text-muted-foreground">{props.i18n.t('settings.bindAddressTitle')}</dt>
+            <dd class="break-all font-mono text-foreground">{props.draft.local_ui_bind}</dd>
+            <dt class="text-muted-foreground">{props.i18n.t('settings.reachableInterfaces')}</dt>
+            <dd class="text-foreground">{reachableInterfaces()}</dd>
+            <dt class="text-muted-foreground">{props.i18n.t('settings.transportLabel')}</dt>
+            <dd class="text-foreground">{props.i18n.t('settings.httpNoTLS')}</dd>
+            <dt class="text-muted-foreground">{props.i18n.t('settings.authenticationLabel')}</dt>
+            <dd class="flex items-center gap-1.5 text-foreground"><Shield class="h-3.5 w-3.5 text-success" />{props.i18n.t('settings.passwordEnabled')}</dd>
+          </dl>
+
+          <div class="rounded-md border border-warning/30 bg-warning/10 px-4 py-3 text-xs leading-5 text-muted-foreground">
+            {props.i18n.t('settings.plaintextExposureBoundary')}
+          </div>
+
+          <Checkbox
+            checked={riskAccepted()}
+            onChange={setRiskAccepted}
+            label={props.i18n.t('settings.acceptPlaintextExposureRisk')}
+            size="sm"
+          />
+
+          <Show when={props.settingsError}>
+            <div ref={props.settingsErrorRef} tabIndex={-1} role="alert" class="rounded-md border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive outline-none">
+              {props.settingsError}
+            </div>
+          </Show>
+        </div>
+      </Show>
     </Dialog>
   );
 }

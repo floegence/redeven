@@ -18,6 +18,7 @@ import (
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/localui"
 	"github.com/floegence/redeven/internal/lockfile"
+	"github.com/floegence/redeven/internal/runtimemanagement"
 	"github.com/floegence/redeven/internal/runtimepresentation"
 )
 
@@ -230,6 +231,7 @@ func (c *cli) runCmd(args []string) int {
 	stateRoot := fs.String("state-root", "", "State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven)")
 	modeRaw := fs.String("mode", string(defaultRunMode), "Run mode: remote|hybrid|local|desktop")
 	localUIBindRaw := fs.String("local-ui-bind", localui.DefaultBind, "Local UI bind address (default: localhost:23998)")
+	acknowledgePlaintextNetworkExposure := fs.Bool("acknowledge-plaintext-network-exposure", false, "Acknowledge plaintext credential exposure for a non-loopback Local UI bind")
 	passwordPrompt := fs.Bool("password-prompt", false, "Prompt for the Local UI access password without echo")
 	passwordStdin := fs.Bool("password-stdin", false, "Read the access password from stdin")
 	passwordFile := fs.String("password-file", "", "File path holding the access password")
@@ -283,8 +285,8 @@ func (c *cli) runCmd(args []string) int {
 			c.stderr,
 			fmt.Sprintf("invalid value for `--local-ui-bind`: %v", err),
 			[]string{
-				"Accepted examples: localhost:23998, 127.0.0.1:24000, 127.42.0.9:24000, 127.0.0.1:0, [::1]:24000.",
-				"For access from another device, use Redeven Desktop, SSH forwarding, or a Flowersec secure tunnel.",
+				"Accepted examples: localhost:23998, 127.0.0.1:0, 192.168.1.20:23998, 0.0.0.0:23998, [2001:db8::20]:23998, [::]:23998.",
+				"Non-loopback binds require a fixed port, a Local UI password, and --acknowledge-plaintext-network-exposure.",
 			},
 			runHelpText(),
 		)
@@ -329,6 +331,24 @@ func (c *cli) runCmd(args []string) int {
 		)
 		return 2
 	}
+	if mode == runModeRemote && *acknowledgePlaintextNetworkExposure {
+		writeErrorWithHelp(
+			c.stderr,
+			"`--acknowledge-plaintext-network-exposure` requires a Local UI run mode",
+			[]string{"Remove the acknowledgement in remote-only mode; no Local UI listener is started."},
+			runHelpText(),
+		)
+		return 2
+	}
+	if localUIBind.IsLoopbackOnly() && *acknowledgePlaintextNetworkExposure {
+		writeErrorWithHelp(
+			c.stderr,
+			"`--acknowledge-plaintext-network-exposure` is invalid for a loopback Local UI bind",
+			[]string{"Remove the acknowledgement, or choose a specific non-loopback IP or wildcard bind when network access is intentional."},
+			runHelpText(),
+		)
+		return 2
+	}
 
 	inlineBootstrapRequested := strings.TrimSpace(*providerOrigin) != "" ||
 		strings.TrimSpace(*controlplane) != "" ||
@@ -354,6 +374,35 @@ func (c *cli) runCmd(args []string) int {
 		return 2
 	}
 	resolvedBootstrapTicket := startupSecrets.bootstrapTicket.value
+	passwordRequired := startupSecrets.localUIPassword.value != ""
+	localUIExposure := runtimemanagement.NewLocalUIExposure(localUIBind.IsNetworkExposure(), passwordRequired)
+	if mode != runModeRemote && localUIBind.IsNetworkExposure() {
+		if !*acknowledgePlaintextNetworkExposure {
+			writeErrorWithHelp(
+				c.stderr,
+				"network Local UI exposure requires `--acknowledge-plaintext-network-exposure`",
+				[]string{
+					"Plaintext HTTP does not protect passwords, cookies, page resources, or non-Flowersec traffic from interception or modification.",
+					"Provide a Local UI password and repeat the command with the acknowledgement only on a trusted network.",
+				},
+				runHelpText(),
+			)
+			return 2
+		}
+		if !passwordRequired {
+			writeErrorWithHelp(
+				c.stderr,
+				"network Local UI exposure requires a non-empty access password",
+				[]string{"Use --password-prompt, --password-stdin, --password-file, or the fixed REDEVEN_LOCAL_UI_PASSWORD secret injection."},
+				runHelpText(),
+			)
+			return 2
+		}
+		if err := localUIExposure.Validate(); err != nil {
+			writeErrorWithHelp(c.stderr, err.Error(), nil, runHelpText())
+			return 2
+		}
+	}
 
 	presentationConfig := runtimepresentation.ResolveConfig(requestedPresentation, runtimepresentation.ResolveInput{
 		Stdin:             c.stdin,
@@ -375,6 +424,7 @@ func (c *cli) runCmd(args []string) int {
 		DesktopManaged:   *desktopManaged,
 		StateDir:         stateLayout.StateDir,
 		LocalUIBind:      localUIBind.ListenLabel(),
+		LocalUIExposure:  localUIExposure,
 	}
 	logBuffer := runtimepresentation.NewLogBuffer(500)
 	presentationRenderer := runtimepresentation.NewRendererWithOptions(c.stderr, presentationConfig, runtimepresentation.RendererOptions{
@@ -611,7 +661,11 @@ func (c *cli) runCmd(args []string) int {
 	if err := writeAgentLockMetadata(lk, newAgentLockMetadata(string(mode), runtimeInstanceID, *desktopManaged, desktopOwnerID, mode != runModeRemote, stateLayout)); err != nil {
 		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to write runtime lock metadata: %v", err))
 	}
-	if err := config.WriteEnvironmentCatalogRecord(stateLayout, cfg, localUIBindLabel, accessGate.Enabled()); err != nil {
+	if err := config.WriteEnvironmentCatalogRecord(stateLayout, cfg, config.EnvironmentCatalogAccess{
+		LocalUIBind:                          localUIBindLabel,
+		LocalUIPasswordConfigured:            accessGate.Enabled(),
+		PlaintextNetworkExposureAcknowledged: *acknowledgePlaintextNetworkExposure,
+	}); err != nil {
 		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to update environment catalog: %v", err))
 	}
 	announce := func() {
@@ -749,7 +803,20 @@ func (c *cli) runCmd(args []string) int {
 			Title:  "Local UI ready",
 			Detail: firstNonEmptyString(localUIURLs),
 		})
-		if err := config.WriteEnvironmentCatalogRecord(stateLayout, cfg, localUIBindLabel, accessGate.Enabled()); err != nil {
+		if srv.LocalUIExposure().IsNetwork() {
+			_ = startupReporter.Emit(runtimepresentation.Event{
+				Kind:     runtimepresentation.EventWarning,
+				Phase:    runtimepresentation.PhaseStartLocalUI,
+				Title:    "Plaintext network exposure is active",
+				Detail:   fmt.Sprintf("listen=%s urls=%s tls=disabled password=enabled", localUIBindLabel, strings.Join(localUIURLs, ",")),
+				Severity: runtimepresentation.SeverityWarning,
+			})
+		}
+		if err := config.WriteEnvironmentCatalogRecord(stateLayout, cfg, config.EnvironmentCatalogAccess{
+			LocalUIBind:                          localUIBindLabel,
+			LocalUIPasswordConfigured:            accessGate.Enabled(),
+			PlaintextNetworkExposureAcknowledged: *acknowledgePlaintextNetworkExposure,
+		}); err != nil {
 			return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to refresh environment catalog: %v", err))
 		}
 		if reportPath := strings.TrimSpace(*startupReportFile); reportPath != "" {
@@ -770,6 +837,7 @@ func (c *cli) runCmd(args []string) int {
 					}
 				}(),
 				PasswordRequired:         accessGate != nil && accessGate.Enabled(),
+				Exposure:                 srv.LocalUIExposure(),
 				EffectiveRunMode:         string(effectiveRunMode),
 				RemoteEnabled:            processRemoteEnabled,
 				DesktopManaged:           *desktopManaged,

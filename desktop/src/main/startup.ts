@@ -1,11 +1,13 @@
 import { normalizeRuntimeServiceSnapshot, type RuntimeServiceSnapshot } from '../shared/runtimeService';
 import type { DesktopRuntimeControlEndpoint } from '../shared/runtimeControl';
+import { parseLocalUIExposure, type LocalUIExposure } from '../shared/localUIExposure';
 
 export type StartupReport = Readonly<{
   local_ui_url: string;
   local_ui_urls: string[];
   runtime_control?: DesktopRuntimeControlEndpoint;
   password_required?: boolean;
+  exposure?: LocalUIExposure;
   effective_run_mode?: string;
   remote_enabled?: boolean;
   desktop_managed?: boolean;
@@ -56,12 +58,14 @@ export function parseStartupReport(raw: string): StartupReport {
     ? parsed.local_ui_urls.map((value) => String(value ?? '').trim()).filter(Boolean)
     : [];
   const runtimeControl = parseRuntimeControlEndpoint(parsed.runtime_control);
+  const exposure = parsed.exposure == null ? undefined : parseLocalUIExposure(parsed.exposure);
 
   return {
     local_ui_url: localUIURL,
     local_ui_urls: localUIURLs.length > 0 ? localUIURLs : [localUIURL],
     ...(runtimeControl ? { runtime_control: runtimeControl } : {}),
     password_required: typeof parsed.password_required === 'boolean' ? parsed.password_required : undefined,
+    ...(exposure ? { exposure } : {}),
     effective_run_mode: String(parsed.effective_run_mode ?? '').trim() || undefined,
     remote_enabled: typeof parsed.remote_enabled === 'boolean' ? parsed.remote_enabled : undefined,
     desktop_managed: typeof parsed.desktop_managed === 'boolean' ? parsed.desktop_managed : undefined,

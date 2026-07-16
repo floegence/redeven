@@ -1,5 +1,11 @@
 import { readDesktopHostBridge } from './desktopHostWindow';
 
+export type LocalUIExposure = Readonly<{
+  scope: 'loopback' | 'network';
+  transport: 'plaintext';
+  password_required: boolean;
+}>;
+
 export interface DesktopSessionContextSnapshot {
   local_environment_id: string;
   renderer_storage_scope_id: string;
@@ -10,6 +16,7 @@ export interface DesktopSessionContextSnapshot {
   provider_id?: string;
   env_public_id?: string;
   label?: string;
+  local_ui_exposure?: LocalUIExposure;
 }
 
 export interface DesktopSessionContextBridge {
@@ -49,6 +56,15 @@ function normalizeDesktopSessionContextSnapshot(value: unknown): DesktopSessionC
   const providerID = compact(candidate.provider_id);
   const envPublicID = compact(candidate.env_public_id);
   const label = compact(candidate.label);
+  const localUIExposure = (() => {
+    const exposure = candidate.local_ui_exposure;
+    if (!exposure || typeof exposure !== 'object') return undefined;
+    return exposure.scope === 'network' || exposure.scope === 'loopback'
+      ? exposure.transport === 'plaintext' && typeof exposure.password_required === 'boolean'
+        ? { scope: exposure.scope, transport: exposure.transport, password_required: exposure.password_required }
+        : undefined
+      : undefined;
+  })();
   if (localEnvironmentID === '' || rendererStorageScopeID === '') {
     return null;
   }
@@ -62,6 +78,7 @@ function normalizeDesktopSessionContextSnapshot(value: unknown): DesktopSessionC
     ...(providerID !== '' ? { provider_id: providerID } : {}),
     ...(envPublicID !== '' ? { env_public_id: envPublicID } : {}),
     ...(label !== '' ? { label } : {}),
+    ...(localUIExposure ? { local_ui_exposure: localUIExposure } : {}),
   };
 }
 

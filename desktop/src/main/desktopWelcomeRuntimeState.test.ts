@@ -14,6 +14,11 @@ import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
 import { hydrateWelcomeLocalEnvironmentRuntimeState } from './desktopWelcomeRuntimeState';
 
 const validEnvAppShellHTML = '<!doctype html><html><body><div id="root"></div><script type="module" src="/_redeven_proxy/env/assets/index.js"></script></body></html>';
+const loopbackExposure = {
+  scope: 'loopback',
+  transport: 'plaintext',
+  password_required: false,
+} as const;
 
 async function startRuntimeServer(healthData: Record<string, unknown>) {
   const server = http.createServer((request, response) => {
@@ -91,6 +96,10 @@ describe('desktopWelcomeRuntimeState', () => {
           data: {
             status: 'online',
             password_required: true,
+            exposure: {
+              ...loopbackExposure,
+              password_required: true,
+            },
             started_at_unix_ms: 1778751234567,
             runtime_service: {
               runtime_version: 'v1.4.0',
@@ -171,6 +180,10 @@ describe('desktopWelcomeRuntimeState', () => {
         desktop_managed: false,
         desktop_ownership: 'external',
         password_required: true,
+        exposure: {
+          ...loopbackExposure,
+          password_required: true,
+        },
         diagnostics_enabled: false,
         pid: 4242,
         started_at_unix_ms: 1778751234567,
@@ -202,6 +215,7 @@ describe('desktopWelcomeRuntimeState', () => {
     const server = await startRuntimeServer({
       status: 'online',
       password_required: false,
+      exposure: loopbackExposure,
       desktop_managed: true,
       desktop_owner_id: 'other-desktop-owner',
       runtime_service: runtimeService(),
@@ -241,6 +255,7 @@ describe('desktopWelcomeRuntimeState', () => {
         desktop_managed: true,
         desktop_owner_id: 'other-desktop-owner',
         desktop_ownership: 'managed_elsewhere',
+        exposure: loopbackExposure,
       }));
     } finally {
       await server.close();
@@ -251,6 +266,7 @@ describe('desktopWelcomeRuntimeState', () => {
     const server = await startRuntimeServer({
       status: 'online',
       password_required: false,
+      exposure: loopbackExposure,
       desktop_managed: true,
       desktop_owner_id: 'desktop-owner-1',
       runtime_service: runtimeService({
@@ -287,6 +303,7 @@ describe('desktopWelcomeRuntimeState', () => {
 
       expect(hydrated.local_environment.local_hosting.current_runtime).toEqual(expect.objectContaining({
         desktop_ownership: 'owned',
+        exposure: loopbackExposure,
         runtime_service: expect.objectContaining({
           runtime_version: 'v1.4.0',
           compatibility: 'compatible',
@@ -341,6 +358,7 @@ describe('desktopWelcomeRuntimeState', () => {
           data: {
             status: 'online',
             password_required: false,
+            exposure: loopbackExposure,
             desktop_owner_id: 'desktop-owner-1',
             runtime_service: {
               runtime_version: 'v1.4.0',
@@ -396,6 +414,7 @@ process.stdout.write(${JSON.stringify(JSON.stringify({
           status: 'ready',
           local_ui_url: `http://127.0.0.1:${address.port}/`,
           local_ui_urls: [`http://127.0.0.1:${address.port}/`],
+          exposure: loopbackExposure,
           desktop_managed: true,
           remote_enabled: true,
           effective_run_mode: 'desktop',
@@ -446,6 +465,7 @@ process.stdout.write(${JSON.stringify(JSON.stringify({
         desktop_owner_id: 'desktop-owner-1',
         desktop_ownership: 'owned',
         password_required: false,
+        exposure: loopbackExposure,
         diagnostics_enabled: false,
         pid: 5252,
         started_at_unix_ms: 1778751234567,

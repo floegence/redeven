@@ -33,10 +33,10 @@ function normalizeRuntimeServiceSnapshot(value: unknown) {
 }
 
 describe('runtimeService', () => {
-  it('publishes the Flower live compatibility window for v0.9.0', () => {
-    expect(RUNTIME_SERVICE_COMPATIBILITY_EPOCH).toBe(7);
-    expect(RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION).toBe('v0.9.0');
-    expect(RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION).toBe('v0.9.0');
+  it('publishes the Local UI exposure compatibility window for v0.10.0', () => {
+    expect(RUNTIME_SERVICE_COMPATIBILITY_EPOCH).toBe(8);
+    expect(RUNTIME_SERVICE_MINIMUM_DESKTOP_VERSION).toBe('v0.10.0');
+    expect(RUNTIME_SERVICE_MINIMUM_RUNTIME_VERSION).toBe('v0.10.0');
   });
 
   it('enforces the current compatibility epoch in both directions', () => {

@@ -405,6 +405,7 @@ func desktopLaunchReportFromRuntimeStatus(state runtimemanagement.RuntimeAttachS
 		LocalUIURLs:              append([]string(nil), endpoint.LocalUIURLs...),
 		RuntimeControl:           runtimeControlEndpointFromRuntimeStatus(endpoint.RuntimeControl),
 		PasswordRequired:         endpoint.PasswordRequired,
+		Exposure:                 endpoint.Exposure,
 		EffectiveRunMode:         state.RuntimeService.EffectiveRunMode,
 		RemoteEnabled:            state.RuntimeService.RemoteEnabled,
 		DesktopManaged:           state.Identity.DesktopManaged,

@@ -24,13 +24,15 @@ import (
 )
 
 const (
-	ubuntuImage        = "ubuntu:24.04"
-	containerStateRoot = "/root/.redeven-e2e"
-	containerRedeven   = "/usr/local/bin/redeven"
-	upgradedRedeven    = "/root/.redeven-e2e/runtime/releases/v9.9.9-e2e/bin/redeven"
-	containerHelper    = "/tmp/redeven-e2e-client"
-	targetVersion      = "v9.9.9-e2e"
-	desktopOwnerID     = "redeven-docker-e2e-desktop-owner"
+	ubuntuImage         = "ubuntu:24.04"
+	containerStateRoot  = "/root/.redeven-e2e"
+	containerRedeven    = "/usr/local/bin/redeven"
+	upgradedRedeven     = "/root/.redeven-e2e/runtime/releases/v9.9.9-e2e/bin/redeven"
+	containerHelper     = "/tmp/redeven-e2e-client"
+	targetVersion       = "v9.9.9-e2e"
+	desktopOwnerID      = "redeven-docker-e2e-desktop-owner"
+	networkTestPort     = "23998"
+	networkTestPassword = "redeven-network-e2e-password"
 )
 
 type commandResult struct {
@@ -39,23 +41,24 @@ type commandResult struct {
 }
 
 type launchReport struct {
-	Status                   string                  `json:"status,omitempty"`
-	Code                     string                  `json:"code,omitempty"`
-	Message                  string                  `json:"message,omitempty"`
-	LocalUIURL               string                  `json:"local_ui_url,omitempty"`
-	LocalUIURLs              []string                `json:"local_ui_urls,omitempty"`
-	RuntimeControl           *runtimeControlEndpoint `json:"runtime_control,omitempty"`
-	PasswordRequired         bool                    `json:"password_required"`
-	EffectiveRunMode         string                  `json:"effective_run_mode,omitempty"`
-	RemoteEnabled            bool                    `json:"remote_enabled"`
-	DesktopManaged           bool                    `json:"desktop_managed"`
-	DesktopOwnerID           string                  `json:"desktop_owner_id,omitempty"`
-	StateDir                 string                  `json:"state_dir,omitempty"`
-	RuntimeControlSocketPath string                  `json:"runtime_control_socket_path,omitempty"`
-	PID                      int                     `json:"pid,omitempty"`
-	RuntimeService           map[string]any          `json:"runtime_service,omitempty"`
-	LockOwner                *runtimeLockOwner       `json:"lock_owner,omitempty"`
-	Diagnostics              *runtimeDiagnostics     `json:"diagnostics,omitempty"`
+	Status                   string                            `json:"status,omitempty"`
+	Code                     string                            `json:"code,omitempty"`
+	Message                  string                            `json:"message,omitempty"`
+	LocalUIURL               string                            `json:"local_ui_url,omitempty"`
+	LocalUIURLs              []string                          `json:"local_ui_urls,omitempty"`
+	RuntimeControl           *runtimeControlEndpoint           `json:"runtime_control,omitempty"`
+	PasswordRequired         bool                              `json:"password_required"`
+	Exposure                 runtimemanagement.LocalUIExposure `json:"exposure"`
+	EffectiveRunMode         string                            `json:"effective_run_mode,omitempty"`
+	RemoteEnabled            bool                              `json:"remote_enabled"`
+	DesktopManaged           bool                              `json:"desktop_managed"`
+	DesktopOwnerID           string                            `json:"desktop_owner_id,omitempty"`
+	StateDir                 string                            `json:"state_dir,omitempty"`
+	RuntimeControlSocketPath string                            `json:"runtime_control_socket_path,omitempty"`
+	PID                      int                               `json:"pid,omitempty"`
+	RuntimeService           map[string]any                    `json:"runtime_service,omitempty"`
+	LockOwner                *runtimeLockOwner                 `json:"lock_owner,omitempty"`
+	Diagnostics              *runtimeDiagnostics               `json:"diagnostics,omitempty"`
 }
 
 type runtimeControlEndpoint struct {
@@ -99,6 +102,23 @@ type helperResult struct {
 		OK      bool   `json:"ok"`
 		Message string `json:"message,omitempty"`
 	} `json:"upgrade,omitempty"`
+	NetworkCheck *struct {
+		AccessStatus struct {
+			PasswordRequired bool                              `json:"password_required"`
+			Unlocked         bool                              `json:"unlocked"`
+			Exposure         runtimemanagement.LocalUIExposure `json:"exposure"`
+			URLs             []string                          `json:"urls"`
+		} `json:"access_status"`
+		EnvAppLoaded          bool          `json:"env_app_loaded"`
+		WrongHostStatus       int           `json:"wrong_host_status"`
+		WrongOriginWSRejected bool          `json:"wrong_origin_ws_rejected"`
+		Ping                  *pingResponse `json:"ping,omitempty"`
+	} `json:"network_check,omitempty"`
+}
+
+type pingResponse struct {
+	ServerTimeMs       int64 `json:"server_time_ms,omitempty"`
+	ProcessStartedAtMs int64 `json:"process_started_at_ms,omitempty"`
 }
 
 type fixture struct {
@@ -177,6 +197,99 @@ func TestDockerUbuntuDesktopRuntimeLifecycle(t *testing.T) {
 	}
 	if afterUpgrade.Version != targetVersion || afterUpgrade.RuntimeServiceVersion != targetVersion {
 		t.Fatalf("afterUpgrade versions = %#v, want %q", afterUpgrade, targetVersion)
+	}
+}
+
+func TestDockerUbuntuPlaintextNetworkExposure(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	f := newFixture(t)
+	f.requireDocker(ctx)
+	f.ensureUbuntuImage(ctx)
+	networkName := f.containerName + "-network"
+	clientName := f.containerName + "-client"
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "network", "create", networkName); err != nil {
+		t.Fatalf("create Docker network: %v", err)
+	}
+	defer func() {
+		_, _ = f.runHost(context.Background(), f.repoRoot, nil, "docker", "rm", "-f", clientName)
+		f.cleanup(context.Background())
+		_, _ = f.runHost(context.Background(), f.repoRoot, nil, "docker", "network", "rm", networkName)
+	}()
+	for _, name := range []string{f.containerName, clientName} {
+		if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "run", "-d", "--network", networkName, "--name", name, ubuntuImage, "sleep", "infinity"); err != nil {
+			t.Fatalf("start network container %s: %v", name, err)
+		}
+	}
+
+	f.detectContainerArch(ctx)
+	f.buildBinaries(ctx)
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", filepath.Join(f.tempRoot, "redeven-e2e-client"), clientName+":"+containerHelper); err != nil {
+		t.Fatalf("copy network client helper: %v", err)
+	}
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "exec", "-i", clientName, "chmod", "0755", containerHelper); err != nil {
+		t.Fatalf("prepare network client helper: %v", err)
+	}
+
+	passwordPath := "/tmp/redeven-network-password"
+	f.dockerExec(ctx, strings.NewReader(networkTestPassword+"\n"), "sh", "-c", "umask 077; cat > "+passwordPath)
+	f.assertNetworkExposureStartFailures(ctx, passwordPath)
+
+	reportPath := "/tmp/redeven-network-report.json"
+	stateRoot := "/root/.redeven-network-e2e"
+	if _, err := f.runHost(ctx, f.repoRoot, nil,
+		"docker", "exec", "-d", f.containerName,
+		containerRedeven, "run",
+		"--mode", "local",
+		"--state-root", stateRoot,
+		"--local-ui-bind", "0.0.0.0:"+networkTestPort,
+		"--password-file", passwordPath,
+		"--acknowledge-plaintext-network-exposure",
+		"--presentation", "machine",
+		"--startup-report-file", reportPath,
+	); err != nil {
+		t.Fatalf("start network-exposed runtime: %v", err)
+	}
+	report := f.waitNetworkExposureReady(ctx, reportPath)
+	if report.Exposure.Scope != runtimemanagement.LocalUIExposureScopeNetwork ||
+		report.Exposure.Transport != runtimemanagement.LocalUITransportPlaintext ||
+		!report.Exposure.PasswordRequired || !report.PasswordRequired {
+		t.Fatalf("unexpected network exposure report: %#v", report)
+	}
+	if strings.Contains(report.LocalUIURL, "0.0.0.0") || strings.Contains(report.LocalUIURL, "[::]") {
+		t.Fatalf("network report exposed wildcard URL: %#v", report)
+	}
+
+	clientOutput, err := f.runHost(ctx, f.repoRoot, nil,
+		"docker", "exec", "-i", clientName,
+		containerHelper,
+		"--base-url", report.LocalUIURL,
+		"--action", "network-check",
+		"--password", networkTestPassword,
+	)
+	if err != nil {
+		f.dumpContainerDiagnostics(ctx)
+		t.Fatalf("run cross-container network check: %v", err)
+	}
+	var result helperResult
+	if err := json.Unmarshal([]byte(clientOutput.Stdout), &result); err != nil {
+		t.Fatalf("decode network helper output: %v; stdout=%q", err, clientOutput.Stdout)
+	}
+	if result.NetworkCheck == nil || !result.NetworkCheck.EnvAppLoaded || result.NetworkCheck.Ping == nil {
+		t.Fatalf("network helper did not load Env App and Direct RPC: %#v", result)
+	}
+	if result.NetworkCheck.WrongHostStatus != http.StatusMisdirectedRequest || !result.NetworkCheck.WrongOriginWSRejected {
+		t.Fatalf("network helper did not reject Host/Origin attacks: %#v", result.NetworkCheck)
+	}
+	if result.NetworkCheck.AccessStatus.Exposure.Scope != runtimemanagement.LocalUIExposureScopeNetwork ||
+		result.NetworkCheck.AccessStatus.Exposure.Transport != runtimemanagement.LocalUITransportPlaintext ||
+		!result.NetworkCheck.AccessStatus.Exposure.PasswordRequired || !result.NetworkCheck.AccessStatus.PasswordRequired ||
+		result.NetworkCheck.AccessStatus.Unlocked {
+		t.Fatalf("unexpected public access status: %#v", result.NetworkCheck.AccessStatus)
+	}
+	if !containsString(result.NetworkCheck.AccessStatus.URLs, report.LocalUIURL) {
+		t.Fatalf("access status URLs %v do not include startup URL %q", result.NetworkCheck.AccessStatus.URLs, report.LocalUIURL)
 	}
 }
 
@@ -276,6 +389,76 @@ func (f *fixture) buildBinaries(ctx context.Context) {
 		f.t.Fatalf("copy upgraded redeven: %v", err)
 	}
 	f.dockerExec(ctx, nil, "chmod", "0755", containerRedeven, upgradedRedeven, containerHelper)
+}
+
+func (f *fixture) assertNetworkExposureStartFailures(ctx context.Context, passwordPath string) {
+	f.t.Helper()
+	tests := []struct {
+		name       string
+		stateRoot  string
+		args       []string
+		wantDetail string
+	}{
+		{
+			name:      "missing acknowledgement",
+			stateRoot: "/root/.redeven-network-missing-ack",
+			args: []string{
+				"--password-file", passwordPath,
+			},
+			wantDetail: "requires `--acknowledge-plaintext-network-exposure`",
+		},
+		{
+			name:      "missing password",
+			stateRoot: "/root/.redeven-network-missing-password",
+			args: []string{
+				"--acknowledge-plaintext-network-exposure",
+			},
+			wantDetail: "requires a non-empty access password",
+		},
+	}
+	for _, test := range tests {
+		args := []string{
+			"docker", "exec", "-i", f.containerName,
+			containerRedeven, "run",
+			"--mode", "local",
+			"--state-root", test.stateRoot,
+			"--local-ui-bind", "0.0.0.0:" + networkTestPort,
+			"--presentation", "plain",
+		}
+		args = append(args, test.args...)
+		_, err := f.runHost(ctx, f.repoRoot, nil, args[0], args[1:]...)
+		if err == nil || !strings.Contains(err.Error(), test.wantDetail) {
+			f.t.Fatalf("%s error = %v, want detail %q", test.name, err, test.wantDetail)
+		}
+	}
+}
+
+func (f *fixture) waitNetworkExposureReady(ctx context.Context, reportPath string) launchReport {
+	f.t.Helper()
+	deadline := time.Now().Add(35 * time.Second)
+	var lastReport launchReport
+	var lastErr error
+	for time.Now().Before(deadline) {
+		result, err := f.runHost(ctx, f.repoRoot, nil, "docker", "exec", "-i", f.containerName, "cat", reportPath)
+		if err == nil {
+			var report launchReport
+			if decodeErr := json.Unmarshal([]byte(result.Stdout), &report); decodeErr == nil {
+				lastReport = report
+				if report.Status == "ready" && report.LocalUIURL != "" && report.PID > 0 {
+					return report
+				}
+				lastErr = fmt.Errorf("network report is not ready: %#v", report)
+			} else {
+				lastErr = decodeErr
+			}
+		} else {
+			lastErr = err
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	f.dumpContainerDiagnostics(ctx)
+	f.t.Fatalf("network runtime did not become ready: %v; last=%#v", lastErr, lastReport)
+	return launchReport{}
 }
 
 func (f *fixture) startRuntime(ctx context.Context, binaryPath string) {
@@ -913,6 +1096,15 @@ func assertContains(t *testing.T, haystack string, needle string) {
 	if !strings.Contains(haystack, needle) {
 		t.Fatalf("expected %q to contain %q", haystack, needle)
 	}
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if value == target {
+			return true
+		}
+	}
+	return false
 }
 
 func TestMain(m *testing.M) {

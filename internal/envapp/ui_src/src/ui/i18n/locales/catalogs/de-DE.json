@@ -456,6 +456,24 @@
     "reloadPageAction": "Seite neu laden",
     "notice": "Die Kennwortüberprüfung bleibt innerhalb der von der Laufzeit verwalteten Sitzung, bevor interaktive Funktionen fortgesetzt werden."
   },
+  "networkExposure": {
+    "title": "Unverschlüsselter Netzwerkzugriff ist aktiv",
+    "summary": "Passwort aktiviert; kein TLS. Nur in einem vertrauenswürdigen Netzwerk verwenden.",
+    "viewDetails": "Sicherheitsdetails anzeigen",
+    "dontRemindAgain": "Nicht mehr anzeigen",
+    "dismissWarning": "Warnung schließen",
+    "detailsTitle": "Sicherheitsgrenze des unverschlüsselten Netzwerkzugriffs",
+    "detailsDescription": "Prüfen Sie, was diese Local UI-Verbindung schützt und was im Netzwerk sichtbar bleibt.",
+    "accessURLs": "Zugriffs-URLs",
+    "transport": "Transport",
+    "httpNoTLS": "HTTP, kein TLS",
+    "authentication": "Authentifizierung",
+    "passwordEnabled": "Passwort aktiviert",
+    "securityBoundary": "Passwort, Cookies, Seitenressourcen und nicht durch Flowersec geschützter HTTP-Datenverkehr können abgefangen oder verändert werden. Flowersec E2EE beginnt erst nach Abschluss des Handshakes.",
+    "close": "Schließen",
+    "policyUnavailable": "Die Sicherheitsrichtlinie für unverschlüsselten Netzwerkzugriff ist nicht verfügbar.",
+    "policyError": "Die Sicherheitsrichtlinie für unverschlüsselten Netzwerkzugriff konnte nicht erstellt werden: {message}"
+  },
   "aiChrome": {
     "flowerTitle": "Flower",
     "codexTitle": "Codex",

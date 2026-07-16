@@ -11,6 +11,7 @@ import {
 import type { DesktopSessionLifecycle, DesktopSessionSummary } from './desktopTarget';
 import type { GatewayDesktopTarget } from './desktopTarget';
 import { buildDesktopSettingsSurfaceSnapshot } from './settingsPageContent';
+import { canonicalLocalUIBind, isLoopbackOnlyBind, parseLocalUIBind } from './localUIBind';
 import type {
   DesktopEnvironmentEntry,
   DesktopLauncherSurface,
@@ -1211,6 +1212,18 @@ function buildLocalEnvironmentEntry(
   const isOpen = sessionIsOpen(localSession);
   const isOpening = sessionIsOpening(localSession);
   const access = localEnvironmentAccess(environment);
+  const networkExposureReviewRequired = (() => {
+    try {
+      const canonicalBind = canonicalLocalUIBind(access.local_ui_bind);
+      if (isLoopbackOnlyBind(parseLocalUIBind(canonicalBind))) {
+        return false;
+      }
+      return access.plaintext_network_exposure_acknowledgement?.version !== 1
+        || canonicalLocalUIBind(access.plaintext_network_exposure_acknowledgement.bind) !== canonicalBind;
+    } catch {
+      return true;
+    }
+  })();
   const kind = localEnvironmentStateKind(environment);
   const providerOrigin = localEnvironmentProviderOrigin(environment);
   const providerID = localEnvironmentProviderID(environment);
@@ -1292,6 +1305,7 @@ function buildLocalEnvironmentEntry(
     local_environment_kind: kind,
     local_environment_ui_bind: access.local_ui_bind,
     local_environment_ui_password_configured: access.local_ui_password_configured,
+    local_environment_network_exposure_review_required: networkExposureReviewRequired,
     local_environment_owner: environment.local_hosting?.owner,
     local_environment_runtime_state: resolvedLocalRuntimeState,
     local_environment_runtime_url: resolvedLocalRuntimeURL || undefined,
@@ -2066,11 +2080,15 @@ export function buildDesktopWelcomeSnapshot(
         ? managedSessions.remote_desktop ?? managedSessions.local_host
         : managedSessions.local_host ?? managedSessions.remote_desktop
     ) ?? null;
+    const localEnvironmentEntry = environments.find((environment) => environment.id === localEnvironment.id);
     return {
       environment_id: localEnvironment.id,
       environment_label: localEnvironment.label,
       environment_kind: localEnvironmentStateKind(localEnvironment),
-      current_runtime_url: managedSession?.entry_url ?? managedSession?.startup?.local_ui_url ?? '',
+      current_runtime_url: managedSession?.entry_url
+        ?? managedSession?.startup?.local_ui_url
+        ?? localEnvironmentEntry?.local_environment_runtime_url
+        ?? '',
       local_ui_password_configured: localEnvironmentAccess(localEnvironment).local_ui_password_configured,
       runtime_password_required: managedSession?.startup?.password_required === true,
       auto_runtime_probe_configurable: false,

@@ -254,9 +254,12 @@ Local Environment state rules:
 
 Local UI bind rules:
   - Default bind: localhost:23998
-  - Accepted examples: localhost:23998, 127.0.0.1:24000, 127.42.0.9:24000, 127.0.0.1:0, [::1]:24000
+  - Loopback examples: localhost:23998, 127.0.0.1:24000, 127.0.0.1:0, [::1]:24000
+  - Network examples: 192.168.1.20:23998, 0.0.0.0:23998, [2001:db8::20]:23998, [::]:23998
   - localhost:0 is rejected because dual-stack localhost listeners cannot share one dynamic port.
-  - Local UI is permanently loopback-only. Use Redeven Desktop, SSH forwarding, or a Flowersec secure tunnel across devices.
+  - Network binds require a fixed port, password authentication, and --acknowledge-plaintext-network-exposure.
+  - HTTP remains plaintext: passwords, cookies, page resources, and non-Flowersec traffic can be intercepted or modified.
+  - Flowersec protects encrypted session payloads only after its handshake completes.
 
 Password rules:
   - Select at most one of --password-prompt, --password-stdin, or --password-file.
@@ -274,6 +277,8 @@ Flags:
   --mode <remote|hybrid|local|desktop>
                                     Run mode (default: local).
   --local-ui-bind <host:port>       Local UI bind address (default: localhost:23998).
+  --acknowledge-plaintext-network-exposure
+                                    Explicitly accept plaintext credential exposure for a network bind.
   --provider-origin <url>           Provider authority origin for one-shot bootstrap.
   --controlplane <url>              Access point controlplane base URL for one-shot bootstrap.
   --env-id <env_public_id>          Environment public ID for one-shot bootstrap.
@@ -310,7 +315,7 @@ Examples:
     redeven run --mode desktop --desktop-managed --presentation machine --local-ui-bind 127.0.0.1:0
 
   Cross-device access:
-    Keep Local UI on loopback and use Redeven Desktop, SSH forwarding, or a Flowersec secure tunnel.
+    redeven run --local-ui-bind 0.0.0.0:23998 --password-file /run/secrets/redeven-local-ui-password --acknowledge-plaintext-network-exposure
 
   One-shot hybrid run without a separate bootstrap step:
     redeven run --mode hybrid --provider-origin %[1]s --controlplane %[2]s --env-id %[3]s --bootstrap-ticket-file /run/secrets/redeven-bootstrap-ticket
