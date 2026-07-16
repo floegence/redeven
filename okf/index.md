@@ -20,6 +20,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## Security
 
+- [Local UI network exposure](security/local-ui-network-exposure.md) - Fixed-port plaintext exposure admission, exact authority checks, acknowledgement, and warning preferences.
 - [Permission policy and filesystem scope](security/permission-policy-and-filesystem-scope.md) - Local caps and directory-level file access policy.
 - [Plugin platform integration security](security/plugin-platform-integration-security.md) - Session, route, permission, and capability boundaries for ReDevPlugin adapters.
 

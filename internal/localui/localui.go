@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -105,6 +106,7 @@ type Server struct {
 	diag      *diagnostics.Store
 
 	accessGate *accessgate.Gate
+	exposure   runtimemanagement.LocalUIExposure
 
 	latestVersionResolver latestVersionResolver
 
@@ -113,6 +115,8 @@ type Server struct {
 
 	authorityMu        sync.RWMutex
 	networkAuthorities map[string]struct{}
+	displayURLs        []string
+	resolveAccessHosts func(BindSpec) ([]netip.Addr, error)
 
 	listeners []net.Listener
 	srv       *http.Server
@@ -162,7 +166,18 @@ func (s *Server) HandlerForDesktopBridge() http.Handler {
 	if s == nil {
 		return http.NotFoundHandler()
 	}
-	return s.handler()
+	next := s.handler()
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r == nil {
+			http.Error(w, "invalid Local UI request", http.StatusBadRequest)
+			return
+		}
+		if _, err := canonicalLoopbackAuthority(r.Host); err != nil {
+			http.Error(w, "invalid Local UI bridge authority", http.StatusMisdirectedRequest)
+			return
+		}
+		next.ServeHTTP(w, withTrustedLocalUIBridge(r))
+	})
 }
 
 func New(opts Options) (*Server, error) {
@@ -196,6 +211,10 @@ func New(opts Options) (*Server, error) {
 		agent.FloeAppRedevenAgent,
 		config.PermissionSet{Read: true, Write: false, Execute: true},
 	)
+	exposure := runtimemanagement.NewLocalUIExposure(bind.IsNetworkExposure(), opts.AccessGate != nil && opts.AccessGate.Enabled())
+	if err := exposure.Validate(); err != nil {
+		return nil, err
+	}
 	return &Server{
 		log:                    logger,
 		bind:                   bind,
@@ -216,8 +235,10 @@ func New(opts Options) (*Server, error) {
 		a:                      opts.Agent,
 		diag:                   opts.Diagnostics,
 		accessGate:             opts.AccessGate,
+		exposure:               exposure,
 		pending:                make(map[string]pendingDirect),
 		networkAuthorities:     make(map[string]struct{}),
+		resolveAccessHosts:     resolveNetworkAccessHosts,
 	}, nil
 }
 
@@ -432,6 +453,7 @@ func (s *Server) RuntimeAttachStatus() runtimemanagement.RuntimeAttachStatus {
 			LocalUIURLs:      s.DisplayURLs(),
 			RuntimeControl:   runtimeControlEndpoint(s.runtimeControl),
 			PasswordRequired: s.accessEnabled(),
+			Exposure:         s.LocalUIExposure(),
 		},
 		RuntimeService: runtimeService,
 		Diagnostics: runtimemanagement.RuntimeAttachDiagnostics{
@@ -498,6 +520,12 @@ func (s *Server) DisplayURLs() []string {
 	if s == nil {
 		return nil
 	}
+	s.authorityMu.RLock()
+	resolved := append([]string(nil), s.displayURLs...)
+	s.authorityMu.RUnlock()
+	if len(resolved) > 0 {
+		return resolved
+	}
 	return s.bind.DisplayURLsForPort(s.Port())
 }
 
@@ -516,17 +544,20 @@ type apiError struct {
 }
 
 type accessStatusResp struct {
-	PasswordRequired bool `json:"password_required"`
-	Unlocked         bool `json:"unlocked"`
+	PasswordRequired bool                              `json:"password_required"`
+	Unlocked         bool                              `json:"unlocked"`
+	Exposure         runtimemanagement.LocalUIExposure `json:"exposure"`
+	URLs             []string                          `json:"urls"`
 }
 
 type runtimeHealthResp struct {
-	Status           string                  `json:"status"`
-	PasswordRequired bool                    `json:"password_required"`
-	DesktopManaged   bool                    `json:"desktop_managed,omitempty"`
-	DesktopOwnerID   string                  `json:"desktop_owner_id,omitempty"`
-	StartedAtUnixMS  int64                   `json:"started_at_unix_ms,omitempty"`
-	RuntimeService   runtimeservice.Snapshot `json:"runtime_service"`
+	Status           string                            `json:"status"`
+	PasswordRequired bool                              `json:"password_required"`
+	Exposure         runtimemanagement.LocalUIExposure `json:"exposure"`
+	DesktopManaged   bool                              `json:"desktop_managed,omitempty"`
+	DesktopOwnerID   string                            `json:"desktop_owner_id,omitempty"`
+	StartedAtUnixMS  int64                             `json:"started_at_unix_ms,omitempty"`
+	RuntimeService   runtimeservice.Snapshot           `json:"runtime_service"`
 }
 
 type accessUnlockReq struct {
@@ -535,6 +566,16 @@ type accessUnlockReq struct {
 
 func (s *Server) accessEnabled() bool {
 	return s != nil && s.accessGate != nil && s.accessGate.Enabled()
+}
+
+func (s *Server) LocalUIExposure() runtimemanagement.LocalUIExposure {
+	if s == nil {
+		return runtimemanagement.NewLocalUIExposure(false, false)
+	}
+	if err := s.exposure.Validate(); err == nil {
+		return s.exposure
+	}
+	return runtimemanagement.NewLocalUIExposure(s.bind.IsNetworkExposure(), s.accessEnabled())
 }
 
 func localAccessResumeMeta() session.Meta {
@@ -849,6 +890,8 @@ func (s *Server) handleAccessStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, apiResp{OK: true, Data: accessStatusResp{
 		PasswordRequired: s.accessEnabled(),
 		Unlocked:         s.hasLocalAccess(r),
+		Exposure:         s.LocalUIExposure(),
+		URLs:             s.DisplayURLs(),
 	}})
 }
 
@@ -863,6 +906,7 @@ func (s *Server) handleRuntimeHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, apiResp{OK: true, Data: runtimeHealthResp{
 		Status:           "online",
 		PasswordRequired: s.accessEnabled(),
+		Exposure:         s.LocalUIExposure(),
 		DesktopManaged:   s.desktopManaged,
 		DesktopOwnerID:   s.desktopOwnerID,
 		StartedAtUnixMS:  s.a.ProcessStartedAtUnixMS(),
@@ -1113,7 +1157,10 @@ func (s *Server) directWSURLFromRequest(r *http.Request) (string, error) {
 	if r == nil {
 		return "", errors.New("nil request")
 	}
-	host, err := canonicalLoopbackAuthority(r.Host)
+	if !s.isTrustedOrAllowedAuthority(r) {
+		return "", errors.New("invalid Local UI authority")
+	}
+	host, err := canonicalLocalUIAuthority(r.Host)
 	if err != nil {
 		return "", errors.New("invalid Local UI authority")
 	}
@@ -1590,7 +1637,7 @@ func sameOriginWSRequest(r *http.Request) bool {
 }
 
 func (s *Server) sameOriginWSRequest(r *http.Request) bool {
-	return s != nil && s.isTrustedOrAllowedAuthority(r.Host) && strictSameOriginWSRequest(r, true)
+	return s != nil && s.isTrustedOrAllowedAuthority(r) && strictSameOriginWSRequest(r, true)
 }
 
 func firstNonEmptyString(values []string) string {

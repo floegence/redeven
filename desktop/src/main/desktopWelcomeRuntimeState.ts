@@ -66,6 +66,7 @@ function runtimeStateFromStartup(
     controlplane_provider_id: compact(startup.controlplane_provider_id) || undefined,
     env_public_id: compact(startup.env_public_id) || undefined,
     password_required: startup.password_required === true,
+    exposure: startup.exposure,
     diagnostics_enabled: startup.diagnostics_enabled === true,
     pid: Number.isInteger(pid) && pid > 0 ? pid : 0,
     started_at_unix_ms: Number.isInteger(startedAtUnixMS) && startedAtUnixMS > 0 ? startedAtUnixMS : undefined,

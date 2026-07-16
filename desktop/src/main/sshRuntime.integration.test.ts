@@ -421,7 +421,12 @@ function writeRuntimeStatus() {
       desktop_owner_id: 'desktop-owner-test',
       expires_at_unix_ms: Date.now() + 60 * 60 * 1000,
     },
-    password_required: true,
+    password_required: false,
+    exposure: {
+      scope: 'loopback',
+      transport: 'plaintext',
+      password_required: false,
+    },
     effective_run_mode: 'local',
     desktop_managed: true,
     pid: 4242,
@@ -477,6 +482,11 @@ function startForward() {
           data: {
             status: 'online',
             password_required: false,
+            exposure: {
+              scope: 'loopback',
+              transport: 'plaintext',
+              password_required: false,
+            },
             runtime_service: scenario === 'forwarded_blocked_readiness'
               ? {
                   ...currentRuntimeService(),
@@ -717,7 +727,12 @@ if (args.includes('-M') && args.includes('-N')) {
             expires_at_unix_ms: Date.now() + 60 * 60 * 1000,
           },
         } : {}),
-        password_required: true,
+        password_required: false,
+        exposure: {
+          scope: 'loopback',
+          transport: 'plaintext',
+          password_required: false,
+        },
         effective_run_mode: 'local',
         desktop_managed: true,
         pid: Number(state.runtime_pid || 4242),
@@ -1287,6 +1302,11 @@ describe('sshRuntime integration', () => {
       expect(runtime.startup.local_ui_url).toBe(runtime.local_forward_url);
       expect(runtime.startup.local_ui_urls).toEqual([runtime.local_forward_url]);
       expect(runtime.startup.password_required).toBe(false);
+      expect(runtime.startup.exposure).toEqual({
+        scope: 'loopback',
+        transport: 'plaintext',
+        password_required: false,
+      });
       expect(runtime.startup.pid).toBe(4242);
       expect(runtime.runtime_handle).toEqual(expect.objectContaining({
         runtime_kind: 'ssh',
@@ -1300,6 +1320,11 @@ describe('sshRuntime integration', () => {
         data: {
           status: 'online',
           password_required: false,
+          exposure: {
+            scope: 'loopback',
+            transport: 'plaintext',
+            password_required: false,
+          },
           runtime_service: {
             open_readiness: {
               state: 'openable',

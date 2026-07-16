@@ -7,6 +7,7 @@ import {
   buildDesktopSettingsSummaryItems,
   deriveDesktopAccessDraftModel,
   desktopAccessModeForDraft,
+  desktopSettingsDraftRequiresRuntimeRestart,
 } from './desktopAccessModel';
 import type { DesktopSettingsDraft } from './settingsIPC';
 
@@ -126,5 +127,47 @@ describe('desktopAccessModel', () => {
         value_key: 'settings.noPassword',
       }),
     ]));
+  });
+
+  it('requires a Runtime restart only for startup access changes', () => {
+    const baseline = draft({
+      local_ui_bind: 'localhost:23998',
+      local_ui_password_mode: 'replace',
+    });
+
+    expect(desktopSettingsDraftRequiresRuntimeRestart(baseline, baseline)).toBe(false);
+    expect(desktopSettingsDraftRequiresRuntimeRestart(baseline, {
+      ...baseline,
+      auto_runtime_probe_enabled: true,
+    })).toBe(false);
+    expect(desktopSettingsDraftRequiresRuntimeRestart(baseline, {
+      ...baseline,
+      local_ui_bind: '0.0.0.0:23998',
+    })).toBe(true);
+    expect(desktopSettingsDraftRequiresRuntimeRestart(baseline, {
+      ...baseline,
+      local_ui_password: 'replacement',
+    })).toBe(true);
+  });
+
+  it('detects password removal and acknowledgement changes without treating an empty replacement as a change', () => {
+    const passwordBaseline = draft({
+      local_ui_bind: '0.0.0.0:23998',
+      local_ui_password_mode: 'keep',
+      plaintext_network_exposure_acknowledgement_bind: '0.0.0.0:23998',
+    });
+
+    expect(desktopSettingsDraftRequiresRuntimeRestart(passwordBaseline, {
+      ...passwordBaseline,
+      local_ui_password_mode: 'clear',
+    })).toBe(true);
+    expect(desktopSettingsDraftRequiresRuntimeRestart(passwordBaseline, {
+      ...passwordBaseline,
+      plaintext_network_exposure_acknowledgement_bind: '',
+    })).toBe(true);
+    expect(desktopSettingsDraftRequiresRuntimeRestart(draft({}), draft({
+      local_ui_password: '',
+      local_ui_password_mode: 'replace',
+    }))).toBe(false);
   });
 });

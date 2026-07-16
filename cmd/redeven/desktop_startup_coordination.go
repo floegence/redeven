@@ -47,6 +47,7 @@ func writeDesktopReadyLaunchReport(reportPath string, startup runtimeStartupRepo
 		LocalUIURLs:              append([]string(nil), startup.LocalUIURLs...),
 		RuntimeControl:           startup.RuntimeControl,
 		PasswordRequired:         startup.PasswordRequired,
+		Exposure:                 startup.Exposure,
 		EffectiveRunMode:         startup.EffectiveRunMode,
 		RemoteEnabled:            startup.RemoteEnabled,
 		DesktopManaged:           startup.DesktopManaged,
@@ -69,6 +70,7 @@ type runtimeStartupReport struct {
 	LocalUIURLs              []string
 	RuntimeControl           *runtimeControlEndpoint
 	PasswordRequired         bool
+	Exposure                 runtimemanagement.LocalUIExposure
 	EffectiveRunMode         string
 	RemoteEnabled            bool
 	DesktopManaged           bool
@@ -106,6 +108,7 @@ func buildRuntimeStartupReport(status runtimemanagement.RuntimeAttachStatus) run
 			}
 		}(),
 		PasswordRequired:         endpoint.PasswordRequired,
+		Exposure:                 endpoint.Exposure,
 		EffectiveRunMode:         status.RuntimeService.EffectiveRunMode,
 		RemoteEnabled:            status.RuntimeService.RemoteEnabled,
 		DesktopManaged:           status.Identity.DesktopManaged,

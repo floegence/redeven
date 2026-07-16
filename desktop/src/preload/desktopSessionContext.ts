@@ -8,6 +8,7 @@ import {
   type DesktopSessionAppReadyPayload,
   type DesktopSessionContextSnapshot,
 } from '../shared/desktopSessionContextIPC';
+import { parseLocalUIExposure } from '../shared/localUIExposure';
 
 export interface DesktopSessionContextBridge {
   getSnapshot: () => DesktopSessionContextSnapshot | null;
@@ -37,6 +38,13 @@ export function bootstrapDesktopSessionContextBridge(): void {
       const providerID = String(candidate.provider_id ?? '').trim();
       const envPublicID = String(candidate.env_public_id ?? '').trim();
       const label = String(candidate.label ?? '').trim();
+      const localUIExposure = (() => {
+        try {
+          return candidate.local_ui_exposure == null ? undefined : parseLocalUIExposure(candidate.local_ui_exposure);
+        } catch {
+          return undefined;
+        }
+      })();
       if (localEnvironmentID === '' || rendererStorageScopeID === '') {
         return null;
       }
@@ -50,6 +58,7 @@ export function bootstrapDesktopSessionContextBridge(): void {
         ...(providerID !== '' ? { provider_id: providerID } : {}),
         ...(envPublicID !== '' ? { env_public_id: envPublicID } : {}),
         ...(label !== '' ? { label } : {}),
+        ...(localUIExposure ? { local_ui_exposure: localUIExposure } : {}),
       };
     },
     notifyAppReady: (payload) => {

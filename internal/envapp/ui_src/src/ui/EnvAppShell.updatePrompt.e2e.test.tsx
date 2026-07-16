@@ -99,11 +99,32 @@ vi.mock('@floegence/floe-webapp-core/layout', async (importOriginal) => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
+  Button: (props: any) => (
+    <button
+      type="button"
+      class={props.class}
+      data-testid={props['data-testid']}
+      aria-label={props['aria-label']}
+      onClick={props.onClick}
+    >
+      {props.children}
+    </button>
+  ),
   createFloatingPresence: (options: { open: () => boolean }) => ({
     mounted: () => Boolean(options.open()),
     exiting: () => false,
     state: () => (options.open() ? 'entered' : 'exited'),
   }),
+  Dialog: (props: any) => (
+    props.open
+      ? (
+          <div role="dialog" aria-label={props.title}>
+            {props.children}
+            {props.footer}
+          </div>
+        )
+      : null
+  ),
   Dropdown: (props: any) => <>{props.trigger}</>,
   SegmentedControl: (props: any) => (
     <div>

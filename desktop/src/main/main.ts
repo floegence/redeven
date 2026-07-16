@@ -7677,7 +7677,7 @@ function normalizeDesktopSessionAppReadyPayload(value: unknown): DesktopSessionA
 }
 
 function desktopSessionContextSnapshot(sessionRecord: DesktopSessionRecord | null): DesktopSessionContextSnapshot | null {
-  return desktopSessionContextSnapshotFromTarget(sessionRecord?.target ?? null);
+  return desktopSessionContextSnapshotFromTarget(sessionRecord?.target ?? null, sessionRecord?.startup.exposure);
 }
 
 function markSessionAppReady(

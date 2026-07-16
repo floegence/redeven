@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -16,6 +17,7 @@ type BindSpec struct {
 	port      int
 	localhost bool
 	loopback  bool
+	wildcard  bool
 }
 
 func ParseBind(raw string) (BindSpec, error) {
@@ -51,13 +53,31 @@ func ParseBind(raw string) (BindSpec, error) {
 	if err != nil {
 		return BindSpec{}, fmt.Errorf("host must be localhost or an IP literal")
 	}
-	if addr.Zone() != "" || addr.Is4In6() || !addr.IsLoopback() {
-		return BindSpec{}, fmt.Errorf("Local UI is loopback-only; use localhost, 127.0.0.0/8, or ::1")
+	if addr.Zone() != "" || addr.Is4In6() {
+		return BindSpec{}, fmt.Errorf("host must be a canonical IPv4 or IPv6 literal without a zone")
+	}
+	if addr.IsUnspecified() {
+		if port == 0 {
+			return BindSpec{}, fmt.Errorf("network exposure requires a fixed port")
+		}
+		return BindSpec{
+			host:     addr.String(),
+			port:     port,
+			wildcard: true,
+		}, nil
+	}
+	if !addr.IsLoopback() {
+		if !eligibleNetworkAccessAddress(addr) {
+			return BindSpec{}, fmt.Errorf("network host must be a non-loopback unicast IP address")
+		}
+		if port == 0 {
+			return BindSpec{}, fmt.Errorf("network exposure requires a fixed port")
+		}
 	}
 	return BindSpec{
 		host:     addr.String(),
 		port:     port,
-		loopback: true,
+		loopback: addr.IsLoopback(),
 	}, nil
 }
 
@@ -71,6 +91,14 @@ func (b BindSpec) Host() string {
 
 func (b BindSpec) IsLoopbackOnly() bool {
 	return b.localhost || b.loopback
+}
+
+func (b BindSpec) IsNetworkExposure() bool {
+	return b.host != "" && !b.IsLoopbackOnly()
+}
+
+func (b BindSpec) IsWildcard() bool {
+	return b.wildcard
 }
 
 func (b BindSpec) ListenLabel() string {
@@ -126,9 +154,84 @@ func (b BindSpec) displayURLsForPort(port int) []string {
 	switch {
 	case b.localhost:
 		return []string{formatHTTPURL("localhost", port)}
+	case b.wildcard:
+		return nil
 	default:
 		return []string{formatHTTPURL(b.host, port)}
 	}
+}
+
+type interfaceAddress struct {
+	addr     netip.Addr
+	up       bool
+	loopback bool
+}
+
+func resolveNetworkAccessHosts(bind BindSpec) ([]netip.Addr, error) {
+	if !bind.IsNetworkExposure() {
+		return nil, nil
+	}
+	if !bind.IsWildcard() {
+		addr, err := netip.ParseAddr(bind.Host())
+		if err != nil || !eligibleNetworkAccessAddress(addr) {
+			return nil, fmt.Errorf("invalid network bind host")
+		}
+		return []netip.Addr{addr}, nil
+	}
+
+	interfaces, err := net.Interfaces()
+	if err != nil {
+		return nil, fmt.Errorf("enumerate network interfaces: %w", err)
+	}
+	candidates := make([]interfaceAddress, 0)
+	for _, iface := range interfaces {
+		addrs, addrErr := iface.Addrs()
+		if addrErr != nil {
+			continue
+		}
+		for _, raw := range addrs {
+			prefix, parseErr := netip.ParsePrefix(strings.TrimSpace(raw.String()))
+			if parseErr != nil {
+				continue
+			}
+			candidates = append(candidates, interfaceAddress{
+				addr:     prefix.Addr(),
+				up:       iface.Flags&net.FlagUp != 0,
+				loopback: iface.Flags&net.FlagLoopback != 0,
+			})
+		}
+	}
+	return selectNetworkAccessHosts(bind, candidates), nil
+}
+
+func selectNetworkAccessHosts(bind BindSpec, candidates []interfaceAddress) []netip.Addr {
+	wantIPv4 := bind.Host() == "0.0.0.0"
+	unique := make(map[netip.Addr]struct{})
+	for _, candidate := range candidates {
+		addr := candidate.addr
+		if !candidate.up || candidate.loopback || addr.Is4() != wantIPv4 || !eligibleNetworkAccessAddress(addr) {
+			continue
+		}
+		unique[addr] = struct{}{}
+	}
+	result := make([]netip.Addr, 0, len(unique))
+	for addr := range unique {
+		result = append(result, addr)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].Less(result[j]) })
+	return result
+}
+
+func eligibleNetworkAccessAddress(addr netip.Addr) bool {
+	return addr.IsValid() &&
+		addr.Zone() == "" &&
+		!addr.Is4In6() &&
+		!addr.IsLoopback() &&
+		!addr.IsUnspecified() &&
+		!addr.IsMulticast() &&
+		!addr.IsLinkLocalUnicast() &&
+		!addr.IsLinkLocalMulticast() &&
+		addr.IsGlobalUnicast()
 }
 
 func formatHTTPURL(host string, port int) string {

@@ -35,7 +35,10 @@ func TestWriteEnvironmentCatalogRecordWritesLocalEnvironmentProviderBinding(t *t
 		LocalEnvironmentPublicID: "le_demo",
 		BindingGeneration:        1,
 	}
-	if err := WriteEnvironmentCatalogRecord(layout, cfg, "localhost:23998", true); err != nil {
+	if err := WriteEnvironmentCatalogRecord(layout, cfg, EnvironmentCatalogAccess{
+		LocalUIBind:               "localhost:23998",
+		LocalUIPasswordConfigured: true,
+	}); err != nil {
 		t.Fatalf("WriteEnvironmentCatalogRecord() error = %v", err)
 	}
 
@@ -90,7 +93,10 @@ func TestWriteEnvironmentCatalogRecordKeepsLocalIdentityWithoutProviderID(t *tes
 		LocalEnvironmentPublicID: "le_demo",
 		BindingGeneration:        1,
 	}
-	if err := WriteEnvironmentCatalogRecord(layout, cfg, "localhost:23998", true); err != nil {
+	if err := WriteEnvironmentCatalogRecord(layout, cfg, EnvironmentCatalogAccess{
+		LocalUIBind:               "localhost:23998",
+		LocalUIPasswordConfigured: true,
+	}); err != nil {
 		t.Fatalf("WriteEnvironmentCatalogRecord() error = %v", err)
 	}
 
@@ -101,6 +107,45 @@ func TestWriteEnvironmentCatalogRecordKeepsLocalIdentityWithoutProviderID(t *tes
 	}
 	if record.CurrentProviderBinding != nil {
 		t.Fatalf("CurrentProviderBinding = %#v, want nil", record.CurrentProviderBinding)
+	}
+}
+
+func TestWriteEnvironmentCatalogRecordPersistsExactPlaintextNetworkAcknowledgement(t *testing.T) {
+	stateRoot := t.TempDir()
+	layout, err := LocalEnvironmentStateLayout(stateRoot)
+	if err != nil {
+		t.Fatalf("LocalEnvironmentStateLayout() error = %v", err)
+	}
+
+	if err := WriteEnvironmentCatalogRecord(layout, &Config{}, EnvironmentCatalogAccess{
+		LocalUIBind:                          "0.0.0.0:24000",
+		LocalUIPasswordConfigured:            true,
+		PlaintextNetworkExposureAcknowledged: true,
+	}); err != nil {
+		t.Fatalf("WriteEnvironmentCatalogRecord() error = %v", err)
+	}
+
+	recordPath := filepath.Join(stateRoot, "catalog", "local-environment.json")
+	record := readCatalogEnvironmentFile(t, recordPath)
+	acknowledgement := record.LocalHosting.Access.PlaintextNetworkExposureAcknowledgement
+	if acknowledgement == nil {
+		t.Fatal("PlaintextNetworkExposureAcknowledgement = nil")
+	}
+	if acknowledgement.Version != 1 || acknowledgement.Bind != "0.0.0.0:24000" {
+		t.Fatalf("PlaintextNetworkExposureAcknowledgement = %#v", acknowledgement)
+	}
+
+	if err := WriteEnvironmentCatalogRecord(layout, &Config{}, EnvironmentCatalogAccess{
+		LocalUIBind: "localhost:24000",
+	}); err != nil {
+		t.Fatalf("WriteEnvironmentCatalogRecord(loopback) error = %v", err)
+	}
+	record = readCatalogEnvironmentFile(t, recordPath)
+	if record.LocalHosting.Access.PlaintextNetworkExposureAcknowledgement != nil {
+		t.Fatalf(
+			"PlaintextNetworkExposureAcknowledgement = %#v, want nil",
+			record.LocalHosting.Access.PlaintextNetworkExposureAcknowledgement,
+		)
 	}
 }
 
@@ -149,7 +194,9 @@ func TestWriteEnvironmentCatalogRecordReusesExistingLocalEnvironmentRecordProper
 		LocalEnvironmentPublicID: "le_demo",
 		BindingGeneration:        1,
 	}
-	if err := WriteEnvironmentCatalogRecord(layout, cfg, "127.0.0.1:24000", false); err != nil {
+	if err := WriteEnvironmentCatalogRecord(layout, cfg, EnvironmentCatalogAccess{
+		LocalUIBind: "127.0.0.1:24000",
+	}); err != nil {
 		t.Fatalf("WriteEnvironmentCatalogRecord() error = %v", err)
 	}
 

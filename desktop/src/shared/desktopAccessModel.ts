@@ -47,6 +47,8 @@ export type DesktopAccessDraftModel = Readonly<{
   next_start_address_detail_key: 'settings.localOnlyAddressDetail' | 'settings.sharedAddressDetail' | 'settings.customLoopbackDetail' | 'settings.customBindDetail' | 'settings.autoLoopbackAddressDetail';
   password_required: boolean;
   password_configured: boolean;
+  network_exposure: boolean;
+  network_exposure_acknowledged: boolean;
   password_state_id: DesktopPasswordStateID;
   password_state_tone: 'default' | 'warning' | 'success';
   current_runtime_url: string;
@@ -280,6 +282,7 @@ export function deriveDesktopAccessDraftModel(
   const fixedPort = fixedPortValue(bindPortText);
   const addressDisplay = nextStartAddressDisplay(accessMode, bindHost, portMode, fixedPort, bindRaw);
   const password = passwordState(accessMode, bindHost, draft, options);
+  const networkExposure = !isLoopbackHost(bindHost);
 
   return {
     access_mode: accessMode,
@@ -292,10 +295,35 @@ export function deriveDesktopAccessDraftModel(
     next_start_address_detail_key: addressDisplay.detailKey,
     password_required: password.required,
     password_configured: password.configured,
+    network_exposure: networkExposure,
+    network_exposure_acknowledged: networkExposure
+      && trimString(draft.plaintext_network_exposure_acknowledgement_bind) === bindRaw,
     password_state_id: password.id,
     password_state_tone: password.tone,
     current_runtime_url: trimString(options.current_runtime_url),
   };
+}
+
+export function desktopSettingsDraftRequiresRuntimeRestart(
+  baseline: DesktopSettingsDraft,
+  draft: DesktopSettingsDraft,
+): boolean {
+  if (trimString(baseline.local_ui_bind) !== trimString(draft.local_ui_bind)) {
+    return true;
+  }
+  if (
+    trimString(baseline.plaintext_network_exposure_acknowledgement_bind)
+    !== trimString(draft.plaintext_network_exposure_acknowledgement_bind)
+  ) {
+    return true;
+  }
+
+  const passwordMode = normalizeDesktopLocalUIPasswordMode(draft.local_ui_password_mode);
+  if (passwordMode === 'replace') {
+    return trimString(draft.local_ui_password) !== '';
+  }
+  return passwordMode === 'clear'
+    && normalizeDesktopLocalUIPasswordMode(baseline.local_ui_password_mode) === 'keep';
 }
 
 export function desktopPasswordStateTranslationKey(state: DesktopPasswordStateID) {
@@ -372,12 +400,14 @@ export function applyDesktopAccessModeToDraft(
         ...draft,
         local_ui_bind: DEFAULT_DESKTOP_AUTO_LOOPBACK_BIND,
         local_ui_password: '',
+        plaintext_network_exposure_acknowledgement_bind: '',
       };
     }
     return {
       ...draft,
       local_ui_bind: formatHostPort('localhost', nextFixedPortForDraft(draft)),
       local_ui_password: '',
+      plaintext_network_exposure_acknowledgement_bind: '',
     };
   }
   return {
@@ -408,11 +438,13 @@ export function applyDesktopAccessAutoPortToDraft(
       ...draft,
       local_ui_bind: DEFAULT_DESKTOP_AUTO_LOOPBACK_BIND,
       local_ui_password: '',
+      plaintext_network_exposure_acknowledgement_bind: '',
     };
   }
   return {
     ...draft,
     local_ui_bind: formatHostPort('localhost', nextFixedPortForDraft(draft)),
     local_ui_password: '',
+    plaintext_network_exposure_acknowledgement_bind: '',
   };
 }

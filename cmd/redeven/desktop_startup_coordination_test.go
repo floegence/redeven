@@ -39,6 +39,7 @@ func TestHandleDesktopLockConflictWritesAttachedReportWhenRuntimeIsAvailable(t *
 				LocalUIURL:       "http://127.0.0.1:23998/",
 				LocalUIURLs:      []string{"http://127.0.0.1:23998/"},
 				PasswordRequired: true,
+				Exposure:         runtimemanagement.NewLocalUIExposure(false, true),
 			},
 			RuntimeService: runtimeservice.NormalizeSnapshot(runtimeservice.Snapshot{
 				ServiceOwner:     runtimeservice.OwnerDesktop,

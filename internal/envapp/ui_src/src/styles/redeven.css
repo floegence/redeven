@@ -1992,6 +1992,40 @@ html.dark .env-debug-console-switch[data-state='checked'] {
   border-color: var(--redeven-settings-control-border);
 }
 
+.redeven-network-security-details {
+  width: min(32rem, calc(100vw - 2rem));
+}
+
+.redeven-env-shell-stage {
+  position: relative;
+  overflow: hidden;
+}
+
+.redeven-env-shell-stage .display-mode-page-shell {
+  position: absolute;
+  inset: 0;
+  height: 100%;
+  min-height: 0;
+}
+
+@media (max-width: 639px) {
+  [data-floe-dialog-overlay-root]:has(.redeven-network-security-details) {
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  [data-floe-dialog-panel].redeven-network-security-details {
+    width: 100%;
+    max-width: none;
+    max-height: min(78dvh, 42rem);
+    margin-top: auto;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 8px 8px 0 0;
+  }
+}
+
 .redeven-settings-inset {
   border-color: var(--redeven-settings-card-border) !important;
   background: var(--redeven-settings-inset-bg) !important;

@@ -3,6 +3,7 @@
 import { For, Show, createContext, createEffect, createSignal, onCleanup, onMount, useContext, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { NETWORK_EXPOSURE_WARNING_PREFERENCE_STORAGE_KEY } from './security/networkExposureWarningPreference';
 
 const getLocalRuntimeMock = vi.fn();
 const getLocalAccessStatusMock = vi.fn();
@@ -252,7 +253,7 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
       setMountedIDs((current) => current.includes(activeID) ? current : [...current, activeID]);
     });
     return (
-      <div data-testid="display-mode-keep-alive" data-active-id={props.activeId}>
+      <div class={props.class} data-testid="display-mode-keep-alive" data-active-id={props.activeId}>
         <For each={props.views.filter((view: any) => mountedIDs().includes(view.id))}>
           {(view: any) => (
             <div data-testid={`display-mode-view-${view.id}`} style={{ display: view.id === props.activeId ? 'block' : 'none' }}>
@@ -307,7 +308,7 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
       setSidebarActiveTabMock(item.id, { openSidebar, visibilityMotion });
     };
     return (
-      <div data-floe-shell="">
+      <div class={props.class} data-floe-shell="">
         {props.logo}
         {props.topBarActions}
         <div>
@@ -373,6 +374,28 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/ui', () => ({
+  Button: (props: any) => (
+    <button
+      type={props.type ?? 'button'}
+      class={props.class}
+      disabled={props.disabled || props.loading}
+      aria-label={props['aria-label']}
+      data-testid={props['data-testid']}
+      onClick={props.onClick}
+    >
+      {props.children}
+    </button>
+  ),
+  Dialog: (props: any) => (
+    <Show when={props.open}>
+      <section role="dialog" aria-label={props.title} class={props.class}>
+        <h2>{props.title}</h2>
+        <Show when={props.description}><p>{props.description}</p></Show>
+        {props.children}
+        {props.footer}
+      </section>
+    </Show>
+  ),
   createFloatingPresence: (options: { open: () => boolean }) => ({
     mounted: () => Boolean(options.open()),
     exiting: () => false,
@@ -492,6 +515,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
   const Icon = () => <span />;
   return {
     Activity: Icon,
+    AlertTriangle: Icon,
     ArrowRightLeft: Icon,
     Check: Icon,
     ChevronDown: Icon,
@@ -508,6 +532,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     RefreshIcon: Icon,
     Search: Icon,
     Settings: Icon,
+    Shield: Icon,
     Sun: Icon,
     Terminal: Icon,
     CheckCircle: Icon,
@@ -955,6 +980,163 @@ beforeEach(() => {
 });
 
 describe('EnvAppShell environment entry affordances', () => {
+  it('shows the runtime-driven plaintext exposure warning and exact security details before dismissal', async () => {
+    const accessStatus = {
+      password_required: true,
+      unlocked: true,
+      exposure: {
+        scope: 'network' as const,
+        transport: 'plaintext' as const,
+        password_required: true,
+      },
+      urls: ['http://192.168.1.20:23998/'],
+    };
+    getLocalRuntimeMock.mockResolvedValue({
+      mode: 'local',
+      env_public_id: 'env_local',
+      direct_ws_url: 'ws://localhost/_redeven_direct/ws',
+      access_status: accessStatus,
+    });
+    refreshLocalRuntimeMock.mockResolvedValue({
+      mode: 'local',
+      env_public_id: 'env_local',
+      direct_ws_url: 'ws://localhost/_redeven_direct/ws',
+      access_status: accessStatus,
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushUntil(() => Boolean(host.querySelector('[data-testid="network-exposure-warning"]')));
+      const warning = host.querySelector('[data-testid="network-exposure-warning"]') as HTMLElement;
+      expect(warning.textContent).toContain('Plaintext network exposure is active');
+      expect(warning.textContent).toContain('Password enabled; TLS is not. Use only on a trusted network.');
+      expect(host.querySelector('[data-testid="display-mode-keep-alive"]')?.className).toContain('redeven-env-shell-stage');
+
+      findButtonByText(host, 'Activity')?.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-floe-shell]')));
+      expect(host.querySelector('[data-floe-shell]')?.className).toContain('!h-full');
+
+      findButtonByText(host, 'View security details')?.click();
+      await flushUntil(() => Boolean(host.querySelector('[role="dialog"]')));
+
+      const dialog = host.querySelector('[role="dialog"]') as HTMLElement;
+      expect(dialog.textContent).toContain('http://192.168.1.20:23998/');
+      expect(dialog.textContent).toContain('HTTP, no TLS');
+      expect(dialog.textContent).toContain('Password enabled');
+      expect(dialog.textContent).toContain('Flowersec end-to-end encryption begins only after its handshake completes');
+
+      findButtonByText(host, 'Close')?.click();
+      await flushUntil(() => !host.querySelector('[role="dialog"]'));
+      expect(host.querySelector('[data-testid="network-exposure-warning"]')).toBeTruthy();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('closes the plaintext exposure warning only for the current Env App mount', async () => {
+    const accessStatus = {
+      password_required: true,
+      unlocked: true,
+      exposure: {
+        scope: 'network' as const,
+        transport: 'plaintext' as const,
+        password_required: true,
+      },
+      urls: ['http://192.168.1.20:23998/'],
+    };
+    getLocalRuntimeMock.mockResolvedValue({
+      mode: 'local',
+      env_public_id: 'env_local',
+      direct_ws_url: 'ws://localhost/_redeven_direct/ws',
+      access_status: accessStatus,
+    });
+    refreshLocalRuntimeMock.mockResolvedValue({
+      mode: 'local',
+      env_public_id: 'env_local',
+      direct_ws_url: 'ws://localhost/_redeven_direct/ws',
+      access_status: accessStatus,
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const firstDispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushUntil(() => Boolean(host.querySelector('[data-testid="network-exposure-warning"]')));
+      (host.querySelector('[data-testid="network-exposure-dismiss"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => !host.querySelector('[data-testid="network-exposure-warning"]'));
+      expect(window.localStorage.getItem(NETWORK_EXPOSURE_WARNING_PREFERENCE_STORAGE_KEY)).toBeNull();
+    } finally {
+      firstDispose();
+    }
+
+    const secondDispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => Boolean(host.querySelector('[data-testid="network-exposure-warning"]')));
+      expect(host.querySelector('[data-testid="network-exposure-warning"]')).toBeTruthy();
+    } finally {
+      secondDispose();
+    }
+  });
+
+  it('persists the choice to stop showing plaintext exposure warnings', async () => {
+    const accessStatus = {
+      password_required: true,
+      unlocked: true,
+      exposure: {
+        scope: 'network' as const,
+        transport: 'plaintext' as const,
+        password_required: true,
+      },
+      urls: ['http://192.168.1.20:23998/'],
+    };
+    getLocalRuntimeMock.mockResolvedValue({
+      mode: 'local',
+      env_public_id: 'env_local',
+      direct_ws_url: 'ws://localhost/_redeven_direct/ws',
+      access_status: accessStatus,
+    });
+    refreshLocalRuntimeMock.mockResolvedValue({
+      mode: 'local',
+      env_public_id: 'env_local',
+      direct_ws_url: 'ws://localhost/_redeven_direct/ws',
+      access_status: accessStatus,
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const firstDispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushUntil(() => Boolean(host.querySelector('[data-testid="network-exposure-warning"]')));
+      (host.querySelector('[data-testid="network-exposure-dont-remind"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => !host.querySelector('[data-testid="network-exposure-warning"]'));
+      expect(JSON.parse(window.localStorage.getItem(NETWORK_EXPOSURE_WARNING_PREFERENCE_STORAGE_KEY) ?? 'null')).toEqual({
+        version: 1,
+        suppressed: true,
+      });
+    } finally {
+      firstDispose();
+    }
+
+    const secondDispose = render(() => <EnvAppShell />, host);
+    try {
+      await flushUntil(() => Boolean(host.querySelector('[data-testid="display-mode-keep-alive"]')));
+      expect(host.querySelector('[data-testid="network-exposure-warning"]')).toBeNull();
+    } finally {
+      secondDispose();
+    }
+  });
+
   it('keeps visited Activity surfaces mounted across Files, Terminal, Monitor, Flower, and Codex navigation', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
@@ -1823,6 +2005,28 @@ describe('EnvAppShell local access gate', () => {
   });
 
   it('waits for password unlock before connecting the local runtime', async () => {
+    const networkExposure = {
+      scope: 'network' as const,
+      transport: 'plaintext' as const,
+      password_required: true,
+    };
+    getLocalAccessStatusMock.mockResolvedValue({
+      password_required: true,
+      unlocked: false,
+      exposure: networkExposure,
+      urls: ['http://192.168.1.20:23998/'],
+    });
+    refreshLocalRuntimeMock.mockResolvedValue({
+      mode: 'local',
+      env_public_id: 'env_local',
+      direct_ws_url: 'ws://localhost/_redeven_direct/ws',
+      access_status: {
+        password_required: true,
+        unlocked: true,
+        exposure: networkExposure,
+        urls: ['http://192.168.1.20:23998/'],
+      },
+    });
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -1892,6 +2096,8 @@ describe('EnvAppShell local access gate', () => {
       expect(host.textContent).not.toContain('Unlock local runtime');
       expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
       expect(host.textContent).not.toContain('Preparing secure session');
+      expect(host.querySelector('[data-testid="network-exposure-warning"]')).toBeTruthy();
+      expect(host.textContent).toContain('Plaintext network exposure is active');
     } finally {
       dispose();
     }

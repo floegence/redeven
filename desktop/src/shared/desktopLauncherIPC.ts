@@ -331,6 +331,7 @@ export type DesktopEnvironmentEntry = Readonly<{
   local_environment_kind?: 'local' | 'controlplane';
   local_environment_ui_bind?: string;
   local_environment_ui_password_configured?: boolean;
+  local_environment_network_exposure_review_required?: boolean;
   local_environment_owner?: 'desktop' | 'agent' | 'unknown';
   local_environment_runtime_state?: DesktopLocalRuntimeState;
   local_environment_runtime_url?: string;

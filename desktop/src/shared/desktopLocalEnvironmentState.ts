@@ -3,11 +3,18 @@ import { normalizeControlPlaneOrigin } from './controlPlaneProvider';
 import type { DesktopProviderEnvironmentRecord } from './desktopProviderEnvironment';
 import { normalizeRuntimeServiceSnapshot, type RuntimeServiceSnapshot } from './runtimeService';
 import type { DesktopRuntimeControlEndpoint } from './runtimeControl';
+import type { LocalUIExposure } from './localUIExposure';
+
+export type DesktopPlaintextNetworkExposureAcknowledgement = Readonly<{
+  version: 1;
+  bind: string;
+}>;
 
 export type DesktopLocalEnvironmentAccess = Readonly<{
   local_ui_bind: string;
   local_ui_password: string;
   local_ui_password_configured: boolean;
+  plaintext_network_exposure_acknowledgement?: DesktopPlaintextNetworkExposureAcknowledgement;
 }>;
 
 export type DesktopLocalEnvironmentPreferredOpenRoute = 'auto' | 'local_host' | 'remote_desktop';
@@ -25,6 +32,7 @@ export type DesktopLocalEnvironmentRuntimeState = Readonly<{
   controlplane_provider_id?: string;
   env_public_id?: string;
   password_required: boolean;
+  exposure?: LocalUIExposure;
   diagnostics_enabled: boolean;
   pid: number;
   started_at_unix_ms?: number;
@@ -101,6 +109,7 @@ export function defaultDesktopLocalEnvironmentAccess(): DesktopLocalEnvironmentA
     local_ui_bind: DEFAULT_DESKTOP_LOCAL_UI_BIND,
     local_ui_password: '',
     local_ui_password_configured: false,
+    plaintext_network_exposure_acknowledgement: undefined,
   };
 }
 
@@ -138,6 +147,7 @@ function normalizeRuntimeState(
     controlplane_provider_id: compact(value.controlplane_provider_id) || undefined,
     env_public_id: compact(value.env_public_id) || undefined,
     password_required: value.password_required === true,
+    exposure: value.exposure,
     diagnostics_enabled: value.diagnostics_enabled === true,
     pid: Number.isInteger(pid) && pid > 0 ? pid : 0,
     started_at_unix_ms: Number.isInteger(startedAtUnixMS) && startedAtUnixMS > 0 ? startedAtUnixMS : undefined,

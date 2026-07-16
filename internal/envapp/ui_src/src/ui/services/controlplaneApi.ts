@@ -63,6 +63,12 @@ export type LocalRuntimeInfo = {
 export type LocalAccessStatus = {
   password_required: boolean;
   unlocked: boolean;
+  exposure?: {
+    scope: 'loopback' | 'network';
+    transport: 'plaintext';
+    password_required: boolean;
+  };
+  urls?: readonly string[];
 };
 
 export type LocalAccessUnlockResult = {
@@ -365,7 +371,21 @@ export async function getLocalAccessStatus(): Promise<LocalAccessStatus | null> 
   try {
     const out = await fetchLocalJSON<LocalAccessStatus>('/api/local/access/status', { method: 'GET' });
     if (typeof out?.password_required === 'boolean' && typeof out?.unlocked === 'boolean') {
-      return out;
+      const exposure = out.exposure && typeof out.exposure === 'object'
+        && (out.exposure.scope === 'loopback' || out.exposure.scope === 'network')
+        && out.exposure.transport === 'plaintext'
+        && typeof out.exposure.password_required === 'boolean'
+        ? out.exposure
+        : undefined;
+      const urls = Array.isArray(out.urls)
+        ? out.urls.map((value) => String(value ?? '').trim()).filter(Boolean)
+        : undefined;
+      return {
+        password_required: out.password_required,
+        unlocked: out.unlocked,
+        ...(exposure ? { exposure } : {}),
+        ...(urls && urls.length > 0 ? { urls } : {}),
+      };
     }
   } catch {
     // ignore

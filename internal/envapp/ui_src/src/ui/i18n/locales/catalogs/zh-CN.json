@@ -456,6 +456,24 @@
       "retryLater": "错误尝试过多。请等待冷却结束后再试。"
     }
   },
+  "networkExposure": {
+    "title": "明文网络暴露已启用",
+    "summary": "密码仅提供访问控制，未启用 TLS。仅限在可信网络中使用。",
+    "viewDetails": "查看安全详情",
+    "dontRemindAgain": "不再提醒",
+    "dismissWarning": "关闭提示",
+    "detailsTitle": "明文网络的安全边界",
+    "detailsDescription": "了解此 Local UI 连接的访问控制范围，以及仍会暴露在网络上的内容。",
+    "accessURLs": "访问 URL",
+    "transport": "传输方式",
+    "httpNoTLS": "HTTP（无 TLS）",
+    "authentication": "身份验证",
+    "passwordEnabled": "已启用密码",
+    "securityBoundary": "密码、Cookie、页面资源及非 Flowersec HTTP 流量都可能被截获或篡改。Flowersec 端到端加密仅在握手完成后开始生效。",
+    "close": "关闭",
+    "policyUnavailable": "明文网络安全策略不可用。",
+    "policyError": "无法创建明文网络安全策略：{message}"
+  },
   "aiChrome": {
     "flowerTitle": "Flower",
     "codexTitle": "Codex",
