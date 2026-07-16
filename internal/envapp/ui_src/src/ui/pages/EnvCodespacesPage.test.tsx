@@ -84,6 +84,7 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
 
 vi.mock('@floegence/floe-webapp-core/loading', () => ({
   LoadingOverlay: (props: any) => (props.visible ? <div>{props.message}</div> : null),
+  SkeletonCard: (props: any) => <div class={props.class} data-testid="skeleton-card" />,
   SnakeLoader: () => <div data-testid="snake-loader" />,
 }));
 
@@ -232,6 +233,20 @@ async function flushPage(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
   await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+async function flushMicrotasks(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
 }
 
 async function waitForHostText(host: HTMLElement, text: string, attempts = 20): Promise<void> {
@@ -408,6 +423,92 @@ describe('EnvCodespacesPage', () => {
     delete window.redevenDesktopShell;
     host.remove();
     document.body.innerHTML = '';
+  });
+
+  it('delays the quiet card skeleton for the initial codespaces request', async () => {
+    vi.useFakeTimers();
+    const spacesRequest = deferred<{ spaces: any[] }>();
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/code-runtime/status') return runtimeStatusResponse;
+      if (url === '/_redeven_proxy/api/spaces') return spacesRequest.promise;
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+    const dispose = render(() => <EnvCodespacesPage />, host);
+
+    try {
+      await flushMicrotasks();
+      const listRegion = host.querySelector('[data-testid="codespaces-list-region"]');
+      expect(listRegion?.querySelector('.redeven-loading-curtain')).toBeNull();
+      expect(host.querySelector('[data-testid="codespaces-initial-loading"]')).toBeNull();
+
+      await vi.advanceTimersByTimeAsync(149);
+      expect(host.querySelector('[data-testid="codespaces-initial-loading"]')).toBeNull();
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(host.querySelector('[data-testid="codespaces-initial-loading"]')).not.toBeNull();
+      const skeletonCards = Array.from(host.querySelectorAll('[data-testid="skeleton-card"]'));
+      expect(skeletonCards).toHaveLength(3);
+      expect(skeletonCards[0]?.className).not.toContain('hidden');
+      expect(skeletonCards[1]?.className).toContain('hidden');
+      expect(skeletonCards[1]?.className).toContain('md:block');
+      expect(skeletonCards[2]?.className).toContain('lg:block');
+
+      spacesRequest.resolve({ spaces: [] });
+      await flushMicrotasks();
+      expect(host.querySelector('[data-testid="codespaces-initial-loading"]')).toBeNull();
+      expect(host.textContent).toContain('No codespaces yet');
+    } finally {
+      dispose();
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps the current codespace card mounted while refreshing', async () => {
+    render(() => <EnvCodespacesPage />, host);
+    await flushPage();
+
+    const currentCard = host.querySelector('[data-testid="codespace-card"]');
+    const spacesRequest = deferred<{ spaces: any[] }>();
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/code-runtime/status') return runtimeStatusResponse;
+      if (url === '/_redeven_proxy/api/spaces') return spacesRequest.promise;
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+
+    const refreshButton = host.querySelector('button[aria-label="Refresh"]') as HTMLButtonElement | null;
+    expect(refreshButton).toBeTruthy();
+    refreshButton?.click();
+    await flushMicrotasks();
+
+    expect(host.querySelector('[data-testid="codespace-card"]')).toBe(currentCard);
+    expect(host.querySelector('[data-testid="codespaces-list-region"]')?.getAttribute('aria-busy')).toBe('true');
+    expect(refreshButton?.getAttribute('aria-busy')).toBe('true');
+    expect(refreshButton?.querySelector('[data-testid="refresh-icon"]')?.className).toContain('animate-spin');
+    expect(host.querySelector('[data-testid="codespaces-initial-loading"]')).toBeNull();
+    expect(host.querySelector('[data-testid="codespaces-list-region"] .redeven-loading-curtain')).toBeNull();
+
+    spacesRequest.resolve({
+      spaces: [
+        {
+          code_space_id: 'space-2',
+          name: 'Updated Space',
+          description: 'Updated workspace',
+          workspace_path: '/workspace/updated',
+          code_port: 13338,
+          created_at_unix_ms: 2,
+          updated_at_unix_ms: 2,
+          last_opened_at_unix_ms: 2,
+          running: false,
+          pid: 0,
+        },
+      ],
+    });
+    await flushPage();
+
+    expect(host.textContent).toContain('Updated Space');
+    expect(host.querySelector('[data-testid="codespaces-list-region"]')?.getAttribute('aria-busy')).toBeNull();
+    expect(refreshButton?.getAttribute('aria-busy')).toBeNull();
+    expect(refreshButton?.querySelector('[data-testid="refresh-icon"]')?.className).not.toContain('animate-spin');
   });
 
   it('opens Ask Flower from a codespace card context menu with directory context copy', async () => {

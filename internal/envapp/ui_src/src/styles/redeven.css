@@ -4394,6 +4394,10 @@ html.dark .redeven-workbench-progress-curtain {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .redeven-collection-loading-skeleton .floe-skeleton {
+    animation: none;
+  }
+
   .redeven-loading-curtain__indicator-bar {
     animation: none;
     background: color-mix(in srgb, var(--foreground) 15%, transparent);
