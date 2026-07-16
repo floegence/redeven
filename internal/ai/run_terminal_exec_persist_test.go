@@ -257,9 +257,6 @@ func TestHandleToolCall_TerminalExecPending_PersistsProcessHandle(t *testing.T) 
 	if got := strings.TrimSpace(anyToString(persisted["status"])); got != terminalProcessStatusRunning {
 		t.Fatalf("persisted status=%q, want running", got)
 	}
-	if _, ok := persisted["timeout_ms"]; ok {
-		t.Fatalf("persisted timeout_ms should be absent: %#v", persisted)
-	}
 	if _, err := manager.Terminate(processID); err != nil {
 		t.Fatalf("Terminate: %v", err)
 	}

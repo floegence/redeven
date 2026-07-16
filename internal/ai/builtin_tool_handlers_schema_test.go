@@ -73,59 +73,66 @@ func TestBuiltInToolDefinitions_ApplyPatchContractIsCanonical(t *testing.T) {
 	}
 }
 
-func TestBuiltInToolDefinitions_TerminalExecTimeoutMSIsYieldAlias(t *testing.T) {
+func TestBuiltInToolDefinitions_TerminalSchemasAreCanonical(t *testing.T) {
 	t.Parallel()
 
-	var terminalExec ToolDef
+	var terminalExec, terminalRead ToolDef
 	for _, def := range builtInToolDefinitions() {
-		if def.Name == "terminal.exec" {
+		switch def.Name {
+		case "terminal.exec":
 			terminalExec = def
-			break
+		case "terminal.read":
+			terminalRead = def
 		}
 	}
-	if terminalExec.Name == "" {
-		t.Fatal("terminal.exec definition not found")
-	}
-	if !strings.Contains(terminalExec.Description, "timeout_ms is only a compatibility alias for yield_ms") {
-		t.Fatalf("description missing timeout_ms alias contract: %q", terminalExec.Description)
-	}
-	if !strings.Contains(terminalExec.Description, "not a hard timeout") {
-		t.Fatalf("description missing non-hard-timeout contract: %q", terminalExec.Description)
+	if terminalExec.Name == "" || terminalRead.Name == "" {
+		t.Fatalf("terminal definitions missing: exec=%q read=%q", terminalExec.Name, terminalRead.Name)
 	}
 
-	var schema map[string]any
-	if err := json.Unmarshal(terminalExec.InputSchema, &schema); err != nil {
+	var execSchema map[string]any
+	if err := json.Unmarshal(terminalExec.InputSchema, &execSchema); err != nil {
 		t.Fatalf("parse schema: %v", err)
 	}
-	if ap, ok := schema["additionalProperties"].(bool); !ok || ap {
-		t.Fatalf("terminal.exec must keep a closed schema: %#v", schema["additionalProperties"])
+	if ap, ok := execSchema["additionalProperties"].(bool); !ok || ap {
+		t.Fatalf("terminal.exec must keep a closed schema: %#v", execSchema["additionalProperties"])
 	}
-	props, ok := schema["properties"].(map[string]any)
+	execProps, ok := execSchema["properties"].(map[string]any)
 	if !ok {
-		t.Fatalf("schema missing properties: %#v", schema)
+		t.Fatalf("terminal.exec schema missing properties: %#v", execSchema)
 	}
-	yieldSchema, ok := props["yield_ms"].(map[string]any)
+	yieldSchema, ok := execProps["yield_ms"].(map[string]any)
 	if !ok {
-		t.Fatalf("schema missing yield_ms: %#v", props)
+		t.Fatalf("terminal.exec schema missing yield_ms: %#v", execProps)
 	}
-	timeoutSchema, ok := props["timeout_ms"].(map[string]any)
-	if !ok {
-		t.Fatalf("schema missing timeout_ms alias: %#v", props)
+	if _, ok := execProps["timeout_ms"]; ok {
+		t.Fatalf("terminal.exec schema retained timeout_ms: %#v", execProps)
 	}
-	if fmt.Sprint(yieldSchema["type"]) != "integer" || fmt.Sprint(timeoutSchema["type"]) != "integer" {
-		t.Fatalf("yield_ms/timeout_ms must be integer schemas: yield=%#v timeout=%#v", yieldSchema, timeoutSchema)
-	}
-	if fmt.Sprint(yieldSchema["maximum"]) != "30000" {
+	if fmt.Sprint(yieldSchema["type"]) != "integer" || fmt.Sprint(yieldSchema["maximum"]) != "30000" {
 		t.Fatalf("yield_ms maximum=%v, want 30000", yieldSchema["maximum"])
 	}
-	if fmt.Sprint(timeoutSchema["maximum"]) != "1.2e+06" && fmt.Sprint(timeoutSchema["maximum"]) != "1200000" {
-		t.Fatalf("timeout_ms maximum=%v, want 1200000", timeoutSchema["maximum"])
+
+	var readSchema map[string]any
+	if err := json.Unmarshal(terminalRead.InputSchema, &readSchema); err != nil {
+		t.Fatalf("parse terminal.read schema: %v", err)
 	}
-	description := strings.ToLower(fmt.Sprint(timeoutSchema["description"]))
-	for _, want := range []string{"compatibility alias", "yield_ms", "not a hard timeout", "terminal.terminate"} {
-		if !strings.Contains(description, want) {
-			t.Fatalf("timeout_ms description missing %q: %q", want, description)
-		}
+	readProps, ok := readSchema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("terminal.read schema missing properties: %#v", readSchema)
+	}
+	descriptionSchema, ok := readProps["description"].(map[string]any)
+	if !ok {
+		t.Fatalf("terminal.read schema missing description: %#v", readProps)
+	}
+	if fmt.Sprint(descriptionSchema["minLength"]) != "1" || fmt.Sprint(descriptionSchema["maxLength"]) != "120" {
+		t.Fatalf("terminal.read description bounds=%#v, want 1..120", descriptionSchema)
+	}
+	description := strings.ToLower(fmt.Sprint(descriptionSchema["description"]))
+	if !strings.Contains(description, "user's language") || !strings.Contains(description, "latest output") || !strings.Contains(description, "never use a generic label") {
+		t.Fatalf("terminal.read description guidance is incomplete: %q", description)
+	}
+	required, _ := readSchema["required"].([]any)
+	if !containsAnyString(required, "process_id") || !containsAnyString(required, "description") {
+		t.Fatalf("terminal.read required=%#v, want process_id and description", required)
 	}
 }
 

@@ -706,6 +706,7 @@ func floretToolDefinition(r *run, def ToolDef) (fltools.Definition, error) {
 	}
 	if toolName == "terminal.read" {
 		annotations[fltools.AnnotationRepeatPolicy] = fltools.RepeatPolicyPolling
+		annotations[fltools.AnnotationRepeatIdentityIgnoredArguments] = []string{"description"}
 	}
 	return fltools.Definition{
 		Name:        toolName,
@@ -1088,7 +1089,10 @@ func floretActivityForToolCall(toolName string, args map[string]any) *observatio
 		Payload:  payload,
 	}
 	if renderer == observation.ActivityRendererTerminal {
-		activity.Description = activityPresentationDescription(anyToString(args["description"]))
+		description := activityPresentationDescription(anyToString(args["description"]))
+		if description != activity.Label {
+			activity.Description = description
+		}
 		activity.Chips = []observation.ActivityChip{{Kind: "tool", Label: "shell", Tone: "neutral"}}
 	}
 	return contractSafeActivityPresentation(activity)
