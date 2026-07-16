@@ -1,6 +1,7 @@
 package runtimemanagement
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -38,6 +39,15 @@ type RuntimeProcessStopResult struct {
 	Before        RuntimeProcessInventory  `json:"before"`
 	After         RuntimeProcessInventory  `json:"after"`
 	Stopped       []RuntimeProcessInstance `json:"stopped,omitempty"`
+
+	leaseSnapshots []runtimeProcessLeaseSnapshot
+}
+
+type runtimeProcessLeaseSnapshot struct {
+	LockPath   string
+	Body       []byte
+	PID        int
+	InstanceID string
 }
 
 type runtimeProcessController interface {
@@ -200,8 +210,18 @@ func stopRuntimeProcesses(
 			}
 			return RuntimeProcessStopResult{SchemaVersion: RuntimeProcessInventorySchemaVersion, Before: before}, err
 		}
+	}
+	leaseSnapshots, err := captureRuntimeProcessLeaseSnapshots(targets)
+	if err != nil {
+		return RuntimeProcessStopResult{SchemaVersion: RuntimeProcessInventorySchemaVersion, Before: before}, err
+	}
+	for _, target := range targets {
 		if err := controller.Interrupt(target.PID); err != nil && !errors.Is(err, os.ErrProcessDone) {
-			return RuntimeProcessStopResult{SchemaVersion: RuntimeProcessInventorySchemaVersion, Before: before}, err
+			return RuntimeProcessStopResult{
+				SchemaVersion:  RuntimeProcessInventorySchemaVersion,
+				Before:         before,
+				leaseSnapshots: leaseSnapshots,
+			}, err
 		}
 	}
 	if gracePeriod <= 0 {
@@ -227,10 +247,11 @@ func stopRuntimeProcesses(
 		return RuntimeProcessStopResult{SchemaVersion: RuntimeProcessInventorySchemaVersion, Before: before, After: afterGrace}, err
 	}
 	result := RuntimeProcessStopResult{
-		SchemaVersion: RuntimeProcessInventorySchemaVersion,
-		Before:        before,
-		After:         after,
-		Stopped:       append([]RuntimeProcessInstance(nil), targets...),
+		SchemaVersion:  RuntimeProcessInventorySchemaVersion,
+		Before:         before,
+		After:          after,
+		Stopped:        append([]RuntimeProcessInstance(nil), targets...),
+		leaseSnapshots: leaseSnapshots,
 	}
 	if len(remaining) > 0 {
 		return result, runtimeProcessOperationError(
@@ -247,23 +268,23 @@ func stopRuntimeProcesses(
 	return result, nil
 }
 
-func runtimeProcessLeasePID(body []byte) (int, bool) {
+func runtimeProcessLeaseIdentity(body []byte) (int, string, bool) {
 	trimmed := strings.TrimSpace(string(body))
 	if trimmed == "" {
-		return 0, false
+		return 0, "", false
 	}
 	var metadata runtimeLockMetadata
 	if json.Unmarshal(body, &metadata) == nil && metadata.PID > 0 {
-		return metadata.PID, true
+		return metadata.PID, strings.TrimSpace(metadata.InstanceID), true
 	}
 	pid, err := strconv.Atoi(trimmed)
 	if err != nil || pid <= 0 {
-		return 0, false
+		return 0, "", false
 	}
-	return pid, true
+	return pid, "", true
 }
 
-func stoppedRuntimeProcessPIDsByStateRoot(instances []RuntimeProcessInstance) map[string]map[int]struct{} {
+func runtimeProcessTargetPIDsByStateRoot(instances []RuntimeProcessInstance) map[string]map[int]struct{} {
 	result := make(map[string]map[int]struct{})
 	for _, instance := range instances {
 		stateRoot := strings.TrimSpace(instance.StateRoot)
@@ -278,55 +299,144 @@ func stoppedRuntimeProcessPIDsByStateRoot(instances []RuntimeProcessInstance) ma
 	return result
 }
 
-func retireStoppedRuntimeProcessLeases(ctx context.Context, instances []RuntimeProcessInstance) error {
-	for stateRoot, stoppedPIDs := range stoppedRuntimeProcessPIDsByStateRoot(instances) {
+func captureRuntimeProcessLeaseSnapshots(instances []RuntimeProcessInstance) ([]runtimeProcessLeaseSnapshot, error) {
+	snapshots := make([]runtimeProcessLeaseSnapshot, 0, len(instances))
+	capturedPaths := make(map[string]struct{})
+	targetPIDsByStateRoot := runtimeProcessTargetPIDsByStateRoot(instances)
+	visitedStateRoots := make(map[string]struct{})
+	for _, instance := range instances {
+		stateRoot := strings.TrimSpace(instance.StateRoot)
+		if _, visited := visitedStateRoots[stateRoot]; visited {
+			continue
+		}
+		visitedStateRoots[stateRoot] = struct{}{}
+		targetPIDs := targetPIDsByStateRoot[stateRoot]
+		if len(targetPIDs) == 0 {
+			continue
+		}
 		for _, lockPath := range runtimeLockPaths(stateRoot) {
-			deadline := time.Now().Add(2 * time.Second)
-			for {
-				_, err := lockfile.RetireIf(lockPath, func(body []byte) (bool, error) {
-					if len(strings.TrimSpace(string(body))) == 0 {
-						return false, nil
-					}
-					pid, ok := runtimeProcessLeasePID(body)
-					if !ok {
-						return false, runtimeProcessOperationError(
-							RuntimeProcessErrorLeaseCleanup,
-							fmt.Sprintf("runtime lock %s contains unrecognized active lease metadata", lockPath),
-						)
-					}
-					if _, stopped := stoppedPIDs[pid]; !stopped {
-						return false, runtimeProcessOperationError(
-							RuntimeProcessErrorInventoryChanged,
-							fmt.Sprintf("runtime lock %s changed to pid %d after process stop", lockPath, pid),
-						)
-					}
+			if _, captured := capturedPaths[lockPath]; captured {
+				continue
+			}
+			body, err := os.ReadFile(lockPath)
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			if err != nil {
+				return nil, runtimeProcessOperationError(
+					RuntimeProcessErrorLeaseCleanup,
+					fmt.Sprintf("read runtime lock %s before process stop: %v", lockPath, err),
+				)
+			}
+			pid, instanceID, ok := runtimeProcessLeaseIdentity(body)
+			if !ok {
+				continue
+			}
+			if _, target := targetPIDs[pid]; !target {
+				continue
+			}
+			snapshots = append(snapshots, runtimeProcessLeaseSnapshot{
+				LockPath:   lockPath,
+				Body:       append([]byte(nil), body...),
+				PID:        pid,
+				InstanceID: instanceID,
+			})
+			capturedPaths[lockPath] = struct{}{}
+		}
+	}
+	return snapshots, nil
+}
+
+func retireRuntimeProcessLeases(ctx context.Context, snapshots []runtimeProcessLeaseSnapshot) error {
+	for _, snapshot := range snapshots {
+		lockPath := snapshot.LockPath
+		if strings.TrimSpace(lockPath) == "" || snapshot.PID <= 0 || len(snapshot.Body) == 0 {
+			return runtimeProcessOperationError(
+				RuntimeProcessErrorLeaseCleanup,
+				"runtime lease snapshot is incomplete",
+			)
+		}
+		deadline := time.Now().Add(2 * time.Second)
+		for {
+			_, err := lockfile.RetireIf(lockPath, func(body []byte) (bool, error) {
+				if len(strings.TrimSpace(string(body))) == 0 {
+					return false, nil
+				}
+				if bytes.Equal(body, snapshot.Body) {
 					return true, nil
-				})
-				if err == nil || errors.Is(err, os.ErrNotExist) {
-					break
 				}
-				if !errors.Is(err, lockfile.ErrAlreadyLocked) {
-					if RuntimeProcessErrorCode(err) != "" {
-						return err
-					}
-					return runtimeProcessOperationError(
+				pid, instanceID, ok := runtimeProcessLeaseIdentity(body)
+				if !ok {
+					return false, runtimeProcessOperationError(
 						RuntimeProcessErrorLeaseCleanup,
-						fmt.Sprintf("retire runtime lock %s: %v", lockPath, err),
+						fmt.Sprintf("runtime lock %s contains unrecognized lease metadata after process stop", lockPath),
 					)
 				}
-				if !time.Now().Before(deadline) {
-					return runtimeProcessOperationError(
-						RuntimeProcessErrorLeaseCleanup,
-						fmt.Sprintf("runtime lock %s remained held after process stop", lockPath),
+				if pid != snapshot.PID {
+					return false, runtimeProcessOperationError(
+						RuntimeProcessErrorInventoryChanged,
+						fmt.Sprintf("runtime lock %s changed from pid %d to pid %d after process stop", lockPath, snapshot.PID, pid),
 					)
 				}
-				if err := runtimeProcessWait(ctx, 50*time.Millisecond); err != nil {
+				if instanceID != snapshot.InstanceID {
+					return false, runtimeProcessOperationError(
+						RuntimeProcessErrorInventoryChanged,
+						fmt.Sprintf("runtime lock %s changed instance identity after process stop", lockPath),
+					)
+				}
+				return false, runtimeProcessOperationError(
+					RuntimeProcessErrorInventoryChanged,
+					fmt.Sprintf("runtime lock %s changed lease content after process stop", lockPath),
+				)
+			})
+			if err == nil || errors.Is(err, os.ErrNotExist) {
+				break
+			}
+			if !errors.Is(err, lockfile.ErrAlreadyLocked) {
+				if RuntimeProcessErrorCode(err) != "" {
 					return err
 				}
+				return runtimeProcessOperationError(
+					RuntimeProcessErrorLeaseCleanup,
+					fmt.Sprintf("retire runtime lock %s: %v", lockPath, err),
+				)
+			}
+			if !time.Now().Before(deadline) {
+				return runtimeProcessOperationError(
+					RuntimeProcessErrorLeaseCleanup,
+					fmt.Sprintf("runtime lock %s remained held after process stop", lockPath),
+				)
+			}
+			if err := runtimeProcessWait(ctx, 50*time.Millisecond); err != nil {
+				return err
 			}
 		}
 	}
 	return nil
+}
+
+func completeRuntimeProcessStop(
+	ctx context.Context,
+	controller runtimeProcessController,
+	options RuntimeProcessInventoryOptions,
+	result RuntimeProcessStopResult,
+) (RuntimeProcessStopResult, error) {
+	leaseErr := retireRuntimeProcessLeases(ctx, result.leaseSnapshots)
+	after, err := controller.Inspect(ctx, options)
+	if err != nil {
+		return result, err
+	}
+	result.After = after
+	if len(after.Instances) > 0 {
+		return result, runtimeProcessOperationError(
+			RuntimeProcessErrorInventoryChanged,
+			fmt.Sprintf("runtime process inventory contains %d instance(s) after lease cleanup", len(after.Instances)),
+		)
+	}
+	if leaseErr != nil {
+		return result, leaseErr
+	}
+	return result, nil
 }
 
 func StopRuntimeProcesses(
@@ -344,19 +454,5 @@ func StopRuntimeProcesses(
 	if err != nil {
 		return result, err
 	}
-	if err := retireStoppedRuntimeProcessLeases(ctx, result.Stopped); err != nil {
-		return result, err
-	}
-	after, err := controller.Inspect(ctx, normalized)
-	if err != nil {
-		return result, err
-	}
-	result.After = after
-	if len(after.Instances) > 0 {
-		return result, runtimeProcessOperationError(
-			RuntimeProcessErrorInventoryChanged,
-			fmt.Sprintf("runtime process inventory contains %d instance(s) after lease cleanup", len(after.Instances)),
-		)
-	}
-	return result, nil
+	return completeRuntimeProcessStop(ctx, controller, normalized, result)
 }

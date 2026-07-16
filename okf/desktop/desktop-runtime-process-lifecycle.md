@@ -20,7 +20,9 @@ Historical layouts are data, not guesses. They include the current runtime root,
 
 `desktop-runtime-inventory` returns schema v1 inventory JSON. `desktop-runtime-stop --all-matching` requires the expected digest and returns schema v1 stop JSON. Before any signal, the command re-inventories the scope and rejects a changed digest, blocking classification, PID reuse, changed create time, changed owner, changed namespace, or changed executable inode. A target that exits before the signal set is committed also changes the transaction and causes `runtime_inventory_changed` instead of allowing a partial signal set.
 
-All verified targets receive a graceful interrupt before one shared grace deadline begins. Targets that remain are re-identified before forced termination. The operation succeeds only when a final inventory is empty; a new matching process, a changed identity, or a surviving target is an explicit failure. Desktop stops managed Runtime processes only through this command contract. A startup report PID remains diagnostic and is never sufficient authority for a bare kill.
+After every target passes fresh process-identity verification and before the signal set is committed, Stop captures the original bytes of only those lock leases whose PID names a verified target. Those snapshots define the lease-cleanup ownership boundary for the transaction. A pre-existing inactive lock for another PID, including one in a known historical layout, is not part of the current Stop and remains untouched. Stop does not perform a global stale-lock sweep or infer ownership from a lock path alone.
+
+All verified targets receive a graceful interrupt before one shared grace deadline begins. Targets that remain are re-identified before forced termination. Once a target exits, an already empty captured lease is complete and an unchanged captured lease can be safely retired. A captured lease whose PID, instance identity, or original content changed causes `runtime_inventory_changed`; changed malformed content causes `runtime_lock_cleanup_failed`. The final process inventory is inspected even when lease cleanup fails, and a new live Runtime takes precedence as `runtime_inventory_changed`. The operation succeeds only when the final inventory is empty and every captured lease is settled. Desktop stops managed Runtime processes only through this command contract. A startup report PID remains diagnostic and is never sufficient authority for a bare kill.
 
 # Lifecycle ordering
 
@@ -55,9 +57,9 @@ Stop succeeds only with an empty matching inventory. Restart and Update succeed 
 [3] redeven:internal/runtimemanagement/process_inventory.go:332 - Only `redeven run` processes carrying `--desktop-managed` enter the inventory.
 [4] redeven:internal/runtimemanagement/process_inventory.go:484 - Classification enforces state layout, executable layout, user, namespace, owner, and complete identity boundaries.
 [5] redeven:internal/runtimemanagement/process_inventory.go:631 - The stable identity key contains PID, create time, namespace, state root, executable inode identity, and owner.
-[6] redeven:internal/runtimemanagement/process_stop.go:152 - Stop validates the expected digest and blocking classifications before signals.
-[7] redeven:internal/runtimemanagement/process_stop.go:186 - Every graceful signal is preceded by a fresh identity check.
-[8] redeven:internal/runtimemanagement/process_stop.go:205 - Forced termination applies only to remaining targets whose identity still matches.
+[6] redeven:internal/runtimemanagement/process_stop.go:178 - Stop validates the expected digest and blocking classifications before signals.
+[7] redeven:internal/runtimemanagement/process_stop.go:203 - Every target passes a fresh identity check before the graceful signal set is committed.
+[8] redeven:internal/runtimemanagement/process_stop.go:234 - Forced termination applies only to remaining targets whose identity still matches.
 [9] redeven:cmd/redeven/desktop_runtime_daemon.go:115 - `desktop-runtime-inventory` emits the versioned machine contract.
 [10] redeven:cmd/redeven/desktop_runtime_daemon.go:162 - `desktop-runtime-stop --all-matching` requires an expected inventory digest.
 [11] redeven:desktop/src/main/runtimeProcess.ts:790 - Local lifecycle discovery, stop, and final identity verification use the inventory contract.
@@ -74,3 +76,4 @@ Stop succeeds only with an empty matching inventory. Restart and Update succeed 
 [22] redeven:desktop/src/main/main.ts:2292 - Lifecycle conflicts return the active operation key through structured launcher failure.
 [23] redeven:desktop/src/main/main.ts:16399 - Target deletion cancels pre-commit coordinator work and waits for lifecycle ownership to settle.
 [24] redeven:desktop/src/main/main.ts:16790 - Desktop quit cancels cancelable lifecycle work and waits for all coordinator tasks.
+[25] redeven:internal/runtimemanagement/process_stop.go:303 - Stop captures and later retires only lock leases that identify a verified target PID.

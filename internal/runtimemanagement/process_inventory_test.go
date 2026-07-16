@@ -328,6 +328,57 @@ func TestStopRuntimeProcessesRejectsProcessExitBeforeSignalSet(t *testing.T) {
 	}
 }
 
+func TestStopRuntimeProcessesVerifiesEveryTargetBeforeSignalSet(t *testing.T) {
+	options := testInventoryOptions(t)
+	executable := filepath.Join(options.RuntimeRoot, "runtime", "managed", "bin", "redeven")
+	first := testSnapshot(options, 44, 440, executable, options.StateRoot, options.DesktopOwnerID)
+	second := testSnapshot(options, 45, 450, executable, options.StateRoot, options.DesktopOwnerID)
+	before := buildRuntimeProcessInventory(
+		options,
+		runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"},
+		[]runtimeProcessSnapshot{first, second},
+	)
+	secondExited := buildRuntimeProcessInventory(
+		options,
+		runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"},
+		[]runtimeProcessSnapshot{first},
+	)
+	controller := &fakeRuntimeProcessController{inventories: []RuntimeProcessInventory{
+		before,
+		before,
+		secondExited,
+	}}
+	_, err := stopRuntimeProcesses(context.Background(), controller, options, before.InventoryDigest, time.Second)
+	if RuntimeProcessErrorCode(err) != RuntimeProcessErrorInventoryChanged {
+		t.Fatalf("error = %v", err)
+	}
+	if len(controller.interrupts) != 0 || len(controller.kills) != 0 {
+		t.Fatalf("signals were sent before every target was verified: interrupts=%#v kills=%#v", controller.interrupts, controller.kills)
+	}
+}
+
+func TestStopRuntimeProcessesCapturesTargetLeasesBeforeSignals(t *testing.T) {
+	options := testInventoryOptions(t)
+	executable := filepath.Join(options.RuntimeRoot, "runtime", "managed", "bin", "redeven")
+	before := buildRuntimeProcessInventory(
+		options,
+		runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"},
+		[]runtimeProcessSnapshot{testSnapshot(options, 46, 460, executable, options.StateRoot, options.DesktopOwnerID)},
+	)
+	lockPath := filepath.Join(options.StateRoot, "agent.lock")
+	if err := os.MkdirAll(lockPath, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	controller := &fakeRuntimeProcessController{inventories: []RuntimeProcessInventory{before, before}}
+	_, err := stopRuntimeProcesses(context.Background(), controller, options, before.InventoryDigest, time.Second)
+	if RuntimeProcessErrorCode(err) != RuntimeProcessErrorLeaseCleanup {
+		t.Fatalf("error = %v", err)
+	}
+	if len(controller.interrupts) != 0 || len(controller.kills) != 0 {
+		t.Fatalf("signals were sent before target leases were captured: interrupts=%#v kills=%#v", controller.interrupts, controller.kills)
+	}
+}
+
 func TestStopRuntimeProcessesStopsAllVerifiedInstancesAndVerifiesEmpty(t *testing.T) {
 	options := testInventoryOptions(t)
 	legacyRoot := options.LegacyRuntimeRoots[0]
@@ -405,57 +456,139 @@ func TestVerifyRuntimeProcessInstanceTreatsExitedProcessAsDone(t *testing.T) {
 	}
 }
 
-func TestRetireStoppedRuntimeProcessLeasesClearsMatchingJSONAndLegacyPID(t *testing.T) {
+func writeRuntimeLeaseTestFile(t *testing.T, lockPath string, body []byte) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(lockPath, body, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRuntimeProcessLeaseSnapshotsExcludeInactiveLegacyLocks(t *testing.T) {
 	stateRoot := t.TempDir()
-	jsonLockPath := filepath.Join(stateRoot, "agent.lock")
-	jsonBody, err := json.Marshal(runtimeLockMetadata{PID: 81, InstanceID: "current"})
+	targetLockPath := filepath.Join(stateRoot, "local-environment", "agent.lock")
+	targetBody, err := json.Marshal(runtimeLockMetadata{PID: 81, InstanceID: "current"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(jsonLockPath, jsonBody, 0o600); err != nil {
+	writeRuntimeLeaseTestFile(t, targetLockPath, targetBody)
+
+	inactiveLocks := map[string][]byte{
+		filepath.Join(stateRoot, "scopes", "local", "default", "agent.lock"): []byte("23672\n"),
+		filepath.Join(stateRoot, "machine", "agent.lock"):                    []byte("86103\n"),
+		filepath.Join(stateRoot, "agent.lock"):                               []byte("not a current runtime lease\n"),
+	}
+	for lockPath, body := range inactiveLocks {
+		writeRuntimeLeaseTestFile(t, lockPath, body)
+	}
+
+	snapshots, err := captureRuntimeProcessLeaseSnapshots([]RuntimeProcessInstance{{PID: 81, StateRoot: stateRoot}})
+	if err != nil {
 		t.Fatal(err)
 	}
-	legacyLockPath := filepath.Join(stateRoot, "machine", "agent.lock")
-	if err := os.MkdirAll(filepath.Dir(legacyLockPath), 0o755); err != nil {
+	if len(snapshots) != 1 || snapshots[0].LockPath != targetLockPath || snapshots[0].PID != 81 || snapshots[0].InstanceID != "current" {
+		t.Fatalf("snapshots = %#v", snapshots)
+	}
+	if err := retireRuntimeProcessLeases(context.Background(), snapshots); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(legacyLockPath, []byte("82\n"), 0o600); err != nil {
+	targetAfter, err := os.ReadFile(targetLockPath)
+	if err != nil {
 		t.Fatal(err)
 	}
-	instances := []RuntimeProcessInstance{
-		{PID: 81, StateRoot: stateRoot},
-		{PID: 82, StateRoot: stateRoot},
+	if len(targetAfter) != 0 {
+		t.Fatalf("target lock content = %q, want empty", string(targetAfter))
 	}
-	if err := retireStoppedRuntimeProcessLeases(context.Background(), instances); err != nil {
-		t.Fatal(err)
-	}
-	for _, lockPath := range []string{jsonLockPath, legacyLockPath} {
-		body, err := os.ReadFile(lockPath)
+	for lockPath, want := range inactiveLocks {
+		got, err := os.ReadFile(lockPath)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(body) != 0 {
-			t.Fatalf("lock %s content = %q, want empty", lockPath, string(body))
+		if string(got) != string(want) {
+			t.Fatalf("inactive lock %s content = %q, want preserved %q", lockPath, string(got), string(want))
 		}
 	}
 }
 
-func TestRetireStoppedRuntimeProcessLeasesRejectsChangedOrMalformedLease(t *testing.T) {
+func TestRetireRuntimeProcessLeasesClearsUnchangedOrReleasedTargets(t *testing.T) {
+	jsonBody, err := json.Marshal(runtimeLockMetadata{PID: 91, InstanceID: "current"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	for _, test := range []struct {
-		name     string
-		body     string
-		wantCode string
+		name       string
+		beforeBody []byte
+		afterBody  []byte
 	}{
-		{name: "changed pid", body: "92\n", wantCode: RuntimeProcessErrorInventoryChanged},
-		{name: "malformed", body: "not a runtime lease\n", wantCode: RuntimeProcessErrorLeaseCleanup},
+		{name: "unchanged json", beforeBody: jsonBody, afterBody: jsonBody},
+		{name: "unchanged legacy pid", beforeBody: []byte("91\n"), afterBody: []byte("91\n")},
+		{name: "released by runtime", beforeBody: jsonBody, afterBody: nil},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			stateRoot := t.TempDir()
-			lockPath := filepath.Join(stateRoot, "agent.lock")
-			if err := os.WriteFile(lockPath, []byte(test.body), 0o600); err != nil {
+			lockPath := filepath.Join(t.TempDir(), "agent.lock")
+			writeRuntimeLeaseTestFile(t, lockPath, test.afterBody)
+			pid, instanceID, ok := runtimeProcessLeaseIdentity(test.beforeBody)
+			if !ok {
+				t.Fatalf("invalid test lease %q", string(test.beforeBody))
+			}
+			err := retireRuntimeProcessLeases(context.Background(), []runtimeProcessLeaseSnapshot{{
+				LockPath:   lockPath,
+				Body:       test.beforeBody,
+				PID:        pid,
+				InstanceID: instanceID,
+			}})
+			if err != nil {
 				t.Fatal(err)
 			}
-			err := retireStoppedRuntimeProcessLeases(context.Background(), []RuntimeProcessInstance{{PID: 91, StateRoot: stateRoot}})
+			body, err := os.ReadFile(lockPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(body) != 0 {
+				t.Fatalf("lock content = %q, want empty", string(body))
+			}
+		})
+	}
+}
+
+func TestRetireRuntimeProcessLeasesRejectsChangedTarget(t *testing.T) {
+	originalBody, err := json.Marshal(runtimeLockMetadata{PID: 91, InstanceID: "current", RuntimeVersion: "v1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	changedPIDBody, err := json.Marshal(runtimeLockMetadata{PID: 92, InstanceID: "current", RuntimeVersion: "v1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	changedInstanceBody, err := json.Marshal(runtimeLockMetadata{PID: 91, InstanceID: "replacement", RuntimeVersion: "v1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	changedContentBody, err := json.Marshal(runtimeLockMetadata{PID: 91, InstanceID: "current", RuntimeVersion: "v2"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name     string
+		body     []byte
+		wantCode string
+	}{
+		{name: "changed pid", body: changedPIDBody, wantCode: RuntimeProcessErrorInventoryChanged},
+		{name: "changed instance identity", body: changedInstanceBody, wantCode: RuntimeProcessErrorInventoryChanged},
+		{name: "changed original content", body: changedContentBody, wantCode: RuntimeProcessErrorInventoryChanged},
+		{name: "malformed", body: []byte("not a runtime lease\n"), wantCode: RuntimeProcessErrorLeaseCleanup},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			lockPath := filepath.Join(t.TempDir(), "agent.lock")
+			writeRuntimeLeaseTestFile(t, lockPath, test.body)
+			err := retireRuntimeProcessLeases(context.Background(), []runtimeProcessLeaseSnapshot{{
+				LockPath:   lockPath,
+				Body:       originalBody,
+				PID:        91,
+				InstanceID: "current",
+			}})
 			if RuntimeProcessErrorCode(err) != test.wantCode {
 				t.Fatalf("error = %v, code = %q, want %q", err, RuntimeProcessErrorCode(err), test.wantCode)
 			}
@@ -463,9 +596,37 @@ func TestRetireStoppedRuntimeProcessLeasesRejectsChangedOrMalformedLease(t *test
 			if readErr != nil {
 				t.Fatal(readErr)
 			}
-			if string(body) != test.body {
-				t.Fatalf("lock content = %q, want preserved %q", string(body), test.body)
+			if string(body) != string(test.body) {
+				t.Fatalf("lock content = %q, want preserved %q", string(body), string(test.body))
 			}
 		})
+	}
+}
+
+func TestCompleteRuntimeProcessStopPrioritizesLiveInventoryOverLeaseCleanupFailure(t *testing.T) {
+	options := testInventoryOptions(t)
+	lockPath := filepath.Join(t.TempDir(), "agent.lock")
+	writeRuntimeLeaseTestFile(t, lockPath, []byte("malformed replacement lease\n"))
+	executable := filepath.Join(options.RuntimeRoot, "runtime", "managed", "bin", "redeven")
+	live := buildRuntimeProcessInventory(
+		options,
+		runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"},
+		[]runtimeProcessSnapshot{testSnapshot(options, 92, 920, executable, options.StateRoot, options.DesktopOwnerID)},
+	)
+	controller := &fakeRuntimeProcessController{inventories: []RuntimeProcessInventory{live}}
+	result, err := completeRuntimeProcessStop(context.Background(), controller, options, RuntimeProcessStopResult{
+		SchemaVersion: RuntimeProcessInventorySchemaVersion,
+		leaseSnapshots: []runtimeProcessLeaseSnapshot{{
+			LockPath:   lockPath,
+			Body:       []byte("91\n"),
+			PID:        91,
+			InstanceID: "",
+		}},
+	})
+	if RuntimeProcessErrorCode(err) != RuntimeProcessErrorInventoryChanged {
+		t.Fatalf("error = %v", err)
+	}
+	if len(result.After.Instances) != 1 || result.After.Instances[0].PID != 92 {
+		t.Fatalf("result = %#v", result)
 	}
 }
