@@ -4,7 +4,6 @@ import { Eye, Pencil, Play, Plus, Trash } from '@floegence/floe-webapp-core/icon
 import { cn } from '@floegence/floe-webapp-core';
 import type { PermissionRow } from './types';
 import { EmptyState, SettingsPill } from './SettingsPrimitives';
-import { redevenSurfaceRoleClass } from '../../utils/redevenSurfaceRoles';
 import { useI18n } from '../../i18n';
 
 export function PermissionRuleTable(props: {
@@ -30,7 +29,7 @@ export function PermissionRuleTable(props: {
       >
         <Index each={props.rows}>
           {(row, index) => (
-            <div class={cn('flex items-center gap-2 rounded-lg border px-3 py-2', redevenSurfaceRoleClass('panel'))}>
+            <div class="redeven-settings-inset flex items-center gap-2 rounded-lg border px-3 py-2">
               <Input
                 value={row().key}
                 onInput={(event) => props.onChangeKey(index, event.currentTarget.value)}
@@ -131,9 +130,8 @@ export function PermissionMatrixTable(props: {
         {(perm) => (
           <label
             class={cn(
-              'inline-flex items-center gap-2 rounded-lg border px-3 py-2 transition-colors',
-              redevenSurfaceRoleClass('panel'),
-              props.canInteract ? 'cursor-pointer hover:border-primary/30' : 'cursor-not-allowed opacity-50',
+              'redeven-settings-choice inline-flex items-center gap-2 rounded-lg border px-3 py-2',
+              props.canInteract ? 'cursor-pointer' : 'cursor-not-allowed opacity-50',
             )}
           >
             <Checkbox

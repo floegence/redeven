@@ -15,6 +15,20 @@ function readEnvAppEntryCss(): string {
   return fs.readFileSync(path.resolve(dir, '../index.css'), 'utf8');
 }
 
+function relativeLuminance(hex: string): number {
+  const channels = hex.match(/[a-f\d]{2}/gi)?.map((channel) => Number.parseInt(channel, 16) / 255) ?? [];
+  const linear = channels.map((channel) => (
+    channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4
+  ));
+  return 0.2126 * linear[0] + 0.7152 * linear[1] + 0.0722 * linear[2];
+}
+
+function contrastRatio(first: string, second: string): number {
+  const firstLuminance = relativeLuminance(first);
+  const secondLuminance = relativeLuminance(second);
+  return (Math.max(firstLuminance, secondLuminance) + 0.05) / (Math.min(firstLuminance, secondLuminance) + 0.05);
+}
+
 describe('Redeven Env App surface theme contract', () => {
   it('scopes desktop theme transition suppression to shell chrome instead of the full Workbench tree', () => {
     const src = readEnvAppEntryCss();
@@ -118,6 +132,64 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).not.toContain('--activity-bar: color-mix(in srgb, var(--redeven-surface-panel)');
     expect(src).toContain('--card: #fffdfa;');
     expect(src).toContain('--popover: #fffdfa;');
+  });
+
+  it('defines an independent neutral settings hierarchy for both themes', () => {
+    const src = readRedevenCss();
+
+    for (const token of [
+      '--redeven-settings-header-bg: #ffffff;',
+      '--redeven-settings-sidebar-bg: #eef1f4;',
+      '--redeven-settings-sidebar-border: #d8dee6;',
+      '--redeven-settings-content-bg: #f4f6f8;',
+      '--redeven-settings-card-bg: #ffffff;',
+      '--redeven-settings-inset-bg: #f7f8fa;',
+      '--redeven-settings-row-hover-bg: #eef2f6;',
+      '--redeven-settings-card-border: #d8dee6;',
+      '--redeven-settings-divider: #e4e8ee;',
+      '--redeven-settings-label-fg: #475569;',
+      '--redeven-settings-note-fg: #667085;',
+      '--redeven-settings-selection-bg: #e8f0fe;',
+      '--redeven-settings-selection-indicator: #3b82f6;',
+      '--redeven-settings-control-border: #8793a5;',
+      '--redeven-settings-header-bg: #141820;',
+      '--redeven-settings-sidebar-bg: #141820;',
+      '--redeven-settings-sidebar-border: #2b323d;',
+      '--redeven-settings-content-bg: #181c23;',
+      '--redeven-settings-card-bg: #222730;',
+      '--redeven-settings-inset-bg: #1b2027;',
+      '--redeven-settings-row-hover-bg: #282e38;',
+      '--redeven-settings-card-border: #343c48;',
+      '--redeven-settings-divider: #2b323d;',
+      '--redeven-settings-label-fg: #c0c9d6;',
+      '--redeven-settings-note-fg: #94a3b8;',
+      '--redeven-settings-selection-bg: #22324a;',
+      '--redeven-settings-selection-indicator: #6ea8fe;',
+      '--redeven-settings-control-border: #68788f;',
+    ]) {
+      expect(src).toContain(token);
+    }
+
+    expect(src).toContain('.redeven-settings-table {');
+    expect(src).toContain('background: var(--redeven-settings-inset-bg);');
+    expect(src).toContain('.redeven-settings-list > .redeven-setting-row + .redeven-setting-row {');
+    expect(src).toContain('.redeven-settings-nav-item--active,');
+    expect(src).not.toContain('--redeven-settings-content-bg: #fffdfa;');
+    expect(src).not.toContain('--redeven-settings-card-bg: #363b45;');
+  });
+
+  it('keeps settings text and control boundaries above their accessibility thresholds', () => {
+    expect(contrastRatio('#202a37', '#ffffff')).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio('#475569', '#ffffff')).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio('#667085', '#ffffff')).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio('#667085', '#f7f8fa')).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio('#8793a5', '#ffffff')).toBeGreaterThanOrEqual(3);
+
+    expect(contrastRatio('#f9fafb', '#222730')).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio('#c0c9d6', '#222730')).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio('#94a3b8', '#222730')).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio('#94a3b8', '#1b2027')).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio('#68788f', '#222730')).toBeGreaterThanOrEqual(3);
   });
 
   it('keeps Flower on the shared main content surface family instead of private raw color literals', () => {

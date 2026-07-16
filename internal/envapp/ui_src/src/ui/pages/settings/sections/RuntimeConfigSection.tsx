@@ -2,7 +2,7 @@ import { For, Show, createSignal, createEffect, onCleanup } from 'solid-js';
 import { Terminal, Plus, Trash, Home, FolderOpen } from '@floegence/floe-webapp-core/icons';
 import { Button, Input, ConfirmDialog } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
-import { SettingsSection, AutoSaveIndicator, DotIndicator, SettingRow } from '../SettingsPrimitives';
+import { SettingsSection, SettingsList, AutoSaveIndicator, DotIndicator, SettingRow } from '../SettingsPrimitives';
 import { formatUnknownError } from '../../../maintenance/shared';
 import { useI18n } from '../../../i18n';
 import type { FilesystemRootPolicy, FilesystemScope } from '../types';
@@ -110,7 +110,7 @@ export function RuntimeConfigSection() {
         }
       >
         {/* Shell environment card */}
-        <div class="space-y-3">
+        <SettingsList>
           <SettingRow
             icon={Home}
             title="agent_home_dir"
@@ -129,7 +129,7 @@ export function RuntimeConfigSection() {
                 placeholder="/bin/bash" size="sm" class="w-full min-w-[16rem] font-mono text-xs sm:w-[28rem]" disabled={!ctx.canInteract()} />
             }
           />
-        </div>
+        </SettingsList>
 
         {/* Filesystem roots */}
         <div class="mt-5">
@@ -137,10 +137,10 @@ export function RuntimeConfigSection() {
             <div class="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">文件系统根路径</div>
             <Button size="sm" variant="outline" icon={Plus} onClick={addRoot} disabled={!ctx.canInteract()}>{i18n.t('runtimeConfig.addRoot')}</Button>
           </div>
-          <div class="space-y-2">
+          <SettingsList>
             <For each={roots()}>
               {(root, index) => (
-                <div class="rounded-lg border border-[color-mix(in_srgb,var(--redeven-stroke-panel)_76%,transparent)] bg-[var(--redeven-settings-row-bg)] px-4 py-3">
+                <div class="redeven-settings-list-row px-4 py-3">
                   <div class="flex items-start justify-between gap-3">
                     <div class="flex min-w-0 flex-1 items-start gap-3">
                       <span class="redeven-setting-row__icon mt-0.5 inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md">
@@ -166,7 +166,7 @@ export function RuntimeConfigSection() {
                     </Show>
                   </div>
                   <Show when={!root.system}>
-                    <div class="mt-2 pt-2 border-t border-border/30">
+                    <div class="mt-2 border-t border-[var(--redeven-settings-divider)] pt-2">
                       <Input value={root.path} onInput={(e) => updateRootAt(index(), (r) => ({ ...r, path: e.currentTarget.value }))}
                         placeholder="/path/to/folder" size="sm" class="w-full font-mono text-xs" disabled={!ctx.canInteract()} />
                     </div>
@@ -174,7 +174,7 @@ export function RuntimeConfigSection() {
                 </div>
               )}
             </For>
-          </div>
+          </SettingsList>
           <p class="mt-2 text-[11px] text-muted-foreground">{i18n.t('runtimeConfig.systemRootsNote')}</p>
         </div>
       </SettingsSection>

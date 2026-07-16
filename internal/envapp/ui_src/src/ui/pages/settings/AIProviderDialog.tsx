@@ -173,9 +173,9 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
           ]);
 
           return (
-            <div class="grid max-h-[72vh] min-h-[34rem] grid-cols-1 gap-5 overflow-hidden lg:grid-cols-[15rem_minmax(0,1fr)]">
-              <aside class="rounded-lg border border-border bg-muted/20 p-2">
-                <div class="mb-2 rounded-md border border-border bg-background p-3">
+            <div class="redeven-settings-dialog grid max-h-[72vh] min-h-[34rem] grid-cols-1 gap-5 overflow-hidden lg:grid-cols-[15rem_minmax(0,1fr)]">
+              <aside class="redeven-settings-inset rounded-lg border p-2">
+                <div class="redeven-settings-choice mb-2 rounded-md border p-3">
                   <div class="flex items-center gap-2">
                     <span class="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-muted">
                       <ProviderBrandIcon type={provider().type} class="h-5 w-5" />
@@ -205,14 +205,14 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                           class={cn(
                             'flex w-full cursor-pointer items-start gap-2 rounded-md border px-3 py-2.5 text-left transition disabled:cursor-not-allowed disabled:opacity-60',
                             active()
-                              ? 'border-primary/40 bg-primary/10 text-foreground shadow-sm'
-                              : 'border-transparent text-muted-foreground hover:border-border hover:bg-background hover:text-foreground',
+                              ? 'redeven-settings-choice redeven-settings-choice--selected text-[var(--redeven-settings-selection-fg)]'
+                              : 'border-transparent text-muted-foreground hover:bg-[var(--redeven-settings-row-hover-bg)] hover:text-foreground',
                           )}
                           onClick={() => setActiveStep(step.id)}
                           disabled={!props.canInteract && step.id !== activeStep()}
                           data-provider-dialog-step={step.id}
                         >
-                          <span class={cn('mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md', active() ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}>
+                          <span class={cn('mt-0.5 flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-md', active() ? 'bg-[var(--redeven-settings-selection-indicator)] text-[var(--redeven-settings-header-bg)]' : 'bg-muted text-muted-foreground')}>
                             <StepIcon class="h-3.5 w-3.5" />
                           </span>
                           <span class="min-w-0">
@@ -241,15 +241,15 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                             <button
                               type="button"
                               class={cn(
-                                'rounded-lg border p-3 text-left transition disabled:cursor-not-allowed disabled:opacity-60',
-                                active() ? 'border-primary/50 bg-primary/5 ring-1 ring-primary/15' : 'border-border bg-background hover:border-primary/30 hover:bg-primary/5',
+                                'redeven-settings-choice rounded-lg border p-3 text-left disabled:cursor-not-allowed disabled:opacity-60',
+                                active() && 'redeven-settings-choice--selected',
                               )}
                               onClick={() => chooseProviderType(item.value)}
                               disabled={!props.canInteract}
                               data-provider-type={item.value}
                             >
                               <div class="flex items-start gap-3">
-                                <span class={cn('flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg', active() ? 'bg-background' : 'bg-muted/60')}>
+                                <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg bg-[var(--redeven-settings-card-bg)]">
                                   <ProviderBrandIcon type={item.value} class="h-5 w-5" />
                                 </span>
                                 <span class="min-w-0">
@@ -350,7 +350,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                         </div>
                       </Show>
                     </div>
-                    <div class="flex flex-wrap gap-2 rounded-lg border border-border bg-muted/20 p-3">
+                    <div class="redeven-settings-inset flex flex-wrap gap-2 rounded-lg border p-3">
                       <SettingsPill tone={props.keySet || String(props.keyDraft ?? '').trim() ? 'success' : 'default'}>
                         {props.keySet || String(props.keyDraft ?? '').trim() ? i18n.t('flowerProviderDialog.keyReady') : i18n.t('flowerSettings.needsKey')}
                       </SettingsPill>
@@ -385,7 +385,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                             {(preset) => {
                               const selected = () => recommendedModelSelected(preset.model_name);
                               return (
-                                <div class={cn('rounded-lg border p-3 transition', selected() ? 'border-primary/50 bg-primary/5' : 'border-border bg-background')}>
+                                <div class={cn('redeven-settings-choice rounded-lg border p-3', selected() && 'redeven-settings-choice--selected')}>
                                   <div class="flex items-start justify-between gap-3">
                                     <div class="min-w-0">
                                       <div class="break-all font-mono text-sm font-semibold text-foreground">{preset.model_name}</div>
@@ -421,7 +421,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                         </div>
                       </Show>
 
-                      <div class="grid grid-cols-1 gap-2 rounded-lg border border-border bg-muted/20 p-3 md:grid-cols-[minmax(0,1fr)_auto]">
+                      <div class="redeven-settings-inset grid grid-cols-1 gap-2 rounded-lg border p-3 md:grid-cols-[minmax(0,1fr)_auto]">
                         <Input
                           value={customModelName()}
                           onInput={(event) => setCustomModelName(event.currentTarget.value)}
@@ -448,7 +448,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                         <div class="grid grid-cols-1 gap-2 xl:grid-cols-2">
                           <For each={models()}>
                             {(model, index) => (
-                              <div class="rounded-lg border border-border bg-background p-3">
+                              <div class="redeven-settings-inset rounded-lg border p-3">
                                 <div class="flex items-start justify-between gap-3">
                                   <div class="min-w-0">
                                     <div class="break-all font-mono text-sm font-semibold text-foreground">{normalizeModelName(model.model_name) || i18n.t('flowerProviderDialog.unnamedModel')}</div>
@@ -489,7 +489,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                       description={i18n.t('flowerProviderDialog.advancedDescription')}
                     />
                     <Show when={providerNeedsWebSearchConfig(provider().type)}>
-                      <div class="rounded-lg border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
+                      <div class="redeven-settings-inset rounded-lg border p-3 text-xs text-muted-foreground">
                         {i18n.t('flowerProviderDialog.webSearchConfigDescription')}
                       </div>
                     </Show>
@@ -500,7 +500,7 @@ export function AIProviderDialog(props: AIProviderDialogProps) {
                       <div class="space-y-3">
                         <For each={models()}>
                           {(model, index) => (
-                            <div class="rounded-lg border border-border bg-background p-3">
+                            <div class="redeven-settings-inset rounded-lg border p-3">
                               <div class="mb-3 flex flex-wrap items-center justify-between gap-2">
                                 <div class="font-mono text-xs text-muted-foreground">{modelID(providerID(), normalizeModelName(model.model_name)) || i18n.t('flowerProviderDialog.noWireModelId')}</div>
                                 <CodeBadge>{providerID() || i18n.t('flowerProviderDialog.providerIdPending')}</CodeBadge>

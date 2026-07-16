@@ -2,7 +2,7 @@ import { For, Show, createSignal, createEffect, onCleanup } from 'solid-js';
 import { Shield, Trash, Package, ShieldCheck, User } from '@floegence/floe-webapp-core/icons';
 import { Button, Input } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
-import { SettingsSection, AutoSaveIndicator, SubSectionHeader, PermissionDot, SettingRow } from '../SettingsPrimitives';
+import { SettingsSection, SettingsList, AutoSaveIndicator, SubSectionHeader, PermissionDot, SettingRow } from '../SettingsPrimitives';
 import { buildPermissionPolicyValue } from '../permissionPolicy';
 import { formatUnknownError } from '../../../maintenance/shared';
 import { useI18n } from '../../../i18n';
@@ -101,30 +101,33 @@ export function PermissionPolicySection() {
       }
     >
       {/* local_max matrix card */}
-      <SettingRow
-        icon={ShieldCheck}
-        title="local_max"
-        description={localMaxDescription()}
-        tone="warning"
-        control={
-          <PermissionDot
-            read={localRead()} write={localWrite()} execute={localExecute()}
-            onReadChange={ctx.canInteract() ? (v) => { setLocalRead(v); setDirty(true); } : undefined}
-            onWriteChange={ctx.canInteract() ? (v) => { setLocalWrite(v); setDirty(true); } : undefined}
-            onExecuteChange={ctx.canInteract() ? (v) => { setLocalExecute(v); setDirty(true); } : undefined}
-          />
-        }
-      />
+      <SettingsList>
+        <SettingRow
+          icon={ShieldCheck}
+          title="local_max"
+          description={localMaxDescription()}
+          tone="warning"
+          control={
+            <PermissionDot
+              read={localRead()} write={localWrite()} execute={localExecute()}
+              onReadChange={ctx.canInteract() ? (v) => { setLocalRead(v); setDirty(true); } : undefined}
+              onWriteChange={ctx.canInteract() ? (v) => { setLocalWrite(v); setDirty(true); } : undefined}
+              onExecuteChange={ctx.canInteract() ? (v) => { setLocalExecute(v); setDirty(true); } : undefined}
+            />
+          }
+        />
+      </SettingsList>
 
       {/* by_user rules */}
       <div class="mt-5">
         <SubSectionHeader title="by_user" description={i18n.t('permissionPolicy.byUserDescription')}
           actions={<Button size="sm" variant="outline" onClick={addUserRule} disabled={!ctx.canInteract()}>{i18n.t('permissionPolicy.addRule')}</Button>} />
-        <div class="mt-3 space-y-1.5">
+        <div class="mt-3">
           <Show when={byUser().length > 0} fallback={<p class="text-[11px] text-muted-foreground py-2">{i18n.t('permissionPolicy.noUserOverrides')}</p>}>
-            <For each={byUser()}>
-              {(row, index) => (
-                <div class="flex flex-col gap-3 rounded-lg border border-[color-mix(in_srgb,var(--redeven-stroke-panel)_76%,transparent)] bg-[var(--redeven-settings-row-bg)] px-3 py-2 sm:flex-row sm:items-center">
+            <SettingsList>
+              <For each={byUser()}>
+                {(row, index) => (
+                  <div class="redeven-settings-list-row flex flex-col gap-3 px-3 py-2 sm:flex-row sm:items-center">
                   <div class="flex min-w-0 flex-1 items-center gap-2">
                     <span class="redeven-setting-row__icon inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md">
                       <User class="h-3.5 w-3.5" />
@@ -138,9 +141,10 @@ export function PermissionPolicySection() {
                     onWriteChange={localWrite() && ctx.canInteract() ? (v) => { setByUser((prev) => prev.map((it, i) => i === index() ? { ...it, write: v } : it)); setDirty(true); } : undefined}
                     onExecuteChange={localExecute() && ctx.canInteract() ? (v) => { setByUser((prev) => prev.map((it, i) => i === index() ? { ...it, execute: v } : it)); setDirty(true); } : undefined} />
                   <Button size="icon" variant="ghost" icon={Trash} class="text-muted-foreground hover:text-destructive" onClick={() => { setByUser((prev) => prev.filter((_, i) => i !== index())); setDirty(true); }} disabled={!ctx.canInteract()} aria-label={i18n.t('permissionPolicy.removeRuleAria', { subject: row.key || i18n.t('permissionPolicy.userHeader') })} />
-                </div>
-              )}
-            </For>
+                  </div>
+                )}
+              </For>
+            </SettingsList>
           </Show>
         </div>
       </div>
@@ -149,11 +153,12 @@ export function PermissionPolicySection() {
       <div class="mt-5">
         <SubSectionHeader title="by_app" description={i18n.t('permissionPolicy.byAppDescription')}
           actions={<Button size="sm" variant="outline" onClick={addAppRule} disabled={!ctx.canInteract()}>{i18n.t('permissionPolicy.addRule')}</Button>} />
-        <div class="mt-3 space-y-1.5">
+        <div class="mt-3">
           <Show when={byApp().length > 0} fallback={<p class="text-[11px] text-muted-foreground py-2">{i18n.t('permissionPolicy.noAppOverrides')}</p>}>
-            <For each={byApp()}>
-              {(row, index) => (
-                <div class="flex flex-col gap-3 rounded-lg border border-[color-mix(in_srgb,var(--redeven-stroke-panel)_76%,transparent)] bg-[var(--redeven-settings-row-bg)] px-3 py-2 sm:flex-row sm:items-center">
+            <SettingsList>
+              <For each={byApp()}>
+                {(row, index) => (
+                  <div class="redeven-settings-list-row flex flex-col gap-3 px-3 py-2 sm:flex-row sm:items-center">
                   <div class="flex min-w-0 flex-1 items-center gap-2">
                     <span class="redeven-setting-row__icon inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md">
                       <Package class="h-3.5 w-3.5" />
@@ -167,9 +172,10 @@ export function PermissionPolicySection() {
                     onWriteChange={localWrite() && ctx.canInteract() ? (v) => { setByApp((prev) => prev.map((it, i) => i === index() ? { ...it, write: v } : it)); setDirty(true); } : undefined}
                     onExecuteChange={localExecute() && ctx.canInteract() ? (v) => { setByApp((prev) => prev.map((it, i) => i === index() ? { ...it, execute: v } : it)); setDirty(true); } : undefined} />
                   <Button size="icon" variant="ghost" icon={Trash} class="text-muted-foreground hover:text-destructive" onClick={() => { setByApp((prev) => prev.filter((_, i) => i !== index())); setDirty(true); }} disabled={!ctx.canInteract()} aria-label={i18n.t('permissionPolicy.removeRuleAria', { subject: row.key || i18n.t('permissionPolicy.appHeader') })} />
-                </div>
-              )}
-            </For>
+                  </div>
+                )}
+              </For>
+            </SettingsList>
           </Show>
         </div>
       </div>

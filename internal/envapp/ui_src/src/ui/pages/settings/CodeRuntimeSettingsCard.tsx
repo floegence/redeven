@@ -24,7 +24,7 @@ import type { BrowserEditorSetupProgress } from '../../services/browserEditorSet
 import { Tooltip } from '../../primitives/Tooltip';
 import { BrowserEditorSetupActivityPanel } from '../BrowserEditorSetupActivityPanel';
 import { BrowserEditorInstallMethodSelector } from '../BrowserEditorInstallMethodSelector';
-import { SettingsSection, SettingsKeyValueTable, SettingsPill } from './SettingsPrimitives';
+import { SettingsList, SettingsSection, SettingsKeyValueTable, SettingsPill } from './SettingsPrimitives';
 import { useI18n, type I18nHelpers } from '../../i18n';
 
 type RuntimeDetailRow = Readonly<{
@@ -145,7 +145,7 @@ function VersionRow(props: {
   const detectionTone = () => runtimeStatusTone(props.version.detection_state);
 
   return (
-    <div class="rounded-lg border border-border bg-muted/20 p-4">
+    <div class="redeven-settings-version-row p-4">
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div class="space-y-2">
           <div class="flex flex-wrap items-center gap-2">
@@ -422,7 +422,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
       >
         <div class="space-y-4">
           <Show when={!props.canManage}>
-            <div class="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+            <div class="redeven-settings-inset rounded-lg border p-4 text-sm text-muted-foreground">
               {i18n.t('codeRuntime.manageRequiresRwx')}
             </div>
           </Show>
@@ -480,7 +480,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
           </Show>
 
           <Show when={showRemovalOperation()}>
-            <div class="rounded-lg border border-border bg-muted/20 p-4">
+            <div class="redeven-settings-inset rounded-lg border p-4">
               <div class="flex flex-wrap items-center gap-2">
                 <div class="text-sm font-semibold text-foreground">{i18n.t('codeRuntime.recentRuntimeOperation')}</div>
                 <SettingsPill tone={operationRunning() ? 'warning' : operationFailed() ? 'warning' : operationCancelled() ? 'warning' : 'success'}>
@@ -498,7 +498,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
                   {props.status?.operation.last_error}
                 </div>
               </Show>
-              <pre class="mt-3 max-h-52 overflow-auto rounded-md border border-border bg-background/80 p-3 text-[11px] leading-5 text-muted-foreground whitespace-pre-wrap break-words">
+              <pre class="redeven-settings-control mt-3 max-h-52 overflow-auto rounded-md border p-3 text-[11px] leading-5 text-muted-foreground whitespace-pre-wrap break-words">
                 {operationLogTail().length > 0 ? operationLogTail().join('\n') : i18n.t('codeRuntime.noRuntimeOutput')}
               </pre>
             </div>
@@ -522,18 +522,20 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
           >
             <div class="space-y-3">
               <div class="text-sm font-semibold text-foreground">{i18n.t('codeRuntime.installedEditorVersionsSection')}</div>
-              <For each={installedVersions()}>
-                {(version) => (
-                  <VersionRow
-                    version={version}
-                    canInteract={props.canInteract}
-                    canManage={props.canManage}
-                    busy={busy()}
-                    onUse={(selectedVersion) => void props.onSelectVersion(selectedVersion)}
-                    onRemove={(selectedVersion) => setRemoveVersionConfirmOpen(selectedVersion)}
-                  />
-                )}
-              </For>
+              <SettingsList>
+                <For each={installedVersions()}>
+                  {(version) => (
+                    <VersionRow
+                      version={version}
+                      canInteract={props.canInteract}
+                      canManage={props.canManage}
+                      busy={busy()}
+                      onUse={(selectedVersion) => void props.onSelectVersion(selectedVersion)}
+                      onRemove={(selectedVersion) => setRemoveVersionConfirmOpen(selectedVersion)}
+                    />
+                  )}
+                </For>
+              </SettingsList>
             </div>
           </Show>
         </div>
@@ -569,7 +571,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
       >
         <div class="space-y-3">
           <p class="text-sm">{i18n.t('codeRuntime.removeDialogDescription')}</p>
-          <div class="grid gap-2 rounded-lg border border-border bg-muted/20 p-3 text-[11px] text-muted-foreground">
+          <div class="redeven-settings-inset grid gap-2 rounded-lg border p-3 text-[11px] text-muted-foreground">
             <div>{i18n.t('codeRuntime.targetVersion')}: <span class="font-mono text-foreground">{removeVersionConfirmOpen() || '-'}</span></div>
             <div>{i18n.t('codeRuntime.sharedRuntimeRoot')}: <span class="font-mono text-foreground break-all">{props.status?.shared_runtime_root || '-'}</span></div>
           </div>

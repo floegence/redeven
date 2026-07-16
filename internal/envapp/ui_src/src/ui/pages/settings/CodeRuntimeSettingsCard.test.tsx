@@ -101,6 +101,7 @@ vi.mock('./SettingsPrimitives', () => ({
       {props.children}
     </section>
   ),
+  SettingsList: (props: any) => <div>{props.children}</div>,
   SettingsKeyValueTable: (props: any) => (
     <table>
       <tbody>

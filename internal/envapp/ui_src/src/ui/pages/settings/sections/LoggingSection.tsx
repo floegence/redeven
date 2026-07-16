@@ -2,7 +2,7 @@ import { createSignal, createEffect, onCleanup } from 'solid-js';
 import { Database, FileText, Filter } from '@floegence/floe-webapp-core/icons';
 import { Select } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
-import { SettingsSection, AutoSaveIndicator, SettingRow } from '../SettingsPrimitives';
+import { SettingsSection, SettingsList, AutoSaveIndicator, SettingRow } from '../SettingsPrimitives';
 import { formatUnknownError } from '../../../maintenance/shared';
 import { useI18n } from '../../../i18n';
 
@@ -59,7 +59,7 @@ export function LoggingSection() {
       badgeVariant="warning"
       actions={<AutoSaveIndicator dirty={dirty()} saving={saving()} error={error()} savedAt={savedAt()} enabled={ctx.canInteract()} />}
     >
-      <div class="space-y-3">
+      <SettingsList>
         <SettingRow
           icon={FileText}
           title={i18n.t('loggingSettings.formatLabel')}
@@ -84,7 +84,7 @@ export function LoggingSection() {
           />
           }
         />
-      </div>
+      </SettingsList>
     </SettingsSection>
   );
 }

@@ -2,7 +2,7 @@ import { Show, createMemo, createSignal, createEffect, onCleanup } from 'solid-j
 import { Code, Hash } from '@floegence/floe-webapp-core/icons';
 import { Input, Checkbox } from '@floegence/floe-webapp-core/ui';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
-import { SettingsSection, AutoSaveIndicator, SettingRow } from '../SettingsPrimitives';
+import { SettingsSection, SettingsList, AutoSaveIndicator, SettingRow } from '../SettingsPrimitives';
 import { CodeRuntimeSettingsCard } from '../CodeRuntimeSettingsCard';
 import { formatUnknownError } from '../../../maintenance/shared';
 import { useI18n } from '../../../i18n';
@@ -101,37 +101,39 @@ export function CodespacesSection() {
         actions={<AutoSaveIndicator dirty={dirty()} saving={saving()} error={error()} savedAt={savedAt()} enabled={ctx.canInteract()} />}
       >
         {/* Port range card */}
-        <SettingRow
-          icon={Hash}
-          title={i18n.t('codespacesSettings.portRange')}
-          description={`${i18n.t('codespacesSettings.effectiveRange')}: ${effective().effective_min} - ${effective().effective_max}`}
-          control={
-            <label class={`flex items-center gap-2 ${ctx.canInteract() ? 'cursor-pointer' : ''}`}>
-              <Checkbox checked={useDefaults()} onChange={(v) => { setUseDefaults(Boolean(v)); setDirty(true); }} disabled={!ctx.canInteract()} />
-              <span class="text-sm text-foreground">{i18n.t('codespacesSettings.useDefaultRange')}</span>
-            </label>
-          }
-        >
-          <code class="inline-flex rounded-md border border-[color-mix(in_srgb,var(--redeven-stroke-control)_74%,transparent)] bg-[var(--redeven-settings-card-bg)] px-2 py-1 font-mono text-xs text-foreground">
-            {effective().effective_min} - {effective().effective_max}
-          </code>
-          <Show when={!useDefaults()}>
-            <div class="flex items-center gap-4 pt-3 border-t border-border/30">
-              <div class="flex items-center gap-2">
-                <label class="text-xs text-muted-foreground">code_server_port_min</label>
-                <Input value={portMin() === '' ? '' : String(portMin())}
-                  onInput={(e) => { const v = e.currentTarget.value.trim(); setPortMin(v ? Number(v) : ''); setDirty(true); }}
-                  placeholder="20000" size="sm" class="w-24" disabled={!ctx.canInteract()} />
+        <SettingsList>
+          <SettingRow
+            icon={Hash}
+            title={i18n.t('codespacesSettings.portRange')}
+            description={`${i18n.t('codespacesSettings.effectiveRange')}: ${effective().effective_min} - ${effective().effective_max}`}
+            control={
+              <label class={`flex items-center gap-2 ${ctx.canInteract() ? 'cursor-pointer' : ''}`}>
+                <Checkbox checked={useDefaults()} onChange={(v) => { setUseDefaults(Boolean(v)); setDirty(true); }} disabled={!ctx.canInteract()} />
+                <span class="text-sm text-foreground">{i18n.t('codespacesSettings.useDefaultRange')}</span>
+              </label>
+            }
+          >
+            <code class="redeven-settings-control inline-flex rounded-md border px-2 py-1 font-mono text-xs text-foreground">
+              {effective().effective_min} - {effective().effective_max}
+            </code>
+            <Show when={!useDefaults()}>
+              <div class="flex items-center gap-4 border-t border-[var(--redeven-settings-divider)] pt-3">
+                <div class="flex items-center gap-2">
+                  <label class="redeven-settings-note text-xs">code_server_port_min</label>
+                  <Input value={portMin() === '' ? '' : String(portMin())}
+                    onInput={(e) => { const v = e.currentTarget.value.trim(); setPortMin(v ? Number(v) : ''); setDirty(true); }}
+                    placeholder="20000" size="sm" class="w-24" disabled={!ctx.canInteract()} />
+                </div>
+                <div class="flex items-center gap-2">
+                  <label class="redeven-settings-note text-xs">code_server_port_max</label>
+                  <Input value={portMax() === '' ? '' : String(portMax())}
+                    onInput={(e) => { const v = e.currentTarget.value.trim(); setPortMax(v ? Number(v) : ''); setDirty(true); }}
+                    placeholder="21000" size="sm" class="w-24" disabled={!ctx.canInteract()} />
+                </div>
               </div>
-              <div class="flex items-center gap-2">
-                <label class="text-xs text-muted-foreground">code_server_port_max</label>
-                <Input value={portMax() === '' ? '' : String(portMax())}
-                  onInput={(e) => { const v = e.currentTarget.value.trim(); setPortMax(v ? Number(v) : ''); setDirty(true); }}
-                  placeholder="21000" size="sm" class="w-24" disabled={!ctx.canInteract()} />
-              </div>
-            </div>
-          </Show>
-        </SettingRow>
+            </Show>
+          </SettingRow>
+        </SettingsList>
       </SettingsSection>
     </div>
   );

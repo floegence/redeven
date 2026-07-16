@@ -38,7 +38,7 @@ function ConnectionInfoRow(props: Readonly<{
   action?: JSX.Element;
 }>) {
   return (
-    <div class="rounded-lg border border-[color-mix(in_srgb,var(--redeven-stroke-panel)_76%,transparent)] bg-[var(--redeven-settings-row-bg)] px-4 py-3">
+    <div class="redeven-settings-inset rounded-lg border px-4 py-3">
       <div class="grid min-w-0 gap-3 md:grid-cols-[minmax(0,220px)_minmax(0,1fr)_auto] md:items-center">
         <div class="flex min-w-0 items-start gap-3">
           <span class="redeven-setting-row__icon mt-0.5 inline-flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md">
@@ -66,7 +66,7 @@ function ConnectionInfoRow(props: Readonly<{
 function TechnicalRow(props: Readonly<{ label: string; value: string; emptyLabel: string }>) {
   const value = () => String(props.value ?? '').trim();
   return (
-    <tr class="border-t border-border/40 first:border-t-0">
+    <tr class="border-t border-[var(--redeven-settings-divider)] first:border-t-0">
       <th class="w-40 px-3 py-2 text-left align-top text-[11px] font-medium text-muted-foreground">{props.label}</th>
       <td class="px-3 py-2">
         <code class="break-all text-[11px] font-mono text-foreground">{value() || props.emptyLabel}</code>
@@ -108,7 +108,7 @@ export function ConnectionSection() {
       description={i18n.t('settings.connection.description')}
       badge={i18n.t('settings.connection.readOnly')}
     >
-      <div class="rounded-lg border border-[color-mix(in_srgb,var(--redeven-stroke-panel)_76%,transparent)] bg-[var(--redeven-settings-row-bg)] px-4 py-3">
+      <div class="redeven-settings-inset rounded-lg border px-4 py-3">
         <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
           <ConnectionStatusLine
             active={hasConnectionInfo()}
@@ -194,7 +194,7 @@ export function ConnectionSection() {
           {i18n.t('settings.connection.technicalInformation')}
         </button>
         <Show when={showDetails()}>
-          <div class="mt-2 overflow-hidden rounded-lg border border-border/40 bg-muted/20">
+          <div class="redeven-settings-inset mt-2 overflow-hidden rounded-lg border">
             <table class="w-full table-fixed text-xs">
               <tbody>
                 <TechnicalRow label={i18n.t('settings.connection.channelId')} value={String(direct()?.channel_id ?? '')} emptyLabel={i18n.t('settings.connection.emptyValue')} />

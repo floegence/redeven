@@ -302,12 +302,25 @@
   --redeven-surface-overlay: var(--redeven-surface-panel-elevated);
   --redeven-surface-control: color-mix(in srgb, var(--redeven-surface-panel) 58%, var(--redeven-surface-panel-elevated) 42%);
   --redeven-surface-control-muted: #f1efec;
-  --redeven-settings-sidebar-bg: #e9e5df;
-  --redeven-settings-sidebar-border: #d0c9bf;
-  --redeven-settings-content-bg: #fffdfa;
-  --redeven-settings-card-bg: #fffdfa;
-  --redeven-settings-row-bg: #f8f5f1;
-  --redeven-settings-row-hover-bg: color-mix(in srgb, var(--redeven-settings-row-bg) 86%, white 14%);
+  --redeven-settings-header-bg: #ffffff;
+  --redeven-settings-sidebar-bg: #eef1f4;
+  --redeven-settings-sidebar-border: #d8dee6;
+  --redeven-settings-content-bg: #f4f6f8;
+  --redeven-settings-card-bg: #ffffff;
+  --redeven-settings-inset-bg: #f7f8fa;
+  --redeven-settings-row-bg: var(--redeven-settings-inset-bg);
+  --redeven-settings-row-hover-bg: #eef2f6;
+  --redeven-settings-card-border: #d8dee6;
+  --redeven-settings-divider: #e4e8ee;
+  --redeven-settings-label-fg: #475569;
+  --redeven-settings-note-fg: #667085;
+  --redeven-settings-selection-bg: #e8f0fe;
+  --redeven-settings-selection-fg: #1e4f91;
+  --redeven-settings-selection-indicator: #3b82f6;
+  --redeven-settings-control-border: #8793a5;
+  --redeven-settings-section-shadow:
+    0 1px 2px rgb(15 23 42 / 4%),
+    0 12px 24px -22px rgb(15 23 42 / 18%);
   --redeven-surface-panel-border: color-mix(in srgb, var(--border) 82%, white 18%);
   --redeven-stroke-panel: var(--redeven-surface-panel-border);
   --redeven-stroke-panel-strong: color-mix(in srgb, var(--redeven-stroke-panel) 72%, var(--foreground) 28%);
@@ -366,12 +379,23 @@ html.dark {
   --redeven-surface-overlay: var(--redeven-surface-panel-elevated);
   --redeven-surface-control: color-mix(in srgb, var(--background) 62%, var(--redeven-surface-panel-elevated) 38%);
   --redeven-surface-control-muted: color-mix(in srgb, var(--muted) 56%, var(--background));
-  --redeven-settings-sidebar-bg: #252932;
-  --redeven-settings-sidebar-border: #3a404b;
-  --redeven-settings-content-bg: #30343d;
-  --redeven-settings-card-bg: #363b45;
-  --redeven-settings-row-bg: #3d424d;
-  --redeven-settings-row-hover-bg: color-mix(in srgb, var(--redeven-settings-row-bg) 88%, white 12%);
+  --redeven-settings-header-bg: #141820;
+  --redeven-settings-sidebar-bg: #141820;
+  --redeven-settings-sidebar-border: #2b323d;
+  --redeven-settings-content-bg: #181c23;
+  --redeven-settings-card-bg: #222730;
+  --redeven-settings-inset-bg: #1b2027;
+  --redeven-settings-row-bg: var(--redeven-settings-inset-bg);
+  --redeven-settings-row-hover-bg: #282e38;
+  --redeven-settings-card-border: #343c48;
+  --redeven-settings-divider: #2b323d;
+  --redeven-settings-label-fg: #c0c9d6;
+  --redeven-settings-note-fg: #94a3b8;
+  --redeven-settings-selection-bg: #22324a;
+  --redeven-settings-selection-fg: #dceaff;
+  --redeven-settings-selection-indicator: #6ea8fe;
+  --redeven-settings-control-border: #68788f;
+  --redeven-settings-section-shadow: none;
   --redeven-surface-panel-border: color-mix(in srgb, var(--border) 82%, #616976 18%);
   --redeven-stroke-panel: var(--redeven-surface-panel-border);
   --redeven-stroke-panel-strong: color-mix(in srgb, var(--redeven-stroke-panel) 62%, var(--foreground) 38%);
@@ -1885,13 +1909,8 @@ html.dark .env-debug-console-switch[data-state='checked'] {
 }
 
 .redeven-settings-header {
-  border-color: color-mix(in srgb, var(--redeven-settings-sidebar-border) 74%, transparent);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--redeven-settings-content-bg) 96%, white 4%),
-      var(--redeven-settings-content-bg)
-    );
+  border-color: var(--redeven-settings-sidebar-border);
+  background: var(--redeven-settings-header-bg);
 }
 
 .redeven-settings-sidebar {
@@ -1905,24 +1924,32 @@ html.dark .env-debug-console-switch[data-state='checked'] {
 }
 
 .redeven-settings-search {
-  border-color: color-mix(in srgb, var(--redeven-settings-sidebar-border) 80%, transparent);
-  background: color-mix(in srgb, var(--redeven-settings-sidebar-bg) 72%, var(--redeven-settings-content-bg) 28%);
+  border-color: var(--redeven-settings-control-border);
+  background: var(--redeven-settings-inset-bg);
+  color: var(--foreground);
 }
 
 .redeven-settings-search:focus {
   background: var(--redeven-settings-card-bg);
+  border-color: var(--redeven-settings-selection-indicator);
 }
 
 .redeven-settings-nav-item:hover {
-  background: color-mix(in srgb, var(--redeven-settings-sidebar-bg) 78%, var(--primary) 8%) !important;
+  background: var(--redeven-settings-row-hover-bg) !important;
+  color: var(--foreground);
+}
+
+.redeven-settings-nav-item--active,
+.redeven-settings-nav-item--active:hover {
+  border-color: var(--redeven-settings-selection-indicator) !important;
+  background: var(--redeven-settings-selection-bg) !important;
+  color: var(--redeven-settings-selection-fg) !important;
 }
 
 .redeven-settings-section {
-  border-color: color-mix(in srgb, var(--redeven-stroke-panel) 86%, transparent);
+  border-color: var(--redeven-settings-card-border);
   background: var(--redeven-settings-card-bg);
-  box-shadow:
-    0 1px 2px color-mix(in srgb, var(--foreground) 5%, transparent),
-    0 14px 28px -26px color-mix(in srgb, var(--foreground) 20%, transparent);
+  box-shadow: var(--redeven-settings-section-shadow);
 }
 
 .redeven-settings-section + .redeven-settings-section {
@@ -1931,44 +1958,169 @@ html.dark .env-debug-console-switch[data-state='checked'] {
 
 .redeven-settings-section__icon,
 .redeven-setting-row__icon {
-  border: 1px solid color-mix(in srgb, var(--redeven-stroke-panel) 72%, transparent);
-  background: color-mix(in srgb, var(--redeven-settings-row-bg) 78%, var(--redeven-settings-card-bg));
-  color: color-mix(in srgb, var(--primary) 80%, var(--foreground) 20%);
+  border: 1px solid var(--redeven-settings-divider);
+  background: var(--redeven-settings-inset-bg);
+  color: var(--redeven-settings-label-fg);
+}
+
+.redeven-settings-label {
+  color: var(--redeven-settings-label-fg);
+}
+
+.redeven-settings-note {
+  color: var(--redeven-settings-note-fg);
+}
+
+.redeven-settings-shell .text-muted-foreground {
+  color: var(--redeven-settings-note-fg);
+}
+
+.redeven-settings-dialog .text-muted-foreground {
+  color: var(--redeven-settings-note-fg);
+}
+
+.redeven-settings-shell input:not([type='checkbox']):not([type='radio']):not([type='range']),
+.redeven-settings-shell textarea,
+.redeven-settings-shell [role='combobox'],
+.redeven-settings-dialog input:not([type='checkbox']):not([type='radio']):not([type='range']),
+.redeven-settings-dialog textarea,
+.redeven-settings-dialog [role='combobox'] {
+  border-color: var(--redeven-settings-control-border);
+}
+
+.redeven-settings-inset {
+  border-color: var(--redeven-settings-card-border) !important;
+  background: var(--redeven-settings-inset-bg) !important;
+}
+
+.redeven-settings-control {
+  border-color: var(--redeven-settings-control-border) !important;
+  background: var(--redeven-settings-inset-bg) !important;
+  color: var(--foreground);
+}
+
+.redeven-settings-control:focus,
+.redeven-settings-control:focus-visible {
+  border-color: var(--redeven-settings-selection-indicator) !important;
+}
+
+.redeven-settings-choice {
+  border-color: var(--redeven-settings-card-border) !important;
+  background: var(--redeven-settings-inset-bg) !important;
+  transition:
+    border-color 150ms ease,
+    background-color 150ms ease;
+}
+
+.redeven-settings-choice:hover:not(:disabled):not([aria-disabled='true']) {
+  border-color: var(--redeven-settings-control-border) !important;
+  background: var(--redeven-settings-row-hover-bg) !important;
+}
+
+.redeven-settings-choice--selected,
+.redeven-settings-choice--selected:hover:not(:disabled):not([aria-disabled='true']) {
+  border-color: var(--redeven-settings-selection-indicator) !important;
+  background: var(--redeven-settings-selection-bg) !important;
+}
+
+.redeven-settings-list {
+  border-color: var(--redeven-settings-card-border);
+  background: var(--redeven-settings-inset-bg);
 }
 
 .redeven-setting-row {
   min-height: 4.5rem;
-  border-color: color-mix(in srgb, var(--redeven-stroke-panel) 76%, transparent);
-  background: var(--redeven-settings-row-bg);
-  transition:
-    border-color 150ms ease,
-    background-color 150ms ease,
-    box-shadow 150ms ease;
+  border-color: var(--redeven-settings-card-border);
+  background: var(--redeven-settings-inset-bg);
 }
 
-.redeven-setting-row:hover {
-  border-color: color-mix(in srgb, var(--redeven-stroke-panel-strong) 70%, transparent);
-  background: var(--redeven-settings-row-hover-bg);
+.redeven-settings-list > .redeven-setting-row {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+}
+
+.redeven-settings-list > .redeven-setting-row + .redeven-setting-row {
+  border-top: 1px solid var(--redeven-settings-divider);
+}
+
+.redeven-settings-list-row {
+  background: transparent;
+}
+
+.redeven-settings-list-row + .redeven-settings-list-row {
+  border-top: 1px solid var(--redeven-settings-divider);
+}
+
+.redeven-settings-list > .redeven-setting-row--info {
+  background: color-mix(in srgb, var(--info) 10%, var(--redeven-settings-inset-bg));
+}
+
+.redeven-settings-list > .redeven-setting-row--success {
+  background: color-mix(in srgb, var(--success) 10%, var(--redeven-settings-inset-bg));
+}
+
+.redeven-settings-list > .redeven-setting-row--warning {
+  background: color-mix(in srgb, var(--warning) 12%, var(--redeven-settings-inset-bg));
+}
+
+.redeven-settings-list > .redeven-setting-row--danger {
+  background: color-mix(in srgb, var(--error) 10%, var(--redeven-settings-inset-bg));
+}
+
+.redeven-settings-version-row + .redeven-settings-version-row {
+  border-top: 1px solid var(--redeven-settings-divider);
 }
 
 .redeven-setting-row--info {
-  border-color: color-mix(in srgb, var(--info) 30%, var(--redeven-stroke-panel));
-  background: color-mix(in srgb, var(--info) 10%, var(--redeven-settings-row-bg));
+  border-color: color-mix(in srgb, var(--info) 30%, var(--redeven-settings-card-border));
+  background: color-mix(in srgb, var(--info) 10%, var(--redeven-settings-inset-bg));
 }
 
 .redeven-setting-row--success {
-  border-color: color-mix(in srgb, var(--success) 30%, var(--redeven-stroke-panel));
-  background: color-mix(in srgb, var(--success) 10%, var(--redeven-settings-row-bg));
+  border-color: color-mix(in srgb, var(--success) 30%, var(--redeven-settings-card-border));
+  background: color-mix(in srgb, var(--success) 10%, var(--redeven-settings-inset-bg));
 }
 
 .redeven-setting-row--warning {
-  border-color: color-mix(in srgb, var(--warning) 34%, var(--redeven-stroke-panel));
-  background: color-mix(in srgb, var(--warning) 12%, var(--redeven-settings-row-bg));
+  border-color: color-mix(in srgb, var(--warning) 34%, var(--redeven-settings-card-border));
+  background: color-mix(in srgb, var(--warning) 12%, var(--redeven-settings-inset-bg));
 }
 
 .redeven-setting-row--danger {
-  border-color: color-mix(in srgb, var(--error) 32%, var(--redeven-stroke-panel));
-  background: color-mix(in srgb, var(--error) 10%, var(--redeven-settings-row-bg));
+  border-color: color-mix(in srgb, var(--error) 32%, var(--redeven-settings-card-border));
+  background: color-mix(in srgb, var(--error) 10%, var(--redeven-settings-inset-bg));
+}
+
+.redeven-settings-table {
+  border-color: var(--redeven-settings-card-border);
+  background: var(--redeven-settings-inset-bg);
+}
+
+.redeven-settings-table thead {
+  background: color-mix(in srgb, var(--redeven-settings-inset-bg) 82%, var(--redeven-settings-card-bg) 18%);
+  color: var(--redeven-settings-label-fg);
+}
+
+.redeven-settings-table__header-row {
+  border-color: var(--redeven-settings-card-border);
+}
+
+.redeven-settings-table__row {
+  border-color: var(--redeven-settings-divider);
+  background: transparent;
+}
+
+.redeven-settings-table__row--selected {
+  background: var(--redeven-settings-selection-bg);
+}
+
+.redeven-settings-table__row--interactive {
+  transition: background-color 150ms ease;
+}
+
+.redeven-settings-table__row--interactive:hover {
+  background: var(--redeven-settings-row-hover-bg);
 }
 
 .redeven-settings-alert--danger {
