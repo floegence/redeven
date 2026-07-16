@@ -1175,6 +1175,41 @@
     "validationRuntimeRootRequired": "需要运行时根。",
     "validationSshPasswordRequired": "使用密码认证时必须填写 SSH 密码。"
   },
+  "runtimeTakeover": {
+    "forceRestartTitle": "强制重启此运行时？",
+    "forceStopTitle": "强制停止此运行时？",
+    "forceRestartAction": "强制重启",
+    "forceStopAction": "强制停止",
+    "reviewRequired": "需要核对",
+    "progressTitle": "接管此运行时前需要确认",
+    "progressRestartDetail": "请先核对已验证的运行时进程，再强制重启。",
+    "progressStopDetail": "请先核对已验证的运行时进程，再强制停止此运行时。",
+    "warningTitle": "将终止 {count} 个已验证的运行时进程",
+    "warningDescription": "进程身份已经验证，但没有证据表明它归属当前 Desktop，或现有证据表明它属于另一个 Desktop。活动终端会话、任务和未保存的工作可能会丢失。",
+    "targetLabel": "运行时目标",
+    "locationLabel": "位置",
+    "processAriaLabel": "运行时进程 {pid}",
+    "startedLabel": "启动时间",
+    "ownerEvidenceLabel": "归属证据",
+    "stateRootLabel": "状态根目录",
+    "versionLabel": "运行时版本",
+    "authorizationNotice": "此授权仅适用于此处显示的进程清单。如果任何进程身份发生变化，Desktop 会中止本次操作，并要求您重新核对更新后的进程信息。",
+    "location": {
+      "local_host": "这台 Mac",
+      "ssh_host": "SSH 主机",
+      "local_container": "本地容器",
+      "ssh_container": "SSH 主机上的容器"
+    },
+    "ownerStatus": {
+      "missing": "缺少归属证据",
+      "foreign": "属于另一个 Desktop"
+    },
+    "ownerEvidence": {
+      "process_environment": "已通过进程环境验证",
+      "runtime_lock": "已通过运行时锁验证",
+      "missing": "没有可用的归属证据"
+    }
+  },
   "confirm": {
     "deleteConnectionTitle": "删除 Connection",
     "deleteConnectionConfirm": "删除 Connection",
@@ -1684,12 +1719,12 @@
     "sshRuntimeReady": "一旦运行时在此 SSH 主机上准备就绪，打开就可用。一旦运行时在此设备上准备就绪，",
     "localRuntimeReady": "Open 就可用。",
     "desktopLocalRuntimeUpdateHandoffReady": "该本地环境使用与 Redeven Desktop 捆绑的运行时。在 Desktop 更新切换刷新应用程序和捆绑的本地运行时后，Open 变得可用。",
-    "modelSourceNeedsUpdateDetail": "此 {subject} 需要更新，然后 Desktop 才能在此处提供本地 AI 模型设置。先更新并重启执行环境； Open 保持独立，在执行环境准备好后才可用。",
-    "runtimeNotRunningDetail": "此 {subject} 未运行。再次启动运行系统；运行时报告准备好后，打开即可使用。",
-    "runtimeRestartRequiredDetail": "此 {subject} 需要成功重启才能打开此环境。重新启动运行时，然后在报告就绪后再次打开它。",
-    "runtimeUpdateRequiredDetail": "此 {subject} 需要更新才能打开此环境。 {action}； Open 保持独立，并在运行时准备就绪后可用。",
-    "updateAndRestartRuntimeFirst": "首先更新并重新启动运行时",
-    "updateRuntimeFirst": "首先更新运行时",
+    "modelSourceNeedsUpdateDetail": "此{subject}需要更新，Desktop 才能在这里使用您的本地模型设置。请先更新并重启运行时；Open 是独立操作，将在运行时准备就绪后可用。",
+    "runtimeNotRunningDetail": "此{subject}未运行。请再次启动运行时；Open 将在运行时报告就绪后可用。",
+    "runtimeRestartRequiredDetail": "此{subject}必须成功重启后才能打开此环境。请重启运行时，待其报告就绪后再次打开该环境。",
+    "runtimeUpdateRequiredDetail": "此{subject}需要更新，之后才能打开此环境。{action}；Open 是独立操作，将在运行时准备就绪后可用。",
+    "updateAndRestartRuntimeFirst": "请先更新并重启运行时",
+    "updateRuntimeFirst": "请先更新运行时",
     "sshContainerRuntime": "SSH 容器运行时",
     "localContainerRuntime": "本地容器运行时",
     "sshRuntime": "SSH 运行时",

@@ -8,9 +8,7 @@ import {
   containerRuntimeDaemonStartCommand,
   containerRuntimeDaemonStatusCommand,
   containerRuntimeExecCommand,
-  containerRuntimeProcessInventoryCommand,
-  containerRuntimeProcessStopCommand,
-  containerRuntimeUploadedProcessHelperCommand,
+  containerRuntimeProcessHelperCommand,
   containerRuntimeUploadedInstallCommand,
   parseContainerListOutput,
   parseContainerInspectJSON,
@@ -159,10 +157,7 @@ describe('containerRuntime', () => {
     expect(probeCommand.join('\n')).toContain('slot_release_tag=');
     expect(probeCommand.join('\n')).toContain('reported_release_tag=');
     expect(probeCommand.join('\n')).toContain('target_release_tag=');
-    expect(probeCommand.join('\n')).toContain('runtime/releases');
-    expect(probeCommand.join('\n')).not.toContain('runtime/releases/${runtime_release_tag}');
-    expect(probeCommand.join('\n')).not.toContain('runtime/releases/${target_release_tag}');
-    expect(probeCommand.join('\n')).not.toContain('runtime/releases/${release_tag}');
+    expect(probeCommand.join('\n')).not.toContain('runtime/releases');
     const installCommand = containerRuntimeUploadedInstallCommand({
       engine: 'podman',
       container_id: 'dev',
@@ -190,11 +185,7 @@ describe('containerRuntime', () => {
     expect(installCommand.join('\n')).toContain('switch_staged_runtime');
     expect(installCommand.join('\n')).toContain('if mv "$staging_root" "$managed_root"; then');
     expect(installCommand.join('\n')).not.toContain('mv "$temp_binary" "$binary"');
-    expect(installCommand.join('\n')).toContain('runtime/releases');
-    expect(installCommand.join('\n')).not.toContain('release_root="${runtime_root%/}/runtime/releases');
-    expect(installCommand.join('\n')).not.toContain('runtime/releases/${runtime_release_tag}');
-    expect(installCommand.join('\n')).not.toContain('runtime/releases/${target_release_tag}');
-    expect(installCommand.join('\n')).not.toContain('runtime/releases/${release_tag}');
+    expect(installCommand.join('\n')).not.toContain('runtime/releases');
     expect(installCommand.join('\n')).not.toContain('desktop-runtime-stop');
     expect(installCommand.join('\n')).not.toContain('redeven run');
     expect(installCommand.join('\n')).not.toContain('docker stop');
@@ -302,23 +293,16 @@ describe('containerRuntime', () => {
     })[6]).toContain('runtime_binary_path="${runtime_root%/}/runtime/managed/bin/redeven"');
   });
 
-  it('builds digest-bound container inventory and stop commands with an uploaded helper fallback', () => {
-    const inventoryCommand = containerRuntimeProcessInventoryCommand({
+  it('builds digest-bound container inventory and stop commands through the current Desktop helper', () => {
+    const inventoryCommand = containerRuntimeProcessHelperCommand({
       engine: 'docker',
       container_id: 'dev',
       runtime_binary_path: '/root/.redeven/runtime/managed/bin/redeven',
       runtime_root: '/root/.redeven',
       desktop_owner_id: 'desktop-owner',
+      operation: 'inventory',
     });
-    const stopCommand = containerRuntimeProcessStopCommand({
-      engine: 'docker',
-      container_id: 'dev',
-      runtime_binary_path: '/root/.redeven/runtime/managed/bin/redeven',
-      runtime_root: '/root/.redeven',
-      desktop_owner_id: 'desktop-owner',
-      inventory_digest: 'a'.repeat(64),
-    });
-    const helperCommand = containerRuntimeUploadedProcessHelperCommand({
+    const stopCommand = containerRuntimeProcessHelperCommand({
       engine: 'podman',
       container_id: 'dev',
       runtime_binary_path: '/root/.redeven/runtime/managed/bin/redeven',
@@ -326,19 +310,20 @@ describe('containerRuntime', () => {
       desktop_owner_id: 'desktop-owner',
       operation: 'stop',
       inventory_digest: 'a'.repeat(64),
+      reconciliation_mode: 'confirmed_takeover',
     });
 
     expect(inventoryCommand.join('\n')).toContain('desktop-runtime-inventory');
-    expect(inventoryCommand.join('\n')).toContain('--include-known-legacy');
-    expect(inventoryCommand.join('\n')).toContain('--current-executable "$runtime_binary_path"');
+    expect(inventoryCommand.join('\n')).toContain('--current-executable "$managed_binary"');
     expect(stopCommand.join('\n')).toContain('desktop-runtime-stop');
     expect(stopCommand.join('\n')).toContain('--all-matching');
     expect(stopCommand.join('\n')).toContain('--expected-inventory-digest "$inventory_digest"');
     expect(stopCommand).toContain('a'.repeat(64));
-    expect(helperCommand.join('\n')).toContain('redeven-runtime-process-helper');
-    expect(helperCommand.join('\n')).toContain('tar -xzf "$archive_path"');
-    expect(helperCommand.join('\n')).toContain('rm -rf "$helper_root"');
-    expect(helperCommand.join('\n')).toContain('--current-executable "$managed_binary"');
+    expect(stopCommand).toContain('confirmed_takeover');
+    expect(stopCommand.join('\n')).toContain('tar -xzf "$archive_path"');
+    expect(stopCommand.join('\n')).toContain('rm -rf "$helper_root"');
+    expect(stopCommand.join('\n')).not.toContain('--process-contract-version');
+    expect(stopCommand.join('\n')).not.toContain('--include-known-legacy');
     expect(stopCommand.join(' ')).not.toContain('docker stop');
     expect(stopCommand.join(' ')).not.toContain('podman stop');
     expect(stopCommand.join(' ')).not.toContain('kill "$pid"');

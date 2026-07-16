@@ -1175,6 +1175,41 @@
     "validationRuntimeRootRequired": "런타임 루트가 필요합니다. 비밀번호 인증을 위해서는",
     "validationSshPasswordRequired": "SSH 비밀번호가 필요합니다."
   },
+  "runtimeTakeover": {
+    "forceRestartTitle": "이 런타임을 강제로 다시 시작할까요?",
+    "forceStopTitle": "이 런타임을 강제로 중지할까요?",
+    "forceRestartAction": "강제 다시 시작",
+    "forceStopAction": "강제 중지",
+    "reviewRequired": "확인 필요",
+    "progressTitle": "런타임 제어권을 가져오려면 확인이 필요합니다",
+    "progressRestartDetail": "강제 재시작하기 전에 식별 정보가 검증된 런타임 프로세스를 확인하세요.",
+    "progressStopDetail": "이 런타임을 강제로 중지하기 전에 식별 정보가 검증된 런타임 프로세스를 확인하세요.",
+    "warningTitle": "식별 정보가 검증된 런타임 프로세스 {count}개가 종료됩니다",
+    "warningDescription": "프로세스의 식별 정보는 검증되었지만 현재 Desktop에 속한다는 확인 정보가 없거나 다른 Desktop에 속한 것으로 확인되었습니다. 사용 중인 터미널, 작업 및 저장하지 않은 변경 사항이 손실될 수 있습니다.",
+    "targetLabel": "런타임 대상",
+    "locationLabel": "위치",
+    "processAriaLabel": "런타임 프로세스 {pid}",
+    "startedLabel": "시작 시간",
+    "ownerEvidenceLabel": "소유자 확인 근거",
+    "stateRootLabel": "상태 루트",
+    "versionLabel": "런타임 버전",
+    "authorizationNotice": "이 확인은 여기에 표시된 프로세스 목록에만 적용됩니다. 프로세스의 식별 정보가 하나라도 변경되면 Desktop은 작업을 중단하고 변경된 정보를 다시 확인하도록 요청합니다.",
+    "location": {
+      "local_host": "이 Mac",
+      "ssh_host": "SSH 호스트",
+      "local_container": "로컬 컨테이너",
+      "ssh_container": "SSH 호스트의 컨테이너"
+    },
+    "ownerStatus": {
+      "missing": "소유자 정보 없음",
+      "foreign": "다른 Desktop에 속함"
+    },
+    "ownerEvidence": {
+      "process_environment": "프로세스 환경에서 확인됨",
+      "runtime_lock": "런타임 잠금 파일에서 확인됨",
+      "missing": "소유자를 확인할 근거 없음"
+    }
+  },
   "confirm": {
     "deleteConnectionTitle": "연결 삭제",
     "deleteConnectionConfirm": "연결 삭제",

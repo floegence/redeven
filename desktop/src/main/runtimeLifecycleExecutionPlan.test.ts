@@ -66,7 +66,6 @@ describe('runtimeLifecycleExecutionPlan', () => {
     ]);
     expect(plan.omitted_steps).toEqual([
       { id: 'discovering_runtime_instances', reason: 'runtime_process_absent' },
-      { id: 'stopping_legacy_runtimes', reason: 'runtime_process_absent' },
       { id: 'stopping_runtime_process', reason: 'runtime_process_absent' },
       { id: 'verifying_runtime_inventory', reason: 'runtime_process_absent' },
     ]);
@@ -84,7 +83,6 @@ describe('runtimeLifecycleExecutionPlan', () => {
     ]);
     expect(plan.omitted_steps).toEqual([
       { id: 'discovering_runtime_instances', reason: 'runtime_process_absent' },
-      { id: 'stopping_legacy_runtimes', reason: 'runtime_process_absent' },
       { id: 'stopping_runtime_process', reason: 'runtime_process_absent' },
       { id: 'verifying_runtime_inventory', reason: 'runtime_process_absent' },
     ]);
@@ -103,7 +101,6 @@ describe('runtimeLifecycleExecutionPlan', () => {
     ]);
     expect(plan.omitted_steps).toEqual([
       { id: 'discovering_runtime_instances', reason: 'runtime_process_absent' },
-      { id: 'stopping_legacy_runtimes', reason: 'runtime_process_absent' },
       { id: 'stopping_runtime_process', reason: 'runtime_process_absent' },
       { id: 'verifying_runtime_inventory', reason: 'runtime_process_absent' },
     ]);
@@ -186,7 +183,6 @@ describe('runtimeLifecycleExecutionPlan', () => {
     ]);
     expect(plan.omitted_steps).toEqual([
       { id: 'discovering_runtime_instances', reason: 'runtime_already_stopped' },
-      { id: 'stopping_legacy_runtimes', reason: 'runtime_already_stopped' },
       { id: 'stopping_runtime_process', reason: 'runtime_already_stopped' },
       { id: 'verifying_runtime_inventory', reason: 'runtime_already_stopped' },
     ]);

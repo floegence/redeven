@@ -117,7 +117,6 @@ function startReadySteps(): readonly DesktopRuntimeLifecycleStepID[] {
 function stopSteps(terminal: DesktopRuntimeLifecycleStepID = 'runtime_stopped'): readonly DesktopRuntimeLifecycleStepID[] {
   return [
     'discovering_runtime_instances',
-    'stopping_legacy_runtimes',
     'stopping_runtime_process',
     'verifying_runtime_inventory',
     'verifying_runtime_stopped',
@@ -128,7 +127,6 @@ function stopSteps(terminal: DesktopRuntimeLifecycleStepID = 'runtime_stopped'):
 function runtimeProcessReconciliationStepIDs(): readonly DesktopRuntimeLifecycleStepID[] {
   return [
     'discovering_runtime_instances',
-    'stopping_legacy_runtimes',
     'stopping_runtime_process',
     'verifying_runtime_inventory',
   ];
@@ -225,12 +223,7 @@ function stopTailForOperation(
   if (step === 'discovering_runtime_instances') {
     return operation === 'stop'
       ? stopSteps()
-      : ['discovering_runtime_instances', 'stopping_legacy_runtimes', 'stopping_runtime_process', 'verifying_runtime_inventory'];
-  }
-  if (step === 'stopping_legacy_runtimes') {
-    return operation === 'stop'
-      ? ['stopping_legacy_runtimes', 'stopping_runtime_process', 'verifying_runtime_inventory', 'runtime_stopped']
-      : ['stopping_legacy_runtimes', 'stopping_runtime_process', 'verifying_runtime_inventory'];
+      : ['discovering_runtime_instances', 'stopping_runtime_process', 'verifying_runtime_inventory'];
   }
   if (step === 'stopping_runtime_process') {
     return operation === 'stop'

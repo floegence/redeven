@@ -1175,6 +1175,41 @@
     "validationRuntimeRootRequired": "ランタイム ルートが必要です。",
     "validationSshPasswordRequired": "SSH パスワード認証にはパスワードが必要です。"
   },
+  "runtimeTakeover": {
+    "forceRestartTitle": "このランタイムを強制再起動しますか？",
+    "forceStopTitle": "このランタイムを強制停止しますか？",
+    "forceRestartAction": "強制再起動",
+    "forceStopAction": "強制停止",
+    "reviewRequired": "確認が必要",
+    "progressTitle": "ランタイムを引き継ぐには確認が必要です",
+    "progressRestartDetail": "強制再起動する前に、検証済みのランタイムプロセスを確認してください。",
+    "progressStopDetail": "このランタイムを強制停止する前に、検証済みのランタイムプロセスを確認してください。",
+    "warningTitle": "検証済みのランタイムプロセス {count} 件を終了します",
+    "warningDescription": "プロセスの識別情報は検証済みですが、Desktop 所有者の確認根拠がないか、別の Desktop に属しています。実行中のターミナル、ジョブ、未保存の作業が失われる可能性があります。",
+    "targetLabel": "ランタイムターゲット",
+    "locationLabel": "場所",
+    "processAriaLabel": "ランタイムプロセス {pid}",
+    "startedLabel": "開始日時",
+    "ownerEvidenceLabel": "所有者の確認根拠",
+    "stateRootLabel": "状態ルート",
+    "versionLabel": "ランタイムバージョン",
+    "authorizationNotice": "この承認は、ここに表示されているインベントリにのみ有効です。プロセスの識別情報が変わった場合、Desktop は処理を停止し、新しい情報の確認を求めます。",
+    "location": {
+      "local_host": "この Mac",
+      "ssh_host": "SSH ホスト",
+      "local_container": "ローカルコンテナ",
+      "ssh_container": "SSH ホスト上のコンテナ"
+    },
+    "ownerStatus": {
+      "missing": "所有者を確認できる根拠なし",
+      "foreign": "別の Desktop が所有"
+    },
+    "ownerEvidence": {
+      "process_environment": "プロセス環境で確認済み",
+      "runtime_lock": "ランタイム ロックで確認済み",
+      "missing": "所有者を確認できる根拠なし"
+    }
+  },
   "confirm": {
     "deleteConnectionTitle": "接続を削除します",
     "deleteConnectionConfirm": "接続を削除します",

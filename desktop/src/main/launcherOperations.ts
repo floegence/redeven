@@ -117,6 +117,7 @@ function operationProgress(snapshot: DesktopLauncherOperationSnapshot): DesktopL
     deleted_subject: snapshot.deleted_subject,
     next_actions: snapshot.next_actions,
     failure: snapshot.failure,
+    runtime_process_takeover: snapshot.runtime_process_takeover,
   };
 }
 
@@ -413,7 +414,7 @@ export class LauncherOperationRegistry {
 
   finish(
     operationKey: string,
-    status: Extract<DesktopLauncherOperationStatus, 'canceled' | 'cleanup_failed' | 'failed' | 'succeeded'>,
+    status: Extract<DesktopLauncherOperationStatus, 'canceled' | 'needs_confirmation' | 'cleanup_failed' | 'failed' | 'succeeded'>,
     patch: LauncherOperationFinishPatch = {},
   ): DesktopLauncherOperationSnapshot | null {
     const next = this.update(operationKey, {
@@ -429,7 +430,7 @@ export class LauncherOperationRegistry {
   finishCurrentAttempt(
     operationKey: string,
     attempt: LauncherOperationAttemptIdentity,
-    status: Extract<DesktopLauncherOperationStatus, 'canceled' | 'cleanup_failed' | 'failed' | 'succeeded'>,
+    status: Extract<DesktopLauncherOperationStatus, 'canceled' | 'needs_confirmation' | 'cleanup_failed' | 'failed' | 'succeeded'>,
     patch: LauncherOperationFinishPatch = {},
   ): DesktopLauncherOperationSnapshot | null {
     const key = compact(operationKey);

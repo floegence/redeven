@@ -646,114 +646,7 @@ export function containerRuntimeDaemonStatusCommand(input: Readonly<{
 
 export const CONTAINER_RUNTIME_PROCESS_COMMAND_EXIT_MARKER = '__REDEVEN_RUNTIME_PROCESS_EXIT__=';
 
-function containerRuntimeProcessCommandDriver(): string {
-  return [
-    'set -eu',
-    'state_root="$1"',
-    containerRuntimeRootShellPrelude('state_root'),
-    'runtime_root="$2"',
-    containerRuntimeRootShellPrelude('runtime_root'),
-    'runtime_binary_path="$3"',
-    `if [ "$runtime_binary_path" = "${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}" ]; then`,
-    '  runtime_binary_path="${runtime_root%/}/runtime/managed/bin/redeven"',
-    'fi',
-    `case "$runtime_binary_path" in`,
-    `  ${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/*)`,
-    '    if [ -z "${HOME:-}" ]; then',
-    '      echo "container HOME is unavailable; set Runtime Root to an absolute .redeven path" >&2',
-    '      exit 1',
-    '    fi',
-    `    runtime_binary_path="\${HOME%/}/.redeven/\${runtime_binary_path#${DEFAULT_DESKTOP_SSH_RUNTIME_ROOT}/}"`,
-    '    ;;',
-    'esac',
-    'desktop_owner_id="$4"',
-    'operation="$5"',
-    'inventory_digest="${6:-}"',
-    'grace_period="${7:-5s}"',
-    'output_path="$(mktemp "${TMPDIR:-/tmp}/redeven-runtime-process-output.XXXXXX")"',
-    'error_path="$(mktemp "${TMPDIR:-/tmp}/redeven-runtime-process-error.XXXXXX")"',
-    'cleanup() { rm -f "$output_path" "$error_path"; }',
-    'trap cleanup EXIT INT TERM',
-    'exit_code=127',
-    'if [ -x "$runtime_binary_path" ]; then',
-    '  set +e',
-    '  case "$operation" in',
-    '    inventory)',
-    '      "$runtime_binary_path" desktop-runtime-inventory --runtime-root "$runtime_root" --state-root "$state_root" --desktop-owner-id "$desktop_owner_id" --current-executable "$runtime_binary_path" --include-known-legacy >"$output_path" 2>"$error_path"',
-    '      exit_code=$?',
-    '      ;;',
-    '    stop)',
-    '      "$runtime_binary_path" desktop-runtime-stop --runtime-root "$runtime_root" --state-root "$state_root" --desktop-owner-id "$desktop_owner_id" --current-executable "$runtime_binary_path" --include-known-legacy --all-matching --expected-inventory-digest "$inventory_digest" --grace-period "$grace_period" --json >"$output_path" 2>"$error_path"',
-    '      exit_code=$?',
-    '      ;;',
-    '    *)',
-    '      printf "%s\\n" "runtime process operation is invalid" >"$error_path"',
-    '      exit_code=2',
-    '      ;;',
-    '  esac',
-    '  set -e',
-    'fi',
-    `printf '${CONTAINER_RUNTIME_PROCESS_COMMAND_EXIT_MARKER}%s\\n' "$exit_code"`,
-    'cat "$output_path"',
-    'cat "$error_path" >&2',
-  ].join('\n');
-}
-
-export function containerRuntimeProcessInventoryCommand(input: Readonly<{
-  engine: DesktopContainerEngine;
-  container_id: string;
-  runtime_binary_path: string;
-  runtime_root: string;
-  runtime_state_root?: string;
-  desktop_owner_id: string;
-}>): readonly string[] {
-  return containerRuntimeExecCommand({
-    engine: input.engine,
-    container_id: input.container_id,
-    argv: [
-      'sh',
-      '-c',
-      containerRuntimeProcessCommandDriver(),
-      'redeven-container-runtime-inventory',
-      input.runtime_state_root ?? input.runtime_root,
-      input.runtime_root,
-      input.runtime_binary_path,
-      input.desktop_owner_id,
-      'inventory',
-    ],
-  });
-}
-
-export function containerRuntimeProcessStopCommand(input: Readonly<{
-  engine: DesktopContainerEngine;
-  container_id: string;
-  runtime_binary_path: string;
-  runtime_root: string;
-  runtime_state_root?: string;
-  desktop_owner_id: string;
-  inventory_digest: string;
-  grace_period_seconds?: number;
-}>): readonly string[] {
-  return containerRuntimeExecCommand({
-    engine: input.engine,
-    container_id: input.container_id,
-    argv: [
-      'sh',
-      '-c',
-      containerRuntimeProcessCommandDriver(),
-      'redeven-container-runtime-stop-all',
-      input.runtime_state_root ?? input.runtime_root,
-      input.runtime_root,
-      input.runtime_binary_path,
-      input.desktop_owner_id,
-      'stop',
-      input.inventory_digest,
-      `${Math.max(1, Math.ceil(input.grace_period_seconds ?? 5))}s`,
-    ],
-  });
-}
-
-export function containerRuntimeUploadedProcessHelperCommand(input: Readonly<{
+export function containerRuntimeProcessHelperCommand(input: Readonly<{
   engine: DesktopContainerEngine;
   container_id: string;
   runtime_binary_path: string;
@@ -763,6 +656,7 @@ export function containerRuntimeUploadedProcessHelperCommand(input: Readonly<{
   operation: 'inventory' | 'stop';
   inventory_digest?: string;
   grace_period_seconds?: number;
+  reconciliation_mode?: 'automatic' | 'confirmed_takeover';
 }>): readonly string[] {
   const helperDriver = [
     'set -eu',
@@ -787,6 +681,7 @@ export function containerRuntimeUploadedProcessHelperCommand(input: Readonly<{
     'operation="$5"',
     'inventory_digest="${6:-}"',
     'grace_period="${7:-5s}"',
+    'reconciliation_mode="${8:-automatic}"',
     'helper_root="$(mktemp -d "${TMPDIR:-/tmp}/redeven-runtime-process-helper.XXXXXX")"',
     'archive_path="${helper_root}/runtime.tar.gz"',
     'output_path="${helper_root}/output"',
@@ -797,17 +692,17 @@ export function containerRuntimeUploadedProcessHelperCommand(input: Readonly<{
     'tar -xzf "$archive_path" -C "$helper_root"',
     'helper_binary="${helper_root}/redeven"',
     'if [ ! -x "$helper_binary" ]; then',
-    '  echo "uploaded runtime helper is missing redeven" >&2',
+    '  echo "Desktop runtime process helper is missing redeven" >&2',
     '  exit 1',
     'fi',
     'set +e',
     'case "$operation" in',
     '  inventory)',
-    '    "$helper_binary" desktop-runtime-inventory --runtime-root "$runtime_root" --state-root "$state_root" --desktop-owner-id "$desktop_owner_id" --current-executable "$managed_binary" --include-known-legacy >"$output_path" 2>"$error_path"',
+    '    "$helper_binary" desktop-runtime-inventory --runtime-root "$runtime_root" --state-root "$state_root" --desktop-owner-id "$desktop_owner_id" --current-executable "$managed_binary" >"$output_path" 2>"$error_path"',
     '    exit_code=$?',
     '    ;;',
     '  stop)',
-    '    "$helper_binary" desktop-runtime-stop --runtime-root "$runtime_root" --state-root "$state_root" --desktop-owner-id "$desktop_owner_id" --current-executable "$managed_binary" --include-known-legacy --all-matching --expected-inventory-digest "$inventory_digest" --grace-period "$grace_period" --json >"$output_path" 2>"$error_path"',
+    '    "$helper_binary" desktop-runtime-stop --runtime-root "$runtime_root" --state-root "$state_root" --desktop-owner-id "$desktop_owner_id" --current-executable "$managed_binary" --reconciliation-mode "$reconciliation_mode" --all-matching --expected-inventory-digest "$inventory_digest" --grace-period "$grace_period" --json >"$output_path" 2>"$error_path"',
     '    exit_code=$?',
     '    ;;',
     '  *)',
@@ -835,6 +730,7 @@ export function containerRuntimeUploadedProcessHelperCommand(input: Readonly<{
       input.operation,
       input.inventory_digest || '-',
       `${Math.max(1, Math.ceil(input.grace_period_seconds ?? 5))}s`,
+      input.reconciliation_mode ?? 'automatic',
     ],
   });
 }

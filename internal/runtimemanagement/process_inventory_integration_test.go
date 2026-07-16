@@ -3,12 +3,10 @@ package runtimemanagement
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -102,7 +100,8 @@ func waitRuntimeProcessHelper(t *testing.T, command *exec.Cmd) {
 
 func writeRuntimeProcessLock(t *testing.T, stateRoot string, pid int, ownerID string) {
 	t.Helper()
-	if err := os.MkdirAll(stateRoot, 0o755); err != nil {
+	lockPath := filepath.Join(stateRoot, "local-environment", "agent.lock")
+	if err := os.MkdirAll(filepath.Dir(lockPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	body, err := json.Marshal(runtimeLockMetadata{
@@ -114,52 +113,28 @@ func writeRuntimeProcessLock(t *testing.T, stateRoot string, pid int, ownerID st
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(stateRoot, "agent.lock"), body, 0o600); err != nil {
+	if err := os.WriteFile(lockPath, body, 0o600); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func TestRuntimeProcessInventoryFindsAndStopsCurrentAndHistoricalProcesses(t *testing.T) {
+func TestRuntimeProcessInventoryRequiresConfirmationForOwnerlessCurrentProcess(t *testing.T) {
 	root := t.TempDir()
 	runtimeRoot := filepath.Join(root, ".redeven")
-	stateRoot := filepath.Join(runtimeRoot, "scopes", "local", "default")
-	currentExecutable := filepath.Join(runtimeRoot, "runtime", "managed", "bin", "redeven")
-	legacyExecutable := filepath.Join(runtimeRoot, "runtime", "releases", "v0.5.0", "bin", "redeven")
-	buildRuntimeProcessHelper(t, currentExecutable)
-	if err := os.MkdirAll(filepath.Dir(legacyExecutable), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	body, err := os.ReadFile(currentExecutable)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(legacyExecutable, body, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	legacyStateRoot := filepath.Join(runtimeRoot, "instances", "envinst_gzcom_fixture", "state")
-	if err := os.MkdirAll(stateRoot, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(legacyStateRoot, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	current := startRuntimeProcessHelper(t, currentExecutable, stateRoot, "desktop-owner", filepath.Join(root, "current.ready"))
-	legacy := startRuntimeProcessHelper(t, legacyExecutable, legacyStateRoot, "", filepath.Join(root, "legacy.ready"))
-	writeRuntimeProcessLock(t, stateRoot, current.Process.Pid, "desktop-owner")
-
-	if err := os.RemoveAll(legacyStateRoot); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.MkdirAll(legacyStateRoot, 0o755); err != nil {
+	executable := filepath.Join(runtimeRoot, "runtime", "managed", "bin", "redeven")
+	buildRuntimeProcessHelper(t, executable)
+	current := startRuntimeProcessHelper(t, executable, runtimeRoot, "desktop-owner", filepath.Join(root, "current.ready"))
+	ownerless := startRuntimeProcessHelper(t, executable, runtimeRoot, "", filepath.Join(root, "ownerless.ready"))
+	writeRuntimeProcessLock(t, runtimeRoot, current.Process.Pid, "desktop-owner")
+	if err := os.RemoveAll(filepath.Join(runtimeRoot, "local-environment")); err != nil {
 		t.Fatal(err)
 	}
 
 	options := RuntimeProcessInventoryOptions{
 		RuntimeRoot:        runtimeRoot,
-		StateRoot:          stateRoot,
+		StateRoot:          runtimeRoot,
 		DesktopOwnerID:     "desktop-owner",
-		CurrentExecutables: []string{currentExecutable},
-		IncludeKnownLegacy: true,
+		CurrentExecutables: []string{executable},
 	}
 	inventory, err := InspectRuntimeProcesses(context.Background(), options)
 	if err != nil {
@@ -168,124 +143,37 @@ func TestRuntimeProcessInventoryFindsAndStopsCurrentAndHistoricalProcesses(t *te
 	if len(inventory.Instances) != 2 {
 		t.Fatalf("instances = %#v", inventory.Instances)
 	}
-	classifications := []RuntimeProcessClassification{
-		inventory.Instances[0].Classification,
-		inventory.Instances[1].Classification,
+	if inventory.Summary.Automatic != 0 || inventory.Summary.ConfirmedTakeover != 2 || inventory.Summary.Blocked != 0 {
+		t.Fatalf("summary = %#v", inventory.Summary)
 	}
-	sort.Slice(classifications, func(i, j int) bool { return classifications[i] < classifications[j] })
-	if classifications[0] != RuntimeProcessCurrentOwned || classifications[1] != RuntimeProcessLegacyOwnerless {
-		t.Fatalf("classifications = %#v", classifications)
+	if _, err := StopRuntimeProcesses(context.Background(), options, inventory.InventoryDigest, 2*time.Second); RuntimeProcessErrorCode(err) != RuntimeProcessErrorTakeoverRequired {
+		t.Fatalf("automatic stop error = %v", err)
 	}
-	if inventory.Instances[0].ExecutableInode == inventory.Instances[1].ExecutableInode {
-		t.Fatalf("expected distinct executable inodes: %#v", inventory.Instances)
-	}
-	result, err := StopRuntimeProcesses(context.Background(), options, inventory.InventoryDigest, 2*time.Second)
+	result, err := StopRuntimeProcessesWithMode(
+		context.Background(),
+		options,
+		inventory.InventoryDigest,
+		2*time.Second,
+		RuntimeProcessReconciliationConfirmedTakeover,
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(result.After.Instances) != 0 {
-		t.Fatalf("after = %#v", result.After)
-	}
-	lockBody, err := os.ReadFile(filepath.Join(stateRoot, "agent.lock"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(lockBody) != 0 {
-		t.Fatalf("runtime lock content after stop = %q, want empty", string(lockBody))
+	if len(result.After.Instances) != 0 || len(result.Stopped) != 2 {
+		t.Fatalf("result = %#v", result)
 	}
 	waitRuntimeProcessHelper(t, current)
-	waitRuntimeProcessHelper(t, legacy)
+	waitRuntimeProcessHelper(t, ownerless)
 }
 
-func TestRuntimeProcessRestartIgnoresInactiveLegacyLocks(t *testing.T) {
-	root := t.TempDir()
-	runtimeRoot := filepath.Join(root, ".redeven")
-	executable := filepath.Join(runtimeRoot, "runtime", "managed", "bin", "redeven")
-	buildRuntimeProcessHelper(t, executable)
-
-	current := startRuntimeProcessHelper(t, executable, runtimeRoot, "desktop-owner", filepath.Join(root, "current.ready"))
-	currentPID := current.Process.Pid
-	targetLockPath := filepath.Join(runtimeRoot, "local-environment", "agent.lock")
-	targetBody, err := json.Marshal(runtimeLockMetadata{
-		PID:            currentPID,
-		InstanceID:     "current-runtime",
-		RuntimeVersion: "vtest",
-		DesktopOwnerID: "desktop-owner",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	writeRuntimeLeaseTestFile(t, targetLockPath, targetBody)
-	inactiveLocks := map[string][]byte{
-		filepath.Join(runtimeRoot, "scopes", "local", "default", "agent.lock"): []byte("23672\n"),
-		filepath.Join(runtimeRoot, "machine", "agent.lock"):                    []byte("86103\n"),
-		filepath.Join(runtimeRoot, "agent.lock"):                               []byte("65664\n"),
-	}
-	for lockPath, body := range inactiveLocks {
-		writeRuntimeLeaseTestFile(t, lockPath, body)
-	}
-
-	options := RuntimeProcessInventoryOptions{
-		RuntimeRoot:        runtimeRoot,
-		StateRoot:          runtimeRoot,
-		DesktopOwnerID:     "desktop-owner",
-		CurrentExecutables: []string{executable},
-		IncludeKnownLegacy: true,
-	}
-	stop := func(command *exec.Cmd) {
-		t.Helper()
-		inventory, err := InspectRuntimeProcesses(context.Background(), options)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(inventory.Instances) != 1 || inventory.Instances[0].PID != command.Process.Pid {
-			t.Fatalf("inventory = %#v", inventory)
-		}
-		result, err := StopRuntimeProcesses(context.Background(), options, inventory.InventoryDigest, 2*time.Second)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if len(result.After.Instances) != 0 {
-			t.Fatalf("after = %#v", result.After)
-		}
-		waitRuntimeProcessHelper(t, command)
-		for lockPath, want := range inactiveLocks {
-			got, err := os.ReadFile(lockPath)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if string(got) != string(want) {
-				t.Fatalf("inactive lock %s content = %q, want preserved %q", lockPath, string(got), string(want))
-			}
-		}
-	}
-
-	stop(current)
-	replacement := startRuntimeProcessHelper(t, executable, runtimeRoot, "desktop-owner", filepath.Join(root, "replacement.ready"))
-	if replacement.Process.Pid == currentPID {
-		t.Fatalf("replacement reused stopped pid %d", currentPID)
-	}
-	replacementBody, err := json.Marshal(runtimeLockMetadata{
-		PID:            replacement.Process.Pid,
-		InstanceID:     "replacement-runtime",
-		RuntimeVersion: "vtest",
-		DesktopOwnerID: "desktop-owner",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	writeRuntimeLeaseTestFile(t, targetLockPath, replacementBody)
-	stop(replacement)
-}
-
-func TestRuntimeProcessInventoryFindsDeletedLegacyExecutableOnLinux(t *testing.T) {
+func TestRuntimeProcessInventoryFindsDeletedCurrentExecutableOnLinux(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("deleted executable identity is exposed through Linux /proc")
 	}
 	root := t.TempDir()
 	runtimeRoot := filepath.Join(root, ".redeven")
-	stateRoot := filepath.Join(runtimeRoot, "local-environment", "state", "local-environment")
-	executable := filepath.Join(runtimeRoot, "runtime", "releases", "v0.4.0", "bin", "redeven")
+	stateRoot := runtimeRoot
+	executable := filepath.Join(runtimeRoot, "runtime", "managed", "bin", "redeven")
 	buildRuntimeProcessHelper(t, executable)
 	process := startRuntimeProcessHelper(t, executable, stateRoot, "", filepath.Join(root, "deleted.ready"))
 	if err := os.Remove(executable); err != nil {
@@ -294,9 +182,9 @@ func TestRuntimeProcessInventoryFindsDeletedLegacyExecutableOnLinux(t *testing.T
 
 	options := RuntimeProcessInventoryOptions{
 		RuntimeRoot:        runtimeRoot,
-		StateRoot:          filepath.Join(runtimeRoot, "scopes", "local", "default"),
+		StateRoot:          stateRoot,
 		DesktopOwnerID:     "desktop-owner",
-		IncludeKnownLegacy: true,
+		CurrentExecutables: []string{executable},
 	}
 	inventory, err := InspectRuntimeProcesses(context.Background(), options)
 	if err != nil {
@@ -305,11 +193,18 @@ func TestRuntimeProcessInventoryFindsDeletedLegacyExecutableOnLinux(t *testing.T
 	if len(inventory.Instances) != 1 || !inventory.Instances[0].ExecutableDeleted {
 		t.Fatalf("inventory = %#v", inventory)
 	}
-	if inventory.Instances[0].Classification != RuntimeProcessLegacyOwnerless {
-		t.Fatalf("classification = %q", inventory.Instances[0].Classification)
+	if inventory.Instances[0].LayoutStatus != RuntimeProcessLayoutCurrent ||
+		inventory.Instances[0].StopAuthority != RuntimeProcessStopConfirmedTakeover {
+		t.Fatalf("instance = %#v", inventory.Instances[0])
 	}
-	result, err := StopRuntimeProcesses(context.Background(), options, inventory.InventoryDigest, 2*time.Second)
-	if err != nil && !errors.Is(err, os.ErrProcessDone) {
+	result, err := StopRuntimeProcessesWithMode(
+		context.Background(),
+		options,
+		inventory.InventoryDigest,
+		2*time.Second,
+		RuntimeProcessReconciliationConfirmedTakeover,
+	)
+	if err != nil {
 		t.Fatal(err)
 	}
 	if len(result.After.Instances) != 0 {

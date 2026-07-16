@@ -16,11 +16,9 @@ import {
   containerRuntimeDaemonStartCommand,
   containerRuntimeDaemonStatusCommand,
   containerRuntimePlatformProbeCommand,
+  containerRuntimeProcessHelperCommand,
   containerRuntimeProbeCommand,
-  containerRuntimeProcessInventoryCommand,
-  containerRuntimeProcessStopCommand,
   containerRuntimeUnavailableMessage,
-  containerRuntimeUploadedProcessHelperCommand,
   containerRuntimeUploadedInstallCommand,
   type DesktopContainerRuntimePlatform,
   parseContainerInspectJSON,
@@ -30,10 +28,14 @@ import { parseLaunchReport } from './launchReport';
 import {
   parseDesktopRuntimeProcessInventory,
   parseDesktopRuntimeProcessStopResult,
+  requireDesktopRuntimeProcessReconciliation,
+  desktopRuntimeProcessInventoryHasSingleCurrentOwner,
+  desktopRuntimeProcessStopTargetCount,
   runtimeProcessCommandErrorFromOutput,
   type DesktopRuntimeProcessInventory,
   type DesktopRuntimeProcessStopResult,
 } from './runtimeProcessInventory';
+import type { DesktopRuntimeProcessReconciliation } from '../shared/desktopRuntimeProcessTakeover';
 import { type StartupReport } from './startup';
 import {
   createLocalRuntimeHostExecutor,
@@ -56,7 +58,6 @@ export type RuntimePlacementProgressPhase =
   | 'detecting_platform'
   | 'checking_runtime'
   | 'discovering_runtime_instances'
-  | 'stopping_legacy_runtimes'
   | 'stopping_runtime_process'
   | 'verifying_runtime_inventory'
   | 'preparing_runtime_package'
@@ -106,6 +107,7 @@ export type EnsureRuntimePlacementReadyArgs = Readonly<{
   asset_cache_root: string;
   force_runtime_update?: boolean;
   runtime_process_intent?: 'start' | 'restart' | 'update';
+  runtime_process_reconciliation?: DesktopRuntimeProcessReconciliation;
   runtime_binary_path?: string;
   previous_runtime_pid?: number;
   require_new_daemon?: boolean;
@@ -128,6 +130,7 @@ type ContainerRuntimeProcessCommandArgs = Readonly<{
   source_runtime_root?: string;
   asset_cache_root: string;
   platform?: DesktopContainerRuntimePlatform;
+  runtime_process_reconciliation?: DesktopRuntimeProcessReconciliation;
   signal?: AbortSignal;
 }>;
 
@@ -173,21 +176,6 @@ function parseContainerRuntimeProcessCommandOutput(
   };
 }
 
-function containerRuntimeProcessCommandNeedsHelper(output: ContainerRuntimeProcessCommandOutput): boolean {
-  if (output.exitCode === 127) {
-    return true;
-  }
-  if (output.exitCode !== 1 && output.exitCode !== 2) {
-    return false;
-  }
-  try {
-    const parsed = JSON.parse(compact(output.stdout) || '{}') as Readonly<{ error?: unknown }>;
-    return !parsed.error;
-  } catch {
-    return true;
-  }
-}
-
 async function runContainerRuntimeProcessCommand(
   args: ContainerRuntimeProcessCommandArgs,
   operation: 'inventory' | 'stop',
@@ -205,25 +193,6 @@ async function runContainerRuntimeProcessCommand(
   if (!commandInput.desktop_owner_id) {
     throw new Error('Desktop owner id is required for container runtime process reconciliation.');
   }
-  const installedResult = await args.executor.run(operation === 'inventory'
-    ? containerRuntimeProcessInventoryCommand(commandInput)
-    : containerRuntimeProcessStopCommand({
-        ...commandInput,
-        inventory_digest: inventoryDigest,
-        grace_period_seconds: gracePeriodSeconds,
-      }), { signal: args.signal });
-  const installedOutput = parseContainerRuntimeProcessCommandOutput(installedResult);
-  if (installedOutput.exitCode === 0) {
-    return installedOutput.stdout;
-  }
-  if (!containerRuntimeProcessCommandNeedsHelper(installedOutput)) {
-    throw runtimeProcessCommandErrorFromOutput(
-      installedOutput.stdout,
-      installedOutput.stderr,
-      `Desktop could not ${operation === 'inventory' ? 'inspect' : 'stop'} the container runtime processes.`,
-    );
-  }
-
   let platform = args.platform;
   if (!platform) {
     const platformResult = await args.executor.run(containerRuntimePlatformProbeCommand({
@@ -241,10 +210,11 @@ async function runContainerRuntimeProcessCommand(
     fetchPolicy: runtimeReleaseFetchPolicy(45_000, args.signal),
     signal: args.signal,
   });
-  const helperResult = await args.executor.run(containerRuntimeUploadedProcessHelperCommand({
+  const helperResult = await args.executor.run(containerRuntimeProcessHelperCommand({
     ...commandInput,
     operation,
     inventory_digest: inventoryDigest,
+    reconciliation_mode: args.runtime_process_reconciliation?.mode ?? 'automatic',
     grace_period_seconds: gracePeriodSeconds,
   }), {
     stdinData: asset.archiveData,
@@ -255,7 +225,7 @@ async function runContainerRuntimeProcessCommand(
     throw runtimeProcessCommandErrorFromOutput(
       helperOutput.stdout,
       helperOutput.stderr,
-      `Desktop runtime helper could not ${operation === 'inventory' ? 'inspect' : 'stop'} the container runtime processes.`,
+      `Desktop runtime process helper could not ${operation === 'inventory' ? 'inspect' : 'stop'} the container runtime processes.`,
     );
   }
   return helperOutput.stdout;
@@ -520,32 +490,28 @@ export async function ensureRuntimePlacementReady(
     source_runtime_root: args.source_runtime_root,
     asset_cache_root: args.asset_cache_root,
     platform,
+    runtime_process_reconciliation: args.runtime_process_reconciliation,
     signal: args.signal,
   };
   emitProgress(
     args.on_progress,
     'discovering_runtime_instances',
     'Discovering runtime processes',
-    'Desktop is identifying current and historical runtime processes inside the selected container.',
+    'Desktop is verifying Runtime process identities inside the selected container.',
   );
   const processInventory = await inspectContainerRuntimeProcesses(processCommandArgs);
-  if (processInventory.summary.blocking > 0) {
-    throw new Error(
-      `Desktop found ${processInventory.summary.blocking} container runtime process(es) whose identity or owner cannot be safely reconciled.`,
-    );
-  }
-  const legacyProcessCount = processInventory.summary.legacy_owned + processInventory.summary.legacy_ownerless;
+  requireDesktopRuntimeProcessReconciliation(processInventory, args.runtime_process_reconciliation);
   if (runtimeProcessIntent === 'start' && processInventory.instances.length > 0) {
     const maintenance = buildDesktopRuntimeMaintenanceRequirement({
       kind: 'runtime_restart_required',
       required_for: 'open',
       recovery_action: 'restart_runtime',
       can_desktop_start: false,
-      can_desktop_restart: processInventory.summary.stoppable > 0,
+      can_desktop_restart: processInventory.summary.automatic > 0,
       has_active_work: false,
       active_work_label: 'Runtime process reconciliation required',
       target_runtime_version: runtimeReleaseTag,
-      message: `Desktop found ${processInventory.instances.length} live container runtime process(es), including ${legacyProcessCount} historical process(es). Restart or update this runtime before opening it.`,
+      message: `Desktop found ${processInventory.instances.length} live container Runtime process(es). Restart or update this Runtime before opening it.`,
     });
     throw new RuntimePlacementMaintenanceRequiredError(maintenance.message, maintenance);
   }
@@ -558,9 +524,9 @@ export async function ensureRuntimePlacementReady(
     }
     emitProgress(
       args.on_progress,
-      legacyProcessCount > 0 ? 'stopping_legacy_runtimes' : 'stopping_runtime_process',
-      legacyProcessCount > 0 ? 'Stopping historical runtime processes' : 'Stopping runtime process',
-      `Desktop is stopping ${processInventory.summary.stoppable} verified runtime process(es) inside the selected container.`,
+      'stopping_runtime_process',
+      'Stopping Runtime processes',
+      `Desktop is stopping ${desktopRuntimeProcessStopTargetCount(processInventory, args.runtime_process_reconciliation)} verified Runtime process(es) inside the selected container.`,
     );
     await stopContainerRuntimeProcesses(processCommandArgs, processInventory);
     emitProgress(
@@ -575,7 +541,7 @@ export async function ensureRuntimePlacementReady(
     args.on_progress,
     'checking_runtime',
     'Checking container runtime',
-    `Desktop is checking for a compatible Redeven ${runtimeReleaseTag} runtime inside the container.`,
+    `Desktop is checking for the current Redeven ${runtimeReleaseTag} Runtime inside the container.`,
   );
   let probe = await probeContainerRuntime(executor, placement, runtimeReleaseTag, args.signal);
   const sourceRuntimeRoot = compact(args.source_runtime_root);
@@ -698,8 +664,9 @@ export async function ensureRuntimePlacementReady(
     ? runtimeReleaseTag
     : normalizeRuntimeReleaseTag(probe.reported_release_tag ?? startup.runtime_service?.runtime_version ?? runtimeReleaseTag);
   if (
-    finalInventory.summary.blocking > 0
-    || finalInventory.summary.current_owned !== 1
+    finalInventory.summary.blocked > 0
+    || finalInventory.summary.confirmed_takeover > 0
+    || !desktopRuntimeProcessInventoryHasSingleCurrentOwner(finalInventory)
     || finalInventory.instances.length !== 1
     || !finalInstance
     || (Number.isInteger(startup.pid) && Number(startup.pid) > 0 && finalInstance.pid !== startup.pid)

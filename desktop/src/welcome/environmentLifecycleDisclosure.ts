@@ -237,6 +237,7 @@ function progressIsTerminal(progress: DesktopLauncherActionProgress): boolean {
   return progress.status === 'succeeded'
     || progress.status === 'failed'
     || progress.status === 'canceled'
+    || progress.status === 'needs_confirmation'
     || progress.status === 'cleanup_failed';
 }
 

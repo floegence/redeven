@@ -20,18 +20,46 @@ import (
 	processlib "github.com/shirou/gopsutil/v4/process"
 )
 
-const RuntimeProcessInventorySchemaVersion = 1
+const RuntimeProcessInventorySchemaVersion = 2
 
 const desktopOwnerIDEnvName = "REDEVEN_DESKTOP_OWNER_ID"
 
-type RuntimeProcessClassification string
+type RuntimeProcessIdentityStatus string
 
 const (
-	RuntimeProcessCurrentOwned    RuntimeProcessClassification = "current_owned"
-	RuntimeProcessLegacyOwned     RuntimeProcessClassification = "legacy_owned"
-	RuntimeProcessLegacyOwnerless RuntimeProcessClassification = "legacy_ownerless"
-	RuntimeProcessForeignOwner    RuntimeProcessClassification = "foreign_owner"
-	RuntimeProcessAmbiguous       RuntimeProcessClassification = "ambiguous"
+	RuntimeProcessIdentityVerified   RuntimeProcessIdentityStatus = "verified"
+	RuntimeProcessIdentityIncomplete RuntimeProcessIdentityStatus = "incomplete"
+)
+
+type RuntimeProcessOwnerStatus string
+
+const (
+	RuntimeProcessOwnerCurrent RuntimeProcessOwnerStatus = "current"
+	RuntimeProcessOwnerMissing RuntimeProcessOwnerStatus = "missing"
+	RuntimeProcessOwnerForeign RuntimeProcessOwnerStatus = "foreign"
+)
+
+type RuntimeProcessLayoutStatus string
+
+const (
+	RuntimeProcessLayoutCurrent RuntimeProcessLayoutStatus = "current"
+	RuntimeProcessLayoutUnknown RuntimeProcessLayoutStatus = "unknown"
+)
+
+type RuntimeProcessOwnerEvidence string
+
+const (
+	RuntimeProcessOwnerEvidenceEnvironment RuntimeProcessOwnerEvidence = "process_environment"
+	RuntimeProcessOwnerEvidenceLock        RuntimeProcessOwnerEvidence = "runtime_lock"
+	RuntimeProcessOwnerEvidenceMissing     RuntimeProcessOwnerEvidence = "missing"
+)
+
+type RuntimeProcessStopAuthority string
+
+const (
+	RuntimeProcessStopAutomatic         RuntimeProcessStopAuthority = "automatic"
+	RuntimeProcessStopConfirmedTakeover RuntimeProcessStopAuthority = "confirmed_takeover"
+	RuntimeProcessStopBlocked           RuntimeProcessStopAuthority = "blocked"
 )
 
 type RuntimeProcessInventoryOptions struct {
@@ -39,8 +67,6 @@ type RuntimeProcessInventoryOptions struct {
 	StateRoot          string
 	DesktopOwnerID     string
 	CurrentExecutables []string
-	IncludeKnownLegacy bool
-	LegacyRuntimeRoots []string
 }
 
 type RuntimeProcessScope struct {
@@ -63,19 +89,18 @@ type RuntimeProcessInstance struct {
 	ExecutableDevice       uint64                       `json:"executable_device,omitempty"`
 	ExecutableInode        uint64                       `json:"executable_inode,omitempty"`
 	RuntimeVersion         string                       `json:"runtime_version,omitempty"`
-	Classification         RuntimeProcessClassification `json:"classification"`
-	Stoppable              bool                         `json:"stoppable"`
 	ReasonCode             string                       `json:"reason_code,omitempty"`
+	IdentityStatus         RuntimeProcessIdentityStatus `json:"identity_status"`
+	OwnerStatus            RuntimeProcessOwnerStatus    `json:"owner_status"`
+	LayoutStatus           RuntimeProcessLayoutStatus   `json:"layout_status"`
+	OwnerEvidence          RuntimeProcessOwnerEvidence  `json:"owner_evidence"`
+	StopAuthority          RuntimeProcessStopAuthority  `json:"stop_authority"`
 }
 
 type RuntimeProcessInventorySummary struct {
-	CurrentOwned    int `json:"current_owned"`
-	LegacyOwned     int `json:"legacy_owned"`
-	LegacyOwnerless int `json:"legacy_ownerless"`
-	ForeignOwner    int `json:"foreign_owner"`
-	Ambiguous       int `json:"ambiguous"`
-	Stoppable       int `json:"stoppable"`
-	Blocking        int `json:"blocking"`
+	Automatic         int `json:"automatic"`
+	ConfirmedTakeover int `json:"confirmed_takeover"`
+	Blocked           int `json:"blocked"`
 }
 
 type RuntimeProcessInventory struct {
@@ -97,6 +122,7 @@ type runtimeProcessSnapshot struct {
 	ExecutableInode        uint64
 	Args                   []string
 	DesktopOwnerID         string
+	OwnerEvidence          RuntimeProcessOwnerEvidence
 	InstanceID             string
 	RuntimeVersion         string
 }
@@ -128,26 +154,11 @@ func normalizeRuntimeInventoryOptions(options RuntimeProcessInventoryOptions) (R
 	if stateRoot == "" {
 		return RuntimeProcessInventoryOptions{}, errors.New("state root is required")
 	}
-	legacyRoots := make([]string, 0, len(options.LegacyRuntimeRoots)+4)
-	for _, root := range options.LegacyRuntimeRoots {
-		clean, cleanErr := absoluteCleanPath(root)
-		if cleanErr != nil {
-			return RuntimeProcessInventoryOptions{}, fmt.Errorf("resolve legacy runtime root %q: %w", root, cleanErr)
-		}
-		if clean != "" {
-			legacyRoots = append(legacyRoots, clean)
-		}
-	}
-	if options.IncludeKnownLegacy {
-		legacyRoots = append(legacyRoots, knownLegacyRuntimeRoots()...)
-	}
 	return RuntimeProcessInventoryOptions{
 		RuntimeRoot:        runtimeRoot,
 		StateRoot:          stateRoot,
 		DesktopOwnerID:     strings.TrimSpace(options.DesktopOwnerID),
 		CurrentExecutables: uniqueCleanPaths(options.CurrentExecutables),
-		IncludeKnownLegacy: options.IncludeKnownLegacy,
-		LegacyRuntimeRoots: uniqueCleanPaths(legacyRoots),
 	}, nil
 }
 
@@ -179,31 +190,6 @@ func uniqueCleanPaths(values []string) []string {
 	}
 	sort.Strings(result)
 	return result
-}
-
-func knownLegacyRuntimeRoots() []string {
-	roots := make([]string, 0, 6)
-	if cacheRoot := strings.TrimSpace(os.Getenv("XDG_CACHE_HOME")); cacheRoot != "" {
-		roots = append(roots, filepath.Join(cacheRoot, "redeven-desktop", "runtime"))
-	}
-	if cacheRoot, err := os.UserCacheDir(); err == nil && strings.TrimSpace(cacheRoot) != "" {
-		roots = append(roots, filepath.Join(cacheRoot, "redeven-desktop", "runtime"))
-	}
-	if home, err := os.UserHomeDir(); err == nil && strings.TrimSpace(home) != "" {
-		roots = append(roots, filepath.Join(home, ".cache", "redeven-desktop", "runtime"))
-	}
-	tempRoot := strings.TrimSpace(os.Getenv("TMPDIR"))
-	if tempRoot == "" {
-		tempRoot = os.TempDir()
-	}
-	labels := []string{strconv.Itoa(os.Geteuid())}
-	if current, err := user.Current(); err == nil && strings.TrimSpace(current.Username) != "" {
-		labels = append(labels, filepath.Base(current.Username))
-	}
-	for _, label := range labels {
-		roots = append(roots, filepath.Join(tempRoot, "redeven-desktop-runtime-"+label))
-	}
-	return uniqueCleanPaths(roots)
 }
 
 func currentRuntimeProcessExecutionScope() runtimeProcessExecutionScope {
@@ -306,10 +292,14 @@ func loadSystemRuntimeProcessSnapshot(ctx context.Context, candidate *processlib
 		}
 	}
 	ownerID := ""
+	ownerEvidence := RuntimeProcessOwnerEvidenceMissing
 	if environ, environErr := candidate.EnvironWithContext(ctx); environErr == nil {
 		for _, entry := range environ {
 			if strings.HasPrefix(entry, desktopOwnerIDEnvName+"=") {
 				ownerID = strings.TrimSpace(strings.TrimPrefix(entry, desktopOwnerIDEnvName+"="))
+				if ownerID != "" {
+					ownerEvidence = RuntimeProcessOwnerEvidenceEnvironment
+				}
 				break
 			}
 		}
@@ -326,6 +316,7 @@ func loadSystemRuntimeProcessSnapshot(ctx context.Context, candidate *processlib
 		ExecutableInode:        inode,
 		Args:                   append([]string(nil), args...),
 		DesktopOwnerID:         ownerID,
+		OwnerEvidence:          ownerEvidence,
 	}, nil
 }
 
@@ -356,16 +347,6 @@ func runtimeProcessStateRoot(args []string) string {
 	return ""
 }
 
-func pathWithin(root string, candidate string) bool {
-	root = comparableRuntimePath(root)
-	candidate = comparableRuntimePath(candidate)
-	if root == "." || candidate == "." || root == "" || candidate == "" {
-		return false
-	}
-	relative, err := filepath.Rel(root, candidate)
-	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
-}
-
 func comparableRuntimePath(raw string) string {
 	clean := filepath.Clean(strings.TrimSpace(raw))
 	if clean == "." || clean == "" {
@@ -390,65 +371,6 @@ func currentManagedExecutable(options RuntimeProcessInventoryOptions, executable
 	return false
 }
 
-func legacyExecutable(options RuntimeProcessInventoryOptions, executablePath string) bool {
-	clean := comparableRuntimePath(executablePath)
-	if filepath.Base(clean) != "redeven" {
-		return false
-	}
-	roots := append([]string{options.RuntimeRoot}, options.LegacyRuntimeRoots...)
-	for _, root := range roots {
-		root = comparableRuntimePath(root)
-		if !pathWithin(root, clean) {
-			continue
-		}
-		relative, err := filepath.Rel(root, clean)
-		if err != nil {
-			continue
-		}
-		relative = filepath.ToSlash(relative)
-		if strings.HasPrefix(relative, "runtime/releases/") ||
-			strings.HasPrefix(relative, "releases/") ||
-			strings.HasPrefix(relative, "runtime/managed/") {
-			return true
-		}
-	}
-	return false
-}
-
-func legacyStateRoot(options RuntimeProcessInventoryOptions, stateRoot string) bool {
-	if comparableRuntimePath(stateRoot) == comparableRuntimePath(options.StateRoot) {
-		return true
-	}
-	for _, root := range append([]string{options.RuntimeRoot}, options.LegacyRuntimeRoots...) {
-		root = comparableRuntimePath(root)
-		stateRoot = comparableRuntimePath(stateRoot)
-		if !pathWithin(root, stateRoot) {
-			continue
-		}
-		relative, err := filepath.Rel(root, stateRoot)
-		if err != nil {
-			continue
-		}
-		parts := strings.Split(filepath.ToSlash(relative), "/")
-		if len(parts) == 1 && parts[0] == "." {
-			return true
-		}
-		if len(parts) == 2 && ((parts[0] == "local-environment" || parts[0] == "machine") && parts[1] == "state") {
-			return true
-		}
-		if len(parts) == 3 && parts[0] == "local-environment" && parts[1] == "state" && parts[2] == "local-environment" {
-			return true
-		}
-		if len(parts) == 3 && parts[0] == "instances" && strings.HasPrefix(parts[1], "envinst_") && parts[2] == "state" {
-			return true
-		}
-		if len(parts) == 3 && parts[0] == "scopes" && parts[1] == "local" && parts[2] == "default" {
-			return true
-		}
-	}
-	return false
-}
-
 func enrichRuntimeProcessSnapshot(snapshot runtimeProcessSnapshot, stateRoot string) runtimeProcessSnapshot {
 	if snapshot.DesktopOwnerID != "" && snapshot.InstanceID != "" && snapshot.RuntimeVersion != "" {
 		return snapshot
@@ -464,6 +386,9 @@ func enrichRuntimeProcessSnapshot(snapshot runtimeProcessSnapshot, stateRoot str
 		}
 		if snapshot.DesktopOwnerID == "" {
 			snapshot.DesktopOwnerID = strings.TrimSpace(metadata.DesktopOwnerID)
+			if snapshot.DesktopOwnerID != "" {
+				snapshot.OwnerEvidence = RuntimeProcessOwnerEvidenceLock
+			}
 		}
 		snapshot.InstanceID = strings.TrimSpace(metadata.InstanceID)
 		snapshot.RuntimeVersion = strings.TrimSpace(metadata.RuntimeVersion)
@@ -475,9 +400,6 @@ func enrichRuntimeProcessSnapshot(snapshot runtimeProcessSnapshot, stateRoot str
 func runtimeLockPaths(stateRoot string) []string {
 	return []string{
 		filepath.Join(stateRoot, "local-environment", "agent.lock"),
-		filepath.Join(stateRoot, "scopes", "local", "default", "agent.lock"),
-		filepath.Join(stateRoot, "machine", "agent.lock"),
-		filepath.Join(stateRoot, "agent.lock"),
 	}
 }
 
@@ -487,27 +409,16 @@ func classifyRuntimeProcess(
 	snapshot runtimeProcessSnapshot,
 ) (RuntimeProcessInstance, bool) {
 	stateRoot := runtimeProcessStateRoot(snapshot.Args)
-	if stateRoot == "" {
+	if stateRoot == "" || comparableRuntimePath(stateRoot) != comparableRuntimePath(options.StateRoot) {
 		return RuntimeProcessInstance{}, false
 	}
-	currentStateRoot := comparableRuntimePath(stateRoot) == comparableRuntimePath(options.StateRoot)
-	currentExecutable := currentManagedExecutable(options, snapshot.ExecutablePath) && !snapshot.ExecutableDeleted
-	legacyExecutableMatch := legacyExecutable(options, snapshot.ExecutablePath)
-	legacyStateRootMatch := legacyStateRoot(options, stateRoot)
-	if !currentStateRoot && !legacyStateRootMatch {
-		return RuntimeProcessInstance{}, false
-	}
-	if !currentStateRoot && !legacyExecutableMatch {
-		return RuntimeProcessInstance{}, false
-	}
-	if currentStateRoot && filepath.Base(snapshot.ExecutablePath) != "redeven" {
+	if filepath.Base(snapshot.ExecutablePath) != "redeven" {
 		return RuntimeProcessInstance{}, false
 	}
 	if scope.NamespaceID != "" && snapshot.NamespaceID != "" && scope.NamespaceID != snapshot.NamespaceID {
 		return RuntimeProcessInstance{}, false
 	}
 	snapshot = enrichRuntimeProcessSnapshot(snapshot, stateRoot)
-	var classification RuntimeProcessClassification
 	reasonCode := "runtime_identity_incomplete"
 	identityComplete := snapshot.PID > 0 &&
 		snapshot.ProcessStartedAtUnixMS > 0 &&
@@ -527,29 +438,48 @@ func classifyRuntimeProcess(
 	}
 	ownerMatches := options.DesktopOwnerID != "" && snapshot.DesktopOwnerID == options.DesktopOwnerID
 	ownerForeign := options.DesktopOwnerID != "" && snapshot.DesktopOwnerID != "" && snapshot.DesktopOwnerID != options.DesktopOwnerID
-	legacy := !currentStateRoot || !currentExecutable || snapshot.ExecutableDeleted
+	layoutStatus := RuntimeProcessLayoutUnknown
+	if currentManagedExecutable(options, snapshot.ExecutablePath) {
+		layoutStatus = RuntimeProcessLayoutCurrent
+	}
+	if layoutStatus == RuntimeProcessLayoutUnknown {
+		identityComplete = false
+		reasonCode = "runtime_layout_untrusted"
+	}
+	identityStatus := RuntimeProcessIdentityIncomplete
+	if identityComplete {
+		identityStatus = RuntimeProcessIdentityVerified
+	}
+	ownerStatus := RuntimeProcessOwnerMissing
 	switch {
+	case ownerMatches:
+		ownerStatus = RuntimeProcessOwnerCurrent
 	case ownerForeign:
-		classification = RuntimeProcessForeignOwner
-		reasonCode = "runtime_owned_by_another_desktop"
+		ownerStatus = RuntimeProcessOwnerForeign
+	}
+	stopAuthority := RuntimeProcessStopBlocked
+	if identityComplete {
+		switch {
+		case ownerStatus == RuntimeProcessOwnerCurrent:
+			stopAuthority = RuntimeProcessStopAutomatic
+		default:
+			stopAuthority = RuntimeProcessStopConfirmedTakeover
+		}
+	}
+	switch {
 	case !identityComplete:
-		classification = RuntimeProcessAmbiguous
-	case ownerMatches && !legacy:
-		classification = RuntimeProcessCurrentOwned
-		reasonCode = ""
-	case ownerMatches && legacy:
-		classification = RuntimeProcessLegacyOwned
-		reasonCode = ""
-	case snapshot.DesktopOwnerID == "" && legacy && legacyExecutableMatch && legacyStateRootMatch:
-		classification = RuntimeProcessLegacyOwnerless
+	case ownerForeign:
+		reasonCode = "runtime_owned_by_another_desktop"
+	case ownerMatches:
 		reasonCode = ""
 	default:
-		classification = RuntimeProcessAmbiguous
+		reasonCode = "runtime_owner_identity_unavailable"
 	}
-	stoppable := classification == RuntimeProcessCurrentOwned ||
-		classification == RuntimeProcessLegacyOwned ||
-		classification == RuntimeProcessLegacyOwnerless
-	return RuntimeProcessInstance{
+	ownerEvidence := snapshot.OwnerEvidence
+	if ownerEvidence == "" {
+		ownerEvidence = RuntimeProcessOwnerEvidenceMissing
+	}
+	instance := RuntimeProcessInstance{
 		PID:                    snapshot.PID,
 		ProcessStartedAtUnixMS: snapshot.ProcessStartedAtUnixMS,
 		InstanceID:             snapshot.InstanceID,
@@ -561,10 +491,14 @@ func classifyRuntimeProcess(
 		ExecutableDevice:       snapshot.ExecutableDevice,
 		ExecutableInode:        snapshot.ExecutableInode,
 		RuntimeVersion:         snapshot.RuntimeVersion,
-		Classification:         classification,
-		Stoppable:              stoppable,
 		ReasonCode:             reasonCode,
-	}, true
+		IdentityStatus:         identityStatus,
+		OwnerStatus:            ownerStatus,
+		LayoutStatus:           layoutStatus,
+		OwnerEvidence:          ownerEvidence,
+		StopAuthority:          stopAuthority,
+	}
+	return instance, true
 }
 
 func buildRuntimeProcessInventory(
@@ -594,22 +528,13 @@ func buildRuntimeProcessInventory(
 	})
 	summary := RuntimeProcessInventorySummary{}
 	for _, instance := range instances {
-		switch instance.Classification {
-		case RuntimeProcessCurrentOwned:
-			summary.CurrentOwned++
-		case RuntimeProcessLegacyOwned:
-			summary.LegacyOwned++
-		case RuntimeProcessLegacyOwnerless:
-			summary.LegacyOwnerless++
-		case RuntimeProcessForeignOwner:
-			summary.ForeignOwner++
-		case RuntimeProcessAmbiguous:
-			summary.Ambiguous++
-		}
-		if instance.Stoppable {
-			summary.Stoppable++
-		} else {
-			summary.Blocking++
+		switch instance.StopAuthority {
+		case RuntimeProcessStopAutomatic:
+			summary.Automatic++
+		case RuntimeProcessStopConfirmedTakeover:
+			summary.ConfirmedTakeover++
+		case RuntimeProcessStopBlocked:
+			summary.Blocked++
 		}
 	}
 	inventory := RuntimeProcessInventory{
@@ -668,14 +593,13 @@ func InspectRuntimeProcesses(ctx context.Context, options RuntimeProcessInventor
 	return buildRuntimeProcessInventory(normalized, currentRuntimeProcessExecutionScope(), snapshots), nil
 }
 
-func RuntimeProcessInventoryHasBlockingInstances(inventory RuntimeProcessInventory) bool {
-	return inventory.Summary.Blocking > 0
-}
-
 func runtimeProcessInstancesEqual(left RuntimeProcessInstance, right RuntimeProcessInstance) bool {
 	return runtimeProcessIdentityKey(left) == runtimeProcessIdentityKey(right) &&
-		left.Classification == right.Classification &&
-		left.Stoppable == right.Stoppable
+		left.IdentityStatus == right.IdentityStatus &&
+		left.OwnerStatus == right.OwnerStatus &&
+		left.LayoutStatus == right.LayoutStatus &&
+		left.OwnerEvidence == right.OwnerEvidence &&
+		left.StopAuthority == right.StopAuthority
 }
 
 func runtimeProcessWait(ctx context.Context, duration time.Duration) error {

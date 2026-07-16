@@ -95,6 +95,7 @@ import {
   selectLatestDesktopWelcomeSnapshot,
 } from '../shared/desktopLauncherIPC';
 import type { DesktopControlPlaneSummary } from '../shared/controlPlaneProvider';
+import type { DesktopRuntimeProcessTakeoverProposal } from '../shared/desktopRuntimeProcessTakeover';
 import {
   desktopProviderEnvironmentRuntimeLabel,
   desktopProviderOnlineEnvironmentCount,
@@ -340,6 +341,7 @@ import {
 } from './gatewayActionPresentation';
 import { runGatewaySourceAction } from './gatewaySourceActionRunner';
 import { createRuntimeLifecycleStepAnimation } from './runtimeLifecycleStepAnimation';
+import { parseRuntimeMaintenanceMessage } from './runtimeMaintenanceMessage';
 import {
   createLocalEnvironmentFlowerSurfaceAdapter,
   launchLocalEnvironmentFlowerTurn,
@@ -503,6 +505,11 @@ type ControlPlaneDialogState = Readonly<{
   preset_provider_origin: string;
   custom_provider_origin: string;
 }> | null;
+
+type RuntimeProcessTakeoverDialogState = Readonly<{
+  proposal: DesktopRuntimeProcessTakeoverProposal;
+  continuation_action: DesktopLauncherActionRequest;
+}>;
 
 type EnvironmentGuidanceActionResolution = Readonly<{
   close_panel: boolean;
@@ -705,6 +712,7 @@ function activeLauncherProgressIsRetainable(progress: DesktopLauncherActionProgr
     || progress.status === 'cleanup_running'
     || progress.status === 'failed'
     || progress.status === 'cleanup_failed'
+    || progress.status === 'needs_confirmation'
     || progress.status === 'succeeded'
     || progress.status === 'canceled';
 }
@@ -1331,50 +1339,39 @@ function localizedRuntimeMaintenanceSubject(i18n: DesktopI18n, subject: string):
     'local container runtime': 'runtimeMessage.localContainerRuntime',
     'SSH runtime': 'runtimeMessage.sshRuntime',
     'local runtime': 'runtimeMessage.localRuntime',
-    'SSH container Runtime': 'runtimeMessage.sshContainerRuntime',
-    'local container Runtime': 'runtimeMessage.localContainerRuntime',
-    'SSH Runtime': 'runtimeMessage.sshRuntime',
-    'local Runtime': 'runtimeMessage.localRuntime',
-    Runtime: 'runtimeMessage.runtime',
     runtime: 'runtimeMessage.runtime',
   });
 }
 
 function localizedRuntimeMaintenanceMessage(i18n: DesktopI18n, message: string): string {
-  const runtimeWord = '[Rr]untime';
-  const environmentWord = '[Ee]nvironment';
-  const modelSource = message.match(new RegExp(`^This (.+) needs an update before Desktop can make your local model settings available here\\\\. Update and restart the ${runtimeWord} first; Open stays separate and becomes available after the ${runtimeWord} is ready\\\\.$`, 'u'));
-  if (modelSource) {
-    return i18n.t('runtimeMessage.modelSourceNeedsUpdateDetail', {
-      subject: localizedRuntimeMaintenanceSubject(i18n, modelSource[1] ?? ''),
-    });
+  const parsed = parseRuntimeMaintenanceMessage(message);
+  if (!parsed) {
+    return '';
   }
-  const notRunning = message.match(new RegExp(`^This (.+) is not running\\\\. Start the ${runtimeWord} again; Open becomes available after the ${runtimeWord} reports ready\\\\.$`, 'u'));
-  if (notRunning) {
-    return i18n.t('runtimeMessage.runtimeNotRunningDetail', {
-      subject: localizedRuntimeMaintenanceSubject(i18n, notRunning[1] ?? ''),
-    });
+  switch (parsed.kind) {
+    case 'model_source_update':
+      return i18n.t('runtimeMessage.modelSourceNeedsUpdateDetail', {
+        subject: localizedRuntimeMaintenanceSubject(i18n, parsed.subject),
+      });
+    case 'not_running':
+      return i18n.t('runtimeMessage.runtimeNotRunningDetail', {
+        subject: localizedRuntimeMaintenanceSubject(i18n, parsed.subject),
+      });
+    case 'restart_required':
+      return i18n.t('runtimeMessage.runtimeRestartRequiredDetail', {
+        subject: localizedRuntimeMaintenanceSubject(i18n, parsed.subject),
+      });
+    case 'update_required': {
+      const action = localizedStringByValue(i18n, parsed.action, {
+        'Update and restart the runtime first': 'runtimeMessage.updateAndRestartRuntimeFirst',
+        'Update the runtime first': 'runtimeMessage.updateRuntimeFirst',
+      });
+      return i18n.t('runtimeMessage.runtimeUpdateRequiredDetail', {
+        subject: localizedRuntimeMaintenanceSubject(i18n, parsed.subject),
+        action,
+      });
+    }
   }
-  const restartRequired = message.match(new RegExp(`^This (.+) needs a successful restart before it can open this ${environmentWord}\\\\. Restart the ${runtimeWord}, then open it again after it reports ready\\\\.$`, 'u'));
-  if (restartRequired) {
-    return i18n.t('runtimeMessage.runtimeRestartRequiredDetail', {
-      subject: localizedRuntimeMaintenanceSubject(i18n, restartRequired[1] ?? ''),
-    });
-  }
-  const updateRequired = message.match(new RegExp(`^This (.+) needs an update before it can open this ${environmentWord}\\\\. (Update and restart the ${runtimeWord} first|Update the ${runtimeWord} first); Open stays separate and becomes available after the ${runtimeWord} is ready\\\\.$`, 'u'));
-  if (updateRequired) {
-    const action = localizedStringByValue(i18n, updateRequired[2] ?? '', {
-      'Update and restart the runtime first': 'runtimeMessage.updateAndRestartRuntimeFirst',
-      'Update the runtime first': 'runtimeMessage.updateRuntimeFirst',
-      'Update and restart the Runtime first': 'runtimeMessage.updateAndRestartRuntimeFirst',
-      'Update the Runtime first': 'runtimeMessage.updateRuntimeFirst',
-    });
-    return i18n.t('runtimeMessage.runtimeUpdateRequiredDetail', {
-      subject: localizedRuntimeMaintenanceSubject(i18n, updateRequired[1] ?? ''),
-      action,
-    });
-  }
-  return '';
 }
 
 function localizedToastMessage(i18n: DesktopI18n, message: string): string {
@@ -2837,6 +2834,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [runtimeContainerOptionsError, setRuntimeContainerOptionsError] = createSignal('');
   const [runtimeContainerOptionsKey, setRuntimeContainerOptionsKey] = createSignal('');
   const [controlPlaneDialogState, setControlPlaneDialogState] = createSignal<ControlPlaneDialogState>(null);
+  const [runtimeProcessTakeoverDialog, setRuntimeProcessTakeoverDialog] = createSignal<RuntimeProcessTakeoverDialogState | null>(null);
+  const [runtimeProcessTakeoverSubmitting, setRuntimeProcessTakeoverSubmitting] = createSignal(false);
   const [deleteTarget, setDeleteTarget] = createSignal<DesktopEnvironmentEntry | null>(null);
   const [deleteGatewayTarget, setDeleteGatewayTarget] = createSignal<DesktopGatewaySource | null>(null);
   const [providerRuntimeLinkConfirmation, setProviderRuntimeLinkConfirmation] = createSignal<ProviderRuntimeLinkConfirmationState | null>(null);
@@ -3573,6 +3572,17 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     requestEnvID?: string,
     request?: DesktopLauncherActionRequest,
   ): Promise<void> {
+    if (
+      failure.code === 'confirmation_required'
+      && failure.runtime_process_takeover
+      && failure.continuation_action
+    ) {
+      setRuntimeProcessTakeoverDialog({
+        proposal: failure.runtime_process_takeover,
+        continuation_action: failure.continuation_action,
+      });
+      return;
+    }
     const presentation = launcherActionFailurePresentation(i18n(), failure);
     if (presentation.refresh_snapshot) {
       try {
@@ -4297,6 +4307,43 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       return null;
     } finally {
       setBusyState(IDLE_LAUNCHER_BUSY_STATE);
+    }
+  }
+
+  function cancelRuntimeProcessTakeover(): void {
+    const proposal = runtimeProcessTakeoverDialog()?.proposal;
+    if (proposal) {
+      console.info('[desktop-runtime-lifecycle]', JSON.stringify({
+        event: 'takeover_canceled',
+        operation: proposal.operation,
+        location: proposal.location,
+        target_id: proposal.target_id,
+        process_count: proposal.process_count,
+      }));
+    }
+    setRuntimeProcessTakeoverDialog(null);
+  }
+
+  async function confirmRuntimeProcessTakeover(): Promise<void> {
+    const state = runtimeProcessTakeoverDialog();
+    if (!state || runtimeProcessTakeoverSubmitting()) {
+      return;
+    }
+    setRuntimeProcessTakeoverSubmitting(true);
+    try {
+      const result = await performLauncherAction(state.continuation_action);
+      if (result) {
+        console.info('[desktop-runtime-lifecycle]', JSON.stringify({
+          event: 'takeover_confirmed',
+          operation: state.proposal.operation,
+          location: state.proposal.location,
+          target_id: state.proposal.target_id,
+          process_count: state.proposal.process_count,
+        }));
+        setRuntimeProcessTakeoverDialog(null);
+      }
+    } finally {
+      setRuntimeProcessTakeoverSubmitting(false);
     }
   }
 
@@ -6408,6 +6455,98 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         onConnect={connectControlPlaneFromDialog}
       />
 
+      <Dialog
+        open={runtimeProcessTakeoverDialog() !== null}
+        onOpenChange={(open) => {
+          if (!open && !runtimeProcessTakeoverSubmitting()) {
+            cancelRuntimeProcessTakeover();
+          }
+        }}
+        title={runtimeProcessTakeoverDialog()?.proposal.operation === 'stop'
+          ? i18n().t('runtimeTakeover.forceStopTitle')
+          : i18n().t('runtimeTakeover.forceRestartTitle')}
+        class="max-w-2xl"
+        footer={(
+          <div class="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              data-floe-autofocus
+              disabled={runtimeProcessTakeoverSubmitting()}
+              onClick={cancelRuntimeProcessTakeover}
+            >
+              {i18n().t('common.cancel')}
+            </Button>
+            <Button
+              variant="destructive"
+              loading={runtimeProcessTakeoverSubmitting()}
+              onClick={() => void confirmRuntimeProcessTakeover()}
+            >
+              {runtimeProcessTakeoverDialog()?.proposal.operation === 'stop'
+                ? i18n().t('runtimeTakeover.forceStopAction')
+                : i18n().t('runtimeTakeover.forceRestartAction')}
+            </Button>
+          </div>
+        )}
+      >
+        <Show when={runtimeProcessTakeoverDialog()?.proposal} keyed>
+          {(proposal) => (
+            <div class="space-y-4">
+              <div class="flex items-start gap-3 rounded-md border border-destructive/25 bg-destructive/10 px-4 py-3">
+                <AlertTriangle class="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
+                <div class="space-y-1">
+                  <p class="text-sm font-semibold text-foreground">
+                    {i18n().t('runtimeTakeover.warningTitle', { count: proposal.process_count })}
+                  </p>
+                  <p class="text-xs leading-5 text-muted-foreground">
+                    {i18n().t('runtimeTakeover.warningDescription')}
+                  </p>
+                </div>
+              </div>
+
+              <dl class="grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)] gap-x-4 gap-y-2 text-xs">
+                <dt class="text-muted-foreground">{i18n().t('runtimeTakeover.targetLabel')}</dt>
+                <dd class="min-w-0 break-words font-medium text-foreground">{proposal.target_label}</dd>
+                <dt class="text-muted-foreground">{i18n().t('runtimeTakeover.locationLabel')}</dt>
+                <dd class="font-medium text-foreground">{i18n().t(`runtimeTakeover.location.${proposal.location}` as DesktopTranslationKey)}</dd>
+              </dl>
+
+              <div class="max-h-72 space-y-2 overflow-y-auto pr-1">
+                <For each={proposal.instances}>
+                  {(instance) => (
+                    <section class="rounded-md border border-border bg-muted/15 px-4 py-3" aria-label={i18n().t('runtimeTakeover.processAriaLabel', { pid: instance.pid })}>
+                      <div class="flex flex-wrap items-center justify-between gap-2">
+                        <div class="font-mono text-sm font-semibold text-foreground">PID {instance.pid}</div>
+                        <Show when={instance.owner_status !== 'current'}>
+                          <Tag variant="warning" tone="soft" size="sm">
+                            {i18n().t(`runtimeTakeover.ownerStatus.${instance.owner_status}` as DesktopTranslationKey)}
+                          </Tag>
+                        </Show>
+                      </div>
+                      <dl class="mt-3 grid grid-cols-[minmax(0,8rem)_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-xs">
+                        <dt class="text-muted-foreground">{i18n().t('runtimeTakeover.startedLabel')}</dt>
+                        <dd class="text-foreground">{new Intl.DateTimeFormat(i18n().locale, { dateStyle: 'medium', timeStyle: 'medium' }).format(new Date(instance.process_started_at_unix_ms))}</dd>
+                        <dt class="text-muted-foreground">{i18n().t('runtimeTakeover.ownerEvidenceLabel')}</dt>
+                        <dd class="text-foreground">{i18n().t(`runtimeTakeover.ownerEvidence.${instance.owner_evidence}` as DesktopTranslationKey)}</dd>
+                        <dt class="text-muted-foreground">{i18n().t('runtimeTakeover.stateRootLabel')}</dt>
+                        <dd class="break-all font-mono text-[11px] text-foreground">{instance.state_root}</dd>
+                        <Show when={instance.runtime_version}>
+                          <dt class="text-muted-foreground">{i18n().t('runtimeTakeover.versionLabel')}</dt>
+                          <dd class="font-mono text-[11px] text-foreground">{instance.runtime_version}</dd>
+                        </Show>
+                      </dl>
+                    </section>
+                  )}
+                </For>
+              </div>
+
+              <p class="text-xs leading-5 text-muted-foreground">
+                {i18n().t('runtimeTakeover.authorizationNotice')}
+              </p>
+            </div>
+          )}
+        </Show>
+      </Dialog>
+
       <ConfirmDialog
         open={deleteTarget() !== null}
         onOpenChange={(open) => {
@@ -8113,6 +8252,8 @@ function environmentProgressStatus(i18n: DesktopI18n, progress: DesktopLauncherA
       return i18n.t('progress.cleanupNeedsAttention');
     case 'failed':
       return i18n.t('progress.failed');
+    case 'needs_confirmation':
+      return i18n.t('runtimeTakeover.reviewRequired');
     case 'canceled':
       return i18n.t('progress.canceled');
     case 'succeeded':
@@ -8164,6 +8305,8 @@ function environmentProgressStatusIconTone(progress: DesktopLauncherActionProgre
     case 'canceled':
     case 'cleanup_failed':
       return 'error';
+    case 'needs_confirmation':
+      return 'info';
     default:
       return 'info';
   }
@@ -8214,8 +8357,6 @@ function localizedRuntimeLifecyclePhaseLabel(i18n: DesktopI18n, phase: DesktopRu
       return i18n.t('progress.checkingRuntimePackage');
     case 'discovering_runtime_instances':
       return i18n.t('progress.checkingExistingRuntime');
-    case 'stopping_legacy_runtimes':
-      return i18n.t('progress.stoppingRuntimeProcess');
     case 'stopping_runtime_process':
       return i18n.t('progress.stoppingRuntimeProcess');
     case 'verifying_runtime_stopped':
@@ -8266,6 +8407,19 @@ function localizedRuntimeLifecycleStepLabel(
   step: DesktopRuntimeLifecycleStepSnapshot,
 ): string {
   return localizedRuntimeLifecyclePhaseLabel(i18n, step.id);
+}
+
+function localizedRuntimeTargetDetail(
+  i18n: DesktopI18n,
+  progress: Readonly<{ location: string; target_detail?: string }> | undefined,
+): string {
+  const detail = trimString(progress?.target_detail);
+  if (detail === '') {
+    return '';
+  }
+  return progress?.location === 'local_host'
+    ? i18n.t('environmentFacts.thisDevice')
+    : detail;
 }
 
 function localizedGatewayCheckStepLabel(i18n: DesktopI18n, stepID: string, fallback: string): string {
@@ -8359,6 +8513,7 @@ function localizedProgressTitle(i18n: DesktopI18n, progress: DesktopLauncherActi
     'Runtime ready': 'progress.titleRuntimeReady',
     'Startup canceled': 'progress.titleStartupCanceled',
     'Connection removed': 'progress.connectionRemoved',
+    'Runtime takeover confirmation required': 'runtimeTakeover.progressTitle',
   });
 }
 
@@ -8400,6 +8555,8 @@ function localizedProgressDetail(i18n: DesktopI18n, progress: DesktopLauncherAct
     'The runtime daemon is running. Open will prepare the Desktop bridge.': 'progress.detailRuntimeReady',
     'Desktop stopped the container runtime startup and cleaned up local startup resources.': 'progress.detailStartupCanceled',
     'Desktop stopped the Runtime startup and cleaned up local startup resources.': 'progress.detailStartupCanceled',
+    'Review the verified Runtime processes before forcing a restart.': 'runtimeTakeover.progressRestartDetail',
+    'Review the verified Runtime processes before forcing this Runtime to stop.': 'runtimeTakeover.progressStopDetail',
   });
 }
 
@@ -8550,11 +8707,16 @@ function EnvironmentProgressPanel(props: Readonly<{
   const openConnection = createMemo(() => props.progress.open_progress);
   const stepProgress = createMemo(() => props.progress.step_progress);
   const currentRuntimeLifecycle = createMemo(() => props.progress.lifecycle_progress);
+  const runtimeTargetDetail = createMemo(() => localizedRuntimeTargetDetail(props.i18n, startup()));
+  const openTargetDetail = createMemo(() => localizedRuntimeTargetDetail(props.i18n, openConnection()));
   const iconTone = createMemo(() => environmentProgressStatusIconTone(props.progress));
   const phaseStatus = createMemo(() => {
     const s = props.progress.status;
     if (s === 'succeeded' || s === 'failed' || s === 'canceled') {
       return s;
+    }
+    if (s === 'needs_confirmation') {
+      return 'canceled';
     }
     return 'running';
   });
@@ -8575,6 +8737,7 @@ function EnvironmentProgressPanel(props: Readonly<{
     props.progress.status === 'failed'
     || props.progress.status === 'cleanup_failed'
     || props.progress.status === 'canceled'
+    || props.progress.status === 'needs_confirmation'
   ));
   const panelPrimaryAction = createMemo(() => localizedProgressPanelPrimaryAction(
     props.i18n,
@@ -8798,10 +8961,10 @@ function EnvironmentProgressPanel(props: Readonly<{
               <Show when={!stepProgress() && currentRuntimeLifecycle()?.plan_state !== 'planning'}>
                 <span>{localizedProgressPlanningLabel(props.i18n, props.progress.action)}</span>
               </Show>
-              <Show when={!stepProgress() && startup()?.target_detail}>
+              <Show when={!stepProgress() && runtimeTargetDetail()}>
                 {(detail) => <span>{detail()}</span>}
               </Show>
-              <Show when={!stepProgress() && !startup()?.target_detail && openConnection()?.target_detail}>
+              <Show when={!stepProgress() && !runtimeTargetDetail() && openTargetDetail()}>
                 {(detail) => <span>{detail()}</span>}
               </Show>
             </div>
@@ -9076,6 +9239,7 @@ function localizedPrimaryProgressPresentation(
     'Update failed': 'progress.updateFailed',
     'Stop failed': 'progress.stopFailed',
     'Needs attention': 'progress.needsAttention',
+    'Review required': 'runtimeTakeover.reviewRequired',
   });
   return {
     ...presentation,
@@ -10899,6 +11063,7 @@ function launcherActionProgressIsTerminal(progress: DesktopLauncherActionProgres
   return progress?.status === 'succeeded'
     || progress?.status === 'failed'
     || progress?.status === 'canceled'
+    || progress?.status === 'needs_confirmation'
     || progress?.status === 'cleanup_failed';
 }
 

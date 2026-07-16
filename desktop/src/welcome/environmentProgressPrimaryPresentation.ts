@@ -120,6 +120,13 @@ export function environmentProgressPrimaryPresentation(
         ariaLabel: `${sentenceForLabel(label)} Show details.`,
       };
     }
+    case 'needs_confirmation':
+      return {
+        kind: 'attention_trigger',
+        progress,
+        label: 'Review required',
+        ariaLabel: 'Review required. Show details.',
+      };
     default:
       return null;
   }
@@ -235,6 +242,7 @@ function progressSelectionPriority(progress: DesktopLauncherActionProgress): num
       return 3;
     case 'failed':
     case 'cleanup_failed':
+    case 'needs_confirmation':
       return 2;
     case 'succeeded':
     case 'canceled':

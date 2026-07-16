@@ -1175,6 +1175,41 @@
     "validationRuntimeRootRequired": "A raiz do tempo de execução é necessária.",
     "validationSshPasswordRequired": "A senha SSH é obrigatória para autenticação por senha."
   },
+  "runtimeTakeover": {
+    "forceRestartTitle": "Forçar a reinicialização deste ambiente de execução?",
+    "forceStopTitle": "Forçar a parada deste ambiente de execução?",
+    "forceRestartAction": "Forçar reinicialização",
+    "forceStopAction": "Forçar parada",
+    "reviewRequired": "Verificação necessária",
+    "progressTitle": "Confirmação necessária para assumir o controle do ambiente de execução",
+    "progressRestartDetail": "Revise os processos verificados do ambiente de execução antes de forçar a reinicialização.",
+    "progressStopDetail": "Revise os processos verificados do ambiente de execução antes de forçar a parada deste ambiente de execução.",
+    "warningTitle": "Processos verificados do ambiente de execução que serão encerrados: {count}",
+    "warningDescription": "A identidade do processo foi verificada, mas não há evidências de vínculo com este Desktop, ou as evidências indicam vínculo com outro Desktop. Terminais ativos, tarefas e trabalho não salvo podem ser perdidos.",
+    "targetLabel": "Destino do ambiente de execução",
+    "locationLabel": "Local",
+    "processAriaLabel": "Processo do ambiente de execução {pid}",
+    "startedLabel": "Iniciado em",
+    "ownerEvidenceLabel": "Vínculo com o Desktop",
+    "stateRootLabel": "Diretório raiz do estado",
+    "versionLabel": "Versão do ambiente de execução",
+    "authorizationNotice": "Esta autorização se aplica apenas ao inventário exibido aqui. Se a identidade de qualquer processo mudar, o Desktop interromperá a operação e pedirá que você revise as informações atualizadas.",
+    "location": {
+      "local_host": "Este Mac",
+      "ssh_host": "Host SSH",
+      "local_container": "Contêiner local",
+      "ssh_container": "Contêiner no host SSH"
+    },
+    "ownerStatus": {
+      "missing": "Vínculo com o Desktop não comprovado",
+      "foreign": "Vinculado a outro Desktop"
+    },
+    "ownerEvidence": {
+      "process_environment": "Vínculo verificado pelo ambiente do processo",
+      "runtime_lock": "Vínculo verificado pelo bloqueio do ambiente de execução",
+      "missing": "Nenhuma evidência de vínculo com o Desktop disponível"
+    }
+  },
   "confirm": {
     "deleteConnectionTitle": "Excluir conexão",
     "deleteConnectionConfirm": "Excluir conexão",

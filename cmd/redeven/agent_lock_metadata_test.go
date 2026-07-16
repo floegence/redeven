@@ -62,18 +62,14 @@ func TestWriteAndReadAgentLockMetadata(t *testing.T) {
 	}
 }
 
-func TestReadAgentLockMetadataSupportsTransitionalRawPID(t *testing.T) {
+func TestReadAgentLockMetadataRejectsRawPID(t *testing.T) {
 	lockPath := filepath.Join(t.TempDir(), "agent.lock")
 	if err := os.WriteFile(lockPath, []byte("12345\n"), 0o600); err != nil {
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	got, err := readAgentLockMetadata(lockPath)
-	if err != nil {
-		t.Fatalf("readAgentLockMetadata() error = %v", err)
-	}
-	if got == nil || got.PID != 12345 {
-		t.Fatalf("unexpected metadata: %#v", got)
+	if _, err := readAgentLockMetadata(lockPath); err == nil {
+		t.Fatal("readAgentLockMetadata() accepted obsolete raw PID metadata")
 	}
 }
 

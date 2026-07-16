@@ -72,6 +72,25 @@ describe('main routing', () => {
     expect(mainSrc).not.toContain("throw new Error('That environment window is no longer open.')");
   });
 
+  it('keeps raced Start takeover discovery observational', () => {
+    const mainSrc = readMainSource();
+
+    expect(mainSrc).toContain('function finishRuntimeProcessReconciliation(');
+    expect(mainSrc).toContain('class RuntimeProcessTakeoverMaintenanceRequiredError extends Error');
+    expect(mainSrc).toContain("kind: 'maintenance_required'");
+    expect(mainSrc).toContain("kind: 'confirmation_required'");
+    expect(mainSrc).toContain("if (input.lifecycleOperation === 'start') {");
+    expect(mainSrc).toContain('error: new RuntimeProcessTakeoverMaintenanceRequiredError(),');
+    expect(mainSrc).toContain('throwRuntimeProcessReconciliationOutcome(takeoverOutcome);');
+    expect(mainSrc).toContain('return runtimeProcessConfirmationFailure(takeoverOutcome);');
+    expect(mainSrc).toContain('return launcherActionSuccessFromRuntimeProcessMaintenance(error)');
+    expect(mainSrc).toContain("return launcherActionSuccess('runtime_maintenance_required');");
+    expect(mainSrc).not.toContain('thrownLauncherActionSuccess');
+    expect(mainSrc.indexOf("if (input.lifecycleOperation === 'start') {")).toBeLessThan(
+      mainSrc.indexOf("'confirmation_required'", mainSrc.indexOf('function finishRuntimeProcessReconciliation(')),
+    );
+  });
+
   it('keeps desktop windows unthrottled while the user works in other apps', () => {
     const mainSrc = readMainSource();
 
@@ -420,7 +439,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain('const sshRuntimeMaintenanceByKey = new Map');
     expect(mainSrc).toContain('error instanceof DesktopSSHRuntimeMaintenanceRequiredError');
     expect(mainSrc).toContain('sshRuntimeMaintenanceByKey.set(runtimeKey, error.maintenance)');
-    expect(mainSrc).not.toContain('runtime_maintenance: maintenance');
+    expect(mainSrc).toContain('runtime_maintenance: maintenance');
     expect(mainSrc).toContain('sshRuntimeMaintenanceByKey.delete(runtimeKey)');
     expect(mainSrc).toContain('const operation = launcherOperations.create({');
     expect(mainSrc).toContain("phase: 'ssh_preparing_start'");

@@ -55,8 +55,6 @@ func runtimeProcessInventoryOptions(
 	runtimeRoot string,
 	desktopOwnerID string,
 	currentExecutables []string,
-	includeKnownLegacy bool,
-	legacyRuntimeRoots []string,
 ) (runtimemanagement.RuntimeProcessInventoryOptions, error) {
 	resolvedStateRoot, err := config.ResolveStateRoot(stateRoot)
 	if err != nil {
@@ -71,8 +69,6 @@ func runtimeProcessInventoryOptions(
 		StateRoot:          resolvedStateRoot,
 		DesktopOwnerID:     strings.TrimSpace(desktopOwnerID),
 		CurrentExecutables: append([]string(nil), currentExecutables...),
-		IncludeKnownLegacy: includeKnownLegacy,
-		LegacyRuntimeRoots: append([]string(nil), legacyRuntimeRoots...),
 	}, nil
 }
 
@@ -117,11 +113,8 @@ func (c *cli) desktopRuntimeInventoryCmd(args []string) int {
 	stateRoot := fs.String("state-root", "", "Current Runtime state root.")
 	runtimeRoot := fs.String("runtime-root", "", "Managed runtime package root.")
 	desktopOwnerID := fs.String("desktop-owner-id", "", "Expected Desktop owner identity.")
-	includeKnownLegacy := fs.Bool("include-known-legacy", false, "Include built-in historical Desktop layouts.")
 	var currentExecutables repeatedStringFlag
 	fs.Var(&currentExecutables, "current-executable", "Expected current runtime executable; repeatable.")
-	var legacyRuntimeRoots repeatedStringFlag
-	fs.Var(&legacyRuntimeRoots, "legacy-runtime-root", "Additional historical runtime root; repeatable.")
 	if err := parseCommandFlags(fs, args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			writeText(c.stdout, desktopRuntimeInventoryHelpText())
@@ -140,8 +133,6 @@ func (c *cli) desktopRuntimeInventoryCmd(args []string) int {
 		*runtimeRoot,
 		*desktopOwnerID,
 		currentExecutables,
-		*includeKnownLegacy,
-		legacyRuntimeRoots,
 	)
 	if err != nil {
 		writeRuntimeProcessJSONError(c.stdout, err)
@@ -164,16 +155,14 @@ func (c *cli) desktopRuntimeStopCmd(args []string) int {
 	stateRoot := fs.String("state-root", "", "State root override (default: $REDEVEN_STATE_ROOT or ~/.redeven).")
 	probeTimeout := fs.Duration("probe-timeout", desktopRuntimeProbeTimeout, "Runtime health probe timeout.")
 	gracePeriod := fs.Duration("grace-period", 5*time.Second, "Time to wait after requesting runtime shutdown.")
-	allMatching := fs.Bool("all-matching", false, "Stop every safely matched current or legacy instance.")
+	allMatching := fs.Bool("all-matching", false, "Stop every verified matching Runtime instance.")
 	runtimeRoot := fs.String("runtime-root", "", "Managed runtime package root.")
 	desktopOwnerID := fs.String("desktop-owner-id", "", "Expected Desktop owner identity.")
-	includeKnownLegacy := fs.Bool("include-known-legacy", false, "Include built-in historical Desktop layouts.")
+	reconciliationMode := fs.String("reconciliation-mode", string(runtimemanagement.RuntimeProcessReconciliationAutomatic), "Process reconciliation mode: automatic or confirmed_takeover.")
 	var currentExecutables repeatedStringFlag
 	fs.Var(&currentExecutables, "current-executable", "Expected current runtime executable; repeatable.")
 	expectedDigest := fs.String("expected-inventory-digest", "", "Expected runtime process inventory digest.")
 	jsonOut := fs.Bool("json", false, "Write a versioned machine-readable result.")
-	var legacyRuntimeRoots repeatedStringFlag
-	fs.Var(&legacyRuntimeRoots, "legacy-runtime-root", "Additional historical runtime root; repeatable.")
 	if err := parseCommandFlags(fs, args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			writeText(c.stdout, desktopRuntimeStopHelpText())
@@ -193,11 +182,13 @@ func (c *cli) desktopRuntimeStopCmd(args []string) int {
 			*runtimeRoot,
 			*desktopOwnerID,
 			currentExecutables,
-			*includeKnownLegacy,
-			legacyRuntimeRoots,
 		)
 		if err == nil && strings.TrimSpace(*expectedDigest) == "" {
 			err = errors.New("--expected-inventory-digest is required with --all-matching")
+		}
+		mode := runtimemanagement.RuntimeProcessReconciliationMode(strings.TrimSpace(*reconciliationMode))
+		if err == nil && mode != runtimemanagement.RuntimeProcessReconciliationAutomatic && mode != runtimemanagement.RuntimeProcessReconciliationConfirmedTakeover {
+			err = errors.New("--reconciliation-mode must be automatic or confirmed_takeover")
 		}
 		if err != nil {
 			if *jsonOut {
@@ -207,11 +198,12 @@ func (c *cli) desktopRuntimeStopCmd(args []string) int {
 			}
 			return 1
 		}
-		result, stopErr := runtimemanagement.StopRuntimeProcesses(
+		result, stopErr := runtimemanagement.StopRuntimeProcessesWithMode(
 			context.Background(),
 			options,
 			*expectedDigest,
 			*gracePeriod,
+			mode,
 		)
 		if stopErr != nil {
 			if *jsonOut {
@@ -228,6 +220,10 @@ func (c *cli) desktopRuntimeStopCmd(args []string) int {
 			}
 		}
 		return 0
+	}
+	if strings.TrimSpace(*reconciliationMode) != string(runtimemanagement.RuntimeProcessReconciliationAutomatic) {
+		writeErrorWithHelp(c.stderr, "--reconciliation-mode requires --all-matching", nil, desktopRuntimeStopHelpText())
+		return 2
 	}
 	if err := stopDesktopRuntime(*stateRoot, *probeTimeout, *gracePeriod); err != nil {
 		fmt.Fprintf(c.stderr, "desktop-runtime-stop failed: %v\n", err)

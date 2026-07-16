@@ -1175,6 +1175,41 @@
     "validationRuntimeRootRequired": "est requise.",
     "validationSshPasswordRequired": "Le mot de passe SSH est requis pour l’authentification par mot de passe."
   },
+  "runtimeTakeover": {
+    "forceRestartTitle": "Forcer le redémarrage de cet environnement d’exécution ?",
+    "forceStopTitle": "Forcer l’arrêt de cet environnement d’exécution ?",
+    "forceRestartAction": "Forcer le redémarrage",
+    "forceStopAction": "Forcer l’arrêt",
+    "reviewRequired": "Examen requis",
+    "progressTitle": "Confirmation requise pour reprendre le contrôle de l’environnement d’exécution",
+    "progressRestartDetail": "Examinez les processus d’exécution vérifiés avant de forcer le redémarrage de cet environnement d’exécution.",
+    "progressStopDetail": "Examinez les processus d’exécution vérifiés avant de forcer l’arrêt de cet environnement d’exécution.",
+    "warningTitle": "Processus d’exécution vérifiés qui seront arrêtés : {count}",
+    "warningDescription": "L’identité du processus est vérifiée, mais aucune information ne permet de l’attribuer au Desktop actuel, ou les informations disponibles indiquent qu’il appartient à un autre Desktop. Les terminaux actifs, les tâches en cours et le travail non enregistré risquent d’être perdus.",
+    "targetLabel": "Cible d’exécution",
+    "locationLabel": "Emplacement",
+    "processAriaLabel": "Processus d’exécution {pid}",
+    "startedLabel": "Démarré",
+    "ownerEvidenceLabel": "Vérification du propriétaire",
+    "stateRootLabel": "Racine des données d’état",
+    "versionLabel": "Version de l’environnement d’exécution",
+    "authorizationNotice": "Cette autorisation est liée à l’inventaire affiché ici. Si l’identité d’un processus change, Desktop interrompra l’opération et vous demandera d’examiner les informations actualisées.",
+    "location": {
+      "local_host": "Ce Mac",
+      "ssh_host": "Hôte SSH",
+      "local_container": "Conteneur local",
+      "ssh_container": "Conteneur sur l’hôte SSH"
+    },
+    "ownerStatus": {
+      "missing": "Propriétaire non vérifié",
+      "foreign": "Appartient à un autre Desktop"
+    },
+    "ownerEvidence": {
+      "process_environment": "Vérifié via l’environnement du processus",
+      "runtime_lock": "Vérifié via le verrou d’exécution",
+      "missing": "Aucun élément de vérification du propriétaire disponible"
+    }
+  },
   "confirm": {
     "deleteConnectionTitle": "Supprimer la connexion",
     "deleteConnectionConfirm": "Supprimer la connexion",

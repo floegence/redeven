@@ -49,7 +49,6 @@ export type DesktopRuntimeUploadAsset = Readonly<{
 export type DesktopRuntimePackagePrunePolicy = Readonly<{
   cacheRoot: string;
   activeReleaseTag: string;
-  legacyCacheRoots?: readonly string[];
   includeTemporaryEntries?: boolean;
 }>;
 
@@ -160,13 +159,6 @@ function onceInFlight<T>(
 
 export function runtimePackageCacheRoot(userDataPath: string): string {
   return path.join(userDataPath, 'runtime-package-cache');
-}
-
-export function legacyRuntimePackageCacheRoots(userDataPath: string): readonly string[] {
-  return [
-    path.join(userDataPath, 'ssh-runtime-cache'),
-    path.join(userDataPath, 'runtime-placement-cache'),
-  ];
 }
 
 export function runtimeReleaseFetchPolicy(
@@ -476,7 +468,6 @@ async function pruneEmptyDirectory(dir: string): Promise<void> {
 export async function pruneDesktopRuntimePackageCache(policy: DesktopRuntimePackagePrunePolicy): Promise<void> {
   const activeReleaseTag = normalizeRuntimeReleaseTag(policy.activeReleaseTag);
   const includeTemporaryEntries = policy.includeTemporaryEntries !== false;
-  await Promise.all((policy.legacyCacheRoots ?? []).map((root) => fs.rm(root, { recursive: true, force: true })));
 
   const sourceEntries = await readDirectoryIfPresent(policy.cacheRoot);
   await Promise.all(sourceEntries.map(async (sourceEntry) => {

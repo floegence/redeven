@@ -28,6 +28,10 @@ import type { DesktopOpenConnectionTiming } from './desktopOpenConnectionProgres
 import type { DesktopRuntimeLifecycleProgress } from './desktopRuntimeLifecycleProgress';
 import type { DesktopOperationFailurePresentation } from './desktopOperationFailure';
 import type { DesktopLocalRuntimeOpenPlan } from './localRuntimeSupervisor';
+import type {
+  DesktopRuntimeProcessReconciliation,
+  DesktopRuntimeProcessTakeoverProposal,
+} from './desktopRuntimeProcessTakeover';
 import type { RuntimeServiceProviderConnectionState, RuntimeServiceSnapshot } from './runtimeService';
 import type { DesktopTranslationKey } from './i18n/desktopI18n';
 import type {
@@ -80,6 +84,7 @@ export type DesktopLauncherOperationStatus =
   | 'running'
   | 'canceling'
   | 'canceled'
+  | 'needs_confirmation'
   | 'cleanup_running'
   | 'cleanup_failed'
   | 'failed'
@@ -110,6 +115,7 @@ export type DesktopLauncherActionOutcome =
   | 'opened_environment_window'
   | 'focused_environment_window'
   | 'started_environment_runtime'
+  | 'runtime_maintenance_required'
   | 'restarted_environment_runtime'
   | 'updated_environment_runtime'
   | 'opened_desktop_update_handoff'
@@ -281,6 +287,7 @@ export type DesktopLauncherRuntimeTarget = Readonly<
     auto_runtime_probe_enabled: boolean;
     ssh_password: string;
     ssh_password_mode: 'keep' | 'replace' | 'clear';
+    runtime_process_reconciliation: DesktopRuntimeProcessReconciliation;
   }>
   & Partial<DesktopSSHEnvironmentDetails>
 >;
@@ -533,6 +540,7 @@ export type DesktopLauncherOperationSnapshot = Readonly<{
   deleted_subject: boolean;
   next_actions?: readonly DesktopLauncherOperationNextAction[];
   failure?: DesktopOperationFailurePresentation;
+  runtime_process_takeover?: DesktopRuntimeProcessTakeoverProposal;
 }>;
 
 export type DesktopLauncherOperationNextAction = Readonly<
@@ -975,6 +983,7 @@ export type DesktopLauncherActionFailure = Readonly<{
   continuation_action?: DesktopLauncherActionRequest;
   resolve_focus?: DesktopGatewayResolveFocus;
   gateway_start_required_payload?: DesktopGatewayStartRequiredPayload;
+  runtime_process_takeover?: DesktopRuntimeProcessTakeoverProposal;
 }>;
 
 export type DesktopLauncherActionResult = DesktopLauncherActionSuccess | DesktopLauncherActionFailure;
@@ -1011,6 +1020,7 @@ export type DesktopLauncherActionProgress = Readonly<{
   deleted_subject?: boolean;
   next_actions?: readonly DesktopLauncherOperationNextAction[];
   failure?: DesktopOperationFailurePresentation;
+  runtime_process_takeover?: DesktopRuntimeProcessTakeoverProposal;
 }>;
 
 export function isDesktopLauncherActionFailure(
@@ -1045,6 +1055,7 @@ function normalizeGatewayStartPolicy(
 
 function normalizeDesktopLauncherRuntimeTarget(
   candidate: Record<string, unknown>,
+  options: Readonly<{ allowProcessReconciliation?: boolean }> = {},
 ): DesktopLauncherRuntimeTarget | null {
   const runtimeTargetID = compact(candidate.runtime_target_id);
   const placementTargetID = compact(candidate.placement_target_id);
@@ -1076,6 +1087,36 @@ function normalizeDesktopLauncherRuntimeTarget(
   const remoteInstallDir = compact(candidate.runtime_root);
   const bootstrapStrategy = compact(candidate.bootstrap_strategy);
   const releaseBaseURL = compact(candidate.release_base_url);
+  const reconciliationValue = candidate.runtime_process_reconciliation;
+  const hasProcessReconciliation = reconciliationValue !== undefined;
+  if (hasProcessReconciliation && options.allowProcessReconciliation !== true) {
+    return null;
+  }
+  let runtimeProcessReconciliation: DesktopRuntimeProcessReconciliation | undefined;
+  if (hasProcessReconciliation) {
+    if (!reconciliationValue || typeof reconciliationValue !== 'object' || Array.isArray(reconciliationValue)) {
+      return null;
+    }
+    const reconciliationRecord = reconciliationValue as Record<string, unknown>;
+    if (
+      Object.keys(reconciliationRecord).some((field) => (
+        field !== 'mode' && field !== 'expected_inventory_digest'
+      ))
+    ) {
+      return null;
+    }
+    const reconciliationDigest = compact(reconciliationRecord.expected_inventory_digest);
+    if (
+      compact(reconciliationRecord.mode) !== 'confirmed_takeover'
+      || !/^[a-f0-9]{64}$/u.test(reconciliationDigest)
+    ) {
+      return null;
+    }
+    runtimeProcessReconciliation = {
+      mode: 'confirmed_takeover',
+      expected_inventory_digest: reconciliationDigest,
+    };
+  }
 
   let providerOrigin = '';
   if (providerOriginRaw !== '') {
@@ -1116,6 +1157,7 @@ function normalizeDesktopLauncherRuntimeTarget(
     ...(candidate.connect_timeout_seconds != null ? { connect_timeout_seconds: normalizeDesktopSSHConnectTimeoutSeconds(candidate.connect_timeout_seconds) } : {}),
     ...(candidate.force_runtime_update === true ? { force_runtime_update: true } : {}),
     ...(candidate.auto_runtime_probe_enabled === true ? { auto_runtime_probe_enabled: true } : {}),
+    ...(runtimeProcessReconciliation ? { runtime_process_reconciliation: runtimeProcessReconciliation } : {}),
   };
 
   if (
@@ -1137,6 +1179,18 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
 
   const candidate = value as Partial<DesktopLauncherActionRequest>;
   const kind = compact(candidate.kind) as DesktopLauncherActionKind;
+  const hasProcessReconciliation = Object.prototype.hasOwnProperty.call(
+    candidate,
+    'runtime_process_reconciliation',
+  );
+  if (
+    hasProcessReconciliation
+    && kind !== 'restart_environment_runtime'
+    && kind !== 'update_environment_runtime'
+    && kind !== 'stop_environment_runtime'
+  ) {
+    return null;
+  }
   switch (kind) {
     case 'close_launcher_or_quit':
       return { kind };
@@ -1232,11 +1286,22 @@ export function normalizeDesktopLauncherActionRequest(value: unknown): DesktopLa
       } as DesktopLauncherActionRequest;
     }
     case 'start_environment_runtime':
-    case 'restart_environment_runtime':
-    case 'update_environment_runtime':
-    case 'stop_environment_runtime':
     case 'refresh_environment_runtime': {
       const target = normalizeDesktopLauncherRuntimeTarget(candidate as Record<string, unknown>);
+      if (!target) {
+        return null;
+      }
+      return {
+        kind,
+        ...target,
+      } as DesktopLauncherActionRequest;
+    }
+    case 'restart_environment_runtime':
+    case 'update_environment_runtime':
+    case 'stop_environment_runtime': {
+      const target = normalizeDesktopLauncherRuntimeTarget(candidate as Record<string, unknown>, {
+        allowProcessReconciliation: true,
+      });
       if (!target) {
         return null;
       }

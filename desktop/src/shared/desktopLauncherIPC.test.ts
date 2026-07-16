@@ -612,6 +612,69 @@ describe('desktopLauncherIPC', () => {
     });
   });
 
+  it('normalizes only digest-bound runtime process takeover continuations', () => {
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'restart_environment_runtime',
+      environment_id: 'local',
+      host_access: { kind: 'local_host' },
+      placement: { kind: 'host_process', runtime_root: '/tmp/redeven' },
+      runtime_process_reconciliation: {
+        mode: 'confirmed_takeover',
+        expected_inventory_digest: ` ${'a'.repeat(64)} `,
+      },
+    })).toMatchObject({
+      runtime_process_reconciliation: {
+        mode: 'confirmed_takeover',
+        expected_inventory_digest: 'a'.repeat(64),
+      },
+    });
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'restart_environment_runtime',
+      environment_id: 'local',
+      host_access: { kind: 'local_host' },
+      placement: { kind: 'host_process', runtime_root: '/tmp/redeven' },
+      runtime_process_reconciliation: { mode: 'automatic', expected_inventory_digest: 'a'.repeat(64) },
+    })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'restart_environment_runtime',
+      environment_id: 'local',
+      host_access: { kind: 'local_host' },
+      placement: { kind: 'host_process', runtime_root: '/tmp/redeven' },
+      runtime_process_reconciliation: { mode: 'confirmed_takeover', expected_inventory_digest: 'not-a-digest' },
+    })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'restart_environment_runtime',
+      environment_id: 'local',
+      host_access: { kind: 'local_host' },
+      placement: { kind: 'host_process', runtime_root: '/tmp/redeven' },
+      runtime_process_reconciliation: {
+        mode: 'confirmed_takeover',
+        expected_inventory_digest: 'a'.repeat(64),
+        allow_changed_inventory: true,
+      },
+    })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'start_environment_runtime',
+      environment_id: 'local',
+      host_access: { kind: 'local_host' },
+      placement: { kind: 'host_process', runtime_root: '/tmp/redeven' },
+      runtime_process_reconciliation: {
+        mode: 'confirmed_takeover',
+        expected_inventory_digest: 'a'.repeat(64),
+      },
+    })).toBeNull();
+    expect(normalizeDesktopLauncherActionRequest({
+      kind: 'open_local_environment',
+      environment_id: 'local',
+      host_access: { kind: 'local_host' },
+      placement: { kind: 'host_process', runtime_root: '/tmp/redeven' },
+      runtime_process_reconciliation: {
+        mode: 'confirmed_takeover',
+        expected_inventory_digest: 'a'.repeat(64),
+      },
+    })).toBeNull();
+  });
+
   it('rejects unsupported or incomplete launcher actions', () => {
     expect(normalizeDesktopLauncherActionRequest({ kind: 'open_advanced_settings' })).toBeNull();
     expect(normalizeDesktopLauncherActionRequest({ kind: 'open_local_environment' })).toBeNull();

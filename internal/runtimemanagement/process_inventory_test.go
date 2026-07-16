@@ -15,11 +15,9 @@ func testInventoryOptions(t *testing.T) RuntimeProcessInventoryOptions {
 	t.Helper()
 	root := t.TempDir()
 	return RuntimeProcessInventoryOptions{
-		RuntimeRoot:        filepath.Join(root, ".redeven"),
-		StateRoot:          filepath.Join(root, ".redeven"),
-		DesktopOwnerID:     "desktop-owner",
-		IncludeKnownLegacy: true,
-		LegacyRuntimeRoots: []string{filepath.Join(root, ".cache", "redeven-desktop", "runtime")},
+		RuntimeRoot:    filepath.Join(root, ".redeven"),
+		StateRoot:      filepath.Join(root, ".redeven"),
+		DesktopOwnerID: "desktop-owner",
 	}
 }
 
@@ -43,41 +41,33 @@ func testSnapshot(options RuntimeProcessInventoryOptions, pid int, startedAt int
 	}
 }
 
-func TestBuildRuntimeProcessInventoryClassifiesCurrentLegacyAndBlockingInstances(t *testing.T) {
+func TestBuildRuntimeProcessInventorySeparatesIdentityOwnershipLayoutAndAuthority(t *testing.T) {
 	options := testInventoryOptions(t)
-	legacyRoot := options.LegacyRuntimeRoots[0]
 	currentExecutable := filepath.Join(options.RuntimeRoot, "runtime", "managed", "bin", "redeven")
-	legacyExecutable := filepath.Join(legacyRoot, "releases", "v0.5.10", "bin", "redeven")
-	currentLegacyExecutable := filepath.Join(options.RuntimeRoot, "runtime", "releases", "v0.0.0-dev", "bin", "redeven")
 	current := testSnapshot(options, 10, 100, currentExecutable, options.StateRoot, options.DesktopOwnerID)
-	ownedLegacy := testSnapshot(options, 11, 110, currentLegacyExecutable, options.StateRoot, options.DesktopOwnerID)
-	ownedLegacy.ExecutableDeleted = true
-	ownerlessLegacy := testSnapshot(
-		options,
-		12,
-		120,
-		legacyExecutable,
-		filepath.Join(legacyRoot, "instances", "envinst_demo", "state"),
-		"",
-	)
-	foreign := testSnapshot(options, 13, 130, currentExecutable, options.StateRoot, "another-desktop")
-	ambiguous := testSnapshot(options, 14, 140, currentExecutable, options.StateRoot, "")
+	ownerless := testSnapshot(options, 11, 110, currentExecutable, options.StateRoot, "")
+	foreign := testSnapshot(options, 12, 120, currentExecutable, options.StateRoot, "another-desktop")
+	incomplete := testSnapshot(options, 13, 130, currentExecutable, options.StateRoot, options.DesktopOwnerID)
+	incomplete.ExecutableInode = 0
+	untrustedLayout := testSnapshot(options, 14, 140, filepath.Join(options.RuntimeRoot, "other", "redeven"), options.StateRoot, options.DesktopOwnerID)
 	differentNamespace := testSnapshot(options, 15, 150, currentExecutable, options.StateRoot, options.DesktopOwnerID)
 	differentNamespace.NamespaceID = "mnt:[container]"
 	differentUser := testSnapshot(options, 16, 160, currentExecutable, options.StateRoot, options.DesktopOwnerID)
 	differentUser.UserIdentity = "someone-else"
+	differentStateRoot := testSnapshot(options, 17, 170, currentExecutable, filepath.Join(options.StateRoot, "other"), options.DesktopOwnerID)
 
 	inventory := buildRuntimeProcessInventory(
 		options,
 		runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"},
 		[]runtimeProcessSnapshot{
 			current,
-			ownedLegacy,
-			ownerlessLegacy,
+			ownerless,
 			foreign,
-			ambiguous,
+			incomplete,
+			untrustedLayout,
 			differentNamespace,
 			differentUser,
+			differentStateRoot,
 			current,
 		},
 	)
@@ -85,26 +75,39 @@ func TestBuildRuntimeProcessInventoryClassifiesCurrentLegacyAndBlockingInstances
 	if len(inventory.Instances) != 5 {
 		t.Fatalf("instances = %#v, want five scoped and deduplicated processes", inventory.Instances)
 	}
-	classifications := map[int]RuntimeProcessClassification{}
+	byPID := map[int]RuntimeProcessInstance{}
 	for _, instance := range inventory.Instances {
-		classifications[instance.PID] = instance.Classification
+		byPID[instance.PID] = instance
 	}
-	if classifications[10] != RuntimeProcessCurrentOwned {
-		t.Fatalf("current classification = %q", classifications[10])
+	if got := byPID[10]; got.IdentityStatus != RuntimeProcessIdentityVerified ||
+		got.OwnerStatus != RuntimeProcessOwnerCurrent ||
+		got.LayoutStatus != RuntimeProcessLayoutCurrent ||
+		got.StopAuthority != RuntimeProcessStopAutomatic ||
+		got.ReasonCode != "" {
+		t.Fatalf("current = %#v", got)
 	}
-	if classifications[11] != RuntimeProcessLegacyOwned {
-		t.Fatalf("owned legacy classification = %q", classifications[11])
+	if got := byPID[11]; got.IdentityStatus != RuntimeProcessIdentityVerified ||
+		got.OwnerStatus != RuntimeProcessOwnerMissing ||
+		got.StopAuthority != RuntimeProcessStopConfirmedTakeover ||
+		got.ReasonCode != "runtime_owner_identity_unavailable" {
+		t.Fatalf("ownerless = %#v", got)
 	}
-	if classifications[12] != RuntimeProcessLegacyOwnerless {
-		t.Fatalf("ownerless legacy classification = %q", classifications[12])
+	if got := byPID[12]; got.OwnerStatus != RuntimeProcessOwnerForeign ||
+		got.StopAuthority != RuntimeProcessStopConfirmedTakeover ||
+		got.ReasonCode != "runtime_owned_by_another_desktop" {
+		t.Fatalf("foreign = %#v", got)
 	}
-	if classifications[13] != RuntimeProcessForeignOwner {
-		t.Fatalf("foreign classification = %q", classifications[13])
+	if got := byPID[13]; got.IdentityStatus != RuntimeProcessIdentityIncomplete ||
+		got.StopAuthority != RuntimeProcessStopBlocked ||
+		got.ReasonCode != "runtime_identity_incomplete" {
+		t.Fatalf("incomplete = %#v", got)
 	}
-	if classifications[14] != RuntimeProcessAmbiguous {
-		t.Fatalf("ambiguous classification = %q", classifications[14])
+	if got := byPID[14]; got.LayoutStatus != RuntimeProcessLayoutUnknown ||
+		got.StopAuthority != RuntimeProcessStopBlocked ||
+		got.ReasonCode != "runtime_layout_untrusted" {
+		t.Fatalf("untrusted layout = %#v", got)
 	}
-	if inventory.Summary.Stoppable != 3 || inventory.Summary.Blocking != 2 {
+	if inventory.Summary.Automatic != 1 || inventory.Summary.ConfirmedTakeover != 2 || inventory.Summary.Blocked != 2 {
 		t.Fatalf("summary = %#v", inventory.Summary)
 	}
 	if len(inventory.InventoryDigest) != 64 {
@@ -112,35 +115,26 @@ func TestBuildRuntimeProcessInventoryClassifiesCurrentLegacyAndBlockingInstances
 	}
 }
 
-func TestRuntimeProcessInventorySupportsHistoricalLayouts(t *testing.T) {
+func TestRuntimeProcessInventoryUsesMatchingLockAsOwnerEvidence(t *testing.T) {
 	options := testInventoryOptions(t)
-	legacyRoot := options.LegacyRuntimeRoots[0]
-	executable := filepath.Join(legacyRoot, "runtime", "releases", "v0.0.0-dev", "bin", "redeven")
-	stateRoots := []string{
-		legacyRoot,
-		filepath.Join(legacyRoot, "local-environment", "state"),
-		filepath.Join(legacyRoot, "local-environment", "state", "local-environment"),
-		filepath.Join(legacyRoot, "machine", "state"),
-		filepath.Join(legacyRoot, "instances", "envinst_012345", "state"),
-		filepath.Join(legacyRoot, "scopes", "local", "default"),
-		filepath.Join(options.RuntimeRoot, "instances", "envinst_current", "state"),
+	lockPath := filepath.Join(options.StateRoot, "local-environment", "agent.lock")
+	body, err := json.Marshal(runtimeLockMetadata{PID: 20, DesktopOwnerID: options.DesktopOwnerID})
+	if err != nil {
+		t.Fatal(err)
 	}
-	snapshots := make([]runtimeProcessSnapshot, 0, len(stateRoots))
-	for index, stateRoot := range stateRoots {
-		snapshots = append(snapshots, testSnapshot(options, 100+index, int64(1000+index), executable, stateRoot, ""))
-	}
+	writeRuntimeLeaseTestFile(t, lockPath, body)
+	executable := filepath.Join(options.RuntimeRoot, "runtime", "managed", "bin", "redeven")
+	snapshot := testSnapshot(options, 20, 200, executable, options.StateRoot, "")
 	inventory := buildRuntimeProcessInventory(
 		options,
 		runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"},
-		snapshots,
+		[]runtimeProcessSnapshot{snapshot},
 	)
-	if len(inventory.Instances) != len(stateRoots) {
-		t.Fatalf("instances = %#v", inventory.Instances)
-	}
-	for _, instance := range inventory.Instances {
-		if instance.Classification != RuntimeProcessLegacyOwnerless || !instance.Stoppable {
-			t.Fatalf("instance = %#v", instance)
-		}
+	instance := inventory.Instances[0]
+	if instance.OwnerStatus != RuntimeProcessOwnerCurrent ||
+		instance.OwnerEvidence != RuntimeProcessOwnerEvidenceLock ||
+		instance.StopAuthority != RuntimeProcessStopAutomatic {
+		t.Fatalf("instance = %#v", instance)
 	}
 }
 
@@ -158,7 +152,7 @@ func TestRuntimeProcessInventoryBlocksMissingUserOrExecutableIdentity(t *testing
 		runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"},
 		[]runtimeProcessSnapshot{missingUser, missingExecutableIdentity},
 	)
-	if inventory.Summary.Ambiguous != 2 || inventory.Summary.Blocking != 2 {
+	if inventory.Summary.Blocked != 2 {
 		t.Fatalf("summary = %#v", inventory.Summary)
 	}
 	if inventory.Instances[0].ReasonCode != "runtime_user_identity_unavailable" {
@@ -255,7 +249,7 @@ func TestStopRuntimeProcessesRejectsDigestChangesBeforeSignals(t *testing.T) {
 		[]runtimeProcessSnapshot{testSnapshot(options, 40, 400, executable, options.StateRoot, options.DesktopOwnerID)},
 	)
 	controller := &fakeRuntimeProcessController{inventories: []RuntimeProcessInventory{before}}
-	_, err := stopRuntimeProcesses(context.Background(), controller, options, "different-digest", time.Second)
+	_, err := stopRuntimeProcesses(context.Background(), controller, options, "different-digest", time.Second, RuntimeProcessReconciliationAutomatic)
 	if RuntimeProcessErrorCode(err) != RuntimeProcessErrorInventoryChanged {
 		t.Fatalf("error = %v", err)
 	}
@@ -267,18 +261,99 @@ func TestStopRuntimeProcessesRejectsDigestChangesBeforeSignals(t *testing.T) {
 func TestStopRuntimeProcessesRejectsBlockingInventoryBeforeSignals(t *testing.T) {
 	options := testInventoryOptions(t)
 	executable := filepath.Join(options.RuntimeRoot, "runtime", "managed", "bin", "redeven")
+	blocked := testSnapshot(options, 41, 410, executable, options.StateRoot, "foreign-owner")
+	blocked.ExecutableInode = 0
 	before := buildRuntimeProcessInventory(
 		options,
 		runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"},
-		[]runtimeProcessSnapshot{testSnapshot(options, 41, 410, executable, options.StateRoot, "foreign-owner")},
+		[]runtimeProcessSnapshot{blocked},
 	)
 	controller := &fakeRuntimeProcessController{inventories: []RuntimeProcessInventory{before}}
-	_, err := stopRuntimeProcesses(context.Background(), controller, options, before.InventoryDigest, time.Second)
+	_, err := stopRuntimeProcesses(context.Background(), controller, options, before.InventoryDigest, time.Second, RuntimeProcessReconciliationAutomatic)
 	if RuntimeProcessErrorCode(err) != RuntimeProcessErrorInventoryBlocked {
 		t.Fatalf("error = %v", err)
 	}
 	if len(controller.interrupts) != 0 || len(controller.kills) != 0 {
 		t.Fatalf("signals were sent for blocking inventory")
+	}
+}
+
+func TestStopRuntimeProcessesRequiresConfirmationBeforeTakeover(t *testing.T) {
+	options := testInventoryOptions(t)
+	executable := filepath.Join(options.RuntimeRoot, "runtime", "managed", "bin", "redeven")
+	before := buildRuntimeProcessInventory(
+		options,
+		runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"},
+		[]runtimeProcessSnapshot{testSnapshot(options, 80, 800, executable, options.StateRoot, "")},
+	)
+	controller := &fakeRuntimeProcessController{inventories: []RuntimeProcessInventory{before}}
+	_, err := stopRuntimeProcesses(
+		context.Background(),
+		controller,
+		options,
+		before.InventoryDigest,
+		time.Second,
+		RuntimeProcessReconciliationAutomatic,
+	)
+	if RuntimeProcessErrorCode(err) != RuntimeProcessErrorTakeoverRequired {
+		t.Fatalf("error = %v", err)
+	}
+	if len(controller.interrupts) != 0 || len(controller.kills) != 0 {
+		t.Fatalf("signals were sent before takeover confirmation")
+	}
+}
+
+func TestStopRuntimeProcessesStopsVerifiedTakeoverAfterConfirmation(t *testing.T) {
+	options := testInventoryOptions(t)
+	executable := filepath.Join(options.RuntimeRoot, "runtime", "managed", "bin", "redeven")
+	before := buildRuntimeProcessInventory(
+		options,
+		runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"},
+		[]runtimeProcessSnapshot{testSnapshot(options, 81, 810, executable, options.StateRoot, "foreign-owner")},
+	)
+	after := emptyInventoryFrom(before)
+	controller := &fakeRuntimeProcessController{inventories: []RuntimeProcessInventory{before, before, after}}
+	result, err := stopRuntimeProcesses(
+		context.Background(),
+		controller,
+		options,
+		before.InventoryDigest,
+		time.Second,
+		RuntimeProcessReconciliationConfirmedTakeover,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Stopped) != 1 || len(controller.interrupts) != 1 || controller.interrupts[0] != 81 {
+		t.Fatalf("result = %#v interrupts = %#v", result, controller.interrupts)
+	}
+}
+
+func TestStopRuntimeProcessesRejectsMixedBlockedInventoryAfterConfirmation(t *testing.T) {
+	options := testInventoryOptions(t)
+	executable := filepath.Join(options.RuntimeRoot, "runtime", "managed", "bin", "redeven")
+	takeover := testSnapshot(options, 82, 820, executable, options.StateRoot, "")
+	blocked := testSnapshot(options, 83, 830, executable, options.StateRoot, "foreign-owner")
+	blocked.ExecutableInode = 0
+	before := buildRuntimeProcessInventory(
+		options,
+		runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"},
+		[]runtimeProcessSnapshot{takeover, blocked},
+	)
+	controller := &fakeRuntimeProcessController{inventories: []RuntimeProcessInventory{before}}
+	_, err := stopRuntimeProcesses(
+		context.Background(),
+		controller,
+		options,
+		before.InventoryDigest,
+		time.Second,
+		RuntimeProcessReconciliationConfirmedTakeover,
+	)
+	if RuntimeProcessErrorCode(err) != RuntimeProcessErrorInventoryBlocked {
+		t.Fatalf("error = %v", err)
+	}
+	if len(controller.interrupts) != 0 || len(controller.kills) != 0 {
+		t.Fatalf("signals were sent for a mixed hard-blocked inventory")
 	}
 }
 
@@ -298,7 +373,7 @@ func TestStopRuntimeProcessesRejectsPIDReuseBeforeSignal(t *testing.T) {
 		[]runtimeProcessSnapshot{snapshot},
 	)
 	controller := &fakeRuntimeProcessController{inventories: []RuntimeProcessInventory{before, reused}}
-	_, err := stopRuntimeProcesses(context.Background(), controller, options, before.InventoryDigest, time.Second)
+	_, err := stopRuntimeProcesses(context.Background(), controller, options, before.InventoryDigest, time.Second, RuntimeProcessReconciliationAutomatic)
 	if RuntimeProcessErrorCode(err) != RuntimeProcessErrorIdentityChanged {
 		t.Fatalf("error = %v", err)
 	}
@@ -319,7 +394,7 @@ func TestStopRuntimeProcessesRejectsProcessExitBeforeSignalSet(t *testing.T) {
 		before,
 		emptyInventoryFrom(before),
 	}}
-	_, err := stopRuntimeProcesses(context.Background(), controller, options, before.InventoryDigest, time.Second)
+	_, err := stopRuntimeProcesses(context.Background(), controller, options, before.InventoryDigest, time.Second, RuntimeProcessReconciliationAutomatic)
 	if RuntimeProcessErrorCode(err) != RuntimeProcessErrorInventoryChanged {
 		t.Fatalf("error = %v", err)
 	}
@@ -345,15 +420,40 @@ func TestStopRuntimeProcessesVerifiesEveryTargetBeforeSignalSet(t *testing.T) {
 	)
 	controller := &fakeRuntimeProcessController{inventories: []RuntimeProcessInventory{
 		before,
-		before,
 		secondExited,
 	}}
-	_, err := stopRuntimeProcesses(context.Background(), controller, options, before.InventoryDigest, time.Second)
+	_, err := stopRuntimeProcesses(context.Background(), controller, options, before.InventoryDigest, time.Second, RuntimeProcessReconciliationAutomatic)
 	if RuntimeProcessErrorCode(err) != RuntimeProcessErrorInventoryChanged {
 		t.Fatalf("error = %v", err)
 	}
 	if len(controller.interrupts) != 0 || len(controller.kills) != 0 {
 		t.Fatalf("signals were sent before every target was verified: interrupts=%#v kills=%#v", controller.interrupts, controller.kills)
+	}
+}
+
+func TestStopRuntimeProcessesRejectsNewMatchingInstanceBeforeSignalSet(t *testing.T) {
+	options := testInventoryOptions(t)
+	executable := filepath.Join(options.RuntimeRoot, "runtime", "managed", "bin", "redeven")
+	first := testSnapshot(options, 46, 460, executable, options.StateRoot, options.DesktopOwnerID)
+	before := buildRuntimeProcessInventory(
+		options,
+		runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"},
+		[]runtimeProcessSnapshot{first},
+	)
+	newProcess := testSnapshot(options, 47, 470, executable, options.StateRoot, "foreign-owner")
+	newProcess.ExecutableInode = 0
+	changed := buildRuntimeProcessInventory(
+		options,
+		runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"},
+		[]runtimeProcessSnapshot{first, newProcess},
+	)
+	controller := &fakeRuntimeProcessController{inventories: []RuntimeProcessInventory{before, changed}}
+	_, err := stopRuntimeProcesses(context.Background(), controller, options, before.InventoryDigest, time.Second, RuntimeProcessReconciliationAutomatic)
+	if RuntimeProcessErrorCode(err) != RuntimeProcessErrorInventoryChanged {
+		t.Fatalf("error = %v", err)
+	}
+	if len(controller.interrupts) != 0 || len(controller.kills) != 0 {
+		t.Fatalf("signals were sent after the inventory gained a blocked instance: interrupts=%#v kills=%#v", controller.interrupts, controller.kills)
 	}
 }
 
@@ -365,12 +465,12 @@ func TestStopRuntimeProcessesCapturesTargetLeasesBeforeSignals(t *testing.T) {
 		runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"},
 		[]runtimeProcessSnapshot{testSnapshot(options, 46, 460, executable, options.StateRoot, options.DesktopOwnerID)},
 	)
-	lockPath := filepath.Join(options.StateRoot, "agent.lock")
+	lockPath := filepath.Join(options.StateRoot, "local-environment", "agent.lock")
 	if err := os.MkdirAll(lockPath, 0o755); err != nil {
 		t.Fatal(err)
 	}
 	controller := &fakeRuntimeProcessController{inventories: []RuntimeProcessInventory{before, before}}
-	_, err := stopRuntimeProcesses(context.Background(), controller, options, before.InventoryDigest, time.Second)
+	_, err := stopRuntimeProcesses(context.Background(), controller, options, before.InventoryDigest, time.Second, RuntimeProcessReconciliationAutomatic)
 	if RuntimeProcessErrorCode(err) != RuntimeProcessErrorLeaseCleanup {
 		t.Fatalf("error = %v", err)
 	}
@@ -381,25 +481,22 @@ func TestStopRuntimeProcessesCapturesTargetLeasesBeforeSignals(t *testing.T) {
 
 func TestStopRuntimeProcessesStopsAllVerifiedInstancesAndVerifiesEmpty(t *testing.T) {
 	options := testInventoryOptions(t)
-	legacyRoot := options.LegacyRuntimeRoots[0]
-	currentExecutable := filepath.Join(options.RuntimeRoot, "runtime", "managed", "bin", "redeven")
-	legacyExecutable := filepath.Join(legacyRoot, "releases", "v0.5.10", "bin", "redeven")
-	current := testSnapshot(options, 50, 500, currentExecutable, options.StateRoot, options.DesktopOwnerID)
-	legacy := testSnapshot(options, 51, 510, legacyExecutable, filepath.Join(legacyRoot, "local-environment", "state"), "")
+	executable := filepath.Join(options.RuntimeRoot, "runtime", "managed", "bin", "redeven")
+	first := testSnapshot(options, 50, 500, executable, options.StateRoot, options.DesktopOwnerID)
+	second := testSnapshot(options, 51, 510, executable, options.StateRoot, options.DesktopOwnerID)
 	before := buildRuntimeProcessInventory(
 		options,
 		runtimeProcessExecutionScope{UserIdentity: "tester", NamespaceID: "mnt:[current]"},
-		[]runtimeProcessSnapshot{current, legacy},
+		[]runtimeProcessSnapshot{first, second},
 	)
 	after := emptyInventoryFrom(before)
 	controller := &fakeRuntimeProcessController{inventories: []RuntimeProcessInventory{
 		before,
 		before,
-		before,
 		after,
 		after,
 	}}
-	result, err := stopRuntimeProcesses(context.Background(), controller, options, before.InventoryDigest, time.Second)
+	result, err := stopRuntimeProcesses(context.Background(), controller, options, before.InventoryDigest, time.Second, RuntimeProcessReconciliationAutomatic)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -432,7 +529,7 @@ func TestStopRuntimeProcessesRejectsNewMatchingInstanceAfterTargetsExit(t *testi
 		before,
 		after,
 	}}
-	result, err := stopRuntimeProcesses(context.Background(), controller, options, before.InventoryDigest, time.Second)
+	result, err := stopRuntimeProcesses(context.Background(), controller, options, before.InventoryDigest, time.Second, RuntimeProcessReconciliationAutomatic)
 	if RuntimeProcessErrorCode(err) != RuntimeProcessErrorInventoryChanged {
 		t.Fatalf("error = %v", err)
 	}
@@ -466,7 +563,7 @@ func writeRuntimeLeaseTestFile(t *testing.T, lockPath string, body []byte) {
 	}
 }
 
-func TestRuntimeProcessLeaseSnapshotsExcludeInactiveLegacyLocks(t *testing.T) {
+func TestRuntimeProcessLeaseSnapshotsUseOnlyCurrentLockPath(t *testing.T) {
 	stateRoot := t.TempDir()
 	targetLockPath := filepath.Join(stateRoot, "local-environment", "agent.lock")
 	targetBody, err := json.Marshal(runtimeLockMetadata{PID: 81, InstanceID: "current"})
@@ -523,7 +620,6 @@ func TestRetireRuntimeProcessLeasesClearsUnchangedOrReleasedTargets(t *testing.T
 		afterBody  []byte
 	}{
 		{name: "unchanged json", beforeBody: jsonBody, afterBody: jsonBody},
-		{name: "unchanged legacy pid", beforeBody: []byte("91\n"), afterBody: []byte("91\n")},
 		{name: "released by runtime", beforeBody: jsonBody, afterBody: nil},
 	} {
 		t.Run(test.name, func(t *testing.T) {

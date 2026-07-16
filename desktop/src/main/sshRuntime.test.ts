@@ -10,8 +10,6 @@ import {
   buildManagedSSHActivatePreparedRuntimeScript,
   buildManagedSSHRemoteInstallScript,
   buildManagedSSHRuntimeProbeScript,
-  buildManagedSSHRuntimeInventoryScript,
-  buildManagedSSHRuntimeInventoryStopScript,
   buildManagedSSHStartScript,
   buildManagedSSHUploadedInstallScript,
   buildManagedSSHReportReadScript,
@@ -112,13 +110,14 @@ describe('sshRuntime', () => {
     expect(buildManagedSSHReportReadScript()).toContain('state_root_raw="${2:-}"');
     expect(buildManagedSSHReportReadScript()).toContain('session_token="$3"');
     expect(buildManagedSSHReportReadScript()).toContain('report_path="${state_root%/}/runtime/sessions/${session_token}/startup-report.json"');
-    expect(buildManagedSSHRuntimeInventoryScript()).toContain('desktop-runtime-inventory');
-    expect(buildManagedSSHRuntimeInventoryScript()).toContain('--include-known-legacy');
-    expect(buildManagedSSHRuntimeInventoryScript()).toContain('--desktop-owner-id "$desktop_owner_id"');
-    expect(buildManagedSSHRuntimeInventoryStopScript()).toContain('desktop-runtime-stop');
-    expect(buildManagedSSHRuntimeInventoryStopScript()).toContain('--all-matching');
-    expect(buildManagedSSHRuntimeInventoryStopScript()).toContain('--expected-inventory-digest "$inventory_digest"');
-    expect(buildManagedSSHRuntimeInventoryStopScript()).not.toContain('kill "$pid"');
+    const source = readSSHRuntimeSource();
+    expect(source).toContain("'redeven-ssh-runtime-process-helper'");
+    expect(source).toContain('desktop-runtime-inventory --runtime-root "$runtime_root"');
+    expect(source).toContain('desktop-runtime-stop --runtime-root "$runtime_root"');
+    expect(source).toContain('--expected-inventory-digest "$inventory_digest"');
+    expect(source).not.toContain('--process-contract-version');
+    expect(source).not.toContain('--include-known-legacy');
+    expect(source).not.toContain('runtimeProcessCommandNeedsUploadedHelper');
   });
 
   it('parses structured probe results and normalizes reported release tags', () => {
@@ -219,10 +218,10 @@ describe('sshRuntime', () => {
     expect(activateScript).toContain('switch_staged_runtime');
     expect(activateScript).toContain('mv "$managed_root" "$previous_managed_root"');
     expect(activateScript).toContain('if mv "$staging_root" "$managed_root"; then');
-    expect(activateScript).toContain('cleanup_legacy_releases');
+    expect(activateScript).not.toContain('cleanup_legacy_releases');
   });
 
-  it('checks the SSH master socket, probes remote platform, and keeps auto fallback limited to local asset preparation failures', () => {
+  it('checks the SSH master socket, probes remote platform, and keeps bootstrap strategy explicit', () => {
     const source = readSSHRuntimeSource();
 
     expect(source).toContain("'-O', 'check',");
@@ -239,13 +238,12 @@ describe('sshRuntime', () => {
     expect(source).toContain('async function probeRemoteRuntimeCompatibility(');
     expect(source).toContain('async function probeRemotePlatform(');
     expect(source).toContain('function resolveDesktopSSHReleaseFetchPolicy(');
-    expect(source).toContain("return ['desktop_upload', 'remote_install'];");
-    expect(source).toContain('class DesktopSSHUploadAssetPreparationError extends DesktopOperationFailureError');
-    expect(source).toContain("runtimeLifecycleStepID: 'preparing_runtime_package'");
+    expect(source).not.toContain('function installStrategyOrder(');
+    expect(source).not.toContain('DesktopSSHUploadAssetPreparationError');
     expect(source).toContain('fetchPolicy: releaseFetchPolicy,');
-    expect(source).toContain("if (args.target.bootstrap_strategy === 'auto' && error instanceof DesktopSSHUploadAssetPreparationError)");
-    expect(source).toContain('allowLegacyMigration: false,');
-    expect(source).toContain('return prepared;');
+    expect(source).toContain("if (args.target.bootstrap_strategy === 'remote_install')");
+    expect(source).toContain('return prepareRemoteRuntimeViaRemoteInstall(args);');
+    expect(source).not.toContain('allowLegacyMigration');
     expect(source).toContain("from './runtimePackageCache'");
     expect(source).toContain('prepareDesktopRuntimeUploadAsset({');
     expect(source).toContain("asset.source === 'source_build_cache'");

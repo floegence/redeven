@@ -17,14 +17,11 @@ func TestRuntimeProcessInventoryOptionsPreservesExplicitMachineScope(t *testing.
 	root := t.TempDir()
 	stateRoot := filepath.Join(root, "state")
 	runtimeRoot := filepath.Join(root, "runtime")
-	legacyRoot := filepath.Join(root, "legacy")
 	options, err := runtimeProcessInventoryOptions(
 		stateRoot,
 		runtimeRoot,
 		" desktop-owner ",
 		[]string{filepath.Join(runtimeRoot, "bin", "redeven")},
-		true,
-		[]string{legacyRoot, legacyRoot},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -32,8 +29,8 @@ func TestRuntimeProcessInventoryOptionsPreservesExplicitMachineScope(t *testing.
 	if options.StateRoot != stateRoot || options.RuntimeRoot != runtimeRoot || options.DesktopOwnerID != "desktop-owner" {
 		t.Fatalf("options = %#v", options)
 	}
-	if len(options.LegacyRuntimeRoots) != 2 {
-		t.Fatalf("legacy roots = %#v", options.LegacyRuntimeRoots)
+	if len(options.CurrentExecutables) != 1 {
+		t.Fatalf("current executables = %#v", options.CurrentExecutables)
 	}
 }
 
@@ -55,7 +52,7 @@ func TestDesktopRuntimeStopAllMatchingRequiresDigestAsJSONError(t *testing.T) {
 	if err := json.Unmarshal(stdout.Bytes(), &body); err != nil {
 		t.Fatalf("json error = %v, stdout = %q", err, stdout.String())
 	}
-	if body.SchemaVersion != 1 || body.Error.Code != "runtime_process_operation_failed" {
+	if body.SchemaVersion != runtimemanagement.RuntimeProcessInventorySchemaVersion || body.Error.Code != "runtime_process_operation_failed" {
 		t.Fatalf("body = %#v", body)
 	}
 	if !strings.Contains(body.Error.Message, "--expected-inventory-digest") {

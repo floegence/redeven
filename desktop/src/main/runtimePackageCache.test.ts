@@ -11,7 +11,6 @@ vi.mock('./sshReleaseTrust', () => ({
 }));
 
 import {
-  legacyRuntimePackageCacheRoots,
   prepareDesktopRuntimeUploadAsset,
   pruneDesktopRuntimePackageCache,
   runtimePackageCacheRoot,
@@ -474,38 +473,30 @@ describe('runtimePackageCache', () => {
 	    }
 	  }, 15_000);
 
-	  it('prunes old release tags, temporary files, and legacy cache roots', async () => {
+	  it('prunes old release tags and temporary files', async () => {
     const userDataRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-runtime-package-prune-'));
     const cacheRoot = runtimePackageCacheRoot(userDataRoot);
     const sourceRoot = path.join(cacheRoot, 'source-key');
     const currentArchive = path.join(sourceRoot, 'v1.2.3', 'linux_amd64', 'redeven_linux_amd64.tar.gz');
     const oldArchive = path.join(sourceRoot, 'v1.2.2', 'linux_amd64', 'redeven_linux_amd64.tar.gz');
     const tempArchive = path.join(sourceRoot, 'v1.2.3', 'linux_amd64', '.redeven_linux_amd64.tar.gz.1234.abcdef.tmp');
-    const [oldSSHRoot, oldPlacementRoot] = legacyRuntimePackageCacheRoots(userDataRoot);
     try {
       await fs.mkdir(path.dirname(currentArchive), { recursive: true });
       await fs.mkdir(path.dirname(oldArchive), { recursive: true });
-      await fs.mkdir(oldSSHRoot, { recursive: true });
-      await fs.mkdir(oldPlacementRoot, { recursive: true });
       await Promise.all([
         fs.writeFile(currentArchive, 'current'),
         fs.writeFile(oldArchive, 'old'),
         fs.writeFile(tempArchive, 'tmp'),
-        fs.writeFile(path.join(oldSSHRoot, 'old'), 'old'),
-        fs.writeFile(path.join(oldPlacementRoot, 'old'), 'old'),
       ]);
 
       await pruneDesktopRuntimePackageCache({
         cacheRoot,
         activeReleaseTag: 'v1.2.3',
-        legacyCacheRoots: [oldSSHRoot, oldPlacementRoot],
       });
 
       await expect(fs.readFile(currentArchive, 'utf8')).resolves.toBe('current');
       await expect(fs.stat(oldArchive)).rejects.toMatchObject({ code: 'ENOENT' });
       await expect(fs.stat(tempArchive)).rejects.toMatchObject({ code: 'ENOENT' });
-      await expect(fs.stat(oldSSHRoot)).rejects.toMatchObject({ code: 'ENOENT' });
-      await expect(fs.stat(oldPlacementRoot)).rejects.toMatchObject({ code: 'ENOENT' });
     } finally {
       await fs.rm(userDataRoot, { recursive: true, force: true });
     }

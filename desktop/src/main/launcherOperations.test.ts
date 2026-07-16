@@ -27,6 +27,36 @@ describe('LauncherOperationRegistry', () => {
     })).toThrow(LauncherOperationConflictError);
   });
 
+  it('treats needs_confirmation as terminal and releases the operation key', () => {
+    const registry = new LauncherOperationRegistry();
+    const operation = registry.create({
+      operation_key: 'runtime-confirmation',
+      action: 'restart_environment_runtime',
+      subject_kind: 'local_environment',
+      subject_id: 'local',
+      phase: 'discovering_runtime_instances',
+      title: 'Checking Runtime processes',
+      detail: 'Desktop is checking Runtime processes.',
+    });
+    registry.finishCurrentAttempt(operation.operation_key, {
+      action: operation.action,
+      started_at_unix_ms: operation.started_at_unix_ms,
+    }, 'needs_confirmation', {
+      title: 'Runtime takeover confirmation required',
+      detail: 'Review the verified Runtime processes.',
+    });
+    expect(registry.get(operation.operation_key)?.status).toBe('needs_confirmation');
+    expect(() => registry.create({
+      operation_key: operation.operation_key,
+      action: 'restart_environment_runtime',
+      subject_kind: 'local_environment',
+      subject_id: 'local',
+      phase: 'checking_existing_runtime',
+      title: 'Checking Runtime',
+      detail: 'Desktop is checking the Runtime.',
+    })).not.toThrow();
+  });
+
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -171,7 +201,7 @@ describe('LauncherOperationRegistry', () => {
       environment_label: 'Local Environment',
       phase: 'checking_existing_runtime',
       title: 'Checking existing runtime',
-      detail: 'Desktop is checking whether a compatible local runtime is already running.',
+      detail: 'Desktop is checking whether a verified current local Runtime is already running.',
       presentation_context: 'flower_warmup',
       lifecycle_progress: runtimeLifecycleProgress({
         location: 'local_host',

@@ -1175,6 +1175,41 @@
     "validationRuntimeRootRequired": "Se requiere raíz de tiempo de ejecución.",
     "validationSshPasswordRequired": "La contraseña SSH es obligatoria para la autenticación con contraseña."
   },
+  "runtimeTakeover": {
+    "forceRestartTitle": "¿Forzar el reinicio de este entorno de ejecución?",
+    "forceStopTitle": "¿Forzar la detención de este entorno de ejecución?",
+    "forceRestartAction": "Forzar el reinicio",
+    "forceStopAction": "Forzar la detención",
+    "reviewRequired": "Revisión necesaria",
+    "progressTitle": "Se requiere confirmar la toma de control del entorno de ejecución",
+    "progressRestartDetail": "Revisa los procesos verificados del entorno de ejecución antes de forzar el reinicio.",
+    "progressStopDetail": "Revisa los procesos verificados del entorno de ejecución antes de forzar la detención de este entorno de ejecución.",
+    "warningTitle": "Procesos verificados del entorno de ejecución que se finalizarán: {count}",
+    "warningDescription": "La identidad de los procesos está verificada, pero no hay información que confirme que pertenecen a este Desktop o la información disponible indica que pertenecen a otro Desktop. Podrían perderse terminales activos, tareas y trabajo sin guardar.",
+    "targetLabel": "Destino del entorno de ejecución",
+    "locationLabel": "Ubicación",
+    "processAriaLabel": "Proceso del entorno de ejecución {pid}",
+    "startedLabel": "Hora de inicio",
+    "ownerEvidenceLabel": "Verificación de propiedad",
+    "stateRootLabel": "Raíz de estado",
+    "versionLabel": "Versión del entorno de ejecución",
+    "authorizationNotice": "Esta autorización se limita al inventario que se muestra aquí. Si cambia la identidad de algún proceso, Desktop cancelará la operación y te pedirá que revises la información actualizada.",
+    "location": {
+      "local_host": "Este Mac",
+      "ssh_host": "Host SSH",
+      "local_container": "Contenedor local",
+      "ssh_container": "Contenedor en host SSH"
+    },
+    "ownerStatus": {
+      "missing": "No se ha podido verificar la propiedad",
+      "foreign": "Pertenece a otro Desktop"
+    },
+    "ownerEvidence": {
+      "process_environment": "Propiedad verificada mediante el entorno del proceso",
+      "runtime_lock": "Propiedad verificada mediante el bloqueo del entorno de ejecución",
+      "missing": "Sin datos para verificar la propiedad"
+    }
+  },
   "confirm": {
     "deleteConnectionTitle": "Eliminar conexión",
     "deleteConnectionConfirm": "Eliminar conexión",

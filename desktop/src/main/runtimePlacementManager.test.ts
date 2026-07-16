@@ -90,22 +90,22 @@ describe('runtimePlacementManager', () => {
       '  const instances = [];',
       '  if (fs.existsSync(daemon)) {',
       '    const storedPID = Number(fs.readFileSync(daemon, "utf8"));',
-      '    instances.push({ pid: Number.isInteger(storedPID) && storedPID > 0 ? storedPID : 4242, process_started_at_unix_ms: 1000, desktop_owner_id: "owner", state_root: "/root/.redeven", executable_path: managedBinary, executable_device: 1, executable_inode: 2, namespace_id: "mnt:[container]", runtime_version: fs.existsSync(marker) ? normalizedReleaseTag(fs.readFileSync(marker, "utf8")) : "v0.0.0-dev", classification: "current_owned", stoppable: true });',
+      '    instances.push({ pid: Number.isInteger(storedPID) && storedPID > 0 ? storedPID : 4242, process_started_at_unix_ms: 1000, desktop_owner_id: "owner", state_root: "/root/.redeven", executable_path: managedBinary, executable_device: 1, executable_inode: 2, namespace_id: "mnt:[container]", runtime_version: fs.existsSync(marker) ? normalizedReleaseTag(fs.readFileSync(marker, "utf8")) : "v0.0.0-dev", identity_status: "verified", owner_status: "current", layout_status: "current", owner_evidence: "process_environment", stop_authority: "automatic" });',
       '  }',
       '  if (fs.existsSync(orphan)) {',
-      '    instances.push({ pid: 4343, process_started_at_unix_ms: 900, state_root: "/root/.redeven/local-environment/state/local-environment", executable_path: "/root/.cache/redeven-desktop/runtime/releases/v0.5.0/bin/redeven", executable_deleted: true, executable_device: 3, executable_inode: 4, namespace_id: "mnt:[container]", classification: "legacy_ownerless", stoppable: true });',
+      '    instances.push({ pid: 4343, process_started_at_unix_ms: 900, state_root: "/root/.redeven", executable_path: managedBinary, executable_device: 3, executable_inode: 4, namespace_id: "mnt:[container]", reason_code: "runtime_owner_identity_unavailable", identity_status: "verified", owner_status: "missing", layout_status: "current", owner_evidence: "missing", stop_authority: "confirmed_takeover" });',
       '  }',
       '  if (fs.existsSync(foreign)) {',
-      '    instances.push({ pid: 4444, process_started_at_unix_ms: 800, desktop_owner_id: "another-owner", state_root: "/root/.redeven", executable_path: managedBinary, executable_device: 5, executable_inode: 6, namespace_id: "mnt:[container]", classification: "foreign_owner", stoppable: false, reason_code: "runtime_owned_by_another_desktop" });',
+      '    instances.push({ pid: 4444, process_started_at_unix_ms: 800, desktop_owner_id: "another-owner", state_root: "/root/.redeven", executable_path: managedBinary, executable_device: 5, executable_inode: 6, namespace_id: "mnt:[container]", reason_code: "runtime_owned_by_another_desktop", identity_status: "verified", owner_status: "foreign", layout_status: "current", owner_evidence: "process_environment", stop_authority: "confirmed_takeover" });',
       '  }',
-      '  const current = instances.filter((entry) => entry.classification === "current_owned").length;',
-      '  const legacyOwnerless = instances.filter((entry) => entry.classification === "legacy_ownerless").length;',
-      '  const foreignOwner = instances.filter((entry) => entry.classification === "foreign_owner").length;',
-      '  return { schema_version: 1, scope: { runtime_root: "/root/.redeven", state_root: "/root/.redeven", desktop_owner_id: "owner", user_identity: "root", namespace_id: "mnt:[container]" }, inventory_digest: instances.length > 0 ? "a".repeat(64) : "b".repeat(64), instances, summary: { current_owned: current, legacy_owned: 0, legacy_ownerless: legacyOwnerless, foreign_owner: foreignOwner, ambiguous: 0, stoppable: instances.length - foreignOwner, blocking: foreignOwner } };',
+      '  const automatic = instances.filter((entry) => entry.stop_authority === "automatic").length;',
+      '  const confirmedTakeover = instances.filter((entry) => entry.stop_authority === "confirmed_takeover").length;',
+      '  const blocked = instances.filter((entry) => entry.stop_authority === "blocked").length;',
+      '  return { schema_version: 2, scope: { runtime_root: "/root/.redeven", state_root: "/root/.redeven", desktop_owner_id: "owner", user_identity: "root", namespace_id: "mnt:[container]" }, inventory_digest: instances.length > 0 ? "a".repeat(64) : "b".repeat(64), instances, summary: { automatic, confirmed_takeover: confirmedTakeover, blocked } };',
       '}',
       'function processCommandEnvelope(operation) {',
       '  const before = processInventory();',
-      '  if (operation === "stop") { try { fs.unlinkSync(daemon); } catch {} try { fs.unlinkSync(orphan); } catch {} event("stop"); const after = processInventory(); return JSON.stringify({ schema_version: 1, before, after, stopped: before.instances }); }',
+      '  if (operation === "stop") { try { fs.unlinkSync(daemon); } catch {} try { fs.unlinkSync(orphan); } catch {} try { fs.unlinkSync(foreign); } catch {} event("stop"); const after = processInventory(); return JSON.stringify({ schema_version: 2, before, after, stopped: before.instances }); }',
       '  return JSON.stringify(before);',
       '}',
       'const args = process.argv.slice(2);',
@@ -124,7 +124,6 @@ describe('runtimePlacementManager', () => {
       '  }',
       '  if (execMarker === "redeven-container-runtime-stop-all") { process.stdout.write("__REDEVEN_RUNTIME_PROCESS_EXIT__=0\\n" + processCommandEnvelope("stop")); process.exit(0); }',
       '  if (execMarker === "redeven-container-runtime-process-helper") {',
-      '    event("helper");',
       '    fs.readFileSync(0);',
       '    const operation = args[markerIndex + 5];',
       '    process.stdout.write("__REDEVEN_RUNTIME_PROCESS_EXIT__=0\\n" + processCommandEnvelope(operation));',
@@ -282,7 +281,7 @@ describe('runtimePlacementManager', () => {
       stamp_path: MANAGED_RUNTIME_STAMP_PATH,
     });
     expect(await fs.readFile(markerPath, 'utf8')).toBe('v0.6.10');
-    expect(uploadAssetMocks.prepareDesktopRuntimeUploadAsset).not.toHaveBeenCalled();
+    expect(uploadAssetMocks.prepareDesktopRuntimeUploadAsset).toHaveBeenCalledTimes(2);
     expect(progressPhases).toEqual([
       'checking_container',
       'detecting_platform',
@@ -429,7 +428,7 @@ describe('runtimePlacementManager', () => {
       message: expect.stringContaining('Update this container runtime'),
     });
 
-    expect(await fs.readFile(eventsPath, 'utf8')).toBe('helper\n');
+    expect(await fs.readFile(eventsPath, 'utf8').catch(() => '')).toBe('');
     await expect(fs.stat(uploadedArchivePath)).rejects.toMatchObject({ code: 'ENOENT' });
   });
 
@@ -457,13 +456,13 @@ describe('runtimePlacementManager', () => {
       runtime_process_intent: 'update',
       force_runtime_update: true,
       desktop_owner_id: 'owner',
-    })).rejects.toThrow('cannot be safely reconciled');
+    })).rejects.toMatchObject({ name: 'RuntimeProcessTakeoverRequiredError' });
 
     expect(await fs.readFile(markerPath, 'utf8')).toBe('v0.6.10');
     expect(await fs.readFile(eventsPath, 'utf8').catch(() => '')).toBe('');
   });
 
-  it('blocks Start when inventory finds a live historical process without a reachable management socket', async () => {
+  it('requires takeover confirmation when owner evidence is missing in a container', async () => {
     const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-placement-manager-'));
     const { markerPath, orphanPath, eventsPath } = await installFakeDocker(tempDir);
     await fs.writeFile(markerPath, 'v0.6.10');
@@ -488,10 +487,7 @@ describe('runtimePlacementManager', () => {
       on_progress: (progress) => {
         progressPhases.push(progress.phase);
       },
-    })).rejects.toMatchObject({
-      name: 'RuntimePlacementMaintenanceRequiredError',
-      message: expect.stringContaining('historical process'),
-    });
+    })).rejects.toMatchObject({ name: 'RuntimeProcessTakeoverRequiredError' });
 
     expect(await fs.readFile(eventsPath, 'utf8').catch(() => '')).toBe('');
     expect(progressPhases).toEqual([
@@ -561,7 +557,7 @@ describe('runtimePlacementManager', () => {
     });
 
     expect(ready.startup?.pid).toBe(2222);
-    expect(uploadAssetMocks.prepareDesktopRuntimeUploadAsset).not.toHaveBeenCalled();
+    expect(uploadAssetMocks.prepareDesktopRuntimeUploadAsset).toHaveBeenCalledTimes(2);
   });
 
   it('times out when replacement readiness keeps reporting the previous daemon pid', async () => {
