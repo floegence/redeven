@@ -38,6 +38,7 @@ import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redev
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 import { useI18n, type I18nHelpers } from '../i18n';
 import { useEnvContext } from './EnvContext';
+import { EnvCollectionLoadingSkeleton } from './EnvCollectionLoadingSkeleton';
 
 // ============================================================================
 // Types
@@ -564,6 +565,9 @@ export function EnvPortForwardsPage() {
       return Array.isArray(out?.forwards) ? out.forwards : [];
     }
   );
+  const initialForwardsLoading = () => forwards.state === 'pending';
+  const forwardsRefreshing = () => forwards.state === 'refreshing';
+  const forwardsRenderable = () => forwards.state === 'ready' || forwards.state === 'refreshing';
 
   // Filtered and sorted services
   const filteredForwards = createMemo(() => {
@@ -723,10 +727,11 @@ export function EnvPortForwardsPage() {
                 onClick={bumpRefresh}
                 disabled={!!busyID() || forwards.loading}
                 aria-label={i18n.t('webServices.actions.refresh')}
+                aria-busy={forwardsRefreshing() ? 'true' : undefined}
                 title={i18n.t('webServices.actions.refresh')}
                 class={outlineControlClass}
               >
-                <RefreshIcon class="w-3.5 h-3.5 sm:mr-1" />
+                <RefreshIcon class={cn('w-3.5 h-3.5 sm:mr-1', forwardsRefreshing() && 'animate-spin motion-reduce:animate-none')} />
                 <span class="hidden sm:inline">{i18n.t('webServices.actions.refresh')}</span>
               </Button>
               <Button
@@ -778,8 +783,20 @@ export function EnvPortForwardsPage() {
           </Show>
 
           {/* Services list */}
-          <div class="relative" style={{ 'min-height': '200px' }}>
-            <RedevenLoadingCurtain visible={forwards.loading} eyebrow={i18n.t('webServices.loadingEyebrow')} message={i18n.t('webServices.loadingMessage')} />
+          <div
+            class="relative"
+            style={{ 'min-height': '200px' }}
+            aria-busy={forwardsRefreshing() ? 'true' : undefined}
+            data-testid="web-services-list-region"
+          >
+            <EnvCollectionLoadingSkeleton
+              visible={initialForwardsLoading()}
+              message={i18n.t('webServices.loadingMessage')}
+              testId="web-services-initial-loading"
+            />
+            <Show when={forwardsRefreshing()}>
+              <span class="sr-only" role="status" aria-live="polite">{i18n.t('webServices.loadingMessage')}</span>
+            </Show>
 
             <Show when={forwards.error}>
               <div class="flex items-center gap-2 text-sm text-destructive p-4">
@@ -794,7 +811,7 @@ export function EnvPortForwardsPage() {
               </div>
             </Show>
 
-            <Show when={forwards.state === 'ready' && !forwards.error}>
+            <Show when={forwardsRenderable() && !forwards.error}>
               <Show
                 when={(forwards()?.length ?? 0) > 0}
                 fallback={<EmptyState onCreateClick={() => setCreateOpen(true)} disabled={permissionReady() && !canExecute()} />}

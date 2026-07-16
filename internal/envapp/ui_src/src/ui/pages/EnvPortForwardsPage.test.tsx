@@ -59,6 +59,7 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
 
 vi.mock('@floegence/floe-webapp-core/loading', () => ({
   LoadingOverlay: (props: any) => (props.visible ? <div>{props.message}</div> : null),
+  SkeletonCard: (props: any) => <div class={props.class} data-testid="skeleton-card" />,
   SnakeLoader: () => <div data-testid="snake-loader" />,
 }));
 
@@ -69,7 +70,15 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     state: () => (options.open() ? 'entered' : 'exited'),
   }),
   Button: (props: any) => (
-    <button type="button" class={props.class} onClick={props.onClick} disabled={props.disabled} aria-label={props['aria-label']} title={props.title}>
+    <button
+      type="button"
+      class={props.class}
+      onClick={props.onClick}
+      disabled={props.disabled}
+      aria-label={props['aria-label']}
+      aria-busy={props['aria-busy']}
+      title={props.title}
+    >
       {props.children}
     </button>
   ),
@@ -123,6 +132,20 @@ async function flushPage(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();
   await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
+async function flushMicrotasks(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((next) => {
+    resolve = next;
+  });
+  return { promise, resolve };
 }
 
 async function waitForAssertion(assertion: () => void): Promise<void> {
@@ -287,6 +310,145 @@ describe('EnvPortForwardsPage', () => {
     host.remove();
     document.body.innerHTML = '';
     vi.restoreAllMocks();
+  });
+
+  it('delays the quiet card skeleton for the initial web services request', async () => {
+    vi.useFakeTimers();
+    const forwardsRequest = deferred<{ forwards: any[] }>();
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/forwards') return forwardsRequest.promise;
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+    const dispose = render(() => <EnvPortForwardsPage />, host);
+
+    try {
+      await flushMicrotasks();
+      const listRegion = host.querySelector('[data-testid="web-services-list-region"]');
+      expect(listRegion?.querySelector('.redeven-loading-curtain')).toBeNull();
+      expect(host.querySelector('[data-testid="web-services-initial-loading"]')).toBeNull();
+
+      await vi.advanceTimersByTimeAsync(149);
+      expect(host.querySelector('[data-testid="web-services-initial-loading"]')).toBeNull();
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(host.querySelector('[data-testid="web-services-initial-loading"]')).not.toBeNull();
+      expect(host.querySelectorAll('[data-testid="skeleton-card"]')).toHaveLength(3);
+
+      forwardsRequest.resolve({ forwards: [] });
+      await flushMicrotasks();
+      expect(host.querySelector('[data-testid="web-services-initial-loading"]')).toBeNull();
+      expect(host.textContent).toContain('No web services yet');
+    } finally {
+      dispose();
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps cards and search state mounted while refreshing web services', async () => {
+    render(() => <EnvPortForwardsPage />, host);
+    await flushPage();
+
+    const currentCard = host.querySelector('[data-testid="port-forward-card"]');
+    const searchInput = host.querySelector('input') as HTMLInputElement | null;
+    expect(searchInput).toBeTruthy();
+    if (searchInput) {
+      searchInput.value = 'Demo';
+      searchInput.dispatchEvent(new InputEvent('input', { bubbles: true, data: 'Demo' }));
+    }
+    const forwardsRequest = deferred<{ forwards: any[] }>();
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/forwards') return forwardsRequest.promise;
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+
+    const refreshButton = host.querySelector('button[aria-label="Refresh"]') as HTMLButtonElement | null;
+    expect(refreshButton).toBeTruthy();
+    refreshButton?.click();
+    await flushMicrotasks();
+
+    expect(host.querySelector('[data-testid="port-forward-card"]')).toBe(currentCard);
+    expect(host.querySelector('input')).toBe(searchInput);
+    expect(searchInput?.value).toBe('Demo');
+    expect(host.querySelector('[data-testid="web-services-list-region"]')?.getAttribute('aria-busy')).toBe('true');
+    expect(refreshButton?.getAttribute('aria-busy')).toBe('true');
+    expect(refreshButton?.querySelector('[data-testid="refresh-icon"]')?.className).toContain('animate-spin');
+    expect(host.querySelector('[data-testid="web-services-initial-loading"]')).toBeNull();
+    expect(host.querySelector('[data-testid="web-services-list-region"] .redeven-loading-curtain')).toBeNull();
+
+    forwardsRequest.resolve({
+      forwards: [
+        {
+          forward_id: 'forward-2',
+          target_url: 'http://localhost:4000',
+          name: 'Demo Forward Updated',
+          description: 'Updated browser preview',
+          health_path: '/healthz',
+          insecure_skip_verify: false,
+          created_at_unix_ms: 2,
+          updated_at_unix_ms: 2,
+          last_opened_at_unix_ms: 2,
+          health: {
+            status: 'healthy',
+            last_checked_at_unix_ms: 2,
+            latency_ms: 8,
+            last_error: '',
+          },
+        },
+      ],
+    });
+    await flushPage();
+
+    expect(host.textContent).toContain('Demo Forward Updated');
+    expect(searchInput?.value).toBe('Demo');
+    expect(host.querySelector('[data-testid="web-services-list-region"]')?.getAttribute('aria-busy')).toBeNull();
+    expect(refreshButton?.getAttribute('aria-busy')).toBeNull();
+    expect(refreshButton?.querySelector('[data-testid="refresh-icon"]')?.className).not.toContain('animate-spin');
+  });
+
+  it('keeps the empty state mounted while refreshing web services', async () => {
+    localApiMocks.fetchLocalApiJSON.mockResolvedValue({ forwards: [] });
+    render(() => <EnvPortForwardsPage />, host);
+    await flushPage();
+
+    const emptyTitle = Array.from(host.querySelectorAll('h3')).find((element) => element.textContent === 'No web services yet');
+    expect(emptyTitle).toBeTruthy();
+    const forwardsRequest = deferred<{ forwards: any[] }>();
+    localApiMocks.fetchLocalApiJSON.mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/forwards') return forwardsRequest.promise;
+      throw new Error(`Unexpected local API call: ${url}`);
+    });
+
+    const refreshButton = host.querySelector('button[aria-label="Refresh"]') as HTMLButtonElement | null;
+    refreshButton?.click();
+    await flushMicrotasks();
+
+    expect(emptyTitle ? host.contains(emptyTitle) : false).toBe(true);
+    expect(host.querySelector('[data-testid="web-services-initial-loading"]')).toBeNull();
+
+    forwardsRequest.resolve({ forwards: [] });
+    await flushPage();
+    expect(host.textContent).toContain('No web services yet');
+  });
+
+  it('keeps the blocking curtain for opening a web service', async () => {
+    const runtimeRequest = deferred<typeof localRuntime>();
+    controlplaneMocks.getLocalRuntime.mockReturnValue(runtimeRequest.promise);
+    const assign = vi.fn();
+    vi.spyOn(window, 'open').mockReturnValue({ location: { assign }, close: vi.fn() } as unknown as Window);
+    render(() => <EnvPortForwardsPage />, host);
+    await flushPage();
+
+    const openButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Open'));
+    openButton?.click();
+    await flushMicrotasks();
+
+    expect(host.querySelector('.redeven-loading-curtain')).not.toBeNull();
+    expect(host.textContent).toContain('Resolving route');
+
+    runtimeRequest.resolve(localRuntime);
+    await waitForAssertion(() => {
+      expect(assign).toHaveBeenCalledWith('http://localhost:3000');
+    });
   });
 
   it('uses semantic panel and card surface classes for neutral forward shells', async () => {

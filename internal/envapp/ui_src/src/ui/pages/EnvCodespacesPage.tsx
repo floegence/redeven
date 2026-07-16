@@ -65,7 +65,6 @@ import {
   createBrowserEditorSetupOperationID,
   type BrowserEditorSetupProgress,
 } from "../services/browserEditorSetupProgress";
-import { RedevenLoadingCurtain } from "../primitives/RedevenLoadingCurtain";
 import { buildFilePathFlowerTurnLauncherIntent } from "../utils/filePathAskFlower";
 import { canOpenDirectoryPathInTerminal, openDirectoryInTerminal } from "../utils/openDirectoryInTerminal";
 import { canLaunchProcess } from "../utils/permission";
@@ -73,6 +72,7 @@ import { replacePickerChildren, sortPickerFolderItems, toPickerFolderItem, toPic
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from "../utils/redevenSurfaceRoles";
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from "../workbench/surface/workbenchWheelInteractive";
 import { FloatingContextMenu, type FloatingContextMenuItem } from "../widgets/FloatingContextMenu";
+import { EnvCollectionLoadingSkeleton } from "./EnvCollectionLoadingSkeleton";
 
 type SpaceStatus = Readonly<{
   code_space_id: string;
@@ -1476,6 +1476,10 @@ export function EnvCodespacesPage() {
     return false;
   };
   const showCompactRuntimeStatus = () => !showWizard() && (runtimeStatus.loading || Boolean(runtimeStatusError()));
+  const initialSpacesLoading = () => spaces.state === "pending";
+  const spacesRefreshing = () => spaces.state === "refreshing";
+  const spacesRenderable = () => spaces.state === "ready" || spaces.state === "refreshing";
+  const pageRefreshing = () => spacesRefreshing() || runtimeStatus.state === "refreshing";
   const handleRefreshAll = async () => {
     await Promise.all([refetch(), refetchRuntimeStatus()]);
   };
@@ -1516,16 +1520,11 @@ export function EnvCodespacesPage() {
                 onClick={() => void handleRefreshAll()}
                 disabled={spaces.loading || runtimeStatus.loading}
                 aria-label={i18n.t("codespaces.actions.refresh")}
+                aria-busy={pageRefreshing() ? "true" : undefined}
                 title={i18n.t("codespaces.actions.refresh")}
                 class={outlineControlClass}
               >
-                <svg class="w-3.5 h-3.5 sm:mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                  <path
-                    stroke-linecap="round"
-                    stroke-linejoin="round"
-                    d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99"
-                  />
-                </svg>
+                <RefreshIcon class={cn("w-3.5 h-3.5 sm:mr-1", pageRefreshing() && "animate-spin motion-reduce:animate-none")} />
                 <span class="hidden sm:inline">{i18n.t("codespaces.actions.refresh")}</span>
               </Button>
               <Button
@@ -1573,9 +1572,21 @@ export function EnvCodespacesPage() {
           </Show>
 
           {/* Codespaces list */}
-          <div class="relative" style={{ "min-height": "200px" }}>
-            <RedevenLoadingCurtain visible={spaces.loading} eyebrow={i18n.t("codespaces.loadingEyebrow")} message={i18n.t("codespaces.loadingMessage")} />
-            <Show when={!spaces.loading}>
+          <div
+            class="relative"
+            style={{ "min-height": "200px" }}
+            aria-busy={spacesRefreshing() ? "true" : undefined}
+            data-testid="codespaces-list-region"
+          >
+            <EnvCollectionLoadingSkeleton
+              visible={initialSpacesLoading()}
+              message={i18n.t("codespaces.loadingMessage")}
+              testId="codespaces-initial-loading"
+            />
+            <Show when={spacesRefreshing()}>
+              <span class="sr-only" role="status" aria-live="polite">{i18n.t("codespaces.loadingMessage")}</span>
+            </Show>
+            <Show when={spacesRenderable()}>
               <Show when={spaceList().length > 0} fallback={<EmptyState onCreateClick={() => setCreateDialogOpen(true)} />}>
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                   <For each={sortedSpaces()}>
