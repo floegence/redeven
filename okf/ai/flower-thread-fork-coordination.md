@@ -29,7 +29,7 @@ After commit, Redeven serializes summary publication per service, reloads the cu
 - Secrets, runs, execution spans, tool audit rows, and Floret internal storage are not copied.
 - A destination owned by another operation is a conflict, not a recovery hint.
 - A pending operation remains replayable after process restart.
-- Floret is consumed only through the published v0.7.0 public runtime API.
+- Floret is consumed only through the published v0.8.0 public runtime API.
 
 # References
 

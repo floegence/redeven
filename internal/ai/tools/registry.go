@@ -229,9 +229,7 @@ var builtinDefinitions = map[string]Definition{
 		RequiresApproval: false,
 		Presentation: withPresentationOptions(
 			presentation(ToolPresentationCommand, "readonly", "terminal", "terminal", "terminal", "error"),
-			labelFields("command"),
-			callFallback("Read terminal output"),
-			resultFallback("Terminal output"),
+			labelFields("description"),
 			callPayloadFields("process_id", "after_seq", "wait_ms", "max_bytes"),
 			resultPayloadFields("status", "process_id", "command", "exit_code", "duration_ms", "output", "latest_output", "first_seq", "last_seq", "total_bytes", "truncated"),
 			chipFields("process_id", "last_seq", "truncated"),

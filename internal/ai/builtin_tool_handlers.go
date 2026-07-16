@@ -10,6 +10,8 @@ import (
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
+const terminalReadDescriptionMaxRunes = 120
+
 type builtInToolHandler struct {
 	r               *run
 	toolName        string
@@ -665,8 +667,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "terminal.exec",
-			Description:      "Start a PTY-backed shell command in the local AI runtime. Defaults to the run working directory. It waits briefly for yield_ms, returns final output if the process exits, or returns a running process_id for terminal.read, terminal.write, and terminal.terminate. timeout_ms is only a compatibility alias for yield_ms and is not a hard timeout; use terminal.terminate to stop a running process. Do not treat thread target context as remote execution.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"command": map[string]any{"type": "string"}, "stdin": map[string]any{"type": "string", "maxLength": 200000}, "cwd": map[string]any{"type": "string"}, "workdir": map[string]any{"type": "string"}, "yield_ms": map[string]any{"type": "integer", "minimum": 0, "maximum": 30000, "description": "Preferred initial wait in milliseconds before returning output or a running process_id. This is not a hard runtime timeout."}, "timeout_ms": map[string]any{"type": "integer", "minimum": 0, "maximum": 1200000, "description": "Compatibility alias for yield_ms initial wait only. It is not a hard timeout and does not stop the process; use terminal.terminate with process_id to stop a running process."}, "description": map[string]any{"type": "string", "maxLength": 200}}, "required": []string{"command"}, "additionalProperties": false}),
+			Description:      "Start a PTY-backed shell command in the local AI runtime. Defaults to the run working directory. It waits briefly for yield_ms, returns final output if the process exits, or returns a running process_id for terminal.read, terminal.write, and terminal.terminate. The initial wait is not a hard timeout; use terminal.terminate to stop a running process. Do not treat thread target context as remote execution.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"command": map[string]any{"type": "string"}, "stdin": map[string]any{"type": "string", "maxLength": 200000}, "cwd": map[string]any{"type": "string"}, "workdir": map[string]any{"type": "string"}, "yield_ms": map[string]any{"type": "integer", "minimum": 0, "maximum": 30000, "description": "Preferred initial wait in milliseconds before returning output or a running process_id. This is not a hard runtime timeout."}, "description": map[string]any{"type": "string", "maxLength": 200}}, "required": []string{"command"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
 			Visibility:       ToolVisibilityStandard,
@@ -677,8 +679,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "terminal.read",
-			Description:      "Read the latest output from a running or completed terminal process started by terminal.exec. Use the returned last_seq as the next after_seq with wait_ms to poll for new output.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"process_id": map[string]any{"type": "string"}, "after_seq": map[string]any{"type": "integer", "minimum": 0}, "wait_ms": map[string]any{"type": "integer", "minimum": 0, "maximum": 30000}, "max_bytes": map[string]any{"type": "integer", "minimum": 1, "maximum": 1000000}}, "required": []string{"process_id"}, "additionalProperties": false}),
+			Description:      "Read the latest output from a running or completed terminal process started by terminal.exec. Every call must include a concise user-facing description in the user's language that names the command or task whose output is being checked. For later polls, naturally say that the latest output is being checked again. Do not use generic labels such as 'Terminal output'. Use the returned last_seq as the next after_seq with wait_ms to poll for new output.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"process_id": map[string]any{"type": "string"}, "description": map[string]any{"type": "string", "minLength": 1, "maxLength": terminalReadDescriptionMaxRunes, "description": "Concise user-facing text in the user's language naming the command or task whose output is being checked. For a later poll, say that its latest output is being checked again. Never use a generic label such as 'Terminal output'."}, "after_seq": map[string]any{"type": "integer", "minimum": 0}, "wait_ms": map[string]any{"type": "integer", "minimum": 0, "maximum": 30000}, "max_bytes": map[string]any{"type": "integer", "minimum": 1, "maximum": 1000000}}, "required": []string{"process_id", "description"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
 			Visibility:       ToolVisibilityStandard,

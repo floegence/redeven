@@ -209,6 +209,35 @@ describe('ActivityTimelineBlock', () => {
     expect(host.textContent).not.toContain('exit');
   });
 
+  it('renders consecutive terminal reads with their model-authored intent', async () => {
+    const items = [
+      baseItem({
+        item_id: 'read_1',
+        tool_id: 'read_1',
+        tool_name: 'terminal.read',
+        label: 'Check the Docker build output',
+        payload: { command: 'docker compose up --build -d', process_id: 'tp_build', latest_output: 'step 1\n' },
+      }),
+      baseItem({
+        item_id: 'read_2',
+        tool_id: 'read_2',
+        tool_name: 'terminal.read',
+        label: 'Check the latest Docker build output again',
+        payload: { command: 'docker compose up --build -d', process_id: 'tp_build', latest_output: 'step 2\n' },
+      }),
+    ];
+    const host = renderActivity(baseBlock({ items, summary: baseSummary('success', items.length) }));
+
+    expandTimeline(host);
+    await flushAsync();
+
+    const rows = Array.from(host.querySelectorAll<HTMLElement>('.chat-activity-item'));
+    expect(rows).toHaveLength(2);
+    expect(rows[0]?.textContent).toContain('Check the Docker build output');
+    expect(rows[1]?.textContent).toContain('Check the latest Docker build output again');
+    expect(host.textContent).not.toContain('Terminal output');
+  });
+
   it('keeps terminal output visible when the same activity item is replaced by an empty running frame', async () => {
     const runningBlock = (output: string): ActivityTimelineBlockType => baseBlock({
       summary: baseSummary('running'),

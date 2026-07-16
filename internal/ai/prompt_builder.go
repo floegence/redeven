@@ -472,7 +472,7 @@ func buildPromptMandatoryRulesSection(snapshot promptRuntimeSnapshot) promptSect
 		"- Prefer apply_patch for patch-shaped edits instead of shell redirection or ad-hoc overwrite commands.",
 		"- When the task asks for verification or a verification command, use terminal.exec for that verification; file inspection can supplement but does not replace a real verification command.",
 		"- Keep file paths inside the active project boundary; the runtime home is only the outer sandbox.",
-		"- Tool argument limits are strict: terminal.exec should use yield_ms for the initial wait; timeout_ms is only a compatibility alias for yield_ms, not a hard timeout, and terminal.read wait_ms must be <= 30000.",
+		"- Tool argument limits are strict: terminal.exec should use yield_ms for the initial wait, and terminal.read wait_ms must be <= 30000.",
 		"- Treat the current working directory and any terminal.exec cwd/workdir as the same active project boundary; they must resolve to the current project root rather than some sibling path.",
 		"- When you call apply_patch, send exactly one canonical patch document from `*** Begin Patch` to `*** End Patch` with relative paths.",
 		"- Use `*** Add File:`, `*** Delete File:`, `*** Update File:`, optional `*** Move to:`, and `@@` hunks inside apply_patch; do NOT send `diff --git` or raw `---` / `+++` diffs for normal edits.",

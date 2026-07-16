@@ -89,6 +89,30 @@ describe('presentFlowerActivityItem', () => {
     expect(presentation.label).toBe('pnpm test -- src/ui/chat/activity/ActivityTimelineBlock.test.tsx');
   });
 
+  it('uses terminal read intent as the compact title and keeps the real command in details', () => {
+    const presentation = presentFlowerActivityItem(item({
+      tool_name: 'terminal.read',
+      renderer: 'terminal',
+      label: 'Check the latest Docker build output again',
+      payload: {
+        command: 'docker compose up --build -d',
+        process_id: 'tp_build',
+        latest_output: 'building...\n',
+      },
+    }));
+
+    expect(presentation.label).toBe('Check the latest Docker build output again');
+    expect(presentation.title).toEqual({ kind: 'plain', text: 'Check the latest Docker build output again' });
+    expect(presentation.detailBlocks[0]).toMatchObject({
+      kind: 'terminal_output',
+      terminal: {
+        command: 'docker compose up --build -d',
+        latest_output: 'building...\n',
+        process_id: 'tp_build',
+      },
+    });
+  });
+
   it('renders terminal failures as a semantic error block before output', () => {
     const presentation = presentFlowerActivityItem(item({
       renderer: 'terminal',

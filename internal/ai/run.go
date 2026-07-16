@@ -3081,14 +3081,22 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 			return nil, errors.New("process permission denied: write and execute permissions required")
 		}
 		var p struct {
-			ProcessID string `json:"process_id"`
-			AfterSeq  int64  `json:"after_seq"`
-			WaitMS    int64  `json:"wait_ms"`
-			MaxBytes  int64  `json:"max_bytes"`
+			ProcessID   string `json:"process_id"`
+			Description string `json:"description"`
+			AfterSeq    int64  `json:"after_seq"`
+			WaitMS      int64  `json:"wait_ms"`
+			MaxBytes    int64  `json:"max_bytes"`
 		}
 		b, _ := json.Marshal(args)
 		if err := json.Unmarshal(b, &p); err != nil {
 			return nil, errors.New("invalid args")
+		}
+		description := strings.TrimSpace(p.Description)
+		if description == "" {
+			return nil, errors.New("invalid args: description is required")
+		}
+		if utf8.RuneCountInString(description) > terminalReadDescriptionMaxRunes {
+			return nil, errors.New("invalid args: description is too long")
 		}
 		return r.toolTerminalRead(p.ProcessID, p.AfterSeq, p.WaitMS, p.MaxBytes)
 
@@ -4306,20 +4314,14 @@ type terminalExecProcessArgs struct {
 	Cwd         string `json:"cwd"`
 	Workdir     string `json:"workdir"`
 	YieldMS     int64  `json:"yield_ms"`
-	TimeoutMS   int64  `json:"timeout_ms"`
 	Description string `json:"description"`
 }
 
 func normalizeTerminalExecArgs(args map[string]any) map[string]any {
 	out := cloneAnyMap(args)
 	yieldMS := parseIntRaw(out["yield_ms"], 0)
-	timeoutMS := parseIntRaw(out["timeout_ms"], 0)
-	delete(out, "timeout_ms")
-	switch {
-	case yieldMS > 0:
+	if yieldMS > 0 {
 		out["yield_ms"] = clampTerminalExecYieldMS(yieldMS)
-	case timeoutMS > 0:
-		out["yield_ms"] = clampTerminalExecYieldMS(timeoutMS)
 	}
 	return out
 }

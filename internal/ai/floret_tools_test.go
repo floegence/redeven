@@ -3,7 +3,6 @@ package ai
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log/slog"
 	"path/filepath"
@@ -123,7 +122,7 @@ func TestFloretToolDefinitionStripsRedevenTargetSchema(t *testing.T) {
 	}
 }
 
-func TestFloretToolDefinitionPreservesTerminalExecTimeoutAlias(t *testing.T) {
+func TestFloretToolDefinitionRemovesTerminalExecTimeoutAlias(t *testing.T) {
 	t.Parallel()
 
 	var terminalExec ToolDef
@@ -145,30 +144,37 @@ func TestFloretToolDefinitionPreservesTerminalExecTimeoutAlias(t *testing.T) {
 	if !ok {
 		t.Fatalf("properties=%#v, want object", def.InputSchema["properties"])
 	}
-	timeoutSchema, ok := properties["timeout_ms"].(map[string]any)
-	if !ok {
-		t.Fatalf("Floret terminal.exec schema missing timeout_ms alias: %#v", properties)
+	if _, ok := properties["timeout_ms"]; ok {
+		t.Fatalf("Floret terminal.exec schema retained timeout_ms: %#v", properties)
 	}
-	description := strings.ToLower(fmt.Sprint(timeoutSchema["description"]))
-	for _, want := range []string{"compatibility alias", "yield_ms", "not a hard timeout"} {
-		if !strings.Contains(description, want) {
-			t.Fatalf("timeout_ms description missing %q: %q", want, description)
-		}
+	if _, err := fltools.Validate(def.InputSchema, []byte(`{"command":"pwd","timeout_ms":1000}`)); err == nil {
+		t.Fatal("Floret terminal.exec schema accepted removed timeout_ms")
 	}
 }
 
 func TestFloretTerminalReadDefinitionDeclaresPollingRepeatPolicy(t *testing.T) {
 	t.Parallel()
 
-	def, err := floretToolDefinition(newRun(runOptions{}), ToolDef{
-		Name:       "terminal.read",
-		Visibility: ToolVisibilityStandard,
-	})
+	var terminalRead ToolDef
+	for _, candidate := range builtInToolDefinitions() {
+		if candidate.Name == "terminal.read" {
+			terminalRead = candidate
+			break
+		}
+	}
+	if terminalRead.Name == "" {
+		t.Fatal("terminal.read definition not found")
+	}
+	def, err := floretToolDefinition(newRun(runOptions{}), terminalRead)
 	if err != nil {
 		t.Fatalf("floretToolDefinition: %v", err)
 	}
 	if got := def.Annotations[fltools.AnnotationRepeatPolicy]; got != fltools.RepeatPolicyPolling {
 		t.Fatalf("terminal.read repeat policy=%#v, want polling", got)
+	}
+	ignored, ok := def.Annotations[fltools.AnnotationRepeatIdentityIgnoredArguments].([]string)
+	if !ok || !reflect.DeepEqual(ignored, []string{"description"}) {
+		t.Fatalf("terminal.read ignored repeat identity arguments=%#v, want description", def.Annotations[fltools.AnnotationRepeatIdentityIgnoredArguments])
 	}
 
 	execDef, err := floretToolDefinition(newRun(runOptions{}), ToolDef{Name: "terminal.exec"})
@@ -177,6 +183,52 @@ func TestFloretTerminalReadDefinitionDeclaresPollingRepeatPolicy(t *testing.T) {
 	}
 	if _, ok := execDef.Annotations[fltools.AnnotationRepeatPolicy]; ok {
 		t.Fatalf("terminal.exec must not declare polling repeat policy: %#v", execDef.Annotations)
+	}
+}
+
+func TestFloretTerminalReadActivityKeepsModelIntentAcrossResult(t *testing.T) {
+	t.Parallel()
+
+	const intent = "Check the latest Docker build output again"
+	callActivity := floretActivityForToolCall("terminal.read", map[string]any{
+		"process_id":  "tp_build",
+		"description": intent,
+		"after_seq":   int64(4),
+		"wait_ms":     int64(1000),
+	})
+	if callActivity == nil || callActivity.Label != intent || callActivity.Description != "" {
+		t.Fatalf("call activity=%#v, want intent label without duplicate description", callActivity)
+	}
+	if _, ok := callActivity.Payload["description"]; ok {
+		t.Fatalf("call payload duplicated description: %#v", callActivity.Payload)
+	}
+
+	resultActivity := mustFloretToolResultActivity(t, newRun(runOptions{}), ToolResult{
+		ToolID:   "call_terminal_read_intent",
+		ToolName: "terminal.read",
+		Status:   toolResultStatusSuccess,
+		Data: map[string]any{
+			"status":        terminalProcessStatusRunning,
+			"process_id":    "tp_build",
+			"command":       "docker compose up --build -d",
+			"latest_output": "building...\n",
+			"last_seq":      int64(5),
+		},
+	})
+	if resultActivity.Label != "" {
+		t.Fatalf("result activity label=%q, want omitted label", resultActivity.Label)
+	}
+
+	timeline := observation.BuildActivityTimeline(observation.ActivityRunMeta{RunID: "run_terminal_read_intent"}, []observation.Event{
+		{Type: observation.EventTypeToolCall, RunID: "run_terminal_read_intent", ToolID: "call_terminal_read_intent", ToolName: "terminal.read", ToolKind: "local", Activity: callActivity, ObservedAt: time.UnixMilli(1000)},
+		{Type: observation.EventTypeToolResult, RunID: "run_terminal_read_intent", ToolID: "call_terminal_read_intent", ToolName: "terminal.read", ToolKind: "local", Activity: resultActivity, Metadata: map[string]any{"tool_result_status": string(observation.ActivityStatusSuccess)}, ObservedAt: time.UnixMilli(1100)},
+	}, 1200)
+	if len(timeline.Items) != 1 {
+		t.Fatalf("timeline items=%#v, want one", timeline.Items)
+	}
+	item := timeline.Items[0]
+	if item.Label != intent || item.Payload["command"] != "docker compose up --build -d" || item.Payload["latest_output"] != "building..." {
+		t.Fatalf("terminal.read timeline item=%#v", item)
 	}
 }
 

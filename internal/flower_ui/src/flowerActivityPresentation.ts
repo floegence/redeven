@@ -1122,12 +1122,15 @@ function presentationForTodos(item: FlowerActivityItem): FlowerActivityPresentat
   };
 }
 
-function terminalCommandForItem(item: FlowerActivityItem): string {
+function terminalTitleForItem(item: FlowerActivityItem): FlowerActivityTitle {
   const payload = item.payload ?? {};
   const toolName = trimString(item.tool_name);
   const label = trimString(item.label);
   const meaningfulLabel = label && label !== toolName && label !== 'Tool approval' ? label : '';
-  return payloadValue(payload, 'command') || meaningfulLabel || defaultLabelForItem(item);
+  const command = payloadValue(payload, 'command');
+  if (meaningfulLabel && meaningfulLabel !== command) return { kind: 'plain', text: meaningfulLabel };
+  if (command) return { kind: 'command', command };
+  return { kind: 'plain', text: meaningfulLabel || defaultLabelForItem(item) };
 }
 
 function terminalOutputFromPayload(payload: Readonly<Record<string, unknown>>): string {
@@ -1148,11 +1151,10 @@ function terminalStatusLines(item: FlowerActivityItem): readonly FlowerActivityD
 
 function presentationForTerminal(item: FlowerActivityItem): FlowerActivityPresentation {
   const payload = item.payload ?? {};
-  const command = terminalCommandForItem(item);
-  const title: FlowerActivityTitle = { kind: 'command', command };
+  const title = terminalTitleForItem(item);
   const detailLines = terminalStatusLines(item);
   const terminal: FlowerActivityTerminalDetail = {
-    command,
+    command: payloadValue(payload, 'command'),
     output: terminalOutputFromPayload(payload),
     latest_output: rawPayloadText(payload, 'latest_output'),
     status: item.status,
@@ -1172,7 +1174,7 @@ function presentationForTerminal(item: FlowerActivityItem): FlowerActivityPresen
   detailBlocks.push({ kind: 'terminal_output', terminal });
   if (detailLines.length > 0) detailBlocks.push({ kind: 'structured', lines: detailLines });
   return {
-    label: command,
+    label: titleText(title),
     title,
     meta: metaForTerminalItem(item),
     detailLines,
@@ -1345,12 +1347,7 @@ function titleForGenericItem(item: FlowerActivityItem, renderer: FlowerActivityR
   const explicit = trimString(item.label);
   const toolName = trimString(item.tool_name);
   const meaningful = (text: string) => text && text !== 'Tool approval' ? text : '';
-  const meaningfulTerminalTitle = (text: string) => text && text !== toolName && text !== 'Tool approval' ? text : '';
   switch (renderer) {
-    case 'terminal': {
-      const command = payloadValue(item.payload, 'command') || meaningfulTerminalTitle(explicit) || defaultLabelForItem(item);
-      return { kind: 'command', command };
-    }
     case 'web_search':
       return { kind: 'plain', text: titleWithToolContext(toolName, explicit, defaultLabelForItem(item)) };
     case 'question':
