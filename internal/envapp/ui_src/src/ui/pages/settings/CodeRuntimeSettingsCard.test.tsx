@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { Show } from 'solid-js';
+import { Show, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -162,6 +162,8 @@ function makeStatus(overrides: any = {}) {
 }
 
 function renderCard(host: HTMLElement, overrides: Partial<CodeRuntimeSettingsCardProps> = {}) {
+  const [installMethod, setInstallMethod] = createSignal(overrides.installMethod ?? 'desktop_transfer');
+  const onInstallMethodChange = overrides.onInstallMethodChange ?? (() => undefined);
   const props: CodeRuntimeSettingsCardProps = {
     status: makeStatus(),
     loading: false,
@@ -172,9 +174,9 @@ function renderCard(host: HTMLElement, overrides: Partial<CodeRuntimeSettingsCar
     cancelLoading: false,
     selectionLoadingVersion: null,
     removeVersionLoading: null,
-    installMethod: 'desktop_transfer',
+    installMethod: installMethod(),
     desktopTransferAvailable: true,
-    onInstallMethodChange: () => undefined,
+    onInstallMethodChange,
     onRefresh: () => undefined,
     onPrepare: () => undefined,
     onSelectVersion: () => undefined,
@@ -183,7 +185,16 @@ function renderCard(host: HTMLElement, overrides: Partial<CodeRuntimeSettingsCar
     ...overrides,
   };
 
-  render(() => <CodeRuntimeSettingsCard {...props} />, host);
+  render(() => (
+    <CodeRuntimeSettingsCard
+      {...props}
+      installMethod={installMethod()}
+      onInstallMethodChange={(method) => {
+        setInstallMethod(method);
+        onInstallMethodChange(method);
+      }}
+    />
+  ), host);
   return props;
 }
 
@@ -273,7 +284,7 @@ describe('CodeRuntimeSettingsCard', () => {
     expect(host.querySelector('[data-testid="browser-editor-setup-activity"]')).toBeNull();
   });
 
-  it('shows Browser Editor setup copy when no managed versions are installed', () => {
+  it('uses the setup activity as the single setup surface when no managed versions are installed', () => {
     renderCard(host, {
       status: makeStatus({
         active_runtime: {
@@ -294,24 +305,58 @@ describe('CodeRuntimeSettingsCard', () => {
       }),
     });
 
-    expect(host.textContent).toContain('Browser Editor setup required');
     expect(host.textContent).toContain('Set up Browser Editor');
+    expect(host.textContent).not.toContain('Browser Editor setup required');
+    expect(Array.from(host.querySelectorAll('button')).filter((button) => button.textContent === 'Set up Browser Editor')).toHaveLength(1);
   });
 
-  it('opens the Browser Editor update confirmation and calls the prepare action', () => {
+  it('selects the Browser Editor update method in the confirmation before preparing', () => {
     const onPrepare = vi.fn(async () => undefined);
-    renderCard(host, { onPrepare });
+    const onInstallMethodChange = vi.fn();
+    renderCard(host, { onPrepare, onInstallMethodChange });
 
     const prepareButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Update Browser Editor');
     prepareButton?.click();
 
     expect(host.textContent).toContain('Update Browser Editor');
     expect(host.textContent).toContain('Desktop downloads and verifies the Browser Editor package');
+    expect(onInstallMethodChange).toHaveBeenCalledWith('desktop_transfer');
+
+    const methodButtons = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
+    expect(methodButtons).toHaveLength(2);
+    expect(methodButtons[0].getAttribute('aria-checked')).toBe('true');
+
+    methodButtons[1].click();
+
+    expect(onInstallMethodChange).toHaveBeenLastCalledWith('remote_download');
+    expect(methodButtons[1].getAttribute('aria-checked')).toBe('true');
+    expect(host.textContent).toContain('Environment network → Redeven package service');
+    expect(host.textContent).toContain('This environment downloads and verifies the Browser Editor package directly');
 
     const confirmButton = Array.from(host.querySelectorAll('button')).filter((button) => button.textContent === 'Update Browser Editor').at(-1);
     confirmButton?.click();
 
     expect(onPrepare).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows Desktop unavailability and selects environment download for the update dialog', () => {
+    const onInstallMethodChange = vi.fn();
+    renderCard(host, {
+      desktopTransferAvailable: false,
+      installMethod: 'remote_download',
+      onInstallMethodChange,
+    });
+
+    Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Update Browser Editor')?.click();
+
+    const methodButtons = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
+    expect(methodButtons).toHaveLength(2);
+    expect(methodButtons[0].disabled).toBe(true);
+    expect(methodButtons[0].tabIndex).toBe(-1);
+    expect(methodButtons[1].getAttribute('aria-checked')).toBe('true');
+    expect(methodButtons[1].tabIndex).toBe(0);
+    expect(host.textContent).toContain('Desktop transfer is unavailable because this session does not include the Desktop package bridge.');
+    expect(onInstallMethodChange).toHaveBeenCalledWith('remote_download');
   });
 
   it('shows Retry setup after the last Browser Editor setup action failed', () => {
@@ -330,6 +375,27 @@ describe('CodeRuntimeSettingsCard', () => {
     expect(host.textContent).toContain('Download failed.');
     expect(host.querySelector('[role="progressbar"]')).toBeNull();
     expect(host.querySelector('[data-testid="browser-editor-setup-activity"]')?.getAttribute('data-layout')).toBe('compact');
+    expect(Array.from(host.querySelectorAll('button')).filter((button) => button.textContent === 'Retry setup')).toHaveLength(1);
+  });
+
+  it('locks the method and keeps one cancel action while Browser Editor setup is running', () => {
+    renderCard(host, {
+      status: makeStatus({
+        operation: {
+          state: 'running',
+          action: 'prepare_workspace_engine',
+          install_method: 'desktop_transfer',
+          stage: 'receiving',
+          log_tail: [],
+        },
+      }),
+    });
+
+    const methodButtons = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="radio"]'));
+    expect(methodButtons).toHaveLength(2);
+    expect(methodButtons.every((button) => button.disabled)).toBe(true);
+    expect(Array.from(host.querySelectorAll('button')).filter((button) => button.textContent === 'Cancel')).toHaveLength(1);
+    expect(host.textContent).not.toContain('Update Browser Editor');
   });
 
   it('shows local Desktop preparation failures before the runtime records an operation failure', () => {

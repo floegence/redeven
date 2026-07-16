@@ -400,6 +400,7 @@ describe('BrowserEditorSetupActivityPanel rendered layout', () => {
     expect(changes).toEqual(['remote_download']);
     expect(radios[1].getAttribute('aria-checked')).toBe('true');
     expect(document.activeElement).toBe(radios[1]);
+    expect(host.querySelector('[role="tooltip"]')).toBeNull();
     expect(host.textContent).toContain('Environment network → Redeven package service');
   });
 
@@ -417,8 +418,11 @@ describe('BrowserEditorSetupActivityPanel rendered layout', () => {
     expect(getComputedStyle(selector!).gridTemplateColumns.split(' ')).toHaveLength(2);
     expect(radios[0].disabled).toBe(true);
     expect(radios[0].getAttribute('aria-disabled')).toBe('true');
+    expect(radios[0].tabIndex).toBe(-1);
     expect(radios[1].getAttribute('aria-checked')).toBe('true');
+    expect(radios[1].tabIndex).toBe(0);
     expect(host.textContent).toContain('Environment network → Redeven package service');
+    expect(host.textContent).toContain('Desktop transfer is unavailable because this session does not include the Desktop package bridge.');
     expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth + 1);
   });
 
