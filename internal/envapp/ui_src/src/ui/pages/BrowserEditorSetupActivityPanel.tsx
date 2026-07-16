@@ -34,33 +34,68 @@ export type BrowserEditorSetupActivityPanelProps = Readonly<{
   extraDetails?: JSX.Element;
 }>;
 
-function activityIconClass(activity: BrowserEditorSetupActivity): string {
-  if (activity.platform_diagnosis) return 'browser-editor-setup__icon--warning';
+type BrowserEditorSetupGlyphKind = 'neutral' | 'orbit' | 'ready' | 'warning' | 'failure' | 'error';
+
+function activityGlyphKind(activity: BrowserEditorSetupActivity): BrowserEditorSetupGlyphKind {
+  if (activity.platform_diagnosis) return 'warning';
   switch (activity.state) {
     case 'ready':
-      return 'browser-editor-setup__icon--success';
+      return 'ready';
     case 'preparing':
     case 'checking':
-      return 'browser-editor-setup__icon--info';
+      return 'orbit';
     case 'failed':
-    case 'error':
-      return 'browser-editor-setup__icon--error';
+      return 'failure';
     case 'cancelled':
     case 'unusable':
-      return 'browser-editor-setup__icon--warning';
+      return 'warning';
+    case 'error':
+      return 'error';
     default:
-      return 'browser-editor-setup__icon--neutral';
+      return 'neutral';
   }
 }
 
-function activityIcon(activity: BrowserEditorSetupActivity): JSX.Element {
-  if (activity.state === 'ready') return <Check class="h-4 w-4" />;
-  if (activity.state === 'preparing' || activity.state === 'checking') return <RefreshIcon class="h-4 w-4 animate-spin" />;
-  if (activity.platform_diagnosis || activity.state === 'failed' || activity.state === 'cancelled' || activity.state === 'unusable') {
-    return <AlertTriangle class="h-4 w-4" />;
+function activityIconClass(kind: BrowserEditorSetupGlyphKind): string {
+  switch (kind) {
+    case 'orbit':
+      return 'browser-editor-setup__icon--info';
+    case 'ready':
+      return 'browser-editor-setup__icon--success';
+    case 'failure':
+      return 'browser-editor-setup__icon--error';
+    default:
+      return `browser-editor-setup__icon--${kind}`;
   }
-  if (activity.state === 'error') return <X class="h-4 w-4" />;
+}
+
+function staticActivityIcon(kind: BrowserEditorSetupGlyphKind): JSX.Element {
+  if (kind === 'ready') return <Check class="h-4 w-4" />;
+  if (kind === 'warning' || kind === 'failure') return <AlertTriangle class="h-4 w-4" />;
+  if (kind === 'error') return <X class="h-4 w-4" />;
   return <Code class="h-4 w-4" />;
+}
+
+function BrowserEditorSetupStatusGlyph(props: Readonly<{ activity: BrowserEditorSetupActivity }>): JSX.Element {
+  const kind = () => activityGlyphKind(props.activity);
+  return (
+    <div
+      class={cn('browser-editor-setup__icon', activityIconClass(kind()))}
+      data-activity-glyph={kind()}
+      aria-hidden="true"
+    >
+      <Show
+        when={kind() === 'orbit'}
+        fallback={staticActivityIcon(kind())}
+      >
+        <span class="browser-editor-setup__orbit">
+          <span class="browser-editor-setup__orbit-track" />
+          <span class="browser-editor-setup__orbit-ring" />
+          <Code class="browser-editor-setup__orbit-core" />
+        </span>
+      </Show>
+    </div>
+  );
 }
 
 function detailCalloutClass(state: BrowserEditorSetupActivity['state']): string {
@@ -294,9 +329,7 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
         <div class="browser-editor-setup__primary">
           <div class="browser-editor-setup__header">
             <div class="flex min-w-0 items-center gap-3">
-              <div class={cn('browser-editor-setup__icon', activityIconClass(activity()))}>
-                {activityIcon(activity())}
-              </div>
+              <BrowserEditorSetupStatusGlyph activity={activity()} />
               <div class="flex min-w-0 flex-wrap items-center gap-2">
                 <h3 class="text-sm font-semibold text-foreground">{activity().title}</h3>
                 <Tag variant={activity().badge_variant} tone="soft" size="sm" class="cursor-default select-none">

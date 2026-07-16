@@ -4424,16 +4424,6 @@ html.dark .redeven-workbench-progress-curtain {
     transform: none;
   }
 
-  .browser-editor-setup__step-dot[data-state='active'] {
-    animation-duration: 1ms;
-  }
-
-  .browser-editor-setup,
-  .browser-editor-setup__step,
-  .browser-editor-setup__step-dot,
-  .browser-editor-setup__step-line {
-    transition-duration: 1ms;
-  }
 }
 
 .workbench-surface[data-workbench-theme='default'] {
@@ -4631,6 +4621,7 @@ html.dark .browser-editor-setup {
 }
 
 .browser-editor-setup__icon {
+  position: relative;
   display: flex;
   width: 2rem;
   height: 2rem;
@@ -4649,9 +4640,61 @@ html.dark .browser-editor-setup {
 }
 
 .browser-editor-setup__icon--info {
-  border-color: color-mix(in srgb, var(--info) 28%, transparent);
-  background: color-mix(in srgb, var(--info) 8%, transparent);
+  border-color: transparent;
+  background: transparent;
   color: color-mix(in srgb, var(--info) 78%, var(--foreground));
+}
+
+.browser-editor-setup__orbit {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+}
+
+.browser-editor-setup__orbit-track,
+.browser-editor-setup__orbit-ring {
+  position: absolute;
+  inset: 0.1875rem;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.browser-editor-setup__orbit-track {
+  border: 1px solid color-mix(in srgb, var(--info) 18%, transparent);
+}
+
+.browser-editor-setup__orbit-ring {
+  color: color-mix(in srgb, var(--info) 84%, var(--foreground));
+  animation: browser-editor-precision-orbit 1.8s linear infinite;
+  transform-origin: center;
+  will-change: transform;
+}
+
+.browser-editor-setup__orbit-ring::before,
+.browser-editor-setup__orbit-ring::after {
+  position: absolute;
+  inset: 0;
+  border: 1.5px solid transparent;
+  border-radius: 50%;
+  content: '';
+}
+
+.browser-editor-setup__orbit-ring::before {
+  border-top-color: currentcolor;
+  border-right-color: currentcolor;
+}
+
+.browser-editor-setup__orbit-ring::after {
+  border-left-color: color-mix(in srgb, var(--info) 52%, transparent);
+  transform: rotate(24deg);
+}
+
+.browser-editor-setup__orbit-core {
+  width: 0.875rem;
+  height: 0.875rem;
+  color: color-mix(in srgb, var(--info) 72%, var(--foreground));
 }
 
 .browser-editor-setup__icon--success {
@@ -4869,10 +4912,6 @@ html.dark .browser-editor-setup {
   border-color: color-mix(in srgb, var(--primary) 58%, transparent);
   background: color-mix(in srgb, var(--primary) 72%, white 28%);
   box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--primary) 11%, transparent);
-}
-
-.browser-editor-setup[data-presentation='progress'] .browser-editor-setup__step-dot[data-state='active'] {
-  animation: redeven-step-pulse 2.2s ease-in-out infinite;
 }
 
 .browser-editor-setup__step-dot[data-state='error'] {
@@ -5268,14 +5307,46 @@ html.dark .browser-editor-setup {
   }
 }
 
-@keyframes redeven-step-pulse {
-  0%,
-  100% {
-    box-shadow: 0 0 0 0.22rem color-mix(in srgb, var(--primary) 14%, transparent);
+@keyframes browser-editor-precision-orbit {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .browser-editor-setup__orbit-ring {
+    animation: none !important;
+    transform: rotate(24deg);
+    will-change: auto;
   }
 
-  50% {
-    box-shadow: 0 0 0 0.42rem color-mix(in srgb, var(--primary) 6%, transparent);
+  .browser-editor-setup,
+  .browser-editor-setup__step,
+  .browser-editor-setup__step-dot,
+  .browser-editor-setup__step-line {
+    transition-duration: 1ms !important;
+  }
+}
+
+@media (forced-colors: active) {
+  .browser-editor-setup__orbit {
+    forced-color-adjust: none;
+  }
+
+  .browser-editor-setup__orbit-track {
+    border-color: CanvasText;
+  }
+
+  .browser-editor-setup__orbit-ring {
+    color: Highlight;
+  }
+
+  .browser-editor-setup__orbit-ring::after {
+    border-left-color: Highlight;
+  }
+
+  .browser-editor-setup__orbit-core {
+    color: CanvasText;
   }
 }
 
