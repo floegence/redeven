@@ -233,6 +233,52 @@ func TestFloretTerminalReadActivityKeepsModelIntentAcrossResult(t *testing.T) {
 	}
 }
 
+func TestFloretTerminalTerminateActivityKeepsModelIntentAcrossResult(t *testing.T) {
+	t.Parallel()
+
+	const intent = "Stop the Docker build command"
+	callActivity := floretActivityForToolCall("terminal.terminate", map[string]any{
+		"process_id":  "tp_build",
+		"description": intent,
+	})
+	if callActivity == nil || callActivity.Label != intent || callActivity.Description != "" {
+		t.Fatalf("call activity=%#v, want intent label without duplicate description", callActivity)
+	}
+	if callActivity.Payload["process_id"] != "tp_build" {
+		t.Fatalf("call payload=%#v, want process_id detail", callActivity.Payload)
+	}
+	if _, ok := callActivity.Payload["description"]; ok {
+		t.Fatalf("call payload duplicated description: %#v", callActivity.Payload)
+	}
+
+	resultActivity := mustFloretToolResultActivity(t, newRun(runOptions{}), ToolResult{
+		ToolID:   "call_terminal_terminate_intent",
+		ToolName: "terminal.terminate",
+		Status:   toolResultStatusSuccess,
+		Data: map[string]any{
+			"status":     terminalProcessStatusCanceled,
+			"process_id": "tp_build",
+			"command":    "docker compose up --build -d",
+			"terminated": true,
+		},
+	})
+	if resultActivity.Label != "" {
+		t.Fatalf("result activity label=%q, want omitted label", resultActivity.Label)
+	}
+
+	timeline := observation.BuildActivityTimeline(observation.ActivityRunMeta{RunID: "run_terminal_terminate_intent"}, []observation.Event{
+		{Type: observation.EventTypeToolCall, RunID: "run_terminal_terminate_intent", ToolID: "call_terminal_terminate_intent", ToolName: "terminal.terminate", ToolKind: "local", Activity: callActivity, ObservedAt: time.UnixMilli(1000)},
+		{Type: observation.EventTypeToolResult, RunID: "run_terminal_terminate_intent", ToolID: "call_terminal_terminate_intent", ToolName: "terminal.terminate", ToolKind: "local", Activity: resultActivity, Metadata: map[string]any{"tool_result_status": string(observation.ActivityStatusSuccess)}, ObservedAt: time.UnixMilli(1100)},
+	}, 1200)
+	if len(timeline.Items) != 1 {
+		t.Fatalf("timeline items=%#v, want one", timeline.Items)
+	}
+	item := timeline.Items[0]
+	if item.Label != intent || item.Payload["process_id"] != "tp_build" || item.Payload["terminated"] != true {
+		t.Fatalf("terminal.terminate timeline item=%#v", item)
+	}
+}
+
 func TestFloretTerminalReadResultsExposeEachDeltaOnce(t *testing.T) {
 	t.Parallel()
 

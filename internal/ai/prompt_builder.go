@@ -478,7 +478,7 @@ func buildPromptMandatoryRulesSection(snapshot promptRuntimeSnapshot) promptSect
 		"- Use `*** Add File:`, `*** Delete File:`, `*** Update File:`, optional `*** Move to:`, and `@@` hunks inside apply_patch; do NOT send `diff --git` or raw `---` / `+++` diffs for normal edits.",
 		"- In apply_patch `*** Add File:` bodies, prefix every new content line with `+`.",
 		"- Use workdir/cwd fields on terminal.exec instead of running cd in the command string.",
-		"- For long-running commands (tests/build/lint), keep terminal.exec interactive: use yield_ms for the initial wait, then terminal.read for progress, terminal.write for input, and terminal.terminate(process_id) only when stopping is intentional.",
+		"- For long-running commands (tests/build/lint), keep terminal.exec interactive: use yield_ms for the initial wait, then terminal.read for progress, terminal.write for input, and terminal.terminate(process_id, description) only when stopping is intentional; description must use the user's language and clearly name the command or task being stopped.",
 		"- Do NOT wrap terminal.exec commands with an extra `bash -lc` (terminal.exec already runs a shell with -lc).",
 		"- For multi-line scripts, pass content via terminal.exec `stdin` and use a stdin-reading command (e.g. `python -`, `bash`, `cat`). Avoid here documents and here-strings.",
 		"- Do NOT fabricate file contents, command outputs, or tool results. Always use tools to get real data.",

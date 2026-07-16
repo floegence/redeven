@@ -924,7 +924,7 @@ func TestToolTerminalReadSettlesOriginalExecWhenWaitObservesCompletion(t *testin
 	}
 	longDescription, readErr := r.handleToolCall(context.Background(), "tool_read_long_description", "terminal.read", map[string]any{
 		"process_id":  processID,
-		"description": strings.Repeat("x", terminalReadDescriptionMaxRunes+1),
+		"description": strings.Repeat("x", terminalDescriptionMaxRunes+1),
 	})
 	if readErr != nil || longDescription == nil || longDescription.ToolError == nil || !strings.Contains(longDescription.ToolError.Message, "description is too long") {
 		t.Fatalf("terminal.read long description outcome=%#v error=%v", longDescription, readErr)
@@ -1005,8 +1005,30 @@ func TestToolTerminalTerminateSettlesOriginalExec(t *testing.T) {
 	}
 	processID := strings.TrimSpace(outcome.Pending.Handle)
 
-	terminateOutcome, err := r.handleToolCall(context.Background(), "tool_terminate", "terminal.terminate", map[string]any{
+	missingDescription, terminateErr := r.handleToolCall(context.Background(), "tool_terminate_missing_description", "terminal.terminate", map[string]any{
 		"process_id": processID,
+	})
+	if terminateErr != nil || missingDescription == nil || missingDescription.ToolError == nil || !strings.Contains(missingDescription.ToolError.Message, "description is required") {
+		t.Fatalf("terminal.terminate missing description outcome=%#v error=%v", missingDescription, terminateErr)
+	}
+	blankDescription, terminateErr := r.handleToolCall(context.Background(), "tool_terminate_blank_description", "terminal.terminate", map[string]any{
+		"process_id":  processID,
+		"description": "   ",
+	})
+	if terminateErr != nil || blankDescription == nil || blankDescription.ToolError == nil || !strings.Contains(blankDescription.ToolError.Message, "description is required") {
+		t.Fatalf("terminal.terminate blank description outcome=%#v error=%v", blankDescription, terminateErr)
+	}
+	longDescription, terminateErr := r.handleToolCall(context.Background(), "tool_terminate_long_description", "terminal.terminate", map[string]any{
+		"process_id":  processID,
+		"description": strings.Repeat("x", terminalDescriptionMaxRunes+1),
+	})
+	if terminateErr != nil || longDescription == nil || longDescription.ToolError == nil || !strings.Contains(longDescription.ToolError.Message, "description is too long") {
+		t.Fatalf("terminal.terminate long description outcome=%#v error=%v", longDescription, terminateErr)
+	}
+
+	terminateOutcome, err := r.handleToolCall(context.Background(), "tool_terminate", "terminal.terminate", map[string]any{
+		"process_id":  processID,
+		"description": "Stop the sleeping test command",
 	})
 	if err != nil {
 		t.Fatalf("terminal.terminate: %v", err)
@@ -1424,7 +1446,8 @@ func TestHandleToolCallTerminalPendingHandleIsProcessIDForInteractiveTools(t *te
 	}
 	readResult := readTerminalToolUntil(t, r, processID, "reply:hello")
 	if _, err := r.handleToolCall(context.Background(), "tool_terminate", "terminal.terminate", map[string]any{
-		"process_id": processID,
+		"process_id":  processID,
+		"description": "Stop the interactive reply command",
 	}); err != nil {
 		t.Fatalf("terminal.terminate with pending handle after output %#v: %v", readResult, err)
 	}

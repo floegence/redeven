@@ -763,6 +763,9 @@ export const ShellBlock: Component<ShellBlockProps> = (props) => {
         <div id={commandPanelId} class="chat-shell-detail-panel">
           <pre class="chat-shell-detail-command">
             {normalizedCommand() || i18n.t('shellBlock.emptyCommand')}
+            <Show when={displayProcessId()}>
+              {'\n\n'}<code data-field="process_id">{displayProcessId()}</code>
+            </Show>
           </pre>
         </div>
       </Show>

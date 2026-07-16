@@ -54,6 +54,12 @@ func TestBuiltInPresentationSpecsCarryProjectionFacts(t *testing.T) {
 			resultPayloadFields: []string{"status", "process_id", "command", "exit_code", "duration_ms", "output", "first_seq", "last_seq", "latest_seq", "has_more", "total_bytes", "truncated"},
 		},
 		{
+			toolName:            "terminal.terminate",
+			labelFields:         []string{"description"},
+			callPayloadFields:   []string{"process_id"},
+			resultPayloadFields: []string{"status", "process_id", "terminated", "exit_code", "duration_ms", "output", "first_seq", "last_seq", "latest_seq", "total_bytes", "truncated"},
+		},
+		{
 			toolName:          "file.read",
 			operation:         "read",
 			labelFields:       []string{"display_name"},
