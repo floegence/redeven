@@ -1,7 +1,7 @@
 import { createSignal, onCleanup, onMount } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
-import { page } from 'vitest/browser';
+import { page, userEvent } from 'vitest/browser';
 import {
   createWorkbenchFilterState,
   type WorkbenchState,
@@ -45,8 +45,9 @@ describe('Workbench terminal input plane', () => {
     delete document.documentElement.dataset.theme;
   });
 
-  it('keeps the lower terminal canvas stable after fit, minimum scale, and focus', async () => {
+  it('keeps transformed terminal input and canvas stable after fit, minimum scale, and focus', async () => {
     let core: TerminalCore | null = null;
+    const terminalData: string[] = [];
     let resolveCoreReady: ((value: TerminalCore) => void) | null = null;
     const coreReady = new Promise<TerminalCore>((resolve) => {
       resolveCoreReady = resolve;
@@ -63,6 +64,8 @@ describe('Workbench terminal input plane', () => {
           fontSize: 12,
           rendererType: 'canvas',
           fit: { scrollbarReservePx: 0 },
+        }, {
+          onData: (data) => terminalData.push(data),
         });
         core = nextCore;
         void nextCore.initialize().then(async () => {
@@ -232,5 +235,12 @@ describe('Workbench terminal input plane', () => {
       width: canvas.width,
       height: canvas.height,
     }).toEqual(canvasSizeBefore);
+
+    expect(terminalData).toEqual([]);
+    await userEvent.keyboard('{Control>}c{/Control}');
+    expect(terminalData).toEqual(['\x03']);
+    expect(document.activeElement).toBe(textarea);
+    expect(renderHost.scrollLeft).toBe(0);
+    expect(renderHost.scrollTop).toBe(0);
   });
 });
