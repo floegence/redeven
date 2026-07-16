@@ -10,7 +10,7 @@ import (
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
-const terminalReadDescriptionMaxRunes = 120
+const terminalDescriptionMaxRunes = 120
 
 type builtInToolHandler struct {
 	r               *run
@@ -669,7 +669,7 @@ func builtInToolDefinitions() []ToolDef {
 		{
 			Name:             "terminal.read",
 			Description:      "Read only the new output produced after after_seq by a running or completed terminal process started by terminal.exec. The output field is exactly the new output since after_seq; it never replays output already consumed by an earlier read. Use after_seq: 0 for the first read, then pass the previous result's last_seq unchanged as the next after_seq and never move the cursor backward. An empty output means no new output arrived during this read, not that earlier output disappeared. If has_more is true, read again immediately with last_seq. If status is running and has_more is false, the process is still running and you may read again when more output is needed. Every call must include a concise user-facing description in the user's language that names the command or task being checked and naturally distinguishes later checks. Never use a generic label such as 'Terminal output'.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"process_id": map[string]any{"type": "string", "description": "The process_id returned by terminal.exec."}, "description": map[string]any{"type": "string", "minLength": 1, "maxLength": terminalReadDescriptionMaxRunes, "description": "Concise user-facing text in the user's language naming the command or task whose new output is being checked. For a later read, naturally say that new output is being checked again. Never use a generic label such as 'Terminal output'."}, "after_seq": map[string]any{"type": "integer", "minimum": 0, "description": "The last output sequence already consumed by the model. Use 0 for the first read, then copy the previous result's last_seq exactly. Never invent a value or move this cursor backward."}}, "required": []string{"process_id", "description", "after_seq"}, "additionalProperties": false}),
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"process_id": map[string]any{"type": "string", "description": "The process_id returned by terminal.exec."}, "description": map[string]any{"type": "string", "minLength": 1, "maxLength": terminalDescriptionMaxRunes, "description": "Concise user-facing text in the user's language naming the command or task whose new output is being checked. For a later read, naturally say that new output is being checked again. Never use a generic label such as 'Terminal output'."}, "after_seq": map[string]any{"type": "integer", "minimum": 0, "description": "The last output sequence already consumed by the model. Use 0 for the first read, then copy the previous result's last_seq exactly. Never invent a value or move this cursor backward."}}, "required": []string{"process_id", "description", "after_seq"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
 			Visibility:       ToolVisibilityStandard,
@@ -692,8 +692,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "terminal.terminate",
-			Description:      "Terminate a running terminal process started by terminal.exec.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"process_id": map[string]any{"type": "string"}}, "required": []string{"process_id"}, "additionalProperties": false}),
+			Description:      "Terminate a running terminal process started by terminal.exec. Every call must include concise user-facing text in the user's language that clearly names the command or task being stopped.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"process_id": map[string]any{"type": "string", "description": "The process_id returned by terminal.exec."}, "description": map[string]any{"type": "string", "minLength": 1, "maxLength": terminalDescriptionMaxRunes, "description": "Concise user-facing text in the user's language clearly naming the command or task being stopped. Never use a generic label such as 'Terminate terminal'."}}, "required": []string{"process_id", "description"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
 			Visibility:       ToolVisibilityStandard,

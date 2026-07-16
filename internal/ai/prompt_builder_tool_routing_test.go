@@ -104,7 +104,8 @@ func TestBuildLayeredSystemPrompt_UsesCanonicalToolNamesAndTerminalLimits(t *tes
 	assertPromptContains(t, prompt, "terminal.read is strictly incremental")
 	assertPromptContains(t, prompt, "pass the previous last_seq unchanged")
 	assertPromptNotContains(t, prompt, "compatibility alias for yield_ms")
-	assertPromptContains(t, prompt, "terminal.terminate(process_id) only when stopping is intentional")
+	assertPromptContains(t, prompt, "terminal.terminate(process_id, description) only when stopping is intentional")
+	assertPromptContains(t, prompt, "description must use the user's language and clearly name the command or task being stopped")
 	assertPromptContains(t, prompt, "file.read")
 	assertPromptNotContains(t, prompt, "file_read")
 }

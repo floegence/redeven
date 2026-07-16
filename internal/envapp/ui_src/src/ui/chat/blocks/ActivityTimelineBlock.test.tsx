@@ -286,6 +286,39 @@ describe('ActivityTimelineBlock', () => {
 	expect(shells[1]?.textContent).not.toContain('phase 1');
   });
 
+  it('keeps a terminal termination description as the title and exposes its process id in details', async () => {
+    const item = baseItem({
+      item_id: 'terminate_1',
+      tool_id: 'terminate_1',
+      tool_name: 'terminal.terminate',
+      label: 'Stop the Docker build command',
+      payload: {
+        command: 'docker compose up --build -d',
+        process_id: 'tp_stop',
+        status: 'canceled',
+        terminated: true,
+        output: '',
+      },
+    });
+    const host = renderActivity(baseBlock({ items: [item], summary: baseSummary('success') }));
+
+    expandTimeline(host);
+    await flushAsync();
+
+    expect(host.textContent).toContain('Stop the Docker build command');
+    expect(host.textContent).not.toContain('terminal.terminate');
+
+    const row = host.querySelector('.chat-activity-item-clickable') as HTMLDivElement | null;
+    row?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsync();
+    const commandToggle = host.querySelector('button[aria-label="Show full command"]') as HTMLButtonElement | null;
+    commandToggle?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await flushAsync();
+
+    expect(host.textContent).toContain('docker compose up --build -d');
+    expect(host.querySelector('[data-field="process_id"]')?.textContent).toBe('tp_stop');
+  });
+
   it('keeps terminal output visible when the same activity item is replaced by an empty running frame', async () => {
     const runningBlock = (output: string): ActivityTimelineBlockType => baseBlock({
       summary: baseSummary('running'),

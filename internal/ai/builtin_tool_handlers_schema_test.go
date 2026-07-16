@@ -76,17 +76,19 @@ func TestBuiltInToolDefinitions_ApplyPatchContractIsCanonical(t *testing.T) {
 func TestBuiltInToolDefinitions_TerminalSchemasAreCanonical(t *testing.T) {
 	t.Parallel()
 
-	var terminalExec, terminalRead ToolDef
+	var terminalExec, terminalRead, terminalTerminate ToolDef
 	for _, def := range builtInToolDefinitions() {
 		switch def.Name {
 		case "terminal.exec":
 			terminalExec = def
 		case "terminal.read":
 			terminalRead = def
+		case "terminal.terminate":
+			terminalTerminate = def
 		}
 	}
-	if terminalExec.Name == "" || terminalRead.Name == "" {
-		t.Fatalf("terminal definitions missing: exec=%q read=%q", terminalExec.Name, terminalRead.Name)
+	if terminalExec.Name == "" || terminalRead.Name == "" || terminalTerminate.Name == "" {
+		t.Fatalf("terminal definitions missing: exec=%q read=%q terminate=%q", terminalExec.Name, terminalRead.Name, terminalTerminate.Name)
 	}
 
 	var execSchema map[string]any
@@ -164,6 +166,34 @@ func TestBuiltInToolDefinitions_TerminalSchemasAreCanonical(t *testing.T) {
 		if !strings.Contains(toolDescription, phrase) {
 			t.Fatalf("terminal.read description missing %q: %q", phrase, terminalRead.Description)
 		}
+	}
+
+	var terminateSchema map[string]any
+	if err := json.Unmarshal(terminalTerminate.InputSchema, &terminateSchema); err != nil {
+		t.Fatalf("parse terminal.terminate schema: %v", err)
+	}
+	terminateProps, ok := terminateSchema["properties"].(map[string]any)
+	if !ok {
+		t.Fatalf("terminal.terminate schema missing properties: %#v", terminateSchema)
+	}
+	terminateDescriptionSchema, ok := terminateProps["description"].(map[string]any)
+	if !ok {
+		t.Fatalf("terminal.terminate schema missing description: %#v", terminateProps)
+	}
+	if fmt.Sprint(terminateDescriptionSchema["minLength"]) != "1" || fmt.Sprint(terminateDescriptionSchema["maxLength"]) != "120" {
+		t.Fatalf("terminal.terminate description bounds=%#v, want 1..120", terminateDescriptionSchema)
+	}
+	terminateDescription := strings.ToLower(fmt.Sprint(terminateDescriptionSchema["description"]))
+	if !strings.Contains(terminateDescription, "user's language") || !strings.Contains(terminateDescription, "command or task being stopped") || !strings.Contains(terminateDescription, "never use a generic label") {
+		t.Fatalf("terminal.terminate description guidance is incomplete: %q", terminateDescription)
+	}
+	terminateRequired, _ := terminateSchema["required"].([]any)
+	if !containsAnyString(terminateRequired, "process_id") || !containsAnyString(terminateRequired, "description") {
+		t.Fatalf("terminal.terminate required=%#v, want process_id and description", terminateRequired)
+	}
+	terminateToolDescription := strings.ToLower(terminalTerminate.Description)
+	if !strings.Contains(terminateToolDescription, "every call") || !strings.Contains(terminateToolDescription, "user's language") || !strings.Contains(terminateToolDescription, "command or task being stopped") {
+		t.Fatalf("terminal.terminate tool description is incomplete: %q", terminalTerminate.Description)
 	}
 }
 

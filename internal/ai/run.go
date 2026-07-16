@@ -3093,7 +3093,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		if description == "" {
 			return nil, errors.New("invalid args: description is required")
 		}
-		if utf8.RuneCountInString(description) > terminalReadDescriptionMaxRunes {
+		if utf8.RuneCountInString(description) > terminalDescriptionMaxRunes {
 			return nil, errors.New("invalid args: description is too long")
 		}
 		return r.toolTerminalRead(p.ProcessID, p.AfterSeq)
@@ -3117,11 +3117,19 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 			return nil, errors.New("process permission denied: write and execute permissions required")
 		}
 		var p struct {
-			ProcessID string `json:"process_id"`
+			ProcessID   string `json:"process_id"`
+			Description string `json:"description"`
 		}
 		b, _ := json.Marshal(args)
 		if err := json.Unmarshal(b, &p); err != nil {
 			return nil, errors.New("invalid args")
+		}
+		description := strings.TrimSpace(p.Description)
+		if description == "" {
+			return nil, errors.New("invalid args: description is required")
+		}
+		if utf8.RuneCountInString(description) > terminalDescriptionMaxRunes {
+			return nil, errors.New("invalid args: description is too long")
 		}
 		return r.toolTerminalTerminate(p.ProcessID)
 

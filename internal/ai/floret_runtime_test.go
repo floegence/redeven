@@ -19,6 +19,7 @@ import (
 	flruntime "github.com/floegence/floret/runtime"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/ai/threadstore"
+	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -33,6 +34,17 @@ type concurrentTerminalBatchProvider struct {
 	mu    sync.Mutex
 	calls int
 	cwd   string
+}
+
+type terminalTerminationHostedProvider struct {
+	mu         sync.Mutex
+	calls      int
+	manager    *terminalProcessManager
+	endpointID string
+	threadID   string
+	runID      string
+	processID  string
+	toolCalls  []ToolCall
 }
 
 type failingTurnProvider struct{}
@@ -70,6 +82,69 @@ func (p *concurrentTerminalBatchProvider) StreamTurn(_ context.Context, req Mode
 	}, nil
 }
 
+func (p *terminalTerminationHostedProvider) StreamTurn(_ context.Context, req ModelGatewayRequest, _ func(StreamEvent)) (ModelGatewayResult, error) {
+	p.mu.Lock()
+	p.calls++
+	call := p.calls
+	p.mu.Unlock()
+
+	switch call {
+	case 1:
+		toolCall := ToolCall{
+			ID:   "tool_exec_pending",
+			Name: "terminal.exec",
+			Args: map[string]any{"command": "sleep 30", "yield_ms": 1},
+		}
+		p.recordToolCall(toolCall)
+		return ModelGatewayResult{FinishReason: "tool_calls", ToolCalls: []ToolCall{toolCall}}, nil
+	case 2:
+		processes := p.manager.ProcessesForRun(p.endpointID, p.threadID, p.runID)
+		if len(processes) != 1 {
+			return ModelGatewayResult{}, fmt.Errorf("running terminal processes=%d, want 1", len(processes))
+		}
+		snapshot := processes[0].Snapshot()
+		if snapshot.Status != terminalProcessStatusRunning || strings.TrimSpace(snapshot.ProcessID) == "" {
+			return ModelGatewayResult{}, fmt.Errorf("pending terminal snapshot=%#v", snapshot)
+		}
+		p.mu.Lock()
+		p.processID = snapshot.ProcessID
+		p.mu.Unlock()
+		toolCall := ToolCall{
+			ID:   "tool_terminate_pending",
+			Name: "terminal.terminate",
+			Args: map[string]any{
+				"process_id":  snapshot.ProcessID,
+				"description": "Stop the sleeping test command",
+			},
+		}
+		p.recordToolCall(toolCall)
+		return ModelGatewayResult{FinishReason: "tool_calls", ToolCalls: []ToolCall{toolCall}}, nil
+	case 3:
+		messages, err := json.Marshal(req.Messages)
+		if err != nil {
+			return ModelGatewayResult{}, err
+		}
+		if strings.Contains(string(messages), "thread already has an active turn") {
+			return ModelGatewayResult{}, errors.New("terminal termination exposed an active-turn settlement failure")
+		}
+		return ModelGatewayResult{FinishReason: "stop", Text: "The command was stopped."}, nil
+	default:
+		return ModelGatewayResult{}, fmt.Errorf("unexpected provider request %d", call)
+	}
+}
+
+func (p *terminalTerminationHostedProvider) recordToolCall(call ToolCall) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.toolCalls = append(p.toolCalls, call)
+}
+
+func (p *terminalTerminationHostedProvider) snapshot() (int, string, []ToolCall) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.calls, p.processID, append([]ToolCall(nil), p.toolCalls...)
+}
+
 func TestRunFloretHostedTurnExecutesSameResponseTerminalCallsConcurrently(t *testing.T) {
 	t.Parallel()
 	workspace := t.TempDir()
@@ -103,6 +178,119 @@ func TestRunFloretHostedTurnExecutesSameResponseTerminalCallsConcurrently(t *tes
 		if _, err := os.Stat(filepath.Join(workspace, name)); err != nil {
 			t.Fatalf("missing barrier %s: %v", name, err)
 		}
+	}
+}
+
+func TestRunFloretHostedTurnTerminatesPendingCommandWithoutCompensation(t *testing.T) {
+	workspace := t.TempDir()
+	store := openTerminalProcessTestStore(t)
+	t.Cleanup(func() { _ = store.Close() })
+	const endpointID = "env_terminal_termination"
+	const threadID = "thread_terminal_termination"
+	const runID = "run_terminal_termination"
+	const turnID = "turn_terminal_termination"
+	upsertTerminalProcessTestRun(t, store, endpointID, threadID, runID, turnID)
+	if err := store.UpdateThreadPermissionType(context.Background(), endpointID, threadID, config.AIPermissionFullAccess); err != nil {
+		t.Fatalf("UpdateThreadPermissionType: %v", err)
+	}
+
+	manager := newTerminalProcessManager(nil)
+	t.Cleanup(manager.Close)
+	svc := &Service{
+		stateDir:          t.TempDir(),
+		threadsDB:         store,
+		terminalProcesses: manager,
+		log:               slog.New(slog.NewTextHandler(io.Discard, nil)),
+		persistOpTO:       5 * time.Second,
+		runs:              map[string]*run{},
+		activeRunByTh:     map[string]string{runThreadKey(endpointID, threadID): runID},
+	}
+	manager.onDone = svc.handleTerminalProcessDone
+	r := newRun(runOptions{
+		Log:              slog.New(slog.NewTextHandler(io.Discard, nil)),
+		StateDir:         svc.stateDir,
+		AgentHomeDir:     workspace,
+		WorkingDir:       workspace,
+		Shell:            "/bin/bash",
+		Service:          svc,
+		AIConfig:         &config.AIConfig{},
+		ThreadsDB:        store,
+		PersistOpTimeout: 5 * time.Second,
+		RunID:            runID,
+		EndpointID:       endpointID,
+		ThreadID:         threadID,
+		MessageID:        turnID,
+		SessionMeta: &session.Meta{
+			EndpointID: endpointID,
+			CanRead:    true,
+			CanWrite:   true,
+			CanExecute: true,
+			CanAdmin:   true,
+		},
+	})
+	svc.runs[runID] = r
+	provider := &terminalTerminationHostedProvider{
+		manager:    manager,
+		endpointID: endpointID,
+		threadID:   threadID,
+		runID:      runID,
+	}
+
+	err := r.runFloretHostedTurn(t.Context(), RunRequest{
+		Model:   "compat/gpt-5-mini",
+		Input:   RunInput{Text: "start a command and stop it"},
+		Options: RunOptions{PermissionType: config.AIPermissionFullAccess},
+	}, config.AIProvider{ID: "compat", Type: "openai_compatible", BaseURL: "https://example.test/v1"}, "sk-test", "stop a pending command", provider)
+	if err != nil {
+		t.Fatalf("runFloretHostedTurn: %v", err)
+	}
+
+	requestCount, processID, toolCalls := provider.snapshot()
+	if requestCount != 3 {
+		t.Fatalf("provider requests=%d, want 3", requestCount)
+	}
+	if len(toolCalls) != 2 || toolCalls[0].Name != "terminal.exec" || toolCalls[1].Name != "terminal.terminate" {
+		t.Fatalf("provider tool calls=%#v, want terminal.exec then terminal.terminate", toolCalls)
+	}
+	for _, call := range toolCalls {
+		command := strings.TrimSpace(anyToString(call.Args["command"]))
+		if call.Name == "pkill" || call.Name == "kill" || strings.HasPrefix(command, "pkill ") || strings.HasPrefix(command, "kill ") {
+			t.Fatalf("provider emitted compensation tool call: %#v", call)
+		}
+	}
+
+	var execItem observation.ActivityItem
+	var terminateItem observation.ActivityItem
+	for _, block := range r.assistantBlocks {
+		if candidate, ok := block.(ActivityTimelineBlock); ok {
+			for _, item := range candidate.Items {
+				switch item.ToolID {
+				case "tool_exec_pending":
+					execItem = item
+				case "tool_terminate_pending":
+					terminateItem = item
+				}
+			}
+		}
+	}
+	if execItem.ToolID == "" || terminateItem.ToolID == "" {
+		t.Fatalf("assistant blocks missing terminal activity items: %#v", r.assistantBlocks)
+	}
+	if execItem.Status != observation.ActivityStatusCanceled {
+		t.Fatalf("terminal.exec item=%#v, want canceled", execItem)
+	}
+	if terminateItem.Status != observation.ActivityStatusSuccess || terminateItem.Label != "Stop the sleeping test command" {
+		t.Fatalf("terminal.terminate item=%#v, want successful descriptive result", terminateItem)
+	}
+	if terminateItem.Payload["process_id"] != processID || strings.TrimSpace(processID) == "" {
+		t.Fatalf("terminal.terminate payload=%#v process_id=%q", terminateItem.Payload, processID)
+	}
+	record, err := store.GetToolCall(context.Background(), endpointID, runID, "tool_exec_pending")
+	if err != nil {
+		t.Fatalf("GetToolCall: %v", err)
+	}
+	if record.Status != toolCallStatusError || record.ErrorCode != string(aitools.ErrorCodeCanceled) {
+		t.Fatalf("terminal.exec audit=%#v, want canceled", record)
 	}
 }
 

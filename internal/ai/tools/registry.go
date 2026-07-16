@@ -254,8 +254,7 @@ var builtinDefinitions = map[string]Definition{
 		RequiresApproval: false,
 		Presentation: withPresentationOptions(
 			presentation(ToolPresentationCommand, "approval", "terminal", "terminal", "terminal", "error"),
-			labelFields("process_id"),
-			resultFallback("terminal.terminate"),
+			labelFields("description"),
 			callPayloadFields("process_id"),
 			resultPayloadFields("status", "process_id", "terminated", "exit_code", "duration_ms", "output", "first_seq", "last_seq", "latest_seq", "total_bytes", "truncated"),
 			chipFields("process_id", "terminated"),
