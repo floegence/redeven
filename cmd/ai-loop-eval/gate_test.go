@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/floegence/redeven/internal/ai"
-	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 func TestDetectPhasePingPong(t *testing.T) {
@@ -103,7 +102,7 @@ func TestAssessTaskOutcome_PassesStructuredFlowerAssertions(t *testing.T) {
 			WaitingPrompt:  false,
 		},
 		EventCounts: map[string]int{"todos.updated": 1},
-		rawToolCalls: []threadstore.ToolCallRecord{
+		rawToolCalls: []canonicalToolCall{
 			{ToolName: "terminal.exec", Status: "success"},
 			{ToolName: "write_todos", Status: "success", ArgsJSON: `{"todos":[{"content":"Inspect repo","status":"in_progress"},{"content":"Summarize risk","status":"pending"},{"content":"Verify command","status":"pending"}]}`},
 			{ToolName: "write_todos", Status: "success", ArgsJSON: `{"todos":[{"content":"Inspect repo","status":"completed"},{"content":"Summarize risk","status":"completed"},{"content":"Verify command","status":"completed"}]}`},
@@ -212,7 +211,7 @@ func TestAssessTaskOutcome_FailsWhenWorkspaceScopedToolEscapesSandbox(t *testing
 	result := taskResult{
 		Task:          task,
 		WorkspacePath: "/tmp/workspace",
-		rawToolCalls: []threadstore.ToolCallRecord{
+		rawToolCalls: []canonicalToolCall{
 			{
 				ToolName: "terminal.exec",
 				Status:   "success",
@@ -244,7 +243,7 @@ func TestFirstWorkspaceScopeViolation_AllowsWorkspaceBoundTerminalExecCommands(t
 	t.Parallel()
 
 	workspace := "/tmp/workspace"
-	calls := []threadstore.ToolCallRecord{
+	calls := []canonicalToolCall{
 		{
 			ToolName: "terminal.exec",
 			Status:   "success",
@@ -266,7 +265,7 @@ func TestFirstWorkspaceScopeViolation_ApplyPatchIgnoresOutsidePathMentionsInFile
 	t.Parallel()
 
 	workspace := "/tmp/workspace"
-	calls := []threadstore.ToolCallRecord{
+	calls := []canonicalToolCall{
 		{
 			ToolName: "apply_patch",
 			Status:   "success",
@@ -283,7 +282,7 @@ func TestFirstWorkspaceScopeViolation_AllowsStructuredFileToolInsideWorkspace(t 
 	t.Parallel()
 
 	workspace := "/tmp/workspace"
-	calls := []threadstore.ToolCallRecord{
+	calls := []canonicalToolCall{
 		{
 			ToolName: "file.write",
 			Status:   "success",
@@ -321,7 +320,7 @@ func TestFirstWorkspaceScopeViolation_ChecksReadonlyToolsInsideWorkspace(t *test
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			calls := []threadstore.ToolCallRecord{{ToolName: tc.toolName, Status: "success", ArgsJSON: tc.argsJSON}}
+			calls := []canonicalToolCall{{ToolName: tc.toolName, Status: "success", ArgsJSON: tc.argsJSON}}
 			if violation := firstWorkspaceScopeViolation(tc.toolName, calls, workspace); violation != "" {
 				t.Fatalf("unexpected %s violation: %s", tc.toolName, violation)
 			}
@@ -347,7 +346,7 @@ func TestFirstWorkspaceScopeViolation_FailsWhenReadonlyToolEscapesWorkspace(t *t
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			calls := []threadstore.ToolCallRecord{{ToolName: tc.toolName, Status: "success", ArgsJSON: tc.argsJSON}}
+			calls := []canonicalToolCall{{ToolName: tc.toolName, Status: "success", ArgsJSON: tc.argsJSON}}
 			if violation := firstWorkspaceScopeViolation(tc.toolName, calls, workspace); violation != tc.want {
 				t.Fatalf("%s violation=%q, want %q", tc.toolName, violation, tc.want)
 			}
@@ -369,7 +368,7 @@ func TestAssessTaskOutcome_FailsWhenStructuredFileToolEscapesSandbox(t *testing.
 	result := taskResult{
 		Task:          task,
 		WorkspacePath: "/tmp/workspace",
-		rawToolCalls: []threadstore.ToolCallRecord{
+		rawToolCalls: []canonicalToolCall{
 			{
 				ToolName: "file.write",
 				Status:   "success",

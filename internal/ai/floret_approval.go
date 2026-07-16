@@ -326,6 +326,29 @@ func (r *run) activeFloretHost() floretActiveRunHost {
 	return host
 }
 
+func (r *run) pendingToolSettlementOwner() floretPendingToolSettler {
+	if r == nil {
+		return nil
+	}
+	r.mu.Lock()
+	resolver := r.settlementOwnerResolver
+	host := r.floretHost
+	r.mu.Unlock()
+	if resolver != nil {
+		return resolver()
+	}
+	return host
+}
+
+func (r *run) setPendingToolSettlementOwnerResolver(resolver func() floretPendingToolSettler) {
+	if r == nil {
+		return
+	}
+	r.mu.Lock()
+	r.settlementOwnerResolver = resolver
+	r.mu.Unlock()
+}
+
 func (r *run) syncPendingFloretApprovals(ctx context.Context, reason string) {
 	if r == nil || r.service == nil {
 		return

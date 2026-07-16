@@ -48,40 +48,10 @@ func (s *floretToolRuntimeState) updateFromToolResult(call ToolCall, result Tool
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	id := strings.TrimSpace(call.ID)
-	if id != "" {
-		if s.state.ToolCallLedger == nil {
-			s.state.ToolCallLedger = map[string]string{}
-		}
-		s.state.ToolCallLedger[id] = "dispatched"
-	}
 	if result.Pending != nil {
 		return
 	}
 	updateTodoRuntimeState(&s.state, []ToolCall{call}, []ToolResult{result}, round)
-	if result.Status == toolResultStatusSuccess {
-		if id != "" {
-			s.state.ToolCallLedger[id] = "completed"
-		}
-		s.state.CompletedActionFacts = appendLimited(s.state.CompletedActionFacts, result.ToolName+": "+strings.TrimSpace(result.Summary), 12)
-		return
-	}
-	if id != "" {
-		if result.Status == toolResultStatusAborted {
-			s.state.ToolCallLedger[id] = "aborted"
-		} else {
-			s.state.ToolCallLedger[id] = "failed"
-		}
-		s.state.BlockedEvidenceRefs = appendLimited(s.state.BlockedEvidenceRefs, "tool:"+id, 12)
-	}
-	detail := strings.TrimSpace(result.Details)
-	if detail == "" && result.Error != nil {
-		detail = strings.TrimSpace(result.Error.Message)
-	}
-	if detail == "" {
-		detail = strings.TrimSpace(result.Summary)
-	}
-	s.state.BlockedActionFacts = appendLimited(s.state.BlockedActionFacts, result.ToolName+": "+detail, 12)
 }
 
 func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRuntimeState) (*fltools.Registry, error) {
@@ -249,6 +219,10 @@ func floretRunContextForIDs(base *run, rawRunID string, rawThreadID string, rawT
 	child.settlementThreadID = settlementThreadID
 	child.settlementRunID = settlementRunID
 	child.settlementTurnID = settlementTurnID
+	base.mu.Lock()
+	settlementOwnerResolver := base.settlementOwnerResolver
+	base.mu.Unlock()
+	child.setPendingToolSettlementOwnerResolver(settlementOwnerResolver)
 	child.allowDelegatedApproval = base.allowDelegatedApproval
 	child.delegatedApprovalParent = base.delegatedApprovalParent
 	if permission := strings.TrimSpace(hostContext[subagentToolHostContextParentPermissionKey]); permission != "" {
@@ -1453,7 +1427,6 @@ func isNonInformativeToolActivityText(value string) bool {
 		"done",
 		"tool execution failed",
 		"tool failed",
-		"tool.error",
 		"tool error",
 		"tool.timeout",
 		"tool aborted",

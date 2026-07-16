@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/floegence/redeven/internal/ai"
-	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/pathutil"
 )
 
@@ -326,7 +325,7 @@ func aggregateSuiteMetrics(results []taskResult) suiteMetrics {
 	return metrics
 }
 
-func firstWorkspaceScopeViolation(toolName string, calls []threadstore.ToolCallRecord, workspacePath string) string {
+func firstWorkspaceScopeViolation(toolName string, calls []canonicalToolCall, workspacePath string) string {
 	workspacePath = filepath.Clean(strings.TrimSpace(workspacePath))
 	if workspacePath == "" {
 		return "missing_workspace"
@@ -652,8 +651,8 @@ func evaluateGate(metrics suiteMetrics, baselines benchmarkBaselines, thresholds
 	}
 }
 
-func groupToolCallsByName(calls []threadstore.ToolCallRecord) map[string][]threadstore.ToolCallRecord {
-	out := make(map[string][]threadstore.ToolCallRecord)
+func groupToolCallsByName(calls []canonicalToolCall) map[string][]canonicalToolCall {
+	out := make(map[string][]canonicalToolCall)
 	for _, call := range calls {
 		name := normalizeName(call.ToolName)
 		out[name] = append(out[name], call)
@@ -661,7 +660,7 @@ func groupToolCallsByName(calls []threadstore.ToolCallRecord) map[string][]threa
 	return out
 }
 
-func hasSuccessfulToolCall(calls []threadstore.ToolCallRecord) bool {
+func hasSuccessfulToolCall(calls []canonicalToolCall) bool {
 	for _, call := range calls {
 		if normalizeName(call.Status) == "success" {
 			return true
@@ -670,7 +669,7 @@ func hasSuccessfulToolCall(calls []threadstore.ToolCallRecord) bool {
 	return false
 }
 
-func hasWriteTodosInProgressDiscipline(calls []threadstore.ToolCallRecord) (bool, bool) {
+func hasWriteTodosInProgressDiscipline(calls []canonicalToolCall) (bool, bool) {
 	sawUpdate := false
 	sawSingleInProgress := false
 	for _, call := range calls {
@@ -690,7 +689,7 @@ func hasWriteTodosInProgressDiscipline(calls []threadstore.ToolCallRecord) (bool
 	return sawSingleInProgress, sawUpdate
 }
 
-func parseWriteTodosArgs(call threadstore.ToolCallRecord) []ai.TodoItem {
+func parseWriteTodosArgs(call canonicalToolCall) []ai.TodoItem {
 	raw := strings.TrimSpace(call.ArgsJSON)
 	if raw == "" {
 		return nil

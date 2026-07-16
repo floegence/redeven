@@ -9,8 +9,6 @@ import (
 
 	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
-	"github.com/floegence/redeven/internal/ai/threadstore"
-	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -47,8 +45,8 @@ func (s *Service) ReadTerminalProcess(ctx context.Context, meta *session.Meta, r
 	if err := validateTerminalProcessAccess(meta, strings.TrimSpace(runID), snapshot); err != nil {
 		return nil, err
 	}
-	if err := proc.publishDone(); err != nil {
-		return nil, err
+	if snapshot.Status != terminalProcessStatusRunning {
+		return nil, errors.New("terminal process is not running")
 	}
 	return &snapshot, nil
 }
@@ -72,15 +70,9 @@ func (s *Service) WriteTerminalProcess(ctx context.Context, meta *session.Meta, 
 	if err := validateTerminalProcessAccess(meta, strings.TrimSpace(runID), before); err != nil {
 		return nil, err
 	}
-	if err := proc.publishDone(); err != nil {
-		return nil, err
-	}
 	snapshot, err := proc.Write(input)
 	if err != nil {
 		return &snapshot, err
-	}
-	if err := proc.publishDone(); err != nil {
-		return nil, err
 	}
 	return &snapshot, nil
 }
@@ -101,15 +93,9 @@ func (s *Service) TerminateTerminalProcess(ctx context.Context, meta *session.Me
 	if err := validateTerminalProcessAccess(meta, strings.TrimSpace(runID), before); err != nil {
 		return nil, err
 	}
-	if err := proc.publishDone(); err != nil {
-		return nil, err
-	}
-	snapshot, err := proc.Terminate()
+	snapshot, err := proc.Terminate(ctx)
 	if err != nil {
 		return &snapshot, err
-	}
-	if err := proc.publishDone(); err != nil {
-		return nil, err
 	}
 	return &snapshot, nil
 }
@@ -127,13 +113,12 @@ func validateTerminalProcessAccess(meta *session.Meta, runID string, snapshot te
 	return nil
 }
 
-func (s *Service) handleTerminalProcessDone(snapshot terminalProcessSnapshot) error {
+func (s *Service) finalizeTerminalProcess(owner floretPendingToolSettler, target flruntime.PendingToolSettlementTarget, snapshot terminalProcessSnapshot) error {
 	if s == nil {
 		return errors.New("terminal process service unavailable")
 	}
-	db := s.threadsDB
-	if db == nil {
-		return errors.New("terminal process thread store unavailable")
+	if owner == nil {
+		return errors.New("terminal process settlement owner unavailable")
 	}
 	if strings.TrimSpace(snapshot.EndpointID) == "" ||
 		strings.TrimSpace(snapshot.ThreadID) == "" ||
@@ -142,31 +127,24 @@ func (s *Service) handleTerminalProcessDone(snapshot terminalProcessSnapshot) er
 		strings.TrimSpace(snapshot.ToolID) == "" {
 		return errors.New("terminal process settlement identity incomplete")
 	}
-	if strings.TrimSpace(snapshot.SettlementThreadID) == "" ||
-		strings.TrimSpace(snapshot.SettlementRunID) == "" ||
-		strings.TrimSpace(snapshot.SettlementTurnID) == "" {
+	if strings.TrimSpace(string(target.ThreadID)) == "" ||
+		strings.TrimSpace(string(target.RunID)) == "" ||
+		strings.TrimSpace(string(target.TurnID)) == "" ||
+		strings.TrimSpace(target.ToolCallID) == "" ||
+		strings.TrimSpace(target.ToolName) == "" ||
+		strings.TrimSpace(target.Handle) == "" {
 		return errors.New("terminal process settlement target incomplete")
+	}
+	if strings.TrimSpace(target.ToolCallID) != strings.TrimSpace(snapshot.ToolID) ||
+		strings.TrimSpace(target.ToolName) != strings.TrimSpace(snapshot.ToolName) ||
+		strings.TrimSpace(target.Handle) != strings.TrimSpace(snapshot.ProcessID) {
+		return errors.New("terminal process settlement target mismatch")
 	}
 
 	resultPayload := terminalProcessResultPayload(snapshot)
-	status := toolCallStatusSuccess
-	var toolErr *aitools.ToolError
-	if snapshot.Status == terminalProcessStatusCanceled {
-		status = toolCallStatusError
-		toolErr = &aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Terminal process was canceled", Retryable: false}
-	} else if snapshot.Status == terminalProcessStatusError {
-		status = toolCallStatusError
-		toolErr = snapshot.Error
-		if toolErr == nil {
-			toolErr = &aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "Terminal process failed", Retryable: false}
-		}
-	}
-	if toolErr != nil {
-		toolErr.Normalize()
-	}
-	settlementReq := terminalProcessSettlementRequest(snapshot, resultPayload)
+	settlementReq := terminalProcessSettlementRequest(target, snapshot, resultPayload)
 	settleCtx, settleCancel := context.WithTimeout(context.Background(), s.persistTimeout())
-	settled, err := s.settlePendingToolWithActiveRedevenRun(settleCtx, snapshot.EndpointID, snapshot.ThreadID, snapshot.RunID, settlementReq)
+	settled, err := owner.SettlePendingTool(settleCtx, settlementReq)
 	settleCancel()
 	if err != nil {
 		if s.log != nil {
@@ -175,52 +153,10 @@ func (s *Service) handleTerminalProcessDone(snapshot terminalProcessSnapshot) er
 		return err
 	}
 	if err := settled.ValidateProjection(); err != nil {
-		if active := s.runForFloretSettlement(snapshot.EndpointID, snapshot.ThreadID, snapshot.RunID); active != nil {
+		if active := s.activeRunForFloretProjection(snapshot.EndpointID, snapshot.ThreadID, snapshot.RunID); active != nil {
 			active.rejectFloretContract("pending_tool_settlement_projection_outcome", err)
 		}
 		return fmt.Errorf("invalid Floret pending tool settlement projection outcome: %w", err)
-	}
-	startedAt := snapshot.StartedAtUnixMs
-	if startedAt <= 0 {
-		startedAt = time.Now().UnixMilli()
-	}
-	endedAt := snapshot.EndedAtUnixMs
-	if endedAt <= 0 {
-		endedAt = time.Now().UnixMilli()
-	}
-	argsJSON := marshalPersistJSON(redactToolArgsForPersist("terminal.exec", map[string]any{
-		"command": snapshot.Command,
-		"cwd":     snapshot.Cwd,
-	}))
-	errorCode := ""
-	errorMessage := ""
-	retryable := false
-	if toolErr != nil {
-		errorCode = string(toolErr.Code)
-		errorMessage = toolErr.Message
-		retryable = toolErr.Retryable
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), s.persistTimeout())
-	err = db.UpsertToolCall(ctx, threadstore.ToolCallRecord{
-		RunID:           snapshot.RunID,
-		ToolID:          snapshot.ToolID,
-		ToolName:        "terminal.exec",
-		Status:          status,
-		ArgsJSON:        argsJSON,
-		ResultJSON:      marshalPersistJSON(redactAnyForPersist("result", resultPayload, 0)),
-		ErrorCode:       errorCode,
-		ErrorMessage:    errorMessage,
-		Retryable:       retryable,
-		StartedAtUnixMs: startedAt,
-		EndedAtUnixMs:   endedAt,
-		LatencyMS:       endedAt - startedAt,
-	})
-	cancel()
-	if err != nil {
-		if s.log != nil {
-			s.log.Warn("ai: persist terminal process result failed", "run_id", snapshot.RunID, "tool_id", snapshot.ToolID, "error", err)
-		}
-		return err
 	}
 	if err := s.applyFloretPendingToolSettlementProjection(context.Background(), snapshot.EndpointID, snapshot.ThreadID, snapshot.RunID, snapshot.TurnID, settled); err != nil {
 		if s.log != nil {
@@ -228,7 +164,6 @@ func (s *Service) handleTerminalProcessDone(snapshot terminalProcessSnapshot) er
 		}
 		return err
 	}
-	s.appendTerminalProcessRunEvent(snapshot, status, toolErr)
 	return nil
 }
 
@@ -239,45 +174,13 @@ func (s *Service) persistTimeout() time.Duration {
 	return s.persistOpTO
 }
 
-func (s *Service) appendTerminalProcessRunEvent(snapshot terminalProcessSnapshot, status string, toolErr *aitools.ToolError) {
-	if s == nil || s.threadsDB == nil {
-		return
-	}
-	payload := map[string]any{
-		"tool_id":    snapshot.ToolID,
-		"tool_name":  "terminal.exec",
-		"status":     status,
-		"process_id": snapshot.ProcessID,
-		"exit_code":  snapshot.ExitCode,
-	}
-	if toolErr != nil {
-		payload["error"] = activityToolErrorPayload(toolErr)
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), s.persistTimeout())
-	_ = s.threadsDB.AppendRunEvent(ctx, threadstore.RunEventRecord{
-		EndpointID:  snapshot.EndpointID,
-		ThreadID:    snapshot.ThreadID,
-		RunID:       snapshot.RunID,
-		StreamKind:  string(RealtimeStreamKindTool),
-		EventType:   "tool.result",
-		PayloadJSON: marshalPersistJSON(payload),
-		AtUnixMs:    time.Now().UnixMilli(),
-	})
-	cancel()
-}
-
-func terminalProcessSettlementRequest(snapshot terminalProcessSnapshot, resultPayload map[string]any) flruntime.PendingToolSettlementRequest {
+func terminalProcessSettlementRequest(target flruntime.PendingToolSettlementTarget, snapshot terminalProcessSnapshot, resultPayload map[string]any) flruntime.PendingToolSettlementRequest {
 	return flruntime.PendingToolSettlementRequest{
-		ThreadID:   flruntime.ThreadID(strings.TrimSpace(snapshot.SettlementThreadID)),
-		TurnID:     flruntime.TurnID(strings.TrimSpace(snapshot.SettlementTurnID)),
-		RunID:      flruntime.RunID(strings.TrimSpace(snapshot.SettlementRunID)),
-		ToolCallID: snapshot.ToolID,
-		ToolName:   "terminal.exec",
-		Handle:     snapshot.ProcessID,
-		Status:     terminalSettlementStatus(snapshot.Status),
-		Summary:    terminalSettlementSummary(snapshot),
-		Output:     strings.TrimRight(snapshot.Output, "\n"),
-		Activity:   terminalProcessActivity(snapshot, resultPayload),
+		Target:   target,
+		Status:   terminalSettlementStatus(snapshot.Status),
+		Summary:  terminalSettlementSummary(snapshot),
+		Output:   strings.TrimRight(snapshot.Output, "\n"),
+		Activity: terminalProcessActivity(snapshot, resultPayload),
 	}
 }
 

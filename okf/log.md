@@ -1,7 +1,7 @@
 # Redeven OKF Update Log
 
 ## 2026-07-16
-* **Fix**: Documented atomic active-Host terminal termination settlement, required user-language termination titles, visible process identity in terminal details, and the published Floret v0.8.1 boundary.
+* **Refactor**: Made published Floret v0.9.0 the single persistent source of truth for tool identity, lifecycle, results, errors, completion output, and Activity projection; removed Redeven tool-state mirrors and bound terminal finalization to the creating Host and explicit settlement target.
 * **Update**: Documented model-authored terminal read activity titles, command-focused terminal details, Floret v0.8.0 polling identity exclusions, and removal of the terminal execution timeout alias.
 * **Fix**: Documented Floret v0.7.0 running live projections so Flower tool activity is visible before turn completion.
 * **Refactor**: Moved Floret projection, stream, activity, event, and availability validation ownership to Floret public validators while retaining only Redeven run identity association and Flower block mapping.

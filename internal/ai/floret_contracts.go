@@ -57,6 +57,7 @@ type FlowerReadStateCleaner interface {
 
 type floretSubagentHost interface {
 	floretThreadEnsurer
+	floretPendingToolSettler
 	floretSubagentsCloser
 	SpawnSubAgent(context.Context, flruntime.SpawnSubAgentRequest) (flruntime.SubAgentSnapshot, error)
 	SendSubAgentInput(context.Context, flruntime.SendSubAgentInputRequest) (flruntime.SubAgentSnapshot, error)

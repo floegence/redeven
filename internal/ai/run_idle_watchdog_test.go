@@ -18,8 +18,8 @@ func TestRunIdleWatchdog_DoesNotCancelWhileToolBusy(t *testing.T) {
 
 	root := t.TempDir()
 	meta := &session.Meta{CanRead: true, CanWrite: true, CanExecute: true}
-	svc := &Service{terminalProcesses: newTerminalProcessManager(nil)}
-	t.Cleanup(svc.terminalProcesses.Close)
+	svc := &Service{terminalProcesses: newTerminalProcessManager()}
+	t.Cleanup(func() { _ = svc.terminalProcesses.Close(context.Background()) })
 
 	r := newRun(runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
@@ -34,6 +34,8 @@ func TestRunIdleWatchdog_DoesNotCancelWhileToolBusy(t *testing.T) {
 		MessageID:    "m_test",
 		IdleTimeout:  150 * time.Millisecond,
 	})
+	owner := &terminalProcessTestOwner{}
+	r.setPendingToolSettlementOwnerResolver(func() floretPendingToolSettler { return owner })
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)

@@ -156,7 +156,7 @@ describe('ShellBlock', () => {
     expect(host.textContent).not.toContain('Command');
   });
 
-  it('does not render raw terminal result data when deferred output lacks streams', async () => {
+  it('does not fetch completed output or render non-canonical terminal result data', async () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       text: async () => JSON.stringify({
@@ -181,13 +181,38 @@ describe('ShellBlock', () => {
     });
 
     const toggleButton = host.querySelector('button[aria-label="Show output for command output"]') as HTMLButtonElement | null;
+    expect(toggleButton).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(host.textContent).not.toContain('sk-secret');
+    expect(host.textContent).not.toContain('"api_key"');
+    dispose();
+  });
+
+  it('shows a localized live-output error without exposing the backend error', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      text: async () => JSON.stringify({
+        ok: false,
+        error: 'thread already has an active turn',
+      }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    const { host, dispose } = renderShellBlock({
+      command: 'npm test',
+      outputRef: { runId: 'run_live', toolId: 'tool_live' },
+      processId: 'tp_live',
+      status: 'running',
+    });
+
+    const toggleButton = host.querySelector('button[aria-label="Show output for command output"]') as HTMLButtonElement | null;
     toggleButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
     await waitForCondition(() => {
-      expect(host.textContent).toContain('No output captured.');
+      expect(host.textContent).toContain('Live output is unavailable.');
     });
-    expect(host.textContent).not.toContain('sk-secret');
-    expect(host.textContent).not.toContain('"api_key"');
+    expect(host.textContent).not.toContain('thread already has an active turn');
     dispose();
   });
 
@@ -249,8 +274,8 @@ describe('ShellBlock', () => {
     expect(host.textContent).toContain('tick 1');
     expect(host.textContent).not.toContain('Listening for output');
     expect(host.textContent).not.toContain('No output captured');
-	expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/read?after_seq=0');
-	expect(String(fetchMock.mock.calls[1]?.[0])).toContain('/read?after_seq=1');
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/read?after_seq=0');
+    expect(String(fetchMock.mock.calls[1]?.[0])).toContain('/read?after_seq=1');
     dispose();
   });
 

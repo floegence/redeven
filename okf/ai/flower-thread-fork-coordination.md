@@ -12,7 +12,7 @@ Flower thread fork is a cross-repository durable operation. Floret owns the engi
 
 Redeven threadstore schema v38 adds `ai_thread_fork_operations`. An operation has one required `ForkOperationID`, request fingerprint, source and destination thread identities, `pending | committed | failed` status, snapshot schema version, snapshot JSON, Floret result JSON, retry count, diagnostic code/message, broadcast acknowledgements, and timestamps.
 
-`PrepareForkOperation` runs in one SQLite transaction. It validates that the operation request and destination are unused, reads the source product records, writes snapshot schema v1, and commits the operation as `pending`. The fixed snapshot contains the source thread, transcript messages, conversation turns, structured user inputs, todos, memory items, upload references, and Flower thread metadata. It intentionally excludes request-user-input secret answers, runs, execution spans, tool audit rows, run events, and provider-visible Floret projection content. A later source-thread mutation cannot change what this operation will copy.
+`PrepareForkOperation` runs in one SQLite transaction. It validates that the operation request and destination are unused, reads the source product records, writes snapshot schema v1, and commits the operation as `pending`. The fixed snapshot contains the source thread, transcript messages, conversation turns, structured user inputs, todos, memory items, upload references, and Flower thread metadata. It intentionally excludes request-user-input secret answers, runs, run events, and every Floret-owned tool lifecycle or projection value. A later source-thread mutation cannot change what this operation will copy.
 
 Redeven then calls the provider-free Floret maintenance host with the same operation ID, source thread, and planned destination. Floret owns its own fixed journal plan and returns the destination turn/run mappings. `CommitForkOperation` requires an exact mapping for every captured Redeven conversation turn, rejects missing, duplicate, or inconsistent identities, and uses the same mapping to rewrite destination turn, run, thread, trace, and assistant-message references. Floret may own additional journal turns that have no Redeven product anchor; those remain Floret-owned and do not create local rows. Redeven never allocates a local fallback turn or run identity. The transaction materializes the Redeven destination from the stored snapshot, stores the Floret result, clears the committed snapshot payload, and changes the operation to `committed`. Replaying an already committed operation returns the existing destination row; it does not copy again.
 
@@ -26,10 +26,10 @@ After commit, Redeven serializes summary publication per service, reloads the cu
 - Source snapshot capture happens before any Floret target is created.
 - Product materialization never reads the live source thread.
 - Every captured conversation turn uses the exact Floret destination turn/run mapping; unmapped or conflicting identities fail the operation.
-- Secrets, runs, execution spans, tool audit rows, and Floret internal storage are not copied.
+- Secrets, runs, Floret tool lifecycle state, and Floret internal storage are not copied.
 - A destination owned by another operation is a conflict, not a recovery hint.
 - A pending operation remains replayable after process restart.
-- Floret is consumed only through the published v0.8.1 public runtime API.
+- Floret is consumed only through the published v0.9.0 public runtime API.
 
 # References
 

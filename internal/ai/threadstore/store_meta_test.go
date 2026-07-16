@@ -124,3 +124,59 @@ ON structured_user_inputs(endpoint_id, thread_id, id DESC);
 		t.Fatalf("user_version=%d, want %d", version, CurrentSchemaVersion())
 	}
 }
+
+func TestStore_OpenResettingInvalidSchemaRemovesLegacyToolStateMirror(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	store, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if err := store.CreateThread(context.Background(), Thread{ThreadID: "th_old", EndpointID: "env_1", Title: "old"}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("close store: %v", err)
+	}
+
+	raw, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	if _, err := raw.Exec(`
+CREATE TABLE ai_tool_calls (id INTEGER PRIMARY KEY);
+CREATE TABLE execution_spans (span_id TEXT PRIMARY KEY);
+ALTER TABLE ai_thread_checkpoints ADD COLUMN tool_calls_max_id INTEGER NOT NULL DEFAULT 0;
+`); err != nil {
+		_ = raw.Close()
+		t.Fatalf("add legacy tool-state mirror schema: %v", err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatalf("close raw db: %v", err)
+	}
+
+	_, err = Open(dbPath)
+	var schemaErr *sqliteutil.SchemaVerifyError
+	if !errors.As(err, &schemaErr) {
+		t.Fatalf("Open error=%v, want SchemaVerifyError", err)
+	}
+
+	store, err = OpenResettingInvalidSchema(dbPath)
+	if err != nil {
+		t.Fatalf("OpenResettingInvalidSchema: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+
+	for _, tableName := range []string{"ai_tool_calls", "execution_spans"} {
+		if tableExistsForTest(t, store.db, tableName) {
+			t.Fatalf("legacy table %q still exists after schema reset", tableName)
+		}
+	}
+	if tableHasColumnForTest(t, store.db, "ai_thread_checkpoints", "tool_calls_max_id") {
+		t.Fatal("legacy checkpoint tool-state cursor still exists after schema reset")
+	}
+	if got := countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_threads`); got != 0 {
+		t.Fatalf("ai_threads row count=%d, want reset database", got)
+	}
+}

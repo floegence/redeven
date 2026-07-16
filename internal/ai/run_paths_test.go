@@ -154,8 +154,8 @@ func TestResolveToolPath(t *testing.T) {
 
 func TestToolTerminalExec_CwdRules(t *testing.T) {
 	workingDir := t.TempDir()
-	manager := newTerminalProcessManager(nil)
-	defer manager.Close()
+	manager := newTerminalProcessManager()
+	defer func() { _ = manager.Close(context.Background()) }()
 	r := newTerminalProcessTestRun(workingDir, &Service{terminalProcesses: manager}, nil, "env_paths", "thread_paths", "run_paths", "turn_paths")
 
 	t.Run("passes stdin to the command", func(t *testing.T) {

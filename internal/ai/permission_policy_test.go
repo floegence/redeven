@@ -25,8 +25,8 @@ import (
 
 func newPermissionPolicyTestRun(t *testing.T, workspace string, permissionType FlowerPermissionType, messageID string) *run {
 	t.Helper()
-	svc := &Service{terminalProcesses: newTerminalProcessManager(nil)}
-	t.Cleanup(svc.terminalProcesses.Close)
+	svc := &Service{terminalProcesses: newTerminalProcessManager()}
+	t.Cleanup(func() { _ = svc.terminalProcesses.Close(context.Background()) })
 	r := newRun(runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
 		AgentHomeDir: workspace,
@@ -47,6 +47,8 @@ func newPermissionPolicyTestRun(t *testing.T, workspace string, permissionType F
 		MessageID: messageID,
 	})
 	r.permissionType = permissionType
+	owner := &terminalProcessTestOwner{}
+	r.setPendingToolSettlementOwnerResolver(func() floretPendingToolSettler { return owner })
 	freezePermissionPolicyTestSnapshot(t, r)
 	return r
 }
@@ -186,8 +188,8 @@ func newPermissionPolicyBridgeService(t *testing.T) *Service {
 		t.Fatalf("threadstore.Open: %v", err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	manager := newTerminalProcessManager(nil)
-	t.Cleanup(manager.Close)
+	manager := newTerminalProcessManager()
+	t.Cleanup(func() { _ = manager.Close(context.Background()) })
 	return &Service{
 		flowerLiveByThread: map[string]*flowerLiveThreadStream{},
 		delegatedApprovals: map[string]*delegatedApprovalHandle{},

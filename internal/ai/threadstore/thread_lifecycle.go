@@ -14,7 +14,6 @@ func deleteThreadContextPlanesTx(ctx context.Context, tx *sql.Tx, endpointID str
 		`DELETE FROM structured_user_inputs WHERE endpoint_id = ? AND thread_id = ?`,
 		`DELETE FROM request_user_input_secret_answers WHERE endpoint_id = ? AND thread_id = ?`,
 		`DELETE FROM memory_items WHERE endpoint_id = ? AND thread_id = ?`,
-		`DELETE FROM execution_spans WHERE endpoint_id = ? AND thread_id = ?`,
 	}
 	for _, q := range queries {
 		if _, err := tx.ExecContext(ctx, q, endpointID, threadID); err != nil {
@@ -32,17 +31,6 @@ func deleteThreadRunArtifactsTx(ctx context.Context, tx *sql.Tx, endpointID stri
 		{
 			name: "ai_run_events",
 			sql:  `DELETE FROM ai_run_events WHERE endpoint_id = ? AND thread_id = ?`,
-		},
-		{
-			name: "ai_tool_calls",
-			sql: `
-DELETE FROM ai_tool_calls
-WHERE id IN (
-  SELECT tc.id
-  FROM ai_tool_calls tc
-  JOIN ai_runs r ON r.run_id = tc.run_id
-  WHERE r.endpoint_id = ? AND r.thread_id = ?
-)`,
 		},
 		{
 			name: "ai_thread_checkpoints",

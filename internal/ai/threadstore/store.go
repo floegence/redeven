@@ -2651,22 +2651,6 @@ type RunRecord struct {
 	UpdatedAtUnixMs int64  `json:"updated_at_unix_ms"`
 }
 
-type ToolCallRecord struct {
-	RunID           string `json:"run_id"`
-	ToolID          string `json:"tool_id"`
-	ToolName        string `json:"tool_name"`
-	Status          string `json:"status"`
-	ArgsJSON        string `json:"args_json"`
-	ResultJSON      string `json:"result_json"`
-	ErrorCode       string `json:"error_code"`
-	ErrorMessage    string `json:"error_message"`
-	Retryable       bool   `json:"retryable"`
-	RecoveryAction  string `json:"recovery_action"`
-	StartedAtUnixMs int64  `json:"started_at_unix_ms"`
-	EndedAtUnixMs   int64  `json:"ended_at_unix_ms"`
-	LatencyMS       int64  `json:"latency_ms"`
-}
-
 type RunEventRecord struct {
 	ID          int64  `json:"id"`
 	EndpointID  string `json:"endpoint_id"`
@@ -2839,21 +2823,6 @@ SELECT 1
 FROM ai_threads
 WHERE endpoint_id = ? AND thread_id = ?
 `, endpointID, threadID).Scan(&exists); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return sql.ErrNoRows
-		}
-		return err
-	}
-	return nil
-}
-
-func ensureRunExistsTx(ctx context.Context, tx *sql.Tx, runID string) error {
-	var exists int
-	if err := tx.QueryRowContext(ctx, `
-SELECT 1
-FROM ai_runs
-WHERE run_id = ?
-`, runID).Scan(&exists); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return sql.ErrNoRows
 		}
@@ -3256,187 +3225,6 @@ ON CONFLICT(run_id) DO UPDATE SET
 	return err
 }
 
-func (s *Store) UpsertToolCall(ctx context.Context, rec ToolCallRecord) error {
-	if s == nil || s.db == nil {
-		return errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	rec.RunID = strings.TrimSpace(rec.RunID)
-	rec.ToolID = strings.TrimSpace(rec.ToolID)
-	rec.ToolName = strings.TrimSpace(rec.ToolName)
-	rec.Status = strings.TrimSpace(rec.Status)
-	rec.ArgsJSON = strings.TrimSpace(rec.ArgsJSON)
-	rec.ResultJSON = strings.TrimSpace(rec.ResultJSON)
-	rec.ErrorCode = strings.TrimSpace(rec.ErrorCode)
-	rec.ErrorMessage = strings.TrimSpace(rec.ErrorMessage)
-	rec.RecoveryAction = strings.TrimSpace(rec.RecoveryAction)
-	if rec.RunID == "" || rec.ToolID == "" || rec.ToolName == "" || rec.Status == "" {
-		return errors.New("invalid tool call record")
-	}
-	if rec.ArgsJSON == "" {
-		rec.ArgsJSON = "{}"
-	}
-	now := time.Now().UnixMilli()
-	if rec.StartedAtUnixMs <= 0 {
-		rec.StartedAtUnixMs = now
-	}
-	if rec.EndedAtUnixMs > 0 && rec.LatencyMS <= 0 && rec.EndedAtUnixMs >= rec.StartedAtUnixMs {
-		rec.LatencyMS = rec.EndedAtUnixMs - rec.StartedAtUnixMs
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := ensureRunExistsTx(ctx, tx, rec.RunID); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `
-INSERT INTO ai_tool_calls(
-  run_id, tool_id, tool_name, status,
-  args_json, result_json, error_code, error_message,
-  retryable, recovery_action, started_at_unix_ms, ended_at_unix_ms, latency_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT(run_id, tool_id) DO UPDATE SET
-  tool_name=excluded.tool_name,
-  status=excluded.status,
-  args_json=excluded.args_json,
-  result_json=excluded.result_json,
-  error_code=excluded.error_code,
-  error_message=excluded.error_message,
-  retryable=excluded.retryable,
-  recovery_action=excluded.recovery_action,
-  started_at_unix_ms=excluded.started_at_unix_ms,
-  ended_at_unix_ms=excluded.ended_at_unix_ms,
-  latency_ms=excluded.latency_ms
-`, rec.RunID, rec.ToolID, rec.ToolName, rec.Status, rec.ArgsJSON, rec.ResultJSON, rec.ErrorCode, rec.ErrorMessage, boolToInt(rec.Retryable), rec.RecoveryAction, rec.StartedAtUnixMs, rec.EndedAtUnixMs, rec.LatencyMS); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
-func (s *Store) ListRecentThreadToolCalls(ctx context.Context, endpointID string, threadID string, limit int) ([]ToolCallRecord, error) {
-	if s == nil || s.db == nil {
-		return nil, errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	if endpointID == "" || threadID == "" {
-		return nil, errors.New("invalid request")
-	}
-	if limit <= 0 {
-		limit = 20
-	}
-	if limit > 200 {
-		limit = 200
-	}
-
-	rows, err := s.db.QueryContext(ctx, `
-SELECT tc.run_id, tc.tool_id, tc.tool_name, tc.status,
-       tc.args_json, tc.result_json, tc.error_code, tc.error_message,
-       tc.retryable, tc.recovery_action,
-       tc.started_at_unix_ms, tc.ended_at_unix_ms, tc.latency_ms
-FROM ai_tool_calls tc
-JOIN ai_runs r ON r.run_id = tc.run_id
-WHERE r.endpoint_id = ? AND r.thread_id = ?
-ORDER BY tc.id DESC
-LIMIT ?
-`, endpointID, threadID, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	tmp := make([]ToolCallRecord, 0, limit)
-	for rows.Next() {
-		var rec ToolCallRecord
-		var retryableInt int
-		if err := rows.Scan(
-			&rec.RunID,
-			&rec.ToolID,
-			&rec.ToolName,
-			&rec.Status,
-			&rec.ArgsJSON,
-			&rec.ResultJSON,
-			&rec.ErrorCode,
-			&rec.ErrorMessage,
-			&retryableInt,
-			&rec.RecoveryAction,
-			&rec.StartedAtUnixMs,
-			&rec.EndedAtUnixMs,
-			&rec.LatencyMS,
-		); err != nil {
-			return nil, err
-		}
-		rec.Retryable = retryableInt != 0
-		tmp = append(tmp, rec)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	// Reverse to ASC for stable chronological context.
-	out := make([]ToolCallRecord, 0, len(tmp))
-	for i := len(tmp) - 1; i >= 0; i-- {
-		out = append(out, tmp[i])
-	}
-	return out, nil
-}
-
-func (s *Store) GetToolCall(ctx context.Context, endpointID string, runID string, toolID string) (*ToolCallRecord, error) {
-	if s == nil || s.db == nil {
-		return nil, errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	runID = strings.TrimSpace(runID)
-	toolID = strings.TrimSpace(toolID)
-	if endpointID == "" || runID == "" || toolID == "" {
-		return nil, errors.New("invalid request")
-	}
-
-	var (
-		rec          ToolCallRecord
-		retryableInt int
-	)
-	err := s.db.QueryRowContext(ctx, `
-SELECT tc.run_id, tc.tool_id, tc.tool_name, tc.status,
-       tc.args_json, tc.result_json, tc.error_code, tc.error_message,
-       tc.retryable, tc.recovery_action,
-       tc.started_at_unix_ms, tc.ended_at_unix_ms, tc.latency_ms
-FROM ai_tool_calls tc
-JOIN ai_runs r ON r.run_id = tc.run_id
-WHERE r.endpoint_id = ? AND tc.run_id = ? AND tc.tool_id = ?
-LIMIT 1
-`, endpointID, runID, toolID).Scan(
-		&rec.RunID,
-		&rec.ToolID,
-		&rec.ToolName,
-		&rec.Status,
-		&rec.ArgsJSON,
-		&rec.ResultJSON,
-		&rec.ErrorCode,
-		&rec.ErrorMessage,
-		&retryableInt,
-		&rec.RecoveryAction,
-		&rec.StartedAtUnixMs,
-		&rec.EndedAtUnixMs,
-		&rec.LatencyMS,
-	)
-	if err != nil {
-		return nil, err
-	}
-	rec.Retryable = retryableInt != 0
-	return &rec, nil
-}
-
 func (s *Store) AppendRunEvent(ctx context.Context, rec RunEventRecord) error {
 	if s == nil || s.db == nil {
 		return errors.New("store not initialized")
@@ -3700,13 +3488,9 @@ func scrubLegacyModelDefaultToken(tx *sql.Tx) error {
 		{table: "ai_messages", column: "text_content"},
 		{table: "ai_messages", column: "message_json"},
 		{table: "ai_runs", column: "error_message"},
-		{table: "ai_tool_calls", column: "args_json"},
-		{table: "ai_tool_calls", column: "result_json"},
-		{table: "ai_tool_calls", column: "error_message"},
 		{table: "ai_run_events", column: "payload_json"},
 		{table: "transcript_messages", column: "text_content"},
 		{table: "transcript_messages", column: "message_json"},
-		{table: "execution_spans", column: "payload_json"},
 		{table: "memory_items", column: "content"},
 		{table: "provider_capabilities", column: "capability_json"},
 	}
