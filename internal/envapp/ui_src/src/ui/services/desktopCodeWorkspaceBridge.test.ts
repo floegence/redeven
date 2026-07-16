@@ -7,6 +7,27 @@ const appendChunk = vi.fn();
 const cancelOperation = vi.fn();
 const completeOperation = vi.fn();
 const fetchStatus = vi.fn();
+let receivedBytes = 0;
+
+function setupStatus(state = 'running') {
+  return {
+    active_runtime: { detection_state: 'missing', present: false, source: 'none' },
+    managed_runtime: { detection_state: 'missing', present: false, source: 'managed' },
+    managed_prefix: '',
+    shared_runtime_root: '',
+    managed_runtime_source: 'none',
+    installed_versions: [],
+    operation: {
+      action: 'prepare_workspace_engine',
+      operation_id: 'browser-editor:1',
+      install_method: 'desktop_transfer',
+      state,
+      stage: state === 'running' ? 'receiving' : 'finalizing',
+      transfer: { received_bytes: receivedBytes, expected_bytes: 4 },
+    },
+    updated_at_unix_ms: receivedBytes + 1,
+  };
+}
 
 vi.mock('./desktopHostWindow', () => ({
   readDesktopHostBridge: () => bridge,
@@ -23,6 +44,7 @@ vi.mock('./codeRuntimeApi', async (importOriginal) => {
       received_bytes: 0,
       chunk_size_bytes: 2,
       expected_bytes: 4,
+      next_chunk_index: 0,
     })),
     appendCodeRuntimeSetupChunk: appendChunk,
     cancelCodeRuntimeSetupOperation: cancelOperation,
@@ -37,17 +59,18 @@ describe('desktopCodeWorkspaceBridge', () => {
     cancelOperation.mockReset();
     completeOperation.mockReset();
     fetchStatus.mockReset();
-    let chunkIndex = 0;
+    receivedBytes = 0;
     appendChunk.mockImplementation(async () => {
-      chunkIndex += 1;
+      receivedBytes += 2;
       return {
         operation_id: 'browser-editor:1',
-        received_bytes: chunkIndex * 2,
+        received_bytes: receivedBytes,
         expected_bytes: 4,
-        next_chunk_index: chunkIndex,
+        next_chunk_index: receivedBytes / 2,
       };
     });
-    completeOperation.mockResolvedValue({ operation: { state: 'succeeded' } });
+    fetchStatus.mockImplementation(async () => setupStatus());
+    completeOperation.mockImplementation(async () => setupStatus('succeeded'));
     cancelOperation.mockResolvedValue({ operation: { state: 'cancelled' } });
   });
 
@@ -75,6 +98,7 @@ describe('desktopCodeWorkspaceBridge', () => {
     };
     const { prepareWorkspaceEngineWithDesktop } = await import('./desktopCodeWorkspaceBridge');
     const progress: any[] = [];
+    const statuses: any[] = [];
 
     const result = await prepareWorkspaceEngineWithDesktop({
       operationID: 'browser-editor:1',
@@ -90,14 +114,20 @@ describe('desktopCodeWorkspaceBridge', () => {
         updated_at_unix_ms: 1,
       },
       onProgress: (item) => progress.push(item),
+      observer: { onRuntimeStatus: (status) => statuses.push(status) },
     });
 
     expect(result).toMatchObject({ ok: true, prepared: true });
-    expect(progress.map((item) => [item.phase, item.completed_bytes, item.total_bytes, item.state])).toEqual([
-      ['upload', 0, 4, 'running'],
-      ['upload', 2, 4, 'running'],
-      ['upload', 4, 4, 'running'],
-      ['upload', 4, 4, 'completed'],
+    expect(progress).toEqual([]);
+    expect(statuses.map((status) => [
+      status.operation.state,
+      status.operation.transfer.received_bytes,
+      status.operation.transfer.expected_bytes,
+    ])).toEqual([
+      ['running', 0, 4],
+      ['running', 2, 4],
+      ['running', 4, 4],
+      ['succeeded', 4, 4],
     ]);
     expect(dispose).toHaveBeenCalledWith({ job_id: 'job_1' });
   });
@@ -121,12 +151,6 @@ describe('desktopCodeWorkspaceBridge', () => {
       })),
       disposeWorkspaceEnginePackage: dispose,
     };
-    fetchStatus.mockResolvedValue({
-      operation: {
-        operation_id: 'browser-editor:1',
-        state: 'running',
-      },
-    });
     const { prepareWorkspaceEngineWithDesktop } = await import('./desktopCodeWorkspaceBridge');
 
     await expect(prepareWorkspaceEngineWithDesktop({

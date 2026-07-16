@@ -27,6 +27,7 @@ function missingActivity(): BrowserEditorSetupActivity {
     steps,
     active_step_index: 1,
     step_count: 4,
+    show_steps: true,
     can_retry: false,
     can_cancel: false,
     can_continue: false,
@@ -115,6 +116,20 @@ function remoteDownloadActivity(): BrowserEditorSetupActivity {
       total_bytes: 192 * 1024 * 1024,
       updated_at_unix_ms: Date.now(),
     },
+  };
+}
+
+function remoteSubmittingActivity(): BrowserEditorSetupActivity {
+  return {
+    ...missingActivity(),
+    state: 'preparing',
+    presentation: 'progress',
+    badge_label: 'Preparing',
+    badge_variant: 'info',
+    summary: 'Preparing Browser Editor...',
+    install_method: 'remote_download',
+    can_cancel: true,
+    show_steps: false,
   };
 }
 
@@ -247,6 +262,18 @@ describe('BrowserEditorSetupActivityPanel rendered layout', () => {
     document.documentElement.classList.remove('dark', 'light');
     await mediaCommands.emulateMediaPreferences({ forcedColors: 'none', reducedMotion: 'no-preference' });
     await page.viewport(1280, 720);
+  });
+
+  it('shows only the submitting state before Runtime reports the first remote stage', async () => {
+    await page.viewport(390, 844);
+    const { host, dispose } = mountPanel(remoteSubmittingActivity(), 'calc(100vw - 16px)');
+    cleanup = dispose;
+    await settle();
+
+    expect(host.querySelector('.browser-editor-setup')?.getAttribute('data-steps-visible')).toBe('false');
+    expect(host.querySelector('.browser-editor-setup__secondary')).toBeNull();
+    expect(host.querySelector('[role="progressbar"]')).toBeNull();
+    expect(host.scrollWidth).toBeLessThanOrEqual(host.clientWidth + 1);
   });
 
   it('uses a single decorative precision orbit for active setup states', async () => {

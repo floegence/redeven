@@ -39,8 +39,8 @@ const localApiMocks = vi.hoisted(() => ({
 
 const desktopCodeWorkspaceMocks = vi.hoisted(() => ({
   prepareAvailable: vi.fn(() => true),
-  prepareWorkspaceEngineWithDesktop: vi.fn(async (): Promise<any> => ({ ok: true, prepared: true })),
-  cancelWorkspaceEnginePreparation: vi.fn(async (): Promise<any> => ({ ok: true, cancelled: true })),
+  prepareWorkspaceEngineWithDesktop: vi.fn<(args: any) => Promise<any>>(async () => ({ ok: true, prepared: true })),
+  cancelWorkspaceEnginePreparation: vi.fn<(operationID: string, installMethod: string) => Promise<any>>(async () => ({ ok: true, cancelled: true })),
 }));
 
 const desktopSessionContextMocks = vi.hoisted(() => ({
@@ -201,7 +201,59 @@ vi.mock('../services/desktopCodeWorkspaceBridge', () => ({
 }));
 
 vi.mock('../services/browserEditorSetup', () => ({
+  browserEditorRuntimeOperationAbsenceConfirmed: () => true,
   cancelBrowserEditorSetup: desktopCodeWorkspaceMocks.cancelWorkspaceEnginePreparation,
+  createBrowserEditorSetupOrchestration: (options: any) => {
+    const controller = new AbortController();
+    let operation = { operationID: options.operationID, installMethod: options.installMethod };
+    let operationObserved = false;
+    let localProgress: any = null;
+    let runtimeStatus: any = null;
+    let cancelled = false;
+    const snapshot = () => ({
+      requestedOperation: { operationID: options.operationID, installMethod: options.installMethod },
+      operation,
+      operationObserved,
+      phase: 'submitting',
+      localProgress,
+      runtimeStatus,
+      result: null,
+    });
+    return {
+      snapshot,
+      isCancellationRequested: () => cancelled,
+      run: async () => {
+        const result = await desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop({
+          status: options.status,
+          operationID: options.operationID,
+          installMethod: options.installMethod,
+          signal: controller.signal,
+          onProgress: (progress: any) => {
+            localProgress = progress;
+            options.onSnapshot?.(snapshot());
+          },
+          onOperationObserved: (identity: any) => {
+            operation = identity;
+            operationObserved = true;
+            localProgress = null;
+            options.onSnapshot?.(snapshot());
+          },
+          onRuntimeStatus: (status: any) => {
+            runtimeStatus = status;
+            options.onSnapshot?.(snapshot());
+          },
+        });
+        if (result.state) return result;
+        if (!result.ok || !result.prepared) throw new Error(result.message);
+        return { state: 'succeeded', ...result };
+      },
+      cancel: async () => {
+        cancelled = true;
+        controller.abort();
+        await desktopCodeWorkspaceMocks.cancelWorkspaceEnginePreparation(operation.operationID, operation.installMethod);
+      },
+    };
+  },
   defaultBrowserEditorInstallMethod: () => (desktopCodeWorkspaceMocks.prepareAvailable() ? 'desktop_transfer' : 'remote_download'),
   prepareBrowserEditorSetup: desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop,
 }));
@@ -729,6 +781,55 @@ describe('EnvCodespacesPage', () => {
     expect(wizard?.textContent).toContain('Download failed.');
   });
 
+  it('shows and cancels an existing Runtime setup using its real identity', async () => {
+    runtimeStatusResponse = makeRuntimeStatus({
+      operation: {
+        action: 'prepare_workspace_engine',
+        operation_id: 'browser-editor:existing',
+        install_method: 'remote_download',
+        state: 'running',
+        stage: 'downloading',
+        transfer: {
+          received_bytes: 1024,
+          expected_bytes: 4096,
+        },
+        log_tail: [],
+      },
+      updated_at_unix_ms: 2,
+    });
+    desktopCodeWorkspaceMocks.cancelWorkspaceEnginePreparation.mockImplementationOnce(async () => {
+      runtimeStatusResponse = makeRuntimeStatus({
+        operation: {
+          action: 'prepare_workspace_engine',
+          operation_id: 'browser-editor:existing',
+          install_method: 'remote_download',
+          state: 'cancelled',
+          stage: 'downloading',
+          log_tail: [],
+        },
+        updated_at_unix_ms: 3,
+      });
+      return runtimeStatusResponse;
+    });
+
+    render(() => <EnvCodespacesPage />, host);
+    await flushPage();
+
+    const wizard = host.querySelector('[data-testid="browser-editor-setup-activity"]') as HTMLDivElement | null;
+    expect(wizard).toBeTruthy();
+    expect(wizard?.textContent).toContain('This environment is downloading the Browser Editor');
+    expect(wizard?.textContent).toContain('1 KiB of 4 KiB');
+    const cancelButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.trim() === 'Cancel');
+    cancelButton?.click();
+
+    await vi.waitFor(() => {
+      expect(desktopCodeWorkspaceMocks.cancelWorkspaceEnginePreparation).toHaveBeenCalledWith(
+        'browser-editor:existing',
+        'remote_download',
+      );
+    });
+  });
+
   it('prepares the workspace through Desktop instead of calling the old local API install path', async () => {
     runtimeStatusResponse = makeRuntimeStatus({
       active_runtime: {
@@ -771,6 +872,20 @@ describe('EnvCodespacesPage', () => {
           ],
         };
       }
+      if (url === '/_redeven_proxy/api/spaces/space-1/start') {
+        return {
+          code_space_id: 'space-1',
+          name: 'Demo Space',
+          description: 'Workspace demo',
+          workspace_path: '/workspace/demo',
+          code_port: 13337,
+          created_at_unix_ms: 1,
+          updated_at_unix_ms: 2,
+          last_opened_at_unix_ms: 1,
+          running: true,
+          pid: 4242,
+        };
+      }
       throw new Error(`Unexpected local API call: ${url}`);
     });
 
@@ -811,8 +926,14 @@ describe('EnvCodespacesPage', () => {
     expect(localApiMocks.fetchLocalApiJSON).not.toHaveBeenCalledWith('/_redeven_proxy/api/code-runtime/install', expect.anything());
     expect(localApiMocks.fetchLocalApiJSON).not.toHaveBeenCalledWith('/_redeven_proxy/api/spaces/space-1/start', expect.anything());
 
-    resolvePrepare({ ok: true, prepared: true, status: makeRuntimeStatus() });
-    await flushPage();
+    runtimeStatusResponse = makeRuntimeStatus();
+    resolvePrepare({ ok: true, prepared: true, status: runtimeStatusResponse });
+    await vi.waitFor(() => {
+      expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith(
+        '/_redeven_proxy/api/spaces/space-1/start',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
     windowOpenSpy.mockRestore();
   });
 

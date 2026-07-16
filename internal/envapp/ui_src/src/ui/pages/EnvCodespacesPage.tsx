@@ -57,9 +57,11 @@ import {
 } from "../services/desktopShellBridge";
 import { desktopCodeWorkspacePrepareAvailable } from "../services/desktopCodeWorkspaceBridge";
 import {
+  browserEditorRuntimeOperationAbsenceConfirmed,
   cancelBrowserEditorSetup,
+  createBrowserEditorSetupOrchestration,
   defaultBrowserEditorInstallMethod,
-  prepareBrowserEditorSetup,
+  type BrowserEditorSetupOrchestration,
 } from "../services/browserEditorSetup";
 import {
   createBrowserEditorSetupOperationID,
@@ -958,16 +960,18 @@ export function EnvCodespacesPage() {
   const [runtimePrepareLocalFailure, setRuntimePrepareLocalFailure] = createSignal<BrowserEditorSetupLocalFailure | null>(null);
   const [runtimePrepareLocalCancelled, setRuntimePrepareLocalCancelled] = createSignal(false);
   const [runtimePrepareProgress, setRuntimePrepareProgress] = createSignal<BrowserEditorSetupProgress | null>(null);
-  const [runtimePrepareOperationID, setRuntimePrepareOperationID] = createSignal<string | null>(null);
-  const [runtimePrepareCancelRequestedID, setRuntimePrepareCancelRequestedID] = createSignal<string | null>(null);
   const [runtimePrepareSubmitting, setRuntimePrepareSubmitting] = createSignal(false);
   const [runtimeInstallMethod, setRuntimeInstallMethod] = createSignal<BrowserEditorInstallMethod>(defaultBrowserEditorInstallMethod());
-  const [runtimePrepareActiveMethod, setRuntimePrepareActiveMethod] = createSignal<BrowserEditorInstallMethod | null>(null);
-  let runtimePrepareAbortController: AbortController | null = null;
+  let runtimeSetupOrchestration: BrowserEditorSetupOrchestration | null = null;
   const [runtimeCancelSubmitting, setRuntimeCancelSubmitting] = createSignal(false);
   const [busyActions, setBusyActions] = createSignal<Record<string, CodespaceBusyAction | undefined>>({});
   const [codespaceContextMenu, setCodespaceContextMenu] = createSignal<CodespaceContextMenuState | null>(null);
   let codespaceContextMenuEl: HTMLDivElement | null = null;
+
+  const browserEditorSetupRunning = () => (
+    runtimeStatus()?.operation.action === "prepare_workspace_engine"
+    && codeRuntimeOperationRunning(runtimeStatus())
+  );
 
   const busyActionOf = (codeSpaceID: string): CodespaceBusyAction | undefined => {
     const action = busyActions()[codeSpaceID];
@@ -975,7 +979,7 @@ export function EnvCodespacesPage() {
     const intent = pendingIntent();
     if (
       intent?.code_space_id === codeSpaceID
-      && (runtimePrepareSubmitting() || runtimePrepareLocalPending() || codeRuntimeOperationRunning(runtimeStatus()))
+      && (runtimePrepareSubmitting() || runtimePrepareLocalPending() || browserEditorSetupRunning())
     ) {
       return intent.kind;
     }
@@ -985,7 +989,7 @@ export function EnvCodespacesPage() {
     const intent = pendingIntent();
     if (
       intent?.code_space_id === codeSpaceID
-      && (runtimePrepareSubmitting() || runtimePrepareLocalPending() || codeRuntimeOperationRunning(runtimeStatus()))
+      && (runtimePrepareSubmitting() || runtimePrepareLocalPending() || browserEditorSetupRunning())
     ) {
       return i18n.t("codespaces.status.settingUpEditor");
     }
@@ -1017,7 +1021,7 @@ export function EnvCodespacesPage() {
     const list = out?.spaces;
     return Array.isArray(list) ? list : [];
   });
-  const [runtimeStatus, { refetch: refetchRuntimeStatus }] = createResource<CodeRuntimeStatus>(fetchCodeRuntimeStatus);
+  const [runtimeStatus, { mutate: mutateRuntimeStatus, refetch: refetchRuntimeStatus }] = createResource<CodeRuntimeStatus>(fetchCodeRuntimeStatus);
 
   // Load home directory path
   createEffect(() => {
@@ -1152,48 +1156,59 @@ export function EnvCodespacesPage() {
   const startWorkspacePrepareFlow = async () => {
     const operationID = createBrowserEditorSetupOperationID();
     const installMethod = runtimeInstallMethod();
-    const abortController = new AbortController();
-    runtimePrepareAbortController = abortController;
-    setRuntimePrepareOperationID(operationID);
-    setRuntimePrepareActiveMethod(installMethod);
-    setRuntimePrepareCancelRequestedID(null);
     setRuntimePrepareLocalPending(true);
     setRuntimePrepareSubmitting(true);
     setRuntimePrepareLocalFailure(null);
     setRuntimePrepareLocalCancelled(false);
-    setRuntimePrepareProgress({
-      operation_id: operationID,
-      phase: "lookup",
-      state: "running",
-      updated_at_unix_ms: Date.now(),
+    setRuntimePrepareProgress(null);
+    const orchestration = createBrowserEditorSetupOrchestration({
+      operationID,
+      installMethod,
+      status: runtimeStatus(),
+      onSnapshot: (snapshot) => {
+        setRuntimeInstallMethod(snapshot.operation.installMethod);
+        setRuntimePrepareProgress(snapshot.localProgress);
+        if (snapshot.operationObserved) {
+          setRuntimePrepareLocalPending(false);
+          setRuntimePrepareLocalFailure(null);
+          setRuntimePrepareLocalCancelled(false);
+        }
+        if (snapshot.runtimeStatus) mutateRuntimeStatus(snapshot.runtimeStatus);
+      },
     });
+    runtimeSetupOrchestration = orchestration;
     try {
-      const result = await prepareBrowserEditorSetup({
-        status: runtimeStatus(),
-        operationID,
-        installMethod,
-        signal: abortController.signal,
-        onProgress: (progress) => {
-          if (runtimePrepareOperationID() === operationID) setRuntimePrepareProgress(progress);
-        },
-      });
-      if (result.cancelled || runtimePrepareCancelRequestedID() === operationID) {
-        setRuntimePrepareLocalCancelled(true);
+      const result = await orchestration.run();
+      if (result.state === "cancelled") {
+        if (!result.status) setRuntimePrepareLocalCancelled(true);
         return;
       }
-      if (!result.ok || !result.prepared) {
-        throw new Error(result.message || i18n.t("codespaces.prepare.setupDidNotFinish"));
+      if (result.state === "blocked") return;
+      if (result.state === "failed") {
+        const failure = browserEditorLocalFailureFromError(result.message, orchestration.snapshot().operation.installMethod);
+        notification.error(i18n.t("codespaces.notifications.browserEditorSetupFailedTitle"), failure.message);
+        const intent = pendingIntent();
+        if (intent?.kind === "open" && intent.open_target === "desktop_window") {
+          await showDesktopCodespaceOpenFailure(intent.code_space_id, {
+            loadingTitle: i18n.t("codespaces.desktopWindow.loadingTitle"),
+            loadingDetail: i18n.t("codespaces.desktopWindow.loadingDetail"),
+            failedTitle: i18n.t("codespaces.desktopWindow.failedTitle"),
+            failedDetail: (message) => i18n.t("codespaces.desktopWindow.failedDetail", { message }),
+            desktopWindowOpenFailed: i18n.t("codespaces.errors.desktopWindowOpenFailed"),
+          }, failure);
+        }
+        return;
       }
       await refetchRuntimeStatus();
       await continuePendingIntent();
     } catch (e) {
-      if (runtimePrepareCancelRequestedID() === operationID) {
-        setRuntimePrepareLocalCancelled(true);
-        return;
-      }
-      const failure = browserEditorLocalFailureFromError(e, installMethod);
+      if (orchestration.isCancellationRequested()) return;
+      const snapshot = orchestration.snapshot();
+      const failure = browserEditorLocalFailureFromError(e, snapshot.operation.installMethod);
       const intent = pendingIntent();
-      setRuntimePrepareLocalFailure(failure);
+      if (!snapshot.operationObserved && browserEditorRuntimeOperationAbsenceConfirmed(e)) {
+        setRuntimePrepareLocalFailure(failure);
+      }
       notification.error(i18n.t("codespaces.notifications.browserEditorSetupFailedTitle"), failure.message);
       if (intent?.kind === "open" && intent.open_target === "desktop_window") {
         await showDesktopCodespaceOpenFailure(intent.code_space_id, {
@@ -1206,12 +1221,11 @@ export function EnvCodespacesPage() {
       }
       await refetchRuntimeStatus();
     } finally {
-      if (runtimePrepareOperationID() === operationID) {
-        runtimePrepareAbortController = null;
-        setRuntimePrepareOperationID(null);
-        setRuntimePrepareActiveMethod(null);
+      if (runtimeSetupOrchestration === orchestration) {
+        runtimeSetupOrchestration = null;
         setRuntimePrepareSubmitting(false);
         setRuntimePrepareLocalPending(false);
+        setRuntimePrepareProgress(null);
         setRuntimeInstallMethod(defaultBrowserEditorInstallMethod());
       }
     }
@@ -1237,20 +1251,24 @@ export function EnvCodespacesPage() {
   };
 
   const cancelRuntimePrepareFlow = async () => {
-    const operationID = runtimePrepareOperationID();
-    const installMethod = runtimePrepareActiveMethod();
-    if (operationID) setRuntimePrepareCancelRequestedID(operationID);
-    runtimePrepareAbortController?.abort();
     setRuntimeCancelSubmitting(true);
     try {
-      if (operationID && installMethod) {
-        await cancelBrowserEditorSetup(operationID, installMethod);
+      if (runtimeSetupOrchestration) {
+        await runtimeSetupOrchestration.cancel();
+      } else {
+        const operation = runtimeStatus()?.operation;
+        if (
+          operation?.action === "prepare_workspace_engine"
+          && operation.operation_id
+          && operation.install_method
+        ) {
+          mutateRuntimeStatus(await cancelBrowserEditorSetup(operation.operation_id, operation.install_method));
+        }
       }
-      if (operationID) setRuntimePrepareLocalCancelled(true);
-      await refetchRuntimeStatus();
     } catch (e) {
       notification.error(i18n.t("codespaces.notifications.cancelPreparationFailedTitle"), e instanceof Error ? e.message : String(e));
     } finally {
+      await refetchRuntimeStatus();
       setRuntimeCancelSubmitting(false);
     }
   };
@@ -1471,6 +1489,7 @@ export function EnvCodespacesPage() {
     const prepareFlowActive = status?.operation.action !== "remove_local_environment_version";
     if (runtimePrepareLocalPending()) return true;
     if (codeRuntimeMissing(status)) return true;
+    if (prepareFlowActive && codeRuntimeOperationRunning(status)) return true;
     if (prepareFlowActive && (status.operation.state === "failed" || status.operation.state === "cancelled")) return true;
     if (status.active_runtime.detection_state === "unusable") return true;
     return false;

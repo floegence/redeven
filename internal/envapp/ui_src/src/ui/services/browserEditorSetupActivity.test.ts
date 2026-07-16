@@ -146,6 +146,19 @@ describe('browserEditorSetupActivity', () => {
     expect(activity.steps[0]).toMatchObject({ id: 'catalog', state: 'active' });
   });
 
+  it('keeps remote creation in a pure submitting state until Runtime reports a stage', () => {
+    const activity = buildBrowserEditorSetupActivity({
+      installMethod: 'remote_download',
+      status: missingStatus(),
+      localPending: true,
+    });
+
+    expect(activity.state).toBe('preparing');
+    expect(activity.progress).toBeUndefined();
+    expect(activity.show_steps).toBe(false);
+    expect(activity.steps.every((step) => step.state === 'pending')).toBe(true);
+  });
+
   it('maps Runtime receiving operations to the upload step', () => {
     const activity = buildBrowserEditorSetupActivity({ installMethod: 'desktop_transfer',
       status: {

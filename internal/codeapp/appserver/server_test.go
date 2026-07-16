@@ -375,6 +375,9 @@ func TestServer_CodeRuntimeRoutes(t *testing.T) {
 		},
 		createCodeRuntimeSetupOperation: func(ctx context.Context, operationID string, installMethod codeserver.BrowserEditorInstallMethod, manifest *CodeRuntimeArtifactManifest) (CodeRuntimeSetupOperation, error) {
 			createSetupCalls++
+			if operationID == "browser-editor:conflict" {
+				return CodeRuntimeSetupOperation{}, fmt.Errorf("wrapped setup conflict: %w", codeserver.ErrBrowserEditorSetupOperationConflict)
+			}
 			if operationID != "browser-editor:remote" || installMethod != codeserver.BrowserEditorInstallMethodRemoteDownload || manifest != nil {
 				return CodeRuntimeSetupOperation{}, fmt.Errorf("unexpected setup create: id=%q method=%q manifest=%v", operationID, installMethod, manifest)
 			}
@@ -507,13 +510,24 @@ func TestServer_CodeRuntimeRoutes(t *testing.T) {
 	if !bytes.Contains(createResp.Body.Bytes(), []byte(`"install_method":"remote_download"`)) {
 		t.Fatalf("setup create body missing method: %s", createResp.Body.String())
 	}
+	if bytes.Contains(createResp.Body.Bytes(), []byte(`"chunk_size_bytes"`)) {
+		t.Fatalf("remote setup create body contains Desktop-only chunk size: %s", createResp.Body.String())
+	}
+
+	conflictResp := request(http.MethodPost, "/_redeven_proxy/api/code-runtime/setup-operations", `{"operation_id":"browser-editor:conflict","install_method":"remote_download"}`)
+	if conflictResp.Code != http.StatusConflict || createSetupCalls != 2 {
+		t.Fatalf("setup conflict code=%d calls=%d body=%s", conflictResp.Code, createSetupCalls, conflictResp.Body.String())
+	}
+	if !bytes.Contains(conflictResp.Body.Bytes(), []byte(`"error_code":"CODE_RUNTIME_OPERATION_CONFLICT"`)) {
+		t.Fatalf("setup conflict body missing stable error code: %s", conflictResp.Body.String())
+	}
 
 	injectedURLResp := request(http.MethodPost, "/_redeven_proxy/api/code-runtime/setup-operations", `{"operation_id":"browser-editor:injected","install_method":"remote_download","download_url":"https://example.com/package.tar.gz"}`)
-	if injectedURLResp.Code != http.StatusBadRequest || createSetupCalls != 1 {
+	if injectedURLResp.Code != http.StatusBadRequest || createSetupCalls != 2 {
 		t.Fatalf("client URL injection code=%d create_calls=%d body=%s", injectedURLResp.Code, createSetupCalls, injectedURLResp.Body.String())
 	}
 	trailingResp := request(http.MethodPost, "/_redeven_proxy/api/code-runtime/setup-operations", `{"operation_id":"browser-editor:trailing","install_method":"remote_download"} {}`)
-	if trailingResp.Code != http.StatusBadRequest || createSetupCalls != 1 {
+	if trailingResp.Code != http.StatusBadRequest || createSetupCalls != 2 {
 		t.Fatalf("trailing setup JSON code=%d create_calls=%d body=%s", trailingResp.Code, createSetupCalls, trailingResp.Body.String())
 	}
 

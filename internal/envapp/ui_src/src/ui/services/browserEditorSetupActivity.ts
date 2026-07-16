@@ -67,6 +67,7 @@ export type BrowserEditorSetupActivity = Readonly<{
   steps: readonly BrowserEditorSetupStep[];
   active_step_index: number;
   step_count: number;
+  show_steps: boolean;
   progress?: BrowserEditorSetupProgress;
   install_method?: BrowserEditorInstallMethod;
   can_retry: boolean;
@@ -368,6 +369,7 @@ function baseActivity(args: Readonly<{
   pendingActionLabel?: string;
   progress?: BrowserEditorSetupProgress;
   installMethod?: BrowserEditorInstallMethod;
+  showSteps?: boolean;
 }>): BrowserEditorSetupActivity {
   const badge = badgeForState(args.state);
   const activeIndex = stepIndexForID(args.activeStepID);
@@ -381,6 +383,7 @@ function baseActivity(args: Readonly<{
     steps: args.steps,
     active_step_index: activeIndex + 1,
     step_count: browserEditorStepDefs.length,
+    show_steps: args.showSteps !== false,
     ...(args.progress ? { progress: args.progress } : {}),
     ...(args.installMethod ? { install_method: args.installMethod } : {}),
     can_retry: Boolean(args.canRetry),
@@ -515,15 +518,19 @@ export function buildBrowserEditorSetupActivity(args: Readonly<{
   if (args.localPending) {
     const progress = args.localProgress ?? undefined;
     const stepID = progress ? progressStepID(progress.phase, installMethod) : 'catalog';
+    const remoteSubmitting = installMethod === 'remote_download' && progress === undefined;
     return baseActivity({
       state: 'preparing',
       summary: 'Desktop is preparing the Browser Editor.',
       detail: 'Setup starts only after your explicit request. Redeven will not retry automatically if it fails.',
-      steps: stepsFor(stepID, 'active'),
+      steps: remoteSubmitting
+        ? browserEditorStepDefs.map((step) => ({ ...step, state: 'pending' as const }))
+        : stepsFor(stepID, 'active'),
       activeStepID: stepID,
       canCancel: true,
       progress,
       installMethod,
+      showSteps: !remoteSubmitting,
     });
   }
 
@@ -750,7 +757,9 @@ export function localizeBrowserEditorSetupActivity(
   } else if (args.localPending) {
     summary = args.localProgress
       ? localizedProgressSummary(args.localProgress, i18n)
-      : i18n.t('codeRuntime.activity.desktopPreparing');
+      : i18n.t(args.installMethod === 'desktop_transfer'
+        ? 'codeRuntime.activity.desktopPreparing'
+        : 'codeRuntime.stage.preparing');
     detail = i18n.t('codeRuntime.activity.explicitRequestDetail');
   } else if (args.status?.active_runtime.detection_state === 'ready') {
     summary = i18n.t('codeRuntime.activity.readyWithPath', { path: args.status.active_runtime.binary_path ?? '-' });

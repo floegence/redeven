@@ -68,15 +68,27 @@ export type CodeRuntimePlatform = Readonly<{
   message?: string;
 }>;
 
-export type CodeRuntimeSetupOperation = Readonly<{
+type CodeRuntimeSetupOperationBase = Readonly<{
   operation_id: string;
-  install_method: BrowserEditorInstallMethod;
-  state: string;
+}>;
+
+export type CodeRuntimeDesktopTransferSetupOperation = CodeRuntimeSetupOperationBase & Readonly<{
+  install_method: 'desktop_transfer';
+  state: 'receiving';
   chunk_size_bytes: number;
   expected_bytes: number;
   received_bytes: number;
-  next_chunk_index?: number;
+  next_chunk_index: number;
 }>;
+
+export type CodeRuntimeRemoteDownloadSetupOperation = CodeRuntimeSetupOperationBase & Readonly<{
+  install_method: 'remote_download';
+  state: 'running';
+}>;
+
+export type CodeRuntimeSetupOperation =
+  | CodeRuntimeDesktopTransferSetupOperation
+  | CodeRuntimeRemoteDownloadSetupOperation;
 
 export type CodeRuntimeSetupChunkResult = Readonly<{
   operation_id: string;
@@ -113,7 +125,10 @@ export async function appendCodeRuntimeSetupChunk(
   signal?: AbortSignal,
 ): Promise<CodeRuntimeSetupChunkResult> {
   const cleanOperationID = encodeURIComponent(String(operationID ?? '').trim());
-  const cleanChunkIndex = Math.max(0, Math.floor(chunkIndex));
+  if (!Number.isSafeInteger(chunkIndex) || chunkIndex < 0) {
+    throw new Error('Browser Editor setup chunk index must be a non-negative safe integer.');
+  }
+  const cleanChunkIndex = chunkIndex;
   return normalizeCodeRuntimeSetupChunkResult(await withCodeRuntimeChunkTimeout((timeoutSignal) => fetchLocalApiJSON<CodeRuntimeSetupChunkResult>(
     `/_redeven_proxy/api/code-runtime/setup-operations/${cleanOperationID}/chunks/${cleanChunkIndex}`,
     {
@@ -336,30 +351,47 @@ function normalizeCodeRuntimeSetupOperation(value: unknown): CodeRuntimeSetupOpe
   const record = value && typeof value === 'object' ? value as Record<string, unknown> : {};
   const operationID = String(record.operation_id ?? '').trim();
   const installMethod = String(record.install_method ?? '').trim();
+  const state = String(record.state ?? '').trim();
+  if (!operationID || (installMethod !== 'desktop_transfer' && installMethod !== 'remote_download')) {
+    throw new Error('Runtime did not return a valid Browser Editor setup operation.');
+  }
+  if (installMethod === 'remote_download') {
+    if (state !== 'running') {
+      throw new Error('Runtime did not return a valid Browser Editor setup operation.');
+    }
+    return {
+      operation_id: operationID,
+      install_method: installMethod,
+      state,
+    };
+  }
+
   const chunkSizeBytes = Number(record.chunk_size_bytes);
   const expectedBytes = Number(record.expected_bytes);
   const receivedBytes = Number(record.received_bytes);
   const nextChunkIndex = Number(record.next_chunk_index);
   if (
-    !operationID
-    || (installMethod !== 'desktop_transfer' && installMethod !== 'remote_download')
-    || !Number.isFinite(chunkSizeBytes)
-    || chunkSizeBytes < 0
-    || !Number.isFinite(expectedBytes)
-    || expectedBytes < 0
-    || !Number.isFinite(receivedBytes)
+    state !== 'receiving'
+    || !Number.isSafeInteger(chunkSizeBytes)
+    || chunkSizeBytes <= 0
+    || !Number.isSafeInteger(expectedBytes)
+    || expectedBytes <= 0
+    || !Number.isSafeInteger(receivedBytes)
     || receivedBytes < 0
+    || receivedBytes > expectedBytes
+    || !Number.isSafeInteger(nextChunkIndex)
+    || nextChunkIndex < 0
   ) {
     throw new Error('Runtime did not return a valid Browser Editor setup operation.');
   }
   return {
     operation_id: operationID,
-    install_method: installMethod,
-    state: String(record.state ?? '').trim(),
-    chunk_size_bytes: Math.floor(chunkSizeBytes),
-    expected_bytes: Math.floor(expectedBytes),
-    received_bytes: Math.floor(receivedBytes),
-    ...(Number.isFinite(nextChunkIndex) && nextChunkIndex >= 0 ? { next_chunk_index: Math.floor(nextChunkIndex) } : {}),
+    install_method: 'desktop_transfer',
+    state,
+    chunk_size_bytes: chunkSizeBytes,
+    expected_bytes: expectedBytes,
+    received_bytes: receivedBytes,
+    next_chunk_index: nextChunkIndex,
   };
 }
 
@@ -369,13 +401,22 @@ function normalizeCodeRuntimeSetupChunkResult(value: unknown): CodeRuntimeSetupC
   const receivedBytes = Number(record.received_bytes);
   const expectedBytes = Number(record.expected_bytes);
   const nextChunkIndex = Number(record.next_chunk_index);
-  if (!operationID || !Number.isFinite(receivedBytes) || !Number.isFinite(expectedBytes) || !Number.isFinite(nextChunkIndex)) {
+  if (
+    !operationID
+    || !Number.isSafeInteger(receivedBytes)
+    || receivedBytes < 0
+    || !Number.isSafeInteger(expectedBytes)
+    || expectedBytes <= 0
+    || receivedBytes > expectedBytes
+    || !Number.isSafeInteger(nextChunkIndex)
+    || nextChunkIndex < 0
+  ) {
     throw new Error('Runtime did not return a valid Browser Editor setup chunk result.');
   }
   return {
     operation_id: operationID,
-    received_bytes: Math.max(0, Math.floor(receivedBytes)),
-    expected_bytes: Math.max(0, Math.floor(expectedBytes)),
-    next_chunk_index: Math.max(0, Math.floor(nextChunkIndex)),
+    received_bytes: receivedBytes,
+    expected_bytes: expectedBytes,
+    next_chunk_index: nextChunkIndex,
   };
 }

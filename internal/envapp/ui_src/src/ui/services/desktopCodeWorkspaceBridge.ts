@@ -15,7 +15,6 @@ import {
   cancelCodeRuntimeSetupOperation,
   codeRuntimePlatformForDesktop,
   completeCodeRuntimeSetupOperation,
-  createCodeRuntimeSetupOperation,
   fetchCodeRuntimeStatus,
   type CodeRuntimeStatus,
 } from './codeRuntimeApi';
@@ -28,6 +27,14 @@ import {
   browserEditorSetupError,
   type BrowserEditorSetupFailureSource,
 } from './browserEditorSetupError';
+import {
+  browserEditorRuntimeTerminalResult,
+  blockedBrowserEditorRuntimeSetupResult,
+  observeBrowserEditorRuntimeOperation,
+  startOrReconcileBrowserEditorRuntimeOperation,
+  type BrowserEditorRuntimeOperationObserver,
+  type BrowserEditorRuntimeSetupResult,
+} from './browserEditorRuntimeOperation';
 
 export interface DesktopCodeWorkspaceBridge {
   prepareWorkspaceEnginePackage?: (request?: unknown) => Promise<DesktopCodeWorkspacePackagePrepareResponse>;
@@ -37,13 +44,7 @@ export interface DesktopCodeWorkspaceBridge {
   subscribeWorkspaceEngineProgress?: (listener: (progress: DesktopCodeWorkspaceProgress) => void) => () => void;
 }
 
-export type BrowserEditorDesktopTransferResult = Readonly<{
-  ok: boolean;
-  prepared: boolean;
-  cancelled?: boolean;
-  message?: string;
-  status?: CodeRuntimeStatus;
-}>;
+export type BrowserEditorDesktopTransferResult = BrowserEditorRuntimeSetupResult;
 
 declare global {
   interface Window {
@@ -87,13 +88,22 @@ function throwIfAborted(signal: AbortSignal | undefined): void {
 }
 
 async function terminateRuntimeSetupAfterDesktopFailure(operationID: string): Promise<void> {
-  try {
-    const status = await fetchCodeRuntimeStatus();
-    if (status.operation.operation_id !== operationID || status.operation.state !== 'running') return;
-  } catch {
-    // The matched cancel request remains authoritative when status observation is unavailable.
-  }
   await cancelCodeRuntimeSetupOperation(operationID);
+}
+
+function publishDesktopRuntimeStatus(
+  status: CodeRuntimeStatus,
+  operationID: string,
+  observer: BrowserEditorRuntimeOperationObserver | undefined,
+): void {
+  if (
+    status.operation.action !== 'prepare_workspace_engine'
+    || status.operation.operation_id !== operationID
+    || status.operation.install_method !== 'desktop_transfer'
+  ) {
+    throw new Error('The environment reported a different Browser Editor setup operation.');
+  }
+  observer?.onRuntimeStatus?.(status);
 }
 
 export async function prepareWorkspaceEngineWithDesktop(args: Readonly<{
@@ -101,6 +111,7 @@ export async function prepareWorkspaceEngineWithDesktop(args: Readonly<{
   operationID: string;
   signal?: AbortSignal;
   onProgress?: (progress: BrowserEditorSetupProgress) => void;
+  observer?: BrowserEditorRuntimeOperationObserver;
 }>): Promise<BrowserEditorDesktopTransferResult> {
   const bridge = desktopCodeWorkspaceBridge();
   if (!bridge?.prepareWorkspaceEnginePackage || !bridge.readWorkspaceEnginePackageChunk) {
@@ -135,29 +146,43 @@ export async function prepareWorkspaceEngineWithDesktop(args: Readonly<{
     jobID = job.job_id;
 
     failureSource = 'runtime_import';
-    const operation = await createCodeRuntimeSetupOperation({
+    const start = await startOrReconcileBrowserEditorRuntimeOperation({
       operationID: args.operationID,
       installMethod: 'desktop_transfer',
       manifest: job.manifest,
       signal: args.signal,
+      observer: args.observer,
     });
+    if (start.kind === 'blocked') return blockedBrowserEditorRuntimeSetupResult(start);
+    if (start.kind === 'existing') {
+      return observeBrowserEditorRuntimeOperation({
+        identity: start.identity,
+        initialStatus: start.status,
+        signal: args.signal,
+        observer: args.observer,
+      });
+    }
+    const operation = start.operation;
+    if (operation.install_method !== 'desktop_transfer') {
+      throw new Error('Runtime did not create a Desktop transfer operation.');
+    }
     runtimeOperationCreated = true;
+    if (
+      operation.expected_bytes !== job.archive_size_bytes
+      || operation.received_bytes !== 0
+      || operation.next_chunk_index !== 0
+    ) {
+      throw new Error('Runtime did not create the expected initial Desktop transfer cursor.');
+    }
+    publishDesktopRuntimeStatus(await fetchCodeRuntimeStatus(), args.operationID, args.observer);
     failureSource = 'desktop_upload';
-    const chunkSize = Math.max(1, Math.min(
+    const chunkSize = Math.min(
       DESKTOP_CODE_WORKSPACE_PACKAGE_CHUNK_SIZE_BYTES,
-      Math.floor(operation.chunk_size_bytes || DESKTOP_CODE_WORKSPACE_PACKAGE_CHUNK_SIZE_BYTES),
-      Math.floor(job.chunk_size_bytes || DESKTOP_CODE_WORKSPACE_PACKAGE_CHUNK_SIZE_BYTES),
-    ));
+      operation.chunk_size_bytes,
+      job.chunk_size_bytes,
+    );
     let offset = 0;
     let chunkIndex = 0;
-    args.onProgress?.({
-      operation_id: args.operationID,
-      phase: 'upload',
-      state: 'running',
-      completed_bytes: 0,
-      total_bytes: job.archive_size_bytes,
-      updated_at_unix_ms: Date.now(),
-    });
     while (offset < job.archive_size_bytes) {
       throwIfAborted(args.signal);
       const chunkResponse = normalizeDesktopCodeWorkspacePackageChunkResponse(await bridge.readWorkspaceEnginePackageChunk({
@@ -178,40 +203,39 @@ export async function prepareWorkspaceEngineWithDesktop(args: Readonly<{
       if (progress.operation_id !== args.operationID) {
         throw new Error('The environment confirmed a different Browser Editor setup operation.');
       }
+      if (
+        progress.expected_bytes !== operation.expected_bytes
+        || progress.received_bytes <= offset
+        || progress.next_chunk_index !== chunkIndex + 1
+      ) {
+        throw new Error('Runtime returned an invalid Browser Editor upload cursor.');
+      }
       offset = progress.received_bytes;
       chunkIndex = progress.next_chunk_index;
-      args.onProgress?.({
-        operation_id: args.operationID,
-        phase: 'upload',
-        state: 'running',
-        completed_bytes: offset,
-        total_bytes: progress.expected_bytes || job.archive_size_bytes,
-        updated_at_unix_ms: Date.now(),
-      });
+      publishDesktopRuntimeStatus(await fetchCodeRuntimeStatus(), args.operationID, args.observer);
     }
     if (offset !== job.archive_size_bytes) {
       throw new Error('Desktop did not finish reading the Browser Editor package.');
     }
     const finalStatus = await completeCodeRuntimeSetupOperation(args.operationID, args.signal);
-    args.onProgress?.({
-      operation_id: args.operationID,
-      phase: 'upload',
-      state: 'completed',
-      completed_bytes: offset,
-      total_bytes: job.archive_size_bytes,
-      updated_at_unix_ms: Date.now(),
+    publishDesktopRuntimeStatus(finalStatus, args.operationID, args.observer);
+    const terminalResult = browserEditorRuntimeTerminalResult(finalStatus, {
+      operationID: args.operationID,
+      installMethod: 'desktop_transfer',
     });
-    return {
-      ok: true,
-      prepared: true,
-      status: finalStatus,
-      message: job.from_cache
-        ? 'Browser Editor package was ready from Desktop cache.'
-        : 'Browser Editor package was transferred to the environment.',
-    };
+    if (!terminalResult) {
+      throw new Error('Runtime did not finish the Desktop transfer operation.');
+    }
+    return terminalResult;
   } catch (error) {
     if (args.signal?.aborted) {
-      return { ok: false, prepared: false, cancelled: true, message: 'Browser Editor setup was canceled.' };
+      return {
+        state: 'cancelled',
+        ok: false,
+        prepared: false,
+        cancelled: true,
+        message: 'Browser Editor setup was canceled.',
+      };
     }
     if (runtimeOperationCreated) {
       try {

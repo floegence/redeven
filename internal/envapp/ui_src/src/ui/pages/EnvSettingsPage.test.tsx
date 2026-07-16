@@ -78,8 +78,8 @@ const localApiMocks = vi.hoisted(() => ({
 
 const desktopCodeWorkspaceMocks = vi.hoisted(() => ({
   prepareAvailable: vi.fn(() => true),
-  prepareWorkspaceEngineWithDesktop: vi.fn(async (): Promise<any> => ({ ok: true, prepared: true })),
-  cancelWorkspaceEnginePreparation: vi.fn(async (): Promise<any> => ({ ok: true, cancelled: true })),
+  prepareWorkspaceEngineWithDesktop: vi.fn<(args: any) => Promise<any>>(async () => ({ ok: true, prepared: true })),
+  cancelWorkspaceEnginePreparation: vi.fn<(operationID: string, installMethod: string) => Promise<any>>(async () => ({ ok: true, cancelled: true })),
 }));
 
 const desktopSessionContextMocks = vi.hoisted(() => ({
@@ -253,7 +253,59 @@ vi.mock('../services/desktopCodeWorkspaceBridge', () => ({
 }));
 
 vi.mock('../services/browserEditorSetup', () => ({
+  browserEditorRuntimeOperationAbsenceConfirmed: () => true,
   cancelBrowserEditorSetup: desktopCodeWorkspaceMocks.cancelWorkspaceEnginePreparation,
+  createBrowserEditorSetupOrchestration: (options: any) => {
+    const controller = new AbortController();
+    let operation = { operationID: options.operationID, installMethod: options.installMethod };
+    let operationObserved = false;
+    let localProgress: any = null;
+    let runtimeStatus: any = null;
+    let cancelled = false;
+    const snapshot = () => ({
+      requestedOperation: { operationID: options.operationID, installMethod: options.installMethod },
+      operation,
+      operationObserved,
+      phase: 'submitting',
+      localProgress,
+      runtimeStatus,
+      result: null,
+    });
+    return {
+      snapshot,
+      isCancellationRequested: () => cancelled,
+      run: async () => {
+        const result = await desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop({
+          status: options.status,
+          operationID: options.operationID,
+          installMethod: options.installMethod,
+          signal: controller.signal,
+          onProgress: (progress: any) => {
+            localProgress = progress;
+            options.onSnapshot?.(snapshot());
+          },
+          onOperationObserved: (identity: any) => {
+            operation = identity;
+            operationObserved = true;
+            localProgress = null;
+            options.onSnapshot?.(snapshot());
+          },
+          onRuntimeStatus: (status: any) => {
+            runtimeStatus = status;
+            options.onSnapshot?.(snapshot());
+          },
+        });
+        if (result.state) return result;
+        if (!result.ok || !result.prepared) throw new Error(result.message);
+        return { state: 'succeeded', ...result };
+      },
+      cancel: async () => {
+        cancelled = true;
+        controller.abort();
+        await desktopCodeWorkspaceMocks.cancelWorkspaceEnginePreparation(operation.operationID, operation.installMethod);
+      },
+    };
+  },
   defaultBrowserEditorInstallMethod: () => (desktopCodeWorkspaceMocks.prepareAvailable() ? 'desktop_transfer' : 'remote_download'),
   prepareBrowserEditorSetup: desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop,
 }));
@@ -1099,6 +1151,99 @@ describe('EnvSettingsPage', () => {
     });
     await vi.waitFor(() => {
       expect(host.querySelector('[data-testid="browser-editor-install-method"]')?.textContent).toBe('desktop_transfer');
+    });
+  });
+
+  it('uses the observed Runtime identity and method when cancelling setup', async () => {
+    settingsResponse = { ai: null };
+    const initialStatus = {
+      active_runtime: { detection_state: 'ready', present: true, source: 'managed' },
+      managed_runtime: { detection_state: 'ready', present: true, source: 'managed' },
+      managed_prefix: '/runtime',
+      shared_runtime_root: '/shared',
+      managed_runtime_source: 'managed',
+      installed_versions: [],
+      operation: { state: 'idle' },
+      updated_at_unix_ms: 1,
+    };
+    protocolMocks.status.mockReturnValue('connected');
+    codeRuntimeMocks.fetchCodeRuntimeStatus.mockResolvedValue(initialStatus);
+    desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop.mockImplementationOnce((args: any) => {
+      const observedStatus = {
+        ...initialStatus,
+        operation: {
+          action: 'prepare_workspace_engine',
+          operation_id: 'browser-editor:existing',
+          install_method: 'remote_download',
+          state: 'running',
+          stage: 'downloading',
+        },
+        updated_at_unix_ms: 2,
+      };
+      args.onOperationObserved({
+        operationID: 'browser-editor:existing',
+        installMethod: 'remote_download',
+      });
+      args.onRuntimeStatus(observedStatus);
+      return new Promise((resolve) => {
+        args.signal.addEventListener('abort', () => resolve({
+          state: 'cancelled',
+          ok: false,
+          prepared: false,
+          cancelled: true,
+          message: 'Browser Editor setup was canceled.',
+        }), { once: true });
+      });
+    });
+
+    render(() => <EnvSettingsPage />, host);
+    await openSettingsSection(host, 'codespaces');
+    const updateButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Update browser editor'));
+    updateButton?.click();
+
+    await vi.waitFor(() => {
+      expect(host.textContent).toContain('Cancel runtime operation');
+    });
+    const cancelButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Cancel runtime operation'));
+    cancelButton?.click();
+
+    await vi.waitFor(() => {
+      expect(desktopCodeWorkspaceMocks.cancelWorkspaceEnginePreparation).toHaveBeenCalledWith(
+        'browser-editor:existing',
+        'remote_download',
+      );
+    });
+  });
+
+  it('refreshes Code Runtime status from the page-level Refresh action', async () => {
+    settingsResponse = { ai: null };
+    protocolMocks.status.mockReturnValue('connected');
+    codeRuntimeMocks.fetchCodeRuntimeStatus.mockResolvedValue({
+      active_runtime: { detection_state: 'ready', present: true, source: 'managed' },
+      managed_runtime: { detection_state: 'ready', present: true, source: 'managed' },
+      managed_prefix: '/runtime',
+      shared_runtime_root: '/shared',
+      managed_runtime_source: 'managed',
+      installed_versions: [],
+      operation: { state: 'idle' },
+      updated_at_unix_ms: 1,
+    });
+
+    render(() => <EnvSettingsPage />, host);
+    await vi.waitFor(() => {
+      expect(codeRuntimeMocks.fetchCodeRuntimeStatus).toHaveBeenCalled();
+    });
+    codeRuntimeMocks.fetchCodeRuntimeStatus.mockClear();
+
+    const refreshButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.trim() === 'Refresh');
+    expect(refreshButton).toBeTruthy();
+    await vi.waitFor(() => {
+      expect(refreshButton?.disabled).toBe(false);
+    });
+    refreshButton?.click();
+
+    await vi.waitFor(() => {
+      expect(codeRuntimeMocks.fetchCodeRuntimeStatus).toHaveBeenCalledOnce();
     });
   });
 

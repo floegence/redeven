@@ -1,11 +1,19 @@
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+const fetchJSON = vi.hoisted(() => vi.fn());
+
+vi.mock('./localApi', () => ({
+  fetchLocalApiJSON: fetchJSON,
+}));
 
 import {
+  appendCodeRuntimeSetupChunk,
   codeRuntimeManagedActionLabel,
   codeRuntimeOperationCancelled,
   codeRuntimeOperationFailed,
   codeRuntimeOperationNeedsAttention,
   codeRuntimeOperationSucceeded,
+  createCodeRuntimeSetupOperation,
   type CodeRuntimeStatus,
 } from './codeRuntimeApi';
 
@@ -89,5 +97,135 @@ describe('codeRuntimeApi selectors', () => {
         log_tail: [],
       },
     })).toBe('Retry setup');
+  });
+});
+
+describe('codeRuntimeApi setup operation contract', () => {
+  beforeEach(() => {
+    fetchJSON.mockReset();
+  });
+
+  it('accepts the production environment-download response without Desktop upload fields', async () => {
+    fetchJSON.mockResolvedValue({
+      operation_id: 'browser-editor:remote',
+      install_method: 'remote_download',
+      state: 'running',
+      received_bytes: 0,
+      expected_bytes: 0,
+      next_chunk_index: 0,
+      created_at_unix_ms: 1,
+    });
+
+    await expect(createCodeRuntimeSetupOperation({
+      operationID: 'browser-editor:remote',
+      installMethod: 'remote_download',
+    })).resolves.toEqual({
+      operation_id: 'browser-editor:remote',
+      install_method: 'remote_download',
+      state: 'running',
+    });
+  });
+
+  it('rejects a remote response with a Desktop-only operation state', async () => {
+    fetchJSON.mockResolvedValue({
+      operation_id: 'browser-editor:remote',
+      install_method: 'remote_download',
+      state: 'receiving',
+    });
+
+    await expect(createCodeRuntimeSetupOperation({
+      operationID: 'browser-editor:remote',
+      installMethod: 'remote_download',
+    })).rejects.toThrow('Runtime did not return a valid Browser Editor setup operation.');
+  });
+
+  it.each([
+    'chunk_size_bytes',
+    'expected_bytes',
+    'received_bytes',
+    'next_chunk_index',
+  ])('rejects a Desktop response missing %s', async (missingField) => {
+    const response: Record<string, unknown> = {
+      operation_id: 'browser-editor:desktop',
+      install_method: 'desktop_transfer',
+      state: 'receiving',
+      chunk_size_bytes: 1024,
+      expected_bytes: 4096,
+      received_bytes: 0,
+      next_chunk_index: 0,
+    };
+    delete response[missingField];
+    fetchJSON.mockResolvedValue(response);
+
+    await expect(createCodeRuntimeSetupOperation({
+      operationID: 'browser-editor:desktop',
+      installMethod: 'desktop_transfer',
+      manifest: { version: '4.128.0' },
+    })).rejects.toThrow('Runtime did not return a valid Browser Editor setup operation.');
+  });
+
+  it('returns strict positive Desktop upload fields unchanged', async () => {
+    fetchJSON.mockResolvedValue({
+      operation_id: 'browser-editor:desktop',
+      install_method: 'desktop_transfer',
+      state: 'receiving',
+      chunk_size_bytes: 1024,
+      expected_bytes: 4096,
+      received_bytes: 1024,
+      next_chunk_index: 1,
+    });
+
+    await expect(createCodeRuntimeSetupOperation({
+      operationID: 'browser-editor:desktop',
+      installMethod: 'desktop_transfer',
+      manifest: { version: '4.128.0' },
+    })).resolves.toMatchObject({
+      chunk_size_bytes: 1024,
+      expected_bytes: 4096,
+      received_bytes: 1024,
+      next_chunk_index: 1,
+    });
+  });
+
+  it('rejects fractional Desktop upload fields', async () => {
+    fetchJSON.mockResolvedValue({
+      operation_id: 'browser-editor:desktop',
+      install_method: 'desktop_transfer',
+      state: 'receiving',
+      chunk_size_bytes: 1024.5,
+      expected_bytes: 4096,
+      received_bytes: 0,
+      next_chunk_index: 0,
+    });
+
+    await expect(createCodeRuntimeSetupOperation({
+      operationID: 'browser-editor:desktop',
+      installMethod: 'desktop_transfer',
+      manifest: { version: '4.128.0' },
+    })).rejects.toThrow('Runtime did not return a valid Browser Editor setup operation.');
+  });
+
+  it('rejects invalid Runtime-confirmed upload cursors instead of clamping them', async () => {
+    fetchJSON.mockResolvedValue({
+      operation_id: 'browser-editor:desktop',
+      received_bytes: -1,
+      expected_bytes: 4096,
+      next_chunk_index: -1,
+    });
+
+    await expect(appendCodeRuntimeSetupChunk(
+      'browser-editor:desktop',
+      0,
+      new Uint8Array(new ArrayBuffer(1)),
+    )).rejects.toThrow('Runtime did not return a valid Browser Editor setup chunk result.');
+  });
+
+  it('rejects an invalid chunk request cursor before sending it', async () => {
+    await expect(appendCodeRuntimeSetupChunk(
+      'browser-editor:desktop',
+      -1,
+      new Uint8Array(new ArrayBuffer(1)),
+    )).rejects.toThrow('Browser Editor setup chunk index must be a non-negative safe integer.');
+    expect(fetchJSON).not.toHaveBeenCalled();
   });
 });

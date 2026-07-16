@@ -1,10 +1,40 @@
 package codeserver
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 )
+
+func TestDesktopSetupOperationJSONContainsStrictUploadContract(t *testing.T) {
+	mgr := newTestRuntimeManager(t)
+	manifest, _ := writeFakeWorkspaceEngineArchive(t, "4.128.0", mgr.stateRoot)
+
+	operation, err := mgr.CreateSetupOperation(context.Background(), "browser-editor:desktop-json", BrowserEditorInstallMethodDesktopTransfer, &manifest)
+	if err != nil {
+		t.Fatalf("CreateSetupOperation() error = %v", err)
+	}
+	if operation.ChunkSizeBytes <= 0 || operation.ExpectedBytes <= 0 || operation.NextChunkIndex != 0 {
+		t.Fatalf("operation upload contract = %+v, want positive sizes and initial cursor 0", operation)
+	}
+	payload, err := json.Marshal(operation)
+	if err != nil {
+		t.Fatalf("json.Marshal() error = %v", err)
+	}
+	for _, field := range [][]byte{
+		[]byte(`"chunk_size_bytes":`),
+		[]byte(`"expected_bytes":`),
+		[]byte(`"received_bytes":0`),
+		[]byte(`"next_chunk_index":0`),
+	} {
+		if !bytes.Contains(payload, field) {
+			t.Fatalf("operation JSON %s missing %s", payload, field)
+		}
+	}
+}
 
 func TestSetupOperationIDsCannotBeReused(t *testing.T) {
 	mgr := newTestRuntimeManager(t)
@@ -37,8 +67,13 @@ func TestSetupOperationRejectsConcurrentCreateWithoutConsumingID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateSetupOperation(first) error = %v", err)
 	}
-	if _, err := mgr.CreateSetupOperation(context.Background(), "browser-editor:waiting", BrowserEditorInstallMethodDesktopTransfer, &manifest); err == nil || !strings.Contains(err.Error(), "already running") {
-		t.Fatalf("CreateSetupOperation(concurrent) error = %v, want running rejection", err)
+	if _, err := mgr.CreateSetupOperation(context.Background(), "browser-editor:waiting", BrowserEditorInstallMethodDesktopTransfer, &manifest); err == nil {
+		t.Fatal("CreateSetupOperation(concurrent) error = nil, want typed conflict")
+	} else {
+		var conflict *BrowserEditorSetupOperationConflictError
+		if !errors.As(err, &conflict) || !errors.Is(err, ErrBrowserEditorSetupOperationConflict) {
+			t.Fatalf("CreateSetupOperation(concurrent) error = %v, want BrowserEditorSetupOperationConflictError", err)
+		}
 	}
 	if _, err := mgr.CancelSetupOperation(context.Background(), first.OperationID); err != nil {
 		t.Fatalf("CancelSetupOperation(first) error = %v", err)
