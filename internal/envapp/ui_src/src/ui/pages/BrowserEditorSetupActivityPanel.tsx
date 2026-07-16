@@ -1,12 +1,12 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { AlertTriangle, Check, ChevronDown, ChevronRight, Cloud, Code, Cpu, RefreshIcon, X } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, Check, ChevronDown, ChevronRight, Code, RefreshIcon, X } from '@floegence/floe-webapp-core/icons';
 import { Button, Tag } from '@floegence/floe-webapp-core/ui';
 
 import { type BrowserEditorSetupActivity } from '../services/browserEditorSetupActivity';
 import type { BrowserEditorInstallMethod } from '../services/codeRuntimeApi';
 import { useI18n } from '../i18n';
-import { Tooltip } from '../primitives/Tooltip';
+import { BrowserEditorInstallMethodSelector } from './BrowserEditorInstallMethodSelector';
 import {
   BrowserEditorTransferEstimator,
   PROGRESS_TEXT_REFRESH_INTERVAL_MS,
@@ -163,45 +163,6 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
   const transferEstimator = new BrowserEditorTransferEstimator();
   let latestProgress: BrowserEditorSetupProgress | null = null;
   let lastProgressTextRefreshMS = 0;
-  let desktopMethodButton: HTMLButtonElement | undefined;
-  let remoteMethodButton: HTMLButtonElement | undefined;
-
-  const selectInstallMethod = (method: BrowserEditorInstallMethod): void => {
-    if (props.installMethodLocked || (method === 'desktop_transfer' && !props.desktopTransferAvailable)) return;
-    props.onInstallMethodChange?.(method);
-  };
-
-  const handleInstallMethodKeyDown = (event: KeyboardEvent): void => {
-    if (props.installMethodLocked) return;
-    const availableMethods: BrowserEditorInstallMethod[] = props.desktopTransferAvailable
-      ? ['desktop_transfer', 'remote_download']
-      : ['remote_download'];
-    const currentIndex = Math.max(0, availableMethods.indexOf(props.installMethod));
-    let nextIndex = currentIndex;
-    switch (event.key) {
-      case 'ArrowRight':
-      case 'ArrowDown':
-        nextIndex = (currentIndex + 1) % availableMethods.length;
-        break;
-      case 'ArrowLeft':
-      case 'ArrowUp':
-        nextIndex = (currentIndex - 1 + availableMethods.length) % availableMethods.length;
-        break;
-      case 'Home':
-        nextIndex = 0;
-        break;
-      case 'End':
-        nextIndex = availableMethods.length - 1;
-        break;
-      default:
-        return;
-    }
-    event.preventDefault();
-    const nextMethod = availableMethods[nextIndex];
-    selectInstallMethod(nextMethod);
-    (nextMethod === 'desktop_transfer' ? desktopMethodButton : remoteMethodButton)?.focus();
-  };
-
   createEffect(() => {
     const progress = activity().progress;
     if (!progress) {
@@ -362,71 +323,12 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
           </Show>
 
           <Show when={showInstallMethodSelector()}>
-            <div class="browser-editor-setup__method-section">
-              <div class="browser-editor-setup__method-label">{i18n.t('codeRuntime.installMethod.label')}</div>
-              <div
-                class="browser-editor-setup__method-selector"
-                role="radiogroup"
-                aria-label={i18n.t('codeRuntime.installMethod.label')}
-                aria-readonly={props.installMethodLocked ? 'true' : undefined}
-              >
-                <Tooltip
-                  content={!props.desktopTransferAvailable
-                    ? i18n.t('codeRuntime.installMethod.desktopUnavailable')
-                    : props.installMethodLocked
-                      ? i18n.t('codeRuntime.installMethod.lockedWhileRunning')
-                      : i18n.t('codeRuntime.installMethod.desktopTransferDescription')}
-                  placement="top"
-                  delay={0}
-                >
-                  <button
-                    ref={(element) => { desktopMethodButton = element; }}
-                    type="button"
-                    class="browser-editor-setup__method-option"
-                    data-selected={props.installMethod === 'desktop_transfer' ? 'true' : undefined}
-                    role="radio"
-                    aria-checked={props.installMethod === 'desktop_transfer'}
-                    aria-disabled={!props.desktopTransferAvailable || props.installMethodLocked ? 'true' : undefined}
-                    tabIndex={props.installMethod === 'desktop_transfer' ? 0 : -1}
-                    disabled={!props.desktopTransferAvailable || props.installMethodLocked}
-                    onClick={() => selectInstallMethod('desktop_transfer')}
-                    onKeyDown={handleInstallMethodKeyDown}
-                  >
-                    <Cpu class="h-4 w-4" />
-                    <span>{i18n.t('codeRuntime.installMethod.desktopTransfer')}</span>
-                  </button>
-                </Tooltip>
-                <Tooltip
-                  content={props.installMethodLocked
-                    ? i18n.t('codeRuntime.installMethod.lockedWhileRunning')
-                    : i18n.t('codeRuntime.installMethod.remoteDownloadDescription')}
-                  placement="top"
-                  delay={0}
-                >
-                  <button
-                    ref={(element) => { remoteMethodButton = element; }}
-                    type="button"
-                    class="browser-editor-setup__method-option"
-                    data-selected={props.installMethod === 'remote_download' ? 'true' : undefined}
-                    role="radio"
-                    aria-checked={props.installMethod === 'remote_download'}
-                    aria-disabled={props.installMethodLocked ? 'true' : undefined}
-                    tabIndex={props.installMethod === 'remote_download' ? 0 : -1}
-                    disabled={props.installMethodLocked}
-                    onClick={() => selectInstallMethod('remote_download')}
-                    onKeyDown={handleInstallMethodKeyDown}
-                  >
-                    <Cloud class="h-4 w-4" />
-                    <span>{i18n.t('codeRuntime.installMethod.remoteDownload')}</span>
-                  </button>
-                </Tooltip>
-              </div>
-              <div class="browser-editor-setup__data-path">
-                {props.installMethod === 'desktop_transfer'
-                  ? i18n.t('codeRuntime.installMethod.desktopPath')
-                  : i18n.t('codeRuntime.installMethod.remotePath')}
-              </div>
-            </div>
+            <BrowserEditorInstallMethodSelector
+              installMethod={props.installMethod}
+              desktopTransferAvailable={props.desktopTransferAvailable}
+              locked={props.installMethodLocked}
+              onChange={(method) => props.onInstallMethodChange?.(method)}
+            />
           </Show>
 
           <Show when={showActions()}>

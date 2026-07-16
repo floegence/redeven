@@ -4797,6 +4797,7 @@ html.dark .browser-editor-setup {
   font-weight: 600;
   line-height: 1.35;
   color: var(--muted-foreground);
+  cursor: pointer;
   text-align: center;
   transition: border-color 150ms ease, background-color 150ms ease, color 150ms ease;
 }
@@ -4836,6 +4837,13 @@ html.dark .browser-editor-setup {
   font-size: 0.65rem;
   line-height: 1.5;
   color: var(--muted-foreground);
+  overflow-wrap: anywhere;
+}
+
+.browser-editor-setup__method-availability {
+  font-size: 0.65rem;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--warning) 72%, var(--muted-foreground));
   overflow-wrap: anywhere;
 }
 

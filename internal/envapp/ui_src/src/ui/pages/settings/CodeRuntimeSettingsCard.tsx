@@ -23,6 +23,7 @@ import {
 import type { BrowserEditorSetupProgress } from '../../services/browserEditorSetupProgress';
 import { Tooltip } from '../../primitives/Tooltip';
 import { BrowserEditorSetupActivityPanel } from '../BrowserEditorSetupActivityPanel';
+import { BrowserEditorInstallMethodSelector } from '../BrowserEditorInstallMethodSelector';
 import { SettingsSection, SettingsKeyValueTable, SettingsPill } from './SettingsPrimitives';
 import { useI18n, type I18nHelpers } from '../../i18n';
 
@@ -365,6 +366,11 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
     setPrepareConfirmOpen(false);
   };
 
+  const openPrepareConfirmation = () => {
+    props.onInstallMethodChange(props.desktopTransferAvailable ? 'desktop_transfer' : 'remote_download');
+    setPrepareConfirmOpen(true);
+  };
+
   const confirmRemoveVersion = async () => {
     const target = removeVersionConfirmOpen();
     if (!target) return;
@@ -389,32 +395,25 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
                 {props.loading ? i18n.t('codeRuntime.refreshing') : refreshActionLabel()}
               </Button>
             </ActionButtonTooltip>
-            <Show
-              when={operationRunning()}
-              fallback={
-                <Show when={!platformUnsupported()}>
-                  <ActionButtonTooltip
-                    content={prepareActionTooltip()}
-                    disabled={!props.canInteract || !props.canManage || props.actionLoading}
-                  >
-                    <Button
-                      size="sm"
-                      variant="default"
-                      onClick={() => setPrepareConfirmOpen(true)}
-                      disabled={!props.canInteract || !props.canManage || props.actionLoading}
-                    >
-                      {props.actionLoading ? localizedPrepareCopy().runningLabel : prepareActionLabel()}
-                    </Button>
-                  </ActionButtonTooltip>
-                </Show>
-              }
-            >
-              <ActionButtonTooltip
-                content={cancelActionTooltip()}
-                disabled={!props.canInteract || !props.canManage || props.cancelLoading}
-              >
-              <Button size="sm" variant="outline" onClick={() => void props.onCancel()} disabled={!props.canInteract || !props.canManage || props.cancelLoading}>
+            <Show when={operationRunning() && !prepareOperationActive()}>
+              <ActionButtonTooltip content={cancelActionTooltip()} disabled={!props.canInteract || !props.canManage || props.cancelLoading}>
+                <Button size="sm" variant="outline" onClick={() => void props.onCancel()} disabled={!props.canInteract || !props.canManage || props.cancelLoading}>
                   {props.cancelLoading ? i18n.t('codeRuntime.cancelling') : cancelActionLabel()}
+                </Button>
+              </ActionButtonTooltip>
+            </Show>
+            <Show when={!operationRunning() && !platformUnsupported() && !showSetupActivity()}>
+              <ActionButtonTooltip
+                content={prepareActionTooltip()}
+                disabled={!props.canInteract || !props.canManage || props.actionLoading}
+              >
+                <Button
+                  size="sm"
+                  variant="default"
+                  onClick={openPrepareConfirmation}
+                  disabled={!props.canInteract || !props.canManage || props.actionLoading}
+                >
+                  {props.actionLoading ? localizedPrepareCopy().runningLabel : prepareActionLabel()}
                 </Button>
               </ActionButtonTooltip>
             </Show>
@@ -511,7 +510,7 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
           <Show
             when={installedVersions().length > 0}
             fallback={
-              <Show when={!platformUnsupported()}>
+              <Show when={!platformUnsupported() && !showSetupActivity()}>
                 <HighlightBlock variant="warning" title={i18n.t('codeRuntime.setupRequiredTitle')}>
                   <div class="space-y-2 text-sm text-muted-foreground">
                     <div>{i18n.t('codeRuntime.setupRequiredDescription')}</div>
@@ -548,15 +547,15 @@ export function CodeRuntimeSettingsCard(props: CodeRuntimeSettingsCardProps) {
         loading={props.actionLoading}
         onConfirm={() => void confirmPrepare()}
       >
-        <div class="space-y-3">
-          <p class="text-sm">
-            {installMethodDescription()}
-          </p>
+        <div class="space-y-4">
+          <BrowserEditorInstallMethodSelector
+            installMethod={props.installMethod}
+            desktopTransferAvailable={props.desktopTransferAvailable}
+            locked={props.actionLoading}
+            onChange={props.onInstallMethodChange}
+          />
+          <p class="text-sm text-foreground">{installMethodDescription()}</p>
           <p class="text-sm text-muted-foreground">{i18n.t('codeRuntime.confirm.workspaceFilesStay')}</p>
-          <div class="grid gap-2 rounded-lg border border-border bg-muted/20 p-3 text-[11px] text-muted-foreground">
-            <div>{i18n.t('codeRuntime.sharedEngineRoot')}: <span class="font-mono text-foreground break-all">{props.status?.shared_runtime_root || '-'}</span></div>
-            <div>{i18n.t('codeRuntime.selectedEditorPath')}: <span class="font-mono text-foreground break-all">{props.status?.managed_prefix || '-'}</span></div>
-          </div>
         </div>
       </ConfirmDialog>
 

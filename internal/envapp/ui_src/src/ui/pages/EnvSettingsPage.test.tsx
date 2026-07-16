@@ -321,6 +321,10 @@ vi.mock('./settings/CodeRuntimeSettingsCard', () => ({
     <section data-settings-card="Browser Editor">
       <div>Browser Editor</div>
       <div>{props.localPrepareFailure?.message}</div>
+      <div data-testid="browser-editor-install-method">{props.installMethod}</div>
+      <button type="button" onClick={() => props.onInstallMethodChange('remote_download')} disabled={props.actionLoading}>
+        Use environment download
+      </button>
       <button type="button" onClick={props.onPrepare} disabled={props.actionLoading}>
         Update browser editor
       </button>
@@ -1056,6 +1060,41 @@ describe('EnvSettingsPage', () => {
       onProgress: expect.any(Function),
     }));
     expect(notificationMocks.error).not.toHaveBeenCalled();
+  });
+
+  it('updates the Browser Editor through environment download and restores the dynamic default', async () => {
+    settingsResponse = {
+      ai: null,
+    };
+    desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop.mockResolvedValueOnce({
+      ok: true,
+      prepared: true,
+    });
+
+    render(() => <EnvSettingsPage />, host);
+    await flushPage();
+    await openSettingsSection(host, 'codespaces');
+
+    expect(host.querySelector('[data-testid="browser-editor-install-method"]')?.textContent).toBe('desktop_transfer');
+    const environmentDownloadButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Use environment download'));
+    environmentDownloadButton?.click();
+    await flushPage();
+    expect(host.querySelector('[data-testid="browser-editor-install-method"]')?.textContent).toBe('remote_download');
+
+    const updateButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('Update browser editor'));
+    updateButton?.click();
+
+    await vi.waitFor(() => {
+      expect(desktopCodeWorkspaceMocks.prepareWorkspaceEngineWithDesktop).toHaveBeenCalledWith(expect.objectContaining({
+        installMethod: 'remote_download',
+        signal: expect.any(AbortSignal),
+        operationID: expect.stringMatching(/^browser-editor:/),
+        onProgress: expect.any(Function),
+      }));
+    });
+    await vi.waitFor(() => {
+      expect(host.querySelector('[data-testid="browser-editor-install-method"]')?.textContent).toBe('desktop_transfer');
+    });
   });
 
   it('uses the generic Runtime cancellation path for a running version removal', async () => {
