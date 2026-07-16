@@ -3084,8 +3084,6 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 			ProcessID   string `json:"process_id"`
 			Description string `json:"description"`
 			AfterSeq    int64  `json:"after_seq"`
-			WaitMS      int64  `json:"wait_ms"`
-			MaxBytes    int64  `json:"max_bytes"`
 		}
 		b, _ := json.Marshal(args)
 		if err := json.Unmarshal(b, &p); err != nil {
@@ -3098,7 +3096,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		if utf8.RuneCountInString(description) > terminalReadDescriptionMaxRunes {
 			return nil, errors.New("invalid args: description is too long")
 		}
-		return r.toolTerminalRead(p.ProcessID, p.AfterSeq, p.WaitMS, p.MaxBytes)
+		return r.toolTerminalRead(p.ProcessID, p.AfterSeq)
 
 	case "terminal.write":
 		if !session.AllowsProcessLaunch(meta) {
@@ -4410,7 +4408,7 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 		return outcome, aitools.ClassifyError(aitools.Invocation{ToolName: "terminal.exec", Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, err)
 	}
 	if activityUpdater != nil {
-		snapshot := proc.Read(terminalProcessReadRequest{MaxBytes: terminalProcessDefaultReadBytes})
+		snapshot := proc.Snapshot()
 		activityUpdater(terminalProcessActivity(snapshot, terminalProcessResultPayload(snapshot)), nil)
 	}
 	snapshot := proc.WaitForYieldContext(ctx, parsed.YieldMS)
@@ -4497,7 +4495,7 @@ func (r *run) terminalProcessForTool(processID string) (*terminalProcess, error)
 	if !ok || proc == nil {
 		return nil, errors.New("terminal process not found")
 	}
-	snapshot := proc.Read(terminalProcessReadRequest{})
+	snapshot := proc.Snapshot()
 	if strings.TrimSpace(snapshot.EndpointID) != strings.TrimSpace(r.endpointID) ||
 		strings.TrimSpace(snapshot.ThreadID) != strings.TrimSpace(r.threadID) {
 		return nil, errors.New("terminal process not found")
@@ -4508,17 +4506,20 @@ func (r *run) terminalProcessForTool(processID string) (*terminalProcess, error)
 	return proc, nil
 }
 
-func (r *run) toolTerminalRead(processID string, afterSeq int64, waitMS int64, maxBytes int64) (any, error) {
+func (r *run) toolTerminalRead(processID string, afterSeq int64) (any, error) {
 	proc, err := r.terminalProcessForTool(processID)
 	if err != nil {
 		return nil, err
 	}
-	snapshot := proc.Read(terminalProcessReadRequest{
+	snapshot, err := proc.ReadAfter(terminalProcessReadRequest{
 		ProcessID: strings.TrimSpace(processID),
 		AfterSeq:  afterSeq,
-		WaitMS:    waitMS,
-		MaxBytes:  maxBytes,
+		WaitMS:    terminalProcessModelReadWaitMS,
+		MaxBytes:  terminalProcessModelReadBytes,
 	})
+	if err != nil {
+		return nil, err
+	}
 	if err := proc.publishDone(); err != nil {
 		return nil, err
 	}

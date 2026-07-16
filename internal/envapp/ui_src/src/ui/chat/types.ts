@@ -66,7 +66,8 @@ export interface ShellBlock {
     toolId: string;
   };
   processId?: string;
-  latestOutput?: string;
+  firstSeq?: number;
+  lastSeq?: number;
   cwd?: string;
   durationMs?: number;
   truncated?: boolean;

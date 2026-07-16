@@ -53,6 +53,11 @@ function activityThread(status: 'running' | 'success'): FlowerThreadSnapshot {
             payload: {
               command: 'pnpm test:browser',
               output: running ? 'running disclosure checks\n' : 'browser checks passed\n',
+			  first_seq: 1,
+			  last_seq: 1,
+			  latest_seq: 1,
+			  has_more: false,
+			  truncated: false,
               exit_code: running ? undefined : 0,
             },
           })],
@@ -149,7 +154,11 @@ function streamingActivityThread(): FlowerThreadSnapshot {
 }
 
 function outputLines(count: number): string {
-  return Array.from({ length: count }, (_, index) => `stream line ${index + 1}`).join('\n');
+	return outputLineRange(1, count);
+}
+
+function outputLineRange(first: number, last: number): string {
+	return Array.from({ length: last - first + 1 }, (_, index) => `stream line ${first + index}`).join('\n');
 }
 
 function sampleHeights(element: HTMLElement, durationMs: number): Promise<number[]> {
@@ -326,7 +335,11 @@ describe('Flower activity disclosure browser behavior', () => {
           process_id: 'tp-browser-disclosure',
           status: 'success',
           output: outputLines(60),
+		  first_seq: 1,
           last_seq: 60,
+		  latest_seq: 60,
+		  has_more: false,
+		  truncated: false,
           exit_code: 0,
         },
       })],
@@ -341,7 +354,11 @@ describe('Flower activity disclosure browser behavior', () => {
         process_id: 'tp-browser-disclosure',
         status: 'running',
         output: outputLines(24),
+		first_seq: 1,
         last_seq: 24,
+		latest_seq: 24,
+		has_more: false,
+		truncated: false,
       })),
     });
     const button = await selectDisclosureThread(runtime);
@@ -418,7 +435,11 @@ describe('Flower activity disclosure browser behavior', () => {
           process_id: 'tp-browser-disclosure',
           status: 'running',
           output: outputLines(2),
+		  first_seq: 1,
           last_seq: 2,
+		  latest_seq: 2,
+		  has_more: false,
+		  truncated: false,
         };
       }
       if (call === 2) return secondSnapshot.promise;
@@ -442,8 +463,12 @@ describe('Flower activity disclosure browser behavior', () => {
     secondSnapshot.resolve({
       process_id: 'tp-browser-disclosure',
       status: 'running',
-      output: outputLines(36),
+	  output: outputLineRange(3, 36),
+	  first_seq: 3,
       last_seq: 36,
+	  latest_seq: 36,
+	  has_more: false,
+	  truncated: false,
     });
 
     await waitFor(() => runtime.textContent?.includes('stream line 36') === true);
@@ -464,8 +489,12 @@ describe('Flower activity disclosure browser behavior', () => {
     finalSnapshot.resolve({
       process_id: 'tp-browser-disclosure',
       status: 'success',
-      output: outputLines(52),
+	  output: outputLineRange(37, 52),
+	  first_seq: 37,
       last_seq: 52,
+	  latest_seq: 52,
+	  has_more: false,
+	  truncated: false,
       exit_code: 0,
     });
 

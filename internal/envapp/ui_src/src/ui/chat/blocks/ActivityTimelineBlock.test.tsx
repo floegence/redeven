@@ -9,7 +9,7 @@ import type { ActivityItem, ActivityTimelineBlock as ActivityTimelineBlockType }
 
 const approveToolCallMock = vi.hoisted(() => vi.fn());
 const terminalVisibleOutputStoreMock = vi.hoisted(() => {
-  const entries = new Map<string, string>();
+	const entries = new Map<string, { output: string; first_seq: number; last_seq: number; truncated: boolean }>();
   const key = (identity: any) => [
     identity?.surface_scope ?? '',
     identity?.owner_thread_id ?? '',
@@ -21,25 +21,37 @@ const terminalVisibleOutputStoreMock = vi.hoisted(() => {
     identity?.tool_id || identity?.item_id || '',
     identity?.item_id ?? '',
   ].join('\x1e');
-  const mergeOutput = (previous: unknown, next: unknown) => {
-    const current = String(previous ?? '').replace(/\r\n?/g, '\n');
-    const incoming = String(next ?? '').replace(/\r\n?/g, '\n');
-    if (!incoming.trim()) return current;
-    if (!current.trim() || incoming.startsWith(current)) return incoming;
-    if (current.includes(incoming)) return current;
-    return `${current}${current.endsWith('\n') || incoming.startsWith('\n') ? '' : '\n'}${incoming}`;
-  };
+	const frame = (value: any) => ({
+	  output: String(value.output ?? '').replace(/\r\n?/g, '\n'),
+	  first_seq: Number(value.first_seq ?? 0),
+	  last_seq: Number(value.last_seq ?? 0),
+	  truncated: Boolean(value.truncated),
+	});
   return {
-    get: (identity: any) => entries.get(key(identity)) ?? '',
-    merge: (identity: any, current: unknown, next: unknown) => {
+	get: (identity: any) => entries.get(key(identity))?.output ?? '',
+	replaceSnapshot: (identity: any, snapshot: any) => {
       const storeKey = key(identity);
-      const merged = mergeOutput(entries.get(storeKey) ?? current, next);
-      if (merged.trim()) entries.set(storeKey, merged);
-      return merged;
+	  const previous = entries.get(storeKey);
+	  const next = frame(snapshot);
+	  if (previous && next.last_seq <= previous.last_seq) return previous.output;
+	  entries.set(storeKey, next);
+	  return next.output;
     },
-    remember: (identity: any, output: unknown) => {
-      const normalized = String(output ?? '').replace(/\r\n?/g, '\n');
-      if (normalized.trim()) entries.set(key(identity), normalized);
+	appendDelta: (identity: any, delta: any) => {
+	  const storeKey = key(identity);
+	  const previous = entries.get(storeKey);
+	  const next = frame(delta);
+	  if (previous && next.last_seq <= previous.last_seq) return previous.output;
+	  const appended = previous && !next.truncated
+		? {
+			output: previous.output + next.output,
+			first_seq: previous.first_seq || next.first_seq,
+			last_seq: next.last_seq,
+			truncated: previous.truncated,
+		  }
+		: next;
+	  entries.set(storeKey, appended);
+	  return appended.output;
     },
     clear: () => entries.clear(),
   };
@@ -93,8 +105,12 @@ function baseItem(overrides: Partial<ActivityItem> = {}): ActivityItem {
     description: 'Run tests',
     payload: {
       command: 'go test ./...',
-      stdout: 'ok\n',
-      stderr: '',
+	  output: 'ok\n',
+	  first_seq: 1,
+	  last_seq: 1,
+	  latest_seq: 1,
+	  has_more: false,
+	  truncated: false,
       exit_code: 0,
       duration_ms: 8,
     },
@@ -216,14 +232,32 @@ describe('ActivityTimelineBlock', () => {
         tool_id: 'read_1',
         tool_name: 'terminal.read',
         label: 'Check the Docker build output',
-        payload: { command: 'docker compose up --build -d', process_id: 'tp_build', latest_output: 'step 1\n' },
+		payload: {
+		  command: 'docker compose up --build -d',
+		  process_id: 'tp_build',
+		  output: 'phase 1\n',
+		  first_seq: 1,
+		  last_seq: 1,
+		  latest_seq: 1,
+		  has_more: false,
+		  truncated: false,
+		},
       }),
       baseItem({
         item_id: 'read_2',
         tool_id: 'read_2',
         tool_name: 'terminal.read',
         label: 'Check the latest Docker build output again',
-        payload: { command: 'docker compose up --build -d', process_id: 'tp_build', latest_output: 'step 2\n' },
+		payload: {
+		  command: 'docker compose up --build -d',
+		  process_id: 'tp_build',
+		  output: 'phase 2\n',
+		  first_seq: 2,
+		  last_seq: 2,
+		  latest_seq: 2,
+		  has_more: false,
+		  truncated: false,
+		},
       }),
     ];
     const host = renderActivity(baseBlock({ items, summary: baseSummary('success', items.length) }));
@@ -231,11 +265,25 @@ describe('ActivityTimelineBlock', () => {
     expandTimeline(host);
     await flushAsync();
 
-    const rows = Array.from(host.querySelectorAll<HTMLElement>('.chat-activity-item'));
-    expect(rows).toHaveLength(2);
-    expect(rows[0]?.textContent).toContain('Check the Docker build output');
-    expect(rows[1]?.textContent).toContain('Check the latest Docker build output again');
-    expect(host.textContent).not.toContain('Terminal output');
+	const shells = Array.from(host.querySelectorAll<HTMLElement>('.chat-activity-item-shell'));
+	expect(shells).toHaveLength(2);
+	expect(shells[0]?.textContent).toContain('Check the Docker build output');
+	expect(shells[1]?.textContent).toContain('Check the latest Docker build output again');
+	expect(host.textContent).not.toContain('Terminal output');
+
+	(shells[0]?.querySelector('.chat-activity-item-clickable') as HTMLDivElement | null)?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+	await flushAsync();
+	(shells[0]?.querySelector('.chat-shell-output-toggle') as HTMLButtonElement | null)?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+	await flushAsync();
+	expect(shells[0]?.textContent).toContain('phase 1');
+	expect(shells[0]?.textContent).not.toContain('phase 2');
+
+	(shells[1]?.querySelector('.chat-activity-item-clickable') as HTMLDivElement | null)?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+	await flushAsync();
+	(shells[1]?.querySelector('.chat-shell-output-toggle') as HTMLButtonElement | null)?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+	await flushAsync();
+	expect(shells[1]?.textContent).toContain('phase 2');
+	expect(shells[1]?.textContent).not.toContain('phase 1');
   });
 
   it('keeps terminal output visible when the same activity item is replaced by an empty running frame', async () => {
@@ -249,8 +297,11 @@ describe('ActivityTimelineBlock', () => {
           command: 'npm test',
           process_id: 'tp_live',
           output,
-          stdout: '',
+		  first_seq: output ? 1 : 0,
           last_seq: output ? 1 : 0,
+		  latest_seq: output ? 1 : 0,
+		  has_more: false,
+		  truncated: false,
           total_bytes: output.length,
         },
       })],

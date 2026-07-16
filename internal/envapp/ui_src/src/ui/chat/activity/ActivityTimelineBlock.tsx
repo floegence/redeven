@@ -220,16 +220,16 @@ function TerminalDetailBlock(props: {
 }) {
   const payload = createMemo(() => itemPayloadRecord(props.item));
   const processId = createMemo(() => payloadString(payload(), 'process_id') || String(props.item.metadata?.process_id ?? '').trim());
-  const output = createMemo(() => payloadString(payload(), 'output') || payloadString(payload(), 'stdout'));
-  const latestOutput = createMemo(() => payloadString(payload(), 'latest_output'));
+  const output = createMemo(() => payloadString(payload(), 'output'));
   const command = createMemo(() => terminalCommandForItem(props.item, payload()));
   return (
     <ShellBlock
       command={command()}
       output={output() || undefined}
-      latestOutput={latestOutput() || undefined}
       outputRef={props.runID && props.item.tool_id ? { runId: props.runID, toolId: props.item.tool_id } : undefined}
       processId={processId() || undefined}
+      firstSeq={payloadNumber(payload(), 'first_seq')}
+      lastSeq={payloadNumber(payload(), 'last_seq')}
       durationMs={payloadNumber(payload(), 'duration_ms')}
       truncated={Boolean(payload().truncated)}
       exitCode={payloadNumber(payload(), 'exit_code')}

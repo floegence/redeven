@@ -38,7 +38,7 @@ func TestGetTerminalToolOutput(t *testing.T) {
 		ToolName:   "terminal.exec",
 		Status:     "success",
 		ArgsJSON:   `{"command":"pwd","cwd":"/tmp"}`,
-		ResultJSON: `{"status":"success","process_id":"tp_1","output":"/tmp\n","stdout":"/tmp\n","stderr":"","exit_code":0,"duration_ms":8,"first_seq":1,"last_seq":2,"total_bytes":5,"truncated":false,"execution_location":"local_runtime"}`,
+		ResultJSON: `{"status":"success","process_id":"tp_1","output":"/tmp\n","exit_code":0,"duration_ms":8,"first_seq":1,"last_seq":2,"latest_seq":2,"has_more":false,"total_bytes":5,"truncated":false,"execution_location":"local_runtime"}`,
 	}); err != nil {
 		t.Fatalf("UpsertToolCall: %v", err)
 	}
@@ -58,8 +58,8 @@ func TestGetTerminalToolOutput(t *testing.T) {
 	if out == nil {
 		t.Fatalf("GetTerminalToolOutput returned nil")
 	}
-	if got := strings.TrimSpace(out.Stdout); got != "/tmp" {
-		t.Fatalf("stdout=%q, want /tmp", got)
+	if got := strings.TrimSpace(out.Output); got != "/tmp" {
+		t.Fatalf("output=%q, want /tmp", got)
 	}
 	if out.ExitCode != 0 {
 		t.Fatalf("exit_code=%d, want 0", out.ExitCode)
@@ -70,12 +70,12 @@ func TestGetTerminalToolOutput(t *testing.T) {
 	if out.ProcessID != "tp_1" {
 		t.Fatalf("process_id=%q, want tp_1", out.ProcessID)
 	}
-	if out.FirstSeq != 1 || out.LastSeq != 2 || out.TotalBytes != 5 {
-		t.Fatalf("seq fields=%d/%d bytes=%d", out.FirstSeq, out.LastSeq, out.TotalBytes)
+	if out.FirstSeq != 1 || out.LastSeq != 2 || out.LatestSeq != 2 || out.TotalBytes != 5 {
+		t.Fatalf("seq fields=%d/%d/%d bytes=%d", out.FirstSeq, out.LastSeq, out.LatestSeq, out.TotalBytes)
 	}
 }
 
-func TestGetTerminalToolOutput_RawFallbackForInvalidJSON(t *testing.T) {
+func TestGetTerminalToolOutput_RejectsInvalidJSON(t *testing.T) {
 	t.Parallel()
 
 	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
@@ -102,7 +102,7 @@ func TestGetTerminalToolOutput_RawFallbackForInvalidJSON(t *testing.T) {
 		ToolName:   "terminal.exec",
 		Status:     "success",
 		ArgsJSON:   `{"command":"pwd"}`,
-		ResultJSON: `{"stdout":"x"`,
+		ResultJSON: `{"output":"x"`,
 	}); err != nil {
 		t.Fatalf("UpsertToolCall: %v", err)
 	}
@@ -115,15 +115,8 @@ func TestGetTerminalToolOutput_RawFallbackForInvalidJSON(t *testing.T) {
 		CanExecute: true,
 	}
 
-	out, err := svc.GetTerminalToolOutput(ctx, meta, "run_1", "tool_1")
-	if err != nil {
-		t.Fatalf("GetTerminalToolOutput: %v", err)
-	}
-	if out == nil {
-		t.Fatalf("GetTerminalToolOutput returned nil")
-	}
-	if strings.TrimSpace(out.RawResult) == "" {
-		t.Fatalf("RawResult should not be empty for invalid result_json")
+	if _, err := svc.GetTerminalToolOutput(ctx, meta, "run_1", "tool_1"); err == nil || !strings.Contains(err.Error(), "invalid terminal output result") {
+		t.Fatalf("GetTerminalToolOutput error=%v, want invalid terminal output result", err)
 	}
 }
 
@@ -154,7 +147,7 @@ func TestGetTerminalToolOutput_UsesRunningProcessMetadata(t *testing.T) {
 		ToolName:   "terminal.exec",
 		Status:     "running",
 		ArgsJSON:   `{"command":"go test ./..."}`,
-		ResultJSON: `{"status":"running","process_id":"tp_running","output":"partial","latest_output":"partial","cwd":"/workspace","first_seq":3,"last_seq":4,"total_bytes":7,"started_at_ms":1700000000000,"truncated":false}`,
+		ResultJSON: `{"status":"running","process_id":"tp_running","output":"partial","cwd":"/workspace","first_seq":3,"last_seq":4,"latest_seq":4,"has_more":false,"total_bytes":7,"started_at_ms":1700000000000,"truncated":false}`,
 	}); err != nil {
 		t.Fatalf("UpsertToolCall: %v", err)
 	}
@@ -180,13 +173,13 @@ func TestGetTerminalToolOutput_UsesRunningProcessMetadata(t *testing.T) {
 	if out.ProcessID != "tp_running" {
 		t.Fatalf("process_id=%q, want tp_running", out.ProcessID)
 	}
-	if out.Output != "partial" || out.LatestOutput != "partial" {
-		t.Fatalf("output=%q latest=%q", out.Output, out.LatestOutput)
+	if out.Output != "partial" {
+		t.Fatalf("output=%q", out.Output)
 	}
 	if out.Cwd != "/workspace" {
 		t.Fatalf("cwd=%q, want /workspace", out.Cwd)
 	}
-	if out.FirstSeq != 3 || out.LastSeq != 4 || out.TotalBytes != 7 || out.StartedAtUnixMs != 1700000000000 {
+	if out.FirstSeq != 3 || out.LastSeq != 4 || out.LatestSeq != 4 || out.TotalBytes != 7 || out.StartedAtUnixMs != 1700000000000 {
 		t.Fatalf("metadata=%+v", out)
 	}
 }

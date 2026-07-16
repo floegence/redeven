@@ -1103,9 +1103,7 @@ export type FlowerLinkedContextPathOpenRequest = Readonly<{
 export type FlowerTerminalProcessReadRequest = Readonly<{
   run_id: string;
   process_id: string;
-  after_seq?: number;
-  wait_ms?: number;
-  max_bytes?: number;
+  after_seq: number;
 }>;
 
 export type FlowerTerminalProcessSnapshot = Readonly<{
@@ -1113,12 +1111,11 @@ export type FlowerTerminalProcessSnapshot = Readonly<{
   status: string;
   command?: string;
   cwd?: string;
-  output?: string;
-  stdout?: string;
-  stderr?: string;
-  latest_output?: string;
-  first_seq?: number;
-  last_seq?: number;
+  output: string;
+  first_seq: number;
+  last_seq: number;
+  latest_seq: number;
+  has_more: boolean;
   total_bytes?: number;
   truncated?: boolean;
   started_at_ms?: number;

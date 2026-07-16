@@ -132,7 +132,7 @@ func TestFloretSubagentTerminalCleanupSettlesCompletedChildPendingProcess(t *tes
 		settleRequests[0].Status != flruntime.PendingToolSettlementCanceled {
 		t.Fatalf("settle request=%#v, want completed child terminal cancellation", settleRequests[0])
 	}
-	completedSnapshot := completedProc.Read(terminalProcessReadRequest{ProcessID: completedProc.id})
+	completedSnapshot := completedProc.Snapshot()
 	if completedSnapshot.Status != terminalProcessStatusCanceled {
 		t.Fatalf("completed child terminal status=%q, want canceled", completedSnapshot.Status)
 	}
@@ -142,7 +142,7 @@ func TestFloretSubagentTerminalCleanupSettlesCompletedChildPendingProcess(t *tes
 		completedSnapshot.SettlementTurnID != completedFloretTurnID {
 		t.Fatalf("completed child snapshot identities=%#v, want audit and Floret settlement identities preserved", completedSnapshot)
 	}
-	runningSnapshot := runningProc.Read(terminalProcessReadRequest{ProcessID: runningProc.id})
+	runningSnapshot := runningProc.Snapshot()
 	if runningSnapshot.Status != terminalProcessStatusRunning {
 		t.Fatalf("running child terminal status=%q, want running", runningSnapshot.Status)
 	}
@@ -1315,7 +1315,7 @@ func TestServiceGetFlowerSubagentDetailRequestsRawMessageContent(t *testing.T) {
 							Description:      "Command completed",
 							Renderer:         observation.ActivityRendererTerminal,
 							Payload: map[string]any{
-								"stdout":      "total 4",
+								"output":      "total 4",
 								"content_ref": "hash-content",
 							},
 						}},
@@ -1437,7 +1437,7 @@ func TestServiceGetFlowerSubagentDetailRequestsRawMessageContent(t *testing.T) {
 					Description:      "Command completed",
 					Renderer:         observation.ActivityRendererTerminal,
 					Payload: map[string]any{
-						"stdout":      "total 4",
+						"output":      "total 4",
 						"content_ref": "hash-content",
 					},
 				}},
@@ -1522,7 +1522,7 @@ func TestServiceGetFlowerSubagentDetailRequestsRawMessageContent(t *testing.T) {
 		t.Fatalf("canonical subagent activity not projected: %#v", detail)
 	}
 	resultActivity := detail.Activity.Items[0]
-	if resultActivity.Renderer != observation.ActivityRendererTerminal || resultActivity.Payload["stdout"] != "total 4" || resultActivity.Payload["content_ref"] != "hash-content" {
+	if resultActivity.Renderer != observation.ActivityRendererTerminal || resultActivity.Payload["output"] != "total 4" || resultActivity.Payload["content_ref"] != "hash-content" {
 		t.Fatalf("tool result activity does not use canonical terminal presentation: %#v", resultActivity)
 	}
 	if resultActivity.Status != observation.ActivityStatusSuccess {

@@ -8313,14 +8313,10 @@ const runtimeFlowerSubagentDetailQuery = (parsed: URL): boolean => parsed.search
   || /^\?after_ordinal=\d+&limit=\d{1,4}$/u.test(parsed.search)
   || /^\?limit=\d{1,4}&after_ordinal=\d+$/u.test(parsed.search);
 const runtimeFlowerTerminalReadQuery = (parsed: URL): boolean => {
-  const allowed = new Set(['after_seq', 'wait_ms', 'max_bytes']);
-  for (const key of parsed.searchParams.keys()) {
-    const values = parsed.searchParams.getAll(key);
-    if (!allowed.has(key) || values.length !== 1 || !/^\d{1,18}$/u.test(values[0] ?? '')) {
-      return false;
-    }
-  }
-  return true;
+	const values = parsed.searchParams.getAll('after_seq');
+	return [...parsed.searchParams.keys()].every((key) => key === 'after_seq')
+		&& values.length === 1
+		&& /^\d{1,18}$/u.test(values[0] ?? '');
 };
 
 const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [

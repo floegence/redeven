@@ -62,15 +62,16 @@ export type FlowerActivityDiffFile = Readonly<{
 export type FlowerActivityTerminalDetail = Readonly<{
   command: string;
   output: string;
-  latest_output: string;
   status: FlowerActivityItem['status'];
   process_id: string;
   execution_location: string;
   exit_code?: number;
   duration_ms?: number;
   total_bytes?: number;
-  first_seq?: number;
-  last_seq?: number;
+  first_seq: number;
+  last_seq: number;
+  latest_seq: number;
+  has_more: boolean;
   truncated: boolean;
   timed_out: boolean;
 }>;
@@ -234,16 +235,14 @@ const DETAIL_LABELS: Readonly<Record<string, string>> = {
   items: 'items',
   process_id: 'process',
   execution_location: 'location',
-  latest_output: 'latest output',
   first_seq: 'first seq',
   last_seq: 'last seq',
+  latest_seq: 'latest seq',
   total_bytes: 'bytes',
   started_at_ms: 'started',
   ended_at_ms: 'ended',
   exit_code: 'exit',
   duration_ms: 'duration',
-  stdout: 'stdout',
-  stderr: 'stderr',
   timed_out: 'timed out',
   truncated: 'truncated',
   query: 'query',
@@ -533,7 +532,7 @@ function isSubagentsActivityItem(item: FlowerActivityItem): boolean {
 }
 
 function detailLineTone(key: string): FlowerActivityDetailLine['tone'] {
-  return key === 'command' || key === 'stdout' || key === 'stderr' ? 'code' : undefined;
+  return key === 'command' ? 'code' : undefined;
 }
 
 function detailLabel(key: string, copy?: FlowerActivityPresentationCopy): string {
@@ -1134,12 +1133,7 @@ function terminalTitleForItem(item: FlowerActivityItem): FlowerActivityTitle {
 }
 
 function terminalOutputFromPayload(payload: Readonly<Record<string, unknown>>): string {
-  const output = rawPayloadText(payload, 'output');
-  if (output.trim()) return output;
-  const stdout = rawPayloadText(payload, 'stdout');
-  const stderr = rawPayloadText(payload, 'stderr');
-  if (stdout.trim() && stderr.trim()) return `${stdout.replace(/\s+$/g, '')}\n\n[stderr]\n${stderr}`;
-  return stdout || stderr;
+  return rawPayloadText(payload, 'output');
 }
 
 function terminalStatusLines(item: FlowerActivityItem): readonly FlowerActivityDetailLine[] {
@@ -1156,15 +1150,16 @@ function presentationForTerminal(item: FlowerActivityItem): FlowerActivityPresen
   const terminal: FlowerActivityTerminalDetail = {
     command: payloadValue(payload, 'command'),
     output: terminalOutputFromPayload(payload),
-    latest_output: rawPayloadText(payload, 'latest_output'),
     status: item.status,
     process_id: payloadValue(payload, 'process_id'),
     execution_location: payloadValue(payload, 'execution_location'),
     exit_code: optionalNumericValue(payload.exit_code),
     duration_ms: optionalNumericValue(payload.duration_ms),
     total_bytes: optionalNumericValue(payload.total_bytes),
-    first_seq: optionalNumericValue(payload.first_seq),
-    last_seq: optionalNumericValue(payload.last_seq),
+    first_seq: optionalNumericValue(payload.first_seq) ?? 0,
+    last_seq: optionalNumericValue(payload.last_seq) ?? 0,
+    latest_seq: optionalNumericValue(payload.latest_seq) ?? 0,
+    has_more: boolValue(payload.has_more),
     truncated: boolValue(payload.truncated),
     timed_out: boolValue(payload.timed_out),
   };

@@ -19,16 +19,17 @@ import (
 )
 
 const (
-	terminalProcessDefaultYieldMS   = 1000
-	terminalProcessMaxYieldMS       = 30_000
-	terminalProcessDefaultReadWait  = 1000
-	terminalProcessMaxReadWait      = 30_000
-	terminalProcessDefaultReadBytes = 200_000
-	terminalProcessMaxReadBytes     = 1_000_000
-	terminalProcessTailCapBytes     = 1_000_000
-	terminalProcessOutputDrainWait  = 500 * time.Millisecond
-	terminalProcessMaxRuntime       = 30 * time.Minute
-	terminalProcessMaxActive        = 64
+	terminalProcessDefaultYieldMS    = 1000
+	terminalProcessMaxYieldMS        = 30_000
+	terminalProcessOutputChunkBytes  = 4_000
+	terminalProcessModelReadWaitMS   = 5_000
+	terminalProcessModelReadBytes    = 8_000
+	terminalProcessUIReadWaitMS      = 1_000
+	terminalProcessUIReadBytes       = 256_000
+	terminalProcessTailCapBytes      = 1_000_000
+	terminalProcessOutputDrainWait   = 500 * time.Millisecond
+	terminalProcessMaxRuntime        = 30 * time.Minute
+	terminalProcessMaxActive         = 64
 )
 
 const (
@@ -69,6 +70,11 @@ type terminalProcessReadRequest struct {
 	MaxBytes  int64
 }
 
+type terminalProcessOutputChunk struct {
+	seq  int64
+	data []byte
+}
+
 type terminalProcessSnapshot struct {
 	ProcessID  string `json:"process_id"`
 	EndpointID string `json:"endpoint_id,omitempty"`
@@ -86,9 +92,10 @@ type terminalProcessSnapshot struct {
 	Cwd                string             `json:"cwd"`
 	Status             string             `json:"status"`
 	Output             string             `json:"output"`
-	LatestOutput       string             `json:"latest_output,omitempty"`
 	FirstSeq           int64              `json:"first_seq"`
 	LastSeq            int64              `json:"last_seq"`
+	LatestSeq          int64              `json:"latest_seq"`
+	HasMore            bool               `json:"has_more"`
 	TotalBytes         int64              `json:"total_bytes"`
 	Truncated          bool               `json:"truncated"`
 	StartedAtUnixMs    int64              `json:"started_at_ms"`
@@ -123,8 +130,8 @@ type terminalProcess struct {
 	status                 string
 	exitCode               int
 	err                    *aitools.ToolError
-	buf                    []byte
-	firstSeq               int64
+	outputChunks           []terminalProcessOutputChunk
+	retainedBytes          int
 	lastSeq                int64
 	total                  int64
 	truncated              bool
@@ -275,12 +282,12 @@ func (m *terminalProcessManager) ProcessesForRun(endpointID string, threadID str
 	return matched
 }
 
-func (m *terminalProcessManager) Read(req terminalProcessReadRequest) (terminalProcessSnapshot, error) {
+func (m *terminalProcessManager) ReadAfter(req terminalProcessReadRequest) (terminalProcessSnapshot, error) {
 	proc, ok := m.Get(req.ProcessID)
 	if !ok {
 		return terminalProcessSnapshot{}, errors.New("terminal process not found")
 	}
-	return proc.Read(req), nil
+	return proc.ReadAfter(req)
 }
 
 func (m *terminalProcessManager) Write(processID string, input string) (terminalProcessSnapshot, error) {
@@ -323,26 +330,46 @@ func (p *terminalProcess) MarkPending() terminalProcessSnapshot {
 	}
 	p.mu.Lock()
 	p.pending = true
-	snapshot := p.snapshotLocked(0)
+	snapshot := p.snapshotLocked(terminalProcessTailCapBytes)
 	p.mu.Unlock()
 	_ = p.publishDone()
 	return snapshot
 }
 
-func (p *terminalProcess) Read(req terminalProcessReadRequest) terminalProcessSnapshot {
+func (p *terminalProcess) Snapshot() terminalProcessSnapshot {
 	if p == nil {
 		return terminalProcessSnapshot{}
 	}
-	waitMS := req.WaitMS
-	if waitMS <= 0 {
-		waitMS = terminalProcessDefaultReadWait
+	p.mu.Lock()
+	snapshot := p.snapshotLocked(terminalProcessTailCapBytes)
+	p.mu.Unlock()
+	return snapshot
+}
+
+func (p *terminalProcess) ReadAfter(req terminalProcessReadRequest) (terminalProcessSnapshot, error) {
+	if p == nil {
+		return terminalProcessSnapshot{}, errors.New("terminal process not found")
 	}
-	if waitMS > terminalProcessMaxReadWait {
-		waitMS = terminalProcessMaxReadWait
+	if req.AfterSeq < 0 {
+		return terminalProcessSnapshot{}, errors.New("invalid after_seq")
+	}
+	p.mu.Lock()
+	if req.AfterSeq > p.lastSeq {
+		p.mu.Unlock()
+		return terminalProcessSnapshot{}, errors.New("invalid after_seq: exceeds latest sequence")
+	}
+	waitMS := req.WaitMS
+	if waitMS < 0 {
+		p.mu.Unlock()
+		return terminalProcessSnapshot{}, errors.New("invalid terminal read wait")
+	}
+	maxBytes := req.MaxBytes
+	if maxBytes < terminalProcessOutputChunkBytes {
+		p.mu.Unlock()
+		return terminalProcessSnapshot{}, errors.New("invalid terminal read size")
 	}
 	deadline := time.Now().Add(time.Duration(waitMS) * time.Millisecond)
-	p.mu.Lock()
-	for req.AfterSeq > 0 && p.lastSeq <= req.AfterSeq && p.status == terminalProcessStatusRunning {
+	for p.lastSeq <= req.AfterSeq && p.status == terminalProcessStatusRunning {
 		remaining := time.Until(deadline)
 		if remaining <= 0 {
 			break
@@ -355,9 +382,9 @@ func (p *terminalProcess) Read(req terminalProcessReadRequest) terminalProcessSn
 		p.cond.Wait()
 		timer.Stop()
 	}
-	snapshot := p.snapshotLocked(req.MaxBytes)
+	snapshot := p.readAfterLocked(req.AfterSeq, maxBytes)
 	p.mu.Unlock()
-	return snapshot
+	return snapshot, nil
 }
 
 func (p *terminalProcess) WaitForYield(yieldMS int64) terminalProcessSnapshot {
@@ -408,7 +435,7 @@ func (p *terminalProcess) WaitForYieldContext(ctx context.Context, yieldMS int64
 		snapshot, _ := p.Terminate()
 		return snapshot
 	}
-	snapshot := p.snapshotLocked(0)
+	snapshot := p.snapshotLocked(terminalProcessTailCapBytes)
 	p.mu.Unlock()
 	return snapshot
 }
@@ -419,7 +446,7 @@ func (p *terminalProcess) Write(input string) (terminalProcessSnapshot, error) {
 	}
 	p.mu.Lock()
 	if p.status != terminalProcessStatusRunning {
-		snapshot := p.snapshotLocked(0)
+		snapshot := p.snapshotLocked(terminalProcessTailCapBytes)
 		p.mu.Unlock()
 		return snapshot, errors.New("terminal process is not running")
 	}
@@ -431,7 +458,7 @@ func (p *terminalProcess) Write(input string) (terminalProcessSnapshot, error) {
 	if _, err := tty.Write([]byte(input)); err != nil {
 		return terminalProcessSnapshot{}, err
 	}
-	return p.Read(terminalProcessReadRequest{}), nil
+	return p.Snapshot(), nil
 }
 
 func (p *terminalProcess) Terminate() (terminalProcessSnapshot, error) {
@@ -440,7 +467,7 @@ func (p *terminalProcess) Terminate() (terminalProcessSnapshot, error) {
 	}
 	p.mu.Lock()
 	if p.status != terminalProcessStatusRunning {
-		snapshot := p.snapshotLocked(0)
+		snapshot := p.snapshotLocked(terminalProcessTailCapBytes)
 		p.mu.Unlock()
 		return snapshot, nil
 	}
@@ -451,7 +478,7 @@ func (p *terminalProcess) Terminate() (terminalProcessSnapshot, error) {
 	p.cond.Broadcast()
 	p.mu.Unlock()
 	err := terminateTerminalExecProcessTree(cmd)
-	snapshot := p.Read(terminalProcessReadRequest{})
+	snapshot := p.Snapshot()
 	return snapshot, err
 }
 
@@ -546,15 +573,18 @@ func (p *terminalProcess) appendOutput(chunk []byte) {
 	}
 	p.mu.Lock()
 	p.total += int64(len(chunk))
-	p.lastSeq++
-	if p.firstSeq == 0 {
-		p.firstSeq = p.lastSeq
+	for len(chunk) > 0 {
+		size := min(len(chunk), terminalProcessOutputChunkBytes)
+		data := append([]byte(nil), chunk[:size]...)
+		p.lastSeq++
+		p.outputChunks = append(p.outputChunks, terminalProcessOutputChunk{seq: p.lastSeq, data: data})
+		p.retainedBytes += len(data)
+		chunk = chunk[size:]
 	}
-	p.buf = append(p.buf, chunk...)
-	if len(p.buf) > terminalProcessTailCapBytes {
-		excess := len(p.buf) - terminalProcessTailCapBytes
-		copy(p.buf, p.buf[excess:])
-		p.buf = p.buf[:terminalProcessTailCapBytes]
+	for p.retainedBytes > terminalProcessTailCapBytes && len(p.outputChunks) > 0 {
+		p.retainedBytes -= len(p.outputChunks[0].data)
+		p.outputChunks[0].data = nil
+		p.outputChunks = p.outputChunks[1:]
 		p.truncated = true
 	}
 	p.cond.Broadcast()
@@ -591,7 +621,7 @@ func (p *terminalProcess) publishDone() error {
 		return nil
 	}
 	p.settlementInFlight = true
-	snapshot := p.snapshotLocked(0)
+	snapshot := p.snapshotLocked(terminalProcessTailCapBytes)
 	p.cond.Broadcast()
 	p.mu.Unlock()
 	err := p.manager.onDone(snapshot)
@@ -656,22 +686,78 @@ func (p *terminalProcess) snapshotLocked(maxBytes int64) terminalProcessSnapshot
 	if p == nil {
 		return terminalProcessSnapshot{}
 	}
-	if maxBytes <= 0 {
-		maxBytes = terminalProcessDefaultReadBytes
+	if maxBytes <= 0 || maxBytes > terminalProcessTailCapBytes {
+		maxBytes = terminalProcessTailCapBytes
 	}
-	if maxBytes > terminalProcessMaxReadBytes {
-		maxBytes = terminalProcessMaxReadBytes
+	start := len(p.outputChunks)
+	selectedBytes := 0
+	for start > 0 {
+		nextBytes := len(p.outputChunks[start-1].data)
+		if selectedBytes > 0 && int64(selectedBytes+nextBytes) > maxBytes {
+			break
+		}
+		selectedBytes += nextBytes
+		start--
 	}
-	output := string(p.buf)
+	selected := p.outputChunks[start:]
+	output := joinTerminalOutputChunks(selected)
 	truncated := p.truncated
-	if int64(len(output)) > maxBytes {
-		output = output[len(output)-int(maxBytes):]
+	if start > 0 {
 		truncated = true
 	}
-	latest := output
-	if len(latest) > 4000 {
-		latest = latest[len(latest)-4000:]
+	firstSeq := int64(0)
+	if len(selected) > 0 {
+		firstSeq = selected[0].seq
 	}
+	return p.snapshotWithOutputLocked(output, firstSeq, p.lastSeq, p.lastSeq, false, truncated)
+}
+
+func (p *terminalProcess) readAfterLocked(afterSeq int64, maxBytes int64) terminalProcessSnapshot {
+	retainedFirstSeq := p.lastSeq + 1
+	if len(p.outputChunks) > 0 {
+		retainedFirstSeq = p.outputChunks[0].seq
+	}
+	truncated := afterSeq+1 < retainedFirstSeq
+	selected := make([]terminalProcessOutputChunk, 0)
+	selectedBytes := 0
+	for _, chunk := range p.outputChunks {
+		if chunk.seq <= afterSeq {
+			continue
+		}
+		if len(selected) > 0 && int64(selectedBytes+len(chunk.data)) > maxBytes {
+			break
+		}
+		selected = append(selected, chunk)
+		selectedBytes += len(chunk.data)
+	}
+	firstSeq := int64(0)
+	lastSeq := afterSeq
+	if len(selected) > 0 {
+		firstSeq = selected[0].seq
+		lastSeq = selected[len(selected)-1].seq
+	}
+	return p.snapshotWithOutputLocked(
+		joinTerminalOutputChunks(selected),
+		firstSeq,
+		lastSeq,
+		p.lastSeq,
+		lastSeq < p.lastSeq,
+		truncated,
+	)
+}
+
+func joinTerminalOutputChunks(chunks []terminalProcessOutputChunk) string {
+	if len(chunks) == 0 {
+		return ""
+	}
+	var output strings.Builder
+	for _, chunk := range chunks {
+		_, _ = output.Write(chunk.data)
+	}
+	return output.String()
+}
+
+func (p *terminalProcess) snapshotWithOutputLocked(output string, firstSeq int64, lastSeq int64, latestSeq int64, hasMore bool, truncated bool) terminalProcessSnapshot {
 	duration := int64(0)
 	if !p.startedAt.IsZero() {
 		end := p.endedAt
@@ -708,9 +794,10 @@ func (p *terminalProcess) snapshotLocked(maxBytes int64) terminalProcessSnapshot
 		Cwd:                p.cwd,
 		Status:             p.status,
 		Output:             output,
-		LatestOutput:       latest,
-		FirstSeq:           p.firstSeq,
-		LastSeq:            p.lastSeq,
+		FirstSeq:           firstSeq,
+		LastSeq:            lastSeq,
+		LatestSeq:          latestSeq,
+		HasMore:            hasMore,
 		TotalBytes:         p.total,
 		Truncated:          truncated,
 		StartedAtUnixMs:    startedAtUnixMs,
@@ -730,17 +817,14 @@ func terminalProcessResultPayload(snapshot terminalProcessSnapshot) map[string]a
 		"cwd":                strings.TrimSpace(snapshot.Cwd),
 		"execution_location": strings.TrimSpace(snapshot.ExecutionLocation),
 		"output":             snapshot.Output,
-		"stdout":             snapshot.Output,
-		"stderr":             "",
 		"first_seq":          snapshot.FirstSeq,
 		"last_seq":           snapshot.LastSeq,
+		"latest_seq":         snapshot.LatestSeq,
+		"has_more":           snapshot.HasMore,
 		"total_bytes":        snapshot.TotalBytes,
 		"truncated":          snapshot.Truncated,
 		"started_at_ms":      snapshot.StartedAtUnixMs,
 		"duration_ms":        snapshot.DurationMS,
-	}
-	if snapshot.LatestOutput != "" {
-		out["latest_output"] = snapshot.LatestOutput
 	}
 	if snapshot.EndedAtUnixMs > 0 {
 		out["ended_at_ms"] = snapshot.EndedAtUnixMs

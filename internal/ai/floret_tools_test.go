@@ -194,7 +194,6 @@ func TestFloretTerminalReadActivityKeepsModelIntentAcrossResult(t *testing.T) {
 		"process_id":  "tp_build",
 		"description": intent,
 		"after_seq":   int64(4),
-		"wait_ms":     int64(1000),
 	})
 	if callActivity == nil || callActivity.Label != intent || callActivity.Description != "" {
 		t.Fatalf("call activity=%#v, want intent label without duplicate description", callActivity)
@@ -208,11 +207,13 @@ func TestFloretTerminalReadActivityKeepsModelIntentAcrossResult(t *testing.T) {
 		ToolName: "terminal.read",
 		Status:   toolResultStatusSuccess,
 		Data: map[string]any{
-			"status":        terminalProcessStatusRunning,
-			"process_id":    "tp_build",
-			"command":       "docker compose up --build -d",
-			"latest_output": "building...\n",
-			"last_seq":      int64(5),
+			"status":     terminalProcessStatusRunning,
+			"process_id": "tp_build",
+			"command":    "docker compose up --build -d",
+			"output":     "building...\n",
+			"last_seq":   int64(5),
+			"latest_seq": int64(5),
+			"has_more":   false,
 		},
 	})
 	if resultActivity.Label != "" {
@@ -227,8 +228,51 @@ func TestFloretTerminalReadActivityKeepsModelIntentAcrossResult(t *testing.T) {
 		t.Fatalf("timeline items=%#v, want one", timeline.Items)
 	}
 	item := timeline.Items[0]
-	if item.Label != intent || item.Payload["command"] != "docker compose up --build -d" || item.Payload["latest_output"] != "building..." {
+	if item.Label != intent || item.Payload["command"] != "docker compose up --build -d" || item.Payload["output"] != "building...\n" {
 		t.Fatalf("terminal.read timeline item=%#v", item)
+	}
+}
+
+func TestFloretTerminalReadResultsExposeEachDeltaOnce(t *testing.T) {
+	t.Parallel()
+
+	toFloret := func(toolID string, output string, firstSeq int64, lastSeq int64) fltools.Result {
+		result, err := floretToolResultFromFlower(newRun(runOptions{}), ToolResult{
+			ToolID:   toolID,
+			ToolName: "terminal.read",
+			Status:   toolResultStatusSuccess,
+			Data: map[string]any{
+				"process_id": "tp_phases",
+				"status":     terminalProcessStatusRunning,
+				"output":     output,
+				"first_seq":  firstSeq,
+				"last_seq":   lastSeq,
+				"latest_seq": lastSeq,
+				"has_more":   false,
+			},
+		})
+		if err != nil {
+			t.Fatalf("floretToolResultFromFlower(%s): %v", toolID, err)
+		}
+		return result
+	}
+
+	first := toFloret("read_phase_1", "phase 1\n", 1, 1)
+	second := toFloret("read_phase_2", "phase 2\n", 2, 2)
+	if strings.Count(first.Text, "phase 1") != 1 || strings.Contains(first.Text, "phase 2") {
+		t.Fatalf("first result text=%s", first.Text)
+	}
+	if strings.Count(second.Text, "phase 2") != 1 || strings.Contains(second.Text, "phase 1") {
+		t.Fatalf("second result text=%s", second.Text)
+	}
+	modelVisibleHistory := first.Text + "\n" + second.Text
+	if strings.Count(modelVisibleHistory, "phase 1") != 1 || strings.Count(modelVisibleHistory, "phase 2") != 1 {
+		t.Fatalf("model-visible terminal history duplicated a delta: %s", modelVisibleHistory)
+	}
+	for _, removed := range []string{"stdout", "stderr", "latest_output"} {
+		if strings.Contains(modelVisibleHistory, `"`+removed+`"`) {
+			t.Fatalf("model-visible terminal history retained %q: %s", removed, modelVisibleHistory)
+		}
 	}
 }
 
@@ -1022,7 +1066,7 @@ func TestFloretToolResultActivityPayloadsMeetFullContract(t *testing.T) {
 		Data: map[string]any{
 			"command": "printf ok",
 			"cwd":     "/Users/alice/private",
-			"stdout":  strings.Repeat("o", activityPayloadStringLimit+400),
+			"output":  strings.Repeat("o", activityPayloadStringLimit+400),
 			"bad key / with spaces": map[string]any{
 				"level1": map[string]any{
 					"level2": map[string]any{
@@ -1048,8 +1092,8 @@ func TestFloretToolResultActivityPayloadsMeetFullContract(t *testing.T) {
 	if _, ok := activity.Payload["cwd"]; ok {
 		t.Fatalf("terminal activity payload kept host-only cwd: %#v", activity.Payload)
 	}
-	if len([]rune(anyToString(activity.Payload["stdout"]))) > activityPayloadStringLimit {
-		t.Fatalf("stdout length=%d, want <= %d", len([]rune(anyToString(activity.Payload["stdout"]))), activityPayloadStringLimit)
+	if len([]rune(anyToString(activity.Payload["output"]))) > activityPayloadStringLimit {
+		t.Fatalf("output length=%d, want <= %d", len([]rune(anyToString(activity.Payload["output"]))), activityPayloadStringLimit)
 	}
 	if activity.Payload["truncated"] != true {
 		t.Fatalf("payload truncated flag=%#v, want true", activity.Payload["truncated"])

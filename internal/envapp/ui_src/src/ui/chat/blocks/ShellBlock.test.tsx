@@ -161,9 +161,15 @@ describe('ShellBlock', () => {
       ok: true,
       text: async () => JSON.stringify({
         ok: true,
-        data: {
-          status: 'success',
-          raw_result: '{"api_key":"sk-secret"}',
+          data: {
+            status: 'success',
+			output: '',
+			first_seq: 0,
+			last_seq: 0,
+			latest_seq: 0,
+			has_more: false,
+			truncated: false,
+            raw_result: '{"api_key":"sk-secret"}',
         },
       }),
     });
@@ -195,7 +201,11 @@ describe('ShellBlock', () => {
             status: 'running',
             process_id: 'tp_live',
             output: 'tick 1\n',
+			first_seq: 1,
             last_seq: 1,
+			latest_seq: 1,
+			has_more: false,
+			truncated: false,
             total_bytes: 7,
           },
         }),
@@ -208,8 +218,11 @@ describe('ShellBlock', () => {
             status: 'running',
             process_id: 'tp_live',
             output: '',
-            stdout: '',
+			first_seq: 0,
             last_seq: 1,
+			latest_seq: 1,
+			has_more: false,
+			truncated: false,
             total_bytes: 7,
           },
         }),
@@ -236,6 +249,8 @@ describe('ShellBlock', () => {
     expect(host.textContent).toContain('tick 1');
     expect(host.textContent).not.toContain('Listening for output');
     expect(host.textContent).not.toContain('No output captured');
+	expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/read?after_seq=0');
+	expect(String(fetchMock.mock.calls[1]?.[0])).toContain('/read?after_seq=1');
     dispose();
   });
 
@@ -248,7 +263,11 @@ describe('ShellBlock', () => {
           status: 'success',
           process_id: 'tp_complete',
           output: 'done\n',
+		  first_seq: 1,
           last_seq: 1,
+		  latest_seq: 1,
+		  has_more: false,
+		  truncated: false,
           total_bytes: 5,
         },
       }),

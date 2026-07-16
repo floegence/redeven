@@ -1226,7 +1226,7 @@ func activityPayloadFieldValue(r *run, field string, source map[string]any) (any
 		switch field {
 		case "mutations":
 			return activityMutationPayloads(r, toAnySlice(value)), true
-		case "stdout", "stderr":
+		case "output":
 			if text, ok := value.(string); ok && text != "" {
 				return text, true
 			}
