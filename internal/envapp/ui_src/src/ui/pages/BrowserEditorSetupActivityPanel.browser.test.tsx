@@ -1,6 +1,6 @@
 import '../../index.css';
 
-import { page } from 'vitest/browser';
+import { commands, page } from 'vitest/browser';
 import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -130,6 +130,19 @@ function awaitingConfirmationActivity(): BrowserEditorSetupActivity {
   };
 }
 
+function activityWithState(
+  state: 'checking' | 'ready' | 'failed' | 'cancelled' | 'error',
+): BrowserEditorSetupActivity {
+  return {
+    ...missingActivity(),
+    state,
+    presentation: state === 'checking' ? 'progress' : 'result',
+    badge_label: state,
+    badge_variant: state === 'ready' ? 'success' : state === 'checking' ? 'info' : 'warning',
+    can_cancel: state === 'checking',
+  };
+}
+
 async function settle(): Promise<void> {
   await Promise.resolve();
   await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
@@ -180,11 +193,12 @@ function mountPanel(
   host.style.width = width;
   host.style.margin = '24px auto';
   document.body.appendChild(host);
+  const [currentActivity, setActivity] = createSignal(activity);
   const [installMethod, setInstallMethod] = createSignal(options.installMethod ?? activity.install_method ?? 'desktop_transfer');
   const dispose = render(
     () => (
       <BrowserEditorSetupActivityPanel
-        activity={activity}
+        activity={currentActivity()}
         layout={layout}
         actionLabel="Set up Browser Editor"
         runningLabel="Setting up..."
@@ -213,8 +227,15 @@ function mountPanel(
     ),
     host,
   );
-  return { host, dispose };
+  return { host, dispose, setActivity };
 }
+
+const mediaCommands = commands as unknown as Readonly<{
+  emulateMediaPreferences: (preferences: Readonly<{
+    forcedColors?: null | 'active' | 'none';
+    reducedMotion?: null | 'reduce' | 'no-preference';
+  }>) => Promise<void>;
+}>;
 
 describe('BrowserEditorSetupActivityPanel rendered layout', () => {
   let cleanup: (() => void) | undefined;
@@ -224,7 +245,90 @@ describe('BrowserEditorSetupActivityPanel rendered layout', () => {
     cleanup = undefined;
     document.body.replaceChildren();
     document.documentElement.classList.remove('dark', 'light');
+    await mediaCommands.emulateMediaPreferences({ forcedColors: 'none', reducedMotion: 'no-preference' });
     await page.viewport(1280, 720);
+  });
+
+  it('uses a single decorative precision orbit for active setup states', async () => {
+    for (const activeActivity of [uploadActivity(), activityWithState('checking')]) {
+      const { host, dispose } = mountPanel(activeActivity, '1180px');
+      await settle();
+
+      const glyph = host.querySelector<HTMLElement>('.browser-editor-setup__icon');
+      expect(glyph?.dataset.activityGlyph).toBe('orbit');
+      expect(glyph?.getAttribute('aria-hidden')).toBe('true');
+      expect(glyph?.querySelector('.browser-editor-setup__orbit-track')).toBeTruthy();
+      expect(glyph?.querySelector('.browser-editor-setup__orbit-ring')).toBeTruthy();
+      expect(glyph?.querySelector('.browser-editor-setup__orbit-core')).toBeTruthy();
+      expect(glyph?.querySelector('.animate-spin')).toBeNull();
+      expect(glyph?.getAttribute('role')).toBeNull();
+
+      dispose();
+      host.remove();
+    }
+
+    for (const [state, expectedGlyph] of [
+      ['ready', 'ready'],
+      ['failed', 'failure'],
+      ['cancelled', 'warning'],
+      ['error', 'error'],
+    ] as const) {
+      const { host, dispose } = mountPanel(activityWithState(state), '1180px');
+      await settle();
+
+      const glyph = host.querySelector<HTMLElement>('.browser-editor-setup__icon');
+      expect(glyph?.dataset.activityGlyph).toBe(expectedGlyph);
+      expect(glyph?.getAttribute('aria-hidden')).toBe('true');
+      expect(glyph?.querySelector('.browser-editor-setup__orbit')).toBeNull();
+
+      dispose();
+      host.remove();
+    }
+  });
+
+  it('keeps glyph geometry and title alignment stable across state changes', async () => {
+    await page.viewport(1440, 900);
+    const { host, dispose, setActivity } = mountPanel(uploadActivity(), '1180px');
+    cleanup = dispose;
+    await settle();
+
+    const glyph = host.querySelector<HTMLElement>('.browser-editor-setup__icon')!;
+    const title = host.querySelector<HTMLElement>('.browser-editor-setup__header h3')!;
+    const runningGlyphRect = glyph.getBoundingClientRect();
+    const runningTitleLeft = title.getBoundingClientRect().left;
+
+    setActivity(activityWithState('ready'));
+    await settle();
+
+    const readyGlyphRect = glyph.getBoundingClientRect();
+    expect(readyGlyphRect.width).toBe(32);
+    expect(readyGlyphRect.height).toBe(32);
+    expect(readyGlyphRect.width).toBe(runningGlyphRect.width);
+    expect(readyGlyphRect.height).toBe(runningGlyphRect.height);
+    expect(title.getBoundingClientRect().left).toBe(runningTitleLeft);
+  });
+
+  it('stops orbit motion for reduced motion and preserves system-color contours', async () => {
+    await mediaCommands.emulateMediaPreferences({ reducedMotion: 'reduce', forcedColors: 'none' });
+    const { host, dispose } = mountPanel(uploadActivity(), '1180px');
+    cleanup = dispose;
+    await settle();
+
+    const orbitRing = host.querySelector<HTMLElement>('.browser-editor-setup__orbit-ring')!;
+    const activeStep = host.querySelector<HTMLElement>('.browser-editor-setup__step-dot[data-state="active"]')!;
+    expect(window.matchMedia('(prefers-reduced-motion: reduce)').matches).toBe(true);
+    expect(getComputedStyle(orbitRing).animationName).toBe('none');
+    expect(getComputedStyle(orbitRing).transform).not.toBe('none');
+    expect(getComputedStyle(activeStep).animationName).toBe('none');
+
+    await mediaCommands.emulateMediaPreferences({ reducedMotion: 'reduce', forcedColors: 'active' });
+    await settle();
+    const orbitTrack = host.querySelector<HTMLElement>('.browser-editor-setup__orbit-track')!;
+    const orbitCore = host.querySelector<HTMLElement>('.browser-editor-setup__orbit-core')!;
+    expect(window.matchMedia('(forced-colors: active)').matches).toBe(true);
+    expect(getComputedStyle(orbitTrack).borderTopStyle).toBe('solid');
+    expect(getComputedStyle(orbitRing, '::before').borderTopStyle).toBe('solid');
+    expect(getComputedStyle(orbitCore).color).not.toBe('rgba(0, 0, 0, 0)');
   });
 
   it('keeps the idle wide layout balanced on desktop', async () => {

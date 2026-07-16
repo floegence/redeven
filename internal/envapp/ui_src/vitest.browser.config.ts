@@ -17,6 +17,17 @@ export default mergeConfig(viteConfig, defineConfig({
     browser: {
       enabled: true,
       provider: playwright(),
+      commands: {
+        emulateMediaPreferences: async (
+          { page },
+          preferences: {
+            forcedColors?: null | 'active' | 'none';
+            reducedMotion?: null | 'reduce' | 'no-preference';
+          },
+        ) => {
+          await page.emulateMedia(preferences);
+        },
+      },
       instances: [
         {
           browser: 'chromium',
