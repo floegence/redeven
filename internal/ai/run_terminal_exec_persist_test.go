@@ -133,7 +133,7 @@ func TestPersistToolCallSnapshot_TerminalExecResult_NotTruncated(t *testing.T) {
 		persistOpTimeout: 5 * time.Second,
 	}
 
-	longStdout := strings.Repeat("x", 5200)
+	longOutput := strings.Repeat("x", 5200)
 	startedAt := time.Now().Add(-2 * time.Second)
 	endedAt := time.Now()
 	r.persistToolCallSnapshot(
@@ -142,8 +142,7 @@ func TestPersistToolCallSnapshot_TerminalExecResult_NotTruncated(t *testing.T) {
 		toolCallStatusSuccess,
 		map[string]any{"command": "printf test"},
 		map[string]any{
-			"stdout":      longStdout,
-			"stderr":      "",
+			"output":      longOutput,
 			"exit_code":   0,
 			"duration_ms": 120,
 			"truncated":   false,
@@ -169,8 +168,8 @@ func TestPersistToolCallSnapshot_TerminalExecResult_NotTruncated(t *testing.T) {
 	if err := json.Unmarshal([]byte(rec.ResultJSON), &parsed); err != nil {
 		t.Fatalf("result json invalid: %v", err)
 	}
-	if got := parsed["stdout"]; got != longStdout {
-		t.Fatalf("stdout length=%d, want=%d", len(anyToString(got)), len(longStdout))
+	if got := parsed["output"]; got != longOutput {
+		t.Fatalf("output length=%d, want=%d", len(anyToString(got)), len(longOutput))
 	}
 }
 

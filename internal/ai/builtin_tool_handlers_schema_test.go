@@ -127,12 +127,43 @@ func TestBuiltInToolDefinitions_TerminalSchemasAreCanonical(t *testing.T) {
 		t.Fatalf("terminal.read description bounds=%#v, want 1..120", descriptionSchema)
 	}
 	description := strings.ToLower(fmt.Sprint(descriptionSchema["description"]))
-	if !strings.Contains(description, "user's language") || !strings.Contains(description, "latest output") || !strings.Contains(description, "never use a generic label") {
+	if !strings.Contains(description, "user's language") || !strings.Contains(description, "new output") || !strings.Contains(description, "never use a generic label") {
 		t.Fatalf("terminal.read description guidance is incomplete: %q", description)
 	}
+	afterSeqSchema, ok := readProps["after_seq"].(map[string]any)
+	if !ok {
+		t.Fatalf("terminal.read schema missing after_seq: %#v", readProps)
+	}
+	afterSeqDescription := strings.ToLower(fmt.Sprint(afterSeqSchema["description"]))
+	if !strings.Contains(afterSeqDescription, "last output sequence already consumed") ||
+		!strings.Contains(afterSeqDescription, "previous result's last_seq exactly") ||
+		!strings.Contains(afterSeqDescription, "never invent") ||
+		!strings.Contains(afterSeqDescription, "never") || !strings.Contains(afterSeqDescription, "backward") {
+		t.Fatalf("terminal.read after_seq guidance is incomplete: %q", afterSeqDescription)
+	}
+	for _, removed := range []string{"wait_ms", "max_bytes"} {
+		if _, exists := readProps[removed]; exists {
+			t.Fatalf("terminal.read schema retained %s: %#v", removed, readProps)
+		}
+	}
 	required, _ := readSchema["required"].([]any)
-	if !containsAnyString(required, "process_id") || !containsAnyString(required, "description") {
-		t.Fatalf("terminal.read required=%#v, want process_id and description", required)
+	if !containsAnyString(required, "process_id") || !containsAnyString(required, "description") || !containsAnyString(required, "after_seq") {
+		t.Fatalf("terminal.read required=%#v, want process_id, description, and after_seq", required)
+	}
+	toolDescription := strings.ToLower(terminalRead.Description)
+	for _, phrase := range []string{
+		"read only the new output produced after after_seq",
+		"never replays output already consumed",
+		"after_seq: 0 for the first read",
+		"previous result's last_seq unchanged",
+		"empty output means no new output",
+		"has_more is true",
+		"status is running and has_more is false",
+		"new output since after_seq",
+	} {
+		if !strings.Contains(toolDescription, phrase) {
+			t.Fatalf("terminal.read description missing %q: %q", phrase, terminalRead.Description)
+		}
 	}
 }
 

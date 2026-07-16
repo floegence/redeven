@@ -51,7 +51,11 @@ describe('presentFlowerActivityItem', () => {
         workdir: '/workspace/private',
         exit_code: 0,
         output: 'built\n',
-        latest_output: 'built\n',
+		first_seq: 1,
+		last_seq: 1,
+		latest_seq: 1,
+		has_more: false,
+		truncated: false,
         stdin: 'secret',
       },
       chips: [{ kind: 'exit_code', label: 'exit', value: '0', tone: 'neutral' }],
@@ -65,9 +69,12 @@ describe('presentFlowerActivityItem', () => {
       terminal: {
         command: 'npm run build -- --mode production',
         output: 'built\n',
-        latest_output: 'built\n',
         process_id: 'tp_123',
         exit_code: 0,
+		first_seq: 1,
+		last_seq: 1,
+		latest_seq: 1,
+		has_more: false,
       },
     });
     expect(presentation.detailLines.map((line) => line.label)).not.toContain('command');
@@ -97,7 +104,12 @@ describe('presentFlowerActivityItem', () => {
       payload: {
         command: 'docker compose up --build -d',
         process_id: 'tp_build',
-        latest_output: 'building...\n',
+		output: 'building...\n',
+		first_seq: 2,
+		last_seq: 2,
+		latest_seq: 2,
+		has_more: false,
+		truncated: false,
       },
     }));
 
@@ -107,8 +119,12 @@ describe('presentFlowerActivityItem', () => {
       kind: 'terminal_output',
       terminal: {
         command: 'docker compose up --build -d',
-        latest_output: 'building...\n',
+		output: 'building...\n',
         process_id: 'tp_build',
+		first_seq: 2,
+		last_seq: 2,
+		latest_seq: 2,
+		has_more: false,
       },
     });
   });

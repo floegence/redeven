@@ -18,20 +18,18 @@ type TerminalToolOutput struct {
 	ToolName        string `json:"tool_name"`
 	Status          string `json:"status"`
 	ProcessID       string `json:"process_id,omitempty"`
-	Output          string `json:"output,omitempty"`
-	LatestOutput    string `json:"latest_output,omitempty"`
-	Stdout          string `json:"stdout"`
-	Stderr          string `json:"stderr"`
+	Output          string `json:"output"`
 	ExitCode        int    `json:"exit_code"`
 	DurationMS      int64  `json:"duration_ms"`
 	Truncated       bool   `json:"truncated"`
 	Cwd             string `json:"cwd,omitempty"`
-	FirstSeq        int64  `json:"first_seq,omitempty"`
-	LastSeq         int64  `json:"last_seq,omitempty"`
+	FirstSeq        int64  `json:"first_seq"`
+	LastSeq         int64  `json:"last_seq"`
+	LatestSeq       int64  `json:"latest_seq"`
+	HasMore         bool   `json:"has_more"`
 	TotalBytes      int64  `json:"total_bytes,omitempty"`
 	StartedAtUnixMs int64  `json:"started_at_ms,omitempty"`
 	EndedAtUnixMs   int64  `json:"ended_at_ms,omitempty"`
-	RawResult       string `json:"raw_result,omitempty"`
 }
 
 type ToolDetail struct {
@@ -150,40 +148,36 @@ func (s *Service) GetTerminalToolOutput(ctx context.Context, meta *session.Meta,
 		return nil, fmt.Errorf("tool %q has no terminal output", strings.TrimSpace(rec.ToolName))
 	}
 
-	resultObj, parseErr := parseObjectJSON(rec.ResultJSON)
-	argsObj, _ := parseObjectJSON(rec.ArgsJSON)
+	resultObj, err := parseObjectJSON(rec.ResultJSON)
+	if err != nil {
+		return nil, fmt.Errorf("invalid terminal output result: %w", err)
+	}
+	argsObj, err := parseObjectJSON(rec.ArgsJSON)
+	if err != nil {
+		return nil, fmt.Errorf("invalid terminal output args: %w", err)
+	}
 
 	out := &TerminalToolOutput{
 		RunID:           strings.TrimSpace(rec.RunID),
 		ToolID:          strings.TrimSpace(rec.ToolID),
 		ToolName:        strings.TrimSpace(rec.ToolName),
 		Status:          strings.TrimSpace(rec.Status),
-		ProcessID:       readStringField(resultObj, "process_id", "processId"),
+		ProcessID:       readStringField(resultObj, "process_id"),
 		Output:          readStringField(resultObj, "output"),
-		LatestOutput:    readStringField(resultObj, "latest_output", "latestOutput"),
-		Stdout:          readStringField(resultObj, "stdout"),
-		Stderr:          readStringField(resultObj, "stderr"),
-		ExitCode:        readIntField(resultObj, "exit_code", "exitCode"),
-		DurationMS:      readInt64Field(resultObj, "duration_ms", "durationMs"),
+		ExitCode:        readIntField(resultObj, "exit_code"),
+		DurationMS:      readInt64Field(resultObj, "duration_ms"),
 		Truncated:       readBoolField(resultObj, "truncated"),
-		Cwd:             readStringField(argsObj, "cwd", "workdir"),
-		FirstSeq:        readInt64Field(resultObj, "first_seq", "firstSeq"),
-		LastSeq:         readInt64Field(resultObj, "last_seq", "lastSeq"),
-		TotalBytes:      readInt64Field(resultObj, "total_bytes", "totalBytes"),
-		StartedAtUnixMs: readInt64Field(resultObj, "started_at_ms", "startedAtMs"),
-		EndedAtUnixMs:   readInt64Field(resultObj, "ended_at_ms", "endedAtMs"),
-	}
-	if out.Stdout == "" && out.Output != "" {
-		out.Stdout = out.Output
-	}
-	if out.Output == "" && out.Stdout != "" {
-		out.Output = out.Stdout
+		Cwd:             readStringField(argsObj, "cwd"),
+		FirstSeq:        readInt64Field(resultObj, "first_seq"),
+		LastSeq:         readInt64Field(resultObj, "last_seq"),
+		LatestSeq:       readInt64Field(resultObj, "latest_seq"),
+		HasMore:         readBoolField(resultObj, "has_more"),
+		TotalBytes:      readInt64Field(resultObj, "total_bytes"),
+		StartedAtUnixMs: readInt64Field(resultObj, "started_at_ms"),
+		EndedAtUnixMs:   readInt64Field(resultObj, "ended_at_ms"),
 	}
 	if cwd := readStringField(resultObj, "cwd"); cwd != "" {
 		out.Cwd = cwd
-	}
-	if parseErr != nil && strings.TrimSpace(rec.ResultJSON) != "" {
-		out.RawResult = strings.TrimSpace(rec.ResultJSON)
 	}
 
 	return out, nil

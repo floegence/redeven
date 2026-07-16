@@ -100,8 +100,9 @@ func TestBuildLayeredSystemPrompt_UsesCanonicalToolNamesAndTerminalLimits(t *tes
 
 	prompt := buildPromptForToolRoutingTest(t)
 	assertPromptContains(t, prompt, "Use canonical tool names exactly as listed in Current Context")
-	assertPromptContains(t, prompt, "terminal.exec should use yield_ms for the initial wait")
-	assertPromptContains(t, prompt, "terminal.read wait_ms must be <= 30000")
+	assertPromptContains(t, prompt, "terminal.exec interactive: use yield_ms for the initial wait")
+	assertPromptContains(t, prompt, "terminal.read is strictly incremental")
+	assertPromptContains(t, prompt, "pass the previous last_seq unchanged")
 	assertPromptNotContains(t, prompt, "compatibility alias for yield_ms")
 	assertPromptContains(t, prompt, "terminal.terminate(process_id) only when stopping is intentional")
 	assertPromptContains(t, prompt, "file.read")

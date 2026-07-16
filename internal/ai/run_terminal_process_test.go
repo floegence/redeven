@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -149,6 +150,210 @@ func TestTerminalProcessSnapshotDoesNotExposeSettlementIdentityJSON(t *testing.T
 	}
 }
 
+func TestTerminalProcessReadAfterReturnsOnlyNewOutput(t *testing.T) {
+	proc := newBufferedTerminalProcessForTest(terminalProcessStatusSuccess)
+	proc.appendOutput([]byte("phase 1\n"))
+
+	first, err := proc.ReadAfter(terminalProcessReadRequest{
+		AfterSeq: 0,
+		WaitMS:   0,
+		MaxBytes: terminalProcessModelReadBytes,
+	})
+	if err != nil {
+		t.Fatalf("first ReadAfter: %v", err)
+	}
+	if first.Output != "phase 1\n" || first.FirstSeq != 1 || first.LastSeq != 1 || first.LatestSeq != 1 || first.HasMore {
+		t.Fatalf("first read=%#v, want only phase 1 at sequence 1", first)
+	}
+
+	proc.appendOutput([]byte("phase 2\n"))
+	second, err := proc.ReadAfter(terminalProcessReadRequest{
+		AfterSeq: first.LastSeq,
+		WaitMS:   0,
+		MaxBytes: terminalProcessModelReadBytes,
+	})
+	if err != nil {
+		t.Fatalf("second ReadAfter: %v", err)
+	}
+	if second.Output != "phase 2\n" || strings.Contains(second.Output, "phase 1") || second.FirstSeq != 2 || second.LastSeq != 2 || second.LatestSeq != 2 || second.HasMore {
+		t.Fatalf("second read=%#v, want only phase 2 at sequence 2", second)
+	}
+}
+
+func TestTerminalProcessReadAfterPaginatesWithoutDuplicatesOrGaps(t *testing.T) {
+	proc := newBufferedTerminalProcessForTest(terminalProcessStatusSuccess)
+	want := strings.Repeat("a", terminalProcessOutputChunkBytes) +
+		strings.Repeat("b", terminalProcessOutputChunkBytes) +
+		strings.Repeat("c", 517)
+	proc.appendOutput([]byte(want))
+
+	afterSeq := int64(0)
+	var got strings.Builder
+	reads := 0
+	for {
+		read, err := proc.ReadAfter(terminalProcessReadRequest{
+			AfterSeq: afterSeq,
+			WaitMS:   0,
+			MaxBytes: terminalProcessModelReadBytes,
+		})
+		if err != nil {
+			t.Fatalf("ReadAfter(%d): %v", afterSeq, err)
+		}
+		reads++
+		if read.LastSeq < afterSeq {
+			t.Fatalf("last_seq moved backward: read=%#v", read)
+		}
+		got.WriteString(read.Output)
+		afterSeq = read.LastSeq
+		if !read.HasMore {
+			if afterSeq != read.LatestSeq {
+				t.Fatalf("final cursor=%d latest=%d", afterSeq, read.LatestSeq)
+			}
+			break
+		}
+	}
+	if reads != 2 {
+		t.Fatalf("reads=%d, want 2", reads)
+	}
+	if got.String() != want {
+		t.Fatalf("paged output mismatch: got %d bytes, want %d", got.Len(), len(want))
+	}
+}
+
+func TestTerminalProcessReadAfterEmptyDeltaPreservesCursor(t *testing.T) {
+	proc := newBufferedTerminalProcessForTest(terminalProcessStatusSuccess)
+	proc.appendOutput([]byte("done\n"))
+
+	read, err := proc.ReadAfter(terminalProcessReadRequest{
+		AfterSeq: 1,
+		WaitMS:   0,
+		MaxBytes: terminalProcessModelReadBytes,
+	})
+	if err != nil {
+		t.Fatalf("ReadAfter: %v", err)
+	}
+	if read.Output != "" || read.FirstSeq != 0 || read.LastSeq != 1 || read.LatestSeq != 1 || read.HasMore {
+		t.Fatalf("empty read=%#v, want unchanged cursor", read)
+	}
+}
+
+func TestTerminalProcessReadAfterWaitsForNewOutput(t *testing.T) {
+	proc := newBufferedTerminalProcessForTest(terminalProcessStatusRunning)
+	result := make(chan terminalProcessSnapshot, 1)
+	errs := make(chan error, 1)
+	go func() {
+		read, err := proc.ReadAfter(terminalProcessReadRequest{
+			AfterSeq: 0,
+			WaitMS:   500,
+			MaxBytes: terminalProcessModelReadBytes,
+		})
+		result <- read
+		errs <- err
+	}()
+
+	time.Sleep(20 * time.Millisecond)
+	proc.appendOutput([]byte("ready\n"))
+	select {
+	case err := <-errs:
+		if err != nil {
+			t.Fatalf("ReadAfter: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("ReadAfter did not wake for new output")
+	}
+	read := <-result
+	if read.Output != "ready\n" || read.LastSeq != 1 {
+		t.Fatalf("read=%#v, want ready delta", read)
+	}
+}
+
+func TestTerminalProcessReadAfterWakesWhenProcessEndsWithoutOutput(t *testing.T) {
+	proc := newBufferedTerminalProcessForTest(terminalProcessStatusRunning)
+	result := make(chan terminalProcessSnapshot, 1)
+	errs := make(chan error, 1)
+	go func() {
+		read, err := proc.ReadAfter(terminalProcessReadRequest{
+			AfterSeq: 0,
+			WaitMS:   500,
+			MaxBytes: terminalProcessModelReadBytes,
+		})
+		result <- read
+		errs <- err
+	}()
+
+	time.Sleep(20 * time.Millisecond)
+	proc.mu.Lock()
+	proc.status = terminalProcessStatusSuccess
+	proc.endedAt = time.Now()
+	proc.cond.Broadcast()
+	proc.mu.Unlock()
+	select {
+	case err := <-errs:
+		if err != nil {
+			t.Fatalf("ReadAfter: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("ReadAfter did not wake when the process ended")
+	}
+	read := <-result
+	if read.Status != terminalProcessStatusSuccess || read.Output != "" || read.LastSeq != 0 {
+		t.Fatalf("read=%#v, want completed empty delta", read)
+	}
+}
+
+func TestTerminalProcessReadAfterRejectsFutureCursor(t *testing.T) {
+	proc := newBufferedTerminalProcessForTest(terminalProcessStatusSuccess)
+	proc.appendOutput([]byte("one\n"))
+
+	_, err := proc.ReadAfter(terminalProcessReadRequest{
+		AfterSeq: 2,
+		WaitMS:   0,
+		MaxBytes: terminalProcessModelReadBytes,
+	})
+	if err == nil || !strings.Contains(err.Error(), "exceeds latest sequence") {
+		t.Fatalf("error=%v, want future cursor rejection", err)
+	}
+}
+
+func TestTerminalProcessReadAfterMarksRetentionGapTruncated(t *testing.T) {
+	proc := newBufferedTerminalProcessForTest(terminalProcessStatusSuccess)
+	proc.appendOutput([]byte(strings.Repeat("x", terminalProcessTailCapBytes+terminalProcessOutputChunkBytes)))
+
+	read, err := proc.ReadAfter(terminalProcessReadRequest{
+		AfterSeq: 0,
+		WaitMS:   0,
+		MaxBytes: terminalProcessTailCapBytes,
+	})
+	if err != nil {
+		t.Fatalf("ReadAfter: %v", err)
+	}
+	if !read.Truncated || read.FirstSeq != 2 || read.LastSeq != 251 || read.LatestSeq != 251 || read.HasMore {
+		t.Fatalf("read=%#v, want retained sequences 2..251 with truncation", read)
+	}
+	if len(read.Output) != terminalProcessTailCapBytes {
+		t.Fatalf("retained output bytes=%d, want %d", len(read.Output), terminalProcessTailCapBytes)
+	}
+	proc.mu.Lock()
+	defer proc.mu.Unlock()
+	for _, chunk := range proc.outputChunks {
+		if len(chunk.data) > terminalProcessOutputChunkBytes {
+			t.Fatalf("chunk %d has %d bytes, max %d", chunk.seq, len(chunk.data), terminalProcessOutputChunkBytes)
+		}
+	}
+}
+
+func newBufferedTerminalProcessForTest(status string) *terminalProcess {
+	proc := &terminalProcess{
+		id:        "tp_buffered_test",
+		command:   "test command",
+		cwd:       "/workspace",
+		status:    status,
+		startedAt: time.Now(),
+	}
+	proc.cond = sync.NewCond(&proc.mu)
+	return proc
+}
+
 func TestTerminalProcessManagerReadWriteAndTerminate(t *testing.T) {
 	workspace := t.TempDir()
 	manager := newTerminalProcessManager(nil)
@@ -235,10 +440,7 @@ func TestTerminalProcessManagerSettlesPendingProcessOnceWhenProcessEnds(t *testi
 
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
-		snapshot, err := manager.Read(terminalProcessReadRequest{ProcessID: running.ProcessID, WaitMS: 50})
-		if err != nil {
-			t.Fatalf("Read: %v", err)
-		}
+		snapshot := proc.Snapshot()
 		if snapshot.Status == terminalProcessStatusSuccess && settlements.Load() == 1 {
 			break
 		}
@@ -249,9 +451,7 @@ func TestTerminalProcessManagerSettlesPendingProcessOnceWhenProcessEnds(t *testi
 	if raw := settlementErr.Load(); raw != nil {
 		t.Fatalf("settlement callback error: %v", raw)
 	}
-	if _, err := manager.Read(terminalProcessReadRequest{ProcessID: running.ProcessID}); err != nil {
-		t.Fatalf("Read after settlement: %v", err)
-	}
+	_ = proc.Snapshot()
 	if got := settlements.Load(); got != 1 {
 		t.Fatalf("settlements after reread=%d, want one", got)
 	}
@@ -364,7 +564,7 @@ func TestReadTerminalProcessPublishesDoneOnlyAfterAccessValidation(t *testing.T)
 
 	svc := &Service{terminalProcesses: manager}
 	wrongMeta := &session.Meta{EndpointID: "env_other", CanRead: true, CanWrite: true, CanExecute: true}
-	if _, err := svc.ReadTerminalProcess(context.Background(), wrongMeta, "run_owner", snapshot.ProcessID, 0, 0, 0); err == nil {
+	if _, err := svc.ReadTerminalProcess(context.Background(), wrongMeta, "run_owner", snapshot.ProcessID, 0); err == nil {
 		t.Fatalf("ReadTerminalProcess with wrong endpoint succeeded")
 	}
 	if got := settlements.Load(); got != 0 {
@@ -372,7 +572,7 @@ func TestReadTerminalProcessPublishesDoneOnlyAfterAccessValidation(t *testing.T)
 	}
 
 	ownerMeta := &session.Meta{EndpointID: "env_owner", CanRead: true, CanWrite: true, CanExecute: true}
-	if _, err := svc.ReadTerminalProcess(context.Background(), ownerMeta, "run_owner", snapshot.ProcessID, 0, 0, 0); err != nil {
+	if _, err := svc.ReadTerminalProcess(context.Background(), ownerMeta, "run_owner", snapshot.ProcessID, 0); err != nil {
 		t.Fatalf("ReadTerminalProcess owner: %v", err)
 	}
 	if got := settlements.Load(); got != 1 {
@@ -391,7 +591,7 @@ func TestTerminalProcessServicesWithholdTerminalSnapshotUntilSettlementAcknowled
 		{
 			name: "read",
 			call: func(svc *Service, processID string) (*terminalProcessSnapshot, error) {
-				return svc.ReadTerminalProcess(context.Background(), meta, "run_owner", processID, 0, 0, 0)
+				return svc.ReadTerminalProcess(context.Background(), meta, "run_owner", processID, 0)
 			},
 		},
 		{
@@ -509,7 +709,7 @@ func TestReadTerminalProcessWaitsForInFlightSettlementAcknowledgement(t *testing
 	var returned *terminalProcessSnapshot
 	var readErr error
 	go func() {
-		returned, readErr = svc.ReadTerminalProcess(context.Background(), meta, "run_owner", snapshot.ProcessID, 0, 0, 0)
+		returned, readErr = svc.ReadTerminalProcess(context.Background(), meta, "run_owner", snapshot.ProcessID, 0)
 		close(done)
 	}()
 	select {
@@ -733,14 +933,23 @@ func TestToolTerminalReadSettlesOriginalExecWhenWaitObservesCompletion(t *testin
 	readOutcome, err := r.handleToolCall(context.Background(), "tool_read", "terminal.read", map[string]any{
 		"process_id":  processID,
 		"description": "Check the settled command output",
-		"after_seq":   1,
-		"wait_ms":     1000,
-		"max_bytes":   10000,
+		"after_seq":   0,
 	})
 	if err != nil {
 		t.Fatalf("terminal.read: %v", err)
 	}
 	readResult, _ := readOutcome.Result.(map[string]any)
+	if strings.TrimSpace(anyToString(readResult["status"])) == terminalProcessStatusRunning {
+		readOutcome, err = r.handleToolCall(context.Background(), "tool_read_settled", "terminal.read", map[string]any{
+			"process_id":  processID,
+			"description": "Check the settled command output again",
+			"after_seq":   readInt64Field(readResult, "last_seq"),
+		})
+		if err != nil {
+			t.Fatalf("second terminal.read: %v", err)
+		}
+		readResult, _ = readOutcome.Result.(map[string]any)
+	}
 	if got := strings.TrimSpace(anyToString(readResult["status"])); got != terminalProcessStatusSuccess {
 		t.Fatalf("terminal.read status=%q, want success; result=%#v", got, readResult)
 	}
@@ -878,7 +1087,7 @@ func TestRunTerminalCleanupSettlesPendingProcessesForRun(t *testing.T) {
 		{toolID: "tool_cleanup_a", proc: first},
 		{toolID: "tool_cleanup_b", proc: second},
 	} {
-		snapshot := entry.proc.Read(terminalProcessReadRequest{})
+		snapshot := entry.proc.Snapshot()
 		if snapshot.Status != terminalProcessStatusCanceled {
 			t.Fatalf("%s status=%q, want canceled", entry.toolID, snapshot.Status)
 		}
@@ -890,7 +1099,7 @@ func TestRunTerminalCleanupSettlesPendingProcessesForRun(t *testing.T) {
 			t.Fatalf("%s audit status=%q, want error", entry.toolID, rec.Status)
 		}
 	}
-	if snapshot := otherRun.Read(terminalProcessReadRequest{}); snapshot.Status != terminalProcessStatusRunning {
+	if snapshot := otherRun.Snapshot(); snapshot.Status != terminalProcessStatusRunning {
 		t.Fatalf("other run status=%q, want running", snapshot.Status)
 	}
 }
@@ -930,7 +1139,7 @@ func TestServiceCloseSettlesTerminalProcessesBeforeClearingActiveRuns(t *testing
 	if req.ToolCallID != "tool_shutdown" || req.RunID != flruntime.RunID("run_shutdown") || req.Status != flruntime.PendingToolSettlementCanceled {
 		t.Fatalf("settlement request=%#v, want canceled shutdown settlement for active run", req)
 	}
-	if snapshot := proc.Read(terminalProcessReadRequest{}); snapshot.Status != terminalProcessStatusCanceled {
+	if snapshot := proc.Snapshot(); snapshot.Status != terminalProcessStatusCanceled {
 		t.Fatalf("shutdown process status=%q, want canceled", snapshot.Status)
 	}
 	if svc.runForFloretSettlement("env_1", "thread_1", "run_shutdown") != nil {
@@ -1130,10 +1339,11 @@ func TestHandleToolCallTerminalExecCancelTerminatesProcess(t *testing.T) {
 	if processID == "" {
 		t.Fatalf("missing process_id in canceled result: %#v", result)
 	}
-	snapshot, err := manager.Read(terminalProcessReadRequest{ProcessID: processID})
-	if err != nil {
-		t.Fatalf("Read canceled process: %v", err)
+	proc, ok := manager.Get(processID)
+	if !ok {
+		t.Fatalf("canceled process %q not found", processID)
 	}
+	snapshot := proc.Snapshot()
 	if snapshot.Status != terminalProcessStatusCanceled {
 		t.Fatalf("process status=%q, want canceled", snapshot.Status)
 	}
@@ -1228,16 +1438,14 @@ func readTerminalToolUntil(t *testing.T, r *run, processID string, want string) 
 	for time.Now().Before(deadline) {
 		outcome, err := r.handleToolCall(context.Background(), "tool_read", "terminal.read", map[string]any{
 			"process_id":  processID,
-			"description": "Check the latest process output",
+			"description": "Check the new process output",
 			"after_seq":   afterSeq,
-			"wait_ms":     500,
-			"max_bytes":   10000,
 		})
 		if err != nil {
 			t.Fatalf("terminal.read with pending handle: %v", err)
 		}
 		last, _ = outcome.Result.(map[string]any)
-		if strings.Contains(anyToString(last["output"]), want) || strings.Contains(anyToString(last["latest_output"]), want) {
+		if strings.Contains(anyToString(last["output"]), want) {
 			return last
 		}
 		if seq := readInt64Field(last, "last_seq"); seq > afterSeq {
@@ -1252,7 +1460,7 @@ func managerReadUntil(t *testing.T, manager *terminalProcessManager, processID s
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for time.Now().Before(deadline) {
-		snapshot, err := manager.Read(terminalProcessReadRequest{
+		snapshot, err := manager.ReadAfter(terminalProcessReadRequest{
 			ProcessID: processID,
 			AfterSeq:  afterSeq,
 			WaitMS:    50,
@@ -1266,7 +1474,8 @@ func managerReadUntil(t *testing.T, manager *terminalProcessManager, processID s
 		}
 		afterSeq = snapshot.LastSeq
 	}
-	snapshot, _ := manager.Read(terminalProcessReadRequest{ProcessID: processID})
+	proc, _ := manager.Get(processID)
+	snapshot := proc.Snapshot()
 	t.Fatalf("process output never contained %q; last output=%q", want, snapshot.Output)
 	return terminalProcessSnapshot{}
 }

@@ -5220,7 +5220,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const terminalSnapshotOutput = (snapshot: FlowerTerminalProcessSnapshot): string => (
-    String(snapshot.output || snapshot.stdout || snapshot.latest_output || '').replace(/\r\n?/g, '\n')
+    String(snapshot.output).replace(/\r\n?/g, '\n')
   );
 
   type FlowerTerminalOutputContext = Readonly<{
@@ -5246,7 +5246,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const terminal = () => detailProps.block().terminal;
     const [commandExpanded, setCommandExpanded] = createSignal(false);
     const [commandCopied, setCommandCopied] = createSignal(false);
-    const [liveLastSeq, setLiveLastSeq] = createSignal<number | undefined>(terminal().last_seq);
+    const [liveLastSeq, setLiveLastSeq] = createSignal(terminal().last_seq);
     const [liveError, setLiveError] = createSignal('');
     const outputViewport = createTerminalOutputViewportController({
       onPresentationFrame: () => {
@@ -5281,8 +5281,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         command: terminal().command,
       };
     };
-    const payloadOutput = () => String(terminal().output || terminal().latest_output || '').replace(/\r\n?/g, '\n');
-    const initialOutput = terminalVisibleOutputStore.merge(terminalIdentity(), '', payloadOutput(), detailProps.canonicalStatus());
+    const payloadOutput = () => String(terminal().output).replace(/\r\n?/g, '\n');
+    const initialOutput = terminalVisibleOutputStore.replaceSnapshot(terminalIdentity(), {
+      output: payloadOutput(),
+      first_seq: terminal().first_seq,
+      last_seq: terminal().last_seq,
+      truncated: terminal().truncated,
+    });
     const [liveOutput, setLiveOutput] = createSignal(initialOutput);
     const canReadLiveOutput = () => (
       !!props.adapter.readTerminalProcess &&
@@ -5291,12 +5296,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       (detailProps.canonicalStatus() === 'running' || detailProps.canonicalStatus() === 'pending')
     );
     const displayStatus = detailProps.canonicalStatus;
-    const visibleOutput = () => terminalVisibleOutputStore.merge(
-      terminalIdentity(),
-      liveOutput(),
-      payloadOutput(),
-      displayStatus(),
-    );
+    const visibleOutput = liveOutput;
     const displayOutput = () => {
       const output = visibleOutput();
       if (output.trim()) return output;
@@ -5329,18 +5329,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
     const applyTerminalSnapshot = (snapshot: FlowerTerminalProcessSnapshot) => {
       const output = terminalSnapshotOutput(snapshot);
-      const mergedOutput = terminalVisibleOutputStore.merge(
-        terminalIdentity(),
-        liveOutput(),
+      const mergedOutput = terminalVisibleOutputStore.appendDelta(terminalIdentity(), {
         output,
-        displayStatus(),
-      );
+        first_seq: snapshot.first_seq,
+        last_seq: snapshot.last_seq,
+        truncated: snapshot.truncated,
+      });
       if (mergedOutput !== liveOutput()) {
         setLiveOutput(mergedOutput);
       }
-      if (typeof snapshot.last_seq === 'number' && Number.isFinite(snapshot.last_seq)) {
-        setLiveLastSeq(Math.max(0, Math.floor(snapshot.last_seq)));
-      }
+      setLiveLastSeq(Math.max(0, Math.floor(snapshot.last_seq)));
     };
 
     createEffect(() => {
@@ -5353,9 +5351,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           const snapshot = await props.adapter.readTerminalProcess({
             run_id: detailProps.context().runID,
             process_id: processID(),
-            after_seq: untrack(() => liveLastSeq()) ?? terminal().last_seq ?? undefined,
-            wait_ms: 1000,
-            max_bytes: 1_000_000,
+            after_seq: untrack(() => liveLastSeq()),
           });
           if (disposed) return;
           setLiveError('');
@@ -5381,10 +5377,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
 
     createEffect(() => {
-      const canonicalLastSeq = terminal().last_seq;
-      if (typeof canonicalLastSeq === 'number' && Number.isFinite(canonicalLastSeq)) {
-        setLiveLastSeq((current) => Math.max(current ?? 0, Math.max(0, Math.floor(canonicalLastSeq))));
+      const canonicalOutput = terminalVisibleOutputStore.replaceSnapshot(terminalIdentity(), {
+        output: payloadOutput(),
+        first_seq: terminal().first_seq,
+        last_seq: terminal().last_seq,
+        truncated: terminal().truncated,
+      });
+      if (canonicalOutput !== liveOutput()) {
+        setLiveOutput(canonicalOutput);
       }
+      setLiveLastSeq((current) => Math.max(current, Math.max(0, Math.floor(terminal().last_seq))));
     });
 
     createEffect(() => {

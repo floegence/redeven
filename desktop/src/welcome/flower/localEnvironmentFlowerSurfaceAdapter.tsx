@@ -474,14 +474,11 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       ),
       readTerminalProcess: (runID, processID, input) => {
         const params = new URLSearchParams();
-        if (input.after_seq !== undefined) params.set('after_seq', String(input.after_seq));
-        if (input.wait_ms !== undefined) params.set('wait_ms', String(input.wait_ms));
-        if (input.max_bytes !== undefined) params.set('max_bytes', String(input.max_bytes));
-        const qs = params.toString();
+        params.set('after_seq', String(input.after_seq));
         return runtimeJSON<FlowerTerminalProcessSnapshot>(
           bridge,
           'GET',
-          `/_redeven_proxy/api/ai/runs/${encodeURIComponent(runID)}/terminal/${encodeURIComponent(processID)}/read${qs ? `?${qs}` : ''}`,
+          `/_redeven_proxy/api/ai/runs/${encodeURIComponent(runID)}/terminal/${encodeURIComponent(processID)}/read?${params.toString()}`,
         );
       },
       markThreadRead: (threadID, body) => runtimeJSON<MarkThreadReadResponse>(

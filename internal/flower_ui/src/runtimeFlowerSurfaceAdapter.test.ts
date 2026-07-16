@@ -91,6 +91,11 @@ function adapterOptions(
       process_id: 'tp_default',
       status: 'running',
       output: '',
+	  first_seq: 0,
+	  last_seq: 0,
+	  latest_seq: 0,
+	  has_more: false,
+	  truncated: false,
     })),
     markThreadRead: vi.fn(async () => ({ read_status: readStatus() })),
     patchThread: vi.fn(async () => ({ thread: undefined })),
@@ -255,25 +260,37 @@ describe('runtime Flower surface adapter read state', () => {
       process_id: 'tp_live',
       status: 'running',
       output: 'tick 1\n',
+	  first_seq: 2,
       last_seq: 2,
+	  latest_seq: 2,
+	  has_more: false,
+	  truncated: false,
     }));
     const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ readTerminalProcess }));
 
     const result = await adapter.readTerminalProcess?.({
       run_id: ' run_live ',
       process_id: ' tp_live ',
-      after_seq: 2.8,
-      wait_ms: 45_000,
-      max_bytes: 2_000_000,
+	  after_seq: 2,
     });
 
     expect(readTerminalProcess).toHaveBeenCalledWith('run_live', 'tp_live', {
       after_seq: 2,
-      wait_ms: 30000,
-      max_bytes: 1000000,
     });
     expect(result?.output).toBe('tick 1\n');
   });
+
+	it('rejects invalid terminal process cursors instead of normalizing them', async () => {
+	  const readTerminalProcess = vi.fn();
+	  const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ readTerminalProcess }));
+
+	  await expect(adapter.readTerminalProcess?.({
+		run_id: 'run_live',
+		process_id: 'tp_live',
+		after_seq: 2.8,
+	  })).rejects.toThrow('Invalid terminal output sequence.');
+	  expect(readTerminalProcess).not.toHaveBeenCalled();
+	});
 
   it('passes compact context requests through without creating a user turn', async () => {
     const bootstrap = {

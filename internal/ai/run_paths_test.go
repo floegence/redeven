@@ -165,8 +165,8 @@ func TestToolTerminalExec_CwdRules(t *testing.T) {
 			"stdin":    stdin,
 			"yield_ms": 1000,
 		})
-		if got := anyToString(m["stdout"]); !strings.Contains(got, "got:hello/world") {
-			t.Fatalf("stdout=%q, want processed stdin", got)
+		if got := anyToString(m["output"]); !strings.Contains(got, "got:hello/world") {
+			t.Fatalf("output=%q, want processed stdin", got)
 		}
 	})
 
@@ -175,9 +175,9 @@ func TestToolTerminalExec_CwdRules(t *testing.T) {
 			"command":  "pwd",
 			"yield_ms": 1000,
 		})
-		stdout := strings.TrimSpace(anyToString(m["stdout"]))
-		if canonicalPath(stdout) != canonicalPath(workingDir) {
-			t.Fatalf("stdout=%q, want cwd=%q", stdout, workingDir)
+		output := strings.TrimSpace(anyToString(m["output"]))
+		if canonicalPath(output) != canonicalPath(workingDir) {
+			t.Fatalf("output=%q, want cwd=%q", output, workingDir)
 		}
 	})
 
@@ -191,9 +191,9 @@ func TestToolTerminalExec_CwdRules(t *testing.T) {
 			"cwd":      "subdir",
 			"yield_ms": 1000,
 		})
-		stdout := strings.TrimSpace(anyToString(m["stdout"]))
-		if canonicalPath(stdout) != canonicalPath(subdir) {
-			t.Fatalf("stdout=%q, want cwd=%q", stdout, subdir)
+		output := strings.TrimSpace(anyToString(m["output"]))
+		if canonicalPath(output) != canonicalPath(subdir) {
+			t.Fatalf("output=%q, want cwd=%q", output, subdir)
 		}
 	})
 

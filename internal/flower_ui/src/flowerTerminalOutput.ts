@@ -15,10 +15,24 @@ export type TerminalVisibleOutputIdentity = Readonly<{
   command_hash?: string;
 }>;
 
+export type TerminalOutputFrame = Readonly<{
+  output: string;
+  first_seq: number;
+  last_seq: number;
+  truncated?: boolean;
+}>;
+
+export type TerminalVisibleOutputState = Readonly<{
+  output: string;
+  first_seq: number;
+  last_seq: number;
+  truncated: boolean;
+}>;
+
 export interface TerminalVisibleOutputStore {
   get(identity: TerminalVisibleOutputIdentity): string;
-  merge(identity: TerminalVisibleOutputIdentity, current: unknown, next: unknown, status?: TerminalVisibleOutputStatus): string;
-  remember(identity: TerminalVisibleOutputIdentity, output: unknown): void;
+  replaceSnapshot(identity: TerminalVisibleOutputIdentity, snapshot: TerminalOutputFrame): string;
+  appendDelta(identity: TerminalVisibleOutputIdentity, delta: TerminalOutputFrame): string;
   clear(): void;
 }
 
@@ -143,17 +157,61 @@ export function terminalVisibleOutputIdentityKey(identity: TerminalVisibleOutput
   return [threadScope, runID, processID, commandHash].join('\x1e');
 }
 
-export function mergeTerminalVisibleOutput(previous: unknown, next: unknown, _status?: TerminalVisibleOutputStatus): string {
-  const current = normalizeOutput(previous);
-  const incoming = normalizeOutput(next);
-  if (!incoming.trim()) {
-    return current;
+function normalizeSequence(value: unknown, field: string): number {
+  const sequence = Number(value);
+  if (!Number.isSafeInteger(sequence) || sequence < 0) {
+    throw new Error(`Invalid terminal output ${field}.`);
   }
-  if (!current.trim()) return incoming;
-  if (incoming === current) return current;
-  if (incoming.startsWith(current)) return incoming;
-  if (current.includes(incoming)) return current;
-  return `${current}${current.endsWith('\n') || incoming.startsWith('\n') ? '' : '\n'}${incoming}`;
+  return sequence;
+}
+
+function normalizeFrame(frame: TerminalOutputFrame): TerminalVisibleOutputState {
+  const output = normalizeOutput(frame.output);
+  const firstSeq = normalizeSequence(frame.first_seq, 'first_seq');
+  const lastSeq = normalizeSequence(frame.last_seq, 'last_seq');
+  if (output.length === 0) {
+    if (firstSeq !== 0) throw new Error('Empty terminal output must have first_seq 0.');
+  } else if (firstSeq === 0 || lastSeq < firstSeq) {
+    throw new Error('Terminal output sequence range is invalid.');
+  }
+  return { output, first_seq: firstSeq, last_seq: lastSeq, truncated: Boolean(frame.truncated) };
+}
+
+export function replaceTerminalOutputSnapshot(
+  previous: TerminalVisibleOutputState | undefined,
+  snapshot: TerminalOutputFrame,
+): TerminalVisibleOutputState {
+  const next = normalizeFrame(snapshot);
+  if (previous && next.last_seq <= previous.last_seq) return previous;
+  return next;
+}
+
+export function appendTerminalOutputDelta(
+  previous: TerminalVisibleOutputState | undefined,
+  delta: TerminalOutputFrame,
+): TerminalVisibleOutputState {
+  const next = normalizeFrame(delta);
+  if (previous && next.last_seq <= previous.last_seq) return previous;
+  if (next.output.length === 0) {
+    if (previous) return previous;
+    return next;
+  }
+  if (!previous) {
+    if (next.first_seq !== 1 && !next.truncated) {
+      throw new Error('Terminal output delta does not start at the first sequence.');
+    }
+    return next;
+  }
+  if (next.first_seq !== previous.last_seq + 1) {
+    if (next.truncated && next.first_seq > previous.last_seq + 1) return next;
+    throw new Error('Terminal output delta is not contiguous.');
+  }
+  return {
+    output: `${previous.output}${next.output}`,
+    first_seq: previous.first_seq || next.first_seq,
+    last_seq: next.last_seq,
+    truncated: previous.truncated || next.truncated,
+  };
 }
 
 export function terminalListeningPlaceholderVisible(output: unknown, status: TerminalVisibleOutputStatus | undefined): boolean {
@@ -161,11 +219,11 @@ export function terminalListeningPlaceholderVisible(output: unknown, status: Ter
 }
 
 export function createTerminalVisibleOutputStore(maxEntries = 200): TerminalVisibleOutputStore {
-  const entries = new Map<string, string>();
+  const entries = new Map<string, TerminalVisibleOutputState>();
 
-  const touch = (key: string, output: string) => {
+  const touch = (key: string, state: TerminalVisibleOutputState) => {
     entries.delete(key);
-    entries.set(key, output);
+    entries.set(key, state);
     while (entries.size > maxEntries) {
       const oldest = entries.keys().next().value;
       if (oldest === undefined) break;
@@ -175,20 +233,19 @@ export function createTerminalVisibleOutputStore(maxEntries = 200): TerminalVisi
 
   return {
     get(identity) {
-      return entries.get(terminalVisibleOutputIdentityKey(identity)) ?? '';
+      return entries.get(terminalVisibleOutputIdentityKey(identity))?.output ?? '';
     },
-    merge(identity, current, next, status) {
+    replaceSnapshot(identity, snapshot) {
       const key = terminalVisibleOutputIdentityKey(identity);
-      const merged = mergeTerminalVisibleOutput(entries.get(key) ?? current, next, status);
-      if (merged.trim()) {
-        touch(key, merged);
-      }
-      return merged;
+      const state = replaceTerminalOutputSnapshot(entries.get(key), snapshot);
+      touch(key, state);
+      return state.output;
     },
-    remember(identity, output) {
-      const normalized = normalizeOutput(output);
-      if (!normalized.trim()) return;
-      touch(terminalVisibleOutputIdentityKey(identity), normalized);
+    appendDelta(identity, delta) {
+      const key = terminalVisibleOutputIdentityKey(identity);
+      const state = appendTerminalOutputDelta(entries.get(key), delta);
+      touch(key, state);
+      return state.output;
     },
     clear() {
       entries.clear();

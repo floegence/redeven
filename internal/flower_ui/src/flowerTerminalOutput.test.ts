@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  appendTerminalOutputDelta,
   createTerminalOutputViewportController,
   createTerminalVisibleOutputStore,
-  mergeTerminalVisibleOutput,
+  replaceTerminalOutputSnapshot,
   TERMINAL_OUTPUT_FOLLOW_THRESHOLD_PX,
   terminalListeningPlaceholderVisible,
   terminalVisibleOutputIdentityKey,
@@ -11,12 +12,12 @@ import {
 
 describe('terminal visible output', () => {
   it('keeps previous output when a running poll returns no content', () => {
-    expect(mergeTerminalVisibleOutput('tick 1\n', '', 'running')).toBe('tick 1\n');
+    const previous = { output: 'tick 1\n', first_seq: 1, last_seq: 1, truncated: false };
+    expect(appendTerminalOutputDelta(previous, { output: '', first_seq: 0, last_seq: 1 })).toBe(previous);
     expect(terminalListeningPlaceholderVisible('tick 1\n', 'running')).toBe(false);
   });
 
   it('shows the listening placeholder only before any running output exists', () => {
-    expect(mergeTerminalVisibleOutput('', '', 'running')).toBe('');
     expect(terminalListeningPlaceholderVisible('', 'running')).toBe(true);
     expect(terminalListeningPlaceholderVisible('', 'success')).toBe(false);
   });
@@ -34,9 +35,8 @@ describe('terminal visible output', () => {
       command: 'npm test',
     };
 
-    expect(store.merge(identity, '', 'tick 1\n', 'running')).toBe('tick 1\n');
-    expect(store.merge(identity, '', '', 'running')).toBe('tick 1\n');
-    expect(store.merge(identity, '', '', 'success')).toBe('tick 1\n');
+    expect(store.replaceSnapshot(identity, { output: 'tick 1\n', first_seq: 1, last_seq: 1 })).toBe('tick 1\n');
+    expect(store.appendDelta(identity, { output: '', first_seq: 0, last_seq: 1 })).toBe('tick 1\n');
     expect(terminalListeningPlaceholderVisible(store.get(identity), 'running')).toBe(false);
   });
 
@@ -77,9 +77,27 @@ describe('terminal visible output', () => {
     }));
   });
 
-  it('appends live output segments without duplicating repeated chunks', () => {
-    expect(mergeTerminalVisibleOutput('tick 1\n', 'tick 2\n', 'running')).toBe('tick 1\ntick 2\n');
-    expect(mergeTerminalVisibleOutput('tick 1\ntick 2\n', 'tick 2\n', 'running')).toBe('tick 1\ntick 2\n');
+  it('appends only contiguous deltas and ignores repeated sequence ranges', () => {
+    const first = replaceTerminalOutputSnapshot(undefined, { output: 'tick 1\n', first_seq: 1, last_seq: 1 });
+    const second = appendTerminalOutputDelta(first, { output: 'tick 2\n', first_seq: 2, last_seq: 2 });
+    expect(second.output).toBe('tick 1\ntick 2\n');
+    expect(appendTerminalOutputDelta(second, { output: 'tick 2\n', first_seq: 2, last_seq: 2 })).toBe(second);
+  });
+
+  it('ignores stale snapshots and replaces output only for an explicit truncated gap', () => {
+    const current = { output: 'tick 1\ntick 2\n', first_seq: 1, last_seq: 2, truncated: false };
+    expect(replaceTerminalOutputSnapshot(current, { output: 'tick 1\n', first_seq: 1, last_seq: 1 })).toBe(current);
+    expect(appendTerminalOutputDelta(current, { output: 'tick 5\n', first_seq: 5, last_seq: 5, truncated: true })).toEqual({
+      output: 'tick 5\n',
+      first_seq: 5,
+      last_seq: 5,
+      truncated: true,
+    });
+  });
+
+  it('rejects non-contiguous output without an explicit truncation gap', () => {
+    const current = { output: 'tick 1\n', first_seq: 1, last_seq: 1, truncated: false };
+    expect(() => appendTerminalOutputDelta(current, { output: 'tick 3\n', first_seq: 3, last_seq: 3 })).toThrow('not contiguous');
   });
 });
 

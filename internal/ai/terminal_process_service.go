@@ -23,7 +23,7 @@ func (s *Service) terminalProcessManager() *terminalProcessManager {
 	return s.terminalProcesses
 }
 
-func (s *Service) ReadTerminalProcess(ctx context.Context, meta *session.Meta, runID string, processID string, afterSeq int64, waitMS int64, maxBytes int64) (*terminalProcessSnapshot, error) {
+func (s *Service) ReadTerminalProcess(ctx context.Context, meta *session.Meta, runID string, processID string, afterSeq int64) (*terminalProcessSnapshot, error) {
 	if err := requireRWX(meta); err != nil {
 		return nil, err
 	}
@@ -35,12 +35,15 @@ func (s *Service) ReadTerminalProcess(ctx context.Context, meta *session.Meta, r
 	if !ok || proc == nil {
 		return nil, errors.New("terminal process not found")
 	}
-	snapshot := proc.Read(terminalProcessReadRequest{
+	snapshot, err := proc.ReadAfter(terminalProcessReadRequest{
 		ProcessID: strings.TrimSpace(processID),
 		AfterSeq:  afterSeq,
-		WaitMS:    waitMS,
-		MaxBytes:  maxBytes,
+		WaitMS:    terminalProcessUIReadWaitMS,
+		MaxBytes:  terminalProcessUIReadBytes,
 	})
+	if err != nil {
+		return nil, err
+	}
 	if err := validateTerminalProcessAccess(meta, strings.TrimSpace(runID), snapshot); err != nil {
 		return nil, err
 	}
@@ -65,7 +68,7 @@ func (s *Service) WriteTerminalProcess(ctx context.Context, meta *session.Meta, 
 	if !ok || proc == nil {
 		return nil, errors.New("terminal process not found")
 	}
-	before := proc.Read(terminalProcessReadRequest{ProcessID: strings.TrimSpace(processID)})
+	before := proc.Snapshot()
 	if err := validateTerminalProcessAccess(meta, strings.TrimSpace(runID), before); err != nil {
 		return nil, err
 	}
@@ -94,7 +97,7 @@ func (s *Service) TerminateTerminalProcess(ctx context.Context, meta *session.Me
 	if !ok || proc == nil {
 		return nil, errors.New("terminal process not found")
 	}
-	before := proc.Read(terminalProcessReadRequest{ProcessID: strings.TrimSpace(processID)})
+	before := proc.Snapshot()
 	if err := validateTerminalProcessAccess(meta, strings.TrimSpace(runID), before); err != nil {
 		return nil, err
 	}
@@ -225,7 +228,7 @@ func (s *Service) handleTerminalProcessDone(snapshot terminalProcessSnapshot) er
 		}
 		return err
 	}
-	s.appendTerminalProcessRunEvent(snapshot, status, resultPayload, toolErr)
+	s.appendTerminalProcessRunEvent(snapshot, status, toolErr)
 	return nil
 }
 
@@ -236,7 +239,7 @@ func (s *Service) persistTimeout() time.Duration {
 	return s.persistOpTO
 }
 
-func (s *Service) appendTerminalProcessRunEvent(snapshot terminalProcessSnapshot, status string, result map[string]any, toolErr *aitools.ToolError) {
+func (s *Service) appendTerminalProcessRunEvent(snapshot terminalProcessSnapshot, status string, toolErr *aitools.ToolError) {
 	if s == nil || s.threadsDB == nil {
 		return
 	}
@@ -249,9 +252,6 @@ func (s *Service) appendTerminalProcessRunEvent(snapshot terminalProcessSnapshot
 	}
 	if toolErr != nil {
 		payload["error"] = activityToolErrorPayload(toolErr)
-	}
-	if latest := strings.TrimSpace(anyToString(result["latest_output"])); latest != "" {
-		payload["latest_output"] = latest
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), s.persistTimeout())
 	_ = s.threadsDB.AppendRunEvent(ctx, threadstore.RunEventRecord{

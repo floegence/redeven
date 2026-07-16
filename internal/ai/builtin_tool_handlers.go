@@ -171,30 +171,19 @@ func extractStringSlice(v any) []string {
 func normalizeTruncatedToolPayload(toolName string, payload any) (any, bool) {
 	toolName = strings.TrimSpace(toolName)
 	switch toolName {
-	case "terminal.exec":
+	case "terminal.exec", "terminal.read":
 		m, _ := payload.(map[string]any)
 		if m == nil {
 			return payload, false
 		}
 		truncated := false
-		if stdout, ok := m["stdout"].(string); ok {
-			trimmed, hit := truncateByRunes(stdout, 4000)
-			m["stdout"] = trimmed
-			truncated = truncated || hit
-		}
-		if stderr, ok := m["stderr"].(string); ok {
-			trimmed, hit := truncateByRunes(stderr, 2000)
-			m["stderr"] = trimmed
-			truncated = truncated || hit
-		}
 		if output, ok := m["output"].(string); ok {
-			trimmed, hit := truncateByRunes(output, 4000)
+			limit := 4000
+			if toolName == "terminal.read" {
+				limit = terminalProcessModelReadBytes
+			}
+			trimmed, hit := truncateByRunes(output, limit)
 			m["output"] = trimmed
-			truncated = truncated || hit
-		}
-		if latest, ok := m["latest_output"].(string); ok {
-			trimmed, hit := truncateByRunes(latest, 4000)
-			m["latest_output"] = trimmed
 			truncated = truncated || hit
 		}
 		if truncated {
@@ -679,8 +668,8 @@ func builtInToolDefinitions() []ToolDef {
 		},
 		{
 			Name:             "terminal.read",
-			Description:      "Read the latest output from a running or completed terminal process started by terminal.exec. Every call must include a concise user-facing description in the user's language that names the command or task whose output is being checked. For later polls, naturally say that the latest output is being checked again. Do not use generic labels such as 'Terminal output'. Use the returned last_seq as the next after_seq with wait_ms to poll for new output.",
-			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"process_id": map[string]any{"type": "string"}, "description": map[string]any{"type": "string", "minLength": 1, "maxLength": terminalReadDescriptionMaxRunes, "description": "Concise user-facing text in the user's language naming the command or task whose output is being checked. For a later poll, say that its latest output is being checked again. Never use a generic label such as 'Terminal output'."}, "after_seq": map[string]any{"type": "integer", "minimum": 0}, "wait_ms": map[string]any{"type": "integer", "minimum": 0, "maximum": 30000}, "max_bytes": map[string]any{"type": "integer", "minimum": 1, "maximum": 1000000}}, "required": []string{"process_id", "description"}, "additionalProperties": false}),
+			Description:      "Read only the new output produced after after_seq by a running or completed terminal process started by terminal.exec. The output field is exactly the new output since after_seq; it never replays output already consumed by an earlier read. Use after_seq: 0 for the first read, then pass the previous result's last_seq unchanged as the next after_seq and never move the cursor backward. An empty output means no new output arrived during this read, not that earlier output disappeared. If has_more is true, read again immediately with last_seq. If status is running and has_more is false, the process is still running and you may read again when more output is needed. Every call must include a concise user-facing description in the user's language that names the command or task being checked and naturally distinguishes later checks. Never use a generic label such as 'Terminal output'.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"process_id": map[string]any{"type": "string", "description": "The process_id returned by terminal.exec."}, "description": map[string]any{"type": "string", "minLength": 1, "maxLength": terminalReadDescriptionMaxRunes, "description": "Concise user-facing text in the user's language naming the command or task whose new output is being checked. For a later read, naturally say that new output is being checked again. Never use a generic label such as 'Terminal output'."}, "after_seq": map[string]any{"type": "integer", "minimum": 0, "description": "The last output sequence already consumed by the model. Use 0 for the first read, then copy the previous result's last_seq exactly. Never invent a value or move this cursor backward."}}, "required": []string{"process_id", "description", "after_seq"}, "additionalProperties": false}),
 			Mutating:         false,
 			RequiresApproval: false,
 			Visibility:       ToolVisibilityStandard,

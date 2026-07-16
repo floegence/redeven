@@ -4918,22 +4918,17 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 					writeJSON(w, http.StatusMethodNotAllowed, apiResp{OK: false, Error: "method not allowed"})
 					return
 				}
+				query := r.URL.Query()
+				if len(query) != 1 || len(query["after_seq"]) != 1 || strings.TrimSpace(query.Get("after_seq")) == "" {
+					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "after_seq is required"})
+					return
+				}
 				afterSeq, err := parseOptionalInt64Query(r, "after_seq")
 				if err != nil {
 					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid after_seq"})
 					return
 				}
-				waitMS, err := parseOptionalInt64Query(r, "wait_ms")
-				if err != nil {
-					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid wait_ms"})
-					return
-				}
-				maxBytes, err := parseOptionalInt64Query(r, "max_bytes")
-				if err != nil {
-					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid max_bytes"})
-					return
-				}
-				out, err := g.ai.ReadTerminalProcess(r.Context(), meta, runID, processID, afterSeq, waitMS, maxBytes)
+				out, err := g.ai.ReadTerminalProcess(r.Context(), meta, runID, processID, afterSeq)
 				if err != nil {
 					g.appendAudit(meta, "ai_terminal_process_read", "failure", map[string]any{
 						"run_id":     runID,
@@ -5047,16 +5042,13 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			}
 			if metaOnly {
 				// Default terminal view only needs status/metadata; output is fetched lazily when expanded.
-				out.Stdout = ""
-				out.Stderr = ""
-				out.RawResult = ""
+				out.Output = ""
 			}
 			g.appendAudit(meta, "ai_terminal_output", "success", map[string]any{
 				"run_id":      runID,
 				"tool_id":     toolID,
 				"status":      strings.TrimSpace(out.Status),
-				"stdout_size": len(out.Stdout),
-				"stderr_size": len(out.Stderr),
+				"output_size": len(out.Output),
 			}, nil)
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
 			return

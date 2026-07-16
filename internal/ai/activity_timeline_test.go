@@ -364,7 +364,7 @@ func TestObservationActivityEventsDoNotPublishFlowerTimelineBlocks(t *testing.T)
 	r.recordToolResultActivity("tool_running_terminal", "terminal.exec", toolResultStatusSuccess, map[string]any{
 		"command":   "pwd",
 		"exit_code": 0,
-		"stdout":    "/workspace\n",
+		"output":    "/workspace\n",
 	}, nil, time.UnixMilli(1010))
 
 	if len(blockSets) != 0 {
@@ -393,7 +393,7 @@ func TestRecordToolResultActivityRejectsMissingStatus(t *testing.T) {
 		},
 	}
 
-	r.recordToolResultActivity("tool_invalid", "terminal.exec", "", map[string]any{"stdout": "ok"}, nil, time.UnixMilli(1000))
+	r.recordToolResultActivity("tool_invalid", "terminal.exec", "", map[string]any{"output": "ok"}, nil, time.UnixMilli(1000))
 
 	if len(frames) != 0 {
 		t.Fatalf("timeline frames=%d, want none for invalid status", len(frames))

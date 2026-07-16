@@ -153,7 +153,8 @@ export const BlockRenderer: Component<BlockRendererProps> = (props) => {
             output?: string;
             outputRef?: { runId: string; toolId: string };
             processId?: string;
-            latestOutput?: string;
+            firstSeq?: number;
+            lastSeq?: number;
             cwd?: string;
             durationMs?: number;
             truncated?: boolean;
@@ -166,7 +167,8 @@ export const BlockRenderer: Component<BlockRendererProps> = (props) => {
               output={b.output}
               outputRef={b.outputRef}
               processId={b.processId}
-              latestOutput={b.latestOutput}
+              firstSeq={b.firstSeq}
+              lastSeq={b.lastSeq}
               cwd={b.cwd}
               durationMs={b.durationMs}
               truncated={b.truncated}
