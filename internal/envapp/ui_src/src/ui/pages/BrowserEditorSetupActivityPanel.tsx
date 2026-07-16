@@ -276,6 +276,7 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
       data-layout={layout()}
       data-presentation={activity().presentation}
       data-state={activity().state}
+      data-steps-visible={activity().show_steps ? 'true' : 'false'}
       class="browser-editor-setup"
       aria-live="off"
     >
@@ -286,7 +287,7 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
             : i18n.t('codeRuntime.installMethod.remoteDownload'),
         })}
       </div>
-      <div class="browser-editor-setup__body">
+      <div class="browser-editor-setup__body" data-steps-visible={activity().show_steps ? 'true' : 'false'}>
         <div class="browser-editor-setup__primary">
           <div class="browser-editor-setup__header">
             <div class="flex min-w-0 items-center gap-3">
@@ -359,7 +360,8 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
           </Show>
         </div>
 
-        <div class="browser-editor-setup__secondary">
+        <Show when={activity().show_steps}>
+          <div class="browser-editor-setup__secondary">
           <Show
             when={activity().platform_diagnosis}
             fallback={
@@ -444,7 +446,8 @@ export function BrowserEditorSetupActivityPanel(props: BrowserEditorSetupActivit
               </div>
             )}
           </Show>
-        </div>
+          </div>
+        </Show>
       </div>
 
       <Show when={hasTechnicalDetails()}>

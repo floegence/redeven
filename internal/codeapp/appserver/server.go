@@ -170,6 +170,8 @@ type CodeRuntimeSetupOperationRequest struct {
 	Manifest      *CodeRuntimeArtifactManifest          `json:"manifest,omitempty"`
 }
 
+const codeRuntimeOperationConflictErrorCode = "CODE_RUNTIME_OPERATION_CONFLICT"
+
 func codeRuntimeSetupOperationIDFromPath(rawPath string, suffix string) string {
 	const prefix = "/_redeven_proxy/api/code-runtime/setup-operations/"
 	if !strings.HasPrefix(rawPath, prefix) {
@@ -2751,10 +2753,13 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				"install_method": string(body.InstallMethod),
 			}, err)
 			statusCode := http.StatusBadRequest
-			if strings.Contains(err.Error(), "already running") {
+			errorCode := ""
+			var conflict *codeserver.BrowserEditorSetupOperationConflictError
+			if errors.As(err, &conflict) {
 				statusCode = http.StatusConflict
+				errorCode = codeRuntimeOperationConflictErrorCode
 			}
-			writeJSON(w, statusCode, apiResp{OK: false, Error: err.Error()})
+			writeJSON(w, statusCode, apiResp{OK: false, Error: err.Error(), ErrorCode: errorCode})
 			return
 		}
 		g.appendAudit(meta, "browser_editor_setup_create", "success", map[string]any{

@@ -89,6 +89,7 @@ vi.mock('./SettingsPrimitives', () => ({
     <section>
       <div>{props.title}</div>
       <div>{props.description}</div>
+      <div data-testid="settings-section-badge">{props.badge}</div>
       <div>{props.actions}</div>
       {props.children}
     </section>
@@ -397,6 +398,26 @@ describe('CodeRuntimeSettingsCard', () => {
     expect(methodButtons.every((button) => button.disabled)).toBe(true);
     expect(Array.from(host.querySelectorAll('button')).filter((button) => button.textContent === 'Cancel')).toHaveLength(1);
     expect(host.textContent).not.toContain('Update Browser Editor');
+  });
+
+  it('uses the Runtime operation stage for the badge while the current editor stays usable', () => {
+    renderCard(host, {
+      status: makeStatus({
+        operation: {
+          operation_id: 'browser-editor:remote',
+          state: 'running',
+          action: 'prepare_workspace_engine',
+          install_method: 'remote_download',
+          stage: 'downloading',
+          log_tail: [],
+        },
+      }),
+      installMethod: 'remote_download',
+    });
+
+    expect(host.querySelector('[data-testid="settings-section-badge"]')?.textContent)
+      .toBe('This environment is downloading the Browser Editor...');
+    expect(host.querySelector('[data-testid="settings-section-badge"]')?.textContent).not.toBe('Ready');
   });
 
   it('shows local Desktop preparation failures before the runtime records an operation failure', () => {

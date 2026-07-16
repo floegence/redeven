@@ -17,6 +17,14 @@ const (
 	workspaceEngineUploadTTL        = 6 * time.Hour
 )
 
+type BrowserEditorSetupOperationConflictError struct{}
+
+func (*BrowserEditorSetupOperationConflictError) Error() string {
+	return "another browser editor setup operation is already running"
+}
+
+var ErrBrowserEditorSetupOperationConflict = &BrowserEditorSetupOperationConflictError{}
+
 type WorkspaceEngineSetupOperation struct {
 	OperationID     string                     `json:"operation_id"`
 	InstallMethod   BrowserEditorInstallMethod `json:"install_method"`
@@ -24,7 +32,7 @@ type WorkspaceEngineSetupOperation struct {
 	ReceivedBytes   int64                      `json:"received_bytes"`
 	ExpectedBytes   int64                      `json:"expected_bytes"`
 	ChunkSizeBytes  int64                      `json:"chunk_size_bytes,omitempty"`
-	NextChunkIndex  int64                      `json:"next_chunk_index,omitempty"`
+	NextChunkIndex  int64                      `json:"next_chunk_index"`
 	CreatedAtUnixMS int64                      `json:"created_at_unix_ms"`
 	ExpiresAtUnixMS int64                      `json:"expires_at_unix_ms,omitempty"`
 }
@@ -104,7 +112,7 @@ func (m *RuntimeManager) CreateSetupOperation(
 	}
 	opCtx, started := m.startOperation(RuntimeOperationActionPrepareWorkspaceEngine, targetVersion, cleanOperationID, installMethod)
 	if !started {
-		return WorkspaceEngineSetupOperation{}, errors.New("another browser editor setup operation is already running")
+		return WorkspaceEngineSetupOperation{}, ErrBrowserEditorSetupOperationConflict
 	}
 	m.mu.Lock()
 	m.usedSetupOperationIDs[cleanOperationID] = struct{}{}

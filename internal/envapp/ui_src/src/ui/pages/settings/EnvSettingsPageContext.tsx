@@ -22,9 +22,11 @@ import {
 } from '../../services/browserEditorSetupActivity';
 import { desktopCodeWorkspacePrepareAvailable } from '../../services/desktopCodeWorkspaceBridge';
 import {
-  cancelBrowserEditorSetup,
+  browserEditorRuntimeOperationAbsenceConfirmed,
+  createBrowserEditorSetupOrchestration,
   defaultBrowserEditorInstallMethod,
-  prepareBrowserEditorSetup,
+  cancelBrowserEditorSetup,
+  type BrowserEditorSetupOrchestration,
 } from '../../services/browserEditorSetup';
 import {
   createBrowserEditorSetupOperationID,
@@ -165,7 +167,7 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element; initialS
     () => key(),
     async (k) => (k == null ? null : await fetchLocalApiJSON<CodexHostStatus>('/_redeven_proxy/api/codex/status', { method: 'GET' })),
   );
-  const [codeRuntimeStatus, { refetch: refetchCodeRuntimeStatus }] = createResource<CodeRuntimeStatus | null, number | null>(
+  const [codeRuntimeStatus, { mutate: mutateCodeRuntimeStatus, refetch: refetchCodeRuntimeStatus }] = createResource<CodeRuntimeStatus | null, number | null>(
     () => key(),
     async (k) => (k == null ? null : await fetchCodeRuntimeStatus()),
   );
@@ -219,11 +221,8 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element; initialS
   const [codeRuntimeLocalPrepareFailure, setCodeRuntimeLocalPrepareFailure] = createSignal<BrowserEditorSetupLocalFailure | null>(null);
   const [codeRuntimeLocalPrepareCancelled, setCodeRuntimeLocalPrepareCancelled] = createSignal(false);
   const [codeRuntimePrepareProgress, setCodeRuntimePrepareProgress] = createSignal<BrowserEditorSetupProgress | null>(null);
-  const [codeRuntimePrepareOperationID, setCodeRuntimePrepareOperationID] = createSignal<string | null>(null);
-  const [codeRuntimePrepareCancelRequestedID, setCodeRuntimePrepareCancelRequestedID] = createSignal<string | null>(null);
   const [codeRuntimeInstallMethod, setCodeRuntimeInstallMethod] = createSignal<BrowserEditorInstallMethod>(defaultBrowserEditorInstallMethod());
-  const [codeRuntimePrepareActiveMethod, setCodeRuntimePrepareActiveMethod] = createSignal<BrowserEditorInstallMethod | null>(null);
-  let codeRuntimePrepareAbortController: AbortController | null = null;
+  let codeRuntimeSetupOrchestration: BrowserEditorSetupOrchestration | null = null;
   const [codeRuntimeSelectionLoadingVersion, setCodeRuntimeSelectionLoadingVersion] = createSignal<string | null>(null);
   const [codeRuntimeRemoveVersionLoading, setCodeRuntimeRemoveVersionLoading] = createSignal<string | null>(null);
   const [pendingRuntimeSuccessAction, setPendingRuntimeSuccessAction] = createSignal<'' | 'prepare_workspace_engine' | 'remove_local_environment_version'>('');
@@ -283,7 +282,11 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element; initialS
   };
 
   const refreshSettingsPage = async () => {
-    await Promise.allSettled([refetch(), runtimeUpdate.version.refetchLatestVersion()]);
+    await Promise.allSettled([
+      refetch(),
+      refetchCodeRuntimeStatus(),
+      runtimeUpdate.version.refetchLatestVersion(),
+    ]);
   };
 
   // Maintenance actions (stubs — real implementations moved to sections)
@@ -294,77 +297,82 @@ export function EnvSettingsPageProvider(props: { children: JSX.Element; initialS
   const prepareManagedCodeRuntime = async () => {
     const operationID = createBrowserEditorSetupOperationID();
     const installMethod = codeRuntimeInstallMethod();
-    const abortController = new AbortController();
-    codeRuntimePrepareAbortController = abortController;
-    setCodeRuntimePrepareOperationID(operationID);
-    setCodeRuntimePrepareActiveMethod(installMethod);
-    setCodeRuntimePrepareCancelRequestedID(null);
     setCodeRuntimeActionLoading(true);
     setPendingRuntimeSuccessAction('prepare_workspace_engine');
     setCodeRuntimeLocalPrepareFailure(null);
     setCodeRuntimeLocalPrepareCancelled(false);
-    setCodeRuntimePrepareProgress({
-      operation_id: operationID,
-      phase: 'lookup',
-      state: 'running',
-      updated_at_unix_ms: Date.now(),
+    setCodeRuntimePrepareProgress(null);
+    const orchestration = createBrowserEditorSetupOrchestration({
+      operationID,
+      installMethod,
+      status: codeRuntimeStatus(),
+      onSnapshot: (snapshot) => {
+        setCodeRuntimeInstallMethod(snapshot.operation.installMethod);
+        setCodeRuntimePrepareProgress(snapshot.localProgress);
+        if (snapshot.operationObserved) {
+          setCodeRuntimeLocalPrepareFailure(null);
+          setCodeRuntimeLocalPrepareCancelled(false);
+        }
+        if (snapshot.runtimeStatus) mutateCodeRuntimeStatus(snapshot.runtimeStatus);
+      },
     });
+    codeRuntimeSetupOrchestration = orchestration;
     try {
-      const result = await prepareBrowserEditorSetup({
-        status: codeRuntimeStatus(),
-        operationID,
-        installMethod,
-        signal: abortController.signal,
-        onProgress: (progress) => {
-          if (codeRuntimePrepareOperationID() === operationID) setCodeRuntimePrepareProgress(progress);
-        },
-      });
-      if (result.cancelled || codeRuntimePrepareCancelRequestedID() === operationID) {
+      const result = await orchestration.run();
+      if (result.state === 'cancelled') {
         setPendingRuntimeSuccessAction('');
-        setCodeRuntimeLocalPrepareCancelled(true);
+        if (!result.status) setCodeRuntimeLocalPrepareCancelled(true);
         return;
       }
-      if (!result.ok || !result.prepared) {
-        throw new Error(result.message || i18n.t('codeRuntime.notifications.setupDidNotFinish'));
+      if (result.state === 'blocked') {
+        setPendingRuntimeSuccessAction('');
+        return;
       }
-      await refetchCodeRuntimeStatus();
+      if (result.state === 'failed') {
+        setPendingRuntimeSuccessAction('');
+        notify.error(i18n.t('codeRuntime.notifications.setupFailedTitle'), result.message);
+        return;
+      }
     } catch (e) {
       setPendingRuntimeSuccessAction('');
-      if (codeRuntimePrepareCancelRequestedID() === operationID) {
-        setCodeRuntimeLocalPrepareCancelled(true);
-        return;
+      if (orchestration.isCancellationRequested()) return;
+      const snapshot = orchestration.snapshot();
+      const failure = browserEditorLocalFailureFromError(e, snapshot.operation.installMethod);
+      if (!snapshot.operationObserved && browserEditorRuntimeOperationAbsenceConfirmed(e)) {
+        setCodeRuntimeLocalPrepareFailure(failure);
       }
-      const failure = browserEditorLocalFailureFromError(e, installMethod);
-      setCodeRuntimeLocalPrepareFailure(failure);
       notify.error(i18n.t('codeRuntime.notifications.setupFailedTitle'), failure.message);
     } finally {
-      if (codeRuntimePrepareOperationID() === operationID) {
-        codeRuntimePrepareAbortController = null;
-        setCodeRuntimePrepareOperationID(null);
-        setCodeRuntimePrepareActiveMethod(null);
+      if (codeRuntimeSetupOrchestration === orchestration) {
+        codeRuntimeSetupOrchestration = null;
         setCodeRuntimeActionLoading(false);
+        setCodeRuntimePrepareProgress(null);
         setCodeRuntimeInstallMethod(defaultBrowserEditorInstallMethod());
       }
     }
   };
   const cancelManagedCodeRuntimeOperation = async () => {
-    const operationID = codeRuntimePrepareOperationID();
-    const installMethod = codeRuntimePrepareActiveMethod();
-    if (operationID) setCodeRuntimePrepareCancelRequestedID(operationID);
-    codeRuntimePrepareAbortController?.abort();
     setCodeRuntimeCancelLoading(true);
     try {
-      if (operationID && installMethod) {
-        await cancelBrowserEditorSetup(operationID, installMethod);
-      } else if (codeRuntimeStatus()?.operation.action === 'remove_local_environment_version') {
-        await cancelCodeRuntimeOperation();
+      if (codeRuntimeSetupOrchestration) {
+        await codeRuntimeSetupOrchestration.cancel();
+      } else {
+        const operation = codeRuntimeStatus()?.operation;
+        if (
+          operation?.action === 'prepare_workspace_engine'
+          && operation.operation_id
+          && operation.install_method
+        ) {
+          mutateCodeRuntimeStatus(await cancelBrowserEditorSetup(operation.operation_id, operation.install_method));
+        } else if (operation?.action === 'remove_local_environment_version') {
+          await cancelCodeRuntimeOperation();
+        }
       }
-      if (operationID) setCodeRuntimeLocalPrepareCancelled(true);
-      await refetchCodeRuntimeStatus();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       notify.error(i18n.t('codeRuntime.notifications.cancelFailedTitle'), msg || i18n.t('codeRuntime.notifications.requestFailed'));
     } finally {
+      await refetchCodeRuntimeStatus();
       setCodeRuntimeCancelLoading(false);
     }
   };

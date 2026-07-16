@@ -4720,6 +4720,11 @@ html.dark .browser-editor-setup {
   min-height: 13.25rem;
 }
 
+.browser-editor-setup[data-layout='wide'] .browser-editor-setup__body[data-steps-visible='false'] {
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 0;
+}
+
 .browser-editor-setup[data-layout='compact'] .browser-editor-setup__body {
   grid-template-columns: minmax(0, 1fr);
 }

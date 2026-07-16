@@ -89,8 +89,12 @@ function codeRuntimeStageLabelLocalized(stage: string | null | undefined, action
   switch (normalizedStage) {
     case 'preparing':
       return i18n.t('codeRuntime.stage.preparing');
+    case 'resolving_catalog':
+      return i18n.t('codeRuntime.stage.resolvingCatalog');
     case 'receiving':
       return i18n.t('codeRuntime.stage.receiving');
+    case 'downloading':
+      return i18n.t('codeRuntime.stage.downloadingInEnvironment');
     case 'verifying':
       return i18n.t('codeRuntime.stage.verifying');
     case 'installing':
