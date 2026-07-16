@@ -58,7 +58,7 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   ),
   ConfirmDialog: (props: any) => (
     <Show when={props.open}>
-      <div>
+      <div role="dialog">
         <div>{props.title}</div>
         <div>{props.children}</div>
         <button type="button" onClick={() => props.onConfirm?.()} disabled={props.loading}>
@@ -339,6 +339,32 @@ describe('CodeRuntimeSettingsCard', () => {
     confirmButton?.click();
 
     expect(onPrepare).toHaveBeenCalledTimes(1);
+  });
+
+  it('dismisses the update confirmation before Browser Editor setup completes', async () => {
+    let resolvePrepare!: () => void;
+    const preparePending = new Promise<void>((resolve) => {
+      resolvePrepare = resolve;
+    });
+    const onPrepare = vi.fn(() => preparePending);
+    renderCard(host, { onPrepare });
+
+    Array.from(host.querySelectorAll('button'))
+      .find((button) => button.textContent === 'Update Browser Editor')
+      ?.click();
+
+    expect(host.querySelector('[role="dialog"]')).not.toBeNull();
+
+    Array.from(host.querySelectorAll('button'))
+      .filter((button) => button.textContent === 'Update Browser Editor')
+      .at(-1)
+      ?.click();
+
+    expect(onPrepare).toHaveBeenCalledTimes(1);
+    expect(host.querySelector('[role="dialog"]')).toBeNull();
+
+    resolvePrepare();
+    await preparePending;
   });
 
   it('shows Desktop unavailability and selects environment download for the update dialog', () => {

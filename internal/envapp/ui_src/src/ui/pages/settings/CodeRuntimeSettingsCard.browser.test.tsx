@@ -54,6 +54,7 @@ function mountReadyCard(width: string, desktopTransferAvailable: boolean) {
   const [installMethod, setInstallMethod] = createSignal<BrowserEditorInstallMethod>(
     desktopTransferAvailable ? 'desktop_transfer' : 'remote_download',
   );
+  const [actionLoading, setActionLoading] = createSignal(false);
   const dispose = render(
     () => (
       <CodeRuntimeSettingsCard
@@ -61,7 +62,7 @@ function mountReadyCard(width: string, desktopTransferAvailable: boolean) {
         loading={false}
         canInteract
         canManage
-        actionLoading={false}
+        actionLoading={actionLoading()}
         cancelLoading={false}
         selectionLoadingVersion={null}
         removeVersionLoading={null}
@@ -69,7 +70,9 @@ function mountReadyCard(width: string, desktopTransferAvailable: boolean) {
         desktopTransferAvailable={desktopTransferAvailable}
         onInstallMethodChange={setInstallMethod}
         onRefresh={() => undefined}
-        onPrepare={() => undefined}
+        onPrepare={() => {
+          setActionLoading(true);
+        }}
         onSelectVersion={() => undefined}
         onRemoveVersion={() => undefined}
         onCancel={() => undefined}
@@ -127,6 +130,19 @@ describe('CodeRuntimeSettingsCard rendered update method flow', () => {
     expect(dialog?.textContent).not.toContain('/Users/test/.redeven');
     expect(dialog?.scrollWidth).toBeLessThanOrEqual((dialog?.clientWidth ?? 0) + 1);
     expect(dialog?.getBoundingClientRect().right ?? Number.POSITIVE_INFINITY).toBeLessThanOrEqual(window.innerWidth);
+
+    const confirmButton = Array.from(dialog?.querySelectorAll<HTMLButtonElement>('button') ?? [])
+      .find((button) => button.textContent?.trim() === 'Update Browser Editor');
+    expect(confirmButton).toBeTruthy();
+    confirmButton?.click();
+    await settle();
+
+    expect(document.querySelector('[role="dialog"]')?.getAttribute('data-floating-presence')).toBe('exiting');
+    expect(host.querySelector('[data-testid="browser-editor-setup-activity"]')).toBeTruthy();
+    expect(Array.from(host.querySelectorAll('button')).filter((button) => button.textContent?.trim() === 'Cancel')).toHaveLength(1);
+
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 160));
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
 
     const screenshot = await page.screenshot({ save: false });
     expect(screenshot.length).toBeGreaterThan(1_000);
