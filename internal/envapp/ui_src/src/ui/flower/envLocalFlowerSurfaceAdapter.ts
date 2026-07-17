@@ -11,6 +11,8 @@ import type {
   FlowerTurnLaunchInput,
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
+  FlowerModelSourceModel,
+  FlowerModelSourceRecovery,
   FlowerSurfaceAdapter,
   FlowerTerminalProcessSnapshot,
   FlowerThreadReadStatus,
@@ -36,6 +38,7 @@ type EnvLocalFlowerSurfaceAdapterOptions = Readonly<{
   openFilePreview?: FlowerSurfaceAdapter['openFilePreview'];
   openLinkedFilePreview?: FlowerSurfaceAdapter['openLinkedFilePreview'];
   openLinkedDirectoryBrowser?: FlowerSurfaceAdapter['openLinkedDirectoryBrowser'];
+  modelSourceRecovery?: FlowerModelSourceRecovery;
 }>;
 
 export type EnvLocalFlowerSurfaceAdapterCopy = Readonly<{
@@ -60,6 +63,12 @@ type ModelsResponse = Readonly<{
     reasoning_capability?: FlowerProviderModel['reasoning_capability'];
   }>[];
 }>;
+
+type DesktopModelCatalogLoad =
+  | Readonly<{ state: 'loaded'; response: ModelsResponse }>
+  | Readonly<{ state: 'failed'; message: string }>;
+
+const DESKTOP_MODEL_SOURCE_ID_PATTERN = /^desktop:model_[0-9a-f]{64}$/;
 
 type ThreadView = Readonly<{
   thread_id?: string;
@@ -132,46 +141,122 @@ function mapProvider(provider: NonNullable<AIConfig['providers']>[number]): Flow
   };
 }
 
-function mapDesktopModelSource(settings: AgentSettingsResponse, models?: ModelsResponse): FlowerSettingsSnapshot['model_source'] {
-  const source = settings.ai_runtime?.desktop_model_source;
-  if (!source) return undefined;
-  const modelCount = Number(source.model_count ?? models?.models?.length ?? 0);
-  const sourceModels = (models?.models ?? []).map((model) => {
+function mapDesktopModels(models: ModelsResponse): readonly FlowerModelSourceModel[] {
+  const sourceModels = (models.models ?? []).flatMap((model) => {
     const id = trim(model.id);
-    if (!id || (trim(model.source) !== 'desktop_model_source' && !id.startsWith('desktop:model_'))) return null;
+    if (trim(model.source) !== 'desktop_model_source') {
+      if (DESKTOP_MODEL_SOURCE_ID_PATTERN.test(id)) {
+        throw new Error('Desktop model catalog contains an invalid model source.');
+      }
+      return [];
+    }
+    if (!DESKTOP_MODEL_SOURCE_ID_PATTERN.test(id)) {
+      throw new Error('Desktop model catalog contains an invalid opaque model id.');
+    }
     const reasoningCapability = normalizeFlowerReasoningCapability(model.reasoning_capability);
-    return {
+    return [{
       id,
       label: trim(model.label) || id,
       ...(positiveInteger(model.context_window) ? { context_window: positiveInteger(model.context_window) } : {}),
       ...(positiveInteger(model.max_output_tokens) ? { max_output_tokens: positiveInteger(model.max_output_tokens) } : {}),
       ...(Array.isArray(model.input_modalities) ? { input_modalities: model.input_modalities.map(trim).filter(Boolean) } : {}),
       ...(reasoningCapability ? { reasoning_capability: reasoningCapability } : {}),
+    }];
+  });
+  if (new Set(sourceModels.map((model) => model.id)).size !== sourceModels.length) {
+    throw new Error('Desktop model catalog contains duplicate opaque model ids.');
+  }
+  return sourceModels;
+}
+
+function mapDesktopModelSource(
+  settings: AgentSettingsResponse,
+  catalog?: DesktopModelCatalogLoad,
+): FlowerSettingsSnapshot['model_source'] {
+  const source = settings.ai_runtime?.desktop_model_source;
+  if (!source || trim(source.binding_state) === 'unsupported') {
+    return { kind: 'desktop_model_source', state: 'unsupported', label: 'Desktop' };
+  }
+  const bindingState = trim(source.binding_state);
+  if (bindingState === 'connecting' || bindingState === 'unbound' || bindingState === 'expired') {
+    return { kind: 'desktop_model_source', state: bindingState, label: 'Desktop' };
+  }
+  if (bindingState === 'error') {
+    const diagnosticMessage = trim(source.last_error);
+    return {
+      kind: 'desktop_model_source',
+      state: 'error',
+      label: 'Desktop',
+      ...(diagnosticMessage ? { diagnostic_message: diagnosticMessage } : {}),
     };
-  }).filter((model): model is NonNullable<typeof model> => model !== null);
-  const currentModelCandidate = trim(models?.current_model);
-  const currentModel = sourceModels.some((model) => model.id === currentModelCandidate)
-    ? currentModelCandidate
-    : '';
-  return {
-    kind: 'desktop_model_source',
-    ready: Boolean(source.connected && source.available && sourceModels.length > 0),
-    ...(currentModel ? { current_model_id: currentModel } : {}),
-    label: 'Desktop',
-    model_count: Number.isFinite(modelCount) && modelCount > 0 ? Math.floor(modelCount) : 0,
-    models: sourceModels,
-    missing_key_provider_ids: (source.missing_key_provider_ids ?? []).map(trim).filter(Boolean),
-    ...(trim(source.last_error) ? { last_error: trim(source.last_error) } : {}),
-  };
+  }
+  if (bindingState !== 'bound' || source.connected !== true) {
+    return {
+      kind: 'desktop_model_source',
+      state: 'error',
+      label: 'Desktop',
+      diagnostic_message: 'Desktop model source returned an invalid binding contract.',
+    };
+  }
+  const missingKeyProviderIDs = (source.missing_key_provider_ids ?? []).map(trim).filter(Boolean);
+  if (missingKeyProviderIDs.length > 0) {
+    return {
+      kind: 'desktop_model_source',
+      state: 'missing_keys',
+      label: 'Desktop',
+      missing_key_provider_ids: missingKeyProviderIDs,
+    };
+  }
+  if (catalog?.state === 'failed') {
+    return {
+      kind: 'desktop_model_source',
+      state: 'error',
+      label: 'Desktop',
+      diagnostic_message: catalog.message,
+    };
+  }
+  if (!catalog) {
+    return {
+      kind: 'desktop_model_source',
+      state: 'error',
+      label: 'Desktop',
+      diagnostic_message: 'Desktop model catalog was not loaded.',
+    };
+  }
+  try {
+    const sourceModels = mapDesktopModels(catalog.response);
+    const [firstModel, ...remainingModels] = sourceModels;
+    if (!firstModel) {
+      return { kind: 'desktop_model_source', state: 'empty', label: 'Desktop' };
+    }
+    const currentModelCandidate = trim(catalog.response.current_model);
+    const currentModel = sourceModels.some((model) => model.id === currentModelCandidate)
+      ? currentModelCandidate
+      : '';
+    return {
+      kind: 'desktop_model_source',
+      state: 'ready',
+      label: 'Desktop',
+      models: [firstModel, ...remainingModels],
+      ...(currentModel ? { current_model_id: currentModel } : {}),
+    };
+  } catch (error) {
+    return {
+      kind: 'desktop_model_source',
+      state: 'error',
+      label: 'Desktop',
+      diagnostic_message: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
 function mapSettings(
   settings: AgentSettingsResponse,
-  models?: ModelsResponse,
+  catalog?: DesktopModelCatalogLoad,
   exposeDesktopModelSource = false,
 ): FlowerSettingsSnapshot {
   const ai = settings.ai;
-  const externalModelSource = exposeDesktopModelSource ? mapDesktopModelSource(settings, models) : undefined;
+  const externalModelSource = exposeDesktopModelSource ? mapDesktopModelSource(settings, catalog) : undefined;
   const modelProfile = ai && (ai.providers ?? []).length > 0 && trim(ai.current_model_id)
     ? {
         schema_version: 1 as const,
@@ -291,14 +376,37 @@ function decision(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerRouterDec
 async function loadSettingsSnapshot(options: EnvLocalFlowerSurfaceAdapterOptions): Promise<FlowerSettingsSnapshot> {
   const settings = await fetchLocalApiJSON<AgentSettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' });
   const exposeDesktopModelSource = options.desktopSessionTargetRoute === 'remote_desktop';
-  const models = exposeDesktopModelSource && settings.ai_runtime?.desktop_model_source?.connected
-    ? await loadModels().catch(() => undefined)
-    : undefined;
-  return mapSettings(settings, models, exposeDesktopModelSource);
+  const desktopModelSource = settings.ai_runtime?.desktop_model_source;
+  let catalog: DesktopModelCatalogLoad | undefined;
+  if (
+    exposeDesktopModelSource
+    && trim(desktopModelSource?.binding_state) === 'bound'
+    && desktopModelSource?.connected === true
+    && (desktopModelSource.missing_key_provider_ids ?? []).length === 0
+  ) {
+    try {
+      catalog = { state: 'loaded', response: await loadDesktopModelCatalog() };
+    } catch (error) {
+      catalog = { state: 'failed', message: error instanceof Error ? error.message : String(error) };
+    }
+  }
+  return mapSettings(settings, catalog, exposeDesktopModelSource);
 }
 
 async function loadModels(): Promise<ModelsResponse> {
   return fetchLocalApiJSON<ModelsResponse>('/_redeven_proxy/api/ai/models', { method: 'GET' });
+}
+
+async function loadDesktopModelCatalog(): Promise<ModelsResponse> {
+  const raw = await fetchLocalApiJSON<unknown>('/_redeven_proxy/api/ai/models', { method: 'GET' });
+  if (!raw || typeof raw !== 'object') {
+    throw new Error('Desktop model catalog response is invalid.');
+  }
+  const candidate = raw as ModelsResponse;
+  if (!Array.isArray(candidate.models) || candidate.models.some((model) => !model || typeof model !== 'object')) {
+    throw new Error('Desktop model catalog response is invalid.');
+  }
+  return candidate;
 }
 
 function currentModelID(snapshot: FlowerSettingsSnapshot, models: ModelsResponse): string {
@@ -535,5 +643,6 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     ...(options.openFilePreview ? { openFilePreview: options.openFilePreview } : {}),
     ...(options.openLinkedFilePreview ? { openLinkedFilePreview: options.openLinkedFilePreview } : {}),
     ...(options.openLinkedDirectoryBrowser ? { openLinkedDirectoryBrowser: options.openLinkedDirectoryBrowser } : {}),
+    ...(options.modelSourceRecovery ? { modelSourceRecovery: options.modelSourceRecovery } : {}),
   });
 }

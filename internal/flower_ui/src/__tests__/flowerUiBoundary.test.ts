@@ -165,6 +165,24 @@ describe('shared Flower UI boundary', () => {
 		expect(contractsSrc).toContain('persistDefaultModel:');
 	});
 
+  it('does not retain the removed managed Desktop source settings contract', () => {
+    const copySrc = readText(path.join(flowerRoot, 'copy.ts'));
+    const messagesSrc = readText(path.join(flowerRoot, 'i18n', 'flowerSurfaceMessages.ts'));
+    const localizedCopySrc = readText(path.join(flowerRoot, 'i18n', 'createLocalizedFlowerSurfaceCopy.ts'));
+    const envAdapterSrc = readText(path.join(repoRoot, 'internal', 'envapp', 'ui_src', 'src', 'ui', 'flower', 'envLocalFlowerSurfaceAdapter.ts'));
+    const surfaceSrc = readText(path.join(flowerRoot, 'FlowerSurface.tsx'));
+    const contractsSrc = readText(path.join(flowerRoot, 'contracts', 'flowerSurfaceContracts.ts'));
+
+    for (const source of [copySrc, messagesSrc, localizedCopySrc]) {
+      expect(source).not.toContain('managedByLocalAIProfile');
+    }
+    expect(envAdapterSrc).not.toContain("id.startsWith('desktop:model_')");
+    expect(envAdapterSrc).not.toContain('await loadModels().catch(() => undefined)');
+    expect(surfaceSrc).not.toContain("source?: 'model_profile'");
+    expect(surfaceSrc).toContain("source: 'model_profile' | 'desktop_model_source' | 'thread_snapshot'");
+    expect(contractsSrc).not.toContain('ready: boolean');
+  });
+
   it('fuses composer model and reasoning into one segmented control', () => {
     const surfaceSrc = readText(path.join(flowerRoot, 'FlowerSurface.tsx'));
     const controlSrc = readText(path.join(flowerRoot, 'ReasoningControl.tsx'));

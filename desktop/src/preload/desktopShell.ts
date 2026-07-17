@@ -37,6 +37,9 @@ export function bootstrapDesktopShellBridge(): void {
     openAdvancedSettings: async (): Promise<void> => {
       await ipcRenderer.invoke(DESKTOP_SHELL_OPEN_WINDOW_CHANNEL, { kind: 'settings' });
     },
+    openFlowerSettings: async (): Promise<void> => {
+      await ipcRenderer.invoke(DESKTOP_SHELL_OPEN_WINDOW_CHANNEL, { kind: 'flower_settings' });
+    },
     openWindow: async (kind: unknown): Promise<void> => {
       const normalized = normalizeDesktopShellWindowKind(kind);
       if (!normalized) {

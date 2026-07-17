@@ -211,6 +211,7 @@ describe('web service route helpers', () => {
         local_environment_id: 'url:http://localhost:24000',
         renderer_storage_scope_id: 'url:http://localhost:24000',
         target_kind: 'external_local_ui',
+        target_route: 'remote_desktop',
       },
       browserLocation,
     })).toEqual({
@@ -227,6 +228,7 @@ describe('web service route helpers', () => {
         local_environment_id: 'ssh:devbox',
         renderer_storage_scope_id: 'ssh:devbox',
         target_kind: 'ssh_environment',
+        target_route: 'remote_desktop',
       },
       browserLocation,
     }).kind).toBe('local_proxy');

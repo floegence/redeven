@@ -684,6 +684,12 @@ export function adapter(configured = true): FlowerSurfaceAdapter {
     stopThread: vi.fn(async (threadID: string) => liveBootstrap(thread({ thread_id: threadID, status: 'canceled' }))),
     submitInput: vi.fn(async () => liveBootstrap(thread({ status: 'running' }))),
     submitApproval: vi.fn(async () => ({ ok: true, current_cursor: 1 })),
+    modelSourceRecovery: {
+      describe: (status) => `Desktop source is ${status.state}.`,
+      localSettings: { label: 'Local Flower settings', run: vi.fn(async () => undefined) },
+      runtimeSettings: { label: 'Runtime settings', run: vi.fn(async () => undefined) },
+      connectionCenter: { label: 'Connection center', run: vi.fn(async () => undefined) },
+    },
   };
 }
 
@@ -753,6 +759,7 @@ const mountFlowerSurface = (
   surfaceAdapter: FlowerSurfaceAdapter,
   props: Readonly<{
     focusThreadRequest?: FlowerThreadFocusRequest | null;
+    settingsFocusRequest?: number;
     onFocusThreadRequestConsumed?: (requestID: string) => void;
     onThreadSelectionEvent?: (event: UIFirstSelectionEvent<string, { source: 'thread-list' }>) => void;
   }> = {},
@@ -766,6 +773,7 @@ const mountFlowerSurface = (
         notifications.push(notification);
       }}
       focusThreadRequest={props.focusThreadRequest}
+      settingsFocusRequest={props.settingsFocusRequest}
       onFocusThreadRequestConsumed={props.onFocusThreadRequestConsumed}
       onThreadSelectionEvent={props.onThreadSelectionEvent}
     />
@@ -785,6 +793,7 @@ export function renderSurfaceWithAdapterProps(
   surfaceAdapter: FlowerSurfaceAdapter,
   props: Readonly<{
     focusThreadRequest?: FlowerThreadFocusRequest | null;
+    settingsFocusRequest?: number;
     onFocusThreadRequestConsumed?: (requestID: string) => void;
     onThreadSelectionEvent?: (event: UIFirstSelectionEvent<string, { source: 'thread-list' }>) => void;
   }>,

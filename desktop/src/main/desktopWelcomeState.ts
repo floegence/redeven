@@ -120,6 +120,7 @@ export type BuildDesktopWelcomeSnapshotArgs = Readonly<{
   entryReason?: DesktopWelcomeEntryReason;
   issue?: DesktopWelcomeIssue | null;
   selectedEnvironmentID?: string;
+  flowerSettingsFocusRevision?: number;
 }>;
 
 function diagnosticsLines(lines: readonly string[]): string {
@@ -2097,6 +2098,7 @@ export function buildDesktopWelcomeSnapshot(
 
   return {
     surface,
+    flower_settings_focus_revision: Math.max(0, Math.floor(Number(args.flowerSettingsFocusRevision ?? 0))),
     entry_reason: args.entryReason ?? 'app_launch',
     close_action: openSessions.length > 0 ? 'close_launcher' : 'quit',
     open_windows: buildOpenEnvironmentWindows(openSessions),

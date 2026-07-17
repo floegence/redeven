@@ -143,4 +143,25 @@ describe('bootstrapDesktopSessionContextBridge', () => {
       label: 'Gateway Environment',
     });
   });
+
+  it.each([
+    ['missing route', {
+      local_environment_id: 'ssh:devbox',
+      renderer_storage_scope_id: 'ssh:devbox',
+      target_kind: 'ssh_environment',
+    }],
+    ['invalid route', {
+      local_environment_id: 'ssh:devbox',
+      renderer_storage_scope_id: 'ssh:devbox',
+      target_kind: 'ssh_environment',
+      target_route: 'browser',
+    }],
+  ])('rejects an incomplete session contract with %s', async (_label, snapshot) => {
+    ipcRendererSendSync.mockReturnValue(snapshot);
+    const { bootstrapDesktopSessionContextBridge } = await import('./desktopSessionContext');
+
+    bootstrapDesktopSessionContextBridge();
+
+    expect(exposedBridge().getSnapshot()).toBeNull();
+  });
 });

@@ -12,6 +12,7 @@ import { createEnvLocalFlowerSurfaceAdapter } from '../flower/envLocalFlowerSurf
 import { useI18n, type EnvAppTranslationKey, type I18nHelpers } from '../i18n';
 import { useEnvContext } from './EnvContext';
 import { readDesktopSessionContextSnapshot } from '../services/desktopSessionContext';
+import { openConnectionCenter, openFlowerSettings } from '../services/desktopShellBridge';
 import '../flower-feature.css';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 
@@ -55,6 +56,47 @@ export function EnvAIPage() {
     openFilePreview: env.openFlowerFilePreview,
     openLinkedFilePreview: env.openFlowerLinkedFilePreview,
     openLinkedDirectoryBrowser: env.openFlowerLinkedDirectoryBrowser,
+    modelSourceRecovery: {
+      describe: (status) => {
+        if (status.state === 'missing_keys') {
+          return i18n.t('flowerSettings.localAIProfileMissingKeys', {
+            providers: status.missing_key_provider_ids.join(', '),
+          });
+        }
+        if (status.state === 'empty') return i18n.t('flowerSettings.desktopModelNoUsableModel');
+        if (status.state === 'unsupported') return i18n.t('flowerSettings.desktopModelUnsupported');
+        if (status.state === 'expired') return i18n.t('flowerSettings.desktopModelExpired');
+        if (status.state === 'connecting') return i18n.t('flowerSurface.chat.handlerStillStarting');
+        if (status.state === 'error' && trim(status.diagnostic_message)) {
+          return i18n.t('flowerSettings.desktopModelBindingFailedWithError', {
+            message: trim(status.diagnostic_message),
+          });
+        }
+        return i18n.t('flowerSettings.desktopModelBindingFailed');
+      },
+      localSettings: {
+        label: i18n.t('flowerChat.header.aiSettings'),
+        run: async () => {
+          if (!await openFlowerSettings()) {
+            throw new Error(i18n.t('settings.connection.manageConnectionFailedMessage'));
+          }
+        },
+      },
+      runtimeSettings: {
+        label: i18n.t('settings.runtimeTitle'),
+        run: async () => {
+          env.openSettings('agent', { origin: { kind: 'flower', returnSurfaceId: 'ai' } });
+        },
+      },
+      connectionCenter: {
+        label: i18n.t('settings.connection.manageConnection'),
+        run: async () => {
+          if (!await openConnectionCenter()) {
+            throw new Error(i18n.t('settings.connection.manageConnectionFailedMessage'));
+          }
+        },
+      },
+    },
   }));
 
   return (

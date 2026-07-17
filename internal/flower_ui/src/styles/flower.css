@@ -1258,6 +1258,16 @@ html.dark .flower-component-shell {
   background: color-mix(in srgb, var(--primary) 8%, transparent);
 }
 
+.flower-model-menu-item:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.flower-model-menu-item:disabled:hover,
+.flower-model-menu-item:disabled:focus-visible {
+  background: transparent;
+}
+
 .flower-model-menu-icon {
   width: 0.875rem;
   height: 0.875rem;
@@ -1315,6 +1325,85 @@ html.dark .flower-component-shell {
   font-size: 0.65625rem;
   font-weight: 700;
   line-height: 1.2;
+}
+
+.flower-model-source-status {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.4375rem;
+  color: color-mix(in srgb, var(--muted-foreground) 86%, var(--foreground) 14%);
+}
+
+.flower-model-source-status-footer {
+  flex: 1 1 auto;
+}
+
+.flower-model-source-status-menu {
+  margin-top: 0.25rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 66%, transparent);
+  padding: 0.375rem 0.375rem 0.125rem;
+}
+
+.flower-model-source-status-icon {
+  width: 0.8125rem;
+  height: 0.8125rem;
+  flex: 0 0 auto;
+  color: var(--flower-subagents-warning, #a56a00);
+}
+
+.flower-model-source-status-message {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.35;
+}
+
+.flower-model-source-status-actions {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.flower-model-source-status-action {
+  display: inline-flex;
+  width: 1.75rem;
+  height: 1.75rem;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--muted-foreground);
+  transition: background-color 140ms ease, color 140ms ease;
+}
+
+.flower-model-source-status-action:hover,
+.flower-model-source-status-action:focus-visible {
+  background: color-mix(in srgb, var(--primary) 8%, transparent);
+  color: var(--foreground);
+  outline: none;
+}
+
+.flower-model-source-status-action:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.flower-model-source-status-refresh[aria-busy='true'] svg {
+  animation: flower-model-source-refresh-spin 850ms linear infinite;
+}
+
+@keyframes flower-model-source-refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .flower-model-reasoning-warning {
@@ -7564,6 +7653,10 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
 
   .flower-setup-inline span {
     white-space: normal;
+  }
+
+  .flower-setup-inline .flower-model-source-status-message {
+    white-space: nowrap;
   }
 }
 

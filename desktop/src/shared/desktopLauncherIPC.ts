@@ -424,6 +424,7 @@ export type DesktopEnvironmentEntry = Readonly<{
 export type DesktopWelcomeSnapshot = Readonly<{
   snapshot_revision?: number;
   snapshot_generation?: number;
+  flower_settings_focus_revision?: number;
   surface: DesktopLauncherSurface;
   entry_reason: DesktopWelcomeEntryReason;
   close_action: DesktopLauncherCloseAction;

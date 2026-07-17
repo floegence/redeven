@@ -2,6 +2,8 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { desktopSessionContextSnapshotFromTarget } from '../../../../../desktop/src/main/desktopSessionContext';
+import { buildSSHDesktopTarget } from '../../../../../desktop/src/main/desktopTarget';
 import { createEnvLocalFlowerSurfaceAdapter } from './flower/envLocalFlowerSurfaceAdapter';
 import {
   renderSurfaceWithAdapter,
@@ -77,8 +79,8 @@ afterEach(() => {
 
 describe('Flower Desktop model source E2E', () => {
   it('projects the read-only catalog and sends the opaque model with reasoning on the first turn', async () => {
-    const deepSeekModelID = 'desktop:model_deepseek';
-    const flashModelID = 'desktop:model_flash';
+    const deepSeekModelID = `desktop:model_${'1'.repeat(64)}`;
+    const flashModelID = `desktop:model_${'2'.repeat(64)}`;
     const createdBodies: unknown[] = [];
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/settings' && init?.method === 'GET') {
@@ -86,6 +88,7 @@ describe('Flower Desktop model source E2E', () => {
           ai: null,
           ai_runtime: {
             desktop_model_source: {
+              binding_state: 'bound',
               connected: true,
               available: true,
               model_source: 'desktop_local_environment',
@@ -140,10 +143,23 @@ describe('Flower Desktop model source E2E', () => {
 
     const subscribeThread = vi.fn(async () => ({ runId: '' }));
     const sendUserTurn = vi.fn(async () => ({ runId: 'run-desktop-e2e', kind: 'start' }));
+    const desktopSession = desktopSessionContextSnapshotFromTarget(buildSSHDesktopTarget({
+      ssh_destination: 'gzcom',
+      ssh_port: 22,
+      auth_mode: 'key_agent',
+      runtime_root: 'remote_default',
+      bootstrap_strategy: 'desktop_upload',
+      release_base_url: '',
+    }, {
+      forwardedLocalUIURL: 'http://127.0.0.1:41111/',
+      label: 'gzcom',
+    }));
+    expect(desktopSession?.target_route).toBe('remote_desktop');
+
     const surface = renderSurfaceWithAdapter(createEnvLocalFlowerSurfaceAdapter({
       envPublicID: 'gzcom',
       envLabel: 'gzcom',
-      desktopSessionTargetRoute: 'remote_desktop',
+      desktopSessionTargetRoute: desktopSession?.target_route,
       rpc: {
         fs: {
           getPathContext: vi.fn(async () => ({

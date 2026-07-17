@@ -84,6 +84,8 @@ describe('main routing', () => {
     expect(mainSrc).toContain("case 'focus_environment_window':");
     expect(mainSrc).toContain("case 'close_launcher_or_quit':");
     expect(mainSrc).toContain("if (normalized.kind === 'connection_center') {");
+    expect(mainSrc).toContain("if (normalized.kind === 'flower_settings') {");
+    expect(mainSrc).toContain('focusFlowerSettings: true,');
     expect(mainSrc).toContain('await openAdvancedSettingsWindow();');
     expect(mainSrc).toContain('DESKTOP_SHELL_OPEN_CODESPACE_WINDOW_CHANNEL');
     expect(mainSrc).toContain('return openCodespaceWindowFromShell(sessionRecordForWebContentsID(event.sender.id), normalized);');

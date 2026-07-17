@@ -1,6 +1,6 @@
 export const DESKTOP_SHELL_OPEN_WINDOW_CHANNEL = 'redeven-desktop:shell-open-window';
 
-export type DesktopShellWindowKind = 'connection_center' | 'settings';
+export type DesktopShellWindowKind = 'connection_center' | 'settings' | 'flower_settings';
 
 export type DesktopShellOpenWindowRequest = Readonly<{
   kind: DesktopShellWindowKind;
@@ -17,6 +17,9 @@ export function normalizeDesktopShellWindowKind(value: unknown): DesktopShellWin
   }
   if (kind === 'settings' || kind === 'advanced_settings') {
     return 'settings';
+  }
+  if (kind === 'flower_settings') {
+    return 'flower_settings';
   }
   return '';
 }

@@ -47,6 +47,7 @@ describe('bootstrapDesktopShellBridge', () => {
 
     await bridge.openConnectionCenter();
     await bridge.openAdvancedSettings();
+    await bridge.openFlowerSettings();
     await bridge.openWindow('connect');
     await bridge.openWindow('advanced_settings');
     await bridge.openWindow('invalid');
@@ -69,21 +70,22 @@ describe('bootstrapDesktopShellBridge', () => {
 
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(1, 'redeven-desktop:shell-open-window', { kind: 'connection_center' });
     expect(ipcRendererInvoke).toHaveBeenNthCalledWith(2, 'redeven-desktop:shell-open-window', { kind: 'settings' });
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(3, 'redeven-desktop:shell-open-window', { kind: 'connection_center' });
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(4, 'redeven-desktop:shell-open-window', { kind: 'settings' });
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(5, 'redeven-desktop:shell-window-command', { command: 'toggle_maximize' });
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(6, 'redeven-desktop:shell-window-command', { command: 'minimize' });
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(7, 'redeven-desktop:shell-window-command', { command: 'close' });
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(8, 'redeven-desktop:shell-window-command', { command: 'toggle_maximize' });
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(9, 'redeven-desktop:shell-window-command', { command: 'toggle_full_screen' });
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(10, 'redeven-desktop:shell-open-external-url', { url: 'http://127.0.0.1:43123/cs/demo/' });
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(11, 'redeven-desktop:shell-open-codespace-window', { mode: 'loading', code_space_id: 'demo', title: 'Opening Codespace', detail: 'Preparing editor.' });
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(12, 'redeven-desktop:shell-open-codespace-window', { mode: 'navigate', url: 'http://127.0.0.1:43123/cs/demo/', code_space_id: 'demo' });
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(13, 'redeven-desktop:shell-open-dashboard');
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(14, 'redeven-desktop:shell-runtime-maintenance-context');
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(15, 'redeven-desktop:shell-runtime-action', { action: 'restart_runtime' });
-    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(16, 'redeven-desktop:shell-runtime-action', { action: 'restart_managed_runtime' });
-    expect(ipcRendererInvoke).toHaveBeenCalledTimes(16);
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(3, 'redeven-desktop:shell-open-window', { kind: 'flower_settings' });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(4, 'redeven-desktop:shell-open-window', { kind: 'connection_center' });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(5, 'redeven-desktop:shell-open-window', { kind: 'settings' });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(6, 'redeven-desktop:shell-window-command', { command: 'toggle_maximize' });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(7, 'redeven-desktop:shell-window-command', { command: 'minimize' });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(8, 'redeven-desktop:shell-window-command', { command: 'close' });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(9, 'redeven-desktop:shell-window-command', { command: 'toggle_maximize' });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(10, 'redeven-desktop:shell-window-command', { command: 'toggle_full_screen' });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(11, 'redeven-desktop:shell-open-external-url', { url: 'http://127.0.0.1:43123/cs/demo/' });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(12, 'redeven-desktop:shell-open-codespace-window', { mode: 'loading', code_space_id: 'demo', title: 'Opening Codespace', detail: 'Preparing editor.' });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(13, 'redeven-desktop:shell-open-codespace-window', { mode: 'navigate', url: 'http://127.0.0.1:43123/cs/demo/', code_space_id: 'demo' });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(14, 'redeven-desktop:shell-open-dashboard');
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(15, 'redeven-desktop:shell-runtime-maintenance-context');
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(16, 'redeven-desktop:shell-runtime-action', { action: 'restart_runtime' });
+    expect(ipcRendererInvoke).toHaveBeenNthCalledWith(17, 'redeven-desktop:shell-runtime-action', { action: 'restart_managed_runtime' });
+    expect(ipcRendererInvoke).toHaveBeenCalledTimes(17);
     expect(ipcRendererSend).toHaveBeenNthCalledWith(1, 'redeven-desktop:shell-runtime-maintenance-started', { kind: 'restart' });
     expect(ipcRendererSend).toHaveBeenNthCalledWith(2, 'redeven-desktop:shell-runtime-maintenance-started', { kind: 'update' });
     expect(ipcRendererSend).toHaveBeenCalledTimes(2);

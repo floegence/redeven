@@ -97,6 +97,27 @@ describe('desktopSessionContext', () => {
     });
   });
 
+  it.each([
+    ['missing route', undefined],
+    ['invalid route', 'browser'],
+  ])('rejects a Desktop session contract with %s', (_label, targetRoute) => {
+    const parentWindow = {
+      location: { origin: window.location.origin },
+      redevenDesktopSessionContext: {
+        getSnapshot: () => ({
+          local_environment_id: 'ssh:devbox',
+          renderer_storage_scope_id: 'ssh:devbox',
+          target_kind: 'ssh_environment',
+          ...(targetRoute ? { target_route: targetRoute } : {}),
+        }),
+      },
+    } as unknown as Window;
+
+    setWindowHierarchy(parentWindow);
+
+    expect(readDesktopSessionContextSnapshot()).toBeNull();
+  });
+
   it('falls back to the provided scope id when no desktop session context exists', () => {
     expect(readDesktopSessionContextSnapshot()).toBeNull();
     expect(desktopRendererStorageScopeID()).toBe('');
