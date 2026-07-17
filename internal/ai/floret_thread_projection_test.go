@@ -120,6 +120,8 @@ func TestFloretTurnResultProjectionDoesNotDowngradeFullAssistantMarkdown(t *test
 	}
 
 	ctx := context.Background()
+	floretStore := flruntime.NewMemoryStore()
+	defer floretStore.Close()
 	host, err := flruntime.NewHost(flruntime.HostOptions{
 		Config: flconfig.Config{
 			Provider:     flconfig.ProviderFake,
@@ -127,12 +129,11 @@ func TestFloretTurnResultProjectionDoesNotDowngradeFullAssistantMarkdown(t *test
 			FakeResponse: fullAnswer,
 			SystemPrompt: "test",
 		},
-		Store: flruntime.NewMemoryStore(),
+		Store: floretStore,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer host.Close()
 	if _, err := host.StartThread(ctx, flruntime.StartThreadRequest{ThreadID: "thread_full_result_projection"}); err != nil {
 		t.Fatal(err)
 	}
@@ -323,6 +324,8 @@ func TestFloretHostPublishesRunningToolProjectionToFlowerLiveEvents(t *testing.T
 		return events, nil
 	})
 	capture := &capturingFloretEventSink{downstream: floretEventSink{run: r}}
+	floretStore := flruntime.NewMemoryStore()
+	defer floretStore.Close()
 	host, err := flruntime.NewHost(flruntime.HostOptions{
 		Config: flconfig.Config{
 			SystemPrompt: "test",
@@ -331,8 +334,8 @@ func TestFloretHostPublishesRunningToolProjectionToFlowerLiveEvents(t *testing.T
 			},
 		},
 		ModelGateway:         gateway,
-		ModelGatewayIdentity: flruntime.ModelGatewayIdentity{Provider: "fake", Model: "fake-model"},
-		Store:                flruntime.NewMemoryStore(),
+		ModelGatewayIdentity: flruntime.ModelGatewayIdentity{Provider: "fake", Model: "fake-model", StateCompatibilityKey: "fake-model:test"},
+		Store:                floretStore,
 		Tools:                registry,
 		Sink:                 capture,
 		ThreadTitleMode:      flruntime.ThreadTitleModeHostOwned,
@@ -340,7 +343,6 @@ func TestFloretHostPublishesRunningToolProjectionToFlowerLiveEvents(t *testing.T
 	if err != nil {
 		t.Fatalf("NewHost: %v", err)
 	}
-	defer host.Close()
 	if _, err := host.StartThread(ctx, flruntime.StartThreadRequest{ThreadID: flruntime.ThreadID(thread.ThreadID)}); err != nil {
 		t.Fatalf("StartThread: %v", err)
 	}
@@ -390,8 +392,8 @@ func TestFloretHostPublishesRunningToolProjectionToFlowerLiveEvents(t *testing.T
 	if outcome.err != nil {
 		t.Fatalf("RunTurn: %v", outcome.err)
 	}
-	if err := outcome.result.ValidateProjection(); err != nil {
-		t.Fatalf("ValidateProjection: %v", err)
+	if err := outcome.result.Validate(); err != nil {
+		t.Fatalf("Validate: %v", err)
 	}
 	if outcome.result.Projection == nil || outcome.result.Projection.Status != flruntime.TurnStatusCompleted {
 		t.Fatalf("terminal projection=%#v", outcome.result.Projection)

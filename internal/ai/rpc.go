@@ -66,9 +66,9 @@ type aiCompactThreadContextReq struct {
 }
 
 type aiCompactThreadContextResp struct {
-	OperationID string `json:"operation_id,omitempty"`
-	Kind        string `json:"kind"`
-	ErrorCode   string `json:"error_code,omitempty"`
+	RequestID string `json:"request_id,omitempty"`
+	Kind      string `json:"kind"`
+	ErrorCode string `json:"error_code,omitempty"`
 }
 
 type aiSubscribeSummaryReq struct{}
@@ -207,9 +207,9 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 			return nil, toAIRPCError(err)
 		}
 		return &aiCompactThreadContextResp{
-			OperationID: strings.TrimSpace(resp.OperationID),
-			Kind:        strings.TrimSpace(resp.Kind),
-			ErrorCode:   strings.TrimSpace(resp.ErrorCode),
+			RequestID: strings.TrimSpace(resp.RequestID),
+			Kind:      strings.TrimSpace(resp.Kind),
+			ErrorCode: strings.TrimSpace(resp.ErrorCode),
 		}, nil
 	})
 

@@ -139,7 +139,10 @@ func (s *Service) finalizeTerminalProcess(owner floretPendingToolSettler, target
 	}
 
 	resultPayload := terminalProcessResultPayload(snapshot)
-	settlementReq := terminalProcessSettlementRequest(target, snapshot, resultPayload)
+	settlementReq, err := terminalProcessSettlementRequest(target, snapshot, resultPayload)
+	if err != nil {
+		return err
+	}
 	settleCtx, settleCancel := context.WithTimeout(context.Background(), s.persistTimeout())
 	settled, err := owner.SettlePendingTool(settleCtx, settlementReq)
 	settleCancel()
@@ -149,7 +152,7 @@ func (s *Service) finalizeTerminalProcess(owner floretPendingToolSettler, target
 		}
 		return err
 	}
-	if err := settled.ValidateProjection(); err != nil {
+	if err := settled.Validate(); err != nil {
 		if active := s.activeRunForFloretProjection(snapshot.EndpointID, snapshot.ThreadID, snapshot.RunID); active != nil {
 			active.rejectFloretContract("pending_tool_settlement_projection_outcome", err)
 		}
@@ -171,24 +174,30 @@ func (s *Service) persistTimeout() time.Duration {
 	return s.persistOpTO
 }
 
-func terminalProcessSettlementRequest(target flruntime.PendingToolSettlementTarget, snapshot terminalProcessSnapshot, resultPayload map[string]any) flruntime.PendingToolSettlementRequest {
+func terminalProcessSettlementRequest(target flruntime.PendingToolSettlementTarget, snapshot terminalProcessSnapshot, resultPayload map[string]any) (flruntime.PendingToolSettlementRequest, error) {
+	status, err := terminalSettlementStatus(snapshot.Status)
+	if err != nil {
+		return flruntime.PendingToolSettlementRequest{}, err
+	}
 	return flruntime.PendingToolSettlementRequest{
 		Target:   target,
-		Status:   terminalSettlementStatus(snapshot.Status),
+		Status:   status,
 		Summary:  terminalSettlementSummary(snapshot),
 		Output:   strings.TrimRight(snapshot.Output, "\n"),
 		Activity: terminalProcessActivity(snapshot, resultPayload),
-	}
+	}, nil
 }
 
-func terminalSettlementStatus(status string) flruntime.PendingToolSettlementStatus {
+func terminalSettlementStatus(status string) (flruntime.PendingToolSettlementStatus, error) {
 	switch strings.TrimSpace(status) {
+	case terminalProcessStatusSuccess:
+		return flruntime.PendingToolSettlementCompleted, nil
 	case terminalProcessStatusCanceled:
-		return flruntime.PendingToolSettlementCanceled
+		return flruntime.PendingToolSettlementCanceled, nil
 	case terminalProcessStatusError:
-		return flruntime.PendingToolSettlementFailed
+		return flruntime.PendingToolSettlementFailed, nil
 	default:
-		return flruntime.PendingToolSettlementCompleted
+		return "", fmt.Errorf("terminal process has non-terminal or unknown status %q", status)
 	}
 }
 

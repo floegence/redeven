@@ -391,13 +391,8 @@ func TestForkThreadReadsForkedFloretProjectionWithoutShadowTranscript(t *testing
 		sourceRunID  = "run_source_projection"
 		fullAnswer   = "Forked Floret projection body with a final sentence that must render from the destination thread."
 	)
-	storePath, err := floretThreadStorePath(svc.stateDir)
-	if err != nil {
-		t.Fatalf("floretThreadStorePath: %v", err)
-	}
-	host := openTestFloretHost(t, storePath, fullAnswer)
+	host := newTestFloretHost(t, svc.floretStore, fullAnswer)
 	if _, err := host.StartThread(ctx, flruntime.StartThreadRequest{ThreadID: flruntime.ThreadID(source.ThreadID)}); err != nil {
-		_ = host.Close()
 		t.Fatalf("StartThread: %v", err)
 	}
 	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
@@ -406,11 +401,7 @@ func TestForkThreadReadsForkedFloretProjectionWithoutShadowTranscript(t *testing
 		RunID:    flruntime.RunID(sourceRunID),
 		Input:    "write the projection-only answer",
 	}); err != nil {
-		_ = host.Close()
 		t.Fatalf("RunTurn: %v", err)
-	}
-	if err := host.Close(); err != nil {
-		t.Fatalf("Close seed Floret host: %v", err)
 	}
 
 	appendTimelineReadPathUserMessage(t, ctx, svc.threadsDB, meta.EndpointID, source.ThreadID, "msg_user_source", "hello", 1000)
@@ -465,9 +456,6 @@ func TestForkThreadReadsForkedFloretProjectionWithoutShadowTranscript(t *testing
 		TurnID:   flruntime.TurnID(turns[0].TurnID),
 		RunID:    flruntime.RunID(turns[0].RunID),
 	})
-	if closeErr := maintenance.Close(); closeErr != nil {
-		t.Fatalf("Close maintenance host: %v", closeErr)
-	}
 	if err != nil {
 		t.Fatalf("ReadTurnProjection fork: %v turn=%+v", err, turns[0])
 	}

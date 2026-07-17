@@ -551,7 +551,6 @@ func (s *Service) threadSummaryRealtimeEvent(endpointID string, threadID string)
 		LastMessagePreview:  strings.TrimSpace(th.LastMessagePreview),
 		LastMessageAtUnixMs: th.LastMessageAtUnixMs,
 		ActiveRunID:         activeRunID,
-		LastContextRunID:    strings.TrimSpace(th.LastContextRunID),
 		PermissionType:      permissionType,
 		QueuedTurnCount:     queuedTurnCount,
 		ReasoningSelection:  reasoningSelection,

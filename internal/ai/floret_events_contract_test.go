@@ -2,7 +2,6 @@ package ai
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -11,7 +10,7 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
-func TestFloretLifecycleEventsUseTypedReasonsInsteadOfMetadata(t *testing.T) {
+func TestFloretEngineLifecycleEventsAreNotMirroredToProductRunEvents(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
@@ -25,6 +24,7 @@ func TestFloretLifecycleEventsUseTypedReasonsInsteadOfMetadata(t *testing.T) {
 		id:               "run_typed_reasons",
 		endpointID:       meta.EndpointID,
 		threadID:         thread.ThreadID,
+		messageID:        "turn_typed_reasons",
 		threadsDB:        svc.threadsDB,
 		persistOpTimeout: time.Second,
 	}
@@ -33,6 +33,8 @@ func TestFloretLifecycleEventsUseTypedReasonsInsteadOfMetadata(t *testing.T) {
 		Type:             observation.EventTypeStepEnd,
 		RunID:            flruntime.RunID(r.id),
 		ThreadID:         flruntime.ThreadID(thread.ThreadID),
+		TurnID:           flruntime.TurnID(r.messageID),
+		Step:             1,
 		FinishReason:     observation.FinishReasonStop,
 		RawFinishReason:  "end_turn",
 		FinishInferred:   true,
@@ -43,31 +45,54 @@ func TestFloretLifecycleEventsUseTypedReasonsInsteadOfMetadata(t *testing.T) {
 		},
 	})
 	sink.EmitEvent(flruntime.Event{
-		Type:     observation.EventTypeContextContinue,
-		RunID:    flruntime.RunID(r.id),
-		ThreadID: flruntime.ThreadID(thread.ThreadID),
-		Metadata: map[string]any{"continuation_reason": "hook"},
+		Type:               observation.EventTypeContextContinue,
+		RunID:              flruntime.RunID(r.id),
+		ThreadID:           flruntime.ThreadID(thread.ThreadID),
+		TurnID:             flruntime.TurnID(r.messageID),
+		Step:               1,
+		ContinuationReason: observation.ContinuationReasonHook,
 	})
 
 	events, err := svc.threadsDB.ListRunEvents(ctx, meta.EndpointID, r.id, 10)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(events) != 2 {
-		t.Fatalf("events = %#v", events)
+	if len(events) != 0 {
+		t.Fatalf("engine lifecycle events were mirrored into product run events: %#v", events)
 	}
-	var stepPayload map[string]any
-	if err := json.Unmarshal([]byte(events[0].PayloadJSON), &stepPayload); err != nil {
-		t.Fatal(err)
+}
+
+func TestValidateFloretRuntimeEventRequiresConfiguredProductAssociation(t *testing.T) {
+	t.Parallel()
+
+	r := &run{}
+	r.expectFloretRuntimeEventIdentity("run-1", "thread-1", "turn-1", true)
+	valid := flruntime.Event{
+		Type:     observation.EventTypeStepStart,
+		RunID:    "run-1",
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		Step:     1,
 	}
-	if stepPayload["finish_reason"] != "stop" || stepPayload["raw_finish_reason"] != "end_turn" || stepPayload["finish_inferred"] != true || stepPayload["completion_reason"] != "natural_stop" || stepPayload["continuation_reason"] != "" {
-		t.Fatalf("step payload = %#v", stepPayload)
+	if err := r.validateFloretRuntimeEvent(valid); err != nil {
+		t.Fatalf("validate matching event: %v", err)
 	}
-	var continuePayload map[string]any
-	if err := json.Unmarshal([]byte(events[1].PayloadJSON), &continuePayload); err != nil {
-		t.Fatal(err)
+	wrongRun := valid
+	wrongRun.RunID = "run-2"
+	if err := r.validateFloretRuntimeEvent(wrongRun); err == nil {
+		t.Fatal("event from another run was accepted")
 	}
-	if continuePayload["continuation_reason"] != "" {
-		t.Fatalf("metadata-only continuation leaked into payload: %#v", continuePayload)
+	wrongThread := valid
+	wrongThread.ThreadID = "thread-2"
+	if err := r.validateFloretRuntimeEvent(wrongThread); err == nil {
+		t.Fatal("event from another thread was accepted")
+	}
+
+	r.expectFloretRuntimeEventIdentity("", "thread-1", "", false)
+	standaloneCompaction := valid
+	standaloneCompaction.RunID = "floret-generated-run"
+	standaloneCompaction.TurnID = ""
+	if err := r.validateFloretRuntimeEvent(standaloneCompaction); err != nil {
+		t.Fatalf("validate standalone compaction association: %v", err)
 	}
 }

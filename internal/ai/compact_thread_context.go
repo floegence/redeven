@@ -5,11 +5,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
 
 	flconfig "github.com/floegence/floret/config"
+	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/ai/threadstore"
@@ -17,61 +19,36 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
-func idleManualCompactionOperationID(runID string, requestID string) string {
-	return flruntime.ManualCompactionOperationID(flruntime.RunID(strings.TrimSpace(runID)), 1, strings.TrimSpace(requestID))
-}
-
-func idleCompactThreadResultStatus(result flruntime.CompactThreadResult) string {
-	status := strings.TrimSpace(result.Status)
-	switch {
-	case status == "compacted":
-		return "compacted"
-	case status == "completed" && result.Metrics.Compactions > 0:
-		return "compacted"
-	case status == "noop" || status == "completed" && result.Metrics.Compactions == 0:
-		return "noop"
-	default:
-		return ""
-	}
-}
-
-var errIdleCompactionNotCurrent = errors.New("context compaction operation is no longer current")
-
 const idleCompactionGateRunEventType = "context.compaction.gate"
 
 func idleThreadCompactionExpired(err error) bool {
 	return errors.Is(err, context.Canceled) ||
 		errors.Is(err, context.DeadlineExceeded) ||
-		errors.Is(err, errIdleCompactionNotCurrent) ||
-		errors.Is(err, threadstore.ErrThreadContextBoundaryChanged) ||
 		errors.Is(err, sql.ErrNoRows)
 }
 
 type idleThreadCompaction struct {
-	mu              sync.Mutex
-	endpointID      string
-	threadID        string
-	operationID     string
-	runID           string
-	anchor          FlowerTimelineAnchor
-	contextBoundary threadstore.ThreadContextBoundary
-	cancelled       bool
-	finalizing      bool
-	cancel          context.CancelFunc
-	done            chan struct{}
+	mu         sync.Mutex
+	endpointID string
+	threadID   string
+	requestID  string
+	runID      string
+	anchor     FlowerTimelineAnchor
+	cancelled  bool
+	cancel     context.CancelFunc
+	done       chan struct{}
 }
 
 type idleThreadCompactionBeginResult struct {
-	OperationID string
-	RunID       string
-	Started     bool
+	RequestID string
+	RunID     string
+	Started   bool
 }
 
 type idleThreadCompactionCancelResult struct {
 	Compaction *idleThreadCompaction
 	Found      bool
 	Cancelled  bool
-	Finalizing bool
 }
 
 func (c *idleThreadCompaction) cancelRun() {
@@ -99,34 +76,25 @@ func (c *idleThreadCompaction) isCancelled() bool {
 	return c.cancelled
 }
 
-func (c *idleThreadCompaction) isFinalizing() bool {
-	if c == nil {
-		return false
-	}
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.finalizing
-}
-
 func (c *idleThreadCompaction) busy() bool {
 	if c == nil {
 		return false
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return !c.cancelled && strings.TrimSpace(c.operationID) != ""
+	return !c.cancelled && strings.TrimSpace(c.requestID) != ""
 }
 
-func (s *Service) persistIdleThreadCompactionGateEvent(endpointID string, threadID string, runID string, operationID string, phase string, attrs map[string]any) {
+func (s *Service) persistIdleThreadCompactionGateEvent(endpointID string, threadID string, runID string, requestID string, phase string, attrs map[string]any) {
 	if s == nil {
 		return
 	}
 	endpointID = strings.TrimSpace(endpointID)
 	threadID = strings.TrimSpace(threadID)
 	runID = strings.TrimSpace(runID)
-	operationID = strings.TrimSpace(operationID)
+	requestID = strings.TrimSpace(requestID)
 	phase = strings.TrimSpace(phase)
-	if endpointID == "" || threadID == "" || runID == "" || operationID == "" || phase == "" {
+	if endpointID == "" || threadID == "" || runID == "" || requestID == "" || phase == "" {
 		return
 	}
 	s.mu.Lock()
@@ -140,7 +108,7 @@ func (s *Service) persistIdleThreadCompactionGateEvent(endpointID string, thread
 		persistTO = defaultPersistOpTimeout
 	}
 	payload := make(map[string]any, len(attrs)+2)
-	payload["operation_id"] = operationID
+	payload["request_id"] = requestID
 	payload["phase"] = phase
 	for key, value := range attrs {
 		key = strings.TrimSpace(key)
@@ -163,18 +131,18 @@ func (s *Service) persistIdleThreadCompactionGateEvent(endpointID string, thread
 		PayloadJSON: string(raw),
 		AtUnixMs:    time.Now().UnixMilli(),
 	}); err != nil && s.log != nil {
-		s.log.Warn("persist idle compaction gate event failed", "thread_id", threadID, "run_id", runID, "operation_id", operationID, "phase", phase, "error", err)
+		s.log.Warn("persist idle compaction gate event failed", "thread_id", threadID, "run_id", runID, "request_id", requestID, "phase", phase, "error", err)
 	}
 }
 
-func (s *Service) beginIdleThreadCompaction(endpointID string, threadID string, operationID string, runID string, anchor FlowerTimelineAnchor, contextBoundary threadstore.ThreadContextBoundary, cancel context.CancelFunc) (idleThreadCompactionBeginResult, error) {
+func (s *Service) beginIdleThreadCompaction(endpointID string, threadID string, requestID string, runID string, anchor FlowerTimelineAnchor, cancel context.CancelFunc) (idleThreadCompactionBeginResult, error) {
 	if s == nil {
 		return idleThreadCompactionBeginResult{}, errors.New("service not ready")
 	}
 	thKey := runThreadKey(endpointID, threadID)
-	operationID = strings.TrimSpace(operationID)
+	requestID = strings.TrimSpace(requestID)
 	runID = strings.TrimSpace(runID)
-	if thKey == "" || operationID == "" || runID == "" || !validFlowerTimelineAnchor(anchor) || cancel == nil {
+	if thKey == "" || requestID == "" || runID == "" || !validFlowerTimelineAnchor(anchor) || cancel == nil {
 		return idleThreadCompactionBeginResult{}, errors.New("invalid request")
 	}
 	s.mu.Lock()
@@ -184,24 +152,24 @@ func (s *Service) beginIdleThreadCompaction(endpointID string, threadID string, 
 	if activeRunID := strings.TrimSpace(s.activeRunByTh[thKey]); activeRunID != "" {
 		s.mu.Unlock()
 		cancel()
-		return idleThreadCompactionBeginResult{OperationID: activeRunID, RunID: activeRunID}, ErrThreadBusy
+		return idleThreadCompactionBeginResult{RunID: activeRunID}, ErrThreadBusy
 	}
-	if existing := s.idleCompactionByTh[thKey]; existing != nil && strings.TrimSpace(existing.operationID) != "" {
+	if existing := s.idleCompactionByTh[thKey]; existing != nil && strings.TrimSpace(existing.requestID) != "" {
 		existing.mu.Lock()
-		existingOperationID := strings.TrimSpace(existing.operationID)
+		existingRequestID := strings.TrimSpace(existing.requestID)
 		existingRunID := strings.TrimSpace(existing.runID)
 		existingCancelled := existing.cancelled
 		existing.mu.Unlock()
 		if existingCancelled {
 			delete(s.idleCompactionByTh, thKey)
 			s.mu.Unlock()
-			s.persistIdleThreadCompactionGateEvent(endpointID, threadID, existingRunID, existingOperationID, "superseded_after_cancel", map[string]any{
-				"next_operation_id": operationID,
+			s.persistIdleThreadCompactionGateEvent(endpointID, threadID, existingRunID, existingRequestID, "superseded_after_cancel", map[string]any{
+				"next_request_id": requestID,
 			})
 		} else {
 			s.mu.Unlock()
 			cancel()
-			return idleThreadCompactionBeginResult{OperationID: existingOperationID, RunID: existingRunID}, nil
+			return idleThreadCompactionBeginResult{RequestID: existingRequestID, RunID: existingRunID}, nil
 		}
 	} else {
 		s.mu.Unlock()
@@ -210,42 +178,41 @@ func (s *Service) beginIdleThreadCompaction(endpointID string, threadID string, 
 	if s.idleCompactionByTh == nil {
 		s.idleCompactionByTh = make(map[string]*idleThreadCompaction)
 	}
-	if existing := s.idleCompactionByTh[thKey]; existing != nil && strings.TrimSpace(existing.operationID) != "" {
+	if existing := s.idleCompactionByTh[thKey]; existing != nil && strings.TrimSpace(existing.requestID) != "" {
 		existing.mu.Lock()
-		existingOperationID := strings.TrimSpace(existing.operationID)
+		existingRequestID := strings.TrimSpace(existing.requestID)
 		existingRunID := strings.TrimSpace(existing.runID)
 		existing.mu.Unlock()
 		s.mu.Unlock()
 		cancel()
-		return idleThreadCompactionBeginResult{OperationID: existingOperationID, RunID: existingRunID}, nil
+		return idleThreadCompactionBeginResult{RequestID: existingRequestID, RunID: existingRunID}, nil
 	}
 	s.idleCompactionByTh[thKey] = &idleThreadCompaction{
-		endpointID:      endpointID,
-		threadID:        threadID,
-		operationID:     operationID,
-		runID:           runID,
-		anchor:          anchor,
-		contextBoundary: contextBoundary,
-		cancel:          cancel,
-		done:            make(chan struct{}),
+		endpointID: endpointID,
+		threadID:   threadID,
+		requestID:  requestID,
+		runID:      runID,
+		anchor:     anchor,
+		cancel:     cancel,
+		done:       make(chan struct{}),
 	}
 	s.mu.Unlock()
-	s.persistIdleThreadCompactionGateEvent(endpointID, threadID, runID, operationID, "registered", nil)
-	return idleThreadCompactionBeginResult{OperationID: operationID, RunID: runID, Started: true}, nil
+	s.persistIdleThreadCompactionGateEvent(endpointID, threadID, runID, requestID, "registered", nil)
+	return idleThreadCompactionBeginResult{RequestID: requestID, RunID: runID, Started: true}, nil
 }
 
-func (s *Service) finishIdleThreadCompaction(endpointID string, threadID string, operationID string) {
+func (s *Service) finishIdleThreadCompaction(endpointID string, threadID string, requestID string) {
 	if s == nil {
 		return
 	}
 	thKey := runThreadKey(endpointID, threadID)
-	operationID = strings.TrimSpace(operationID)
-	if thKey == "" || operationID == "" {
+	requestID = strings.TrimSpace(requestID)
+	if thKey == "" || requestID == "" {
 		return
 	}
 	s.mu.Lock()
 	var done chan struct{}
-	if existing := s.idleCompactionByTh[thKey]; existing != nil && strings.TrimSpace(existing.operationID) == operationID {
+	if existing := s.idleCompactionByTh[thKey]; existing != nil && strings.TrimSpace(existing.requestID) == requestID {
 		done = existing.done
 		delete(s.idleCompactionByTh, thKey)
 	}
@@ -258,7 +225,7 @@ func (s *Service) finishIdleThreadCompaction(endpointID string, threadID string,
 	}
 }
 
-func (s *Service) idleThreadCompactionOperation(endpointID string, threadID string) string {
+func (s *Service) idleThreadCompactionRequestID(endpointID string, threadID string) string {
 	if s == nil {
 		return ""
 	}
@@ -277,22 +244,22 @@ func (s *Service) idleThreadCompactionOperation(endpointID string, threadID stri
 	if existing.cancelled {
 		return ""
 	}
-	return strings.TrimSpace(existing.operationID)
+	return strings.TrimSpace(existing.requestID)
 }
 
-func (s *Service) isIdleThreadCompactionCurrent(endpointID string, threadID string, operationID string) bool {
+func (s *Service) isIdleThreadCompactionCurrent(endpointID string, threadID string, requestID string) bool {
 	if s == nil {
 		return false
 	}
 	thKey := runThreadKey(endpointID, threadID)
-	operationID = strings.TrimSpace(operationID)
-	if thKey == "" || operationID == "" {
+	requestID = strings.TrimSpace(requestID)
+	if thKey == "" || requestID == "" {
 		return false
 	}
 	s.mu.Lock()
 	existing := s.idleCompactionByTh[thKey]
 	s.mu.Unlock()
-	if existing == nil || strings.TrimSpace(existing.operationID) != operationID {
+	if existing == nil || strings.TrimSpace(existing.requestID) != requestID {
 		return false
 	}
 	existing.mu.Lock()
@@ -316,48 +283,19 @@ func (s *Service) cancelIdleThreadCompaction(endpointID string, threadID string)
 	}
 	compaction.mu.Lock()
 	runID := strings.TrimSpace(compaction.runID)
-	operationID := strings.TrimSpace(compaction.operationID)
-	if compaction.finalizing {
-		compaction.mu.Unlock()
-		s.persistIdleThreadCompactionGateEvent(endpointID, threadID, runID, operationID, "cancel_skipped_finalizing", map[string]any{
-			"reason": "commit_finalizing",
-		})
-		return idleThreadCompactionCancelResult{Compaction: compaction, Found: true, Finalizing: true}
-	}
+	requestID := strings.TrimSpace(compaction.requestID)
 	if !compaction.cancelled {
 		compaction.cancelled = true
 	}
 	compaction.mu.Unlock()
-	s.persistIdleThreadCompactionGateEvent(endpointID, threadID, runID, operationID, "cancel_requested", nil)
+	s.persistIdleThreadCompactionGateEvent(endpointID, threadID, runID, requestID, "cancel_requested", nil)
 	compaction.cancelRun()
 	return idleThreadCompactionCancelResult{Compaction: compaction, Found: true, Cancelled: true}
 }
 
 func (s *Service) cancelIdleThreadCompactionWithBroadcast(endpointID string, threadID string) (*idleThreadCompaction, bool) {
 	result := s.cancelIdleThreadCompaction(endpointID, threadID)
-	if !result.Found || result.Compaction == nil {
-		return result.Compaction, result.Found
-	}
-	if !result.Cancelled {
-		return result.Compaction, result.Found
-	}
-	s.publishIdleContextCompactionCancellation(result.Compaction)
 	return result.Compaction, result.Found
-}
-
-func (s *Service) publishIdleContextCompactionCancellation(compaction *idleThreadCompaction) {
-	if s == nil || compaction == nil {
-		return
-	}
-	s.publishIdleContextCompaction(compaction.endpointID, compaction.threadID, compaction.runID, FlowerContextCompaction{
-		OperationID: strings.TrimSpace(compaction.operationID),
-		RunID:       strings.TrimSpace(compaction.runID),
-		Phase:       "cancelled",
-		Status:      "cancelled",
-		Trigger:     "manual",
-		Reason:      "manual",
-		UpdatedAtMs: time.Now().UnixMilli(),
-	}, compaction.anchor)
 }
 
 func (s *Service) waitIdleThreadCompaction(ctx context.Context, compaction *idleThreadCompaction) bool {
@@ -372,127 +310,6 @@ func (s *Service) waitIdleThreadCompaction(ctx context.Context, compaction *idle
 		return true
 	case <-ctx.Done():
 		return false
-	}
-}
-
-func (s *Service) commitIdleThreadCompaction(ctx context.Context, db *threadstore.Store, endpointID string, threadID string, runID string, operationID string, continuation threadstore.ThreadProviderContinuation) error {
-	if s == nil || db == nil {
-		return errors.New("threads store not ready")
-	}
-	thKey := runThreadKey(endpointID, threadID)
-	runID = strings.TrimSpace(runID)
-	operationID = strings.TrimSpace(operationID)
-	if thKey == "" || runID == "" || operationID == "" {
-		return errors.New("invalid request")
-	}
-	s.mu.Lock()
-	existing := s.idleCompactionByTh[thKey]
-	s.mu.Unlock()
-	if existing == nil {
-		s.persistIdleThreadCompactionGateEvent(endpointID, threadID, runID, operationID, "commit_rejected", map[string]any{
-			"reason":    "not_current",
-			"cancelled": false,
-		})
-		return errIdleCompactionNotCurrent
-	}
-	existing.mu.Lock()
-	if existing.cancelled || strings.TrimSpace(existing.operationID) != operationID {
-		cancelled := existing.cancelled
-		runID := strings.TrimSpace(existing.runID)
-		existing.mu.Unlock()
-		if runID == "" {
-			runID = operationID
-		}
-		s.persistIdleThreadCompactionGateEvent(endpointID, threadID, runID, operationID, "commit_rejected", map[string]any{
-			"reason":    "not_current",
-			"cancelled": cancelled,
-		})
-		return errIdleCompactionNotCurrent
-	}
-	contextBoundary := existing.contextBoundary
-	currentRunID := strings.TrimSpace(existing.runID)
-	existing.finalizing = true
-	existing.mu.Unlock()
-	if currentRunID != runID {
-		s.persistIdleThreadCompactionGateEvent(endpointID, threadID, runID, operationID, "commit_rejected", map[string]any{
-			"reason":         "run_changed",
-			"current_run_id": currentRunID,
-		})
-		return errIdleCompactionNotCurrent
-	}
-	s.persistIdleThreadCompactionGateEvent(endpointID, threadID, runID, operationID, "commit_attempt", nil)
-	if err := db.SetThreadProviderContinuationIfBoundaryMatches(ctx, endpointID, threadID, contextBoundary, continuation); err != nil {
-		s.persistIdleThreadCompactionGateEvent(endpointID, threadID, runID, operationID, "commit_rejected", map[string]any{
-			"reason": strings.TrimSpace(err.Error()),
-		})
-		return err
-	}
-	s.persistIdleThreadCompactionGateEvent(endpointID, threadID, runID, operationID, "commit_persisted", nil)
-	return nil
-}
-
-func (s *Service) publishIdleContextCompaction(endpointID string, threadID string, runID string, compaction FlowerContextCompaction, anchor FlowerTimelineAnchor) {
-	if s == nil || !validFlowerTimelineAnchor(anchor) {
-		return
-	}
-	operationID := strings.TrimSpace(compaction.OperationID)
-	if operationID == "" {
-		return
-	}
-	compaction.RunID = strings.TrimSpace(runID)
-	if compaction.UpdatedAtMs <= 0 {
-		compaction.UpdatedAtMs = time.Now().UnixMilli()
-	}
-	decoration := FlowerTimelineDecoration{
-		DecorationID: "context-compaction:" + operationID,
-		Kind:         "context_compaction",
-		Anchor:       anchor,
-		Compaction:   compaction,
-	}
-	s.persistIdleContextCompaction(endpointID, threadID, runID, compaction, decoration)
-	s.broadcastStreamEvent(endpointID, threadID, runID, streamEventContextCompaction{
-		Type:               "context-compaction",
-		Compaction:         compaction,
-		TimelineDecoration: decoration,
-	})
-}
-
-func (s *Service) persistIdleContextCompaction(endpointID string, threadID string, runID string, compaction FlowerContextCompaction, decoration FlowerTimelineDecoration) {
-	if s == nil {
-		return
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	runID = strings.TrimSpace(runID)
-	if endpointID == "" || threadID == "" || runID == "" {
-		return
-	}
-	s.mu.Lock()
-	db := s.threadsDB
-	persistTO := s.persistOpTO
-	s.mu.Unlock()
-	if db == nil {
-		return
-	}
-	if persistTO <= 0 {
-		persistTO = defaultPersistOpTimeout
-	}
-	raw := mustFlowerPayload(FlowerLiveContextCompactionUpdatedPayload{
-		Compaction:         compaction,
-		TimelineDecoration: decoration,
-	})
-	ctx, cancel := context.WithTimeout(context.Background(), persistTO)
-	defer cancel()
-	if err := db.AppendRunEvent(ctx, threadstore.RunEventRecord{
-		EndpointID:  endpointID,
-		ThreadID:    threadID,
-		RunID:       runID,
-		StreamKind:  string(RealtimeStreamKindContext),
-		EventType:   string(FlowerLiveContextCompactionUpdated),
-		PayloadJSON: string(raw),
-		AtUnixMs:    compaction.UpdatedAtMs,
-	}); err != nil && s.log != nil {
-		s.log.Warn("persist idle compaction event failed", "thread_id", threadID, "run_id", runID, "operation_id", compaction.OperationID, "phase", compaction.Phase, "error", err)
 	}
 }
 
@@ -566,8 +383,8 @@ func (a *threadActor) handleCompactThreadContext(ctx context.Context, meta *sess
 			kind = "already_pending"
 		}
 		return CompactThreadContextResponse{
-			OperationID: strings.TrimSpace(manual.RequestID),
-			Kind:        kind,
+			RequestID: strings.TrimSpace(manual.RequestID),
+			Kind:      kind,
 		}, nil
 	}
 	if activeRunRequestID != "" {
@@ -581,7 +398,6 @@ func (a *threadActor) handleCompactThreadContext(ctx context.Context, meta *sess
 	if err != nil {
 		return CompactThreadContextResponse{}, err
 	}
-	operationID := idleManualCompactionOperationID(runID, requestID)
 	anchor, err := a.mgr.svc.lastVisibleFlowerTimelineAnchor(ctx, endpointID, threadID)
 	if err != nil {
 		return CompactThreadContextResponse{}, err
@@ -589,71 +405,41 @@ func (a *threadActor) handleCompactThreadContext(ctx context.Context, meta *sess
 	if !validFlowerTimelineAnchor(anchor) {
 		return CompactThreadContextResponse{}, ErrNoCompactableContext
 	}
-	boundaryCtx, cancelBoundary := context.WithTimeout(ctx, persistTO)
-	contextBoundary, err := db.CurrentThreadContextBoundary(boundaryCtx, endpointID, threadID)
-	cancelBoundary()
-	if err != nil {
-		return CompactThreadContextResponse{}, err
-	}
 	startedAt := time.Now()
 	bgCtx, cancelBg := context.WithCancel(context.Background())
-	if begin, gateErr := a.mgr.svc.beginIdleThreadCompaction(endpointID, threadID, operationID, runID, anchor, contextBoundary, cancelBg); gateErr != nil {
+	if begin, gateErr := a.mgr.svc.beginIdleThreadCompaction(endpointID, threadID, requestID, runID, anchor, cancelBg); gateErr != nil {
 		return CompactThreadContextResponse{}, gateErr
 	} else if !begin.Started {
-		return CompactThreadContextResponse{OperationID: begin.OperationID, Kind: "already_pending"}, nil
+		return CompactThreadContextResponse{RequestID: begin.RequestID, Kind: "already_pending"}, nil
 	}
 	manual := flruntime.ManualCompactionRequest{
 		RequestID:   requestID,
 		Source:      source,
 		RequestedAt: startedAt,
 	}
-	a.mgr.svc.publishIdleContextCompaction(endpointID, threadID, runID, FlowerContextCompaction{
-		OperationID: operationID,
-		RunID:       runID,
-		Phase:       "start",
-		Status:      "compacting",
-		Trigger:     "manual",
-		Reason:      "manual",
-		UpdatedAtMs: startedAt.UnixMilli(),
-	}, anchor)
 	metaCopy := *meta
 	threadCopy := *th
 	go func() {
-		defer a.mgr.svc.finishIdleThreadCompaction(endpointID, threadID, operationID)
-		if err := a.mgr.svc.runIdleThreadCompaction(bgCtx, &metaCopy, &threadCopy, runID, manual, anchor, contextBoundary); err != nil {
-			if !a.mgr.svc.isIdleThreadCompactionCurrent(endpointID, threadID, operationID) {
+		defer a.mgr.svc.finishIdleThreadCompaction(endpointID, threadID, requestID)
+		if err := a.mgr.svc.runIdleThreadCompaction(bgCtx, &metaCopy, &threadCopy, runID, manual, anchor); err != nil {
+			if !a.mgr.svc.isIdleThreadCompactionCurrent(endpointID, threadID, requestID) {
 				if a.mgr.svc.log != nil {
-					a.mgr.svc.log.Debug("idle thread compaction stopped before commit", "thread_id", threadID, "operation_id", operationID, "error", err)
+					a.mgr.svc.log.Debug("idle thread compaction request stopped", "thread_id", threadID, "request_id", requestID, "error", err)
 				}
 				return
 			}
-			phase := "failed"
-			status := "failed"
-			if idleThreadCompactionExpired(err) {
-				phase = "cancelled"
-				status = "cancelled"
-			} else if a.mgr.svc.log != nil {
-				a.mgr.svc.log.Warn("idle thread compaction failed", "thread_id", threadID, "operation_id", operationID, "error", err)
+			if !idleThreadCompactionExpired(err) && a.mgr.svc.log != nil {
+				a.mgr.svc.log.Warn("idle thread compaction failed", "thread_id", threadID, "request_id", requestID, "error", err)
 			}
 			if a.mgr.svc.log != nil {
-				a.mgr.svc.log.Debug("idle thread compaction reached terminal state", "thread_id", threadID, "operation_id", operationID, "phase", phase, "error", err)
+				a.mgr.svc.log.Debug("idle thread compaction reached terminal state", "thread_id", threadID, "request_id", requestID, "error", err)
 			}
-			a.mgr.svc.publishIdleContextCompaction(endpointID, threadID, runID, FlowerContextCompaction{
-				OperationID: operationID,
-				RunID:       runID,
-				Phase:       phase,
-				Status:      status,
-				Trigger:     "manual",
-				Reason:      "manual",
-				Error:       strings.TrimSpace(err.Error()),
-				UpdatedAtMs: time.Now().UnixMilli(),
-			}, anchor)
 		}
 	}()
-	return CompactThreadContextResponse{OperationID: operationID, Kind: "started"}, nil
+	return CompactThreadContextResponse{RequestID: requestID, Kind: "started"}, nil
 }
 
-func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Meta, th *threadstore.Thread, runID string, manual flruntime.ManualCompactionRequest, anchor FlowerTimelineAnchor, contextBoundary threadstore.ThreadContextBoundary) error {
+func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Meta, th *threadstore.Thread, runID string, manual flruntime.ManualCompactionRequest, anchor FlowerTimelineAnchor) error {
 	if s == nil {
 		return errors.New("nil service")
 	}
@@ -704,29 +490,30 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 	}
 	metaCopy := *meta
 	r := newRun(runOptions{
-		Log:                          s.log,
-		StateDir:                     s.stateDir,
-		AgentHomeDir:                 s.agentHomeDir,
-		WorkingDir:                   runWorkingDir,
-		FilesystemScope:              s.scope,
-		Shell:                        s.shell,
-		AIConfig:                     cfg,
-		SessionMeta:                  &metaCopy,
-		ResolveProviderKey:           s.resolveProviderKey,
-		ResolveWebSearchKey:          s.resolveWebSearchKey,
-		DesktopModelSource:           desktopModelSource,
-		RunID:                        runID,
-		ChannelID:                    strings.TrimSpace(meta.ChannelID),
-		EndpointID:                   endpointID,
-		ThreadID:                     threadID,
-		UserPublicID:                 strings.TrimSpace(meta.UserPublicID),
-		MessageID:                    messageID,
-		UploadsDir:                   uploadsDir,
-		ThreadsDB:                    db,
-		PersistOpTimeout:             persistTO,
-		HostManagedContextCompaction: true,
-		MaxWallTime:                  runMaxWallTime,
-		IdleTimeout:                  runIdleTimeout,
+		Log:                 s.log,
+		StateDir:            s.stateDir,
+		AgentHomeDir:        s.agentHomeDir,
+		WorkingDir:          runWorkingDir,
+		FilesystemScope:     s.scope,
+		Shell:               s.shell,
+		Service:             s,
+		AIConfig:            cfg,
+		SessionMeta:         &metaCopy,
+		ResolveProviderKey:  s.resolveProviderKey,
+		ResolveWebSearchKey: s.resolveWebSearchKey,
+		DesktopModelSource:  desktopModelSource,
+		RunID:               runID,
+		ChannelID:           strings.TrimSpace(meta.ChannelID),
+		EndpointID:          endpointID,
+		ThreadID:            threadID,
+		UserPublicID:        strings.TrimSpace(meta.UserPublicID),
+		MessageID:           messageID,
+		UploadsDir:          uploadsDir,
+		ThreadsDB:           db,
+		FloretStore:         s.floretStore,
+		PersistOpTimeout:    persistTO,
+		MaxWallTime:         runMaxWallTime,
+		IdleTimeout:         runIdleTimeout,
 		OnStreamEvent: func(ev any) {
 			s.broadcastStreamEvent(endpointID, threadID, runID, ev)
 		},
@@ -755,7 +542,6 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 		go r.runIdleWatchdog(execCtx)
 	}
 	r.setContextCompactionAnchor(strings.TrimSpace(manual.RequestID), anchor)
-	r.setContextCompactionAnchor(idleManualCompactionOperationID(runID, manual.RequestID), anchor)
 	r.permissionType = permissionType
 	_, modelCapability, reasoning, providerCfg, apiKey, adapterOverride, err := s.resolveIdleCompactionModel(execCtx, cfg, th, r)
 	if err != nil {
@@ -786,25 +572,23 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 		Correlation: map[string]string{"thread_id": threadID, "message_id": messageID},
 		Host:        floretHostLabelsForRun(r),
 	}
-	providerContinuation := newProviderContinuationProjector(r, providerCfg.ID, providerType, strings.TrimSpace(modelCapability.WireModelName), providerCfg.BaseURL)
-	previousState, err := providerContinuation.PreviousState(execCtx)
-	if err != nil {
-		return err
-	}
 	contextWindow := modelGatewayDefaultContextWindowTokens
 	if modelCapability.MaxContextTokens > 0 {
 		contextWindow = modelCapability.MaxContextTokens
 	}
 	systemPrompt := r.buildLayeredSystemPrompt("", permissionTypeString(permissionType), TaskComplexityStandard, 0, true, nil, runtimeState{}, "", runCapabilityContract{})
-	store, err := r.openFloretThreadStore()
+	store := r.floretStore
+	if store == nil {
+		return errors.New("floret store not ready")
+	}
+	gatewayIdentity, err := redevenFloretGatewayIdentity(providerCfg.ID, providerType, providerCfg.BaseURL, modelCapability.WireModelName, flProvider.stateCompatibilityRoute())
 	if err != nil {
 		return err
 	}
-	defer func() { _ = store.Close() }()
 	host, err := flruntime.NewHost(flruntime.HostOptions{
 		Config:               flconfig.Config{SystemPrompt: systemPrompt, ContextPolicy: floretModelContextPolicy(contextWindow, 0), Reasoning: reasoning},
 		ModelGateway:         flProvider,
-		ModelGatewayIdentity: redevenFloretGatewayIdentity(providerCfg.ID, modelCapability.WireModelName),
+		ModelGatewayIdentity: gatewayIdentity,
 		Store:                store,
 		Sink:                 floretEventSink{run: r},
 		ThreadTitleMode:      flruntime.ThreadTitleModeHostOwned,
@@ -819,59 +603,32 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 	if err := ensureFloretThread(execCtx, host, flruntime.ThreadID(threadID)); err != nil {
 		return err
 	}
+	r.expectFloretRuntimeEventIdentity("", threadID, "", false)
 	result, err := host.CompactThread(execCtx, flruntime.CompactThreadRequest{
-		ThreadID:              flruntime.ThreadID(threadID),
-		RequestID:             strings.TrimSpace(manual.RequestID),
-		Source:                strings.TrimSpace(manual.Source),
-		Labels:                labels,
-		PreviousProviderState: previousState,
+		ThreadID:  flruntime.ThreadID(threadID),
+		RequestID: strings.TrimSpace(manual.RequestID),
+		Source:    strings.TrimSpace(manual.Source),
+		Labels:    labels,
 		Limits: flruntime.TurnLimits{
 			MaxToolCalls:           modelGatewayHardMaxToolCalls,
 			MaxLengthContinuations: 2,
 		},
 		Reasoning: reasoning,
 	})
+	if result.ThreadID != "" {
+		if validationErr := result.Validate(); validationErr != nil {
+			return validationErr
+		}
+		if result.ThreadID != flruntime.ThreadID(threadID) || strings.TrimSpace(result.RequestID) != strings.TrimSpace(manual.RequestID) {
+			return errors.New("Floret compact thread result identity mismatch")
+		}
+	}
 	if err != nil {
 		return err
 	}
-	operationID := idleManualCompactionOperationID(runID, manual.RequestID)
-	switch idleCompactThreadResultStatus(result) {
-	case "compacted":
-	case "noop":
-		s.publishIdleContextCompaction(endpointID, threadID, runID, FlowerContextCompaction{
-			OperationID:         operationID,
-			RunID:               runID,
-			Phase:               "noop",
-			Status:              "noop",
-			Trigger:             "manual",
-			Reason:              "manual",
-			TokensBefore:        result.Metrics.ProviderUsage.InputTokens,
-			TokensAfterEstimate: result.Metrics.ProviderUsage.WindowInputTokens,
-			UpdatedAtMs:         time.Now().UnixMilli(),
-		}, anchor)
-		return nil
-	default:
-		return ErrNoCompactableContext
+	if result.Compaction.Status != observation.CompactionStatusCompacted && result.Compaction.Status != observation.CompactionStatusNoop {
+		return fmt.Errorf("Floret compaction completed with status %q", result.Compaction.Status)
 	}
-	pctx, cancel := context.WithTimeout(context.Background(), persistTO)
-	continuation := providerContinuation.Candidate(floretProviderStateToFlower(result.ProviderState))
-	if err := s.commitIdleThreadCompaction(pctx, db, endpointID, threadID, runID, operationID, continuation); err != nil {
-		cancel()
-		return err
-	}
-	cancel()
-	s.publishIdleContextCompaction(endpointID, threadID, runID, FlowerContextCompaction{
-		OperationID:         operationID,
-		RunID:               runID,
-		Phase:               "complete",
-		Status:              "compacted",
-		Trigger:             "manual",
-		Reason:              "manual",
-		TokensBefore:        result.Metrics.ProviderUsage.InputTokens,
-		TokensAfterEstimate: result.Metrics.ProviderUsage.WindowInputTokens,
-		UpdatedAtMs:         time.Now().UnixMilli(),
-	}, anchor)
-	s.broadcastThreadSummary(endpointID, threadID)
 	return nil
 }
 

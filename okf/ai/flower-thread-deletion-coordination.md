@@ -6,11 +6,11 @@ tags: [ai, threads, persistence, deletion, floret]
 timestamp: 2026-07-15T00:00:00Z
 ---
 
-Flower thread deletion crosses three ownership domains. Redeven owns product thread rows, transcript anchors, run and tool audit data, checkpoints, uploads, and user-scoped Flower read state. Floret owns the durable engine thread tree. A process can stop after any one of those stores changes, so deletion is represented as a durable operation rather than a sequence inferred from current absence or repaired by restoring old rows.
+Flower thread deletion crosses three ownership domains. Redeven owns product thread rows, transcript anchors, product run and operation audit data, checkpoints, uploads, and user-scoped Flower read state. Floret owns the durable engine thread tree, context lifecycle, tool lifecycle, and provider state. A process can stop after any one of those stores changes, so deletion is represented as a durable operation rather than a sequence inferred from current absence or repaired by restoring old rows.
 
 # Mechanism
 
-Threadstore schema v39 adds `ai_thread_delete_operations`. The unique `(endpoint_id, thread_id)` pair maps to one stable operation id and a `pending | committed | failed` status. Snapshot schema v1 stores the exact checkpoint ids, upload cleanup ids, and whether Flower read-state cleanup is required. The operation also records product-data, file, Floret, and read-state confirmation times, retry count, stable error code, sanitized error message, and creation, update, and commit times. A database trigger and the create-thread path permanently reject reuse of an endpoint/thread identity that has any delete operation.
+Canonical threadstore schema v1 contains `ai_thread_delete_operations`. The unique `(endpoint_id, thread_id)` pair maps to one stable operation id and a `pending | committed | failed` status. Snapshot schema v1 stores the exact checkpoint ids, upload cleanup ids, and whether Flower read-state cleanup is required. The operation also records product-data, file, Floret, and read-state confirmation times, retry count, stable error code, sanitized error message, and creation, update, and commit times. A database trigger and the create-thread path permanently reject reuse of an endpoint/thread identity that has any delete operation. Older pre-release schemas are rejected without reset or migration.
 
 `PrepareThreadDeleteOperation` runs in one SQLite transaction. It returns an existing operation for an already prepared identity, otherwise requires the product thread to exist, captures the immutable cleanup snapshot, marks referenced upload candidates as deleting, removes every Redeven thread-scoped row and the thread row, inserts the pending operation, and records the product-data confirmation. No external file, Floret, or read-state mutation happens before that transaction commits.
 
@@ -33,7 +33,7 @@ The authenticated DELETE thread endpoint returns the operation result. `committe
 
 # References
 
-[1] redeven:internal/ai/threadstore/schema.go:329 - Threadstore migration v39 creates the delete operation journal and retired-id trigger.
+[1] redeven:internal/ai/threadstore/schema.go:35 - The canonical schema creates the delete operation journal and retired-id trigger.
 [2] redeven:internal/ai/threadstore/thread_delete_operation.go:58 - Preparation captures the snapshot and deletes product data in one transaction.
 [3] redeven:internal/ai/thread_delete_operation.go:52 - Replay executes the fixed file, Floret, and read-state order.
 [4] redeven:internal/ai/threads.go:952 - The product delete entrypoint enforces busy and force rules before preparing the operation.

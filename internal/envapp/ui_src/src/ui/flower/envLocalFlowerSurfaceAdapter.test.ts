@@ -615,7 +615,7 @@ describe('Env local Flower surface adapter', () => {
       throw new Error(`unexpected fetch: ${url}`);
     });
     const compactThreadContext = vi.fn(async () => ({
-      operationId: 'manual-compact-1',
+      requestId: 'manual-compact-1',
       kind: 'accepted',
     }));
     const adapter = createEnvLocalFlowerSurfaceAdapter({

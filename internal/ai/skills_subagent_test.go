@@ -375,6 +375,11 @@ func prepareSubagentPermissionSnapshot(t *testing.T, r *run) {
 		t.Cleanup(func() { _ = store.Close() })
 		r.threadsDB = store
 	}
+	if r.floretStore == nil {
+		store := flruntime.NewMemoryStore()
+		t.Cleanup(func() { _ = store.Close() })
+		r.floretStore = store
+	}
 	if resolved, err := r.resolveSubagentRunModel(context.Background()); err == nil {
 		webSearchCapability := resolveProviderWebSearchCapability(resolved.RunModel.Provider, strings.TrimSpace(resolved.ModelName))
 		if enableFlowerWebSearchTool(resolved.RunModel.Provider, webSearchCapability) {
@@ -1041,7 +1046,8 @@ func TestFloretSubagents_InheritsWebSearchResolver(t *testing.T) {
 		t.Fatalf("missing bounded subagent item for id=%s: %#v", id, waited)
 	}
 	if strings.TrimSpace(anyToString(entry["status"])) != subagentStatusCompleted {
-		t.Fatalf("unexpected subagent status payload: %#v", entry)
+		inspected, inspectErr := r.manageSubagents(context.Background(), map[string]any{"action": "inspect", "ids": []string{id}})
+		t.Fatalf("unexpected subagent status payload: %#v inspect=%#v inspect_err=%v", entry, inspected, inspectErr)
 	}
 	assertNoSubagentModelDetailFields(t, waited)
 

@@ -444,6 +444,16 @@ func TestServiceCloseFinalizesBeforeClosingThreadstore(t *testing.T) {
 	}
 }
 
+func TestTerminalSettlementStatusRejectsNonTerminalAndUnknownValues(t *testing.T) {
+	t.Parallel()
+
+	for _, status := range []string{terminalProcessStatusRunning, "", "unknown"} {
+		if got, err := terminalSettlementStatus(status); err == nil || got != "" {
+			t.Fatalf("terminalSettlementStatus(%q)=(%q, %v), want explicit error", status, got, err)
+		}
+	}
+}
+
 func managerReadUntil(t *testing.T, manager *terminalProcessManager, processID string, afterSeq int64, want string) terminalProcessSnapshot {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
@@ -489,7 +499,11 @@ func terminalProcessTestStartRequestWithIdentity(workspace string, owner floretP
 			Handle:     processID,
 		},
 		Finalize: func(owner floretPendingToolSettler, target flruntime.PendingToolSettlementTarget, snapshot terminalProcessSnapshot) error {
-			_, err := owner.SettlePendingTool(context.Background(), terminalProcessSettlementRequest(target, snapshot, terminalProcessResultPayload(snapshot)))
+			request, err := terminalProcessSettlementRequest(target, snapshot, terminalProcessResultPayload(snapshot))
+			if err != nil {
+				return err
+			}
+			_, err = owner.SettlePendingTool(context.Background(), request)
 			return err
 		},
 		ToolID:   toolID,

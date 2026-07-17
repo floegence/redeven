@@ -29,19 +29,19 @@ type floretProviderAdapterOption func(*floretProviderAdapter)
 
 func newFloretProviderAdapter(base ModelGateway, providerType string, modelName string, controls ProviderControls, budgets TurnBudgets, webSearch string, options ...floretProviderAdapterOption) *floretProviderAdapter {
 	adapter := &floretProviderAdapter{
-		base:                  base,
-		providerType:          strings.ToLower(strings.TrimSpace(providerType)),
-		modelName:             strings.TrimSpace(modelName),
-		webSearch:             strings.TrimSpace(webSearch),
-		controls:              controls,
-		budgets:               budgets,
-		continuationSupported: isOpenAIResponsesProviderContinuationEnabled(providerType),
+		base:         base,
+		providerType: strings.ToLower(strings.TrimSpace(providerType)),
+		modelName:    strings.TrimSpace(modelName),
+		webSearch:    strings.TrimSpace(webSearch),
+		controls:     controls,
+		budgets:      budgets,
 	}
 	for _, option := range options {
 		if option != nil {
 			option(adapter)
 		}
 	}
+	adapter.continuationSupported = adapter.stateCompatibilityRoute() == "openai-responses"
 	return adapter
 }
 
@@ -139,10 +139,15 @@ func (p *floretProviderAdapter) StreamModel(ctx context.Context, req flruntime.M
 		if usage.InputTokens > 0 || usage.OutputTokens > 0 || usage.ReasoningTokens > 0 {
 			sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventUsage, Usage: usage})
 		}
+		responseState, err := flowerProviderStateToFloret(result.ProviderState)
+		if err != nil {
+			sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventError, Err: err, Reason: err.Error()})
+			return
+		}
 		terminal := flruntime.ModelEvent{
 			Type:          flruntime.ModelEventDone,
 			Reason:        normalizeReplyFinishReason(result.FinishReason),
-			ResponseState: flowerProviderStateToFloret(result.ProviderState),
+			ResponseState: responseState,
 		}
 		if terminal.Reason == "length" {
 			terminal.Type = flruntime.ModelEventTruncated
@@ -184,11 +189,11 @@ func flowerSourcesToFloret(in []SourceRef) []flruntime.SourceRef {
 func (p *floretProviderAdapter) turnRequest(req flruntime.ModelRequest) (ModelGatewayRequest, error) {
 	controls := p.controls
 	previous := cloneFloretModelState(req.PreviousState)
-	if p.shouldUsePreviousState(previous, req.Step) {
-		controls.PreviousResponseID = strings.TrimSpace(previous.ID)
-	} else {
-		controls.PreviousResponseID = ""
+	previousResponseID, err := p.previousResponseID(previous)
+	if err != nil {
+		return ModelGatewayRequest{}, err
 	}
+	controls.PreviousResponseID = previousResponseID
 	if reasoning := config.NormalizeAIReasoningSelection(req.Reasoning); !reasoning.IsZero() {
 		controls.ReasoningSelection = reasoning
 	}
@@ -258,17 +263,41 @@ func (p *floretProviderAdapter) firstDisabledCoreControlToolCall(calls []ToolCal
 	return ""
 }
 
-func (p *floretProviderAdapter) shouldUsePreviousState(state *flruntime.ModelState, step int) bool {
-	if p == nil || !p.continuationSupported || state == nil {
-		return false
+func (p *floretProviderAdapter) previousResponseID(state *flruntime.ModelState) (string, error) {
+	if state == nil {
+		return "", nil
+	}
+	if p == nil || !p.continuationSupported {
+		return "", errors.New("Floret provided continuation state to a gateway without continuation support")
 	}
 	if strings.TrimSpace(state.Kind) != providerContinuationKindOpenAIResponses || strings.TrimSpace(state.ID) == "" {
-		return false
+		return "", errors.New("Floret provided invalid OpenAI Responses continuation state")
 	}
-	// Redeven's OpenAI Responses continuation contract only resumes
-	// the first provider request of a user turn. Later Floret steps already have
-	// explicit tool history in the local transcript.
-	return step <= 1
+	return strings.TrimSpace(state.ID), nil
+}
+
+func (p *floretProviderAdapter) stateCompatibilityRoute() string {
+	if p == nil {
+		return ""
+	}
+	if p.providerType == "openai" {
+		return "openai-responses"
+	}
+	switch p.providerType {
+	case "anthropic":
+		return "anthropic-messages"
+	case DesktopModelSourceProviderType:
+		return "desktop-model-source"
+	case "openai_compatible", "openrouter", "xai", "groq", "ollama", "chatglm", "deepseek", "qwen":
+		if p.webSearch == providerWebSearchModeOpenAIResponsesBuiltin ||
+			p.webSearch == providerWebSearchModeQwenResponsesWebSearch ||
+			(p.providerType == "openai_compatible" && p.webSearch == providerWebSearchModeExternalBrave) {
+			return "openai-responses"
+		}
+		return "openai-chat-completions"
+	default:
+		return "openai-chat-completions"
+	}
 }
 
 func sendFloretProviderEvent(ctx context.Context, out chan<- flruntime.ModelEvent, ev flruntime.ModelEvent) {
@@ -280,181 +309,52 @@ func sendFloretProviderEvent(ctx context.Context, out chan<- flruntime.ModelEven
 
 func floretMessagesToFlower(messages []flruntime.ModelMessage) ([]Message, error) {
 	out := make([]Message, 0, len(messages))
-	for i := 0; i < len(messages); i++ {
-		msg := messages[i]
-		role := strings.ToLower(strings.TrimSpace(msg.Role))
-		switch role {
-		case "system":
-			role = "system"
-		case "user":
-			role = "user"
-		case "assistant":
-			role = "assistant"
-		case "tool":
-			role = "tool"
-		default:
-			return nil, fmt.Errorf("Floret model message %d has unsupported Floret model message role %q", i, msg.Role)
+	for i, msg := range messages {
+		if err := msg.Validate(); err != nil {
+			return nil, fmt.Errorf("invalid Floret model message %d: %w", i, err)
 		}
-		if role == "tool" {
-			out = append(out, Message{Role: "tool", Content: []ContentPart{{
-				Type:       "tool_result",
-				ToolCallID: strings.TrimSpace(msg.ToolCallID),
-				ToolName:   strings.TrimSpace(msg.ToolName),
-				Text:       strings.TrimSpace(msg.Content),
-			}}})
-			continue
+		parts := make([]ContentPart, 0, 2+len(msg.ToolCalls))
+		if msg.Text != "" {
+			parts = append(parts, ContentPart{Type: "text", Text: msg.Text})
 		}
-		if role == "assistant" && strings.TrimSpace(msg.ToolCallID) != "" {
-			parts, next, err := floretAssistantToolCallParts(messages, i)
-			if err != nil {
-				return nil, err
-			}
-			out = append(out, Message{Role: "assistant", Content: parts})
-			i = next - 1
-			continue
-		}
-		parts := make([]ContentPart, 0, 2)
-		if strings.TrimSpace(msg.Content) != "" {
-			parts = append(parts, ContentPart{Type: "text", Text: msg.Content})
-		}
-		if role == "assistant" && strings.TrimSpace(msg.Reasoning) != "" {
+		if msg.Reasoning != "" {
 			parts = append(parts, ContentPart{Type: "reasoning", Text: msg.Reasoning})
 		}
-		if len(parts) == 0 {
-			continue
+		for _, call := range msg.ToolCalls {
+			parts = append(parts, ContentPart{
+				Type:       "tool_call",
+				ToolCallID: call.ID,
+				ToolName:   call.Name,
+				ArgsJSON:   call.Args,
+				JSON:       []byte(call.Args),
+			})
 		}
-		out = append(out, Message{Role: role, Content: parts})
-	}
-	if err := validateFloretProviderToolResultSequence(out); err != nil {
-		return nil, err
+		if msg.ToolResult != nil {
+			parts = append(parts, ContentPart{
+				Type:       "tool_result",
+				ToolCallID: msg.ToolResult.CallID,
+				ToolName:   msg.ToolResult.ToolName,
+				Text:       msg.ToolResult.Text,
+			})
+		}
+		out = append(out, Message{Role: string(msg.Role), Content: parts})
 	}
 	return out, nil
-}
-
-func validateFloretProviderToolResultSequence(messages []Message) error {
-	pending := map[string]struct{}{}
-	pendingOrder := make([]string, 0, 2)
-	for idx, msg := range messages {
-		role := strings.ToLower(strings.TrimSpace(msg.Role))
-		assistantCallIDs := toolCallIDsFromAssistantMessage(msg)
-		if len(pending) > 0 {
-			if role != "tool" {
-				return fmt.Errorf("Floret provider history has unresolved tool call %q before %s message at index %d", pendingOrder[0], role, idx)
-			}
-			toolResultIDs := toolResultIDsFromMessage(msg)
-			if len(toolResultIDs) == 0 {
-				return fmt.Errorf("Floret provider history has empty tool result message at index %d", idx)
-			}
-			for _, id := range toolResultIDs {
-				if _, ok := pending[id]; !ok {
-					return fmt.Errorf("Floret provider history has tool result %q without a pending assistant tool call at index %d", id, idx)
-				}
-				delete(pending, id)
-				pendingOrder = removeStringOnce(pendingOrder, id)
-			}
-			continue
-		}
-		if role == "tool" {
-			toolResultIDs := toolResultIDsFromMessage(msg)
-			if len(toolResultIDs) == 0 {
-				return fmt.Errorf("Floret provider history has empty tool result message at index %d", idx)
-			}
-			return fmt.Errorf("Floret provider history has tool result %q without a preceding assistant tool call at index %d", toolResultIDs[0], idx)
-		}
-		for _, id := range assistantCallIDs {
-			if _, ok := pending[id]; ok {
-				continue
-			}
-			pending[id] = struct{}{}
-			pendingOrder = append(pendingOrder, id)
-		}
-	}
-	if len(pendingOrder) > 0 {
-		return fmt.Errorf("Floret provider history has unresolved assistant tool call %q", pendingOrder[0])
-	}
-	return nil
-}
-
-func toolResultIDsFromMessage(msg Message) []string {
-	seen := map[string]struct{}{}
-	out := make([]string, 0, len(msg.Content))
-	for _, part := range msg.Content {
-		if strings.ToLower(strings.TrimSpace(part.Type)) != "tool_result" {
-			continue
-		}
-		id := toolCallIDFromPart(part)
-		if id == "" {
-			continue
-		}
-		if _, ok := seen[id]; ok {
-			continue
-		}
-		seen[id] = struct{}{}
-		out = append(out, id)
-	}
-	return out
-}
-
-func removeStringOnce(values []string, target string) []string {
-	for idx, value := range values {
-		if value != target {
-			continue
-		}
-		out := append([]string(nil), values[:idx]...)
-		out = append(out, values[idx+1:]...)
-		return out
-	}
-	return values
-}
-
-func floretAssistantToolCallParts(messages []flruntime.ModelMessage, start int) ([]ContentPart, int, error) {
-	parts := make([]ContentPart, 0, 3)
-	reasoningSet := make(map[string]struct{}, 1)
-	for i := start; i < len(messages); i++ {
-		msg := messages[i]
-		if strings.ToLower(strings.TrimSpace(msg.Role)) != "assistant" || strings.TrimSpace(msg.ToolCallID) == "" {
-			return parts, i, nil
-		}
-		if reasoning := strings.TrimSpace(msg.Reasoning); reasoning != "" {
-			if _, ok := reasoningSet[reasoning]; !ok {
-				parts = append(parts, ContentPart{Type: "reasoning", Text: reasoning})
-				reasoningSet[reasoning] = struct{}{}
-			}
-		}
-		args := strings.TrimSpace(msg.ToolArgs)
-		if args == "" {
-			args = "{}"
-		}
-		if !json.Valid([]byte(args)) {
-			return nil, i, fmt.Errorf("invalid Floret assistant tool args for %s", strings.TrimSpace(msg.ToolName))
-		}
-		parts = append(parts, ContentPart{
-			Type:       "tool_call",
-			ToolCallID: strings.TrimSpace(msg.ToolCallID),
-			ToolName:   strings.TrimSpace(msg.ToolName),
-			ArgsJSON:   args,
-			JSON:       []byte(args),
-		})
-	}
-	return parts, len(messages), nil
 }
 
 func floretToolCallsFromFlower(calls []ToolCall) ([]fltools.ToolCall, error) {
 	out := make([]fltools.ToolCall, 0, len(calls))
 	for _, call := range calls {
+		id := strings.TrimSpace(call.ID)
 		name := strings.TrimSpace(call.Name)
-		if name == "" {
-			continue
+		if id == "" || name == "" || call.Args == nil {
+			return nil, errors.New("Flower tool call requires id, name, and args")
 		}
-		raw := "{}"
-		if call.Args != nil {
-			b, err := json.Marshal(call.Args)
-			if err != nil || !json.Valid(b) {
-				return nil, fmt.Errorf("invalid Flower tool args for %s", name)
-			}
-			raw = string(b)
+		b, err := json.Marshal(call.Args)
+		if err != nil || !json.Valid(b) {
+			return nil, fmt.Errorf("invalid Flower tool args for %s", name)
 		}
-		out = append(out, fltools.ToolCall{ID: strings.TrimSpace(call.ID), Name: name, Args: raw})
+		out = append(out, fltools.ToolCall{ID: id, Name: name, Args: string(b)})
 	}
 	return out, nil
 }
@@ -463,36 +363,32 @@ func flowerToolsFromFloret(defs []fltools.ToolDefinition) ([]ToolDef, error) {
 	out := make([]ToolDef, 0, len(defs))
 	for _, def := range defs {
 		name := strings.TrimSpace(def.Name)
-		if name == "" {
-			continue
+		if name == "" || def.InputSchema == nil {
+			return nil, errors.New("Floret tool definition requires name and input schema")
 		}
-		raw := json.RawMessage(`{"type":"object","additionalProperties":true}`)
-		if def.InputSchema != nil {
-			b, err := json.Marshal(def.InputSchema)
-			if err != nil || !json.Valid(b) {
-				return nil, fmt.Errorf("invalid Floret tool schema for %s", name)
-			}
-			raw = b
+		b, err := json.Marshal(def.InputSchema)
+		if err != nil || !json.Valid(b) {
+			return nil, fmt.Errorf("invalid Floret tool schema for %s", name)
 		}
 		out = append(out, ToolDef{
 			Name:        name,
 			Description: strings.TrimSpace(def.Description),
-			InputSchema: raw,
+			InputSchema: b,
 		})
 	}
 	return out, nil
 }
 
-func flowerProviderStateToFloret(state *ModelGatewayState) *flruntime.ModelState {
+func flowerProviderStateToFloret(state *ModelGatewayState) (*flruntime.ModelState, error) {
 	if state == nil {
-		return nil
+		return nil, nil
 	}
 	kind := strings.TrimSpace(state.Kind)
 	id := strings.TrimSpace(state.ID)
 	if kind == "" || id == "" {
-		return nil
+		return nil, errors.New("Flower provider state requires kind and id")
 	}
-	return &flruntime.ModelState{Kind: kind, ID: id, Attributes: cloneStringMap(state.Attributes)}
+	return &flruntime.ModelState{Kind: kind, ID: id, Attributes: cloneStringMap(state.Attributes)}, nil
 }
 
 func floretProviderStateToFlower(state *flruntime.ModelState) *ModelGatewayState {

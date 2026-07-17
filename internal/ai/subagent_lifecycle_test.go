@@ -145,7 +145,6 @@ func TestFloretSubagentTerminalCleanupSettlesCompletedChildPendingProcess(t *tes
 
 type recordingFloretHost struct {
 	mu                  sync.Mutex
-	closeCount          atomic.Int32
 	closeSubagentCount  atomic.Int32
 	closeSubagentsCount atomic.Int32
 	deleteThreadCount   atomic.Int32
@@ -443,16 +442,20 @@ func (h *recordingFloretHost) DeleteThread(_ context.Context, id flruntime.Threa
 	return nil
 }
 
-func (h *recordingFloretHost) Close() error {
-	h.closeCount.Add(1)
-	return nil
-}
-
-func openTestFloretHost(t *testing.T, storePath string, fakeResponse string) *flruntime.Host {
+func openTestFloretHost(t *testing.T, storePath string, fakeResponse string) (*flruntime.Host, *flruntime.Store) {
 	t.Helper()
 	store, err := flruntime.OpenSQLiteStore(storePath)
 	if err != nil {
 		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	host := newTestFloretHost(t, store, fakeResponse)
+	return host, store
+}
+
+func newTestFloretHost(t *testing.T, store *flruntime.Store, fakeResponse string) *flruntime.Host {
+	t.Helper()
+	if store == nil {
+		t.Fatal("Floret store is required")
 	}
 	host, err := flruntime.NewHost(flruntime.HostOptions{
 		Config: flconfig.Config{
@@ -463,7 +466,6 @@ func openTestFloretHost(t *testing.T, storePath string, fakeResponse string) *fl
 		Store: store,
 	})
 	if err != nil {
-		_ = store.Close()
 		t.Fatalf("NewHost: %v", err)
 	}
 	return host
@@ -475,9 +477,8 @@ func seedTestFloretSubagentTree(t *testing.T, ctx context.Context, svc *Service,
 	if err != nil {
 		t.Fatalf("floretThreadStorePath: %v", err)
 	}
-	host := openTestFloretHost(t, storePath, "child done")
+	host := newTestFloretHost(t, svc.floretStore, "child done")
 	if _, err := host.StartThread(ctx, flruntime.StartThreadRequest{ThreadID: flruntime.ThreadID(parentThreadID)}); err != nil {
-		_ = host.Close()
 		t.Fatalf("StartThread: %v", err)
 	}
 	if _, err := host.SpawnSubAgent(ctx, flruntime.SpawnSubAgentRequest{
@@ -487,7 +488,6 @@ func seedTestFloretSubagentTree(t *testing.T, ctx context.Context, svc *Service,
 		Message:        "work",
 		ForkMode:       flruntime.SubAgentForkFullPath,
 	}); err != nil {
-		_ = host.Close()
 		t.Fatalf("SpawnSubAgent: %v", err)
 	}
 	if waited, err := host.WaitSubAgents(ctx, flruntime.WaitSubAgentsRequest{
@@ -495,11 +495,7 @@ func seedTestFloretSubagentTree(t *testing.T, ctx context.Context, svc *Service,
 		ChildThreadIDs: []flruntime.ThreadID{flruntime.ThreadID(childThreadID)},
 		Timeout:        2 * time.Second,
 	}); err != nil || waited.TimedOut {
-		_ = host.Close()
 		t.Fatalf("WaitSubAgents=%#v err=%v", waited, err)
-	}
-	if err := host.Close(); err != nil {
-		t.Fatalf("Close seed host: %v", err)
 	}
 	return storePath
 }
@@ -533,9 +529,6 @@ func TestServiceCloseReleasesThreadSubagentRuntimes(t *testing.T) {
 
 	if err := svc.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
-	}
-	if got := host.closeCount.Load(); got != 1 {
-		t.Fatalf("host closeCount=%d, want 1", got)
 	}
 	if len(svc.subagentRuntimes) != 0 {
 		t.Fatalf("subagent runtime cache not cleared: %#v", svc.subagentRuntimes)
@@ -871,9 +864,6 @@ func TestReleasedSubagentRuntimeCannotRecreateHost(t *testing.T) {
 	}
 
 	runtime.release()
-	if got := host.closeCount.Load(); got != 1 {
-		t.Fatalf("release host closeCount=%d, want 1", got)
-	}
 	if runtime.currentHost() != nil {
 		t.Fatalf("released runtime still exposes a host")
 	}
@@ -917,9 +907,6 @@ func TestReleasedSubagentRuntimeDropsQueuedTimelineRefresh(t *testing.T) {
 
 	if got := host.listSubagentCount.Load(); got != 0 {
 		t.Fatalf("released runtime delayed refresh listed subagents %d times; want 0", got)
-	}
-	if got := host.closeCount.Load(); got != 1 {
-		t.Fatalf("host closeCount=%d, want 1", got)
 	}
 	runtime.mu.Lock()
 	queued := len(runtime.subagentsPatchQueued)
@@ -991,12 +978,6 @@ func TestDeleteThreadClosesRuntimeWithoutChildThreadstoreProjection(t *testing.T
 	maintenanceHost.mu.Unlock()
 	if len(deleteThreadIDs) != 1 || deleteThreadIDs[0] != flruntime.ThreadID(parent.ThreadID) {
 		t.Fatalf("DeleteThread ids=%v, want [%s]", deleteThreadIDs, parent.ThreadID)
-	}
-	if got := host.closeCount.Load(); got != 1 {
-		t.Fatalf("runtime host close count=%d, want 1", got)
-	}
-	if got := maintenanceHost.closeCount.Load(); got != 1 {
-		t.Fatalf("maintenance host close count=%d, want 1", got)
 	}
 	childAfterDelete, err := svc.threadsDB.GetThread(ctx, meta.EndpointID, childID)
 	if err != nil {
@@ -1160,8 +1141,8 @@ func TestDeleteThreadDeletesFloretTreeWithoutCachedRuntime(t *testing.T) {
 	}
 	assertLegacyFloretSubagentStoreNotCreated(t, svc)
 
-	reopenedHost := openTestFloretHost(t, storePath, "unused")
-	defer reopenedHost.Close()
+	reopenedHost, reopenedStore := openTestFloretHost(t, storePath, "unused")
+	defer reopenedStore.Close()
 	if _, err := reopenedHost.ReadThread(ctx, flruntime.ThreadID(parent.ThreadID)); !isFloretThreadNotFoundError(err) {
 		t.Fatalf("ReadThread parent err=%v, want not found", err)
 	}
@@ -1189,8 +1170,8 @@ func TestCancelThreadClosesFloretSubagentsWithoutCachedRuntime(t *testing.T) {
 	}
 	assertLegacyFloretSubagentStoreNotCreated(t, svc)
 
-	reopenedHost := openTestFloretHost(t, storePath, "unused")
-	defer reopenedHost.Close()
+	reopenedHost, reopenedStore := openTestFloretHost(t, storePath, "unused")
+	defer reopenedStore.Close()
 	snapshot, err := reopenedHost.ReadSubAgentDetail(ctx, flruntime.ReadSubAgentDetailRequest{
 		ParentThreadID: flruntime.ThreadID(parent.ThreadID),
 		ChildThreadID:  flruntime.ThreadID(childID),
@@ -1437,6 +1418,7 @@ func TestServiceGetFlowerSubagentDetailRequestsRawMessageContent(t *testing.T) {
 					},
 				}},
 			},
+			Context:      flruntime.ThreadContextSnapshot{ThreadID: flruntime.ThreadID("child-detail")},
 			NextOrdinal:  7,
 			HasMore:      true,
 			RetainedFrom: 1,
@@ -1591,22 +1573,30 @@ func TestServiceGetFlowerSubagentDetailProjectsCanonicalContextFacts(t *testing.
 					Kind:      flruntime.SubAgentDetailEventCompaction,
 					CreatedAt: now.Add(-30 * time.Second),
 					Compaction: &flruntime.SubAgentDetailCompaction{
+						OperationID:         "compact-child-1",
+						RequestID:           "request-compact-child-1",
+						Source:              "context_manager",
 						Phase:               "complete",
 						Trigger:             "pressure",
 						Reason:              "near limit",
 						TokensBefore:        900,
 						TokensAfterEstimate: 350,
 					},
-					Metadata: map[string]string{"operation_id": "compact-child-1"},
 				},
 			},
-			Context: flruntime.SubAgentDetailContext{
+			Context: flruntime.ThreadContextSnapshot{
+				ThreadID: flruntime.ThreadID("child-context"),
+				Provider: "openai",
+				Model:    "gpt-5-mini",
+				Policy:   flconfig.ContextPolicy{ContextWindowTokens: 1000},
 				Usage: &observation.ContextStatus{
 					RunID:    "child-run",
 					ThreadID: "child-context",
 					TurnID:   "child-turn",
 					Step:     2,
 					Phase:    observation.ContextPhaseProjectedRequest,
+					Provider: "openai",
+					Model:    "gpt-5-mini",
 					ContextPressure: flconfig.ContextPressure{
 						ProjectedInputTokens: 600,
 						ContextWindowTokens:  1000,
@@ -1620,16 +1610,18 @@ func TestServiceGetFlowerSubagentDetailProjectsCanonicalContextFacts(t *testing.
 					Status:         observation.ContextStatusStable,
 					ObservedAt:     now.Add(-35 * time.Second),
 				},
-				Compactions: []flruntime.SubAgentDetailContextCompaction{{
+				Compactions: []observation.CompactionEvent{{
 					RunID:               "child-run",
 					ThreadID:            "child-context",
 					TurnID:              "child-turn",
 					Step:                2,
 					OperationID:         "compact-child-1",
-					Phase:               "complete",
-					Status:              "compacted",
+					RequestID:           "request-compact-child-1",
+					Phase:               observation.CompactionPhaseComplete,
+					Status:              observation.CompactionStatusCompacted,
 					Trigger:             "pressure",
 					Reason:              "near limit",
+					Source:              "context_manager",
 					TokensBefore:        900,
 					TokensAfterEstimate: 350,
 					ObservedAt:          now.Add(-30 * time.Second),
@@ -1677,6 +1669,24 @@ func TestServiceGetFlowerSubagentDetailProjectsCanonicalContextFacts(t *testing.
 	}
 	if detail.ModelIOStatus != nil {
 		t.Fatalf("subagent detail must not synthesize model_io_status: %#v", detail.ModelIOStatus)
+	}
+}
+
+func TestFlowerSubagentCompactionAnchorsRejectMetadataIdentityAlias(t *testing.T) {
+	t.Parallel()
+
+	_, err := flowerSubagentDetailCompactionAnchors(flruntime.SubAgentDetail{
+		Snapshot: flruntime.SubAgentSnapshot{ThreadID: "child-context"},
+		Events: []flruntime.SubAgentDetailEvent{{
+			ThreadID:   "child-context",
+			TurnID:     "child-turn",
+			Kind:       flruntime.SubAgentDetailEventCompaction,
+			Compaction: &flruntime.SubAgentDetailCompaction{Phase: "complete"},
+			Metadata:   map[string]string{"context_operation_id": "legacy-operation"},
+		}},
+	})
+	if err == nil {
+		t.Fatal("subagent compaction metadata identity alias was accepted")
 	}
 }
 

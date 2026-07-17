@@ -99,12 +99,8 @@ func (s *Service) replayThreadDeleteOperation(ctx context.Context, operation thr
 			return s.keepThreadDeletePending(ctx, operation, "floret_host_open_failed", err)
 		}
 		deleteErr := host.DeleteThread(ctxOrBackground(ctx), flruntime.ThreadID(operation.ThreadID))
-		closeErr := host.Close()
 		if deleteErr != nil && !errors.Is(deleteErr, flruntime.ErrThreadNotFound) {
 			return s.keepThreadDeletePending(ctx, operation, "floret_delete_failed", deleteErr)
-		}
-		if closeErr != nil {
-			return s.keepThreadDeletePending(ctx, operation, "floret_host_close_failed", closeErr)
 		}
 		confirmed, err := db.ConfirmThreadDeleteFloretDeleted(ctxOrBackground(ctx), operation.OperationID)
 		if err != nil {

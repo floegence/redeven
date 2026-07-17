@@ -55,13 +55,13 @@ INSERT INTO ai_threads(
   thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json, permission_type, working_dir, title,
   title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
   run_status, run_updated_at_unix_ms, run_error_code, run_error,
-  waiting_user_input_json, last_context_run_id,
+  waiting_user_input_json,
   flower_activity_revision, flower_activity_signature, flower_activity_waiting_prompt_id,
   created_by_user_public_id, created_by_user_email,
   updated_by_user_public_id, updated_by_user_email,
   created_at_unix_ms, updated_at_unix_ms,
   last_message_at_unix_ms, last_message_preview, pinned_at_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `,
 		forkedThread.ThreadID,
 		forkedThread.EndpointID,
@@ -78,7 +78,6 @@ INSERT INTO ai_threads(
 		"",
 		forkedThread.RunStatus,
 		int64(0),
-		"",
 		"",
 		"",
 		"",

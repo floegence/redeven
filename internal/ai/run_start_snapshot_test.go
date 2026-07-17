@@ -101,6 +101,26 @@ func TestPrepareRun_InitializesLiveAssistantDraftImmediately(t *testing.T) {
 	if bootstrap.Cursor <= 0 {
 		t.Fatalf("cursor=%d, want > 0", bootstrap.Cursor)
 	}
+	if got := strings.TrimSpace(bootstrap.Thread.ActiveRunID); got != runID {
+		t.Fatalf("bootstrap thread active_run_id=%q, want %q", got, runID)
+	}
+	if got := strings.TrimSpace(bootstrap.LiveState.ThreadPatch.ActiveRunID); got != runID {
+		t.Fatalf("live patch active_run_id=%q, want %q", got, runID)
+	}
+	gotThread, err := svc.GetThread(ctx, meta, thread.ThreadID)
+	if err != nil {
+		t.Fatalf("GetThread: %v", err)
+	}
+	if got := strings.TrimSpace(gotThread.ActiveRunID); got != runID {
+		t.Fatalf("GetThread active_run_id=%q, want %q", got, runID)
+	}
+	listed, err := svc.ListThreads(ctx, meta, 20, "")
+	if err != nil {
+		t.Fatalf("ListThreads: %v", err)
+	}
+	if len(listed.Threads) != 1 || strings.TrimSpace(listed.Threads[0].ActiveRunID) != runID {
+		t.Fatalf("ListThreads=%#v, want active_run_id %q", listed, runID)
+	}
 	runState := bootstrap.LiveState.Runs[runID]
 	if strings.TrimSpace(runState.RunID) != runID {
 		t.Fatalf("runID=%q, want %q", runState.RunID, runID)

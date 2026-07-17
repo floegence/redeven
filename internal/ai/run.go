@@ -61,6 +61,7 @@ type runOptions struct {
 
 	UploadsDir       string
 	ThreadsDB        *threadstore.Store
+	FloretStore      *flruntime.Store
 	PersistOpTimeout time.Duration
 
 	OnStreamEvent func(any)
@@ -76,8 +77,6 @@ type runOptions struct {
 	SubagentRuntime       subagentRuntime
 	ToolTargetPolicy      ToolTargetPolicy
 	TargetToolExecutor    TargetToolExecutor
-
-	HostManagedContextCompaction bool
 
 	WebFetchHTTPClient *http.Client
 	WebFetchResolver   webFetchResolver
@@ -117,20 +116,19 @@ type run struct {
 	doneCh         chan struct{}
 	doneOnce       sync.Once
 
-	muCancel           sync.Mutex
-	cancelReason       string // "canceled"|"timed_out"|""
-	endReason          string // "complete"|"canceled"|"timed_out"|"disconnected"|"error"
-	runErrorCode       string
-	cancelRequested    bool
-	cancelFn           context.CancelFunc
-	detached           atomic.Bool // hard-canceled: stop emitting realtime events and skip thread state updates
-	busyCount          atomic.Int32
-	runtimeToolCalls   atomic.Int64
-	runtimeTokens      atomic.Int64
-	assistantPersisted atomic.Bool
-
+	muCancel         sync.Mutex
+	cancelReason     string // "canceled"|"timed_out"|""
+	endReason        string // "complete"|"canceled"|"timed_out"|"disconnected"|"error"
+	runErrorCode     string
+	cancelRequested  bool
+	cancelFn         context.CancelFunc
+	detached         atomic.Bool // hard-canceled: stop emitting realtime events and skip thread state updates
+	busyCount        atomic.Int32
+	runtimeToolCalls atomic.Int64
+	runtimeTokens    atomic.Int64
 	uploadsDir       string
 	threadsDB        *threadstore.Store
+	floretStore      *flruntime.Store
 	persistOpTimeout time.Duration
 
 	onStreamEvent func(any)
@@ -165,23 +163,20 @@ type run struct {
 	activityFileActions      map[string]FlowerActivityFileAction
 	activityFileActionSeq    int64
 	waitingPrompt            *RequestUserInputPrompt
-	providerContinuation     threadstore.ThreadProviderContinuation
 
 	muFloretProjection      sync.Mutex
 	floretProjectionOrdinal map[string]int64
+	floretEventIdentity     floretRuntimeEventIdentity
 
 	finalizationReason string
 	currentModelID     string
 	currentReasoning   config.AIReasoningSelection
 
-	muManualCompaction                sync.Mutex
-	pendingManualCompaction           *flruntime.ManualCompactionRequest
-	activeManualCompactionID          string
-	activeManualCompactionOperationID string
-	completeManualCompactionIDs       map[string]struct{}
-	contextCompactionAnchors          map[string]FlowerTimelineAnchor
-	completedContextCompaction        observation.CompactionEvent
-	hostManagedContextCompaction      bool
+	muManualCompaction         sync.Mutex
+	pendingManualCompaction    *flruntime.ManualCompactionRequest
+	activeManualCompactionID   string
+	contextCompactionAnchors   map[string]FlowerTimelineAnchor
+	completedContextCompaction observation.CompactionEvent
 
 	webSearchToolEnabled bool
 	webSearchMode        string
@@ -207,13 +202,16 @@ type run struct {
 	webFetchResolver   webFetchResolver
 }
 
-type activeManualCompaction struct {
-	RequestID   string
-	OperationID string
-}
-
 type assistantAnswerState struct {
 	CanonicalMarkdown string
+}
+
+type floretRuntimeEventIdentity struct {
+	configured bool
+	checkRunID bool
+	runID      string
+	threadID   string
+	turnID     string
 }
 
 type canonicalMarkdownSource string
@@ -289,6 +287,7 @@ func newRun(opts runOptions) *run {
 		settlementTurnID:          strings.TrimSpace(opts.MessageID),
 		uploadsDir:                strings.TrimSpace(opts.UploadsDir),
 		threadsDB:                 opts.ThreadsDB,
+		floretStore:               opts.FloretStore,
 		persistOpTimeout:          opts.PersistOpTimeout,
 		onStreamEvent:             opts.OnStreamEvent,
 		w:                         opts.Writer,
@@ -317,9 +316,8 @@ func newRun(opts runOptions) *run {
 			}
 			return opts.SubagentDepth <= 0
 		}(),
-		hostManagedContextCompaction: opts.HostManagedContextCompaction,
-		webFetchHTTPClient:           opts.WebFetchHTTPClient,
-		webFetchResolver:             opts.WebFetchResolver,
+		webFetchHTTPClient: opts.WebFetchHTTPClient,
+		webFetchResolver:   opts.WebFetchResolver,
 	}
 	if r.idleTimeout > 0 {
 		r.activityCh = make(chan struct{}, 1)
@@ -560,27 +558,6 @@ func (r *run) getFinalizationReason() string {
 	return v
 }
 
-func (r *run) setProviderContinuationCandidate(cont threadstore.ThreadProviderContinuation) {
-	if r == nil {
-		return
-	}
-	if !r.acceptsEngineResultProjection() {
-		return
-	}
-	r.muAssistant.Lock()
-	r.providerContinuation = cont.Normalized()
-	r.muAssistant.Unlock()
-}
-
-func (r *run) getProviderContinuationCandidate() threadstore.ThreadProviderContinuation {
-	if r == nil {
-		return threadstore.ThreadProviderContinuation{}
-	}
-	r.muAssistant.Lock()
-	defer r.muAssistant.Unlock()
-	return r.providerContinuation.Normalized()
-}
-
 func (r *run) EnqueueManualCompaction(ctx context.Context, request flruntime.ManualCompactionRequest) (flruntime.ManualCompactionRequest, error) {
 	if r == nil {
 		return flruntime.ManualCompactionRequest{}, errors.New("nil run")
@@ -642,7 +619,7 @@ func (r *run) EnqueueManualCompaction(ctx context.Context, request flruntime.Man
 	return pending, nil
 }
 
-func (r *run) PollManualCompaction(ctx context.Context, req flruntime.ManualCompactionPollRequest) (flruntime.ManualCompactionRequest, bool, error) {
+func (r *run) PollManualCompaction(ctx context.Context, _ flruntime.ManualCompactionPollRequest) (flruntime.ManualCompactionRequest, bool, error) {
 	if r == nil {
 		return flruntime.ManualCompactionRequest{}, false, nil
 	}
@@ -662,7 +639,6 @@ func (r *run) PollManualCompaction(ctx context.Context, req flruntime.ManualComp
 	r.pendingManualCompaction = nil
 	requestID := strings.TrimSpace(manual.RequestID)
 	r.activeManualCompactionID = requestID
-	r.activeManualCompactionOperationID = strings.TrimSpace(flruntime.ManualCompactionOperationID(req.RunID, req.Step, requestID))
 	return manual, true, nil
 }
 
@@ -678,85 +654,17 @@ func (r *run) finishManualCompaction(requestID string) {
 	defer r.muManualCompaction.Unlock()
 	if strings.TrimSpace(r.activeManualCompactionID) == requestID {
 		r.activeManualCompactionID = ""
-		r.activeManualCompactionOperationID = ""
-	}
-	if r.completeManualCompactionIDs == nil {
-		r.completeManualCompactionIDs = map[string]struct{}{}
-	}
-	r.completeManualCompactionIDs[requestID] = struct{}{}
-}
-
-func (r *run) unfinishedManualCompactions() []activeManualCompaction {
-	if r == nil {
-		return nil
-	}
-	r.muManualCompaction.Lock()
-	defer r.muManualCompaction.Unlock()
-	seen := make(map[string]struct{}, 2)
-	out := make([]activeManualCompaction, 0, 2)
-	if r.pendingManualCompaction != nil {
-		if requestID := strings.TrimSpace(r.pendingManualCompaction.RequestID); requestID != "" {
-			if _, ok := r.completeManualCompactionIDs[requestID]; !ok {
-				seen[requestID] = struct{}{}
-				out = append(out, activeManualCompaction{RequestID: requestID, OperationID: requestID})
-			}
-		}
-		r.pendingManualCompaction = nil
-	}
-	if requestID := strings.TrimSpace(r.activeManualCompactionID); requestID != "" {
-		if _, complete := r.completeManualCompactionIDs[requestID]; !complete {
-			if _, duplicate := seen[requestID]; !duplicate {
-				operationID := strings.TrimSpace(r.activeManualCompactionOperationID)
-				if operationID == "" {
-					operationID = requestID
-				}
-				out = append(out, activeManualCompaction{RequestID: requestID, OperationID: operationID})
-			}
-		}
-		r.activeManualCompactionID = ""
-		r.activeManualCompactionOperationID = ""
-	}
-	return out
-}
-
-func (r *run) cancelUnfinishedManualCompactions(reason string) {
-	if r == nil {
-		return
-	}
-	reason = strings.TrimSpace(reason)
-	if reason == "" {
-		reason = "run_finished"
-	}
-	for _, compaction := range r.unfinishedManualCompactions() {
-		r.applyFloretCompaction(&observation.CompactionEvent{
-			OperationID: compaction.OperationID,
-			RequestID:   compaction.RequestID,
-			RunID:       strings.TrimSpace(r.id),
-			ThreadID:    strings.TrimSpace(r.threadID),
-			TurnID:      strings.TrimSpace(r.messageID),
-			Phase:       observation.CompactionPhaseCancelled,
-			Status:      observation.CompactionStatusCancelled,
-			Trigger:     "manual",
-			Reason:      reason,
-			ObservedAt:  time.Now(),
-		})
 	}
 }
 
-func (r *run) noteManualCompactionOperation(requestID string, operationID string) {
+func (r *run) clearManualCompactionRequests() {
 	if r == nil {
-		return
-	}
-	requestID = strings.TrimSpace(requestID)
-	operationID = strings.TrimSpace(operationID)
-	if requestID == "" || operationID == "" {
 		return
 	}
 	r.muManualCompaction.Lock()
 	defer r.muManualCompaction.Unlock()
-	if strings.TrimSpace(r.activeManualCompactionID) == requestID {
-		r.activeManualCompactionOperationID = operationID
-	}
+	r.pendingManualCompaction = nil
+	r.activeManualCompactionID = ""
 }
 
 func (r *run) setCompletedContextCompaction(compaction observation.CompactionEvent) {
@@ -946,17 +854,6 @@ func (r *run) markDone() {
 	r.doneOnce.Do(func() {
 		close(r.doneCh)
 	})
-}
-
-func (r *run) markAssistantPersisted() {
-	if r == nil {
-		return
-	}
-	r.assistantPersisted.Store(true)
-}
-
-func (r *run) assistantAlreadyPersisted() bool {
-	return r != nil && r.assistantPersisted.Load()
 }
 
 func (r *run) debug(event string, attrs ...any) {
@@ -1328,7 +1225,7 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		case "error":
 			state = RunStateFailed
 		}
-		r.cancelUnfinishedManualCompactions("run_finished")
+		r.clearManualCompactionRequests()
 		r.persistRunRecord(state, errCode, errMsg, startedAt.UnixMilli(), time.Now().UnixMilli())
 		r.persistRunEvent(eventType, RealtimeStreamKindLifecycle, map[string]any{
 			"state":               string(state),

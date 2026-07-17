@@ -46,9 +46,9 @@ type CompactThreadContextRequest struct {
 }
 
 type CompactThreadContextResponse struct {
-	OperationID string `json:"operation_id,omitempty"`
-	Kind        string `json:"kind"`
-	ErrorCode   string `json:"error_code,omitempty"`
+	RequestID string `json:"request_id,omitempty"`
+	Kind      string `json:"kind"`
+	ErrorCode string `json:"error_code,omitempty"`
 }
 
 type persistedUserMessage struct {

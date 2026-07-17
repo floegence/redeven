@@ -72,7 +72,7 @@ func TestFloretProviderAdapter_ReasoningSelectionControlsProviderRequest(t *test
 		ThreadID:        "thread",
 		PromptScopeID:   "thread",
 		Model:           "deepseek-v4-pro",
-		Messages:        []flruntime.ModelMessage{{Role: "user", Content: "请生成标题"}},
+		Messages:        []flruntime.ModelMessage{{Role: flruntime.ModelMessageRoleUser, Text: "请生成标题"}},
 		MaxOutputTokens: 64,
 		Reasoning:       flruntime.ReasoningSelection{Level: flruntime.ReasoningLevelOff},
 	})
@@ -136,19 +136,14 @@ func newFloretProviderAdapterRunTest(t *testing.T, provider ModelGateway) (*flor
 	}
 
 	events := make([]any, 0, 4)
-	r := &run{
-		id:                        "run_floret_reasoning",
-		endpointID:                "env_floret_reasoning",
-		threadID:                  "thread_floret_reasoning",
-		messageID:                 "msg_floret_reasoning",
-		threadsDB:                 store,
-		onStreamEvent:             func(ev any) { events = append(events, ev) },
-		nextBlockIndex:            0,
-		currentTextBlockIndex:     -1,
-		currentThinkingBlockIndex: -1,
-		needNewTextBlock:          true,
-		needNewThinkingBlock:      true,
-	}
+	r := newFloretRuntimeTestRun(t, runOptions{
+		RunID:         "run_floret_reasoning",
+		EndpointID:    "env_floret_reasoning",
+		ThreadID:      "thread_floret_reasoning",
+		MessageID:     "msg_floret_reasoning",
+		ThreadsDB:     store,
+		OnStreamEvent: func(ev any) { events = append(events, ev) },
+	})
 	adapter := newFloretProviderAdapter(
 		provider,
 		"openai",
@@ -174,7 +169,7 @@ func TestFloretProviderAdapter_UsesRedevenModelNameInsteadOfFloretPlaceholder(t 
 	)
 	stream, err := adapter.StreamModel(context.Background(), flruntime.ModelRequest{
 		Model:    "redeven-model-adapter",
-		Messages: []flruntime.ModelMessage{{Role: "user", Content: "hello"}},
+		Messages: []flruntime.ModelMessage{{Role: flruntime.ModelMessageRoleUser, Text: "hello"}},
 	})
 	if err != nil {
 		t.Fatalf("StreamModel: %v", err)
@@ -201,10 +196,10 @@ func TestFloretProviderAdapter_FiltersDisabledCoreControlToolsFromRequest(t *tes
 	)
 	stream, err := adapter.StreamModel(context.Background(), flruntime.ModelRequest{
 		Model:    "gpt-5-mini",
-		Messages: []flruntime.ModelMessage{{Role: "user", Content: "hello"}},
+		Messages: []flruntime.ModelMessage{{Role: flruntime.ModelMessageRoleUser, Text: "hello"}},
 		Tools: []fltools.ToolDefinition{
-			{Name: "ask_user"},
-			{Name: "terminal.exec"},
+			{Name: "ask_user", InputSchema: map[string]any{"type": "object"}},
+			{Name: "terminal.exec", InputSchema: map[string]any{"type": "object"}},
 		},
 	})
 	if err != nil {
@@ -245,7 +240,7 @@ func TestFloretProviderAdapter_ErrorsWhenDisabledCoreControlToolIsReturned(t *te
 	)
 	stream, err := adapter.StreamModel(context.Background(), flruntime.ModelRequest{
 		Model:    "gpt-5-mini",
-		Messages: []flruntime.ModelMessage{{Role: "user", Content: "hello"}},
+		Messages: []flruntime.ModelMessage{{Role: flruntime.ModelMessageRoleUser, Text: "hello"}},
 	})
 	if err != nil {
 		t.Fatalf("StreamModel: %v", err)
@@ -292,7 +287,7 @@ func TestFloretProviderAdapter_UsesProjectedPreviousState(t *testing.T) {
 	stream, err := adapter.StreamModel(context.Background(), flruntime.ModelRequest{
 		Step:            1,
 		Model:           "gpt-5-mini",
-		Messages:        []flruntime.ModelMessage{{Role: "user", Content: "full history"}},
+		Messages:        []flruntime.ModelMessage{{Role: flruntime.ModelMessageRoleUser, Text: "full history"}},
 		PreviousState:   &flruntime.ModelState{Kind: providerContinuationKindOpenAIResponses, ID: "resp_prev"},
 		MaxOutputTokens: 64,
 	})
@@ -306,6 +301,40 @@ func TestFloretProviderAdapter_UsesProjectedPreviousState(t *testing.T) {
 	}
 	if len(recorder.req.Messages) != 1 || len(recorder.req.Messages[0].Content) != 1 || strings.TrimSpace(recorder.req.Messages[0].Content[0].Text) != "full history" {
 		t.Fatalf("messages=%#v, want Floret-projected history", recorder.req.Messages)
+	}
+}
+
+func TestFloretProviderAdapter_CompatibleResponsesRouteUsesProjectedPreviousState(t *testing.T) {
+	t.Parallel()
+
+	recorder := &recordingFlowerProvider{}
+	adapter := newFloretProviderAdapter(
+		recorder,
+		"openai_compatible",
+		"gpt-5-mini",
+		ProviderControls{},
+		TurnBudgets{},
+		providerWebSearchModeExternalBrave,
+	)
+	if got := adapter.stateCompatibilityRoute(); got != "openai-responses" {
+		t.Fatalf("state compatibility route=%q, want openai-responses", got)
+	}
+	stream, err := adapter.StreamModel(context.Background(), flruntime.ModelRequest{
+		Model:         "gpt-5-mini",
+		Messages:      []flruntime.ModelMessage{{Role: flruntime.ModelMessageRoleUser, Text: "search"}},
+		PreviousState: &flruntime.ModelState{Kind: providerContinuationKindOpenAIResponses, ID: "resp_prev"},
+		Tools: []fltools.ToolDefinition{{
+			Name:        "web.search",
+			InputSchema: fltools.StrictObject(map[string]any{"query": fltools.String("query")}, []string{"query"}),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("StreamModel: %v", err)
+	}
+	for range stream {
+	}
+	if got := recorder.req.ProviderControls.PreviousResponseID; got != "resp_prev" {
+		t.Fatalf("PreviousResponseID=%q, want resp_prev", got)
 	}
 }
 
@@ -330,9 +359,12 @@ func TestFloretProviderStateConversion_PreservesOpaqueAttributes(t *testing.T) {
 	}
 	flower.Attributes["cursor"] = "cur_1"
 
-	roundTrip := flowerProviderStateToFloret(flower)
+	roundTrip, err := flowerProviderStateToFloret(flower)
+	if err != nil {
+		t.Fatalf("flowerProviderStateToFloret: %v", err)
+	}
 	if roundTrip == nil {
-		t.Fatalf("flowerProviderStateToFloret returned nil")
+		t.Fatal("flowerProviderStateToFloret returned nil")
 	}
 	if roundTrip.Kind != original.Kind || roundTrip.ID != original.ID {
 		t.Fatalf("roundTrip=%+v, want kind/id from original", roundTrip)
@@ -343,6 +375,24 @@ func TestFloretProviderStateConversion_PreservesOpaqueAttributes(t *testing.T) {
 	roundTrip.Attributes["cursor"] = "changed"
 	if flower.Attributes["cursor"] != "cur_1" {
 		t.Fatalf("flower attributes mutated by roundTrip: %v", flower.Attributes)
+	}
+}
+
+func TestFloretProviderStateConversion_RejectsIncompleteState(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name  string
+		state *ModelGatewayState
+	}{
+		{name: "missing kind", state: &ModelGatewayState{ID: "resp_state"}},
+		{name: "missing id", state: &ModelGatewayState{Kind: providerContinuationKindOpenAIResponses}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			if _, err := flowerProviderStateToFloret(testCase.state); err == nil {
+				t.Fatal("incomplete provider state was accepted")
+			}
+		})
 	}
 }
 
@@ -361,7 +411,7 @@ func TestFloretProviderAdapter_EmitsErrorForRejectedPreviousResponseIDWithoutRep
 	stream, err := adapter.StreamModel(context.Background(), flruntime.ModelRequest{
 		Step:            1,
 		Model:           "gpt-5-mini",
-		Messages:        []flruntime.ModelMessage{{Role: "user", Content: "full history"}},
+		Messages:        []flruntime.ModelMessage{{Role: flruntime.ModelMessageRoleUser, Text: "full history"}},
 		PreviousState:   &flruntime.ModelState{Kind: providerContinuationKindOpenAIResponses, ID: "resp_prev"},
 		MaxOutputTokens: 64,
 	})
@@ -406,7 +456,7 @@ func TestFloretProviderAdapter_StreamsReasoningWithoutMutatingRun(t *testing.T) 
 	})
 	stream, err := adapter.StreamModel(context.Background(), flruntime.ModelRequest{
 		Model:    "gpt-5-mini",
-		Messages: []flruntime.ModelMessage{{Role: "user", Content: "inspect"}},
+		Messages: []flruntime.ModelMessage{{Role: flruntime.ModelMessageRoleUser, Text: "inspect"}},
 	})
 	if err != nil {
 		t.Fatalf("StreamModel: %v", err)
@@ -446,7 +496,7 @@ func TestFloretProviderAdapter_EmitsToolCallStreamEvents(t *testing.T) {
 	})
 	stream, err := adapter.StreamModel(context.Background(), flruntime.ModelRequest{
 		Model:    "gpt-5-mini",
-		Messages: []flruntime.ModelMessage{{Role: "user", Content: "inspect"}},
+		Messages: []flruntime.ModelMessage{{Role: flruntime.ModelMessageRoleUser, Text: "inspect"}},
 	})
 	if err != nil {
 		t.Fatalf("StreamModel: %v", err)
@@ -490,7 +540,7 @@ func TestFloretProviderAdapter_ResultReasoningFallbackDoesNotMutateRun(t *testin
 	})
 	stream, err := adapter.StreamModel(context.Background(), flruntime.ModelRequest{
 		Model:    "gpt-5-mini",
-		Messages: []flruntime.ModelMessage{{Role: "user", Content: "answer"}},
+		Messages: []flruntime.ModelMessage{{Role: flruntime.ModelMessageRoleUser, Text: "answer"}},
 	})
 	if err != nil {
 		t.Fatalf("StreamModel: %v", err)
@@ -529,7 +579,7 @@ func TestFloretProviderAdapter_EmitsSourcesWithoutMutatingRun(t *testing.T) {
 	})
 	stream, err := adapter.StreamModel(context.Background(), flruntime.ModelRequest{
 		Model:    "gpt-5-mini",
-		Messages: []flruntime.ModelMessage{{Role: "user", Content: "cite"}},
+		Messages: []flruntime.ModelMessage{{Role: flruntime.ModelMessageRoleUser, Text: "cite"}},
 	})
 	if err != nil {
 		t.Fatalf("StreamModel: %v", err)
@@ -621,21 +671,27 @@ func TestFloretProviderAdapter_PersistsThinkingInTranscriptOnly(t *testing.T) {
 func TestFloretMessagesToFlowerRejectsUnsupportedRole(t *testing.T) {
 	t.Parallel()
 
-	_, err := floretMessagesToFlower([]flruntime.ModelMessage{{Role: "developer", Content: "unsupported"}})
-	if err == nil || !strings.Contains(err.Error(), "unsupported Floret model message role") {
+	_, err := floretMessagesToFlower([]flruntime.ModelMessage{{Role: "developer", Text: "unsupported"}})
+	if err == nil || !strings.Contains(err.Error(), "unsupported model message role") {
 		t.Fatalf("error=%v, want unsupported role rejection", err)
 	}
 }
 
-func TestFloretMessagesToFlower_GroupsConsecutiveAssistantToolCalls(t *testing.T) {
+func TestFloretMessagesToFlowerMapsGroupedAssistantToolCallsDirectly(t *testing.T) {
 	t.Parallel()
 
 	got, err := floretMessagesToFlower([]flruntime.ModelMessage{
-		{Role: "user", Content: "inspect and edit"},
-		{Role: "assistant", Content: "tool_call", Reasoning: "use both tools", ToolCallID: "todo-1", ToolName: "write_todos", ToolArgs: `{"todos":[{"content":"inspect","status":"in_progress"}]}`},
-		{Role: "assistant", Content: "tool_call", Reasoning: "use both tools", ToolCallID: "shell-1", ToolName: "terminal.exec", ToolArgs: `{"command":"mkdir -p smoke"}`},
-		{Role: "tool", Content: `{"status":"success","summary":"updated todos"}`, ToolCallID: "todo-1", ToolName: "write_todos"},
-		{Role: "tool", Content: `{"status":"success","summary":"created directory"}`, ToolCallID: "shell-1", ToolName: "terminal.exec"},
+		{Role: flruntime.ModelMessageRoleUser, Text: "inspect and edit"},
+		{
+			Role:      flruntime.ModelMessageRoleAssistant,
+			Reasoning: "use both tools",
+			ToolCalls: []fltools.ToolCall{
+				{ID: "todo-1", Name: "write_todos", Args: `{"todos":[{"content":"inspect","status":"in_progress"}]}`},
+				{ID: "shell-1", Name: "terminal.exec", Args: `{"command":"mkdir -p smoke"}`},
+			},
+		},
+		{Role: flruntime.ModelMessageRoleTool, ToolResult: &flruntime.ModelToolResult{CallID: "todo-1", ToolName: "write_todos", Text: `{"status":"success","summary":"updated todos"}`}},
+		{Role: flruntime.ModelMessageRoleTool, ToolResult: &flruntime.ModelToolResult{CallID: "shell-1", ToolName: "terminal.exec", Text: `{"status":"success","summary":"created directory"}`}},
 	})
 	if err != nil {
 		t.Fatalf("floretMessagesToFlower: %v", err)
@@ -673,8 +729,8 @@ func TestFloretMessagesToFlowerKeepsProviderSafeControlTextOpaque(t *testing.T) 
 	t.Parallel()
 
 	got, err := floretMessagesToFlower([]flruntime.ModelMessage{
-		{Role: "user", Content: "ask a structured question"},
-		{Role: "assistant", Content: `Host processed control signal "ask_user".`},
+		{Role: flruntime.ModelMessageRoleUser, Text: "ask a structured question"},
+		{Role: flruntime.ModelMessageRoleAssistant, Text: `Host processed control signal "ask_user".`},
 	})
 	if err != nil {
 		t.Fatalf("floretMessagesToFlower: %v", err)
@@ -698,28 +754,18 @@ func TestFloretMessagesToFlowerKeepsProviderSafeControlTextOpaque(t *testing.T) 
 	}
 }
 
-func TestFloretMessagesToFlower_RejectsOrphanOrdinaryToolResult(t *testing.T) {
-	t.Parallel()
-
-	_, err := floretMessagesToFlower([]flruntime.ModelMessage{
-		{Role: "user", Content: "continue"},
-		{Role: "tool", Content: `{"status":"success"}`, ToolCallID: "read-1", ToolName: "file.read"},
-	})
-	if err == nil || !strings.Contains(err.Error(), "without a preceding assistant tool call") {
-		t.Fatalf("error=%v, want orphan ordinary tool result rejection", err)
-	}
-}
-
 func TestFloretMessagesToFlowerRejectsInvalidToolArgs(t *testing.T) {
 	t.Parallel()
 
 	_, err := floretMessagesToFlower([]flruntime.ModelMessage{{
-		Role:       "assistant",
-		ToolCallID: "call-1",
-		ToolName:   "terminal.exec",
-		ToolArgs:   `{"command":`,
+		Role: flruntime.ModelMessageRoleAssistant,
+		ToolCalls: []fltools.ToolCall{{
+			ID:   "call-1",
+			Name: "terminal.exec",
+			Args: `{"command":`,
+		}},
 	}})
-	if err == nil || !strings.Contains(err.Error(), "invalid Floret assistant tool args") {
+	if err == nil || !strings.Contains(err.Error(), "invalid JSON args") {
 		t.Fatalf("error=%v, want invalid tool args", err)
 	}
 }

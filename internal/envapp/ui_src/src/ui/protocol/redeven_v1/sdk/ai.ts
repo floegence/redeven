@@ -95,7 +95,7 @@ export type AICompactThreadContextRequest = {
 };
 
 export type AICompactThreadContextResponse = {
-  operationId?: string;
+  requestId?: string;
   kind: string;
   errorCode?: string;
 };
@@ -211,7 +211,6 @@ export type AIRealtimeEvent = {
   lastMessagePreview?: string;
   lastMessageAtUnixMs?: number;
   activeRunId?: string;
-  lastContextRunId?: string;
   permissionType?: AIPermissionType;
   queuedTurnCount?: number;
 

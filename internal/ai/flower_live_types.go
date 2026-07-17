@@ -114,7 +114,7 @@ type FlowerLiveThreadPatch struct {
 	RunErrorCode           string                        `json:"run_error_code,omitempty"`
 	RunError               string                        `json:"run_error,omitempty"`
 	WaitingPrompt          *RequestUserInputPrompt       `json:"waiting_prompt,omitempty"`
-	LastContextRunID       string                        `json:"last_context_run_id,omitempty"`
+	ActiveRunID            string                        `json:"active_run_id,omitempty"`
 	PinnedAtUnixMs         int64                         `json:"pinned_at_unix_ms,omitempty"`
 	CreatedAtUnixMs        int64                         `json:"created_at_unix_ms,omitempty"`
 	UpdatedAtUnixMs        int64                         `json:"updated_at_unix_ms,omitempty"`
@@ -142,7 +142,7 @@ func (p FlowerLiveThreadPatch) MarshalJSON() ([]byte, error) {
 		RunErrorCode        string                        `json:"run_error_code,omitempty"`
 		RunError            string                        `json:"run_error,omitempty"`
 		WaitingPrompt       *RequestUserInputPrompt       `json:"waiting_prompt,omitempty"`
-		LastContextRunID    string                        `json:"last_context_run_id,omitempty"`
+		ActiveRunID         string                        `json:"active_run_id,omitempty"`
 		PinnedAtUnixMs      int64                         `json:"pinned_at_unix_ms,omitempty"`
 		CreatedAtUnixMs     int64                         `json:"created_at_unix_ms,omitempty"`
 		UpdatedAtUnixMs     int64                         `json:"updated_at_unix_ms,omitempty"`
@@ -165,7 +165,7 @@ func (p FlowerLiveThreadPatch) MarshalJSON() ([]byte, error) {
 		RunErrorCode:        p.RunErrorCode,
 		RunError:            p.RunError,
 		WaitingPrompt:       p.WaitingPrompt,
-		LastContextRunID:    p.LastContextRunID,
+		ActiveRunID:         p.ActiveRunID,
 		PinnedAtUnixMs:      p.PinnedAtUnixMs,
 		CreatedAtUnixMs:     p.CreatedAtUnixMs,
 		UpdatedAtUnixMs:     p.UpdatedAtUnixMs,
@@ -227,7 +227,7 @@ func (p *FlowerLiveThreadPatch) UnmarshalJSON(data []byte) error {
 		RunErrorCode        string                  `json:"run_error_code,omitempty"`
 		RunError            string                  `json:"run_error,omitempty"`
 		WaitingPrompt       *RequestUserInputPrompt `json:"waiting_prompt,omitempty"`
-		LastContextRunID    string                  `json:"last_context_run_id,omitempty"`
+		ActiveRunID         string                  `json:"active_run_id,omitempty"`
 		PinnedAtUnixMs      int64                   `json:"pinned_at_unix_ms,omitempty"`
 		CreatedAtUnixMs     int64                   `json:"created_at_unix_ms,omitempty"`
 		UpdatedAtUnixMs     int64                   `json:"updated_at_unix_ms,omitempty"`
@@ -253,7 +253,7 @@ func (p *FlowerLiveThreadPatch) UnmarshalJSON(data []byte) error {
 		RunErrorCode:        raw.RunErrorCode,
 		RunError:            raw.RunError,
 		WaitingPrompt:       raw.WaitingPrompt,
-		LastContextRunID:    raw.LastContextRunID,
+		ActiveRunID:         raw.ActiveRunID,
 		PinnedAtUnixMs:      raw.PinnedAtUnixMs,
 		CreatedAtUnixMs:     raw.CreatedAtUnixMs,
 		UpdatedAtUnixMs:     raw.UpdatedAtUnixMs,
@@ -502,12 +502,14 @@ type FlowerContextUsage struct {
 
 type FlowerContextCompaction struct {
 	OperationID         string `json:"operation_id"`
+	RequestID           string `json:"request_id"`
 	RunID               string `json:"run_id,omitempty"`
 	StepIndex           int    `json:"step_index,omitempty"`
 	Phase               string `json:"phase"`
 	Status              string `json:"status"`
 	Trigger             string `json:"trigger,omitempty"`
 	Reason              string `json:"reason,omitempty"`
+	Source              string `json:"source"`
 	TokensBefore        int64  `json:"tokens_before,omitempty"`
 	TokensAfterEstimate int64  `json:"tokens_after_estimate,omitempty"`
 	Error               string `json:"error,omitempty"`

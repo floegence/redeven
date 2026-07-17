@@ -307,30 +307,6 @@ func TestIntegration_ModelGateway_Anthropic_LengthContinuationSucceeds(t *testin
 
 	requireAssistantTimelineText(t, ctx, svc, &meta, th.ThreadID, "PART_1PART_2")
 
-	runEvents, err := svc.ListRunEvents(ctx, &meta, runID, 2000)
-	if err != nil {
-		t.Fatalf("ListRunEvents: %v", err)
-	}
-	var continuation map[string]any
-	for _, event := range runEvents.Events {
-		if event.EventType != "floret.step.end" {
-			continue
-		}
-		payload, ok := event.Payload.(map[string]any)
-		if !ok {
-			t.Fatalf("run event %q payload type=%T, want map[string]any", event.EventType, event.Payload)
-		}
-		if strings.TrimSpace(fmt.Sprint(payload["finish_reason"])) == "length" {
-			continuation = payload
-			break
-		}
-	}
-	if continuation == nil {
-		t.Fatalf("missing floret.step.end length event")
-	}
-	if got := strings.TrimSpace(fmt.Sprint(continuation["finish_reason"])); got != "length" {
-		t.Fatalf("continuation finish_reason=%q, want length", got)
-	}
 }
 
 func TestIntegration_ModelGateway_Anthropic_ContentFilterFails(t *testing.T) {

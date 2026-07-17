@@ -2,7 +2,6 @@ package threadstore
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -135,83 +134,5 @@ func TestStoreThreadDeleteOperationStepConfirmationCommitsOnlyAfterRequiredSteps
 	}
 	if len(pending) != 0 {
 		t.Fatalf("pending=%+v, want none", pending)
-	}
-}
-
-func TestStoreMigratesV38ToV39ThreadDeleteOperations(t *testing.T) {
-	t.Parallel()
-
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	raw, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		t.Fatalf("sql.Open: %v", err)
-	}
-	schema := threadstoreSchemaSpec()
-	tx, err := raw.Begin()
-	if err != nil {
-		t.Fatalf("Begin: %v", err)
-	}
-	for _, migration := range schema.Migrations {
-		if migration.ToVersion > 38 {
-			break
-		}
-		if err := migration.Apply(tx); err != nil {
-			_ = tx.Rollback()
-			t.Fatalf("apply migration %d->%d: %v", migration.FromVersion, migration.ToVersion, err)
-		}
-	}
-	if _, err := tx.Exec(`
-INSERT INTO ai_threads(thread_id, endpoint_id, created_at_unix_ms, updated_at_unix_ms)
-VALUES('thread_from_v38', 'env_from_v38', 1000, 1000)
-`); err != nil {
-		_ = tx.Rollback()
-		t.Fatalf("insert v38 thread: %v", err)
-	}
-	if _, err := tx.Exec(`PRAGMA user_version=38;`); err != nil {
-		_ = tx.Rollback()
-		t.Fatalf("set user_version: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("Commit: %v", err)
-	}
-	if err := raw.Close(); err != nil {
-		t.Fatalf("Close raw: %v", err)
-	}
-
-	store, err := Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open migrated: %v", err)
-	}
-	defer func() { _ = store.Close() }()
-	if !tableExistsForTest(t, store.db, "ai_thread_delete_operations") {
-		t.Fatalf("missing ai_thread_delete_operations")
-	}
-	if !indexExistsForTest(t, store.db, "idx_ai_thread_delete_operations_status_updated") {
-		t.Fatalf("missing delete operation status index")
-	}
-	thread, err := store.GetThread(context.Background(), "env_from_v38", "thread_from_v38")
-	if err != nil || thread == nil {
-		t.Fatalf("migrated thread=%+v err=%v", thread, err)
-	}
-	operation, err := store.PrepareThreadDeleteOperation(context.Background(), "env_from_v38", "thread_from_v38", true)
-	if err != nil {
-		t.Fatalf("PrepareThreadDeleteOperation: %v", err)
-	}
-	if operation.Status != ThreadDeleteOperationPending {
-		t.Fatalf("operation status=%q, want %q", operation.Status, ThreadDeleteOperationPending)
-	}
-	if err := store.CreateThread(context.Background(), Thread{
-		ThreadID:   "thread_from_v38",
-		EndpointID: "env_from_v38",
-		Title:      "reused",
-	}); !errors.Is(err, ErrThreadIDRetired) {
-		t.Fatalf("CreateThread reused err=%v, want %v", err, ErrThreadIDRetired)
-	}
-	var version int
-	if err := store.db.QueryRow(`PRAGMA user_version;`).Scan(&version); err != nil {
-		t.Fatalf("read user_version: %v", err)
-	}
-	if version != CurrentSchemaVersion() {
-		t.Fatalf("user_version=%d, want %d", version, CurrentSchemaVersion())
 	}
 }

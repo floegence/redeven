@@ -247,7 +247,7 @@ export function toWireAICompactThreadContextRequest(req: AICompactThreadContextR
 
 export function fromWireAICompactThreadContextResponse(resp: wire_ai_compact_thread_context_resp): AICompactThreadContextResponse {
   return {
-    operationId: String(resp?.operation_id ?? '').trim() || undefined,
+    requestId: String(resp?.request_id ?? '').trim() || undefined,
     kind: String(resp?.kind ?? '').trim(),
     errorCode: String(resp?.error_code ?? '').trim() || undefined,
   };
@@ -401,7 +401,6 @@ export function fromWireAIEventNotify(payload: wire_ai_event_notify): AIRealtime
     lastMessagePreview: typeof payload?.last_message_preview === 'string' ? payload.last_message_preview : undefined,
     lastMessageAtUnixMs: typeof payload?.last_message_at_unix_ms === 'number' ? payload.last_message_at_unix_ms : undefined,
     activeRunId: typeof payload?.active_run_id === 'string' ? payload.active_run_id : undefined,
-    lastContextRunId: typeof payload?.last_context_run_id === 'string' ? payload.last_context_run_id : undefined,
     permissionType: normalizePermissionType(payload?.permission_type),
     queuedTurnCount: typeof payload?.queued_turn_count === 'number' ? payload.queued_turn_count : undefined,
 

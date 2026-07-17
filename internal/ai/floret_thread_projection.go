@@ -174,7 +174,7 @@ func (s *Service) applyFloretPendingToolSettlementProjection(ctx context.Context
 	if s == nil {
 		return errors.New("nil service")
 	}
-	if err := settled.ValidateProjection(); err != nil {
+	if err := settled.Validate(); err != nil {
 		return fmt.Errorf("invalid pending tool settlement projection outcome: %w", err)
 	}
 	if settled.ProjectionAvailability == flruntime.TurnProjectionAvailabilityUnavailable {

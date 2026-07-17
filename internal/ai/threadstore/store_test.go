@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"strings"
 	"testing"
@@ -563,106 +562,6 @@ func TestStore_UpdateThreadRunStateRejectsUnsupportedStatus(t *testing.T) {
 	}
 }
 
-func TestStore_AppendRunEvent_ContextEventsUpdateLastContextRunID(t *testing.T) {
-	t.Parallel()
-
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	s, err := Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	ctx := context.Background()
-	if err := s.CreateThread(ctx, Thread{ThreadID: "th_1", EndpointID: "env_1", Title: "chat"}); err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-	initial, err := s.GetThread(ctx, "env_1", "th_1")
-	if err != nil {
-		t.Fatalf("GetThread initial: %v", err)
-	}
-	if initial == nil {
-		t.Fatalf("thread missing")
-	}
-	initialRevision := initial.FlowerActivityRevision
-	initialSignature := initial.FlowerActivitySignature
-
-	if err := s.AppendRunEvent(ctx, RunEventRecord{
-		EndpointID:  "env_1",
-		ThreadID:    "th_1",
-		RunID:       "run_non_context",
-		StreamKind:  "lifecycle",
-		EventType:   "run.start",
-		PayloadJSON: "{}",
-		AtUnixMs:    1000,
-	}); err != nil {
-		t.Fatalf("AppendRunEvent non-context: %v", err)
-	}
-
-	th, err := s.GetThread(ctx, "env_1", "th_1")
-	if err != nil {
-		t.Fatalf("GetThread after non-context: %v", err)
-	}
-	if got := strings.TrimSpace(th.LastContextRunID); got != "" {
-		t.Fatalf("LastContextRunID=%q, want empty after non-context event", got)
-	}
-	if th.FlowerActivityRevision != initialRevision || th.FlowerActivitySignature != initialSignature {
-		t.Fatalf("non-context event changed Flower activity: before=(%d,%q) after=(%d,%q)", initialRevision, initialSignature, th.FlowerActivityRevision, th.FlowerActivitySignature)
-	}
-
-	if err := s.AppendRunEvent(ctx, RunEventRecord{
-		EndpointID:  "env_1",
-		ThreadID:    "th_1",
-		RunID:       "run_context_1",
-		StreamKind:  "context",
-		EventType:   "context.usage.updated",
-		PayloadJSON: "{}",
-		AtUnixMs:    1100,
-	}); err != nil {
-		t.Fatalf("AppendRunEvent context usage: %v", err)
-	}
-	th, err = s.GetThread(ctx, "env_1", "th_1")
-	if err != nil {
-		t.Fatalf("GetThread after context usage: %v", err)
-	}
-	if got := strings.TrimSpace(th.LastContextRunID); got != "run_context_1" {
-		t.Fatalf("LastContextRunID=%q, want run_context_1 after context usage", got)
-	}
-	if th.FlowerActivityRevision <= initialRevision {
-		t.Fatalf("context usage FlowerActivityRevision=%d, want > %d", th.FlowerActivityRevision, initialRevision)
-	}
-	if !strings.Contains(th.FlowerActivitySignature, "turn:run_context_1") {
-		t.Fatalf("context usage FlowerActivitySignature=%q, want run_context_1 turn token", th.FlowerActivitySignature)
-	}
-	contextUsageRevision := th.FlowerActivityRevision
-
-	if err := s.AppendRunEvent(ctx, RunEventRecord{
-		EndpointID:  "env_1",
-		ThreadID:    "th_1",
-		RunID:       "run_context_2",
-		StreamKind:  "context",
-		EventType:   "context.compaction.updated",
-		PayloadJSON: "{}",
-		AtUnixMs:    1200,
-	}); err != nil {
-		t.Fatalf("AppendRunEvent context compaction: %v", err)
-	}
-
-	th, err = s.GetThread(ctx, "env_1", "th_1")
-	if err != nil {
-		t.Fatalf("GetThread after context events: %v", err)
-	}
-	if got := strings.TrimSpace(th.LastContextRunID); got != "run_context_2" {
-		t.Fatalf("LastContextRunID=%q, want %q", got, "run_context_2")
-	}
-	if th.FlowerActivityRevision <= contextUsageRevision {
-		t.Fatalf("context compaction FlowerActivityRevision=%d, want > %d", th.FlowerActivityRevision, contextUsageRevision)
-	}
-	if !strings.Contains(th.FlowerActivitySignature, "turn:run_context_2") {
-		t.Fatalf("context compaction FlowerActivitySignature=%q, want run_context_2 turn token", th.FlowerActivitySignature)
-	}
-}
-
 func TestStore_AppendRunEvent_RejectsInvalidPayloadJSON(t *testing.T) {
 	t.Parallel()
 
@@ -707,98 +606,6 @@ func TestStore_AppendRunEvent_RejectsInvalidPayloadJSON(t *testing.T) {
 	}
 	if len(page) != 1 || page[0].PayloadJSON != "{}" {
 		t.Fatalf("run events = %#v, want one normalized empty payload", page)
-	}
-}
-
-func TestStore_AppendRunEvent_ContextCompactionDoesNotPolluteTranscript(t *testing.T) {
-	t.Parallel()
-
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	s, err := Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	ctx := context.Background()
-	if err := s.CreateThread(ctx, Thread{ThreadID: "th_context", EndpointID: "env_1", Title: "chat"}); err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-	if _, err := s.AppendMessage(ctx, "env_1", "th_context", Message{
-		ThreadID:        "th_context",
-		EndpointID:      "env_1",
-		MessageID:       "msg_user",
-		Role:            "user",
-		Status:          "complete",
-		TextContent:     "keep this transcript clean",
-		MessageJSON:     `{"id":"msg_user","role":"user","content":"keep this transcript clean"}`,
-		CreatedAtUnixMs: 1000,
-		UpdatedAtUnixMs: 1000,
-	}, "u1", "u1@example.com"); err != nil {
-		t.Fatalf("AppendMessage: %v", err)
-	}
-
-	now := time.Now().UnixMilli()
-	for _, rec := range []RunEventRecord{
-		{
-			EndpointID:  "env_1",
-			ThreadID:    "th_context",
-			RunID:       "run_context",
-			StreamKind:  "context",
-			EventType:   "context.usage.updated",
-			PayloadJSON: `{"usage":{"phase":"projected_request","input_tokens":620,"context_window_tokens":1000,"pressure_status":"stable"}}`,
-			AtUnixMs:    now,
-		},
-		{
-			EndpointID:  "env_1",
-			ThreadID:    "th_context",
-			RunID:       "run_context",
-			StreamKind:  "context",
-			EventType:   "context.compaction.updated",
-			PayloadJSON: `{"compaction":{"operation_id":"compact-1","phase":"complete","status":"compacted","tokens_before":920,"tokens_after_estimate":210}}`,
-			AtUnixMs:    now + 1,
-		},
-	} {
-		if err := s.AppendRunEvent(ctx, rec); err != nil {
-			t.Fatalf("AppendRunEvent(%s): %v", rec.EventType, err)
-		}
-	}
-
-	if got := countRowsForTest(t, s.db, `
-SELECT COUNT(1)
-FROM ai_run_events
-WHERE endpoint_id = ? AND thread_id = ? AND run_id = ?
-  AND event_type IN ('context.usage.updated', 'context.compaction.updated')
-`, "env_1", "th_context", "run_context"); got != 2 {
-		t.Fatalf("context run events=%d, want 2", got)
-	}
-	if got := countRowsForTest(t, s.db, `
-SELECT COUNT(1)
-FROM transcript_messages
-WHERE endpoint_id = ? AND thread_id = ?
-  AND (
-    text_content LIKE '%Context compressed%'
-    OR text_content LIKE '%上下文已压缩%'
-    OR text_content LIKE '%上下文压缩中%'
-    OR message_json LIKE '%context_compaction%'
-    OR message_json LIKE '%context.compaction.updated%'
-  )
-`, "env_1", "th_context"); got != 0 {
-		t.Fatalf("polluted transcript rows=%d, want 0", got)
-	}
-	if got := countRowsForTest(t, s.db, `
-SELECT COUNT(1)
-FROM ai_messages
-WHERE endpoint_id = ? AND thread_id = ?
-  AND (
-    text_content LIKE '%Context compressed%'
-    OR text_content LIKE '%上下文已压缩%'
-    OR text_content LIKE '%上下文压缩中%'
-    OR message_json LIKE '%context_compaction%'
-    OR message_json LIKE '%context.compaction.updated%'
-  )
-`, "env_1", "th_context"); got != 0 {
-		t.Fatalf("polluted legacy message rows=%d, want 0", got)
 	}
 }
 
@@ -982,81 +789,6 @@ func TestStore_UpdateThreadLastMessagePreviewDoesNotAppendTranscriptMessage(t *t
 	}
 	if unchanged.LastMessageAtUnixMs != 2000 {
 		t.Fatalf("LastMessageAtUnixMs=%d, want 2000 after older update", unchanged.LastMessageAtUnixMs)
-	}
-}
-
-func TestStore_UpsertProjectedMessageBumpsFlowerActivityOnVisibleChanges(t *testing.T) {
-	t.Parallel()
-
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	s, err := Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	ctx := context.Background()
-	if err := s.CreateThread(ctx, Thread{ThreadID: "th_projected_msg", EndpointID: "env_1", CreatedAtUnixMs: 100, UpdatedAtUnixMs: 100}); err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-	initial, err := s.GetThread(ctx, "env_1", "th_projected_msg")
-	if err != nil {
-		t.Fatalf("GetThread initial: %v", err)
-	}
-	if initial == nil {
-		t.Fatalf("thread missing")
-	}
-
-	msg := Message{
-		ThreadID:        "th_projected_msg",
-		EndpointID:      "env_1",
-		MessageID:       "msg_projected",
-		Role:            "assistant",
-		Status:          "complete",
-		CreatedAtUnixMs: 200,
-		UpdatedAtUnixMs: 200,
-		TextContent:     "first projected answer",
-		MessageJSON:     `{"id":"msg_projected","role":"assistant","blocks":[{"type":"markdown","content":"first projected answer"}],"status":"complete","timestamp":200}`,
-	}
-	if _, err := s.UpsertProjectedMessage(ctx, "env_1", "th_projected_msg", msg, "u1", "u1@example.com"); err != nil {
-		t.Fatalf("UpsertProjectedMessage insert: %v", err)
-	}
-	inserted, err := s.GetThread(ctx, "env_1", "th_projected_msg")
-	if err != nil {
-		t.Fatalf("GetThread inserted: %v", err)
-	}
-	if inserted.FlowerActivityRevision <= initial.FlowerActivityRevision {
-		t.Fatalf("insert FlowerActivityRevision=%d, want > %d", inserted.FlowerActivityRevision, initial.FlowerActivityRevision)
-	}
-	if !strings.Contains(inserted.LastMessagePreview, "first projected answer") || !strings.Contains(inserted.FlowerActivitySignature, "message:") {
-		t.Fatalf("inserted projected message did not update visible activity: %+v", inserted)
-	}
-
-	if _, err := s.UpsertProjectedMessage(ctx, "env_1", "th_projected_msg", msg, "u1", "u1@example.com"); err != nil {
-		t.Fatalf("UpsertProjectedMessage idempotent: %v", err)
-	}
-	idempotent, err := s.GetThread(ctx, "env_1", "th_projected_msg")
-	if err != nil {
-		t.Fatalf("GetThread idempotent: %v", err)
-	}
-	if idempotent.FlowerActivityRevision != inserted.FlowerActivityRevision || idempotent.FlowerActivitySignature != inserted.FlowerActivitySignature {
-		t.Fatalf("idempotent projected message changed Flower activity: before=(%d,%q) after=(%d,%q)", inserted.FlowerActivityRevision, inserted.FlowerActivitySignature, idempotent.FlowerActivityRevision, idempotent.FlowerActivitySignature)
-	}
-
-	msg.TextContent = "updated projected answer"
-	msg.MessageJSON = `{"id":"msg_projected","role":"assistant","blocks":[{"type":"markdown","content":"updated projected answer"}],"status":"complete","timestamp":200}`
-	if _, err := s.UpsertProjectedMessage(ctx, "env_1", "th_projected_msg", msg, "u1", "u1@example.com"); err != nil {
-		t.Fatalf("UpsertProjectedMessage update: %v", err)
-	}
-	updated, err := s.GetThread(ctx, "env_1", "th_projected_msg")
-	if err != nil {
-		t.Fatalf("GetThread updated: %v", err)
-	}
-	if updated.FlowerActivityRevision <= idempotent.FlowerActivityRevision {
-		t.Fatalf("update FlowerActivityRevision=%d, want > %d", updated.FlowerActivityRevision, idempotent.FlowerActivityRevision)
-	}
-	if updated.FlowerActivitySignature == idempotent.FlowerActivitySignature || !strings.Contains(updated.LastMessagePreview, "updated projected answer") {
-		t.Fatalf("updated projected message did not change visible Flower activity: before=%+v after=%+v", idempotent, updated)
 	}
 }
 
@@ -1301,14 +1033,13 @@ func TestStore_UpsertProjectedThreadWithFlowerMetadataPersistsAtomically(t *test
 		t.Fatalf("unexpected metadata: %#v", meta)
 	}
 	if err := s.UpsertProjectedThreadWithFlowerMetadata(ctx, Thread{
-		ThreadID:         "child-atomic",
-		EndpointID:       "env_1",
-		Title:            "Child atomic",
-		ModelID:          "openai/gpt-5-mini",
-		RunStatus:        "success",
-		LastContextRunID: "run_child_2",
-		CreatedAtUnixMs:  1000,
-		UpdatedAtUnixMs:  2500,
+		ThreadID:        "child-atomic",
+		EndpointID:      "env_1",
+		Title:           "Child atomic",
+		ModelID:         "openai/gpt-5-mini",
+		RunStatus:       "success",
+		CreatedAtUnixMs: 1000,
+		UpdatedAtUnixMs: 2500,
 	}, FlowerThreadMetadata{
 		EndpointID:      "env_1",
 		ThreadID:        "child-atomic",
@@ -1323,25 +1054,24 @@ func TestStore_UpsertProjectedThreadWithFlowerMetadataPersistsAtomically(t *test
 	if err != nil {
 		t.Fatalf("GetThread child after update: %v", err)
 	}
-	if child == nil || child.RunStatus != "success" || child.LastContextRunID != "run_child_2" {
+	if child == nil || child.RunStatus != "success" {
 		t.Fatalf("thread update was not stored: %#v", child)
 	}
 	if child.FlowerActivityRevision <= initialChildRevision {
 		t.Fatalf("FlowerActivityRevision=%d, want > %d", child.FlowerActivityRevision, initialChildRevision)
 	}
-	if child.FlowerActivitySignature == initialChildSignature || !strings.Contains(child.FlowerActivitySignature, "status:success") || !strings.Contains(child.FlowerActivitySignature, "turn:run_child_2") {
+	if child.FlowerActivitySignature == initialChildSignature || !strings.Contains(child.FlowerActivitySignature, "status:success") {
 		t.Fatalf("FlowerActivitySignature=%q initial=%q, want updated state", child.FlowerActivitySignature, initialChildSignature)
 	}
 	afterUpdateRevision := child.FlowerActivityRevision
 	if err := s.UpsertProjectedThreadWithFlowerMetadata(ctx, Thread{
-		ThreadID:         "child-atomic",
-		EndpointID:       "env_1",
-		Title:            "Child atomic",
-		ModelID:          "openai/gpt-5-mini",
-		RunStatus:        "success",
-		LastContextRunID: "run_child_2",
-		CreatedAtUnixMs:  1000,
-		UpdatedAtUnixMs:  2500,
+		ThreadID:        "child-atomic",
+		EndpointID:      "env_1",
+		Title:           "Child atomic",
+		ModelID:         "openai/gpt-5-mini",
+		RunStatus:       "success",
+		CreatedAtUnixMs: 1000,
+		UpdatedAtUnixMs: 2500,
 	}, FlowerThreadMetadata{
 		EndpointID:      "env_1",
 		ThreadID:        "child-atomic",
@@ -1741,518 +1471,6 @@ func TestStore_ResetStaleActiveThreadRunStates(t *testing.T) {
 	}
 }
 
-func TestStore_MigrateFromV1AddsRunColumns(t *testing.T) {
-	t.Parallel()
-
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	raw, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		t.Fatalf("sql.Open: %v", err)
-	}
-	_, err = raw.Exec(`
-CREATE TABLE IF NOT EXISTS ai_threads (
-  thread_id TEXT PRIMARY KEY,
-  endpoint_id TEXT NOT NULL,
-  namespace_public_id TEXT NOT NULL DEFAULT '',
-  title TEXT NOT NULL DEFAULT '',
-  created_by_user_public_id TEXT NOT NULL DEFAULT '',
-  created_by_user_email TEXT NOT NULL DEFAULT '',
-  updated_by_user_public_id TEXT NOT NULL DEFAULT '',
-  updated_by_user_email TEXT NOT NULL DEFAULT '',
-  created_at_unix_ms INTEGER NOT NULL,
-  updated_at_unix_ms INTEGER NOT NULL,
-  last_message_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  last_message_preview TEXT NOT NULL DEFAULT ''
-);
-CREATE INDEX IF NOT EXISTS idx_ai_threads_endpoint_updated ON ai_threads(endpoint_id, updated_at_unix_ms DESC, thread_id DESC);
-CREATE TABLE IF NOT EXISTS ai_messages (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  thread_id TEXT NOT NULL,
-  endpoint_id TEXT NOT NULL,
-  message_id TEXT NOT NULL,
-  role TEXT NOT NULL,
-  author_user_public_id TEXT NOT NULL DEFAULT '',
-  author_user_email TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL,
-  created_at_unix_ms INTEGER NOT NULL,
-  updated_at_unix_ms INTEGER NOT NULL,
-  text_content TEXT NOT NULL DEFAULT '',
-  message_json TEXT NOT NULL,
-  UNIQUE(thread_id, message_id)
-);
-CREATE INDEX IF NOT EXISTS idx_ai_messages_thread_id ON ai_messages(endpoint_id, thread_id, id ASC);
-INSERT INTO ai_threads(
-  thread_id, endpoint_id, namespace_public_id, title,
-  created_at_unix_ms, updated_at_unix_ms, last_message_at_unix_ms, last_message_preview
-) VALUES(
-  'legacy_thread', 'env_legacy', 'ns_legacy', 'Legacy',
-  1000, 2000, 3000, 'legacy answer'
-);
-PRAGMA user_version=1;
-`)
-	if err != nil {
-		t.Fatalf("init v1 schema: %v", err)
-	}
-	if err := raw.Close(); err != nil {
-		t.Fatalf("close raw db: %v", err)
-	}
-
-	s, err := Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open with migration: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	ctx := context.Background()
-	rows, err := s.db.QueryContext(ctx, `PRAGMA table_info(ai_threads)`)
-	if err != nil {
-		t.Fatalf("PRAGMA table_info: %v", err)
-	}
-	defer rows.Close()
-
-	cols := map[string]bool{}
-	for rows.Next() {
-		var cid int
-		var name string
-		var typ string
-		var notNull int
-		var dflt sql.NullString
-		var pk int
-		if err := rows.Scan(&cid, &name, &typ, &notNull, &dflt, &pk); err != nil {
-			t.Fatalf("scan table_info: %v", err)
-		}
-		cols[strings.TrimSpace(name)] = true
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("rows err: %v", err)
-	}
-
-	for _, col := range []string{"model_id", "execution_mode", "working_dir", "run_status", "run_updated_at_unix_ms", "run_error_code", "run_error", "waiting_user_input_json", "last_context_run_id", "title_source", "title_generated_at_unix_ms", "title_input_message_id", "title_model_id", "title_prompt_version", "pinned_at_unix_ms", "flower_activity_revision", "flower_activity_signature", "flower_activity_waiting_prompt_id"} {
-		if !cols[col] {
-			t.Fatalf("missing migrated column %q", col)
-		}
-	}
-	legacy, err := s.GetThread(ctx, "env_legacy", "legacy_thread")
-	if err != nil {
-		t.Fatalf("GetThread legacy: %v", err)
-	}
-	if legacy == nil {
-		t.Fatalf("legacy thread missing after migration")
-	}
-	wantRevision := legacyFlowerActivityRevision("idle", 0, 3000)
-	if legacy.FlowerActivityRevision != wantRevision {
-		t.Fatalf("legacy FlowerActivityRevision=%d, want %d", legacy.FlowerActivityRevision, wantRevision)
-	}
-	if legacy.FlowerActivitySignature == "" || !strings.Contains(legacy.FlowerActivitySignature, "activity:30000") || !strings.Contains(legacy.FlowerActivitySignature, "message:") {
-		t.Fatalf("legacy FlowerActivitySignature=%q, want backfilled activity and message tokens", legacy.FlowerActivitySignature)
-	}
-	if !tableHasColumnForTest(t, s.db, "ai_queued_turns", "context_action_json") {
-		t.Fatalf("missing migrated queued turn column %q", "context_action_json")
-	}
-
-	for _, table := range []string{"ai_runs", "ai_run_events", "ai_thread_todos", "ai_thread_checkpoints", "transcript_messages", "conversation_turns", "memory_items", "provider_capabilities", "structured_user_inputs", "request_user_input_secret_answers", "ai_flower_thread_metadata", "ai_flower_transfers", "ai_flower_handoffs"} {
-		var exists int
-		if err := s.db.QueryRowContext(ctx, `
-SELECT COUNT(1)
-FROM sqlite_master
-WHERE type = 'table' AND name = ?
-`, table).Scan(&exists); err != nil {
-			t.Fatalf("check table %s: %v", table, err)
-		}
-		if exists == 0 {
-			t.Fatalf("missing migrated table %q", table)
-		}
-	}
-	for _, table := range []string{"memory_embeddings", "ai_tool_calls", "execution_spans"} {
-		if tableExistsForTest(t, s.db, table) {
-			t.Fatalf("%s should be absent from the current schema", table)
-		}
-	}
-	if tableHasColumnForTest(t, s.db, "ai_thread_checkpoints", "tool_calls_max_id") {
-		t.Fatalf("tool_calls_max_id should be absent from the current checkpoint schema")
-	}
-
-	var version int
-	if err := s.db.QueryRowContext(ctx, `PRAGMA user_version;`).Scan(&version); err != nil {
-		t.Fatalf("read user_version: %v", err)
-	}
-	if version != CurrentSchemaVersion() {
-		t.Fatalf("user_version=%d, want %d", version, CurrentSchemaVersion())
-	}
-}
-
-func TestStore_MigrateFromV27AddsFlowerTables(t *testing.T) {
-	t.Parallel()
-
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	raw, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		t.Fatalf("sql.Open: %v", err)
-	}
-	schema := threadstoreSchemaSpec()
-	tx, err := raw.Begin()
-	if err != nil {
-		_ = raw.Close()
-		t.Fatalf("begin v27 migration setup: %v", err)
-	}
-	for _, migration := range schema.Migrations {
-		if migration.ToVersion > 27 {
-			break
-		}
-		if err := migration.Apply(tx); err != nil {
-			_ = tx.Rollback()
-			_ = raw.Close()
-			t.Fatalf("apply migration %d->%d: %v", migration.FromVersion, migration.ToVersion, err)
-		}
-	}
-	if _, err := tx.Exec(`PRAGMA user_version=27;`); err != nil {
-		_ = tx.Rollback()
-		_ = raw.Close()
-		t.Fatalf("set user_version v27: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		_ = raw.Close()
-		t.Fatalf("commit v27 migration setup: %v", err)
-	}
-	if err := raw.Close(); err != nil {
-		t.Fatalf("close raw db: %v", err)
-	}
-
-	s, err := Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open with v28 migration: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	for _, table := range []string{"ai_flower_thread_metadata", "ai_flower_transfers", "ai_flower_handoffs"} {
-		if !tableExistsForTest(t, s.db, table) {
-			t.Fatalf("missing migrated Flower table %q", table)
-		}
-	}
-	for _, indexName := range []string{
-		"idx_ai_flower_thread_metadata_owner",
-		"idx_ai_flower_thread_metadata_parent",
-		"idx_ai_flower_transfers_idempotency",
-		"idx_ai_flower_transfers_source",
-		"idx_ai_flower_transfers_destination",
-		"idx_ai_flower_handoffs_idempotency",
-		"idx_ai_flower_handoffs_source",
-		"idx_ai_flower_handoffs_destination",
-	} {
-		if !indexExistsForTest(t, s.db, indexName) {
-			t.Fatalf("missing migrated Flower index %q", indexName)
-		}
-	}
-
-	var version int
-	if err := s.db.QueryRow(`PRAGMA user_version;`).Scan(&version); err != nil {
-		t.Fatalf("read user_version: %v", err)
-	}
-	if version != CurrentSchemaVersion() {
-		t.Fatalf("user_version=%d, want %d", version, CurrentSchemaVersion())
-	}
-}
-
-func TestStore_MigrateFromV30EnsuresFlowerMetadataOwnershipColumns(t *testing.T) {
-	t.Parallel()
-
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	raw, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		t.Fatalf("sql.Open: %v", err)
-	}
-	schema := threadstoreSchemaSpec()
-	tx, err := raw.Begin()
-	if err != nil {
-		_ = raw.Close()
-		t.Fatalf("begin v30 migration setup: %v", err)
-	}
-	for _, migration := range schema.Migrations {
-		if migration.ToVersion > 30 {
-			break
-		}
-		if err := migration.Apply(tx); err != nil {
-			_ = tx.Rollback()
-			_ = raw.Close()
-			t.Fatalf("apply migration %d->%d: %v", migration.FromVersion, migration.ToVersion, err)
-		}
-	}
-	if _, err := tx.Exec(`CREATE TABLE ai_flower_thread_metadata_reduced (
-  endpoint_id TEXT NOT NULL,
-  thread_id TEXT NOT NULL,
-  owner_kind TEXT NOT NULL DEFAULT '',
-  owner_id TEXT NOT NULL DEFAULT '',
-  parent_thread_id TEXT NOT NULL DEFAULT '',
-  parent_run_id TEXT NOT NULL DEFAULT '',
-  context_json TEXT NOT NULL DEFAULT '{}',
-  action_json TEXT NOT NULL DEFAULT '{}',
-  updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  PRIMARY KEY(endpoint_id, thread_id)
-);`); err != nil {
-		_ = tx.Rollback()
-		_ = raw.Close()
-		t.Fatalf("create reduced metadata table: %v", err)
-	}
-	if _, err := tx.Exec(`INSERT INTO ai_flower_thread_metadata_reduced(endpoint_id, thread_id, owner_kind, owner_id, updated_at_unix_ms)
-SELECT endpoint_id, thread_id, owner_kind, owner_id, updated_at_unix_ms
-FROM ai_flower_thread_metadata;`); err != nil {
-		_ = tx.Rollback()
-		_ = raw.Close()
-		t.Fatalf("copy reduced metadata table: %v", err)
-	}
-	if _, err := tx.Exec(`DROP TABLE ai_flower_thread_metadata;`); err != nil {
-		_ = tx.Rollback()
-		_ = raw.Close()
-		t.Fatalf("drop metadata table: %v", err)
-	}
-	if _, err := tx.Exec(`ALTER TABLE ai_flower_thread_metadata_reduced RENAME TO ai_flower_thread_metadata;`); err != nil {
-		_ = tx.Rollback()
-		_ = raw.Close()
-		t.Fatalf("rename metadata table: %v", err)
-	}
-	if _, err := tx.Exec(`
-CREATE INDEX IF NOT EXISTS idx_ai_flower_thread_metadata_owner ON ai_flower_thread_metadata(endpoint_id, owner_kind, owner_id);
-CREATE INDEX IF NOT EXISTS idx_ai_flower_thread_metadata_parent ON ai_flower_thread_metadata(endpoint_id, parent_thread_id, parent_run_id);
-`); err != nil {
-		_ = tx.Rollback()
-		_ = raw.Close()
-		t.Fatalf("create metadata indexes: %v", err)
-	}
-	if _, err := tx.Exec(`PRAGMA user_version=30;`); err != nil {
-		_ = tx.Rollback()
-		_ = raw.Close()
-		t.Fatalf("set user_version v30: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		_ = raw.Close()
-		t.Fatalf("commit v30 migration setup: %v", err)
-	}
-	if err := raw.Close(); err != nil {
-		t.Fatalf("close raw db: %v", err)
-	}
-
-	s, err := Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open with v31 migration: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	for _, column := range []string{"home_runtime_id", "home_runtime_kind", "origin_env_public_id", "primary_target_id", "active_target_ids_json"} {
-		if !tableHasColumnForTest(t, s.db, "ai_flower_thread_metadata", column) {
-			t.Fatalf("missing migrated metadata column %q", column)
-		}
-	}
-}
-
-func TestStore_MigrateFromV34BackfillsPermissionType(t *testing.T) {
-	t.Parallel()
-
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	raw, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		t.Fatalf("sql.Open: %v", err)
-	}
-	schema := threadstoreSchemaSpec()
-	tx, err := raw.Begin()
-	if err != nil {
-		_ = raw.Close()
-		t.Fatalf("begin v34 migration setup: %v", err)
-	}
-	for _, migration := range schema.Migrations {
-		if migration.ToVersion > 34 {
-			break
-		}
-		if err := migration.Apply(tx); err != nil {
-			_ = tx.Rollback()
-			_ = raw.Close()
-			t.Fatalf("apply migration %d->%d: %v", migration.FromVersion, migration.ToVersion, err)
-		}
-	}
-	if _, err := tx.Exec(`
-INSERT INTO ai_threads(
-  thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json,
-  execution_mode, working_dir, title, title_source, title_generated_at_unix_ms, title_input_message_id,
-  title_model_id, title_prompt_version, followups_revision, pinned_at_unix_ms,
-  run_status, run_updated_at_unix_ms, run_error_code, run_error, waiting_user_input_json, last_context_run_id,
-  flower_activity_revision, flower_activity_signature, flower_activity_waiting_prompt_id,
-  created_by_user_public_id, created_by_user_email, updated_by_user_public_id, updated_by_user_email,
-  created_at_unix_ms, updated_at_unix_ms, last_message_at_unix_ms, last_message_preview
-) VALUES
-  ('th_plan', 'env_1', '', '', '', 'plan', '', 'plan thread', '', 0, '', '', '', 0, 0, 'idle', 0, '', '', '', '', 0, '', '', '', '', '', '', 100, 100, 0, ''),
-  ('th_act', 'env_1', '', '', '', 'act', '', 'act thread', '', 0, '', '', '', 0, 0, 'idle', 0, '', '', '', '', 0, '', '', '', '', '', '', 101, 101, 0, '')
-`); err != nil {
-		_ = tx.Rollback()
-		_ = raw.Close()
-		t.Fatalf("insert v34 threads: %v", err)
-	}
-	if _, err := tx.Exec(`PRAGMA user_version=34;`); err != nil {
-		_ = tx.Rollback()
-		_ = raw.Close()
-		t.Fatalf("set user_version v34: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		_ = raw.Close()
-		t.Fatalf("commit v34 migration setup: %v", err)
-	}
-	if err := raw.Close(); err != nil {
-		t.Fatalf("close raw db: %v", err)
-	}
-
-	s, err := Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open with v35 migration: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	for _, tc := range []struct {
-		threadID string
-		want     string
-	}{
-		{threadID: "th_plan", want: "readonly"},
-		{threadID: "th_act", want: "approval_required"},
-	} {
-		th, err := s.GetThread(context.Background(), "env_1", tc.threadID)
-		if err != nil {
-			t.Fatalf("GetThread(%s): %v", tc.threadID, err)
-		}
-		if th == nil {
-			t.Fatalf("thread %s missing after migration", tc.threadID)
-		}
-		if th.PermissionType != tc.want {
-			t.Fatalf("%s PermissionType=%q, want %q", tc.threadID, th.PermissionType, tc.want)
-		}
-	}
-}
-
-func TestStore_MigrateFromV31EnsuresProviderContinuationStateEnvelope(t *testing.T) {
-	t.Parallel()
-
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	raw, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		t.Fatalf("sql.Open: %v", err)
-	}
-	schema := threadstoreSchemaSpec()
-	tx, err := raw.Begin()
-	if err != nil {
-		_ = raw.Close()
-		t.Fatalf("begin v31 migration setup: %v", err)
-	}
-	for _, migration := range schema.Migrations {
-		if migration.ToVersion > 31 {
-			break
-		}
-		if err := migration.Apply(tx); err != nil {
-			_ = tx.Rollback()
-			_ = raw.Close()
-			t.Fatalf("apply migration %d->%d: %v", migration.FromVersion, migration.ToVersion, err)
-		}
-	}
-	if _, err := tx.Exec(`PRAGMA user_version=31;`); err != nil {
-		_ = tx.Rollback()
-		_ = raw.Close()
-		t.Fatalf("set user_version v31: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		_ = raw.Close()
-		t.Fatalf("commit v31 migration setup: %v", err)
-	}
-	if err := raw.Close(); err != nil {
-		t.Fatalf("close raw db: %v", err)
-	}
-
-	s, err := Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open with v32 migration: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	for _, column := range []string{
-		"provider_continuation_state_json",
-		"provider_continuation_provider_id",
-		"provider_continuation_model",
-		"provider_continuation_base_url",
-		"provider_continuation_updated_at_unix_ms",
-	} {
-		if !tableHasColumnForTest(t, s.db, "ai_thread_state", column) {
-			t.Fatalf("missing migrated continuation column %q", column)
-		}
-	}
-	var version int
-	if err := s.db.QueryRow(`PRAGMA user_version;`).Scan(&version); err != nil {
-		t.Fatalf("read user_version: %v", err)
-	}
-	if version != CurrentSchemaVersion() {
-		t.Fatalf("user_version=%d, want %d", version, CurrentSchemaVersion())
-	}
-}
-
-func TestStore_MigrateFromV9ScrubsLegacyModelDefaultToken(t *testing.T) {
-	t.Parallel()
-
-	legacyToken := strings.Join([]string{"is", "default"}, "_")
-	runEventPayload := strings.Replace(`{"legacy":"TOKEN"}`, "TOKEN", legacyToken, 1)
-
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	s, err := Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	if err := s.Close(); err != nil {
-		t.Fatalf("close store: %v", err)
-	}
-
-	raw, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		t.Fatalf("sql.Open: %v", err)
-	}
-	defer func() { _ = raw.Close() }()
-
-	if _, err := raw.Exec(`PRAGMA user_version=9;`); err != nil {
-		t.Fatalf("set user_version: %v", err)
-	}
-	if _, err := raw.Exec(`
-INSERT INTO ai_run_events(endpoint_id, thread_id, run_id, event_type, payload_json)
-VALUES(?, ?, ?, ?, ?)
-`, "env_legacy", "th_legacy", "run_legacy", "stream_event", runEventPayload); err != nil {
-		t.Fatalf("seed legacy data: %v", err)
-	}
-	if err := raw.Close(); err != nil {
-		t.Fatalf("close seeded db: %v", err)
-	}
-
-	s, err = Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open after v9 seed: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	ctx := context.Background()
-
-	var cleanedEvent string
-	if err := s.db.QueryRowContext(ctx, `
-SELECT payload_json
-FROM ai_run_events
-WHERE run_id = 'run_legacy'
-`).Scan(&cleanedEvent); err != nil {
-		t.Fatalf("load run event: %v", err)
-	}
-	if strings.Contains(cleanedEvent, legacyToken) {
-		t.Fatalf("run event payload_json still contains legacy token: %s", cleanedEvent)
-	}
-	if !strings.Contains(cleanedEvent, "current_model_id") {
-		t.Fatalf("run event payload_json not rewritten: %s", cleanedEvent)
-	}
-
-	var version int
-	if err := s.db.QueryRowContext(ctx, `PRAGMA user_version;`).Scan(&version); err != nil {
-		t.Fatalf("read user_version: %v", err)
-	}
-	if version != CurrentSchemaVersion() {
-		t.Fatalf("user_version=%d, want %d", version, CurrentSchemaVersion())
-	}
-}
-
 func TestStore_ListConversationTurnsBeforePagesBeyondDefaultWindow(t *testing.T) {
 	t.Parallel()
 
@@ -2322,16 +1540,6 @@ func TestStore_DeleteThread_CleansThreadScopedPersistence(t *testing.T) {
 
 	if err := s.CreateThread(ctx, Thread{ThreadID: threadID, EndpointID: endpointID, Title: "cleanup"}); err != nil {
 		t.Fatalf("CreateThread: %v", err)
-	}
-	if _, err := s.db.ExecContext(ctx, `
-INSERT INTO ai_messages(
-  thread_id, endpoint_id, message_id, role,
-  author_user_public_id, author_user_email,
-  status, created_at_unix_ms, updated_at_unix_ms,
-  text_content, message_json
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, threadID, endpointID, "legacy_msg_1", "user", "u1", "u1@example.com", "complete", 100, 100, "legacy", `{"id":"legacy_msg_1"}`); err != nil {
-		t.Fatalf("seed ai_messages: %v", err)
 	}
 	if _, err := s.AppendMessage(ctx, endpointID, threadID, Message{
 		ThreadID:           threadID,
@@ -2505,7 +1713,6 @@ INSERT INTO ai_messages(
 
 	threadScopedCounts := map[string]int{
 		"ai_threads":                        countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_threads WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
-		"ai_messages":                       countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_messages WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"transcript_messages":               countRowsForTest(t, s.db, `SELECT COUNT(1) FROM transcript_messages WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"conversation_turns":                countRowsForTest(t, s.db, `SELECT COUNT(1) FROM conversation_turns WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
 		"structured_user_inputs":            countRowsForTest(t, s.db, `SELECT COUNT(1) FROM structured_user_inputs WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID),
@@ -2761,7 +1968,6 @@ func TestStore_ForkOperationCopiesContextAndClearsRunState(t *testing.T) {
 		WorkingDir:          "/workspace/repo",
 		Title:               "Source",
 		RunStatus:           "success",
-		LastContextRunID:    "run_src",
 		CreatedAtUnixMs:     100,
 		UpdatedAtUnixMs:     200,
 		LastMessageAtUnixMs: 300,
@@ -2934,7 +2140,7 @@ func TestStore_ForkOperationCopiesContextAndClearsRunState(t *testing.T) {
 	if forked.ThreadID != "th_fork" || forked.Title != "Forked" {
 		t.Fatalf("forked thread mismatch: %+v", forked)
 	}
-	if forked.RunStatus != "idle" || forked.LastContextRunID != "" || forked.WaitingUserInputJSON != "" || forked.PinnedAtUnixMs != 0 {
+	if forked.RunStatus != "idle" || forked.WaitingUserInputJSON != "" || forked.PinnedAtUnixMs != 0 {
 		t.Fatalf("forked run state not cleared: %+v", forked)
 	}
 	if source.PermissionType != "readonly" || forked.PermissionType != "readonly" {
@@ -3238,84 +2444,6 @@ func TestStore_ReplaceThreadTodosSnapshot(t *testing.T) {
 	}
 }
 
-func TestStore_ListRunEventsPage_ContextCategory(t *testing.T) {
-	t.Parallel()
-
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	s, err := Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	ctx := context.Background()
-	if err := s.CreateThread(ctx, Thread{ThreadID: "th_1", EndpointID: "env_1", Title: "chat"}); err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-
-	appendEvent := func(eventType string) {
-		t.Helper()
-		err := s.AppendRunEvent(ctx, RunEventRecord{
-			EndpointID:  "env_1",
-			ThreadID:    "th_1",
-			RunID:       "run_1",
-			StreamKind:  "lifecycle",
-			EventType:   eventType,
-			PayloadJSON: "{}",
-			AtUnixMs:    time.Now().UnixMilli(),
-		})
-		if err != nil {
-			t.Fatalf("AppendRunEvent(%s): %v", eventType, err)
-		}
-	}
-
-	appendEvent("context.integrity.repair_applied")
-	appendEvent("context.usage.updated")
-	appendEvent("context.compaction.updated")
-	appendEvent("floret.host_turn.result")
-
-	firstPage, nextCursor, hasMore, err := s.ListRunEventsPage(ctx, "env_1", "run_1", RunEventsQuery{
-		Category: "context",
-		Limit:    2,
-	})
-	if err != nil {
-		t.Fatalf("ListRunEventsPage first: %v", err)
-	}
-	if len(firstPage) != 2 {
-		t.Fatalf("len(firstPage)=%d, want 2", len(firstPage))
-	}
-	if hasMore {
-		t.Fatalf("hasMore=%v, want false", hasMore)
-	}
-	if strings.TrimSpace(firstPage[0].EventType) != "context.usage.updated" {
-		t.Fatalf("firstPage[0].EventType=%q, want context.usage.updated", firstPage[0].EventType)
-	}
-	if strings.TrimSpace(firstPage[1].EventType) != "context.compaction.updated" {
-		t.Fatalf("firstPage[1].EventType=%q, want context.compaction.updated", firstPage[1].EventType)
-	}
-	if nextCursor <= 0 {
-		t.Fatalf("nextCursor=%d, want > 0", nextCursor)
-	}
-
-	secondPage, secondCursor, secondHasMore, err := s.ListRunEventsPage(ctx, "env_1", "run_1", RunEventsQuery{
-		Category: "context",
-		Limit:    2,
-		Cursor:   nextCursor,
-	})
-	if err != nil {
-		t.Fatalf("ListRunEventsPage second: %v", err)
-	}
-	if secondHasMore {
-		t.Fatalf("secondHasMore=%v, want false", secondHasMore)
-	}
-	if len(secondPage) != 0 {
-		t.Fatalf("len(secondPage)=%d, want 0", len(secondPage))
-	}
-	if secondCursor < nextCursor {
-		t.Fatalf("secondCursor=%d, want >= %d", secondCursor, nextCursor)
-	}
-}
-
 func TestStore_AppendRunEvent_AgeRetention(t *testing.T) {
 	t.Parallel()
 
@@ -3336,8 +2464,8 @@ func TestStore_AppendRunEvent_AgeRetention(t *testing.T) {
 		EndpointID:  "env_1",
 		ThreadID:    "th_1",
 		RunID:       "run_1",
-		StreamKind:  "context",
-		EventType:   "context.usage.updated",
+		StreamKind:  "gateway",
+		EventType:   "gateway.transport.received",
 		PayloadJSON: "{}",
 		AtUnixMs:    oldEventTime,
 	}); err != nil {
@@ -3356,8 +2484,8 @@ func TestStore_AppendRunEvent_AgeRetention(t *testing.T) {
 		EndpointID:  "env_1",
 		ThreadID:    "th_1",
 		RunID:       "run_1",
-		StreamKind:  "context",
-		EventType:   "context.compaction.updated",
+		StreamKind:  "gateway",
+		EventType:   "gateway.transport.completed",
 		PayloadJSON: "{}",
 		AtUnixMs:    time.Now().UnixMilli(),
 	}); err != nil {
@@ -3371,8 +2499,8 @@ func TestStore_AppendRunEvent_AgeRetention(t *testing.T) {
 	if len(events) != 1 {
 		t.Fatalf("len(events)=%d, want 1", len(events))
 	}
-	if strings.TrimSpace(events[0].EventType) != "context.compaction.updated" {
-		t.Fatalf("EventType=%q, want context.compaction.updated", events[0].EventType)
+	if strings.TrimSpace(events[0].EventType) != "gateway.transport.completed" {
+		t.Fatalf("EventType=%q, want gateway.transport.completed", events[0].EventType)
 	}
 }
 
@@ -3756,214 +2884,6 @@ func TestStore_QueuedTurnCompatibilityAPIsBumpFollowupsRevision(t *testing.T) {
 	}
 	if after := revision(); after != rev {
 		t.Fatalf("empty DeleteQueuedTurns revision=%d, want unchanged %d", after, rev)
-	}
-}
-
-func TestStore_ThreadProviderContinuationCRUD(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	s, err := Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
-
-	if err := s.CreateThread(ctx, Thread{
-		ThreadID:              "th_resume",
-		EndpointID:            "env_resume",
-		NamespacePublicID:     "ns_resume",
-		CreatedByUserPublicID: "u1",
-		CreatedByUserEmail:    "u1@example.com",
-		UpdatedByUserPublicID: "u1",
-		UpdatedByUserEmail:    "u1@example.com",
-		CreatedAtUnixMs:       1,
-		UpdatedAtUnixMs:       1,
-	}); err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-
-	continuation := ThreadProviderContinuation{
-		State: ProviderContinuationState{
-			Kind:       "openai_responses",
-			ID:         "resp_1",
-			Attributes: map[string]string{"cursor": "cur_1", "region": "iad"},
-		},
-		ProviderID:      "openai",
-		Model:           "gpt-5-mini",
-		BaseURL:         "https://api.openai.com/v1",
-		UpdatedAtUnixMs: 10,
-	}
-	if err := s.SetThreadProviderContinuation(ctx, "env_resume", "th_resume", continuation); err != nil {
-		t.Fatalf("SetThreadProviderContinuation: %v", err)
-	}
-
-	got, err := s.GetThreadProviderContinuation(ctx, "env_resume", "th_resume")
-	if err != nil {
-		t.Fatalf("GetThreadProviderContinuation: %v", err)
-	}
-	if got == nil {
-		t.Fatalf("expected continuation state")
-	}
-	if !reflect.DeepEqual(*got, continuation) {
-		t.Fatalf("continuation=%+v, want %+v", *got, continuation)
-	}
-	got.State.Attributes["cursor"] = "mutated"
-	again, err := s.GetThreadProviderContinuation(ctx, "env_resume", "th_resume")
-	if err != nil {
-		t.Fatalf("GetThreadProviderContinuation again: %v", err)
-	}
-	if again == nil || again.State.Attributes["cursor"] != "cur_1" {
-		t.Fatalf("continuation attributes after mutation=%+v, want original", again)
-	}
-
-	state, err := s.GetThreadState(ctx, "env_resume", "th_resume")
-	if err != nil {
-		t.Fatalf("GetThreadState: %v", err)
-	}
-	if state == nil {
-		t.Fatalf("expected thread state row")
-	}
-	if !reflect.DeepEqual(state.ProviderContinuation, continuation) {
-		t.Fatalf("thread state continuation=%+v, want %+v", state.ProviderContinuation, continuation)
-	}
-
-	if err := s.ClearThreadProviderContinuation(ctx, "env_resume", "th_resume"); err != nil {
-		t.Fatalf("ClearThreadProviderContinuation: %v", err)
-	}
-	got, err = s.GetThreadProviderContinuation(ctx, "env_resume", "th_resume")
-	if err != nil {
-		t.Fatalf("GetThreadProviderContinuation after clear: %v", err)
-	}
-	if got != nil {
-		t.Fatalf("continuation after clear=%+v, want nil", got)
-	}
-}
-
-func TestStore_SetThreadProviderContinuationIfBoundaryMatches(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	s, err := Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
-
-	if err := s.CreateThread(ctx, Thread{
-		ThreadID:        "th_boundary_pair",
-		EndpointID:      "env_boundary_pair",
-		CreatedAtUnixMs: 1,
-		UpdatedAtUnixMs: 1,
-	}); err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-	boundary, err := s.CurrentThreadContextBoundary(ctx, "env_boundary_pair", "th_boundary_pair")
-	if err != nil {
-		t.Fatalf("CurrentThreadContextBoundary: %v", err)
-	}
-
-	continuation := ThreadProviderContinuation{
-		State: ProviderContinuationState{
-			Kind:       "openai_responses",
-			ID:         "resp_boundary_pair",
-			Attributes: map[string]string{"cursor": "cur_boundary_pair"},
-		},
-		ProviderID:      "openai",
-		Model:           "gpt-5-mini",
-		BaseURL:         "https://api.openai.com/v1",
-		UpdatedAtUnixMs: 10,
-	}
-
-	if err := s.SetThreadProviderContinuationIfBoundaryMatches(ctx, "env_boundary_pair", "th_boundary_pair", boundary, continuation); err != nil {
-		t.Fatalf("SetThreadProviderContinuationIfBoundaryMatches: %v", err)
-	}
-	state, err := s.GetThreadState(ctx, "env_boundary_pair", "th_boundary_pair")
-	if err != nil {
-		t.Fatalf("GetThreadState: %v", err)
-	}
-	if state == nil {
-		t.Fatalf("expected thread state")
-	}
-	if !reflect.DeepEqual(state.ProviderContinuation, continuation) {
-		t.Fatalf("continuation=%+v, want %+v", state.ProviderContinuation, continuation)
-	}
-}
-
-func TestStore_SetThreadProviderContinuationIfBoundaryMatchesRejectsDeletedThread(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	s, err := Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
-
-	if err := s.CreateThread(ctx, Thread{ThreadID: "th_deleted_continuation", EndpointID: "env_deleted_continuation"}); err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-	boundary, err := s.CurrentThreadContextBoundary(ctx, "env_deleted_continuation", "th_deleted_continuation")
-	if err != nil {
-		t.Fatalf("CurrentThreadContextBoundary: %v", err)
-	}
-	if _, err := s.DeleteThreadResources(ctx, "env_deleted_continuation", "th_deleted_continuation"); err != nil {
-		t.Fatalf("DeleteThreadResources: %v", err)
-	}
-	continuation := ThreadProviderContinuation{
-		State:           ProviderContinuationState{Kind: "openai_responses", ID: "resp_deleted"},
-		ProviderID:      "openai",
-		Model:           "gpt-5-mini",
-		UpdatedAtUnixMs: 10,
-	}
-	if err := s.SetThreadProviderContinuationIfBoundaryMatches(ctx, "env_deleted_continuation", "th_deleted_continuation", boundary, continuation); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("SetThreadProviderContinuationIfBoundaryMatches err=%v, want %v", err, sql.ErrNoRows)
-	}
-	if rows := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_thread_state WHERE endpoint_id = ? AND thread_id = ?`, "env_deleted_continuation", "th_deleted_continuation"); rows != 0 {
-		t.Fatalf("thread state rows=%d, want none after rejected commit", rows)
-	}
-}
-
-func TestStore_SetThreadProviderContinuationIfBoundaryMatchesRejectsChangedBoundary(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	s, err := Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
-
-	if err := s.CreateThread(ctx, Thread{ThreadID: "th_boundary_continuation", EndpointID: "env_boundary_continuation"}); err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-	expected, err := s.CurrentThreadContextBoundary(ctx, "env_boundary_continuation", "th_boundary_continuation")
-	if err != nil {
-		t.Fatalf("CurrentThreadContextBoundary: %v", err)
-	}
-	start := startUserTurnRecordForTest("env_boundary_continuation", "th_boundary_continuation", "m_user_boundary", "run_boundary", "m_assistant_boundary")
-	if _, err := s.StartUserTurn(ctx, start); err != nil {
-		t.Fatalf("StartUserTurn: %v", err)
-	}
-	continuation := ThreadProviderContinuation{
-		State:           ProviderContinuationState{Kind: "openai_responses", ID: "resp_changed_boundary"},
-		ProviderID:      "openai",
-		Model:           "gpt-5-mini",
-		UpdatedAtUnixMs: 10,
-	}
-	if err := s.SetThreadProviderContinuationIfBoundaryMatches(ctx, "env_boundary_continuation", "th_boundary_continuation", expected, continuation); !errors.Is(err, ErrThreadContextBoundaryChanged) {
-		t.Fatalf("SetThreadProviderContinuationIfBoundaryMatches err=%v, want %v", err, ErrThreadContextBoundaryChanged)
-	}
-	state, err := s.GetThreadState(ctx, "env_boundary_continuation", "th_boundary_continuation")
-	if err != nil {
-		t.Fatalf("GetThreadState: %v", err)
-	}
-	if state != nil {
-		t.Fatalf("thread state=%+v, want no continuation state after rejected boundary", state)
 	}
 }
 

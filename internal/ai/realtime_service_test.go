@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -17,7 +16,6 @@ import (
 
 	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
-	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -94,6 +92,83 @@ func writeRealtimeSSE(w io.Writer, f http.Flusher, payload any) {
 	_, _ = w.Write(b)
 	_, _ = io.WriteString(w, "\n\n")
 	f.Flush()
+}
+
+func TestFlowerLiveBootstrapReadsCanonicalFloretContextAfterServiceRestart(t *testing.T) {
+	t.Parallel()
+
+	stateDir := t.TempDir()
+	agentHomeDir := t.TempDir()
+	newService := func() *Service {
+		svc, err := NewService(Options{
+			Logger:       slog.New(slog.NewTextHandler(io.Discard, nil)),
+			StateDir:     stateDir,
+			AgentHomeDir: agentHomeDir,
+			Shell:        "/bin/bash",
+		})
+		if err != nil {
+			t.Fatalf("NewService: %v", err)
+		}
+		return svc
+	}
+
+	ctx := context.Background()
+	meta := testSendTurnMeta()
+	first := newService()
+	thread, err := first.CreateThread(ctx, meta, "canonical context", "", "", "")
+	if err != nil {
+		_ = first.Close()
+		t.Fatalf("CreateThread: %v", err)
+	}
+	host := newTestFloretHost(t, first.floretStore, "canonical context answer")
+	if _, err := host.StartThread(ctx, flruntime.StartThreadRequest{ThreadID: flruntime.ThreadID(thread.ThreadID)}); err != nil {
+		_ = first.Close()
+		t.Fatalf("StartThread: %v", err)
+	}
+	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
+		ThreadID: flruntime.ThreadID(thread.ThreadID),
+		TurnID:   "turn_context_restart",
+		RunID:    "run_context_restart",
+		Input:    "record canonical context",
+	}); err != nil {
+		_ = first.Close()
+		t.Fatalf("RunTurn: %v", err)
+	}
+	maintenance, err := first.openFloretMaintenanceHost()
+	if err != nil {
+		_ = first.Close()
+		t.Fatalf("openFloretMaintenanceHost: %v", err)
+	}
+	snapshot, err := maintenance.ReadThreadContext(ctx, flruntime.ThreadID(thread.ThreadID))
+	if err != nil {
+		_ = first.Close()
+		t.Fatalf("ReadThreadContext: %v", err)
+	}
+	if snapshot.Usage == nil {
+		_ = first.Close()
+		t.Fatal("canonical context usage is missing")
+	}
+	wantUsage, err := flowerContextUsageFromFloret(snapshot.Usage)
+	if err != nil {
+		_ = first.Close()
+		t.Fatalf("flowerContextUsageFromFloret: %v", err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatalf("Close first service: %v", err)
+	}
+	if err := first.Close(); err != nil {
+		t.Fatalf("Close first service twice: %v", err)
+	}
+
+	restarted := newService()
+	t.Cleanup(func() { _ = restarted.Close() })
+	bootstrap, err := restarted.GetFlowerThreadLiveBootstrap(ctx, meta, thread.ThreadID)
+	if err != nil {
+		t.Fatalf("GetFlowerThreadLiveBootstrap: %v", err)
+	}
+	if bootstrap.LiveState.ContextUsage == nil || !reflect.DeepEqual(*bootstrap.LiveState.ContextUsage, wantUsage) {
+		t.Fatalf("bootstrap context usage=%#v, want canonical %#v", bootstrap.LiveState.ContextUsage, wantUsage)
+	}
 }
 
 func newRealtimeTestService(t *testing.T, delay time.Duration) *Service {
@@ -668,6 +743,7 @@ func TestFlowerLiveContextUsageAndCompactionMaterializedState(t *testing.T) {
 			ThresholdRatio:         0.9,
 			PressureStatus:         "stable",
 			Source:                 "full_request_estimate",
+			UpdatedAtMs:            10_000,
 		}}),
 	})
 	if state.ContextUsage == nil || state.ContextUsage.InputTokens != 620 || state.ContextUsage.UpdatedAtMs != 10_000 {
@@ -676,13 +752,16 @@ func TestFlowerLiveContextUsageAndCompactionMaterializedState(t *testing.T) {
 
 	start := FlowerContextCompaction{
 		OperationID:  "run-context:compact:1:pre_request:threshold",
+		RequestID:    "request-context",
 		RunID:        "run-context",
 		StepIndex:    1,
 		Phase:        "start",
 		Status:       "compacting",
 		Trigger:      "pre_request",
 		Reason:       "threshold",
+		Source:       "automatic",
 		TokensBefore: 920,
+		UpdatedAtMs:  10_001,
 	}
 	startDecoration := FlowerTimelineDecoration{
 		DecorationID: "context-compaction:" + start.OperationID,
@@ -711,6 +790,7 @@ func TestFlowerLiveContextUsageAndCompactionMaterializedState(t *testing.T) {
 	complete.Phase = "complete"
 	complete.Status = "compacted"
 	complete.TokensAfterEstimate = 210
+	complete.UpdatedAtMs = 10_002
 	completeDecoration := startDecoration
 	completeDecoration.Compaction = complete
 	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
@@ -732,78 +812,6 @@ func TestFlowerLiveContextUsageAndCompactionMaterializedState(t *testing.T) {
 	clone.ContextCompactions[0].Status = "mutated"
 	if state.ContextCompactions[0].Status != "compacted" {
 		t.Fatalf("clone mutated source context compactions: %#v", state.ContextCompactions)
-	}
-}
-
-func TestFlowerLiveContextActivityBroadcastsThreadPatch(t *testing.T) {
-	t.Parallel()
-
-	meta := session.Meta{
-		EndpointID:        "env_live_context_patch",
-		NamespacePublicID: "ns_live_context_patch",
-		ChannelID:         "ch_live_context_patch",
-		UserPublicID:      "u_live_context_patch",
-		UserEmail:         "context-patch@example.com",
-		CanRead:           true,
-		CanWrite:          true,
-		CanExecute:        true,
-		CanAdmin:          true,
-	}
-	svc := newRealtimeTestService(t, 0)
-	ctx := context.Background()
-	th, err := svc.CreateThread(ctx, &meta, "context patch", "", "", "")
-	if err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-
-	runID := "run_context_patch"
-	usage := FlowerContextUsage{
-		RunID:               runID,
-		StepIndex:           1,
-		Phase:               "projected_request",
-		InputTokens:         910,
-		ContextWindowTokens: 1000,
-		UsedRatio:           0.91,
-		PressureStatus:      "near_threshold",
-		UpdatedAtMs:         time.Now().UnixMilli(),
-	}
-	if err := svc.threadsDB.AppendRunEvent(ctx, threadstore.RunEventRecord{
-		EndpointID:  meta.EndpointID,
-		ThreadID:    th.ThreadID,
-		RunID:       runID,
-		StreamKind:  "context",
-		EventType:   "context.usage.updated",
-		PayloadJSON: string(mustFlowerPayload(FlowerLiveUsageUpdatedPayload{Usage: usage})),
-		AtUnixMs:    time.Now().UnixMilli(),
-	}); err != nil {
-		t.Fatalf("AppendRunEvent usage: %v", err)
-	}
-	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, streamEventContextUsage{
-		Type:  "context-usage",
-		Usage: usage,
-	})
-
-	resp, err := svc.ListFlowerThreadLiveEvents(ctx, &meta, th.ThreadID, 0, 10)
-	if err != nil {
-		t.Fatalf("ListFlowerThreadLiveEvents: %v", err)
-	}
-	var gotKinds []FlowerLiveKind
-	for _, event := range resp.Events {
-		gotKinds = append(gotKinds, event.Kind)
-	}
-	wantKinds := []FlowerLiveKind{
-		FlowerLiveContextUsageUpdated,
-		FlowerLiveThreadPatched,
-	}
-	if !reflect.DeepEqual(gotKinds, wantKinds) {
-		t.Fatalf("event kinds=%#v, want %#v", gotKinds, wantKinds)
-	}
-	var payload FlowerLiveThreadPatchedPayload
-	if !decodeFlowerPayload(resp.Events[1].Payload, &payload) {
-		t.Fatalf("failed to decode thread patch payload: %s", string(resp.Events[1].Payload))
-	}
-	if strings.TrimSpace(payload.Patch.LastContextRunID) != runID {
-		t.Fatalf("thread patch last_context_run_id=%q, want %q", payload.Patch.LastContextRunID, runID)
 	}
 }
 
@@ -836,13 +844,16 @@ func TestFlowerLiveContextCompactionCompleteKeepsRunActive(t *testing.T) {
 
 	start := FlowerContextCompaction{
 		OperationID:  "run-context-active:compact:1:pre_request:threshold",
+		RequestID:    "request-context-active",
 		RunID:        runID,
 		StepIndex:    1,
 		Phase:        "start",
 		Status:       "compacting",
 		Trigger:      "pre_request",
 		Reason:       "threshold",
+		Source:       "automatic",
 		TokensBefore: 920,
+		UpdatedAtMs:  10_001,
 	}
 	startDecoration := FlowerTimelineDecoration{
 		DecorationID: "context-compaction:" + start.OperationID,
@@ -864,6 +875,7 @@ func TestFlowerLiveContextCompactionCompleteKeepsRunActive(t *testing.T) {
 	complete.Phase = "complete"
 	complete.Status = "compacted"
 	complete.TokensAfterEstimate = 210
+	complete.UpdatedAtMs = 10_002
 	completeDecoration := startDecoration
 	completeDecoration.Compaction = complete
 	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
@@ -916,6 +928,40 @@ func TestFlowerLiveContextCompactionCompleteKeepsRunActive(t *testing.T) {
 	draft := state.Messages[messageID]
 	if len(draft.Blocks) != 1 || !strings.Contains(draft.Blocks[0].Content, "continued after compaction") {
 		t.Fatalf("draft after post-compaction delta=%#v", draft)
+	}
+}
+
+func TestFlowerLiveContextStateRejectsMissingCanonicalIdentity(t *testing.T) {
+	t.Parallel()
+
+	state := FlowerLiveMaterializedState{}
+	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
+		RunID:    "envelope-run",
+		AtUnixMs: 10_000,
+		Kind:     FlowerLiveContextUsageUpdated,
+		Payload: mustFlowerPayload(FlowerLiveUsageUpdatedPayload{Usage: FlowerContextUsage{
+			Phase:          "projected_request",
+			PressureStatus: "stable",
+		}}),
+	})
+	if state.ContextUsage != nil {
+		t.Fatalf("context usage without canonical identity was accepted: %#v", state.ContextUsage)
+	}
+
+	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
+		RunID:    "envelope-run",
+		AtUnixMs: 10_001,
+		Kind:     FlowerLiveContextCompactionUpdated,
+		Payload: mustFlowerPayload(FlowerLiveContextCompactionUpdatedPayload{Compaction: FlowerContextCompaction{
+			OperationID: "floret-operation",
+			RunID:       "floret-run",
+			Phase:       "complete",
+			Status:      "compacted",
+			UpdatedAtMs: 10_001,
+		}}),
+	})
+	if len(state.ContextCompactions) != 0 {
+		t.Fatalf("compaction without request and source identity was accepted: %#v", state.ContextCompactions)
 	}
 }
 
@@ -1014,802 +1060,6 @@ func TestRunContextCompactionAnchorRemainsStableAcrossOperationEvents(t *testing
 	}
 	if blockIndex != 0 {
 		t.Fatalf("test setup block index=%d, want 0", blockIndex)
-	}
-}
-
-func TestRunFinalizationCancelsUnfinishedManualCompaction(t *testing.T) {
-	t.Parallel()
-
-	svc := newRealtimeTestService(t, 0)
-	ctx := context.Background()
-	meta := session.Meta{
-		EndpointID:        "env_manual_compact_finalize",
-		NamespacePublicID: "ns_manual_compact_finalize",
-		ChannelID:         "ch_manual_compact_finalize",
-		UserPublicID:      "u_manual_compact_finalize",
-		UserEmail:         "manual-compact-finalize@example.com",
-		CanRead:           true,
-		CanWrite:          true,
-		CanExecute:        true,
-	}
-	th, err := svc.CreateThread(ctx, &meta, "manual compact finalize", "", "", "")
-	if err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-	appendFlowerTimelineTestMessage(t, svc.threadsDB, meta.EndpointID, th.ThreadID, "msg-before-manual-finalize", "assistant", "ready", 1_000)
-
-	r := newRun(runOptions{
-		RunID:            "run-manual-compact-finalize",
-		EndpointID:       meta.EndpointID,
-		ThreadID:         th.ThreadID,
-		MessageID:        "msg-manual-compact-finalize",
-		ThreadsDB:        svc.threadsDB,
-		PersistOpTimeout: time.Second,
-		OnStreamEvent: func(ev any) {
-			svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, "run-manual-compact-finalize", ev)
-		},
-	})
-	if _, err := r.EnqueueManualCompaction(ctx, flruntime.ManualCompactionRequest{
-		RequestID:   "manual-finalize-request",
-		Source:      "slash_command",
-		RequestedAt: time.UnixMilli(2_000),
-	}); err != nil {
-		t.Fatalf("EnqueueManualCompaction: %v", err)
-	}
-
-	r.cancelUnfinishedManualCompactions("run_finished")
-
-	if _, ok, err := r.PollManualCompaction(ctx, flruntime.ManualCompactionPollRequest{}); err != nil || ok {
-		t.Fatalf("PollManualCompaction after finalization returned ok=%v err=%v, want no pending request", ok, err)
-	}
-	events, err := svc.threadsDB.ListRunEvents(ctx, meta.EndpointID, "run-manual-compact-finalize", 10)
-	if err != nil {
-		t.Fatalf("ListRunEvents: %v", err)
-	}
-	var found bool
-	for _, event := range events {
-		if event.EventType != "context.compaction.updated" {
-			continue
-		}
-		var payload FlowerLiveContextCompactionUpdatedPayload
-		if err := json.Unmarshal([]byte(event.PayloadJSON), &payload); err != nil {
-			t.Fatalf("unmarshal compaction payload: %v", err)
-		}
-		got := payload.Compaction
-		if got.OperationID == "manual-finalize-request" && got.Status == "cancelled" && got.Reason == "run_finished" {
-			found = true
-			if payload.TimelineDecoration.Compaction.OperationID != got.OperationID {
-				t.Fatalf("decoration compaction=%#v, want operation %s", payload.TimelineDecoration.Compaction, got.OperationID)
-			}
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("run events did not contain cancelled manual compaction: %#v", events)
-	}
-
-	svc.mu.Lock()
-	delete(svc.flowerLiveByThread, runThreadKey(meta.EndpointID, th.ThreadID))
-	svc.mu.Unlock()
-	bootstrap, err := svc.GetFlowerThreadLiveBootstrap(ctx, &meta, th.ThreadID)
-	if err != nil {
-		t.Fatalf("GetFlowerThreadLiveBootstrap: %v", err)
-	}
-	if len(bootstrap.LiveState.ContextCompactions) != 1 {
-		t.Fatalf("context compactions=%#v, want one cancelled event", bootstrap.LiveState.ContextCompactions)
-	}
-	got := bootstrap.LiveState.ContextCompactions[0]
-	if got.OperationID != "manual-finalize-request" || got.Status != "cancelled" || got.Phase != "cancelled" {
-		t.Fatalf("context compaction=%#v, want finalized cancelled request", got)
-	}
-}
-
-func TestRunFinalizationCancelsStartedManualCompactionWithFloretOperationID(t *testing.T) {
-	t.Parallel()
-
-	svc := newRealtimeTestService(t, 0)
-	ctx := context.Background()
-	meta := session.Meta{
-		EndpointID:        "env_manual_compact_started_finalize",
-		NamespacePublicID: "ns_manual_compact_started_finalize",
-		ChannelID:         "ch_manual_compact_started_finalize",
-		UserPublicID:      "u_manual_compact_started_finalize",
-		UserEmail:         "manual-compact-started-finalize@example.com",
-		CanRead:           true,
-		CanWrite:          true,
-		CanExecute:        true,
-	}
-	th, err := svc.CreateThread(ctx, &meta, "manual compact started finalize", "", "", "")
-	if err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-	appendFlowerTimelineTestMessage(t, svc.threadsDB, meta.EndpointID, th.ThreadID, "msg-before-started-manual-finalize", "assistant", "ready", 1_000)
-
-	const runID = "run-manual-compact-started-finalize"
-	const requestID = "manual-started-finalize-request"
-	const step = 2
-	operationID := string(flruntime.ManualCompactionOperationID(flruntime.RunID(runID), step, requestID))
-	r := newRun(runOptions{
-		RunID:            runID,
-		EndpointID:       meta.EndpointID,
-		ThreadID:         th.ThreadID,
-		MessageID:        "msg-manual-compact-started-finalize",
-		ThreadsDB:        svc.threadsDB,
-		PersistOpTimeout: time.Second,
-		OnStreamEvent: func(ev any) {
-			svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, ev)
-		},
-	})
-	if _, err := r.EnqueueManualCompaction(ctx, flruntime.ManualCompactionRequest{
-		RequestID:   requestID,
-		Source:      "slash_command",
-		RequestedAt: time.UnixMilli(2_000),
-	}); err != nil {
-		t.Fatalf("EnqueueManualCompaction: %v", err)
-	}
-	if polled, ok, err := r.PollManualCompaction(ctx, flruntime.ManualCompactionPollRequest{
-		RunID:  flruntime.RunID(runID),
-		TurnID: flruntime.TurnID(r.messageID),
-		Step:   step,
-	}); err != nil || !ok || polled.RequestID != requestID {
-		t.Fatalf("PollManualCompaction got=%#v ok=%v err=%v", polled, ok, err)
-	}
-	r.applyFloretCompaction(&observation.CompactionEvent{
-		OperationID: operationID,
-		RequestID:   requestID,
-		RunID:       runID,
-		ThreadID:    th.ThreadID,
-		TurnID:      r.messageID,
-		Step:        step,
-		Phase:       observation.CompactionPhaseStart,
-		Status:      observation.CompactionStatusRunning,
-		Trigger:     "manual",
-		Reason:      "manual",
-		ObservedAt:  time.UnixMilli(2_100),
-	})
-
-	r.cancelUnfinishedManualCompactions("run_finished")
-
-	if _, ok, err := r.PollManualCompaction(ctx, flruntime.ManualCompactionPollRequest{}); err != nil || ok {
-		t.Fatalf("PollManualCompaction after finalization returned ok=%v err=%v, want no pending request", ok, err)
-	}
-	events, err := svc.threadsDB.ListRunEvents(ctx, meta.EndpointID, runID, 10)
-	if err != nil {
-		t.Fatalf("ListRunEvents: %v", err)
-	}
-	var contextEvents []FlowerContextCompaction
-	for _, event := range events {
-		if event.EventType != "context.compaction.updated" {
-			continue
-		}
-		var payload FlowerLiveContextCompactionUpdatedPayload
-		if err := json.Unmarshal([]byte(event.PayloadJSON), &payload); err != nil {
-			t.Fatalf("unmarshal compaction payload: %v", err)
-		}
-		contextEvents = append(contextEvents, payload.Compaction)
-		if payload.Compaction.OperationID != operationID {
-			t.Fatalf("context event operation_id=%q, want %q", payload.Compaction.OperationID, operationID)
-		}
-	}
-	if len(contextEvents) != 2 {
-		t.Fatalf("context events=%#v, want start and cancelled events", contextEvents)
-	}
-	if contextEvents[0].Status != "compacting" || contextEvents[1].Status != "cancelled" || contextEvents[1].Reason != "run_finished" {
-		t.Fatalf("context event lifecycle=%#v, want compacting then cancelled", contextEvents)
-	}
-
-	svc.mu.Lock()
-	delete(svc.flowerLiveByThread, runThreadKey(meta.EndpointID, th.ThreadID))
-	svc.mu.Unlock()
-	bootstrap, err := svc.GetFlowerThreadLiveBootstrap(ctx, &meta, th.ThreadID)
-	if err != nil {
-		t.Fatalf("GetFlowerThreadLiveBootstrap: %v", err)
-	}
-	if len(bootstrap.LiveState.ContextCompactions) != 1 {
-		t.Fatalf("context compactions=%#v, want one terminal event", bootstrap.LiveState.ContextCompactions)
-	}
-	got := bootstrap.LiveState.ContextCompactions[0]
-	if got.OperationID != operationID || got.Status != "cancelled" || got.Phase != "cancelled" {
-		t.Fatalf("context compaction=%#v, want finalized cancelled operation", got)
-	}
-}
-
-func TestFlowerLiveBootstrapRestoresPersistedContextState(t *testing.T) {
-	t.Parallel()
-
-	meta := session.Meta{
-		EndpointID:        "env_live_context_restore",
-		NamespacePublicID: "ns_live_context_restore",
-		ChannelID:         "ch_live_context_restore",
-		UserPublicID:      "u_live_context_restore",
-		UserEmail:         "context-restore@example.com",
-		CanRead:           true,
-		CanWrite:          true,
-		CanExecute:        true,
-		CanAdmin:          true,
-	}
-	svc := newRealtimeTestService(t, 0)
-	ctx := context.Background()
-	th, err := svc.CreateThread(ctx, &meta, "context restore", "", "", "")
-	if err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-
-	runID := "run_context_restore"
-	now := time.Now().UnixMilli()
-	if err := svc.threadsDB.AppendRunEvent(ctx, threadstore.RunEventRecord{
-		EndpointID: meta.EndpointID,
-		ThreadID:   th.ThreadID,
-		RunID:      runID,
-		StreamKind: "context",
-		EventType:  "context.usage.updated",
-		PayloadJSON: string(mustFlowerPayload(FlowerLiveUsageUpdatedPayload{Usage: FlowerContextUsage{
-			RunID:               runID,
-			StepIndex:           1,
-			Phase:               "projected_request",
-			InputTokens:         910,
-			ContextWindowTokens: 1000,
-			UsedRatio:           0.91,
-			PressureStatus:      "near_threshold",
-			UpdatedAtMs:         10_000,
-		}})),
-		AtUnixMs: now,
-	}); err != nil {
-		t.Fatalf("AppendRunEvent usage: %v", err)
-	}
-	compaction := FlowerContextCompaction{
-		OperationID:         "compact-restore",
-		RunID:               runID,
-		StepIndex:           1,
-		Phase:               "complete",
-		Status:              "compacted",
-		TokensBefore:        920,
-		TokensAfterEstimate: 240,
-		UpdatedAtMs:         10_002,
-	}
-	decoration := FlowerTimelineDecoration{
-		DecorationID: "context-compaction:" + compaction.OperationID,
-		Kind:         "context_compaction",
-		Anchor: FlowerTimelineAnchor{
-			TargetKind: "message",
-			MessageID:  "msg_context_restore",
-			Edge:       "after",
-		},
-		Compaction: compaction,
-	}
-	if err := svc.threadsDB.AppendRunEvent(ctx, threadstore.RunEventRecord{
-		EndpointID:  meta.EndpointID,
-		ThreadID:    th.ThreadID,
-		RunID:       runID,
-		StreamKind:  "context",
-		EventType:   "context.compaction.updated",
-		PayloadJSON: string(mustFlowerPayload(FlowerLiveContextCompactionUpdatedPayload{Compaction: compaction, TimelineDecoration: decoration})),
-		AtUnixMs:    now + 2,
-	}); err != nil {
-		t.Fatalf("AppendRunEvent compaction: %v", err)
-	}
-
-	svc.mu.Lock()
-	delete(svc.flowerLiveByThread, runThreadKey(meta.EndpointID, th.ThreadID))
-	svc.mu.Unlock()
-
-	bootstrap, err := svc.GetFlowerThreadLiveBootstrap(ctx, &meta, th.ThreadID)
-	if err != nil {
-		t.Fatalf("GetFlowerThreadLiveBootstrap: %v", err)
-	}
-	if bootstrap.LiveState.ContextUsage == nil || bootstrap.LiveState.ContextUsage.InputTokens != 910 {
-		t.Fatalf("bootstrap context usage=%#v", bootstrap.LiveState.ContextUsage)
-	}
-	if len(bootstrap.LiveState.ContextCompactions) != 1 || bootstrap.LiveState.ContextCompactions[0].OperationID != "compact-restore" {
-		t.Fatalf("bootstrap context compactions=%#v", bootstrap.LiveState.ContextCompactions)
-	}
-	if len(bootstrap.LiveState.TimelineDecorations) != 1 || bootstrap.LiveState.TimelineDecorations[0].Compaction.Status != "compacted" {
-		t.Fatalf("bootstrap timeline decorations=%#v", bootstrap.LiveState.TimelineDecorations)
-	}
-	if got := strings.TrimSpace(bootstrap.LiveState.TimelineDecorations[0].Anchor.MessageID); got != "msg_context_restore" {
-		t.Fatalf("bootstrap timeline decoration anchor=%q, want msg_context_restore", got)
-	}
-}
-
-func TestIdleContextCompactionEventsRestoreFromLiveBootstrap(t *testing.T) {
-	t.Parallel()
-
-	svc := newRealtimeTestService(t, 0)
-	ctx := context.Background()
-	meta := session.Meta{
-		ChannelID:         "ch_idle_context_restore",
-		EndpointID:        "env_idle_context_restore",
-		UserPublicID:      "u_idle_context_restore",
-		UserEmail:         "idle-context-restore@example.com",
-		NamespacePublicID: "ns_idle_context_restore",
-		CanRead:           true,
-		CanWrite:          true,
-		CanExecute:        true,
-	}
-	th, err := svc.CreateThread(ctx, &meta, "idle context restore", "", "", "")
-	if err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-	if _, err := svc.threadsDB.AppendMessage(ctx, meta.EndpointID, th.ThreadID, threadstore.Message{
-		ThreadID:        th.ThreadID,
-		EndpointID:      meta.EndpointID,
-		MessageID:       "msg_idle_context_restore",
-		Role:            "assistant",
-		Status:          "complete",
-		TextContent:     "ready",
-		MessageJSON:     `{"id":"msg_idle_context_restore","role":"assistant","content":"ready","status":"complete","created_at_ms":1000}`,
-		CreatedAtUnixMs: 1000,
-		UpdatedAtUnixMs: 1000,
-	}, meta.UserPublicID, meta.UserEmail); err != nil {
-		t.Fatalf("AppendMessage: %v", err)
-	}
-	anchor := FlowerTimelineAnchor{
-		TargetKind: "message",
-		MessageID:  "msg_idle_context_restore",
-		Edge:       "after",
-	}
-	runID := "run_idle_context_restore"
-	now := time.Now().UnixMilli()
-	svc.publishIdleContextCompaction(meta.EndpointID, th.ThreadID, runID, FlowerContextCompaction{
-		OperationID: "compact-idle-restore",
-		RunID:       runID,
-		Phase:       "start",
-		Status:      "compacting",
-		Trigger:     "manual",
-		Reason:      "manual",
-		UpdatedAtMs: now,
-	}, anchor)
-	svc.publishIdleContextCompaction(meta.EndpointID, th.ThreadID, runID, FlowerContextCompaction{
-		OperationID: "compact-idle-restore",
-		RunID:       runID,
-		Phase:       "cancelled",
-		Status:      "cancelled",
-		Trigger:     "manual",
-		Reason:      "manual",
-		UpdatedAtMs: now + 1,
-	}, anchor)
-
-	svc.mu.Lock()
-	delete(svc.flowerLiveByThread, runThreadKey(meta.EndpointID, th.ThreadID))
-	svc.mu.Unlock()
-
-	bootstrap, err := svc.GetFlowerThreadLiveBootstrap(ctx, &meta, th.ThreadID)
-	if err != nil {
-		t.Fatalf("GetFlowerThreadLiveBootstrap: %v", err)
-	}
-	if len(bootstrap.LiveState.ContextCompactions) != 1 {
-		t.Fatalf("bootstrap context compactions=%#v, want one", bootstrap.LiveState.ContextCompactions)
-	}
-	got := bootstrap.LiveState.ContextCompactions[0]
-	if got.OperationID != "compact-idle-restore" || got.Status != "cancelled" || got.Phase != "cancelled" {
-		t.Fatalf("bootstrap compaction=%#v, want cancelled compact-idle-restore", got)
-	}
-	if len(bootstrap.LiveState.TimelineDecorations) != 1 {
-		t.Fatalf("bootstrap timeline decorations=%#v, want one", bootstrap.LiveState.TimelineDecorations)
-	}
-	decoration := bootstrap.LiveState.TimelineDecorations[0]
-	if decoration.Compaction.Status != "cancelled" || decoration.Anchor.MessageID != "msg_idle_context_restore" {
-		t.Fatalf("bootstrap decoration=%#v, want cancelled decoration anchored after assistant", decoration)
-	}
-}
-
-func TestIdleContextCompactionNoopRestoresFromLiveBootstrap(t *testing.T) {
-	t.Parallel()
-
-	svc := newRealtimeTestService(t, 0)
-	ctx := context.Background()
-	meta := session.Meta{
-		ChannelID:         "ch_idle_context_noop_restore",
-		EndpointID:        "env_idle_context_noop_restore",
-		UserPublicID:      "u_idle_context_noop_restore",
-		UserEmail:         "idle-context-noop-restore@example.com",
-		NamespacePublicID: "ns_idle_context_noop_restore",
-		CanRead:           true,
-		CanWrite:          true,
-		CanExecute:        true,
-	}
-	th, err := svc.CreateThread(ctx, &meta, "idle context noop restore", "", "", "")
-	if err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-	if _, err := svc.threadsDB.AppendMessage(ctx, meta.EndpointID, th.ThreadID, threadstore.Message{
-		ThreadID:        th.ThreadID,
-		EndpointID:      meta.EndpointID,
-		MessageID:       "msg_idle_context_noop_restore",
-		Role:            "assistant",
-		Status:          "complete",
-		TextContent:     "ready",
-		MessageJSON:     `{"id":"msg_idle_context_noop_restore","role":"assistant","content":"ready","status":"complete","created_at_ms":1000}`,
-		CreatedAtUnixMs: 1000,
-		UpdatedAtUnixMs: 1000,
-	}, meta.UserPublicID, meta.UserEmail); err != nil {
-		t.Fatalf("AppendMessage: %v", err)
-	}
-	anchor := FlowerTimelineAnchor{
-		TargetKind: "message",
-		MessageID:  "msg_idle_context_noop_restore",
-		Edge:       "after",
-	}
-	runID := "run_idle_context_noop_restore"
-	now := time.Now().UnixMilli()
-	svc.publishIdleContextCompaction(meta.EndpointID, th.ThreadID, runID, FlowerContextCompaction{
-		OperationID: "compact-idle-noop-restore",
-		RunID:       runID,
-		Phase:       "start",
-		Status:      "compacting",
-		Trigger:     "manual",
-		Reason:      "manual",
-		UpdatedAtMs: now,
-	}, anchor)
-	svc.publishIdleContextCompaction(meta.EndpointID, th.ThreadID, runID, FlowerContextCompaction{
-		OperationID: "compact-idle-noop-restore",
-		RunID:       runID,
-		Phase:       "noop",
-		Status:      "noop",
-		Trigger:     "manual",
-		Reason:      "manual",
-		UpdatedAtMs: now + 1,
-	}, anchor)
-
-	svc.mu.Lock()
-	delete(svc.flowerLiveByThread, runThreadKey(meta.EndpointID, th.ThreadID))
-	svc.mu.Unlock()
-
-	bootstrap, err := svc.GetFlowerThreadLiveBootstrap(ctx, &meta, th.ThreadID)
-	if err != nil {
-		t.Fatalf("GetFlowerThreadLiveBootstrap: %v", err)
-	}
-	if len(bootstrap.LiveState.ContextCompactions) != 1 {
-		t.Fatalf("bootstrap context compactions=%#v, want one noop", bootstrap.LiveState.ContextCompactions)
-	}
-	got := bootstrap.LiveState.ContextCompactions[0]
-	if got.OperationID != "compact-idle-noop-restore" || got.Status != "noop" || got.Phase != "noop" {
-		t.Fatalf("bootstrap compaction=%#v, want noop compact-idle-noop-restore", got)
-	}
-	if len(bootstrap.LiveState.TimelineDecorations) != 1 {
-		t.Fatalf("bootstrap timeline decorations=%#v, want one noop", bootstrap.LiveState.TimelineDecorations)
-	}
-	decoration := bootstrap.LiveState.TimelineDecorations[0]
-	if decoration.Compaction.Status != "noop" || decoration.Anchor.MessageID != "msg_idle_context_noop_restore" {
-		t.Fatalf("bootstrap decoration=%#v, want noop decoration anchored after assistant", decoration)
-	}
-
-	nextRunID := "run_idle_context_noop_after_restore"
-	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, nextRunID, streamEventMessageStart{Type: "message-start", MessageID: "msg_idle_context_noop_after_restore"})
-	resp, err := svc.ListFlowerThreadLiveEvents(ctx, &meta, th.ThreadID, 0, 10)
-	if err != nil {
-		t.Fatalf("ListFlowerThreadLiveEvents after noop restore: %v", err)
-	}
-	var gotKinds []FlowerLiveKind
-	for _, event := range resp.Events {
-		gotKinds = append(gotKinds, event.Kind)
-		if event.Kind == FlowerLiveTimelineReplaced {
-			t.Fatalf("ordinary next run start produced timeline.replaced event: %#v", event)
-		}
-	}
-	if !reflect.DeepEqual(gotKinds, []FlowerLiveKind{FlowerLiveRunStarted, FlowerLiveMessageStarted}) {
-		t.Fatalf("event kinds=%#v, want next run start only", gotKinds)
-	}
-	bootstrap, err = svc.GetFlowerThreadLiveBootstrap(ctx, &meta, th.ThreadID)
-	if err != nil {
-		t.Fatalf("GetFlowerThreadLiveBootstrap after next run: %v", err)
-	}
-	if len(bootstrap.LiveState.ContextCompactions) != 1 {
-		t.Fatalf("bootstrap context compactions after next run=%#v, want retained noop", bootstrap.LiveState.ContextCompactions)
-	}
-	if got := bootstrap.LiveState.ContextCompactions[0]; got.OperationID != "compact-idle-noop-restore" || got.Status != "noop" {
-		t.Fatalf("bootstrap context compaction after next run=%#v, want retained noop", got)
-	}
-	if len(bootstrap.LiveState.TimelineDecorations) != 1 || bootstrap.LiveState.TimelineDecorations[0].Compaction.Status != "noop" {
-		t.Fatalf("bootstrap timeline decorations after next run=%#v, want retained noop", bootstrap.LiveState.TimelineDecorations)
-	}
-}
-
-func TestIdleContextCompactionBootstrapIgnoresUnfinishedStartEvent(t *testing.T) {
-	t.Parallel()
-
-	svc := newRealtimeTestService(t, 0)
-	ctx := context.Background()
-	meta := session.Meta{
-		ChannelID:         "ch_idle_context_unfinished",
-		EndpointID:        "env_idle_context_unfinished",
-		UserPublicID:      "u_idle_context_unfinished",
-		UserEmail:         "u_idle_context_unfinished@example.com",
-		NamespacePublicID: "ns_idle_context_unfinished",
-		CanRead:           true,
-		CanWrite:          true,
-		CanExecute:        true,
-	}
-	th, err := svc.CreateThread(ctx, &meta, "idle context unfinished", "", "", "")
-	if err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-	anchor := FlowerTimelineAnchor{TargetKind: "message", MessageID: "msg_idle_context_unfinished", Edge: "after"}
-	runID := "run_idle_context_unfinished"
-	svc.publishIdleContextCompaction(meta.EndpointID, th.ThreadID, runID, FlowerContextCompaction{
-		OperationID: "compact-idle-unfinished",
-		RunID:       runID,
-		Phase:       "start",
-		Status:      "compacting",
-		Trigger:     "manual",
-		Reason:      "manual",
-		UpdatedAtMs: time.Now().UnixMilli(),
-	}, anchor)
-
-	svc.mu.Lock()
-	delete(svc.flowerLiveByThread, runThreadKey(meta.EndpointID, th.ThreadID))
-	svc.mu.Unlock()
-
-	bootstrap, err := svc.GetFlowerThreadLiveBootstrap(ctx, &meta, th.ThreadID)
-	if err != nil {
-		t.Fatalf("GetFlowerThreadLiveBootstrap: %v", err)
-	}
-	if len(bootstrap.LiveState.ContextCompactions) != 0 {
-		t.Fatalf("bootstrap context compactions=%#v, want unfinished idle compaction omitted", bootstrap.LiveState.ContextCompactions)
-	}
-	if len(bootstrap.LiveState.TimelineDecorations) != 0 {
-		t.Fatalf("bootstrap timeline decorations=%#v, want unfinished idle compaction omitted", bootstrap.LiveState.TimelineDecorations)
-	}
-}
-
-func TestServiceClosePersistsIdleContextCompactionCancellation(t *testing.T) {
-	t.Parallel()
-
-	stateDir := t.TempDir()
-	cfg := &config.AIConfig{
-		CurrentModelID: "openai/gpt-5-mini",
-		Providers: []config.AIProvider{{
-			ID:      "openai",
-			Type:    "openai",
-			BaseURL: "https://api.openai.com/v1",
-			Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
-		}},
-	}
-	svc, err := NewService(Options{
-		Logger:           slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo})),
-		StateDir:         stateDir,
-		AgentHomeDir:     t.TempDir(),
-		Shell:            "bash",
-		Config:           cfg,
-		PersistOpTimeout: 50 * time.Millisecond,
-		RunMaxWallTime:   time.Second,
-		RunIdleTimeout:   time.Second,
-		ResolveProviderAPIKey: func(string) (string, bool, error) {
-			return "", false, nil
-		},
-	})
-	if err != nil {
-		t.Fatalf("NewService: %v", err)
-	}
-
-	ctx := context.Background()
-	meta := session.Meta{
-		ChannelID:         "ch_idle_close_cancel",
-		EndpointID:        "env_idle_close_cancel",
-		UserPublicID:      "u_idle_close_cancel",
-		UserEmail:         "idle-close-cancel@example.com",
-		NamespacePublicID: "ns_idle_close_cancel",
-		CanRead:           true,
-		CanWrite:          true,
-		CanExecute:        true,
-	}
-	th, err := svc.CreateThread(ctx, &meta, "idle close cancel", "", "", "")
-	if err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-	if _, err := svc.threadsDB.AppendMessage(ctx, meta.EndpointID, th.ThreadID, threadstore.Message{
-		ThreadID:        th.ThreadID,
-		EndpointID:      meta.EndpointID,
-		MessageID:       "msg_idle_close_cancel_anchor",
-		Role:            "assistant",
-		Status:          "complete",
-		TextContent:     "ready",
-		MessageJSON:     `{"id":"msg_idle_close_cancel_anchor","role":"assistant","content":"ready","status":"complete","created_at_ms":1000}`,
-		CreatedAtUnixMs: 1000,
-		UpdatedAtUnixMs: 1000,
-	}, meta.UserPublicID, meta.UserEmail); err != nil {
-		t.Fatalf("AppendMessage anchor: %v", err)
-	}
-	boundary, err := svc.threadsDB.CurrentThreadContextBoundary(ctx, meta.EndpointID, th.ThreadID)
-	if err != nil {
-		t.Fatalf("CurrentThreadContextBoundary: %v", err)
-	}
-
-	cancelled := false
-	anchor := FlowerTimelineAnchor{
-		TargetKind: "message",
-		MessageID:  "msg_idle_close_cancel_anchor",
-		Edge:       "after",
-	}
-	runID := "run_idle_close_cancel"
-	operationID := idleManualCompactionOperationID(runID, "manual-idle-close-cancel")
-	begin, gateErr := svc.beginIdleThreadCompaction(meta.EndpointID, th.ThreadID, operationID, runID, anchor, boundary, func() {
-		cancelled = true
-	})
-	if gateErr != nil || !begin.Started || begin.OperationID != operationID {
-		t.Fatalf("beginIdleThreadCompaction result=%+v err=%v", begin, gateErr)
-	}
-	svc.publishIdleContextCompaction(meta.EndpointID, th.ThreadID, runID, FlowerContextCompaction{
-		OperationID: operationID,
-		RunID:       runID,
-		Phase:       "start",
-		Status:      "compacting",
-		Trigger:     "manual",
-		Reason:      "manual",
-		UpdatedAtMs: time.Now().UnixMilli(),
-	}, anchor)
-
-	if err := svc.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
-	if !cancelled {
-		t.Fatalf("Close did not cancel the idle compaction context")
-	}
-
-	store, err := threadstore.Open(filepath.Join(stateDir, "ai", "threads.sqlite"))
-	if err != nil {
-		t.Fatalf("reopen threadstore: %v", err)
-	}
-	defer func() { _ = store.Close() }()
-	events, err := store.ListThreadContextRunEvents(ctx, meta.EndpointID, th.ThreadID, 20)
-	if err != nil {
-		t.Fatalf("ListThreadContextRunEvents: %v", err)
-	}
-	if len(events) == 0 || events[len(events)-1].EventType != string(FlowerLiveContextCompactionUpdated) {
-		t.Fatalf("events=%+v, want persisted terminal compaction event", events)
-	}
-	var payload FlowerLiveContextCompactionUpdatedPayload
-	if err := json.Unmarshal([]byte(events[len(events)-1].PayloadJSON), &payload); err != nil {
-		t.Fatalf("decode terminal compaction payload: %v", err)
-	}
-	if payload.Compaction.OperationID != operationID || payload.Compaction.Status != "cancelled" || payload.Compaction.Phase != "cancelled" {
-		t.Fatalf("terminal compaction=%#v, want cancelled %q", payload.Compaction, operationID)
-	}
-	if payload.TimelineDecoration.Anchor.MessageID != "msg_idle_close_cancel_anchor" {
-		t.Fatalf("terminal decoration=%#v, want original anchor", payload.TimelineDecoration)
-	}
-}
-
-func TestIdleContextCompactionDoesNotPersistCompleteBeforeCommit(t *testing.T) {
-	t.Parallel()
-
-	svc := newRealtimeTestService(t, 0)
-	ctx := context.Background()
-	meta := session.Meta{
-		ChannelID:         "ch_idle_context_commit_gate",
-		EndpointID:        "env_idle_context_commit_gate",
-		UserPublicID:      "u_idle_context_commit_gate",
-		UserEmail:         "idle-context-commit-gate@example.com",
-		NamespacePublicID: "ns_idle_context_commit_gate",
-		CanRead:           true,
-		CanWrite:          true,
-		CanExecute:        true,
-	}
-	th, err := svc.CreateThread(ctx, &meta, "idle context commit gate", "", "", "")
-	if err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-	if _, err := svc.threadsDB.AppendMessage(ctx, meta.EndpointID, th.ThreadID, threadstore.Message{
-		ThreadID:        th.ThreadID,
-		EndpointID:      meta.EndpointID,
-		MessageID:       "msg_idle_context_commit_gate_anchor",
-		Role:            "assistant",
-		Status:          "complete",
-		TextContent:     "ready",
-		MessageJSON:     `{"id":"msg_idle_context_commit_gate_anchor","role":"assistant","content":"ready","status":"complete","created_at_ms":1000}`,
-		CreatedAtUnixMs: 1000,
-		UpdatedAtUnixMs: 1000,
-	}, meta.UserPublicID, meta.UserEmail); err != nil {
-		t.Fatalf("AppendMessage anchor: %v", err)
-	}
-	boundary, err := svc.threadsDB.CurrentThreadContextBoundary(ctx, meta.EndpointID, th.ThreadID)
-	if err != nil {
-		t.Fatalf("CurrentThreadContextBoundary: %v", err)
-	}
-	anchor := FlowerTimelineAnchor{
-		TargetKind: "message",
-		MessageID:  "msg_idle_context_commit_gate_anchor",
-		Edge:       "after",
-	}
-	runID := "run_idle_context_commit_gate"
-	requestID := "manual-idle-context-commit-gate"
-	operationID := idleManualCompactionOperationID(runID, requestID)
-	startedAt := time.Now().UnixMilli()
-	begin, gateErr := svc.beginIdleThreadCompaction(meta.EndpointID, th.ThreadID, operationID, runID, anchor, boundary, func() {})
-	if gateErr != nil || !begin.Started || begin.OperationID != operationID || begin.RunID != runID {
-		t.Fatalf("beginIdleThreadCompaction result=%+v err=%v", begin, gateErr)
-	}
-	defer svc.finishIdleThreadCompaction(meta.EndpointID, th.ThreadID, operationID)
-	svc.publishIdleContextCompaction(meta.EndpointID, th.ThreadID, runID, FlowerContextCompaction{
-		OperationID: operationID,
-		RunID:       runID,
-		Phase:       "start",
-		Status:      "compacting",
-		Trigger:     "manual",
-		Reason:      "manual",
-		UpdatedAtMs: startedAt,
-	}, anchor)
-
-	r := newRun(runOptions{
-		RunID:                        runID,
-		EndpointID:                   meta.EndpointID,
-		ThreadID:                     th.ThreadID,
-		MessageID:                    "msg_idle_context_commit_gate_hidden_run",
-		ThreadsDB:                    svc.threadsDB,
-		PersistOpTimeout:             time.Second,
-		HostManagedContextCompaction: true,
-		OnStreamEvent: func(ev any) {
-			svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, ev)
-		},
-	})
-	r.activeManualCompactionID = requestID
-	r.applyFloretCompaction(&observation.CompactionEvent{
-		RunID:               runID,
-		ThreadID:            th.ThreadID,
-		TurnID:              r.messageID,
-		OperationID:         operationID,
-		RequestID:           requestID,
-		Phase:               observation.CompactionPhaseComplete,
-		Status:              observation.CompactionStatusCompacted,
-		Trigger:             "manual",
-		Reason:              "manual",
-		TokensBefore:        1_000,
-		TokensAfterEstimate: 200,
-		ObservedAt:          time.UnixMilli(startedAt + 1),
-	})
-
-	if _, err := svc.threadsDB.AppendMessage(ctx, meta.EndpointID, th.ThreadID, threadstore.Message{
-		ThreadID:        th.ThreadID,
-		EndpointID:      meta.EndpointID,
-		MessageID:       "msg_idle_context_commit_gate_race",
-		Role:            "user",
-		Status:          "complete",
-		TextContent:     "arrived while compaction was committing",
-		MessageJSON:     `{"id":"msg_idle_context_commit_gate_race","role":"user","content":"arrived while compaction was committing","status":"complete","created_at_ms":2000}`,
-		CreatedAtUnixMs: 2000,
-		UpdatedAtUnixMs: 2000,
-	}, meta.UserPublicID, meta.UserEmail); err != nil {
-		t.Fatalf("AppendMessage racing user: %v", err)
-	}
-	continuation := threadstore.ThreadProviderContinuation{
-		State:           threadstore.ProviderContinuationState{Kind: "responses", ID: "resp_idle_context_commit_gate"},
-		ProviderID:      "provider",
-		Model:           "model",
-		UpdatedAtUnixMs: startedAt + 2,
-	}
-	err = svc.commitIdleThreadCompaction(ctx, svc.threadsDB, meta.EndpointID, th.ThreadID, runID, operationID, continuation)
-	if !errors.Is(err, threadstore.ErrThreadContextBoundaryChanged) {
-		t.Fatalf("commitIdleThreadCompaction err=%v, want %v", err, threadstore.ErrThreadContextBoundaryChanged)
-	}
-	svc.publishIdleContextCompaction(meta.EndpointID, th.ThreadID, runID, FlowerContextCompaction{
-		OperationID: operationID,
-		RunID:       runID,
-		Phase:       "cancelled",
-		Status:      "cancelled",
-		Trigger:     "manual",
-		Reason:      "manual",
-		Error:       strings.TrimSpace(err.Error()),
-		UpdatedAtMs: startedAt + 3,
-	}, anchor)
-
-	svc.mu.Lock()
-	delete(svc.flowerLiveByThread, runThreadKey(meta.EndpointID, th.ThreadID))
-	svc.mu.Unlock()
-	bootstrap, err := svc.GetFlowerThreadLiveBootstrap(ctx, &meta, th.ThreadID)
-	if err != nil {
-		t.Fatalf("GetFlowerThreadLiveBootstrap: %v", err)
-	}
-	if len(bootstrap.LiveState.ContextCompactions) != 1 {
-		t.Fatalf("context compactions=%#v, want one terminal event", bootstrap.LiveState.ContextCompactions)
-	}
-	got := bootstrap.LiveState.ContextCompactions[0]
-	if got.OperationID != operationID || got.Status != "cancelled" || got.Phase != "cancelled" {
-		t.Fatalf("context compaction=%#v, want persisted cancelled event", got)
-	}
-	for _, decoration := range bootstrap.LiveState.TimelineDecorations {
-		if decoration.Compaction.Status == "compacted" {
-			t.Fatalf("unexpected compacted decoration after rejected commit: %#v", decoration)
-		}
 	}
 }
 
@@ -2468,59 +1718,5 @@ func TestFlowerLiveThreadSummaryClearsReasoningForUnsupportedModel(t *testing.T)
 	}
 	if !payload.Patch.ReasoningCapabilitySet || payload.Patch.ReasoningCapability != nil {
 		t.Fatalf("reasoning_capability=%+v set=%v, want explicit null", payload.Patch.ReasoningCapability, payload.Patch.ReasoningCapabilitySet)
-	}
-}
-
-func TestGetThreadAndListThreadsExposeLastContextRunID(t *testing.T) {
-	t.Parallel()
-
-	meta := session.Meta{
-		EndpointID:        "env_test",
-		NamespacePublicID: "ns_test",
-		ChannelID:         "ch_a",
-		UserPublicID:      "u_a",
-		UserEmail:         "u_a@example.com",
-		CanRead:           true,
-		CanWrite:          true,
-		CanExecute:        true,
-		CanAdmin:          true,
-	}
-	svc := newRealtimeTestService(t, 0)
-
-	ctx := context.Background()
-	th, err := svc.CreateThread(ctx, &meta, "hello", "", "", "")
-	if err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-
-	if err := svc.threadsDB.AppendRunEvent(ctx, threadstore.RunEventRecord{
-		EndpointID:  meta.EndpointID,
-		ThreadID:    th.ThreadID,
-		RunID:       "run_ctx_1",
-		StreamKind:  "context",
-		EventType:   "context.usage.updated",
-		PayloadJSON: "{}",
-		AtUnixMs:    time.Now().UnixMilli(),
-	}); err != nil {
-		t.Fatalf("AppendRunEvent: %v", err)
-	}
-
-	view, err := svc.GetThread(ctx, &meta, th.ThreadID)
-	if err != nil {
-		t.Fatalf("GetThread: %v", err)
-	}
-	if got := strings.TrimSpace(view.LastContextRunID); got != "run_ctx_1" {
-		t.Fatalf("GetThread LastContextRunID=%q, want %q", got, "run_ctx_1")
-	}
-
-	list, err := svc.ListThreads(ctx, &meta, 20, "")
-	if err != nil {
-		t.Fatalf("ListThreads: %v", err)
-	}
-	if len(list.Threads) != 1 {
-		t.Fatalf("len(list.Threads)=%d, want 1", len(list.Threads))
-	}
-	if got := strings.TrimSpace(list.Threads[0].LastContextRunID); got != "run_ctx_1" {
-		t.Fatalf("ListThreads LastContextRunID=%q, want %q", got, "run_ctx_1")
 	}
 }

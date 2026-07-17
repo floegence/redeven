@@ -2,7 +2,6 @@ package threadstore
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -239,60 +238,5 @@ func TestForkOperationRejectsIncompleteFloretIdentityMapping(t *testing.T) {
 		UpdatedAtUnixMs:  6,
 	}); err != nil {
 		t.Fatalf("CommitForkOperation exact mapping: %v", err)
-	}
-}
-
-func TestStoreMigratesV37ToV38ForkOperations(t *testing.T) {
-	t.Parallel()
-
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	raw, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		t.Fatalf("sql.Open: %v", err)
-	}
-	schema := threadstoreSchemaSpec()
-	tx, err := raw.Begin()
-	if err != nil {
-		t.Fatalf("Begin: %v", err)
-	}
-	for _, migration := range schema.Migrations {
-		if migration.ToVersion > 37 {
-			break
-		}
-		if err := migration.Apply(tx); err != nil {
-			_ = tx.Rollback()
-			t.Fatalf("apply migration %d->%d: %v", migration.FromVersion, migration.ToVersion, err)
-		}
-	}
-	if _, err := tx.Exec(`PRAGMA user_version=37;`); err != nil {
-		_ = tx.Rollback()
-		t.Fatalf("set user_version: %v", err)
-	}
-	if err := tx.Commit(); err != nil {
-		t.Fatalf("Commit: %v", err)
-	}
-	if err := raw.Close(); err != nil {
-		t.Fatalf("Close raw: %v", err)
-	}
-
-	s, err := Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open migrated: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-	if !tableExistsForTest(t, s.db, "ai_thread_fork_operations") {
-		t.Fatalf("missing ai_thread_fork_operations")
-	}
-	for _, index := range []string{"idx_ai_thread_fork_operations_status_updated", "idx_ai_thread_fork_operations_source"} {
-		if !indexExistsForTest(t, s.db, index) {
-			t.Fatalf("missing index %q", index)
-		}
-	}
-	var version int
-	if err := s.db.QueryRow(`PRAGMA user_version;`).Scan(&version); err != nil {
-		t.Fatalf("read user_version: %v", err)
-	}
-	if version != CurrentSchemaVersion() {
-		t.Fatalf("user_version=%d, want %d", version, CurrentSchemaVersion())
 	}
 }

@@ -1059,7 +1059,7 @@ function mapThreadPatch(raw: unknown): FlowerLiveThreadPatch | null {
     ...(trim(patch.run_error_code) ? { run_error_code: trim(patch.run_error_code) } : {}),
     ...(trim(patch.run_error) ? { run_error: trim(patch.run_error) } : {}),
     ...(patch.waiting_prompt !== undefined ? { waiting_prompt: mapInputRequest(patch.waiting_prompt) } : {}),
-    ...(trim(patch.last_context_run_id) ? { last_context_run_id: trim(patch.last_context_run_id) } : {}),
+    ...(trim(patch.active_run_id) ? { active_run_id: trim(patch.active_run_id) } : {}),
     ...(positiveInteger(patch.pinned_at_unix_ms) ? { pinned_at_ms: positiveInteger(patch.pinned_at_unix_ms) } : {}),
     ...(positiveInteger(patch.created_at_unix_ms) ? { created_at_ms: positiveInteger(patch.created_at_unix_ms) } : {}),
     ...(positiveInteger(patch.updated_at_unix_ms) ? { updated_at_ms: positiveInteger(patch.updated_at_unix_ms) } : {}),
@@ -1130,7 +1130,7 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
   const threadID = trim(record.thread_id);
   const status = runStatus(record.run_status);
   const activeRunID = status === 'running' || status === 'waiting_approval'
-    ? trim(record.last_context_run_id)
+    ? trim(record.active_run_id)
     : '';
   const waitingPrompt = record.waiting_prompt !== undefined ? mapInputRequest(record.waiting_prompt) : null;
   const inputRequest = status === 'waiting_user' ? waitingPrompt : null;

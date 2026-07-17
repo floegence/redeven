@@ -28,8 +28,6 @@ func (h *recordingThreadMaintenanceHost) DeleteThread(_ context.Context, threadI
 	return h.deleteErr
 }
 
-func (h *recordingThreadMaintenanceHost) Close() error { return nil }
-
 func (h *recordingThreadMaintenanceHost) setDeleteError(err error) {
 	h.mu.Lock()
 	h.deleteErr = err
