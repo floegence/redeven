@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 	"time"
 
@@ -98,6 +99,12 @@ func TestServerStartPublishesRuntimeManagementStatus(t *testing.T) {
 	if status.Endpoint.LocalUIURL == "" || len(status.Endpoint.LocalUIURLs) == 0 {
 		t.Fatalf("unexpected runtime endpoint: %#v", status.Endpoint)
 	}
+	if status.Endpoint.LocalUIBridgeURL == "" {
+		t.Fatalf("missing trusted Local UI bridge endpoint: %#v", status.Endpoint)
+	}
+	if slices.Contains(status.Endpoint.LocalUIURLs, status.Endpoint.LocalUIBridgeURL) {
+		t.Fatalf("trusted bridge URL leaked into public Local UI URLs: %#v", status.Endpoint)
+	}
 	if status.Endpoint.PasswordRequired {
 		t.Fatalf("PasswordRequired = true, want false")
 	}
@@ -115,8 +122,49 @@ func TestServerStartPublishesRuntimeManagementStatus(t *testing.T) {
 		t.Fatalf("unexpected runtime-control endpoint: %#v", status.Endpoint.RuntimeControl)
 	}
 
+	forwardedAuthority := "127.0.0.1:54321"
+	publicReq, err := http.NewRequestWithContext(ctx, http.MethodGet, status.Endpoint.LocalUIURL+"api/local/runtime/health", nil)
+	if err != nil {
+		t.Fatalf("NewRequest(public) error = %v", err)
+	}
+	publicReq.Host = forwardedAuthority
+	publicResp, err := http.DefaultClient.Do(publicReq)
+	if err != nil {
+		t.Fatalf("Do(public) error = %v", err)
+	}
+	_ = publicResp.Body.Close()
+	if publicResp.StatusCode != http.StatusMisdirectedRequest {
+		t.Fatalf("public listener status = %d, want %d", publicResp.StatusCode, http.StatusMisdirectedRequest)
+	}
+
+	bridgeReq, err := http.NewRequestWithContext(ctx, http.MethodGet, status.Endpoint.LocalUIBridgeURL+"api/local/runtime/health", nil)
+	if err != nil {
+		t.Fatalf("NewRequest(bridge) error = %v", err)
+	}
+	bridgeReq.Host = forwardedAuthority
+	bridgeReq.Header.Set("Origin", "http://"+forwardedAuthority)
+	bridgeResp, err := http.DefaultClient.Do(bridgeReq)
+	if err != nil {
+		t.Fatalf("Do(bridge) error = %v", err)
+	}
+	defer bridgeResp.Body.Close()
+	if bridgeResp.StatusCode != http.StatusOK {
+		t.Fatalf("trusted bridge listener status = %d, want %d", bridgeResp.StatusCode, http.StatusOK)
+	}
+
+	bridgeURL := status.Endpoint.LocalUIBridgeURL
 	if err := s.Close(); err != nil {
 		t.Fatalf("Close() error = %v", err)
+	}
+	closedCtx, closedCancel := context.WithTimeout(context.Background(), 250*time.Millisecond)
+	defer closedCancel()
+	closedReq, err := http.NewRequestWithContext(closedCtx, http.MethodGet, bridgeURL+"api/local/runtime/health", nil)
+	if err != nil {
+		t.Fatalf("NewRequest(closed bridge) error = %v", err)
+	}
+	if closedResp, err := http.DefaultClient.Do(closedReq); err == nil {
+		_ = closedResp.Body.Close()
+		t.Fatalf("trusted bridge listener remained reachable after Close()")
 	}
 }
 

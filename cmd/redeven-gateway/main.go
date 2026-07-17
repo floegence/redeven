@@ -144,7 +144,7 @@ func (c *cli) desktopBridgeCmd(args []string) int {
 	defer cancel()
 	gatewayURL := fmt.Sprintf("http://%s/", strings.TrimSpace(status.Listen))
 	bridge := desktopbridge.Server{
-		DialSurface: desktopbridge.NewURLSurfaceDialerWithGateway("", "", gatewayURL, managedBridgeToken),
+		DialSurface: desktopbridge.NewGatewaySurfaceDialer(gatewayURL, managedBridgeToken),
 		Hello: desktopbridge.Hello{
 			RuntimeVersion:  Version,
 			RuntimeCommit:   Commit,

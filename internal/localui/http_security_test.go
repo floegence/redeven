@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"reflect"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -133,7 +134,7 @@ func TestDesktopBridgeAcceptsOnlyLoopbackAuthority(t *testing.T) {
 			t.Fatalf("bridge Host %q status = %d, want %d", host, res.Code, http.StatusFound)
 		}
 	}
-	for _, host := range []string{"192.168.1.10:23998", "evil.example:23998"} {
+	for _, host := range []string{"192.168.1.10:23998", "evil.example:23998", "127.0.0.1", "127.0.0.1:notaport"} {
 		req := httptest.NewRequest(http.MethodGet, "http://localhost:24000/", nil)
 		req.Host = host
 		res := httptest.NewRecorder()
@@ -141,6 +142,19 @@ func TestDesktopBridgeAcceptsOnlyLoopbackAuthority(t *testing.T) {
 		if res.Code != http.StatusMisdirectedRequest {
 			t.Fatalf("bridge Host %q status = %d, want %d", host, res.Code, http.StatusMisdirectedRequest)
 		}
+	}
+
+	originReq := httptest.NewRequest(http.MethodGet, "http://127.0.0.1:24000/_redeven_direct/ws", nil)
+	originReq.Host = "127.0.0.1:24000"
+	originReq.Header.Set("Connection", "Upgrade")
+	originReq.Header.Set("Upgrade", "websocket")
+	originReq.Header.Set("Sec-WebSocket-Key", strings.Repeat("a", 24))
+	originReq.Header.Set("Sec-WebSocket-Version", "13")
+	originReq.Header.Set("Origin", "http://127.0.0.1:24001")
+	originRes := httptest.NewRecorder()
+	s.HandlerForDesktopBridge().ServeHTTP(originRes, originReq)
+	if originRes.Code != http.StatusForbidden {
+		t.Fatalf("mismatched bridge Origin status = %d, want %d", originRes.Code, http.StatusForbidden)
 	}
 }
 

@@ -196,3 +196,44 @@ func TestServerShutdownFrameEndsBridgeContext(t *testing.T) {
 		t.Fatal("bridge did not stop after shutdown frame")
 	}
 }
+
+func TestTrustedLoopbackAddrFromURL(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name    string
+		raw     string
+		want    string
+		wantErr bool
+	}{
+		{name: "ipv4", raw: "http://127.0.0.1:23998/", want: "127.0.0.1:23998"},
+		{name: "ipv6", raw: "http://[::1]:23998/", want: "[::1]:23998"},
+		{name: "missing", raw: "", wantErr: true},
+		{name: "hostname", raw: "http://localhost:23998/", wantErr: true},
+		{name: "non loopback", raw: "http://192.0.2.10:23998/", wantErr: true},
+		{name: "missing port", raw: "http://127.0.0.1/", wantErr: true},
+		{name: "invalid port", raw: "http://127.0.0.1:notaport/", wantErr: true},
+		{name: "zero port", raw: "http://127.0.0.1:0/", wantErr: true},
+		{name: "mapped ipv4", raw: "http://[::ffff:127.0.0.1]:23998/", wantErr: true},
+		{name: "credentials", raw: "http://user@127.0.0.1:23998/", wantErr: true},
+		{name: "path", raw: "http://127.0.0.1:23998/api", wantErr: true},
+		{name: "query", raw: "http://127.0.0.1:23998/?token=value", wantErr: true},
+		{name: "https", raw: "https://127.0.0.1:23998/", wantErr: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := trustedLoopbackAddrFromURL(test.raw)
+			if test.wantErr {
+				if err == nil {
+					t.Fatalf("trustedLoopbackAddrFromURL(%q) = %q, want error", test.raw, got)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("trustedLoopbackAddrFromURL(%q) error = %v", test.raw, err)
+			}
+			if got != test.want {
+				t.Fatalf("trustedLoopbackAddrFromURL(%q) = %q, want %q", test.raw, got, test.want)
+			}
+		})
+	}
+}

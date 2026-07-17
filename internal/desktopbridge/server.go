@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"net/url"
 	"strings"
 	"sync"
@@ -201,14 +202,19 @@ func isClosedNetworkError(err error) bool {
 	return strings.Contains(text, "use of closed network connection") || strings.Contains(text, "closed pipe")
 }
 
-func NewURLSurfaceDialer(localUIURL string, runtimeControlURL string) SurfaceDialer {
-	return NewURLSurfaceDialerWithGateway(localUIURL, runtimeControlURL, "", "")
+func NewTrustedBridgeSurfaceDialer(localUIBridgeURL string, runtimeControlURL string) (SurfaceDialer, error) {
+	localUIAddr, err := trustedLoopbackAddrFromURL(localUIBridgeURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid trusted Local UI bridge URL: %w", err)
+	}
+	return newSurfaceDialer(localUIAddr, dialAddrFromURL(runtimeControlURL), "", ""), nil
 }
 
-func NewURLSurfaceDialerWithGateway(localUIURL string, runtimeControlURL string, gatewayURL string, managedGatewayBridgeToken string) SurfaceDialer {
-	localUIAddr := dialAddrFromURL(localUIURL)
-	runtimeControlAddr := dialAddrFromURL(runtimeControlURL)
-	gatewayAddr := dialAddrFromURL(gatewayURL)
+func NewGatewaySurfaceDialer(gatewayURL string, managedGatewayBridgeToken string) SurfaceDialer {
+	return newSurfaceDialer("", "", dialAddrFromURL(gatewayURL), managedGatewayBridgeToken)
+}
+
+func newSurfaceDialer(localUIAddr string, runtimeControlAddr string, gatewayAddr string, managedGatewayBridgeToken string) SurfaceDialer {
 	return func(ctx context.Context, surface StreamSurface) (net.Conn, error) {
 		addr := ""
 		switch surface {
@@ -237,6 +243,17 @@ func NewURLSurfaceDialerWithGateway(localUIURL string, runtimeControlURL string,
 		}
 		return conn, nil
 	}
+}
+
+func ProbeSurface(ctx context.Context, dial SurfaceDialer, surface StreamSurface) error {
+	if dial == nil {
+		return errors.New("missing bridge surface dialer")
+	}
+	conn, err := dial(ctx, surface)
+	if err != nil {
+		return err
+	}
+	return conn.Close()
 }
 
 type gatewayProtocolHeaderConn struct {
@@ -300,4 +317,23 @@ func dialAddrFromURL(raw string) string {
 		return ""
 	}
 	return parsed.Host
+}
+
+func trustedLoopbackAddrFromURL(raw string) (string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed == nil || parsed.Scheme != "http" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", errors.New("URL must be an HTTP loopback endpoint")
+	}
+	if parsed.Path != "" && parsed.Path != "/" {
+		return "", errors.New("URL path must be root")
+	}
+	addrPort, err := netip.ParseAddrPort(parsed.Host)
+	if err != nil || addrPort.Port() == 0 {
+		return "", errors.New("URL must include a loopback host and port")
+	}
+	addr := addrPort.Addr()
+	if !addr.IsLoopback() || addr.Zone() != "" || addr.Is4In6() {
+		return "", errors.New("URL host must be loopback")
+	}
+	return addrPort.String(), nil
 }
