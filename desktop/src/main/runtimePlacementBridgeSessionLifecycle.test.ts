@@ -22,7 +22,11 @@ import {
   readRuntimePlacementBridgeFrame,
 } from './runtimePlacementBridgeProtocol';
 import { startRuntimePlacementBridgeSession } from './runtimePlacementBridgeSession';
-import { DesktopSSHTransportInterruptedError } from './sshTransportManager';
+import {
+  DesktopSSHTransportAuthenticationError,
+  DesktopSSHTransportInterruptedError,
+  DesktopSSHTransportUnavailableError,
+} from './sshTransportManager';
 
 function createMockBridgeCommand() {
   const stdin = new PassThrough();
@@ -451,6 +455,13 @@ describe('runtimePlacementBridgeSession lifecycle', () => {
       first.interrupt(new DesktopSSHTransportInterruptedError('los:22', 1));
       await waitForClosedSocket(activeSocket);
       await waitForCondition(() => gate.wait.mock.calls.length === 1);
+      expect(session.getRecoverySnapshot()).toMatchObject({
+        generation: 1,
+        phase: 'waiting',
+        attempt_count: 0,
+        failure: { code: 'transport_interrupted' },
+        actions: ['retry_now'],
+      });
 
       const unavailableSocket = await connectLoopback(stableURL);
       unavailableSocket.write('GET /during-recovery HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n');
@@ -463,6 +474,13 @@ describe('runtimePlacementBridgeSession lifecycle', () => {
       expect(session.local_ui_url).toBe(stableURL);
       expect(second.stdin.readableLength).toBe(0);
       expect(sessionClosed).toBe(false);
+      expect(session.getRecoverySnapshot()).toMatchObject({
+        generation: 1,
+        phase: 'ready',
+        attempt_count: 1,
+        actions: [],
+      });
+      expect(session.getRecoverySnapshot().recovered_at_unix_ms).toEqual(expect.any(Number));
 
       const response = await bridgeHTTPRoundTrip({
         command: second,
@@ -505,9 +523,161 @@ describe('runtimePlacementBridgeSession lifecycle', () => {
     first.interrupt(new DesktopSSHTransportInterruptedError('los:22', 1));
     await waitForCondition(() => gate.wait.mock.calls.length === 1);
     gate.release();
-    await session.closed;
+    await expect(session.closed).resolves.toMatchObject({
+      kind: 'failed',
+      failure: { code: 'process_identity_changed' },
+    });
     expect(() => session.openStream('local_ui')).toThrow('Runtime Placement Bridge session is closed.');
     expect(hostAccessMocks.spawnSSHRuntimeHostCommand).toHaveBeenCalledTimes(2);
+    expect(session.getRecoverySnapshot()).toMatchObject({
+      phase: 'failed',
+      attempt_count: 1,
+      failure: { code: 'process_identity_changed' },
+      actions: ['open_connection_center'],
+    });
+  });
+
+  it('starts the next bridge attempt immediately when the user requests a retry', async () => {
+    hostAccessMocks.spawnSSHRuntimeHostCommand.mockReset();
+    const first = createMockBridgeCommand();
+    const second = createMockBridgeCommand();
+    const gate = recoveryGate();
+    hostAccessMocks.spawnSSHRuntimeHostCommand
+      .mockImplementationOnce(() => first)
+      .mockImplementationOnce(() => {
+        writeHello(second.stdout);
+        return second;
+      });
+    const task = startRuntimePlacementBridgeSession({
+      host_access: {
+        kind: 'ssh_host',
+        ssh: { ssh_destination: 'los', ssh_port: 22, auth_mode: 'key_agent', connect_timeout_seconds: 10 },
+      },
+      placement: { kind: 'host_process', runtime_root: '~/.redeven' },
+      desktop_owner_id: 'desktop-owner',
+      ssh_credential_scope: 'los',
+      ssh_transport_manager: { acquire: vi.fn(), dispose: vi.fn() },
+      recovery_scheduler: { wait: gate.wait },
+    });
+    writeHello(first.stdout);
+    const session = await task;
+    try {
+      first.interrupt(new DesktopSSHTransportInterruptedError('los:22', 1));
+      await waitForCondition(() => gate.wait.mock.calls.length === 1);
+
+      expect(session.requestRecoveryNow()).toBe(true);
+      await waitForCondition(() => hostAccessMocks.spawnSSHRuntimeHostCommand.mock.calls.length === 2);
+      await waitForCondition(() => session.getRecoverySnapshot().phase === 'ready');
+      expect(session.getRecoverySnapshot()).toMatchObject({ attempt_count: 1 });
+      expect(session.requestRecoveryNow()).toBe(false);
+    } finally {
+      await session.disconnect();
+    }
+  });
+
+  it('publishes each failed attempt and recovers on a later retry without replaying requests', async () => {
+    hostAccessMocks.spawnSSHRuntimeHostCommand.mockReset();
+    const first = createMockBridgeCommand();
+    const third = createMockBridgeCommand();
+    const gate = recoveryGate();
+    hostAccessMocks.spawnSSHRuntimeHostCommand
+      .mockImplementationOnce(() => first)
+      .mockImplementationOnce(() => {
+        throw new DesktopSSHTransportUnavailableError('SSH transport is unavailable.');
+      })
+      .mockImplementationOnce(() => {
+        writeHello(third.stdout);
+        return third;
+      });
+    const task = startRuntimePlacementBridgeSession({
+      host_access: {
+        kind: 'ssh_host',
+        ssh: { ssh_destination: 'los', ssh_port: 22, auth_mode: 'key_agent', connect_timeout_seconds: 10 },
+      },
+      placement: { kind: 'host_process', runtime_root: '~/.redeven' },
+      desktop_owner_id: 'desktop-owner',
+      ssh_credential_scope: 'los',
+      ssh_transport_manager: { acquire: vi.fn(), dispose: vi.fn() },
+      recovery_scheduler: { wait: gate.wait },
+    });
+    writeHello(first.stdout);
+    const session = await task;
+    try {
+      first.interrupt(new DesktopSSHTransportInterruptedError('los:22', 1));
+      await waitForCondition(() => gate.wait.mock.calls.length === 1);
+      gate.release();
+      await waitForCondition(() => gate.wait.mock.calls.length === 2);
+      expect(session.getRecoverySnapshot()).toMatchObject({
+        phase: 'waiting',
+        attempt_count: 1,
+        failure: { code: 'transport_unavailable' },
+      });
+
+      gate.release();
+      await waitForCondition(() => session.getRecoverySnapshot().phase === 'ready');
+      expect(session.getRecoverySnapshot()).toMatchObject({
+        phase: 'ready',
+        attempt_count: 2,
+      });
+      expect(third.stdin.readableLength).toBe(0);
+    } finally {
+      await session.disconnect();
+    }
+  });
+
+  it('stops bridge recovery after an authentication failure', async () => {
+    hostAccessMocks.spawnSSHRuntimeHostCommand.mockReset();
+    const first = createMockBridgeCommand();
+    const gate = recoveryGate();
+    hostAccessMocks.spawnSSHRuntimeHostCommand
+      .mockImplementationOnce(() => first)
+      .mockImplementationOnce(() => {
+        throw new DesktopSSHTransportAuthenticationError('SSH authentication failed.');
+      });
+    const task = startRuntimePlacementBridgeSession({
+      host_access: {
+        kind: 'ssh_host',
+        ssh: { ssh_destination: 'los', ssh_port: 22, auth_mode: 'key_agent', connect_timeout_seconds: 10 },
+      },
+      placement: { kind: 'host_process', runtime_root: '~/.redeven' },
+      desktop_owner_id: 'desktop-owner',
+      ssh_credential_scope: 'los',
+      ssh_transport_manager: { acquire: vi.fn(), dispose: vi.fn() },
+      recovery_scheduler: { wait: gate.wait },
+    });
+    writeHello(first.stdout);
+    const session = await task;
+    first.interrupt(new DesktopSSHTransportInterruptedError('los:22', 1));
+    await waitForCondition(() => gate.wait.mock.calls.length === 1);
+    gate.release();
+
+    await expect(session.closed).resolves.toMatchObject({
+      kind: 'failed',
+      failure: { code: 'authentication_failed' },
+    });
+    expect(session.getRecoverySnapshot()).toMatchObject({
+      phase: 'failed',
+      attempt_count: 1,
+      actions: ['open_connection_center'],
+    });
+  });
+
+  it('treats an ended remote bridge command as terminal instead of rebinding it', async () => {
+    hostAccessMocks.spawnSSHRuntimeHostCommand.mockReset();
+    const command = createMockBridgeCommand();
+    const session = await startMockedSSHSession(command);
+    command.stdout.end();
+    command.kill();
+
+    await expect(session.closed).resolves.toMatchObject({
+      kind: 'failed',
+      failure: { code: 'remote_command_ended' },
+    });
+    expect(hostAccessMocks.spawnSSHRuntimeHostCommand).toHaveBeenCalledTimes(1);
+    expect(session.getRecoverySnapshot()).toMatchObject({
+      phase: 'failed',
+      attempt_count: 0,
+    });
   });
 
   it('recovers a Gateway bridge only when its managed service identity is unchanged', async () => {

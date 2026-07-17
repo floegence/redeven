@@ -27,6 +27,10 @@ import type {
 } from '../shared/desktopRuntimePlacement';
 import { desktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import type { RuntimeServiceSnapshot } from '../shared/runtimeService';
+import type {
+  DesktopSessionTransportRecoveryFailure,
+  DesktopSessionTransportRecoverySnapshot,
+} from '../shared/desktopSessionContextIPC';
 import {
   parseRuntimePlacementBridgeHello,
   parseRuntimePlacementBridgeStreamError,
@@ -99,10 +103,18 @@ export type RuntimePlacementBridgeSession = RuntimePlacementBridgeSessionHandle 
   runtime_control?: DesktopRuntimeControlEndpoint;
   runtime_service?: RuntimeServiceSnapshot;
   runtime_handle: DesktopSessionRuntimeHandle;
-  closed: Promise<void>;
+  closed: Promise<RuntimePlacementBridgeTermination>;
+  getRecoverySnapshot: () => DesktopSessionTransportRecoverySnapshot;
+  subscribeRecovery: (listener: (snapshot: DesktopSessionTransportRecoverySnapshot) => void) => () => void;
+  requestRecoveryNow: () => boolean;
   disconnect: () => Promise<void>;
   stop: () => Promise<void>;
 }>;
+
+export type RuntimePlacementBridgeTermination = Readonly<
+  | { kind: 'closed' }
+  | { kind: 'failed'; failure: DesktopSessionTransportRecoveryFailure }
+>;
 
 export type StartRuntimePlacementBridgeSessionArgs = Readonly<{
   host_access: DesktopRuntimeHostAccess;
@@ -126,6 +138,20 @@ class RuntimePlacementBridgeIdentityChangedError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'RuntimePlacementBridgeIdentityChangedError';
+  }
+}
+
+class RuntimePlacementBridgeRemoteCommandEndedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'RuntimePlacementBridgeRemoteCommandEndedError';
+  }
+}
+
+class RuntimePlacementBridgeRetryNowError extends Error {
+  constructor() {
+    super('Runtime Placement Bridge retry requested.');
+    this.name = 'RuntimePlacementBridgeRetryNowError';
   }
 }
 
@@ -288,7 +314,7 @@ async function closeStreamingCommand(command: RuntimeHostStreamingCommand): Prom
 async function transportClosedReason(command: RuntimeHostStreamingCommand): Promise<Error> {
   try {
     await command.closed;
-    return new RuntimePlacementBridgeIdentityChangedError(
+    return new RuntimePlacementBridgeRemoteCommandEndedError(
       'Runtime Placement Bridge command ended; the original remote process generation is no longer available.',
     );
   } catch (error) {
@@ -334,6 +360,40 @@ function transportFailureIsRecoverable(error: Error): boolean {
     );
 }
 
+function recoveryBackoff(args: StartRuntimePlacementBridgeSessionArgs): readonly number[] {
+  const configured = args.recovery_scheduler?.backoff_ms
+    ?.map((delayMS) => Math.max(0, Number(delayMS)))
+    .filter(Number.isFinite);
+  return configured && configured.length > 0 ? configured : DEFAULT_BRIDGE_RECOVERY_BACKOFF_MS;
+}
+
+function recoveryFailureFromError(error: Error): DesktopSessionTransportRecoveryFailure {
+  const code = error instanceof RuntimePlacementBridgeIdentityChangedError
+    ? 'process_identity_changed'
+    : error instanceof RuntimePlacementBridgeRemoteCommandEndedError || error instanceof DesktopSSHRemoteCommandError
+      ? 'remote_command_ended'
+      : error instanceof DesktopSSHTransportAuthenticationError
+        ? 'authentication_failed'
+        : error instanceof DesktopSSHTransportInterruptedError
+          ? 'transport_interrupted'
+          : 'transport_unavailable';
+  return Object.freeze({
+    code,
+    error_name: compact(error.name),
+    technical_detail: compact(error.message),
+  });
+}
+
+function freezeRecoverySnapshot(
+  snapshot: DesktopSessionTransportRecoverySnapshot,
+): DesktopSessionTransportRecoverySnapshot {
+  return Object.freeze({
+    ...snapshot,
+    ...(snapshot.failure ? { failure: Object.freeze({ ...snapshot.failure }) } : {}),
+    actions: Object.freeze([...snapshot.actions]),
+  });
+}
+
 export async function startRuntimePlacementBridgeSession(
   args: StartRuntimePlacementBridgeSessionArgs,
 ): Promise<RuntimePlacementBridgeSession> {
@@ -357,11 +417,35 @@ export async function startRuntimePlacementBridgeSession(
   let proxyClose: (() => Promise<void>) | null = null;
   let closed = false;
   let recoveryTask: Promise<void> | null = null;
+  let recoveryWaitController: AbortController | null = null;
+  let recoveryRetryRequested = false;
   const streams = new Map<string, BridgeStreamCallbacks>();
-  let resolveClosed!: () => void;
-  const closedPromise = new Promise<void>((resolve) => {
+  const recoveryListeners = new Set<(snapshot: DesktopSessionTransportRecoverySnapshot) => void>();
+  const recoveryBackoffMS = recoveryBackoff(args);
+  let recoverySnapshot = freezeRecoverySnapshot({
+    generation: 0,
+    revision: 0,
+    phase: 'ready',
+    attempt_count: 0,
+    actions: [],
+  });
+  let resolveClosed!: (termination: RuntimePlacementBridgeTermination) => void;
+  const closedPromise = new Promise<RuntimePlacementBridgeTermination>((resolve) => {
     resolveClosed = resolve;
   });
+
+  const publishRecovery = (
+    next: Omit<DesktopSessionTransportRecoverySnapshot, 'revision'>,
+  ): DesktopSessionTransportRecoverySnapshot => {
+    recoverySnapshot = freezeRecoverySnapshot({
+      ...next,
+      revision: recoverySnapshot.revision + 1,
+    });
+    for (const listener of recoveryListeners) {
+      listener(recoverySnapshot);
+    }
+    return recoverySnapshot;
+  };
 
   const failActiveStreams = (error: Error) => {
     const callbacksList = [...streams.values()];
@@ -453,10 +537,24 @@ export async function startRuntimePlacementBridgeSession(
     }
     const transport = currentTransport;
     currentTransport = null;
+    recoveryWaitController?.abort(error ?? new DOMException('Bridge session closed.', 'AbortError'));
+    recoveryWaitController = null;
+    const failure = error ? recoveryFailureFromError(error) : null;
+    if (failure) {
+      publishRecovery({
+        generation: recoverySnapshot.generation || 1,
+        phase: 'failed',
+        attempt_count: recoverySnapshot.attempt_count,
+        started_at_unix_ms: recoverySnapshot.started_at_unix_ms ?? Date.now(),
+        failure,
+        actions: ['open_connection_center'],
+      });
+    }
     failActiveStreams(error ?? new Error('Runtime Placement Bridge session is closed.'));
     await proxyClose?.().catch(() => undefined);
     await (transport ? closeStreamingCommand(transport.command) : Promise.resolve());
-    resolveClosed();
+    recoveryListeners.clear();
+    resolveClosed(failure ? { kind: 'failed', failure } : { kind: 'closed' });
   };
 
   const runFrameLoop = async (transport: RemoteBridgeTransport): Promise<void> => {
@@ -492,8 +590,26 @@ export async function startRuntimePlacementBridgeSession(
       return;
     }
     currentTransport = null;
+    if (args.host_access.kind === 'ssh_host' && transportFailureIsRecoverable(terminalError)) {
+      const nextGeneration = recoverySnapshot.generation + 1;
+      const firstDelayMS = recoveryBackoffMS[0] ?? DEFAULT_BRIDGE_RECOVERY_BACKOFF_MS[0];
+      const now = Date.now();
+      publishRecovery({
+        generation: nextGeneration,
+        phase: 'waiting',
+        attempt_count: 0,
+        started_at_unix_ms: now,
+        next_attempt_at_unix_ms: now + firstDelayMS,
+        failure: recoveryFailureFromError(terminalError),
+        actions: ['retry_now'],
+      });
+    }
     failActiveStreams(new Error('Runtime Placement Bridge is temporarily unavailable.'));
     await closeStreamingCommand(transport.command);
+    if (sessionController.signal.aborted || args.signal?.aborted) {
+      await settleBridgeSession();
+      return;
+    }
     if (args.host_access.kind !== 'ssh_host' || !transportFailureIsRecoverable(terminalError)) {
       await settleBridgeSession(terminalError);
       return;
@@ -512,25 +628,54 @@ export async function startRuntimePlacementBridgeSession(
       await settleBridgeSession(new Error('Runtime Placement Bridge recovery requires a remote process identity.'));
       return;
     }
-    const configuredBackoff = args.recovery_scheduler?.backoff_ms
-      ?.map((delayMS) => Math.max(0, Number(delayMS)))
-      .filter(Number.isFinite);
-    const backoff = configuredBackoff && configuredBackoff.length > 0
-      ? configuredBackoff
-      : DEFAULT_BRIDGE_RECOVERY_BACKOFF_MS;
     const wait = args.recovery_scheduler?.wait ?? waitForRecovery;
     let attempt = 0;
     while (!closed && !sessionController.signal.aborted) {
-      const delayMS = backoff[Math.min(attempt, backoff.length - 1)] ?? 30_000;
-      attempt += 1;
-      try {
-        await wait(delayMS, sessionController.signal);
-      } catch {
-        return;
+      const delayMS = recoveryBackoffMS[Math.min(attempt, recoveryBackoffMS.length - 1)] ?? 30_000;
+      if (!recoveryRetryRequested) {
+        publishRecovery({
+          generation: recoverySnapshot.generation,
+          phase: 'waiting',
+          attempt_count: attempt,
+          started_at_unix_ms: recoverySnapshot.started_at_unix_ms ?? Date.now(),
+          next_attempt_at_unix_ms: Date.now() + delayMS,
+          ...(recoverySnapshot.failure ? { failure: recoverySnapshot.failure } : {}),
+          actions: ['retry_now'],
+        });
+        const waitController = new AbortController();
+        recoveryWaitController = waitController;
+        const abortWait = () => {
+          if (!waitController.signal.aborted) {
+            waitController.abort(sessionController.signal.reason ?? abortError());
+          }
+        };
+        sessionController.signal.addEventListener('abort', abortWait, { once: true });
+        try {
+          await wait(delayMS, waitController.signal);
+        } catch (error) {
+          if (!(error instanceof RuntimePlacementBridgeRetryNowError)) {
+            return;
+          }
+        } finally {
+          sessionController.signal.removeEventListener('abort', abortWait);
+          if (recoveryWaitController === waitController) {
+            recoveryWaitController = null;
+          }
+        }
       }
+      recoveryRetryRequested = false;
       if (closed || sessionController.signal.aborted) {
         return;
       }
+      attempt += 1;
+      publishRecovery({
+        generation: recoverySnapshot.generation,
+        phase: 'connecting',
+        attempt_count: attempt,
+        started_at_unix_ms: recoverySnapshot.started_at_unix_ms ?? Date.now(),
+        ...(recoverySnapshot.failure ? { failure: recoverySnapshot.failure } : {}),
+        actions: [],
+      });
       try {
         const transport = await openRemoteBridgeTransport(
           args,
@@ -544,6 +689,14 @@ export async function startRuntimePlacementBridgeSession(
           );
         }
         attachTransport(transport);
+        publishRecovery({
+          generation: recoverySnapshot.generation,
+          phase: 'ready',
+          attempt_count: attempt,
+          started_at_unix_ms: recoverySnapshot.started_at_unix_ms ?? Date.now(),
+          recovered_at_unix_ms: Date.now(),
+          actions: [],
+        });
         return;
       } catch (error) {
         const normalized = normalizeError(error);
@@ -559,6 +712,14 @@ export async function startRuntimePlacementBridgeSession(
           await settleBridgeSession(normalized);
           return;
         }
+        publishRecovery({
+          generation: recoverySnapshot.generation,
+          phase: 'waiting',
+          attempt_count: attempt,
+          started_at_unix_ms: recoverySnapshot.started_at_unix_ms ?? Date.now(),
+          failure: recoveryFailureFromError(normalized),
+          actions: ['retry_now'],
+        });
       }
     }
   };
@@ -645,6 +806,22 @@ export async function startRuntimePlacementBridgeSession(
       stop,
     },
     closed: closedPromise,
+    getRecoverySnapshot: () => recoverySnapshot,
+    subscribeRecovery: (listener) => {
+      recoveryListeners.add(listener);
+      listener(recoverySnapshot);
+      return () => {
+        recoveryListeners.delete(listener);
+      };
+    },
+    requestRecoveryNow: () => {
+      if (closed || recoverySnapshot.phase !== 'waiting') {
+        return false;
+      }
+      recoveryRetryRequested = true;
+      recoveryWaitController?.abort(new RuntimePlacementBridgeRetryNowError());
+      return true;
+    },
     disconnect: stop,
     stop,
   };

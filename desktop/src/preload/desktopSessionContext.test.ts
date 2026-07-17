@@ -5,6 +5,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DesktopSessionContextBridge } from './desktopSessionContext';
 
 const exposeInMainWorld = vi.fn();
+const ipcRendererInvoke = vi.fn();
+const ipcRendererOn = vi.fn();
 const ipcRendererSend = vi.fn();
 const ipcRendererSendSync = vi.fn();
 
@@ -21,6 +23,8 @@ vi.mock('electron', () => ({
     exposeInMainWorld,
   },
   ipcRenderer: {
+    invoke: ipcRendererInvoke,
+    on: ipcRendererOn,
     send: ipcRendererSend,
     sendSync: ipcRendererSendSync,
   },
@@ -30,13 +34,21 @@ describe('bootstrapDesktopSessionContextBridge', () => {
   beforeEach(() => {
     vi.resetModules();
     exposeInMainWorld.mockReset();
+    ipcRendererInvoke.mockReset();
+    ipcRendererOn.mockReset();
     ipcRendererSend.mockReset();
     ipcRendererSendSync.mockReset();
-    ipcRendererSendSync.mockReturnValue({
-      local_environment_id: 'local',
-      renderer_storage_scope_id: 'local',
-      target_kind: 'local_environment',
-      target_route: 'local_host',
+    ipcRendererInvoke.mockResolvedValue(false);
+    ipcRendererSendSync.mockImplementation((channel: string) => {
+      if (channel === 'redeven-desktop:session-transport-recovery-get') {
+        return null;
+      }
+      return {
+        local_environment_id: 'local',
+        renderer_storage_scope_id: 'local',
+        target_kind: 'local_environment',
+        target_route: 'local_host',
+      };
     });
   });
 
@@ -163,5 +175,68 @@ describe('bootstrapDesktopSessionContextBridge', () => {
     bootstrapDesktopSessionContextBridge();
 
     expect(exposedBridge().getSnapshot()).toBeNull();
+  });
+
+  it('publishes only monotonic transport recovery snapshots and requests an immediate retry', async () => {
+    ipcRendererSendSync.mockImplementation((channel: string) => {
+      if (channel === 'redeven-desktop:session-transport-recovery-get') {
+        return {
+          generation: 2,
+          revision: 4,
+          phase: 'waiting',
+          attempt_count: 1,
+          started_at_unix_ms: 100,
+          next_attempt_at_unix_ms: 200,
+          failure: {
+            code: 'transport_interrupted',
+            error_name: 'DesktopSSHTransportInterruptedError',
+            technical_detail: 'SSH transport was interrupted.',
+          },
+          actions: ['retry_now'],
+        };
+      }
+      return {
+        local_environment_id: 'ssh:demo',
+        renderer_storage_scope_id: 'ssh:demo',
+        target_kind: 'ssh_environment',
+        target_route: 'remote_desktop',
+      };
+    });
+    ipcRendererInvoke.mockResolvedValue(true);
+    const { bootstrapDesktopSessionContextBridge } = await import('./desktopSessionContext');
+
+    bootstrapDesktopSessionContextBridge();
+    const bridge = exposedBridge();
+    const snapshots: unknown[] = [];
+    bridge.subscribeTransportRecovery((snapshot) => snapshots.push(snapshot));
+    const eventListener = ipcRendererOn.mock.calls.find(([
+      channel,
+    ]) => channel === 'redeven-desktop:session-transport-recovery-updated')?.[1];
+    if (typeof eventListener !== 'function') {
+      throw new Error('Missing transport recovery event listener.');
+    }
+
+    eventListener({}, {
+      generation: 2,
+      revision: 3,
+      phase: 'connecting',
+      attempt_count: 2,
+      actions: [],
+    });
+    eventListener({}, {
+      generation: 2,
+      revision: 5,
+      phase: 'ready',
+      attempt_count: 2,
+      started_at_unix_ms: 100,
+      recovered_at_unix_ms: 240,
+      actions: [],
+    });
+
+    expect(snapshots).toHaveLength(2);
+    expect(snapshots[0]).toMatchObject({ phase: 'waiting', revision: 4 });
+    expect(snapshots[1]).toMatchObject({ phase: 'ready', revision: 5, attempt_count: 2 });
+    await expect(bridge.requestTransportRecoveryNow()).resolves.toBe(true);
+    expect(ipcRendererInvoke).toHaveBeenCalledWith('redeven-desktop:session-transport-recovery-retry');
   });
 });

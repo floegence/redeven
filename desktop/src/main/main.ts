@@ -427,8 +427,12 @@ import {
 import {
   DESKTOP_SESSION_APP_READY_CHANNEL,
   DESKTOP_SESSION_CONTEXT_GET_CHANNEL,
+  DESKTOP_SESSION_TRANSPORT_RECOVERY_GET_CHANNEL,
+  DESKTOP_SESSION_TRANSPORT_RECOVERY_RETRY_CHANNEL,
+  DESKTOP_SESSION_TRANSPORT_RECOVERY_UPDATED_CHANNEL,
   type DesktopSessionAppReadyPayload,
   type DesktopSessionContextSnapshot,
+  type DesktopSessionTransportRecoverySnapshot,
 } from '../shared/desktopSessionContextIPC';
 import {
   desktopControlPlaneKey,
@@ -570,6 +574,9 @@ type DesktopSessionRecord = {
   session_partition: string;
   diagnostics: DesktopDiagnosticsRecorder;
   runtime_handle: DesktopSessionRuntimeHandle | null;
+  transport_recovery_session: RuntimePlacementBridgeSession | null;
+  transport_recovery_snapshot: DesktopSessionTransportRecoverySnapshot | null;
+  unsubscribe_transport_recovery: (() => void) | null;
   steal_app_focus_on_ready: boolean;
   lifecycle: DesktopSessionLifecycle;
   initial_load_completion: Promise<void>;
@@ -1087,14 +1094,34 @@ function bridgeRecordFromSession(input: Readonly<{
 function trackRuntimePlacementBridgeRecord(record: RuntimePlacementBridgeRecord): void {
   const targetID = record.session.placement_target_id;
   runtimePlacementBridgeByTargetID.set(targetID, record);
-  void record.session.closed.then(async () => {
+  void record.session.closed.then(async (termination) => {
     const current = runtimePlacementBridgeByTargetID.get(targetID) ?? null;
     if (!current || current.session !== record.session) {
       return;
     }
     runtimePlacementBridgeByTargetID.delete(targetID);
     await current.desktop_model_source?.stop().catch(() => undefined);
-    await finalizeSessionClosure(desktopSessionKeyFromRuntimeTargetID(targetID)).catch(() => undefined);
+    const sessionRecord = liveSession(desktopSessionKeyFromRuntimeTargetID(targetID));
+    if (termination.kind === 'failed' && sessionRecord?.transport_recovery_session === record.session) {
+      sessionRecord.unsubscribe_transport_recovery?.();
+      sessionRecord.unsubscribe_transport_recovery = null;
+      sessionRecord.transport_recovery_session = null;
+      sessionRecord.transport_recovery_snapshot = record.session.getRecoverySnapshot();
+      sessionRecord.runtime_handle = null;
+      sessionRecord.diagnostics.clearRuntime();
+      sendSessionTransportRecoverySnapshot(sessionRecord);
+      await sessionRecord.diagnostics.recordLifecycle(
+        'runtime_transport_failed',
+        'Runtime Placement Bridge recovery ended and Desktop retained the disconnected Env App shell.',
+        {
+          failure_code: termination.failure.code,
+          recovery_generation: sessionRecord.transport_recovery_snapshot.generation,
+          recovery_attempt_count: sessionRecord.transport_recovery_snapshot.attempt_count,
+        },
+      );
+    } else {
+      await finalizeSessionClosure(desktopSessionKeyFromRuntimeTargetID(targetID)).catch(() => undefined);
+    }
     broadcastDesktopWelcomeSnapshots();
   });
 }
@@ -7952,6 +7979,47 @@ function desktopSessionContextSnapshot(sessionRecord: DesktopSessionRecord | nul
   return desktopSessionContextSnapshotFromTarget(sessionRecord?.target ?? null, sessionRecord?.startup.exposure);
 }
 
+function sendSessionTransportRecoverySnapshot(sessionRecord: DesktopSessionRecord): void {
+  const window = liveTrackedBrowserWindow(sessionRecord.root_window);
+  if (!window || !sessionRecord.transport_recovery_snapshot) {
+    return;
+  }
+  window.webContents.send(
+    DESKTOP_SESSION_TRANSPORT_RECOVERY_UPDATED_CHANNEL,
+    sessionRecord.transport_recovery_snapshot,
+  );
+}
+
+function attachSessionTransportRecovery(
+  sessionRecord: DesktopSessionRecord,
+  bridgeSession: RuntimePlacementBridgeSession,
+): void {
+  sessionRecord.unsubscribe_transport_recovery?.();
+  sessionRecord.transport_recovery_session = bridgeSession;
+  sessionRecord.transport_recovery_snapshot = bridgeSession.getRecoverySnapshot();
+  sessionRecord.unsubscribe_transport_recovery = bridgeSession.subscribeRecovery((snapshot) => {
+    if (sessionRecord.transport_recovery_session !== bridgeSession || sessionRecord.closing) {
+      return;
+    }
+    const current = sessionRecord.transport_recovery_snapshot;
+    if (
+      current
+      && (
+        snapshot.generation < current.generation
+        || (snapshot.generation === current.generation && snapshot.revision <= current.revision)
+      )
+    ) {
+      return;
+    }
+    sessionRecord.transport_recovery_snapshot = snapshot;
+    sendSessionTransportRecoverySnapshot(sessionRecord);
+  });
+}
+
+function sessionTransportRecoveryFailed(sessionRecord: DesktopSessionRecord): boolean {
+  return sessionRecord.transport_recovery_snapshot?.phase === 'failed';
+}
+
 function markSessionAppReady(
   sessionRecord: DesktopSessionRecord,
   payload: DesktopSessionAppReadyPayload,
@@ -8121,6 +8189,7 @@ async function createSessionRecord(
     openStartedAtUnixMS?: number;
     runtimeLifecycleGenerationIdentityKeys?: readonly string[];
     runtimeLifecycleGenerationSnapshot?: string;
+    transportRecovery?: RuntimePlacementBridgeSession | null;
   }> = {},
 ): Promise<DesktopSessionRecord> {
   const assertRuntimeLifecycleGenerationUnchanged = (): void => {
@@ -8178,6 +8247,9 @@ async function createSessionRecord(
     session_partition: sessionPartition,
     diagnostics,
     runtime_handle: options.runtimeHandle ?? null,
+    transport_recovery_session: null,
+    transport_recovery_snapshot: options.transportRecovery?.getRecoverySnapshot() ?? null,
+    unsubscribe_transport_recovery: null,
     steal_app_focus_on_ready: options.stealAppFocus === true,
     lifecycle: 'opening',
     initial_load_completion: initialLoad.promise,
@@ -8195,6 +8267,9 @@ async function createSessionRecord(
 
   sessionsByKey.set(target.session_key, sessionRecord);
   sessionKeyByWebContentsID.set(rootWindow.webContentsID, target.session_key);
+  if (options.transportRecovery) {
+    attachSessionTransportRecovery(sessionRecord, options.transportRecovery);
+  }
   rootWindow.browserWindow.on('focus', () => {
     lastFocusedSessionKey = target.session_key;
   });
@@ -8258,6 +8333,9 @@ async function finalizeSessionClosure(
     const wasOpening = sessionRecord.lifecycle === 'opening';
     sessionRecord.closing = true;
     sessionRecord.lifecycle = 'closing';
+    sessionRecord.unsubscribe_transport_recovery?.();
+    sessionRecord.unsubscribe_transport_recovery = null;
+    sessionRecord.transport_recovery_session = null;
     if (wasOpening && (sessionRecord.resolve_initial_load || sessionRecord.reject_initial_load)) {
       const message = sessionRecord.initial_load_failure_message
         || `Desktop closed ${sessionRecord.target.label} before it finished opening.`;
@@ -13421,15 +13499,19 @@ async function openRuntimePlacementBridgeFromLauncher(
       : buildManagedLocalRuntimeDesktopTarget(environmentID, label);
     const existingSession = liveSession(target.session_key);
     if (existingSession) {
-      if (existingSession.lifecycle === 'opening') {
-        return launcherActionFailureForOpeningSession(existingSession, {
-          environmentID,
+      if (sessionTransportRecoveryFailed(existingSession)) {
+        await finalizeSessionClosure(existingSession.session_key);
+      } else {
+        if (existingSession.lifecycle === 'opening') {
+          return launcherActionFailureForOpeningSession(existingSession, {
+            environmentID,
+          });
+        }
+        focusEnvironmentSession(existingSession.session_key, { stealAppFocus: true });
+        return launcherActionSuccess('focused_environment_window', {
+          sessionKey: existingSession.session_key,
         });
       }
-      focusEnvironmentSession(existingSession.session_key, { stealAppFocus: true });
-      return launcherActionSuccess('focused_environment_window', {
-        sessionKey: existingSession.session_key,
-      });
     }
     const operationKey = `${targetID}:open`;
     const operation = launcherOperations.create({
@@ -13652,6 +13734,7 @@ async function openRuntimePlacementBridgeFromLauncher(
         openStartedAtUnixMS,
         runtimeLifecycleGenerationIdentityKeys,
         runtimeLifecycleGenerationSnapshot: runtimeLifecycleGeneration,
+        transportRecovery: record.session,
       });
       if (desktopModelSourceTask) {
         await desktopModelSourceTask;
@@ -17165,6 +17248,10 @@ if (!app.requestSingleInstanceLock()) {
     const sessionRecord = sessionRecordForWebContentsID(event.sender.id);
     event.returnValue = desktopSessionContextSnapshot(sessionRecord);
   });
+  ipcMain.on(DESKTOP_SESSION_TRANSPORT_RECOVERY_GET_CHANNEL, (event) => {
+    const sessionRecord = sessionRecordForWebContentsID(event.sender.id);
+    event.returnValue = sessionRecord?.transport_recovery_snapshot ?? null;
+  });
   ipcMain.on(DESKTOP_SESSION_APP_READY_CHANNEL, (event, payload) => {
     const readyPayload = normalizeDesktopSessionAppReadyPayload(payload);
     if (!readyPayload) {
@@ -17175,6 +17262,10 @@ if (!app.requestSingleInstanceLock()) {
       return;
     }
     markSessionAppReady(sessionRecord, readyPayload);
+  });
+  ipcMain.handle(DESKTOP_SESSION_TRANSPORT_RECOVERY_RETRY_CHANNEL, (event) => {
+    const sessionRecord = sessionRecordForWebContentsID(event.sender.id);
+    return sessionRecord?.transport_recovery_session?.requestRecoveryNow() ?? false;
   });
   ipcMain.on(DESKTOP_THEME_GET_SNAPSHOT_CHANNEL, (event) => {
     event.returnValue = desktopThemeState().getSnapshot();

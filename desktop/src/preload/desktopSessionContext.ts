@@ -5,13 +5,21 @@ import { contextBridge, ipcRenderer } from 'electron';
 import {
   DESKTOP_SESSION_APP_READY_CHANNEL,
   DESKTOP_SESSION_CONTEXT_GET_CHANNEL,
+  DESKTOP_SESSION_TRANSPORT_RECOVERY_GET_CHANNEL,
+  DESKTOP_SESSION_TRANSPORT_RECOVERY_RETRY_CHANNEL,
+  DESKTOP_SESSION_TRANSPORT_RECOVERY_UPDATED_CHANNEL,
+  normalizeDesktopSessionTransportRecoverySnapshot,
   type DesktopSessionAppReadyPayload,
   type DesktopSessionContextSnapshot,
+  type DesktopSessionTransportRecoverySnapshot,
 } from '../shared/desktopSessionContextIPC';
 import { parseLocalUIExposure } from '../shared/localUIExposure';
 
 export interface DesktopSessionContextBridge {
   getSnapshot: () => DesktopSessionContextSnapshot | null;
+  getTransportRecoverySnapshot: () => DesktopSessionTransportRecoverySnapshot | null;
+  subscribeTransportRecovery: (listener: (snapshot: DesktopSessionTransportRecoverySnapshot) => void) => () => void;
+  requestTransportRecoveryNow: () => Promise<boolean>;
   notifyAppReady: (payload: DesktopSessionAppReadyPayload) => void;
 }
 
@@ -22,6 +30,33 @@ declare global {
 }
 
 export function bootstrapDesktopSessionContextBridge(): void {
+  const recoveryListeners = new Set<(snapshot: DesktopSessionTransportRecoverySnapshot) => void>();
+  let currentRecoverySnapshot = normalizeDesktopSessionTransportRecoverySnapshot(
+    ipcRenderer.sendSync(DESKTOP_SESSION_TRANSPORT_RECOVERY_GET_CHANNEL),
+  );
+  ipcRenderer.on(DESKTOP_SESSION_TRANSPORT_RECOVERY_UPDATED_CHANNEL, (_event, payload) => {
+    const snapshot = normalizeDesktopSessionTransportRecoverySnapshot(payload);
+    if (
+      !snapshot
+      || (
+        currentRecoverySnapshot
+        && (
+          snapshot.generation < currentRecoverySnapshot.generation
+          || (
+            snapshot.generation === currentRecoverySnapshot.generation
+            && snapshot.revision <= currentRecoverySnapshot.revision
+          )
+        )
+      )
+    ) {
+      return;
+    }
+    currentRecoverySnapshot = snapshot;
+    for (const listener of recoveryListeners) {
+      listener(snapshot);
+    }
+  });
+
   const bridge: DesktopSessionContextBridge = {
     getSnapshot: () => {
       const value = ipcRenderer.sendSync(DESKTOP_SESSION_CONTEXT_GET_CHANNEL);
@@ -65,6 +100,22 @@ export function bootstrapDesktopSessionContextBridge(): void {
         ...(localUIExposure ? { local_ui_exposure: localUIExposure } : {}),
       };
     },
+    getTransportRecoverySnapshot: () => currentRecoverySnapshot,
+    subscribeTransportRecovery: (listener) => {
+      if (typeof listener !== 'function') {
+        return () => undefined;
+      }
+      recoveryListeners.add(listener);
+      if (currentRecoverySnapshot) {
+        listener(currentRecoverySnapshot);
+      }
+      return () => {
+        recoveryListeners.delete(listener);
+      };
+    },
+    requestTransportRecoveryNow: async () => (
+      await ipcRenderer.invoke(DESKTOP_SESSION_TRANSPORT_RECOVERY_RETRY_CHANNEL)
+    ) === true,
     notifyAppReady: (payload) => {
       const state = String(payload?.state ?? '').trim();
       if (state !== 'access_gate_interactive' && state !== 'runtime_connected') {
