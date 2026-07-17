@@ -96,11 +96,13 @@ describe('desktopOperationFailure', () => {
   });
 
   it.each([
+    'ssh_connection_interrupted',
+    'ssh_upload_directory_unavailable',
     'ssh_forward_unavailable',
     'ssh_forward_verification_timed_out',
     'ssh_forward_network_failed',
     'ssh_forward_invalid_response',
-  ] as const)('preserves the typed SSH forward failure code %s', (code) => {
+  ] as const)('preserves the typed SSH failure code %s', (code) => {
     expect(normalizeDesktopOperationFailurePresentation({
       code,
       severity: 'error',

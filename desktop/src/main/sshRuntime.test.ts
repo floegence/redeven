@@ -241,7 +241,7 @@ describe('sshRuntime', () => {
     expect(source).not.toContain('function installStrategyOrder(');
     expect(source).not.toContain('DesktopSSHUploadAssetPreparationError');
     expect(source).toContain('fetchPolicy: releaseFetchPolicy,');
-    expect(source).toContain("if (args.target.bootstrap_strategy === 'remote_install')");
+    expect(source).toContain("if (args.session.target.bootstrap_strategy === 'remote_install')");
     expect(source).toContain('return prepareRemoteRuntimeViaRemoteInstall(args);');
     expect(source).not.toContain('allowLegacyMigration');
     expect(source).toContain("from './runtimePackageCache'");
@@ -275,7 +275,11 @@ describe('sshRuntime', () => {
     expect(source).toContain("'ssh_uploading_archive'");
     expect(source).toContain("'ssh_waiting_report'");
     expect(source).toContain("'ssh_verifying_tunnel'");
-    expect(source).toContain('const result = await runSSHOnce(');
+    expect(source).toContain('type SSHControlSessionContext = Readonly<{');
+    expect(source).toContain('async function runSSHControlCommand(');
+    expect(source).toContain('const result = await runSSHControlCommand(');
+    expect(source).toContain("code: 'ssh_connection_interrupted'");
+    expect(source).toContain('const isolatedLogs = createMutableRecentLogs();');
     expect(source).toContain('parseLaunchReport(result.stdout)');
     expect(source).toContain('formatBlockedLaunchDiagnostics(launchReport)');
     expect(source).toContain('const replacementInventory = await inspectManagedSSHRuntimeProcesses(');
@@ -307,7 +311,7 @@ describe('sshRuntime', () => {
     expect(source).toContain('async function createRemoteTempDir(args: Readonly<{');
     expect(source).toContain('async function prepareRemoteRuntimeViaDesktopUpload(args: Readonly<{');
     expect(source).toContain('const remoteTempDir = await createRemoteTempDir(args);');
-    expect(source).toContain('await removeRemotePath({\n      ...args,\n      remotePath: remoteTempDir,\n    });');
+    expect(source).toContain('await removeRemotePath({\n      session: args.session,\n      remotePath: remoteTempDir,\n    });');
     expect(source).toContain('await disconnect();');
     expect(source).toContain('if (error instanceof DesktopSSHRuntimeCanceledError || isAbortError(error) || args.signal?.aborted) {');
   });

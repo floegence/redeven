@@ -4,8 +4,10 @@ export type DesktopFailureSeverity = 'info' | 'warning' | 'error';
 
 export type DesktopFailureCode =
   | 'ssh_connection_failed'
+  | 'ssh_connection_interrupted'
   | 'ssh_runtime_status_unavailable'
   | 'ssh_runtime_install_failed'
+  | 'ssh_upload_directory_unavailable'
   | 'ssh_runtime_launch_failed'
   | 'ssh_runtime_stop_failed'
   | 'ssh_forward_unavailable'
@@ -58,8 +60,10 @@ function normalizeFailureCode(value: unknown): DesktopFailureCode {
   const code = compact(value) as DesktopFailureCode;
   switch (code) {
     case 'ssh_connection_failed':
+    case 'ssh_connection_interrupted':
     case 'ssh_runtime_status_unavailable':
     case 'ssh_runtime_install_failed':
+    case 'ssh_upload_directory_unavailable':
     case 'ssh_runtime_launch_failed':
     case 'ssh_runtime_stop_failed':
     case 'ssh_forward_unavailable':

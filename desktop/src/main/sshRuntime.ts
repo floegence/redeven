@@ -70,6 +70,7 @@ import type {
   DesktopFailureDiagnostic,
   DesktopOperationFailurePresentation,
 } from '../shared/desktopOperationFailure';
+import type { DesktopTranslationKey } from '../shared/i18n';
 
 const PUBLIC_INSTALL_SCRIPT_URL = 'https://redeven.com/install.sh';
 const DEFAULT_SSH_STARTUP_TIMEOUT_MS = 45_000;
@@ -91,6 +92,18 @@ type SSHCommandAuthContext = Readonly<{
   mode: DesktopSSHAuthMode;
   askPassScriptPath?: string;
   password?: string;
+}>;
+
+type SSHControlSessionContext = Readonly<{
+  sshBinary: string;
+  target: DesktopSSHEnvironmentDetails;
+  controlSocketPath: string;
+  connectTimeoutSeconds: number;
+  auth: SSHCommandAuthContext;
+  masterProcess: SpawnedSSHProcess;
+  logs: MutableRecentLogs;
+  onLog: StartManagedSSHRuntimeArgs['onLog'];
+  signal?: AbortSignal;
 }>;
 
 export type DesktopSSHRuntimeStatusProbe = Readonly<
@@ -200,6 +213,12 @@ type SSHCommandResult = Readonly<{
   signal: NodeJS.Signals | null;
   stdout: string;
   stderr: string;
+}>;
+
+type SSHControlSessionHealth = Readonly<{
+  masterAlive: boolean;
+  checkResult: SSHCommandResult | null;
+  checkError: Error | null;
 }>;
 
 type SSHLocalForwardExitState = Readonly<{
@@ -328,6 +347,16 @@ function appendRecentLog(existing: string, chunk: string): string {
   return next.slice(next.length - MAX_RECENT_LOG_CHARS);
 }
 
+function createMutableRecentLogs(): MutableRecentLogs {
+  return {
+    master_stderr: '',
+    control_stdout: '',
+    control_stderr: '',
+    forward_stderr: '',
+    runtime_control_forward_stderr: '',
+  };
+}
+
 function formatRecentLogsForMaintenanceDetails(logs: RecentLogs): string {
   const sections: string[] = [];
   for (const [name, value] of Object.entries(logs)) {
@@ -354,18 +383,26 @@ function readinessFailure(
   options: Readonly<{
     code?: DesktopOperationFailurePresentation['code'];
     title?: string;
+    titleKey?: DesktopTranslationKey;
     summary?: string;
+    summaryKey?: DesktopTranslationKey;
     detail?: string;
+    detailKey?: DesktopTranslationKey;
     recoveryHint?: string;
+    recoveryHintKey?: DesktopTranslationKey;
     targetLabel?: string;
   }> = {},
 ): Error {
   return new DesktopOperationFailureError(desktopOperationFailurePresentation({
     code: options.code ?? 'ssh_runtime_launch_failed',
     title: options.title ?? 'SSH Runtime Start Failed',
+    titleKey: options.titleKey,
     summary: compact(options.summary) || message,
+    summaryKey: options.summaryKey,
     detail: options.detail,
+    detailKey: options.detailKey,
     recoveryHint: options.recoveryHint,
+    recoveryHintKey: options.recoveryHintKey,
     targetLabel: options.targetLabel,
     diagnostics: diagnosticsFromRecentLogs(logs, SSH_RECENT_LOG_LABELS),
   }));
@@ -1126,13 +1163,7 @@ export async function probeManagedSSHRuntimeStatus(
   const tempRoot = compact(args.tempRoot) || os.tmpdir();
   const connectTimeoutSeconds = args.connectTimeoutSeconds ?? DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS;
   const tempDir = await fs.mkdtemp(path.join(tempRoot, 'rdv-ssh-probe-'));
-  const logs: MutableRecentLogs = {
-    master_stderr: '',
-    control_stdout: '',
-    control_stderr: '',
-    forward_stderr: '',
-    runtime_control_forward_stderr: '',
-  };
+  const logs = createMutableRecentLogs();
   const auth: SSHCommandAuthContext = {
     mode: target.auth_mode,
     askPassScriptPath: await createSSHAskPassScript(tempDir, target.auth_mode),
@@ -1236,13 +1267,7 @@ async function runManagedSSHRuntimeProcessCommand(
   const tempRoot = compact(args.tempRoot) || os.tmpdir();
   const connectTimeoutSeconds = args.connectTimeoutSeconds ?? DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS;
   const tempDir = await fs.mkdtemp(path.join(tempRoot, 'rdv-ssh-processes-'));
-  const logs: MutableRecentLogs = {
-    master_stderr: '',
-    control_stdout: '',
-    control_stderr: '',
-    forward_stderr: '',
-    runtime_control_forward_stderr: '',
-  };
+  const logs = createMutableRecentLogs();
   const auth: SSHCommandAuthContext = {
     mode: target.auth_mode,
     askPassScriptPath: await createSSHAskPassScript(tempDir, target.auth_mode),
@@ -2064,59 +2089,128 @@ async function runSSHOnce(
   });
 }
 
-async function waitForMasterReady(args: Readonly<{
-  sshBinary: string;
-  target: DesktopSSHEnvironmentDetails;
-  controlSocketPath: string;
-  connectTimeoutSeconds: number;
-  auth: SSHCommandAuthContext;
+function sshControlCommandArgs(
+  session: SSHControlSessionContext,
+  remoteCommand: string,
+): readonly string[] {
+  return [
+    ...sshSharedArgs(session.controlSocketPath, session.connectTimeoutSeconds, session.auth.mode),
+    ...sshTargetArgs(session.target),
+    remoteCommand,
+  ];
+}
+
+async function inspectSSHControlSession(
+  session: SSHControlSessionContext,
+): Promise<SSHControlSessionHealth> {
+  const masterAlive = session.masterProcess.exitCode === null && !session.masterProcess.signalCode;
+  const isolatedLogs = createMutableRecentLogs();
+  try {
+    const checkResult = await runSSHOnce(
+      session.sshBinary,
+      [
+        ...sshSharedArgs(session.controlSocketPath, session.connectTimeoutSeconds, session.auth.mode),
+        '-O', 'check',
+        ...sshTargetArgs(session.target),
+      ],
+      session.auth,
+      isolatedLogs,
+      'master_stderr',
+      undefined,
+      undefined,
+      session.signal,
+    );
+    return { masterAlive, checkResult, checkError: null };
+  } catch (error) {
+    if (error instanceof DesktopSSHRuntimeCanceledError || isAbortError(error) || session.signal?.aborted) {
+      throw new DesktopSSHRuntimeCanceledError();
+    }
+    return {
+      masterAlive,
+      checkResult: null,
+      checkError: error instanceof Error ? error : new Error(String(error)),
+    };
+  }
+}
+
+function sshControlSessionIsHealthy(health: SSHControlSessionHealth): boolean {
+  return health.masterAlive && health.checkResult?.exit_code === 0;
+}
+
+function recordSSHControlCheckFailure(
+  session: SSHControlSessionContext,
+  health: SSHControlSessionHealth,
+): void {
+  if (sshControlSessionIsHealthy(health)) {
+    return;
+  }
+  const checkEvidence = compact(health.checkResult?.stderr)
+    || compact(health.checkResult?.stdout)
+    || compact(health.checkError?.message)
+    || (
+      health.checkResult
+        ? `SSH control check exited with ${health.checkResult.exit_code ?? health.checkResult.signal ?? 'an unknown status'}.`
+        : 'SSH control check did not complete.'
+    );
+  const chunk = `[ssh -O check]\n${checkEvidence}\n`;
+  session.logs.master_stderr = appendRecentLog(session.logs.master_stderr, chunk);
+  session.onLog?.('master_stderr', chunk);
+}
+
+function sshConnectionInterruptedFailure(session: SSHControlSessionContext): Error {
+  const targetLabel = desktopSSHAuthority(session.target);
+  return readinessFailure(
+    `Desktop connected to "${targetLabel}", but the reusable SSH connection ended before the operation completed.`,
+    session.logs,
+    {
+      code: 'ssh_connection_interrupted',
+      title: 'SSH Connection Interrupted',
+      titleKey: 'progress.sshConnectionInterruptedTitle',
+      summaryKey: 'progress.sshConnectionInterruptedSummary',
+      detail: 'The SSH control connection was no longer healthy after a remote command failed.',
+      detailKey: 'progress.sshConnectionInterruptedDetail',
+      recoveryHint: 'Check the network, VPN, and SSH service on the host, then retry the operation explicitly.',
+      recoveryHintKey: 'progress.sshConnectionInterruptedRecoveryHint',
+      targetLabel,
+    },
+  );
+}
+
+async function runSSHControlCommand(
+  session: SSHControlSessionContext,
+  remoteCommand: string,
+  stdinData?: Buffer,
+): Promise<SSHCommandResult> {
+  const result = await runSSHOnce(
+    session.sshBinary,
+    sshControlCommandArgs(session, remoteCommand),
+    session.auth,
+    session.logs,
+    'control_stderr',
+    session.onLog,
+    stdinData,
+    session.signal,
+  );
+  if (result.exit_code === 0) {
+    return result;
+  }
+  const health = await inspectSSHControlSession(session);
+  if (sshControlSessionIsHealthy(health)) {
+    return result;
+  }
+  recordSSHControlCheckFailure(session, health);
+  throw sshConnectionInterruptedFailure(session);
+}
+
+async function waitForMasterReady(session: SSHControlSessionContext, args: Readonly<{
   startupTimeoutMs: number;
-  logs: MutableRecentLogs;
-  onLog: StartManagedSSHRuntimeArgs['onLog'];
   onProgress: StartManagedSSHRuntimeArgs['onProgress'];
-  signal?: AbortSignal;
-  getMasterProcess: () => SpawnedSSHProcess | null;
 }>): Promise<void> {
   const deadline = Date.now() + args.startupTimeoutMs;
   for (;;) {
-    throwIfSSHRuntimeCanceled(args.signal);
-    const masterProcess = args.getMasterProcess();
-    if (!masterProcess) {
-      throw readinessFailure('Desktop failed to start the SSH control connection.', args.logs, {
-        code: 'ssh_connection_failed',
-        title: 'SSH Connection Failed',
-        summary: `SSH connection to "${desktopSSHAuthority(args.target)}" failed.`,
-        detail: 'Desktop could not create the reusable SSH control socket.',
-        recoveryHint: 'Check the SSH host, ~/.ssh/config alias, VPN, network connection, and authentication method.',
-        targetLabel: desktopSSHAuthority(args.target),
-      });
-    }
-    if (masterProcess.exitCode !== null || masterProcess.signalCode) {
-      throw readinessFailure('Desktop could not establish the SSH control connection.', args.logs, {
-        code: 'ssh_connection_failed',
-        title: 'SSH Connection Failed',
-        summary: `SSH connection to "${desktopSSHAuthority(args.target)}" failed.`,
-        detail: 'The SSH control connection exited before it became ready.',
-        recoveryHint: 'Check the SSH host, ~/.ssh/config alias, VPN, network connection, and authentication method.',
-        targetLabel: desktopSSHAuthority(args.target),
-      });
-    }
-
-    const result = await runSSHOnce(
-      args.sshBinary,
-      [
-        ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds, args.auth.mode),
-        '-O', 'check',
-        ...sshTargetArgs(args.target),
-      ],
-      args.auth,
-      args.logs,
-      'master_stderr',
-      args.onLog,
-      undefined,
-      args.signal,
-    );
-    if (result.exit_code === 0) {
+    throwIfSSHRuntimeCanceled(session.signal);
+    const health = await inspectSSHControlSession(session);
+    if (sshControlSessionIsHealthy(health)) {
       emitSSHRuntimeProgress(
         args.onProgress,
         'ssh_control_ready',
@@ -2125,14 +2219,26 @@ async function waitForMasterReady(args: Readonly<{
       );
       return;
     }
+    if (!health.masterAlive) {
+      recordSSHControlCheckFailure(session, health);
+      throw readinessFailure('Desktop could not establish the SSH control connection.', session.logs, {
+        code: 'ssh_connection_failed',
+        title: 'SSH Connection Failed',
+        summary: `SSH connection to "${desktopSSHAuthority(session.target)}" failed.`,
+        detail: 'The SSH control connection exited before it became ready.',
+        recoveryHint: 'Check the SSH host, ~/.ssh/config alias, VPN, network connection, and authentication method.',
+        targetLabel: desktopSSHAuthority(session.target),
+      });
+    }
     if (Date.now() >= deadline) {
-      throw readinessFailure('Timed out waiting for the SSH control connection to become ready.', args.logs, {
+      recordSSHControlCheckFailure(session, health);
+      throw readinessFailure('Timed out waiting for the SSH control connection to become ready.', session.logs, {
         code: 'ssh_connection_failed',
         title: 'SSH Connection Timed Out',
-        summary: `SSH connection to "${desktopSSHAuthority(args.target)}" timed out.`,
+        summary: `SSH connection to "${desktopSSHAuthority(session.target)}" timed out.`,
         detail: 'Desktop could not confirm the reusable SSH control socket before the startup timeout.',
         recoveryHint: 'Check VPN status, firewall rules, SSH config, and the configured SSH connect timeout.',
-        targetLabel: desktopSSHAuthority(args.target),
+        targetLabel: desktopSSHAuthority(session.target),
       });
     }
     await delay(DEFAULT_SSH_POLL_INTERVAL_MS);
@@ -2140,47 +2246,30 @@ async function waitForMasterReady(args: Readonly<{
 }
 
 async function probeRemoteRuntimeCompatibility(args: Readonly<{
-  sshBinary: string;
-  target: DesktopSSHEnvironmentDetails;
-  controlSocketPath: string;
-  connectTimeoutSeconds: number;
-  auth: SSHCommandAuthContext;
+  session: SSHControlSessionContext;
   runtimeReleaseTag: string;
-  logs: MutableRecentLogs;
-  onLog: StartManagedSSHRuntimeArgs['onLog'];
   onProgress: StartManagedSSHRuntimeArgs['onProgress'];
-  signal?: AbortSignal;
 }>): Promise<DesktopSSHRemoteRuntimeProbeResult> {
-  throwIfSSHRuntimeCanceled(args.signal);
+  throwIfSSHRuntimeCanceled(args.session.signal);
   emitSSHRuntimeProgress(
     args.onProgress,
     'ssh_checking_runtime',
     'Checking remote runtime',
     `Looking for a Desktop-managed Redeven ${args.runtimeReleaseTag} runtime on the SSH host.`,
   );
-  const result = await runSSHOnce(
-    args.sshBinary,
-    [
-      ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds, args.auth.mode),
-      ...sshTargetArgs(args.target),
-      remoteShellCommand(buildManagedSSHRuntimeProbeScript(), 'redeven-ssh-runtime-probe', [
-        args.target.runtime_root,
-        args.runtimeReleaseTag,
-      ]),
-    ],
-    args.auth,
-    args.logs,
-    'control_stderr',
-    args.onLog,
-    undefined,
-    args.signal,
+  const result = await runSSHControlCommand(
+    args.session,
+    remoteShellCommand(buildManagedSSHRuntimeProbeScript(), 'redeven-ssh-runtime-probe', [
+      args.session.target.runtime_root,
+      args.runtimeReleaseTag,
+    ]),
   );
   if (result.exit_code !== 0) {
-    throw readinessFailure('Desktop could not probe the managed Redeven runtime over SSH.', args.logs, {
+    throw readinessFailure('Desktop could not probe the managed Redeven runtime over SSH.', args.session.logs, {
       code: 'ssh_runtime_status_unavailable',
       title: 'SSH Runtime Status Unavailable',
       detail: 'Desktop reached the SSH host, but the runtime probe command did not complete successfully.',
-      targetLabel: desktopSSHAuthority(args.target),
+      targetLabel: desktopSSHAuthority(args.session.target),
     });
   }
   try {
@@ -2197,55 +2286,38 @@ async function probeRemoteRuntimeCompatibility(args: Readonly<{
   } catch (error) {
     throw readinessFailure(
       error instanceof Error ? error.message : 'Desktop received an invalid SSH runtime probe result.',
-      args.logs,
+      args.session.logs,
       {
         code: 'ssh_runtime_status_unavailable',
         title: 'SSH Runtime Status Invalid',
         detail: 'The SSH host returned a runtime probe response Desktop could not parse.',
-        targetLabel: desktopSSHAuthority(args.target),
+        targetLabel: desktopSSHAuthority(args.session.target),
       },
     );
   }
 }
 
 async function probeRemotePlatform(args: Readonly<{
-  sshBinary: string;
-  target: DesktopSSHEnvironmentDetails;
-  controlSocketPath: string;
-  connectTimeoutSeconds: number;
-  auth: SSHCommandAuthContext;
-  logs: MutableRecentLogs;
-  onLog: StartManagedSSHRuntimeArgs['onLog'];
+  session: SSHControlSessionContext;
   onProgress: StartManagedSSHRuntimeArgs['onProgress'];
-  signal?: AbortSignal;
 }>): Promise<DesktopSSHRemotePlatform> {
-  throwIfSSHRuntimeCanceled(args.signal);
+  throwIfSSHRuntimeCanceled(args.session.signal);
   emitSSHRuntimeProgress(
     args.onProgress,
     'ssh_detecting_platform',
     'Detecting remote platform',
     'Desktop is checking the remote OS and CPU architecture before choosing a runtime package.',
   );
-  const result = await runSSHOnce(
-    args.sshBinary,
-    [
-      ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds, args.auth.mode),
-      ...sshTargetArgs(args.target),
-      remoteShellCommand('set -eu\nuname -s\nuname -m', 'redeven-ssh-probe-platform'),
-    ],
-    args.auth,
-    args.logs,
-    'control_stderr',
-    args.onLog,
-    undefined,
-    args.signal,
+  const result = await runSSHControlCommand(
+    args.session,
+    remoteShellCommand('set -eu\nuname -s\nuname -m', 'redeven-ssh-probe-platform'),
   );
   if (result.exit_code !== 0) {
-    throw readinessFailure('Desktop could not determine the remote platform for SSH bootstrap.', args.logs, {
+    throw readinessFailure('Desktop could not determine the remote platform for SSH bootstrap.', args.session.logs, {
       code: 'ssh_runtime_install_failed',
       title: 'Remote Platform Detection Failed',
       detail: 'Desktop reached the SSH host, but could not detect the remote OS and CPU architecture.',
-      targetLabel: desktopSSHAuthority(args.target),
+      targetLabel: desktopSSHAuthority(args.session.target),
     });
   }
   const lines = result.stdout
@@ -2253,97 +2325,74 @@ async function probeRemotePlatform(args: Readonly<{
     .map((line) => line.trim())
     .filter((line) => line !== '');
   if (lines.length < 2) {
-    throw readinessFailure('Desktop received an incomplete remote platform probe result over SSH.', args.logs, {
+    throw readinessFailure('Desktop received an incomplete remote platform probe result over SSH.', args.session.logs, {
       code: 'ssh_runtime_install_failed',
       title: 'Remote Platform Detection Failed',
       detail: 'The SSH host returned incomplete platform information.',
-      targetLabel: desktopSSHAuthority(args.target),
+      targetLabel: desktopSSHAuthority(args.session.target),
     });
   }
   return resolveDesktopSSHRemotePlatform(lines[0], lines[1]);
 }
 
 async function createRemoteTempDir(args: Readonly<{
-  sshBinary: string;
-  target: DesktopSSHEnvironmentDetails;
-  controlSocketPath: string;
-  connectTimeoutSeconds: number;
-  auth: SSHCommandAuthContext;
-  logs: MutableRecentLogs;
-  onLog: StartManagedSSHRuntimeArgs['onLog'];
+  session: SSHControlSessionContext;
   onProgress: StartManagedSSHRuntimeArgs['onProgress'];
-  signal?: AbortSignal;
 }>): Promise<string> {
-  throwIfSSHRuntimeCanceled(args.signal);
+  throwIfSSHRuntimeCanceled(args.session.signal);
   emitSSHRuntimeProgress(
     args.onProgress,
     'ssh_creating_upload_dir',
     'Preparing remote upload directory',
     'Desktop is creating a private temporary directory on the SSH host.',
   );
-  const result = await runSSHOnce(
-    args.sshBinary,
-    [
-      ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds, args.auth.mode),
-      ...sshTargetArgs(args.target),
-      remoteShellCommand('set -eu\numask 077\nmktemp -d "${TMPDIR:-/tmp}/redeven-ssh-upload.XXXXXX"', 'redeven-ssh-create-upload-dir'),
-    ],
-    args.auth,
-    args.logs,
-    'control_stderr',
-    args.onLog,
-    undefined,
-    args.signal,
+  const result = await runSSHControlCommand(
+    args.session,
+    remoteShellCommand('set -eu\numask 077\nmktemp -d "${TMPDIR:-/tmp}/redeven-ssh-upload.XXXXXX"', 'redeven-ssh-create-upload-dir'),
   );
   if (result.exit_code !== 0) {
-    throw readinessFailure('Desktop could not allocate a remote temporary directory for SSH upload.', args.logs, {
-      code: 'ssh_runtime_install_failed',
-      title: 'SSH Runtime Install Failed',
-      detail: 'Desktop could not create a temporary upload directory on the SSH host.',
-      targetLabel: desktopSSHAuthority(args.target),
+    const targetLabel = desktopSSHAuthority(args.session.target);
+    throw readinessFailure(`Desktop could not create a private SSH upload directory on "${targetLabel}".`, args.session.logs, {
+      code: 'ssh_upload_directory_unavailable',
+      title: 'SSH Upload Directory Unavailable',
+      titleKey: 'progress.sshUploadDirectoryUnavailableTitle',
+      summaryKey: 'progress.sshUploadDirectoryUnavailableSummary',
+      detail: 'The SSH connection is still active, but the host could not create a private directory under $TMPDIR or /tmp.',
+      detailKey: 'progress.sshUploadDirectoryUnavailableDetail',
+      recoveryHint: 'Check free disk space, user quota, and write permissions for $TMPDIR or /tmp, then retry.',
+      recoveryHintKey: 'progress.sshUploadDirectoryUnavailableRecoveryHint',
+      targetLabel,
     });
   }
   const remoteDir = compact(result.stdout);
   if (remoteDir === '') {
-    throw readinessFailure('Desktop received an empty remote upload directory from SSH bootstrap.', args.logs, {
-      code: 'ssh_runtime_install_failed',
-      title: 'SSH Runtime Install Failed',
-      detail: 'The SSH host did not report the temporary upload directory path.',
-      targetLabel: desktopSSHAuthority(args.target),
+    throw readinessFailure('Desktop received an empty remote upload directory from SSH bootstrap.', args.session.logs, {
+      code: 'ssh_upload_directory_unavailable',
+      title: 'SSH Upload Directory Unavailable',
+      titleKey: 'progress.sshUploadDirectoryUnavailableTitle',
+      summaryKey: 'progress.sshUploadDirectoryUnavailableSummary',
+      detail: 'The SSH connection is still active, but the host did not report the private upload directory path.',
+      detailKey: 'progress.sshUploadDirectoryUnavailableDetail',
+      recoveryHint: 'Check free disk space, user quota, and write permissions for $TMPDIR or /tmp, then retry.',
+      recoveryHintKey: 'progress.sshUploadDirectoryUnavailableRecoveryHint',
+      targetLabel: desktopSSHAuthority(args.session.target),
     });
   }
   return remoteDir;
 }
 
 async function removeRemotePath(args: Readonly<{
-  sshBinary: string;
-  target: DesktopSSHEnvironmentDetails;
-  controlSocketPath: string;
-  connectTimeoutSeconds: number;
-  auth: SSHCommandAuthContext;
+  session: SSHControlSessionContext;
   remotePath: string;
-  logs: MutableRecentLogs;
-  onLog: StartManagedSSHRuntimeArgs['onLog'];
-  signal?: AbortSignal;
 }>): Promise<void> {
   if (compact(args.remotePath) === '') {
     return;
   }
-  await runSSHOnce(
-    args.sshBinary,
-    [
-      ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds, args.auth.mode),
-      ...sshTargetArgs(args.target),
-      remoteShellCommand('set -eu\nrm -rf "$1"', 'redeven-ssh-cleanup-path', [
+  await runSSHControlCommand(
+    args.session,
+    remoteShellCommand('set -eu\nrm -rf "$1"', 'redeven-ssh-cleanup-path', [
         args.remotePath,
       ]),
-    ],
-    args.auth,
-    args.logs,
-    'control_stderr',
-    args.onLog,
-    undefined,
-    args.signal,
   ).catch(() => undefined);
 }
 
@@ -2369,50 +2418,33 @@ function preparedRuntimeStagingRoot(stdout: string): string {
 }
 
 async function prepareRemoteRuntimeViaRemoteInstall(args: Readonly<{
-  sshBinary: string;
-  target: DesktopSSHEnvironmentDetails;
-  controlSocketPath: string;
-  connectTimeoutSeconds: number;
-  auth: SSHCommandAuthContext;
+  session: SSHControlSessionContext;
   runtimeReleaseTag: string;
   installScriptURL: string;
-  logs: MutableRecentLogs;
-  onLog: StartManagedSSHRuntimeArgs['onLog'];
   onProgress: StartManagedSSHRuntimeArgs['onProgress'];
-  signal?: AbortSignal;
 }>): Promise<PreparedManagedSSHRuntimePackage> {
-  throwIfSSHRuntimeCanceled(args.signal);
+  throwIfSSHRuntimeCanceled(args.session.signal);
   emitSSHRuntimeProgress(
     args.onProgress,
     'ssh_remote_installing',
     'Installing runtime on SSH host',
     `The host is downloading and installing Redeven ${args.runtimeReleaseTag}. This can take a minute on first connection.`,
   );
-  const result = await runSSHOnce(
-    args.sshBinary,
-    [
-      ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds, args.auth.mode),
-      ...sshTargetArgs(args.target),
-      remoteShellCommand(buildManagedSSHRemoteInstallScript(), 'redeven-ssh-remote-install', [
-        args.target.runtime_root,
-        args.runtimeReleaseTag,
-        args.installScriptURL,
-      ]),
-    ],
-    args.auth,
-    args.logs,
-    'control_stderr',
-    args.onLog,
-    undefined,
-    args.signal,
+  const result = await runSSHControlCommand(
+    args.session,
+    remoteShellCommand(buildManagedSSHRemoteInstallScript(), 'redeven-ssh-remote-install', [
+      args.session.target.runtime_root,
+      args.runtimeReleaseTag,
+      args.installScriptURL,
+    ]),
   );
   if (result.exit_code !== 0) {
-    throw readinessFailure('Desktop could not install Redeven on the remote host using the remote installer.', args.logs, {
+    throw readinessFailure('Desktop could not install Redeven on the remote host using the remote installer.', args.session.logs, {
       code: 'ssh_runtime_install_failed',
       title: 'SSH Runtime Install Failed',
       detail: 'The remote install script did not complete successfully on the SSH host.',
       recoveryHint: 'Check network access from the SSH host to the Redeven release source, shell permissions, and the runtime root.',
-      targetLabel: desktopSSHAuthority(args.target),
+      targetLabel: desktopSSHAuthority(args.session.target),
     });
   }
   return {
@@ -2490,20 +2522,13 @@ function desktopSSHUploadAssetPreparedDetail(
 }
 
 async function prepareRemoteRuntimeViaDesktopUpload(args: Readonly<{
-  sshBinary: string;
-  target: DesktopSSHEnvironmentDetails;
-  controlSocketPath: string;
-  connectTimeoutSeconds: number;
-  auth: SSHCommandAuthContext;
+  session: SSHControlSessionContext;
   runtimeReleaseTag: string;
   platform: DesktopSSHRemotePlatform;
   archiveData: Buffer;
-  logs: MutableRecentLogs;
-  onLog: StartManagedSSHRuntimeArgs['onLog'];
   onProgress: StartManagedSSHRuntimeArgs['onProgress'];
-  signal?: AbortSignal;
 }>): Promise<PreparedManagedSSHRuntimePackage> {
-  throwIfSSHRuntimeCanceled(args.signal);
+  throwIfSSHRuntimeCanceled(args.session.signal);
   const remoteTempDir = await createRemoteTempDir(args);
   const remoteArchivePath = `${remoteTempDir}/redeven.tar.gz`;
 
@@ -2514,32 +2539,23 @@ async function prepareRemoteRuntimeViaDesktopUpload(args: Readonly<{
       'Uploading runtime package',
       `Desktop is sending the ${args.platform.release_package_name} archive to the SSH host.`,
     );
-    const uploadResult = await runSSHOnce(
-      args.sshBinary,
-      [
-        ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds, args.auth.mode),
-        ...sshTargetArgs(args.target),
-        remoteShellCommand('set -eu\ncat > "$1"', 'redeven-ssh-upload-archive', [
-          remoteArchivePath,
-        ]),
-      ],
-      args.auth,
-      args.logs,
-      'control_stderr',
-      args.onLog,
+    const uploadResult = await runSSHControlCommand(
+      args.session,
+      remoteShellCommand('set -eu\ncat > "$1"', 'redeven-ssh-upload-archive', [
+        remoteArchivePath,
+      ]),
       args.archiveData,
-      args.signal,
     );
     if (uploadResult.exit_code !== 0) {
       throw readinessFailure(
         `Desktop could not upload the ${args.platform.release_package_name} release archive over SSH.`,
-        args.logs,
+        args.session.logs,
         {
           code: 'ssh_runtime_install_failed',
           title: 'SSH Runtime Upload Failed',
           detail: 'Desktop could not copy the runtime package archive to the SSH host.',
           recoveryHint: 'Check SSH permissions, available disk space, and the remote temporary directory.',
-          targetLabel: desktopSSHAuthority(args.target),
+          targetLabel: desktopSSHAuthority(args.session.target),
         },
       );
     }
@@ -2550,35 +2566,25 @@ async function prepareRemoteRuntimeViaDesktopUpload(args: Readonly<{
       'Installing uploaded runtime',
       `The SSH host is unpacking Redeven ${args.runtimeReleaseTag} and writing the Desktop runtime stamp.`,
     );
-    const installResult = await runSSHOnce(
-      args.sshBinary,
-      [
-        ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds, args.auth.mode),
-        ...sshTargetArgs(args.target),
-        remoteShellCommand(buildManagedSSHUploadedInstallScript(), 'redeven-ssh-upload-install', [
-          args.target.runtime_root,
-          args.runtimeReleaseTag,
-          remoteArchivePath,
-          remoteTempDir,
-        ]),
-      ],
-      args.auth,
-      args.logs,
-      'control_stderr',
-      args.onLog,
-      undefined,
-      args.signal,
+    const installResult = await runSSHControlCommand(
+      args.session,
+      remoteShellCommand(buildManagedSSHUploadedInstallScript(), 'redeven-ssh-upload-install', [
+        args.session.target.runtime_root,
+        args.runtimeReleaseTag,
+        remoteArchivePath,
+        remoteTempDir,
+      ]),
     );
     if (installResult.exit_code !== 0) {
       throw readinessFailure(
         `Desktop could not install the uploaded ${args.platform.platform_label} Redeven package on the remote host.`,
-        args.logs,
+        args.session.logs,
         {
           code: 'ssh_runtime_install_failed',
           title: 'SSH Runtime Install Failed',
           detail: 'The SSH host could not unpack or stamp the uploaded runtime package.',
           recoveryHint: 'Check runtime root permissions, available disk space, and shell access on the SSH host.',
-          targetLabel: desktopSSHAuthority(args.target),
+          targetLabel: desktopSSHAuthority(args.session.target),
         },
       );
     }
@@ -2588,18 +2594,14 @@ async function prepareRemoteRuntimeViaDesktopUpload(args: Readonly<{
     };
   } finally {
     await removeRemotePath({
-      ...args,
+      session: args.session,
       remotePath: remoteTempDir,
     });
   }
 }
 
 async function prepareRemoteRuntimePackage(args: Readonly<{
-  sshBinary: string;
-  target: DesktopSSHEnvironmentDetails;
-  controlSocketPath: string;
-  connectTimeoutSeconds: number;
-  auth: SSHCommandAuthContext;
+  session: SSHControlSessionContext;
   runtimeReleaseTag: string;
   installScriptURL: string;
   assetCacheRoot: string;
@@ -2607,10 +2609,7 @@ async function prepareRemoteRuntimePackage(args: Readonly<{
   forceRuntimeUpdate?: boolean;
   packageIntent?: ManagedRuntimePackageIntent;
   fetchPolicy: DesktopSSHReleaseFetchPolicy;
-  logs: MutableRecentLogs;
-  onLog: StartManagedSSHRuntimeArgs['onLog'];
   onProgress: StartManagedSSHRuntimeArgs['onProgress'];
-  signal?: AbortSignal;
 }>): Promise<PreparedManagedSSHRuntimePackage | null> {
   const packageIntent = args.packageIntent ?? (args.forceRuntimeUpdate === true ? 'replace_with_desktop_target' : 'install_if_missing');
   const initialProbe = await probeRemoteRuntimeCompatibility({
@@ -2627,99 +2626,68 @@ async function prepareRemoteRuntimePackage(args: Readonly<{
     throw new Error(describeManagedSSHRuntimeProbeResult(initialProbe));
   }
 
-  if (args.target.bootstrap_strategy === 'remote_install') {
+  if (args.session.target.bootstrap_strategy === 'remote_install') {
     return prepareRemoteRuntimeViaRemoteInstall(args);
   }
   const platform = await probeRemotePlatform(args);
   const preparedUpload = await prepareDesktopSSHUploadAsset({
-    target: args.target,
+    target: args.session.target,
     runtimeReleaseTag: args.runtimeReleaseTag,
     assetCacheRoot: args.assetCacheRoot,
     sourceRuntimeRoot: args.sourceRuntimeRoot,
     platform,
     fetchPolicy: args.fetchPolicy,
     onProgress: args.onProgress,
-    signal: args.signal,
+    signal: args.session.signal,
   });
   return prepareRemoteRuntimeViaDesktopUpload({
-    sshBinary: args.sshBinary,
-    target: args.target,
-    controlSocketPath: args.controlSocketPath,
-    connectTimeoutSeconds: args.connectTimeoutSeconds,
-    auth: args.auth,
+    session: args.session,
     runtimeReleaseTag: args.runtimeReleaseTag,
     platform,
     archiveData: preparedUpload.archiveData,
-    logs: args.logs,
-    onLog: args.onLog,
     onProgress: args.onProgress,
-    signal: args.signal,
   });
 }
 
 async function activatePreparedRemoteRuntimePackage(args: Readonly<{
-  sshBinary: string;
-  target: DesktopSSHEnvironmentDetails;
-  controlSocketPath: string;
-  connectTimeoutSeconds: number;
-  auth: SSHCommandAuthContext;
+  session: SSHControlSessionContext;
   runtimeReleaseTag: string;
   prepared: PreparedManagedSSHRuntimePackage;
-  logs: MutableRecentLogs;
-  onLog: StartManagedSSHRuntimeArgs['onLog'];
   onProgress: StartManagedSSHRuntimeArgs['onProgress'];
-  signal?: AbortSignal;
 }>): Promise<void> {
-  throwIfSSHRuntimeCanceled(args.signal);
+  throwIfSSHRuntimeCanceled(args.session.signal);
   emitSSHRuntimeProgress(
     args.onProgress,
     'ssh_activating_runtime_package',
     'Activating prepared runtime package',
     `Desktop is switching the verified SSH runtime slot to Redeven ${args.runtimeReleaseTag}.`,
   );
-  const result = await runSSHOnce(
-    args.sshBinary,
-    [
-      ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds, args.auth.mode),
-      ...sshTargetArgs(args.target),
-      remoteShellCommand(buildManagedSSHActivatePreparedRuntimeScript(), 'redeven-ssh-activate-runtime', [
-        args.target.runtime_root,
-        args.runtimeReleaseTag,
-        args.prepared.stagingRoot,
-      ]),
-    ],
-    args.auth,
-    args.logs,
-    'control_stderr',
-    args.onLog,
-    undefined,
-    args.signal,
+  const result = await runSSHControlCommand(
+    args.session,
+    remoteShellCommand(buildManagedSSHActivatePreparedRuntimeScript(), 'redeven-ssh-activate-runtime', [
+      args.session.target.runtime_root,
+      args.runtimeReleaseTag,
+      args.prepared.stagingRoot,
+    ]),
   );
   if (result.exit_code !== 0) {
-    throw readinessFailure('Desktop could not activate the prepared SSH runtime package.', args.logs, {
+    throw readinessFailure('Desktop could not activate the prepared SSH runtime package.', args.session.logs, {
       code: 'ssh_runtime_install_failed',
       title: 'SSH Runtime Activation Failed',
       detail: 'The SSH host rejected or could not atomically switch the prepared managed runtime slot.',
       recoveryHint: 'Retry Update after checking runtime root permissions and available disk space.',
-      targetLabel: desktopSSHAuthority(args.target),
+      targetLabel: desktopSSHAuthority(args.session.target),
     });
   }
 }
 
 async function waitForRemoteStartupReport(args: Readonly<{
-  sshBinary: string;
-  target: DesktopSSHEnvironmentDetails;
+  session: SSHControlSessionContext;
   runtimeStateRoot?: string;
-  controlSocketPath: string;
-  connectTimeoutSeconds: number;
-  auth: SSHCommandAuthContext;
   sessionToken: string;
   runtimeReleaseTag: string;
   startupTimeoutMs: number;
-  logs: MutableRecentLogs;
-  onLog: StartManagedSSHRuntimeArgs['onLog'];
   onProgress: StartManagedSSHRuntimeArgs['onProgress'];
-  signal?: AbortSignal;
   getControlProcess: () => SpawnedSSHProcess | null;
 }>): Promise<ManagedSSHRemoteStartup> {
   const deadline = Date.now() + args.startupTimeoutMs;
@@ -2731,34 +2699,24 @@ async function waitForRemoteStartupReport(args: Readonly<{
     'Redeven is starting on the SSH host and writing its startup report.',
   );
   for (;;) {
-    throwIfSSHRuntimeCanceled(args.signal);
+    throwIfSSHRuntimeCanceled(args.session.signal);
     const controlProcess = args.getControlProcess();
     if (!controlProcess) {
-      throw readinessFailure('Desktop lost the SSH runtime bootstrap session before Redeven reported readiness.', args.logs, {
+      throw readinessFailure('Desktop lost the SSH runtime bootstrap session before Redeven reported readiness.', args.session.logs, {
         code: 'ssh_runtime_launch_failed',
         title: 'SSH Runtime Launch Failed',
         detail: 'The remote launch command ended before Desktop could read the startup report.',
-        targetLabel: desktopSSHAuthority(args.target),
+        targetLabel: desktopSSHAuthority(args.session.target),
       });
     }
 
-    const result = await runSSHOnce(
-      args.sshBinary,
-      [
-        ...sshSharedArgs(args.controlSocketPath, args.connectTimeoutSeconds, args.auth.mode),
-        ...sshTargetArgs(args.target),
-        remoteShellCommand(script, 'redeven-ssh-read-report', [
-          args.target.runtime_root,
-          args.runtimeStateRoot ?? args.target.runtime_root,
-          args.sessionToken,
-        ]),
-      ],
-      args.auth,
-      args.logs,
-      'control_stderr',
-      args.onLog,
-      undefined,
-      args.signal,
+    const result = await runSSHControlCommand(
+      args.session,
+      remoteShellCommand(script, 'redeven-ssh-read-report', [
+        args.session.target.runtime_root,
+        args.runtimeStateRoot ?? args.session.target.runtime_root,
+        args.sessionToken,
+      ]),
     );
     if (result.exit_code === 0) {
       try {
@@ -2774,11 +2732,11 @@ async function waitForRemoteStartupReport(args: Readonly<{
             if (Date.now() >= deadline) {
               throw readinessTimeoutFailure(
                 classification.maintenance.message,
-                args.logs,
+                args.session.logs,
                 {
                   title: 'SSH Runtime Launch Timed Out',
                   detail: 'Redeven is running on the SSH host, but Desktop could not verify the management socket before the timeout.',
-                  targetLabel: desktopSSHAuthority(args.target),
+                  targetLabel: desktopSSHAuthority(args.session.target),
                 },
               );
             }
@@ -2797,12 +2755,12 @@ async function waitForRemoteStartupReport(args: Readonly<{
         }
         throw readinessFailure(
           error instanceof Error ? error.message : 'Remote Redeven startup report was invalid.',
-          args.logs,
+          args.session.logs,
           {
             code: 'ssh_runtime_launch_failed',
             title: 'SSH Runtime Startup Report Invalid',
             detail: 'Redeven started on the SSH host but wrote a startup report Desktop could not use.',
-            targetLabel: desktopSSHAuthority(args.target),
+            targetLabel: desktopSSHAuthority(args.session.target),
           },
         );
       }
@@ -2811,10 +2769,10 @@ async function waitForRemoteStartupReport(args: Readonly<{
     if (controlProcess.exitCode !== null || controlProcess.signalCode) {
       if (controlProcess.exitCode === 0 && !controlProcess.signalCode) {
         if (Date.now() >= deadline) {
-          throw readinessTimeoutFailure('Timed out waiting for remote Redeven to report readiness over SSH.', args.logs, {
+          throw readinessTimeoutFailure('Timed out waiting for remote Redeven to report readiness over SSH.', args.session.logs, {
             title: 'SSH Runtime Launch Timed Out',
             detail: 'Redeven did not write its startup report on the SSH host before the timeout.',
-            targetLabel: desktopSSHAuthority(args.target),
+            targetLabel: desktopSSHAuthority(args.session.target),
           });
         }
         await delay(DEFAULT_SSH_POLL_INTERVAL_MS);
@@ -2823,19 +2781,19 @@ async function waitForRemoteStartupReport(args: Readonly<{
       const exitReason = controlProcess.exitCode !== null
         ? `exit code ${controlProcess.exitCode}`
         : `signal ${controlProcess.signalCode}`;
-      throw readinessFailure(`Remote Redeven launcher failed before reporting readiness (${exitReason}).`, args.logs, {
+      throw readinessFailure(`Remote Redeven launcher failed before reporting readiness (${exitReason}).`, args.session.logs, {
         code: 'ssh_runtime_launch_failed',
         title: 'SSH Runtime Launch Failed',
         detail: 'The remote Redeven process exited before Desktop could read its startup report.',
-        targetLabel: desktopSSHAuthority(args.target),
+        targetLabel: desktopSSHAuthority(args.session.target),
       });
     }
 
     if (Date.now() >= deadline) {
-      throw readinessTimeoutFailure('Timed out waiting for remote Redeven to report readiness over SSH.', args.logs, {
+      throw readinessTimeoutFailure('Timed out waiting for remote Redeven to report readiness over SSH.', args.session.logs, {
         title: 'SSH Runtime Launch Timed Out',
         detail: 'Redeven did not write its startup report on the SSH host before the timeout.',
-        targetLabel: desktopSSHAuthority(args.target),
+        targetLabel: desktopSSHAuthority(args.session.target),
       });
     }
     await delay(DEFAULT_SSH_POLL_INTERVAL_MS);
@@ -3035,13 +2993,7 @@ async function startManagedSSHRuntimeInternal(
     : runtimeProcessIntent === 'restart'
       ? 'use_installed'
       : 'install_if_missing';
-  const logs: MutableRecentLogs = {
-    master_stderr: '',
-    control_stdout: '',
-    control_stderr: '',
-    forward_stderr: '',
-    runtime_control_forward_stderr: '',
-  };
+  const logs = createMutableRecentLogs();
 
   const tempDir = await fs.mkdtemp(path.join(tempRoot, 'rdv-ssh-'));
   const controlSocketPath = path.join(tempDir, 'm.sock');
@@ -3071,6 +3023,17 @@ async function startManagedSSHRuntimeInternal(
     masterSpawnError = error instanceof Error ? error : new Error(String(error));
   });
   bindRecentLog(masterProcess.stderr, 'master_stderr', logs, args.onLog);
+  const controlSession: SSHControlSessionContext = {
+    sshBinary,
+    target,
+    controlSocketPath,
+    connectTimeoutSeconds,
+    auth,
+    masterProcess,
+    logs,
+    onLog: args.onLog,
+    signal: args.signal,
+  };
 
   let controlProcess: SpawnedSSHProcess | null = null;
   let forwardPair: SSHLocalForwardPair | null = null;
@@ -3129,26 +3092,13 @@ async function startManagedSSHRuntimeInternal(
     if (masterSpawnError) {
       throw masterSpawnError;
     }
-    await waitForMasterReady({
-      sshBinary,
-      target,
-      controlSocketPath,
-      connectTimeoutSeconds,
-      auth,
+    await waitForMasterReady(controlSession, {
       startupTimeoutMs,
-      logs,
-      onLog: args.onLog,
       onProgress: args.onProgress,
-      signal: args.signal,
-      getMasterProcess: () => masterProcess,
     });
 
     const packageArgs = {
-      sshBinary,
-      target,
-      controlSocketPath,
-      connectTimeoutSeconds,
-      auth,
+      session: controlSession,
       runtimeReleaseTag,
       installScriptURL,
       assetCacheRoot,
@@ -3156,10 +3106,7 @@ async function startManagedSSHRuntimeInternal(
       forceRuntimeUpdate: args.forceRuntimeUpdate,
       packageIntent,
       fetchPolicy: releaseFetchPolicy,
-      logs,
-      onLog: args.onLog,
       onProgress: args.onProgress,
-      signal: args.signal,
     } as const;
     preparedRuntimePackage = await prepareRemoteRuntimePackage(packageArgs);
 
@@ -3243,9 +3190,8 @@ async function startManagedSSHRuntimeInternal(
           ? 'Desktop is restarting Redeven on the SSH host so the running Runtime Service matches this session.'
           : 'Desktop is launching Redeven on the SSH host.',
       );
-      controlProcess = spawnSSHProcess(sshBinary, [
-        ...sshSharedArgs(controlSocketPath, connectTimeoutSeconds, auth.mode),
-        ...sshTargetArgs(target),
+      controlProcess = spawnSSHProcess(sshBinary, sshControlCommandArgs(
+        controlSession,
         remoteShellCommand(buildManagedSSHStartScript(), 'redeven-ssh-start', [
           target.runtime_root,
           args.runtimeStateRoot ?? target.runtime_root,
@@ -3253,7 +3199,7 @@ async function startManagedSSHRuntimeInternal(
           sessionToken,
           desktopOwnerID,
         ]),
-      ], auth, undefined, args.signal);
+      ), auth, undefined, args.signal);
       let controlSpawnError: Error | null = null;
       controlProcess.once('error', (error) => {
         controlSpawnError = error instanceof Error ? error : new Error(String(error));
@@ -3265,19 +3211,12 @@ async function startManagedSSHRuntimeInternal(
       }
 
       const launch = await waitForRemoteStartupReport({
-        sshBinary,
-        target,
+        session: controlSession,
         runtimeStateRoot: args.runtimeStateRoot,
-        controlSocketPath,
-        connectTimeoutSeconds,
-        auth,
         sessionToken,
         runtimeReleaseTag,
         startupTimeoutMs,
-        logs,
-        onLog: args.onLog,
         onProgress: args.onProgress,
-        signal: args.signal,
         getControlProcess: () => controlProcess,
       });
       const attachPolicy = managedSSHRuntimeAttachPolicy(launch.startup, {
@@ -3442,14 +3381,8 @@ async function startManagedSSHRuntimeInternal(
   } catch (error) {
     if (preparedRuntimePackage) {
       await removeRemotePath({
-        sshBinary,
-        target,
-        controlSocketPath,
-        connectTimeoutSeconds,
-        auth,
+        session: controlSession,
         remotePath: preparedRuntimePackage.stagingRoot,
-        logs,
-        onLog: args.onLog,
       });
       preparedRuntimePackage = null;
     }
@@ -3508,13 +3441,7 @@ export async function openManagedSSHRuntimeConnection(
   const tempRoot = compact(args.tempRoot) || os.tmpdir();
   const stopTimeoutMs = args.stopTimeoutMs ?? DEFAULT_SSH_STOP_TIMEOUT_MS;
   const connectTimeoutSeconds = args.connectTimeoutSeconds ?? DEFAULT_SSH_CONNECT_TIMEOUT_SECONDS;
-  const logs: MutableRecentLogs = {
-    master_stderr: '',
-    control_stdout: '',
-    control_stderr: '',
-    forward_stderr: '',
-    runtime_control_forward_stderr: '',
-  };
+  const logs = createMutableRecentLogs();
 
   const tempDir = await fs.mkdtemp(path.join(tempRoot, 'rdv-ssh-open-'));
   const controlSocketPath = path.join(tempDir, 'm.sock');
@@ -3543,6 +3470,17 @@ export async function openManagedSSHRuntimeConnection(
     masterSpawnError = error instanceof Error ? error : new Error(String(error));
   });
   bindRecentLog(masterProcess.stderr, 'master_stderr', logs, args.onLog);
+  const controlSession: SSHControlSessionContext = {
+    sshBinary,
+    target,
+    controlSocketPath,
+    connectTimeoutSeconds,
+    auth,
+    masterProcess,
+    logs,
+    onLog: args.onLog,
+    signal: args.signal,
+  };
 
   let forwardPair: SSHLocalForwardPair | null = null;
   let transportDisconnected = false;
@@ -3567,18 +3505,9 @@ export async function openManagedSSHRuntimeConnection(
     if (masterSpawnError) {
       throw masterSpawnError;
     }
-    await waitForMasterReady({
-      sshBinary,
-      target,
-      controlSocketPath,
-      connectTimeoutSeconds,
-      auth,
+    await waitForMasterReady(controlSession, {
       startupTimeoutMs: args.probeTimeoutMs ?? DEFAULT_SSH_STARTUP_TIMEOUT_MS,
-      logs,
-      onLog: args.onLog,
       onProgress: undefined,
-      signal: args.signal,
-      getMasterProcess: () => masterProcess,
     });
 
     const forwarded = await openSSHForwardedRuntime({

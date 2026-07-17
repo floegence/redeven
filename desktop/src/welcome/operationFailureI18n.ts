@@ -18,10 +18,14 @@ function failureTitleKey(failure: DesktopOperationFailurePresentation): DesktopT
   switch (failure.code) {
     case 'ssh_connection_failed':
       return 'progress.sshConnectionFailedTitle';
+    case 'ssh_connection_interrupted':
+      return 'progress.sshConnectionInterruptedTitle';
     case 'ssh_runtime_status_unavailable':
       return 'progress.sshRuntimeStatusUnavailableTitle';
     case 'ssh_runtime_install_failed':
       return 'progress.sshRuntimeInstallFailedTitle';
+    case 'ssh_upload_directory_unavailable':
+      return 'progress.sshUploadDirectoryUnavailableTitle';
     case 'ssh_forward_unavailable':
       return 'progress.sshForwardUnavailableTitle';
     case 'ssh_forward_verification_timed_out':
@@ -70,10 +74,14 @@ function failureSummaryKey(failure: DesktopOperationFailurePresentation): Deskto
   switch (failure.code) {
     case 'ssh_connection_failed':
       return 'progress.sshConnectionFailedSummary';
+    case 'ssh_connection_interrupted':
+      return 'progress.sshConnectionInterruptedSummary';
     case 'ssh_runtime_status_unavailable':
       return 'progress.sshRuntimeStatusUnavailableSummary';
     case 'ssh_runtime_install_failed':
       return 'progress.sshRuntimeInstallFailedSummary';
+    case 'ssh_upload_directory_unavailable':
+      return 'progress.sshUploadDirectoryUnavailableSummary';
     case 'ssh_forward_unavailable':
       return 'progress.sshForwardUnavailableSummary';
     case 'ssh_forward_verification_timed_out':
@@ -140,6 +148,12 @@ export function localizedOperationFailureDetail(
   if (failure.detail_key) {
     return i18n.t(failure.detail_key, failureParams(failure));
   }
+  if (failure.code === 'ssh_connection_interrupted') {
+    return i18n.t('progress.sshConnectionInterruptedDetail');
+  }
+  if (failure.code === 'ssh_upload_directory_unavailable') {
+    return i18n.t('progress.sshUploadDirectoryUnavailableDetail');
+  }
   if (failure.code === 'runtime_lifecycle_conflict') {
     return i18n.t('progress.runtimeLifecycleConflictDetail');
   }
@@ -152,6 +166,12 @@ export function localizedOperationFailureRecoveryHint(
 ): string {
   if (failure.recovery_hint_key) {
     return i18n.t(failure.recovery_hint_key, failureParams(failure));
+  }
+  if (failure.code === 'ssh_connection_interrupted') {
+    return i18n.t('progress.sshConnectionInterruptedRecoveryHint');
+  }
+  if (failure.code === 'ssh_upload_directory_unavailable') {
+    return i18n.t('progress.sshUploadDirectoryUnavailableRecoveryHint');
   }
   if (failure.code === 'runtime_lifecycle_conflict') {
     return i18n.t('progress.runtimeLifecycleConflictRecoveryHint');
