@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -220,6 +221,104 @@ func TestTerminalProcessReadAndWriteDoNotTriggerSettlement(t *testing.T) {
 	}
 	if finalized.Load() != 1 {
 		t.Fatalf("terminate finalizations=%d, want 1", finalized.Load())
+	}
+}
+
+func TestReadTerminalProcessReturnsTerminalSnapshots(t *testing.T) {
+	meta := &session.Meta{EndpointID: "env_test", CanRead: true, CanWrite: true, CanExecute: true}
+
+	for _, status := range []string{
+		terminalProcessStatusSuccess,
+		terminalProcessStatusError,
+		terminalProcessStatusCanceled,
+	} {
+		t.Run(status, func(t *testing.T) {
+			manager := newTerminalProcessManager()
+			processID := "tp_" + status
+			endedAt := time.Now()
+			proc := &terminalProcess{
+				manager:      manager,
+				id:           processID,
+				endpointID:   "env_test",
+				threadID:     "thread_test",
+				runID:        "run_test",
+				turnID:       "turn_test",
+				toolID:       "tool_test",
+				toolName:     "terminal.exec",
+				command:      "printf done",
+				startedAt:    endedAt.Add(-time.Second),
+				endedAt:      endedAt,
+				status:       status,
+				lastSeq:      4,
+				total:        16,
+				outputChunks: []terminalProcessOutputChunk{{seq: 4, data: []byte("done\n")}},
+			}
+			manager.processes[processID] = proc
+			svc := &Service{terminalProcesses: manager}
+
+			snapshot, err := svc.ReadTerminalProcess(context.Background(), meta, "run_test", processID, 4)
+			if err != nil {
+				t.Fatalf("ReadTerminalProcess: %v", err)
+			}
+			if snapshot.Status != status || snapshot.Output != "" {
+				t.Fatalf("snapshot=%#v, want terminal status %q with empty delta", snapshot, status)
+			}
+			if snapshot.FirstSeq != 0 || snapshot.LastSeq != 4 || snapshot.LatestSeq != 4 || snapshot.HasMore {
+				t.Fatalf("snapshot sequence=%#v, want empty delta at sequence 4", snapshot)
+			}
+
+			if _, err := svc.ReadTerminalProcess(context.Background(), meta, "run_test", processID, 5); err == nil || !strings.Contains(err.Error(), "exceeds latest sequence") {
+				t.Fatalf("future cursor err=%v, want exceeds latest sequence", err)
+			}
+		})
+	}
+}
+
+func TestReadTerminalProcessReturnsCompletionDuringWait(t *testing.T) {
+	manager := newTerminalProcessManager()
+	defer func() { _ = manager.Close(context.Background()) }()
+	owner := &terminalProcessTestOwner{}
+	workspace := t.TempDir()
+	releasePath := filepath.Join(workspace, "release")
+	req := terminalProcessTestStartRequest(
+		workspace,
+		owner,
+		"tool_complete_during_read",
+		"printf initial-output; while [ ! -f release ]; do sleep 0.01; done",
+	)
+	req.Env = []string{"HOME=" + t.TempDir(), "PATH=/usr/bin:/bin"}
+	proc, err := manager.Start(req)
+	if err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	initial := managerReadUntil(t, manager, proc.id, 0, "initial-output")
+	if initial.Status != terminalProcessStatusRunning || initial.LastSeq <= 0 {
+		t.Fatalf("initial snapshot=%#v, want running output cursor", initial)
+	}
+	go func() {
+		time.Sleep(20 * time.Millisecond)
+		_ = os.WriteFile(releasePath, []byte("release\n"), 0o600)
+	}()
+
+	meta := &session.Meta{EndpointID: "env_test", CanRead: true, CanWrite: true, CanExecute: true}
+	snapshot, err := (&Service{terminalProcesses: manager}).ReadTerminalProcess(
+		context.Background(),
+		meta,
+		"run_test",
+		proc.id,
+		initial.LastSeq,
+	)
+	if err != nil {
+		t.Fatalf("ReadTerminalProcess: %v", err)
+	}
+	if snapshot.Status != terminalProcessStatusSuccess || snapshot.Output != "" {
+		t.Fatalf("snapshot=%#v, want successful empty completion delta", snapshot)
+	}
+	if snapshot.EndedAtUnixMs <= 0 || snapshot.LastSeq != initial.LastSeq || snapshot.LatestSeq != initial.LastSeq || snapshot.HasMore {
+		t.Fatalf("snapshot completion facts=%#v", snapshot)
+	}
+	if owner.requestCount() != 0 {
+		t.Fatalf("process read triggered %d settlement requests", owner.requestCount())
 	}
 }
 
