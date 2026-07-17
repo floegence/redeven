@@ -407,18 +407,6 @@ func (s *Service) flowerLiveCanonicalContextState(ctx context.Context, endpointI
 	return state, nil
 }
 
-func flowerContextCompactionTerminal(compaction FlowerContextCompaction) bool {
-	switch strings.TrimSpace(compaction.Status) {
-	case "compacted", "failed", "cancelled", "noop":
-		return true
-	}
-	switch strings.TrimSpace(compaction.Phase) {
-	case "complete", "failed", "cancelled", "noop":
-		return true
-	}
-	return false
-}
-
 func mergeFlowerLiveCanonicalContextState(live FlowerLiveMaterializedState, canonical FlowerLiveMaterializedState) FlowerLiveMaterializedState {
 	out := cloneFlowerLiveMaterializedState(live)
 	if canonical.ContextUsage != nil && (out.ContextUsage == nil || canonical.ContextUsage.UpdatedAtMs > out.ContextUsage.UpdatedAtMs) {

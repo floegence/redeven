@@ -163,10 +163,7 @@ func (r *run) applyFloretCompaction(compaction *observation.CompactionEvent) {
 		TimelineDecoration: decoration,
 	})
 	switch compaction.Phase {
-	case observation.CompactionPhaseComplete:
-		r.setCompletedContextCompaction(*compaction)
-		r.finishManualCompaction(compaction.RequestID)
-	case observation.CompactionPhaseFailed, observation.CompactionPhaseCancelled, observation.CompactionPhaseNoop:
+	case observation.CompactionPhaseComplete, observation.CompactionPhaseFailed, observation.CompactionPhaseCancelled, observation.CompactionPhaseNoop:
 		r.finishManualCompaction(compaction.RequestID)
 	}
 }
@@ -566,19 +563,6 @@ func (r *run) rejectFloretContract(kind string, err error) {
 		"contract_kind": strings.TrimSpace(kind),
 		"error":         sanitizeLogText(err.Error(), 240),
 	})
-}
-
-func flowerContextUsagePayload(usage FlowerContextUsage) map[string]any {
-	return map[string]any{
-		"usage": usage,
-	}
-}
-
-func flowerContextCompactionPayload(compaction FlowerContextCompaction, decoration FlowerTimelineDecoration) map[string]any {
-	return map[string]any{
-		"compaction":          compaction,
-		"timeline_decoration": decoration,
-	}
 }
 
 func (r *run) applyFloretSourceObservation(sources []flruntime.SourceRef) {

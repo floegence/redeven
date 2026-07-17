@@ -172,11 +172,10 @@ type run struct {
 	currentModelID     string
 	currentReasoning   config.AIReasoningSelection
 
-	muManualCompaction         sync.Mutex
-	pendingManualCompaction    *flruntime.ManualCompactionRequest
-	activeManualCompactionID   string
-	contextCompactionAnchors   map[string]FlowerTimelineAnchor
-	completedContextCompaction observation.CompactionEvent
+	muManualCompaction       sync.Mutex
+	pendingManualCompaction  *flruntime.ManualCompactionRequest
+	activeManualCompactionID string
+	contextCompactionAnchors map[string]FlowerTimelineAnchor
 
 	webSearchToolEnabled bool
 	webSearchMode        string
@@ -665,27 +664,6 @@ func (r *run) clearManualCompactionRequests() {
 	defer r.muManualCompaction.Unlock()
 	r.pendingManualCompaction = nil
 	r.activeManualCompactionID = ""
-}
-
-func (r *run) setCompletedContextCompaction(compaction observation.CompactionEvent) {
-	if r == nil {
-		return
-	}
-	if strings.TrimSpace(compaction.OperationID) == "" {
-		return
-	}
-	r.muManualCompaction.Lock()
-	r.completedContextCompaction = compaction
-	r.muManualCompaction.Unlock()
-}
-
-func (r *run) getCompletedContextCompaction() observation.CompactionEvent {
-	if r == nil {
-		return observation.CompactionEvent{}
-	}
-	r.muManualCompaction.Lock()
-	defer r.muManualCompaction.Unlock()
-	return r.completedContextCompaction
 }
 
 func (r *run) recordRuntimeToolCall() {

@@ -2897,59 +2897,10 @@ func countRowsForTest(t *testing.T, db *sql.DB, query string, args ...any) int {
 	return count
 }
 
-func tableExistsForTest(t *testing.T, db *sql.DB, tableName string) bool {
-	t.Helper()
-
-	return countRowsForTest(t, db, `
-SELECT COUNT(1)
-FROM sqlite_master
-WHERE type = 'table' AND name = ?
-`, tableName) == 1
-}
-
-func indexExistsForTest(t *testing.T, db *sql.DB, indexName string) bool {
-	t.Helper()
-
-	return countRowsForTest(t, db, `
-SELECT COUNT(1)
-FROM sqlite_master
-WHERE type = 'index' AND name = ?
-`, indexName) == 1
-}
-
 func storeThreadIDs(threads []Thread) []string {
 	out := make([]string, 0, len(threads))
 	for _, thread := range threads {
 		out = append(out, thread.ThreadID)
 	}
 	return out
-}
-
-func tableHasColumnForTest(t *testing.T, db *sql.DB, tableName string, columnName string) bool {
-	t.Helper()
-
-	rows, err := db.Query(`PRAGMA table_info(` + tableName + `)`)
-	if err != nil {
-		t.Fatalf("PRAGMA table_info(%s): %v", tableName, err)
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var cid int
-		var name string
-		var typ string
-		var notNull int
-		var dflt sql.NullString
-		var pk int
-		if err := rows.Scan(&cid, &name, &typ, &notNull, &dflt, &pk); err != nil {
-			t.Fatalf("scan table_info(%s): %v", tableName, err)
-		}
-		if strings.TrimSpace(name) == columnName {
-			return true
-		}
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("table_info(%s) rows: %v", tableName, err)
-	}
-	return false
 }

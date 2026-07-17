@@ -2230,10 +2230,6 @@ func shouldUseStrictOpenAIToolSchema(providerType string, baseURL string) bool {
 	return host == "api.openai.com"
 }
 
-func isOpenAIResponsesProviderContinuationEnabled(providerType string) bool {
-	return strings.EqualFold(strings.TrimSpace(providerType), "openai")
-}
-
 type toolReferenceIntegrityStats struct {
 	OrphanToolCallIDs          []string
 	PrependedAssistantMessages int
