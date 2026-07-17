@@ -797,7 +797,10 @@ Git-hook contracts, UI lint and behavior checks, release and compatibility
 contracts, dependency boundaries, embedded asset generation, ReDevPlugin and
 Gateway integration, Flower checks, full Desktop Vitest coverage and build,
 Docker Runtime E2E, repository hygiene, OKF verification, Go tests, and
-golangci-lint. It fails if any check changes the worktree.
+golangci-lint. Local Go package tests run serially with the test cache disabled
+before the heavier UI and Desktop stages, so wall-clock-sensitive integration
+tests do not compete with other Go packages and failures stop the gate early. It
+fails if any check changes the worktree.
 
 Commands with explicit full modes, especially
 `./scripts/check_desktop.sh --full`, belong only in the final integration script

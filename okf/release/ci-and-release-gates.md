@@ -44,6 +44,10 @@ range. Only then does it invoke the canonical final integration script for that
 exact base and tip. This keeps full Desktop Vitest coverage, Docker Runtime E2E,
 asset builds, repository-wide Go checks, and the remaining local integration
 contracts off routine commits without making them optional before main moves.
+The local final gate runs Go package tests serially with caching disabled and
+before heavier UI stages. This preserves fresh test evidence while preventing
+wall-clock-sensitive PTY integration tests from competing with other Go package
+processes on developer workstations.
 
 The canonical English `README.md` and every product-supported
 `README.<locale>.md` are bound by `assets/readme/locales.json`. The lightweight
@@ -197,3 +201,4 @@ new final gate because evidence from another commit does not transfer.
 [28] redeven:.githooks/pre-push:29 - The main pre-push hook validates source ref, checked-out tip, fast-forward ancestry, and linear history before running the full gate.
 [29] redeven:scripts/check_final_integration.sh:44 - The canonical final integration script binds the complete local gate to explicit base and tip commits and requires a clean worktree.
 [30] redeven:.githooks/pre-commit:7 - Commit-time validation contains only fast staged checks.
+[31] redeven:scripts/check_final_integration.sh:103 - The final gate runs fresh Go package tests serially before heavier UI and Desktop stages.
