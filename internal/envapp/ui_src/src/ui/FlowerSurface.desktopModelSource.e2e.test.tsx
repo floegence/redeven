@@ -143,6 +143,7 @@ describe('Flower Desktop model source E2E', () => {
     const surface = renderSurfaceWithAdapter(createEnvLocalFlowerSurfaceAdapter({
       envPublicID: 'gzcom',
       envLabel: 'gzcom',
+      desktopSessionTargetRoute: 'remote_desktop',
       rpc: {
         fs: {
           getPathContext: vi.fn(async () => ({

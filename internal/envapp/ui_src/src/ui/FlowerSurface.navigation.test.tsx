@@ -170,12 +170,10 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.querySelector('[role="dialog"]')?.textContent).toContain('Provider type');
   });
 
-  it('uses Desktop Model Source readiness without exposing a second provider editor', async () => {
+  it('keeps the remote provider editor visible when Desktop models are also available', async () => {
     const launchTurn = vi.fn(async () => liveBootstrap(thread()));
     const desktopSourceSnapshot: FlowerSettingsSnapshot = {
-      ...settingsSnapshot(false),
-      model_profile: null,
-      provider_secrets: [],
+      ...settingsSnapshot(true),
       model_source: {
         kind: 'desktop_model_source',
         ready: true,
@@ -197,17 +195,13 @@ describe('FlowerSurface navigation', () => {
     (runtime.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
     await flush();
 
-    expect(runtime.textContent).toContain('Local AI Profile on this Mac');
-    expect(runtime.textContent).toContain('Open Local Environment Settings on this Mac to change providers, models, or keys.');
-    expect(runtime.querySelector('.flower-settings-current-model')).toBeNull();
+    expect(runtime.querySelector('.flower-settings-managed-source')).toBeNull();
+    expect(runtime.querySelector('.flower-settings-current-model')?.textContent).toContain('OpenAI / gpt-5.2');
     expect(runtime.querySelector('.flower-settings-policy-card')).toBeTruthy();
-    expect(runtime.querySelector('.flower-settings-providers-section')).toBeNull();
-    expect(runtime.querySelector('.flower-settings-terminal-section')).toBeNull();
-    expect(runtime.textContent).not.toContain('Add provider');
-    expect(runtime.textContent).not.toContain('OpenAI');
-    expect(runtime.textContent).not.toContain('gpt-5.2');
-    expect(runtime.textContent).not.toContain('User approval');
-    expect(runtime.textContent).not.toContain('Terminal execution limits');
+    expect(runtime.querySelector('.flower-settings-providers-section')).toBeTruthy();
+    expect(runtime.textContent).toContain('Add provider');
+    expect(runtime.textContent).toContain('OpenAI');
+    expect(runtime.textContent).toContain('gpt-5.2');
     await wait(850);
     await flush();
     expect(saveDefaultPermission).not.toHaveBeenCalled();
@@ -224,7 +218,7 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.querySelector('.flower-setup-guide')).toBeNull();
   });
 
-  it('guides setup from new chat when the provider is not ready', async () => {
+  it('keeps the normal empty state and compact setup footer when the provider is not ready', async () => {
     const runtime = renderSurface(false);
     await flush();
 
@@ -237,8 +231,9 @@ describe('FlowerSurface navigation', () => {
 
     expect(runtime.querySelector('.flower-chat-shell')).toBeTruthy();
     expect(runtime.querySelector('.flower-chat-header-title')?.textContent).toBe('Ask Flower');
-    expect(runtime.querySelector('.flower-setup-guide')?.textContent).toContain('Set up Flower');
-    expect(runtime.querySelector('.flower-setup-guide')?.textContent).toContain('Choose a provider, model, and API key once.');
+    expect(runtime.querySelector('.flower-empty-state')).toBeTruthy();
+    expect(runtime.querySelector('.flower-setup-guide')).toBeNull();
+    expect(runtime.querySelector('.flower-setup-inline')?.textContent).toContain('Set up a model provider to start chatting.');
     expect(runtime.querySelector('.flower-handler-error')).toBeNull();
     expect(runtime.textContent).not.toContain(retiredHandlerUnavailableCopy());
 
@@ -248,8 +243,8 @@ describe('FlowerSurface navigation', () => {
     textarea!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     await flush();
 
-    expect(runtime.querySelector('.flower-chat-shell')).toBeNull();
-    expect(runtime.querySelector('button[aria-label="Back to chat"]')).toBeTruthy();
+    expect(runtime.querySelector('.flower-chat-shell')).toBeTruthy();
+    expect(runtime.querySelector('.flower-setup-inline')).toBeTruthy();
   });
 
   it('shows a starting handler state before settings finish loading', async () => {

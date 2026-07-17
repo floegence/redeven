@@ -119,6 +119,7 @@ describe('Env local Flower surface adapter', () => {
       envPublicID: 'env_a',
       envLabel: 'Demo Env',
       rpc: { ai: {} } as any,
+      desktopSessionTargetRoute: 'remote_desktop',
     });
 
     const snapshot = await adapter.loadSettings();
@@ -131,6 +132,127 @@ describe('Env local Flower surface adapter', () => {
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
+
+  it('keeps the remote model profile and Desktop catalog together for remote Desktop sessions', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/settings' && init?.method === 'GET') {
+        return jsonResponse({
+          ai: {
+            current_model_id: 'remote/gpt-5.4',
+            permission_type: 'approval_required',
+            providers: [{
+              id: 'remote',
+              name: 'Remote Provider',
+              type: 'openai',
+              models: [{ model_name: 'gpt-5.4', context_window: 400000 }],
+            }],
+          },
+          ai_secrets: {
+            provider_api_key_set: { remote: true },
+            web_search_provider_api_key_set: { remote: false },
+          },
+          ai_runtime: {
+            desktop_model_source: {
+              connected: true,
+              available: true,
+              model_source: 'desktop_local_environment',
+              model_count: 1,
+              missing_key_provider_ids: [],
+            },
+          },
+        });
+      }
+      if (url === '/_redeven_proxy/api/ai/models' && init?.method === 'GET') {
+        return jsonResponse({
+          current_model: 'remote/gpt-5.4',
+          models: [
+            {
+              id: 'remote/gpt-5.4',
+              label: 'Remote Provider / gpt-5.4',
+              source: 'runtime_config',
+            },
+            {
+              id: 'desktop:model_local',
+              label: 'Desktop / Local Model',
+              source: 'desktop_model_source',
+            },
+          ],
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: { ai: {} } as any,
+      desktopSessionTargetRoute: 'remote_desktop',
+    });
+
+    const snapshot = await adapter.loadSettings();
+
+    expect(snapshot.model_profile).toMatchObject({
+      current_model_id: 'remote/gpt-5.4',
+      providers: [expect.objectContaining({ id: 'remote' })],
+    });
+    expect(snapshot.provider_secrets).toEqual([expect.objectContaining({
+      provider_id: 'remote',
+      provider_api_key_configured: true,
+    })]);
+    expect(snapshot.model_source).toMatchObject({
+      kind: 'desktop_model_source',
+      ready: true,
+    });
+    expect(snapshot.model_source?.current_model_id).toBeUndefined();
+    expect(snapshot.model_source?.models).toEqual([
+      expect.objectContaining({ id: 'desktop:model_local' }),
+    ]);
+  });
+
+  it.each(['local_host', undefined] as const)(
+    'ignores unbound Desktop diagnostics for %s sessions',
+    async (desktopSessionTargetRoute) => {
+      fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+        if (url === '/_redeven_proxy/api/settings' && init?.method === 'GET') {
+          return jsonResponse({
+            ai: {
+              current_model_id: 'remote/gpt-5.4',
+              providers: [{
+                id: 'remote',
+                type: 'openai',
+                models: [{ model_name: 'gpt-5.4' }],
+              }],
+            },
+            ai_secrets: {
+              provider_api_key_set: { remote: true },
+              web_search_provider_api_key_set: {},
+            },
+            ai_runtime: {
+              desktop_model_source: {
+                binding_state: 'unbound',
+                connected: false,
+                available: false,
+                model_source: 'desktop_local_environment',
+                model_count: 0,
+              },
+            },
+          });
+        }
+        throw new Error(`unexpected fetch: ${url}`);
+      });
+      const adapter = createEnvLocalFlowerSurfaceAdapter({
+        envPublicID: 'env_a',
+        envLabel: 'Demo Env',
+        rpc: { ai: {} } as any,
+        desktopSessionTargetRoute,
+      });
+
+      const snapshot = await adapter.loadSettings();
+
+      expect(snapshot.model_profile?.current_model_id).toBe('remote/gpt-5.4');
+      expect(snapshot.model_source).toBeUndefined();
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    },
+  );
 
   it('maps live bootstrap context telemetry into the shared Flower surface state', async () => {
     const bootstrap = liveBootstrap('thread_context', 'running');
@@ -370,6 +492,7 @@ describe('Env local Flower surface adapter', () => {
       envPublicID: 'env_a',
       envLabel: 'Demo Env',
       rpc: { ai: {} } as any,
+      desktopSessionTargetRoute: 'remote_desktop',
     });
 
     const snapshot = await adapter.loadSettings();
@@ -824,11 +947,60 @@ describe('Env local Flower surface adapter', () => {
       onSettingsChanged,
     });
 
-    const snapshot = await adapter.setCurrentModel('default/gpt-5.4');
+    const snapshot = await adapter.persistDefaultModel('default/gpt-5.4');
 
     expect(currentModelBodies).toEqual([{ model_id: 'default/gpt-5.4' }]);
     expect(snapshot.model_profile?.current_model_id).toBe('default/gpt-5.4');
     expect(onSettingsChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects Desktop models from the persisted Env default path', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/settings' && init?.method === 'GET') {
+        return jsonResponse({
+          ai: {
+            current_model_id: 'remote/gpt-5.4',
+            providers: [{
+              id: 'remote',
+              type: 'openai',
+              models: [{ model_name: 'gpt-5.4' }],
+            }],
+          },
+          ai_secrets: {
+            provider_api_key_set: { remote: true },
+            web_search_provider_api_key_set: {},
+          },
+          ai_runtime: {
+            desktop_model_source: {
+              connected: true,
+              available: true,
+              model_count: 1,
+            },
+          },
+        });
+      }
+      if (url === '/_redeven_proxy/api/ai/models' && init?.method === 'GET') {
+        return jsonResponse({
+          current_model: 'desktop:model_local',
+          models: [{ id: 'desktop:model_local', source: 'desktop_model_source' }],
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      desktopSessionTargetRoute: 'remote_desktop',
+      rpc: { ai: {} } as any,
+    });
+
+    await expect(adapter.persistDefaultModel('desktop:model_local')).rejects.toThrow(
+      'Model is not part of the environment profile.',
+    );
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/_redeven_proxy/api/ai/current_model',
+      expect.anything(),
+    );
   });
 
   it('exposes linked-context host capabilities without changing activity file actions', async () => {

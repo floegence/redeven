@@ -117,7 +117,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   loadSettings: () => Promise<FlowerSettingsSnapshot>;
   saveDefaultPermission: (permissionType: FlowerPermissionType) => Promise<FlowerSettingsSnapshot>;
   saveModelProfile: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
-  setCurrentModel: (modelID: string) => Promise<FlowerSettingsSnapshot>;
+  persistDefaultModel: (modelID: string) => Promise<FlowerSettingsSnapshot>;
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerLiveBootstrap>;
   compactThreadContext: (input: FlowerCompactThreadContextInput) => Promise<FlowerLiveBootstrap>;
@@ -232,10 +232,10 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       const threadResp = await options.transport.patchThread(tid, { permission_type: permissionType });
       return loadThread(trim(threadResp.thread?.thread_id) || tid);
     },
-    setCurrentModel: async (modelID) => {
+    persistDefaultModel: async (modelID) => {
       const mid = trim(modelID);
       if (!mid) throw new Error('Missing model id.');
-      return options.setCurrentModel(mid);
+      return options.persistDefaultModel(mid);
     },
     setThreadModel: async (threadID, modelID) => {
       const tid = trim(threadID);

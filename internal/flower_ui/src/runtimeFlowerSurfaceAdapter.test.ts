@@ -121,7 +121,7 @@ function adapterOptions(
     loadSettings: vi.fn(async () => settingsSnapshot()),
     saveDefaultPermission: vi.fn(async () => settingsSnapshot()),
     saveModelProfile: vi.fn(async (_draft: FlowerSettingsDraft) => settingsSnapshot()),
-    setCurrentModel: vi.fn(async (_modelID: string) => settingsSnapshot()),
+    persistDefaultModel: vi.fn(async (_modelID: string) => settingsSnapshot()),
     resolveHandler: vi.fn(async () => routerDecision()),
     launchTurn: vi.fn(async () => {
       throw new Error('launchTurn should not be called.');
@@ -173,12 +173,12 @@ describe('runtime Flower surface adapter read state', () => {
         current_model_id: 'default/gpt-5.4',
       },
     };
-    const setCurrentModel = vi.fn(async () => nextSnapshot);
-    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({}, { setCurrentModel }));
+    const persistDefaultModel = vi.fn(async () => nextSnapshot);
+    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({}, { persistDefaultModel }));
 
-    const snapshot = await adapter.setCurrentModel(' default/gpt-5.4 ');
+    const snapshot = await adapter.persistDefaultModel(' default/gpt-5.4 ');
 
-    expect(setCurrentModel).toHaveBeenCalledWith('default/gpt-5.4');
+    expect(persistDefaultModel).toHaveBeenCalledWith('default/gpt-5.4');
     expect(snapshot.model_profile?.current_model_id).toBe('default/gpt-5.4');
   });
 

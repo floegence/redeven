@@ -1342,6 +1342,7 @@ export function EnvAppShell() {
       const adapter = createEnvLocalFlowerSurfaceAdapter({
         envPublicID: trimString(envId()),
         envLabel: trimString(env()?.name) || trimString(envId()) || 'This environment',
+        desktopSessionTargetRoute: readDesktopSessionContextSnapshot()?.target_route,
         rpc,
         copy: {
           currentEnvironment: i18n.t('flowerChat.router.currentEnvSource'),

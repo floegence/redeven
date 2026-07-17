@@ -162,7 +162,7 @@ describe('shared Flower UI boundary', () => {
 		expect(surfaceSrc).toContain('...(reasoningSelection ? { reasoning_selection: reasoningSelection } : {})');
 		expect(contractsSrc).toContain('model_id?: string');
 		expect(contractsSrc).toContain('setThreadModel?:');
-		expect(contractsSrc).toContain('setCurrentModel:');
+		expect(contractsSrc).toContain('persistDefaultModel:');
 	});
 
   it('fuses composer model and reasoning into one segmented control', () => {

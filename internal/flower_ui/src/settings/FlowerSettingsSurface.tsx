@@ -237,11 +237,6 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
     return provider?.models.find((model) => trim(model.model_name) === modelName) ?? null;
   });
   const normalizedProviders = createMemo(() => providers().map(normalizeProviderForSave));
-  const externalModelSource = createMemo(() => {
-    const source = props.snapshot?.model_source ?? null;
-    return source?.kind === 'desktop_model_source' ? source : null;
-  });
-  const managedByLocalAIProfile = createMemo(() => externalModelSource() !== null);
   const markDirty = () => setDirty(true);
   const focusPermissionType = (kind: FlowerPermissionType) => {
     queueMicrotask(() => permissionButtonRefs.get(kind)?.focus());
@@ -452,7 +447,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
   };
   createEffect(() => {
     autosaveFingerprint();
-    if (managedByLocalAIProfile() || !dirty() || props.saving || providerDialogOpen()) {
+    if (!dirty() || props.saving || providerDialogOpen()) {
       clearAutosaveTimer();
       return;
     }
@@ -545,7 +540,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                   <h2 class="truncate text-base font-semibold text-foreground">{copy().title}</h2>
                 </div>
                 <p class="mt-1 text-xs text-muted-foreground">
-                  {managedByLocalAIProfile() ? copy().managedByLocalAIProfileOpenLocal : copy().description}
+                  {copy().description}
                 </p>
               </div>
             </div>
@@ -560,38 +555,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
             </div>
           </header>
 
-          <Show when={managedByLocalAIProfile()}>
-            <section class="flower-settings-section flower-settings-managed-source">
-              <div class="flower-settings-managed-source-header">
-                <div>
-                  <div class="text-sm font-semibold text-foreground">{copy().managedByLocalAIProfileTitle}</div>
-                  <p class="mt-1 text-xs leading-relaxed text-muted-foreground">{copy().managedByLocalAIProfileDescription}</p>
-                </div>
-                <span class={cn('flower-settings-dot-pill', externalModelSource()?.ready && 'flower-settings-dot-pill-active')}>
-                  {externalModelSource()?.ready ? copy().managedByLocalAIProfileReady : copy().managedByLocalAIProfileNeedsKey}
-                </span>
-              </div>
-              <div class="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
-                <Show when={externalModelSource()?.model_count != null}>
-                  <span class="flower-settings-dot-pill flower-settings-dot-pill-active">
-                    {copy().managedByLocalAIProfileModelCount(externalModelSource()?.model_count ?? 0)}
-                  </span>
-                </Show>
-                <Show when={(externalModelSource()?.missing_key_provider_ids ?? []).length > 0}>
-                  <span class="flower-settings-dot-pill">
-                    {copy().managedByLocalAIProfileMissingKeys((externalModelSource()?.missing_key_provider_ids ?? []).join(', '))}
-                  </span>
-                </Show>
-              </div>
-              <p class="mt-3 text-xs leading-relaxed text-muted-foreground">{copy().managedByLocalAIProfileOpenLocal}</p>
-              <Show when={trim(externalModelSource()?.last_error)}>
-                <p role="alert" class="mt-3 text-xs text-destructive">{externalModelSource()?.last_error}</p>
-              </Show>
-            </section>
-          </Show>
-
-          <Show when={!managedByLocalAIProfile()}>
-            <section class="flower-settings-current-model">
+          <section class="flower-settings-current-model">
               <div class="flower-settings-current-model-icon">
                 <Show when={activeModelOption()} fallback={<Bot class="h-6 w-6 text-muted-foreground" />}>
                   {(option) => <FlowerProviderBrandIcon type={option().provider_type} class="h-6 w-6" />}
@@ -634,8 +598,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                   </div>
                 </Show>
               </div>
-            </section>
-          </Show>
+          </section>
 
           <section class="flower-settings-section flower-settings-policy-section">
               <FlowerSubSectionHeader
@@ -685,8 +648,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
               </Show>
           </section>
 
-          <Show when={!managedByLocalAIProfile()}>
-            <section class="flower-settings-section flower-settings-providers-section">
+          <section class="flower-settings-section flower-settings-providers-section">
               <FlowerSubSectionHeader
                 title={copy().providersTitle}
                 description={copy().providersDescription}
@@ -762,9 +724,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                   }}
                 </For>
               </div>
-            </section>
-
-          </Show>
+          </section>
         </div>
       </div>
 
