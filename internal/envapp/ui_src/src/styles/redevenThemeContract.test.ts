@@ -151,6 +151,9 @@ describe('Redeven Env App surface theme contract', () => {
       '--redeven-settings-card-bg: #ffffff;',
       '--redeven-settings-sidebar-inset-bg: color-mix(in srgb, var(--redeven-settings-sidebar-bg) 64%, var(--redeven-settings-card-bg) 36%);',
       '--redeven-settings-sidebar-hover-bg: color-mix(in srgb, var(--redeven-settings-sidebar-bg) 92%, var(--foreground) 8%);',
+      '--redeven-settings-sidebar-selection-bg: color-mix(in srgb, var(--redeven-settings-sidebar-bg) 88%, var(--foreground) 12%);',
+      '--redeven-settings-sidebar-selection-fg: var(--foreground);',
+      '--redeven-settings-sidebar-selection-indicator: color-mix(in srgb, var(--foreground) 64%, var(--redeven-settings-sidebar-bg) 36%);',
       '--redeven-settings-sidebar-note-fg: #5a687c;',
       '--redeven-settings-sidebar-control-border: #748092;',
       '--redeven-settings-inset-bg: #f7f8fa;',
@@ -171,6 +174,9 @@ describe('Redeven Env App surface theme contract', () => {
       '--redeven-settings-card-bg: #222730;',
       '--redeven-settings-sidebar-inset-bg: #1b2027;',
       '--redeven-settings-sidebar-hover-bg: #282e38;',
+      '--redeven-settings-sidebar-selection-bg: var(--redeven-settings-selection-bg);',
+      '--redeven-settings-sidebar-selection-fg: var(--redeven-settings-selection-fg);',
+      '--redeven-settings-sidebar-selection-indicator: var(--redeven-settings-selection-indicator);',
       '--redeven-settings-sidebar-note-fg: #94a3b8;',
       '--redeven-settings-sidebar-control-border: #68788f;',
       '--redeven-settings-inset-bg: #1b2027;',
@@ -197,12 +203,15 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('border-color: var(--redeven-settings-sidebar-control-border);');
     expect(src).toContain('background: var(--redeven-settings-sidebar-inset-bg);');
     expect(src).toContain('background: var(--redeven-settings-sidebar-hover-bg) !important;');
+    expect(src).toContain('border-color: var(--redeven-settings-sidebar-selection-indicator) !important;');
+    expect(src).toContain('background: var(--redeven-settings-sidebar-selection-bg) !important;');
+    expect(src).toContain('color: var(--redeven-settings-sidebar-selection-fg) !important;');
     expect(src).toContain(":not([type='range']):not(.redeven-settings-search),");
     expect(src).not.toContain('--redeven-settings-content-bg: #fffdfa;');
     expect(src).not.toContain('--redeven-settings-card-bg: #363b45;');
   });
 
-  it('uses neutral selection surfaces for large Flower choices without weakening blue navigation state', () => {
+  it('uses neutral selection surfaces for large Flower choices without weakening focused settings selection', () => {
     const css = readRedevenCss();
     const flower = readFlowerSettingsSource();
 
@@ -222,6 +231,8 @@ describe('Redeven Env App surface theme contract', () => {
     expect(contrastRatio('#8793a5', '#ffffff')).toBeGreaterThanOrEqual(3);
     expect(contrastRatio('#5a687c', '#e9e5df')).toBeGreaterThanOrEqual(4.5);
     expect(contrastRatio('#748092', '#e9e5df')).toBeGreaterThanOrEqual(3);
+    expect(contrastRatio('#202a37', '#d1ceca')).toBeGreaterThanOrEqual(4.5);
+    expect(contrastRatio('#686d74', '#d1ceca')).toBeGreaterThanOrEqual(3);
 
     expect(contrastRatio('#f9fafb', '#222730')).toBeGreaterThanOrEqual(4.5);
     expect(contrastRatio('#c0c9d6', '#222730')).toBeGreaterThanOrEqual(4.5);

@@ -309,6 +309,9 @@
   --redeven-settings-card-bg: #ffffff;
   --redeven-settings-sidebar-inset-bg: color-mix(in srgb, var(--redeven-settings-sidebar-bg) 64%, var(--redeven-settings-card-bg) 36%);
   --redeven-settings-sidebar-hover-bg: color-mix(in srgb, var(--redeven-settings-sidebar-bg) 92%, var(--foreground) 8%);
+  --redeven-settings-sidebar-selection-bg: color-mix(in srgb, var(--redeven-settings-sidebar-bg) 88%, var(--foreground) 12%);
+  --redeven-settings-sidebar-selection-fg: var(--foreground);
+  --redeven-settings-sidebar-selection-indicator: color-mix(in srgb, var(--foreground) 64%, var(--redeven-settings-sidebar-bg) 36%);
   --redeven-settings-sidebar-note-fg: #5a687c;
   --redeven-settings-sidebar-control-border: #748092;
   --redeven-settings-inset-bg: #f7f8fa;
@@ -392,6 +395,9 @@ html.dark {
   --redeven-settings-card-bg: #222730;
   --redeven-settings-sidebar-inset-bg: #1b2027;
   --redeven-settings-sidebar-hover-bg: #282e38;
+  --redeven-settings-sidebar-selection-bg: var(--redeven-settings-selection-bg);
+  --redeven-settings-sidebar-selection-fg: var(--redeven-settings-selection-fg);
+  --redeven-settings-sidebar-selection-indicator: var(--redeven-settings-selection-indicator);
   --redeven-settings-sidebar-note-fg: #94a3b8;
   --redeven-settings-sidebar-control-border: #68788f;
   --redeven-settings-inset-bg: #1b2027;
@@ -1953,9 +1959,9 @@ html.dark .env-debug-console-switch[data-state='checked'] {
 
 .redeven-settings-nav-item--active,
 .redeven-settings-nav-item--active:hover {
-  border-color: var(--redeven-settings-selection-indicator) !important;
-  background: var(--redeven-settings-selection-bg) !important;
-  color: var(--redeven-settings-selection-fg) !important;
+  border-color: var(--redeven-settings-sidebar-selection-indicator) !important;
+  background: var(--redeven-settings-sidebar-selection-bg) !important;
+  color: var(--redeven-settings-sidebar-selection-fg) !important;
 }
 
 .redeven-settings-section {
