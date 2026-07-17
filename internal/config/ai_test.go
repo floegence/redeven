@@ -1,6 +1,56 @@
 package config
 
-import "testing"
+import (
+	"encoding/json"
+	"strings"
+	"testing"
+)
+
+func TestAIConfigValidate_AllowsPermissionOnly(t *testing.T) {
+	t.Parallel()
+
+	cfg := &AIConfig{PermissionType: AIPermissionReadonly}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate permission-only config: %v", err)
+	}
+	if cfg.HasModelProfile() {
+		t.Fatalf("HasModelProfile=true for permission-only config")
+	}
+
+	raw, err := json.Marshal(cfg)
+	if err != nil {
+		t.Fatalf("Marshal: %v", err)
+	}
+	if strings.Contains(string(raw), "current_model_id") {
+		t.Fatalf("permission-only config serialized current_model_id: %s", raw)
+	}
+}
+
+func TestAIConfigValidate_RejectsPartialModelProfiles(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		cfg  AIConfig
+	}{
+		{name: "current_model_only", cfg: AIConfig{CurrentModelID: "openai/gpt-5-mini"}},
+		{name: "providers_only", cfg: AIConfig{Providers: []AIProvider{{
+			ID: "openai", Type: "openai", Models: []AIProviderModel{{ModelName: "gpt-5-mini"}},
+		}}}},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if err := tt.cfg.Validate(); err == nil {
+				t.Fatalf("Validate accepted partial model profile: %#v", tt.cfg)
+			}
+			if tt.cfg.HasModelProfile() {
+				t.Fatalf("HasModelProfile=true for partial model profile: %#v", tt.cfg)
+			}
+		})
+	}
+}
 
 func TestAIConfigValidate_RequiresProviderModels(t *testing.T) {
 	t.Parallel()

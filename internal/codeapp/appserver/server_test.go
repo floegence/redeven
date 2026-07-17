@@ -24,6 +24,7 @@ import (
 	flconfig "github.com/floegence/floret/config"
 	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/redeven/internal/ai"
+	"github.com/floegence/redeven/internal/auditlog"
 	"github.com/floegence/redeven/internal/codeapp/codeserver"
 	"github.com/floegence/redeven/internal/codexbridge"
 	"github.com/floegence/redeven/internal/config"
@@ -1786,7 +1787,7 @@ func TestServer_Settings_RedactsSecrets(t *testing.T) {
 	}
 }
 
-func TestServer_SettingsUpdate_ReturnsAIUpdateMeta(t *testing.T) {
+func TestServer_AIDefaultPermissionUpdate_PreservesModelProfile(t *testing.T) {
 	t.Parallel()
 
 	dist := fstest.MapFS{
@@ -1797,8 +1798,11 @@ func TestServer_SettingsUpdate_ReturnsAIUpdateMeta(t *testing.T) {
 	cfgPath := writeTestConfigWithAI(t)
 	channelID := "ch_test_settings_ai_update"
 	envOrigin := envOriginWithChannel(channelID)
+	recoveryEnabled := false
 	aiCfg := &config.AIConfig{
-		CurrentModelID: "openai/gpt-5-mini",
+		CurrentModelID:      "openai/gpt-5-mini",
+		PermissionType:      config.AIPermissionReadonly,
+		ToolRecoveryEnabled: &recoveryEnabled,
 		Providers: []config.AIProvider{{
 			ID:      "openai",
 			Name:    "OpenAI",
@@ -1809,6 +1813,14 @@ func TestServer_SettingsUpdate_ReturnsAIUpdateMeta(t *testing.T) {
 				{ModelName: "gpt-5"},
 			},
 		}},
+	}
+	persisted, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	persisted.AI = aiCfg
+	if err := config.Save(cfgPath, persisted); err != nil {
+		t.Fatalf("save config: %v", err)
 	}
 	aiSvc, err := ai.NewService(ai.Options{
 		StateDir:     t.TempDir(),
@@ -1835,25 +1847,7 @@ func TestServer_SettingsUpdate_ReturnsAIUpdateMeta(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 
-	body := `{
-  "ai": {
-    "current_model_id": "openai/gpt-5-mini",
-    "providers": [
-      {
-        "id": "openai",
-        "name": "OpenAI",
-        "type": "openai",
-        "base_url": "https://api.openai.com/v1",
-        "models": [
-          { "model_name": "gpt-5-mini" },
-          { "model_name": "gpt-5" }
-        ]
-      }
-    ]
-  }
-}`
-
-	req := httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/settings", bytes.NewBufferString(body))
+	req := httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/ai/default_permission", bytes.NewBufferString(`{"permission_type":"full_access"}`))
 	req.Header.Set("Origin", envOrigin)
 	rr := httptest.NewRecorder()
 	srv.serveHTTP(rr, req)
@@ -1886,11 +1880,124 @@ func TestServer_SettingsUpdate_ReturnsAIUpdateMeta(t *testing.T) {
 	if aiUpdate == nil {
 		t.Fatalf("missing ai_update object")
 	}
-	if got := strings.TrimSpace(aiUpdate["apply_scope"].(string)); got != "future_runs" {
-		t.Fatalf("apply_scope=%q, want=%q", got, "future_runs")
+	if got := strings.TrimSpace(aiUpdate["apply_scope"].(string)); got != "future_threads" {
+		t.Fatalf("apply_scope=%q, want=%q", got, "future_threads")
 	}
 	if got, ok := aiUpdate["active_run_count"].(float64); !ok || int(got) != 0 {
 		t.Fatalf("active_run_count=%v, want=0", aiUpdate["active_run_count"])
+	}
+
+	updated, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load updated config: %v", err)
+	}
+	if updated.AI == nil || updated.AI.PermissionType != config.AIPermissionFullAccess {
+		t.Fatalf("permission_type=%q, want=%q", updated.AI.PermissionType, config.AIPermissionFullAccess)
+	}
+	if updated.AI.CurrentModelID != aiCfg.CurrentModelID || len(updated.AI.Providers) != len(aiCfg.Providers) {
+		t.Fatalf("model profile changed: %#v", updated.AI)
+	}
+	if updated.AI.ToolRecoveryEnabled == nil || *updated.AI.ToolRecoveryEnabled {
+		t.Fatalf("tool recovery setting changed: %#v", updated.AI.ToolRecoveryEnabled)
+	}
+
+	req = httptest.NewRequest(http.MethodPut, "/_redeven_proxy/api/settings", bytes.NewBufferString(`{"ai":{"permission_type":"readonly"}}`))
+	req.Header.Set("Origin", envOrigin)
+	rr = httptest.NewRecorder()
+	srv.serveHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("generic settings ai update status=%d, want=%d body=%s", rr.Code, http.StatusBadRequest, rr.Body.String())
+	}
+}
+
+func TestServer_AIDefaultPermissionUpdate_CreatesPermissionOnlyConfig(t *testing.T) {
+	t.Parallel()
+
+	dist := fstest.MapFS{
+		"env/index.html": {Data: []byte("<html>env</html>")},
+		"inject.js":      {Data: []byte("console.log('inject');")},
+	}
+	cfgPath := writeTestConfig(t)
+	stateDir := t.TempDir()
+	aiSvc, err := ai.NewService(ai.Options{
+		StateDir:     stateDir,
+		AgentHomeDir: t.TempDir(),
+		Shell:        "/bin/sh",
+	})
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	t.Cleanup(func() { _ = aiSvc.Close() })
+	auditStore, err := auditlog.New(auditlog.Options{StateDir: stateDir})
+	if err != nil {
+		t.Fatalf("auditlog.New: %v", err)
+	}
+	adminChannelID := "ch_default_permission_admin"
+	readChannelID := "ch_default_permission_read"
+	srv, err := New(Options{
+		Backend:    &stubBackend{},
+		DistFS:     dist,
+		ListenAddr: "127.0.0.1:0",
+		AI:         aiSvc,
+		Audit:      auditStore,
+		ConfigPath: cfgPath,
+		ResolveSessionMeta: func(channelID string) (*session.Meta, bool) {
+			switch channelID {
+			case adminChannelID:
+				return &session.Meta{ChannelID: channelID, CanRead: true, CanAdmin: true}, true
+			case readChannelID:
+				return &session.Meta{ChannelID: channelID, CanRead: true}, true
+			default:
+				return nil, false
+			}
+		},
+	})
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+
+	rr := performServerRequest(srv, http.MethodPut, "/_redeven_proxy/api/ai/default_permission", envOriginWithChannel(readChannelID), `{"permission_type":"readonly"}`)
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("non-admin status=%d, want=%d body=%s", rr.Code, http.StatusForbidden, rr.Body.String())
+	}
+
+	rr = performServerRequest(srv, http.MethodPut, "/_redeven_proxy/api/ai/default_permission", envOriginWithChannel(adminChannelID), `{"permission_type":"invalid"}`)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("invalid permission status=%d, want=%d body=%s", rr.Code, http.StatusBadRequest, rr.Body.String())
+	}
+
+	rr = performServerRequest(srv, http.MethodPut, "/_redeven_proxy/api/ai/default_permission", envOriginWithChannel(adminChannelID), `{"permission_type":"readonly"}`)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("permission-only update status=%d, want=%d body=%s", rr.Code, http.StatusOK, rr.Body.String())
+	}
+	if strings.Contains(rr.Body.String(), "current_model_id") {
+		t.Fatalf("permission-only response serialized current_model_id: %s", rr.Body.String())
+	}
+	updated, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load updated config: %v", err)
+	}
+	if updated.AI == nil || updated.AI.PermissionType != config.AIPermissionReadonly {
+		t.Fatalf("permission-only config=%#v", updated.AI)
+	}
+	if updated.AI.HasModelProfile() {
+		t.Fatalf("permission-only update created a model profile: %#v", updated.AI)
+	}
+
+	entries, err := auditStore.List(10)
+	if err != nil {
+		t.Fatalf("audit list: %v", err)
+	}
+	var sawFailure, sawSuccess bool
+	for _, entry := range entries {
+		if entry.Action != "ai_default_permission_update" {
+			continue
+		}
+		sawFailure = sawFailure || entry.Status == "failure"
+		sawSuccess = sawSuccess || entry.Status == "success"
+	}
+	if !sawFailure || !sawSuccess {
+		t.Fatalf("default permission audit entries missing failure/success: %#v", entries)
 	}
 }
 
@@ -2245,20 +2352,32 @@ func TestServer_AIProviderBundle_SavesConfigAndSecretTogether(t *testing.T) {
 	cfgPath := writeTestConfigWithAI(t)
 	channelID := "ch_test_provider_bundle"
 	envOrigin := envOriginWithChannel(channelID)
+	recoveryEnabled := false
+	initialAI := &config.AIConfig{
+		CurrentModelID:      "openai/gpt-5-mini",
+		PermissionType:      config.AIPermissionReadonly,
+		ToolRecoveryEnabled: &recoveryEnabled,
+		Providers: []config.AIProvider{{
+			ID:      "openai",
+			Name:    "OpenAI",
+			Type:    "openai",
+			BaseURL: "https://api.openai.com/v1",
+			Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
+		}},
+	}
+	persisted, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	persisted.AI = initialAI
+	if err := config.Save(cfgPath, persisted); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
 	aiSvc, err := ai.NewService(ai.Options{
 		StateDir:     t.TempDir(),
 		AgentHomeDir: t.TempDir(),
 		Shell:        "/bin/sh",
-		Config: &config.AIConfig{
-			CurrentModelID: "openai/gpt-5-mini",
-			Providers: []config.AIProvider{{
-				ID:      "openai",
-				Name:    "OpenAI",
-				Type:    "openai",
-				BaseURL: "https://api.openai.com/v1",
-				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
-			}},
-		},
+		Config:       initialAI,
 	})
 	if err != nil {
 		t.Fatalf("NewService: %v", err)
@@ -2280,7 +2399,7 @@ func TestServer_AIProviderBundle_SavesConfigAndSecretTogether(t *testing.T) {
 	}
 
 	body := `{
-	  "ai": {
+	  "model_profile": {
 	    "current_model_id": "openai/gpt-5-mini",
 	    "providers": [
 	      {
@@ -2317,6 +2436,12 @@ func TestServer_AIProviderBundle_SavesConfigAndSecretTogether(t *testing.T) {
 	if !cfg.AI.Providers[0].Models[0].SupportsImageInput() {
 		t.Fatalf("saved model should support image input")
 	}
+	if cfg.AI.PermissionType != config.AIPermissionReadonly {
+		t.Fatalf("permission_type=%q, want=%q", cfg.AI.PermissionType, config.AIPermissionReadonly)
+	}
+	if cfg.AI.ToolRecoveryEnabled == nil || *cfg.AI.ToolRecoveryEnabled {
+		t.Fatalf("tool recovery setting changed: %#v", cfg.AI.ToolRecoveryEnabled)
+	}
 
 	req = httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/provider_keys/status", bytes.NewBufferString(`{"provider_ids":["openai"]}`))
 	req.Header.Set("Origin", envOrigin)
@@ -2339,7 +2464,7 @@ func TestServer_AIProviderBundle_SavesConfigAndSecretTogether(t *testing.T) {
 	}
 
 	badBody := `{
-	  "ai": {
+	  "model_profile": {
 	    "current_model_id": "broken/missing",
 	    "providers": [
 	      {
@@ -2443,7 +2568,7 @@ func TestServer_AIProviderBundle_CleansSecretsOutsideCurrentProfile(t *testing.T
 	}
 
 	body := `{
-	  "ai": {
+	  "model_profile": {
 	    "current_model_id": "openai/gpt-5-mini",
 	    "providers": [
 	      {

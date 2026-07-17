@@ -183,6 +183,7 @@ func newAutoTitleTestServiceWithStateDir(t *testing.T, mock *autoTitleMock, stat
 	t.Cleanup(srv.Close)
 
 	cfg := &config.AIConfig{
+		CurrentModelID: "openai/gpt-5-mini",
 		Providers: []config.AIProvider{
 			{
 				ID:      "openai",

@@ -72,6 +72,66 @@ function liveBootstrap(threadID: string, status = 'canceled') {
 }
 
 describe('Env local Flower surface adapter', () => {
+  it('loads permission-only settings without requesting runtime models', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/settings' && init?.method === 'GET') {
+        return jsonResponse({
+          ai: { permission_type: 'readonly' },
+          ai_runtime: { remote_configured: false },
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: { ai: {} } as any,
+    });
+
+    const snapshot = await adapter.loadSettings();
+
+    expect(snapshot.defaults.permission_type).toBe('readonly');
+    expect(snapshot.model_profile).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).not.toHaveBeenCalledWith('/_redeven_proxy/api/ai/models', expect.anything());
+  });
+
+  it('keeps a disconnected Desktop model source in the settings contract', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/settings' && init?.method === 'GET') {
+        return jsonResponse({
+          ai: { permission_type: 'approval_required' },
+          ai_runtime: {
+            desktop_model_source: {
+              binding_state: 'error',
+              connected: false,
+              available: false,
+              model_source: 'desktop_local_environment',
+              model_count: 0,
+              last_error: 'Desktop source disconnected',
+            },
+          },
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: { ai: {} } as any,
+    });
+
+    const snapshot = await adapter.loadSettings();
+
+    expect(snapshot.model_profile).toBeNull();
+    expect(snapshot.model_source).toMatchObject({
+      kind: 'desktop_model_source',
+      ready: false,
+      last_error: 'Desktop source disconnected',
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it('maps live bootstrap context telemetry into the shared Flower surface state', async () => {
     const bootstrap = liveBootstrap('thread_context', 'running');
     bootstrap.live_state = {
@@ -314,8 +374,8 @@ describe('Env local Flower surface adapter', () => {
 
     const snapshot = await adapter.loadSettings();
 
-    expect(snapshot.config.current_model_id).toBe('desktop:model_deepseek');
-    expect(snapshot.config.providers).toEqual([]);
+    expect(snapshot.model_profile).toBeNull();
+    expect(snapshot.model_source?.current_model_id).toBe('desktop:model_deepseek');
     expect(snapshot.model_source).toMatchObject({
       kind: 'desktop_model_source',
       ready: true,
@@ -767,7 +827,7 @@ describe('Env local Flower surface adapter', () => {
     const snapshot = await adapter.setCurrentModel('default/gpt-5.4');
 
     expect(currentModelBodies).toEqual([{ model_id: 'default/gpt-5.4' }]);
-    expect(snapshot.config.current_model_id).toBe('default/gpt-5.4');
+    expect(snapshot.model_profile?.current_model_id).toBe('default/gpt-5.4');
     expect(onSettingsChanged).toHaveBeenCalledTimes(1);
   });
 

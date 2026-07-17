@@ -367,7 +367,7 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 		if _, _, ok := strings.Cut(modelID, "/"); !ok && !isDesktopModelSourceModelID(modelID) {
 			return nil, errors.New("invalid model")
 		}
-		if cfg != nil && cfg.IsAllowedModelID(modelID) {
+		if cfg.HasModelProfile() && cfg.IsAllowedModelID(modelID) {
 			// The model is provided by the runtime config.
 		} else if ok, err := s.desktopModelSourceModelAllowed(ctx, modelID); err != nil {
 			return nil, err
@@ -385,7 +385,7 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 			modelID = id
 		}
 	}
-	if modelID == "" && cfg != nil {
+	if modelID == "" && cfg.HasModelProfile() {
 		if id := strings.TrimSpace(cfg.CurrentModelID); id != "" && cfg.IsAllowedModelID(id) {
 			modelID = id
 		}
@@ -698,10 +698,10 @@ func (s *Service) SetThreadModel(ctx context.Context, meta *session.Meta, thread
 	if db == nil {
 		return errors.New("threads store not ready")
 	}
-	if cfg == nil && !isDesktopModelSourceModelID(modelID) {
+	if !cfg.HasModelProfile() && !isDesktopModelSourceModelID(modelID) {
 		return ErrNotConfigured
 	}
-	if cfg != nil && cfg.IsAllowedModelID(modelID) {
+	if cfg.HasModelProfile() && cfg.IsAllowedModelID(modelID) {
 		// The model is provided by the runtime config.
 	} else if ok, err := s.desktopModelSourceModelAllowed(ctx, modelID); err != nil {
 		return err

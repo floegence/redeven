@@ -39,6 +39,7 @@ func TestE2E_OpenAICompatibleBaseURL_StreamText(t *testing.T) {
 	agentHomeDir := t.TempDir()
 
 	cfg := &config.AIConfig{
+		CurrentModelID: "openai/" + modelName,
 		Providers: []config.AIProvider{
 			{
 				ID:      "openai",

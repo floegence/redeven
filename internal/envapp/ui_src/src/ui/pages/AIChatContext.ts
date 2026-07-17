@@ -528,7 +528,11 @@ export function createAIChatContextValue(): AIChatContextValue {
   const aiEnabled = createMemo(() => {
     const s = settings();
     if (!s) return false;
-    if (s.ai) return true;
+    const hasRuntimeModelProfile = Boolean(
+      s.ai_runtime?.remote_configured
+      || ((s.ai?.providers?.length ?? 0) > 0 && String(s.ai?.current_model_id ?? '').trim()),
+    );
+    if (hasRuntimeModelProfile) return true;
     return !!s.ai_runtime?.desktop_model_source?.connected;
   });
 

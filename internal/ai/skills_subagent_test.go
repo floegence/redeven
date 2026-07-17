@@ -406,6 +406,7 @@ func TestFloretSubagents_DelegateAndWait(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	cfg := &config.AIConfig{
+		CurrentModelID: "openai/gpt-5-mini",
 		Providers: []config.AIProvider{{
 			ID:      "openai",
 			Type:    "openai",
@@ -584,6 +585,7 @@ func TestFloretSubagents_DoNotProjectChildThreadForFlowerNavigation(t *testing.T
 	t.Cleanup(srv.Close)
 
 	cfg := &config.AIConfig{
+		CurrentModelID: "openai/gpt-5-mini",
 		Providers: []config.AIProvider{{
 			ID:      "openai",
 			Type:    "openai",
@@ -947,6 +949,7 @@ func TestFloretSubagents_InheritsWebSearchResolver(t *testing.T) {
 	t.Cleanup(srv.Close)
 
 	cfg := &config.AIConfig{
+		CurrentModelID: "compat/gpt-5-mini",
 		Providers: []config.AIProvider{{
 			ID:      "compat",
 			Type:    "openai_compatible",

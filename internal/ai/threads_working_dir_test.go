@@ -38,6 +38,7 @@ func newWorkingDirTestService(t *testing.T, rootDir string) *Service {
 	}
 
 	cfg := &config.AIConfig{
+		CurrentModelID: "openai/gpt-5-mini",
 		Providers: []config.AIProvider{
 			{
 				ID:      "openai",

@@ -1362,7 +1362,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ));
   const currentComposerSessionKey = createMemo(() => trimString(selectedThreadID()) || PENDING_NEW_THREAD_ID);
   const currentComposerSessionDraft = createMemo(() => composerSessionDrafts()[currentComposerSessionKey()] ?? emptyFlowerComposerSessionDraft());
-  const defaultComposerPermissionType = createMemo<FlowerPermissionType>(() => snapshot()?.config.permission_type ?? 'approval_required');
+  const defaultComposerPermissionType = createMemo<FlowerPermissionType>(() => snapshot()?.defaults.permission_type ?? 'approval_required');
   const selectedThreadPermissionType = createMemo<FlowerPermissionType>(() => selectedThread()?.permission_type ?? defaultComposerPermissionType());
   const composerPermissionType = createMemo<FlowerPermissionType>(() => {
     const thread = selectedThread();
@@ -1624,15 +1624,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const applyCurrentModelLocally = (modelID: string) => {
     const mid = trimString(modelID);
     if (!mid) return;
-    setSnapshot((current) => (current
-      ? {
-          ...current,
-          config: {
-            ...current.config,
-            current_model_id: mid,
-          },
-        }
-      : current));
+    setSnapshot((current) => {
+      if (!current) return current;
+      if (current.model_source?.models?.some((model) => model.id === mid)) {
+        return { ...current, model_source: { ...current.model_source, current_model_id: mid } };
+      }
+      if (!current.model_profile) return current;
+      return { ...current, model_profile: { ...current.model_profile, current_model_id: mid } };
+    });
   };
   const applyThreadReasoningLocally = (threadID: string, selection: FlowerReasoningSelection | undefined) => {
     const tid = trimString(threadID);
@@ -2082,7 +2081,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const renameOriginalTitle = createMemo(() => threads().find((thread) => thread.thread_id === renameThreadID())?.title ?? '');
   const renameUnchanged = createMemo(() => trimString(renameDraft()) === trimString(renameOriginalTitle()));
-  const currentModelID = createMemo(() => trimString(snapshot()?.config.current_model_id));
+  const currentModelID = createMemo(() => trimString(snapshot()?.model_profile?.current_model_id || snapshot()?.model_source?.current_model_id));
   const selectedComposerModelID = createMemo(() => {
     const threadModelID = trimString(selectedThread()?.model_id);
     if (threadModelID) return threadModelID;
@@ -2091,7 +2090,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const activeProvider = createMemo(() => {
     const current = selectedComposerModelID();
     const providerID = current.split('/')[0] ?? '';
-    return snapshot()?.config.providers.find((provider) => provider.id === providerID) ?? null;
+    return snapshot()?.model_profile?.providers.find((provider) => provider.id === providerID) ?? null;
   });
   type ComposerModelOption = Readonly<{
     id: string;
@@ -2105,7 +2104,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     defaultReasoningSelection?: FlowerReasoningSelection;
   }>;
   const configuredModelOptions = createMemo<readonly ComposerModelOption[]>(() => (
-    snapshot()?.config.providers.flatMap((provider) => {
+    snapshot()?.model_profile?.providers.flatMap((provider) => {
       const providerID = trimString(provider.id);
       if (!providerID) return [];
       const providerLabel = trimString(provider.name) || providerID;
@@ -2152,7 +2151,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const catalogModel = catalogModelOptions().find((option) => option.id === currentModelID());
     if (catalogModel) return catalogModel.label;
     const current = snapshot();
-    return current ? formatFlowerCurrentModelLabel(current.config, copy().chat.noModelSelected) : copy().chat.noModelSelected;
+    return current?.model_profile ? formatFlowerCurrentModelLabel(current.model_profile, copy().chat.noModelSelected) : copy().chat.noModelSelected;
   });
   const reasoningControlLabel = createMemo(() => trimString(copy().chat.reasoningLabel) || DEFAULT_FLOWER_SURFACE_COPY.chat.reasoningLabel);
   const selectedThreadModelLabel = createMemo(() => {
@@ -2161,8 +2160,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const catalogModel = catalogModelOptions().find((option) => option.id === threadModelID);
     if (catalogModel) return catalogModel.label;
     const current = snapshot();
-    if (!current) return threadModelID;
-    return formatFlowerCurrentModelLabel({ ...current.config, current_model_id: threadModelID }, copy().chat.noModelSelected);
+    if (!current?.model_profile) return threadModelID;
+    return formatFlowerCurrentModelLabel({ ...current.model_profile, current_model_id: threadModelID }, copy().chat.noModelSelected);
   });
   const modelSelectOptions = createMemo(() => {
     const options = catalogModelOptions();
@@ -3148,11 +3147,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }));
   });
 
-  const saveSettings = async (draft: FlowerSettingsDraft) => {
+  const saveSettingsMutation = async (mutation: () => Promise<FlowerSettingsSnapshot>) => {
     setSaveError('');
     setSettingsSaving(true);
     try {
-      const next = await props.adapter.saveSettings(draft);
+      const next = await mutation();
       setSnapshot(next);
       setSavedAt(Date.now());
       return next;
@@ -3164,6 +3163,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setSettingsSaving(false);
     }
   };
+
+  const saveDefaultPermission = async (permissionType: FlowerPermissionType) => {
+    try {
+      return await saveSettingsMutation(() => props.adapter.saveDefaultPermission(permissionType));
+    } catch (error) {
+      notifyPermissionError(getErrorMessage(error));
+      throw error;
+    }
+  };
+
+  const saveModelProfile = (draft: FlowerSettingsDraft) => (
+    saveSettingsMutation(() => props.adapter.saveModelProfile(draft))
+  );
 
   const returnToChat = () => {
     setSidePanel('chat');
@@ -3192,7 +3204,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setSubagentDetailOpenedRevision((revision) => revision + 1);
   };
 
-  const settingsReadOnly = createMemo(() => modelSource()?.kind === 'desktop_model_source');
+  const modelProfileManagedByDesktop = createMemo(() => modelSource()?.kind === 'desktop_model_source');
 
   const openSettings = () => {
     closeSubagentOverlays();
@@ -3318,7 +3330,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       notifyComposerError(copy().chat.loadingSettings);
       return;
     }
-    if (!readyForChat() && !settingsReadOnly()) {
+    if (!readyForChat() && !modelProfileManagedByDesktop()) {
       openSettings();
       return;
     }
@@ -3570,7 +3582,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       notifyComposerError(copy().chat.loadingSettings);
       return;
     }
-    if (!readyForChat() && !settingsReadOnly()) {
+    if (!readyForChat() && !modelProfileManagedByDesktop()) {
       openSettings();
       return;
     }
@@ -6337,9 +6349,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       <FlowerSoftAuraIcon class="redeven-flower-soft-aura-lg h-14 w-14 redeven-flower-icon-breathe" iconClass="redeven-flower-icon-spin" />
       <div class="flower-setup-copy">
         <h2>{copy().chat.setupNeeded}</h2>
-        <p>{settingsReadOnly() ? copy().settings.managedByLocalAIProfileOpenLocal : copy().chat.needsProviderNotice}</p>
+        <p>{modelProfileManagedByDesktop() ? copy().settings.managedByLocalAIProfileOpenLocal : copy().chat.needsProviderNotice}</p>
       </div>
-      <Show when={!settingsReadOnly()}>
+      <Show when={!modelProfileManagedByDesktop()}>
         <button type="button" class="flower-setup-primary" onClick={openSettings}>
           <Settings class="h-4 w-4" />
           <span>{copy().chat.openSettings}</span>
@@ -7403,7 +7415,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <FlowerSettingsSurface
             snapshot={snapshot()}
             copy={copy().settings}
-            onSaveDraft={saveSettings}
+            onSaveDefaultPermission={saveDefaultPermission}
+            onSaveModelProfile={saveModelProfile}
             saveError={saveError()}
             savedAt={savedAt()}
             saving={settingsSaving()}

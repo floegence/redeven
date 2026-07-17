@@ -32,10 +32,10 @@ function readStatus(): FlowerThreadReadStatus {
 
 function settingsSnapshot(): FlowerSettingsSnapshot {
   return {
-    config: {
+    defaults: { permission_type: 'approval_required' },
+    model_profile: {
       schema_version: 1,
       current_model_id: 'default/gpt-5',
-      permission_type: 'approval_required',
       providers: [],
     },
     provider_secrets: [],
@@ -119,7 +119,8 @@ function adapterOptions(
       targetLabels: [],
     },
     loadSettings: vi.fn(async () => settingsSnapshot()),
-    saveSettings: vi.fn(async (_draft: FlowerSettingsDraft) => settingsSnapshot()),
+    saveDefaultPermission: vi.fn(async () => settingsSnapshot()),
+    saveModelProfile: vi.fn(async (_draft: FlowerSettingsDraft) => settingsSnapshot()),
     setCurrentModel: vi.fn(async (_modelID: string) => settingsSnapshot()),
     resolveHandler: vi.fn(async () => routerDecision()),
     launchTurn: vi.fn(async () => {
@@ -167,8 +168,8 @@ describe('runtime Flower surface adapter read state', () => {
   it('delegates current model updates through the host option', async () => {
     const nextSnapshot = {
       ...settingsSnapshot(),
-      config: {
-        ...settingsSnapshot().config,
+      model_profile: {
+        ...settingsSnapshot().model_profile!,
         current_model_id: 'default/gpt-5.4',
       },
     };
@@ -178,7 +179,7 @@ describe('runtime Flower surface adapter read state', () => {
     const snapshot = await adapter.setCurrentModel(' default/gpt-5.4 ');
 
     expect(setCurrentModel).toHaveBeenCalledWith('default/gpt-5.4');
-    expect(snapshot.config.current_model_id).toBe('default/gpt-5.4');
+    expect(snapshot.model_profile?.current_model_id).toBe('default/gpt-5.4');
   });
 
   it('returns read_status from markThreadRead without reloading the thread', async () => {

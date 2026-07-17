@@ -174,6 +174,7 @@ func newOpenAIContinuationServiceForTest(t *testing.T, baseURL string) (*Service
 	stateDir := t.TempDir()
 	agentHomeDir := t.TempDir()
 	cfg := &config.AIConfig{
+		CurrentModelID: "openai/gpt-5-mini",
 		Providers: []config.AIProvider{
 			{
 				ID:      "openai",

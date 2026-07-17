@@ -11,6 +11,7 @@ import type {
   FlowerProvider,
   FlowerProviderDraft,
   FlowerProviderModel,
+  FlowerPermissionType,
   FlowerRouterDecision,
   FlowerTurnLaunchInput,
   FlowerSettingsDraft,
@@ -27,6 +28,7 @@ import type {
 import type {
   AgentSettingsResponse,
   AIConfig,
+  AIModelProfile,
 } from '../../../../internal/envapp/ui_src/src/ui/pages/settings/types';
 import { requireAskFlowerContextActionEnvelope } from '../../../../internal/envapp/ui_src/src/ui/contextActions/protocol';
 import {
@@ -196,22 +198,13 @@ function positiveInteger(raw: unknown): number | undefined {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined;
 }
 
-function normalizePermissionType(raw: unknown): FlowerSettingsSnapshot['config']['permission_type'] {
+function normalizePermissionType(raw: unknown): FlowerPermissionType {
   const value = trim(raw).toLowerCase();
   if (value === 'readonly' || value === 'full_access') return value;
   return 'approval_required';
 }
 
-function defaultConfig(): FlowerSettingsSnapshot['config'] {
-  return {
-    schema_version: 1,
-    current_model_id: '',
-    permission_type: 'approval_required',
-    providers: [],
-  };
-}
-
-function mapProviderModel(model: NonNullable<AIConfig['providers'][number]['models']>[number]): FlowerProviderModel {
+function mapProviderModel(model: NonNullable<NonNullable<AIConfig['providers']>[number]['models']>[number]): FlowerProviderModel {
   return {
     model_name: trim(model.model_name),
     ...(trim(model.wire_model_name) ? { wire_model_name: trim(model.wire_model_name) } : {}),
@@ -224,7 +217,7 @@ function mapProviderModel(model: NonNullable<AIConfig['providers'][number]['mode
   };
 }
 
-function mapProvider(provider: AIConfig['providers'][number]): FlowerProvider {
+function mapProvider(provider: NonNullable<AIConfig['providers']>[number]): FlowerProvider {
   return {
     id: trim(provider.id),
     ...(trim(provider.name) ? { name: trim(provider.name) } : {}),
@@ -237,19 +230,19 @@ function mapProvider(provider: AIConfig['providers'][number]): FlowerProvider {
 
 export function mapRuntimeFlowerSettings(settings: AgentSettingsResponse): FlowerSettingsSnapshot {
   const ai = settings.ai;
-  const config = ai
+  const modelProfile = ai && (ai.providers ?? []).length > 0 && trim(ai.current_model_id)
     ? {
         schema_version: 1 as const,
         current_model_id: trim(ai.current_model_id),
-        permission_type: normalizePermissionType(ai.permission_type),
         providers: (ai.providers ?? []).map(mapProvider).filter((provider) => provider.id && provider.models.length > 0),
       }
-    : defaultConfig();
+    : null;
   const providerSecrets = settings.ai_secrets?.provider_api_key_set ?? {};
   const webSecrets = settings.ai_secrets?.web_search_provider_api_key_set ?? {};
   return {
-    config,
-    provider_secrets: config.providers.map((provider) => ({
+    defaults: { permission_type: normalizePermissionType(ai?.permission_type) },
+    model_profile: modelProfile,
+    provider_secrets: (modelProfile?.providers ?? []).map((provider) => ({
       provider_id: provider.id,
       provider_api_key_configured: Boolean(providerSecrets[provider.id]),
       web_search_api_key_configured: Boolean(webSecrets[provider.id]),
@@ -257,7 +250,7 @@ export function mapRuntimeFlowerSettings(settings: AgentSettingsResponse): Flowe
   };
 }
 
-function draftProviderToAI(provider: FlowerProviderDraft): AIConfig['providers'][number] {
+function draftProviderToAI(provider: FlowerProviderDraft): NonNullable<AIConfig['providers']>[number] {
   return {
     id: trim(provider.id),
     ...(trim(provider.name) ? { name: trim(provider.name) } : {}),
@@ -278,11 +271,11 @@ function draftProviderToAI(provider: FlowerProviderDraft): AIConfig['providers']
 }
 
 export function mapFlowerSettingsDraftToRuntimeBundle(draft: FlowerSettingsDraft): {
-  ai: AIConfig;
+  model_profile: AIModelProfile;
   provider_api_key_patches: readonly FlowerSecretPatch[];
   web_search_provider_key_patches: readonly FlowerSecretPatch[];
 } {
-  const providerAPIKeyPatches: FlowerSecretPatch[] = draft.config.providers.flatMap((provider): FlowerSecretPatch[] => {
+  const providerAPIKeyPatches: FlowerSecretPatch[] = draft.model_profile.providers.flatMap((provider): FlowerSecretPatch[] => {
     if (provider.provider_api_key === undefined) return [];
     const providerID = trim(provider.id);
     if (!providerID) return [];
@@ -290,7 +283,7 @@ export function mapFlowerSettingsDraftToRuntimeBundle(draft: FlowerSettingsDraft
     const apiKey = trim(provider.provider_api_key);
     return apiKey ? [{ provider_id: providerID, api_key: apiKey }] : [];
   });
-  const webSearchKeyPatches: FlowerSecretPatch[] = draft.config.providers.flatMap((provider): FlowerSecretPatch[] => {
+  const webSearchKeyPatches: FlowerSecretPatch[] = draft.model_profile.providers.flatMap((provider): FlowerSecretPatch[] => {
     if (provider.web_search_api_key === undefined) return [];
     const providerID = trim(provider.id);
     if (!providerID) return [];
@@ -299,10 +292,9 @@ export function mapFlowerSettingsDraftToRuntimeBundle(draft: FlowerSettingsDraft
     return apiKey ? [{ provider_id: providerID, api_key: apiKey }] : [];
   });
   return {
-    ai: {
-      current_model_id: trim(draft.config.current_model_id),
-      permission_type: draft.config.permission_type,
-      providers: draft.config.providers.map(draftProviderToAI),
+    model_profile: {
+      current_model_id: trim(draft.model_profile.current_model_id),
+      providers: draft.model_profile.providers.map(draftProviderToAI),
     },
     provider_api_key_patches: providerAPIKeyPatches,
     web_search_provider_key_patches: webSearchKeyPatches,
@@ -361,7 +353,7 @@ function decision(): FlowerRouterDecision {
 }
 
 function currentModelID(snapshot: FlowerSettingsSnapshot, models: ModelsResponse): string {
-  const configured = trim(snapshot.config.current_model_id);
+  const configured = trim(snapshot.model_profile?.current_model_id);
   if (configured) return configured;
   return trim(models.current_model);
 }
@@ -404,7 +396,7 @@ export async function launchLocalEnvironmentFlowerTurn(
   const models = await loadModels(bridge);
   const modelID = currentModelID(snapshot, models);
   if (!modelID) throw new Error('Select a Flower model before starting a chat.');
-  const permissionType = normalizePermissionType(input.permission_type ?? snapshot.config.permission_type);
+  const permissionType = normalizePermissionType(input.permission_type ?? snapshot.defaults.permission_type);
   const contextAction = requireAskFlowerContextActionEnvelope(input.context_action);
   if ((input.pending_files ?? []).length > 0) {
     throw new Error('Attachment upload is unavailable for Desktop Welcome.');
@@ -503,7 +495,13 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
     },
     mapperOptions: localEnvironmentLiveMapperOptions(),
     loadSettings: () => loadSettingsSnapshot(bridge),
-    saveSettings: async (draft) => {
+    saveDefaultPermission: async (permissionType) => {
+      await runtimeJSON<unknown>(bridge, 'PUT', '/_redeven_proxy/api/ai/default_permission', {
+        permission_type: normalizePermissionType(permissionType),
+      });
+      return loadSettingsSnapshot(bridge);
+    },
+    saveModelProfile: async (draft) => {
       await runtimeJSON<unknown>(bridge, 'PUT', '/_redeven_proxy/api/ai/provider_bundle', mapFlowerSettingsDraftToRuntimeBundle(draft));
       return loadSettingsSnapshot(bridge);
     },

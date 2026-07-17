@@ -66,15 +66,14 @@ export type FlowerProviderDraft = FlowerProvider & Readonly<{
 
 export type FlowerPermissionType = 'readonly' | 'approval_required' | 'full_access';
 
-export type FlowerConfig = Readonly<{
+export type FlowerModelProfile = Readonly<{
   schema_version: 1;
   current_model_id: string;
-  permission_type: FlowerPermissionType;
   providers: readonly FlowerProvider[];
 }>;
 
 export type FlowerSettingsDraft = Readonly<{
-  config: Omit<FlowerConfig, 'providers'> & Readonly<{
+  model_profile: Omit<FlowerModelProfile, 'providers'> & Readonly<{
     providers: readonly FlowerProviderDraft[];
   }>;
 }>;
@@ -88,6 +87,7 @@ export type FlowerProviderSecretState = Readonly<{
 export type FlowerModelSourceStatus = Readonly<{
   kind: 'desktop_model_source';
   ready: boolean;
+  current_model_id?: string;
   label?: string;
   model_count?: number;
   models?: readonly FlowerModelSourceModel[];
@@ -105,7 +105,10 @@ export type FlowerModelSourceModel = Readonly<{
 }>;
 
 export type FlowerSettingsSnapshot = Readonly<{
-  config: FlowerConfig;
+  defaults: Readonly<{
+    permission_type: FlowerPermissionType;
+  }>;
+  model_profile: FlowerModelProfile | null;
   provider_secrets: readonly FlowerProviderSecretState[];
   model_source?: FlowerModelSourceStatus;
 }>;
@@ -1167,7 +1170,8 @@ export type FlowerSurfaceRuntimeDescriptor = Readonly<{
 export type FlowerSurfaceAdapter = Readonly<{
   runtime: FlowerSurfaceRuntimeDescriptor;
   loadSettings: () => Promise<FlowerSettingsSnapshot>;
-  saveSettings: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
+  saveDefaultPermission: (permissionType: FlowerPermissionType) => Promise<FlowerSettingsSnapshot>;
+  saveModelProfile: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
   listThreads: () => Promise<readonly FlowerThreadSnapshot[]>;
   loadThread: (threadID: string) => Promise<FlowerLiveBootstrap>;
   listThreadLiveEvents: (threadID: string, afterSeq: number, limit?: number) => Promise<FlowerLiveEventsResponse>;

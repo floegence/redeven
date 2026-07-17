@@ -102,6 +102,7 @@ func newRealtimeTestService(t *testing.T, delay time.Duration) *Service {
 	t.Cleanup(server.Close)
 
 	cfg := &config.AIConfig{
+		CurrentModelID: "openai/gpt-5-mini",
 		Providers: []config.AIProvider{
 			{
 				ID:      "openai",
@@ -1556,6 +1557,7 @@ func TestServiceClosePersistsIdleContextCompactionCancellation(t *testing.T) {
 
 	stateDir := t.TempDir()
 	cfg := &config.AIConfig{
+		CurrentModelID: "openai/gpt-5-mini",
 		Providers: []config.AIProvider{{
 			ID:      "openai",
 			Type:    "openai",
@@ -2425,6 +2427,7 @@ func TestFlowerLiveThreadSummaryClearsReasoningForUnsupportedModel(t *testing.T)
 	svc := newRealtimeTestService(t, 0)
 	svc.mu.Lock()
 	svc.cfg = &config.AIConfig{
+		CurrentModelID: "compat/plain-model",
 		Providers: []config.AIProvider{{
 			ID:      "compat",
 			Type:    "openai_compatible",

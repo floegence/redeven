@@ -1,10 +1,10 @@
-import type { FlowerConfig } from './contracts/flowerSurfaceContracts';
+import type { FlowerModelProfile } from './contracts/flowerSurfaceContracts';
 
 function cleanText(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-export function formatFlowerCurrentModelLabel(config: FlowerConfig, noModelSelected: string): string {
+export function formatFlowerCurrentModelLabel(config: FlowerModelProfile, noModelSelected: string): string {
   const current = cleanText(config.current_model_id);
   if (!current) return noModelSelected;
   const [providerID, ...modelParts] = current.split('/');

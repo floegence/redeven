@@ -22,7 +22,7 @@ type AIConfig struct {
 	// CurrentModelID points to the model used by default for new chats.
 	//
 	// Format: <provider_id>/<model_name>
-	CurrentModelID string `json:"current_model_id"`
+	CurrentModelID string `json:"current_model_id,omitempty"`
 
 	// PermissionType controls the Flower tool surface and approval behavior.
 	//
@@ -47,6 +47,14 @@ type AIConfig struct {
 	// ToolRecoveryFailOnRepeatedSignature controls fail-fast behavior when the same failure signature
 	// repeats across recovery attempts.
 	ToolRecoveryFailOnRepeatedSignature *bool `json:"tool_recovery_fail_on_repeated_signature,omitempty"`
+}
+
+// AIModelProfile is the complete environment-local model registry used by
+// Flower. The persisted AIConfig remains flat, while this value object keeps
+// model availability and validation separate from Flower defaults.
+type AIModelProfile struct {
+	Providers      []AIProvider `json:"providers"`
+	CurrentModelID string       `json:"current_model_id"`
 }
 
 type AIProvider struct {
@@ -302,6 +310,20 @@ func (m AIProviderModel) EffectiveDefaultReasoningSelection(providerType string)
 	return AIReasoningSelection{}
 }
 
+func (c *AIConfig) ModelProfile() AIModelProfile {
+	if c == nil {
+		return AIModelProfile{}
+	}
+	return AIModelProfile{
+		Providers:      c.Providers,
+		CurrentModelID: c.CurrentModelID,
+	}
+}
+
+func (c *AIConfig) HasModelProfile() bool {
+	return c != nil && len(c.Providers) > 0 && strings.TrimSpace(c.CurrentModelID) != ""
+}
+
 func (c *AIConfig) Validate() error {
 	if c == nil {
 		return errors.New("nil config")
@@ -315,14 +337,26 @@ func (c *AIConfig) Validate() error {
 		}
 	}
 
+	profile := c.ModelProfile()
+	if len(profile.Providers) == 0 && strings.TrimSpace(profile.CurrentModelID) == "" {
+		return nil
+	}
+	return profile.Validate()
+}
+
+func (p *AIModelProfile) Validate() error {
+	if p == nil {
+		return errors.New("nil model profile")
+	}
+
 	// Validate providers.
-	if len(c.Providers) == 0 {
+	if len(p.Providers) == 0 {
 		return errors.New("missing providers")
 	}
-	seen := make(map[string]struct{}, len(c.Providers))
-	for i := range c.Providers {
-		p := c.Providers[i]
-		id := strings.TrimSpace(p.ID)
+	seen := make(map[string]struct{}, len(p.Providers))
+	for i := range p.Providers {
+		provider := p.Providers[i]
+		id := strings.TrimSpace(provider.ID)
 		if id == "" {
 			return fmt.Errorf("providers[%d]: missing id", i)
 		}
@@ -334,14 +368,14 @@ func (c *AIConfig) Validate() error {
 		}
 		seen[id] = struct{}{}
 
-		t := strings.ToLower(strings.TrimSpace(p.Type))
+		t := strings.ToLower(strings.TrimSpace(provider.Type))
 		switch t {
 		case "openai", "anthropic", "moonshot", "chatglm", "deepseek", "qwen", "openrouter", "xai", "groq", "ollama", "openai_compatible":
 		default:
 			return fmt.Errorf("providers[%d]: invalid type %q", i, t)
 		}
 
-		baseURL := strings.TrimSpace(p.BaseURL)
+		baseURL := strings.TrimSpace(provider.BaseURL)
 		if requiresExplicitAIProviderBaseURL(t) && baseURL == "" {
 			return fmt.Errorf("providers[%d]: base_url is required for %s", i, t)
 		}
@@ -359,15 +393,15 @@ func (c *AIConfig) Validate() error {
 			}
 		}
 
-		if p.WebSearch != nil {
-			mode := strings.ToLower(strings.TrimSpace(p.WebSearch.Mode))
+		if provider.WebSearch != nil {
+			mode := strings.ToLower(strings.TrimSpace(provider.WebSearch.Mode))
 			if mode == "" {
 				mode = AIProviderWebSearchModeDisabled
 			}
 			switch mode {
 			case AIProviderWebSearchModeDisabled, AIProviderWebSearchModeOpenAIBuiltin, AIProviderWebSearchModeBrave:
 			default:
-				return fmt.Errorf("providers[%d]: invalid web_search.mode %q", i, p.WebSearch.Mode)
+				return fmt.Errorf("providers[%d]: invalid web_search.mode %q", i, provider.WebSearch.Mode)
 			}
 			if t != "openai_compatible" && mode != AIProviderWebSearchModeDisabled {
 				return fmt.Errorf("providers[%d]: web_search.mode is only supported for openai_compatible providers", i)
@@ -375,12 +409,12 @@ func (c *AIConfig) Validate() error {
 		}
 
 		// Validate models (provider-owned list).
-		if len(p.Models) == 0 {
+		if len(provider.Models) == 0 {
 			return fmt.Errorf("providers[%d]: missing models", i)
 		}
-		modelNames := make(map[string]struct{}, len(p.Models))
-		for j := range p.Models {
-			m := p.Models[j]
+		modelNames := make(map[string]struct{}, len(provider.Models))
+		for j := range provider.Models {
+			m := provider.Models[j]
 			name := strings.TrimSpace(m.ModelName)
 			if name == "" {
 				return fmt.Errorf("providers[%d].models[%d]: missing model_name", i, j)
@@ -437,11 +471,24 @@ func (c *AIConfig) Validate() error {
 		}
 	}
 
-	currentModelID := strings.TrimSpace(c.CurrentModelID)
+	currentModelID := strings.TrimSpace(p.CurrentModelID)
 	if currentModelID == "" {
 		return errors.New("missing current model (current_model_id)")
 	}
-	if !c.IsAllowedModelID(currentModelID) {
+	allowed := false
+	for _, provider := range p.Providers {
+		providerID := strings.TrimSpace(provider.ID)
+		for _, model := range provider.Models {
+			if providerID+"/"+strings.TrimSpace(model.ModelName) == currentModelID {
+				allowed = true
+				break
+			}
+		}
+		if allowed {
+			break
+		}
+	}
+	if !allowed {
 		return fmt.Errorf("current_model_id is not in providers[].models[]: %s", currentModelID)
 	}
 

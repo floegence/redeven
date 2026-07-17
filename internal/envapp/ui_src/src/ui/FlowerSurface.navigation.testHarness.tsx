@@ -244,10 +244,10 @@ export async function waitFor(condition: () => boolean, timeoutMs = 1000): Promi
 
 export function settingsSnapshot(configured = true): FlowerSettingsSnapshot {
   return {
-    config: {
+    defaults: { permission_type: 'approval_required' },
+    model_profile: {
       schema_version: 1,
       current_model_id: 'openai/gpt-5.2',
-      permission_type: 'approval_required',
       providers: [
         {
           id: 'openai',
@@ -645,7 +645,8 @@ export function adapter(configured = true): FlowerSurfaceAdapter {
       subtitle: 'Global runtime',
     },
     loadSettings: vi.fn(async () => settingsSnapshot(configured)),
-    saveSettings: vi.fn(async () => settingsSnapshot(configured)),
+    saveDefaultPermission: vi.fn(async () => settingsSnapshot(configured)),
+    saveModelProfile: vi.fn(async () => settingsSnapshot(configured)),
     listThreads: vi.fn(async () => [
       thread(),
       thread({ thread_id: 'thread-2', title: 'Review branch', updated_at_ms: 3 }),
@@ -687,19 +688,27 @@ export function adapter(configured = true): FlowerSurfaceAdapter {
 }
 
 export function mutableSettingsAdapter(configured = true): FlowerSurfaceAdapter & Readonly<{
-  saveSettings: ReturnType<typeof vi.fn>;
+  saveDefaultPermission: ReturnType<typeof vi.fn>;
+  saveModelProfile: ReturnType<typeof vi.fn>;
   setCurrentModel: ReturnType<typeof vi.fn>;
 }> {
   let snapshot = settingsSnapshot(configured);
   return {
     ...adapter(configured),
     loadSettings: vi.fn(async () => snapshot),
-    saveSettings: vi.fn(async (draft: FlowerSettingsDraft) => {
+    saveDefaultPermission: vi.fn(async (permissionType: FlowerSettingsSnapshot['defaults']['permission_type']) => {
       snapshot = {
         ...snapshot,
-        config: {
-          ...draft.config,
-          providers: draft.config.providers.map((provider) => ({
+        defaults: { permission_type: permissionType },
+      };
+      return snapshot;
+    }),
+    saveModelProfile: vi.fn(async (draft: FlowerSettingsDraft) => {
+      snapshot = {
+        ...snapshot,
+        model_profile: {
+          ...draft.model_profile,
+          providers: draft.model_profile.providers.map((provider) => ({
             id: provider.id,
             name: provider.name,
             type: provider.type,
@@ -714,10 +723,10 @@ export function mutableSettingsAdapter(configured = true): FlowerSurfaceAdapter 
     setCurrentModel: vi.fn(async (modelID: string) => {
       snapshot = {
         ...snapshot,
-        config: {
-          ...snapshot.config,
+        model_profile: snapshot.model_profile ? {
+          ...snapshot.model_profile,
           current_model_id: modelID,
-        },
+        } : null,
       };
       return snapshot;
     }),

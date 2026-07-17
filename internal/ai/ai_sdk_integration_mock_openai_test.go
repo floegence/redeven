@@ -293,6 +293,7 @@ func TestIntegration_ModelGateway_OpenAI_IdentityQuestionCompletesWithNaturalSto
 
 	baseURL := strings.TrimSuffix(srv.URL, "/") + "/v1"
 	cfg := &config.AIConfig{
+		CurrentModelID: "openai/gpt-5-mini",
 		Providers: []config.AIProvider{
 			{
 				ID:      "openai",
@@ -416,6 +417,7 @@ func TestIntegration_ModelGateway_OpenAI_ResponsesStream_GPT4o_Succeeds(t *testi
 
 	baseURL := strings.TrimSuffix(srv.URL, "/") + "/v1"
 	cfg := &config.AIConfig{
+		CurrentModelID: "openai/gpt-4o-mini",
 		Providers: []config.AIProvider{
 			{
 				ID:      "openai",

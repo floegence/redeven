@@ -115,7 +115,8 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   transport: FlowerRuntimeTransport;
   mapperOptions: FlowerLiveThreadMapperOptions;
   loadSettings: () => Promise<FlowerSettingsSnapshot>;
-  saveSettings: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
+  saveDefaultPermission: (permissionType: FlowerPermissionType) => Promise<FlowerSettingsSnapshot>;
+  saveModelProfile: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
   setCurrentModel: (modelID: string) => Promise<FlowerSettingsSnapshot>;
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerLiveBootstrap>;
@@ -185,7 +186,8 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
   return {
     runtime: options.runtime,
     loadSettings: options.loadSettings,
-    saveSettings: options.saveSettings,
+    saveDefaultPermission: options.saveDefaultPermission,
+    saveModelProfile: options.saveModelProfile,
     listThreads: async () => {
       const result = await options.transport.listThreads();
       return (result.threads ?? []).map((thread) => mapRuntimeThread(thread, options));

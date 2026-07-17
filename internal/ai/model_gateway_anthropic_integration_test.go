@@ -164,6 +164,7 @@ func newAnthropicTestService(t *testing.T, mock *anthropicMock) (*Service, sessi
 
 	baseURL := strings.TrimSuffix(srv.URL, "/") + "/v1"
 	cfg := &config.AIConfig{
+		CurrentModelID: "anthropic/claude-3-5-sonnet-latest",
 		Providers: []config.AIProvider{
 			{
 				ID:      "anthropic",
