@@ -227,7 +227,11 @@ import {
   type SSHConnectionDialogAdvancedState,
   type SSHConnectionDialogStateSnapshot,
 } from './sshConnectionDialogState';
-import { DesktopAnchoredListbox } from './DesktopAnchoredListbox';
+import {
+  DesktopAnchoredListbox,
+  scrollDesktopListboxOptionIntoView,
+} from './DesktopAnchoredListbox';
+import { SSHDestinationCombobox } from './SSHDestinationCombobox';
 import {
   createDesktopSettingsDraftSession,
   reconcileDesktopSettingsDraftSession,
@@ -2460,24 +2464,6 @@ async function copyToClipboard(text: string): Promise<void> {
   document.body.removeChild(textarea);
 }
 
-function scrollListboxOptionIntoView(
-  listbox: HTMLElement | undefined,
-  optionID: string,
-): void {
-  if (!listbox) {
-    return;
-  }
-  const option = listbox.querySelector<HTMLElement>(`#${CSS.escape(optionID)}`);
-  if (!option) {
-    return;
-  }
-  const listboxRect = listbox.getBoundingClientRect();
-  const optionRect = option.getBoundingClientRect();
-  if (optionRect.top < listboxRect.top || optionRect.bottom > listboxRect.bottom) {
-    option.scrollIntoView({ block: 'nearest' });
-  }
-}
-
 function desktopLauncherBridge(): DesktopLauncherBridge | null {
   const candidate = window.redevenDesktopLauncher;
   if (
@@ -2551,7 +2537,7 @@ function DesktopLanguagePicker(props: Readonly<{
 
   createEffect(() => {
     if (open()) {
-      scrollListboxOptionIntoView(listboxRef, `redeven-desktop-language-option-${highlightedIndex()}`);
+      scrollDesktopListboxOptionIntoView(listboxRef, `redeven-desktop-language-option-${highlightedIndex()}`);
     }
   });
 
@@ -2828,7 +2814,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [gatewaySetupDialogError, setGatewaySetupDialogError] = createSignal('');
   const [gatewaySetupDialogFieldErrors, setGatewaySetupDialogFieldErrors] = createSignal<Partial<Record<string, string>>>({});
   const [sshConfigHosts, setSSHConfigHosts] = createSignal<readonly DesktopSSHConfigHost[]>([]);
-  const [sshConfigHostsLoaded, setSSHConfigHostsLoaded] = createSignal(false);
+  const [sshConfigHostsLoading, setSSHConfigHostsLoading] = createSignal(false);
+  const [sshConfigHostsLoadError, setSSHConfigHostsLoadError] = createSignal(false);
   const [runtimeContainerOptions, setRuntimeContainerOptions] = createSignal<readonly DesktopRuntimeContainerOption[]>([]);
   const [runtimeContainerOptionsLoading, setRuntimeContainerOptionsLoading] = createSignal(false);
   const [runtimeContainerOptionsError, setRuntimeContainerOptionsError] = createSignal('');
@@ -2868,11 +2855,26 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   let nextActionToastID = 0;
   let lifecycleProgressFocusRequestSequence = 0;
   let settingsErrorRef: HTMLElement | undefined;
-  let sshConfigHostsLoading = false;
+  let sshConfigHostsRequestID = 0;
   let runtimeContainerOptionsRequestID = 0;
 
   const visibleSurface = createMemo<DesktopLauncherSurface>(() => snapshot().surface);
   const i18n = createMemo(() => createDesktopI18n(languageSnapshot().resolved_locale));
+  const sshConfigHostsLoadKey = createMemo(() => {
+    const connectionState = connectionDialogState();
+    if (
+      connectionState?.connection_kind === 'ssh_environment'
+      || connectionState?.connection_kind === 'ssh_container_runtime'
+      || (connectionState?.connection_kind === 'gateway_url_profile' && connectionState.profile_route_kind !== 'url')
+    ) {
+      return `connection:${connectionState.mode}:${connectionState.connection_kind}:${connectionState.environment_id}`;
+    }
+    const gatewayState = gatewaySetupDialogState();
+    if (gatewayState?.connection_kind === 'ssh_host' || gatewayState?.connection_kind === 'ssh_container') {
+      return `gateway:${gatewayState.mode}:${gatewayState.connection_kind}:${gatewayState.gateway_id}`;
+    }
+    return '';
+  });
   const headerLogoSrc = createMemo(() => theme.resolvedTheme() === 'light' ? LOGO_LIGHT_URL : LOGO_DARK_URL);
   const settingsSurface = createMemo<DesktopSettingsSurfaceSnapshot>(() => snapshot().settings_surface);
   const settingsBaselineSurface = createMemo<DesktopSettingsSurfaceSnapshot>(() => settingsDraftSession().baseline_surface);
@@ -3245,34 +3247,39 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   }
 
   async function refreshSSHConfigHosts(): Promise<void> {
-    if (sshConfigHostsLoading || !props.runtime.launcher.getSSHConfigHosts) {
+    const requestID = ++sshConfigHostsRequestID;
+    setSSHConfigHostsLoading(true);
+    setSSHConfigHostsLoadError(false);
+    const loadHosts = props.runtime.launcher.getSSHConfigHosts;
+    if (!loadHosts) {
+      if (requestID === sshConfigHostsRequestID) {
+        setSSHConfigHostsLoadError(true);
+        setSSHConfigHostsLoading(false);
+      }
       return;
     }
-    sshConfigHostsLoading = true;
     try {
-      setSSHConfigHosts(await props.runtime.launcher.getSSHConfigHosts());
-      setSSHConfigHostsLoaded(true);
+      const hosts = await loadHosts();
+      if (requestID !== sshConfigHostsRequestID) {
+        return;
+      }
+      setSSHConfigHosts(hosts);
     } catch {
-      setSSHConfigHosts([]);
-      setSSHConfigHostsLoaded(true);
+      if (requestID === sshConfigHostsRequestID) {
+        setSSHConfigHostsLoadError(true);
+      }
     } finally {
-      sshConfigHostsLoading = false;
+      if (requestID === sshConfigHostsRequestID) {
+        setSSHConfigHostsLoading(false);
+      }
     }
   }
 
-  createEffect(() => {
-    const kind = connectionDialogState()?.connection_kind;
-    if ((kind === 'ssh_environment' || kind === 'ssh_container_runtime') && !sshConfigHostsLoaded()) {
+  createEffect(on(sshConfigHostsLoadKey, (loadKey, previousLoadKey) => {
+    if (loadKey !== '' && loadKey !== previousLoadKey) {
       void refreshSSHConfigHosts();
     }
-  });
-
-  createEffect(() => {
-    const kind = gatewaySetupDialogState()?.connection_kind;
-    if ((kind === 'ssh_host' || kind === 'ssh_container') && !sshConfigHostsLoaded()) {
-      void refreshSSHConfigHosts();
-    }
-  });
+  }));
 
   async function refreshRuntimeContainerOptions(force = false): Promise<void> {
     const connectionState = connectionDialogState();
@@ -6393,6 +6400,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         i18n={i18n()}
         state={connectionDialogState()}
         sshConfigHosts={sshConfigHosts()}
+        sshConfigHostsLoading={sshConfigHostsLoading()}
+        sshConfigHostsLoadError={sshConfigHostsLoadError()}
         containerOptions={runtimeContainerOptions()}
         containerOptionsLoading={runtimeContainerOptionsLoading()}
         containerOptionsError={runtimeContainerOptionsError()}
@@ -6410,6 +6419,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         refreshContainerOptions={() => {
           void refreshRuntimeContainerOptions(true);
         }}
+        refreshSSHConfigHosts={() => {
+          void refreshSSHConfigHosts();
+        }}
         switchKind={switchConnectionDialogKind}
         switchBootstrapStrategy={switchSSHBootstrapStrategy}
         removeSSHPassword={removeSSHPasswordFromConnectionDialog}
@@ -6421,6 +6433,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         i18n={i18n()}
         state={gatewaySetupDialogState()}
         sshConfigHosts={sshConfigHosts()}
+        sshConfigHostsLoading={sshConfigHostsLoading()}
+        sshConfigHostsLoadError={sshConfigHostsLoadError()}
         containerOptions={runtimeContainerOptions()}
         containerOptionsLoading={runtimeContainerOptionsLoading()}
         containerOptionsError={runtimeContainerOptionsError()}
@@ -6435,6 +6449,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         updateField={updateGatewaySetupDialogField}
         refreshContainerOptions={() => {
           void refreshRuntimeContainerOptions(true);
+        }}
+        refreshSSHConfigHosts={() => {
+          void refreshSSHConfigHosts();
         }}
         clearFieldErrors={() => setGatewaySetupDialogFieldErrors({})}
         removeSSHPassword={removeSSHPasswordFromGatewaySetupDialog}
@@ -13523,211 +13540,6 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
   );
 }
 
-function sshConfigHostSearchText(host: DesktopSSHConfigHost): string {
-  return [
-    host.alias,
-    host.host_name,
-    host.user,
-    host.port == null ? '' : String(host.port),
-  ].join(' ').toLowerCase();
-}
-
-function sshConfigHostEndpointLabel(host: DesktopSSHConfigHost): string {
-  const endpoint = host.host_name || host.alias;
-  return host.user ? `${host.user}@${endpoint}` : endpoint;
-}
-
-function SSHDestinationCombobox(props: Readonly<{
-  i18n: DesktopI18n;
-  value: string;
-  hosts: readonly DesktopSSHConfigHost[];
-  autofocus: boolean;
-  class?: string;
-  onInput: (value: string) => void;
-  onSelectHost: (host: DesktopSSHConfigHost) => void;
-}>) {
-  const [open, setOpen] = createSignal(false);
-  const [highlightedIndex, setHighlightedIndex] = createSignal(0);
-  let closeTimer: number | undefined;
-  let rootRef: HTMLDivElement | undefined;
-  let listboxRef: HTMLDivElement | undefined;
-
-  const filteredHosts = createMemo(() => {
-    const query = trimString(props.value).toLowerCase();
-    const hosts = query === ''
-      ? props.hosts
-      : props.hosts.filter((host) => sshConfigHostSearchText(host).includes(query));
-    return hosts.slice(0, 8);
-  });
-
-  createEffect(() => {
-    const hostCount = filteredHosts().length;
-    if (hostCount <= 0) {
-      setHighlightedIndex(0);
-      return;
-    }
-    if (highlightedIndex() >= hostCount) {
-      setHighlightedIndex(hostCount - 1);
-    }
-  });
-
-  createEffect(() => {
-    if (open() && filteredHosts().length > 0) {
-      scrollListboxOptionIntoView(listboxRef, `environment-ssh-host-option-${highlightedIndex()}`);
-    }
-  });
-
-  onCleanup(() => {
-    if (closeTimer !== undefined) {
-      window.clearTimeout(closeTimer);
-    }
-  });
-
-  function containsTarget(target: EventTarget | null): boolean {
-    return target instanceof Node && (rootRef?.contains(target) === true || listboxRef?.contains(target) === true);
-  }
-
-  function openMenu(): void {
-    if (closeTimer !== undefined) {
-      window.clearTimeout(closeTimer);
-      closeTimer = undefined;
-    }
-    setOpen(true);
-  }
-
-  function closeMenuSoon(): void {
-    closeTimer = window.setTimeout(() => setOpen(false), 100);
-  }
-
-  function selectHost(host: DesktopSSHConfigHost): void {
-    props.onSelectHost(host);
-    setOpen(false);
-  }
-
-  function moveHighlight(delta: number): void {
-    const hostCount = filteredHosts().length;
-    if (hostCount <= 0) {
-      return;
-    }
-    setHighlightedIndex((current) => (current + delta + hostCount) % hostCount);
-  }
-
-  return (
-    <div
-      ref={rootRef}
-      class="relative"
-      onFocusOut={(event) => {
-        if (containsTarget(event.relatedTarget)) {
-          return;
-        }
-        closeMenuSoon();
-      }}
-    >
-      <Input
-        id="environment-ssh-destination"
-        value={props.value}
-        onInput={(event) => {
-          props.onInput(event.currentTarget.value);
-          openMenu();
-        }}
-        onFocus={openMenu}
-        onKeyDown={(event) => {
-          if (!open() && (event.key === 'ArrowDown' || event.key === 'ArrowUp')) {
-            setOpen(true);
-          }
-          if (!open() || filteredHosts().length <= 0) {
-            return;
-          }
-          if (event.key === 'ArrowDown') {
-            event.preventDefault();
-            moveHighlight(1);
-          } else if (event.key === 'ArrowUp') {
-            event.preventDefault();
-            moveHighlight(-1);
-          } else if (event.key === 'Enter') {
-            event.preventDefault();
-            const host = filteredHosts()[highlightedIndex()];
-            if (host) {
-              selectHost(host);
-            }
-          } else if (event.key === 'Escape') {
-            event.preventDefault();
-            setOpen(false);
-          }
-        }}
-        placeholder={props.i18n.t('connectionDialog.sshDestinationPlaceholder')}
-        size="sm"
-        class={cn('w-full', props.class)}
-        spellcheck={false}
-        autofocus={props.autofocus}
-        role="combobox"
-        aria-expanded={open() && filteredHosts().length > 0 ? 'true' : 'false'}
-        aria-controls="environment-ssh-destination-options"
-        aria-activedescendant={open() && filteredHosts().length > 0 ? `environment-ssh-host-option-${highlightedIndex()}` : undefined}
-        aria-autocomplete="list"
-      />
-      <Show when={open() && filteredHosts().length > 0}>
-        <DesktopAnchoredListbox
-          id="environment-ssh-destination-options"
-          anchorRef={rootRef}
-          class="p-1"
-          maxHeight={224}
-          role="listbox"
-          open={open() && filteredHosts().length > 0}
-          onOverlayRef={(element) => {
-            listboxRef = element;
-          }}
-        >
-          <div
-            class="min-h-0 flex-1 overflow-auto"
-            onWheel={(event) => {
-              const el = event.currentTarget as HTMLElement;
-              event.stopPropagation();
-              if (el.scrollHeight > el.clientHeight) {
-                el.scrollTop += event.deltaY;
-              }
-            }}
-          >
-            <For each={filteredHosts()}>
-              {(host, index) => (
-                <button
-                  type="button"
-                  id={`environment-ssh-host-option-${index()}`}
-                  class={cn(
-                    'flex w-full cursor-pointer items-center justify-between gap-3 rounded px-2.5 py-2 text-left transition-colors',
-                    highlightedIndex() === index()
-                      ? 'bg-accent text-accent-foreground'
-                      : 'text-foreground hover:bg-accent/70 hover:text-accent-foreground',
-                  )}
-                  role="option"
-                  tabIndex={-1}
-                  aria-selected={highlightedIndex() === index() ? 'true' : 'false'}
-                  onClick={() => selectHost(host)}
-                  onMouseEnter={() => setHighlightedIndex(index())}
-                  onMouseDown={(event) => {
-                    event.preventDefault();
-                    selectHost(host);
-                  }}
-                >
-                  <span class="min-w-0">
-                    <span class="block truncate font-mono text-xs">{host.alias}</span>
-                    <span class="block truncate text-[11px] text-muted-foreground">{sshConfigHostEndpointLabel(host)}</span>
-                  </span>
-                  <Show when={host.port !== null}>
-                    <Tag variant="neutral" tone="soft" size="sm" class="shrink-0 cursor-default whitespace-nowrap">
-                      {props.i18n.t('connectionDialog.sshPortTag', { port: host.port ?? '' })}
-                    </Tag>
-                  </Show>
-                </button>
-              )}
-            </For>
-          </div>
-        </DesktopAnchoredListbox>
-      </Show>
-    </div>
-  );
-}
-
 function runtimeContainerSearchText(container: DesktopRuntimeContainerOption): string {
   return [
     container.container_label,
@@ -13799,7 +13611,7 @@ function ContainerPicker(props: Readonly<{
 
   createEffect(() => {
     if (open() && filteredContainers().length > 0) {
-      scrollListboxOptionIntoView(listboxRef, `environment-container-option-${highlightedIndex()}`);
+      scrollDesktopListboxOptionIntoView(listboxRef, `environment-container-option-${highlightedIndex()}`);
     }
   });
 
@@ -14124,7 +13936,7 @@ function GatewayProfileSourcePicker(props: Readonly<{
 
   createEffect(() => {
     if (open()) {
-      scrollListboxOptionIntoView(listboxRef, `${listboxID}-option-${highlightedIndex()}`);
+      scrollDesktopListboxOptionIntoView(listboxRef, `${listboxID}-option-${highlightedIndex()}`);
     }
   });
 
@@ -14382,6 +14194,8 @@ function ConnectionDialog(props: Readonly<{
   i18n: DesktopI18n;
   state: ConnectionDialogState;
   sshConfigHosts: readonly DesktopSSHConfigHost[];
+  sshConfigHostsLoading: boolean;
+  sshConfigHostsLoadError: boolean;
   containerOptions: readonly DesktopRuntimeContainerOption[];
   containerOptionsLoading: boolean;
   containerOptionsError: string;
@@ -14396,6 +14210,7 @@ function ConnectionDialog(props: Readonly<{
   ) => void;
   toggleAutoRuntimeProbe: (enabled: boolean) => void;
   refreshContainerOptions: () => void;
+  refreshSSHConfigHosts: () => void;
   switchKind: (kind: ConnectionDialogKind) => void;
   switchBootstrapStrategy: (strategy: DesktopSSHBootstrapStrategy) => void;
   removeSSHPassword: () => void;
@@ -14692,8 +14507,11 @@ function ConnectionDialog(props: Readonly<{
                   </label>
                   <SSHDestinationCombobox
                     i18n={props.i18n}
+                    inputID="environment-ssh-destination"
                     value={isSSHBackedKind() ? (props.state as SSHBackedConnectionDialogState | null)?.ssh_destination ?? '' : ''}
                     hosts={props.sshConfigHosts}
+                    loading={props.sshConfigHostsLoading}
+                    loadError={props.sshConfigHostsLoadError}
                     autofocus={props.state?.mode === 'create'}
                     class={props.fieldErrors.ssh_destination && 'border-destructive ring-1 ring-destructive/20'}
                     onInput={(value) => {
@@ -14704,6 +14522,7 @@ function ConnectionDialog(props: Readonly<{
                       props.updateField('ssh_destination', host.alias);
                       props.updateField('ssh_port', host.port == null ? '' : String(host.port));
                     }}
+                    onRetry={props.refreshSSHConfigHosts}
                   />
                   <Show when={props.fieldErrors.ssh_destination}>
                     <div class="text-[11px] text-destructive">{props.fieldErrors.ssh_destination}</div>
@@ -15023,6 +14842,8 @@ function GatewaySetupDialog(props: Readonly<{
   i18n: DesktopI18n;
   state: GatewaySetupDialogState | null;
   sshConfigHosts: readonly DesktopSSHConfigHost[];
+  sshConfigHostsLoading: boolean;
+  sshConfigHostsLoadError: boolean;
   containerOptions: readonly DesktopRuntimeContainerOption[];
   containerOptionsLoading: boolean;
   containerOptionsError: string;
@@ -15032,6 +14853,7 @@ function GatewaySetupDialog(props: Readonly<{
   onOpenChange: (open: boolean) => void;
   updateField: (name: keyof GatewaySetupDialogState, value: string | boolean) => void;
   refreshContainerOptions: () => void;
+  refreshSSHConfigHosts: () => void;
   clearFieldErrors: () => void;
   removeSSHPassword: () => void;
   onSave: () => Promise<void>;
@@ -15232,8 +15054,11 @@ function GatewaySetupDialog(props: Readonly<{
                   </label>
                   <SSHDestinationCombobox
                     i18n={props.i18n}
+                    inputID="gateway-ssh-destination"
                     value={props.state?.ssh_destination ?? ''}
                     hosts={props.sshConfigHosts}
+                    loading={props.sshConfigHostsLoading}
+                    loadError={props.sshConfigHostsLoadError}
                     autofocus={connectionKind() !== 'url' && props.state?.mode === 'create'}
                     class={props.fieldErrors.ssh_destination && 'border-destructive ring-1 ring-destructive/20'}
                     onInput={(value) => {
@@ -15244,6 +15069,7 @@ function GatewaySetupDialog(props: Readonly<{
                       props.updateField('ssh_destination', host.alias);
                       props.updateField('ssh_port', host.port == null ? '' : String(host.port));
                     }}
+                    onRetry={props.refreshSSHConfigHosts}
                   />
                   <Show when={props.fieldErrors.ssh_destination}>
                     <div class="text-[11px] text-destructive">{props.fieldErrors.ssh_destination}</div>
@@ -15549,7 +15375,7 @@ function OfficialProviderPicker(props: Readonly<{
 
   createEffect(() => {
     if (open()) {
-      scrollListboxOptionIntoView(listboxRef, `control-plane-provider-option-${highlightedIndex()}`);
+      scrollDesktopListboxOptionIntoView(listboxRef, `control-plane-provider-option-${highlightedIndex()}`);
     }
   });
 

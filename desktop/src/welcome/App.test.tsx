@@ -61,6 +61,10 @@ function readDesktopAnchoredListboxSource(): string {
   return fs.readFileSync(path.join(__dirname, 'DesktopAnchoredListbox.tsx'), 'utf8');
 }
 
+function readSSHDestinationComboboxSource(): string {
+  return fs.readFileSync(path.join(__dirname, 'SSHDestinationCombobox.tsx'), 'utf8');
+}
+
 function readWelcomeStyles(): string {
   return fs.readFileSync(path.join(__dirname, 'index.css'), 'utf8');
 }
@@ -1232,11 +1236,13 @@ describe('DesktopWelcomeShell', () => {
   it('renders dialog field listboxes through anchored portals so footers and scroll panes cannot clip them', () => {
     const appSrc = readWelcomeSource();
     const listboxSrc = readDesktopAnchoredListboxSource();
+    const sshComboboxSrc = readSSHDestinationComboboxSource();
 
-    expect(appSrc).toContain("import { DesktopAnchoredListbox } from './DesktopAnchoredListbox';");
+    expect(appSrc).toContain("} from './DesktopAnchoredListbox';");
     expect(appSrc).toContain('<DesktopAnchoredListbox');
+    expect(sshComboboxSrc).toContain('<DesktopAnchoredListbox');
     expect(appSrc).toContain('anchorRef={buttonRef}');
-    expect(appSrc).toContain('anchorRef={rootRef}');
+    expect(sshComboboxSrc).toContain('anchorRef={rootRef}');
     expect(appSrc).toContain('width={288}');
     expect(appSrc).not.toContain('class="absolute left-0 right-0 z-50 mt-1 max-h-56 overflow-auto rounded-md border border-border bg-popover p-1 shadow-xl"');
     expect(appSrc).not.toContain('class="absolute left-0 right-0 z-50 mt-1 overflow-hidden rounded-md border border-border bg-popover shadow-xl"');
@@ -1267,7 +1273,7 @@ describe('DesktopWelcomeShell', () => {
     expect(pickerSrc).toContain('role="listbox"');
     expect(pickerSrc).toContain('role="option"');
     expect(pickerSrc).toContain('tabIndex={-1}');
-    expect(pickerSrc).toContain('scrollListboxOptionIntoView');
+    expect(pickerSrc).toContain('scrollDesktopListboxOptionIntoView');
     expect(pickerSrc).toContain('aria-haspopup="listbox"');
     expect(pickerSrc).toContain("aria-expanded={open() ? 'true' : 'false'}");
     expect(pickerSrc).toContain('aria-controls="redeven-desktop-language-options"');
@@ -1300,7 +1306,7 @@ describe('DesktopWelcomeShell', () => {
     expect(pickerSrc).toContain('role="listbox"');
     expect(pickerSrc).toContain('role="option"');
     expect(pickerSrc).toContain('tabIndex={-1}');
-    expect(pickerSrc).toContain('scrollListboxOptionIntoView');
+    expect(pickerSrc).toContain('scrollDesktopListboxOptionIntoView');
     expect(pickerSrc).toContain('aria-haspopup="listbox"');
     expect(pickerSrc).toContain("aria-expanded={open() ? 'true' : 'false'}");
     expect(pickerSrc).toContain('aria-controls={listboxID}');
@@ -1992,6 +1998,7 @@ describe('DesktopWelcomeShell', () => {
 
   it('keeps the New Environment dialog focused on Redeven URLs, SSH hosts, and managed container targets', () => {
     const appSrc = readWelcomeSource();
+    const sshComboboxSrc = readSSHDestinationComboboxSource();
 
     expect(appSrc).toContain("props.i18n.t('connectionDialog.name')");
     expect(appSrc).not.toContain('Environment Name');
@@ -2041,7 +2048,17 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("label: props.i18n.t('connectionDialog.remoteFallback')");
     expect(appSrc).toContain("props.i18n.t('connectionDialog.bootstrapHelp')");
     expect(appSrc).toContain("props.i18n.t('connectionDialog.sshDestination')");
-    expect(appSrc).toContain('function SSHDestinationCombobox');
+    expect(appSrc).toContain("import { SSHDestinationCombobox } from './SSHDestinationCombobox';");
+    expect(sshComboboxSrc).toContain('export function SSHDestinationCombobox');
+    expect(sshComboboxSrc).toContain('filterAndRankSSHConfigHosts(props.hosts, props.value)');
+    expect(sshComboboxSrc).not.toContain('hosts.slice(0, 8)');
+    expect(sshComboboxSrc).toContain('maxHeight={320}');
+    expect(sshComboboxSrc).toContain("props.i18n.t('connectionDialog.sshConfigLoading')");
+    expect(sshComboboxSrc).toContain("props.i18n.t('connectionDialog.sshConfigLoadFailed')");
+    expect(sshComboboxSrc).toContain("props.i18n.t('connectionDialog.sshConfigEmpty')");
+    expect(sshComboboxSrc).toContain("props.i18n.t('connectionDialog.sshConfigNoMatches')");
+    expect(appSrc).toContain('inputID="environment-ssh-destination"');
+    expect(appSrc).toContain('inputID="gateway-ssh-destination"');
     expect(appSrc).toContain('sm:grid-cols-[minmax(0,1fr)_7.5rem]');
     expect(appSrc).toContain("props.updateField('ssh_destination', host.alias);");
     expect(appSrc).toContain("props.updateField('ssh_port', host.port == null ? '' : String(host.port));");
@@ -2053,6 +2070,18 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("props.i18n.t('connectionDialog.runtimeRootHelp'");
     expect(appSrc).not.toContain(['Remote', 'Install', 'Directory'].join(' '));
     expect(appSrc).not.toContain(['default', 'remote', 'user', 'cache'].join(' '));
+  });
+
+  it('refreshes SSH config hosts for each SSH dialog entry without reloading on field input', () => {
+    const appSrc = readWelcomeSource();
+
+    expect(appSrc).toContain('const sshConfigHostsLoadKey = createMemo(() => {');
+    expect(appSrc).toContain('createEffect(on(sshConfigHostsLoadKey, (loadKey, previousLoadKey) => {');
+    expect(appSrc).toContain('const requestID = ++sshConfigHostsRequestID;');
+    expect(appSrc).toContain('if (requestID !== sshConfigHostsRequestID)');
+    expect(appSrc).toContain('setSSHConfigHostsLoading(true);');
+    expect(appSrc).toContain('setSSHConfigHostsLoadError(true);');
+    expect(appSrc).not.toContain('sshConfigHostsLoaded');
   });
 
   it('keeps the connection dialog source-scoped across URL, SSH, and managed container targets', () => {
