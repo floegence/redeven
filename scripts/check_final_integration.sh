@@ -100,6 +100,8 @@ run_step "checking third-party notices" node scripts/generate_third_party_notice
 run_step "testing README localization contract" node --test scripts/check_readme_localizations.test.mjs
 run_step "checking reviewed README localizations" node scripts/check_readme_localizations.mjs --require-reviewed
 run_step "testing Git hook contracts" ./scripts/test_git_hooks.sh
+run_step "testing Go packages serially without cache" env GOWORK=off go test -p 1 -count=1 ./...
+run_step "linting Go packages" env GOWORK=off golangci-lint run ./...
 run_step "linting UI packages" ./scripts/lint_ui.sh
 run_step "testing release note generation" ./scripts/test_generate_release_notes.sh
 run_step "checking Runtime compatibility source" ./scripts/check_runtime_compatibility_contract.sh --source-only
@@ -118,8 +120,6 @@ run_step "checking Docker Runtime E2E" ./scripts/check_docker_runtime_e2e.sh
 run_step "checking open-source hygiene" ./scripts/open_source_hygiene_check.sh --all
 run_step "checking OKF source integrity" ./scripts/okf/check_source_integrity.sh
 run_step "verifying OKF bundle" ./scripts/build_okf_bundle.sh --verify-only
-run_step "testing Go packages" env GOWORK=off go test ./...
-run_step "linting Go packages" env GOWORK=off golangci-lint run ./...
 
 if [ -n "$(git status --porcelain)" ]; then
   echo "[ERROR] final integration gate changed the worktree" >&2
