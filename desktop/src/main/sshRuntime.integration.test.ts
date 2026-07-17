@@ -19,6 +19,7 @@ import {
   stopManagedSSHRuntimeProcesses,
   type ManagedSSHRuntime,
   type ManagedSSHRuntimeReady,
+  type StartManagedSSHRuntimeArgs,
 } from './sshRuntime';
 import type { DesktopSSHBootstrapStrategy, DesktopSSHEnvironmentDetails } from '../shared/desktopSSH';
 import type { DesktopOperationFailurePresentation } from '../shared/desktopOperationFailure';
@@ -41,6 +42,12 @@ type FakeSSHScenario =
   | 'remote_install'
   | 'desktop_upload'
   | 'upload_install_fail'
+  | 'upload_temp_dir_fail'
+  | 'upload_temp_dir_connection_interrupted'
+  | 'upload_install_connection_interrupted'
+  | 'report_connection_interrupted'
+  | 'master_readiness_noise'
+  | 'master_readiness_timeout'
   | 'no_report'
   | 'quick_exit_report'
   | 'blocked_report'
@@ -366,6 +373,40 @@ function terminateLater(event, cleanup) {
   setInterval(() => {}, 1000);
 }
 
+function interruptControlConnection(message) {
+  writeState({ ...readState(), control_interrupted: true });
+  process.stderr.write(message + '\n');
+  setTimeout(() => process.exit(255), 40);
+}
+
+function startMaster() {
+  appendLog('master_start', {
+    socket: controlSocketPath(),
+    batch_mode: sshOptionValue('BatchMode'),
+    password_prompts: sshOptionValue('NumberOfPasswordPrompts'),
+    forward_x11: sshOptionValue('ForwardX11'),
+    request_tty: sshOptionValue('RequestTTY'),
+    disables_x11: args.includes('-x'),
+    disables_tty: args.includes('-T'),
+    askpass_require: process.env.SSH_ASKPASS_REQUIRE || '',
+    askpass_configured: Boolean(process.env.SSH_ASKPASS),
+  });
+  const monitor = setInterval(() => {
+    if (readState().control_interrupted !== true) return;
+    clearInterval(monitor);
+    appendLog('master_interrupted');
+    process.stderr.write('Connection to devbox closed by remote host.\n');
+    process.exit(255);
+  }, 5);
+  const finish = () => {
+    clearInterval(monitor);
+    appendLog('master_terminated');
+    setTimeout(() => process.exit(0), 10);
+  };
+  process.on('SIGTERM', finish);
+  process.on('SIGINT', finish);
+}
+
 function writeProbeResult() {
   const state = readState();
   const installed = state.installed === true;
@@ -548,25 +589,30 @@ function startForward() {
 
 if (args.includes('-O') && args.includes('check')) {
   appendLog('master_check', { socket: controlSocketPath() });
+  const state = readState();
+  const readinessCheckShouldFail = scenario === 'master_readiness_timeout'
+    || (scenario === 'master_readiness_noise' && Number(state.master_check_count || 0) < 2);
+  if (readinessCheckShouldFail) {
+    writeState({ ...state, master_check_count: Number(state.master_check_count || 0) + 1 });
+    process.stderr.write('Control socket connect(' + controlSocketPath() + '): No such file or directory\n');
+    process.exit(255);
+  }
+  if (state.control_interrupted === true) {
+    process.stderr.write('Control socket connect(' + controlSocketPath() + '): No such file or directory\n');
+    process.exit(255);
+  }
   process.exit(0);
 }
 
 if (args.includes('-M') && args.includes('-N')) {
-  appendLog('master_start', {
-    socket: controlSocketPath(),
-    batch_mode: sshOptionValue('BatchMode'),
-    password_prompts: sshOptionValue('NumberOfPasswordPrompts'),
-    forward_x11: sshOptionValue('ForwardX11'),
-    request_tty: sshOptionValue('RequestTTY'),
-    disables_x11: args.includes('-x'),
-    disables_tty: args.includes('-T'),
-    askpass_require: process.env.SSH_ASKPASS_REQUIRE || '',
-    askpass_configured: Boolean(process.env.SSH_ASKPASS),
-  });
-  terminateLater('master_terminated');
+  startMaster();
 } else if (args.includes('-L')) {
   startForward();
 } else {
+  if (readState().control_interrupted === true) {
+    process.stderr.write('Control socket connect(' + controlSocketPath() + '): No such file or directory\n');
+    process.exit(255);
+  }
   switch (marker()) {
     case 'redeven-ssh-runtime-probe':
       appendLog('probe_runtime', {
@@ -592,6 +638,14 @@ if (args.includes('-M') && args.includes('-N')) {
       break;
     case 'redeven-ssh-create-upload-dir':
       appendLog('create_remote_temp_dir');
+      if (scenario === 'upload_temp_dir_fail') {
+        process.stderr.write("mktemp: failed to create directory via template '/tmp/redeven-ssh-upload.XXXXXX': Permission denied\n");
+        process.exit(1);
+      }
+      if (scenario === 'upload_temp_dir_connection_interrupted') {
+        interruptControlConnection('Connection closed by remote host during upload directory creation.');
+        break;
+      }
       process.stdout.write('/tmp/redeven-ssh-upload.fake\n');
       process.exit(0);
       break;
@@ -612,6 +666,10 @@ if (args.includes('-M') && args.includes('-N')) {
       break;
     case 'redeven-ssh-upload-install':
       appendLog('upload_install');
+      if (scenario === 'upload_install_connection_interrupted') {
+        interruptControlConnection('Connection closed by remote host during uploaded runtime installation.');
+        break;
+      }
       if (scenario === 'upload_install_fail') {
         process.stderr.write('simulated upload install failure\n');
         process.exit(2);
@@ -656,7 +714,9 @@ if (args.includes('-M') && args.includes('-N')) {
         });
       }
       if (scenario === 'blocked_report') {
-        process.exit(1);
+        setTimeout(() => process.exit(1), 250);
+        setInterval(() => {}, 1000);
+        break;
       }
       if (scenario === 'quick_exit_report') {
         process.exit(0);
@@ -668,6 +728,10 @@ if (args.includes('-M') && args.includes('-N')) {
         process.exit(1);
       }
       appendLog('read_report');
+      if (scenario === 'report_connection_interrupted') {
+        interruptControlConnection('Connection closed by remote host while reading the startup report.');
+        break;
+      }
       if (scenario === 'no_report') {
         process.exit(1);
       }
@@ -849,6 +913,8 @@ async function createFakeSSHFixture(scenario: FakeSSHScenario): Promise<FakeSSHF
       || scenario === 'forwarded_network_reset'
       || scenario === 'forwarded_invalid_response'
       || scenario === 'runtime_control_forward_early_exit'
+      || scenario === 'report_connection_interrupted'
+      || scenario === 'master_readiness_noise'
       || scenario === 'no_report'
       || scenario === 'quick_exit_report'
       || scenario === 'blocked_report'
@@ -869,6 +935,8 @@ async function createFakeSSHFixture(scenario: FakeSSHScenario): Promise<FakeSSHF
       || scenario === 'forwarded_network_reset'
       || scenario === 'forwarded_invalid_response'
       || scenario === 'runtime_control_forward_early_exit'
+      || scenario === 'report_connection_interrupted'
+      || scenario === 'master_readiness_noise'
       || scenario === 'no_report'
       || scenario === 'quick_exit_report'
       || scenario === 'blocked_report'
@@ -980,6 +1048,7 @@ async function startWithFakeSSH(
     allowActiveWorkReplacement?: boolean;
     requireDesktopModelSource?: boolean;
     signal?: AbortSignal;
+    onLog?: StartManagedSSHRuntimeArgs['onLog'];
   }> = {},
 ): Promise<ManagedSSHRuntime> {
   const runtime = await withFakeSSHEnv(fixture, () => startManagedSSHRuntime({
@@ -999,6 +1068,7 @@ async function startWithFakeSSH(
     connectTimeoutSeconds: 1,
     requireDesktopModelSource: options.requireDesktopModelSource === true,
     signal: options.signal,
+    onLog: options.onLog,
   }));
   const stop = async () => await withFakeSSHEnv(fixture, runtime.stop);
   return {
@@ -1812,6 +1882,140 @@ describe('sshRuntime integration', () => {
     expect(eventNames).toContain('upload_install');
     expect(eventNames).not.toContain('remote_install');
     await removeFakeSSHFixture(fixture);
+  });
+
+  it('reports an unavailable remote upload directory while the SSH control session remains healthy', async () => {
+    const fixture = await createFakeSSHFixture('upload_temp_dir_fail');
+    installReleaseFetchMock(new Map([
+      ['redeven_linux_amd64.tar.gz', Buffer.from('fake archive')],
+    ]));
+    try {
+      const failure = await captureDesktopOperationFailure(() => startWithFakeSSH(fixture, 'desktop_upload'));
+
+      expect(failure).toMatchObject({
+        code: 'ssh_upload_directory_unavailable',
+        title_key: 'progress.sshUploadDirectoryUnavailableTitle',
+        summary_key: 'progress.sshUploadDirectoryUnavailableSummary',
+        detail_key: 'progress.sshUploadDirectoryUnavailableDetail',
+        recovery_hint_key: 'progress.sshUploadDirectoryUnavailableRecoveryHint',
+      });
+      expect(failure.detail).toContain('SSH connection is still active');
+      expect(failure.diagnostics?.find((item) => item.channel === 'control_stderr')?.text).toContain('Permission denied');
+
+      const eventNames = (await readFakeSSHEvents(fixture)).map((event) => event.event);
+      expect(eventNames).toContain('create_remote_temp_dir');
+      expect(eventNames).toContain('master_check');
+      expect(eventNames).not.toContain('upload_archive');
+      expect(eventNames).not.toContain('upload_install');
+      expect(eventNames).not.toContain('remote_install');
+    } finally {
+      await removeFakeSSHFixture(fixture);
+    }
+  });
+
+  it('classifies a lost control session during upload directory creation as an SSH interruption', async () => {
+    const fixture = await createFakeSSHFixture('upload_temp_dir_connection_interrupted');
+    installReleaseFetchMock(new Map([
+      ['redeven_linux_amd64.tar.gz', Buffer.from('fake archive')],
+    ]));
+    try {
+      const failure = await captureDesktopOperationFailure(() => startWithFakeSSH(fixture, 'desktop_upload'));
+
+      expect(failure).toMatchObject({
+        code: 'ssh_connection_interrupted',
+        title_key: 'progress.sshConnectionInterruptedTitle',
+        summary_key: 'progress.sshConnectionInterruptedSummary',
+        detail_key: 'progress.sshConnectionInterruptedDetail',
+        recovery_hint_key: 'progress.sshConnectionInterruptedRecoveryHint',
+      });
+      expect(failure.summary).not.toContain('temporary directory');
+      expect(failure.summary).not.toContain('upload directory');
+      const diagnostics = failure.diagnostics?.map((item) => item.text).join('\n') ?? '';
+      expect(diagnostics).toContain('Connection closed by remote host');
+      expect(diagnostics.match(/\[ssh -O check\]/gu)).toHaveLength(1);
+
+      const eventNames = (await readFakeSSHEvents(fixture)).map((event) => event.event);
+      expect(eventNames).toContain('master_interrupted');
+      expect(eventNames).not.toContain('upload_archive');
+      expect(eventNames).not.toContain('upload_install');
+    } finally {
+      await removeFakeSSHFixture(fixture);
+    }
+  });
+
+  it('uses the same SSH interruption contract when the uploaded runtime install loses ControlMaster', async () => {
+    const fixture = await createFakeSSHFixture('upload_install_connection_interrupted');
+    installReleaseFetchMock(new Map([
+      ['redeven_linux_amd64.tar.gz', Buffer.from('fake archive')],
+    ]));
+    try {
+      const failure = await captureDesktopOperationFailure(() => startWithFakeSSH(fixture, 'desktop_upload'));
+
+      expect(failure.code).toBe('ssh_connection_interrupted');
+      expect(failure.summary).toContain('reusable SSH connection ended');
+      const eventNames = (await readFakeSSHEvents(fixture)).map((event) => event.event);
+      expect(eventNames).toContain('upload_archive');
+      expect(eventNames).toContain('upload_install');
+      expect(eventNames).not.toContain('activate_runtime');
+      expect(eventNames).not.toContain('start_runtime');
+    } finally {
+      await removeFakeSSHFixture(fixture);
+    }
+  });
+
+  it('stops startup-report polling immediately when the SSH control session is interrupted', async () => {
+    const fixture = await createFakeSSHFixture('report_connection_interrupted');
+    try {
+      const failure = await captureDesktopOperationFailure(() => startWithFakeSSH(fixture, 'auto', {
+        startupTimeoutMs: 5_000,
+      }));
+
+      expect(failure.code).toBe('ssh_connection_interrupted');
+      expect(failure.summary).not.toContain('Timed out');
+      const eventNames = (await readFakeSSHEvents(fixture)).map((event) => event.event);
+      expect(eventNames).toContain('start_runtime');
+      expect(eventNames.filter((event) => event === 'read_report')).toHaveLength(1);
+      expect(eventNames).toContain('master_interrupted');
+      expect(eventNames).not.toContain('forward_start');
+    } finally {
+      await removeFakeSSHFixture(fixture);
+    }
+  });
+
+  it('keeps expected control-socket readiness polling noise out of user diagnostics', async () => {
+    const fixture = await createFakeSSHFixture('master_readiness_noise');
+    const observedLogs: string[] = [];
+    let runtime: ManagedSSHRuntime | null = null;
+    try {
+      runtime = await startWithFakeSSH(fixture, 'auto', {
+        onLog: (_stream, chunk) => observedLogs.push(chunk),
+      });
+      const events = await readFakeSSHEvents(fixture);
+      expect(events.filter((event) => event.event === 'master_check').length).toBeGreaterThanOrEqual(3);
+      expect(observedLogs.join('\n')).not.toContain('Control socket connect');
+    } finally {
+      await runtime?.disconnect();
+      await removeFakeSSHFixture(fixture);
+    }
+  });
+
+  it('records only the final failed liveness check when the control socket never becomes ready', async () => {
+    const fixture = await createFakeSSHFixture('master_readiness_timeout');
+    try {
+      const failure = await captureDesktopOperationFailure(() => startWithFakeSSH(fixture, 'auto', {
+        startupTimeoutMs: 350,
+      }));
+
+      expect(failure.code).toBe('ssh_connection_failed');
+      const masterDiagnostic = failure.diagnostics?.find((item) => item.channel === 'master_stderr')?.text ?? '';
+      expect(masterDiagnostic.match(/\[ssh -O check\]/gu)).toHaveLength(1);
+      expect(masterDiagnostic.match(/Control socket connect/gu)).toHaveLength(1);
+      const events = await readFakeSSHEvents(fixture);
+      expect(events.filter((event) => event.event === 'master_check').length).toBeGreaterThanOrEqual(1);
+      expect(events.map((event) => event.event)).not.toContain('probe_runtime');
+    } finally {
+      await removeFakeSSHFixture(fixture);
+    }
   });
 
   it('reinstalls a release runtime when the user explicitly requests an update before restart', async () => {

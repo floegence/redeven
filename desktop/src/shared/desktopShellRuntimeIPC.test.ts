@@ -65,6 +65,22 @@ describe('desktopShellRuntimeIPC', () => {
     });
   });
 
+  it.each([
+    'ssh_connection_interrupted',
+    'ssh_upload_directory_unavailable',
+  ] as const)('preserves %s across runtime action IPC normalization', (failureCode) => {
+    expect(normalizeDesktopShellRuntimeActionResponse({
+      ok: false,
+      started: false,
+      failure: {
+        code: failureCode,
+        severity: 'error',
+        title: 'SSH failure',
+        summary: 'SSH operation failed.',
+      },
+    })?.failure?.code).toBe(failureCode);
+  });
+
   it('normalizes runtime maintenance started notifications', () => {
     expect(normalizeDesktopShellRuntimeMaintenanceStartedNotification({ kind: ' restart ' })).toEqual({ kind: 'restart' });
     expect(normalizeDesktopShellRuntimeMaintenanceStartedNotification({ kind: 'UPDATE' })).toEqual({ kind: 'update' });
