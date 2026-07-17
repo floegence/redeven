@@ -4167,33 +4167,15 @@
       "mode": "Modo"
     },
     "chat": {
-      "fileActions": "Ações de arquivo",
-      "previewFile": "Visualizar arquivo",
-      "browseFolder": "Navegar na pasta",
-      "failureReason": "Motivo da falha",
-      "subagents": "Subagentes",
-      "openSubagentMessages": "Abrir mensagens do subagente",
       "download": "Download",
-      "renderingDiagram": "Diagrama de renderização...",
+      "renderingDiagram": "Renderizando diagrama...",
       "removeAttachment": "Remover anexo",
       "attachFiles": "Anexar arquivos",
       "loadingHistory": "Carregando histórico...",
       "mention": "Menção",
       "assistantResponding": "O assistente está respondendo",
-      "truncated": "truncado",
-      "noTextualDiff": "Nenhuma diferença textual",
-      "searchResults": "Resultados da pesquisa",
-      "searchResultCount": {
-        "one": "{count} resultado",
-        "other": "{count} resultados"
-      },
-      "result": "Resultado",
       "input": "Entrada",
-      "fileFallback": "arquivo",
-      "previewTarget": "Visualizar {target}",
-      "browseFolderForTarget": "Procurar a pasta de {target}",
-      "browseFiles": "Procurar arquivos",
-      "openSubagentMessagesFor": "Abrir mensagens do subagente {name}"
+      "browseFiles": "Procurar arquivos"
     },
     "audit": {
       "title": "Registro de auditoria",

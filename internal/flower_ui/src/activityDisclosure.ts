@@ -37,9 +37,10 @@ export function flowerActivityDisclosureIntent(
   return 'settled';
 }
 
-export type FlowerActivityDisclosureSettlePolicy =
-  | Readonly<{ anchor: 'intent'; holdMs?: number }>
-  | Readonly<{ anchor: 'presentation'; holdMs?: number }>;
+export type FlowerActivityDisclosureSettlePolicy = Readonly<{
+  anchor: Accessor<'intent' | 'presentation'>;
+  holdMs?: number;
+}>;
 
 export type FlowerActivityDisclosureController = Readonly<{
   open: Accessor<boolean>;
@@ -67,7 +68,7 @@ export function createFlowerActivityDisclosureController(
   options: FlowerActivityDisclosureControllerOptions,
 ): FlowerActivityDisclosureController {
   const openDelayMs = Math.max(0, options.openDelayMs ?? FLOWER_ACTIVITY_AUTO_OPEN_DELAY_MS);
-  const settlePolicy = options.settle ?? { anchor: 'intent' as const };
+  const settlePolicy = options.settle ?? { anchor: () => 'intent' as const };
   const settleHoldMs = Math.max(0, settlePolicy.holdMs ?? FLOWER_ACTIVITY_SETTLE_HOLD_MS);
   const reducedMotion = options.reducedMotion ?? prefersReducedMotion;
   const initialIntent = options.intent();
@@ -103,6 +104,7 @@ export function createFlowerActivityDisclosureController(
     const manualOpen = options.manualOpen();
     const motionReduced = reducedMotion();
     const presentationRevision = settledPresentationRevision();
+    const settleAnchor = settlePolicy.anchor();
     clearOpenTimer();
 
     if (typeof manualOpen === 'boolean') {
@@ -139,7 +141,7 @@ export function createFlowerActivityDisclosureController(
       clearSettleTimer();
       return;
     }
-    if (settlePolicy.anchor === 'presentation' && presentationRevision <= presentationBaseline) {
+    if (settleAnchor === 'presentation' && presentationRevision <= presentationBaseline) {
       clearSettleTimer();
       return;
     }
@@ -164,7 +166,7 @@ export function createFlowerActivityDisclosureController(
     toggle: () => options.onManualOpenChange(!open()),
     retainOpen,
     markSettledPresentation: () => {
-      if (settlePolicy.anchor === 'presentation') {
+      if (settlePolicy.anchor() === 'presentation') {
         setSettledPresentationRevision((revision) => revision + 1);
       }
     },

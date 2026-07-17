@@ -12,7 +12,6 @@ import { ShellBlock } from './ShellBlock';
 import { ThinkingBlock } from './ThinkingBlock';
 import { TodosBlock } from './TodosBlock';
 import { SourcesBlock } from './SourcesBlock';
-import { ActivityTimelineBlock } from './ActivityTimelineBlock';
 import { useI18n } from '../../i18n';
 import { useChatContext } from '../ChatProvider';
 
@@ -35,33 +34,6 @@ export interface BlockRendererProps {
   blockIndex: number;
   isStreaming?: boolean;
 }
-
-const ActivityTimelineBlockWithChatConfig: Component<{
-  block: import('../types').ActivityTimelineBlock;
-  messageId: string;
-  blockIndex: number;
-}> = (props) => {
-  const ctx = useChatContext();
-  return (
-    <ActivityTimelineBlock
-      block={props.block}
-      messageId={props.messageId}
-      blockIndex={props.blockIndex}
-      onPreviewFile={ctx.config().onActivityFilePreview ? (action, item) => ctx.config().onActivityFilePreview?.({
-        message_id: props.messageId,
-        block_index: props.blockIndex,
-        item_id: item.item_id,
-        action_id: action.action_id,
-      }) : undefined}
-      onBrowseDirectory={ctx.config().onActivityDirectoryBrowse ? (action, item) => ctx.config().onActivityDirectoryBrowse?.({
-        message_id: props.messageId,
-        block_index: props.blockIndex,
-        item_id: item.item_id,
-        action_id: action.action_id,
-      }) : undefined}
-    />
-  );
-};
 
 /**
  * A simple skeleton placeholder shown while lazy-loaded components are loading.
@@ -301,13 +273,6 @@ export const BlockRenderer: Component<BlockRendererProps> = (props) => {
         <SourcesBlock sources={(props.block as import('../types').SourcesBlock).sources} />
       </Match>
 
-      <Match when={props.block.type === 'activity-timeline'}>
-        <ActivityTimelineBlockWithChatConfig
-          block={props.block as import('../types').ActivityTimelineBlock}
-          messageId={props.messageId}
-          blockIndex={props.blockIndex}
-        />
-      </Match>
     </Switch>
   );
 };

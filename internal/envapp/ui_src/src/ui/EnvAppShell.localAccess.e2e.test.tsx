@@ -754,11 +754,6 @@ vi.mock('./pages/EnvContext', () => ({
   EnvContext: EnvContextMock,
   useEnvContext: () => useContext(EnvContextMock as any),
 }));
-vi.mock('./pages/AIChatContext', () => ({
-  AIChatContext: createContext({}),
-  createAIChatContextValue: () => ({}),
-}));
-
 async function flushAsync(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();

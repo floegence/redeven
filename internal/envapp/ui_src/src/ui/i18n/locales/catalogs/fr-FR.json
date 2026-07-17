@@ -4167,33 +4167,15 @@
       "mode": "Mode"
     },
     "chat": {
-      "fileActions": "Actions sur les fichiers",
-      "previewFile": "Fichier d'aperçu",
-      "browseFolder": "Parcourir le dossier",
-      "failureReason": "Raison de l'échec",
-      "subagents": "Sous-agents",
-      "openSubagentMessages": "Ouvrir les messages du sous-agent",
       "download": "Télécharger",
-      "renderingDiagram": "Schéma de rendu...",
+      "renderingDiagram": "Rendu du diagramme...",
       "removeAttachment": "Supprimer la pièce jointe",
       "attachFiles": "Joindre des fichiers",
       "loadingHistory": "Chargement de l'historique...",
       "mention": "Mention",
       "assistantResponding": "L’assistant répond",
-      "truncated": "tronqué",
-      "noTextualDiff": "Aucune différence textuelle",
-      "searchResults": "Résultats de recherche",
-      "searchResultCount": {
-        "one": "{count} résultat",
-        "other": "{count} résultats"
-      },
-      "result": "Résultat",
       "input": "Entrée",
-      "fileFallback": "fichier",
-      "previewTarget": "Prévisualiser {target}",
-      "browseFolderForTarget": "Parcourir le dossier de {target}",
-      "browseFiles": "Parcourir les fichiers",
-      "openSubagentMessagesFor": "Ouvrir les messages du sous-agent {name}"
+      "browseFiles": "Parcourir les fichiers"
     },
     "audit": {
       "title": "Journal d'audit",

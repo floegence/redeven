@@ -89,11 +89,11 @@ describe('presentFlowerActivityItem', () => {
       renderer: 'terminal',
       label: 'terminal.exec',
       payload: {
-        command: 'pnpm test -- src/ui/chat/activity/ActivityTimelineBlock.test.tsx',
+        command: 'pnpm run test:browser -- src/ui/FlowerSurface.activityDisclosure.browser.test.tsx',
       },
     }));
 
-    expect(presentation.label).toBe('pnpm test -- src/ui/chat/activity/ActivityTimelineBlock.test.tsx');
+    expect(presentation.label).toBe('pnpm run test:browser -- src/ui/FlowerSurface.activityDisclosure.browser.test.tsx');
   });
 
   it('uses terminal read intent as the compact title and keeps the real command in details', () => {

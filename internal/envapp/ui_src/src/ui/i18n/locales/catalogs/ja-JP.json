@@ -4167,33 +4167,15 @@
       "mode": "モード"
     },
     "chat": {
-      "fileActions": "ファイルアクション",
-      "previewFile": "プレビューファイル",
-      "browseFolder": "フォルダを参照する",
-      "failureReason": "失敗の理由",
-      "subagents": "サブエージェント",
-      "openSubagentMessages": "サブエージェントのメッセージを開く",
       "download": "ダウンロード",
-      "renderingDiagram": "レンダリング図...",
+      "renderingDiagram": "図をレンダリングしています...",
       "removeAttachment": "添付ファイルを削除する",
       "attachFiles": "ファイルを添付する",
       "loadingHistory": "履歴を読み込んでいます...",
-      "mention": "言及",
+      "mention": "メンション",
       "assistantResponding": "アシスタントが応答しています",
-      "truncated": "省略",
-      "noTextualDiff": "表示できるテキスト差分はありません",
-      "searchResults": "検索結果",
-      "searchResultCount": {
-        "one": "{count} 件",
-        "other": "{count} 件"
-      },
-      "result": "結果",
       "input": "入力",
-      "fileFallback": "ファイル",
-      "previewTarget": "{target} をプレビュー",
-      "browseFolderForTarget": "{target} のフォルダーを開く",
-      "browseFiles": "ファイルを参照",
-      "openSubagentMessagesFor": "{name} のサブエージェントメッセージを開く"
+      "browseFiles": "ファイルを参照"
     },
     "audit": {
       "title": "監査ログ",

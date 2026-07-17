@@ -51,19 +51,6 @@ export function createEmptyBlock(blockType: MessageBlock['type']): MessageBlock 
       return { type: 'file', name: '', size: 0, mimeType: '' };
     case 'thinking':
       return { type: 'thinking' };
-    case 'activity-timeline':
-      return {
-        type: 'activity-timeline',
-        schema_version: 1,
-        summary: {
-          status: 'running',
-          severity: 'normal',
-          needs_attention: true,
-          total_items: 0,
-          counts: {},
-        },
-        items: [],
-      };
     case 'todos':
       return { type: 'todos', version: 0, updatedAtUnixMs: 0, todos: [] };
     case 'sources':

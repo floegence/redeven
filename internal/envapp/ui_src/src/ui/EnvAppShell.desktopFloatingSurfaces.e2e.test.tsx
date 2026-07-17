@@ -514,11 +514,6 @@ vi.mock('./envSidebarVisibilityMotion', () => ({
   resolveEnvSidebarVisibilityMotion: () => 'animated',
   shouldEnvTabOpenSidebar: () => false,
 }));
-vi.mock('./pages/AIChatContext', () => ({
-  AIChatContext: createContext({}),
-  createAIChatContextValue: () => ({}),
-}));
-
 async function flushAsync(): Promise<void> {
   await Promise.resolve();
   await Promise.resolve();

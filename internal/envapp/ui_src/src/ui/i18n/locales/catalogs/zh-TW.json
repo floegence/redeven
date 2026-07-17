@@ -4167,12 +4167,6 @@
       "mode": "模式"
     },
     "chat": {
-      "fileActions": "檔案操作",
-      "previewFile": "預覽檔案",
-      "browseFolder": "瀏覽資料夾",
-      "failureReason": "失敗原因",
-      "subagents": "子代理",
-      "openSubagentMessages": "開啟子代理訊息",
       "download": "下載",
       "renderingDiagram": "正在繪製圖表...",
       "removeAttachment": "刪除附件",
@@ -4180,20 +4174,8 @@
       "loadingHistory": "載入歷史記錄...",
       "mention": "提及",
       "assistantResponding": "助理正在回覆",
-      "truncated": "已截斷",
-      "noTextualDiff": "沒有可顯示的文字差異",
-      "searchResults": "搜尋結果",
-      "searchResultCount": {
-        "one": "{count} 筆結果",
-        "other": "{count} 筆結果"
-      },
-      "result": "結果",
       "input": "輸入",
-      "fileFallback": "檔案",
-      "previewTarget": "預覽 {target}",
-      "browseFolderForTarget": "瀏覽 {target} 所在的資料夾",
-      "browseFiles": "瀏覽檔案",
-      "openSubagentMessagesFor": "開啟 {name} 的子代理訊息"
+      "browseFiles": "瀏覽檔案"
     },
     "audit": {
       "title": "審核日誌",

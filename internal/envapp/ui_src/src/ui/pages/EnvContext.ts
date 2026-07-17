@@ -1,6 +1,7 @@
 import { createContext, useContext, type Resource } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type {
+  FlowerFileOpenRequest,
   FlowerLinkedContextPathOpenRequest,
   FlowerThreadFocusRequest,
   FlowerTurnLauncherAnchor,
@@ -8,7 +9,6 @@ import type {
 } from '../../../../../flower_ui/src';
 import type { EnvironmentDetail, LocalRuntimeInfo } from '../services/controlplaneApi';
 import type { FilePreviewOpenOptions } from '../widgets/FilePreviewContext';
-import type { ActivityFileActionOpenRequest } from '../chat/types';
 import type {
   EnvFileBrowserSurfacePayload,
   EnvOpenSurfaceOptions,
@@ -146,8 +146,8 @@ export type EnvContextValue = {
     item: FileItem,
     options?: FilePreviewOpenOptions,
   ) => Promise<void>;
-  openFlowerFileBrowser: (request: ActivityFileActionOpenRequest) => Promise<void>;
-  openFlowerFilePreview: (request: ActivityFileActionOpenRequest) => Promise<void>;
+  openFlowerFileBrowser: (request: FlowerFileOpenRequest) => Promise<void>;
+  openFlowerFilePreview: (request: FlowerFileOpenRequest) => Promise<void>;
   openFlowerLinkedFilePreview: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
   openFlowerLinkedDirectoryBrowser: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
   consumeOpenTerminalInDirectoryRequest: (requestId: string) => void;

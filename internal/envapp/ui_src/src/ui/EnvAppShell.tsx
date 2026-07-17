@@ -64,13 +64,13 @@ import {
   type OpenTerminalInDirectoryRequest,
 } from './pages/EnvContext';
 import type {
+  FlowerFileOpenRequest,
   FlowerThreadFocusRequest,
   FlowerTurnLauncherAnchor,
   FlowerTurnLauncherIntent,
   FlowerTurnLauncherSubmitInput,
 } from '../../../../flower_ui/src';
 import type { ContextActionExecutionContext } from './contextActions/protocol';
-import type { ActivityFileActionOpenRequest } from './chat/types';
 import { createFlowerLinkedContextNavigation } from './flower/linkedContextNavigation';
 import { buildPluginPanelModel } from './plugins/pluginInventoryProjection';
 import type { PluginLifecycleCommand, PluginOpenSurfaceResult, PluginSurfaceLaunchTarget } from './plugins/pluginTypes';
@@ -1219,7 +1219,7 @@ export function EnvAppShell() {
   };
 
   const resolveFlowerFileActionPath = async (
-    request: ActivityFileActionOpenRequest,
+    request: FlowerFileOpenRequest,
     action: 'preview' | 'browse_directory',
   ): Promise<string> => {
     const threadID = String(request.thread_id ?? '').trim();
@@ -1240,7 +1240,7 @@ export function EnvAppShell() {
     return String(target.path ?? '').trim();
   };
 
-  const openFlowerFileBrowser = async (request: ActivityFileActionOpenRequest): Promise<void> => {
+  const openFlowerFileBrowser = async (request: FlowerFileOpenRequest): Promise<void> => {
     const path = await resolveFlowerFileActionPath(request, 'browse_directory');
     if (!path) return;
     await openFileBrowserAtPath(path, {
@@ -1249,7 +1249,7 @@ export function EnvAppShell() {
     });
   };
 
-  const openFlowerFilePreview = async (request: ActivityFileActionOpenRequest): Promise<void> => {
+  const openFlowerFilePreview = async (request: FlowerFileOpenRequest): Promise<void> => {
     const path = await resolveFlowerFileActionPath(request, 'preview');
     if (!path) return;
     await openFilePreview(fileItemFromPath(path), {

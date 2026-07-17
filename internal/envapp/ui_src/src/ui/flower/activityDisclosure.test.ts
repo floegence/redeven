@@ -25,6 +25,7 @@ type ControllerHarness = Readonly<{
   dispose: () => void;
   setIntent: (intent: FlowerActivityDisclosureIntent) => void;
   setManualOpen: (open: boolean | undefined) => void;
+  setSettleAnchor: (anchor: 'intent' | 'presentation') => void;
 }>;
 
 function createControllerHarness(
@@ -34,6 +35,7 @@ function createControllerHarness(
 ): ControllerHarness {
   const [intent, setIntent] = createSignal(initialIntent);
   const [manualOpen, setManualOpen] = createSignal<boolean | undefined>(undefined);
+  const [anchor, setSettleAnchor] = createSignal(settleAnchor);
   let dispose: () => void = () => undefined;
   let control!: FlowerActivityDisclosureController;
   createRoot((rootDispose) => {
@@ -43,10 +45,10 @@ function createControllerHarness(
       manualOpen,
       onManualOpenChange: setManualOpen,
       reducedMotion: () => reducedMotion,
-      settle: { anchor: settleAnchor },
+      settle: { anchor },
     });
   });
-  return { control, dispose, setIntent, setManualOpen };
+  return { control, dispose, setIntent, setManualOpen, setSettleAnchor };
 }
 
 afterEach(() => {
@@ -138,6 +140,24 @@ describe('createFlowerActivityDisclosureController', () => {
     await vi.advanceTimersByTimeAsync(900);
     expect(harness.control.open()).toBe(true);
     await vi.advanceTimersByTimeAsync(300);
+    expect(harness.control.open()).toBe(false);
+    harness.dispose();
+  });
+
+  it('waits for settled presentation when the anchor becomes presentation-driven later', async () => {
+    vi.useFakeTimers();
+    const harness = createControllerHarness('active');
+
+    await vi.advanceTimersByTimeAsync(FLOWER_ACTIVITY_AUTO_OPEN_DELAY_MS);
+    expect(harness.control.open()).toBe(true);
+
+    harness.setIntent('settled');
+    harness.setSettleAnchor('presentation');
+    await vi.advanceTimersByTimeAsync(FLOWER_ACTIVITY_SETTLE_HOLD_MS * 2);
+    expect(harness.control.open()).toBe(true);
+
+    harness.control.markSettledPresentation();
+    await vi.advanceTimersByTimeAsync(FLOWER_ACTIVITY_SETTLE_HOLD_MS);
     expect(harness.control.open()).toBe(false);
     harness.dispose();
   });
