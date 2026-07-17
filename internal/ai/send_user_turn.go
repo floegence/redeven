@@ -163,20 +163,6 @@ func isSafeClientMessageID(raw string) bool {
 	return true
 }
 
-func isUniqueConstraintError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(strings.TrimSpace(err.Error()))
-	if msg == "" {
-		return false
-	}
-	if strings.Contains(msg, "unique constraint failed") {
-		return true
-	}
-	return strings.Contains(msg, "constraint failed") && strings.Contains(msg, "unique")
-}
-
 func (s *Service) prepareUserMessage(ctx context.Context, meta *session.Meta, endpointID string, threadID string, input RunInput) (preparedUserMessage, RunInput, error) {
 	if s == nil {
 		return preparedUserMessage{}, input, errors.New("nil service")

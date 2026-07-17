@@ -21,10 +21,6 @@ type floretTurnHost interface {
 	floretSubagentsCloser
 }
 
-type floretProjectionReader interface {
-	ReadTurnProjection(context.Context, flruntime.ReadTurnProjectionRequest) (flruntime.ThreadTurnProjection, error)
-}
-
 type floretPendingApprovalLister interface {
 	ListPendingApprovals(context.Context, flruntime.ListPendingApprovalsRequest) (flruntime.PendingApprovals, error)
 }
