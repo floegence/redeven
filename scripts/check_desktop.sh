@@ -59,8 +59,9 @@ main() {
     npm run typecheck
     npm run test:runtime-compatibility
     # IMPORTANT: GitHub Actions runs the lightweight Desktop gate; full Vitest
-    # coverage is intentionally owned by local pre-commit. The focused Runtime
-    # compatibility matrix always runs because it protects the open boundary.
+    # coverage is intentionally owned by the final main pre-push gate. Routine
+    # commits stay fast, while the focused Runtime compatibility matrix always
+    # runs because it protects the open boundary.
     if [ "$mode" = "full" ]; then
       npm run test
     fi

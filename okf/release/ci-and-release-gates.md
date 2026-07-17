@@ -30,14 +30,20 @@ browser cache.
 
 Local validation is staged to keep iteration fast without weakening integration
 evidence. Feature work uses focused checks while implementation, reviews,
-generated artifacts, or further upstream synchronization are still pending. The
-applicable full repository or product gate runs only after the branch has been
-rebased onto the latest `origin/main` and is intended to be the final integration
-tip. Immediately before integration, the developer fetches `origin` again; if
-`origin/main` moved, the feature is rebased and the full gate is rerun because
-the previously tested commit is no longer the final tip. Conflict resolutions
-and overlapping upstream changes also receive focused checks before that final
-full gate.
+generated artifacts, or further upstream synchronization are still pending.
+Pre-commit is deliberately limited to staged diff validation, the README
+localization contract, and staged open-source hygiene. Heavy product and
+repository coverage is owned by the remote-main pre-push path instead of every
+feature commit.
+
+When local `main` is pushed, the pre-push hook uses the remote handshake's
+authoritative main commit and the proposed local commit as the validation
+boundary. It rejects pushes that do not originate from the checked-out local
+`main`, are not fast-forwards, or contain merge commits in the unpublished
+range. Only then does it invoke the canonical final integration script for that
+exact base and tip. This keeps full Desktop Vitest coverage, Docker Runtime E2E,
+asset builds, repository-wide Go checks, and the remaining local integration
+contracts off routine commits without making them optional before main moves.
 
 The canonical English `README.md` and every product-supported
 `README.<locale>.md` are bound by `assets/readme/locales.json`. The lightweight
@@ -153,28 +159,28 @@ Unreleased Floret behavior is likewise not a valid Redeven integration target.
 Flower lifecycle fixes that belong to Floret must ship as a published
 `github.com/floegence/floret` release before Redeven consumes them.
 
-A full local quality gate is integration evidence for one exact rebased commit,
-not a background check to repeat after every intermediate edit or sync. Focused
-checks provide iteration feedback; only the final rebased integration candidate
-needs the complete applicable gate. If that commit changes, its prior full-gate
-result does not transfer to the new tip.
+A full local quality gate is integration evidence for one exact remote-base and
+local-tip pair, not a background check to repeat after every intermediate edit
+or sync. Focused checks provide iteration feedback. A stale or divergent remote
+main is rejected before heavy checks start; a changed candidate tip receives a
+new final gate because evidence from another commit does not transfer.
 
 # Citations
 
 [1] redeven:.github/workflows/ci-check.yml:14 - CI defines a dedicated OKF bundle check job.
 [2] redeven:.github/workflows/ci-check.yml:26 - OKF source integrity is checked in CI.
 [3] redeven:.github/workflows/ci-check.yml:29 - OKF dist verification is checked in CI.
-[4] redeven:.github/workflows/ci-check.yml:106 - Embedded assets are built before focused Go gates that import UI embed packages.
-[5] redeven:.github/workflows/ci-check.yml:109 - CI runs the ReDevPlugin integration gate after embedded assets are generated.
-[6] redeven:.github/workflows/ci-check.yml:116 - CI runs the Floret dependency boundary guard before Flower protocol and UI checks.
-[7] redeven:.github/workflows/ci-check.yml:122 - CI installs the lockfile-selected Playwright Chromium runtime before Flower UI browser contracts.
-[8] redeven:AGENTS.md:773 - Repository local quality gates include README review enforcement, OKF integrity, dist verification, assets, Go tests, and golangci-lint.
+[4] redeven:.github/workflows/ci-check.yml:118 - Embedded assets are built before focused Go gates that import UI embed packages.
+[5] redeven:.github/workflows/ci-check.yml:121 - CI runs the ReDevPlugin integration gate after embedded assets are generated.
+[6] redeven:.github/workflows/ci-check.yml:127 - CI runs the Floret dependency boundary guard before Flower protocol and UI checks.
+[7] redeven:.github/workflows/ci-check.yml:133 - CI installs the lockfile-selected Playwright Chromium runtime before Flower UI browser contracts.
+[8] redeven:AGENTS.md:778 - Repository local quality gates separate focused iteration, fast pre-commit checks, and the final main pre-push gate.
 [9] redeven:scripts/check_redevplugin_dependency_boundary.sh:1 - The local boundary script rejects local ReDevPlugin wiring and copied platform-core paths.
 [10] redeven:scripts/check_floret_dependency_boundary.sh:1 - The Floret boundary script rejects local Floret wiring, internal imports, and direct schema access.
 [11] redeven:scripts/check_plugin_integration.sh:44 - The integration gate requires embedded UI asset directories before Go embed tests.
 [12] redeven:scripts/check_plugin_integration.sh:62 - The integration gate starts with the published dependency boundary guard.
 [13] redeven:scripts/check_plugin_integration.sh:74 - The integration gate runs AppServer and Local UI plugin route tests.
-[14] redeven:scripts/check_plugin_integration.sh:85 - The integration gate runs ReDevPlugin session, security, runtime, and route adapter tests.
+[14] redeven:scripts/check_plugin_integration.sh:82 - The integration gate runs ReDevPlugin session, security, runtime, and route adapter tests.
 [15] redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.test.ts:1 - Projection tests cover official catalog merging and tile action decisions.
 [16] redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.test.ts:1 - Plugin API tests cover proxy paths and bundled official install/update bodies.
 [17] redeven:internal/envapp/ui_src/src/ui/plugins/PluginPanel.test.tsx:1 - Plugin Panel tests cover app-grid entry behavior and pointer affordance.
@@ -186,5 +192,8 @@ result does not transfer to the new tip.
 [23] redeven:.github/workflows/ci-check.yml:52 - CI runs README localization unit tests and requires completed locale-review subagent approvals.
 [24] redeven:scripts/check_readme_localizations.mjs:1 - The README contract validates structure, links, literals, hashes, language quality, and review state.
 [25] redeven:assets/readme/locales.json:1 - The README locale manifest declares language order, file mappings, review hashes, and the shared visual exception.
-[26] redeven:AGENTS.md:227 - Repository rules define English canonical ownership and the README locale-review subagent gate.
-[27] redeven:AGENTS.md:86 - Repository validation uses focused checks during iteration and reserves the full integration gate for the final rebased tip.
+[26] redeven:AGENTS.md:226 - Repository rules define English canonical ownership and the README locale-review subagent gate.
+[27] redeven:AGENTS.md:86 - Repository validation uses focused checks during iteration and reserves the full integration gate for the exact main tip being pushed.
+[28] redeven:.githooks/pre-push:29 - The main pre-push hook validates source ref, checked-out tip, fast-forward ancestry, and linear history before running the full gate.
+[29] redeven:scripts/check_final_integration.sh:44 - The canonical final integration script binds the complete local gate to explicit base and tip commits and requires a clean worktree.
+[30] redeven:.githooks/pre-commit:7 - Commit-time validation contains only fast staged checks.

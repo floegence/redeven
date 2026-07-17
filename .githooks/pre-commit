@@ -4,14 +4,6 @@ set -euo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
+git diff --cached --check
 node scripts/check_readme_localizations.mjs
 ./scripts/open_source_hygiene_check.sh --staged
-./scripts/build_assets.sh
-./scripts/check_plugin_integration.sh --ci
-./scripts/check_gateway_protocol_contract.sh
-
-# IMPORTANT: Heavy Desktop Vitest coverage and Docker runtime E2E belong to
-# pre-commit, not GitHub Actions, so developer machines catch integration
-# regressions before push while hosted CI remains lightweight and deterministic.
-./scripts/check_desktop.sh --full
-./scripts/check_docker_runtime_e2e.sh

@@ -93,15 +93,19 @@ Use staged validation so full gates run only on the final rebased tip:
   rebased is not final integration evidence.
 - Once implementation, required reviews, localization work, and generated
   artifacts are complete, fetch `origin`, rebase onto the latest `origin/main`,
-  inspect `git diff origin/main...HEAD`, and run the applicable full integration
-  quality gate once on that intended final tip.
-- Immediately before integration, fetch `origin` again. If `origin/main` moved,
-  stop, rebase the feature branch, review the new diff, rerun affected focused
-  checks, and rerun the full integration gate because the previously tested
-  commit is no longer the final rebased tip.
+  inspect `git diff origin/main...HEAD`, and run the affected focused checks.
+- Do not run the full integration gate from routine feature commits. After the
+  rebased feature is fast-forwarded into local `main`, `git push origin main`
+  invokes `.githooks/pre-push`, which validates the authoritative remote base
+  and runs `./scripts/check_final_integration.sh` once for the exact main tip
+  being pushed.
+- The pre-push hook rejects a stale or non-fast-forward main update before it
+  starts the full gate. Return to the feature worktree, rebase onto the new
+  `origin/main`, review the new diff, and rerun affected focused checks before
+  attempting integration again.
 - If a rebase has conflicts or upstream changes overlap the feature behavior,
-  run focused checks for the resolved or overlapping behavior in addition to
-  the final full gate.
+  run focused checks for the resolved or overlapping behavior before the final
+  main push.
 
 ## Integration Back To Main
 
@@ -112,9 +116,9 @@ git switch main
 git fetch origin
 git pull --ff-only
 
-# The feature branch's full gate must have run after its final rebase onto this
-# exact origin/main tip. If origin/main moved, return to the feature worktree,
-# rebase, and validate the new final tip before merging.
+# The pre-push hook verifies that this main update is still a fast-forward of
+# the authoritative remote main tip, then runs the full integration gate for
+# the exact local main commit being pushed.
 
 # If local main is already ahead of origin/main, publish the full local main tip first.
 # Do not keep older local main commits unpublished while only pushing the new feature result.
@@ -145,9 +149,8 @@ Additional rules:
 - Before resolving merge or rebase conflicts, review the substantive commits on each side for new features, bug fixes, behavior changes, tests, and user-facing workflows.
 - Do not drop, overwrite, or silently weaken current or historical functionality unless the user explicitly approves that product decision.
 - If two branches introduce incompatible behavior, surface the product or architecture tradeoff instead of choosing one side silently.
-- After resolving conflicts, run focused checks for the affected behavior. Run
-  the full repository gate only when that rebased commit is the final
-  integration candidate.
+- After resolving conflicts, run focused checks for the affected behavior. The
+  full repository gate remains owned by the final main pre-push event.
 - If a feature branch has already been pushed and someone depends on it, switch to a conservative coordination flow instead of freely rewriting history.
 
 Recommended Git configuration:
@@ -772,61 +775,35 @@ tests, and published Floret release notes.
 
 ## Local Quality Gate
 
-This list defines the full integration quality gate. Run applicable focused
-checks while iterating, but do not repeatedly run the full list before the
-feature is ready for final synchronization. Complete implementation, reviews,
-and generated artifacts first; then rebase onto the latest `origin/main` and run
-the applicable full gate on that final rebased tip before integration. If
-`origin/main` moves again, the new rebased tip requires a new final full gate.
-Commands with explicit full modes, such as `./scripts/check_desktop.sh --full`,
-follow this same sequencing and must not be used as routine iteration checks.
+Validation has three explicit levels:
 
-The CI-aligned checks and local-only pre-commit checks are:
+- During implementation, run focused checks for changed behavior and affected
+  contracts.
+- `.githooks/pre-commit` is intentionally fast. It runs staged diff validation,
+  the README localization contract, and staged open-source hygiene only. Do not
+  add asset builds, full product suites, Docker E2E, or repository-wide tests to
+  pre-commit.
+- `.githooks/pre-push` owns the complete local integration gate for updates to
+  remote `main`. It requires the checked-out local `main` tip to match the push,
+  requires the remote tip to be its ancestor, rejects merge commits in the
+  unpublished range, and invokes `./scripts/check_final_integration.sh` with the
+  exact base and tip commits. Other branch and tag pushes do not run the full
+  gate.
 
-- `sh -n scripts/install.sh`
-- `sh -n scripts/generate_release_notes.sh`
-- `bash -n scripts/test_generate_release_notes.sh`
-- `bash -n scripts/lint_ui.sh`
-- `bash -n scripts/build_desktop_bundled_runtime.sh`
-- `bash -n scripts/build_desktop_bundled_agent.sh`
-- `bash -n scripts/check_desktop.sh`
-- `bash -n scripts/check_docker_runtime_e2e.sh`
-- `bash -n scripts/check_gateway_protocol_contract.sh`
-- `bash -n scripts/check_redevplugin_dependency_boundary.sh`
-- `bash -n scripts/check_redevplugin_release_artifacts.sh`
-- `bash -n scripts/check_redevplugin_consumption_gate.sh`
-- `bash -n scripts/stage_redevplugin_release_artifacts.sh`
-- `bash -n scripts/check_plugin_integration.sh`
-- `bash -n scripts/check_runtime_compatibility_contract.sh`
-- `bash -n scripts/check_flower_live_protocol.sh`
-- `bash -n scripts/check_flower_ui.sh`
-- `bash -n scripts/ui_package_common.sh`
-- `bash -n scripts/open_source_hygiene_check.sh`
-- `bash -n scripts/install_git_hooks.sh`
-- `bash -n .githooks/pre-commit`
-- `node scripts/generate_third_party_notices.mjs --check`
-- `node --test scripts/check_readme_localizations.test.mjs`
-- `node scripts/check_readme_localizations.mjs --require-reviewed`
-- `./scripts/lint_ui.sh`
-- `./scripts/test_generate_release_notes.sh`
-- `./scripts/check_runtime_compatibility_contract.sh --source-only`
-- `./scripts/check_redevplugin_dependency_boundary.sh --ci`
-- `./scripts/check_redevplugin_release_artifacts.sh --self-test`
-- `./scripts/check_redevplugin_consumption_gate.sh --self-test`
-- `./scripts/stage_redevplugin_release_artifacts.sh --self-test`
-- `./scripts/check_plugin_integration.sh --ci`
-- `./scripts/check_gateway_protocol_contract.sh`
-- `./scripts/check_flower_live_protocol.sh`
-- `./scripts/check_flower_ui.sh`
-- `./scripts/check_desktop.sh`
-- `./scripts/check_docker_runtime_e2e.sh`
-- `./scripts/open_source_hygiene_check.sh --staged`
-- `./scripts/open_source_hygiene_check.sh --all`
-- `./scripts/okf/check_source_integrity.sh`
-- `./scripts/build_okf_bundle.sh --verify-only`
-- `./scripts/build_assets.sh`
-- `go test ./...`
-- `golangci-lint run ./...`
+`scripts/check_final_integration.sh` is the single executable source of truth
+for the complete local gate. It requires a clean worktree and exact `HEAD`, then
+runs diff validation, shell syntax, notices, README localization enforcement,
+Git-hook contracts, UI lint and behavior checks, release and compatibility
+contracts, dependency boundaries, embedded asset generation, ReDevPlugin and
+Gateway integration, Flower checks, full Desktop Vitest coverage and build,
+Docker Runtime E2E, repository hygiene, OKF verification, Go tests, and
+golangci-lint. It fails if any check changes the worktree.
+
+Commands with explicit full modes, especially
+`./scripts/check_desktop.sh --full`, belong only in the final integration script
+and must not be used as routine iteration checks. GitHub Actions keeps its
+documented lightweight Desktop coverage and independently validates the pushed
+main commit.
 
 ## Repository Rule File
 
