@@ -106,7 +106,6 @@ import {
   type DesktopSettingsDraft,
 } from '../shared/settingsIPC';
 import {
-  runtimeServiceIsOpenable,
   type RuntimeServiceSnapshot,
   type RuntimeServiceWorkload,
 } from '../shared/runtimeService';
@@ -249,7 +248,6 @@ import {
 } from './desktopTheme';
 import { desktopLanguageBridge } from './desktopLanguage';
 import { DesktopTooltip } from './DesktopTooltip';
-import { DesktopPopover } from './DesktopPopover';
 import { DesktopLauncherShell } from './DesktopLauncherShell';
 import { desktopControlPlaneKey, suggestControlPlaneDisplayLabel } from '../shared/controlPlaneProvider';
 import {
@@ -552,10 +550,6 @@ const CONTROL_PLANE_PROVIDER_PRESET_OPTIONS: readonly ControlPlaneProviderPreset
       }]
     : []),
 ];
-
-type EnvironmentFailureState = Readonly<{
-  failure: DesktopOperationFailurePresentation;
-}>;
 
 type LifecycleProgressFocusRequest = Readonly<{
   request_id: number;
@@ -2848,7 +2842,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const [gatewaySourceFilter, setGatewaySourceFilter] = createSignal('');
   const [gatewayQuery, setGatewayQuery] = createSignal('');
   const [activeCenterTab, setActiveCenterTab] = createSignal<EnvironmentCenterTab>('environments');
-  const [environmentFailures, setEnvironmentFailures] = createSignal<ReadonlyMap<string, EnvironmentFailureState>>(new Map());
   const [lifecycleProgressFocusRequest, setLifecycleProgressFocusRequest] = createSignal<LifecycleProgressFocusRequest | null>(null);
   const actionToastTimers = new Map<number, number>();
   const liveActionProgressTimers = new Map<string, number>();
@@ -3152,22 +3145,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         setBusyState((busy) => reconcileBusyStateWithActionProgressSnapshot(busy, next.action_progress));
         pruneLiveActionProgressWithSnapshot(next.action_progress);
       }
-      setEnvironmentFailures((failures) => {
-        if (failures.size === 0) {
-          return failures;
-        }
-        const nextFailures = new Map(failures);
-        for (const env of next.environments) {
-          if (
-            nextFailures.has(env.id)
-            && env.runtime_health.status === 'online'
-            && runtimeServiceIsOpenable(environmentRuntimeServiceSnapshot(env))
-          ) {
-            nextFailures.delete(env.id);
-          }
-        }
-        return nextFailures.size !== failures.size ? nextFailures : failures;
-      });
       setRetainedGatewayFailures((failures) => {
         if (failures.length === 0) {
           return failures;
@@ -3673,17 +3650,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         action: presentation.action,
         autoDismiss: presentation.auto_dismiss,
       });
-      const environmentID = requestEnvID || failure.environment_id?.trim();
-      if (environmentID && (presentation.tone === 'error' || presentation.tone === 'warning')) {
-        const tone: 'error' | 'warning' = presentation.tone;
-        setEnvironmentFailures((current) => {
-          const next = new Map(current);
-          next.set(environmentID, {
-            failure: failure.failure ?? inlineFailurePresentation(i18n(), presentation.message, tone),
-          });
-          return next;
-        });
-      }
     }
   }
 
@@ -4973,11 +4939,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     ) {
       const message = runtimeUnavailableMessage(environment);
       setErrorMessage(errorTarget, message);
-      setEnvironmentFailures((current) => {
-        const next = new Map(current);
-        next.set(environment.id, { failure: inlineFailurePresentation(i18n(), message, 'warning') });
-        return next;
-      });
       return false;
     }
     if (environment.kind === 'local_environment') {
@@ -6297,14 +6258,6 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               refreshControlPlane={refreshControlPlane}
               deleteControlPlane={setDeleteControlPlaneTarget}
               deleteGateway={setDeleteGatewayTarget}
-              environmentFailures={environmentFailures()}
-              dismissEnvironmentFailure={(environmentID: string) => {
-                setEnvironmentFailures((current) => {
-                  const next = new Map(current);
-                  next.delete(environmentID);
-                  return next;
-                });
-              }}
             />
           )}
         >
@@ -6924,8 +6877,6 @@ function ConnectEnvironmentSurface(props: Readonly<{
   refreshControlPlane: (controlPlane: DesktopControlPlaneSummary) => Promise<void>;
   deleteControlPlane: (controlPlane: DesktopControlPlaneSummary) => void;
   deleteGateway: (gateway: DesktopGatewaySource) => void;
-  environmentFailures: ReadonlyMap<string, EnvironmentFailureState>;
-  dismissEnvironmentFailure: (environmentID: string) => void;
 }>) {
   const visibleEnvironmentCount = createMemo(() => (
     environmentLibraryCount(
@@ -7274,8 +7225,6 @@ function ConnectEnvironmentSurface(props: Readonly<{
                 cancelOperation={props.cancelOperation}
                 dismissOperation={props.dismissOperation}
                 copyOperationDiagnostics={props.copyOperationDiagnostics}
-                environmentFailures={props.environmentFailures}
-                dismissEnvironmentFailure={props.dismissEnvironmentFailure}
               />
             </Show>
             <Show when={props.activeTab === 'control_planes'}>
@@ -7358,8 +7307,6 @@ function EnvironmentCardsPanel(props: Readonly<{
   cancelOperation: (progress: DesktopLauncherActionProgress) => void;
   dismissOperation: (progress: DesktopLauncherActionProgress) => void;
   copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
-  environmentFailures: ReadonlyMap<string, EnvironmentFailureState>;
-  dismissEnvironmentFailure: (environmentID: string) => void;
 }>) {
   const [environmentLibraryElement, setEnvironmentLibraryElement] = createSignal<HTMLDivElement>();
   const [environmentLibraryWidthPx, setEnvironmentLibraryWidthPx] = createSignal(0);
@@ -7647,8 +7594,6 @@ function EnvironmentCardsPanel(props: Readonly<{
                     copyOperationDiagnostics={props.copyOperationDiagnostics}
                     setGuidanceSession={(nextSession) => setGuidanceSessionState(nextSession)}
                     beginLifecycleDisclosure={(intent) => beginLifecycleProgressDisclosure(environmentID, intent)}
-                    environmentFailure={props.environmentFailures.get(environmentID) ?? null}
-                    dismissEnvironmentFailure={() => props.dismissEnvironmentFailure(environmentID)}
                   />
                 )}
               </For>
@@ -7693,8 +7638,6 @@ function EnvironmentCardsPanel(props: Readonly<{
                     copyOperationDiagnostics={props.copyOperationDiagnostics}
                     setGuidanceSession={(nextSession) => setGuidanceSessionState(nextSession)}
                     beginLifecycleDisclosure={(intent) => beginLifecycleProgressDisclosure(environmentID, intent)}
-                    environmentFailure={props.environmentFailures.get(environmentID) ?? null}
-                    dismissEnvironmentFailure={() => props.dismissEnvironmentFailure(environmentID)}
                   />
                 )}
               </For>
@@ -8809,13 +8752,31 @@ function EnvironmentProgressPanel(props: Readonly<{
       {(failure) => (
         <div
           class="redeven-action-popover__notice"
-          data-tone="error"
+          data-tone={failure().severity}
           data-placement={hasStepTimeline() ? 'after-steps' : 'inline'}
         >
           <div class="redeven-action-popover__notice-title">{failureNoticeHeading()}</div>
           <div class="redeven-action-popover__notice-detail">{failure().summary}</div>
           <Show when={failure().detail}>
             {(detail) => <pre class="redeven-action-popover__notice-detail redeven-action-popover__notice-detail--pre">{detail()}</pre>}
+          </Show>
+          <Show when={failure().recovery_hint}>
+            {(hint) => <div class="redeven-action-popover__failure-recovery">{hint()}</div>}
+          </Show>
+          <Show when={(failure().diagnostics ?? []).length > 0}>
+            <details class="redeven-action-popover__failure-details">
+              <summary>{props.i18n.t('settings.detailsTitle')}</summary>
+              <div class="redeven-action-popover__failure-diagnostics">
+                <For each={failure().diagnostics ?? []}>
+                  {(diagnostic) => (
+                    <div class="redeven-action-popover__failure-diagnostic">
+                      <div>{diagnostic.label}</div>
+                      <pre>{diagnostic.text}</pre>
+                    </div>
+                  )}
+                </For>
+              </div>
+            </details>
           </Show>
         </div>
       )}
@@ -8896,7 +8857,12 @@ function EnvironmentProgressPanel(props: Readonly<{
   };
 
   return (
-    <div class="redeven-action-popover redeven-environment-progress" tabIndex={-1} aria-live="polite">
+    <div
+      class="redeven-action-popover redeven-environment-progress"
+      data-redeven-action-popover-initial-focus=""
+      tabIndex={-1}
+      aria-live="polite"
+    >
       <div class="redeven-action-popover__status-header">
         <span class="redeven-action-popover__status-icon" data-tone={iconTone()}>
           <Show when={iconTone() === 'success'} fallback={(
@@ -9549,6 +9515,8 @@ function EnvironmentSplitActionButton(props: Readonly<{
               </div>
             )}
             anchorClass="flex w-full"
+            allowMainAxisOverflow={false}
+            placementLock="top-inline-shift"
             popoverAriaLabel={
               progressPanelVisible()
                 ? (panelProgress() ? localizedProgressTitle(props.i18n, panelProgress()!) : props.i18n.t('progress.environmentProgress'))
@@ -9792,8 +9760,6 @@ function EnvironmentConnectionCard(props: Readonly<{
   cancelOperation: (progress: DesktopLauncherActionProgress) => void;
   dismissOperation: (progress: DesktopLauncherActionProgress) => void;
   copyOperationDiagnostics: (progress: DesktopLauncherActionProgress) => void;
-  environmentFailure: EnvironmentFailureState | null;
-  dismissEnvironmentFailure: () => void;
 }>) {
   const card = createMemo(() => {
     const model = buildEnvironmentCardModel(props.environment);
@@ -9907,9 +9873,6 @@ function EnvironmentConnectionCard(props: Readonly<{
     <Card class={cn(
       'redeven-environment-card h-full overflow-hidden',
       isCardOpen() && 'redeven-environment-card--open',
-      props.environmentFailure && 'redeven-environment-card--failure',
-      props.environmentFailure?.failure.severity === 'error' && 'redeven-environment-card--failure-error',
-      props.environmentFailure?.failure.severity === 'warning' && 'redeven-environment-card--failure-warning',
     )}>
       <CardHeader class="px-4 pb-2.5 pt-4">
         <div class="flex items-start justify-between gap-2">
@@ -9921,94 +9884,6 @@ function EnvironmentConnectionCard(props: Readonly<{
               <EnvironmentStatusIndicator tone={card().status_tone}>
                 {card().status_label}
               </EnvironmentStatusIndicator>
-              <Show when={props.environmentFailure}>
-                {(failure) => {
-                  const [popoverOpen, setPopoverOpen] = createSignal(false);
-                  const [copied, setCopied] = createSignal(false);
-                  const presentation = createMemo(() => localizedFailureForDisplay(props.i18n, failure().failure));
-
-                  const handleCopy = async () => {
-                    await copyToClipboard(formatDesktopOperationFailureForClipboard(presentation()));
-                    setCopied(true);
-                    setTimeout(() => setCopied(false), 1500);
-                  };
-
-                  return (
-                    <DesktopPopover
-                      open={popoverOpen()}
-                      onOpenChange={setPopoverOpen}
-                      placement="bottom"
-                      delay={300}
-                      closeDelay={150}
-                      content={
-                        <div class="py-2.5 px-3">
-                          <div class="flex items-center gap-1.5 mb-1.5">
-                            <Show
-                              when={presentation().severity === 'error'}
-                              fallback={<AlertTriangle class="h-3.5 w-3.5 shrink-0 text-amber-400" />}
-                            >
-                              <AlertCircle class="h-3.5 w-3.5 shrink-0 text-red-400" />
-                            </Show>
-                            <span class="text-xs font-semibold">
-                              {presentation().title}
-                            </span>
-                            <button
-                              type="button"
-                              class="ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[0.65rem] font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors cursor-pointer"
-                              aria-label={props.i18n.t('environmentCenter.copyErrorMessage')}
-                              onClick={(e) => { e.stopPropagation(); void handleCopy(); }}
-                            >
-                              <Show when={copied()} fallback={<Copy class="h-3 w-3" />}>
-                                <Check class="h-3 w-3" />
-                              </Show>
-                              <span>{copied() ? props.i18n.t('environmentCenter.copied') : props.i18n.t('common.copy')}</span>
-                            </button>
-                          </div>
-                          <div class="space-y-1.5">
-                            <p class="text-xs leading-relaxed text-foreground break-words">
-                              {presentation().summary}
-                            </p>
-                            <Show when={presentation().detail}>
-                              {(detail) => <p class="text-xs leading-relaxed text-muted-foreground break-words">{detail()}</p>}
-                            </Show>
-                            <Show when={presentation().recovery_hint}>
-                              {(hint) => <p class="text-xs leading-relaxed text-muted-foreground break-words">{hint()}</p>}
-                            </Show>
-                            <Show when={(presentation().diagnostics ?? []).length > 0}>
-                              <details class="redeven-environment-card__failure-details">
-                                <summary>{props.i18n.t('settings.detailsTitle')}</summary>
-                                <div class="mt-1.5 space-y-1.5">
-                                  <For each={presentation().diagnostics ?? []}>
-                                    {(diagnostic) => (
-                                      <div>
-                                        <div class="text-[0.65rem] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                                          {diagnostic.label}
-                                        </div>
-                                        <pre class="redeven-environment-card__failure-diagnostic">{diagnostic.text}</pre>
-                                      </div>
-                                    )}
-                                  </For>
-                                </div>
-                              </details>
-                            </Show>
-                          </div>
-                        </div>
-                      }
-                    >
-                      <span
-                        class="redeven-environment-card__failure-badge"
-                        data-tone={presentation().severity}
-                        onClick={props.dismissEnvironmentFailure}
-                        role="button"
-                        tabIndex={0}
-                        aria-label={props.i18n.t('environmentCenter.dismissStartupFailureAriaLabel', { summary: presentation().summary })}
-                      >
-                        <span class="redeven-environment-card__failure-badge-icon" aria-hidden="true">!</span>
-                      </span>
-                    </DesktopPopover>
-                  );
-                }}
-              </Show>
             </div>
             <CardTitle class="truncate text-sm font-semibold leading-5 tracking-[0.01em]" title={props.environment.label}>
               {props.environment.label}
