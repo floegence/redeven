@@ -21,6 +21,7 @@ import {
   RuntimePlacementReadinessTimeoutError,
 } from './runtimePlacementManager';
 import type { RuntimePlacementProgressPhase } from './runtimePlacementManager';
+import { DefaultDesktopSSHTransportManager } from './sshTransportManager';
 
 const MANAGED_RUNTIME_BINARY_PATH = '/root/.redeven/runtime/managed/bin/redeven';
 const MANAGED_RUNTIME_STAMP_PATH = '/root/.redeven/runtime/managed/managed-runtime.stamp';
@@ -176,6 +177,19 @@ describe('runtimePlacementManager', () => {
       'const fs = require("node:fs");',
       'const { spawnSync } = require("node:child_process");',
       'const args = process.argv.slice(2);',
+      'const socketIndex = args.indexOf("-S");',
+      'const socketPath = socketIndex >= 0 ? args[socketIndex + 1] : "";',
+      'if (args.includes("-M") && args.includes("-N")) {',
+      '  fs.writeFileSync(socketPath, "ready");',
+      '  const close = () => { try { fs.unlinkSync(socketPath); } catch {} process.exit(0); };',
+      '  process.on("SIGTERM", close);',
+      '  process.on("SIGINT", close);',
+      '  setInterval(() => {}, 1000);',
+      '  return;',
+      '}',
+      'if (args.includes("-O") && args[args.indexOf("-O") + 1] === "check") {',
+      '  process.exit(socketPath && fs.existsSync(socketPath) ? 0 : 255);',
+      '}',
       'const command = args[args.length - 1] || "";',
       'if (command === "" || command.startsWith("-")) {',
       '  process.stderr.write(`unexpected ssh args: ${args.join(" ")}\\n`);',
@@ -639,55 +653,65 @@ describe('runtimePlacementManager', () => {
     const { markerPath, uploadedArchivePath } = await installFakeDocker(tempDir);
     await installFakeSSH(tempDir);
     const progressPhases: RuntimePlacementProgressPhase[] = [];
-
-    const ready = await ensureRuntimePlacementReady({
-      host_access: {
-        kind: 'ssh_host',
-        ssh: {
-          ssh_destination: 'devbox',
-          ssh_port: 2222,
-          auth_mode: 'key_agent',
-          connect_timeout_seconds: 1,
-        },
-      },
-      placement: {
-        kind: 'container_process',
-        container_engine: 'docker',
-        container_id: 'dev',
-        container_ref: 'dev',
-        container_label: 'dev',
-        runtime_root: '/root/.redeven',
-        bridge_strategy: 'exec_stream',
-      },
-      runtime_release_tag: 'v1.2.3',
-      release_base_url: 'https://example.invalid/releases',
-      asset_cache_root: tempDir,
-      desktop_owner_id: 'owner',
-      on_progress: (progress) => {
-        progressPhases.push(progress.phase);
-      },
+    const sshTransportManager = new DefaultDesktopSSHTransportManager({
+      readyPollMs: 1,
+      dependencies: { tempRoot: tempDir },
     });
 
-    expect(ready.runtime_binary_path).toBe(MANAGED_RUNTIME_BINARY_PATH);
-    expect(ready.probe.reported_release_tag).toBe('v1.2.3');
-    expect(await fs.readFile(markerPath, 'utf8')).toBe('v1.2.3');
-    expect(await fs.readFile(uploadedArchivePath, 'utf8')).toBe('redeven-archive');
-    expect(uploadAssetMocks.prepareDesktopRuntimeUploadAsset).toHaveBeenCalledWith(expect.objectContaining({
-      runtimeReleaseTag: 'v1.2.3',
-      platform: expect.objectContaining({ platform_id: 'linux_amd64' }),
-    }));
-    expect(progressPhases).toEqual([
-      'checking_host',
-      'checking_container',
-      'detecting_platform',
-      'discovering_runtime_instances',
-      'checking_runtime',
-      'preparing_runtime_package',
-      'installing_runtime',
-      'starting_runtime_daemon',
-      'waiting_runtime_daemon',
-      'verifying_runtime_inventory',
-      'runtime_ready',
-    ]);
+    try {
+      const ready = await ensureRuntimePlacementReady({
+        host_access: {
+          kind: 'ssh_host',
+          ssh: {
+            ssh_destination: 'devbox',
+            ssh_port: 2222,
+            auth_mode: 'key_agent',
+            connect_timeout_seconds: 1,
+          },
+        },
+        placement: {
+          kind: 'container_process',
+          container_engine: 'docker',
+          container_id: 'dev',
+          container_ref: 'dev',
+          container_label: 'dev',
+          runtime_root: '/root/.redeven',
+          bridge_strategy: 'exec_stream',
+        },
+        ssh_transport_manager: sshTransportManager,
+        ssh_credential_scope: tempDir,
+        runtime_release_tag: 'v1.2.3',
+        release_base_url: 'https://example.invalid/releases',
+        asset_cache_root: tempDir,
+        desktop_owner_id: 'owner',
+        on_progress: (progress) => {
+          progressPhases.push(progress.phase);
+        },
+      });
+
+      expect(ready.runtime_binary_path).toBe(MANAGED_RUNTIME_BINARY_PATH);
+      expect(ready.probe.reported_release_tag).toBe('v1.2.3');
+      expect(await fs.readFile(markerPath, 'utf8')).toBe('v1.2.3');
+      expect(await fs.readFile(uploadedArchivePath, 'utf8')).toBe('redeven-archive');
+      expect(uploadAssetMocks.prepareDesktopRuntimeUploadAsset).toHaveBeenCalledWith(expect.objectContaining({
+        runtimeReleaseTag: 'v1.2.3',
+        platform: expect.objectContaining({ platform_id: 'linux_amd64' }),
+      }));
+      expect(progressPhases).toEqual([
+        'checking_host',
+        'checking_container',
+        'detecting_platform',
+        'discovering_runtime_instances',
+        'checking_runtime',
+        'preparing_runtime_package',
+        'installing_runtime',
+        'starting_runtime_daemon',
+        'waiting_runtime_daemon',
+        'verifying_runtime_inventory',
+        'runtime_ready',
+      ]);
+    } finally {
+      await sshTransportManager.dispose();
+    }
   }, 15_000);
 });

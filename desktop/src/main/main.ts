@@ -207,6 +207,7 @@ import {
   createLocalRuntimeHostExecutor,
   createSSHRuntimeHostExecutor,
 } from './runtimeHostAccess';
+import { DefaultDesktopSSHTransportManager } from './sshTransportManager';
 import {
   startRuntimePlacementBridgeSession,
   type RuntimePlacementBridgeSession,
@@ -840,6 +841,7 @@ const pendingRuntimePlacementOpenByTargetID = new Map<DesktopRuntimeTargetID, Pr
 const launcherOperationRemovalTimers = new Map<string, ReturnType<typeof setTimeout>>();
 const launcherOperations = new LauncherOperationRegistry(handleLauncherOperationChange);
 const runtimeLifecycleCoordinator = new RuntimeLifecycleCoordinator();
+const desktopSSHTransportManager = new DefaultDesktopSSHTransportManager();
 const desktopWelcomeSnapshotOrder = new DesktopWelcomeSnapshotOrder();
 const welcomeRuntimeHealthStore = new DesktopWelcomeRuntimeHealthStore(
   () => broadcastDesktopWelcomeSnapshots(),
@@ -1108,6 +1110,8 @@ async function openRuntimePlacementBridgeForReadyRecord(
     runtime_binary_path: readyRecord.runtime_binary_path,
     desktop_owner_id: await desktopRuntimeOwnerID(),
     ssh_password: sshPassword,
+    ssh_credential_scope: readyRecord.environment_id,
+    ssh_transport_manager: desktopSSHTransportManager,
     fallback_local_id: readyRecord.environment_id,
     signal,
   });
@@ -1658,18 +1662,26 @@ async function runtimeControlStatusForStartup(startup: StartupReport | null | un
     : desktopRuntimeControlStatusOwnerMismatch('This runtime is owned by another Desktop instance.');
 }
 
-function runtimeHostExecutor(hostAccess: DesktopRuntimeHostAccess, sshPassword?: string) {
+function runtimeHostExecutor(
+  hostAccess: DesktopRuntimeHostAccess,
+  credentialScope: string,
+  sshPassword?: string,
+) {
   return hostAccess.kind === 'ssh_host'
-    ? createSSHRuntimeHostExecutor(hostAccess.ssh, { sshPassword })
+    ? createSSHRuntimeHostExecutor(desktopSSHTransportManager, hostAccess.ssh, {
+        credentialScope,
+        sshPassword,
+      })
     : createLocalRuntimeHostExecutor();
 }
 
 function runtimeContainerResolver(
   hostAccess: DesktopRuntimeHostAccess,
+  credentialScope: string,
   signal?: AbortSignal,
   sshPassword?: string,
-): DesktopRuntimeContainerResolver {
-  const executor = runtimeHostExecutor(hostAccess, sshPassword);
+): DesktopRuntimeContainerResolver & Readonly<{ release: () => Promise<void> }> {
+  const executor = runtimeHostExecutor(hostAccess, credentialScope, sshPassword);
   const commandOptions = () => ({
     signal: signal ?? AbortSignal.timeout(DESKTOP_RUNTIME_PROBE_TIMEOUT_MS),
   });
@@ -1682,6 +1694,7 @@ function runtimeContainerResolver(
       engine,
       (await executor.run(containerListCommand(engine), commandOptions())).stdout,
     ),
+    release: () => executor.release(),
   };
 }
 
@@ -1888,30 +1901,34 @@ async function inspectRuntimePlacementTargetState(
       runtime_target_available: false,
     };
   }
+  const bridgeRecord = await verifyRuntimePlacementBridgeRecord(target.targetID);
+  if (bridgeRecord) {
+    const runtimeService = bridgeRecord.startup.runtime_service;
+    return {
+      running: true,
+      startup: bridgeRecord.startup,
+      local_ui_url: bridgeRecord.startup.local_ui_url,
+      runtime_service: runtimeService,
+      runtime_control_status: await runtimeControlStatusForStartup(bridgeRecord.startup),
+      maintenance: runtimePlacementMaintenanceForRuntimeService(target.targetID, runtimeService),
+      placement: target.placement,
+      binary_path: bridgeRecord.runtime_binary_path,
+      runtime_target_available: true,
+    };
+  }
   const commandOptions = () => ({
     signal: target.signal ?? AbortSignal.timeout(DESKTOP_RUNTIME_PROBE_TIMEOUT_MS),
   });
-  const resolution = await resolveRuntimeContainerPlacement(
-    runtimeContainerResolver(target.hostAccess, target.signal, sshPassword || undefined),
-    target.placement,
+  const resolver = runtimeContainerResolver(
+    target.hostAccess,
+    target.environmentID,
+    target.signal,
+    sshPassword || undefined,
   );
+  const resolution = await resolveRuntimeContainerPlacement(resolver, target.placement)
+    .finally(() => resolver.release());
   if (resolution.status === 'running') {
-    const bridgeRecord = await verifyRuntimePlacementBridgeRecord(target.targetID);
-    if (bridgeRecord) {
-      const runtimeService = bridgeRecord.startup.runtime_service;
-      return {
-        running: true,
-        startup: bridgeRecord.startup,
-        local_ui_url: bridgeRecord.startup.local_ui_url,
-        runtime_service: runtimeService,
-        runtime_control_status: await runtimeControlStatusForStartup(bridgeRecord.startup),
-        maintenance: runtimePlacementMaintenanceForRuntimeService(target.targetID, runtimeService),
-        placement: resolution.placement,
-        binary_path: bridgeRecord.runtime_binary_path,
-        runtime_target_available: true,
-      };
-    }
-    const executor = runtimeHostExecutor(target.hostAccess, sshPassword || undefined);
+    const executor = runtimeHostExecutor(target.hostAccess, target.environmentID, sshPassword || undefined);
     try {
       const probeResult = await executor.run(containerRuntimeProbeCommand({
         engine: resolution.placement.container_engine,
@@ -2076,6 +2093,8 @@ async function inspectRuntimePlacementTargetState(
         placement: resolution.placement,
         runtime_target_available: true,
       };
+    } finally {
+      await executor.release();
     }
     runtimePlacementReadyByTargetID.delete(target.targetID);
     return {
@@ -2790,6 +2809,7 @@ function gatewayLifecycleManager(): GatewayLifecycleManager {
       target_commit: process.env.REDEVEN_DESKTOP_BUNDLE_COMMIT,
       desktop_owner_id: desktopRuntimeOwnerID,
       lifecycle_coordinator: runtimeLifecycleCoordinator,
+      ssh_transport_manager: desktopSSHTransportManager,
     });
   }
   return gatewayLifecycleManagerCache;
@@ -3469,6 +3489,8 @@ async function probeSavedSSHRuntimeHealth(
     };
   }
   const probe = await probeManagedSSHRuntimeStatus({
+    sshTransportManager: desktopSSHTransportManager,
+    sshCredentialScope: environment.id,
     target: environment,
     runtimeReleaseTag: resolveSSHRuntimeReleaseTag(),
     sshPassword: environment.ssh_password_configured ? environment.ssh_password : undefined,
@@ -3615,6 +3637,50 @@ async function probeSavedRuntimeTargetHealth(
   };
 }
 
+function welcomeRuntimeProbeCoordinatorKey(
+  hostAccess: DesktopRuntimeHostAccess,
+  placement: DesktopRuntimePlacement,
+  credentialScope: string,
+): string {
+  return runtimeLifecycleFingerprint({
+    physical_target: runtimeLifecycleTargetKey(hostAccess, placement),
+    runtime_release_tag: resolveSSHRuntimeReleaseTag(),
+    credential_scope: hostAccess.kind === 'ssh_host' && hostAccess.ssh.auth_mode === 'password'
+      ? credentialScope
+      : 'key-agent-or-local',
+  });
+}
+
+function projectWelcomeRuntimeProbeResult(
+  result: DesktopWelcomeRuntimeHealthProbeResult,
+  identity: Readonly<{
+    target_id: DesktopProviderRuntimeLinkTargetID;
+    placement_target_id: DesktopRuntimeTargetID;
+    environment_id: string;
+    label: string;
+    runtime_key?: string;
+    host_access?: DesktopRuntimeHostAccess;
+    placement?: DesktopRuntimePlacement;
+  }>,
+): DesktopWelcomeRuntimeHealthProbeResult {
+  if (!result.presence) {
+    return result;
+  }
+  return {
+    ...result,
+    presence: {
+      ...result.presence,
+      target_id: identity.target_id,
+      placement_target_id: identity.placement_target_id,
+      environment_id: identity.environment_id,
+      label: identity.label,
+      ...(identity.runtime_key ? { runtime_key: identity.runtime_key } : {}),
+      ...(identity.host_access ? { host_access: identity.host_access } : {}),
+      ...(identity.placement ? { placement: identity.placement } : {}),
+    },
+  };
+}
+
 function buildWelcomeRuntimeHealthTargets(
   preferences: DesktopPreferences,
   openSessions: readonly DesktopSessionSummary[],
@@ -3637,22 +3703,40 @@ function buildWelcomeRuntimeHealthTargets(
       checking_health: checkingRuntimeHealth('external_local_ui_probe', 'unverified', 'Checking saved Environment status.'),
       probe: () => probeSavedExternalRuntimeHealth(environment),
     })),
-    ...preferences.saved_ssh_environments.map((environment) => ({
-      key: `ssh:${environment.id}`,
-      environment_id: environment.id,
-      slot: 'ssh_environment' as const,
-      presence_target_id: desktopProviderRuntimeLinkTargetID('ssh_environment', desktopSSHEnvironmentID(environment)),
-      auto_refresh_enabled: environment.auto_runtime_probe_enabled,
-      checking_health: checkingRuntimeHealth('ssh_runtime_probe', 'not_started', 'Checking SSH Runtime status.'),
-      probe: () => probeSavedSSHRuntimeHealth(environment),
-    })),
+    ...preferences.saved_ssh_environments.map((environment) => {
+      const hostAccess: DesktopRuntimeHostAccess = { kind: 'ssh_host', ssh: environment };
+      const placement: DesktopRuntimePlacement = { kind: 'host_process', runtime_root: environment.runtime_root };
+      const placementTargetID = desktopRuntimeTargetID(hostAccess, placement);
+      const presenceTargetID = desktopProviderRuntimeLinkTargetID('ssh_environment', desktopSSHEnvironmentID(environment));
+      return {
+        key: `ssh:${environment.id}`,
+        probe_coordinator_key: welcomeRuntimeProbeCoordinatorKey(hostAccess, placement, environment.id),
+        environment_id: environment.id,
+        slot: 'ssh_environment' as const,
+        presence_target_id: presenceTargetID,
+        auto_refresh_enabled: environment.auto_runtime_probe_enabled,
+        checking_health: checkingRuntimeHealth('ssh_runtime_probe', 'not_started', 'Checking SSH Runtime status.'),
+        probe: () => probeSavedSSHRuntimeHealth(environment),
+        project_shared_result: (result: DesktopWelcomeRuntimeHealthProbeResult) => projectWelcomeRuntimeProbeResult(result, {
+          target_id: presenceTargetID,
+          placement_target_id: placementTargetID,
+          environment_id: environment.id,
+          label: environment.label,
+          runtime_key: placementTargetID,
+          host_access: hostAccess,
+          placement,
+        }),
+      };
+    }),
     ...preferences.saved_runtime_targets.map((target) => {
       const targetKind = providerRuntimeLinkKindForHostAccess(target.host_access);
+      const presenceTargetID = desktopProviderRuntimeLinkTargetID(targetKind, target.id);
       return {
         key: `runtime-target:${target.id}`,
+        probe_coordinator_key: welcomeRuntimeProbeCoordinatorKey(target.host_access, target.placement, target.id),
         environment_id: target.id,
         slot: 'runtime_target' as const,
-        presence_target_id: desktopProviderRuntimeLinkTargetID(targetKind, target.id),
+        presence_target_id: presenceTargetID,
         auto_refresh_enabled: desktopRuntimeTargetAutoStatusDetectionEnabled(
           target.host_access,
           target.placement,
@@ -3664,6 +3748,15 @@ function buildWelcomeRuntimeHealthTargets(
           'Checking Runtime status.',
         ),
         probe: () => probeSavedRuntimeTargetHealth(target),
+        project_shared_result: (result: DesktopWelcomeRuntimeHealthProbeResult) => projectWelcomeRuntimeProbeResult(result, {
+          target_id: presenceTargetID,
+          placement_target_id: target.id,
+          environment_id: target.id,
+          label: target.label,
+          runtime_key: target.id,
+          host_access: target.host_access,
+          placement: target.placement,
+        }),
       };
     }),
   ];
@@ -9981,6 +10074,8 @@ async function ensureSSHRuntimeReadyRecordUncoordinated(
     if (canKeepExistingRecord) {
       const preferences = await loadDesktopPreferencesCached();
       const inventory = await inspectManagedSSHRuntimeProcesses({
+        sshTransportManager: desktopSSHTransportManager,
+        sshCredentialScope: environmentID,
         target: sshDetails,
         runtimeReleaseTag: resolveSSHRuntimeReleaseTag(),
         desktopOwnerID: await desktopRuntimeOwnerID(),
@@ -10093,6 +10188,8 @@ async function ensureSSHRuntimeReadyRecordUncoordinated(
         sshRuntimeMaintenanceByKey.delete(runtimeKey);
       }
       const managedSSHRuntime = await ensureManagedSSHRuntimeReady({
+        sshTransportManager: desktopSSHTransportManager,
+        sshCredentialScope: environmentID,
         target: sshDetails,
         runtimeReleaseTag: resolveSSHRuntimeReleaseTag(),
         desktopOwnerID: processOwnerID,
@@ -12831,8 +12928,12 @@ function commitRuntimePlacementLiveDaemonReplacement(input: Readonly<{
 async function assertRuntimeTargetContainerRunning(
   hostAccess: DesktopRuntimeHostAccess,
   placement: Extract<DesktopRuntimePlacement, Readonly<{ kind: 'container_process' }>>,
+  credentialScope: string,
+  sshPassword?: string,
 ): Promise<Extract<DesktopRuntimePlacement, Readonly<{ kind: 'container_process' }>>> {
-  const resolution = await resolveRuntimeContainerPlacement(runtimeContainerResolver(hostAccess), placement);
+  const resolver = runtimeContainerResolver(hostAccess, credentialScope, undefined, sshPassword);
+  const resolution = await resolveRuntimeContainerPlacement(resolver, placement)
+    .finally(() => resolver.release());
   if (resolution.status === 'running') {
     return resolution.placement;
   }
@@ -13071,6 +13172,8 @@ async function ensureRuntimePlacementReadyRecordFromLauncherUncoordinated(
           host_access: hostAccess,
           placement,
           ssh_password: sshPassword,
+          ssh_credential_scope: targetID,
+          ssh_transport_manager: desktopSSHTransportManager,
           runtime_release_tag: resolveSSHRuntimeReleaseTag(),
           release_base_url: PUBLIC_REDEVEN_RELEASE_BASE_URL,
           source_runtime_root: process.env.REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT,
@@ -13424,6 +13527,8 @@ async function openRuntimePlacementBridgeFromLauncher(
           runtime_binary_path: runtimeBinaryPath,
           desktop_owner_id: await desktopRuntimeOwnerID(),
           ssh_password: sshPassword,
+          ssh_credential_scope: targetID,
+          ssh_transport_manager: desktopSSHTransportManager,
           fallback_local_id: environmentID,
           signal,
         });
@@ -14574,8 +14679,9 @@ async function stopEnvironmentRuntimeFromLauncherUncoordinated(
       const sshPassword = savedTarget?.ssh_password_configured === true
         ? savedTarget.ssh_password ?? ''
         : compact(request.ssh_password);
-      const executor = runtimeHostExecutor(hostAccess, sshPassword || undefined);
-      const processArgs = {
+      const executor = runtimeHostExecutor(hostAccess, targetID, sshPassword || undefined);
+      try {
+        const processArgs = {
         executor,
         placement: runtimePlacement,
         runtime_binary_path: binaryPath,
@@ -14637,7 +14743,10 @@ async function stopEnvironmentRuntimeFromLauncherUncoordinated(
       scheduleCurrentLauncherOperationRemoval(operation.operation_key, lifecycleAttemptOwner);
       clearRuntimeLifecycleWorkflow(targetID, lifecycleAttemptOwner);
       broadcastDesktopWelcomeSnapshots();
-      return launcherActionSuccess('stopped_environment_runtime');
+        return launcherActionSuccess('stopped_environment_runtime');
+      } finally {
+        await executor.release();
+      }
     } catch (error) {
       const canceled = signal?.aborted === true;
       const conflict = launcherActionFailureFromRuntimeProcessConflict(error, {
@@ -14788,6 +14897,8 @@ async function stopEnvironmentRuntimeFromLauncherUncoordinated(
       const preferences = await loadDesktopPreferencesCached();
       const sshPassword = savedSSHPasswordForDetails(preferences, sshDetails, request.environment_id) || compact(request.ssh_password);
       const processInventoryArgs = {
+        sshTransportManager: desktopSSHTransportManager,
+        sshCredentialScope: compact(request.environment_id) || runtimeKey,
         target: sshDetails,
         runtimeReleaseTag: resolveSSHRuntimeReleaseTag(),
         desktopOwnerID: await desktopRuntimeOwnerID(),
@@ -16233,7 +16344,12 @@ async function upsertSavedRuntimeTargetFromWelcome(
 ): Promise<void> {
   let placement = request.placement;
   if (request.placement.kind === 'container_process') {
-    placement = await assertRuntimeTargetContainerRunning(request.host_access, request.placement);
+    placement = await assertRuntimeTargetContainerRunning(
+      request.host_access,
+      request.placement,
+      compact(request.environment_id) || desktopRuntimeTargetID(request.host_access, request.placement),
+      request.ssh_password_mode === 'replace' ? compact(request.ssh_password) : undefined,
+    );
   }
   const preferences = await loadDesktopPreferencesCached();
   const next = upsertSavedRuntimeTarget(preferences, {
@@ -16332,11 +16448,13 @@ async function listRuntimeContainersFromLauncher(
   }
   try {
     const executor = normalized.host_access.kind === 'ssh_host'
-      ? createSSHRuntimeHostExecutor(normalized.host_access.ssh)
+      ? createSSHRuntimeHostExecutor(desktopSSHTransportManager, normalized.host_access.ssh, {
+          credentialScope: `runtime-container-list:${desktopSSHAuthority(normalized.host_access.ssh)}`,
+        })
       : createLocalRuntimeHostExecutor();
     const result = await executor.run(containerListCommand(normalized.engine), {
       signal: AbortSignal.timeout(DESKTOP_RUNTIME_PROBE_TIMEOUT_MS),
-    });
+    }).finally(() => executor.release());
     return {
       ok: true,
       containers: parseContainerListOutput(normalized.engine, result.stdout),
@@ -16687,6 +16805,7 @@ async function shutdownDesktopWindowsAndSessions(): Promise<void> {
   await Promise.allSettled(sessionClosePromises);
   await Promise.allSettled([...sessionCloseTasks.values()]);
   await Promise.allSettled(runtimePlacementDisconnectPromises);
+  await desktopSSHTransportManager.dispose();
 }
 
 type DesktopDeepLinkRequest =

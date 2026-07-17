@@ -142,6 +142,67 @@ describe('DesktopWelcomeRuntimeHealthStore', () => {
     await Promise.all([first, second]);
   });
 
+  it('coalesces physical probes while projecting each saved record identity independently', async () => {
+    const probeResult = deferred<{ health: DesktopRuntimeHealth; presence: DesktopManagedRuntimePresence }>();
+    let firstProbeCount = 0;
+    let secondProbeCount = 0;
+    const store = new DesktopWelcomeRuntimeHealthStore(() => undefined);
+    const first = target(() => {
+      firstProbeCount += 1;
+      return probeResult.promise;
+    }, {
+      key: 'ssh:first',
+      environment_id: 'first',
+      slot: 'ssh_environment',
+      probe_coordinator_key: 'ssh-physical:devbox:runtime-root:v1',
+      project_shared_result: (result) => ({
+        ...result,
+        presence: result.presence ? {
+          ...result.presence,
+          target_id: 'ssh:first',
+          environment_id: 'first',
+          label: 'First',
+        } : undefined,
+      }),
+    });
+    const second = target(() => {
+      secondProbeCount += 1;
+      return probeResult.promise;
+    }, {
+      key: 'ssh:second',
+      environment_id: 'second',
+      slot: 'ssh_environment',
+      probe_coordinator_key: 'ssh-physical:devbox:runtime-root:v1',
+      project_shared_result: (result) => ({
+        ...result,
+        presence: result.presence ? {
+          ...result.presence,
+          target_id: 'ssh:second',
+          environment_id: 'second',
+          label: 'Second',
+        } : undefined,
+      }),
+    });
+
+    const refresh = store.refresh([first, second]);
+    expect(firstProbeCount).toBe(1);
+    expect(secondProbeCount).toBe(0);
+    probeResult.resolve({
+      health: health({ status: 'online' }),
+      presence: presence({ kind: 'ssh_environment' }),
+    });
+    await refresh;
+
+    expect(store.snapshot().managedRuntimePresenceByTargetID).toEqual(expect.objectContaining({
+      'ssh:first': expect.objectContaining({ environment_id: 'first', label: 'First' }),
+      'ssh:second': expect.objectContaining({ environment_id: 'second', label: 'Second' }),
+    }));
+    expect(store.snapshot().savedSSHRuntimeHealth).toEqual(expect.objectContaining({
+      first: expect.objectContaining({ status: 'online' }),
+      second: expect.objectContaining({ status: 'online' }),
+    }));
+  });
+
   it('reuses an in-flight probe even when the caller forces refresh', async () => {
     const firstProbe = deferred<{ health: DesktopRuntimeHealth }>();
     let probeCount = 0;

@@ -38,6 +38,14 @@ import type { GatewaySecretStore } from './gatewayTrust';
 import { DEFAULT_DESKTOP_SSH_RUNTIME_ROOT } from '../shared/desktopSSH';
 import { desktopRuntimeTargetID } from '../shared/desktopRuntimePlacement';
 import { RuntimeLifecycleCoordinator, RuntimeLifecycleInProgressError } from './runtimeLifecycleCoordinator';
+import type { DesktopSSHTransportManager } from './sshTransportManager';
+
+function fakeSSHTransportManager(): DesktopSSHTransportManager {
+  return {
+    acquire: vi.fn(),
+    dispose: vi.fn(async () => undefined),
+  } as DesktopSSHTransportManager;
+}
 
 function memorySecretStore(seed: readonly (readonly [string, string])[] = []): GatewaySecretStore {
   const values = new Map<string, string>(seed);
@@ -89,6 +97,7 @@ function fakeBridgeSession() {
 
 function manager(progress: string[] = [], secretStore = memorySecretStore()): GatewayLifecycleManager {
   return new GatewayLifecycleManager({
+    ssh_transport_manager: fakeSSHTransportManager(),
     secret_store: secretStore,
     runtime_release_tag: 'v1.2.3',
     release_base_url: 'https://releases.example.invalid',
@@ -275,6 +284,7 @@ describe('GatewayLifecycleManager', () => {
       display_name: 'Second Gateway',
     };
     const lifecycle = new GatewayLifecycleManager({
+      ssh_transport_manager: fakeSSHTransportManager(),
       secret_store: memorySecretStore(),
       runtime_release_tag: 'v1.2.3',
       release_base_url: 'https://releases.example.invalid',

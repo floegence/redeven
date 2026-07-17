@@ -21,6 +21,7 @@ import {
 import type { DesktopSSHBootstrapStrategy, DesktopSSHEnvironmentDetails } from '../shared/desktopSSH';
 import type { DesktopOperationFailurePresentation } from '../shared/desktopOperationFailure';
 import { RUNTIME_SERVICE_COMPATIBILITY_EPOCH } from '../shared/runtimeService';
+import { DefaultDesktopSSHTransportManager } from './sshTransportManager';
 
 type FakeSSHScenario =
   | 'ready'
@@ -53,6 +54,7 @@ type FakeSSHFixture = Readonly<{
   logPath: string;
   statePath: string;
   scenario: FakeSSHScenario;
+  transportManager: DefaultDesktopSSHTransportManager;
 }>;
 
 const SSH_RUNTIME_MAINTENANCE_TEST_TIMEOUT_MS = 30_000;
@@ -743,6 +745,10 @@ async function createFakeSSHFixture(scenario: FakeSSHScenario): Promise<FakeSSHF
     logPath,
     statePath,
     scenario,
+    transportManager: new DefaultDesktopSSHTransportManager({
+      readyPollMs: 10,
+      dependencies: { tempRoot: root },
+    }),
   };
 }
 
@@ -841,6 +847,8 @@ async function startWithFakeSSH(
   }> = {},
 ): Promise<ManagedSSHRuntimeReady> {
   const runtime = await withFakeSSHEnv(fixture, () => ensureManagedSSHRuntimeReady({
+    sshTransportManager: fixture.transportManager,
+    sshCredentialScope: fixture.root,
     target: options.target ?? targetFor(strategy),
     runtimeReleaseTag: options.runtimeReleaseTag ?? 'v1.2.3',
     desktopOwnerID: 'desktop-owner-test',
@@ -873,6 +881,8 @@ async function ensureReadyWithFakeSSH(
   strategy: DesktopSSHBootstrapStrategy,
 ): Promise<ManagedSSHRuntimeReady> {
   return withFakeSSHEnv(fixture, () => ensureManagedSSHRuntimeReady({
+    sshTransportManager: fixture.transportManager,
+    sshCredentialScope: fixture.root,
     target: targetFor(strategy),
     runtimeReleaseTag: 'v1.2.3',
     desktopOwnerID: 'desktop-owner-test',
@@ -928,6 +938,7 @@ fs.writeFileSync(args[outputIndex + 1], '#!/bin/sh\\necho fake redeven\\n');
 }
 
 async function removeFakeSSHFixture(fixture: FakeSSHFixture): Promise<void> {
+  await fixture.transportManager.dispose();
   await fs.rm(fixture.root, { recursive: true, force: true });
 }
 
@@ -946,6 +957,8 @@ describe('sshRuntime integration', () => {
     const fixture = await createFakeSSHFixture('ready');
     try {
       const probe = await withFakeSSHEnv(fixture, () => probeManagedSSHRuntimeStatus({
+        sshTransportManager: fixture.transportManager,
+        sshCredentialScope: fixture.root,
         target: targetFor('auto'),
         runtimeReleaseTag: 'v1.2.3',
         sshBinary: fixture.sshBinary,
@@ -966,6 +979,8 @@ describe('sshRuntime integration', () => {
     const fixture = await createFakeSSHFixture('status_blocked_without_socket');
     try {
       const probe = await withFakeSSHEnv(fixture, () => probeManagedSSHRuntimeStatus({
+        sshTransportManager: fixture.transportManager,
+        sshCredentialScope: fixture.root,
         target: targetFor('auto'),
         runtimeReleaseTag: 'v1.2.3',
         sshBinary: fixture.sshBinary,
@@ -988,6 +1003,8 @@ describe('sshRuntime integration', () => {
       });
 
       const processArgs = {
+        sshTransportManager: fixture.transportManager,
+        sshCredentialScope: fixture.root,
         target: targetFor('auto'),
         runtimeReleaseTag: 'v1.2.3',
         desktopOwnerID: 'desktop-owner-test',
@@ -1093,15 +1110,17 @@ describe('sshRuntime integration', () => {
     expect(events.map((event) => event.event)).toEqual(expect.arrayContaining([
       'stop_runtime',
       'control_terminated',
-      'master_terminated',
     ]));
+    expect(events.map((event) => event.event)).not.toContain('master_terminated');
     expect(events.find((event) => event.event === 'stop_runtime')?.data).toEqual({
       count: 1,
     });
+    await fixture.transportManager.dispose();
+    expect((await readFakeSSHEvents(fixture)).map((event) => event.event)).toContain('master_terminated');
     await removeFakeSSHFixture(fixture);
   });
 
-  it('aborts a pending SSH startup and tears down long-lived SSH processes before opening a bridge', async () => {
+  it('aborts a pending SSH startup without closing the reusable SSH master', async () => {
     const fixture = await createFakeSSHFixture('no_report');
     try {
       const abortController = new AbortController();
@@ -1114,16 +1133,17 @@ describe('sshRuntime integration', () => {
       abortController.abort();
 
       await expect(startup).rejects.toBeInstanceOf(DesktopSSHRuntimeCanceledError);
-      await waitForFakeSSHEvent(fixture, 'master_terminated');
       await waitForFakeSSHEvent(fixture, 'control_terminated');
 
       const events = await readFakeSSHEvents(fixture);
       expect(events.map((event) => event.event)).toEqual(expect.arrayContaining([
         'master_start',
         'start_runtime',
-        'master_terminated',
         'control_terminated',
       ]));
+      expect(events.map((event) => event.event)).not.toContain('master_terminated');
+      await fixture.transportManager.dispose();
+      await waitForFakeSSHEvent(fixture, 'master_terminated');
     } finally {
       await removeFakeSSHFixture(fixture);
     }
@@ -1506,6 +1526,8 @@ describe('sshRuntime integration', () => {
     try {
       for (const fixture of fixtures) {
         const runtime = await withFakeSSHEnv(fixture, () => ensureManagedSSHRuntimeReady({
+          sshTransportManager: fixture.transportManager,
+          sshCredentialScope: fixture.root,
           target: targetFor('desktop_upload'),
           runtimeReleaseTag: 'v1.2.3',
           desktopOwnerID: 'desktop-owner-test',
@@ -1642,12 +1664,15 @@ describe('sshRuntime integration', () => {
       'start_runtime',
       'read_report',
       'control_terminated',
-      'master_terminated',
     ]));
+    expect(eventNames).not.toContain('master_terminated');
     const masterStart = events.find((event) => event.event === 'master_start');
     const socketPath = String(masterStart?.data?.socket ?? '');
     expect(socketPath).not.toBe('');
+    await expect(fs.access(path.dirname(socketPath))).resolves.toBeUndefined();
+    await fixture.transportManager.dispose();
     await expect(fs.access(path.dirname(socketPath))).rejects.toThrow();
+    expect((await readFakeSSHEvents(fixture)).map((event) => event.event)).toContain('master_terminated');
     await removeFakeSSHFixture(fixture);
   });
 });

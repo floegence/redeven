@@ -22,20 +22,33 @@ import {
   readRuntimePlacementBridgeFrame,
 } from './runtimePlacementBridgeProtocol';
 import { startRuntimePlacementBridgeSession } from './runtimePlacementBridgeSession';
+import { DesktopSSHTransportInterruptedError } from './sshTransportManager';
 
 function createMockBridgeCommand() {
   const stdin = new PassThrough();
   const stdout = new PassThrough();
   const stderr = new PassThrough();
   let settleClosed: (() => void) | null = null;
-  const closed = new Promise<void>((resolve) => {
+  let rejectClosed: ((error: Error) => void) | null = null;
+  let settled = false;
+  const closed = new Promise<void>((resolve, reject) => {
     settleClosed = resolve;
+    rejectClosed = reject;
   });
-  const kill = vi.fn((_signal?: NodeJS.Signals) => {
+  const settle = (error?: Error) => {
+    if (settled) return;
+    settled = true;
     stdout.end();
     stderr.end();
     stdin.end();
-    settleClosed?.();
+    if (error) {
+      rejectClosed?.(error);
+    } else {
+      settleClosed?.();
+    }
+  };
+  const kill = vi.fn((_signal?: NodeJS.Signals) => {
+    settle();
   });
   return {
     stdin,
@@ -43,29 +56,91 @@ function createMockBridgeCommand() {
     stderr,
     closed,
     kill,
+    interrupt: (error: Error) => settle(error),
   };
 }
 
-function writeHello(stdout: PassThrough): void {
+function writeHello(
+  stdout: PassThrough,
+  options: Readonly<{
+    startedAtUnixMS?: number;
+    runtimeVersion?: string;
+    runtimeControlProtocolVersion?: string;
+    desktopOwnerID?: string;
+    runtimeControlToken?: string;
+  }> = {},
+): void {
   stdout.write(encodeRuntimePlacementBridgeFrame({
     type: 'hello',
     stream_id: 'bridge',
     payload: {
       protocol_version: 'redeven-desktop-bridge-v1',
-      runtime_version: 'v0.0.0-test',
-      started_at_unix_ms: 1778751234567,
+      runtime_version: options.runtimeVersion ?? 'v0.0.0-test',
+      started_at_unix_ms: options.startedAtUnixMS ?? 1778751234567,
       local_ui: {
         available: true,
         base_path: '/',
       },
       runtime_control: {
         available: true,
-        protocol_version: 'redeven-runtime-control-v1',
-        token: 'runtime-control-token',
-        desktop_owner_id: 'desktop-owner',
+        protocol_version: options.runtimeControlProtocolVersion ?? 'redeven-runtime-control-v1',
+        token: options.runtimeControlToken ?? 'runtime-control-token',
+        desktop_owner_id: options.desktopOwnerID ?? 'desktop-owner',
       },
     },
   }));
+}
+
+function writeGatewayHello(
+  stdout: PassThrough,
+  options: Readonly<{
+    stateRoot?: string;
+    executablePath?: string;
+    servicePID?: number;
+    managedBridgeToken?: string;
+  }> = {},
+): void {
+  stdout.write(encodeRuntimePlacementBridgeFrame({
+    type: 'hello',
+    stream_id: 'bridge',
+    payload: {
+      protocol_version: 'redeven-desktop-bridge-v1',
+      runtime_version: 'v0.0.0-test',
+      started_at_unix_ms: Date.now(),
+      local_ui: { available: false, base_path: '/' },
+      runtime_control: { available: false },
+      gateway_service: {
+        state_root: options.stateRoot ?? '/home/dev/.redeven/gateways/gw/state',
+        executable_path: options.executablePath ?? '/home/dev/.redeven/gateway/managed/bin/redeven-gateway',
+        service_pid: options.servicePID ?? 4242,
+        managed_bridge_token: options.managedBridgeToken ?? 'managed-bridge-token',
+      },
+    },
+  }));
+}
+
+function recoveryGate() {
+  let release: (() => void) | null = null;
+  const wait = vi.fn((_delayMS: number, signal: AbortSignal) => new Promise<void>((resolve, reject) => {
+    const onAbort = () => reject(signal.reason ?? new DOMException('Canceled.', 'AbortError'));
+    signal.addEventListener('abort', onAbort, { once: true });
+    release = () => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    };
+  }));
+  return {
+    wait,
+    release: () => release?.(),
+  };
+}
+
+async function waitForCondition(condition: () => boolean, timeoutMS = 1_000): Promise<void> {
+  const deadline = Date.now() + timeoutMS;
+  while (!condition() && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+  expect(condition()).toBe(true);
 }
 
 async function connectLoopback(rawURL: string): Promise<net.Socket> {
@@ -116,7 +191,7 @@ async function startMockedSSHSession(
   command: ReturnType<typeof createMockBridgeCommand>,
   signal?: AbortSignal,
 ) {
-  hostAccessMocks.spawnSSHRuntimeHostCommand.mockImplementationOnce((_ssh, _command, options) => {
+  hostAccessMocks.spawnSSHRuntimeHostCommand.mockImplementationOnce((_manager, _ssh, _command, options) => {
     options?.signal?.addEventListener('abort', () => command.kill('SIGTERM'), { once: true });
     return command;
   });
@@ -134,6 +209,11 @@ async function startMockedSSHSession(
     runtime_binary_path: '~/.redeven',
     desktop_owner_id: 'desktop-owner',
     fallback_local_id: 'los',
+    ssh_credential_scope: 'los',
+    ssh_transport_manager: {
+      acquire: vi.fn(),
+      dispose: vi.fn(),
+    },
     signal,
   });
   writeHello(command.stdout);
@@ -309,13 +389,224 @@ describe('runtimePlacementBridgeSession lifecycle', () => {
       expect(websocketResponse.toString('latin1')).toContain('101 Switching Protocols');
 
       expect(hostAccessMocks.spawnSSHRuntimeHostCommand).toHaveBeenCalledWith(
+        expect.objectContaining({ acquire: expect.any(Function) }),
         expect.objectContaining({ ssh_destination: 'los' }),
         expect.arrayContaining(['sh', '-c']),
-        expect.objectContaining({ signal: undefined }),
+        expect.objectContaining({
+          credentialScope: 'los',
+          signal: expect.any(AbortSignal),
+        }),
       );
     } finally {
       await session.disconnect();
     }
+  });
+
+  it('keeps the loopback URL stable and resumes new requests after the same Runtime identity reconnects', async () => {
+    hostAccessMocks.spawnSSHRuntimeHostCommand.mockReset();
+    const first = createMockBridgeCommand();
+    const second = createMockBridgeCommand();
+    const gate = recoveryGate();
+    hostAccessMocks.spawnSSHRuntimeHostCommand
+      .mockImplementationOnce((_manager, _ssh, _command, options) => {
+        options.signal.addEventListener('abort', () => first.kill('SIGTERM'), { once: true });
+        return first;
+      })
+      .mockImplementationOnce((_manager, _ssh, _command, options) => {
+        options.signal.addEventListener('abort', () => second.kill('SIGTERM'), { once: true });
+        writeHello(second.stdout);
+        return second;
+      });
+    const task = startRuntimePlacementBridgeSession({
+      host_access: {
+        kind: 'ssh_host',
+        ssh: {
+          ssh_destination: 'los',
+          ssh_port: 22,
+          auth_mode: 'key_agent',
+          connect_timeout_seconds: 10,
+        },
+      },
+      placement: { kind: 'host_process', runtime_root: '~/.redeven' },
+      runtime_binary_path: '~/.redeven',
+      desktop_owner_id: 'desktop-owner',
+      fallback_local_id: 'los',
+      ssh_credential_scope: 'los',
+      ssh_transport_manager: { acquire: vi.fn(), dispose: vi.fn() },
+      recovery_scheduler: { wait: gate.wait },
+    });
+    writeHello(first.stdout);
+    const session = await task;
+    const stableURL = session.local_ui_url;
+    let sessionClosed = false;
+    void session.closed.then(() => {
+      sessionClosed = true;
+    });
+    const activeSocket = await connectLoopback(stableURL);
+    activeSocket.on('error', () => undefined);
+    try {
+      activeSocket.write('GET /old HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n');
+      await readRuntimePlacementBridgeFrame(first.stdin);
+      await readRuntimePlacementBridgeFrame(first.stdin);
+      first.interrupt(new DesktopSSHTransportInterruptedError('los:22', 1));
+      await waitForClosedSocket(activeSocket);
+      await waitForCondition(() => gate.wait.mock.calls.length === 1);
+
+      const unavailableSocket = await connectLoopback(stableURL);
+      unavailableSocket.write('GET /during-recovery HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n');
+      const unavailableResponse = await readSocketUntilClose(unavailableSocket);
+      expect(unavailableResponse.toString('latin1')).toContain('HTTP/1.1 502 Bad Gateway');
+
+      gate.release();
+      await waitForCondition(() => hostAccessMocks.spawnSSHRuntimeHostCommand.mock.calls.length === 2);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(session.local_ui_url).toBe(stableURL);
+      expect(second.stdin.readableLength).toBe(0);
+      expect(sessionClosed).toBe(false);
+
+      const response = await bridgeHTTPRoundTrip({
+        command: second,
+        localUIURL: stableURL,
+        request: 'GET /new HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n',
+        expectedRequestLine: /^GET \/new HTTP\/1\.1/u,
+        response: 'HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok',
+      });
+      expect(response.toString('latin1')).toContain('\r\n\r\nok');
+    } finally {
+      activeSocket.destroy();
+      await session.disconnect();
+    }
+  });
+
+  it('terminates Runtime recovery when the Runtime process identity changes', async () => {
+    hostAccessMocks.spawnSSHRuntimeHostCommand.mockReset();
+    const first = createMockBridgeCommand();
+    const second = createMockBridgeCommand();
+    const gate = recoveryGate();
+    hostAccessMocks.spawnSSHRuntimeHostCommand
+      .mockImplementationOnce(() => first)
+      .mockImplementationOnce(() => {
+        writeHello(second.stdout, { runtimeControlToken: 'replacement-token' });
+        return second;
+      });
+    const task = startRuntimePlacementBridgeSession({
+      host_access: {
+        kind: 'ssh_host',
+        ssh: { ssh_destination: 'los', ssh_port: 22, auth_mode: 'key_agent', connect_timeout_seconds: 10 },
+      },
+      placement: { kind: 'host_process', runtime_root: '~/.redeven' },
+      desktop_owner_id: 'desktop-owner',
+      ssh_credential_scope: 'los',
+      ssh_transport_manager: { acquire: vi.fn(), dispose: vi.fn() },
+      recovery_scheduler: { wait: gate.wait },
+    });
+    writeHello(first.stdout);
+    const session = await task;
+    first.interrupt(new DesktopSSHTransportInterruptedError('los:22', 1));
+    await waitForCondition(() => gate.wait.mock.calls.length === 1);
+    gate.release();
+    await session.closed;
+    expect(() => session.openStream('local_ui')).toThrow('Runtime Placement Bridge session is closed.');
+    expect(hostAccessMocks.spawnSSHRuntimeHostCommand).toHaveBeenCalledTimes(2);
+  });
+
+  it('recovers a Gateway bridge only when its managed service identity is unchanged', async () => {
+    hostAccessMocks.spawnSSHRuntimeHostCommand.mockReset();
+    const first = createMockBridgeCommand();
+    const second = createMockBridgeCommand();
+    const gate = recoveryGate();
+    hostAccessMocks.spawnSSHRuntimeHostCommand
+      .mockImplementationOnce(() => first)
+      .mockImplementationOnce(() => {
+        writeGatewayHello(second.stdout);
+        return second;
+      });
+    const task = startRuntimePlacementBridgeSession({
+      host_access: {
+        kind: 'ssh_host',
+        ssh: { ssh_destination: 'los', ssh_port: 22, auth_mode: 'key_agent', connect_timeout_seconds: 10 },
+      },
+      placement: { kind: 'host_process', runtime_root: '~/.redeven' },
+      bridge_command_kind: 'gateway',
+      require_local_ui: false,
+      desktop_owner_id: 'desktop-owner',
+      ssh_credential_scope: 'gateway-a',
+      ssh_transport_manager: { acquire: vi.fn(), dispose: vi.fn() },
+      recovery_scheduler: { wait: gate.wait },
+    });
+    writeGatewayHello(first.stdout);
+    const session = await task;
+    try {
+      first.interrupt(new DesktopSSHTransportInterruptedError('los:22', 1));
+      await waitForCondition(() => gate.wait.mock.calls.length === 1);
+      gate.release();
+      await waitForCondition(() => hostAccessMocks.spawnSSHRuntimeHostCommand.mock.calls.length === 2);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      const stream = session.openStream('gateway_protocol');
+      const frame = await readRuntimePlacementBridgeFrame(second.stdin);
+      expect(frame?.header.type).toBe('stream_open');
+      await stream.close();
+    } finally {
+      await session.disconnect();
+    }
+  });
+
+  it('terminates Gateway recovery when the managed service PID changes', async () => {
+    hostAccessMocks.spawnSSHRuntimeHostCommand.mockReset();
+    const first = createMockBridgeCommand();
+    const second = createMockBridgeCommand();
+    const gate = recoveryGate();
+    hostAccessMocks.spawnSSHRuntimeHostCommand
+      .mockImplementationOnce(() => first)
+      .mockImplementationOnce(() => {
+        writeGatewayHello(second.stdout, { servicePID: 5252 });
+        return second;
+      });
+    const task = startRuntimePlacementBridgeSession({
+      host_access: {
+        kind: 'ssh_host',
+        ssh: { ssh_destination: 'los', ssh_port: 22, auth_mode: 'key_agent', connect_timeout_seconds: 10 },
+      },
+      placement: { kind: 'host_process', runtime_root: '~/.redeven' },
+      bridge_command_kind: 'gateway',
+      require_local_ui: false,
+      desktop_owner_id: 'desktop-owner',
+      ssh_credential_scope: 'gateway-a',
+      ssh_transport_manager: { acquire: vi.fn(), dispose: vi.fn() },
+      recovery_scheduler: { wait: gate.wait },
+    });
+    writeGatewayHello(first.stdout);
+    const session = await task;
+    first.interrupt(new DesktopSSHTransportInterruptedError('los:22', 1));
+    await waitForCondition(() => gate.wait.mock.calls.length === 1);
+    gate.release();
+    await session.closed;
+    expect(() => session.openStream('gateway_protocol')).toThrow('Runtime Placement Bridge session is closed.');
+  });
+
+  it('cancels pending bridge recovery when the session disconnects', async () => {
+    hostAccessMocks.spawnSSHRuntimeHostCommand.mockReset();
+    const first = createMockBridgeCommand();
+    const gate = recoveryGate();
+    hostAccessMocks.spawnSSHRuntimeHostCommand.mockImplementationOnce(() => first);
+    const task = startRuntimePlacementBridgeSession({
+      host_access: {
+        kind: 'ssh_host',
+        ssh: { ssh_destination: 'los', ssh_port: 22, auth_mode: 'key_agent', connect_timeout_seconds: 10 },
+      },
+      placement: { kind: 'host_process', runtime_root: '~/.redeven' },
+      desktop_owner_id: 'desktop-owner',
+      ssh_credential_scope: 'los',
+      ssh_transport_manager: { acquire: vi.fn(), dispose: vi.fn() },
+      recovery_scheduler: { wait: gate.wait },
+    });
+    writeHello(first.stdout);
+    const session = await task;
+    first.interrupt(new DesktopSSHTransportInterruptedError('los:22', 1));
+    await waitForCondition(() => gate.wait.mock.calls.length === 1);
+    await session.disconnect();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(hostAccessMocks.spawnSSHRuntimeHostCommand).toHaveBeenCalledTimes(1);
   });
 
   it('cancels the SSH bridge command and closes active proxy sockets', async () => {

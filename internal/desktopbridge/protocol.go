@@ -42,6 +42,7 @@ type Hello struct {
 	RuntimeControl  RuntimeControl  `json:"runtime_control"`
 	RuntimeService  any             `json:"runtime_service"`
 	GatewayProtocol GatewayProtocol `json:"gateway_protocol,omitempty"`
+	GatewayService  *GatewayService `json:"gateway_service,omitempty"`
 }
 
 type HelloLocalUI struct {
@@ -51,6 +52,13 @@ type HelloLocalUI struct {
 
 type GatewayProtocol struct {
 	Available bool `json:"available"`
+}
+
+type GatewayService struct {
+	StateRoot          string `json:"state_root"`
+	ExecutablePath     string `json:"executable_path"`
+	ServicePID         int    `json:"service_pid"`
+	ManagedBridgeToken string `json:"managed_bridge_token"`
 }
 
 type RuntimeControl struct {

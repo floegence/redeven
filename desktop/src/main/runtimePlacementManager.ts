@@ -42,6 +42,7 @@ import {
   createSSHRuntimeHostExecutor,
   type RuntimeHostAccessExecutor,
 } from './runtimeHostAccess';
+import type { DesktopSSHTransportManager } from './sshTransportManager';
 import {
   describeManagedSSHRuntimeProbeResult,
   parseManagedSSHRuntimeProbeResult,
@@ -101,6 +102,8 @@ export type EnsureRuntimePlacementReadyArgs = Readonly<{
   host_access: DesktopRuntimeHostAccess;
   placement: DesktopRuntimePlacement;
   ssh_password?: string;
+  ssh_credential_scope?: string;
+  ssh_transport_manager?: DesktopSSHTransportManager;
   runtime_release_tag: string;
   release_base_url: string;
   source_runtime_root?: string;
@@ -267,10 +270,17 @@ function emitProgress(
   });
 }
 
-function runtimeHostExecutor(hostAccess: DesktopRuntimeHostAccess, sshPassword?: string): RuntimeHostAccessExecutor {
-  return hostAccess.kind === 'ssh_host'
-    ? createSSHRuntimeHostExecutor(hostAccess.ssh, { sshPassword })
-    : createLocalRuntimeHostExecutor();
+function runtimeHostExecutor(args: EnsureRuntimePlacementReadyArgs): RuntimeHostAccessExecutor {
+  if (args.host_access.kind !== 'ssh_host') {
+    return createLocalRuntimeHostExecutor();
+  }
+  if (!args.ssh_transport_manager) {
+    throw new Error('SSH runtime placement requires the Desktop SSH transport manager.');
+  }
+  return createSSHRuntimeHostExecutor(args.ssh_transport_manager, args.host_access.ssh, {
+    sshPassword: args.ssh_password,
+    credentialScope: compact(args.ssh_credential_scope),
+  });
 }
 
 async function waitForContainerRuntimeDaemon(args: Readonly<{
@@ -423,7 +433,8 @@ export async function ensureRuntimePlacementReady(
   }
   const placement = args.placement;
 
-  const executor = runtimeHostExecutor(args.host_access, args.ssh_password);
+  const executor = runtimeHostExecutor(args);
+  try {
   emitProgress(
     args.on_progress,
     args.host_access.kind === 'ssh_host' ? 'checking_host' : 'checking_container',
@@ -689,11 +700,14 @@ export async function ensureRuntimePlacementReady(
     'Runtime daemon ready',
     'The runtime daemon is running. Open will connect Desktop to it.',
   );
-  return {
-    host_access: args.host_access,
-    placement,
-    runtime_binary_path: probe.binary_path,
-    probe,
-    startup,
-  };
+    return {
+      host_access: args.host_access,
+      placement,
+      runtime_binary_path: probe.binary_path,
+      probe,
+      startup,
+    };
+  } finally {
+    await executor.release();
+  }
 }
