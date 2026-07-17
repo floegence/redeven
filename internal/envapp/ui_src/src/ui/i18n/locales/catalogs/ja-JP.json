@@ -3043,6 +3043,49 @@
     "localOnlyDescription": "Local UI の状態にのみ適用され、実行環境の設定には影響しません。",
     "frontendOnly": "フロントエンドのみ"
   },
+  "connectionRecovery": {
+    "title": {
+      "recovering": "接続を復旧しています",
+      "recovered": "接続が復旧しました",
+      "failed": "接続を復旧できませんでした"
+    },
+    "summary": {
+      "recovering": "Redeven はこの環境への再接続を進めています。必要な手順がすべて完了すると、元のワークスペースに戻ります。",
+      "recovered": "必要な接続手順がすべて完了しました。ワークスペースに戻ります。",
+      "failed": "元のランタイムセッションは使用できなくなりました。以前のワークスペース状態は保持されますが、リクエストは送信できません。"
+    },
+    "steps": {
+      "interrupted": "接続が中断されました",
+      "desktopTransport": "Desktop トランスポートの復旧",
+      "runtimeProbe": "ランタイムの可用性確認",
+      "protocolConnect": "プロトコル接続",
+      "secureSession": "セキュアセッションの復旧",
+      "completed": "接続完了"
+    },
+    "progressLabel": "接続復旧の進行状況",
+    "progress": "{total} ステップ中 {complete} ステップ完了",
+    "timelineLabel": "接続復旧の手順",
+    "attempts": {
+      "one": "試行回数: {count}",
+      "other": "試行回数: {count}"
+    },
+    "retryIn": "{seconds} 秒後に再試行",
+    "retryNow": "今すぐ再試行",
+    "openConnectionCenter": "接続センターを開く",
+    "technicalDetails": "技術的な詳細",
+    "copyDiagnostic": "診断情報をコピー",
+    "copiedDiagnostic": "診断情報をコピーしました",
+    "failure": {
+      "runtimeOffline": "ランタイムはオフラインで、復旧中に利用可能になりませんでした。",
+      "runtimeUnavailable": "復旧が停止するまでにランタイムの準備が整いませんでした。",
+      "transportUnavailable": "このセッションの接続トランスポートは利用できなくなりました。",
+      "authenticationFailed": "Desktop は元のランタイム接続を認証できませんでした。",
+      "missingEnvironmentContext": "このセッションに必要な環境識別情報がありません。",
+      "secureSessionFailed": "セキュアセッションを再開できませんでした。",
+      "remoteCommandEnded": "元のリモートランタイムブリッジコマンドが終了しました。",
+      "processIdentityChanged": "リモートランタイムの識別情報が変わったため、このウィンドウを安全に再バインドできません。"
+    }
+  },
   "debugConsole": {
     "windowTitle": "デバッグコンソール",
     "header": {

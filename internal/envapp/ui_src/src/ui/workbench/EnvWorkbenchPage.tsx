@@ -772,9 +772,6 @@ export function EnvWorkbenchPage() {
       )]),
   ));
   const workbenchCurtainStage = createMemo<WorkbenchProgressCurtainStage>(() => {
-    if (env.connectionOverlayVisible()) {
-      return 'connecting';
-    }
     if (!runtimeLayoutReady()) {
       return 'layout';
     }
@@ -784,12 +781,8 @@ export function EnvWorkbenchPage() {
     return 'ready';
   });
   const workbenchCurtainVisible = createMemo(() => (
-    env.connectionOverlayVisible()
-    || !runtimeLayoutReady()
+    !runtimeLayoutReady()
     || !surfaceApi()
-  ));
-  const workbenchCurtainMessage = createMemo(() => (
-    env.connectionOverlayVisible() ? env.connectionOverlayMessage() : undefined
   ));
   const selectedWidget = createMemo(() => {
     const selectedWidgetId = compact(workbenchState().selectedWidgetId);
@@ -2703,7 +2696,6 @@ export function EnvWorkbenchPage() {
         <WorkbenchProgressCurtain
           visible={workbenchCurtainVisible()}
           stage={workbenchCurtainStage()}
-          message={workbenchCurtainMessage()}
         />
       </div>
     </EnvWorkbenchInstancesContext.Provider>

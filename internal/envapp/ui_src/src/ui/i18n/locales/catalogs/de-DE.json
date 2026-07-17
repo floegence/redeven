@@ -3043,6 +3043,49 @@
     "localOnlyDescription": "Betrifft nur den Status von Local UI und ändert die Laufzeitkonfiguration nicht.",
     "frontendOnly": "Nur Frontend"
   },
+  "connectionRecovery": {
+    "title": {
+      "recovering": "Verbindung wird wiederhergestellt",
+      "recovered": "Verbindung wiederhergestellt",
+      "failed": "Verbindung konnte nicht wiederhergestellt werden"
+    },
+    "summary": {
+      "recovering": "Redeven stellt die Verbindung zu dieser Umgebung wieder her. Sobald alle erforderlichen Schritte abgeschlossen sind, kehren Sie zum selben Arbeitsbereich zurück.",
+      "recovered": "Alle erforderlichen Verbindungsschritte sind abgeschlossen. Sie kehren jetzt zum Arbeitsbereich zurück.",
+      "failed": "Die ursprüngliche Laufzeitsitzung kann nicht mehr verwendet werden. Der vorherige Arbeitsbereich bleibt erhalten, kann aber keine Anfragen mehr senden."
+    },
+    "steps": {
+      "interrupted": "Verbindung unterbrochen",
+      "desktopTransport": "Desktop-Transport wiederherstellen",
+      "runtimeProbe": "Verfügbarkeit der Laufzeit prüfen",
+      "protocolConnect": "Protokollverbindung herstellen",
+      "secureSession": "Sichere Sitzung wiederherstellen",
+      "completed": "Verbindung hergestellt"
+    },
+    "progressLabel": "Fortschritt der Verbindungswiederherstellung",
+    "progress": "{complete} von {total} Schritten abgeschlossen",
+    "timelineLabel": "Schritte zur Verbindungswiederherstellung",
+    "attempts": {
+      "one": "{count} Versuch",
+      "other": "{count} Versuche"
+    },
+    "retryIn": "Neuer Versuch in {seconds} s",
+    "retryNow": "Jetzt erneut versuchen",
+    "openConnectionCenter": "Connection Center öffnen",
+    "technicalDetails": "Technische Details",
+    "copyDiagnostic": "Diagnose kopieren",
+    "copiedDiagnostic": "Diagnose kopiert",
+    "failure": {
+      "runtimeOffline": "Die Laufzeit ist offline und blieb während der Wiederherstellung nicht verfügbar.",
+      "runtimeUnavailable": "Die Laufzeit war noch nicht bereit, als die Wiederherstellung beendet wurde.",
+      "transportUnavailable": "Der Verbindungstransport ist für diese Sitzung nicht mehr verfügbar.",
+      "authenticationFailed": "Desktop konnte die ursprüngliche Laufzeitverbindung nicht authentifizieren.",
+      "missingEnvironmentContext": "Die für diese Sitzung erforderliche Umgebungsidentität fehlt.",
+      "secureSessionFailed": "Die sichere Sitzung konnte nicht fortgesetzt werden.",
+      "remoteCommandEnded": "Der ursprüngliche Remote-Laufzeit-Bridge-Befehl wurde beendet.",
+      "processIdentityChanged": "Die Identität der Remote-Laufzeit hat sich geändert. Dieses Fenster kann daher nicht sicher neu gebunden werden."
+    }
+  },
   "debugConsole": {
     "windowTitle": "Debug-Konsole",
     "header": {

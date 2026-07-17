@@ -89,9 +89,6 @@ export type EnvContextValue = {
   localRuntime: () => LocalRuntimeInfo | null;
   connect: () => Promise<void>;
   connecting: () => boolean;
-  connectError: () => string | null;
-  connectionOverlayVisible: () => boolean;
-  connectionOverlayMessage: () => string;
 
   viewMode: () => EnvViewMode;
   setViewMode: (mode: EnvViewMode, options?: SetEnvViewModeOptions) => void;

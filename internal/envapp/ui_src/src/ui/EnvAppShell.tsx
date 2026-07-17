@@ -1,4 +1,4 @@
-import { Show, createEffect, createMemo, createResource, createSignal, lazy, onCleanup, onMount } from 'solid-js';
+import { Show, createEffect, createMemo, createResource, createSignal, lazy, onCleanup, onMount, untrack } from 'solid-js';
 import { createUIFirstSelection, deferAfterPaint, type FloeComponent, type UIFirstSelectionEvent, useCommand, useLayout, useNotification, useTheme } from '@floegence/floe-webapp-core';
 import { ActivityAppsMain, FloeRegistryRuntime } from '@floegence/floe-webapp-core/app';
 import { NotesOverlayIcon } from '@floegence/floe-webapp-core/notes';
@@ -92,6 +92,7 @@ import {
   createRuntimeReconnectController,
   type ReconnectAvailability,
 } from './reconnect/createRuntimeReconnectController';
+import { ConnectionRecoveryView } from './reconnect/ConnectionRecoveryView';
 import { createDebugConsoleController } from './debugConsole/createDebugConsoleController';
 import { TopBarBrandButton } from './TopBarBrandButton';
 import { Tooltip } from './primitives/Tooltip';
@@ -155,7 +156,13 @@ import {
   type LocalRuntimeInfo,
 } from './services/controlplaneApi';
 import { desktopThemeBridge, toggleDesktopTheme } from './services/desktopTheme';
-import { notifyDesktopSessionAppReady, readDesktopSessionContextSnapshot } from './services/desktopSessionContext';
+import {
+  notifyDesktopSessionAppReady,
+  readDesktopSessionContextSnapshot,
+  readDesktopTransportRecoverySnapshot,
+  requestDesktopTransportRecoveryNow,
+  subscribeDesktopTransportRecovery,
+} from './services/desktopSessionContext';
 import { controlPlaneOriginFromSandboxLocation } from './services/sandboxOrigins';
 import { readUIStorageItem, writeUIStorageItem } from './services/uiStorage';
 import { requestWorkbenchRenderTransaction } from './workbench/workbenchRenderBoundary';
@@ -380,19 +387,9 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string)
 
 function isAccessResumeAuthFailure(error: unknown): boolean {
   const candidate = error as { code?: unknown; status?: unknown } | null;
-  const statusCode = Number(candidate?.status ?? candidate?.code ?? 0);
-  if (Number.isFinite(statusCode) && statusCode === 401) {
-    return true;
-  }
-
-  const message = getErrorMessage(error).toLowerCase();
-  return (
-    message.includes('invalid resume token') ||
-    message.includes('resume token binding mismatch') ||
-    message.includes('missing channel_id or resume_token') ||
-    message.includes('channel not found') ||
-    message.includes('access password required')
-  );
+  const statusCode = Number(candidate?.status ?? 0);
+  const errorCode = Number(candidate?.code ?? 0);
+  return statusCode === 401 || errorCode === 401;
 }
 
 function readPersistedDesktopViewMode(): EnvViewMode | null {
@@ -468,6 +465,13 @@ export function EnvAppShell() {
   const i18n = useI18n();
   const localTransportSecurity = resolveLocalTransportSecurityPolicy(window.location.hostname);
   const initialDesktopSessionContext = readDesktopSessionContextSnapshot();
+  const [desktopTransportRecovery, setDesktopTransportRecovery] = createSignal(
+    readDesktopTransportRecoverySnapshot(),
+  );
+  onMount(() => {
+    const unsubscribe = subscribeDesktopTransportRecovery(setDesktopTransportRecovery);
+    onCleanup(unsubscribe);
+  });
   const shellTheme = desktopThemeBridge();
   const toggleThemeWithRenderBoundary = () => {
     requestWorkbenchRenderTransaction('theme');
@@ -667,7 +671,7 @@ export function EnvAppShell() {
 
   const handleAccessRecoveryFailure = (error: unknown) => {
     const message = getErrorMessage(error);
-    if (isAccessResumeAuthFailure(error) || message.toLowerCase().includes('access password')) {
+    if (isAccessResumeAuthFailure(error)) {
       markCurrentAccessLocked(i18n.t('accessGate.passwordExpiredError'));
       return;
     }
@@ -699,20 +703,36 @@ export function EnvAppShell() {
         status: String(detail?.status ?? '').trim().toLowerCase() === 'offline' ? 'offline' : 'online',
         access: 'unknown',
       };
-    } catch {
-      return { status: 'unknown', access: 'unknown' };
+    } catch (error) {
+      return {
+        status: 'unknown',
+        access: 'unknown',
+        failure: classifyReconnectFailure(error),
+      };
     }
   };
 
   const probeLocalRuntimeAvailability = async (): Promise<ReconnectAvailability> => {
     const status = await getLocalAccessStatus();
     if (!status) {
-      return { status: 'offline', access: 'unknown' };
+      return {
+        status: 'offline',
+        access: 'unknown',
+        failure: classifyReconnectFailure({ code: 'LOCAL_RUNTIME_UNAVAILABLE' }),
+      };
     }
 
     if (status.password_required && !status.unlocked) {
       markCurrentAccessLocked(i18n.t('accessGate.passwordExpiredError'));
-      return { status: 'online', access: 'locked' };
+      return {
+        status: 'online',
+        access: 'locked',
+        failure: {
+          code: 'authentication_failed',
+          retryable: false,
+          technical_detail: '',
+        },
+      };
     }
 
     setLocalAccessStatus(status);
@@ -739,6 +759,7 @@ export function EnvAppShell() {
   );
 
   const [manualError, setManualError] = createSignal<string | null>(null);
+  const [runtimeConnectionEstablished, setRuntimeConnectionEstablished] = createSignal(false);
 
   createEffect(() => {
     if (isLocalMode() && localTransportSecurity.error) {
@@ -1401,6 +1422,9 @@ export function EnvAppShell() {
         markAgentRx();
       }
     },
+    onDiagnosticEvent: (event) => {
+      reconnectController.noteProtocolDiagnostic(event, classifyReconnectFailure(protocol.error()));
+    },
   };
 
   let ensureInFlight: Promise<void> | null = null;
@@ -1473,9 +1497,9 @@ export function EnvAppShell() {
       const detail = await getEnvironment({ source: 'controlplane', envId: id });
       // `status` is the only availability source of truth returned by the controlplane API.
       agentStatus = detail?.status ? String(detail.status) : null;
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (msg.includes('Redirecting to the control plane')) throw new Error(msg);
+    } catch (error) {
+      const failure = classifyReconnectFailure(error);
+      if (!failure.retryable) throw error;
       // For transient failures (meta/network), continue with the grant flow below.
     }
     if (agentStatus && agentStatus !== 'online') {
@@ -1524,6 +1548,12 @@ export function EnvAppShell() {
     const id = envId();
     if (!id) {
       setManualError(i18n.t('shell.status.missingEnvContext'));
+      reconnectController.activateWaiting({
+        code: 'missing_environment_context',
+        retryable: false,
+        technical_detail: '',
+        error_code: 'MISSING_ENV_CONTEXT',
+      });
       protocol.disconnect();
       return;
     }
@@ -1582,8 +1612,8 @@ export function EnvAppShell() {
       await retryAccessConnection();
       return;
     }
-    if (reconnectController.phase() === 'waiting_for_runtime') {
-      reconnectController.requestReconnectNow();
+    if (reconnectController.snapshot().state === 'recovering') {
+      await reconnectController.requestImmediateRetry();
       return;
     }
     await reconnect();
@@ -1594,9 +1624,11 @@ export function EnvAppShell() {
   };
 
   const reconnectController = createRuntimeReconnectController({
-    enabled: () => !accessGateVisible() && connectionAttemptSeq() > 0,
+    enabled: runtimeConnectionEstablished,
+    desktopTransport: desktopTransportRecovery,
     probeAvailability: () => (isLocalMode() ? probeLocalRuntimeAvailability() : probeRemoteRuntimeAvailability()),
     reconnect,
+    requestDesktopRecoveryNow: requestDesktopTransportRecoveryNow,
   });
 
   const currentPingSource = createMemo(() => {
@@ -1761,42 +1793,15 @@ export function EnvAppShell() {
     notify.info(notice.title, notice.message);
   });
 
-  const reconnectFailure = createMemo(() => reconnectController.failure());
-  const connectNotice = createMemo<Readonly<{ title: string; message: string }> | null>(() => {
-    if (accessGateVisible()) return null;
-
-    if (reconnectController.phase() === 'waiting_for_runtime') {
-      return {
-        title: i18n.t('shell.status.waitingForRuntime'),
-        message: reconnectFailure()?.message || i18n.t('shell.status.runtimeUnavailableRetrying'),
-      };
-    }
-
-    const fatalError = manualError();
-    if (fatalError) {
-      return {
-        title: i18n.t('shell.status.connectionFailed'),
-        message: fatalError,
-      };
-    }
-
-    return null;
-  });
+  const recoverySnapshot = reconnectController.snapshot;
+  const recoveryVisible = createMemo(() => recoverySnapshot().state !== 'idle');
   const status = createMemo(() => {
     if (accessGatePhase() === 'unlock_required') return 'disconnected';
     if (accessGatePhase() === 'checking' || accessGatePhase() === 'resuming' || accessGatePhase() === 'resume_blocked') {
       return 'connecting';
     }
-
-    switch (reconnectController.phase()) {
-      case 'transport_retry':
-      case 'waiting_for_runtime':
-      case 'reconnecting':
-        return 'connecting';
-      default:
-        break;
-    }
-
+    if (recoverySnapshot().state === 'failed') return 'error';
+    if (recoveryVisible()) return 'connecting';
     if (manualError()) return 'error';
     return protocol.status();
   });
@@ -1814,24 +1819,19 @@ export function EnvAppShell() {
         break;
     }
 
-    switch (reconnectController.phase()) {
-      case 'transport_retry':
-        return i18n.t('shell.status.retryingConnection');
-      case 'waiting_for_runtime':
-        if (
-          reconnectController.availabilityStatus() === 'offline'
-          || reconnectFailure()?.kind === 'runtime_offline'
-        ) {
-          return i18n.t('shell.status.waitingForRuntime');
-        }
-        return i18n.t('shell.status.reconnectingSoon');
-      case 'reconnecting':
-        return i18n.t('shell.status.reconnecting');
-      default:
-        return undefined;
+    switch (recoverySnapshot().phase) {
+      case 'desktop_transport': return i18n.t('shell.status.retryingConnection');
+      case 'runtime_probe': return i18n.t('shell.status.waitingForRuntime');
+      case 'protocol_connect': return i18n.t('shell.status.reconnecting');
+      case 'secure_session': return i18n.t('shell.status.preparingSecureSession');
+      case 'completed': return i18n.t('shell.framework.connected');
+      case 'failed': return i18n.t('shell.status.connectionFailed');
+      default: return undefined;
     }
   });
-  const connecting = () => !accessGateVisible() && (protocol.status() === 'connecting' || reconnectController.phase() === 'reconnecting');
+  const connecting = () => !accessGateVisible() && (
+    protocol.status() === 'connecting' || recoverySnapshot().state === 'recovering'
+  );
   const reconnectDisabled = createMemo(() => {
     switch (accessGatePhase()) {
       case 'checking':
@@ -1844,8 +1844,12 @@ export function EnvAppShell() {
         break;
     }
 
-    if (reconnectController.phase() === 'transport_retry' || reconnectController.phase() === 'reconnecting') {
+    if (recoverySnapshot().state === 'failed' || recoverySnapshot().state === 'succeeded') {
       return true;
+    }
+    if (recoverySnapshot().state === 'recovering') {
+      return recoverySnapshot().phase === 'protocol_connect'
+        || recoverySnapshot().phase === 'secure_session';
     }
 
     return accessRecoveryBusy() || connecting();
@@ -1865,41 +1869,13 @@ export function EnvAppShell() {
         break;
     }
 
-    switch (reconnectController.phase()) {
-      case 'transport_retry':
-      case 'reconnecting':
-        return i18n.t('shell.status.reconnectingEllipsis');
-      case 'waiting_for_runtime':
-        return i18n.t('shell.status.retryNow');
-      default:
-        return connecting() ? i18n.t('shell.status.connectingEllipsis') : i18n.t('shell.status.reconnect');
+    if (recoverySnapshot().state === 'recovering') {
+      return reconnectDisabled()
+        ? i18n.t('shell.status.reconnectingEllipsis')
+        : i18n.t('shell.status.retryNow');
     }
+    return connecting() ? i18n.t('shell.status.connectingEllipsis') : i18n.t('shell.status.reconnect');
   });
-  const connectionOverlayVisible = createMemo(() => !accessGateVisible() && protocol.status() !== 'connected');
-  const connectionOverlayMessage = createMemo(() => {
-    if (agentMaintenanceController.maintaining()) {
-      return agentMaintenanceController.stage() || i18n.t('shell.status.runtimeRestarting');
-    }
-
-    switch (reconnectController.phase()) {
-      case 'transport_retry':
-      case 'reconnecting':
-        return i18n.t('shell.status.reconnectingToRuntime');
-      case 'waiting_for_runtime':
-        if (
-          reconnectController.availabilityStatus() === 'offline'
-          || reconnectFailure()?.kind === 'runtime_offline'
-        ) {
-          return i18n.t('shell.status.waitingForRuntimeEllipsis');
-        }
-        return i18n.t('shell.status.tryingRuntimeSoon');
-      default:
-        return isLocalMode()
-          ? i18n.t('shell.status.connectingLocalRuntime')
-          : i18n.t('shell.status.connectingRuntime');
-    }
-  });
-  const connectError = createMemo(() => connectNotice()?.message ?? null);
 
   const submitAccessUnlock = async (event?: SubmitEvent) => {
     event?.preventDefault();
@@ -1971,18 +1947,10 @@ export function EnvAppShell() {
     }
   });
 
-  let lastReconnectSignal = '';
   let lastConnectedClient: unknown = null;
 
   createEffect(() => {
-    if (accessGateVisible()) {
-      reconnectController.noteBlocked();
-      lastReconnectSignal = '';
-      lastConnectedClient = null;
-      return;
-    }
-
-    if (connectionAttemptSeq() <= 0) return;
+    if (!runtimeConnectionEstablished() || connectionAttemptSeq() <= 0) return;
 
     const protocolStatusValue = String(protocol.status() ?? '').trim();
     if (!protocolStatusValue) return;
@@ -1990,7 +1958,6 @@ export function EnvAppShell() {
 
     const rawFailure = manualError() || protocol.error();
     const failure = classifyReconnectFailure(rawFailure);
-    const signal = `${protocolStatusValue}:${failure.kind}:${trimString(failure.message)}`;
 
     if (protocolStatusValue === 'connected') {
       if (lastConnectedClient !== protocol.client()) {
@@ -1999,27 +1966,44 @@ export function EnvAppShell() {
           void refetchEnv();
         }
       }
-      reconnectController.noteConnected();
-      lastReconnectSignal = signal;
+      untrack(() => reconnectController.noteProtocolConnected());
       return;
     }
 
     lastConnectedClient = null;
     if (protocolStatusValue === 'connecting') {
-      reconnectController.noteTransportRetry();
-      lastReconnectSignal = signal;
+      untrack(() => reconnectController.noteProtocolConnecting());
       return;
     }
+    untrack(() => reconnectController.activateWaiting(failure));
+  });
 
-    if (signal === lastReconnectSignal) return;
-    lastReconnectSignal = signal;
+  createEffect(() => {
+    const protocolConnected = protocol.status() === 'connected';
+    const secureSessionReady = accessChannelReady();
+    const recoveringAccess = accessRecoveryBusy();
+    const locked = accessLocked();
 
-    if (failure.kind === 'fatal') {
-      reconnectController.noteBlocked();
+    if (protocolConnected && secureSessionReady) {
+      setRuntimeConnectionEstablished(true);
+    }
+    if (!runtimeConnectionEstablished()) return;
+
+    if (locked) {
+      untrack(() => reconnectController.noteSecureSession('failed', {
+        code: 'authentication_failed',
+        retryable: false,
+        technical_detail: accessError() || '',
+      }));
       return;
     }
-
-    reconnectController.activateWaiting(failure);
+    if (recoveringAccess) {
+      untrack(() => reconnectController.noteSecureSession('recovering'));
+      return;
+    }
+    if (protocolConnected && secureSessionReady) {
+      untrack(() => reconnectController.noteSecureSession('ready'));
+    }
   });
 
   createEffect(() => {
@@ -2095,10 +2079,10 @@ export function EnvAppShell() {
     ensureInFlight = (async () => {
       if (accessGateVisible()) return;
       if (connecting()) return;
-      if (manualError() && classifyReconnectFailure(manualError()).kind === 'fatal') return;
-      if (reconnectController.phase() === 'waiting_for_runtime') {
+      if (manualError() && !classifyReconnectFailure(manualError()).retryable) return;
+      if (recoverySnapshot().state === 'recovering') {
         console.debug('[envapp] ensureHealthy: nudge waiting reconnect', { reason });
-        reconnectController.requestImmediateTick();
+        await reconnectController.requestImmediateRetry();
         return;
       }
 
@@ -3448,27 +3432,25 @@ export function EnvAppShell() {
       }
     >
       <div class="h-full min-h-0 overflow-hidden flex flex-col">
-        <Show when={connectError()}>
-          <Panel class="h-auto rounded-none border-0 border-b border-error/40">
-            <PanelContent class="p-3 text-xs">
-              <div role="alert">
-                <div class="text-error font-medium">{connectNotice()?.title ?? i18n.t('shell.status.connectionFailed')}</div>
-                <div class="text-muted-foreground break-words">{connectNotice()?.message ?? connectError()}</div>
-              </div>
-            </PanelContent>
-          </Panel>
-        </Show>
-
         <div ref={setActivityNotesViewportAnchor} class="flex-1 min-h-0 overflow-hidden relative">
-          <Show
-            when={accessGateVisible()}
-            fallback={
-              <>
-                <ActivityAppsMain activeId={() => layout.sidebarActiveTab()} activationMode="after-paint" />
-              </>
-            }
+          <div
+            class={`h-full min-h-0 ${recoveryVisible() ? 'pointer-events-none' : ''}`}
+            inert={recoveryVisible()}
+            aria-hidden={recoveryVisible() ? 'true' : undefined}
           >
-            {accessGatePanel()}
+            <Show when={!accessGateVisible() || recoveryVisible()}>
+              <ActivityAppsMain activeId={() => layout.sidebarActiveTab()} activationMode="after-paint" />
+            </Show>
+            <Show when={accessGateVisible() && !recoveryVisible()}>
+              {accessGatePanel()}
+            </Show>
+          </div>
+          <Show when={recoveryVisible()}>
+            <ConnectionRecoveryView
+              snapshot={recoverySnapshot()}
+              environmentName={envSessionIdentity().displayName}
+              onRetry={() => reconnectController.requestImmediateRetry()}
+            />
           </Show>
         </div>
       </div>
@@ -3497,15 +3479,24 @@ export function EnvAppShell() {
 
   const renderWorkbenchContent = () => (
     <div ref={setWorkbenchNotesViewportAnchor} class="relative h-full min-h-0 overflow-hidden">
-      <Show
-        when={accessGateVisible()}
-        fallback={(
-          <>
-            <EnvWorkbenchPage />
-          </>
-        )}
+      <div
+        class={`h-full min-h-0 ${recoveryVisible() ? 'pointer-events-none' : ''}`}
+        inert={recoveryVisible()}
+        aria-hidden={recoveryVisible() ? 'true' : undefined}
       >
-        {accessGatePanel()}
+        <Show when={!accessGateVisible() || recoveryVisible()}>
+          <EnvWorkbenchPage />
+        </Show>
+        <Show when={accessGateVisible() && !recoveryVisible()}>
+          {accessGatePanel()}
+        </Show>
+      </div>
+      <Show when={recoveryVisible()}>
+        <ConnectionRecoveryView
+          snapshot={recoverySnapshot()}
+          environmentName={envSessionIdentity().displayName}
+          onRetry={() => reconnectController.requestImmediateRetry()}
+        />
       </Show>
     </div>
   );
@@ -3544,9 +3535,6 @@ export function EnvAppShell() {
         localRuntime,
         connect,
         connecting,
-        connectError,
-        connectionOverlayVisible,
-        connectionOverlayMessage,
         viewMode,
         setViewMode,
         activeSurface,

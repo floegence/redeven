@@ -96,17 +96,9 @@ const setSidebarCollapsedMock = vi.fn();
 const EnvContextMock = createContext({} as any);
 
 function MockDisplayModeSurface(props: Readonly<{ testId: string }>) {
-  const env = useContext(EnvContextMock as any) as {
-    connectionOverlayVisible?: () => boolean;
-    connectionOverlayMessage?: () => string;
-  } | undefined;
-  const overlayVisible = Boolean(env?.connectionOverlayVisible?.());
-  const overlayMessage = String(env?.connectionOverlayMessage?.() ?? '');
-
   return (
     <div>
       <div data-testid={props.testId} />
-      {overlayVisible ? <div data-testid={`${props.testId}-overlay`}>{overlayMessage}</div> : null}
     </div>
   );
 }
@@ -515,6 +507,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
   const Icon = () => <span />;
   return {
     Activity: Icon,
+    AlertCircle: Icon,
     AlertTriangle: Icon,
     ArrowRightLeft: Icon,
     Check: Icon,
@@ -526,6 +519,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     Globe: Icon,
     Grid3x3: Icon,
     LayoutDashboard: Icon,
+    Loader2: Icon,
     MoreVertical: Icon,
     Moon: Icon,
     Refresh: Icon,
@@ -2303,11 +2297,6 @@ describe('EnvAppShell local access gate', () => {
       .mockResolvedValueOnce({ password_required: true, unlocked: true })
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ password_required: true, unlocked: true });
-    connectMock.mockImplementationOnce(async () => {
-      protocolStatus = 'error';
-      protocolClient = null;
-      protocolError = { code: 'AGENT_OFFLINE', status: 503, message: 'Runtime is offline' };
-    });
     reconnectMock.mockImplementationOnce(async () => {
       protocolStatus = 'connected';
       protocolClient = { id: 'client-local-recovered' };
@@ -2325,9 +2314,19 @@ describe('EnvAppShell local access gate', () => {
       await flushAsync();
 
       expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
-      expect(['Connecting to local runtime...', 'Waiting for runtime...']).toContain(
-        host.querySelector('[data-testid="workbench-page-overlay"]')?.textContent,
-      );
+      protocolStatus = 'error';
+      protocolClient = null;
+      protocolError = { code: 'AGENT_OFFLINE', status: 503, message: 'Runtime is offline' };
+      const observer = connectMock.mock.calls[0]?.[0]?.observer as {
+        onDiagnosticEvent?: (event: Record<string, unknown>) => void;
+      } | undefined;
+      observer?.onDiagnosticEvent?.({ stage: 'reconnect', code: 'reconnect_attempt', result: 'retry', attempt_seq: 1 });
+      observer?.onDiagnosticEvent?.({ stage: 'reconnect', code: 'reconnect_exhausted', result: 'fail', attempt_seq: 1 });
+      await flushAsync();
+
+      expect(host.querySelector('[data-testid="connection-recovery-view"]')).toBeTruthy();
+      expect(host.textContent).toContain('Restoring connection');
+      expect(host.querySelector('[data-testid="workbench-page"]')?.closest('[aria-hidden="true"]')).toBeTruthy();
       expect(reconnectMock).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(12_000);
@@ -2350,12 +2349,6 @@ describe('EnvAppShell local access gate', () => {
       .mockResolvedValueOnce({ password_required: true, unlocked: true })
       .mockResolvedValueOnce(null)
       .mockResolvedValueOnce({ password_required: true, unlocked: false });
-    connectMock.mockImplementationOnce(async () => {
-      protocolStatus = 'error';
-      protocolClient = null;
-      protocolError = { code: 'AGENT_OFFLINE', status: 503, message: 'Runtime is offline' };
-    });
-
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -2367,16 +2360,23 @@ describe('EnvAppShell local access gate', () => {
       await flushAsync();
 
       expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
-      expect(['Connecting to local runtime...', 'Waiting for runtime...']).toContain(
-        host.querySelector('[data-testid="workbench-page-overlay"]')?.textContent,
-      );
+      protocolStatus = 'error';
+      protocolClient = null;
+      protocolError = { code: 'AGENT_OFFLINE', status: 503, message: 'Runtime is offline' };
+      const observer = connectMock.mock.calls[0]?.[0]?.observer as {
+        onDiagnosticEvent?: (event: Record<string, unknown>) => void;
+      } | undefined;
+      observer?.onDiagnosticEvent?.({ stage: 'reconnect', code: 'reconnect_attempt', result: 'retry', attempt_seq: 1 });
+      observer?.onDiagnosticEvent?.({ stage: 'reconnect', code: 'reconnect_exhausted', result: 'fail', attempt_seq: 1 });
+      await flushAsync();
+      expect(host.querySelector('[data-testid="connection-recovery-view"]')).toBeTruthy();
 
       await vi.advanceTimersByTimeAsync(12_000);
-      await flushUntil(() => host.textContent?.includes('Unlock local runtime') ?? false);
+      await flushUntil(() => host.textContent?.includes('Connection could not be restored') ?? false);
 
-      expect(host.textContent).toContain('Unlock local runtime');
-      expect(host.textContent).toContain('Access password expired. Enter it again to continue.');
-      expect(host.querySelector('input[type="password"]')).toBeTruthy();
+      expect(host.textContent).toContain('Connection could not be restored');
+      expect(host.textContent).toContain('Desktop could not authenticate the original runtime connection.');
+      expect(host.querySelector('[data-testid="workbench-page"]')?.closest('[aria-hidden="true"]')).toBeTruthy();
     } finally {
       dispose();
     }
@@ -2852,28 +2852,15 @@ describe('EnvAppShell remote access gate', () => {
     accessStatusMock.mockResolvedValue({ passwordRequired: false, unlocked: true });
     getEnvAppAccessStatusMock.mockReset();
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    connectMock.mockImplementationOnce(async () => {
-      protocolStatus = 'error';
-      protocolClient = null;
-      protocolError = { code: 'AGENT_OFFLINE', status: 503, message: 'Runtime is offline' };
-    });
-    getEnvironmentMock
-      .mockResolvedValueOnce({
+    let remoteRuntimeStatus = 'offline';
+    getEnvironmentMock.mockImplementation(async () => ({
         public_id: 'env_demo',
         name: 'Remote runtime',
         namespace_public_id: 'ns_remote',
-        status: 'offline',
+        status: remoteRuntimeStatus,
         lifecycle_status: 'running',
         permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true, is_owner: true },
-      })
-      .mockResolvedValueOnce({
-        public_id: 'env_demo',
-        name: 'Remote runtime',
-        namespace_public_id: 'ns_remote',
-        status: 'online',
-        lifecycle_status: 'running',
-        permissions: { can_read: true, can_write: true, can_execute: true, can_admin: true, is_owner: true },
-      });
+      }));
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -2886,9 +2873,17 @@ describe('EnvAppShell remote access gate', () => {
       await flushAsync();
 
       expect(host.querySelector('[data-testid="workbench-page"]')).toBeTruthy();
-      expect(['Connecting to runtime...', 'Waiting for runtime...']).toContain(
-        host.querySelector('[data-testid="workbench-page-overlay"]')?.textContent,
-      );
+      protocolStatus = 'error';
+      protocolClient = null;
+      protocolError = { code: 'AGENT_OFFLINE', status: 503, message: 'Runtime is offline' };
+      const observer = connectMock.mock.calls[0]?.[0]?.observer as {
+        onDiagnosticEvent?: (event: Record<string, unknown>) => void;
+      } | undefined;
+      observer?.onDiagnosticEvent?.({ stage: 'reconnect', code: 'reconnect_attempt', result: 'retry', attempt_seq: 7 });
+      observer?.onDiagnosticEvent?.({ stage: 'reconnect', code: 'reconnect_exhausted', result: 'fail', attempt_seq: 7 });
+      await flushAsync();
+      expect(host.querySelector('[data-testid="connection-recovery-view"]')).toBeTruthy();
+      expect(host.textContent).toContain('1 attempt');
       expect(reconnectMock).not.toHaveBeenCalled();
 
       await vi.advanceTimersByTimeAsync(2_000);
@@ -2897,6 +2892,7 @@ describe('EnvAppShell remote access gate', () => {
       expect(getEnvironmentMock).toHaveBeenCalled();
       expect(reconnectMock).not.toHaveBeenCalled();
 
+      remoteRuntimeStatus = 'online';
       await vi.advanceTimersByTimeAsync(3_000);
       await flushUntil(() => reconnectMock.mock.calls.length === 1);
 

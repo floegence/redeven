@@ -3043,6 +3043,49 @@
     "localOnlyDescription": "État Local UI uniquement. N'affecte pas la configuration d'exécution.",
     "frontendOnly": "Frontend uniquement"
   },
+  "connectionRecovery": {
+    "title": {
+      "recovering": "Restauration de la connexion",
+      "recovered": "Connexion restaurée",
+      "failed": "Impossible de restaurer la connexion"
+    },
+    "summary": {
+      "recovering": "Redeven rétablit la connexion à cet environnement. Vous retrouverez le même espace de travail dès que toutes les étapes requises seront achevées.",
+      "recovered": "Toutes les étapes de connexion requises sont terminées. Retour à votre espace de travail.",
+      "failed": "La session d'exécution d'origine n'est plus utilisable. L'état précédent de votre espace de travail est conservé, mais aucune requête ne peut être envoyée."
+    },
+    "steps": {
+      "interrupted": "Connexion interrompue",
+      "desktopTransport": "Restauration du transport Desktop",
+      "runtimeProbe": "Vérification de la disponibilité de l'environnement d'exécution",
+      "protocolConnect": "Connexion au protocole",
+      "secureSession": "Restauration de la session sécurisée",
+      "completed": "Connexion rétablie"
+    },
+    "progressLabel": "Progression de la restauration de la connexion",
+    "progress": "Étapes terminées : {complete} sur {total}",
+    "timelineLabel": "Étapes de restauration de la connexion",
+    "attempts": {
+      "one": "{count} tentative",
+      "other": "{count} tentatives"
+    },
+    "retryIn": "Nouvelle tentative dans {seconds} s",
+    "retryNow": "Réessayer maintenant",
+    "openConnectionCenter": "Ouvrir le Centre de connexion",
+    "technicalDetails": "Détails techniques",
+    "copyDiagnostic": "Copier le diagnostic",
+    "copiedDiagnostic": "Diagnostic copié",
+    "failure": {
+      "runtimeOffline": "L'environnement d'exécution est hors ligne et n'est pas redevenu disponible pendant la restauration.",
+      "runtimeUnavailable": "La restauration s'est arrêtée avant que l'environnement d'exécution ne soit prêt.",
+      "transportUnavailable": "Le transport de connexion n'est plus disponible pour cette session.",
+      "authenticationFailed": "Desktop n'a pas pu authentifier la connexion d'origine à l'environnement d'exécution.",
+      "missingEnvironmentContext": "L'identité de l'environnement requise pour cette session est manquante.",
+      "secureSessionFailed": "La session sécurisée n'a pas pu être reprise.",
+      "remoteCommandEnded": "La commande d'origine assurant le pont avec l'environnement d'exécution distant s'est terminée.",
+      "processIdentityChanged": "L'identité de l'environnement d'exécution distant a changé ; cette fenêtre ne peut donc pas y être réassociée en toute sécurité."
+    }
+  },
   "debugConsole": {
     "windowTitle": "Console de débogage",
     "header": {

@@ -40,7 +40,7 @@ export function EnvTerminalPage() {
               when={catalogError()}
               fallback={
                 <RedevenLoadingCurtain
-                  visible={catalogWaitVisible() && !env.connectionOverlayVisible()}
+                  visible={catalogWaitVisible()}
                   surface="page"
                   eyebrow={i18n.t('shell.nav.terminal')}
                   message={i18n.t('terminal.loadingSessions')}
@@ -82,12 +82,6 @@ export function EnvTerminalPage() {
           onOpenSessionRequestHandled={env.consumeOpenTerminalInDirectoryRequest}
         />
       </Show>
-      <RedevenLoadingCurtain
-        visible={env.connectionOverlayVisible()}
-        surface="page"
-        eyebrow={i18n.t('uiCopy.runtime.eyebrow')}
-        message={env.connectionOverlayMessage()}
-      />
     </div>
   );
 }

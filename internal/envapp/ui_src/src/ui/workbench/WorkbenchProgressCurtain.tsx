@@ -4,7 +4,6 @@ import { useI18n, type I18nHelpers } from '../i18n';
 import { RedevenLoadingCurtain } from '../primitives/RedevenLoadingCurtain';
 
 export type WorkbenchProgressCurtainStage =
-  | 'connecting'
   | 'layout'
   | 'canvas'
   | 'ready';
@@ -12,11 +11,6 @@ export type WorkbenchProgressCurtainStage =
 export interface WorkbenchProgressCurtainProps {
   visible: boolean;
   stage: WorkbenchProgressCurtainStage;
-  message?: string;
-}
-
-function compact(value: unknown): string {
-  return String(value ?? '').trim();
 }
 
 function workbenchProgressCurtainStatusText(
@@ -24,8 +18,6 @@ function workbenchProgressCurtainStatusText(
   t: I18nHelpers['t'],
 ): string {
   switch (stage) {
-    case 'connecting':
-      return t('workbench.progress.connecting');
     case 'layout':
       return t('workbench.progress.layout');
     case 'canvas':
@@ -39,9 +31,7 @@ function workbenchProgressCurtainStatusText(
 
 export function WorkbenchProgressCurtain(props: WorkbenchProgressCurtainProps) {
   const i18n = useI18n();
-  const statusText = createMemo(
-    () => compact(props.message) || workbenchProgressCurtainStatusText(props.stage, i18n.t),
-  );
+  const statusText = createMemo(() => workbenchProgressCurtainStatusText(props.stage, i18n.t));
 
   return (
     <RedevenLoadingCurtain
