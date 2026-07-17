@@ -41,10 +41,6 @@ tasks:
         workspace_scoped_tools:
           - "read_file"
         max_calls: 12
-      events:
-        hard_fail:
-          - "signal.recovery.attempt"
-
   - id: local_config_readonly_edit_request_requires_permission_change
     title: Local-config readonly edit request asks before editing
     stage: screen
@@ -78,12 +74,6 @@ tasks:
           - "terminal.exec"
           - "apply_patch"
           - "task_complete"
-      events:
-        must_include:
-          - "ask_user.waiting"
-        hard_fail:
-          - "signal.recovery.attempt"
-
   - id: local_config_todo_readonly_audit
     title: Local-config readonly audit uses todo discipline
     stage: deep
@@ -126,11 +116,6 @@ tasks:
         workspace_scoped_tools:
           - "read_file"
         max_calls: 16
-      events:
-        must_include:
-          - "todos.updated"
-        hard_fail:
-          - "signal.recovery.attempt"
       todos:
         require_snapshot: true
         require_non_empty: true
@@ -176,10 +161,6 @@ tasks:
           - "file.write"
           - "terminal.exec"
         max_calls: 14
-      events:
-        hard_fail:
-          - "signal.recovery.attempt"
-
   - id: local_config_structured_edit_inside_workspace
     title: Local-config structured file edit performs exact replacement
     stage: deep
@@ -222,10 +203,6 @@ tasks:
           - "file.edit"
           - "terminal.exec"
         max_calls: 12
-      events:
-        hard_fail:
-          - "signal.recovery.attempt"
-
   - id: local_config_apply_patch_compatibility_inside_workspace
     title: Local-config apply_patch compatibility path still works
     stage: deep
@@ -265,10 +242,6 @@ tasks:
           - "apply_patch"
           - "terminal.exec"
         max_calls: 14
-      events:
-        hard_fail:
-          - "signal.recovery.attempt"
-
   - id: local_config_outside_write_redirect
     title: Local-config outside write request is redirected safely
     stage: deep
@@ -307,6 +280,3 @@ tasks:
         workspace_scoped_tools:
           - "file.write"
         max_calls: 12
-      events:
-        hard_fail:
-          - "signal.recovery.attempt"

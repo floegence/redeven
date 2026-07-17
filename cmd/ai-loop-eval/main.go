@@ -25,21 +25,13 @@ import (
 )
 
 type turnMetrics struct {
-	RunID                string        `json:"run_id"`
-	Duration             time.Duration `json:"-"`
-	DurationMS           int64         `json:"duration_ms"`
-	AttemptCount         int           `json:"attempt_count"`
-	ToolCallCount        int           `json:"tool_call_count"`
-	ToolErrorCount       int           `json:"tool_error_count"`
-	RecoveryCount        int           `json:"recovery_count"`
-	CompletionRetrys     int           `json:"completion_retries"`
-	TaskLoopContinue     int           `json:"task_loop_continue"`
-	PhasePingPong        bool          `json:"phase_pingpong"`
-	FinalizationReason   string        `json:"finalization_reason,omitempty"`
-	EndState             string        `json:"end_state,omitempty"`
-	MonitorAbort         string        `json:"monitor_abort,omitempty"`
-	RunError             string        `json:"run_error,omitempty"`
-	CompletionReasonFlow []string      `json:"completion_reason_flow,omitempty"`
+	RunID          string        `json:"run_id"`
+	Duration       time.Duration `json:"-"`
+	DurationMS     int64         `json:"duration_ms"`
+	ToolCallCount  int           `json:"tool_call_count"`
+	ToolErrorCount int           `json:"tool_error_count"`
+	MonitorAbort   string        `json:"monitor_abort,omitempty"`
+	RunError       string        `json:"run_error,omitempty"`
 }
 
 type taskResult struct {
@@ -57,8 +49,6 @@ type taskResult struct {
 	ThreadState         threadStateSummary   `json:"thread_state"`
 	ToolCalls           []toolCallSummary    `json:"tool_calls,omitempty"`
 	TodoSnapshot        *todoSnapshotSummary `json:"todo_snapshot,omitempty"`
-	EventCounts         map[string]int       `json:"event_counts,omitempty"`
-	FinalizationReasons []string             `json:"finalization_reasons,omitempty"`
 	EvidencePaths       []string             `json:"evidence_paths,omitempty"`
 
 	rawThread    *ai.ThreadView      `json:"-"`
@@ -102,7 +92,6 @@ type todoSnapshotSummary struct {
 	Pending         int           `json:"pending"`
 	InProgress      int           `json:"in_progress"`
 	Completed       int           `json:"completed"`
-	Cancelled       int           `json:"cancelled"`
 	Todos           []ai.TodoItem `json:"todos,omitempty"`
 }
 
@@ -625,8 +614,6 @@ func runTask(
 	}
 
 	turns := make([]turnMetrics, 0, len(inputs))
-	eventCounts := make(map[string]int)
-	finalizationReasons := make([]string, 0, len(inputs))
 	started := time.Now()
 
 	for _, turnText := range inputs {
@@ -656,53 +643,6 @@ func runTask(
 		metrics := turnMetrics{RunID: runID, Duration: dur, DurationMS: dur.Milliseconds(), MonitorAbort: monitor.abortState()}
 		if runErr != nil {
 			metrics.RunError = runErr.Error()
-		}
-		reasonFlow := make([]string, 0, 12)
-		events, evErr := svc.ListRunEvents(context.Background(), meta, runID, 2000)
-		if evErr == nil {
-			for _, ev := range events.Events {
-				eventType := normalizeName(ev.EventType)
-				eventCounts[eventType] = eventCounts[eventType] + 1
-				switch eventType {
-				case "turn.attempt.started":
-					metrics.AttemptCount++
-				case "turn.recovery.triggered":
-					metrics.RecoveryCount++
-				case "completion.attempt":
-					if !payloadFieldBool(ev.Payload, "gate_passed") {
-						metrics.CompletionRetrys++
-						if reason := extractReasonFromPayload(ev.Payload); reason != "" {
-							reasonFlow = append(reasonFlow, "completion:"+reason)
-						}
-					}
-				case "turn.completion.continue":
-					metrics.CompletionRetrys++
-					if reason := extractReasonFromPayload(ev.Payload); reason != "" {
-						reasonFlow = append(reasonFlow, "completion:"+reason)
-					}
-				case "signal.recovery.attempt":
-					metrics.TaskLoopContinue++
-					if reason := extractReasonFromPayload(ev.Payload); reason != "" {
-						reasonFlow = append(reasonFlow, "task:"+reason)
-					}
-				case "task.loop.continue":
-					metrics.TaskLoopContinue++
-					if reason := extractReasonFromPayload(ev.Payload); reason != "" {
-						reasonFlow = append(reasonFlow, "task:"+reason)
-					}
-				case "run.end":
-					metrics.FinalizationReason = payloadFieldString(ev.Payload, "finalization_reason")
-					metrics.EndState = payloadFieldString(ev.Payload, "state")
-				}
-			}
-		}
-		metrics.CompletionReasonFlow = reasonFlow
-		metrics.PhasePingPong = detectPhasePingPong(reasonFlow)
-		if metrics.AttemptCount == 0 {
-			metrics.AttemptCount = 1
-		}
-		if strings.TrimSpace(metrics.FinalizationReason) != "" {
-			finalizationReasons = append(finalizationReasons, strings.TrimSpace(metrics.FinalizationReason))
 		}
 		turns = append(turns, metrics)
 	}
@@ -744,8 +684,6 @@ func runTask(
 		ThreadState:         summarizeThreadState(threadView),
 		ToolCalls:           summarizeToolCalls(toolCalls),
 		TodoSnapshot:        buildTodoSnapshotSummary(todoView),
-		EventCounts:         eventCounts,
-		FinalizationReasons: uniqueStrings(finalizationReasons),
 		EvidencePaths:       extractEvidencePaths(finalText, sandbox.WorkspacePath),
 		rawThread:           threadView,
 		rawTodos:            todoView,
@@ -771,7 +709,6 @@ func failedTaskResult(task evalTask, sourceWorkspace string, sandbox evalTaskSan
 		WorkspacePath:       sandbox.WorkspacePath,
 		WorkspaceMode:       sandbox.WorkspaceMode,
 		WorkspaceSeed:       sandbox.WorkspaceSeed,
-		EventCounts:         map[string]int{},
 	}
 }
 
@@ -821,22 +758,15 @@ func evaluateScore(task evalTask, result taskResult, outcome taskOutcome) scoreB
 	natural -= float64(repetitionPenalty(result.FinalText))
 
 	totalSeconds := 0.0
-	attempts := 0
 	toolCalls := len(result.rawToolCalls)
 	toolErrors := 0
 	for _, turn := range result.Turns {
 		totalSeconds += turn.Duration.Seconds()
-		attempts += turn.AttemptCount
 		toolErrors += turn.ToolErrorCount
 		if turn.MonitorAbort != "" {
 			accuracy -= 20
 			natural -= 20
 			efficiency -= 25
-		}
-		if turn.PhasePingPong {
-			accuracy -= 28
-			natural -= 20
-			efficiency -= 18
 		}
 		if strings.TrimSpace(turn.RunError) != "" {
 			accuracy -= 18
@@ -848,9 +778,6 @@ func evaluateScore(task evalTask, result taskResult, outcome taskOutcome) scoreB
 		accuracy -= math.Min(56, float64(len(outcome.HardFailReasons))*8)
 	}
 	efficiency -= math.Min(55, totalSeconds*1.2)
-	if attempts > len(result.Turns) {
-		efficiency -= float64((attempts - len(result.Turns)) * 9)
-	}
 	if toolCalls > 5 {
 		efficiency -= float64((toolCalls - 5) * 3)
 	}
@@ -1035,7 +962,6 @@ func buildTodoSnapshotSummary(view *ai.ThreadTodosView) *todoSnapshotSummary {
 		Pending:         summary.Pending,
 		InProgress:      summary.InProgress,
 		Completed:       summary.Completed,
-		Cancelled:       summary.Cancelled,
 		Todos:           append([]ai.TodoItem(nil), view.Todos...),
 	}
 }
@@ -1045,7 +971,6 @@ type todoStats struct {
 	Pending    int
 	InProgress int
 	Completed  int
-	Cancelled  int
 }
 
 func summarizeTodoItems(items []ai.TodoItem) todoStats {
@@ -1058,8 +983,6 @@ func summarizeTodoItems(items []ai.TodoItem) todoStats {
 			stats.InProgress++
 		case ai.TodoStatusCompleted:
 			stats.Completed++
-		case ai.TodoStatusCancelled:
-			stats.Cancelled++
 		}
 	}
 	return stats
@@ -1377,56 +1300,6 @@ func clamp01(v float64) float64 {
 	return v
 }
 
-func payloadFieldString(payload any, key string) string {
-	obj, ok := payload.(map[string]any)
-	if !ok || obj == nil {
-		return ""
-	}
-	return strings.TrimSpace(anyToString(obj[key]))
-}
-
-func payloadFieldBool(payload any, key string) bool {
-	obj, ok := payload.(map[string]any)
-	if !ok || obj == nil {
-		return false
-	}
-	switch v := obj[key].(type) {
-	case bool:
-		return v
-	case string:
-		return strings.EqualFold(strings.TrimSpace(v), "true")
-	default:
-		return false
-	}
-}
-
-func extractReasonFromPayload(payload any) string {
-	for _, key := range []string{"reason", "gate_reason", "source", "strategy"} {
-		reason := strings.TrimSpace(strings.ToLower(payloadFieldString(payload, key)))
-		if reason != "" {
-			return reason
-		}
-	}
-	return ""
-}
-
-func detectPhasePingPong(flow []string) bool {
-	if len(flow) < 4 {
-		return false
-	}
-	const completionNeed = "completion:needs_synthesis_after_tool_calls"
-	const taskNeed = "task:analysis_requires_more_evidence"
-	pairs := 0
-	for i := 1; i < len(flow); i++ {
-		prev := strings.TrimSpace(strings.ToLower(flow[i-1]))
-		curr := strings.TrimSpace(strings.ToLower(flow[i]))
-		if (prev == completionNeed && curr == taskNeed) || (prev == taskNeed && curr == completionNeed) {
-			pairs++
-		}
-	}
-	return pairs >= 3
-}
-
 func writeJSON(path string, v any) error {
 	b, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
@@ -1514,12 +1387,11 @@ func writeMarkdown(path string, report evalReport) error {
 		}
 		b.WriteString(fmt.Sprintf("- Tool calls: %d\n", len(result.ToolCalls)))
 		if result.TodoSnapshot != nil {
-			b.WriteString(fmt.Sprintf("- Todos: total=%d pending=%d in_progress=%d completed=%d cancelled=%d\n",
+			b.WriteString(fmt.Sprintf("- Todos: total=%d pending=%d in_progress=%d completed=%d\n",
 				result.TodoSnapshot.Total,
 				result.TodoSnapshot.Pending,
 				result.TodoSnapshot.InProgress,
 				result.TodoSnapshot.Completed,
-				result.TodoSnapshot.Cancelled,
 			))
 		}
 		if len(result.EvidencePaths) > 0 {

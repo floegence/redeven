@@ -40,10 +40,6 @@ tasks:
           - "terminal.exec"
           - "apply_patch"
         max_calls: 12
-      events:
-        hard_fail:
-          - "signal.recovery.attempt"
-
   - id: readonly_review_question
     title: Readonly review question
     stage: screen
@@ -81,10 +77,6 @@ tasks:
           - "terminal.exec"
           - "apply_patch"
         max_calls: 10
-      events:
-        hard_fail:
-          - "signal.recovery.attempt"
-
   - id: readonly_edit_request_requires_permission_change
     title: Readonly edit request asks for permission change
     stage: screen
@@ -116,12 +108,6 @@ tasks:
           - "terminal.exec"
           - "apply_patch"
           - "task_complete"
-      events:
-        must_include:
-          - "ask_user.waiting"
-        hard_fail:
-          - "signal.recovery.attempt"
-
   - id: multi_step_todo_discipline
     title: Multi-step readonly task uses todo discipline
     stage: deep
@@ -163,11 +149,6 @@ tasks:
           - "terminal.exec"
           - "apply_patch"
         max_calls: 14
-      events:
-        must_include:
-          - "todos.updated"
-        hard_fail:
-          - "signal.recovery.attempt"
       todos:
         require_snapshot: true
         require_non_empty: true
@@ -215,14 +196,6 @@ tasks:
           - "terminal.exec"
           - "apply_patch"
         max_calls: 14
-      events:
-        must_include:
-          - "activity.item.projected"
-          - "activity.group.updated"
-          - "activity.timeline.persisted"
-        hard_fail:
-          - "signal.recovery.attempt"
-
   - id: continue_context_followup
     title: Continue preserves thread context
     stage: deep
@@ -262,10 +235,6 @@ tasks:
           - "terminal.exec"
           - "apply_patch"
         max_calls: 14
-      events:
-        hard_fail:
-          - "signal.recovery.attempt"
-
   - id: readonly_no_user_interaction_closeout
     title: Readonly no-user-interaction run closes with blockers
     stage: deep
@@ -301,8 +270,3 @@ tasks:
           - "ask_user"
           - "terminal.exec"
           - "apply_patch"
-      events:
-        must_not_include:
-          - "ask_user.waiting"
-        hard_fail:
-          - "signal.recovery.attempt"

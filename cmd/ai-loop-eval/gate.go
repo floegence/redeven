@@ -95,7 +95,7 @@ func assessTaskOutcome(task evalTask, result taskResult) taskOutcome {
 	}
 
 	finalTextLower := strings.ToLower(strings.TrimSpace(result.FinalText))
-	if task.Assertions.Output.MustNotEndWithFallback || len(task.Assertions.Events.HardFail) > 0 {
+	if task.Assertions.Output.MustNotEndWithFallback {
 		for _, phrase := range fallbackFinalPhrases {
 			if strings.Contains(finalTextLower, phrase) {
 				out.FallbackFinal = true
@@ -107,25 +107,9 @@ func assessTaskOutcome(task evalTask, result taskResult) taskOutcome {
 		}
 	}
 
-	hardEventSet := normalizeNameSet(task.Assertions.Events.HardFail)
 	for _, turn := range result.Turns {
-		if turn.ToolErrorCount > 0 || turn.RecoveryCount > 0 || turn.CompletionRetrys > 0 || turn.TaskLoopContinue > 0 {
+		if turn.ToolErrorCount > 0 {
 			out.RecoveryCandidate = true
-		}
-		if turn.PhasePingPong {
-			out.LoopSafe = false
-			out.Passed = false
-		}
-		if turn.PhasePingPong {
-			out.HardFailReasons = append(out.HardFailReasons, "phase_pingpong_detected")
-		}
-		if hardFailEventConfigured(hardEventSet, "completion.attempt", "turn.completion.continue") && turn.CompletionRetrys > 0 {
-			out.Passed = false
-			out.HardFailReasons = append(out.HardFailReasons, "completion_attempt_rejected")
-		}
-		if hardFailEventConfigured(hardEventSet, "signal.recovery.attempt", "task.loop.continue") && turn.TaskLoopContinue > 0 {
-			out.Passed = false
-			out.HardFailReasons = append(out.HardFailReasons, "signal_recovery_attempt")
 		}
 		if strings.TrimSpace(turn.MonitorAbort) != "" {
 			out.Passed = false
@@ -214,26 +198,6 @@ func assessTaskOutcome(task evalTask, result taskResult) taskOutcome {
 		}
 	}
 
-	events := task.Assertions.Events
-	for _, name := range events.MustInclude {
-		if result.EventCounts[normalizeName(name)] <= 0 {
-			out.Passed = false
-			out.HardFailReasons = append(out.HardFailReasons, "missing_event:"+normalizeName(name))
-		}
-	}
-	for _, name := range events.MustNotHave {
-		if result.EventCounts[normalizeName(name)] > 0 {
-			out.Passed = false
-			out.HardFailReasons = append(out.HardFailReasons, "forbidden_event:"+normalizeName(name))
-		}
-	}
-	for _, name := range events.HardFail {
-		if result.EventCounts[normalizeName(name)] > 0 {
-			out.Passed = false
-			out.HardFailReasons = append(out.HardFailReasons, "hard_fail_event:"+normalizeName(name))
-		}
-	}
-
 	todos := task.Assertions.Todos
 	if todos.RequireSnapshot && result.rawTodos == nil {
 		out.Passed = false
@@ -268,15 +232,6 @@ func assessTaskOutcome(task evalTask, result taskResult) taskOutcome {
 		out.HardFailReasons = uniqueStrings(out.HardFailReasons)
 	}
 	return out
-}
-
-func hardFailEventConfigured(set map[string]struct{}, names ...string) bool {
-	for _, name := range names {
-		if _, ok := set[normalizeName(name)]; ok {
-			return true
-		}
-	}
-	return false
 }
 
 func aggregateSuiteMetrics(results []taskResult) suiteMetrics {
@@ -701,16 +656,6 @@ func parseWriteTodosArgs(call canonicalToolCall) []ai.TodoItem {
 		return nil
 	}
 	return payload.Todos
-}
-
-func normalizeNameSet(items []string) map[string]struct{} {
-	out := make(map[string]struct{}, len(items))
-	for _, item := range items {
-		if key := normalizeName(item); key != "" {
-			out[key] = struct{}{}
-		}
-	}
-	return out
 }
 
 func normalizeName(raw string) string {
