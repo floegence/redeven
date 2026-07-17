@@ -121,6 +121,10 @@ type Server struct {
 	listeners []net.Listener
 	srv       *http.Server
 
+	desktopBridgeListener net.Listener
+	desktopBridgeServer   *http.Server
+	localUIBridgeURL      string
+
 	runtimeControl *runtimeControlServer
 	runtimeStatus  *runtimemanagement.Server
 }
@@ -176,8 +180,22 @@ func (s *Server) HandlerForDesktopBridge() http.Handler {
 			http.Error(w, "invalid Local UI bridge authority", http.StatusMisdirectedRequest)
 			return
 		}
+		if r.Body != nil {
+			r.Body = http.MaxBytesReader(w, r.Body, localUIBodyLimit)
+		}
 		next.ServeHTTP(w, withTrustedLocalUIBridge(r))
 	})
+}
+
+func newLocalUIHTTPServer(handler http.Handler) *http.Server {
+	return &http.Server{
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       2 * time.Minute,
+		WriteTimeout:      30 * time.Minute,
+		IdleTimeout:       2 * time.Minute,
+		MaxHeaderBytes:    localUIMaxHeaderBytes,
+	}
 }
 
 func New(opts Options) (*Server, error) {
@@ -276,16 +294,13 @@ func (s *Server) Start(ctx context.Context) error {
 		s.log.Warn("local ui listener unavailable", "bind", s.bind.ListenLabel(), "error", errText)
 	}
 
-	srv := &http.Server{
-		Handler:           s.networkHandler(),
-		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       2 * time.Minute,
-		WriteTimeout:      30 * time.Minute,
-		IdleTimeout:       2 * time.Minute,
-		MaxHeaderBytes:    localUIMaxHeaderBytes,
-	}
+	srv := newLocalUIHTTPServer(s.networkHandler())
 	s.srv = srv
 	s.listeners = listeners
+	if err := s.startDesktopBridgeListener(); err != nil {
+		_ = s.Close()
+		return fmt.Errorf("start trusted Local UI bridge listener: %w", err)
+	}
 
 	go func() {
 		<-ctx.Done()
@@ -342,16 +357,13 @@ func (s *Server) StartOnListeners(ctx context.Context, listeners []net.Listener,
 		return err
 	}
 
-	srv := &http.Server{
-		Handler:           s.networkHandler(),
-		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       2 * time.Minute,
-		WriteTimeout:      30 * time.Minute,
-		IdleTimeout:       2 * time.Minute,
-		MaxHeaderBytes:    localUIMaxHeaderBytes,
-	}
+	srv := newLocalUIHTTPServer(s.networkHandler())
 	s.srv = srv
 	s.listeners = append([]net.Listener(nil), listeners...)
+	if err := s.startDesktopBridgeListener(); err != nil {
+		_ = s.Close()
+		return fmt.Errorf("start trusted Local UI bridge listener: %w", err)
+	}
 
 	go func() {
 		<-ctx.Done()
@@ -392,6 +404,31 @@ func (s *Server) StartOnListeners(ctx context.Context, listeners []net.Listener,
 	}
 
 	s.log.Info("local ui listening", "bind", s.ListenLabel())
+	return nil
+}
+
+func (s *Server) startDesktopBridgeListener() error {
+	if s == nil || s.desktopBridgeListener != nil {
+		return nil
+	}
+	listener, err := net.Listen("tcp4", "127.0.0.1:0")
+	if err != nil {
+		return err
+	}
+	addr, ok := listener.Addr().(*net.TCPAddr)
+	if !ok || addr == nil || addr.Port <= 0 || !addr.IP.IsLoopback() {
+		_ = listener.Close()
+		return errors.New("trusted Local UI bridge listener must use loopback TCP")
+	}
+	server := newLocalUIHTTPServer(s.HandlerForDesktopBridge())
+	s.desktopBridgeListener = listener
+	s.desktopBridgeServer = server
+	s.localUIBridgeURL = formatHTTPURL(addr.IP.String(), addr.Port)
+	go func() {
+		if err := server.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			s.log.Error("trusted Local UI bridge server stopped", "error", err)
+		}
+	}()
 	return nil
 }
 
@@ -451,6 +488,7 @@ func (s *Server) RuntimeAttachStatus() runtimemanagement.RuntimeAttachStatus {
 		Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
 			LocalUIURL:       firstNonEmptyString(s.DisplayURLs()),
 			LocalUIURLs:      s.DisplayURLs(),
+			LocalUIBridgeURL: s.localUIBridgeURL,
 			RuntimeControl:   runtimeControlEndpoint(s.runtimeControl),
 			PasswordRequired: s.accessEnabled(),
 			Exposure:         s.LocalUIExposure(),
@@ -473,10 +511,13 @@ func (s *Server) Close() error {
 	if s == nil {
 		return nil
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
 	if s.srv != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
 		_ = s.srv.Shutdown(ctx)
+	}
+	if s.desktopBridgeServer != nil {
+		_ = s.desktopBridgeServer.Shutdown(ctx)
 	}
 	if s.runtimeControl != nil {
 		_ = s.runtimeControl.Close()
@@ -487,8 +528,14 @@ func (s *Server) Close() error {
 	for _, ln := range s.listeners {
 		_ = ln.Close()
 	}
+	if s.desktopBridgeListener != nil {
+		_ = s.desktopBridgeListener.Close()
+	}
 	s.srv = nil
 	s.listeners = nil
+	s.desktopBridgeServer = nil
+	s.desktopBridgeListener = nil
+	s.localUIBridgeURL = ""
 	s.runtimeControl = nil
 	s.runtimeStatus = nil
 	return nil

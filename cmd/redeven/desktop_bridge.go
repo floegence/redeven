@@ -38,13 +38,28 @@ func (c *cli) desktopBridgeCmd(args []string) int {
 		fmt.Fprintf(c.stderr, "desktop-bridge failed: %s\n", desktopRuntimeAttachMessage(state.State))
 		return 1
 	}
+	controlEndpoint := state.Endpoint.RuntimeControl
+	dialSurface, err := desktopbridge.NewTrustedBridgeSurfaceDialer(
+		state.Endpoint.LocalUIBridgeURL,
+		endpointString(controlEndpoint, func(endpoint runtimemanagement.RuntimeControlEndpoint) string { return endpoint.BaseURL }),
+	)
+	if err != nil {
+		fmt.Fprintf(c.stderr, "desktop-bridge failed: %v\n", err)
+		return 1
+	}
+	probeCtx, probeCancel := context.WithTimeout(context.Background(), *probeTimeout)
+	probeErr := desktopbridge.ProbeSurface(probeCtx, dialSurface, desktopbridge.StreamSurfaceLocalUI)
+	probeCancel()
+	if probeErr != nil {
+		fmt.Fprintf(c.stderr, "desktop-bridge failed: trusted Local UI bridge is unreachable: %v\n", probeErr)
+		return 1
+	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	controlEndpoint := state.Endpoint.RuntimeControl
 	bridge := desktopbridge.Server{
-		DialSurface: desktopbridge.NewURLSurfaceDialer(state.Endpoint.LocalUIURL, endpointString(controlEndpoint, func(endpoint runtimemanagement.RuntimeControlEndpoint) string { return endpoint.BaseURL })),
+		DialSurface: dialSurface,
 		Hello: desktopbridge.Hello{
 			RuntimeVersion:  Version,
 			RuntimeCommit:   Commit,
