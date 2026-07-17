@@ -59,6 +59,28 @@ describe('desktopAccessModel', () => {
     expect(model.next_start_address_display).toBe('24000');
     expect(model.next_start_address_kind).toBe('lan_ip_port');
     expect(model.password_state_id).toBe('required');
+    expect(model.password_requirement_satisfied).toBe(false);
+    expect(model.network_exposure_review_required).toBe(true);
+  });
+
+  it('allows review with an effective password and keeps acknowledgement bound to the listener', () => {
+    const pendingReview = deriveDesktopAccessDraftModel(draft({
+      local_ui_bind: '0.0.0.0:23998',
+      local_ui_password: 'secret',
+    }));
+
+    expect(pendingReview.password_requirement_satisfied).toBe(true);
+    expect(pendingReview.network_exposure_acknowledged).toBe(false);
+    expect(pendingReview.network_exposure_review_required).toBe(true);
+
+    const reviewed = deriveDesktopAccessDraftModel(draft({
+      local_ui_bind: '0.0.0.0:23998',
+      local_ui_password: 'secret',
+      plaintext_network_exposure_acknowledgement_bind: '0.0.0.0:23998',
+    }));
+
+    expect(reviewed.network_exposure_acknowledged).toBe(true);
+    expect(reviewed.network_exposure_review_required).toBe(false);
   });
 
   it('treats a write-only kept password as custom exposure on loopback', () => {

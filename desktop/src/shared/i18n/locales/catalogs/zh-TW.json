@@ -470,6 +470,7 @@
   "common": {
     "open": "開啟",
     "back": "返回",
+    "next": "下一步",
     "save": "儲存",
     "cancel": "取消",
     "delete": "刪除",
@@ -545,7 +546,11 @@
     "passwordNeeded": "需要密碼",
     "optional": "選用",
     "chooseEnvironmentFirst": "先選擇環境。",
+    "settingsStepsLabel": "本機環境設定步驟",
+    "configureAccessStep": "設定",
+    "securityReviewStep": "安全確認",
     "settingsWindowTitle": "{label} 設定",
+    "saveSettings": "儲存設定",
     "saveEnvironmentSettings": "儲存 {label} 設定",
     "saveAndRestart": "儲存並重新啟動",
     "saveAndRestartEnvironmentSettings": "儲存 {label} 設定並重新啟動執行環境",
@@ -561,8 +566,9 @@
     "localUIPasswordKeepHelp": "Desktop 會在本機儲存此密鑰，並透過非互動式 stdin 啟動通道轉發。留空即可保留目前已儲存的密碼。",
     "localUIPasswordRuntimeRequiredHelp": "Desktop 將此秘密儲存在本地，並透過非互動式 stdin 啟動通道轉送。目前運行時受到保護，但 Desktop 沒有可供重複使用的儲存密碼。在此輸入它以保存它以供下次桌面管理啟動使用。",
     "localUIPasswordReplacePlaceholder": "輸入新密碼以取代已儲存的密碼",
-    "plaintextNetworkExposureTitle": "明文網路暴露",
-    "plaintextNetworkExposureSummary": "已啟用密碼保護，但 HTTP 流量未加密。僅限在受信任的網路上使用。",
+    "sharedPasswordRequired": "透過區域網路共用時，必須設定存取密碼。",
+    "plaintextNetworkExposureTitle": "將在區域網路上公開",
+    "plaintextNetworkExposureSummary": "存取時必須使用密碼，但 HTTP 流量未經加密。請只在受信任的網路上使用。",
     "reviewExposure": "檢視暴露風險",
     "reviewPlaintextExposureTitle": "確認明文網路存取",
     "reviewPlaintextExposureDescription": "請先確認確切的監聽位址與安全邊界，此本機環境才能在網路上啟動。",
@@ -576,7 +582,11 @@
     "passwordEnabled": "已啟用密碼",
     "plaintextExposureBoundary": "密碼、Cookie、頁面資源及非 Flowersec 的 HTTP 流量都可能遭攔截或竄改。Flowersec 端對端加密只會在握手完成後開始。",
     "acceptPlaintextExposureRisk": "我瞭解這會暴露明文 HTTP 流量，且只會在受信任的網路上使用。",
-    "enablePlaintextNetworkAccess": "啟用明文網路存取"
+    "enablePlaintextNetworkAccess": "啟用明文網路存取",
+    "applyTimingTitle": "變更生效時間",
+    "applyTimingHelp": "立即重新啟動會中斷目前的環境連線。",
+    "applyNextStart": "下次啟動時生效",
+    "applyRestartNow": "立即重新啟動"
   },
   "shell": {
     "accessibility": {

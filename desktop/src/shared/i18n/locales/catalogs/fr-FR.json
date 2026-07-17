@@ -470,6 +470,7 @@
   "common": {
     "open": "Ouvrir",
     "back": "Retour",
+    "next": "Suivant",
     "save": "Enregistrer",
     "cancel": "Annuler",
     "delete": "Supprimer",
@@ -544,8 +545,12 @@
     "clearOnSave": "Effacer à l’enregistrement",
     "passwordNeeded": "Mot de passe requis",
     "optional": "Facultatif",
-    "chooseEnvironmentFirst": "Choisissez d'abord un environnement.",
+    "chooseEnvironmentFirst": "Choisissez d’abord un environnement.",
+    "settingsStepsLabel": "Étapes de configuration de l’environnement local",
+    "configureAccessStep": "Paramètres",
+    "securityReviewStep": "Vérification de sécurité",
     "settingsWindowTitle": "Paramètres de {label}",
+    "saveSettings": "Enregistrer les paramètres",
     "saveEnvironmentSettings": "Enregistrer les paramètres de {label}",
     "saveAndRestart": "Enregistrer et redémarrer",
     "saveAndRestartEnvironmentSettings": "Enregistrer les paramètres de {label} et redémarrer l’environnement d’exécution",
@@ -561,8 +566,9 @@
     "localUIPasswordKeepHelp": "Desktop stocke ce secret localement et le transmet via un canal de démarrage stdin non interactif. Laissez vide pour conserver le mot de passe stocké actuel.",
     "localUIPasswordRuntimeRequiredHelp": "Desktop stocke ce secret localement et le transmet via un canal de démarrage stdin non interactif. L'environnement d'exécution actuel est protégé, mais Desktop n'a pas de mot de passe stocké prêt à être réutilisé. Saisissez-le ici pour l'enregistrer pour le prochain démarrage géré par le bureau. Toile de zone de travail",
     "localUIPasswordReplacePlaceholder": "Saisissez un nouveau mot de passe pour remplacer celui enregistré",
-    "plaintextNetworkExposureTitle": "Exposition réseau en clair",
-    "plaintextNetworkExposureSummary": "Le mot de passe protège l’accès, mais le trafic HTTP n’est pas chiffré. Utilisez cette option uniquement sur un réseau de confiance.",
+    "sharedPasswordRequired": "Le partage sur le réseau local nécessite un mot de passe d’accès.",
+    "plaintextNetworkExposureTitle": "Exposition sur votre réseau local",
+    "plaintextNetworkExposureSummary": "L’accès nécessite un mot de passe, mais le trafic HTTP n’est pas chiffré. Utilisez cette option uniquement sur un réseau de confiance.",
     "reviewExposure": "Vérifier l’exposition",
     "reviewPlaintextExposureTitle": "Vérifier l’accès réseau en clair",
     "reviewPlaintextExposureDescription": "Confirmez l’adresse d’écoute exacte et le périmètre de sécurité avant que cet environnement local puisse démarrer sur le réseau.",
@@ -576,7 +582,11 @@
     "passwordEnabled": "Mot de passe activé",
     "plaintextExposureBoundary": "L’authentification contrôle uniquement l’accès. Le mot de passe, les cookies, les ressources de la page et le trafic HTTP hors Flowersec peuvent être interceptés ou modifiés. Le chiffrement de bout en bout de Flowersec ne commence qu’une fois sa négociation terminée.",
     "acceptPlaintextExposureRisk": "Je comprends que cet accès expose du trafic HTTP en clair et je l’utiliserai uniquement sur un réseau de confiance.",
-    "enablePlaintextNetworkAccess": "Activer l’accès réseau en clair"
+    "enablePlaintextNetworkAccess": "Activer l’accès réseau en clair",
+    "applyTimingTitle": "Prise d’effet des modifications",
+    "applyTimingHelp": "Un redémarrage immédiat interrompra les connexions actives à l’environnement.",
+    "applyNextStart": "Au prochain démarrage",
+    "applyRestartNow": "Redémarrer maintenant"
   },
   "shell": {
     "accessibility": {

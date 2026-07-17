@@ -470,6 +470,7 @@
   "common": {
     "open": "Открыть",
     "back": "Назад",
+    "next": "Далее",
     "save": "Сохранить",
     "cancel": "Отмена",
     "delete": "Удалить",
@@ -545,7 +546,11 @@
     "passwordNeeded": "Нужен пароль",
     "optional": "Необязательно",
     "chooseEnvironmentFirst": "Сначала выберите среду.",
+    "settingsStepsLabel": "Этапы настройки локального окружения",
+    "configureAccessStep": "Настройка",
+    "securityReviewStep": "Проверка безопасности",
     "settingsWindowTitle": "Настройки {label}",
+    "saveSettings": "Сохранить настройки",
     "saveEnvironmentSettings": "Сохранить настройки {label}",
     "saveAndRestart": "Сохранить и перезапустить",
     "saveAndRestartEnvironmentSettings": "Сохранить настройки {label} и перезапустить среду выполнения",
@@ -561,8 +566,9 @@
     "localUIPasswordKeepHelp": "Desktop хранит этот секрет локально и передает его через неинтерактивный stdin-канал запуска. Оставьте поле пустым, чтобы сохранить текущий сохраненный пароль.",
     "localUIPasswordRuntimeRequiredHelp": "Desktop сохраняет этот секрет локально и передает его через неинтерактивный канал запуска stdin. Текущая среда выполнения защищена, но у Desktop нет сохраненного пароля, который можно было бы использовать повторно. Введите его здесь, чтобы сохранить для следующего запуска, управляемого с рабочего стола.",
     "localUIPasswordReplacePlaceholder": "Введите новый пароль, чтобы заменить сохраненный",
-    "plaintextNetworkExposureTitle": "Незашифрованный сетевой доступ",
-    "plaintextNetworkExposureSummary": "Защита паролем включена, но HTTP-трафик не зашифрован. Используйте только в доверенной сети.",
+    "sharedPasswordRequired": "Для общего доступа по локальной сети требуется пароль.",
+    "plaintextNetworkExposureTitle": "Доступ открыт по локальной сети",
+    "plaintextNetworkExposureSummary": "Для доступа требуется пароль, но HTTP-трафик не шифруется. Используйте только в доверенной сети.",
     "reviewExposure": "Проверить сетевой доступ",
     "reviewPlaintextExposureTitle": "Проверка незашифрованного сетевого доступа",
     "reviewPlaintextExposureDescription": "Перед запуском этой локальной среды в сети проверьте адрес прослушивания и точные границы защиты.",
@@ -576,7 +582,11 @@
     "passwordEnabled": "Пароль включен",
     "plaintextExposureBoundary": "Пароль, файлы cookie, ресурсы страницы и HTTP-трафик вне Flowersec могут быть перехвачены или изменены. Сквозное шифрование Flowersec начинает действовать только после завершения рукопожатия.",
     "acceptPlaintextExposureRisk": "Я понимаю, что при этом HTTP-трафик передается без шифрования, и буду использовать такой доступ только в доверенной сети.",
-    "enablePlaintextNetworkAccess": "Включить HTTP-доступ без TLS"
+    "enablePlaintextNetworkAccess": "Включить HTTP-доступ без TLS",
+    "applyTimingTitle": "Когда применить изменения",
+    "applyTimingHelp": "Немедленный перезапуск прервёт активные подключения к окружению.",
+    "applyNextStart": "При следующем запуске",
+    "applyRestartNow": "Перезапустить сейчас"
   },
   "shell": {
     "accessibility": {

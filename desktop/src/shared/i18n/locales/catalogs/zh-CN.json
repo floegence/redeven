@@ -470,6 +470,7 @@
   "common": {
     "open": "打开",
     "back": "返回",
+    "next": "下一步",
     "save": "保存",
     "cancel": "取消",
     "delete": "删除",
@@ -545,7 +546,11 @@
     "passwordNeeded": "需要密码",
     "optional": "可选",
     "chooseEnvironmentFirst": "首先选择环境。",
+    "settingsStepsLabel": "本地环境设置步骤",
+    "configureAccessStep": "设置",
+    "securityReviewStep": "安全确认",
     "settingsWindowTitle": "{label} 设置",
+    "saveSettings": "保存设置",
     "saveEnvironmentSettings": "保存 {label} 设置",
     "saveAndRestart": "保存并重新启动",
     "saveAndRestartEnvironmentSettings": "保存 {label} 设置并重新启动运行时",
@@ -561,8 +566,9 @@
     "localUIPasswordKeepHelp": "Desktop 会在本机保存此密钥，并通过非交互式 stdin 启动通道转发。留空即可保留当前已保存的密码。",
     "localUIPasswordRuntimeRequiredHelp": "Desktop 将此秘密存储在本地，并通过非交互式 stdin 启动通道转发。当前运行时受到保护，但 Desktop 没有可供重复使用的存储密码。在此处输入它以保存它以供下次桌面管理启动使用。",
     "localUIPasswordReplacePlaceholder": "输入新密码以替换已保存的密码",
-    "plaintextNetworkExposureTitle": "明文网络暴露",
-    "plaintextNetworkExposureSummary": "密码仅提供访问控制，HTTP 流量并未加密。仅限在可信网络中使用。",
+    "sharedPasswordRequired": "共享到本地网络必须设置访问密码。",
+    "plaintextNetworkExposureTitle": "将通过本地网络公开",
+    "plaintextNetworkExposureSummary": "访问必须使用密码，但 HTTP 流量不会加密。仅在可信网络中使用。",
     "reviewExposure": "确认暴露风险",
     "reviewPlaintextExposureTitle": "确认明文网络访问",
     "reviewPlaintextExposureDescription": "确认具体监听地址和安全边界后，此本地环境才能通过网络启动。",
@@ -576,7 +582,11 @@
     "passwordEnabled": "已启用密码",
     "plaintextExposureBoundary": "密码、Cookie、页面资源及非 Flowersec HTTP 流量都可能被截获或篡改。Flowersec 端到端加密仅在握手完成后开始生效。",
     "acceptPlaintextExposureRisk": "我了解这会暴露明文 HTTP 流量，并且仅会在可信网络中使用。",
-    "enablePlaintextNetworkAccess": "启用明文网络访问"
+    "enablePlaintextNetworkAccess": "启用明文网络访问",
+    "applyTimingTitle": "生效方式",
+    "applyTimingHelp": "立即重新启动会中断当前环境连接。",
+    "applyNextStart": "下次启动生效",
+    "applyRestartNow": "立即重新启动"
   },
   "shell": {
     "accessibility": {
