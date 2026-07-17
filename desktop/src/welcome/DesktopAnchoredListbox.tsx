@@ -40,6 +40,24 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(Math.max(value, min), max);
 }
 
+export function scrollDesktopListboxOptionIntoView(
+  listbox: HTMLElement | undefined,
+  optionID: string,
+): void {
+  if (!listbox) {
+    return;
+  }
+  const option = listbox.querySelector<HTMLElement>(`#${CSS.escape(optionID)}`);
+  if (!option) {
+    return;
+  }
+  const listboxRect = listbox.getBoundingClientRect();
+  const optionRect = option.getBoundingClientRect();
+  if (optionRect.top < listboxRect.top || optionRect.bottom > listboxRect.bottom) {
+    option.scrollIntoView({ block: 'nearest' });
+  }
+}
+
 // IMPORTANT: Dialog form listboxes must live outside dialog scroll containers.
 // A listbox anchored to a field is a floating surface, not form content; keeping
 // this geometry in one component prevents footer/overflow clipping regressions.

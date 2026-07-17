@@ -103,4 +103,18 @@ describe('sshConfigHosts', () => {
 
     expect(hosts.map((host) => host.alias)).toEqual(['included-host', 'main-host']);
   });
+
+  it('returns every concrete host without applying a presentation limit', async () => {
+    const home = await makeHome();
+    const configPath = path.join(home, '.ssh', 'config');
+    await fs.writeFile(configPath, Array.from({ length: 12 }, (_, index) => [
+      `Host host-${String(index + 1).padStart(2, '0')}`,
+      `  HostName host-${String(index + 1).padStart(2, '0')}.internal`,
+    ].join('\n')).join('\n'));
+
+    const hosts = await loadDesktopSSHConfigHosts({ homeDir: home, configPath });
+
+    expect(hosts).toHaveLength(12);
+    expect(hosts.at(-1)?.alias).toBe('host-12');
+  });
 });
