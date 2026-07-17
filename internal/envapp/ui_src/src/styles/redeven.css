@@ -303,10 +303,14 @@
   --redeven-surface-control: color-mix(in srgb, var(--redeven-surface-panel) 58%, var(--redeven-surface-panel-elevated) 42%);
   --redeven-surface-control-muted: #f1efec;
   --redeven-settings-header-bg: #ffffff;
-  --redeven-settings-sidebar-bg: #eef1f4;
-  --redeven-settings-sidebar-border: #d8dee6;
+  --redeven-settings-sidebar-bg: #e9e5df;
+  --redeven-settings-sidebar-border: #d0c9bf;
   --redeven-settings-content-bg: #f4f6f8;
   --redeven-settings-card-bg: #ffffff;
+  --redeven-settings-sidebar-inset-bg: color-mix(in srgb, var(--redeven-settings-sidebar-bg) 64%, var(--redeven-settings-card-bg) 36%);
+  --redeven-settings-sidebar-hover-bg: color-mix(in srgb, var(--redeven-settings-sidebar-bg) 92%, var(--foreground) 8%);
+  --redeven-settings-sidebar-note-fg: #5a687c;
+  --redeven-settings-sidebar-control-border: #748092;
   --redeven-settings-inset-bg: #f7f8fa;
   --redeven-settings-row-bg: var(--redeven-settings-inset-bg);
   --redeven-settings-row-hover-bg: #eef2f6;
@@ -386,6 +390,10 @@ html.dark {
   --redeven-settings-sidebar-border: #2b323d;
   --redeven-settings-content-bg: #181c23;
   --redeven-settings-card-bg: #222730;
+  --redeven-settings-sidebar-inset-bg: #1b2027;
+  --redeven-settings-sidebar-hover-bg: #282e38;
+  --redeven-settings-sidebar-note-fg: #94a3b8;
+  --redeven-settings-sidebar-control-border: #68788f;
   --redeven-settings-inset-bg: #1b2027;
   --redeven-settings-row-bg: var(--redeven-settings-inset-bg);
   --redeven-settings-row-hover-bg: #282e38;
@@ -1928,8 +1936,8 @@ html.dark .env-debug-console-switch[data-state='checked'] {
 }
 
 .redeven-settings-search {
-  border-color: var(--redeven-settings-control-border);
-  background: var(--redeven-settings-inset-bg);
+  border-color: var(--redeven-settings-sidebar-control-border);
+  background: var(--redeven-settings-sidebar-inset-bg);
   color: var(--foreground);
 }
 
@@ -1939,7 +1947,7 @@ html.dark .env-debug-console-switch[data-state='checked'] {
 }
 
 .redeven-settings-nav-item:hover {
-  background: var(--redeven-settings-row-hover-bg) !important;
+  background: var(--redeven-settings-sidebar-hover-bg) !important;
   color: var(--foreground);
 }
 
@@ -1971,6 +1979,15 @@ html.dark .env-debug-console-switch[data-state='checked'] {
   color: var(--redeven-settings-label-fg);
 }
 
+.redeven-settings-sidebar-note {
+  color: var(--redeven-settings-sidebar-note-fg);
+}
+
+:root:not(.dark) .redeven-settings-sidebar-group-label,
+.light .redeven-settings-sidebar-group-label {
+  color: var(--redeven-settings-sidebar-note-fg);
+}
+
 .redeven-settings-note {
   color: var(--redeven-settings-note-fg);
 }
@@ -1983,7 +2000,7 @@ html.dark .env-debug-console-switch[data-state='checked'] {
   color: var(--redeven-settings-note-fg);
 }
 
-.redeven-settings-shell input:not([type='checkbox']):not([type='radio']):not([type='range']),
+.redeven-settings-shell input:not([type='checkbox']):not([type='radio']):not([type='range']):not(.redeven-settings-search),
 .redeven-settings-shell textarea,
 .redeven-settings-shell [role='combobox'],
 .redeven-settings-dialog input:not([type='checkbox']):not([type='radio']):not([type='range']),
