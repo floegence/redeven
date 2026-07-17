@@ -7,11 +7,39 @@ function readMainSource(): string {
   return fs.readFileSync(path.join(__dirname, 'main.ts'), 'utf8');
 }
 
+function readMainModuleSource(filename: string): string {
+  return fs.readFileSync(path.join(__dirname, filename), 'utf8');
+}
+
 function readSharedGatewaySource(): string {
   return fs.readFileSync(path.join(__dirname, '..', 'shared', 'desktopGateway.ts'), 'utf8');
 }
 
 describe('main routing', () => {
+  it('owns and injects one Desktop SSH transport manager without direct consumer SSH spawns', () => {
+    const mainSrc = readMainSource();
+    expect(mainSrc).toContain('const desktopSSHTransportManager = new DefaultDesktopSSHTransportManager();');
+    expect(mainSrc).toContain('sshTransportManager: desktopSSHTransportManager');
+    expect(mainSrc).toContain('ssh_transport_manager: desktopSSHTransportManager');
+    expect(mainSrc.indexOf('await Promise.allSettled(runtimePlacementDisconnectPromises);')).toBeLessThan(
+      mainSrc.indexOf('await desktopSSHTransportManager.dispose();'),
+    );
+
+    const consumerSources = [
+      'sshRuntime.ts',
+      'runtimeHostAccess.ts',
+      'runtimePlacementBridgeSession.ts',
+      'runtimePlacementManager.ts',
+      'gatewayServiceHost.ts',
+      'gatewayLifecycleManager.ts',
+      'main.ts',
+    ].map(readMainModuleSource);
+    for (const source of consumerSources) {
+      expect(source).not.toMatch(/\bspawn(?:Sync)?\s*\(\s*['"]ssh['"]/u);
+      expect(source).not.toMatch(/\bspawn(?:Sync)?\s*\(\s*sshBinary\b/u);
+    }
+  });
+
   it('keeps the launcher as the single desktop utility window', () => {
     const mainSrc = readMainSource();
 
@@ -352,7 +380,7 @@ describe('main routing', () => {
     expect(snapshotSrc).not.toContain('refreshAllProviderEnvironmentRuntimeHealth');
   });
 
-  it('reconciles saved runtime target maintenance before exposing Welcome state', () => {
+  it('prefers an existing bridge before reconciling saved runtime target maintenance', () => {
     const mainSrc = readMainSource();
     const inspectStart = mainSrc.indexOf('async function inspectSavedRuntimeTargetState(');
     const inspectEnd = mainSrc.indexOf('function createInitialLoadDeferred(', inspectStart);
@@ -362,8 +390,8 @@ describe('main routing', () => {
 
     expect(mainSrc).toContain('function runtimePlacementMaintenanceForRuntimeService(');
     expect(mainSrc).toContain('runtimePlacementMaintenanceByTargetID.delete(targetID)');
-    expect(inspectSrc.indexOf('resolveRuntimeContainerPlacement(')).toBeLessThan(
-      inspectSrc.indexOf('const bridgeRecord = await verifyRuntimePlacementBridgeRecord(target.targetID)'),
+    expect(inspectSrc.indexOf('const bridgeRecord = await verifyRuntimePlacementBridgeRecord(target.targetID)')).toBeLessThan(
+      inspectSrc.indexOf('resolveRuntimeContainerPlacement('),
     );
     expect(inspectSrc).not.toContain('const bridgeRecord = runtimePlacementBridgeByTargetID.get(target.targetID) ?? null');
     expect(inspectSrc).toContain('await clearRuntimePlacementTargetRecords(target.targetID)');

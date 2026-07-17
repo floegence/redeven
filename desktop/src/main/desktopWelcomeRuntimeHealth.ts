@@ -23,12 +23,16 @@ export type DesktopWelcomeRuntimeHealthProbeResult = Readonly<{
 
 export type DesktopWelcomeRuntimeHealthTarget = Readonly<{
   key: string;
+  probe_coordinator_key?: string;
   environment_id: string;
   slot: DesktopWelcomeRuntimeHealthSlot;
   presence_target_id?: DesktopProviderRuntimeLinkTargetID;
   auto_refresh_enabled: boolean;
   checking_health: DesktopRuntimeHealth;
   probe: () => Promise<DesktopWelcomeRuntimeHealthProbeResult>;
+  project_shared_result?: (
+    result: DesktopWelcomeRuntimeHealthProbeResult,
+  ) => DesktopWelcomeRuntimeHealthProbeResult;
 }>;
 
 export type DesktopWelcomeRuntimeHealthSnapshot = Readonly<{
@@ -75,6 +79,7 @@ function withFreshness(
 export class DesktopWelcomeRuntimeHealthStore {
   private readonly cache = new Map<string, CacheEntry>();
   private readonly inFlight = new Map<string, RefreshTask>();
+  private readonly coordinatedProbes = new Map<string, Promise<DesktopWelcomeRuntimeHealthProbeResult>>();
 
   constructor(
     private readonly onChange: () => void,
@@ -194,7 +199,7 @@ export class DesktopWelcomeRuntimeHealthStore {
     this.onChange();
 
     const startedAt = Date.now();
-    const promise = target.probe()
+    const promise = this.runProbe(target)
       .then((result) => {
         if (this.cache.get(target.key)?.generation !== generation) {
           return;
@@ -248,5 +253,24 @@ export class DesktopWelcomeRuntimeHealthStore {
       promise,
     });
     return promise;
+  }
+
+  private runProbe(
+    target: DesktopWelcomeRuntimeHealthTarget,
+  ): Promise<DesktopWelcomeRuntimeHealthProbeResult> {
+    const coordinatorKey = target.probe_coordinator_key;
+    if (!coordinatorKey) {
+      return target.probe();
+    }
+    let shared = this.coordinatedProbes.get(coordinatorKey);
+    if (!shared) {
+      shared = target.probe().finally(() => {
+        if (this.coordinatedProbes.get(coordinatorKey) === shared) {
+          this.coordinatedProbes.delete(coordinatorKey);
+        }
+      });
+      this.coordinatedProbes.set(coordinatorKey, shared);
+    }
+    return shared.then((result) => target.project_shared_result?.(result) ?? result);
   }
 }

@@ -142,6 +142,11 @@ func (c *cli) desktopBridgeCmd(args []string) int {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	executablePath, err := os.Executable()
+	if err != nil {
+		writeError(c.stderr, fmt.Sprintf("desktop-bridge failed: resolve Gateway executable: %v", err))
+		return 1
+	}
 	gatewayURL := fmt.Sprintf("http://%s/", strings.TrimSpace(status.Listen))
 	bridge := desktopbridge.Server{
 		DialSurface: desktopbridge.NewGatewaySurfaceDialer(gatewayURL, managedBridgeToken),
@@ -156,6 +161,12 @@ func (c *cli) desktopBridgeCmd(args []string) int {
 			RuntimeControl: desktopbridge.RuntimeControl{Available: false},
 			GatewayProtocol: desktopbridge.GatewayProtocol{
 				Available: true,
+			},
+			GatewayService: &desktopbridge.GatewayService{
+				StateRoot:          stateRootValue,
+				ExecutablePath:     filepath.Clean(executablePath),
+				ServicePID:         status.PID,
+				ManagedBridgeToken: managedBridgeToken,
 			},
 		},
 		OnShutdown: cancel,

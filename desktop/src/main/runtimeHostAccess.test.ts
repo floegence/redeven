@@ -2,13 +2,39 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import {
   createLocalRuntimeHostExecutor,
   createSSHRuntimeHostExecutor,
 } from './runtimeHostAccess';
 import { DesktopOperationFailureError } from './desktopOperationFailure';
+import type { DesktopSSHTransportManager } from './sshTransportManager';
+
+function fakeTransportManager(
+  run: (command: string, options?: Readonly<{ stdinData?: Buffer }>) => Promise<Readonly<{
+    exit_code: number | null;
+    signal: NodeJS.Signals | null;
+    stdout: string;
+    stderr: string;
+  }>> = async () => ({ exit_code: 0, signal: null, stdout: '', stderr: '' }),
+) {
+  const runMock = vi.fn(run);
+  const release = vi.fn(async () => undefined);
+  const acquire = vi.fn(async (input) => ({
+    generation: 1,
+    target: input.target,
+    run: runMock,
+    stream: vi.fn(),
+    release,
+  }));
+  return {
+    manager: { acquire, dispose: vi.fn(async () => undefined) } as DesktopSSHTransportManager,
+    acquire,
+    run: runMock,
+    release,
+  };
+}
 
 describe('runtimeHostAccess', () => {
   it('describes local host access without placement details', () => {
@@ -16,12 +42,13 @@ describe('runtimeHostAccess', () => {
   });
 
   it('describes SSH host access separately from runtime placement', () => {
-    const executor = createSSHRuntimeHostExecutor({
+    const transport = fakeTransportManager();
+    const executor = createSSHRuntimeHostExecutor(transport.manager, {
       ssh_destination: 'devbox',
       ssh_port: 2222,
       auth_mode: 'key_agent',
       connect_timeout_seconds: 15,
-    });
+    }, { credentialScope: 'environment-a' });
 
     expect(executor.host_access).toMatchObject({
       kind: 'ssh_host',
@@ -45,60 +72,47 @@ describe('runtimeHostAccess', () => {
   });
 
   it('passes explicit bridge environment variables to the remote SSH command', async () => {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-ssh-test-'));
-    const argsPath = path.join(tempDir, 'ssh-args.json');
-    const fakeSSH = path.join(tempDir, 'ssh');
-    await fs.writeFile(fakeSSH, [
-      '#!/usr/bin/env bash',
-      `node -e "require('node:fs').writeFileSync(process.argv[1], JSON.stringify(process.argv.slice(2)))" ${JSON.stringify(argsPath)} "$@"`,
-    ].join('\n'), { mode: 0o755 });
-
-    const executor = createSSHRuntimeHostExecutor({
+    const transport = fakeTransportManager();
+    const executor = createSSHRuntimeHostExecutor(transport.manager, {
       ssh_destination: 'devbox',
       ssh_port: null,
       auth_mode: 'key_agent',
       connect_timeout_seconds: 15,
-    }, { sshBinary: fakeSSH });
+    }, { credentialScope: 'environment-a' });
     await executor.run(['docker', 'exec', '-i', 'dev', 'redeven', 'desktop-bridge'], {
       env: {
         REDEVEN_DESKTOP_OWNER_ID: 'desktop-owner',
         'BAD-NAME': 'ignored',
       },
     });
-    const args = JSON.parse(await fs.readFile(argsPath, 'utf8')) as string[];
-
-    expect(args.at(-1)).toBe(
+    const remoteCommand = transport.run.mock.calls[0]?.[0] ?? '';
+    expect(remoteCommand).toBe(
       "env REDEVEN_DESKTOP_OWNER_ID='desktop-owner' 'docker' 'exec' '-i' 'dev' 'redeven' 'desktop-bridge'",
     );
-    expect(args).not.toContain('-L');
-    expect(args.join(' ')).not.toContain('ExitOnForwardFailure');
+    expect(remoteCommand).not.toContain('-L');
+    expect(remoteCommand).not.toContain('ExitOnForwardFailure');
+    await executor.release();
   });
 
   it('uses a locally supplied SSH password through askpass without sending it in argv', async () => {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-ssh-password-test-'));
-    const argsPath = path.join(tempDir, 'ssh-args.json');
-    const passwordPath = path.join(tempDir, 'password.txt');
-    const fakeSSH = path.join(tempDir, 'ssh');
-    await fs.writeFile(fakeSSH, [
-      '#!/usr/bin/env bash',
-      'set -euo pipefail',
-      `node -e "const fs=require('node:fs'); fs.writeFileSync(process.argv[1], JSON.stringify(process.argv.slice(3))); const askpass=process.env.SSH_ASKPASS; fs.writeFileSync(process.argv[2], askpass ? require('node:child_process').execFileSync(askpass, ['Password:']).toString('utf8') : '');" ${JSON.stringify(argsPath)} ${JSON.stringify(passwordPath)} "$@"`,
-    ].join('\n'), { mode: 0o755 });
-
-    const executor = createSSHRuntimeHostExecutor({
+    const transport = fakeTransportManager();
+    const executor = createSSHRuntimeHostExecutor(transport.manager, {
       ssh_destination: 'devbox',
       ssh_port: null,
       auth_mode: 'password',
       connect_timeout_seconds: 15,
     }, {
-      sshBinary: fakeSSH,
       sshPassword: 'stored-secret',
+      credentialScope: 'saved-environment-a',
     });
     await executor.run(['true']);
 
-    const args = JSON.parse(await fs.readFile(argsPath, 'utf8')) as string[];
-    expect(args.join(' ')).not.toContain('stored-secret');
-    expect(await fs.readFile(passwordPath, 'utf8')).toBe('stored-secret\n');
+    expect(transport.acquire).toHaveBeenCalledWith(expect.objectContaining({
+      credentialScope: 'saved-environment-a',
+      sshPassword: 'stored-secret',
+    }));
+    expect(transport.run.mock.calls[0]?.[0]).not.toContain('stored-secret');
+    await executor.release();
   });
 
   it('streams stdin data through local and SSH host executors', async () => {
@@ -113,38 +127,37 @@ describe('runtimeHostAccess', () => {
     });
     expect(await fs.readFile(localOut, 'utf8')).toBe('local-archive');
 
-    const sshOut = path.join(tempDir, 'ssh.bin');
-    const fakeSSH = path.join(tempDir, 'ssh');
-    await fs.writeFile(fakeSSH, [
-      '#!/usr/bin/env bash',
-      `cat > ${JSON.stringify(sshOut)}`,
-    ].join('\n'), { mode: 0o755 });
-    const executor = createSSHRuntimeHostExecutor({
+    let sshArchive = '';
+    const transport = fakeTransportManager(async (_command, options) => {
+      sshArchive = options?.stdinData?.toString('utf8') ?? '';
+      return { exit_code: 0, signal: null, stdout: '', stderr: '' };
+    });
+    const executor = createSSHRuntimeHostExecutor(transport.manager, {
       ssh_destination: 'devbox',
       ssh_port: null,
       auth_mode: 'key_agent',
       connect_timeout_seconds: 15,
-    }, { sshBinary: fakeSSH });
+    }, { credentialScope: 'environment-a' });
     await executor.run(['docker', 'exec', '-i', 'dev', 'sh'], {
       stdinData: Buffer.from('ssh-archive'),
     });
-    expect(await fs.readFile(sshOut, 'utf8')).toBe('ssh-archive');
+    expect(sshArchive).toBe('ssh-archive');
+    await executor.release();
   });
 
   it('keeps SSH host command stderr as diagnostics instead of the visible summary', async () => {
-    const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'redeven-host-error-test-'));
-    const fakeSSH = path.join(tempDir, 'ssh');
-    await fs.writeFile(fakeSSH, [
-      '#!/usr/bin/env bash',
-      'echo "ssh: Could not resolve hostname dify" >&2',
-      'exit 255',
-    ].join('\n'), { mode: 0o755 });
-    const executor = createSSHRuntimeHostExecutor({
+    const transport = fakeTransportManager(async () => ({
+      exit_code: 255,
+      signal: null,
+      stdout: '',
+      stderr: 'ssh: Could not resolve hostname dify\n',
+    }));
+    const executor = createSSHRuntimeHostExecutor(transport.manager, {
       ssh_destination: 'dify',
       ssh_port: null,
       auth_mode: 'key_agent',
       connect_timeout_seconds: 15,
-    }, { sshBinary: fakeSSH });
+    }, { credentialScope: 'environment-dify' });
 
     try {
       await executor.run(['docker', 'ps']);
@@ -159,6 +172,8 @@ describe('runtimeHostAccess', () => {
           text: 'ssh: Could not resolve hostname dify',
         }),
       ]));
+    } finally {
+      await executor.release();
     }
   });
 });

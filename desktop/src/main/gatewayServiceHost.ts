@@ -17,6 +17,7 @@ import {
   runtimeReleaseFetchPolicy,
 } from './runtimePackageCache';
 import { createSSHRuntimeHostExecutor, type RuntimeHostAccessExecutor } from './runtimeHostAccess';
+import type { DesktopSSHTransportManager } from './sshTransportManager';
 import {
   buildDesktopSSHReleaseAssetURL,
   desktopSSHReleasePackageName,
@@ -84,6 +85,8 @@ export type GatewayServiceProgress = Readonly<{
 }>;
 
 export type GatewayServiceHostOptions = Readonly<{
+  sshTransportManager: DesktopSSHTransportManager;
+  sshCredentialScope: string;
   target: DesktopSSHEnvironmentDetails;
   placement: DesktopRuntimePlacement;
   stateRoot: string;
@@ -590,7 +593,22 @@ function rootShellForPlacement(placement: DesktopRuntimePlacement): string {
 }
 
 function executorFor(options: GatewayServiceHostOptions): RuntimeHostAccessExecutor {
-  return createSSHRuntimeHostExecutor(options.target, { sshPassword: options.sshPassword });
+  return createSSHRuntimeHostExecutor(options.sshTransportManager, options.target, {
+    sshPassword: options.sshPassword,
+    credentialScope: options.sshCredentialScope,
+  });
+}
+
+async function withGatewayExecutor<T>(
+  options: GatewayServiceHostOptions,
+  action: (executor: RuntimeHostAccessExecutor) => Promise<T>,
+): Promise<T> {
+  const executor = executorFor(options);
+  try {
+    return await action(executor);
+  } finally {
+    await executor.release();
+  }
 }
 
 function normalizeStatusLineTag(raw: string | undefined): string | null {
@@ -708,8 +726,10 @@ function parseGatewayServiceCommandStatus(raw: string, stateRoot: string): Gatew
   };
 }
 
-async function probeGatewayPackage(options: GatewayServiceHostOptions): Promise<GatewayPackageProbe> {
-  const executor = executorFor(options);
+async function probeGatewayPackage(
+  options: GatewayServiceHostOptions,
+  executor: RuntimeHostAccessExecutor,
+): Promise<GatewayPackageProbe> {
   const rootShell = rootShellForPlacement(options.placement);
   const result = await executor.run(commandForPlacement(options.placement, gatewayProbeCommandScript(rootShell), [
     options.placement.runtime_root,
@@ -719,8 +739,10 @@ async function probeGatewayPackage(options: GatewayServiceHostOptions): Promise<
   return parseGatewayPackageProbe(result.stdout);
 }
 
-async function probeGatewayPlatform(options: GatewayServiceHostOptions): Promise<DesktopSSHRemotePlatform> {
-  const executor = executorFor(options);
+async function probeGatewayPlatform(
+  options: GatewayServiceHostOptions,
+  executor: RuntimeHostAccessExecutor,
+): Promise<DesktopSSHRemotePlatform> {
   if (options.placement.kind === 'container_process') {
     const result = await executor.run(containerRuntimePlatformProbeCommand({
       engine: options.placement.container_engine,
@@ -739,7 +761,11 @@ async function probeGatewayPlatform(options: GatewayServiceHostOptions): Promise
   return resolveDesktopSSHRemotePlatform(lines[0] ?? '', lines[1] ?? '');
 }
 
-async function installGatewayPackage(options: GatewayServiceHostOptions, platform: DesktopSSHRemotePlatform): Promise<void> {
+async function installGatewayPackage(
+  options: GatewayServiceHostOptions,
+  executor: RuntimeHostAccessExecutor,
+  platform: DesktopSSHRemotePlatform,
+): Promise<void> {
   options.onProgress?.({
     phase: 'preparing_gateway_package',
     title: 'Preparing Gateway package',
@@ -760,7 +786,6 @@ async function installGatewayPackage(options: GatewayServiceHostOptions, platfor
     title: 'Installing Gateway package',
     detail: `Desktop is uploading Redeven Gateway ${normalizeReleaseTag(options.releaseTag)} to the target.`,
   });
-  const executor = executorFor(options);
   const rootShell = rootShellForPlacement(options.placement);
   await executor.run(commandForPlacement(options.placement, gatewayUploadedInstallScript(rootShell), [
     options.placement.runtime_root,
@@ -777,7 +802,10 @@ export function gatewayServiceBinaryPath(placement: DesktopRuntimePlacement): st
   return `${root.replace(/\/+$/u, '')}/gateway/managed/bin/redeven-gateway`;
 }
 
-export async function probeManagedGatewayServiceStatus(options: GatewayServiceHostOptions): Promise<GatewayServiceProbe> {
+async function probeManagedGatewayServiceStatusWithExecutor(
+  options: GatewayServiceHostOptions,
+  executor: RuntimeHostAccessExecutor,
+): Promise<GatewayServiceProbe> {
   options.onProgress?.({
     phase: options.placement.kind === 'container_process' ? 'checking_container' : 'checking_host',
     title: options.placement.kind === 'container_process' ? 'Checking Gateway container' : 'Checking Gateway host',
@@ -785,7 +813,7 @@ export async function probeManagedGatewayServiceStatus(options: GatewayServiceHo
       ? 'Desktop is checking the container that hosts this Gateway service.'
       : 'Desktop is checking the SSH host that runs this Gateway service.',
   });
-  const packageProbe = await probeGatewayPackage(options);
+  const packageProbe = await probeGatewayPackage(options, executor);
   if (packageProbe.status !== 'ready') {
     return {
       status: 'needs_update',
@@ -795,7 +823,6 @@ export async function probeManagedGatewayServiceStatus(options: GatewayServiceHo
       package_status: packageProbe.status,
     };
   }
-  const executor = executorFor(options);
   const rootShell = rootShellForPlacement(options.placement);
   const result = await executor.run(commandForPlacement(options.placement, gatewayServiceStatusScript(rootShell), [
     options.placement.runtime_root,
@@ -832,6 +859,10 @@ export async function probeManagedGatewayServiceStatus(options: GatewayServiceHo
   };
 }
 
+export async function probeManagedGatewayServiceStatus(options: GatewayServiceHostOptions): Promise<GatewayServiceProbe> {
+  return withGatewayExecutor(options, (executor) => probeManagedGatewayServiceStatusWithExecutor(options, executor));
+}
+
 function parseGatewayServiceDeepProbe(raw: string): GatewayServiceDeepProbe {
   const parsed = parseProbeLines(raw);
   const servicePID = Number(compact(parsed.get('service_pid')));
@@ -858,24 +889,27 @@ function parseGatewayServiceDeepProbe(raw: string): GatewayServiceDeepProbe {
 }
 
 export async function probeManagedGatewayServiceDeep(options: GatewayServiceHostOptions): Promise<GatewayServiceDeepProbe> {
-  const executor = executorFor(options);
-  const rootShell = rootShellForPlacement(options.placement);
-  const targetCommit = compact(options.targetCommit);
-  const result = await executor.run(commandForPlacement(options.placement, gatewayDeepProbeScript(rootShell), [
-    options.placement.runtime_root,
-    options.stateRoot,
-    normalizeReleaseTag(options.releaseTag),
-    targetCommit,
-  ]), { signal: options.signal });
-  return parseGatewayServiceDeepProbe(result.stdout);
+  return withGatewayExecutor(options, async (executor) => {
+    const rootShell = rootShellForPlacement(options.placement);
+    const targetCommit = compact(options.targetCommit);
+    const result = await executor.run(commandForPlacement(options.placement, gatewayDeepProbeScript(rootShell), [
+      options.placement.runtime_root,
+      options.stateRoot,
+      normalizeReleaseTag(options.releaseTag),
+      targetCommit,
+    ]), { signal: options.signal });
+    return parseGatewayServiceDeepProbe(result.stdout);
+  });
 }
 
-async function cleanupLegacyGatewayRuntimeResidue(options: GatewayServiceHostOptions): Promise<void> {
+async function cleanupLegacyGatewayRuntimeResidue(
+  options: GatewayServiceHostOptions,
+  executor: RuntimeHostAccessExecutor,
+): Promise<void> {
   const gatewayID = compact(options.gatewayID);
   if (!gatewayID) {
     throw new Error('Gateway legacy cleanup requires a Gateway id.');
   }
-  const executor = executorFor(options);
   const rootShell = rootShellForPlacement(options.placement);
   await executor.run(commandForPlacement(options.placement, gatewayLegacyCleanupScript(rootShell), [
     options.placement.runtime_root,
@@ -886,61 +920,63 @@ async function cleanupLegacyGatewayRuntimeResidue(options: GatewayServiceHostOpt
 }
 
 export async function ensureManagedGatewayServiceReady(options: GatewayServiceHostOptions): Promise<string> {
-  const releaseTag = normalizeReleaseTag(options.releaseTag);
-  const initialProbe = await probeGatewayPackage(options).catch(() => null);
-  if (options.forceUpdate === true || initialProbe?.status !== 'ready') {
-    const platform = await probeGatewayPlatform(options);
-    await installGatewayPackage(options, platform);
-    const installedProbe = await probeGatewayPackage(options);
-    if (installedProbe.status !== 'ready') {
-      throw new Error(describeGatewayPackageProbe(installedProbe));
+  return withGatewayExecutor(options, async (executor) => {
+    const releaseTag = normalizeReleaseTag(options.releaseTag);
+    const initialProbe = await probeGatewayPackage(options, executor).catch(() => null);
+    if (options.forceUpdate === true || initialProbe?.status !== 'ready') {
+      const platform = await probeGatewayPlatform(options, executor);
+      await installGatewayPackage(options, executor, platform);
+      const installedProbe = await probeGatewayPackage(options, executor);
+      if (installedProbe.status !== 'ready') {
+        throw new Error(describeGatewayPackageProbe(installedProbe));
+      }
     }
-  }
-  if (options.forceUpdate === true) {
-    await cleanupLegacyGatewayRuntimeResidue(options);
-  }
-  options.onProgress?.({
-    phase: 'starting_gateway',
-    title: 'Starting Gateway service',
-    detail: `Desktop is starting Redeven Gateway ${releaseTag} on the target.`,
+    if (options.forceUpdate === true) {
+      await cleanupLegacyGatewayRuntimeResidue(options, executor);
+    }
+    options.onProgress?.({
+      phase: 'starting_gateway',
+      title: 'Starting Gateway service',
+      detail: `Desktop is starting Redeven Gateway ${releaseTag} on the target.`,
+    });
+    const rootShell = rootShellForPlacement(options.placement);
+    await executor.run(commandForPlacement(options.placement, gatewayServiceStartScript(rootShell), [
+      options.placement.runtime_root,
+      options.stateRoot,
+      releaseTag,
+    ]), { signal: options.signal });
+    options.onProgress?.({
+      phase: 'gateway_ready',
+      title: 'Gateway service ready',
+      detail: 'Desktop can now open a Gateway bridge and sync the catalog.',
+    });
+    return gatewayServiceBinaryPath(options.placement);
   });
-  const executor = executorFor(options);
-  const rootShell = rootShellForPlacement(options.placement);
-  await executor.run(commandForPlacement(options.placement, gatewayServiceStartScript(rootShell), [
-    options.placement.runtime_root,
-    options.stateRoot,
-    releaseTag,
-  ]), { signal: options.signal });
-  options.onProgress?.({
-    phase: 'gateway_ready',
-    title: 'Gateway service ready',
-    detail: 'Desktop can now open a Gateway bridge and sync the catalog.',
-  });
-  return gatewayServiceBinaryPath(options.placement);
 }
 
 export async function stopManagedGatewayService(options: GatewayServiceHostOptions): Promise<void> {
-  options.onProgress?.({
-    phase: 'stopping_gateway',
-    title: 'Stopping Gateway service',
-    detail: 'Desktop is stopping the managed Gateway service on the target.',
+  await withGatewayExecutor(options, async (executor) => {
+    options.onProgress?.({
+      phase: 'stopping_gateway',
+      title: 'Stopping Gateway service',
+      detail: 'Desktop is stopping the managed Gateway service on the target.',
+    });
+    const rootShell = rootShellForPlacement(options.placement);
+    await executor.run(commandForPlacement(options.placement, gatewayServiceStopScript(rootShell), [
+      options.placement.runtime_root,
+      options.stateRoot,
+      normalizeReleaseTag(options.releaseTag),
+    ]), { signal: options.signal });
+    options.onProgress?.({
+      phase: 'verifying_gateway_stopped',
+      title: 'Verifying Gateway stopped',
+      detail: 'Desktop is confirming that the managed Gateway service has stopped.',
+    });
+    const probe = await probeManagedGatewayServiceStatusWithExecutor(options, executor).catch(() => null);
+    if (probe?.status === 'running') {
+      throw new Error('Desktop could not stop the Gateway service because it still reports running.');
+    }
   });
-  const executor = executorFor(options);
-  const rootShell = rootShellForPlacement(options.placement);
-  await executor.run(commandForPlacement(options.placement, gatewayServiceStopScript(rootShell), [
-    options.placement.runtime_root,
-    options.stateRoot,
-    normalizeReleaseTag(options.releaseTag),
-  ]), { signal: options.signal });
-  options.onProgress?.({
-    phase: 'verifying_gateway_stopped',
-    title: 'Verifying Gateway stopped',
-    detail: 'Desktop is confirming that the managed Gateway service has stopped.',
-  });
-  const probe = await probeManagedGatewayServiceStatus(options).catch(() => null);
-  if (probe?.status === 'running') {
-    throw new Error('Desktop could not stop the Gateway service because it still reports running.');
-  }
 }
 
 export function gatewayReleasePackageName(platform: DesktopSSHRemotePlatform): string {

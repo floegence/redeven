@@ -1,8 +1,4 @@
 import * as childProcess from 'node:child_process';
-import fsSync from 'node:fs';
-import fs from 'node:fs/promises';
-import os from 'node:os';
-import path from 'node:path';
 import type { ChildProcessByStdio } from 'node:child_process';
 import type { Readable, Writable } from 'node:stream';
 
@@ -20,6 +16,10 @@ import {
   resolveDesktopHostCommand,
 } from './desktopHostCommand';
 import { sanitizeDesktopChildEnvironment } from './desktopProcessEnvironment';
+import type {
+  DesktopSSHTransportLease,
+  DesktopSSHTransportManager,
+} from './sshTransportManager';
 
 export type RuntimeHostCommandResult = Readonly<{
   stdout: string;
@@ -29,6 +29,7 @@ export type RuntimeHostCommandResult = Readonly<{
 export type RuntimeHostAccessExecutor = Readonly<{
   host_access: DesktopRuntimeHostAccess;
   run: (argv: readonly string[], options?: RuntimeHostCommandOptions) => Promise<RuntimeHostCommandResult>;
+  release: () => Promise<void>;
 }>;
 
 export type RuntimeHostCommandOptions = Readonly<{
@@ -71,13 +72,6 @@ function shellQuote(value: string): string {
     return "''";
   }
   return `'${value.replace(/'/gu, `'\\''`)}'`;
-}
-
-function sshTargetArgs(target: DesktopSSHHostAccessDetails): readonly string[] {
-  return [
-    ...(target.ssh_port == null ? [] : ['-p', String(target.ssh_port)]),
-    target.ssh_destination,
-  ];
 }
 
 function sshRemoteCommand(argv: readonly string[]): string {
@@ -151,29 +145,6 @@ function runtimeHostCommandFailure(
 
 // IMPORTANT: Host command stdout/stderr are diagnostics. Runtime host access
 // must not splice command output into Error.message for UI-facing paths.
-
-function buildSSHPasswordAskPassScript(): string {
-  return [
-    '#!/bin/sh',
-    'set -eu',
-    'printf "%s\\n" "${REDEVEN_DESKTOP_SSH_PASSWORD:-}"',
-  ].join('\n');
-}
-
-async function createSSHPasswordAskPassScript(): Promise<Readonly<{
-  scriptPath: string;
-  cleanup: () => Promise<void>;
-}>> {
-  const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'rdv-host-ssh-'));
-  const scriptPath = path.join(tempDir, 'redeven-ssh-password-askpass.sh');
-  await fs.writeFile(scriptPath, buildSSHPasswordAskPassScript(), { mode: 0o700 });
-  return {
-    scriptPath,
-    cleanup: async () => {
-      await fs.rm(tempDir, { recursive: true, force: true }).catch(() => undefined);
-    },
-  };
-}
 
 function mergedProcessEnvironment(options: RuntimeHostCommandOptions): NodeJS.ProcessEnv {
   return sanitizeDesktopChildEnvironment({
@@ -343,6 +314,7 @@ export function createLocalRuntimeHostExecutor(): RuntimeHostAccessExecutor {
         targetLabel: 'Local Host',
       });
     },
+    release: async () => undefined,
   };
 }
 
@@ -363,111 +335,133 @@ export function spawnLocalRuntimeHostCommand(
 }
 
 export function createSSHRuntimeHostExecutor(
+  transportManager: DesktopSSHTransportManager,
   ssh: DesktopSSHHostAccessDetails,
   options: Readonly<{
     sshBinary?: string;
     sshPassword?: string;
-  }> = {},
+    credentialScope: string;
+  }>,
 ): RuntimeHostAccessExecutor {
+  let leaseTask: Promise<DesktopSSHTransportLease> | null = null;
+  let released = false;
+  const acquireLease = async (signal?: AbortSignal): Promise<DesktopSSHTransportLease> => {
+    if (released) {
+      throw new Error('SSH runtime host executor has been released.');
+    }
+    if (!leaseTask) {
+      leaseTask = transportManager.acquire({
+        target: ssh,
+        credentialScope: options.credentialScope,
+        sshPassword: options.sshPassword,
+        sshBinary: options.sshBinary,
+        signal,
+      });
+    }
+    return leaseTask;
+  };
   return {
     host_access: { kind: 'ssh_host', ssh },
     run: async (argv, commandOptions = {}) => {
       if (argv.length === 0) {
         throw new Error('Runtime host command argv must be non-empty.');
       }
-      const sshBinary = compact(options.sshBinary) || 'ssh';
-      const sshPassword = compact(options.sshPassword);
       const targetLabel = desktopSSHAuthority(ssh);
-      const askPass = ssh.auth_mode === 'password' && sshPassword !== ''
-        ? await createSSHPasswordAskPassScript()
-        : null;
-      const args = [
-        '-T',
-        '-x',
-        '-o',
-        `ConnectTimeout=${ssh.connect_timeout_seconds}`,
-        ...(ssh.auth_mode === 'key_agent' ? ['-o', 'BatchMode=yes'] : ['-o', 'BatchMode=no', '-o', 'NumberOfPasswordPrompts=1']),
-        ...sshTargetArgs(ssh),
-        sshRemoteCommandWithEnv(argv, commandOptions.env),
-      ];
       try {
-        return await spawnCommand(sshBinary, args, {
-          ...commandOptions,
-          env: askPass
-            ? {
-                DISPLAY: process.env.DISPLAY || ':0',
-                SSH_ASKPASS: askPass.scriptPath,
-                SSH_ASKPASS_REQUIRE: 'force',
-                REDEVEN_DESKTOP_SSH_PASSWORD: sshPassword,
-              }
-            : undefined,
-        }, {
+        const lease = await acquireLease(commandOptions.signal);
+        const result = await lease.run(sshRemoteCommandWithEnv(argv, commandOptions.env), {
+          stdinData: commandOptions.stdinData,
+          signal: commandOptions.signal,
+        });
+        if (result.exit_code === 0 && !result.signal) {
+          return { stdout: result.stdout, stderr: result.stderr };
+        }
+        throw runtimeHostCommandFailure({
           title: 'SSH Host Command Failed',
           summary: `SSH command on "${targetLabel}" failed.`,
           detail: 'Desktop could not run the requested runtime management command on this SSH host.',
           recoveryHint: 'Check the SSH host, ~/.ssh/config alias, VPN, network connection, and authentication method.',
           targetLabel,
+        }, {
+          command: argv.join(' '),
+          reason: result.signal ? `signal ${result.signal}` : `exit code ${result.exit_code ?? 'unknown'}`,
+          stdout: result.stdout,
+          stderr: result.stderr,
         });
-      } finally {
-        await askPass?.cleanup();
+      } catch (error) {
+        if (error instanceof DesktopOperationFailureError) {
+          throw error;
+        }
+        throw runtimeHostCommandFailure({
+          title: 'SSH Host Command Failed',
+          summary: `SSH command on "${targetLabel}" failed.`,
+          detail: 'Desktop could not run the requested runtime management command on this SSH host.',
+          recoveryHint: 'Check the SSH host, ~/.ssh/config alias, VPN, network connection, and authentication method.',
+          targetLabel,
+        }, {
+          command: argv.join(' '),
+          reason: error instanceof Error ? error.message : String(error),
+          cause: error,
+        });
       }
+    },
+    release: async () => {
+      if (released) {
+        return;
+      }
+      released = true;
+      await leaseTask?.then((lease) => lease.release()).catch(() => undefined);
     },
   };
 }
 
-export function spawnSSHRuntimeHostCommand(
+export async function spawnSSHRuntimeHostCommand(
+  transportManager: DesktopSSHTransportManager,
   ssh: DesktopSSHHostAccessDetails,
   argv: readonly string[],
   options: RuntimeHostCommandOptions & Readonly<{
     sshBinary?: string;
     sshPassword?: string;
-  }> = {},
-): RuntimeHostStreamingCommand {
+    credentialScope: string;
+  }>,
+): Promise<RuntimeHostStreamingCommand> {
   if (argv.length === 0) {
     throw new Error('Runtime host command argv must be non-empty.');
   }
-  const sshBinary = compact(options.sshBinary) || 'ssh';
-  const sshPassword = compact(options.sshPassword);
   const targetLabel = desktopSSHAuthority(ssh);
-  const askPass = ssh.auth_mode === 'password' && sshPassword !== ''
-    ? (() => {
-        const tempDir = fsSync.mkdtempSync(path.join(os.tmpdir(), 'rdv-host-ssh-stream-'));
-        const scriptPath = path.join(tempDir, 'redeven-ssh-password-askpass.sh');
-        fsSync.writeFileSync(scriptPath, buildSSHPasswordAskPassScript(), { mode: 0o700 });
-        return {
-          scriptPath,
-          cleanup: () => fsSync.rmSync(tempDir, { recursive: true, force: true }),
-        };
-      })()
-    : null;
-  const args = [
-    '-T',
-    '-x',
-    '-o',
-    `ConnectTimeout=${ssh.connect_timeout_seconds}`,
-    ...(ssh.auth_mode === 'key_agent' ? ['-o', 'BatchMode=yes'] : ['-o', 'BatchMode=no', '-o', 'NumberOfPasswordPrompts=1']),
-    ...sshTargetArgs(ssh),
-    sshRemoteCommandWithEnv(argv, options.env),
-  ];
-  const command = spawnStreamingCommand(sshBinary, args, {
-    ...options,
-    env: askPass
-      ? {
-          DISPLAY: process.env.DISPLAY || ':0',
-          SSH_ASKPASS: askPass.scriptPath,
-          SSH_ASKPASS_REQUIRE: 'force',
-          REDEVEN_DESKTOP_SSH_PASSWORD: sshPassword,
-      }
-      : undefined,
-  }, {
-    title: 'SSH Host Command Failed',
-    summary: `SSH command on "${targetLabel}" failed.`,
-    detail: 'Desktop could not keep the requested runtime management stream open on this SSH host.',
-    recoveryHint: 'Check the SSH host, ~/.ssh/config alias, VPN, network connection, and authentication method.',
-    targetLabel,
+  const lease = await transportManager.acquire({
+    target: ssh,
+    credentialScope: options.credentialScope,
+    sshPassword: options.sshPassword,
+    sshBinary: options.sshBinary,
+    persistent: true,
+    signal: options.signal,
   });
-  if (askPass) {
-    void command.closed.finally(() => askPass.cleanup()).catch(() => undefined);
+  let command: ReturnType<DesktopSSHTransportLease['stream']>;
+  try {
+    command = lease.stream(sshRemoteCommandWithEnv(argv, options.env), {
+      signal: options.signal,
+    });
+  } catch (error) {
+    await lease.release();
+    throw runtimeHostCommandFailure({
+      title: 'SSH Host Command Failed',
+      summary: `SSH command on "${targetLabel}" failed.`,
+      detail: 'Desktop could not keep the requested runtime management stream open on this SSH host.',
+      recoveryHint: 'Check the SSH host, ~/.ssh/config alias, VPN, network connection, and authentication method.',
+      targetLabel,
+    }, {
+      command: argv.join(' '),
+      reason: error instanceof Error ? error.message : String(error),
+      cause: error,
+    });
   }
-  return command;
+  const closed = command.closed.finally(() => lease.release());
+  return {
+    stdin: command.stdin,
+    stdout: command.stdout,
+    stderr: command.stderr,
+    closed,
+    kill: command.kill,
+  };
 }

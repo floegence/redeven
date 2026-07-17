@@ -52,6 +52,12 @@ export type RuntimePlacementBridgeHello = Readonly<{
     desktop_owner_id?: string;
   }>;
   runtime_service?: RuntimeServiceSnapshot;
+  gateway_service?: Readonly<{
+    state_root: string;
+    executable_path: string;
+    service_pid: number;
+    managed_bridge_token: string;
+  }>;
 }>;
 
 export type RuntimePlacementBridgeStreamError = Readonly<{
@@ -304,6 +310,9 @@ export function parseRuntimePlacementBridgeHello(payload: Buffer): RuntimePlacem
   const runtimeControl = parsed.runtime_control && typeof parsed.runtime_control === 'object'
     ? parsed.runtime_control as Record<string, unknown>
     : {};
+  const gatewayService = parsed.gateway_service && typeof parsed.gateway_service === 'object'
+    ? parsed.gateway_service as Record<string, unknown>
+    : null;
   return {
     protocol_version: RUNTIME_PLACEMENT_BRIDGE_PROTOCOL_VERSION,
     runtime_version: compact(parsed.runtime_version),
@@ -322,6 +331,16 @@ export function parseRuntimePlacementBridgeHello(payload: Buffer): RuntimePlacem
     },
     ...(parsed.runtime_service
       ? { runtime_service: normalizeRuntimeServiceSnapshot(parsed.runtime_service) }
+      : {}),
+    ...(gatewayService
+      ? {
+          gateway_service: {
+            state_root: compact(gatewayService.state_root),
+            executable_path: compact(gatewayService.executable_path),
+            service_pid: normalizePositiveInteger(gatewayService.service_pid) ?? 0,
+            managed_bridge_token: compact(gatewayService.managed_bridge_token),
+          },
+        }
       : {}),
   };
 }

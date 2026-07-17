@@ -45,6 +45,7 @@ import {
   runtimeLifecycleTargetKey,
   type RuntimeLifecycleIntent,
 } from './runtimeLifecycleCoordinator';
+import type { DesktopSSHTransportManager } from './sshTransportManager';
 
 export type GatewayLifecycleSession = Readonly<{
   target_id: string;
@@ -109,6 +110,7 @@ export type GatewayServiceTargetDescriptor = Readonly<{
 }>;
 
 export type GatewayLifecycleManagerOptions = Readonly<{
+  ssh_transport_manager: DesktopSSHTransportManager;
   secret_store: GatewaySecretStore;
   runtime_release_tag: string;
   release_base_url: string;
@@ -274,6 +276,8 @@ export class GatewayLifecycleManager {
     const sshPassword = await this.gatewaySSHPassword(record);
     try {
       const probe = await probeManagedGatewayServiceStatus({
+        sshTransportManager: this.options.ssh_transport_manager,
+        sshCredentialScope: record.gateway_id,
         target: gatewaySSHDetails(record),
         placement: gatewayPlacement(record),
         stateRoot: gatewayServiceStateRoot(record),
@@ -328,6 +332,8 @@ export class GatewayLifecycleManager {
     }
     const sshPassword = await this.gatewaySSHPassword(record);
     return probeManagedGatewayServiceDeep({
+      sshTransportManager: this.options.ssh_transport_manager,
+      sshCredentialScope: record.gateway_id,
       target: gatewaySSHDetails(record),
       placement: gatewayPlacement(record),
       stateRoot: gatewayServiceStateRoot(record),
@@ -426,6 +432,8 @@ export class GatewayLifecycleManager {
     await this.clear(record);
     const sshPassword = await this.gatewaySSHPassword(record);
     await stopManagedGatewayService({
+      sshTransportManager: this.options.ssh_transport_manager,
+      sshCredentialScope: record.gateway_id,
       target: gatewaySSHDetails(record),
       placement: gatewayPlacement(record),
       stateRoot: gatewayServiceStateRoot(record),
@@ -446,6 +454,8 @@ export class GatewayLifecycleManager {
     const sshPassword = await this.gatewaySSHPassword(record);
     await this.clear(record);
     await stopManagedGatewayService({
+      sshTransportManager: this.options.ssh_transport_manager,
+      sshCredentialScope: record.gateway_id,
       target: gatewaySSHDetails(record),
       placement,
       stateRoot: gatewayServiceStateRoot(record),
@@ -544,6 +554,8 @@ export class GatewayLifecycleManager {
         require_local_ui: false,
         desktop_owner_id: await this.options.desktop_owner_id(),
         ssh_password: sshPassword,
+        ssh_credential_scope: record.gateway_id,
+        ssh_transport_manager: this.options.ssh_transport_manager,
         fallback_local_id: record.gateway_id,
         signal: options.signal,
       });
@@ -560,6 +572,11 @@ export class GatewayLifecycleManager {
       client: new GatewayBridgeClient(this.options.secret_store, bridgeSession),
     };
     this.sessions.set(targetID, session);
+    void bridgeSession.closed.then(() => {
+      if (this.sessions.get(targetID) === session) {
+        this.sessions.delete(targetID);
+      }
+    });
     this.emit(options.onProgress, 'gateway_ready', 'Gateway ready', 'Desktop can now use Gateway protocol for catalog and open-session.');
     return session;
   }
@@ -573,6 +590,8 @@ export class GatewayLifecycleManager {
   ): Promise<string> {
     try {
       return await ensureManagedGatewayServiceReady({
+        sshTransportManager: this.options.ssh_transport_manager,
+        sshCredentialScope: record.gateway_id,
         target: gatewaySSHDetails(record),
         placement,
         stateRoot: gatewayServiceStateRoot(record),

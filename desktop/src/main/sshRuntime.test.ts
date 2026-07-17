@@ -17,9 +17,14 @@ import {
   parseManagedSSHRuntimeProbeResult,
   probeManagedSSHRuntimeStatus,
 } from './sshRuntime';
+import { DefaultDesktopSSHTransportManager } from './sshTransportManager';
 
 function readSSHRuntimeSource(): string {
   return fs.readFileSync(path.join(__dirname, 'sshRuntime.ts'), 'utf8');
+}
+
+function readSSHTransportManagerSource(): string {
+  return fs.readFileSync(path.join(__dirname, 'sshTransportManager.ts'), 'utf8');
 }
 
 describe('sshRuntime', () => {
@@ -33,9 +38,15 @@ describe('sshRuntime', () => {
       '',
     ].join('\n'), 'utf8');
     fs.chmodSync(fakeSSH, 0o755);
+    const transportManager = new DefaultDesktopSSHTransportManager({
+      readyPollMs: 1,
+      dependencies: { tempRoot: tempDir },
+    });
 
     try {
       const probe = await probeManagedSSHRuntimeStatus({
+        sshTransportManager: transportManager,
+        sshCredentialScope: tempDir,
         target: {
           ssh_destination: 'dify',
           ssh_port: null,
@@ -60,12 +71,13 @@ describe('sshRuntime', () => {
       expect(probe.failure.summary).not.toContain('control_stderr');
       expect(probe.failure.diagnostics).toEqual(expect.arrayContaining([
         expect.objectContaining({
-          channel: 'control_stderr',
-          label: 'SSH command stderr',
+          channel: 'master_stderr',
+          label: 'SSH control connection stderr',
           text: expect.stringContaining('Could not resolve hostname dify'),
         }),
       ]));
     } finally {
+      await transportManager.dispose();
       fs.rmSync(tempDir, { recursive: true, force: true });
     }
   });
@@ -223,18 +235,20 @@ describe('sshRuntime', () => {
 
   it('checks the SSH master socket, probes remote platform, and keeps bootstrap strategy explicit', () => {
     const source = readSSHRuntimeSource();
+    const transportSource = readSSHTransportManagerSource();
 
-    expect(source).toContain("'-O', 'check',");
-    expect(source).toContain("authMode === 'key_agent'");
-    expect(source).toContain("'BatchMode=yes'");
-    expect(source).toContain("'BatchMode=no'");
-    expect(source).toContain("'-T'");
-    expect(source).toContain("'-x'");
-    expect(source).toContain("'ForwardX11=no'");
-    expect(source).toContain("'RequestTTY=no'");
-    expect(source).toContain('SSH_ASKPASS_REQUIRE');
-    expect(source).toContain("'force'");
-    expect(source).toContain('createSSHAskPassScript(tempDir, target.auth_mode)');
+    expect(transportSource).toContain("'-O', 'check',");
+    expect(transportSource).toContain("target.auth_mode === 'key_agent'");
+    expect(transportSource).toContain("'BatchMode=yes'");
+    expect(transportSource).toContain("'BatchMode=no'");
+    expect(transportSource).toContain("'-T'");
+    expect(transportSource).toContain("'-x'");
+    expect(transportSource).toContain("'ForwardX11=no'");
+    expect(transportSource).toContain("'RequestTTY=no'");
+    expect(transportSource).toContain('SSH_ASKPASS_REQUIRE');
+    expect(transportSource).toContain("'force'");
+    expect(source).toContain('sshTransportManager: DesktopSSHTransportManager;');
+    expect(source).toContain('transportLease?: DesktopSSHTransportLease;');
     expect(source).toContain('async function probeRemoteRuntimeCompatibility(');
     expect(source).toContain('async function probeRemotePlatform(');
     expect(source).toContain('function resolveDesktopSSHReleaseFetchPolicy(');
@@ -265,7 +279,7 @@ describe('sshRuntime', () => {
     expect(source).toContain('async function runSSHControlCommand(');
     expect(source).toContain('const result = await runSSHControlCommand(');
     expect(source).toContain("code: 'ssh_connection_interrupted'");
-    expect(source).toContain('const isolatedLogs = createMutableRecentLogs();');
+    expect(source).toContain('recordSSHControlCheckFailure(session, error);');
     expect(source).toContain('parseLaunchReport(result.stdout)');
     expect(source).toContain('formatBlockedLaunchDiagnostics(launchReport)');
     expect(source).toContain('const replacementInventory = await inspectManagedSSHRuntimeProcesses(');
@@ -289,9 +303,9 @@ describe('sshRuntime', () => {
     expect(source).toContain('export class DesktopSSHRuntimeCanceledError extends Error');
     expect(source).toContain('signal?: AbortSignal;');
     expect(source).toContain('function throwIfSSHRuntimeCanceled(signal: AbortSignal | undefined): void');
-    expect(source).toContain('throwIfSSHRuntimeCanceled(signal);');
-    expect(source).toContain('signal,');
-    expect(source).toContain('reject(new DesktopSSHRuntimeCanceledError());');
+    expect(source).toContain('throwIfSSHRuntimeCanceled(args.signal);');
+    expect(source).toContain('signal: args.signal,');
+    expect(source).toContain('throw new DesktopSSHRuntimeCanceledError();');
     expect(source).toContain('async function createRemoteTempDir(args: Readonly<{');
     expect(source).toContain('async function prepareRemoteRuntimeViaDesktopUpload(args: Readonly<{');
     expect(source).toContain('const remoteTempDir = await createRemoteTempDir(args);');
