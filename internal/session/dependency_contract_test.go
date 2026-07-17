@@ -262,7 +262,7 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 
 	const (
 		floretModule  = "github.com/floegence/floret"
-		floretVersion = "v0.9.0"
+		floretVersion = "v0.10.0"
 	)
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
@@ -363,10 +363,10 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"ForkOperationID",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
-			"v0.9.0",
+			"v0.10.0",
 			"single persistent source of truth",
 			"host-owned thread titles",
-			"typed event fields",
+			"public Validate methods",
 			"turn_projection_unavailable",
 			"Thread deletion persists an immutable cleanup snapshot",
 			"redeven-runtime-v1",
@@ -504,7 +504,7 @@ func TestFloretGatewayBoundaryUsesGatewayIdentity(t *testing.T) {
 	}
 }
 
-func TestFloretLifecycleReasonsUseTypedFields(t *testing.T) {
+func TestFloretLifecycleEventsDoNotMirrorEngineState(t *testing.T) {
 	t.Parallel()
 
 	root := repoRootForTest(t)
@@ -513,14 +513,18 @@ func TestFloretLifecycleReasonsUseTypedFields(t *testing.T) {
 		"floretEvent" + "MetadataString",
 		"floretEventMetadataString(ev.Metadata, \"completion_reason\")",
 		"floretEventMetadataString(ev.Metadata, \"continuation_reason\")",
+		"floret.step.end",
+		"floret.run.end",
+		"floret.context.compact",
+		"floret.context.continue",
 	} {
 		if strings.Contains(content, marker) {
-			t.Fatalf("floret_events.go must consume typed lifecycle reasons instead of marker %q", marker)
+			t.Fatalf("floret_events.go must not mirror Floret engine lifecycle marker %q", marker)
 		}
 	}
-	for _, marker := range []string{"ev.CompletionReason", "ev.ContinuationReason", "ev.RawFinishReason", "ev.FinishInferred"} {
+	for _, marker := range []string{"ev.FinishReason", "ev.RawFinishReason", "ev.FinishInferred"} {
 		if !strings.Contains(content, marker) {
-			t.Fatalf("floret_events.go missing typed lifecycle field %q", marker)
+			t.Fatalf("floret_events.go missing typed provider diagnostic field %q", marker)
 		}
 	}
 }

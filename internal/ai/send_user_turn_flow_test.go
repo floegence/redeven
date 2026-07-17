@@ -803,13 +803,13 @@ func TestSendUserTurn_IdleCompactionQueuesUntilCompactionFinishes(t *testing.T) 
 		TargetKind: "message",
 		MessageID:  "m_existing_anchor",
 		Edge:       "after",
-	}, threadstore.ThreadContextBoundary{}, func() {
+	}, func() {
 		t.Fatalf("idle compaction must not be canceled by a user turn")
 	})
 	if gateErr != nil || !begin.Started {
 		t.Fatalf("beginIdleThreadCompaction result=%+v err=%v", begin, gateErr)
 	}
-	defer svc.finishIdleThreadCompaction(meta.EndpointID, th.ThreadID, begin.OperationID)
+	defer svc.finishIdleThreadCompaction(meta.EndpointID, th.ThreadID, begin.RequestID)
 
 	resp, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
 		ThreadID: th.ThreadID,
@@ -826,8 +826,8 @@ func TestSendUserTurn_IdleCompactionQueuesUntilCompactionFinishes(t *testing.T) 
 	if resp.Kind != "queued" || strings.TrimSpace(resp.RunID) != "" || strings.TrimSpace(resp.QueueID) == "" || resp.QueuePosition != 1 {
 		t.Fatalf("SendUserTurn response=%+v, want queued follow-up", resp)
 	}
-	if got := svc.idleThreadCompactionOperation(meta.EndpointID, th.ThreadID); got != begin.OperationID {
-		t.Fatalf("idleThreadCompactionOperation=%q, want current operation %q", got, begin.OperationID)
+	if got := svc.idleThreadCompactionRequestID(meta.EndpointID, th.ThreadID); got != begin.RequestID {
+		t.Fatalf("idleThreadCompactionRequestID=%q, want current request %q", got, begin.RequestID)
 	}
 
 	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 200, 0)
@@ -880,7 +880,7 @@ func TestQueuedDrain_WaitsForIdleCompactionThenStartsQueuedTurn(t *testing.T) {
 		TargetKind: "message",
 		MessageID:  "m_existing_anchor",
 		Edge:       "after",
-	}, threadstore.ThreadContextBoundary{}, func() {
+	}, func() {
 		t.Fatalf("queued drain must not cancel idle compaction")
 	})
 	if gateErr != nil || !begin.Started {
@@ -910,9 +910,9 @@ func TestQueuedDrain_WaitsForIdleCompactionThenStartsQueuedTurn(t *testing.T) {
 		t.Fatalf("queued=%+v, want queued turn retained while compaction is running", queued)
 	}
 
-	svc.finishIdleThreadCompaction(meta.EndpointID, th.ThreadID, begin.OperationID)
-	if got := svc.idleThreadCompactionOperation(meta.EndpointID, th.ThreadID); got != "" {
-		t.Fatalf("idleThreadCompactionOperation=%q, want cleared", got)
+	svc.finishIdleThreadCompaction(meta.EndpointID, th.ThreadID, begin.RequestID)
+	if got := svc.idleThreadCompactionRequestID(meta.EndpointID, th.ThreadID); got != "" {
+		t.Fatalf("idleThreadCompactionRequestID=%q, want cleared", got)
 	}
 	if err := actor.handleMaybeStartQueuedTurn(ctx); err != nil {
 		t.Fatalf("handleMaybeStartQueuedTurn after compaction: %v", err)
@@ -1170,11 +1170,11 @@ func TestStartRunDetachedRejectedWhileIdleCompactionRunning(t *testing.T) {
 		TargetKind: "message",
 		MessageID:  "m_idle_gate_anchor",
 		Edge:       "after",
-	}, threadstore.ThreadContextBoundary{}, func() {})
-	if gateErr != nil || !begin.Started || begin.OperationID == "" {
+	}, func() {})
+	if gateErr != nil || !begin.Started || begin.RequestID == "" {
 		t.Fatalf("beginIdleThreadCompaction result=%+v err=%v", begin, gateErr)
 	}
-	defer svc.finishIdleThreadCompaction(meta.EndpointID, th.ThreadID, begin.OperationID)
+	defer svc.finishIdleThreadCompaction(meta.EndpointID, th.ThreadID, begin.RequestID)
 
 	err = svc.StartRunDetached(meta, "run_must_not_start_during_idle_compaction", RunStartRequest{
 		ThreadID: th.ThreadID,
@@ -1195,8 +1195,8 @@ func TestStartRunDetachedRejectedWhileIdleCompactionRunning(t *testing.T) {
 	if len(msgs) != 0 {
 		t.Fatalf("messages=%+v, want no transcript message from rejected detached run", msgs)
 	}
-	if got := svc.idleThreadCompactionOperation(meta.EndpointID, th.ThreadID); got != begin.OperationID {
-		t.Fatalf("idleThreadCompactionOperation=%q, want %q", got, begin.OperationID)
+	if got := svc.idleThreadCompactionRequestID(meta.EndpointID, th.ThreadID); got != begin.RequestID {
+		t.Fatalf("idleThreadCompactionRequestID=%q, want %q", got, begin.RequestID)
 	}
 }
 
@@ -1268,7 +1268,7 @@ func TestBeginIdleCompactionRejectedWhileActiveRunRegistered(t *testing.T) {
 		TargetKind: "message",
 		MessageID:  "m_active_gate_anchor",
 		Edge:       "after",
-	}, threadstore.ThreadContextBoundary{}, func() {
+	}, func() {
 		cancelled = true
 	})
 	if !errors.Is(gateErr, ErrThreadBusy) {
@@ -1280,7 +1280,7 @@ func TestBeginIdleCompactionRejectedWhileActiveRunRegistered(t *testing.T) {
 	if !cancelled {
 		t.Fatalf("beginIdleThreadCompaction did not cancel rejected idle compaction context")
 	}
-	if existing := svc.idleThreadCompactionOperation(meta.EndpointID, th.ThreadID); existing != "" {
+	if existing := svc.idleThreadCompactionRequestID(meta.EndpointID, th.ThreadID); existing != "" {
 		t.Fatalf("idle compaction operation=%q, want none", existing)
 	}
 }

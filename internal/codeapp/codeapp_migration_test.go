@@ -85,7 +85,7 @@ func TestAppServerThreadReadStatePathMigratesLegacyStore(t *testing.T) {
 	}
 }
 
-func TestNewMigratesLegacyFollowupQueueSchema(t *testing.T) {
+func TestNewRejectsLegacyThreadstoreSchemaWithoutMigration(t *testing.T) {
 	t.Parallel()
 
 	stateDir := t.TempDir()
@@ -108,10 +108,12 @@ func TestNewMigratesLegacyFollowupQueueSchema(t *testing.T) {
 			return "", false
 		},
 	})
-	if err != nil {
-		t.Fatalf("New: %v", err)
+	if err == nil {
+		if svc != nil {
+			_ = svc.Close()
+		}
+		t.Fatal("New accepted a legacy threadstore schema")
 	}
-	defer func() { _ = svc.Close() }()
 
 	raw, err := sql.Open("sqlite", dbPath)
 	if err != nil {
@@ -123,36 +125,19 @@ func TestNewMigratesLegacyFollowupQueueSchema(t *testing.T) {
 	if err := raw.QueryRow(`PRAGMA user_version;`).Scan(&version); err != nil {
 		t.Fatalf("read user_version: %v", err)
 	}
-	if want := threadstore.CurrentSchemaVersion(); version != want {
-		t.Fatalf("user_version=%d, want %d", version, want)
+	if version != 15 {
+		t.Fatalf("user_version=%d, want preserved legacy version 15", version)
 	}
-
-	var laneColCount int
-	if err := raw.QueryRow(`
-SELECT COUNT(1)
-FROM pragma_table_info('ai_queued_turns')
-WHERE name = 'lane'
-`).Scan(&laneColCount); err != nil {
-		t.Fatalf("check lane column: %v", err)
+	var legacyMessageTables int
+	if err := raw.QueryRow(`SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = 'ai_messages'`).Scan(&legacyMessageTables); err != nil {
+		t.Fatalf("check legacy ai_messages table: %v", err)
 	}
-	if laneColCount != 1 {
-		t.Fatalf("lane column count=%d, want 1", laneColCount)
-	}
-
-	var titleSourceColumns int
-	if err := raw.QueryRow(`
-SELECT COUNT(1)
-FROM pragma_table_info('ai_threads')
-WHERE name = 'title_source'
-`).Scan(&titleSourceColumns); err != nil {
-		t.Fatalf("check title_source column: %v", err)
-	}
-	if titleSourceColumns != 1 {
-		t.Fatalf("title_source column count=%d, want 1", titleSourceColumns)
+	if legacyMessageTables != 1 {
+		t.Fatalf("legacy ai_messages table count=%d, want preserved table", legacyMessageTables)
 	}
 }
 
-func TestNewRebuildsInvalidThreadstoreSchema(t *testing.T) {
+func TestNewRejectsInvalidThreadstoreSchemaWithoutRebuild(t *testing.T) {
 	t.Parallel()
 
 	stateDir := t.TempDir()
@@ -186,10 +171,12 @@ func TestNewRebuildsInvalidThreadstoreSchema(t *testing.T) {
 			return "", false
 		},
 	})
-	if err != nil {
-		t.Fatalf("New: %v", err)
+	if err == nil {
+		if svc != nil {
+			_ = svc.Close()
+		}
+		t.Fatal("New accepted an invalid threadstore schema")
 	}
-	defer func() { _ = svc.Close() }()
 
 	raw, err := sql.Open("sqlite", dbPath)
 	if err != nil {
@@ -197,15 +184,15 @@ func TestNewRebuildsInvalidThreadstoreSchema(t *testing.T) {
 	}
 	defer func() { _ = raw.Close() }()
 
-	if got := countTableColumns(t, raw, "structured_user_inputs", "selected_choice_id"); got != 1 {
-		t.Fatalf("selected_choice_id column count=%d, want 1", got)
+	if got := countTableColumns(t, raw, "structured_user_inputs", "selected_choice_id"); got != 0 {
+		t.Fatalf("selected_choice_id column count=%d, want malformed schema preserved", got)
 	}
 	var threadCount int
 	if err := raw.QueryRow(`SELECT COUNT(1) FROM ai_threads`).Scan(&threadCount); err != nil {
 		t.Fatalf("count ai_threads: %v", err)
 	}
-	if threadCount != 0 {
-		t.Fatalf("ai_threads row count=%d, want reset database", threadCount)
+	if threadCount != 1 {
+		t.Fatalf("ai_threads row count=%d, want existing data preserved", threadCount)
 	}
 }
 

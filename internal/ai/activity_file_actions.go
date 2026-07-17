@@ -97,7 +97,7 @@ func (s *Service) rawFlowerActionMessageValues(ctx context.Context, endpointID s
 			values = append(values, msg.MessageJSON)
 		}
 	}
-	if r != nil && !r.assistantAlreadyPersisted() {
+	if r != nil {
 		msgJSON, _, _, err := r.snapshotAssistantMessageJSONWithStatus("streaming")
 		if err == nil && strings.TrimSpace(msgJSON) != "" {
 			values = append(values, msgJSON)

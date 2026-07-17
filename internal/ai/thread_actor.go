@@ -459,7 +459,7 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 	if a.mgr.svc.stopFinalizingRunID(endpointID, threadID) != "" {
 		return nil
 	}
-	if a.mgr.svc.idleThreadCompactionOperation(endpointID, threadID) != "" {
+	if a.mgr.svc.idleThreadCompactionRequestID(endpointID, threadID) != "" {
 		return nil
 	}
 
@@ -669,7 +669,7 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 			AppliedPermissionType: appliedPermissionType,
 		}, nil
 	}
-	if a.mgr.svc.idleThreadCompactionOperation(endpointID, threadID) != "" {
+	if a.mgr.svc.idleThreadCompactionRequestID(endpointID, threadID) != "" {
 		queued, position, err := a.mgr.svc.enqueueQueuedTurn(ctx, meta, req)
 		if err != nil {
 			return SendUserTurnResponse{}, err

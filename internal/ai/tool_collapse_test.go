@@ -44,8 +44,6 @@ func TestSnapshotAssistantMessageJSONWithStatus_RemainsFinalizationOnly(t *testi
 			&persistedMarkdownBlock{Type: "markdown", Content: "persisted already"},
 		},
 	}
-	r.markAssistantPersisted()
-
 	msgJSON, _, _, err := r.snapshotAssistantMessageJSONWithStatus("streaming")
 	if err != nil {
 		t.Fatalf("snapshotAssistantMessageJSONWithStatus: %v", err)

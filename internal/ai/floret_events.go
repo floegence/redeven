@@ -16,11 +16,6 @@ const (
 	floretEventProviderRequest       = observation.EventTypeProviderRequest
 	floretEventProviderFinish        = observation.EventTypeProviderFinish
 	floretEventProviderRetry         = observation.EventTypeProviderRetry
-	floretEventContextCompact        = observation.EventTypeContextCompact
-	floretEventContextCompactDebug   = observation.EventTypeContextCompactDebug
-	floretEventContextContinue       = observation.EventTypeContextContinue
-	floretEventBudgetExceeded        = observation.EventTypeBudgetExceeded
-	floretEventStepEnd               = observation.EventTypeStepEnd
 	floretEventRunEnd                = observation.EventTypeRunEnd
 	floretEventToolApprovalRequested = observation.EventTypeToolApprovalRequested
 	floretEventToolApprovalApproved  = observation.EventTypeToolApprovalApproved
@@ -49,7 +44,6 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	r.applyFloretSourceObservation(ev.Sources)
 	r.applyFloretContextStatus(ev.ContextStatus)
 	r.applyFloretCompaction(ev.Compaction)
-	r.persistFloretCompactionDebug(ev.CompactionDebug)
 	if ev.Projection != nil {
 		r.applyFloretThreadProjection(*ev.Projection)
 	}
@@ -78,51 +72,11 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 			"step_index": ev.Step,
 			"message":    strings.TrimSpace(ev.Message),
 		})
-	case floretEventContextCompact:
-		if ev.Compaction == nil {
-			r.persistRunEvent("floret.context.compact", RealtimeStreamKindLifecycle, map[string]any{
-				"step_index": ev.Step,
-				"message":    strings.TrimSpace(ev.Message),
-				"metadata":   ev.Metadata,
-			})
-		}
-	case floretEventContextContinue:
-		r.persistRunEvent("floret.context.continue", RealtimeStreamKindLifecycle, map[string]any{
-			"step_index":          ev.Step,
-			"message":             strings.TrimSpace(ev.Message),
-			"detail":              strings.TrimSpace(ev.Result),
-			"continuation_reason": strings.TrimSpace(string(ev.ContinuationReason)),
-			"metadata":            ev.Metadata,
-		})
-	case floretEventBudgetExceeded:
-		r.persistRunEvent("floret.budget.exceeded", RealtimeStreamKindLifecycle, map[string]any{
-			"step_index": ev.Step,
-			"metadata":   ev.Metadata,
-		})
 	case floretEventStepStart:
 		r.updateModelIOStatus(FlowerModelIOPhasePreparing, ev.Step)
 		r.touchActivity()
-	case floretEventStepEnd:
-		r.persistRunEvent("floret.step.end", RealtimeStreamKindLifecycle, map[string]any{
-			"step_index":          ev.Step,
-			"finish_reason":       strings.TrimSpace(string(ev.FinishReason)),
-			"raw_finish_reason":   strings.TrimSpace(ev.RawFinishReason),
-			"finish_inferred":     ev.FinishInferred,
-			"completion_reason":   strings.TrimSpace(string(ev.CompletionReason)),
-			"continuation_reason": strings.TrimSpace(string(ev.ContinuationReason)),
-			"metadata":            ev.Metadata,
-		})
 	case floretEventRunEnd:
 		r.clearModelIOStatus()
-		r.persistRunEvent("floret.run.end", RealtimeStreamKindLifecycle, map[string]any{
-			"finish_reason":       strings.TrimSpace(string(ev.FinishReason)),
-			"raw_finish_reason":   strings.TrimSpace(ev.RawFinishReason),
-			"finish_inferred":     ev.FinishInferred,
-			"completion_reason":   strings.TrimSpace(string(ev.CompletionReason)),
-			"continuation_reason": strings.TrimSpace(string(ev.ContinuationReason)),
-			"error":               strings.TrimSpace(ev.Error),
-			"metadata":            ev.Metadata,
-		})
 	case floretEventToolApprovalRequested, floretEventToolApprovalApproved, floretEventToolApprovalRejected, floretEventToolApprovalTimedOut, floretEventToolApprovalCanceled:
 		if ev.Type != floretEventToolApprovalRequested {
 			r.syncPendingFloretApprovals(context.Background(), string(ev.Type))
@@ -139,51 +93,32 @@ func (r *run) validateFloretRuntimeEvent(ev flruntime.Event) error {
 	if err := ev.Validate(); err != nil {
 		return err
 	}
+	identity := r.floretEventIdentity
+	if identity.configured {
+		if strings.TrimSpace(string(ev.ThreadID)) != identity.threadID || strings.TrimSpace(string(ev.TurnID)) != identity.turnID {
+			return errors.New("Floret event thread or turn identity mismatch")
+		}
+		if identity.checkRunID && strings.TrimSpace(string(ev.RunID)) != identity.runID {
+			return errors.New("Floret event run identity mismatch")
+		}
+	}
 	if ev.Projection != nil && !r.floretThreadProjectionMatchesRun(*ev.Projection) {
 		return errors.New("Floret event projection identity mismatch")
 	}
 	return nil
 }
 
-func (r *run) persistFloretCompactionDebug(debug *observation.CompactionDebugEvent) {
-	if r == nil || debug == nil {
+func (r *run) expectFloretRuntimeEventIdentity(runID string, threadID string, turnID string, checkRunID bool) {
+	if r == nil {
 		return
 	}
-	payload := map[string]any{
-		"step_index":                     debug.Step,
-		"operation_id":                   strings.TrimSpace(debug.OperationID),
-		"request_id":                     strings.TrimSpace(debug.RequestID),
-		"stage":                          strings.TrimSpace(string(debug.Stage)),
-		"status":                         strings.TrimSpace(string(debug.Status)),
-		"trigger":                        strings.TrimSpace(debug.Trigger),
-		"reason":                         strings.TrimSpace(debug.Reason),
-		"source":                         strings.TrimSpace(debug.Source),
-		"compaction_convergence_attempt": debug.CompactionConvergenceAttempt,
-		"history_message_count":          debug.HistoryMessageCount,
-		"active_message_count":           debug.ActiveMessageCount,
-		"tokens_before":                  debug.TokensBefore,
-		"tokens_after_estimate":          debug.TokensAfterEstimate,
-		"context_before":                 debug.ContextBefore,
-		"context_after":                  debug.ContextAfter,
-		"before_pressure":                debug.BeforePressure,
-		"request_estimate":               debug.RequestEstimate,
-		"validated_context_pressure":     debug.ValidatedContextPressure,
-		"hard_limit_exceeded":            debug.HardLimitExceeded,
-		"fixed_input_tokens":             debug.FixedInputTokens,
-		"reducible_input_tokens":         debug.ReducibleInputTokens,
-		"request_safe_limit":             debug.RequestSafeLimit,
-		"compact_target_tokens":          debug.CompactedContextTargetTokens,
-		"next_compact_target_tokens":     debug.NextCompactedContextTargetTokens,
-		"consecutive_failures":           debug.ConsecutiveFailures,
-		"duration_ms":                    debug.DurationMS,
-		"provider_state_kind":            strings.TrimSpace(debug.ProviderStateKind),
-		"next_action":                    strings.TrimSpace(debug.NextAction),
-		"error":                          strings.TrimSpace(debug.Error),
+	r.floretEventIdentity = floretRuntimeEventIdentity{
+		configured: true,
+		checkRunID: checkRunID,
+		runID:      strings.TrimSpace(runID),
+		threadID:   strings.TrimSpace(threadID),
+		turnID:     strings.TrimSpace(turnID),
 	}
-	if !debug.ObservedAt.IsZero() {
-		payload["observed_at_unix_ms"] = debug.ObservedAt.UnixMilli()
-	}
-	r.persistRunEvent("floret.context.compact.debug", RealtimeStreamKindContext, payload)
 }
 
 func (r *run) applyFloretContextStatus(status *observation.ContextStatus) {
@@ -193,12 +128,11 @@ func (r *run) applyFloretContextStatus(status *observation.ContextStatus) {
 	if !r.acceptsPresentationUpdates() {
 		return
 	}
-	usage, err := flowerContextUsageFromFloret(status, strings.TrimSpace(r.id))
+	usage, err := flowerContextUsageFromFloret(status)
 	if err != nil {
 		r.rejectFloretContract("context_status", err)
 		return
 	}
-	r.persistRunEvent("context.usage.updated", RealtimeStreamKindContext, flowerContextUsagePayload(usage))
 	r.sendStreamEvent(streamEventContextUsage{
 		Type:  "context-usage",
 		Usage: usage,
@@ -212,22 +146,22 @@ func (r *run) applyFloretCompaction(compaction *observation.CompactionEvent) {
 	if !r.acceptsPresentationUpdates() {
 		return
 	}
-	projected, err := flowerContextCompactionFromFloret(compaction, strings.TrimSpace(r.id))
+	projected, err := flowerContextCompactionFromFloret(compaction)
 	if err != nil {
 		r.rejectFloretContract("compaction", err)
 		return
 	}
-	if !r.hostManagedContextCompaction {
-		r.bindContextCompactionOperationAnchor(projected.OperationID, compaction.RequestID)
-		r.noteManualCompactionOperation(compaction.RequestID, projected.OperationID)
-		decoration := r.flowerContextCompactionDecoration(projected)
-		r.persistRunEvent("context.compaction.updated", RealtimeStreamKindContext, flowerContextCompactionPayload(projected, decoration))
-		r.sendStreamEvent(streamEventContextCompaction{
-			Type:               "context-compaction",
-			Compaction:         projected,
-			TimelineDecoration: decoration,
-		})
+	r.bindContextCompactionOperationAnchor(projected.OperationID, compaction.RequestID)
+	decoration, err := r.flowerContextCompactionDecoration(projected)
+	if err != nil {
+		r.rejectFloretContract("compaction_decoration", err)
+		return
 	}
+	r.sendStreamEvent(streamEventContextCompaction{
+		Type:               "context-compaction",
+		Compaction:         projected,
+		TimelineDecoration: decoration,
+	})
 	switch compaction.Phase {
 	case observation.CompactionPhaseComplete:
 		r.setCompletedContextCompaction(*compaction)
@@ -237,11 +171,10 @@ func (r *run) applyFloretCompaction(compaction *observation.CompactionEvent) {
 	}
 }
 
-func (r *run) flowerContextCompactionDecoration(compaction FlowerContextCompaction) FlowerTimelineDecoration {
+func (r *run) flowerContextCompactionDecoration(compaction FlowerContextCompaction) (FlowerTimelineDecoration, error) {
 	operationID := strings.TrimSpace(compaction.OperationID)
 	if operationID == "" {
-		operationID = fmt.Sprintf("%s:%d:%s", strings.TrimSpace(compaction.RunID), compaction.StepIndex, strings.TrimSpace(compaction.Phase))
-		compaction.OperationID = operationID
+		return FlowerTimelineDecoration{}, errors.New("Floret compaction missing operation id")
 	}
 	anchor := r.contextCompactionAnchor(operationID)
 	return FlowerTimelineDecoration{
@@ -250,7 +183,7 @@ func (r *run) flowerContextCompactionDecoration(compaction FlowerContextCompacti
 		Anchor:       anchor,
 		Ordinal:      0,
 		Compaction:   compaction,
-	}
+	}, nil
 }
 
 func (r *run) bindContextCompactionOperationAnchor(operationID string, requestID string) {
@@ -467,7 +400,7 @@ func flowerBlockHasVisibleContent(block any) bool {
 	}
 }
 
-func flowerContextUsageFromFloret(status *observation.ContextStatus, fallbackRunID string) (FlowerContextUsage, error) {
+func flowerContextUsageFromFloret(status *observation.ContextStatus) (FlowerContextUsage, error) {
 	if status == nil {
 		return FlowerContextUsage{}, nil
 	}
@@ -494,9 +427,9 @@ func flowerContextUsageFromFloret(status *observation.ContextStatus, fallbackRun
 	if updatedAt <= 0 {
 		updatedAt = 0
 	}
-	runID := strings.TrimSpace(fallbackRunID)
+	runID := strings.TrimSpace(status.RunID)
 	if runID == "" {
-		runID = strings.TrimSpace(status.RunID)
+		return FlowerContextUsage{}, errors.New("Floret context status missing run id")
 	}
 	phase, err := normalizeFlowerContextUsagePhase(status.Phase)
 	if err != nil {
@@ -523,7 +456,7 @@ func flowerContextUsageFromFloret(status *observation.ContextStatus, fallbackRun
 	}, nil
 }
 
-func flowerContextCompactionFromFloret(compaction *observation.CompactionEvent, fallbackRunID string) (FlowerContextCompaction, error) {
+func flowerContextCompactionFromFloret(compaction *observation.CompactionEvent) (FlowerContextCompaction, error) {
 	if compaction == nil {
 		return FlowerContextCompaction{}, nil
 	}
@@ -536,7 +469,7 @@ func flowerContextCompactionFromFloret(compaction *observation.CompactionEvent, 
 	}
 	runID := strings.TrimSpace(compaction.RunID)
 	if runID == "" {
-		runID = fallbackRunID
+		return FlowerContextCompaction{}, errors.New("Floret compaction missing run id")
 	}
 	phase, err := normalizeFlowerContextCompactionPhase(compaction.Phase)
 	if err != nil {
@@ -548,12 +481,14 @@ func flowerContextCompactionFromFloret(compaction *observation.CompactionEvent, 
 	}
 	return FlowerContextCompaction{
 		OperationID:         strings.TrimSpace(compaction.OperationID),
+		RequestID:           strings.TrimSpace(compaction.RequestID),
 		RunID:               runID,
 		StepIndex:           compaction.Step,
 		Phase:               phase,
 		Status:              status,
 		Trigger:             strings.TrimSpace(compaction.Trigger),
 		Reason:              strings.TrimSpace(compaction.Reason),
+		Source:              strings.TrimSpace(compaction.Source),
 		TokensBefore:        compaction.TokensBefore,
 		TokensAfterEstimate: compaction.TokensAfterEstimate,
 		Error:               strings.TrimSpace(compaction.Error),

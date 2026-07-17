@@ -3219,9 +3219,7 @@ func seedFloretForkSourceThread(t *testing.T, stateDir string, threadID string) 
 		_ = store.Close()
 		t.Fatalf("flruntime.NewHost: %v", err)
 	}
-	defer func() {
-		_ = host.Close()
-	}()
+	defer func() { _ = store.Close() }()
 
 	ctx := context.Background()
 	if _, err := host.StartThread(ctx, flruntime.StartThreadRequest{ThreadID: flruntime.ThreadID(threadID)}); err != nil {

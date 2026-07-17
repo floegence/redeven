@@ -201,6 +201,7 @@ func floretRunContextForIDs(base *run, rawRunID string, rawThreadID string, rawT
 		MessageID:             turnID,
 		UploadsDir:            base.uploadsDir,
 		ThreadsDB:             base.threadsDB,
+		FloretStore:           base.floretStore,
 		PersistOpTimeout:      base.persistOpTimeout,
 		MaxWallTime:           base.maxWallTime,
 		IdleTimeout:           base.idleTimeout,

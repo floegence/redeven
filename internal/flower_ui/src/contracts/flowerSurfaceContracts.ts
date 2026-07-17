@@ -720,7 +720,7 @@ export type FlowerLiveThreadPatch = Readonly<{
   run_error_code?: string;
   run_error?: string;
   waiting_prompt?: FlowerInputRequest | null;
-  last_context_run_id?: string;
+  active_run_id?: string;
   pinned_at_ms?: number;
   created_at_ms?: number;
   updated_at_ms?: number;

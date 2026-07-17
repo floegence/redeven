@@ -4503,7 +4503,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			g.appendAudit(meta, "ai_thread_context_compact", "success", map[string]any{
 				"thread_id":     threadID,
 				"active_run_id": strings.TrimSpace(body.ActiveRunID),
-				"operation_id":  strings.TrimSpace(resp.OperationID),
+				"request_id":    strings.TrimSpace(resp.RequestID),
 				"kind":          strings.TrimSpace(resp.Kind),
 			}, nil)
 			writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: resp})
@@ -5028,11 +5028,9 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				}
 				cursor = v
 			}
-			category := strings.TrimSpace(strings.ToLower(r.URL.Query().Get("category")))
 			out, err := g.ai.ListRunEventsWithQuery(r.Context(), meta, runID, ai.ListRunEventsQuery{
-				Cursor:   cursor,
-				Limit:    limit,
-				Category: category,
+				Cursor: cursor,
+				Limit:  limit,
 			})
 			if err != nil {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})

@@ -278,7 +278,6 @@ func (s *floretSubagentRuntime) ensureHost(ctx context.Context) (floretSubagentH
 		if active {
 			return s.host, nil
 		}
-		_ = s.host.Close()
 		s.host = nil
 		s.hostKey = ""
 	}
@@ -420,9 +419,9 @@ func (s *floretSubagentRuntime) newHostLocked(parent *run, resolved resolvedSuba
 		parent.webSearchMode,
 		withDisabledFloretCoreControlTools(childContract.HiddenControlTools...),
 	)
-	store, err := parent.openFloretThreadStore()
-	if err != nil {
-		return nil, err
+	store := parent.floretStore
+	if store == nil {
+		return nil, errors.New("floret store not ready")
 	}
 	systemPrompt := parent.buildSubagentHostSystemPrompt(activeTools, childContract)
 	surfaceProvider := s.dynamicSubagentToolSurfaceProvider(state)
@@ -434,10 +433,14 @@ func (s *floretSubagentRuntime) newHostLocked(parent *run, resolved resolvedSuba
 	if modelCapability.MaxOutputTokens > 0 {
 		maxOutputTokens = modelCapability.MaxOutputTokens
 	}
+	gatewayIdentity, err := redevenFloretGatewayIdentity(resolved.RunModel.Provider.ID, providerType, resolved.RunModel.Provider.BaseURL, wireModelName, flProvider.stateCompatibilityRoute())
+	if err != nil {
+		return nil, err
+	}
 	host, err := flruntime.NewHost(flruntime.HostOptions{
 		Config:               flconfig.Config{SystemPrompt: systemPrompt, ContextPolicy: floretModelContextPolicy(contextWindow, maxOutputTokens), Reasoning: config.NormalizeAIReasoningSelection(parent.currentReasoning)},
 		ModelGateway:         flProvider,
-		ModelGatewayIdentity: redevenFloretGatewayIdentity(resolved.RunModel.Provider.ID, wireModelName),
+		ModelGatewayIdentity: gatewayIdentity,
 		Store:                store,
 		Tools:                flTools,
 		Approver:             floretToolApproverForRun(childRun),
@@ -451,7 +454,6 @@ func (s *floretSubagentRuntime) newHostLocked(parent *run, resolved resolvedSuba
 		},
 	})
 	if err != nil {
-		_ = store.Close()
 		return nil, err
 	}
 	return host, nil
@@ -2047,14 +2049,10 @@ func (s *floretSubagentRuntime) release() {
 		return
 	}
 	s.mu.Lock()
-	host := s.host
 	s.host = nil
 	s.subagentsPatchQueued = nil
 	s.closed = true
 	s.mu.Unlock()
-	if host != nil {
-		_ = host.Close()
-	}
 }
 
 func (s *floretSubagentRuntime) snapshots(ctx context.Context) ([]subagentSnapshot, error) {
@@ -2081,7 +2079,6 @@ func (s *floretSubagentRuntime) snapshots(ctx context.Context) ([]subagentSnapsh
 
 type flowerSubagentListHost interface {
 	ListSubAgents(context.Context, flruntime.ThreadID) ([]flruntime.SubAgentSnapshot, error)
-	Close() error
 }
 
 func (s *Service) ListFlowerSubagents(ctx context.Context, meta *session.Meta, parentThreadID string) ([]FlowerSubagentSummary, error) {
@@ -2132,7 +2129,6 @@ func (s *Service) listFlowerSubagentsForEndpoint(ctx context.Context, endpointID
 			return nil, err
 		}
 		host = maintenanceHost
-		defer host.Close()
 	}
 	snapshots, err := host.ListSubAgents(ctxOrBackground(ctx), flruntime.ThreadID(parentThreadID))
 	if err != nil {
@@ -2227,7 +2223,6 @@ func (s *Service) GetFlowerSubagentDetail(ctx context.Context, meta *session.Met
 	}
 	var detailHost interface {
 		ReadSubAgentDetail(context.Context, flruntime.ReadSubAgentDetailRequest) (flruntime.SubAgentDetail, error)
-		Close() error
 	}
 	if runtime != nil {
 		detailHost = runtime.currentHost()
@@ -2238,7 +2233,6 @@ func (s *Service) GetFlowerSubagentDetail(ctx context.Context, meta *session.Met
 			return nil, err
 		}
 		detailHost = host
-		defer detailHost.Close()
 	}
 	detail, err := detailHost.ReadSubAgentDetail(ctxOrBackground(ctx), flruntime.ReadSubAgentDetailRequest{
 		ParentThreadID: flruntime.ThreadID(parentThreadID),
@@ -2275,6 +2269,9 @@ func isFloretSubagentNotFoundError(err error) bool {
 }
 
 func flowerSubagentDetailResponse(detail flruntime.SubAgentDetail) (FlowerSubagentDetailResponse, error) {
+	if err := detail.Context.Validate(); err != nil {
+		return FlowerSubagentDetailResponse{}, err
+	}
 	contextUsage, err := flowerSubagentDetailContextUsage(detail.Context)
 	if err != nil {
 		return FlowerSubagentDetailResponse{}, err
@@ -2283,7 +2280,10 @@ func flowerSubagentDetailResponse(detail flruntime.SubAgentDetail) (FlowerSubage
 	if err != nil {
 		return FlowerSubagentDetailResponse{}, err
 	}
-	timelineDecorations := flowerSubagentDetailTimelineDecorations(detail, contextCompactions)
+	timelineDecorations, err := flowerSubagentDetailTimelineDecorations(detail, contextCompactions)
+	if err != nil {
+		return FlowerSubagentDetailResponse{}, err
+	}
 	return FlowerSubagentDetailResponse{
 		Summary:             flowerSubagentSummary(detail.Snapshot),
 		Timeline:            flowerSubagentTimelineRows(detail.Events),
@@ -2298,24 +2298,24 @@ func flowerSubagentDetailResponse(detail flruntime.SubAgentDetail) (FlowerSubage
 	}, nil
 }
 
-func flowerSubagentDetailContextUsage(contextBlock flruntime.SubAgentDetailContext) (*FlowerContextUsage, error) {
+func flowerSubagentDetailContextUsage(contextBlock flruntime.ThreadContextSnapshot) (*FlowerContextUsage, error) {
 	if contextBlock.Usage == nil {
 		return nil, nil
 	}
-	usage, err := flowerContextUsageFromFloret(contextBlock.Usage, strings.TrimSpace(contextBlock.Usage.RunID))
+	usage, err := flowerContextUsageFromFloret(contextBlock.Usage)
 	if err != nil {
 		return nil, err
 	}
 	return &usage, nil
 }
 
-func flowerSubagentDetailContextCompactions(contextBlock flruntime.SubAgentDetailContext) ([]FlowerContextCompaction, error) {
+func flowerSubagentDetailContextCompactions(contextBlock flruntime.ThreadContextSnapshot) ([]FlowerContextCompaction, error) {
 	if len(contextBlock.Compactions) == 0 {
 		return nil, nil
 	}
 	out := make([]FlowerContextCompaction, 0, len(contextBlock.Compactions))
 	for _, compaction := range contextBlock.Compactions {
-		projected, err := flowerContextCompactionFromSubagentDetail(compaction)
+		projected, err := flowerContextCompactionFromFloret(&compaction)
 		if err != nil {
 			return nil, err
 		}
@@ -2327,48 +2327,16 @@ func flowerSubagentDetailContextCompactions(contextBlock flruntime.SubAgentDetai
 	return out, nil
 }
 
-func flowerContextCompactionFromSubagentDetail(compaction flruntime.SubAgentDetailContextCompaction) (FlowerContextCompaction, error) {
-	contract := observation.CompactionEvent{
-		Phase:  observation.CompactionPhase(strings.TrimSpace(compaction.Phase)),
-		Status: observation.CompactionStatus(strings.TrimSpace(compaction.Status)),
-	}
-	if err := contract.Validate(); err != nil {
-		return FlowerContextCompaction{}, err
-	}
-	phase, err := normalizeFlowerContextCompactionPhase(contract.Phase)
-	if err != nil {
-		return FlowerContextCompaction{}, err
-	}
-	status, err := normalizeFlowerContextCompactionStatus(contract.Status)
-	if err != nil {
-		return FlowerContextCompaction{}, err
-	}
-	updatedAt := compaction.ObservedAt.UnixMilli()
-	if updatedAt <= 0 {
-		updatedAt = 0
-	}
-	return FlowerContextCompaction{
-		OperationID:         strings.TrimSpace(compaction.OperationID),
-		RunID:               strings.TrimSpace(compaction.RunID),
-		StepIndex:           compaction.Step,
-		Phase:               phase,
-		Status:              status,
-		Trigger:             strings.TrimSpace(compaction.Trigger),
-		Reason:              strings.TrimSpace(compaction.Reason),
-		TokensBefore:        compaction.TokensBefore,
-		TokensAfterEstimate: compaction.TokensAfterEstimate,
-		Error:               strings.TrimSpace(compaction.Error),
-		UpdatedAtMs:         updatedAt,
-	}, nil
-}
-
-func flowerSubagentDetailTimelineDecorations(detail flruntime.SubAgentDetail, compactions []FlowerContextCompaction) []FlowerTimelineDecoration {
+func flowerSubagentDetailTimelineDecorations(detail flruntime.SubAgentDetail, compactions []FlowerContextCompaction) ([]FlowerTimelineDecoration, error) {
 	if len(compactions) == 0 {
-		return nil
+		return nil, nil
 	}
-	anchorsByOperationID := flowerSubagentDetailCompactionAnchors(detail)
+	anchorsByOperationID, err := flowerSubagentDetailCompactionAnchors(detail)
+	if err != nil {
+		return nil, err
+	}
 	if len(anchorsByOperationID) == 0 {
-		return nil
+		return nil, nil
 	}
 	out := make([]FlowerTimelineDecoration, 0, len(compactions))
 	ordinalByAnchor := map[string]int{}
@@ -2395,14 +2363,14 @@ func flowerSubagentDetailTimelineDecorations(detail flruntime.SubAgentDetail, co
 			Compaction:   compaction,
 		})
 	}
-	return out
+	return out, nil
 }
 
-func flowerSubagentDetailCompactionAnchors(detail flruntime.SubAgentDetail) map[string]FlowerTimelineAnchor {
+func flowerSubagentDetailCompactionAnchors(detail flruntime.SubAgentDetail) (map[string]FlowerTimelineAnchor, error) {
 	out := map[string]FlowerTimelineAnchor{}
 	threadID := strings.TrimSpace(string(detail.Snapshot.ThreadID))
 	if threadID == "" {
-		return out
+		return nil, errors.New("Floret subagent detail missing thread id")
 	}
 	events := append([]flruntime.SubAgentDetailEvent(nil), detail.Events...)
 	sort.SliceStable(events, func(i, j int) bool {
@@ -2416,16 +2384,15 @@ func flowerSubagentDetailCompactionAnchors(detail flruntime.SubAgentDetail) map[
 		if event.Compaction == nil {
 			continue
 		}
+		operationID := strings.TrimSpace(event.Compaction.OperationID)
+		requestID := strings.TrimSpace(event.Compaction.RequestID)
+		source := strings.TrimSpace(event.Compaction.Source)
+		if operationID == "" || requestID == "" || source == "" {
+			return nil, errors.New("Floret subagent compaction detail requires operation id, request id, and source")
+		}
 		turnID := strings.TrimSpace(string(event.TurnID))
 		if turnID == "" {
-			continue
-		}
-		operationID := strings.TrimSpace(event.Metadata["operation_id"])
-		if operationID == "" {
-			operationID = strings.TrimSpace(event.Metadata["context_operation_id"])
-		}
-		if operationID == "" {
-			continue
+			return nil, errors.New("Floret subagent compaction detail missing turn id")
 		}
 		messageID := strings.TrimSpace(latestMessageByTurn[turnID])
 		if messageID == "" {
@@ -2437,7 +2404,7 @@ func flowerSubagentDetailCompactionAnchors(detail flruntime.SubAgentDetail) map[
 			Edge:       "after",
 		}
 	}
-	return out
+	return out, nil
 }
 
 func flowerSubagentVisibleMessageID(threadID string, event flruntime.SubAgentDetailEvent) string {

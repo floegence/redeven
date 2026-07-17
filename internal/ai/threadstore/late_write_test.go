@@ -57,11 +57,6 @@ func TestStore_RejectsLateThreadScopedWritesAfterDelete(t *testing.T) {
 	assertLateWriteRejected(t, "run", store.UpsertRun(ctx, RunRecord{RunID: runID, EndpointID: endpointID, ThreadID: threadID, State: "success"}))
 	assertLateWriteRejected(t, "run event", store.AppendRunEvent(ctx, RunEventRecord{EndpointID: endpointID, ThreadID: threadID, RunID: runID, EventType: "run.end"}))
 	assertLateWriteRejected(t, "thread state", store.UpsertThreadState(ctx, ThreadState{EndpointID: endpointID, ThreadID: threadID, OpenGoal: "late goal"}))
-	assertLateWriteRejected(t, "provider continuation", store.SetThreadProviderContinuation(ctx, endpointID, threadID, ThreadProviderContinuation{
-		State:      ProviderContinuationState{Kind: "openai_responses", ID: "resp_late"},
-		ProviderID: "openai",
-		Model:      "gpt-5-mini",
-	}))
 	_, err = store.ReplaceThreadTodosSnapshot(ctx, ThreadTodosSnapshot{EndpointID: endpointID, ThreadID: threadID, TodosJSON: `[]`, UpdatedByRunID: runID}, nil)
 	assertLateWriteRejected(t, "todos", err)
 	assertLateWriteRejected(t, "memory", store.UpsertMemoryItem(ctx, MemoryItemRecord{MemoryID: "memory_after_delete", EndpointID: endpointID, ThreadID: threadID, Scope: "working", Kind: "fact", Content: "late memory"}))

@@ -9,57 +9,6 @@ import (
 	"time"
 )
 
-func TestStore_MigrateFromV20AddsUploadTables(t *testing.T) {
-	t.Parallel()
-
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	s, err := Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	if err := s.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
-
-	raw, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		t.Fatalf("sql.Open: %v", err)
-	}
-	if _, err := raw.Exec(`DROP TABLE IF EXISTS ai_upload_refs`); err != nil {
-		t.Fatalf("drop ai_upload_refs: %v", err)
-	}
-	if _, err := raw.Exec(`DROP TABLE IF EXISTS ai_uploads`); err != nil {
-		t.Fatalf("drop ai_uploads: %v", err)
-	}
-	if _, err := raw.Exec(`PRAGMA user_version=20;`); err != nil {
-		t.Fatalf("set user_version: %v", err)
-	}
-	if err := raw.Close(); err != nil {
-		t.Fatalf("close raw db: %v", err)
-	}
-
-	s, err = Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open after v20 seed: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	if !tableExistsForTest(t, s.db, "ai_uploads") {
-		t.Fatalf("ai_uploads should exist after migration")
-	}
-	if !tableExistsForTest(t, s.db, "ai_upload_refs") {
-		t.Fatalf("ai_upload_refs should exist after migration")
-	}
-
-	var autoVacuum int64
-	if err := s.db.QueryRow(`PRAGMA auto_vacuum;`).Scan(&autoVacuum); err != nil {
-		t.Fatalf("PRAGMA auto_vacuum: %v", err)
-	}
-	if autoVacuum != sqliteAutoVacuumIncremental {
-		t.Fatalf("auto_vacuum=%d, want %d", autoVacuum, sqliteAutoVacuumIncremental)
-	}
-}
-
 func TestStore_DeleteThreadResources_RespectsSharedUploadRefs(t *testing.T) {
 	t.Parallel()
 

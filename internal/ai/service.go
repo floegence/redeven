@@ -141,8 +141,9 @@ type Service struct {
 
 	delegatedApprovals map[string]*delegatedApprovalHandle
 
-	uploadsDir string
-	threadsDB  *threadstore.Store
+	uploadsDir  string
+	threadsDB   *threadstore.Store
+	floretStore *flruntime.Store
 
 	contextRepo        *contextstore.Repository
 	capabilityResolver *contextadapter.Resolver
@@ -240,7 +241,7 @@ func NewService(opts Options) (*Service, error) {
 	}
 
 	threadsPath := filepath.Join(strings.TrimSpace(opts.StateDir), "ai", "threads.sqlite")
-	ts, err := threadstore.OpenResettingInvalidSchema(threadsPath)
+	ts, err := threadstore.Open(threadsPath)
 	if err != nil {
 		return nil, err
 	}
@@ -298,6 +299,16 @@ func NewService(opts Options) (*Service, error) {
 	if delegatedUnavailableCount > 0 {
 		logger.Info("ai: marked pending delegated approvals unavailable after restart", "count", delegatedUnavailableCount)
 	}
+	floretStorePath, err := floretThreadStorePath(opts.StateDir)
+	if err != nil {
+		_ = ts.Close()
+		return nil, err
+	}
+	floretStore, err := flruntime.OpenSQLiteStore(floretStorePath)
+	if err != nil {
+		_ = ts.Close()
+		return nil, err
+	}
 
 	contextRepo := contextstore.NewRepository(ts)
 	capabilityResolver := contextadapter.NewResolver(contextRepo)
@@ -336,6 +347,7 @@ func NewService(opts Options) (*Service, error) {
 		suppressQueuedDrainByTh:      make(map[string]bool),
 		uploadsDir:                   uploadsDir,
 		threadsDB:                    ts,
+		floretStore:                  floretStore,
 		contextRepo:                  contextRepo,
 		capabilityResolver:           capabilityResolver,
 		skillManager:                 newSkillManager(agentHomeDir, strings.TrimSpace(opts.StateDir)),
@@ -418,6 +430,7 @@ func (s *Service) Close() error {
 	terminalProcesses := s.terminalProcesses
 	s.terminalProcesses = nil
 	ts := s.threadsDB
+	floretStore := s.floretStore
 	writers := make([]*aiSinkWriter, 0, len(s.realtimeWriters))
 	for srv, w := range s.realtimeWriters {
 		if w == nil {
@@ -489,15 +502,15 @@ func (s *Service) Close() error {
 		waitOK := s.waitIdleThreadCompaction(waitCtx, compaction)
 		waitCancel()
 		if !waitOK && s.log != nil {
-			s.log.Warn("idle context compaction did not finish before service close", "thread_id", compaction.threadID, "operation_id", compaction.operationID)
-		}
-		if waitOK && compaction.isCancelled() {
-			s.publishIdleContextCompactionCancellation(compaction)
+			s.log.Warn("idle context compaction did not finish before service close", "thread_id", compaction.threadID, "request_id", compaction.requestID)
 		}
 	}
 	s.mu.Lock()
 	if s.threadsDB == ts {
 		s.threadsDB = nil
+	}
+	if s.floretStore == floretStore {
+		s.floretStore = nil
 	}
 	s.runs = make(map[string]*run)
 	s.activeRunByTh = make(map[string]string)
@@ -508,10 +521,15 @@ func (s *Service) Close() error {
 	for _, runtime := range runtimes {
 		runtime.release()
 	}
-	if ts != nil {
-		return errors.Join(terminalCloseErr, ts.Close())
+	var floretCloseErr error
+	if floretStore != nil {
+		floretCloseErr = floretStore.Close()
 	}
-	return terminalCloseErr
+	var threadCloseErr error
+	if ts != nil {
+		threadCloseErr = ts.Close()
+	}
+	return errors.Join(terminalCloseErr, floretCloseErr, threadCloseErr)
 }
 
 func (s *Service) ensureThreadSubagentRuntimeLocked(thKey string, r *run) subagentRuntime {
@@ -597,7 +615,6 @@ func (s *Service) closeThreadSubagentsWithMaintenanceHost(ctx context.Context, t
 	if err != nil {
 		return
 	}
-	defer host.Close()
 	_, _ = host.CloseSubAgents(ctx, flruntime.CloseSubAgentsRequest{
 		ParentThreadID: flruntime.ThreadID(threadID),
 		Reason:         "parent_stop",
@@ -673,20 +690,13 @@ func (s *Service) openFloretMaintenanceHost() (*flruntime.ThreadMaintenanceHost,
 	if s == nil {
 		return nil, errors.New("nil service")
 	}
-	storePath, err := floretThreadStorePath(s.stateDir)
-	if err != nil {
-		return nil, err
+	s.mu.Lock()
+	store := s.floretStore
+	s.mu.Unlock()
+	if store == nil {
+		return nil, errors.New("floret store not ready")
 	}
-	store, err := flruntime.OpenSQLiteStore(storePath)
-	if err != nil {
-		return nil, err
-	}
-	host, err := flruntime.NewThreadMaintenanceHost(flruntime.ThreadMaintenanceHostOptions{Store: store})
-	if err != nil {
-		_ = store.Close()
-		return nil, err
-	}
-	return host, nil
+	return flruntime.NewThreadMaintenanceHost(flruntime.ThreadMaintenanceHostOptions{Store: store})
 }
 
 func (s *Service) Enabled() bool {
@@ -1815,6 +1825,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		MessageID:           messageID,
 		UploadsDir:          uploadsDir,
 		ThreadsDB:           db,
+		FloretStore:         s.floretStore,
 		PersistOpTimeout:    persistTO,
 		SkillManager:        s.skillManager,
 		ToolAllowlist:       append([]string(nil), req.Options.ToolAllowlist...),
@@ -2144,32 +2155,6 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	s.broadcastThreadSummary(endpointID, threadID)
 
 	finalReason := strings.TrimSpace(r.getFinalizationReason())
-	if db != nil {
-		continuationCtx, cancelContinuation := context.WithTimeout(context.Background(), persistTO)
-		continuationCandidate := r.getProviderContinuationCandidate()
-		syncErr := persistProviderContinuationCandidate(continuationCtx, db, endpointID, threadID, continuationCandidate)
-		if syncErr != nil && finalErr == nil {
-			finalErr = syncErr
-		} else if syncErr == nil {
-			eventType := "provider.continuation.cleared"
-			payload := map[string]any{
-				"finalization_reason": finalReason,
-			}
-			if continuationCandidate.IsZero() {
-				payload["reason"] = "no_candidate"
-			} else {
-				eventType = "provider.continuation.persisted"
-				payload["reason"] = "provider_state_available"
-				payload["provider_state_kind"] = continuationCandidate.State.Kind
-				payload["provider_state_id"] = continuationCandidate.State.ID
-				payload["provider_id"] = continuationCandidate.ProviderID
-				payload["model"] = continuationCandidate.Model
-				payload["base_url"] = continuationCandidate.BaseURL
-			}
-			r.persistRunEvent(eventType, RealtimeStreamKindLifecycle, payload)
-		}
-		cancelContinuation()
-	}
 	if s.contextRepo != nil {
 		stateCtx, cancelState := context.WithTimeout(context.Background(), persistTO)
 		if shouldClearOpenGoalAfterRun(existingOpenGoal, finalReason) {

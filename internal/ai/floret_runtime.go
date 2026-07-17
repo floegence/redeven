@@ -2,8 +2,11 @@ package ai
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -105,11 +108,6 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	sharedState := newFloretToolRuntimeState(state)
 	r.ensureSkillManager()
 
-	providerContinuation := newProviderContinuationProjector(r, providerCfg.ID, providerType, modelName, providerCfg.BaseURL)
-	previousState, err := providerContinuation.PreviousState(ctx)
-	if err != nil {
-		return r.failRun("Failed to load provider continuation", err)
-	}
 	contextWindow := modelGatewayDefaultContextWindowTokens
 	if req.ModelCapability.MaxContextTokens > 0 {
 		contextWindow = req.ModelCapability.MaxContextTokens
@@ -148,15 +146,18 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	}
 	labels := flruntime.RunLabels{Correlation: map[string]string{"thread_id": strings.TrimSpace(r.threadID), "message_id": strings.TrimSpace(r.messageID)}, Host: initialSurface.HostContext}
 	floretCfg := redevenFloretAdapterConfig(initialSurface.SystemPrompt, floretModelContextPolicy(contextWindow, req.Options.MaxOutputTokens), req.Options.ReasoningSelection)
-	store, err := r.openFloretThreadStore()
-	if err != nil {
-		return r.failRun("Failed to initialize Floret context store", err)
+	store := r.floretStore
+	if store == nil {
+		return r.failRun("Failed to initialize Floret context store", errors.New("floret store not ready"))
 	}
-	defer func() { _ = store.Close() }()
+	gatewayIdentity, err := redevenFloretGatewayIdentity(providerCfg.ID, providerType, providerCfg.BaseURL, capability.WireModelName, flProvider.stateCompatibilityRoute())
+	if err != nil {
+		return r.failRun("Failed to initialize Floret model identity", err)
+	}
 	host, err := flruntime.NewHost(flruntime.HostOptions{
 		Config:               floretCfg,
 		ModelGateway:         flProvider,
-		ModelGatewayIdentity: redevenFloretGatewayIdentity(providerCfg.ID, capability.WireModelName),
+		ModelGatewayIdentity: gatewayIdentity,
 		Store:                store,
 		Tools:                initialSurface.FloretTools,
 		Approver:             floretToolApproverForRun(r),
@@ -178,6 +179,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	if err := ensureFloretThread(ctx, turnHost, threadID); err != nil {
 		return r.failRun("Failed to initialize Floret thread", err)
 	}
+	r.expectFloretRuntimeEventIdentity(r.id, r.threadID, r.messageID, true)
 	r.emitLifecyclePhase("executing", map[string]any{"engine": "floret"})
 	supplementalContext, err := floretSupplementalContextForInput(req.Input)
 	if err != nil {
@@ -187,15 +189,14 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		r.persistRunEvent("flower.context_action.injected", RealtimeStreamKindLifecycle, payload)
 	}
 	result, err := turnHost.RunTurn(ctx, flruntime.RunTurnRequest{
-		RunID:                 flruntime.RunID(strings.TrimSpace(r.id)),
-		ThreadID:              threadID,
-		TurnID:                flruntime.TurnID(strings.TrimSpace(r.messageID)),
-		Input:                 floretCurrentTurnInput(req.Input),
-		SupplementalContext:   supplementalContext.Items,
-		Labels:                labels,
-		PreviousProviderState: previousState,
-		Completion:            completionPolicy,
-		Signals:               controlSpec,
+		RunID:               flruntime.RunID(strings.TrimSpace(r.id)),
+		ThreadID:            threadID,
+		TurnID:              flruntime.TurnID(strings.TrimSpace(r.messageID)),
+		Input:               floretCurrentTurnInput(req.Input),
+		SupplementalContext: supplementalContext.Items,
+		Labels:              labels,
+		Completion:          completionPolicy,
+		Signals:             controlSpec,
 		Limits: flruntime.TurnLimits{
 			MaxToolCalls:           modelGatewayHardMaxToolCalls,
 			MaxInputTokens:         int64(req.Options.MaxInputTokens),
@@ -206,7 +207,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		ManualCompactions: r,
 	})
 	projectionUnavailable := result.ProjectionAvailability == flruntime.TurnProjectionAvailabilityUnavailable
-	if projectionErr := result.ValidateProjection(); projectionErr != nil {
+	if projectionErr := result.Validate(); projectionErr != nil {
 		r.rejectFloretContract("turn_projection_outcome", projectionErr)
 		projectionUnavailable = true
 		result.Projection = nil
@@ -278,7 +279,6 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		}
 		if r.acceptsEngineResultProjection() {
 			r.recordRuntimeTurnUsage(flowerUsageFromFloret(result.Metrics.ProviderUsage), 0)
-			r.setProviderContinuationCandidate(providerContinuation.Candidate(floretProviderStateToFlower(result.ProviderState)))
 		}
 		return r.failRunWithCode(runErrorCodeFloretProjectionUnavailable, "", errors.New(strings.TrimSpace(result.ProjectionError)))
 	}
@@ -303,7 +303,6 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	}
 	if r.acceptsEngineResultProjection() {
 		r.recordRuntimeTurnUsage(flowerUsageFromFloret(result.Metrics.ProviderUsage), 0)
-		r.setProviderContinuationCandidate(providerContinuation.Candidate(floretProviderStateToFlower(result.ProviderState)))
 	}
 	return r.projectFloretResult(ctx, result, req, sharedState.snapshot(), taskComplexity, permissionTypeString(r.permissionType))
 }
@@ -374,7 +373,6 @@ func (r *run) closeParentTerminalSubagents(ctx context.Context, host floretSubag
 		if err != nil {
 			return err
 		}
-		defer maintenance.Close()
 		closeHost = maintenance
 	}
 	if closeHost == nil {
@@ -512,11 +510,45 @@ func redevenFloretAdapterConfig(systemPrompt string, contextPolicy flconfig.Cont
 	}
 }
 
-func redevenFloretGatewayIdentity(providerID string, modelName string) flruntime.ModelGatewayIdentity {
-	return flruntime.ModelGatewayIdentity{
-		Provider: strings.TrimSpace(providerID),
-		Model:    strings.TrimSpace(modelName),
+func redevenFloretGatewayIdentity(providerID string, providerType string, baseURL string, modelName string, route string) (flruntime.ModelGatewayIdentity, error) {
+	providerID = strings.TrimSpace(providerID)
+	providerType = strings.ToLower(strings.TrimSpace(providerType))
+	modelName = strings.TrimSpace(modelName)
+	route = strings.TrimSpace(route)
+	if providerID == "" || providerType == "" || modelName == "" || route == "" {
+		return flruntime.ModelGatewayIdentity{}, errors.New("Floret model gateway identity requires provider, type, model, and route")
 	}
+	endpoint, err := normalizedFloretGatewayBaseURL(baseURL)
+	if err != nil {
+		return flruntime.ModelGatewayIdentity{}, err
+	}
+	digest := sha256.Sum256([]byte(strings.Join([]string{providerID, providerType, endpoint, modelName, route}, "\x00")))
+	return flruntime.ModelGatewayIdentity{
+		Provider:              providerID,
+		Model:                 modelName,
+		StateCompatibilityKey: hex.EncodeToString(digest[:]),
+	}, nil
+}
+
+func normalizedFloretGatewayBaseURL(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "default", nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil || strings.TrimSpace(u.Scheme) == "" || strings.TrimSpace(u.Host) == "" {
+		return "", fmt.Errorf("invalid provider base URL %q", raw)
+	}
+	if u.User != nil {
+		return "", errors.New("provider base URL must not contain user information")
+	}
+	u.Scheme = strings.ToLower(u.Scheme)
+	u.Host = strings.ToLower(u.Host)
+	u.Path = strings.TrimRight(u.Path, "/")
+	u.RawPath = ""
+	u.RawQuery = ""
+	u.Fragment = ""
+	return u.String(), nil
 }
 
 func floretFailureFinishReason(result flruntime.TurnResult) string {
@@ -646,14 +678,6 @@ func floretModelContextPolicy(contextWindow int, maxOutput int) flconfig.Context
 		ReservedOutputTokens:  int64(maxOutput),
 		MaxCompactionFailures: 2,
 	}
-}
-
-func (r *run) openFloretThreadStore() (*flruntime.Store, error) {
-	path, err := floretThreadStorePath(r.stateDir)
-	if err != nil {
-		return nil, err
-	}
-	return flruntime.OpenSQLiteStore(path)
 }
 
 func floretThreadStorePath(stateDir string) (string, error) {

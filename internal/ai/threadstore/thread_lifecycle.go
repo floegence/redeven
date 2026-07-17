@@ -103,9 +103,6 @@ func deleteThreadScopedRowsTx(ctx context.Context, tx *sql.Tx, endpointID string
 		return fmt.Errorf("invalid thread scope")
 	}
 
-	if _, err := tx.ExecContext(ctx, `DELETE FROM ai_messages WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
-		return fmt.Errorf("delete thread ai_messages rows failed: %w", err)
-	}
 	if err := deleteThreadContextPlanesTx(ctx, tx, endpointID, threadID); err != nil {
 		return err
 	}

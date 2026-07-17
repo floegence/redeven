@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/floegence/floret/observation"
+	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
@@ -192,11 +193,11 @@ func (s *Service) GetFlowerThreadLiveBootstrap(ctx context.Context, meta *sessio
 	streamGeneration := s.flowerLiveStreamGenerationValue()
 	s.mu.Unlock()
 
-	persistedState, err := s.flowerLivePersistedContextState(ctx, endpointID, threadID)
+	canonicalContextState, err := s.flowerLiveCanonicalContextState(ctx, endpointID, threadID)
 	if err != nil {
 		return nil, err
 	}
-	state = mergeFlowerLivePersistedContextState(state, persistedState)
+	state = mergeFlowerLiveCanonicalContextState(state, canonicalContextState)
 	state = s.mergePersistedDelegatedApprovalState(ctx, endpointID, threadID, state)
 	normalizeFlowerApprovalQueueActions(&state)
 
@@ -361,47 +362,47 @@ func (s *Service) ListFlowerThreadLiveEvents(ctx context.Context, meta *session.
 	return &FlowerLiveEventsResponse{StreamGeneration: streamGeneration, Events: events, NextCursor: nextCursor, HasMore: hasMore, RetainedFromSeq: retainedFromSeq}, nil
 }
 
-func (s *Service) flowerLivePersistedContextState(ctx context.Context, endpointID string, threadID string) (FlowerLiveMaterializedState, error) {
+func (s *Service) flowerLiveCanonicalContextState(ctx context.Context, endpointID string, threadID string) (FlowerLiveMaterializedState, error) {
 	if s == nil {
 		return emptyFlowerLiveMaterializedState(), errors.New("nil service")
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	s.mu.Lock()
-	db := s.threadsDB
-	s.mu.Unlock()
-	if db == nil {
-		return emptyFlowerLiveMaterializedState(), errors.New("threads store not ready")
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	if endpointID == "" || threadID == "" {
+		return emptyFlowerLiveMaterializedState(), errors.New("invalid request")
 	}
-	records, err := db.ListThreadContextRunEvents(ctx, endpointID, threadID, flowerLiveEventBufferLimit)
+	host, err := s.openFloretMaintenanceHost()
 	if err != nil {
 		return emptyFlowerLiveMaterializedState(), err
 	}
+	snapshot, err := host.ReadThreadContext(ctx, flruntime.ThreadID(threadID))
+	if errors.Is(err, flruntime.ErrThreadNotFound) {
+		return emptyFlowerLiveMaterializedState(), nil
+	}
+	if err != nil {
+		return emptyFlowerLiveMaterializedState(), err
+	}
+	if err := snapshot.Validate(); err != nil {
+		return emptyFlowerLiveMaterializedState(), err
+	}
 	state := emptyFlowerLiveMaterializedState()
-	for _, rec := range records {
-		kind := FlowerLiveKind(strings.TrimSpace(rec.EventType))
-		switch kind {
-		case FlowerLiveContextUsageUpdated, FlowerLiveContextCompactionUpdated:
-			payload := json.RawMessage(strings.TrimSpace(rec.PayloadJSON))
-			if kind == FlowerLiveContextCompactionUpdated {
-				var compactionPayload FlowerLiveContextCompactionUpdatedPayload
-				if !decodeFlowerPayload(payload, &compactionPayload) || !flowerContextCompactionTerminal(compactionPayload.Compaction) {
-					continue
-				}
-			}
-			applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
-				SchemaVersion: FlowerLiveSchemaVersion,
-				EndpointID:    strings.TrimSpace(rec.EndpointID),
-				ThreadID:      strings.TrimSpace(rec.ThreadID),
-				RunID:         strings.TrimSpace(rec.RunID),
-				Kind:          kind,
-				Payload:       payload,
-				AtUnixMs:      rec.AtUnixMs,
-			})
-		default:
-			continue
+	if snapshot.Usage != nil {
+		usage, err := flowerContextUsageFromFloret(snapshot.Usage)
+		if err != nil {
+			return emptyFlowerLiveMaterializedState(), err
 		}
+		state.ContextUsage = &usage
+	}
+	state.ContextCompactions = make([]FlowerContextCompaction, 0, len(snapshot.Compactions))
+	for i := range snapshot.Compactions {
+		compaction, err := flowerContextCompactionFromFloret(&snapshot.Compactions[i])
+		if err != nil {
+			return emptyFlowerLiveMaterializedState(), err
+		}
+		state.ContextCompactions = append(state.ContextCompactions, compaction)
 	}
 	return state, nil
 }
@@ -418,15 +419,15 @@ func flowerContextCompactionTerminal(compaction FlowerContextCompaction) bool {
 	return false
 }
 
-func mergeFlowerLivePersistedContextState(live FlowerLiveMaterializedState, persisted FlowerLiveMaterializedState) FlowerLiveMaterializedState {
+func mergeFlowerLiveCanonicalContextState(live FlowerLiveMaterializedState, canonical FlowerLiveMaterializedState) FlowerLiveMaterializedState {
 	out := cloneFlowerLiveMaterializedState(live)
-	if persisted.ContextUsage != nil && (out.ContextUsage == nil || persisted.ContextUsage.UpdatedAtMs > out.ContextUsage.UpdatedAtMs) {
-		out.ContextUsage = cloneFlowerContextUsage(persisted.ContextUsage)
+	if canonical.ContextUsage != nil && (out.ContextUsage == nil || canonical.ContextUsage.UpdatedAtMs > out.ContextUsage.UpdatedAtMs) {
+		out.ContextUsage = cloneFlowerContextUsage(canonical.ContextUsage)
 	}
-	for _, compaction := range persisted.ContextCompactions {
+	for _, compaction := range canonical.ContextCompactions {
 		out.ContextCompactions = mergeFlowerContextCompaction(out.ContextCompactions, compaction)
 	}
-	for _, decoration := range persisted.TimelineDecorations {
+	for _, decoration := range canonical.TimelineDecorations {
 		out.TimelineDecorations = mergeFlowerTimelineDecoration(out.TimelineDecorations, decoration)
 	}
 	return out
@@ -1209,7 +1210,9 @@ func flowerLiveEventWithAssignedSeqPayload(stream *flowerLiveThreadStream, event
 		if !decodeFlowerPayload(event.Payload, &payload) {
 			return event
 		}
-		payload.Compaction = normalizeFlowerContextCompactionForEvent(payload.Compaction, event)
+		if !flowerContextCompactionHasCanonicalIdentity(payload.Compaction) {
+			return event
+		}
 		payload.TimelineDecoration = normalizeFlowerTimelineDecorationForEvent(stream, payload.Compaction, payload.TimelineDecoration)
 		if !validFlowerTimelineDecoration(payload.TimelineDecoration) {
 			return event
@@ -1245,19 +1248,6 @@ func flowerLiveEventWithAssignedSeqPayload(stream *flowerLiveThreadStream, event
 	}
 	event.Payload = mustFlowerPayload(payload)
 	return event
-}
-
-func normalizeFlowerContextCompactionForEvent(compaction FlowerContextCompaction, event FlowerLiveEvent) FlowerContextCompaction {
-	if strings.TrimSpace(compaction.RunID) == "" {
-		compaction.RunID = strings.TrimSpace(event.RunID)
-	}
-	if strings.TrimSpace(compaction.OperationID) == "" {
-		compaction.OperationID = fmt.Sprintf("%s:%d:%s", compaction.RunID, compaction.StepIndex, strings.TrimSpace(compaction.Phase))
-	}
-	if compaction.UpdatedAtMs <= 0 {
-		compaction.UpdatedAtMs = event.AtUnixMs
-	}
-	return compaction
 }
 
 func normalizeFlowerTimelineDecorationForEvent(stream *flowerLiveThreadStream, compaction FlowerContextCompaction, decoration FlowerTimelineDecoration) FlowerTimelineDecoration {
@@ -1415,20 +1405,17 @@ func (s *Service) flowerLiveEventsFromStreamEvent(ev RealtimeEvent, base func(Fl
 			Error:     strings.TrimSpace(stream.Error),
 		})}
 	case streamEventContextUsage:
-		usage, ok := flowerContextUsageFromStream(stream, strings.TrimSpace(ev.RunID), ev.AtUnixMs)
+		usage, ok := flowerContextUsageFromStream(stream)
 		if !ok {
 			return nil
 		}
 		return []FlowerLiveEvent{base(FlowerLiveContextUsageUpdated, FlowerLiveUsageUpdatedPayload{Usage: usage})}
 	case streamEventContextCompaction:
-		compaction, ok := flowerContextCompactionFromStream(stream, strings.TrimSpace(ev.RunID), ev.AtUnixMs)
+		compaction, ok := flowerContextCompactionFromStream(stream)
 		if !ok {
 			return nil
 		}
 		decoration := stream.TimelineDecoration
-		if strings.TrimSpace(decoration.Compaction.OperationID) == "" {
-			decoration.Compaction = compaction
-		}
 		if !validFlowerTimelineDecoration(decoration) {
 			return nil
 		}
@@ -1563,20 +1550,14 @@ func applyFlowerLiveEventToMaterializedState(state *FlowerLiveMaterializedState,
 		}
 	case FlowerLiveContextUsageUpdated:
 		var payload FlowerLiveUsageUpdatedPayload
-		if decodeFlowerPayload(event.Payload, &payload) {
+		if decodeFlowerPayload(event.Payload, &payload) && flowerContextUsageHasCanonicalIdentity(payload.Usage) {
 			usage := payload.Usage
-			if strings.TrimSpace(usage.RunID) == "" {
-				usage.RunID = strings.TrimSpace(event.RunID)
-			}
-			if usage.UpdatedAtMs <= 0 {
-				usage.UpdatedAtMs = event.AtUnixMs
-			}
 			state.ContextUsage = cloneFlowerContextUsage(&usage)
 		}
 	case FlowerLiveContextCompactionUpdated:
 		var payload FlowerLiveContextCompactionUpdatedPayload
 		if decodeFlowerPayload(event.Payload, &payload) {
-			upsertFlowerContextCompaction(state, payload.Compaction, payload.TimelineDecoration, event)
+			upsertFlowerContextCompaction(state, payload.Compaction, payload.TimelineDecoration)
 		}
 	case FlowerLiveMessageStarted:
 		var payload FlowerLiveMessageStartedPayload
@@ -1809,18 +1790,12 @@ func flowerModelIOStatusMatchesLiveRun(state *FlowerLiveMaterializedState, statu
 	return !flowerLiveRunStatusHidesModelIO(run.Status)
 }
 
-func upsertFlowerContextCompaction(state *FlowerLiveMaterializedState, compaction FlowerContextCompaction, decoration FlowerTimelineDecoration, event FlowerLiveEvent) {
+func upsertFlowerContextCompaction(state *FlowerLiveMaterializedState, compaction FlowerContextCompaction, decoration FlowerTimelineDecoration) {
 	if state == nil {
 		return
 	}
-	if strings.TrimSpace(compaction.RunID) == "" {
-		compaction.RunID = strings.TrimSpace(event.RunID)
-	}
-	if strings.TrimSpace(compaction.OperationID) == "" {
-		compaction.OperationID = fmt.Sprintf("%s:%d:%s", compaction.RunID, compaction.StepIndex, strings.TrimSpace(compaction.Phase))
-	}
-	if compaction.UpdatedAtMs <= 0 {
-		compaction.UpdatedAtMs = event.AtUnixMs
+	if !flowerContextCompactionHasCanonicalIdentity(compaction) {
+		return
 	}
 	operationID := strings.TrimSpace(compaction.OperationID)
 	replaced := false
@@ -1896,35 +1871,32 @@ func flowerModelIOStatusFromStream(stream streamEventModelIOStatus, runID string
 	}
 }
 
-func flowerContextUsageFromStream(stream streamEventContextUsage, runID string, atUnixMs int64) (FlowerContextUsage, bool) {
+func flowerContextUsageFromStream(stream streamEventContextUsage) (FlowerContextUsage, bool) {
 	usage := stream.Usage
-	if strings.TrimSpace(usage.RunID) == "" {
-		usage.RunID = runID
-	}
-	if usage.UpdatedAtMs <= 0 {
-		usage.UpdatedAtMs = atUnixMs
-	}
-	if strings.TrimSpace(usage.Phase) == "" || strings.TrimSpace(usage.PressureStatus) == "" {
+	if !flowerContextUsageHasCanonicalIdentity(usage) || strings.TrimSpace(usage.Phase) == "" || strings.TrimSpace(usage.PressureStatus) == "" {
 		return FlowerContextUsage{}, false
 	}
 	return usage, true
 }
 
-func flowerContextCompactionFromStream(stream streamEventContextCompaction, runID string, atUnixMs int64) (FlowerContextCompaction, bool) {
+func flowerContextCompactionFromStream(stream streamEventContextCompaction) (FlowerContextCompaction, bool) {
 	compaction := stream.Compaction
-	if strings.TrimSpace(compaction.RunID) == "" {
-		compaction.RunID = runID
-	}
-	if compaction.UpdatedAtMs <= 0 {
-		compaction.UpdatedAtMs = atUnixMs
-	}
-	if strings.TrimSpace(compaction.OperationID) == "" {
-		compaction.OperationID = fmt.Sprintf("%s:%d:%s", compaction.RunID, compaction.StepIndex, strings.TrimSpace(compaction.Phase))
-	}
-	if strings.TrimSpace(compaction.Phase) == "" || strings.TrimSpace(compaction.Status) == "" {
+	if !flowerContextCompactionHasCanonicalIdentity(compaction) || strings.TrimSpace(compaction.Phase) == "" || strings.TrimSpace(compaction.Status) == "" {
 		return FlowerContextCompaction{}, false
 	}
 	return compaction, true
+}
+
+func flowerContextUsageHasCanonicalIdentity(usage FlowerContextUsage) bool {
+	return strings.TrimSpace(usage.RunID) != "" && usage.UpdatedAtMs > 0
+}
+
+func flowerContextCompactionHasCanonicalIdentity(compaction FlowerContextCompaction) bool {
+	return strings.TrimSpace(compaction.OperationID) != "" &&
+		strings.TrimSpace(compaction.RequestID) != "" &&
+		strings.TrimSpace(compaction.RunID) != "" &&
+		strings.TrimSpace(compaction.Source) != "" &&
+		compaction.UpdatedAtMs > 0
 }
 
 func normalizeFlowerModelIOPhase(raw string) FlowerModelIOPhase {
@@ -2100,7 +2072,7 @@ func flowerLiveThreadPatchFromSummary(ev RealtimeEvent) FlowerLiveThreadPatch {
 		RunErrorCode:           strings.TrimSpace(ev.RunErrorCode),
 		RunError:               strings.TrimSpace(ev.RunError),
 		WaitingPrompt:          ev.WaitingPrompt,
-		LastContextRunID:       strings.TrimSpace(ev.LastContextRunID),
+		ActiveRunID:            strings.TrimSpace(ev.ActiveRunID),
 		UpdatedAtUnixMs:        ev.UpdatedAtUnixMs,
 		LastMessageAtUnixMs:    ev.LastMessageAtUnixMs,
 		LastMessagePreview:     strings.TrimSpace(ev.LastMessagePreview),
@@ -2145,8 +2117,8 @@ func mergeFlowerLiveThreadPatch(current FlowerLiveThreadPatch, patch FlowerLiveT
 	current.RunErrorCode = strings.TrimSpace(patch.RunErrorCode)
 	current.RunError = strings.TrimSpace(patch.RunError)
 	current.WaitingPrompt = patch.WaitingPrompt
-	if strings.TrimSpace(patch.LastContextRunID) != "" {
-		current.LastContextRunID = strings.TrimSpace(patch.LastContextRunID)
+	if strings.TrimSpace(patch.ActiveRunID) != "" {
+		current.ActiveRunID = strings.TrimSpace(patch.ActiveRunID)
 	}
 	if patch.PinnedAtUnixMs > 0 {
 		current.PinnedAtUnixMs = patch.PinnedAtUnixMs

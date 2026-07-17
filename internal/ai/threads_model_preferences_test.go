@@ -4,12 +4,9 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
-
-	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
-func TestSetThreadModel_AllowsIdleThreadSwitchAndClearsProviderContinuation(t *testing.T) {
+func TestSetThreadModelAllowsIdleThreadSwitch(t *testing.T) {
 	t.Parallel()
 
 	svc := newSendTurnTestService(t)
@@ -20,19 +17,6 @@ func TestSetThreadModel_AllowsIdleThreadSwitchAndClearsProviderContinuation(t *t
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	if err := svc.threadsDB.SetThreadProviderContinuation(ctx, meta.EndpointID, th.ThreadID, threadstore.ThreadProviderContinuation{
-		State: threadstore.ProviderContinuationState{
-			Kind: providerContinuationKindOpenAIResponses,
-			ID:   "response_1",
-		},
-		ProviderID:      "openai",
-		Model:           "gpt-5-mini",
-		BaseURL:         "https://api.openai.com/v1",
-		UpdatedAtUnixMs: time.Now().UnixMilli(),
-	}); err != nil {
-		t.Fatalf("SetThreadProviderContinuation: %v", err)
-	}
-
 	if err := svc.SetThreadModel(ctx, meta, th.ThreadID, "openai/gpt-4o-mini"); err != nil {
 		t.Fatalf("SetThreadModel: %v", err)
 	}
@@ -46,13 +30,6 @@ func TestSetThreadModel_AllowsIdleThreadSwitchAndClearsProviderContinuation(t *t
 	}
 	if latest.ModelID != "openai/gpt-4o-mini" {
 		t.Fatalf("ModelID=%q, want %q", latest.ModelID, "openai/gpt-4o-mini")
-	}
-	continuation, err := svc.threadsDB.GetThreadProviderContinuation(ctx, meta.EndpointID, th.ThreadID)
-	if err != nil {
-		t.Fatalf("GetThreadProviderContinuation: %v", err)
-	}
-	if continuation != nil && !continuation.IsZero() {
-		t.Fatalf("provider continuation = %+v, want cleared", continuation)
 	}
 }
 

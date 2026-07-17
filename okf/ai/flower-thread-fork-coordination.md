@@ -10,7 +10,7 @@ Flower thread fork is a cross-repository durable operation. Floret owns the engi
 
 # Mechanism
 
-Redeven threadstore schema v38 adds `ai_thread_fork_operations`. An operation has one required `ForkOperationID`, request fingerprint, source and destination thread identities, `pending | committed | failed` status, snapshot schema version, snapshot JSON, Floret result JSON, retry count, diagnostic code/message, broadcast acknowledgements, and timestamps.
+Redeven canonical threadstore schema v1 contains `ai_thread_fork_operations`. An operation has one required `ForkOperationID`, request fingerprint, source and destination thread identities, `pending | committed | failed` status, snapshot schema version, snapshot JSON, Floret result JSON, retry count, diagnostic code/message, broadcast acknowledgements, and timestamps. Older pre-release schemas are rejected rather than migrated or repaired.
 
 `PrepareForkOperation` runs in one SQLite transaction. It validates that the operation request and destination are unused, reads the source product records, writes snapshot schema v1, and commits the operation as `pending`. The fixed snapshot contains the source thread, transcript messages, conversation turns, structured user inputs, todos, memory items, upload references, and Flower thread metadata. It intentionally excludes request-user-input secret answers, runs, run events, and every Floret-owned tool lifecycle or projection value. A later source-thread mutation cannot change what this operation will copy.
 
@@ -29,11 +29,11 @@ After commit, Redeven serializes summary publication per service, reloads the cu
 - Secrets, runs, Floret tool lifecycle state, and Floret internal storage are not copied.
 - A destination owned by another operation is a conflict, not a recovery hint.
 - A pending operation remains replayable after process restart.
-- Floret is consumed only through the published v0.9.0 public runtime API.
+- Floret is consumed only through the published v0.10.0 public runtime API and the Service-owned shared Store.
 
 # References
 
-[1] redeven:internal/ai/threadstore/schema.go:299 - Threadstore migration v38 creates durable fork operation storage.
+[1] redeven:internal/ai/threadstore/schema.go:35 - The canonical schema creates durable fork operation storage.
 [2] redeven:internal/ai/threadstore/fork_operation.go:176 - Fork preparation captures snapshot schema v1 transactionally.
 [3] redeven:internal/ai/threadstore/fork_operation.go:254 - Fork commit materializes from the fixed snapshot and stores the Floret result.
 [4] redeven:internal/ai/thread_fork_operation.go:20 - Redeven resumes one pending operation through Floret and local commit.

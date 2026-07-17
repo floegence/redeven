@@ -152,7 +152,7 @@ type ThreadView struct {
 	RunErrorCode        string                       `json:"run_error_code,omitempty"`
 	RunError            string                       `json:"run_error,omitempty"`
 	WaitingPrompt       *RequestUserInputPrompt      `json:"waiting_prompt,omitempty"`
-	LastContextRunID    string                       `json:"last_context_run_id,omitempty"`
+	ActiveRunID         string                       `json:"active_run_id,omitempty"`
 	ReasoningSelection  config.AIReasoningSelection  `json:"reasoning_selection,omitempty"`
 	ReasoningCapability config.AIReasoningCapability `json:"reasoning_capability,omitempty"`
 	PinnedAtUnixMs      int64                        `json:"pinned_at_unix_ms,omitempty"`
@@ -633,7 +633,6 @@ type RealtimeEvent struct {
 	LastMessagePreview  string                       `json:"last_message_preview,omitempty"`
 	LastMessageAtUnixMs int64                        `json:"last_message_at_unix_ms,omitempty"`
 	ActiveRunID         string                       `json:"active_run_id,omitempty"`
-	LastContextRunID    string                       `json:"last_context_run_id,omitempty"`
 	PermissionType      string                       `json:"permission_type,omitempty"`
 	QueuedTurnCount     int                          `json:"queued_turn_count,omitempty"`
 	ReasoningSelection  config.AIReasoningSelection  `json:"reasoning_selection,omitempty"`

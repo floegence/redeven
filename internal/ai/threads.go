@@ -98,11 +98,12 @@ func applyFlowerThreadMetadataView(view *ThreadView, meta *threadstore.FlowerThr
 	}
 }
 
-func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.Thread, flowerMeta *threadstore.FlowerThreadMetadata, queuedTurnCount int, active bool, waitingApproval bool) ThreadView {
+func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.Thread, flowerMeta *threadstore.FlowerThreadMetadata, queuedTurnCount int, activeRunID string, waitingApproval bool) ThreadView {
 	if th == nil {
 		return ThreadView{}
 	}
-	runStatus, runErrorCode, runError := effectiveThreadRunState(th.RunStatus, th.RunErrorCode, th.RunError, active, waitingApproval)
+	activeRunID = strings.TrimSpace(activeRunID)
+	runStatus, runErrorCode, runError := effectiveThreadRunState(th.RunStatus, th.RunErrorCode, th.RunError, activeRunID != "", waitingApproval)
 	workingDir := strings.TrimSpace(th.WorkingDir)
 	if workingDir == "" && s != nil {
 		workingDir = strings.TrimSpace(s.agentHomeDir)
@@ -120,7 +121,7 @@ func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.Thre
 		RunErrorCode:        runErrorCode,
 		RunError:            runError,
 		WaitingPrompt:       s.threadWaitingPrompt(ctx, th, runStatus),
-		LastContextRunID:    strings.TrimSpace(th.LastContextRunID),
+		ActiveRunID:         activeRunID,
 		ReasoningSelection:  unmarshalReasoningSelection(th.ReasoningSelectionJSON),
 		ReasoningCapability: capability,
 		PinnedAtUnixMs:      th.PinnedAtUnixMs,
@@ -179,13 +180,13 @@ func (s *Service) requireThreadMutable(ctx context.Context, db *threadstore.Stor
 	return nil
 }
 
-func (s *Service) threadRuntimeStateSets(endpointID string) (map[string]struct{}, map[string]struct{}) {
+func (s *Service) threadRuntimeStateSets(endpointID string) (map[string]string, map[string]struct{}) {
 	endpointID = strings.TrimSpace(endpointID)
 	if endpointID == "" || s == nil {
-		return map[string]struct{}{}, map[string]struct{}{}
+		return map[string]string{}, map[string]struct{}{}
 	}
 	prefix := endpointID + ":"
-	active := make(map[string]struct{})
+	active := make(map[string]string)
 	waitingApproval := make(map[string]struct{})
 	s.mu.Lock()
 	for key, runID := range s.activeRunByTh {
@@ -200,7 +201,7 @@ func (s *Service) threadRuntimeStateSets(endpointID string) (map[string]struct{}
 		if tid == "" {
 			continue
 		}
-		active[tid] = struct{}{}
+		active[tid] = strings.TrimSpace(runID)
 	}
 	for key, stream := range s.flowerLiveByThread {
 		if !strings.HasPrefix(key, prefix) || stream == nil || stream.State.ApprovalQueue == nil || stream.State.ApprovalQueue.UnresolvedCount <= 0 {
@@ -251,9 +252,9 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 	}
 
 	activeThreads, approvalThreads := s.threadRuntimeStateSets(endpointID)
-	_, active := activeThreads[threadID]
+	activeRunID := activeThreads[threadID]
 	_, waitingApproval := approvalThreads[threadID]
-	view := s.threadViewFromRecord(ctx, th, flowerMeta, queuedTurnCount, active, waitingApproval)
+	view := s.threadViewFromRecord(ctx, th, flowerMeta, queuedTurnCount, activeRunID, waitingApproval)
 	if queuedTurnCount > 0 {
 		queued, listErr := db.ListFollowupsByLane(ctx, endpointID, threadID, threadstore.FollowupLaneQueued, queuedTurnCount)
 		if listErr != nil {
@@ -313,9 +314,9 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 	out := &ListThreadsResponse{Threads: make([]ThreadView, 0, len(list)), NextCursor: strings.TrimSpace(next)}
 	for _, t := range list {
 		threadID := strings.TrimSpace(t.ThreadID)
-		_, active := activeThreads[threadID]
+		activeRunID := activeThreads[threadID]
 		_, waitingApproval := approvalThreads[threadID]
-		out.Threads = append(out.Threads, s.threadViewFromRecord(ctx, &t, flowerMetaByThread[threadID], queuedTurnCounts[threadID], active, waitingApproval))
+		out.Threads = append(out.Threads, s.threadViewFromRecord(ctx, &t, flowerMetaByThread[threadID], queuedTurnCounts[threadID], activeRunID, waitingApproval))
 	}
 	return out, nil
 }
@@ -439,7 +440,7 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 		return nil, err
 	}
 
-	view := s.threadViewFromRecord(ctx, &t, nil, 0, false, false)
+	view := s.threadViewFromRecord(ctx, &t, nil, 0, "", false)
 	return &view, nil
 }
 
@@ -602,7 +603,6 @@ func (s *Service) forkFloretThread(ctx context.Context, operationID string, sour
 	if err != nil {
 		return flruntime.ForkThreadResult{}, err
 	}
-	defer host.Close()
 	return forkFloretThreadWithHost(ctx, host, operationID, sourceThreadID, destinationThreadID)
 }
 
@@ -723,7 +723,7 @@ func (s *Service) SetThreadModel(ctx context.Context, meta *session.Meta, thread
 		return nil
 	}
 	if s.HasActiveThreadForEndpoint(endpointID, threadID) ||
-		s.idleThreadCompactionOperation(endpointID, threadID) != "" ||
+		s.idleThreadCompactionRequestID(endpointID, threadID) != "" ||
 		threadPreferenceChangeBlockedByRunState(th) {
 		return ErrThreadBusy
 	}
@@ -737,9 +737,6 @@ func (s *Service) SetThreadModel(ctx context.Context, meta *session.Meta, thread
 		return reasoningSelectionError(modelID, err)
 	}
 	if err := db.UpdateThreadModelAndReasoningSelection(ctx, endpointID, threadID, modelID, marshalReasoningSelection(normalizedReasoning)); err != nil {
-		return err
-	}
-	if err := db.ClearThreadProviderContinuation(ctx, endpointID, threadID); err != nil {
 		return err
 	}
 	s.broadcastThreadSummary(strings.TrimSpace(endpointID), strings.TrimSpace(threadID))
@@ -778,7 +775,7 @@ func (s *Service) SetThreadReasoningSelection(ctx context.Context, meta *session
 		return err
 	}
 	if s.HasActiveThreadForEndpoint(endpointID, threadID) ||
-		s.idleThreadCompactionOperation(endpointID, threadID) != "" ||
+		s.idleThreadCompactionRequestID(endpointID, threadID) != "" ||
 		threadPreferenceChangeBlockedByRunState(th) {
 		return ErrThreadBusy
 	}
@@ -832,7 +829,7 @@ func (s *Service) ClearThreadReasoningSelection(ctx context.Context, meta *sessi
 		return err
 	}
 	if s.HasActiveThreadForEndpoint(endpointID, threadID) ||
-		s.idleThreadCompactionOperation(endpointID, threadID) != "" ||
+		s.idleThreadCompactionRequestID(endpointID, threadID) != "" ||
 		threadPreferenceChangeBlockedByRunState(th) {
 		return ErrThreadBusy
 	}
@@ -932,7 +929,7 @@ func (s *Service) CancelThread(meta *session.Meta, threadID string) error {
 	if runID != "" {
 		return s.CancelRun(meta, runID)
 	}
-	if s.idleThreadCompactionOperation(endpointID, threadID) != "" {
+	if s.idleThreadCompactionRequestID(endpointID, threadID) != "" {
 		_, err := s.StopThread(context.Background(), meta, threadID)
 		return err
 	}
@@ -1040,16 +1037,7 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 		if !force {
 			return ThreadDeleteResult{}, ErrThreadBusy
 		}
-		if compaction, ok := s.cancelIdleThreadCompactionWithBroadcast(endpointID, threadID); ok {
-			if compaction.isFinalizing() {
-				waitCtx, waitCancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
-				waitOK := s.waitIdleThreadCompaction(waitCtx, compaction)
-				waitCancel()
-				if !waitOK {
-					return ThreadDeleteResult{}, context.DeadlineExceeded
-				}
-			}
-		}
+		s.cancelIdleThreadCompactionWithBroadcast(endpointID, threadID)
 	}
 
 	deleteCtx, cancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
@@ -1244,9 +1232,8 @@ func (s *Service) ListRunEvents(ctx context.Context, meta *session.Meta, runID s
 }
 
 type ListRunEventsQuery struct {
-	Cursor   int64
-	Limit    int
-	Category string
+	Cursor int64
+	Limit  int
 }
 
 func (s *Service) ListRunEventsWithQuery(ctx context.Context, meta *session.Meta, runID string, query ListRunEventsQuery) (*ListRunEventsResponse, error) {
@@ -1268,9 +1255,8 @@ func (s *Service) ListRunEventsWithQuery(ctx context.Context, meta *session.Meta
 	}
 
 	recs, nextCursor, hasMore, err := db.ListRunEventsPage(ctx, strings.TrimSpace(meta.EndpointID), runID, threadstore.RunEventsQuery{
-		Cursor:   query.Cursor,
-		Limit:    query.Limit,
-		Category: query.Category,
+		Cursor: query.Cursor,
+		Limit:  query.Limit,
 	})
 	if err != nil {
 		return nil, err

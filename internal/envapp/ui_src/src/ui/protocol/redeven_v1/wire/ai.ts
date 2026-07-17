@@ -86,7 +86,7 @@ export type wire_ai_compact_thread_context_req = {
 };
 
 export type wire_ai_compact_thread_context_resp = {
-  operation_id?: string;
+  request_id?: string;
   kind: string;
   error_code?: string;
 };
@@ -157,7 +157,6 @@ export type wire_ai_event_notify = {
   last_message_preview?: string;
   last_message_at_unix_ms?: number;
   active_run_id?: string;
-  last_context_run_id?: string;
   permission_type?: string;
   queued_turn_count?: number;
 

@@ -8,13 +8,11 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
-	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -83,17 +81,13 @@ func (m *openAIContinuationMock) handle(w http.ResponseWriter, r *http.Request) 
 func (m *openAIContinuationMock) snapshot() ([]string, []string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	previous := append([]string(nil), m.previousResponseIDs...)
-	issued := append([]string(nil), m.issuedResponseIDs...)
-	return previous, issued
+	return append([]string(nil), m.previousResponseIDs...), append([]string(nil), m.issuedResponseIDs...)
 }
 
 func (m *openAIContinuationMock) successfulCalls() ([]string, []string) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	previous := append([]string(nil), m.issuedPreviousIDs...)
-	issued := append([]string(nil), m.issuedResponseIDs...)
-	return previous, issued
+	return append([]string(nil), m.issuedPreviousIDs...), append([]string(nil), m.issuedResponseIDs...)
 }
 
 func writeOpenAIResponsesSSE(w http.ResponseWriter, r *http.Request, model string, responseID string, token string) {
@@ -171,25 +165,21 @@ func newOpenAIContinuationServiceForTest(t *testing.T, baseURL string) (*Service
 	t.Helper()
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
-	stateDir := t.TempDir()
-	agentHomeDir := t.TempDir()
 	cfg := &config.AIConfig{
 		CurrentModelID: "openai/gpt-5-mini",
-		Providers: []config.AIProvider{
-			{
-				ID:      "openai",
-				Name:    "OpenAI",
-				Type:    "openai",
-				BaseURL: strings.TrimSpace(baseURL),
-				Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
-			},
-		},
+		Providers: []config.AIProvider{{
+			ID:      "openai",
+			Name:    "OpenAI",
+			Type:    "openai",
+			BaseURL: strings.TrimSpace(baseURL),
+			Models:  []config.AIProviderModel{{ModelName: "gpt-5-mini"}},
+		}},
 	}
 
 	svc, err := NewService(Options{
 		Logger:              logger,
-		StateDir:            stateDir,
-		AgentHomeDir:        agentHomeDir,
+		StateDir:            t.TempDir(),
+		AgentHomeDir:        t.TempDir(),
 		Shell:               "bash",
 		Config:              cfg,
 		RunMaxWallTime:      30 * time.Second,
@@ -207,7 +197,7 @@ func newOpenAIContinuationServiceForTest(t *testing.T, baseURL string) (*Service
 	}
 	t.Cleanup(func() { _ = svc.Close() })
 
-	meta := session.Meta{
+	return svc, session.Meta{
 		EndpointID:        "env_continuation",
 		NamespacePublicID: "ns_continuation",
 		ChannelID:         "ch_continuation",
@@ -218,10 +208,9 @@ func newOpenAIContinuationServiceForTest(t *testing.T, baseURL string) (*Service
 		CanExecute:        true,
 		CanAdmin:          true,
 	}
-	return svc, meta
 }
 
-func TestOpenAIProviderStreamTurn_UsesPreviousResponseIDAndReturnsProviderState(t *testing.T) {
+func TestOpenAIProviderStreamTurnUsesPreviousResponseIDAndReturnsProviderState(t *testing.T) {
 	t.Parallel()
 
 	var (
@@ -252,7 +241,6 @@ func TestOpenAIProviderStreamTurn_UsesPreviousResponseIDAndReturnsProviderState(
 	if err != nil {
 		t.Fatalf("newProviderAdapter: %v", err)
 	}
-
 	result, err := provider.StreamTurn(context.Background(), ModelGatewayRequest{
 		Model: "gpt-5-mini",
 		Messages: []Message{{
@@ -268,106 +256,62 @@ func TestOpenAIProviderStreamTurn_UsesPreviousResponseIDAndReturnsProviderState(
 	gotPrevious := captured
 	mu.Unlock()
 	if gotPrevious != "resp_prev" {
-		t.Fatalf("previous_response_id=%q, want %q", gotPrevious, "resp_prev")
+		t.Fatalf("previous_response_id=%q, want resp_prev", gotPrevious)
 	}
-	if result.ProviderState == nil {
-		t.Fatalf("expected provider continuation state")
-	}
-	if result.ProviderState.ID != "resp_next" {
-		t.Fatalf("provider_state.id=%q, want %q", result.ProviderState.ID, "resp_next")
+	if result.ProviderState == nil || result.ProviderState.ID != "resp_next" {
+		t.Fatalf("provider state=%+v, want resp_next", result.ProviderState)
 	}
 }
 
-func TestIntegration_Service_OpenAIContinuationPersistsAndResumes(t *testing.T) {
+func TestIntegrationServiceOpenAIContinuationPersistsInFloretAndResumes(t *testing.T) {
 	t.Parallel()
 
 	mock := &openAIContinuationMock{}
 	srv := httptest.NewServer(http.HandlerFunc(mock.handle))
 	t.Cleanup(srv.Close)
-
 	svc, meta := newOpenAIContinuationServiceForTest(t, strings.TrimSuffix(srv.URL, "/")+"/v1")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-
 	thread, err := svc.CreateThread(ctx, &meta, "Continuation thread", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-
-	if err := svc.StartRun(ctx, &meta, "run_continuation_1", RunStartRequest{
-		ThreadID: thread.ThreadID,
-		Model:    "openai/gpt-5-mini",
-		Input:    RunInput{Text: "hello"},
-		Options:  RunOptions{},
-	}, httptest.NewRecorder()); err != nil {
-		t.Fatalf("StartRun first: %v", err)
-	}
-
-	continuation, err := svc.threadsDB.GetThreadProviderContinuation(ctx, meta.EndpointID, thread.ThreadID)
-	if err != nil {
-		t.Fatalf("GetThreadProviderContinuation first: %v", err)
-	}
-	if continuation == nil || continuation.State.ID != "resp_run_1" {
-		t.Fatalf("continuation after first run=%+v, want resp_run_1", continuation)
-	}
-
-	if err := svc.StartRun(ctx, &meta, "run_continuation_2", RunStartRequest{
-		ThreadID: thread.ThreadID,
-		Model:    "openai/gpt-5-mini",
-		Input:    RunInput{Text: "hello again"},
-		Options:  RunOptions{},
-	}, httptest.NewRecorder()); err != nil {
-		t.Fatalf("StartRun second: %v", err)
+	for index, input := range []string{"hello", "hello again"} {
+		if err := svc.StartRun(ctx, &meta, fmt.Sprintf("run_continuation_%d", index+1), RunStartRequest{
+			ThreadID: thread.ThreadID,
+			Model:    "openai/gpt-5-mini",
+			Input:    RunInput{Text: input},
+			Options:  RunOptions{},
+		}, httptest.NewRecorder()); err != nil {
+			t.Fatalf("StartRun %d: %v", index+1, err)
+		}
 	}
 
 	allPreviousIDs, _ := mock.snapshot()
-	if len(allPreviousIDs) < 2 {
-		t.Fatalf("previousIDs=%v, want multiple provider calls", allPreviousIDs)
+	if len(allPreviousIDs) < 2 || allPreviousIDs[0] != "" {
+		t.Fatalf("previous response ids=%v, want initial empty state and resumed turn", allPreviousIDs)
 	}
-	if allPreviousIDs[0] != "" {
-		t.Fatalf("first actual previous_response_id=%q, want empty", allPreviousIDs[0])
-	}
-	successfulPreviousIDs, issuedResponseIDs := mock.successfulCalls()
-	resumedResponseID := ""
-	for i, previousID := range successfulPreviousIDs {
-		if previousID == "resp_run_1" && i < len(issuedResponseIDs) {
-			resumedResponseID = issuedResponseIDs[i]
-			break
-		}
-	}
-	if resumedResponseID == "" {
-		t.Fatalf("successfulPreviousIDs=%v issuedResponseIDs=%v, want a successful call resumed from resp_run_1", successfulPreviousIDs, issuedResponseIDs)
-	}
-
-	continuation, err = svc.threadsDB.GetThreadProviderContinuation(ctx, meta.EndpointID, thread.ThreadID)
-	if err != nil {
-		t.Fatalf("GetThreadProviderContinuation second: %v", err)
-	}
-	if continuation == nil || continuation.State.ID != resumedResponseID {
-		t.Fatalf("continuation after second run=%+v, want resumed response %q", continuation, resumedResponseID)
+	successfulPreviousIDs, _ := mock.successfulCalls()
+	if !containsString(successfulPreviousIDs, "resp_run_1") {
+		t.Fatalf("successful previous response ids=%v, want resp_run_1", successfulPreviousIDs)
 	}
 }
 
-func TestIntegration_Service_OpenAIContinuationRejectedPreviousResponseIDFailsAndClearsState(t *testing.T) {
+func TestIntegrationServiceRejectedOpenAIContinuationFailsWithoutReplay(t *testing.T) {
 	t.Parallel()
 
-	mock := &openAIContinuationMock{
-		rejectPreviousIDOnce: map[string]bool{"resp_run_1": true},
-	}
+	mock := &openAIContinuationMock{rejectPreviousIDOnce: map[string]bool{"resp_run_1": true}}
 	srv := httptest.NewServer(http.HandlerFunc(mock.handle))
 	t.Cleanup(srv.Close)
-
 	svc, meta := newOpenAIContinuationServiceForTest(t, strings.TrimSuffix(srv.URL, "/")+"/v1")
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-
-	thread, err := svc.CreateThread(ctx, &meta, "Continuation replay", "", "", "")
+	thread, err := svc.CreateThread(ctx, &meta, "Continuation rejection", "", "", "")
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-
 	if err := svc.StartRun(ctx, &meta, "run_replay_1", RunStartRequest{
 		ThreadID: thread.ThreadID,
 		Model:    "openai/gpt-5-mini",
@@ -382,260 +326,15 @@ func TestIntegration_Service_OpenAIContinuationRejectedPreviousResponseIDFailsAn
 		Input:    RunInput{Text: "hello again"},
 		Options:  RunOptions{},
 	}, httptest.NewRecorder())
-	if err == nil {
-		t.Fatalf("StartRun second succeeded, want rejected continuation error")
-	}
-	if !strings.Contains(err.Error(), "previous_response_id") {
-		t.Fatalf("StartRun second error=%v, want rejected continuation detail", err)
+	if err == nil || !strings.Contains(err.Error(), "previous_response_id") {
+		t.Fatalf("StartRun second error=%v, want rejected continuation", err)
 	}
 
 	previousIDs, issuedResponseIDs := mock.snapshot()
-	if len(previousIDs) < 2 {
-		t.Fatalf("previousIDs=%v, want multiple provider calls", previousIDs)
+	if !containsString(previousIDs, "resp_run_1") || !containsString(issuedResponseIDs, "resp_run_1") {
+		t.Fatalf("previous ids=%v issued ids=%v, want one rejected resp_run_1 continuation", previousIDs, issuedResponseIDs)
 	}
-	if previousIDs[0] != "" || !containsString(previousIDs, "resp_run_1") {
-		t.Fatalf("previousIDs=%v, want initial empty call and rejected resp_run_1 replay", previousIDs)
-	}
-	if !containsString(issuedResponseIDs, "resp_run_1") {
-		t.Fatalf("issuedResponseIDs=%v, want first successful response", issuedResponseIDs)
-	}
-
-	continuation, err := svc.threadsDB.GetThreadProviderContinuation(ctx, meta.EndpointID, thread.ThreadID)
-	if err != nil {
-		t.Fatalf("GetThreadProviderContinuation: %v", err)
-	}
-	if continuation != nil {
-		t.Fatalf("continuation after rejected state=%+v, want cleared", continuation)
-	}
-}
-
-func TestProviderContinuationProjector_PreviousStateRequiresMatchingEnvelope(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name         string
-		continuation threadstore.ThreadProviderContinuation
-		providerType string
-		modelName    string
-		wantPrevious bool
-	}{
-		{
-			name: "matching state",
-			continuation: threadstore.ThreadProviderContinuation{
-				State: threadstore.ProviderContinuationState{
-					Kind:       providerContinuationKindOpenAIResponses,
-					ID:         "resp_prev",
-					Attributes: map[string]string{"cursor": "cur_1"},
-				},
-				ProviderID:      "openai",
-				Model:           "gpt-5-mini",
-				BaseURL:         "https://api.openai.com/v1",
-				UpdatedAtUnixMs: 2,
-			},
-			providerType: "openai",
-			modelName:    "gpt-5-mini",
-			wantPrevious: true,
-		},
-		{
-			name: "model mismatch",
-			continuation: threadstore.ThreadProviderContinuation{
-				State: threadstore.ProviderContinuationState{
-					Kind: providerContinuationKindOpenAIResponses,
-					ID:   "resp_prev",
-				},
-				ProviderID:      "openai",
-				Model:           "gpt-5",
-				BaseURL:         "https://api.openai.com/v1",
-				UpdatedAtUnixMs: 2,
-			},
-			providerType: "openai",
-			modelName:    "gpt-5-mini",
-		},
-		{
-			name: "provider id mismatch",
-			continuation: threadstore.ThreadProviderContinuation{
-				State: threadstore.ProviderContinuationState{
-					Kind: providerContinuationKindOpenAIResponses,
-					ID:   "resp_prev",
-				},
-				ProviderID:      "openai",
-				Model:           "gpt-5-mini",
-				BaseURL:         "https://api.openai.com/v1",
-				UpdatedAtUnixMs: 2,
-			},
-			providerType: "openai",
-			modelName:    "gpt-5-mini",
-		},
-		{
-			name: "base url mismatch",
-			continuation: threadstore.ThreadProviderContinuation{
-				State: threadstore.ProviderContinuationState{
-					Kind: providerContinuationKindOpenAIResponses,
-					ID:   "resp_prev",
-				},
-				ProviderID:      "openai",
-				Model:           "gpt-5-mini",
-				BaseURL:         "https://api.openai.com/v1",
-				UpdatedAtUnixMs: 2,
-			},
-			providerType: "openai",
-			modelName:    "gpt-5-mini",
-		},
-		{
-			name: "kind mismatch",
-			continuation: threadstore.ThreadProviderContinuation{
-				State: threadstore.ProviderContinuationState{
-					Kind: "other_kind",
-					ID:   "resp_prev",
-				},
-				ProviderID:      "openai",
-				Model:           "gpt-5-mini",
-				BaseURL:         "https://api.openai.com/v1",
-				UpdatedAtUnixMs: 2,
-			},
-			providerType: "openai",
-			modelName:    "gpt-5-mini",
-		},
-		{
-			name: "provider type not supported",
-			continuation: threadstore.ThreadProviderContinuation{
-				State: threadstore.ProviderContinuationState{
-					Kind: providerContinuationKindOpenAIResponses,
-					ID:   "resp_prev",
-				},
-				ProviderID:      "openai",
-				Model:           "gpt-5-mini",
-				BaseURL:         "https://api.openai.com/v1",
-				UpdatedAtUnixMs: 2,
-			},
-			providerType: "moonshot",
-			modelName:    "kimi-k2.6",
-		},
-	}
-
-	for _, tt := range tests {
-		tt := tt
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-
-			dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-			store, err := threadstore.Open(dbPath)
-			if err != nil {
-				t.Fatalf("Open: %v", err)
-			}
-			t.Cleanup(func() { _ = store.Close() })
-
-			ctx := context.Background()
-			if err := store.CreateThread(ctx, threadstore.Thread{
-				ThreadID:              "th_resume",
-				EndpointID:            "env_resume",
-				NamespacePublicID:     "ns_resume",
-				CreatedByUserPublicID: "u1",
-				CreatedByUserEmail:    "u1@example.com",
-				UpdatedByUserPublicID: "u1",
-				UpdatedByUserEmail:    "u1@example.com",
-				CreatedAtUnixMs:       1,
-				UpdatedAtUnixMs:       1,
-			}); err != nil {
-				t.Fatalf("CreateThread: %v", err)
-			}
-			if err := store.SetThreadProviderContinuation(ctx, "env_resume", "th_resume", tt.continuation); err != nil {
-				t.Fatalf("SetThreadProviderContinuation: %v", err)
-			}
-
-			r := newRun(runOptions{
-				ThreadsDB:  store,
-				EndpointID: "env_resume",
-				ThreadID:   "th_resume",
-			})
-			providerID := "openai"
-			baseURL := "https://api.openai.com/v1"
-			if tt.name == "provider id mismatch" {
-				providerID = "openai-alt"
-			}
-			if tt.name == "base url mismatch" {
-				baseURL = "https://proxy.example.com/v1"
-			}
-			projector := newProviderContinuationProjector(r, providerID, tt.providerType, tt.modelName, baseURL)
-			state, err := projector.PreviousState(ctx)
-			if err != nil {
-				t.Fatalf("PreviousState: %v", err)
-			}
-			if tt.wantPrevious {
-				if state == nil || state.ID != "resp_prev" || state.Kind != providerContinuationKindOpenAIResponses {
-					t.Fatalf("previous state=%+v, want resp_prev", state)
-				}
-				if state.Attributes["cursor"] != "cur_1" {
-					t.Fatalf("previous attributes=%v, want cursor", state.Attributes)
-				}
-				return
-			}
-			if state != nil {
-				t.Fatalf("previous state=%+v, want nil", state)
-			}
-		})
-	}
-}
-
-func TestPersistProviderContinuationCandidate_PersistsProviderState(t *testing.T) {
-	t.Parallel()
-
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	store, err := threadstore.Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(func() { _ = store.Close() })
-
-	ctx := context.Background()
-	if err := store.CreateThread(ctx, threadstore.Thread{
-		ThreadID:              "th_sync",
-		EndpointID:            "env_sync",
-		NamespacePublicID:     "ns_sync",
-		CreatedByUserPublicID: "u1",
-		CreatedByUserEmail:    "u1@example.com",
-		UpdatedByUserPublicID: "u1",
-		UpdatedByUserEmail:    "u1@example.com",
-		CreatedAtUnixMs:       1,
-		UpdatedAtUnixMs:       1,
-	}); err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-	if err := store.SetThreadProviderContinuation(ctx, "env_sync", "th_sync", threadstore.ThreadProviderContinuation{
-		State: threadstore.ProviderContinuationState{
-			Kind: providerContinuationKindOpenAIResponses,
-			ID:   "resp_prev",
-		},
-		ProviderID:      "openai",
-		Model:           "gpt-5-mini",
-		BaseURL:         "https://api.openai.com/v1",
-		UpdatedAtUnixMs: 2,
-	}); err != nil {
-		t.Fatalf("SetThreadProviderContinuation: %v", err)
-	}
-
-	if err := persistProviderContinuationCandidate(ctx, store, "env_sync", "th_sync", threadstore.ThreadProviderContinuation{
-		State: threadstore.ProviderContinuationState{
-			Kind:       providerContinuationKindOpenAIResponses,
-			ID:         "resp_next",
-			Attributes: map[string]string{"cursor": "cur_next"},
-		},
-		ProviderID:      "openai",
-		Model:           "gpt-5-mini",
-		BaseURL:         "https://api.openai.com/v1",
-		UpdatedAtUnixMs: 3,
-	}); err != nil {
-		t.Fatalf("persistProviderContinuationCandidate: %v", err)
-	}
-
-	got, err := store.GetThreadProviderContinuation(ctx, "env_sync", "th_sync")
-	if err != nil {
-		t.Fatalf("GetThreadProviderContinuation: %v", err)
-	}
-	if got == nil || got.State.ID != "resp_next" {
-		t.Fatalf("continuation after sync=%+v, want resp_next", got)
-	}
-	if got.State.Attributes["cursor"] != "cur_next" {
-		t.Fatalf("continuation attributes=%v, want cursor", got.State.Attributes)
+	if len(previousIDs) != 2 {
+		t.Fatalf("provider calls=%v, want no Redeven replay after rejection", previousIDs)
 	}
 }

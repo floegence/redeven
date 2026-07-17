@@ -14,8 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/floegence/redeven/internal/persistence/sqliteutil"
-
 	_ "modernc.org/sqlite"
 )
 
@@ -73,34 +71,6 @@ func Open(path string) (*Store, error) {
 	return &Store{db: db}, nil
 }
 
-func OpenResettingInvalidSchema(path string) (*Store, error) {
-	store, err := Open(path)
-	if err == nil {
-		return store, nil
-	}
-	var schemaErr *sqliteutil.SchemaVerifyError
-	if !errors.As(err, &schemaErr) {
-		return nil, err
-	}
-	if resetErr := removeSQLiteFiles(path); resetErr != nil {
-		return nil, errors.Join(err, resetErr)
-	}
-	return Open(path)
-}
-
-func removeSQLiteFiles(path string) error {
-	p := filepath.Clean(strings.TrimSpace(path))
-	if p == "" {
-		return errors.New("missing db path")
-	}
-	for _, candidate := range []string{p, p + "-wal", p + "-shm", p + "-journal"} {
-		if err := os.Remove(candidate); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-	}
-	return nil
-}
-
 func (s *Store) Close() error {
 	if s == nil || s.db == nil {
 		return nil
@@ -127,7 +97,6 @@ type Thread struct {
 	RunErrorCode           string `json:"run_error_code"`
 	RunError               string `json:"run_error"`
 	WaitingUserInputJSON   string `json:"waiting_user_input_json"`
-	LastContextRunID       string `json:"last_context_run_id"`
 	PinnedAtUnixMs         int64  `json:"pinned_at_unix_ms"`
 
 	FlowerActivityRevision        int64  `json:"flower_activity_revision"`
@@ -219,7 +188,7 @@ const threadSelectColumnsSQL = `
   thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json, execution_mode, permission_type, working_dir, title,
   title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
   run_status, run_updated_at_unix_ms, run_error_code, run_error,
-  waiting_user_input_json, last_context_run_id, pinned_at_unix_ms,
+	  waiting_user_input_json, pinned_at_unix_ms,
   flower_activity_revision, flower_activity_signature, flower_activity_waiting_prompt_id,
   created_by_user_public_id, created_by_user_email,
   updated_by_user_public_id, updated_by_user_email,
@@ -255,7 +224,6 @@ func scanThreadRow(scan rowScanner, t *Thread) error {
 		&t.RunErrorCode,
 		&t.RunError,
 		&t.WaitingUserInputJSON,
-		&t.LastContextRunID,
 		&t.PinnedAtUnixMs,
 		&t.FlowerActivityRevision,
 		&t.FlowerActivitySignature,
@@ -276,7 +244,6 @@ func scanThreadRow(scan rowScanner, t *Thread) error {
 	t.TitleInputMessageID = strings.TrimSpace(t.TitleInputMessageID)
 	t.TitleModelID = strings.TrimSpace(t.TitleModelID)
 	t.TitlePromptVersion = strings.TrimSpace(t.TitlePromptVersion)
-	t.LastContextRunID = strings.TrimSpace(t.LastContextRunID)
 	t.FlowerActivitySignature = strings.TrimSpace(t.FlowerActivitySignature)
 	t.FlowerActivityWaitingPromptID = strings.TrimSpace(t.FlowerActivityWaitingPromptID)
 	if t.FlowerActivityRevision < 0 {
@@ -597,13 +564,13 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 		  thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json, permission_type, working_dir, title,
 	  title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
 	  run_status, run_updated_at_unix_ms, run_error_code, run_error,
-	  waiting_user_input_json, last_context_run_id,
+		  waiting_user_input_json,
 	  flower_activity_revision, flower_activity_signature, flower_activity_waiting_prompt_id,
 	  created_by_user_public_id, created_by_user_email,
 	  updated_by_user_public_id, updated_by_user_email,
 	  created_at_unix_ms, updated_at_unix_ms,
 	  last_message_at_unix_ms, last_message_preview, pinned_at_unix_ms
-		) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		t.ThreadID,
 		t.EndpointID,
@@ -623,7 +590,6 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 		t.RunErrorCode,
 		t.RunError,
 		t.WaitingUserInputJSON,
-		t.LastContextRunID,
 		t.FlowerActivityRevision,
 		t.FlowerActivitySignature,
 		t.FlowerActivityWaitingPromptID,
@@ -725,7 +691,6 @@ func normalizeProjectedThread(t Thread) (Thread, error) {
 	t.RunErrorCode = strings.TrimSpace(t.RunErrorCode)
 	t.RunError = strings.TrimSpace(t.RunError)
 	t.WaitingUserInputJSON = strings.TrimSpace(t.WaitingUserInputJSON)
-	t.LastContextRunID = strings.TrimSpace(t.LastContextRunID)
 	t.CreatedByUserPublicID = strings.TrimSpace(t.CreatedByUserPublicID)
 	t.CreatedByUserEmail = strings.TrimSpace(t.CreatedByUserEmail)
 	t.UpdatedByUserPublicID = strings.TrimSpace(t.UpdatedByUserPublicID)
@@ -771,13 +736,13 @@ INSERT INTO ai_threads(
   thread_id, endpoint_id, namespace_public_id, model_id, permission_type, working_dir, title,
   title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
   run_status, run_updated_at_unix_ms, run_error_code, run_error,
-  waiting_user_input_json, last_context_run_id,
+	  waiting_user_input_json,
   flower_activity_revision, flower_activity_signature, flower_activity_waiting_prompt_id,
   created_by_user_public_id, created_by_user_email,
   updated_by_user_public_id, updated_by_user_email,
   created_at_unix_ms, updated_at_unix_ms,
   last_message_at_unix_ms, last_message_preview, pinned_at_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `,
 			t.ThreadID,
 			t.EndpointID,
@@ -796,7 +761,6 @@ INSERT INTO ai_threads(
 			t.RunErrorCode,
 			t.RunError,
 			t.WaitingUserInputJSON,
-			t.LastContextRunID,
 			t.FlowerActivityRevision,
 			t.FlowerActivitySignature,
 			t.FlowerActivityWaitingPromptID,
@@ -847,11 +811,10 @@ SET namespace_public_id = ?,
     title_prompt_version = ?,
     run_status = ?,
     run_updated_at_unix_ms = ?,
-    run_error_code = ?,
-    run_error = ?,
-    waiting_user_input_json = ?,
-    last_context_run_id = ?,
-    updated_by_user_public_id = ?,
+	    run_error_code = ?,
+	    run_error = ?,
+	    waiting_user_input_json = ?,
+	    updated_by_user_public_id = ?,
     updated_by_user_email = ?,
     updated_at_unix_ms = ?,
     last_message_at_unix_ms = ?,
@@ -876,7 +839,6 @@ WHERE endpoint_id = ? AND thread_id = ?
 		t.RunErrorCode,
 		t.RunError,
 		t.WaitingUserInputJSON,
-		t.LastContextRunID,
 		t.UpdatedByUserPublicID,
 		t.UpdatedByUserEmail,
 		t.UpdatedAtUnixMs,
@@ -910,7 +872,6 @@ func projectedThreadEqual(existing Thread, next Thread) bool {
 		existing.RunErrorCode == next.RunErrorCode &&
 		existing.RunError == next.RunError &&
 		existing.WaitingUserInputJSON == next.WaitingUserInputJSON &&
-		existing.LastContextRunID == next.LastContextRunID &&
 		existing.UpdatedByUserPublicID == next.UpdatedByUserPublicID &&
 		existing.UpdatedByUserEmail == next.UpdatedByUserEmail &&
 		existing.UpdatedAtUnixMs == next.UpdatedAtUnixMs &&
@@ -1213,18 +1174,13 @@ func normalizeWaitingUserInputJSONForStatus(runStatus string, waitingUserInputJS
 	return waitingUserInputJSON
 }
 
-func isPersistedContextRunEventType(eventType string) bool {
-	eventType = strings.TrimSpace(strings.ToLower(eventType))
-	return eventType == "context.usage.updated" || eventType == "context.compaction.updated"
-}
-
 func initialFlowerActivitySnapshot(t Thread) FlowerActivitySnapshot {
 	revision := legacyFlowerActivityRevision(t.RunStatus, t.RunUpdatedAtUnixMs, t.LastMessageAtUnixMs)
 	waitingPromptID := flowerActivityWaitingPromptID(t.RunStatus, t.WaitingUserInputJSON)
 	return FlowerActivitySnapshot{
 		ActivityRevision:    revision,
 		LastMessageAtUnixMs: nonNegativeInt64(t.LastMessageAtUnixMs),
-		ActivitySignature:   flowerActivitySignatureForState(revision, t.RunStatus, t.LastContextRunID, waitingPromptID, t.LastMessageAtUnixMs, t.LastMessagePreview),
+		ActivitySignature:   flowerActivitySignatureForState(revision, t.RunStatus, waitingPromptID, t.LastMessageAtUnixMs, t.LastMessagePreview),
 		WaitingPromptID:     waitingPromptID,
 	}
 }
@@ -1259,7 +1215,7 @@ WHERE endpoint_id = ? AND thread_id = ?
 	return FlowerActivitySnapshot{
 		ActivityRevision:    revision,
 		LastMessageAtUnixMs: nonNegativeInt64(next.LastMessageAtUnixMs),
-		ActivitySignature:   flowerActivitySignatureForState(revision, next.RunStatus, next.LastContextRunID, waitingPromptID, next.LastMessageAtUnixMs, next.LastMessagePreview),
+		ActivitySignature:   flowerActivitySignatureForState(revision, next.RunStatus, waitingPromptID, next.LastMessageAtUnixMs, next.LastMessagePreview),
 		WaitingPromptID:     waitingPromptID,
 	}, nil
 }
@@ -1340,17 +1296,13 @@ func flowerActivityWaitingPromptID(runStatus string, waitingUserInputJSON string
 func flowerActivitySignatureForState(
 	activityRevision int64,
 	runStatus string,
-	lastContextRunID string,
 	waitingPromptID string,
 	lastMessageAtUnixMs int64,
 	lastMessagePreview string,
 ) string {
-	tokens := make([]string, 0, 6)
+	tokens := make([]string, 0, 5)
 	if normalizedStatus := normalizeFlowerActivityToken(runStatus); normalizedStatus != "" {
 		tokens = append(tokens, "status:"+normalizedStatus)
-	}
-	if lastContextRunID = strings.TrimSpace(lastContextRunID); lastContextRunID != "" {
-		tokens = append(tokens, "turn:"+lastContextRunID)
 	}
 	tokens = append(tokens, "activity:"+formatNonNegativeInt64(activityRevision))
 	tokens = append(tokens, "last_message:"+formatNonNegativeInt64(lastMessageAtUnixMs))
@@ -2069,169 +2021,6 @@ func (s *Store) AppendMessage(ctx context.Context, endpointID string, threadID s
 	return rowID, nil
 }
 
-// UpsertProjectedMessage stores or replaces one host-owned transcript message
-// identified by endpoint, thread, and message id.
-func (s *Store) UpsertProjectedMessage(ctx context.Context, endpointID string, threadID string, m Message, updatedByID string, updatedByEmail string) (int64, error) {
-	if s == nil || s.db == nil {
-		return 0, errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	if endpointID == "" || threadID == "" {
-		return 0, errors.New("invalid request")
-	}
-
-	m.ThreadID = strings.TrimSpace(m.ThreadID)
-	if m.ThreadID == "" {
-		m.ThreadID = threadID
-	}
-	m.EndpointID = strings.TrimSpace(m.EndpointID)
-	if m.EndpointID == "" {
-		m.EndpointID = endpointID
-	}
-	m.MessageID = strings.TrimSpace(m.MessageID)
-	m.Role = strings.TrimSpace(m.Role)
-	m.Status = strings.TrimSpace(m.Status)
-	m.AuthorUserPublicID = strings.TrimSpace(m.AuthorUserPublicID)
-	m.AuthorUserEmail = strings.TrimSpace(m.AuthorUserEmail)
-	m.TextContent = strings.TrimSpace(m.TextContent)
-	m.MessageJSON = strings.TrimSpace(m.MessageJSON)
-	if m.MessageID == "" || m.Role == "" || m.Status == "" || m.MessageJSON == "" {
-		return 0, errors.New("invalid message")
-	}
-	now := time.Now().UnixMilli()
-	if m.CreatedAtUnixMs <= 0 {
-		m.CreatedAtUnixMs = now
-	}
-	if m.UpdatedAtUnixMs <= 0 {
-		m.UpdatedAtUnixMs = m.CreatedAtUnixMs
-	}
-
-	preview := buildPreview(m.Role, m.TextContent, m.MessageJSON)
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return 0, err
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	var rowID int64
-	var existing Message
-	err = tx.QueryRowContext(ctx, `
-SELECT id, role, author_user_public_id, author_user_email, status, created_at_unix_ms, updated_at_unix_ms, text_content, message_json
-FROM transcript_messages
-WHERE endpoint_id = ? AND thread_id = ? AND message_id = ?
-`, endpointID, threadID, m.MessageID).Scan(
-		&rowID,
-		&existing.Role,
-		&existing.AuthorUserPublicID,
-		&existing.AuthorUserEmail,
-		&existing.Status,
-		&existing.CreatedAtUnixMs,
-		&existing.UpdatedAtUnixMs,
-		&existing.TextContent,
-		&existing.MessageJSON,
-	)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return 0, err
-	}
-	if errors.Is(err, sql.ErrNoRows) {
-		rowID, err = appendMessageTx(ctx, tx, endpointID, threadID, m, strings.TrimSpace(updatedByID), strings.TrimSpace(updatedByEmail), preview)
-		if err != nil {
-			return 0, err
-		}
-	} else {
-		if existing.Role == m.Role &&
-			existing.AuthorUserPublicID == m.AuthorUserPublicID &&
-			existing.AuthorUserEmail == m.AuthorUserEmail &&
-			existing.Status == m.Status &&
-			existing.CreatedAtUnixMs == m.CreatedAtUnixMs &&
-			existing.UpdatedAtUnixMs == m.UpdatedAtUnixMs &&
-			existing.TextContent == m.TextContent &&
-			existing.MessageJSON == m.MessageJSON {
-			if err := tx.Commit(); err != nil {
-				return 0, err
-			}
-			return rowID, nil
-		}
-		_, err = tx.ExecContext(ctx, `
-UPDATE transcript_messages
-SET role = ?,
-    author_user_public_id = ?,
-    author_user_email = ?,
-    status = ?,
-    created_at_unix_ms = ?,
-    updated_at_unix_ms = ?,
-    text_content = ?,
-    message_json = ?
-WHERE endpoint_id = ? AND thread_id = ? AND message_id = ?
-`,
-			m.Role,
-			m.AuthorUserPublicID,
-			m.AuthorUserEmail,
-			m.Status,
-			m.CreatedAtUnixMs,
-			m.UpdatedAtUnixMs,
-			m.TextContent,
-			m.MessageJSON,
-			endpointID,
-			threadID,
-			m.MessageID,
-		)
-		if err != nil {
-			return 0, err
-		}
-		var currentUpdatedAt int64
-		var currentLastMessageAt int64
-		var currentPreview string
-		if err := tx.QueryRowContext(ctx, `
-SELECT updated_at_unix_ms, last_message_at_unix_ms, last_message_preview
-FROM ai_threads
-WHERE endpoint_id = ? AND thread_id = ?
-`, endpointID, threadID).Scan(&currentUpdatedAt, &currentLastMessageAt, &currentPreview); err != nil {
-			if errors.Is(err, sql.ErrNoRows) {
-				return 0, sql.ErrNoRows
-			}
-			return 0, err
-		}
-		nextLastMessageAt := currentLastMessageAt
-		nextPreview := strings.TrimSpace(currentPreview)
-		if m.CreatedAtUnixMs >= currentLastMessageAt {
-			nextLastMessageAt = m.CreatedAtUnixMs
-			nextPreview = preview
-		}
-		_, err = tx.ExecContext(ctx, `
-UPDATE ai_threads
-SET updated_at_unix_ms = ?,
-    updated_by_user_public_id = ?,
-    updated_by_user_email = ?,
-    last_message_at_unix_ms = ?,
-    last_message_preview = ?
-WHERE endpoint_id = ? AND thread_id = ?
-`,
-			maxInt64(m.UpdatedAtUnixMs, currentUpdatedAt),
-			strings.TrimSpace(updatedByID),
-			strings.TrimSpace(updatedByEmail),
-			nextLastMessageAt,
-			nextPreview,
-			endpointID,
-			threadID,
-		)
-		if err != nil {
-			return 0, err
-		}
-		if _, err := bumpFlowerActivityTx(ctx, tx, endpointID, threadID); err != nil {
-			return 0, err
-		}
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, err
-	}
-	return rowID, nil
-}
-
 func appendMessageTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, m Message, updatedByID string, updatedByEmail string, preview string) (int64, error) {
 	res, err := tx.ExecContext(ctx, `
 INSERT INTO transcript_messages(
@@ -2663,157 +2452,16 @@ type RunEventRecord struct {
 }
 
 type RunEventsQuery struct {
-	Cursor   int64
-	Limit    int
-	Category string
-}
-
-type ProviderContinuationState struct {
-	Kind       string            `json:"kind,omitempty"`
-	ID         string            `json:"id,omitempty"`
-	Attributes map[string]string `json:"attributes,omitempty"`
-}
-
-func (s ProviderContinuationState) normalized() ProviderContinuationState {
-	s.Kind = strings.TrimSpace(s.Kind)
-	s.ID = strings.TrimSpace(s.ID)
-	s.Attributes = cloneProviderContinuationAttributes(s.Attributes)
-	if s.Kind == "" || s.ID == "" {
-		return ProviderContinuationState{}
-	}
-	return s
-}
-
-func (s ProviderContinuationState) IsZero() bool {
-	normalized := s.normalized()
-	return normalized.Kind == "" || normalized.ID == ""
-}
-
-type ThreadProviderContinuation struct {
-	State           ProviderContinuationState `json:"state"`
-	ProviderID      string                    `json:"provider_id"`
-	Model           string                    `json:"model"`
-	BaseURL         string                    `json:"base_url"`
-	UpdatedAtUnixMs int64                     `json:"updated_at_unix_ms"`
-}
-
-func (c ThreadProviderContinuation) normalized() ThreadProviderContinuation {
-	c.State = c.State.normalized()
-	c.ProviderID = strings.TrimSpace(c.ProviderID)
-	c.Model = strings.TrimSpace(c.Model)
-	c.BaseURL = strings.TrimSpace(c.BaseURL)
-	if c.State.IsZero() {
-		return ThreadProviderContinuation{}
-	}
-	return c
-}
-
-func (c ThreadProviderContinuation) Normalized() ThreadProviderContinuation {
-	return c.normalized()
-}
-
-func (c ThreadProviderContinuation) IsZero() bool {
-	return c.normalized().State.IsZero()
-}
-
-func cloneProviderContinuationAttributes(in map[string]string) map[string]string {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make(map[string]string, len(in))
-	for key, value := range in {
-		out[key] = value
-	}
-	return out
-}
-
-func marshalProviderContinuationState(state ProviderContinuationState) string {
-	state = state.normalized()
-	if state.IsZero() {
-		return ""
-	}
-	raw, err := json.Marshal(state)
-	if err != nil || len(raw) == 0 {
-		return ""
-	}
-	return string(raw)
-}
-
-func parseProviderContinuationStateJSON(raw string) ProviderContinuationState {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return ProviderContinuationState{}
-	}
-	var state ProviderContinuationState
-	if err := json.Unmarshal([]byte(raw), &state); err != nil {
-		return ProviderContinuationState{}
-	}
-	return state.normalized()
+	Cursor int64
+	Limit  int
 }
 
 type ThreadState struct {
-	EndpointID           string                     `json:"endpoint_id"`
-	ThreadID             string                     `json:"thread_id"`
-	OpenGoal             string                     `json:"open_goal"`
-	LastAssistantSummary string                     `json:"last_assistant_summary"`
-	ProviderContinuation ThreadProviderContinuation `json:"provider_continuation,omitempty"`
-	UpdatedAtUnixMs      int64                      `json:"updated_at_unix_ms"`
-}
-
-type ThreadContextBoundary struct {
-	TurnRowID int64
-	MessageID int64
-}
-
-var ErrThreadContextBoundaryChanged = errors.New("thread context boundary changed")
-
-func (s *Store) CurrentThreadContextBoundary(ctx context.Context, endpointID string, threadID string) (ThreadContextBoundary, error) {
-	if s == nil || s.db == nil {
-		return ThreadContextBoundary{}, errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	if endpointID == "" || threadID == "" {
-		return ThreadContextBoundary{}, errors.New("invalid request")
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return ThreadContextBoundary{}, err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := ensureThreadExistsTx(ctx, tx, endpointID, threadID); err != nil {
-		return ThreadContextBoundary{}, err
-	}
-	boundary, err := currentThreadContextBoundaryTx(ctx, tx, endpointID, threadID)
-	if err != nil {
-		return ThreadContextBoundary{}, err
-	}
-	if err := tx.Commit(); err != nil {
-		return ThreadContextBoundary{}, err
-	}
-	return boundary, nil
-}
-
-func currentThreadContextBoundaryTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string) (ThreadContextBoundary, error) {
-	var boundary ThreadContextBoundary
-	if err := tx.QueryRowContext(ctx, `
-SELECT COALESCE(MAX(id), 0)
-FROM conversation_turns
-WHERE endpoint_id = ? AND thread_id = ?
-`, endpointID, threadID).Scan(&boundary.TurnRowID); err != nil {
-		return ThreadContextBoundary{}, err
-	}
-	if err := tx.QueryRowContext(ctx, `
-SELECT COALESCE(MAX(id), 0)
-FROM transcript_messages
-WHERE endpoint_id = ? AND thread_id = ?
-`, endpointID, threadID).Scan(&boundary.MessageID); err != nil {
-		return ThreadContextBoundary{}, err
-	}
-	return boundary, nil
+	EndpointID           string `json:"endpoint_id"`
+	ThreadID             string `json:"thread_id"`
+	OpenGoal             string `json:"open_goal"`
+	LastAssistantSummary string `json:"last_assistant_summary"`
+	UpdatedAtUnixMs      int64  `json:"updated_at_unix_ms"`
 }
 
 func ensureThreadExistsTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string) error {
@@ -2831,17 +2479,6 @@ WHERE endpoint_id = ? AND thread_id = ?
 	return nil
 }
 
-func ensureThreadContextBoundaryTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, expected ThreadContextBoundary) error {
-	current, err := currentThreadContextBoundaryTx(ctx, tx, endpointID, threadID)
-	if err != nil {
-		return err
-	}
-	if current.TurnRowID != expected.TurnRowID || current.MessageID != expected.MessageID {
-		return ErrThreadContextBoundaryChanged
-	}
-	return nil
-}
-
 func (s *Store) GetThreadState(ctx context.Context, endpointID string, threadID string) (*ThreadState, error) {
 	if s == nil || s.db == nil {
 		return nil, errors.New("store not initialized")
@@ -2855,24 +2492,15 @@ func (s *Store) GetThreadState(ctx context.Context, endpointID string, threadID 
 		return nil, errors.New("invalid request")
 	}
 	var st ThreadState
-	var providerContinuationStateJSON string
 	err := s.db.QueryRowContext(ctx, `
-	SELECT endpoint_id, thread_id, open_goal, last_assistant_summary,
-	       provider_continuation_state_json, provider_continuation_provider_id,
-	       provider_continuation_model, provider_continuation_base_url, provider_continuation_updated_at_unix_ms,
-	       updated_at_unix_ms
-	FROM ai_thread_state
+		SELECT endpoint_id, thread_id, open_goal, last_assistant_summary, updated_at_unix_ms
+		FROM ai_thread_state
 WHERE endpoint_id = ? AND thread_id = ?
 `, endpointID, threadID).Scan(
 		&st.EndpointID,
 		&st.ThreadID,
 		&st.OpenGoal,
 		&st.LastAssistantSummary,
-		&providerContinuationStateJSON,
-		&st.ProviderContinuation.ProviderID,
-		&st.ProviderContinuation.Model,
-		&st.ProviderContinuation.BaseURL,
-		&st.ProviderContinuation.UpdatedAtUnixMs,
 		&st.UpdatedAtUnixMs,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -2883,8 +2511,6 @@ WHERE endpoint_id = ? AND thread_id = ?
 	}
 	st.OpenGoal = strings.TrimSpace(st.OpenGoal)
 	st.LastAssistantSummary = strings.TrimSpace(st.LastAssistantSummary)
-	st.ProviderContinuation.State = parseProviderContinuationStateJSON(providerContinuationStateJSON)
-	st.ProviderContinuation = st.ProviderContinuation.normalized()
 	return &st, nil
 }
 
@@ -2899,7 +2525,6 @@ func (s *Store) UpsertThreadState(ctx context.Context, st ThreadState) error {
 	st.ThreadID = strings.TrimSpace(st.ThreadID)
 	st.OpenGoal = strings.TrimSpace(st.OpenGoal)
 	st.LastAssistantSummary = strings.TrimSpace(st.LastAssistantSummary)
-	st.ProviderContinuation = st.ProviderContinuation.normalized()
 	if st.EndpointID == "" || st.ThreadID == "" {
 		return errors.New("invalid thread state")
 	}
@@ -2915,190 +2540,18 @@ func (s *Store) UpsertThreadState(ctx context.Context, st ThreadState) error {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `
-	INSERT INTO ai_thread_state(
-	  endpoint_id, thread_id, open_goal, last_assistant_summary,
-	  provider_continuation_state_json, provider_continuation_provider_id,
-	  provider_continuation_model, provider_continuation_base_url, provider_continuation_updated_at_unix_ms,
-	  updated_at_unix_ms
-	)
-	VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	ON CONFLICT(endpoint_id, thread_id) DO UPDATE SET
-	  open_goal=excluded.open_goal,
-	  last_assistant_summary=excluded.last_assistant_summary,
-	  provider_continuation_state_json=excluded.provider_continuation_state_json,
-	  provider_continuation_provider_id=excluded.provider_continuation_provider_id,
-	  provider_continuation_model=excluded.provider_continuation_model,
-	  provider_continuation_base_url=excluded.provider_continuation_base_url,
-	  provider_continuation_updated_at_unix_ms=excluded.provider_continuation_updated_at_unix_ms,
-	  updated_at_unix_ms=excluded.updated_at_unix_ms
-	`, st.EndpointID, st.ThreadID, st.OpenGoal, st.LastAssistantSummary,
-		marshalProviderContinuationState(st.ProviderContinuation.State), st.ProviderContinuation.ProviderID,
-		st.ProviderContinuation.Model, st.ProviderContinuation.BaseURL, st.ProviderContinuation.UpdatedAtUnixMs,
-		st.UpdatedAtUnixMs); err != nil {
+		INSERT INTO ai_thread_state(
+		  endpoint_id, thread_id, open_goal, last_assistant_summary, updated_at_unix_ms
+		)
+		VALUES(?, ?, ?, ?, ?)
+		ON CONFLICT(endpoint_id, thread_id) DO UPDATE SET
+		  open_goal=excluded.open_goal,
+		  last_assistant_summary=excluded.last_assistant_summary,
+		  updated_at_unix_ms=excluded.updated_at_unix_ms
+		`, st.EndpointID, st.ThreadID, st.OpenGoal, st.LastAssistantSummary, st.UpdatedAtUnixMs); err != nil {
 		return err
 	}
 	return tx.Commit()
-}
-
-func (s *Store) GetThreadProviderContinuation(ctx context.Context, endpointID string, threadID string) (*ThreadProviderContinuation, error) {
-	if s == nil || s.db == nil {
-		return nil, errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	if endpointID == "" || threadID == "" {
-		return nil, errors.New("invalid request")
-	}
-
-	var cont ThreadProviderContinuation
-	var stateJSON string
-	err := s.db.QueryRowContext(ctx, `
-	SELECT provider_continuation_state_json, provider_continuation_provider_id,
-	       provider_continuation_model, provider_continuation_base_url, provider_continuation_updated_at_unix_ms
-	FROM ai_thread_state
-	WHERE endpoint_id = ? AND thread_id = ?
-	`, endpointID, threadID).Scan(
-		&stateJSON,
-		&cont.ProviderID,
-		&cont.Model,
-		&cont.BaseURL,
-		&cont.UpdatedAtUnixMs,
-	)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	cont.State = parseProviderContinuationStateJSON(stateJSON)
-	cont = cont.normalized()
-	if cont.IsZero() {
-		return nil, nil
-	}
-	return &cont, nil
-}
-
-func (s *Store) SetThreadProviderContinuation(ctx context.Context, endpointID string, threadID string, cont ThreadProviderContinuation) error {
-	if s == nil || s.db == nil {
-		return errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	cont = cont.normalized()
-	if endpointID == "" || threadID == "" || cont.IsZero() {
-		return errors.New("invalid request")
-	}
-	if cont.UpdatedAtUnixMs <= 0 {
-		cont.UpdatedAtUnixMs = time.Now().UnixMilli()
-	}
-	updatedAt := time.Now().UnixMilli()
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := ensureThreadExistsTx(ctx, tx, endpointID, threadID); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, `
-	INSERT INTO ai_thread_state(
-	  endpoint_id, thread_id, open_goal, last_assistant_summary,
-	  provider_continuation_state_json, provider_continuation_provider_id,
-	  provider_continuation_model, provider_continuation_base_url, provider_continuation_updated_at_unix_ms,
-	  updated_at_unix_ms
-	)
-	VALUES(?, ?, '', '', ?, ?, ?, ?, ?, ?)
-	ON CONFLICT(endpoint_id, thread_id) DO UPDATE SET
-	  provider_continuation_state_json=excluded.provider_continuation_state_json,
-	  provider_continuation_provider_id=excluded.provider_continuation_provider_id,
-	  provider_continuation_model=excluded.provider_continuation_model,
-	  provider_continuation_base_url=excluded.provider_continuation_base_url,
-	  provider_continuation_updated_at_unix_ms=excluded.provider_continuation_updated_at_unix_ms,
-	  updated_at_unix_ms=excluded.updated_at_unix_ms
-	`, endpointID, threadID, marshalProviderContinuationState(cont.State), cont.ProviderID, cont.Model, cont.BaseURL, cont.UpdatedAtUnixMs, updatedAt); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
-func (s *Store) SetThreadProviderContinuationIfBoundaryMatches(ctx context.Context, endpointID string, threadID string, expected ThreadContextBoundary, cont ThreadProviderContinuation) error {
-	if s == nil || s.db == nil {
-		return errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	cont = cont.normalized()
-	if endpointID == "" || threadID == "" || cont.IsZero() {
-		return errors.New("invalid request")
-	}
-	if cont.UpdatedAtUnixMs <= 0 {
-		cont.UpdatedAtUnixMs = time.Now().UnixMilli()
-	}
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-	if err := ensureThreadExistsTx(ctx, tx, endpointID, threadID); err != nil {
-		return err
-	}
-	if err := ensureThreadContextBoundaryTx(ctx, tx, endpointID, threadID, expected); err != nil {
-		return err
-	}
-	updatedAt := time.Now().UnixMilli()
-	if _, err := tx.ExecContext(ctx, `
-	INSERT INTO ai_thread_state(
-	  endpoint_id, thread_id, open_goal, last_assistant_summary,
-	  provider_continuation_state_json, provider_continuation_provider_id,
-	  provider_continuation_model, provider_continuation_base_url, provider_continuation_updated_at_unix_ms,
-	  updated_at_unix_ms
-	)
-	VALUES(?, ?, '', '', ?, ?, ?, ?, ?, ?)
-	ON CONFLICT(endpoint_id, thread_id) DO UPDATE SET
-	  provider_continuation_state_json=excluded.provider_continuation_state_json,
-	  provider_continuation_provider_id=excluded.provider_continuation_provider_id,
-	  provider_continuation_model=excluded.provider_continuation_model,
-	  provider_continuation_base_url=excluded.provider_continuation_base_url,
-	  provider_continuation_updated_at_unix_ms=excluded.provider_continuation_updated_at_unix_ms,
-	  updated_at_unix_ms=excluded.updated_at_unix_ms
-	`, endpointID, threadID, marshalProviderContinuationState(cont.State), cont.ProviderID, cont.Model, cont.BaseURL, cont.UpdatedAtUnixMs, updatedAt); err != nil {
-		return err
-	}
-	return tx.Commit()
-}
-
-func (s *Store) ClearThreadProviderContinuation(ctx context.Context, endpointID string, threadID string) error {
-	if s == nil || s.db == nil {
-		return errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	if endpointID == "" || threadID == "" {
-		return errors.New("invalid request")
-	}
-	_, err := s.db.ExecContext(ctx, `
-	UPDATE ai_thread_state
-	SET provider_continuation_state_json = '',
-	    provider_continuation_provider_id = '',
-	    provider_continuation_model = '',
-	    provider_continuation_base_url = '',
-    provider_continuation_updated_at_unix_ms = 0,
-    updated_at_unix_ms = ?
-WHERE endpoint_id = ? AND thread_id = ?
-`, time.Now().UnixMilli(), endpointID, threadID)
-	return err
 }
 
 func (s *Store) ClearThreadState(ctx context.Context, endpointID string, threadID string) error {
@@ -3265,21 +2718,6 @@ VALUES(?, ?, ?, ?, ?, ?, ?)
 	if err != nil {
 		return err
 	}
-	if isPersistedContextRunEventType(rec.EventType) {
-		res, err := tx.ExecContext(ctx, `
-UPDATE ai_threads
-SET last_context_run_id = ?
-WHERE endpoint_id = ? AND thread_id = ?
-`, rec.RunID, rec.EndpointID, rec.ThreadID)
-		if err != nil {
-			return err
-		}
-		if n, _ := res.RowsAffected(); n > 0 {
-			if _, err := bumpFlowerActivityTx(ctx, tx, rec.EndpointID, rec.ThreadID); err != nil {
-				return err
-			}
-		}
-	}
 	if err := pruneRunEventsForThreadTx(ctx, tx, rec.EndpointID, rec.ThreadID); err != nil {
 		return err
 	}
@@ -3318,36 +2756,16 @@ func (s *Store) ListRunEventsPage(ctx context.Context, endpointID string, runID 
 		cursor = 0
 	}
 
-	category := strings.TrimSpace(strings.ToLower(query.Category))
-	switch category {
-	case "", "all":
-		category = ""
-	case "context":
-		// keep as-is
-	default:
-		return nil, 0, false, fmt.Errorf("unsupported run event category: %s", category)
-	}
-
 	args := []any{endpointID, runID, cursor}
-	whereCategory := ""
-	if category == "context" {
-		// Explicit whitelist to avoid leaking non-UI diagnostic categories (for example context.integrity.*).
-		whereCategory = `
-AND (
-  event_type = 'context.usage.updated'
-  OR event_type = 'context.compaction.updated'
-)`
-	}
 	args = append(args, limit+1)
 
-	q := fmt.Sprintf(`
+	q := `
 SELECT id, endpoint_id, thread_id, run_id, stream_kind, event_type, payload_json, at_unix_ms
 FROM ai_run_events
 WHERE endpoint_id = ? AND run_id = ? AND id > ?
-%s
 ORDER BY id ASC
 LIMIT ?
-`, whereCategory)
+`
 	rows, err := s.db.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, 0, false, err
@@ -3373,54 +2791,6 @@ LIMIT ?
 		nextCursor = out[len(out)-1].ID
 	}
 	return out, nextCursor, hasMore, nil
-}
-
-func (s *Store) ListThreadContextRunEvents(ctx context.Context, endpointID string, threadID string, limit int) ([]RunEventRecord, error) {
-	if s == nil || s.db == nil {
-		return nil, errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	if endpointID == "" || threadID == "" {
-		return nil, errors.New("invalid request")
-	}
-	if limit <= 0 {
-		limit = 500
-	}
-	if limit > 2000 {
-		limit = 2000
-	}
-	rows, err := s.db.QueryContext(ctx, `
-SELECT id, endpoint_id, thread_id, run_id, stream_kind, event_type, payload_json, at_unix_ms
-FROM ai_run_events
-WHERE endpoint_id = ? AND thread_id = ?
-  AND event_type IN ('context.usage.updated', 'context.compaction.updated')
-ORDER BY id DESC
-LIMIT ?
-`, endpointID, threadID, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	reversed := make([]RunEventRecord, 0, limit)
-	for rows.Next() {
-		var rec RunEventRecord
-		if err := rows.Scan(&rec.ID, &rec.EndpointID, &rec.ThreadID, &rec.RunID, &rec.StreamKind, &rec.EventType, &rec.PayloadJSON, &rec.AtUnixMs); err != nil {
-			return nil, err
-		}
-		reversed = append(reversed, rec)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	out := make([]RunEventRecord, len(reversed))
-	for i := range reversed {
-		out[len(reversed)-1-i] = reversed[i]
-	}
-	return out, nil
 }
 
 func pruneRunEventsForThreadTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string) error {
@@ -3468,53 +2838,6 @@ func boolToInt(v bool) int {
 		return 1
 	}
 	return 0
-}
-
-func scrubLegacyModelDefaultToken(tx *sql.Tx) error {
-	if tx == nil {
-		return errors.New("nil tx")
-	}
-
-	legacyToken := strings.Join([]string{"is", "default"}, "_")
-	const replacementToken = "current_model_id"
-
-	type target struct {
-		table  string
-		column string
-	}
-	targets := []target{
-		{table: "ai_threads", column: "title"},
-		{table: "ai_threads", column: "last_message_preview"},
-		{table: "ai_messages", column: "text_content"},
-		{table: "ai_messages", column: "message_json"},
-		{table: "ai_runs", column: "error_message"},
-		{table: "ai_run_events", column: "payload_json"},
-		{table: "transcript_messages", column: "text_content"},
-		{table: "transcript_messages", column: "message_json"},
-		{table: "memory_items", column: "content"},
-		{table: "provider_capabilities", column: "capability_json"},
-	}
-
-	for _, item := range targets {
-		hasColumn, err := columnExists(tx, item.table, item.column)
-		if err != nil {
-			return err
-		}
-		if !hasColumn {
-			continue
-		}
-
-		stmt := fmt.Sprintf(`
-UPDATE %s
-SET %s = REPLACE(%s, ?, ?)
-WHERE instr(%s, ?) > 0
-`, item.table, item.column, item.column, item.column)
-		if _, err := tx.Exec(stmt, legacyToken, replacementToken, legacyToken); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 func columnExists(tx *sql.Tx, tableName string, colName string) (bool, error) {

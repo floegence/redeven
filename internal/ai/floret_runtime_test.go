@@ -48,6 +48,16 @@ type terminalTerminationHostedProvider struct {
 
 type failingTurnProvider struct{}
 
+func newFloretRuntimeTestRun(t *testing.T, opts runOptions) *run {
+	t.Helper()
+	if opts.FloretStore == nil {
+		store := flruntime.NewMemoryStore()
+		t.Cleanup(func() { _ = store.Close() })
+		opts.FloretStore = store
+	}
+	return newRun(opts)
+}
+
 func (failingTurnProvider) StreamTurn(context.Context, ModelGatewayRequest, func(StreamEvent)) (ModelGatewayResult, error) {
 	return ModelGatewayResult{}, errors.New("primary engine failure")
 }
@@ -150,7 +160,7 @@ func TestRunFloretHostedTurnExecutesSameResponseTerminalCallsConcurrently(t *tes
 	manager := newTerminalProcessManager()
 	t.Cleanup(func() { _ = manager.Close(context.Background()) })
 	svc := &Service{terminalProcesses: manager}
-	r := newRun(runOptions{
+	r := newFloretRuntimeTestRun(t, runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, nil)),
 		StateDir:     t.TempDir(),
 		AgentHomeDir: t.TempDir(),
@@ -204,7 +214,7 @@ func TestRunFloretHostedTurnTerminatesPendingCommandWithoutCompensation(t *testi
 		runs:              map[string]*run{},
 		activeRunByTh:     map[string]string{runThreadKey(endpointID, threadID): runID},
 	}
-	r := newRun(runOptions{
+	r := newFloretRuntimeTestRun(t, runOptions{
 		Log:              slog.New(slog.NewTextHandler(io.Discard, nil)),
 		StateDir:         svc.stateDir,
 		AgentHomeDir:     workspace,
@@ -288,7 +298,7 @@ func TestRunFloretHostedTurnTerminatesPendingCommandWithoutCompensation(t *testi
 func TestRunFloretHostedTurnPreservesEngineErrorAsPrimaryFailure(t *testing.T) {
 	t.Parallel()
 
-	r := newRun(runOptions{
+	r := newFloretRuntimeTestRun(t, runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, nil)),
 		StateDir:     t.TempDir(),
 		AgentHomeDir: t.TempDir(),
@@ -345,7 +355,7 @@ func (p *capturingTurnProvider) requestCount() int {
 }
 
 func TestUnavailableFloretTurnProjectionPreservesStreamedMarkdown(t *testing.T) {
-	r := newRun(runOptions{})
+	r := newFloretRuntimeTestRun(t, runOptions{})
 	r.id = "run_projection_unavailable"
 	r.threadID = "thread_projection_unavailable"
 	r.messageID = "msg_projection_unavailable"
@@ -442,7 +452,7 @@ func (p *naturalCompactionProvider) StreamTurn(_ context.Context, req ModelGatew
 	p.mu.Unlock()
 
 	if callIndex == 1 {
-		return ModelGatewayResult{FinishReason: "stop", Text: strings.Repeat("older assistant context ", 10000)}, nil
+		return ModelGatewayResult{FinishReason: "stop", Text: strings.Repeat("older assistant context ", 20000)}, nil
 	}
 	if callIndex == 2 {
 		return ModelGatewayResult{FinishReason: "stop", Text: "Older context checkpoint summary."}, nil
@@ -457,11 +467,37 @@ func (p *naturalCompactionProvider) requestCount() int {
 	return len(p.requests)
 }
 
+func (p *naturalCompactionProvider) requestSnapshot() []ModelGatewayRequest {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]ModelGatewayRequest(nil), p.requests...)
+}
+
+func (p *naturalCompactionProvider) requestDescriptions() []string {
+	requests := p.requestSnapshot()
+	out := make([]string, 0, len(requests))
+	for index, request := range requests {
+		roles := make([]string, 0, len(request.Messages))
+		previews := make([]string, 0, len(request.Messages))
+		for _, message := range request.Messages {
+			roles = append(roles, message.Role)
+			for _, part := range message.Content {
+				if strings.TrimSpace(part.Text) != "" {
+					previews = append(previews, truncateRunes(strings.TrimSpace(part.Text), 80))
+					break
+				}
+			}
+		}
+		out = append(out, fmt.Sprintf("%d roles=%v text=%q", index+1, roles, previews))
+	}
+	return out
+}
+
 func TestRunFloretHostedTurnCompletesEmptyTaskCompleteFromStreamedText(t *testing.T) {
 	t.Parallel()
 
 	events := make([]any, 0, 8)
-	r := newRun(runOptions{
+	r := newFloretRuntimeTestRun(t, runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
 		StateDir:     t.TempDir(),
 		AgentHomeDir: t.TempDir(),
@@ -513,7 +549,7 @@ func TestRunFloretHostedTurnEmitsContextUsageFromPublishedHost(t *testing.T) {
 
 	events := make([]any, 0, 8)
 	provider := &capturingTurnProvider{}
-	r := newRun(runOptions{
+	r := newFloretRuntimeTestRun(t, runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
 		StateDir:     t.TempDir(),
 		AgentHomeDir: t.TempDir(),
@@ -583,7 +619,7 @@ func TestRunFloretHostedTurnKeepsInputAndOutputBudgetsIndependent(t *testing.T) 
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			provider := &capturingTurnProvider{result: ModelGatewayResult{FinishReason: "stop", Text: "done", Usage: tc.usage}}
-			r := newRun(runOptions{
+			r := newFloretRuntimeTestRun(t, runOptions{
 				Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
 				StateDir:     t.TempDir(),
 				AgentHomeDir: t.TempDir(),
@@ -628,7 +664,7 @@ func TestRunFloretHostedTurnInjectsAskFlowerLinkedContext(t *testing.T) {
 	t.Parallel()
 
 	provider := &capturingTurnProvider{}
-	r := newRun(runOptions{
+	r := newFloretRuntimeTestRun(t, runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
 		StateDir:     t.TempDir(),
 		AgentHomeDir: t.TempDir(),
@@ -721,7 +757,7 @@ func TestRunFloretHostedTurnRefreshesPermissionBeforeDispatch(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	r := newRun(runOptions{
+	r := newFloretRuntimeTestRun(t, runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
 		StateDir:     t.TempDir(),
 		AgentHomeDir: t.TempDir(),
@@ -800,8 +836,10 @@ func TestRunFloretHostedTurnNaturalCompactionContinuesStreaming(t *testing.T) {
 
 	events := make([]any, 0, 16)
 	provider := &naturalCompactionProvider{}
+	store := flruntime.NewMemoryStore()
+	t.Cleanup(func() { _ = store.Close() })
 	stateDir := t.TempDir()
-	r := newRun(runOptions{
+	r := newFloretRuntimeTestRun(t, runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
 		StateDir:     stateDir,
 		AgentHomeDir: t.TempDir(),
@@ -813,9 +851,10 @@ func TestRunFloretHostedTurnNaturalCompactionContinuesStreaming(t *testing.T) {
 			CanExecute: true,
 			CanAdmin:   true,
 		},
-		RunID:     "run_floret_natural_compact_streaming",
-		ThreadID:  "thread_floret_natural_compact_streaming",
-		MessageID: "msg_floret_natural_compact_streaming",
+		RunID:       "run_floret_natural_compact_streaming",
+		ThreadID:    "thread_floret_natural_compact_streaming",
+		MessageID:   "msg_floret_natural_compact_streaming",
+		FloretStore: store,
 	})
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
 
@@ -839,7 +878,7 @@ func TestRunFloretHostedTurnNaturalCompactionContinuesStreaming(t *testing.T) {
 	}
 
 	events = events[:0]
-	r = newRun(runOptions{
+	r = newFloretRuntimeTestRun(t, runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
 		StateDir:     stateDir,
 		AgentHomeDir: t.TempDir(),
@@ -851,9 +890,10 @@ func TestRunFloretHostedTurnNaturalCompactionContinuesStreaming(t *testing.T) {
 			CanExecute: true,
 			CanAdmin:   true,
 		},
-		RunID:     "run_floret_natural_compact_streaming_next",
-		ThreadID:  "thread_floret_natural_compact_streaming",
-		MessageID: "msg_floret_natural_compact_streaming_next",
+		RunID:       "run_floret_natural_compact_streaming_next",
+		ThreadID:    "thread_floret_natural_compact_streaming",
+		MessageID:   "msg_floret_natural_compact_streaming_next",
+		FloretStore: store,
 	})
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
 
@@ -876,8 +916,8 @@ func TestRunFloretHostedTurnNaturalCompactionContinuesStreaming(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runFloretHostedTurn: %v", err)
 	}
-	if provider.requestCount() < 3 {
-		t.Fatalf("provider request count=%d, want seed, summary, and post-compaction provider requests", provider.requestCount())
+	if provider.requestCount() != 3 {
+		t.Fatalf("provider request count=%d, want seed, compaction summary, and post-compaction requests: %v", provider.requestCount(), provider.requestDescriptions())
 	}
 	if got := r.getFinalizationReason(); got != "natural_stop" {
 		t.Fatalf("finalizationReason=%q, want natural_stop", got)
@@ -887,7 +927,7 @@ func TestRunFloretHostedTurnNaturalCompactionContinuesStreaming(t *testing.T) {
 		t.Fatalf("snapshotAssistantMessageJSON: %v", err)
 	}
 	if assistantText != "continued after natural compact" {
-		t.Fatalf("assistantText=%q, want post-compaction streamed output", assistantText)
+		t.Fatalf("assistantText=%q, want post-compaction streamed output; requests=%v", assistantText, provider.requestDescriptions())
 	}
 	if !hasFloretMarkdownContent(events, "continued after natural compact") {
 		t.Fatalf("events missing post-compaction markdown content: %#v", events)
@@ -902,7 +942,7 @@ func TestRunFloretHostedTurnManualCompactionNoopContinuesStreaming(t *testing.T)
 
 	events := make([]any, 0, 16)
 	provider := &capturingTurnProvider{}
-	r := newRun(runOptions{
+	r := newFloretRuntimeTestRun(t, runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
 		StateDir:     t.TempDir(),
 		AgentHomeDir: t.TempDir(),
@@ -954,9 +994,6 @@ func TestRunFloretHostedTurnManualCompactionNoopContinuesStreaming(t *testing.T)
 	}
 	if r.activeManualCompactionID != "" {
 		t.Fatalf("activeManualCompactionID=%q, want cleared after noop", r.activeManualCompactionID)
-	}
-	if _, ok := r.completeManualCompactionIDs["manual-noop-request"]; !ok {
-		t.Fatalf("completeManualCompactionIDs=%#v, want noop request recorded complete", r.completeManualCompactionIDs)
 	}
 	_, assistantText, _, err := r.snapshotAssistantMessageJSON()
 	if err != nil {
@@ -1023,7 +1060,7 @@ func TestRunFloretHostedTurnProjectsWebSearchToolThroughFloretGateway(t *testing
 	t.Parallel()
 
 	provider := &capturingTurnProvider{}
-	r := newRun(runOptions{
+	r := newFloretRuntimeTestRun(t, runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
 		StateDir:     t.TempDir(),
 		AgentHomeDir: t.TempDir(),
@@ -1232,10 +1269,13 @@ func TestFloretEventSinkProjectsContextObservations(t *testing.T) {
 	}
 	sink := floretEventSink{run: r}
 	sink.EmitEvent(flruntime.Event{
-		Type:  observation.EventTypeProviderUsage,
-		RunID: "msg_context_projection",
+		Type:     observation.EventTypeProviderUsage,
+		RunID:    "run_context_projection",
+		ThreadID: "thread_context_projection",
+		TurnID:   "msg_context_projection",
+		Step:     1,
 		ContextStatus: &observation.ContextStatus{
-			RunID:    "msg_context_projection",
+			RunID:    "run_context_projection",
 			ThreadID: "thread_context_projection",
 			TurnID:   "msg_context_projection",
 			Step:     1,
@@ -1255,18 +1295,23 @@ func TestFloretEventSinkProjectsContextObservations(t *testing.T) {
 		},
 	})
 	sink.EmitEvent(flruntime.Event{
-		Type:  observation.EventTypeContextCompact,
-		RunID: "run_context_projection",
+		Type:     observation.EventTypeContextCompact,
+		RunID:    "run_context_projection",
+		ThreadID: "thread_context_projection",
+		TurnID:   "msg_context_projection",
+		Step:     1,
 		Compaction: &observation.CompactionEvent{
 			RunID:               "run_context_projection",
 			ThreadID:            "thread_context_projection",
 			TurnID:              "msg_context_projection",
 			Step:                1,
 			OperationID:         "run_context_projection:compact:1:pre_request:threshold",
+			RequestID:           "request_context_projection",
 			Phase:               observation.CompactionPhaseStart,
 			Status:              observation.CompactionStatusRunning,
 			Trigger:             "pre_request",
 			Reason:              "threshold",
+			Source:              "context_manager",
 			TokensBefore:        920,
 			TokensAfterEstimate: 0,
 			ObservedAt:          time.UnixMilli(10_001),
@@ -1295,158 +1340,6 @@ func TestFloretEventSinkProjectsContextObservations(t *testing.T) {
 		compaction.Compaction.Status != "compacting" ||
 		compaction.Compaction.Phase != string(observation.CompactionPhaseStart) {
 		t.Fatalf("compaction=%#v", compaction.Compaction)
-	}
-}
-
-func TestHostManagedContextCompactionDefersLiveProjection(t *testing.T) {
-	t.Parallel()
-
-	_, r, store, events := newFloretProviderAdapterRunTest(t, reasoningFlowerProvider{})
-	r.hostManagedContextCompaction = true
-	r.activeManualCompactionID = "manual-host-managed"
-
-	r.applyFloretCompaction(&observation.CompactionEvent{
-		RunID:               "run_floret_reasoning",
-		ThreadID:            "thread_floret_reasoning",
-		TurnID:              "msg_floret_reasoning",
-		Step:                1,
-		OperationID:         "run_floret_reasoning:compact:1:manual:manual-host-managed",
-		RequestID:           "manual-host-managed",
-		Phase:               observation.CompactionPhaseComplete,
-		Status:              observation.CompactionStatusCompacted,
-		Trigger:             "manual",
-		Reason:              "manual",
-		TokensBefore:        1_000,
-		TokensAfterEstimate: 300,
-		ObservedAt:          time.UnixMilli(30_000),
-	})
-
-	if len(*events) != 0 {
-		t.Fatalf("stream events=%#v, want host-managed compaction to defer live projection", *events)
-	}
-	runEvents, err := store.ListRunEvents(context.Background(), "env_floret_reasoning", "run_floret_reasoning", 10)
-	if err != nil {
-		t.Fatalf("ListRunEvents: %v", err)
-	}
-	for _, event := range runEvents {
-		if event.EventType == string(FlowerLiveContextCompactionUpdated) {
-			t.Fatalf("unexpected persisted live compaction event: %#v", event)
-		}
-	}
-	completed := r.getCompletedContextCompaction()
-	if completed.OperationID != "run_floret_reasoning:compact:1:manual:manual-host-managed" {
-		t.Fatalf("completed compaction=%#v, want operation retained", completed)
-	}
-	if r.activeManualCompactionID != "" {
-		t.Fatalf("activeManualCompactionID=%q, want cleared", r.activeManualCompactionID)
-	}
-	if _, ok := r.completeManualCompactionIDs["manual-host-managed"]; !ok {
-		t.Fatalf("completeManualCompactionIDs=%#v, want manual request recorded complete", r.completeManualCompactionIDs)
-	}
-}
-
-func TestFloretEventSinkPersistsCompactionDebugWithoutProjectingTimeline(t *testing.T) {
-	t.Parallel()
-
-	_, r, store, events := newFloretProviderAdapterRunTest(t, reasoningFlowerProvider{})
-	sink := floretEventSink{run: r}
-	sink.EmitEvent(flruntime.Event{
-		Type: floretEventContextCompactDebug,
-		CompactionDebug: &observation.CompactionDebugEvent{
-			RunID:                        "run_floret_reasoning",
-			ThreadID:                     "thread_floret_reasoning",
-			TurnID:                       "msg_floret_reasoning",
-			Step:                         3,
-			OperationID:                  "op_compact_debug",
-			RequestID:                    "req_compact_debug",
-			Stage:                        observation.CompactionDebugStageRequestValidation,
-			Status:                       observation.CompactionDebugStatusRetrying,
-			Trigger:                      "manual",
-			Reason:                       "slash_command",
-			Source:                       "manual",
-			CompactionConvergenceAttempt: 2,
-			TokensBefore:                 101_000,
-			TokensAfterEstimate:          45_000,
-			RequestSafeLimit:             80_000,
-			HardLimitExceeded:            true,
-			DurationMS:                   1234,
-			ProviderStateKind:            "responses",
-			NextAction:                   "provider_request",
-			Error:                        "validation pressure still high",
-			ObservedAt:                   time.UnixMilli(20_000),
-		},
-	})
-	sink.EmitEvent(flruntime.Event{
-		Type: floretEventContextCompactDebug,
-		CompactionDebug: &observation.CompactionDebugEvent{
-			RunID:       "run_floret_reasoning",
-			ThreadID:    "thread_floret_reasoning",
-			TurnID:      "msg_floret_reasoning",
-			Step:        3,
-			OperationID: "op_compact_debug",
-			RequestID:   "req_compact_debug",
-			Stage:       observation.CompactionDebugStagePreflight,
-			Status:      observation.CompactionDebugStatusFailed,
-			Trigger:     "manual",
-			Reason:      "manual",
-			Source:      "slash_command",
-			Error:       "compaction manager is required when context exceeds policy",
-			ObservedAt:  time.UnixMilli(20_100),
-		},
-	})
-
-	if len(*events) != 0 {
-		t.Fatalf("stream events=%#v, want no UI projection for compaction debug", *events)
-	}
-	runEvents, err := store.ListRunEvents(context.Background(), "env_floret_reasoning", "run_floret_reasoning", 10)
-	if err != nil {
-		t.Fatalf("ListRunEvents: %v", err)
-	}
-	if len(runEvents) != 2 {
-		t.Fatalf("run events=%#v, want exactly two debug events", runEvents)
-	}
-	if runEvents[0].EventType != "floret.context.compact.debug" || runEvents[0].StreamKind != string(RealtimeStreamKindContext) {
-		t.Fatalf("run event=%#v, want context compaction debug", runEvents[0])
-	}
-	var payload map[string]any
-	if err := json.Unmarshal([]byte(runEvents[0].PayloadJSON), &payload); err != nil {
-		t.Fatalf("payload json: %v", err)
-	}
-	for key, want := range map[string]string{
-		"operation_id":        "op_compact_debug",
-		"request_id":          "req_compact_debug",
-		"stage":               string(observation.CompactionDebugStageRequestValidation),
-		"status":              string(observation.CompactionDebugStatusRetrying),
-		"provider_state_kind": "responses",
-		"next_action":         "provider_request",
-		"error":               "validation pressure still high",
-	} {
-		if got := strings.TrimSpace(anyToString(payload[key])); got != want {
-			t.Fatalf("payload[%s]=%q, want %q in %#v", key, got, want, payload)
-		}
-	}
-	if payload["tokens_before"] != float64(101_000) ||
-		payload["tokens_after_estimate"] != float64(45_000) ||
-		payload["request_safe_limit"] != float64(80_000) ||
-		payload["duration_ms"] != float64(1234) ||
-		payload["observed_at_unix_ms"] != float64(20_000) ||
-		payload["hard_limit_exceeded"] != true {
-		t.Fatalf("payload numeric fields=%#v", payload)
-	}
-	if err := json.Unmarshal([]byte(runEvents[1].PayloadJSON), &payload); err != nil {
-		t.Fatalf("preflight payload json: %v", err)
-	}
-	for key, want := range map[string]string{
-		"operation_id": "op_compact_debug",
-		"request_id":   "req_compact_debug",
-		"stage":        string(observation.CompactionDebugStagePreflight),
-		"status":       string(observation.CompactionDebugStatusFailed),
-		"source":       "slash_command",
-		"error":        "compaction manager is required when context exceeds policy",
-	} {
-		if got := strings.TrimSpace(anyToString(payload[key])); got != want {
-			t.Fatalf("preflight payload[%s]=%q, want %q in %#v", key, got, want, payload)
-		}
 	}
 }
 
@@ -1562,12 +1455,46 @@ func TestRedevenFloretGatewayConfigDoesNotCarryProviderConfiguration(t *testing.
 	if cfg.Reasoning.Level != config.AIReasoningLevelLow {
 		t.Fatalf("reasoning=%+v, want low selection", cfg.Reasoning)
 	}
-	identity := redevenFloretGatewayIdentity(" provider-a ", " gpt-test ")
+	identity, err := redevenFloretGatewayIdentity(" provider-a ", "openai", "https://api.example.test/v1/", " gpt-test ", "openai-responses")
+	if err != nil {
+		t.Fatalf("redevenFloretGatewayIdentity: %v", err)
+	}
 	if identity.Provider != "provider-a" || identity.Model != "gpt-test" {
 		t.Fatalf("identity=%+v, want trimmed provider id/model", identity)
 	}
-	if identity == redevenFloretGatewayIdentity("provider-b", "gpt-test") {
-		t.Fatalf("gateway identity must distinguish same-type providers by provider id")
+	equivalent, err := redevenFloretGatewayIdentity("provider-a", "OPENAI", "HTTPS://API.EXAMPLE.TEST/v1/?ignored=true#fragment", "gpt-test", "openai-responses")
+	if err != nil {
+		t.Fatalf("equivalent gateway identity: %v", err)
+	}
+	if identity.StateCompatibilityKey != equivalent.StateCompatibilityKey {
+		t.Fatalf("normalized equivalent endpoint changed compatibility key: %q != %q", identity.StateCompatibilityKey, equivalent.StateCompatibilityKey)
+	}
+	for _, testCase := range []struct {
+		name         string
+		providerID   string
+		providerType string
+		baseURL      string
+		model        string
+		route        string
+	}{
+		{name: "provider", providerID: "provider-b", providerType: "openai", baseURL: "https://api.example.test/v1", model: "gpt-test", route: "openai-responses"},
+		{name: "type", providerID: "provider-a", providerType: "openai_compatible", baseURL: "https://api.example.test/v1", model: "gpt-test", route: "openai-responses"},
+		{name: "endpoint", providerID: "provider-a", providerType: "openai", baseURL: "https://other.example.test/v1", model: "gpt-test", route: "openai-responses"},
+		{name: "model", providerID: "provider-a", providerType: "openai", baseURL: "https://api.example.test/v1", model: "gpt-other", route: "openai-responses"},
+		{name: "route", providerID: "provider-a", providerType: "openai", baseURL: "https://api.example.test/v1", model: "gpt-test", route: "openai-chat-completions"},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			other, err := redevenFloretGatewayIdentity(testCase.providerID, testCase.providerType, testCase.baseURL, testCase.model, testCase.route)
+			if err != nil {
+				t.Fatalf("gateway identity: %v", err)
+			}
+			if identity.StateCompatibilityKey == other.StateCompatibilityKey {
+				t.Fatalf("compatibility key did not distinguish %s", testCase.name)
+			}
+		})
+	}
+	if _, err := redevenFloretGatewayIdentity("provider-a", "openai", "https://user:secret@api.example.test/v1", "gpt-test", "openai-responses"); err == nil {
+		t.Fatal("gateway identity accepted endpoint user information")
 	}
 }
 
@@ -1575,7 +1502,7 @@ func TestProjectFloretTaskCompleteDoesNotCreateTranscriptMarkdown(t *testing.T) 
 	t.Parallel()
 
 	events := make([]any, 0, 4)
-	r := newRun(runOptions{})
+	r := newFloretRuntimeTestRun(t, runOptions{})
 	r.id = "run_floret_task_complete"
 	r.threadID = "thread_floret_task_complete"
 	r.messageID = "msg_floret_task_complete"
@@ -1622,7 +1549,7 @@ func TestProjectFloretTaskCompletePreservesStreamedMarkdown(t *testing.T) {
 	t.Parallel()
 
 	events := make([]any, 0, 4)
-	r := newRun(runOptions{})
+	r := newFloretRuntimeTestRun(t, runOptions{})
 	r.id = "run_floret_task_complete_streamed"
 	r.threadID = "thread_floret_task_complete_streamed"
 	r.messageID = "msg_floret_task_complete_streamed"
@@ -1683,7 +1610,7 @@ func TestProjectFloretNaturalStopDoesNotCreateTranscriptMarkdown(t *testing.T) {
 	t.Parallel()
 
 	events := make([]any, 0, 4)
-	r := newRun(runOptions{})
+	r := newFloretRuntimeTestRun(t, runOptions{})
 	r.id = "run_floret_natural_stop"
 	r.threadID = "thread_floret_natural_stop"
 	r.messageID = "msg_floret_natural_stop"
@@ -1721,7 +1648,7 @@ func TestProjectFloretNaturalStopDoesNotUseResultOutputAsTranscriptFallback(t *t
 	t.Parallel()
 
 	events := make([]any, 0, 4)
-	r := newRun(runOptions{})
+	r := newFloretRuntimeTestRun(t, runOptions{})
 	r.id = "run_floret_natural_stop_no_fallback"
 	r.threadID = "thread_floret_natural_stop_no_fallback"
 	r.messageID = "msg_floret_natural_stop_no_fallback"
@@ -1761,7 +1688,7 @@ func TestProjectFloretNaturalStopPreservesStreamedMarkdown(t *testing.T) {
 	t.Parallel()
 
 	events := make([]any, 0, 4)
-	r := newRun(runOptions{})
+	r := newFloretRuntimeTestRun(t, runOptions{})
 	r.id = "run_floret_natural_stop_streamed"
 	r.threadID = "thread_floret_natural_stop_streamed"
 	r.messageID = "msg_floret_natural_stop_streamed"
@@ -1817,7 +1744,7 @@ func TestProjectFloretResultIgnoresDetachedRun(t *testing.T) {
 	t.Parallel()
 
 	events := make([]any, 0, 4)
-	r := newRun(runOptions{})
+	r := newFloretRuntimeTestRun(t, runOptions{})
 	r.id = "run_floret_detached_result"
 	r.threadID = "thread_floret_detached_result"
 	r.messageID = "msg_floret_detached_result"
@@ -1888,7 +1815,7 @@ func TestProjectFloretCancelledResultUsesCanceledLifecycle(t *testing.T) {
 	t.Parallel()
 
 	events := make([]any, 0, 4)
-	r := newRun(runOptions{})
+	r := newFloretRuntimeTestRun(t, runOptions{})
 	r.id = "run_floret_cancelled"
 	r.threadID = "thread_floret_cancelled"
 	r.messageID = "msg_floret_cancelled"
@@ -1925,7 +1852,7 @@ func TestProjectFloretCancelledResultWithDeadlineUsesTimedOutLifecycle(t *testin
 	t.Parallel()
 
 	events := make([]any, 0, 4)
-	r := newRun(runOptions{})
+	r := newFloretRuntimeTestRun(t, runOptions{})
 	r.id = "run_floret_cancelled_timeout"
 	r.threadID = "thread_floret_cancelled_timeout"
 	r.messageID = "msg_floret_cancelled_timeout"
@@ -1963,7 +1890,7 @@ func TestProjectFloretCancelledResultWithDeadlineUsesTimedOutLifecycle(t *testin
 func TestProjectFloretUnknownWaitingSignalFailsAsUnsupportedSignal(t *testing.T) {
 	t.Parallel()
 
-	r := newRun(runOptions{})
+	r := newFloretRuntimeTestRun(t, runOptions{})
 	r.id = "run_unknown_waiting"
 	r.threadID = "thread_unknown_waiting"
 	r.messageID = "msg_unknown_waiting"

@@ -296,7 +296,6 @@ func (s *Service) loadThreadTimelineMessages(ctx context.Context, endpointID str
 		if hostErr != nil {
 			return nil, hostErr
 		}
-		defer host.Close()
 	}
 	for _, candidate := range projectionTurns {
 		outcome, err := s.floretProjectionMessage(ctx, host, endpointID, threadID, candidate.turn)
