@@ -94,6 +94,21 @@ describe('main routing', () => {
     expect(mainSrc).toContain("return focusEnvironmentWindow(request.session_key);");
   });
 
+  it('scopes transport recovery IPC to the sending Desktop session', () => {
+    const mainSrc = readMainSource();
+    const handlerStart = mainSrc.indexOf('ipcMain.on(DESKTOP_SESSION_TRANSPORT_RECOVERY_GET_CHANNEL');
+    const handlerEnd = mainSrc.indexOf('ipcMain.on(DESKTOP_THEME_GET_SNAPSHOT_CHANNEL', handlerStart);
+
+    expect(handlerStart).toBeGreaterThanOrEqual(0);
+    expect(handlerEnd).toBeGreaterThan(handlerStart);
+    const handlerSrc = mainSrc.slice(handlerStart, handlerEnd);
+    expect(handlerSrc.match(/sessionRecordForWebContentsID\(event\.sender\.id\)/gu)).toHaveLength(3);
+    expect(handlerSrc).toContain('event.returnValue = sessionRecord?.transport_recovery_snapshot ?? null;');
+    expect(handlerSrc).toContain('return sessionRecord?.transport_recovery_session?.requestRecoveryNow() ?? false;');
+    expect(handlerSrc).not.toContain('sessionsByKey.get(');
+    expect(handlerSrc).not.toContain('runtimePlacementBridgeByTargetID.get(');
+  });
+
   it('returns structured launcher failures for stale sessions instead of raw exception text', () => {
     const mainSrc = readMainSource();
 
@@ -838,10 +853,16 @@ describe('main routing', () => {
     const trackBridgeStart = mainSrc.indexOf('function trackRuntimePlacementBridgeRecord(');
     const trackBridgeEnd = mainSrc.indexOf('async function openRuntimePlacementBridgeForReadyRecord(', trackBridgeStart);
     const trackBridgeSrc = mainSrc.slice(trackBridgeStart, trackBridgeEnd);
-    expect(trackBridgeSrc).toContain('void record.session.closed.then(async () => {');
+    expect(trackBridgeSrc).toContain('void record.session.closed.then(async (termination) => {');
     expect(trackBridgeSrc).toContain('runtimePlacementBridgeByTargetID.delete(targetID);');
     expect(trackBridgeSrc).toContain('await current.desktop_model_source?.stop().catch(() => undefined);');
+    expect(trackBridgeSrc).toContain("termination.kind === 'failed'");
+    expect(trackBridgeSrc).toContain('sessionRecord.runtime_handle = null;');
+    expect(trackBridgeSrc).toContain('sendSessionTransportRecoverySnapshot(sessionRecord);');
     expect(trackBridgeSrc).toContain('await finalizeSessionClosure(desktopSessionKeyFromRuntimeTargetID(targetID)).catch(() => undefined);');
+    expect(bridgeOpenSrc).toContain('sessionTransportRecoveryFailed(existingSession)');
+    expect(bridgeOpenSrc).toContain('await finalizeSessionClosure(existingSession.session_key);');
+    expect(bridgeOpenSrc).toContain('transportRecovery: record.session');
 
     const shutdownStart = mainSrc.indexOf('async function shutdownDesktopWindowsAndSessions(');
     const shutdownEnd = mainSrc.indexOf('type DesktopDeepLinkRequest', shutdownStart);
