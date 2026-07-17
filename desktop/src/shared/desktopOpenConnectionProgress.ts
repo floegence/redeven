@@ -16,7 +16,6 @@ export type DesktopOpenConnectionPhase =
   | 'checking_runtime_record'
   | 'ensuring_runtime_ready'
   | 'opening_ssh_control'
-  | 'opening_local_tunnel'
   | 'starting_container_bridge'
   | 'opening_bridge_proxy'
   | 'connecting_runtime_control'
@@ -75,8 +74,7 @@ const CONTAINER_OPEN_PHASES: readonly DesktopOpenConnectionPhase[] = [
 const SSH_HOST_OPEN_PHASES: readonly DesktopOpenConnectionPhase[] = [
   'checking_runtime_record',
   'ensuring_runtime_ready',
-  'opening_ssh_control',
-  'opening_local_tunnel',
+  'opening_bridge_proxy',
   'connecting_runtime_control',
   'connecting_desktop_model_source',
   'checking_env_app_readiness',
@@ -130,7 +128,6 @@ export const OPEN_CONNECTION_PHASE_LABELS: Record<DesktopOpenConnectionPhase, st
   checking_runtime_record: 'Checking runtime',
   ensuring_runtime_ready: 'Preparing runtime',
   opening_ssh_control: 'Opening SSH connection',
-  opening_local_tunnel: 'Opening local tunnel',
   starting_container_bridge: 'Opening container bridge',
   opening_bridge_proxy: 'Opening bridge proxy',
   connecting_runtime_control: 'Connecting runtime control',

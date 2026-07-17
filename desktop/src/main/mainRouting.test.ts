@@ -491,10 +491,8 @@ describe('main routing', () => {
     const providerOccupancySrc = mainSrc.slice(providerOccupancyStart, providerOccupancyEnd);
     expect(providerOccupancySrc).toContain('preferences: DesktopPreferences');
     expect(providerOccupancySrc).toContain('await verifyCurrentLocalEnvironmentRuntimeRecord(preferences.local_environment)');
-    expect(providerOccupancySrc).toContain('await verifySSHEnvironmentRuntimeRecord(runtimeKey)');
     expect(providerOccupancySrc).toContain('await verifyRuntimePlacementBridgeRecord(targetID)');
     expect(providerOccupancySrc).not.toContain('if (localEnvironmentRuntimeRecord)');
-    expect(providerOccupancySrc).not.toContain('for (const record of sshEnvironmentRuntimeByKey.values())');
     expect(providerOccupancySrc).not.toContain('for (const record of runtimePlacementBridgeByTargetID.values())');
 
     const localRecordVerifyStart = mainSrc.indexOf('async function verifyCurrentLocalEnvironmentRuntimeRecord(');
@@ -514,36 +512,25 @@ describe('main routing', () => {
     expect(bridgeRecordVerifySrc).toContain('runtimePlacementBridgeByTargetID.set(targetID, updatedRecord)');
     expect(bridgeRecordVerifySrc).not.toContain('started_at_unix_ms: bridgeRecord.startup.started_at_unix_ms');
 
-    const sshRecordVerifyStart = mainSrc.indexOf('async function verifySSHEnvironmentRuntimeRecord(');
-    const sshRecordVerifyEnd = mainSrc.indexOf('async function inspectSavedRuntimeTargetState(', sshRecordVerifyStart);
-    expect(sshRecordVerifyStart).toBeGreaterThanOrEqual(0);
-    expect(sshRecordVerifyEnd).toBeGreaterThan(sshRecordVerifyStart);
-    const sshRecordVerifySrc = mainSrc.slice(sshRecordVerifyStart, sshRecordVerifyEnd);
-    expect(sshRecordVerifySrc).toContain('started_at_unix_ms: startup.started_at_unix_ms\n            ?? runtimeRecord.startup.started_at_unix_ms');
-    expect(sshRecordVerifySrc).toContain('sshEnvironmentRuntimeByKey.set(runtimeKey, updatedRecord)');
-    expect(sshRecordVerifySrc).not.toContain('started_at_unix_ms: runtimeRecord.startup.started_at_unix_ms');
-
     const sshProbeStart = mainSrc.indexOf('async function probeSavedSSHRuntimeHealth(');
     const sshProbeEnd = mainSrc.indexOf('function runtimeTargetProbeSource(', sshProbeStart);
     expect(sshProbeStart).toBeGreaterThanOrEqual(0);
     expect(sshProbeEnd).toBeGreaterThan(sshProbeStart);
     const sshProbeSrc = mainSrc.slice(sshProbeStart, sshProbeEnd);
-    expect(sshProbeSrc).toContain('const runtimeRecord = await verifySSHEnvironmentRuntimeRecord(runtimeKey)');
+    expect(sshProbeSrc).toContain('const bridgeRecord = await verifyRuntimePlacementBridgeRecord(placementTargetID)');
+    expect(sshProbeSrc).toContain('const probe = await probeManagedSSHRuntimeStatus({');
+    expect(sshProbeSrc).toContain('sshRuntimeReadyByKey.set(runtimeKey, readyRuntimeRecord)');
     expect(sshProbeSrc).toContain('sshRuntimeReadyByKey.delete(runtimeKey)');
-    expect(sshProbeSrc).not.toContain('const runtimeRecord = sshEnvironmentRuntimeByKey.get(runtimeKey) ?? null');
 
     const openSSHStart = mainSrc.indexOf('async function openSSHEnvironmentFromLauncher(');
     const openSSHEnd = mainSrc.indexOf('function thrownLauncherActionFailure(', openSSHStart);
     expect(openSSHStart).toBeGreaterThanOrEqual(0);
     expect(openSSHEnd).toBeGreaterThan(openSSHStart);
     const openSSHSrc = mainSrc.slice(openSSHStart, openSSHEnd);
-    expect(openSSHSrc).toContain('let readyRecord: SSHRuntimeReadyRecord | null = null;');
-    expect(openSSHSrc).toContain('let existingRuntimeRecord = await verifySSHEnvironmentRuntimeRecord(optimisticSessionKey);');
-    expect(openSSHSrc).toContain('await refreshWelcomeRuntimeHealthForEnvironment(preflightEnvironmentID)');
-    expect(openSSHSrc).not.toContain('let readyRecord = sshRuntimeReadyByKey.get(optimisticSessionKey) ?? null');
-    expect(openSSHSrc).toContain('const reusedFreshPreflight = canReuseFreshSSHOpenPreflight(cachedHealth, readyRecord);');
-    expect(openSSHSrc).toContain('if (!reusedFreshPreflight) {');
-    expect(openSSHSrc).toContain('if (!reusedFreshPreflight || !cachedSSHOpenFailureAllowsRefreshRetry(error)) {');
+    expect(openSSHSrc).toContain('const bridgeOpenResult = await openRuntimePlacementBridgeFromLauncher(request);');
+    expect(openSSHSrc).toContain('return bridgeOpenResult;');
+    expect(openSSHSrc).not.toContain('sshRuntimeReadyByKey');
+    expect(openSSHSrc).not.toContain('probeManagedSSHRuntimeStatus');
     expect(mainSrc).toContain('if (!sessionRecord.env_app_ready || !sessionRecord.desktop_model_source_settled) {');
     expect(mainSrc).toContain('resolveSessionInitialLoadWhenReady(sessionRecord);');
     expect(mainSrc).toContain("'environment_open_timing'");
@@ -560,13 +547,16 @@ describe('main routing', () => {
     expect(modelSourceGateSrc).toContain('sessionRecord.desktop_model_source_settled = true;');
     expect(modelSourceGateSrc).toContain('resolveSessionInitialLoadWhenReady(sessionRecord);');
     expect(modelSourceGateSrc).not.toContain('presentAppWindow(');
-    expect(openSSHSrc).toContain('desktopModelSourceSettled: desktopModelSourceTask === null');
-    expect(openSSHSrc).toContain('markSessionDesktopModelSourceSettled(sessionRecord);');
-    expect(openSSHSrc.indexOf('desktopModelSourceTask = (async () => {')).toBeLessThan(
-      openSSHSrc.indexOf('sessionRecord = await createSessionRecord(openTarget'),
+    const bridgeOpenStart = mainSrc.indexOf('async function openRuntimePlacementBridgeFromLauncher(');
+    const bridgeOpenEnd = mainSrc.indexOf('async function runEnvironmentRuntimeLifecycleFromLauncher(', bridgeOpenStart);
+    const bridgeOpenSrc = mainSrc.slice(bridgeOpenStart, bridgeOpenEnd);
+    expect(bridgeOpenSrc).toContain('desktopModelSourceSettled: desktopModelSourceTask === null');
+    expect(bridgeOpenSrc).toContain('markSessionDesktopModelSourceSettled(sessionRecord);');
+    expect(bridgeOpenSrc.indexOf('desktopModelSourceTask = (async () => {')).toBeLessThan(
+      bridgeOpenSrc.indexOf('sessionRecord = await createSessionRecord(openTarget'),
     );
-    expect(openSSHSrc.indexOf('sessionRecord = await createSessionRecord(openTarget')).toBeLessThan(
-      openSSHSrc.indexOf('await desktopModelSourceTask;'),
+    expect(bridgeOpenSrc.indexOf('sessionRecord = await createSessionRecord(openTarget')).toBeLessThan(
+      bridgeOpenSrc.indexOf('await desktopModelSourceTask;'),
     );
 
     const ensureRuntimeStart = mainSrc.indexOf('async function ensureRuntimePlacementReadyRecordFromLauncher(');
@@ -693,7 +683,7 @@ describe('main routing', () => {
     expect(managedRestartSrc).not.toContain('rootWindow.loadURL');
     expect(managedRestartSrc).not.toContain('focusEnvironmentSession(');
     expect(sshRestartSrc).not.toContain('await handoffSessionToRuntimeLifecycle({');
-    expect(sshRestartSrc).toContain('await startSSHEnvironmentRuntimeRecord(sshDetails, {');
+    expect(sshRestartSrc).toContain('await ensureSSHRuntimeReadyRecord(sshDetails, {');
     expect(sshRestartSrc).not.toContain('openSSHEnvironmentFromLauncher({');
     expect(sshRestartSrc).not.toContain('rootWindow.loadURL');
     expect(sshRestartSrc).not.toContain('focusEnvironmentSession(');
@@ -735,7 +725,7 @@ describe('main routing', () => {
     expect(routeSnapshotSrc).toContain('summary.environments.find');
     expect(routeSnapshotSrc).not.toContain('controlPlane.environments.find');
 
-    const sshStartStart = mainSrc.indexOf('async function startSSHEnvironmentRuntimeRecordUncoordinated(');
+    const sshStartStart = mainSrc.indexOf('async function ensureSSHRuntimeReadyRecordUncoordinated(');
     const sshStartEnd = mainSrc.indexOf('const operation = launcherOperations.create({', sshStartStart);
     expect(sshStartStart).toBeGreaterThanOrEqual(0);
     expect(sshStartEnd).toBeGreaterThan(sshStartStart);
@@ -749,25 +739,31 @@ describe('main routing', () => {
     const sshTaskBodyStart = mainSrc.indexOf('const task = (async () => {', sshStartStart);
     const sshStartTaskSrc = mainSrc.slice(sshTaskBodyStart, sshStartTaskEnd);
     expect(sshStartTaskSrc).toContain('commitRuntimeLifecycleDecision(runtimeKey, lifecycleAttemptOwner');
+    expect(sshStartTaskSrc).toContain('if (replacementRequested) {');
+    expect(sshStartTaskSrc).toContain('await closeEnvironmentSessionsForRuntimeLifecycle({');
+    expect(sshStartTaskSrc).toContain('await clearRuntimePlacementBridgeRecord(placementTargetID);');
+    expect(mainSrc.indexOf('await closeEnvironmentSessionsForRuntimeLifecycle({', sshTaskBodyStart)).toBeLessThan(
+      sshStartTaskEnd,
+    );
     expect(sshStartTaskSrc).not.toContain('inspectManagedSSHRuntimeProcesses');
     expect(sshStartTaskSrc).not.toContain('stopManagedSSHRuntimeProcesses');
     expect(sshStartSrc).toContain('const inventory = await inspectManagedSSHRuntimeProcesses({');
     const sshManagedStartEnd = mainSrc.indexOf('if (launcherOperations.isStale(runtimeKey))', sshStartTaskEnd);
     const sshManagedStartSrc = mainSrc.slice(sshStartTaskEnd, sshManagedStartEnd);
-    expect(sshManagedStartSrc).toContain('beforeRuntimeReplacement: replacementRequested ? async () => {');
-    expect(sshManagedStartSrc).toContain('await closeEnvironmentSessionsForRuntimeLifecycle({');
-    expect(sshManagedStartSrc).toContain('await existingRecord?.disconnect().catch(() => undefined)');
+    expect(sshManagedStartSrc).not.toContain('beforeRuntimeReplacement');
 
     const openSSHStart = mainSrc.indexOf('async function openSSHEnvironmentFromLauncher(');
-    const openSSHEnd = mainSrc.indexOf('const optimisticSessionKey = sshDesktopSessionKey(sshDetails);', openSSHStart);
-    expect(mainSrc.slice(openSSHStart, openSSHEnd)).toContain('connect_timeout_seconds: request.connect_timeout_seconds');
+    const openSSHEnd = mainSrc.indexOf('function thrownLauncherActionFailure(', openSSHStart);
+    const openSSHSrc = mainSrc.slice(openSSHStart, openSSHEnd);
+    expect(openSSHSrc).toContain('const bridgeOpenResult = await openRuntimePlacementBridgeFromLauncher(request);');
+    expect(openSSHSrc).toContain('return bridgeOpenResult;');
 
     const startRuntimeStart = mainSrc.indexOf('function sshDetailsFromRuntimeTargetRequest(');
     const startRuntimeEnd = mainSrc.indexOf('async function runEnvironmentRuntimeLifecycleFromLauncher(', startRuntimeStart);
     expect(mainSrc.slice(startRuntimeStart, startRuntimeEnd)).toContain('connect_timeout_seconds: request.connect_timeout_seconds');
   });
 
-  it('keeps runtime lifecycle dispatch target-first and opens container placement only through bridge sessions', () => {
+  it('keeps runtime lifecycle dispatch target-first and opens SSH or container placement only through bridge sessions', () => {
     const mainSrc = readMainSource();
     expect(mainSrc).not.toContain('function launcherActionFailureForUnsupportedRuntimePlacement(');
     expect(mainSrc).toContain('const runtimePlacementBridgeByTargetID = new Map<DesktopRuntimeTargetID, RuntimePlacementBridgeRecord>();');
@@ -776,7 +772,7 @@ describe('main routing', () => {
     expect(mainSrc).toContain('startRuntimePlacementBridgeSession({');
     expect(mainSrc).toContain('startDesktopModelSourceForStartup({');
     expect(mainSrc).toContain('runtimePlacementReadyByTargetID.set(targetID, readyRecord)');
-    expect(mainSrc).toContain('runtimePlacementBridgeByTargetID.set(bridgeSession.placement_target_id, record)');
+    expect(mainSrc).toContain('trackRuntimePlacementBridgeRecord(record)');
     expect(mainSrc).toContain('open_connection_required: true');
     expect(mainSrc).toContain('openConnectionRequired: state.open_connection_required === true');
     expect(mainSrc).toContain('async function openRuntimePlacementBridgeFromLauncher(');
@@ -801,7 +797,29 @@ describe('main routing', () => {
     expect(bridgeOpenSrc).toContain('await runtimeLifecycleCoordinator.waitForReadyMutation(lifecycleTargetKey)');
     expect(bridgeOpenSrc).toContain('launcherActionFailureFromRuntimeLifecycleError(error');
     expect(bridgeOpenSrc).toContain("title: 'Checking runtime status'");
+    expect(bridgeOpenSrc).toContain("if (placement.kind !== 'container_process' && hostAccess.kind !== 'ssh_host')");
+    expect(bridgeOpenSrc).toContain('const sshReadyRecord = hostAccess.kind === \'ssh_host\'');
+    expect(bridgeOpenSrc).toContain("phase: 'opening_bridge_proxy'");
+    expect(bridgeOpenSrc).toContain("phase: 'checking_env_app_readiness'");
+    expect(bridgeOpenSrc.match(/probeExternalLocalUIStartup\(bridgeSession\.startup\.local_ui_url/gu)).toHaveLength(1);
+    expect(bridgeOpenSrc).toContain('savedRuntimePlacementSSHPassword(');
     expect(bridgeOpenSrc).not.toContain('Start this runtime first, then open it.');
+
+    const trackBridgeStart = mainSrc.indexOf('function trackRuntimePlacementBridgeRecord(');
+    const trackBridgeEnd = mainSrc.indexOf('async function openRuntimePlacementBridgeForReadyRecord(', trackBridgeStart);
+    const trackBridgeSrc = mainSrc.slice(trackBridgeStart, trackBridgeEnd);
+    expect(trackBridgeSrc).toContain('void record.session.closed.then(async () => {');
+    expect(trackBridgeSrc).toContain('runtimePlacementBridgeByTargetID.delete(targetID);');
+    expect(trackBridgeSrc).toContain('await current.desktop_model_source?.stop().catch(() => undefined);');
+    expect(trackBridgeSrc).toContain('await finalizeSessionClosure(desktopSessionKeyFromRuntimeTargetID(targetID)).catch(() => undefined);');
+
+    const shutdownStart = mainSrc.indexOf('async function shutdownDesktopWindowsAndSessions(');
+    const shutdownEnd = mainSrc.indexOf('type DesktopDeepLinkRequest', shutdownStart);
+    const shutdownSrc = mainSrc.slice(shutdownStart, shutdownEnd);
+    expect(shutdownSrc.indexOf('runtimePlacementBridgeByTargetID.clear();')).toBeLessThan(
+      shutdownSrc.indexOf('const sessionClosePromises ='),
+    );
+    expect(shutdownSrc).toContain('await runtimeRecord.session.disconnect().catch(() => undefined);');
     expect(mainSrc).toContain('resolveRuntimeContainerPlacement');
     expect(mainSrc).toContain('DESKTOP_LAUNCHER_LIST_RUNTIME_CONTAINERS_CHANNEL');
     expect(mainSrc).not.toContain('containerStartCommand');
@@ -826,12 +844,18 @@ describe('main routing', () => {
     expect(ensureRuntimeSrc.indexOf('await pendingOpen.catch(() => undefined)')).toBeLessThan(
       ensureRuntimeSrc.indexOf('const inspection = await inspectRuntimePlacementTargetState({'),
     );
+    expect(ensureRuntimeSrc.indexOf('await closeEnvironmentSessionsForRuntimeLifecycle({')).toBeLessThan(
+      ensureRuntimeSrc.indexOf('const inspection = await inspectRuntimePlacementTargetState({'),
+    );
+    expect(ensureRuntimeSrc.indexOf('await clearRuntimePlacementBridgeRecord(targetID)')).toBeLessThan(
+      ensureRuntimeSrc.indexOf('const inspection = await inspectRuntimePlacementTargetState({'),
+    );
     expect(ensureRuntimeSrc).toContain('let replacementLiveDaemon = runtimePlacementLiveDaemonFromInspection({');
     expect(ensureRuntimeSrc).toContain('before_runtime_replacement: beforeRuntimeReplacement');
     expect(ensureRuntimeSrc).not.toContain('inspection.ready_record && replacementRequested');
 
     const liveDaemonHelperStart = mainSrc.indexOf('function runtimePlacementLiveDaemonFromInspection(');
-    const liveDaemonHelperEnd = mainSrc.indexOf('async function releaseRuntimePlacementLiveDaemonForReplacement(', liveDaemonHelperStart);
+    const liveDaemonHelperEnd = mainSrc.indexOf('function commitRuntimePlacementLiveDaemonReplacement(', liveDaemonHelperStart);
     expect(liveDaemonHelperStart).toBeGreaterThanOrEqual(0);
     expect(liveDaemonHelperEnd).toBeGreaterThan(liveDaemonHelperStart);
     const liveDaemonHelperSrc = mainSrc.slice(liveDaemonHelperStart, liveDaemonHelperEnd);
@@ -846,8 +870,7 @@ describe('main routing', () => {
     const replacementReleaseHelperSrc = mainSrc.slice(replacementReleaseHelperStart, replacementReleaseHelperEnd);
     const readyCleanupIndex = replacementReleaseHelperSrc.indexOf('runtimePlacementReadyByTargetID.delete(input.liveDaemon.target_id)');
     const maintenanceCleanupIndex = replacementReleaseHelperSrc.indexOf('runtimePlacementMaintenanceByTargetID.delete(input.liveDaemon.target_id)');
-    expect(replacementReleaseHelperSrc).toContain('await closeEnvironmentSessionsForRuntimeLifecycle({');
-    expect(replacementReleaseHelperSrc).toContain('await bridgeRecord?.session.disconnect().catch(() => undefined)');
+    expect(replacementReleaseHelperSrc).toContain('commitRuntimeLifecycleDecision(input.liveDaemon.target_id');
     expect(replacementReleaseHelperSrc).not.toContain('inspectContainerRuntimeProcesses');
     expect(replacementReleaseHelperSrc).not.toContain('stopContainerRuntimeProcesses');
     expect(readyCleanupIndex).toBeGreaterThanOrEqual(0);
@@ -862,7 +885,7 @@ describe('main routing', () => {
     expect(replacementBranchSrc).not.toContain('runtime_up_to_date');
     expect(ensureRuntimeSrc).toContain('let replacementReadiness: RuntimePlacementReplacementReadiness | null = null');
     expect(ensureRuntimeSrc).toContain('beforeRuntimeReplacement = async () => {');
-    expect(ensureRuntimeSrc).toContain('await releaseRuntimePlacementLiveDaemonForReplacement({');
+    expect(ensureRuntimeSrc).toContain('commitRuntimePlacementLiveDaemonReplacement({');
     expect(ensureRuntimeSrc).toContain('previous_runtime_pid: replacementReadiness?.previous_runtime_pid');
     expect(ensureRuntimeSrc).toContain('require_new_daemon: replacementReadiness?.require_new_daemon === true');
     expect(ensureRuntimeSrc).not.toContain('let previousRuntimePID');
@@ -896,19 +919,30 @@ describe('main routing', () => {
     expect(stopRuntimeSrc).toContain('const inventory = await inspectContainerRuntimeProcesses(processArgs);');
     expect(stopRuntimeSrc).toContain('await stopContainerRuntimeProcesses(processArgs, inventory);');
     expect(stopRuntimeSrc).not.toContain('containerRuntimeDaemonStopCommand({');
-    expect(stopRuntimeSrc).toContain('await runtimeRecord?.session.disconnect().catch(() => undefined);');
+    const stopUncoordinatedStart = stopRuntimeSrc.indexOf('async function stopEnvironmentRuntimeFromLauncherUncoordinated(');
+    const containerStopStart = stopRuntimeSrc.indexOf("if (placement.kind === 'container_process')", stopUncoordinatedStart);
+    const sshStopStart = stopRuntimeSrc.indexOf('const sshDetails = sshDetailsFromRuntimeTargetRequest(request);', containerStopStart);
+    const containerStopSrc = stopRuntimeSrc.slice(containerStopStart, sshStopStart);
+    expect(containerStopSrc.indexOf('await clearRuntimePlacementBridgeRecord(targetID)')).toBeLessThan(
+      containerStopSrc.indexOf('const inventory = await inspectContainerRuntimeProcesses(processArgs)'),
+    );
     expect(stopRuntimeSrc).toContain('runtimePlacementBridgeByTargetID.delete(targetID)');
     expect(stopRuntimeSrc).toContain('runtimePlacementReadyByTargetID.delete(targetID)');
     expect(stopRuntimeSrc).toContain('sshRuntimeReadyByKey.delete(runtimeKey)');
     expect(stopRuntimeSrc).toContain('runtimeLifecycleFailureNextActions');
     expect(stopRuntimeSrc).toContain('const sshDetails = sshDetailsFromRuntimeTargetRequest(request);');
     expect(stopRuntimeSrc.match(/await closeEnvironmentSessionsForRuntimeLifecycle\(\{/gu)).toHaveLength(3);
-    const stopUncoordinatedStart = stopRuntimeSrc.indexOf('async function stopEnvironmentRuntimeFromLauncherUncoordinated(');
-    const sshStopStart = stopRuntimeSrc.indexOf('const sshDetails = sshDetailsFromRuntimeTargetRequest(request);', stopUncoordinatedStart);
-    const localStopStart = stopRuntimeSrc.indexOf('const preferences = await loadDesktopPreferencesCached();', sshStopStart);
-    const sshStopSrc = stopRuntimeSrc.slice(sshStopStart, localStopStart);
+    const coordinatedSSHStopStart = stopRuntimeSrc.indexOf('const sshDetails = sshDetailsFromRuntimeTargetRequest(request);', stopUncoordinatedStart);
+    const localStopStart = stopRuntimeSrc.indexOf(
+      '\n  const preferences = await loadDesktopPreferencesCached();\n  const environment =',
+      coordinatedSSHStopStart,
+    );
+    const sshStopSrc = stopRuntimeSrc.slice(coordinatedSSHStopStart, localStopStart);
     expect(sshStopSrc.indexOf('await closeEnvironmentSessionsForRuntimeLifecycle({')).toBeLessThan(
-      sshStopSrc.indexOf('await verifySSHEnvironmentRuntimeRecord(runtimeKey)'),
+      sshStopSrc.indexOf('const processInventory = await inspectManagedSSHRuntimeProcesses(processInventoryArgs)'),
+    );
+    expect(sshStopSrc.indexOf('await clearRuntimePlacementBridgeRecord(placementTargetID)')).toBeLessThan(
+      sshStopSrc.indexOf('const processInventory = await inspectManagedSSHRuntimeProcesses(processInventoryArgs)'),
     );
     expect(stopRuntimeSrc).toContain("decision: 'runtime_already_stopped'");
     expect(stopRuntimeSrc).not.toContain('await finalizeSessionClosure(liveRuntimeSession.session_key)');

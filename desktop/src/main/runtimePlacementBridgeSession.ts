@@ -63,6 +63,7 @@ export type RuntimePlacementBridgeSession = RuntimePlacementBridgeSessionHandle 
   runtime_control?: DesktopRuntimeControlEndpoint;
   runtime_service?: RuntimeServiceSnapshot;
   runtime_handle: DesktopSessionRuntimeHandle;
+  closed: Promise<void>;
   disconnect: () => Promise<void>;
   stop: () => Promise<void>;
 }>;
@@ -127,9 +128,9 @@ async function closeStreamingCommand(command: RuntimeHostStreamingCommand): Prom
 export async function startRuntimePlacementBridgeSession(
   args: StartRuntimePlacementBridgeSessionArgs,
 ): Promise<RuntimePlacementBridgeSession> {
-  // IMPORTANT: Runtime Placement Bridge sessions are the only container runtime
-  // access path. Do not add published-port, host-network, or provider-card
-  // fallback paths around this bridge.
+  // IMPORTANT: Runtime Placement Bridge sessions are the only SSH host and
+  // container Env App transport. Do not add published-port, host-network,
+  // provider-card, or public Local UI fallback paths around this bridge.
   const command = spawnBridgeCommand(args);
   void command.closed.catch(() => undefined);
   const throwIfCanceled = () => {
@@ -142,6 +143,10 @@ export async function startRuntimePlacementBridgeSession(
   const streams = new Map<string, BridgeStreamCallbacks>();
   let closed = false;
   let proxyClose: (() => Promise<void>) | null = null;
+  let resolveClosed!: () => void;
+  const closedPromise = new Promise<void>((resolve) => {
+    resolveClosed = resolve;
+  });
 
   bindRecentLog(command.stderr);
 
@@ -162,6 +167,7 @@ export async function startRuntimePlacementBridgeSession(
     }
     command.kill('SIGTERM');
     await command.closed.catch(() => undefined);
+    resolveClosed();
   };
 
   let hello: RuntimePlacementBridgeHello;
@@ -332,6 +338,7 @@ export async function startRuntimePlacementBridgeSession(
       launch_mode: 'spawned',
       stop,
     },
+    closed: closedPromise,
     disconnect,
     stop,
   };

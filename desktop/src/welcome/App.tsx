@@ -8337,8 +8337,6 @@ function localizedOpenConnectionPhaseLabel(i18n: DesktopI18n, phase: DesktopOpen
       return i18n.t('progress.preparingRuntime');
     case 'opening_ssh_control':
       return i18n.t('progress.openingSshConnection');
-    case 'opening_local_tunnel':
-      return i18n.t('progress.openingLocalTunnel');
     case 'starting_container_bridge':
       return i18n.t('progress.openingContainerBridge');
     case 'opening_bridge_proxy':
@@ -8508,7 +8506,6 @@ function localizedProgressTitle(i18n: DesktopI18n, progress: DesktopLauncherActi
       case 'canceled':
         return i18n.t('progress.canceled');
       case 'ensuring_runtime_ready':
-      case 'opening_local_tunnel':
       case 'connecting_runtime_control':
         return localizedOpenConnectionPhaseLabel(i18n, open.phase);
     }
@@ -8554,7 +8551,6 @@ function localizedProgressDetail(i18n: DesktopI18n, progress: DesktopLauncherAct
       case 'open_ready':
         return i18n.t('progress.detailEnvironmentOpen');
       case 'ensuring_runtime_ready':
-      case 'opening_local_tunnel':
       case 'connecting_runtime_control':
       case 'failed':
       case 'canceled':

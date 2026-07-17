@@ -249,32 +249,18 @@ describe('sshRuntime', () => {
     expect(source).toContain("asset.source === 'source_build_cache'");
     expect(source).toContain('Using cached local runtime package');
     expect(source).toContain('package built from this Desktop session');
-    expect(source).toContain('async function waitForForwardedLocalUIOpenable(');
-    expect(source).toContain('DEFAULT_RUNTIME_PROBE_TIMEOUT_MS');
-    expect(source).toContain('Math.min(DEFAULT_RUNTIME_PROBE_TIMEOUT_MS, remainingDeadlineMs)');
-    expect(source).toContain('Math.min(DEFAULT_SSH_POLL_INTERVAL_MS, Math.max(1, deadline - Date.now()))');
-    expect(source).toContain('class SSHLocalForwardHandle');
+    expect(source).not.toContain('ExitOnForwardFailure');
+    expect(source).not.toContain("'-L'");
     expect(source).toContain('managedSSHRuntimeAttachPolicy(');
     expect(source).toContain('DesktopSSHRuntimeMaintenanceRequiredError');
     expect(source).toContain('allowActiveWorkReplacement?: boolean;');
     expect(source).toContain('allowActiveWorkReplacement: args.allowActiveWorkReplacement === true');
-    expect(source).toContain('requireDesktopModelSource: boolean;');
-    expect(source).toContain('const modelSourceUnsupported = args.requireDesktopModelSource');
-    expect(source).toContain('runtimeServiceSupportsDesktopModelSource(runtimeService)');
-    expect(source).toContain("'desktop_model_source_requires_runtime_update'");
     expect(source).not.toContain('/_redeven_proxy/api/runtime/bindings/');
-    expect(source).toContain('const forwarded = await openSSHForwardedRuntime({');
-    expect(source).toContain('ready: ManagedSSHRuntimeReady;');
-    expect(source).toContain('return await startManagedSSHRuntimeInternal(args, false) as ManagedSSHRuntimeReady;');
-    expect(source).toContain('const remoteStartup = args.ready.startup;');
-    expect(source).toContain('runtimeServiceIsOpenable(result.value.runtime_service)');
-    expect(source).not.toContain('Desktop reached the forwarded Redeven Local UI, but the runtime is not ready to open yet');
-    expect(source).toContain('runtime_service: forwardedStartup.runtime_service ?? remoteStartup.runtime_service');
+    expect(source).toContain('export async function ensureManagedSSHRuntimeReady(');
     expect(source).toContain('onProgress?: (progress: DesktopSSHRuntimeProgress) => void;');
     expect(source).toContain("'ssh_connecting'");
     expect(source).toContain("'ssh_uploading_archive'");
     expect(source).toContain("'ssh_waiting_report'");
-    expect(source).toContain("'ssh_verifying_tunnel'");
     expect(source).toContain('type SSHControlSessionContext = Readonly<{');
     expect(source).toContain('async function runSSHControlCommand(');
     expect(source).toContain('const result = await runSSHControlCommand(');
@@ -297,7 +283,7 @@ describe('sshRuntime', () => {
     expect(source).toContain('Remote Redeven launcher failed before reporting readiness (${exitReason}).');
   });
 
-  it('threads AbortSignal through SSH child processes, polling loops, and upload cleanup', () => {
+  it('threads AbortSignal through SSH child processes and upload cleanup', () => {
     const source = readSSHRuntimeSource();
 
     expect(source).toContain('export class DesktopSSHRuntimeCanceledError extends Error');
@@ -306,8 +292,6 @@ describe('sshRuntime', () => {
     expect(source).toContain('throwIfSSHRuntimeCanceled(signal);');
     expect(source).toContain('signal,');
     expect(source).toContain('reject(new DesktopSSHRuntimeCanceledError());');
-    expect(source).toContain('async function waitForForwardedLocalUIOpenable(args: Readonly<{');
-    expect(source).toContain('signal: readinessController.signal');
     expect(source).toContain('async function createRemoteTempDir(args: Readonly<{');
     expect(source).toContain('async function prepareRemoteRuntimeViaDesktopUpload(args: Readonly<{');
     expect(source).toContain('const remoteTempDir = await createRemoteTempDir(args);');

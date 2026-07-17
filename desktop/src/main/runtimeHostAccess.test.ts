@@ -70,6 +70,8 @@ describe('runtimeHostAccess', () => {
     expect(args.at(-1)).toBe(
       "env REDEVEN_DESKTOP_OWNER_ID='desktop-owner' 'docker' 'exec' '-i' 'dev' 'redeven' 'desktop-bridge'",
     );
+    expect(args).not.toContain('-L');
+    expect(args.join(' ')).not.toContain('ExitOnForwardFailure');
   });
 
   it('uses a locally supplied SSH password through askpass without sending it in argv', async () => {

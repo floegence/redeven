@@ -98,33 +98,29 @@ describe('desktopOperationFailure', () => {
   it.each([
     'ssh_connection_interrupted',
     'ssh_upload_directory_unavailable',
-    'ssh_forward_unavailable',
-    'ssh_forward_verification_timed_out',
-    'ssh_forward_network_failed',
-    'ssh_forward_invalid_response',
   ] as const)('preserves the typed SSH failure code %s', (code) => {
     expect(normalizeDesktopOperationFailurePresentation({
       code,
       severity: 'error',
-      title: 'SSH forward failure',
-      summary: 'Desktop could not verify the forwarded Runtime.',
+      title: 'SSH failure',
+      summary: 'Desktop could not complete the SSH operation.',
     })?.code).toBe(code);
   });
 
-  it('includes sanitized forward probe diagnostics in clipboard output', () => {
+  it('includes sanitized diagnostics in clipboard output', () => {
     const text = formatDesktopOperationFailureForClipboard({
-      code: 'ssh_forward_network_failed',
+      code: 'environment_open_failed',
       severity: 'error',
-      title: 'Forwarded Runtime Unreachable',
-      summary: 'The forwarded Runtime connection failed.',
+      title: 'Environment Open Failed',
+      summary: 'The Desktop bridge connection failed.',
       diagnostics: [{
-        channel: 'forward_probe',
-        label: 'SSH forward probe',
+        channel: 'bridge_probe',
+        label: 'Desktop bridge probe',
         text: 'failure_type=network_error\nerror_code=ECONNRESET\nattempts=3\nrequest_budget_ms=450\nelapsed_ms=450',
       }],
     });
 
-    expect(text).toContain('SSH forward probe (forward_probe):');
+    expect(text).toContain('Desktop bridge probe (bridge_probe):');
     expect(text).toContain('failure_type=network_error');
     expect(text).toContain('error_code=ECONNRESET');
   });

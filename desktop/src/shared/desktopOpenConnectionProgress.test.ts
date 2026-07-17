@@ -35,12 +35,11 @@ describe('desktopOpenConnectionProgress', () => {
     expect(desktopOpenConnectionLocation(sshHost, containerPlacement)).toBe('ssh_container');
   });
 
-  it('keeps tunnel and bridge phases out of runtime lifecycle progress', () => {
+  it('uses the placement bridge phases for SSH and container opens', () => {
     expect(openConnectionPhaseSequence('ssh_host')).toEqual([
       'checking_runtime_record',
       'ensuring_runtime_ready',
-      'opening_ssh_control',
-      'opening_local_tunnel',
+      'opening_bridge_proxy',
       'connecting_runtime_control',
       'connecting_desktop_model_source',
       'checking_env_app_readiness',
