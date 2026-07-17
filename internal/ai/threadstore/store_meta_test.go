@@ -52,7 +52,7 @@ func TestStoreOpenRejectsLegacySchemaWithoutResettingDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("begin verification transaction: %v", err)
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	if has, err := columnExists(tx, "ai_threads", "last_context_run_id"); err != nil {
 		t.Fatalf("check legacy column: %v", err)
 	} else if !has {
