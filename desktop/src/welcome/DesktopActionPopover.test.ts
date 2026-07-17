@@ -24,6 +24,7 @@ describe('DesktopActionPopover', () => {
     expect(overlaySource).toContain('data-placement-lock={props.placementLock}');
     expect(source).toContain('allowMainAxisOverflow?: boolean;');
     expect(source).toContain('allowMainAxisOverflow={props.allowMainAxisOverflow ?? true}');
+    expect(source).toContain('[data-redeven-action-popover-initial-focus]');
     expect(source).toContain('onAnchorPointerDown?: JSX.EventHandlerUnion<HTMLSpanElement, PointerEvent>;');
     expect(source).toContain('onExitComplete?: () => void;');
     expect(source).toContain('onPointerDown={props.onAnchorPointerDown}');

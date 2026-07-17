@@ -26,7 +26,9 @@ function firstFocusableElement(root: HTMLElement | undefined): HTMLElement | nul
   if (!root) {
     return null;
   }
-  return root.querySelector<HTMLElement>('button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])');
+  return root.querySelector<HTMLElement>(
+    '[data-redeven-action-popover-initial-focus], button:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+  );
 }
 
 export function DesktopActionPopover(props: DesktopActionPopoverProps) {

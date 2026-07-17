@@ -1408,6 +1408,27 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('NewEnvironmentPlaceholderCard');
   });
 
+  it('keeps launcher operations as the single persistent Environment failure owner', () => {
+    const appSrc = readWelcomeSource();
+    const styles = readWelcomeStyles();
+
+    expect(appSrc).toContain("kind: 'dismiss_launcher_operation'");
+    expect(appSrc).toContain('selectedSnapshotOpenConnectionProgressForEnvironment');
+    expect(appSrc).toContain('<EnvironmentProgressPanel');
+    expect(appSrc).not.toContain('EnvironmentFailureState');
+    expect(appSrc).not.toContain('environmentFailures');
+    expect(appSrc).not.toContain('dismissEnvironmentFailure');
+    expect(appSrc).not.toContain('redeven-environment-card__failure-badge');
+    expect(styles).not.toContain('redeven-environment-card--failure');
+    expect(styles).not.toContain('redeven-environment-card__failure-badge');
+    const splitActionStart = appSrc.indexOf('function EnvironmentSplitActionButton');
+    const splitActionEnd = appSrc.indexOf('function QuickCreateConnectionCard', splitActionStart);
+    const splitActionSrc = appSrc.slice(splitActionStart, splitActionEnd);
+    expect(splitActionSrc).toContain('allowMainAxisOverflow={false}');
+    expect(splitActionSrc).toContain('placementLock="top-inline-shift"');
+    expect(appSrc).toContain('data-redeven-action-popover-initial-focus=""');
+  });
+
   it('renders filter pills with counts, a dismissible chip for runtime target / control plane filters, and conditional live count', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
@@ -1767,19 +1788,20 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).not.toContain('.redeven-ssh-runtime-activity');
   });
 
-  it('shows structured card failures with diagnostics behind Details', () => {
+  it('shows structured operation failures with diagnostics behind Details', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
 
-    expect(appSrc).toContain('formatDesktopOperationFailureForClipboard(presentation())');
-    expect(appSrc).toContain('{presentation().summary}');
-    expect(appSrc).toContain('{presentation().recovery_hint}');
+    expect(appSrc).toContain('formatDesktopOperationFailureForClipboard(failure)');
+    expect(appSrc).toContain('{failure().summary}');
+    expect(appSrc).toContain('{failure().recovery_hint}');
     expect(appSrc).toContain("<summary>{props.i18n.t('settings.detailsTitle')}</summary>");
     expect(appSrc).toContain('diagnostic.label');
     expect(appSrc).toContain('diagnostic.text');
-    expect(styles).toContain('.redeven-environment-card__failure-details summary');
+    expect(styles).toContain('.redeven-action-popover__failure-details summary');
     expect(styles).toContain('cursor: pointer;');
-    expect(styles).toContain('.redeven-environment-card__failure-diagnostic');
+    expect(styles).toContain('.redeven-action-popover__failure-diagnostic pre');
+    expect(styles).not.toContain('.redeven-environment-card__failure-details');
   });
 
   it('lets users inspect and cancel lifecycle or Open progress from the Open popup while shimmer feedback stays active', () => {
