@@ -3,7 +3,6 @@ package ai
 import (
 	"context"
 	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -51,113 +50,31 @@ func TestEnsureAssistantMessageStarted_IsIdempotent(t *testing.T) {
 	}
 }
 
-func TestPrepareRun_InitializesLiveAssistantDraftImmediately(t *testing.T) {
-	t.Parallel()
-
+func TestPrepareRunDoesNotPublishDraftBeforeFloretAcceptance(t *testing.T) {
 	svc := newRealtimeTestService(t, 2*time.Second)
 	ctx := context.Background()
-	meta := &session.Meta{
-		EndpointID:        "env_prepare_live_draft",
-		NamespacePublicID: "ns_prepare_live_draft",
-		ChannelID:         "ch_prepare_live_draft",
-		UserPublicID:      "user_prepare_live_draft",
-		UserEmail:         "prepare@example.com",
-		CanRead:           true,
-		CanWrite:          true,
-		CanExecute:        true,
-		CanAdmin:          true,
-	}
-
-	thread, err := svc.CreateThread(ctx, meta, "prepare live draft", "", "", "")
+	meta := &session.Meta{EndpointID: "env_prepare_draft", NamespacePublicID: "ns", ChannelID: "ch", UserPublicID: "user", CanRead: true, CanWrite: true, CanExecute: true}
+	thread, err := svc.CreateThread(ctx, meta, "prepare", "", "", "")
 	if err != nil {
-		t.Fatalf("CreateThread: %v", err)
+		t.Fatal(err)
 	}
-
-	runID := "run_prepare_immediate_live_draft"
-	prepared, err := svc.prepareRun(meta, runID, RunStartRequest{
-		ThreadID: thread.ThreadID,
-		Model:    "openai/gpt-5-mini",
-		Input:    RunInput{Text: "hello"},
-		Options:  RunOptions{},
-	}, nil, nil)
+	prepared, err := svc.prepareRun(meta, "run_prepare", RunStartRequest{ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini", Input: RunInput{Text: "hello"}}, nil, nil)
 	if err != nil {
-		t.Fatalf("prepareRun: %v", err)
+		t.Fatal(err)
 	}
 	t.Cleanup(func() {
 		svc.mu.Lock()
-		delete(svc.runs, runID)
+		delete(svc.runs, "run_prepare")
 		delete(svc.activeRunByTh, runThreadKey(meta.EndpointID, thread.ThreadID))
 		svc.mu.Unlock()
 		prepared.r.markDone()
 	})
-
 	bootstrap, err := svc.GetFlowerThreadLiveBootstrap(ctx, meta, thread.ThreadID)
 	if err != nil {
-		t.Fatalf("GetFlowerThreadLiveBootstrap: %v", err)
+		t.Fatal(err)
 	}
-	if bootstrap == nil {
-		t.Fatalf("bootstrap missing")
-	}
-	if bootstrap.Cursor <= 0 {
-		t.Fatalf("cursor=%d, want > 0", bootstrap.Cursor)
-	}
-	if got := strings.TrimSpace(bootstrap.Thread.ActiveRunID); got != runID {
-		t.Fatalf("bootstrap thread active_run_id=%q, want %q", got, runID)
-	}
-	if got := strings.TrimSpace(bootstrap.LiveState.ThreadPatch.ActiveRunID); got != runID {
-		t.Fatalf("live patch active_run_id=%q, want %q", got, runID)
-	}
-	gotThread, err := svc.GetThread(ctx, meta, thread.ThreadID)
-	if err != nil {
-		t.Fatalf("GetThread: %v", err)
-	}
-	if got := strings.TrimSpace(gotThread.ActiveRunID); got != runID {
-		t.Fatalf("GetThread active_run_id=%q, want %q", got, runID)
-	}
-	listed, err := svc.ListThreads(ctx, meta, 20, "")
-	if err != nil {
-		t.Fatalf("ListThreads: %v", err)
-	}
-	if len(listed.Threads) != 1 || strings.TrimSpace(listed.Threads[0].ActiveRunID) != runID {
-		t.Fatalf("ListThreads=%#v, want active_run_id %q", listed, runID)
-	}
-	runState := bootstrap.LiveState.Runs[runID]
-	if strings.TrimSpace(runState.RunID) != runID {
-		t.Fatalf("runID=%q, want %q", runState.RunID, runID)
-	}
-	if strings.TrimSpace(runState.MessageID) != strings.TrimSpace(prepared.messageID) {
-		t.Fatalf("run messageID=%q, want %q", runState.MessageID, prepared.messageID)
-	}
-	if bootstrap.LiveState.ModelIO == nil {
-		t.Fatalf("model_io missing, want preparing status for accepted run")
-	}
-	if bootstrap.LiveState.ModelIO.Phase != FlowerModelIOPhasePreparing {
-		t.Fatalf("model_io phase=%q, want %q", bootstrap.LiveState.ModelIO.Phase, FlowerModelIOPhasePreparing)
-	}
-	if strings.TrimSpace(bootstrap.LiveState.ModelIO.RunID) != runID {
-		t.Fatalf("model_io run_id=%q, want %q", bootstrap.LiveState.ModelIO.RunID, runID)
-	}
-	msg := bootstrap.LiveState.Messages[prepared.messageID]
-	if strings.TrimSpace(msg.MessageID) != strings.TrimSpace(prepared.messageID) {
-		t.Fatalf("assistant message id=%q, want %q", msg.MessageID, prepared.messageID)
-	}
-	if strings.TrimSpace(msg.Role) != "assistant" {
-		t.Fatalf("role=%q, want assistant", msg.Role)
-	}
-	if strings.TrimSpace(msg.Status) != "streaming" {
-		t.Fatalf("status=%q, want streaming", msg.Status)
-	}
-	if msg.CreatedAtMs <= 0 {
-		t.Fatalf("created_at_ms=%d, want > 0", msg.CreatedAtMs)
-	}
-	if len(msg.Blocks) != 1 {
-		t.Fatalf("block count=%d, want 1", len(msg.Blocks))
-	}
-	if strings.TrimSpace(msg.Blocks[0].Type) != "markdown" {
-		t.Fatalf("block type=%q, want markdown", msg.Blocks[0].Type)
-	}
-	if msg.Blocks[0].Content != "" {
-		t.Fatalf("block content=%q, want empty string", msg.Blocks[0].Content)
+	if len(bootstrap.TimelineMessages) != 0 {
+		t.Fatalf("pre-accept draft entered canonical timeline: %#v", bootstrap.TimelineMessages)
 	}
 }
 

@@ -78,7 +78,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	}
 	r.webSearchMode = webSearchCapability.Mode
 	r.webSearchToolEnabled = webSearchCapability.RegisterTool
-	r.persistRunEvent("web_search.config", RealtimeStreamKindLifecycle, map[string]any{
+	r.recordRunDiagnostic("web_search.config", RealtimeStreamKindLifecycle, map[string]any{
 		"resolved":          webSearchCapability.Mode,
 		"reason":            webSearchCapability.Reason,
 		"web_search_tool":   webSearchCapability.RegisterTool,
@@ -86,7 +86,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		"provider_base_url": strings.TrimSpace(providerCfg.BaseURL),
 		"model":             modelName,
 	})
-	r.persistRunEvent("floret.host_turn.start", RealtimeStreamKindLifecycle, map[string]any{
+	r.recordRunDiagnostic("floret.host_turn.start", RealtimeStreamKindLifecycle, map[string]any{
 		"engine":                        "floret",
 		"provider_type":                 providerType,
 		"parallel_tool_calls_wire_mode": string(resolveParallelToolCallsWireMode(providerType, strings.TrimSpace(providerCfg.BaseURL))),
@@ -97,7 +97,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 
 	state := newRuntimeState(taskObjective)
 	if source, hydrated := r.hydrateTodoRuntimeState(ctx, &state); hydrated {
-		r.persistRunEvent("todo.hydrated", RealtimeStreamKindLifecycle, map[string]any{
+		r.recordRunDiagnostic("todo.hydrated", RealtimeStreamKindLifecycle, map[string]any{
 			"source":           source,
 			"todo_total_count": state.TodoTotalCount,
 			"todo_open_count":  state.TodoOpenCount,
@@ -119,7 +119,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	if err != nil {
 		return r.failRun("Failed to initialize dynamic tool surface", err)
 	}
-	r.persistRunEvent("capability.contract.resolved", RealtimeStreamKindLifecycle, initialSurface.CapabilityContract.eventPayload())
+	r.recordRunDiagnostic("capability.contract.resolved", RealtimeStreamKindLifecycle, initialSurface.CapabilityContract.eventPayload())
 	toolSurfaceProvider := r.dynamicToolSurfaceProvider(surfaceConfig, initialSurface.PermissionType, true)
 	flProvider := newFloretProviderAdapter(
 		adapter,
@@ -186,7 +186,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		return r.failRun("Failed to prepare linked context", err)
 	}
 	if payload := floretContextActionInjectedEventPayload(req.Input.ContextAction, supplementalContext); payload != nil {
-		r.persistRunEvent("flower.context_action.injected", RealtimeStreamKindLifecycle, payload)
+		r.recordRunDiagnostic("flower.context_action.injected", RealtimeStreamKindLifecycle, payload)
 	}
 	result, err := turnHost.RunTurn(ctx, flruntime.RunTurnRequest{
 		RunID:               flruntime.RunID(strings.TrimSpace(r.id)),
@@ -216,17 +216,22 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		}
 	}
 	if projectionUnavailable {
-		r.persistRunEvent("floret.projection.unavailable", RealtimeStreamKindLifecycle, map[string]any{
+		r.recordRunDiagnostic("floret.projection.unavailable", RealtimeStreamKindLifecycle, map[string]any{
 			"source": "run_turn",
 			"error":  sanitizeLogText(result.ProjectionError, 240),
 		})
+	}
+	if result.Status.IsTerminal() && r.service != nil {
+		if replaceErr := r.service.replaceFlowerLiveDraftWithCanonicalTimeline(context.Background(), r.endpointID, r.threadID, r.id, r.messageID, "terminal_projection"); replaceErr != nil {
+			r.recordRunDiagnostic("flower.timeline.replace_failed", RealtimeStreamKindLifecycle, map[string]any{"error": replaceErr.Error()})
+		}
 	}
 	if reason := r.floretParentTerminalSubagentCloseReason(ctx, result, err); reason != "" {
 		if closeErr := r.closeParentTerminalSubagents(context.Background(), turnHost, reason); closeErr != nil {
 			if r.log != nil {
 				r.log.Warn("ai: close parent terminal subagents failed", "run_id", r.id, "thread_id", r.threadID, "reason", reason, "error", closeErr)
 			}
-			r.persistRunEvent("subagent.parent_terminal_close_failed", RealtimeStreamKindLifecycle, map[string]any{
+			r.recordRunDiagnostic("subagent.parent_terminal_close_failed", RealtimeStreamKindLifecycle, map[string]any{
 				"reason": reason,
 				"error":  closeErr.Error(),
 			})
@@ -237,7 +242,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		if r.log != nil {
 			r.log.Warn("ai: cleanup run terminal processes failed", "run_id", r.id, "thread_id", r.threadID, "error", cleanupErr)
 		}
-		r.persistRunEvent("terminal.cleanup_failed", RealtimeStreamKindLifecycle, map[string]any{
+		r.recordRunDiagnostic("terminal.cleanup_failed", RealtimeStreamKindLifecycle, map[string]any{
 			"error": cleanupErr.Error(),
 		})
 	}
@@ -245,7 +250,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		if r.log != nil {
 			r.log.Warn("ai: cleanup subagent terminal processes failed", "run_id", r.id, "thread_id", r.threadID, "error", subagentCleanupErr)
 		}
-		r.persistRunEvent("subagent.terminal_cleanup_failed", RealtimeStreamKindLifecycle, map[string]any{
+		r.recordRunDiagnostic("subagent.terminal_cleanup_failed", RealtimeStreamKindLifecycle, map[string]any{
 			"error": subagentCleanupErr.Error(),
 		})
 	}
@@ -304,7 +309,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	if r.acceptsEngineResultProjection() {
 		r.recordRuntimeTurnUsage(flowerUsageFromFloret(result.Metrics.ProviderUsage), 0)
 	}
-	return r.projectFloretResult(ctx, result, req, sharedState.snapshot(), taskComplexity, permissionTypeString(r.permissionType))
+	return r.projectFloretResult(ctx, result, req)
 }
 
 func (r *run) floretParentTerminalSubagentCloseReason(ctx context.Context, result flruntime.TurnResult, runErr error) string {
@@ -394,14 +399,14 @@ func (r *run) closeParentTerminalSubagents(ctx context.Context, host floretSubag
 			runtime.refreshSubagentsPatch(closeCtx, snapshots...)
 		}
 	}
-	r.persistRunEvent("subagent.parent_terminal_close", RealtimeStreamKindLifecycle, map[string]any{
+	r.recordRunDiagnostic("subagent.parent_terminal_close", RealtimeStreamKindLifecycle, map[string]any{
 		"reason":       reason,
 		"closed_count": result.Closed,
 	})
 	return nil
 }
 
-func (r *run) projectFloretResult(ctx context.Context, result flruntime.TurnResult, req RunRequest, state runtimeState, complexity string, permissionType string) error {
+func (r *run) projectFloretResult(ctx context.Context, result flruntime.TurnResult, req RunRequest) error {
 	if !r.acceptsEngineResultProjection() {
 		return nil
 	}
@@ -428,19 +433,6 @@ func (r *run) projectFloretResult(ctx context.Context, result flruntime.TurnResu
 				if !approved {
 					return r.failRun("Task completion rejected by user", errors.New("task completion rejected"))
 				}
-			}
-			gatePassed, gateReason := evaluateTaskCompletionGate(resultText, state, complexity, permissionType)
-			r.persistRunEvent("completion.attempt", RealtimeStreamKindLifecycle, map[string]any{
-				"step_index":      step,
-				"attempt":         "task_complete",
-				"gate_passed":     gatePassed,
-				"gate_reason":     gateReason,
-				"complexity":      complexity,
-				"permission_type": strings.TrimSpace(permissionType),
-				"engine":          "floret",
-			})
-			if !gatePassed {
-				return r.failRun("Task completion rejected by completion gate", fmt.Errorf("task_complete rejected: %s", gateReason))
 			}
 			r.setFinalizationReason("task_complete")
 			r.setEndReason("complete")
@@ -588,7 +580,7 @@ func (r *run) persistFloretHostTurnResult(step int, result flruntime.TurnResult,
 		return
 	}
 	usage := flowerUsageFromFloret(result.Metrics.ProviderUsage)
-	r.persistRunEvent("floret.host_turn.result", RealtimeStreamKindLifecycle, map[string]any{
+	r.recordRunDiagnostic("floret.host_turn.result", RealtimeStreamKindLifecycle, map[string]any{
 		"step_index":    step,
 		"finish_reason": normalizeReplyFinishReason(finishReason),
 		"tool_calls":    result.Metrics.ToolCalls,
@@ -628,7 +620,7 @@ func (r *run) projectFloretAskUserWaiting(step int, signal *flruntime.TurnSignal
 	r.persistAskUserWaitingPrompt(ask, "model_signal", strings.TrimSpace(signal.CallID))
 	r.reconcileCanonicalWaitingUserMessage()
 	finalReason := finalizationReasonForAskUserSource("model_signal")
-	r.persistRunEvent("ask_user.waiting", RealtimeStreamKindLifecycle, map[string]any{
+	r.recordRunDiagnostic("ask_user.waiting", RealtimeStreamKindLifecycle, map[string]any{
 		"question":            ask.Question,
 		"questions_count":     len(ask.Questions),
 		"choices_count":       requestUserInputQuestionChoiceCount(ask.Questions),

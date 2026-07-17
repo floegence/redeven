@@ -179,7 +179,7 @@ func (s *Service) applyFloretPendingToolSettlementProjection(ctx context.Context
 	}
 	if settled.ProjectionAvailability == flruntime.TurnProjectionAvailabilityUnavailable {
 		if active := s.activeRunForFloretProjection(endpointID, threadID, runID); active != nil {
-			active.persistRunEvent("floret.projection.unavailable", RealtimeStreamKindLifecycle, map[string]any{
+			active.recordRunDiagnostic("floret.projection.unavailable", RealtimeStreamKindLifecycle, map[string]any{
 				"source": "pending_tool_settlement",
 				"error":  sanitizeLogText(settled.ProjectionError, 240),
 			})
@@ -197,7 +197,7 @@ func (s *Service) applyFloretPendingToolSettlementProjection(ctx context.Context
 	if active := s.activeRunForFloretProjection(endpointID, threadID, runID); active != nil {
 		active.applyFloretThreadProjectionInternal(*projection, active.acceptsPresentationUpdates(), true)
 	}
-	if err := s.publishFlowerCanonicalTimelineReplacement(ctx, endpointID, threadID, runID, messageID, "terminal_settlement"); err != nil {
+	if err := s.replaceFlowerLiveDraftWithCanonicalTimeline(ctx, endpointID, threadID, runID, messageID, "terminal_settlement"); err != nil {
 		return err
 	}
 	s.broadcastThreadSummary(endpointID, threadID)

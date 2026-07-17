@@ -450,7 +450,7 @@ func TestFloretProviderAdapter_EmitsErrorForRejectedPreviousResponseIDWithoutRep
 func TestFloretProviderAdapter_StreamsReasoningWithoutMutatingRun(t *testing.T) {
 	t.Parallel()
 
-	adapter, r, store, events := newFloretProviderAdapterRunTest(t, reasoningFlowerProvider{
+	adapter, r, _, events := newFloretProviderAdapterRunTest(t, reasoningFlowerProvider{
 		streamReasoning: "Inspecting sources.",
 		resultText:      "Final answer.",
 	})
@@ -474,19 +474,12 @@ func TestFloretProviderAdapter_StreamsReasoningWithoutMutatingRun(t *testing.T) 
 		t.Fatalf("provider adapter must not mutate run stream state: blocks=%#v events=%#v", r.assistantBlocks, *events)
 	}
 
-	runEvents, err := store.ListRunEvents(context.Background(), "env_floret_reasoning", "run_floret_reasoning", 20)
-	if err != nil {
-		t.Fatalf("ListRunEvents: %v", err)
-	}
-	if len(runEvents) != 0 {
-		t.Fatalf("run events=%#v, want none for streamed reasoning", runEvents)
-	}
 }
 
 func TestFloretProviderAdapter_EmitsToolCallStreamEvents(t *testing.T) {
 	t.Parallel()
 
-	adapter, r, store, events := newFloretProviderAdapterRunTest(t, reasoningFlowerProvider{
+	adapter, r, _, events := newFloretProviderAdapterRunTest(t, reasoningFlowerProvider{
 		resultText: "Final answer.",
 		streamEvents: []StreamEvent{
 			{Type: StreamEventToolCallStart, ToolCall: &PartialToolCall{ID: "call-1", Name: "read_file"}},
@@ -522,19 +515,12 @@ func TestFloretProviderAdapter_EmitsToolCallStreamEvents(t *testing.T) {
 	if len(r.assistantBlocks) != 0 || len(*events) != 0 {
 		t.Fatalf("provider adapter must not mutate run stream state: blocks=%#v events=%#v", r.assistantBlocks, *events)
 	}
-	runEvents, err := store.ListRunEvents(context.Background(), "env_floret_reasoning", "run_floret_reasoning", 20)
-	if err != nil {
-		t.Fatalf("ListRunEvents: %v", err)
-	}
-	if len(runEvents) != 0 {
-		t.Fatalf("run events=%#v, want none for tool call stream", runEvents)
-	}
 }
 
 func TestFloretProviderAdapter_ResultReasoningFallbackDoesNotMutateRun(t *testing.T) {
 	t.Parallel()
 
-	adapter, r, store, events := newFloretProviderAdapterRunTest(t, reasoningFlowerProvider{
+	adapter, r, _, events := newFloretProviderAdapterRunTest(t, reasoningFlowerProvider{
 		resultReasoning: "Fallback reasoning.",
 		omitResultText:  true,
 	})
@@ -558,19 +544,12 @@ func TestFloretProviderAdapter_ResultReasoningFallbackDoesNotMutateRun(t *testin
 		t.Fatalf("provider adapter must not mutate run stream state: blocks=%#v events=%#v", r.assistantBlocks, *events)
 	}
 
-	runEvents, err := store.ListRunEvents(context.Background(), "env_floret_reasoning", "run_floret_reasoning", 20)
-	if err != nil {
-		t.Fatalf("ListRunEvents: %v", err)
-	}
-	if len(runEvents) != 0 {
-		t.Fatalf("run events=%#v, want none for fallback reasoning", runEvents)
-	}
 }
 
 func TestFloretProviderAdapter_EmitsSourcesWithoutMutatingRun(t *testing.T) {
 	t.Parallel()
 
-	adapter, r, store, events := newFloretProviderAdapterRunTest(t, reasoningFlowerProvider{
+	adapter, r, _, events := newFloretProviderAdapterRunTest(t, reasoningFlowerProvider{
 		resultText: "Final answer.",
 		sources: []SourceRef{{
 			Title: "Example docs",
@@ -598,20 +577,12 @@ func TestFloretProviderAdapter_EmitsSourcesWithoutMutatingRun(t *testing.T) {
 		t.Fatalf("provider adapter must not mutate run source state: sources=%#v events=%#v", r.collectedWebSources, *events)
 	}
 
-	runEvents, err := store.ListRunEvents(context.Background(), "env_floret_reasoning", "run_floret_reasoning", 20)
-	if err != nil {
-		t.Fatalf("ListRunEvents: %v", err)
-	}
-	if len(runEvents) != 0 {
-		t.Fatalf("run events=%#v, want none for provider sources", runEvents)
-	}
 }
 
-func TestFloretProviderAdapter_PersistsThinkingInTranscriptOnly(t *testing.T) {
+func TestFloretProviderAdapter_ProjectsThinkingWithoutVisibleTextPollution(t *testing.T) {
 	t.Parallel()
 
-	ctx := context.Background()
-	_, r, store, _ := newFloretProviderAdapterRunTest(t, reasoningFlowerProvider{
+	_, r, _, _ := newFloretProviderAdapterRunTest(t, reasoningFlowerProvider{
 		streamReasoning: "Inspecting transcript contract.",
 		resultText:      "Final transcript answer.",
 	})
@@ -620,7 +591,7 @@ func TestFloretProviderAdapter_PersistsThinkingInTranscriptOnly(t *testing.T) {
 	sink.EmitEvent(flruntime.Event{Type: observation.EventTypeProviderDelta, Stream: &flruntime.StreamObservation{Type: flruntime.StreamObservationAssistantDelta, Text: "Final transcript answer."}})
 
 	r.assistantCreatedAtUnixMs = 1700000000000
-	assistantJSON, assistantText, assistantAt, err := r.snapshotAssistantMessageJSON()
+	assistantJSON, assistantText, _, err := r.snapshotAssistantMessageJSON()
 	if err != nil {
 		t.Fatalf("snapshotAssistantMessageJSON: %v", err)
 	}
@@ -631,41 +602,6 @@ func TestFloretProviderAdapter_PersistsThinkingInTranscriptOnly(t *testing.T) {
 		t.Fatalf("assistant JSON missing thinking block: %s", assistantJSON)
 	}
 
-	if _, err := store.AppendMessage(ctx, "env_floret_reasoning", "thread_floret_reasoning", threadstore.Message{
-		ThreadID:        "thread_floret_reasoning",
-		EndpointID:      "env_floret_reasoning",
-		MessageID:       "msg_floret_reasoning",
-		Role:            "assistant",
-		Status:          "complete",
-		CreatedAtUnixMs: assistantAt,
-		UpdatedAtUnixMs: assistantAt,
-		TextContent:     assistantText,
-		MessageJSON:     assistantJSON,
-	}, "", ""); err != nil {
-		t.Fatalf("AppendMessage: %v", err)
-	}
-
-	messages, _, _, err := store.ListMessages(ctx, "env_floret_reasoning", "thread_floret_reasoning", 10, 0)
-	if err != nil {
-		t.Fatalf("ListMessages: %v", err)
-	}
-	if len(messages) != 1 {
-		t.Fatalf("messages=%d, want 1", len(messages))
-	}
-	if messages[0].TextContent != "Final transcript answer." {
-		t.Fatalf("TextContent=%q, want visible answer only", messages[0].TextContent)
-	}
-	if !strings.Contains(messages[0].MessageJSON, `"type":"thinking"`) || !strings.Contains(messages[0].MessageJSON, "Inspecting transcript contract.") {
-		t.Fatalf("persisted message JSON missing thinking block: %s", messages[0].MessageJSON)
-	}
-
-	runEvents, err := store.ListRunEvents(ctx, "env_floret_reasoning", "run_floret_reasoning", 20)
-	if err != nil {
-		t.Fatalf("ListRunEvents: %v", err)
-	}
-	if len(runEvents) != 0 {
-		t.Fatalf("run events=%#v, want none for transcript reasoning", runEvents)
-	}
 }
 
 func TestFloretMessagesToFlowerRejectsUnsupportedRole(t *testing.T) {

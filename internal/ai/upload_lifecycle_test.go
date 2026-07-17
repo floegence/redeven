@@ -46,11 +46,8 @@ func TestService_DeleteThreadRemovesOwnedUploadArtifacts(t *testing.T) {
 	if uploadID == "" {
 		t.Fatalf("missing upload_id in URL %q", upload.URL)
 	}
-	if _, _, err := svc.persistUserMessage(ctx, meta, meta.EndpointID, thread.ThreadID, RunInput{
-		Text:        "please keep the file",
-		Attachments: []RunAttachmentIn{{URL: upload.URL}},
-	}); err != nil {
-		t.Fatalf("persistUserMessage: %v", err)
+	if err := svc.threadsDB.BindUploadsToRef(ctx, meta.EndpointID, thread.ThreadID, threadstore.UploadRefKindTurn, "turn_upload_cleanup", []string{uploadID}, time.Now().UnixMilli()); err != nil {
+		t.Fatalf("BindUploadsToRef: %v", err)
 	}
 
 	dataPath := filepath.Join(svc.uploadsDir, uploadID+".data")
@@ -92,11 +89,8 @@ func TestService_DeleteThreadKeepsSharedUploadUntilLastThread(t *testing.T) {
 	dataPath := filepath.Join(svc.uploadsDir, uploadID+".data")
 
 	for _, threadID := range []string{threadA.ThreadID, threadB.ThreadID} {
-		if _, _, err := svc.persistUserMessage(ctx, meta, meta.EndpointID, threadID, RunInput{
-			Text:        "shared upload",
-			Attachments: []RunAttachmentIn{{URL: upload.URL}},
-		}); err != nil {
-			t.Fatalf("persistUserMessage(%s): %v", threadID, err)
+		if err := svc.threadsDB.BindUploadsToRef(ctx, meta.EndpointID, threadID, threadstore.UploadRefKindTurn, "turn_"+threadID, []string{uploadID}, time.Now().UnixMilli()); err != nil {
+			t.Fatalf("BindUploadsToRef(%s): %v", threadID, err)
 		}
 	}
 

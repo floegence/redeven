@@ -80,28 +80,15 @@ func (s *Service) rawFlowerActionMessageValues(ctx context.Context, endpointID s
 		return nil, errors.New("invalid request")
 	}
 	s.mu.Lock()
-	db := s.threadsDB
-	runID := strings.TrimSpace(s.activeRunByTh[runThreadKey(endpointID, threadID)])
-	r := s.runs[runID]
+	state := s.flowerLiveMaterializedStateLocked(endpointID, threadID)
 	s.mu.Unlock()
-	if db == nil {
-		return nil, errors.New("threads store not ready")
-	}
-	msgs, _, _, err := db.ListMessages(ctx, endpointID, threadID, 200, 0)
+	messages, err := s.buildFlowerTimelineMessages(ctx, endpointID, threadID, state)
 	if err != nil {
 		return nil, err
 	}
-	values := make([]any, 0, len(msgs)+1)
-	for _, msg := range msgs {
-		if strings.TrimSpace(msg.MessageJSON) != "" {
-			values = append(values, msg.MessageJSON)
-		}
-	}
-	if r != nil {
-		msgJSON, _, _, err := r.snapshotAssistantMessageJSONWithStatus("streaming")
-		if err == nil && strings.TrimSpace(msgJSON) != "" {
-			values = append(values, msgJSON)
-		}
+	values := make([]any, 0, len(messages))
+	for _, message := range messages {
+		values = append(values, message)
 	}
 	return values, nil
 }

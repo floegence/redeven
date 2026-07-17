@@ -3,7 +3,6 @@ package ai
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -85,7 +84,7 @@ func (c *idleThreadCompaction) busy() bool {
 	return !c.cancelled && strings.TrimSpace(c.requestID) != ""
 }
 
-func (s *Service) persistIdleThreadCompactionGateEvent(endpointID string, threadID string, runID string, requestID string, phase string, attrs map[string]any) {
+func (s *Service) recordIdleThreadCompactionGateEvent(endpointID string, threadID string, runID string, requestID string, phase string, attrs map[string]any) {
 	if s == nil {
 		return
 	}
@@ -97,16 +96,6 @@ func (s *Service) persistIdleThreadCompactionGateEvent(endpointID string, thread
 	if endpointID == "" || threadID == "" || runID == "" || requestID == "" || phase == "" {
 		return
 	}
-	s.mu.Lock()
-	db := s.threadsDB
-	persistTO := s.persistOpTO
-	s.mu.Unlock()
-	if db == nil {
-		return
-	}
-	if persistTO <= 0 {
-		persistTO = defaultPersistOpTimeout
-	}
 	payload := make(map[string]any, len(attrs)+2)
 	payload["request_id"] = requestID
 	payload["phase"] = phase
@@ -116,22 +105,8 @@ func (s *Service) persistIdleThreadCompactionGateEvent(endpointID string, thread
 			payload[key] = value
 		}
 	}
-	raw, err := json.Marshal(payload)
-	if err != nil {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), persistTO)
-	defer cancel()
-	if err := db.AppendRunEvent(ctx, threadstore.RunEventRecord{
-		EndpointID:  endpointID,
-		ThreadID:    threadID,
-		RunID:       runID,
-		StreamKind:  string(RealtimeStreamKindContext),
-		EventType:   idleCompactionGateRunEventType,
-		PayloadJSON: string(raw),
-		AtUnixMs:    time.Now().UnixMilli(),
-	}); err != nil && s.log != nil {
-		s.log.Warn("persist idle compaction gate event failed", "thread_id", threadID, "run_id", runID, "request_id", requestID, "phase", phase, "error", err)
+	if s.log != nil {
+		s.log.Debug("idle thread compaction gate", "event", idleCompactionGateRunEventType, "endpoint_id", endpointID, "thread_id", threadID, "run_id", runID, "payload", payload)
 	}
 }
 
@@ -163,7 +138,7 @@ func (s *Service) beginIdleThreadCompaction(endpointID string, threadID string, 
 		if existingCancelled {
 			delete(s.idleCompactionByTh, thKey)
 			s.mu.Unlock()
-			s.persistIdleThreadCompactionGateEvent(endpointID, threadID, existingRunID, existingRequestID, "superseded_after_cancel", map[string]any{
+			s.recordIdleThreadCompactionGateEvent(endpointID, threadID, existingRunID, existingRequestID, "superseded_after_cancel", map[string]any{
 				"next_request_id": requestID,
 			})
 		} else {
@@ -197,7 +172,7 @@ func (s *Service) beginIdleThreadCompaction(endpointID string, threadID string, 
 		done:       make(chan struct{}),
 	}
 	s.mu.Unlock()
-	s.persistIdleThreadCompactionGateEvent(endpointID, threadID, runID, requestID, "registered", nil)
+	s.recordIdleThreadCompactionGateEvent(endpointID, threadID, runID, requestID, "registered", nil)
 	return idleThreadCompactionBeginResult{RequestID: requestID, RunID: runID, Started: true}, nil
 }
 
@@ -288,7 +263,7 @@ func (s *Service) cancelIdleThreadCompaction(endpointID string, threadID string)
 		compaction.cancelled = true
 	}
 	compaction.mu.Unlock()
-	s.persistIdleThreadCompactionGateEvent(endpointID, threadID, runID, requestID, "cancel_requested", nil)
+	s.recordIdleThreadCompactionGateEvent(endpointID, threadID, runID, requestID, "cancel_requested", nil)
 	compaction.cancelRun()
 	return idleThreadCompactionCancelResult{Compaction: compaction, Found: true, Cancelled: true}
 }
@@ -352,11 +327,11 @@ func (a *threadActor) handleCompactThreadContext(ctx context.Context, meta *sess
 	if th == nil {
 		return CompactThreadContextResponse{}, errors.New("thread not found")
 	}
-	if err := a.mgr.svc.requireThreadMutable(ctx, db, endpointID, threadID); err != nil {
+	_, latest, err := a.mgr.svc.readCanonicalThreadState(ctx, threadID)
+	if err != nil {
 		return CompactThreadContextResponse{}, err
 	}
-	runStatus, _, _ := normalizeThreadRunState(th.RunStatus, th.RunErrorCode, th.RunError)
-	if NormalizeRunState(runStatus) == RunStateWaitingUser || requestUserInputPromptFromThreadRecord(th, runStatus) != nil {
+	if requestUserInputPromptFromFloretTurn(latest) != nil {
 		return CompactThreadContextResponse{}, ErrWaitingUserQueueConflict
 	}
 
@@ -473,7 +448,7 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 	if !cfg.HasModelProfile() && (desktopModelSource == nil || !desktopModelSource.hasBinding()) {
 		return ErrNotConfigured
 	}
-	permissionType, err := normalizePermissionType(threadPermissionTypeString(th, ""), FlowerPermissionApprovalRequired)
+	permissionType, err := normalizePermissionType(threadPermissionTypeString(th), FlowerPermissionApprovalRequired)
 	if err != nil {
 		permissionType = FlowerPermissionApprovalRequired
 	}

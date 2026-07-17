@@ -236,7 +236,7 @@ PRAGMA user_version=15;
 	return err
 }
 
-func ReplaceStructuredUserInputsWithoutSelectedChoice(dbPath string) error {
+func AddForbiddenAgentShadowTable(dbPath string) error {
 	raw, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		return err
@@ -244,26 +244,12 @@ func ReplaceStructuredUserInputsWithoutSelectedChoice(dbPath string) error {
 	defer func() { _ = raw.Close() }()
 
 	_, err = raw.Exec(`
-DROP TABLE structured_user_inputs;
-CREATE TABLE structured_user_inputs (
+CREATE TABLE conversation_turns (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   endpoint_id TEXT NOT NULL,
   thread_id TEXT NOT NULL,
-  response_message_id TEXT NOT NULL,
-  prompt_id TEXT NOT NULL DEFAULT '',
-  tool_id TEXT NOT NULL DEFAULT '',
-  reason_code TEXT NOT NULL DEFAULT '',
-  question_id TEXT NOT NULL,
-  header TEXT NOT NULL DEFAULT '',
-  question_text TEXT NOT NULL DEFAULT '',
-  response_text TEXT NOT NULL DEFAULT '',
-  public_summary TEXT NOT NULL DEFAULT '',
-  contains_secret INTEGER NOT NULL DEFAULT 0,
-  created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  UNIQUE(endpoint_id, thread_id, response_message_id, question_id)
+  turn_id TEXT NOT NULL
 );
-CREATE INDEX idx_structured_user_inputs_recent
-ON structured_user_inputs(endpoint_id, thread_id, id DESC);
 `)
 	return err
 }

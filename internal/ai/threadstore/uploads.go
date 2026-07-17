@@ -15,7 +15,7 @@ const (
 	UploadStateLive     = "live"
 	UploadStateDeleting = "deleting"
 
-	UploadRefKindMessage    = "message"
+	UploadRefKindTurn       = "turn"
 	UploadRefKindQueuedTurn = "queued_turn"
 
 	sqliteAutoVacuumNone        = 0
@@ -51,7 +51,6 @@ type UploadRefRecord struct {
 }
 
 type ThreadDeleteResourcesResult struct {
-	CheckpointIDs   []string
 	UploadsToDelete []UploadRecord
 }
 
@@ -93,7 +92,7 @@ func normalizeUploadRefKind(kind string) string {
 	case UploadRefKindQueuedTurn:
 		return UploadRefKindQueuedTurn
 	default:
-		return UploadRefKindMessage
+		return UploadRefKindTurn
 	}
 }
 
@@ -269,66 +268,6 @@ func (s *Store) BindUploadsToRef(ctx context.Context, endpointID string, threadI
 	return tx.Commit()
 }
 
-func (s *Store) AppendMessageWithUploadRefs(ctx context.Context, endpointID string, threadID string, m Message, updatedByID string, updatedByEmail string, uploadIDs []string, claimedAtUnixMs int64) (int64, error) {
-	if s == nil || s.db == nil {
-		return 0, errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	uploadIDs = dedupeNonEmptyStrings(uploadIDs)
-	if endpointID == "" || threadID == "" {
-		return 0, errors.New("invalid request")
-	}
-	m.ThreadID = strings.TrimSpace(m.ThreadID)
-	if m.ThreadID == "" {
-		m.ThreadID = threadID
-	}
-	m.EndpointID = strings.TrimSpace(m.EndpointID)
-	if m.EndpointID == "" {
-		m.EndpointID = endpointID
-	}
-	m.MessageID = strings.TrimSpace(m.MessageID)
-	m.Role = strings.TrimSpace(m.Role)
-	m.Status = strings.TrimSpace(m.Status)
-	m.AuthorUserPublicID = strings.TrimSpace(m.AuthorUserPublicID)
-	m.AuthorUserEmail = strings.TrimSpace(m.AuthorUserEmail)
-	m.TextContent = strings.TrimSpace(m.TextContent)
-	m.MessageJSON = strings.TrimSpace(m.MessageJSON)
-	if m.MessageID == "" || m.Role == "" || m.Status == "" || m.MessageJSON == "" {
-		return 0, errors.New("invalid message")
-	}
-	now := time.Now().UnixMilli()
-	if m.CreatedAtUnixMs <= 0 {
-		m.CreatedAtUnixMs = now
-	}
-	if m.UpdatedAtUnixMs <= 0 {
-		m.UpdatedAtUnixMs = m.CreatedAtUnixMs
-	}
-	if claimedAtUnixMs <= 0 {
-		claimedAtUnixMs = m.CreatedAtUnixMs
-	}
-	preview := buildPreview(m.Role, m.TextContent, m.MessageJSON)
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return 0, err
-	}
-	defer func() { _ = tx.Rollback() }()
-	rowID, err := appendMessageTx(ctx, tx, endpointID, threadID, m, updatedByID, updatedByEmail, preview)
-	if err != nil {
-		return 0, err
-	}
-	if err := bindUploadsToRefTx(ctx, tx, endpointID, threadID, UploadRefKindMessage, m.MessageID, uploadIDs, claimedAtUnixMs); err != nil {
-		return 0, err
-	}
-	if err := tx.Commit(); err != nil {
-		return 0, err
-	}
-	return rowID, nil
-}
-
 func (s *Store) CreateFollowupWithUploadRefs(ctx context.Context, rec QueuedTurn, uploadIDs []string, claimedAtUnixMs int64) (QueuedTurn, int, int64, error) {
 	if s == nil || s.db == nil {
 		return QueuedTurn{}, 0, 0, errors.New("store not initialized")
@@ -341,7 +280,8 @@ func (s *Store) CreateFollowupWithUploadRefs(ctx context.Context, rec QueuedTurn
 	rec.ThreadID = strings.TrimSpace(rec.ThreadID)
 	rec.ChannelID = strings.TrimSpace(rec.ChannelID)
 	rec.Lane = normalizeFollowupLane(rec.Lane)
-	rec.MessageID = strings.TrimSpace(rec.MessageID)
+	rec.TurnID = strings.TrimSpace(rec.TurnID)
+	rec.RunID = strings.TrimSpace(rec.RunID)
 	rec.ModelID = strings.TrimSpace(rec.ModelID)
 	rec.TextContent = strings.TrimSpace(rec.TextContent)
 	rec.AttachmentsJSON = strings.TrimSpace(rec.AttachmentsJSON)
@@ -350,7 +290,7 @@ func (s *Store) CreateFollowupWithUploadRefs(ctx context.Context, rec QueuedTurn
 	rec.CreatedByUserPublicID = strings.TrimSpace(rec.CreatedByUserPublicID)
 	rec.CreatedByUserEmail = strings.TrimSpace(rec.CreatedByUserEmail)
 	uploadIDs = dedupeNonEmptyStrings(uploadIDs)
-	if rec.QueueID == "" || rec.EndpointID == "" || rec.ThreadID == "" || rec.ChannelID == "" || rec.MessageID == "" {
+	if rec.QueueID == "" || rec.EndpointID == "" || rec.ThreadID == "" || rec.ChannelID == "" || rec.TurnID == "" || rec.RunID == "" {
 		return QueuedTurn{}, 0, 0, errors.New("invalid request")
 	}
 	if rec.AttachmentsJSON == "" {
@@ -388,6 +328,76 @@ func (s *Store) CreateFollowupWithUploadRefs(ctx context.Context, rec QueuedTurn
 		return QueuedTurn{}, 0, 0, err
 	}
 	return queued, position, revision, nil
+}
+
+func (s *Store) CommitPendingTurnAdmission(ctx context.Context, endpointID string, threadID string, commandID string, turnID string, admittedAtUnixMs int64) error {
+	if s == nil || s.db == nil {
+		return errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	commandID = strings.TrimSpace(commandID)
+	turnID = strings.TrimSpace(turnID)
+	if endpointID == "" || threadID == "" || commandID == "" || turnID == "" {
+		return errors.New("invalid request")
+	}
+	if admittedAtUnixMs <= 0 {
+		admittedAtUnixMs = time.Now().UnixMilli()
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var storedTurnID string
+	var lane string
+	err = tx.QueryRowContext(ctx, `
+SELECT turn_id, lane
+FROM ai_queued_turns
+WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
+`, endpointID, threadID, commandID).Scan(&storedTurnID, &lane)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(storedTurnID) != turnID || normalizeFollowupLane(lane) != FollowupLaneQueued {
+		return errors.New("pending turn command identity mismatch")
+	}
+	if _, err := tx.ExecContext(ctx, `
+INSERT INTO ai_upload_refs(endpoint_id, upload_id, thread_id, ref_kind, ref_id, created_at_unix_ms)
+SELECT endpoint_id, upload_id, thread_id, ?, ?, ?
+FROM ai_upload_refs
+WHERE endpoint_id = ? AND thread_id = ? AND ref_kind = ? AND ref_id = ?
+ON CONFLICT(endpoint_id, upload_id, ref_kind, ref_id) DO NOTHING
+`, UploadRefKindTurn, turnID, admittedAtUnixMs, endpointID, threadID, UploadRefKindQueuedTurn, commandID); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
+DELETE FROM ai_upload_refs
+WHERE endpoint_id = ? AND thread_id = ? AND ref_kind = ? AND ref_id = ?
+`, endpointID, threadID, UploadRefKindQueuedTurn, commandID); err != nil {
+		return err
+	}
+	result, err := tx.ExecContext(ctx, `
+DELETE FROM ai_queued_turns
+WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ? AND lane = ? AND turn_id = ?
+`, endpointID, threadID, commandID, FollowupLaneQueued, turnID)
+	if err != nil {
+		return err
+	}
+	rows, _ := result.RowsAffected()
+	if rows != 1 {
+		return errors.New("pending turn command changed during admission")
+	}
+	if _, err := bumpThreadFollowupsRevisionTx(ctx, tx, endpointID, threadID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func bindUploadsToRefTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, refKind string, refID string, uploadIDs []string, claimedAtUnixMs int64) error {
@@ -455,10 +465,6 @@ func (s *Store) DeleteThreadResources(ctx context.Context, endpointID string, th
 		return ThreadDeleteResourcesResult{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	checkpointIDs, err := listThreadCheckpointIDsTx(ctx, tx, endpointID, threadID)
-	if err != nil {
-		return ThreadDeleteResourcesResult{}, err
-	}
 	uploadsToDelete, err := prepareUploadCleanupForThreadTx(ctx, tx, endpointID, threadID, now)
 	if err != nil {
 		return ThreadDeleteResourcesResult{}, err
@@ -477,10 +483,7 @@ func (s *Store) DeleteThreadResources(ctx context.Context, endpointID string, th
 	if err := tx.Commit(); err != nil {
 		return ThreadDeleteResourcesResult{}, err
 	}
-	return ThreadDeleteResourcesResult{
-		CheckpointIDs:   checkpointIDs,
-		UploadsToDelete: uploadsToDelete,
-	}, nil
+	return ThreadDeleteResourcesResult{UploadsToDelete: uploadsToDelete}, nil
 }
 
 func (s *Store) DeleteFollowupResources(ctx context.Context, endpointID string, threadID string, followupID string) (FollowupDeleteResourcesResult, error) {
@@ -528,35 +531,6 @@ WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
 		Revision:        revision,
 		UploadsToDelete: uploadsToDelete,
 	}, nil
-}
-
-func listThreadCheckpointIDsTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string) ([]string, error) {
-	rows, err := tx.QueryContext(ctx, `
-SELECT checkpoint_id
-FROM ai_thread_checkpoints
-WHERE endpoint_id = ? AND thread_id = ?
-ORDER BY created_at_unix_ms ASC, checkpoint_id ASC
-`, endpointID, threadID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	out := make([]string, 0)
-	for rows.Next() {
-		var checkpointID string
-		if err := rows.Scan(&checkpointID); err != nil {
-			return nil, err
-		}
-		checkpointID = strings.TrimSpace(checkpointID)
-		if checkpointID == "" {
-			continue
-		}
-		out = append(out, checkpointID)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return out, nil
 }
 
 func prepareUploadCleanupForThreadTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, deleteAfterUnixMs int64) ([]UploadRecord, error) {

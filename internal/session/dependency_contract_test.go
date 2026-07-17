@@ -278,7 +278,7 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 
 	const (
 		floretModule  = "github.com/floegence/floret"
-		floretVersion = "v0.10.0"
+		floretVersion = "v0.11.2"
 	)
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
@@ -370,19 +370,20 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 		},
 		filepath.Join("okf", "ui", "flower-live-timeline.md"): {
 			"ThroughOrdinal",
-			"floret_projection_unavailable",
+			"ListThreadTurns",
+			"turn_projection_unavailable",
 			"floret.contract.rejected",
 		},
 		filepath.Join("okf", "ai", "flower-thread-fork-coordination.md"): {
 			"ai_thread_fork_operations",
-			"snapshot schema v1",
+			"snapshot schema v2",
 			"ForkOperationID",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
-			"v0.10.0",
+			"Floret v0.11.2",
 			"single persistent source of truth",
 			"host-owned thread titles",
-			"public Validate methods",
+			"public contracts",
 			"turn_projection_unavailable",
 			"Thread deletion persists an immutable cleanup snapshot",
 			"redeven-runtime-v1",
@@ -716,7 +717,7 @@ func TestFloretContextPolicyUsesOnlyHostSelectableModelLimits(t *testing.T) {
 	}
 }
 
-func TestFloretThreadTranscriptAPIsAreNotUsedInProduction(t *testing.T) {
+func TestFloretLegacyThreadTranscriptAPIsAreNotUsedInProduction(t *testing.T) {
 	t.Parallel()
 
 	root := repoRootForTest(t)
@@ -735,18 +736,11 @@ func TestFloretThreadTranscriptAPIsAreNotUsedInProduction(t *testing.T) {
 			return readErr
 		}
 		content := string(data)
-		for _, marker := range []string{
-			".Read" + "Thread(",
-			"flruntime." + "ThreadMessage",
-		} {
+		for _, marker := range []string{"flruntime." + "ThreadMessage"} {
 			if strings.Contains(content, marker) {
 				rel, _ := filepath.Rel(root, path)
 				t.Fatalf("%s must not use Floret transcript API marker %q", rel, marker)
 			}
-		}
-		if strings.Contains(content, "flruntime."+"ThreadSnapshot") && strings.Contains(content, ".Messages") {
-			rel, _ := filepath.Rel(root, path)
-			t.Fatalf("%s must not inspect Floret thread snapshot messages", rel)
 		}
 		return nil
 	})

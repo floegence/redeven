@@ -42,7 +42,6 @@ const (
 	FlowerLiveMessageBlockStart        FlowerLiveKind = "message.block_started"
 	FlowerLiveMessageBlockDelta        FlowerLiveKind = "message.block_delta"
 	FlowerLiveMessageBlockSet          FlowerLiveKind = "message.block_set"
-	FlowerLiveMessageCommitted         FlowerLiveKind = "message.committed"
 	FlowerLiveMessageFailed            FlowerLiveKind = "message.failed"
 	FlowerLiveApprovalRequested        FlowerLiveKind = "approval.requested"
 	FlowerLiveApprovalResolved         FlowerLiveKind = "approval.resolved"
@@ -322,11 +321,6 @@ type FlowerLiveMessageBlockSetPayload struct {
 	Block      any    `json:"block"`
 }
 
-type FlowerLiveMessageCommittedPayload struct {
-	MessageID string          `json:"message_id"`
-	Message   json.RawMessage `json:"message"`
-}
-
 type FlowerLiveMessageFailedPayload struct {
 	MessageID string `json:"message_id"`
 	Error     string `json:"error"`
@@ -534,18 +528,11 @@ const (
 type FlowerTurnProjectionUnavailableReason string
 
 const (
-	FlowerTurnProjectionUnavailableNotFound        FlowerTurnProjectionUnavailableReason = "not_found"
-	FlowerTurnProjectionUnavailableInvalidContract FlowerTurnProjectionUnavailableReason = "invalid_contract"
-	FlowerTurnProjectionUnavailableNotRenderable   FlowerTurnProjectionUnavailableReason = "not_renderable"
+	FlowerTurnProjectionUnavailableNotRenderable FlowerTurnProjectionUnavailableReason = "not_renderable"
 )
 
 func (reason FlowerTurnProjectionUnavailableReason) Valid() bool {
-	switch reason {
-	case FlowerTurnProjectionUnavailableNotFound, FlowerTurnProjectionUnavailableInvalidContract, FlowerTurnProjectionUnavailableNotRenderable:
-		return true
-	default:
-		return false
-	}
+	return reason == FlowerTurnProjectionUnavailableNotRenderable
 }
 
 type FlowerTurnProjectionUnavailable struct {
@@ -683,6 +670,9 @@ type FlowerLiveResyncRequiredPayload struct {
 }
 
 type FlowerLiveMessageDraft struct {
+	ThreadID    string            `json:"thread_id"`
+	TurnID      string            `json:"turn_id"`
+	RunID       string            `json:"run_id"`
 	MessageID   string            `json:"message_id"`
 	Role        string            `json:"role"`
 	Status      string            `json:"status"`

@@ -29,11 +29,14 @@ import (
 )
 
 var (
-	ErrNotConfigured         = errors.New("ai not configured")
-	ErrRunActive             = errors.New("run already active")
-	ErrThreadBusy            = errors.New("thread already active")
-	ErrThreadForkUnavailable = errors.New("thread cannot be forked while active or waiting")
+	ErrNotConfigured                   = errors.New("ai not configured")
+	ErrRunActive                       = errors.New("run already active")
+	ErrThreadBusy                      = errors.New("thread already active")
+	ErrThreadForkUnavailable           = errors.New("thread cannot be forked while active or waiting")
+	ErrCanonicalTimelineResyncRequired = errors.New("canonical timeline resync required")
 )
+
+const CanonicalTimelineResyncErrorCode = "AI_TIMELINE_RESYNC_REQUIRED"
 
 const (
 	modelSourceRuntimeConfig           = "runtime_config"
@@ -145,7 +148,6 @@ type Service struct {
 	threadsDB   *threadstore.Store
 	floretStore *flruntime.Store
 
-	contextRepo        *contextstore.Repository
 	capabilityResolver *contextadapter.Resolver
 	skillManager       *skillManager
 	terminalProcesses  *terminalProcessManager
@@ -279,26 +281,6 @@ func NewService(opts Options) (*Service, error) {
 	if persistTO <= 0 {
 		persistTO = defaultPersistOpTimeout
 	}
-	resetCtx, cancelReset := context.WithTimeout(context.Background(), persistTO)
-	resetCount, resetErr := ts.ResetStaleActiveThreadRunStates(resetCtx)
-	cancelReset()
-	if resetErr != nil {
-		_ = ts.Close()
-		return nil, resetErr
-	}
-	if resetCount > 0 {
-		logger.Info("ai: reset stale active thread run states after restart", "count", resetCount)
-	}
-	delegatedCtx, cancelDelegated := context.WithTimeout(context.Background(), persistTO)
-	delegatedUnavailableCount, delegatedUnavailableErr := ts.MarkPendingDelegatedApprovalsUnavailable(delegatedCtx, "runtime restarted before the delegated approval could be delivered", time.Now().UnixMilli())
-	cancelDelegated()
-	if delegatedUnavailableErr != nil {
-		_ = ts.Close()
-		return nil, delegatedUnavailableErr
-	}
-	if delegatedUnavailableCount > 0 {
-		logger.Info("ai: marked pending delegated approvals unavailable after restart", "count", delegatedUnavailableCount)
-	}
 	floretStorePath, err := floretThreadStorePath(opts.StateDir)
 	if err != nil {
 		_ = ts.Close()
@@ -348,7 +330,6 @@ func NewService(opts Options) (*Service, error) {
 		uploadsDir:                   uploadsDir,
 		threadsDB:                    ts,
 		floretStore:                  floretStore,
-		contextRepo:                  contextRepo,
 		capabilityResolver:           capabilityResolver,
 		skillManager:                 newSkillManager(agentHomeDir, strings.TrimSpace(opts.StateDir)),
 		flowerReadStateCleaner:       opts.FlowerReadStateCleaner,
@@ -407,8 +388,31 @@ func (s *Service) scheduleQueuedTurnRecovery() {
 		if endpointID == "" || threadID == "" {
 			continue
 		}
-		runStatus, _, _ := normalizeThreadRunState(queued.RunStatus, queued.RunErrorCode, queued.RunError)
-		if NormalizeRunState(runStatus) == RunStateWaitingUser || strings.TrimSpace(queued.WaitingUserInputJSON) != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), persistTO)
+		commands, listErr := db.ListFollowupsByLane(ctx, endpointID, threadID, threadstore.FollowupLaneQueued, 500)
+		cancel()
+		if listErr != nil {
+			if s.log != nil {
+				s.log.Warn("ai: pending turn command reconciliation failed", "thread_id", threadID, "error", listErr)
+			}
+			continue
+		}
+		for _, command := range commands {
+			reconcileCtx, reconcileCancel := context.WithTimeout(context.Background(), persistTO)
+			_, reconcileErr := s.reconcilePendingTurnCommand(reconcileCtx, endpointID, threadID, command.QueueID, command.TurnID)
+			reconcileCancel()
+			if reconcileErr != nil && s.log != nil {
+				s.log.Warn("ai: pending turn command reconciliation failed", "thread_id", threadID, "turn_id", command.TurnID, "error", reconcileErr)
+			}
+		}
+		readCtx, readCancel := context.WithTimeout(context.Background(), persistTO)
+		host, hostErr := s.openFloretMaintenanceHost()
+		var snapshot flruntime.ThreadSnapshot
+		if hostErr == nil {
+			snapshot, hostErr = host.ReadThread(readCtx, flruntime.ThreadID(threadID))
+		}
+		readCancel()
+		if hostErr == nil && !snapshot.CanAppendMessage {
 			continue
 		}
 		if s.threadMgr != nil {
@@ -626,64 +630,6 @@ func isFloretThreadNotFoundError(err error) bool {
 		return false
 	}
 	return errors.Is(err, flruntime.ErrThreadNotFound)
-}
-
-func (s *Service) appendFloretConversationTurnCorrelation(ctx context.Context, db *threadstore.Store, timeout time.Duration, endpointID string, threadID string, runID string, turnID string, userMessageID string, createdAtUnixMs int64) error {
-	if db == nil {
-		return nil
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	runID = strings.TrimSpace(runID)
-	turnID = strings.TrimSpace(turnID)
-	userMessageID = strings.TrimSpace(userMessageID)
-	if endpointID == "" || threadID == "" || runID == "" || turnID == "" {
-		return errors.New("invalid floret turn correlation")
-	}
-	if timeout <= 0 {
-		timeout = defaultPersistOpTimeout
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	pctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	_, err := db.AppendConversationTurn(pctx, threadstore.ConversationTurn{
-		TurnID:             turnID,
-		EndpointID:         endpointID,
-		ThreadID:           threadID,
-		RunID:              runID,
-		UserMessageID:      userMessageID,
-		AssistantMessageID: turnID,
-		CreatedAtUnixMs:    createdAtUnixMs,
-	})
-	return err
-}
-
-func (s *Service) updateThreadLastMessagePreviewFromRun(ctx context.Context, db *threadstore.Store, timeout time.Duration, meta *session.Meta, endpointID string, threadID string, r *run) error {
-	if db == nil || r == nil {
-		return nil
-	}
-	preview, _ := r.assistantPreviewTextSnapshot()
-	if strings.TrimSpace(preview) == "" {
-		return nil
-	}
-	atUnixMs := time.Now().UnixMilli()
-	if timeout <= 0 {
-		timeout = defaultPersistOpTimeout
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	updatedByID := ""
-	updatedByEmail := ""
-	if meta != nil {
-		updatedByID = meta.UserPublicID
-		updatedByEmail = meta.UserEmail
-	}
-	pctx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	return db.UpdateThreadLastMessagePreview(pctx, endpointID, threadID, preview, atUnixMs, updatedByID, updatedByEmail)
 }
 
 func (s *Service) openFloretMaintenanceHost() (*flruntime.ThreadMaintenanceHost, error) {
@@ -1520,7 +1466,6 @@ func newManualCompactionRequestID() (string, error) {
 type preparedRun struct {
 	meta                         *session.Meta
 	req                          RunStartRequest
-	persistedUser                *persistedUserMessage
 	runID                        string
 	startedAtUnixMs              int64
 	channelID                    string
@@ -1535,7 +1480,6 @@ type preparedRun struct {
 	db                           *threadstore.Store
 	messageID                    string
 	r                            *run
-	updateThreadRunState         func(status string, runErrorCode string, runErr string, waitingPrompt *RequestUserInputPrompt)
 }
 
 func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string, req RunStartRequest, w http.ResponseWriter) error {
@@ -1585,83 +1529,61 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 		return persistedUserMessage{}, req.Input, err
 	}
 	req.Input = normalizedInput
-	persistedSeed := persistedUserMessage{
-		MessageID:       preparedUser.Message.MessageID,
-		MessageJSON:     preparedUser.Message.MessageJSON,
-		CreatedAtUnixMs: preparedUser.Message.CreatedAtUnixMs,
-	}
-	prepared, err := s.prepareRun(meta, runID, req, nil, &persistedSeed)
+	prepared, err := s.prepareRun(meta, runID, req, nil, nil)
 	if err != nil {
 		return persistedUserMessage{}, normalizedInput, err
 	}
-
-	startedAt := time.Now().UnixMilli()
-	prepared.startedAtUnixMs = startedAt
-	pctx, cancel := context.WithTimeout(ctx, prepared.persistTO)
-	result, err := prepared.db.StartUserTurn(pctx, threadstore.StartUserTurn{
-		EndpointID:  endpointID,
-		ThreadID:    threadID,
-		UserMessage: preparedUser.Message,
-		UploadIDs:   preparedUser.UploadIDs,
-		Run: threadstore.RunRecord{
-			RunID:           runID,
-			EndpointID:      endpointID,
-			ThreadID:        threadID,
-			MessageID:       prepared.messageID,
-			State:           string(RunStateRunning),
-			AttemptCount:    1,
-			StartedAtUnixMs: startedAt,
-			UpdatedAtUnixMs: startedAt,
-		},
-		Turn: threadstore.ConversationTurn{
-			TurnID:             prepared.messageID,
-			EndpointID:         endpointID,
-			ThreadID:           threadID,
-			RunID:              runID,
-			UserMessageID:      preparedUser.Message.MessageID,
-			AssistantMessageID: prepared.messageID,
-			CreatedAtUnixMs:    preparedUser.Message.CreatedAtUnixMs,
-		},
-		RunState: threadstore.ThreadRunStateWrite{
-			Status:                string(RunStateRunning),
-			UpdatedByUserPublicID: strings.TrimSpace(meta.UserPublicID),
-			UpdatedByUserEmail:    strings.TrimSpace(meta.UserEmail),
-			UpdatedAtUnixMs:       startedAt,
-		},
-		SourceQueueID:           strings.TrimSpace(sourceFollowupID),
-		RequireSourceQueue:      requireSourceFollowup,
-		StructuredUserInputs:    preparedUser.StructuredInputs,
-		RequestUserInputSecrets: preparedUser.SecretAnswers,
-		UploadClaimedAtUnixMs:   preparedUser.Message.CreatedAtUnixMs,
-	})
-	cancel()
-	if err != nil {
-		s.releasePreparedRun(prepared)
-		return persistedUserMessage{}, normalizedInput, err
+	commandID := strings.TrimSpace(sourceFollowupID)
+	if commandID == "" {
+		commandID, err = NewQueuedTurnID()
+		if err != nil {
+			s.releasePreparedRun(prepared)
+			return persistedUserMessage{}, normalizedInput, err
+		}
+		contextActionJSON, marshalErr := marshalQueuedTurnContextAction(normalizedInput.ContextAction)
+		if marshalErr != nil {
+			s.releasePreparedRun(prepared)
+			return persistedUserMessage{}, normalizedInput, marshalErr
+		}
+		record := threadstore.QueuedTurn{
+			QueueID: commandID, EndpointID: endpointID, ThreadID: threadID,
+			ChannelID: strings.TrimSpace(meta.ChannelID), Lane: threadstore.FollowupLaneQueued,
+			TurnID: prepared.messageID, RunID: runID, ModelID: strings.TrimSpace(req.Model),
+			TextContent: strings.TrimSpace(normalizedInput.Text), AttachmentsJSON: marshalQueuedTurnAttachments(normalizedInput.Attachments),
+			ContextActionJSON: contextActionJSON, OptionsJSON: marshalQueuedTurnOptions(req.Options), SessionMetaJSON: marshalQueuedTurnSessionMeta(meta),
+			CreatedByUserPublicID: strings.TrimSpace(meta.UserPublicID), CreatedByUserEmail: strings.TrimSpace(meta.UserEmail),
+			CreatedAtUnixMs: preparedUser.CreatedAtUnixMs,
+		}
+		pctx, cancel := context.WithTimeout(ctx, prepared.persistTO)
+		_, _, _, err = prepared.db.CreateFollowupWithUploadRefs(pctx, record, preparedUser.UploadIDs, preparedUser.CreatedAtUnixMs)
+		cancel()
+		if err != nil {
+			s.releasePreparedRun(prepared)
+			return persistedUserMessage{}, normalizedInput, err
+		}
+	} else if requireSourceFollowup {
+		pctx, cancel := context.WithTimeout(ctx, prepared.persistTO)
+		record, loadErr := prepared.db.GetQueuedTurn(pctx, endpointID, threadID, commandID)
+		cancel()
+		if loadErr != nil || record == nil || strings.TrimSpace(record.TurnID) != prepared.messageID || strings.TrimSpace(record.RunID) != runID {
+			s.releasePreparedRun(prepared)
+			if loadErr != nil {
+				return persistedUserMessage{}, normalizedInput, loadErr
+			}
+			return persistedUserMessage{}, normalizedInput, errors.New("pending turn command identity mismatch")
+		}
 	}
 
-	persisted := persistedUserMessage{
-		MessageID:       result.UserMessageID,
-		RowID:           result.UserMessageRowID,
-		MessageJSON:     result.UserMessageJSON,
-		CreatedAtUnixMs: result.UserMessageCreatedAtUnixMs,
-	}
-	prepared.persistedUser = &persisted
+	prepared.r.setPendingTurnCommand(commandID)
 	prepared.req.Input = normalizedInput
-
-	s.broadcastTranscriptMessage(endpointID, threadID, "", persisted.RowID, persisted.MessageJSON, persisted.CreatedAtUnixMs)
 	s.broadcastThreadState(endpointID, threadID, runID, string(RunStateRunning), "", "")
 	s.broadcastThreadSummary(endpointID, threadID)
 	effectiveCurrentInput := deriveEffectiveCurrentUserInput(normalizedInput)
-	effectiveCurrentInput.MessageID = persisted.MessageID
-	effectiveCurrentInput.MessageRowID = persisted.RowID
-	effectiveCurrentInput.MessageCreatedAtUnixMs = persisted.CreatedAtUnixMs
+	effectiveCurrentInput.MessageID = prepared.messageID
+	effectiveCurrentInput.MessageCreatedAtUnixMs = preparedUser.CreatedAtUnixMs
 	s.scheduleAutoThreadTitle(meta, threadID, effectiveCurrentInput)
 	prepared.r.ensureAssistantMessageStarted()
 	prepared.r.updateModelIOStatus(FlowerModelIOPhasePreparing, 0)
-	if _, cleanupErr := s.processUploadCleanupCandidates(context.Background(), result.UploadsToDelete); cleanupErr != nil && s.log != nil {
-		s.log.Warn("ai followup upload cleanup failed after turn start", "thread_id", threadID, "followup_id", strings.TrimSpace(sourceFollowupID), "error", cleanupErr)
-	}
 
 	go func() {
 		if err := s.executePreparedRun(context.Background(), prepared); err != nil {
@@ -1670,7 +1592,7 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 			}
 		}
 	}()
-	return persisted, normalizedInput, nil
+	return persistedUserMessage{TurnID: prepared.messageID, RunID: runID, CreatedAtUnixMs: preparedUser.CreatedAtUnixMs}, normalizedInput, nil
 }
 
 func (s *Service) releasePreparedRun(prepared *preparedRun) {
@@ -1787,14 +1709,18 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	}
 	cfg := s.cfg
 	desktopModelSource := s.desktopModelSource
-	req.Options.PermissionType = threadPermissionTypeString(th, "")
+	req.Options.PermissionType = threadPermissionTypeString(th)
 	uploadsDir := s.uploadsDir
 	db = s.threadsDB
-	messageID, err := newMessageID()
-	if err != nil {
-		s.mu.Unlock()
-		return nil, err
+	messageID := strings.TrimSpace(req.Input.MessageID)
+	if messageID == "" {
+		messageID, err = newMessageID()
+		if err != nil {
+			s.mu.Unlock()
+			return nil, err
+		}
 	}
+	req.Input.MessageID = messageID
 	finalizingThreadStatePublished := false
 	toolTargetPolicy := s.toolTargetPolicy
 	if toolTargetPolicyForRun != nil {
@@ -1835,21 +1761,6 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		OnStreamEvent: func(ev any) {
 			if !finalizingThreadStatePublished && isFinalizingLifecycleStreamEvent(ev) {
 				finalizingThreadStatePublished = true
-				uctx, cancel := context.WithTimeout(context.Background(), persistTO)
-				if err := db.UpdateThreadRunState(
-					uctx,
-					endpointID,
-					threadID,
-					string(RunStateFinalizing),
-					"",
-					"",
-					"",
-					metaRef.UserPublicID,
-					metaRef.UserEmail,
-				); err != nil && s.log != nil {
-					s.log.Warn("update thread finalizing state failed", "thread_id", threadID, "run_id", runID, "error", err)
-				}
-				cancel()
 				s.broadcastThreadState(endpointID, threadID, runID, string(RunStateFinalizing), "", "")
 				s.broadcastThreadSummary(endpointID, threadID)
 			}
@@ -1862,50 +1773,15 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	s.runs[runID] = r
 	s.mu.Unlock()
 
-	updateThreadRunState := func(status string, runErrorCode string, runErr string, waitingPrompt *RequestUserInputPrompt) {
-		if db == nil {
-			return
-		}
-		status = strings.TrimSpace(status)
-		if status == "" {
-			status = "failed"
-		}
-		waitingUserInputJSON := marshalRequestUserInputPrompt(waitingPrompt)
-		uctx, cancel := context.WithTimeout(context.Background(), persistTO)
-		defer cancel()
-		if err := db.UpdateThreadRunState(
-			uctx,
-			endpointID,
-			threadID,
-			status,
-			runErrorCode,
-			runErr,
-			waitingUserInputJSON,
-			metaRef.UserPublicID,
-			metaRef.UserEmail,
-		); err != nil && s.log != nil {
-			s.log.Warn("update thread run state failed", "thread_id", threadID, "run_id", runID, "status", status, "error", err)
-		}
-	}
-
 	if persisted == nil {
-		updateThreadRunState("running", "", "", nil)
 		s.broadcastThreadState(endpointID, threadID, runID, "running", "", "")
 		s.broadcastThreadSummary(endpointID, threadID)
-		r.ensureAssistantMessageStarted()
 		r.updateModelIOStatus(FlowerModelIOPhasePreparing, 0)
-	}
-
-	var persistedCopy *persistedUserMessage
-	if persisted != nil {
-		cp := *persisted
-		persistedCopy = &cp
 	}
 
 	return &preparedRun{
 		meta:                         metaRef,
 		req:                          req,
-		persistedUser:                persistedCopy,
 		runID:                        runID,
 		startedAtUnixMs:              time.Now().UnixMilli(),
 		channelID:                    channelID,
@@ -1920,7 +1796,6 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		db:                           db,
 		messageID:                    messageID,
 		r:                            r,
-		updateThreadRunState:         updateThreadRunState,
 	}, nil
 }
 
@@ -1943,7 +1818,6 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	db := prepared.db
 	persistTO := prepared.persistTO
 	cfg := prepared.cfg
-	meta := prepared.meta
 	messageID := strings.TrimSpace(prepared.messageID)
 	req := prepared.req
 
@@ -1964,8 +1838,6 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		if msg == "" {
 			msg = "AI failed."
 		}
-		r.ensureAssistantMessageStarted()
-		_ = r.appendTextDelta(msg)
 		r.sendStreamEvent(streamEventError{Type: "error", MessageID: messageID, Error: msg})
 		r.setEndReason("error")
 		return err
@@ -1986,26 +1858,17 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 			return
 		}
 		runStatus, runStatusErrCode, runStatusErr := deriveThreadRunState(r.getEndReason(), r.getFinalizationReason(), r.getRunErrorCode(), retErr)
-		waitingPrompt := waitingPromptForRunState(runStatus, r.snapshotWaitingPrompt())
 		if !engineRunStarted {
-			startedAt := prepared.startedAtUnixMs
-			if startedAt <= 0 {
-				startedAt = time.Now().UnixMilli()
-			}
-			r.persistRunRecord(NormalizeRunState(runStatus), runStatusErrCode, runStatusErr, startedAt, time.Now().UnixMilli())
 			eventType := "run.error"
 			switch NormalizeRunState(runStatus) {
 			case RunStateSuccess, RunStateWaitingUser, RunStateCanceled:
 				eventType = "run.end"
 			}
-			r.persistRunEvent(eventType, RealtimeStreamKindLifecycle, map[string]any{
+			r.recordRunDiagnostic(eventType, RealtimeStreamKindLifecycle, map[string]any{
 				"state":      runStatus,
 				"error_code": runStatusErrCode,
 				"error":      runStatusErr,
 			})
-		}
-		if prepared.updateThreadRunState != nil {
-			prepared.updateThreadRunState(runStatus, runStatusErrCode, runStatusErr, waitingPrompt)
 		}
 		s.broadcastThreadState(endpointID, threadID, runID, runStatus, runStatusErrCode, runStatusErr)
 		s.broadcastThreadSummary(endpointID, threadID)
@@ -2013,18 +1876,6 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 			s.threadMgr.Wake(endpointID, threadID)
 		}
 	}()
-
-	effectiveCurrentInput := deriveEffectiveCurrentUserInput(req.Input)
-	pctx, cancelPersist := context.WithTimeout(context.Background(), persistTO)
-	existingOpenGoal := ""
-	if s.contextRepo != nil && s.contextRepo.Ready() {
-		goal, goalErr := s.contextRepo.GetOpenGoal(pctx, endpointID, threadID)
-		if goalErr != nil && r.log != nil {
-			r.log.Warn("load open goal failed", "thread_id", threadID, "error", goalErr)
-		}
-		existingOpenGoal = strings.TrimSpace(goal)
-	}
-	cancelPersist()
 
 	resolvedModel, err := s.resolveRunModel(ctx, cfg, req.Model, prepared.threadModelID, r)
 	if err != nil {
@@ -2040,7 +1891,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	}
 	req.Options.ReasoningSelection = reasoning.Effective
 	r.currentReasoning = reasoning.Effective
-	r.persistRunEvent("reasoning.selection.normalized", RealtimeStreamKindLifecycle, map[string]any{
+	r.recordRunDiagnostic("reasoning.selection.normalized", RealtimeStreamKindLifecycle, map[string]any{
 		"requested":      reasoning.Requested,
 		"effective":      reasoning.Effective,
 		"source":         reasoning.Source,
@@ -2052,42 +1903,8 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		"disabled":       reasoning.Effective.Level == config.AIReasoningLevelOff,
 	})
 	if payload := contextActionRunEventPayload(req.Input.ContextAction); payload != nil {
-		r.persistRunEvent("flower.context_action.received", RealtimeStreamKindLifecycle, payload)
+		r.recordRunDiagnostic("flower.context_action.received", RealtimeStreamKindLifecycle, payload)
 	}
-
-	openGoal := strings.TrimSpace(existingOpenGoal)
-	effectiveInput := req.Input
-
-	userMsgID := ""
-	autoTitleMessageRowID := int64(0)
-	autoTitleMessageCreatedAtUnixMs := int64(0)
-	if prepared.persistedUser != nil {
-		if persistedID := strings.TrimSpace(prepared.persistedUser.MessageID); persistedID != "" {
-			userMsgID = persistedID
-		}
-		autoTitleMessageRowID = prepared.persistedUser.RowID
-		autoTitleMessageCreatedAtUnixMs = prepared.persistedUser.CreatedAtUnixMs
-	}
-	if userMsgID == "" {
-		persisted, normalizedInput, persistErr := s.persistUserMessage(context.Background(), meta, endpointID, threadID, req.Input)
-		if persistErr != nil {
-			return streamEarlyError(persistErr)
-		}
-		effectiveInput = normalizedInput
-		userMsgID = strings.TrimSpace(persisted.MessageID)
-		autoTitleMessageRowID = persisted.RowID
-		autoTitleMessageCreatedAtUnixMs = persisted.CreatedAtUnixMs
-		s.broadcastTranscriptMessage(endpointID, threadID, runID, persisted.RowID, persisted.MessageJSON, persisted.CreatedAtUnixMs)
-		s.broadcastThreadSummary(endpointID, threadID)
-	}
-	effectiveCurrentInput.MessageID = userMsgID
-	effectiveCurrentInput.MessageRowID = autoTitleMessageRowID
-	effectiveCurrentInput.MessageCreatedAtUnixMs = autoTitleMessageCreatedAtUnixMs
-	effectiveInput.MessageID = userMsgID
-	if err := s.appendFloretConversationTurnCorrelation(context.Background(), db, persistTO, endpointID, threadID, runID, messageID, userMsgID, autoTitleMessageCreatedAtUnixMs); err != nil {
-		return streamEarlyError(err)
-	}
-	s.scheduleAutoThreadTitle(meta, threadID, effectiveCurrentInput)
 
 	select {
 	case <-ctx.Done():
@@ -2117,13 +1934,13 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 
 	runReq := RunRequest{
 		Model:           model,
-		Objective:       strings.TrimSpace(openGoal),
-		Input:           effectiveInput,
+		Input:           req.Input,
 		Options:         req.Options,
 		ModelCapability: modelCapability,
 	}
 	engineRunStarted = true
 	runErr := r.run(ctx, runReq)
+	r.reconcilePendingTurnCommand()
 	finalErr := runErr
 	if runErr != nil {
 		handledCancel := false
@@ -2149,21 +1966,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		return finalErr
 	}
 
-	if err := s.updateThreadLastMessagePreviewFromRun(context.Background(), db, persistTO, meta, endpointID, threadID, r); err != nil && finalErr == nil {
-		finalErr = err
-	}
 	s.broadcastThreadSummary(endpointID, threadID)
-
-	finalReason := strings.TrimSpace(r.getFinalizationReason())
-	if s.contextRepo != nil {
-		stateCtx, cancelState := context.WithTimeout(context.Background(), persistTO)
-		if shouldClearOpenGoalAfterRun(existingOpenGoal, finalReason) {
-			_ = s.contextRepo.SetOpenGoal(stateCtx, endpointID, threadID, "")
-		} else if shouldPersistOpenGoalAfterRun(finalReason) && strings.TrimSpace(openGoal) != "" {
-			_ = s.contextRepo.SetOpenGoal(stateCtx, endpointID, threadID, openGoal)
-		}
-		cancelState()
-	}
 	return finalErr
 }
 
@@ -2334,38 +2137,6 @@ func (s *Service) resolvedDesktopModelSourceDefaultModel(ctx context.Context) (s
 	return "", false
 }
 
-func shouldClearThreadState(finalReason string) bool {
-	switch strings.TrimSpace(finalReason) {
-	case "task_complete", "natural_stop":
-		return true
-	default:
-		return false
-	}
-}
-
-func shouldPersistOpenGoalAfterRun(finalReason string) bool {
-	if shouldClearThreadState(finalReason) {
-		return false
-	}
-	if classifyFinalizationReason(finalReason) == finalizationClassWaitingUser {
-		return true
-	}
-	return false
-}
-
-func shouldClearOpenGoalAfterRun(existingOpenGoal string, finalReason string) bool {
-	if shouldClearThreadState(finalReason) {
-		return true
-	}
-	if shouldPersistOpenGoalAfterRun(finalReason) {
-		return false
-	}
-	if strings.TrimSpace(existingOpenGoal) == "" {
-		return false
-	}
-	return classifyFinalizationReason(finalReason) == finalizationClassSuccess
-}
-
 type effectiveCurrentUserInput struct {
 	MessageID              string
 	MessageRowID           int64
@@ -2506,7 +2277,6 @@ func (s *Service) CancelRun(meta *session.Meta, runID string) error {
 	var r *run
 	threadID := ""
 	finalizingThreadID := ""
-	var canceledDelegatedApprovals []FlowerApprovalAction
 	var finalizingDoneCh <-chan struct{}
 
 	s.mu.Lock()
@@ -2519,7 +2289,7 @@ func (s *Service) CancelRun(meta *session.Meta, runID string) error {
 	if r != nil {
 		threadID = strings.TrimSpace(r.threadID)
 		r.markDetached()
-		canceledDelegatedApprovals = s.cancelThreadApprovalQueueLocked(endpointID, threadID, "run canceled")
+		s.cancelThreadApprovalQueueLocked(endpointID, threadID, "run canceled")
 		finalizingThreadID = threadID
 		finalizingDoneCh = r.doneCh
 	}
@@ -2546,18 +2316,6 @@ func (s *Service) CancelRun(meta *session.Meta, runID string) error {
 	db := s.threadsDB
 	persistTO := s.persistOpTO
 	s.mu.Unlock()
-	for _, action := range canceledDelegatedApprovals {
-		if db == nil || action.DelegatedRef == nil {
-			continue
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), persistTO)
-		_, err := db.MarkDelegatedApprovalCanceled(ctx, endpointID, threadID, action.ActionID, action.Version, string(mustFlowerPayload(action)), action.ReadOnlyReason, action.ResolvedAtMs)
-		cancel()
-		if err != nil && s.log != nil {
-			s.log.Warn("persist canceled delegated approval failed", "endpoint_id", endpointID, "thread_id", threadID, "action_id", action.ActionID, "error", err)
-		}
-	}
-
 	if finalizingKey != "" && finalizingDoneCh != nil {
 		go s.waitForStopFinalization(endpointID, finalizingThreadID, runID, finalizingDoneCh)
 	}
@@ -2569,9 +2327,6 @@ func (s *Service) CancelRun(meta *session.Meta, runID string) error {
 	}
 
 	if db != nil && threadID != "" {
-		uctx, cancel := context.WithTimeout(context.Background(), persistTO)
-		_ = db.UpdateThreadRunState(uctx, endpointID, threadID, "canceled", "", "", "", meta.UserPublicID, meta.UserEmail)
-		cancel()
 		s.broadcastThreadState(endpointID, threadID, runID, "canceled", "", "")
 		s.broadcastThreadSummary(endpointID, threadID)
 		if s.threadMgr != nil {

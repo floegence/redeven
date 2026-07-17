@@ -2,7 +2,7 @@ import type { StreamEvent } from '../../../chat';
 import type { ContextActionEnvelope } from '../../../contextActions/protocol';
 import type { FlowerReasoningSelection, FlowerTimelineDecoration } from '../../../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 
-export type AIRealtimeEventType = 'stream_event' | 'thread_state' | 'transcript_message' | 'transcript_reset' | 'thread_summary';
+export type AIRealtimeEventType = 'stream_event' | 'thread_state' | 'thread_summary';
 
 export type AIThreadRunStatus = 'idle' | 'accepted' | 'running' | 'waiting_approval' | 'recovering' | 'finalizing' | 'waiting_user' | 'success' | 'failed' | 'canceled' | 'timed_out';
 export type AIPermissionType = 'readonly' | 'approval_required' | 'full_access';
@@ -166,7 +166,7 @@ export type AIStopThreadResponse = {
   recoveredFollowups?: AIFollowupItem[];
 };
 
-export type AITranscriptMessageItem = {
+export type AITimelineMessageItem = {
   rowId: number;
   messageJson: any;
 };
@@ -180,7 +180,7 @@ export type AIListMessagesRequest = {
 };
 
 export type AIListMessagesResponse = {
-  messages: AITranscriptMessageItem[];
+  messages: AITimelineMessageItem[];
   timelineDecorations?: readonly FlowerTimelineDecoration[];
   nextAfterRowId?: number;
   hasMore?: boolean;
@@ -201,10 +201,6 @@ export type AIRealtimeEvent = {
   runError?: string;
   waitingPrompt?: AIRequestUserInputPrompt;
 
-  // transcript_message only
-  messageRowId?: number;
-  messageJson?: any;
-
   // thread_summary only
   title?: string;
   updatedAtUnixMs?: number;
@@ -213,8 +209,4 @@ export type AIRealtimeEvent = {
   activeRunId?: string;
   permissionType?: AIPermissionType;
   queuedTurnCount?: number;
-
-  // transcript_reset only
-  resetReason?: string;
-  resetCheckpointId?: string;
 };

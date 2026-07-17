@@ -19,7 +19,6 @@ import type {
   FlowerLiveEvent,
   FlowerLiveEventsResponse,
   FlowerLiveMaterializedState,
-  FlowerLiveMessageCommittedPayload,
   FlowerLiveMessageStartedPayload,
   FlowerLiveMessageBlockDeltaPayload,
   FlowerLiveMessageBlockSetPayload,
@@ -377,7 +376,7 @@ function mapTimelineDecoration(raw: unknown): FlowerTimelineDecoration | null {
       || !trim(payload.turn_id)
       || !trim(payload.run_id)
       || !trim(payload.expected_message_id)
-      || (reason !== 'not_found' && reason !== 'invalid_contract' && reason !== 'not_renderable')
+      || reason !== 'not_renderable'
       || anchor.target_kind !== 'message'
       || anchor.edge !== 'after'
     ) return null;
@@ -1226,17 +1225,6 @@ function mapLiveEventPayload(kind: string, payload: unknown): unknown {
         block: mappedBlock ?? { type: '' },
         } as FlowerLiveMessageBlockSetPayload;
       }
-    case 'message.committed':
-      {
-        const message = mapFlowerMessage(record.message);
-        if (!message) {
-          throw new Error('Flower contract error: message.committed requires a valid message.');
-        }
-        return {
-          message_id: trim(record.message_id) || message.id,
-          message,
-        } as FlowerLiveMessageCommittedPayload;
-      }
     case 'message.failed':
       return {
         message_id: trim(record.message_id),
@@ -1301,7 +1289,6 @@ const liveKinds = new Set<FlowerLiveKind>([
   'message.block_started',
   'message.block_delta',
   'message.block_set',
-  'message.committed',
   'message.failed',
   'approval.requested',
   'approval.resolved',

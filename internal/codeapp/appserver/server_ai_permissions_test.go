@@ -102,7 +102,6 @@ func TestServer_AI_Permissions_RequireRWX(t *testing.T) {
 	assertForbidden(http.MethodDelete, "/_redeven_proxy/api/ai/threads/th_test")
 	assertForbidden(http.MethodGet, "/_redeven_proxy/api/ai/threads/th_test/todos")
 	assertForbidden(http.MethodGet, "/_redeven_proxy/api/ai/threads/th_test/messages")
-	assertForbidden(http.MethodPost, "/_redeven_proxy/api/ai/threads/th_test/messages")
 	assertForbidden(http.MethodGet, "/_redeven_proxy/api/ai/threads/th_test/live/bootstrap")
 	assertForbidden(http.MethodGet, "/_redeven_proxy/api/ai/threads/th_test/live/events?after_seq=1&limit=10")
 	assertForbidden(http.MethodPost, "/_redeven_proxy/api/ai/threads/th_test/turns")

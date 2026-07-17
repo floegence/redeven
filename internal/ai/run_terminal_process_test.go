@@ -526,15 +526,6 @@ func openTerminalProcessTestStore(t *testing.T) *threadstore.Store {
 func upsertTerminalProcessTestRun(t *testing.T, store *threadstore.Store, endpointID string, threadID string, runID string, turnID string) {
 	t.Helper()
 	ensureThreadstoreThreadForTest(t, store, endpointID, threadID)
-	if err := store.UpsertRun(context.Background(), threadstore.RunRecord{
-		RunID:      runID,
-		EndpointID: endpointID,
-		ThreadID:   threadID,
-		MessageID:  turnID,
-		State:      "running",
-	}); err != nil {
-		t.Fatalf("UpsertRun: %v", err)
-	}
 }
 
 func newTerminalProcessTestRun(workspace string, svc *Service, store *threadstore.Store, endpointID string, threadID string, runID string, turnID string) *run {

@@ -12,7 +12,7 @@ import (
 	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
 	fltools "github.com/floegence/floret/tools"
-	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/config"
 )
 
 type floretModelGatewayFunc func(context.Context, flruntime.ModelRequest) (<-chan flruntime.ModelEvent, error)
@@ -134,7 +134,7 @@ func TestFloretTurnResultProjectionDoesNotDowngradeFullAssistantMarkdown(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := host.StartThread(ctx, flruntime.StartThreadRequest{ThreadID: "thread_full_result_projection"}); err != nil {
+	if _, err := host.EnsureThread(ctx, flruntime.EnsureThreadRequest{ThreadID: "thread_full_result_projection"}); err != nil {
 		t.Fatal(err)
 	}
 	result, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
@@ -343,7 +343,7 @@ func TestFloretHostPublishesRunningToolProjectionToFlowerLiveEvents(t *testing.T
 	if err != nil {
 		t.Fatalf("NewHost: %v", err)
 	}
-	if _, err := host.StartThread(ctx, flruntime.StartThreadRequest{ThreadID: flruntime.ThreadID(thread.ThreadID)}); err != nil {
+	if _, err := host.EnsureThread(ctx, flruntime.EnsureThreadRequest{ThreadID: flruntime.ThreadID(thread.ThreadID)}); err != nil {
 		t.Fatalf("StartThread: %v", err)
 	}
 
@@ -433,15 +433,6 @@ func TestFloretHostPublishesRunningToolProjectionToFlowerLiveEvents(t *testing.T
 		}
 		if ev.Projection != nil && !ev.Projection.Status.IsTerminal() && ev.Projection.Status != flruntime.TurnStatusRunning {
 			t.Fatalf("live projection status=%q, want running before terminal", ev.Projection.Status)
-		}
-	}
-	runEvents, err := svc.threadsDB.ListRunEvents(ctx, meta.EndpointID, runID, 500)
-	if err != nil {
-		t.Fatalf("ListRunEvents: %v", err)
-	}
-	for _, event := range runEvents {
-		if event.EventType == "floret.contract.rejected" {
-			t.Fatalf("valid Host execution produced contract rejection: %#v", event)
 		}
 	}
 }
@@ -1261,105 +1252,6 @@ func TestFloretTerminalThreadProjectionRejectsMismatchedRun(t *testing.T) {
 	}
 }
 
-func TestApplyFloretPendingToolSettlementProjectionDoesNotPersistAssistantMessage(t *testing.T) {
-	ctx := context.Background()
-	svc := newTestService(t, nil)
-	meta := testSendTurnMeta()
-	thread, err := svc.CreateThread(ctx, meta, "terminal settlement", "", "", "")
-	if err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-
-	runID := "run_terminal_settlement"
-	messageID := "msg_terminal_settlement"
-	createdAt := time.UnixMilli(1_700_100_000_000).UnixMilli()
-	initialRaw, err := json.Marshal(persistedMessage{
-		ID:        messageID,
-		Role:      "assistant",
-		Status:    "canceled",
-		Timestamp: createdAt,
-		Blocks:    []any{&persistedMarkdownBlock{Type: "markdown", Content: ""}},
-	})
-	if err != nil {
-		t.Fatalf("marshal initial assistant: %v", err)
-	}
-	rowID, err := svc.threadsDB.AppendMessage(ctx, meta.EndpointID, thread.ThreadID, threadstore.Message{
-		ThreadID:        thread.ThreadID,
-		EndpointID:      meta.EndpointID,
-		MessageID:       messageID,
-		Role:            "assistant",
-		Status:          "canceled",
-		CreatedAtUnixMs: createdAt,
-		UpdatedAtUnixMs: createdAt,
-		MessageJSON:     string(initialRaw),
-	}, meta.UserPublicID, meta.UserEmail)
-	if err != nil {
-		t.Fatalf("AppendMessage: %v", err)
-	}
-
-	timeline := floretProjectionTimeline(runID, thread.ThreadID, messageID, "exec-1", "terminal.exec")
-	timeline.Summary = observation.ActivitySummary{
-		Status:     observation.ActivityStatusCanceled,
-		Severity:   observation.ActivitySeverityWarning,
-		TotalItems: 1,
-		Counts:     observation.ActivityCounts{Canceled: 1},
-	}
-	timeline.Items[0].Status = observation.ActivityStatusCanceled
-	timeline.Items[0].Severity = observation.ActivitySeverityWarning
-	settledProjection := flruntime.ThreadTurnProjection{
-		ThreadID:       flruntime.ThreadID(thread.ThreadID),
-		TurnID:         flruntime.TurnID(messageID),
-		RunID:          flruntime.RunID(runID),
-		TraceID:        flruntime.TraceID(runID),
-		Status:         flruntime.TurnStatusCancelled,
-		ThroughOrdinal: 2,
-		Segments: []flruntime.ThreadTurnProjectionSegment{{
-			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
-			ActivityTimeline: timeline,
-		}},
-	}
-	settlementTarget := flruntime.PendingToolSettlementTarget{
-		ThreadID:   flruntime.ThreadID(thread.ThreadID),
-		TurnID:     flruntime.TurnID(messageID),
-		RunID:      flruntime.RunID(runID),
-		ToolCallID: "exec-cancelled",
-		ToolName:   "terminal.exec",
-		Handle:     "process-cancelled",
-	}
-	settled := pendingToolSettlementResultForTest(settlementTarget, flruntime.TurnProjectionAvailabilityReady, &settledProjection, "")
-	failedCtx, cancel := context.WithCancel(ctx)
-	cancel()
-	err = svc.applyFloretPendingToolSettlementProjection(failedCtx, meta.EndpointID, thread.ThreadID, runID, messageID, settled)
-	if err == nil {
-		t.Fatalf("apply settlement projection succeeded with canceled canonical build context")
-	}
-	failedResp, listErr := svc.ListFlowerThreadLiveEvents(ctx, meta, thread.ThreadID, 0, 50)
-	if listErr != nil {
-		t.Fatalf("ListFlowerThreadLiveEvents after failed publication: %v", listErr)
-	}
-	for _, event := range failedResp.Events {
-		if event.Kind == FlowerLiveTimelineReplaced {
-			t.Fatalf("failed canonical build produced timeline.replaced: %#v", event)
-		}
-	}
-
-	err = svc.applyFloretPendingToolSettlementProjection(ctx, meta.EndpointID, thread.ThreadID, runID, messageID, settled)
-	if err != nil {
-		t.Fatalf("apply settlement projection: %v", err)
-	}
-
-	gotRowID, raw, err := svc.threadsDB.GetTranscriptMessageRowIDAndJSONByMessageID(ctx, meta.EndpointID, thread.ThreadID, messageID)
-	if err != nil {
-		t.Fatalf("GetTranscriptMessageRowIDAndJSONByMessageID: %v", err)
-	}
-	if gotRowID != rowID {
-		t.Fatalf("rowID=%d, want original row %d", gotRowID, rowID)
-	}
-	if raw != string(initialRaw) {
-		t.Fatalf("assistant message JSON mutated by Floret settlement projection:\n got %s\nwant %s", raw, string(initialRaw))
-	}
-}
-
 func TestApplyFloretPendingToolSettlementProjectionPublishesTimelineReplacement(t *testing.T) {
 	ctx := context.Background()
 	svc := newTestService(t, nil)
@@ -1371,6 +1263,15 @@ func TestApplyFloretPendingToolSettlementProjectionPublishesTimelineReplacement(
 
 	runID := "run_terminal_settlement_live"
 	messageID := "msg_terminal_settlement_live"
+	host := newTestFloretHost(t, svc.floretStore, "canonical terminal output")
+	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
+		ThreadID: flruntime.ThreadID(thread.ThreadID),
+		TurnID:   flruntime.TurnID(messageID),
+		RunID:    flruntime.RunID(runID),
+		Input:    "run terminal command",
+	}); err != nil {
+		t.Fatalf("seed canonical turn: %v", err)
+	}
 	activeRun := newRun(runOptions{
 		Service:    svc,
 		RunID:      runID,
@@ -1454,10 +1355,77 @@ func TestApplyFloretPendingToolSettlementProjectionPublishesTimelineReplacement(
 	if !decodeFlowerPayload(replacement.Payload, &payload) {
 		t.Fatalf("replacement payload decode failed: %#v", replacement)
 	}
-	block := firstActivityBlockInTimelineMessages(t, payload.Messages)
-	item := activityBlockItemByToolID(t, block, "exec-1")
-	if item.Status != observation.ActivityStatusSuccess {
-		t.Fatalf("replacement terminal item status=%q, want success", item.Status)
+	if len(payload.Messages) != 2 || payload.Messages[1].MessageID != messageID || payload.Messages[1].Content != "canonical terminal output" {
+		t.Fatalf("replacement messages=%#v, want canonical Floret turn", payload.Messages)
+	}
+	if _, ok := payload.LiveState.Messages[messageID]; ok {
+		t.Fatalf("terminal canonical projection left live draft: %#v", payload.LiveState.Messages[messageID])
+	}
+}
+
+func TestRunFloretHostedTurnTerminalProjectionPublishesCanonicalReplacement(t *testing.T) {
+	ctx := context.Background()
+	svc := newTestService(t, nil)
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(ctx, meta, "ordinary terminal replacement", "", "", "")
+	if err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+
+	runID := "run_ordinary_terminal_replacement"
+	turnID := "turn_ordinary_terminal_replacement"
+	r := newRun(runOptions{
+		Service:      svc,
+		FloretStore:  svc.floretStore,
+		StateDir:     svc.stateDir,
+		AgentHomeDir: t.TempDir(),
+		WorkingDir:   t.TempDir(),
+		Shell:        "bash",
+		AIConfig:     &config.AIConfig{},
+		SessionMeta:  meta,
+		RunID:        runID,
+		EndpointID:   meta.EndpointID,
+		ThreadID:     thread.ThreadID,
+		MessageID:    turnID,
+		OnStreamEvent: func(event any) {
+			svc.broadcastStreamEvent(meta.EndpointID, thread.ThreadID, runID, event)
+		},
+	})
+	provider := &capturingTurnProvider{result: ModelGatewayResult{FinishReason: "stop", Text: "canonical final answer"}}
+	if err := r.runFloretHostedTurn(ctx, RunRequest{
+		Model: "compat/gpt-5-mini",
+		Input: RunInput{Text: "finish normally"},
+		Options: RunOptions{
+			PermissionType: config.AIPermissionApprovalRequired,
+		},
+	}, config.AIProvider{ID: "compat", Type: "openai_compatible", BaseURL: "https://example.test/v1"}, "sk-test", "ordinary terminal replacement", provider); err != nil {
+		t.Fatalf("runFloretHostedTurn: %v", err)
+	}
+
+	response, err := svc.ListFlowerThreadLiveEvents(ctx, meta, thread.ThreadID, 0, 100)
+	if err != nil {
+		t.Fatalf("ListFlowerThreadLiveEvents: %v", err)
+	}
+	var replacements []FlowerLiveTimelineReplacedPayload
+	for _, event := range response.Events {
+		if event.Kind != FlowerLiveTimelineReplaced {
+			continue
+		}
+		var payload FlowerLiveTimelineReplacedPayload
+		if !decodeFlowerPayload(event.Payload, &payload) {
+			t.Fatalf("decode timeline replacement: %s", string(event.Payload))
+		}
+		replacements = append(replacements, payload)
+	}
+	if len(replacements) != 1 {
+		t.Fatalf("timeline replacements = %d, want 1; events=%#v", len(replacements), response.Events)
+	}
+	replacement := replacements[0]
+	if len(replacement.Messages) != 2 || replacement.Messages[0].Role != "user" || replacement.Messages[1].MessageID != turnID || replacement.Messages[1].Content != "canonical final answer" {
+		t.Fatalf("replacement messages = %#v", replacement.Messages)
+	}
+	if _, exists := replacement.LiveState.Messages[turnID]; exists {
+		t.Fatalf("terminal replacement retained live draft: %#v", replacement.LiveState.Messages[turnID])
 	}
 }
 

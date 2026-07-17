@@ -639,31 +639,43 @@ module versions. Do not use `replace`, `go.work`, `go.work.sum`, local sibling
 paths, package-manager links, or build aliases to point Redeven at a local
 Floret checkout. Run Floret dependency checks with `GOWORK=off`.
 
-Flower and Redeven own product policy, concrete tool implementations, durable
-threads, canonical Flower timeline projection, Desktop and Env App adapters,
-provider credentials, provider profiles, provider wire adapters, session grants,
-filesystem scope, target routing, approval UI, and product modes.
+Flower and Redeven own product policy, concrete tool implementations, product
+thread metadata, unadmitted commands, Desktop and Env App adapters, provider
+credentials and profiles, provider wire adapters, session grants, filesystem
+scope, target routing, approval UX, resource references, read acknowledgement,
+and product modes. Redeven presentation is a stateless mapping over Floret public
+snapshots plus current-process live drafts bound to exact canonical identity.
 
-Floret owns the reusable agent-engine lifecycle consumed by Redeven: provider
-loop execution, tool call identity, tool dispatch and settlement lifecycle,
-tool status/result/error persistence, Activity projection, tool
-permission/resource/approval lifecycle, runtime streaming observation, core
-control-signal handling, and opaque model state lifecycle. Floret public
-runtime APIs, projections, and Store are the single persistent source of truth
-for tool lifecycle, provider continuation, and context state.
+Floret owns the reusable Agent lifecycle consumed by Redeven. Its durable
+journal, public thread and turn snapshots, turn projections, pending approval
+snapshot, context snapshot, and typed Agent todo state are the only authority
+for admitted user and assistant conversation, turn/run order and lifecycle,
+failure and waiting state, control signals, approvals, todos, provider-visible
+context, tool identity and lifecycle, Activity projection, pending settlement,
+and opaque provider state. Redeven must not persist a second queryable copy,
+reconstruct one from audit or transport events, or query Floret-managed storage.
 
 Redeven code must not bypass those Floret lifecycles:
 - tool approval must flow through Floret `PermissionSpec`, resource extraction,
   and `Approver`;
 - provider adapters may map provider bytes to Floret `ModelEvent`, but must not
-  mutate Flower run state, assistant blocks, cursor state, transcript rows, or
-  activity timeline directly;
+  create durable Flower messages, mutate canonical order, or publish an
+  independent activity timeline;
 - tool handlers may execute already-approved domain actions, but must not run
   user approval waits or policy deny gates that belong before Floret dispatch;
 - control signals must not be registered as ordinary tools;
-- Flower waiting prompts and persisted product UI actions may only be created in
-  the Redeven waiting projection/persistence layer, not while projecting a
-  Floret control signal;
+- `ask_user`, `task_complete`, and custom control signals receive no synthetic
+  tool result or Redeven completion gate. Redeven may apply product confirmation
+  policy, but waiting and terminal lifecycle remain Floret facts;
+- a user command may retain prompt text only before Floret admission. A committed
+  public Floret turn causes Redeven to atomically remove that prompt while
+  retaining only allowed product resource references; restart reconciliation
+  checks the exact opaque `TurnID` through `ListThreadTurns`;
+- Flower history, pagination, thread summaries, waiting presentation, approvals,
+  and todos must read `ListThreadTurns`, `ReadThread`, pending approvals, and the
+  typed todo API. Realtime events may carry only in-memory run presentation and
+  canonical replacement signals; they must not carry transcript messages or a
+  transcript-reset protocol;
 - provider adapters may pass `PreviousState` and `ResponseState` only at the
   typed Floret gateway boundary. Floret persists the complete opaque state and
   invalidates it by journal leaf plus the non-sensitive gateway compatibility
@@ -671,9 +683,9 @@ Redeven code must not bypass those Floret lifecycles:
 - context usage and compaction are read from Floret `ReadThreadContext` for
   bootstrap and mapped into current-process Flower presentation only. Redeven
   must not persist context lifecycle events or mapped context snapshots;
-- Redeven must not persist, mirror, map into another database, or reconstruct
-  Floret tool identity, arguments, lifecycle status, result, error, completion
-  output, or Activity state. It must not query or edit Floret-managed storage;
+- Redeven product tables may reference opaque Floret `ThreadID`/`TurnID`/`RunID`
+  values, but must not store their content, status, ordinal, projection,
+  lifecycle, control, approval, todo, context, provider, or tool-state copies;
 - Redeven may retain product-owned audit records for user operations, policy,
   routing, and permissions, but those records must not contain a queryable copy
   of Floret tool state and must never become a Flower UI or evaluation source;
@@ -687,6 +699,10 @@ Redeven code must not bypass those Floret lifecycles:
 - activity presentation must use Redeven's `ToolPresentationSpec` projection as
   the single product display policy and must travel with the Floret tool call,
   not as separately persisted presentation state.
+- fork calls Floret first and uses the returned turn rewrite map only while
+  materializing opaque product references; Redeven must not persist the Floret
+  fork result. Delete coordinates product cleanup with Floret public
+  `DeleteThread` and never edits or cleans shadow Agent tables.
 
 Flower read state is user scoped. Live thread patches returned through appserver
 must carry the current `read_status` when thread activity changes, so a running

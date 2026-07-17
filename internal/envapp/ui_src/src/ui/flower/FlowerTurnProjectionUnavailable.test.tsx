@@ -28,7 +28,7 @@ describe('FlowerTurnProjectionUnavailable', () => {
             turn_id: 'turn-1',
             run_id: 'run-1',
             expected_message_id: 'msg-assistant',
-            reason: 'not_found',
+            reason: 'not_renderable',
           },
         }}
         copy={DEFAULT_FLOWER_SURFACE_COPY}

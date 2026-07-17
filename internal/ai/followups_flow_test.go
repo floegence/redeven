@@ -76,30 +76,21 @@ func TestSendUserTurn_WaitingUserQueueAfterWaitingUser_QueuesWithoutConsumingPro
 	if len(queued) != 1 {
 		t.Fatalf("len(queued)=%d, want 1", len(queued))
 	}
-	if queued[0].MessageID != "m_waiting_queue_later_1" {
-		t.Fatalf("queued[0].MessageID=%q, want m_waiting_queue_later_1", queued[0].MessageID)
+	if queued[0].TurnID == "" || queued[0].RunID == "" || queued[0].TextContent != "queue this until I answer" {
+		t.Fatalf("queued command lacks canonical identity or prompt: %#v", queued[0])
 	}
-
-	threadRecord, err := svc.threadsDB.GetThread(ctx, meta.EndpointID, th.ThreadID)
+	threadView, err := svc.GetThread(ctx, meta, th.ThreadID)
 	if err != nil {
 		t.Fatalf("GetThread: %v", err)
 	}
-	if threadRecord == nil {
+	if threadView == nil {
 		t.Fatalf("thread missing")
 	}
-	if got := strings.TrimSpace(threadRecord.RunStatus); got != "waiting_user" {
+	if got := strings.TrimSpace(threadView.RunStatus); got != "waiting_user" {
 		t.Fatalf("RunStatus=%q, want waiting_user", got)
 	}
-	if got := requestUserInputPromptFromThreadRecord(threadRecord, threadRecord.RunStatus); got == nil || got.PromptID != waitingPrompt.PromptID {
+	if got := threadView.WaitingPrompt; got == nil || got.PromptID != waitingPrompt.PromptID {
 		t.Fatalf("waiting prompt mismatch: %+v", got)
-	}
-
-	msgs, _, _, err := svc.threadsDB.ListMessages(ctx, meta.EndpointID, th.ThreadID, 200, 0)
-	if err != nil {
-		t.Fatalf("ListMessages: %v", err)
-	}
-	if len(msgs) != 0 {
-		t.Fatalf("expected no persisted transcript messages while queueing after waiting_user, got %d", len(msgs))
 	}
 
 	followups, err := svc.ListFollowups(ctx, meta, th.ThreadID, 20)
@@ -193,8 +184,8 @@ func TestService_StopThread_RecoversQueuedFollowupsToDraftsAndClearsQueue(t *tes
 	if len(drafts) != 1 {
 		t.Fatalf("len(drafts)=%d, want 1", len(drafts))
 	}
-	if drafts[0].MessageID != "m_stop_recover_1" {
-		t.Fatalf("drafts[0].MessageID=%q, want m_stop_recover_1", drafts[0].MessageID)
+	if drafts[0].TurnID == "" || drafts[0].RunID == "" || drafts[0].TextContent != "recover this after stop" {
+		t.Fatalf("unexpected recovered draft: %#v", drafts[0])
 	}
 
 	svc.mu.Lock()
@@ -220,21 +211,6 @@ func TestService_StopThread_CancelsIdleCompactionAndKeepsQueuedTurnDrafted(t *te
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	anchorMessage := threadstore.Message{
-		ThreadID:        th.ThreadID,
-		EndpointID:      meta.EndpointID,
-		MessageID:       "m_stop_idle_compaction_anchor",
-		Role:            "assistant",
-		Status:          "complete",
-		TextContent:     "ready",
-		MessageJSON:     `{"id":"m_stop_idle_compaction_anchor","role":"assistant","status":"complete","blocks":[{"type":"text","text":"ready"}]}`,
-		CreatedAtUnixMs: time.Now().UnixMilli(),
-		UpdatedAtUnixMs: time.Now().UnixMilli(),
-	}
-	if _, err := svc.threadsDB.AppendMessage(ctx, meta.EndpointID, th.ThreadID, anchorMessage, meta.UserPublicID, meta.UserEmail); err != nil {
-		t.Fatalf("AppendMessage anchor: %v", err)
-	}
-
 	var cancelCalled bool
 	begin, gateErr := svc.beginIdleThreadCompaction(meta.EndpointID, th.ThreadID, "compact_stop_idle", "run_stop_idle_compaction", FlowerTimelineAnchor{
 		TargetKind: "message",
@@ -297,7 +273,7 @@ func TestService_StopThread_CancelsIdleCompactionAndKeepsQueuedTurnDrafted(t *te
 	if err != nil {
 		t.Fatalf("ListFollowupsByLane drafts: %v", err)
 	}
-	if len(drafts) != 1 || drafts[0].MessageID != "m_stop_idle_compaction_followup" {
+	if len(drafts) != 1 || drafts[0].TurnID == "" || drafts[0].RunID == "" || drafts[0].TextContent != "queued behind compaction" {
 		t.Fatalf("drafts=%+v, want stopped followup drafted", drafts)
 	}
 }

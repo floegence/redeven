@@ -65,7 +65,7 @@ func TestThreadForkOperationRecoversAfterFloretCommitAndProcessRestart(t *testin
 	}
 
 	floretHost := newTestFloretHost(t, svc.floretStore, "done")
-	if _, err := floretHost.StartThread(ctx, flruntime.StartThreadRequest{ThreadID: flruntime.ThreadID(source.ThreadID)}); err != nil {
+	if _, err := floretHost.EnsureThread(ctx, flruntime.EnsureThreadRequest{ThreadID: flruntime.ThreadID(source.ThreadID)}); err != nil {
 		_ = svc.Close()
 		t.Fatalf("StartThread: %v", err)
 	}

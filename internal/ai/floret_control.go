@@ -100,7 +100,7 @@ func (p floretControlProjector) projectAskUser(call ToolCall, core flruntime.Tur
 	reason := validateAskUserSignal(signal)
 	pass := reason == ""
 	if p.run != nil {
-		p.run.persistRunEvent("ask_user.attempt", RealtimeStreamKindLifecycle, map[string]any{
+		p.run.recordRunDiagnostic("ask_user.attempt", RealtimeStreamKindLifecycle, map[string]any{
 			"source":                "model_signal",
 			"gate_passed":           pass,
 			"gate_reason":           reason,

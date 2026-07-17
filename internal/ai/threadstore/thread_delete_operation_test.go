@@ -22,9 +22,6 @@ func TestStorePrepareThreadDeleteOperationPersistsReplaySnapshotAndRetiresThread
 	if err := store.CreateThread(ctx, Thread{ThreadID: threadID, EndpointID: endpointID, Title: "delete me"}); err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	if _, err := store.CreateThreadCheckpoint(ctx, endpointID, threadID, "checkpoint_delete_operation", "", CheckpointKindPreRun); err != nil {
-		t.Fatalf("CreateThreadCheckpoint: %v", err)
-	}
 	if err := store.InsertUpload(ctx, UploadRecord{
 		UploadID:       "upload_delete_operation",
 		EndpointID:     endpointID,
@@ -35,18 +32,8 @@ func TestStorePrepareThreadDeleteOperationPersistsReplaySnapshotAndRetiresThread
 	}); err != nil {
 		t.Fatalf("InsertUpload: %v", err)
 	}
-	if _, err := store.AppendMessageWithUploadRefs(ctx, endpointID, threadID, Message{
-		ThreadID:        threadID,
-		EndpointID:      endpointID,
-		MessageID:       "message_delete_operation",
-		Role:            "user",
-		Status:          "complete",
-		CreatedAtUnixMs: 1000,
-		UpdatedAtUnixMs: 1000,
-		TextContent:     "attachment",
-		MessageJSON:     `{"id":"message_delete_operation"}`,
-	}, "user_1", "user@example.com", []string{"upload_delete_operation"}, 1000); err != nil {
-		t.Fatalf("AppendMessageWithUploadRefs: %v", err)
+	if err := store.BindUploadsToRef(ctx, endpointID, threadID, UploadRefKindTurn, "turn_delete_operation", []string{"upload_delete_operation"}, 1000); err != nil {
+		t.Fatalf("BindUploadsToRef: %v", err)
 	}
 
 	operation, err := store.PrepareThreadDeleteOperation(ctx, endpointID, threadID, true)
@@ -61,9 +48,6 @@ func TestStorePrepareThreadDeleteOperationPersistsReplaySnapshotAndRetiresThread
 	}
 	if operation.Snapshot.SchemaVersion != ThreadDeleteSnapshotSchemaV1 || !operation.Snapshot.DeleteFlowerReadState {
 		t.Fatalf("snapshot=%+v", operation.Snapshot)
-	}
-	if len(operation.Snapshot.CheckpointIDs) != 1 || operation.Snapshot.CheckpointIDs[0] != "checkpoint_delete_operation" {
-		t.Fatalf("checkpoint ids=%v", operation.Snapshot.CheckpointIDs)
 	}
 	if len(operation.Snapshot.UploadCleanupIDs) != 1 || operation.Snapshot.UploadCleanupIDs[0] != "upload_delete_operation" {
 		t.Fatalf("upload ids=%v", operation.Snapshot.UploadCleanupIDs)

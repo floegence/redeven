@@ -134,7 +134,7 @@ export type wire_ai_subscribe_thread_resp = {
 };
 
 export type wire_ai_event_notify = {
-  event_type: 'stream_event' | 'thread_state' | 'transcript_message' | 'transcript_reset' | 'thread_summary';
+  event_type: 'stream_event' | 'thread_state' | 'thread_summary';
   endpoint_id: string;
   thread_id: string;
   run_id: string;
@@ -148,9 +148,6 @@ export type wire_ai_event_notify = {
   run_error?: string;
   waiting_prompt?: wire_ai_waiting_prompt;
 
-  message_row_id?: number;
-  message_json?: any;
-
   // thread_summary only
   title?: string;
   updated_at_unix_ms?: number;
@@ -159,10 +156,6 @@ export type wire_ai_event_notify = {
   active_run_id?: string;
   permission_type?: string;
   queued_turn_count?: number;
-
-  // transcript_reset only
-  reset_reason?: string;
-  reset_checkpoint_id?: string;
 };
 
 export type wire_ai_followup_attachment = {
@@ -199,13 +192,13 @@ export type wire_ai_list_messages_req = {
   limit?: number;
 };
 
-export type wire_ai_transcript_message_item = {
+export type wire_ai_timeline_message_item = {
   row_id: number;
   message_json: any;
 };
 
 export type wire_ai_list_messages_resp = {
-  messages: wire_ai_transcript_message_item[];
+  messages: wire_ai_timeline_message_item[];
   timeline_decorations?: FlowerTimelineDecoration[];
   next_after_row_id?: number;
   has_more?: boolean;

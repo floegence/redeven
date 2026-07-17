@@ -41,20 +41,8 @@ func TestStore_DeleteThreadResources_RespectsSharedUploadRefs(t *testing.T) {
 
 	appendWithUpload := func(threadID string, messageID string) {
 		t.Helper()
-		if _, err := s.AppendMessageWithUploadRefs(ctx, "env_1", threadID, Message{
-			ThreadID:           threadID,
-			EndpointID:         "env_1",
-			MessageID:          messageID,
-			Role:               "user",
-			Status:             "complete",
-			CreatedAtUnixMs:    1000,
-			UpdatedAtUnixMs:    1000,
-			TextContent:        "see attachment",
-			MessageJSON:        `{"id":"` + messageID + `"}`,
-			AuthorUserPublicID: "u1",
-			AuthorUserEmail:    "u1@example.com",
-		}, "u1", "u1@example.com", []string{"upl_shared"}, 1000); err != nil {
-			t.Fatalf("AppendMessageWithUploadRefs(%s): %v", threadID, err)
+		if err := s.BindUploadsToRef(ctx, "env_1", threadID, UploadRefKindTurn, messageID, []string{"upl_shared"}, 1000); err != nil {
+			t.Fatalf("BindUploadsToRef(%s): %v", threadID, err)
 		}
 	}
 	appendWithUpload("th_1", "msg_1")
@@ -113,7 +101,8 @@ func TestStore_DeleteFollowupResources_ReturnsUploadCandidate(t *testing.T) {
 		ThreadID:              "th_1",
 		ChannelID:             "ch_1",
 		Lane:                  FollowupLaneQueued,
-		MessageID:             "msg_followup",
+		TurnID:                "turn_followup",
+		RunID:                 "run_followup",
 		ModelID:               "openai/gpt-5-mini",
 		TextContent:           "queued followup",
 		AttachmentsJSON:       `[{"url":"/_redeven_proxy/api/ai/uploads/upl_followup"}]`,
@@ -138,6 +127,69 @@ func TestStore_DeleteFollowupResources_ReturnsUploadCandidate(t *testing.T) {
 	}
 	if count := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_queued_turns WHERE endpoint_id = ? AND thread_id = ?`, "env_1", "th_1"); count != 0 {
 		t.Fatalf("queued turn count=%d, want 0", count)
+	}
+}
+
+func TestStore_CommitPendingTurnAdmissionAtomicallyTransfersUploadRefs(t *testing.T) {
+	t.Parallel()
+
+	s := openStoreForTest(t)
+	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_admission", EndpointID: "env_1", Title: "admission"}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	if err := s.InsertUpload(ctx, UploadRecord{
+		UploadID: "upl_admission", EndpointID: "env_1", StorageRelPath: "upl_admission.data",
+		Name: "admission.txt", MimeType: "text/plain", State: UploadStateStaged, CreatedAtUnixMs: 100,
+	}); err != nil {
+		t.Fatalf("InsertUpload: %v", err)
+	}
+	command, _, _, err := s.CreateFollowupWithUploadRefs(ctx, QueuedTurn{
+		QueueID: "command_admission", EndpointID: "env_1", ThreadID: "th_admission", ChannelID: "ch_1",
+		Lane: FollowupLaneQueued, TurnID: "turn_admission", RunID: "run_admission",
+		TextContent: "persist only before admission", AttachmentsJSON: "[]", CreatedAtUnixMs: 200,
+	}, []string{"upl_admission"}, 200)
+	if err != nil {
+		t.Fatalf("CreateFollowupWithUploadRefs: %v", err)
+	}
+	if err := s.CommitPendingTurnAdmission(ctx, "env_1", "th_admission", command.QueueID, command.TurnID, 300); err != nil {
+		t.Fatalf("CommitPendingTurnAdmission: %v", err)
+	}
+	if count := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_queued_turns WHERE queue_id = ?`, command.QueueID); count != 0 {
+		t.Fatalf("pending command rows=%d, want 0", count)
+	}
+	if count := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_upload_refs WHERE upload_id = ? AND ref_kind = ? AND ref_id = ?`, "upl_admission", UploadRefKindQueuedTurn, command.QueueID); count != 0 {
+		t.Fatalf("queued upload refs=%d, want 0", count)
+	}
+	if count := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_upload_refs WHERE upload_id = ? AND ref_kind = ? AND ref_id = ?`, "upl_admission", UploadRefKindTurn, command.TurnID); count != 1 {
+		t.Fatalf("turn upload refs=%d, want 1", count)
+	}
+	if err := s.CommitPendingTurnAdmission(ctx, "env_1", "th_admission", command.QueueID, command.TurnID, 400); err != nil {
+		t.Fatalf("idempotent CommitPendingTurnAdmission: %v", err)
+	}
+}
+
+func TestStore_CommitPendingTurnAdmissionRejectsIdentityMismatchWithoutMutation(t *testing.T) {
+	t.Parallel()
+
+	s := openStoreForTest(t)
+	ctx := context.Background()
+	if err := s.CreateThread(ctx, Thread{ThreadID: "th_admission_mismatch", EndpointID: "env_1", Title: "admission"}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	command, _, _, err := s.CreateFollowup(ctx, QueuedTurn{
+		QueueID: "command_admission_mismatch", EndpointID: "env_1", ThreadID: "th_admission_mismatch", ChannelID: "ch_1",
+		Lane: FollowupLaneQueued, TurnID: "turn_expected", RunID: "run_expected", TextContent: "keep me",
+	})
+	if err != nil {
+		t.Fatalf("CreateFollowup: %v", err)
+	}
+	if err := s.CommitPendingTurnAdmission(ctx, "env_1", "th_admission_mismatch", command.QueueID, "turn_other", 300); err == nil {
+		t.Fatal("CommitPendingTurnAdmission accepted a different turn identity")
+	}
+	stored, err := s.GetQueuedTurn(ctx, "env_1", "th_admission_mismatch", command.QueueID)
+	if err != nil || stored == nil || stored.TextContent != "keep me" {
+		t.Fatalf("pending command changed after rejected admission: %#v err=%v", stored, err)
 	}
 }
 

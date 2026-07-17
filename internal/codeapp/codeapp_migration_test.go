@@ -153,8 +153,8 @@ func TestNewRejectsInvalidThreadstoreSchemaWithoutRebuild(t *testing.T) {
 	if err := store.Close(); err != nil {
 		t.Fatalf("store Close: %v", err)
 	}
-	if err := legacydb.ReplaceStructuredUserInputsWithoutSelectedChoice(dbPath); err != nil {
-		t.Fatalf("break structured_user_inputs schema: %v", err)
+	if err := legacydb.AddForbiddenAgentShadowTable(dbPath); err != nil {
+		t.Fatalf("add forbidden Agent shadow table: %v", err)
 	}
 
 	svc, err := New(context.Background(), Options{
@@ -184,8 +184,12 @@ func TestNewRejectsInvalidThreadstoreSchemaWithoutRebuild(t *testing.T) {
 	}
 	defer func() { _ = raw.Close() }()
 
-	if got := countTableColumns(t, raw, "structured_user_inputs", "selected_choice_id"); got != 0 {
-		t.Fatalf("selected_choice_id column count=%d, want malformed schema preserved", got)
+	var shadowTableCount int
+	if err := raw.QueryRow(`SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = 'conversation_turns'`).Scan(&shadowTableCount); err != nil {
+		t.Fatalf("check forbidden Agent shadow table: %v", err)
+	}
+	if shadowTableCount != 1 {
+		t.Fatalf("conversation_turns table count=%d, want malformed schema preserved", shadowTableCount)
 	}
 	var threadCount int
 	if err := raw.QueryRow(`SELECT COUNT(1) FROM ai_threads`).Scan(&threadCount); err != nil {
@@ -265,17 +269,4 @@ func TestNewPrunesStaleWorkbenchTerminalSessions(t *testing.T) {
 	if len(state.State.SessionIDs) != 0 {
 		t.Fatalf("session_ids=%#v, want stale sessions pruned", state.State.SessionIDs)
 	}
-}
-
-func countTableColumns(t *testing.T, db *sql.DB, tableName string, columnName string) int {
-	t.Helper()
-	var count int
-	if err := db.QueryRow(`
-SELECT COUNT(1)
-FROM pragma_table_info(?)
-WHERE name = ?
-`, tableName, columnName).Scan(&count); err != nil {
-		t.Fatalf("count table columns: %v", err)
-	}
-	return count
 }

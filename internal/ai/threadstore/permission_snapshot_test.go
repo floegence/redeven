@@ -9,7 +9,7 @@ func TestPermissionSnapshotStore_PersistsParentAndChildSnapshotsIdempotently(t *
 	t.Parallel()
 
 	ctx := context.Background()
-	store := openDelegatedApprovalTestStore(t)
+	store := openStoreForTest(t)
 	parent := PermissionSnapshotRecord{
 		SnapshotID:       "psnap_parent",
 		EndpointID:       "env_snap",
@@ -82,7 +82,7 @@ func TestPermissionSnapshotStore_FinalizesProvisionalChildSnapshot(t *testing.T)
 	t.Parallel()
 
 	ctx := context.Background()
-	store := openDelegatedApprovalTestStore(t)
+	store := openStoreForTest(t)
 	child := ChildPermissionSnapshotRecord{
 		ChildSnapshotID:  "psnap_child_provisional",
 		EndpointID:       "env_snap",
@@ -151,7 +151,7 @@ func TestPermissionSnapshotStore_RejectsInvalidChildRunIdentity(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
-	store := openDelegatedApprovalTestStore(t)
+	store := openStoreForTest(t)
 	base := ChildPermissionSnapshotRecord{
 		ChildSnapshotID:   "psnap_child_identity",
 		EndpointID:        "env_snap",

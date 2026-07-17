@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -13,7 +12,6 @@ import (
 
 	"github.com/floegence/floret/observation"
 	fltools "github.com/floegence/floret/tools"
-	"github.com/floegence/redeven/internal/ai/threadstore"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
@@ -1778,25 +1776,8 @@ func TestFloretToolRegistryBlocksWorkerMutationsWhenReadonlyPermissionApplies(t 
 func TestFloretToolRegistryUsesExplicitChildHostIdentityForSubagentTools(t *testing.T) {
 	t.Parallel()
 
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	store, err := threadstore.Open(dbPath)
-	if err != nil {
-		t.Fatalf("threadstore.Open: %v", err)
-	}
-	defer func() { _ = store.Close() }()
-
 	ctx := context.Background()
 	childRunID := "child_run_identity"
-	ensureThreadstoreThreadForTest(t, store, "env_test", "thread_parent")
-	ensureThreadstoreThreadForTest(t, store, "env_test", "thread_child")
-	for _, rec := range []threadstore.RunRecord{
-		{RunID: "run_parent", EndpointID: "env_test", ThreadID: "thread_parent", MessageID: "msg_parent", State: "running"},
-		{RunID: childRunID, EndpointID: "env_test", ThreadID: "thread_child", MessageID: "turn_child", State: "running"},
-	} {
-		if err := store.UpsertRun(ctx, rec); err != nil {
-			t.Fatalf("UpsertRun(%s): %v", rec.RunID, err)
-		}
-	}
 
 	manager := newTerminalProcessManager()
 	defer func() { _ = manager.Close(context.Background()) }()
@@ -1809,7 +1790,6 @@ func TestFloretToolRegistryUsesExplicitChildHostIdentityForSubagentTools(t *test
 		AgentHomeDir:     t.TempDir(),
 		Shell:            "bash",
 		Service:          &Service{terminalProcesses: manager},
-		ThreadsDB:        store,
 		SessionMeta:      &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
 		PersistOpTimeout: 5 * time.Second,
 	})

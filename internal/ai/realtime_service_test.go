@@ -121,7 +121,7 @@ func TestFlowerLiveBootstrapReadsCanonicalFloretContextAfterServiceRestart(t *te
 		t.Fatalf("CreateThread: %v", err)
 	}
 	host := newTestFloretHost(t, first.floretStore, "canonical context answer")
-	if _, err := host.StartThread(ctx, flruntime.StartThreadRequest{ThreadID: flruntime.ThreadID(thread.ThreadID)}); err != nil {
+	if _, err := host.EnsureThread(ctx, flruntime.EnsureThreadRequest{ThreadID: flruntime.ThreadID(thread.ThreadID)}); err != nil {
 		_ = first.Close()
 		t.Fatalf("StartThread: %v", err)
 	}
@@ -265,8 +265,8 @@ func TestStartRunDetached_ImmediateCancelStillStopsRun(t *testing.T) {
 	if view == nil {
 		t.Fatalf("thread missing")
 	}
-	if strings.TrimSpace(view.RunStatus) != "canceled" {
-		t.Fatalf("run_status=%q, want canceled", view.RunStatus)
+	if strings.TrimSpace(view.RunStatus) != "idle" {
+		t.Fatalf("run_status=%q, want idle before Floret accepts the canceled command", view.RunStatus)
 	}
 	if strings.Contains(view.LastMessagePreview, "Canceled.") {
 		t.Fatalf("last_message_preview must not include cancellation notice: %q", view.LastMessagePreview)
@@ -413,26 +413,6 @@ func TestFlowerLiveEventsProjectRealtimeEventsProgressively(t *testing.T) {
 		t.Fatalf("delta payload contains old live shape: %s", string(resp.Events[3].Payload))
 	}
 
-	finalMessage := `{"id":"msg_live_projection_1","role":"assistant","status":"complete","content":"done","created_at_ms":1700000000000,"blocks":[{"type":"markdown","content":"done"}]}`
-	svc.broadcastTranscriptMessage(meta.EndpointID, th.ThreadID, runID, 1, finalMessage, time.Now().UnixMilli())
-
-	next, err := svc.ListFlowerThreadLiveEvents(ctx, &meta, th.ThreadID, resp.NextCursor, 10)
-	if err != nil {
-		t.Fatalf("ListFlowerThreadLiveEvents after transcript: %v", err)
-	}
-	if len(next.Events) != 1 {
-		t.Fatalf("next events=%d, want 1", len(next.Events))
-	}
-	if got := next.Events[0].Kind; got != FlowerLiveMessageCommitted {
-		t.Fatalf("kind=%q, want message.committed", got)
-	}
-	var committed FlowerLiveMessageCommittedPayload
-	if !decodeFlowerPayload(next.Events[0].Payload, &committed) {
-		t.Fatalf("failed to decode committed payload: %s", string(next.Events[0].Payload))
-	}
-	if len(committed.Message) == 0 {
-		t.Fatalf("message payload is empty")
-	}
 }
 
 func TestFlowerLiveStreamingDeltasDoNotEmitTimelineReplacements(t *testing.T) {
@@ -639,12 +619,11 @@ func TestFlowerLiveModelIOStatusProjectsProviderLifecycle(t *testing.T) {
 		t.Fatalf("model io status=%#v", payload.Status)
 	}
 
-	bootstrap, err := svc.GetFlowerThreadLiveBootstrap(ctx, &meta, th.ThreadID)
-	if err != nil {
-		t.Fatalf("GetFlowerThreadLiveBootstrap: %v", err)
-	}
-	if bootstrap.LiveState.ModelIO == nil || bootstrap.LiveState.ModelIO.Phase != FlowerModelIOPhaseStreaming {
-		t.Fatalf("bootstrap model_io=%#v", bootstrap.LiveState.ModelIO)
+	svc.mu.Lock()
+	state := svc.flowerLiveMaterializedStateLocked(meta.EndpointID, th.ThreadID)
+	svc.mu.Unlock()
+	if state.ModelIO == nil || state.ModelIO.Phase != FlowerModelIOPhaseStreaming {
+		t.Fatalf("live model_io=%#v", state.ModelIO)
 	}
 }
 
@@ -900,8 +879,10 @@ func TestFlowerLiveContextCompactionCompleteKeepsRunActive(t *testing.T) {
 	}
 
 	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
-		RunID: runID,
-		Kind:  FlowerLiveMessageBlockStart,
+		ThreadID: "thread-compaction",
+		TurnID:   messageID,
+		RunID:    runID,
+		Kind:     FlowerLiveMessageBlockStart,
 		Payload: mustFlowerPayload(FlowerLiveMessageBlockStartedPayload{
 			MessageID:  messageID,
 			BlockIndex: 0,
@@ -909,8 +890,10 @@ func TestFlowerLiveContextCompactionCompleteKeepsRunActive(t *testing.T) {
 		}),
 	})
 	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
-		RunID: runID,
-		Kind:  FlowerLiveMessageBlockDelta,
+		ThreadID: "thread-compaction",
+		TurnID:   messageID,
+		RunID:    runID,
+		Kind:     FlowerLiveMessageBlockDelta,
 		Payload: mustFlowerPayload(FlowerLiveMessageBlockDeltaPayload{
 			MessageID:  messageID,
 			BlockIndex: 0,
@@ -984,9 +967,13 @@ func TestRunContextCompactionAnchorRemainsStableAcrossOperationEvents(t *testing
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	appendFlowerTimelineTestMessage(t, svc.threadsDB, meta.EndpointID, th.ThreadID, "message-before-compact", "assistant", "visible output before compact", 1_000)
+	host := newTestFloretHost(t, svc.floretStore, "visible output before compact")
+	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{ThreadID: flruntime.ThreadID(th.ThreadID), TurnID: "message-before-compact", RunID: "run-before-compact", Input: "prepare"}); err != nil {
+		t.Fatalf("seed canonical timeline: %v", err)
+	}
 
 	r := newRun(runOptions{
+		Service:          svc,
 		RunID:            "run-anchor-stable",
 		EndpointID:       meta.EndpointID,
 		ThreadID:         th.ThreadID,
@@ -1256,9 +1243,6 @@ func TestFlowerLiveApprovalRequestedCarriesExpectedSeq(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetFlowerThreadLiveBootstrap with pending approval: %v", err)
 	}
-	if got := bootstrap.LiveState.ThreadPatch.RunStatus; got != string(RunStateWaitingApproval) {
-		t.Fatalf("bootstrap run status=%q, want waiting_approval", got)
-	}
 	if _, ok := bootstrap.LiveState.ApprovalActions[payload.Action.ActionID]; !ok {
 		t.Fatalf("pending approval missing from bootstrap live state")
 	}
@@ -1357,11 +1341,11 @@ func TestFlowerLiveApprovalRequestedCarriesExpectedSeq(t *testing.T) {
 	if resolvedPayload.Action.ExpectedSeq != payload.Action.ExpectedSeq {
 		t.Fatalf("resolved expected_seq=%d, want original requested seq %d", resolvedPayload.Action.ExpectedSeq, payload.Action.ExpectedSeq)
 	}
-	bootstrap, err = svc.GetFlowerThreadLiveBootstrap(ctx, &meta, th.ThreadID)
-	if err != nil {
-		t.Fatalf("GetFlowerThreadLiveBootstrap after approval submit: %v", err)
-	}
-	if _, ok := bootstrap.LiveState.ApprovalActions[payload.Action.ActionID]; ok {
+	svc.mu.Lock()
+	state := svc.flowerLiveMaterializedStateLocked(meta.EndpointID, th.ThreadID)
+	svc.mu.Unlock()
+	normalizeFlowerApprovalQueueActions(&state)
+	if _, ok := state.ApprovalActions[payload.Action.ActionID]; ok {
 		t.Fatalf("resolved approval still present in live materialized state")
 	}
 }

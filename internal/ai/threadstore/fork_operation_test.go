@@ -3,240 +3,72 @@ package threadstore
 import (
 	"context"
 	"errors"
-	"path/filepath"
 	"testing"
-
-	_ "modernc.org/sqlite"
 )
 
-func TestForkOperationUsesFixedSnapshotAndReplaysAfterReopen(t *testing.T) {
-	t.Parallel()
-
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	s, err := Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
+func TestForkOperationCopiesOnlyProductMetadataAndReplays(t *testing.T) {
+	store := openStoreForTest(t)
 	ctx := context.Background()
-	if err := s.CreateThread(ctx, Thread{
-		ThreadID:        "thread_source",
-		EndpointID:      "env_1",
-		Title:           "Source",
-		RunStatus:       "success",
-		CreatedAtUnixMs: 100,
-		UpdatedAtUnixMs: 100,
+	if err := store.CreateThread(ctx, Thread{
+		ThreadID: "source", EndpointID: "env", NamespacePublicID: "ns", Title: "Source",
+		ModelID: "openai/gpt-5", ReasoningSelectionJSON: `{"effort":"high"}`,
+		PermissionType: "approval_required", WorkingDir: "/workspace", CreatedAtUnixMs: 1, UpdatedAtUnixMs: 1,
 	}); err != nil {
-		t.Fatalf("CreateThread: %v", err)
+		t.Fatal(err)
 	}
-	if _, err := s.AppendMessage(ctx, "env_1", "thread_source", Message{
-		MessageID:       "message_before_prepare",
-		Role:            "user",
-		Status:          "complete",
-		CreatedAtUnixMs: 110,
-		UpdatedAtUnixMs: 110,
-		TextContent:     "before prepare",
-		MessageJSON:     `{"id":"message_before_prepare","role":"user","blocks":[{"type":"text","content":"before prepare"}]}`,
-	}, "user_1", "user@example.com"); err != nil {
-		t.Fatalf("AppendMessage before prepare: %v", err)
+	request := ForkThreadRequest{
+		OperationID: "fork_1", EndpointID: "env", SourceThreadID: "source", DestinationThreadID: "destination",
+		Title: "Forked", CreatedByUserPublicID: "user_1", CreatedByUserEmail: "user@example.com", CreatedAtUnixMs: 2,
 	}
-	req := ForkThreadRequest{
-		OperationID:           "fork_operation_fixed_snapshot",
-		EndpointID:            "env_1",
-		SourceThreadID:        "thread_source",
-		DestinationThreadID:   "thread_destination",
-		Title:                 "Forked",
-		CreatedByUserPublicID: "user_2",
-		CreatedByUserEmail:    "user2@example.com",
-		CreatedAtUnixMs:       200,
-	}
-	prepared, err := s.PrepareForkOperation(ctx, req)
+	prepared, err := store.PrepareForkOperation(ctx, request)
 	if err != nil {
-		t.Fatalf("PrepareForkOperation: %v", err)
+		t.Fatal(err)
 	}
 	if prepared.Status != ForkOperationPending || prepared.SnapshotSchemaVersion != ForkSnapshotSchemaVersion || prepared.SnapshotJSON == "" {
-		t.Fatalf("prepared operation=%+v", prepared)
+		t.Fatalf("unexpected prepared operation: %#v", prepared)
 	}
-	if _, err := s.AppendMessage(ctx, "env_1", "thread_source", Message{
-		MessageID:       "message_after_prepare",
-		Role:            "user",
-		Status:          "complete",
-		CreatedAtUnixMs: 210,
-		UpdatedAtUnixMs: 210,
-		TextContent:     "after prepare",
-		MessageJSON:     `{"id":"message_after_prepare","role":"user","blocks":[{"type":"text","content":"after prepare"}]}`,
-	}, "user_1", "user@example.com"); err != nil {
-		t.Fatalf("AppendMessage after prepare: %v", err)
-	}
-
-	forked, err := s.CommitForkOperation(ctx, CommitForkOperationRequest{
-		OperationID:      req.OperationID,
-		FloretResultJSON: `{"operation_id":"fork_operation_fixed_snapshot","thread":{"id":"thread_destination"}}`,
-		UpdatedAtUnixMs:  300,
-	})
+	forked, err := store.CommitForkOperation(ctx, CommitForkOperationRequest{OperationID: "fork_1", UpdatedAtUnixMs: 3})
 	if err != nil {
-		t.Fatalf("CommitForkOperation: %v", err)
+		t.Fatal(err)
 	}
-	if forked.ThreadID != req.DestinationThreadID {
-		t.Fatalf("forked thread=%+v", forked)
+	if forked.ThreadID != "destination" || forked.Title != "Forked" || forked.ModelID != "openai/gpt-5" || forked.PermissionType != "approval_required" {
+		t.Fatalf("unexpected forked metadata: %#v", forked)
 	}
-	messages, _, _, err := s.ListMessages(ctx, req.EndpointID, req.DestinationThreadID, 10, 0)
+	replayed, err := store.CommitForkOperation(ctx, CommitForkOperationRequest{OperationID: "fork_1", UpdatedAtUnixMs: 4})
 	if err != nil {
-		t.Fatalf("ListMessages: %v", err)
+		t.Fatal(err)
 	}
-	if len(messages) != 1 || messages[0].TextContent != "before prepare" {
-		t.Fatalf("destination messages=%+v, want fixed pre-prepare snapshot", messages)
-	}
-	committed, err := s.GetForkOperation(ctx, req.OperationID)
-	if err != nil {
-		t.Fatalf("GetForkOperation: %v", err)
-	}
-	if committed.Status != ForkOperationCommitted || committed.SnapshotJSON != "" || committed.FloretResultJSON == "" {
-		t.Fatalf("committed operation=%+v", committed)
-	}
-	if err := s.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
-
-	reopened, err := Open(dbPath)
-	if err != nil {
-		t.Fatalf("Open after commit: %v", err)
-	}
-	defer func() { _ = reopened.Close() }()
-	replayed, err := reopened.CommitForkOperation(ctx, CommitForkOperationRequest{
-		OperationID:      req.OperationID,
-		FloretResultJSON: committed.FloretResultJSON,
-		UpdatedAtUnixMs:  400,
-	})
-	if err != nil {
-		t.Fatalf("CommitForkOperation replay: %v", err)
-	}
-	if replayed.ThreadID != forked.ThreadID || replayed.CreatedAtUnixMs != forked.CreatedAtUnixMs || replayed.Title != forked.Title {
-		t.Fatalf("replayed=%+v, want %+v", replayed, forked)
+	if replayed.ThreadID != forked.ThreadID || replayed.CreatedAtUnixMs != forked.CreatedAtUnixMs {
+		t.Fatalf("unexpected replay: %#v", replayed)
 	}
 }
 
 func TestForkOperationRejectsRequestAndDestinationConflicts(t *testing.T) {
-	t.Parallel()
-
-	s, err := Open(filepath.Join(t.TempDir(), "threads.sqlite"))
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	defer func() { _ = s.Close() }()
+	store := openStoreForTest(t)
 	ctx := context.Background()
-	if err := s.CreateThread(ctx, Thread{ThreadID: "source", EndpointID: "env", Title: "Source", RunStatus: "idle", CreatedAtUnixMs: 1, UpdatedAtUnixMs: 1}); err != nil {
-		t.Fatalf("CreateThread: %v", err)
+	if err := store.CreateThread(ctx, Thread{ThreadID: "source", EndpointID: "env", Title: "Source", CreatedAtUnixMs: 1, UpdatedAtUnixMs: 1}); err != nil {
+		t.Fatal(err)
 	}
-	req := ForkThreadRequest{
-		OperationID:         "operation",
-		EndpointID:          "env",
-		SourceThreadID:      "source",
-		DestinationThreadID: "destination",
-		Title:               "Fork",
-		CreatedAtUnixMs:     2,
-	}
-	first, err := s.PrepareForkOperation(ctx, req)
+	request := ForkThreadRequest{OperationID: "fork_1", EndpointID: "env", SourceThreadID: "source", DestinationThreadID: "destination", Title: "Fork", CreatedAtUnixMs: 2}
+	first, err := store.PrepareForkOperation(ctx, request)
 	if err != nil {
-		t.Fatalf("PrepareForkOperation: %v", err)
+		t.Fatal(err)
 	}
-	replay, err := s.PrepareForkOperation(ctx, req)
+	replay, err := store.PrepareForkOperation(ctx, request)
 	if err != nil {
-		t.Fatalf("PrepareForkOperation replay: %v", err)
+		t.Fatal(err)
 	}
 	if replay.RequestFingerprint != first.RequestFingerprint || replay.SnapshotJSON != first.SnapshotJSON {
-		t.Fatalf("replay=%+v, want same prepared result %+v", replay, first)
+		t.Fatalf("idempotent prepare changed snapshot")
 	}
-	conflict := req
-	conflict.Title = "Different"
-	if _, err := s.PrepareForkOperation(ctx, conflict); !errors.Is(err, ErrForkOperationConflict) {
-		t.Fatalf("request conflict error=%v", err)
+	changed := request
+	changed.Title = "Different"
+	if _, err := store.PrepareForkOperation(ctx, changed); !errors.Is(err, ErrForkOperationConflict) {
+		t.Fatalf("request conflict error = %v", err)
 	}
-	destinationConflict := req
-	destinationConflict.OperationID = "other_operation"
-	if _, err := s.PrepareForkOperation(ctx, destinationConflict); !errors.Is(err, ErrForkDestinationConflict) {
-		t.Fatalf("destination conflict error=%v", err)
-	}
-}
-
-func TestForkOperationRejectsIncompleteFloretIdentityMapping(t *testing.T) {
-	t.Parallel()
-
-	s, err := Open(filepath.Join(t.TempDir(), "threads.sqlite"))
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-	ctx := context.Background()
-	if err := s.CreateThread(ctx, Thread{ThreadID: "source", EndpointID: "env", Title: "Source", RunStatus: "idle", CreatedAtUnixMs: 1, UpdatedAtUnixMs: 1}); err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-	if _, err := s.AppendMessage(ctx, "env", "source", Message{
-		MessageID:       "user_message",
-		Role:            "user",
-		Status:          "complete",
-		CreatedAtUnixMs: 2,
-		UpdatedAtUnixMs: 2,
-		TextContent:     "fork this",
-		MessageJSON:     `{"id":"user_message","role":"user","blocks":[{"type":"text","content":"fork this"}]}`,
-	}, "", ""); err != nil {
-		t.Fatalf("AppendMessage: %v", err)
-	}
-	if _, err := s.AppendConversationTurn(ctx, ConversationTurn{
-		TurnID:             "source_turn",
-		EndpointID:         "env",
-		ThreadID:           "source",
-		RunID:              "source_run",
-		UserMessageID:      "user_message",
-		AssistantMessageID: "source_turn",
-		CreatedAtUnixMs:    3,
-	}); err != nil {
-		t.Fatalf("AppendConversationTurn: %v", err)
-	}
-	req := ForkThreadRequest{
-		OperationID:         "strict_mapping_operation",
-		EndpointID:          "env",
-		SourceThreadID:      "source",
-		DestinationThreadID: "destination",
-		Title:               "Fork",
-		CreatedAtUnixMs:     4,
-	}
-	if _, err := s.PrepareForkOperation(ctx, req); err != nil {
-		t.Fatalf("PrepareForkOperation: %v", err)
-	}
-	_, err = s.CommitForkOperation(ctx, CommitForkOperationRequest{
-		OperationID:      req.OperationID,
-		FloretResultJSON: `{"operation_id":"strict_mapping_operation","thread":{"id":"destination"}}`,
-		UpdatedAtUnixMs:  5,
-	})
-	if !errors.Is(err, ErrForkResultConflict) {
-		t.Fatalf("CommitForkOperation missing mapping error=%v", err)
-	}
-	operation, err := s.GetForkOperation(ctx, req.OperationID)
-	if err != nil {
-		t.Fatalf("GetForkOperation: %v", err)
-	}
-	if operation.Status != ForkOperationPending || operation.SnapshotJSON == "" {
-		t.Fatalf("operation=%+v, want pending operation with fixed snapshot", operation)
-	}
-	if destination, err := s.GetThread(ctx, req.EndpointID, req.DestinationThreadID); err != nil || destination != nil {
-		t.Fatalf("destination=%+v err=%v, want no partial materialization", destination, err)
-	}
-	if _, err := s.CommitForkOperation(ctx, CommitForkOperationRequest{
-		OperationID: req.OperationID,
-		FloretTurnRefs: []ForkTurnRef{{
-			SourceTurnID:      "source_turn",
-			SourceRunID:       "source_run",
-			DestinationTurnID: "destination_turn",
-			DestinationRunID:  "destination_run",
-		}, {
-			SourceTurnID:      "floret_only_turn",
-			SourceRunID:       "floret_only_run",
-			DestinationTurnID: "floret_only_destination_turn",
-			DestinationRunID:  "floret_only_destination_run",
-		}},
-		FloretResultJSON: `{"operation_id":"strict_mapping_operation","thread":{"id":"destination"}}`,
-		UpdatedAtUnixMs:  6,
-	}); err != nil {
-		t.Fatalf("CommitForkOperation exact mapping: %v", err)
+	other := request
+	other.OperationID = "fork_2"
+	if _, err := store.PrepareForkOperation(ctx, other); !errors.Is(err, ErrForkDestinationConflict) {
+		t.Fatalf("destination conflict error = %v", err)
 	}
 }

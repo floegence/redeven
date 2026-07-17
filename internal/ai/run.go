@@ -168,6 +168,10 @@ type run struct {
 	floretProjectionOrdinal map[string]int64
 	floretEventIdentity     floretRuntimeEventIdentity
 
+	muPendingCommand         sync.Mutex
+	pendingCommandID         string
+	pendingCommandReconciled bool
+
 	finalizationReason string
 	currentModelID     string
 	currentReasoning   config.AIReasoningSelection
@@ -921,60 +925,59 @@ func (r *run) persistTimeout() time.Duration {
 	return 10 * time.Second
 }
 
-func (r *run) persistRunRecord(state RunState, errCode string, errMessage string, startedAt int64, endedAt int64) {
-	if r == nil || r.threadsDB == nil {
+func (r *run) setPendingTurnCommand(commandID string) {
+	if r == nil {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), r.persistTimeout())
-	defer cancel()
-	now := time.Now().UnixMilli()
-	state = NormalizeRunState(string(state))
-	rec := threadstore.RunRecord{
-		RunID:           strings.TrimSpace(r.id),
-		EndpointID:      strings.TrimSpace(r.endpointID),
-		ThreadID:        strings.TrimSpace(r.threadID),
-		MessageID:       strings.TrimSpace(r.messageID),
-		State:           string(state),
-		ErrorCode:       strings.TrimSpace(errCode),
-		ErrorMessage:    strings.TrimSpace(errMessage),
-		AttemptCount:    1,
-		StartedAtUnixMs: startedAt,
-		EndedAtUnixMs:   endedAt,
-		UpdatedAtUnixMs: now,
+	r.muPendingCommand.Lock()
+	r.pendingCommandID = strings.TrimSpace(commandID)
+	r.pendingCommandReconciled = false
+	r.muPendingCommand.Unlock()
+}
+
+func (r *run) commitPendingTurnCommandAdmission(verifyCanonicalTurn bool) {
+	if r == nil || r.service == nil {
+		return
 	}
-	if err := r.threadsDB.UpsertRun(ctx, rec); err != nil && r.log != nil {
-		r.log.Warn("persist run record failed", "run_id", rec.RunID, "thread_id", rec.ThreadID, "state", rec.State, "error", err)
+	r.muPendingCommand.Lock()
+	defer r.muPendingCommand.Unlock()
+	if r.pendingCommandReconciled || strings.TrimSpace(r.pendingCommandID) == "" {
+		return
+	}
+	timeout := r.persistTimeout()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	accepted := true
+	var err error
+	if verifyCanonicalTurn {
+		accepted, err = r.service.reconcilePendingTurnCommand(ctx, r.endpointID, r.threadID, r.pendingCommandID, r.messageID)
+	} else {
+		err = r.service.commitPendingTurnCommandAdmission(ctx, r.endpointID, r.threadID, r.pendingCommandID, r.messageID)
+	}
+	cancel()
+	if err != nil {
+		if r.log != nil {
+			r.log.Warn("ai: reconcile pending turn command failed", "thread_id", r.threadID, "turn_id", r.messageID, "error", err)
+		}
+		return
+	}
+	if accepted {
+		r.pendingCommandReconciled = true
 	}
 }
 
-func (r *run) persistRunEvent(eventType string, streamKind RealtimeStreamKind, payload map[string]any) {
-	if r == nil || r.threadsDB == nil {
+func (r *run) reconcilePendingTurnCommand() {
+	r.commitPendingTurnCommandAdmission(true)
+}
+
+func (r *run) recordRunDiagnostic(eventType string, streamKind RealtimeStreamKind, payload map[string]any) {
+	if r == nil {
 		return
 	}
 	eventType = strings.TrimSpace(eventType)
 	if eventType == "" {
 		return
 	}
-	if payload == nil {
-		payload = map[string]any{}
-	}
-	b, err := json.Marshal(payload)
-	if err != nil {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), r.persistTimeout())
-	defer cancel()
-	if err := r.threadsDB.AppendRunEvent(ctx, threadstore.RunEventRecord{
-		EndpointID:  strings.TrimSpace(r.endpointID),
-		ThreadID:    strings.TrimSpace(r.threadID),
-		RunID:       strings.TrimSpace(r.id),
-		StreamKind:  string(streamKind),
-		EventType:   eventType,
-		PayloadJSON: strings.TrimSpace(string(b)),
-		AtUnixMs:    time.Now().UnixMilli(),
-	}); err != nil && r.log != nil {
-		r.log.Warn("persist run event failed", "thread_id", strings.TrimSpace(r.threadID), "run_id", strings.TrimSpace(r.id), "event_type", eventType, "stream_kind", streamKind, "error", err)
-	}
+	r.debug("ai.run.diagnostic", "diagnostic_type", eventType, "stream_kind", string(streamKind), "payload", payload)
 }
 
 func sanitizeLogText(raw string, maxRunes int) string {
@@ -1139,11 +1142,10 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 	}
 	r.setFinalizationReason("")
 	startedAt := time.Now()
-	r.persistRunRecord(RunStateRunning, "", "", startedAt.UnixMilli(), 0)
 	runStartPayload := map[string]any{
 		"model": strings.TrimSpace(req.Model),
 	}
-	r.persistRunEvent("run.start", RealtimeStreamKindLifecycle, runStartPayload)
+	r.recordRunDiagnostic("run.start", RealtimeStreamKindLifecycle, runStartPayload)
 	defer func() {
 		endReason := strings.TrimSpace(r.getEndReason())
 		if endReason == "" {
@@ -1204,8 +1206,7 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 			state = RunStateFailed
 		}
 		r.clearManualCompactionRequests()
-		r.persistRunRecord(state, errCode, errMsg, startedAt.UnixMilli(), time.Now().UnixMilli())
-		r.persistRunEvent(eventType, RealtimeStreamKindLifecycle, map[string]any{
+		r.recordRunDiagnostic(eventType, RealtimeStreamKindLifecycle, map[string]any{
 			"state":               string(state),
 			"error_code":          errCode,
 			"error":               errMsg,
@@ -1246,7 +1247,6 @@ func (r *run) run(ctx context.Context, req RunRequest) (retErr error) {
 		go r.runIdleWatchdog(execCtx)
 	}
 
-	r.ensureAssistantMessageStarted()
 	r.emitLifecyclePhase("planning", nil)
 
 	modelID := strings.TrimSpace(req.Model)
@@ -1903,7 +1903,7 @@ func (r *run) recordToolResultActivity(toolID string, toolName string, status st
 		Error:    toolErr,
 	}
 	if _, err := validateToolResultStatus(toolResult.Status); err != nil {
-		r.persistRunEvent("activity.tool_result.invalid", RealtimeStreamKindTool, map[string]any{
+		r.recordRunDiagnostic("activity.tool_result.invalid", RealtimeStreamKindTool, map[string]any{
 			"tool_id":   toolResult.ToolID,
 			"tool_name": toolResult.ToolName,
 			"error":     sanitizeLogText(err.Error(), 240),
@@ -1917,7 +1917,7 @@ func (r *run) recordToolResultActivity(toolID string, toolName string, status st
 	}
 	activity, err := floretActivityForToolResult(r, toolResult)
 	if err != nil {
-		r.persistRunEvent("activity.tool_result.invalid", RealtimeStreamKindTool, map[string]any{
+		r.recordRunDiagnostic("activity.tool_result.invalid", RealtimeStreamKindTool, map[string]any{
 			"tool_id":   toolResult.ToolID,
 			"tool_name": toolResult.ToolName,
 			"error":     sanitizeLogText(err.Error(), 240),
@@ -2952,7 +2952,7 @@ func (r *run) authorizeToolExecutionFromSnapshot(ctx context.Context, toolID str
 		surfaceConfig.IncludeControlSignalsInSnapshot = true
 		if surface, err := r.buildRunToolSurface(ctx, surfaceConfig, r.permissionType); err == nil {
 			if surface.Epoch != "" && surface.Epoch != previousEpoch {
-				r.persistRunEvent("tool_surface.updated", RealtimeStreamKindLifecycle, map[string]any{
+				r.recordRunDiagnostic("tool_surface.updated", RealtimeStreamKindLifecycle, map[string]any{
 					"phase":             "local_tool_dispatch",
 					"permission_type":   permissionTypeString(surface.PermissionType),
 					"snapshot_id":       strings.TrimSpace(surface.PermissionSnapshot.SnapshotID),

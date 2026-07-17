@@ -8,7 +8,6 @@ import (
 
 	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
-	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 const (
@@ -37,6 +36,9 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 		r.rejectFloretContract("event", err)
 		return
 	}
+	if ev.Type == observation.EventTypeThreadEntryCommitted && ev.Committed != nil && ev.Committed.Kind == flruntime.ThreadDetailEventUserMessage {
+		r.commitPendingTurnCommandAdmission(false)
+	}
 	if !r.acceptsPresentationUpdates() {
 		return
 	}
@@ -51,7 +53,7 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	switch ev.Type {
 	case floretEventProviderRequest:
 		r.updateModelIOStatus(FlowerModelIOPhaseWaitingResponse, ev.Step)
-		r.persistRunEvent("floret.provider.request", RealtimeStreamKindLifecycle, map[string]any{
+		r.recordRunDiagnostic("floret.provider.request", RealtimeStreamKindLifecycle, map[string]any{
 			"step_index": ev.Step,
 			"provider":   strings.TrimSpace(ev.Provider),
 			"model":      strings.TrimSpace(ev.Model),
@@ -59,7 +61,7 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 		})
 	case floretEventProviderFinish:
 		r.updateModelIOStatus(FlowerModelIOPhaseFinalizing, ev.Step)
-		r.persistRunEvent("floret.provider.finish", RealtimeStreamKindLifecycle, map[string]any{
+		r.recordRunDiagnostic("floret.provider.finish", RealtimeStreamKindLifecycle, map[string]any{
 			"step_index":        ev.Step,
 			"finish_reason":     strings.TrimSpace(string(ev.FinishReason)),
 			"raw_finish_reason": strings.TrimSpace(ev.RawFinishReason),
@@ -68,7 +70,7 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 		})
 	case floretEventProviderRetry:
 		r.updateModelIOStatus(FlowerModelIOPhaseRetrying, ev.Step)
-		r.persistRunEvent("floret.provider.retry", RealtimeStreamKindLifecycle, map[string]any{
+		r.recordRunDiagnostic("floret.provider.retry", RealtimeStreamKindLifecycle, map[string]any{
 			"step_index": ev.Step,
 			"message":    strings.TrimSpace(ev.Message),
 		})
@@ -81,7 +83,7 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 		if ev.Type != floretEventToolApprovalRequested {
 			r.syncPendingFloretApprovals(context.Background(), string(ev.Type))
 		}
-		r.persistRunEvent("floret."+string(ev.Type), RealtimeStreamKindLifecycle, map[string]any{
+		r.recordRunDiagnostic("floret."+string(ev.Type), RealtimeStreamKindLifecycle, map[string]any{
 			"tool_id":   strings.TrimSpace(ev.ToolID),
 			"tool_name": strings.TrimSpace(ev.ToolName),
 			"metadata":  ev.Metadata,
@@ -246,7 +248,14 @@ func (r *run) captureFlowerTimelineAnchor() FlowerTimelineAnchor {
 	if anchor := r.captureAssistantDraftTimelineAnchor(); validFlowerTimelineAnchor(anchor) {
 		return anchor
 	}
-	return r.lastPersistedFlowerTimelineAnchor()
+	if r.service == nil {
+		return FlowerTimelineAnchor{}
+	}
+	anchor, err := r.service.lastVisibleFlowerTimelineAnchor(context.Background(), r.endpointID, r.threadID)
+	if err != nil {
+		return FlowerTimelineAnchor{}
+	}
+	return anchor
 }
 
 func (r *run) captureAssistantDraftTimelineAnchor() FlowerTimelineAnchor {
@@ -282,43 +291,6 @@ func (r *run) captureAssistantDraftTimelineAnchor() FlowerTimelineAnchor {
 		}
 	}
 	return FlowerTimelineAnchor{}
-}
-
-func (r *run) lastPersistedFlowerTimelineAnchor() FlowerTimelineAnchor {
-	if r == nil || r.threadsDB == nil {
-		return FlowerTimelineAnchor{}
-	}
-	endpointID := strings.TrimSpace(r.endpointID)
-	threadID := strings.TrimSpace(r.threadID)
-	if endpointID == "" || threadID == "" {
-		return FlowerTimelineAnchor{}
-	}
-	persistTO := r.persistOpTimeout
-	if persistTO <= 0 {
-		persistTO = defaultPersistOpTimeout
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), persistTO)
-	defer cancel()
-	messages, _, _, err := r.threadsDB.ListMessages(ctx, endpointID, threadID, 500, 0)
-	if err != nil {
-		return FlowerTimelineAnchor{}
-	}
-	return lastVisibleFlowerTimelineAnchorFromMessages(messages)
-}
-
-func lastVisibleFlowerTimelineAnchorFromMessages(messages []threadstore.Message) FlowerTimelineAnchor {
-	if len(messages) == 0 {
-		return FlowerTimelineAnchor{}
-	}
-	timeline := make([]FlowerTimelineMessage, 0, len(messages))
-	for _, message := range messages {
-		projected, ok, err := flowerTimelineMessageFromTranscript(message)
-		if err != nil || !ok {
-			continue
-		}
-		timeline = append(timeline, projected)
-	}
-	return lastVisibleFlowerTimelineAnchorFromTimeline(timeline)
 }
 
 func lastVisibleFlowerTimelineAnchorFromTimeline(timeline []FlowerTimelineMessage) FlowerTimelineAnchor {
@@ -559,7 +531,7 @@ func (r *run) rejectFloretContract(kind string, err error) {
 	if r == nil || err == nil {
 		return
 	}
-	r.persistRunEvent("floret.contract.rejected", RealtimeStreamKindLifecycle, map[string]any{
+	r.recordRunDiagnostic("floret.contract.rejected", RealtimeStreamKindLifecycle, map[string]any{
 		"contract_kind": strings.TrimSpace(kind),
 		"error":         sanitizeLogText(err.Error(), 240),
 	})
@@ -600,13 +572,13 @@ func (r *run) applyFloretStreamObservation(stream *flruntime.StreamObservation) 
 		r.updateModelIOStatus(FlowerModelIOPhaseStreaming, stream.Attempt)
 	case flruntime.StreamObservationModelRetry:
 		r.updateModelIOStatus(FlowerModelIOPhaseRetrying, stream.Attempt)
-		r.persistRunEvent("floret.provider.retry.stream", RealtimeStreamKindLifecycle, map[string]any{
+		r.recordRunDiagnostic("floret.provider.retry.stream", RealtimeStreamKindLifecycle, map[string]any{
 			"attempt": stream.Attempt,
 			"reason":  strings.TrimSpace(stream.Reason),
 		})
 	case flruntime.StreamObservationModelStreamDone:
 		r.updateModelIOStatus(FlowerModelIOPhaseFinalizing, stream.Attempt)
-		r.persistRunEvent("floret.provider.stream.done", RealtimeStreamKindLifecycle, map[string]any{
+		r.recordRunDiagnostic("floret.provider.stream.done", RealtimeStreamKindLifecycle, map[string]any{
 			"attempt":              stream.Attempt,
 			"finish_reason":        strings.TrimSpace(string(stream.FinishReason)),
 			"raw_finish_reason":    strings.TrimSpace(stream.RawFinishReason),
@@ -615,7 +587,7 @@ func (r *run) applyFloretStreamObservation(stream *flruntime.StreamObservation) 
 		})
 	case flruntime.StreamObservationModelStreamAbort:
 		r.updateModelIOStatus(FlowerModelIOPhaseRetrying, stream.Attempt)
-		r.persistRunEvent("floret.provider.stream.abort", RealtimeStreamKindLifecycle, map[string]any{
+		r.recordRunDiagnostic("floret.provider.stream.abort", RealtimeStreamKindLifecycle, map[string]any{
 			"attempt": stream.Attempt,
 			"reason":  strings.TrimSpace(stream.Reason),
 		})

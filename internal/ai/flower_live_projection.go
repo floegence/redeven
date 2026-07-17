@@ -14,7 +14,6 @@ import (
 
 	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
-	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -198,7 +197,6 @@ func (s *Service) GetFlowerThreadLiveBootstrap(ctx context.Context, meta *sessio
 		return nil, err
 	}
 	state = mergeFlowerLiveCanonicalContextState(state, canonicalContextState)
-	state = s.mergePersistedDelegatedApprovalState(ctx, endpointID, threadID, state)
 	normalizeFlowerApprovalQueueActions(&state)
 
 	timeline, err := s.buildFlowerTimelineProjection(ctx, endpointID, threadID, state)
@@ -219,54 +217,6 @@ func (s *Service) GetFlowerThreadLiveBootstrap(ctx context.Context, meta *sessio
 		LiveState:        state,
 		GeneratedAtMs:    time.Now().UnixMilli(),
 	}, nil
-}
-
-func (s *Service) mergePersistedDelegatedApprovalState(ctx context.Context, endpointID string, threadID string, state FlowerLiveMaterializedState) FlowerLiveMaterializedState {
-	if s == nil || s.threadsDB == nil {
-		return state
-	}
-	recs, err := s.threadsDB.ListDelegatedApprovalRequestsForThread(ctx, endpointID, threadID, 200)
-	if err != nil {
-		if s.log != nil {
-			s.log.Warn("ai: failed to load delegated approvals for flower live bootstrap", "endpoint_id", endpointID, "thread_id", threadID, "error", err)
-		}
-		return state
-	}
-	if len(recs) > 0 {
-		state.ApprovalActionsSeen = true
-	}
-	ensureFlowerLiveStateMaps(&state)
-	for _, rec := range recs {
-		action := delegatedApprovalActionFromRecord(rec)
-		if strings.TrimSpace(action.ActionID) == "" {
-			continue
-		}
-		if live, ok := state.ApprovalActions[action.ActionID]; ok &&
-			live.Status == FlowerApprovalStatusPending && live.State == FlowerApprovalStateRequested {
-			action.QueueGeneration = live.QueueGeneration
-			action.QueueOrder = live.QueueOrder
-			action.SurfaceRole = live.SurfaceRole
-			action.CanApprove = live.CanApprove
-			action.ExpectedSeq = live.ExpectedSeq
-			action.PrimaryWaitAnchor = live.PrimaryWaitAnchor
-			action.ExpiresAtMs = firstPositiveInt64(live.ExpiresAtMs, action.ExpiresAtMs)
-			action.BatchIndex = live.BatchIndex
-			action.BatchSize = max(1, live.BatchSize)
-			if live.ReadOnlyReason == "Queued for approval" {
-				action.ReadOnlyReason = live.ReadOnlyReason
-			}
-		}
-		switch action.Status {
-		case FlowerApprovalStatusPending, FlowerApprovalStatusUnavailable:
-			state.ApprovalActions[action.ActionID] = action
-		case FlowerApprovalStatusResolved:
-			if visibleResolvedDelegatedApprovalAction(action) {
-				action.CanApprove = false
-				state.ApprovalActions[action.ActionID] = action
-			}
-		}
-	}
-	return state
 }
 
 func visibleResolvedDelegatedApprovalAction(action FlowerApprovalAction) bool {
@@ -479,10 +429,21 @@ func (s *Service) buildFlowerTimelineProjection(ctx context.Context, endpointID 
 	if err != nil {
 		return flowerTimelineProjection{}, err
 	}
-	persistedByID := make(map[string]FlowerTimelineMessage, len(msgs))
-	persistedOrder := make([]string, 0, len(msgs))
+	type canonicalTurnRef struct {
+		runID  string
+		status flruntime.TurnStatus
+	}
+	canonicalTurns := make(map[string]canonicalTurnRef, len(msgs)/2+1)
+	canonicalAssistant := make(map[string]struct{}, len(msgs)/2+1)
 	projectionDecorations := make([]FlowerTimelineDecoration, 0)
 	for _, msg := range msgs {
+		turnID := strings.TrimSpace(msg.CanonicalTurn)
+		if turnID != "" {
+			canonicalTurns[turnID] = canonicalTurnRef{runID: strings.TrimSpace(msg.CanonicalRun), status: msg.TurnStatus}
+			if strings.TrimSpace(msg.MessageID) == turnID && msg.Decoration == nil {
+				canonicalAssistant[turnID] = struct{}{}
+			}
+		}
 		if msg.Decoration != nil {
 			if err := msg.Decoration.Validate(); err != nil {
 				return flowerTimelineProjection{}, fmt.Errorf("invalid persisted timeline decoration: %w", err)
@@ -493,53 +454,87 @@ func (s *Service) buildFlowerTimelineProjection(ctx context.Context, endpointID 
 		if len(msg.MessageJSON) == 0 {
 			return flowerTimelineProjection{}, errors.New("timeline item has neither message nor decoration")
 		}
-		timelineMsg, ok, err := flowerTimelineMessageFromRaw(msg.MessageID, "", "", msg.CreatedAt, msg.MessageJSON)
+	}
+	activeMessageID := activeFlowerCursorMessageID(state)
+	for key, draft := range state.Messages {
+		messageID := strings.TrimSpace(key)
+		ref, ok := canonicalTurns[messageID]
+		if !ok || strings.TrimSpace(draft.MessageID) != messageID || strings.TrimSpace(draft.ThreadID) != threadID ||
+			strings.TrimSpace(draft.TurnID) != messageID || strings.TrimSpace(draft.RunID) == "" || strings.TrimSpace(draft.RunID) != ref.runID ||
+			ref.status == flruntime.TurnStatusCompleted || ref.status == flruntime.TurnStatusFailed || ref.status == flruntime.TurnStatusCancelled {
+			reason := "live_draft_canonical_identity_mismatch"
+			s.triggerFlowerLiveTimelineResync(endpointID, threadID, reason)
+			return flowerTimelineProjection{}, fmt.Errorf("flower live timeline resync required: %s", reason)
+		}
+	}
+	usedDrafts := make(map[string]struct{}, len(state.Messages))
+	out := make([]FlowerTimelineMessage, 0, len(msgs)+len(state.Messages))
+	appendDraft := func(turnID string) error {
+		draft, ok := state.Messages[turnID]
+		if !ok {
+			return nil
+		}
+		live, ok := flowerTimelineMessageFromLiveDraft(draft, activeMessageID)
+		if !ok {
+			return errors.New("canonical live draft is not renderable")
+		}
+		out = append(out, live)
+		usedDrafts[turnID] = struct{}{}
+		return nil
+	}
+	for _, msg := range msgs {
+		if msg.Decoration != nil {
+			continue
+		}
+		turnID := strings.TrimSpace(msg.CanonicalTurn)
+		if strings.TrimSpace(msg.MessageID) == turnID {
+			if _, ok := state.Messages[turnID]; ok {
+				if err := appendDraft(turnID); err != nil {
+					return flowerTimelineProjection{}, err
+				}
+				continue
+			}
+		}
+		persisted, ok, err := flowerTimelineMessageFromRaw(msg.MessageID, "", "", msg.CreatedAt, msg.MessageJSON)
 		if err != nil {
 			return flowerTimelineProjection{}, err
 		}
-		if !ok {
-			continue
-		}
-		persistedByID[timelineMsg.MessageID] = timelineMsg
-		persistedOrder = append(persistedOrder, timelineMsg.MessageID)
-	}
-
-	activeMessageID := activeFlowerCursorMessageID(state)
-	used := map[string]struct{}{}
-	out := make([]FlowerTimelineMessage, 0, len(persistedByID)+len(state.Messages))
-
-	appendByID := func(messageID string) {
-		messageID = strings.TrimSpace(messageID)
-		if messageID == "" {
-			return
-		}
-		if _, exists := used[messageID]; exists {
-			return
-		}
-		if live, ok := flowerTimelineMessageFromLiveDraft(state.Messages[messageID], activeMessageID); ok {
-			out = append(out, live)
-			used[messageID] = struct{}{}
-			return
-		}
-		if persisted, ok := persistedByID[messageID]; ok {
+		if ok {
 			persisted.ActiveCursor = persisted.MessageID == activeMessageID
 			out = append(out, persisted)
-			used[messageID] = struct{}{}
+		}
+		if strings.TrimSpace(msg.MessageID) != turnID {
+			if _, hasAssistant := canonicalAssistant[turnID]; !hasAssistant {
+				if err := appendDraft(turnID); err != nil {
+					return flowerTimelineProjection{}, err
+				}
+			}
 		}
 	}
-
-	for _, messageID := range persistedOrder {
-		appendByID(messageID)
-	}
-	liveIDs := sortedFlowerLiveMessageIDs(state.Messages)
-	for _, messageID := range liveIDs {
-		appendByID(messageID)
+	if len(usedDrafts) != len(state.Messages) {
+		reason := "live_draft_missing_canonical_position"
+		s.triggerFlowerLiveTimelineResync(endpointID, threadID, reason)
+		return flowerTimelineProjection{}, fmt.Errorf("flower live timeline resync required: %s", reason)
 	}
 	decorations, err := mergeFlowerTimelineDecorationsStrict(state.TimelineDecorations, projectionDecorations)
 	if err != nil {
 		return flowerTimelineProjection{}, err
 	}
 	return flowerTimelineProjection{Messages: out, TimelineDecorations: decorations}, nil
+}
+
+func (s *Service) triggerFlowerLiveTimelineResync(endpointID string, threadID string, reason string) {
+	if s == nil {
+		return
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	s.mu.Lock()
+	if stream := s.flowerLiveByThread[runThreadKey(endpointID, threadID)]; stream != nil {
+		stream.State.Messages = map[string]FlowerLiveMessageDraft{}
+	}
+	s.mu.Unlock()
+	s.appendFlowerLiveEvent(flowerLiveResyncEvent(endpointID, threadID, 0, reason))
 }
 
 func (s *Service) buildFlowerTimelineMessages(ctx context.Context, endpointID string, threadID string, state FlowerLiveMaterializedState) ([]FlowerTimelineMessage, error) {
@@ -621,6 +616,33 @@ func (s *Service) publishFlowerCanonicalTimelineReplacement(ctx context.Context,
 	return nil
 }
 
+func (s *Service) replaceFlowerLiveDraftWithCanonicalTimeline(ctx context.Context, endpointID string, threadID string, runID string, turnID string, reason string) error {
+	if s == nil {
+		return errors.New("nil service")
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	runID = strings.TrimSpace(runID)
+	turnID = strings.TrimSpace(turnID)
+	if endpointID == "" || threadID == "" || runID == "" || turnID == "" {
+		return errors.New("invalid canonical timeline replacement identity")
+	}
+	s.mu.Lock()
+	if stream := s.flowerLiveByThread[runThreadKey(endpointID, threadID)]; stream != nil {
+		if draft, ok := stream.State.Messages[turnID]; ok {
+			if strings.TrimSpace(draft.ThreadID) != threadID || strings.TrimSpace(draft.TurnID) != turnID ||
+				strings.TrimSpace(draft.RunID) != runID || strings.TrimSpace(draft.MessageID) != turnID {
+				s.mu.Unlock()
+				s.triggerFlowerLiveTimelineResync(endpointID, threadID, "terminal_draft_canonical_identity_mismatch")
+				return errors.New("terminal live draft identity does not match canonical turn")
+			}
+			delete(stream.State.Messages, turnID)
+		}
+	}
+	s.mu.Unlock()
+	return s.publishFlowerCanonicalTimelineReplacement(ctx, endpointID, threadID, runID, turnID, reason)
+}
+
 func activeFlowerCursorMessageID(state FlowerLiveMaterializedState) string {
 	for _, run := range state.Runs {
 		status := NormalizeRunState(run.Status)
@@ -631,28 +653,6 @@ func activeFlowerCursorMessageID(state FlowerLiveMaterializedState) string {
 		}
 	}
 	return ""
-}
-
-func sortedFlowerLiveMessageIDs(messages map[string]FlowerLiveMessageDraft) []string {
-	out := make([]string, 0, len(messages))
-	for id := range messages {
-		if strings.TrimSpace(id) != "" {
-			out = append(out, strings.TrimSpace(id))
-		}
-	}
-	sort.Strings(out)
-	return out
-}
-
-func flowerTimelineMessageFromTranscript(msg threadstore.Message) (FlowerTimelineMessage, bool, error) {
-	raw, err := SanitizeActivityTimelineMessageJSON(msg.MessageJSON)
-	if err != nil {
-		return FlowerTimelineMessage{}, false, err
-	}
-	if len(raw) == 0 {
-		return FlowerTimelineMessage{}, false, nil
-	}
-	return flowerTimelineMessageFromRaw(msg.MessageID, msg.Role, msg.Status, msg.CreatedAtUnixMs, raw)
 }
 
 func flowerTimelineMessageFromRaw(messageID string, role string, status string, createdAtUnixMs int64, raw json.RawMessage) (FlowerTimelineMessage, bool, error) {
@@ -1294,21 +1294,6 @@ func (s *Service) flowerLiveEventsFromRealtime(ev RealtimeEvent) []FlowerLiveEve
 	}
 
 	switch ev.EventType {
-	case RealtimeEventTypeTranscript:
-		safeMessageJSON, err := SanitizeActivityTimelineMessageJSON(string(ev.MessageJSON))
-		if err != nil || len(safeMessageJSON) == 0 {
-			return nil
-		}
-		messageID, ok := messageIDFromJSON(safeMessageJSON)
-		if !ok {
-			return nil
-		}
-		return []FlowerLiveEvent{base(FlowerLiveMessageCommitted, FlowerLiveMessageCommittedPayload{
-			MessageID: messageID,
-			Message:   cloneRawMessage(safeMessageJSON),
-		})}
-	case RealtimeEventTypeTranscriptReset:
-		return []FlowerLiveEvent{base(FlowerLiveResyncRequired, FlowerLiveResyncRequiredPayload{Reason: firstNonEmptyString(ev.ResetReason, "transcript_reset")})}
 	case RealtimeEventTypeThreadSummary:
 		return []FlowerLiveEvent{base(FlowerLiveThreadPatched, FlowerLiveThreadPatchedPayload{Patch: flowerLiveThreadPatchFromSummary(ev)})}
 	case RealtimeEventTypeThreadState:
@@ -1552,6 +1537,9 @@ func applyFlowerLiveEventToMaterializedState(state *FlowerLiveMaterializedState,
 		if decodeFlowerPayload(event.Payload, &payload) && strings.TrimSpace(payload.MessageID) != "" {
 			id := strings.TrimSpace(payload.MessageID)
 			msg := state.Messages[id]
+			msg.ThreadID = strings.TrimSpace(event.ThreadID)
+			msg.TurnID = strings.TrimSpace(event.TurnID)
+			msg.RunID = strings.TrimSpace(event.RunID)
 			msg.MessageID = id
 			msg.Role = firstNonEmptyString(strings.TrimSpace(payload.Role), "assistant")
 			msg.Status = firstNonEmptyString(strings.TrimSpace(payload.Status), "streaming")
@@ -1561,12 +1549,15 @@ func applyFlowerLiveEventToMaterializedState(state *FlowerLiveMaterializedState,
 	case FlowerLiveMessageBlockStart:
 		var payload FlowerLiveMessageBlockStartedPayload
 		if decodeFlowerPayload(event.Payload, &payload) {
-			upsertFlowerLiveBlock(state, payload.MessageID, payload.BlockIndex, FlowerLiveBlock{Type: normalizeLiveBlockType(payload.BlockType)})
+			upsertFlowerLiveBlock(state, event, payload.MessageID, payload.BlockIndex, FlowerLiveBlock{Type: normalizeLiveBlockType(payload.BlockType)})
 		}
 	case FlowerLiveMessageBlockDelta:
 		var payload FlowerLiveMessageBlockDeltaPayload
 		if decodeFlowerPayload(event.Payload, &payload) && strings.TrimSpace(payload.MessageID) != "" && payload.BlockIndex >= 0 && payload.Delta != "" {
-			msg := ensureFlowerLiveMessage(state, payload.MessageID)
+			msg, ok := ensureFlowerLiveMessageForEvent(state, event, payload.MessageID)
+			if !ok {
+				return
+			}
 			for len(msg.Blocks) <= payload.BlockIndex {
 				msg.Blocks = append(msg.Blocks, FlowerLiveBlock{Type: "markdown"})
 			}
@@ -1583,17 +1574,15 @@ func applyFlowerLiveEventToMaterializedState(state *FlowerLiveMaterializedState,
 		if decodeFlowerPayload(event.Payload, &payload) {
 			raw := mustFlowerPayload(payload.Block)
 			blockType := blockTypeFromRaw(raw)
-			upsertFlowerLiveBlock(state, payload.MessageID, payload.BlockIndex, FlowerLiveBlock{Type: blockType, Block: raw})
-		}
-	case FlowerLiveMessageCommitted:
-		var payload FlowerLiveMessageCommittedPayload
-		if decodeFlowerPayload(event.Payload, &payload) && strings.TrimSpace(payload.MessageID) != "" {
-			delete(state.Messages, strings.TrimSpace(payload.MessageID))
+			upsertFlowerLiveBlock(state, event, payload.MessageID, payload.BlockIndex, FlowerLiveBlock{Type: blockType, Block: raw})
 		}
 	case FlowerLiveMessageFailed:
 		var payload FlowerLiveMessageFailedPayload
 		if decodeFlowerPayload(event.Payload, &payload) && strings.TrimSpace(payload.MessageID) != "" {
-			msg := ensureFlowerLiveMessage(state, payload.MessageID)
+			msg, ok := ensureFlowerLiveMessageForEvent(state, event, payload.MessageID)
+			if !ok {
+				return
+			}
 			msg.Status = "error"
 			state.Messages[msg.MessageID] = msg
 		}
@@ -2028,11 +2017,35 @@ func ensureFlowerLiveMessage(state *FlowerLiveMaterializedState, messageID strin
 	return msg
 }
 
-func upsertFlowerLiveBlock(state *FlowerLiveMaterializedState, messageID string, blockIndex int, block FlowerLiveBlock) {
+func ensureFlowerLiveMessageForEvent(state *FlowerLiveMaterializedState, event FlowerLiveEvent, messageID string) (FlowerLiveMessageDraft, bool) {
+	messageID = strings.TrimSpace(messageID)
+	threadID := strings.TrimSpace(event.ThreadID)
+	turnID := strings.TrimSpace(event.TurnID)
+	runID := strings.TrimSpace(event.RunID)
+	if messageID == "" || threadID == "" || turnID == "" || runID == "" || messageID != turnID {
+		return FlowerLiveMessageDraft{}, false
+	}
+	msg := ensureFlowerLiveMessage(state, messageID)
+	if (strings.TrimSpace(msg.ThreadID) != "" && strings.TrimSpace(msg.ThreadID) != threadID) ||
+		(strings.TrimSpace(msg.TurnID) != "" && strings.TrimSpace(msg.TurnID) != turnID) ||
+		(strings.TrimSpace(msg.RunID) != "" && strings.TrimSpace(msg.RunID) != runID) {
+		return FlowerLiveMessageDraft{}, false
+	}
+	msg.ThreadID = threadID
+	msg.TurnID = turnID
+	msg.RunID = runID
+	msg.MessageID = messageID
+	return msg, true
+}
+
+func upsertFlowerLiveBlock(state *FlowerLiveMaterializedState, event FlowerLiveEvent, messageID string, blockIndex int, block FlowerLiveBlock) {
 	if state == nil || strings.TrimSpace(messageID) == "" || blockIndex < 0 {
 		return
 	}
-	msg := ensureFlowerLiveMessage(state, messageID)
+	msg, ok := ensureFlowerLiveMessageForEvent(state, event, messageID)
+	if !ok {
+		return
+	}
 	for len(msg.Blocks) <= blockIndex {
 		msg.Blocks = append(msg.Blocks, FlowerLiveBlock{Type: "markdown"})
 	}

@@ -14,8 +14,10 @@ import (
 	"testing/fstest"
 	"time"
 
+	flconfig "github.com/floegence/floret/config"
+	flruntime "github.com/floegence/floret/runtime"
+	fltools "github.com/floegence/floret/tools"
 	"github.com/floegence/redeven/internal/ai"
-	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -66,44 +68,10 @@ func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	prompt := &ai.RequestUserInputPrompt{
-		PromptID:         "prompt_appserver_input",
-		MessageID:        "msg_appserver_input",
-		ToolID:           "tool_appserver_input",
-		ToolName:         "request_user_input",
-		ReasonCode:       "needs_choice",
-		RequiredFromUser: []string{"Choose a path."},
-		Questions: []ai.RequestUserInputQuestion{
-			{
-				ID:           "question_1",
-				Header:       "Path",
-				Question:     "Which path?",
-				ResponseMode: "write",
-			},
-		},
-	}
-	promptBody, err := json.Marshal(prompt)
-	if err != nil {
-		t.Fatalf("json.Marshal prompt: %v", err)
-	}
-	threadsDB, err := threadstore.Open(filepath.Join(stateDir, "ai", "threads.sqlite"))
-	if err != nil {
-		t.Fatalf("threadstore.Open: %v", err)
-	}
-	t.Cleanup(func() { _ = threadsDB.Close() })
-	if err := threadsDB.UpdateThreadRunState(
-		context.Background(),
-		meta.EndpointID,
-		thread.ThreadID,
-		"waiting_user",
-		"",
-		"",
-		string(promptBody),
-		meta.UserPublicID,
-		meta.UserEmail,
-	); err != nil {
-		t.Fatalf("UpdateThreadRunState waiting_user: %v", err)
-	}
+	const waitingTurnID = "msg_appserver_input"
+	const waitingToolID = "tool_appserver_input"
+	const promptID = "rui_" + waitingTurnID + "_" + waitingToolID
+	seedAppserverWaitingPrompt(t, stateDir, thread.ThreadID, waitingTurnID, "run_appserver_input", waitingToolID)
 
 	srv, err := New(Options{
 		Logger:  logger,
@@ -124,7 +92,7 @@ func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 	inputResponsePath := "/_redeven_proxy/api/ai/threads/" + url.PathEscape(thread.ThreadID) + "/input_response"
 	mismatch := performServerRequest(srv, http.MethodPost, inputResponsePath, envOrigin, `{
 		"thread_id":"other_thread",
-		"response":{"prompt_id":"prompt_appserver_input","answers":{"question_1":{"text":"ship it"}}},
+		"response":{"prompt_id":"`+promptID+`","answers":{"question_1":{"text":"ship it"}}},
 		"input":{"text":"ship it","attachments":[]},
 		"options":{}
 	}`)
@@ -138,7 +106,7 @@ func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 	}
 
 	body := bytes.NewBufferString(`{
-		"response":{"prompt_id":"prompt_appserver_input","answers":{"question_1":{"text":"ship it"}}},
+		"response":{"prompt_id":"` + promptID + `","answers":{"question_1":{"text":"ship it"}}},
 		"input":{"text":"ship it","attachments":[]},
 		"options":{}
 	}`)
@@ -160,7 +128,62 @@ func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("json.Unmarshal response: %v", err)
 	}
-	if !resp.OK || resp.Data.Kind != "start" || resp.Data.RunID == "" || resp.Data.ConsumedWaitingPromptID != "prompt_appserver_input" {
+	if !resp.OK || resp.Data.Kind != "start" || resp.Data.RunID == "" || resp.Data.ConsumedWaitingPromptID != promptID {
 		t.Fatalf("unexpected input response payload: %+v", resp)
+	}
+}
+
+type appserverAskUserGateway struct {
+	toolID string
+	args   string
+}
+
+func (g appserverAskUserGateway) StreamModel(context.Context, flruntime.ModelRequest) (<-chan flruntime.ModelEvent, error) {
+	events := make(chan flruntime.ModelEvent, 2)
+	events <- flruntime.ModelEvent{Type: flruntime.ModelEventToolCalls, ToolCalls: []fltools.ToolCall{{ID: g.toolID, Name: "ask_user", Args: g.args}}}
+	events <- flruntime.ModelEvent{Type: flruntime.ModelEventDone, Reason: "tool_calls"}
+	close(events)
+	return events, nil
+}
+
+func seedAppserverWaitingPrompt(t *testing.T, stateDir string, threadID string, turnID string, runID string, toolID string) {
+	t.Helper()
+	args, err := json.Marshal(map[string]any{
+		"reason_code":        "needs_choice",
+		"required_from_user": []string{"Choose a path."},
+		"evidence_refs":      []string{"message:latest"},
+		"questions": []map[string]any{{
+			"id": "question_1", "header": "Path", "question": "Which path?", "response_mode": "write", "is_secret": false,
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store, err := flruntime.OpenSQLiteStore(filepath.Join(stateDir, "ai", "floret_threads.sqlite"))
+	if err != nil {
+		t.Fatalf("OpenSQLiteStore: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+	host, err := flruntime.NewHost(flruntime.HostOptions{
+		Config: flconfig.Config{ContextPolicy: flconfig.ContextPolicy{
+			ContextWindowTokens: 128000, MaxOutputTokens: 4096, ReservedOutputTokens: 4096, MaxCompactionFailures: 2,
+		}},
+		Store:                store,
+		ModelGateway:         appserverAskUserGateway{toolID: toolID, args: string(args)},
+		ModelGatewayIdentity: flruntime.ModelGatewayIdentity{Provider: "test", Model: "ask-user-test", StateCompatibilityKey: "test:ask-user-test"},
+	})
+	if err != nil {
+		t.Fatalf("NewHost: %v", err)
+	}
+	result, err := host.RunTurn(context.Background(), flruntime.RunTurnRequest{
+		ThreadID: flruntime.ThreadID(threadID), TurnID: flruntime.TurnID(turnID), RunID: flruntime.RunID(runID),
+		Input:   "wait for user input",
+		Signals: flruntime.TurnSignalSpec{Definitions: flruntime.CoreControlDefinitions(false), Project: flruntime.ProjectCoreControlSignal},
+	})
+	if err != nil {
+		t.Fatalf("RunTurn: %v", err)
+	}
+	if result.Status != flruntime.TurnStatusWaiting {
+		t.Fatalf("waiting turn status=%q, want waiting", result.Status)
 	}
 }

@@ -162,7 +162,7 @@ func (r *run) dynamicToolSurfaceProvider(cfg runToolSurfaceConfig, fallback Flow
 		}
 		mu.Unlock()
 		if changed {
-			r.persistRunEvent("tool_surface.updated", RealtimeStreamKindLifecycle, map[string]any{
+			r.recordRunDiagnostic("tool_surface.updated", RealtimeStreamKindLifecycle, map[string]any{
 				"phase":             strings.TrimSpace(req.Phase),
 				"step":              req.Step,
 				"permission_type":   permissionTypeString(surface.PermissionType),
@@ -172,7 +172,7 @@ func (r *run) dynamicToolSurfaceProvider(cfg runToolSurfaceConfig, fallback Flow
 				"schema_hash":       strings.TrimSpace(surface.PermissionSnapshot.SchemaHash),
 				"presentation_hash": strings.TrimSpace(surface.PermissionSnapshot.PresentationHash),
 			})
-			r.persistRunEvent("capability.contract.resolved", RealtimeStreamKindLifecycle, surface.CapabilityContract.eventPayload())
+			r.recordRunDiagnostic("capability.contract.resolved", RealtimeStreamKindLifecycle, surface.CapabilityContract.eventPayload())
 		}
 		return flruntime.ToolSurface{
 			Tools:        surface.FloretTools,

@@ -139,9 +139,6 @@ func (a *threadActor) handleStopThread(ctx context.Context, meta *session.Meta, 
 	if db == nil {
 		return StopThreadResponse{}, errors.New("threads store not ready")
 	}
-	if err := a.mgr.svc.requireThreadMutable(ctx, db, endpointID, threadID); err != nil {
-		return StopThreadResponse{}, err
-	}
 	if persistTO <= 0 {
 		persistTO = defaultPersistOpTimeout
 	}
@@ -159,9 +156,6 @@ func (a *threadActor) handleStopThread(ctx context.Context, meta *session.Meta, 
 		}
 	} else if _, ok := a.mgr.svc.cancelIdleThreadCompactionWithBroadcast(endpointID, threadID); ok {
 	} else {
-		uctx, ucancel := context.WithTimeout(ctx, persistTO)
-		_ = db.UpdateThreadRunState(uctx, endpointID, threadID, "canceled", "", "", "", meta.UserPublicID, meta.UserEmail)
-		ucancel()
 		a.mgr.svc.broadcastThreadSummary(endpointID, threadID)
 	}
 	a.mgr.svc.closeThreadSubagents(ctx, endpointID, threadID, persistTO)

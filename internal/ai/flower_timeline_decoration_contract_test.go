@@ -9,7 +9,7 @@ func TestFlowerTimelineDecorationRejectsPayloadKindMismatchEvenWhenPayloadIsEmpt
 	t.Parallel()
 
 	for _, raw := range []string{
-		`{"decoration_id":"unavailable:1","kind":"turn_projection_unavailable","anchor":{"target_kind":"message","message_id":"user-1","edge":"after"},"ordinal":0,"compaction":{},"projection_unavailable":{"turn_id":"turn-1","run_id":"run-1","expected_message_id":"assistant-1","reason":"not_found"}}`,
+		`{"decoration_id":"unavailable:1","kind":"turn_projection_unavailable","anchor":{"target_kind":"message","message_id":"user-1","edge":"after"},"ordinal":0,"compaction":{},"projection_unavailable":{"turn_id":"turn-1","run_id":"run-1","expected_message_id":"assistant-1","reason":"not_renderable"}}`,
 		`{"decoration_id":"compaction:1","kind":"context_compaction","anchor":{"target_kind":"message","message_id":"assistant-1","edge":"before"},"ordinal":0,"compaction":{"operation_id":"compact-1","phase":"complete","status":"compacted","updated_at_ms":1},"projection_unavailable":null}`,
 	} {
 		var decoration FlowerTimelineDecoration
@@ -30,7 +30,7 @@ func TestFlowerTimelineDecorationRoundTripsUnavailablePayload(t *testing.T) {
 			TurnID:            "turn-1",
 			RunID:             "run-1",
 			ExpectedMessageID: "assistant-1",
-			Reason:            FlowerTurnProjectionUnavailableNotFound,
+			Reason:            FlowerTurnProjectionUnavailableNotRenderable,
 		},
 	}
 	raw, err := json.Marshal(decoration)

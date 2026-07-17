@@ -4860,38 +4860,18 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 
 			out, err := g.ai.ListThreadMessages(r.Context(), meta, threadID, limit, beforeID)
 			if err != nil {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+				status := http.StatusBadRequest
+				code := ""
+				if errors.Is(err, ai.ErrCanonicalTimelineResyncRequired) {
+					status = http.StatusConflict
+					code = ai.CanonicalTimelineResyncErrorCode
+				}
+				writeJSON(w, status, apiResp{OK: false, Error: err.Error(), ErrorCode: code})
 				return
 			}
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
 			return
 
-		case action == "messages" && r.Method == http.MethodPost:
-			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
-			if !ok {
-				return
-			}
-			if g.ai == nil {
-				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
-				return
-			}
-			dec := json.NewDecoder(r.Body)
-			dec.DisallowUnknownFields()
-			var body ai.AppendThreadMessageRequest
-			if err := dec.Decode(&body); err != nil {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			if err := dec.Decode(&struct{}{}); err != io.EOF {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-				return
-			}
-			if err := g.ai.AppendThreadMessage(r.Context(), meta, threadID, body.Role, body.Text, body.Format); err != nil {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
-				return
-			}
-			writeJSON(w, http.StatusOK, apiResp{OK: true})
-			return
 		}
 
 		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
@@ -5010,34 +4990,6 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 				return
 			}
-		}
-
-		if r.Method == http.MethodGet && action == "events" {
-			limit := 300
-			if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
-				if v, err := strconv.Atoi(raw); err == nil && v > 0 {
-					limit = v
-				}
-			}
-			cursor := int64(0)
-			if raw := strings.TrimSpace(r.URL.Query().Get("cursor")); raw != "" {
-				v, err := strconv.ParseInt(raw, 10, 64)
-				if err != nil || v < 0 {
-					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid cursor"})
-					return
-				}
-				cursor = v
-			}
-			out, err := g.ai.ListRunEventsWithQuery(r.Context(), meta, runID, ai.ListRunEventsQuery{
-				Cursor: cursor,
-				Limit:  limit,
-			})
-			if err != nil {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
-				return
-			}
-			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
-			return
 		}
 
 		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})

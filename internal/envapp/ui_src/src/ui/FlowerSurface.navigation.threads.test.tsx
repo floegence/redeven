@@ -1940,10 +1940,11 @@ describe('FlowerSurface navigation threads', () => {
     liveEvents.resolve({
       stream_generation: 1,
       events: [
-        liveEvent('thread-live-complete-read', 1, 'message.committed', {
-          message_id: 'm-live-complete',
-          message: finalThread.messages[0],
-        }),
+		liveEvent('thread-live-complete-read', 1, 'timeline.replaced', {
+		  messages: finalThread.messages,
+		  stream_generation: 1,
+		  snapshot_through_seq: 1,
+		}),
         liveEvent('thread-live-complete-read', 2, 'thread.patched', {
           patch: {
             run_status: 'success',
@@ -2769,17 +2770,18 @@ describe('FlowerSurface navigation threads', () => {
     liveEvents.resolve({
       stream_generation: 1,
       events: [
-        liveEvent('thread-commit-selection', 1, 'message.committed', {
-          message_id: 'message-commit-selection',
-          message: {
-            id: 'message-commit-selection',
-            role: 'assistant',
-            content: 'Committed paragraph.\n\nGrowing tail',
-            status: 'complete',
-            created_at_ms: 7_100,
-            blocks: [{ type: 'markdown', content: 'Committed paragraph.\n\nGrowing tail' }],
-          },
-        }),
+		liveEvent('thread-commit-selection', 1, 'timeline.replaced', {
+		  messages: [{
+			id: 'message-commit-selection',
+			role: 'assistant',
+			content: 'Committed paragraph.\n\nGrowing tail',
+			status: 'complete',
+			created_at_ms: 7_100,
+			blocks: [{ type: 'markdown', content: 'Committed paragraph.\n\nGrowing tail' }],
+		  }],
+		  stream_generation: 1,
+		  snapshot_through_seq: 1,
+		}),
       ],
       next_cursor: 1,
       retained_from_seq: 1,

@@ -21,7 +21,7 @@ describe('Redeven v1 AI codec', () => {
           turn_id: 'turn-1',
           run_id: 'run-1',
           expected_message_id: 'msg-assistant',
-          reason: 'not_found',
+          reason: 'not_renderable',
         },
       }],
       next_after_row_id: 10,
@@ -32,7 +32,7 @@ describe('Redeven v1 AI codec', () => {
       kind: 'turn_projection_unavailable',
       projection_unavailable: expect.objectContaining({
         run_id: 'run-1',
-        reason: 'not_found',
+        reason: 'not_renderable',
       }),
     })]);
   });
