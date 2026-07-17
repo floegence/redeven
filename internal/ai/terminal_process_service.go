@@ -45,9 +45,6 @@ func (s *Service) ReadTerminalProcess(ctx context.Context, meta *session.Meta, r
 	if err := validateTerminalProcessAccess(meta, strings.TrimSpace(runID), snapshot); err != nil {
 		return nil, err
 	}
-	if snapshot.Status != terminalProcessStatusRunning {
-		return nil, errors.New("terminal process is not running")
-	}
 	return &snapshot, nil
 }
 

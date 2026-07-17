@@ -1665,9 +1665,15 @@ describe('FlowerSurface navigation activity', () => {
     await waitFor(() => runtime.textContent?.includes('tick 2') ?? false);
     await waitFor(() => readTerminalProcess.mock.calls.length > 1);
     await waitFor(() => deliveredEmptyBlockSet);
+    await wait(350);
+    const settledTerminalPollCount = readTerminalProcess.mock.calls.length;
+    expect(settledTerminalPollCount).toBeGreaterThanOrEqual(2);
+    await wait(350);
+    expect(readTerminalProcess).toHaveBeenCalledTimes(settledTerminalPollCount);
     expect(runtime.textContent).toContain('tick 1');
     expect(runtime.textContent).toContain('tick 2');
     expect(runtime.textContent).not.toContain('Listening for output...');
+    expect(runtime.textContent).not.toContain('Live output unavailable');
     expect(runtime.querySelector('[data-flower-activity-item-id="terminal-live"]')?.getAttribute('data-flower-activity-status')).toBe('running');
     expect(runtime.querySelector('[data-flower-activity-terminal-panel]')?.classList.contains('flower-activity-terminal-panel-running')).toBe(true);
     expect(runtime.querySelector('[data-flower-activity-terminal-panel]')?.classList.contains('flower-activity-terminal-panel-success')).toBe(false);
