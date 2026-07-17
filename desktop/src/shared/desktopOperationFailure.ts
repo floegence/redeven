@@ -10,10 +10,6 @@ export type DesktopFailureCode =
   | 'ssh_upload_directory_unavailable'
   | 'ssh_runtime_launch_failed'
   | 'ssh_runtime_stop_failed'
-  | 'ssh_forward_unavailable'
-  | 'ssh_forward_verification_timed_out'
-  | 'ssh_forward_network_failed'
-  | 'ssh_forward_invalid_response'
   | 'local_runtime_launch_failed'
   | 'local_runtime_stop_failed'
   | 'runtime_cleanup_failed'
@@ -66,10 +62,6 @@ function normalizeFailureCode(value: unknown): DesktopFailureCode {
     case 'ssh_upload_directory_unavailable':
     case 'ssh_runtime_launch_failed':
     case 'ssh_runtime_stop_failed':
-    case 'ssh_forward_unavailable':
-    case 'ssh_forward_verification_timed_out':
-    case 'ssh_forward_network_failed':
-    case 'ssh_forward_invalid_response':
     case 'local_runtime_launch_failed':
     case 'local_runtime_stop_failed':
     case 'runtime_cleanup_failed':

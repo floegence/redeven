@@ -81,6 +81,7 @@ function fakeBridgeSession() {
     local_ui_url: '',
     runtime_handle: { disconnect: vi.fn(), stop: vi.fn() },
     openStream: vi.fn(),
+    closed: new Promise<void>(() => undefined),
     disconnect: vi.fn(),
     stop: vi.fn(),
   };
