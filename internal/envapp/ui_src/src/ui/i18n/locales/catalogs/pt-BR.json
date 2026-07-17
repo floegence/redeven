@@ -3043,6 +3043,49 @@
     "localOnlyDescription": "Local UI. Não afeta a configuração do tempo de execução.",
     "frontendOnly": "Somente frontend"
   },
+  "connectionRecovery": {
+    "title": {
+      "recovering": "Restaurando a conexão",
+      "recovered": "Conexão restaurada",
+      "failed": "Não foi possível restaurar a conexão"
+    },
+    "summary": {
+      "recovering": "O Redeven está restabelecendo a conexão com este ambiente, e você voltará ao mesmo espaço de trabalho assim que todas as etapas necessárias forem concluídas.",
+      "recovered": "Todas as etapas de conexão necessárias foram concluídas. Retornando ao seu espaço de trabalho.",
+      "failed": "A sessão original do ambiente de execução não pode mais ser usada. Seu espaço de trabalho anterior permanece preservado, mas não é mais possível enviar solicitações por ele."
+    },
+    "steps": {
+      "interrupted": "Conexão interrompida",
+      "desktopTransport": "Recuperação do transporte do Desktop",
+      "runtimeProbe": "Verificação da disponibilidade do ambiente de execução",
+      "protocolConnect": "Conexão de protocolo",
+      "secureSession": "Recuperação da sessão segura",
+      "completed": "Conexão concluída"
+    },
+    "progressLabel": "Progresso da recuperação da conexão",
+    "progress": "{complete} de {total} etapas concluídas",
+    "timelineLabel": "Etapas da recuperação da conexão",
+    "attempts": {
+      "one": "{count} tentativa",
+      "other": "{count} tentativas"
+    },
+    "retryIn": "Nova tentativa em {seconds} s",
+    "retryNow": "Tentar novamente agora",
+    "openConnectionCenter": "Abrir o Centro de Conexão",
+    "technicalDetails": "Detalhes técnicos",
+    "copyDiagnostic": "Copiar diagnóstico",
+    "copiedDiagnostic": "Diagnóstico copiado",
+    "failure": {
+      "runtimeOffline": "O ambiente de execução está offline e não voltou a ficar disponível durante a recuperação.",
+      "runtimeUnavailable": "O ambiente de execução não ficou pronto antes de a recuperação ser encerrada.",
+      "transportUnavailable": "O transporte da conexão não está mais disponível para esta sessão.",
+      "authenticationFailed": "O Desktop não conseguiu autenticar a conexão original com o ambiente de execução.",
+      "missingEnvironmentContext": "A identidade do ambiente necessária para esta sessão está ausente.",
+      "secureSessionFailed": "Não foi possível retomar a sessão segura.",
+      "remoteCommandEnded": "O comando original da ponte para o ambiente de execução remoto foi encerrado.",
+      "processIdentityChanged": "A identidade do ambiente de execução remoto mudou, por isso esta janela não pode ser vinculada novamente com segurança."
+    }
+  },
   "debugConsole": {
     "windowTitle": "Console de depuração",
     "header": {

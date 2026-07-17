@@ -1,6 +1,9 @@
-import { createSignal, createEffect, onCleanup, type Accessor } from 'solid-js';
+import { createEffect, createSignal, on, onCleanup, untrack, type Accessor } from 'solid-js';
+
+import type { DesktopTransportRecoverySnapshot } from '../services/desktopSessionContext';
 
 const WAIT_DELAYS_MS = [2_000, 3_000, 5_000, 8_000, 12_000, 15_000] as const;
+const RECOVERY_SUCCESS_HOLD_MS = 1_500;
 
 export const REMOTE_FAST_RECONNECT_POLICY = {
   enabled: true,
@@ -14,276 +17,490 @@ export const LOCAL_FAST_RECONNECT_POLICY = REMOTE_FAST_RECONNECT_POLICY;
 export type ReconnectAvailabilityStatus = 'online' | 'offline' | 'unknown';
 export type ReconnectAccessStatus = 'ready' | 'locked' | 'unknown';
 
+export type ReconnectFailureCode =
+  | 'runtime_offline'
+  | 'runtime_unavailable'
+  | 'transport_unavailable'
+  | 'authentication_failed'
+  | 'missing_environment_context'
+  | 'secure_session_failed';
+
+export type ReconnectFailure = Readonly<{
+  code: ReconnectFailureCode;
+  retryable: boolean;
+  technical_detail: string;
+  error_code?: string;
+  http_status?: number;
+}>;
+
 export type ReconnectAvailability = Readonly<{
   status: ReconnectAvailabilityStatus;
   access?: ReconnectAccessStatus;
+  failure?: ReconnectFailure;
 }>;
 
-export type ReconnectPhase = 'idle' | 'transport_retry' | 'waiting_for_runtime' | 'reconnecting';
+export type ConnectionRecoveryPhase =
+  | 'interrupted'
+  | 'desktop_transport'
+  | 'runtime_probe'
+  | 'protocol_connect'
+  | 'secure_session'
+  | 'completed'
+  | 'failed';
 
-export type ReconnectFailureKind = 'runtime_offline' | 'runtime_unavailable' | 'transport' | 'fatal';
+export type ConnectionRecoverySnapshot = Readonly<{
+  generation: number;
+  revision: number;
+  state: 'idle' | 'recovering' | 'succeeded' | 'failed';
+  phase: ConnectionRecoveryPhase;
+  started_at_unix_ms?: number;
+  recovered_at_unix_ms?: number;
+  next_retry_at_unix_ms?: number;
+  runtime_probe_attempt_count: number;
+  protocol_attempt_count: number;
+  availability_status: ReconnectAvailabilityStatus;
+  protocol_connected: boolean;
+  secure_session: 'pending' | 'recovering' | 'ready' | 'failed';
+  desktop_transport?: DesktopTransportRecoverySnapshot;
+  failure?: ReconnectFailure;
+}>;
 
-export type ReconnectFailure = Readonly<{
-  kind: ReconnectFailureKind;
-  message: string;
+export type ReconnectDiagnosticEvent = Readonly<{
+  stage: string;
+  code: string;
+  result: string;
+  attempt_seq: number;
 }>;
 
 export type RuntimeReconnectController = Readonly<{
-  phase: Accessor<ReconnectPhase>;
-  failure: Accessor<ReconnectFailure | null>;
-  availabilityStatus: Accessor<ReconnectAvailabilityStatus | null>;
-  nextRetryAtMs: Accessor<number | null>;
+  snapshot: Accessor<ConnectionRecoverySnapshot>;
   activateWaiting: (failure: ReconnectFailure) => void;
-  noteTransportRetry: () => void;
-  noteConnected: () => void;
-  noteBlocked: () => void;
-  requestImmediateTick: () => void;
-  requestReconnectNow: () => void;
+  noteProtocolDiagnostic: (event: ReconnectDiagnosticEvent, failure?: ReconnectFailure) => void;
+  noteProtocolConnecting: () => void;
+  noteProtocolConnected: () => void;
+  noteSecureSession: (state: 'recovering' | 'ready' | 'failed', failure?: ReconnectFailure) => void;
+  requestImmediateRetry: () => Promise<void>;
 }>;
 
 type CreateRuntimeReconnectControllerArgs = Readonly<{
   enabled: Accessor<boolean>;
+  desktopTransport: Accessor<DesktopTransportRecoverySnapshot | null>;
   probeAvailability: () => Promise<ReconnectAvailability>;
   reconnect: () => Promise<void>;
+  requestDesktopRecoveryNow: () => Promise<boolean>;
+  successHoldMs?: number;
 }>;
 
-function trimString(value: unknown): string {
+function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-function normalizeAvailabilityStatus(value: unknown): ReconnectAvailabilityStatus {
-  const status = trimString(value).toLowerCase();
-  if (status === 'online') return 'online';
-  if (status === 'offline') return 'offline';
-  return 'unknown';
-}
-
-function normalizeAccessStatus(value: unknown): ReconnectAccessStatus {
-  const status = trimString(value).toLowerCase();
-  if (status === 'ready') return 'ready';
-  if (status === 'locked') return 'locked';
-  return 'unknown';
+function positiveInteger(value: unknown): number | null {
+  const numberValue = Number(value);
+  return Number.isSafeInteger(numberValue) && numberValue > 0 ? numberValue : null;
 }
 
 function nextWaitDelayMs(attempt: number): number {
-  if (!Number.isFinite(attempt) || attempt <= 0) return WAIT_DELAYS_MS[0];
-  return WAIT_DELAYS_MS[Math.min(Math.floor(attempt), WAIT_DELAYS_MS.length - 1)] ?? WAIT_DELAYS_MS[WAIT_DELAYS_MS.length - 1]!;
+  return WAIT_DELAYS_MS[Math.min(Math.max(0, Math.floor(attempt)), WAIT_DELAYS_MS.length - 1)]!;
+}
+
+function freezeSnapshot(snapshot: ConnectionRecoverySnapshot): ConnectionRecoverySnapshot {
+  return Object.freeze({
+    ...snapshot,
+    ...(snapshot.desktop_transport ? { desktop_transport: snapshot.desktop_transport } : {}),
+    ...(snapshot.failure ? { failure: Object.freeze({ ...snapshot.failure }) } : {}),
+  });
+}
+
+function idleSnapshot(generation = 0, revision = 0): ConnectionRecoverySnapshot {
+  return freezeSnapshot({
+    generation,
+    revision,
+    state: 'idle',
+    phase: 'interrupted',
+    runtime_probe_attempt_count: 0,
+    protocol_attempt_count: 0,
+    availability_status: 'unknown',
+    protocol_connected: false,
+    secure_session: 'pending',
+  });
 }
 
 export function classifyReconnectFailure(error: unknown): ReconnectFailure {
-  const candidate = (error ?? {}) as { code?: unknown; message?: unknown; status?: unknown };
-  const code = trimString(candidate.code).toUpperCase();
-  const status = Number(candidate.status ?? Number.NaN);
-  const message = trimString(candidate.message ?? (error instanceof Error ? error.message : error));
-  const lowerMessage = message.toLowerCase();
+  const candidate = (error ?? {}) as { code?: unknown; message?: unknown; status?: unknown; name?: unknown };
+  const errorCode = compact(candidate.code).toUpperCase();
+  const statusValue = Number(candidate.status);
+  const httpStatus = Number.isInteger(statusValue) && statusValue > 0 ? statusValue : undefined;
+  const technicalDetail = compact(candidate.message ?? (error instanceof Error ? error.message : error));
 
+  if (errorCode === 'AGENT_OFFLINE') {
+    return Object.freeze({
+      code: 'runtime_offline',
+      retryable: true,
+      technical_detail: technicalDetail,
+      error_code: errorCode,
+      ...(httpStatus ? { http_status: httpStatus } : {}),
+    });
+  }
+  if (errorCode === 'AGENT_UNAVAILABLE') {
+    return Object.freeze({
+      code: 'runtime_unavailable',
+      retryable: true,
+      technical_detail: technicalDetail,
+      error_code: errorCode,
+      ...(httpStatus ? { http_status: httpStatus } : {}),
+    });
+  }
   if (
-    code === 'AGENT_OFFLINE'
-    || lowerMessage.includes('runtime is offline')
+    httpStatus === 401
+    || httpStatus === 403
+    || errorCode === 'INVALID_ENV_SESSION'
+    || errorCode === 'MISSING_ENV_SESSION'
+    || errorCode === 'UNAUTHORIZED'
   ) {
-    return {
-      kind: 'runtime_offline',
-      message: 'The runtime is offline. Waiting for it to come back online.',
-    };
+    return Object.freeze({
+      code: 'authentication_failed',
+      retryable: false,
+      technical_detail: technicalDetail,
+      ...(errorCode ? { error_code: errorCode } : {}),
+      ...(httpStatus ? { http_status: httpStatus } : {}),
+    });
   }
-
-  if (
-    code === 'AGENT_UNAVAILABLE'
-    || lowerMessage.includes('failed to deliver grant_server')
-    || lowerMessage.includes('runtime is restarting')
-    || lowerMessage.includes('runtime unavailable')
-  ) {
-    return {
-      kind: 'runtime_unavailable',
-      message: 'The runtime is restarting or not ready yet. Retrying automatically.',
-    };
+  if (errorCode === 'MISSING_ENV_CONTEXT') {
+    return Object.freeze({
+      code: 'missing_environment_context',
+      retryable: false,
+      technical_detail: technicalDetail,
+      error_code: errorCode,
+    });
   }
-
-  if (
-    status === 401
-    || lowerMessage.includes('invalid resume token')
-    || lowerMessage.includes('resume token')
-    || lowerMessage.includes('access password')
-    || lowerMessage.includes('reopen from the control plane')
-    || lowerMessage.includes('missing env context')
-    || lowerMessage.includes('redirecting to the control plane')
-  ) {
-    return {
-      kind: 'fatal',
-      message: message || 'Connection recovery is blocked.',
-    };
+  if (errorCode === 'ENV_SESSION_REDIRECTING' || errorCode === 'ENV_SESSION_REOPEN_REQUIRED') {
+    return Object.freeze({
+      code: 'authentication_failed',
+      retryable: false,
+      technical_detail: technicalDetail,
+      error_code: errorCode,
+    });
   }
-
-  if (code === 'SERVICE_UNAVAILABLE') {
-    return {
-      kind: 'transport',
-      message: 'Control plane is unavailable. Retrying automatically.',
-    };
-  }
-
-  return {
-    kind: 'transport',
-    message: message || 'Connection lost. Retrying automatically.',
-  };
+  return Object.freeze({
+    code: httpStatus === 502 || httpStatus === 503 || httpStatus === 504
+      ? 'runtime_unavailable'
+      : 'transport_unavailable',
+    retryable: true,
+    technical_detail: technicalDetail,
+    ...(errorCode ? { error_code: errorCode } : {}),
+    ...(httpStatus ? { http_status: httpStatus } : {}),
+  });
 }
 
 export function createRuntimeReconnectController(args: CreateRuntimeReconnectControllerArgs): RuntimeReconnectController {
-  const [phase, setPhase] = createSignal<ReconnectPhase>('idle');
-  const [failure, setFailure] = createSignal<ReconnectFailure | null>(null);
-  const [availabilityStatus, setAvailabilityStatus] = createSignal<ReconnectAvailabilityStatus | null>(null);
-  const [nextRetryAtMs, setNextRetryAtMs] = createSignal<number | null>(null);
-
-  let waitAttempt = 0;
-  let lastFailureKey = '';
+  const [snapshot, setSnapshot] = createSignal<ConnectionRecoverySnapshot>(idleSnapshot());
   let waitTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
+  let successTimer: ReturnType<typeof globalThis.setTimeout> | undefined;
   let tickInFlight = false;
+  let lastDiagnosticAttemptSeq = 0;
+
+  const publish = (next: Omit<ConnectionRecoverySnapshot, 'revision'>) => {
+    setSnapshot(freezeSnapshot({ ...next, revision: snapshot().revision + 1 }));
+  };
 
   const clearWaitTimer = () => {
     if (typeof waitTimer !== 'undefined') {
       globalThis.clearTimeout(waitTimer);
       waitTimer = undefined;
     }
-    setNextRetryAtMs(null);
   };
 
-  const resetState = () => {
+  const clearSuccessTimer = () => {
+    if (typeof successTimer !== 'undefined') {
+      globalThis.clearTimeout(successTimer);
+      successTimer = undefined;
+    }
+  };
+
+  const reset = () => {
     clearWaitTimer();
+    clearSuccessTimer();
     tickInFlight = false;
-    waitAttempt = 0;
-    lastFailureKey = '';
-    setPhase('idle');
-    setFailure(null);
-    setAvailabilityStatus(null);
+    const current = snapshot();
+    setSnapshot(idleSnapshot(current.generation, current.revision + 1));
+  };
+
+  const ensureRecovery = (phase: ConnectionRecoveryPhase, failure?: ReconnectFailure) => {
+    const current = snapshot();
+    if (current.state === 'failed') {
+      return;
+    }
+    if (current.state === 'recovering') {
+      publish({
+        ...current,
+        phase,
+        ...(failure ? { failure } : {}),
+      });
+      return;
+    }
+    if (current.state === 'succeeded') {
+      clearSuccessTimer();
+    }
+    publish({
+      generation: current.generation + 1,
+      state: 'recovering',
+      phase,
+      started_at_unix_ms: Date.now(),
+      runtime_probe_attempt_count: 0,
+      protocol_attempt_count: 0,
+      availability_status: 'unknown',
+      protocol_connected: false,
+      secure_session: 'pending',
+      ...(args.desktopTransport() ? { desktop_transport: args.desktopTransport()! } : {}),
+      ...(failure ? { failure } : {}),
+    });
+  };
+
+  const failRecovery = (failure: ReconnectFailure) => {
+    clearWaitTimer();
+    clearSuccessTimer();
+    ensureRecovery('failed', failure);
+    const current = snapshot();
+    publish({
+      ...current,
+      state: 'failed',
+      phase: 'failed',
+      failure,
+      secure_session: failure.code === 'secure_session_failed' || failure.code === 'authentication_failed'
+        ? 'failed'
+        : current.secure_session,
+    });
+  };
+
+  const completeRecovery = () => {
+    const current = snapshot();
+    if (current.state === 'idle' || current.state === 'failed' || current.state === 'succeeded') return;
+    clearWaitTimer();
+    clearSuccessTimer();
+    publish({
+      ...current,
+      state: 'succeeded',
+      phase: 'completed',
+      recovered_at_unix_ms: Date.now(),
+      next_retry_at_unix_ms: undefined,
+      protocol_connected: true,
+      secure_session: 'ready',
+      failure: undefined,
+    });
+    successTimer = globalThis.setTimeout(reset, Math.max(0, args.successHoldMs ?? RECOVERY_SUCCESS_HOLD_MS));
+  };
+
+  const desktopTransportBlocksProbe = () => {
+    const phase = args.desktopTransport()?.phase;
+    return phase === 'waiting' || phase === 'connecting' || phase === 'failed';
   };
 
   const scheduleTick = (delayMs: number, forceReconnect: boolean) => {
-    if (!args.enabled()) return;
+    if (!args.enabled() || snapshot().state === 'failed' || desktopTransportBlocksProbe()) return;
     clearWaitTimer();
-
     const safeDelay = Math.max(0, Math.floor(delayMs));
-    setNextRetryAtMs(Date.now() + safeDelay);
+    const current = snapshot();
+    publish({
+      ...current,
+      phase: 'runtime_probe',
+      next_retry_at_unix_ms: Date.now() + safeDelay,
+    });
     waitTimer = globalThis.setTimeout(() => {
       waitTimer = undefined;
-      setNextRetryAtMs(null);
       void runTick(forceReconnect);
     }, safeDelay);
   };
 
   const runTick = async (forceReconnect: boolean) => {
-    if (!args.enabled() || tickInFlight) return;
-
+    if (!args.enabled() || tickInFlight || snapshot().state === 'failed' || desktopTransportBlocksProbe()) return;
     tickInFlight = true;
     clearWaitTimer();
-
+    const beforeProbe = snapshot();
+    const probeAttemptCount = beforeProbe.runtime_probe_attempt_count + 1;
+    publish({
+      ...beforeProbe,
+      phase: 'runtime_probe',
+      runtime_probe_attempt_count: probeAttemptCount,
+      next_retry_at_unix_ms: undefined,
+    });
     try {
-      let nextAvailability: ReconnectAvailability = { status: 'unknown', access: 'unknown' };
-      try {
-        nextAvailability = args.probeAvailability
-          ? await args.probeAvailability()
-          : { status: 'unknown', access: 'unknown' };
-      } catch {
-        nextAvailability = { status: 'unknown', access: 'unknown' };
-      }
-
-      if (!args.enabled()) {
-        resetState();
+      const availability = await args.probeAvailability();
+      if (!args.enabled() || snapshot().state === 'failed' || desktopTransportBlocksProbe()) return;
+      if (availability.access === 'locked') {
+        failRecovery(availability.failure ?? {
+          code: 'authentication_failed',
+          retryable: false,
+          technical_detail: '',
+        });
         return;
       }
-
-      const nextStatus = normalizeAvailabilityStatus(nextAvailability.status);
-      const nextAccess = normalizeAccessStatus(nextAvailability.access);
-      setAvailabilityStatus(nextStatus === 'unknown' ? null : nextStatus);
-
-      if (nextAccess === 'locked') {
-        setPhase('idle');
+      const current = snapshot();
+      publish({
+        ...current,
+        availability_status: availability.status,
+        ...(availability.failure ? { failure: availability.failure } : {}),
+      });
+      if (!forceReconnect && availability.status === 'offline') {
+        scheduleTick(nextWaitDelayMs(probeAttemptCount), false);
         return;
       }
-
-      const shouldReconnect = forceReconnect || nextStatus !== 'offline';
-      if (!shouldReconnect) {
-        setPhase('waiting_for_runtime');
-        scheduleTick(nextWaitDelayMs(waitAttempt), false);
-        waitAttempt += 1;
+      const beforeReconnect = snapshot();
+      publish({
+        ...beforeReconnect,
+        phase: 'protocol_connect',
+        next_retry_at_unix_ms: undefined,
+      });
+      await args.reconnect();
+    } catch (error) {
+      const failure = classifyReconnectFailure(error);
+      if (!failure.retryable) {
+        failRecovery(failure);
         return;
       }
-
-      setPhase('reconnecting');
-      try {
-        await args.reconnect();
-      } catch {
-        // Reconnect state is reconciled by the caller via protocol status updates.
-      }
+      const current = snapshot();
+      publish({ ...current, failure });
+      scheduleTick(nextWaitDelayMs(current.runtime_probe_attempt_count), false);
     } finally {
       tickInFlight = false;
     }
   };
 
-  createEffect(() => {
-    if (args.enabled()) return;
-    resetState();
-  });
+  createEffect(on([args.enabled, args.desktopTransport], ([enabled, desktop]) => {
+    const currentSnapshot = untrack(snapshot);
+    if (!enabled) {
+      if (currentSnapshot.state !== 'idle') reset();
+      return;
+    }
+    if (!desktop) return;
+    if (desktop.phase === 'waiting' || desktop.phase === 'connecting') {
+      clearWaitTimer();
+      ensureRecovery('desktop_transport', desktop.failure ? {
+        code: desktop.failure.code === 'authentication_failed' ? 'authentication_failed' : 'transport_unavailable',
+        retryable: desktop.failure.code !== 'authentication_failed',
+        technical_detail: desktop.failure.technical_detail,
+        error_code: desktop.failure.code,
+      } : undefined);
+      const current = snapshot();
+      publish({
+        ...current,
+        phase: 'desktop_transport',
+        desktop_transport: desktop,
+        next_retry_at_unix_ms: desktop.next_attempt_at_unix_ms,
+      });
+      return;
+    }
+    if (desktop.phase === 'failed') {
+      failRecovery({
+        code: desktop.failure?.code === 'authentication_failed' ? 'authentication_failed' : 'transport_unavailable',
+        retryable: false,
+        technical_detail: desktop.failure?.technical_detail ?? '',
+        error_code: desktop.failure?.code,
+      });
+      const current = snapshot();
+      publish({ ...current, desktop_transport: desktop });
+      return;
+    }
+    if (currentSnapshot.state === 'recovering' && desktop.recovered_at_unix_ms) {
+      const current = snapshot();
+      publish({ ...current, desktop_transport: desktop });
+      scheduleTick(0, false);
+    }
+  }));
 
   onCleanup(() => {
-    resetState();
+    clearWaitTimer();
+    clearSuccessTimer();
   });
 
   return {
-    phase,
-    failure,
-    availabilityStatus,
-    nextRetryAtMs,
-    activateWaiting: (nextFailure) => {
+    snapshot,
+    activateWaiting: (failure) => {
       if (!args.enabled()) return;
-
-      const normalizedFailure = {
-        kind: nextFailure.kind,
-        message: trimString(nextFailure.message),
-      } satisfies ReconnectFailure;
-      const failureKey = `${normalizedFailure.kind}:${normalizedFailure.message}`;
-      if (normalizedFailure.kind === 'fatal') {
-        setFailure(normalizedFailure);
-        setPhase('idle');
-        clearWaitTimer();
-        lastFailureKey = failureKey;
+      if (!failure.retryable) {
+        failRecovery(failure);
         return;
       }
-
-      if (
-        lastFailureKey === failureKey
-        && (phase() === 'waiting_for_runtime' || phase() === 'reconnecting')
-      ) {
+      ensureRecovery(desktopTransportBlocksProbe() ? 'desktop_transport' : 'runtime_probe', failure);
+      if (!desktopTransportBlocksProbe() && !tickInFlight && typeof waitTimer === 'undefined') {
+        scheduleTick(nextWaitDelayMs(snapshot().runtime_probe_attempt_count), false);
+      }
+    },
+    noteProtocolDiagnostic: (event, failure) => {
+      if (!args.enabled() || event.stage !== 'reconnect') return;
+      const attemptSeq = positiveInteger(event.attempt_seq);
+      if (event.code === 'reconnect_attempt' || event.code === 'reconnect_retry_attempt') {
+        if (!attemptSeq || attemptSeq <= lastDiagnosticAttemptSeq) return;
+        lastDiagnosticAttemptSeq = attemptSeq;
+        ensureRecovery(desktopTransportBlocksProbe() ? 'desktop_transport' : 'protocol_connect');
+        const current = snapshot();
+        publish({
+          ...current,
+          phase: desktopTransportBlocksProbe() ? 'desktop_transport' : 'protocol_connect',
+          protocol_attempt_count: current.protocol_attempt_count + 1,
+          next_retry_at_unix_ms: undefined,
+        });
         return;
       }
-
-      lastFailureKey = failureKey;
-      setFailure(normalizedFailure);
-      setPhase('waiting_for_runtime');
-      scheduleTick(nextWaitDelayMs(waitAttempt), false);
-      waitAttempt += 1;
-    },
-    noteTransportRetry: () => {
-      if (!args.enabled()) return;
-      clearWaitTimer();
-      if (phase() !== 'reconnecting') {
-        setPhase('transport_retry');
+      if (event.code === 'reconnect_exhausted') {
+        const exhaustedFailure = failure ?? {
+          code: 'transport_unavailable',
+          retryable: true,
+          technical_detail: '',
+        };
+        if (!exhaustedFailure.retryable) {
+          failRecovery(exhaustedFailure);
+          return;
+        }
+        ensureRecovery(desktopTransportBlocksProbe() ? 'desktop_transport' : 'runtime_probe', exhaustedFailure);
+        if (!desktopTransportBlocksProbe() && !tickInFlight && typeof waitTimer === 'undefined') {
+          scheduleTick(nextWaitDelayMs(snapshot().runtime_probe_attempt_count), false);
+        }
       }
     },
-    noteConnected: () => {
-      resetState();
+    noteProtocolConnecting: () => {
+      if (!args.enabled() || snapshot().state === 'idle') return;
+      const current = snapshot();
+      publish({ ...current, phase: desktopTransportBlocksProbe() ? 'desktop_transport' : 'protocol_connect' });
     },
-    noteBlocked: () => {
-      resetState();
+    noteProtocolConnected: () => {
+      if (snapshot().state === 'idle') return;
+      const current = snapshot();
+      publish({
+        ...current,
+        phase: current.secure_session === 'ready' ? 'completed' : 'secure_session',
+        protocol_connected: true,
+        availability_status: 'online',
+        next_retry_at_unix_ms: undefined,
+      });
+      if (snapshot().secure_session === 'ready') completeRecovery();
     },
-    requestImmediateTick: () => {
-      if (!args.enabled()) return;
-      if (tickInFlight) return;
-      setPhase('waiting_for_runtime');
-      scheduleTick(0, false);
+    noteSecureSession: (state, failure) => {
+      if (snapshot().state === 'idle') return;
+      if (state === 'failed') {
+        failRecovery(failure ?? {
+          code: 'secure_session_failed',
+          retryable: false,
+          technical_detail: '',
+        });
+        return;
+      }
+      const current = snapshot();
+      publish({
+        ...current,
+        phase: current.protocol_connected ? 'secure_session' : current.phase,
+        secure_session: state,
+      });
+      if (state === 'ready' && snapshot().protocol_connected) completeRecovery();
     },
-    requestReconnectNow: () => {
-      if (!args.enabled()) return;
-      if (tickInFlight) return;
-      setPhase('reconnecting');
+    requestImmediateRetry: async () => {
+      if (snapshot().state === 'failed') return;
+      const desktop = args.desktopTransport();
+      if (desktop?.phase === 'waiting' && desktop.actions.includes('retry_now')) {
+        await args.requestDesktopRecoveryNow();
+        return;
+      }
+      if (desktopTransportBlocksProbe()) return;
       scheduleTick(0, true);
     },
   };

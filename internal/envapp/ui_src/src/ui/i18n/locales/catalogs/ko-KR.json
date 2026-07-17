@@ -3043,6 +3043,49 @@
     "localOnlyDescription": "Local UI 상태에만 적용되며 실행 환경 구성에는 영향을 주지 않습니다.",
     "frontendOnly": "프론트엔드 전용"
   },
+  "connectionRecovery": {
+    "title": {
+      "recovering": "연결 복구 중",
+      "recovered": "연결이 복구됨",
+      "failed": "연결을 복구할 수 없음"
+    },
+    "summary": {
+      "recovering": "Redeven이 이 환경에 다시 연결하고 있습니다. 필요한 단계가 모두 준비되면 기존 작업 공간으로 돌아갑니다.",
+      "recovered": "필요한 연결 단계가 모두 완료되었습니다. 작업 공간으로 돌아갑니다.",
+      "failed": "기존 런타임 세션을 더 이상 사용할 수 없습니다. 이전 작업 공간은 그대로 유지되지만 요청을 보낼 수 없습니다."
+    },
+    "steps": {
+      "interrupted": "연결 중단됨",
+      "desktopTransport": "Desktop 연결 채널 복구",
+      "runtimeProbe": "런타임 가용성 확인",
+      "protocolConnect": "프로토콜 연결",
+      "secureSession": "보안 세션 복구",
+      "completed": "연결 완료"
+    },
+    "progressLabel": "연결 복구 진행률",
+    "progress": "{total}단계 중 {complete}단계 완료",
+    "timelineLabel": "연결 복구 단계",
+    "attempts": {
+      "one": "{count}회 시도",
+      "other": "{count}회 시도"
+    },
+    "retryIn": "{seconds}초 후 다시 시도",
+    "retryNow": "지금 다시 시도",
+    "openConnectionCenter": "연결 센터 열기",
+    "technicalDetails": "기술 세부 정보",
+    "copyDiagnostic": "진단 정보 복사",
+    "copiedDiagnostic": "진단 정보를 복사했습니다.",
+    "failure": {
+      "runtimeOffline": "런타임이 오프라인 상태이며 복구 중에 다시 사용 가능해지지 않았습니다.",
+      "runtimeUnavailable": "복구가 중단되기 전에 런타임이 준비되지 않았습니다.",
+      "transportUnavailable": "이 세션의 연결 채널을 더 이상 사용할 수 없습니다.",
+      "authenticationFailed": "Desktop이 기존 런타임 연결을 인증하지 못했습니다.",
+      "missingEnvironmentContext": "이 세션에 필요한 환경 식별 정보가 없습니다.",
+      "secureSessionFailed": "보안 세션을 재개하지 못했습니다.",
+      "remoteCommandEnded": "기존 원격 런타임 브리지 명령이 종료되었습니다.",
+      "processIdentityChanged": "원격 런타임의 식별 정보가 변경되어 이 창을 안전하게 다시 바인딩할 수 없습니다."
+    }
+  },
   "debugConsole": {
     "windowTitle": "디버그 콘솔",
     "header": {

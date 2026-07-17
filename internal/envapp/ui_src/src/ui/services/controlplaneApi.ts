@@ -89,6 +89,19 @@ class APIError extends Error {
   }
 }
 
+export class EnvSessionRecoveryError extends Error {
+  readonly code: 'MISSING_ENV_CONTEXT' | 'ENV_SESSION_REDIRECTING' | 'ENV_SESSION_REOPEN_REQUIRED';
+
+  constructor(
+    code: EnvSessionRecoveryError['code'],
+    message: string,
+  ) {
+    super(message);
+    this.name = 'EnvSessionRecoveryError';
+    this.code = code;
+  }
+}
+
 const ENV_APP_PATH_PREFIX = '/_redeven_proxy/env';
 const ENV_SESSION_RECOVER_REDIRECT_DEBOUNCE_MS = 5_000;
 const ENV_SESSION_RECOVER_RETRY_WINDOW_MS = 90_000;
@@ -147,10 +160,7 @@ function isEnvSessionUnauthorizedError(e: unknown): boolean {
   if (e.status !== 401) return false;
 
   const code = asString(e.code).toUpperCase();
-  if (code === 'INVALID_ENV_SESSION' || code === 'MISSING_ENV_SESSION' || code === 'UNAUTHORIZED') return true;
-
-  const msg = asString(e.message).toLowerCase();
-  return msg.includes('env_session') || msg.includes('env session');
+  return code === 'INVALID_ENV_SESSION' || code === 'MISSING_ENV_SESSION' || code === 'UNAUTHORIZED';
 }
 
 function isEnvAppPath(pathname: string): boolean {
@@ -202,19 +212,31 @@ function clearEnvSessionRecoverMarker(): void {
 function redirectToControlPlaneForEnvSessionRecovery(envPublicID: string): never {
   const envID = asString(envPublicID);
   if (!envID) {
-    throw new Error('Missing env context. Please reopen from the control plane.');
+    throw new EnvSessionRecoveryError(
+      'MISSING_ENV_CONTEXT',
+      'Missing env context. Please reopen from the control plane.',
+    );
   }
 
   const age = envSessionRecoverAgeMsBestEffort();
   if (age >= 0 && age < ENV_SESSION_RECOVER_REDIRECT_DEBOUNCE_MS) {
-    throw new Error('Session expired. Redirecting to the control plane...');
+    throw new EnvSessionRecoveryError(
+      'ENV_SESSION_REDIRECTING',
+      'Session expired. Redirecting to the control plane...',
+    );
   }
   if (age >= 0 && age < ENV_SESSION_RECOVER_RETRY_WINDOW_MS) {
-    throw new Error('Failed to refresh session. Please reopen from the control plane.');
+    throw new EnvSessionRecoveryError(
+      'ENV_SESSION_REOPEN_REQUIRED',
+      'Failed to refresh session. Please reopen from the control plane.',
+    );
   }
 
   if (envSessionRecoverRedirecting) {
-    throw new Error('Session expired. Redirecting to the control plane...');
+    throw new EnvSessionRecoveryError(
+      'ENV_SESSION_REDIRECTING',
+      'Session expired. Redirecting to the control plane...',
+    );
   }
   envSessionRecoverRedirecting = true;
   markEnvSessionRecoverNow();
@@ -230,7 +252,10 @@ function redirectToControlPlaneForEnvSessionRecovery(envPublicID: string): never
     window.location.replace(target);
   }
 
-  throw new Error('Session expired. Redirecting to the control plane...');
+  throw new EnvSessionRecoveryError(
+    'ENV_SESSION_REDIRECTING',
+    'Session expired. Redirecting to the control plane...',
+  );
 }
 
 async function fetchJSONWithEnvSessionAutoRecover<T>(

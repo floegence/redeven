@@ -19,8 +19,34 @@ export interface DesktopSessionContextSnapshot {
   local_ui_exposure?: LocalUIExposure;
 }
 
+export type DesktopTransportRecoveryFailureCode =
+  | 'transport_interrupted'
+  | 'transport_unavailable'
+  | 'authentication_failed'
+  | 'remote_command_ended'
+  | 'process_identity_changed';
+
+export type DesktopTransportRecoverySnapshot = Readonly<{
+  generation: number;
+  revision: number;
+  phase: 'ready' | 'waiting' | 'connecting' | 'failed';
+  attempt_count: number;
+  started_at_unix_ms?: number;
+  next_attempt_at_unix_ms?: number;
+  recovered_at_unix_ms?: number;
+  failure?: Readonly<{
+    code: DesktopTransportRecoveryFailureCode;
+    error_name: string;
+    technical_detail: string;
+  }>;
+  actions: readonly ('retry_now' | 'open_connection_center')[];
+}>;
+
 export interface DesktopSessionContextBridge {
   getSnapshot: () => DesktopSessionContextSnapshot | null;
+  getTransportRecoverySnapshot?: () => DesktopTransportRecoverySnapshot | null;
+  subscribeTransportRecovery?: (listener: (snapshot: DesktopTransportRecoverySnapshot) => void) => () => void;
+  requestTransportRecoveryNow?: () => Promise<boolean>;
   notifyAppReady?: (payload: {
     state: 'access_gate_interactive' | 'runtime_connected';
     timings?: Readonly<{
@@ -86,6 +112,78 @@ function normalizeDesktopSessionContextSnapshot(value: unknown): DesktopSessionC
   };
 }
 
+function nonNegativeInteger(value: unknown): number | null {
+  const numberValue = Number(value);
+  return Number.isSafeInteger(numberValue) && numberValue >= 0 ? numberValue : null;
+}
+
+function positiveInteger(value: unknown): number | null {
+  const numberValue = Number(value);
+  return Number.isSafeInteger(numberValue) && numberValue > 0 ? numberValue : null;
+}
+
+export function normalizeDesktopTransportRecoverySnapshot(
+  value: unknown,
+): DesktopTransportRecoverySnapshot | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+  const candidate = value as Partial<DesktopTransportRecoverySnapshot>;
+  const generation = nonNegativeInteger(candidate.generation);
+  const revision = nonNegativeInteger(candidate.revision);
+  const attemptCount = nonNegativeInteger(candidate.attempt_count);
+  const phase = compact(candidate.phase);
+  if (
+    generation === null
+    || revision === null
+    || attemptCount === null
+    || (phase !== 'ready' && phase !== 'waiting' && phase !== 'connecting' && phase !== 'failed')
+  ) {
+    return null;
+  }
+  const failure = (() => {
+    if (!candidate.failure || typeof candidate.failure !== 'object') return undefined;
+    const failureCandidate = candidate.failure as Partial<NonNullable<DesktopTransportRecoverySnapshot['failure']>>;
+    const code = compact(failureCandidate.code);
+    if (
+      code !== 'transport_interrupted'
+      && code !== 'transport_unavailable'
+      && code !== 'authentication_failed'
+      && code !== 'remote_command_ended'
+      && code !== 'process_identity_changed'
+    ) {
+      return undefined;
+    }
+    return Object.freeze({
+      code,
+      error_name: compact(failureCandidate.error_name),
+      technical_detail: compact(failureCandidate.technical_detail),
+    });
+  })();
+  if (phase === 'failed' && !failure) {
+    return null;
+  }
+  const actions = Array.isArray(candidate.actions)
+    ? candidate.actions.flatMap((action) => (
+        action === 'retry_now' || action === 'open_connection_center' ? [action] : []
+      ))
+    : [];
+  const startedAtUnixMS = positiveInteger(candidate.started_at_unix_ms);
+  const nextAttemptAtUnixMS = positiveInteger(candidate.next_attempt_at_unix_ms);
+  const recoveredAtUnixMS = positiveInteger(candidate.recovered_at_unix_ms);
+  return Object.freeze({
+    generation,
+    revision,
+    phase,
+    attempt_count: attemptCount,
+    ...(startedAtUnixMS === null ? {} : { started_at_unix_ms: startedAtUnixMS }),
+    ...(nextAttemptAtUnixMS === null ? {} : { next_attempt_at_unix_ms: nextAttemptAtUnixMS }),
+    ...(recoveredAtUnixMS === null ? {} : { recovered_at_unix_ms: recoveredAtUnixMS }),
+    ...(failure ? { failure } : {}),
+    actions: Object.freeze([...new Set(actions)]),
+  });
+}
+
 function isDesktopSessionContextBridge(candidate: unknown): candidate is DesktopSessionContextBridge {
   if (!candidate || typeof candidate !== 'object') {
     return false;
@@ -103,6 +201,57 @@ export function readDesktopSessionContextSnapshot(): DesktopSessionContextSnapsh
     return normalizeDesktopSessionContextSnapshot(bridge.getSnapshot());
   } catch {
     return null;
+  }
+}
+
+export function readDesktopTransportRecoverySnapshot(): DesktopTransportRecoverySnapshot | null {
+  const bridge = readDesktopHostBridge('redevenDesktopSessionContext', isDesktopSessionContextBridge);
+  if (!bridge || typeof bridge.getTransportRecoverySnapshot !== 'function') {
+    return null;
+  }
+  try {
+    return normalizeDesktopTransportRecoverySnapshot(bridge.getTransportRecoverySnapshot());
+  } catch {
+    return null;
+  }
+}
+
+export function subscribeDesktopTransportRecovery(
+  listener: (snapshot: DesktopTransportRecoverySnapshot) => void,
+): () => void {
+  const bridge = readDesktopHostBridge('redevenDesktopSessionContext', isDesktopSessionContextBridge);
+  if (!bridge || typeof bridge.subscribeTransportRecovery !== 'function') {
+    return () => undefined;
+  }
+  let current = readDesktopTransportRecoverySnapshot();
+  return bridge.subscribeTransportRecovery((value) => {
+    const snapshot = normalizeDesktopTransportRecoverySnapshot(value);
+    if (
+      !snapshot
+      || (
+        current
+        && (
+          snapshot.generation < current.generation
+          || (snapshot.generation === current.generation && snapshot.revision <= current.revision)
+        )
+      )
+    ) {
+      return;
+    }
+    current = snapshot;
+    listener(snapshot);
+  });
+}
+
+export async function requestDesktopTransportRecoveryNow(): Promise<boolean> {
+  const bridge = readDesktopHostBridge('redevenDesktopSessionContext', isDesktopSessionContextBridge);
+  if (!bridge || typeof bridge.requestTransportRecoveryNow !== 'function') {
+    return false;
+  }
+  try {
+    return await bridge.requestTransportRecoveryNow() === true;
+  } catch {
+    return false;
   }
 }
 

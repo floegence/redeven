@@ -1,12 +1,15 @@
 // @vitest-environment jsdom
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   desktopRendererStorageScopeID,
   notifyDesktopSessionAppReady,
   readDesktopSessionContextSnapshot,
+  readDesktopTransportRecoverySnapshot,
+  requestDesktopTransportRecoveryNow,
   resolveRendererStorageScopeID,
+  subscribeDesktopTransportRecovery,
 } from './desktopSessionContext';
 
 const originalParent = window.parent;
@@ -147,5 +150,65 @@ describe('desktopSessionContext', () => {
       { state: 'access_gate_interactive' },
       { state: 'runtime_connected', timings: { shell_painted_ms: 42 } },
     ]);
+  });
+
+  it('reads, orders, and controls Desktop transport recovery through the current session bridge', async () => {
+    let recoveryListener: (snapshot: unknown) => void = () => undefined;
+    let subscribed = false;
+    const requestRetry = vi.fn(async () => true);
+    const initialSnapshot = {
+      generation: 4,
+      revision: 8,
+      phase: 'waiting' as const,
+      attempt_count: 2,
+      started_at_unix_ms: 100,
+      next_attempt_at_unix_ms: 200,
+      failure: {
+        code: 'transport_interrupted' as const,
+        error_name: 'DesktopSSHTransportInterruptedError',
+        technical_detail: 'SSH transport was interrupted.',
+      },
+      actions: ['retry_now' as const],
+    };
+    const parentWindow = {
+      location: { origin: window.location.origin },
+      redevenDesktopSessionContext: {
+        getSnapshot: () => ({
+          local_environment_id: 'ssh:demo',
+          renderer_storage_scope_id: 'ssh:demo',
+        }),
+        getTransportRecoverySnapshot: () => initialSnapshot,
+        subscribeTransportRecovery: (listener: (snapshot: unknown) => void) => {
+          recoveryListener = listener;
+          subscribed = true;
+          listener(initialSnapshot);
+          return () => {
+            subscribed = false;
+          };
+        },
+        requestTransportRecoveryNow: requestRetry,
+      },
+    } as unknown as Window;
+    setWindowHierarchy(parentWindow);
+
+    expect(readDesktopTransportRecoverySnapshot()).toEqual(initialSnapshot);
+    const snapshots: unknown[] = [];
+    const unsubscribe = subscribeDesktopTransportRecovery((snapshot) => snapshots.push(snapshot));
+    recoveryListener({ ...initialSnapshot, revision: 7, phase: 'connecting', actions: [] });
+    recoveryListener({
+      ...initialSnapshot,
+      revision: 9,
+      phase: 'ready',
+      attempt_count: 3,
+      recovered_at_unix_ms: 240,
+      actions: [],
+    });
+
+    expect(snapshots).toHaveLength(1);
+    expect(snapshots[0]).toMatchObject({ revision: 9, phase: 'ready', attempt_count: 3 });
+    await expect(requestDesktopTransportRecoveryNow()).resolves.toBe(true);
+    expect(requestRetry).toHaveBeenCalledTimes(1);
+    unsubscribe();
+    expect(subscribed).toBe(false);
   });
 });
