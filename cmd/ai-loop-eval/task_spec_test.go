@@ -169,3 +169,30 @@ tasks:
 		})
 	}
 }
+
+func TestLoadTaskSpecs_RejectsRunEventAssertions(t *testing.T) {
+	t.Parallel()
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "tasks.yaml")
+	content := `version: v2
+
+tasks:
+  - id: event_assertion
+    title: Event Assertion
+    stage: screen
+    turns:
+      - "Inspect ${workspace}"
+    assertions:
+      events:
+        must_include:
+          - "run.end"
+`
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		t.Fatalf("write task spec: %v", err)
+	}
+
+	if _, err := loadTaskSpecs(path); err == nil {
+		t.Fatalf("expected run event assertions to be rejected")
+	}
+}

@@ -7,21 +7,6 @@ import (
 	"github.com/floegence/redeven/internal/ai"
 )
 
-func TestDetectPhasePingPong(t *testing.T) {
-	t.Parallel()
-	flow := []string{
-		"completion:needs_synthesis_after_tool_calls",
-		"task:analysis_requires_more_evidence",
-		"completion:needs_synthesis_after_tool_calls",
-		"task:analysis_requires_more_evidence",
-		"completion:needs_synthesis_after_tool_calls",
-		"task:analysis_requires_more_evidence",
-	}
-	if !detectPhasePingPong(flow) {
-		t.Fatalf("expected ping-pong detection")
-	}
-}
-
 func TestEvaluateGate_RejectBelowBaseline(t *testing.T) {
 	t.Parallel()
 
@@ -79,10 +64,6 @@ func TestAssessTaskOutcome_PassesStructuredFlowerAssertions(t *testing.T) {
 				MustNotCall: []string{"apply_patch"},
 				MaxCalls:    6,
 			},
-			Events: taskEventAssertions{
-				MustInclude: []string{"todos.updated"},
-				HardFail:    []string{"signal.recovery.attempt"},
-			},
 			Todos: taskTodoAssertions{
 				RequireSnapshot:             true,
 				RequireNonEmpty:             true,
@@ -101,7 +82,6 @@ func TestAssessTaskOutcome_PassesStructuredFlowerAssertions(t *testing.T) {
 			PermissionType: "approval_required",
 			WaitingPrompt:  false,
 		},
-		EventCounts: map[string]int{"todos.updated": 1},
 		rawToolCalls: []canonicalToolCall{
 			{ToolName: "terminal.exec", Status: "success"},
 			{ToolName: "write_todos", Status: "success", ArgsJSON: `{"todos":[{"content":"Inspect repo","status":"in_progress"},{"content":"Summarize risk","status":"pending"},{"content":"Verify command","status":"pending"}]}`},
@@ -132,12 +112,10 @@ func TestAssessTaskOutcome_FallbackFails(t *testing.T) {
 		ID: "t1",
 		Assertions: taskAssertionsSpec{
 			Output: taskOutputAssertions{
-				RequireEvidence: true,
-				MustContain:     []string{"conclusion"},
-				Forbidden:       []string{"No response"},
-			},
-			Events: taskEventAssertions{
-				HardFail: []string{"signal.recovery.attempt"},
+				RequireEvidence:        true,
+				MustContain:            []string{"conclusion"},
+				Forbidden:              []string{"No response"},
+				MustNotEndWithFallback: true,
 			},
 		},
 	}
@@ -155,45 +133,60 @@ func TestAssessTaskOutcome_FallbackFails(t *testing.T) {
 	}
 }
 
-func TestAssessTaskOutcome_CurrentRuntimeEventsFailGate(t *testing.T) {
+func TestAssessTaskOutcome_StreamMonitorAbortFailsLoopSafety(t *testing.T) {
 	t.Parallel()
 
 	task := evalTask{
-		ID: "current_events",
-		Assertions: taskAssertionsSpec{
-			Events: taskEventAssertions{
-				HardFail: []string{"completion.attempt", "signal.recovery.attempt"},
-			},
-		},
+		ID: "stream_monitor_abort",
 	}
 	result := taskResult{
 		Task:      task,
 		FinalText: "Final answer with enough content.",
 		Turns: []turnMetrics{{
-			CompletionRetrys: 1,
-			TaskLoopContinue: 1,
+			MonitorAbort: "tool_signature_loop",
 		}},
 	}
 	outcome := assessTaskOutcome(task, result)
 	if outcome.Passed {
-		t.Fatalf("expected current hard-fail runtime events to fail")
+		t.Fatalf("expected stream monitor abort to fail")
 	}
-	reasons := strings.Join(outcome.HardFailReasons, ",")
-	for _, want := range []string{"completion_attempt_rejected", "signal_recovery_attempt"} {
-		if !strings.Contains(reasons, want) {
-			t.Fatalf("hard fail reasons %q missing %q", reasons, want)
-		}
+	if outcome.LoopSafe {
+		t.Fatalf("expected stream monitor abort to mark loop unsafe")
+	}
+	if reasons := strings.Join(outcome.HardFailReasons, ","); !strings.Contains(reasons, "monitor_abort:tool_signature_loop") {
+		t.Fatalf("hard fail reasons %q missing monitor abort", reasons)
 	}
 }
 
-func TestExtractReasonFromPayload_UsesCurrentEventFields(t *testing.T) {
+func TestAssessTaskOutcome_CanonicalToolErrorMarksSuccessfulRecovery(t *testing.T) {
 	t.Parallel()
 
-	if got := extractReasonFromPayload(map[string]any{"gate_reason": "missing_verified_tool_work"}); got != "missing_verified_tool_work" {
-		t.Fatalf("gate reason = %q", got)
+	result := taskResult{
+		FinalText: "The retry completed and produced the requested result.",
+		Turns:     []turnMetrics{{ToolErrorCount: 1}},
 	}
-	if got := extractReasonFromPayload(map[string]any{"source": "text_only_continuation"}); got != "text_only_continuation" {
-		t.Fatalf("source reason = %q", got)
+	outcome := assessTaskOutcome(evalTask{ID: "tool_error_recovery"}, result)
+	if !outcome.Passed || !outcome.LoopSafe {
+		t.Fatalf("expected recovered tool error to pass safely, got %+v", outcome)
+	}
+	if !outcome.RecoveryCandidate || !outcome.RecoverySucceeded {
+		t.Fatalf("expected recovered tool error to count as successful recovery, got %+v", outcome)
+	}
+}
+
+func TestAssessTaskOutcome_RunErrorFailsTask(t *testing.T) {
+	t.Parallel()
+
+	result := taskResult{
+		FinalText: "The run stopped before it could complete the requested work.",
+		Turns:     []turnMetrics{{RunError: "provider unavailable"}},
+	}
+	outcome := assessTaskOutcome(evalTask{ID: "run_error"}, result)
+	if outcome.Passed {
+		t.Fatalf("expected run error to fail task")
+	}
+	if reasons := strings.Join(outcome.HardFailReasons, ","); !strings.Contains(reasons, "run_error") {
+		t.Fatalf("hard fail reasons %q missing run error", reasons)
 	}
 }
 

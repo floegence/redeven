@@ -44,7 +44,6 @@ type taskAssertionsSpec struct {
 	Output taskOutputAssertions `yaml:"output"`
 	Thread taskThreadAssertions `yaml:"thread"`
 	Tools  taskToolAssertions   `yaml:"tools"`
-	Events taskEventAssertions  `yaml:"events"`
 	Todos  taskTodoAssertions   `yaml:"todos"`
 }
 
@@ -69,12 +68,6 @@ type taskToolAssertions struct {
 	MustSucceed          []string `yaml:"must_succeed"`
 	WorkspaceScopedTools []string `yaml:"workspace_scoped_tools"`
 	MaxCalls             int      `yaml:"max_calls"`
-}
-
-type taskEventAssertions struct {
-	MustInclude []string `yaml:"must_include"`
-	MustNotHave []string `yaml:"must_not_include"`
-	HardFail    []string `yaml:"hard_fail"`
 }
 
 type taskTodoAssertions struct {
@@ -199,9 +192,6 @@ func normalizeTaskSpecItem(item taskSpecItem, specDir string) (evalTask, error) 
 	assertions.Tools.MustNotCall = normalizeStringSlice(assertions.Tools.MustNotCall)
 	assertions.Tools.MustSucceed = normalizeStringSlice(assertions.Tools.MustSucceed)
 	assertions.Tools.WorkspaceScopedTools = normalizeStringSlice(assertions.Tools.WorkspaceScopedTools)
-	assertions.Events.MustInclude = normalizeStringSlice(assertions.Events.MustInclude)
-	assertions.Events.MustNotHave = normalizeStringSlice(assertions.Events.MustNotHave)
-	assertions.Events.HardFail = normalizeStringSlice(assertions.Events.HardFail)
 
 	waitingPrompt := strings.TrimSpace(strings.ToLower(assertions.Thread.WaitingPrompt))
 	switch waitingPrompt {
