@@ -72,6 +72,7 @@ main() {
     ui_pkg_run_pnpm run test:browser -- \
       src/ui/FlowerSurface.approvalRefresh.browser.test.tsx \
       src/ui/FlowerSurface.activityDisclosure.browser.test.tsx \
+      src/ui/FlowerSurface.setupGuide.browser.test.tsx \
       src/ui/widgets/FlowerTurnLauncherWindow.browser.test.tsx \
       src/ui/widgets/TerminalWorkbenchInputPlane.browser.test.tsx \
       src/ui/flower/SubagentDetailWindow.boundary.browser.test.tsx

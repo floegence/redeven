@@ -7339,8 +7339,6 @@ html.dark .flower-subagent-detail-window {
   flex-direction: column;
   align-items: center;
   gap: 0.85rem;
-  background:
-    radial-gradient(circle at 50% 0%, color-mix(in srgb, var(--primary) 8%, transparent), transparent 44%);
   padding: 1.25rem 1.6rem;
   text-align: center;
 }
