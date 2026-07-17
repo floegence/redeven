@@ -4167,33 +4167,15 @@
       "mode": "방법"
     },
     "chat": {
-      "fileActions": "파일 작업",
-      "previewFile": "미리보기 파일",
-      "browseFolder": "폴더 찾아보기",
-      "failureReason": "실패 이유",
-      "subagents": "하위 에이전트",
-      "openSubagentMessages": "하위 에이전트 메시지 열기",
       "download": "다운로드",
-      "renderingDiagram": "렌더링 다이어그램...",
-      "removeAttachment": "첨부파일 삭제",
+      "renderingDiagram": "다이어그램 렌더링 중...",
+      "removeAttachment": "첨부 파일 삭제",
       "attachFiles": "파일 첨부",
       "loadingHistory": "기록 로드 중...",
-      "mention": "언급하다",
+      "mention": "멘션",
       "assistantResponding": "어시스턴트가 응답 중입니다.",
-      "truncated": "일부 생략됨",
-      "noTextualDiff": "표시할 텍스트 차이가 없습니다",
-      "searchResults": "검색 결과",
-      "searchResultCount": {
-        "one": "결과 {count}개",
-        "other": "결과 {count}개"
-      },
-      "result": "결과",
       "input": "입력",
-      "fileFallback": "파일",
-      "previewTarget": "{target} 미리보기",
-      "browseFolderForTarget": "{target}의 폴더 찾아보기",
-      "browseFiles": "파일 찾아보기",
-      "openSubagentMessagesFor": "{name}의 하위 에이전트 메시지 열기"
+      "browseFiles": "파일 찾아보기"
     },
     "audit": {
       "title": "감사 로그",

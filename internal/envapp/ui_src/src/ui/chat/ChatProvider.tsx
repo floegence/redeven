@@ -24,11 +24,6 @@ import type {
   ChatCallbacks,
   VirtualListConfig,
   StreamEvent,
-  ActivityAttentionReason,
-  ActivityItem,
-  ActivityItemSeverity,
-  ActivityItemStatus,
-  ActivityTimelineBlock,
 } from './types';
 import { DEFAULT_VIRTUAL_LIST_CONFIG } from './types';
 import { createClientId } from '../utils/clientId';
@@ -46,117 +41,6 @@ function deferNonBlocking(fn: () => void): void {
   } else {
     Promise.resolve().then(fn);
   }
-}
-
-function activityStatusRank(status: string | undefined): number {
-  switch (String(status ?? '').trim()) {
-    case 'error':
-      return 5;
-    case 'waiting':
-      return 4;
-    case 'running':
-      return 3;
-    case 'pending':
-      return 2;
-    case 'success':
-      return 1;
-    default:
-      return 0;
-  }
-}
-
-function activitySeverityRank(severity: string | undefined): number {
-  switch (String(severity ?? '').trim()) {
-    case 'error':
-      return 4;
-    case 'blocking':
-      return 3;
-    case 'warning':
-      return 2;
-    case 'normal':
-      return 1;
-    default:
-      return 0;
-  }
-}
-
-function rollupActivityStatus(items: ActivityItem[]): ActivityItemStatus {
-  let status: ActivityItemStatus = 'success';
-  for (const item of items) {
-    if (activityStatusRank(item.status) > activityStatusRank(status)) {
-      status = item.status;
-    }
-  }
-  return status;
-}
-
-function rollupActivitySeverity(items: ActivityItem[]): ActivityItemSeverity {
-  let severity: ActivityItemSeverity = 'quiet';
-  for (const item of items) {
-    const next: ActivityItemSeverity = item.severity ?? (item.status === 'error' ? 'error' : 'quiet');
-    if (activitySeverityRank(next) > activitySeverityRank(severity)) {
-      severity = next;
-    }
-  }
-  return severity;
-}
-
-function updateActivityApprovalItems(items: ActivityItem[], toolId: string, approved: boolean): {
-  items: ActivityItem[];
-  changed: boolean;
-} {
-  let changed = false;
-  const nextItems = items.map((item) => {
-    if (
-      String(item.tool_id ?? '').trim() !== toolId ||
-      item.requires_approval !== true ||
-      item.approval_state !== 'requested'
-    ) {
-      return item;
-    }
-    changed = true;
-    return approved
-      ? {
-        ...item,
-        approval_state: 'approved' as const,
-        status: 'running' as const,
-        severity: 'normal' as const,
-        needs_attention: true,
-        attention_reasons: ['running'] satisfies ActivityAttentionReason[],
-      }
-      : {
-        ...item,
-        approval_state: 'rejected' as const,
-        status: 'error' as const,
-        severity: 'error' as const,
-        needs_attention: true,
-        attention_reasons: ['error'] satisfies ActivityAttentionReason[],
-      };
-  });
-  return { items: nextItems, changed };
-}
-
-function updateActivityApprovalSummary(block: ActivityTimelineBlock, items: ActivityItem[]): ActivityTimelineBlock['summary'] {
-  const status = rollupActivityStatus(items);
-  const severity = rollupActivitySeverity(items);
-  const counts: ActivityTimelineBlock['summary']['counts'] = {};
-  for (const item of items) {
-    if (item.status === 'pending') counts.pending = (counts.pending ?? 0) + 1;
-    if (item.status === 'running') counts.running = (counts.running ?? 0) + 1;
-    if (item.status === 'waiting') counts.waiting = (counts.waiting ?? 0) + 1;
-    if (item.status === 'success') counts.success = (counts.success ?? 0) + 1;
-    if (item.status === 'error') counts.error = (counts.error ?? 0) + 1;
-    if (item.status === 'canceled') counts.canceled = (counts.canceled ?? 0) + 1;
-    if (item.requires_approval) counts.approval = (counts.approval ?? 0) + 1;
-  }
-  return {
-    ...block.summary,
-    status,
-    severity,
-    needs_attention: items.some((item) => item.needs_attention || item.status === 'running' || item.status === 'waiting' || item.status === 'error'),
-    total_items: block.summary.total_items || items.length,
-    counts,
-  };
 }
 
 // ---- Context value type ----
@@ -183,7 +67,6 @@ export interface ChatContextValue {
   setMessages: (messages: Message[]) => void;
   handleStreamEvent: (event: StreamEvent) => void;
   uploadAttachment: (file: File) => Promise<string>;
-  approveToolCall: (messageId: string, toolId: string, approved: boolean) => void;
   scrollToBottomRequest: Accessor<FollowBottomRequest | null>;
   requestScrollToBottom: (options?: ScrollToBottomRequestOptions) => void;
 
@@ -483,27 +366,6 @@ export const ChatProvider: ParentComponent<ChatProviderProps> = (props) => {
     uploadAttachment: async (file) => {
       const onUpload = props.callbacks?.onUploadAttachment;
       return onUpload ? await onUpload(file) : URL.createObjectURL(file);
-    },
-
-    approveToolCall: (messageId, toolId, approved) => {
-      updateMessage(messageId, (msg) => ({
-        ...msg,
-        blocks: msg.blocks.map((block) => {
-          if (block.type === 'activity-timeline') {
-            const { items, changed } = updateActivityApprovalItems(block.items, toolId, approved);
-            return changed ? { ...block, items, summary: updateActivityApprovalSummary(block, items) } : block;
-          }
-          return block;
-        }),
-      }));
-
-      const onApproval = props.callbacks?.onToolApproval;
-      if (!onApproval) return;
-      deferNonBlocking(() => {
-        Promise.resolve(onApproval(messageId, toolId, approved)).catch((err) => {
-          console.error('Failed to approve tool call:', err);
-        });
-      });
     },
 
     scrollToBottomRequest,

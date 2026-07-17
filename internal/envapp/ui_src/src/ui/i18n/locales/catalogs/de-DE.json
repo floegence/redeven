@@ -4167,33 +4167,15 @@
       "mode": "Modus"
     },
     "chat": {
-      "fileActions": "Dateiaktionen",
-      "previewFile": "Vorschaudatei",
-      "browseFolder": "Ordner durchsuchen",
-      "failureReason": "Fehlergrund",
-      "subagents": "Subagenten",
-      "openSubagentMessages": "Öffnen Sie Subagentennachrichten",
       "download": "Herunterladen",
-      "renderingDiagram": "Rendering-Diagramm...",
+      "renderingDiagram": "Diagramm wird gerendert...",
       "removeAttachment": "Anhang entfernen",
       "attachFiles": "Dateien anhängen",
       "loadingHistory": "Verlauf wird geladen...",
-      "mention": "Erwähnen",
+      "mention": "Erwähnung",
       "assistantResponding": "Der Assistent antwortet",
-      "truncated": "gekürzt",
-      "noTextualDiff": "Keine Textunterschiede",
-      "searchResults": "Suchergebnisse",
-      "searchResultCount": {
-        "one": "{count} Ergebnis",
-        "other": "{count} Ergebnisse"
-      },
-      "result": "Ergebnis",
       "input": "Eingabe",
-      "fileFallback": "Datei",
-      "previewTarget": "{target} in der Vorschau anzeigen",
-      "browseFolderForTarget": "Ordner von {target} öffnen",
-      "browseFiles": "Dateien durchsuchen",
-      "openSubagentMessagesFor": "Subagent-Nachrichten für {name} öffnen"
+      "browseFiles": "Dateien durchsuchen"
     },
     "audit": {
       "title": "Audit-Protokoll",

@@ -89,91 +89,6 @@ export interface ThinkingBlock {
   duration?: number;
 }
 
-export interface ActivityChip {
-  kind: string;
-  label: string;
-  value?: string;
-  tone?: string;
-}
-
-export interface ActivityTargetRef {
-  kind: string;
-  label: string;
-  uri?: string;
-  line?: number;
-}
-
-export type ActivityItemStatus = 'pending' | 'running' | 'waiting' | 'success' | 'error' | 'canceled';
-export type ActivityItemKind = 'tool' | 'hosted_tool' | 'control' | 'budget';
-export type ActivityItemSeverity = 'quiet' | 'normal' | 'warning' | 'error' | 'blocking';
-export type ActivityAttentionReason = 'running' | 'waiting' | 'approval' | 'error';
-export type ActivityApprovalState = 'requested' | 'approved' | 'rejected' | 'timed_out' | 'canceled';
-
-export interface ActivityItem {
-  item_id: string;
-  tool_id?: string;
-  tool_name?: string;
-  kind: ActivityItemKind;
-  status: ActivityItemStatus;
-  severity?: ActivityItemSeverity;
-  needs_attention: boolean;
-  attention_reasons?: ActivityAttentionReason[];
-  requires_approval: boolean;
-  approval_state?: ActivityApprovalState;
-  started_at_unix_ms?: number;
-  ended_at_unix_ms?: number;
-  metadata?: Record<string, string>;
-  label?: string;
-  description?: string;
-  renderer?: string;
-  chips?: ActivityChip[];
-  target_refs?: ActivityTargetRef[];
-  payload?: unknown;
-}
-
-export interface ActivityFileAction {
-  action_id: string;
-  display_name: string;
-  can_preview: boolean;
-  can_browse_directory: boolean;
-}
-
-export interface ActivityTimelineBlock {
-  type: 'activity-timeline';
-  schema_version: number;
-  run_id?: string;
-  thread_id?: string;
-  turn_id?: string;
-  trace_id?: string;
-  summary: {
-    status: ActivityItemStatus;
-    severity: ActivityItemSeverity;
-    needs_attention: boolean;
-    attention_reasons?: ActivityAttentionReason[];
-    total_items: number;
-    counts: {
-      pending?: number;
-      running?: number;
-      waiting?: number;
-      success?: number;
-      error?: number;
-      canceled?: number;
-      approval?: number;
-    };
-    duration_ms?: number;
-  };
-  items: ActivityItem[];
-  file_actions?: Record<string, ActivityFileAction>;
-}
-
-export interface ActivityFileActionOpenRequest {
-  thread_id?: string;
-  message_id: string;
-  block_index: number;
-  item_id: string;
-  action_id: string;
-}
-
 export interface TodosBlock {
   type: 'todos';
   version: number;
@@ -222,7 +137,6 @@ export type MessageBlock =
   | ShellBlock
   | FileBlock
   | ThinkingBlock
-  | ActivityTimelineBlock
   | TodosBlock
   | SourcesBlock
   | RequestUserInputResponseBlock;
@@ -307,8 +221,6 @@ export interface ChatConfig {
   userAvatar?: ChatAvatar;
   assistantAvatar?: ChatAvatar;
   renderMessageOrnament?: Component<MessageOrnamentRenderProps>;
-  onActivityFilePreview?: (request: ActivityFileActionOpenRequest) => void | Promise<void>;
-  onActivityDirectoryBrowse?: (request: ActivityFileActionOpenRequest) => void | Promise<void>;
   showListWorkingIndicator?: boolean;
   placeholder?: string;
   allowAttachments?: boolean;
@@ -330,7 +242,6 @@ export interface ChatCallbacks {
   onLoadMore?: () => Promise<Message[]>;
   onRetry?: (messageId: string) => void;
   onUploadAttachment?: (file: File) => Promise<string>;
-  onToolApproval?: (messageId: string, toolId: string, approved: boolean) => Promise<void> | void;
   onChecklistChange?: (
     messageId: string,
     blockIndex: number,

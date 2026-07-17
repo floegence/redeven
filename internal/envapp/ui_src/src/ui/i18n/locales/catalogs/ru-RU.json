@@ -4263,35 +4263,15 @@
       "mode": "Режим"
     },
     "chat": {
-      "fileActions": "Действия с файлами",
-      "previewFile": "Предварительный просмотр файла",
-      "browseFolder": "Просмотреть папку",
-      "failureReason": "Причина отказа",
-      "subagents": "Субагенты",
-      "openSubagentMessages": "Открыть сообщения субагента",
       "download": "Скачать",
-      "renderingDiagram": "Диаграмма рендеринга...",
+      "renderingDiagram": "Отрисовка диаграммы...",
       "removeAttachment": "Удалить вложение",
       "attachFiles": "Прикрепить файлы",
       "loadingHistory": "Загрузка истории...",
-      "mention": "Упомянуть",
+      "mention": "Упоминание",
       "assistantResponding": "Ассистент отвечает",
-      "truncated": "обрезано",
-      "noTextualDiff": "Текстовых различий нет",
-      "searchResults": "Результаты поиска",
-      "searchResultCount": {
-        "one": "{count} результат",
-        "few": "{count} результата",
-        "many": "{count} результатов",
-        "other": "{count} результата"
-      },
-      "result": "Результат",
       "input": "Ввод",
-      "fileFallback": "файл",
-      "previewTarget": "Предпросмотр: {target}",
-      "browseFolderForTarget": "Открыть папку для {target}",
-      "browseFiles": "Просмотреть файлы",
-      "openSubagentMessagesFor": "Открыть сообщения субагента {name}"
+      "browseFiles": "Просмотреть файлы"
     },
     "audit": {
       "title": "Журнал аудита",

@@ -12,6 +12,5 @@ export { ChecklistBlock, type ChecklistBlockProps } from './ChecklistBlock';
 export { ShellBlock, type ShellBlockProps } from './ShellBlock';
 export { FileBlock, type FileBlockProps } from './FileBlock';
 export { ThinkingBlock, type ThinkingBlockProps } from './ThinkingBlock';
-export { ActivityTimelineBlock, type ActivityTimelineBlockProps } from './ActivityTimelineBlock';
 export { TodosBlock, type TodosBlockProps } from './TodosBlock';
 export { SourcesBlock, type SourcesBlockProps } from './SourcesBlock';

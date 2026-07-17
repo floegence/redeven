@@ -407,6 +407,137 @@ describe('Flower activity disclosure browser behavior', () => {
     await waitFor(() => runtime.querySelector('.flower-activity-inline-details') === null);
   });
 
+  it('keeps a late Todo presentation interactive on the same activity row', async () => {
+    await page.viewport(1440, 900);
+    const runningActivity = activityTimeline({
+      run_id: 'run-late-todo',
+      turn_id: 'm-late-todo',
+      status: 'running',
+      severity: 'normal',
+      needs_attention: true,
+      items: [activityItem({
+        item_id: 'todo-late',
+        tool_id: 'todo-late',
+        tool_name: 'update_todos',
+        status: 'running',
+        severity: 'normal',
+        needs_attention: true,
+      })],
+    });
+    const completedActivity = activityTimeline({
+      run_id: 'run-late-todo',
+      turn_id: 'm-late-todo',
+      status: 'success',
+      severity: 'quiet',
+      items: [activityItem({
+        item_id: 'todo-late',
+        tool_id: 'todo-late',
+        tool_name: 'update_todos',
+        status: 'success',
+        severity: 'quiet',
+        renderer: 'todos',
+        payload: {
+          todos: [{ id: 'todo-1', content: 'Inspect the activity contract', status: 'completed' }],
+        },
+      })],
+    });
+    const canonicalActivity = activityTimeline({
+      run_id: 'run-late-todo',
+      turn_id: 'm-late-todo',
+      status: 'success',
+      severity: 'quiet',
+      items: [activityItem({
+        item_id: 'todo-late',
+        tool_id: 'todo-late',
+        tool_name: 'update_todos',
+        status: 'success',
+        severity: 'quiet',
+        renderer: 'todos',
+        payload: {
+          todos: [{ id: 'todo-1', content: 'Canonical Todo presentation', status: 'completed' }],
+        },
+      })],
+    });
+    const runningThread = thread({
+      thread_id: 'thread-late-todo',
+      title: 'Late Todo presentation',
+      status: 'running',
+      active_run_id: 'run-late-todo',
+      messages: [{
+        id: 'm-late-todo',
+        role: 'assistant',
+        content: '',
+        status: 'streaming',
+        created_at_ms: 10_000,
+        blocks: [runningActivity],
+      }],
+    });
+    const firstEvents = deferred<FlowerLiveEventsResponse>();
+    const secondEvents = deferred<FlowerLiveEventsResponse>();
+    let liveEventCall = 0;
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [runningThread]),
+      loadThread: vi.fn(async () => liveBootstrap(runningThread, 0)),
+      listThreadLiveEvents: vi.fn(() => {
+        liveEventCall += 1;
+        return liveEventCall === 1 ? firstEvents.promise : secondEvents.promise;
+      }),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-late-todo"] button')));
+    (runtime.querySelector('[data-thread-id="thread-late-todo"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-activity-item-id="todo-late"]')));
+    const activityRow = runtime.querySelector('[data-flower-activity-item-id="todo-late"]');
+    const button = runtime.querySelector('.flower-activity-inline-button') as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+    expect(button.getAttribute('aria-expanded')).toBeNull();
+
+    firstEvents.resolve({
+      stream_generation: 1,
+      events: [liveEvent('thread-late-todo', 1, 'message.block_set', {
+        message_id: 'm-late-todo',
+        block_index: 0,
+        block: { type: 'activity-timeline', block: completedActivity },
+      })],
+      next_cursor: 1,
+      retained_from_seq: 1,
+    });
+
+    await waitFor(() => button.disabled === false);
+    expect(runtime.querySelector('[data-flower-activity-item-id="todo-late"]')).toBe(activityRow);
+    button.click();
+    await waitFor(() => button.getAttribute('aria-expanded') === 'true');
+    expect(runtime.textContent).toContain('Inspect the activity contract');
+
+    secondEvents.resolve({
+      stream_generation: 1,
+      events: [liveEvent('thread-late-todo', 2, 'timeline.replaced', {
+        messages: [{
+          id: 'm-late-todo',
+          role: 'assistant',
+          content: '',
+          status: 'complete',
+          created_at_ms: 10_000,
+          blocks: [canonicalActivity],
+        }],
+        stream_generation: 1,
+        snapshot_through_seq: 2,
+        thread_patch: { run_status: 'success' },
+      })],
+      next_cursor: 2,
+      retained_from_seq: 1,
+    });
+
+    await waitFor(() => runtime.textContent?.includes('Canonical Todo presentation') === true);
+    expect(runtime.querySelector('[data-flower-activity-item-id="todo-late"]')).toBe(activityRow);
+    expect(runtime.querySelector('.flower-activity-inline-button')).toBe(button);
+    button.click();
+    await waitFor(() => button.getAttribute('aria-expanded') === 'false');
+    button.click();
+    await waitFor(() => button.getAttribute('aria-expanded') === 'true');
+  });
+
   it.each(disclosureInterventions)('keeps automatically opened detail pinned after %s intervention', async (intervention) => {
     await page.viewport(1440, 900);
     const { runtime, complete } = renderDisclosureThread();

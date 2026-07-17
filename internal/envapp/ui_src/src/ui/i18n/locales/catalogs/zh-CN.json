@@ -4167,12 +4167,6 @@
       "mode": "模式"
     },
     "chat": {
-      "fileActions": "文件操作",
-      "previewFile": "预览文件",
-      "browseFolder": "浏览文件夹",
-      "failureReason": "失败原因",
-      "subagents": "子代理",
-      "openSubagentMessages": "打开子代理消息",
       "download": "下载",
       "renderingDiagram": "渲染图...",
       "removeAttachment": "删除附件",
@@ -4180,20 +4174,8 @@
       "loadingHistory": "加载历史记录...",
       "mention": "提及",
       "assistantResponding": "助手正在回复",
-      "truncated": "已截断",
-      "noTextualDiff": "没有可显示的文本差异",
-      "searchResults": "搜索结果",
-      "searchResultCount": {
-        "one": "{count} 条结果",
-        "other": "{count} 条结果"
-      },
-      "result": "结果",
       "input": "输入",
-      "fileFallback": "文件",
-      "previewTarget": "预览{target}",
-      "browseFolderForTarget": "浏览{target}所在的文件夹",
-      "browseFiles": "浏览文件",
-      "openSubagentMessagesFor": "打开{name}的子代理消息"
+      "browseFiles": "浏览文件"
     },
     "audit": {
       "title": "审计日志",

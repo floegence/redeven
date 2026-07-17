@@ -6,11 +6,11 @@ tags: [ai, okf, ui]
 timestamp: 2026-06-17T00:00:00Z
 ---
 
-Redeven exposes the embedded OKF bundle through read-only `okf.index`, `okf.search`, and `okf.open` builtin tools, and Env App renders OKF activity as project knowledge lookup inside Flower's compact activity timeline.
+Redeven exposes the embedded OKF bundle through read-only `okf.index`, `okf.search`, and `okf.open` builtin tools, and the shared Flower surface renders OKF activity as project knowledge lookup rows with expandable detail.
 
 # Mechanism
 
-Runtime OKF code loads the embedded bundle once, indexes root directory sections, scores concepts in memory, and opens concept bodies by id or path. The bundle builder parses internal Markdown links into deterministic `links` and `backlinks` so concept detail can expose graph context without scanning source Markdown at runtime. Builtin tool registration advertises OKF tools as non-mutating local-read tools with structured presentation metadata, tool execution dispatches behind a read-permission gate, and `ActivityTimelineBlock` renders compact knowledge-lookup activity with detail access for directory sections, concept matches, opened concept metadata, and link graph payloads. OKF activity labels and operation values come from `ToolPresentationSpec`, so the Floret projection does not own a separate OKF display vocabulary.
+Runtime OKF code loads the embedded bundle once, indexes root directory sections, scores concepts in memory, and opens concept bodies by id or path. The bundle builder parses internal Markdown links into deterministic `links` and `backlinks` so concept detail can expose graph context without scanning source Markdown at runtime. Builtin tool registration advertises OKF tools as non-mutating local-read tools with structured presentation metadata, tool execution dispatches behind a read-permission gate, and Flower activity rows render compact knowledge-lookup details for directory sections, concept matches, opened concept metadata, and link graph payloads. OKF activity labels and operation values come from `ToolPresentationSpec`, so the Floret projection does not own a separate OKF display vocabulary.
 
 # Tool workflow
 

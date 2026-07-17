@@ -19,10 +19,10 @@ export {
 // Block renderers
 export {
   BlockRenderer, TextBlock, MarkdownBlock, CodeBlock, CodeDiffBlock, ImageBlock, SvgBlock, MermaidBlock,
-  ChecklistBlock, ShellBlock, FileBlock, ThinkingBlock, ActivityTimelineBlock, TodosBlock, SourcesBlock,
+  ChecklistBlock, ShellBlock, FileBlock, ThinkingBlock, TodosBlock, SourcesBlock,
   type BlockRendererProps, type TextBlockProps, type MarkdownBlockProps, type CodeBlockProps, type CodeDiffBlockProps,
   type ImageBlockProps, type SvgBlockProps, type MermaidBlockProps, type ChecklistBlockProps, type ShellBlockProps,
-  type FileBlockProps, type ThinkingBlockProps, type ActivityTimelineBlockProps, type TodosBlockProps, type SourcesBlockProps,
+  type FileBlockProps, type ThinkingBlockProps, type TodosBlockProps, type SourcesBlockProps,
 } from './blocks';
 
 // Input

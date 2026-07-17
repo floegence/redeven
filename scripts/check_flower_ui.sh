@@ -37,7 +37,6 @@ main() {
       src/ui/flower/envLocalFlowerSurfaceAdapter.test.ts \
       src/ui/flower/linkedContextNavigation.test.ts \
       src/ui/widgets/FlowerTurnLauncherWindow.test.tsx \
-      src/ui/chat/blocks/ActivityTimelineBlock.test.tsx \
       src/ui/chat/blocks/ShellBlock.test.tsx \
       src/ui/chat/message-list/VirtualMessageList.test.tsx
 

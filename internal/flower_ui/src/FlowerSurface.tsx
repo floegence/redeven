@@ -5837,7 +5837,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ) => {
     const disclosureKey = createMemo(() => activityItemKey(messageID(), timeline(), item()));
     const presentation = createMemo(() => presentFlowerActivityItem(item(), timeline().file_actions, { subagents: subagentsCopy() }));
-    const terminalDisclosure = presentation().detailBlocks.some((block) => block.kind === 'terminal_output');
+    const terminalDisclosure = createMemo(() => presentation().detailBlocks.some((block) => block.kind === 'terminal_output'));
     const detailKeys = createMemo(() => presentation().detailBlocks.map((block) => `${disclosureKey()}:${block.kind}`));
     const detailsByKey = createMemo(() => {
       const blocks = presentation().detailBlocks;
@@ -5851,7 +5851,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         setOpenActivityRuns((current) => ({ ...current, [key]: open }));
       },
       reducedMotion: reducedMotionPreferred,
-      settle: terminalDisclosure ? { anchor: 'presentation' } : { anchor: 'intent' },
+      settle: { anchor: () => terminalDisclosure() ? 'presentation' : 'intent' },
     });
     const open = disclosureControl.open;
     const subagentsDetail = createMemo(() => subagentsDetailForPresentation(presentation()));
@@ -5901,7 +5901,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             class={cn('flower-activity-inline-button', !expandable() && 'flower-activity-inline-button-static')}
             aria-expanded={expandable() ? open() : undefined}
             disabled={!expandable()}
-            onClick={expandable() ? disclosureControl.toggle : undefined}
+            onClick={disclosureControl.toggle}
           >
             <span class="flower-activity-inline-icon">{statusIcon(displayStatus())}</span>
             <span class="flower-activity-inline-copy">
