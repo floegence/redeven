@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+cd "$repo_root"
+
+remote_name="${1:-unknown}"
+main_update_seen=0
+
+is_zero_oid() {
+  [[ "$1" =~ ^0+$ ]]
+}
+
+fail() {
+  echo "[ERROR] $*" >&2
+  exit 1
+}
+
+while read -r local_ref local_oid remote_ref remote_oid; do
+  if [ "$remote_ref" != "refs/heads/main" ]; then
+    continue
+  fi
+
+  if [ "$main_update_seen" -ne 0 ]; then
+    fail "pre-push received more than one update for refs/heads/main"
+  fi
+  main_update_seen=1
+
+  if [ "$local_ref" != "refs/heads/main" ]; then
+    fail "push main from the local main branch, not from ${local_ref}"
+  fi
+  if is_zero_oid "$local_oid"; then
+    fail "deleting refs/heads/main is not allowed"
+  fi
+  if is_zero_oid "$remote_oid"; then
+    fail "refs/heads/main must already exist on ${remote_name}"
+  fi
+
+  current_ref="$(git symbolic-ref -q HEAD || true)"
+  if [ "$current_ref" != "refs/heads/main" ]; then
+    fail "check out the local main worktree before pushing refs/heads/main"
+  fi
+
+  head_oid="$(git rev-parse HEAD)"
+  main_oid="$(git rev-parse refs/heads/main)"
+  if [ "$head_oid" != "$local_oid" ] || [ "$main_oid" != "$local_oid" ]; then
+    fail "the checked-out main tip does not match the tip being pushed"
+  fi
+
+  if ! git merge-base --is-ancestor "$remote_oid" "$local_oid"; then
+    fail "remote main moved or local main is not a fast-forward; return to the feature worktree and rebase before running the full gate"
+  fi
+  if git rev-list --merges "${remote_oid}..${local_oid}" | grep -q .; then
+    fail "local main contains merge commits; integrate the rebased feature with git merge --ff-only"
+  fi
+
+  # IMPORTANT: Heavy local integration coverage runs only for the exact main
+  # tip accepted by the remote pre-push handshake, never for routine commits.
+  ./scripts/check_final_integration.sh --base "$remote_oid" --tip "$local_oid"
+done

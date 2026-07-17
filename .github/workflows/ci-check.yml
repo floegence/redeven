@@ -68,6 +68,7 @@ jobs:
           bash -n scripts/build_desktop_bundled_agent.sh
           bash -n scripts/check_desktop.sh
           bash -n scripts/check_docker_runtime_e2e.sh
+          bash -n scripts/check_final_integration.sh
           bash -n scripts/check_gateway_protocol_contract.sh
           bash -n scripts/check_floret_dependency_boundary.sh
           bash -n scripts/check_redevplugin_dependency_boundary.sh
@@ -79,7 +80,12 @@ jobs:
           bash -n scripts/ui_package_common.sh
           bash -n scripts/open_source_hygiene_check.sh
           bash -n scripts/install_git_hooks.sh
+          bash -n scripts/test_git_hooks.sh
           bash -n .githooks/pre-commit
+          bash -n .githooks/pre-push
+
+      - name: Git hook contract
+        run: ./scripts/test_git_hooks.sh
 
       - name: Third-party notice check
         run: node scripts/generate_third_party_notices.mjs --check
