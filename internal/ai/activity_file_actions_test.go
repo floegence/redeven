@@ -9,8 +9,6 @@ import (
 	"testing"
 
 	"github.com/floegence/floret/observation"
-	"github.com/floegence/flowersec/flowersec-go/rpc"
-	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -30,67 +28,6 @@ func rawActivityMessageWithPrivateFileActionSidecar(messageID string) string {
 			],"file_actions":{"file_action_read":{"action_id":"file_action_read","display_name":"app.ts","preview_path":"/workspace/private/app.ts","directory_path":"/workspace/private"}}}
 		]
 	}`, messageID, messageID)
-}
-
-func TestListThreadMessagesSanitizesActivityFileActionSidecar(t *testing.T) {
-	ctx := context.Background()
-	svc := newTestService(t, nil)
-	meta := &session.Meta{
-		EndpointID:   "env_activity_sanitize",
-		UserPublicID: "user_activity_sanitize",
-		UserEmail:    "user@example.com",
-		CanRead:      true,
-		CanWrite:     true,
-		CanExecute:   true,
-	}
-	thread, err := svc.CreateThread(ctx, meta, "activity sanitize", "", "", "")
-	if err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-	raw := rawActivityMessageWithPrivateFileActionSidecar("msg_1")
-	if _, err := svc.threadsDB.AppendMessage(ctx, meta.EndpointID, thread.ThreadID, threadstore.Message{
-		MessageID:       "msg_1",
-		Role:            "assistant",
-		Status:          "complete",
-		TextContent:     "done",
-		MessageJSON:     raw,
-		CreatedAtUnixMs: 1700000000000,
-		UpdatedAtUnixMs: 1700000000000,
-	}, meta.UserPublicID, meta.UserEmail); err != nil {
-		t.Fatalf("AppendMessage: %v", err)
-	}
-
-	messages, err := svc.ListThreadMessages(ctx, meta, thread.ThreadID, 20, 0)
-	if err != nil {
-		t.Fatalf("ListThreadMessages: %v", err)
-	}
-	if len(messages.Messages) != 1 {
-		t.Fatalf("messages len=%d, want 1", len(messages.Messages))
-	}
-	body := string(messages.Messages[0].(json.RawMessage))
-	for _, forbidden := range []string{"preview_path", "directory_path", "root_dir", `\"path\"`} {
-		if strings.Contains(body, forbidden) {
-			t.Fatalf("sanitized message contains %q: %s", forbidden, body)
-		}
-	}
-	if !strings.Contains(body, `"can_preview":true`) || !strings.Contains(body, `"can_browse_directory":true`) {
-		t.Fatalf("sanitized message missing file action capabilities: %s", body)
-	}
-
-	target, err := svc.ResolveFlowerFileActionOpenTarget(ctx, meta, FlowerFileActionOpenRequest{
-		ThreadID:   thread.ThreadID,
-		MessageID:  "msg_1",
-		BlockIndex: 0,
-		ItemID:     "tool_read",
-		ActionID:   "file_action_read",
-		Action:     "preview",
-	})
-	if err != nil {
-		t.Fatalf("ResolveFlowerFileActionOpenTarget: %v", err)
-	}
-	if target.Path != "/workspace/private/app.ts" {
-		t.Fatalf("target path=%q, want raw host path", target.Path)
-	}
 }
 
 func TestSanitizeActivityTimelineMessageJSONFiltersPublicPayloadContract(t *testing.T) {
@@ -386,40 +323,5 @@ func TestActivityPayloadAllowedKeysExcludeForbiddenKeys(t *testing.T) {
 				}
 			}
 		})
-	}
-}
-
-func TestBroadcastTranscriptMessageSanitizesActivitySidecar(t *testing.T) {
-	svc := newTestService(t, nil)
-	notifier := newSinkTestNotifier(false)
-	writer := newAISinkWriterWithNotifier(notifier)
-	t.Cleanup(writer.Close)
-	svc.mu.Lock()
-	svc.realtimeWriters[nil] = writer
-	svc.realtimeByThread[runThreadKey("env_realtime_sanitize", "thread_realtime_sanitize")] = map[*rpc.Server]struct{}{nil: {}}
-	svc.mu.Unlock()
-
-	svc.broadcastTranscriptMessage(
-		"env_realtime_sanitize",
-		"thread_realtime_sanitize",
-		"run_realtime_sanitize",
-		1,
-		rawActivityMessageWithPrivateFileActionSidecar("msg_realtime"),
-		1700000000000,
-	)
-	waitForSinkCondition(t, "sanitized transcript realtime event", func() bool {
-		return len(notifier.snapshot()) == 1
-	})
-	notifications := notifier.snapshot()
-	body := string(notifications[0].payload)
-	for _, forbidden := range []string{"preview_path", "directory_path", "root_dir", `\"path\"`} {
-		if strings.Contains(body, forbidden) {
-			t.Fatalf("transcript realtime event contains %q: %s", forbidden, body)
-		}
-	}
-	for _, required := range []string{`"can_preview":true`, `"can_browse_directory":true`} {
-		if !strings.Contains(body, required) {
-			t.Fatalf("transcript realtime event missing %q: %s", required, body)
-		}
 	}
 }

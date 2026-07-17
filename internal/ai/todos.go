@@ -1,7 +1,6 @@
 package ai
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -11,7 +10,6 @@ const (
 	TodoStatusPending    = "pending"
 	TodoStatusInProgress = "in_progress"
 	TodoStatusCompleted  = "completed"
-	TodoStatusCancelled  = "cancelled"
 
 	maxTodosPerWrite = 40
 )
@@ -22,7 +20,6 @@ type TodoItem struct {
 	ID      string `json:"id"`
 	Content string `json:"content"`
 	Status  string `json:"status"`
-	Note    string `json:"note,omitempty"`
 }
 
 type TodoSummary struct {
@@ -30,7 +27,6 @@ type TodoSummary struct {
 	Pending    int `json:"pending"`
 	InProgress int `json:"in_progress"`
 	Completed  int `json:"completed"`
-	Cancelled  int `json:"cancelled"`
 }
 
 type ThreadTodosView struct {
@@ -42,7 +38,7 @@ type ThreadTodosView struct {
 func normalizeTodoStatus(raw string) (string, bool) {
 	status := strings.ToLower(strings.TrimSpace(raw))
 	switch status {
-	case TodoStatusPending, TodoStatusInProgress, TodoStatusCompleted, TodoStatusCancelled:
+	case TodoStatusPending, TodoStatusInProgress, TodoStatusCompleted:
 		return status, true
 	default:
 		return "", false
@@ -73,7 +69,6 @@ func normalizeTodoItems(items []TodoItem) ([]TodoItem, error) {
 			return nil, fmt.Errorf("duplicate todo id %q", id)
 		}
 		seenID[id] = struct{}{}
-		note := strings.TrimSpace(item.Note)
 		if status == TodoStatusInProgress {
 			inProgressCount++
 			if inProgressCount > 1 {
@@ -84,30 +79,9 @@ func normalizeTodoItems(items []TodoItem) ([]TodoItem, error) {
 			ID:      id,
 			Content: content,
 			Status:  status,
-			Note:    note,
 		})
 	}
 	return out, nil
-}
-
-func decodeTodoItemsJSON(raw string) ([]TodoItem, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		raw = "[]"
-	}
-	var items []TodoItem
-	if err := json.Unmarshal([]byte(raw), &items); err != nil {
-		return nil, err
-	}
-	return normalizeTodoItems(items)
-}
-
-func encodeTodoItemsJSON(items []TodoItem) (string, error) {
-	b, err := json.Marshal(items)
-	if err != nil {
-		return "", err
-	}
-	return string(b), nil
 }
 
 func summarizeTodos(items []TodoItem) TodoSummary {
@@ -120,8 +94,6 @@ func summarizeTodos(items []TodoItem) TodoSummary {
 			out.InProgress++
 		case TodoStatusCompleted:
 			out.Completed++
-		case TodoStatusCancelled:
-			out.Cancelled++
 		}
 	}
 	return out
@@ -141,8 +113,6 @@ func actionableTodoSummary(items []TodoItem) TodoSummary {
 			out.InProgress++
 		case TodoStatusCompleted:
 			out.Completed++
-		case TodoStatusCancelled:
-			out.Cancelled++
 		}
 	}
 	return out

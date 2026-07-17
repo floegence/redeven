@@ -424,7 +424,7 @@ describe('Flower live projection', () => {
         turn_id: 'turn-1',
         run_id: 'run-1',
         expected_message_id: 'msg-assistant',
-        reason: 'not_found',
+        reason: 'not_renderable',
       },
     }],
   ])('rejects %s timeline decoration contracts', (_name, decoration) => {
@@ -442,14 +442,14 @@ describe('Flower live projection', () => {
         turn_id: 'turn-1',
         run_id: 'run-1',
         expected_message_id: 'msg-assistant',
-        reason: 'not_found',
+        reason: 'not_renderable',
       },
     }), mapperOptions());
 
     expect(mapped.timeline_messages.map((message) => message.id)).toEqual(['msg-user']);
     expect(mapped.live_state.timeline_decorations).toEqual([expect.objectContaining({
       kind: 'turn_projection_unavailable',
-      projection_unavailable: expect.objectContaining({ expected_message_id: 'msg-assistant', reason: 'not_found' }),
+      projection_unavailable: expect.objectContaining({ expected_message_id: 'msg-assistant', reason: 'not_renderable' }),
     })]);
   });
 
@@ -2625,125 +2625,6 @@ describe('Flower live projection', () => {
     });
   });
 
-  it('upserts canonical user messages from message.committed without a placeholder', () => {
-    const initial = projectFlowerLiveBootstrap(bootstrap());
-    const committed = applyFlowerLiveEvent(initial, 1, event(2, 'message.committed', {
-      message_id: 'msg-user-2',
-      message: message({
-        id: 'msg-user-2',
-        content: 'Second user turn',
-        created_at_ms: 2200,
-        blocks: [{ type: 'markdown', content: 'Second user turn' }],
-      }),
-    }));
-
-    expect(committed.resyncRequired).toBe(false);
-    expect(committed.thread.messages.map((item) => item.id)).toEqual(['msg-user', 'msg-user-2']);
-    expect(committed.thread.messages[1]).toMatchObject({ role: 'user', content: 'Second user turn' });
-  });
-
-  it('commits a streaming draft under the same message id', () => {
-    const initial = projectFlowerLiveBootstrap(bootstrapWithLiveAssistant({
-      blocks: [{ type: 'markdown', content: '' }],
-    }));
-    const withDraft = applyEvents(initial, 0, [
-      event(3, 'message.block_delta', {
-        message_id: 'assistant-live',
-        block_index: 0,
-        delta: 'draft',
-      }),
-    ]);
-    const committed = applyFlowerLiveEvent(withDraft.thread, withDraft.cursor, event(4, 'message.committed', {
-      message_id: 'assistant-live',
-      message: message({
-        id: 'assistant-live',
-        role: 'assistant',
-        status: 'complete',
-        content: 'final',
-        blocks: [{ type: 'markdown', content: 'final' }],
-      }),
-    }));
-
-    expect(committed.thread.messages.map((item) => item.id)).toEqual(['msg-user', 'assistant-live']);
-    expect(committed.thread.messages[1]).toMatchObject({
-      id: 'assistant-live',
-      content: 'final',
-      status: 'complete',
-    });
-  });
-
-  it('preserves streamed markdown through activity blocks and commit', () => {
-    const initial = projectFlowerLiveBootstrap(bootstrapWithLiveAssistant({
-      blocks: [{ type: 'markdown', content: '' }],
-    }));
-    const beforeCommit = applyEvents(initial, 0, [
-      event(3, 'message.block_delta', {
-        message_id: 'assistant-live',
-        block_index: 0,
-        delta: 'Let me inspect Loomcycle first.',
-      }),
-      event(4, 'message.block_set', {
-        message_id: 'assistant-live',
-        block_index: 1,
-        block: {
-          type: 'activity-timeline',
-          block: {
-            type: 'activity-timeline',
-            schema_version: 1,
-            run_id: 'run-live',
-            summary: { status: 'success', severity: 'quiet', needs_attention: false, total_items: 1, counts: { success: 1 } },
-            items: [{
-              item_id: 'tool-1',
-              kind: 'tool',
-              status: 'success',
-              severity: 'quiet',
-              needs_attention: false,
-              requires_approval: false,
-            }],
-          },
-        },
-      }),
-    ]);
-
-    expect(beforeCommit.thread.messages[1]?.blocks).toHaveLength(2);
-    expect(beforeCommit.thread.messages[1]?.blocks?.[0]).toEqual({ type: 'markdown', content: 'Let me inspect Loomcycle first.' });
-    expect(beforeCommit.thread.messages[1]?.blocks?.[1]).toEqual(expect.objectContaining({ type: 'activity-timeline' }));
-    expect(beforeCommit.thread.messages[1]?.content).toBe('Let me inspect Loomcycle first.');
-
-    const committed = applyFlowerLiveEvent(beforeCommit.thread, beforeCommit.cursor, event(5, 'message.committed', {
-      message_id: 'assistant-live',
-      message: message({
-        id: 'assistant-live',
-        role: 'assistant',
-        status: 'complete',
-        content: 'Let me inspect Loomcycle first.',
-        blocks: [
-          { type: 'markdown', content: 'Let me inspect Loomcycle first.' },
-          {
-            type: 'activity-timeline',
-            schema_version: 1,
-            run_id: 'run-live',
-            summary: { status: 'success', severity: 'quiet', needs_attention: false, total_items: 1, counts: { success: 1 } },
-            items: [{
-              item_id: 'tool-1',
-              kind: 'tool',
-              status: 'success',
-              severity: 'quiet',
-              needs_attention: false,
-              requires_approval: false,
-            }],
-          },
-        ],
-      }),
-    }));
-
-    expect(committed.thread.messages[1]?.blocks).toEqual([
-      { type: 'markdown', content: 'Let me inspect Loomcycle first.' },
-      expect.objectContaining({ type: 'activity-timeline' }),
-    ]);
-    expect(committed.thread.messages[1]?.content).toBe('Let me inspect Loomcycle first.');
-  });
-
   it('marks stream resync events as requiring bootstrap reload', () => {
     const initial = projectFlowerLiveBootstrap(bootstrap());
     const result = applyFlowerLiveEvent(initial, 5, event(8, 'stream.resync_required', {
@@ -2819,22 +2700,22 @@ describe('Flower live projection', () => {
       stream_generation: 1,
       snapshot_through_seq: 6,
       messages: [
-        message({ id: 'msg-user-1', content: 'First request', created_at_ms: 1000, blocks: [{ type: 'markdown', content: 'First request' }] }),
+		message({ id: 'z-user-1', content: 'First request', created_at_ms: 9000, blocks: [{ type: 'markdown', content: 'First request' }] }),
         {
-          id: 'assistant-1',
+		  id: 'y-assistant-1',
           role: 'assistant',
           content: 'Canceled partial output',
           status: 'canceled',
-          created_at_ms: 1500,
+		  created_at_ms: 7000,
           blocks: [{ type: 'markdown', content: 'Canceled partial output' }],
         },
-        message({ id: 'msg-user-2', content: 'Second request', created_at_ms: 2000, blocks: [{ type: 'markdown', content: 'Second request' }] }),
+		message({ id: 'b-user-2', content: 'Second request', created_at_ms: 3000, blocks: [{ type: 'markdown', content: 'Second request' }] }),
         {
-          id: 'assistant-2',
+		  id: 'a-assistant-2',
           role: 'assistant',
           content: '',
           status: 'streaming',
-          created_at_ms: 2500,
+		  created_at_ms: 1000,
           blocks: [{ type: 'markdown', content: '' }],
           active_cursor: true,
         },
@@ -2843,7 +2724,7 @@ describe('Flower live projection', () => {
 
     expect(result.resyncRequired).toBe(false);
     expect(result.cursor).toBe(6);
-    expect(result.thread.messages.map((item) => item.id)).toEqual(['msg-user-1', 'assistant-1', 'msg-user-2', 'assistant-2']);
+	  expect(result.thread.messages.map((item) => item.id)).toEqual(['z-user-1', 'y-assistant-1', 'b-user-2', 'a-assistant-2']);
     expect(result.thread.messages[1]).toMatchObject({ role: 'assistant', status: 'canceled' });
     expect(result.thread.messages[1]?.active_cursor).toBeUndefined();
     expect(result.thread.messages[3]).toMatchObject({ role: 'assistant', status: 'streaming', active_cursor: true });
@@ -3117,22 +2998,6 @@ describe('Flower live projection', () => {
       { type: 'markdown', content: 'Final answer.' },
     ]);
     expect(mapped.thread.messages[0]?.content).toBe('Final answer.');
-  });
-
-  it('rejects committed message events without a valid message payload', () => {
-    expect(() => mapFlowerLiveEvents({
-      events: [{
-        schema_version: 1,
-        seq: 1,
-        endpoint_id: 'runtime',
-        thread_id: 'th-live',
-        at_unix_ms: 3000,
-        kind: 'message.committed',
-        payload: { message_id: 'assistant-live' },
-      }],
-      next_cursor: 1,
-      retained_from_seq: 1,
-    })).toThrow(/message\.committed/);
   });
 
   it('maps thread subagents from bootstrap and thread patch events', () => {

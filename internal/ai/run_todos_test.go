@@ -2,282 +2,129 @@ package ai
 
 import (
 	"context"
-	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/floegence/redeven/internal/ai/threadstore"
+	flruntime "github.com/floegence/floret/runtime"
+	fltools "github.com/floegence/floret/tools"
+	"github.com/floegence/redeven/internal/config"
 )
 
-func TestRunToolWriteTodos_PersistsSnapshotAndEvent(t *testing.T) {
-	t.Parallel()
+type todoToolCallGateway struct{ calls int }
 
-	dbPath := t.TempDir() + "/threads.sqlite"
-	s, err := threadstore.Open(dbPath)
+func (g *todoToolCallGateway) StreamModel(_ context.Context, _ flruntime.ModelRequest) (<-chan flruntime.ModelEvent, error) {
+	g.calls++
+	events := make(chan flruntime.ModelEvent, 2)
+	if g.calls == 1 {
+		events <- flruntime.ModelEvent{Type: flruntime.ModelEventToolCalls, ToolCalls: []fltools.ToolCall{{ID: "tool_1", Name: "write_todos", Args: `{}`}}}
+		events <- flruntime.ModelEvent{Type: flruntime.ModelEventDone, Reason: "tool_calls"}
+	} else {
+		events <- flruntime.ModelEvent{Type: flruntime.ModelEventDelta, Text: "done"}
+		events <- flruntime.ModelEvent{Type: flruntime.ModelEventDone, Reason: "stop"}
+	}
+	close(events)
+	return events, nil
+}
+
+func TestRunToolWriteTodosUsesCanonicalFloretState(t *testing.T) {
+	r, host := newTodoTestRun(t)
+	result, err := r.toolWriteTodos(context.Background(), "tool_1", []TodoItem{{ID: "todo_1", Content: "Inspect workspace", Status: TodoStatusInProgress}}, nil, "initial")
 	if err != nil {
-		t.Fatalf("threadstore.Open: %v", err)
+		t.Fatal(err)
 	}
-	defer func() { _ = s.Close() }()
-
-	ctx := context.Background()
-	if err := s.CreateThread(ctx, threadstore.Thread{ThreadID: "th_1", EndpointID: "env_1", Title: "chat"}); err != nil {
-		t.Fatalf("CreateThread: %v", err)
+	if result.(map[string]any)["version"] != int64(1) {
+		t.Fatalf("unexpected result: %#v", result)
 	}
-
-	r := &run{
-		id:         "run_1",
-		endpointID: "env_1",
-		threadID:   "th_1",
-		threadsDB:  s,
-	}
-
-	result, err := r.toolWriteTodos(ctx, "tool_1", []TodoItem{
-		{ID: "todo_1", Content: "Inspect workspace", Status: TodoStatusInProgress},
-	}, nil, "set initial todo")
+	snapshot, err := host.ReadThreadAgentTodos(context.Background(), flruntime.ThreadID(r.threadID))
 	if err != nil {
-		t.Fatalf("toolWriteTodos: %v", err)
+		t.Fatal(err)
 	}
-	resultMap, ok := result.(map[string]any)
-	if !ok {
-		t.Fatalf("result type=%T, want map[string]any", result)
-	}
-	if int64(resultMap["version"].(int64)) != 1 {
-		t.Fatalf("result version=%v, want 1", resultMap["version"])
-	}
-	todosResult, ok := resultMap["todos"].([]TodoItem)
-	if !ok {
-		t.Fatalf("result todos type=%T, want []TodoItem", resultMap["todos"])
-	}
-	if len(todosResult) != 1 {
-		t.Fatalf("result todos len=%d, want 1", len(todosResult))
-	}
-	if todosResult[0].Content != "Inspect workspace" || todosResult[0].Status != TodoStatusInProgress {
-		t.Fatalf("unexpected todo payload: %+v", todosResult[0])
-	}
-
-	snapshot, err := s.GetThreadTodosSnapshot(ctx, "env_1", "th_1")
-	if err != nil {
-		t.Fatalf("GetThreadTodosSnapshot: %v", err)
-	}
-	if snapshot.Version != 1 {
-		t.Fatalf("snapshot version=%d, want 1", snapshot.Version)
-	}
-	if !strings.Contains(snapshot.TodosJSON, "Inspect workspace") {
-		t.Fatalf("snapshot todos_json=%q, want todo content", snapshot.TodosJSON)
-	}
-
-	events, err := s.ListRunEvents(ctx, "env_1", "run_1", 20)
-	if err != nil {
-		t.Fatalf("ListRunEvents: %v", err)
-	}
-	found := false
-	for _, event := range events {
-		if strings.TrimSpace(event.EventType) == "todos.updated" {
-			found = true
-			break
-		}
-	}
-	if !found {
-		t.Fatalf("missing todos.updated run event")
+	if snapshot.Version != 1 || len(snapshot.Items) != 1 || snapshot.Items[0].Content != "Inspect workspace" || snapshot.UpdatedByTurnID != flruntime.TurnID(r.messageID) || snapshot.UpdatedByRunID != flruntime.RunID(r.id) || snapshot.UpdatedByToolCall != "tool_1" {
+		t.Fatalf("unexpected canonical todo state: %#v", snapshot)
 	}
 }
 
-func TestRunToolWriteTodos_RejectsControlSignalTodos(t *testing.T) {
-	t.Parallel()
-
+func TestRunToolWriteTodosRejectsStaleCASVersion(t *testing.T) {
+	r, _ := newTodoTestRun(t)
 	ctx := context.Background()
-	s, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))
+	if _, err := r.toolWriteTodos(ctx, "tool_1", []TodoItem{{ID: "todo_1", Content: "Inspect", Status: TodoStatusInProgress}}, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	stale := int64(0)
+	if _, err := r.toolWriteTodos(ctx, "tool_1", []TodoItem{{ID: "todo_1", Content: "Inspect", Status: TodoStatusCompleted}}, &stale, ""); err == nil || !strings.Contains(strings.ToLower(err.Error()), "version conflict") {
+		t.Fatalf("stale update error = %v", err)
+	}
+}
+
+func TestRunToolWriteTodosHydratesExistingContent(t *testing.T) {
+	r, host := newTodoTestRun(t)
+	ctx := context.Background()
+	if _, err := r.toolWriteTodos(ctx, "tool_1", []TodoItem{{ID: "todo_1", Content: "Inspect", Status: TodoStatusInProgress}}, nil, ""); err != nil {
+		t.Fatal(err)
+	}
+	expected := int64(1)
+	if _, err := r.toolWriteTodos(ctx, "tool_1", []TodoItem{{ID: "todo_1", Status: TodoStatusCompleted}}, &expected, ""); err != nil {
+		t.Fatal(err)
+	}
+	snapshot, err := host.ReadThreadAgentTodos(ctx, flruntime.ThreadID(r.threadID))
 	if err != nil {
-		t.Fatalf("threadstore.Open: %v", err)
+		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = s.Close() })
-	if err := s.CreateThread(ctx, threadstore.Thread{ThreadID: "th_1", EndpointID: "env_1", Title: "chat"}); err != nil {
-		t.Fatalf("CreateThread: %v", err)
+	if snapshot.Version != 2 || len(snapshot.Items) != 1 || snapshot.Items[0].Content != "Inspect" || snapshot.Items[0].Status != flruntime.AgentTodoCompleted {
+		t.Fatalf("unexpected hydrated state: %#v", snapshot)
 	}
+}
 
-	r := &run{
-		id:         "run_1",
-		endpointID: "env_1",
-		threadID:   "th_1",
-		threadsDB:  s,
-	}
-
-	_, err = r.toolWriteTodos(ctx, "tool_1", []TodoItem{
-		{ID: "work_1", Content: "Run focused tests", Status: TodoStatusCompleted},
-		{ID: "finish", Content: "调用 task_complete 总结结果", Status: TodoStatusInProgress},
+func TestRunToolWriteTodosRejectsControlSignalTodo(t *testing.T) {
+	r, host := newTodoTestRun(t)
+	_, err := r.toolWriteTodos(context.Background(), "tool_1", []TodoItem{
+		{ID: "work", Content: "Run tests", Status: TodoStatusCompleted},
+		{ID: "finish", Content: "Call task_complete", Status: TodoStatusInProgress},
 	}, nil, "")
-	if err == nil {
-		t.Fatalf("toolWriteTodos should reject control signal todos")
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "control signal") {
+		t.Fatalf("control todo error = %v", err)
 	}
-	if !strings.Contains(err.Error(), "control signal") {
-		t.Fatalf("error=%q, want control signal guidance", err.Error())
+	snapshot, readErr := host.ReadThreadAgentTodos(context.Background(), flruntime.ThreadID(r.threadID))
+	if readErr != nil {
+		t.Fatal(readErr)
 	}
-
-	snapshot, snapErr := s.GetThreadTodosSnapshot(ctx, "env_1", "th_1")
-	if snapErr != nil {
-		t.Fatalf("GetThreadTodosSnapshot: %v", snapErr)
-	}
-	if strings.TrimSpace(snapshot.TodosJSON) != "[]" {
-		t.Fatalf("snapshot todos_json=%q, want unchanged empty snapshot", snapshot.TodosJSON)
+	if snapshot.Version != 0 || len(snapshot.Items) != 0 {
+		t.Fatalf("invalid todo changed canonical state: %#v", snapshot)
 	}
 }
 
-func TestRunToolWriteTodos_ExpectedVersionConflict(t *testing.T) {
-	t.Parallel()
-
-	dbPath := t.TempDir() + "/threads.sqlite"
-	s, err := threadstore.Open(dbPath)
+func newTodoTestRun(t *testing.T) (*run, *flruntime.Host) {
+	t.Helper()
+	store := flruntime.NewMemoryStore()
+	t.Cleanup(func() { _ = store.Close() })
+	registry := fltools.NewRegistry(fltools.Define(
+		fltools.Definition{
+			Name: "write_todos", Description: "record todos", ReadOnly: true,
+			Permission:  fltools.PermissionSpec{Mode: fltools.PermissionAllow},
+			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false},
+		},
+		func([]byte) (map[string]any, error) { return map[string]any{}, nil }, nil,
+		func(_ context.Context, inv fltools.Invocation[map[string]any]) (fltools.Result, error) {
+			return fltools.Result{CallID: inv.CallID, Name: inv.Name, Text: "recorded"}, nil
+		},
+	))
+	host, err := flruntime.NewHost(flruntime.HostOptions{
+		Config:               redevenFloretAdapterConfig("", floretModelContextPolicy(128000, 4096), config.AIReasoningSelection{}),
+		Store:                store,
+		ModelGateway:         &todoToolCallGateway{},
+		ModelGatewayIdentity: flruntime.ModelGatewayIdentity{Provider: "test", Model: "todo-test", StateCompatibilityKey: "test:todo-test"},
+		Tools:                registry,
+	})
 	if err != nil {
-		t.Fatalf("threadstore.Open: %v", err)
+		t.Fatal(err)
 	}
-	defer func() { _ = s.Close() }()
-
-	ctx := context.Background()
-	if err := s.CreateThread(ctx, threadstore.Thread{ThreadID: "th_1", EndpointID: "env_1", Title: "chat"}); err != nil {
-		t.Fatalf("CreateThread: %v", err)
+	if _, err := host.EnsureThread(context.Background(), flruntime.EnsureThreadRequest{ThreadID: "thread_1"}); err != nil {
+		t.Fatal(err)
 	}
-
-	r := &run{
-		id:         "run_1",
-		endpointID: "env_1",
-		threadID:   "th_1",
-		threadsDB:  s,
+	if _, err := host.RunTurn(context.Background(), flruntime.RunTurnRequest{ThreadID: "thread_1", TurnID: "turn_1", RunID: "run_1", Input: "track work"}); err != nil {
+		t.Fatal(err)
 	}
-
-	if _, err := r.toolWriteTodos(ctx, "tool_1", []TodoItem{
-		{ID: "todo_1", Content: "Inspect workspace", Status: TodoStatusInProgress},
-	}, nil, "initial"); err != nil {
-		t.Fatalf("toolWriteTodos initial: %v", err)
-	}
-
-	expected := int64(0)
-	_, err = r.toolWriteTodos(ctx, "tool_2", []TodoItem{
-		{ID: "todo_1", Content: "Inspect workspace", Status: TodoStatusCompleted},
-	}, &expected, "stale update")
-	if err == nil {
-		t.Fatalf("expected version conflict error")
-	}
-	if !strings.Contains(strings.ToLower(err.Error()), "version conflict") {
-		t.Fatalf("err=%q, want version conflict", err.Error())
-	}
-}
-
-func TestRunToolWriteTodos_HydratesMissingContentFromSnapshot(t *testing.T) {
-	t.Parallel()
-
-	dbPath := t.TempDir() + "/threads.sqlite"
-	s, err := threadstore.Open(dbPath)
-	if err != nil {
-		t.Fatalf("threadstore.Open: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	ctx := context.Background()
-	if err := s.CreateThread(ctx, threadstore.Thread{ThreadID: "th_1", EndpointID: "env_1", Title: "chat"}); err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-
-	r := &run{
-		id:         "run_1",
-		endpointID: "env_1",
-		threadID:   "th_1",
-		threadsDB:  s,
-	}
-
-	if _, err := r.toolWriteTodos(ctx, "tool_1", []TodoItem{
-		{ID: "todo_1", Content: "Inspect workspace", Status: TodoStatusInProgress},
-		{ID: "todo_2", Content: "Run tests", Status: TodoStatusPending},
-	}, nil, "initial"); err != nil {
-		t.Fatalf("toolWriteTodos initial: %v", err)
-	}
-
-	expected := int64(1)
-	result, err := r.toolWriteTodos(ctx, "tool_2", []TodoItem{
-		{ID: "todo_1", Status: TodoStatusCompleted},
-		{ID: "todo_2", Status: TodoStatusInProgress},
-	}, &expected, "status-only update")
-	if err != nil {
-		t.Fatalf("toolWriteTodos hydrated update: %v", err)
-	}
-
-	resultMap, ok := result.(map[string]any)
-	if !ok {
-		t.Fatalf("result type=%T, want map[string]any", result)
-	}
-	todosResult, ok := resultMap["todos"].([]TodoItem)
-	if !ok {
-		t.Fatalf("result todos type=%T, want []TodoItem", resultMap["todos"])
-	}
-	if len(todosResult) != 2 {
-		t.Fatalf("result todos len=%d, want 2", len(todosResult))
-	}
-	if todosResult[0].Content != "Inspect workspace" || todosResult[0].Status != TodoStatusCompleted {
-		t.Fatalf("todo_1=%+v, want hydrated content and completed status", todosResult[0])
-	}
-	if todosResult[1].Content != "Run tests" || todosResult[1].Status != TodoStatusInProgress {
-		t.Fatalf("todo_2=%+v, want hydrated content and in_progress status", todosResult[1])
-	}
-
-	snapshot, err := s.GetThreadTodosSnapshot(ctx, "env_1", "th_1")
-	if err != nil {
-		t.Fatalf("GetThreadTodosSnapshot: %v", err)
-	}
-	if snapshot.Version != 2 {
-		t.Fatalf("snapshot version=%d, want 2", snapshot.Version)
-	}
-
-	events, err := s.ListRunEvents(ctx, "env_1", "run_1", 50)
-	if err != nil {
-		t.Fatalf("ListRunEvents: %v", err)
-	}
-	foundHydrated := false
-	for _, event := range events {
-		if strings.TrimSpace(event.EventType) == "todos.args_hydrated" {
-			foundHydrated = true
-			break
-		}
-	}
-	if !foundHydrated {
-		t.Fatalf("missing todos.args_hydrated run event")
-	}
-}
-
-func TestRunToolWriteTodos_MissingContentWithoutMatchingIDStillFails(t *testing.T) {
-	t.Parallel()
-
-	dbPath := t.TempDir() + "/threads.sqlite"
-	s, err := threadstore.Open(dbPath)
-	if err != nil {
-		t.Fatalf("threadstore.Open: %v", err)
-	}
-	defer func() { _ = s.Close() }()
-
-	ctx := context.Background()
-	if err := s.CreateThread(ctx, threadstore.Thread{ThreadID: "th_1", EndpointID: "env_1", Title: "chat"}); err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-
-	r := &run{
-		id:         "run_1",
-		endpointID: "env_1",
-		threadID:   "th_1",
-		threadsDB:  s,
-	}
-
-	if _, err := r.toolWriteTodos(ctx, "tool_1", []TodoItem{
-		{ID: "todo_1", Content: "Inspect workspace", Status: TodoStatusInProgress},
-	}, nil, "initial"); err != nil {
-		t.Fatalf("toolWriteTodos initial: %v", err)
-	}
-
-	expected := int64(1)
-	_, err = r.toolWriteTodos(ctx, "tool_2", []TodoItem{
-		{ID: "todo_2", Status: TodoStatusCompleted},
-	}, &expected, "missing content for unknown id")
-	if err == nil {
-		t.Fatalf("expected missing content error")
-	}
-	if !strings.Contains(strings.ToLower(err.Error()), "missing content") {
-		t.Fatalf("err=%q, want missing content", err.Error())
-	}
+	r := &run{id: "run_1", threadID: "thread_1", messageID: "turn_1"}
+	r.setActiveFloretHost(host)
+	return r, host
 }

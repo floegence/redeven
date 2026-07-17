@@ -5,28 +5,33 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
-	"github.com/floegence/redeven/internal/ai/threadstore"
+	flruntime "github.com/floegence/floret/runtime"
 )
 
 func (r *run) toolWriteTodos(ctx context.Context, toolID string, todos []TodoItem, expectedVersion *int64, explanation string) (any, error) {
-	if r == nil || r.threadsDB == nil {
-		return nil, errors.New("threads store not ready")
+	if r == nil {
+		return nil, errors.New("run is not ready")
 	}
-	endpointID := strings.TrimSpace(r.endpointID)
+	host := r.activeFloretHost()
+	if host == nil {
+		return nil, errors.New("Floret host is not ready")
+	}
 	threadID := strings.TrimSpace(r.threadID)
-	if endpointID == "" || threadID == "" {
-		return nil, errors.New("invalid thread context")
+	turnID := strings.TrimSpace(r.messageID)
+	runID := strings.TrimSpace(r.id)
+	toolID = strings.TrimSpace(toolID)
+	if threadID == "" || turnID == "" || runID == "" || toolID == "" {
+		return nil, errors.New("canonical todo update identity is incomplete")
 	}
-	hydratedTodos, hydratedCount, missingCount, err := r.hydrateTodoContentFromSnapshot(ctx, endpointID, threadID, todos)
+	current, err := host.ReadThreadAgentTodos(ctx, flruntime.ThreadID(threadID))
 	if err != nil {
 		return nil, err
 	}
+	hydratedTodos, hydratedCount, missingCount := hydrateTodoContent(todos, current.Items)
 	if hydratedCount > 0 {
-		r.persistRunEvent("todos.args_hydrated", RealtimeStreamKindLifecycle, map[string]any{
-			"hydrated_count":          hydratedCount,
-			"missing_content_count":   missingCount,
+		r.recordRunDiagnostic("todos.args_hydrated", RealtimeStreamKindLifecycle, map[string]any{
+			"hydrated_count": hydratedCount, "missing_content_count": missingCount,
 			"remaining_missing_count": max(0, missingCount-hydratedCount),
 		})
 	}
@@ -37,93 +42,53 @@ func (r *run) toolWriteTodos(ctx context.Context, toolID string, todos []TodoIte
 	if err := validateActionableTodoItems(normalized); err != nil {
 		return nil, err
 	}
-	todosJSON, err := encodeTodoItemsJSON(normalized)
-	if err != nil {
-		return nil, err
+	expected := current.Version
+	if expectedVersion != nil {
+		expected = *expectedVersion
 	}
-	now := time.Now().UnixMilli()
-	snapshot, err := r.threadsDB.ReplaceThreadTodosSnapshot(ctx, threadstore.ThreadTodosSnapshot{
-		EndpointID:      endpointID,
-		ThreadID:        threadID,
-		TodosJSON:       todosJSON,
-		UpdatedAtUnixMs: now,
-		UpdatedByRunID:  strings.TrimSpace(r.id),
-		UpdatedByToolID: strings.TrimSpace(toolID),
-	}, expectedVersion)
+	items := make([]flruntime.AgentTodo, 0, len(normalized))
+	for _, item := range normalized {
+		items = append(items, flruntime.AgentTodo{ID: item.ID, Content: item.Content, Status: flruntime.AgentTodoStatus(item.Status)})
+	}
+	snapshot, err := host.UpdateThreadAgentTodos(ctx, flruntime.UpdateThreadAgentTodosRequest{
+		ThreadID: flruntime.ThreadID(threadID), ExpectedVersion: expected, Items: items,
+		TurnID: flruntime.TurnID(turnID), RunID: flruntime.RunID(runID), ToolCallID: toolID,
+	})
 	if err != nil {
-		if errors.Is(err, threadstore.ErrThreadTodosVersionConflict) {
-			return nil, fmt.Errorf("todo version conflict: refresh and retry: %w", threadstore.ErrThreadTodosVersionConflict)
+		if errors.Is(err, flruntime.ErrAgentTodoVersionConflict) {
+			return nil, fmt.Errorf("todo version conflict: refresh and retry: %w", err)
 		}
 		return nil, err
 	}
 	summary := summarizeTodos(normalized)
-	payload := map[string]any{
-		"version":            snapshot.Version,
-		"summary":            summary,
-		"updated_at_unix_ms": snapshot.UpdatedAtUnixMs,
-		"updated_by_tool":    strings.TrimSpace(toolID),
-		"updated_by_run":     strings.TrimSpace(r.id),
-		"explanation_hint":   strings.TrimSpace(explanation),
-	}
-	r.persistRunEvent("todos.updated", RealtimeStreamKindTool, payload)
-	result := map[string]any{
-		"version":            snapshot.Version,
-		"updated_at_unix_ms": snapshot.UpdatedAtUnixMs,
-		"summary":            summary,
-		"todos":              normalized,
-	}
-	if txt := strings.TrimSpace(explanation); txt != "" {
-		result["explanation"] = txt
+	updatedAt := snapshot.UpdatedAt.UnixMilli()
+	r.recordRunDiagnostic("todos.updated", RealtimeStreamKindTool, map[string]any{
+		"version": snapshot.Version, "summary": summary, "updated_at_unix_ms": updatedAt,
+		"updated_by_tool": toolID, "updated_by_run": runID, "explanation_hint": strings.TrimSpace(explanation),
+	})
+	result := map[string]any{"version": snapshot.Version, "updated_at_unix_ms": updatedAt, "summary": summary, "todos": normalized}
+	if text := strings.TrimSpace(explanation); text != "" {
+		result["explanation"] = text
 	}
 	return result, nil
 }
 
-func (r *run) hydrateTodoContentFromSnapshot(ctx context.Context, endpointID string, threadID string, todos []TodoItem) ([]TodoItem, int, int, error) {
-	if len(todos) == 0 {
-		return nil, 0, 0, nil
-	}
+func hydrateTodoContent(todos []TodoItem, existing []flruntime.AgentTodo) ([]TodoItem, int, int) {
 	out := append([]TodoItem(nil), todos...)
-	missingContent := 0
-	for i := range out {
-		if strings.TrimSpace(out[i].Content) == "" {
-			missingContent++
-		}
+	contentByID := make(map[string]string, len(existing))
+	for _, item := range existing {
+		contentByID[strings.TrimSpace(item.ID)] = strings.TrimSpace(item.Content)
 	}
-	if missingContent == 0 {
-		return out, 0, 0, nil
-	}
-	snapshot, err := r.threadsDB.GetThreadTodosSnapshot(ctx, endpointID, threadID)
-	if err != nil {
-		return nil, 0, missingContent, err
-	}
-	existingTodos, err := decodeTodoItemsJSON(snapshot.TodosJSON)
-	if err != nil {
-		return out, 0, missingContent, nil
-	}
-	contentByID := make(map[string]string, len(existingTodos))
-	for _, item := range existingTodos {
-		id := strings.TrimSpace(item.ID)
-		content := strings.TrimSpace(item.Content)
-		if id == "" || content == "" {
+	hydrated, missing := 0, 0
+	for index := range out {
+		if strings.TrimSpace(out[index].Content) != "" {
 			continue
 		}
-		contentByID[id] = content
+		missing++
+		if content := contentByID[strings.TrimSpace(out[index].ID)]; content != "" {
+			out[index].Content = content
+			hydrated++
+		}
 	}
-	hydrated := 0
-	for i := range out {
-		if strings.TrimSpace(out[i].Content) != "" {
-			continue
-		}
-		id := strings.TrimSpace(out[i].ID)
-		if id == "" {
-			continue
-		}
-		content := strings.TrimSpace(contentByID[id])
-		if content == "" {
-			continue
-		}
-		out[i].Content = content
-		hydrated++
-	}
-	return out, hydrated, missingContent, nil
+	return out, hydrated, missing
 }

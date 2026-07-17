@@ -697,13 +697,6 @@ func TestFloretSubagents_DoNotProjectChildThreadForFlowerNavigation(t *testing.T
 		t.Fatalf("GetFlowerThreadLiveBootstrap(child) bootstrap=%#v err=%v, want no Redeven child thread", bootstrap, err)
 	}
 
-	messages, _, _, err := svc.threadsDB.ListMessages(context.Background(), meta.EndpointID, id, 500, 0)
-	if err != nil {
-		t.Fatalf("ListMessages child: %v", err)
-	}
-	if len(messages) != 0 {
-		t.Fatalf("child transcript projected into Redeven messages: %#v", messages)
-	}
 	threadRecord, err := svc.threadsDB.GetThread(context.Background(), meta.EndpointID, id)
 	if err != nil {
 		t.Fatalf("GetThread child store: %v", err)

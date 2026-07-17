@@ -13,6 +13,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -24,6 +25,19 @@ type autoTitleMock struct {
 	requests     []map[string]any
 	token        string
 	responses    []autoTitleMockResponse
+}
+
+func seedCanonicalTitleTurn(t *testing.T, ctx context.Context, svc *Service, threadID, turnID, runID, input string) flruntime.ThreadTurnSnapshot {
+	t.Helper()
+	host := newTestFloretHost(t, svc.floretStore, "title seed complete")
+	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{ThreadID: flruntime.ThreadID(threadID), TurnID: flruntime.TurnID(turnID), RunID: flruntime.RunID(runID), Input: input}); err != nil {
+		t.Fatalf("seed canonical title turn: %v", err)
+	}
+	page, err := host.ListThreadTurns(ctx, flruntime.ListThreadTurnsRequest{ThreadID: flruntime.ThreadID(threadID), Tail: 1})
+	if err != nil || len(page.Turns) != 1 {
+		t.Fatalf("read canonical title turn: page=%#v err=%v", page, err)
+	}
+	return page.Turns[0]
 }
 
 type autoTitleMockResponse struct {
@@ -395,15 +409,12 @@ func TestScheduleAutoThreadTitle_LeavesThreadUntitledAfterGenerationFailures(t *
 		t.Fatalf("CreateThread: %v", err)
 	}
 	firstText := "please fix the failing regression tests in CI before the release cut ships today"
-	persisted, _, err := svc.persistUserMessage(ctx, &meta, meta.EndpointID, thread.ThreadID, RunInput{Text: firstText})
-	if err != nil {
-		t.Fatalf("persistUserMessage: %v", err)
-	}
+	turn := seedCanonicalTitleTurn(t, ctx, svc, thread.ThreadID, "turn_title_failure", "run_title_failure", firstText)
 
 	svc.scheduleAutoThreadTitle(&meta, thread.ThreadID, effectiveCurrentUserInput{
-		MessageID:              persisted.MessageID,
-		MessageRowID:           persisted.RowID,
-		MessageCreatedAtUnixMs: persisted.CreatedAtUnixMs,
+		MessageID:              turn.UserEntryID,
+		MessageRowID:           turn.Ordinal,
+		MessageCreatedAtUnixMs: turn.StartedAt.UnixMilli(),
 		PublicText:             firstText,
 	})
 
@@ -731,12 +742,7 @@ func TestNewService_RecoversPendingAutoThreadTitles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	persisted, _, err := svc.persistUserMessage(ctx, &meta, meta.EndpointID, thread.ThreadID, RunInput{
-		Text: "please recover the blank thread title after restart",
-	})
-	if err != nil {
-		t.Fatalf("persistUserMessage: %v", err)
-	}
+	turn := seedCanonicalTitleTurn(t, ctx, svc, thread.ThreadID, "turn_title_recovery", "run_title_recovery", "please recover the blank thread title after restart")
 	if err := svc.Close(); err != nil {
 		t.Fatalf("Close initial service: %v", err)
 	}
@@ -757,8 +763,8 @@ func TestNewService_RecoversPendingAutoThreadTitles(t *testing.T) {
 		}
 		if th != nil && strings.TrimSpace(th.Title) != "" {
 			assertShortAutoTitle(t, th.Title)
-			if th.TitleInputMessageID != persisted.MessageID {
-				t.Fatalf("TitleInputMessageID=%q, want %q", th.TitleInputMessageID, persisted.MessageID)
+			if th.TitleInputMessageID != turn.UserEntryID {
+				t.Fatalf("TitleInputMessageID=%q, want %q", th.TitleInputMessageID, turn.UserEntryID)
 			}
 			if recoveryMock.count() == 0 {
 				t.Fatalf("recovery requestCount=0, want >=1")

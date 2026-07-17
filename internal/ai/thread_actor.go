@@ -410,8 +410,7 @@ func queuedTurnStartLogAttrs(err error, endpointID string, threadID string) []an
 }
 
 func queuedTurnStartErrorIsPermanent(err error) bool {
-	return errors.Is(err, threadstore.ErrDuplicateUserTurnMessage) ||
-		errors.Is(err, sql.ErrNoRows) ||
+	return errors.Is(err, sql.ErrNoRows) ||
 		errors.Is(err, ErrReadOnlyThread) ||
 		errors.Is(err, ErrWaitingPromptChanged) ||
 		errors.Is(err, ErrWaitingUserQueueConflict)
@@ -483,8 +482,11 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 	if th == nil {
 		return nil
 	}
-	runStatus, _, _ := normalizeThreadRunState(th.RunStatus, th.RunErrorCode, th.RunError)
-	if NormalizeRunState(runStatus) == RunStateWaitingUser || requestUserInputPromptFromThreadRecord(th, runStatus) != nil {
+	snapshot, latest, canonicalErr := a.mgr.svc.readCanonicalThreadState(ctx, threadID)
+	if canonicalErr != nil && !isFloretThreadNotFoundError(canonicalErr) {
+		return canonicalErr
+	}
+	if canonicalErr == nil && (!snapshot.CanAppendMessage || requestUserInputPromptFromFloretTurn(latest) != nil) {
 		return nil
 	}
 
@@ -498,9 +500,9 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 		return nil
 	}
 	rec := queued[0]
-	runID, err := NewRunID()
-	if err != nil {
-		return err
+	runID := strings.TrimSpace(rec.RunID)
+	if runID == "" {
+		return errors.New("pending turn command is missing run identity")
 	}
 	meta := queuedTurnRecordToSessionMeta(rec, th.NamespacePublicID)
 	startReq, err := queuedTurnRecordToRunStartRequest(rec, th.PermissionType)
@@ -512,7 +514,7 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 			endpointID:         endpointID,
 			threadID:           threadID,
 			queueID:            rec.QueueID,
-			messageID:          rec.MessageID,
+			messageID:          rec.TurnID,
 			runID:              runID,
 			requireSourceQueue: true,
 			err:                err,
@@ -531,7 +533,7 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 			endpointID:         endpointID,
 			threadID:           threadID,
 			queueID:            rec.QueueID,
-			messageID:          rec.MessageID,
+			messageID:          rec.TurnID,
 			runID:              runID,
 			requireSourceQueue: true,
 			err:                err,
@@ -601,17 +603,20 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		return SendUserTurnResponse{}, err
 	}
 	req.Model = resolvedModel.ID
-	resolvedPermissionType, err := normalizePermissionType(threadPermissionTypeString(th, ""), FlowerPermissionApprovalRequired)
+	resolvedPermissionType, err := normalizePermissionType(threadPermissionTypeString(th), FlowerPermissionApprovalRequired)
 	if err != nil {
 		resolvedPermissionType = FlowerPermissionApprovalRequired
 	}
-	runStatus, _, _ := normalizeThreadRunState(th.RunStatus, th.RunErrorCode, th.RunError)
 	consumeSourceFollowup := func() {
 		if err := a.mgr.svc.consumeSourceFollowup(context.Background(), meta, threadID, req.SourceFollowupID); err != nil && a.mgr.svc.log != nil {
 			a.mgr.svc.log.Warn("failed to consume source followup", "thread_id", threadID, "followup_id", strings.TrimSpace(req.SourceFollowupID), "error", err)
 		}
 	}
-	openPrompt := a.mgr.svc.threadWaitingPrompt(ctx, th, runStatus)
+	_, latest, canonicalErr := a.mgr.svc.readCanonicalThreadState(ctx, threadID)
+	if canonicalErr != nil && !isFloretThreadNotFoundError(canonicalErr) {
+		return SendUserTurnResponse{}, canonicalErr
+	}
+	openPrompt := requestUserInputPromptFromFloretTurn(latest)
 	normalizeTurnReasoning := func(options *RunOptions) error {
 		if options == nil {
 			return nil
@@ -776,12 +781,15 @@ func (a *threadActor) handleSubmitRequestUserInputResponse(ctx context.Context, 
 		return SubmitRequestUserInputResponseResponse{}, err
 	}
 	req.Model = resolvedModel.ID
-	resolvedPermissionType, err := normalizePermissionType(threadPermissionTypeString(th, ""), FlowerPermissionApprovalRequired)
+	resolvedPermissionType, err := normalizePermissionType(threadPermissionTypeString(th), FlowerPermissionApprovalRequired)
 	if err != nil {
 		resolvedPermissionType = FlowerPermissionApprovalRequired
 	}
-	runStatus, _, _ := normalizeThreadRunState(th.RunStatus, th.RunErrorCode, th.RunError)
-	openPrompt := a.mgr.svc.threadWaitingPrompt(ctx, th, runStatus)
+	_, latest, canonicalErr := a.mgr.svc.readCanonicalThreadState(ctx, threadID)
+	if canonicalErr != nil {
+		return SubmitRequestUserInputResponseResponse{}, canonicalErr
+	}
+	openPrompt := requestUserInputPromptFromFloretTurn(latest)
 	if openPrompt == nil {
 		return SubmitRequestUserInputResponseResponse{}, ErrWaitingPromptChanged
 	}

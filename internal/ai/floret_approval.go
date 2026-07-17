@@ -165,7 +165,7 @@ func (r *run) persistFloretToolPolicyEvent(toolID string, toolName string, args 
 		return
 	}
 	commandProfile := aitools.InvocationCommandProfile(toolName, args)
-	r.persistRunEvent("tool.policy", RealtimeStreamKindLifecycle, map[string]any{
+	r.recordRunDiagnostic("tool.policy", RealtimeStreamKindLifecycle, map[string]any{
 		"tool_id":                    strings.TrimSpace(toolID),
 		"tool_name":                  strings.TrimSpace(toolName),
 		"normalized_command":         strings.TrimSpace(commandProfile.NormalizedCommand),
@@ -745,18 +745,6 @@ func (r *run) publishThreadApprovalState(status string) {
 	runID := strings.TrimSpace(r.id)
 	if endpointID == "" || threadID == "" || runID == "" {
 		return
-	}
-	db := r.threadsDB
-	if db != nil {
-		persistTO := r.persistOpTimeout
-		if persistTO <= 0 {
-			persistTO = defaultPersistOpTimeout
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), persistTO)
-		if err := db.UpdateThreadRunState(ctx, endpointID, threadID, status, "", "", "", runUserPublicID(r), ""); err != nil && r.log != nil {
-			r.log.Warn("update thread approval state failed", "thread_id", threadID, "run_id", runID, "status", status, "error", err)
-		}
-		cancel()
 	}
 	r.service.broadcastThreadState(endpointID, threadID, runID, status, "", "")
 	r.service.broadcastThreadSummary(endpointID, threadID)

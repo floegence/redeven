@@ -47,10 +47,10 @@ func (r *run) activateSkill(name string) (SkillActivation, bool, error) {
 	}
 	activation, alreadyActive, err := mgr.Activate(name, r.skillPermissionType(), false)
 	if err != nil {
-		r.persistRunEvent("skill.activate.error", RealtimeStreamKindLifecycle, map[string]any{"name": strings.TrimSpace(name), "error": err.Error()})
+		r.recordRunDiagnostic("skill.activate.error", RealtimeStreamKindLifecycle, map[string]any{"name": strings.TrimSpace(name), "error": err.Error()})
 		return SkillActivation{}, false, err
 	}
-	r.persistRunEvent("skill.activated", RealtimeStreamKindLifecycle, map[string]any{"name": activation.Name, "activation_id": activation.ActivationID, "already_active": alreadyActive})
+	r.recordRunDiagnostic("skill.activated", RealtimeStreamKindLifecycle, map[string]any{"name": activation.Name, "activation_id": activation.ActivationID, "already_active": alreadyActive})
 	return activation, alreadyActive, nil
 }
 
@@ -93,7 +93,7 @@ func (r *run) manageSubagentsForTool(ctx context.Context, toolCallID string, arg
 			msg:  "subagents action is required",
 			meta: nil,
 		}
-		r.persistRunEvent("delegation.manage.validation_error", RealtimeStreamKindLifecycle, map[string]any{
+		r.recordRunDiagnostic("delegation.manage.validation_error", RealtimeStreamKindLifecycle, map[string]any{
 			"action":                "",
 			"provided_keys":         subagentValidationProvidedKeys(args),
 			"contract_variant":      "unknown",
@@ -112,7 +112,7 @@ func (r *run) manageSubagentsForTool(ctx context.Context, toolCallID string, arg
 		if errors.As(err, &subagentErr) {
 			eventPayload["validation_error_code"] = subagentErr.InvalidArgumentsCode()
 		}
-		r.persistRunEvent("delegation.manage.validation_error", RealtimeStreamKindLifecycle, eventPayload)
+		r.recordRunDiagnostic("delegation.manage.validation_error", RealtimeStreamKindLifecycle, eventPayload)
 		return nil, err
 	}
 	runtime := r.ensureSubagentRuntime()

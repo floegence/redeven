@@ -103,13 +103,13 @@ type aiListMessagesReq struct {
 }
 
 type aiListMessagesResp struct {
-	Messages            []aiTranscriptMessageItem  `json:"messages"`
+	Messages            []aiTimelineMessageItem    `json:"messages"`
 	TimelineDecorations []FlowerTimelineDecoration `json:"timeline_decorations,omitempty"`
 	NextAfterRowID      int64                      `json:"next_after_row_id,omitempty"`
 	HasMore             bool                       `json:"has_more,omitempty"`
 }
 
-type aiTranscriptMessageItem struct {
+type aiTimelineMessageItem struct {
 	RowID       int64           `json:"row_id"`
 	MessageJSON json.RawMessage `json:"message_json"`
 }
@@ -303,11 +303,11 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 		endpointID := strings.TrimSpace(meta.EndpointID)
 		msgs, nextAfter, hasMore, err := s.listThreadTimelineMessagesAfter(ctx, endpointID, threadID, limit, req.AfterRowID, req.Tail)
 		if err != nil {
-			return nil, &rpc.Error{Code: 400, Message: err.Error()}
+			return nil, toAIRPCError(err)
 		}
 
 		out := &aiListMessagesResp{
-			Messages:            make([]aiTranscriptMessageItem, 0, len(msgs)),
+			Messages:            make([]aiTimelineMessageItem, 0, len(msgs)),
 			TimelineDecorations: make([]FlowerTimelineDecoration, 0),
 			NextAfterRowID:      nextAfter,
 			HasMore:             hasMore,
@@ -320,7 +320,7 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 			if len(m.MessageJSON) == 0 {
 				continue
 			}
-			out.Messages = append(out.Messages, aiTranscriptMessageItem{
+			out.Messages = append(out.Messages, aiTimelineMessageItem{
 				RowID:       m.RowID,
 				MessageJSON: m.MessageJSON,
 			})
@@ -347,7 +347,8 @@ func toAIRPCError(err error) *rpc.Error {
 		errors.Is(err, ErrWaitingPromptChanged),
 		errors.Is(err, ErrFollowupsRevisionChanged),
 		errors.Is(err, ErrCompactAlreadyPending),
-		errors.Is(err, ErrNoCompactableContext):
+		errors.Is(err, ErrNoCompactableContext),
+		errors.Is(err, ErrCanonicalTimelineResyncRequired):
 		return &rpc.Error{Code: 409, Message: msg}
 	}
 

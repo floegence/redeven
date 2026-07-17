@@ -525,16 +525,6 @@ export function applyFlowerLiveEvent(
         resyncRequired = !result.ok;
       }
       break;
-    case 'message.committed':
-      if (!event.payload.message || !trim(event.payload.message.id)) {
-        resyncRequired = true;
-      } else {
-        next = {
-          ...replaceMessage(next, event.payload.message),
-          approval_actions: pendingApprovalActions(next.approval_actions),
-        };
-      }
-      break;
     case 'message.failed':
       {
         const result = updateMessageStrict(next, event.payload.message_id, (message) => ({ ...message, status: 'error' }));

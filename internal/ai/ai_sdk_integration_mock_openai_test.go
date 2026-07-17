@@ -393,14 +393,6 @@ func TestIntegration_ModelGateway_OpenAI_IdentityQuestionCompletesWithNaturalSto
 		t.Fatalf("unexpected OpenAI Chat Completions API call (/chat/completions)")
 	}
 
-	runEvents, err := svc.ListRunEvents(ctx, &meta, runID, 2000)
-	if err != nil {
-		t.Fatalf("ListRunEvents: %v", err)
-	}
-	endPayload := findRunEventPayload(t, runEvents.Events, "run.end")
-	if got := strings.TrimSpace(fmt.Sprint(endPayload["finalization_reason"])); got != "natural_stop" {
-		t.Fatalf("finalization_reason=%q, want %q", got, "natural_stop")
-	}
 }
 
 func TestIntegration_ModelGateway_OpenAI_ResponsesStream_GPT4o_Succeeds(t *testing.T) {

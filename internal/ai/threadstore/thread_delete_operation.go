@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"strings"
 	"time"
 )
@@ -25,7 +24,6 @@ var ErrThreadIDRetired = errors.New("thread id retired")
 
 type ThreadDeleteSnapshotV1 struct {
 	SchemaVersion         int      `json:"schema_version"`
-	CheckpointIDs         []string `json:"checkpoint_ids"`
 	UploadCleanupIDs      []string `json:"upload_cleanup_ids"`
 	DeleteFlowerReadState bool     `json:"delete_flower_read_state"`
 }
@@ -88,10 +86,6 @@ func (s *Store) PrepareThreadDeleteOperation(ctx context.Context, endpointID str
 	if thread == nil {
 		return ThreadDeleteOperation{}, sql.ErrNoRows
 	}
-	checkpointIDs, err := listThreadCheckpointIDsTx(ctx, tx, endpointID, threadID)
-	if err != nil {
-		return ThreadDeleteOperation{}, err
-	}
 	now := time.Now().UnixMilli()
 	uploads, err := prepareUploadCleanupForThreadTx(ctx, tx, endpointID, threadID, now)
 	if err != nil {
@@ -103,7 +97,6 @@ func (s *Store) PrepareThreadDeleteOperation(ctx context.Context, endpointID str
 	}
 	snapshot := ThreadDeleteSnapshotV1{
 		SchemaVersion:         ThreadDeleteSnapshotSchemaV1,
-		CheckpointIDs:         dedupeNonEmptyStrings(checkpointIDs),
 		UploadCleanupIDs:      dedupeNonEmptyStrings(uploadIDs),
 		DeleteFlowerReadState: deleteFlowerReadState,
 	}
@@ -358,7 +351,6 @@ func scanThreadDeleteOperation(scanner rowScanner) (*ThreadDeleteOperation, erro
 	}
 	if operation.Snapshot.SchemaVersion != ThreadDeleteSnapshotSchemaV1 ||
 		operation.Snapshot.DeleteFlowerReadState != (readStateRequired != 0) ||
-		!validThreadDeleteSnapshotIDs(operation.Snapshot.CheckpointIDs) ||
 		!validThreadDeleteSnapshotIDs(operation.Snapshot.UploadCleanupIDs) {
 		operation.SnapshotValid = false
 		operation.SnapshotErrorCode = "invalid_snapshot_contract"
@@ -370,7 +362,7 @@ func validThreadDeleteSnapshotIDs(ids []string) bool {
 	seen := make(map[string]struct{}, len(ids))
 	for _, raw := range ids {
 		id := strings.TrimSpace(raw)
-		if id == "" || id != raw || filepath.Base(id) != id || id == "." {
+		if id == "" || id != raw || strings.ContainsAny(id, `/\\`) || id == "." {
 			return false
 		}
 		if _, exists := seen[id]; exists {

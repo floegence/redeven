@@ -243,6 +243,7 @@ func openTestThreadReadStateStore(t *testing.T) *threadreadstate.Store {
 }
 
 type failingThreadMaintenanceHost struct {
+	ai.ThreadMaintenanceHost
 	err error
 }
 
@@ -1822,8 +1823,9 @@ func TestServer_AIDefaultPermissionUpdate_PreservesModelProfile(t *testing.T) {
 	if err := config.Save(cfgPath, persisted); err != nil {
 		t.Fatalf("save config: %v", err)
 	}
+	stateDir := t.TempDir()
 	aiSvc, err := ai.NewService(ai.Options{
-		StateDir:     t.TempDir(),
+		StateDir:     stateDir,
 		AgentHomeDir: t.TempDir(),
 		Shell:        "/bin/sh",
 		Config:       aiCfg,
@@ -2709,8 +2711,9 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 
 	cfgPath := writeTestConfig(t)
 	store := openTestThreadReadStateStore(t)
+	stateDir := t.TempDir()
 	aiSvc, err := ai.NewService(ai.Options{
-		StateDir:     t.TempDir(),
+		StateDir:     stateDir,
 		AgentHomeDir: t.TempDir(),
 		Shell:        "/bin/sh",
 	})
@@ -2754,9 +2757,7 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	if err := aiSvc.AppendThreadMessage(context.Background(), &creatorMeta, thread.ThreadID, "user", "First prompt", "markdown"); err != nil {
-		t.Fatalf("AppendThreadMessage(first): %v", err)
-	}
+	seedFloretThreadTurn(t, stateDir, thread.ThreadID, "turn_read_state_1", "run_read_state_1", "First prompt", "First response")
 
 	srv, err := New(Options{
 		Backend:              &stubBackend{},
@@ -2905,9 +2906,7 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 		t.Fatalf("user2 first list is_unread=true, want=false")
 	}
 
-	if err := aiSvc.AppendThreadMessage(context.Background(), &creatorMeta, thread.ThreadID, "user", "Second prompt", "markdown"); err != nil {
-		t.Fatalf("AppendThreadMessage(second): %v", err)
-	}
+	seedFloretThreadTurn(t, stateDir, thread.ThreadID, "turn_read_state_2", "run_read_state_2", "Second prompt", "Second response")
 
 	detail := readDetail(originUser1)
 	if !detail.Data.Thread.ReadStatus.IsUnread {
@@ -2955,9 +2954,7 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 		t.Fatalf("mismatched last-message ai mark-read status=%d, want=%d body=%s", mismatchedLastMessageRead.Code, http.StatusBadRequest, mismatchedLastMessageRead.Body.String())
 	}
 
-	if err := aiSvc.AppendThreadMessage(context.Background(), &creatorMeta, thread.ThreadID, "user", "Concurrent prompt", "markdown"); err != nil {
-		t.Fatalf("AppendThreadMessage(concurrent): %v", err)
-	}
+	seedFloretThreadTurn(t, stateDir, thread.ThreadID, "turn_read_state_3", "run_read_state_3", "Concurrent prompt", "Concurrent response")
 	staleTampered := markRead(originUser1, aiThreadReadStatusSnapshot{
 		ActivityRevision:    staleSnapshot.ActivityRevision,
 		LastMessageAtUnixMs: staleSnapshot.LastMessageAtUnixMs,
@@ -3022,8 +3019,9 @@ func TestServer_AIThreadLiveEventsIncludeReadStatus(t *testing.T) {
 	}
 	cfgPath := writeTestConfig(t)
 	store := openTestThreadReadStateStore(t)
+	stateDir := t.TempDir()
 	aiSvc, err := ai.NewService(ai.Options{
-		StateDir:     t.TempDir(),
+		StateDir:     stateDir,
 		AgentHomeDir: t.TempDir(),
 		Shell:        "/bin/sh",
 	})
@@ -3037,9 +3035,7 @@ func TestServer_AIThreadLiveEventsIncludeReadStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	if err := aiSvc.AppendThreadMessage(context.Background(), &meta, thread.ThreadID, "user", "Initial", "markdown"); err != nil {
-		t.Fatalf("AppendThreadMessage(initial): %v", err)
-	}
+	seedFloretThreadTurn(t, stateDir, thread.ThreadID, "turn_live_read_1", "run_live_read_1", "Initial", "Initial response")
 
 	srv, err := New(Options{
 		Backend:              &stubBackend{},
@@ -3058,9 +3054,7 @@ func TestServer_AIThreadLiveEventsIncludeReadStatus(t *testing.T) {
 	if initialDetail.Code != http.StatusOK {
 		t.Fatalf("initial detail status=%d body=%s", initialDetail.Code, initialDetail.Body.String())
 	}
-	if err := aiSvc.AppendThreadMessage(context.Background(), &meta, thread.ThreadID, "user", "Final", "markdown"); err != nil {
-		t.Fatalf("AppendThreadMessage(final): %v", err)
-	}
+	seedFloretThreadTurn(t, stateDir, thread.ThreadID, "turn_live_read_2", "run_live_read_2", "Final", "Final response")
 	if err := aiSvc.RenameThread(context.Background(), &meta, thread.ThreadID, "Live events read state updated"); err != nil {
 		t.Fatalf("RenameThread: %v", err)
 	}
@@ -3147,9 +3141,6 @@ func TestServer_AIThreadForkDecodesBodyStrictly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	if err := aiSvc.AppendThreadMessage(context.Background(), &meta, thread.ThreadID, "user", "Fork me", "markdown"); err != nil {
-		t.Fatalf("AppendThreadMessage: %v", err)
-	}
 	seedFloretForkSourceThread(t, stateDir, thread.ThreadID)
 	srv, err := New(Options{
 		Backend:            &stubBackend{},
@@ -3201,6 +3192,11 @@ func TestServer_AIThreadForkDecodesBodyStrictly(t *testing.T) {
 
 func seedFloretForkSourceThread(t *testing.T, stateDir string, threadID string) {
 	t.Helper()
+	seedFloretThreadTurn(t, stateDir, threadID, "turn_appserver_fork_source", "run_appserver_fork_source", "Fork me", "fork source projection")
+}
+
+func seedFloretThreadTurn(t *testing.T, stateDir string, threadID string, turnID string, runID string, input string, output string) {
+	t.Helper()
 
 	store, err := flruntime.OpenSQLiteStore(filepath.Join(stateDir, "ai", "floret_threads.sqlite"))
 	if err != nil {
@@ -3210,7 +3206,7 @@ func seedFloretForkSourceThread(t *testing.T, stateDir string, threadID string) 
 		Config: flconfig.Config{
 			Provider:     flconfig.ProviderFake,
 			Model:        "fake-model",
-			FakeResponse: "fork source projection",
+			FakeResponse: output,
 			SystemPrompt: "test",
 		},
 		Store: store,
@@ -3222,14 +3218,14 @@ func seedFloretForkSourceThread(t *testing.T, stateDir string, threadID string) 
 	defer func() { _ = store.Close() }()
 
 	ctx := context.Background()
-	if _, err := host.StartThread(ctx, flruntime.StartThreadRequest{ThreadID: flruntime.ThreadID(threadID)}); err != nil {
-		t.Fatalf("StartThread: %v", err)
+	if _, err := host.EnsureThread(ctx, flruntime.EnsureThreadRequest{ThreadID: flruntime.ThreadID(threadID)}); err != nil {
+		t.Fatalf("EnsureThread: %v", err)
 	}
 	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
 		ThreadID: flruntime.ThreadID(threadID),
-		TurnID:   flruntime.TurnID("turn_appserver_fork_source"),
-		RunID:    flruntime.RunID("run_appserver_fork_source"),
-		Input:    "Fork me",
+		TurnID:   flruntime.TurnID(turnID),
+		RunID:    flruntime.RunID(runID),
+		Input:    input,
 	}); err != nil {
 		t.Fatalf("RunTurn: %v", err)
 	}
@@ -3355,13 +3351,19 @@ func TestServer_AIThreadDeleteReturnsAcceptedForPersistedPendingOperation(t *tes
 	}
 	store := openTestThreadReadStateStore(t)
 	stateDir := t.TempDir()
+	canonicalStore := flruntime.NewMemoryStore()
+	t.Cleanup(func() { _ = canonicalStore.Close() })
+	canonicalHost, err := flruntime.NewThreadMaintenanceHost(flruntime.ThreadMaintenanceHostOptions{Store: canonicalStore})
+	if err != nil {
+		t.Fatalf("NewThreadMaintenanceHost: %v", err)
+	}
 	aiSvc, err := ai.NewService(ai.Options{
 		StateDir:               stateDir,
 		AgentHomeDir:           t.TempDir(),
 		Shell:                  "/bin/sh",
 		FlowerReadStateCleaner: store,
 		OpenThreadMaintenanceHost: func() (ai.ThreadMaintenanceHost, error) {
-			return &failingThreadMaintenanceHost{err: errors.New("temporary Floret delete failure")}, nil
+			return &failingThreadMaintenanceHost{ThreadMaintenanceHost: canonicalHost, err: errors.New("temporary Floret delete failure")}, nil
 		},
 	})
 	if err != nil {

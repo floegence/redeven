@@ -33,7 +33,8 @@ func scanFollowup(scanner interface{ Scan(...any) error }) (QueuedTurn, error) {
 		&rec.ThreadID,
 		&rec.ChannelID,
 		&rec.Lane,
-		&rec.MessageID,
+		&rec.TurnID,
+		&rec.RunID,
 		&rec.ModelID,
 		&rec.TextContent,
 		&rec.AttachmentsJSON,
@@ -121,7 +122,7 @@ func listFollowupsByLaneTx(ctx context.Context, tx *sql.Tx, endpointID string, t
 		limit = 500
 	}
 	rows, err := tx.QueryContext(ctx, `
-SELECT queue_id, endpoint_id, thread_id, channel_id, lane, message_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
+SELECT queue_id, endpoint_id, thread_id, channel_id, lane, turn_id, run_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
        created_by_user_public_id, created_by_user_email, sort_index, created_at_unix_ms, updated_at_unix_ms
 FROM ai_queued_turns
 WHERE endpoint_id = ? AND thread_id = ? AND lane = ?
@@ -146,14 +147,14 @@ LIMIT ?
 	return out, nil
 }
 
-func getFollowupByLaneAndMessageIDTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, lane string, messageID string) (QueuedTurn, error) {
+func getFollowupByLaneAndTurnIDTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, lane string, turnID string) (QueuedTurn, error) {
 	lane = normalizeFollowupLane(lane)
 	row := tx.QueryRowContext(ctx, `
-SELECT queue_id, endpoint_id, thread_id, channel_id, lane, message_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
+SELECT queue_id, endpoint_id, thread_id, channel_id, lane, turn_id, run_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
        created_by_user_public_id, created_by_user_email, sort_index, created_at_unix_ms, updated_at_unix_ms
 FROM ai_queued_turns
-WHERE endpoint_id = ? AND thread_id = ? AND lane = ? AND message_id = ?
-`, endpointID, threadID, lane, messageID)
+WHERE endpoint_id = ? AND thread_id = ? AND lane = ? AND turn_id = ?
+`, endpointID, threadID, lane, turnID)
 	return scanFollowup(row)
 }
 
@@ -196,7 +197,8 @@ func (s *Store) CreateFollowup(ctx context.Context, rec QueuedTurn) (QueuedTurn,
 	rec.ThreadID = strings.TrimSpace(rec.ThreadID)
 	rec.ChannelID = strings.TrimSpace(rec.ChannelID)
 	rec.Lane = normalizeFollowupLane(rec.Lane)
-	rec.MessageID = strings.TrimSpace(rec.MessageID)
+	rec.TurnID = strings.TrimSpace(rec.TurnID)
+	rec.RunID = strings.TrimSpace(rec.RunID)
 	rec.ModelID = strings.TrimSpace(rec.ModelID)
 	rec.TextContent = strings.TrimSpace(rec.TextContent)
 	rec.AttachmentsJSON = strings.TrimSpace(rec.AttachmentsJSON)
@@ -204,7 +206,7 @@ func (s *Store) CreateFollowup(ctx context.Context, rec QueuedTurn) (QueuedTurn,
 	rec.SessionMetaJSON = strings.TrimSpace(rec.SessionMetaJSON)
 	rec.CreatedByUserPublicID = strings.TrimSpace(rec.CreatedByUserPublicID)
 	rec.CreatedByUserEmail = strings.TrimSpace(rec.CreatedByUserEmail)
-	if rec.QueueID == "" || rec.EndpointID == "" || rec.ThreadID == "" || rec.ChannelID == "" || rec.MessageID == "" {
+	if rec.QueueID == "" || rec.EndpointID == "" || rec.ThreadID == "" || rec.ChannelID == "" || rec.TurnID == "" || rec.RunID == "" {
 		return QueuedTurn{}, 0, 0, errors.New("invalid request")
 	}
 	if rec.AttachmentsJSON == "" {
@@ -253,17 +255,17 @@ func createFollowupTx(ctx context.Context, tx *sql.Tx, rec QueuedTurn) (QueuedTu
 
 	_, err := tx.ExecContext(ctx, `
 INSERT INTO ai_queued_turns(
-  queue_id, endpoint_id, thread_id, channel_id, lane, sort_index, message_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
+  queue_id, endpoint_id, thread_id, channel_id, lane, sort_index, turn_id, run_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
   created_by_user_public_id, created_by_user_email, created_at_unix_ms, updated_at_unix_ms
 )
-VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, rec.QueueID, rec.EndpointID, rec.ThreadID, rec.ChannelID, rec.Lane, rec.SortIndex, rec.MessageID, rec.ModelID, rec.TextContent, rec.AttachmentsJSON, rec.ContextActionJSON, rec.OptionsJSON, rec.SessionMetaJSON,
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`, rec.QueueID, rec.EndpointID, rec.ThreadID, rec.ChannelID, rec.Lane, rec.SortIndex, rec.TurnID, rec.RunID, rec.ModelID, rec.TextContent, rec.AttachmentsJSON, rec.ContextActionJSON, rec.OptionsJSON, rec.SessionMetaJSON,
 		rec.CreatedByUserPublicID, rec.CreatedByUserEmail, rec.CreatedAtUnixMs, rec.UpdatedAtUnixMs)
 	if err != nil {
 		if !isUniqueConstraintError(err) {
 			return QueuedTurn{}, 0, 0, err
 		}
-		existing, getErr := getFollowupByLaneAndMessageIDTx(ctx, tx, rec.EndpointID, rec.ThreadID, rec.Lane, rec.MessageID)
+		existing, getErr := getFollowupByLaneAndTurnIDTx(ctx, tx, rec.EndpointID, rec.ThreadID, rec.Lane, rec.TurnID)
 		if getErr != nil {
 			return QueuedTurn{}, 0, 0, err
 		}
@@ -394,7 +396,7 @@ func (s *Store) ListFollowupsByLane(ctx context.Context, endpointID string, thre
 		limit = 500
 	}
 	rows, err := s.db.QueryContext(ctx, `
-SELECT queue_id, endpoint_id, thread_id, channel_id, lane, message_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
+SELECT queue_id, endpoint_id, thread_id, channel_id, lane, turn_id, run_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
        created_by_user_public_id, created_by_user_email, sort_index, created_at_unix_ms, updated_at_unix_ms
 FROM ai_queued_turns
 WHERE endpoint_id = ? AND thread_id = ? AND lane = ?
@@ -436,10 +438,6 @@ func (s *Store) ListThreadsWithQueuedTurns(ctx context.Context, limit int) ([]Qu
 SELECT
   t.endpoint_id,
   t.thread_id,
-  t.run_status,
-  t.run_error_code,
-  t.run_error,
-  t.waiting_user_input_json,
   t.namespace_public_id,
   COUNT(q.queue_id) AS queued_turn_count,
   MIN(q.created_at_unix_ms) AS first_queued_at_unix_ms,
@@ -461,10 +459,6 @@ JOIN ai_queued_turns AS q
 GROUP BY
   t.endpoint_id,
   t.thread_id,
-  t.run_status,
-  t.run_error_code,
-  t.run_error,
-  t.waiting_user_input_json,
   t.namespace_public_id
 ORDER BY first_queued_sort_index ASC, first_queued_at_unix_ms ASC, t.thread_id ASC
 LIMIT ?
@@ -480,10 +474,6 @@ LIMIT ?
 		if err := rows.Scan(
 			&rec.EndpointID,
 			&rec.ThreadID,
-			&rec.RunStatus,
-			&rec.RunErrorCode,
-			&rec.RunError,
-			&rec.WaitingUserInputJSON,
 			&rec.NamespacePublicID,
 			&rec.QueuedTurnCount,
 			&rec.FirstQueuedAtUnixMs,

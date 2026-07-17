@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
@@ -649,30 +650,37 @@ func (s *Service) recoverAutoThreadTitleRequest(ctx context.Context, endpointID 
 	}
 
 	loadCtx, cancel := context.WithTimeout(ctx, persistTO)
-	messages, err := db.ListRecentTranscriptMessages(loadCtx, endpointID, threadID, 24)
+	host, err := s.openFloretMaintenanceHost()
+	if err != nil {
+		cancel()
+		return autoThreadTitleRequest{}, false, err
+	}
+	page, err := host.ListThreadTurns(loadCtx, flruntime.ListThreadTurnsRequest{ThreadID: flruntime.ThreadID(threadID), Tail: 24})
 	cancel()
 	if err != nil {
 		return autoThreadTitleRequest{}, false, err
 	}
-
-	for i := len(messages) - 1; i >= 0; i-- {
-		msg := messages[i]
-		if !strings.EqualFold(strings.TrimSpace(msg.Role), "user") {
-			continue
-		}
-		publicText := strings.TrimSpace(msg.TextContent)
+	thread, err := db.GetThread(ctx, endpointID, threadID)
+	if err != nil {
+		return autoThreadTitleRequest{}, false, err
+	}
+	if thread == nil {
+		return autoThreadTitleRequest{}, false, nil
+	}
+	for _, turn := range page.Turns {
+		publicText := strings.TrimSpace(turn.UserInput)
 		if publicText == "" {
 			continue
 		}
 		return autoThreadTitleRequest{
 			EndpointID:             endpointID,
 			ThreadID:               threadID,
-			MessageID:              strings.TrimSpace(msg.MessageID),
-			MessageRowID:           msg.ID,
-			MessageCreatedAtUnixMs: msg.CreatedAtUnixMs,
+			MessageID:              strings.TrimSpace(turn.UserEntryID),
+			MessageRowID:           turn.Ordinal,
+			MessageCreatedAtUnixMs: turn.StartedAt.UnixMilli(),
 			PublicText:             publicText,
-			UpdatedByID:            strings.TrimSpace(msg.AuthorUserPublicID),
-			UpdatedByEmail:         strings.TrimSpace(msg.AuthorUserEmail),
+			UpdatedByID:            strings.TrimSpace(thread.UpdatedByUserPublicID),
+			UpdatedByEmail:         strings.TrimSpace(thread.UpdatedByUserEmail),
 		}, true, nil
 	}
 	return autoThreadTitleRequest{}, false, nil

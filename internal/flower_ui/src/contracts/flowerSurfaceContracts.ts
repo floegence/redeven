@@ -245,7 +245,7 @@ export type FlowerTimelineAnchor = Readonly<{
   edge: FlowerTimelineAnchorEdge;
 }>;
 
-export type FlowerTurnProjectionUnavailableReason = 'not_found' | 'invalid_contract' | 'not_renderable';
+export type FlowerTurnProjectionUnavailableReason = 'not_renderable';
 
 export type FlowerTurnProjectionUnavailable = Readonly<{
   turn_id: string;
@@ -681,7 +681,6 @@ export type FlowerLiveKind =
   | 'message.block_started'
   | 'message.block_delta'
   | 'message.block_set'
-  | 'message.committed'
   | 'message.failed'
   | 'approval.requested'
   | 'approval.resolved'
@@ -787,11 +786,6 @@ export type FlowerLiveMessageBlockSetPayload = Readonly<{
   block: FlowerLiveBlock;
 }>;
 
-export type FlowerLiveMessageCommittedPayload = Readonly<{
-  message_id: string;
-  message: FlowerChatMessage;
-}>;
-
 export type FlowerLiveMessageFailedPayload = Readonly<{
   message_id: string;
   error: string;
@@ -867,7 +861,6 @@ export type FlowerLiveEventPayloadByKind = Readonly<{
   'message.block_started': FlowerLiveMessageBlockStartedPayload;
   'message.block_delta': FlowerLiveMessageBlockDeltaPayload;
   'message.block_set': FlowerLiveMessageBlockSetPayload;
-  'message.committed': FlowerLiveMessageCommittedPayload;
   'message.failed': FlowerLiveMessageFailedPayload;
   'approval.requested': FlowerLiveApprovalPayload;
   'approval.resolved': FlowerLiveApprovalPayload;

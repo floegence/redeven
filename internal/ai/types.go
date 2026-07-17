@@ -304,12 +304,6 @@ type ListThreadMessagesResponse struct {
 	TotalReturned       int                        `json:"total_returned,omitempty"`
 }
 
-type AppendThreadMessageRequest struct {
-	Role   string `json:"role"`
-	Text   string `json:"text"`
-	Format string `json:"format,omitempty"` // markdown|text (defaults to markdown for now)
-}
-
 type FollowupAttachmentView struct {
 	Name     string `json:"name"`
 	MimeType string `json:"mime_type"`
@@ -447,22 +441,6 @@ type UploadResponse struct {
 	MimeType string `json:"mime_type"`
 }
 
-type RunEventView struct {
-	EventID    int64  `json:"event_id"`
-	RunID      string `json:"run_id"`
-	ThreadID   string `json:"thread_id"`
-	StreamKind string `json:"stream_kind,omitempty"`
-	EventType  string `json:"event_type"`
-	AtUnixMs   int64  `json:"at_unix_ms"`
-	Payload    any    `json:"payload,omitempty"`
-}
-
-type ListRunEventsResponse struct {
-	Events     []RunEventView `json:"events"`
-	NextCursor int64          `json:"next_cursor,omitempty"`
-	HasMore    bool           `json:"has_more,omitempty"`
-}
-
 // RunState is the normalized state machine for a single AI run.
 type RunState string
 
@@ -577,11 +555,9 @@ type streamEventApprovalAction struct {
 type RealtimeEventType string
 
 const (
-	RealtimeEventTypeStream          RealtimeEventType = "stream_event"
-	RealtimeEventTypeThreadState     RealtimeEventType = "thread_state"
-	RealtimeEventTypeTranscript      RealtimeEventType = "transcript_message"
-	RealtimeEventTypeTranscriptReset RealtimeEventType = "transcript_reset"
-	RealtimeEventTypeThreadSummary   RealtimeEventType = "thread_summary"
+	RealtimeEventTypeStream        RealtimeEventType = "stream_event"
+	RealtimeEventTypeThreadState   RealtimeEventType = "thread_state"
+	RealtimeEventTypeThreadSummary RealtimeEventType = "thread_summary"
 )
 
 // RealtimeStreamKind is a low-cardinality stream category for diagnostics/UI routing.
@@ -622,10 +598,6 @@ type RealtimeEvent struct {
 	RunError      string                  `json:"run_error,omitempty"`
 	WaitingPrompt *RequestUserInputPrompt `json:"waiting_prompt,omitempty"`
 
-	// Transcript message events (EventType=transcript_message).
-	MessageRowID int64           `json:"message_row_id,omitempty"`
-	MessageJSON  json.RawMessage `json:"message_json,omitempty"`
-
 	// Thread summary events (EventType=thread_summary).
 	Title               string                       `json:"title,omitempty"`
 	ModelID             string                       `json:"model_id,omitempty"`
@@ -637,10 +609,6 @@ type RealtimeEvent struct {
 	QueuedTurnCount     int                          `json:"queued_turn_count,omitempty"`
 	ReasoningSelection  config.AIReasoningSelection  `json:"reasoning_selection,omitempty"`
 	ReasoningCapability config.AIReasoningCapability `json:"reasoning_capability,omitempty"`
-
-	// Transcript reset events (EventType=transcript_reset).
-	ResetReason       string `json:"reset_reason,omitempty"`
-	ResetCheckpointID string `json:"reset_checkpoint_id,omitempty"`
 }
 
 // ActiveThreadRun is returned in subscribe snapshots so late subscribers can discover

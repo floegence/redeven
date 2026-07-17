@@ -165,72 +165,6 @@ func (s *Service) DetachRealtimeSink(streamServer *rpc.Server) {
 	}
 }
 
-func shouldPersistRealtimeEvent(ev RealtimeEvent) bool {
-	if ev.EventType == RealtimeEventTypeTranscript {
-		// Transcript messages are already persisted in transcript_messages and can be backfilled directly.
-		return false
-	}
-	if ev.EventType == RealtimeEventTypeTranscriptReset {
-		return false
-	}
-	if ev.EventType == RealtimeEventTypeThreadSummary {
-		return false
-	}
-	if ev.EventType == RealtimeEventTypeThreadState {
-		return true
-	}
-	// Skip noisy assistant delta frames; keep lifecycle/tool/terminal events.
-	switch ev.StreamEvent.(type) {
-	case streamEventBlockDelta:
-		return false
-	case streamEventContextUsage:
-		// Context telemetry is persisted via explicit run events.
-		return false
-	case streamEventContextCompaction:
-		// Context telemetry is persisted via explicit run events.
-		return false
-	default:
-		return true
-	}
-}
-
-func (s *Service) persistRealtimeEvent(ev RealtimeEvent) {
-	if s == nil || s.threadsDB == nil {
-		return
-	}
-	if !shouldPersistRealtimeEvent(ev) {
-		return
-	}
-	payload := map[string]any{
-		"event_type":     ev.EventType,
-		"stream_kind":    ev.StreamKind,
-		"phase":          ev.Phase,
-		"diag":           ev.Diag,
-		"run_status":     ev.RunStatus,
-		"run_error_code": ev.RunErrorCode,
-		"run_error":      ev.RunError,
-		"waiting_prompt": ev.WaitingPrompt,
-		"stream_event":   ev.StreamEvent,
-	}
-	b, err := json.Marshal(payload)
-	if err != nil {
-		return
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), s.persistOpTO)
-	defer cancel()
-	if err := s.threadsDB.AppendRunEvent(ctx, threadstore.RunEventRecord{
-		EndpointID:  ev.EndpointID,
-		ThreadID:    ev.ThreadID,
-		RunID:       ev.RunID,
-		StreamKind:  string(ev.StreamKind),
-		EventType:   string(ev.EventType),
-		PayloadJSON: strings.TrimSpace(string(b)),
-		AtUnixMs:    ev.AtUnixMs,
-	}); err != nil && s.log != nil {
-		s.log.Warn("persist realtime run event failed", "thread_id", ev.ThreadID, "run_id", ev.RunID, "event_type", ev.EventType, "stream_kind", ev.StreamKind, "error", err)
-	}
-}
-
 func (s *Service) broadcastRealtimeEvent(ev RealtimeEvent) {
 	if s == nil {
 		return
@@ -241,14 +175,12 @@ func (s *Service) broadcastRealtimeEvent(ev RealtimeEvent) {
 	if ev.EndpointID == "" || ev.ThreadID == "" {
 		return
 	}
-	// run_id is required for run-scoped events, but transcript messages may be appended outside a run.
-	if ev.EventType != RealtimeEventTypeTranscript && ev.EventType != RealtimeEventTypeTranscriptReset && ev.EventType != RealtimeEventTypeThreadSummary && ev.RunID == "" {
+	if ev.EventType != RealtimeEventTypeThreadSummary && ev.RunID == "" {
 		return
 	}
 	if ev.AtUnixMs <= 0 {
 		ev.AtUnixMs = time.Now().UnixMilli()
 	}
-	s.persistRealtimeEvent(ev)
 	s.publishFlowerLiveEventFromRealtime(ev)
 
 	payload, err := json.Marshal(ev)
@@ -301,9 +233,6 @@ const (
 
 func classifyRealtimePriority(ev RealtimeEvent) aiSinkPriority {
 	if ev.EventType == RealtimeEventTypeThreadState {
-		return aiSinkPriorityHigh
-	}
-	if ev.EventType == RealtimeEventTypeTranscriptReset {
 		return aiSinkPriorityHigh
 	}
 	switch ev.StreamEvent.(type) {
@@ -383,20 +312,15 @@ func (s *Service) broadcastThreadState(endpointID string, threadID string, runID
 	runErr = strings.TrimSpace(runErr)
 	var waitingPrompt *RequestUserInputPrompt
 	if s != nil {
-		s.mu.Lock()
-		db := s.threadsDB
-		persistTO := s.persistOpTO
-		s.mu.Unlock()
-		if db != nil {
-			if persistTO <= 0 {
-				persistTO = defaultPersistOpTimeout
-			}
-			ctx, cancel := context.WithTimeout(context.Background(), persistTO)
-			th, err := db.GetThread(ctx, strings.TrimSpace(endpointID), strings.TrimSpace(threadID))
-			if err == nil && th != nil {
-				waitingPrompt = s.threadWaitingPrompt(ctx, th, runStatus)
-			}
-			cancel()
+		timeout := s.persistOpTO
+		if timeout <= 0 {
+			timeout = defaultPersistOpTimeout
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		_, latest, err := s.readCanonicalThreadState(ctx, threadID)
+		cancel()
+		if err == nil {
+			waitingPrompt = requestUserInputPromptFromFloretTurn(latest)
 		}
 	}
 	ev := RealtimeEvent{
@@ -448,36 +372,6 @@ func isFlowerReadActivityStreamEvent(streamEvent any) bool {
 	}
 }
 
-func (s *Service) broadcastTranscriptMessage(endpointID string, threadID string, runID string, rowID int64, messageJSON string, atUnixMs int64) {
-	if s == nil {
-		return
-	}
-	if rowID <= 0 {
-		return
-	}
-	raw := strings.TrimSpace(messageJSON)
-	if raw == "" {
-		return
-	}
-	safeMessageJSON, err := SanitizeActivityTimelineMessageJSON(raw)
-	if err != nil || len(safeMessageJSON) == 0 {
-		return
-	}
-	if atUnixMs <= 0 {
-		atUnixMs = time.Now().UnixMilli()
-	}
-	ev := RealtimeEvent{
-		EventType:    RealtimeEventTypeTranscript,
-		EndpointID:   strings.TrimSpace(endpointID),
-		ThreadID:     strings.TrimSpace(threadID),
-		RunID:        strings.TrimSpace(runID),
-		AtUnixMs:     atUnixMs,
-		MessageRowID: rowID,
-		MessageJSON:  safeMessageJSON,
-	}
-	s.broadcastRealtimeEvent(ev)
-}
-
 func (s *Service) broadcastThreadSummary(endpointID string, threadID string) {
 	_ = s.broadcastThreadSummaryChecked(endpointID, threadID)
 }
@@ -504,7 +398,6 @@ func (s *Service) threadSummaryRealtimeEvent(endpointID string, threadID string)
 	s.mu.Lock()
 	db := s.threadsDB
 	persistTO := s.persistOpTO
-	activeRunID := strings.TrimSpace(s.activeRunByTh[runThreadKey(endpointID, threadID)])
 	s.mu.Unlock()
 	if db == nil {
 		return RealtimeEvent{}, errors.New("threads store not ready")
@@ -527,12 +420,14 @@ func (s *Service) threadSummaryRealtimeEvent(endpointID string, threadID string)
 		return RealtimeEvent{}, countErr
 	}
 
-	runStatus, runErrorCode, runError := normalizeThreadRunState(th.RunStatus, th.RunErrorCode, th.RunError)
-	if activeRunID != "" {
-		runStatus, runErrorCode, runError = activeThreadEffectiveRunState(th.RunStatus, th.RunErrorCode, th.RunError)
+	snapshot, latest, err := s.readCanonicalThreadState(ctx, threadID)
+	if err != nil {
+		return RealtimeEvent{}, err
 	}
-	permissionType := threadPermissionTypeString(th, "")
-	waitingPrompt := s.threadWaitingPrompt(ctx, th, runStatus)
+	runStatus, runErrorCode, runError := threadViewRunState(snapshot, latest)
+	permissionType := threadPermissionTypeString(th)
+	waitingPrompt := requestUserInputPromptFromFloretTurn(latest)
+	lastMessageAt, lastMessagePreview := canonicalThreadPreview(latest)
 	reasoningCapability, _, _ := s.threadReasoningDefaults(ctx, strings.TrimSpace(th.ModelID))
 	reasoningSelection := unmarshalReasoningSelection(th.ReasoningSelectionJSON)
 
@@ -547,10 +442,10 @@ func (s *Service) threadSummaryRealtimeEvent(endpointID string, threadID string)
 		RunError:            runError,
 		Title:               strings.TrimSpace(th.Title),
 		ModelID:             strings.TrimSpace(th.ModelID),
-		UpdatedAtUnixMs:     th.UpdatedAtUnixMs,
-		LastMessagePreview:  strings.TrimSpace(th.LastMessagePreview),
-		LastMessageAtUnixMs: th.LastMessageAtUnixMs,
-		ActiveRunID:         activeRunID,
+		UpdatedAtUnixMs:     maxInt64(th.UpdatedAtUnixMs, snapshot.UpdatedAt.UnixMilli()),
+		LastMessagePreview:  lastMessagePreview,
+		LastMessageAtUnixMs: lastMessageAt,
+		ActiveRunID:         strings.TrimSpace(string(snapshot.LatestRunID)),
 		PermissionType:      permissionType,
 		QueuedTurnCount:     queuedTurnCount,
 		ReasoningSelection:  reasoningSelection,

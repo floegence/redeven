@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	flruntime "github.com/floegence/floret/runtime"
@@ -152,15 +151,6 @@ func (s *Service) keepThreadDeletePending(ctx context.Context, operation threads
 }
 
 func (s *Service) cleanupThreadDeleteFiles(ctx context.Context, operation threadstore.ThreadDeleteOperation) error {
-	for _, checkpointID := range operation.Snapshot.CheckpointIDs {
-		checkpointID = strings.TrimSpace(checkpointID)
-		if checkpointID == "" {
-			return errors.New("thread delete snapshot contains empty checkpoint id")
-		}
-		if err := os.RemoveAll(checkpointArtifactsDir(s.stateDir, checkpointID)); err != nil {
-			return fmt.Errorf("delete checkpoint %s: %w", checkpointID, err)
-		}
-	}
 	s.mu.Lock()
 	db := s.threadsDB
 	s.mu.Unlock()

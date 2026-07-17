@@ -2,7 +2,6 @@ package ai
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -54,16 +53,11 @@ func (s *Service) resumeThreadForkOperation(ctx context.Context, db *threadstore
 		err := errors.New("Floret fork result identity mismatch")
 		return nil, s.recordThreadForkOperationError(ctx, db, operation.OperationID, "floret_contract_mismatch", err, true)
 	}
-	floretResultJSON, err := json.Marshal(floretResult)
-	if err != nil {
-		return nil, s.recordThreadForkOperationError(ctx, db, operation.OperationID, "floret_result_encode_failed", err, false)
-	}
 	committedAt := time.Now().UnixMilli()
 	forked, err := db.CommitForkOperation(ctx, threadstore.CommitForkOperationRequest{
-		OperationID:      operation.OperationID,
-		FloretTurnRefs:   threadstoreForkTurnRefs(floretResult.Turns),
-		FloretResultJSON: string(floretResultJSON),
-		UpdatedAtUnixMs:  committedAt,
+		OperationID:     operation.OperationID,
+		FloretTurnRefs:  threadstoreForkTurnRefs(floretResult.Turns),
+		UpdatedAtUnixMs: committedAt,
 	})
 	if err != nil {
 		terminal := errors.Is(err, threadstore.ErrForkDestinationConflict) ||

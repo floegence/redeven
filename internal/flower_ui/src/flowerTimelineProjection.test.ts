@@ -357,7 +357,7 @@ describe('buildFlowerTimelineEntries', () => {
           turn_id: 'turn-1',
           run_id: 'run-1',
           expected_message_id: 'assistant-1',
-          reason: 'not_found',
+          reason: 'not_renderable',
         },
       }],
     }));

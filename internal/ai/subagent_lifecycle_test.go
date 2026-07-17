@@ -182,6 +182,14 @@ func (h *recordingFloretHost) EnsureThread(_ context.Context, req flruntime.Ensu
 	}, nil
 }
 
+func (h *recordingFloretHost) ReadThreadAgentTodos(_ context.Context, threadID flruntime.ThreadID) (flruntime.ThreadAgentTodoState, error) {
+	return flruntime.ThreadAgentTodoState{ThreadID: threadID}, nil
+}
+
+func (h *recordingFloretHost) UpdateThreadAgentTodos(_ context.Context, req flruntime.UpdateThreadAgentTodosRequest) (flruntime.ThreadAgentTodoState, error) {
+	return flruntime.ThreadAgentTodoState{ThreadID: req.ThreadID, Version: req.ExpectedVersion + 1, Items: req.Items}, nil
+}
+
 func (h *recordingFloretHost) ForkThread(context.Context, flruntime.ForkThreadRequest) (flruntime.ForkThreadResult, error) {
 	return flruntime.ForkThreadResult{}, nil
 }
@@ -195,6 +203,10 @@ func (h *recordingFloretHost) ReadThread(_ context.Context, id flruntime.ThreadI
 		}
 	}
 	return flruntime.ThreadSnapshot{}, nil
+}
+
+func (h *recordingFloretHost) ListThreadTurns(_ context.Context, _ flruntime.ListThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
+	return flruntime.ThreadTurnsPage{}, nil
 }
 
 func (h *recordingFloretHost) RunTurn(context.Context, flruntime.RunTurnRequest) (flruntime.TurnResult, error) {
@@ -478,7 +490,7 @@ func seedTestFloretSubagentTree(t *testing.T, ctx context.Context, svc *Service,
 		t.Fatalf("floretThreadStorePath: %v", err)
 	}
 	host := newTestFloretHost(t, svc.floretStore, "child done")
-	if _, err := host.StartThread(ctx, flruntime.StartThreadRequest{ThreadID: flruntime.ThreadID(parentThreadID)}); err != nil {
+	if _, err := host.EnsureThread(ctx, flruntime.EnsureThreadRequest{ThreadID: flruntime.ThreadID(parentThreadID)}); err != nil {
 		t.Fatalf("StartThread: %v", err)
 	}
 	if _, err := host.SpawnSubAgent(ctx, flruntime.SpawnSubAgentRequest{
@@ -686,7 +698,6 @@ func TestFloretSubagentsSpawnPersistsAndLabelsDistinctChildRunID(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	parent.persistRunRecord(RunStateRunning, "", "", time.Now().UnixMilli(), 0)
 
 	host := &recordingFloretHost{}
 	runtime := &floretSubagentRuntime{parent: parent, host: host}
@@ -716,26 +727,6 @@ func TestFloretSubagentsSpawnPersistsAndLabelsDistinctChildRunID(t *testing.T) {
 	host.mu.Unlock()
 	if got := strings.TrimSpace(spawnReq.TaskName); got != "Identity Check" {
 		t.Fatalf("spawn TaskName=%q, want canonical human-facing name", got)
-	}
-
-	events, err := store.ListRunEvents(context.Background(), parent.endpointID, parent.id, 50)
-	if err != nil {
-		t.Fatalf("ListRunEvents: %v", err)
-	}
-	spawnEventTaskName := ""
-	for _, event := range events {
-		if event.EventType != "delegation.spawn" {
-			continue
-		}
-		var payload map[string]any
-		if err := json.Unmarshal([]byte(event.PayloadJSON), &payload); err != nil {
-			t.Fatalf("decode delegation.spawn payload: %v", err)
-		}
-		spawnEventTaskName = strings.TrimSpace(anyToString(payload["task_name"]))
-		break
-	}
-	if spawnEventTaskName != "Identity Check" {
-		t.Fatalf("delegation.spawn task_name=%q, want canonical human-facing name", spawnEventTaskName)
 	}
 
 	childThreadID := strings.TrimSpace(string(spawnReq.ThreadID))
@@ -1823,18 +1814,6 @@ func TestSubagentEventSinkDoesNotPersistChildToolLifecycle(t *testing.T) {
 	}
 	floretSubagentEventSink{runtime: runtime}.EmitEvent(event)
 
-	runEvents, err := svc.threadsDB.ListRunEvents(ctx, meta.EndpointID, parent.id, 20)
-	if err != nil {
-		t.Fatalf("ListRunEvents: %v", err)
-	}
-	for _, recorded := range runEvents {
-		switch recorded.EventType {
-		case "floret.contract.rejected":
-			t.Fatalf("valid child projection was rejected: %#v", recorded)
-		case "delegation.child.event":
-			t.Fatalf("child Floret lifecycle was mirrored into Redeven run events: %#v", recorded)
-		}
-	}
 }
 
 func TestSubagentChildEventPublishesParentSubagentsPatch(t *testing.T) {

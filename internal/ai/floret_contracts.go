@@ -36,6 +36,8 @@ type floretPendingToolSettler interface {
 type floretActiveRunHost interface {
 	floretPendingApprovalLister
 	floretPendingToolSettler
+	ReadThreadAgentTodos(context.Context, flruntime.ThreadID) (flruntime.ThreadAgentTodoState, error)
+	UpdateThreadAgentTodos(context.Context, flruntime.UpdateThreadAgentTodosRequest) (flruntime.ThreadAgentTodoState, error)
 }
 
 type floretSubagentsCloser interface {
@@ -47,7 +49,12 @@ type floretForkHost interface {
 }
 
 type ThreadMaintenanceHost interface {
+	EnsureThread(context.Context, flruntime.EnsureThreadRequest) (flruntime.ThreadSummary, error)
 	DeleteThread(context.Context, flruntime.ThreadID) error
+	ReadThread(context.Context, flruntime.ThreadID) (flruntime.ThreadSnapshot, error)
+	ListThreadTurns(context.Context, flruntime.ListThreadTurnsRequest) (flruntime.ThreadTurnsPage, error)
+	ReadThreadAgentTodos(context.Context, flruntime.ThreadID) (flruntime.ThreadAgentTodoState, error)
+	UpdateThreadAgentTodos(context.Context, flruntime.UpdateThreadAgentTodosRequest) (flruntime.ThreadAgentTodoState, error)
 }
 
 type FlowerReadStateCleaner interface {

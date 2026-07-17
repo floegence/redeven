@@ -199,7 +199,7 @@ func (s *floretSubagentRuntime) manage(ctx context.Context, toolCallID string, a
 	if action == "" {
 		return nil, fmt.Errorf("missing action")
 	}
-	parent.persistRunEvent("delegation.manage.begin", RealtimeStreamKindLifecycle, map[string]any{
+	parent.recordRunDiagnostic("delegation.manage.begin", RealtimeStreamKindLifecycle, map[string]any{
 		"action":             action,
 		"tool_call_id":       toolCallID,
 		"provided_keys":      subagentValidationProvidedKeys(args),
@@ -230,7 +230,7 @@ func (s *floretSubagentRuntime) manage(ctx context.Context, toolCallID string, a
 	if err != nil {
 		return nil, err
 	}
-	parent.persistRunEvent("delegation.manage.end", RealtimeStreamKindLifecycle, map[string]any{
+	parent.recordRunDiagnostic("delegation.manage.end", RealtimeStreamKindLifecycle, map[string]any{
 		"action":       action,
 		"tool_call_id": toolCallID,
 		"status":       strings.TrimSpace(anyToString(out["status"])),
@@ -721,7 +721,7 @@ func (s *floretSubagentRuntime) dynamicSubagentToolSurfaceProvider(state *floret
 		}
 		forkMode, err := s.childForkModeForThread(ctx, childThreadID)
 		if err != nil {
-			parent.persistRunEvent("subagent.tool_surface.error", RealtimeStreamKindLifecycle, map[string]any{
+			parent.recordRunDiagnostic("subagent.tool_surface.error", RealtimeStreamKindLifecycle, map[string]any{
 				"phase":           strings.TrimSpace(req.Phase),
 				"step":            req.Step,
 				"subagent_id":     childThreadID,
@@ -759,7 +759,7 @@ func (s *floretSubagentRuntime) dynamicSubagentToolSurfaceProvider(state *floret
 		}
 		mu.Unlock()
 		if changed {
-			parent.persistRunEvent("subagent.tool_surface.updated", RealtimeStreamKindLifecycle, map[string]any{
+			parent.recordRunDiagnostic("subagent.tool_surface.updated", RealtimeStreamKindLifecycle, map[string]any{
 				"phase":             strings.TrimSpace(req.Phase),
 				"step":              req.Step,
 				"subagent_id":       childThreadID,
@@ -972,7 +972,7 @@ func (s *floretSubagentRuntime) spawn(ctx context.Context, toolCallID string, ar
 	localSnapshot := subagentSnapshotFromFloret(snapshot)
 	s.refreshSubagentsPatch(ctx, localSnapshot)
 	item := subagentSnapshotPayload(localSnapshot)
-	parent.persistRunEvent("delegation.spawn", RealtimeStreamKindLifecycle, map[string]any{
+	parent.recordRunDiagnostic("delegation.spawn", RealtimeStreamKindLifecycle, map[string]any{
 		"subagent_id":      item["subagent_id"],
 		"thread_id":        item["thread_id"],
 		"agent_type":       item["agent_type"],
@@ -2014,7 +2014,7 @@ func (s *floretSubagentRuntime) cleanupTerminalProcessesForSnapshots(ctx context
 		}
 	}
 	if cleaned > 0 {
-		parent.persistRunEvent("delegation.terminal_cleanup", RealtimeStreamKindLifecycle, map[string]any{
+		parent.recordRunDiagnostic("delegation.terminal_cleanup", RealtimeStreamKindLifecycle, map[string]any{
 			"settled_count": cleaned,
 		})
 	}

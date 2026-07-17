@@ -21,6 +21,26 @@ type recordingThreadMaintenanceHost struct {
 	deleted   []string
 }
 
+func (h *recordingThreadMaintenanceHost) EnsureThread(_ context.Context, req flruntime.EnsureThreadRequest) (flruntime.ThreadSummary, error) {
+	return flruntime.ThreadSummary{ID: req.ThreadID}, nil
+}
+
+func (h *recordingThreadMaintenanceHost) ReadThread(_ context.Context, threadID flruntime.ThreadID) (flruntime.ThreadSnapshot, error) {
+	return flruntime.ThreadSnapshot{ID: threadID}, nil
+}
+
+func (h *recordingThreadMaintenanceHost) ListThreadTurns(_ context.Context, _ flruntime.ListThreadTurnsRequest) (flruntime.ThreadTurnsPage, error) {
+	return flruntime.ThreadTurnsPage{}, nil
+}
+
+func (h *recordingThreadMaintenanceHost) ReadThreadAgentTodos(_ context.Context, threadID flruntime.ThreadID) (flruntime.ThreadAgentTodoState, error) {
+	return flruntime.ThreadAgentTodoState{ThreadID: threadID}, nil
+}
+
+func (h *recordingThreadMaintenanceHost) UpdateThreadAgentTodos(_ context.Context, req flruntime.UpdateThreadAgentTodosRequest) (flruntime.ThreadAgentTodoState, error) {
+	return flruntime.ThreadAgentTodoState{ThreadID: req.ThreadID, Version: req.ExpectedVersion + 1, Items: req.Items}, nil
+}
+
 func (h *recordingThreadMaintenanceHost) DeleteThread(_ context.Context, threadID flruntime.ThreadID) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
@@ -91,27 +111,12 @@ func TestServiceDeleteThreadPersistsPendingOperationAndReplaysTransientFailure(t
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	const checkpointID = "checkpoint_delete_pending"
-	if _, err := service.threadsDB.CreateThreadCheckpoint(context.Background(), meta.EndpointID, thread.ThreadID, checkpointID, "", threadstore.CheckpointKindPreRun); err != nil {
-		t.Fatalf("CreateThreadCheckpoint: %v", err)
-	}
-	checkpointDir := checkpointArtifactsDir(stateDir, checkpointID)
-	if err := os.MkdirAll(checkpointDir, 0o700); err != nil {
-		t.Fatalf("create checkpoint artifacts: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(checkpointDir, "manifest.json"), []byte("{}"), 0o600); err != nil {
-		t.Fatalf("write checkpoint artifact: %v", err)
-	}
-
 	result, err := service.DeleteThread(context.Background(), meta, thread.ThreadID, false)
 	if err != nil {
 		t.Fatalf("DeleteThread: %v", err)
 	}
 	if result.Status != ThreadDeleteStatusPending || result.OperationID == "" {
 		t.Fatalf("result=%+v", result)
-	}
-	if _, err := os.Stat(checkpointDir); !os.IsNotExist(err) {
-		t.Fatalf("checkpoint artifacts err=%v, want removed", err)
 	}
 	deletedThread, err := service.threadsDB.GetThread(context.Background(), meta.EndpointID, thread.ThreadID)
 	if err != nil {

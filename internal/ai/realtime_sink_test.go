@@ -1,14 +1,10 @@
 package ai
 
 import (
-	"context"
 	"encoding/json"
-	"path/filepath"
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 type sinkTestNotification struct {
@@ -311,50 +307,5 @@ func TestAISinkWriter_ContextUsageKeepsLatestLowPrioritySnapshot(t *testing.T) {
 	notifications := notifier.snapshot()
 	if got := int(decodeSinkContextUsage(t, notifications[1].payload).Payload["step"].(float64)); got != 3 {
 		t.Fatalf("delivered context step=%d, want 3", got)
-	}
-}
-
-func TestPersistRealtimeEventSkipsAssistantBlockDeltaText(t *testing.T) {
-	t.Parallel()
-
-	ctx := context.Background()
-	store, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))
-	if err != nil {
-		t.Fatalf("threadstore.Open: %v", err)
-	}
-	t.Cleanup(func() { _ = store.Close() })
-	if err := store.CreateThread(ctx, threadstore.Thread{
-		EndpointID: "env_sink",
-		ThreadID:   "thread_sink",
-		Title:      "sink",
-	}); err != nil {
-		t.Fatalf("CreateThread: %v", err)
-	}
-	svc := &Service{
-		threadsDB:   store,
-		persistOpTO: time.Second,
-	}
-
-	svc.persistRealtimeEvent(RealtimeEvent{
-		EventType:  RealtimeEventTypeStream,
-		EndpointID: "env_sink",
-		ThreadID:   "thread_sink",
-		RunID:      "run_sink",
-		AtUnixMs:   time.Now().UnixMilli(),
-		StreamKind: RealtimeStreamKindAssistant,
-		StreamEvent: streamEventBlockDelta{
-			Type:       "block-delta",
-			MessageID:  "msg_sink",
-			BlockIndex: 0,
-			Delta:      "private reasoning fragment",
-		},
-	})
-
-	events, err := store.ListRunEvents(ctx, "env_sink", "run_sink", 10)
-	if err != nil {
-		t.Fatalf("ListRunEvents: %v", err)
-	}
-	if len(events) != 0 {
-		t.Fatalf("persisted block-delta events=%#v, want none", events)
 	}
 }

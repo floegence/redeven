@@ -706,7 +706,7 @@ func TestPermissionPolicy_DelegatedApprovalRejectsParentRunAliasChildRunID(t *te
 	}
 }
 
-func TestPermissionPolicy_DelegatedApprovalRejectsChildSnapshotRunIDMismatch(t *testing.T) {
+func TestPermissionPolicy_DelegatedApprovalRejectsMissingExactChildSnapshot(t *testing.T) {
 	t.Parallel()
 
 	workspace := t.TempDir()
@@ -740,8 +740,8 @@ func TestPermissionPolicy_DelegatedApprovalRejectsChildSnapshotRunIDMismatch(t *
 			subagentToolHostContextChildRunIDKey:    child.id,
 		},
 	})
-	if err == nil || !strings.Contains(err.Error(), "identity mismatch") {
-		t.Fatalf("register delegated approval error=%v, want identity mismatch", err)
+	if err == nil || !strings.Contains(err.Error(), "snapshot missing") {
+		t.Fatalf("register delegated approval error=%v, want exact snapshot missing", err)
 	}
 }
 
@@ -1460,13 +1460,6 @@ func TestPermissionPolicy_SubagentsRuntimeActionsDoNotRequestApproval(t *testing
 					if outcome == nil || !outcome.Success {
 						t.Fatalf("subagents %s outcome=%+v, want success without approval", tc.name, outcome)
 					}
-					records, err := svc.threadsDB.ListDelegatedApprovalRequestsForThread(context.Background(), r.endpointID, r.threadID, 10)
-					if err != nil {
-						t.Fatalf("ListDelegatedApprovalRequestsForThread: %v", err)
-					}
-					if len(records) != 0 {
-						t.Fatalf("subagents %s wrote delegated approval records: %#v", tc.name, records)
-					}
 					if tc.name == "spawn" {
 						rec, ok, err := svc.threadsDB.GetChildPermissionSnapshotBySpawnToolCall(context.Background(), r.endpointID, toolID)
 						if err != nil {
@@ -1503,12 +1496,11 @@ func TestPermissionPolicy_SubagentsValidationFailureDoesNotCreateDelegatedApprov
 	if outcome == nil || outcome.Success {
 		t.Fatalf("invalid subagents call outcome=%+v, want tool error", outcome)
 	}
-	records, err := svc.threadsDB.ListDelegatedApprovalRequestsForThread(context.Background(), r.endpointID, r.threadID, 10)
-	if err != nil {
-		t.Fatalf("ListDelegatedApprovalRequestsForThread: %v", err)
-	}
-	if len(records) != 0 {
-		t.Fatalf("subagents validation failure created delegated approvals: %#v", records)
+	svc.mu.Lock()
+	hasDelegatedApproval := len(svc.delegatedApprovals) != 0
+	svc.mu.Unlock()
+	if hasDelegatedApproval {
+		t.Fatal("subagents validation failure created a delegated approval")
 	}
 }
 
@@ -1748,16 +1740,6 @@ func TestPermissionPolicy_SubagentApprovalDelegatesToParentRun(t *testing.T) {
 	if string(got) != "delegated" {
 		t.Fatalf("file content=%q, want delegated", string(got))
 	}
-	if _, err := svc.SubmitFlowerApproval(parent.sessionMeta, approveReq); err != nil {
-		t.Fatalf("SubmitFlowerApproval delegated approve idempotent replay: %v", err)
-	}
-	rec, ok, err := svc.threadsDB.GetDelegatedApprovalRequest(context.Background(), parent.endpointID, parent.threadID, action.ActionID)
-	if err != nil {
-		t.Fatalf("GetDelegatedApprovalRequest: %v", err)
-	}
-	if !ok || rec.State != "approved" || rec.Status != "resolved" || rec.DeliveryState != "delivery_delivered" {
-		t.Fatalf("delegated approval durable record=%#v", rec)
-	}
 }
 
 func TestPermissionPolicy_SubagentDelegatedSubmitRequiresParentOwner(t *testing.T) {
@@ -1806,13 +1788,6 @@ func TestPermissionPolicy_SubagentDelegatedSubmitRequiresParentOwner(t *testing.
 	}
 	if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
 		t.Fatalf("target should not exist after intruder submit, statErr=%v", statErr)
-	}
-	rec, ok, err := svc.threadsDB.GetDelegatedApprovalRequest(context.Background(), parent.endpointID, parent.threadID, action.ActionID)
-	if err != nil {
-		t.Fatalf("GetDelegatedApprovalRequest: %v", err)
-	}
-	if !ok || rec.ParentUserPublicID != parent.userPublicID || rec.Status != "pending" || rec.State != "requested" {
-		t.Fatalf("delegated record after intruder submit=%#v, want original owner pending", rec)
 	}
 	select {
 	case res := <-done:
@@ -1916,27 +1891,10 @@ func TestPermissionPolicy_SubagentDelegatedConcurrentSubmitOnlyOneWins(t *testin
 	case <-time.After(3 * time.Second):
 		t.Fatalf("timed out waiting for delegated race result")
 	}
-	rec, ok, err := svc.threadsDB.GetDelegatedApprovalRequest(context.Background(), parent.endpointID, parent.threadID, action.ActionID)
-	if err != nil {
-		t.Fatalf("GetDelegatedApprovalRequest: %v", err)
-	}
-	if !ok || rec.Status != "resolved" {
-		t.Fatalf("delegated race record=%#v, want resolved", rec)
-	}
-	if rec.State == "approved" {
-		got, err := os.ReadFile(target)
-		if err != nil {
-			t.Fatalf("read target after approved race: %v", err)
-		}
-		if string(got) != "race-approved" {
-			t.Fatalf("file content=%q, want race-approved", string(got))
-		}
-	} else if rec.State == "rejected" {
-		if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
-			t.Fatalf("target should not exist after rejected race, statErr=%v", statErr)
-		}
-	} else {
-		t.Fatalf("delegated race state=%q, want approved or rejected", rec.State)
+	if got, err := os.ReadFile(target); err == nil && string(got) != "race-approved" {
+		t.Fatalf("file content=%q, want race-approved when approval won", string(got))
+	} else if err != nil && !os.IsNotExist(err) {
+		t.Fatalf("inspect race target: %v", err)
 	}
 }
 
@@ -1989,13 +1947,6 @@ func TestPermissionPolicy_SubagentDelegatedStaleVersionAndSurfaceEpochDoNotDeliv
 	}
 	if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
 		t.Fatalf("target should not exist after stale decisions, statErr=%v", statErr)
-	}
-	rec, ok, err := svc.threadsDB.GetDelegatedApprovalRequest(context.Background(), parent.endpointID, parent.threadID, action.ActionID)
-	if err != nil {
-		t.Fatalf("GetDelegatedApprovalRequest: %v", err)
-	}
-	if !ok || rec.Status != "pending" || rec.State != "requested" || rec.DeliveryState != "waiting_decision" {
-		t.Fatalf("delegated record after stale decisions=%#v, want still pending", rec)
 	}
 
 	reject := base
@@ -2123,13 +2074,6 @@ func TestPermissionPolicy_SubagentDelegatedRepeatedAskReusesRecordAndLiveAction(
 		t.Fatalf("repeated ask handle=%p created=%v, want existing %p and created=false", handle2, created2, handle)
 	}
 	actionID := handle.action.ActionID
-	records, err := svc.threadsDB.ListDelegatedApprovalRequestsForThread(context.Background(), parent.endpointID, parent.threadID, 10)
-	if err != nil {
-		t.Fatalf("ListDelegatedApprovalRequestsForThread: %v", err)
-	}
-	if len(records) != 1 || records[0].ActionID != actionID {
-		t.Fatalf("delegated records=%#v, want one record %s", records, actionID)
-	}
 	svc.mu.Lock()
 	stream := svc.flowerLiveByThread[runThreadKey(parent.endpointID, parent.threadID)]
 	liveCount := 0
@@ -2146,125 +2090,6 @@ func TestPermissionPolicy_SubagentDelegatedRepeatedAskReusesRecordAndLiveAction(
 	}
 	if err := handle.resolve(false); err != nil {
 		t.Fatalf("resolve cleanup: %v", err)
-	}
-}
-
-func TestNewService_ReconcilesDelegatedApprovalDeliveryStatesOnStartup(t *testing.T) {
-	t.Parallel()
-
-	stateDir := t.TempDir()
-	agentHome := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(stateDir, "ai"), 0o700); err != nil {
-		t.Fatalf("mkdir ai state: %v", err)
-	}
-	store, err := threadstore.Open(filepath.Join(stateDir, "ai", "threads.sqlite"))
-	if err != nil {
-		t.Fatalf("threadstore.Open: %v", err)
-	}
-	record := func(actionID string) threadstore.DelegatedApprovalRecord {
-		return threadstore.DelegatedApprovalRecord{
-			ActionID:            actionID,
-			EndpointID:          "env_permission_policy",
-			ParentThreadID:      "thread_startup",
-			ParentUserPublicID:  "user_permission_policy",
-			ParentRunID:         "run_parent_startup",
-			ParentTurnID:        "turn_parent_startup",
-			SubagentID:          "subagent_startup",
-			ChildThreadID:       "thread_child_startup",
-			ChildRunID:          "run_child_startup",
-			ChildTurnID:         "turn_child_startup",
-			ChildToolCallID:     "tool_child_" + actionID,
-			ApprovalID:          "approval_child_" + actionID,
-			RefHash:             "ref_hash_" + actionID,
-			State:               "requested",
-			Status:              "pending",
-			DeliveryState:       "waiting_decision",
-			ChildExecutionState: "pending",
-			Version:             1,
-			SurfaceEpoch:        1,
-			RequestedAtUnixMs:   100,
-			ExpiresAtUnixMs:     1000,
-			ActionJSON:          fmt.Sprintf(`{"action_id":%q,"state":"requested","status":"pending","can_approve":true}`, actionID),
-			CreatedAtUnixMs:     100,
-			UpdatedAtUnixMs:     100,
-		}
-	}
-	ctx := context.Background()
-	pending := record("dappr_startup_pending")
-	deliveryPending := record("dappr_startup_delivery_pending")
-	delivered := record("dappr_startup_delivered")
-	for _, rec := range []threadstore.DelegatedApprovalRecord{pending, deliveryPending, delivered} {
-		if err := store.UpsertDelegatedApprovalRequest(ctx, rec); err != nil {
-			_ = store.Close()
-			t.Fatalf("UpsertDelegatedApprovalRequest %s: %v", rec.ActionID, err)
-		}
-	}
-	for _, rec := range []threadstore.DelegatedApprovalRecord{deliveryPending, delivered} {
-		if _, err := store.SubmitDelegatedApprovalDecisionCAS(ctx, threadstore.DelegatedApprovalDecisionRequest{
-			EndpointID:       rec.EndpointID,
-			ParentThreadID:   rec.ParentThreadID,
-			ActionID:         rec.ActionID,
-			RefHash:          rec.RefHash,
-			Version:          1,
-			SurfaceEpoch:     1,
-			Approved:         true,
-			NextVersion:      2,
-			NextActionJSON:   fmt.Sprintf(`{"action_id":%q,"state":"approved","status":"resolved","delivery_state":"delivery_pending","can_approve":false}`, rec.ActionID),
-			ResolvedAtUnixMs: 200,
-			ActorScope:       rec.EndpointID + ":" + rec.ParentUserPublicID + ":" + rec.ParentThreadID,
-			IdempotencyKey:   "idem-" + rec.ActionID,
-			ResponseJSON:     `{"ok":true}`,
-		}); err != nil {
-			_ = store.Close()
-			t.Fatalf("SubmitDelegatedApprovalDecisionCAS %s: %v", rec.ActionID, err)
-		}
-	}
-	if changed, err := store.MarkDelegatedApprovalDelivered(ctx, delivered.EndpointID, delivered.ParentThreadID, delivered.ActionID, 2, fmt.Sprintf(`{"action_id":%q,"state":"approved","status":"resolved","delivery_state":"delivery_delivered","can_approve":false}`, delivered.ActionID), 250); err != nil || !changed {
-		_ = store.Close()
-		t.Fatalf("MarkDelegatedApprovalDelivered changed=%v err=%v", changed, err)
-	}
-	if err := store.Close(); err != nil {
-		t.Fatalf("close seed store: %v", err)
-	}
-
-	svc, err := NewService(Options{
-		Logger:       slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
-		StateDir:     stateDir,
-		AgentHomeDir: agentHome,
-	})
-	if err != nil {
-		t.Fatalf("NewService: %v", err)
-	}
-	t.Cleanup(func() { _ = svc.Close() })
-	cases := []struct {
-		record       threadstore.DelegatedApprovalRecord
-		wantState    string
-		wantStatus   string
-		wantDelivery string
-		wantVersion  int64
-	}{
-		{record: pending, wantState: "unavailable", wantStatus: "unavailable", wantDelivery: "delivery_unavailable", wantVersion: 2},
-		{record: deliveryPending, wantState: "approved", wantStatus: "resolved", wantDelivery: "delivery_ack_unknown", wantVersion: 3},
-		{record: delivered, wantState: "approved", wantStatus: "resolved", wantDelivery: "delivery_delivered", wantVersion: 2},
-	}
-	for _, tc := range cases {
-		got, ok, err := svc.threadsDB.GetDelegatedApprovalRequest(context.Background(), tc.record.EndpointID, tc.record.ParentThreadID, tc.record.ActionID)
-		if err != nil {
-			t.Fatalf("GetDelegatedApprovalRequest %s: %v", tc.record.ActionID, err)
-		}
-		if !ok {
-			t.Fatalf("delegated approval %s missing after startup", tc.record.ActionID)
-		}
-		if got.State != tc.wantState || got.Status != tc.wantStatus || got.DeliveryState != tc.wantDelivery || got.Version != tc.wantVersion {
-			t.Fatalf("startup delegated record %s=%#v, want state=%s status=%s delivery=%s version=%d", tc.record.ActionID, got, tc.wantState, tc.wantStatus, tc.wantDelivery, tc.wantVersion)
-		}
-		var action map[string]any
-		if err := json.Unmarshal([]byte(got.ActionJSON), &action); err != nil {
-			t.Fatalf("startup action_json for %s is invalid: %v", tc.record.ActionID, err)
-		}
-		if action["can_approve"] != false || action["state"] != tc.wantState || action["delivery_state"] != tc.wantDelivery {
-			t.Fatalf("startup action_json for %s=%#v, want non-decidable %s/%s", tc.record.ActionID, action, tc.wantState, tc.wantDelivery)
-		}
 	}
 }
 

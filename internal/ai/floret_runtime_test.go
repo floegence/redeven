@@ -194,6 +194,8 @@ func TestRunFloretHostedTurnTerminatesPendingCommandWithoutCompensation(t *testi
 	workspace := t.TempDir()
 	store := openTerminalProcessTestStore(t)
 	t.Cleanup(func() { _ = store.Close() })
+	floretStore := flruntime.NewMemoryStore()
+	t.Cleanup(func() { _ = floretStore.Close() })
 	const endpointID = "env_terminal_termination"
 	const threadID = "thread_terminal_termination"
 	const runID = "run_terminal_termination"
@@ -208,6 +210,7 @@ func TestRunFloretHostedTurnTerminatesPendingCommandWithoutCompensation(t *testi
 	svc := &Service{
 		stateDir:          t.TempDir(),
 		threadsDB:         store,
+		floretStore:       floretStore,
 		terminalProcesses: manager,
 		log:               slog.New(slog.NewTextHandler(io.Discard, nil)),
 		persistOpTO:       5 * time.Second,
@@ -223,6 +226,7 @@ func TestRunFloretHostedTurnTerminatesPendingCommandWithoutCompensation(t *testi
 		Service:          svc,
 		AIConfig:         &config.AIConfig{},
 		ThreadsDB:        store,
+		FloretStore:      floretStore,
 		PersistOpTimeout: 5 * time.Second,
 		RunID:            runID,
 		EndpointID:       endpointID,
@@ -815,20 +819,6 @@ func TestRunFloretHostedTurnRefreshesPermissionBeforeDispatch(t *testing.T) {
 	if !sawRejectedToolResult {
 		t.Fatalf("second provider request missing rejected stale tool result: %#v", secondRequest.Messages)
 	}
-	runEvents, err := store.ListRunEvents(ctx, endpointID, runID, 20)
-	if err != nil {
-		t.Fatalf("ListRunEvents: %v", err)
-	}
-	var sawReadonlyUpdate bool
-	for _, event := range runEvents {
-		if event.EventType != "tool_surface.updated" || !strings.Contains(event.PayloadJSON, `"permission_type":"readonly"`) {
-			continue
-		}
-		sawReadonlyUpdate = true
-	}
-	if !sawReadonlyUpdate {
-		t.Fatalf("missing readonly tool_surface.updated event: %#v", runEvents)
-	}
 }
 
 func TestRunFloretHostedTurnNaturalCompactionContinuesStreaming(t *testing.T) {
@@ -1171,7 +1161,7 @@ func TestFloretEventSinkProjectsStreamObservationDeltas(t *testing.T) {
 func TestFloretEventSinkRejectsUnknownContractsBeforePresentation(t *testing.T) {
 	t.Parallel()
 
-	_, r, store, events := newFloretProviderAdapterRunTest(t, reasoningFlowerProvider{})
+	_, r, _, events := newFloretProviderAdapterRunTest(t, reasoningFlowerProvider{})
 	sink := floretEventSink{run: r}
 	sink.EmitEvent(flruntime.Event{
 		Type:   observation.EventType("unknown_event"),
@@ -1205,18 +1195,6 @@ func TestFloretEventSinkRejectsUnknownContractsBeforePresentation(t *testing.T) 
 	})
 	if len(*events) != 0 || len(r.assistantBlocks) != 0 {
 		t.Fatalf("rejected contracts changed presentation: events=%#v blocks=%#v", *events, r.assistantBlocks)
-	}
-	runEvents, err := store.ListRunEvents(context.Background(), r.endpointID, r.id, 10)
-	if err != nil {
-		t.Fatalf("ListRunEvents: %v", err)
-	}
-	if len(runEvents) != 4 {
-		t.Fatalf("run events=%#v, want four contract rejections", runEvents)
-	}
-	for _, event := range runEvents {
-		if event.EventType != "floret.contract.rejected" || !strings.Contains(event.PayloadJSON, "contract_kind") {
-			t.Fatalf("contract rejection event=%#v", event)
-		}
 	}
 }
 
@@ -1523,9 +1501,6 @@ func TestProjectFloretTaskCompleteDoesNotCreateTranscriptMarkdown(t *testing.T) 
 			},
 		},
 		RunRequest{},
-		newRuntimeState(""),
-		TaskComplexityStandard,
-		permissionTypeString(FlowerPermissionApprovalRequired),
 	)
 	if err != nil {
 		t.Fatalf("projectFloretResult: %v", err)
@@ -1542,6 +1517,31 @@ func TestProjectFloretTaskCompleteDoesNotCreateTranscriptMarkdown(t *testing.T) 
 	}
 	if len(r.assistantBlocks) != 0 {
 		t.Fatalf("assistantBlocks len=%d, want no local task_complete transcript projection: %#v", len(r.assistantBlocks), r.assistantBlocks)
+	}
+}
+
+func TestProjectFloretTaskCompleteDoesNotApplyRedevenCompletionGate(t *testing.T) {
+	t.Parallel()
+
+	r := newFloretRuntimeTestRun(t, runOptions{})
+	r.id = "run_floret_task_complete_no_local_gate"
+	r.threadID = "thread_floret_task_complete_no_local_gate"
+	r.messageID = "msg_floret_task_complete_no_local_gate"
+
+	err := r.projectFloretResult(
+		t.Context(),
+		flruntime.TurnResult{
+			Status:  flruntime.TurnStatusCompleted,
+			Metrics: flruntime.RunMetrics{Steps: 1},
+			Signal:  &flruntime.TurnSignal{Name: "task_complete", CallID: "call_task_complete"},
+		},
+		RunRequest{},
+	)
+	if err != nil {
+		t.Fatalf("projectFloretResult: %v", err)
+	}
+	if r.getEndReason() != "complete" || r.getFinalizationReason() != "task_complete" {
+		t.Fatalf("task_complete lifecycle = (%q, %q), want (complete, task_complete)", r.getEndReason(), r.getFinalizationReason())
 	}
 }
 
@@ -1575,9 +1575,6 @@ func TestProjectFloretTaskCompletePreservesStreamedMarkdown(t *testing.T) {
 			},
 		},
 		RunRequest{},
-		newRuntimeState(""),
-		TaskComplexityStandard,
-		permissionTypeString(FlowerPermissionApprovalRequired),
 	)
 	if err != nil {
 		t.Fatalf("projectFloretResult: %v", err)
@@ -1626,9 +1623,6 @@ func TestProjectFloretNaturalStopDoesNotCreateTranscriptMarkdown(t *testing.T) {
 			},
 		},
 		RunRequest{},
-		newRuntimeState(""),
-		TaskComplexityStandard,
-		permissionTypeString(FlowerPermissionApprovalRequired),
 	)
 	if err != nil {
 		t.Fatalf("projectFloretResult: %v", err)
@@ -1662,9 +1656,6 @@ func TestProjectFloretNaturalStopDoesNotUseResultOutputAsTranscriptFallback(t *t
 			Metrics: flruntime.RunMetrics{Steps: 1},
 		},
 		RunRequest{},
-		newRuntimeState(""),
-		TaskComplexityStandard,
-		permissionTypeString(FlowerPermissionApprovalRequired),
 	)
 	if err != nil {
 		t.Fatalf("projectFloretResult: %v", err)
@@ -1709,9 +1700,6 @@ func TestProjectFloretNaturalStopPreservesStreamedMarkdown(t *testing.T) {
 			},
 		},
 		RunRequest{},
-		newRuntimeState(""),
-		TaskComplexityStandard,
-		permissionTypeString(FlowerPermissionApprovalRequired),
 	)
 	if err != nil {
 		t.Fatalf("projectFloretResult: %v", err)
@@ -1759,9 +1747,6 @@ func TestProjectFloretResultIgnoresDetachedRun(t *testing.T) {
 			Metrics: flruntime.RunMetrics{Steps: 1},
 		},
 		RunRequest{},
-		newRuntimeState(""),
-		TaskComplexityStandard,
-		permissionTypeString(FlowerPermissionApprovalRequired),
 	)
 	if err != nil {
 		t.Fatalf("projectFloretResult completed: %v", err)
@@ -1779,9 +1764,6 @@ func TestProjectFloretResultIgnoresDetachedRun(t *testing.T) {
 			},
 		},
 		RunRequest{},
-		newRuntimeState(""),
-		TaskComplexityStandard,
-		permissionTypeString(FlowerPermissionApprovalRequired),
 	)
 	if err != nil {
 		t.Fatalf("projectFloretResult waiting: %v", err)
@@ -1828,9 +1810,6 @@ func TestProjectFloretCancelledResultUsesCanceledLifecycle(t *testing.T) {
 			Metrics: flruntime.RunMetrics{Steps: 1},
 		},
 		RunRequest{},
-		newRuntimeState(""),
-		TaskComplexityStandard,
-		permissionTypeString(FlowerPermissionApprovalRequired),
 	)
 	if err != nil {
 		t.Fatalf("projectFloretResult: %v", err)
@@ -1867,9 +1846,6 @@ func TestProjectFloretCancelledResultWithDeadlineUsesTimedOutLifecycle(t *testin
 			Metrics: flruntime.RunMetrics{Steps: 1},
 		},
 		RunRequest{},
-		newRuntimeState(""),
-		TaskComplexityStandard,
-		permissionTypeString(FlowerPermissionApprovalRequired),
 	)
 	if err != nil {
 		t.Fatalf("projectFloretResult: %v", err)
@@ -1912,9 +1888,6 @@ func TestProjectFloretUnknownWaitingSignalFailsAsUnsupportedSignal(t *testing.T)
 			},
 		},
 		RunRequest{},
-		newRuntimeState(""),
-		TaskComplexityStandard,
-		permissionTypeString(FlowerPermissionApprovalRequired),
 	)
 	if err == nil {
 		t.Fatalf("projectFloretResult should reject unknown waiting signal")

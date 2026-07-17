@@ -6,7 +6,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 )
 
@@ -680,16 +679,6 @@ func parseRequestUserInputPromptJSON(raw string) *RequestUserInputPrompt {
 		PublicSummary:      payload.PublicSummary,
 		ContainsSecret:     payload.ContainsSecret,
 	})
-}
-
-func requestUserInputPromptFromThreadRecord(t *threadstore.Thread, effectiveRunStatus string) *RequestUserInputPrompt {
-	if t == nil {
-		return nil
-	}
-	if NormalizeRunState(effectiveRunStatus) != RunStateWaitingUser {
-		return nil
-	}
-	return parseRequestUserInputPromptJSON(t.WaitingUserInputJSON)
 }
 
 func normalizeRequestUserInputAnswer(answer RequestUserInputAnswer) RequestUserInputAnswer {

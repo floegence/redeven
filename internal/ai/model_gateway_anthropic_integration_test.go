@@ -3,7 +3,6 @@ package ai
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
@@ -349,22 +348,10 @@ func TestIntegration_ModelGateway_Anthropic_ContentFilterFails(t *testing.T) {
 	if got := strings.TrimSpace(view.RunStatus); got != string(RunStateFailed) {
 		t.Fatalf("run_status=%q, want %q", got, RunStateFailed)
 	}
-	if !strings.Contains(view.RunError, "content_filter") {
-		t.Fatalf("run_error=%q, want content_filter detail", view.RunError)
+	if view.RunError != "provider output was content filtered" {
+		t.Fatalf("run_error=%q, want canonical provider failure", view.RunError)
 	}
 
-	runEvents, err := svc.ListRunEvents(ctx, &meta, runID, 2000)
-	if err != nil {
-		t.Fatalf("ListRunEvents: %v", err)
-	}
-	projectedTurnResult := findRunEventPayload(t, runEvents.Events, "floret.host_turn.result")
-	if got := strings.TrimSpace(fmt.Sprint(projectedTurnResult["finish_reason"])); got != "content_filter" {
-		t.Fatalf("finish_reason=%q, want content_filter", got)
-	}
-	rejected := findRunEventPayload(t, runEvents.Events, "reply.finish_rejected")
-	if got := strings.TrimSpace(fmt.Sprint(rejected["finish_class"])); got != string(replyFinishClassBlocked) {
-		t.Fatalf("finish_class=%q, want %q", got, replyFinishClassBlocked)
-	}
 }
 
 func TestIntegration_ModelGateway_Anthropic_IdentityLengthContinuationCompletesWithNaturalStop(t *testing.T) {
@@ -407,12 +394,4 @@ func TestIntegration_ModelGateway_Anthropic_IdentityLengthContinuationCompletesW
 
 	requireAssistantTimelineText(t, ctx, svc, &meta, th.ThreadID, "FIRST_PARTSECOND_PART")
 
-	runEvents, err := svc.ListRunEvents(ctx, &meta, runID, 2000)
-	if err != nil {
-		t.Fatalf("ListRunEvents: %v", err)
-	}
-	endPayload := findRunEventPayload(t, runEvents.Events, "run.end")
-	if got := strings.TrimSpace(fmt.Sprint(endPayload["finalization_reason"])); got != "natural_stop" {
-		t.Fatalf("finalization_reason=%q, want %q", got, "natural_stop")
-	}
 }

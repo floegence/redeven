@@ -14,6 +14,7 @@ import (
 	anthropic "github.com/anthropics/anthropic-sdk-go"
 	aoption "github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/floegence/floret/observation"
+	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/redeven/internal/config"
 	openai "github.com/openai/openai-go"
 	ooption "github.com/openai/openai-go/option"
@@ -2645,7 +2646,7 @@ func (r *run) failReplyFinish(step int, finishReason string, finalizationReason 
 		return errors.New(strings.TrimSpace(errMsg))
 	}
 	normalizedFinishReason := normalizeReplyFinishReason(finishReason)
-	r.persistRunEvent("reply.finish_rejected", RealtimeStreamKindLifecycle, map[string]any{
+	r.recordRunDiagnostic("reply.finish_rejected", RealtimeStreamKindLifecycle, map[string]any{
 		"step_index":    step,
 		"finish_reason": normalizedFinishReason,
 		"finish_class":  string(classifyReplyFinish(normalizedFinishReason)),
@@ -2662,17 +2663,6 @@ func finalizationReasonForAskUserSource(source string) string {
 		return "ask_user_waiting_model"
 	}
 	return ""
-}
-
-func evaluateTaskCompletionGate(resultText string, state runtimeState, complexity string, mode string) (bool, string) {
-	_ = state
-	_ = complexity
-	_ = mode
-	text := strings.TrimSpace(resultText)
-	if text == "" {
-		return false, "empty_result"
-	}
-	return true, "ok"
 }
 
 func validateAskUserSignal(signal askUserSignal) string {
@@ -2704,13 +2694,11 @@ func (r *run) hydrateTodoRuntimeState(ctx context.Context, state *runtimeState) 
 		return "", false
 	}
 
-	endpointID := ""
 	threadID := ""
 	if r != nil {
-		endpointID = strings.TrimSpace(r.endpointID)
 		threadID = strings.TrimSpace(r.threadID)
 	}
-	if r != nil && r.threadsDB != nil && endpointID != "" && threadID != "" {
+	if r != nil && r.activeFloretHost() != nil && threadID != "" {
 		readCtx := ctx
 		if readCtx == nil {
 			readCtx = context.Background()
@@ -2720,21 +2708,22 @@ func (r *run) hydrateTodoRuntimeState(ctx context.Context, state *runtimeState) 
 			readCtx, cancel = context.WithTimeout(readCtx, 2*time.Second)
 			defer cancel()
 		}
-		snapshot, err := r.threadsDB.GetThreadTodosSnapshot(readCtx, endpointID, threadID)
+		snapshot, err := r.activeFloretHost().ReadThreadAgentTodos(readCtx, flruntime.ThreadID(threadID))
 		if err == nil {
-			hasSnapshot := snapshot.UpdatedAtUnixMs > 0 || snapshot.Version > 0 || strings.TrimSpace(snapshot.UpdatedByRunID) != "" || strings.TrimSpace(snapshot.UpdatedByToolID) != ""
+			hasSnapshot := !snapshot.UpdatedAt.IsZero() || snapshot.Version > 0 || strings.TrimSpace(string(snapshot.UpdatedByRunID)) != "" || strings.TrimSpace(snapshot.UpdatedByToolCall) != ""
 			if hasSnapshot {
-				todos, decodeErr := decodeTodoItemsJSON(snapshot.TodosJSON)
-				if decodeErr == nil {
-					summary := summarizeTodos(todos)
-					actionableSummary := actionableTodoSummary(todos)
-					state.TodoTrackingEnabled = true
-					state.TodoTotalCount = summary.Total
-					state.TodoOpenCount = actionableSummary.Pending + actionableSummary.InProgress
-					state.TodoInProgressCount = actionableSummary.InProgress
-					state.TodoSnapshotVersion = snapshot.Version
-					return "thread_snapshot", true
+				todos := make([]TodoItem, 0, len(snapshot.Items))
+				for _, item := range snapshot.Items {
+					todos = append(todos, TodoItem{ID: item.ID, Content: item.Content, Status: string(item.Status)})
 				}
+				summary := summarizeTodos(todos)
+				actionableSummary := actionableTodoSummary(todos)
+				state.TodoTrackingEnabled = true
+				state.TodoTotalCount = summary.Total
+				state.TodoOpenCount = actionableSummary.Pending + actionableSummary.InProgress
+				state.TodoInProgressCount = actionableSummary.InProgress
+				state.TodoSnapshotVersion = snapshot.Version
+				return "thread_snapshot", true
 			}
 		}
 	}
