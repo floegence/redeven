@@ -82,13 +82,6 @@ export type FlowerSettingsCopy = Readonly<{
   }>>>;
   providersTitle: string;
   providersDescription: string;
-  managedByLocalAIProfileTitle: string;
-  managedByLocalAIProfileDescription: string;
-  managedByLocalAIProfileReady: string;
-  managedByLocalAIProfileNeedsKey: string;
-  managedByLocalAIProfileModelCount: (count: number) => string;
-  managedByLocalAIProfileMissingKeys: (providers: string) => string;
-  managedByLocalAIProfileOpenLocal: string;
   addProvider: string;
   noProviders: string;
   defaultProvider: string;
@@ -782,13 +775,6 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     },
     providersTitle: 'Providers',
     providersDescription: 'Provider cards show the Local AI Profile model sources and capability details.',
-    managedByLocalAIProfileTitle: 'Local AI Profile on this Mac',
-    managedByLocalAIProfileDescription: 'Model calls are handled by Desktop from the Local AI Profile. Files, terminal, Git, and workspace actions still run in the selected runtime.',
-    managedByLocalAIProfileReady: 'Ready',
-    managedByLocalAIProfileNeedsKey: 'Needs local key',
-    managedByLocalAIProfileModelCount: (count) => `${count} model${count === 1 ? '' : 's'}`,
-    managedByLocalAIProfileMissingKeys: (providers) => `Missing local keys: ${providers}`,
-    managedByLocalAIProfileOpenLocal: 'Open Local Environment Settings on this Mac to change providers, models, or keys.',
     addProvider: 'Add provider',
     noProviders: 'No providers yet. Add OpenAI, Anthropic, Kimi, ChatGLM, DeepSeek, Qwen, OpenRouter, xAI, Groq, Ollama, or a custom endpoint.',
     defaultProvider: 'Default',

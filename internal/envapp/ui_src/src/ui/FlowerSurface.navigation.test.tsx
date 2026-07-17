@@ -17,6 +17,7 @@ import {
   mutableSettingsAdapter,
   renderSurface,
   renderSurfaceWithAdapter,
+  renderSurfaceWithAdapterProps,
   retiredHandlerUnavailableCopy,
   settingsSnapshot,
   thread,
@@ -25,6 +26,15 @@ import {
 } from './FlowerSurface.navigation.testHarness';
 
 describe('FlowerSurface navigation', () => {
+  it('focuses Flower settings from a host navigation request', async () => {
+    const runtime = renderSurfaceWithAdapterProps(adapter(true), { settingsFocusRequest: 1 });
+
+    await waitFor(() => Boolean(runtime.querySelector('.flower-settings-providers-section')));
+
+    expect(runtime.querySelector('.flower-chat-shell')).toBeNull();
+    expect(runtime.textContent).toContain('OpenAI');
+  });
+
   it('returns from settings to the chat panel with an icon-only control', async () => {
     const runtime = renderSurface();
     await flush();
@@ -176,11 +186,10 @@ describe('FlowerSurface navigation', () => {
       ...settingsSnapshot(true),
       model_source: {
         kind: 'desktop_model_source',
-        ready: true,
-        current_model_id: 'desktop:gpt-5.2',
-        label: 'Local AI Profile',
-        model_count: 1,
-        models: [{ id: 'desktop:gpt-5.2', label: 'Desktop / gpt-5.2' }],
+        state: 'ready',
+        current_model_id: `desktop:model_${'e'.repeat(64)}`,
+        label: 'Desktop',
+        models: [{ id: `desktop:model_${'e'.repeat(64)}`, label: 'Desktop / gpt-5.2' }],
       },
     };
     const saveDefaultPermission = vi.fn(async () => desktopSourceSnapshot);
@@ -195,7 +204,6 @@ describe('FlowerSurface navigation', () => {
     (runtime.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
     await flush();
 
-    expect(runtime.querySelector('.flower-settings-managed-source')).toBeNull();
     expect(runtime.querySelector('.flower-settings-current-model')?.textContent).toContain('OpenAI / gpt-5.2');
     expect(runtime.querySelector('.flower-settings-policy-card')).toBeTruthy();
     expect(runtime.querySelector('.flower-settings-providers-section')).toBeTruthy();

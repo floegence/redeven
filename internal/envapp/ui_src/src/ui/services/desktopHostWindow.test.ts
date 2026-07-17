@@ -96,6 +96,7 @@ describe('desktopHostWindow', () => {
       getSnapshot: () => ({
         local_environment_id: 'local',
         renderer_storage_scope_id: 'local',
+        target_route: 'local_host' as const,
       }),
     };
     parentWindow.redevenDesktopSessionContext = sessionContextBridge;

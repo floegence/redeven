@@ -156,6 +156,7 @@ describe('uiStorage', () => {
       getSnapshot: () => ({
         local_environment_id: 'provider:https%3A%2F%2Fredeven.test:env:env_demo',
         renderer_storage_scope_id: 'provider:https%3A%2F%2Fredeven.test:env:env_demo',
+        target_route: 'remote_desktop',
       }),
     };
 

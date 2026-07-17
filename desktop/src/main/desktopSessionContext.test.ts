@@ -43,13 +43,14 @@ describe('desktopSessionContext', () => {
     });
   });
 
-  it('keeps external and SSH remote desktop sessions out of the provider source', () => {
+  it('publishes the remote Desktop route for external and SSH sessions', () => {
     expect(desktopSessionContextSnapshotFromTarget(buildExternalLocalUIDesktopTarget('http://192.168.1.11:24000/', {
       label: 'External host',
-    }))).toMatchObject({
+    }))).toEqual({
       local_environment_id: 'http://192.168.1.11:24000/',
       renderer_storage_scope_id: 'http://192.168.1.11:24000/',
       target_kind: 'external_local_ui',
+      target_route: 'remote_desktop',
       session_source: 'external_local_ui',
       label: 'External host',
     });
@@ -64,10 +65,11 @@ describe('desktopSessionContext', () => {
     }, {
       forwardedLocalUIURL: 'http://127.0.0.1:41111/',
       label: 'SSH Lab',
-    }))).toMatchObject({
+    }))).toEqual({
       local_environment_id: 'ssh:devbox:2222:key_agent:remote_default',
       renderer_storage_scope_id: 'ssh:devbox:2222:key_agent:remote_default',
       target_kind: 'ssh_environment',
+      target_route: 'remote_desktop',
       session_source: 'ssh_environment',
       label: 'SSH Lab',
     });
@@ -82,10 +84,11 @@ describe('desktopSessionContext', () => {
       gatewaySessionID: 'gws_demo',
     }));
 
-    expect(snapshot).toMatchObject({
+    expect(snapshot).toEqual({
       local_environment_id: 'gateway:bastion:env:env_demo',
       renderer_storage_scope_id: 'gateway:bastion:env:env_demo:session:gws_demo',
       target_kind: 'gateway_environment',
+      target_route: 'remote_desktop',
       session_source: 'runtime_gateway',
       label: 'Demo Env',
     });

@@ -2,7 +2,7 @@ import type { Accessor, Component, JSX } from 'solid-js';
 import { For, Show, batch, createEffect, createMemo, createSignal, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
-import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, GitBranch, GripVertical, MoreHorizontal, Plus, Settings, Shield, Terminal, XCircle } from '@floegence/floe-webapp-core/icons';
+import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, GitBranch, GripVertical, MoreHorizontal, Plus, Refresh, Settings, Shield, Terminal, XCircle } from '@floegence/floe-webapp-core/icons';
 import { Button, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 
 import { writeTextToClipboard } from './clipboard';
@@ -52,6 +52,8 @@ import type {
   FlowerActivityApprovalState,
   FlowerModelIOPhase,
   FlowerModelIOStatus,
+  FlowerModelSourceStatus,
+  FlowerSurfaceAction,
   FlowerPermissionType,
   FlowerProviderType,
   FlowerReasoningCapability,
@@ -127,6 +129,8 @@ import {
 } from './reasoning';
 
 type FlowerSurfacePanel = 'chat' | 'settings';
+type UnavailableFlowerModelSourceStatus = Exclude<FlowerModelSourceStatus, { state: 'ready' }>;
+type FlowerModelSourceRecoveryActionID = 'local_settings' | 'runtime_settings' | 'connection_center';
 type FlowerInputDraft = Readonly<{
   choice_id?: string;
   text?: string;
@@ -711,6 +715,7 @@ export type FlowerSurfaceProps = Readonly<{
   copy?: FlowerSurfaceCopy;
   warmup?: FlowerSurfaceWarmupState | null;
   focusThreadRequest?: FlowerThreadFocusRequest | null;
+  settingsFocusRequest?: number;
   sidebarLeadingAction?: JSX.Element;
   onFocusThreadRequestConsumed?: (requestID: string) => void;
   onThreadSelectionEvent?: (event: UIFirstSelectionEvent<string, { source: 'thread-list' }>) => void;
@@ -774,9 +779,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [pendingContextCompaction, setPendingContextCompaction] = createSignal<PendingContextCompactionDecoration | null>(null);
   const [pendingTurns, setPendingTurns] = createSignal<readonly PendingFlowerTurn[]>([]);
   const [settingsSaving, setSettingsSaving] = createSignal(false);
+  const [modelSourceRefreshing, setModelSourceRefreshing] = createSignal(false);
   const [threadsRefreshing, setThreadsRefreshing] = createSignal(false);
   const [historyFilter, setHistoryFilter] = createSignal('');
   const [sidePanel, setSidePanel] = createSignal<FlowerSurfacePanel>('chat');
+  let consumedSettingsFocusRequest = 0;
   const [contextSnapshotPreview, setContextSnapshotPreview] = createSignal<FlowerChatContextSnapshotPreview | null>(null);
   const [workingDirectoryPathContext, setWorkingDirectoryPathContext] = createSignal<FlowerWorkingDirectoryPathContext | null>(null);
   const [, setWorkingDirectoryPathContextLoading] = createSignal(false);
@@ -2087,7 +2094,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const renameOriginalTitle = createMemo(() => threads().find((thread) => thread.thread_id === renameThreadID())?.title ?? '');
   const renameUnchanged = createMemo(() => trimString(renameDraft()) === trimString(renameOriginalTitle()));
-  const currentModelID = createMemo(() => trimString(snapshot()?.model_profile?.current_model_id || snapshot()?.model_source?.current_model_id));
+  const currentModelID = createMemo(() => {
+    const current = snapshot();
+    if (current?.model_profile?.current_model_id) return trimString(current.model_profile.current_model_id);
+    return current?.model_source?.state === 'ready' ? trimString(current.model_source.current_model_id) : '';
+  });
   const selectedComposerModelID = createMemo(() => {
     const threadModelID = trimString(selectedThread()?.model_id);
     if (threadModelID) return threadModelID;
@@ -2096,7 +2107,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   type ComposerModelOption = Readonly<{
     id: string;
     label: string;
-    source?: 'model_profile' | 'desktop_model_source';
+    source: 'model_profile' | 'desktop_model_source' | 'thread_snapshot';
+    disabled?: boolean;
     providerType?: FlowerProviderType;
     supportsImageInput: boolean;
     contextWindow?: number;
@@ -2128,8 +2140,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   ));
   const sourceModelOptions = createMemo<readonly ComposerModelOption[]>(() => {
     const source = snapshot()?.model_source;
-    if (source?.kind !== 'desktop_model_source') return [];
-    return (source.models ?? []).map((model) => ({
+    if (source?.kind !== 'desktop_model_source' || source.state !== 'ready') return [];
+    return source.models.map((model) => ({
       id: trimString(model.id),
       label: trimString(model.label) || trimString(model.id),
       source: 'desktop_model_source' as const,
@@ -2159,18 +2171,23 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!threadModelID) return currentModelLabel();
     const catalogModel = catalogModelOptions().find((option) => option.id === threadModelID);
     if (catalogModel) return catalogModel.label;
-    const current = snapshot();
-    if (!current?.model_profile) return threadModelID;
-    return formatFlowerCurrentModelLabel({ ...current.model_profile, current_model_id: threadModelID }, copy().chat.noModelSelected);
+    return threadModelID;
+  });
+  const threadSnapshotModelOption = createMemo<ComposerModelOption | null>(() => {
+    const threadModelID = trimString(selectedThread()?.model_id);
+    if (!threadModelID || catalogModelOptions().some((option) => option.id === threadModelID)) return null;
+    return {
+      id: threadModelID,
+      label: threadModelID,
+      source: 'thread_snapshot',
+      disabled: true,
+      supportsImageInput: false,
+    };
   });
   const modelSelectOptions = createMemo(() => {
     const options = catalogModelOptions();
-    const selected = selectedComposerModelID();
-    if (selected && !options.some((option) => option.id === selected)) {
-      const label = selectedThreadModelLabel();
-      return [{ id: selected, label, supportsImageInput: false } as ComposerModelOption, ...options];
-    }
-    return options;
+    const threadSnapshot = threadSnapshotModelOption();
+    return threadSnapshot ? [threadSnapshot, ...options] : options;
   });
   const selectedModelOption = createMemo(() => modelSelectOptions().find((option) => option.id === selectedComposerModelID()) ?? null);
   const groupedModelOptions = createMemo(() => {
@@ -2178,12 +2195,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const remoteOptions = options.filter((option) => option.source === 'model_profile');
     const desktopOptions = options.filter((option) => option.source === 'desktop_model_source');
     if (remoteOptions.length === 0 || desktopOptions.length === 0) return null;
-    const uncataloguedOptions = options.filter((option) => !option.source);
     return [
       {
         source: 'model_profile' as const,
         label: trimString(props.adapter.runtime.display_name),
-        options: [...uncataloguedOptions, ...remoteOptions],
+        options: remoteOptions,
       },
       {
         source: 'desktop_model_source' as const,
@@ -2237,8 +2253,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (option.source === 'desktop_model_source') {
       const source = modelSource();
       return source?.kind === 'desktop_model_source'
-        && source.ready
-        && (source.models ?? []).some((model) => trimString(model.id) === option.id);
+        && source.state === 'ready'
+        && source.models.some((model) => trimString(model.id) === option.id);
     }
     if (option.source !== 'model_profile') return false;
     const providerID = option.id.split('/')[0] ?? '';
@@ -2250,6 +2266,28 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const readyForChat = createMemo(() => modelOptionReady(selectedModelOption()));
   const anyModelReady = createMemo(() => catalogModelOptions().some((option) => modelOptionReady(option)));
   const selectedModelNeedsAttention = createMemo(() => !readyForChat() && anyModelReady());
+  const unavailableModelSource = createMemo<UnavailableFlowerModelSourceStatus | null>(() => {
+    const source = modelSource();
+    return source && source.state !== 'ready' ? source : null;
+  });
+  const modelSourceStatusMessage = createMemo(() => {
+    const source = unavailableModelSource();
+    const recovery = props.adapter.modelSourceRecovery;
+    return source && recovery ? trimString(recovery.describe(source)) : '';
+  });
+  const modelSourceRecoveryAction = (
+    status: UnavailableFlowerModelSourceStatus,
+  ): Readonly<{ id: FlowerModelSourceRecoveryActionID; action: FlowerSurfaceAction }> | null => {
+    const recovery = props.adapter.modelSourceRecovery;
+    if (!recovery) return null;
+    if (status.state === 'missing_keys' || status.state === 'empty') {
+      return { id: 'local_settings', action: recovery.localSettings };
+    }
+    if (status.state === 'unsupported') {
+      return { id: 'runtime_settings', action: recovery.runtimeSettings };
+    }
+    return { id: 'connection_center', action: recovery.connectionCenter };
+  };
   const currentHandlerDecision = createMemo(() => {
     const state = handlerState();
     return 'decision' in state ? state.decision : null;
@@ -3228,6 +3266,26 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const openSettings = () => {
     closeSubagentOverlays();
     setSidePanel('settings');
+  };
+
+  createEffect(() => {
+    const request = Math.max(0, Math.floor(Number(props.settingsFocusRequest ?? 0)));
+    if (request <= consumedSettingsFocusRequest) return;
+    consumedSettingsFocusRequest = request;
+    openSettings();
+  });
+
+  const refreshModelSource = async () => {
+    if (modelSourceRefreshing()) return;
+    setModelSourceRefreshing(true);
+    try {
+      setSnapshot(await props.adapter.loadSettings());
+      setLoadError('');
+    } catch (error) {
+      notifyComposerError(getErrorMessage(error));
+    } finally {
+      setModelSourceRefreshing(false);
+    }
   };
 
   const updateSubagentDropdownPosition = () => {
@@ -6665,7 +6723,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         data-model-source={option.source}
         role="option"
         aria-selected={selected()}
-        onClick={() => { void updateComposerModelID(option.id); closeModelMenu(true); }}
+        disabled={option.disabled}
+        onClick={() => {
+          if (option.disabled) return;
+          void updateComposerModelID(option.id);
+          closeModelMenu(true);
+        }}
       >
         {option.providerType
           ? <FlowerProviderBrandIcon type={option.providerType} class="flower-model-menu-icon" />
@@ -6691,6 +6754,57 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     );
   };
 
+  const modelSourceStatusRow = (placement: 'footer' | 'menu') => (
+    <Show when={unavailableModelSource()} keyed>
+      {(status) => {
+        const recoveryAction = modelSourceRecoveryAction(status);
+        return (
+          <div
+            class={cn('flower-model-source-status', `flower-model-source-status-${placement}`)}
+            data-state={status.state}
+            data-placement={placement}
+          >
+            <AlertTriangle class="flower-model-source-status-icon" aria-hidden="true" />
+            <span class="flower-model-source-status-message" title={modelSourceStatusMessage()}>
+              {modelSourceStatusMessage()}
+            </span>
+            <span class="flower-model-source-status-actions">
+              <button
+                type="button"
+                class="flower-model-source-status-action flower-model-source-status-refresh"
+                aria-label={copy().threadList.refreshLabel}
+                title={copy().threadList.refreshLabel}
+                aria-busy={modelSourceRefreshing() ? 'true' : undefined}
+                disabled={modelSourceRefreshing()}
+                onClick={() => void refreshModelSource()}
+              >
+                <Refresh class="h-3.5 w-3.5" aria-hidden="true" />
+              </button>
+              <Show when={recoveryAction}>
+                {(value) => (
+                  <button
+                    type="button"
+                    class="flower-model-source-status-action"
+                    data-model-source-action={value().id}
+                    aria-label={value().action.label}
+                    title={value().action.label}
+                    onClick={() => {
+                      void value().action.run().catch((error) => notifyComposerError(getErrorMessage(error)));
+                    }}
+                  >
+                    {value().id === 'connection_center'
+                      ? <ExternalLink class="h-3.5 w-3.5" aria-hidden="true" />
+                      : <Settings class="h-3.5 w-3.5" aria-hidden="true" />}
+                  </button>
+                )}
+              </Show>
+            </span>
+          </div>
+        );
+      }}
+    </Show>
+  );
+
   const modelMenu = () => (
     <Show when={modelMenuOpen()}>
       <div
@@ -6700,9 +6814,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         role="listbox"
         onKeyDown={handleModelMenuKeyDown}
       >
+        <Show when={threadSnapshotModelOption()}>{(option) => modelMenuItem(option())}</Show>
         <Show
           when={groupedModelOptions()}
-          fallback={<For each={modelSelectOptions()}>{modelMenuItem}</For>}
+          fallback={<For each={catalogModelOptions()}>{modelMenuItem}</For>}
         >
           {(groups) => (
             <For each={groups()}>
@@ -6718,6 +6833,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             </For>
           )}
         </Show>
+        {modelSourceStatusRow('menu')}
       </div>
     </Show>
   );
@@ -7159,14 +7275,34 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   <Show
                     when={!needsSetup()}
                   fallback={(
-                    <>
-                      <div class="flower-setup-inline">
-                        <span>{copy().chat.configureProviderBeforeChat}</span>
-                      </div>
-                      <Button variant="primary" icon={Settings} onClick={openSettings}>
-                        {copy().chat.openSettings}
-                      </Button>
-                    </>
+                    <Show
+                      when={unavailableModelSource()}
+                      fallback={(
+                        <div
+                          class="flower-setup-inline flower-model-source-status flower-model-source-status-footer"
+                          data-state="not_configured"
+                          data-placement="footer"
+                        >
+                          <AlertTriangle class="flower-model-source-status-icon" aria-hidden="true" />
+                          <span class="flower-model-source-status-message" title={copy().chat.configureProviderBeforeChat}>
+                            {copy().chat.configureProviderBeforeChat}
+                          </span>
+                          <span class="flower-model-source-status-actions">
+                            <button
+                              type="button"
+                              class="flower-model-source-status-action"
+                              aria-label={copy().chat.settingsLabel}
+                              title={copy().chat.settingsLabel}
+                              onClick={openSettings}
+                            >
+                              <Settings class="h-3.5 w-3.5" aria-hidden="true" />
+                            </button>
+                          </span>
+                        </div>
+                      )}
+                    >
+                      {modelSourceStatusRow('footer')}
+                    </Show>
                   )}
                 >
                     <div class="flower-model-stack">

@@ -33,6 +33,7 @@ export function desktopSessionContextSnapshotFromTarget(
       ? target.session_key
       : target.environment_id,
     target_kind: target.kind,
+    target_route: 'remote_desktop',
     session_source: target.kind === 'ssh_environment'
       ? 'ssh_environment'
       : target.kind === 'gateway_environment'

@@ -543,6 +543,7 @@ type OpenDesktopWelcomeOptions = Readonly<{
   entryReason?: DesktopWelcomeEntryReason;
   issue?: DesktopWelcomeIssue | null;
   selectedEnvironmentID?: string;
+  focusFlowerSettings?: boolean;
   stealAppFocus?: boolean;
 }>;
 
@@ -554,6 +555,7 @@ type DesktopUtilityWindowState = Readonly<{
   entryReason: DesktopWelcomeEntryReason;
   issue: DesktopWelcomeIssue | null;
   selectedEnvironmentID: string;
+  flowerSettingsFocusRevision: number;
 }>;
 
 type DesktopSessionRecord = {
@@ -759,7 +761,13 @@ type CreateBrowserWindowArgs = Readonly<{
 
 const utilityWindows = new Map<DesktopUtilityWindowKind, DesktopTrackedWindow>();
 const utilityWindowState = new Map<DesktopUtilityWindowKind, DesktopUtilityWindowState>([
-  ['launcher', { surface: 'connect_environment', entryReason: 'app_launch', issue: null, selectedEnvironmentID: '' }],
+  ['launcher', {
+    surface: 'connect_environment',
+    entryReason: 'app_launch',
+    issue: null,
+    selectedEnvironmentID: '',
+    flowerSettingsFocusRevision: 0,
+  }],
 ]);
 const utilityWindowKindByWebContentsID = new Map<number, DesktopUtilityWindowKind>();
 const UTILITY_WINDOW_KINDS = ['launcher'] as const;
@@ -3017,6 +3025,7 @@ function currentUtilityWindowState(kind: DesktopUtilityWindowKind): DesktopUtili
     entryReason: openSessionSummaries().length > 0 ? 'switch_environment' : 'app_launch',
     issue: null,
     selectedEnvironmentID: '',
+    flowerSettingsFocusRevision: 0,
   };
 }
 
@@ -3985,6 +3994,7 @@ async function buildCurrentDesktopWelcomeSnapshot(
     entryReason: overrides.entryReason ?? state.entryReason,
     issue: overrides.issue ?? state.issue,
     selectedEnvironmentID: state.selectedEnvironmentID,
+    flowerSettingsFocusRevision: state.flowerSettingsFocusRevision,
   });
 }
 
@@ -7325,6 +7335,9 @@ function setLauncherViewState(options: OpenDesktopWelcomeOptions = {}): DesktopU
     entryReason: options.entryReason ?? (openSessionSummaries().length > 0 ? 'switch_environment' : 'app_launch'),
     issue: options.issue === undefined ? current.issue : options.issue,
     selectedEnvironmentID: options.selectedEnvironmentID ?? current.selectedEnvironmentID,
+    flowerSettingsFocusRevision: options.focusFlowerSettings
+      ? current.flowerSettingsFocusRevision + 1
+      : current.flowerSettingsFocusRevision,
   };
   setUtilityWindowState('launcher', nextState);
   return nextState;
@@ -17317,6 +17330,16 @@ if (!app.requestSingleInstanceLock()) {
     if (normalized.kind === 'connection_center') {
       await openDesktopWelcomeWindow({
         entryReason: openSessionSummaries().length > 0 ? 'switch_environment' : 'app_launch',
+        stealAppFocus: true,
+      });
+      return;
+    }
+
+    if (normalized.kind === 'flower_settings') {
+      await openUtilityWindow('launcher', {
+        surface: 'flower',
+        issue: null,
+        focusFlowerSettings: true,
         stealAppFocus: true,
       });
       return;

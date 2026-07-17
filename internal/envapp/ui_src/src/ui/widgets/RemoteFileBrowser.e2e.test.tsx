@@ -2241,6 +2241,7 @@ describe('RemoteFileBrowser persistence', () => {
       getSnapshot: () => ({
         local_environment_id: 'local:dev-b',
         renderer_storage_scope_id: 'local:dev-b',
+        target_route: 'local_host',
       }),
     };
     widgetStateStore.values = {

@@ -12,6 +12,7 @@ import {
   notifyRuntimeMaintenanceStartedInDesktopShell,
   openAdvancedSettings,
   openConnectionCenter,
+  openFlowerSettings,
   openCodespaceWindowInDesktopShell,
   openDashboardInDesktopShell,
   openExternalURLInDesktopShell,
@@ -55,10 +56,12 @@ describe('desktopShellBridge', () => {
     expect(desktopShellBridgeAvailable()).toBe(true);
     await expect(openConnectionCenter()).resolves.toBe(true);
     await expect(openAdvancedSettings()).resolves.toBe(true);
+    await expect(openFlowerSettings()).resolves.toBe(true);
 
     expect(openWindowBridge).toHaveBeenNthCalledWith(1, 'connection_center');
     expect(openWindowBridge).toHaveBeenNthCalledWith(2, 'settings');
-    expect(openWindowBridge).toHaveBeenCalledTimes(2);
+    expect(openWindowBridge).toHaveBeenNthCalledWith(3, 'flower_settings');
+    expect(openWindowBridge).toHaveBeenCalledTimes(3);
   });
 
   it('prefers explicit native window command bridge methods when present', async () => {

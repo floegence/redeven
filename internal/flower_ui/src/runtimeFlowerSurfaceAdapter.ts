@@ -3,6 +3,7 @@ import type {
   FlowerCompactThreadContextInput,
   FlowerFileOpenRequest,
   FlowerLinkedContextPathOpenRequest,
+  FlowerModelSourceRecovery,
   FlowerPermissionType,
   FlowerReasoningSelection,
   FlowerResolveHandlerInput,
@@ -129,6 +130,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   openFilePreview?: (request: FlowerFileOpenRequest) => Promise<void>;
   openLinkedFilePreview?: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
   openLinkedDirectoryBrowser?: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
+  modelSourceRecovery?: FlowerModelSourceRecovery;
   missingThreadID?: string;
   failedToCreateThread?: string;
 }>;
@@ -326,5 +328,6 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     ...(options.openFilePreview ? { openFilePreview: options.openFilePreview } : {}),
     ...(options.openLinkedFilePreview ? { openLinkedFilePreview: options.openLinkedFilePreview } : {}),
     ...(options.openLinkedDirectoryBrowser ? { openLinkedDirectoryBrowser: options.openLinkedDirectoryBrowser } : {}),
+    ...(options.modelSourceRecovery ? { modelSourceRecovery: options.modelSourceRecovery } : {}),
   };
 }

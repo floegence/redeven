@@ -84,17 +84,6 @@ export type FlowerProviderSecretState = Readonly<{
   web_search_api_key_configured: boolean;
 }>;
 
-export type FlowerModelSourceStatus = Readonly<{
-  kind: 'desktop_model_source';
-  ready: boolean;
-  current_model_id?: string;
-  label?: string;
-  model_count?: number;
-  models?: readonly FlowerModelSourceModel[];
-  missing_key_provider_ids?: readonly string[];
-  last_error?: string;
-}>;
-
 export type FlowerModelSourceModel = Readonly<{
   id: string;
   label: string;
@@ -102,6 +91,49 @@ export type FlowerModelSourceModel = Readonly<{
   max_output_tokens?: number;
   input_modalities?: readonly string[];
   reasoning_capability?: FlowerReasoningCapability;
+}>;
+
+export type FlowerModelSourceStatus =
+  | Readonly<{
+      kind: 'desktop_model_source';
+      state: 'ready';
+      label: 'Desktop';
+      models: readonly [FlowerModelSourceModel, ...FlowerModelSourceModel[]];
+      current_model_id?: string;
+    }>
+  | Readonly<{
+      kind: 'desktop_model_source';
+      state: 'missing_keys';
+      label: 'Desktop';
+      missing_key_provider_ids: readonly string[];
+    }>
+  | Readonly<{
+      kind: 'desktop_model_source';
+      state: 'empty';
+      label: 'Desktop';
+    }>
+  | Readonly<{
+      kind: 'desktop_model_source';
+      state: 'connecting' | 'unbound' | 'expired' | 'unsupported';
+      label: 'Desktop';
+    }>
+  | Readonly<{
+      kind: 'desktop_model_source';
+      state: 'error';
+      label: 'Desktop';
+      diagnostic_message?: string;
+    }>;
+
+export type FlowerSurfaceAction = Readonly<{
+  label: string;
+  run: () => Promise<void>;
+}>;
+
+export type FlowerModelSourceRecovery = Readonly<{
+  describe: (status: Exclude<FlowerModelSourceStatus, { state: 'ready' }>) => string;
+  localSettings: FlowerSurfaceAction;
+  runtimeSettings: FlowerSurfaceAction;
+  connectionCenter: FlowerSurfaceAction;
 }>;
 
 export type FlowerSettingsSnapshot = Readonly<{
@@ -1197,4 +1229,5 @@ export type FlowerSurfaceAdapter = Readonly<{
   openFilePreview?: (request: FlowerFileOpenRequest) => Promise<void>;
   openLinkedFilePreview?: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
   openLinkedDirectoryBrowser?: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
+  modelSourceRecovery?: FlowerModelSourceRecovery;
 }>;

@@ -45,14 +45,18 @@ export function bootstrapDesktopSessionContextBridge(): void {
           return undefined;
         }
       })();
-      if (localEnvironmentID === '' || rendererStorageScopeID === '') {
+      if (
+        localEnvironmentID === ''
+        || rendererStorageScopeID === ''
+        || (targetRoute !== 'local_host' && targetRoute !== 'remote_desktop')
+      ) {
         return null;
       }
       return {
         local_environment_id: localEnvironmentID,
         renderer_storage_scope_id: rendererStorageScopeID,
         ...(targetKind === 'local_environment' || targetKind === 'external_local_ui' || targetKind === 'ssh_environment' || targetKind === 'gateway_environment' ? { target_kind: targetKind } : {}),
-        ...(targetRoute === 'local_host' || targetRoute === 'remote_desktop' ? { target_route: targetRoute } : {}),
+        target_route: targetRoute,
         ...(sessionSource === 'local_runtime' || sessionSource === 'provider_environment' || sessionSource === 'ssh_environment' || sessionSource === 'external_local_ui' || sessionSource === 'runtime_gateway' ? { session_source: sessionSource } : {}),
         ...(providerOrigin !== '' ? { provider_origin: providerOrigin } : {}),
         ...(providerID !== '' ? { provider_id: providerID } : {}),

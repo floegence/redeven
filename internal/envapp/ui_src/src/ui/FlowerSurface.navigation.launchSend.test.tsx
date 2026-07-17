@@ -114,6 +114,8 @@ function installComposerControlLayoutHarness(input: {
   };
 }
 
+const DESKTOP_MODEL_ID = `desktop:model_${'c'.repeat(64)}`;
+
 function dualSourceSnapshot(input: Readonly<{
   remoteReady?: boolean;
   desktopReady?: boolean;
@@ -133,19 +135,25 @@ function dualSourceSnapshot(input: Readonly<{
         ],
       }],
     },
-    model_source: {
-      kind: 'desktop_model_source',
-      ready: input.desktopReady ?? true,
-      current_model_id: 'desktop:model_local',
-      label: 'Local AI Profile',
-      model_count: 1,
-      models: [{
-        id: 'desktop:model_local',
-        label: 'Desktop / Local Model',
-        context_window: 200000,
-        input_modalities: ['text'],
-      }],
-    },
+    model_source: input.desktopReady ?? true
+      ? {
+          kind: 'desktop_model_source',
+          state: 'ready',
+          current_model_id: DESKTOP_MODEL_ID,
+          label: 'Desktop',
+          models: [{
+            id: DESKTOP_MODEL_ID,
+            label: 'Desktop / Local Model',
+            context_window: 200000,
+            input_modalities: ['text'],
+          }],
+        }
+      : {
+          kind: 'desktop_model_source',
+          state: 'error',
+          label: 'Desktop',
+          diagnostic_message: 'Desktop model bridge binding failed.',
+        },
   };
 }
 
@@ -195,11 +203,14 @@ describe('FlowerSurface navigation launch/send', () => {
     (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
     await waitFor(() => launchTurn.mock.calls.length === 1);
     expect(launchTurn).toHaveBeenCalledWith(expect.objectContaining({
-      model_id: 'desktop:model_local',
+      model_id: DESKTOP_MODEL_ID,
     }));
 
     (runtime.querySelector('button[aria-label="New chat"]') as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelector('.flower-model-reasoning-model-trigger')?.textContent?.includes('Desktop / Local Model') ?? false);
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-reasoning-model-trigger')));
+    (runtime.querySelector('.flower-model-reasoning-model-trigger') as HTMLButtonElement).click();
+    await waitFor(() => Array.from(runtime.querySelectorAll('.flower-model-menu-item'))
+      .some((item) => item.textContent?.includes('Desktop / Local Model')));
     expect(persistDefaultModel).not.toHaveBeenCalled();
 
     const remounted = renderSurfaceWithAdapter(surfaceAdapter);
@@ -277,12 +288,15 @@ describe('FlowerSurface navigation launch/send', () => {
     desktopOption.click();
 
     await waitFor(() => setThreadModel.mock.calls.length === 1);
-    expect(setThreadModel).toHaveBeenCalledWith('thread-desktop-isolated', 'desktop:model_local');
+    expect(setThreadModel).toHaveBeenCalledWith('thread-desktop-isolated', DESKTOP_MODEL_ID);
     expect(persistDefaultModel).not.toHaveBeenCalled();
     expect(runtime.querySelector('.flower-model-reasoning-model-trigger')?.textContent).toContain('Desktop / Local Model');
 
     (runtime.querySelector('button[aria-label="New chat"]') as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelector('.flower-model-reasoning-model-trigger')?.textContent?.includes('gpt-5.2') ?? false);
+    await waitFor(() => {
+      const trigger = runtime.querySelector<HTMLButtonElement>('.flower-model-reasoning-model-trigger');
+      return Boolean(trigger && !trigger.disabled && trigger.textContent?.includes('gpt-5.2'));
+    });
     (runtime.querySelector('[data-thread-id="thread-desktop-isolated"] button') as HTMLButtonElement).click();
     await waitFor(() => runtime.querySelector('.flower-model-reasoning-model-trigger')?.textContent?.includes('Desktop / Local Model') ?? false);
   });
@@ -335,10 +349,121 @@ describe('FlowerSurface navigation launch/send', () => {
       persistDefaultModel: vi.fn(async () => snapshot),
     });
 
-    await waitFor(() => Boolean(runtime.querySelector('.flower-setup-inline')));
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-source-status-footer')));
     expect(runtime.querySelector('.flower-empty-state')).toBeTruthy();
     expect(runtime.querySelector('.flower-setup-guide')).toBeNull();
     expect(runtime.querySelector('.flower-model-reasoning-control')).toBeNull();
+  });
+
+  it('refreshes only the settings snapshot and preserves the composer session', async () => {
+    const readySnapshot = dualSourceSnapshot({ remoteReady: false, desktopReady: true });
+    const initialSnapshot: FlowerSettingsSnapshot = {
+      ...readySnapshot,
+      model_source: {
+        kind: 'desktop_model_source',
+        state: 'empty',
+        label: 'Desktop',
+      },
+    };
+    let currentSnapshot = initialSnapshot;
+    const loadSettings = vi.fn(async () => currentSnapshot);
+    const listThreads = vi.fn(async () => []);
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(false),
+      loadSettings,
+      listThreads,
+      modelSourceRecovery: {
+        describe: () => 'Desktop has no usable model.',
+        localSettings: { label: 'Local Flower settings', run: vi.fn(async () => undefined) },
+        runtimeSettings: { label: 'Runtime settings', run: vi.fn(async () => undefined) },
+        connectionCenter: { label: 'Connection center', run: vi.fn(async () => undefined) },
+      },
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-source-status')));
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'keep this draft';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    currentSnapshot = readySnapshot;
+    (runtime.querySelector('.flower-model-source-status-refresh') as HTMLButtonElement).click();
+
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-reasoning-model-trigger')));
+    (runtime.querySelector('.flower-model-reasoning-model-trigger') as HTMLButtonElement).click();
+    await waitFor(() => Array.from(runtime.querySelectorAll('.flower-model-menu-item'))
+      .some((item) => item.textContent?.includes('Desktop / Local Model')));
+    expect(textarea.value).toBe('keep this draft');
+    expect(listThreads).toHaveBeenCalledTimes(1);
+    expect(loadSettings).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['missing_keys', 'local_settings'],
+    ['empty', 'local_settings'],
+    ['unsupported', 'runtime_settings'],
+    ['unbound', 'connection_center'],
+    ['connecting', 'connection_center'],
+    ['expired', 'connection_center'],
+    ['error', 'connection_center'],
+  ] as const)('routes Desktop source state %s to %s', async (state, expectedAction) => {
+    const localSettings = vi.fn(async () => undefined);
+    const runtimeSettings = vi.fn(async () => undefined);
+    const connectionCenter = vi.fn(async () => undefined);
+    const source = state === 'missing_keys'
+      ? { kind: 'desktop_model_source' as const, state, label: 'Desktop' as const, missing_key_provider_ids: ['openai'] }
+      : state === 'error'
+        ? { kind: 'desktop_model_source' as const, state, label: 'Desktop' as const, diagnostic_message: 'Binding failed.' }
+        : { kind: 'desktop_model_source' as const, state, label: 'Desktop' as const };
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(false),
+      loadSettings: vi.fn(async () => ({
+        defaults: { permission_type: 'approval_required' as const },
+        model_profile: null,
+        provider_secrets: [],
+        model_source: source,
+      })),
+      listThreads: vi.fn(async () => []),
+      modelSourceRecovery: {
+        describe: () => `Desktop source is ${state}.`,
+        localSettings: { label: 'Local Flower settings', run: localSettings },
+        runtimeSettings: { label: 'Runtime settings', run: runtimeSettings },
+        connectionCenter: { label: 'Connection center', run: connectionCenter },
+      },
+    });
+
+    await waitFor(() => runtime.querySelector('.flower-model-source-status')?.getAttribute('data-state') === state);
+    const message = runtime.querySelector('.flower-model-source-status-message') as HTMLElement;
+    expect(message.title).toBe(message.textContent);
+    expect(runtime.querySelector('.flower-setup-guide')).toBeNull();
+    (runtime.querySelector(`[data-model-source-action="${expectedAction}"]`) as HTMLButtonElement).click();
+
+    await waitFor(() => localSettings.mock.calls.length + runtimeSettings.mock.calls.length + connectionCenter.mock.calls.length === 1);
+    expect(localSettings).toHaveBeenCalledTimes(expectedAction === 'local_settings' ? 1 : 0);
+    expect(runtimeSettings).toHaveBeenCalledTimes(expectedAction === 'runtime_settings' ? 1 : 0);
+    expect(connectionCenter).toHaveBeenCalledTimes(expectedAction === 'connection_center' ? 1 : 0);
+  });
+
+  it('keeps an unavailable thread model as a disabled ungrouped snapshot option', async () => {
+    const snapshot = dualSourceSnapshot();
+    const unavailableModelID = `desktop:model_${'d'.repeat(64)}`;
+    const staleThread = thread({ thread_id: 'thread-stale-model', model_id: unavailableModelID });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      loadSettings: vi.fn(async () => snapshot),
+      listThreads: vi.fn(async () => [staleThread]),
+      loadThread: vi.fn(async () => liveBootstrap(staleThread)),
+      setThreadModel: vi.fn(async () => liveBootstrap(staleThread)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-stale-model"] button')));
+    (runtime.querySelector('[data-thread-id="thread-stale-model"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-stale-model'));
+    (runtime.querySelector('.flower-model-reasoning-model-trigger') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-model-source="thread_snapshot"]')));
+
+    const staleOption = runtime.querySelector('[data-model-source="thread_snapshot"]') as HTMLButtonElement;
+    expect(staleOption.disabled).toBe(true);
+    expect(staleOption.closest('[data-model-source-group]')).toBeNull();
+    expect(runtime.querySelector('.flower-model-reasoning-model-trigger')?.textContent).toContain(unavailableModelID);
   });
 
   it('patches an existing thread permission from the composer footer', async () => {
@@ -741,18 +866,17 @@ describe('FlowerSurface navigation launch/send', () => {
   });
 
   it('selects opaque Desktop models and reasoning before launching a new thread', async () => {
-    const deepSeekModelID = 'desktop:model_deepseek';
-    const plainModelID = 'desktop:model_plain';
+    const deepSeekModelID = `desktop:model_${'3'.repeat(64)}`;
+    const plainModelID = `desktop:model_${'4'.repeat(64)}`;
     let currentSnapshot: FlowerSettingsSnapshot = {
       ...settingsSnapshot(false),
       model_profile: null,
       provider_secrets: [],
       model_source: {
         kind: 'desktop_model_source',
-        ready: true,
+        state: 'ready',
         current_model_id: deepSeekModelID,
-        label: 'Local AI Profile',
-        model_count: 2,
+        label: 'Desktop',
         models: [
           {
             id: deepSeekModelID,
@@ -936,7 +1060,10 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-model-default-fails"] button')));
     (runtime.querySelector('[data-thread-id="thread-model-default-fails"] button') as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelector('.flower-model-reasoning-model-trigger')?.textContent?.includes('gpt-5.2') ?? false);
+    await waitFor(() => {
+      const trigger = runtime.querySelector<HTMLButtonElement>('.flower-model-reasoning-model-trigger');
+      return Boolean(trigger && !trigger.disabled && trigger.textContent?.includes('gpt-5.2'));
+    });
 
     (runtime.querySelector('.flower-model-reasoning-model-trigger') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-model-menu')));

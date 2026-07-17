@@ -6321,6 +6321,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
             }}
             copy={createDesktopFlowerSurfaceCopy(i18n())}
             warmup={flowerWarmupState()}
+            settingsFocusRequest={snapshot().flower_settings_focus_revision}
             focusThreadRequest={flowerFocusThreadRequest()}
             sidebarLeadingAction={(
               <button

@@ -37,6 +37,7 @@ export type RuntimeMaintenanceContext = DesktopShellRuntimeMaintenanceContext;
 export interface DesktopShellBridge {
   openConnectionCenter?: () => Promise<void>;
   openAdvancedSettings?: () => Promise<void>;
+  openFlowerSettings?: () => Promise<void>;
   openWindow?: (kind: unknown) => Promise<void>;
   performWindowCommand?: (command: unknown) => Promise<DesktopShellWindowCommandResponse>;
   minimizeWindow?: () => Promise<DesktopShellWindowCommandResponse>;
@@ -70,6 +71,7 @@ function desktopShellBridge(): DesktopShellBridge | null {
     || (
       typeof candidate.openConnectionCenter !== 'function'
       && typeof candidate.openAdvancedSettings !== 'function'
+      && typeof candidate.openFlowerSettings !== 'function'
       && typeof candidate.openWindow !== 'function'
       && typeof candidate.performWindowCommand !== 'function'
       && typeof candidate.minimizeWindow !== 'function'
@@ -128,6 +130,22 @@ export async function openAdvancedSettings(): Promise<boolean> {
     return true;
   }
   return openConnectionCenter();
+}
+
+export async function openFlowerSettings(): Promise<boolean> {
+  const bridge = desktopShellBridge();
+  if (!bridge) {
+    return false;
+  }
+  if (typeof bridge.openFlowerSettings === 'function') {
+    await bridge.openFlowerSettings();
+    return true;
+  }
+  if (typeof bridge.openWindow === 'function') {
+    await bridge.openWindow('flower_settings');
+    return true;
+  }
+  return false;
 }
 
 export async function minimizeDesktopWindow(): Promise<DesktopShellWindowCommandResponse | null> {

@@ -11,10 +11,12 @@ describe('desktopShellWindowIPC', () => {
     expect(normalizeDesktopShellWindowKind('CONNECTION_CENTER')).toBe('connection_center');
     expect(normalizeDesktopShellWindowKind('SETTINGS')).toBe('settings');
     expect(normalizeDesktopShellWindowKind('advanced_settings')).toBe('settings');
+    expect(normalizeDesktopShellWindowKind('FLOWER_SETTINGS')).toBe('flower_settings');
   });
 
   it('normalizes open-window requests', () => {
     expect(normalizeDesktopShellOpenWindowRequest({ kind: ' connect ' })).toEqual({ kind: 'connection_center' });
+    expect(normalizeDesktopShellOpenWindowRequest({ kind: 'flower_settings' })).toEqual({ kind: 'flower_settings' });
   });
 
   it('rejects unsupported window kinds', () => {

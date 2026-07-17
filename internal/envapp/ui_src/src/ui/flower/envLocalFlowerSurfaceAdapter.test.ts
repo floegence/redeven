@@ -24,6 +24,8 @@ function jsonResponse(data: unknown): Response {
   } as Response;
 }
 
+const DESKTOP_MODEL_ID = `desktop:model_${'a'.repeat(64)}`;
+
 function readStatus(status = 'idle') {
   return {
     is_unread: false,
@@ -72,6 +74,211 @@ function liveBootstrap(threadID: string, status = 'canceled') {
 }
 
 describe('Env local Flower surface adapter', () => {
+  it.each([
+    ['missing_keys', {
+      binding_state: 'bound', connected: true, available: false, model_count: 0, missing_key_provider_ids: ['openai'],
+    }],
+    ['empty', {
+      binding_state: 'bound', connected: true, available: false, model_count: 0, missing_key_provider_ids: [],
+    }],
+    ['connecting', {
+      binding_state: 'connecting', connected: false, available: false, model_count: 0,
+    }],
+    ['unbound', {
+      binding_state: 'unbound', connected: false, available: false, model_count: 0,
+    }],
+    ['expired', {
+      binding_state: 'expired', connected: false, available: false, model_count: 0,
+    }],
+    ['error', {
+      binding_state: 'error', connected: false, available: false, model_count: 0, last_error: 'Desktop source disconnected',
+    }],
+  ] as const)('maps Desktop source state %s without contradictory readiness fields', async (expectedState, source) => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/settings' && init?.method === 'GET') {
+        return jsonResponse({
+          ai: { permission_type: 'approval_required' },
+          ai_runtime: { desktop_model_source: source },
+        });
+      }
+      if (url === '/_redeven_proxy/api/ai/models' && init?.method === 'GET') {
+        return jsonResponse({ models: [] });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: { ai: {} } as any,
+      desktopSessionTargetRoute: 'remote_desktop',
+    });
+
+    const sourceStatus = (await adapter.loadSettings()).model_source;
+
+    expect(sourceStatus).toMatchObject({
+      kind: 'desktop_model_source',
+      state: expectedState,
+      label: 'Desktop',
+    });
+    expect(sourceStatus).not.toHaveProperty('ready');
+    expect(sourceStatus).not.toHaveProperty('model_count');
+  });
+
+  it('maps a missing Runtime Desktop capability to unsupported', async () => {
+    fetchMock.mockResolvedValue(jsonResponse({
+      ai: { permission_type: 'approval_required' },
+      ai_runtime: {},
+    }));
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: { ai: {} } as any,
+      desktopSessionTargetRoute: 'remote_desktop',
+    });
+
+    expect((await adapter.loadSettings()).model_source).toEqual({
+      kind: 'desktop_model_source',
+      state: 'unsupported',
+      label: 'Desktop',
+    });
+  });
+
+  it('rejects a Desktop catalog entry from an unexpected source', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/settings' && init?.method === 'GET') {
+        return jsonResponse({
+          ai: { permission_type: 'approval_required' },
+          ai_runtime: {
+            desktop_model_source: {
+              binding_state: 'bound', connected: true, available: true, model_count: 3,
+            },
+          },
+        });
+      }
+      if (url === '/_redeven_proxy/api/ai/models' && init?.method === 'GET') {
+        return jsonResponse({
+          current_model: DESKTOP_MODEL_ID,
+          models: [
+            { id: DESKTOP_MODEL_ID, label: 'Desktop / Valid', source: 'desktop_model_source' },
+            { id: `desktop:model_${'b'.repeat(64)}`, label: 'Wrong source', source: 'runtime_config' },
+          ],
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: { ai: {} } as any,
+      desktopSessionTargetRoute: 'remote_desktop',
+    });
+
+    expect((await adapter.loadSettings()).model_source).toEqual({
+      kind: 'desktop_model_source',
+      state: 'error',
+      label: 'Desktop',
+      diagnostic_message: 'Desktop model catalog contains an invalid model source.',
+    });
+  });
+
+  it('rejects a Desktop catalog entry with an invalid opaque id', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/settings' && init?.method === 'GET') {
+        return jsonResponse({
+          ai: { permission_type: 'approval_required' },
+          ai_runtime: {
+            desktop_model_source: {
+              binding_state: 'bound', connected: true, available: true, model_count: 1,
+            },
+          },
+        });
+      }
+      if (url === '/_redeven_proxy/api/ai/models' && init?.method === 'GET') {
+        return jsonResponse({
+          models: [{ id: 'desktop:model_legacy', source: 'desktop_model_source' }],
+        });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: { ai: {} } as any,
+      desktopSessionTargetRoute: 'remote_desktop',
+    });
+
+    expect((await adapter.loadSettings()).model_source).toEqual({
+      kind: 'desktop_model_source',
+      state: 'error',
+      label: 'Desktop',
+      diagnostic_message: 'Desktop model catalog contains an invalid opaque model id.',
+    });
+  });
+
+  it('reports model catalog request failures as Desktop source errors', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/settings' && init?.method === 'GET') {
+        return jsonResponse({
+          ai: { permission_type: 'approval_required' },
+          ai_runtime: {
+            desktop_model_source: {
+              binding_state: 'bound', connected: true, available: true, model_count: 1,
+            },
+          },
+        });
+      }
+      if (url === '/_redeven_proxy/api/ai/models' && init?.method === 'GET') {
+        throw new Error('catalog unavailable');
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: { ai: {} } as any,
+      desktopSessionTargetRoute: 'remote_desktop',
+    });
+
+    expect((await adapter.loadSettings()).model_source).toEqual({
+      kind: 'desktop_model_source',
+      state: 'error',
+      label: 'Desktop',
+      diagnostic_message: 'catalog unavailable',
+    });
+  });
+
+  it('rejects a malformed Desktop model catalog response', async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/settings' && init?.method === 'GET') {
+        return jsonResponse({
+          ai: { permission_type: 'approval_required' },
+          ai_runtime: {
+            desktop_model_source: {
+              binding_state: 'bound', connected: true, available: true, model_count: 1,
+            },
+          },
+        });
+      }
+      if (url === '/_redeven_proxy/api/ai/models' && init?.method === 'GET') {
+        return jsonResponse({ models: 'invalid' });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: { ai: {} } as any,
+      desktopSessionTargetRoute: 'remote_desktop',
+    });
+
+    expect((await adapter.loadSettings()).model_source).toEqual({
+      kind: 'desktop_model_source',
+      state: 'error',
+      label: 'Desktop',
+      diagnostic_message: 'Desktop model catalog response is invalid.',
+    });
+  });
+
   it('loads permission-only settings without requesting runtime models', async () => {
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/settings' && init?.method === 'GET') {
@@ -127,8 +334,8 @@ describe('Env local Flower surface adapter', () => {
     expect(snapshot.model_profile).toBeNull();
     expect(snapshot.model_source).toMatchObject({
       kind: 'desktop_model_source',
-      ready: false,
-      last_error: 'Desktop source disconnected',
+      state: 'error',
+      diagnostic_message: 'Desktop source disconnected',
     });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
@@ -153,6 +360,7 @@ describe('Env local Flower surface adapter', () => {
           },
           ai_runtime: {
             desktop_model_source: {
+              binding_state: 'bound',
               connected: true,
               available: true,
               model_source: 'desktop_local_environment',
@@ -172,7 +380,7 @@ describe('Env local Flower surface adapter', () => {
               source: 'runtime_config',
             },
             {
-              id: 'desktop:model_local',
+              id: DESKTOP_MODEL_ID,
               label: 'Desktop / Local Model',
               source: 'desktop_model_source',
             },
@@ -200,11 +408,12 @@ describe('Env local Flower surface adapter', () => {
     })]);
     expect(snapshot.model_source).toMatchObject({
       kind: 'desktop_model_source',
-      ready: true,
+      state: 'ready',
     });
-    expect(snapshot.model_source?.current_model_id).toBeUndefined();
-    expect(snapshot.model_source?.models).toEqual([
-      expect.objectContaining({ id: 'desktop:model_local' }),
+    if (snapshot.model_source?.state !== 'ready') throw new Error('Expected ready Desktop model source.');
+    expect(snapshot.model_source.current_model_id).toBeUndefined();
+    expect(snapshot.model_source.models).toEqual([
+      expect.objectContaining({ id: DESKTOP_MODEL_ID }),
     ]);
   });
 
@@ -443,6 +652,7 @@ describe('Env local Flower surface adapter', () => {
           ai: null,
           ai_runtime: {
             desktop_model_source: {
+              binding_state: 'bound',
               connected: true,
               available: true,
               model_source: 'desktop_local_environment',
@@ -454,10 +664,10 @@ describe('Env local Flower surface adapter', () => {
       }
       if (url === '/_redeven_proxy/api/ai/models' && init?.method === 'GET') {
         return jsonResponse({
-          current_model: 'desktop:model_deepseek',
+          current_model: DESKTOP_MODEL_ID,
           models: [
             {
-              id: 'desktop:model_deepseek',
+              id: DESKTOP_MODEL_ID,
               label: 'Desktop / DeepSeek / deepseek-v4-pro',
               source: 'desktop_model_source',
               context_window: 950000,
@@ -471,7 +681,7 @@ describe('Env local Flower surface adapter', () => {
               },
             },
             {
-              id: 'desktop:model_plain',
+              id: `desktop:model_${'f'.repeat(64)}`,
               label: 'Desktop / Plain',
               source: 'desktop_model_source',
               context_window: 128000,
@@ -498,15 +708,16 @@ describe('Env local Flower surface adapter', () => {
     const snapshot = await adapter.loadSettings();
 
     expect(snapshot.model_profile).toBeNull();
-    expect(snapshot.model_source?.current_model_id).toBe('desktop:model_deepseek');
+    expect(snapshot.model_source?.state).toBe('ready');
+    if (snapshot.model_source?.state !== 'ready') throw new Error('Expected ready Desktop model source.');
+    expect(snapshot.model_source.current_model_id).toBe(DESKTOP_MODEL_ID);
     expect(snapshot.model_source).toMatchObject({
       kind: 'desktop_model_source',
-      ready: true,
-      model_count: 2,
+      state: 'ready',
     });
-    expect(snapshot.model_source?.models).toEqual([
+    expect(snapshot.model_source.models).toEqual([
       expect.objectContaining({
-        id: 'desktop:model_deepseek',
+        id: DESKTOP_MODEL_ID,
         context_window: 950000,
         reasoning_capability: expect.objectContaining({
           supported_levels: ['high', 'max'],
@@ -514,7 +725,7 @@ describe('Env local Flower surface adapter', () => {
         }),
       }),
       expect.objectContaining({
-        id: 'desktop:model_plain',
+        id: `desktop:model_${'f'.repeat(64)}`,
         input_modalities: ['text', 'image'],
       }),
     ]);
@@ -972,6 +1183,7 @@ describe('Env local Flower surface adapter', () => {
           },
           ai_runtime: {
             desktop_model_source: {
+              binding_state: 'bound',
               connected: true,
               available: true,
               model_count: 1,
@@ -981,8 +1193,8 @@ describe('Env local Flower surface adapter', () => {
       }
       if (url === '/_redeven_proxy/api/ai/models' && init?.method === 'GET') {
         return jsonResponse({
-          current_model: 'desktop:model_local',
-          models: [{ id: 'desktop:model_local', source: 'desktop_model_source' }],
+          current_model: DESKTOP_MODEL_ID,
+          models: [{ id: DESKTOP_MODEL_ID, source: 'desktop_model_source' }],
         });
       }
       throw new Error(`unexpected fetch: ${url}`);
@@ -994,7 +1206,7 @@ describe('Env local Flower surface adapter', () => {
       rpc: { ai: {} } as any,
     });
 
-    await expect(adapter.persistDefaultModel('desktop:model_local')).rejects.toThrow(
+    await expect(adapter.persistDefaultModel(DESKTOP_MODEL_ID)).rejects.toThrow(
       'Model is not part of the environment profile.',
     );
     expect(fetchMock).not.toHaveBeenCalledWith(
