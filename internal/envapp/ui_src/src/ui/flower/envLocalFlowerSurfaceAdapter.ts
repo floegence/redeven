@@ -1,11 +1,12 @@
 import type { RedevenV1Rpc } from '../protocol/redeven_v1';
 import { fetchLocalApiJSON } from '../services/localApi';
-import type { AgentSettingsResponse, AIConfig } from '../pages/settings/types';
+import type { AgentSettingsResponse, AIConfig, AIModelProfile } from '../pages/settings/types';
 import type {
   FlowerApprovalDecisionReceipt,
   FlowerProvider,
   FlowerProviderDraft,
   FlowerProviderModel,
+  FlowerPermissionType,
   FlowerRouterDecision,
   FlowerTurnLaunchInput,
   FlowerSettingsDraft,
@@ -100,22 +101,13 @@ function positiveInteger(raw: unknown): number | undefined {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : undefined;
 }
 
-function normalizePermissionType(raw: unknown): FlowerSettingsSnapshot['config']['permission_type'] {
+function normalizePermissionType(raw: unknown): FlowerPermissionType {
   const value = trim(raw).toLowerCase();
   if (value === 'readonly' || value === 'full_access') return value;
   return 'approval_required';
 }
 
-function defaultConfig(): FlowerSettingsSnapshot['config'] {
-  return {
-    schema_version: 1,
-    current_model_id: '',
-    permission_type: 'approval_required',
-    providers: [],
-  };
-}
-
-function mapProviderModel(model: NonNullable<AIConfig['providers'][number]['models']>[number]): FlowerProviderModel {
+function mapProviderModel(model: NonNullable<NonNullable<AIConfig['providers']>[number]['models']>[number]): FlowerProviderModel {
   return {
     model_name: trim(model.model_name),
     ...(trim(model.wire_model_name) ? { wire_model_name: trim(model.wire_model_name) } : {}),
@@ -128,7 +120,7 @@ function mapProviderModel(model: NonNullable<AIConfig['providers'][number]['mode
   };
 }
 
-function mapProvider(provider: AIConfig['providers'][number]): FlowerProvider {
+function mapProvider(provider: NonNullable<AIConfig['providers']>[number]): FlowerProvider {
   return {
     id: trim(provider.id),
     ...(trim(provider.name) ? { name: trim(provider.name) } : {}),
@@ -141,7 +133,7 @@ function mapProvider(provider: AIConfig['providers'][number]): FlowerProvider {
 
 function mapDesktopModelSource(settings: AgentSettingsResponse, models?: ModelsResponse): FlowerSettingsSnapshot['model_source'] {
   const source = settings.ai_runtime?.desktop_model_source;
-  if (!source?.connected) return undefined;
+  if (!source) return undefined;
   const modelCount = Number(source.model_count ?? models?.models?.length ?? 0);
   const currentModel = trim(models?.current_model);
   const sourceModels = (models?.models ?? []).map((model) => {
@@ -159,7 +151,8 @@ function mapDesktopModelSource(settings: AgentSettingsResponse, models?: ModelsR
   }).filter((model): model is NonNullable<typeof model> => model !== null);
   return {
     kind: 'desktop_model_source',
-    ready: Boolean(source.available && currentModel && modelCount > 0),
+    ready: Boolean(source.connected && source.available && currentModel && modelCount > 0),
+    ...(currentModel ? { current_model_id: currentModel } : {}),
     label: trim(source.model_source) || 'Local AI Profile',
     model_count: Number.isFinite(modelCount) && modelCount > 0 ? Math.floor(modelCount) : 0,
     models: sourceModels,
@@ -173,28 +166,25 @@ function mapSettings(settings: AgentSettingsResponse, models?: ModelsResponse): 
   const externalModelSource = mapDesktopModelSource(settings, models);
   if (externalModelSource?.kind === 'desktop_model_source') {
     return {
-      config: {
-        ...defaultConfig(),
-        current_model_id: trim(models?.current_model) || trim(ai?.current_model_id),
-        permission_type: normalizePermissionType(ai?.permission_type),
-      },
+      defaults: { permission_type: normalizePermissionType(ai?.permission_type) },
+      model_profile: null,
       provider_secrets: [],
       model_source: externalModelSource,
     };
   }
-  const config = ai
+  const modelProfile = ai && (ai.providers ?? []).length > 0 && trim(ai.current_model_id)
     ? {
         schema_version: 1 as const,
         current_model_id: trim(ai.current_model_id),
-        permission_type: normalizePermissionType(ai.permission_type),
         providers: (ai.providers ?? []).map(mapProvider).filter((provider) => provider.id && provider.models.length > 0),
       }
-    : defaultConfig();
+    : null;
   const providerSecrets = settings.ai_secrets?.provider_api_key_set ?? {};
   const webSecrets = settings.ai_secrets?.web_search_provider_api_key_set ?? {};
   return {
-    config,
-    provider_secrets: config.providers.map((provider) => ({
+    defaults: { permission_type: normalizePermissionType(ai?.permission_type) },
+    model_profile: modelProfile,
+    provider_secrets: (modelProfile?.providers ?? []).map((provider) => ({
       provider_id: provider.id,
       provider_api_key_configured: Boolean(providerSecrets[provider.id]),
       web_search_api_key_configured: Boolean(webSecrets[provider.id]),
@@ -202,7 +192,7 @@ function mapSettings(settings: AgentSettingsResponse, models?: ModelsResponse): 
   };
 }
 
-function draftProviderToAI(provider: FlowerProviderDraft): AIConfig['providers'][number] {
+function draftProviderToAI(provider: FlowerProviderDraft): NonNullable<AIConfig['providers']>[number] {
   return {
     id: trim(provider.id),
     ...(trim(provider.name) ? { name: trim(provider.name) } : {}),
@@ -222,11 +212,10 @@ function draftProviderToAI(provider: FlowerProviderDraft): AIConfig['providers']
   };
 }
 
-function draftToAIConfig(draft: FlowerSettingsDraft): AIConfig {
+function draftToModelProfile(draft: FlowerSettingsDraft): AIModelProfile {
   return {
-    current_model_id: trim(draft.config.current_model_id),
-    permission_type: draft.config.permission_type,
-    providers: draft.config.providers.map(draftProviderToAI),
+    current_model_id: trim(draft.model_profile.current_model_id),
+    providers: draft.model_profile.providers.map(draftProviderToAI),
   };
 }
 
@@ -299,10 +288,10 @@ function decision(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerRouterDec
 }
 
 async function loadSettingsSnapshot(): Promise<FlowerSettingsSnapshot> {
-  const [settings, models] = await Promise.all([
-    fetchLocalApiJSON<AgentSettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' }),
-    loadModels().catch(() => undefined),
-  ]);
+  const settings = await fetchLocalApiJSON<AgentSettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' });
+  const models = settings.ai_runtime?.desktop_model_source?.connected
+    ? await loadModels().catch(() => undefined)
+    : undefined;
   return mapSettings(settings, models);
 }
 
@@ -311,7 +300,7 @@ async function loadModels(): Promise<ModelsResponse> {
 }
 
 function currentModelID(snapshot: FlowerSettingsSnapshot, models: ModelsResponse): string {
-  const configured = trim(snapshot.config.current_model_id);
+  const configured = trim(snapshot.model_profile?.current_model_id);
   if (configured) return configured;
   return trim(models.current_model);
 }
@@ -369,8 +358,15 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     },
     mapperOptions: envLiveMapperOptions(options),
     loadSettings: loadSettingsSnapshot,
-    saveSettings: async (draft) => {
-      const providerAPIKeyPatches: FlowerSecretPatch[] = draft.config.providers.flatMap((provider): FlowerSecretPatch[] => {
+    saveDefaultPermission: async (permissionType) => {
+      await fetchLocalApiJSON<unknown>('/_redeven_proxy/api/ai/default_permission', {
+        method: 'PUT',
+        body: JSON.stringify({ permission_type: normalizePermissionType(permissionType) }),
+      });
+      return loadSettingsSnapshot();
+    },
+    saveModelProfile: async (draft) => {
+      const providerAPIKeyPatches: FlowerSecretPatch[] = draft.model_profile.providers.flatMap((provider): FlowerSecretPatch[] => {
         if (provider.provider_api_key === undefined) return [];
         const providerID = trim(provider.id);
         if (!providerID) return [];
@@ -378,7 +374,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         const apiKey = trim(provider.provider_api_key);
         return apiKey ? [{ provider_id: providerID, api_key: apiKey }] : [];
       });
-      const webSearchKeyPatches: FlowerSecretPatch[] = draft.config.providers.flatMap((provider): FlowerSecretPatch[] => {
+      const webSearchKeyPatches: FlowerSecretPatch[] = draft.model_profile.providers.flatMap((provider): FlowerSecretPatch[] => {
         if (provider.web_search_api_key === undefined) return [];
         const providerID = trim(provider.id);
         if (!providerID) return [];
@@ -389,7 +385,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       await fetchLocalApiJSON<unknown>('/_redeven_proxy/api/ai/provider_bundle', {
         method: 'PUT',
         body: JSON.stringify({
-          ai: draftToAIConfig(draft),
+          model_profile: draftToModelProfile(draft),
           provider_api_key_patches: providerAPIKeyPatches,
           web_search_provider_key_patches: webSearchKeyPatches,
         }),
@@ -421,7 +417,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       const prompt = trim(input.prompt);
       if (!prompt) throw new Error(copy.enterMessageBeforeSending);
       const snapshot = await loadSettingsSnapshot();
-      const permissionType = normalizePermissionType(input.permission_type ?? snapshot.config.permission_type);
+      const permissionType = normalizePermissionType(input.permission_type ?? snapshot.defaults.permission_type);
       const contextAction = requireAskFlowerContextActionEnvelope(input.context_action);
       let threadID = trim(input.thread_id);
       let turnModelID = trim(input.model_id);

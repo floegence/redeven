@@ -1002,7 +1002,7 @@ func (e *desktopModelSourceExecutor) streamTurn(ctx context.Context, frame Deskt
 		publicModelID = strings.TrimSpace(snapshot.CurrentModel)
 	}
 	entry, ok := registry[publicModelID]
-	if !ok || cfg == nil || cfg.AI == nil {
+	if !ok || cfg == nil || !cfg.AI.HasModelProfile() {
 		return ModelGatewayResult{}, fmt.Errorf("model not allowed: %s", publicModelID)
 	}
 	if !desktopModelSourceSnapshotHasModel(snapshot, publicModelID) {
@@ -1079,9 +1079,9 @@ func (e *desktopModelSourceExecutor) writeStartupReport(reportFile string) error
 }
 
 func buildDesktopModelSourceModelSnapshot(cfg *config.AIConfig, secretStore *settings.SecretsStore) (*DesktopModelSourceModelSnapshot, map[string]desktopModelSourceRegistryEntry, error) {
-	out := &DesktopModelSourceModelSnapshot{Configured: cfg != nil}
+	out := &DesktopModelSourceModelSnapshot{Configured: cfg.HasModelProfile()}
 	registry := map[string]desktopModelSourceRegistryEntry{}
-	if cfg == nil {
+	if !cfg.HasModelProfile() {
 		return out, registry, nil
 	}
 	providerNameByID := map[string]string{}

@@ -684,7 +684,7 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 	if persistTO <= 0 {
 		persistTO = defaultPersistOpTimeout
 	}
-	if cfg == nil && (desktopModelSource == nil || !desktopModelSource.hasBinding()) {
+	if !cfg.HasModelProfile() && (desktopModelSource == nil || !desktopModelSource.hasBinding()) {
 		return ErrNotConfigured
 	}
 	permissionType, err := normalizePermissionType(threadPermissionTypeString(th, ""), FlowerPermissionApprovalRequired)

@@ -66,7 +66,7 @@ function newProviderID(): string {
   return `prov_local_${flowerProviderIDSequence}`;
 }
 
-function cloneProviderForForm(provider: FlowerSettingsSnapshot['config']['providers'][number]): FlowerProviderDraft {
+function cloneProviderForForm(provider: NonNullable<FlowerSettingsSnapshot['model_profile']>['providers'][number]): FlowerProviderDraft {
   return {
     ...provider,
     models: provider.models.map((model) => ({
@@ -184,7 +184,8 @@ function normalizeProviderForSave(provider: FlowerProviderDraft): FlowerProvider
 
 export type FlowerSettingsSurfaceProps = Readonly<{
   snapshot: FlowerSettingsSnapshot | null;
-  onSaveDraft: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
+  onSaveDefaultPermission: (permissionType: FlowerPermissionType) => Promise<FlowerSettingsSnapshot>;
+  onSaveModelProfile: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
   saveError?: string;
   savedAt?: number | null;
   saving?: boolean;
@@ -197,6 +198,11 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
   const [providers, setProviders] = createSignal<readonly FlowerProviderDraft[]>([]);
   const [currentModelID, setCurrentModelID] = createSignal('');
   const [permissionType, setPermissionType] = createSignal<FlowerPermissionType>('approval_required');
+  const [confirmedPermissionType, setConfirmedPermissionType] = createSignal<FlowerPermissionType>('approval_required');
+  const [permissionDirty, setPermissionDirty] = createSignal(false);
+  const [permissionSaving, setPermissionSaving] = createSignal(false);
+  const [permissionError, setPermissionError] = createSignal('');
+  const [permissionSavedAt, setPermissionSavedAt] = createSignal<number | null>(null);
   const [localError, setLocalError] = createSignal('');
   const [dirty, setDirty] = createSignal(false);
   const [providerDialogOpen, setProviderDialogOpen] = createSignal(false);
@@ -209,10 +215,12 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
   createEffect(() => {
     const snapshot = props.snapshot;
     if (!snapshot) return;
-    const rows = snapshot.config.providers.map(cloneProviderForForm);
+    const rows = (snapshot.model_profile?.providers ?? []).map(cloneProviderForForm);
     setProviders(rows);
-    setCurrentModelID(trim(snapshot.config.current_model_id));
-    setPermissionType(snapshot.config.permission_type ?? 'approval_required');
+    setCurrentModelID(trim(snapshot.model_profile?.current_model_id));
+    const savedPermission = snapshot.defaults.permission_type ?? 'approval_required';
+    setConfirmedPermissionType(savedPermission);
+    if (!permissionDirty() && !permissionSaving()) setPermissionType(savedPermission);
     setLocalError('');
     setDirty(false);
   });
@@ -240,7 +248,8 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
   };
   const choosePermissionType = (kind: FlowerPermissionType, focus = false) => {
     setPermissionType(kind);
-    markDirty();
+    setPermissionDirty(kind !== confirmedPermissionType());
+    setPermissionError('');
     if (focus) focusPermissionType(kind);
   };
   const movePermissionType = (delta: number) => {
@@ -375,10 +384,9 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
       current_model_id: current,
       providers: cleanProviders,
       draft: {
-        config: {
+        model_profile: {
           schema_version: 1,
           current_model_id: current,
-          permission_type: permissionType(),
           providers: cleanProviders,
         },
       },
@@ -391,7 +399,7 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
       return null;
     }
     setLocalError('');
-    const saved = await props.onSaveDraft(result.draft);
+    const saved = await props.onSaveModelProfile(result.draft);
     setDirty(false);
     return saved;
   };
@@ -409,16 +417,15 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
       : (!current && index == null ? flowerModelID(normalized.id, normalized.models[0]?.model_name ?? '') : current);
     const result = buildSettingsDraft(next, nextCurrent);
     if (!result.ok) {
-      setLocalError(result.error);
       setProviderDialogError(result.error);
       return;
     }
     try {
       const saved = await saveBuiltDraft(result);
       if (!saved) return;
-      const savedProviders = saved.config.providers.map(cloneProviderForForm);
+      const savedProviders = (saved.model_profile?.providers ?? []).map(cloneProviderForForm);
       setProviders(savedProviders);
-      setCurrentModelID(trim(saved.config.current_model_id));
+      setCurrentModelID(trim(saved.model_profile?.current_model_id));
       setProviderDialogOpen(false);
       setProviderDialogProvider(null);
       setProviderDialogIndex(null);
@@ -435,7 +442,6 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
 
   const autosaveFingerprint = createMemo(() => JSON.stringify({
     current_model_id: currentModelID(),
-    permission_type: permissionType(),
     providers: normalizedProviders(),
   }));
   let autosaveTimer: number | undefined;
@@ -458,7 +464,63 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
       });
     }, AUTO_SAVE_DELAY_MS);
   });
-  onCleanup(clearAutosaveTimer);
+
+  let permissionAutosaveTimer: number | undefined;
+  const clearPermissionAutosaveTimer = () => {
+    if (permissionAutosaveTimer == null) return;
+    window.clearTimeout(permissionAutosaveTimer);
+    permissionAutosaveTimer = undefined;
+  };
+  const savePendingPermission = async () => {
+    if (permissionSaving()) return;
+    const target = permissionType();
+    if (target === confirmedPermissionType()) {
+      setPermissionDirty(false);
+      return;
+    }
+    setPermissionSaving(true);
+    setPermissionError('');
+    try {
+      const saved = await props.onSaveDefaultPermission(target);
+      const confirmed = saved.defaults.permission_type;
+      setConfirmedPermissionType(confirmed);
+      setPermissionSavedAt(Date.now());
+      if (permissionType() === target) {
+        setPermissionType(confirmed);
+        setPermissionDirty(false);
+      } else {
+        setPermissionDirty(permissionType() !== confirmed);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setPermissionError(message);
+      if (permissionType() === target) {
+        setPermissionType(confirmedPermissionType());
+        setPermissionDirty(false);
+      }
+    } finally {
+      setPermissionSaving(false);
+      if (permissionType() !== confirmedPermissionType()) {
+        permissionAutosaveTimer = window.setTimeout(() => {
+          permissionAutosaveTimer = undefined;
+          void savePendingPermission();
+        }, 0);
+      }
+    }
+  };
+  createEffect(() => {
+    permissionType();
+    clearPermissionAutosaveTimer();
+    if (!permissionDirty() || permissionSaving()) return;
+    permissionAutosaveTimer = window.setTimeout(() => {
+      permissionAutosaveTimer = undefined;
+      void savePendingPermission();
+    }, AUTO_SAVE_DELAY_MS);
+  });
+  onCleanup(() => {
+    clearAutosaveTimer();
+    clearPermissionAutosaveTimer();
+  });
 
   return (
     <>
@@ -488,7 +550,13 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
               </div>
             </div>
             <div class="flower-settings-title-feedback" aria-live="polite">
-              <FlowerAutoSaveIndicator dirty={dirty()} copy={copy().autoSave} saving={props.saving} error={localError() || props.saveError} savedAt={props.savedAt} />
+              <FlowerAutoSaveIndicator
+                dirty={dirty() || permissionDirty()}
+                copy={copy().autoSave}
+                saving={props.saving || permissionSaving()}
+                error={localError() || permissionError() || props.saveError}
+                savedAt={Math.max(props.savedAt ?? 0, permissionSavedAt() ?? 0) || null}
+              />
             </div>
           </header>
 
@@ -516,6 +584,9 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                 </Show>
               </div>
               <p class="mt-3 text-xs leading-relaxed text-muted-foreground">{copy().managedByLocalAIProfileOpenLocal}</p>
+              <Show when={trim(externalModelSource()?.last_error)}>
+                <p role="alert" class="mt-3 text-xs text-destructive">{externalModelSource()?.last_error}</p>
+              </Show>
             </section>
           </Show>
 
@@ -564,11 +635,21 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                 </Show>
               </div>
             </section>
+          </Show>
 
-            <section class="flower-settings-section flower-settings-policy-section">
+          <section class="flower-settings-section flower-settings-policy-section">
               <FlowerSubSectionHeader
                 title={copy().defaultPermissionTitle}
                 description={copy().defaultPermissionDescription}
+                actions={(
+                  <FlowerAutoSaveIndicator
+                    dirty={permissionDirty()}
+                    copy={copy().autoSave}
+                    saving={permissionSaving()}
+                    error={permissionError()}
+                    savedAt={permissionSavedAt()}
+                  />
+                )}
               />
               <div class="flower-settings-permission-grid" role="radiogroup" aria-label={copy().defaultPermissionTitle}>
                 <For each={PERMISSION_TYPE_ORDER}>
@@ -599,8 +680,12 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
                   }}
                 </For>
               </div>
-            </section>
+              <Show when={permissionError()}>
+                <p role="alert" class="mt-2 text-xs text-destructive">{permissionError()}</p>
+              </Show>
+          </section>
 
+          <Show when={!managedByLocalAIProfile()}>
             <section class="flower-settings-section flower-settings-providers-section">
               <FlowerSubSectionHeader
                 title={copy().providersTitle}
@@ -679,9 +764,6 @@ export const FlowerSettingsSurface: Component<FlowerSettingsSurfaceProps> = (pro
               </div>
             </section>
 
-          </Show>
-          <Show when={localError() || props.saveError}>
-            <div role="alert" class="flower-settings-error-strip">{localError() || props.saveError}</div>
           </Show>
         </div>
       </div>

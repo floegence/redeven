@@ -1052,6 +1052,7 @@ describe('main routing', () => {
     expect(routeSrc).toContain("'/_redeven_proxy/api/fs/path_context'");
     expect(routeSrc).toContain("'/_redeven_proxy/api/fs/list'");
     expect(routeSrc).toContain("'/_redeven_proxy/api/ai/provider_bundle'");
+    expect(routeSrc).toContain("{ path: '/_redeven_proxy/api/ai/default_permission', methods: ['PUT'] }");
     expect(routeSrc).toContain("{ path: '/_redeven_proxy/api/ai/current_model', methods: ['PUT'] }");
     expect(routeSrc).toContain("'/_redeven_proxy/api/ai/models'");
     expect(routeSrc).not.toContain("'/_redeven_proxy/api/ai/runs'");

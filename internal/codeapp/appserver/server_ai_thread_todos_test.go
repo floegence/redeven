@@ -23,6 +23,7 @@ func TestServer_AI_ThreadTodosEndpoint(t *testing.T) {
 	stateDir := t.TempDir()
 
 	cfg := &config.AIConfig{
+		CurrentModelID: "openai/gpt-5-mini",
 		Providers: []config.AIProvider{
 			{
 				ID:      "openai",

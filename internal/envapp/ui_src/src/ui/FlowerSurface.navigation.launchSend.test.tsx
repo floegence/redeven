@@ -429,11 +429,11 @@ describe('FlowerSurface navigation launch/send', () => {
   it('hides reasoning for models without reasoning support and omits stale reasoning on launch', async () => {
     let currentSnapshot: FlowerSettingsSnapshot = {
       ...settingsSnapshot(true),
-      config: {
-        ...settingsSnapshot(true).config,
+      model_profile: {
+        ...settingsSnapshot(true).model_profile!,
         current_model_id: 'openai/gpt-5.2',
         providers: [{
-          ...settingsSnapshot(true).config.providers[0],
+          ...settingsSnapshot(true).model_profile!.providers[0],
           models: [
             {
               model_name: 'gpt-5.2',
@@ -467,8 +467,8 @@ describe('FlowerSurface navigation launch/send', () => {
       setCurrentModel: vi.fn(async (modelID: string) => {
         currentSnapshot = {
           ...currentSnapshot,
-          config: {
-            ...currentSnapshot.config,
+          model_profile: {
+            ...currentSnapshot.model_profile!,
             current_model_id: modelID,
           },
         };
@@ -519,15 +519,12 @@ describe('FlowerSurface navigation launch/send', () => {
     const plainModelID = 'desktop:model_plain';
     let currentSnapshot: FlowerSettingsSnapshot = {
       ...settingsSnapshot(false),
-      config: {
-        ...settingsSnapshot(false).config,
-        current_model_id: deepSeekModelID,
-        providers: [],
-      },
+      model_profile: null,
       provider_secrets: [],
       model_source: {
         kind: 'desktop_model_source',
         ready: true,
+        current_model_id: deepSeekModelID,
         label: 'Local AI Profile',
         model_count: 2,
         models: [
@@ -564,8 +561,8 @@ describe('FlowerSurface navigation launch/send', () => {
     const setCurrentModel = vi.fn(async (modelID: string) => {
       currentSnapshot = {
         ...currentSnapshot,
-        config: {
-          ...currentSnapshot.config,
+        model_source: {
+          ...currentSnapshot.model_source!,
           current_model_id: modelID,
         },
       };
@@ -628,12 +625,12 @@ describe('FlowerSurface navigation launch/send', () => {
     });
     let currentSnapshot: FlowerSettingsSnapshot = {
       ...settingsSnapshot(true),
-      config: {
-        ...settingsSnapshot(true).config,
+      model_profile: {
+        ...settingsSnapshot(true).model_profile!,
         providers: [{
-          ...settingsSnapshot(true).config.providers[0],
+          ...settingsSnapshot(true).model_profile!.providers[0],
           models: [
-            ...settingsSnapshot(true).config.providers[0].models,
+            ...settingsSnapshot(true).model_profile!.providers[0].models,
             { model_name: 'gpt-5.4', context_window: 400000, input_modalities: ['text'] },
           ],
         }],
@@ -654,8 +651,8 @@ describe('FlowerSurface navigation launch/send', () => {
       setCurrentModel: vi.fn(async (modelID: string) => {
         currentSnapshot = {
           ...currentSnapshot,
-          config: {
-            ...currentSnapshot.config,
+          model_profile: {
+            ...currentSnapshot.model_profile!,
             current_model_id: modelID,
           },
         };
@@ -692,13 +689,13 @@ describe('FlowerSurface navigation launch/send', () => {
     });
     const currentSnapshot: FlowerSettingsSnapshot = {
       ...settingsSnapshot(true),
-      config: {
-        ...settingsSnapshot(true).config,
+      model_profile: {
+        ...settingsSnapshot(true).model_profile!,
         current_model_id: 'openai/gpt-5.2',
         providers: [{
-          ...settingsSnapshot(true).config.providers[0],
+          ...settingsSnapshot(true).model_profile!.providers[0],
           models: [
-            ...settingsSnapshot(true).config.providers[0].models,
+            ...settingsSnapshot(true).model_profile!.providers[0].models,
             { model_name: 'gpt-5.4', context_window: 400000, input_modalities: ['text'] },
           ],
         }],

@@ -694,7 +694,7 @@ func (s *Service) Enabled() bool {
 		return false
 	}
 	s.mu.Lock()
-	enabled := s.cfg != nil || (s.desktopModelSource != nil && s.desktopModelSource.hasBinding())
+	enabled := s.cfg.HasModelProfile() || (s.desktopModelSource != nil && s.desktopModelSource.hasBinding())
 	s.mu.Unlock()
 	return enabled
 }
@@ -760,7 +760,7 @@ func (s *Service) RuntimeStatus(ctx context.Context) *AIRuntimeStatus {
 	cfg := s.cfg
 	modelSource := s.desktopModelSource
 	s.mu.Unlock()
-	out := &AIRuntimeStatus{RemoteConfigured: cfg != nil}
+	out := &AIRuntimeStatus{RemoteConfigured: cfg.HasModelProfile()}
 	if modelSource != nil {
 		statusCtx := ctx
 		cancel := func() {}
@@ -818,6 +818,90 @@ func (s *Service) UpdateConfig(next *config.AIConfig, persist func() error) erro
 	}
 
 	s.cfg = next
+	coordinator := s.threadTitleCoordinator
+	s.mu.Unlock()
+	if coordinator != nil {
+		coordinator.Wake()
+	}
+	return nil
+}
+
+// SetDefaultPermissionType updates the default permission for future Flower
+// threads without changing the environment model profile or active runs.
+func (s *Service) SetDefaultPermissionType(permissionType string, persist func(next *config.AIConfig) error) error {
+	if s == nil {
+		return errors.New("nil service")
+	}
+	if persist == nil {
+		return errors.New("missing persist function")
+	}
+
+	permissionType = strings.ToLower(strings.TrimSpace(permissionType))
+	switch permissionType {
+	case config.AIPermissionReadonly, config.AIPermissionApprovalRequired, config.AIPermissionFullAccess:
+	default:
+		return fmt.Errorf("invalid ai permission_type %q", permissionType)
+	}
+
+	s.mu.Lock()
+	next := config.AIConfig{}
+	if s.cfg != nil {
+		next = *s.cfg
+	}
+	next.PermissionType = permissionType
+	if err := next.Validate(); err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	if err := persist(&next); err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	s.cfg = &next
+	s.mu.Unlock()
+	return nil
+}
+
+// SetModelProfile replaces the environment model profile while preserving
+// Flower defaults and runtime recovery settings. Passing nil clears only the
+// model profile.
+func (s *Service) SetModelProfile(profile *config.AIModelProfile, persist func(next *config.AIConfig) error) error {
+	if s == nil {
+		return errors.New("nil service")
+	}
+	if persist == nil {
+		return errors.New("missing persist function")
+	}
+	if profile != nil {
+		if err := profile.Validate(); err != nil {
+			return err
+		}
+	}
+
+	s.mu.Lock()
+	next := config.AIConfig{}
+	if s.cfg != nil {
+		next = *s.cfg
+	}
+	if profile == nil {
+		next.Providers = nil
+		next.CurrentModelID = ""
+	} else {
+		next.Providers = append([]config.AIProvider(nil), profile.Providers...)
+		next.CurrentModelID = strings.TrimSpace(profile.CurrentModelID)
+	}
+	if err := next.Validate(); err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	if err := persist(&next); err != nil {
+		s.mu.Unlock()
+		return err
+	}
+	s.cfg = &next
+	if s.desktopModelSource != nil {
+		s.desktopModelSource.SetCurrentModelID("")
+	}
 	coordinator := s.threadTitleCoordinator
 	s.mu.Unlock()
 	if coordinator != nil {
@@ -887,11 +971,11 @@ func (s *Service) SetCurrentModelID(modelID string, persist func(next *config.AI
 	s.mu.Lock()
 	cfg := s.cfg
 	modelSource := s.desktopModelSource
-	if cfg == nil && (modelSource == nil || !modelSource.hasBinding()) {
+	if !cfg.HasModelProfile() && (modelSource == nil || !modelSource.hasBinding()) {
 		s.mu.Unlock()
 		return ErrNotConfigured
 	}
-	if cfg != nil && cfg.IsAllowedModelID(modelID) {
+	if cfg.HasModelProfile() && cfg.IsAllowedModelID(modelID) {
 		next := *cfg
 		next.CurrentModelID = modelID
 		if err := next.Validate(); err != nil {
@@ -1035,13 +1119,13 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 		modelSourceCurrent = modelSource.CurrentModelID()
 	}
 	s.mu.Unlock()
-	if cfg == nil && (modelSource == nil || !modelSource.hasBinding()) {
+	if !cfg.HasModelProfile() && (modelSource == nil || !modelSource.hasBinding()) {
 		return nil, ErrNotConfigured
 	}
 
 	out := NewModelsResponse(s.RuntimeStatus(context.Background()))
 	configModels, currentModelID, err := configModelViews(cfg)
-	if err != nil && cfg != nil {
+	if err != nil && cfg.HasModelProfile() {
 		return nil, err
 	}
 	seen := make(map[string]struct{}, len(configModels))
@@ -1071,7 +1155,7 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		snapshot, sourceErr := modelSource.ListModels(ctx)
 		cancel()
-		if sourceErr != nil && cfg == nil {
+		if sourceErr != nil && !cfg.HasModelProfile() {
 			return nil, sourceErr
 		}
 		if sourceErr == nil && snapshot != nil {
@@ -1123,7 +1207,7 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 		}
 	}
 
-	if len(out.Models) == 0 && cfg != nil {
+	if len(out.Models) == 0 && cfg.HasModelProfile() {
 		return nil, errors.New("invalid ai config: missing models")
 	}
 
@@ -1131,7 +1215,7 @@ func (s *Service) ListModels() (*ModelsResponse, error) {
 }
 
 func configModelViews(cfg *config.AIConfig) ([]Model, string, error) {
-	if cfg == nil {
+	if !cfg.HasModelProfile() {
 		return nil, "", nil
 	}
 	providerNameByID := make(map[string]string, len(cfg.Providers))
@@ -1670,7 +1754,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	}
 
 	s.mu.Lock()
-	if s.cfg == nil && (s.desktopModelSource == nil || !s.desktopModelSource.hasBinding()) {
+	if !s.cfg.HasModelProfile() && (s.desktopModelSource == nil || !s.desktopModelSource.hasBinding()) {
 		s.mu.Unlock()
 		return nil, ErrNotConfigured
 	}
@@ -2116,7 +2200,7 @@ func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, req
 			model = id
 		}
 	}
-	if model == "" && cfg != nil {
+	if model == "" && cfg.HasModelProfile() {
 		if id := strings.TrimSpace(cfg.CurrentModelID); id != "" && cfg.IsAllowedModelID(id) {
 			model = id
 		}
@@ -2156,7 +2240,7 @@ func (s *Service) resolveRunModel(ctx context.Context, cfg *config.AIConfig, req
 			return resolvedRunModel{}, errors.New("invalid model")
 		}
 		providerCfg = config.AIProvider{ID: providerID, Type: providerID}
-		if cfg == nil {
+		if !cfg.HasModelProfile() {
 			return resolvedRunModel{}, ErrNotConfigured
 		}
 		if !cfg.IsAllowedModelID(model) {

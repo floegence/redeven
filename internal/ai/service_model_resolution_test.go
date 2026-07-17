@@ -229,6 +229,7 @@ func TestExecutePreparedRun_UsesDesktopModelSourceReasoningCapability(t *testing
 
 	svc := newSendTurnTestService(t)
 	svc.mu.Lock()
+	svc.cfg = &config.AIConfig{PermissionType: config.AIPermissionReadonly}
 	svc.desktopModelSource = modelSource
 	svc.mu.Unlock()
 	meta := testSendTurnMeta()

@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -97,7 +98,7 @@ func TestServiceUpdateConfigValidationError(t *testing.T) {
 
 	svc := &Service{cfg: testAIConfigForUpdate(t, "openai/gpt-5-mini", "gpt-5-mini")}
 	persistCalls := 0
-	err := svc.UpdateConfig(&config.AIConfig{}, func() error {
+	err := svc.UpdateConfig(&config.AIConfig{CurrentModelID: "openai/gpt-5-mini"}, func() error {
 		persistCalls++
 		return nil
 	})
@@ -106,5 +107,69 @@ func TestServiceUpdateConfigValidationError(t *testing.T) {
 	}
 	if persistCalls != 0 {
 		t.Fatalf("persist should not be called on validation error")
+	}
+}
+
+func TestServiceEnabledPermissionOnlyIsFalse(t *testing.T) {
+	t.Parallel()
+
+	svc := &Service{cfg: &config.AIConfig{PermissionType: config.AIPermissionReadonly}}
+	if svc.Enabled() {
+		t.Fatalf("Enabled=true for permission-only config")
+	}
+	if status := svc.RuntimeStatus(context.Background()); status.RemoteConfigured {
+		t.Fatalf("RemoteConfigured=true for permission-only config")
+	}
+}
+
+func TestServiceSetDefaultPermissionTypePreservesModelProfileAndRecovery(t *testing.T) {
+	t.Parallel()
+
+	recoveryEnabled := false
+	oldCfg := testAIConfigForUpdate(t, "openai/gpt-5-mini", "gpt-5-mini")
+	oldCfg.ToolRecoveryEnabled = &recoveryEnabled
+	svc := &Service{cfg: oldCfg}
+	var persisted *config.AIConfig
+	if err := svc.SetDefaultPermissionType(config.AIPermissionFullAccess, func(next *config.AIConfig) error {
+		persisted = next
+		return nil
+	}); err != nil {
+		t.Fatalf("SetDefaultPermissionType: %v", err)
+	}
+	if persisted == nil || persisted.PermissionType != config.AIPermissionFullAccess {
+		t.Fatalf("persisted permission=%#v", persisted)
+	}
+	if persisted.CurrentModelID != oldCfg.CurrentModelID || len(persisted.Providers) != len(oldCfg.Providers) {
+		t.Fatalf("model profile changed: %#v", persisted)
+	}
+	if persisted.ToolRecoveryEnabled == nil || *persisted.ToolRecoveryEnabled {
+		t.Fatalf("recovery setting changed: %#v", persisted.ToolRecoveryEnabled)
+	}
+}
+
+func TestServiceSetModelProfilePreservesDefaultPermissionAndRecovery(t *testing.T) {
+	t.Parallel()
+
+	recoveryEnabled := false
+	oldCfg := testAIConfigForUpdate(t, "openai/gpt-5-mini", "gpt-5-mini")
+	oldCfg.PermissionType = config.AIPermissionReadonly
+	oldCfg.ToolRecoveryEnabled = &recoveryEnabled
+	svc := &Service{cfg: oldCfg}
+	profile := testAIConfigForUpdate(t, "openai/gpt-5", "gpt-5").ModelProfile()
+	var persisted *config.AIConfig
+	if err := svc.SetModelProfile(&profile, func(next *config.AIConfig) error {
+		persisted = next
+		return nil
+	}); err != nil {
+		t.Fatalf("SetModelProfile: %v", err)
+	}
+	if persisted == nil || persisted.CurrentModelID != "openai/gpt-5" {
+		t.Fatalf("persisted model profile=%#v", persisted)
+	}
+	if persisted.PermissionType != config.AIPermissionReadonly {
+		t.Fatalf("permission changed: %q", persisted.PermissionType)
+	}
+	if persisted.ToolRecoveryEnabled == nil || *persisted.ToolRecoveryEnabled {
+		t.Fatalf("recovery setting changed: %#v", persisted.ToolRecoveryEnabled)
 	}
 }

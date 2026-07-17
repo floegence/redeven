@@ -710,7 +710,7 @@ func (s *Service) applyAutoThreadTitleOnce(ctx context.Context, req autoThreadTi
 	persistTO := s.persistOpTO
 	logger := s.log
 	s.mu.Unlock()
-	if db == nil || (cfg == nil && (modelSource == nil || !modelSource.hasBinding())) {
+	if db == nil || (!cfg.HasModelProfile() && (modelSource == nil || !modelSource.hasBinding())) {
 		return autoThreadTitleApplyResult{Status: autoThreadTitleApplyStatusRetry, Reason: "service_not_ready"}
 	}
 	if persistTO <= 0 {

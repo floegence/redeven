@@ -36,6 +36,7 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 	defer providerServer.Close()
 
 	cfg := &config.AIConfig{
+		CurrentModelID: "openai/gpt-5-mini",
 		Providers: []config.AIProvider{
 			{
 				ID:      "openai",

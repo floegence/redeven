@@ -47,7 +47,7 @@ description: test skill
 		StateDir:     stateDir,
 		AgentHomeDir: workspace,
 		Shell:        "bash",
-		Config: &config.AIConfig{Providers: []config.AIProvider{{
+		Config: &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{
 			ID:      "openai",
 			Name:    "OpenAI",
 			Type:    "openai",
@@ -174,7 +174,7 @@ func TestServer_AISkills_PermissionModel(t *testing.T) {
 		StateDir:     stateDir,
 		AgentHomeDir: workspace,
 		Shell:        "bash",
-		Config: &config.AIConfig{Providers: []config.AIProvider{{
+		Config: &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{
 			ID:      "openai",
 			Name:    "OpenAI",
 			Type:    "openai",
@@ -291,7 +291,7 @@ description: Install Codex skills
 		StateDir:     stateDir,
 		AgentHomeDir: workspace,
 		Shell:        "bash",
-		Config: &config.AIConfig{Providers: []config.AIProvider{{
+		Config: &config.AIConfig{CurrentModelID: "openai/gpt-5-mini", Providers: []config.AIProvider{{
 			ID:      "openai",
 			Name:    "OpenAI",
 			Type:    "openai",

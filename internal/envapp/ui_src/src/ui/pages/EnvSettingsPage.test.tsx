@@ -872,7 +872,50 @@ describe('EnvSettingsPage', () => {
     const flowerCard = host.querySelector('[data-settings-card="Flower"]');
     expect(flowerCard?.textContent).toContain('Local AI Profile on this Mac');
     expect(flowerCard?.textContent).toContain('Desktop model source ready');
+    expect(flowerCard?.querySelectorAll('[role="radio"]')).toHaveLength(3);
     expect(flowerCard?.textContent).not.toContain('Add Provider');
+  });
+
+  it('saves the default Flower permission when no model profile is configured', async () => {
+    protocolMocks.status.mockReturnValue('connected');
+    settingsResponse = {
+      config_path: '/tmp/config.json',
+      runtime: { agent_home_dir: '/workspace', shell: '/bin/zsh' },
+      logging: { log_format: 'plain', log_level: 'info' },
+      codespaces: { code_server_port_min: 0, code_server_port_max: 0 },
+      permission_policy: null,
+      ai: null,
+      ai_runtime: { remote_configured: false },
+    };
+    const permissionBodies: unknown[] = [];
+    (localApiMocks.fetchLocalApiJSON as any).mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === '/_redeven_proxy/api/settings') return structuredClone(settingsResponse);
+      if (url === '/_redeven_proxy/api/ai/default_permission') {
+        const body = JSON.parse(String(init?.body ?? '{}'));
+        permissionBodies.push(body);
+        settingsResponse = {
+          ...settingsResponse,
+          ai: { permission_type: body.permission_type },
+        };
+        return { settings: structuredClone(settingsResponse), ai_update: { apply_scope: 'future_threads' } };
+      }
+      throw new Error(`unexpected local API request: ${url}`);
+    });
+
+    render(() => <EnvSettingsPage />, host);
+    await openSettingsSection(host, 'ai');
+    await vi.waitFor(() => expect(host.querySelector('[data-settings-card="Flower"]')).toBeTruthy());
+
+    const readonly = host.querySelectorAll<HTMLButtonElement>('[role="radio"]')[0];
+    expect(readonly).toBeTruthy();
+    readonly.click();
+
+    await vi.waitFor(() => expect(permissionBodies).toEqual([{ permission_type: 'readonly' }]), { timeout: 2000 });
+    expect(host.textContent).not.toContain('missing providers');
+    expect(localApiMocks.fetchLocalApiJSON).not.toHaveBeenCalledWith(
+      '/_redeven_proxy/api/ai/provider_bundle',
+      expect.anything(),
+    );
   });
 
   it('moves Flower permission radio focus with arrow keys', async () => {

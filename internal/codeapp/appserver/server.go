@@ -1243,7 +1243,7 @@ func (e aiProviderBundleSaveError) Unwrap() error {
 }
 
 func (g *Server) saveAIProviderBundle(
-	nextAI config.AIConfig,
+	modelProfile config.AIModelProfile,
 	aiKeyPatches []settings.AIProviderAPIKeyPatch,
 	webSearchKeyPatches []settings.WebSearchProviderAPIKeyPatch,
 ) (*config.Config, error) {
@@ -1262,16 +1262,16 @@ func (g *Server) saveAIProviderBundle(
 
 	restore := func() error {
 		return errors.Join(
-			g.restoreAIProviderBundleConfig(prevConfig),
+			g.restoreAIProviderBundleModelProfile(prevConfig.AI),
 			restoreAIProviderAPIKeys(g.secrets, prevAIKeys),
 			restoreWebSearchProviderAPIKeys(g.secrets, prevWebSearchKeys),
 		)
 	}
 
 	var updated *config.Config
-	persist := func() error {
+	persist := func(nextAI *config.AIConfig) error {
 		cfg, err := g.updateConfigLocked(func(c *config.Config) error {
-			c.AI = &nextAI
+			c.AI = nextAI
 			return nil
 		})
 		if err != nil {
@@ -1280,7 +1280,7 @@ func (g *Server) saveAIProviderBundle(
 		updated = cfg
 		return nil
 	}
-	if err := g.ai.UpdateConfig(&nextAI, persist); err != nil {
+	if err := g.ai.SetModelProfile(&modelProfile, persist); err != nil {
 		return nil, aiProviderBundleSaveError{status: http.StatusBadRequest, err: err}
 	}
 	if err := g.secrets.ApplyAIProviderAPIKeyPatches(aiKeyPatches); err != nil {
@@ -1298,13 +1298,15 @@ func (g *Server) saveAIProviderBundle(
 	return updated, nil
 }
 
-func (g *Server) restoreAIProviderBundleConfig(prevConfig *config.Config) error {
-	if prevConfig == nil {
-		return nil
+func (g *Server) restoreAIProviderBundleModelProfile(prevAI *config.AIConfig) error {
+	var profile *config.AIModelProfile
+	if prevAI.HasModelProfile() {
+		value := prevAI.ModelProfile()
+		profile = &value
 	}
-	return g.ai.UpdateConfig(prevConfig.AI, func() error {
+	return g.ai.SetModelProfile(profile, func(nextAI *config.AIConfig) error {
 		_, err := g.updateConfigLocked(func(c *config.Config) error {
-			*c = *prevConfig
+			c.AI = nextAI
 			return nil
 		})
 		return err
@@ -2507,7 +2509,6 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			CodeServerPortMax *int `json:"code_server_port_max,omitempty"`
 
 			PermissionPolicy json.RawMessage `json:"permission_policy,omitempty"`
-			AI               json.RawMessage `json:"ai,omitempty"`
 			Codex            json.RawMessage `json:"codex,omitempty"`
 		}
 
@@ -2533,7 +2534,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if body.AgentHomeDir == nil && body.Shell == nil && body.FilesystemScope == nil &&
 			body.LogFormat == nil && body.LogLevel == nil &&
 			body.CodeServerPortMin == nil && body.CodeServerPortMax == nil &&
-			len(body.PermissionPolicy) == 0 && len(body.AI) == 0 {
+			len(body.PermissionPolicy) == 0 {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing fields"})
 			return
 		}
@@ -2558,29 +2559,6 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 				nextPolicy = &p
-			}
-		}
-
-		var nextAI *config.AIConfig
-		if len(body.AI) > 0 {
-			raw := bytes.TrimSpace(body.AI)
-			if !bytes.Equal(raw, []byte("null")) {
-				var cfg config.AIConfig
-				aiDec := json.NewDecoder(bytes.NewReader(raw))
-				aiDec.DisallowUnknownFields()
-				if err := aiDec.Decode(&cfg); err != nil {
-					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid ai json"})
-					return
-				}
-				if err := aiDec.Decode(&struct{}{}); err != io.EOF {
-					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid ai json"})
-					return
-				}
-				if err := cfg.Validate(); err != nil {
-					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: fmt.Sprintf("invalid ai: %s", err.Error())})
-					return
-				}
-				nextAI = &cfg
 			}
 		}
 
@@ -2609,22 +2587,6 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if len(body.PermissionPolicy) > 0 {
 			auditDetail["permission_policy_updated"] = true
 		}
-		if len(body.AI) > 0 {
-			// Do NOT log any AI config details (may include secrets).
-			auditDetail["ai_updated"] = true
-		}
-		endpointID := strings.TrimSpace(meta.EndpointID)
-		aiUpdate := (*settingsAIUpdateView)(nil)
-		if len(body.AI) > 0 && g.ai != nil {
-			activeRunCount := g.ai.ActiveRunCount(endpointID)
-			aiUpdate = &settingsAIUpdateView{
-				ApplyScope:     "future_runs",
-				ActiveRunCount: activeRunCount,
-			}
-			auditDetail["ai_apply_scope"] = aiUpdate.ApplyScope
-			auditDetail["ai_active_run_count"] = activeRunCount
-		}
-
 		var updated *config.Config
 		persist := func() error {
 			cfg, err := g.updateConfigLocked(func(c *config.Config) error {
@@ -2661,9 +2623,6 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				if len(body.PermissionPolicy) > 0 {
 					c.PermissionPolicy = nextPolicy
 				}
-				if len(body.AI) > 0 {
-					c.AI = nextAI
-				}
 				return nil
 			})
 			if err != nil {
@@ -2690,17 +2649,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return nil
 		}
 
-		var err error
-		if len(body.AI) > 0 {
-			if g.ai == nil {
-				g.appendAudit(meta, "settings_update", "failure", auditDetail, errors.New("ai service not ready"))
-				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
-				return
-			}
-			err = g.ai.UpdateConfig(nextAI, persist)
-		} else {
-			err = persist()
-		}
+		err := persist()
 		if err != nil {
 			g.appendAudit(meta, "settings_update", "failure", auditDetail, err)
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
@@ -2711,7 +2660,6 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			OK: true,
 			Data: settingsUpdateView{
 				Settings: g.toSettingsView(updated),
-				AIUpdate: aiUpdate,
 			},
 		})
 		return
@@ -3284,6 +3232,67 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+	case r.Method == http.MethodPut && r.URL.Path == "/_redeven_proxy/api/ai/default_permission":
+		meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
+		if !ok {
+			return
+		}
+		if g.ai == nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			return
+		}
+		dec := json.NewDecoder(r.Body)
+		dec.DisallowUnknownFields()
+		var body struct {
+			PermissionType string `json:"permission_type"`
+		}
+		if err := dec.Decode(&body); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+		if err := dec.Decode(&struct{}{}); err != io.EOF {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+			return
+		}
+
+		permissionType := strings.ToLower(strings.TrimSpace(body.PermissionType))
+		activeRunCount := g.ai.ActiveRunCount(strings.TrimSpace(meta.EndpointID))
+		aiUpdate := &settingsAIUpdateView{
+			ApplyScope:     "future_threads",
+			ActiveRunCount: activeRunCount,
+		}
+		auditDetail := map[string]any{
+			"permission_type":     permissionType,
+			"ai_apply_scope":      aiUpdate.ApplyScope,
+			"ai_active_run_count": activeRunCount,
+		}
+		var updated *config.Config
+		persist := func(next *config.AIConfig) error {
+			cfg, err := g.updateConfigLocked(func(c *config.Config) error {
+				c.AI = next
+				return nil
+			})
+			if err != nil {
+				return err
+			}
+			updated = cfg
+			return nil
+		}
+		if err := g.ai.SetDefaultPermissionType(permissionType, persist); err != nil {
+			g.appendAudit(meta, "ai_default_permission_update", "failure", auditDetail, err)
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+			return
+		}
+		g.appendAudit(meta, "ai_default_permission_update", "success", auditDetail, nil)
+		writeJSON(w, http.StatusOK, apiResp{
+			OK: true,
+			Data: settingsUpdateView{
+				Settings: g.toSettingsView(updated),
+				AIUpdate: aiUpdate,
+			},
+		})
+		return
+
 	case r.Method == http.MethodPut && r.URL.Path == "/_redeven_proxy/api/ai/provider_bundle":
 		meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
 		if !ok {
@@ -3302,9 +3311,9 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			APIKey     *string `json:"api_key"`
 		}
 		type reqBody struct {
-			AI                          config.AIConfig `json:"ai"`
-			ProviderAPIKeyPatches       []keyPatch      `json:"provider_api_key_patches,omitempty"`
-			WebSearchProviderKeyPatches []keyPatch      `json:"web_search_provider_key_patches,omitempty"`
+			ModelProfile                config.AIModelProfile `json:"model_profile"`
+			ProviderAPIKeyPatches       []keyPatch            `json:"provider_api_key_patches,omitempty"`
+			WebSearchProviderKeyPatches []keyPatch            `json:"web_search_provider_key_patches,omitempty"`
 		}
 		dec := json.NewDecoder(r.Body)
 		dec.DisallowUnknownFields()
@@ -3318,14 +3327,14 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		nextAI := body.AI
-		if err := nextAI.Validate(); err != nil {
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: fmt.Sprintf("invalid ai: %s", err.Error())})
+		modelProfile := body.ModelProfile
+		if err := modelProfile.Validate(); err != nil {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: fmt.Sprintf("invalid ai model profile: %s", err.Error())})
 			return
 		}
-		providerIDs := make(map[string]struct{}, len(nextAI.Providers))
-		for i := range nextAI.Providers {
-			id := strings.TrimSpace(nextAI.Providers[i].ID)
+		providerIDs := make(map[string]struct{}, len(modelProfile.Providers))
+		for i := range modelProfile.Providers {
+			id := strings.TrimSpace(modelProfile.Providers[i].ID)
 			if id != "" {
 				providerIDs[id] = struct{}{}
 			}
@@ -3375,7 +3384,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: cleanupErr.Error()})
 			return
 		}
-		webSearchKeyPatches, cleanupErr = appendWebSearchSecretCleanupPatches(g.secrets, nextAI.Providers, webSearchKeyPatches)
+		webSearchKeyPatches, cleanupErr = appendWebSearchSecretCleanupPatches(g.secrets, modelProfile.Providers, webSearchKeyPatches)
 		if cleanupErr != nil {
 			writeJSON(w, http.StatusInternalServerError, apiResp{OK: false, Error: cleanupErr.Error()})
 			return
@@ -3394,7 +3403,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			"ai_active_run_count":  activeRunCount,
 		}
 
-		updated, saveErr := g.saveAIProviderBundle(nextAI, aiKeyPatches, webSearchKeyPatches)
+		updated, saveErr := g.saveAIProviderBundle(modelProfile, aiKeyPatches, webSearchKeyPatches)
 		if saveErr != nil {
 			status := http.StatusBadRequest
 			var bundleErr aiProviderBundleSaveError

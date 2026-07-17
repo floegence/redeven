@@ -1450,7 +1450,7 @@ func (r *run) resolveModelGatewayForModel(modelID string, providerID string, pro
 	if modelName == "" {
 		return resolvedRunModelGateway{}, fmt.Errorf("invalid model id %q", modelID)
 	}
-	if r.cfg == nil {
+	if !r.cfg.HasModelProfile() {
 		return resolvedRunModelGateway{}, fmt.Errorf("%w: ai not configured", errModelGatewayMissingKey)
 	}
 	var providerCfg *config.AIProvider

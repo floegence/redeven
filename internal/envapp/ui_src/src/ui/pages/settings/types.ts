@@ -46,13 +46,18 @@ export type AIProvider = Readonly<{
 export type AIPermissionType = 'readonly' | 'approval_required' | 'full_access';
 
 export type AIConfig = Readonly<{
-  current_model_id: string;
-  providers: AIProvider[];
+  current_model_id?: string;
+  providers?: AIProvider[];
   permission_type?: AIPermissionType;
   tool_recovery_enabled?: boolean;
   tool_recovery_allow_path_rewrite?: boolean;
   tool_recovery_allow_probe_tools?: boolean;
   tool_recovery_fail_on_repeated_signature?: boolean;
+}>;
+
+export type AIModelProfile = Readonly<{
+  current_model_id: string;
+  providers: AIProvider[];
 }>;
 
 export type AISecretsView = Readonly<{

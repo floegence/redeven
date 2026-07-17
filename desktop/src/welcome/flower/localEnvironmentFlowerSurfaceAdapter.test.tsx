@@ -126,7 +126,7 @@ describe('Local Environment Flower surface adapter', () => {
   it('maps runtime settings to the shared Flower snapshot without dropping model metadata', () => {
     const snapshot = mapRuntimeFlowerSettings(settingsResponse());
 
-    expect(snapshot.config.providers[0].models[0]).toEqual({
+    expect(snapshot.model_profile?.providers[0].models[0]).toEqual({
       model_name: 'gpt-4.1',
       context_window: 128000,
       max_output_tokens: 16384,
@@ -142,10 +142,10 @@ describe('Local Environment Flower surface adapter', () => {
 
   it('builds provider bundle updates for the runtime gateway', () => {
     const draft = {
-      config: {
-        ...mapRuntimeFlowerSettings(settingsResponse()).config,
+      model_profile: {
+        ...mapRuntimeFlowerSettings(settingsResponse()).model_profile!,
         providers: [{
-          ...mapRuntimeFlowerSettings(settingsResponse()).config.providers[0],
+          ...mapRuntimeFlowerSettings(settingsResponse()).model_profile!.providers[0],
           provider_api_key: 'sk-test',
           web_search_api_key: 'brave-test',
         }],
@@ -153,7 +153,7 @@ describe('Local Environment Flower surface adapter', () => {
     };
 
     expect(mapFlowerSettingsDraftToRuntimeBundle(draft)).toMatchObject({
-      ai: {
+      model_profile: {
         current_model_id: 'default/gpt-4.1',
         providers: [{ id: 'default', models: [{ model_name: 'gpt-4.1' }] }],
       },
@@ -164,10 +164,10 @@ describe('Local Environment Flower surface adapter', () => {
 
   it('sends null secret patches when the settings draft clears provider keys', () => {
     const draft = {
-      config: {
-        ...mapRuntimeFlowerSettings(settingsResponse()).config,
+      model_profile: {
+        ...mapRuntimeFlowerSettings(settingsResponse()).model_profile!,
         providers: [{
-          ...mapRuntimeFlowerSettings(settingsResponse()).config.providers[0],
+          ...mapRuntimeFlowerSettings(settingsResponse()).model_profile!.providers[0],
           provider_api_key: null,
           web_search_api_key: null,
         }],
@@ -273,14 +273,15 @@ describe('Local Environment Flower surface adapter', () => {
       }
       if (request.path === '/_redeven_proxy/api/settings') {
         const settings = settingsResponse();
+        const provider = settings.ai?.providers?.[0];
         return {
           ...settings,
-          ai: settings.ai
+          ai: settings.ai && provider
             ? {
                 ...settings.ai,
                 current_model_id: 'default/gpt-5.4',
                 providers: [{
-                  ...settings.ai.providers[0]!,
+                  ...provider,
                   models: [{ model_name: 'gpt-5.4' }],
                 }],
               }
@@ -301,7 +302,7 @@ describe('Local Environment Flower surface adapter', () => {
       },
       { method: 'GET', path: '/_redeven_proxy/api/settings' },
     ]);
-    expect(snapshot.config.current_model_id).toBe('default/gpt-5.4');
+    expect(snapshot.model_profile?.current_model_id).toBe('default/gpt-5.4');
     expect(onSettingsChanged).toHaveBeenCalledTimes(1);
   });
 

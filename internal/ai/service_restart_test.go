@@ -142,6 +142,7 @@ func TestNewService_RecoversDurableQueuedTurnAfterRestart(t *testing.T) {
 	agentHomeDir := t.TempDir()
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	cfg := &config.AIConfig{
+		CurrentModelID: "openai/gpt-5-mini",
 		Providers: []config.AIProvider{{
 			ID:      "openai",
 			Type:    "openai",

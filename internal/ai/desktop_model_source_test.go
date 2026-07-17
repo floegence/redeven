@@ -262,7 +262,10 @@ func TestServiceListModelsUsesDesktopModelSourceWithoutRemoteConfig(t *testing.T
 	})
 	defer cleanup()
 
-	svc := &Service{desktopModelSource: modelSource}
+	svc := &Service{
+		cfg:                &config.AIConfig{PermissionType: config.AIPermissionReadonly},
+		desktopModelSource: modelSource,
+	}
 	if !svc.Enabled() {
 		t.Fatalf("Enabled=false, want true")
 	}

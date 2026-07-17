@@ -20,6 +20,7 @@ func newSendTurnTestService(t *testing.T) *Service {
 	t.Helper()
 
 	cfg := &config.AIConfig{
+		CurrentModelID: "openai/gpt-5-mini",
 		Providers: []config.AIProvider{
 			{
 				ID:      "openai",

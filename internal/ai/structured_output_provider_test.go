@@ -17,6 +17,7 @@ func TestInitStructuredOutputProvider_MoonshotUsesPromptLevelJSON(t *testing.T) 
 		AgentHomeDir: t.TempDir(),
 		Shell:        "bash",
 		Config: &config.AIConfig{
+			CurrentModelID: "moonshot/kimi-k2.6",
 			Providers: []config.AIProvider{{
 				ID:      "moonshot",
 				Type:    "moonshot",

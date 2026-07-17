@@ -3,6 +3,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type {
+  FlowerPermissionType,
   FlowerRouterDecision,
   FlowerSettingsSnapshot,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -111,31 +112,50 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.querySelector('.flower-settings-current-model')).toBeTruthy();
     expect(runtime.textContent).toContain('Configure models and the default Flower permission for the Local AI Profile.');
 
-    const approvalButton = Array.from(runtime.querySelectorAll('.flower-settings-policy-card'))
-      .find((button) => button.textContent?.includes('Approval required')) as HTMLButtonElement | undefined;
-    approvalButton?.click();
+    const fullAccessButton = Array.from(runtime.querySelectorAll('.flower-settings-policy-card'))
+      .find((button) => button.textContent?.includes('Full access')) as HTMLButtonElement | undefined;
+    fullAccessButton?.click();
     await wait(850);
     await flush();
 
-    expect(surfaceAdapter.saveSettings).toHaveBeenCalledTimes(1);
+    expect(surfaceAdapter.saveDefaultPermission).toHaveBeenCalledTimes(1);
     expect(runtime.querySelector('.flower-settings-title-feedback')?.textContent).toContain('Saved');
+  }, 5000);
+
+  it('coalesces rapid default permission changes to the latest selection', async () => {
+    const saveDefaultPermission = vi.fn(async (permissionType: FlowerPermissionType) => ({
+      ...settingsSnapshot(true),
+      defaults: { permission_type: permissionType },
+    }));
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      saveDefaultPermission,
+    });
+    await flush();
+
+    (runtime.querySelector('button[aria-label="Flower settings"]') as HTMLButtonElement).click();
+    await flush();
+    const permissionButtons = Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-settings-policy-card'));
+    permissionButtons.find((button) => button.textContent?.includes('Read-only'))?.click();
+    permissionButtons.find((button) => button.textContent?.includes('Full access'))?.click();
+
+    await wait(850);
+    await flush();
+    expect(saveDefaultPermission).toHaveBeenCalledTimes(1);
+    expect(saveDefaultPermission).toHaveBeenCalledWith('full_access');
   }, 5000);
 
   it('opens provider setup from settings when no model is configured', async () => {
     const surfaceAdapter = mutableSettingsAdapter(false);
     const emptySnapshot: FlowerSettingsSnapshot = {
       ...settingsSnapshot(false),
-      config: {
-        ...settingsSnapshot(false).config,
-        current_model_id: '',
-        providers: [],
-      },
+      model_profile: null,
       provider_secrets: [],
     };
     const runtime = renderSurfaceWithAdapter({
       ...surfaceAdapter,
       loadSettings: vi.fn(async () => emptySnapshot),
-      saveSettings: vi.fn(async () => emptySnapshot),
+      saveModelProfile: vi.fn(async () => emptySnapshot),
     });
     await flush();
 
@@ -154,23 +174,22 @@ describe('FlowerSurface navigation', () => {
     const launchTurn = vi.fn(async () => liveBootstrap(thread()));
     const desktopSourceSnapshot: FlowerSettingsSnapshot = {
       ...settingsSnapshot(false),
-      config: {
-        ...settingsSnapshot(false).config,
-        current_model_id: 'desktop:gpt-5.2',
-      },
+      model_profile: null,
       provider_secrets: [],
       model_source: {
         kind: 'desktop_model_source',
         ready: true,
+        current_model_id: 'desktop:gpt-5.2',
         label: 'Local AI Profile',
         model_count: 1,
+        models: [{ id: 'desktop:gpt-5.2', label: 'Desktop / gpt-5.2' }],
       },
     };
-    const saveSettings = vi.fn(async () => desktopSourceSnapshot);
+    const saveDefaultPermission = vi.fn(async () => desktopSourceSnapshot);
     const runtime = renderSurfaceWithAdapter({
       ...adapter(false),
       loadSettings: vi.fn(async () => desktopSourceSnapshot),
-      saveSettings,
+      saveDefaultPermission,
       launchTurn,
     });
     await flush();
@@ -181,7 +200,7 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.textContent).toContain('Local AI Profile on this Mac');
     expect(runtime.textContent).toContain('Open Local Environment Settings on this Mac to change providers, models, or keys.');
     expect(runtime.querySelector('.flower-settings-current-model')).toBeNull();
-    expect(runtime.querySelector('.flower-settings-policy-card')).toBeNull();
+    expect(runtime.querySelector('.flower-settings-policy-card')).toBeTruthy();
     expect(runtime.querySelector('.flower-settings-providers-section')).toBeNull();
     expect(runtime.querySelector('.flower-settings-terminal-section')).toBeNull();
     expect(runtime.textContent).not.toContain('Add provider');
@@ -191,7 +210,7 @@ describe('FlowerSurface navigation', () => {
     expect(runtime.textContent).not.toContain('Terminal execution limits');
     await wait(850);
     await flush();
-    expect(saveSettings).not.toHaveBeenCalled();
+    expect(saveDefaultPermission).not.toHaveBeenCalled();
 
     (runtime.querySelector('button[aria-label="New chat"]') as HTMLButtonElement).click();
     await flush();
@@ -280,12 +299,12 @@ describe('FlowerSurface navigation', () => {
       ...adapter(true),
       loadSettings: vi.fn(async () => ({
         ...settingsSnapshot(true),
-        config: {
-          ...settingsSnapshot(true).config,
+        model_profile: {
+          ...settingsSnapshot(true).model_profile!,
           providers: [{
-            ...settingsSnapshot(true).config.providers[0],
+            ...settingsSnapshot(true).model_profile!.providers[0],
             models: [
-              ...settingsSnapshot(true).config.providers[0].models,
+              ...settingsSnapshot(true).model_profile!.providers[0].models,
               { model_name: 'gpt-5.4-mini', context_window: 400000, input_modalities: ['text'] },
             ],
           }],
