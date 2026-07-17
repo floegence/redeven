@@ -27,6 +27,7 @@ import {
 type EnvLocalFlowerSurfaceAdapterOptions = Readonly<{
   envPublicID: string;
   envLabel: string;
+  desktopSessionTargetRoute?: 'local_host' | 'remote_desktop';
   rpc: RedevenV1Rpc;
   copy?: EnvLocalFlowerSurfaceAdapterCopy;
   onSettingsChanged?: () => void | Promise<unknown>;
@@ -135,7 +136,6 @@ function mapDesktopModelSource(settings: AgentSettingsResponse, models?: ModelsR
   const source = settings.ai_runtime?.desktop_model_source;
   if (!source) return undefined;
   const modelCount = Number(source.model_count ?? models?.models?.length ?? 0);
-  const currentModel = trim(models?.current_model);
   const sourceModels = (models?.models ?? []).map((model) => {
     const id = trim(model.id);
     if (!id || (trim(model.source) !== 'desktop_model_source' && !id.startsWith('desktop:model_'))) return null;
@@ -149,11 +149,15 @@ function mapDesktopModelSource(settings: AgentSettingsResponse, models?: ModelsR
       ...(reasoningCapability ? { reasoning_capability: reasoningCapability } : {}),
     };
   }).filter((model): model is NonNullable<typeof model> => model !== null);
+  const currentModelCandidate = trim(models?.current_model);
+  const currentModel = sourceModels.some((model) => model.id === currentModelCandidate)
+    ? currentModelCandidate
+    : '';
   return {
     kind: 'desktop_model_source',
-    ready: Boolean(source.connected && source.available && currentModel && modelCount > 0),
+    ready: Boolean(source.connected && source.available && sourceModels.length > 0),
     ...(currentModel ? { current_model_id: currentModel } : {}),
-    label: trim(source.model_source) || 'Local AI Profile',
+    label: 'Desktop',
     model_count: Number.isFinite(modelCount) && modelCount > 0 ? Math.floor(modelCount) : 0,
     models: sourceModels,
     missing_key_provider_ids: (source.missing_key_provider_ids ?? []).map(trim).filter(Boolean),
@@ -161,17 +165,13 @@ function mapDesktopModelSource(settings: AgentSettingsResponse, models?: ModelsR
   };
 }
 
-function mapSettings(settings: AgentSettingsResponse, models?: ModelsResponse): FlowerSettingsSnapshot {
+function mapSettings(
+  settings: AgentSettingsResponse,
+  models?: ModelsResponse,
+  exposeDesktopModelSource = false,
+): FlowerSettingsSnapshot {
   const ai = settings.ai;
-  const externalModelSource = mapDesktopModelSource(settings, models);
-  if (externalModelSource?.kind === 'desktop_model_source') {
-    return {
-      defaults: { permission_type: normalizePermissionType(ai?.permission_type) },
-      model_profile: null,
-      provider_secrets: [],
-      model_source: externalModelSource,
-    };
-  }
+  const externalModelSource = exposeDesktopModelSource ? mapDesktopModelSource(settings, models) : undefined;
   const modelProfile = ai && (ai.providers ?? []).length > 0 && trim(ai.current_model_id)
     ? {
         schema_version: 1 as const,
@@ -189,6 +189,7 @@ function mapSettings(settings: AgentSettingsResponse, models?: ModelsResponse): 
       provider_api_key_configured: Boolean(providerSecrets[provider.id]),
       web_search_api_key_configured: Boolean(webSecrets[provider.id]),
     })),
+    ...(externalModelSource ? { model_source: externalModelSource } : {}),
   };
 }
 
@@ -287,12 +288,13 @@ function decision(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerRouterDec
   };
 }
 
-async function loadSettingsSnapshot(): Promise<FlowerSettingsSnapshot> {
+async function loadSettingsSnapshot(options: EnvLocalFlowerSurfaceAdapterOptions): Promise<FlowerSettingsSnapshot> {
   const settings = await fetchLocalApiJSON<AgentSettingsResponse>('/_redeven_proxy/api/settings', { method: 'GET' });
-  const models = settings.ai_runtime?.desktop_model_source?.connected
+  const exposeDesktopModelSource = options.desktopSessionTargetRoute === 'remote_desktop';
+  const models = exposeDesktopModelSource && settings.ai_runtime?.desktop_model_source?.connected
     ? await loadModels().catch(() => undefined)
     : undefined;
-  return mapSettings(settings, models);
+  return mapSettings(settings, models, exposeDesktopModelSource);
 }
 
 async function loadModels(): Promise<ModelsResponse> {
@@ -303,6 +305,13 @@ function currentModelID(snapshot: FlowerSettingsSnapshot, models: ModelsResponse
   const configured = trim(snapshot.model_profile?.current_model_id);
   if (configured) return configured;
   return trim(models.current_model);
+}
+
+function profileContainsModel(snapshot: FlowerSettingsSnapshot, modelID: string): boolean {
+  const mid = trim(modelID);
+  return snapshot.model_profile?.providers.some((provider) => (
+    provider.models.some((model) => `${trim(provider.id)}/${trim(model.model_name)}` === mid)
+  )) ?? false;
 }
 
 export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerSurfaceAdapter {
@@ -357,13 +366,13 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       }),
     },
     mapperOptions: envLiveMapperOptions(options),
-    loadSettings: loadSettingsSnapshot,
+    loadSettings: () => loadSettingsSnapshot(options),
     saveDefaultPermission: async (permissionType) => {
       await fetchLocalApiJSON<unknown>('/_redeven_proxy/api/ai/default_permission', {
         method: 'PUT',
         body: JSON.stringify({ permission_type: normalizePermissionType(permissionType) }),
       });
-      return loadSettingsSnapshot();
+      return loadSettingsSnapshot(options);
     },
     saveModelProfile: async (draft) => {
       const providerAPIKeyPatches: FlowerSecretPatch[] = draft.model_profile.providers.flatMap((provider): FlowerSecretPatch[] => {
@@ -390,16 +399,18 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
           web_search_provider_key_patches: webSearchKeyPatches,
         }),
       });
-      return loadSettingsSnapshot();
+      return loadSettingsSnapshot(options);
     },
-    setCurrentModel: async (modelID) => {
+    persistDefaultModel: async (modelID) => {
       const mid = trim(modelID);
       if (!mid) throw new Error('Missing model id.');
+      const current = await loadSettingsSnapshot(options);
+      if (!profileContainsModel(current, mid)) throw new Error('Model is not part of the environment profile.');
       await fetchLocalApiJSON<ModelsResponse>('/_redeven_proxy/api/ai/current_model', {
         method: 'PUT',
         body: JSON.stringify({ model_id: mid }),
       });
-      const snapshot = await loadSettingsSnapshot();
+      const snapshot = await loadSettingsSnapshot(options);
       if (options.onSettingsChanged) void Promise.resolve(options.onSettingsChanged()).catch(() => undefined);
       return snapshot;
     },
@@ -416,7 +427,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       const copy = adapterCopy(options);
       const prompt = trim(input.prompt);
       if (!prompt) throw new Error(copy.enterMessageBeforeSending);
-      const snapshot = await loadSettingsSnapshot();
+      const snapshot = await loadSettingsSnapshot(options);
       const permissionType = normalizePermissionType(input.permission_type ?? snapshot.defaults.permission_type);
       const contextAction = requireAskFlowerContextActionEnvelope(input.context_action);
       let threadID = trim(input.thread_id);

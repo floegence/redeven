@@ -840,7 +840,7 @@ describe('EnvSettingsPage', () => {
     expect(runtimeStatus?.textContent).toContain('Bound');
   });
 
-  it('shows Local AI Profile status instead of remote provider settings for Desktop model source sessions', async () => {
+  it('keeps remote provider settings visible for Desktop model source sessions', async () => {
     protocolMocks.status.mockReturnValue('connected');
     desktopSessionContextMocks.readSnapshot.mockReturnValue({
       local_environment_id: 'local-env',
@@ -850,7 +850,15 @@ describe('EnvSettingsPage', () => {
       session_source: 'ssh_environment',
     });
     settingsResponse = {
-      ai: null,
+      ai: {
+        current_model_id: 'remote/gpt-5.4',
+        providers: [{
+          id: 'remote',
+          name: 'Remote Provider',
+          type: 'openai',
+          models: [{ model_name: 'gpt-5.4' }],
+        }],
+      },
       ai_runtime: {
         desktop_model_source: {
           binding_state: 'bound',
@@ -870,10 +878,10 @@ describe('EnvSettingsPage', () => {
     });
 
     const flowerCard = host.querySelector('[data-settings-card="Flower"]');
-    expect(flowerCard?.textContent).toContain('Local AI Profile on this Mac');
-    expect(flowerCard?.textContent).toContain('Desktop model source ready');
+    expect(flowerCard?.textContent).toContain('OpenAI / gpt-5.4');
+    expect(flowerCard?.textContent).toContain('Add Provider');
     expect(flowerCard?.querySelectorAll('[role="radio"]')).toHaveLength(3);
-    expect(flowerCard?.textContent).not.toContain('Add Provider');
+    expect(flowerCard?.textContent).not.toContain('Local AI Profile on this Mac');
   });
 
   it('saves the default Flower permission when no model profile is configured', async () => {

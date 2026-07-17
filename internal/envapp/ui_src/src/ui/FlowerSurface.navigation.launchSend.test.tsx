@@ -114,7 +114,233 @@ function installComposerControlLayoutHarness(input: {
   };
 }
 
+function dualSourceSnapshot(input: Readonly<{
+  remoteReady?: boolean;
+  desktopReady?: boolean;
+  remoteCurrentModelID?: string;
+}> = {}): FlowerSettingsSnapshot {
+  const base = settingsSnapshot(input.remoteReady ?? true);
+  return {
+    ...base,
+    model_profile: {
+      ...base.model_profile!,
+      current_model_id: input.remoteCurrentModelID ?? 'openai/gpt-5.2',
+      providers: [{
+        ...base.model_profile!.providers[0],
+        models: [
+          ...base.model_profile!.providers[0].models,
+          { model_name: 'gpt-5.4', context_window: 400000, input_modalities: ['text'] },
+        ],
+      }],
+    },
+    model_source: {
+      kind: 'desktop_model_source',
+      ready: input.desktopReady ?? true,
+      current_model_id: 'desktop:model_local',
+      label: 'Local AI Profile',
+      model_count: 1,
+      models: [{
+        id: 'desktop:model_local',
+        label: 'Desktop / Local Model',
+        context_window: 200000,
+        input_modalities: ['text'],
+      }],
+    },
+  };
+}
+
 describe('FlowerSurface navigation launch/send', () => {
+  it('groups remote and Desktop models while keeping Desktop selection session scoped', async () => {
+    const snapshot = dualSourceSnapshot();
+    const persistDefaultModel = vi.fn(async () => snapshot);
+    const launchTurn = vi.fn(async (input: { model_id?: string }) => liveBootstrap(thread({
+      thread_id: 'thread-desktop-session-draft',
+      model_id: input.model_id ?? 'openai/gpt-5.2',
+    })));
+    const surfaceAdapter = {
+      ...adapter(true),
+      runtime: {
+        ...adapter(true).runtime,
+        display_name: 'Demo Env',
+      },
+      loadSettings: vi.fn(async () => snapshot),
+      listThreads: vi.fn(async () => []),
+      persistDefaultModel,
+      launchTurn,
+    };
+    const runtime = renderSurfaceWithAdapter(surfaceAdapter);
+
+    await waitFor(() => runtime.querySelector('.flower-model-reasoning-model-trigger')?.textContent?.includes('gpt-5.2') ?? false);
+    (runtime.querySelector('.flower-model-reasoning-model-trigger') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelectorAll('.flower-model-menu-group-label').length === 2);
+    expect(Array.from(runtime.querySelectorAll('.flower-model-menu-group-label')).map((label) => label.textContent?.trim())).toEqual([
+      'Demo Env',
+      'Desktop',
+    ]);
+    expect(Array.from(runtime.querySelectorAll('[data-model-source]')).map((item) => item.getAttribute('data-model-source'))).toEqual([
+      'model_profile',
+      'model_profile',
+      'desktop_model_source',
+    ]);
+
+    const desktopOption = Array.from(runtime.querySelectorAll('.flower-model-menu-item'))
+      .find((button) => button.textContent?.includes('Desktop / Local Model')) as HTMLButtonElement;
+    desktopOption.click();
+    await waitFor(() => runtime.querySelector('.flower-model-reasoning-model-trigger')?.textContent?.includes('Desktop / Local Model') ?? false);
+    expect(persistDefaultModel).not.toHaveBeenCalled();
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'use Desktop for this window';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+    await waitFor(() => launchTurn.mock.calls.length === 1);
+    expect(launchTurn).toHaveBeenCalledWith(expect.objectContaining({
+      model_id: 'desktop:model_local',
+    }));
+
+    (runtime.querySelector('button[aria-label="New chat"]') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('.flower-model-reasoning-model-trigger')?.textContent?.includes('Desktop / Local Model') ?? false);
+    expect(persistDefaultModel).not.toHaveBeenCalled();
+
+    const remounted = renderSurfaceWithAdapter(surfaceAdapter);
+    await waitFor(() => remounted.querySelector('.flower-model-reasoning-model-trigger')?.textContent?.includes('gpt-5.2') ?? false);
+    expect(remounted.querySelector('.flower-model-reasoning-model-trigger')?.textContent).not.toContain('Desktop / Local Model');
+  });
+
+  it('persists remote selections as the next Env default', async () => {
+    let snapshot = dualSourceSnapshot();
+    const persistDefaultModel = vi.fn(async (modelID: string) => {
+      snapshot = {
+        ...snapshot,
+        model_profile: {
+          ...snapshot.model_profile!,
+          current_model_id: modelID,
+        },
+      };
+      return snapshot;
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      loadSettings: vi.fn(async () => snapshot),
+      listThreads: vi.fn(async () => []),
+      persistDefaultModel,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-reasoning-model-trigger')));
+    (runtime.querySelector('.flower-model-reasoning-model-trigger') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-menu')));
+    const remoteOption = Array.from(runtime.querySelectorAll('.flower-model-menu-item'))
+      .find((button) => button.textContent?.includes('gpt-5.4')) as HTMLButtonElement;
+    remoteOption.click();
+
+    await waitFor(() => persistDefaultModel.mock.calls.length === 1);
+    expect(persistDefaultModel).toHaveBeenCalledWith('openai/gpt-5.4');
+    expect(runtime.querySelector('.flower-model-reasoning-model-trigger')?.textContent).toContain('gpt-5.4');
+
+    const remounted = renderSurfaceWithAdapter({
+      ...adapter(true),
+      loadSettings: vi.fn(async () => snapshot),
+      listThreads: vi.fn(async () => []),
+      persistDefaultModel,
+    });
+    await waitFor(() => remounted.querySelector('.flower-model-reasoning-model-trigger')?.textContent?.includes('gpt-5.4') ?? false);
+  });
+
+  it('patches Desktop onto an existing thread without changing the remote default', async () => {
+    const snapshot = dualSourceSnapshot();
+    let selectedThread = thread({
+      thread_id: 'thread-desktop-isolated',
+      title: 'Desktop isolated',
+      model_id: 'openai/gpt-5.2',
+    });
+    const setThreadModel = vi.fn(async (_threadID: string, modelID: string) => {
+      selectedThread = { ...selectedThread, model_id: modelID };
+      return liveBootstrap(selectedThread);
+    });
+    const persistDefaultModel = vi.fn(async () => snapshot);
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      loadSettings: vi.fn(async () => snapshot),
+      listThreads: vi.fn(async () => [selectedThread]),
+      loadThread: vi.fn(async () => liveBootstrap(selectedThread)),
+      setThreadModel,
+      persistDefaultModel,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-desktop-isolated"] button')));
+    (runtime.querySelector('[data-thread-id="thread-desktop-isolated"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, 'thread-desktop-isolated'));
+    (runtime.querySelector('.flower-model-reasoning-model-trigger') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-menu')));
+    const desktopOption = Array.from(runtime.querySelectorAll('.flower-model-menu-item'))
+      .find((button) => button.textContent?.includes('Desktop / Local Model')) as HTMLButtonElement;
+    desktopOption.click();
+
+    await waitFor(() => setThreadModel.mock.calls.length === 1);
+    expect(setThreadModel).toHaveBeenCalledWith('thread-desktop-isolated', 'desktop:model_local');
+    expect(persistDefaultModel).not.toHaveBeenCalled();
+    expect(runtime.querySelector('.flower-model-reasoning-model-trigger')?.textContent).toContain('Desktop / Local Model');
+
+    (runtime.querySelector('button[aria-label="New chat"]') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('.flower-model-reasoning-model-trigger')?.textContent?.includes('gpt-5.2') ?? false);
+    (runtime.querySelector('[data-thread-id="thread-desktop-isolated"] button') as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('.flower-model-reasoning-model-trigger')?.textContent?.includes('Desktop / Local Model') ?? false);
+  });
+
+  it('keeps model switching available when the selected source is unavailable', async () => {
+    const snapshot = dualSourceSnapshot({ remoteReady: false, desktopReady: true });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      loadSettings: vi.fn(async () => snapshot),
+      listThreads: vi.fn(async () => []),
+      persistDefaultModel: vi.fn(async () => snapshot),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-reasoning-model-trigger')));
+    expect(runtime.querySelector('.flower-model-reasoning-warning')).toBeTruthy();
+    expect((runtime.querySelector('.flower-model-reasoning-model-trigger') as HTMLButtonElement).disabled).toBe(false);
+    expect((runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).disabled).toBe(true);
+    expect(runtime.querySelector('.flower-setup-inline')).toBeNull();
+    expect(runtime.querySelector('.flower-setup-guide')).toBeNull();
+
+    (runtime.querySelector('.flower-model-reasoning-model-trigger') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-menu')));
+    const desktopOption = Array.from(runtime.querySelectorAll('.flower-model-menu-item'))
+      .find((button) => button.textContent?.includes('Desktop / Local Model')) as HTMLButtonElement;
+    desktopOption.click();
+    await waitFor(() => runtime.querySelector('.flower-model-reasoning-warning') === null);
+  });
+
+  it('keeps the remote default ready when the optional Desktop source is unavailable', async () => {
+    const snapshot = dualSourceSnapshot({ remoteReady: true, desktopReady: false });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      loadSettings: vi.fn(async () => snapshot),
+      listThreads: vi.fn(async () => []),
+      persistDefaultModel: vi.fn(async () => snapshot),
+    });
+
+    await waitFor(() => runtime.querySelector('.flower-model-reasoning-model-trigger')?.textContent?.includes('gpt-5.2') ?? false);
+    expect(runtime.querySelector('.flower-model-reasoning-warning')).toBeNull();
+    expect(runtime.querySelector('.flower-setup-inline')).toBeNull();
+    expect((runtime.querySelector('.flower-model-reasoning-model-trigger') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('uses only the compact setup footer when no source has a usable model', async () => {
+    const snapshot = dualSourceSnapshot({ remoteReady: false, desktopReady: false });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(false),
+      loadSettings: vi.fn(async () => snapshot),
+      listThreads: vi.fn(async () => []),
+      persistDefaultModel: vi.fn(async () => snapshot),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('.flower-setup-inline')));
+    expect(runtime.querySelector('.flower-empty-state')).toBeTruthy();
+    expect(runtime.querySelector('.flower-setup-guide')).toBeNull();
+    expect(runtime.querySelector('.flower-model-reasoning-control')).toBeNull();
+  });
+
   it('patches an existing thread permission from the composer footer', async () => {
     const baseThread = thread({
       thread_id: 'thread-permission-existing',
@@ -464,7 +690,7 @@ describe('FlowerSurface navigation launch/send', () => {
       ...adapter(true),
       loadSettings: vi.fn(async () => currentSnapshot),
       listThreads: vi.fn(async () => []),
-      setCurrentModel: vi.fn(async (modelID: string) => {
+      persistDefaultModel: vi.fn(async (modelID: string) => {
         currentSnapshot = {
           ...currentSnapshot,
           model_profile: {
@@ -495,9 +721,9 @@ describe('FlowerSurface navigation launch/send', () => {
       .find((button) => button.textContent?.includes('plain-text')) as HTMLButtonElement | undefined;
     plainOption?.click();
 
-    await waitFor(() => surfaceAdapter.setCurrentModel.mock.calls.length === 1);
+    await waitFor(() => surfaceAdapter.persistDefaultModel.mock.calls.length === 1);
     await waitFor(() => modelReasoningControl()?.getAttribute('data-has-reasoning') === 'false');
-    expect(surfaceAdapter.setCurrentModel).toHaveBeenCalledWith('openai/plain-text');
+    expect(surfaceAdapter.persistDefaultModel).toHaveBeenCalledWith('openai/plain-text');
     expect(runtime.querySelector('.flower-reasoning-control-segment')).toBeNull();
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
@@ -558,21 +784,12 @@ describe('FlowerSurface navigation launch/send', () => {
       reasoning_selection: { level: 'high' },
     });
     const launchTurn = vi.fn(async (_input: unknown) => liveBootstrap(launchedThread));
-    const setCurrentModel = vi.fn(async (modelID: string) => {
-      currentSnapshot = {
-        ...currentSnapshot,
-        model_source: {
-          ...currentSnapshot.model_source!,
-          current_model_id: modelID,
-        },
-      };
-      return currentSnapshot;
-    });
+    const persistDefaultModel = vi.fn(async () => currentSnapshot);
     const runtime = renderSurfaceWithAdapter({
       ...adapter(false),
       loadSettings: vi.fn(async () => currentSnapshot),
       listThreads: vi.fn(async () => []),
-      setCurrentModel,
+      persistDefaultModel,
       launchTurn,
     });
     const modelReasoningControl = () => runtime.querySelector('[data-flower-composer-control="model_reasoning"]') as HTMLElement | null;
@@ -590,18 +807,16 @@ describe('FlowerSurface navigation launch/send', () => {
     const plainOption = Array.from(runtime.querySelectorAll('.flower-model-menu-item'))
       .find((button) => button.textContent?.includes('Desktop / Plain')) as HTMLButtonElement | undefined;
     plainOption?.click();
-    await waitFor(() => setCurrentModel.mock.calls.length === 1);
     await waitFor(() => modelReasoningControl()?.getAttribute('data-has-reasoning') === 'false');
-    expect(setCurrentModel).toHaveBeenLastCalledWith(plainModelID);
+    expect(persistDefaultModel).not.toHaveBeenCalled();
 
     (runtime.querySelector('.flower-model-reasoning-model-trigger') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-model-menu')));
     const deepSeekOption = Array.from(runtime.querySelectorAll('.flower-model-menu-item'))
       .find((button) => button.textContent?.includes('deepseek-v4-pro')) as HTMLButtonElement | undefined;
     deepSeekOption?.click();
-    await waitFor(() => setCurrentModel.mock.calls.length === 2);
     await waitFor(() => modelReasoningControl()?.getAttribute('data-has-reasoning') === 'true');
-    expect(setCurrentModel).toHaveBeenLastCalledWith(deepSeekModelID);
+    expect(persistDefaultModel).not.toHaveBeenCalled();
     expect(runtime.querySelector('.flower-reasoning-segment-button')?.textContent).toContain('High');
 
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
@@ -648,7 +863,7 @@ describe('FlowerSurface navigation launch/send', () => {
         };
         return liveBootstrap(selectedModelThread);
       }),
-      setCurrentModel: vi.fn(async (modelID: string) => {
+      persistDefaultModel: vi.fn(async (modelID: string) => {
         currentSnapshot = {
           ...currentSnapshot,
           model_profile: {
@@ -674,10 +889,10 @@ describe('FlowerSurface navigation launch/send', () => {
       .find((button) => button.textContent?.includes('gpt-5.4')) as HTMLButtonElement | undefined;
     nextModelOption?.click();
 
-    await waitFor(() => surfaceAdapter.setCurrentModel.mock.calls.length === 1);
+    await waitFor(() => surfaceAdapter.persistDefaultModel.mock.calls.length === 1);
     expect(surfaceAdapter.setThreadModel).toHaveBeenCalledWith('thread-model-default', 'openai/gpt-5.4');
-    expect(surfaceAdapter.setCurrentModel).toHaveBeenCalledWith('openai/gpt-5.4');
-    expect(surfaceAdapter.setThreadModel.mock.invocationCallOrder[0]).toBeLessThan(surfaceAdapter.setCurrentModel.mock.invocationCallOrder[0]);
+    expect(surfaceAdapter.persistDefaultModel).toHaveBeenCalledWith('openai/gpt-5.4');
+    expect(surfaceAdapter.setThreadModel.mock.invocationCallOrder[0]).toBeLessThan(surfaceAdapter.persistDefaultModel.mock.invocationCallOrder[0]);
     expect(runtime.querySelector('.flower-model-reasoning-model-trigger')?.textContent).toContain('OpenAI / gpt-5.4');
   });
 
@@ -713,7 +928,7 @@ describe('FlowerSurface navigation launch/send', () => {
         };
         return liveBootstrap(selectedModelThread);
       }),
-      setCurrentModel: vi.fn(async () => {
+      persistDefaultModel: vi.fn(async () => {
         throw new Error('default save failed');
       }),
     };
@@ -731,7 +946,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => flowerSurfaceNotifications().some((notice) => notice.message.includes('default save failed')));
     expect(surfaceAdapter.setThreadModel).toHaveBeenCalledWith('thread-model-default-fails', 'openai/gpt-5.4');
-    expect(surfaceAdapter.setCurrentModel).toHaveBeenCalledWith('openai/gpt-5.4');
+    expect(surfaceAdapter.persistDefaultModel).toHaveBeenCalledWith('openai/gpt-5.4');
     expect(flowerSurfaceNotifications()).toContainEqual(expect.objectContaining({
       tone: 'error',
       title: 'Default model was not updated.',

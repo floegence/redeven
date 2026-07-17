@@ -292,7 +292,7 @@ describe('Local Environment Flower surface adapter', () => {
     });
     const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge, { onSettingsChanged });
 
-    const snapshot = await adapter.setCurrentModel('default/gpt-5.4');
+    const snapshot = await adapter.persistDefaultModel('default/gpt-5.4');
 
     expect(calls).toEqual([
       {

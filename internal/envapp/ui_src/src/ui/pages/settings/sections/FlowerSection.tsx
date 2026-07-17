@@ -4,7 +4,6 @@ import { Button, Select } from '@floegence/floe-webapp-core/ui';
 import { cn } from '@floegence/floe-webapp-core';
 import { useEnvSettingsPage } from '../EnvSettingsPageContext';
 import { fetchLocalApiJSON } from '../../../services/localApi';
-import { readDesktopSessionContextSnapshot } from '../../../services/desktopSessionContext';
 import { SettingsSection, AutoSaveIndicator, SubSectionHeader, DotIndicator } from '../SettingsPrimitives';
 import { AIProviderDialog } from '../AIProviderDialog';
 import { ProviderBrandIcon } from '../ProviderBrandIcon';
@@ -213,11 +212,6 @@ export function FlowerSection() {
 
   const aiModelOptions = createMemo(() => collectAIModelOptions(providers(), i18n.locale()));
   const aiCurrentModelOption = createMemo(() => aiModelOptions().find((o) => o.id === currentModelID()));
-  const desktopSession = createMemo(() => readDesktopSessionContextSnapshot());
-  const desktopModelSource = createMemo(() => ctx.settings()?.ai_runtime?.desktop_model_source ?? null);
-  const usesRemoteDesktopModelSource = createMemo(() => (
-    desktopSession()?.target_route === 'remote_desktop'
-  ));
   const focusPermissionType = (kind: AIPermissionType) => {
     queueMicrotask(() => permissionButtonRefs.get(kind)?.focus());
   };
@@ -252,7 +246,7 @@ export function FlowerSection() {
 
   let autoSaveTimer: number | undefined;
   const clearTimer = (t: number | undefined) => { if (t != null) { window.clearTimeout(t); return undefined; } return undefined; };
-  createEffect(() => { if (usesRemoteDesktopModelSource() || !dirty() || saving() || !ctx.canInteract()) { autoSaveTimer = clearTimer(autoSaveTimer); return; } autoSaveTimer = clearTimer(autoSaveTimer); autoSaveTimer = window.setTimeout(async () => { autoSaveTimer = undefined; if (!dirty() || saving() || !ctx.canInteract()) return; setSaving(true); try { const pd = normalizeAIProviders(providers()).map((p) => ({ id: p.id, name: p.name, type: p.type, base_url: p.base_url, models: p.models, web_search: p.web_search })); const sv = await fetchLocalApiJSON<SettingsUpdateResponse | unknown>('/_redeven_proxy/api/ai/provider_bundle', { method: 'PUT', body: JSON.stringify({ model_profile: { current_model_id: String(currentModelID() ?? '').trim(), providers: pd } }) }); if (isJSONObject(sv) && isJSONObject((sv as SettingsUpdateResponse).settings)) ctx.mutateSettings((sv as SettingsUpdateResponse).settings); ctx.env.bumpSettingsSeq(); setSavedAt(Date.now()); setDirty(false); setError(null); } catch (e) { setError(formatUnknownError(e) || i18n.t('flowerSettings.saveFailedMessage')); } finally { setSaving(false); } }, AUTO_SAVE_DELAY_MS); });
+  createEffect(() => { if (!dirty() || saving() || !ctx.canInteract()) { autoSaveTimer = clearTimer(autoSaveTimer); return; } autoSaveTimer = clearTimer(autoSaveTimer); autoSaveTimer = window.setTimeout(async () => { autoSaveTimer = undefined; if (!dirty() || saving() || !ctx.canInteract()) return; setSaving(true); try { const pd = normalizeAIProviders(providers()).map((p) => ({ id: p.id, name: p.name, type: p.type, base_url: p.base_url, models: p.models, web_search: p.web_search })); const sv = await fetchLocalApiJSON<SettingsUpdateResponse | unknown>('/_redeven_proxy/api/ai/provider_bundle', { method: 'PUT', body: JSON.stringify({ model_profile: { current_model_id: String(currentModelID() ?? '').trim(), providers: pd } }) }); if (isJSONObject(sv) && isJSONObject((sv as SettingsUpdateResponse).settings)) ctx.mutateSettings((sv as SettingsUpdateResponse).settings); ctx.env.bumpSettingsSeq(); setSavedAt(Date.now()); setDirty(false); setError(null); } catch (e) { setError(formatUnknownError(e) || i18n.t('flowerSettings.saveFailedMessage')); } finally { setSaving(false); } }, AUTO_SAVE_DELAY_MS); });
 
   const saveAICurrentModelDirectly = async (next: string, previous: string) => { try { await fetchLocalApiJSON('/_redeven_proxy/api/ai/current_model', { method: 'PUT', body: JSON.stringify({ model_id: next }) }); ctx.env.bumpSettingsSeq(); setSavedAt(Date.now()); setError(null); } catch (e) { const message = formatUnknownError(e) || i18n.t('flowerSettings.saveFailedMessage'); setCurrentModelID(previous); setError(message); ctx.notify.error(i18n.t('flowerSettings.saveFailedTitle'), message); } };
 
@@ -402,39 +396,6 @@ export function FlowerSection() {
   );
   return (
     <>
-      <Show when={usesRemoteDesktopModelSource()}>
-        <SettingsSection
-          icon={Zap} title={i18n.t('aiChrome.flowerTitle')} description={i18n.t('flowerSettings.localAIProfileDescription')}
-          badge={desktopModelSource()?.available ? i18n.t('flowerSettings.activeBadge') : i18n.t('flowerSettings.desktopModelSourceNeedsAttention')}
-          badgeVariant={desktopModelSource()?.available ? 'success' : 'warning'}
-        >
-          <div class="redeven-settings-choice redeven-settings-choice--selected-neutral rounded-xl border p-5">
-            <div class="flex items-start gap-4">
-              <div class="redeven-settings-inset flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl border">
-                <Zap class="h-6 w-6 text-primary" />
-              </div>
-              <div class="min-w-0 flex-1">
-                <div class="text-base font-semibold text-foreground">{i18n.t('flowerSettings.localAIProfileTitle')}</div>
-                <p class="mt-1 text-xs leading-relaxed text-muted-foreground">{i18n.t('flowerSettings.localAIProfileBody')}</p>
-                <div class="mt-3 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
-                  <DotIndicator active={Boolean(desktopModelSource()?.available)} label={desktopModelSource()?.available ? i18n.t('flowerSettings.desktopModelSourceReady') : i18n.t('flowerSettings.desktopModelSourceNeedsAttention')} />
-                  <Show when={Number(desktopModelSource()?.model_count ?? 0) > 0}>
-                    <DotIndicator active label={i18n.tn('flowerSettings.modelCount', Number(desktopModelSource()?.model_count ?? 0))} />
-                  </Show>
-                </div>
-                <Show when={(desktopModelSource()?.missing_key_provider_ids ?? []).length > 0}>
-                  <p class="mt-3 text-xs text-warning">{i18n.t('flowerSettings.localAIProfileMissingKeys', { providers: (desktopModelSource()?.missing_key_provider_ids ?? []).join(', ') })}</p>
-                </Show>
-                <Show when={String(desktopModelSource()?.last_error ?? '').trim()}>
-                  <p class="mt-3 text-xs text-destructive">{desktopModelSource()?.last_error}</p>
-                </Show>
-              </div>
-            </div>
-          </div>
-          {renderDefaultPermissionSection()}
-        </SettingsSection>
-      </Show>
-      <Show when={!usesRemoteDesktopModelSource()}>
       <SettingsSection
         icon={Bot} title={i18n.t('aiChrome.flowerTitle')} description={i18n.t('flowerSettings.description')}
         badge={aiModelOptions().length > 0 ? i18n.t('flowerSettings.activeBadge') : i18n.t('flowerSettings.noModelSelected')}
@@ -564,7 +525,6 @@ export function FlowerSection() {
         onChangeModelNumber={updateDialogModelNumber} onChangeModelImageInput={(i, en) => updateAIProviderDialogDraft((c) => ({ ...c, models: (Array.isArray(c.models) ? c.models : []).map((m, mi) => mi === i ? { ...m, input_modalities: en ? ['text', 'image'] : ['text'] } : m) }))}
         onRemoveModel={(i) => updateAIProviderDialogDraft((c) => ({ ...c, models: (Array.isArray(c.models) ? c.models : []).filter((_, mi) => mi !== i) }))}
       />
-      </Show>
     </>
   );
 }

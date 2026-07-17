@@ -505,7 +505,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       await runtimeJSON<unknown>(bridge, 'PUT', '/_redeven_proxy/api/ai/provider_bundle', mapFlowerSettingsDraftToRuntimeBundle(draft));
       return loadSettingsSnapshot(bridge);
     },
-    setCurrentModel: async (modelID) => {
+    persistDefaultModel: async (modelID) => {
       const mid = trim(modelID);
       if (!mid) throw new Error('Missing model id.');
       await runtimeJSON<ModelsResponse>(bridge, 'PUT', '/_redeven_proxy/api/ai/current_model', { model_id: mid });

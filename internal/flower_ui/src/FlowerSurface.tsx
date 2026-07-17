@@ -1621,16 +1621,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return changed ? next : current;
     });
   };
-  const applyCurrentModelLocally = (modelID: string) => {
+  const applyPersistedDefaultModelLocally = (modelID: string) => {
     const mid = trimString(modelID);
     if (!mid) return;
     setSnapshot((current) => {
-      if (!current) return current;
-      if (current.model_source?.models?.some((model) => model.id === mid)) {
-        return { ...current, model_source: { ...current.model_source, current_model_id: mid } };
-      }
-      if (!current.model_profile) return current;
-      return { ...current, model_profile: { ...current.model_profile, current_model_id: mid } };
+      if (!current?.model_profile) return current;
+      const profile = current.model_profile;
+      const belongsToProfile = profile.providers.some((provider) => (
+        provider.models.some((model) => `${trimString(provider.id)}/${trimString(model.model_name)}` === mid)
+      ));
+      if (!belongsToProfile) return current;
+      return { ...current, model_profile: { ...profile, current_model_id: mid } };
     });
   };
   const applyThreadReasoningLocally = (threadID: string, selection: FlowerReasoningSelection | undefined) => {
@@ -1655,20 +1656,23 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const updateComposerModelID = async (modelID: string) => {
     const mid = trimString(modelID);
     if (!mid) return;
-    if (!modelSelectOptions().some((option) => option.id === mid)) return;
+    const option = modelSelectOptions().find((item) => item.id === mid);
+    if (!option) return;
+    const persistsRemoteDefault = option.source === 'model_profile';
     const threadID = trimString(selectedThreadID());
     if (!threadID) {
       const previous = selectedComposerModelID();
       if (previous === mid) return;
-      const previousSnapshot = snapshot();
       const previousDraftOverride = trimString(currentComposerSessionDraft().modelIDOverride);
-      setPendingModelPatch({ threadID: PENDING_NEW_THREAD_ID, requested: mid, previous });
       updateCurrentComposerSessionDraft((draft) => (
         trimString(draft.modelIDOverride) === mid ? draft : { ...draft, modelIDOverride: mid }
       ));
-      applyCurrentModelLocally(mid);
+      if (!persistsRemoteDefault) return;
+      const previousSnapshot = snapshot();
+      setPendingModelPatch({ threadID: PENDING_NEW_THREAD_ID, requested: mid, previous });
+      applyPersistedDefaultModelLocally(mid);
       try {
-        const next = await props.adapter.setCurrentModel(mid);
+        const next = await props.adapter.persistDefaultModel(mid);
         setSnapshot(next);
         updateCurrentComposerSessionDraft((draft) => (
           trimString(draft.modelIDOverride) === mid ? { ...draft, modelIDOverride: '' } : draft
@@ -1695,14 +1699,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     try {
       const live = await props.adapter.setThreadModel(threadID, mid);
       const updated = applyLiveBootstrap(live, 'user_action');
-      applyCurrentModelLocally(mid);
-      try {
-        const next = await props.adapter.setCurrentModel(mid);
-        setSnapshot(next);
-      } catch (error) {
-        setSnapshot(previousSnapshot);
-        if (selectedThreadDetailMatches(threadID)) {
-          notifyFutureDefaultModelError(getErrorMessage(error) || copy().chat.messageErrorFallback);
+      if (persistsRemoteDefault) {
+        applyPersistedDefaultModelLocally(mid);
+        try {
+          const next = await props.adapter.persistDefaultModel(mid);
+          setSnapshot(next);
+        } catch (error) {
+          setSnapshot(previousSnapshot);
+          if (selectedThreadDetailMatches(threadID)) {
+            notifyFutureDefaultModelError(getErrorMessage(error) || copy().chat.messageErrorFallback);
+          }
         }
       }
       if (selectedThreadDetailMatches(threadID)) {
@@ -2087,15 +2093,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (threadModelID) return threadModelID;
     return trimString(currentComposerSessionDraft().modelIDOverride) || currentModelID();
   });
-  const activeProvider = createMemo(() => {
-    const current = selectedComposerModelID();
-    const providerID = current.split('/')[0] ?? '';
-    return snapshot()?.model_profile?.providers.find((provider) => provider.id === providerID) ?? null;
-  });
   type ComposerModelOption = Readonly<{
     id: string;
     label: string;
-    providerLabel: string;
+    source?: 'model_profile' | 'desktop_model_source';
     providerType?: FlowerProviderType;
     supportsImageInput: boolean;
     contextWindow?: number;
@@ -2114,7 +2115,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return {
           id: `${providerID}/${modelName}`,
           label: `${providerLabel} / ${modelName}`,
-          providerLabel,
+          source: 'model_profile',
           providerType: provider.type,
           supportsImageInput: flowerModelSupportsImage(model.input_modalities),
           ...(model.context_window != null ? { contextWindow: model.context_window } : {}),
@@ -2128,11 +2129,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const sourceModelOptions = createMemo<readonly ComposerModelOption[]>(() => {
     const source = snapshot()?.model_source;
     if (source?.kind !== 'desktop_model_source') return [];
-    const providerLabel = trimString(source.label) || 'Desktop';
     return (source.models ?? []).map((model) => ({
       id: trimString(model.id),
       label: trimString(model.label) || trimString(model.id),
-      providerLabel,
+      source: 'desktop_model_source' as const,
       supportsImageInput: flowerModelSupportsImage(model.input_modalities),
       ...(model.context_window != null ? { contextWindow: model.context_window } : {}),
       ...(model.max_output_tokens != null ? { maxOutputTokens: model.max_output_tokens } : {}),
@@ -2168,11 +2168,30 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const selected = selectedComposerModelID();
     if (selected && !options.some((option) => option.id === selected)) {
       const label = selectedThreadModelLabel();
-      return [{ id: selected, label, providerLabel: '', supportsImageInput: false } as ComposerModelOption, ...options];
+      return [{ id: selected, label, supportsImageInput: false } as ComposerModelOption, ...options];
     }
     return options;
   });
   const selectedModelOption = createMemo(() => modelSelectOptions().find((option) => option.id === selectedComposerModelID()) ?? null);
+  const groupedModelOptions = createMemo(() => {
+    const options = modelSelectOptions();
+    const remoteOptions = options.filter((option) => option.source === 'model_profile');
+    const desktopOptions = options.filter((option) => option.source === 'desktop_model_source');
+    if (remoteOptions.length === 0 || desktopOptions.length === 0) return null;
+    const uncataloguedOptions = options.filter((option) => !option.source);
+    return [
+      {
+        source: 'model_profile' as const,
+        label: trimString(props.adapter.runtime.display_name),
+        options: [...uncataloguedOptions, ...remoteOptions],
+      },
+      {
+        source: 'desktop_model_source' as const,
+        label: 'Desktop',
+        options: desktopOptions,
+      },
+    ];
+  });
   const selectedReasoningCapability = createMemo(() => {
     const thread = selectedThread();
     const model = selectedModelOption();
@@ -2212,23 +2231,25 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     && (selectedInputRequest() ? !selectedThreadReadOnly() : selectedThreadPreferenceEditable())
     && (!selectedThreadID() || selectedInputRequest() || typeof props.adapter.setThreadReasoningSelection === 'function')
   ));
-  const activeProviderSecrets = createMemo(() => {
-    const provider = activeProvider();
-    if (!provider) return null;
-    return snapshot()?.provider_secrets.find((secret) => secret.provider_id === provider.id) ?? null;
-  });
   const modelSource = createMemo(() => snapshot()?.model_source ?? null);
-  const externalModelSourceReady = createMemo(() => {
-    const source = modelSource();
-    return source?.kind === 'desktop_model_source' && source.ready && !!currentModelID();
-  });
-  const readyForChat = createMemo(() => {
-    if (externalModelSourceReady()) return true;
-    const provider = activeProvider();
-    const secrets = activeProviderSecrets();
-    if (!currentModelID() || !provider || !secrets?.provider_api_key_configured) return false;
+  const modelOptionReady = (option: ComposerModelOption | null | undefined): boolean => {
+    if (!option) return false;
+    if (option.source === 'desktop_model_source') {
+      const source = modelSource();
+      return source?.kind === 'desktop_model_source'
+        && source.ready
+        && (source.models ?? []).some((model) => trimString(model.id) === option.id);
+    }
+    if (option.source !== 'model_profile') return false;
+    const providerID = option.id.split('/')[0] ?? '';
+    const provider = snapshot()?.model_profile?.providers.find((item) => trimString(item.id) === providerID);
+    const secrets = snapshot()?.provider_secrets.find((secret) => secret.provider_id === providerID);
+    if (!provider || !secrets?.provider_api_key_configured) return false;
     return provider.web_search?.mode !== 'brave' || Boolean(secrets.web_search_api_key_configured);
-  });
+  };
+  const readyForChat = createMemo(() => modelOptionReady(selectedModelOption()));
+  const anyModelReady = createMemo(() => catalogModelOptions().some((option) => modelOptionReady(option)));
+  const selectedModelNeedsAttention = createMemo(() => !readyForChat() && anyModelReady());
   const currentHandlerDecision = createMemo(() => {
     const state = handlerState();
     return 'decision' in state ? state.decision : null;
@@ -2250,7 +2271,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     return null;
   });
-  const needsSetup = createMemo(() => !!snapshot() && !readyForChat());
+  const needsSetup = createMemo(() => !!snapshot() && !anyModelReady());
 
   const composerControlIDs = createMemo<readonly FlowerComposerControlID[]>(() => {
     if (needsSetup()) return [];
@@ -3204,8 +3225,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setSubagentDetailOpenedRevision((revision) => revision + 1);
   };
 
-  const modelProfileManagedByDesktop = createMemo(() => modelSource()?.kind === 'desktop_model_source');
-
   const openSettings = () => {
     closeSubagentOverlays();
     setSidePanel('settings');
@@ -3328,10 +3347,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const prompt = trimString(promptInput);
     if (!snapshot()) {
       notifyComposerError(copy().chat.loadingSettings);
-      return;
-    }
-    if (!readyForChat() && !modelProfileManagedByDesktop()) {
-      openSettings();
       return;
     }
     if (!readyForChat()) {
@@ -3580,10 +3595,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const compactSelectedThreadContext = async () => {
     if (!snapshot()) {
       notifyComposerError(copy().chat.loadingSettings);
-      return;
-    }
-    if (!readyForChat() && !modelProfileManagedByDesktop()) {
-      openSettings();
       return;
     }
     if (!readyForChat()) {
@@ -6344,22 +6355,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
-  const setupGuide = () => (
-    <div class="flower-setup-guide" role="status">
-      <FlowerSoftAuraIcon class="redeven-flower-soft-aura-lg h-14 w-14 redeven-flower-icon-breathe" iconClass="redeven-flower-icon-spin" />
-      <div class="flower-setup-copy">
-        <h2>{copy().chat.setupNeeded}</h2>
-        <p>{modelProfileManagedByDesktop() ? copy().settings.managedByLocalAIProfileOpenLocal : copy().chat.needsProviderNotice}</p>
-      </div>
-      <Show when={!modelProfileManagedByDesktop()}>
-        <button type="button" class="flower-setup-primary" onClick={openSettings}>
-          <Settings class="h-4 w-4" />
-          <span>{copy().chat.openSettings}</span>
-        </button>
-      </Show>
-    </div>
-  );
-
   const subagentStatusLabel = (status: FlowerSubagentPanelStatus): string => subagentsCopy().statusLabels[status] ?? subagentsCopy().statusLabels.unknown;
   const subagentElapsedDuration = (item: FlowerSubagentPanelItem): string => {
     const startedAt = item.startedAtMs || item.createdAtMs || 0;
@@ -6661,6 +6656,41 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </button>
   );
 
+  const modelMenuItem = (option: ComposerModelOption) => {
+    const selected = () => option.id === selectedComposerModelID();
+    return (
+      <button
+        type="button"
+        class={cn('flower-model-menu-item', selected() && 'flower-model-menu-item-active')}
+        data-model-source={option.source}
+        role="option"
+        aria-selected={selected()}
+        onClick={() => { void updateComposerModelID(option.id); closeModelMenu(true); }}
+      >
+        {option.providerType
+          ? <FlowerProviderBrandIcon type={option.providerType} class="flower-model-menu-icon" />
+          : <Bot class="flower-model-menu-icon" />}
+        <span class="flower-model-menu-copy">
+          <span class="flower-model-menu-name">{option.label}</span>
+          <span class="flower-model-menu-meta">
+            <Show when={option.contextWindow}>
+              <span>{formatFlowerTokenCount(option.contextWindow)} context</span>
+            </Show>
+            <Show when={option.maxOutputTokens}>
+              <span> · {formatFlowerTokenCount(option.maxOutputTokens)} output</span>
+            </Show>
+            <Show when={option.supportsImageInput}>
+              <span> · Image</span>
+            </Show>
+          </span>
+        </span>
+        <Show when={selected()}>
+          <Check class="flower-model-menu-check" aria-hidden="true" />
+        </Show>
+      </button>
+    );
+  };
+
   const modelMenu = () => (
     <Show when={modelMenuOpen()}>
       <div
@@ -6670,41 +6700,24 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         role="listbox"
         onKeyDown={handleModelMenuKeyDown}
       >
-        <For each={modelSelectOptions()}>
-          {(option) => {
-            const selected = () => option.id === selectedComposerModelID();
-            return (
-              <button
-                type="button"
-                class={cn('flower-model-menu-item', selected() && 'flower-model-menu-item-active')}
-                role="option"
-                aria-selected={selected()}
-                onClick={() => { void updateComposerModelID(option.id); closeModelMenu(true); }}
-              >
-                {option.providerType
-                  ? <FlowerProviderBrandIcon type={option.providerType} class="flower-model-menu-icon" />
-                  : <Bot class="flower-model-menu-icon" />}
-                <span class="flower-model-menu-copy">
-                  <span class="flower-model-menu-name">{option.label}</span>
-                  <span class="flower-model-menu-meta">
-                    <Show when={option.contextWindow}>
-                      <span>{formatFlowerTokenCount(option.contextWindow)} context</span>
-                    </Show>
-                    <Show when={option.maxOutputTokens}>
-                      <span> · {formatFlowerTokenCount(option.maxOutputTokens)} output</span>
-                    </Show>
-                    <Show when={option.supportsImageInput}>
-                      <span> · Image</span>
-                    </Show>
-                  </span>
-                </span>
-                <Show when={selected()}>
-                  <Check class="flower-model-menu-check" aria-hidden="true" />
-                </Show>
-              </button>
-            );
-          }}
-        </For>
+        <Show
+          when={groupedModelOptions()}
+          fallback={<For each={modelSelectOptions()}>{modelMenuItem}</For>}
+        >
+          {(groups) => (
+            <For each={groups()}>
+              {(group, index) => (
+                <div
+                  class={cn('flower-model-menu-group', index() > 0 && 'flower-model-menu-group-separated')}
+                  data-model-source-group={group.source}
+                >
+                  <div class="flower-model-menu-group-label">{group.label}</div>
+                  <For each={group.options}>{modelMenuItem}</For>
+                </div>
+              )}
+            </For>
+          )}
+        </Show>
       </div>
     </Show>
   );
@@ -6731,11 +6744,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           disabled={!composerModelInteractive() || modelPatchPending()}
           aria-haspopup="listbox"
           aria-expanded={modelMenuOpen()}
-          aria-label={`${copy().chat.modelLabel}: ${selectedThreadModelLabel()}`}
-          title={`${copy().chat.modelLabel}: ${selectedThreadModelLabel()}`}
+          aria-label={selectedModelNeedsAttention()
+            ? `${copy().chat.modelLabel}: ${selectedThreadModelLabel()}. ${copy().chat.configureProviderBeforeChat}`
+            : `${copy().chat.modelLabel}: ${selectedThreadModelLabel()}`}
+          title={selectedModelNeedsAttention()
+            ? copy().chat.configureProviderBeforeChat
+            : `${copy().chat.modelLabel}: ${selectedThreadModelLabel()}`}
           onClick={() => { if (modelMenuOpen()) { closeModelMenu(false); return; } openModelMenu(); }}
           onKeyDown={handleModelTriggerKeyDown}
         >
+          <Show when={selectedModelNeedsAttention()}>
+            <AlertTriangle class="flower-model-reasoning-warning" aria-hidden="true" />
+          </Show>
           <span class="flower-model-reasoning-model-label">{selectedThreadModelLabel()}</span>
           <ChevronDown class="flower-model-reasoning-chevron" aria-hidden="true" />
         </button>
@@ -7001,9 +7021,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   ? threadLoadingState()
                   : warmupCanReplaceTranscript()
                     ? warmupPanel()
-                  : needsSetup()
-                    ? setupGuide()
-                    : <FlowerEmptyState copy={copy().emptyState} disabled={!readyForChat()} onSuggestionClick={(prompt) => updateCurrentComposerSessionDraft((draft) => ({ ...draft, chatDraft: prompt }))} />}
+                  : <FlowerEmptyState copy={copy().emptyState} disabled={!readyForChat()} onSuggestionClick={(prompt) => updateCurrentComposerSessionDraft((draft) => ({ ...draft, chatDraft: prompt }))} />}
             >
               <For each={visibleTimelineEntryKeys()}>
                 {(entryKey) => {

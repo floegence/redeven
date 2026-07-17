@@ -1294,6 +1294,36 @@ html.dark .flower-component-shell {
   color: var(--primary);
 }
 
+.flower-model-menu-group {
+  display: grid;
+  gap: 0.125rem;
+}
+
+.flower-model-menu-group-separated {
+  margin-top: 0.25rem;
+  border-top: 1px solid color-mix(in srgb, var(--border) 66%, transparent);
+  padding-top: 0.25rem;
+}
+
+.flower-model-menu-group-label {
+  min-width: 0;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground) 12%);
+  padding: 0.25rem 0.5rem 0.125rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.65625rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.flower-model-reasoning-warning {
+  width: 0.75rem;
+  height: 0.75rem;
+  flex: 0 0 auto;
+  color: var(--flower-subagents-warning, #a56a00);
+}
+
 .flower-reasoning-control {
   position: relative;
   display: inline-flex;
@@ -7332,68 +7362,6 @@ html.dark .flower-subagent-detail-window {
   color: color-mix(in srgb, var(--muted-foreground) 60%, transparent);
 }
 
-.flower-setup-guide {
-  width: min(100%, 32rem);
-  margin: min(13vh, 6.5rem) auto 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 0.85rem;
-  padding: 1.25rem 1.6rem;
-  text-align: center;
-}
-
-.flower-setup-copy {
-  display: grid;
-  max-width: 28rem;
-  gap: 0.45rem;
-}
-
-.flower-setup-copy h2 {
-  margin: 0;
-  color: var(--foreground);
-  font-size: 1.0625rem;
-  font-weight: 700;
-  letter-spacing: 0;
-}
-
-.flower-setup-copy p {
-  margin: 0;
-  color: color-mix(in srgb, var(--muted-foreground) 84%, var(--foreground) 16%);
-  font-size: 0.8125rem;
-  line-height: 1.65;
-}
-
-.flower-setup-primary {
-  display: inline-flex;
-  height: 2.15rem;
-  cursor: pointer;
-  align-items: center;
-  justify-content: center;
-  gap: 0.45rem;
-  border: 1px solid color-mix(in srgb, var(--primary) 18%, transparent);
-  border-radius: 9999px;
-  background: color-mix(in srgb, var(--foreground) 90%, var(--primary) 10%);
-  color: var(--background);
-  padding: 0 0.82rem;
-  font-size: 0.8125rem;
-  font-weight: 700;
-  letter-spacing: 0;
-  box-shadow: 0 12px 24px -20px color-mix(in srgb, var(--foreground) 55%, transparent);
-  transition:
-    background-color 150ms ease,
-    box-shadow 150ms ease,
-    transform 150ms ease;
-}
-
-.flower-setup-primary:hover,
-.flower-setup-primary:focus-visible {
-  background: color-mix(in srgb, var(--foreground) 84%, var(--primary) 16%);
-  box-shadow: 0 14px 28px -20px color-mix(in srgb, var(--foreground) 64%, transparent);
-  outline: none;
-  transform: translateY(-1px);
-}
-
 .redeven-flower-soft-aura {
   position: relative;
   display: inline-flex;
@@ -7592,11 +7560,6 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
     flex-wrap: wrap;
     gap: 0.625rem 1rem;
     margin-top: 1.25rem;
-  }
-
-  .flower-setup-guide {
-    margin-top: 1rem;
-    padding: 1.25rem;
   }
 
   .flower-setup-inline span {

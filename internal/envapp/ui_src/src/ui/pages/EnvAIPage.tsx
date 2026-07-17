@@ -11,6 +11,7 @@ import { useRedevenRpc } from '../protocol/redeven_v1';
 import { createEnvLocalFlowerSurfaceAdapter } from '../flower/envLocalFlowerSurfaceAdapter';
 import { useI18n, type EnvAppTranslationKey, type I18nHelpers } from '../i18n';
 import { useEnvContext } from './EnvContext';
+import { readDesktopSessionContextSnapshot } from '../services/desktopSessionContext';
 import '../flower-feature.css';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 
@@ -34,6 +35,7 @@ export function EnvAIPage() {
   const adapter = createMemo(() => createEnvLocalFlowerSurfaceAdapter({
     envPublicID: trim(env.env_id()),
     envLabel: trim(env.env()?.name) || trim(env.env_id()) || i18n.t('flower.currentEnvironmentFallback'),
+    desktopSessionTargetRoute: readDesktopSessionContextSnapshot()?.target_route,
     rpc,
     copy: {
       currentEnvironment: i18n.t('flowerChat.router.currentEnvSource'),
