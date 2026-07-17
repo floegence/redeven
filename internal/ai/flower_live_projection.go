@@ -2402,17 +2402,6 @@ func messageIDFromRealtime(ev RealtimeEvent) string {
 	}
 }
 
-func messageIDFromJSON(raw json.RawMessage) (string, bool) {
-	var record struct {
-		ID string `json:"id"`
-	}
-	if err := json.Unmarshal(raw, &record); err != nil {
-		return "", false
-	}
-	id := strings.TrimSpace(record.ID)
-	return id, id != ""
-}
-
 func normalizeLiveBlockType(raw string) string {
 	switch strings.TrimSpace(strings.ToLower(raw)) {
 	case "markdown", "text":

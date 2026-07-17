@@ -2316,39 +2316,6 @@ func (r *run) snapshotAssistantMessageJSON() (string, string, int64, error) {
 	return r.snapshotAssistantMessageJSONWithStatus("complete")
 }
 
-func (r *run) assistantPreviewTextSnapshot() (string, int64) {
-	if r == nil {
-		return "", 0
-	}
-	r.muAssistant.Lock()
-	blocks := make([]any, 0, len(r.assistantBlocks))
-	blocks = append(blocks, r.assistantBlocks...)
-	assistantAt := r.assistantCreatedAtUnixMs
-	r.muAssistant.Unlock()
-
-	var sb strings.Builder
-	for _, blk := range blocks {
-		text := assistantVisibleTextFromBlock(blk)
-		if text == "" {
-			continue
-		}
-		if sb.Len() > 0 {
-			sb.WriteString("\n\n")
-		}
-		sb.WriteString(text)
-	}
-	if text := strings.TrimSpace(sb.String()); text != "" {
-		return text, assistantAt
-	}
-	if text := r.canonicalMarkdownTextSnapshot(""); text != "" {
-		return text, assistantAt
-	}
-	if text := r.waitingPromptSummarySnapshot(); text != "" {
-		return text, assistantAt
-	}
-	return "", assistantAt
-}
-
 func assistantVisibleTextFromBlock(block any) string {
 	switch v := block.(type) {
 	case *persistedMarkdownBlock:

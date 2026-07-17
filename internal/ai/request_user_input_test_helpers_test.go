@@ -97,13 +97,3 @@ func seedWaitingUserPrompt(t *testing.T, svc *Service, ctx context.Context, _ *s
 		t.Fatalf("seeded turn status = %q, want waiting", result.Status)
 	}
 }
-
-func testResponseForPrompt(prompt *RequestUserInputPrompt, answers map[string]RequestUserInputAnswer) RequestUserInputResponse {
-	if prompt == nil {
-		return RequestUserInputResponse{}
-	}
-	return RequestUserInputResponse{
-		PromptID: prompt.PromptID,
-		Answers:  answers,
-	}
-}

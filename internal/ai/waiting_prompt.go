@@ -625,18 +625,6 @@ func requestUserInputPromptContainsSecret(prompt RequestUserInputPrompt) bool {
 	return false
 }
 
-func marshalRequestUserInputPrompt(prompt *RequestUserInputPrompt) string {
-	normalized := normalizeRequestUserInputPrompt(prompt)
-	if normalized == nil {
-		return ""
-	}
-	raw, err := json.Marshal(normalized)
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(raw))
-}
-
 func parseRequestUserInputPromptJSON(raw string) *RequestUserInputPrompt {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {

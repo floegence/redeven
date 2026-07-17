@@ -1462,27 +1462,6 @@ func floretRunningProjectionTimeline(runID string, threadID string, turnID strin
 	return timeline
 }
 
-func firstActivityBlockInTimelineMessages(t *testing.T, messages []FlowerTimelineMessage) ActivityTimelineBlock {
-	t.Helper()
-	for _, message := range messages {
-		for _, raw := range message.Blocks {
-			if block, ok := activityTimelineBlockFromValue(raw); ok {
-				return block
-			}
-			b, err := json.Marshal(raw)
-			if err != nil {
-				continue
-			}
-			var decoded ActivityTimelineBlock
-			if err := json.Unmarshal(b, &decoded); err == nil && decoded.Type == activityTimelineBlockType {
-				return decoded
-			}
-		}
-	}
-	t.Fatalf("activity timeline block not found in messages: %#v", messages)
-	return ActivityTimelineBlock{}
-}
-
 func floretProjectionApprovalTimeline(runID string, threadID string, turnID string, toolID string, label string) *observation.ActivityTimeline {
 	timeline := observation.ActivityTimeline{
 		SchemaVersion: observation.ActivityTimelineSchemaVersion,
