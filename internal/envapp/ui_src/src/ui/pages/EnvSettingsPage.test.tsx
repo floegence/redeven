@@ -564,6 +564,11 @@ describe('EnvSettingsPage', () => {
     expect(host.querySelector('[data-settings-nav-item="config"]')?.getAttribute('aria-current')).toBe('page');
     expect(host.querySelector('[data-settings-nav-item="connection"]')?.hasAttribute('aria-current')).toBe(false);
 
+    const settingsSidebar = host.querySelector('.redeven-settings-sidebar');
+    expect(settingsSidebar?.querySelector('[data-icon="Search"]')?.classList.contains('redeven-settings-sidebar-note')).toBe(true);
+    expect(settingsSidebar?.querySelector('[data-settings-group="overview"] span')?.classList.contains('redeven-settings-sidebar-group-label')).toBe(true);
+    expect(settingsSidebar?.querySelector('[data-settings-nav-item="connection"]')?.classList.contains('redeven-settings-sidebar-note')).toBe(true);
+
     expect(host.querySelector('[data-settings-card="Config File"]')).toBeTruthy();
     expect(host.textContent).not.toContain('Language preference');
     expect(host.textContent).not.toContain('System default');

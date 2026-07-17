@@ -155,7 +155,7 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
         <div class="redeven-settings-sidebar hidden md:flex flex-col border-r w-[260px] shrink-0 h-full overflow-hidden">
           <div class="p-3 border-b border-[color-mix(in_srgb,var(--redeven-settings-sidebar-border)_72%,transparent)]">
             <div class="relative">
-              <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground pointer-events-none" />
+              <Search class="redeven-settings-sidebar-note absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 pointer-events-none" />
               <input
                 type="text"
                 value={ctx.searchQuery()}
@@ -166,7 +166,7 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
               <Show when={ctx.searchQuery()}>
                 <button
                   type="button"
-                  class="absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded cursor-pointer text-muted-foreground hover:text-foreground"
+                  class="redeven-settings-sidebar-note absolute right-1.5 top-1/2 -translate-y-1/2 p-0.5 rounded cursor-pointer hover:text-foreground"
                   onClick={() => ctx.setSearchQuery('')}
                 >
                   <X class="h-3 w-3" />
@@ -174,7 +174,7 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
               </Show>
             </div>
             <Show when={ctx.searchQuery()}>
-              <p class="mt-1.5 text-[10px] text-muted-foreground">
+              <p class="redeven-settings-sidebar-note mt-1.5 text-[10px]">
                 {i18n.t('settings.filteredSections', { visible: filteredItems().length, total: SETTINGS_NAV_ITEMS.length })}
               </p>
             </Show>
@@ -190,7 +190,7 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
                   <Show when={groupItems().length > 0}>
                     <div data-settings-group={group.id}>
                       <div class="px-3 pt-3 pb-1">
-                        <span class="text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">{groupTitle(group.id, group.title, i18n.t)}</span>
+                        <span class="redeven-settings-sidebar-group-label text-[10px] font-semibold uppercase tracking-widest text-muted-foreground/70">{groupTitle(group.id, group.title, i18n.t)}</span>
                       </div>
                       <For each={groupItems()}>
                         {(item) => {
@@ -203,7 +203,7 @@ function EnvSettingsPageContent(props: { context?: EnvSettingsPageContextValue }
                                 'redeven-settings-nav-item w-full flex items-center gap-2.5 border-r-2 px-3 py-1.5 text-left text-xs transition-colors cursor-pointer',
                                 isActive()
                                   ? 'redeven-settings-nav-item--active font-medium'
-                                  : 'redeven-settings-note border-transparent',
+                                  : 'redeven-settings-sidebar-note border-transparent',
                               )}
                               onClick={() => sectionSelection.request(item.id)}
                               aria-current={isActive() ? 'page' : undefined}
