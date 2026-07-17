@@ -3,7 +3,7 @@ type: Release Contract
 title: CI and release gates
 description: Redeven release confidence comes from README localization checks, shell checks, OKF validation, UI checks, ReDevPlugin integration gates, assets, Go tests, and lint.
 tags: [release, ci, quality, okf]
-timestamp: 2026-07-16T00:00:00Z
+timestamp: 2026-07-17T00:00:00Z
 ---
 
 Redeven keeps CI and local release checks aligned around source validation,
@@ -27,6 +27,17 @@ directories. Before the Flower UI gate, CI installs the lockfile-selected
 Playwright Chromium runtime and its Linux dependencies so the committed browser
 contract runs on a fresh GitHub runner instead of depending on a pre-populated
 browser cache.
+
+Local validation is staged to keep iteration fast without weakening integration
+evidence. Feature work uses focused checks while implementation, reviews,
+generated artifacts, or further upstream synchronization are still pending. The
+applicable full repository or product gate runs only after the branch has been
+rebased onto the latest `origin/main` and is intended to be the final integration
+tip. Immediately before integration, the developer fetches `origin` again; if
+`origin/main` moved, the feature is rebased and the full gate is rerun because
+the previously tested commit is no longer the final tip. Conflict resolutions
+and overlapping upstream changes also receive focused checks before that final
+full gate.
 
 The canonical English `README.md` and every product-supported
 `README.<locale>.md` are bound by `assets/readme/locales.json`. The lightweight
@@ -142,6 +153,12 @@ Unreleased Floret behavior is likewise not a valid Redeven integration target.
 Flower lifecycle fixes that belong to Floret must ship as a published
 `github.com/floegence/floret` release before Redeven consumes them.
 
+A full local quality gate is integration evidence for one exact rebased commit,
+not a background check to repeat after every intermediate edit or sync. Focused
+checks provide iteration feedback; only the final rebased integration candidate
+needs the complete applicable gate. If that commit changes, its prior full-gate
+result does not transfer to the new tip.
+
 # Citations
 
 [1] redeven:.github/workflows/ci-check.yml:14 - CI defines a dedicated OKF bundle check job.
@@ -151,7 +168,7 @@ Flower lifecycle fixes that belong to Floret must ship as a published
 [5] redeven:.github/workflows/ci-check.yml:109 - CI runs the ReDevPlugin integration gate after embedded assets are generated.
 [6] redeven:.github/workflows/ci-check.yml:116 - CI runs the Floret dependency boundary guard before Flower protocol and UI checks.
 [7] redeven:.github/workflows/ci-check.yml:122 - CI installs the lockfile-selected Playwright Chromium runtime before Flower UI browser contracts.
-[8] redeven:AGENTS.md:736 - Repository local quality gates include README review enforcement, OKF integrity, dist verification, assets, Go tests, and golangci-lint.
+[8] redeven:AGENTS.md:773 - Repository local quality gates include README review enforcement, OKF integrity, dist verification, assets, Go tests, and golangci-lint.
 [9] redeven:scripts/check_redevplugin_dependency_boundary.sh:1 - The local boundary script rejects local ReDevPlugin wiring and copied platform-core paths.
 [10] redeven:scripts/check_floret_dependency_boundary.sh:1 - The Floret boundary script rejects local Floret wiring, internal imports, and direct schema access.
 [11] redeven:scripts/check_plugin_integration.sh:44 - The integration gate requires embedded UI asset directories before Go embed tests.
@@ -169,4 +186,5 @@ Flower lifecycle fixes that belong to Floret must ship as a published
 [23] redeven:.github/workflows/ci-check.yml:52 - CI runs README localization unit tests and requires completed locale-review subagent approvals.
 [24] redeven:scripts/check_readme_localizations.mjs:1 - The README contract validates structure, links, literals, hashes, language quality, and review state.
 [25] redeven:assets/readme/locales.json:1 - The README locale manifest declares language order, file mappings, review hashes, and the shared visual exception.
-[26] redeven:AGENTS.md:201 - Repository rules define English canonical ownership and the README locale-review subagent gate.
+[26] redeven:AGENTS.md:227 - Repository rules define English canonical ownership and the README locale-review subagent gate.
+[27] redeven:AGENTS.md:86 - Repository validation uses focused checks during iteration and reserves the full integration gate for the final rebased tip.
