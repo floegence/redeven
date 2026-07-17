@@ -3,7 +3,7 @@ type: Security Contract
 title: Local UI network exposure
 description: Explicit plaintext Local UI exposure requires fixed IP binding, password authentication, and bind-scoped risk acknowledgement.
 tags: [security, local-ui, desktop, env-app, flowersec]
-timestamp: 2026-07-16T00:00:00Z
+timestamp: 2026-07-17T00:00:00Z
 ---
 
 Redeven supports direct Local UI access from another machine only as an explicit plaintext network exposure mode. Loopback remains the default. Network exposure is never inferred, migrated, downgraded, or enabled by an environment-variable acknowledgement.
@@ -18,7 +18,7 @@ Wildcard binds enumerate active same-family interface addresses after the listen
 
 The public listener accepts only exact canonical IP authorities created from the bound or enumerated addresses and actual port. It rejects DNS names, wildcard authorities, userinfo, paths, malformed or noncanonical ports, zones, mapped IPv6, and unlisted IPs before routing. Browser Direct WebSocket requests require exact request scheme and authority equality with Origin. Direct WebSocket URLs are built only from the validated request authority.
 
-Trusted Desktop, SSH, and container bridge traffic enters through a separate handler that accepts canonical loopback authorities only. Runtime-control, Desktop model-source, and runtime management sockets remain loopback, token, owner, or local-socket protected and are not widened by Local UI exposure.
+Trusted Desktop, SSH, and container traffic enters through an independent `127.0.0.1:0` listener that mounts the trusted bridge handler and accepts canonical loopback authorities only. Its required attach URL is machine-only and never joins public display or exposure projections. SSH and container placement bridges execute `redeven desktop-bridge` and stream through that listener; they never forward the public Local UI port, rewrite Host, retry through the public URL, or select a compatibility transport. Runtime-control, Desktop model-source, and runtime management sockets remain loopback, token, owner, or local-socket protected and are not widened by Local UI exposure.
 
 # Security Meaning
 
@@ -41,3 +41,5 @@ Desktop shows a persistent warning while network exposure is active. Desktop rev
 [9] redeven:internal/envapp/ui_src/src/ui/security/networkExposureWarningPreference.ts:1 - Env App stores only a versioned renderer-scoped warning suppression preference and fails open on invalid data.
 [10] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:3200 - Env App renders the warning, details, current-mount close, and persistent do-not-remind actions.
 [11] redeven:internal/config/catalog.go:117 - Runtime catalog writeback preserves exact startup acknowledgement instead of dropping it after restart.
+[12] redeven:cmd/redeven/desktop_bridge.go:42 - `desktop-bridge` dials only the required trusted Local UI bridge URL.
+[13] redeven:internal/desktopbridge/server.go:205 - Trusted bridge URL validation admits only root-path HTTP loopback endpoints.
