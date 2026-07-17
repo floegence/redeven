@@ -47,8 +47,10 @@ export type DesktopAccessDraftModel = Readonly<{
   next_start_address_detail_key: 'settings.localOnlyAddressDetail' | 'settings.sharedAddressDetail' | 'settings.customLoopbackDetail' | 'settings.customBindDetail' | 'settings.autoLoopbackAddressDetail';
   password_required: boolean;
   password_configured: boolean;
+  password_requirement_satisfied: boolean;
   network_exposure: boolean;
   network_exposure_acknowledged: boolean;
+  network_exposure_review_required: boolean;
   password_state_id: DesktopPasswordStateID;
   password_state_tone: 'default' | 'warning' | 'success';
   current_runtime_url: string;
@@ -283,6 +285,8 @@ export function deriveDesktopAccessDraftModel(
   const addressDisplay = nextStartAddressDisplay(accessMode, bindHost, portMode, fixedPort, bindRaw);
   const password = passwordState(accessMode, bindHost, draft, options);
   const networkExposure = !isLoopbackHost(bindHost);
+  const networkExposureAcknowledged = networkExposure
+    && trimString(draft.plaintext_network_exposure_acknowledgement_bind) === bindRaw;
 
   return {
     access_mode: accessMode,
@@ -295,9 +299,10 @@ export function deriveDesktopAccessDraftModel(
     next_start_address_detail_key: addressDisplay.detailKey,
     password_required: password.required,
     password_configured: password.configured,
+    password_requirement_satisfied: !password.required || password.configured,
     network_exposure: networkExposure,
-    network_exposure_acknowledged: networkExposure
-      && trimString(draft.plaintext_network_exposure_acknowledgement_bind) === bindRaw,
+    network_exposure_acknowledged: networkExposureAcknowledged,
+    network_exposure_review_required: networkExposure && !networkExposureAcknowledged,
     password_state_id: password.id,
     password_state_tone: password.tone,
     current_runtime_url: trimString(options.current_runtime_url),

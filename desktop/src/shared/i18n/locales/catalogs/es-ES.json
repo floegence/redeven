@@ -470,6 +470,7 @@
   "common": {
     "open": "Abrir",
     "back": "Atrás",
+    "next": "Siguiente",
     "save": "Guardar",
     "cancel": "Cancelar",
     "delete": "Eliminar",
@@ -545,7 +546,11 @@
     "passwordNeeded": "Contraseña requerida",
     "optional": "Opcional",
     "chooseEnvironmentFirst": "Elija un entorno primero.",
+    "settingsStepsLabel": "Pasos de configuración del entorno local",
+    "configureAccessStep": "Configuración",
+    "securityReviewStep": "Revisión de seguridad",
     "settingsWindowTitle": "Ajustes de {label}",
+    "saveSettings": "Guardar ajustes",
     "saveEnvironmentSettings": "Guardar ajustes de {label}",
     "saveAndRestart": "Guardar y reiniciar",
     "saveAndRestartEnvironmentSettings": "Guardar los ajustes de {label} y reiniciar el tiempo de ejecución",
@@ -561,8 +566,9 @@
     "localUIPasswordKeepHelp": "Desktop guarda este secreto localmente y lo envía por un canal stdin de inicio no interactivo. Déjalo en blanco para conservar la contraseña guardada actual.",
     "localUIPasswordRuntimeRequiredHelp": "Desktop almacena este secreto localmente y lo reenvía a través de un canal de inicio stdin no interactivo. El tiempo de ejecución actual está protegido, pero Desktop no tiene una contraseña almacenada lista para reutilizar. Ingréselo aquí para guardarlo para el próximo inicio administrado por escritorio.",
     "localUIPasswordReplacePlaceholder": "Introduce una nueva contraseña para sustituir la guardada",
-    "plaintextNetworkExposureTitle": "Exposición de red con HTTP sin cifrar",
-    "plaintextNetworkExposureSummary": "La autenticación mediante contraseña solo controla el acceso; el tráfico HTTP no está cifrado. Úsalo solo en una red de confianza.",
+    "sharedPasswordRequired": "El acceso compartido en la red local requiere una contraseña de acceso.",
+    "plaintextNetworkExposureTitle": "Expuesto en la red local",
+    "plaintextNetworkExposureSummary": "El acceso requiere una contraseña, pero el tráfico HTTP no está cifrado. Utilice esta opción solo en una red de confianza.",
     "reviewExposure": "Revisar exposición",
     "reviewPlaintextExposureTitle": "Revisar acceso de red con HTTP sin cifrar",
     "reviewPlaintextExposureDescription": "Confirma la dirección de escucha exacta y el perímetro de seguridad antes de que este entorno local pueda iniciarse en la red.",
@@ -576,7 +582,11 @@
     "passwordEnabled": "Contraseña habilitada (solo control de acceso)",
     "plaintextExposureBoundary": "La contraseña, las cookies, los recursos de la página y el tráfico HTTP no protegido por Flowersec pueden ser interceptados o modificados. El cifrado de extremo a extremo (E2EE) de Flowersec solo comienza una vez completado el handshake.",
     "acceptPlaintextExposureRisk": "Entiendo que esto expone tráfico HTTP sin cifrar y lo usaré solo en una red de confianza.",
-    "enablePlaintextNetworkAccess": "Habilitar acceso de red con HTTP sin cifrar"
+    "enablePlaintextNetworkAccess": "Habilitar acceso de red con HTTP sin cifrar",
+    "applyTimingTitle": "Cuándo se aplicarán los cambios",
+    "applyTimingHelp": "Reiniciar ahora interrumpirá las conexiones activas al entorno.",
+    "applyNextStart": "En el próximo inicio",
+    "applyRestartNow": "Reiniciar ahora"
   },
   "shell": {
     "accessibility": {

@@ -470,6 +470,7 @@
   "common": {
     "open": "열기",
     "back": "뒤로",
+    "next": "다음",
     "save": "저장",
     "cancel": "취소",
     "delete": "삭제",
@@ -545,7 +546,11 @@
     "passwordNeeded": "비밀번호 필요",
     "optional": "선택 사항",
     "chooseEnvironmentFirst": "먼저 환경을 선택하세요.",
+    "settingsStepsLabel": "로컬 환경 설정 단계",
+    "configureAccessStep": "설정",
+    "securityReviewStep": "보안 확인",
     "settingsWindowTitle": "{label} 설정",
+    "saveSettings": "설정 저장",
     "saveEnvironmentSettings": "{label} 설정 저장",
     "saveAndRestart": "저장 후 다시 시작",
     "saveAndRestartEnvironmentSettings": "{label} 설정을 저장하고 런타임을 다시 시작",
@@ -561,8 +566,9 @@
     "localUIPasswordKeepHelp": "Desktop은 이 시크릿을 로컬에 저장하고 비대화형 stdin 시작 채널로 전달합니다. 비워 두면 현재 저장된 비밀번호가 유지됩니다.",
     "localUIPasswordRuntimeRequiredHelp": "Desktop는 이 비밀을 로컬에 저장하고 비대화형 stdin 시작 채널을 통해 전달합니다. 현재 런타임은 보호되어 있지만 Desktop에는 재사용할 수 있는 저장된 비밀번호가 없습니다. 다음에 데스크톱 관리 시작을 위해 저장하려면 여기에 입력하세요.",
     "localUIPasswordReplacePlaceholder": "저장된 비밀번호를 대체할 새 비밀번호 입력",
-    "plaintextNetworkExposureTitle": "평문 HTTP 네트워크 노출",
-    "plaintextNetworkExposureSummary": "비밀번호는 접근만 통제하며 HTTP 트래픽은 암호화되지 않습니다. 신뢰할 수 있는 네트워크에서만 사용하세요.",
+    "sharedPasswordRequired": "로컬 네트워크에 공유하려면 액세스 비밀번호를 설정해야 합니다.",
+    "plaintextNetworkExposureTitle": "로컬 네트워크에 공개됨",
+    "plaintextNetworkExposureSummary": "액세스하려면 비밀번호가 필요하지만 HTTP 트래픽은 암호화되지 않습니다. 신뢰할 수 있는 네트워크에서만 사용하세요.",
     "reviewExposure": "노출 검토",
     "reviewPlaintextExposureTitle": "평문 HTTP 네트워크 접근 검토",
     "reviewPlaintextExposureDescription": "이 로컬 환경을 네트워크에서 시작하기 전에 정확한 수신 대기 주소와 보안 경계를 확인하세요.",
@@ -576,7 +582,11 @@
     "passwordEnabled": "비밀번호 사용",
     "plaintextExposureBoundary": "비밀번호, 쿠키, 페이지 리소스와 Flowersec으로 보호되지 않는 HTTP 트래픽은 공격자가 가로채거나 변조할 수 있습니다. Flowersec 종단 간 암호화(E2EE)는 핸드셰이크가 완료된 뒤에만 시작됩니다.",
     "acceptPlaintextExposureRisk": "평문 HTTP 트래픽이 네트워크에 노출된다는 점을 이해했으며 신뢰할 수 있는 네트워크에서만 사용하겠습니다.",
-    "enablePlaintextNetworkAccess": "평문 HTTP 네트워크 접근 활성화"
+    "enablePlaintextNetworkAccess": "평문 HTTP 네트워크 접근 활성화",
+    "applyTimingTitle": "적용 시점",
+    "applyTimingHelp": "지금 다시 시작하면 활성 환경 연결이 중단됩니다.",
+    "applyNextStart": "다음 시작 시 적용",
+    "applyRestartNow": "지금 다시 시작"
   },
   "shell": {
     "accessibility": {

@@ -13027,6 +13027,75 @@ function SettingsSectionHeader(props: Readonly<{
   );
 }
 
+type DesktopSettingsApplyTiming = 'next_start' | 'restart_now';
+
+function SettingsFlowIndicator(props: Readonly<{
+  step: 'edit' | 'review';
+  i18n: DesktopI18n;
+}>) {
+  const reviewActive = createMemo(() => props.step === 'review');
+  return (
+    <nav aria-label={props.i18n.t('settings.settingsStepsLabel')}>
+      <ol class="flex items-center gap-2 text-xs font-medium">
+        <li class="flex min-w-0 items-center gap-2 text-foreground">
+          <span class={cn(
+            'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px]',
+            reviewActive()
+              ? 'border-success/40 bg-success/10 text-success'
+              : 'border-primary bg-primary text-primary-foreground',
+          )}>
+            <Show when={reviewActive()} fallback="1">
+              <Check class="h-3 w-3" />
+            </Show>
+          </span>
+          <span class="truncate">{props.i18n.t('settings.configureAccessStep')}</span>
+        </li>
+        <li aria-hidden="true" class="h-px min-w-6 flex-1 bg-border" />
+        <li class={cn(
+          'flex min-w-0 items-center gap-2',
+          reviewActive() ? 'text-foreground' : 'text-muted-foreground',
+        )}>
+          <span class={cn(
+            'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px]',
+            reviewActive()
+              ? 'border-primary bg-primary text-primary-foreground'
+              : 'border-border bg-background',
+          )}>
+            2
+          </span>
+          <span class="truncate">{props.i18n.t('settings.securityReviewStep')}</span>
+        </li>
+      </ol>
+    </nav>
+  );
+}
+
+function SettingsApplyTimingControl(props: Readonly<{
+  value: DesktopSettingsApplyTiming;
+  onChange: (value: DesktopSettingsApplyTiming) => void;
+  i18n: DesktopI18n;
+}>) {
+  return (
+    <div class="grid gap-3 border-t border-border pt-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+      <div class="min-w-0">
+        <div class="text-xs font-medium text-foreground">{props.i18n.t('settings.applyTimingTitle')}</div>
+        <div class="mt-1 text-[11px] leading-5 text-muted-foreground">{props.i18n.t('settings.applyTimingHelp')}</div>
+      </div>
+      <div class="min-w-0 sm:min-w-[15rem]">
+        <SegmentedControl
+          value={props.value}
+          onChange={(value) => props.onChange(value as DesktopSettingsApplyTiming)}
+          options={[
+            { value: 'next_start', label: props.i18n.t('settings.applyNextStart') },
+            { value: 'restart_now', label: props.i18n.t('settings.applyRestartNow') },
+          ]}
+          size="sm"
+        />
+      </div>
+    </div>
+  );
+}
+
 function LocalEnvironmentSettingsDialog(props: Readonly<{
   open: boolean;
   snapshot: DesktopSettingsSurfaceSnapshot;
@@ -13051,6 +13120,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
   const [accessModeOverride, setAccessModeOverride] = createSignal<DesktopAccessMode | null>(null);
   const [step, setStep] = createSignal<'edit' | 'review'>('edit');
   const [riskAccepted, setRiskAccepted] = createSignal(false);
+  const [applyTiming, setApplyTiming] = createSignal<DesktopSettingsApplyTiming>('next_start');
   const accessModelOptions = createMemo(() => ({
     current_runtime_url: props.snapshot.current_runtime_url,
     local_ui_password_configured: props.baselineSnapshot.local_ui_password_configured,
@@ -13077,14 +13147,17 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
     && !accessModel().password_required
   ));
   let previousBaselineKey = '';
+  let passwordRequirementWasMissing = false;
   let reviewHeadingRef: HTMLHeadingElement | undefined;
   let reviewTriggerRef: HTMLButtonElement | undefined;
+  let passwordInputRef: HTMLInputElement | undefined;
 
   createEffect(() => {
     if (!props.open) {
       setAccessModeOverride(null);
       setStep('edit');
       setRiskAccepted(false);
+      setApplyTiming('next_start');
     }
   });
 
@@ -13102,6 +13175,7 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
       setAccessModeOverride(null);
       setStep('edit');
       setRiskAccepted(false);
+      setApplyTiming('next_start');
     }
     previousBaselineKey = baselineKey;
   });
@@ -13109,14 +13183,13 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
   // See ConnectionDialog: memoize the open boolean so that identity churn
   // upstream never re-triggers the overlay-mask focus trap mid-typing.
   const isOpen = createMemo(() => props.open);
-  const primaryActionNeedsReview = createMemo(() => (
-    accessModel().network_exposure && !accessModel().network_exposure_acknowledged
-  ));
+  const primaryActionNeedsReview = createMemo(() => accessModel().network_exposure_review_required);
   const restartRequired = createMemo(() => (
     primaryActionNeedsReview()
     || desktopSettingsDraftRequiresRuntimeRestart(props.baselineSnapshot.draft, props.draft)
   ));
-  const showRestartAction = createMemo(() => props.runtimeRestartAvailable && restartRequired());
+  const showApplyTimingChoice = createMemo(() => props.runtimeRestartAvailable && restartRequired());
+  const restartAfterSave = createMemo(() => showApplyTimingChoice() && applyTiming() === 'restart_now');
   const reachableInterfaces = createMemo(() => {
     const host = accessModel().bind_host;
     if (host === '0.0.0.0') {
@@ -13126,6 +13199,17 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
       return props.i18n.t('settings.allActiveIPv6Interfaces');
     }
     return props.i18n.t('settings.interfaceForAddress', { address: host });
+  });
+
+  createEffect(() => {
+    const passwordRequirementMissing = props.open
+      && step() === 'edit'
+      && accessModel().password_required
+      && !accessModel().password_requirement_satisfied;
+    if (passwordRequirementMissing && !passwordRequirementWasMissing) {
+      queueMicrotask(() => passwordInputRef?.focus());
+    }
+    passwordRequirementWasMissing = passwordRequirementMissing;
   });
 
   function beginReview(): void {
@@ -13158,33 +13242,20 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                 <Button size="sm" variant="outline" onClick={props.cancelSettings}>
                   {props.i18n.t('common.cancel')}
                 </Button>
-                <Show when={showRestartAction()}>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    loading={busyStateMatchesAction(props.busyState, 'save_settings')}
-                    aria-label={settingsSaveLabel()}
-                    title={settingsSaveLabel()}
-                    onClick={() => {
-                      void props.saveSettings();
-                    }}
-                  >
-                    {props.i18n.t('common.save')}
-                  </Button>
-                </Show>
                 <Button
                   ref={reviewTriggerRef}
                   size="sm"
                   variant="default"
+                  disabled={!accessModel().password_requirement_satisfied}
                   loading={busyStateMatchesAction(props.busyState, 'save_settings')}
                   aria-label={primaryActionNeedsReview()
-                    ? props.i18n.t('settings.reviewExposure')
-                    : showRestartAction()
+                    ? props.i18n.t('settings.reviewPlaintextExposureTitle')
+                    : restartAfterSave()
                       ? props.i18n.t('settings.saveAndRestartEnvironmentSettings', { label: settingsEnvironmentLabel() })
                       : settingsSaveLabel()}
                   title={primaryActionNeedsReview()
-                    ? props.i18n.t('settings.reviewExposure')
-                    : showRestartAction()
+                    ? props.i18n.t('settings.reviewPlaintextExposureTitle')
+                    : restartAfterSave()
                       ? props.i18n.t('settings.saveAndRestartEnvironmentSettings', { label: settingsEnvironmentLabel() })
                       : settingsSaveLabel()}
                   onClick={() => {
@@ -13192,17 +13263,20 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                       beginReview();
                       return;
                     }
-                    void props.saveSettings({ restartRuntime: showRestartAction() });
+                    void props.saveSettings({ restartRuntime: restartAfterSave() });
                   }}
                 >
-                  <Show when={!primaryActionNeedsReview() && showRestartAction()}>
+                  <Show when={!primaryActionNeedsReview() && restartAfterSave()}>
                     <Refresh class="mr-1.5 h-3.5 w-3.5" />
                   </Show>
                   {primaryActionNeedsReview()
-                    ? props.i18n.t('settings.reviewExposure')
-                    : showRestartAction()
+                    ? props.i18n.t('common.next')
+                    : restartAfterSave()
                       ? props.i18n.t('settings.saveAndRestart')
-                      : props.i18n.t('common.save')}
+                      : props.i18n.t('settings.saveSettings')}
+                  <Show when={primaryActionNeedsReview()}>
+                    <ChevronRight class="ml-1 h-3.5 w-3.5" />
+                  </Show>
                 </Button>
               </>
             )}
@@ -13211,46 +13285,37 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
               <ArrowLeft class="mr-1.5 h-3.5 w-3.5" />
               {props.i18n.t('common.back')}
             </Button>
-            <Show when={showRestartAction()}>
-              <Button
-                size="sm"
-                variant="outline"
-                disabled={!riskAccepted() || !accessModel().password_configured}
-                loading={busyStateMatchesAction(props.busyState, 'save_settings')}
-                onClick={() => {
-                  void props.saveSettings({ acknowledgedBind: props.draft.local_ui_bind });
-                }}
-              >
-                {props.i18n.t('settings.enablePlaintextNetworkAccess')}
-              </Button>
-            </Show>
             <Button
               size="sm"
               variant="default"
-              disabled={!riskAccepted() || !accessModel().password_configured}
+              disabled={!riskAccepted() || !accessModel().password_requirement_satisfied}
               loading={busyStateMatchesAction(props.busyState, 'save_settings')}
               onClick={() => {
                 void props.saveSettings({
                   acknowledgedBind: props.draft.local_ui_bind,
-                  restartRuntime: showRestartAction(),
+                  restartRuntime: restartAfterSave(),
                 });
               }}
             >
-              <Show when={showRestartAction()}>
+              <Show when={restartAfterSave()}>
                 <Refresh class="mr-1.5 h-3.5 w-3.5" />
               </Show>
-              {showRestartAction()
+              {restartAfterSave()
                 ? props.i18n.t('settings.saveAndRestart')
-                : props.i18n.t('settings.enablePlaintextNetworkAccess')}
+                : props.i18n.t('settings.saveSettings')}
             </Button>
           </Show>
         </div>
       )}
     >
-      <Show
-        when={step() === 'review'}
-        fallback={(
-          <div class="space-y-6">
+      <div class="space-y-5">
+        <Show when={primaryActionNeedsReview()}>
+          <SettingsFlowIndicator step={step()} i18n={props.i18n} />
+        </Show>
+        <Show
+          when={step() === 'review'}
+          fallback={(
+            <div class="space-y-6">
             <div class="redeven-settings-statusbar overflow-hidden rounded-md border border-border">
               <div class="grid divide-y divide-border sm:grid-cols-[1fr_auto_1fr] sm:divide-x sm:divide-y-0">
                 <div class="flex items-start gap-3 px-4 py-3">
@@ -13305,16 +13370,9 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
               </div>
             </div>
 
-            <div class="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{props.i18n.t('settings.accessSecurityTitle')}</div>
-                <div class="mt-1 text-sm text-foreground">{props.i18n.t('settings.accessSecurityDescription')}</div>
-              </div>
-              <div class="flex flex-wrap items-center gap-1.5">
-                <Tag variant={passwordStateTagVariant(accessModel().password_state_tone)} tone="soft" size="sm" class="cursor-default whitespace-nowrap">
-                  {compactLocalizedPasswordStateTagLabel(props.i18n, accessModel().password_state_id)}
-                </Tag>
-              </div>
+            <div>
+              <div class="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">{props.i18n.t('settings.accessSecurityTitle')}</div>
+              <div class="mt-1 text-sm text-foreground">{props.i18n.t('settings.accessSecurityDescription')}</div>
             </div>
 
             <div class="space-y-6">
@@ -13456,9 +13514,12 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                             draft={props.draft}
                             passwordStateID={accessModel().password_state_id}
                             passwordStateTone={accessModel().password_state_tone}
+                            passwordRequired={accessModel().password_required}
+                            passwordInvalid={!accessModel().password_requirement_satisfied}
                             localUIPasswordCanClear={localUIPasswordCanClear()}
                             updateDraftField={props.updateDraftField}
                             clearStoredLocalUIPassword={props.clearStoredLocalUIPassword}
+                            inputRef={(value) => { passwordInputRef = value; }}
                             sectionTitle={protectionCardTitle()}
                             i18n={props.i18n}
                           />
@@ -13478,6 +13539,14 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
 
             </div>
 
+            <Show when={!primaryActionNeedsReview() && showApplyTimingChoice()}>
+              <SettingsApplyTimingControl
+                value={applyTiming()}
+                onChange={setApplyTiming}
+                i18n={props.i18n}
+              />
+            </Show>
+
             <Show when={props.settingsError}>
               <div
                 ref={props.settingsErrorRef}
@@ -13489,10 +13558,10 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
                 {props.settingsError}
               </div>
             </Show>
-          </div>
-        )}
-      >
-        <div class="space-y-5">
+            </div>
+          )}
+        >
+          <div class="space-y-5">
           <div class="flex items-start gap-3 border-b border-border pb-4">
             <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-warning/30 bg-warning/10 text-warning">
               <AlertTriangle class="h-4 w-4" />
@@ -13511,7 +13580,10 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
             <dt class="text-muted-foreground">{props.i18n.t('settings.transportLabel')}</dt>
             <dd class="text-foreground">{props.i18n.t('settings.httpNoTLS')}</dd>
             <dt class="text-muted-foreground">{props.i18n.t('settings.authenticationLabel')}</dt>
-            <dd class="flex items-center gap-1.5 text-foreground"><Shield class="h-3.5 w-3.5 text-success" />{props.i18n.t('settings.passwordEnabled')}</dd>
+            <dd class="flex items-center gap-1.5 text-foreground">
+              <Shield class="h-3.5 w-3.5 text-success" />
+              {compactLocalizedPasswordStateTagLabel(props.i18n, accessModel().password_state_id)}
+            </dd>
           </dl>
 
           <div class="rounded-md border border-warning/30 bg-warning/10 px-4 py-3 text-xs leading-5 text-muted-foreground">
@@ -13525,13 +13597,22 @@ function LocalEnvironmentSettingsDialog(props: Readonly<{
             size="sm"
           />
 
+          <Show when={showApplyTimingChoice()}>
+            <SettingsApplyTimingControl
+              value={applyTiming()}
+              onChange={setApplyTiming}
+              i18n={props.i18n}
+            />
+          </Show>
+
           <Show when={props.settingsError}>
             <div ref={props.settingsErrorRef} tabIndex={-1} role="alert" class="rounded-md border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive outline-none">
               {props.settingsError}
             </div>
           </Show>
-        </div>
-      </Show>
+          </div>
+        </Show>
+      </div>
     </Dialog>
   );
 }
@@ -15680,9 +15761,12 @@ function LocalUIPasswordField(props: Readonly<{
   i18n: DesktopI18n;
   passwordStateID: DesktopSettingsSurfaceSnapshot['password_state_id'];
   passwordStateTone: DesktopSettingsSurfaceSnapshot['password_state_tone'];
+  passwordRequired: boolean;
+  passwordInvalid: boolean;
   localUIPasswordCanClear: boolean;
   updateDraftField: (name: keyof DesktopSettingsDraft, value: string) => void;
   clearStoredLocalUIPassword: () => void;
+  inputRef?: (value: HTMLInputElement) => void;
   sectionTitle?: string;
 }>) {
   return (
@@ -15708,6 +15792,11 @@ function LocalUIPasswordField(props: Readonly<{
         updateDraftField={props.updateDraftField}
         sectionTitle={props.sectionTitle}
         i18n={props.i18n}
+        required={props.passwordRequired}
+        invalid={props.passwordInvalid}
+        errorId="local-ui-password-required-error"
+        errorMessage={props.passwordInvalid ? props.i18n.t('settings.sharedPasswordRequired') : ''}
+        inputRef={props.inputRef}
       />
       <Show when={props.localUIPasswordCanClear}>
         <div class="flex justify-end">
@@ -15730,6 +15819,11 @@ function SettingsFieldInput(props: Readonly<{
   updateDraftField: (name: keyof DesktopSettingsDraft, value: string) => void;
   i18n: DesktopI18n;
   sectionTitle?: string;
+  required?: boolean;
+  invalid?: boolean;
+  errorId?: string;
+  errorMessage?: string;
+  inputRef?: (value: HTMLInputElement) => void;
 }>) {
   const compactLabel = createMemo(() => compactLocalizedSettingsFieldLabel(props.i18n, props.field));
   const helpText = createMemo(() => localizedSettingsFieldHelp(props.i18n, props.field));
@@ -15742,6 +15836,9 @@ function SettingsFieldInput(props: Readonly<{
       }
       return true;
     });
+    if (props.errorId && trimString(props.errorMessage) !== '') {
+      values.push(props.errorId);
+    }
     return values.length > 0 ? values.join(' ') : undefined;
   });
 
@@ -15757,6 +15854,7 @@ function SettingsFieldInput(props: Readonly<{
         </div>
       </Show>
       <Input
+        ref={props.inputRef}
         id={props.field.id}
         name={props.field.name}
         value={props.value}
@@ -15766,11 +15864,22 @@ function SettingsFieldInput(props: Readonly<{
         placeholder={placeholderText()}
         spellcheck={false}
         aria-describedby={describedBy()}
+        aria-invalid={props.invalid || undefined}
+        required={props.required}
         aria-label={showVisibleLabel() ? undefined : compactLabel()}
         size="sm"
-        class="w-full"
+        class={cn(
+          'w-full',
+          props.invalid && 'border-destructive focus:border-destructive focus:ring-destructive/20',
+        )}
         onInput={(event) => props.updateDraftField(props.field.name, event.currentTarget.value)}
       />
+      <Show when={props.errorId && trimString(props.errorMessage) !== ''}>
+        <div id={props.errorId} role="alert" class="flex items-start gap-1.5 text-[11px] leading-5 text-destructive">
+          <AlertCircle class="mt-0.5 h-3.5 w-3.5 shrink-0" />
+          <span>{props.errorMessage}</span>
+        </div>
+      </Show>
       <Show when={helpText() !== '' && props.field.helpId}>
         <div id={props.field.helpId!} class="sr-only">{helpText()}</div>
       </Show>

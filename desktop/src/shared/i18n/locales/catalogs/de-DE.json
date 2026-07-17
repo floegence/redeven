@@ -470,6 +470,7 @@
   "common": {
     "open": "Öffnen",
     "back": "Zurück",
+    "next": "Weiter",
     "save": "Speichern",
     "cancel": "Abbrechen",
     "delete": "Löschen",
@@ -545,7 +546,11 @@
     "passwordNeeded": "Passwort nötig",
     "optional": "Optional",
     "chooseEnvironmentFirst": "Wählen Sie zuerst eine Umgebung.",
+    "settingsStepsLabel": "Schritte für die Einstellungen der lokalen Umgebung",
+    "configureAccessStep": "Einstellungen",
+    "securityReviewStep": "Sicherheitsprüfung",
     "settingsWindowTitle": "{label} Einstellungen",
+    "saveSettings": "Einstellungen speichern",
     "saveEnvironmentSettings": "{label} Einstellungen speichern",
     "saveAndRestart": "Speichern und neu starten",
     "saveAndRestartEnvironmentSettings": "Einstellungen für „{label}“ speichern und die Laufzeit neu starten",
@@ -561,8 +566,9 @@
     "localUIPasswordKeepHelp": "Desktop speichert dieses Geheimnis lokal und leitet es über einen nicht interaktiven stdin-Startkanal weiter. Leer lassen, um das aktuell gespeicherte Passwort beizubehalten.",
     "localUIPasswordRuntimeRequiredHelp": "Desktop speichert dieses Geheimnis lokal und leitet es über einen nicht interaktiven stdin-Startkanal weiter. Die aktuelle Ausführungsumgebung ist geschützt, aber Desktop verfügt nicht über ein gespeichertes Passwort, das wiederverwendet werden kann. Geben Sie es hier ein, um es für den nächsten Desktop-verwalteten Start zu speichern.",
     "localUIPasswordReplacePlaceholder": "Neues Passwort eingeben, um das gespeicherte zu ersetzen",
-    "plaintextNetworkExposureTitle": "Unverschlüsselter Netzwerkzugriff",
-    "plaintextNetworkExposureSummary": "Der Passwortschutz ist aktiv, aber der HTTP-Datenverkehr ist unverschlüsselt. Nur in einem vertrauenswürdigen Netzwerk verwenden.",
+    "sharedPasswordRequired": "Für die Freigabe im lokalen Netzwerk ist ein Zugriffspasswort erforderlich.",
+    "plaintextNetworkExposureTitle": "Im lokalen Netzwerk freigegeben",
+    "plaintextNetworkExposureSummary": "Für den Zugriff ist ein Passwort erforderlich, aber der HTTP-Datenverkehr ist nicht verschlüsselt. Nur in einem vertrauenswürdigen Netzwerk verwenden.",
     "reviewExposure": "Freigabe prüfen",
     "reviewPlaintextExposureTitle": "Unverschlüsselten Netzwerkzugriff prüfen",
     "reviewPlaintextExposureDescription": "Prüfen Sie Listener und Sicherheitsgrenze, bevor diese lokale Umgebung im Netzwerk starten kann.",
@@ -576,7 +582,11 @@
     "passwordEnabled": "Passwort aktiviert",
     "plaintextExposureBoundary": "Passwort, Cookies, Seitenressourcen und nicht durch Flowersec geschützter HTTP-Datenverkehr können abgefangen oder verändert werden. Flowersec E2EE beginnt erst nach Abschluss des Handshakes.",
     "acceptPlaintextExposureRisk": "Mir ist bewusst, dass dadurch HTTP-Datenverkehr unverschlüsselt offengelegt wird. Ich verwende dies nur in einem vertrauenswürdigen Netzwerk.",
-    "enablePlaintextNetworkAccess": "Unverschlüsselten Netzwerkzugriff aktivieren"
+    "enablePlaintextNetworkAccess": "Unverschlüsselten Netzwerkzugriff aktivieren",
+    "applyTimingTitle": "Wann Änderungen wirksam werden",
+    "applyTimingHelp": "Ein sofortiger Neustart unterbricht aktive Umgebungsverbindungen.",
+    "applyNextStart": "Beim nächsten Start",
+    "applyRestartNow": "Jetzt neu starten"
   },
   "shell": {
     "accessibility": {
