@@ -77,13 +77,31 @@ If you are unsure:
 git rebase --abort
 ```
 
-After every rebase:
+After every rebase, inspect the resulting feature diff:
 
 ```bash
 git diff origin/main...HEAD
 ```
 
-Then rerun the relevant local quality gate from this file.
+Use staged validation so full gates run only on the final rebased tip:
+
+- During implementation, and after any intermediate rebase that is still
+  expected to be superseded by more edits, reviews, generated artifacts, or
+  another upstream sync, run only focused checks for the affected behavior.
+- Do not repeatedly run the full repository or product quality gate on
+  intermediate feature tips. A passing full gate on a commit that is later
+  rebased is not final integration evidence.
+- Once implementation, required reviews, localization work, and generated
+  artifacts are complete, fetch `origin`, rebase onto the latest `origin/main`,
+  inspect `git diff origin/main...HEAD`, and run the applicable full integration
+  quality gate once on that intended final tip.
+- Immediately before integration, fetch `origin` again. If `origin/main` moved,
+  stop, rebase the feature branch, review the new diff, rerun affected focused
+  checks, and rerun the full integration gate because the previously tested
+  commit is no longer the final rebased tip.
+- If a rebase has conflicts or upstream changes overlap the feature behavior,
+  run focused checks for the resolved or overlapping behavior in addition to
+  the final full gate.
 
 ## Integration Back To Main
 
@@ -93,6 +111,10 @@ Once the feature branch is ready:
 git switch main
 git fetch origin
 git pull --ff-only
+
+# The feature branch's full gate must have run after its final rebase onto this
+# exact origin/main tip. If origin/main moved, return to the feature worktree,
+# rebase, and validate the new final tip before merging.
 
 # If local main is already ahead of origin/main, publish the full local main tip first.
 # Do not keep older local main commits unpublished while only pushing the new feature result.
@@ -123,7 +145,9 @@ Additional rules:
 - Before resolving merge or rebase conflicts, review the substantive commits on each side for new features, bug fixes, behavior changes, tests, and user-facing workflows.
 - Do not drop, overwrite, or silently weaken current or historical functionality unless the user explicitly approves that product decision.
 - If two branches introduce incompatible behavior, surface the product or architecture tradeoff instead of choosing one side silently.
-- After resolving conflicts, run focused checks for the affected behavior in addition to the repository quality gate.
+- After resolving conflicts, run focused checks for the affected behavior. Run
+  the full repository gate only when that rebased commit is the final
+  integration candidate.
 - If a feature branch has already been pushed and someone depends on it, switch to a conservative coordination flow instead of freely rewriting history.
 
 Recommended Git configuration:
@@ -748,7 +772,16 @@ tests, and published Floret release notes.
 
 ## Local Quality Gate
 
-Run the CI-aligned checks and local-only pre-commit checks before integration:
+This list defines the full integration quality gate. Run applicable focused
+checks while iterating, but do not repeatedly run the full list before the
+feature is ready for final synchronization. Complete implementation, reviews,
+and generated artifacts first; then rebase onto the latest `origin/main` and run
+the applicable full gate on that final rebased tip before integration. If
+`origin/main` moves again, the new rebased tip requires a new final full gate.
+Commands with explicit full modes, such as `./scripts/check_desktop.sh --full`,
+follow this same sequencing and must not be used as routine iteration checks.
+
+The CI-aligned checks and local-only pre-commit checks are:
 
 - `sh -n scripts/install.sh`
 - `sh -n scripts/generate_release_notes.sh`
