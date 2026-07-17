@@ -22,11 +22,17 @@ import {
   readRuntimePlacementBridgeFrame,
 } from './runtimePlacementBridgeProtocol';
 import { startRuntimePlacementBridgeSession } from './runtimePlacementBridgeSession';
+import { observeRuntimePlacementBridge } from './runtimePlacementBridgeObservation';
+import {
+  RuntimePlacementBridgeRegistry,
+  type RuntimePlacementBridgeRecord,
+} from './runtimePlacementBridgeRegistry';
 import {
   DesktopSSHTransportAuthenticationError,
   DesktopSSHTransportInterruptedError,
   DesktopSSHTransportUnavailableError,
 } from './sshTransportManager';
+import type { DesktopProviderRuntimeLinkTargetID } from '../shared/providerRuntimeLinkTarget';
 
 function createMockBridgeCommand() {
   const stdin = new PassThrough();
@@ -406,7 +412,7 @@ describe('runtimePlacementBridgeSession lifecycle', () => {
     }
   });
 
-  it('keeps the loopback URL stable and resumes new requests after the same Runtime identity reconnects', async () => {
+  it('keeps the loopback URL stable while health observers watch the same Runtime identity reconnect', async () => {
     hostAccessMocks.spawnSSHRuntimeHostCommand.mockReset();
     const first = createMockBridgeCommand();
     const second = createMockBridgeCommand();
@@ -441,6 +447,17 @@ describe('runtimePlacementBridgeSession lifecycle', () => {
     });
     writeHello(first.stdout);
     const session = await task;
+    const registry = new RuntimePlacementBridgeRegistry(vi.fn());
+    registry.trackOpening({
+      runtime_key: session.placement_target_id,
+      environment_id: 'los',
+      label: 'los',
+      target_id: `ssh_environment:${session.placement_target_id}` as DesktopProviderRuntimeLinkTargetID,
+      runtime_binary_path: '~/.redeven',
+      session,
+      startup: session.startup,
+      runtime_handle: session.runtime_handle,
+    } as RuntimePlacementBridgeRecord, 'los:open');
     const stableURL = session.local_ui_url;
     let sessionClosed = false;
     void session.closed.then(() => {
@@ -462,6 +479,17 @@ describe('runtimePlacementBridgeSession lifecycle', () => {
         failure: { code: 'transport_interrupted' },
         actions: ['retry_now'],
       });
+      const healthProbe = vi.fn();
+      await expect(observeRuntimePlacementBridge(
+        registry,
+        session.placement_target_id,
+        healthProbe,
+      )).resolves.toMatchObject({
+        kind: 'recovering',
+        recovery: { generation: 1, phase: 'waiting' },
+      });
+      expect(healthProbe).not.toHaveBeenCalled();
+      expect(registry.get(session.placement_target_id)?.session).toBe(session);
 
       const unavailableSocket = await connectLoopback(stableURL);
       unavailableSocket.write('GET /during-recovery HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n');
@@ -492,7 +520,7 @@ describe('runtimePlacementBridgeSession lifecycle', () => {
       expect(response.toString('latin1')).toContain('\r\n\r\nok');
     } finally {
       activeSocket.destroy();
-      await session.disconnect();
+      await registry.retire(session.placement_target_id);
     }
   });
 
