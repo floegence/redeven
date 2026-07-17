@@ -3,9 +3,10 @@
   "release_review": {
     "release_version": "v0.10.0",
     "previous_release": "v0.9.0",
-    "reviewed_at": "2026-07-16",
+    "reviewed_at": "2026-07-17",
     "review_id": "local-ui-network-exposure-v0-10-0",
-    "summary": "Redeven v0.10.0 adds explicit plaintext Local UI network exposure with fixed-port IP binds, mandatory password authentication, bind-scoped risk acknowledgement, exact Host and Origin validation, real interface URL projection, and persistent Desktop and Env App warnings. Runtime Service protocol_version remains redeven-runtime-v1, while compatibility epoch advances so older Desktop and Runtime builds cannot omit or misinterpret the LocalUIExposure contract.",
+    "summary": "Redeven v0.10.0 keeps the existing Runtime Service compatibility window while finalizing the unreleased Desktop attach source contract: Runtime now publishes a required machine-only trusted Local UI bridge URL, public Local UI authority validation remains exact, and SSH plus container Env App opens use one placement bridge without public-port forwarding, fallback, or retry transport.",
+    "same_window_rationale": "The Runtime Service protocol payload and compatibility semantics are unchanged. local_ui_bridge_url belongs to the unreleased local Runtime attach contract consumed by the same-source Desktop and CLI, and the project has no deployed older Runtime or Desktop population requiring a compatibility window.",
     "checked_surfaces": [
       "Flower production hosts explicitly select Floret host-owned thread titles, so Redeven's asynchronous title coordinator remains the only product title owner and Floret emits no implicit thread_title logical requests",
       "Provider finish, completion, and continuation lifecycle reasons are consumed only from the published Floret v0.9.0 typed event fields; metadata-only and conflicting metadata cannot change persisted or live behavior",
@@ -27,7 +28,8 @@
       "Redeven consumes github.com/floegence/floret v0.9.0 only from the published module with GOWORK=off verification and no replace, go.work, local sibling path, copied contract, or Floret internal import",
       "Flower HTTP and live payload shapes are unchanged: running projections use the existing message.block_set path and terminal settlement continues to use the existing timeline.replaced path",
       "Runtime Service protocol_version remains redeven-runtime-v1, while compatibility_epoch advances to 8 and both minimum versions advance to v0.10.0 so an older Desktop cannot parse LocalUIExposure and an older Runtime cannot provide the network exposure contract",
-      "Desktop attach/start, managed Runtime process reconciliation, structured startup reports, sys.ping, Local UI health, Env App maintenance routes, gateway lifecycle, SSH Runtime bootstrap, installer discovery, and provider request shaping remain otherwise unchanged",
+      "Runtime attach status now requires local_ui_bridge_url for the independent loopback trusted listener; public Local UI URLs, startup presentation, health, access status, and display URL projections do not expose that machine-only endpoint",
+      "Desktop SSH and container Open use the same redeven desktop-bridge placement transport and one runtimePlacementBridgeByTargetID record; SSH Runtime installation and process lifecycle readiness remain separate and no SSH local-forward, public URL fallback, Host rewrite, or cached-failure retry path remains",
       "Gateway, Docker runtime, ReDevPlugin integration, terminal attach/history, startup presentation, and open-source hygiene gates remain required release checks and do not gain alternate compatibility or fallback paths"
     ]
   },

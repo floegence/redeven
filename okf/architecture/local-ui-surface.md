@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Local UI surface
 description: Local UI serves browser entrypoints, access-gated APIs, direct sessions, Env App proxying, codespaces, and port forwards.
 tags: [architecture, local-ui, runtime, security]
-timestamp: 2026-07-13T00:00:00Z
+timestamp: 2026-07-17T00:00:00Z
 ---
 
 Redeven Local UI is the browser-facing endpoint runtime surface. It exposes the Env App proxy, Local UI status APIs, direct Flowersec session handoff, Browser Editor codespace routes, and port-forward routes from the same runtime-managed HTTP server.
@@ -14,7 +14,7 @@ Redeven Local UI is the browser-facing endpoint runtime surface. It exposes the 
 
 Local UI bind parsing accepts `localhost`, canonical loopback IP literals, concrete non-loopback unicast IPv4 and IPv6 literals, and the `0.0.0.0` and `::` wildcards. It never resolves DNS names. Network exposure requires a fixed port; dynamic port `0` remains available only for explicit loopback IP binds. A network bind is valid only when password authentication and the command-line plaintext exposure acknowledgement are both present. Wildcard startup enumerates active, non-loopback, same-family unicast interface addresses, excludes unspecified, multicast, link-local, zoned, and IPv4-mapped IPv6 addresses, sorts them deterministically, and fails when no real access address remains.
 
-After listeners open, the public server records only exact canonical authorities for the actual bound or enumerated access IPs and ports. Every public request passes that Host authority gate before route, cookie, WebSocket, or access-gate processing. Wildcard authorities themselves are never accepted or displayed. Desktop, SSH, and container bridges use a separate trusted handler that accepts only canonical loopback authorities and carries bridge trust explicitly in request context. DNS names other than literal `localhost`, fake localhost suffixes, alternate IPv4 notation, userinfo, malformed ports, zones, mapped IPv6, and unlisted IP authorities are rejected.
+Runtime starts two independent HTTP listener boundaries. The public Local UI listener records only exact canonical authorities for the actual bound or enumerated access IPs and ports, and every request passes that authority gate before route, cookie, WebSocket, or access-gate processing. A separate trusted listener binds `127.0.0.1:0`, mounts `HandlerForDesktopBridge()`, and is published only as the required `RuntimeAttachEndpoint.local_ui_bridge_url`. It accepts canonical loopback authorities for placement-bridge traffic without weakening the public listener's exact-port authority rule. The trusted URL is not a display URL and is absent from startup presentation, health, access status, and user-facing surfaces. DNS names other than literal `localhost`, fake localhost suffixes, alternate IPv4 notation, userinfo, malformed ports, zones, mapped IPv6, non-loopback authorities, and unlisted public authorities are rejected.
 
 The network server bounds request headers, request bodies, header-read time, read time, write time, idle time, and WebSocket frames. Responses receive CSP frame ancestry, content-type sniffing, referrer, permissions, and same-origin frame headers. Browser WebSocket upgrades require an exact same-scheme, same-authority Origin for the validated request authority. Runtime-control keeps its Desktop owner, bearer token, and loopback peer checks; its non-browser WebSocket may omit Origin, but any supplied Origin must still match its loopback authority.
 
@@ -22,7 +22,7 @@ Direct connect artifacts are one-time credentials, but resolution does not consu
 
 # Boundaries
 
-Local UI route behavior is part of the runtime trust boundary. Public Env App shell GET/HEAD requests may pass before local unlock so the shell can load, but local APIs, direct sessions, codespaces, and port-forward routes stay access-gated when password mode is enabled. Network exposure is plaintext HTTP: password authentication controls access but does not protect passwords, cookies, page resources, or non-Flowersec HTTP traffic from interception or modification. Flowersec protects its encrypted session payload only after the E2EE handshake completes. Runtime-control, Desktop model-source, and runtime management sockets remain loopback or local-socket protected regardless of Local UI exposure.
+Local UI route behavior is part of the runtime trust boundary. Public Env App shell GET/HEAD requests may pass before local unlock so the shell can load, but local APIs, direct sessions, codespaces, and port-forward routes stay access-gated when password mode is enabled. Network exposure is plaintext HTTP: password authentication controls access but does not protect passwords, cookies, page resources, or non-Flowersec HTTP traffic from interception or modification. Flowersec protects its encrypted session payload only after the E2EE handshake completes. The trusted listener is reachable only through local loopback and `redeven desktop-bridge`; SSH and container access must not expose or forward the public listener. Runtime-control, Desktop model-source, and runtime management sockets remain loopback or local-socket protected regardless of Local UI exposure.
 
 # Citations
 
@@ -43,3 +43,5 @@ Local UI route behavior is part of the runtime trust boundary. Public Env App sh
 [15] redeven:internal/localui/localui.go:1426 - Pending direct credentials are resolved without immediate deletion.
 [16] redeven:internal/localui/localui.go:1449 - Authenticated commit atomically consumes the still-matching pending credential.
 [17] redeven:internal/localui/localui.go:1500 - Flowersec `ResolveCredential` binds the commit to successful PSK authentication.
+[18] redeven:internal/localui/localui.go:410 - Runtime starts the trusted Local UI bridge listener on an ephemeral IPv4 loopback port.
+[19] redeven:internal/runtimemanagement/status.go:57 - Runtime attach status requires the machine-only `local_ui_bridge_url` field.
