@@ -78,6 +78,36 @@ func TestPrepareRunDoesNotPublishDraftBeforeFloretAcceptance(t *testing.T) {
 	}
 }
 
+func TestStartUserTurnDetachedDoesNotPublishDraftBeforeFloretAcceptance(t *testing.T) {
+	svc := newSendTurnTestService(t)
+	ctx := context.Background()
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(ctx, meta, "admission boundary", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err = svc.startUserTurnDetached(ctx, meta, "run_before_floret_acceptance", RunStartRequest{
+		ThreadID: thread.ThreadID,
+		Model:    "missing/provider",
+		Input:    RunInput{Text: "provider resolution fails before Floret admission"},
+	}, "", false)
+	if err != nil {
+		t.Fatalf("startUserTurnDetached: %v", err)
+	}
+
+	bootstrap, err := svc.GetFlowerThreadLiveBootstrap(ctx, meta, thread.ThreadID)
+	if err != nil {
+		t.Fatalf("GetFlowerThreadLiveBootstrap: %v", err)
+	}
+	if len(bootstrap.TimelineMessages) != 0 {
+		t.Fatalf("pre-admission draft entered canonical timeline: %#v", bootstrap.TimelineMessages)
+	}
+	if len(bootstrap.LiveState.Messages) != 0 {
+		t.Fatalf("pre-admission draft entered live state: %#v", bootstrap.LiveState.Messages)
+	}
+}
+
 func TestPrepareRun_PropagatesInternalReadonlyRunOptions(t *testing.T) {
 	t.Parallel()
 

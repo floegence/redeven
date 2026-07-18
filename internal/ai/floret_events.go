@@ -36,11 +36,21 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 		r.rejectFloretContract("event", err)
 		return
 	}
-	if ev.Type == observation.EventTypeThreadEntryCommitted && ev.Committed != nil && ev.Committed.Kind == flruntime.ThreadDetailEventUserMessage {
-		r.commitPendingTurnCommandAdmission(false)
+	canonicalUserEntry := ev.Type == observation.EventTypeThreadEntryCommitted && ev.Committed != nil && ev.Committed.Kind == flruntime.ThreadDetailEventUserMessage
+	if r.awaitFloretAdmission.Load() && canonicalUserEntry {
+		r.floretAdmitted.Store(true)
 	}
+	// The validated canonical user entry is the admission boundary for live
+	// assistant state. A draft created after it can be rendered against the
+	// canonical timeline without guessing its place.
 	if !r.acceptsPresentationUpdates() {
 		return
+	}
+	if canonicalUserEntry {
+		r.ensureAssistantMessageStarted()
+	}
+	if ev.Type == observation.EventTypeThreadEntryCommitted && ev.Committed != nil && ev.Committed.Kind == flruntime.ThreadDetailEventUserMessage {
+		r.commitPendingTurnCommandAdmission(false)
 	}
 	r.applyFloretStreamObservation(ev.Stream)
 	r.applyFloretSourceObservation(ev.Sources)
