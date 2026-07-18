@@ -3269,37 +3269,51 @@ export function EnvAppShell() {
 
   const renderNetworkExposureWarning = () => (
     <Show when={networkExposureWarningVisible()}>
-      <div class="flex min-h-11 shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-warning/30 bg-warning/10 px-3 py-2 text-warning-foreground transition-colors duration-150 sm:flex-nowrap sm:px-4" role="status" data-testid="network-exposure-warning">
-        <AlertTriangle class="h-4 w-4 shrink-0 text-warning" />
-        <div class="min-w-0 flex-[1_1_16rem] text-xs sm:flex sm:items-baseline sm:gap-2">
-          <div class="font-semibold text-foreground">{i18n.t('networkExposure.title')}</div>
-          <div class="mt-0.5 text-muted-foreground sm:mt-0">{i18n.t('networkExposure.summary')}</div>
-        </div>
-        <div class="ml-auto flex w-full flex-wrap items-center justify-end gap-1 sm:w-auto sm:flex-nowrap">
-          <Button size="xs" variant="outline" class="shrink-0 border-warning/30 bg-background/80 text-foreground hover:bg-background" onClick={() => setNetworkSecurityDetailsOpen(true)}>
-            {i18n.t('networkExposure.viewDetails')}
-          </Button>
-          <Button
-            size="xs"
-            variant="ghost"
-            class="shrink-0 text-muted-foreground hover:text-foreground"
-            data-testid="network-exposure-dont-remind"
-            onClick={permanentlySuppressNetworkExposureWarning}
+      <div
+        class="min-h-11 shrink-0 border-b border-warning/30 bg-warning/10 text-warning-foreground transition-colors duration-150"
+        role="status"
+        data-testid="network-exposure-warning"
+        data-redeven-desktop-window-titlebar="true"
+        data-redeven-desktop-titlebar-drag-region="true"
+      >
+        <div
+          class="flex min-h-11 w-full flex-wrap items-center gap-x-3 gap-y-1.5 px-3 py-2 sm:flex-nowrap sm:px-4"
+          data-redeven-desktop-window-titlebar-content="true"
+        >
+          <AlertTriangle class="h-4 w-4 shrink-0 text-warning" />
+          <div class="min-w-0 flex-[1_1_16rem] text-xs sm:flex sm:items-baseline sm:gap-2">
+            <div class="font-semibold text-foreground">{i18n.t('networkExposure.title')}</div>
+            <div class="mt-0.5 text-muted-foreground sm:mt-0">{i18n.t('networkExposure.summary')}</div>
+          </div>
+          <div
+            class="ml-auto flex w-full flex-wrap items-center justify-end gap-1 sm:w-auto sm:flex-nowrap"
+            data-redeven-desktop-titlebar-no-drag="true"
           >
-            {i18n.t('networkExposure.dontRemindAgain')}
-          </Button>
-          <Tooltip content={i18n.t('networkExposure.dismissWarning')} placement="bottom" delay={0}>
-            <Button
-              size="icon"
-              variant="ghost"
-              class="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
-              aria-label={i18n.t('networkExposure.dismissWarning')}
-              data-testid="network-exposure-dismiss"
-              onClick={dismissNetworkExposureWarning}
-            >
-              <X class="h-3.5 w-3.5" />
+            <Button size="xs" variant="outline" class="shrink-0 border-warning/30 bg-background/80 text-foreground hover:bg-background" onClick={() => setNetworkSecurityDetailsOpen(true)}>
+              {i18n.t('networkExposure.viewDetails')}
             </Button>
-          </Tooltip>
+            <Button
+              size="xs"
+              variant="ghost"
+              class="shrink-0 text-muted-foreground hover:text-foreground"
+              data-testid="network-exposure-dont-remind"
+              onClick={permanentlySuppressNetworkExposureWarning}
+            >
+              {i18n.t('networkExposure.dontRemindAgain')}
+            </Button>
+            <Tooltip content={i18n.t('networkExposure.dismissWarning')} placement="bottom" delay={0}>
+              <Button
+                size="icon"
+                variant="ghost"
+                class="h-7 w-7 shrink-0 text-muted-foreground hover:text-foreground"
+                aria-label={i18n.t('networkExposure.dismissWarning')}
+                data-testid="network-exposure-dismiss"
+                onClick={dismissNetworkExposureWarning}
+              >
+                <X class="h-3.5 w-3.5" />
+              </Button>
+            </Tooltip>
+          </div>
         </div>
       </div>
     </Show>
