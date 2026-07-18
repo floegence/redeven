@@ -278,7 +278,7 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 
 	const (
 		floretModule  = "github.com/floegence/floret"
-		floretVersion = "v0.11.2"
+		floretVersion = "v0.11.3"
 	)
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
@@ -380,7 +380,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"ForkOperationID",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
-			"Floret v0.11.2",
+			"Floret v0.11.3",
 			"single persistent source of truth",
 			"host-owned thread titles",
 			"public contracts",
