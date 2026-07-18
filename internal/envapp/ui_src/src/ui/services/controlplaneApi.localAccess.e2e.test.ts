@@ -271,11 +271,28 @@ describe('controlplaneApi local access flow', () => {
     expect(fetchMock).not.toHaveBeenCalledWith('/api/local/agent/version/latest', expect.anything());
   });
 
-  it('redeems entry tickets via the canonical connect artifact contract', async () => {
+  it('rejects loopback HTTP artifact requests before fetch unless explicitly allowed', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mod = await import('./controlplaneApi');
+    await expect(mod.connectArtifactEntry({
+      endpointId: 'env_demo',
+      floeApp: 'com.floegence.redeven.agent',
+      entryTicket: 'ticket-1',
+    })).rejects.toMatchObject({
+      status: 0,
+      code: 'transport_policy_denied',
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('redeems entry tickets via the canonical connect artifact contract with explicit loopback HTTP permission', async () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       expect(String(input)).toBe('/v1/connect/artifact/entry');
       expect(init?.method).toBe('POST');
       expect(init?.credentials).toBe('omit');
+      expect(init?.redirect).toBe('error');
       const headers = new Headers(init?.headers);
       expect(headers.get('Authorization')).toBe('Bearer ticket-1');
       expect(JSON.parse(String(init?.body))).toEqual({
@@ -315,6 +332,7 @@ describe('controlplaneApi local access flow', () => {
       endpointId: 'env_demo',
       floeApp: 'com.floegence.redeven.agent',
       entryTicket: 'ticket-1',
+      allowLoopbackHTTP: true,
     });
 
     expect(out.transport).toBe('tunnel');

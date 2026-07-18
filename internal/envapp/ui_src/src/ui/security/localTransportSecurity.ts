@@ -7,9 +7,17 @@ import {
 
 export type LocalTransportSecurityResolution = Readonly<{
   policy: TransportSecurityPolicy | null;
+  loopback: boolean;
   network: boolean;
   error: string;
 }>;
+
+export function allowLoopbackControlplaneHTTP(
+  protocol: string,
+  resolution: LocalTransportSecurityResolution,
+): boolean {
+  return protocol === 'http:' && resolution.loopback;
+}
 
 function normalizeHostname(raw: string): string {
   return String(raw ?? '').trim().toLowerCase().replace(/^\[(.*)\]$/, '$1');
@@ -26,7 +34,7 @@ function hostnameIsLoopback(hostname: string): boolean {
 export function resolveLocalTransportSecurityPolicy(rawHostname: string): LocalTransportSecurityResolution {
   const hostname = normalizeHostname(rawHostname);
   if (hostnameIsLoopback(hostname)) {
-    return { policy: AllowPlaintextForLoopback, network: false, error: '' };
+    return { policy: AllowPlaintextForLoopback, loopback: true, network: false, error: '' };
   }
   try {
     return {
@@ -34,12 +42,14 @@ export function resolveLocalTransportSecurityPolicy(rawHostname: string): LocalT
         allowedHosts: [hostname],
         riskAcceptance: PlaintextRiskAcceptance.acceptPreE2ECredentialExposure,
       }),
+      loopback: false,
       network: true,
       error: '',
     };
   } catch (error) {
     return {
       policy: null,
+      loopback: false,
       network: false,
       error: error instanceof Error ? error.message : String(error),
     };

@@ -63,4 +63,26 @@ describe('controlplaneApi controlplane helper usage', () => {
       signal: controller.signal,
     });
   });
+
+  it('forwards loopback HTTP permission only when the caller selects it', async () => {
+    acquire.mockResolvedValue({ transport: 'tunnel' });
+
+    const mod = await import('./controlplaneApi');
+    await mod.connectArtifactEntry({
+      endpointId: 'env_demo',
+      floeApp: 'com.floegence.redeven.agent',
+      entryTicket: 'ticket-1',
+      allowLoopbackHTTP: true,
+    });
+
+    expect(createControlplaneArtifactSource).toHaveBeenCalledWith({
+      endpointId: 'env_demo',
+      entryTicket: 'ticket-1',
+      credentials: 'omit',
+      payload: {
+        floe_app: 'com.floegence.redeven.agent',
+      },
+      allowLoopbackHTTP: true,
+    });
+  });
 });
