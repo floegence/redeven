@@ -85,13 +85,28 @@ func TestAppServerThreadReadStatePathMigratesLegacyStore(t *testing.T) {
 	}
 }
 
-func TestNewRejectsLegacyThreadstoreSchemaWithoutMigration(t *testing.T) {
+func TestNewMigratesLegacyThreadstoreSchema(t *testing.T) {
 	t.Parallel()
 
 	stateDir := t.TempDir()
 	dbPath := filepath.Join(stateDir, "ai", "threads.sqlite")
 	if err := legacydb.SeedThreadstoreV15(dbPath); err != nil {
 		t.Fatalf("seedLegacyFollowupQueueDB: %v", err)
+	}
+	raw, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("sql.Open seed database: %v", err)
+	}
+	if _, err := raw.Exec(`INSERT INTO ai_threads(thread_id, endpoint_id, created_at_unix_ms, updated_at_unix_ms) VALUES('thread_product', 'env_1', 100, 100)`); err != nil {
+		_ = raw.Close()
+		t.Fatalf("seed product thread: %v", err)
+	}
+	if _, err := raw.Exec(`INSERT INTO ai_messages(thread_id, endpoint_id, message_id, role, status, created_at_unix_ms, updated_at_unix_ms, message_json) VALUES('thread_product', 'env_1', 'legacy_message', 'user', 'completed', 100, 100, '{}')`); err != nil {
+		_ = raw.Close()
+		t.Fatalf("seed legacy agent message: %v", err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatalf("close seed database: %v", err)
 	}
 
 	svc, err := New(context.Background(), Options{
@@ -108,14 +123,17 @@ func TestNewRejectsLegacyThreadstoreSchemaWithoutMigration(t *testing.T) {
 			return "", false
 		},
 	})
-	if err == nil {
-		if svc != nil {
-			_ = svc.Close()
-		}
-		t.Fatal("New accepted a legacy threadstore schema")
+	if err != nil {
+		t.Fatalf("New migrated legacy threadstore: %v", err)
+	}
+	if svc == nil {
+		t.Fatal("New returned nil service after migrating threadstore")
+	}
+	if err := svc.Close(); err != nil {
+		t.Fatalf("close service: %v", err)
 	}
 
-	raw, err := sql.Open("sqlite", dbPath)
+	raw, err = sql.Open("sqlite", dbPath)
 	if err != nil {
 		t.Fatalf("sql.Open: %v", err)
 	}
@@ -125,19 +143,33 @@ func TestNewRejectsLegacyThreadstoreSchemaWithoutMigration(t *testing.T) {
 	if err := raw.QueryRow(`PRAGMA user_version;`).Scan(&version); err != nil {
 		t.Fatalf("read user_version: %v", err)
 	}
-	if version != 15 {
-		t.Fatalf("user_version=%d, want preserved legacy version 15", version)
+	if version != threadstore.CurrentSchemaVersion() {
+		t.Fatalf("user_version=%d, want %d", version, threadstore.CurrentSchemaVersion())
 	}
-	var legacyMessageTables int
-	if err := raw.QueryRow(`SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = 'ai_messages'`).Scan(&legacyMessageTables); err != nil {
-		t.Fatalf("check legacy ai_messages table: %v", err)
+	var legacyAgentTables int
+	if err := raw.QueryRow(`SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name IN ('ai_messages', 'ai_runs', 'ai_thread_state', 'conversation_turns')`).Scan(&legacyAgentTables); err != nil {
+		t.Fatalf("check legacy Agent tables: %v", err)
 	}
-	if legacyMessageTables != 1 {
-		t.Fatalf("legacy ai_messages table count=%d, want preserved table", legacyMessageTables)
+	if legacyAgentTables != 0 {
+		t.Fatalf("legacy Agent table count=%d, want 0", legacyAgentTables)
+	}
+	var threadCount int
+	if err := raw.QueryRow(`SELECT COUNT(1) FROM ai_threads WHERE thread_id = 'thread_product'`).Scan(&threadCount); err != nil {
+		t.Fatalf("check product thread: %v", err)
+	}
+	if threadCount != 1 {
+		t.Fatalf("product thread count=%d, want 1", threadCount)
+	}
+	var hasLegacyExecutionColumn int
+	if err := raw.QueryRow(`SELECT COUNT(1) FROM pragma_table_info('ai_threads') WHERE name = 'run_status'`).Scan(&hasLegacyExecutionColumn); err != nil {
+		t.Fatalf("check legacy thread column: %v", err)
+	}
+	if hasLegacyExecutionColumn != 0 {
+		t.Fatal("legacy run_status column remains after migration")
 	}
 }
 
-func TestNewRejectsInvalidThreadstoreSchemaWithoutRebuild(t *testing.T) {
+func TestNewRepairsCurrentThreadstoreSchema(t *testing.T) {
 	t.Parallel()
 
 	stateDir := t.TempDir()
@@ -171,11 +203,14 @@ func TestNewRejectsInvalidThreadstoreSchemaWithoutRebuild(t *testing.T) {
 			return "", false
 		},
 	})
-	if err == nil {
-		if svc != nil {
-			_ = svc.Close()
-		}
-		t.Fatal("New accepted an invalid threadstore schema")
+	if err != nil {
+		t.Fatalf("New repaired current threadstore: %v", err)
+	}
+	if svc == nil {
+		t.Fatal("New returned nil service after repairing threadstore")
+	}
+	if err := svc.Close(); err != nil {
+		t.Fatalf("close service: %v", err)
 	}
 
 	raw, err := sql.Open("sqlite", dbPath)
@@ -188,8 +223,8 @@ func TestNewRejectsInvalidThreadstoreSchemaWithoutRebuild(t *testing.T) {
 	if err := raw.QueryRow(`SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = 'conversation_turns'`).Scan(&shadowTableCount); err != nil {
 		t.Fatalf("check forbidden Agent shadow table: %v", err)
 	}
-	if shadowTableCount != 1 {
-		t.Fatalf("conversation_turns table count=%d, want malformed schema preserved", shadowTableCount)
+	if shadowTableCount != 0 {
+		t.Fatalf("conversation_turns table count=%d, want obsolete table removed", shadowTableCount)
 	}
 	var threadCount int
 	if err := raw.QueryRow(`SELECT COUNT(1) FROM ai_threads`).Scan(&threadCount); err != nil {

@@ -150,7 +150,7 @@ Redeven must consume published Floret releases. Repository builds, tests, Deskto
 [46] redeven:internal/ai/subagents_floret.go:3301 - Flower child prompts forbid nested subagents and direct user input while requesting a complete final handoff.
 [47] redeven:internal/ai/subagent_lifecycle_test.go:29 - Parent run cancellation is tested to avoid releasing the durable subagent runtime.
 [48] redeven:internal/ai/subagents_floret.go:2068 - Subagent detail rows wrap Floret-provided activity timelines instead of rebuilding them from raw detail fields.
-[49] redeven:internal/ai/threadstore/schema.go:12 - The pre-release threadstore uses one canonical schema baseline and rejects legacy shapes.
+[49] redeven:internal/ai/threadstore/schema.go:12 - The product-only threadstore schema migrates known ai_threadstore_canonical shapes transactionally, removes Agent shadow tables and columns, and rejects unknown kinds or future versions.
 [50] redeven:internal/ai/dynamic_permission_surface.go:74 - Hosted turns rebuild the current permission-derived tool surface from the latest thread permission.
 [51] redeven:internal/ai/run.go:3336 - Direct local tool execution refreshes the permission surface before snapshot authorization.
 [52] redeven:internal/ai/run.go:3057 - Legacy `file.read` direct dispatch is guarded as unavailable outside readonly permission.

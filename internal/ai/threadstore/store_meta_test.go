@@ -2,14 +2,11 @@ package threadstore
 
 import (
 	"database/sql"
-	"errors"
 	"path/filepath"
 	"testing"
-
-	"github.com/floegence/redeven/internal/persistence/sqliteutil"
 )
 
-func TestStoreOpenRejectsLegacySchemaWithoutResettingDatabase(t *testing.T) {
+func TestStoreOpenRepairsLegacyProductColumns(t *testing.T) {
 	t.Parallel()
 
 	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
@@ -34,13 +31,11 @@ func TestStoreOpenRejectsLegacySchemaWithoutResettingDatabase(t *testing.T) {
 	}
 
 	store, err = Open(dbPath)
-	if store != nil {
-		_ = store.Close()
-		t.Fatal("Open returned a store for a legacy schema")
+	if err != nil {
+		t.Fatalf("Open repaired store: %v", err)
 	}
-	var verifyErr *sqliteutil.SchemaVerifyError
-	if !errors.As(err, &verifyErr) {
-		t.Fatalf("Open error=%T %v, want SchemaVerifyError", err, err)
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close repaired store: %v", err)
 	}
 
 	raw, err = sql.Open("sqlite", dbPath)
@@ -55,7 +50,14 @@ func TestStoreOpenRejectsLegacySchemaWithoutResettingDatabase(t *testing.T) {
 	defer func() { _ = tx.Rollback() }()
 	if has, err := columnExists(tx, "ai_threads", "last_context_run_id"); err != nil {
 		t.Fatalf("check legacy column: %v", err)
-	} else if !has {
-		t.Fatal("legacy column was removed instead of rejecting the database")
+	} else if has {
+		t.Fatal("legacy column remains after schema repair")
+	}
+	var version int
+	if err := tx.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		t.Fatalf("read schema version: %v", err)
+	}
+	if version != CurrentSchemaVersion() {
+		t.Fatalf("schema version=%d, want %d", version, CurrentSchemaVersion())
 	}
 }

@@ -10,7 +10,7 @@ Flower thread fork is a cross-repository durable operation. Floret owns the engi
 
 # Mechanism
 
-Redeven canonical threadstore schema v1 contains `ai_thread_fork_operations`. An operation has one required `ForkOperationID`, request fingerprint, source and destination thread identities, `pending | committed | failed` status, snapshot schema version, snapshot JSON, retry count, diagnostic code/message, broadcast acknowledgements, and timestamps. It stores no Floret result, turn map, conversation, or Agent lifecycle payload. Older pre-release schemas are rejected rather than migrated or repaired.
+Redeven canonical threadstore schema v2 contains `ai_thread_fork_operations`. An operation has one required `ForkOperationID`, request fingerprint, source and destination thread identities, `pending | committed | failed` status, snapshot schema version, snapshot JSON, retry count, diagnostic code/message, broadcast acknowledgements, and timestamps. It stores no Floret result, turn map, conversation, or Agent lifecycle payload. Known pre-release threadstores are upgraded transactionally by retaining product tables and deleting Agent shadow tables; failed upgrades roll back, while unknown kinds and future versions remain rejected.
 
 `PrepareForkOperation` runs in one SQLite transaction. It validates that the operation request and destination are unused, writes snapshot schema v2, and commits the operation as `pending`. The fixed snapshot contains the source product thread configuration, upload references, and Flower metadata only. It contains no user or assistant content, turn/run state, projection, control signal, approval, todo, memory, context, or provider state. A later source-thread mutation cannot change what this operation will copy.
 
