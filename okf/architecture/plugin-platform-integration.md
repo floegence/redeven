@@ -5,24 +5,21 @@ description: Redeven integrates released ReDevPlugin artifacts through Local UI,
 tags: [architecture, plugins, local-ui, redevplugin]
 timestamp: 2026-07-16T00:00:00Z
 ---
+# Summary
 
 Redeven plugin-platform integration is host-product glue over released
 ReDevPlugin artifacts. ReDevPlugin owns reusable platform mechanics; Redeven
 owns session mapping, route placement, local policy, product UX, official
-catalog projection, and concrete business capability adapters.
-
-At the current source baseline, Redeven consumes
+catalog projection, and concrete business capability adapters. At the current source baseline, Redeven consumes
 `github.com/floegence/redevplugin v0.1.1` and mounts the released HTTP adapter
 through `internal/redevpluginintegration`. That integration configures durable
 Host stores, policy/session/security adapters, runtime artifact resolution,
 observability fanout, official package trust policy, and Redeven-owned
-business capabilities. Env App contains product entrypoints for an Activity Bar
-Plugins panel, a dedicated Plugin Center Activity, and an internal plugin
-surface Activity, but currently registers them only in explicit development
-builds. Production Env App builds omit every plugin user entry while retaining
-the backend platform integration.
+business capabilities.
 
-# Mechanism
+# Contract
+
+## Mechanism
 
 The dependency shape is library and artifact consumption. Redeven imports
 released ReDevPlugin Go packages for Host construction, lifecycle DTOs,
@@ -114,18 +111,10 @@ dangerous confirmation hash fields.
 
 # Boundaries
 
-Redeven must not point builds, tests, release validation, examples, or source
-code at a local `../redevplugin` checkout. `go.work`, `go.work.sum`, Go
-`replace`, local npm `file:`, `link:`, `workspace:`, or `portal:` wiring, Rust
-path overrides, copied schemas, copied generated clients, copied runtime
-binaries, or copied platform source trees are not valid integration paths.
-
-Redeven must not implement an alternate manifest parser, package builder,
-registry lifecycle, bridge token issuer, asset-ticket system, storage broker,
-network broker, runtime IPC layer, WASM executor, operation manager, runtime
-supervisor, stream envelope, or plugin lifecycle state machine. If a missing
-contract blocks reusable integration, the durable fix belongs upstream in
-ReDevPlugin and Redeven consumes the released artifact that contains it.
+The canonical published-dependency and platform-ownership prohibitions are
+defined by [ReDevPlugin host integration boundary](redevplugin-boundary.md).
+This concept documents only Redeven's Local UI, AppServer, official-package,
+product-placement, and business-adapter integration delta.
 
 Desktop runtime-control, RCPP provider APIs, standalone Gateway APIs, and
 Flower target grants are adjacent host mechanisms, not plugin capability or
@@ -139,26 +128,18 @@ environment catalogs are external environment access/control constructs, not
 plugin installation identities, plugin broker state, or a substitute for the
 closed-world container resources capability contract.
 
-# Citations
+# Evidence
 
-[1] redeven:AGENTS.md:256 - Redeven consumes ReDevPlugin through published artifacts only.
-[2] redeven:AGENTS.md:266 - Redeven integration code should be thin host glue over released artifacts.
-[3] redeven:AGENTS.md:290 - Plugin UI platform code should come from released ReDevPlugin npm packages.
-[4] redeven:AGENTS.md:354 - Redeven owns product integration, session mapping, policy, sinks, and business adapters.
-[5] redeven:AGENTS.md:480 - Containers are Redeven business capabilities, not plugin runtime mechanics.
-[6] redeven:go.mod:11 - Redeven consumes the published ReDevPlugin Go module.
-[7] redeven:internal/codeapp/appserver/server.go:529 - AppServer delegates plugin sandbox routes only for plugin sandbox origins.
-[8] redeven:internal/codeapp/appserver/server.go:537 - AppServer delegates plugin management routes only for Env App origins.
-[9] redeven:internal/codeapp/appserver/server.go:626 - AppServer rewrites Redeven plugin routes to ReDevPlugin handler paths.
-[10] redeven:internal/codeapp/appserver/server_test.go:733 - Tests bind Env App management delegation to the mounted plugin platform handler.
-[11] redeven:internal/codeapp/appserver/server_test.go:833 - Tests bind plugin-origin sandbox namespace delegation to the mounted plugin platform handler.
-[12] redeven:internal/codeapp/codeapp.go:1 - Code App wires the plugin-platform session resolver used by the ReDevPlugin integration.
-[13] redeven:internal/codeapp/plugin_local_session_test.go:1 - Tests bind the Local UI `local-ui` resolver fallback for plugin management.
-[14] redeven:internal/redevpluginintegration/integration.go:52 - The integration package configures the released ReDevPlugin Host.
-[15] redeven:internal/redevpluginintegration/adapters.go:381 - The Containers capability adapter dispatches ReDevPlugin calls into Redeven business logic.
-[16] redeven:internal/redevpluginintegration/adapters.go:1 - The adapter package owns session, policy, trust, runtime, capability, and operation-cancel integration glue.
-[17] redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1 - Env App plugin management calls use the Redeven proxy plugin namespace.
-[18] redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginPackages.ts:1 - Redeven embeds the bundled official Containers package.
-[19] redeven:internal/envapp/ui_src/package.json:25 - Env App consumes the published ReDevPlugin UI package for PluginSurfaceHost.
-[20] redeven:internal/envapp/ui_src/src/ui/plugins/PluginSurfaceFrame.tsx:1 - Env App wraps PluginSurfaceHost with product placement and Redeven route adaptation.
-[21] redeven:okf/architecture/container-resources-capability.md:9 - The container resources contract is a Redeven-owned business capability surface.
+- `redeven:AGENTS.md:256` - Redeven consumes ReDevPlugin through published artifacts only.
+- `redeven:go.mod:11` - Redeven consumes the published ReDevPlugin Go module.
+- `redeven:internal/codeapp/appserver/server.go:529` - AppServer delegates plugin sandbox routes only for plugin sandbox origins.
+- `redeven:internal/codeapp/appserver/server_test.go:733` - Tests bind Env App management delegation to the mounted plugin platform handler.
+- `redeven:internal/codeapp/codeapp.go:1` - Code App wires the plugin-platform session resolver used by the ReDevPlugin integration.
+- `redeven:internal/codeapp/plugin_local_session_test.go:1` - Tests bind the Local UI `local-ui` resolver fallback for plugin management.
+- `redeven:internal/redevpluginintegration/integration.go:52` - The integration package configures the released ReDevPlugin Host.
+- `redeven:internal/redevpluginintegration/adapters.go:381` - The Containers capability adapter dispatches ReDevPlugin calls into Redeven business logic.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1` - Env App plugin management calls use the Redeven proxy plugin namespace.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginPackages.ts:1` - Redeven embeds the bundled official Containers package.
+- `redeven:internal/envapp/ui_src/package.json:25` - Env App consumes the published ReDevPlugin UI package for PluginSurfaceHost.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginSurfaceFrame.tsx:1` - Env App wraps PluginSurfaceHost with product placement and Redeven route adaptation.
+- `redeven:okf/architecture/container-resources-capability.md:9` - The container resources contract is a Redeven-owned business capability surface.

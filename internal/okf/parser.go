@@ -21,6 +21,18 @@ type conceptFrontmatter struct {
 	Timestamp   string   `yaml:"timestamp"`
 }
 
+type parsedConceptBody struct {
+	Body        string
+	Summary     string
+	Sections    []ConceptSection
+	Evidence    []EvidenceRef
+	Legacy      bool
+	HasSummary  bool
+	HasContract bool
+	HasBounds   bool
+	HasEvidence bool
+}
+
 type rootIndexFrontmatter struct {
 	OKFVersion string `yaml:"okf_version"`
 }
@@ -175,7 +187,8 @@ func parseConcept(path string, rel string) (Concept, error) {
 		return Concept{}, fmt.Errorf("%s: missing title", path)
 	}
 	body = strings.TrimSpace(body)
-	snippet := buildSnippet(body)
+	parsed := parseConceptBody(body)
+	snippet := buildSnippet(parsed.Summary, parsed.Sections)
 	tags := normalizeStringList(fm.Tags)
 	frontmatter["type"] = strings.TrimSpace(fm.Type)
 	if title != "" {
@@ -212,8 +225,155 @@ func parseConcept(path string, rel string) (Concept, error) {
 		Timestamp:   strings.TrimSpace(fm.Timestamp),
 		Frontmatter: frontmatter,
 		Body:        body,
+		BodyLength:  len([]rune(body)),
+		Summary:     parsed.Summary,
+		Sections:    parsed.Sections,
+		Evidence:    parsed.Evidence,
+		Legacy:      parsed.Legacy,
+		HasSummary:  parsed.HasSummary,
+		HasContract: parsed.HasContract,
+		HasBounds:   parsed.HasBounds,
+		HasEvidence: parsed.HasEvidence,
 		Snippet:     snippet,
 	}, nil
+}
+
+func parseConceptBody(body string) parsedConceptBody {
+	lines := strings.Split(strings.ReplaceAll(body, "\r\n", "\n"), "\n")
+	var headings []struct {
+		index int
+		level int
+		title string
+	}
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "# ") {
+			headings = append(headings, struct {
+				index int
+				level int
+				title string
+			}{i, 1, strings.TrimSpace(strings.TrimPrefix(trimmed, "# "))})
+			continue
+		}
+		if strings.HasPrefix(trimmed, "## ") {
+			headings = append(headings, struct {
+				index int
+				level int
+				title string
+			}{i, 2, strings.TrimSpace(strings.TrimPrefix(trimmed, "## "))})
+		}
+	}
+	var summary string
+	for i, heading := range headings {
+		if strings.EqualFold(heading.title, "Summary") && heading.level == 1 {
+			end := conceptHeadingEnd(headings, i, len(lines))
+			summary = strings.TrimSpace(strings.Join(lines[heading.index+1:end], "\n"))
+			break
+		}
+	}
+	if summary == "" {
+		if len(headings) > 0 {
+			summary = strings.TrimSpace(strings.Join(lines[:headings[0].index], "\n"))
+		} else {
+			summary = strings.TrimSpace(body)
+		}
+	}
+
+	parsed := parsedConceptBody{
+		Body:        body,
+		Summary:     summary,
+		Legacy:      !hasTopLevelHeading(headings, "Summary"),
+		HasSummary:  hasTopLevelHeading(headings, "Summary"),
+		HasContract: hasTopLevelHeading(headings, "Contract"),
+		HasBounds:   hasTopLevelHeading(headings, "Boundaries"),
+		HasEvidence: hasTopLevelHeading(headings, "Evidence"),
+	}
+	for i, heading := range headings {
+		if heading.level != 1 || strings.EqualFold(heading.title, "Summary") || strings.EqualFold(heading.title, "Evidence") {
+			continue
+		}
+		end := conceptHeadingEnd(headings, i, len(lines))
+		sectionBody := strings.TrimSpace(strings.Join(lines[heading.index+1:end], "\n"))
+		parsed.Sections = append(parsed.Sections, ConceptSection{
+			ID:        slugify(heading.title),
+			Title:     heading.title,
+			Level:     heading.level,
+			Body:      sectionBody,
+			CharCount: len([]rune(sectionBody)),
+		})
+	}
+	for i, heading := range headings {
+		if heading.level != 1 || !strings.EqualFold(heading.title, "Evidence") {
+			continue
+		}
+		end := conceptHeadingEnd(headings, i, len(lines))
+		parsed.Evidence = parseEvidence(strings.Join(lines[heading.index+1:end], "\n"))
+	}
+	if len(parsed.Sections) == 0 && strings.TrimSpace(body) != "" {
+		parsed.Sections = []ConceptSection{{ID: "legacy", Title: "Legacy", Level: 1, Body: body, CharCount: len([]rune(body))}}
+	}
+	return parsed
+}
+
+func conceptHeadingEnd(headings []struct {
+	index int
+	level int
+	title string
+}, current int, fallback int) int {
+	level := headings[current].level
+	for i := current + 1; i < len(headings); i++ {
+		if headings[i].level <= level {
+			return headings[i].index
+		}
+	}
+	return fallback
+}
+
+func hasTopLevelHeading(headings []struct {
+	index int
+	level int
+	title string
+}, title string) bool {
+	for _, heading := range headings {
+		if heading.level == 1 && strings.EqualFold(heading.title, title) {
+			return true
+		}
+	}
+	return false
+}
+
+var evidencePattern = regexp.MustCompile(`^[-*]\s+\x60([^\x60]+)\x60\s+-\s+(.+)$`)
+
+func parseEvidence(body string) []EvidenceRef {
+	var out []EvidenceRef
+	for _, raw := range strings.Split(body, "\n") {
+		line := strings.TrimSpace(raw)
+		match := evidencePattern.FindStringSubmatch(line)
+		if len(match) != 3 {
+			continue
+		}
+		source, lineNumber := splitEvidenceSource(match[1])
+		out = append(out, EvidenceRef{
+			ID:          fmt.Sprintf("%s:%d:%s", source, lineNumber, strings.ToLower(strings.TrimSpace(match[2]))),
+			Source:      source,
+			Line:        lineNumber,
+			Description: strings.TrimSpace(match[2]),
+		})
+	}
+	return out
+}
+
+func splitEvidenceSource(value string) (string, int) {
+	value = strings.TrimSpace(value)
+	idx := strings.LastIndex(value, ":")
+	if idx == -1 {
+		return value, 0
+	}
+	lineNumber := 0
+	if _, err := fmt.Sscanf(value[idx+1:], "%d", &lineNumber); err != nil {
+		return value, 0
+	}
+	return value[:idx], lineNumber
 }
 
 func conceptsByPath(concepts []Concept) map[string]Concept {
@@ -436,13 +596,15 @@ func slugify(value string) string {
 
 func conceptSummary(concept Concept) ConceptSummary {
 	return ConceptSummary{
-		ConceptID:   concept.ConceptID,
-		Path:        concept.Path,
-		Type:        concept.Type,
-		Title:       concept.Title,
-		Description: concept.Description,
-		Resource:    concept.Resource,
-		Tags:        append([]string(nil), concept.Tags...),
+		ConceptID:    concept.ConceptID,
+		Path:         concept.Path,
+		Type:         concept.Type,
+		Title:        concept.Title,
+		Description:  concept.Description,
+		Resource:     concept.Resource,
+		Tags:         append([]string(nil), concept.Tags...),
+		Summary:      concept.Summary,
+		SectionCount: len(concept.Sections),
 	}
 }
 
@@ -463,9 +625,13 @@ func titleFromFilename(rel string) string {
 	return strings.ToUpper(base[:1]) + base[1:]
 }
 
-func buildSnippet(body string) string {
-	if body == "" {
+func buildSnippet(summary string, sections []ConceptSection) string {
+	if strings.TrimSpace(summary) == "" && len(sections) == 0 {
 		return ""
+	}
+	body := strings.TrimSpace(summary)
+	if body == "" {
+		body = sections[0].Body
 	}
 	scanner := bufio.NewScanner(strings.NewReader(body))
 	var parts []string

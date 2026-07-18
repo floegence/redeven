@@ -74,6 +74,9 @@ func TestSearchBundleFiltersTypeTagsAndCapsResults(t *testing.T) {
 		if !hasAnyTag(match.Tags, map[string]struct{}{"gateway": {}}) {
 			t.Fatalf("match tags=%#v, want gateway", match.Tags)
 		}
+		if match.Summary == "" || match.SectionID == "" || match.SectionTitle == "" || match.Snippet == "" {
+			t.Fatalf("match missing progressive-disclosure metadata: %#v", match)
+		}
 	}
 	if result.Filters.Type != "Gateway Contract" || len(result.Filters.Tags) != 1 || result.Filters.Tags[0] != "gateway" {
 		t.Fatalf("filters=%#v", result.Filters)
@@ -122,8 +125,42 @@ func TestOpenBundleReturnsBodyWindowAndGraph(t *testing.T) {
 	if result.Body == "" || result.BodyLength <= 0 || result.ReturnedBodyLength <= 0 {
 		t.Fatalf("body metadata=%#v", result)
 	}
+	if result.SectionID != "summary" || result.SectionTitle != "Summary" || result.Summary == "" {
+		t.Fatalf("default open should return summary: %#v", result)
+	}
+	if len(result.Sections) == 0 || !result.EvidenceOmitted {
+		t.Fatalf("default open should return section catalog and omit evidence: %#v", result)
+	}
 	if len(result.Backlinks) == 0 {
 		t.Fatalf("expected backlinks from index or concepts")
+	}
+
+	contract, err := OpenBundle(bundle, OpenRequest{
+		Path:    "ai/okf-search-tool.md",
+		Section: "contract",
+	})
+	if err != nil {
+		t.Fatalf("OpenBundle contract: %v", err)
+	}
+	if contract.SectionID != "contract" || contract.Body == "" || contract.Body == result.Body {
+		t.Fatalf("contract section=%#v", contract)
+	}
+
+	evidence, err := OpenBundle(bundle, OpenRequest{
+		Path:            "ai/okf-search-tool.md",
+		Section:         "evidence",
+		IncludeEvidence: true,
+	})
+	if err != nil {
+		t.Fatalf("OpenBundle evidence: %v", err)
+	}
+	if evidence.SectionID != "evidence" || len(evidence.Evidence) == 0 || evidence.EvidenceOmitted {
+		t.Fatalf("evidence section=%#v", evidence)
+	}
+
+	_, err = OpenBundle(bundle, OpenRequest{Path: "ai/okf-search-tool.md", Section: "missing"})
+	if err == nil {
+		t.Fatal("expected missing section error")
 	}
 
 	_, err = OpenBundle(bundle, OpenRequest{})

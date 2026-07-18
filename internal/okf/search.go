@@ -101,16 +101,20 @@ func SearchBundle(bundle Bundle, req SearchRequest) SearchResult {
 		if len(terms) > 0 && score <= 0 {
 			continue
 		}
+		sectionID, sectionTitle := bestMatchingSection(concept, terms)
 		matches = append(matches, SearchMatch{
-			ConceptID:   concept.ConceptID,
-			Path:        concept.Path,
-			Type:        concept.Type,
-			Title:       concept.Title,
-			Description: concept.Description,
-			Resource:    concept.Resource,
-			Tags:        append([]string(nil), concept.Tags...),
-			Snippet:     capText(concept.Snippet, 240),
-			Score:       score,
+			ConceptID:    concept.ConceptID,
+			Path:         concept.Path,
+			Type:         concept.Type,
+			Title:        concept.Title,
+			Description:  concept.Description,
+			Resource:     concept.Resource,
+			Tags:         append([]string(nil), concept.Tags...),
+			Summary:      concept.Summary,
+			SectionID:    sectionID,
+			SectionTitle: sectionTitle,
+			Snippet:      capText(querySnippet(concept, terms), 240),
+			Score:        score,
 		})
 	}
 
@@ -165,17 +169,80 @@ func OpenBundle(bundle Bundle, req OpenRequest) (OpenResult, error) {
 	if !ok {
 		return OpenResult{}, errors.New("OKF concept not found")
 	}
-	body, offset, returned, truncated := bodyWindow(concept.Body, req.BodyOffset, req.BodyLimit)
+	sectionID := strings.TrimSpace(req.Section)
+	sectionTitle := "Summary"
+	selectedBody := concept.Summary
+	if sectionID != "" && !strings.EqualFold(sectionID, "summary") {
+		if strings.EqualFold(sectionID, "evidence") {
+			sectionTitle = "Evidence"
+			selectedBody = ""
+		} else {
+			selected, ok := findSection(concept.Sections, sectionID)
+			if !ok {
+				return OpenResult{}, fmt.Errorf("OKF section not found: %s", sectionID)
+			}
+			sectionID = selected.ID
+			sectionTitle = selected.Title
+			selectedBody = selected.Body
+		}
+	} else {
+		sectionID = "summary"
+	}
+	body, offset, returned, truncated := bodyWindow(selectedBody, req.BodyOffset, req.BodyLimit)
+	evidence := []EvidenceRef(nil)
+	evidenceOmitted := len(concept.Evidence) > 0
+	if req.IncludeEvidence || strings.EqualFold(sectionID, "evidence") {
+		evidence = append([]EvidenceRef(nil), concept.Evidence...)
+		evidenceOmitted = false
+	}
+	conceptBodyLength := concept.BodyLength
+	if conceptBodyLength == 0 {
+		conceptBodyLength = len([]rune(concept.Summary))
+		for _, section := range concept.Sections {
+			conceptBodyLength += section.CharCount
+		}
+	}
 	return OpenResult{
 		Concept:            conceptSummary(concept),
+		Summary:            concept.Summary,
+		SectionID:          sectionID,
+		SectionTitle:       sectionTitle,
+		Sections:           sectionSummaries(concept),
+		Evidence:           evidence,
+		EvidenceOmitted:    evidenceOmitted,
 		Body:               body,
 		BodyOffset:         offset,
-		BodyLength:         len([]rune(concept.Body)),
+		BodyLength:         len([]rune(selectedBody)),
 		ReturnedBodyLength: returned,
+		ConceptBodyLength:  conceptBodyLength,
 		Truncated:          truncated,
 		Links:              append([]ConceptLink(nil), concept.Links...),
 		Backlinks:          append([]ConceptLink(nil), concept.Backlinks...),
 	}, nil
+}
+
+func sectionSummaries(concept Concept) []SectionSummary {
+	out := make([]SectionSummary, 0, len(concept.Sections)+1)
+	if strings.TrimSpace(concept.Summary) != "" {
+		out = append(out, SectionSummary{ID: "summary", Title: "Summary", Level: 1, CharCount: len([]rune(concept.Summary))})
+	}
+	for _, section := range concept.Sections {
+		out = append(out, SectionSummary{ID: section.ID, Title: section.Title, Level: section.Level, CharCount: section.CharCount})
+	}
+	if len(concept.Evidence) > 0 {
+		out = append(out, SectionSummary{ID: "evidence", Title: "Evidence", Level: 1, CharCount: len(concept.Evidence)})
+	}
+	return out
+}
+
+func findSection(sections []ConceptSection, value string) (ConceptSection, bool) {
+	normalized := slugify(value)
+	for _, section := range sections {
+		if section.ID == normalized || slugify(section.Title) == normalized {
+			return section, true
+		}
+	}
+	return ConceptSection{}, false
 }
 
 func findConcept(bundle Bundle, conceptID string, path string) (Concept, bool) {
@@ -287,7 +354,7 @@ func scoreConcept(concept Concept, terms []string) int {
 	}
 	title := strings.ToLower(concept.Title)
 	description := strings.ToLower(concept.Description)
-	body := strings.ToLower(concept.Body)
+	summary := strings.ToLower(concept.Summary)
 	resource := strings.ToLower(concept.Resource)
 	typ := strings.ToLower(concept.Type)
 	score := 0
@@ -298,8 +365,16 @@ func scoreConcept(concept Concept, terms []string) int {
 		if strings.Contains(description, term) {
 			score += 4
 		}
-		if strings.Contains(body, term) {
-			score += 2
+		if strings.Contains(summary, term) {
+			score += 5
+		}
+		for _, section := range concept.Sections {
+			if strings.Contains(strings.ToLower(section.Title), term) {
+				score += 3
+			}
+			if strings.Contains(strings.ToLower(section.Body), term) {
+				score += 2
+			}
 		}
 		if strings.Contains(resource, term) {
 			score += 2
@@ -315,6 +390,59 @@ func scoreConcept(concept Concept, terms []string) int {
 		}
 	}
 	return score
+}
+
+func bestMatchingSection(concept Concept, terms []string) (string, string) {
+	if len(terms) == 0 {
+		return "summary", "Summary"
+	}
+	for _, section := range concept.Sections {
+		value := strings.ToLower(section.Title + "\n" + section.Body)
+		for _, term := range terms {
+			if strings.Contains(value, term) {
+				return section.ID, section.Title
+			}
+		}
+	}
+	return "summary", "Summary"
+}
+
+func querySnippet(concept Concept, terms []string) string {
+	if len(terms) == 0 {
+		return concept.Summary
+	}
+	for _, section := range concept.Sections {
+		if snippet := contextSnippet(section.Body, terms); snippet != "" {
+			return snippet
+		}
+	}
+	if snippet := contextSnippet(concept.Summary, terms); snippet != "" {
+		return snippet
+	}
+	return concept.Summary
+}
+
+func contextSnippet(body string, terms []string) string {
+	lower := strings.ToLower(body)
+	best := -1
+	for _, term := range terms {
+		if idx := strings.Index(lower, term); idx >= 0 && (best < 0 || idx < best) {
+			best = idx
+		}
+	}
+	if best < 0 {
+		return ""
+	}
+	runes := []rune(body)
+	start := len([]rune(body[:best])) - 100
+	if start < 0 {
+		start = 0
+	}
+	end := start + 280
+	if end > len(runes) {
+		end = len(runes)
+	}
+	return strings.TrimSpace(string(runes[start:end]))
 }
 
 func capText(value string, limit int) string {

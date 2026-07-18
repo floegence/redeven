@@ -5,10 +5,13 @@ description: Flower first-turn launchers collect scoped context and send one tur
 tags: [ui, flower, desktop, env-app, interaction]
 timestamp: 2026-07-15T00:00:00Z
 ---
+# Summary
 
 Redeven uses a shared Flower turn launcher for contextual Ask Flower entrypoints. The launcher is a focused first-turn composer: it previews the captured context, accepts one prompt, calls the shared turn-launch contract, and then lets the host surface hand off to the correct full Flower chat destination.
 
-# Mechanism
+# Contract
+
+## Mechanism
 
 Shared Flower contracts define `FlowerTurnLauncherIntent`, context items, attachments, and the shared `FlowerSurfaceAdapter` turn controls: `launchTurn` for sending and `stopThread` for canceling the selected running thread. `FlowerTurnLauncherWindow` renders the floating first-turn UI and exposes `onSubmit` instead of owning Desktop or Env App navigation. Its primary action uses the same circular primary ArrowUp button family as the full Flower composer. Click or Enter sets the launcher's `sending` state before invoking the host callback, immediately swaps the ArrowUp icon for the shared loading indicator, marks the control busy, and disables input, close, linked-context, and duplicate-submit actions until the callback settles. `FlowerSurface` uses the same `launchTurn` contract for normal chat sends, so new threads and continued conversations share one adapter path. The full Flower composer uses `stopThread` when the selected thread is running or waiting for approval: with an empty draft, the primary action becomes a stop icon and cancels the current run; with a non-empty draft, the action remains send-shaped and executes stop before launching the typed turn. Desktop Welcome opens the launcher from an environment card, builds the shared `assistant.ask.flower` context action, submits through the local environment adapter, creates a one-shot thread focus request for the returned thread id, and opens the Welcome Flower page. Env App captures its view-mode handoff context when the launcher opens; after a successful submit it creates the same one-shot AI thread focus request and routes to Activity or Workbench using the captured target. Gateway sessions preserve `runtime_gateway` as their execution context source instead of falling through to generic remote sources. A linked context preview must correspond to a valid `context_action`, including target, locality, source surface, and execution hint values accepted by the runtime validator; hosts must reject an explicit malformed context action instead of silently sending a context-free turn.
 
@@ -34,59 +37,30 @@ The launcher is not a persistent chat surface and does not inject drafts into th
 
 A persisted file path is display and navigation metadata, not a filesystem read grant. After a user click, the Env App host normalizes the path and delegates to its existing preview or directory surface, where session and filesystem read policy remains authoritative. That host read does not mutate the context action, attach file contents to the transcript, or create new model-visible supplemental context. Desktop and any future host without the matching capability must render the reference without a click affordance instead of inventing a fallback interaction.
 
-# Citations
+# Evidence
 
-[1] redeven:internal/flower_ui/src/contracts/flowerSurfaceContracts.ts:739 - `FlowerSurfaceAdapter` exposes `stopThread` alongside `launchTurn`.
-[2] redeven:internal/flower_ui/src/FlowerTurnLauncherWindow.tsx:38 - The shared launcher submit payload contains the prompt and the captured launcher intent.
-[3] redeven:internal/flower_ui/src/FlowerTurnLauncherWindow.tsx:478 - The launcher uses the shared circular primary action and binds its loading state directly to first-turn submission.
-[4] redeven:internal/flower_ui/src/FlowerSurface.tsx:1188 - `FlowerSurface` stops the selected thread through the shared adapter before applying the returned bootstrap.
-[5] redeven:internal/flower_ui/src/FlowerSurface.tsx:1203 - `FlowerSurface` chooses the stop/stop+send branch before normal chat send.
-[6] redeven:internal/flower_ui/src/FlowerSurface.tsx:1672 - The composer primary action switches to stop only when the selected thread can stop and the draft is empty.
-[7] redeven:desktop/src/welcome/App.tsx:9689 - Environment card Ask Flower controls open the floating launcher instead of navigating directly.
-[8] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:884 - Env App captures the launcher handoff context when opening the launcher.
-[9] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1070 - Env App handoff uses the captured context to route the completed launch to Activity or Workbench.
-[10] redeven:desktop/src/welcome/App.tsx:5912 - Desktop Welcome submits the launcher prompt through the local environment Flower turn launcher path.
-[11] redeven:desktop/src/welcome/App.tsx:5922 - Desktop Welcome creates the one-shot focus request after a successful launch.
-[12] redeven:desktop/src/welcome/App.tsx:6164 - Desktop Welcome clears the focus request after `FlowerSurface` consumes it.
-[13] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:866 - Env App creates and consumes one-shot AI thread focus requests.
-[14] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1146 - Env App submits launcher prompts through the env-local Flower adapter `launchTurn` contract.
-[15] redeven:desktop/src/welcome/environmentFlowerContext.ts:108 - Desktop Welcome builds environment-card context with the shared Ask Flower context action contract.
-[16] redeven:internal/ai/context_action.go:133 - Runtime validates Ask Flower context actions before accepting the product turn.
-[17] redeven:internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.ts:428 - Env App `stopThread` calls the AI RPC stop endpoint and reloads the thread.
-[18] redeven:desktop/src/welcome/flower/localEnvironmentFlowerSurfaceAdapter.tsx:421 - Desktop `stopThread` posts to the runtime thread cancel endpoint and reloads live bootstrap.
-[19] redeven:desktop/src/main/main.ts:7457 - Desktop runtime Flower allowlist accepts the thread cancel path.
-[20] redeven:internal/codeapp/appserver/server.go:4013 - The app server thread cancel route calls `StopThread` while preserving permission and audit handling.
-[21] redeven:internal/flower_ui/src/contracts/flowerSurfaceContracts.ts:1105 - `FlowerSurfaceAdapter` exposes optional working-directory picker read methods.
-[22] redeven:internal/flower_ui/src/FlowerSurface.tsx:1001 - `FlowerSurface` enables the picker only when both working-directory read methods exist.
-[23] redeven:internal/flower_ui/src/FlowerSurface.tsx:1034 - The working-directory chip title uses the full path while the visible label can stay compact.
-[24] redeven:internal/flower_ui/src/FlowerSurface.tsx:1089 - Existing thread working-directory chip clicks copy the full path instead of opening the picker.
-[25] redeven:internal/flower_ui/src/FlowerSurface.tsx:2545 - `launchTurn` includes `working_dir` only when creating a new thread.
-[26] redeven:internal/flower_ui/src/FlowerSurface.tsx:5810 - DirectoryPicker selection writes the absolute path into the New chat draft.
-[27] redeven:internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.ts:371 - Env App implements picker reads through the existing runtime FS RPC.
-[28] redeven:desktop/src/welcome/flower/localEnvironmentFlowerSurfaceAdapter.tsx:496 - Desktop Welcome implements picker reads through the runtime FS Local API bridge.
-[29] redeven:internal/flower_ui/src/filePicker/path.ts:13 - Shared Flower UI path helpers derive the basename used by the header chip.
-[30] redeven:internal/flower_ui/src/filePicker/createDirectoryPickerDataSource.ts:31 - Shared Flower UI directory-picker data source converts picker paths through the configured home path.
-[31] redeven:internal/ai/threads.go:380 - Creating a thread falls back to `agentHomeDir` when no working directory is supplied.
-[32] redeven:internal/codeapp/appserver/server.go:3843 - Thread PATCH decoding rejects unknown fields such as `working_dir`.
-[33] redeven:go.mod:9 - Redeven consumes the published Floret module that owns provider-visible turn ledger closure.
-[34] redeven:internal/ai/service.go:1043 - Stop finalization waits on the detached run's done channel before clearing admission.
-[35] redeven:internal/ai/service.go:1715 - Direct run preparation rejects a thread while stop finalization is pending.
-[36] redeven:internal/ai/service.go:2495 - CancelRun records the in-memory stop-finalizing guard for the detached run.
-[37] redeven:internal/ai/thread_actor.go:459 - Queued followup drain waits while stop finalization is pending.
-[38] redeven:internal/ai/thread_actor.go:659 - New user input during stop finalization is accepted as a queued turn rather than starting immediately.
-[39] redeven:internal/ai/floret_runtime.go:249 - Redeven-requested cancel or timeout avoids the generic Floret engine failure path.
-[40] redeven:internal/envapp/ui_src/src/ui/utils/filePreviewAskFlower.ts:12 - File preview Ask Flower intents accept preview selection input but only emit file-path context.
-[41] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:4133 - Terminal Ask Flower keeps short selections inline and turns long selections into metadata-only context.
-[42] redeven:internal/ai/context_action_floret.go:83 - Backend attachment projection creates metadata-only Floret supplemental context items.
-[43] redeven:internal/flower_ui/src/contextActionWire.ts:280 - Shared context-action parsing exposes strict-input and persisted-display modes.
-[44] redeven:internal/ai/threads.go:244 - Thread detail returns complete canonical queued-turn records without attachment transport URLs.
-[45] redeven:internal/flower_ui/src/flowerPendingTurns.ts:31 - Pending-turn reconciliation preserves partial summaries and removes canonical transcript duplicates.
-[46] redeven:internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.ts:443 - Env App rejects pending files when upload support is unavailable.
-[47] redeven:internal/flower_ui/src/contracts/flowerSurfaceContracts.ts:1038 - Linked-context navigation carries canonical path and transcript display identity separately from activity file actions.
-[48] redeven:internal/flower_ui/src/FlowerSurface.tsx:5597 - Flower enables file and directory chips only when the host exposes the matching navigation capability.
-[49] redeven:internal/flower_ui/src/FlowerSurface.tsx:5604 - The linked-context dispatcher separates snapshot preview from host file and directory navigation.
-[50] redeven:internal/flower_ui/src/chat/FlowerChatContextPreview.tsx:58 - The local linked-context floating preview accepts only self-contained text and process snapshot actions.
-[51] redeven:internal/envapp/ui_src/src/ui/flower/linkedContextNavigation.ts:26 - Env App normalizes linked file paths and delegates them to the existing layout-aware live preview controller.
-[52] redeven:internal/envapp/ui_src/src/ui/flower/linkedContextNavigation.ts:37 - Env App normalizes linked directory paths and delegates them to the existing Files controller.
-[53] redeven:desktop/src/welcome/App.tsx:6161 - Desktop Welcome creates Flower without linked file or directory host capabilities.
-[54] redeven:desktop/src/welcome/flower/localEnvironmentFlowerSurfaceAdapter.tsx:409 - Desktop Welcome explicitly rejects pending files because it has no upload handler.
+- `redeven:internal/flower_ui/src/contracts/flowerSurfaceContracts.ts:739` - `FlowerSurfaceAdapter` exposes `stopThread` alongside `launchTurn`.
+- `redeven:internal/flower_ui/src/FlowerTurnLauncherWindow.tsx:38` - The shared launcher submit payload contains the prompt and the captured launcher intent.
+- `redeven:internal/flower_ui/src/FlowerSurface.tsx:1188` - `FlowerSurface` stops the selected thread through the shared adapter before applying the returned bootstrap.
+- `redeven:desktop/src/welcome/App.tsx:9689` - Environment card Ask Flower controls open the floating launcher instead of navigating directly.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:884` - Env App captures the launcher handoff context when opening the launcher.
+- `redeven:desktop/src/welcome/environmentFlowerContext.ts:108` - Desktop Welcome builds environment-card context with the shared Ask Flower context action contract.
+- `redeven:internal/ai/context_action.go:133` - Runtime validates Ask Flower context actions before accepting the product turn.
+- `redeven:internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.ts:428` - Env App `stopThread` calls the AI RPC stop endpoint and reloads the thread.
+- `redeven:desktop/src/welcome/flower/localEnvironmentFlowerSurfaceAdapter.tsx:421` - Desktop `stopThread` posts to the runtime thread cancel endpoint and reloads live bootstrap.
+- `redeven:desktop/src/main/main.ts:7457` - Desktop runtime Flower allowlist accepts the thread cancel path.
+- `redeven:internal/codeapp/appserver/server.go:4013` - The app server thread cancel route calls `StopThread` while preserving permission and audit handling.
+- `redeven:internal/flower_ui/src/filePicker/path.ts:13` - Shared Flower UI path helpers derive the basename used by the header chip.
+- `redeven:internal/flower_ui/src/filePicker/createDirectoryPickerDataSource.ts:31` - Shared Flower UI directory-picker data source converts picker paths through the configured home path.
+- `redeven:internal/ai/threads.go:380` - Creating a thread falls back to `agentHomeDir` when no working directory is supplied.
+- `redeven:go.mod:9` - Redeven consumes the published Floret module that owns provider-visible turn ledger closure.
+- `redeven:internal/ai/service.go:1043` - Stop finalization waits on the detached run's done channel before clearing admission.
+- `redeven:internal/ai/thread_actor.go:459` - Queued followup drain waits while stop finalization is pending.
+- `redeven:internal/ai/floret_runtime.go:249` - Redeven-requested cancel or timeout avoids the generic Floret engine failure path.
+- `redeven:internal/envapp/ui_src/src/ui/utils/filePreviewAskFlower.ts:12` - File preview Ask Flower intents accept preview selection input but only emit file-path context.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:4133` - Terminal Ask Flower keeps short selections inline and turns long selections into metadata-only context.
+- `redeven:internal/ai/context_action_floret.go:83` - Backend attachment projection creates metadata-only Floret supplemental context items.
+- `redeven:internal/flower_ui/src/contextActionWire.ts:280` - Shared context-action parsing exposes strict-input and persisted-display modes.
+- `redeven:internal/flower_ui/src/flowerPendingTurns.ts:31` - Pending-turn reconciliation preserves partial summaries and removes canonical transcript duplicates.
+- `redeven:internal/flower_ui/src/chat/FlowerChatContextPreview.tsx:58` - The local linked-context floating preview accepts only self-contained text and process snapshot actions.
+- `redeven:internal/envapp/ui_src/src/ui/flower/linkedContextNavigation.ts:26` - Env App normalizes linked file paths and delegates them to the existing layout-aware live preview controller.

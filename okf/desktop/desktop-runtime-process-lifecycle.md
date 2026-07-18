@@ -5,10 +5,13 @@ description: Desktop serializes Runtime lifecycle ownership and reconciles manag
 tags: [desktop, runtime, lifecycle, coordination, process, inventory]
 timestamp: 2026-07-16T00:00:00Z
 ---
+# Summary
 
 Redeven Desktop governs Local, SSH-hosted, and container-hosted Env Runtime processes through one process inventory contract. Stop, Restart, and Update do not infer liveness from a saved PID, a current state directory, an in-memory ready record, or a status command exit code. Gateway service processes remain outside this inventory and retain their independent lifecycle.
 
-# Inventory identity
+# Contract
+
+## Inventory identity
 
 The inventory only considers command lines shaped as `redeven run ... --desktop-managed`. Each candidate is scoped to the current user and, on Linux, the current mount namespace. The stable process identity contains PID, process create time, mount namespace, state root, executable path and device/inode, and Desktop owner id. Linux additionally records deleted executable state. The JSON response exposes only the sanitized scope, process identity fields, runtime version when available, orthogonal authority fields, counts, and a SHA-256 `inventory_digest`; it never returns full environment data, secret values, tokens, or raw command lines.
 
@@ -18,7 +21,7 @@ The contract has exactly three stop authorities. `automatic` covers a verified c
 
 Only the configured state root and current managed executable layout are eligible. A matching Desktop-managed process under the target state root with an unexpected executable layout remains visible as `blocked`; it is never ignored or reclassified through historical path rules.
 
-# Stop transaction
+## Stop transaction
 
 `desktop-runtime-inventory` always returns schema 2. `desktop-runtime-stop --all-matching` requires the expected digest. Its `--reconciliation-mode` is `automatic` by default, while `confirmed_takeover` is valid only with `--all-matching` and `--expected-inventory-digest`. There is no contract-version flag or legacy-layout option.
 
@@ -28,7 +31,7 @@ After every target passes fresh process-identity verification and before the sig
 
 All verified targets receive a graceful interrupt before one shared grace deadline begins. Targets that remain are re-identified before forced termination. Once a target exits, an already empty captured lease is complete and an unchanged captured lease can be safely retired. A captured lease whose PID, instance identity, or original content changed causes `runtime_inventory_changed`; changed malformed content causes `runtime_lock_cleanup_failed`. The final process inventory is inspected even when lease cleanup fails, and a new live Runtime takes precedence as `runtime_inventory_changed`. The operation succeeds only when the final inventory is empty and every captured lease is settled. Desktop stops managed Runtime processes only through this command contract. A startup report PID remains diagnostic and is never sufficient authority for a bare kill.
 
-# Lifecycle ordering
+## Lifecycle ordering
 
 Start and Open are observational. They inventory the target and may reuse one verified current-owner process, but they never terminate a foreign-owner, missing-owner, duplicate, blocked, or takeover-eligible process. Local health inspection also inventories processes when lease and Runtime status cannot attach, so a live ownerless or foreign process remains a managed maintenance state instead of appearing stopped. A verified missing-owner or foreign-owner process becomes `runtime_process_takeover_required` maintenance rather than a startup failure. If a takeover-eligible process appears after Start's initial observation but before its final inventory, Desktop finishes the launcher attempt as terminal `needs_confirmation`, stores the maintenance in Runtime Presence, and returns the successful `runtime_maintenance_required` outcome without opening the destructive Dialog or sending a signal. A hard-blocked identity remains non-forceable. Explicit Stop, Restart, and Update without a matching confirmation return the existing structured `confirmation_required` outcome before sessions close, packages switch, or signals are sent.
 
@@ -40,7 +43,7 @@ SSH and container targets use the verified current Desktop Runtime asset as the 
 
 The first committed destructive callback is the cancellation boundary. Before it, package preparation, identity discovery, and user confirmation may still be canceled. Once Desktop closes sessions for an authorized Stop/Restart/Update or reaches `stopping_runtime_process`, it marks the operation non-cancelable and continues through final inventory verification. `needs_confirmation` is a terminal launcher status, not a failure and not active lifecycle ownership, so the coordinator is released while the user decides.
 
-# Lifecycle ownership
+## Lifecycle ownership
 
 One Desktop process owns lifecycle mutation through a `RuntimeLifecycleCoordinator` shared by Local, SSH, container, and managed Gateway paths. The coordinator key is the physical target identity: host authority, process placement, normalized state root, and concrete container id when placement is a container. Local host state roots are resolved filesystem paths. Missing state root, SSH authority, container engine, or container id is rejected; an Environment display name is never an identity fallback.
 
@@ -54,37 +57,27 @@ Inventory digest and PID identity checks remain the cross-process safety boundar
 
 Lifecycle diagnostics record `takeover_required`, `takeover_confirmed`, `takeover_canceled`, and `takeover_inventory_changed` with operation, placement, target id, and process count. They do not record owner ids, process environments, tokens, or other secret material.
 
-# Success conditions
+## Success conditions
 
 Stop succeeds only with an empty matching inventory. Restart and Update succeed only when the final inventory contains exactly one process with verified identity, current owner, current layout, and `automatic` authority whose PID matches the startup report, whose state root, namespace, executable identity, and runtime version match the target, and whose PID/create-time identity differs from the pre-stop process. Local, SSH, and container launchers enforce the same rule.
 
-# Citations
+# Boundaries
 
-[1] redeven:internal/runtimemanagement/process_inventory.go:23 - Process inventory schema 2 and the orthogonal process authority fields are defined together.
-[2] redeven:internal/runtimemanagement/process_inventory.go:292 - System snapshots collect create time, user, namespace, executable identity, arguments, and Desktop owner id.
-[3] redeven:internal/runtimemanagement/process_inventory.go:332 - Only `redeven run` processes carrying `--desktop-managed` enter the inventory.
-[4] redeven:internal/runtimemanagement/process_inventory.go:527 - Lock metadata may supply owner evidence without weakening the process identity.
-[5] redeven:internal/runtimemanagement/process_inventory.go:443 - Inventory derives identity, owner, layout, evidence, and stop authority independently.
-[6] redeven:internal/runtimemanagement/process_stop.go:175 - Stop validates digest, reconciliation mode, blocked instances, and takeover authority before signals.
-[7] redeven:internal/runtimemanagement/process_stop.go:253 - Every target passes a fresh identity check before the graceful signal set is committed.
-[8] redeven:internal/runtimemanagement/process_stop.go:284 - Forced termination applies only to remaining targets whose identity still matches.
-[9] redeven:cmd/redeven/desktop_runtime_daemon.go:112 - `desktop-runtime-inventory` exposes the single current process contract.
-[10] redeven:cmd/redeven/desktop_runtime_daemon.go:154 - Confirmed takeover requires all-matching and an expected inventory digest.
-[11] redeven:desktop/src/main/runtimeProcess.ts:790 - Local lifecycle discovery, stop, and final identity verification use the inventory contract.
-[12] redeven:desktop/src/main/sshRuntime.ts:2940 - SSH prepares package state, reconciles processes, activates staging, starts, and verifies final identity in one flow.
-[13] redeven:desktop/src/main/runtimePlacementManager.ts:490 - Container Update prepares the runtime asset before process reconciliation and activates it only after empty verification.
-[14] redeven:desktop/src/main/main.ts:9580 - Product lifecycle progress becomes non-cancelable when the core SSH launcher enters the signal phase.
-[15] redeven:tests/docker_runtime_e2e/docker_runtime_e2e_test.go:430 - Docker E2E proves container-scoped reconciliation does not terminate a matching process in another namespace.
-[16] redeven:desktop/src/main/runtimeLifecycleCoordinator.ts:64 - Physical lifecycle identity requires normalized state root, host authority, placement, and concrete container identity.
-[17] redeven:desktop/src/main/runtimeLifecycleCoordinator.ts:153 - Active lifecycle ownership coalesces identical requests and rejects incompatible requests without queuing.
-[18] redeven:desktop/src/main/runtimeLifecycleCoordinator.ts:134 - Coordinator cancellation keeps the target owned until the task and its cleanup settle.
-[19] redeven:desktop/src/main/launcherOperations.ts:291 - Launcher operation creation rejects replacement of an active same-key attempt.
-[20] redeven:desktop/src/main/runtimeProcess.ts:512 - Local startup cancellation enters deterministic child, inventory, and report-directory cleanup.
-[21] redeven:desktop/src/main/runtimeProcessInventory.ts:230 - The shared Desktop planner separates hard identity blocks from digest-bound takeover confirmation.
-[22] redeven:desktop/src/main/main.ts:2292 - Lifecycle conflicts return the active operation key through structured launcher failure.
-[23] redeven:desktop/src/main/main.ts:16399 - Target deletion cancels pre-commit coordinator work and waits for lifecycle ownership to settle.
-[24] redeven:desktop/src/main/main.ts:16790 - Desktop quit cancels cancelable lifecycle work and waits for all coordinator tasks.
-[25] redeven:internal/runtimemanagement/process_stop.go:353 - Stop captures and later retires only lock leases that identify a verified target PID.
-[26] redeven:desktop/src/shared/desktopRuntimePresence.ts:89 - Runtime Presence remains the sole renderer-facing source of management capability.
-[27] redeven:desktop/src/shared/desktopLauncherIPC.ts:79 - `needs_confirmation` is a terminal launcher operation status.
-[28] redeven:desktop/src/welcome/App.tsx:6400 - Welcome renders the sanitized, destructive takeover confirmation and sends only the digest-bound continuation.
+No additional boundary is declared for this concept.
+
+# Evidence
+
+- `redeven:internal/runtimemanagement/process_inventory.go:23` - Process inventory schema 2 and the orthogonal process authority fields are defined together.
+- `redeven:internal/runtimemanagement/process_stop.go:175` - Stop validates digest, reconciliation mode, blocked instances, and takeover authority before signals.
+- `redeven:cmd/redeven/desktop_runtime_daemon.go:112` - `desktop-runtime-inventory` exposes the single current process contract.
+- `redeven:desktop/src/main/runtimeProcess.ts:790` - Local lifecycle discovery, stop, and final identity verification use the inventory contract.
+- `redeven:desktop/src/main/sshRuntime.ts:2940` - SSH prepares package state, reconciles processes, activates staging, starts, and verifies final identity in one flow.
+- `redeven:desktop/src/main/runtimePlacementManager.ts:490` - Container Update prepares the runtime asset before process reconciliation and activates it only after empty verification.
+- `redeven:desktop/src/main/main.ts:9580` - Product lifecycle progress becomes non-cancelable when the core SSH launcher enters the signal phase.
+- `redeven:tests/docker_runtime_e2e/docker_runtime_e2e_test.go:430` - Docker E2E proves container-scoped reconciliation does not terminate a matching process in another namespace.
+- `redeven:desktop/src/main/runtimeLifecycleCoordinator.ts:64` - Physical lifecycle identity requires normalized state root, host authority, placement, and concrete container identity.
+- `redeven:desktop/src/main/launcherOperations.ts:291` - Launcher operation creation rejects replacement of an active same-key attempt.
+- `redeven:desktop/src/main/runtimeProcessInventory.ts:230` - The shared Desktop planner separates hard identity blocks from digest-bound takeover confirmation.
+- `redeven:desktop/src/shared/desktopRuntimePresence.ts:89` - Runtime Presence remains the sole renderer-facing source of management capability.
+- `redeven:desktop/src/shared/desktopLauncherIPC.ts:79` - `needs_confirmation` is a terminal launcher operation status.
+- `redeven:desktop/src/welcome/App.tsx:6400` - Welcome renders the sanitized, destructive takeover confirmation and sends only the digest-bound continuation.

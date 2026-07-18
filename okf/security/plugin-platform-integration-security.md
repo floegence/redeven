@@ -5,6 +5,7 @@ description: Redeven maps sessions, route ownership, bundled official package tr
 tags: [security, plugins, permissions, local-ui]
 timestamp: 2026-07-06T00:00:00Z
 ---
+# Summary
 
 Redeven plugin security is host integration over released ReDevPlugin
 contracts. ReDevPlugin owns plugin identity, lifecycle, permission evaluation,
@@ -14,7 +15,9 @@ platform errors. Redeven contributes local session facts, product policy, route
 mounting, official bundled-package trust policy, vault/audit/diagnostics sinks,
 and concrete business capability adapters.
 
-# Mechanism
+# Contract
+
+## Mechanism
 
 Redeven session metadata is authoritative only when it comes from the control
 channel or the local direct-session path. Browser-provided permission or app
@@ -89,17 +92,10 @@ by ReDevPlugin.
 
 # Boundaries
 
-Redeven must not point builds, tests, release validation, examples, or
-committed source at a local `../redevplugin` checkout through `go.work`,
-`go.work.sum`, `replace`, local npm link/workspace/file/portal wiring, Rust
-path overrides, copied source trees, or copied generated contracts.
-
-Redeven must not implement an alternate plugin gateway token issuer, asset
-ticket system, manifest parser, package validator, registry lifecycle, storage
-broker, network broker, WASM executor, runtime supervisor, stream envelope, or
-plugin lifecycle state machine. It must not directly edit ReDevPlugin registry
-tables, package staging state, token rows, storage namespaces, runtime leases,
-or revoke epochs.
+The canonical published-dependency, opaque-state, and platform-mechanism
+prohibitions are defined by [ReDevPlugin host integration boundary](../architecture/redevplugin-boundary.md).
+This concept owns only Redeven's session, route, official-package trust, and
+business-capability security projection.
 
 Plugin surfaces and workers must not receive Desktop runtime-control tokens,
 raw local direct-session artifacts, standalone Gateway bridge credentials, RCPP
@@ -107,25 +103,15 @@ provider credentials, or Flower target grants as ambient authority. Access to
 Redeven business resources must always arrive through a released ReDevPlugin
 request context and a Redeven-registered adapter.
 
-# Citations
+# Evidence
 
-[1] redeven:AGENTS.md:256 - Redeven consumes ReDevPlugin through published artifacts only.
-[2] redeven:AGENTS.md:331 - Local sibling checkout wiring and copied ReDevPlugin source are forbidden.
-[3] redeven:AGENTS.md:441 - ReDevPlugin platform state remains opaque to Redeven integration code.
-[4] redeven:AGENTS.md:474 - Redeven integration must not bypass plugin tokens, brokers, sandboxing, or lifecycle policy.
-[5] redeven:internal/session/types.go:7 - Session metadata is delivered by the control plane and browser claims are not trusted.
-[6] redeven:internal/session/types.go:22 - `can_admin` gates management actions and is not part of the RWX clamp.
-[7] redeven:internal/codeapp/appserver/server.go:529 - Plugin sandbox routes are delegated only for plugin sandbox origins.
-[8] redeven:internal/codeapp/appserver/server.go:537 - Plugin management routes are delegated only for Env App origins.
-[9] redeven:internal/codeapp/appserver/server.go:626 - AppServer rewrites Redeven plugin routes to ReDevPlugin handler paths.
-[10] redeven:internal/codeapp/appserver/server.go:6263 - `plg-*` first labels are classified as plugin sandbox origins.
-[11] redeven:internal/codeapp/appserver/server_test.go:548 - Tests bind the proxy route matrix across caller roles.
-[12] redeven:internal/codeapp/appserver/server_test.go:833 - Tests bind plugin-origin sandbox namespace delegation.
-[13] redeven:internal/codeapp/codeapp.go:1 - Code App supplies the plugin-platform resolver that includes the Local UI session fallback.
-[14] redeven:internal/codeapp/plugin_local_session_test.go:1 - Tests prove `local-ui` resolves only when Local UI is enabled.
-[15] redeven:internal/redevpluginintegration/adapters.go:85 - The session resolver projects Redeven session metadata into ReDevPlugin session context.
-[16] redeven:internal/redevpluginintegration/adapters.go:272 - CSRF validation requires the resolved ReDevPlugin session context.
-[17] redeven:internal/redevpluginintegration/adapters.go:1 - ReDevPlugin integration adapters own host policy and trust glue.
-[18] redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1 - Plugin management API calls use `/_redeven_proxy/api/plugins*`.
-[19] redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginPackages.ts:1 - The bundled official Containers package is embedded with expected hashes.
-[20] redeven:okf/architecture/container-resources-capability.md:1 - Container resources are a Redeven-owned Docker/Podman business capability.
+- `redeven:AGENTS.md:256` - Redeven consumes ReDevPlugin through published artifacts only.
+- `redeven:internal/session/types.go:7` - Session metadata is delivered by the control plane and browser claims are not trusted.
+- `redeven:internal/codeapp/appserver/server.go:529` - Plugin sandbox routes are delegated only for plugin sandbox origins.
+- `redeven:internal/codeapp/appserver/server_test.go:548` - Tests bind the proxy route matrix across caller roles.
+- `redeven:internal/codeapp/codeapp.go:1` - Code App supplies the plugin-platform resolver that includes the Local UI session fallback.
+- `redeven:internal/codeapp/plugin_local_session_test.go:1` - Tests prove `local-ui` resolves only when Local UI is enabled.
+- `redeven:internal/redevpluginintegration/adapters.go:85` - The session resolver projects Redeven session metadata into ReDevPlugin session context.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1` - Plugin management API calls use `/_redeven_proxy/api/plugins*`.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginPackages.ts:1` - The bundled official Containers package is embedded with expected hashes.
+- `redeven:okf/architecture/container-resources-capability.md:1` - Container resources are a Redeven-owned Docker/Podman business capability.

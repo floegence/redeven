@@ -98,10 +98,10 @@ func TestBuiltInPresentationSpecsCarryProjectionFacts(t *testing.T) {
 			toolName:            "okf.open",
 			operation:           "okf.open",
 			labelFields:         []string{"concept_title", "concept_id", "path"},
-			callPayloadFields:   []string{"concept_id", "path", "body_offset", "body_limit"},
+			callPayloadFields:   []string{"concept_id", "path", "section", "include_evidence", "body_offset", "body_limit"},
 			callLabelFallback:   "OKF concept",
 			resultLabelFallback: "OKF concept",
-			resultPayloadFields: []string{"concept_title", "concept", "body_offset", "body_length", "returned_body_length", "link_count", "backlink_count", "links", "backlinks", "truncated"},
+			resultPayloadFields: []string{"concept_title", "concept", "summary", "section_id", "section_title", "sections", "evidence", "evidence_omitted", "body_offset", "body_length", "returned_body_length", "concept_body_length", "link_count", "backlink_count", "links", "backlinks", "truncated"},
 		},
 		{
 			toolName:            "write_todos",

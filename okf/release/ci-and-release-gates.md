@@ -5,13 +5,16 @@ description: Redeven release confidence comes from README localization checks, s
 tags: [release, ci, quality, okf]
 timestamp: 2026-07-17T00:00:00Z
 ---
+# Summary
 
 Redeven keeps CI and local release checks aligned around source validation,
 README localization parity, generated asset determinism, ReDevPlugin dependency
 boundaries, UI behavior, embedded assets, Go tests, and lint. OKF is part of
 that gate, not optional documentation.
 
-# Mechanism
+# Contract
+
+## Mechanism
 
 CI has a dedicated OKF bundle check that validates source integrity and verifies
 checked-in dist files. The main check installs Go, Node, corepack,
@@ -169,36 +172,22 @@ or sync. Focused checks provide iteration feedback. A stale or divergent remote
 main is rejected before heavy checks start; a changed candidate tip receives a
 new final gate because evidence from another commit does not transfer.
 
-# Citations
+# Evidence
 
-[1] redeven:.github/workflows/ci-check.yml:14 - CI defines a dedicated OKF bundle check job.
-[2] redeven:.github/workflows/ci-check.yml:26 - OKF source integrity is checked in CI.
-[3] redeven:.github/workflows/ci-check.yml:29 - OKF dist verification is checked in CI.
-[4] redeven:.github/workflows/ci-check.yml:118 - Embedded assets are built before focused Go gates that import UI embed packages.
-[5] redeven:.github/workflows/ci-check.yml:121 - CI runs the ReDevPlugin integration gate after embedded assets are generated.
-[6] redeven:.github/workflows/ci-check.yml:127 - CI runs the Floret dependency boundary guard before Flower protocol and UI checks.
-[7] redeven:.github/workflows/ci-check.yml:133 - CI installs the lockfile-selected Playwright Chromium runtime before Flower UI browser contracts.
-[8] redeven:AGENTS.md:778 - Repository local quality gates separate focused iteration, fast pre-commit checks, and the final main pre-push gate.
-[9] redeven:scripts/check_redevplugin_dependency_boundary.sh:1 - The local boundary script rejects local ReDevPlugin wiring and copied platform-core paths.
-[10] redeven:scripts/check_floret_dependency_boundary.sh:1 - The Floret boundary script rejects local Floret wiring, internal imports, and direct schema access.
-[11] redeven:scripts/check_plugin_integration.sh:44 - The integration gate requires embedded UI asset directories before Go embed tests.
-[12] redeven:scripts/check_plugin_integration.sh:62 - The integration gate starts with the published dependency boundary guard.
-[13] redeven:scripts/check_plugin_integration.sh:74 - The integration gate runs AppServer and Local UI plugin route tests.
-[14] redeven:scripts/check_plugin_integration.sh:82 - The integration gate runs ReDevPlugin session, security, runtime, and route adapter tests.
-[15] redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.test.ts:1 - Projection tests cover official catalog merging and tile action decisions.
-[16] redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.test.ts:1 - Plugin API tests cover proxy paths and bundled official install/update bodies.
-[17] redeven:internal/envapp/ui_src/src/ui/plugins/PluginPanel.test.tsx:1 - Plugin Panel tests cover app-grid entry behavior and pointer affordance.
-[18] redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.test.tsx:1 - Plugin Center tests cover the dedicated shell and lifecycle controls.
-[19] redeven:internal/envapp/ui_src/src/ui/plugins/PluginSurfaceFrame.test.tsx:1 - Plugin surface frame tests cover bootstrap, bridge, RPC, and confirmation behavior.
-[20] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx:807 - EnvAppShell tests bind plugin center and plugin surface Activity placement.
-[21] redeven:internal/codeapp/appserver/server_test.go:733 - AppServer tests bind Env App management delegation to the plugin handler.
-[22] redeven:internal/codeapp/appserver/server_test.go:833 - AppServer tests bind plugin sandbox route delegation to the plugin handler.
-[23] redeven:.github/workflows/ci-check.yml:52 - CI runs README localization unit tests and requires completed locale-review subagent approvals.
-[24] redeven:scripts/check_readme_localizations.mjs:1 - The README contract validates structure, links, literals, hashes, language quality, and review state.
-[25] redeven:assets/readme/locales.json:1 - The README locale manifest declares language order, file mappings, review hashes, and the shared visual exception.
-[26] redeven:AGENTS.md:226 - Repository rules define English canonical ownership and the README locale-review subagent gate.
-[27] redeven:AGENTS.md:86 - Repository validation uses focused checks during iteration and reserves the full integration gate for the exact main tip being pushed.
-[28] redeven:.githooks/pre-push:29 - The main pre-push hook validates source ref, checked-out tip, fast-forward ancestry, and linear history before running the full gate.
-[29] redeven:scripts/check_final_integration.sh:44 - The canonical final integration script binds the complete local gate to explicit base and tip commits and requires a clean worktree.
-[30] redeven:.githooks/pre-commit:7 - Commit-time validation contains only fast staged checks.
-[31] redeven:scripts/check_final_integration.sh:103 - The final gate runs fresh Go package tests serially before heavier UI and Desktop stages.
+- `redeven:.github/workflows/ci-check.yml:14` - CI defines a dedicated OKF bundle check job.
+- `redeven:AGENTS.md:778` - Repository local quality gates separate focused iteration, fast pre-commit checks, and the final main pre-push gate.
+- `redeven:scripts/check_redevplugin_dependency_boundary.sh:1` - The local boundary script rejects local ReDevPlugin wiring and copied platform-core paths.
+- `redeven:scripts/check_floret_dependency_boundary.sh:1` - The Floret boundary script rejects local Floret wiring, internal imports, and direct schema access.
+- `redeven:scripts/check_plugin_integration.sh:44` - The integration gate requires embedded UI asset directories before Go embed tests.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.test.ts:1` - Projection tests cover official catalog merging and tile action decisions.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.test.ts:1` - Plugin API tests cover proxy paths and bundled official install/update bodies.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginPanel.test.tsx:1` - Plugin Panel tests cover app-grid entry behavior and pointer affordance.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.test.tsx:1` - Plugin Center tests cover the dedicated shell and lifecycle controls.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginSurfaceFrame.test.tsx:1` - Plugin surface frame tests cover bootstrap, bridge, RPC, and confirmation behavior.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx:807` - EnvAppShell tests bind plugin center and plugin surface Activity placement.
+- `redeven:internal/codeapp/appserver/server_test.go:733` - AppServer tests bind Env App management delegation to the plugin handler.
+- `redeven:scripts/check_readme_localizations.mjs:1` - The README contract validates structure, links, literals, hashes, language quality, and review state.
+- `redeven:assets/readme/locales.json:1` - The README locale manifest declares language order, file mappings, review hashes, and the shared visual exception.
+- `redeven:.githooks/pre-push:29` - The main pre-push hook validates source ref, checked-out tip, fast-forward ancestry, and linear history before running the full gate.
+- `redeven:scripts/check_final_integration.sh:44` - The canonical final integration script binds the complete local gate to explicit base and tip commits and requires a clean worktree.
+- `redeven:.githooks/pre-commit:7` - Commit-time validation contains only fast staged checks.

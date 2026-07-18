@@ -2822,20 +2822,24 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 			return nil, errors.New("read permission denied")
 		}
 		var p struct {
-			ConceptID  string `json:"concept_id"`
-			Path       string `json:"path"`
-			BodyOffset int    `json:"body_offset"`
-			BodyLimit  int    `json:"body_limit"`
+			ConceptID       string `json:"concept_id"`
+			Path            string `json:"path"`
+			Section         string `json:"section"`
+			IncludeEvidence bool   `json:"include_evidence"`
+			BodyOffset      int    `json:"body_offset"`
+			BodyLimit       int    `json:"body_limit"`
 		}
 		b, _ := json.Marshal(args)
 		if err := json.Unmarshal(b, &p); err != nil {
 			return nil, errors.New("invalid args")
 		}
 		return okf.Open(okf.OpenRequest{
-			ConceptID:  p.ConceptID,
-			Path:       p.Path,
-			BodyOffset: p.BodyOffset,
-			BodyLimit:  p.BodyLimit,
+			ConceptID:       p.ConceptID,
+			Path:            p.Path,
+			Section:         p.Section,
+			IncludeEvidence: p.IncludeEvidence,
+			BodyOffset:      p.BodyOffset,
+			BodyLimit:       p.BodyLimit,
 		})
 
 	case "write_todos":

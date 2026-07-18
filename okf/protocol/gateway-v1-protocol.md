@@ -5,10 +5,13 @@ description: Gateway v1 uses OpenAPI as the machine-readable HTTP JSON wire cont
 tags: [gateway, protocol, desktop, openapi]
 timestamp: 2026-06-18T00:00:00Z
 ---
+# Summary
 
 Gateway v1 is the `redeven-gateway-v1` HTTP JSON protocol used by Desktop and `redeven-gateway` for pairing, catalog reads, open-session artifacts, Gateway-owned profile writes, and lifecycle requests. Its machine-readable source contract is `spec/openapi/gateway-v1.yaml`.
 
-# Mechanism
+# Contract
+
+## Mechanism
 
 The OpenAPI document defines seven `POST /gateway/v1/*` endpoints, one success envelope shape, one error envelope shape, the protocol version const, signed Gateway auth headers, the managed bridge token security boundary for profile writes, `GatewayConnectArtifact` variants, and the conditional profile access route variants. Open-session responses do not declare or depend on browser `Set-Cookie`; local-direct profile sessions are represented by a signed artifact URL whose listener port and random access path are session-specific service state, not a protocol cookie.
 
@@ -26,19 +29,8 @@ No new custom Gateway protocol specification language is introduced. Flowersec D
 
 The contract excludes Desktop bridge stdio hello/frame schemas, Env App proxy routes, direct proxy surfaces, Runtime Service compatibility windows, release installer metadata, and human Markdown protocol descriptions that are not active source contracts.
 
-# Citations
+# Evidence
 
-[1] redeven:spec/openapi/gateway-v1.yaml:1 - The OpenAPI document declares version 3.1.
-[2] redeven:spec/openapi/gateway-v1.yaml:24 - `info.version` is `redeven-gateway-v1`.
-[3] redeven:spec/openapi/gateway-v1.yaml:38 - The path set starts with `/gateway/v1/pairing/challenge`.
-[4] redeven:spec/openapi/gateway-v1.yaml:239 - Gateway auth headers are declared as OpenAPI security schemes.
-[5] redeven:spec/openapi/gateway-v1.yaml:286 - The protocol version schema is a string const.
-[6] redeven:spec/openapi/gateway-v1.yaml:657 - Gateway connect artifacts are closed variants for local direct and Desktop bridge sessions.
-[7] redeven:spec/openapi/gateway-v1.yaml:750 - SSH profile auth mode is limited to key-agent auth.
-[8] redeven:internal/runtimegateway/protocol/openapi_contract_test.go:69 - The focused contract test parses and validates the OpenAPI file.
-[9] redeven:internal/runtimegateway/protocol/openapi_contract_test.go:173 - Desktop protocol literals are checked against the Go protocol version.
-[10] redeven:internal/runtimegateway/protocol/openapi_contract_test.go:197 - OpenAPI paths are compared with Go server routes and Desktop routes.
-[11] redeven:internal/runtimegateway/protocol/openapi_contract_test.go:448 - The contract test keeps `ssh_secret` out of Gateway v1 OpenAPI.
-[12] redeven:internal/runtimegateway/protocol/openapi_contract_test.go:485 - The contract test ensures open-session does not expose browser cookies.
-[13] redeven:desktop/src/main/main.ts:3808 - Gateway sync errors build a source record from the current error and previous catalog state.
-[14] redeven:desktop/src/main/main.ts:3855 - Protocol mismatch invalidates cached Gateway catalog data.
+- `redeven:spec/openapi/gateway-v1.yaml:1` - The OpenAPI document declares version 3.1.
+- `redeven:internal/runtimegateway/protocol/openapi_contract_test.go:69` - The focused contract test parses and validates the OpenAPI file.
+- `redeven:desktop/src/main/main.ts:3808` - Gateway sync errors build a source record from the current error and previous catalog state.
