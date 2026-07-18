@@ -186,8 +186,6 @@ func (s *Service) GetFlowerThreadLiveBootstrap(ctx context.Context, meta *sessio
 
 	endpointID := strings.TrimSpace(meta.EndpointID)
 	s.mu.Lock()
-	cursor := s.flowerLiveCursorLocked(endpointID, threadID)
-	retainedFromSeq := s.flowerLiveRetainedFromSeqLocked(endpointID, threadID)
 	state := s.flowerLiveMaterializedStateLocked(endpointID, threadID)
 	streamGeneration := s.flowerLiveStreamGenerationValue()
 	s.mu.Unlock()
@@ -207,8 +205,8 @@ func (s *Service) GetFlowerThreadLiveBootstrap(ctx context.Context, meta *sessio
 	// emitted a resync event. The bootstrap state was copied before that
 	// reconciliation, so reflect the stream's current messages and cursor.
 	s.mu.Lock()
-	cursor = s.flowerLiveCursorLocked(endpointID, threadID)
-	retainedFromSeq = s.flowerLiveRetainedFromSeqLocked(endpointID, threadID)
+	cursor := s.flowerLiveCursorLocked(endpointID, threadID)
+	retainedFromSeq := s.flowerLiveRetainedFromSeqLocked(endpointID, threadID)
 	state.Messages = s.flowerLiveMaterializedStateLocked(endpointID, threadID).Messages
 	s.mu.Unlock()
 	state.TimelineDecorations = timeline.TimelineDecorations
