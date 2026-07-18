@@ -20,7 +20,6 @@ func registrySchemaSpec() sqliteutil.Spec {
 	return sqliteutil.Spec{
 		Kind:           registrySchemaKind,
 		CurrentVersion: registryCurrentSchemaVersion,
-		LegacyMarkers:  []string{"code_spaces"},
 		Pragmas:        []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`},
 		Migrations: []sqliteutil.Migration{
 			{FromVersion: 0, ToVersion: 1, Apply: migrateRegistryToV1},

@@ -3,6 +3,7 @@ package threadstore
 import (
 	"database/sql"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/floegence/redeven/internal/testutil/legacydb"
@@ -33,9 +34,16 @@ VALUES('queue_1', 'env_1', 'thread_product', 'message_1', 'model_1', 'pending pr
 		t.Fatalf("close legacy threadstore: %v", err)
 	}
 
-	store, err := Open(dbPath)
+	var ensured []string
+	store, err := Open(dbPath, WithThreadIdentityEnsurer(func(threadID string) error {
+		ensured = append(ensured, threadID)
+		return nil
+	}))
 	if err != nil {
 		t.Fatalf("Open migrated threadstore: %v", err)
+	}
+	if !slices.Equal(ensured, []string{"thread_product"}) {
+		t.Fatalf("ensured Floret thread identities = %v", ensured)
 	}
 	if err := store.Close(); err != nil {
 		t.Fatalf("close migrated threadstore: %v", err)

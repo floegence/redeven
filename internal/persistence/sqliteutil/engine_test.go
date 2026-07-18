@@ -111,6 +111,8 @@ func TestOpen_AppliesLegacyKindMigrationAtomically(t *testing.T) {
 		{
 			FromKind:    "toy_a",
 			FromVersion: 1,
+			ToKind:      "toy_b",
+			ToVersion:   1,
 			Apply: func(tx *sql.Tx) error {
 				if _, err := tx.Exec(`ALTER TABLE toy_data RENAME TO legacy_toy_data`); err != nil {
 					return err
@@ -166,6 +168,8 @@ func TestOpen_RollsBackFailedLegacyKindMigration(t *testing.T) {
 	spec.LegacyKindMigrations = []LegacyKindMigration{{
 		FromKind:    "toy_a",
 		FromVersion: 1,
+		ToKind:      "toy_b",
+		ToVersion:   1,
 		Apply: func(tx *sql.Tx) error {
 			if _, err := tx.Exec(`ALTER TABLE toy_data RENAME TO legacy_toy_data`); err != nil {
 				return err
@@ -212,7 +216,6 @@ func TestOpen_RejectsInvalidMigrationChain(t *testing.T) {
 	_, err := Open(dbPath, Spec{
 		Kind:           "broken",
 		CurrentVersion: 2,
-		LegacyMarkers:  []string{"toy_data"},
 		Pragmas:        []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`},
 		Migrations: []Migration{
 			{FromVersion: 0, ToVersion: 1, Apply: func(tx *sql.Tx) error {
@@ -234,7 +237,6 @@ func toySpec(kind string) Spec {
 	return Spec{
 		Kind:           kind,
 		CurrentVersion: 1,
-		LegacyMarkers:  []string{"toy_data"},
 		Pragmas:        []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`},
 		Migrations: []Migration{
 			{FromVersion: 0, ToVersion: 1, Apply: func(tx *sql.Tx) error {

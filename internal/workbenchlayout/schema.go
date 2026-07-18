@@ -16,7 +16,6 @@ func schemaSpec() sqliteutil.Spec {
 	return sqliteutil.Spec{
 		Kind:           schemaKind,
 		CurrentVersion: currentSchemaVersion,
-		LegacyMarkers:  []string{"workbench_layout_snapshot", "workbench_layout_widgets", "workbench_layout_events"},
 		Pragmas:        []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`},
 		Migrations: []sqliteutil.Migration{
 			{FromVersion: 0, ToVersion: 1, Apply: migrateToV1},
