@@ -90,6 +90,121 @@ func TestOpen_RejectsWrongDatabaseKind(t *testing.T) {
 	}
 }
 
+func TestOpen_AppliesLegacyKindMigrationAtomically(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "legacy-kind.sqlite")
+	db, err := Open(dbPath, toySpec("toy_a"))
+	if err != nil {
+		t.Fatalf("Open legacy: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO toy_data(id, name) VALUES(1, 'keep')`); err != nil {
+		_ = db.Close()
+		t.Fatalf("seed legacy data: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close legacy: %v", err)
+	}
+
+	spec := toySpec("toy_b")
+	spec.LegacyKindMigrations = []LegacyKindMigration{
+		{
+			FromKind:    "toy_a",
+			FromVersion: 1,
+			Apply: func(tx *sql.Tx) error {
+				if _, err := tx.Exec(`ALTER TABLE toy_data RENAME TO legacy_toy_data`); err != nil {
+					return err
+				}
+				if _, err := tx.Exec(`CREATE TABLE toy_data(id INTEGER PRIMARY KEY, name TEXT NOT NULL DEFAULT '')`); err != nil {
+					return err
+				}
+				_, err := tx.Exec(`INSERT INTO toy_data(id, name) SELECT id, name FROM legacy_toy_data`)
+				return err
+			},
+		},
+	}
+
+	db, err = Open(dbPath, spec)
+	if err != nil {
+		t.Fatalf("Open migrated: %v", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	var name string
+	if err := db.QueryRow(`SELECT name FROM toy_data WHERE id = 1`).Scan(&name); err != nil {
+		t.Fatalf("read migrated data: %v", err)
+	}
+	if name != "keep" {
+		t.Fatalf("migrated name=%q, want keep", name)
+	}
+	var kind string
+	if err := db.QueryRow(`SELECT db_kind FROM __redeven_db_meta WHERE singleton = 1`).Scan(&kind); err != nil {
+		t.Fatalf("read migrated kind: %v", err)
+	}
+	if kind != "toy_b" {
+		t.Fatalf("migrated kind=%q, want toy_b", kind)
+	}
+}
+
+func TestOpen_RollsBackFailedLegacyKindMigration(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "legacy-kind-failure.sqlite")
+	db, err := Open(dbPath, toySpec("toy_a"))
+	if err != nil {
+		t.Fatalf("Open legacy: %v", err)
+	}
+	if _, err := db.Exec(`INSERT INTO toy_data(id, name) VALUES(1, 'keep')`); err != nil {
+		_ = db.Close()
+		t.Fatalf("seed legacy data: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close legacy: %v", err)
+	}
+
+	spec := toySpec("toy_b")
+	spec.LegacyKindMigrations = []LegacyKindMigration{{
+		FromKind:    "toy_a",
+		FromVersion: 1,
+		Apply: func(tx *sql.Tx) error {
+			if _, err := tx.Exec(`ALTER TABLE toy_data RENAME TO legacy_toy_data`); err != nil {
+				return err
+			}
+			return errors.New("deliberate migration failure")
+		},
+	}}
+	if _, err := Open(dbPath, spec); err == nil {
+		t.Fatal("Open succeeded, want failed legacy migration")
+	}
+
+	raw, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("reopen raw database: %v", err)
+	}
+	defer func() { _ = raw.Close() }()
+	var kind string
+	if err := raw.QueryRow(`SELECT db_kind FROM __redeven_db_meta WHERE singleton = 1`).Scan(&kind); err != nil {
+		t.Fatalf("read rolled-back kind: %v", err)
+	}
+	if kind != "toy_a" {
+		t.Fatalf("rolled-back kind=%q, want toy_a", kind)
+	}
+	var name string
+	if err := raw.QueryRow(`SELECT name FROM toy_data WHERE id = 1`).Scan(&name); err != nil {
+		t.Fatalf("read rolled-back data: %v", err)
+	}
+	if name != "keep" {
+		t.Fatalf("rolled-back name=%q, want keep", name)
+	}
+	var staged int
+	if err := raw.QueryRow(`SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = 'legacy_toy_data'`).Scan(&staged); err != nil {
+		t.Fatalf("check staged table: %v", err)
+	}
+	if staged != 0 {
+		t.Fatalf("staged table count=%d, want 0", staged)
+	}
+}
+
 func TestOpen_RejectsInvalidMigrationChain(t *testing.T) {
 	t.Parallel()
 

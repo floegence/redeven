@@ -20,13 +20,28 @@ type Migration struct {
 	Apply       func(tx *sql.Tx) error
 }
 
+// LegacyKindMigration converts a database owned by an older schema kind into
+// the current schema before normal version migrations run. FromVersion -1
+// accepts any legacy version because the migration owns the full rebuild.
+type LegacyKindMigration struct {
+	FromKind      string
+	FromVersion   int
+	LegacyMarkers []string
+	Apply         func(tx *sql.Tx) error
+}
+
 type Spec struct {
-	Kind           string
-	CurrentVersion int
-	LegacyMarkers  []string
-	Pragmas        []string
-	Migrations     []Migration
-	Verify         func(tx *sql.Tx) error
+	Kind                 string
+	CurrentVersion       int
+	LegacyMarkers        []string
+	Pragmas              []string
+	Migrations           []Migration
+	LegacyKindMigrations []LegacyKindMigration
+	// RepairCurrent rebuilds a malformed database that is already owned by
+	// Kind. It runs in the same transaction as schema verification and is
+	// attempted at most once.
+	RepairCurrent func(tx *sql.Tx) error
+	Verify        func(tx *sql.Tx) error
 }
 
 type DatabaseTooNewError struct {
@@ -138,10 +153,6 @@ func EnsureSchema(db *sql.DB, spec Spec) error {
 	if err != nil {
 		return err
 	}
-	if currentVersion > spec.CurrentVersion {
-		return &DatabaseTooNewError{Kind: spec.Kind, Version: currentVersion, CurrentVersion: spec.CurrentVersion}
-	}
-
 	tx, err := db.Begin()
 	if err != nil {
 		return err
@@ -150,8 +161,52 @@ func EnsureSchema(db *sql.DB, spec Spec) error {
 
 	startedAt := time.Now().UnixMilli()
 	startedVersion := currentVersion
-	if err := ensureMetaOwnershipTx(tx, spec, currentVersion); err != nil {
+	if err := createMetaTableTx(tx); err != nil {
 		return err
+	}
+	metaKind, hasMeta, err := readMetaKindTx(tx)
+	if err != nil {
+		return err
+	}
+	legacyMigration, isLegacy, err := findLegacyKindMigration(tx, spec, metaKind, hasMeta, currentVersion)
+	if err != nil {
+		return err
+	}
+	if isLegacy {
+		if legacyMigration.Apply == nil {
+			return &InvalidMigrationChainError{Kind: spec.Kind, Reason: fmt.Sprintf("legacy migration from %q has nil apply", legacyMigration.FromKind)}
+		}
+		if err := legacyMigration.Apply(tx); err != nil {
+			return fmt.Errorf("migrate %s from legacy kind %q: %w", spec.Kind, legacyMigration.FromKind, err)
+		}
+		if err := setUserVersionTx(tx, spec.CurrentVersion); err != nil {
+			return err
+		}
+		currentVersion = spec.CurrentVersion
+	} else {
+		if currentVersion > spec.CurrentVersion {
+			return &DatabaseTooNewError{Kind: spec.Kind, Version: currentVersion, CurrentVersion: spec.CurrentVersion}
+		}
+		if hasMeta {
+			if metaKind != spec.Kind {
+				tables, listErr := ListUserTablesTx(tx)
+				if listErr != nil {
+					return &WrongDatabaseKindError{ExpectedKind: spec.Kind, ActualKind: metaKind}
+				}
+				return &WrongDatabaseKindError{ExpectedKind: spec.Kind, ActualKind: metaKind, Existing: tables}
+			}
+		} else {
+			tables, listErr := ListUserTablesTx(tx)
+			if listErr != nil {
+				return listErr
+			}
+			if len(tables) > 0 && !matchesLegacyMarkers(tables, spec.LegacyMarkers) {
+				return &WrongDatabaseKindError{ExpectedKind: spec.Kind, Existing: tables}
+			}
+			if err := insertMetaTx(tx, spec.Kind, currentVersion); err != nil {
+				return err
+			}
+		}
 	}
 
 	for currentVersion < spec.CurrentVersion {
@@ -173,7 +228,15 @@ func EnsureSchema(db *sql.DB, spec Spec) error {
 
 	if spec.Verify != nil {
 		if err := spec.Verify(tx); err != nil {
-			return &SchemaVerifyError{Kind: spec.Kind, Err: err}
+			if spec.RepairCurrent == nil || isLegacy {
+				return &SchemaVerifyError{Kind: spec.Kind, Err: err}
+			}
+			if repairErr := spec.RepairCurrent(tx); repairErr != nil {
+				return &SchemaVerifyError{Kind: spec.Kind, Err: fmt.Errorf("repair current schema: %w", repairErr)}
+			}
+			if verifyErr := spec.Verify(tx); verifyErr != nil {
+				return &SchemaVerifyError{Kind: spec.Kind, Err: verifyErr}
+			}
 		}
 	}
 	if err := upsertMetaTx(tx, spec.Kind, startedAt, startedVersion, currentVersion); err != nil {
@@ -192,6 +255,17 @@ func validateSpec(spec Spec) error {
 	}
 	if len(spec.Migrations) == 0 {
 		return &InvalidMigrationChainError{Kind: kind, Reason: "missing migrations"}
+	}
+	for _, migration := range spec.LegacyKindMigrations {
+		if strings.TrimSpace(migration.FromKind) == "" {
+			return &InvalidMigrationChainError{Kind: kind, Reason: "legacy migration has empty source kind"}
+		}
+		if migration.FromVersion < -1 {
+			return &InvalidMigrationChainError{Kind: kind, Reason: fmt.Sprintf("legacy migration from %q has invalid source version %d", migration.FromKind, migration.FromVersion)}
+		}
+		if migration.Apply == nil {
+			return &InvalidMigrationChainError{Kind: kind, Reason: fmt.Sprintf("legacy migration from %q has nil apply", migration.FromKind)}
+		}
 	}
 	expectedFrom := 0
 	for _, migration := range spec.Migrations {
@@ -226,34 +300,29 @@ func findMigration(migrations []Migration, fromVersion int) *Migration {
 	return nil
 }
 
-func ensureMetaOwnershipTx(tx *sql.Tx, spec Spec, currentVersion int) error {
-	if err := createMetaTableTx(tx); err != nil {
-		return err
+func findLegacyKindMigration(tx *sql.Tx, spec Spec, metaKind string, hasMeta bool, currentVersion int) (*LegacyKindMigration, bool, error) {
+	if hasMeta && strings.TrimSpace(metaKind) == strings.TrimSpace(spec.Kind) {
+		return nil, false, nil
 	}
-
-	metaKind, hasMeta, err := readMetaKindTx(tx)
-	if err != nil {
-		return err
-	}
-	if hasMeta {
-		if metaKind != spec.Kind {
-			tables, listErr := ListUserTablesTx(tx)
-			if listErr != nil {
-				return &WrongDatabaseKindError{ExpectedKind: spec.Kind, ActualKind: metaKind}
-			}
-			return &WrongDatabaseKindError{ExpectedKind: spec.Kind, ActualKind: metaKind, Existing: tables}
-		}
-		return nil
-	}
-
 	tables, err := ListUserTablesTx(tx)
 	if err != nil {
-		return err
+		return nil, false, err
 	}
-	if len(tables) > 0 && !matchesLegacyMarkers(tables, spec.LegacyMarkers) {
-		return &WrongDatabaseKindError{ExpectedKind: spec.Kind, Existing: tables}
+	for index := range spec.LegacyKindMigrations {
+		migration := &spec.LegacyKindMigrations[index]
+		if hasMeta {
+			if !strings.EqualFold(strings.TrimSpace(metaKind), strings.TrimSpace(migration.FromKind)) {
+				continue
+			}
+		} else if !matchesLegacyMarkers(tables, migration.LegacyMarkers) {
+			continue
+		}
+		if migration.FromVersion >= 0 && migration.FromVersion != currentVersion {
+			return nil, false, &InvalidMigrationChainError{Kind: spec.Kind, Reason: fmt.Sprintf("legacy kind %q is at version %d, want %d", migration.FromKind, currentVersion, migration.FromVersion)}
+		}
+		return migration, true, nil
 	}
-	return insertMetaTx(tx, spec.Kind, currentVersion)
+	return nil, false, nil
 }
 
 func matchesLegacyMarkers(existing []string, markers []string) bool {
