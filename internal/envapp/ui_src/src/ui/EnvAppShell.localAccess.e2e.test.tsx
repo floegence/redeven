@@ -1004,6 +1004,10 @@ describe('EnvAppShell environment entry affordances', () => {
       const warning = host.querySelector('[data-testid="network-exposure-warning"]') as HTMLElement;
       expect(warning.textContent).toContain('Plaintext network exposure is active');
       expect(warning.textContent).toContain('Password enabled; TLS is not. Use only on a trusted network.');
+      expect(warning.getAttribute('data-redeven-desktop-window-titlebar')).toBe('true');
+      expect(warning.getAttribute('data-redeven-desktop-titlebar-drag-region')).toBe('true');
+      expect(warning.querySelector('[data-redeven-desktop-window-titlebar-content="true"]')).toBeTruthy();
+      expect(warning.querySelector('[data-redeven-desktop-titlebar-no-drag="true"]')?.textContent).toContain('View security details');
       expect(host.querySelector('[data-testid="display-mode-keep-alive"]')?.className).toContain('redeven-env-shell-stage');
 
       findButtonByText(host, 'Activity')?.click();
