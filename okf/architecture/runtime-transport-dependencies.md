@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Runtime transport dependencies
 description: Runtime transport uses Flowersec sessions while terminal lifecycle is delegated to Floeterm managers.
 tags: [architecture, dependencies, terminal]
-timestamp: 2026-07-14T00:00:00Z
+timestamp: 2026-07-18T00:00:00Z
 quality_exception: Cross-domain published dependency contract spanning transport, terminal, and session security.
 ---
 # Summary
@@ -21,6 +21,8 @@ The released runtime dependency set includes Floeterm terminal-go v0.4.26 and Fl
 Redeven pins released `flowersec-go` and `terminal-go` versions in `go.mod`. The runtime consumes Flowersec Go v0.26.0 and the browser surfaces consume Flowersec Core v0.26.0 through published packages only. The agent connects the remote control channel through `fsclient.ConnectDirect` and opens remote data sessions through `endpoint.ConnectTunnel`; both calls explicitly select Flowersec `RequireTLS`. Env App tunnel reconnects select the matching TypeScript policy. Local UI direct reconnects use `AllowPlaintextForLoopback` for loopback locations and Flowersec's host-scoped `createNetworkPlaintextPolicy` for an explicitly acknowledged non-loopback IP location. The network policy accepts only that exact IP and includes `PlaintextRiskAcceptance.acceptPreE2ECredentialExposure`; policy construction failure blocks the connection without a permissive retry. The Docker Local UI integration client applies the same selection so its two-container network test proves the published host-scoped policy rather than unrestricted plaintext. Product code therefore does not depend on the library default and cannot silently accept unrelated remote `ws://` transport.
 
 Flowersec proxy requests use the validated browser source and origin context; payload-provided external origins are ignored, and opaque origins do not become forwarded request metadata. The Go HTTP proxy returns the first 3xx response with its original `Location` instead of following redirects. Browser Service Worker streams use one outstanding `chunk_credit_v1` credit per pull when both sides advertise the capability, while legacy workers retain their previous behavior; cancellation wakes waiting consumers. The optional Yamux stream write queue budget defaults to 4 MiB and is released after each write so an exhausted stream can recover. Reconnect paths share the active promise for the same configuration, including during backoff, preventing duplicate connection attempts without adding a global scheduler.
+
+Code App and Port Forward sessions expose only Flowersec proxy handlers to product callers, but their server still registers an empty Flowersec RPC router because the released high-level connector creates and retains an `rpc` bootstrap stream for the connection lifetime. Unknown RPC types return the standard 404 response and do not close that bootstrap stream. These sessions do not register Redeven business RPC handlers, and they use the same private server constructor so the required transport lifecycle cannot drift between the two proxy products.
 
 The control Direct session replaces record-level keepalive writes with acknowledged Yamux liveness probes at a 15-second interval and a 10-second timeout. Tunnel sessions keep Flowersec's idle-timeout-derived liveness policy. Runtime client, endpoint, and Local UI Direct server setup all select 64 KiB outbound encrypted-record chunks and explicit Yamux limits: 64 active streams, 32 inbound streams, 256 KiB frames and per-stream receive memory, 64 KiB preferred outbound frames, and 16 MiB session receive memory. Runtime RPC streams use 32 request workers with bounded request and notification queues of 128 entries each. Redeven's runtime proxy product adapter blocks only CSP, CSP Report Only, and X-Frame-Options because those embedding policies conflict with proxied product surfaces; Flowersec continues forwarding the remaining default security headers. These are transport and product-policy controls; Redeven does not copy Flowersec framing, multiplexing, RPC scheduling, proxy filtering, or protocol implementation.
 
@@ -42,6 +44,7 @@ Compatibility depends on these transport and terminal interfaces staying aligned
 
 - `redeven:go.mod:8` - Redeven pins floeterm terminal-go in the runtime module.
 - `redeven:internal/agent/agent.go:20` - Agent imports Flowersec client, endpoint, proxy, and RPC packages.
+- `redeven:internal/agent/proxy_session_server_test.go:13` - Proxy-only sessions prove the RPC bootstrap stream returns standard 404 responses and remains usable until cancellation.
 - `redeven:internal/terminal/manager.go:14` - Runtime terminal manager wraps floeterm terminal-go plus Flowersec RPC types.
 - `redeven:internal/terminal/lifecycle.go:190` - Concurrent delete callers join one session-scoped in-flight cleanup operation.
 - `redeven:AGENTS.md:173` - Repository rules require published upstream releases instead of local sibling checkouts.

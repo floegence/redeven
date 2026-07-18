@@ -1069,6 +1069,15 @@ func (a *Agent) runDataSession(ctx context.Context, grant *controlv1.ChannelInit
 	}
 }
 
+func newProxySessionServer(onError func(error)) (*serve.Server, error) {
+	return serve.New(serve.Options{
+		RPC: serve.RPCOptions{
+			Register: func(*rpc.Router, *rpc.Server) {},
+		},
+		OnError: onError,
+	})
+}
+
 func (a *Agent) serveCodeAppSession(ctx context.Context, sess endpoint.Session, meta *session.Meta) error {
 	if a == nil || meta == nil {
 		return errors.New("invalid args")
@@ -1106,13 +1115,11 @@ func (a *Agent) serveCodeAppSession(ctx context.Context, sess endpoint.Session, 
 	}
 	defer cleanupUpstream()
 
-	srv, err := serve.New(serve.Options{
-		OnError: func(err error) {
-			if err == nil {
-				return
-			}
-			a.log.Warn("codeapp stream error", "channel_id", meta.ChannelID, "code_space_id", codeSpaceID, "error", err)
-		},
+	srv, err := newProxySessionServer(func(err error) {
+		if err == nil {
+			return
+		}
+		a.log.Warn("codeapp stream error", "channel_id", meta.ChannelID, "code_space_id", codeSpaceID, "error", err)
 	})
 	if err != nil {
 		return err
@@ -1165,13 +1172,11 @@ func (a *Agent) servePortForwardSession(ctx context.Context, sess endpoint.Sessi
 	}
 	defer cleanupUpstream()
 
-	srv, err := serve.New(serve.Options{
-		OnError: func(err error) {
-			if err == nil {
-				return
-			}
-			a.log.Warn("portforward stream error", "channel_id", meta.ChannelID, "forward_id", forwardID, "error", err)
-		},
+	srv, err := newProxySessionServer(func(err error) {
+		if err == nil {
+			return
+		}
+		a.log.Warn("portforward stream error", "channel_id", meta.ChannelID, "forward_id", forwardID, "error", err)
 	})
 	if err != nil {
 		return err
