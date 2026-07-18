@@ -1,6 +1,7 @@
 package ai
 
 import (
+	"context"
 	"testing"
 
 	"github.com/floegence/floret/observation"
@@ -92,5 +93,32 @@ func TestFloretEventSinkStartsLiveDraftAfterCanonicalIdentityValidation(t *testi
 	})
 	if len(rejectedEvents) != 0 {
 		t.Fatalf("mismatched event created live draft events: %#v", rejectedEvents)
+	}
+	if rejected.floretContractError() == nil {
+		t.Fatal("mismatched event did not abort Floret contract processing")
+	}
+}
+
+func TestFloretEventSinkCancelsRunAfterContractRejection(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	r := &run{
+		id:        "run-1",
+		threadID:  "thread-1",
+		messageID: "turn-1",
+		cancelFn:  cancel,
+	}
+
+	floretEventSink{run: r}.EmitEvent(flruntime.Event{
+		Type:     observation.EventType("assistant_delta"),
+		RunID:    "run-other",
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+	})
+
+	select {
+	case <-ctx.Done():
+	default:
+		t.Fatal("malformed Floret event did not cancel the active run context")
 	}
 }

@@ -49,16 +49,6 @@ func TestClassifyRunFailureCodeProviderErrors(t *testing.T) {
 	}
 }
 
-func TestUserFacingRunErrorPresentsFloretProjectionRecovery(t *testing.T) {
-	t.Parallel()
-
-	msg := userFacingRunError(runErrorCodeFloretProjectionUnavailable, "projection failed")
-	lower := strings.ToLower(msg)
-	if !strings.Contains(lower, "refresh this thread") || !strings.Contains(lower, "do not run the task again") {
-		t.Fatalf("msg=%q, want refresh without rerun guidance", msg)
-	}
-}
-
 func TestUserFacingRunErrorHidesFloretWrapperWhenProviderCodeExists(t *testing.T) {
 	t.Parallel()
 

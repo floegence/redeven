@@ -1180,14 +1180,18 @@ func TestFlowerLiveApprovalRequestedCarriesExpectedSeq(t *testing.T) {
 		ApprovalID:  "tool_live_approval_seq",
 		ToolCallID:  "tool_live_approval_seq",
 		ToolName:    "terminal.exec",
-		RunID:       flruntime.RunID(r.messageID),
+		ToolKind:    "local",
+		RunID:       flruntime.RunID(r.id),
 		ThreadID:    flruntime.ThreadID(th.ThreadID),
 		TurnID:      flruntime.TurnID(r.messageID),
 		Step:        2,
+		BatchIndex:  0,
+		BatchSize:   1,
 		State:       "requested",
 		Revision:    3,
 		Epoch:       7,
 		RequestedAt: requestedAt,
+		ArgsHash:    "args_live_approval_seq",
 		Resources: []flruntime.PendingApprovalResource{
 			{Kind: "command", Value: "pwd; sleep 15; date"},
 			{Kind: "working_directory", Value: "/repo"},
@@ -1196,7 +1200,8 @@ func TestFlowerLiveApprovalRequestedCarriesExpectedSeq(t *testing.T) {
 		OpenWorld: true,
 	}}}
 	r.setActiveFloretHost(host)
-	if actions := r.flowerApprovalActionsFromFloretPending(flruntime.PendingApprovals{ThreadID: flruntime.ThreadID(th.ThreadID), Approvals: host.pendingApprovals}); len(actions) != 1 {
+	actions, err := r.flowerApprovalActionsFromFloretPending(flruntime.PendingApprovals{ThreadID: flruntime.ThreadID(th.ThreadID), Approvals: host.pendingApprovals, GeneratedAt: time.Now()})
+	if err != nil || len(actions) != 1 {
 		t.Fatalf("pending approvals mapped to %d Flower actions: %#v", len(actions), actions)
 	}
 	svc.mu.Lock()
@@ -1204,7 +1209,9 @@ func TestFlowerLiveApprovalRequestedCarriesExpectedSeq(t *testing.T) {
 	svc.activeRunByTh[runThreadKey(meta.EndpointID, th.ThreadID)] = runID
 	svc.mu.Unlock()
 
-	r.syncPendingFloretApprovals(ctx, "test_requested")
+	if err := r.syncPendingFloretApprovals(ctx, "test_requested"); err != nil {
+		t.Fatal(err)
+	}
 
 	resp, err := svc.ListFlowerThreadLiveEvents(ctx, &meta, th.ThreadID, 0, 10)
 	if err != nil {
@@ -1358,14 +1365,17 @@ func TestFlowerLiveApprovalSnapshotCarriesFloretApprovalContext(t *testing.T) {
 		ThreadID:  "thread_floret_approval_context",
 		MessageID: "msg_floret_approval_context",
 	})
-	action, ok := r.flowerApprovalActionFromFloretPending(flruntime.PendingApproval{
+	action, err := r.flowerApprovalActionFromFloretPending(flruntime.PendingApproval{
 		ApprovalID:  "tool_floret_approval_context",
 		ToolCallID:  "tool_floret_approval_context",
 		ToolName:    "apply_patch",
-		RunID:       flruntime.RunID("msg_floret_approval_context"),
+		ToolKind:    "local",
+		RunID:       flruntime.RunID("run_floret_approval_context"),
 		ThreadID:    flruntime.ThreadID("thread_floret_approval_context"),
 		TurnID:      flruntime.TurnID("msg_floret_approval_context"),
 		Step:        4,
+		BatchIndex:  0,
+		BatchSize:   1,
 		State:       "requested",
 		Revision:    2,
 		Epoch:       9,
@@ -1377,8 +1387,8 @@ func TestFlowerLiveApprovalSnapshotCarriesFloretApprovalContext(t *testing.T) {
 		Destructive: true,
 		ArgsHash:    "abc123",
 	})
-	if !ok {
-		t.Fatal("flowerApprovalActionFromFloretPending returned false")
+	if err != nil {
+		t.Fatalf("flowerApprovalActionFromFloretPending: %v", err)
 	}
 	if action.ActionID != flowerApprovalActionID("run_floret_approval_context", "tool_floret_approval_context") {
 		t.Fatalf("ActionID=%q", action.ActionID)

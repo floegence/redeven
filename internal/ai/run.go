@@ -169,6 +169,8 @@ type run struct {
 	muFloretProjection      sync.Mutex
 	floretProjectionOrdinal map[string]int64
 	floretEventIdentity     floretRuntimeEventIdentity
+	muFloretContract        sync.Mutex
+	floretContractErr       error
 
 	muPendingCommand         sync.Mutex
 	pendingCommandID         string

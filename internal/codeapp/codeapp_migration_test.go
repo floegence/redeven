@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/terminal"
@@ -167,9 +168,21 @@ func TestNewMigratesLegacyThreadstoreSchema(t *testing.T) {
 	if hasLegacyExecutionColumn != 0 {
 		t.Fatal("legacy run_status column remains after migration")
 	}
+	floretStore, err := flruntime.OpenSQLiteStore(filepath.Join(stateDir, "ai", "floret_threads.sqlite"))
+	if err != nil {
+		t.Fatalf("open migrated Floret store: %v", err)
+	}
+	defer floretStore.Close()
+	maintenance, err := flruntime.NewThreadMaintenanceHost(flruntime.ThreadMaintenanceHostOptions{Store: floretStore})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := maintenance.ReadThread(context.Background(), "thread_product"); err != nil {
+		t.Fatalf("read ensured Floret thread identity: %v", err)
+	}
 }
 
-func TestNewRepairsCurrentThreadstoreSchema(t *testing.T) {
+func TestNewRejectsCurrentThreadstoreSchemaDrift(t *testing.T) {
 	t.Parallel()
 
 	stateDir := t.TempDir()
@@ -203,14 +216,11 @@ func TestNewRepairsCurrentThreadstoreSchema(t *testing.T) {
 			return "", false
 		},
 	})
-	if err != nil {
-		t.Fatalf("New repaired current threadstore: %v", err)
-	}
-	if svc == nil {
-		t.Fatal("New returned nil service after repairing threadstore")
-	}
-	if err := svc.Close(); err != nil {
-		t.Fatalf("close service: %v", err)
+	if err == nil {
+		if svc != nil {
+			_ = svc.Close()
+		}
+		t.Fatal("New succeeded, want current threadstore schema drift error")
 	}
 
 	raw, err := sql.Open("sqlite", dbPath)
@@ -223,8 +233,8 @@ func TestNewRepairsCurrentThreadstoreSchema(t *testing.T) {
 	if err := raw.QueryRow(`SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = 'conversation_turns'`).Scan(&shadowTableCount); err != nil {
 		t.Fatalf("check forbidden Agent shadow table: %v", err)
 	}
-	if shadowTableCount != 0 {
-		t.Fatalf("conversation_turns table count=%d, want obsolete table removed", shadowTableCount)
+	if shadowTableCount != 1 {
+		t.Fatalf("conversation_turns table count=%d, want drift left untouched", shadowTableCount)
 	}
 	var threadCount int
 	if err := raw.QueryRow(`SELECT COUNT(1) FROM ai_threads`).Scan(&threadCount); err != nil {

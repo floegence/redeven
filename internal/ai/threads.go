@@ -399,16 +399,15 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 	modelID := strings.TrimSpace(req.ModelID)
 	permissionFallback := FlowerPermissionApprovalRequired
 	if cfg != nil {
-		if p, err := normalizePermissionType(cfg.EffectivePermissionType(), permissionFallback); err == nil {
-			permissionFallback = p
+		p, err := normalizePermissionType(cfg.EffectivePermissionType(), permissionFallback)
+		if err != nil {
+			return nil, fmt.Errorf("invalid configured permission type: %w", err)
 		}
+		permissionFallback = p
 	}
 	permissionType, err := normalizePermissionType(strings.TrimSpace(req.PermissionType), permissionFallback)
-	if err != nil && strings.TrimSpace(req.PermissionType) != "" {
-		return nil, err
-	}
 	if err != nil {
-		permissionType = permissionFallback
+		return nil, err
 	}
 	if modelID != "" {
 		if _, _, ok := strings.Cut(modelID, "/"); !ok && !isDesktopModelSourceModelID(modelID) {
@@ -925,9 +924,11 @@ func (s *Service) SetThreadPermissionType(ctx context.Context, meta *session.Met
 
 	permissionFallback := FlowerPermissionApprovalRequired
 	if cfg != nil {
-		if p, err := normalizePermissionType(cfg.EffectivePermissionType(), permissionFallback); err == nil {
-			permissionFallback = p
+		p, err := normalizePermissionType(cfg.EffectivePermissionType(), permissionFallback)
+		if err != nil {
+			return fmt.Errorf("invalid configured permission type: %w", err)
 		}
+		permissionFallback = p
 	}
 	normalizedPermissionType, err := normalizePermissionType(strings.TrimSpace(permissionType), permissionFallback)
 	if err != nil {

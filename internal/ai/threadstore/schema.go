@@ -3,9 +3,8 @@ package threadstore
 import (
 	"database/sql"
 	"fmt"
-	"slices"
-	"sort"
-	"strings"
+	"reflect"
+	"sync"
 
 	"github.com/floegence/redeven/internal/persistence/sqliteutil"
 )
@@ -43,9 +42,9 @@ func canonicalMigrations(ensureThread func(string) error) []sqliteutil.LegacyKin
 			FromKind:    threadstoreLegacySchemaKind,
 			FromVersion: sourceVersion,
 			ToKind:      threadstoreSchemaKind,
-			ToVersion:   threadstoreCurrentSchemaVersion,
+			ToVersion:   1,
 			Apply: func(tx *sql.Tx) error {
-				return migrateCanonicalToProductV2(tx, sourceVersion, ensureThread)
+				return migrateCanonicalToProductV1(tx, sourceVersion, ensureThread)
 			},
 		})
 	}
@@ -91,11 +90,11 @@ CREATE INDEX idx_ai_threads_endpoint_pinned_created ON ai_threads(endpoint_id, p
 		return err
 	}
 	builders := []func(*sql.Tx) error{
-		ensurePendingTurnCommandsTableTx,
-		ensureProviderCapabilitiesTableTx,
-		ensureUploadTablesTx,
-		ensureFlowerTransferHandoffTablesTx,
-		ensurePermissionSnapshotTablesTx,
+		createPendingTurnCommandsTableTx,
+		createProviderCapabilitiesTableTx,
+		createUploadTablesTx,
+		createFlowerTransferHandoffTablesTx,
+		createPermissionSnapshotTablesTx,
 		createFork,
 		createThreadDeleteOperationsTableTx,
 	}
@@ -107,63 +106,7 @@ CREATE INDEX idx_ai_threads_endpoint_pinned_created ON ai_threads(endpoint_id, p
 	return nil
 }
 
-var productThreadstoreTables = []string{
-	"ai_threads",
-	"ai_queued_turns",
-	"provider_capabilities",
-	"ai_uploads",
-	"ai_upload_refs",
-	"ai_flower_thread_metadata",
-	"ai_flower_transfers",
-	"ai_flower_handoffs",
-	"ai_permission_snapshots",
-	"ai_child_permission_snapshots",
-	"ai_thread_fork_operations",
-	"ai_thread_delete_operations",
-}
-
-var productThreadstoreColumns = map[string][]string{
-	"ai_threads":                    {"thread_id", "endpoint_id", "namespace_public_id", "model_id", "reasoning_selection_json", "permission_type", "working_dir", "title", "title_source", "title_generated_at_unix_ms", "title_input_message_id", "title_model_id", "title_prompt_version", "followups_revision", "pinned_at_unix_ms", "created_by_user_public_id", "created_by_user_email", "updated_by_user_public_id", "updated_by_user_email", "created_at_unix_ms", "updated_at_unix_ms"},
-	"ai_queued_turns":               {"queue_id", "endpoint_id", "thread_id", "channel_id", "lane", "sort_index", "turn_id", "run_id", "model_id", "text_content", "attachments_json", "context_action_json", "options_json", "session_meta_json", "created_by_user_public_id", "created_by_user_email", "created_at_unix_ms", "updated_at_unix_ms"},
-	"provider_capabilities":         {"provider_id", "model_name", "capability_json", "updated_at_unix_ms"},
-	"ai_uploads":                    {"upload_id", "endpoint_id", "storage_relpath", "name", "mime_type", "size_bytes", "state", "created_at_unix_ms", "claimed_at_unix_ms", "delete_after_unix_ms"},
-	"ai_upload_refs":                {"id", "endpoint_id", "upload_id", "thread_id", "ref_kind", "ref_id", "created_at_unix_ms"},
-	"ai_flower_thread_metadata":     {"endpoint_id", "thread_id", "owner_kind", "owner_id", "parent_thread_id", "parent_run_id", "context_json", "action_json", "updated_at_unix_ms", "home_runtime_id", "home_runtime_kind", "origin_env_public_id", "primary_target_id", "active_target_ids_json"},
-	"ai_flower_transfers":           {"transfer_id", "endpoint_id", "source_thread_id", "destination_thread_id", "idempotency_key", "manifest_hash", "approval_hash", "state", "plan_json", "created_at_unix_ms", "updated_at_unix_ms"},
-	"ai_flower_handoffs":            {"handoff_id", "endpoint_id", "source_thread_id", "destination_thread_id", "idempotency_key", "envelope_hash", "state", "envelope_json", "created_at_unix_ms", "updated_at_unix_ms"},
-	"ai_permission_snapshots":       {"snapshot_id", "endpoint_id", "owner_thread_id", "owner_run_id", "permission_type", "snapshot_json", "snapshot_hash", "registry_hash", "schema_hash", "presentation_hash", "created_at_unix_ms"},
-	"ai_child_permission_snapshots": {"child_snapshot_id", "endpoint_id", "parent_snapshot_id", "spawn_tool_call_id", "parent_thread_id", "parent_run_id", "subagent_id", "child_thread_id", "child_run_id", "state", "snapshot_json", "snapshot_hash", "registry_hash", "schema_hash", "presentation_hash", "created_at_unix_ms", "finalized_at_unix_ms"},
-	"ai_thread_fork_operations":     {"operation_id", "endpoint_id", "source_thread_id", "destination_thread_id", "request_fingerprint", "status", "snapshot_schema_version", "snapshot_json", "retry_count", "error_code", "error_message", "source_broadcasted_at_unix_ms", "destination_broadcasted_at_unix_ms", "created_at_unix_ms", "updated_at_unix_ms"},
-	"ai_thread_delete_operations":   {"operation_id", "endpoint_id", "thread_id", "status", "snapshot_schema_version", "snapshot_json", "read_state_required", "product_data_deleted_at_unix_ms", "files_cleaned_at_unix_ms", "floret_deleted_at_unix_ms", "read_state_deleted_at_unix_ms", "retry_count", "error_code", "error_message", "created_at_unix_ms", "updated_at_unix_ms", "committed_at_unix_ms"},
-}
-
-func schemaTableColumns(tx *sql.Tx, tableName string) (map[string]struct{}, error) {
-	rows, err := tx.Query(`PRAGMA table_info(` + quoteSchemaIdentifier(tableName) + `)`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	columns := make(map[string]struct{})
-	for rows.Next() {
-		var cid, notNull, primaryKey int
-		var name, columnType string
-		var defaultValue any
-		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
-			return nil, err
-		}
-		columns[name] = struct{}{}
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return columns, nil
-}
-
-func quoteSchemaIdentifier(name string) string {
-	return `"` + strings.ReplaceAll(name, `"`, `""`) + `"`
-}
-
-func ensurePendingTurnCommandsTableTx(tx *sql.Tx) error {
+func createPendingTurnCommandsTableTx(tx *sql.Tx) error {
 	_, err := tx.Exec(`
 CREATE TABLE ai_queued_turns (
   queue_id TEXT PRIMARY KEY,
@@ -193,7 +136,7 @@ CREATE INDEX idx_ai_queued_turns_thread_lane_sort ON ai_queued_turns(endpoint_id
 	return err
 }
 
-func ensureProviderCapabilitiesTableTx(tx *sql.Tx) error {
+func createProviderCapabilitiesTableTx(tx *sql.Tx) error {
 	_, err := tx.Exec(`
 CREATE TABLE provider_capabilities (
   provider_id TEXT NOT NULL,
@@ -206,7 +149,7 @@ CREATE TABLE provider_capabilities (
 	return err
 }
 
-func ensureUploadTablesTx(tx *sql.Tx) error {
+func createUploadTablesTx(tx *sql.Tx) error {
 	_, err := tx.Exec(`
 CREATE TABLE ai_uploads (
   upload_id TEXT PRIMARY KEY,
@@ -238,7 +181,7 @@ CREATE INDEX idx_ai_upload_refs_upload ON ai_upload_refs(endpoint_id, upload_id)
 	return err
 }
 
-func ensureFlowerTransferHandoffTablesTx(tx *sql.Tx) error {
+func createFlowerTransferHandoffTablesTx(tx *sql.Tx) error {
 	_, err := tx.Exec(`
 CREATE TABLE ai_flower_thread_metadata (
   endpoint_id TEXT NOT NULL,
@@ -294,7 +237,7 @@ CREATE INDEX idx_ai_flower_handoffs_destination ON ai_flower_handoffs(endpoint_i
 	return err
 }
 
-func ensurePermissionSnapshotTablesTx(tx *sql.Tx) error {
+func createPermissionSnapshotTablesTx(tx *sql.Tx) error {
 	_, err := tx.Exec(`
 CREATE TABLE ai_permission_snapshots (
   snapshot_id TEXT PRIMARY KEY,
@@ -398,51 +341,69 @@ END;
 }
 
 func verifyThreadstoreSchema(tx *sql.Tx) error {
-	tables, err := sqliteutil.ListUserTablesTx(tx)
+	return verifyProductSchemaVersion(tx, threadstoreCurrentSchemaVersion)
+}
+
+var (
+	productSchemaContractsOnce sync.Once
+	productSchemaContracts     map[int][]canonicalSchemaObject
+	productSchemaContractsErr  error
+)
+
+func verifyProductSchemaVersion(tx *sql.Tx, version int) error {
+	contracts, err := expectedProductSchemaContracts()
 	if err != nil {
 		return err
 	}
-	expectedTables := append([]string(nil), productThreadstoreTables...)
-	sort.Strings(expectedTables)
-	if !slices.Equal(tables, expectedTables) {
-		return fmt.Errorf("threadstore table set mismatch: got %v, want %v", tables, expectedTables)
+	expected, ok := contracts[version]
+	if !ok {
+		return fmt.Errorf("unsupported product threadstore schema version %d", version)
 	}
-	for _, column := range []string{
-		"run_status", "run_updated_at_unix_ms", "run_error_code", "run_error", "waiting_user_input_json",
-		"flower_activity_revision", "flower_activity_signature", "flower_activity_waiting_prompt_id",
-		"last_message_at_unix_ms", "last_message_preview", "execution_mode",
-	} {
-		exists, err := sqliteutil.ColumnExistsTx(tx, "ai_threads", column)
-		if err != nil {
-			return err
-		}
-		if exists {
-			return fmt.Errorf("unexpected agent shadow column ai_threads.%s", column)
-		}
-	}
-	if exists, err := sqliteutil.ColumnExistsTx(tx, "ai_thread_fork_operations", "floret_result_json"); err != nil {
+	actual, err := readCanonicalSchemaObjects(tx)
+	if err != nil {
 		return err
-	} else if exists {
-		return fmt.Errorf("unexpected Floret fork result shadow column ai_thread_fork_operations.floret_result_json")
 	}
-	for _, tableName := range productThreadstoreTables {
-		columns, err := schemaTableColumns(tx, tableName)
-		if err != nil {
-			return err
-		}
-		expected := productThreadstoreColumns[tableName]
-		expectedSet := make(map[string]struct{}, len(expected))
-		for _, column := range expected {
-			expectedSet[column] = struct{}{}
-			if _, ok := columns[column]; !ok {
-				return fmt.Errorf("missing column %s.%s", tableName, column)
-			}
-		}
-		for column := range columns {
-			if _, ok := expectedSet[column]; !ok {
-				return fmt.Errorf("unexpected column %s.%s", tableName, column)
-			}
-		}
+	if !reflect.DeepEqual(actual, expected) {
+		return fmt.Errorf("product threadstore schema v%d contract mismatch", version)
 	}
 	return nil
+}
+
+func expectedProductSchemaContracts() (map[int][]canonicalSchemaObject, error) {
+	productSchemaContractsOnce.Do(func() {
+		productSchemaContracts = make(map[int][]canonicalSchemaObject, threadstoreCurrentSchemaVersion)
+		builders := map[int]func(*sql.Tx) error{
+			1: createThreadstoreSchemaV1,
+			2: createThreadstoreSchema,
+		}
+		for version := 1; version <= threadstoreCurrentSchemaVersion; version++ {
+			db, err := sql.Open("sqlite", fmt.Sprintf("file:redeven-product-contract-v%d?mode=memory&cache=shared&_txlock=immediate", version))
+			if err != nil {
+				productSchemaContractsErr = err
+				return
+			}
+			db.SetMaxOpenConns(1)
+			db.SetMaxIdleConns(1)
+			tx, err := db.Begin()
+			if err == nil {
+				err = builders[version](tx)
+			}
+			var objects []canonicalSchemaObject
+			if err == nil {
+				objects, err = readCanonicalSchemaObjects(tx)
+			}
+			if err == nil {
+				err = tx.Commit()
+			} else if tx != nil {
+				_ = tx.Rollback()
+			}
+			_ = db.Close()
+			if err != nil {
+				productSchemaContractsErr = fmt.Errorf("build product threadstore v%d contract: %w", version, err)
+				return
+			}
+			productSchemaContracts[version] = objects
+		}
+	})
+	return productSchemaContracts, productSchemaContractsErr
 }

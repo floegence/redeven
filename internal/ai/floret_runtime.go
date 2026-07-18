@@ -206,14 +206,19 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		Reasoning:         req.Options.ReasoningSelection,
 		ManualCompactions: r,
 	})
+	if contractErr := r.floretContractError(); contractErr != nil {
+		if r.isDetached() {
+			return nil
+		}
+		return r.failRunWithCode(runErrorCodeFloretEngineFailed, "", contractErr)
+	}
 	projectionUnavailable := result.ProjectionAvailability == flruntime.TurnProjectionAvailabilityUnavailable
 	if projectionErr := result.Validate(); projectionErr != nil {
 		r.rejectFloretContract("turn_projection_outcome", projectionErr)
-		projectionUnavailable = true
-		result.Projection = nil
-		if strings.TrimSpace(result.ProjectionError) == "" {
-			result.ProjectionError = projectionErr.Error()
+		if r.isDetached() {
+			return nil
 		}
+		return r.failRunWithCode(runErrorCodeFloretEngineFailed, "", projectionErr)
 	}
 	if projectionUnavailable {
 		r.recordRunDiagnostic("floret.projection.unavailable", RealtimeStreamKindLifecycle, map[string]any{
@@ -277,15 +282,6 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 			}
 			return r.failRunWithCode(classifyRunFailureCode(err, runErrorCodeFloretEngineFailed), "", err)
 		}
-	}
-	if projectionUnavailable && err == nil {
-		if r.isDetached() {
-			return nil
-		}
-		if r.acceptsEngineResultProjection() {
-			r.recordRuntimeTurnUsage(flowerUsageFromFloret(result.Metrics.ProviderUsage), 0)
-		}
-		return r.failRunWithCode(runErrorCodeFloretProjectionUnavailable, "", errors.New(strings.TrimSpace(result.ProjectionError)))
 	}
 	if result.Status == flruntime.TurnStatusCompleted || result.Status == flruntime.TurnStatusWaiting {
 		if !r.acceptsEngineResultProjection() {
@@ -608,14 +604,11 @@ func (r *run) projectFloretAskUserWaiting(step int, signal *flruntime.TurnSignal
 		RequiredFromUser: extractStringListFromAny(payload["required_from_user"]),
 		EvidenceRefs:     extractStringListFromAny(payload["evidence_refs"]),
 	})
-	if ask.Question == "" {
-		ask.Question = strings.TrimSpace(signal.OutputText)
-	}
 	if ask.Question == "" && len(ask.Questions) > 0 {
 		ask.Question = strings.TrimSpace(ask.Questions[0].Question)
 	}
-	if ask.Question == "" {
-		ask.Question = "I need clarification to continue safely."
+	if reason := validateAskUserSignal(ask); reason != "" {
+		return errors.New(askUserValidationError(reason, ask.ContractError))
 	}
 	r.persistAskUserWaitingPrompt(ask, "model_signal", strings.TrimSpace(signal.CallID))
 	r.reconcileCanonicalWaitingUserMessage()

@@ -3,6 +3,7 @@ package registry
 import (
 	"database/sql"
 	"fmt"
+	"slices"
 
 	"github.com/floegence/redeven/internal/persistence/sqliteutil"
 )
@@ -11,10 +12,6 @@ const (
 	registrySchemaKind           = "portforward_registry"
 	registryCurrentSchemaVersion = 1
 )
-
-func initSchema(db *sql.DB) error {
-	return sqliteutil.EnsureSchema(db, registrySchemaSpec())
-}
 
 func registrySchemaSpec() sqliteutil.Spec {
 	return sqliteutil.Spec{
@@ -30,7 +27,7 @@ func registrySchemaSpec() sqliteutil.Spec {
 
 func migrateRegistryToV1(tx *sql.Tx) error {
 	_, err := tx.Exec(`
-CREATE TABLE IF NOT EXISTS port_forwards (
+	CREATE TABLE port_forwards (
   forward_id TEXT PRIMARY KEY,
   target_url TEXT NOT NULL,
   name TEXT NOT NULL DEFAULT '',
@@ -46,21 +43,27 @@ CREATE TABLE IF NOT EXISTS port_forwards (
 }
 
 func verifyRegistrySchema(tx *sql.Tx) error {
-	exists, err := sqliteutil.TableExistsTx(tx, "port_forwards")
+	tables, err := sqliteutil.ListUserTablesTx(tx)
 	if err != nil {
 		return err
 	}
-	if !exists {
-		return fmt.Errorf("missing table %q", "port_forwards")
+	if !slices.Equal(tables, []string{"port_forwards"}) {
+		return fmt.Errorf("port forward registry table set mismatch: got %v", tables)
 	}
-	for _, columnName := range []string{"forward_id", "target_url", "name", "description", "health_path", "insecure_skip_verify", "created_at_unix_ms", "updated_at_unix_ms", "last_opened_at_unix_ms"} {
-		has, err := sqliteutil.ColumnExistsTx(tx, "port_forwards", columnName)
-		if err != nil {
-			return err
-		}
-		if !has {
-			return fmt.Errorf("missing column %q on %q", columnName, "port_forwards")
-		}
+	expectedColumns := []string{"forward_id", "target_url", "name", "description", "health_path", "insecure_skip_verify", "created_at_unix_ms", "updated_at_unix_ms", "last_opened_at_unix_ms"}
+	columns, err := sqliteutil.TableColumnNamesTx(tx, "port_forwards")
+	if err != nil {
+		return err
+	}
+	if !slices.Equal(columns, expectedColumns) {
+		return fmt.Errorf("port forward registry column mismatch: got %v, want %v", columns, expectedColumns)
+	}
+	indexes, err := sqliteutil.ListUserIndexesTx(tx)
+	if err != nil {
+		return err
+	}
+	if len(indexes) != 0 {
+		return fmt.Errorf("port forward registry has unexpected indexes %v", indexes)
 	}
 	return nil
 }

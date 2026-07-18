@@ -759,11 +759,17 @@ func TestPermissionPolicy_DelegatedApprovalActionOmitsMainApprovalIDs(t *testing
 			subagentToolHostContextChildRunIDKey:    "run_child",
 		},
 	})
-	action := delegatedApprovalAction(parent, child, fltools.ApprovalRequest{
+	action, err := delegatedApprovalAction(parent, child, fltools.ApprovalRequest{
 		ID:         "tool_call_child",
 		ApprovalID: "approval_child",
 		Name:       "terminal.exec",
+		ValidatedArgs: map[string]any{
+			"command": "pwd",
+		},
 	}, ref, "dappr_contract", 100, 200)
+	if err != nil {
+		t.Fatal(err)
+	}
 	payload := mustFlowerPayload(action)
 	var decoded map[string]any
 	if err := json.Unmarshal(payload, &decoded); err != nil {

@@ -31,7 +31,11 @@ func insertForkedThreadTx(ctx context.Context, tx *sql.Tx, req ForkThreadRequest
 	if tx == nil {
 		return errors.New("store not initialized")
 	}
-	_, err := tx.ExecContext(ctx, `
+	permissionType, err := canonicalPermissionType(source.PermissionType)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx, `
 INSERT INTO ai_threads(
   thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json,
   permission_type, working_dir, title, title_source, title_generated_at_unix_ms,
@@ -45,7 +49,7 @@ INSERT INTO ai_threads(
 		strings.TrimSpace(source.NamespacePublicID),
 		strings.TrimSpace(source.ModelID),
 		strings.TrimSpace(source.ReasoningSelectionJSON),
-		normalizePermissionType(source.PermissionType),
+		permissionType,
 		strings.TrimSpace(source.WorkingDir),
 		strings.TrimSpace(title),
 		ThreadTitleSourceUser,

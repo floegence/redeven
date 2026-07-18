@@ -62,7 +62,7 @@ var (
 	canonicalContractsErr  error
 )
 
-func migrateCanonicalToProductV2(tx *sql.Tx, version int, ensureThread func(string) error) error {
+func migrateCanonicalToProductV1(tx *sql.Tx, version int, ensureThread func(string) error) error {
 	if version < canonicalMinimumVersion || version > canonicalCurrentVersion {
 		return fmt.Errorf("unsupported canonical threadstore version %d", version)
 	}
@@ -84,13 +84,13 @@ func migrateCanonicalToProductV2(tx *sql.Tx, version int, ensureThread func(stri
 	if ensureThread == nil {
 		return errors.New("canonical threadstore migration requires a Floret thread identity ensurer")
 	}
-	if err := ensureCanonicalThreadIdentities(tx, ensureThread); err != nil {
-		return err
-	}
 	if err := validateCanonicalProductData(tx); err != nil {
 		return err
 	}
-	return convertCanonicalV40ToProductV2(tx)
+	if err := ensureCanonicalThreadIdentities(tx, ensureThread); err != nil {
+		return err
+	}
+	return convertCanonicalV40ToProductV1(tx)
 }
 
 func canonicalMigrationFrom(version int) *canonicalMigration {
@@ -192,7 +192,7 @@ ORDER BY type, name
 }
 
 const canonicalV15SchemaSQL = `
-CREATE TABLE IF NOT EXISTS ai_threads (
+CREATE TABLE ai_threads (
   thread_id TEXT PRIMARY KEY,
   endpoint_id TEXT NOT NULL,
   namespace_public_id TEXT NOT NULL DEFAULT '',
@@ -217,8 +217,8 @@ CREATE TABLE IF NOT EXISTS ai_threads (
   last_message_at_unix_ms INTEGER NOT NULL DEFAULT 0,
   last_message_preview TEXT NOT NULL DEFAULT ''
 );
-CREATE INDEX IF NOT EXISTS idx_ai_threads_endpoint_updated ON ai_threads(endpoint_id, updated_at_unix_ms DESC, thread_id DESC);
-CREATE TABLE IF NOT EXISTS ai_messages (
+CREATE INDEX idx_ai_threads_endpoint_updated ON ai_threads(endpoint_id, updated_at_unix_ms DESC, thread_id DESC);
+CREATE TABLE ai_messages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   thread_id TEXT NOT NULL,
   endpoint_id TEXT NOT NULL,
@@ -233,8 +233,8 @@ CREATE TABLE IF NOT EXISTS ai_messages (
   message_json TEXT NOT NULL,
   UNIQUE(thread_id, message_id)
 );
-CREATE INDEX IF NOT EXISTS idx_ai_messages_thread_id ON ai_messages(endpoint_id, thread_id, id ASC);
-CREATE TABLE IF NOT EXISTS ai_runs (
+CREATE INDEX idx_ai_messages_thread_id ON ai_messages(endpoint_id, thread_id, id ASC);
+CREATE TABLE ai_runs (
   run_id TEXT PRIMARY KEY,
   endpoint_id TEXT NOT NULL,
   thread_id TEXT NOT NULL,
@@ -247,8 +247,8 @@ CREATE TABLE IF NOT EXISTS ai_runs (
   ended_at_unix_ms INTEGER NOT NULL DEFAULT 0,
   updated_at_unix_ms INTEGER NOT NULL DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS idx_ai_runs_endpoint_thread_updated ON ai_runs(endpoint_id, thread_id, updated_at_unix_ms DESC);
-CREATE TABLE IF NOT EXISTS ai_tool_calls (
+CREATE INDEX idx_ai_runs_endpoint_thread_updated ON ai_runs(endpoint_id, thread_id, updated_at_unix_ms DESC);
+CREATE TABLE ai_tool_calls (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   run_id TEXT NOT NULL,
   tool_id TEXT NOT NULL,
@@ -265,8 +265,8 @@ CREATE TABLE IF NOT EXISTS ai_tool_calls (
   latency_ms INTEGER NOT NULL DEFAULT 0,
   UNIQUE(run_id, tool_id)
 );
-CREATE INDEX IF NOT EXISTS idx_ai_tool_calls_run_id ON ai_tool_calls(run_id, id ASC);
-CREATE TABLE IF NOT EXISTS ai_run_events (
+CREATE INDEX idx_ai_tool_calls_run_id ON ai_tool_calls(run_id, id ASC);
+CREATE TABLE ai_run_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   endpoint_id TEXT NOT NULL,
   thread_id TEXT NOT NULL,
@@ -276,9 +276,9 @@ CREATE TABLE IF NOT EXISTS ai_run_events (
   payload_json TEXT NOT NULL DEFAULT '{}',
   at_unix_ms INTEGER NOT NULL DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS idx_ai_run_events_run_id ON ai_run_events(run_id, id ASC);
-CREATE INDEX IF NOT EXISTS idx_ai_run_events_endpoint_thread ON ai_run_events(endpoint_id, thread_id, id ASC);
-CREATE TABLE IF NOT EXISTS ai_thread_state (
+CREATE INDEX idx_ai_run_events_run_id ON ai_run_events(run_id, id ASC);
+CREATE INDEX idx_ai_run_events_endpoint_thread ON ai_run_events(endpoint_id, thread_id, id ASC);
+CREATE TABLE ai_thread_state (
   endpoint_id TEXT NOT NULL,
   thread_id TEXT NOT NULL,
   open_goal TEXT NOT NULL DEFAULT '',
@@ -286,7 +286,7 @@ CREATE TABLE IF NOT EXISTS ai_thread_state (
   updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY(endpoint_id, thread_id)
 );
-CREATE TABLE IF NOT EXISTS ai_thread_todos (
+CREATE TABLE ai_thread_todos (
   endpoint_id TEXT NOT NULL,
   thread_id TEXT NOT NULL,
   version INTEGER NOT NULL DEFAULT 0,
@@ -296,8 +296,8 @@ CREATE TABLE IF NOT EXISTS ai_thread_todos (
   updated_by_tool_id TEXT NOT NULL DEFAULT '',
   PRIMARY KEY(endpoint_id, thread_id)
 );
-CREATE INDEX IF NOT EXISTS idx_ai_thread_todos_updated ON ai_thread_todos(endpoint_id, thread_id, updated_at_unix_ms DESC);
-CREATE TABLE IF NOT EXISTS ai_queued_turns (
+CREATE INDEX idx_ai_thread_todos_updated ON ai_thread_todos(endpoint_id, thread_id, updated_at_unix_ms DESC);
+CREATE TABLE ai_queued_turns (
   queue_id TEXT PRIMARY KEY,
   endpoint_id TEXT NOT NULL,
   thread_id TEXT NOT NULL,
@@ -311,9 +311,9 @@ CREATE TABLE IF NOT EXISTS ai_queued_turns (
   created_by_user_email TEXT NOT NULL DEFAULT '',
   created_at_unix_ms INTEGER NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_ai_queued_turns_thread_created ON ai_queued_turns(endpoint_id, thread_id, created_at_unix_ms ASC, queue_id ASC);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_queued_turns_message_id ON ai_queued_turns(endpoint_id, thread_id, message_id);
-CREATE TABLE IF NOT EXISTS ai_thread_checkpoints (
+CREATE INDEX idx_ai_queued_turns_thread_created ON ai_queued_turns(endpoint_id, thread_id, created_at_unix_ms ASC, queue_id ASC);
+CREATE UNIQUE INDEX idx_ai_queued_turns_message_id ON ai_queued_turns(endpoint_id, thread_id, message_id);
+CREATE TABLE ai_thread_checkpoints (
   checkpoint_id TEXT PRIMARY KEY,
   endpoint_id TEXT NOT NULL,
   thread_id TEXT NOT NULL,
@@ -328,9 +328,9 @@ CREATE TABLE IF NOT EXISTS ai_thread_checkpoints (
   tool_calls_max_id INTEGER NOT NULL DEFAULT 0,
   run_events_max_id INTEGER NOT NULL DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS idx_ai_thread_checkpoints_thread_created ON ai_thread_checkpoints(endpoint_id, thread_id, created_at_unix_ms DESC, checkpoint_id DESC);
-CREATE INDEX IF NOT EXISTS idx_ai_thread_checkpoints_run_id ON ai_thread_checkpoints(run_id);
-CREATE TABLE IF NOT EXISTS transcript_messages (
+CREATE INDEX idx_ai_thread_checkpoints_thread_created ON ai_thread_checkpoints(endpoint_id, thread_id, created_at_unix_ms DESC, checkpoint_id DESC);
+CREATE INDEX idx_ai_thread_checkpoints_run_id ON ai_thread_checkpoints(run_id);
+CREATE TABLE transcript_messages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   thread_id TEXT NOT NULL,
   endpoint_id TEXT NOT NULL,
@@ -345,8 +345,8 @@ CREATE TABLE IF NOT EXISTS transcript_messages (
   message_json TEXT NOT NULL,
   UNIQUE(thread_id, message_id)
 );
-CREATE INDEX IF NOT EXISTS idx_transcript_messages_thread_id ON transcript_messages(endpoint_id, thread_id, id ASC);
-CREATE TABLE IF NOT EXISTS conversation_turns (
+CREATE INDEX idx_transcript_messages_thread_id ON transcript_messages(endpoint_id, thread_id, id ASC);
+CREATE TABLE conversation_turns (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   turn_id TEXT NOT NULL UNIQUE,
   endpoint_id TEXT NOT NULL,
@@ -356,9 +356,9 @@ CREATE TABLE IF NOT EXISTS conversation_turns (
   assistant_message_id TEXT NOT NULL DEFAULT '',
   created_at_unix_ms INTEGER NOT NULL DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS idx_conversation_turns_thread_id ON conversation_turns(endpoint_id, thread_id, id ASC);
-CREATE INDEX IF NOT EXISTS idx_conversation_turns_run_id ON conversation_turns(run_id, id ASC);
-CREATE TABLE IF NOT EXISTS execution_spans (
+CREATE INDEX idx_conversation_turns_thread_id ON conversation_turns(endpoint_id, thread_id, id ASC);
+CREATE INDEX idx_conversation_turns_run_id ON conversation_turns(run_id, id ASC);
+CREATE TABLE execution_spans (
   span_id TEXT PRIMARY KEY,
   endpoint_id TEXT NOT NULL,
   thread_id TEXT NOT NULL,
@@ -371,9 +371,9 @@ CREATE TABLE IF NOT EXISTS execution_spans (
   ended_at_unix_ms INTEGER NOT NULL DEFAULT 0,
   updated_at_unix_ms INTEGER NOT NULL DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS idx_execution_spans_thread_started ON execution_spans(endpoint_id, thread_id, started_at_unix_ms DESC, span_id DESC);
-CREATE INDEX IF NOT EXISTS idx_execution_spans_run_started ON execution_spans(endpoint_id, run_id, started_at_unix_ms ASC, span_id ASC);
-CREATE TABLE IF NOT EXISTS memory_items (
+CREATE INDEX idx_execution_spans_thread_started ON execution_spans(endpoint_id, thread_id, started_at_unix_ms DESC, span_id DESC);
+CREATE INDEX idx_execution_spans_run_started ON execution_spans(endpoint_id, run_id, started_at_unix_ms ASC, span_id ASC);
+CREATE TABLE memory_items (
   memory_id TEXT PRIMARY KEY,
   endpoint_id TEXT NOT NULL,
   thread_id TEXT NOT NULL,
@@ -387,9 +387,9 @@ CREATE TABLE IF NOT EXISTS memory_items (
   created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
   updated_at_unix_ms INTEGER NOT NULL DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS idx_memory_items_thread_updated ON memory_items(endpoint_id, thread_id, updated_at_unix_ms DESC, memory_id DESC);
-CREATE INDEX IF NOT EXISTS idx_memory_items_scope_kind ON memory_items(endpoint_id, thread_id, scope, kind, updated_at_unix_ms DESC);
-CREATE TABLE IF NOT EXISTS memory_embeddings (
+CREATE INDEX idx_memory_items_thread_updated ON memory_items(endpoint_id, thread_id, updated_at_unix_ms DESC, memory_id DESC);
+CREATE INDEX idx_memory_items_scope_kind ON memory_items(endpoint_id, thread_id, scope, kind, updated_at_unix_ms DESC);
+CREATE TABLE memory_embeddings (
   memory_id TEXT NOT NULL,
   embedding_model TEXT NOT NULL DEFAULT '',
   vector_blob BLOB NOT NULL,
@@ -397,7 +397,7 @@ CREATE TABLE IF NOT EXISTS memory_embeddings (
   updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY(memory_id, embedding_model)
 );
-CREATE TABLE IF NOT EXISTS provider_capabilities (
+CREATE TABLE provider_capabilities (
   provider_id TEXT NOT NULL,
   model_name TEXT NOT NULL,
   capability_json TEXT NOT NULL DEFAULT '{}',
@@ -1043,6 +1043,25 @@ UNION SELECT thread_id FROM ai_thread_delete_operations
 
 func validateCanonicalProductData(tx *sql.Tx) error {
 	var invalid int
+	checks := []struct {
+		label string
+		query string
+	}{
+		{label: "threads", query: `SELECT COUNT(1) FROM ai_threads WHERE TRIM(thread_id) = '' OR TRIM(endpoint_id) = ''`},
+		{label: "thread permissions", query: `SELECT COUNT(1) FROM ai_threads WHERE permission_type NOT IN ('readonly', 'approval_required', 'full_access')`},
+		{label: "upload references", query: `SELECT COUNT(1) FROM ai_upload_refs WHERE TRIM(endpoint_id) = '' OR TRIM(upload_id) = '' OR TRIM(thread_id) = '' OR TRIM(ref_kind) = '' OR TRIM(ref_id) = ''`},
+		{label: "fork operations", query: `SELECT COUNT(1) FROM ai_thread_fork_operations WHERE TRIM(operation_id) = '' OR TRIM(endpoint_id) = '' OR TRIM(source_thread_id) = '' OR TRIM(destination_thread_id) = ''`},
+		{label: "delete operations", query: `SELECT COUNT(1) FROM ai_thread_delete_operations WHERE TRIM(operation_id) = '' OR TRIM(endpoint_id) = '' OR TRIM(thread_id) = ''`},
+		{label: "permission snapshots", query: `SELECT COUNT(1) FROM ai_permission_snapshots WHERE permission_type NOT IN ('readonly', 'approval_required', 'full_access')`},
+	}
+	for _, check := range checks {
+		if err := tx.QueryRow(check.query).Scan(&invalid); err != nil {
+			return err
+		}
+		if invalid > 0 {
+			return fmt.Errorf("canonical %s contain %d rows with invalid product data", check.label, invalid)
+		}
+	}
 	if err := tx.QueryRow(`
 SELECT COUNT(1)
 FROM ai_queued_turns
@@ -1070,7 +1089,7 @@ FROM (
 	return nil
 }
 
-func convertCanonicalV40ToProductV2(tx *sql.Tx) error {
+func convertCanonicalV40ToProductV1(tx *sql.Tx) error {
 	if _, err := tx.Exec(`
 DROP TRIGGER trg_ai_threads_reject_retired_id;
 DROP INDEX idx_ai_threads_endpoint_updated;
@@ -1130,7 +1149,7 @@ DROP TABLE ai_delegated_approval_idempotency;
 `); err != nil {
 		return err
 	}
-	if err := createThreadstoreSchema(tx); err != nil {
+	if err := createThreadstoreSchemaV1(tx); err != nil {
 		return err
 	}
 	if _, err := tx.Exec(`
@@ -1201,8 +1220,8 @@ INSERT INTO ai_child_permission_snapshots(child_snapshot_id, endpoint_id, parent
 SELECT child_snapshot_id, endpoint_id, parent_snapshot_id, spawn_tool_call_id, parent_thread_id, parent_run_id, subagent_id, child_thread_id, child_run_id, state, snapshot_json, snapshot_hash, registry_hash, schema_hash, presentation_hash, created_at_unix_ms, finalized_at_unix_ms
 FROM canonical_v40_ai_child_permission_snapshots;
 
-INSERT INTO ai_thread_fork_operations(operation_id, endpoint_id, source_thread_id, destination_thread_id, request_fingerprint, status, snapshot_schema_version, snapshot_json, retry_count, error_code, error_message, source_broadcasted_at_unix_ms, destination_broadcasted_at_unix_ms, created_at_unix_ms, updated_at_unix_ms)
-SELECT operation_id, endpoint_id, source_thread_id, destination_thread_id, request_fingerprint, status, snapshot_schema_version, snapshot_json, retry_count, error_code, error_message, source_broadcasted_at_unix_ms, destination_broadcasted_at_unix_ms, created_at_unix_ms, updated_at_unix_ms
+	INSERT INTO ai_thread_fork_operations(operation_id, endpoint_id, source_thread_id, destination_thread_id, request_fingerprint, status, snapshot_schema_version, snapshot_json, floret_result_json, retry_count, error_code, error_message, source_broadcasted_at_unix_ms, destination_broadcasted_at_unix_ms, created_at_unix_ms, updated_at_unix_ms)
+	SELECT operation_id, endpoint_id, source_thread_id, destination_thread_id, request_fingerprint, status, snapshot_schema_version, snapshot_json, '', retry_count, error_code, error_message, source_broadcasted_at_unix_ms, destination_broadcasted_at_unix_ms, created_at_unix_ms, updated_at_unix_ms
 FROM canonical_v40_ai_thread_fork_operations;
 
 INSERT INTO ai_thread_delete_operations(operation_id, endpoint_id, thread_id, status, snapshot_schema_version, snapshot_json, read_state_required, product_data_deleted_at_unix_ms, files_cleaned_at_unix_ms, floret_deleted_at_unix_ms, read_state_deleted_at_unix_ms, retry_count, error_code, error_message, created_at_unix_ms, updated_at_unix_ms, committed_at_unix_ms)

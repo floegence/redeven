@@ -116,7 +116,10 @@ func (s *Service) registerDelegatedApproval(parent *run, child *run, req fltools
 	if parent.toolApprovalTO > 0 {
 		expiresAt = now + parent.toolApprovalTO.Milliseconds()
 	}
-	action := delegatedApprovalAction(parent, child, req, ref, actionID, now, expiresAt)
+	action, err := delegatedApprovalAction(parent, child, req, ref, actionID, now, expiresAt)
+	if err != nil {
+		return nil, false, err
+	}
 	s.mu.Lock()
 	if existing := s.delegatedApprovals[actionID]; existing != nil {
 		s.mu.Unlock()
@@ -318,8 +321,11 @@ func validDelegatedApprovalRef(ref DelegatedApprovalRef) bool {
 	return strings.TrimSpace(ref.ParentThreadID) != "" && strings.TrimSpace(ref.ParentRunID) != "" && strings.TrimSpace(ref.SubagentID) != "" && strings.TrimSpace(ref.ChildThreadID) != "" && strings.TrimSpace(ref.ChildRunID) != "" && strings.TrimSpace(ref.ChildToolCallID) != "" && strings.TrimSpace(ref.ApprovalID) != ""
 }
 
-func delegatedApprovalAction(parent *run, child *run, req fltools.ApprovalRequest, ref DelegatedApprovalRef, actionID string, requestedAt int64, expiresAt int64) FlowerApprovalAction {
-	args := floretApprovalArgs(req)
+func delegatedApprovalAction(parent *run, child *run, req fltools.ApprovalRequest, ref DelegatedApprovalRef, actionID string, requestedAt int64, expiresAt int64) (FlowerApprovalAction, error) {
+	args, err := floretApprovalArgs(req)
+	if err != nil {
+		return FlowerApprovalAction{}, err
+	}
 	toolName := firstNonEmptyString(strings.TrimSpace(req.Name), "tool")
 	approval := &toolApprovalRequest{
 		toolName: toolName, argsHash: strings.TrimSpace(req.ArgsHash), command: approvalCommandForTool(toolName, args),
@@ -345,7 +351,7 @@ func delegatedApprovalAction(parent *run, child *run, req fltools.ApprovalReques
 			Flags: append([]string(nil), approval.flags...), Targets: targets,
 		},
 		StepID: delegatedApprovalArgsHash(args),
-	}
+	}, nil
 }
 
 func delegatedApprovalActionID(ref DelegatedApprovalRef) string {

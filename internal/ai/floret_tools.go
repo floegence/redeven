@@ -227,9 +227,11 @@ func floretRunContextForIDs(base *run, rawRunID string, rawThreadID string, rawT
 	child.allowDelegatedApproval = base.allowDelegatedApproval
 	child.delegatedApprovalParent = base.delegatedApprovalParent
 	if permission := strings.TrimSpace(hostContext[subagentToolHostContextParentPermissionKey]); permission != "" {
-		if normalized, err := normalizePermissionType(permission, child.permissionType); err == nil {
-			child.permissionType = normalized
+		normalized, err := normalizePermissionType(permission, child.permissionType)
+		if err != nil {
+			return nil, fmt.Errorf("invalid subagent parent permission: %w", err)
 		}
+		child.permissionType = normalized
 	}
 	child.currentModelID = base.currentModelID
 	child.bindStoredChildPermissionSnapshot(threadID, runID)
@@ -700,9 +702,11 @@ func floretToolDefinition(r *run, def ToolDef) (fltools.Definition, error) {
 				currentPermissionType = r.permissionType
 			}
 			if raw := strings.TrimSpace(req.HostContext[subagentToolHostContextParentPermissionKey]); raw != "" {
-				if normalized, err := normalizePermissionType(raw, currentPermissionType); err == nil {
-					currentPermissionType = normalized
+				normalized, err := normalizePermissionType(raw, currentPermissionType)
+				if err != nil {
+					return fltools.PermissionSpec{}, fmt.Errorf("invalid subagent parent permission: %w", err)
 				}
+				currentPermissionType = normalized
 			}
 			return floretPermissionForInvocation(currentPermissionType, def, cloneAnyMap(args)), nil
 		},

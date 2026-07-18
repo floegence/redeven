@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -134,14 +135,14 @@ func Open(path string, spec Spec) (*sql.DB, error) {
 	}
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
-	if err := EnsureSchema(db, spec); err != nil {
+	if err := ensureSchema(db, spec); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
 	return db, nil
 }
 
-func EnsureSchema(db *sql.DB, spec Spec) error {
+func ensureSchema(db *sql.DB, spec Spec) error {
 	if db == nil {
 		return errors.New("nil db")
 	}
@@ -158,26 +159,44 @@ func EnsureSchema(db *sql.DB, spec Spec) error {
 		}
 	}
 
-	currentVersion, err := readUserVersion(db)
-	if err != nil {
-		return err
-	}
 	tx, err := db.Begin()
 	if err != nil {
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	startedAt := time.Now().UnixMilli()
-	startedVersion := currentVersion
-	if err := createMetaTableTx(tx); err != nil {
-		return err
-	}
-	metaKind, hasMeta, err := readMetaKindTx(tx)
+	currentVersion, err := readUserVersionTx(tx)
 	if err != nil {
 		return err
 	}
-	legacyMigration, isLegacy, err := findLegacyKindMigration(tx, spec, metaKind, hasMeta, currentVersion)
+	startedAt := time.Now().UnixMilli()
+	startedVersion := currentVersion
+	hasMetaTable, err := TableExistsTx(tx, metaTableName)
+	if err != nil {
+		return err
+	}
+	tables, err := ListUserTablesTx(tx)
+	if err != nil {
+		return err
+	}
+	if !hasMetaTable {
+		if len(tables) > 0 || currentVersion != 0 {
+			return &WrongDatabaseKindError{ExpectedKind: spec.Kind, Existing: tables}
+		}
+		if err := createMetaTableTx(tx); err != nil {
+			return err
+		}
+		if err := insertMetaTx(tx, spec.Kind, currentVersion); err != nil {
+			return err
+		}
+	} else if err := verifyMetaTableTx(tx); err != nil {
+		return err
+	}
+	metaKind, err := readMetaKindTx(tx)
+	if err != nil {
+		return err
+	}
+	legacyMigration, isLegacy, err := findLegacyKindMigration(spec, metaKind, currentVersion)
 	if err != nil {
 		return err
 	}
@@ -193,35 +212,18 @@ func EnsureSchema(db *sql.DB, spec Spec) error {
 		}
 		currentVersion = legacyMigration.ToVersion
 	} else {
-		if hasMeta {
-			if metaKind != spec.Kind {
-				minimum, maximum, known := legacyVersionRange(spec, metaKind)
-				if known && currentVersion < minimum {
-					return &DatabaseTooOldError{Kind: metaKind, Version: currentVersion, MinimumVersion: minimum}
-				}
-				if known && currentVersion > maximum {
-					return &DatabaseTooNewError{Kind: metaKind, Version: currentVersion, CurrentVersion: maximum}
-				}
-				if known {
-					return &InvalidMigrationChainError{Kind: spec.Kind, Reason: fmt.Sprintf("missing legacy migration from kind %q version %d", metaKind, currentVersion)}
-				}
-				tables, listErr := ListUserTablesTx(tx)
-				if listErr != nil {
-					return &WrongDatabaseKindError{ExpectedKind: spec.Kind, ActualKind: metaKind}
-				}
-				return &WrongDatabaseKindError{ExpectedKind: spec.Kind, ActualKind: metaKind, Existing: tables}
+		if metaKind != spec.Kind {
+			minimum, maximum, known := legacyVersionRange(spec, metaKind)
+			if known && currentVersion < minimum {
+				return &DatabaseTooOldError{Kind: metaKind, Version: currentVersion, MinimumVersion: minimum}
 			}
-		} else {
-			tables, listErr := ListUserTablesTx(tx)
-			if listErr != nil {
-				return listErr
+			if known && currentVersion > maximum {
+				return &DatabaseTooNewError{Kind: metaKind, Version: currentVersion, CurrentVersion: maximum}
 			}
-			if len(tables) > 0 {
-				return &WrongDatabaseKindError{ExpectedKind: spec.Kind, Existing: tables}
+			if known {
+				return &InvalidMigrationChainError{Kind: spec.Kind, Reason: fmt.Sprintf("missing legacy migration from kind %q version %d", metaKind, currentVersion)}
 			}
-			if err := insertMetaTx(tx, spec.Kind, currentVersion); err != nil {
-				return err
-			}
+			return &WrongDatabaseKindError{ExpectedKind: spec.Kind, ActualKind: metaKind, Existing: tables}
 		}
 	}
 	if currentVersion > spec.CurrentVersion {
@@ -250,7 +252,7 @@ func EnsureSchema(db *sql.DB, spec Spec) error {
 			return &SchemaVerifyError{Kind: spec.Kind, Err: err}
 		}
 	}
-	if err := upsertMetaTx(tx, spec.Kind, startedAt, startedVersion, currentVersion); err != nil {
+	if err := updateMetaTx(tx, spec.Kind, startedAt, startedVersion, currentVersion); err != nil {
 		return err
 	}
 	return tx.Commit()
@@ -267,9 +269,14 @@ func validateSpec(spec Spec) error {
 	if len(spec.Migrations) == 0 && spec.CurrentVersion != 0 {
 		return &InvalidMigrationChainError{Kind: kind, Reason: "missing migrations"}
 	}
+	legacySources := make(map[string]struct{}, len(spec.LegacyKindMigrations))
 	for _, migration := range spec.LegacyKindMigrations {
-		if strings.TrimSpace(migration.FromKind) == "" {
+		fromKind := strings.TrimSpace(migration.FromKind)
+		if fromKind == "" {
 			return &InvalidMigrationChainError{Kind: kind, Reason: "legacy migration has empty source kind"}
+		}
+		if fromKind == kind {
+			return &InvalidMigrationChainError{Kind: kind, Reason: "legacy migration source kind matches current kind"}
 		}
 		if migration.FromVersion < 0 {
 			return &InvalidMigrationChainError{Kind: kind, Reason: fmt.Sprintf("legacy migration from %q has invalid source version %d", migration.FromKind, migration.FromVersion)}
@@ -280,9 +287,14 @@ func validateSpec(spec Spec) error {
 		if strings.TrimSpace(migration.ToKind) != kind {
 			return &InvalidMigrationChainError{Kind: kind, Reason: fmt.Sprintf("legacy migration from %q targets kind %q", migration.FromKind, migration.ToKind)}
 		}
-		if migration.ToVersion != spec.CurrentVersion {
-			return &InvalidMigrationChainError{Kind: kind, Reason: fmt.Sprintf("legacy migration from %q targets version %d, want %d", migration.FromKind, migration.ToVersion, spec.CurrentVersion)}
+		if migration.ToVersion < 0 || migration.ToVersion > spec.CurrentVersion {
+			return &InvalidMigrationChainError{Kind: kind, Reason: fmt.Sprintf("legacy migration from %q targets invalid version %d", migration.FromKind, migration.ToVersion)}
 		}
+		key := fmt.Sprintf("%s\x00%d", fromKind, migration.FromVersion)
+		if _, exists := legacySources[key]; exists {
+			return &InvalidMigrationChainError{Kind: kind, Reason: fmt.Sprintf("duplicate legacy migration from kind %q version %d", fromKind, migration.FromVersion)}
+		}
+		legacySources[key] = struct{}{}
 	}
 	expectedFrom := 0
 	for _, migration := range spec.Migrations {
@@ -300,9 +312,9 @@ func validateSpec(spec Spec) error {
 	return nil
 }
 
-func readUserVersion(db *sql.DB) (int, error) {
+func readUserVersionTx(tx *sql.Tx) (int, error) {
 	var version int
-	if err := db.QueryRow(`PRAGMA user_version;`).Scan(&version); err != nil {
+	if err := tx.QueryRow(`PRAGMA user_version;`).Scan(&version); err != nil {
 		return 0, fmt.Errorf("pragma user_version: %w", err)
 	}
 	return version, nil
@@ -317,13 +329,13 @@ func findMigration(migrations []Migration, fromVersion int) *Migration {
 	return nil
 }
 
-func findLegacyKindMigration(_ *sql.Tx, spec Spec, metaKind string, hasMeta bool, currentVersion int) (*LegacyKindMigration, bool, error) {
-	if hasMeta && strings.TrimSpace(metaKind) == strings.TrimSpace(spec.Kind) {
+func findLegacyKindMigration(spec Spec, metaKind string, currentVersion int) (*LegacyKindMigration, bool, error) {
+	if strings.TrimSpace(metaKind) == strings.TrimSpace(spec.Kind) {
 		return nil, false, nil
 	}
 	for index := range spec.LegacyKindMigrations {
 		migration := &spec.LegacyKindMigrations[index]
-		if !hasMeta || !strings.EqualFold(strings.TrimSpace(metaKind), strings.TrimSpace(migration.FromKind)) {
+		if strings.TrimSpace(metaKind) != strings.TrimSpace(migration.FromKind) {
 			continue
 		}
 		if migration.FromVersion != currentVersion {
@@ -339,7 +351,7 @@ func legacyVersionRange(spec Spec, kind string) (int, int, bool) {
 	minimum, maximum := 0, 0
 	found := false
 	for _, migration := range spec.LegacyKindMigrations {
-		if !strings.EqualFold(strings.TrimSpace(migration.FromKind), kind) {
+		if strings.TrimSpace(migration.FromKind) != kind {
 			continue
 		}
 		if !found || migration.FromVersion < minimum {
@@ -366,7 +378,7 @@ func createMetaTableTx(tx *sql.Tx) error {
 		return errors.New("nil tx")
 	}
 	_, err := tx.Exec(`
-CREATE TABLE IF NOT EXISTS __redeven_db_meta (
+CREATE TABLE __redeven_db_meta (
   singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
   db_kind TEXT NOT NULL,
   created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
@@ -378,16 +390,87 @@ CREATE TABLE IF NOT EXISTS __redeven_db_meta (
 	return err
 }
 
-func readMetaKindTx(tx *sql.Tx) (string, bool, error) {
+func verifyMetaTableTx(tx *sql.Tx) error {
+	rows, err := tx.Query(`PRAGMA table_info(__redeven_db_meta)`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	type column struct {
+		name       string
+		columnType string
+		notNull    int
+		defaultVal string
+		primaryKey int
+	}
+	expected := []column{
+		{name: "singleton", columnType: "INTEGER", primaryKey: 1},
+		{name: "db_kind", columnType: "TEXT", notNull: 1},
+		{name: "created_at_unix_ms", columnType: "INTEGER", notNull: 1, defaultVal: "0"},
+		{name: "last_migrated_at_unix_ms", columnType: "INTEGER", notNull: 1, defaultVal: "0"},
+		{name: "last_migrated_from_version", columnType: "INTEGER", notNull: 1, defaultVal: "0"},
+		{name: "last_migrated_to_version", columnType: "INTEGER", notNull: 1, defaultVal: "0"},
+	}
+	actual := make([]column, 0, len(expected))
+	for rows.Next() {
+		var cid int
+		var item column
+		var defaultValue sql.NullString
+		if err := rows.Scan(&cid, &item.name, &item.columnType, &item.notNull, &defaultValue, &item.primaryKey); err != nil {
+			return err
+		}
+		item.columnType = strings.ToUpper(strings.TrimSpace(item.columnType))
+		item.defaultVal = strings.TrimSpace(defaultValue.String)
+		actual = append(actual, item)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if !slices.Equal(actual, expected) {
+		return fmt.Errorf("invalid %s schema", metaTableName)
+	}
+	var tableSQL string
+	if err := tx.QueryRow(`SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?`, metaTableName).Scan(&tableSQL); err != nil {
+		return err
+	}
+	compactSQL := strings.ToLower(strings.Join(strings.Fields(tableSQL), ""))
+	if !strings.Contains(compactSQL, "check(singleton=1)") {
+		return fmt.Errorf("invalid %s singleton constraint", metaTableName)
+	}
+	var unexpectedObjects int
+	if err := tx.QueryRow(`
+SELECT COUNT(1)
+FROM sqlite_master
+WHERE tbl_name = ?
+  AND name <> ?
+  AND name NOT LIKE 'sqlite_autoindex_%'
+`, metaTableName, metaTableName).Scan(&unexpectedObjects); err != nil {
+		return err
+	}
+	if unexpectedObjects != 0 {
+		return fmt.Errorf("invalid %s contains %d unexpected schema objects", metaTableName, unexpectedObjects)
+	}
+	return nil
+}
+
+func readMetaKindTx(tx *sql.Tx) (string, error) {
+	var rowCount int
+	if err := tx.QueryRow(`SELECT COUNT(1) FROM __redeven_db_meta`).Scan(&rowCount); err != nil {
+		return "", err
+	}
+	if rowCount != 1 {
+		return "", fmt.Errorf("invalid %s row count %d", metaTableName, rowCount)
+	}
 	var kind string
 	err := tx.QueryRow(`SELECT db_kind FROM __redeven_db_meta WHERE singleton = 1`).Scan(&kind)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return "", false, nil
-		}
-		return "", false, err
+		return "", err
 	}
-	return strings.TrimSpace(kind), true, nil
+	kind = strings.TrimSpace(kind)
+	if kind == "" {
+		return "", fmt.Errorf("invalid empty database kind in %s", metaTableName)
+	}
+	return kind, nil
 }
 
 func insertMetaTx(tx *sql.Tx, kind string, version int) error {
@@ -402,24 +485,31 @@ VALUES(1, ?, ?, ?, ?, ?)
 	return err
 }
 
-func upsertMetaTx(tx *sql.Tx, kind string, startedAt int64, fromVersion int, toVersion int) error {
+func updateMetaTx(tx *sql.Tx, kind string, startedAt int64, fromVersion int, toVersion int) error {
 	now := time.Now().UnixMilli()
 	if startedAt <= 0 {
 		startedAt = now
 	}
-	_, err := tx.Exec(`
-INSERT INTO __redeven_db_meta(
-  singleton, db_kind, created_at_unix_ms, last_migrated_at_unix_ms,
-  last_migrated_from_version, last_migrated_to_version
-)
-VALUES(1, ?, ?, ?, ?, ?)
-ON CONFLICT(singleton) DO UPDATE SET
-  db_kind = excluded.db_kind,
-  last_migrated_at_unix_ms = excluded.last_migrated_at_unix_ms,
-  last_migrated_from_version = excluded.last_migrated_from_version,
-  last_migrated_to_version = excluded.last_migrated_to_version
+	result, err := tx.Exec(`
+UPDATE __redeven_db_meta
+SET db_kind = ?,
+    created_at_unix_ms = CASE WHEN created_at_unix_ms > 0 THEN created_at_unix_ms ELSE ? END,
+    last_migrated_at_unix_ms = ?,
+    last_migrated_from_version = ?,
+    last_migrated_to_version = ?
+WHERE singleton = 1
 `, kind, startedAt, now, fromVersion, toVersion)
-	return err
+	if err != nil {
+		return err
+	}
+	updated, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if updated != 1 {
+		return fmt.Errorf("update %s affected %d rows, want 1", metaTableName, updated)
+	}
+	return nil
 }
 
 func setUserVersionTx(tx *sql.Tx, version int) error {

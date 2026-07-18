@@ -3,8 +3,11 @@ package sqliteutil
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestOpen_CreatesFreshDatabaseAndMeta(t *testing.T) {
@@ -148,6 +151,63 @@ func TestOpen_AppliesLegacyKindMigrationAtomically(t *testing.T) {
 	}
 }
 
+func TestOpenContinuesVersionChainAfterLegacyKindMigration(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "legacy-then-version.sqlite")
+	db, err := Open(dbPath, toySpec("toy_a"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO toy_data(id, name) VALUES(1, 'keep')`); err != nil {
+		_ = db.Close()
+		t.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	spec := Spec{
+		Kind:           "toy_b",
+		CurrentVersion: 2,
+		Pragmas:        []string{`PRAGMA busy_timeout=3000;`},
+		Migrations: []Migration{
+			{FromVersion: 0, ToVersion: 1, Apply: func(tx *sql.Tx) error {
+				_, err := tx.Exec(`CREATE TABLE toy_data(id INTEGER PRIMARY KEY, name TEXT NOT NULL DEFAULT '')`)
+				return err
+			}},
+			{FromVersion: 1, ToVersion: 2, Apply: func(tx *sql.Tx) error {
+				_, err := tx.Exec(`ALTER TABLE toy_data ADD COLUMN note TEXT NOT NULL DEFAULT ''`)
+				return err
+			}},
+		},
+		LegacyKindMigrations: []LegacyKindMigration{{
+			FromKind: "toy_a", FromVersion: 1, ToKind: "toy_b", ToVersion: 1,
+			Apply: func(*sql.Tx) error { return nil },
+		}},
+		Verify: func(tx *sql.Tx) error {
+			columns, err := TableColumnNamesTx(tx, "toy_data")
+			if err != nil {
+				return err
+			}
+			if len(columns) != 3 || columns[2] != "note" {
+				return fmt.Errorf("unexpected toy_data columns %v", columns)
+			}
+			return nil
+		},
+	}
+	db, err = Open(dbPath, spec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	var name, note string
+	if err := db.QueryRow(`SELECT name, note FROM toy_data WHERE id = 1`).Scan(&name, &note); err != nil {
+		t.Fatal(err)
+	}
+	if name != "keep" || note != "" {
+		t.Fatalf("migrated row = name %q note %q", name, note)
+	}
+}
+
 func TestOpen_RollsBackFailedLegacyKindMigration(t *testing.T) {
 	t.Parallel()
 
@@ -219,7 +279,7 @@ func TestOpen_RejectsInvalidMigrationChain(t *testing.T) {
 		Pragmas:        []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`},
 		Migrations: []Migration{
 			{FromVersion: 0, ToVersion: 1, Apply: func(tx *sql.Tx) error {
-				_, err := tx.Exec(`CREATE TABLE IF NOT EXISTS toy_data(id INTEGER PRIMARY KEY)`)
+				_, err := tx.Exec(`CREATE TABLE toy_data(id INTEGER PRIMARY KEY)`)
 				return err
 			}},
 		},
@@ -233,6 +293,122 @@ func TestOpen_RejectsInvalidMigrationChain(t *testing.T) {
 	}
 }
 
+func TestOpen_RejectsUnversionedNonEmptyDatabaseWithoutClaimingIt(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "unversioned.sqlite")
+	raw, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.Exec(`CREATE TABLE user_data(id INTEGER PRIMARY KEY)`); err != nil {
+		_ = raw.Close()
+		t.Fatal(err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Open(dbPath, toySpec("toy_a")); err == nil {
+		t.Fatal("Open succeeded, want unversioned non-empty database error")
+	}
+	raw, err = sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	var metaTables int
+	if err := raw.QueryRow(`SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = '__redeven_db_meta'`).Scan(&metaTables); err != nil {
+		t.Fatal(err)
+	}
+	if metaTables != 0 {
+		t.Fatalf("metadata table count = %d, want 0", metaTables)
+	}
+}
+
+func TestOpen_RejectsMalformedMetadataTable(t *testing.T) {
+	t.Parallel()
+
+	dbPath := filepath.Join(t.TempDir(), "malformed-meta.sqlite")
+	raw, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.Exec(`
+CREATE TABLE __redeven_db_meta(singleton INTEGER PRIMARY KEY, db_kind TEXT NOT NULL);
+INSERT INTO __redeven_db_meta(singleton, db_kind) VALUES(1, 'toy_a');
+CREATE TABLE toy_data(id INTEGER PRIMARY KEY, name TEXT NOT NULL DEFAULT '');
+PRAGMA user_version=1;
+`); err != nil {
+		_ = raw.Close()
+		t.Fatal(err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Open(dbPath, toySpec("toy_a")); err == nil {
+		t.Fatal("Open succeeded, want malformed metadata error")
+	}
+}
+
+func TestOpenSerializesConcurrentMigrationVersionReads(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "concurrent.sqlite")
+	started := make(chan struct{})
+	release := make(chan struct{})
+	var applyCount atomic.Int32
+	spec := Spec{
+		Kind:           "concurrent",
+		CurrentVersion: 1,
+		Pragmas:        []string{`PRAGMA busy_timeout=3000;`},
+		Migrations: []Migration{{FromVersion: 0, ToVersion: 1, Apply: func(tx *sql.Tx) error {
+			if applyCount.Add(1) == 1 {
+				close(started)
+				<-release
+			}
+			_, err := tx.Exec(`CREATE TABLE concurrent_data(id INTEGER PRIMARY KEY)`)
+			return err
+		}}},
+		Verify: func(tx *sql.Tx) error {
+			exists, err := TableExistsTx(tx, "concurrent_data")
+			if err != nil {
+				return err
+			}
+			if !exists {
+				return errors.New("missing concurrent_data")
+			}
+			return nil
+		},
+	}
+
+	results := make(chan error, 2)
+	go func() {
+		db, err := Open(dbPath, spec)
+		if db != nil {
+			_ = db.Close()
+		}
+		results <- err
+	}()
+	<-started
+	go func() {
+		db, err := Open(dbPath, spec)
+		if db != nil {
+			_ = db.Close()
+		}
+		results <- err
+	}()
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+	for range 2 {
+		if err := <-results; err != nil {
+			t.Fatalf("concurrent Open: %v", err)
+		}
+	}
+	if got := applyCount.Load(); got != 1 {
+		t.Fatalf("migration apply count = %d, want 1", got)
+	}
+}
+
 func toySpec(kind string) Spec {
 	return Spec{
 		Kind:           kind,
@@ -240,7 +416,7 @@ func toySpec(kind string) Spec {
 		Pragmas:        []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`},
 		Migrations: []Migration{
 			{FromVersion: 0, ToVersion: 1, Apply: func(tx *sql.Tx) error {
-				_, err := tx.Exec(`CREATE TABLE IF NOT EXISTS toy_data(id INTEGER PRIMARY KEY, name TEXT NOT NULL DEFAULT '')`)
+				_, err := tx.Exec(`CREATE TABLE toy_data(id INTEGER PRIMARY KEY, name TEXT NOT NULL DEFAULT '')`)
 				return err
 			}},
 		},

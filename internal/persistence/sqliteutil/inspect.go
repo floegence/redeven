@@ -27,59 +27,30 @@ WHERE type = 'table' AND name = ?
 	return exists > 0, nil
 }
 
-func IndexExistsTx(tx *sql.Tx, indexName string) (bool, error) {
+func TableColumnNamesTx(tx *sql.Tx, tableName string) ([]string, error) {
 	if tx == nil {
-		return false, errors.New("nil tx")
-	}
-	indexName = strings.TrimSpace(indexName)
-	if indexName == "" {
-		return false, errors.New("missing index name")
-	}
-	var exists int
-	if err := tx.QueryRow(`
-SELECT COUNT(1)
-FROM sqlite_master
-WHERE type = 'index' AND name = ?
-`, indexName).Scan(&exists); err != nil {
-		return false, err
-	}
-	return exists > 0, nil
-}
-
-func ColumnExistsTx(tx *sql.Tx, tableName string, columnName string) (bool, error) {
-	if tx == nil {
-		return false, errors.New("nil tx")
+		return nil, errors.New("nil tx")
 	}
 	tableName = strings.TrimSpace(tableName)
-	columnName = strings.TrimSpace(columnName)
-	if tableName == "" || columnName == "" {
-		return false, errors.New("invalid table/column")
+	if tableName == "" {
+		return nil, errors.New("missing table name")
 	}
-
 	rows, err := tx.Query(fmt.Sprintf(`PRAGMA table_info(%s)`, quoteIdentifier(tableName)))
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	defer rows.Close()
-
+	var columns []string
 	for rows.Next() {
-		var cid int
-		var name string
-		var ctype string
-		var notNull int
+		var cid, notNull, primaryKey int
+		var name, columnType string
 		var defaultValue sql.NullString
-		var primaryKey int
-		if err := rows.Scan(&cid, &name, &ctype, &notNull, &defaultValue, &primaryKey); err != nil {
-			return false, err
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return nil, err
 		}
-		if strings.EqualFold(strings.TrimSpace(name), columnName) {
-			return true, nil
-		}
+		columns = append(columns, name)
 	}
-	if err := rows.Err(); err != nil {
-		return false, err
-	}
-	return false, nil
+	return columns, rows.Err()
 }
 
 func ListUserTablesTx(tx *sql.Tx) ([]string, error) {
@@ -116,6 +87,32 @@ ORDER BY name ASC
 	}
 	sort.Strings(tables)
 	return tables, nil
+}
+
+func ListUserIndexesTx(tx *sql.Tx) ([]string, error) {
+	if tx == nil {
+		return nil, errors.New("nil tx")
+	}
+	rows, err := tx.Query(`
+SELECT name
+FROM sqlite_master
+WHERE type = 'index'
+  AND name NOT LIKE 'sqlite_%'
+ORDER BY name ASC
+`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var indexes []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return nil, err
+		}
+		indexes = append(indexes, strings.TrimSpace(name))
+	}
+	return indexes, rows.Err()
 }
 
 func quoteIdentifier(name string) string {
