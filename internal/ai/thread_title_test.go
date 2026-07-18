@@ -391,8 +391,6 @@ func TestScheduleAutoThreadTitle_RetriesUntilSuccess(t *testing.T) {
 }
 
 func TestScheduleAutoThreadTitle_LeavesThreadUntitledAfterGenerationFailures(t *testing.T) {
-	t.Parallel()
-
 	mock := &autoTitleMock{
 		responses: []autoTitleMockResponse{
 			{Token: ``},
