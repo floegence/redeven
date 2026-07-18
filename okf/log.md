@@ -1,6 +1,7 @@
 # Redeven OKF Update Log
 
 ## 2026-07-18
+* **Dependency**: Upgraded to published Floret v0.11.4 and switched thread summaries to `ReadLatestThreadTurn`; pending approval snapshots and items now use Floret-owned validation directly.
 * **Breaking**: Restricted canonical threadstore migration support to explicit
   v15-v40 databases and made product v1-to-v2 a continuous migration after
   product-only canonical conversion.

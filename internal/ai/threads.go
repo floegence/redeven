@@ -106,47 +106,24 @@ func (s *Service) readCanonicalThreadState(ctx context.Context, threadID string)
 	if err != nil {
 		return flruntime.ThreadSnapshot{}, nil, err
 	}
-	snapshot, err := host.ReadThread(ctx, flruntime.ThreadID(strings.TrimSpace(threadID)))
+	canonicalThreadID := flruntime.ThreadID(strings.TrimSpace(threadID))
+	latest, err := host.ReadLatestThreadTurn(ctx, canonicalThreadID)
+	var latestTurn *flruntime.ThreadTurnSnapshot
+	if errors.Is(err, flruntime.ErrTurnNotFound) {
+		latest = flruntime.ThreadTurnSnapshot{}
+	} else if err != nil {
+		return flruntime.ThreadSnapshot{}, nil, err
+	} else {
+		latestTurn = &latest
+	}
+	snapshot, err := host.ReadThread(ctx, canonicalThreadID)
 	if err != nil {
 		return flruntime.ThreadSnapshot{}, nil, err
 	}
-	page, err := host.ListThreadTurns(ctx, flruntime.ListThreadTurnsRequest{ThreadID: snapshot.ID, Tail: 1})
-	if err != nil {
-		return flruntime.ThreadSnapshot{}, nil, err
+	if latestTurn != nil && latestTurn.ThroughOrdinal > snapshot.ThroughOrdinal {
+		return flruntime.ThreadSnapshot{}, nil, canonicalTimelineResyncErrorf("latest turn revision is newer than the thread snapshot")
 	}
-	latest, err := canonicalThreadStateFromPage(snapshot, page)
-	if err != nil {
-		return flruntime.ThreadSnapshot{}, nil, err
-	}
-	return snapshot, latest, nil
-}
-
-func canonicalThreadStateFromPage(snapshot flruntime.ThreadSnapshot, page flruntime.ThreadTurnsPage) (*flruntime.ThreadTurnSnapshot, error) {
-	threadID := strings.TrimSpace(string(snapshot.ID))
-	if threadID == "" || strings.TrimSpace(string(page.ThreadID)) != threadID {
-		return nil, canonicalTimelineResyncErrorf("thread snapshot and turn page identities differ")
-	}
-	if len(page.Turns) > 1 {
-		return nil, canonicalTimelineResyncErrorf("tail page returned %d turns", len(page.Turns))
-	}
-	if len(page.Turns) == 0 {
-		return nil, nil
-	}
-
-	latest := page.Turns[0]
-	if latest.Ordinal <= 0 || strings.TrimSpace(latest.UserEntryID) == "" {
-		return nil, canonicalTimelineResyncErrorf("latest turn has incomplete canonical identity")
-	}
-	if latest.ThroughOrdinal <= 0 || latest.ThroughOrdinal > page.ThroughOrdinal {
-		return nil, canonicalTimelineResyncErrorf("latest turn projection ordinal %d is outside the page ordinal %d", latest.ThroughOrdinal, page.ThroughOrdinal)
-	}
-	if err := latest.Projection.Validate(); err != nil {
-		return nil, canonicalTimelineResyncErrorf("latest turn projection is invalid: %v", err)
-	}
-	if latest.Projection.ThreadID != page.ThreadID || latest.Projection.TurnID != latest.TurnID || latest.Projection.RunID != latest.RunID || latest.Projection.ThroughOrdinal != latest.ThroughOrdinal {
-		return nil, canonicalTimelineResyncErrorf("latest turn projection identity differs from the turn page")
-	}
-	return &latest, nil
+	return snapshot, latestTurn, nil
 }
 
 func threadViewRunState(snapshot flruntime.ThreadSnapshot, latest *flruntime.ThreadTurnSnapshot) (string, string, string) {
