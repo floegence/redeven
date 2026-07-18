@@ -248,6 +248,22 @@ Rules:
 - Machine-consumed Markdown source files named explicitly in `assets/readme/locales.json` are active runtime inputs rather than repository knowledge documents. Do not use that narrow exception to introduce general product or developer documentation outside OKF.
 - Machine-readable protocol assets may live outside OKF when they are active source contracts, for example `spec/openapi/*.yaml`.
 
+### OKF Authoring and Information Quality
+
+- Treat each OKF concept as one retrieval unit for one coherent product question, contract, or decision surface. Do not combine unrelated architecture, UI, security, protocol, release, and implementation concerns in one concept.
+- Every concept must begin with a concise `# Summary` section that states authority, observable outcome, non-negotiable invariants, and the failure or recovery boundary.
+- Keep normative content separate from implementation evidence: summary and contract sections explain what must be true; `# Evidence` records only representative source, test, contract, or script references needed to verify it.
+- Do not turn OKF into a source-code inventory. Cite representative evidence instead of enumerating every call site, helper, or historical implementation detail.
+- The explanatory body of a normal concept should target no more than 8,000 characters. More than 12,000 characters requires splitting or a concise `quality_exception` frontmatter value justified in the change review. More than 20,000 characters is not acceptable for a normal concept.
+- A concept containing more than three independent workflows, owners, or lifecycle domains must be split unless it is explicitly a cross-domain contract.
+- Use headings for independent contracts and workflows. Do not place multiple unrelated invariants in one long paragraph.
+- Each important boundary has one canonical OKF concept. Other concepts must link to that owner and document only their product-specific delta; do not copy the same prohibition or ownership matrix into multiple files.
+- Keep current behavior in concepts. Historical behavior belongs in `okf/log.md` only when it explains a compatibility or migration requirement.
+- `okf/index.md` must provide a unique, action-oriented description for every concept and must not list a concept more than once.
+- Evidence references must be unique and stable within a concept. New concepts must not use manually maintained numeric citation labels such as `[1]` or `[2]`.
+- When an OKF change exceeds its size or scope budget, the same change must split the concept, move evidence into its dedicated section, or record why the exception is necessary.
+- Every OKF change must be reviewed for information hierarchy, duplication, stale claims, and retrieval usability in addition to source correctness.
+
 ## AI Design Principles
 
 - Prefer prompt-first behavior shaping through prompts and structured contracts.
