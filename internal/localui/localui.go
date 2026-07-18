@@ -187,6 +187,13 @@ func (s *Server) HandlerForDesktopBridge() http.Handler {
 	})
 }
 
+func (s *Server) LocalUIBridgeURLForDesktop() string {
+	if s == nil {
+		return ""
+	}
+	return s.localUIBridgeURL
+}
+
 func newLocalUIHTTPServer(handler http.Handler) *http.Server {
 	return &http.Server{
 		Handler:           handler,
@@ -599,6 +606,8 @@ type accessStatusResp struct {
 
 type runtimeHealthResp struct {
 	Status           string                            `json:"status"`
+	LocalUIURL       string                            `json:"local_ui_url,omitempty"`
+	LocalUIURLs      []string                          `json:"local_ui_urls,omitempty"`
 	PasswordRequired bool                              `json:"password_required"`
 	Exposure         runtimemanagement.LocalUIExposure `json:"exposure"`
 	DesktopManaged   bool                              `json:"desktop_managed,omitempty"`
@@ -950,8 +959,11 @@ func (s *Server) handleRuntimeHealth(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
+	displayURLs := s.DisplayURLs()
 	writeJSON(w, http.StatusOK, apiResp{OK: true, Data: runtimeHealthResp{
 		Status:           "online",
+		LocalUIURL:       firstNonEmptyString(displayURLs),
+		LocalUIURLs:      displayURLs,
 		PasswordRequired: s.accessEnabled(),
 		Exposure:         s.LocalUIExposure(),
 		DesktopManaged:   s.desktopManaged,

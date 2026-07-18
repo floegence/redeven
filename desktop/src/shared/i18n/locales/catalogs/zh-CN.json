@@ -1697,6 +1697,8 @@
     "runtimeHostCommandFailedSummary": "Desktop 无法完成 “{target}” 的 host 命令。",
     "environmentOpenFailedTitle": "环境打开失败",
     "environmentOpenFailedSummary": "Desktop 无法打开 “{target}”。",
+    "environmentOpenLocalTransportDetail": "Desktop 的受保护本地连接未返回可用的 Env App 页面。",
+    "environmentOpenLocalTransportRecoveryHint": "请重启运行时后重试。无需关闭 VPN、Tailscale 或代理软件。",
     "workspaceEnginePrepareFailedTitle": "工作区引擎准备失败",
     "workspaceEnginePrepareFailedSummary": "Desktop 无法为“{target}”准备工作区引擎。"
   },

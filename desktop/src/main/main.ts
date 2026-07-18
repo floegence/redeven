@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, powerMonitor, safeStorage, session, shell, type MessageBoxOptions, type WebContents } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, powerMonitor, safeStorage, session, shell, type MessageBoxOptions, type Session, type WebContents } from 'electron';
 import crypto from 'node:crypto';
 import fs from 'node:fs/promises';
 import http from 'node:http';
@@ -171,7 +171,12 @@ import {
   type RuntimeLifecycleIntent,
 } from './runtimeLifecycleCoordinator';
 import { LauncherOperationRegistry, launcherOperationProgress, type LauncherOperationAttemptIdentity } from './launcherOperations';
-import { buildLocalUIEnvAppEntryURL } from './localUIURL';
+import {
+  requireLocalUIBridgeURL,
+  resolveDesktopSessionTransport,
+  shouldFailDesktopSessionMainDocument,
+  type DesktopSessionTransport,
+} from './desktopSessionTransport';
 import { isAllowedAppNavigation, isAllowedCodespaceWindowNavigation } from './navigation';
 import { resolveBundledRuntimePath, resolveSessionPreloadPath, resolveUtilityPreloadPath, resolveWelcomeRendererPath } from './paths';
 import {
@@ -576,7 +581,9 @@ type DesktopSessionRecord = {
   session_key: DesktopSessionKey;
   target: DesktopSessionTarget;
   startup: StartupReport;
+  transport: DesktopSessionTransport;
   entry_url: string;
+  display_url: string;
   allowed_base_url: string;
   root_window: DesktopTrackedWindow;
   child_windows: Map<string, DesktopTrackedWindow>;
@@ -763,6 +770,7 @@ type CreateBrowserWindowArgs = Readonly<{
   }>) => void;
   onClosed?: (win: DesktopClosedWindowSnapshot) => void;
   presentOnReadyToShow?: boolean;
+  deferInitialLoad?: boolean;
 }>;
 
 const utilityWindows = new Map<DesktopUtilityWindowKind, DesktopTrackedWindow>();
@@ -780,6 +788,8 @@ const UTILITY_WINDOW_KINDS = ['launcher'] as const;
 const sessionsByKey = new Map<DesktopSessionKey, DesktopSessionRecord>();
 const sessionKeyByWebContentsID = new Map<number, DesktopSessionKey>();
 const sessionCloseTasks = new Map<DesktopSessionKey, Promise<void>>();
+const desktopDiagnosticsHookSessions = new WeakSet<Session>();
+const directDesktopSessionTasks = new Map<string, Promise<Session>>();
 const confirmedFinalWindowCloseWebContentsIDs = new Set<number>();
 const windowStateCleanup = new Map<BrowserWindow, () => void>();
 const desktopDownloadWriter = new DesktopDownloadWriter(() => desktopLanguageState().getSnapshot().resolved_locale);
@@ -917,7 +927,7 @@ const LOCAL_UI_ACCESS_COOKIE_NAME = 'redeven_local_access';
 const runtimeFlowerAccessCookies = new Map<string, string>();
 
 function runtimeFlowerBaseURL(record: LocalEnvironmentRuntimeRecord): string {
-  return new URL('/', record.startup.local_ui_url).toString();
+  return requireLocalUIBridgeURL(record.startup);
 }
 
 function runtimeFlowerAccessCookieHeader(cookieValue: string): string {
@@ -995,9 +1005,8 @@ async function startDesktopModelSourceForStartup(args: Readonly<{
 
 async function refreshStartupReportFromLocalUI(
   startup: StartupReport,
-  localUIURL: string,
 ): Promise<StartupReport> {
-  const result = await probeExternalLocalUIHealth(localUIURL, {
+  const result = await probeExternalLocalUIHealth(requireLocalUIBridgeURL(startup), {
     timeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
   });
   if (!result.ok) {
@@ -1006,9 +1015,8 @@ async function refreshStartupReportFromLocalUI(
   const refreshed = result.value;
   return {
     ...startup,
-    local_ui_url: refreshed.local_ui_url,
-    local_ui_urls: refreshed.local_ui_urls,
     password_required: refreshed.password_required,
+    exposure: refreshed.exposure ?? startup.exposure,
     desktop_managed: refreshed.desktop_managed ?? startup.desktop_managed,
     desktop_owner_id: refreshed.desktop_owner_id ?? startup.desktop_owner_id,
     started_at_unix_ms: refreshed.started_at_unix_ms ?? startup.started_at_unix_ms,
@@ -1163,7 +1171,7 @@ async function openRuntimePlacementBridgeForReadyRecord(
     signal,
   });
   const startup = desktopModelSource
-    ? await refreshStartupReportFromLocalUI(nextRecord.startup, nextRecord.startup.local_ui_url)
+    ? await refreshStartupReportFromLocalUI(nextRecord.startup)
     : nextRecord.startup;
   const record = {
     ...nextRecord,
@@ -1630,7 +1638,7 @@ async function verifyCurrentLocalEnvironmentRuntimeRecord(
     return null;
   }
   try {
-    const result = await probeExternalLocalUIHealth(currentRecord.startup.local_ui_url, {
+    const result = await probeExternalLocalUIHealth(requireLocalUIBridgeURL(currentRecord.startup), {
       timeoutMs: DESKTOP_RUNTIME_PROBE_TIMEOUT_MS,
     });
     if (result.ok) {
@@ -2853,19 +2861,21 @@ function stripSensitiveURLPayload(rawURL: string): string {
 }
 
 function rendererSafeStartupReport(startup: StartupReport): StartupReport {
+  const rendererStartup = { ...startup };
+  delete rendererStartup.local_ui_bridge_url;
   const localUIURL = stripSensitiveURLPayload(startup.local_ui_url);
   const localUIURLs = startup.local_ui_urls
     .map((url) => stripSensitiveURLPayload(url))
     .filter((url) => url !== '');
   return {
-    ...startup,
+    ...rendererStartup,
     local_ui_url: localUIURL,
     local_ui_urls: localUIURLs.length > 0 ? localUIURLs : localUIURL ? [localUIURL] : [],
   };
 }
 
 function rendererSafeSessionURL(session: DesktopSessionRecord): string {
-  return stripSensitiveURLPayload(session.entry_url) || stripSensitiveURLPayload(session.startup.local_ui_url);
+  return stripSensitiveURLPayload(session.display_url) || stripSensitiveURLPayload(session.startup.local_ui_url);
 }
 
 function desktopStateStore(): DesktopStateStore {
@@ -3232,16 +3242,6 @@ function onlineRuntimeHealth(
     ...(normalizedRuntimeService ? { runtime_service: normalizedRuntimeService } : {}),
     ...(effectiveMaintenance ? { runtime_maintenance: effectiveMaintenance } : {}),
   };
-}
-
-function desktopSessionEntryURL(target: DesktopSessionTarget, startup: StartupReport): string {
-  if (target.kind === 'local_environment' && target.route === 'remote_desktop') {
-    return startup.local_ui_url;
-  }
-  if (target.kind === 'gateway_environment') {
-    return startup.local_ui_url;
-  }
-  return buildLocalUIEnvAppEntryURL(startup.local_ui_url);
 }
 
 function offlineRuntimeHealth(
@@ -7577,7 +7577,9 @@ function createBrowserWindow(args: CreateBrowserWindowArgs): DesktopTrackedWindo
     args.onClosed?.(closedWindow);
   });
 
-  void win.loadURL(args.targetURL);
+  if (args.deferInitialLoad !== true) {
+    void win.loadURL(args.targetURL);
+  }
   return trackedWindow;
 }
 
@@ -7925,6 +7927,27 @@ function sessionOpenFailureMessage(targetURL: string, errorDescription: string):
   return `Desktop could not finish opening ${targetURL}.`;
 }
 
+function localDesktopTransportFailure(
+  targetLabel: string,
+  technicalDetail: string,
+  diagnostics: DesktopOperationFailurePresentation['diagnostics'] = [],
+): DesktopOperationFailureError {
+  const detail = compact(technicalDetail);
+  return new DesktopOperationFailureError(desktopOperationFailurePresentation({
+    code: 'environment_open_failed',
+    title: 'Environment Open Failed',
+    titleKey: 'progress.environmentOpenFailedTitle',
+    summary: `Desktop could not open "${targetLabel}".`,
+    summaryKey: 'progress.environmentOpenFailedSummary',
+    detail: detail || 'Desktop protected local transport did not return a usable Environment App page.',
+    detailKey: 'progress.environmentOpenLocalTransportDetail',
+    recoveryHint: 'Restart the Runtime, then try again. VPN, Tailscale, and proxy software can remain enabled.',
+    recoveryHintKey: 'progress.environmentOpenLocalTransportRecoveryHint',
+    targetLabel,
+    diagnostics,
+  }));
+}
+
 function resolveSessionInitialLoadSuccess(
   sessionRecord: DesktopSessionRecord,
   options: Readonly<{ stealAppFocus?: boolean }> = {},
@@ -8065,16 +8088,19 @@ function markSessionDesktopModelSourceSettled(sessionRecord: DesktopSessionRecor
 
 async function failOpeningSession(
   sessionRecord: DesktopSessionRecord,
-  message: string,
+  failure: string | Error,
 ): Promise<void> {
   if (sessionRecord.lifecycle !== 'opening') {
     return;
   }
-  sessionRecord.initial_load_failure_message = compact(message) || 'Desktop could not open that environment window.';
+  const error = failure instanceof Error
+    ? failure
+    : new Error(compact(failure) || 'Desktop could not open that environment window.');
+  sessionRecord.initial_load_failure_message = compact(error.message) || 'Desktop could not open that environment window.';
   const reject = sessionRecord.reject_initial_load;
   sessionRecord.resolve_initial_load = null;
   sessionRecord.reject_initial_load = null;
-  reject?.(new Error(sessionRecord.initial_load_failure_message));
+  reject?.(error);
   await finalizeSessionClosure(sessionRecord.session_key);
 }
 
@@ -8137,6 +8163,7 @@ function createSessionRootWindow(
     stealAppFocus?: boolean;
     sessionPartition?: string;
     presentOnReadyToShow?: boolean;
+    deferInitialLoad?: boolean;
     onDidFinishLoad?: (win: BrowserWindow) => void;
     onDidFailLoad?: (details: Readonly<{
       win: BrowserWindow;
@@ -8155,6 +8182,7 @@ function createSessionRootWindow(
     stealAppFocus: options?.stealAppFocus,
     sessionPartition: options?.sessionPartition,
     presentOnReadyToShow: options?.presentOnReadyToShow,
+    deferInitialLoad: options?.deferInitialLoad,
     onDidFinishLoad: options?.onDidFinishLoad,
     onDidFailLoad: options?.onDidFailLoad,
     onWindowOpen: (nextURL, parent, frameName) => {
@@ -8181,11 +8209,39 @@ function desktopDiagnosticsStateDirForTarget(target: DesktopSessionTarget, start
   return path.join(app.getPath('userData'), 'session-diagnostics', desktopSessionStateKeyFragment(target.session_key));
 }
 
-function desktopSessionPartitionForTarget(target: DesktopSessionTarget): string {
-  if (target.kind !== 'gateway_environment') {
-    return '';
+async function prepareDesktopSessionTransport(transport: DesktopSessionTransport): Promise<void> {
+  if (transport.proxyPolicy !== 'direct') {
+    installDesktopDiagnosticsHooks(session.defaultSession);
+    return;
   }
-  return `persist:runtime-gateway:${desktopSessionStateKeyFragment(target.session_key)}`;
+  let task = directDesktopSessionTasks.get(transport.partition);
+  if (!task) {
+    task = (async () => {
+      const webSession = session.fromPartition(transport.partition);
+      installDesktopDiagnosticsHooks(webSession);
+      await webSession.setProxy({ mode: 'direct' });
+      return webSession;
+    })();
+    directDesktopSessionTasks.set(transport.partition, task);
+    void task.catch(() => {
+      if (directDesktopSessionTasks.get(transport.partition) === task) {
+        directDesktopSessionTasks.delete(transport.partition);
+      }
+    });
+  }
+  await task;
+}
+
+async function releaseDesktopSessionTransport(transport: DesktopSessionTransport): Promise<void> {
+  if (transport.proxyPolicy !== 'direct') {
+    return;
+  }
+  const task = directDesktopSessionTasks.get(transport.partition);
+  directDesktopSessionTasks.delete(transport.partition);
+  const webSession = await (task ?? Promise.resolve(session.fromPartition(transport.partition))).catch(() => null);
+  if (webSession) {
+    await webSession.clearStorageData().catch(() => undefined);
+  }
 }
 
 async function createSessionRecord(
@@ -8213,14 +8269,33 @@ async function createSessionRecord(
     }
   };
   assertRuntimeLifecycleGenerationUnchanged();
+  let transport: DesktopSessionTransport;
+  try {
+    transport = resolveDesktopSessionTransport(target, startup, {
+      placementBridge: options.transportRecovery != null,
+    });
+  } catch (error) {
+    if (target.kind === 'local_environment' && target.route === 'local_host') {
+      const message = error instanceof Error ? error.message : String(error);
+      throw localDesktopTransportFailure(target.label, message, [
+        { channel: 'transport', label: 'Transport', text: 'native_local_bridge' },
+        { channel: 'proxy_policy', label: 'Proxy policy', text: 'direct' },
+        { channel: 'transport_contract', label: 'Transport contract', text: compact(message) || 'invalid trusted bridge state' },
+      ]);
+    }
+    throw error;
+  }
+  await prepareDesktopSessionTransport(transport);
+  assertRuntimeLifecycleGenerationUnchanged();
   const diagnostics = new DesktopDiagnosticsRecorder();
-  await diagnostics.configureRuntime(startup, startup.local_ui_url, {
+  await diagnostics.configureRuntime(startup, transport.allowedBaseURL, {
     stateDirOverride: desktopDiagnosticsStateDirForTarget(target, startup),
   });
-  const entryURL = desktopSessionEntryURL(target, startup);
+  const entryURL = transport.entryURL;
   const safeEntryURL = stripSensitiveURLPayload(entryURL) || entryURL;
-  const safeAllowedBaseURL = stripSensitiveURLPayload(startup.local_ui_url) || startup.local_ui_url;
-  const sessionPartition = desktopSessionPartitionForTarget(target);
+  const safeAllowedBaseURL = stripSensitiveURLPayload(transport.allowedBaseURL) || transport.allowedBaseURL;
+  const safeDisplayURL = stripSensitiveURLPayload(transport.displayURL) || startup.local_ui_url;
+  const sessionPartition = transport.partition;
   const initialLoad = createInitialLoadDeferred();
   let sessionRecord!: DesktopSessionRecord;
   assertRuntimeLifecycleGenerationUnchanged();
@@ -8228,6 +8303,7 @@ async function createSessionRecord(
     stealAppFocus: options.stealAppFocus,
     sessionPartition,
     presentOnReadyToShow: false,
+    deferInitialLoad: true,
     onDidFinishLoad: () => {
       sessionRecord.document_loaded_at_unix_ms = Date.now();
       void sessionRecord.diagnostics.recordLifecycle(
@@ -8237,6 +8313,17 @@ async function createSessionRecord(
     },
     onDidFailLoad: (details) => {
       if (!details.isMainFrame) {
+        return;
+      }
+      if (transport.proxyPolicy === 'direct') {
+        void failOpeningSession(
+          sessionRecord,
+          localDesktopTransportFailure(target.label, details.errorDescription, [
+            { channel: 'transport', label: 'Transport', text: transport.kind },
+            { channel: 'proxy_policy', label: 'Proxy policy', text: transport.proxyPolicy },
+            { channel: 'chromium_error', label: 'Chromium error', text: `${details.errorCode}: ${details.errorDescription}` },
+          ]),
+        );
         return;
       }
       void failOpeningSession(
@@ -8249,7 +8336,9 @@ async function createSessionRecord(
     session_key: target.session_key,
     target,
     startup,
+    transport,
     entry_url: entryURL,
+    display_url: transport.displayURL,
     allowed_base_url: safeAllowedBaseURL,
     root_window: rootWindow,
     child_windows: new Map(),
@@ -8277,6 +8366,7 @@ async function createSessionRecord(
 
   sessionsByKey.set(target.session_key, sessionRecord);
   sessionKeyByWebContentsID.set(rootWindow.webContentsID, target.session_key);
+  void rootWindow.browserWindow.loadURL(entryURL);
   if (options.transportRecovery) {
     attachSessionTransportRecovery(sessionRecord, options.transportRecovery);
   }
@@ -8313,7 +8403,9 @@ async function createSessionRecord(
           ? 'desktop opened an environment session through a Gateway'
         : 'desktop connected to an external Redeven Local UI target',
     {
-      target_url: safeAllowedBaseURL,
+      target_url: safeDisplayURL,
+      transport_kind: transport.kind,
+      proxy_policy: transport.proxyPolicy,
       attached: options.attached === true,
       effective_run_mode: startup.effective_run_mode ?? '',
     },
@@ -8405,6 +8497,7 @@ async function finalizeSessionClosure(
 
     sessionRecord.runtime_handle = null;
     sessionRecord.diagnostics.clearRuntime();
+    await releaseDesktopSessionTransport(sessionRecord.transport);
   })().finally(() => {
     sessionCloseTasks.delete(sessionKey);
   });
@@ -8969,7 +9062,7 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
   }
   const preferences = await loadDesktopPreferencesCached();
   const record = await ensureRuntimeFlowerRecord();
-  const url = new URL(path, record.startup.local_ui_url);
+  const url = new URL(path, runtimeFlowerBaseURL(record));
   const environment = preferences.local_environment;
   let accessHeaders = await runtimeFlowerAccessHeaders(record, environment);
   let response = await runtimeFlowerRequestHTTP(url, { ...request, method, path }, { headers: accessHeaders });
@@ -13665,6 +13758,8 @@ async function openRuntimePlacementBridgeFromLauncher(
           startup: {
             ...bridgeSession.startup,
             ...readiness.value,
+            local_ui_url: bridgeSession.startup.local_ui_url,
+            local_ui_urls: bridgeSession.startup.local_ui_urls,
             runtime_control: bridgeSession.startup.runtime_control,
           },
         };
@@ -16830,8 +16925,11 @@ function sessionRecordForWebContentsID(webContentsID: number): DesktopSessionRec
   return sessionsByKey.get(sessionKey) ?? null;
 }
 
-function installDesktopDiagnosticsHooks(): void {
-  const webSession = session.defaultSession;
+function installDesktopDiagnosticsHooks(webSession: Session): void {
+  if (desktopDiagnosticsHookSessions.has(webSession)) {
+    return;
+  }
+  desktopDiagnosticsHookSessions.add(webSession);
   webSession.webRequest.onBeforeSendHeaders((details, callback) => {
     const sessionRecord = sessionRecordForWebContentsID((details as { webContentsId?: number }).webContentsId ?? -1);
     const requestHeaders = sessionRecord?.diagnostics.startRequest({
@@ -16854,6 +16952,38 @@ function installDesktopDiagnosticsHooks(): void {
       responseHeaders: details.responseHeaders as Record<string, string | string[]> | undefined,
       fromCache: details.fromCache,
     });
+    if (shouldFailDesktopSessionMainDocument({
+      lifecycle: sessionRecord.lifecycle,
+      resourceType: details.resourceType,
+      statusCode: details.statusCode,
+      webContentsID: (details as { webContentsId?: number }).webContentsId ?? -1,
+      rootWebContentsID: sessionRecord.root_window.webContentsID,
+    })) {
+      const transport = sessionRecord.transport;
+      const diagnostics: NonNullable<DesktopOperationFailurePresentation['diagnostics']> = [
+        { channel: 'transport', label: 'Transport', text: transport.kind },
+        { channel: 'proxy_policy', label: 'Proxy policy', text: transport.proxyPolicy },
+        { channel: 'http_status', label: 'HTTP status', text: String(details.statusCode) },
+      ];
+      void failOpeningSession(
+        sessionRecord,
+        transport.proxyPolicy === 'direct'
+          ? localDesktopTransportFailure(
+              sessionRecord.target.label,
+              `The protected local transport returned HTTP ${details.statusCode}.`,
+              diagnostics,
+            )
+          : new DesktopOperationFailureError(desktopOperationFailurePresentation({
+              code: 'environment_open_failed',
+              title: 'Environment Open Failed',
+              titleKey: 'progress.environmentOpenFailedTitle',
+              summary: `Desktop could not open "${sessionRecord.target.label}".`,
+              summaryKey: 'progress.environmentOpenFailedSummary',
+              targetLabel: sessionRecord.target.label,
+              diagnostics,
+            })),
+      );
+    }
   });
   webSession.webRequest.onErrorOccurred((details) => {
     const sessionRecord = sessionRecordForWebContentsID((details as { webContentsId?: number }).webContentsId ?? -1);
@@ -17622,7 +17752,7 @@ if (!app.requestSingleInstanceLock()) {
   });
 
   app.whenReady().then(async () => {
-    installDesktopDiagnosticsHooks();
+    installDesktopDiagnosticsHooks(session.defaultSession);
     registerDesktopProtocolClient();
     void pruneDesktopRuntimePackageCacheForCurrentRelease().catch((error) => {
       const message = error instanceof Error ? error.message : String(error);

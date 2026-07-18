@@ -184,6 +184,45 @@ describe('runtimeState', () => {
     }
   });
 
+  it('keeps shell readiness on the bridge while using public Local UI URLs from health', async () => {
+    const publicURL = 'http://100.126.191.114:23998/';
+    const publicURLs = [publicURL, 'http://192.168.31.120:23998/'];
+    let shellRequests = 0;
+    const server = http.createServer((request, response) => {
+      if (request.url === '/api/local/runtime/health') {
+        const payload = JSON.parse(openableHealthPayload(401)) as { data: Record<string, unknown> };
+        payload.data.local_ui_url = publicURL;
+        payload.data.local_ui_urls = publicURLs;
+        response.writeHead(200, { 'Content-Type': 'application/json' });
+        response.end(JSON.stringify(payload));
+        return;
+      }
+      if (request.url === '/_redeven_proxy/env/') {
+        shellRequests += 1;
+        response.writeHead(200, { 'Content-Type': 'text/html' });
+        response.end(validEnvAppShellHTML);
+        return;
+      }
+      if (request.url === '/_redeven_proxy/env/assets/index.js') {
+        response.writeHead(200, { 'Content-Type': 'application/javascript' });
+        response.end('export {};');
+        return;
+      }
+      response.writeHead(404);
+      response.end('not found');
+    });
+    const bridgeURL = await listenOnLoopback(server);
+
+    try {
+      const startup = expectProbeSuccess(await probeExternalLocalUIStartup(bridgeURL));
+      expect(startup.local_ui_url).toBe(publicURL);
+      expect(startup.local_ui_urls).toEqual(publicURLs);
+      expect(shellRequests).toBe(1);
+    } finally {
+      await closeServer(server);
+    }
+  });
+
   it('classifies an explicit short probe budget as timeout', async () => {
     const server = http.createServer((_request, response) => {
       setTimeout(() => {

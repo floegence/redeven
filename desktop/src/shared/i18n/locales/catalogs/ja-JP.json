@@ -1697,6 +1697,8 @@
     "runtimeHostCommandFailedSummary": "Desktop は「{target}」の host コマンドを完了できませんでした。",
     "environmentOpenFailedTitle": "環境オープンに失敗しました",
     "environmentOpenFailedSummary": "Desktop は「{target}」を開けませんでした。",
+    "environmentOpenLocalTransportDetail": "Desktop の保護されたローカル接続から、使用可能な Env App ページを取得できませんでした。",
+    "environmentOpenLocalTransportRecoveryHint": "ランタイムを再起動してから、もう一度お試しください。VPN、Tailscale、プロキシソフトウェアは有効のままで構いません。",
     "workspaceEnginePrepareFailedTitle": "ワークスペースエンジンの準備に失敗しました",
     "workspaceEnginePrepareFailedSummary": "Desktop は「{target}」のワークスペースエンジンを準備できませんでした。"
   },

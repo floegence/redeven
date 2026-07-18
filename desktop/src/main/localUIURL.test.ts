@@ -5,6 +5,7 @@ import {
   isLoopbackHost,
   isSupportedLocalHostname,
   LOCAL_UI_ENV_APP_ENTRY_PATH,
+  normalizeLocalUIBridgeURL,
   normalizeLocalUIBaseURL,
 } from './localUIURL';
 
@@ -36,5 +37,26 @@ describe('localUIURL', () => {
     expect(() => normalizeLocalUIBaseURL('192.168.1.11:24000')).toThrow('Redeven URL must be a valid absolute URL.');
     expect(() => normalizeLocalUIBaseURL('http://example.com:24000/')).toThrow('Redeven URL must use localhost or an IP literal.');
     expect(() => normalizeLocalUIBaseURL('http://user:pass@127.0.0.1:24000/')).toThrow('Redeven URL must not include embedded credentials.');
+  });
+
+  it('normalizes only canonical HTTP loopback bridge roots', () => {
+    expect(normalizeLocalUIBridgeURL(' http://127.0.0.1:43123 ')).toBe('http://127.0.0.1:43123/');
+    expect(normalizeLocalUIBridgeURL('http://127.0.0.2:43123/')).toBe('http://127.0.0.2:43123/');
+    expect(normalizeLocalUIBridgeURL('http://[::1]:43123/')).toBe('http://[::1]:43123/');
+
+    for (const raw of [
+      '',
+      'https://127.0.0.1:43123/',
+      'http://localhost:43123/',
+      'http://127.1:43123/',
+      'http://100.126.191.114:43123/',
+      'http://127.0.0.1/',
+      'http://127.0.0.1:43123/env',
+      'http://user:pass@127.0.0.1:43123/',
+      'http://127.0.0.1:43123/?token=secret',
+      'http://127.0.0.1:43123/#fragment',
+    ]) {
+      expect(() => normalizeLocalUIBridgeURL(raw)).toThrow();
+    }
   });
 });

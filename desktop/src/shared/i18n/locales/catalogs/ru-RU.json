@@ -1721,6 +1721,8 @@
     "runtimeHostCommandFailedSummary": "Desktop не смог выполнить команду host для \"{target}\".",
     "environmentOpenFailedTitle": "Ошибка открытия среды",
     "environmentOpenFailedSummary": "Desktop не смог открыть \"{target}\".",
+    "environmentOpenLocalTransportDetail": "По защищённому локальному подключению Desktop не удалось получить рабочую страницу Env App.",
+    "environmentOpenLocalTransportRecoveryHint": "Перезапустите среду выполнения и повторите попытку. VPN, Tailscale и программы для работы с прокси-серверами можно не отключать.",
     "workspaceEnginePrepareFailedTitle": "Не удалось подготовить механизм рабочей области",
     "workspaceEnginePrepareFailedSummary": "Desktop не удалось подготовить механизм рабочей области для «{target}»."
   },

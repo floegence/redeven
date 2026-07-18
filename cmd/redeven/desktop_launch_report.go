@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -62,6 +63,7 @@ type desktopLaunchReport struct {
 
 	LocalUIURL               string                            `json:"local_ui_url,omitempty"`
 	LocalUIURLs              []string                          `json:"local_ui_urls,omitempty"`
+	LocalUIBridgeURL         string                            `json:"local_ui_bridge_url,omitempty"`
 	RuntimeControl           *runtimeControlEndpoint           `json:"runtime_control,omitempty"`
 	PasswordRequired         bool                              `json:"password_required"`
 	Exposure                 runtimemanagement.LocalUIExposure `json:"exposure"`
@@ -118,6 +120,11 @@ func writeDesktopLaunchReport(path string, report desktopLaunchReport) error {
 		if len(report.LocalUIURLs) == 0 {
 			report.LocalUIURLs = []string{report.LocalUIURL}
 		}
+		normalizedBridgeURL, err := runtimemanagement.NormalizeLocalUIBridgeURL(report.LocalUIBridgeURL)
+		if err != nil {
+			return fmt.Errorf("invalid local_ui_bridge_url: %w", err)
+		}
+		report.LocalUIBridgeURL = normalizedBridgeURL
 		report.EffectiveRunMode = strings.TrimSpace(report.EffectiveRunMode)
 		report.DesktopOwnerID = strings.TrimSpace(report.DesktopOwnerID)
 		report.ProviderOrigin = strings.TrimSpace(report.ProviderOrigin)

@@ -821,8 +821,9 @@ func (c *cli) runCmd(args []string) int {
 		}
 		if reportPath := strings.TrimSpace(*startupReportFile); reportPath != "" {
 			if err := writeDesktopReadyLaunchReport(reportPath, runtimeStartupReport{
-				LocalUIURL:  firstNonEmptyString(localUIURLs),
-				LocalUIURLs: append([]string(nil), localUIURLs...),
+				LocalUIURL:       firstNonEmptyString(localUIURLs),
+				LocalUIURLs:      append([]string(nil), localUIURLs...),
+				LocalUIBridgeURL: srv.LocalUIBridgeURLForDesktop(),
 				RuntimeControl: func() *runtimeControlEndpoint {
 					endpoint := srv.RuntimeControlEndpointForDesktopBridge()
 					if endpoint == nil {

@@ -8,6 +8,7 @@ describe('launchReport', () => {
       status: 'ready',
       local_ui_url: 'http://127.0.0.1:43123/',
       local_ui_urls: ['http://127.0.0.1:43123/'],
+      local_ui_bridge_url: 'http://127.0.0.1:43124/',
       password_required: true,
       effective_run_mode: 'hybrid',
       remote_enabled: true,
@@ -20,6 +21,7 @@ describe('launchReport', () => {
       startup: {
         local_ui_url: 'http://127.0.0.1:43123/',
         local_ui_urls: ['http://127.0.0.1:43123/'],
+        local_ui_bridge_url: 'http://127.0.0.1:43124/',
         password_required: true,
         effective_run_mode: 'hybrid',
         remote_enabled: true,
@@ -36,6 +38,7 @@ describe('launchReport', () => {
       status: 'attached',
       local_ui_url: 'http://127.0.0.1:43123/',
       local_ui_urls: ['http://127.0.0.1:43123/'],
+      local_ui_bridge_url: 'http://127.0.0.1:43124/',
       password_required: false,
       effective_run_mode: 'local',
       remote_enabled: false,
@@ -47,6 +50,7 @@ describe('launchReport', () => {
       startup: {
         local_ui_url: 'http://127.0.0.1:43123/',
         local_ui_urls: ['http://127.0.0.1:43123/'],
+        local_ui_bridge_url: 'http://127.0.0.1:43124/',
         password_required: false,
         effective_run_mode: 'local',
         remote_enabled: false,
@@ -101,6 +105,15 @@ describe('launchReport', () => {
         command: 'redeven run',
       },
     });
+  });
+
+  it('rejects an invalid trusted bridge URL when present', () => {
+    expect(() => parseLaunchReport(JSON.stringify({
+      status: 'ready',
+      local_ui_url: 'http://100.126.191.114:23998/',
+      local_ui_urls: ['http://100.126.191.114:23998/'],
+      local_ui_bridge_url: 'http://100.126.191.114:43124/',
+    }))).toThrow(/loopback/iu);
   });
 
   it('formats blocked diagnostics for clipboard export', () => {
