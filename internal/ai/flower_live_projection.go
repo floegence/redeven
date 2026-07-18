@@ -205,11 +205,11 @@ func (s *Service) GetFlowerThreadLiveBootstrap(ctx context.Context, meta *sessio
 	}
 	// buildFlowerTimelineProjection may have invalidated stale drafts and
 	// emitted a resync event. The bootstrap state was copied before that
-	// reconciliation, so reflect the stream's current canonical draft set.
+	// reconciliation, so reflect the stream's current messages and cursor.
 	s.mu.Lock()
-	if stream := s.flowerLiveByThread[runThreadKey(endpointID, threadID)]; stream == nil || len(stream.State.Messages) == 0 {
-		state.Messages = map[string]FlowerLiveMessageDraft{}
-	}
+	cursor = s.flowerLiveCursorLocked(endpointID, threadID)
+	retainedFromSeq = s.flowerLiveRetainedFromSeqLocked(endpointID, threadID)
+	state.Messages = s.flowerLiveMaterializedStateLocked(endpointID, threadID).Messages
 	s.mu.Unlock()
 	state.TimelineDecorations = timeline.TimelineDecorations
 
@@ -658,19 +658,22 @@ func (s *Service) replaceFlowerLiveDraftWithCanonicalTimeline(ctx context.Contex
 	if endpointID == "" || threadID == "" || runID == "" || turnID == "" {
 		return errors.New("invalid canonical timeline replacement identity")
 	}
+	identityMismatch := false
 	s.mu.Lock()
 	if stream := s.flowerLiveByThread[runThreadKey(endpointID, threadID)]; stream != nil {
 		if draft, ok := stream.State.Messages[turnID]; ok {
 			if strings.TrimSpace(draft.ThreadID) != threadID || strings.TrimSpace(draft.TurnID) != turnID ||
 				strings.TrimSpace(draft.RunID) != runID || strings.TrimSpace(draft.MessageID) != turnID {
-				s.mu.Unlock()
-				s.triggerFlowerLiveTimelineResync(endpointID, threadID, "terminal_draft_canonical_identity_mismatch")
-				return errors.New("terminal live draft identity does not match canonical turn")
+				identityMismatch = true
+			} else {
+				delete(stream.State.Messages, turnID)
 			}
-			delete(stream.State.Messages, turnID)
 		}
 	}
 	s.mu.Unlock()
+	if identityMismatch {
+		s.triggerFlowerLiveTimelineResync(endpointID, threadID, "terminal_draft_canonical_identity_mismatch")
+	}
 	return s.publishFlowerCanonicalTimelineReplacement(ctx, endpointID, threadID, runID, turnID, reason)
 }
 

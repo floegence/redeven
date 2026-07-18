@@ -255,6 +255,9 @@ func TestMismatchedLiveDraftIdentityResyncsBootstrapWithoutSendFailure(t *testin
 			if len(bootstrap.LiveState.Messages) != 0 {
 				t.Fatalf("bootstrap retained mismatched live drafts: %#v", bootstrap.LiveState.Messages)
 			}
+			if bootstrap.Cursor != 1 || bootstrap.RetainedFromSeq != 1 {
+				t.Fatalf("bootstrap cursor boundary=%d/%d, want resync event boundary 1/1", bootstrap.Cursor, bootstrap.RetainedFromSeq)
+			}
 			svc.mu.Lock()
 			events := append([]FlowerLiveEvent(nil), svc.flowerLiveByThread[threadKey].Events...)
 			svc.mu.Unlock()
@@ -309,6 +312,69 @@ func TestTerminalCanonicalTurnDropsStaleLiveDraftBeforeRendering(t *testing.T) {
 	svc.mu.Unlock()
 	if stillLive {
 		t.Fatal("terminal canonical turn retained stale live draft")
+	}
+}
+
+func TestTerminalCanonicalReplacementRecoversMismatchedLiveDraft(t *testing.T) {
+	ctx := context.Background()
+	svc := newTestService(t, nil)
+	meta := timelineTestMeta("env_timeline_terminal_identity_resync")
+	thread, err := svc.CreateThread(ctx, meta, "terminal identity resync", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := newTestFloretHost(t, svc.floretStore, "canonical terminal")
+	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
+		ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_terminal_identity", RunID: "run_terminal_identity", Input: "hello",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	threadKey := runThreadKey(meta.EndpointID, thread.ThreadID)
+	svc.mu.Lock()
+	stream := newFlowerLiveThreadStream()
+	stream.State.Messages["turn_terminal_identity"] = FlowerLiveMessageDraft{
+		ThreadID: thread.ThreadID, TurnID: "turn_terminal_identity", RunID: "other_run", MessageID: "turn_terminal_identity", Role: "assistant", Status: "streaming",
+	}
+	svc.flowerLiveByThread[threadKey] = stream
+	svc.mu.Unlock()
+
+	settlementTarget := flruntime.PendingToolSettlementTarget{
+		ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_terminal_identity", RunID: "run_terminal_identity", ToolCallID: "exec-1", ToolName: "terminal.exec", Handle: "process-1",
+	}
+	settledProjection := flruntime.ThreadTurnProjection{
+		ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_terminal_identity", RunID: "run_terminal_identity", TraceID: "run_terminal_identity", Status: flruntime.TurnStatusCompleted, ThroughOrdinal: 2,
+		Segments: []flruntime.ThreadTurnProjectionSegment{{Kind: flruntime.ThreadTurnProjectionSegmentActivityTimeline, ActivityTimeline: floretProjectionTimeline("run_terminal_identity", thread.ThreadID, "turn_terminal_identity", "exec-1", "terminal.exec")}},
+	}
+	if err := svc.applyFloretPendingToolSettlementProjection(ctx, meta.EndpointID, thread.ThreadID, "run_terminal_identity", "turn_terminal_identity", pendingToolSettlementResultForTest(settlementTarget, flruntime.TurnProjectionAvailabilityReady, &settledProjection, "")); err != nil {
+		t.Fatalf("applyFloretPendingToolSettlementProjection: %v", err)
+	}
+
+	response, err := svc.ListFlowerThreadLiveEvents(ctx, meta, thread.ThreadID, 0, 20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var sawResync, sawReplacement bool
+	for _, event := range response.Events {
+		switch event.Kind {
+		case FlowerLiveResyncRequired:
+			sawResync = true
+		case FlowerLiveTimelineReplaced:
+			sawReplacement = true
+			var payload FlowerLiveTimelineReplacedPayload
+			if !decodeFlowerPayload(event.Payload, &payload) {
+				t.Fatalf("replacement payload decode failed: %#v", event)
+			}
+			if len(payload.Messages) != 2 || payload.Messages[1].MessageID != "turn_terminal_identity" || payload.Messages[1].Content != "canonical terminal" {
+				t.Fatalf("replacement messages=%#v, want canonical timeline", payload.Messages)
+			}
+			if len(payload.LiveState.Messages) != 0 {
+				t.Fatalf("replacement retained mismatched live drafts: %#v", payload.LiveState.Messages)
+			}
+		}
+	}
+	if !sawResync || !sawReplacement {
+		t.Fatalf("events=%#v, want resync followed by canonical replacement", response.Events)
 	}
 }
 
