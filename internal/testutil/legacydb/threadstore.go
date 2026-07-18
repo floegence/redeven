@@ -231,6 +231,16 @@ CREATE TABLE IF NOT EXISTS provider_capabilities (
   updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY(provider_id, model_name)
 );
+CREATE TABLE __redeven_db_meta (
+  singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+  db_kind TEXT NOT NULL,
+  created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  last_migrated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  last_migrated_from_version INTEGER NOT NULL DEFAULT 0,
+  last_migrated_to_version INTEGER NOT NULL DEFAULT 0
+);
+INSERT INTO __redeven_db_meta(singleton, db_kind, last_migrated_from_version, last_migrated_to_version)
+VALUES(1, 'ai_threadstore_canonical', 15, 15);
 PRAGMA user_version=15;
 `)
 	return err

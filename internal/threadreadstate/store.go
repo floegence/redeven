@@ -5,8 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -55,34 +53,6 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	return &Store{db: db}, nil
-}
-
-func OpenResettingInvalidSchema(path string) (*Store, error) {
-	store, err := Open(path)
-	if err == nil {
-		return store, nil
-	}
-	var schemaErr *sqliteutil.SchemaVerifyError
-	if !errors.As(err, &schemaErr) {
-		return nil, err
-	}
-	if resetErr := removeSQLiteFiles(path); resetErr != nil {
-		return nil, errors.Join(err, resetErr)
-	}
-	return Open(path)
-}
-
-func removeSQLiteFiles(path string) error {
-	p := filepath.Clean(strings.TrimSpace(path))
-	if p == "" {
-		return errors.New("missing db path")
-	}
-	for _, candidate := range []string{p, p + "-wal", p + "-shm", p + "-journal"} {
-		if err := os.Remove(candidate); err != nil && !errors.Is(err, os.ErrNotExist) {
-			return err
-		}
-	}
-	return nil
 }
 
 func (s *Store) Close() error {

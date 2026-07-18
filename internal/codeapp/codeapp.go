@@ -213,7 +213,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = pfSvc.Close()
 		return nil, err
 	}
-	threadReadStateStore, err := threadreadstate.OpenResettingInvalidSchema(threadReadStatePath)
+	threadReadStateStore, err := threadreadstate.Open(threadReadStatePath)
 	if err != nil {
 		_ = reg.Close()
 		_ = pfSvc.Close()

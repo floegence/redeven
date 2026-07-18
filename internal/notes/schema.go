@@ -16,7 +16,6 @@ func schemaSpec() sqliteutil.Spec {
 	return sqliteutil.Spec{
 		Kind:           schemaKind,
 		CurrentVersion: currentSchemaVersion,
-		LegacyMarkers:  []string{"notes_topics", "notes_items", "notes_events"},
 		Pragmas:        []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`},
 		Migrations: []sqliteutil.Migration{
 			{FromVersion: 0, ToVersion: 1, Apply: migrateToV1},

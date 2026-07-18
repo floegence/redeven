@@ -6,12 +6,12 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/floegence/redeven/internal/persistence/sqliteutil"
 	_ "modernc.org/sqlite"
 )
 
@@ -29,30 +29,37 @@ const (
 	ThreadTitleSourceUser = "user"
 )
 
-func Open(path string) (*Store, error) {
+type OpenOption func(*openOptions)
+
+type openOptions struct {
+	ensureThread func(string) error
+}
+
+func WithThreadIdentityEnsurer(ensureThread func(string) error) OpenOption {
+	return func(options *openOptions) {
+		options.ensureThread = ensureThread
+	}
+}
+
+func Open(path string, optionList ...OpenOption) (*Store, error) {
 	p := filepath.Clean(strings.TrimSpace(path))
 	if p == "" {
 		return nil, errors.New("missing db path")
 	}
-	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
-		return nil, err
+	options := openOptions{}
+	for _, option := range optionList {
+		if option != nil {
+			option(&options)
+		}
 	}
-
-	db, err := sql.Open("sqlite", p)
+	db, err := sqliteutil.Open(p, threadstoreSchemaSpec(options.ensureThread))
 	if err != nil {
-		return nil, err
-	}
-	if err := initSchema(db); err != nil {
-		_ = db.Close()
 		return nil, err
 	}
 	if err := ensureIncrementalAutoVacuum(db); err != nil {
 		_ = db.Close()
 		return nil, err
 	}
-
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
 
 	return &Store{db: db}, nil
 }

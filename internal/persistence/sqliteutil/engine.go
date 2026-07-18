@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,28 +21,23 @@ type Migration struct {
 	Apply       func(tx *sql.Tx) error
 }
 
-// LegacyKindMigration converts a database owned by an older schema kind into
-// the current schema before normal version migrations run. FromVersion -1
-// accepts any legacy version because the migration owns the full rebuild.
+// LegacyKindMigration converts one explicitly versioned older schema kind into
+// the current schema before normal version migrations run.
 type LegacyKindMigration struct {
-	FromKind      string
-	FromVersion   int
-	LegacyMarkers []string
-	Apply         func(tx *sql.Tx) error
+	FromKind    string
+	FromVersion int
+	ToKind      string
+	ToVersion   int
+	Apply       func(tx *sql.Tx) error
 }
 
 type Spec struct {
 	Kind                 string
 	CurrentVersion       int
-	LegacyMarkers        []string
 	Pragmas              []string
 	Migrations           []Migration
 	LegacyKindMigrations []LegacyKindMigration
-	// RepairCurrent rebuilds a malformed database that is already owned by
-	// Kind. It runs in the same transaction as schema verification and is
-	// attempted at most once.
-	RepairCurrent func(tx *sql.Tx) error
-	Verify        func(tx *sql.Tx) error
+	Verify               func(tx *sql.Tx) error
 }
 
 type DatabaseTooNewError struct {
@@ -55,6 +51,19 @@ func (e *DatabaseTooNewError) Error() string {
 		return "database version is newer than supported"
 	}
 	return fmt.Sprintf("database kind %q is at version %d, but this binary only supports up to %d", e.Kind, e.Version, e.CurrentVersion)
+}
+
+type DatabaseTooOldError struct {
+	Kind           string
+	Version        int
+	MinimumVersion int
+}
+
+func (e *DatabaseTooOldError) Error() string {
+	if e == nil {
+		return "database version is older than supported"
+	}
+	return fmt.Sprintf("database kind %q is at version %d, but this binary supports from version %d", e.Kind, e.Version, e.MinimumVersion)
 }
 
 type WrongDatabaseKindError struct {
@@ -119,16 +128,16 @@ func Open(path string, spec Spec) (*sql.DB, error) {
 		return nil, err
 	}
 
-	db, err := sql.Open("sqlite", p)
+	db, err := sql.Open("sqlite", immediateDSN(p))
 	if err != nil {
-		return nil, err
-	}
-	if err := EnsureSchema(db, spec); err != nil {
-		_ = db.Close()
 		return nil, err
 	}
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
+	if err := EnsureSchema(db, spec); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
 	return db, nil
 }
 
@@ -179,16 +188,23 @@ func EnsureSchema(db *sql.DB, spec Spec) error {
 		if err := legacyMigration.Apply(tx); err != nil {
 			return fmt.Errorf("migrate %s from legacy kind %q: %w", spec.Kind, legacyMigration.FromKind, err)
 		}
-		if err := setUserVersionTx(tx, spec.CurrentVersion); err != nil {
+		if err := setUserVersionTx(tx, legacyMigration.ToVersion); err != nil {
 			return err
 		}
-		currentVersion = spec.CurrentVersion
+		currentVersion = legacyMigration.ToVersion
 	} else {
-		if currentVersion > spec.CurrentVersion {
-			return &DatabaseTooNewError{Kind: spec.Kind, Version: currentVersion, CurrentVersion: spec.CurrentVersion}
-		}
 		if hasMeta {
 			if metaKind != spec.Kind {
+				minimum, maximum, known := legacyVersionRange(spec, metaKind)
+				if known && currentVersion < minimum {
+					return &DatabaseTooOldError{Kind: metaKind, Version: currentVersion, MinimumVersion: minimum}
+				}
+				if known && currentVersion > maximum {
+					return &DatabaseTooNewError{Kind: metaKind, Version: currentVersion, CurrentVersion: maximum}
+				}
+				if known {
+					return &InvalidMigrationChainError{Kind: spec.Kind, Reason: fmt.Sprintf("missing legacy migration from kind %q version %d", metaKind, currentVersion)}
+				}
 				tables, listErr := ListUserTablesTx(tx)
 				if listErr != nil {
 					return &WrongDatabaseKindError{ExpectedKind: spec.Kind, ActualKind: metaKind}
@@ -200,13 +216,16 @@ func EnsureSchema(db *sql.DB, spec Spec) error {
 			if listErr != nil {
 				return listErr
 			}
-			if len(tables) > 0 && !matchesLegacyMarkers(tables, spec.LegacyMarkers) {
+			if len(tables) > 0 {
 				return &WrongDatabaseKindError{ExpectedKind: spec.Kind, Existing: tables}
 			}
 			if err := insertMetaTx(tx, spec.Kind, currentVersion); err != nil {
 				return err
 			}
 		}
+	}
+	if currentVersion > spec.CurrentVersion {
+		return &DatabaseTooNewError{Kind: spec.Kind, Version: currentVersion, CurrentVersion: spec.CurrentVersion}
 	}
 
 	for currentVersion < spec.CurrentVersion {
@@ -228,15 +247,7 @@ func EnsureSchema(db *sql.DB, spec Spec) error {
 
 	if spec.Verify != nil {
 		if err := spec.Verify(tx); err != nil {
-			if spec.RepairCurrent == nil || isLegacy {
-				return &SchemaVerifyError{Kind: spec.Kind, Err: err}
-			}
-			if repairErr := spec.RepairCurrent(tx); repairErr != nil {
-				return &SchemaVerifyError{Kind: spec.Kind, Err: fmt.Errorf("repair current schema: %w", repairErr)}
-			}
-			if verifyErr := spec.Verify(tx); verifyErr != nil {
-				return &SchemaVerifyError{Kind: spec.Kind, Err: verifyErr}
-			}
+			return &SchemaVerifyError{Kind: spec.Kind, Err: err}
 		}
 	}
 	if err := upsertMetaTx(tx, spec.Kind, startedAt, startedVersion, currentVersion); err != nil {
@@ -253,18 +264,24 @@ func validateSpec(spec Spec) error {
 	if spec.CurrentVersion <= 0 {
 		return &InvalidMigrationChainError{Kind: kind, Reason: "current version must be positive"}
 	}
-	if len(spec.Migrations) == 0 {
+	if len(spec.Migrations) == 0 && spec.CurrentVersion != 0 {
 		return &InvalidMigrationChainError{Kind: kind, Reason: "missing migrations"}
 	}
 	for _, migration := range spec.LegacyKindMigrations {
 		if strings.TrimSpace(migration.FromKind) == "" {
 			return &InvalidMigrationChainError{Kind: kind, Reason: "legacy migration has empty source kind"}
 		}
-		if migration.FromVersion < -1 {
+		if migration.FromVersion < 0 {
 			return &InvalidMigrationChainError{Kind: kind, Reason: fmt.Sprintf("legacy migration from %q has invalid source version %d", migration.FromKind, migration.FromVersion)}
 		}
 		if migration.Apply == nil {
 			return &InvalidMigrationChainError{Kind: kind, Reason: fmt.Sprintf("legacy migration from %q has nil apply", migration.FromKind)}
+		}
+		if strings.TrimSpace(migration.ToKind) != kind {
+			return &InvalidMigrationChainError{Kind: kind, Reason: fmt.Sprintf("legacy migration from %q targets kind %q", migration.FromKind, migration.ToKind)}
+		}
+		if migration.ToVersion != spec.CurrentVersion {
+			return &InvalidMigrationChainError{Kind: kind, Reason: fmt.Sprintf("legacy migration from %q targets version %d, want %d", migration.FromKind, migration.ToVersion, spec.CurrentVersion)}
 		}
 	}
 	expectedFrom := 0
@@ -300,52 +317,48 @@ func findMigration(migrations []Migration, fromVersion int) *Migration {
 	return nil
 }
 
-func findLegacyKindMigration(tx *sql.Tx, spec Spec, metaKind string, hasMeta bool, currentVersion int) (*LegacyKindMigration, bool, error) {
+func findLegacyKindMigration(_ *sql.Tx, spec Spec, metaKind string, hasMeta bool, currentVersion int) (*LegacyKindMigration, bool, error) {
 	if hasMeta && strings.TrimSpace(metaKind) == strings.TrimSpace(spec.Kind) {
 		return nil, false, nil
 	}
-	tables, err := ListUserTablesTx(tx)
-	if err != nil {
-		return nil, false, err
-	}
 	for index := range spec.LegacyKindMigrations {
 		migration := &spec.LegacyKindMigrations[index]
-		if hasMeta {
-			if !strings.EqualFold(strings.TrimSpace(metaKind), strings.TrimSpace(migration.FromKind)) {
-				continue
-			}
-		} else if !matchesLegacyMarkers(tables, migration.LegacyMarkers) {
+		if !hasMeta || !strings.EqualFold(strings.TrimSpace(metaKind), strings.TrimSpace(migration.FromKind)) {
 			continue
 		}
-		if migration.FromVersion >= 0 && migration.FromVersion != currentVersion {
-			return nil, false, &InvalidMigrationChainError{Kind: spec.Kind, Reason: fmt.Sprintf("legacy kind %q is at version %d, want %d", migration.FromKind, currentVersion, migration.FromVersion)}
+		if migration.FromVersion != currentVersion {
+			continue
 		}
 		return migration, true, nil
 	}
 	return nil, false, nil
 }
 
-func matchesLegacyMarkers(existing []string, markers []string) bool {
-	if len(existing) == 0 {
-		return true
-	}
-	if len(markers) == 0 {
-		return false
-	}
-	markerSet := make(map[string]struct{}, len(markers))
-	for _, marker := range markers {
-		marker = strings.TrimSpace(marker)
-		if marker == "" {
+func legacyVersionRange(spec Spec, kind string) (int, int, bool) {
+	kind = strings.TrimSpace(kind)
+	minimum, maximum := 0, 0
+	found := false
+	for _, migration := range spec.LegacyKindMigrations {
+		if !strings.EqualFold(strings.TrimSpace(migration.FromKind), kind) {
 			continue
 		}
-		markerSet[strings.ToLower(marker)] = struct{}{}
-	}
-	for _, table := range existing {
-		if _, ok := markerSet[strings.ToLower(strings.TrimSpace(table))]; ok {
-			return true
+		if !found || migration.FromVersion < minimum {
+			minimum = migration.FromVersion
 		}
+		if !found || migration.FromVersion > maximum {
+			maximum = migration.FromVersion
+		}
+		found = true
 	}
-	return false
+	return minimum, maximum, found
+}
+
+func immediateDSN(path string) string {
+	u := url.URL{Scheme: "file", Path: path}
+	query := u.Query()
+	query.Set("_txlock", "immediate")
+	u.RawQuery = query.Encode()
+	return u.String()
 }
 
 func createMetaTableTx(tx *sql.Tx) error {
