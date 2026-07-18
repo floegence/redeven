@@ -604,6 +604,7 @@ export async function connectArtifactEntry(args: {
   endpointId: string;
   floeApp: string;
   entryTicket: string;
+  allowLoopbackHTTP?: boolean;
   signal?: AbortSignal;
   traceId?: string;
 }): Promise<ConnectArtifact> {
@@ -619,6 +620,7 @@ export async function connectArtifactEntry(args: {
     payload: {
       floe_app: floeApp,
     },
+    ...(args.allowLoopbackHTTP === true ? { allowLoopbackHTTP: true } : {}),
   });
   if (source.kind !== 'refreshable') {
     throw new Error('Invalid controlplane artifact source');

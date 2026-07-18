@@ -2790,6 +2790,7 @@ describe('EnvAppShell remote access gate', () => {
         endpointId: 'env_demo',
         floeApp: 'com.floegence.redeven.agent',
         entryTicket: 'ticket-1',
+        allowLoopbackHTTP: true,
       });
       expect(artifact).toEqual({
         transport: 'tunnel',

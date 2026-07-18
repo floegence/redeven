@@ -166,7 +166,10 @@ import {
 import { controlPlaneOriginFromSandboxLocation } from './services/sandboxOrigins';
 import { readUIStorageItem, writeUIStorageItem } from './services/uiStorage';
 import { requestWorkbenchRenderTransaction } from './workbench/workbenchRenderBoundary';
-import { resolveLocalTransportSecurityPolicy } from './security/localTransportSecurity';
+import {
+  allowLoopbackControlplaneHTTP,
+  resolveLocalTransportSecurityPolicy,
+} from './security/localTransportSecurity';
 import {
   readNetworkExposureWarningSuppressed,
   suppressNetworkExposureWarning,
@@ -1516,6 +1519,9 @@ export function EnvAppShell() {
       endpointId: id,
       floeApp: FLOE_APP_AGENT,
       entryTicket,
+      ...(allowLoopbackControlplaneHTTP(window.location.protocol, localTransportSecurity)
+        ? { allowLoopbackHTTP: true }
+        : {}),
       traceId: ctx.traceId,
       signal: ctx.signal,
     });
