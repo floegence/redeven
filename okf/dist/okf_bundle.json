@@ -1187,15 +1187,15 @@
         "title": "AI tool runtime",
         "type": "AI Tool Contract"
       },
-      "body_length": 1906,
+      "body_length": 2164,
       "summary": "Redeven exposes typed AI tools through product-owned registration, policy, presentation, and concrete execution adapters while Floret owns admitted conversation, turn, invocation, approval, and projection lifecycle. This overview is the canonical navigation point for the focused tool, terminal, model/context, thread, and subagent contracts. Detailed behavior belongs in those concepts rather than one cross-domain implementation inventory.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Mechanism\n\nThis concept is the stable overview for the subject. Detailed contracts are maintained in the focused concepts below:\n\n- [AI tool permissions and dispatch](tool-permission-runtime.md)\n- [AI tool approval runtime](tool-approval-runtime.md)\n- [AI terminal tool runtime](terminal-tool-runtime.md)\n- [AI model and context runtime](model-context-runtime.md)\n- [Floret thread runtime integration](floret-thread-runtime.md)\n- [Flower subagent runtime](subagent-runtime.md)",
-          "char_count": 479
+          "body": "## Mechanism\n\nThis concept is the stable overview for the subject. Detailed contracts are maintained in the focused concepts below:\n\n- [AI tool permissions and dispatch](tool-permission-runtime.md)\n- [AI tool approval runtime](tool-approval-runtime.md)\n- [AI terminal tool runtime](terminal-tool-runtime.md)\n- [AI model and context runtime](model-context-runtime.md)\n- [Floret thread runtime integration](floret-thread-runtime.md)\n- [Flower subagent runtime](subagent-runtime.md)\n\nFloret receives current user input through `RunTurnRequest.SupplementalContext` as typed `TurnSupplementalContextItem` values. Redeven supplies only product context such as `attachment_metadata`; Floret owns provider-visible history and continuation state.",
+          "char_count": 737
         },
         {
           "id": "boundaries",
@@ -5817,15 +5817,15 @@
         "title": "Flower live timeline",
         "type": "UI Contract"
       },
-      "body_length": 1940,
+      "body_length": 2257,
       "summary": "Flower is a reusable presentation surface over Floret-owned conversation and execution state. This overview is the canonical navigation point for timeline ordering, model/navigation behavior, terminal activity, approval/context state, and subagent detail. The focused concepts own their independent UI contracts so search and open operations can retrieve one behavior without loading the complete Flower implementation history.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Mechanism\n\nThis concept is the stable overview for the subject. Detailed contracts are maintained in the focused concepts below:\n\n- [Flower timeline ordering](flower-timeline-ordering.md)\n- [Flower model and navigation presentation](flower-model-navigation.md)\n- [Flower terminal activity presentation](flower-terminal-activity.md)\n- [Flower approval and context state](flower-approval-context.md)\n- [Flower subagent detail presentation](flower-subagent-detail.md)",
-          "char_count": 467
+          "body": "## Mechanism\n\nThis concept is the stable overview for the subject. Detailed contracts are maintained in the focused concepts below:\n\n- [Flower timeline ordering](flower-timeline-ordering.md)\n- [Flower model and navigation presentation](flower-model-navigation.md)\n- [Flower terminal activity presentation](flower-terminal-activity.md)\n- [Flower approval and context state](flower-approval-context.md)\n- [Flower subagent detail presentation](flower-subagent-detail.md)\n\nThe focused timeline contract preserves Floret `ThroughOrdinal` and `ListThreadTurns` ordering, maps a valid non-renderable turn to `turn_projection_unavailable`, and records rejected public contracts as `floret.contract.rejected`; the detailed rules live in [Flower timeline ordering](flower-timeline-ordering.md).",
+          "char_count": 784
         },
         {
           "id": "boundaries",
@@ -7407,5 +7407,5 @@
       ]
     }
   ],
-  "source_sha256": "f4b4a214b612c9436da22bc2729888605e183b1f174feee6c0696b9e774a6b13"
+  "source_sha256": "0f9c4c1150f2671befdeaff1ef2331732b58d81ee1af97fb35dea0d8ee1bfa39"
 }
