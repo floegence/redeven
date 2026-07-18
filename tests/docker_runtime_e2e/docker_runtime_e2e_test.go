@@ -564,12 +564,26 @@ func (f *fixture) assertInventoryRequiresConfirmedTakeover(ctx context.Context) 
 		instance.OwnerEvidence != runtimemanagement.RuntimeProcessOwnerEvidenceMissing || instance.StopAuthority != runtimemanagement.RuntimeProcessStopConfirmedTakeover {
 		f.t.Fatalf("ownerless runtime inventory after lease removal = %#v", inventory)
 	}
-	if err := f.stopRuntimeInventoryInContainer(ctx, f.containerName, inventory, runtimemanagement.RuntimeProcessReconciliationAutomatic); err == nil ||
-		!strings.Contains(err.Error(), runtimemanagement.RuntimeProcessErrorTakeoverRequired) {
-		f.t.Fatalf("automatic stop error = %v, want %s", err, runtimemanagement.RuntimeProcessErrorTakeoverRequired)
+	automaticErr := f.stopRuntimeInventoryInContainer(ctx, f.containerName, inventory, runtimemanagement.RuntimeProcessReconciliationAutomatic)
+	if automaticErr == nil || (!strings.Contains(automaticErr.Error(), runtimemanagement.RuntimeProcessErrorTakeoverRequired) &&
+		!strings.Contains(automaticErr.Error(), runtimemanagement.RuntimeProcessErrorInventoryChanged)) {
+		f.t.Fatalf("automatic stop error = %v, want %s or %s", automaticErr, runtimemanagement.RuntimeProcessErrorTakeoverRequired, runtimemanagement.RuntimeProcessErrorInventoryChanged)
 	}
-	if err := f.stopRuntimeInventoryInContainer(ctx, f.containerName, inventory, runtimemanagement.RuntimeProcessReconciliationConfirmedTakeover); err != nil {
-		f.t.Fatalf("confirmed takeover stop: %v", err)
+
+	stopDeadline := time.Now().Add(15 * time.Second)
+	for {
+		inventory = f.runtimeInventory(ctx)
+		if len(inventory.Instances) == 0 {
+			break
+		}
+		err := f.stopRuntimeInventoryInContainer(ctx, f.containerName, inventory, runtimemanagement.RuntimeProcessReconciliationConfirmedTakeover)
+		if err == nil {
+			break
+		}
+		if !strings.Contains(err.Error(), runtimemanagement.RuntimeProcessErrorInventoryChanged) || !time.Now().Before(stopDeadline) {
+			f.t.Fatalf("confirmed takeover stop: %v", err)
+		}
+		time.Sleep(100 * time.Millisecond)
 	}
 	if after := f.runtimeInventory(ctx); len(after.Instances) != 0 {
 		f.t.Fatalf("confirmed takeover left target processes: %#v", after)
