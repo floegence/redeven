@@ -149,7 +149,8 @@ func TestDesktopLaunchReportFromRuntimeStatusIncludesStartTime(t *testing.T) {
 			DesktopOwnerID:  "desktop-owner-status",
 		},
 		Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
-			LocalUIURL: "http://127.0.0.1:23998/",
+			LocalUIURL:       "http://127.0.0.1:23998/",
+			LocalUIBridgeURL: "http://127.0.0.1:43123/",
 		},
 		RuntimeService: runtimeservice.NormalizeSnapshot(runtimeservice.Snapshot{
 			ServiceOwner:     runtimeservice.OwnerDesktop,
@@ -166,5 +167,8 @@ func TestDesktopLaunchReportFromRuntimeStatusIncludesStartTime(t *testing.T) {
 	}
 	if report.PID != 4242 {
 		t.Fatalf("PID = %d", report.PID)
+	}
+	if report.LocalUIBridgeURL != "http://127.0.0.1:43123/" {
+		t.Fatalf("LocalUIBridgeURL = %q", report.LocalUIBridgeURL)
 	}
 }

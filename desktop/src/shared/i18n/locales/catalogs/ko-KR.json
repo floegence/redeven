@@ -1697,6 +1697,8 @@
     "runtimeHostCommandFailedSummary": "Desktop이 \"{target}\"의 host 명령을 완료하지 못했습니다.",
     "environmentOpenFailedTitle": "환경 열기 실패",
     "environmentOpenFailedSummary": "Desktop이 \"{target}\"을 열지 못했습니다.",
+    "environmentOpenLocalTransportDetail": "Desktop의 보호된 로컬 연결을 통해 사용 가능한 Env App 페이지가 반환되지 않았습니다.",
+    "environmentOpenLocalTransportRecoveryHint": "런타임을 다시 시작한 다음 다시 시도하세요. VPN, Tailscale 및 프록시 소프트웨어는 활성화된 상태로 두어도 됩니다.",
     "workspaceEnginePrepareFailedTitle": "작업 공간 엔진 준비 실패",
     "workspaceEnginePrepareFailedSummary": "Desktop에서 “{target}”의 작업 공간 엔진을 준비하지 못했습니다."
   },

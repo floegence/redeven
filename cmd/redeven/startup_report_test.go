@@ -16,6 +16,7 @@ func TestWriteDesktopLaunchReportReady(t *testing.T) {
 		Status:           desktopLaunchStatusReady,
 		LocalUIURL:       "http://127.0.0.1:43210/",
 		LocalUIURLs:      []string{"http://127.0.0.1:43210/", "", "http://127.0.0.1:43210/"},
+		LocalUIBridgeURL: "http://127.0.0.1:43211/",
 		PasswordRequired: true,
 		Exposure:         runtimemanagement.NewLocalUIExposure(false, true),
 		EffectiveRunMode: "hybrid",
@@ -57,6 +58,16 @@ func TestWriteDesktopLaunchReportReady(t *testing.T) {
 	}
 	if len(report.LocalUIURLs) != 1 || report.LocalUIURLs[0] != report.LocalUIURL {
 		t.Fatalf("LocalUIURLs = %#v", report.LocalUIURLs)
+	}
+	if report.LocalUIBridgeURL != "http://127.0.0.1:43211/" {
+		t.Fatalf("LocalUIBridgeURL = %q", report.LocalUIBridgeURL)
+	}
+	info, err := os.Stat(reportPath)
+	if err != nil {
+		t.Fatalf("Stat() error = %v", err)
+	}
+	if info.Mode().Perm() != 0o600 {
+		t.Fatalf("report mode = %o, want 600", info.Mode().Perm())
 	}
 	if !report.PasswordRequired {
 		t.Fatalf("PasswordRequired = false, want true")
@@ -114,6 +125,32 @@ func TestWriteDesktopLaunchReportRejectsMissingLocalURL(t *testing.T) {
 	})
 	if err == nil {
 		t.Fatalf("expected missing local_ui_url error")
+	}
+}
+
+func TestWriteDesktopLaunchReportRejectsInvalidLocalUIBridgeURL(t *testing.T) {
+	for _, raw := range []string{
+		"",
+		"https://127.0.0.1:43123/",
+		"http://localhost:43123/",
+		"http://100.126.191.114:43123/",
+		"http://127.0.0.1/",
+		"http://127.0.0.1:43123/env",
+		"http://user:pass@127.0.0.1:43123/",
+		"http://127.0.0.1:43123/?token=secret",
+		"http://127.0.0.1:43123/#fragment",
+	} {
+		t.Run(raw, func(t *testing.T) {
+			err := writeDesktopLaunchReport(filepath.Join(t.TempDir(), "report.json"), desktopLaunchReport{
+				Status:           desktopLaunchStatusReady,
+				LocalUIURL:       "http://127.0.0.1:43122/",
+				LocalUIBridgeURL: raw,
+				Exposure:         runtimemanagement.NewLocalUIExposure(true, false),
+			})
+			if err == nil {
+				t.Fatalf("writeDesktopLaunchReport() accepted bridge URL %q", raw)
+			}
+		})
 	}
 }
 

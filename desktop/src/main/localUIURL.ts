@@ -48,3 +48,38 @@ export function buildLocalUIEnvAppEntryURL(rawURL: string): string {
   parsed.hash = '';
   return parsed.toString();
 }
+
+function canonicalIPv4Loopback(hostname: string): boolean {
+  const parts = hostname.split('.');
+  return parts.length === 4
+    && parts.every((part) => /^(?:0|[1-9][0-9]{0,2})$/u.test(part) && Number(part) <= 255)
+    && Number(parts[0]) === 127;
+}
+
+export function normalizeLocalUIBridgeURL(rawURL: string): string {
+  const cleanValue = String(rawURL ?? '').trim();
+  const authorityMatch = cleanValue.match(/^http:\/\/(\[[^\]]+\]|[^/:?#]+):(\d+)(\/?)$/u);
+  if (!authorityMatch) {
+    throw new Error('Local UI bridge URL must be an HTTP loopback root URL with an explicit port.');
+  }
+
+  const rawHostname = String(authorityMatch[1] ?? '');
+  const hostname = rawHostname.startsWith('[') && rawHostname.endsWith(']')
+    ? rawHostname.slice(1, -1)
+    : rawHostname;
+  const isCanonicalLoopback = canonicalIPv4Loopback(hostname) || hostname === '::1';
+  if (!isCanonicalLoopback || net.isIP(hostname) === 0) {
+    throw new Error('Local UI bridge URL host must be a canonical loopback IP literal.');
+  }
+
+  const port = Number(authorityMatch[2]);
+  if (!Number.isInteger(port) || port <= 0 || port > 65_535) {
+    throw new Error('Local UI bridge URL must include a valid non-zero port.');
+  }
+
+  const parsed = new URL(cleanValue);
+  if (parsed.protocol !== 'http:' || parsed.username || parsed.password || parsed.search || parsed.hash || parsed.pathname !== '/') {
+    throw new Error('Local UI bridge URL must be an HTTP loopback root URL without credentials, query, or fragment.');
+  }
+  return parsed.toString();
+}

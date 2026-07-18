@@ -1701,6 +1701,8 @@
     "runtimeHostCommandFailedSummary": "Desktop konnte den host Befehl für \"{target}\" nicht abschließen.",
     "environmentOpenFailedTitle": "Umgebungsöffnen fehlgeschlagen",
     "environmentOpenFailedSummary": "Desktop konnte \"{target}\" nicht öffnen.",
+    "environmentOpenLocalTransportDetail": "Die geschützte lokale Verbindung von Desktop hat keine nutzbare Env App-Seite geliefert.",
+    "environmentOpenLocalTransportRecoveryHint": "Starten Sie die Laufzeit neu und versuchen Sie es dann erneut. VPN, Tailscale und Proxysoftware müssen dafür nicht deaktiviert werden.",
     "workspaceEnginePrepareFailedTitle": "Arbeitsbereichs-Engine konnte nicht vorbereitet werden",
     "workspaceEnginePrepareFailedSummary": "Desktop konnte die Arbeitsbereichs-Engine für „{target}“ nicht vorbereiten."
   },

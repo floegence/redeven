@@ -1701,6 +1701,8 @@
     "runtimeHostCommandFailedSummary": "Desktop n’a pas pu terminer la commande host pour \"{target}\".",
     "environmentOpenFailedTitle": "Échec de l’ouverture de l’environnement",
     "environmentOpenFailedSummary": "Desktop n’a pas pu ouvrir \"{target}\".",
+    "environmentOpenLocalTransportDetail": "La connexion locale protégée de Desktop n’a pas renvoyé de page Env App utilisable.",
+    "environmentOpenLocalTransportRecoveryHint": "Redémarrez l’environnement d’exécution, puis réessayez. Vous pouvez laisser le VPN, Tailscale et le logiciel de proxy activés.",
     "workspaceEnginePrepareFailedTitle": "Échec de la préparation du moteur d’espace de travail",
     "workspaceEnginePrepareFailedSummary": "Desktop n’a pas pu préparer le moteur d’espace de travail pour « {target} »."
   },

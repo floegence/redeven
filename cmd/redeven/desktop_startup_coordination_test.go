@@ -38,6 +38,7 @@ func TestHandleDesktopLockConflictWritesAttachedReportWhenRuntimeIsAvailable(t *
 			Endpoint: &runtimemanagement.RuntimeAttachEndpoint{
 				LocalUIURL:       "http://127.0.0.1:23998/",
 				LocalUIURLs:      []string{"http://127.0.0.1:23998/"},
+				LocalUIBridgeURL: "http://127.0.0.1:43123/",
 				PasswordRequired: true,
 				Exposure:         runtimemanagement.NewLocalUIExposure(false, true),
 			},
@@ -77,6 +78,9 @@ func TestHandleDesktopLockConflictWritesAttachedReportWhenRuntimeIsAvailable(t *
 	}
 	if report.LocalUIURL != "http://127.0.0.1:23998/" {
 		t.Fatalf("LocalUIURL = %q", report.LocalUIURL)
+	}
+	if report.LocalUIBridgeURL != "http://127.0.0.1:43123/" {
+		t.Fatalf("LocalUIBridgeURL = %q", report.LocalUIBridgeURL)
 	}
 	if !report.PasswordRequired {
 		t.Fatalf("PasswordRequired = false, want true")

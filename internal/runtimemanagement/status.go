@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"net/netip"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -77,6 +79,28 @@ type RuntimeAttachStatus struct {
 	RuntimeService runtimeservice.Snapshot  `json:"runtime_service,omitempty"`
 	Diagnostics    RuntimeAttachDiagnostics `json:"diagnostics,omitempty"`
 	Message        string                   `json:"message,omitempty"`
+}
+
+func NormalizeLocalUIBridgeURL(raw string) (string, error) {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || parsed == nil || parsed.Scheme != "http" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return "", errors.New("URL must be an HTTP loopback endpoint")
+	}
+	if (parsed.Path != "" && parsed.Path != "/") || (parsed.RawPath != "" && parsed.RawPath != "/") {
+		return "", errors.New("URL path must be root")
+	}
+	addrPort, err := netip.ParseAddrPort(parsed.Host)
+	if err != nil || addrPort.Port() == 0 {
+		return "", errors.New("URL must include a loopback host and port")
+	}
+	addr := addrPort.Addr()
+	if !addr.IsLoopback() || addr.Zone() != "" || addr.Is4In6() {
+		return "", errors.New("URL host must be loopback")
+	}
+	parsed.Host = addrPort.String()
+	parsed.Path = "/"
+	parsed.RawPath = ""
+	return parsed.String(), nil
 }
 
 type StatusProvider func(context.Context) (RuntimeAttachStatus, error)

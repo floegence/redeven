@@ -947,6 +947,8 @@ export const enUS = {
     runtimeHostCommandFailedSummary: 'Desktop could not complete the host command for "{target}".',
     environmentOpenFailedTitle: 'Environment Open Failed',
     environmentOpenFailedSummary: 'Desktop could not open "{target}".',
+    environmentOpenLocalTransportDetail: 'Desktop\'s protected local connection did not return a usable Env App page.',
+    environmentOpenLocalTransportRecoveryHint: 'Restart the Runtime, then try again. VPN, Tailscale, and proxy software can remain enabled.',
     workspaceEnginePrepareFailedTitle: 'Workspace Engine Prepare Failed',
     workspaceEnginePrepareFailedSummary: 'Desktop could not prepare the workspace engine for "{target}".',
   },

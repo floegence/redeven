@@ -151,6 +151,24 @@ func TestServerStartPublishesRuntimeManagementStatus(t *testing.T) {
 	if bridgeResp.StatusCode != http.StatusOK {
 		t.Fatalf("trusted bridge listener status = %d, want %d", bridgeResp.StatusCode, http.StatusOK)
 	}
+	var healthPayload struct {
+		Data struct {
+			LocalUIURL  string   `json:"local_ui_url"`
+			LocalUIURLs []string `json:"local_ui_urls"`
+		} `json:"data"`
+	}
+	if err := json.NewDecoder(bridgeResp.Body).Decode(&healthPayload); err != nil {
+		t.Fatalf("Decode(bridge health) error = %v", err)
+	}
+	if healthPayload.Data.LocalUIURL != status.Endpoint.LocalUIURL {
+		t.Fatalf("bridge health local_ui_url = %q, want public %q", healthPayload.Data.LocalUIURL, status.Endpoint.LocalUIURL)
+	}
+	if !slices.Equal(healthPayload.Data.LocalUIURLs, status.Endpoint.LocalUIURLs) {
+		t.Fatalf("bridge health local_ui_urls = %#v, want public %#v", healthPayload.Data.LocalUIURLs, status.Endpoint.LocalUIURLs)
+	}
+	if slices.Contains(healthPayload.Data.LocalUIURLs, status.Endpoint.LocalUIBridgeURL) {
+		t.Fatalf("bridge health exposed local_ui_bridge_url in public URL list: %#v", healthPayload.Data.LocalUIURLs)
+	}
 
 	bridgeURL := status.Endpoint.LocalUIBridgeURL
 	if err := s.Close(); err != nil {

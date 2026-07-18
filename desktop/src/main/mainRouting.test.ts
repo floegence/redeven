@@ -856,6 +856,8 @@ describe('main routing', () => {
     expect(bridgeOpenSrc).toContain("phase: 'opening_bridge_proxy'");
     expect(bridgeOpenSrc).toContain("phase: 'checking_env_app_readiness'");
     expect(bridgeOpenSrc.match(/probeExternalLocalUIStartup\(bridgeSession\.startup\.local_ui_url/gu)).toHaveLength(1);
+    expect(bridgeOpenSrc).toContain('local_ui_url: bridgeSession.startup.local_ui_url');
+    expect(bridgeOpenSrc).toContain('local_ui_urls: bridgeSession.startup.local_ui_urls');
     expect(bridgeOpenSrc).toContain('savedRuntimePlacementSSHPassword(');
     expect(bridgeOpenSrc).not.toContain('Start this runtime first, then open it.');
 
@@ -1198,7 +1200,7 @@ describe('main routing', () => {
     expect(requestEnd).toBeGreaterThan(requestStart);
     const requestSrc = mainSrc.slice(requestStart, requestEnd);
     expect(requestSrc).toContain('const record = await ensureRuntimeFlowerRecord();');
-    expect(requestSrc).toContain('const url = new URL(path, record.startup.local_ui_url);');
+    expect(requestSrc).toContain('const url = new URL(path, runtimeFlowerBaseURL(record));');
     expect(requestSrc).toContain('runtimeFlowerMethodAllowed(path, method)');
     expect(requestSrc).toContain('let accessHeaders = await runtimeFlowerAccessHeaders(record, environment);');
     expect(requestSrc).toContain('Cookie: runtimeFlowerAccessCookieHeader(cookie)');
@@ -1383,20 +1385,26 @@ describe('main routing', () => {
   it('opens Local UI sessions at the canonical Env App entry while keeping the origin root as the navigation boundary', () => {
     const mainSrc = readMainSource();
 
-    expect(mainSrc).toContain('function desktopSessionEntryURL(target: DesktopSessionTarget, startup: StartupReport): string');
-    expect(mainSrc).toContain("target.kind === 'local_environment' && target.route === 'remote_desktop'");
-    expect(mainSrc).toContain("if (target.kind === 'gateway_environment') {\n    return startup.local_ui_url;\n  }");
-    expect(mainSrc).toContain('return buildLocalUIEnvAppEntryURL(startup.local_ui_url);');
-    expect(mainSrc).toContain('const entryURL = desktopSessionEntryURL(target, startup);');
+    expect(mainSrc).toContain('resolveDesktopSessionTransport(target, startup');
+    expect(mainSrc).toContain('placementBridge: options.transportRecovery != null');
+    expect(mainSrc).toContain('await prepareDesktopSessionTransport(transport);');
+    expect(mainSrc).toContain("await webSession.setProxy({ mode: 'direct' });");
+    expect(mainSrc).toContain('function installDesktopDiagnosticsHooks(webSession: Session): void');
+    expect(mainSrc).toContain('desktopDiagnosticsHookSessions.has(webSession)');
+    expect(mainSrc).toContain('shouldFailDesktopSessionMainDocument({');
+    expect(mainSrc).toContain("details.resourceType");
+    expect(mainSrc).toContain("{ channel: 'http_status', label: 'HTTP status', text: String(details.statusCode) }");
+    expect(mainSrc).toContain('const entryURL = transport.entryURL;');
     expect(mainSrc).toContain('const rootWindow = createSessionRootWindow(target.session_key, entryURL, diagnostics');
-    expect(mainSrc).toContain('const safeAllowedBaseURL = stripSensitiveURLPayload(startup.local_ui_url) || startup.local_ui_url;');
+    expect(mainSrc).toContain('const safeAllowedBaseURL = stripSensitiveURLPayload(transport.allowedBaseURL) || transport.allowedBaseURL;');
     expect(mainSrc).toContain('allowed_base_url: safeAllowedBaseURL');
     expect(mainSrc).toContain('function rendererSafeStartupReport(startup: StartupReport): StartupReport');
+    expect(mainSrc).toContain('delete rendererStartup.local_ui_bridge_url;');
     expect(mainSrc).toContain('entry_url: rendererSafeSessionURL(session)');
     expect(mainSrc).toContain('startup: rendererSafeStartupReport(session.startup)');
     expect(mainSrc).toContain('url.search = \'\';');
     expect(mainSrc).toContain('url.hash = \'\';');
-    expect(mainSrc).not.toContain('await rootWindow.loadURL(sessionRecord.entry_url);');
+    expect(mainSrc).toContain('void rootWindow.browserWindow.loadURL(entryURL);');
   });
 
   it('saves Local Environment settings without exposing deletion or extra local records', () => {

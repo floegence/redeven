@@ -38,6 +38,8 @@ type RuntimeProbeResponse = RuntimeProbeResult<Readonly<{
 
 type RuntimeProbeStatus = Readonly<{
   status: 'online';
+  local_ui_url?: string;
+  local_ui_urls?: readonly string[];
   password_required: boolean;
   exposure?: LocalUIExposure;
   desktop_managed?: boolean;
@@ -146,9 +148,35 @@ function parseLocalRuntimeHealthResponse(raw: string): RuntimeProbeStatus | null
     if (String(data.status ?? '').trim().toLowerCase() !== 'online' || typeof data.password_required !== 'boolean') {
       return null;
     }
+    const rawLocalUIURL = String(data.local_ui_url ?? '').trim();
+    if (data.local_ui_urls != null && !Array.isArray(data.local_ui_urls)) {
+      return null;
+    }
+    const rawLocalUIURLs = Array.isArray(data.local_ui_urls)
+      ? data.local_ui_urls.map((value) => String(value ?? '').trim())
+      : [];
+    let localUIURL = '';
+    let localUIURLs: string[] = [];
+    try {
+      localUIURL = rawLocalUIURL ? normalizeLocalUIBaseURL(rawLocalUIURL) : '';
+      localUIURLs = rawLocalUIURLs
+        .filter((value) => value !== '')
+        .map((value) => normalizeLocalUIBaseURL(value));
+    } catch {
+      return null;
+    }
+    if (!localUIURL && localUIURLs.length > 0) {
+      localUIURL = localUIURLs[0] ?? '';
+    }
+    if (localUIURL && !localUIURLs.includes(localUIURL)) {
+      localUIURLs.unshift(localUIURL);
+    }
+    localUIURLs = [...new Set(localUIURLs)];
     const exposure = parseLocalUIExposure(data.exposure);
     return {
       status: 'online',
+      ...(localUIURL ? { local_ui_url: localUIURL } : {}),
+      ...(localUIURLs.length > 0 ? { local_ui_urls: localUIURLs } : {}),
       password_required: data.password_required,
       exposure,
       ...(typeof data.desktop_managed === 'boolean' ? { desktop_managed: data.desktop_managed } : {}),
@@ -347,9 +375,13 @@ async function applyEnvAppShellReadiness(
 }
 
 function startupReportFromProbeStatus(baseURL: string, status: RuntimeProbeStatus): StartupReport {
+  const localUIURL = status.local_ui_url ?? baseURL;
+  const localUIURLs = status.local_ui_urls && status.local_ui_urls.length > 0
+    ? [...status.local_ui_urls]
+    : [localUIURL];
   return {
-    local_ui_url: baseURL,
-    local_ui_urls: [baseURL],
+    local_ui_url: localUIURL,
+    local_ui_urls: localUIURLs,
     password_required: status.password_required,
     ...(status.exposure ? { exposure: status.exposure } : {}),
     ...(typeof status.desktop_managed === 'boolean' ? { desktop_managed: status.desktop_managed } : {}),
@@ -391,11 +423,12 @@ export async function probeExternalLocalUIHealth(
   return { ok: true, value: startupReportFromProbeStatus(normalizedBaseURL, result.value) };
 }
 
-export async function validateExternalLocalUIShell(
+async function validateExternalLocalUIShellAtBaseURL(
   startup: StartupReport,
+  baseURL: string,
   options: RuntimeProbeOptions = {},
 ): Promise<StartupReport> {
-  const normalizedBaseURL = normalizeLocalUIBaseURL(startup.local_ui_url);
+  const normalizedBaseURL = normalizeLocalUIBaseURL(baseURL);
   const status = await applyEnvAppShellReadiness(
     normalizedBaseURL,
     probeStatusFromStartup(startup),
@@ -404,19 +437,29 @@ export async function validateExternalLocalUIShell(
   return {
     ...startup,
     ...startupReportFromProbeStatus(normalizedBaseURL, status),
+    local_ui_url: startup.local_ui_url,
+    local_ui_urls: startup.local_ui_urls,
   };
+}
+
+export async function validateExternalLocalUIShell(
+  startup: StartupReport,
+  options: RuntimeProbeOptions = {},
+): Promise<StartupReport> {
+  return validateExternalLocalUIShellAtBaseURL(startup, startup.local_ui_url, options);
 }
 
 export async function probeExternalLocalUIStartup(
   baseURL: string,
   options: RuntimeProbeOptions = {},
 ): Promise<RuntimeProbeResult<StartupReport>> {
-  const result = await probeExternalLocalUIHealth(baseURL, options);
+  const normalizedBaseURL = normalizeLocalUIBaseURL(baseURL);
+  const result = await probeExternalLocalUIHealth(normalizedBaseURL, options);
   if (!result.ok) {
     return result;
   }
   return {
     ok: true,
-    value: await validateExternalLocalUIShell(result.value, options),
+    value: await validateExternalLocalUIShellAtBaseURL(result.value, normalizedBaseURL, options),
   };
 }

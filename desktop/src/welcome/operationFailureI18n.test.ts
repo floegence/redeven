@@ -94,4 +94,24 @@ describe('operationFailureI18n', () => {
     expect(localizedOperationFailureDetail(i18n, failure)).not.toContain('pid changed');
     expect(localizedOperationFailureRecoveryHint(i18n, failure)).toContain('刷新运行时状态');
   });
+
+  it('localizes protected local transport failures without asking users to disable network software', () => {
+    const failure: DesktopOperationFailurePresentation = {
+      code: 'environment_open_failed',
+      severity: 'error',
+      title: 'Environment Open Failed',
+      title_key: 'progress.environmentOpenFailedTitle',
+      summary: 'Desktop could not open "Local Environment".',
+      summary_key: 'progress.environmentOpenFailedSummary',
+      detail: 'raw transport detail',
+      detail_key: 'progress.environmentOpenLocalTransportDetail',
+      recovery_hint: 'raw recovery',
+      recovery_hint_key: 'progress.environmentOpenLocalTransportRecoveryHint',
+      target_label: '本地环境',
+    };
+
+    const localized = createDesktopI18n('zh-CN');
+    expect(localizedOperationFailureDetail(localized, failure)).toContain('受保护本地连接');
+    expect(localizedOperationFailureRecoveryHint(localized, failure)).toContain('无需关闭 VPN、Tailscale 或代理软件');
+  });
 });

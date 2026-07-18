@@ -8,11 +8,12 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/netip"
 	"net/url"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/floegence/redeven/internal/runtimemanagement"
 )
 
 type SurfaceDialer func(context.Context, StreamSurface) (net.Conn, error)
@@ -320,20 +321,13 @@ func dialAddrFromURL(raw string) string {
 }
 
 func trustedLoopbackAddrFromURL(raw string) (string, error) {
-	parsed, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil || parsed == nil || parsed.Scheme != "http" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+	normalized, err := runtimemanagement.NormalizeLocalUIBridgeURL(raw)
+	if err != nil {
+		return "", err
+	}
+	parsed, err := url.Parse(normalized)
+	if err != nil || parsed == nil {
 		return "", errors.New("URL must be an HTTP loopback endpoint")
 	}
-	if parsed.Path != "" && parsed.Path != "/" {
-		return "", errors.New("URL path must be root")
-	}
-	addrPort, err := netip.ParseAddrPort(parsed.Host)
-	if err != nil || addrPort.Port() == 0 {
-		return "", errors.New("URL must include a loopback host and port")
-	}
-	addr := addrPort.Addr()
-	if !addr.IsLoopback() || addr.Zone() != "" || addr.Is4In6() {
-		return "", errors.New("URL host must be loopback")
-	}
-	return addrPort.String(), nil
+	return parsed.Host, nil
 }

@@ -1,10 +1,12 @@
 import { normalizeRuntimeServiceSnapshot, type RuntimeServiceSnapshot } from '../shared/runtimeService';
 import type { DesktopRuntimeControlEndpoint } from '../shared/runtimeControl';
 import { parseLocalUIExposure, type LocalUIExposure } from '../shared/localUIExposure';
+import { normalizeLocalUIBridgeURL } from './localUIURL';
 
 export type StartupReport = Readonly<{
   local_ui_url: string;
   local_ui_urls: string[];
+  local_ui_bridge_url?: string;
   runtime_control?: DesktopRuntimeControlEndpoint;
   password_required?: boolean;
   exposure?: LocalUIExposure;
@@ -59,10 +61,13 @@ export function parseStartupReport(raw: string): StartupReport {
     : [];
   const runtimeControl = parseRuntimeControlEndpoint(parsed.runtime_control);
   const exposure = parsed.exposure == null ? undefined : parseLocalUIExposure(parsed.exposure);
+  const localUIBridgeURLRaw = String(parsed.local_ui_bridge_url ?? '').trim();
+  const localUIBridgeURL = localUIBridgeURLRaw ? normalizeLocalUIBridgeURL(localUIBridgeURLRaw) : undefined;
 
   return {
     local_ui_url: localUIURL,
     local_ui_urls: localUIURLs.length > 0 ? localUIURLs : [localUIURL],
+    ...(localUIBridgeURL ? { local_ui_bridge_url: localUIBridgeURL } : {}),
     ...(runtimeControl ? { runtime_control: runtimeControl } : {}),
     password_required: typeof parsed.password_required === 'boolean' ? parsed.password_required : undefined,
     ...(exposure ? { exposure } : {}),

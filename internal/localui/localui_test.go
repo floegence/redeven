@@ -499,11 +499,13 @@ func TestServer_handleRuntimeHealth_reportsOnlineWithoutUnlock(t *testing.T) {
 	var payload struct {
 		OK   bool `json:"ok"`
 		Data struct {
-			Status           string `json:"status"`
-			PasswordRequired bool   `json:"password_required"`
-			DesktopManaged   bool   `json:"desktop_managed"`
-			DesktopOwnerID   string `json:"desktop_owner_id"`
-			StartedAtUnixMS  int64  `json:"started_at_unix_ms"`
+			Status           string   `json:"status"`
+			LocalUIURL       string   `json:"local_ui_url"`
+			LocalUIURLs      []string `json:"local_ui_urls"`
+			PasswordRequired bool     `json:"password_required"`
+			DesktopManaged   bool     `json:"desktop_managed"`
+			DesktopOwnerID   string   `json:"desktop_owner_id"`
+			StartedAtUnixMS  int64    `json:"started_at_unix_ms"`
 			RuntimeService   struct {
 				OpenReadiness struct {
 					State string `json:"state"`
@@ -519,6 +521,13 @@ func TestServer_handleRuntimeHealth_reportsOnlineWithoutUnlock(t *testing.T) {
 	}
 	if payload.Data.Status != "online" {
 		t.Fatalf("status = %q, want %q", payload.Data.Status, "online")
+	}
+	wantURLs := s.DisplayURLs()
+	if payload.Data.LocalUIURL != firstNonEmptyString(wantURLs) {
+		t.Fatalf("local_ui_url = %q, want %q", payload.Data.LocalUIURL, firstNonEmptyString(wantURLs))
+	}
+	if strings.Join(payload.Data.LocalUIURLs, "\n") != strings.Join(wantURLs, "\n") {
+		t.Fatalf("local_ui_urls = %#v, want %#v", payload.Data.LocalUIURLs, wantURLs)
 	}
 	if !payload.Data.PasswordRequired {
 		t.Fatalf("password_required = false, want true")

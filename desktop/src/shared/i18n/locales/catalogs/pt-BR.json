@@ -1701,6 +1701,8 @@
     "runtimeHostCommandFailedSummary": "Desktop não conseguiu concluir o comando host para \"{target}\".",
     "environmentOpenFailedTitle": "Falha na abertura do ambiente",
     "environmentOpenFailedSummary": "Desktop não conseguiu abrir \"{target}\".",
+    "environmentOpenLocalTransportDetail": "A conexão local protegida do Desktop não retornou uma página utilizável do Env App.",
+    "environmentOpenLocalTransportRecoveryHint": "Reinicie o ambiente de execução e tente novamente. A VPN, o Tailscale e o software de proxy podem permanecer ativados.",
     "workspaceEnginePrepareFailedTitle": "Falha ao preparar o mecanismo da área de trabalho",
     "workspaceEnginePrepareFailedSummary": "O Desktop não conseguiu preparar o mecanismo da área de trabalho para “{target}”."
   },
