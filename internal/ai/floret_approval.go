@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -28,13 +29,19 @@ func (r *run) approveFloretTool(ctx context.Context, req fltools.ApprovalRequest
 		}
 		return parent.approveDelegatedFloretTool(ctx, child, req)
 	}
-	args := floretApprovalArgs(req)
+	args, err := floretApprovalArgs(req)
+	if err != nil {
+		return fltools.PermissionDecisionDeny, err
+	}
 	toolID := strings.TrimSpace(req.ID)
 	if toolID == "" {
 		toolID = strings.TrimSpace(req.ApprovalID)
 	}
 	toolName := strings.TrimSpace(req.Name)
-	decision, reason := r.floretToolPolicyDecision(toolName, args, req.HostContext)
+	decision, reason, err := r.floretToolPolicyDecision(toolName, args, req.HostContext)
+	if err != nil {
+		return fltools.PermissionDecisionDeny, err
+	}
 	r.persistFloretToolPolicyEvent(toolID, toolName, args, decision, reason)
 	switch decision {
 	case "allow":
@@ -62,7 +69,10 @@ func (r *run) approveDelegatedFloretTool(ctx context.Context, child *run, req fl
 	if r.service == nil {
 		return fltools.PermissionDecisionDenied("delegated tool approval unavailable"), nil
 	}
-	args := floretApprovalArgs(req)
+	args, err := floretApprovalArgs(req)
+	if err != nil {
+		return fltools.PermissionDecisionDeny, err
+	}
 	toolID := strings.TrimSpace(req.ID)
 	if toolID == "" {
 		toolID = strings.TrimSpace(req.ApprovalID)
@@ -72,7 +82,10 @@ func (r *run) approveDelegatedFloretTool(ctx context.Context, child *run, req fl
 	if policyRun == nil {
 		policyRun = r
 	}
-	decision, reason := policyRun.floretToolPolicyDecision(toolName, args, req.HostContext)
+	decision, reason, err := policyRun.floretToolPolicyDecision(toolName, args, req.HostContext)
+	if err != nil {
+		return fltools.PermissionDecisionDeny, err
+	}
 	policyRun.persistFloretToolPolicyEvent(toolID, toolName, args, decision, reason)
 	switch decision {
 	case "allow":
@@ -98,26 +111,28 @@ func (r *run) approveDelegatedFloretTool(ctx context.Context, child *run, req fl
 	}
 }
 
-func floretApprovalArgs(req fltools.ApprovalRequest) map[string]any {
+func floretApprovalArgs(req fltools.ApprovalRequest) (map[string]any, error) {
 	if args, ok := req.ValidatedArgs.(map[string]any); ok {
-		return cloneAnyMap(args)
+		return cloneAnyMap(args), nil
 	}
 	call, err := flowerToolCallFromFloret(fltools.ToolCall{ID: req.ID, Name: req.Name, Args: req.Args})
 	if err != nil {
-		return map[string]any{}
+		return nil, fmt.Errorf("invalid Floret approval tool call: %w", err)
 	}
-	return cloneAnyMap(call.Args)
+	return cloneAnyMap(call.Args), nil
 }
 
-func (r *run) floretToolPolicyDecision(toolName string, args map[string]any, hostContext ...map[string]string) (string, string) {
+func (r *run) floretToolPolicyDecision(toolName string, args map[string]any, hostContext ...map[string]string) (string, string, error) {
 	decision, ok := r.permissionDecisionForToolFromSnapshot(toolName)
 	if !ok {
 		permissionType := r.permissionType
 		if len(hostContext) > 0 {
 			if raw := strings.TrimSpace(hostContext[0][subagentToolHostContextParentPermissionKey]); raw != "" {
-				if normalized, err := normalizePermissionType(raw, permissionType); err == nil {
-					permissionType = normalized
+				normalized, err := normalizePermissionType(raw, permissionType)
+				if err != nil {
+					return "", "", fmt.Errorf("invalid approval parent permission: %w", err)
 				}
+				permissionType = normalized
 			}
 		}
 		def := ToolDef{
@@ -132,13 +147,13 @@ func (r *run) floretToolPolicyDecision(toolName string, args map[string]any, hos
 	delegatedApprovalUnavailable := r.subagentDepth > 0 && decision == ApprovalDecisionAsk && !r.allowDelegatedApproval
 	switch {
 	case delegatedApprovalUnavailable:
-		return "deny", "delegated_approval_unavailable"
+		return "deny", "delegated_approval_unavailable", nil
 	case decision == ApprovalDecisionDeny:
-		return "deny", "permission_denied"
+		return "deny", "permission_denied", nil
 	case decision == ApprovalDecisionAsk:
-		return "ask", "user_approval_required"
+		return "ask", "user_approval_required", nil
 	default:
-		return "allow", "none"
+		return "allow", "none", nil
 	}
 }
 
@@ -237,7 +252,10 @@ func (r *run) waitForFloretToolApproval(ctx context.Context, req fltools.Approva
 		return false, errors.New("missing tool approval id")
 	}
 	toolName := strings.TrimSpace(req.Name)
-	args := floretApprovalArgs(req)
+	args, err := floretApprovalArgs(req)
+	if err != nil {
+		return false, err
+	}
 	ch := make(chan bool, 1)
 	promoted := make(chan struct{})
 	requestedAt := time.Now().UnixMilli()
@@ -258,7 +276,9 @@ func (r *run) waitForFloretToolApproval(ctx context.Context, req fltools.Approva
 	if r.service == nil {
 		r.promoteToolApproval(toolID)
 	}
-	r.syncPendingFloretApprovals(ctx, "approver_registered")
+	if err := r.syncPendingFloretApprovals(ctx, "approver_registered"); err != nil {
+		return false, err
+	}
 	defer func() {
 		r.mu.Lock()
 		delete(r.toolApprovals, toolID)
@@ -349,36 +369,36 @@ func (r *run) setPendingToolSettlementOwnerResolver(resolver func() floretPendin
 	r.mu.Unlock()
 }
 
-func (r *run) syncPendingFloretApprovals(ctx context.Context, reason string) {
+func (r *run) syncPendingFloretApprovals(ctx context.Context, reason string) error {
 	if r == nil || r.service == nil {
-		return
+		return nil
 	}
 	host := r.activeFloretHost()
 	if host == nil {
-		return
+		return nil
 	}
 	threadID := strings.TrimSpace(r.threadID)
 	if threadID == "" {
-		return
+		return errors.New("pending approval sync requires thread id")
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	pending, err := host.ListPendingApprovals(ctx, flruntime.ListPendingApprovalsRequest{ThreadID: flruntime.ThreadID(threadID)})
 	if err != nil {
-		if r.log != nil {
-			r.log.Warn("list floret pending approvals failed", "thread_id", threadID, "run_id", r.id, "reason", strings.TrimSpace(reason), "error", err)
-		}
-		return
+		return err
 	}
-	r.publishFloretPendingApprovalSnapshot(pending, reason)
+	return r.publishFloretPendingApprovalSnapshot(pending, reason)
 }
 
-func (r *run) publishFloretPendingApprovalSnapshot(pending flruntime.PendingApprovals, reason string) {
+func (r *run) publishFloretPendingApprovalSnapshot(pending flruntime.PendingApprovals, reason string) error {
 	if r == nil {
-		return
+		return errors.New("pending approval projection requires run")
 	}
-	actions := r.flowerApprovalActionsFromFloretPending(pending)
+	actions, err := r.flowerApprovalActionsFromFloretPending(pending)
+	if err != nil {
+		return err
+	}
 	active := make(map[string]FlowerApprovalAction, len(actions))
 	for _, action := range actions {
 		active[action.ActionID] = action
@@ -389,8 +409,12 @@ func (r *run) publishFloretPendingApprovalSnapshot(pending flruntime.PendingAppr
 		if _, ok := active[action.ActionID]; ok {
 			continue
 		}
+		resolvedState, err := flowerApprovalResolvedStateForFloretReason(reason)
+		if err != nil {
+			return err
+		}
 		action.Status = FlowerApprovalStatusResolved
-		action.State = flowerApprovalResolvedStateForFloretReason(reason)
+		action.State = resolvedState
 		action.CanApprove = false
 		action.ResolvedAtMs = time.Now().UnixMilli()
 		action.ReadOnlyReason = strings.TrimSpace(reason)
@@ -401,17 +425,24 @@ func (r *run) publishFloretPendingApprovalSnapshot(pending flruntime.PendingAppr
 	} else if len(pendingLive) > 0 {
 		r.publishThreadApprovalState(string(RunStateRunning))
 	}
+	return nil
 }
 
-func (r *run) flowerApprovalActionsFromFloretPending(pending flruntime.PendingApprovals) []FlowerApprovalAction {
+func (r *run) flowerApprovalActionsFromFloretPending(pending flruntime.PendingApprovals) ([]FlowerApprovalAction, error) {
 	if r == nil || len(pending.Approvals) == 0 {
-		return nil
+		return nil, nil
+	}
+	if strings.TrimSpace(string(pending.ThreadID)) == "" || pending.GeneratedAt.IsZero() {
+		return nil, errors.New("invalid Floret pending approval snapshot identity or timestamp")
+	}
+	if strings.TrimSpace(string(pending.ThreadID)) != strings.TrimSpace(r.threadID) {
+		return nil, errors.New("Floret pending approval snapshot thread identity mismatch")
 	}
 	out := make([]FlowerApprovalAction, 0, len(pending.Approvals))
 	for _, approval := range pending.Approvals {
-		action, ok := r.flowerApprovalActionFromFloretPending(approval)
-		if !ok {
-			continue
+		action, err := r.flowerApprovalActionFromFloretPending(approval)
+		if err != nil {
+			return nil, err
 		}
 		out = append(out, action)
 	}
@@ -428,7 +459,7 @@ func (r *run) flowerApprovalActionsFromFloretPending(pending flruntime.PendingAp
 		}
 		return left.ActionID < right.ActionID
 	})
-	return out
+	return out, nil
 }
 
 func flowerApprovalStepNumber(stepID string) int {
@@ -484,18 +515,18 @@ func (r *run) publishRunningAfterApprovalIfNoPending(resolvedActionID string) {
 	r.publishThreadApprovalState(string(RunStateRunning))
 }
 
-func flowerApprovalResolvedStateForFloretReason(reason string) FlowerApprovalState {
+func flowerApprovalResolvedStateForFloretReason(reason string) (FlowerApprovalState, error) {
 	switch strings.TrimSpace(reason) {
 	case string(floretEventToolApprovalApproved):
-		return FlowerApprovalStateApproved
+		return FlowerApprovalStateApproved, nil
 	case string(floretEventToolApprovalRejected):
-		return FlowerApprovalStateRejected
+		return FlowerApprovalStateRejected, nil
 	case string(floretEventToolApprovalTimedOut):
-		return FlowerApprovalStateTimedOut
+		return FlowerApprovalStateTimedOut, nil
 	case string(floretEventToolApprovalCanceled):
-		return FlowerApprovalStateCanceled
+		return FlowerApprovalStateCanceled, nil
 	default:
-		return FlowerApprovalStateCanceled
+		return "", fmt.Errorf("unknown Floret approval resolution reason %q", reason)
 	}
 }
 
@@ -519,7 +550,13 @@ func (r *run) pendingFloretApproval(ctx context.Context, toolID string) (flrunti
 	if err != nil {
 		return flruntime.PendingApproval{}, false, err
 	}
+	if strings.TrimSpace(string(pending.ThreadID)) != threadID || pending.GeneratedAt.IsZero() {
+		return flruntime.PendingApproval{}, false, errors.New("invalid Floret pending approval snapshot")
+	}
 	for _, approval := range pending.Approvals {
+		if err := validateFloretPendingApproval(approval); err != nil {
+			return flruntime.PendingApproval{}, false, err
+		}
 		if floretPendingApprovalMatchesTool(approval, toolID) {
 			return approval, true, nil
 		}
@@ -536,40 +573,28 @@ func floretPendingApprovalMatchesTool(approval flruntime.PendingApproval, toolID
 		strings.TrimSpace(approval.ApprovalID) == toolID
 }
 
-func (r *run) flowerApprovalActionFromFloretPending(approval flruntime.PendingApproval) (FlowerApprovalAction, bool) {
+func (r *run) flowerApprovalActionFromFloretPending(approval flruntime.PendingApproval) (FlowerApprovalAction, error) {
 	if r == nil {
-		return FlowerApprovalAction{}, false
+		return FlowerApprovalAction{}, errors.New("pending approval projection requires run")
 	}
-	toolID := firstNonEmptyString(strings.TrimSpace(approval.ToolCallID), strings.TrimSpace(approval.ApprovalID))
-	if toolID == "" {
-		return FlowerApprovalAction{}, false
+	if err := validateFloretPendingApproval(approval); err != nil {
+		return FlowerApprovalAction{}, err
 	}
+	if strings.TrimSpace(string(approval.ThreadID)) != strings.TrimSpace(r.threadID) || strings.TrimSpace(string(approval.RunID)) != strings.TrimSpace(r.id) {
+		return FlowerApprovalAction{}, errors.New("Floret pending approval run identity mismatch")
+	}
+	toolID := strings.TrimSpace(approval.ToolCallID)
 	state := normalizeFlowerApprovalState(approval.State)
-	if state == "" {
-		state = FlowerApprovalStateRequested
-	}
 	status := approvalStatusForState(state)
 	if status != FlowerApprovalStatusPending || state != FlowerApprovalStateRequested {
-		return FlowerApprovalAction{}, false
+		return FlowerApprovalAction{}, fmt.Errorf("unsupported Floret pending approval state %q", approval.State)
 	}
 	toolName := strings.TrimSpace(approval.ToolName)
-	if toolName == "" {
-		toolName = "tool"
-	}
 	requestedAt := approval.RequestedAt.UnixMilli()
-	if requestedAt <= 0 {
-		requestedAt = time.Now().UnixMilli()
-	}
 	revision := approval.Revision
-	if revision <= 0 {
-		revision = 1
-	}
 	surfaceEpoch := approval.Epoch
-	if surfaceEpoch <= 0 {
-		surfaceEpoch = 1
-	}
-	runID := strings.TrimSpace(r.id)
-	turnID := firstNonEmptyString(strings.TrimSpace(string(approval.TurnID)), strings.TrimSpace(string(approval.RunID)), strings.TrimSpace(r.messageID))
+	runID := strings.TrimSpace(string(approval.RunID))
+	turnID := strings.TrimSpace(string(approval.TurnID))
 	command := floretPendingApprovalCommand(approval)
 	cwd := floretPendingApprovalCwd(approval)
 	targets := floretPendingApprovalTargets(approval)
@@ -587,7 +612,7 @@ func (r *run) flowerApprovalActionFromFloretPending(approval flruntime.PendingAp
 		Version:       revision,
 		SurfaceEpoch:  surfaceEpoch,
 		BatchIndex:    approval.BatchIndex,
-		BatchSize:     max(1, approval.BatchSize),
+		BatchSize:     approval.BatchSize,
 		RequestedAtMs: requestedAt,
 		CanApprove:    true,
 		Summary: FlowerApprovalSummary{
@@ -599,7 +624,39 @@ func (r *run) flowerApprovalActionFromFloretPending(approval flruntime.PendingAp
 			Flags:       floretPendingApprovalFlags(approval),
 			Targets:     targets,
 		},
-	}, true
+	}, nil
+}
+
+func validateFloretPendingApproval(approval flruntime.PendingApproval) error {
+	if strings.TrimSpace(approval.ApprovalID) == "" || strings.TrimSpace(approval.ToolCallID) == "" {
+		return errors.New("Floret pending approval requires approval and tool call identities")
+	}
+	if strings.TrimSpace(approval.ToolName) == "" || strings.TrimSpace(approval.ToolKind) == "" {
+		return errors.New("Floret pending approval requires tool name and kind")
+	}
+	if strings.TrimSpace(string(approval.RunID)) == "" || strings.TrimSpace(string(approval.ThreadID)) == "" || strings.TrimSpace(string(approval.TurnID)) == "" {
+		return errors.New("Floret pending approval requires run, thread, and turn identities")
+	}
+	if approval.Step <= 0 || approval.BatchSize <= 0 || approval.BatchIndex < 0 || approval.BatchIndex >= approval.BatchSize {
+		return errors.New("Floret pending approval step or batch position is invalid")
+	}
+	if approval.State != "requested" || approval.Revision <= 0 || approval.Epoch <= 0 {
+		return errors.New("Floret pending approval lifecycle state is invalid")
+	}
+	if approval.RequestedAt.IsZero() || !approval.ResolvedAt.IsZero() || strings.TrimSpace(approval.ArgsHash) == "" {
+		return errors.New("Floret pending approval timestamp or args hash is invalid")
+	}
+	for index, resource := range approval.Resources {
+		if strings.TrimSpace(resource.Kind) == "" || strings.TrimSpace(resource.Value) == "" {
+			return fmt.Errorf("Floret pending approval resource %d is invalid", index)
+		}
+	}
+	for index, effect := range approval.Effects {
+		if strings.TrimSpace(effect) == "" {
+			return fmt.Errorf("Floret pending approval effect %d is empty", index)
+		}
+	}
+	return nil
 }
 
 func floretApprovalStepID(approval flruntime.PendingApproval) string {
@@ -653,10 +710,7 @@ func floretPendingApprovalEffects(approval flruntime.PendingApproval, toolName s
 		seen[value] = struct{}{}
 		out = append(out, value)
 	}
-	if len(out) > 0 {
-		return out
-	}
-	return toolApprovalEffects(toolName)
+	return out
 }
 
 func floretPendingApprovalFlags(approval flruntime.PendingApproval) []string {

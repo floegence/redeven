@@ -1000,6 +1000,7 @@ func TestRepositoryDoesNotRetainLegacySubagentProjectionMarker(t *testing.T) {
 	t.Parallel()
 
 	root := repoRootForTest(t)
+	canonicalMigrationPath := filepath.Join(root, "internal", "ai", "threadstore", "canonical_migrations.go")
 	forbidden := "subagent_" + "projection"
 	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, err error) error {
 		if err != nil {
@@ -1014,6 +1015,11 @@ func TestRepositoryDoesNotRetainLegacySubagentProjectionMarker(t *testing.T) {
 			}
 		}
 		if !floretBoundaryScanFile(path) {
+			return nil
+		}
+		// The explicit v15-v40 migration contract must identify and delete the
+		// historical marker; current runtime and product schema code must not.
+		if path == canonicalMigrationPath {
 			return nil
 		}
 		data, readErr := os.ReadFile(path)

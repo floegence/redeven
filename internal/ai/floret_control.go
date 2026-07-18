@@ -78,7 +78,7 @@ func (p floretControlProjector) projectTaskComplete(call ToolCall, core flruntim
 	}
 }
 
-func (p floretControlProjector) projectAskUser(call ToolCall, core flruntime.TurnSignal) (flruntime.TurnSignal, error) {
+func (p floretControlProjector) projectAskUser(call ToolCall, _ flruntime.TurnSignal) (flruntime.TurnSignal, error) {
 	questions, questionContractError := extractModelSignalRequestUserInputQuestions(call, "questions")
 	signal := askUserSignal{
 		Questions:        questions,
@@ -90,12 +90,6 @@ func (p floretControlProjector) projectAskUser(call ToolCall, core flruntime.Tur
 	signal = normalizeAskUserSignal(signal)
 	if signal.Question == "" && len(signal.Questions) > 0 {
 		signal.Question = strings.TrimSpace(signal.Questions[0].Question)
-	}
-	if signal.Question == "" {
-		signal.Question = strings.TrimSpace(core.OutputText)
-	}
-	if signal.Question == "" {
-		signal.Question = "I need clarification to continue safely."
 	}
 	reason := validateAskUserSignal(signal)
 	pass := reason == ""
@@ -158,6 +152,9 @@ func floretActivityForControlSignal(toolName string, payload map[string]any, des
 }
 
 func flowerToolCallFromFloret(call fltools.ToolCall) (ToolCall, error) {
+	if strings.TrimSpace(call.ID) == "" || strings.TrimSpace(call.Name) == "" {
+		return ToolCall{}, errors.New("Floret tool call requires id and name")
+	}
 	args := map[string]any{}
 	if raw := strings.TrimSpace(call.Args); raw != "" {
 		if err := json.Unmarshal([]byte(raw), &args); err != nil {

@@ -3,10 +3,6 @@ package threadstore
 import (
 	"database/sql"
 	"fmt"
-	"slices"
-	"sort"
-
-	"github.com/floegence/redeven/internal/persistence/sqliteutil"
 )
 
 func createThreadForkOperationsTableV1Tx(tx *sql.Tx) error {
@@ -70,32 +66,5 @@ DROP TABLE product_v1_thread_fork_operations;
 }
 
 func verifyProductV1Schema(tx *sql.Tx) error {
-	tables, err := sqliteutil.ListUserTablesTx(tx)
-	if err != nil {
-		return err
-	}
-	expectedTables := append([]string(nil), productThreadstoreTables...)
-	sort.Strings(expectedTables)
-	if !slices.Equal(tables, expectedTables) {
-		return fmt.Errorf("product v1 table set mismatch: got %v, want %v", tables, expectedTables)
-	}
-	for _, tableName := range productThreadstoreTables {
-		columns, err := schemaTableColumns(tx, tableName)
-		if err != nil {
-			return err
-		}
-		expected := append([]string(nil), productThreadstoreColumns[tableName]...)
-		if tableName == "ai_thread_fork_operations" {
-			expected = append(expected[:8], append([]string{"floret_result_json"}, expected[8:]...)...)
-		}
-		if len(columns) != len(expected) {
-			return fmt.Errorf("product v1 column count mismatch for %s: got %d, want %d", tableName, len(columns), len(expected))
-		}
-		for _, column := range expected {
-			if _, ok := columns[column]; !ok {
-				return fmt.Errorf("product v1 missing column %s.%s", tableName, column)
-			}
-		}
-	}
-	return nil
+	return verifyProductSchemaVersion(tx, 1)
 }

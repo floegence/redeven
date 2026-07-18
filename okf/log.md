@@ -1,5 +1,16 @@
 # Redeven OKF Update Log
 
+## 2026-07-18
+* **Breaking**: Restricted canonical threadstore migration support to explicit
+  v15-v40 databases and made product v1-to-v2 a continuous migration after
+  product-only canonical conversion.
+* **Boundary**: Documented Floret as the only Agent data authority and Redeven
+  SQLite as product-only storage with no transcript, run, projection, approval,
+  todo, tool lifecycle, or provider-state mirror.
+* **Fix**: Removed schema repair, unversioned database claiming, conditional DDL,
+  permission fallback, approval default synthesis, generated `ask_user`
+  questions, and execution failure for projection-unavailable outcomes.
+
 ## 2026-07-17
 * **Breaking**: Upgraded to published Floret v0.11.3 as the only authority for admitted Agent conversation, turn/run lifecycle, ordering, projection, control signals, approvals, and todos; Redeven threadstore now contains product metadata, pending commands, resource references, read acknowledgement, authorization audit, and coordination records only.
 * **Fix**: Rebuilt Flower history and replacement snapshots from Floret `ListThreadTurns` ordinal order, bound live drafts to exact thread/turn/run identity, and removed unmatched tail append and client-side message ordering behavior.

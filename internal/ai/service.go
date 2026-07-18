@@ -241,10 +241,33 @@ func NewService(opts Options) (*Service, error) {
 	if err := os.MkdirAll(uploadsDir, 0o700); err != nil {
 		return nil, err
 	}
+	persistTO := opts.PersistOpTimeout
+	if persistTO <= 0 {
+		persistTO = defaultPersistOpTimeout
+	}
 
-	threadsPath := filepath.Join(strings.TrimSpace(opts.StateDir), "ai", "threads.sqlite")
-	ts, err := threadstore.Open(threadsPath)
+	floretStorePath, err := floretThreadStorePath(opts.StateDir)
 	if err != nil {
+		return nil, err
+	}
+	floretStore, err := flruntime.OpenSQLiteStore(floretStorePath)
+	if err != nil {
+		return nil, err
+	}
+	migrationHost, err := flruntime.NewThreadMaintenanceHost(flruntime.ThreadMaintenanceHostOptions{Store: floretStore})
+	if err != nil {
+		_ = floretStore.Close()
+		return nil, err
+	}
+	threadsPath := filepath.Join(strings.TrimSpace(opts.StateDir), "ai", "threads.sqlite")
+	ts, err := threadstore.Open(threadsPath, threadstore.WithThreadIdentityEnsurer(func(threadID string) error {
+		ctx, cancel := context.WithTimeout(context.Background(), persistTO)
+		defer cancel()
+		_, err := migrationHost.EnsureThread(ctx, flruntime.EnsureThreadRequest{ThreadID: flruntime.ThreadID(threadID)})
+		return err
+	}))
+	if err != nil {
+		_ = floretStore.Close()
 		return nil, err
 	}
 
@@ -258,6 +281,8 @@ func NewService(opts Options) (*Service, error) {
 	}
 	toolTargetPolicy := normalizeToolTargetPolicy(opts.ToolTargetPolicy)
 	if toolTargetPolicy.requiresExplicitTarget() && opts.TargetToolExecutor == nil {
+		_ = ts.Close()
+		_ = floretStore.Close()
 		return nil, errors.New("explicit target tool policy requires TargetToolExecutor")
 	}
 	maxWall := opts.RunMaxWallTime
@@ -275,21 +300,6 @@ func NewService(opts Options) (*Service, error) {
 	streamWTO := opts.StreamWriteTimeout
 	if streamWTO <= 0 {
 		streamWTO = defaultStreamWriteTO
-	}
-
-	persistTO := opts.PersistOpTimeout
-	if persistTO <= 0 {
-		persistTO = defaultPersistOpTimeout
-	}
-	floretStorePath, err := floretThreadStorePath(opts.StateDir)
-	if err != nil {
-		_ = ts.Close()
-		return nil, err
-	}
-	floretStore, err := flruntime.OpenSQLiteStore(floretStorePath)
-	if err != nil {
-		_ = ts.Close()
-		return nil, err
 	}
 
 	contextRepo := contextstore.NewRepository(ts)

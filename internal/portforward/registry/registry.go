@@ -5,12 +5,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
-	_ "modernc.org/sqlite"
+	"github.com/floegence/redeven/internal/persistence/sqliteutil"
 )
 
 var ErrForwardNotFound = errors.New("port forward not found")
@@ -33,28 +31,10 @@ type Registry struct {
 }
 
 func Open(path string) (*Registry, error) {
-	p := filepath.Clean(strings.TrimSpace(path))
-	if p == "" {
-		return nil, errors.New("missing registry path")
-	}
-	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
-		return nil, err
-	}
-
-	// modernc.org/sqlite uses a file path as DSN.
-	db, err := sql.Open("sqlite", p)
+	db, err := sqliteutil.Open(path, registrySchemaSpec())
 	if err != nil {
 		return nil, err
 	}
-	if err := initSchema(db); err != nil {
-		_ = db.Close()
-		return nil, err
-	}
-
-	// Keep the connection open (single-process local DB).
-	db.SetMaxOpenConns(1)
-	db.SetMaxIdleConns(1)
-
 	return &Registry{db: db}, nil
 }
 

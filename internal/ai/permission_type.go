@@ -78,10 +78,14 @@ type PermissionSnapshot struct {
 func normalizePermissionType(raw string, fallback FlowerPermissionType) (FlowerPermissionType, error) {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "":
-		if fallback != "" {
+		switch fallback {
+		case "":
+			return FlowerPermissionApprovalRequired, nil
+		case FlowerPermissionReadonly, FlowerPermissionApprovalRequired, FlowerPermissionFullAccess:
 			return fallback, nil
+		default:
+			return "", fmt.Errorf("invalid fallback flower permission type %q", fallback)
 		}
-		return FlowerPermissionApprovalRequired, nil
 	case string(FlowerPermissionReadonly):
 		return FlowerPermissionReadonly, nil
 	case string(FlowerPermissionApprovalRequired):

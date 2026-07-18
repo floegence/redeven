@@ -860,9 +860,9 @@ func (s *Service) SubmitFlowerApproval(meta *session.Meta, req SubmitFlowerAppro
 	if !ok {
 		return nil, approvalConflict("approval is no longer pending")
 	}
-	approval, ok := r.flowerApprovalActionFromFloretPending(pending)
-	if !ok {
-		return nil, approvalConflict("approval is no longer pending")
+	approval, err := r.flowerApprovalActionFromFloretPending(pending)
+	if err != nil {
+		return nil, err
 	}
 	if approval.ActionID != actionID {
 		return nil, approvalConflict("approval action changed")

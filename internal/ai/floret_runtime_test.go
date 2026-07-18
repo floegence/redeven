@@ -324,8 +324,8 @@ func TestRunFloretHostedTurnPreservesEngineErrorAsPrimaryFailure(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "primary engine failure") {
 		t.Fatalf("runFloretHostedTurn error=%v, want primary engine failure", err)
 	}
-	if r.getRunErrorCode() == runErrorCodeFloretProjectionUnavailable {
-		t.Fatalf("engine failure was replaced by projection unavailable")
+	if r.getRunErrorCode() != runErrorCodeFloretEngineFailed {
+		t.Fatalf("run error code = %q, want %q", r.getRunErrorCode(), runErrorCodeFloretEngineFailed)
 	}
 }
 
@@ -356,38 +356,6 @@ func (p *capturingTurnProvider) requestCount() int {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return len(p.requests)
-}
-
-func TestUnavailableFloretTurnProjectionPreservesStreamedMarkdown(t *testing.T) {
-	r := newFloretRuntimeTestRun(t, runOptions{})
-	r.id = "run_projection_unavailable"
-	r.threadID = "thread_projection_unavailable"
-	r.messageID = "msg_projection_unavailable"
-	r.persistOpTimeout = time.Second
-	r.assistantBlocks = []any{&persistedMarkdownBlock{Type: "markdown", Content: "already streamed reply"}}
-	var events []any
-	r.onStreamEvent = func(ev any) { events = append(events, ev) }
-	returned := r.failRunWithCode(runErrorCodeFloretProjectionUnavailable, "", errors.New("detail read failed"))
-	if returned == nil || r.getRunErrorCode() != runErrorCodeFloretProjectionUnavailable {
-		t.Fatalf("returned=%v code=%q", returned, r.getRunErrorCode())
-	}
-	if len(r.assistantBlocks) != 1 {
-		t.Fatalf("assistantBlocks = %#v", r.assistantBlocks)
-	}
-	block, ok := r.assistantBlocks[0].(*persistedMarkdownBlock)
-	if !ok || block.Content != "already streamed reply" {
-		t.Fatalf("assistant block = %T %#v", r.assistantBlocks[0], r.assistantBlocks[0])
-	}
-	var presented string
-	for _, ev := range events {
-		if failure, ok := ev.(streamEventError); ok {
-			presented = failure.Error
-		}
-	}
-	lower := strings.ToLower(presented)
-	if !strings.Contains(lower, "refresh this thread") || !strings.Contains(lower, "do not run the task again") {
-		t.Fatalf("presented error = %q", presented)
-	}
 }
 
 type streamedEmptyTaskCompleteProvider struct{}

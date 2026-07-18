@@ -19,7 +19,7 @@ func SeedThreadstoreV15(dbPath string) error {
 	defer func() { _ = raw.Close() }()
 
 	_, err = raw.Exec(`
-CREATE TABLE IF NOT EXISTS ai_threads (
+CREATE TABLE ai_threads (
   thread_id TEXT PRIMARY KEY,
   endpoint_id TEXT NOT NULL,
   namespace_public_id TEXT NOT NULL DEFAULT '',
@@ -44,8 +44,8 @@ CREATE TABLE IF NOT EXISTS ai_threads (
   last_message_at_unix_ms INTEGER NOT NULL DEFAULT 0,
   last_message_preview TEXT NOT NULL DEFAULT ''
 );
-CREATE INDEX IF NOT EXISTS idx_ai_threads_endpoint_updated ON ai_threads(endpoint_id, updated_at_unix_ms DESC, thread_id DESC);
-CREATE TABLE IF NOT EXISTS ai_messages (
+CREATE INDEX idx_ai_threads_endpoint_updated ON ai_threads(endpoint_id, updated_at_unix_ms DESC, thread_id DESC);
+CREATE TABLE ai_messages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   thread_id TEXT NOT NULL,
   endpoint_id TEXT NOT NULL,
@@ -60,8 +60,8 @@ CREATE TABLE IF NOT EXISTS ai_messages (
   message_json TEXT NOT NULL,
   UNIQUE(thread_id, message_id)
 );
-CREATE INDEX IF NOT EXISTS idx_ai_messages_thread_id ON ai_messages(endpoint_id, thread_id, id ASC);
-CREATE TABLE IF NOT EXISTS ai_runs (
+CREATE INDEX idx_ai_messages_thread_id ON ai_messages(endpoint_id, thread_id, id ASC);
+CREATE TABLE ai_runs (
   run_id TEXT PRIMARY KEY,
   endpoint_id TEXT NOT NULL,
   thread_id TEXT NOT NULL,
@@ -74,8 +74,8 @@ CREATE TABLE IF NOT EXISTS ai_runs (
   ended_at_unix_ms INTEGER NOT NULL DEFAULT 0,
   updated_at_unix_ms INTEGER NOT NULL DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS idx_ai_runs_endpoint_thread_updated ON ai_runs(endpoint_id, thread_id, updated_at_unix_ms DESC);
-CREATE TABLE IF NOT EXISTS ai_tool_calls (
+CREATE INDEX idx_ai_runs_endpoint_thread_updated ON ai_runs(endpoint_id, thread_id, updated_at_unix_ms DESC);
+CREATE TABLE ai_tool_calls (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   run_id TEXT NOT NULL,
   tool_id TEXT NOT NULL,
@@ -92,8 +92,8 @@ CREATE TABLE IF NOT EXISTS ai_tool_calls (
   latency_ms INTEGER NOT NULL DEFAULT 0,
   UNIQUE(run_id, tool_id)
 );
-CREATE INDEX IF NOT EXISTS idx_ai_tool_calls_run_id ON ai_tool_calls(run_id, id ASC);
-CREATE TABLE IF NOT EXISTS ai_run_events (
+CREATE INDEX idx_ai_tool_calls_run_id ON ai_tool_calls(run_id, id ASC);
+CREATE TABLE ai_run_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   endpoint_id TEXT NOT NULL,
   thread_id TEXT NOT NULL,
@@ -103,9 +103,9 @@ CREATE TABLE IF NOT EXISTS ai_run_events (
   payload_json TEXT NOT NULL DEFAULT '{}',
   at_unix_ms INTEGER NOT NULL DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS idx_ai_run_events_run_id ON ai_run_events(run_id, id ASC);
-CREATE INDEX IF NOT EXISTS idx_ai_run_events_endpoint_thread ON ai_run_events(endpoint_id, thread_id, id ASC);
-CREATE TABLE IF NOT EXISTS ai_thread_state (
+CREATE INDEX idx_ai_run_events_run_id ON ai_run_events(run_id, id ASC);
+CREATE INDEX idx_ai_run_events_endpoint_thread ON ai_run_events(endpoint_id, thread_id, id ASC);
+CREATE TABLE ai_thread_state (
   endpoint_id TEXT NOT NULL,
   thread_id TEXT NOT NULL,
   open_goal TEXT NOT NULL DEFAULT '',
@@ -113,7 +113,7 @@ CREATE TABLE IF NOT EXISTS ai_thread_state (
   updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY(endpoint_id, thread_id)
 );
-CREATE TABLE IF NOT EXISTS ai_thread_todos (
+CREATE TABLE ai_thread_todos (
   endpoint_id TEXT NOT NULL,
   thread_id TEXT NOT NULL,
   version INTEGER NOT NULL DEFAULT 0,
@@ -123,8 +123,8 @@ CREATE TABLE IF NOT EXISTS ai_thread_todos (
   updated_by_tool_id TEXT NOT NULL DEFAULT '',
   PRIMARY KEY(endpoint_id, thread_id)
 );
-CREATE INDEX IF NOT EXISTS idx_ai_thread_todos_updated ON ai_thread_todos(endpoint_id, thread_id, updated_at_unix_ms DESC);
-CREATE TABLE IF NOT EXISTS ai_queued_turns (
+CREATE INDEX idx_ai_thread_todos_updated ON ai_thread_todos(endpoint_id, thread_id, updated_at_unix_ms DESC);
+CREATE TABLE ai_queued_turns (
   queue_id TEXT PRIMARY KEY,
   endpoint_id TEXT NOT NULL,
   thread_id TEXT NOT NULL,
@@ -138,9 +138,9 @@ CREATE TABLE IF NOT EXISTS ai_queued_turns (
   created_by_user_email TEXT NOT NULL DEFAULT '',
   created_at_unix_ms INTEGER NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_ai_queued_turns_thread_created ON ai_queued_turns(endpoint_id, thread_id, created_at_unix_ms ASC, queue_id ASC);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_ai_queued_turns_message_id ON ai_queued_turns(endpoint_id, thread_id, message_id);
-CREATE TABLE IF NOT EXISTS ai_thread_checkpoints (
+CREATE INDEX idx_ai_queued_turns_thread_created ON ai_queued_turns(endpoint_id, thread_id, created_at_unix_ms ASC, queue_id ASC);
+CREATE UNIQUE INDEX idx_ai_queued_turns_message_id ON ai_queued_turns(endpoint_id, thread_id, message_id);
+CREATE TABLE ai_thread_checkpoints (
   checkpoint_id TEXT PRIMARY KEY,
   endpoint_id TEXT NOT NULL,
   thread_id TEXT NOT NULL,
@@ -155,9 +155,9 @@ CREATE TABLE IF NOT EXISTS ai_thread_checkpoints (
   tool_calls_max_id INTEGER NOT NULL DEFAULT 0,
   run_events_max_id INTEGER NOT NULL DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS idx_ai_thread_checkpoints_thread_created ON ai_thread_checkpoints(endpoint_id, thread_id, created_at_unix_ms DESC, checkpoint_id DESC);
-CREATE INDEX IF NOT EXISTS idx_ai_thread_checkpoints_run_id ON ai_thread_checkpoints(run_id);
-CREATE TABLE IF NOT EXISTS transcript_messages (
+CREATE INDEX idx_ai_thread_checkpoints_thread_created ON ai_thread_checkpoints(endpoint_id, thread_id, created_at_unix_ms DESC, checkpoint_id DESC);
+CREATE INDEX idx_ai_thread_checkpoints_run_id ON ai_thread_checkpoints(run_id);
+CREATE TABLE transcript_messages (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   thread_id TEXT NOT NULL,
   endpoint_id TEXT NOT NULL,
@@ -172,8 +172,8 @@ CREATE TABLE IF NOT EXISTS transcript_messages (
   message_json TEXT NOT NULL,
   UNIQUE(thread_id, message_id)
 );
-CREATE INDEX IF NOT EXISTS idx_transcript_messages_thread_id ON transcript_messages(endpoint_id, thread_id, id ASC);
-CREATE TABLE IF NOT EXISTS conversation_turns (
+CREATE INDEX idx_transcript_messages_thread_id ON transcript_messages(endpoint_id, thread_id, id ASC);
+CREATE TABLE conversation_turns (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   turn_id TEXT NOT NULL UNIQUE,
   endpoint_id TEXT NOT NULL,
@@ -183,9 +183,9 @@ CREATE TABLE IF NOT EXISTS conversation_turns (
   assistant_message_id TEXT NOT NULL DEFAULT '',
   created_at_unix_ms INTEGER NOT NULL DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS idx_conversation_turns_thread_id ON conversation_turns(endpoint_id, thread_id, id ASC);
-CREATE INDEX IF NOT EXISTS idx_conversation_turns_run_id ON conversation_turns(run_id, id ASC);
-CREATE TABLE IF NOT EXISTS execution_spans (
+CREATE INDEX idx_conversation_turns_thread_id ON conversation_turns(endpoint_id, thread_id, id ASC);
+CREATE INDEX idx_conversation_turns_run_id ON conversation_turns(run_id, id ASC);
+CREATE TABLE execution_spans (
   span_id TEXT PRIMARY KEY,
   endpoint_id TEXT NOT NULL,
   thread_id TEXT NOT NULL,
@@ -198,9 +198,9 @@ CREATE TABLE IF NOT EXISTS execution_spans (
   ended_at_unix_ms INTEGER NOT NULL DEFAULT 0,
   updated_at_unix_ms INTEGER NOT NULL DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS idx_execution_spans_thread_started ON execution_spans(endpoint_id, thread_id, started_at_unix_ms DESC, span_id DESC);
-CREATE INDEX IF NOT EXISTS idx_execution_spans_run_started ON execution_spans(endpoint_id, run_id, started_at_unix_ms ASC, span_id ASC);
-CREATE TABLE IF NOT EXISTS memory_items (
+CREATE INDEX idx_execution_spans_thread_started ON execution_spans(endpoint_id, thread_id, started_at_unix_ms DESC, span_id DESC);
+CREATE INDEX idx_execution_spans_run_started ON execution_spans(endpoint_id, run_id, started_at_unix_ms ASC, span_id ASC);
+CREATE TABLE memory_items (
   memory_id TEXT PRIMARY KEY,
   endpoint_id TEXT NOT NULL,
   thread_id TEXT NOT NULL,
@@ -214,9 +214,9 @@ CREATE TABLE IF NOT EXISTS memory_items (
   created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
   updated_at_unix_ms INTEGER NOT NULL DEFAULT 0
 );
-CREATE INDEX IF NOT EXISTS idx_memory_items_thread_updated ON memory_items(endpoint_id, thread_id, updated_at_unix_ms DESC, memory_id DESC);
-CREATE INDEX IF NOT EXISTS idx_memory_items_scope_kind ON memory_items(endpoint_id, thread_id, scope, kind, updated_at_unix_ms DESC);
-CREATE TABLE IF NOT EXISTS memory_embeddings (
+CREATE INDEX idx_memory_items_thread_updated ON memory_items(endpoint_id, thread_id, updated_at_unix_ms DESC, memory_id DESC);
+CREATE INDEX idx_memory_items_scope_kind ON memory_items(endpoint_id, thread_id, scope, kind, updated_at_unix_ms DESC);
+CREATE TABLE memory_embeddings (
   memory_id TEXT NOT NULL,
   embedding_model TEXT NOT NULL DEFAULT '',
   vector_blob BLOB NOT NULL,
@@ -224,7 +224,7 @@ CREATE TABLE IF NOT EXISTS memory_embeddings (
   updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY(memory_id, embedding_model)
 );
-CREATE TABLE IF NOT EXISTS provider_capabilities (
+CREATE TABLE provider_capabilities (
   provider_id TEXT NOT NULL,
   model_name TEXT NOT NULL,
   capability_json TEXT NOT NULL DEFAULT '{}',

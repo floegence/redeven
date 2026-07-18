@@ -184,6 +184,11 @@ func scanThreadRow(scan rowScanner, t *Thread) error {
 	); err != nil {
 		return err
 	}
+	permissionType, err := canonicalPermissionType(t.PermissionType)
+	if err != nil {
+		return err
+	}
+	t.PermissionType = permissionType
 	t.ReasoningSelectionJSON = strings.TrimSpace(t.ReasoningSelectionJSON)
 	t.TitleSource = normalizeThreadTitleSource(t.TitleSource)
 	t.TitleInputMessageID = strings.TrimSpace(t.TitleInputMessageID)
@@ -457,7 +462,11 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 	t.NamespacePublicID = strings.TrimSpace(t.NamespacePublicID)
 	t.ModelID = strings.TrimSpace(t.ModelID)
 	t.ReasoningSelectionJSON = strings.TrimSpace(t.ReasoningSelectionJSON)
-	t.PermissionType = normalizePermissionType(t.PermissionType)
+	permissionType, err := canonicalPermissionType(t.PermissionType)
+	if err != nil {
+		return err
+	}
+	t.PermissionType = permissionType
 	t.WorkingDir = strings.TrimSpace(t.WorkingDir)
 	t.Title = strings.TrimSpace(t.Title)
 	t.TitleSource = normalizeThreadTitleSource(t.TitleSource)
@@ -489,7 +498,7 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 	if t.UpdatedAtUnixMs <= 0 {
 		t.UpdatedAtUnixMs = t.CreatedAtUnixMs
 	}
-	_, err := s.db.ExecContext(ctx, `
+	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO ai_threads(
 		  thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json, permission_type, working_dir, title,
 	  title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
@@ -628,7 +637,10 @@ func (s *Store) UpdateThreadPermissionType(ctx context.Context, endpointID strin
 	}
 	endpointID = strings.TrimSpace(endpointID)
 	threadID = strings.TrimSpace(threadID)
-	permissionType = normalizePermissionType(permissionType)
+	permissionType, err := canonicalPermissionType(permissionType)
+	if err != nil {
+		return err
+	}
 	if endpointID == "" || threadID == "" {
 		return errors.New("invalid request")
 	}
@@ -777,16 +789,19 @@ func normalizeThreadTitleSource(raw string) string {
 	}
 }
 
-func normalizePermissionType(permissionType string) string {
+func canonicalPermissionType(permissionType string) (string, error) {
 	switch strings.TrimSpace(strings.ToLower(permissionType)) {
+	case "":
+		return "approval_required", nil
 	case "readonly":
-		return "readonly"
+		return "readonly", nil
 	case "full_access":
-		return "full_access"
+		return "full_access", nil
 	case "approval_required":
-		return "approval_required"
+		return "approval_required", nil
+	default:
+		return "", fmt.Errorf("invalid thread permission type %q", permissionType)
 	}
-	return "approval_required"
 }
 
 func (s *Store) DeleteThread(ctx context.Context, endpointID string, threadID string) error {
@@ -1134,39 +1149,6 @@ func boolToInt(v bool) int {
 		return 1
 	}
 	return 0
-}
-
-func columnExists(tx *sql.Tx, tableName string, colName string) (bool, error) {
-	tableName = strings.TrimSpace(tableName)
-	colName = strings.TrimSpace(colName)
-	if tableName == "" || colName == "" {
-		return false, errors.New("invalid table/column")
-	}
-
-	rows, err := tx.Query(`PRAGMA table_info(` + tableName + `)`)
-	if err != nil {
-		return false, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var cid int
-		var name string
-		var ctype string
-		var notNull int
-		var defaultValue sql.NullString
-		var primaryKey int
-		if err := rows.Scan(&cid, &name, &ctype, &notNull, &defaultValue, &primaryKey); err != nil {
-			return false, err
-		}
-		if strings.EqualFold(strings.TrimSpace(name), colName) {
-			return true, nil
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return false, err
-	}
-	return false, nil
 }
 
 func truncateRunes(s string, max int) string {

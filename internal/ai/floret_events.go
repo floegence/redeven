@@ -91,7 +91,10 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 		r.clearModelIOStatus()
 	case floretEventToolApprovalRequested, floretEventToolApprovalApproved, floretEventToolApprovalRejected, floretEventToolApprovalTimedOut, floretEventToolApprovalCanceled:
 		if ev.Type != floretEventToolApprovalRequested {
-			r.syncPendingFloretApprovals(context.Background(), string(ev.Type))
+			if err := r.syncPendingFloretApprovals(context.Background(), string(ev.Type)); err != nil {
+				r.rejectFloretContract("pending_approvals", err)
+				return
+			}
 		}
 		r.recordRunDiagnostic("floret."+string(ev.Type), RealtimeStreamKindLifecycle, map[string]any{
 			"tool_id":   strings.TrimSpace(ev.ToolID),
@@ -541,10 +544,31 @@ func (r *run) rejectFloretContract(kind string, err error) {
 	if r == nil || err == nil {
 		return
 	}
+	contractErr := fmt.Errorf("invalid Floret %s contract: %w", strings.TrimSpace(kind), err)
+	r.muFloretContract.Lock()
+	if r.floretContractErr == nil {
+		r.floretContractErr = contractErr
+	}
+	r.muFloretContract.Unlock()
+	r.muCancel.Lock()
+	cancelFn := r.cancelFn
+	r.muCancel.Unlock()
+	if cancelFn != nil {
+		cancelFn()
+	}
 	r.recordRunDiagnostic("floret.contract.rejected", RealtimeStreamKindLifecycle, map[string]any{
 		"contract_kind": strings.TrimSpace(kind),
 		"error":         sanitizeLogText(err.Error(), 240),
 	})
+}
+
+func (r *run) floretContractError() error {
+	if r == nil {
+		return nil
+	}
+	r.muFloretContract.Lock()
+	defer r.muFloretContract.Unlock()
+	return r.floretContractErr
 }
 
 func (r *run) applyFloretSourceObservation(sources []flruntime.SourceRef) {

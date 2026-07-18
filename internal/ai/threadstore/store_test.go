@@ -118,6 +118,26 @@ func TestStoreThreadMetadataUpdatesDoNotCreateConversationState(t *testing.T) {
 	}
 }
 
+func TestStoreRejectsInvalidThreadPermissionContracts(t *testing.T) {
+	store := openStoreForTest(t)
+	ctx := context.Background()
+	if err := store.CreateThread(ctx, Thread{ThreadID: "invalid_create", EndpointID: "env_1", PermissionType: "unknown"}); err == nil {
+		t.Fatal("CreateThread succeeded with invalid permission")
+	}
+	if err := store.CreateThread(ctx, Thread{ThreadID: "valid", EndpointID: "env_1", PermissionType: "approval_required"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.UpdateThreadPermissionType(ctx, "env_1", "valid", "unknown"); err == nil {
+		t.Fatal("UpdateThreadPermissionType succeeded with invalid permission")
+	}
+	if _, err := store.db.Exec(`UPDATE ai_threads SET permission_type = 'unknown' WHERE thread_id = 'valid'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.GetThread(ctx, "env_1", "valid"); err == nil {
+		t.Fatal("GetThread accepted invalid persisted permission")
+	}
+}
+
 func openStoreForTest(t *testing.T) *Store {
 	t.Helper()
 	store, err := Open(filepath.Join(t.TempDir(), "threads.db"))

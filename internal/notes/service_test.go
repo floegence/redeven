@@ -2,11 +2,75 @@ package notes
 
 import (
 	"context"
+	"database/sql"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 )
+
+func TestOpenMigratesNotesV1ToV2(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "notes.db")
+	raw, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := raw.Begin()
+	if err != nil {
+		_ = raw.Close()
+		t.Fatal(err)
+	}
+	if err := migrateToV1(tx); err != nil {
+		_ = tx.Rollback()
+		_ = raw.Close()
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`
+CREATE TABLE __redeven_db_meta (
+  singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+  db_kind TEXT NOT NULL,
+  created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  last_migrated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  last_migrated_from_version INTEGER NOT NULL DEFAULT 0,
+  last_migrated_to_version INTEGER NOT NULL DEFAULT 0
+);
+INSERT INTO __redeven_db_meta(singleton, db_kind, last_migrated_from_version, last_migrated_to_version)
+VALUES(1, 'notes_runtime', 1, 1);
+PRAGMA user_version=1;
+INSERT INTO notes_topics(topic_id, name, icon_key, icon_accent, sort_order, created_at_unix_ms, updated_at_unix_ms)
+VALUES('topic_v1', 'Legacy', 'note', 'sage', 1, 100, 100);
+INSERT INTO notes_items(
+  note_id, topic_id, body, preview_text, character_count, size_bucket,
+  style_version, color_token, x, y, z_index, created_at_unix_ms, updated_at_unix_ms
+)
+VALUES('note_v1', 'topic_v1', 'preserved body', 'preserved body', 14, 1,
+  'v1', 'sage', 1, 2, 3, 100, 100);
+`); err != nil {
+		_ = tx.Rollback()
+		_ = raw.Close()
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		_ = raw.Close()
+		t.Fatal(err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	svc, err := Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer svc.Close()
+	var title, body string
+	if err := svc.store.db.QueryRow(`SELECT title, body FROM notes_items WHERE note_id = 'note_v1'`).Scan(&title, &body); err != nil {
+		t.Fatal(err)
+	}
+	if title != "" || body != "preserved body" {
+		t.Fatalf("migrated note = title %q body %q", title, body)
+	}
+}
 
 func openTestService(t *testing.T) *Service {
 	t.Helper()

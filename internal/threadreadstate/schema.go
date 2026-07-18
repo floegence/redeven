@@ -3,6 +3,7 @@ package threadreadstate
 import (
 	"database/sql"
 	"fmt"
+	"slices"
 
 	"github.com/floegence/redeven/internal/persistence/sqliteutil"
 )
@@ -26,7 +27,7 @@ func schemaSpec() sqliteutil.Spec {
 
 func migrateToV1(tx *sql.Tx) error {
 	_, err := tx.Exec(`
-CREATE TABLE IF NOT EXISTS thread_read_state (
+	CREATE TABLE thread_read_state (
   endpoint_id TEXT NOT NULL,
   scope_id TEXT NOT NULL,
   surface TEXT NOT NULL,
@@ -39,21 +40,21 @@ CREATE TABLE IF NOT EXISTS thread_read_state (
   updated_at_unix_ms INTEGER NOT NULL,
   PRIMARY KEY (endpoint_id, scope_id, surface, thread_id)
 );
-CREATE INDEX IF NOT EXISTS idx_thread_read_state_scope
+	CREATE INDEX idx_thread_read_state_scope
   ON thread_read_state(endpoint_id, scope_id, surface, updated_at_unix_ms DESC, thread_id DESC);
 `)
 	return err
 }
 
 func verifySchema(tx *sql.Tx) error {
-	exists, err := sqliteutil.TableExistsTx(tx, "thread_read_state")
+	tables, err := sqliteutil.ListUserTablesTx(tx)
 	if err != nil {
 		return err
 	}
-	if !exists {
-		return fmt.Errorf("missing table %q", "thread_read_state")
+	if !slices.Equal(tables, []string{"thread_read_state"}) {
+		return fmt.Errorf("thread read state table set mismatch: got %v", tables)
 	}
-	for _, columnName := range []string{
+	expectedColumns := []string{
 		"endpoint_id",
 		"scope_id",
 		"surface",
@@ -64,14 +65,20 @@ func verifySchema(tx *sql.Tx) error {
 		"last_read_updated_at_unix_s",
 		"last_seen_activity_signature",
 		"updated_at_unix_ms",
-	} {
-		has, err := sqliteutil.ColumnExistsTx(tx, "thread_read_state", columnName)
-		if err != nil {
-			return err
-		}
-		if !has {
-			return fmt.Errorf("missing column %q on %q", columnName, "thread_read_state")
-		}
+	}
+	columns, err := sqliteutil.TableColumnNamesTx(tx, "thread_read_state")
+	if err != nil {
+		return err
+	}
+	if !slices.Equal(columns, expectedColumns) {
+		return fmt.Errorf("thread read state column mismatch: got %v, want %v", columns, expectedColumns)
+	}
+	indexes, err := sqliteutil.ListUserIndexesTx(tx)
+	if err != nil {
+		return err
+	}
+	if !slices.Equal(indexes, []string{"idx_thread_read_state_scope"}) {
+		return fmt.Errorf("thread read state index mismatch: got %v", indexes)
 	}
 	return nil
 }

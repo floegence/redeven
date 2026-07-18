@@ -49,31 +49,41 @@ func TestOpen_CreatesV1SchemaForFreshDB(t *testing.T) {
 	}
 }
 
-func TestOpen_MigratesV0ToV1(t *testing.T) {
+func TestOpen_MigratesExplicitLegacyV1(t *testing.T) {
 	t.Parallel()
 
 	p := filepath.Join(t.TempDir(), "registry.sqlite")
 
-	// Create a v0 database on disk.
+	// Create an explicitly identified legacy v1 database on disk.
 	db, err := sql.Open("sqlite", p)
 	if err != nil {
 		t.Fatalf("sql.Open: %v", err)
 	}
 	_, _ = db.Exec(`PRAGMA journal_mode=WAL;`)
-	if _, err := db.Exec(`PRAGMA user_version=0;`); err != nil {
+	if _, err := db.Exec(`PRAGMA user_version=1;`); err != nil {
 		_ = db.Close()
 		t.Fatalf("set user_version: %v", err)
 	}
 	if _, err := db.Exec(`
-CREATE TABLE IF NOT EXISTS code_spaces (
+	CREATE TABLE code_spaces (
   code_space_id TEXT PRIMARY KEY,
   workspace_path TEXT NOT NULL,
   code_port INTEGER NOT NULL,
   created_at_unix_ms INTEGER NOT NULL,
   updated_at_unix_ms INTEGER NOT NULL,
   last_opened_at_unix_ms INTEGER NOT NULL
-);
-`); err != nil {
+	);
+	CREATE TABLE __redeven_db_meta (
+	  singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+	  db_kind TEXT NOT NULL,
+	  created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+	  last_migrated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+	  last_migrated_from_version INTEGER NOT NULL DEFAULT 0,
+	  last_migrated_to_version INTEGER NOT NULL DEFAULT 0
+	);
+	INSERT INTO __redeven_db_meta(singleton, db_kind, last_migrated_from_version, last_migrated_to_version)
+	VALUES(1, 'codeapp_registry_legacy', 1, 1);
+	`); err != nil {
 		_ = db.Close()
 		t.Fatalf("create v0 table: %v", err)
 	}
