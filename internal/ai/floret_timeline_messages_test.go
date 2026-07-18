@@ -183,7 +183,7 @@ func TestCanonicalThreadStateRequiresMatchingSnapshotAndTailPage(t *testing.T) {
 	}
 }
 
-func TestUnmatchedLiveDraftTriggersResyncInsteadOfTailAppend(t *testing.T) {
+func TestUnmatchedLiveDraftTriggersResyncAndUsesCanonicalTimeline(t *testing.T) {
 	ctx := context.Background()
 	svc := newTestService(t, nil)
 	meta := timelineTestMeta("env_timeline_resync")
@@ -198,14 +198,70 @@ func TestUnmatchedLiveDraftTriggersResyncInsteadOfTailAppend(t *testing.T) {
 	state := FlowerLiveMaterializedState{Messages: map[string]FlowerLiveMessageDraft{
 		"turn_stale": {ThreadID: thread.ThreadID, TurnID: "turn_stale", RunID: "run_stale", MessageID: "turn_stale", Role: "assistant", Status: "streaming"},
 	}}
-	if _, err := svc.buildFlowerTimelineProjection(ctx, meta.EndpointID, thread.ThreadID, state); err == nil {
-		t.Fatal("unmatched draft was accepted")
+	projection, err := svc.buildFlowerTimelineProjection(ctx, meta.EndpointID, thread.ThreadID, state)
+	if err != nil {
+		t.Fatalf("buildFlowerTimelineProjection: %v", err)
+	}
+	if len(projection.Messages) != 2 || projection.Messages[0].Role != "user" || projection.Messages[1].MessageID != "turn_1" {
+		t.Fatalf("projection messages=%#v, want canonical timeline without stale draft", projection.Messages)
 	}
 	svc.mu.Lock()
 	stream := svc.flowerLiveByThread[runThreadKey(meta.EndpointID, thread.ThreadID)]
 	svc.mu.Unlock()
 	if stream == nil || len(stream.Events) == 0 || stream.Events[len(stream.Events)-1].Kind != FlowerLiveResyncRequired {
 		t.Fatalf("missing resync event: %#v", stream)
+	}
+	if len(stream.State.Messages) != 0 {
+		t.Fatalf("stale live drafts retained after resync: %#v", stream.State.Messages)
+	}
+}
+
+func TestMismatchedLiveDraftIdentityResyncsBootstrapWithoutSendFailure(t *testing.T) {
+	ctx := context.Background()
+	svc := newTestService(t, nil)
+	meta := timelineTestMeta("env_timeline_identity_resync")
+	thread, err := svc.CreateThread(ctx, meta, "identity resync", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := newTestFloretHost(t, svc.floretStore, "canonical answer")
+	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
+		ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_identity", RunID: "run_identity", Input: "hello",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, draft := range map[string]FlowerLiveMessageDraft{
+		"wrong thread":  {ThreadID: "other", TurnID: "turn_identity", RunID: "run_identity", MessageID: "turn_identity", Role: "assistant", Status: "streaming"},
+		"wrong turn":    {ThreadID: thread.ThreadID, TurnID: "other", RunID: "run_identity", MessageID: "turn_identity", Role: "assistant", Status: "streaming"},
+		"wrong run":     {ThreadID: thread.ThreadID, TurnID: "turn_identity", RunID: "other", MessageID: "turn_identity", Role: "assistant", Status: "streaming"},
+		"wrong message": {ThreadID: thread.ThreadID, TurnID: "turn_identity", RunID: "run_identity", MessageID: "other", Role: "assistant", Status: "streaming"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			threadKey := runThreadKey(meta.EndpointID, thread.ThreadID)
+			svc.mu.Lock()
+			stream := newFlowerLiveThreadStream()
+			stream.State.Messages["turn_identity"] = draft
+			svc.flowerLiveByThread[threadKey] = stream
+			svc.mu.Unlock()
+
+			bootstrap, err := svc.GetFlowerThreadLiveBootstrap(ctx, meta, thread.ThreadID)
+			if err != nil {
+				t.Fatalf("GetFlowerThreadLiveBootstrap: %v", err)
+			}
+			if len(bootstrap.TimelineMessages) != 2 || bootstrap.TimelineMessages[1].MessageID != "turn_identity" || bootstrap.TimelineMessages[1].Content != "canonical answer" {
+				t.Fatalf("timeline=%#v, want canonical Floret replacement", bootstrap.TimelineMessages)
+			}
+			if len(bootstrap.LiveState.Messages) != 0 {
+				t.Fatalf("bootstrap retained mismatched live drafts: %#v", bootstrap.LiveState.Messages)
+			}
+			svc.mu.Lock()
+			events := append([]FlowerLiveEvent(nil), svc.flowerLiveByThread[threadKey].Events...)
+			svc.mu.Unlock()
+			if len(events) == 0 || events[len(events)-1].Kind != FlowerLiveResyncRequired {
+				t.Fatalf("events=%#v, want trailing resync event", events)
+			}
+		})
 	}
 }
 

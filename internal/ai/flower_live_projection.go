@@ -203,6 +203,14 @@ func (s *Service) GetFlowerThreadLiveBootstrap(ctx context.Context, meta *sessio
 	if err != nil {
 		return nil, err
 	}
+	// buildFlowerTimelineProjection may have invalidated stale drafts and
+	// emitted a resync event. The bootstrap state was copied before that
+	// reconciliation, so reflect the stream's current canonical draft set.
+	s.mu.Lock()
+	if stream := s.flowerLiveByThread[runThreadKey(endpointID, threadID)]; stream == nil || len(stream.State.Messages) == 0 {
+		state.Messages = map[string]FlowerLiveMessageDraft{}
+	}
+	s.mu.Unlock()
 	state.TimelineDecorations = timeline.TimelineDecorations
 
 	return &FlowerLiveBootstrapResponse{
@@ -457,18 +465,26 @@ func (s *Service) buildFlowerTimelineProjection(ctx context.Context, endpointID 
 	}
 	activeMessageID := activeFlowerCursorMessageID(state)
 	terminalDraftIDs := make([]string, 0)
+	identityMismatch := false
 	for key, draft := range state.Messages {
 		messageID := strings.TrimSpace(key)
 		ref, ok := canonicalTurns[messageID]
 		if !ok || strings.TrimSpace(draft.MessageID) != messageID || strings.TrimSpace(draft.ThreadID) != threadID ||
 			strings.TrimSpace(draft.TurnID) != messageID || strings.TrimSpace(draft.RunID) == "" || strings.TrimSpace(draft.RunID) != ref.runID {
-			reason := "live_draft_canonical_identity_mismatch"
-			s.triggerFlowerLiveTimelineResync(endpointID, threadID, reason)
-			return flowerTimelineProjection{}, fmt.Errorf("flower live timeline resync required: %s", reason)
+			identityMismatch = true
+			continue
 		}
 		if ref.status == flruntime.TurnStatusCompleted || ref.status == flruntime.TurnStatusFailed || ref.status == flruntime.TurnStatusCancelled {
 			terminalDraftIDs = append(terminalDraftIDs, messageID)
 		}
+	}
+	if identityMismatch {
+		// A draft that cannot be matched to Floret has no trustworthy position or
+		// lifecycle. Drop every live draft and rebuild from the canonical timeline;
+		// the resync event tells connected clients to replace their materialized
+		// state as well.
+		s.triggerFlowerLiveTimelineResync(endpointID, threadID, "live_draft_canonical_identity_mismatch")
+		state.Messages = map[string]FlowerLiveMessageDraft{}
 	}
 	if len(terminalDraftIDs) > 0 {
 		s.mu.Lock()
