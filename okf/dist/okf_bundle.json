@@ -25,7 +25,7 @@
               "runtime",
               "startup"
             ],
-            "summary": "`redeven run` startup is modeled as a lifecycle event stream. Human terminal output and Desktop automation output are renderers over the same state snapshot, so readiness, failures, Local UI URLs, runtime-control details, and shutdown results stay machine-readable.",
+            "summary": "`redeven run` startup is modeled as a lifecycle event stream. Human terminal output and public machine events are renderers over the same state snapshot, while a separate private Desktop report carries machine-only attach data needed to open the local Env App safely.",
             "section_count": 2
           },
           {
@@ -3216,22 +3216,22 @@
         "title": "Local UI surface",
         "type": "Runtime Contract"
       },
-      "body_length": 4894,
+      "body_length": 5887,
       "summary": "Redeven Local UI is the browser-facing endpoint runtime surface. It exposes the Env App proxy, Local UI status APIs, direct Flowersec session handoff, Browser Editor codespace routes, and port-forward routes from the same runtime-managed HTTP server.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Mechanism\n\n`localui.Server` is built with an agent, Code App app server, bind spec, runtime-control socket path, Local Environment identity, diagnostics store, and optional access gate. The handler mounts `/api/local/*`, `/_redeven_direct/ws`, `/_redeven_proxy/*`, `/cs/*`, and `/pf/*`. Password mode protects non-public routes, direct sessions are minted as short-lived Flowersec connect artifacts, and runtime responses include the normalized Runtime Service snapshot.\n\nLocal UI bind parsing accepts `localhost`, canonical loopback IP literals, concrete non-loopback unicast IPv4 and IPv6 literals, and the `0.0.0.0` and `::` wildcards. It never resolves DNS names. Network exposure requires a fixed port; dynamic port `0` remains available only for explicit loopback IP binds. A network bind is valid only when password authentication and the command-line plaintext exposure acknowledgement are both present. Wildcard startup enumerates active, non-loopback, same-family unicast interface addresses, excludes unspecified, multicast, link-local, zoned, and IPv4-mapped IPv6 addresses, sorts them deterministically, and fails when no real access address remains.\n\nRuntime starts two independent HTTP listener boundaries. The public Local UI listener records only exact canonical authorities for the actual bound or enumerated access IPs and ports, and every request passes that authority gate before route, cookie, WebSocket, or access-gate processing. A separate trusted listener binds `127.0.0.1:0`, mounts `HandlerForDesktopBridge()`, and is published only as the required `RuntimeAttachEndpoint.local_ui_bridge_url`. It accepts canonical loopback authorities for placement-bridge traffic without weakening the public listener's exact-port authority rule. The trusted URL is not a display URL and is absent from startup presentation, health, access status, and user-facing surfaces. DNS names other than literal `localhost`, fake localhost suffixes, alternate IPv4 notation, userinfo, malformed ports, zones, mapped IPv6, non-loopback authorities, and unlisted public authorities are rejected.\n\nThe network server bounds request headers, request bodies, header-read time, read time, write time, idle time, and WebSocket frames. Responses receive CSP frame ancestry, content-type sniffing, referrer, permissions, and same-origin frame headers. Browser WebSocket upgrades require an exact same-scheme, same-authority Origin for the validated request authority. Runtime-control keeps its Desktop owner, bearer token, and loopback peer checks; its non-browser WebSocket may omit Origin, but any supplied Origin must still match its loopback authority.\n\nDirect connect artifacts are one-time credentials, but resolution does not consume them. The Local UI resolver returns the E2EE PSK and an authenticated commit callback. Flowersec invokes that callback only after PSK authentication and before Yamux creation. The callback atomically removes the still-matching pending artifact, so a failed handshake does not exhaust a valid artifact and concurrent authenticated handshakes cannot both open sessions.",
-          "char_count": 3106
+          "body": "## Mechanism\n\n`localui.Server` is built with an agent, Code App app server, bind spec, runtime-control socket path, Local Environment identity, diagnostics store, and optional access gate. The handler mounts `/api/local/*`, `/_redeven_direct/ws`, `/_redeven_proxy/*`, `/cs/*`, and `/pf/*`. Password mode protects non-public routes, direct sessions are minted as short-lived Flowersec connect artifacts, and runtime responses include the normalized Runtime Service snapshot.\n\nLocal UI bind parsing accepts `localhost`, canonical loopback IP literals, concrete non-loopback unicast IPv4 and IPv6 literals, and the `0.0.0.0` and `::` wildcards. It never resolves DNS names. Network exposure requires a fixed port; dynamic port `0` remains available only for explicit loopback IP binds. A network bind is valid only when password authentication and the command-line plaintext exposure acknowledgement are both present. Wildcard startup enumerates active, non-loopback, same-family unicast interface addresses, excludes unspecified, multicast, link-local, zoned, and IPv4-mapped IPv6 addresses, sorts them deterministically, and fails when no real access address remains.\n\nRuntime starts two independent HTTP listener boundaries. The public Local UI listener records only exact canonical authorities for the actual bound or enumerated access IPs and ports, and every request passes that authority gate before route, cookie, WebSocket, or access-gate processing. A separate trusted listener binds `127.0.0.1:0`, mounts `HandlerForDesktopBridge()`, and is published as the required `RuntimeAttachEndpoint.local_ui_bridge_url`. It accepts canonical loopback authorities for native Desktop and placement-bridge traffic without weakening the public listener's exact-port authority rule. The private `0600` Desktop launch/status report carries this machine-only endpoint, but public startup events, health, access status, catalogs, display URLs, preferences, and renderer projections do not expose it. Runtime health returns the public `local_ui_url` and ordered `local_ui_urls` so a native Desktop health probe can travel through the trusted listener while refreshing user-facing addresses independently. Desktop validates the bridge value as an HTTP loopback-IP root with an explicit port and no credentials, query, or fragment. DNS names, fake localhost suffixes, alternate IPv4 notation, malformed ports, zones, mapped IPv6, non-loopback authorities, and unlisted public authorities are rejected.\n\nThe network server bounds request headers, request bodies, header-read time, read time, write time, idle time, and WebSocket frames. Responses receive CSP frame ancestry, content-type sniffing, referrer, permissions, and same-origin frame headers. Browser WebSocket upgrades require an exact same-scheme, same-authority Origin for the validated request authority. Runtime-control keeps its Desktop owner, bearer token, and loopback peer checks; its non-browser WebSocket may omit Origin, but any supplied Origin must still match its loopback authority.\n\nDirect connect artifacts are one-time credentials, but resolution does not consume them. The Local UI resolver returns the E2EE PSK and an authenticated commit callback. Flowersec invokes that callback only after PSK authentication and before Yamux creation. The callback atomically removes the still-matching pending artifact, so a failed handshake does not exhaust a valid artifact and concurrent authenticated handshakes cannot both open sessions.",
+          "char_count": 3495
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Local UI route behavior is part of the runtime trust boundary. Public Env App shell GET/HEAD requests may pass before local unlock so the shell can load, but local APIs, direct sessions, codespaces, and port-forward routes stay access-gated when password mode is enabled. Network exposure is plaintext HTTP: password authentication controls access but does not protect passwords, cookies, page resources, or non-Flowersec HTTP traffic from interception or modification. Flowersec protects its encrypted session payload only after the E2EE handshake completes. The trusted listener is reachable only through local loopback and `redeven desktop-bridge`; SSH and container access must not expose or forward the public listener. Runtime-control, Desktop model-source, and runtime management sockets remain loopback or local-socket protected regardless of Local UI exposure.",
-          "char_count": 869
+          "body": "Local UI route behavior is part of the runtime trust boundary. Public Env App shell GET/HEAD requests may pass before local unlock so the shell can load, but local APIs, direct sessions, codespaces, and port-forward routes stay access-gated when password mode is enabled. Network exposure is plaintext HTTP: password authentication controls access but does not protect passwords, cookies, page resources, or non-Flowersec HTTP traffic from interception or modification. Flowersec protects its encrypted session payload only after the E2EE handshake completes. The trusted listener is reachable only through local loopback and `redeven desktop-bridge`; native Desktop, SSH, and container paths must not replace it with or fall back to the public listener. Runtime-control, Desktop model-source, and runtime management sockets remain loopback or local-socket protected regardless of Local UI exposure.",
+          "char_count": 899
         }
       ],
       "evidence": [
@@ -3258,6 +3258,30 @@
           "source": "redeven:internal/runtimemanagement/status.go",
           "line": 57,
           "description": "Runtime attach status requires the machine-only `local_ui_bridge_url` field."
+        },
+        {
+          "id": "redeven:internal/localui/localui.go:417:runtime starts the trusted local ui bridge listener on an ephemeral ipv4 loopback port.",
+          "source": "redeven:internal/localui/localui.go",
+          "line": 417,
+          "description": "Runtime starts the trusted Local UI bridge listener on an ephemeral IPv4 loopback port."
+        },
+        {
+          "id": "redeven:internal/localui/localui.go:607:runtime health carries only the public local ui url projection alongside runtime state.",
+          "source": "redeven:internal/localui/localui.go",
+          "line": 607,
+          "description": "Runtime health carries only the public Local UI URL projection alongside Runtime state."
+        },
+        {
+          "id": "redeven:cmd/redeven/desktop_launch_report.go:123:the private desktop launch/status report validates and carries the trusted bridge endpoint.",
+          "source": "redeven:cmd/redeven/desktop_launch_report.go",
+          "line": 123,
+          "description": "The private Desktop launch/status report validates and carries the trusted bridge endpoint."
+        },
+        {
+          "id": "redeven:desktop/src/main/desktopSessionTransport.ts:1:native desktop transport requires the trusted bridge and never selects a public interface address.",
+          "source": "redeven:desktop/src/main/desktopSessionTransport.ts",
+          "line": 1,
+          "description": "Native Desktop transport requires the trusted bridge and never selects a public interface address."
         }
       ],
       "snippet": "Redeven Local UI is the browser-facing endpoint runtime surface. It exposes the Env App proxy, Local UI status APIs, direct Flowersec session handoff, Browser Editor codespace routes, and port-forward routes from the same runtime-managed HT",
@@ -3726,22 +3750,22 @@
         "title": "Runtime startup presentation",
         "type": "Runtime Contract"
       },
-      "body_length": 2657,
-      "summary": "`redeven run` startup is modeled as a lifecycle event stream. Human terminal output and Desktop automation output are renderers over the same state snapshot, so readiness, failures, Local UI URLs, runtime-control details, and shutdown results stay machine-readable.",
+      "body_length": 3388,
+      "summary": "`redeven run` startup is modeled as a lifecycle event stream. Human terminal output and public machine events are renderers over the same state snapshot, while a separate private Desktop report carries machine-only attach data needed to open the local Env App safely.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Mechanism\n\nThe run command parses `--mode`, `--local-ui-bind`, `--desktop-managed`, `--startup-report-file`, and `--presentation`. When `--mode` is omitted, it defaults to local mode, starts the loopback-only Local UI, and does not require bootstrap configuration or enable the control channel. Explicit remote, hybrid, local, and desktop modes retain their mode-specific behavior. The command rejects Desktop-managed startup unless the presentation contract is machine-compatible, initializes a `runtimepresentation.Reporter`, emits phase events as state, lock, bootstrap, config, control, and Local UI phases progress, and writes a Desktop launch report when a Desktop-managed Local UI becomes ready.\n\nStartup secrets never use literal command-line values. Ordinary CLI startup accepts hidden password prompting, stdin, protected files, or the fixed `REDEVEN_LOCAL_UI_PASSWORD` and `REDEVEN_BOOTSTRAP_TICKET` environment fallbacks. `--bootstrap-ticket-stdin` reads without echo when stdin is an interactive terminal, while preserving prompt-free pipe and redirect behavior for automation. Explicit sources override fixed environment values, empty environment values are ignored, and both fixed variables plus the legacy Desktop ticket variable are removed from the process environment before any command can start a child process. Diagnostics record only the source category. Desktop-managed machine startup instead sends one version 1 JSON envelope through private stdin, with a 64 KiB limit and a hard conflict against every other secret source.",
-          "char_count": 1552
+          "body": "## Mechanism\n\nThe run command parses `--mode`, `--local-ui-bind`, `--desktop-managed`, `--startup-report-file`, and `--presentation`. When `--mode` is omitted, it defaults to local mode, starts the loopback-only Local UI, and does not require bootstrap configuration or enable the control channel. Explicit remote, hybrid, local, and desktop modes retain their mode-specific behavior. The command rejects Desktop-managed startup unless the presentation contract is machine-compatible, initializes a `runtimepresentation.Reporter`, emits phase events as state, lock, bootstrap, config, control, and Local UI phases progress, and writes a private `0600` Desktop launch report when a Desktop-managed Local UI becomes ready. Ready and attached reports require `local_ui_bridge_url`, validate it as an HTTP loopback-IP root, and retain public `local_ui_url(s)` separately for display and external access.\n\nStartup secrets never use literal command-line values. Ordinary CLI startup accepts hidden password prompting, stdin, protected files, or the fixed `REDEVEN_LOCAL_UI_PASSWORD` and `REDEVEN_BOOTSTRAP_TICKET` environment fallbacks. `--bootstrap-ticket-stdin` reads without echo when stdin is an interactive terminal, while preserving prompt-free pipe and redirect behavior for automation. Explicit sources override fixed environment values, empty environment values are ignored, and both fixed variables plus the legacy Desktop ticket variable are removed from the process environment before any command can start a child process. Diagnostics record only the source category. Desktop-managed machine startup instead sends one version 1 JSON envelope through private stdin, with a 64 KiB limit and a hard conflict against every other secret source.",
+          "char_count": 1746
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Desktop readiness must come from the machine presentation and startup-report contract, not from scraping rich terminal output. The compact character mark remains a rich renderer concern rather than command startup logic. The Desktop startup envelope is a one-shot process handoff, not a public automation format or a reason to reintroduce command-line secret flags.",
-          "char_count": 365
+          "body": "Desktop readiness must come from the machine presentation and startup-report contract, not from scraping rich terminal output. The startup report is a private machine handoff protected by its file mode; it may carry `local_ui_bridge_url` and runtime-control credentials that public events and user-facing projections must omit. The compact character mark remains a rich renderer concern rather than command startup logic. The Desktop startup envelope is a one-shot process handoff, not a public automation format or a reason to reintroduce command-line secret flags.",
+          "char_count": 566
         }
       ],
       "evidence": [
@@ -3762,9 +3786,21 @@
           "source": "redeven:internal/runtimepresentation/events.go",
           "line": 1,
           "description": "Startup phases and event payloads live in the runtimepresentation package."
+        },
+        {
+          "id": "redeven:cmd/redeven/main.go:823:desktop-ready launch reports include public local ui, the private trusted bridge, runtime-control, state, and runtime service details.",
+          "source": "redeven:cmd/redeven/main.go",
+          "line": 823,
+          "description": "Desktop-ready launch reports include public Local UI, the private trusted bridge, runtime-control, state, and Runtime Service details."
+        },
+        {
+          "id": "redeven:cmd/redeven/desktop_launch_report.go:123:ready and attached private reports validate the required trusted local ui bridge url before atomic write.",
+          "source": "redeven:cmd/redeven/desktop_launch_report.go",
+          "line": 123,
+          "description": "Ready and attached private reports validate the required trusted Local UI bridge URL before atomic write."
         }
       ],
-      "snippet": "`redeven run` startup is modeled as a lifecycle event stream. Human terminal output and Desktop automation output are renderers over the same state snapshot, so readiness, failures, Local UI URLs, runtime-control details, and shutdown resul",
+      "snippet": "`redeven run` startup is modeled as a lifecycle event stream. Human terminal output and public machine events are renderers over the same state snapshot, while a separate private Desktop report carries machine-only attach data needed to ope",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -4151,29 +4187,29 @@
         "title": "Desktop runtime bridge",
         "type": "Desktop Contract"
       },
-      "body_length": 1630,
+      "body_length": 4601,
       "summary": "Redeven Desktop launches and supervises managed Runtime instances through machine-readable startup, scoped control, transport, session, and process contracts. This overview is the canonical navigation point for readiness, recovery, SSH operations, and model/session integration. Focused concepts own the independent lifecycle details while the bridge overview retains the security boundary between Desktop coordination, Runtime APIs, and plugin capabilities.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Mechanism\n\nThis concept is the stable overview for the subject. Detailed contracts are maintained in the focused concepts below:\n\n- [Desktop runtime readiness](desktop-runtime-readiness.md)\n\n- [Desktop transport recovery](desktop-transport-recovery.md)\n\n- [Desktop SSH runtime operations](desktop-ssh-runtime-operations.md)\n\n- [Desktop session and model source](desktop-session-model-source.md)",
-          "char_count": 397
+          "body": "## Mechanism\n\nThis concept is the stable overview for the subject. Detailed contracts are maintained in the focused concepts below:\n\n- [Desktop runtime readiness](desktop-runtime-readiness.md)\n\n- [Desktop transport recovery](desktop-transport-recovery.md)\n\n- [Desktop SSH runtime operations](desktop-ssh-runtime-operations.md)\n\n- [Desktop session and model source](desktop-session-model-source.md)\n\nNative Local Environment transport is independent from public Local UI addressing. Runtime writes required `local_ui_bridge_url` state into the private `0600` Desktop launch/status report, while public `local_ui_url` and ordered `local_ui_urls` remain display and external-access addresses. Native BrowserWindow loading, health verification, access unlock, and Desktop Flower requests require the validated HTTP loopback-IP root and never fall back to a Tailscale, VPN, RFC1918, or other public interface address. Runtime health returns public URLs for native display refresh while the request itself stays on the trusted bridge. SSH and container placement health preserves the Desktop-owned stable loopback proxy rather than replacing it with a remote interface address.\n\n`desktopSessionTransport` resolves the immutable transport kind, base URL, entry URL, display URL, navigation boundary, proxy policy, and partition before a session window exists. Native Local Environment, SSH/container placement, and Gateway loopback sessions use session-scoped non-persistent Electron partitions configured with `setProxy({ mode: 'direct' })` before the first load. Root, child, access-gate, and codespace windows share that partition, and session closure clears its storage. Provider remote and external Local UI sessions continue to use the default Session and system proxy policy.\n\nWebRequest diagnostics are installed idempotently for every Electron Session that Desktop uses. An opening root document with final HTTP status 400 or greater fails immediately with transport kind, proxy policy, and status diagnostics; Chromium network failures remain immediate through `did-fail-load`. The readiness timeout remains only for a successfully loaded document that never reports an interactive access gate or connected Runtime state. Renderer projections, Welcome snapshots, persisted preferences, and user diagnostics omit `local_ui_bridge_url` and retain the public display URL.",
+          "char_count": 2371
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Runtime-control is a local Desktop coordination capability, not a general network API or plugin grant plane. Bridge, health, process, and session observations must not become competing lifecycle authorities.",
-          "char_count": 207
+          "body": "Runtime-control is a local Desktop coordination capability, not a general network API or plugin grant plane. Bridge, health, process, and session observations must not become competing lifecycle authorities. Desktop must not change the system proxy, install Tailscale/VPN/private-range bypass tables, globally disable proxying, or recover a missing trusted bridge by selecting a public Local UI address. ReDevPlugin, Provider, Runtime Control, public Local UI, and Gateway contracts retain their existing ownership boundaries.",
+          "char_count": 526
         }
       ],
       "evidence": [
         {
-          "id": "redeven:cmd/redeven/main.go:292:desktop-managed startup is rejected for remote-only mode.",
+          "id": "redeven:cmd/redeven/main.go:299:desktop-managed startup is rejected for remote-only mode.",
           "source": "redeven:cmd/redeven/main.go",
-          "line": 292,
+          "line": 299,
           "description": "Desktop-managed startup is rejected for remote-only mode."
         },
         {
@@ -4183,16 +4219,46 @@
           "description": "Desktop builds the Env App entry URL under `/_redeven_proxy/env/`."
         },
         {
+          "id": "redeven:cmd/redeven/desktop_launch_report.go:123:ready and attached private reports require and validate the trusted bridge url.",
+          "source": "redeven:cmd/redeven/desktop_launch_report.go",
+          "line": 123,
+          "description": "Ready and attached private reports require and validate the trusted bridge URL."
+        },
+        {
+          "id": "redeven:internal/localui/localui.go:417:runtime starts a separate ephemeral loopback listener for trusted desktop transport.",
+          "source": "redeven:internal/localui/localui.go",
+          "line": 417,
+          "description": "Runtime starts a separate ephemeral loopback listener for trusted Desktop transport."
+        },
+        {
+          "id": "redeven:desktop/src/main/desktopSessionTransport.ts:1:desktop resolves transport, display, proxy, and partition state through one contract.",
+          "source": "redeven:desktop/src/main/desktopSessionTransport.ts",
+          "line": 1,
+          "description": "Desktop resolves transport, display, proxy, and partition state through one contract."
+        },
+        {
+          "id": "redeven:desktop/src/main/main.ts:8222:session creation prepares direct electron proxy state before loading desktop-owned loopback transport.",
+          "source": "redeven:desktop/src/main/main.ts",
+          "line": 8222,
+          "description": "Session creation prepares direct Electron proxy state before loading Desktop-owned loopback transport."
+        },
+        {
+          "id": "redeven:desktop/src/main/main.ts:16928:per-session diagnostics fail opening root documents on final http errors.",
+          "source": "redeven:desktop/src/main/main.ts",
+          "line": 16928,
+          "description": "Per-Session diagnostics fail opening root documents on final HTTP errors."
+        },
+        {
           "id": "redeven:okf/desktop/desktop-runtime-process-lifecycle.md:1:runtime process inventory and lifecycle ordering are maintained as a separate desktop contract.",
           "source": "redeven:okf/desktop/desktop-runtime-process-lifecycle.md",
           "line": 1,
           "description": "Runtime process inventory and lifecycle ordering are maintained as a separate Desktop contract."
         },
         {
-          "id": "redeven:desktop/src/main/main.ts:8220:welcome flower cold-starts local environment through structured local runtime lifecycle progress.",
+          "id": "redeven:desktop/src/main/main.ts:8854:welcome flower cold-starts local environment through structured local runtime lifecycle progress.",
           "source": "redeven:desktop/src/main/main.ts",
-          "line": 8220,
-          "description": "Welcome Flower cold-starts Local Environment through structured local runtime lifecycle progress."
+          "line": 8854,
+          "description": "Welcome Flower cold-starts Local Environment through structured local Runtime lifecycle progress."
         }
       ],
       "snippet": "Redeven Desktop launches and supervises managed Runtime instances through machine-readable startup, scoped control, transport, session, and process contracts. This overview is the canonical navigation point for readiness, recovery, SSH oper",
@@ -7407,5 +7473,5 @@
       ]
     }
   ],
-  "source_sha256": "0f9c4c1150f2671befdeaff1ef2331732b58d81ee1af97fb35dea0d8ee1bfa39"
+  "source_sha256": "8569ad18e1154a9d2368c3a91722727e1067382e403a0cdae7ff79d8b0c91cc7"
 }
