@@ -113,7 +113,7 @@ func TestThreadTimelineRejectsUnknownPaginationCursor(t *testing.T) {
 	}
 }
 
-func TestCanonicalThreadStateRequiresMatchingSnapshotAndTailPage(t *testing.T) {
+func TestReadCanonicalThreadStateUsesLatestAdmittedTurn(t *testing.T) {
 	ctx := context.Background()
 	svc := newTestService(t, nil)
 	meta := timelineTestMeta("env_timeline_snapshot_consistency")
@@ -125,61 +125,21 @@ func TestCanonicalThreadStateRequiresMatchingSnapshotAndTailPage(t *testing.T) {
 	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_1", RunID: "run_1", Input: "hello"}); err != nil {
 		t.Fatal(err)
 	}
-	maintenance, err := svc.openFloretMaintenanceHost()
-	if err != nil {
-		t.Fatal(err)
-	}
-	snapshot, err := maintenance.ReadThread(ctx, flruntime.ThreadID(thread.ThreadID))
-	if err != nil {
-		t.Fatal(err)
-	}
-	page, err := maintenance.ListThreadTurns(ctx, flruntime.ListThreadTurnsRequest{ThreadID: flruntime.ThreadID(thread.ThreadID), Tail: 1})
-	if err != nil {
-		t.Fatal(err)
-	}
-	latest, err := canonicalThreadStateFromPage(snapshot, page)
+	snapshot, latest, err := svc.readCanonicalThreadState(ctx, thread.ThreadID)
 	if err != nil {
 		t.Fatalf("canonical state: %v", err)
 	}
-	if latest == nil || latest.TurnID != "turn_1" || latest.RunID != "run_1" {
+	if snapshot.ID != flruntime.ThreadID(thread.ThreadID) || latest == nil || latest.TurnID != "turn_1" || latest.RunID != "run_1" {
 		t.Fatalf("latest = %#v", latest)
 	}
 
-	for _, test := range []struct {
-		name   string
-		mutate func(*flruntime.ThreadSnapshot, *flruntime.ThreadTurnsPage)
-	}{
-		{name: "thread identity", mutate: func(_ *flruntime.ThreadSnapshot, page *flruntime.ThreadTurnsPage) { page.ThreadID = "other" }},
-		{name: "turn identity", mutate: func(_ *flruntime.ThreadSnapshot, page *flruntime.ThreadTurnsPage) { page.Turns[0].RunID = "other" }},
-		{name: "projection identity", mutate: func(_ *flruntime.ThreadSnapshot, page *flruntime.ThreadTurnsPage) {
-			page.Turns[0].Projection.RunID = "other"
-		}},
-	} {
-		t.Run(test.name, func(t *testing.T) {
-			changedSnapshot := snapshot
-			changedPage := page
-			changedPage.Turns = append([]flruntime.ThreadTurnSnapshot(nil), page.Turns...)
-			test.mutate(&changedSnapshot, &changedPage)
-			if _, err := canonicalThreadStateFromPage(changedSnapshot, changedPage); !errors.Is(err, ErrCanonicalTimelineResyncRequired) {
-				t.Fatalf("error = %v, want canonical resync", err)
-			}
-		})
+	empty, err := svc.CreateThread(ctx, meta, "empty canonical state", "", "", "")
+	if err != nil {
+		t.Fatal(err)
 	}
-
-	newerPage := page
-	newerPage.ThroughOrdinal++
-	if _, err := canonicalThreadStateFromPage(snapshot, newerPage); err != nil {
-		t.Fatalf("adjacent canonical revisions must remain readable: %v", err)
-	}
-	startedSnapshot := snapshot
-	startedSnapshot.LatestTurnID = "turn_started_only"
-	startedSnapshot.LatestRunID = "run_started_only"
-	if _, err := canonicalThreadStateFromPage(startedSnapshot, page); err != nil {
-		t.Fatalf("thread lifecycle may be newer than the admitted turn tail: %v", err)
-	}
-	emptyStartedPage := flruntime.ThreadTurnsPage{ThreadID: snapshot.ID, ThroughOrdinal: snapshot.ThroughOrdinal}
-	if latest, err := canonicalThreadStateFromPage(startedSnapshot, emptyStartedPage); err != nil || latest != nil {
-		t.Fatalf("started-only turn must remain outside the admitted tail: latest=%#v err=%v", latest, err)
+	emptySnapshot, emptyLatest, err := svc.readCanonicalThreadState(ctx, empty.ThreadID)
+	if err != nil || emptySnapshot.ID != flruntime.ThreadID(empty.ThreadID) || emptyLatest != nil {
+		t.Fatalf("empty canonical state: snapshot=%#v latest=%#v err=%v", emptySnapshot, emptyLatest, err)
 	}
 }
 

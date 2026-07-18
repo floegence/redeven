@@ -73,6 +73,15 @@ func TestFlowerApprovalActionFromFloretPendingRejectsMalformedContract(t *testin
 	}
 }
 
+func TestFlowerApprovalActionsRejectMalformedEmptySnapshot(t *testing.T) {
+	t.Parallel()
+
+	r := newRun(runOptions{RunID: "run_invalid_snapshot", ThreadID: "thread_invalid_snapshot", MessageID: "turn_invalid_snapshot"})
+	if _, err := r.flowerApprovalActionsFromFloretPending(flruntime.PendingApprovals{}); err == nil {
+		t.Fatal("malformed empty pending approval snapshot was accepted")
+	}
+}
+
 func TestToolApprovalDisplayLabelFallsBackWithoutCommand(t *testing.T) {
 	t.Parallel()
 
