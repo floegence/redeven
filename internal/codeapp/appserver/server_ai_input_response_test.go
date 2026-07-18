@@ -177,7 +177,7 @@ func seedAppserverWaitingPrompt(t *testing.T, stateDir string, threadID string, 
 	}
 	result, err := host.RunTurn(context.Background(), flruntime.RunTurnRequest{
 		ThreadID: flruntime.ThreadID(threadID), TurnID: flruntime.TurnID(turnID), RunID: flruntime.RunID(runID),
-		Input:   "wait for user input",
+		Input:   flruntime.TurnInput{Text: "wait for user input"},
 		Signals: flruntime.TurnSignalSpec{Definitions: flruntime.CoreControlDefinitions(false), Project: flruntime.ProjectCoreControlSignal},
 	})
 	if err != nil {

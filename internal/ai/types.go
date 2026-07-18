@@ -171,11 +171,9 @@ type ListThreadsResponse struct {
 
 type FlowerSubagentSummary struct {
 	ParentThreadID  string `json:"parent_thread_id"`
-	SubagentID      string `json:"subagent_id"`
 	ThreadID        string `json:"thread_id"`
 	TaskName        string `json:"task_name,omitempty"`
 	TaskDescription string `json:"task_description,omitempty"`
-	Title           string `json:"title,omitempty"`
 	AgentType       string `json:"agent_type,omitempty"`
 	ContextMode     string `json:"context_mode,omitempty"`
 	Status          string `json:"status"`
@@ -190,9 +188,10 @@ type FlowerSubagentSummary struct {
 }
 
 type FlowerSubagentDetailMessage struct {
-	Role    string `json:"role,omitempty"`
-	Text    string `json:"text,omitempty"`
-	Preview string `json:"preview,omitempty"`
+	Role        string                   `json:"role,omitempty"`
+	Text        string                   `json:"text,omitempty"`
+	Preview     string                   `json:"preview,omitempty"`
+	Attachments []FollowupAttachmentView `json:"attachments,omitempty"`
 }
 
 type FlowerSubagentToolCallView struct {

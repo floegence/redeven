@@ -28,8 +28,10 @@ func TestStoreSchemaContainsOnlyProductThreadState(t *testing.T) {
 	forbiddenColumns := map[string]struct{}{
 		"run_status": {}, "run_error": {}, "run_error_code": {}, "waiting_user_input_json": {},
 		"last_message_at_unix_ms": {}, "last_message_preview": {}, "activity_revision": {}, "activity_signature": {},
+		"title": {}, "title_source": {}, "title_generated_at_unix_ms": {}, "title_input_message_id": {},
+		"title_model_id": {}, "title_prompt_version": {},
 	}
-	rows, err := store.db.Query(`PRAGMA table_info(ai_threads)`)
+	rows, err := store.db.Query(`PRAGMA table_info(ai_thread_settings)`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +45,7 @@ func TestStoreSchemaContainsOnlyProductThreadState(t *testing.T) {
 			t.Fatal(err)
 		}
 		if _, forbidden := forbiddenColumns[name]; forbidden {
-			t.Fatalf("forbidden Agent shadow column ai_threads.%s exists", name)
+			t.Fatalf("forbidden Agent shadow column ai_thread_settings.%s exists", name)
 		}
 	}
 	if count := countRowsForTest(t, store.db, `SELECT COUNT(1) FROM pragma_table_info('ai_thread_fork_operations') WHERE name = 'floret_result_json'`); count != 0 {
@@ -54,10 +56,10 @@ func TestStoreSchemaContainsOnlyProductThreadState(t *testing.T) {
 func TestStoreThreadMetadataAndPendingCommandRoundTrip(t *testing.T) {
 	store := openStoreForTest(t)
 	ctx := context.Background()
-	thread := Thread{
+	thread := ThreadSettings{
 		ThreadID: "th_1", EndpointID: "env_1", NamespacePublicID: "ns_1",
 		ModelID: "openai/gpt-5", ReasoningSelectionJSON: `{"effort":"high"}`,
-		PermissionType: "approval_required", WorkingDir: "/workspace", Title: "Canonical",
+		PermissionType: "approval_required", WorkingDir: "/workspace",
 		CreatedByUserPublicID: "user_1", UpdatedByUserPublicID: "user_1",
 		CreatedAtUnixMs: 10, UpdatedAtUnixMs: 10,
 	}
@@ -79,7 +81,7 @@ func TestStoreThreadMetadataAndPendingCommandRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if loaded == nil || loaded.Title != "Canonical" || loaded.ModelID != "openai/gpt-5" {
+	if loaded == nil || loaded.ModelID != "openai/gpt-5" || loaded.QueueRevision != 1 {
 		t.Fatalf("unexpected thread metadata: %#v", loaded)
 	}
 	commands, err := store.ListFollowupsByLane(ctx, "env_1", "th_1", FollowupLaneQueued, 10)
@@ -94,7 +96,7 @@ func TestStoreThreadMetadataAndPendingCommandRoundTrip(t *testing.T) {
 func TestStoreThreadMetadataUpdatesDoNotCreateConversationState(t *testing.T) {
 	store := openStoreForTest(t)
 	ctx := context.Background()
-	if err := store.CreateThread(ctx, Thread{ThreadID: "th_1", EndpointID: "env_1", ModelID: "openai/gpt-5", PermissionType: "approval_required", CreatedAtUnixMs: 10, UpdatedAtUnixMs: 10}); err != nil {
+	if err := store.CreateThread(ctx, ThreadSettings{ThreadID: "th_1", EndpointID: "env_1", ModelID: "openai/gpt-5", PermissionType: "approval_required", CreatedAtUnixMs: 10, UpdatedAtUnixMs: 10}); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.UpdateThreadModelAndReasoningSelection(ctx, "env_1", "th_1", "openai/gpt-5.1", `{"effort":"medium"}`); err != nil {
@@ -106,14 +108,11 @@ func TestStoreThreadMetadataUpdatesDoNotCreateConversationState(t *testing.T) {
 	if _, err := store.SetThreadPinned(ctx, "env_1", "th_1", true, "user_1", "user@example.com"); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.RenameThread(ctx, "env_1", "th_1", "Renamed", "user_1", "user@example.com"); err != nil {
-		t.Fatal(err)
-	}
 	thread, err := store.GetThread(ctx, "env_1", "th_1")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if thread == nil || thread.Title != "Renamed" || thread.ModelID != "openai/gpt-5.1" || thread.PermissionType != "full_access" || thread.PinnedAtUnixMs <= 0 {
+	if thread == nil || thread.ModelID != "openai/gpt-5.1" || thread.PermissionType != "full_access" || thread.PinnedAtUnixMs <= 0 {
 		t.Fatalf("unexpected updated metadata: %#v", thread)
 	}
 }
@@ -121,16 +120,16 @@ func TestStoreThreadMetadataUpdatesDoNotCreateConversationState(t *testing.T) {
 func TestStoreRejectsInvalidThreadPermissionContracts(t *testing.T) {
 	store := openStoreForTest(t)
 	ctx := context.Background()
-	if err := store.CreateThread(ctx, Thread{ThreadID: "invalid_create", EndpointID: "env_1", PermissionType: "unknown"}); err == nil {
+	if err := store.CreateThread(ctx, ThreadSettings{ThreadID: "invalid_create", EndpointID: "env_1", PermissionType: "unknown"}); err == nil {
 		t.Fatal("CreateThread succeeded with invalid permission")
 	}
-	if err := store.CreateThread(ctx, Thread{ThreadID: "valid", EndpointID: "env_1", PermissionType: "approval_required"}); err != nil {
+	if err := store.CreateThread(ctx, ThreadSettings{ThreadID: "valid", EndpointID: "env_1", PermissionType: "approval_required"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.UpdateThreadPermissionType(ctx, "env_1", "valid", "unknown"); err == nil {
 		t.Fatal("UpdateThreadPermissionType succeeded with invalid permission")
 	}
-	if _, err := store.db.Exec(`UPDATE ai_threads SET permission_type = 'unknown' WHERE thread_id = 'valid'`); err != nil {
+	if _, err := store.db.Exec(`UPDATE ai_thread_settings SET permission_type = 'unknown' WHERE thread_id = 'valid'`); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := store.GetThread(ctx, "env_1", "valid"); err == nil {

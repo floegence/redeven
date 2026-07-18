@@ -367,12 +367,10 @@ func (h *recordingFloretHost) ListSubAgentActivityTimeline(_ context.Context, re
 			RequiresApproval: false,
 			Label:            firstNonEmptyString(strings.TrimSpace(snapshot.TaskName), threadID),
 			Payload: map[string]any{
-				"subagent_id":      threadID,
 				"thread_id":        threadID,
 				"host_profile_ref": strings.TrimSpace(snapshot.HostProfileRef),
 				"task_name":        strings.TrimSpace(snapshot.TaskName),
 				"task_description": strings.TrimSpace(snapshot.TaskDescription),
-				"title":            firstNonEmptyString(strings.TrimSpace(snapshot.TaskName), threadID),
 				"status":           strings.TrimSpace(string(snapshot.Status)),
 				"last_message":     strings.TrimSpace(snapshot.LastMessage),
 				"parent_thread_id": strings.TrimSpace(string(snapshot.ParentThreadID)),
@@ -442,8 +440,8 @@ func (h *recordingFloretHost) ReadSubAgentDetail(_ context.Context, req flruntim
 	return h.detail, nil
 }
 
-func (h *recordingFloretHost) ListSubAgentDetailEvents(context.Context, flruntime.ListSubAgentDetailEventsRequest) (flruntime.SubAgentDetailEvents, error) {
-	return flruntime.SubAgentDetailEvents{}, nil
+func (h *recordingFloretHost) ListSubAgentDetailEvents(context.Context, flruntime.ListSubAgentDetailEventsRequest) (flruntime.ThreadDetailEvents, error) {
+	return flruntime.ThreadDetailEvents{}, nil
 }
 
 func (h *recordingFloretHost) DeleteThread(_ context.Context, id flruntime.ThreadID) error {
@@ -691,10 +689,9 @@ func TestFloretSubagentsSpawnPersistsAndLabelsDistinctChildRunID(t *testing.T) {
 		return "provider-key", strings.TrimSpace(providerID) == "compat", nil
 	}
 	freezePermissionPolicyTestSnapshot(t, parent)
-	if err := store.CreateThread(context.Background(), threadstore.Thread{
+	if err := store.CreateThread(context.Background(), threadstore.ThreadSettings{
 		ThreadID:   parent.threadID,
 		EndpointID: parent.endpointID,
-		Title:      "subagent spawn identity",
 	}); err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
@@ -704,7 +701,7 @@ func TestFloretSubagentsSpawnPersistsAndLabelsDistinctChildRunID(t *testing.T) {
 	spawnToolCallID := "tool_subagents_spawn_identity"
 	spawnResult, err := runtime.spawn(context.Background(), spawnToolCallID, map[string]any{
 		"agent_type":       "worker",
-		"task_name":        "identity_check",
+		"task_name":        "Identity Check",
 		"task_description": "Check child approval identity.",
 		"message":          "check child approval identity",
 	})
@@ -737,8 +734,7 @@ func TestFloretSubagentsSpawnPersistsAndLabelsDistinctChildRunID(t *testing.T) {
 	if childRunID == childThreadID || childRunID == parent.id {
 		t.Fatalf("spawn child_run_id=%q must be distinct from child thread %q and parent run %q", childRunID, childThreadID, parent.id)
 	}
-	if spawnReq.Labels.Host[subagentToolHostContextChildThreadIDKey] != childThreadID ||
-		spawnReq.Labels.Host[subagentToolHostContextSubagentIDKey] != childThreadID {
+	if spawnReq.Labels.Host[subagentToolHostContextChildThreadIDKey] != childThreadID {
 		t.Fatalf("spawn labels=%#v, want child thread and subagent id", spawnReq.Labels.Host)
 	}
 
@@ -1210,15 +1206,15 @@ func TestServiceGetFlowerSubagentDetailRequestsRawMessageContent(t *testing.T) {
 				CanInterrupt:   true,
 				CanClose:       true,
 			},
-			Events: []flruntime.SubAgentDetailEvent{
+			Events: []flruntime.ThreadDetailEvent{
 				{
 					ID:        "event-user",
 					Ordinal:   1,
 					ThreadID:  flruntime.ThreadID("child-detail"),
 					TurnID:    flruntime.TurnID("child-turn"),
-					Kind:      flruntime.SubAgentDetailEventUserMessage,
+					Kind:      flruntime.ThreadDetailEventUserMessage,
 					CreatedAt: now.Add(-50 * time.Second),
-					Message:   &flruntime.SubAgentDetailMessage{Role: "user", Preview: "delegate mission"},
+					Message:   &flruntime.ThreadDetailMessage{Role: "user", Preview: "delegate mission"},
 					Metadata:  map[string]string{"raw_omitted": "true"},
 				},
 				{
@@ -1226,18 +1222,18 @@ func TestServiceGetFlowerSubagentDetailRequestsRawMessageContent(t *testing.T) {
 					Ordinal:   2,
 					ThreadID:  flruntime.ThreadID("child-detail"),
 					TurnID:    flruntime.TurnID("child-turn"),
-					Kind:      flruntime.SubAgentDetailEventToolCall,
+					Kind:      flruntime.ThreadDetailEventToolCall,
 					CreatedAt: now.Add(-40 * time.Second),
-					ToolCall:  &flruntime.SubAgentDetailToolCall{ID: "call-1", Name: "terminal.exec", ArgsPreview: "ls", ArgsHash: "hash-args"},
+					ToolCall:  &flruntime.ThreadDetailToolCall{ID: "call-1", Name: "terminal.exec", ArgsPreview: "ls", ArgsHash: "hash-args"},
 				},
 				{
 					ID:        "event-tool-result",
 					Ordinal:   3,
 					ThreadID:  flruntime.ThreadID("child-detail"),
 					TurnID:    flruntime.TurnID("child-turn"),
-					Kind:      flruntime.SubAgentDetailEventToolResult,
+					Kind:      flruntime.ThreadDetailEventToolResult,
 					CreatedAt: now.Add(-30 * time.Second),
-					ToolResult: &flruntime.SubAgentDetailToolResult{
+					ToolResult: &flruntime.ThreadDetailToolResult{
 						CallID:        "call-1",
 						ToolName:      "terminal.exec",
 						Status:        string(observation.ActivityStatusSuccess),
@@ -1293,10 +1289,10 @@ func TestServiceGetFlowerSubagentDetailRequestsRawMessageContent(t *testing.T) {
 					Ordinal:   4,
 					ThreadID:  flruntime.ThreadID("child-detail"),
 					TurnID:    flruntime.TurnID("child-turn"),
-					Kind:      flruntime.SubAgentDetailEventToolActivity,
+					Kind:      flruntime.ThreadDetailEventToolActivity,
 					Type:      string(observation.EventTypeToolActivityUpdated),
 					CreatedAt: now.Add(-35 * time.Second),
-					ToolCall:  &flruntime.SubAgentDetailToolCall{ID: "call-1", Name: "terminal.exec", ArgsHash: "hash-args"},
+					ToolCall:  &flruntime.ThreadDetailToolCall{ID: "call-1", Name: "terminal.exec", ArgsHash: "hash-args"},
 					ActivityTimeline: &observation.ActivityTimeline{
 						SchemaVersion: 1,
 						RunID:         "child-run",
@@ -1325,9 +1321,9 @@ func TestServiceGetFlowerSubagentDetailRequestsRawMessageContent(t *testing.T) {
 					ID:        "event-approval",
 					Ordinal:   5,
 					ThreadID:  flruntime.ThreadID("child-detail"),
-					Kind:      flruntime.SubAgentDetailEventApproval,
+					Kind:      flruntime.ThreadDetailEventApproval,
 					CreatedAt: now.Add(-20 * time.Second),
-					Approval:  &flruntime.SubAgentDetailApproval{State: "denied", ToolName: "terminal.exec", ArgsHash: "hash-args", Reason: "readonly policy"},
+					Approval:  &flruntime.ThreadDetailApproval{State: "denied", ToolName: "terminal.exec", ArgsHash: "hash-args", Reason: "readonly policy"},
 					ActivityTimeline: &observation.ActivityTimeline{
 						SchemaVersion: 1,
 						RunID:         "child-run",
@@ -1360,7 +1356,7 @@ func TestServiceGetFlowerSubagentDetailRequestsRawMessageContent(t *testing.T) {
 					ID:        "event-error",
 					Ordinal:   6,
 					ThreadID:  flruntime.ThreadID("child-detail"),
-					Kind:      flruntime.SubAgentDetailEventError,
+					Kind:      flruntime.ThreadDetailEventError,
 					CreatedAt: now.Add(-10 * time.Second),
 					Error:     "tool blocked",
 				},
@@ -1369,9 +1365,9 @@ func TestServiceGetFlowerSubagentDetailRequestsRawMessageContent(t *testing.T) {
 					Ordinal:   7,
 					ThreadID:  flruntime.ThreadID("child-detail"),
 					TurnID:    flruntime.TurnID("child-turn"),
-					Kind:      flruntime.SubAgentDetailEventAssistantMessage,
+					Kind:      flruntime.ThreadDetailEventAssistantMessage,
 					CreatedAt: now.Add(-5 * time.Second),
-					Message: &flruntime.SubAgentDetailMessage{
+					Message: &flruntime.ThreadDetailMessage{
 						Role:    "assistant",
 						Preview: finalPreview,
 						Content: finalContent,
@@ -1546,24 +1542,24 @@ func TestServiceGetFlowerSubagentDetailProjectsCanonicalContextFacts(t *testing.
 				CreatedAt:      now.Add(-time.Minute),
 				UpdatedAt:      now,
 			},
-			Events: []flruntime.SubAgentDetailEvent{
+			Events: []flruntime.ThreadDetailEvent{
 				{
 					ID:        "message-1",
 					Ordinal:   1,
 					ThreadID:  flruntime.ThreadID("child-context"),
 					TurnID:    flruntime.TurnID("child-turn"),
-					Kind:      flruntime.SubAgentDetailEventAssistantMessage,
+					Kind:      flruntime.ThreadDetailEventAssistantMessage,
 					CreatedAt: now.Add(-40 * time.Second),
-					Message:   &flruntime.SubAgentDetailMessage{Role: "assistant", Preview: "I am about to compact context."},
+					Message:   &flruntime.ThreadDetailMessage{Role: "assistant", Preview: "I am about to compact context."},
 				},
 				{
 					ID:        "compaction-1",
 					Ordinal:   2,
 					ThreadID:  flruntime.ThreadID("child-context"),
 					TurnID:    flruntime.TurnID("child-turn"),
-					Kind:      flruntime.SubAgentDetailEventCompaction,
+					Kind:      flruntime.ThreadDetailEventCompaction,
 					CreatedAt: now.Add(-30 * time.Second),
-					Compaction: &flruntime.SubAgentDetailCompaction{
+					Compaction: &flruntime.ThreadDetailCompaction{
 						OperationID:         "compact-child-1",
 						RequestID:           "request-compact-child-1",
 						Source:              "context_manager",
@@ -1668,11 +1664,11 @@ func TestFlowerSubagentCompactionAnchorsRejectMetadataIdentityAlias(t *testing.T
 
 	_, err := flowerSubagentDetailCompactionAnchors(flruntime.SubAgentDetail{
 		Snapshot: flruntime.SubAgentSnapshot{ThreadID: "child-context"},
-		Events: []flruntime.SubAgentDetailEvent{{
+		Events: []flruntime.ThreadDetailEvent{{
 			ThreadID:   "child-context",
 			TurnID:     "child-turn",
-			Kind:       flruntime.SubAgentDetailEventCompaction,
-			Compaction: &flruntime.SubAgentDetailCompaction{Phase: "complete"},
+			Kind:       flruntime.ThreadDetailEventCompaction,
+			Compaction: &flruntime.ThreadDetailCompaction{Phase: "complete"},
 			Metadata:   map[string]string{"context_operation_id": "legacy-operation"},
 		}},
 	})
@@ -1898,7 +1894,7 @@ func TestSubagentChildEventPublishesParentSubagentsPatch(t *testing.T) {
 		t.Fatalf("thread patch id=%q, want %q", got, parentView.ThreadID)
 	}
 	item := payload.Patch.Subagents[0]
-	if item.ThreadID != childID || item.SubagentID != childID {
+	if item.ThreadID != childID {
 		t.Fatalf("subagent identity=%#v, want child %q", item, childID)
 	}
 	if item.ParentThreadID != parentView.ThreadID {

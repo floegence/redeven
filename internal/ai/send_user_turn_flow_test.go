@@ -55,7 +55,7 @@ func TestPendingTurnCommandRemainsBeforeFloretAcceptance(t *testing.T) {
 		t.Fatal(err)
 	}
 	command := createPendingCommandForTest(t, svc, meta, thread.ThreadID, "command_1", "turn_1", "run_1")
-	accepted, err := svc.reconcilePendingTurnCommand(ctx, meta.EndpointID, thread.ThreadID, command.QueueID, command.TurnID)
+	accepted, err := svc.reconcilePendingTurnCommand(ctx, meta.EndpointID, thread.ThreadID, command.QueueID, command.TurnID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,17 +78,17 @@ func TestPendingTurnCommandIsDeletedAfterCanonicalAcceptance(t *testing.T) {
 	}
 	command := createPendingCommandForTest(t, svc, meta, thread.ThreadID, "command_1", "turn_1", "run_1")
 	host := newTestFloretHost(t, svc.floretStore, "accepted")
-	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: flruntime.TurnID(command.TurnID), RunID: flruntime.RunID(command.RunID), Input: command.TextContent}); err != nil {
+	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: flruntime.TurnID(command.TurnID), RunID: flruntime.RunID(command.RunID), Input: flruntime.TurnInput{Text: command.TextContent}}); err != nil {
 		t.Fatal(err)
 	}
-	accepted, err := svc.reconcilePendingTurnCommand(ctx, meta.EndpointID, thread.ThreadID, command.QueueID, command.TurnID)
+	accepted, err := svc.reconcilePendingTurnCommand(ctx, meta.EndpointID, thread.ThreadID, command.QueueID, command.TurnID, nil)
 	if err != nil || !accepted {
 		t.Fatalf("reconcile accepted=%v err=%v", accepted, err)
 	}
 	if stored, err := svc.threadsDB.GetQueuedTurn(ctx, meta.EndpointID, thread.ThreadID, command.QueueID); !errors.Is(err, sql.ErrNoRows) || stored != nil {
 		t.Fatalf("accepted prompt still stored: %#v err=%v", stored, err)
 	}
-	accepted, err = svc.reconcilePendingTurnCommand(ctx, meta.EndpointID, thread.ThreadID, command.QueueID, command.TurnID)
+	accepted, err = svc.reconcilePendingTurnCommand(ctx, meta.EndpointID, thread.ThreadID, command.QueueID, command.TurnID, nil)
 	if err != nil || !accepted {
 		t.Fatalf("idempotent reconcile accepted=%v err=%v", accepted, err)
 	}
@@ -133,10 +133,10 @@ func TestPendingTurnReconciliationMatchesExactTurnID(t *testing.T) {
 	}
 	command := createPendingCommandForTest(t, svc, meta, thread.ThreadID, "command_2", "turn_expected", "run_expected")
 	host := newTestFloretHost(t, svc.floretStore, "other")
-	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_other", RunID: "run_other", Input: command.TextContent}); err != nil {
+	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_other", RunID: "run_other", Input: flruntime.TurnInput{Text: command.TextContent}}); err != nil {
 		t.Fatal(err)
 	}
-	accepted, err := svc.reconcilePendingTurnCommand(ctx, meta.EndpointID, thread.ThreadID, command.QueueID, command.TurnID)
+	accepted, err := svc.reconcilePendingTurnCommand(ctx, meta.EndpointID, thread.ThreadID, command.QueueID, command.TurnID, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

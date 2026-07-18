@@ -88,7 +88,7 @@ func seedWaitingUserPrompt(t *testing.T, svc *Service, ctx context.Context, _ *s
 	}
 	result, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
 		ThreadID: flruntime.ThreadID(threadID), TurnID: flruntime.TurnID(prompt.MessageID),
-		RunID: flruntime.RunID(r.id), Input: "wait for user input", Signals: signalSpec,
+		RunID: flruntime.RunID(r.id), Input: flruntime.TurnInput{Text: "wait for user input"}, Signals: signalSpec,
 	})
 	if err != nil {
 		t.Fatalf("seed Floret waiting turn: %v", err)

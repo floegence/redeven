@@ -1,42 +1,44 @@
 ---
 type: Storage Contract
 title: Flower storage ownership and migrations
-description: Floret owns Agent state while Redeven owns product records and migrates only explicitly versioned schemas.
+description: Floret owns Agent state while Redeven schema v3 stores only host settings, resources, queue state, routing, and security audit.
 tags: [ai, storage, sqlite, migrations, floret]
 timestamp: 2026-07-18T00:00:00Z
 ---
 # Summary
 
-- Authority: Floret owns admitted Agent state; Redeven owns product metadata and migration coordination.
-- Outcome: Product threadstore opens only after its schema and any supported canonical legacy source are validated and migrated through explicit steps.
-- Invariants: Redeven never queries Floret SQLite, copies Agent state into product tables, or synthesizes missing permission, approval, event, or control values.
-- Failure boundary: Unknown kinds, unsupported versions, schema drift, invalid data, and failed Floret identity establishment abort the transaction without repair or partial conversion.
+- Authority: Floret owns admitted Agent state; Redeven owns host settings, unadmitted work, upload storage, routing/read state, security audit, and cross-store operation intent.
+- Outcome: threadstore schema v3 uses `ai_thread_settings` and contains no title, transcript, turn, run, projection, approval, todo, context, provider-state, or SubAgent hierarchy copy.
+- Invariants: migration supports only the current product schema v2 to v3 and never calls Floret while a Redeven SQL transaction is open.
+- Failure boundary: title conflicts, unsupported kind/version, schema drift, invalid records, and failed Floret calls stop startup without repair, backup, reset, or substitute database creation.
 
 # Contract
 
-## Ownership
+## Schema v3 ownership
 
-Floret is the only durable authority for admitted conversation, thread path, turn and run lifecycle, projections, control signals, approvals, Agent todos, tool lifecycle, provider continuation, prompt state, and subagent lifecycle. Redeven threadstore contains only product thread configuration, commands that Floret has not admitted, uploads and resource references, Flower routing and handoff metadata, permission audit snapshots, read acknowledgement, and fork or delete coordination records.
+`ai_thread_settings` stores endpoint, namespace, model, reasoning, permission type, working directory, pin state, queue revision, host audit identity, and independent settings timestamps. Canonical title, title source, lifecycle times, status, phase, preview, latest turn, and Agent relationships exist only in Floret. Upload rows and physical files remain Redeven resources. Before admission, `ai_upload_refs` binds uploads to one queued command; after admission, one transaction replaces those refs with thread ownership and deletes the command. There is no durable TurnID/RunID attachment mapping.
 
-## State and flow
+Permission snapshots are append-only Redeven security audit and pending-approval evidence, not the current permission source. Schema v3 keeps only strict snapshot version 2 records; snapshot v1 and malformed versions are removed during migration. Current permission always comes from `ai_thread_settings.permission_type` and invalid data fails closed.
 
-The current Redeven threadstore is product schema v2. The supported canonical legacy kind is explicitly versioned v15 through v40. Migration verifies the declared source version, applies each consecutive canonical step to v40, validates product data, and establishes every non-empty product thread identity through Floret `ThreadMaintenanceHost.EnsureThread`. Only after those calls succeed does the same transaction remove Agent shadow tables and convert retained product records to product v1; the deterministic product v1-to-v2 migration then removes the obsolete Floret result shadow column. Queued command conversion maps `turn_id` from the legacy `message_id` and `run_id` from `queue_id`; empty or duplicate identities fail before Floret calls.
+Create, fork, and delete operation tables persist immutable host-owned snapshots and step confirmations. These tables coordinate effects across stores but do not contain a Floret result, canonical lifecycle snapshot, or data capable of rebuilding an Agent journal.
 
-Every SQLite store uses one immediate-lock migration transaction. The engine acquires the write lock before reading `PRAGMA user_version`, verifies the exact metadata row and schema contract, applies consecutive migrations, verifies tables, columns, indexes, triggers, constraints, and kind, updates version metadata, and commits. Fresh empty databases follow the same declared version chain. The same ownership rules apply to notes, thread read state, Workbench layout, Code App registry, and port-forward registry.
+## Product v2 to v3
 
-## Failure semantics
+Startup first opens the existing database read/write without beginning the migration transaction, verifies kind `ai_threadstore_product_v2`, and accepts only schema version 2 or 3. Version 2 titles are read in one read-only transaction, then that transaction is closed. Each non-empty title is compared with Floret `ReadThreadOverview`: an empty canonical title is written through `SetThreadTitle`, an equal title is idempotent, and a different title is a startup-stopping conflict.
 
-Any failed Floret identity call, canonical step, product conversion, version update, final verification, or input validation rolls back the Redeven transaction. Non-empty databases without metadata, malformed metadata, unknown kinds, unsupported old versions, future versions, schema drift, and invalid data fail without file deletion, schema claiming, conditional DDL, or runtime repair. Pending approvals and events must carry complete identity, lifecycle, batch, timestamp, and argument-hash contracts; missing values are errors. Projection unavailability remains diagnostic state and does not rewrite a successful Floret execution as failed. A malformed `ask_user` signal is rejected instead of receiving generated clarification text.
+Only after every title succeeds does the normal SQLite migration transaction rebuild `ai_threads` as `ai_thread_settings`, remove all title columns, deduplicate admitted upload refs into thread ownership, preserve queued ownership, create the durable create-operation table, strip title data from pending fork snapshots, and retain only permission snapshot v2. The schema version is committed once with the rebuilt product tables. A crash before that commit leaves schema v2, and repeating already completed title writes is safe.
+
+Fresh stores run the declared product migration chain to v3. Existing databases with another kind, version 0, versions below 2, future versions, absent/malformed metadata, or schema drift are rejected non-destructively. The removed canonical v15-v40 chain is not a supported input path.
 
 # Boundaries
 
-Redeven must not import Floret internals, query Floret-managed tables, persist transcript, run, projection, control, approval, todo, context, provider, or tool mirrors, or use local dependency wiring. Migration code may retain only product records and opaque references needed to call public Floret maintenance APIs. [Floret thread runtime integration](floret-thread-runtime.md) owns the runtime authority boundary; this concept owns storage conversion and schema failure behavior.
+Redeven migration code may call only public Floret maintenance APIs and may retain only host settings, resources, queue state, routing/read state, audit, and operation intent. It must not query Floret SQLite, infer canonical data from old Redeven rows, or keep legacy aliases and compatibility parsers after the v2-to-v3 conversion.
 
 # Evidence
 
-- `redeven:internal/persistence/sqliteutil/engine.go:123` - The shared engine opens stores through the immediate-lock schema contract.
-- `redeven:internal/ai/threadstore/schema.go:23` - The threadstore schema registers consecutive product migrations and canonical v15-v40 migrations.
-- `redeven:internal/ai/threadstore/canonical_migrations.go:65` - Canonical migration validates source versions, converts product data, and establishes Floret thread identities.
-- `redeven:internal/ai/threadstore/product_migrations.go:34` - Product v1-to-v2 performs the deterministic product schema rebuild.
-- `redeven:internal/ai/threadstore/schema_migration_test.go:16` - Migration tests cover canonical v15-v40 conversion and product schema outcomes.
-- `redeven:internal/ai/floret_runtime.go:209` - Invalid Floret turn contracts are rejected at the runtime boundary.
+- `redeven:internal/ai/threadstore/schema.go:12` - Threadstore declares product schema version 3 and the host-only settings table.
+- `redeven:internal/ai/threadstore/schema_preflight.go:18` - Startup reads version-2 titles outside the SQL migration transaction and rejects unsupported stores.
+- `redeven:internal/ai/service.go:256` - Title preflight compares and writes through Floret public APIs.
+- `redeven:internal/ai/threadstore/product_migrations.go:73` - The v2-to-v3 migration rebuilds settings, ownership, snapshots, and operation tables.
+- `redeven:internal/ai/threadstore/schema_migration_test.go:51` - Tests cover host-only v3, title migration, replay, conflicts, strict versions, and snapshot retention.
+- `redeven:scripts/check_floret_dependency_boundary.sh:1` - Static checks reject Floret storage access and local dependency wiring.

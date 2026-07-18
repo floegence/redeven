@@ -138,6 +138,8 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 			MaxCostUSD:     req.Options.MaxCostUSD,
 		},
 		r.webSearchMode,
+		withFloretAttachmentResolver(r.resolveFloretMessageAttachment, req.ModelCapability.SupportsImageInput, req.ModelCapability.SupportsFileInput),
+		withFloretBeforeRequest(r.floretContractError),
 	)
 	completionPolicy := flruntime.TurnCompletionNaturalStop
 	controlSpec, err := newFloretControlSpec(r, sharedState, initialSurface.ControlTools, taskComplexity)
@@ -163,7 +165,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		Approver:             floretToolApproverForRun(r),
 		Sink:                 floretEventSink{run: r},
 		ToolSurfaceProvider:  toolSurfaceProvider,
-		ThreadTitleMode:      flruntime.ThreadTitleModeHostOwned,
+		ThreadTitleMode:      flruntime.ThreadTitleModeProvider,
 		LoopLimits: flruntime.LoopLimits{
 			NoProgressLimit:    2,
 			DuplicateToolLimit: 3,
@@ -188,11 +190,18 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	if payload := floretContextActionInjectedEventPayload(req.Input.ContextAction, supplementalContext); payload != nil {
 		r.recordRunDiagnostic("flower.context_action.injected", RealtimeStreamKindLifecycle, payload)
 	}
+	turnInput, err := r.floretTurnInput(ctx, req.Input)
+	if err != nil {
+		return r.failRun("Failed to prepare message attachments", err)
+	}
+	if err := r.preflightFloretTurnAttachments(ctx, turnInput, flProvider); err != nil {
+		return r.failRun("Failed to validate message attachments", err)
+	}
 	result, err := turnHost.RunTurn(ctx, flruntime.RunTurnRequest{
 		RunID:               flruntime.RunID(strings.TrimSpace(r.id)),
 		ThreadID:            threadID,
 		TurnID:              flruntime.TurnID(strings.TrimSpace(r.messageID)),
-		Input:               floretCurrentTurnInput(req.Input),
+		Input:               turnInput,
 		SupplementalContext: supplementalContext.Items,
 		Labels:              labels,
 		Completion:          completionPolicy,
@@ -629,28 +638,6 @@ func (r *run) projectFloretAskUserWaiting(step int, signal *flruntime.TurnSignal
 	r.emitLifecyclePhase("ended", map[string]any{"reason": finalReason, "step_index": step})
 	r.sendStreamEvent(streamEventMessageEnd{Type: "message-end", MessageID: r.messageID})
 	return nil
-}
-
-func floretCurrentTurnInput(input RunInput) string {
-	parts := make([]string, 0, 1+len(input.Attachments))
-	if text := strings.TrimSpace(input.Text); text != "" {
-		parts = append(parts, text)
-	}
-	for _, attachment := range input.Attachments {
-		label := floretSafeSingleLineMetadata(attachment.Name, 512)
-		if label == "" {
-			label = "attachment"
-		}
-		if label == "" {
-			continue
-		}
-		line := "Attachment: " + label
-		if mimeType := floretSafeSingleLineMetadata(attachment.MimeType, 255); mimeType != "" {
-			line += " (" + mimeType + ")"
-		}
-		parts = append(parts, line)
-	}
-	return strings.Join(parts, "\n\n")
 }
 
 func floretModelContextPolicy(contextWindow int, maxOutput int) flconfig.ContextPolicy {

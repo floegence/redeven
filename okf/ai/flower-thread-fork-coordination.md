@@ -1,50 +1,35 @@
 ---
 type: AI Persistence Contract
 title: Flower thread fork coordination
-description: Redeven coordinates product thread snapshots with replayable Floret fork operations without compensation deletion or source drift.
+description: Floret forks canonical Agent state first, then Redeven materializes a fixed host-settings and thread-resource snapshot.
 tags: [ai, threads, persistence, floret]
-timestamp: 2026-07-15T00:00:00Z
+timestamp: 2026-07-18T00:00:00Z
 ---
 # Summary
 
-Flower thread fork is a cross-repository durable operation. Floret owns the engine journal, conversation, turn/run identity mapping, projections, control signals, approvals, and Agent todo state. Redeven owns only the product thread configuration, upload and attachment references, Flower UI metadata, and summary publication. Neither repository treats the other repository's target existence as proof that the whole product operation committed.
+- Authority: Floret owns the forked journal, title, lifecycle, turns, projections, todos, context, and SubAgent state; Redeven owns copied host settings, thread-level upload ownership, and Flower routing metadata.
+- Outcome: one replayable operation creates one fixed destination without copying or persisting a Floret rewrite result.
+- Invariants: product materialization uses the prepared snapshot, not live source state, and upload ownership is copied at thread scope only.
+- Failure boundary: identity conflicts fail explicitly; transient Floret or product commit errors remain replayable under the same operation id.
 
 # Contract
 
-## Mechanism
+`PrepareForkOperation` validates the source settings and unused destination, fingerprints the request, and persists snapshot schema v2 in `ai_thread_fork_operations`, keyed by the stable `ForkOperationID`. The snapshot contains the source `ThreadSettings`, thread-owned upload refs, Flower routing metadata, destination identity, explicit title intent, and host audit identity. It contains no conversation, title copy, turn/run state, projection, approval, todo, context, provider state, tool lifecycle, or Floret result.
 
-Redeven product threadstore schema v2 contains `ai_thread_fork_operations`. An operation has one required `ForkOperationID`, request fingerprint, source and destination thread identities, `pending | committed | failed` status, snapshot schema version, snapshot JSON, retry count, diagnostic code/message, broadcast acknowledgements, and timestamps. It stores no Floret result, turn map, conversation, or Agent lifecycle payload. Explicit canonical v15-v40 threadstores are upgraded transactionally by retaining product tables and deleting Agent shadow tables; failed upgrades roll back, while older, unversioned, unknown-kind, malformed, and future schemas remain rejected.
+Replay calls Floret `ForkThread` first with the stable operation id and planned destination. The returned result is checked only for operation and destination identity; Redeven does not consume or persist turn/run rewrite maps because admitted attachments use thread-level ownership. If the user supplied a destination title, Redeven calls Floret `SetThreadTitle`; otherwise the canonical Floret fork title remains unchanged.
 
-`PrepareForkOperation` runs in one SQLite transaction. It validates that the operation request and destination are unused, writes snapshot schema v2, and commits the operation as `pending`. The fixed snapshot contains the source product thread configuration, upload references, and Flower metadata only. It contains no user or assistant content, turn/run state, projection, control signal, approval, todo, memory, context, or provider state. A later source-thread mutation cannot change what this operation will copy.
+After canonical fork and optional title succeed, one Redeven transaction materializes destination settings from the fixed snapshot, copies thread-level upload ownership to the destination thread, updates Flower routing metadata, clears the snapshot payload, and marks the operation committed. No source reread can change a pending operation. Restart replay calls Floret again with the same operation id and then retries the same product commit.
 
-Redeven then calls the provider-free Floret maintenance host with the same operation ID, source thread, and planned destination. Floret forks the complete canonical thread, including Agent todo state, and returns destination turn/run mappings. Redeven uses those mappings only during the current materialization call to rewrite opaque turn/run foreign keys on copied product resource references, such as upload bindings. Missing mappings cause the affected optional reference to remain uncopied; duplicate or malformed source/destination identities are contract errors. Redeven never creates a conversation row, allocates another turn/run identity, or persists the returned map. The transaction materializes the destination product configuration from the fixed snapshot, clears the committed snapshot payload, and changes the operation to `committed`.
-
-Startup and periodic maintenance scan pending operations in bounded batches. Replays call Floret with the original operation ID and destination; Floret idempotently returns the canonical rewrite map again, and Redeven retries the same product snapshot commit without having cached that result. Explicit Floret operation conflicts, destination conflicts, missing completed targets, and Redeven destination conflicts become `failed`. Transport, storage, and other transient failures increment retry state while keeping the operation pending. There is no compensation call to delete a Floret destination, no regenerated destination identity, no reread of the current source state, and no branch that interprets an unmarked existing target as success.
-
-After commit, Redeven serializes summary publication per service, reloads the current operation state, broadcasts each unacknowledged source or destination summary only after the summary can be built from product metadata plus public Floret state, and then records that side's publication acknowledgement. Maintenance republishes committed operations whose acknowledgements are incomplete. Forked conversation and Agent state remain owned by Floret and are read through `ReadThread`, `ListThreadTurns`, and the typed todo API.
-
-## Invariants
-
-- One operation ID identifies one exact request fingerprint and destination.
-- Source snapshot capture happens before any Floret target is created.
-- Product materialization never reads the live source thread.
-- Redeven uses Floret turn rewrites only for opaque product foreign keys and never copies conversation content.
-- Secrets, runs, projections, approvals, todos, memory, Floret tool lifecycle state, and Floret internal storage are absent from the Redeven snapshot.
-- A destination owned by another operation is a conflict, not a recovery hint.
-- A pending operation remains replayable after process restart.
-- Floret is consumed only through the published v0.11.4 public runtime API and the Service-owned shared Store.
+Committed source and destination summary publication is separately acknowledged and may be retried. Each summary must still resolve current host settings plus public Floret canonical state before broadcast.
 
 # Boundaries
 
-No additional boundary is declared for this concept.
+Redeven never stores a `ForkedTurnRef`, Floret fork result, canonical title, or Agent lifecycle snapshot. It does not create conversation rows, infer a title from preview text, silently omit malformed resources, compensate by deleting a valid Floret destination, or treat an unrelated existing destination as recovery success.
 
 # Evidence
 
-- `redeven:internal/ai/threadstore/schema.go:35` - The canonical schema creates durable fork operation storage.
-- `redeven:internal/ai/threadstore/fork_operation.go:52` - Fork snapshot schema v2 contains only product configuration and resource references.
-- `redeven:internal/ai/threadstore/fork_operation.go:392` - Fork commit materializes product data and rewrites opaque resource references.
-- `redeven:internal/ai/thread_fork_operation.go:20` - Redeven resumes one pending operation through Floret and local commit.
-- `redeven:internal/ai/thread_fork_operation.go:130` - Background maintenance replays pending operations in bounded batches.
-- `redeven:internal/ai/threads.go:577` - User-triggered fork prepares the durable operation before calling Floret.
-- `redeven:internal/ai/threadstore/fork_operation_test.go:13` - Reopen tests prove fixed snapshot and committed replay behavior.
-- `redeven:internal/ai/thread_fork_operation_test.go:14` - Process restart tests recover a Floret-completed pending operation.
+- `redeven:internal/ai/threadstore/fork_operation.go:57` - Snapshot schema v2 contains host settings, thread upload refs, routing metadata, and user intent only.
+- `redeven:internal/ai/threadstore/fork_operation.go:342` - Snapshot capture selects only thread-owned uploads.
+- `redeven:internal/ai/thread_fork_operation.go:16` - Replay forks Floret and applies explicit title before product commit.
+- `redeven:internal/ai/threadstore/fork_operation.go:148` - Product materialization uses the immutable snapshot and persists no Floret result.
+- `redeven:internal/ai/thread_fork_operation_test.go:14` - Restart tests recover canonical-first fork boundaries.

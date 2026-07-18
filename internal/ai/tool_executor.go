@@ -88,10 +88,11 @@ func ExecuteLocalTool(ctx context.Context, opts LocalToolExecutionOptions) (Loca
 	permissionFilter := newPermissionToolFilter(true)
 	permissionFilter = r.withToolAllowlistFilter(permissionFilter)
 	activeTools := permissionFilter.FilterTools(permissionType, registry.Snapshot())
-	snapshot := r.freezePermissionSnapshot(buildPermissionSnapshot(permissionType, activeTools, nil))
+	snapshot := permissionSnapshotWithOwnerIdentity(buildPermissionSnapshot(permissionType, activeTools, nil), "local_tool", "local_tool", strings.TrimSpace(opts.ToolCallID))
 	if err := validatePermissionSnapshotConsistency(snapshot); err != nil {
 		return LocalToolExecutionResult{}, err
 	}
+	r.permissionSnapshot = snapshot
 	result, err := r.execTool(runCtx, meta, strings.TrimSpace(opts.ToolCallID), toolName, args)
 	if err != nil {
 		return LocalToolExecutionResult{}, err

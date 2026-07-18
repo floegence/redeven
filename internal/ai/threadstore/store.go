@@ -24,20 +24,17 @@ type Store struct {
 	db *sql.DB
 }
 
-const (
-	ThreadTitleSourceAuto = "auto"
-	ThreadTitleSourceUser = "user"
-)
-
 type OpenOption func(*openOptions)
 
 type openOptions struct {
-	ensureThread func(string) error
+	migrateTitle func(context.Context, LegacyThreadTitle) error
 }
 
-func WithThreadIdentityEnsurer(ensureThread func(string) error) OpenOption {
+// WithLegacyThreadTitleMigrator supplies the Floret-side title migration used
+// before the product schema v2 to v3 SQL migration starts.
+func WithLegacyThreadTitleMigrator(migrateTitle func(context.Context, LegacyThreadTitle) error) OpenOption {
 	return func(options *openOptions) {
-		options.ensureThread = ensureThread
+		options.migrateTitle = migrateTitle
 	}
 }
 
@@ -52,7 +49,10 @@ func Open(path string, optionList ...OpenOption) (*Store, error) {
 			option(&options)
 		}
 	}
-	db, err := sqliteutil.Open(p, threadstoreSchemaSpec(options.ensureThread))
+	if err := migrateLegacyThreadTitles(p, options.migrateTitle); err != nil {
+		return nil, err
+	}
+	db, err := sqliteutil.Open(p, threadstoreSchemaSpec())
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +71,7 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-type Thread struct {
+type ThreadSettings struct {
 	ThreadID               string `json:"thread_id"`
 	EndpointID             string `json:"endpoint_id"`
 	NamespacePublicID      string `json:"namespace_public_id"`
@@ -79,26 +79,16 @@ type Thread struct {
 	ReasoningSelectionJSON string `json:"reasoning_selection_json"`
 	PermissionType         string `json:"permission_type"`
 	WorkingDir             string `json:"working_dir"`
-	Title                  string `json:"title"`
-	TitleSource            string `json:"title_source"`
-	TitleGeneratedAtUnixMs int64  `json:"title_generated_at_unix_ms"`
-	TitleInputMessageID    string `json:"title_input_message_id"`
-	TitleModelID           string `json:"title_model_id"`
-	TitlePromptVersion     string `json:"title_prompt_version"`
 	PinnedAtUnixMs         int64  `json:"pinned_at_unix_ms"`
+	QueueRevision          int64  `json:"queue_revision"`
 
 	CreatedByUserPublicID string `json:"created_by_user_public_id"`
 	CreatedByUserEmail    string `json:"created_by_user_email"`
 	UpdatedByUserPublicID string `json:"updated_by_user_public_id"`
 	UpdatedByUserEmail    string `json:"updated_by_user_email"`
 
-	CreatedAtUnixMs int64 `json:"created_at_unix_ms"`
-	UpdatedAtUnixMs int64 `json:"updated_at_unix_ms"`
-}
-
-type AutoThreadTitleCandidate struct {
-	EndpointID string `json:"endpoint_id"`
-	ThreadID   string `json:"thread_id"`
+	CreatedAtUnixMs int64 `json:"settings_created_at_unix_ms"`
+	UpdatedAtUnixMs int64 `json:"settings_updated_at_unix_ms"`
 }
 
 type QueuedTurn struct {
@@ -144,19 +134,18 @@ type ThreadsCursor struct {
 }
 
 const threadSelectColumnsSQL = `
-  thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json, permission_type, working_dir, title,
-  title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
-  pinned_at_unix_ms,
+  thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json, permission_type, working_dir,
+  pinned_at_unix_ms, queue_revision,
   created_by_user_public_id, created_by_user_email,
   updated_by_user_public_id, updated_by_user_email,
-  created_at_unix_ms, updated_at_unix_ms
+  settings_created_at_unix_ms, settings_updated_at_unix_ms
 `
 
 type rowScanner interface {
 	Scan(dest ...any) error
 }
 
-func scanThreadRow(scan rowScanner, t *Thread) error {
+func scanThreadRow(scan rowScanner, t *ThreadSettings) error {
 	if t == nil {
 		return errors.New("nil thread")
 	}
@@ -168,13 +157,8 @@ func scanThreadRow(scan rowScanner, t *Thread) error {
 		&t.ReasoningSelectionJSON,
 		&t.PermissionType,
 		&t.WorkingDir,
-		&t.Title,
-		&t.TitleSource,
-		&t.TitleGeneratedAtUnixMs,
-		&t.TitleInputMessageID,
-		&t.TitleModelID,
-		&t.TitlePromptVersion,
 		&t.PinnedAtUnixMs,
+		&t.QueueRevision,
 		&t.CreatedByUserPublicID,
 		&t.CreatedByUserEmail,
 		&t.UpdatedByUserPublicID,
@@ -190,10 +174,6 @@ func scanThreadRow(scan rowScanner, t *Thread) error {
 	}
 	t.PermissionType = permissionType
 	t.ReasoningSelectionJSON = strings.TrimSpace(t.ReasoningSelectionJSON)
-	t.TitleSource = normalizeThreadTitleSource(t.TitleSource)
-	t.TitleInputMessageID = strings.TrimSpace(t.TitleInputMessageID)
-	t.TitleModelID = strings.TrimSpace(t.TitleModelID)
-	t.TitlePromptVersion = strings.TrimSpace(t.TitlePromptVersion)
 	return nil
 }
 
@@ -271,7 +251,7 @@ func isUniqueConstraintError(err error) bool {
 	return strings.Contains(msg, "constraint failed") && strings.Contains(msg, "unique")
 }
 
-func (s *Store) ListThreads(ctx context.Context, endpointID string, limit int, cursor ThreadsCursor) ([]Thread, string, error) {
+func (s *Store) ListThreads(ctx context.Context, endpointID string, limit int, cursor ThreadsCursor) ([]ThreadSettings, string, error) {
 	if s == nil || s.db == nil {
 		return nil, "", errors.New("store not initialized")
 	}
@@ -293,7 +273,7 @@ func (s *Store) ListThreads(ctx context.Context, endpointID string, limit int, c
 	q := fmt.Sprintf(`
 SELECT
 %s
-FROM ai_threads
+FROM ai_thread_settings
 WHERE endpoint_id = ?
 `, threadSelectColumnsSQL)
 	if cursor.CreatedAtUnixMs > 0 && strings.TrimSpace(cursor.ThreadID) != "" {
@@ -306,8 +286,8 @@ WHERE endpoint_id = ?
       CASE WHEN pinned_at_unix_ms > 0 THEN 1 ELSE 0 END = CASE WHEN ? > 0 THEN 1 ELSE 0 END
       AND (
         (? > 0 AND pinned_at_unix_ms < ?)
-        OR ((pinned_at_unix_ms = ? OR (? = 0 AND pinned_at_unix_ms <= 0)) AND created_at_unix_ms < ?)
-        OR ((pinned_at_unix_ms = ? OR (? = 0 AND pinned_at_unix_ms <= 0)) AND created_at_unix_ms = ? AND thread_id > ?)
+		OR ((pinned_at_unix_ms = ? OR (? = 0 AND pinned_at_unix_ms <= 0)) AND settings_created_at_unix_ms < ?)
+		OR ((pinned_at_unix_ms = ? OR (? = 0 AND pinned_at_unix_ms <= 0)) AND settings_created_at_unix_ms = ? AND thread_id > ?)
       )
     )
   )
@@ -324,7 +304,7 @@ WHERE endpoint_id = ?
 ORDER BY
   CASE WHEN pinned_at_unix_ms > 0 THEN 1 ELSE 0 END DESC,
   pinned_at_unix_ms DESC,
-  created_at_unix_ms DESC,
+  settings_created_at_unix_ms DESC,
   thread_id ASC
 LIMIT ?
 `
@@ -336,9 +316,9 @@ LIMIT ?
 	}
 	defer rows.Close()
 
-	out := make([]Thread, 0, limit+1)
+	out := make([]ThreadSettings, 0, limit+1)
 	for rows.Next() {
-		var t Thread
+		var t ThreadSettings
 		if err := scanThreadRow(rows, &t); err != nil {
 			return nil, "", err
 		}
@@ -362,53 +342,7 @@ LIMIT ?
 	return out, next, nil
 }
 
-func (s *Store) ListAutoThreadTitleCandidates(ctx context.Context, limit int) ([]AutoThreadTitleCandidate, error) {
-	if s == nil || s.db == nil {
-		return nil, errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	if limit <= 0 {
-		limit = 64
-	}
-	if limit > 500 {
-		limit = 500
-	}
-
-	rows, err := s.db.QueryContext(ctx, `
-SELECT endpoint_id, thread_id
-FROM ai_threads
-WHERE TRIM(COALESCE(title, '')) = ''
-  AND LOWER(TRIM(COALESCE(title_source, ''))) != ?
-ORDER BY updated_at_unix_ms DESC, thread_id DESC
-LIMIT ?
-`, ThreadTitleSourceUser, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	out := make([]AutoThreadTitleCandidate, 0, limit)
-	for rows.Next() {
-		var candidate AutoThreadTitleCandidate
-		if err := rows.Scan(&candidate.EndpointID, &candidate.ThreadID); err != nil {
-			return nil, err
-		}
-		candidate.EndpointID = strings.TrimSpace(candidate.EndpointID)
-		candidate.ThreadID = strings.TrimSpace(candidate.ThreadID)
-		if candidate.EndpointID == "" || candidate.ThreadID == "" {
-			continue
-		}
-		out = append(out, candidate)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (s *Store) GetThread(ctx context.Context, endpointID string, threadID string) (*Thread, error) {
+func (s *Store) GetThread(ctx context.Context, endpointID string, threadID string) (*ThreadSettings, error) {
 	if s == nil || s.db == nil {
 		return nil, errors.New("store not initialized")
 	}
@@ -421,11 +355,11 @@ func (s *Store) GetThread(ctx context.Context, endpointID string, threadID strin
 		return nil, errors.New("invalid request")
 	}
 
-	var t Thread
+	var t ThreadSettings
 	err := scanThreadRow(s.db.QueryRowContext(ctx, fmt.Sprintf(`
 SELECT
 %s
-FROM ai_threads
+FROM ai_thread_settings
 WHERE endpoint_id = ? AND thread_id = ?
 `, threadSelectColumnsSQL), endpointID, threadID), &t)
 	if err != nil {
@@ -437,9 +371,9 @@ WHERE endpoint_id = ? AND thread_id = ?
 	return &t, nil
 }
 
-func (s *Store) getThreadTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string) (*Thread, error) {
-	var thread Thread
-	err := scanThreadRow(tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT %s FROM ai_threads WHERE endpoint_id = ? AND thread_id = ?`, threadSelectColumnsSQL), endpointID, threadID), &thread)
+func (s *Store) getThreadTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string) (*ThreadSettings, error) {
+	var thread ThreadSettings
+	err := scanThreadRow(tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT %s FROM ai_thread_settings WHERE endpoint_id = ? AND thread_id = ?`, threadSelectColumnsSQL), endpointID, threadID), &thread)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -449,7 +383,7 @@ func (s *Store) getThreadTx(ctx context.Context, tx *sql.Tx, endpointID string, 
 	return &thread, nil
 }
 
-func (s *Store) CreateThread(ctx context.Context, t Thread) error {
+func (s *Store) CreateThread(ctx context.Context, t ThreadSettings) error {
 	if s == nil || s.db == nil {
 		return errors.New("store not initialized")
 	}
@@ -468,14 +402,6 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 	}
 	t.PermissionType = permissionType
 	t.WorkingDir = strings.TrimSpace(t.WorkingDir)
-	t.Title = strings.TrimSpace(t.Title)
-	t.TitleSource = normalizeThreadTitleSource(t.TitleSource)
-	if t.TitleSource == "" && t.Title != "" {
-		t.TitleSource = ThreadTitleSourceUser
-	}
-	t.TitleInputMessageID = strings.TrimSpace(t.TitleInputMessageID)
-	t.TitleModelID = strings.TrimSpace(t.TitleModelID)
-	t.TitlePromptVersion = strings.TrimSpace(t.TitlePromptVersion)
 	t.CreatedByUserPublicID = strings.TrimSpace(t.CreatedByUserPublicID)
 	t.CreatedByUserEmail = strings.TrimSpace(t.CreatedByUserEmail)
 	t.UpdatedByUserPublicID = strings.TrimSpace(t.UpdatedByUserPublicID)
@@ -499,14 +425,13 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 		t.UpdatedAtUnixMs = t.CreatedAtUnixMs
 	}
 	_, err = s.db.ExecContext(ctx, `
-		INSERT INTO ai_threads(
-		  thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json, permission_type, working_dir, title,
-	  title_source, title_generated_at_unix_ms, title_input_message_id, title_model_id, title_prompt_version,
-	  pinned_at_unix_ms,
+		INSERT INTO ai_thread_settings(
+		  thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json, permission_type, working_dir,
+	  pinned_at_unix_ms, queue_revision,
 	  created_by_user_public_id, created_by_user_email,
 	  updated_by_user_public_id, updated_by_user_email,
-	  created_at_unix_ms, updated_at_unix_ms
-			) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	  settings_created_at_unix_ms, settings_updated_at_unix_ms
+			) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`,
 		t.ThreadID,
 		t.EndpointID,
@@ -515,13 +440,8 @@ func (s *Store) CreateThread(ctx context.Context, t Thread) error {
 		t.ReasoningSelectionJSON,
 		t.PermissionType,
 		t.WorkingDir,
-		t.Title,
-		t.TitleSource,
-		t.TitleGeneratedAtUnixMs,
-		t.TitleInputMessageID,
-		t.TitleModelID,
-		t.TitlePromptVersion,
 		nonNegativeInt64(t.PinnedAtUnixMs),
+		nonNegativeInt64(t.QueueRevision),
 		t.CreatedByUserPublicID,
 		t.CreatedByUserEmail,
 		t.UpdatedByUserPublicID,
@@ -553,7 +473,7 @@ func (s *Store) UpdateThreadModelID(ctx context.Context, endpointID string, thre
 	}
 
 	res, err := s.db.ExecContext(ctx, `
-UPDATE ai_threads
+UPDATE ai_thread_settings
 SET model_id = ?
 WHERE endpoint_id = ? AND thread_id = ?
 `, modelID, endpointID, threadID)
@@ -585,7 +505,7 @@ func (s *Store) UpdateThreadModelAndReasoningSelection(ctx context.Context, endp
 		return errors.New("missing model_id")
 	}
 	res, err := s.db.ExecContext(ctx, `
-UPDATE ai_threads
+UPDATE ai_thread_settings
 SET model_id = ?,
     reasoning_selection_json = ?
 WHERE endpoint_id = ? AND thread_id = ?
@@ -614,7 +534,7 @@ func (s *Store) UpdateThreadReasoningSelection(ctx context.Context, endpointID s
 		return errors.New("invalid request")
 	}
 	res, err := s.db.ExecContext(ctx, `
-UPDATE ai_threads
+UPDATE ai_thread_settings
 SET reasoning_selection_json = ?
 WHERE endpoint_id = ? AND thread_id = ?
 `, reasoningSelectionJSON, endpointID, threadID)
@@ -646,51 +566,10 @@ func (s *Store) UpdateThreadPermissionType(ctx context.Context, endpointID strin
 	}
 
 	res, err := s.db.ExecContext(ctx, `
-UPDATE ai_threads
+UPDATE ai_thread_settings
 SET permission_type = ?
 WHERE endpoint_id = ? AND thread_id = ?
 `, permissionType, endpointID, threadID)
-	if err != nil {
-		return err
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return sql.ErrNoRows
-	}
-	return nil
-}
-
-func (s *Store) RenameThread(ctx context.Context, endpointID string, threadID string, title string, updatedByID string, updatedByEmail string) error {
-	if s == nil || s.db == nil {
-		return errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	title = strings.TrimSpace(title)
-	if endpointID == "" || threadID == "" {
-		return errors.New("invalid request")
-	}
-	if len(title) > 200 {
-		return errors.New("title too long")
-	}
-
-	now := time.Now().UnixMilli()
-	res, err := s.db.ExecContext(ctx, `
-UPDATE ai_threads
-SET title = ?,
-    title_source = ?,
-    title_generated_at_unix_ms = 0,
-    title_input_message_id = '',
-    title_model_id = '',
-    title_prompt_version = '',
-    updated_at_unix_ms = ?,
-    updated_by_user_public_id = ?,
-    updated_by_user_email = ?
-WHERE endpoint_id = ? AND thread_id = ?
-`, title, ThreadTitleSourceUser, now, strings.TrimSpace(updatedByID), strings.TrimSpace(updatedByEmail), endpointID, threadID)
 	if err != nil {
 		return err
 	}
@@ -718,7 +597,7 @@ func (s *Store) SetThreadPinned(ctx context.Context, endpointID string, threadID
 		pinnedAt = time.Now().UnixMilli()
 	}
 	res, err := s.db.ExecContext(ctx, `
-UPDATE ai_threads
+UPDATE ai_thread_settings
 SET pinned_at_unix_ms = ?,
     updated_by_user_public_id = ?,
     updated_by_user_email = ?
@@ -732,61 +611,6 @@ WHERE endpoint_id = ? AND thread_id = ?
 		return 0, sql.ErrNoRows
 	}
 	return pinnedAt, nil
-}
-
-func (s *Store) SetAutoThreadTitle(ctx context.Context, endpointID string, threadID string, title string, inputMessageID string, modelID string, promptVersion string, generatedAtUnixMs int64, updatedByID string, updatedByEmail string) (bool, error) {
-	if s == nil || s.db == nil {
-		return false, errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	title = strings.TrimSpace(title)
-	inputMessageID = strings.TrimSpace(inputMessageID)
-	modelID = strings.TrimSpace(modelID)
-	promptVersion = strings.TrimSpace(promptVersion)
-	if endpointID == "" || threadID == "" || title == "" {
-		return false, errors.New("invalid request")
-	}
-	if len(title) > 200 {
-		return false, errors.New("title too long")
-	}
-	if generatedAtUnixMs <= 0 {
-		generatedAtUnixMs = time.Now().UnixMilli()
-	}
-	res, err := s.db.ExecContext(ctx, `
-UPDATE ai_threads
-SET title = ?,
-    title_source = ?,
-    title_generated_at_unix_ms = ?,
-    title_input_message_id = ?,
-    title_model_id = ?,
-    title_prompt_version = ?,
-    updated_at_unix_ms = ?,
-    updated_by_user_public_id = ?,
-    updated_by_user_email = ?
-WHERE endpoint_id = ? AND thread_id = ?
-  AND TRIM(COALESCE(title, '')) = ''
-  AND LOWER(TRIM(COALESCE(title_source, ''))) != ?
-`, title, ThreadTitleSourceAuto, generatedAtUnixMs, inputMessageID, modelID, promptVersion, generatedAtUnixMs, strings.TrimSpace(updatedByID), strings.TrimSpace(updatedByEmail), endpointID, threadID, ThreadTitleSourceUser)
-	if err != nil {
-		return false, err
-	}
-	n, _ := res.RowsAffected()
-	return n > 0, nil
-}
-
-func normalizeThreadTitleSource(raw string) string {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case ThreadTitleSourceAuto:
-		return ThreadTitleSourceAuto
-	case ThreadTitleSourceUser:
-		return ThreadTitleSourceUser
-	default:
-		return ""
-	}
 }
 
 func canonicalPermissionType(permissionType string) (string, error) {
@@ -826,7 +650,7 @@ func (s *Store) DeleteThread(ctx context.Context, endpointID string, threadID st
 	if err := deleteThreadScopedRowsTx(ctx, tx, endpointID, threadID); err != nil {
 		return err
 	}
-	res, err := tx.ExecContext(ctx, `DELETE FROM ai_threads WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID)
+	res, err := tx.ExecContext(ctx, `DELETE FROM ai_thread_settings WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID)
 	if err != nil {
 		return err
 	}

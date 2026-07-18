@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/floegence/redeven/internal/session"
@@ -161,7 +162,11 @@ func (a *threadActor) handleStopThread(ctx context.Context, meta *session.Meta, 
 	a.mgr.svc.closeThreadSubagents(ctx, endpointID, threadID, persistTO)
 	resp := StopThreadResponse{OK: true, RecoveredFollowups: make([]FollowupItemView, 0, len(recovered))}
 	for i, rec := range recovered {
-		resp.RecoveredFollowups = append(resp.RecoveredFollowups, followupRecordToView(rec, i+1))
+		view, err := followupRecordToView(rec, i+1)
+		if err != nil {
+			return StopThreadResponse{}, fmt.Errorf("decode recovered followup %q: %w", rec.QueueID, err)
+		}
+		resp.RecoveredFollowups = append(resp.RecoveredFollowups, view)
 	}
 	return resp, nil
 }

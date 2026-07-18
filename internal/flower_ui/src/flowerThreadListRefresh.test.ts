@@ -65,7 +65,6 @@ function approvalAction(overrides: Partial<FlowerMainToolApprovalAction> = {}): 
 function subagentSummary(overrides: Partial<FlowerSubagentSummary> = {}): FlowerSubagentSummary {
   return {
     parent_thread_id: 'thread-selected',
-    subagent_id: 'thread-child-review',
     thread_id: 'thread-child-review',
     task_name: 'Review API',
     task_description: 'Review the public API boundary.',
@@ -197,8 +196,8 @@ describe('mergeFlowerThreadListRefresh', () => {
         created_at_ms: 10,
       }],
       subagents: [
-        subagentSummary({ thread_id: 'thread-child-a', subagent_id: 'thread-child-a', task_name: 'Research A' }),
-        subagentSummary({ thread_id: 'thread-child-b', subagent_id: 'thread-child-b', task_name: 'Research B' }),
+        subagentSummary({ thread_id: 'thread-child-a', task_name: 'Research A' }),
+        subagentSummary({ thread_id: 'thread-child-b', task_name: 'Research B' }),
       ],
     });
     const summaryWithInheritedSubagents = thread({

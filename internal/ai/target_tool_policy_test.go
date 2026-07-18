@@ -54,6 +54,7 @@ func TestHandleToolCall_ExplicitTargetPolicyBlocksLocalFileToolWithoutTarget(t *
 		SessionMeta:      &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
 		ToolTargetPolicy: ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget},
 	})
+	allowToolsForTest(t, r, "file.read")
 
 	outcome, err := r.handleToolCall(context.Background(), "tool_read_1", "file.read", map[string]any{
 		"path": "/tmp/example.txt",
@@ -80,6 +81,7 @@ func TestHandleToolCall_ExplicitTargetPolicyUsesTargetExecutor(t *testing.T) {
 		ToolTargetPolicy:   ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget},
 		TargetToolExecutor: executor,
 	})
+	allowToolsForTest(t, r, "file.read")
 
 	outcome, err := r.handleToolCall(context.Background(), "tool_file_read_1", "file.read", map[string]any{
 		"target_id": "provider:https%3A%2F%2Fredeven.test:env:env_a",
@@ -123,6 +125,7 @@ func TestHandleToolCall_ExplicitTargetPolicyPreservesTargetProvenance(t *testing
 		ToolTargetPolicy:   ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget},
 		TargetToolExecutor: executor,
 	})
+	allowToolsForTest(t, r, "file.read")
 
 	outcome, err := r.handleToolCall(context.Background(), "tool_file_read_1", "file.read", map[string]any{
 		"target_id": "ssh:ssh%3Adevbox%3Adefault%3Akey_agent%3Aremote_default",
@@ -159,6 +162,7 @@ func TestHandleToolCall_ExplicitTargetPolicyRejectsUnallowedTarget(t *testing.T)
 		},
 		TargetToolExecutor: executor,
 	})
+	allowToolsForTest(t, r, "file.read")
 
 	outcome, err := r.handleToolCall(context.Background(), "tool_file_read_1", "file.read", map[string]any{
 		"target_id": "provider:https%3A%2F%2Fredeven.test:env:env_b",
@@ -188,6 +192,7 @@ func TestHandleToolCall_LocalRuntimePolicyKeepsExistingToolBehavior(t *testing.T
 		WorkingDir:   root,
 		SessionMeta:  &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
 	})
+	allowToolsForTest(t, r, "file.write")
 
 	outcome, err := r.handleToolCall(context.Background(), "tool_write_1", "file.write", map[string]any{
 		"file_path": "note.txt",
@@ -216,7 +221,7 @@ func TestPrepareRunUsesThreadScopedTargetPolicy(t *testing.T) {
 			Mode: ToolTargetModeExplicitTarget,
 		},
 		TargetToolExecutor: executor,
-		ToolTargetPolicyForRun: func(_ *session.Meta, thread threadstore.Thread, _ *threadstore.FlowerThreadMetadata) ToolTargetPolicy {
+		ToolTargetPolicyForRun: func(_ *session.Meta, thread threadstore.ThreadSettings, _ *threadstore.FlowerThreadMetadata) ToolTargetPolicy {
 			return ToolTargetPolicy{
 				Mode:            ToolTargetModeExplicitTarget,
 				DefaultTargetID: "provider:https%3A%2F%2Fredeven.test:env:" + thread.ThreadID,

@@ -189,7 +189,15 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 	if strings.TrimSpace(req.Model) == "" {
 		return ModelGatewayResult{}, errors.New("missing model")
 	}
-	if p.forceChat && !requiresOpenAIResponsesRoute(req) {
+	useChat := p.forceChat && !requiresOpenAIResponsesRoute(req)
+	route := "openai-responses"
+	if useChat {
+		route = "openai-chat"
+	}
+	if err := validateGatewayAttachmentParts(req.Messages, route); err != nil {
+		return ModelGatewayResult{}, err
+	}
+	if useChat {
 		return p.streamChatTurn(ctx, req, onEvent)
 	}
 
@@ -1417,9 +1425,7 @@ func buildOpenAIChatMessages(messages []Message) []openai.ChatCompletionMessageP
 						contentParts = append(contentParts, openai.ImageContentPart(openai.ChatCompletionContentPartImageImageURLParam{URL: uri}))
 					}
 				case "file":
-					if uri := strings.TrimSpace(part.FileURI); uri != "" {
-						contentParts = append(contentParts, openai.TextContentPart("Attachment reference: "+uri))
-					}
+					continue
 				}
 			}
 			if len(contentParts) == 0 {
@@ -1705,6 +1711,9 @@ func (p *anthropicProvider) StreamTurn(ctx context.Context, req ModelGatewayRequ
 	}
 	if strings.TrimSpace(req.Model) == "" {
 		return ModelGatewayResult{}, errors.New("missing model")
+	}
+	if err := validateGatewayAttachmentParts(req.Messages, "anthropic"); err != nil {
+		return ModelGatewayResult{}, err
 	}
 	tools, aliasToReal := buildAnthropicTools(req.Tools)
 	params := anthropic.MessageNewParams{
@@ -2053,6 +2062,52 @@ func isTextLikeMimeType(mime string) bool {
 	default:
 		return false
 	}
+}
+
+func validateGatewayAttachmentParts(messages []Message, route string) error {
+	for messageIndex, message := range messages {
+		for partIndex, part := range message.Content {
+			partType := strings.ToLower(strings.TrimSpace(part.Type))
+			if partType != "image" && partType != "file" {
+				continue
+			}
+			uri := strings.TrimSpace(part.FileURI)
+			mimeType := strings.ToLower(strings.TrimSpace(part.MimeType))
+			if uri == "" || mimeType == "" {
+				return fmt.Errorf("message %d attachment %d is incomplete", messageIndex, partIndex)
+			}
+			if partType == "image" {
+				switch mimeType {
+				case "image/png", "image/jpeg", "image/gif", "image/webp":
+				default:
+					return fmt.Errorf("message %d attachment %d has unsupported image MIME type %q", messageIndex, partIndex, mimeType)
+				}
+				if _, ok := extractDataURLBase64(uri); !ok && !strings.HasPrefix(uri, "http://") && !strings.HasPrefix(uri, "https://") {
+					return fmt.Errorf("message %d attachment %d has unsupported image source", messageIndex, partIndex)
+				}
+				continue
+			}
+			if !supportedProviderFileMIMEType(mimeType) {
+				return fmt.Errorf("message %d attachment %d has unsupported file MIME type %q", messageIndex, partIndex, mimeType)
+			}
+			switch route {
+			case "openai-responses":
+				if _, ok := extractDataURLBase64(uri); !ok && !strings.HasPrefix(uri, "http://") && !strings.HasPrefix(uri, "https://") {
+					return fmt.Errorf("message %d attachment %d has unsupported file source", messageIndex, partIndex)
+				}
+			case "anthropic":
+				if mimeType != "application/pdf" && !isTextLikeMimeType(mimeType) {
+					return fmt.Errorf("message %d attachment %d is unsupported by Anthropic", messageIndex, partIndex)
+				}
+				if _, ok := extractDataURLBase64(uri); !ok {
+					return fmt.Errorf("message %d attachment %d requires inline file data", messageIndex, partIndex)
+				}
+			default:
+				return fmt.Errorf("provider route %q does not support file input", route)
+			}
+		}
+	}
+	return nil
 }
 
 func collectSystemPrompt(messages []Message) string {

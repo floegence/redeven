@@ -56,7 +56,7 @@ func (r *run) activateSkill(name string) (SkillActivation, bool, error) {
 
 func (r *run) skillPermissionType() string {
 	if r == nil || r.permissionType == "" {
-		return permissionTypeString(FlowerPermissionApprovalRequired)
+		return ""
 	}
 	return permissionTypeString(r.permissionType)
 }
@@ -155,10 +155,19 @@ func invalidSubagentArguments(code string, msg string, meta map[string]any) erro
 func validateSubagentsArgsByAction(action string, args map[string]any) error {
 	switch action {
 	case subagentActionSpawn:
+		if _, exists := args["title"]; exists {
+			return invalidSubagentArguments("invalid_arguments.subagents.spawn_title_unsupported", "spawn does not accept title; use task_name", nil)
+		}
+		if _, exists := args["objective"]; exists {
+			return invalidSubagentArguments("invalid_arguments.subagents.spawn_objective_unsupported", "spawn does not accept objective; use message", nil)
+		}
+		if strings.TrimSpace(anyToString(args["task_name"])) == "" {
+			return invalidSubagentArguments("invalid_arguments.subagents.spawn_requires_task_name", "spawn requires task_name", nil)
+		}
 		if strings.TrimSpace(anyToString(args["task_description"])) == "" {
 			return invalidSubagentArguments("invalid_arguments.subagents.spawn_requires_task_description", "spawn requires task_description", nil)
 		}
-		if strings.TrimSpace(anyToString(args["message"])) == "" && strings.TrimSpace(anyToString(args["objective"])) == "" {
+		if strings.TrimSpace(anyToString(args["message"])) == "" {
 			return invalidSubagentArguments("invalid_arguments.subagents.spawn_requires_message", "spawn requires message", nil)
 		}
 		agentType := strings.ToLower(strings.TrimSpace(anyToString(args["agent_type"])))

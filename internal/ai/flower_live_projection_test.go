@@ -151,7 +151,6 @@ func TestFlowerLiveProjectionKeepsResolvedDelegatedAuditActions(t *testing.T) {
 		DelegatedRef: &DelegatedApprovalRef{
 			ParentThreadID:  "thread_parent",
 			ParentRunID:     "run_parent",
-			SubagentID:      "child",
 			ChildThreadID:   "thread_child",
 			ChildRunID:      "run_child",
 			ChildToolCallID: "tool_child",
@@ -211,7 +210,6 @@ func TestFlowerLiveProjectionKeepsSinglePrimaryDelegatedApprovalSurface(t *testi
 		DelegatedRef: &DelegatedApprovalRef{
 			ParentThreadID:  "thread_parent",
 			ParentRunID:     "run_parent",
-			SubagentID:      "child_first",
 			ChildThreadID:   "thread_child_first",
 			ChildRunID:      "run_child_first",
 			ChildToolCallID: "tool_child_first",
@@ -227,7 +225,6 @@ func TestFlowerLiveProjectionKeepsSinglePrimaryDelegatedApprovalSurface(t *testi
 	second.DelegatedRef = &DelegatedApprovalRef{
 		ParentThreadID:  "thread_parent",
 		ParentRunID:     "run_parent",
-		SubagentID:      "child_second",
 		ChildThreadID:   "thread_child_second",
 		ChildRunID:      "run_child_second",
 		ChildToolCallID: "tool_child_second",

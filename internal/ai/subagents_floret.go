@@ -418,6 +418,8 @@ func (s *floretSubagentRuntime) newHostLocked(parent *run, resolved resolvedSuba
 		TurnBudgets{},
 		parent.webSearchMode,
 		withDisabledFloretCoreControlTools(childContract.HiddenControlTools...),
+		withFloretAttachmentResolver(childRun.resolveFloretMessageAttachment, modelCapability.SupportsImageInput, modelCapability.SupportsFileInput),
+		withFloretBeforeRequest(childRun.floretContractError),
 	)
 	store := parent.floretStore
 	if store == nil {
@@ -447,7 +449,7 @@ func (s *floretSubagentRuntime) newHostLocked(parent *run, resolved resolvedSuba
 		Sink:                 floretSubagentEventSink{runtime: s},
 		ToolSurfaceProvider:  surfaceProvider,
 		SubAgentRunTimeout:   subagentRunTimeout,
-		ThreadTitleMode:      flruntime.ThreadTitleModeHostOwned,
+		ThreadTitleMode:      flruntime.ThreadTitleModeProvider,
 		LoopLimits: flruntime.LoopLimits{
 			NoProgressLimit:    2,
 			DuplicateToolLimit: 3,
@@ -714,7 +716,11 @@ func (s *floretSubagentRuntime) dynamicSubagentToolSurfaceProvider(state *floret
 		childRun.settlementThreadID = strings.TrimSpace(string(req.ThreadID))
 		childRun.settlementRunID = strings.TrimSpace(string(req.RunID))
 		childRun.settlementTurnID = strings.TrimSpace(string(req.TurnID))
-		childRun.permissionType = parent.currentThreadPermissionType(ctx, subagentPermissionLimit(parent))
+		permissionType, err := parent.currentThreadPermissionType(ctx)
+		if err != nil {
+			return flruntime.ToolSurface{}, err
+		}
+		childRun.permissionType = permissionType
 		registry := NewInMemoryToolRegistry()
 		if err := registerBuiltInTools(registry, childRun); err != nil {
 			return flruntime.ToolSurface{}, err
@@ -724,7 +730,6 @@ func (s *floretSubagentRuntime) dynamicSubagentToolSurfaceProvider(state *floret
 			parent.recordRunDiagnostic("subagent.tool_surface.error", RealtimeStreamKindLifecycle, map[string]any{
 				"phase":           strings.TrimSpace(req.Phase),
 				"step":            req.Step,
-				"subagent_id":     childThreadID,
 				"child_thread_id": childThreadID,
 				"child_run_id":    childRunID,
 				"error":           err.Error(),
@@ -744,7 +749,6 @@ func (s *floretSubagentRuntime) dynamicSubagentToolSurfaceProvider(state *floret
 		}
 		if childThreadID != "" {
 			hostContext[subagentToolHostContextChildThreadIDKey] = childThreadID
-			hostContext[subagentToolHostContextSubagentIDKey] = childThreadID
 		}
 		if childRunID != "" && childRunID != childThreadID {
 			hostContext[subagentToolHostContextChildRunIDKey] = childRunID
@@ -762,7 +766,6 @@ func (s *floretSubagentRuntime) dynamicSubagentToolSurfaceProvider(state *floret
 			parent.recordRunDiagnostic("subagent.tool_surface.updated", RealtimeStreamKindLifecycle, map[string]any{
 				"phase":             strings.TrimSpace(req.Phase),
 				"step":              req.Step,
-				"subagent_id":       childThreadID,
 				"child_thread_id":   childThreadID,
 				"child_run_id":      childRunID,
 				"permission_type":   permissionTypeString(childRun.permissionType),
@@ -901,23 +904,24 @@ func (s *floretSubagentRuntime) spawn(ctx context.Context, toolCallID string, ar
 		return nil, err
 	}
 	agentType := normalizeSubagentAgentType(anyToString(args["agent_type"]))
+	if _, exists := args["title"]; exists {
+		return nil, errors.New("subagents spawn does not accept title; use task_name")
+	}
+	if _, exists := args["objective"]; exists {
+		return nil, errors.New("subagents spawn does not accept objective; use message")
+	}
+	taskName := strings.TrimSpace(anyToString(args["task_name"]))
+	if taskName == "" {
+		return nil, errors.New("subagents spawn requires task_name")
+	}
 	taskDescription := strings.TrimSpace(anyToString(args["task_description"]))
 	if taskDescription == "" {
 		return nil, errors.New("subagents spawn requires task_description")
 	}
 	message := strings.TrimSpace(anyToString(args["message"]))
-	objective := strings.TrimSpace(anyToString(args["objective"]))
 	if message == "" {
-		message = objective
+		return nil, errors.New("subagents spawn requires message")
 	}
-	taskName := resolveSubagentTaskName(
-		anyToString(args["task_name"]),
-		anyToString(args["title"]),
-		taskDescription,
-		message,
-		objective,
-		agentType,
-	)
 	contextMode := normalizeSubagentContextMode(anyToString(args["context_mode"]))
 	forkMode := subagentForkModeForContextMode(contextMode)
 	childThreadID, err := NewThreadID()
@@ -948,7 +952,6 @@ func (s *floretSubagentRuntime) spawn(ctx context.Context, toolCallID string, ar
 		AgentType:   agentType,
 		TaskName:    taskName,
 		Message:     message,
-		Objective:   objective,
 		ContextMode: contextMode,
 		Contract:    childContract,
 	})
@@ -973,7 +976,6 @@ func (s *floretSubagentRuntime) spawn(ctx context.Context, toolCallID string, ar
 	s.refreshSubagentsPatch(ctx, localSnapshot)
 	item := subagentSnapshotPayload(localSnapshot)
 	parent.recordRunDiagnostic("delegation.spawn", RealtimeStreamKindLifecycle, map[string]any{
-		"subagent_id":      item["subagent_id"],
 		"thread_id":        item["thread_id"],
 		"agent_type":       item["agent_type"],
 		"task_name":        item["task_name"],
@@ -985,13 +987,11 @@ func (s *floretSubagentRuntime) spawn(ctx context.Context, toolCallID string, ar
 		"status":           "ok",
 		"action":           subagentActionSpawn,
 		"accepted":         true,
-		"subagent_id":      bounded["subagent_id"],
 		"thread_id":        bounded["thread_id"],
 		"agent_type":       bounded["agent_type"],
 		"context_mode":     bounded["context_mode"],
 		"task_name":        bounded["task_name"],
 		"task_description": bounded["task_description"],
-		"title":            bounded["title"],
 		"items":            []map[string]any{bounded},
 	}), nil
 }
@@ -1231,18 +1231,12 @@ func boundedSubagentStatusItemsFromAny(raw any) []map[string]any {
 
 func boundedSubagentStatusItem(item map[string]any) map[string]any {
 	threadID := strings.TrimSpace(anyToString(item["thread_id"]))
-	if threadID == "" {
-		threadID = strings.TrimSpace(anyToString(item["subagent_id"]))
-	}
 	taskName := truncateRunes(strings.TrimSpace(anyToString(item["task_name"])), 180)
 	taskDescription := truncateRunes(strings.TrimSpace(anyToString(item["task_description"])), 500)
-	title := truncateRunes(firstNonEmptyString(taskName, strings.TrimSpace(anyToString(item["title"])), threadID), 180)
 	return map[string]any{
-		"subagent_id":      threadID,
 		"thread_id":        threadID,
 		"agent_type":       strings.TrimSpace(anyToString(item["agent_type"])),
 		"context_mode":     normalizeSubagentContextMode(anyToString(item["context_mode"])),
-		"title":            title,
 		"task_name":        taskName,
 		"task_description": taskDescription,
 		"status":           strings.TrimSpace(anyToString(item["status"])),
@@ -1258,19 +1252,13 @@ func boundedSubagentStatusItem(item map[string]any) map[string]any {
 
 func boundedSubagentItem(item map[string]any) map[string]any {
 	threadID := strings.TrimSpace(anyToString(item["thread_id"]))
-	if threadID == "" {
-		threadID = strings.TrimSpace(anyToString(item["subagent_id"]))
-	}
 	taskName := truncateRunes(strings.TrimSpace(anyToString(item["task_name"])), 180)
 	taskDescription := truncateRunes(strings.TrimSpace(anyToString(item["task_description"])), 500)
-	title := truncateRunes(firstNonEmptyString(taskName, strings.TrimSpace(anyToString(item["title"])), threadID), 180)
 	lastMessage := truncateRunes(strings.TrimSpace(anyToString(item["last_message"])), 900)
 	out := map[string]any{
-		"subagent_id":      threadID,
 		"thread_id":        threadID,
 		"agent_type":       strings.TrimSpace(anyToString(item["agent_type"])),
 		"context_mode":     normalizeSubagentContextMode(anyToString(item["context_mode"])),
-		"title":            title,
 		"task_name":        taskName,
 		"task_description": taskDescription,
 		"status":           strings.TrimSpace(anyToString(item["status"])),
@@ -1381,8 +1369,8 @@ func projectSubagentToolResult(in map[string]any) map[string]any {
 
 func subagentToolResultAllowedKeys() map[string]struct{} {
 	return stringSet(
-		"status", "action", "accepted", "subagent_id", "thread_id", "agent_type",
-		"context_mode", "task_name", "task_description", "title", "items",
+		"status", "action", "accepted", "thread_id", "agent_type",
+		"context_mode", "task_name", "task_description", "items",
 		"agent_count", "counts", "detail_omitted", "detail_strategy",
 		"ids", "target_ids", "requested_ids", "requested_count",
 		"requested_timeout_ms", "effective_timeout_ms", "timeout_ms",
@@ -1656,7 +1644,7 @@ func subagentItemsFromAny(raw any) []map[string]any {
 
 func shrinkSubagentToolItems(items []map[string]any, maxRunes int) {
 	for _, item := range items {
-		for _, key := range []string{"waiting_prompt", "last_message", "result_digest", "task_name", "title"} {
+		for _, key := range []string{"waiting_prompt", "last_message", "result_digest", "task_name"} {
 			if text := strings.TrimSpace(anyToString(item[key])); text != "" {
 				item[key] = truncateRunes(text, maxRunes)
 				item["truncated"] = true
@@ -1669,11 +1657,7 @@ func minimalSubagentToolResult(out map[string]any, items []map[string]any) map[s
 	minimalItems := make([]map[string]any, 0, len(items))
 	for _, item := range items {
 		threadID := strings.TrimSpace(anyToString(item["thread_id"]))
-		if threadID == "" {
-			threadID = strings.TrimSpace(anyToString(item["subagent_id"]))
-		}
 		minimalItems = append(minimalItems, map[string]any{
-			"subagent_id":      threadID,
 			"thread_id":        threadID,
 			"status":           strings.TrimSpace(anyToString(item["status"])),
 			"detail_available": anyToBool(item["detail_available"]) || threadID != "",
@@ -1784,13 +1768,12 @@ func (s *floretSubagentRuntime) sendInput(ctx context.Context, _ string, args ma
 	item := subagentSnapshotPayload(localSnapshot)
 	bounded := boundedSubagentItem(item)
 	return trimSubagentToolResult(map[string]any{
-		"status":      "ok",
-		"action":      subagentActionSendInput,
-		"target":      target,
-		"subagent_id": bounded["subagent_id"],
-		"thread_id":   bounded["thread_id"],
-		"accepted":    true,
-		"items":       []map[string]any{bounded},
+		"status":    "ok",
+		"action":    subagentActionSendInput,
+		"target":    target,
+		"thread_id": bounded["thread_id"],
+		"accepted":  true,
+		"items":     []map[string]any{bounded},
 	}), nil
 }
 
@@ -1854,14 +1837,13 @@ func (s *floretSubagentRuntime) close(ctx context.Context, _ string, args map[st
 	item := subagentSnapshotPayload(snapshot)
 	bounded := boundedSubagentItem(item)
 	out := map[string]any{
-		"status":      "ok",
-		"action":      subagentActionClose,
-		"target":      target,
-		"subagent_id": bounded["subagent_id"],
-		"thread_id":   bounded["thread_id"],
-		"closed":      true,
-		"stopped":     true,
-		"items":       []map[string]any{bounded},
+		"status":    "ok",
+		"action":    subagentActionClose,
+		"target":    target,
+		"thread_id": bounded["thread_id"],
+		"closed":    true,
+		"stopped":   true,
+		"items":     []map[string]any{bounded},
 	}
 	if err := s.cleanupTerminalProcessesForSnapshots(closeCtx, []subagentSnapshot{snapshot}); err != nil {
 		return nil, fmt.Errorf("cleanup subagent terminal processes: %w", err)
@@ -2372,7 +2354,7 @@ func flowerSubagentDetailCompactionAnchors(detail flruntime.SubAgentDetail) (map
 	if threadID == "" {
 		return nil, errors.New("Floret subagent detail missing thread id")
 	}
-	events := append([]flruntime.SubAgentDetailEvent(nil), detail.Events...)
+	events := append([]flruntime.ThreadDetailEvent(nil), detail.Events...)
 	sort.SliceStable(events, func(i, j int) bool {
 		return events[i].Ordinal < events[j].Ordinal
 	})
@@ -2407,13 +2389,13 @@ func flowerSubagentDetailCompactionAnchors(detail flruntime.SubAgentDetail) (map
 	return out, nil
 }
 
-func flowerSubagentVisibleMessageID(threadID string, event flruntime.SubAgentDetailEvent) string {
+func flowerSubagentVisibleMessageID(threadID string, event flruntime.ThreadDetailEvent) string {
 	switch event.Kind {
-	case flruntime.SubAgentDetailEventUserMessage:
+	case flruntime.ThreadDetailEventUserMessage:
 		if flowerSubagentRawDelegatedMission(event.Metadata) {
 			return ""
 		}
-	case flruntime.SubAgentDetailEventAssistantMessage, flruntime.SubAgentDetailEventError:
+	case flruntime.ThreadDetailEventAssistantMessage, flruntime.ThreadDetailEventError:
 	default:
 		return ""
 	}
@@ -2428,7 +2410,7 @@ func flowerSubagentVisibleMessageID(threadID string, event flruntime.SubAgentDet
 		return ""
 	}
 	suffix := "message"
-	if event.Kind == flruntime.SubAgentDetailEventError {
+	if event.Kind == flruntime.ThreadDetailEventError {
 		suffix = "error"
 	}
 	return fmt.Sprintf("%s:%d:%s", flowerSubagentSafeIDPart(threadID), maxInt64(0, event.Ordinal), suffix)
@@ -2479,17 +2461,11 @@ func maxInt64(left int64, right int64) int64 {
 
 func flowerSubagentSummary(snapshot flruntime.SubAgentSnapshot) FlowerSubagentSummary {
 	local := subagentSnapshotFromFloret(snapshot)
-	title := strings.TrimSpace(local.TaskName)
-	if title == "" {
-		title = strings.TrimSpace(local.ThreadID)
-	}
 	return FlowerSubagentSummary{
 		ParentThreadID:  local.ParentThreadID,
-		SubagentID:      local.ThreadID,
 		ThreadID:        local.ThreadID,
 		TaskName:        local.TaskName,
 		TaskDescription: local.TaskDescription,
-		Title:           title,
 		AgentType:       local.AgentType,
 		ContextMode:     normalizeSubagentContextMode(local.ContextMode),
 		Status:          local.Status,
@@ -2511,22 +2487,14 @@ func cloneFlowerSubagentSummaries(in []FlowerSubagentSummary) []FlowerSubagentSu
 	out := make([]FlowerSubagentSummary, 0, len(in))
 	for _, item := range in {
 		item.ParentThreadID = strings.TrimSpace(item.ParentThreadID)
-		item.SubagentID = strings.TrimSpace(item.SubagentID)
 		item.ThreadID = strings.TrimSpace(item.ThreadID)
 		item.TaskName = strings.TrimSpace(item.TaskName)
 		item.TaskDescription = strings.TrimSpace(item.TaskDescription)
-		item.Title = strings.TrimSpace(item.Title)
 		item.AgentType = strings.TrimSpace(item.AgentType)
 		item.ContextMode = normalizeSubagentContextMode(item.ContextMode)
 		item.Status = strings.TrimSpace(item.Status)
 		item.LastMessage = strings.TrimSpace(item.LastMessage)
 		item.WaitingPrompt = strings.TrimSpace(item.WaitingPrompt)
-		if item.ThreadID == "" {
-			item.ThreadID = item.SubagentID
-		}
-		if item.SubagentID == "" {
-			item.SubagentID = item.ThreadID
-		}
 		if item.ThreadID == "" {
 			continue
 		}
@@ -2538,7 +2506,7 @@ func cloneFlowerSubagentSummaries(in []FlowerSubagentSummary) []FlowerSubagentSu
 	return out
 }
 
-func flowerSubagentTimelineRows(events []flruntime.SubAgentDetailEvent) []FlowerSubagentTimelineRow {
+func flowerSubagentTimelineRows(events []flruntime.ThreadDetailEvent) []FlowerSubagentTimelineRow {
 	out := make([]FlowerSubagentTimelineRow, 0, len(events))
 	for _, event := range events {
 		out = append(out, flowerSubagentTimelineRow(event))
@@ -2546,7 +2514,7 @@ func flowerSubagentTimelineRows(events []flruntime.SubAgentDetailEvent) []Flower
 	return out
 }
 
-func flowerSubagentTimelineRow(event flruntime.SubAgentDetailEvent) FlowerSubagentTimelineRow {
+func flowerSubagentTimelineRow(event flruntime.ThreadDetailEvent) FlowerSubagentTimelineRow {
 	return FlowerSubagentTimelineRow{
 		Ordinal:     event.Ordinal,
 		Kind:        strings.TrimSpace(string(event.Kind)),
@@ -2572,7 +2540,7 @@ func flowerSubagentActivityBlockValue(timeline observation.ActivityTimeline) *Ac
 	return &block
 }
 
-func flowerSubagentDetailMessage(in *flruntime.SubAgentDetailMessage) *FlowerSubagentDetailMessage {
+func flowerSubagentDetailMessage(in *flruntime.ThreadDetailMessage) *FlowerSubagentDetailMessage {
 	if in == nil {
 		return nil
 	}
@@ -2580,14 +2548,25 @@ func flowerSubagentDetailMessage(in *flruntime.SubAgentDetailMessage) *FlowerSub
 	if text == "" {
 		text = strings.TrimSpace(in.Preview)
 	}
-	return &FlowerSubagentDetailMessage{
+	out := &FlowerSubagentDetailMessage{
 		Role:    strings.TrimSpace(in.Role),
 		Text:    text,
 		Preview: strings.TrimSpace(in.Preview),
 	}
+	for _, attachment := range in.Attachments {
+		uploadID, err := uploadIDFromFloretResourceRef(attachment.ResourceRef)
+		if err != nil {
+			continue
+		}
+		out.Attachments = append(out.Attachments, FollowupAttachmentView{
+			Name: strings.TrimSpace(attachment.Name), MimeType: strings.TrimSpace(attachment.MIMEType),
+			URL: uploadURLPrefix + uploadID,
+		})
+	}
+	return out
 }
 
-func flowerSubagentToolCallView(in *flruntime.SubAgentDetailToolCall) *FlowerSubagentToolCallView {
+func flowerSubagentToolCallView(in *flruntime.ThreadDetailToolCall) *FlowerSubagentToolCallView {
 	if in == nil {
 		return nil
 	}
@@ -2599,7 +2578,7 @@ func flowerSubagentToolCallView(in *flruntime.SubAgentDetailToolCall) *FlowerSub
 	}
 }
 
-func flowerSubagentToolResultView(in *flruntime.SubAgentDetailToolResult) *FlowerSubagentToolResultView {
+func flowerSubagentToolResultView(in *flruntime.ThreadDetailToolResult) *FlowerSubagentToolResultView {
 	if in == nil {
 		return nil
 	}
@@ -2618,7 +2597,7 @@ func flowerSubagentToolResultView(in *flruntime.SubAgentDetailToolResult) *Flowe
 	}
 }
 
-func flowerSubagentApprovalView(in *flruntime.SubAgentDetailApproval) *FlowerSubagentApprovalView {
+func flowerSubagentApprovalView(in *flruntime.ThreadDetailApproval) *FlowerSubagentApprovalView {
 	if in == nil {
 		return nil
 	}
@@ -2633,7 +2612,7 @@ func flowerSubagentApprovalView(in *flruntime.SubAgentDetailApproval) *FlowerSub
 	}
 }
 
-func flowerSubagentTurnMarkerView(in *flruntime.SubAgentDetailTurnMarker) *FlowerSubagentTurnMarkerView {
+func flowerSubagentTurnMarkerView(in *flruntime.ThreadDetailTurnMarker) *FlowerSubagentTurnMarkerView {
 	if in == nil {
 		return nil
 	}
@@ -2643,7 +2622,7 @@ func flowerSubagentTurnMarkerView(in *flruntime.SubAgentDetailTurnMarker) *Flowe
 	}
 }
 
-func flowerSubagentCompactionView(in *flruntime.SubAgentDetailCompaction) *FlowerSubagentCompactionView {
+func flowerSubagentCompactionView(in *flruntime.ThreadDetailCompaction) *FlowerSubagentCompactionView {
 	if in == nil {
 		return nil
 	}
@@ -2657,8 +2636,8 @@ func flowerSubagentCompactionView(in *flruntime.SubAgentDetailCompaction) *Flowe
 	}
 }
 
-func flowerSubagentGenericView(event flruntime.SubAgentDetailEvent) *FlowerSubagentGenericView {
-	if event.Kind != flruntime.SubAgentDetailEventCustom {
+func flowerSubagentGenericView(event flruntime.ThreadDetailEvent) *FlowerSubagentGenericView {
+	if event.Kind != flruntime.ThreadDetailEventCustom {
 		return nil
 	}
 	title := strings.TrimSpace(event.Type)
@@ -2730,7 +2709,6 @@ func (s *floretSubagentRuntime) runLabels(agentType string, childThreadID string
 	childThreadID = strings.TrimSpace(childThreadID)
 	if childThreadID != "" {
 		host[subagentToolHostContextChildThreadIDKey] = childThreadID
-		host[subagentToolHostContextSubagentIDKey] = childThreadID
 	}
 	childRunID = strings.TrimSpace(childRunID)
 	if childRunID != "" && childRunID != childThreadID {
@@ -2818,18 +2796,12 @@ func subagentSnapshotFromFloret(in flruntime.SubAgentSnapshot) subagentSnapshot 
 }
 
 func subagentSnapshotPayload(snapshot subagentSnapshot) map[string]any {
-	title := strings.TrimSpace(snapshot.TaskName)
-	if title == "" {
-		title = strings.TrimSpace(snapshot.ThreadID)
-	}
 	lastMessage := strings.TrimSpace(snapshot.LastMessage)
 	return map[string]any{
 		"id":               snapshot.ThreadID,
-		"subagent_id":      snapshot.ThreadID,
 		"thread_id":        snapshot.ThreadID,
 		"agent_type":       snapshot.AgentType,
 		"context_mode":     normalizeSubagentContextMode(snapshot.ContextMode),
-		"title":            title,
 		"task_name":        snapshot.TaskName,
 		"task_description": snapshot.TaskDescription,
 		"status":           snapshot.Status,
@@ -2859,9 +2831,7 @@ func parentNamespacePublicID(r *run) string {
 func subagentListPayload(snapshot subagentSnapshot) map[string]any {
 	payload := subagentSnapshotPayload(snapshot)
 	return map[string]any{
-		"subagent_id":      payload["subagent_id"],
 		"thread_id":        payload["thread_id"],
-		"title":            payload["title"],
 		"task_name":        payload["task_name"],
 		"task_description": payload["task_description"],
 		"agent_type":       payload["agent_type"],
@@ -2935,7 +2905,6 @@ type flowerSubagentPromptSpec struct {
 	AgentType   string
 	TaskName    string
 	Message     string
-	Objective   string
 	ContextMode string
 	Contract    subagentCapabilityContract
 }
@@ -2945,7 +2914,7 @@ func buildFlowerSubagentPrompt(spec flowerSubagentPromptSpec) string {
 	contract := spec.Contract
 	lines := []string{
 		"# Delegated Mission",
-		strings.TrimSpace(firstNonEmptyString(spec.Message, spec.Objective, spec.TaskName)),
+		strings.TrimSpace(spec.Message),
 		"",
 		"# Role",
 		subagentRolePrompt(agentType),

@@ -165,6 +165,7 @@ func TestHandleToolCallDoesNotEmitActivityTimeline(t *testing.T) {
 		},
 	})
 	r.permissionType = FlowerPermissionReadonly
+	allowToolsForTest(t, r, "read_file")
 
 	outcome, err := r.handleToolCall(context.Background(), "tool_read_file_1", "read_file", map[string]any{"path": "note.txt"})
 	if err != nil {

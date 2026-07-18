@@ -25,13 +25,19 @@ import (
 
 func newPermissionPolicyTestRun(t *testing.T, workspace string, permissionType FlowerPermissionType, messageID string) *run {
 	t.Helper()
-	svc := &Service{terminalProcesses: newTerminalProcessManager()}
+	store, err := threadstore.Open(filepath.Join(t.TempDir(), "permission.sqlite"))
+	if err != nil {
+		t.Fatalf("threadstore.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	svc := &Service{terminalProcesses: newTerminalProcessManager(), threadsDB: store}
 	t.Cleanup(func() { _ = svc.terminalProcesses.Close(context.Background()) })
 	r := newRun(runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
 		AgentHomeDir: workspace,
 		Shell:        "bash",
 		Service:      svc,
+		ThreadsDB:    store,
 		RunID:        "run_" + messageID,
 		EndpointID:   "env_permission_policy",
 		ThreadID:     "thread_" + messageID,
@@ -47,6 +53,11 @@ func newPermissionPolicyTestRun(t *testing.T, workspace string, permissionType F
 		MessageID: messageID,
 	})
 	r.permissionType = permissionType
+	if err := store.CreateThread(context.Background(), threadstore.ThreadSettings{
+		EndpointID: r.endpointID, ThreadID: r.threadID, PermissionType: permissionTypeString(permissionType),
+	}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
 	owner := &terminalProcessTestOwner{}
 	r.setPendingToolSettlementOwnerResolver(func() floretPendingToolSettler { return owner })
 	freezePermissionPolicyTestSnapshot(t, r)
@@ -63,7 +74,10 @@ func freezePermissionPolicyTestSnapshot(t *testing.T, r *run) {
 	permissionFilter = r.withToolAllowlistFilter(permissionFilter)
 	activeTools := permissionFilter.FilterTools(r.permissionType, registry.Snapshot())
 	activeSignals := permissionFilter.FilterTools(r.permissionType, builtInControlSignalDefinitions())
-	snapshot := r.freezePermissionSnapshot(buildPermissionSnapshot(r.permissionType, activeTools, activeSignals))
+	snapshot, err := r.freezePermissionSnapshot(buildPermissionSnapshot(r.permissionType, activeTools, activeSignals))
+	if err != nil {
+		t.Fatalf("freezePermissionSnapshot: %v", err)
+	}
 	if err := validatePermissionSnapshotConsistency(snapshot); err != nil {
 		t.Fatalf("invalid permission snapshot: %v", err)
 	}
@@ -109,7 +123,6 @@ func insertPermissionPolicyChildSnapshotRecord(t *testing.T, parent *run, childT
 		SpawnToolCallID:   "spawn_" + childThreadID,
 		ParentThreadID:    parent.threadID,
 		ParentRunID:       parent.id,
-		SubagentID:        childThreadID,
 		ChildThreadID:     childThreadID,
 		ChildRunID:        childRunID,
 		State:             "finalized",
@@ -151,6 +164,27 @@ func permissionPolicyTestChildRunID(childThreadID string) string {
 	return "child_run_" + strings.TrimSpace(childThreadID)
 }
 
+func ensurePermissionPolicyThreadSettings(t *testing.T, owner *run) {
+	t.Helper()
+	if owner == nil || owner.threadsDB == nil {
+		t.Fatal("permission policy thread settings owner is unavailable")
+	}
+	settings, err := owner.threadsDB.GetThread(context.Background(), owner.endpointID, owner.threadID)
+	if err != nil {
+		t.Fatalf("GetThread settings for %s: %v", owner.threadID, err)
+	}
+	if settings != nil {
+		return
+	}
+	if err := owner.threadsDB.CreateThread(context.Background(), threadstore.ThreadSettings{
+		EndpointID:     owner.endpointID,
+		ThreadID:       owner.threadID,
+		PermissionType: permissionTypeString(owner.permissionType),
+	}); err != nil {
+		t.Fatalf("CreateThread settings for %s: %v", owner.threadID, err)
+	}
+}
+
 func configurePermissionPolicyDelegatedChild(t *testing.T, parent *run, child *run, childThreadID string, toolNames ...string) {
 	t.Helper()
 	if len(toolNames) == 0 {
@@ -159,14 +193,16 @@ func configurePermissionPolicyDelegatedChild(t *testing.T, parent *run, child *r
 	if child != nil && child.service == nil && parent != nil {
 		child.service = parent.service
 	}
-	if parent != nil && parent.threadsDB == nil && parent.service != nil {
+	if parent != nil && parent.service != nil && parent.service.threadsDB != nil {
 		parent.threadsDB = parent.service.threadsDB
 	}
 	if parent != nil {
-		parent.persistPermissionSnapshot(parent.permissionSnapshot)
+		if err := parent.persistPermissionSnapshot(parent.permissionSnapshot); err != nil {
+			t.Fatalf("persist parent permission snapshot: %v", err)
+		}
 	}
-	if child != nil && child.threadsDB == nil {
-		if child.service != nil {
+	if child != nil {
+		if child.service != nil && child.service.threadsDB != nil {
 			child.threadsDB = child.service.threadsDB
 		} else if parent != nil {
 			child.threadsDB = parent.threadsDB
@@ -178,7 +214,15 @@ func configurePermissionPolicyDelegatedChild(t *testing.T, parent *run, child *r
 	child.subagentDepth = 1
 	child.threadID = childThreadID
 	child.id = permissionPolicyTestChildRunID(childThreadID)
+	for _, owner := range []*run{parent, child} {
+		ensurePermissionPolicyThreadSettings(t, owner)
+	}
 	insertPermissionPolicyChildSnapshot(t, parent, childThreadID, toolNames...)
+	if _, ok, err := child.threadsDB.GetFinalizedChildPermissionSnapshot(context.Background(), child.endpointID, child.threadID, child.id); err != nil {
+		t.Fatalf("GetFinalizedChildPermissionSnapshot fixture: %v", err)
+	} else if !ok {
+		t.Fatalf("finalized child permission snapshot fixture is missing for thread=%q run=%q", child.threadID, child.id)
+	}
 }
 
 func newPermissionPolicyBridgeService(t *testing.T) *Service {
@@ -292,7 +336,7 @@ func TestPermissionPolicy_ChildSnapshotWithWidenedToolSetFailsClosed(t *testing.
 	insertPermissionPolicyChildSnapshotRecord(t, parent, childThreadID, widened, nil)
 	childRunID := permissionPolicyTestChildRunID(childThreadID)
 
-	execRun, err := floretInvocationRunContext(parent.subagentChildRun(), fltools.Invocation[map[string]any]{
+	_, err := floretInvocationRunContext(parent.subagentChildRun(), fltools.Invocation[map[string]any]{
 		RunID:    "floret-exec-child-snapshot-widened",
 		ThreadID: childThreadID,
 		TurnID:   "child-turn",
@@ -301,17 +345,8 @@ func TestPermissionPolicy_ChildSnapshotWithWidenedToolSetFailsClosed(t *testing.
 			subagentToolHostContextChildRunIDKey:    childRunID,
 		},
 	})
-	if err != nil {
-		t.Fatalf("floretInvocationRunContext: %v", err)
-	}
-	if execRun == nil {
-		t.Fatalf("floretInvocationRunContext returned nil")
-	}
-	if got := execRun.permissionSnapshot.SnapshotID; got != "missing_child_permission_snapshot" {
-		t.Fatalf("child snapshot id=%q, want fail-closed snapshot", got)
-	}
-	if decision, ok := execRun.permissionDecisionForToolFromSnapshot("okf.search"); !ok || decision != ApprovalDecisionDeny {
-		t.Fatalf("okf.search decision=%q ok=%v, want fail-closed deny", decision, ok)
+	if err == nil || !strings.Contains(err.Error(), "not present in parent") {
+		t.Fatalf("floretInvocationRunContext error=%v, want widened snapshot rejection", err)
 	}
 }
 
@@ -332,7 +367,7 @@ func TestPermissionPolicy_ChildSnapshotHashMismatchFailsClosed(t *testing.T) {
 	})
 	childRunID := permissionPolicyTestChildRunID(childThreadID)
 
-	execRun, err := floretInvocationRunContext(parent.subagentChildRun(), fltools.Invocation[map[string]any]{
+	_, err := floretInvocationRunContext(parent.subagentChildRun(), fltools.Invocation[map[string]any]{
 		RunID:    "floret-exec-child-snapshot-hash",
 		ThreadID: childThreadID,
 		TurnID:   "child-turn",
@@ -341,17 +376,8 @@ func TestPermissionPolicy_ChildSnapshotHashMismatchFailsClosed(t *testing.T) {
 			subagentToolHostContextChildRunIDKey:    childRunID,
 		},
 	})
-	if err != nil {
-		t.Fatalf("floretInvocationRunContext: %v", err)
-	}
-	if execRun == nil {
-		t.Fatalf("floretInvocationRunContext returned nil")
-	}
-	if got := execRun.permissionSnapshot.SnapshotID; got != "missing_child_permission_snapshot" {
-		t.Fatalf("child snapshot id=%q, want fail-closed snapshot", got)
-	}
-	if decision, ok := execRun.permissionDecisionForToolFromSnapshot("okf.search"); !ok || decision != ApprovalDecisionDeny {
-		t.Fatalf("okf.search decision=%q ok=%v, want fail-closed deny", decision, ok)
+	if err == nil || !strings.Contains(err.Error(), "snapshot hash mismatch") {
+		t.Fatalf("floretInvocationRunContext error=%v, want snapshot hash rejection", err)
 	}
 }
 
@@ -359,29 +385,34 @@ func TestPermissionPolicy_ChildSnapshotCompatibilityHashMismatchFailsClosed(t *t
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name   string
-		mutate func(*PermissionSnapshot, *threadstore.ChildPermissionSnapshotRecord)
+		name    string
+		wantErr string
+		mutate  func(*PermissionSnapshot, *threadstore.ChildPermissionSnapshotRecord)
 	}{
 		{
-			name: "record_registry_hash",
+			name:    "record_registry_hash",
+			wantErr: "registry hash mismatch",
 			mutate: func(_ *PermissionSnapshot, rec *threadstore.ChildPermissionSnapshotRecord) {
 				rec.RegistryHash = "tampered_registry_hash"
 			},
 		},
 		{
-			name: "record_schema_hash",
+			name:    "record_schema_hash",
+			wantErr: "schema hash mismatch",
 			mutate: func(_ *PermissionSnapshot, rec *threadstore.ChildPermissionSnapshotRecord) {
 				rec.SchemaHash = "tampered_schema_hash"
 			},
 		},
 		{
-			name: "record_presentation_hash",
+			name:    "record_presentation_hash",
+			wantErr: "presentation hash mismatch",
 			mutate: func(_ *PermissionSnapshot, rec *threadstore.ChildPermissionSnapshotRecord) {
 				rec.PresentationHash = "tampered_presentation_hash"
 			},
 		},
 		{
-			name: "current_registry_incompatible",
+			name:    "current_registry_incompatible",
+			wantErr: "registry is incompatible",
 			mutate: func(snapshot *PermissionSnapshot, rec *threadstore.ChildPermissionSnapshotRecord) {
 				snapshot.RegistryHash = stableStringListHash(snapshot.FloretToolNames)
 				snapshot.SnapshotHash = permissionSnapshotHash(*snapshot)
@@ -395,7 +426,8 @@ func TestPermissionPolicy_ChildSnapshotCompatibilityHashMismatchFailsClosed(t *t
 			},
 		},
 		{
-			name: "current_schema_incompatible",
+			name:    "current_schema_incompatible",
+			wantErr: "schema is incompatible",
 			mutate: func(snapshot *PermissionSnapshot, rec *threadstore.ChildPermissionSnapshotRecord) {
 				snapshot.SchemaHash = stableStringListHash(snapshot.FloretToolNames)
 				snapshot.SnapshotHash = permissionSnapshotHash(*snapshot)
@@ -409,7 +441,8 @@ func TestPermissionPolicy_ChildSnapshotCompatibilityHashMismatchFailsClosed(t *t
 			},
 		},
 		{
-			name: "current_presentation_incompatible",
+			name:    "current_presentation_incompatible",
+			wantErr: "presentation is incompatible",
 			mutate: func(snapshot *PermissionSnapshot, rec *threadstore.ChildPermissionSnapshotRecord) {
 				snapshot.PresentationHash = stableStringListHash(snapshot.PromptCapabilityNames)
 				snapshot.SnapshotHash = permissionSnapshotHash(*snapshot)
@@ -442,7 +475,7 @@ func TestPermissionPolicy_ChildSnapshotCompatibilityHashMismatchFailsClosed(t *t
 			})
 
 			childRunID := permissionPolicyTestChildRunID(childThreadID)
-			execRun, err := floretInvocationRunContext(parent.subagentChildRun(), fltools.Invocation[map[string]any]{
+			_, err := floretInvocationRunContext(parent.subagentChildRun(), fltools.Invocation[map[string]any]{
 				RunID:    "floret-exec-" + childThreadID,
 				ThreadID: childThreadID,
 				TurnID:   "child-turn",
@@ -451,17 +484,8 @@ func TestPermissionPolicy_ChildSnapshotCompatibilityHashMismatchFailsClosed(t *t
 					subagentToolHostContextChildRunIDKey:    childRunID,
 				},
 			})
-			if err != nil {
-				t.Fatalf("floretInvocationRunContext: %v", err)
-			}
-			if execRun == nil {
-				t.Fatalf("floretInvocationRunContext returned nil")
-			}
-			if got := execRun.permissionSnapshot.SnapshotID; got != "missing_child_permission_snapshot" {
-				t.Fatalf("child snapshot id=%q, want fail-closed snapshot", got)
-			}
-			if decision, ok := execRun.permissionDecisionForToolFromSnapshot("okf.search"); !ok || decision != ApprovalDecisionDeny {
-				t.Fatalf("okf.search decision=%q ok=%v, want fail-closed deny", decision, ok)
+			if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("floretInvocationRunContext error=%v, want %q", err, tc.wantErr)
 			}
 		})
 	}
@@ -503,7 +527,7 @@ func TestPermissionPolicy_ChildSnapshotParentOwnerMismatchFailsClosed(t *testing
 			insertPermissionPolicyChildSnapshotRecord(t, parent, childThreadID, snapshot, tc.mutate)
 
 			childRunID := permissionPolicyTestChildRunID(childThreadID)
-			execRun, err := floretInvocationRunContext(parent.subagentChildRun(), fltools.Invocation[map[string]any]{
+			_, err := floretInvocationRunContext(parent.subagentChildRun(), fltools.Invocation[map[string]any]{
 				RunID:    "floret-exec-" + childThreadID,
 				ThreadID: childThreadID,
 				TurnID:   "child-turn",
@@ -512,17 +536,8 @@ func TestPermissionPolicy_ChildSnapshotParentOwnerMismatchFailsClosed(t *testing
 					subagentToolHostContextChildRunIDKey:    childRunID,
 				},
 			})
-			if err != nil {
-				t.Fatalf("floretInvocationRunContext: %v", err)
-			}
-			if execRun == nil {
-				t.Fatalf("floretInvocationRunContext returned nil")
-			}
-			if got := execRun.permissionSnapshot.SnapshotID; got != "missing_child_permission_snapshot" {
-				t.Fatalf("child snapshot id=%q, want fail-closed snapshot", got)
-			}
-			if decision, ok := execRun.permissionDecisionForToolFromSnapshot("okf.search"); !ok || decision != ApprovalDecisionDeny {
-				t.Fatalf("okf.search decision=%q ok=%v, want fail-closed deny", decision, ok)
+			if err == nil || !strings.Contains(err.Error(), "owner mismatch") {
+				t.Fatalf("floretInvocationRunContext error=%v, want parent owner rejection", err)
 			}
 		})
 	}
@@ -593,7 +608,7 @@ WHERE endpoint_id = ? AND child_thread_id = ?
 			}
 
 			childRunID := permissionPolicyTestChildRunID(childThreadID)
-			execRun, err := floretInvocationRunContext(parent.subagentChildRun(), fltools.Invocation[map[string]any]{
+			_, err = floretInvocationRunContext(parent.subagentChildRun(), fltools.Invocation[map[string]any]{
 				RunID:    "floret-exec-" + childThreadID,
 				ThreadID: childThreadID,
 				TurnID:   "child-turn",
@@ -602,17 +617,8 @@ WHERE endpoint_id = ? AND child_thread_id = ?
 					subagentToolHostContextChildRunIDKey:    childRunID,
 				},
 			})
-			if err != nil {
-				t.Fatalf("floretInvocationRunContext: %v", err)
-			}
-			if execRun == nil {
-				t.Fatalf("floretInvocationRunContext returned nil")
-			}
-			if got := execRun.permissionSnapshot.SnapshotID; got != "missing_child_permission_snapshot" {
-				t.Fatalf("child snapshot id=%q, want fail-closed snapshot", got)
-			}
-			if decision, ok := execRun.permissionDecisionForToolFromSnapshot("okf.search"); !ok || decision != ApprovalDecisionDeny {
-				t.Fatalf("okf.search decision=%q ok=%v, want fail-closed deny", decision, ok)
+			if err == nil || !strings.Contains(err.Error(), "finalized child permission snapshot is missing") {
+				t.Fatalf("floretInvocationRunContext error=%v, want invalid stored run identity rejection", err)
 			}
 		})
 	}
@@ -697,7 +703,6 @@ func TestPermissionPolicy_DelegatedApprovalRejectsParentRunAliasChildRunID(t *te
 		},
 		HostContext: map[string]string{
 			subagentToolHostContextChildThreadIDKey: "child_thread_alias",
-			subagentToolHostContextSubagentIDKey:    "child_thread_alias",
 			subagentToolHostContextChildRunIDKey:    parent.id,
 		},
 	})
@@ -736,7 +741,6 @@ func TestPermissionPolicy_DelegatedApprovalRejectsMissingExactChildSnapshot(t *t
 		},
 		HostContext: map[string]string{
 			subagentToolHostContextChildThreadIDKey: childThreadID,
-			subagentToolHostContextSubagentIDKey:    childThreadID,
 			subagentToolHostContextChildRunIDKey:    child.id,
 		},
 	})
@@ -836,7 +840,7 @@ func TestPermissionPolicy_ChildInvocationMissingStoredSnapshotFailsClosed(t *tes
 	childBase := parent.subagentChildRun()
 	childRunID := permissionPolicyTestChildRunID("child_missing")
 
-	execRun, err := floretInvocationRunContext(childBase, fltools.Invocation[map[string]any]{
+	_, err := floretInvocationRunContext(childBase, fltools.Invocation[map[string]any]{
 		RunID:    "floret-exec-child-missing",
 		ThreadID: "child_missing",
 		TurnID:   "child-turn",
@@ -845,14 +849,8 @@ func TestPermissionPolicy_ChildInvocationMissingStoredSnapshotFailsClosed(t *tes
 			subagentToolHostContextChildRunIDKey:    childRunID,
 		},
 	})
-	if err != nil {
-		t.Fatalf("floretInvocationRunContext: %v", err)
-	}
-	if execRun == nil {
-		t.Fatalf("floretInvocationRunContext returned nil")
-	}
-	if decision, ok := execRun.permissionDecisionForToolFromSnapshot("terminal.exec"); !ok || decision != ApprovalDecisionDeny {
-		t.Fatalf("terminal.exec decision=%q ok=%v, want fail-closed deny", decision, ok)
+	if err == nil || !strings.Contains(err.Error(), "finalized child permission snapshot is missing") {
+		t.Fatalf("floretInvocationRunContext error=%v, want missing snapshot failure", err)
 	}
 }
 
@@ -1010,7 +1008,6 @@ func permissionPolicyTestRunOptions(r *run) fltools.RunOptions {
 		childRunID := strings.TrimSpace(r.id)
 		opts.HostContext = map[string]string{
 			subagentToolHostContextChildThreadIDKey:    childThreadID,
-			subagentToolHostContextSubagentIDKey:       childThreadID,
 			subagentToolHostContextParentPermissionKey: permissionTypeString(r.permissionType),
 		}
 		if childRunID != "" && childRunID != childThreadID {
@@ -1311,8 +1308,8 @@ func TestPermissionPolicy_ReadonlyExclusiveToolsFailClosedWithoutSnapshot(t *tes
 	} {
 		toolName, args := toolName, args
 		t.Run(toolName, func(t *testing.T) {
-			if _, err := r.execTool(context.Background(), r.sessionMeta, "tool_empty_snapshot_"+strings.ReplaceAll(toolName, ".", "_"), toolName, args); err == nil || !strings.Contains(err.Error(), "readonly tool unavailable") {
-				t.Fatalf("execTool(%s) error=%v, want readonly tool unavailable", toolName, err)
+			if _, err := r.execTool(context.Background(), r.sessionMeta, "tool_empty_snapshot_"+strings.ReplaceAll(toolName, ".", "_"), toolName, args); err == nil || !strings.Contains(err.Error(), "permission snapshot is unavailable") {
+				t.Fatalf("execTool(%s) error=%v, want permission snapshot failure", toolName, err)
 			}
 		})
 	}
@@ -1426,6 +1423,7 @@ func TestPermissionPolicy_SubagentsRuntimeActionsDoNotRequestApproval(t *testing
 					r := newPermissionPolicyTestRun(t, workspace, permissionType, "subagents_runtime_"+permissionTypeString(permissionType)+"_"+tc.name)
 					r.service = svc
 					r.threadsDB = svc.threadsDB
+					ensurePermissionPolicyThreadSettings(t, r)
 					r.cfg = &config.AIConfig{
 						CurrentModelID: "compat/gpt-5-mini",
 						Providers: []config.AIProvider{{
@@ -1464,7 +1462,11 @@ func TestPermissionPolicy_SubagentsRuntimeActionsDoNotRequestApproval(t *testing
 					}
 					assertNoApprovalWait(t, r, toolID)
 					if outcome == nil || !outcome.Success {
-						t.Fatalf("subagents %s outcome=%+v, want success without approval", tc.name, outcome)
+						var toolErr any
+						if outcome != nil {
+							toolErr = outcome.ToolError
+						}
+						t.Fatalf("subagents %s outcome=%+v tool_error=%+v, want success without approval", tc.name, outcome, toolErr)
 					}
 					if tc.name == "spawn" {
 						rec, ok, err := svc.threadsDB.GetChildPermissionSnapshotBySpawnToolCall(context.Background(), r.endpointID, toolID)
@@ -2060,7 +2062,6 @@ func TestPermissionPolicy_SubagentDelegatedRepeatedAskReusesRecordAndLiveAction(
 		},
 		HostContext: map[string]string{
 			subagentToolHostContextChildThreadIDKey: "child_thread_repeat",
-			subagentToolHostContextSubagentIDKey:    "child_thread_repeat",
 			subagentToolHostContextChildRunIDKey:    child.id,
 		},
 	}

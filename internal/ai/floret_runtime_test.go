@@ -48,12 +48,49 @@ type terminalTerminationHostedProvider struct {
 
 type failingTurnProvider struct{}
 
+func isFloretThreadTitleRequest(req ModelGatewayRequest) bool {
+	for _, message := range req.Messages {
+		if message.Role != "system" {
+			continue
+		}
+		for _, part := range message.Content {
+			if strings.Contains(part.Text, "generate concise thread titles") {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func newFloretRuntimeTestRun(t *testing.T, opts runOptions) *run {
 	t.Helper()
 	if opts.FloretStore == nil {
 		store := flruntime.NewMemoryStore()
 		t.Cleanup(func() { _ = store.Close() })
 		opts.FloretStore = store
+	}
+	if strings.TrimSpace(opts.EndpointID) == "" {
+		opts.EndpointID = "env_floret_runtime_test"
+	}
+	if strings.TrimSpace(opts.ThreadID) == "" {
+		opts.ThreadID = "thread_floret_runtime_test_" + strings.TrimSpace(opts.RunID)
+	}
+	if opts.ThreadsDB == nil {
+		store, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))
+		if err != nil {
+			t.Fatalf("threadstore.Open: %v", err)
+		}
+		t.Cleanup(func() { _ = store.Close() })
+		opts.ThreadsDB = store
+	}
+	if settings, err := opts.ThreadsDB.GetThread(context.Background(), opts.EndpointID, opts.ThreadID); err != nil {
+		t.Fatalf("GetThread: %v", err)
+	} else if settings == nil {
+		if err := opts.ThreadsDB.CreateThread(context.Background(), threadstore.ThreadSettings{
+			EndpointID: opts.EndpointID, ThreadID: opts.ThreadID, PermissionType: config.AIPermissionFullAccess,
+		}); err != nil {
+			t.Fatalf("CreateThread: %v", err)
+		}
 	}
 	return newRun(opts)
 }
@@ -92,6 +129,9 @@ func (p *concurrentTerminalBatchProvider) StreamTurn(_ context.Context, req Mode
 }
 
 func (p *terminalTerminationHostedProvider) StreamTurn(_ context.Context, req ModelGatewayRequest, _ func(StreamEvent)) (ModelGatewayResult, error) {
+	if isFloretThreadTitleRequest(req) {
+		return ModelGatewayResult{FinishReason: "stop", Text: "Command termination"}, nil
+	}
 	p.mu.Lock()
 	p.calls++
 	call := p.calls
@@ -418,6 +458,9 @@ type naturalCompactionProvider struct {
 }
 
 func (p *naturalCompactionProvider) StreamTurn(_ context.Context, req ModelGatewayRequest, onEvent func(StreamEvent)) (ModelGatewayResult, error) {
+	if isFloretThreadTitleRequest(req) {
+		return ModelGatewayResult{FinishReason: "stop", Text: "Context compaction"}, nil
+	}
 	p.mu.Lock()
 	p.requests = append(p.requests, req)
 	callIndex := len(p.requests)
@@ -557,8 +600,8 @@ func TestRunFloretHostedTurnEmitsContextUsageFromPublishedHost(t *testing.T) {
 	if err != nil {
 		t.Fatalf("runFloretHostedTurn: %v", err)
 	}
-	if got := provider.requestCount(); got != 1 {
-		t.Fatalf("provider request count=%d, want 1 hosted turn request and no implicit Floret title request", got)
+	if got := provider.requestCount(); got != 2 {
+		t.Fatalf("provider request count=%d, want one hosted turn request and one Floret provider title request", got)
 	}
 
 	usages := contextUsagesFromStreamEvents(events)
@@ -636,10 +679,12 @@ func TestRunFloretHostedTurnInjectsAskFlowerLinkedContext(t *testing.T) {
 	t.Parallel()
 
 	provider := &capturingTurnProvider{}
+	uploadsDir := t.TempDir()
 	r := newFloretRuntimeTestRun(t, runOptions{
 		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
 		StateDir:     t.TempDir(),
 		AgentHomeDir: t.TempDir(),
+		UploadsDir:   uploadsDir,
 		Shell:        "bash",
 		AIConfig:     &config.AIConfig{},
 		SessionMeta: &session.Meta{
@@ -652,6 +697,40 @@ func TestRunFloretHostedTurnInjectsAskFlowerLinkedContext(t *testing.T) {
 		ThreadID:  "thread_floret_linked_context",
 		MessageID: "msg_floret_linked_context",
 	})
+	const uploadID = "upl_notes"
+	const uploadBody = "linked notes"
+	if err := os.WriteFile(filepath.Join(uploadsDir, uploadID+".data"), []byte(uploadBody), 0o600); err != nil {
+		t.Fatalf("write attachment: %v", err)
+	}
+	if err := r.threadsDB.InsertUpload(context.Background(), threadstore.UploadRecord{
+		UploadID:        uploadID,
+		EndpointID:      r.endpointID,
+		StorageRelPath:  uploadID + ".data",
+		Name:            "notes.txt",
+		MimeType:        "text/plain",
+		SizeBytes:       int64(len(uploadBody)),
+		State:           threadstore.UploadStateStaged,
+		CreatedAtUnixMs: time.Now().UnixMilli(),
+	}); err != nil {
+		t.Fatalf("InsertUpload: %v", err)
+	}
+	const commandID = "qt_floret_linked_context"
+	if _, _, _, err := r.threadsDB.CreateFollowupWithUploadRefs(context.Background(), threadstore.QueuedTurn{
+		QueueID:         commandID,
+		EndpointID:      r.endpointID,
+		ThreadID:        r.threadID,
+		ChannelID:       "channel_floret_linked_context",
+		Lane:            threadstore.FollowupLaneQueued,
+		TurnID:          r.messageID,
+		RunID:           r.id,
+		TextContent:     "what is this process",
+		AttachmentsJSON: `[{"name":"notes.txt","mime_type":"text/plain","url":"/_redeven_proxy/api/ai/uploads/upl_notes"}]`,
+		CreatedAtUnixMs: time.Now().UnixMilli(),
+	}, []string{uploadID}, time.Now().UnixMilli()); err != nil {
+		t.Fatalf("CreateFollowupWithUploadRefs: %v", err)
+	}
+	r.service = &Service{threadsDB: r.threadsDB, persistOpTO: time.Second}
+	r.setPendingTurnCommand(commandID)
 
 	err := r.runFloretHostedTurn(t.Context(), RunRequest{
 		Model: "compat/gpt-5-mini",
@@ -686,21 +765,37 @@ func TestRunFloretHostedTurnInjectsAskFlowerLinkedContext(t *testing.T) {
 			MaxOutputTokens: 500,
 		},
 		ModelCapability: contextmodel.ModelCapability{
-			MaxContextTokens: 128000,
+			MaxContextTokens:  128000,
+			SupportsFileInput: true,
 		},
 	}, config.AIProvider{
 		ID:      "compat",
-		Type:    "openai_compatible",
-		BaseURL: "https://example.test/v1",
+		Type:    "openai",
+		BaseURL: "https://api.openai.com/v1",
 	}, "sk-test", "verify linked context", provider)
 	if err != nil {
 		t.Fatalf("runFloretHostedTurn: %v", err)
 	}
-	requestText := modelGatewayRequestText(provider.firstRequest())
-	for _, want := range []string{"what is this process", "Host-provided supplemental context", "process_snapshot", "pid: 12264", "Codex (Service)", "Attachment: notes.txt (text/plain)", "attachment_metadata"} {
+	request := provider.firstRequest()
+	requestText := modelGatewayRequestText(request)
+	for _, want := range []string{"what is this process", "Host-provided supplemental context", "process_snapshot", "pid: 12264", "Codex (Service)"} {
 		if !strings.Contains(requestText, want) {
 			t.Fatalf("provider request missing %q:\n%s", want, requestText)
 		}
+	}
+	foundFile := false
+	for _, message := range request.Messages {
+		for _, part := range message.Content {
+			if part.Type == "file" && part.Text == "notes.txt" && part.MimeType == "text/plain" && strings.HasPrefix(part.FileURI, "data:text/plain;base64,") {
+				foundFile = true
+			}
+		}
+	}
+	if !foundFile {
+		t.Fatalf("provider request missing resolved file content part: %#v", request.Messages)
+	}
+	if strings.Contains(requestText, "attachment_metadata") || strings.Contains(requestText, "Attachment: notes.txt") {
+		t.Fatalf("provider request retained attachment metadata fallback:\n%s", requestText)
 	}
 	if strings.Contains(requestText, "/_redeven_proxy/api/ai/uploads/") {
 		t.Fatalf("provider request leaked upload URL:\n%s", requestText)
@@ -719,10 +814,9 @@ func TestRunFloretHostedTurnRefreshesPermissionBeforeDispatch(t *testing.T) {
 	const endpointID = "env_floret_dynamic_permission"
 	const threadID = "thread_floret_dynamic_permission"
 	const runID = "run_floret_dynamic_permission"
-	if err := store.CreateThread(ctx, threadstore.Thread{
+	if err := store.CreateThread(ctx, threadstore.ThreadSettings{
 		EndpointID:      endpointID,
 		ThreadID:        threadID,
-		Title:           "dynamic permission",
 		PermissionType:  config.AIPermissionApprovalRequired,
 		CreatedAtUnixMs: 1,
 		UpdatedAtUnixMs: 1,

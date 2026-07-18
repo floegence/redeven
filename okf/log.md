@@ -1,16 +1,12 @@
 # Redeven OKF Update Log
 
 ## 2026-07-18
-* **Dependency**: Upgraded to published Floret v0.11.4 and switched thread summaries to `ReadLatestThreadTurn`; pending approval snapshots and items now use Floret-owned validation directly.
-* **Breaking**: Restricted canonical threadstore migration support to explicit
-  v15-v40 databases and made product v1-to-v2 a continuous migration after
-  product-only canonical conversion.
-* **Boundary**: Documented Floret as the only Agent data authority and Redeven
-  SQLite as product-only storage with no transcript, run, projection, approval,
-  todo, tool lifecycle, or provider-state mirror.
-* **Fix**: Removed schema repair, unversioned database claiming, conditional DDL,
-  permission fallback, approval default synthesis, generated `ask_user`
-  questions, and execution failure for projection-unavailable outcomes.
+* **Dependency**: Upgraded to published Floret v0.12.0 for canonical thread overview, title mutation, structured attachments, and unified Thread/SubAgent detail events.
+* **Breaking**: Advanced Redeven threadstore to schema v3 with `ai_thread_settings`; removed Redeven title ownership, admitted TurnID/RunID upload mappings, permission snapshot v1, and canonical v15-v40 migration support.
+* **Boundary**: Made Floret the only authority for admitted messages and attachments, titles, lifecycle, projections, approvals, todos, context, provider state, and SubAgent hierarchy; Redeven retains only host settings, resources, unadmitted queue, routing/read state, security audit, and durable cross-store intent.
+* **Refactor**: Added explicit create/fork/delete coordinators with canonical-first ordering and immutable host-owned snapshots, without persisting Floret results or rebuilding Agent state.
+* **Fix**: Made current permission, queued command decoding, attachment resolution, title migration, and canonical reads fail closed with no stale snapshot, legacy alias, filename-text, role-name, or default-value fallback.
+* **Breaking**: Removed `subagent_id`, spawn `title`/`objective` aliases, and task-name guessing; Flower and model-facing contracts use child `thread_id` plus required `task_name`.
 * **Governance**: Added enforceable OKF authoring rules for coherent retrieval units, Summary/Contract/Boundaries/Evidence structure, size budgets, canonical ownership, and representative evidence.
 * **Refactor**: Split the largest AI, Flower, Desktop, and Workbench concepts into focused retrieval units while retaining stable overview paths.
 * **Update**: Advanced the OKF bundle to schema 3 and OKF version 0.2 with structured summaries, sections, Evidence, query-aware search snippets, and section-aware opening.

@@ -122,8 +122,8 @@ func TestServiceDeleteThreadPersistsPendingOperationAndReplaysTransientFailure(t
 	if err != nil {
 		t.Fatalf("GetThread: %v", err)
 	}
-	if deletedThread != nil {
-		t.Fatalf("thread=%+v, want product data committed", deletedThread)
+	if deletedThread == nil {
+		t.Fatal("thread settings were deleted before canonical Floret deletion succeeded")
 	}
 	operation, err := service.threadsDB.GetThreadDeleteOperation(context.Background(), meta.EndpointID, thread.ThreadID)
 	if err != nil || operation == nil || operation.RetryCount != 1 {
@@ -145,16 +145,19 @@ func TestServiceDeleteThreadPersistsPendingOperationAndReplaysTransientFailure(t
 
 func TestNewServiceReplaysPendingThreadDeleteOperationsFromEveryCrashBoundary(t *testing.T) {
 	for _, testCase := range []struct {
-		name                         string
-		confirmFiles                 bool
-		confirmFloret                bool
-		deleteReadStateBeforeRestart bool
-		wantReadStateDeleteCount     int
+		name                     string
+		confirmFloret            bool
+		commitProductData        bool
+		confirmReadState         bool
+		confirmFiles             bool
+		wantHostDeleteCount      int
+		wantReadStateDeleteCount int
 	}{
-		{name: "after_product_commit", wantReadStateDeleteCount: 1},
-		{name: "after_file_cleanup", confirmFiles: true, wantReadStateDeleteCount: 1},
-		{name: "after_floret_delete", confirmFiles: true, confirmFloret: true, wantReadStateDeleteCount: 1},
-		{name: "after_read_state_delete", confirmFiles: true, confirmFloret: true, deleteReadStateBeforeRestart: true, wantReadStateDeleteCount: 2},
+		{name: "after_intent_persisted", wantHostDeleteCount: 1, wantReadStateDeleteCount: 1},
+		{name: "after_floret_confirmation", confirmFloret: true, wantReadStateDeleteCount: 1},
+		{name: "after_product_data_commit", confirmFloret: true, commitProductData: true, wantReadStateDeleteCount: 1},
+		{name: "after_read_state_cleanup", confirmFloret: true, commitProductData: true, confirmReadState: true},
+		{name: "after_physical_file_cleanup", confirmFloret: true, commitProductData: true, confirmReadState: true, confirmFiles: true},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
 			stateDir := t.TempDir()
@@ -170,21 +173,28 @@ func TestNewServiceReplaysPendingThreadDeleteOperationsFromEveryCrashBoundary(t 
 			if err != nil {
 				t.Fatalf("PrepareThreadDeleteOperation: %v", err)
 			}
-			if testCase.confirmFiles {
-				operation, err = first.threadsDB.ConfirmThreadDeleteFilesCleaned(context.Background(), operation.OperationID)
-				if err != nil {
-					t.Fatalf("ConfirmThreadDeleteFilesCleaned: %v", err)
-				}
-			}
 			if testCase.confirmFloret {
 				operation, err = first.threadsDB.ConfirmThreadDeleteFloretDeleted(context.Background(), operation.OperationID)
 				if err != nil {
 					t.Fatalf("ConfirmThreadDeleteFloretDeleted: %v", err)
 				}
 			}
-			if testCase.deleteReadStateBeforeRestart {
-				if err := cleaner.DeleteFlowerThreadReadState(context.Background(), meta.EndpointID, thread.ThreadID); err != nil {
-					t.Fatalf("DeleteFlowerThreadReadState before restart: %v", err)
+			if testCase.commitProductData {
+				operation, err = first.threadsDB.CommitThreadDeleteProductData(context.Background(), operation.OperationID)
+				if err != nil {
+					t.Fatalf("CommitThreadDeleteProductData: %v", err)
+				}
+			}
+			if testCase.confirmReadState {
+				operation, err = first.threadsDB.ConfirmThreadDeleteReadStateDeleted(context.Background(), operation.OperationID)
+				if err != nil {
+					t.Fatalf("ConfirmThreadDeleteReadStateDeleted: %v", err)
+				}
+			}
+			if testCase.confirmFiles {
+				operation, err = first.threadsDB.ConfirmThreadDeleteFilesCleaned(context.Background(), operation.OperationID)
+				if err != nil {
+					t.Fatalf("ConfirmThreadDeleteFilesCleaned: %v", err)
 				}
 			}
 			if err := first.Close(); err != nil {
@@ -199,6 +209,9 @@ func TestNewServiceReplaysPendingThreadDeleteOperationsFromEveryCrashBoundary(t 
 			}
 			if cleaner.deleteCount() != testCase.wantReadStateDeleteCount {
 				t.Fatalf("read-state delete count=%d, want %d", cleaner.deleteCount(), testCase.wantReadStateDeleteCount)
+			}
+			if host.deleteCount() != testCase.wantHostDeleteCount {
+				t.Fatalf("Floret delete count=%d, want %d", host.deleteCount(), testCase.wantHostDeleteCount)
 			}
 		})
 	}

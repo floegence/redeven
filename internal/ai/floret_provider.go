@@ -23,6 +23,10 @@ type floretProviderAdapter struct {
 	budgets                  TurnBudgets
 	disabledCoreControlTools map[string]struct{}
 	continuationSupported    bool
+	attachmentResolver       func(context.Context, flruntime.MessageAttachment) (ContentPart, error)
+	supportsImageInput       bool
+	supportsFileInput        bool
+	beforeRequest            func() error
 }
 
 type floretProviderAdapterOption func(*floretProviderAdapter)
@@ -62,6 +66,25 @@ func withDisabledFloretCoreControlTools(names ...string) floretProviderAdapterOp
 	}
 }
 
+func withFloretAttachmentResolver(resolver func(context.Context, flruntime.MessageAttachment) (ContentPart, error), supportsImageInput bool, supportsFileInput bool) floretProviderAdapterOption {
+	return func(adapter *floretProviderAdapter) {
+		if adapter == nil {
+			return
+		}
+		adapter.attachmentResolver = resolver
+		adapter.supportsImageInput = supportsImageInput
+		adapter.supportsFileInput = supportsFileInput
+	}
+}
+
+func withFloretBeforeRequest(check func() error) floretProviderAdapterOption {
+	return func(adapter *floretProviderAdapter) {
+		if adapter != nil {
+			adapter.beforeRequest = check
+		}
+	}
+}
+
 func (p *floretProviderAdapter) StreamModel(ctx context.Context, req flruntime.ModelRequest) (<-chan flruntime.ModelEvent, error) {
 	if p == nil || p.base == nil {
 		return nil, errors.New("nil floret provider adapter")
@@ -70,7 +93,7 @@ func (p *floretProviderAdapter) StreamModel(ctx context.Context, req flruntime.M
 	go func() {
 		defer close(out)
 
-		turnReq, err := p.turnRequest(req)
+		turnReq, err := p.turnRequest(ctx, req)
 		if err != nil {
 			sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventError, Err: err, Reason: err.Error()})
 			return
@@ -186,7 +209,12 @@ func flowerSourcesToFloret(in []SourceRef) []flruntime.SourceRef {
 	return out
 }
 
-func (p *floretProviderAdapter) turnRequest(req flruntime.ModelRequest) (ModelGatewayRequest, error) {
+func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flruntime.ModelRequest) (ModelGatewayRequest, error) {
+	if p.beforeRequest != nil {
+		if err := p.beforeRequest(); err != nil {
+			return ModelGatewayRequest{}, err
+		}
+	}
 	controls := p.controls
 	previous := cloneFloretModelState(req.PreviousState)
 	previousResponseID, err := p.previousResponseID(previous)
@@ -198,7 +226,7 @@ func (p *floretProviderAdapter) turnRequest(req flruntime.ModelRequest) (ModelGa
 		controls.ReasoningSelection = reasoning
 	}
 
-	messages, err := floretMessagesToFlower(req.Messages)
+	messages, err := p.floretMessagesToFlower(ctx, req.Messages)
 	if err != nil {
 		return ModelGatewayRequest{}, err
 	}
@@ -307,15 +335,28 @@ func sendFloretProviderEvent(ctx context.Context, out chan<- flruntime.ModelEven
 	}
 }
 
-func floretMessagesToFlower(messages []flruntime.ModelMessage) ([]Message, error) {
+func (p *floretProviderAdapter) floretMessagesToFlower(ctx context.Context, messages []flruntime.ModelMessage) ([]Message, error) {
 	out := make([]Message, 0, len(messages))
 	for i, msg := range messages {
 		if err := msg.Validate(); err != nil {
 			return nil, fmt.Errorf("invalid Floret model message %d: %w", i, err)
 		}
-		parts := make([]ContentPart, 0, 2+len(msg.ToolCalls))
+		parts := make([]ContentPart, 0, 2+len(msg.Attachments)+len(msg.ToolCalls))
 		if msg.Text != "" {
 			parts = append(parts, ContentPart{Type: "text", Text: msg.Text})
+		}
+		for attachmentIndex, attachment := range msg.Attachments {
+			if p == nil || p.attachmentResolver == nil {
+				return nil, fmt.Errorf("Floret model message %d attachment %d has no host resolver", i, attachmentIndex)
+			}
+			part, err := p.attachmentResolver(ctx, attachment)
+			if err != nil {
+				return nil, fmt.Errorf("resolve Floret model message %d attachment %d: %w", i, attachmentIndex, err)
+			}
+			if err := p.validateResolvedAttachment(part); err != nil {
+				return nil, err
+			}
+			parts = append(parts, part)
 		}
 		if msg.Reasoning != "" {
 			parts = append(parts, ContentPart{Type: "reasoning", Text: msg.Reasoning})
@@ -340,6 +381,29 @@ func floretMessagesToFlower(messages []flruntime.ModelMessage) ([]Message, error
 		out = append(out, Message{Role: string(msg.Role), Content: parts})
 	}
 	return out, nil
+}
+
+func (p *floretProviderAdapter) validateResolvedAttachment(part ContentPart) error {
+	modelName := ""
+	if p != nil {
+		modelName = p.modelName
+	}
+	switch strings.ToLower(strings.TrimSpace(part.Type)) {
+	case "image":
+		if p == nil || !p.supportsImageInput {
+			return fmt.Errorf("model %q does not support image input", modelName)
+		}
+	case "file":
+		if p == nil || !p.supportsFileInput {
+			return fmt.Errorf("model %q does not support file input", modelName)
+		}
+	default:
+		return fmt.Errorf("attachment resolver returned unsupported content type %q", part.Type)
+	}
+	if strings.TrimSpace(part.FileURI) == "" || strings.TrimSpace(part.MimeType) == "" {
+		return errors.New("attachment resolver returned incomplete provider content")
+	}
+	return p.validateResolvedAttachmentForProvider(part)
 }
 
 func floretToolCallsFromFlower(calls []ToolCall) ([]fltools.ToolCall, error) {

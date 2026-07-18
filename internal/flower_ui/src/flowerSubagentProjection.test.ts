@@ -7,14 +7,12 @@ import type {
 import { buildFlowerSubagentPanelItems, presentSubagentTaskName } from './flowerSubagentProjection';
 
 function summary(overrides: Partial<FlowerSubagentSummary>): FlowerSubagentSummary {
-  const threadID = String(overrides.thread_id ?? overrides.subagent_id ?? 'child-1');
+  const threadID = String(overrides.thread_id ?? 'child-1');
   return {
     parent_thread_id: 'parent-thread',
-    subagent_id: threadID,
     thread_id: threadID,
     task_name: 'Review API',
     task_description: 'Review the public API boundary.',
-    title: 'Review API',
     agent_type: 'reviewer',
     status: 'completed',
     can_send_input: false,
@@ -113,7 +111,6 @@ describe('buildFlowerSubagentPanelItems', () => {
             requires_approval: false,
             payload: {
               thread_id: 'legacy-child',
-              subagent_id: 'legacy-child',
               task_name: 'Legacy child',
               status: 'running',
             },
@@ -134,7 +131,6 @@ describe('buildFlowerSubagentPanelItems', () => {
         summary({
           parent_thread_id: 'parent-thread',
           thread_id: 'child-1',
-          subagent_id: 'child-1',
           task_name: 'Review API',
           status: 'completed',
         }),
@@ -149,8 +145,6 @@ describe('buildFlowerSubagentPanelItems', () => {
       subagents: [
         summary({
           thread_id: 'child-1',
-          subagent_id: 'child-1',
-          title: 'child-1',
           task_name: 'Review prompts',
           task_description: 'Review prompt copy.',
           status: 'closed',
@@ -163,7 +157,6 @@ describe('buildFlowerSubagentPanelItems', () => {
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({
       threadID: 'child-1',
-      subagentID: 'child-1',
       title: 'Review prompts',
       displayName: 'Review Prompts',
       taskDescription: 'Review prompt copy.',
@@ -175,27 +168,23 @@ describe('buildFlowerSubagentPanelItems', () => {
     expect(items[0] as Record<string, unknown>).not.toHaveProperty('waitingPrompt');
   });
 
-  it('uses an English role fallback when a historical name has no English words', () => {
+  it('requires task_name and preserves a non-English canonical name without guessing', () => {
     const items = buildFlowerSubagentPanelItems(thread({
       subagents: [
         summary({
           thread_id: 'child-review',
-          subagent_id: 'child-review',
-          title: '检查安全边界',
           task_name: '检查安全边界',
           agent_type: 'reviewer',
         }),
         summary({
           thread_id: 'child-worker',
-          subagent_id: 'child-worker',
-          title: '',
           task_name: '',
           agent_type: 'worker',
         }),
       ],
     }));
 
-    expect(items.map((item) => item.displayName)).toEqual(['Implementation Task', 'Review Task']);
+    expect(items.map((item) => item.displayName)).toEqual(['检查安全边界']);
   });
 });
 
@@ -205,7 +194,7 @@ describe('presentSubagentTaskName', () => {
     expect(presentSubagentTaskName('ai_oss_projects')).toBe('AI OSS Projects');
     expect(presentSubagentTaskName('ai-industry-news')).toBe('AI Industry News');
     expect(presentSubagentTaskName('APIContractReview')).toBe('API Contract Review');
-    expect(presentSubagentTaskName('检查安全边界', 'Review Task')).toBe('Review Task');
+    expect(presentSubagentTaskName('检查安全边界')).toBe('检查安全边界');
   });
 
   it('limits display names to five words and 48 characters', () => {

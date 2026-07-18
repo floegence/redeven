@@ -117,7 +117,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       toolApprovalCopyCommand: t(i18n, k('chat.toolApprovalCopyCommand')),
       toolApprovalCopyCwd: t(i18n, k('chat.toolApprovalCopyCwd')),
       toolApprovalCopied: t(i18n, k('chat.toolApprovalCopied')),
-      toolApprovalSubtaskSuffix: (subagentID) => t(i18n, k('chat.toolApprovalSubtaskSuffix'), { subagent: subagentID }),
+      toolApprovalSubtaskSuffix: (childThreadID) => t(i18n, k('chat.toolApprovalSubtaskSuffix'), { subagent: childThreadID }),
       toolApprovalApproveAction: (label, subtask) => t(i18n, k('chat.toolApprovalApproveAction'), { label, subtask }),
       toolApprovalRejectAction: (label, subtask) => t(i18n, k('chat.toolApprovalRejectAction'), { label, subtask }),
       threadApprovalPanelLabel: t(i18n, k('chat.threadApprovalPanelLabel')),

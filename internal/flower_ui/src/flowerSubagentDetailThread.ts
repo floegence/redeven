@@ -301,12 +301,12 @@ function readStatus(thread: FlowerThreadSnapshot): FlowerThreadReadStatus {
   };
 }
 
-export function projectSubagentDetailThread(detail: FlowerSubagentDetail | null, fallbackThreadID: string, fallbackTitle: string): FlowerThreadSnapshot | null {
+export function projectSubagentDetailThread(detail: FlowerSubagentDetail | null): FlowerThreadSnapshot | null {
   if (!detail) return null;
   const summary = detail.summary;
-  const threadID = trimString(summary.thread_id || summary.subagent_id || fallbackThreadID);
-  if (!threadID) return null;
-  const title = trimString(summary.title) || trimString(summary.task_name) || trimString(fallbackTitle) || threadID;
+  const threadID = trimString(summary.thread_id);
+  const title = trimString(summary.task_name);
+  if (!threadID || !title) return null;
   const orderedMessages: OrderedMessage[] = [];
   let messageSequence = 0;
   for (const row of [...detail.timeline].sort((left, right) => rowOrdinal(left) - rowOrdinal(right))) {

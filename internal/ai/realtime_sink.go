@@ -425,7 +425,10 @@ func (s *Service) threadSummaryRealtimeEvent(endpointID string, threadID string)
 		return RealtimeEvent{}, err
 	}
 	runStatus, runErrorCode, runError := threadViewRunState(snapshot, latest)
-	permissionType := threadPermissionTypeString(th)
+	permissionType, err := threadPermissionType(th)
+	if err != nil {
+		return RealtimeEvent{}, err
+	}
 	waitingPrompt := requestUserInputPromptFromFloretTurn(latest)
 	lastMessageAt, lastMessagePreview := canonicalThreadPreview(latest)
 	reasoningCapability, _, _ := s.threadReasoningDefaults(ctx, strings.TrimSpace(th.ModelID))
@@ -440,13 +443,13 @@ func (s *Service) threadSummaryRealtimeEvent(endpointID string, threadID string)
 		RunStatus:           runStatus,
 		RunErrorCode:        runErrorCode,
 		RunError:            runError,
-		Title:               strings.TrimSpace(th.Title),
+		Title:               strings.TrimSpace(snapshot.Title),
 		ModelID:             strings.TrimSpace(th.ModelID),
-		UpdatedAtUnixMs:     maxInt64(th.UpdatedAtUnixMs, snapshot.UpdatedAt.UnixMilli()),
+		UpdatedAtUnixMs:     snapshot.UpdatedAt.UnixMilli(),
 		LastMessagePreview:  lastMessagePreview,
 		LastMessageAtUnixMs: lastMessageAt,
 		ActiveRunID:         strings.TrimSpace(string(snapshot.LatestRunID)),
-		PermissionType:      permissionType,
+		PermissionType:      permissionTypeString(permissionType),
 		QueuedTurnCount:     queuedTurnCount,
 		ReasoningSelection:  reasoningSelection,
 		ReasoningCapability: reasoningCapability,

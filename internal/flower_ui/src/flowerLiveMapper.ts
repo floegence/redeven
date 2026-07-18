@@ -744,19 +744,17 @@ export function mapFlowerReadStatus(raw: unknown): FlowerThreadReadStatus {
 function mapFlowerSubagentSummary(raw: unknown): FlowerSubagentSummary | null {
   const record = plainRecordValue(raw);
   if (!record) return null;
-  const threadID = trim(record.thread_id) || trim(record.subagent_id);
-  if (!threadID) return null;
-  const subagentID = trim(record.subagent_id) || threadID;
+  const threadID = trim(record.thread_id);
+  const taskName = trim(record.task_name);
+  if (!threadID || !taskName) return null;
   const createdAtMs = integerOrZero(record.created_at_ms ?? record.created_at_unix_ms);
   const updatedAtMs = integerOrZero(record.updated_at_ms ?? record.updated_at_unix_ms);
   const queuedInputs = integerOrZero(record.queued_inputs);
   return {
     parent_thread_id: trim(record.parent_thread_id),
-    subagent_id: subagentID,
     thread_id: threadID,
-    ...(trim(record.task_name) ? { task_name: trim(record.task_name) } : {}),
+    task_name: taskName,
     ...(trim(record.task_description) ? { task_description: trim(record.task_description) } : {}),
-    ...(trim(record.title) ? { title: trim(record.title) } : {}),
     ...(trim(record.agent_type) ? { agent_type: trim(record.agent_type) } : {}),
     ...(trim(record.context_mode) ? { context_mode: trim(record.context_mode) } : {}),
     status: trim(record.status) || 'unknown',
@@ -948,14 +946,13 @@ function mapApprovalAction(raw: unknown): FlowerApprovalAction | null {
     parent_thread_id: trim(delegatedRefRecord.parent_thread_id),
     parent_run_id: trim(delegatedRefRecord.parent_run_id),
     ...(trim(delegatedRefRecord.parent_turn_id) ? { parent_turn_id: trim(delegatedRefRecord.parent_turn_id) } : {}),
-    subagent_id: trim(delegatedRefRecord.subagent_id),
     child_thread_id: trim(delegatedRefRecord.child_thread_id),
     child_run_id: trim(delegatedRefRecord.child_run_id),
     ...(trim(delegatedRefRecord.child_turn_id) ? { child_turn_id: trim(delegatedRefRecord.child_turn_id) } : {}),
     child_tool_call_id: trim(delegatedRefRecord.child_tool_call_id),
     approval_id: trim(delegatedRefRecord.approval_id),
   } : null;
-  const validDelegatedRef = delegatedRef && delegatedRef.parent_thread_id && delegatedRef.parent_run_id && delegatedRef.subagent_id && delegatedRef.child_thread_id && delegatedRef.child_run_id && delegatedRef.child_tool_call_id && delegatedRef.approval_id
+  const validDelegatedRef = delegatedRef && delegatedRef.parent_thread_id && delegatedRef.parent_run_id && delegatedRef.child_thread_id && delegatedRef.child_run_id && delegatedRef.child_tool_call_id && delegatedRef.approval_id
     ? delegatedRef
     : null;
   if (origin === 'main_tool' && (!runID || !toolID)) return null;

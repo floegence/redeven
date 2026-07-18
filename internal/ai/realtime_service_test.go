@@ -129,7 +129,7 @@ func TestFlowerLiveBootstrapReadsCanonicalFloretContextAfterServiceRestart(t *te
 		ThreadID: flruntime.ThreadID(thread.ThreadID),
 		TurnID:   "turn_context_restart",
 		RunID:    "run_context_restart",
-		Input:    "record canonical context",
+		Input:    flruntime.TurnInput{Text: "record canonical context"},
 	}); err != nil {
 		_ = first.Close()
 		t.Fatalf("RunTurn: %v", err)
@@ -968,7 +968,7 @@ func TestRunContextCompactionAnchorRemainsStableAcrossOperationEvents(t *testing
 		t.Fatalf("CreateThread: %v", err)
 	}
 	host := newTestFloretHost(t, svc.floretStore, "visible output before compact")
-	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{ThreadID: flruntime.ThreadID(th.ThreadID), TurnID: "message-before-compact", RunID: "run-before-compact", Input: "prepare"}); err != nil {
+	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{ThreadID: flruntime.ThreadID(th.ThreadID), TurnID: "message-before-compact", RunID: "run-before-compact", Input: flruntime.TurnInput{Text: "prepare"}}); err != nil {
 		t.Fatalf("seed canonical timeline: %v", err)
 	}
 

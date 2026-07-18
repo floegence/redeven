@@ -1375,13 +1375,9 @@ func (s *Service) PrepareDesktopModelSource(session DesktopModelSourceSession) (
 		modelSource = newDesktopModelSourceClient(s.log)
 		s.desktopModelSource = modelSource
 	}
-	coordinator := s.threadTitleCoordinator
 	s.mu.Unlock()
 	if _, err := modelSource.Prepare(session); err != nil {
 		return nil, err
-	}
-	if coordinator != nil {
-		coordinator.Wake()
 	}
 	return s.RuntimeStatus(context.Background()), nil
 }
@@ -1399,12 +1395,8 @@ func (s *Service) ServeDesktopModelSourceRPC(ctx context.Context, session Deskto
 		modelSource = newDesktopModelSourceClient(s.log)
 		s.desktopModelSource = modelSource
 	}
-	coordinator := s.threadTitleCoordinator
 	s.mu.Unlock()
 	wrappedOnChange := func() {
-		if coordinator != nil {
-			coordinator.Wake()
-		}
 		if onChange != nil {
 			onChange()
 		}
@@ -1418,13 +1410,9 @@ func (s *Service) DisconnectDesktopModelSource() *AIRuntimeStatus {
 	}
 	s.mu.Lock()
 	modelSource := s.desktopModelSource
-	coordinator := s.threadTitleCoordinator
 	s.mu.Unlock()
 	if modelSource != nil {
 		modelSource.Disconnect()
-	}
-	if coordinator != nil {
-		coordinator.Wake()
 	}
 	return s.RuntimeStatus(context.Background())
 }

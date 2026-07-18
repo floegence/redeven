@@ -28,15 +28,19 @@ func NewThreadID() (string, error) {
 	return "th_" + base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-func threadPermissionTypeString(th *threadstore.Thread) string {
+func threadPermissionType(th *threadstore.ThreadSettings) (FlowerPermissionType, error) {
 	if th == nil {
-		return permissionTypeString(FlowerPermissionApprovalRequired)
+		return "", errors.New("thread permission settings are missing")
 	}
-	permissionType, err := normalizePermissionType(strings.TrimSpace(th.PermissionType), "")
-	if err == nil {
-		return permissionTypeString(permissionType)
+	raw := strings.TrimSpace(th.PermissionType)
+	if raw == "" {
+		return "", errors.New("thread permission setting is empty")
 	}
-	return permissionTypeString(FlowerPermissionApprovalRequired)
+	permissionType, err := normalizePermissionType(raw, "")
+	if err != nil {
+		return "", fmt.Errorf("parse thread permission setting: %w", err)
+	}
+	return permissionType, nil
 }
 
 func applyFlowerThreadMetadataView(view *ThreadView, meta *threadstore.FlowerThreadMetadata) {
@@ -50,18 +54,18 @@ func applyFlowerThreadMetadataView(view *ThreadView, meta *threadstore.FlowerThr
 	}
 }
 
-func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.Thread, flowerMeta *threadstore.FlowerThreadMetadata, queuedTurnCount int, snapshot flruntime.ThreadSnapshot, latest *flruntime.ThreadTurnSnapshot) ThreadView {
+func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.ThreadSettings, flowerMeta *threadstore.FlowerThreadMetadata, queuedTurnCount int, snapshot flruntime.ThreadSnapshot, latest *flruntime.ThreadTurnSnapshot) (ThreadView, error) {
 	if th == nil {
-		return ThreadView{}
+		return ThreadView{}, errors.New("thread settings are missing")
+	}
+	permissionType, err := threadPermissionType(th)
+	if err != nil {
+		return ThreadView{}, err
 	}
 	runStatus, runErrorCode, runError := threadViewRunState(snapshot, latest)
 	activeRunID := ""
 	if snapshot.Status == flruntime.ThreadStatusRunning || snapshot.Status == flruntime.ThreadStatusWaiting || snapshot.Status == flruntime.ThreadStatusInterrupted {
 		activeRunID = strings.TrimSpace(string(snapshot.LatestRunID))
-	}
-	updatedAt := th.UpdatedAtUnixMs
-	if snapshot.UpdatedAt.UnixMilli() > updatedAt {
-		updatedAt = snapshot.UpdatedAt.UnixMilli()
 	}
 	lastMessageAt, lastMessagePreview := canonicalThreadPreview(latest)
 	waitingPrompt := requestUserInputPromptFromFloretTurn(latest)
@@ -72,9 +76,9 @@ func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.Thre
 	capability, _, _ := s.threadReasoningDefaults(ctx, strings.TrimSpace(th.ModelID))
 	view := ThreadView{
 		ThreadID:            strings.TrimSpace(th.ThreadID),
-		Title:               strings.TrimSpace(th.Title),
+		Title:               strings.TrimSpace(snapshot.Title),
 		ModelID:             strings.TrimSpace(th.ModelID),
-		PermissionType:      threadPermissionTypeString(th),
+		PermissionType:      permissionTypeString(permissionType),
 		WorkingDir:          workingDir,
 		QueuedTurnCount:     queuedTurnCount,
 		RunStatus:           runStatus,
@@ -86,8 +90,8 @@ func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.Thre
 		ReasoningSelection:  unmarshalReasoningSelection(th.ReasoningSelectionJSON),
 		ReasoningCapability: capability,
 		PinnedAtUnixMs:      th.PinnedAtUnixMs,
-		CreatedAtUnixMs:     th.CreatedAtUnixMs,
-		UpdatedAtUnixMs:     updatedAt,
+		CreatedAtUnixMs:     snapshot.CreatedAt.UnixMilli(),
+		UpdatedAtUnixMs:     snapshot.UpdatedAt.UnixMilli(),
 		LastMessageAtUnixMs: lastMessageAt,
 		LastMessagePreview:  lastMessagePreview,
 		FlowerActivity: FlowerThreadReadSnapshot{
@@ -98,7 +102,7 @@ func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.Thre
 		},
 	}
 	applyFlowerThreadMetadataView(&view, flowerMeta)
-	return view
+	return view, nil
 }
 
 func (s *Service) readCanonicalThreadState(ctx context.Context, threadID string) (flruntime.ThreadSnapshot, *flruntime.ThreadTurnSnapshot, error) {
@@ -107,23 +111,11 @@ func (s *Service) readCanonicalThreadState(ctx context.Context, threadID string)
 		return flruntime.ThreadSnapshot{}, nil, err
 	}
 	canonicalThreadID := flruntime.ThreadID(strings.TrimSpace(threadID))
-	latest, err := host.ReadLatestThreadTurn(ctx, canonicalThreadID)
-	var latestTurn *flruntime.ThreadTurnSnapshot
-	if errors.Is(err, flruntime.ErrTurnNotFound) {
-		latest = flruntime.ThreadTurnSnapshot{}
-	} else if err != nil {
-		return flruntime.ThreadSnapshot{}, nil, err
-	} else {
-		latestTurn = &latest
-	}
-	snapshot, err := host.ReadThread(ctx, canonicalThreadID)
+	overview, err := host.ReadThreadOverview(ctx, canonicalThreadID)
 	if err != nil {
 		return flruntime.ThreadSnapshot{}, nil, err
 	}
-	if latestTurn != nil && latestTurn.ThroughOrdinal > snapshot.ThroughOrdinal {
-		return flruntime.ThreadSnapshot{}, nil, canonicalTimelineResyncErrorf("latest turn revision is newer than the thread snapshot")
-	}
-	return snapshot, latestTurn, nil
+	return overview.Thread, overview.LatestTurn, nil
 }
 
 func threadViewRunState(snapshot flruntime.ThreadSnapshot, latest *flruntime.ThreadTurnSnapshot) (string, string, string) {
@@ -272,7 +264,10 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 	if err != nil {
 		return nil, fmt.Errorf("read canonical Floret thread %s: %w", threadID, err)
 	}
-	view := s.threadViewFromRecord(ctx, th, flowerMeta, queuedTurnCount, snapshot, latest)
+	view, err := s.threadViewFromRecord(ctx, th, flowerMeta, queuedTurnCount, snapshot, latest)
+	if err != nil {
+		return nil, err
+	}
 	if queuedTurnCount > 0 {
 		queued, listErr := db.ListFollowupsByLane(ctx, endpointID, threadID, threadstore.FollowupLaneQueued, queuedTurnCount)
 		if listErr != nil {
@@ -280,7 +275,11 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 		}
 		view.QueuedTurns = make([]QueuedTurnView, 0, len(queued))
 		for _, record := range queued {
-			view.QueuedTurns = append(view.QueuedTurns, queuedTurnRecordToThreadView(record))
+			queuedView, err := queuedTurnRecordToThreadView(record)
+			if err != nil {
+				return nil, fmt.Errorf("decode queued turn %q: %w", record.QueueID, err)
+			}
+			view.QueuedTurns = append(view.QueuedTurns, queuedView)
 		}
 	}
 	return &view, nil
@@ -339,7 +338,11 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 	out := &ListThreadsResponse{Threads: make([]ThreadView, 0, len(list)), NextCursor: strings.TrimSpace(next)}
 	for _, t := range list {
 		threadID := strings.TrimSpace(t.ThreadID)
-		out.Threads = append(out.Threads, s.threadViewFromRecord(ctx, &t, flowerMetaByThread[threadID], queuedTurnCounts[threadID], canonicalByThread[threadID], latestByThread[threadID]))
+		view, err := s.threadViewFromRecord(ctx, &t, flowerMetaByThread[threadID], queuedTurnCounts[threadID], canonicalByThread[threadID], latestByThread[threadID])
+		if err != nil {
+			return nil, fmt.Errorf("build thread %s view: %w", threadID, err)
+		}
+		out.Threads = append(out.Threads, view)
 	}
 	return out, nil
 }
@@ -437,7 +440,7 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 	}
 
 	now := time.Now().UnixMilli()
-	t := threadstore.Thread{
+	t := threadstore.ThreadSettings{
 		ThreadID:               id,
 		EndpointID:             strings.TrimSpace(meta.EndpointID),
 		NamespacePublicID:      strings.TrimSpace(meta.NamespacePublicID),
@@ -445,7 +448,6 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 		ReasoningSelectionJSON: marshalReasoningSelection(reasoningSelection),
 		PermissionType:         permissionTypeString(permissionType),
 		WorkingDir:             workingDirClean,
-		Title:                  strings.TrimSpace(req.Title),
 		CreatedByUserPublicID:  strings.TrimSpace(meta.UserPublicID),
 		CreatedByUserEmail:     strings.TrimSpace(meta.UserEmail),
 		UpdatedByUserPublicID:  strings.TrimSpace(meta.UserPublicID),
@@ -453,24 +455,24 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 		CreatedAtUnixMs:        now,
 		UpdatedAtUnixMs:        now,
 	}
-	host, err := s.openFloretMaintenanceHost()
+	operation, err := db.PrepareThreadCreateOperation(ctx, threadstore.PrepareThreadCreateRequest{
+		Settings: t, ExplicitTitle: strings.TrimSpace(req.Title), CreatedAtMS: now,
+	})
 	if err != nil {
 		return nil, err
 	}
-	if _, err := host.EnsureThread(ctx, flruntime.EnsureThreadRequest{ThreadID: flruntime.ThreadID(id)}); err != nil {
-		return nil, fmt.Errorf("create canonical Floret thread: %w", err)
-	}
-	if err := db.CreateThread(ctx, t); err != nil {
-		if cleanupErr := host.DeleteThread(ctx, flruntime.ThreadID(id)); cleanupErr != nil {
-			return nil, fmt.Errorf("create product thread: %w; delete canonical Floret thread: %v", err, cleanupErr)
-		}
-		return nil, err
+	t, err = s.resumeThreadCreateOperation(ctx, operation)
+	if err != nil {
+		return nil, fmt.Errorf("create thread: %w", err)
 	}
 	snapshot, latest, err := s.readCanonicalThreadState(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-	view := s.threadViewFromRecord(ctx, &t, nil, 0, snapshot, latest)
+	view, err := s.threadViewFromRecord(ctx, &t, nil, 0, snapshot, latest)
+	if err != nil {
+		return nil, err
+	}
 	return &view, nil
 }
 
@@ -527,7 +529,18 @@ func (s *Service) RenameThread(ctx context.Context, meta *session.Meta, threadID
 	if threadID == "" {
 		return errors.New("missing thread_id")
 	}
-	if err := db.RenameThread(ctx, endpointID, threadID, title, meta.UserPublicID, meta.UserEmail); err != nil {
+	settings, err := db.GetThread(ctx, endpointID, threadID)
+	if err != nil {
+		return err
+	}
+	if settings == nil {
+		return sql.ErrNoRows
+	}
+	host, err := s.openFloretMaintenanceHost()
+	if err != nil {
+		return err
+	}
+	if _, err := host.SetThreadTitle(ctx, flruntime.SetThreadTitleRequest{ThreadID: flruntime.ThreadID(threadID), Title: title}); err != nil {
 		return err
 	}
 	s.broadcastThreadSummary(endpointID, threadID)
@@ -587,7 +600,7 @@ func (s *Service) ForkThread(ctx context.Context, meta *session.Meta, sourceThre
 	if source == nil {
 		return nil, sql.ErrNoRows
 	}
-	sourceSnapshot, sourceLatest, err := s.readCanonicalThreadState(ctx, sourceThreadID)
+	sourceSnapshot, _, err := s.readCanonicalThreadState(ctx, sourceThreadID)
 	if err != nil {
 		return nil, fmt.Errorf("read canonical Floret thread %s: %w", sourceThreadID, err)
 	}
@@ -598,8 +611,7 @@ func (s *Service) ForkThread(ctx context.Context, meta *session.Meta, sourceThre
 	if err != nil {
 		return nil, err
 	}
-	_, sourcePreview := canonicalThreadPreview(sourceLatest)
-	title = normalizeForkThreadTitle(title, source.Title, sourcePreview)
+	title = strings.TrimSpace(title)
 	createdAtUnixMs := time.Now().UnixMilli()
 	operation, err := db.PrepareForkOperation(ctx, threadstore.ForkThreadRequest{
 		OperationID:           "fork_" + destinationID,
@@ -643,27 +655,6 @@ func forkFloretThreadWithHost(ctx context.Context, host floretForkHost, operatio
 	})
 }
 
-func threadstoreForkTurnRefs(refs []flruntime.ForkedTurnRef) []threadstore.ForkTurnRef {
-	if len(refs) == 0 {
-		return nil
-	}
-	out := make([]threadstore.ForkTurnRef, 0, len(refs))
-	for _, ref := range refs {
-		var createdAtUnixMs int64
-		if !ref.CreatedAt.IsZero() {
-			createdAtUnixMs = ref.CreatedAt.UnixMilli()
-		}
-		out = append(out, threadstore.ForkTurnRef{
-			SourceTurnID:      string(ref.SourceTurnID),
-			SourceRunID:       string(ref.SourceRunID),
-			DestinationTurnID: string(ref.DestinationTurnID),
-			DestinationRunID:  string(ref.DestinationRunID),
-			CreatedAtUnixMs:   createdAtUnixMs,
-		})
-	}
-	return out
-}
-
 func threadForkBlockedByRunState(snapshot flruntime.ThreadSnapshot) bool {
 	return canonicalThreadBusy(snapshot)
 }
@@ -683,20 +674,6 @@ func (s *Service) threadPreferenceChangeBlocked(ctx context.Context, threadID st
 		return false, err
 	}
 	return canonicalThreadBusy(snapshot), nil
-}
-
-func normalizeForkThreadTitle(requested string, sourceTitle string, sourcePreview string) string {
-	requested = strings.TrimSpace(requested)
-	if requested != "" {
-		return truncateRunes(requested, 200)
-	}
-	base := firstNonEmpty(strings.TrimSpace(sourceTitle), strings.TrimSpace(sourcePreview), "Untitled conversation")
-	suffix := " (fork)"
-	maxBase := 200 - len(suffix)
-	if maxBase < 1 {
-		return truncateRunes(base, 200)
-	}
-	return truncateRunes(base, maxBase) + suffix
 }
 
 func (s *Service) SetThreadModel(ctx context.Context, meta *session.Meta, threadID string, modelID string) error {

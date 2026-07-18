@@ -2,8 +2,6 @@ package ai
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -178,7 +176,7 @@ func TestParallelToolCallsWireSerializationNeverSendsFalse(t *testing.T) {
 	}
 }
 
-func TestPermissionSnapshotV2AndLegacyV1Integrity(t *testing.T) {
+func TestPermissionSnapshotV2RejectsLegacyV1(t *testing.T) {
 	t.Parallel()
 	snapshot := PermissionSnapshot{
 		PermissionType:   FlowerPermissionApprovalRequired,
@@ -196,21 +194,9 @@ func TestPermissionSnapshotV2AndLegacyV1Integrity(t *testing.T) {
 		t.Fatalf("unexpected v2 JSON: %s", rawV2)
 	}
 
-	legacyPolicy := `{"Visibility":"standard","Capabilities":["shell"],"ResourceKinds":null,"ApprovalDecision":"ask","Parallel` + `Safe":true}`
-	legacyHashJSON := `{"permission_type":"approval_required","visible_tool_names":["terminal.exec"],"prompt_capability_names":null,"floret_tool_names":["terminal.exec"],"tool_policies":{"terminal.exec":` + legacyPolicy + `}}`
-	sum := sha256.Sum256([]byte(legacyHashJSON))
-	wantHash := base64.RawURLEncoding.EncodeToString(sum[:])
-	legacyJSON := `{"SnapshotID":"legacy","PermissionType":"approval_required","VisibleToolNames":["terminal.exec"],"PromptCapabilityNames":null,"FloretToolNames":["terminal.exec"],"ToolPolicies":{"terminal.exec":` + legacyPolicy + `},"SnapshotHash":"` + wantHash + `","RegistryHash":"","SchemaHash":"","PresentationHash":""}`
-	decoded, err := decodePermissionSnapshot(legacyJSON)
-	if err != nil {
-		t.Fatalf("decode v1: %v", err)
-	}
-	if decoded.Version != permissionSnapshotVersionLegacy || permissionSnapshotHash(decoded) != wantHash {
-		t.Fatalf("legacy version/hash=(%d,%q), want (1,%q)", decoded.Version, permissionSnapshotHash(decoded), wantHash)
-	}
-	policy := decoded.ToolPolicies["terminal.exec"]
-	if policy.ApprovalDecision != ApprovalDecisionAsk || len(policy.Capabilities) != 1 {
-		t.Fatalf("legacy runtime policy=%#v", policy)
+	legacyJSON := `{"SnapshotID":"legacy","PermissionType":"approval_required","VisibleToolNames":["terminal.exec"],"FloretToolNames":["terminal.exec"],"ToolPolicies":{}}`
+	if _, err := decodePermissionSnapshot(legacyJSON); err == nil {
+		t.Fatal("legacy v1 snapshot was accepted")
 	}
 	if _, err := decodePermissionSnapshot(`{"version":99}`); err == nil {
 		t.Fatal("unknown snapshot version was accepted")

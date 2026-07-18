@@ -46,7 +46,7 @@ func TestService_DeleteThreadRemovesOwnedUploadArtifacts(t *testing.T) {
 	if uploadID == "" {
 		t.Fatalf("missing upload_id in URL %q", upload.URL)
 	}
-	if err := svc.threadsDB.BindUploadsToRef(ctx, meta.EndpointID, thread.ThreadID, threadstore.UploadRefKindTurn, "turn_upload_cleanup", []string{uploadID}, time.Now().UnixMilli()); err != nil {
+	if err := svc.threadsDB.BindUploadsToRef(ctx, meta.EndpointID, thread.ThreadID, threadstore.UploadRefKindThread, thread.ThreadID, []string{uploadID}, time.Now().UnixMilli()); err != nil {
 		t.Fatalf("BindUploadsToRef: %v", err)
 	}
 
@@ -89,7 +89,7 @@ func TestService_DeleteThreadKeepsSharedUploadUntilLastThread(t *testing.T) {
 	dataPath := filepath.Join(svc.uploadsDir, uploadID+".data")
 
 	for _, threadID := range []string{threadA.ThreadID, threadB.ThreadID} {
-		if err := svc.threadsDB.BindUploadsToRef(ctx, meta.EndpointID, threadID, threadstore.UploadRefKindTurn, "turn_"+threadID, []string{uploadID}, time.Now().UnixMilli()); err != nil {
+		if err := svc.threadsDB.BindUploadsToRef(ctx, meta.EndpointID, threadID, threadstore.UploadRefKindThread, threadID, []string{uploadID}, time.Now().UnixMilli()); err != nil {
 			t.Fatalf("BindUploadsToRef(%s): %v", threadID, err)
 		}
 	}

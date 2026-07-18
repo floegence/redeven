@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -45,30 +46,34 @@ func (r *run) buildDynamicToolSurfaceConfig(taskObjective string, taskComplexity
 	}
 }
 
-func (r *run) currentThreadPermissionType(ctx context.Context, fallback FlowerPermissionType) FlowerPermissionType {
-	if fallback == "" {
-		fallback = FlowerPermissionApprovalRequired
-	}
+func (r *run) currentThreadPermissionType(ctx context.Context) (FlowerPermissionType, error) {
 	if r == nil || r.threadsDB == nil {
-		return fallback
+		return "", errors.New("thread permission store is unavailable")
 	}
 	endpointID := strings.TrimSpace(r.endpointID)
 	threadID := strings.TrimSpace(r.threadID)
 	if endpointID == "" || threadID == "" {
-		return fallback
+		return "", errors.New("thread permission identity is incomplete")
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	th, err := r.threadsDB.GetThread(ctx, endpointID, threadID)
-	if err != nil || th == nil {
-		return fallback
-	}
-	permissionType, err := normalizePermissionType(strings.TrimSpace(th.PermissionType), fallback)
 	if err != nil {
-		return fallback
+		return "", fmt.Errorf("read current thread permission: %w", err)
 	}
-	return permissionType
+	if th == nil {
+		return "", errors.New("current thread permission settings are missing")
+	}
+	raw := strings.TrimSpace(th.PermissionType)
+	if raw == "" {
+		return "", errors.New("current thread permission setting is empty")
+	}
+	permissionType, err := normalizePermissionType(raw, "")
+	if err != nil {
+		return "", fmt.Errorf("parse current thread permission: %w", err)
+	}
+	return permissionType, nil
 }
 
 func (r *run) buildRunToolSurface(ctx context.Context, cfg runToolSurfaceConfig, fallback FlowerPermissionType) (runToolSurface, error) {
@@ -80,7 +85,11 @@ func (r *run) buildRunToolSurface(ctx context.Context, cfg runToolSurfaceConfig,
 	}
 	permissionType := fallback
 	if cfg.UseLatestThreadPermission {
-		permissionType = r.currentThreadPermissionType(ctx, fallback)
+		var err error
+		permissionType, err = r.currentThreadPermissionType(ctx)
+		if err != nil {
+			return runToolSurface{}, err
+		}
 	}
 	r.permissionType = permissionType
 
@@ -96,8 +105,12 @@ func (r *run) buildRunToolSurface(ctx context.Context, cfg runToolSurfaceConfig,
 	if !cfg.IncludeControlSignalsInSnapshot {
 		snapshotSignals = nil
 	}
-	permissionSnapshot := r.freezePermissionSnapshot(buildPermissionSnapshot(permissionType, activeTools, snapshotSignals))
+	permissionSnapshot := buildPermissionSnapshot(permissionType, activeTools, snapshotSignals)
 	if err := validatePermissionSnapshotConsistency(permissionSnapshot); err != nil {
+		return runToolSurface{}, err
+	}
+	permissionSnapshot, err := r.freezePermissionSnapshot(permissionSnapshot)
+	if err != nil {
 		return runToolSurface{}, err
 	}
 	activeTools = filterToolsByNames(activeTools, permissionSnapshot.FloretToolNames)

@@ -35,6 +35,8 @@ func TestRunIdleWatchdog_DoesNotCancelWhileToolBusy(t *testing.T) {
 		IdleTimeout:  150 * time.Millisecond,
 	})
 	owner := &terminalProcessTestOwner{}
+	r.permissionType = FlowerPermissionFullAccess
+	allowToolsForTest(t, r, "terminal.exec")
 	r.setPendingToolSettlementOwnerResolver(func() floretPendingToolSettler { return owner })
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -83,6 +85,8 @@ func TestHandleToolCall_FileWriteDoesNotRequireWorkspaceCheckpoint(t *testing.T)
 		ThreadID:     "th_test",
 		MessageID:    "m_test_no_workspace_checkpoint",
 	})
+	r.permissionType = FlowerPermissionFullAccess
+	allowToolsForTest(t, r, "file.write")
 
 	outcome, err := r.handleToolCall(context.Background(), "tool_file_write_1", "file.write", map[string]any{
 		"file_path": "note.txt",

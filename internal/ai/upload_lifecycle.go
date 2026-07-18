@@ -79,14 +79,9 @@ func (s *Service) normalizeInputAttachments(ctx context.Context, endpointID stri
 		if err != nil {
 			return input, nil, nil, err
 		}
-		if strings.TrimSpace(next.URL) == "" {
-			continue
-		}
 		normalized = append(normalized, next)
-		if info != nil {
-			infoByURL[next.URL] = *info
-			uploadIDs = append(uploadIDs, info.UploadID)
-		}
+		infoByURL[next.URL] = *info
+		uploadIDs = append(uploadIDs, info.UploadID)
 	}
 	input.Attachments = normalized
 	return input, infoByURL, uniqueStrings(uploadIDs), nil
@@ -99,11 +94,11 @@ func (s *Service) resolveAttachmentInfo(ctx context.Context, endpointID string, 
 		URL:      strings.TrimSpace(item.URL),
 	}
 	if out.URL == "" {
-		return out, nil, nil
+		return out, nil, errors.New("attachment URL is required")
 	}
 	uploadID := parseUploadIDFromURL(out.URL)
 	if uploadID == "" {
-		return out, nil, nil
+		return out, nil, errors.New("attachment must reference a Redeven upload")
 	}
 	rec, err := s.ensureUploadRecord(ctx, endpointID, uploadID)
 	if err != nil {
@@ -112,12 +107,8 @@ func (s *Service) resolveAttachmentInfo(ctx context.Context, endpointID string, 
 	if rec == nil {
 		return out, nil, sql.ErrNoRows
 	}
-	if out.Name == "" {
-		out.Name = strings.TrimSpace(rec.Name)
-	}
-	if out.MimeType == "" {
-		out.MimeType = strings.TrimSpace(rec.MimeType)
-	}
+	out.Name = strings.TrimSpace(rec.Name)
+	out.MimeType = strings.TrimSpace(rec.MimeType)
 	info := &resolvedUploadAttachment{
 		UploadID: strings.TrimSpace(rec.UploadID),
 		URL:      out.URL,
@@ -307,6 +298,14 @@ func (s *Service) runBackgroundMaintenance(reason string) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), uploadCleanupSweepTimeout)
 	defer cancel()
+	creates, createErr := s.replayPendingThreadCreateOperations(ctx)
+	if createErr != nil {
+		if s.log != nil {
+			s.log.Warn("ai thread create replay failed", "reason", reason, "error", createErr)
+		}
+	} else if creates > 0 && s.log != nil {
+		s.log.Info("ai thread create replay completed", "reason", reason, "count", creates)
+	}
 	deletes, deleteErr := s.replayPendingThreadDeletes(ctx, threadDeleteReplayBatchSize)
 	if deleteErr != nil {
 		if s.log != nil {

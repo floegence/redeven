@@ -2899,7 +2899,6 @@ describe('FlowerSurface navigation launch/send', () => {
                   action: 'spawn',
                   items: [{
                     thread_id: 'thread-child-closed',
-                    subagent_id: 'thread-child-closed',
                     task_name: 'Review failed parent',
                     status: 'running',
                   }],
@@ -2912,7 +2911,6 @@ describe('FlowerSurface navigation launch/send', () => {
       subagents: [subagentSummary({
         parent_thread_id: 'thread-failed-continue',
         thread_id: 'thread-child-closed',
-        subagent_id: 'thread-child-closed',
         task_name: 'Review failed parent',
         status: 'closed',
         can_close: false,

@@ -658,7 +658,7 @@ func activityPayloadAllowedKeys(renderer observation.ActivityRenderer) map[strin
 			"data", "result", "content", "content_ref", "activation_id", "already_active",
 			"permission_hints", "dependencies", "dependency_degraded", "reason", "id",
 			"status", "message", "timed_out", "targets", "stats", "output", "structured",
-			"key_files", "rows", "cards", "items", "subagent_id", "thread_id",
+			"key_files", "rows", "cards", "items", "thread_id",
 			"parent_thread_id", "parent_turn_id", "task_name", "task_description",
 			"title", "agent_type", "context_mode", "okf_version", "total_sections",
 			"sections", "filters", "total_concepts", "total_matches", "match_count",
@@ -678,8 +678,8 @@ func activityPayloadAllowedKeys(renderer observation.ActivityRenderer) map[strin
 
 func activitySubagentsPayloadAllowedKeys() map[string]struct{} {
 	return stringSet(
-		"action", "status", "thread_id", "subagent_id", "parent_thread_id", "parent_turn_id",
-		"task_name", "task_description", "title", "agent_type", "items", "counts",
+		"action", "status", "thread_id", "parent_thread_id", "parent_turn_id",
+		"task_name", "task_description", "agent_type", "items", "counts",
 		"started_at_ms", "created_at_ms", "updated_at_ms", "closed",
 		"agent_count", "requested_count", "found_count",
 		"missing_count", "closed_count", "stopped_count", "accepted", "running_only",
@@ -692,7 +692,7 @@ func activityTimelineBlockAllowedKeys() map[string]struct{} {
 }
 
 func activitySubagentsItemAllowedKeys() map[string]struct{} {
-	return stringSet("thread_id", "subagent_id", "parent_thread_id", "parent_turn_id", "task_name", "task_description", "title", "agent_type", "status", "started_at_ms", "created_at_ms", "updated_at_ms", "closed")
+	return stringSet("thread_id", "parent_thread_id", "parent_turn_id", "task_name", "task_description", "agent_type", "status", "started_at_ms", "created_at_ms", "updated_at_ms", "closed")
 }
 
 func activitySubagentsCountAllowedKeys() map[string]struct{} {

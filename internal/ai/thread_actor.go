@@ -504,7 +504,10 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 	if runID == "" {
 		return errors.New("pending turn command is missing run identity")
 	}
-	meta := queuedTurnRecordToSessionMeta(rec, th.NamespacePublicID)
+	meta, err := queuedTurnRecordToSessionMeta(rec, th.NamespacePublicID)
+	if err != nil {
+		return err
+	}
 	startReq, err := queuedTurnRecordToRunStartRequest(rec, th.PermissionType)
 	if err != nil {
 		if consumeErr := a.mgr.svc.consumeSourceFollowup(context.Background(), meta, threadID, rec.QueueID); consumeErr != nil && !errors.Is(consumeErr, sql.ErrNoRows) {
@@ -603,9 +606,9 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		return SendUserTurnResponse{}, err
 	}
 	req.Model = resolvedModel.ID
-	resolvedPermissionType, err := normalizePermissionType(threadPermissionTypeString(th), FlowerPermissionApprovalRequired)
+	resolvedPermissionType, err := threadPermissionType(th)
 	if err != nil {
-		resolvedPermissionType = FlowerPermissionApprovalRequired
+		return SendUserTurnResponse{}, err
 	}
 	consumeSourceFollowup := func() {
 		if err := a.mgr.svc.consumeSourceFollowup(context.Background(), meta, threadID, req.SourceFollowupID); err != nil && a.mgr.svc.log != nil {
@@ -781,9 +784,9 @@ func (a *threadActor) handleSubmitRequestUserInputResponse(ctx context.Context, 
 		return SubmitRequestUserInputResponseResponse{}, err
 	}
 	req.Model = resolvedModel.ID
-	resolvedPermissionType, err := normalizePermissionType(threadPermissionTypeString(th), FlowerPermissionApprovalRequired)
+	resolvedPermissionType, err := threadPermissionType(th)
 	if err != nil {
-		resolvedPermissionType = FlowerPermissionApprovalRequired
+		return SubmitRequestUserInputResponseResponse{}, err
 	}
 	_, latest, canonicalErr := a.mgr.svc.readCanonicalThreadState(ctx, threadID)
 	if canonicalErr != nil {

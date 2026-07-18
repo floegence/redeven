@@ -351,7 +351,7 @@ export type FlowerSurfaceCopy = Readonly<{
     toolApprovalCopyCommand: string;
     toolApprovalCopyCwd: string;
     toolApprovalCopied: string;
-    toolApprovalSubtaskSuffix: (subagentID: string) => string;
+    toolApprovalSubtaskSuffix: (childThreadID: string) => string;
     toolApprovalApproveAction: (label: string, subtaskSuffix: string) => string;
     toolApprovalRejectAction: (label: string, subtaskSuffix: string) => string;
     threadApprovalPanelLabel: string;
@@ -530,7 +530,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     toolApprovalCopyCommand: 'Copy command',
     toolApprovalCopyCwd: 'Copy cwd',
     toolApprovalCopied: 'Copied',
-    toolApprovalSubtaskSuffix: (subagentID) => ` for subtask ${subagentID}`,
+    toolApprovalSubtaskSuffix: (childThreadID) => ` for subtask ${childThreadID}`,
     toolApprovalApproveAction: (label, subtaskSuffix) => `Approve ${label}${subtaskSuffix}`,
     toolApprovalRejectAction: (label, subtaskSuffix) => `Reject ${label}${subtaskSuffix}`,
     threadApprovalPanelLabel: 'Current thread confirmations',

@@ -8,10 +8,8 @@ describe('projectSubagentDetailThread', () => {
     const detail: FlowerSubagentDetail = {
       summary: {
         parent_thread_id: 'parent-1',
-        subagent_id: 'child-1',
         thread_id: 'child-1',
         task_name: 'Research news',
-        title: 'Research news',
         agent_type: 'worker',
         status: 'completed',
         can_send_input: false,
@@ -70,7 +68,7 @@ describe('projectSubagentDetailThread', () => {
       generated_at_ms: 500,
     };
 
-    const thread = projectSubagentDetailThread(detail, '', '');
+    const thread = projectSubagentDetailThread(detail);
 
     expect(thread?.messages.map((message) => message.blocks?.[0]?.type)).toEqual([
       'markdown',
@@ -90,10 +88,8 @@ describe('projectSubagentDetailThread', () => {
     const detail: FlowerSubagentDetail = {
       summary: {
         parent_thread_id: 'parent-1',
-        subagent_id: 'child-1',
         thread_id: 'child-1',
         task_name: 'Research papers',
-        title: 'Research papers',
         agent_type: 'researcher',
         status: 'completed',
         last_message: 'summary-only fallback should not render',
@@ -116,7 +112,7 @@ describe('projectSubagentDetailThread', () => {
       generated_at_ms: 300,
     };
 
-    const thread = projectSubagentDetailThread(detail, '', '');
+    const thread = projectSubagentDetailThread(detail);
 
     expect(thread?.messages).toHaveLength(1);
     expect(thread?.messages[0].content).toBe(fullText);
@@ -129,10 +125,8 @@ describe('projectSubagentDetailThread', () => {
     const detail: FlowerSubagentDetail = {
       summary: {
         parent_thread_id: 'parent-1',
-        subagent_id: 'child-1',
         thread_id: 'child-1',
         task_name: 'Research news',
-        title: 'Research news',
         agent_type: 'worker',
         status: 'completed',
         can_send_input: false,
@@ -191,7 +185,7 @@ describe('projectSubagentDetailThread', () => {
       generated_at_ms: 500,
     };
 
-    const thread = projectSubagentDetailThread(detail, '', '');
+    const thread = projectSubagentDetailThread(detail);
 
     expect(thread?.messages.map((message) => message.blocks?.[0]?.type)).toEqual([
       'markdown',
@@ -209,10 +203,8 @@ describe('projectSubagentDetailThread', () => {
     const detail: FlowerSubagentDetail = {
       summary: {
         parent_thread_id: 'parent-1',
-        subagent_id: 'child-1',
         thread_id: 'child-1',
         task_name: 'Research news',
-        title: 'Research news',
         agent_type: 'worker',
         status: 'completed',
         can_send_input: false,
@@ -298,7 +290,7 @@ describe('projectSubagentDetailThread', () => {
       generated_at_ms: 700,
     };
 
-    const thread = projectSubagentDetailThread(detail, '', '');
+    const thread = projectSubagentDetailThread(detail);
 
     expect(thread?.messages.map((message) => message.blocks?.[0]?.type)).toEqual([
       'markdown',
@@ -331,10 +323,8 @@ describe('projectSubagentDetailThread', () => {
     const detail: FlowerSubagentDetail = {
       summary: {
         parent_thread_id: 'parent-1',
-        subagent_id: 'child-1',
         thread_id: 'child-1',
         task_name: 'Research news',
-        title: 'Research news',
         agent_type: 'worker',
         status: 'completed',
         can_send_input: false,
@@ -393,7 +383,7 @@ describe('projectSubagentDetailThread', () => {
       generated_at_ms: 700,
     };
 
-    const thread = projectSubagentDetailThread(detail, '', '');
+    const thread = projectSubagentDetailThread(detail);
 
     expect(thread?.messages.map((message) => message.content)).toEqual([
       'A: text with a late timestamp.',
@@ -411,10 +401,8 @@ describe('projectSubagentDetailThread', () => {
     const detail: FlowerSubagentDetail = {
       summary: {
         parent_thread_id: 'parent-1',
-        subagent_id: 'child-1',
         thread_id: 'child-1',
         task_name: 'Research news',
-        title: 'Research news',
         agent_type: 'worker',
         status: 'completed',
         can_send_input: false,
@@ -487,7 +475,7 @@ describe('projectSubagentDetailThread', () => {
       generated_at_ms: 500,
     };
 
-    const thread = projectSubagentDetailThread(detail, '', '');
+    const thread = projectSubagentDetailThread(detail);
     const activityBlocks = thread?.messages
       .flatMap((message) => (message.blocks ?? []).filter((block) => block.type === 'activity-timeline')) ?? [];
 
@@ -504,10 +492,8 @@ describe('projectSubagentDetailThread', () => {
     const detail: FlowerSubagentDetail = {
       summary: {
         parent_thread_id: 'parent-1',
-        subagent_id: 'child-1',
         thread_id: 'child-1',
         task_name: 'Weather south',
-        title: 'Weather south',
         agent_type: 'worker',
         status: 'completed',
         can_send_input: false,
@@ -556,7 +542,7 @@ describe('projectSubagentDetailThread', () => {
       generated_at_ms: 350,
     };
 
-    const thread = projectSubagentDetailThread(detail, '', '');
+    const thread = projectSubagentDetailThread(detail);
 
     const activityBlocks = thread?.messages.flatMap((message) => (message.blocks ?? []).filter((block) => block.type === 'activity-timeline')) ?? [];
     expect(activityBlocks).toHaveLength(1);
@@ -571,10 +557,8 @@ describe('projectSubagentDetailThread', () => {
     const detail: FlowerSubagentDetail = {
       summary: {
         parent_thread_id: 'parent-1',
-        subagent_id: 'child-1',
         thread_id: 'child-1',
         task_name: 'News review',
-        title: 'News review',
         task_description: 'Review the latest AI industry news.',
         agent_type: 'worker',
         status: 'completed',
@@ -605,7 +589,7 @@ describe('projectSubagentDetailThread', () => {
       generated_at_ms: 350,
     };
 
-    const thread = projectSubagentDetailThread(detail, '', '');
+    const thread = projectSubagentDetailThread(detail);
 
     expect(thread?.messages).toHaveLength(1);
     expect(thread?.messages[0].content).toBe('I found three useful sources.');
@@ -616,10 +600,8 @@ describe('projectSubagentDetailThread', () => {
   it('uses delegated mission metadata as the raw prompt filter boundary', () => {
     const baseSummary = {
       parent_thread_id: 'parent-1',
-      subagent_id: 'child-1',
       thread_id: 'child-1',
       task_name: 'News review',
-      title: 'News review',
       task_description: 'Review the latest AI industry news.',
       agent_type: 'worker',
       status: 'completed',
@@ -650,7 +632,7 @@ describe('projectSubagentDetailThread', () => {
         },
       ],
       generated_at_ms: 350,
-    }, '', '');
+    });
     expect(hidden?.messages.map((message) => message.content)).toEqual(['I found three useful sources.']);
 
     const rawOmitted = projectSubagentDetailThread({
@@ -666,7 +648,7 @@ describe('projectSubagentDetailThread', () => {
         },
       }],
       generated_at_ms: 350,
-    }, '', '');
+    });
     expect(rawOmitted?.messages.map((message) => message.content)).toEqual(['Mission summary shown to the user.']);
 
     const quoted = projectSubagentDetailThread({
@@ -681,7 +663,7 @@ describe('projectSubagentDetailThread', () => {
         },
       }],
       generated_at_ms: 350,
-    }, '', '');
+    });
     expect(quoted?.messages.map((message) => message.content)).toEqual([
       'The document literally mentions "# Delegated Mission" as a heading.',
     ]);
@@ -698,7 +680,7 @@ describe('projectSubagentDetailThread', () => {
         },
       }],
       generated_at_ms: 350,
-    }, '', '');
+    });
     expect(ordinaryUserHeading?.messages.map((message) => message.content)).toEqual([
       '# Delegated Mission\nThis is a normal quoted document heading, not the hidden subagent prompt.',
     ]);
@@ -708,10 +690,8 @@ describe('projectSubagentDetailThread', () => {
     const detail: FlowerSubagentDetail = {
       summary: {
         parent_thread_id: 'parent-1',
-        subagent_id: 'child-1',
         thread_id: 'child-1',
         task_name: 'Review API',
-        title: 'Review API',
         agent_type: 'reviewer',
         status: 'waiting_input',
         waiting_prompt: 'Waiting for a permitted non-approval path.',
@@ -725,7 +705,7 @@ describe('projectSubagentDetailThread', () => {
       generated_at_ms: 250,
     };
 
-    const thread = projectSubagentDetailThread(detail, '', '');
+    const thread = projectSubagentDetailThread(detail);
 
     expect(thread?.messages).toHaveLength(1);
     expect(thread?.messages[0]).toMatchObject({
@@ -744,10 +724,8 @@ describe('projectSubagentDetailThread', () => {
     const detail: FlowerSubagentDetail = {
       summary: {
         parent_thread_id: 'parent-1',
-        subagent_id: 'child-1',
         thread_id: 'child-1',
         task_name: 'Review context',
-        title: 'Review context',
         agent_type: 'reviewer',
         status: 'running',
         can_send_input: false,
@@ -801,7 +779,7 @@ describe('projectSubagentDetailThread', () => {
       generated_at_ms: 300,
     };
 
-    const thread = projectSubagentDetailThread(detail, '', '');
+    const thread = projectSubagentDetailThread(detail);
 
     expect(thread?.model_io_status?.phase).toBe('waiting_response');
     expect(thread?.context_usage?.context_window_tokens).toBe(1000);
@@ -813,10 +791,8 @@ describe('projectSubagentDetailThread', () => {
     const detail: FlowerSubagentDetail = {
       summary: {
         parent_thread_id: 'parent-1',
-        subagent_id: 'child-1',
         thread_id: 'child-1',
         task_name: 'Review context',
-        title: 'Review context',
         agent_type: 'reviewer',
         status: 'completed',
         can_send_input: false,
@@ -858,7 +834,7 @@ describe('projectSubagentDetailThread', () => {
       generated_at_ms: 300,
     };
 
-    const thread = projectSubagentDetailThread(detail, '', '');
+    const thread = projectSubagentDetailThread(detail);
 
     expect(thread?.timeline_decorations).toEqual(detail.timeline_decorations);
   });

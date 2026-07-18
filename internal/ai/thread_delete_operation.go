@@ -82,16 +82,6 @@ func (s *Service) replayThreadDeleteOperation(ctx context.Context, operation thr
 		}
 		return failed, ErrThreadDeleteOperationFailed
 	}
-	if operation.FilesCleanedAtUnixMs <= 0 {
-		if err := s.cleanupThreadDeleteFiles(ctx, operation); err != nil {
-			return s.keepThreadDeletePending(ctx, operation, "file_cleanup_failed", err)
-		}
-		confirmed, err := db.ConfirmThreadDeleteFilesCleaned(ctxOrBackground(ctx), operation.OperationID)
-		if err != nil {
-			return operation, err
-		}
-		operation = confirmed
-	}
 	if operation.FloretDeletedAtUnixMs <= 0 {
 		host, err := s.openThreadDeleteMaintenanceHost()
 		if err != nil {
@@ -106,6 +96,13 @@ func (s *Service) replayThreadDeleteOperation(ctx context.Context, operation thr
 			return operation, err
 		}
 		operation = confirmed
+	}
+	if operation.ProductDataDeletedAtUnixMs <= 0 {
+		committed, err := db.CommitThreadDeleteProductData(ctxOrBackground(ctx), operation.OperationID)
+		if err != nil {
+			return s.keepThreadDeletePending(ctx, operation, "product_data_delete_failed", err)
+		}
+		operation = committed
 	}
 	if operation.Snapshot.DeleteFlowerReadState && operation.ReadStateDeletedAtUnixMs <= 0 {
 		if cleaner == nil {
@@ -122,6 +119,16 @@ func (s *Service) replayThreadDeleteOperation(ctx context.Context, operation thr
 	}
 	if !operation.Snapshot.DeleteFlowerReadState && operation.Status == threadstore.ThreadDeleteOperationPending {
 		confirmed, err := db.ConfirmThreadDeleteReadStateDeleted(ctxOrBackground(ctx), operation.OperationID)
+		if err != nil {
+			return operation, err
+		}
+		operation = confirmed
+	}
+	if operation.FilesCleanedAtUnixMs <= 0 {
+		if err := s.cleanupThreadDeleteFiles(ctx, operation); err != nil {
+			return s.keepThreadDeletePending(ctx, operation, "file_cleanup_failed", err)
+		}
+		confirmed, err := db.ConfirmThreadDeleteFilesCleaned(ctxOrBackground(ctx), operation.OperationID)
 		if err != nil {
 			return operation, err
 		}
@@ -171,6 +178,9 @@ func (s *Service) cleanupThreadDeleteFiles(ctx context.Context, operation thread
 			return err
 		}
 		if record == nil {
+			continue
+		}
+		if record.State != threadstore.UploadStateDeleting {
 			continue
 		}
 		if err := s.removeUploadArtifacts(*record); err != nil {

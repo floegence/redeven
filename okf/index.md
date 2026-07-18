@@ -60,15 +60,15 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 ## AI
 
 - [AI tool runtime](ai/ai-tool-runtime.md) - Builtin tool registry, permission checks, and activity projection.
-- [Flower storage ownership and migrations](ai/flower-storage-ownership-and-migrations.md) - Floret authority, product-only Redeven storage, and explicit SQLite migration contracts.
+- [Flower storage ownership and migrations](ai/flower-storage-ownership-and-migrations.md) - Apply host-only schema v3 and strict product v2-to-v3 migration boundaries.
 - [AI tool permissions and dispatch](ai/tool-permission-runtime.md) - Apply tool registration, scheduling, permission, approval, readonly, and target-routing contracts.
 - [AI tool approval runtime](ai/tool-approval-runtime.md) - Reconcile pending approval queues, conflicts, decisions, and authoritative live state.
 - [AI terminal tool runtime](ai/terminal-tool-runtime.md) - Manage PTY handles, incremental output, termination, and Floret settlement.
 - [AI model and context runtime](ai/model-context-runtime.md) - Separate model-source ownership, provider mapping, token limits, context, and compaction.
-- [Floret thread runtime integration](ai/floret-thread-runtime.md) - Preserve turn admission, timeline, deletion, control, store, and published dependency ownership.
-- [Flower subagent runtime](ai/subagent-runtime.md) - Coordinate child lifecycle, delegated permission, summaries, membership, and detail.
-- [Flower thread fork coordination](ai/flower-thread-fork-coordination.md) - Fixed product snapshots and replayable Floret fork operations.
-- [Flower thread deletion coordination](ai/flower-thread-deletion-coordination.md) - Persistent product deletion snapshots and ordered replay across files, Floret, and user read state.
+- [Floret thread runtime integration](ai/floret-thread-runtime.md) - Read canonical overviews, titles, structured attachments, and admitted lifecycle through published Floret APIs.
+- [Flower subagent runtime](ai/subagent-runtime.md) - Use Floret-owned child threads, strict spawn input, delegated permission audit, membership, and detail.
+- [Flower thread fork coordination](ai/flower-thread-fork-coordination.md) - Fork canonical Agent state first, then materialize fixed host settings and thread resource ownership.
+- [Flower thread deletion coordination](ai/flower-thread-deletion-coordination.md) - Persist delete intent, remove canonical Floret state first, then host data and physical resources.
 - [Flower plugin generation](ai/flower-plugin-generation.md) - Generated plugin flows through Floret approval and ReDevPlugin lifecycle APIs.
 - [Flower context action records](ai/flower-context-action-records.md) - Ask Flower launcher context validation, persistence, and UI badge projection.
 - [Redeven environment operations](ai/redeven-env-operations.md) - Product boundary for Flower and automation environment lifecycle requests.

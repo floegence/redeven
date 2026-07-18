@@ -25,13 +25,12 @@ type floretSupplementalContextProjection struct {
 }
 
 func floretSupplementalContextForInput(input RunInput) (floretSupplementalContextProjection, error) {
-	items := make([]flruntime.TurnSupplementalContextItem, 0, len(input.Attachments)+contextActionItemCount(input.ContextAction))
+	items := make([]flruntime.TurnSupplementalContextItem, 0, contextActionItemCount(input.ContextAction))
 	contextItems, err := floretSupplementalContextActionItems(input.ContextAction)
 	if err != nil {
 		return floretSupplementalContextProjection{}, err
 	}
 	items = append(items, contextItems...)
-	items = append(items, floretSupplementalAttachmentItems(input.Attachments)...)
 	projection := floretSupplementalContextProjection{Items: items}
 	if len(items) == 0 {
 		return projection, nil
@@ -86,46 +85,6 @@ func floretSupplementalContextActionItems(action *ContextActionEnvelope) ([]flru
 		return nil, ErrInvalidContextAction
 	}
 	return items, nil
-}
-
-func floretSupplementalAttachmentItems(attachments []RunAttachmentIn) []flruntime.TurnSupplementalContextItem {
-	if len(attachments) == 0 {
-		return nil
-	}
-	items := make([]flruntime.TurnSupplementalContextItem, 0, len(attachments))
-	for _, attachment := range attachments {
-		name := floretSafeSingleLineMetadata(attachment.Name, 512)
-		mimeType := floretSafeSingleLineMetadata(attachment.MimeType, 255)
-		if name == "" && mimeType == "" {
-			continue
-		}
-		metadata := map[string]string{}
-		if name != "" {
-			metadata["name"] = name
-		}
-		if mimeType != "" {
-			metadata["mime_type"] = mimeType
-		}
-		items = append(items, flruntime.TurnSupplementalContextItem{
-			Kind:      "attachment_metadata",
-			Title:     nonEmptyString(name, "Attachment"),
-			Metadata:  metadata,
-			Sensitive: true,
-		})
-	}
-	return items
-}
-
-func floretSafeSingleLineMetadata(value string, maxRunes int) string {
-	value = strings.TrimSpace(strings.Split(strings.ReplaceAll(value, "\r\n", "\n"), "\n")[0])
-	if maxRunes <= 0 {
-		return value
-	}
-	runes := []rune(value)
-	if len(runes) > maxRunes {
-		value = string(runes[:maxRunes])
-	}
-	return value
 }
 
 func floretTerminalSelectionSupplementalItem(action *ContextActionEnvelope, item ContextActionContextItem) flruntime.TurnSupplementalContextItem {
@@ -243,29 +202,18 @@ func floretContextActionInjectedEventPayload(action *ContextActionEnvelope, proj
 		return nil
 	}
 	return map[string]any{
-		"schema_version":        action.SchemaVersion,
-		"action_id":             action.ActionID,
-		"provider":              action.Provider,
-		"source_surface":        action.Source.Surface,
-		"source_surface_id":     action.Source.SurfaceID,
-		"target_id":             action.Target.TargetID,
-		"target_locality":       action.Target.Locality,
-		"supplemental_items":    len(projection.Items),
-		"rendered_char_count":   projection.RenderedChars,
-		"truncated":             projection.Truncated,
-		"context_hash":          projection.ContextHash,
-		"attachment_item_count": floretSupplementalAttachmentItemCount(projection.Items),
+		"schema_version":      action.SchemaVersion,
+		"action_id":           action.ActionID,
+		"provider":            action.Provider,
+		"source_surface":      action.Source.Surface,
+		"source_surface_id":   action.Source.SurfaceID,
+		"target_id":           action.Target.TargetID,
+		"target_locality":     action.Target.Locality,
+		"supplemental_items":  len(projection.Items),
+		"rendered_char_count": projection.RenderedChars,
+		"truncated":           projection.Truncated,
+		"context_hash":        projection.ContextHash,
 	}
-}
-
-func floretSupplementalAttachmentItemCount(items []flruntime.TurnSupplementalContextItem) int {
-	count := 0
-	for _, item := range items {
-		if strings.TrimSpace(item.Kind) == "attachment_metadata" {
-			count++
-		}
-	}
-	return count
 }
 
 func floretSupplementalRenderedChars(items []flruntime.TurnSupplementalContextItem) int {

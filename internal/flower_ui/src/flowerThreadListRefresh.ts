@@ -276,11 +276,9 @@ function sameTimelineDecorations(
 
 function sameSubagentSummary(left: FlowerSubagentSummary, right: FlowerSubagentSummary): boolean {
   return sameOptionalString(left.parent_thread_id, right.parent_thread_id)
-    && sameOptionalString(left.subagent_id, right.subagent_id)
     && sameOptionalString(left.thread_id, right.thread_id)
     && sameOptionalString(left.task_name, right.task_name)
     && sameOptionalString(left.task_description, right.task_description)
-    && sameOptionalString(left.title, right.title)
     && sameOptionalString(left.agent_type, right.agent_type)
     && sameOptionalString(left.context_mode, right.context_mode)
     && sameOptionalString(left.status, right.status)

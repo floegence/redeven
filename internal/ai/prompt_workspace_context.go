@@ -484,9 +484,6 @@ func renderPromptEnvironmentFactsLines(env promptEnvironmentFacts) []string {
 		}
 	}
 	permissionType := env.PermissionType
-	if permissionType == "" {
-		permissionType = FlowerPermissionApprovalRequired
-	}
 	lines = append(lines, fmt.Sprintf("- Permission type: %s", permissionTypeString(permissionType)))
 	switch permissionType {
 	case FlowerPermissionReadonly:

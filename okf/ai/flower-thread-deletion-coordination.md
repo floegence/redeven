@@ -1,51 +1,40 @@
 ---
 type: AI Persistence Contract
 title: Flower thread deletion coordination
-description: Redeven persists one immutable delete operation and replays ordered cleanup across product files, Floret thread storage, and user read state without compensation restoration.
+description: Durable delete intent removes the canonical Floret thread before host settings and resource ownership, then retries physical cleanup.
 tags: [ai, threads, persistence, deletion, floret]
-timestamp: 2026-07-15T00:00:00Z
+timestamp: 2026-07-18T00:00:00Z
 ---
 # Summary
 
-Flower thread deletion crosses three ownership domains. Redeven owns product thread metadata, resource references, delete-operation coordination, authorization audit, uploads, and user-scoped Flower read state. Floret owns the complete durable Agent thread tree, conversation, turn/run lifecycle, projection, control, approval, todo, context, tool, and provider state. A process can stop after any one of those stores changes, so deletion is represented as a durable operation rather than inferred from absence or repaired by restoring old rows.
+- Authority: Floret deletes the canonical Agent thread tree; Redeven deletes host settings, queue/routing/read state, upload ownership, audit-linked product rows, and physical upload files.
+- Outcome: one stable delete operation records user intent and replays the same ordered steps after any crash.
+- Invariants: resources remain owned while Floret deletion is unconfirmed, and no compensation restores deleted canonical or product data.
+- Failure boundary: transient external failures keep the operation pending; invalid durable snapshots become failed; missing Floret state is idempotent only for an already persisted operation.
 
 # Contract
 
-## Mechanism
+`PrepareThreadDeleteOperation` verifies that settings exist, captures the exact upload cleanup ids and read-state requirement, and inserts one pending operation for the endpoint/thread identity. Preparation does not delete settings, ownership, files, read state, or Floret data. The operation id is stable and the retired-thread trigger prevents later reuse.
 
-Redeven product threadstore schema v2 contains `ai_thread_delete_operations`. The unique `(endpoint_id, thread_id)` pair maps to one stable operation id and a `pending | committed | failed` status. Snapshot schema v1 stores only upload cleanup ids and whether Flower read-state cleanup is required. The operation also records product-data, file, Floret, and read-state confirmation times, retry count, stable error code, sanitized error message, and creation, update, and commit times. A database trigger and the create-thread path permanently reject reuse of an endpoint/thread identity that has any delete operation. Explicit canonical v15-v40 threadstores are upgraded transactionally to the product schema by retaining product tables and deleting Agent shadow tables; failed upgrades roll back, while older, unversioned, unknown-kind, malformed, and future schemas remain rejected.
+Replay has one fixed order:
 
-`PrepareThreadDeleteOperation` runs in one SQLite transaction. It returns an existing operation for an already prepared identity, otherwise requires the product thread to exist, captures the immutable cleanup snapshot, marks referenced upload candidates as deleting, removes every Redeven thread-scoped row and the thread row, inserts the pending operation, and records the product-data confirmation. No external file, Floret, or read-state mutation happens before that transaction commits.
+1. Call Floret `ThreadMaintenanceHost.DeleteThread` for the canonical parent thread tree and durably confirm success. `ErrThreadNotFound` is success only while replaying this persisted delete intent.
+2. In one Redeven transaction, mark the captured uploads for deletion, remove thread-scoped settings, queue, routing, transfer/handoff, permission audit ownership, and resource refs, and confirm product-data deletion.
+3. Remove user-scoped Flower read state when required and confirm it.
+4. Delete physical upload files, finalize upload rows, and confirm file cleanup.
 
-Replay has one fixed order. Redeven removes upload artifacts named by the snapshot, then records the file confirmation. It opens one provider-free `ThreadMaintenanceHost` and calls `DeleteThread` for the Floret parent thread; `ErrThreadNotFound` is idempotent success only for this already-persisted operation, while every other error leaves the operation pending. Floret deletion removes canonical Agent todos together with the thread tree. Redeven next calls the injected `FlowerReadStateCleaner` for the endpoint/thread identity and records its confirmation. The operation becomes committed only when product data, files, Floret, and every required read-state step are durably confirmed.
+The operation becomes committed only after every required confirmation is durable. A crash after any boundary repeats the same idempotent step. Floret failure leaves settings and resource ownership intact, so a canonical thread never points at a file that Redeven deleted early. File cleanup is last and retryable because physical deletion does not define Agent or host-data authority.
 
-Production opens the user read-state store before constructing the AI service and injects only the narrow cleaner contract. AI service startup synchronously replays pending deletes before scheduling title recovery or queued turns, and periodic maintenance continues bounded replay batches. A crash after product commit, file confirmation, Floret confirmation, or read-state deletion simply repeats the same idempotent operation. Redeven never restores deleted read-state or product rows, never regenerates a cleanup snapshot, never calls `CloseSubAgents` as a delete precondition, and never interprets missing data as proof that an unrecorded step succeeded.
-
-The authenticated DELETE thread endpoint returns the operation result. `committed` is HTTP 200; a persisted operation that still needs retry is HTTP 202 with its stable operation id and `pending` status; a live busy thread without `force` is HTTP 409; an identity with neither a thread nor a historical operation is HTTP 404; and a failed operation contract is HTTP 500. Repeating DELETE after preparation returns the same operation identity instead of starting another deletion.
-
-## Invariants
-
-- Product deletion and operation creation commit atomically before external effects.
-- The snapshot is immutable and every replay uses the same cleanup identities.
-- File cleanup precedes Floret tree deletion, which precedes user read-state cleanup.
-- Floret `ErrThreadNotFound` is idempotent success only inside an existing operation replay.
-- Transient external failures remain pending; invalid durable snapshots become failed.
-- Deleted thread identities cannot be reused.
-- No compensation path restores old data or guesses an external step from absence.
-- Redeven consumes only the published Floret `ThreadMaintenanceHost.DeleteThread` contract.
+The authenticated DELETE endpoint returns the durable operation result: committed is HTTP 200, retryable pending is HTTP 202 with the stable operation id, busy without force is HTTP 409, an unknown identity is HTTP 404, and a failed operation contract is HTTP 500.
 
 # Boundaries
 
-No additional boundary is declared for this concept.
+Delete never queries or edits Floret tables, never calls `CloseSubAgents` as a data-deletion substitute, never restores removed rows, never rebuilds a snapshot from current state, and never treats absence as proof for an unrecorded step.
 
 # Evidence
 
-- `redeven:internal/ai/threadstore/schema.go:35` - The canonical schema creates the delete operation journal and retired-id trigger.
-- `redeven:internal/ai/threadstore/thread_delete_operation.go:58` - Preparation captures the snapshot and deletes product data in one transaction.
-- `redeven:internal/ai/thread_delete_operation.go:52` - Replay executes the fixed file, Floret, and read-state order.
-- `redeven:internal/ai/threads.go:952` - The product delete entrypoint enforces busy and force rules before preparing the operation.
-- `redeven:internal/ai/service.go:353` - Startup replays pending deletes before title and queued-turn recovery.
-- `redeven:internal/codeapp/codeapp.go:209` - Production opens read state before constructing the AI service and injecting the cleaner.
-- `redeven:internal/codeapp/appserver/server.go:4606` - AppServer maps delete operation outcomes to HTTP status.
-- `redeven:internal/ai/thread_delete_operation_test.go:129` - Restart tests cover every durable crash boundary.
-- `redeven:internal/ai/threadstore/thread_delete_operation_test.go:10` - Store tests cover snapshot capture, replay confirmations, and thread-id retirement.
+- `redeven:internal/ai/threadstore/thread_delete_operation.go:57` - Preparation records intent without deleting settings or resources.
+- `redeven:internal/ai/thread_delete_operation.go:66` - Replay deletes Floret first, then product state, read state, and files.
+- `redeven:internal/ai/threadstore/thread_delete_operation.go:113` - Product deletion requires durable Floret confirmation.
+- `redeven:internal/ai/thread_delete_operation_test.go:129` - Restart tests cover every durable step and Floret failure retention.
+- `redeven:internal/ai/threadstore/thread_delete_operation_test.go:10` - Store tests cover intent, retirement, and confirmation order.

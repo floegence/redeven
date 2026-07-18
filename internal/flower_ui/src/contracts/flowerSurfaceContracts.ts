@@ -485,11 +485,9 @@ export type FlowerThreadSnapshot = Readonly<{
 
 export type FlowerSubagentSummary = Readonly<{
   parent_thread_id: string;
-  subagent_id: string;
   thread_id: string;
-  task_name?: string;
+  task_name: string;
   task_description?: string;
-  title?: string;
   agent_type?: string;
   context_mode?: string;
   status: string;
@@ -613,7 +611,6 @@ export type FlowerDelegatedApprovalRef = Readonly<{
   parent_thread_id: string;
   parent_run_id: string;
   parent_turn_id?: string;
-  subagent_id: string;
   child_thread_id: string;
   child_run_id: string;
   child_turn_id?: string;

@@ -9,8 +9,8 @@ import (
 func TestForkOperationCopiesOnlyProductMetadataAndReplays(t *testing.T) {
 	store := openStoreForTest(t)
 	ctx := context.Background()
-	if err := store.CreateThread(ctx, Thread{
-		ThreadID: "source", EndpointID: "env", NamespacePublicID: "ns", Title: "Source",
+	if err := store.CreateThread(ctx, ThreadSettings{
+		ThreadID: "source", EndpointID: "env", NamespacePublicID: "ns",
 		ModelID: "openai/gpt-5", ReasoningSelectionJSON: `{"effort":"high"}`,
 		PermissionType: "approval_required", WorkingDir: "/workspace", CreatedAtUnixMs: 1, UpdatedAtUnixMs: 1,
 	}); err != nil {
@@ -24,14 +24,14 @@ func TestForkOperationCopiesOnlyProductMetadataAndReplays(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if prepared.Status != ForkOperationPending || prepared.SnapshotSchemaVersion != ForkSnapshotSchemaVersion || prepared.SnapshotJSON == "" {
+	if prepared.Status != ForkOperationPending || prepared.SnapshotSchemaVersion != ForkSnapshotSchemaVersion || prepared.SnapshotJSON == "" || prepared.RequestedTitle != "Forked" {
 		t.Fatalf("unexpected prepared operation: %#v", prepared)
 	}
 	forked, err := store.CommitForkOperation(ctx, CommitForkOperationRequest{OperationID: "fork_1", UpdatedAtUnixMs: 3})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if forked.ThreadID != "destination" || forked.Title != "Forked" || forked.ModelID != "openai/gpt-5" || forked.PermissionType != "approval_required" {
+	if forked.ThreadID != "destination" || forked.ModelID != "openai/gpt-5" || forked.PermissionType != "approval_required" {
 		t.Fatalf("unexpected forked metadata: %#v", forked)
 	}
 	replayed, err := store.CommitForkOperation(ctx, CommitForkOperationRequest{OperationID: "fork_1", UpdatedAtUnixMs: 4})
@@ -46,7 +46,7 @@ func TestForkOperationCopiesOnlyProductMetadataAndReplays(t *testing.T) {
 func TestForkOperationRejectsRequestAndDestinationConflicts(t *testing.T) {
 	store := openStoreForTest(t)
 	ctx := context.Background()
-	if err := store.CreateThread(ctx, Thread{ThreadID: "source", EndpointID: "env", Title: "Source", CreatedAtUnixMs: 1, UpdatedAtUnixMs: 1}); err != nil {
+	if err := store.CreateThread(ctx, ThreadSettings{ThreadID: "source", EndpointID: "env", CreatedAtUnixMs: 1, UpdatedAtUnixMs: 1}); err != nil {
 		t.Fatal(err)
 	}
 	request := ForkThreadRequest{OperationID: "fork_1", EndpointID: "env", SourceThreadID: "source", DestinationThreadID: "destination", Title: "Fork", CreatedAtUnixMs: 2}

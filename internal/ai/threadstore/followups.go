@@ -57,8 +57,8 @@ func scanFollowup(scanner interface{ Scan(...any) error }) (QueuedTurn, error) {
 func getThreadFollowupsRevisionTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string) (int64, error) {
 	var revision int64
 	err := tx.QueryRowContext(ctx, `
-SELECT followups_revision
-FROM ai_threads
+SELECT queue_revision
+FROM ai_thread_settings
 WHERE endpoint_id = ? AND thread_id = ?
 `, endpointID, threadID).Scan(&revision)
 	if err != nil {
@@ -72,8 +72,8 @@ WHERE endpoint_id = ? AND thread_id = ?
 
 func bumpThreadFollowupsRevisionTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string) (int64, error) {
 	if _, err := tx.ExecContext(ctx, `
-UPDATE ai_threads
-SET followups_revision = followups_revision + 1
+UPDATE ai_thread_settings
+SET queue_revision = queue_revision + 1
 WHERE endpoint_id = ? AND thread_id = ?
 `, endpointID, threadID); err != nil {
 		return 0, err
@@ -172,8 +172,8 @@ func (s *Store) GetThreadFollowupsRevision(ctx context.Context, endpointID strin
 	}
 	var revision int64
 	err := s.db.QueryRowContext(ctx, `
-SELECT followups_revision
-FROM ai_threads
+SELECT queue_revision
+FROM ai_thread_settings
 WHERE endpoint_id = ? AND thread_id = ?
 `, endpointID, threadID).Scan(&revision)
 	if err != nil {
@@ -451,7 +451,7 @@ SELECT
     ORDER BY q2.sort_index ASC, q2.queue_id ASC
     LIMIT 1
   ), '') AS first_queued_turn_id
-FROM ai_threads AS t
+FROM ai_thread_settings AS t
 JOIN ai_queued_turns AS q
   ON q.endpoint_id = t.endpoint_id
  AND q.thread_id = t.thread_id

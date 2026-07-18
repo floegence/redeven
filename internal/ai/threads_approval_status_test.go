@@ -16,7 +16,7 @@ func TestGetThreadAndListThreadsUseCanonicalFloretStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 	host := newTestFloretHost(t, svc.floretStore, "complete")
-	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_status", RunID: "run_status", Input: "work"}); err != nil {
+	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_status", RunID: "run_status", Input: flruntime.TurnInput{Text: "work"}}); err != nil {
 		t.Fatal(err)
 	}
 	view, err := svc.GetThread(ctx, meta, thread.ThreadID)

@@ -126,7 +126,6 @@ func TestDelegatedApprovalActionUsesCommandPresentationLabel(t *testing.T) {
 	}, DelegatedApprovalRef{
 		ParentThreadID:  "thread_parent_label",
 		ParentRunID:     "run_parent_label",
-		SubagentID:      "thread_child_label",
 		ChildThreadID:   "thread_child_label",
 		ChildRunID:      "run_child_label",
 		ChildToolCallID: "tool_child_label",

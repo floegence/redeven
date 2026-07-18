@@ -43,6 +43,39 @@ func TestValidateFloretRuntimeEventRequiresConfiguredProductAssociation(t *testi
 	}
 }
 
+func TestValidateFloretRuntimeEventAcceptsCanonicalTitleLifecycleIdentity(t *testing.T) {
+	t.Parallel()
+
+	r := &run{}
+	r.expectFloretRuntimeEventIdentity("run-1", "thread-1", "turn-1", true)
+	titleEvent := flruntime.Event{
+		Type:     observation.EventTypeThreadTitleUpdated,
+		ThreadID: "thread-1",
+		TurnID:   "turn-1",
+		Message:  "Canonical title",
+	}
+	if err := r.validateFloretRuntimeEvent(titleEvent); err != nil {
+		t.Fatalf("validate canonical title event: %v", err)
+	}
+
+	wrongTurn := titleEvent
+	wrongTurn.TurnID = "turn-2"
+	if err := r.validateFloretRuntimeEvent(wrongTurn); err == nil {
+		t.Fatal("title event from another turn was accepted")
+	}
+	wrongRun := titleEvent
+	wrongRun.RunID = "run-2"
+	if err := r.validateFloretRuntimeEvent(wrongRun); err == nil {
+		t.Fatal("title event from another run was accepted")
+	}
+
+	manualTitleEvent := titleEvent
+	manualTitleEvent.TurnID = ""
+	if err := r.validateFloretRuntimeEvent(manualTitleEvent); err != nil {
+		t.Fatalf("validate thread-scoped manual title event: %v", err)
+	}
+}
+
 func TestFloretEventSinkStartsLiveDraftAfterCanonicalIdentityValidation(t *testing.T) {
 	t.Parallel()
 

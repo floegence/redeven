@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -29,7 +30,6 @@ type ChildPermissionSnapshotRecord struct {
 	SpawnToolCallID   string
 	ParentThreadID    string
 	ParentRunID       string
-	SubagentID        string
 	ChildThreadID     string
 	ChildRunID        string
 	State             string
@@ -53,7 +53,12 @@ func (s *Store) InsertPermissionSnapshot(ctx context.Context, rec PermissionSnap
 	if rec.SnapshotID == "" || rec.EndpointID == "" || rec.OwnerThreadID == "" || rec.PermissionType == "" || rec.SnapshotJSON == "" {
 		return errors.New("invalid permission snapshot")
 	}
-	_, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `
 INSERT OR IGNORE INTO ai_permission_snapshots(
   snapshot_id, endpoint_id, owner_thread_id, owner_run_id, permission_type,
   snapshot_json, snapshot_hash, registry_hash, schema_hash, presentation_hash,
@@ -61,21 +66,45 @@ INSERT OR IGNORE INTO ai_permission_snapshots(
 ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `, rec.SnapshotID, rec.EndpointID, rec.OwnerThreadID, rec.OwnerRunID, rec.PermissionType,
 		rec.SnapshotJSON, rec.SnapshotHash, rec.RegistryHash, rec.SchemaHash, rec.PresentationHash,
-		rec.CreatedAtUnixMs)
-	return err
+		rec.CreatedAtUnixMs); err != nil {
+		return err
+	}
+	var stored PermissionSnapshotRecord
+	if err := tx.QueryRowContext(ctx, `
+SELECT snapshot_id, endpoint_id, owner_thread_id, owner_run_id, permission_type,
+       snapshot_json, snapshot_hash, registry_hash, schema_hash, presentation_hash,
+       created_at_unix_ms
+FROM ai_permission_snapshots
+WHERE snapshot_id = ?
+`, rec.SnapshotID).Scan(
+		&stored.SnapshotID, &stored.EndpointID, &stored.OwnerThreadID, &stored.OwnerRunID, &stored.PermissionType,
+		&stored.SnapshotJSON, &stored.SnapshotHash, &stored.RegistryHash, &stored.SchemaHash, &stored.PresentationHash,
+		&stored.CreatedAtUnixMs,
+	); err != nil {
+		return err
+	}
+	stored = normalizePermissionSnapshotRecord(stored)
+	if stored.SnapshotID != rec.SnapshotID || stored.EndpointID != rec.EndpointID ||
+		stored.OwnerThreadID != rec.OwnerThreadID || stored.OwnerRunID != rec.OwnerRunID ||
+		stored.PermissionType != rec.PermissionType || stored.SnapshotJSON != rec.SnapshotJSON ||
+		stored.SnapshotHash != rec.SnapshotHash || stored.RegistryHash != rec.RegistryHash ||
+		stored.SchemaHash != rec.SchemaHash || stored.PresentationHash != rec.PresentationHash {
+		return fmt.Errorf("permission snapshot %q conflicts with the stored audit record", rec.SnapshotID)
+	}
+	return tx.Commit()
 }
 
 func (s *Store) InsertChildPermissionSnapshot(ctx context.Context, rec ChildPermissionSnapshotRecord) error {
-	return s.insertChildPermissionSnapshot(ctx, rec, true)
+	return s.insertChildPermissionSnapshot(ctx, rec)
 }
 
 func (s *Store) InsertChildPermissionSnapshotProvisional(ctx context.Context, rec ChildPermissionSnapshotRecord) error {
 	rec.State = "provisional"
 	rec.FinalizedAtUnixMs = 0
-	return s.insertChildPermissionSnapshot(ctx, rec, false)
+	return s.insertChildPermissionSnapshot(ctx, rec)
 }
 
-func (s *Store) insertChildPermissionSnapshot(ctx context.Context, rec ChildPermissionSnapshotRecord, ignoreDuplicate bool) error {
+func (s *Store) insertChildPermissionSnapshot(ctx context.Context, rec ChildPermissionSnapshotRecord) error {
 	if s == nil || s.db == nil {
 		return errors.New("store not initialized")
 	}
@@ -92,22 +121,61 @@ func (s *Store) insertChildPermissionSnapshot(ctx context.Context, rec ChildPerm
 	if rec.SpawnToolCallID == rec.ChildThreadID || rec.SpawnToolCallID == rec.ChildRunID {
 		return errors.New("invalid child permission snapshot spawn identity")
 	}
-	verb := "INSERT INTO"
-	if ignoreDuplicate {
-		verb = "INSERT OR IGNORE INTO"
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
 	}
-	_, err := s.db.ExecContext(ctx, `
-	`+verb+` ai_child_permission_snapshots(
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `
+	INSERT OR IGNORE INTO ai_child_permission_snapshots(
 	  child_snapshot_id, endpoint_id, parent_snapshot_id, spawn_tool_call_id,
-	  parent_thread_id, parent_run_id, subagent_id, child_thread_id, child_run_id,
+	  parent_thread_id, parent_run_id, child_thread_id, child_run_id,
 	  state, snapshot_json, snapshot_hash, registry_hash, schema_hash, presentation_hash,
-  created_at_unix_ms, finalized_at_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	  created_at_unix_ms, finalized_at_unix_ms
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `, rec.ChildSnapshotID, rec.EndpointID, rec.ParentSnapshotID, rec.SpawnToolCallID,
-		rec.ParentThreadID, rec.ParentRunID, rec.SubagentID, rec.ChildThreadID, rec.ChildRunID,
+		rec.ParentThreadID, rec.ParentRunID, rec.ChildThreadID, rec.ChildRunID,
 		rec.State, rec.SnapshotJSON, rec.SnapshotHash, rec.RegistryHash, rec.SchemaHash, rec.PresentationHash,
-		rec.CreatedAtUnixMs, rec.FinalizedAtUnixMs)
-	return err
+		rec.CreatedAtUnixMs, rec.FinalizedAtUnixMs); err != nil {
+		return err
+	}
+	stored, err := loadChildPermissionSnapshotTx(ctx, tx, rec.ChildSnapshotID)
+	if err != nil {
+		return err
+	}
+	if !sameChildPermissionSnapshot(stored, rec) {
+		return fmt.Errorf("child permission snapshot %q conflicts with the stored audit record", rec.ChildSnapshotID)
+	}
+	return tx.Commit()
+}
+
+func loadChildPermissionSnapshotTx(ctx context.Context, tx *sql.Tx, snapshotID string) (ChildPermissionSnapshotRecord, error) {
+	var rec ChildPermissionSnapshotRecord
+	err := tx.QueryRowContext(ctx, `
+SELECT child_snapshot_id, endpoint_id, parent_snapshot_id, spawn_tool_call_id,
+       parent_thread_id, parent_run_id, child_thread_id, child_run_id,
+       state, snapshot_json, snapshot_hash, registry_hash, schema_hash, presentation_hash,
+       created_at_unix_ms, finalized_at_unix_ms
+FROM ai_child_permission_snapshots
+WHERE child_snapshot_id = ?
+`, snapshotID).Scan(
+		&rec.ChildSnapshotID, &rec.EndpointID, &rec.ParentSnapshotID, &rec.SpawnToolCallID,
+		&rec.ParentThreadID, &rec.ParentRunID, &rec.ChildThreadID, &rec.ChildRunID,
+		&rec.State, &rec.SnapshotJSON, &rec.SnapshotHash, &rec.RegistryHash, &rec.SchemaHash, &rec.PresentationHash,
+		&rec.CreatedAtUnixMs, &rec.FinalizedAtUnixMs,
+	)
+	return normalizeChildPermissionSnapshotRecord(rec), err
+}
+
+func sameChildPermissionSnapshot(left, right ChildPermissionSnapshotRecord) bool {
+	return left.ChildSnapshotID == right.ChildSnapshotID && left.EndpointID == right.EndpointID &&
+		left.ParentSnapshotID == right.ParentSnapshotID && left.SpawnToolCallID == right.SpawnToolCallID &&
+		left.ParentThreadID == right.ParentThreadID && left.ParentRunID == right.ParentRunID &&
+		left.ChildThreadID == right.ChildThreadID && left.ChildRunID == right.ChildRunID &&
+		left.State == right.State && left.SnapshotJSON == right.SnapshotJSON &&
+		left.SnapshotHash == right.SnapshotHash && left.RegistryHash == right.RegistryHash &&
+		left.SchemaHash == right.SchemaHash && left.PresentationHash == right.PresentationHash &&
+		left.CreatedAtUnixMs == right.CreatedAtUnixMs && left.FinalizedAtUnixMs == right.FinalizedAtUnixMs
 }
 
 func (s *Store) GetChildPermissionSnapshotBySpawnToolCall(ctx context.Context, endpointID string, spawnToolCallID string) (ChildPermissionSnapshotRecord, bool, error) {
@@ -124,7 +192,7 @@ func (s *Store) GetChildPermissionSnapshotBySpawnToolCall(ctx context.Context, e
 	}
 	row := s.db.QueryRowContext(ctx, `
 	SELECT child_snapshot_id, endpoint_id, parent_snapshot_id, spawn_tool_call_id,
-	       parent_thread_id, parent_run_id, subagent_id, child_thread_id, child_run_id,
+	       parent_thread_id, parent_run_id, child_thread_id, child_run_id,
 	       state, snapshot_json, snapshot_hash, registry_hash, schema_hash, presentation_hash,
 	       created_at_unix_ms, finalized_at_unix_ms
 	FROM ai_child_permission_snapshots
@@ -134,7 +202,7 @@ func (s *Store) GetChildPermissionSnapshotBySpawnToolCall(ctx context.Context, e
 	var rec ChildPermissionSnapshotRecord
 	if err := row.Scan(
 		&rec.ChildSnapshotID, &rec.EndpointID, &rec.ParentSnapshotID, &rec.SpawnToolCallID,
-		&rec.ParentThreadID, &rec.ParentRunID, &rec.SubagentID, &rec.ChildThreadID, &rec.ChildRunID,
+		&rec.ParentThreadID, &rec.ParentRunID, &rec.ChildThreadID, &rec.ChildRunID,
 		&rec.State, &rec.SnapshotJSON, &rec.SnapshotHash, &rec.RegistryHash, &rec.SchemaHash, &rec.PresentationHash,
 		&rec.CreatedAtUnixMs, &rec.FinalizedAtUnixMs,
 	); err != nil {
@@ -229,7 +297,7 @@ func (s *Store) GetFinalizedChildPermissionSnapshot(ctx context.Context, endpoin
 	}
 	row := s.db.QueryRowContext(ctx, `
 SELECT child_snapshot_id, endpoint_id, parent_snapshot_id, spawn_tool_call_id,
-       parent_thread_id, parent_run_id, subagent_id, child_thread_id, child_run_id,
+	       parent_thread_id, parent_run_id, child_thread_id, child_run_id,
        state, snapshot_json, snapshot_hash, registry_hash, schema_hash, presentation_hash,
        created_at_unix_ms, finalized_at_unix_ms
 FROM ai_child_permission_snapshots
@@ -239,7 +307,7 @@ LIMIT 1
 	var rec ChildPermissionSnapshotRecord
 	if err := row.Scan(
 		&rec.ChildSnapshotID, &rec.EndpointID, &rec.ParentSnapshotID, &rec.SpawnToolCallID,
-		&rec.ParentThreadID, &rec.ParentRunID, &rec.SubagentID, &rec.ChildThreadID, &rec.ChildRunID,
+		&rec.ParentThreadID, &rec.ParentRunID, &rec.ChildThreadID, &rec.ChildRunID,
 		&rec.State, &rec.SnapshotJSON, &rec.SnapshotHash, &rec.RegistryHash, &rec.SchemaHash, &rec.PresentationHash,
 		&rec.CreatedAtUnixMs, &rec.FinalizedAtUnixMs,
 	); err != nil {
@@ -265,7 +333,7 @@ func (s *Store) GetFinalizedChildPermissionSnapshotByThread(ctx context.Context,
 	}
 	row := s.db.QueryRowContext(ctx, `
 SELECT child_snapshot_id, endpoint_id, parent_snapshot_id, spawn_tool_call_id,
-       parent_thread_id, parent_run_id, subagent_id, child_thread_id, child_run_id,
+	       parent_thread_id, parent_run_id, child_thread_id, child_run_id,
        state, snapshot_json, snapshot_hash, registry_hash, schema_hash, presentation_hash,
        created_at_unix_ms, finalized_at_unix_ms
 FROM ai_child_permission_snapshots
@@ -276,7 +344,7 @@ LIMIT 1
 	var rec ChildPermissionSnapshotRecord
 	if err := row.Scan(
 		&rec.ChildSnapshotID, &rec.EndpointID, &rec.ParentSnapshotID, &rec.SpawnToolCallID,
-		&rec.ParentThreadID, &rec.ParentRunID, &rec.SubagentID, &rec.ChildThreadID, &rec.ChildRunID,
+		&rec.ParentThreadID, &rec.ParentRunID, &rec.ChildThreadID, &rec.ChildRunID,
 		&rec.State, &rec.SnapshotJSON, &rec.SnapshotHash, &rec.RegistryHash, &rec.SchemaHash, &rec.PresentationHash,
 		&rec.CreatedAtUnixMs, &rec.FinalizedAtUnixMs,
 	); err != nil {
@@ -315,7 +383,6 @@ func normalizeChildPermissionSnapshotRecord(rec ChildPermissionSnapshotRecord) C
 	rec.SpawnToolCallID = strings.TrimSpace(rec.SpawnToolCallID)
 	rec.ParentThreadID = strings.TrimSpace(rec.ParentThreadID)
 	rec.ParentRunID = strings.TrimSpace(rec.ParentRunID)
-	rec.SubagentID = strings.TrimSpace(rec.SubagentID)
 	rec.ChildThreadID = strings.TrimSpace(rec.ChildThreadID)
 	rec.ChildRunID = strings.TrimSpace(rec.ChildRunID)
 	rec.State = strings.TrimSpace(rec.State)
