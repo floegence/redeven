@@ -4,11 +4,17 @@ title: Env App upstream web dependencies
 description: Env App composes published floe-webapp, Floeterm, and Flowersec web packages.
 tags: [architecture, dependencies, protocol, ui]
 timestamp: 2026-07-17T00:00:00Z
+quality_exception: Cross-domain published dependency contract spanning UI, transport, terminal, and security packages.
 ---
+# Summary
 
 Env App is built as a Redeven-specific shell on top of published floe-webapp UI/runtime primitives, floe-webapp protocol connectivity, Floeterm terminal-web components, and Flowersec controlplane artifact helpers.
 
-# Mechanism
+Env App composes published floe-webapp, Floeterm, and Flowersec web packages.
+
+# Contract
+
+## Mechanism
 
 The released browser dependency set includes Floeterm terminal-web v0.5.19 in addition to Floe Webapp v0.37.3 and Flowersec Core v0.25.0.
 
@@ -46,67 +52,27 @@ This concept only holds while Env App continues to consume published upstream pa
 
 The Env App recovery snapshot is a product presentation projection, not another protocol or Desktop transport mechanism. It must not infer retry timing, parse failure prose, invent attempts, add a backup URL, retry through public Local UI, migrate streams, rebind a stale session, or replay user requests. Explicit Start, Restart, Stop, and Update continue to hand off to Desktop Welcome and remain outside this post-open recovery flow.
 
-# Citations
+# Evidence
 
-[1] redeven:internal/envapp/ui_src/package.json:22 - Env App pins floe-webapp-core.
-[2] redeven:internal/envapp/ui_src/package.json:23 - Env App pins floe-webapp-protocol.
-[3] redeven:internal/envapp/ui_src/package.json:24 - Env App pins floeterm terminal-web.
-[4] redeven:internal/envapp/ui_src/package.json:25 - Env App pins flowersec-core.
-[5] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:2 - Env App shell imports floe-webapp runtime and layout primitives.
-[6] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:24 - Env App shell consumes Flowersec observer typing for runtime connections.
-[7] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:25 - Env App shell consumes the floe-webapp protocol hook.
-[8] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionRuntime.tsx:3 - The per-session runtime imports released Floeterm Core and coordinator APIs.
-[9] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionRuntime.tsx:720 - Activity and Workbench terminal sessions instantiate the same paged output coordinator.
-[10] redeven:internal/envapp/ui_src/src/ui/services/terminalAdaptiveWorkingSet.ts:1 - Device-adaptive warm-core and snapshot-pool budgets are product policy over released Floeterm lifecycle APIs.
-[11] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionNavigator.tsx:96 - Desktop and mobile session navigation consume lightweight session rows independently from terminal Core creation.
-[12] redeven:internal/envapp/ui_src/src/ui/services/controlplaneApi.ts:2 - Controlplane services request entry connect artifacts through flowersec-core/controlplane.
-[13] redeven:AGENTS.md:173 - Published Dependency Policy forbids local sibling wiring in package manifests and build aliases.
-[14] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:176 - Env App declares Activity, Workbench, Codex, plugin, and floating-host lazy boundaries.
-[15] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:2056 - Local bootstrap reuses the access status returned with runtime discovery.
-[16] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:2215 - Codex is registered as one lazy Activity surface over a Shell-owned sidebar host accessor.
-[17] redeven:internal/envapp/ui_src/src/ui/workbench/redevenWorkbenchWidgets.tsx:20 - Workbench feature bodies load through independent lazy boundaries.
-[18] redeven:internal/envapp/ui_src/scripts/checkInitialBuildBudget.mjs:9 - Production builds enforce compressed JavaScript, CSS, and total initial-resource budgets.
-[19] redeven:internal/envapp/ui_src/scripts/checkInitialBuildBudget.mjs:14 - Initial HTML is rejected when heavyweight renderer, Flower, or Codex assets are referenced.
-[20] redeven:internal/envapp/ui_src/package.json:9 - The Env App production build always runs the initial-resource budget check.
-[21] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:3225 - The Activity Shell exposes the Codex sidebar host only while Codex is active and permitted.
-[22] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:3305 - `ActivityAppsMain` owns lazy mounting and after-paint keep-alive presentation for registered Activity surfaces.
-[23] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:3353 - Activity and Workbench render as kept-alive views with after-paint activation.
-[24] redeven:internal/envapp/ui_src/src/ui/codex/CodexActivitySurface.tsx:12 - The lazy Codex Activity boundary owns one provider, page, and stable sidebar Portal mount.
-[25] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx:942 - Activity lifecycle regression coverage preserves Files state across Terminal, Monitor, Flower, and Codex navigation.
-[26] redeven:internal/envapp/ui_src/src/ui/codex/CodexActivitySurface.test.tsx:71 - Portal host recreation moves the existing sidebar without remounting the Codex provider or page.
-[27] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1440 - Local Direct reconnects use a stable refreshable ArtifactSource config.
-[28] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1450 - Remote Tunnel reconnects use a stable refreshable ArtifactSource config.
-[29] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:174 - Env App declares shared WebSocket, Yamux, and record chunk resource limits.
-[30] redeven:internal/envapp/ui_src/src/ui/services/controlplaneApi.ts:570 - Entry-ticket exchange creates the published Flowersec controlplane artifact source.
-[31] redeven:internal/envapp/ui_src/src/ui/services/controlplaneApi.ts:581 - Controlplane artifact acquisition forwards trace and abort context through acquire.
-[32] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:2405 - Display-mode selection separates visual intent from the committed Activity or Workbench mode.
-[33] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:3206 - The Activity Shell opts into floe-webapp UI-first selection and records presentation events.
-[34] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx:2685 - Desktop mode tests preserve Activity and Workbench DOM identity across both directions.
-[35] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionRuntime.tsx:812 - History writes resolve only from the TerminalCore parser completion callback.
-[36] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:3910 - Recovery status uses a reserved footer with stable desktop and mobile sizing.
-[37] redeven:internal/envapp/ui_src/src/ui/services/debugConsoleCapture.ts:503 - Terminal attach capture uses an explicit content-free request projection.
-[38] redeven:internal/envapp/ui_src/src/ui/services/debugConsoleCapture.ts:415 - Sanitized client diagnostics use a bounded renderer-local event ring.
-[39] redeven:internal/envapp/ui_src/src/ui/services/terminalRecoveryDiagnostics.ts:1 - Terminal recovery events separate generations, pseudonymize sessions, and emit renderer performance marks.
-[40] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionRuntime.tsx:944 - The coordinator begins retaining live output before the Runtime attach request.
-[41] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionRuntime.tsx:992 - The Runtime history boundary completes the same coordinator attach generation.
-[42] redeven:internal/envapp/ui_src/src/ui/services/debugConsoleCapture.ts:576 - Terminal RPC failures retain only numeric codes plus stable content-free messages.
-[43] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:770 - Terminal attach generations are scoped to the stable protocol transport proxy.
-[44] redeven:internal/envapp/ui_src/src/ui/services/terminalRecoveryDiagnostics.ts:149 - Terminal recovery milestones emit renderer performance marks with sanitized structured detail.
-[45] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:1550 - Session focus intent is captured before the UI-first commit and retried only under current focus ownership.
-[46] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionRuntime.tsx:1051 - Attach lifecycle exits are classified before product recovery state is changed.
-[47] redeven:internal/envapp/ui_src/src/ui/services/terminalTransport.ts:478 - Session deletion clears shared resize state even when the deleting panel lease has already disposed.
-[48] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:2032 - Attachment ownership is distinct from native terminal autofocus policy.
-[49] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionRuntime.tsx:1258 - Surface cleanup invalidates delayed attach and reload work.
-[50] redeven:internal/envapp/ui_src/scripts/checkPackagedRenderer.mjs:113 - The built-dist shell smoke validates production Env App assets without claiming a terminal or Electron package path.
-[51] redeven:internal/envapp/ui_src/scripts/checkTerminalRecoveryCarrier.mjs:450 - The process carrier validates real Runtime, PTY, parser, canvas, and input behavior without starting Desktop.
-[52] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionRuntime.tsx:194 - Runtime status carries the diagnostics query for its exact recovery trace.
-[53] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:1957 - The diagnostics action opens the query carried by the active runtime status.
-[54] redeven:internal/envapp/ui_src/src/ui/services/terminalTabActivity.ts:443 - Generation changes and rebases promote observed provisional unread before clearing coverage state.
-[55] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionRuntime.tsx:1276 - Runtime accessibility busy state is derived from the initial baseline input fence.
-[56] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1425 - Env App consumes published Flowersec reconnect diagnostics through `onDiagnosticEvent`.
-[57] redeven:internal/envapp/ui_src/src/ui/reconnect/createRuntimeReconnectController.ts:429 - Structured reconnect events advance exact protocol attempt counts without product retry heuristics.
-[58] redeven:internal/envapp/ui_src/src/ui/services/desktopSessionContext.ts:215 - Desktop recovery subscriptions reject stale generations and revisions.
-[59] redeven:internal/envapp/ui_src/src/ui/reconnect/createRuntimeReconnectController.ts:291 - Successful recovery remains visible for the fixed 1.5-second product hold.
-[60] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:3438 - Activity content remains mounted but becomes inert and assistive-technology hidden during recovery.
-[61] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:3484 - Workbench uses the same inert recovery ownership while preserving its mounted page.
-[62] redeven:internal/envapp/ui_src/src/ui/reconnect/ConnectionRecoveryView.tsx:124 - The unified recovery view renders progress, attempts, retry timing, terminal focus, and collapsed diagnostics.
+- `redeven:internal/envapp/ui_src/package.json:22` - Env App pins floe-webapp-core.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:2` - Env App shell imports floe-webapp runtime and layout primitives.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionRuntime.tsx:3` - The per-session runtime imports released Floeterm Core and coordinator APIs.
+- `redeven:internal/envapp/ui_src/src/ui/services/terminalAdaptiveWorkingSet.ts:1` - Device-adaptive warm-core and snapshot-pool budgets are product policy over released Floeterm lifecycle APIs.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalSessionNavigator.tsx:96` - Desktop and mobile session navigation consume lightweight session rows independently from terminal Core creation.
+- `redeven:internal/envapp/ui_src/src/ui/services/controlplaneApi.ts:2` - Controlplane services request entry connect artifacts through flowersec-core/controlplane.
+- `redeven:AGENTS.md:173` - Published Dependency Policy forbids local sibling wiring in package manifests and build aliases.
+- `redeven:internal/envapp/ui_src/src/ui/workbench/redevenWorkbenchWidgets.tsx:20` - Workbench feature bodies load through independent lazy boundaries.
+- `redeven:internal/envapp/ui_src/scripts/checkInitialBuildBudget.mjs:9` - Production builds enforce compressed JavaScript, CSS, and total initial-resource budgets.
+- `redeven:internal/envapp/ui_src/src/ui/codex/CodexActivitySurface.tsx:12` - The lazy Codex Activity boundary owns one provider, page, and stable sidebar Portal mount.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx:942` - Activity lifecycle regression coverage preserves Files state across Terminal, Monitor, Flower, and Codex navigation.
+- `redeven:internal/envapp/ui_src/src/ui/codex/CodexActivitySurface.test.tsx:71` - Portal host recreation moves the existing sidebar without remounting the Codex provider or page.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:3910` - Recovery status uses a reserved footer with stable desktop and mobile sizing.
+- `redeven:internal/envapp/ui_src/src/ui/services/debugConsoleCapture.ts:503` - Terminal attach capture uses an explicit content-free request projection.
+- `redeven:internal/envapp/ui_src/src/ui/services/terminalRecoveryDiagnostics.ts:1` - Terminal recovery events separate generations, pseudonymize sessions, and emit renderer performance marks.
+- `redeven:internal/envapp/ui_src/src/ui/services/terminalTransport.ts:478` - Session deletion clears shared resize state even when the deleting panel lease has already disposed.
+- `redeven:internal/envapp/ui_src/scripts/checkPackagedRenderer.mjs:113` - The built-dist shell smoke validates production Env App assets without claiming a terminal or Electron package path.
+- `redeven:internal/envapp/ui_src/scripts/checkTerminalRecoveryCarrier.mjs:450` - The process carrier validates real Runtime, PTY, parser, canvas, and input behavior without starting Desktop.
+- `redeven:internal/envapp/ui_src/src/ui/services/terminalTabActivity.ts:443` - Generation changes and rebases promote observed provisional unread before clearing coverage state.
+- `redeven:internal/envapp/ui_src/src/ui/reconnect/createRuntimeReconnectController.ts:429` - Structured reconnect events advance exact protocol attempt counts without product retry heuristics.
+- `redeven:internal/envapp/ui_src/src/ui/services/desktopSessionContext.ts:215` - Desktop recovery subscriptions reject stale generations and revisions.
+- `redeven:internal/envapp/ui_src/src/ui/reconnect/ConnectionRecoveryView.tsx:124` - The unified recovery view renders progress, attempts, retry timing, terminal focus, and collapsed diagnostics.

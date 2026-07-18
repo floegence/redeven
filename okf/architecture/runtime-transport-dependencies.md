@@ -4,11 +4,17 @@ title: Runtime transport dependencies
 description: Runtime transport uses Flowersec sessions while terminal lifecycle is delegated to Floeterm managers.
 tags: [architecture, dependencies, terminal]
 timestamp: 2026-07-14T00:00:00Z
+quality_exception: Cross-domain published dependency contract spanning transport, terminal, and session security.
 ---
+# Summary
 
 Redeven runtime builds control and data sessions on Flowersec client and endpoint primitives, while terminal lifecycle inside the runtime is delegated to Floeterm's terminal-go manager.
 
-# Mechanism
+Runtime transport uses Flowersec sessions while terminal lifecycle is delegated to Floeterm managers.
+
+# Contract
+
+## Mechanism
 
 The released runtime dependency set includes Floeterm terminal-go v0.4.26 and Flowersec Go v0.25.0.
 
@@ -22,7 +28,7 @@ The runtime wraps `termgo.NewManager` so terminal sessions, PTY activation, hist
 
 Terminal recovery verification is layered and automated without starting Redeven Desktop. A deterministic Go fixture covers cleared 0-byte history plus exact 64 KiB, 512 KiB, and 8 MiB retained snapshots with full fixed-generation pagination and exact replayed-byte equality. A production-dist process carrier starts a temporary Redeven Runtime, Local UI, Direct WebSocket/RPC path, real terminal-go session and PTY, then drives the actual Activity and Workbench terminal surfaces in headless Chromium across reused and fresh browser contexts. The 64 KiB, 448 KiB, and exact 8 MiB boundary payload classes must reach parser-committed interactive state, report actual retained and fetched bytes, match the seeded history canvas fingerprint, accept a real filesystem input probe, avoid blocking recovery UI, and emit no renderer, request, response, or page errors. Standard GitHub-hosted jobs use these as correctness gates and retain raw timings; absolute percentile claims require a separately controlled runner class and sample plan.
 
-# Terminal startup and warmup
+## Terminal startup and warmup
 
 Env App hydrates one Terminal session catalog as soon as the protocol client is connected, the environment resource is ready, and process-launch permission is present. The catalog owns the canonical snapshot, refresh single-flight, lifecycle-event convergence, client reconnect epoch, permission clearing, and stale-on-disconnect state. Activity and Workbench consume that snapshot instead of issuing panel-mount list requests, and full create responses use `upsertSession` so a second list round trip is not needed. The Terminal feature chunk remains a separate dynamic bundle; the connected idle path starts a retryable single-flight module/resource preload, while an explicit Terminal intent promotes it immediately.
 
@@ -32,43 +38,19 @@ After the first visible Runtime reaches interactive state, the Env warmup queue 
 
 Compatibility depends on these transport and terminal interfaces staying aligned across released versions. Redeven compatibility epoch 8 requires Desktop and Runtime v0.10.0 or newer because Local UI exposure is now a startup and status contract shared by both processes. Replacing or bypassing the published contracts can break control and data channel behavior, liveness teardown, bounded RPC dispatch, plaintext network admission, sparse history coverage, command lifecycle events, or terminal session lifecycle. ConnectArtifact v1, E2EE record framing, Yamux frames, and Redeven business RPC payloads remain owned by their existing upstream or product contracts; the v0.25.0 dependency update does not add Redeven business concepts to Flowersec. History and session diagnostics are observability signals only: neither Redeven nor Floeterm may use session count to reject creation, automatically close a PTY, or pause an existing session. Frontend renderer hibernation is not a runtime lifecycle transition: disposing an inactive `TerminalCore` must leave the terminal-go session and PTY running, and later snapshot or paged-history recovery resumes only the visual consumer.
 
-# Citations
+# Evidence
 
-[1] redeven:go.mod:8 - Redeven pins floeterm terminal-go in the runtime module.
-[2] redeven:go.mod:10 - Redeven pins flowersec-go in the runtime module.
-[3] redeven:internal/agent/agent.go:20 - Agent imports Flowersec client, endpoint, proxy, and RPC packages.
-[4] redeven:internal/agent/agent.go:532 - The control channel connects through fsclient.ConnectDirect.
-[5] redeven:internal/agent/agent.go:1007 - Runtime data sessions connect through endpoint.ConnectTunnel.
-[6] redeven:internal/terminal/manager.go:14 - Runtime terminal manager wraps floeterm terminal-go plus Flowersec RPC types.
-[7] redeven:internal/terminal/manager.go:211 - Runtime configures the released terminal-go manager with explicit byte and chunk history limits.
-[8] redeven:internal/terminal/manager.go:204 - Each terminal session uses lazy chunk growth under composed byte and chunk bounds without a manager session limit.
-[9] redeven:internal/terminal/manager.go:207 - Floeterm default providers own shell arguments, init files, and command lifecycle markers.
-[10] redeven:internal/terminal/lifecycle.go:190 - Concurrent delete callers join one session-scoped in-flight cleanup operation.
-[11] redeven:AGENTS.md:173 - Repository rules require published upstream releases instead of local sibling checkouts.
-[12] redeven:go.mod:10 - Redeven consumes published flowersec-go v0.25.0.
-[13] redeven:internal/agent/agent.go:547 - Remote direct control connections explicitly require TLS.
-[14] redeven:internal/agent/agent.go:1018 - Remote tunnel sessions explicitly require TLS.
-[15] redeven:internal/envapp/ui_src/src/ui/security/localTransportSecurity.ts:22 - Local direct reconnects select loopback-only or exact network-IP plaintext policy from the browser hostname.
-[16] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1455 - Remote tunnel reconnects explicitly require TLS.
-[17] redeven:internal/agent/agent.go:543 - Remote control connections configure acknowledged Yamux liveness.
-[18] redeven:internal/agent/agent.go:1264 - Runtime RPC streams use explicit bounded server options.
-[19] redeven:internal/localui/localui.go:1517 - Local UI Direct sessions configure outbound record chunking and Yamux limits.
-[20] redeven:tests/docker_runtime_e2e/testclient/main.go:67 - Docker Local UI verification explicitly allows plaintext only for loopback.
-[21] redeven:internal/runtimeproxy/runtimeproxy.go:15 - Redeven declares the three embedding-policy response headers blocked by its product adapter.
-[22] redeven:internal/terminal/manager.go:1494 - Runtime history responses map Floeterm coverage snapshot fields without omitting zero values.
-[23] redeven:internal/runtimeservice/compatibility_contract.json:2 - Local UI exposure requires compatibility epoch 8 and a matched v0.10.0 Desktop and Runtime pair.
-[24] redeven:internal/terminal/manager.go:1131 - Terminal attachment captures the committed Floeterm history boundary while holding the per-sink routing lock.
-[25] redeven:internal/terminal/manager.go:901 - Live terminal notifications are filtered against each sink's atomic history boundary.
-[26] redeven:internal/terminal/manager.go:679 - Latest accepted attach state rejects stale workers and preserves idempotent activation results before boundary capture.
-[27] redeven:internal/terminal/manager.go:850 - Activation failure conditionally rolls routing and connection ownership back under one lock order.
-[28] redeven:internal/terminal/lifecycle.go:339 - Natural terminal exit atomically clears routing and all pending attach generations.
-[29] redeven:internal/terminal/manager.go:1577 - Sink writers use a stop signal instead of closing the producer queue.
-[30] redeven:internal/terminal/manager.go:257 - Runtime binds attach activation to Floeterm's context-aware session activation API.
-[31] redeven:internal/terminal/manager.go:1207 - Redeven joins Floeterm's session-owned activation through a caller-local context.
-[32] redeven:internal/terminal/manager_test.go:313 - Deterministic history fixtures verify exact pagination and replay across retained-size classes.
-[33] redeven:internal/envapp/ui_src/scripts/checkTerminalRecoveryCarrier.mjs:450 - The production-dist process carrier starts a temporary Runtime and exercises real PTY recovery in Chromium.
-[34] redeven:.github/workflows/release.yml:44 - Release correctness gates run the 64 KiB, 448 KiB, and exact 8 MiB boundary terminal carrier classes.
-[35] redeven:internal/terminal/manager.go:524 - Detach handles close their captured sink lifecycle token and remove state only while that token is still current.
-[36] redeven:internal/terminal/manager_test.go:823 - Stream churn coverage proves closed sink lifecycle indexes remain bounded.
-[37] redeven:internal/terminal/manager_test.go:854 - A late old detach handle cannot close a later registration of the same RPC server.
-[38] redeven:internal/agent/agent.go:1289 - Each Runtime RPC stream defers the detach handle returned by terminal registration.
+- `redeven:go.mod:8` - Redeven pins floeterm terminal-go in the runtime module.
+- `redeven:internal/agent/agent.go:20` - Agent imports Flowersec client, endpoint, proxy, and RPC packages.
+- `redeven:internal/terminal/manager.go:14` - Runtime terminal manager wraps floeterm terminal-go plus Flowersec RPC types.
+- `redeven:internal/terminal/lifecycle.go:190` - Concurrent delete callers join one session-scoped in-flight cleanup operation.
+- `redeven:AGENTS.md:173` - Repository rules require published upstream releases instead of local sibling checkouts.
+- `redeven:internal/envapp/ui_src/src/ui/security/localTransportSecurity.ts:22` - Local direct reconnects select loopback-only or exact network-IP plaintext policy from the browser hostname.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1455` - Remote tunnel reconnects explicitly require TLS.
+- `redeven:internal/localui/localui.go:1517` - Local UI Direct sessions configure outbound record chunking and Yamux limits.
+- `redeven:tests/docker_runtime_e2e/testclient/main.go:67` - Docker Local UI verification explicitly allows plaintext only for loopback.
+- `redeven:internal/runtimeproxy/runtimeproxy.go:15` - Redeven declares the three embedding-policy response headers blocked by its product adapter.
+- `redeven:internal/runtimeservice/compatibility_contract.json:2` - Local UI exposure requires compatibility epoch 8 and a matched v0.10.0 Desktop and Runtime pair.
+- `redeven:internal/terminal/manager_test.go:313` - Deterministic history fixtures verify exact pagination and replay across retained-size classes.
+- `redeven:internal/envapp/ui_src/scripts/checkTerminalRecoveryCarrier.mjs:450` - The production-dist process carrier starts a temporary Runtime and exercises real PTY recovery in Chromium.
+- `redeven:.github/workflows/release.yml:44` - Release correctness gates run the 64 KiB, 448 KiB, and exact 8 MiB boundary terminal carrier classes.

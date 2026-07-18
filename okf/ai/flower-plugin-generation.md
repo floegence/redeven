@@ -5,6 +5,7 @@ description: Flower-generated plugins are Redeven product orchestration through 
 tags: [ai, flower, plugins, floret]
 timestamp: 2026-07-02T00:00:00Z
 ---
+# Summary
 
 Flower can help users create plugins, but the generated-plugin flow is not a
 second plugin platform. Redeven owns the user intent capture, prompt
@@ -13,7 +14,9 @@ projection. ReDevPlugin owns templates, validators, package builders, lifecycle
 APIs, runtime contracts, sandbox surfaces, and platform policy. Floret owns the
 tool dispatch and approval lifecycle that Flower must use.
 
-# Mechanism
+# Contract
+
+## Mechanism
 
 A Flower-generated plugin flow is a sequence of approved product actions over
 released ReDevPlugin APIs. Flower may draft source and manifest content, call
@@ -59,15 +62,7 @@ pending approval model and Redeven's product projection, not from historical
 plugin install audit, ReDevPlugin confirmation rows, or guessed UI state. A
 requested approval remains waiting until Floret resolves it.
 
-# Citations
+# Evidence
 
-[1] redeven:AGENTS.md:204 - AI behavior should be prompt-first and contract guided.
-[2] redeven:AGENTS.md:319 - Redeven Flower/Floret orchestration calls released ReDevPlugin lifecycle APIs.
-[3] redeven:AGENTS.md:368 - Flower/Floret tools must not bypass Floret approval or ReDevPlugin policy.
-[4] redeven:AGENTS.md:487 - Flower-generated plugin flows are Redeven orchestration over ReDevPlugin primitives.
-[5] redeven:AGENTS.md:554 - Flower may generate source and drive lifecycle through released ReDevPlugin APIs only.
-[6] redeven:AGENTS.md:588 - Redeven code must not bypass Floret lifecycles.
-[7] redeven:AGENTS.md:589 - Tool approval flows through Floret `PermissionSpec`, resource extraction, and `Approver`.
-[8] redeven:AGENTS.md:604 - Redeven audit/query records are detail sources, not Flower UI activity generation.
-[9] redeven:AGENTS.md:608 - `ToolPresentationSpec` is the single product display source for activity presentation.
-[10] redeven:okf/ai/ai-tool-runtime.md:15 - Floret owns permission lifecycle and Redeven returns allow, ask, or deny before dispatch.
+- `redeven:AGENTS.md:204` - AI behavior should be prompt-first and contract guided.
+- `redeven:okf/ai/ai-tool-runtime.md:15` - Floret owns permission lifecycle and Redeven returns allow, ask, or deny before dispatch.

@@ -63,7 +63,7 @@ func TestBuildLayeredSystemPrompt_RoutesOKFToRedevenRepositoryKnowledgeOnly(t *t
 	assertPromptContains(t, prompt, "Redeven maintained repository knowledge -> okf.index, okf.search, and okf.open.")
 	assertPromptContains(t, prompt, "Use okf.index to discover OKF areas for broad Redeven-internal questions.")
 	assertPromptContains(t, prompt, "Use okf.search to find candidate concepts; keep broad searches short, usually max_results=3.")
-	assertPromptContains(t, prompt, "Use okf.open before relying on OKF for detailed facts, boundaries, contracts, or workflows.")
+	assertPromptContains(t, prompt, "open the relevant concept Summary, then open the relevant section")
 	assertPromptContains(t, prompt, "Source-level conclusions require file or terminal verification after OKF navigation.")
 }
 

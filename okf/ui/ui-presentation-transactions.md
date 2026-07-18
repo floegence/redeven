@@ -5,10 +5,13 @@ description: Heavy selection changes present visual intent first, commit content
 tags: [ui, interaction, performance, keep-alive]
 timestamp: 2026-07-14T00:00:00Z
 ---
+# Summary
 
-Redeven prioritizes visible input acknowledgement over the secondary work caused by a selection change. A heavy navigation event is one presentation transaction with three ordered stages: the lightweight selected control is updated synchronously, target content visibility is committed after that intent can paint, and visibility-dependent focus, resize, scroll restoration, viewport movement, or measurement runs only after the target content can paint. This ordering applies to Activity navigation, Activity/Workbench mode, terminal sessions, Workbench widgets, Flower and Codex threads, Files/Git modes, and heavy Settings, Plugin Center, or Debug Console panels. Lightweight local controls such as checkboxes, search input, process-row selection, and simple sorting remain synchronous when they do not switch heavy content.
+Redeven prioritizes visible input acknowledgement over the secondary work caused by a selection change. A heavy navigation event is one presentation transaction with three ordered stages: the lightweight selected control is updated synchronously, target content visibility is committed after that intent can paint, and visibility-dependent focus, resize, scroll restoration, viewport movement, or measurement runs only after the target content can paint. This ordering applies to Activity navigation, Activity/Workbench mode, terminal sessions, Workbench widgets, Flower and Codex threads, Files/Git modes, and heavy Settings, Plugin Center, or Debug Console panels.
 
-# Mechanism
+# Contract
+
+## Mechanism
 
 The published floe-webapp controller exposes separate visual and committed values. User pointer, click, and keyboard paths call `request()` so visual state changes immediately and only the latest sequence reaches commit. Terminal may call `preview()` on pointer down before click and resets obsolete previews. Initialization, persisted restoration, permission correction, automatic open, and connection recovery use the synchronous canonical path such as `commitNow()` because they are not waiting to acknowledge a user input. External canonical state changes cancel an older pending transaction and synchronize the visual target. Cleanup cancels scheduled work so a disposed owner cannot commit later.
 
@@ -30,23 +33,17 @@ Not every interaction should wait one frame. A control that only changes lightwe
 
 Keep-alive does not mean eagerly loading every feature. Initial resources still exclude heavy feature modules and styles, and an unvisited surface remains lazy. After first activation, however, ordinary navigation cannot convert that surface back into an unloaded state merely to reduce background work. Explicit environment replacement, permission-root replacement, connection recovery, resource-pressure policy already owned by the relevant subsystem, and user-requested closure may establish separate lifecycle boundaries; a navigation click alone may not.
 
-# Citations
+# Evidence
 
-[1] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:2405 - Activity/Workbench display mode uses a shared UI-first selection controller.
-[2] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:3206 - The Shell opts Activity navigation into UI-first selection and records its events.
-[3] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:3305 - Activity surface visibility publishes activation after paint.
-[4] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:3353 - Activity and Workbench remain in one kept-alive stack after first visit.
-[5] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:1423 - Terminal selection separates visual state, committed session state, and deferred focus.
-[6] redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.tsx:3246 - Files and Git retain mounted panels after first activation.
-[7] redeven:internal/envapp/ui_src/src/ui/services/uiPresentationTransactions.ts:32 - Redeven records the standard upstream transaction phases with surface, source, and target identity.
-[8] redeven:internal/envapp/ui_src/src/ui/debugConsole/createUIPerformanceTracker.ts:380 - Debug Console aggregates presentation samples by transaction identity and phase.
-[9] redeven:internal/envapp/ui_src/src/ui/debugConsole/createUIPerformanceTracker.ts:447 - Slow intent and content presentation produce structured UI performance events.
-[10] redeven:internal/flower_ui/src/FlowerSurface.tsx:2568 - Flower distinguishes warm atomic display from cold staged thread loading.
-[11] redeven:internal/flower_ui/src/FlowerSurface.tsx:2637 - Flower commits the newest thread request after the intent frame.
-[12] redeven:internal/envapp/ui_src/src/ui/codex/threadController.ts:179 - Codex keeps distinct selected, foreground, displayed, loading, cache, and transaction state.
-[13] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx:942 - Activity tests preserve Files DOM identity and state across Terminal, Monitor, Flower, and Codex round trips.
-[14] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx:2685 - Display-mode tests preserve Activity and Workbench DOM identity across both directions.
-[15] redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.browser.test.tsx:875 - Ten warm terminal cores switch without reconstruction or history replay.
-[16] redeven:internal/envapp/ui_src/src/ui/debugConsole/createUIPerformanceTracker.test.ts:31 - Tests cover all transaction phases and percentile aggregation.
-[17] redeven:internal/envapp/ui_src/src/ui/pages/EnvCodespacesPage.tsx:1575 - Codespaces separates delayed initial collection loading from stable background refresh rendering.
-[18] redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx:786 - Web Services keeps resolved cards or its empty state mounted while a replacement snapshot loads.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:2405` - Activity/Workbench display mode uses a shared UI-first selection controller.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:1423` - Terminal selection separates visual state, committed session state, and deferred focus.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/RemoteFileBrowser.tsx:3246` - Files and Git retain mounted panels after first activation.
+- `redeven:internal/envapp/ui_src/src/ui/services/uiPresentationTransactions.ts:32` - Redeven records the standard upstream transaction phases with surface, source, and target identity.
+- `redeven:internal/envapp/ui_src/src/ui/debugConsole/createUIPerformanceTracker.ts:380` - Debug Console aggregates presentation samples by transaction identity and phase.
+- `redeven:internal/flower_ui/src/FlowerSurface.tsx:2568` - Flower distinguishes warm atomic display from cold staged thread loading.
+- `redeven:internal/envapp/ui_src/src/ui/codex/threadController.ts:179` - Codex keeps distinct selected, foreground, displayed, loading, cache, and transaction state.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx:942` - Activity tests preserve Files DOM identity and state across Terminal, Monitor, Flower, and Codex round trips.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.browser.test.tsx:875` - Ten warm terminal cores switch without reconstruction or history replay.
+- `redeven:internal/envapp/ui_src/src/ui/debugConsole/createUIPerformanceTracker.test.ts:31` - Tests cover all transaction phases and percentile aggregation.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvCodespacesPage.tsx:1575` - Codespaces separates delayed initial collection loading from stable background refresh rendering.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvPortForwardsPage.tsx:786` - Web Services keeps resolved cards or its empty state mounted while a replacement snapshot loads.

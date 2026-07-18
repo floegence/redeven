@@ -108,7 +108,7 @@ func TestBuiltInToolDefinitions_OKFDescriptionsDeclareProgressiveDisclosureBound
 		t.Fatalf("okf.index description missing progressive disclosure guidance: %q", index)
 	}
 	open := defs["okf.open"].Description
-	if !strings.Contains(open, "after okf.index or okf.search") || !strings.Contains(open, "does not replace source-code verification") {
+	if !strings.Contains(open, "after okf.index or okf.search") || !strings.Contains(open, "Without section") || !strings.Contains(open, "does not replace source-code verification") {
 		t.Fatalf("okf.open description missing open/source verification guidance: %q", open)
 	}
 }

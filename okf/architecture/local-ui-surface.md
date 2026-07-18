@@ -5,10 +5,13 @@ description: Local UI serves browser entrypoints, access-gated APIs, direct sess
 tags: [architecture, local-ui, runtime, security]
 timestamp: 2026-07-17T00:00:00Z
 ---
+# Summary
 
 Redeven Local UI is the browser-facing endpoint runtime surface. It exposes the Env App proxy, Local UI status APIs, direct Flowersec session handoff, Browser Editor codespace routes, and port-forward routes from the same runtime-managed HTTP server.
 
-# Mechanism
+# Contract
+
+## Mechanism
 
 `localui.Server` is built with an agent, Code App app server, bind spec, runtime-control socket path, Local Environment identity, diagnostics store, and optional access gate. The handler mounts `/api/local/*`, `/_redeven_direct/ws`, `/_redeven_proxy/*`, `/cs/*`, and `/pf/*`. Password mode protects non-public routes, direct sessions are minted as short-lived Flowersec connect artifacts, and runtime responses include the normalized Runtime Service snapshot.
 
@@ -24,24 +27,9 @@ Direct connect artifacts are one-time credentials, but resolution does not consu
 
 Local UI route behavior is part of the runtime trust boundary. Public Env App shell GET/HEAD requests may pass before local unlock so the shell can load, but local APIs, direct sessions, codespaces, and port-forward routes stay access-gated when password mode is enabled. Network exposure is plaintext HTTP: password authentication controls access but does not protect passwords, cookies, page resources, or non-Flowersec HTTP traffic from interception or modification. Flowersec protects its encrypted session payload only after the E2EE handshake completes. The trusted listener is reachable only through local loopback and `redeven desktop-bridge`; SSH and container access must not expose or forward the public listener. Runtime-control, Desktop model-source, and runtime management sockets remain loopback or local-socket protected regardless of Local UI exposure.
 
-# Citations
+# Evidence
 
-[1] redeven:internal/localui/localui.go:50 - Local UI options require bind, agent, app server, state, runtime-control, version, diagnostics, and access gate inputs.
-[2] redeven:internal/localui/localui.go:129 - The handler mounts root, codespace, port-forward, local API, direct WebSocket, and Env App proxy routes.
-[3] redeven:internal/localui/localui.go:187 - Local UI computes a local permission cap from the runtime config path.
-[4] redeven:internal/localui/localui.go:218 - Start opens all configured Local UI listeners and serves the handler.
-[5] redeven:internal/localui/localui.go:656 - Local API calls return locked responses when local access is missing.
-[6] redeven:internal/localui/localui.go:672 - Public Env App shell requests are limited to GET/HEAD under `/_redeven_proxy/env`.
-[7] redeven:internal/localui/localui.go:683 - Env App proxy requests are access-gated except for the public Env App shell path.
-[8] redeven:internal/localui/localui.go:1019 - `/api/local/runtime` returns direct WebSocket, Desktop flags, and Runtime Service data.
-[9] redeven:internal/localui/localui.go:1089 - Direct sessions mint short-lived connect artifacts with channel id and E2EE PSK.
-[10] redeven:internal/localui/localui.go:1151 - Connect artifact creation requires local access and an empty request body.
-[11] redeven:internal/localui/bind.go:32 - Bind parsing distinguishes loopback, concrete network IP, and wildcard exposure while enforcing fixed network ports.
-[12] redeven:internal/localui/http_security.go:24 - Listener and interface addresses produce the exact public network authority allowlist and real display URLs.
-[13] redeven:internal/localui/http_security.go:86 - The network middleware rejects requests whose Host is not an allowed startup authority.
-[14] redeven:internal/localui/http_security.go:196 - WebSocket Origin validation requires canonical same-scheme, same-authority origin.
-[15] redeven:internal/localui/localui.go:1426 - Pending direct credentials are resolved without immediate deletion.
-[16] redeven:internal/localui/localui.go:1449 - Authenticated commit atomically consumes the still-matching pending credential.
-[17] redeven:internal/localui/localui.go:1500 - Flowersec `ResolveCredential` binds the commit to successful PSK authentication.
-[18] redeven:internal/localui/localui.go:410 - Runtime starts the trusted Local UI bridge listener on an ephemeral IPv4 loopback port.
-[19] redeven:internal/runtimemanagement/status.go:57 - Runtime attach status requires the machine-only `local_ui_bridge_url` field.
+- `redeven:internal/localui/localui.go:50` - Local UI options require bind, agent, app server, state, runtime-control, version, diagnostics, and access gate inputs.
+- `redeven:internal/localui/bind.go:32` - Bind parsing distinguishes loopback, concrete network IP, and wildcard exposure while enforcing fixed network ports.
+- `redeven:internal/localui/http_security.go:24` - Listener and interface addresses produce the exact public network authority allowlist and real display URLs.
+- `redeven:internal/runtimemanagement/status.go:57` - Runtime attach status requires the machine-only `local_ui_bridge_url` field.

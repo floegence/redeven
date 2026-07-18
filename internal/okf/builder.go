@@ -35,10 +35,18 @@ func BuildFromSource(sourceRoot string) (BuildResult, error) {
 	}
 
 	bundleHash := sha256Hex(bundleJSON)
+	sectionCount := 0
+	evidenceCount := 0
+	for _, concept := range bundle.Concepts {
+		sectionCount += len(concept.Sections)
+		evidenceCount += len(concept.Evidence)
+	}
 	manifest := BundleManifest{
 		SchemaVersion: SchemaVersion,
 		OKFVersion:    bundle.OKFVersion,
 		ConceptCount:  len(bundle.Concepts),
+		SectionCount:  sectionCount,
+		EvidenceCount: evidenceCount,
 		BundleSHA256:  bundleHash,
 		SourceSHA256:  bundle.SourceSHA256,
 	}

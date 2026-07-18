@@ -5,6 +5,7 @@ description: Redeven places official ReDevPlugin sandbox surfaces into Env App c
 tags: [ui, plugins, workbench, plugin-center]
 timestamp: 2026-07-16T00:00:00Z
 ---
+# Summary
 
 Plugin surfaces are ReDevPlugin sandbox documents placed inside Redeven product
 chrome. Redeven decides discovery, placement, and product navigation, while
@@ -12,7 +13,9 @@ ReDevPlugin remains responsible for plugin identity, lifecycle, permissions,
 confirmation, asset tickets, bridge tokens, RPC, streams, leases, audit, and
 registry state.
 
-# Mechanism
+# Contract
+
+## Mechanism
 
 Env App source contains a two-level official plugin entry, but product discovery
 is development-only until the feature is ready for users. Vite serve enables the
@@ -106,18 +109,15 @@ Official Containers is a sandboxed plugin surface over the Redeven
 `container_resources` business capability. Containers are not a plugin runtime
 mechanism and must not be used to execute third-party plugin backends.
 
-# Citations
+# Evidence
 
-[1] redeven:AGENTS.md:256 - Redeven consumes ReDevPlugin through published artifacts only.
-[2] redeven:AGENTS.md:290 - Plugin UI platform code should arrive as released ReDevPlugin npm packages.
-[3] redeven:AGENTS.md:316 - Redeven owns product placement of plugin surfaces.
-[4] redeven:AGENTS.md:452 - Plugin documents must load through ReDevPlugin sandbox bootstrap and bridge lifecycle.
-[5] redeven:internal/envapp/ui_src/vite.config.ts:1 - Env App resolves the development-only Plugin UI build constant.
-[6] redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:858 - Env App gates inventory loading, entries, and Activity registration with the build constant.
-[7] redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.tsx:1 - Plugin Center renders the dedicated official management Activity view.
-[8] redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1 - Plugin lifecycle wrappers call the Redeven proxy plugin namespace.
-[9] redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginPackages.ts:1 - Redeven embeds the bundled official Containers package for lifecycle install/update.
-[10] redeven:internal/envapp/ui_src/package.json:25 - Env App consumes the published ReDevPlugin UI package for PluginSurfaceHost.
-[11] redeven:internal/envapp/ui_src/src/ui/plugins/PluginSurfaceFrame.tsx:1 - The plugin surface frame bridges Env App placement to the published surface host.
-[12] redeven:internal/envapp/ui_src/src/ui/pages/settings/settingsStructure.ts:45 - Runtime Settings sections do not include Plugin Center.
-[13] redeven:internal/envapp/ui_src/scripts/checkPackagedRenderer.mjs:1 - Built renderer smoke tests require Plugin UI to be hidden by default and can verify explicit development visibility.
+- `redeven:AGENTS.md:256` - Redeven consumes ReDevPlugin through published artifacts only.
+- `redeven:internal/envapp/ui_src/vite.config.ts:1` - Env App resolves the development-only Plugin UI build constant.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:858` - Env App gates inventory loading, entries, and Activity registration with the build constant.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.tsx:1` - Plugin Center renders the dedicated official management Activity view.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1` - Plugin lifecycle wrappers call the Redeven proxy plugin namespace.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginPackages.ts:1` - Redeven embeds the bundled official Containers package for lifecycle install/update.
+- `redeven:internal/envapp/ui_src/package.json:25` - Env App consumes the published ReDevPlugin UI package for PluginSurfaceHost.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/PluginSurfaceFrame.tsx:1` - The plugin surface frame bridges Env App placement to the published surface host.
+- `redeven:internal/envapp/ui_src/src/ui/pages/settings/settingsStructure.ts:45` - Runtime Settings sections do not include Plugin Center.
+- `redeven:internal/envapp/ui_src/scripts/checkPackagedRenderer.mjs:1` - Built renderer smoke tests require Plugin UI to be hidden by default and can verify explicit development visibility.

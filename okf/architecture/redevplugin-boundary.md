@@ -5,13 +5,16 @@ description: Redeven consumes ReDevPlugin as a published plugin-platform depende
 tags: [architecture, dependencies, plugins, release]
 timestamp: 2026-06-29T00:00:00Z
 ---
+# Summary
 
 Redeven treats ReDevPlugin as a published upstream plugin-platform dependency,
 not as code to fork or reimplement inside the Redeven tree. ReDevPlugin is an
 independently released library/runtime repository, not a Redeven source
 directory, submodule, or implementation detail.
 
-# Mechanism
+# Contract
+
+## Mechanism
 
 ReDevPlugin owns reusable plugin-platform concerns: package and manifest
 validation, lifecycle APIs, permission and confirmation machinery, sandboxed
@@ -163,28 +166,15 @@ platform-core directories. The release artifact verifier and consumption gate
 self-tests keep the future runtime-consumption path executable in CI before a
 published ReDevPlugin artifact is selected by Redeven.
 
-# Citations
+# Evidence
 
-[1] redeven:AGENTS.md:223 - Published dependency policy lists `redevplugin` as an upstream dependency consumed by Redeven.
-[2] redeven:AGENTS.md:256 - Redeven must consume ReDevPlugin through published artifacts.
-[3] redeven:AGENTS.md:331 - Local sibling checkout wiring for ReDevPlugin is forbidden.
-[4] redeven:AGENTS.md:338 - ReDevPlugin owns platform-general plugin concerns.
-[5] redeven:AGENTS.md:354 - Redeven owns only product integration and business adapters.
-[6] redeven:AGENTS.md:408 - Redeven treats ReDevPlugin as a published upstream dependency, not a source folder.
-[7] redeven:AGENTS.md:441 - Redeven integration must keep ReDevPlugin platform state opaque.
-[8] redeven:AGENTS.md:460 - Platform contract bugs found during Redeven integration must be fixed upstream in ReDevPlugin first.
-[9] redeven:AGENTS.md:465 - Redeven must not fork or reimplement the plugin platform core.
-[10] redeven:AGENTS.md:474 - Redeven integration code must not bypass ReDevPlugin tokens, brokers, sandboxing, or lifecycle policy.
-[11] redeven:AGENTS.md:480 - Containers are Redeven business capabilities, not a plugin runtime mechanism.
-[12] redeven:AGENTS.md:487 - Flower-generated plugin flows are Redeven product orchestration over ReDevPlugin primitives.
-[13] redeven:AGENTS.md:495 - ReDevPlugin upgrades in Redeven must consume released artifacts together.
-[14] redeven:AGENTS.md:535 - Redeven plugin integration review must reject alternate platform cores and enforce adapter-only business capabilities.
-[15] redeven:okf/architecture/container-resources-capability.md:9 - The active container resources contract is Redeven-owned business capability surface.
-[16] redeven:go.mod:5 - Redeven's current required module list is the active Go dependency surface for released upstream modules.
-[17] redeven:scripts/check_redevplugin_dependency_boundary.sh:1 - The dependency boundary guard blocks local ReDevPlugin wiring and copied platform-core paths.
-[18] redeven:scripts/check_redevplugin_release_artifacts.sh:10 - The consumer-side release artifact verifier validates checksums, signature evidence, stress counters, internal manifests, compatibility metadata, third-party notices, and runtime binary presence.
-[19] redeven:scripts/check_redevplugin_consumption_gate.sh:10 - The consumption gate fails release staging or Desktop bundling when ReDevPlugin payloads appear without verifier markers.
-[20] redeven:.github/workflows/ci-check.yml:108 - CI runs the ReDevPlugin release artifact verifier self-test and consumption gate self-test before a real artifact is wired into release packaging.
-[21] redeven:scripts/stage_redevplugin_release_artifacts.sh:14 - The release artifact staging helper verifies downloaded or copied ReDevPlugin artifacts before extracting a runtime payload.
-[22] redeven:.github/workflows/release.yml:93 - Release packaging stages ReDevPlugin runtime payloads only when explicit release inputs are configured.
-[23] redeven:scripts/build_desktop_bundled_runtime.sh:113 - Desktop bundled-runtime preparation stages ReDevPlugin runtime payloads only when explicit desktop inputs are configured.
+- `redeven:AGENTS.md:223` - Published dependency policy lists `redevplugin` as an upstream dependency consumed by Redeven.
+- `redeven:okf/architecture/container-resources-capability.md:9` - The active container resources contract is Redeven-owned business capability surface.
+- `redeven:go.mod:5` - Redeven's current required module list is the active Go dependency surface for released upstream modules.
+- `redeven:scripts/check_redevplugin_dependency_boundary.sh:1` - The dependency boundary guard blocks local ReDevPlugin wiring and copied platform-core paths.
+- `redeven:scripts/check_redevplugin_release_artifacts.sh:10` - The consumer-side release artifact verifier validates checksums, signature evidence, stress counters, internal manifests, compatibility metadata, third-party notices, and runtime binary presence.
+- `redeven:scripts/check_redevplugin_consumption_gate.sh:10` - The consumption gate fails release staging or Desktop bundling when ReDevPlugin payloads appear without verifier markers.
+- `redeven:.github/workflows/ci-check.yml:108` - CI runs the ReDevPlugin release artifact verifier self-test and consumption gate self-test before a real artifact is wired into release packaging.
+- `redeven:scripts/stage_redevplugin_release_artifacts.sh:14` - The release artifact staging helper verifies downloaded or copied ReDevPlugin artifacts before extracting a runtime payload.
+- `redeven:.github/workflows/release.yml:93` - Release packaging stages ReDevPlugin runtime payloads only when explicit release inputs are configured.
+- `redeven:scripts/build_desktop_bundled_runtime.sh:113` - Desktop bundled-runtime preparation stages ReDevPlugin runtime payloads only when explicit desktop inputs are configured.

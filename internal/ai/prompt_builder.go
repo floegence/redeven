@@ -448,7 +448,7 @@ func buildPromptMandatoryRulesSection(snapshot promptRuntimeSnapshot) promptSect
 	if strings.TrimSpace(snapshot.PermissionType) == string(FlowerPermissionReadonly) {
 		lines = append(lines,
 			"- Use OKF tools only for Redeven repository knowledge: okf.index for broad directory discovery, okf.search for short candidate lists, and okf.open for detailed concept facts.",
-			"- Do not answer detailed OKF-backed claims from search snippets alone; open the relevant concept first.",
+			"- Do not answer detailed OKF-backed claims from search snippets alone; open the relevant concept Summary, then open the relevant section when details are needed.",
 			"- For source-level conclusions, verify OKF background with readonly file/search tools before final conclusions.",
 			"- Prefer read_file/read_files for direct file inspection, rgrep for content search, find for path discovery, and web_fetch for authoritative public text pages.",
 			"- Shell commands, file edits, patch application, and mutation-oriented verification are unavailable in readonly permission.",
@@ -465,7 +465,7 @@ func buildPromptMandatoryRulesSection(snapshot promptRuntimeSnapshot) promptSect
 	}
 	lines = append(lines,
 		"- Use OKF tools only for Redeven repository knowledge: okf.index for broad directory discovery, okf.search for short candidate lists, and okf.open for detailed concept facts.",
-		"- Do not answer detailed OKF-backed claims from search snippets alone; open the relevant concept first.",
+		"- Do not answer detailed OKF-backed claims from search snippets alone; open the relevant concept Summary, then open the relevant section when details are needed.",
 		"- For source-level conclusions, verify OKF background with terminal.exec or file tools before final conclusions.",
 		"- Use canonical tool names exactly as listed in Current Context; do not convert punctuation in tool names or invent underscore variants.",
 		"- Prefer the explicit file tools for direct file inspection or mutation when they are available.",

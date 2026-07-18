@@ -5,10 +5,13 @@ description: redeven env and redeven targets exec are the product boundaries for
 tags: [ai, flower, cli, desktop, runtime]
 timestamp: 2026-07-10T00:00:00Z
 ---
+# Summary
 
 Redeven environment lifecycle requests must go through the Redeven product surface, not through inferred container, SSH, systemd, launchctl, or process-manager commands. Flower learns this boundary through the standard `redeven-environment` system skill, not through a bespoke environment workflow embedded in the global prompt.
 
-# Mechanism
+# Contract
+
+## Mechanism
 
 The `redeven env` CLI surface exposes machine-readable environment status, diagnostics, and lifecycle operation plans through the shared agent protocol envelope. `list`, `resolve`, `status`, `diagnose`, and `stop` are executable for the supported default Local Environment path. `start`, `restart`, and `update` are phase-one planning entries: they return structured availability, reason codes, and next actions rather than pretending the CLI can start or update Desktop runtime sessions. When the target catalog contains SSH, container, provider, Gateway, or external Local UI entries, `redeven env` may resolve the target but still returns the lifecycle request as `supported=false` with `reason_code=unsupported_target_kind` unless the target is the default Local Environment.
 
@@ -22,12 +25,11 @@ For arbitrary target OS diagnostics, Flower should use `redeven targets exec --t
 
 `terminal.exec` remains the local AI runtime shell. It starts an interactive PTY process with a local `process_id`, can be inspected with `terminal.read`, driven with `terminal.write`, and stopped with `terminal.terminate`. It can be used to invoke Redeven product commands, but it must not be described as remote execution unless the product command result itself contains target execution provenance such as `execution_location=ssh_target`.
 
-# Citations
+# Evidence
 
-[1] redeven:cmd/redeven/env.go:13 - The `env` command dispatches lifecycle subcommands.
-[2] redeven:internal/agentprotocol/env.go:60 - Environment status, runtime summary, diagnostics, and operation plans define the JSON contract.
-[3] redeven:internal/agentprotocol/env.go:120 - Environment target resolution distinguishes supported local targets from recognized unsupported target shapes.
-[4] redeven:internal/agentprotocol/targets.go:37 - Target discovery projects the default local target and saved catalog connections into target descriptors.
-[5] redeven:internal/agentprotocol/target_exec.go:39 - Target command execution returns structured target, command, location, stdout/stderr, exit-code, timeout, and support fields.
-[6] redeven:internal/ai/system_skills/redeven-environment/SKILL.md:1 - The system skill teaches Flower the Redeven environment and target execution command surfaces.
-[7] redeven:internal/ai/context_action_floret.go:200 - Ask Flower execution metadata is projected into Floret supplemental context metadata for the current turn.
+- `redeven:cmd/redeven/env.go:13` - The `env` command dispatches lifecycle subcommands.
+- `redeven:internal/agentprotocol/env.go:60` - Environment status, runtime summary, diagnostics, and operation plans define the JSON contract.
+- `redeven:internal/agentprotocol/targets.go:37` - Target discovery projects the default local target and saved catalog connections into target descriptors.
+- `redeven:internal/agentprotocol/target_exec.go:39` - Target command execution returns structured target, command, location, stdout/stderr, exit-code, timeout, and support fields.
+- `redeven:internal/ai/system_skills/redeven-environment/SKILL.md:1` - The system skill teaches Flower the Redeven environment and target execution command surfaces.
+- `redeven:internal/ai/context_action_floret.go:200` - Ask Flower execution metadata is projected into Floret supplemental context metadata for the current turn.

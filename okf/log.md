@@ -11,6 +11,10 @@
 * **Fix**: Removed schema repair, unversioned database claiming, conditional DDL,
   permission fallback, approval default synthesis, generated `ask_user`
   questions, and execution failure for projection-unavailable outcomes.
+* **Governance**: Added enforceable OKF authoring rules for coherent retrieval units, Summary/Contract/Boundaries/Evidence structure, size budgets, canonical ownership, and representative evidence.
+* **Refactor**: Split the largest AI, Flower, Desktop, and Workbench concepts into focused retrieval units while retaining stable overview paths.
+* **Update**: Advanced the OKF bundle to schema 3 and OKF version 0.2 with structured summaries, sections, Evidence, query-aware search snippets, and section-aware opening.
+* **Quality**: Added report-only and strict content validation and wired strict OKF quality into the final integration gate.
 
 ## 2026-07-17
 * **Breaking**: Upgraded to published Floret v0.11.3 as the only authority for admitted Agent conversation, turn/run lifecycle, ordering, projection, control signals, approvals, and todos; Redeven threadstore now contains product metadata, pending commands, resource references, read acknowledgement, authorization audit, and coordination records only.

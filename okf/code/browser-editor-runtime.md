@@ -5,10 +5,13 @@ description: Code App serves Browser Editor codespaces through the local app ser
 tags: [code-app, browser-editor, local-ui, desktop]
 timestamp: 2026-07-16T00:00:00Z
 ---
+# Summary
 
 Browser Editor support is owned by the Code App app server. Codespaces are opened through Local UI `/cs/<id>/` routes or through remote `cs-*` sandbox hosts, while Desktop and Env App can prepare or update managed Browser Editor runtime versions through code workspace engine APIs.
 
-# Mechanism
+# Contract
+
+## Mechanism
 
 The Code App app server backend owns codespace lifecycle, port resolution, managed runtime status, setup operations, Desktop-transfer chunks, completion, version selection, version removal, and operation cancellation. Local UI routes `/cs/*` to the app server. A setup operation is identified by a caller-generated `operation_id`, records its explicit `desktop_transfer` or `remote_download` method, and is the only authority allowed to mutate the active Browser Editor setup status. Only one setup operation may run at a time, an accepted operation id cannot be reused during the RuntimeManager lifetime, and stale chunk, completion, cancellation, or progress updates cannot terminate or overwrite a different operation.
 
@@ -38,50 +41,32 @@ The main process validates the sender session for both modes. `loading` only cre
 
 Opening or managing Browser Editor is not just a static file route. Version setup and removal require full read/write/execute runtime permissions, while status reads require read permission. Setup create, chunk, completion, and cancellation requests are audited with their operation id; create also records the chosen method. The remote method's fixed catalog and package-origin validation prevent the Env App request from becoming a general network fetch primitive. The session-scoped Desktop bridge values are transport bootstrap inputs for the current isolated app origin; they do not grant broader runtime permissions or replace controller source, origin, and capability validation.
 
-# Citations
+# Evidence
 
-[1] redeven:internal/codeapp/appserver/server.go:80 - App server backend owns codespace start, stop, delete, and port resolution.
-[2] redeven:internal/codeapp/appserver/server.go:84 - App server backend owns managed code runtime status and setup operations.
-[3] redeven:internal/localui/localui.go:132 - Local UI mounts `/cs/` for codespace routes.
-[4] redeven:internal/localui/runtime_control.go:1 - Runtime Control no longer exposes Browser Editor binary import routes.
-[5] redeven:internal/codeapp/appserver/server.go:2720 - Code runtime status requires read permission.
-[6] redeven:internal/codeapp/appserver/server.go:2730 - Setup operation creation requires full permission and records the explicit install method.
-[7] redeven:internal/codeapp/appserver/server.go:2763 - Desktop package chunks are uploaded by operation id and chunk index.
-[8] redeven:internal/codeapp/appserver/server.go:2840 - Runtime version selection requires full permission.
-[9] redeven:internal/codeapp/codeserver/runner.go:274 - code-server uses `/cs/<code_space_id>` as the absolute proxy base path.
-[10] redeven:internal/codeapp/codeserver/runner.go:276 - code-server binds to loopback with editor auth disabled.
-[11] redeven:internal/codeapp/codeserver/artifact.go:22 - Runtime uses a 2 GiB workspace engine archive safety cap.
-[12] redeven:internal/codeapp/codeserver/artifact.go:293 - Runtime counts extracted regular file sizes before writing archive entries.
-[13] redeven:internal/envapp/ui_src/src/ui/pages/EnvCodespacesPage.tsx:158 - Env App resolves codespace open targets into Desktop codespace-window, Desktop external-browser, or browser popup strategies.
-[14] redeven:internal/envapp/ui_src/src/ui/pages/EnvCodespacesPage.tsx:198 - Env App opens or updates the Desktop codespace loading window through the shell bridge before navigation.
-[15] redeven:internal/envapp/ui_src/src/ui/pages/EnvCodespacesPage.tsx:457 - The codespace card makes Desktop the running-card primary action when the bridge is available and keeps Browser in the menu.
-[16] redeven:desktop/src/shared/desktopShellCodespaceWindowIPC.ts:3 - Desktop shell codespace-window IPC defines loading and navigate request variants.
-[17] redeven:desktop/src/preload/desktopShell.ts:70 - The trusted Desktop preload exposes `openCodespaceWindow` through the shell bridge.
-[18] redeven:desktop/src/main/navigation.ts:212 - Desktop recognizes codespace URLs by local `/cs/<id>/` paths or remote `cs-<id>` host labels.
-[19] redeven:desktop/src/main/navigation.ts:239 - Codespace window navigation must pass both the session allow-list and the codespace URL check.
-[20] redeven:desktop/src/main/main.ts:6902 - Desktop builds a local CSP-bound loading document for codespace child windows.
-[21] redeven:desktop/src/main/main.ts:7061 - Codespace child windows use the session partition, native chrome, and no Desktop preload.
-[22] redeven:desktop/src/main/main.ts:7111 - Desktop shell codespace-window requests branch between loading and validated navigate modes.
-[23] redeven:desktop/src/main/main.ts:16734 - The Electron main process registers the shell-open-codespace-window IPC handler.
-[24] redeven:internal/envapp/ui_src/src/ui/services/browserEditorSetupActivity.ts:108 - Browser Editor activity derives structured, non-retryable platform diagnoses from Runtime status.
-[25] redeven:internal/envapp/ui_src/src/ui/pages/BrowserEditorSetupActivityPanel.tsx:80 - The shared setup component renders wide and compact layouts from the same activity contract.
-[26] redeven:internal/envapp/ui_src/src/ui/pages/EnvCodespacesPage.tsx:862 - Codespaces uses the wide operational layout while preserving the separate codespace content region.
-[27] redeven:internal/envapp/ui_src/src/ui/pages/settings/CodeRuntimeSettingsCard.tsx:405 - Settings keeps the update action out of the header while the compact activity owns setup and retry actions, and opens the method selector for ready-state updates.
-[28] redeven:internal/codeapp/ui_src/src/runtimeBridge.ts:63 - Code App restores the session-scoped bridge capability and WebSocket frame limit with the legacy fallback.
-[29] redeven:internal/codeapp/ui_src/src/runtimeBridge.test.ts:81 - Focused tests cover restored capability values, malformed limits, and unavailable storage.
-[30] redeven:desktop/src/shared/desktopCodeWorkspaceIPC.ts:1 - Desktop defines operation-scoped Browser Editor preparation progress and cancellation IPC contracts.
-[31] redeven:desktop/src/main/codeWorkspaceEngineReleaseAssets.ts:160 - Desktop streams Browser Editor package downloads to disk with separate response-header and continuous-idle timeouts.
-[32] redeven:internal/codeapp/codeserver/runtime.go:83 - Runtime operation status exposes optional environment-confirmed transfer byte counts.
-[33] redeven:internal/envapp/ui_src/src/ui/services/browserEditorSetupProgress.ts:1 - Env App calculates smoothed transfer rate, current-stage ETA, and stalled state from structured progress snapshots.
-[34] redeven:internal/codeapp/codeserver/setup_operation.go:65 - Runtime creates explicit, operation-scoped Desktop transfer or environment download setup operations.
-[35] redeven:internal/codeapp/codeserver/setup_operation.go:330 - Both methods use the same verification, installation, promotion, and managed-link update pipeline.
-[36] redeven:internal/codeapp/codeserver/remote_download.go:18 - Environment download fixes the catalog and package-service origins and defines response and idle timeouts.
-[37] redeven:internal/codeapp/codeserver/remote_download.go:178 - Runtime strictly validates the remote catalog and package source before downloading.
-[38] redeven:internal/codeapp/codeserver/remote_download.go:339 - Remote packages use verified per-platform caching and operation-scoped temporary downloads.
-[39] redeven:desktop/src/main/codeWorkspaceEnginePackageJobs.ts:1 - Desktop package jobs own bounded chunk reads, cancellation, disposal, and expiry.
-[40] redeven:internal/envapp/ui_src/src/ui/services/browserEditorSetup.ts:40 - The shared Env App orchestration owns requested and observed identities, local progress, Runtime snapshots, cancellation, and terminal results.
-[41] redeven:internal/envapp/ui_src/src/ui/pages/BrowserEditorInstallMethodSelector.tsx:15 - The shared selector renders both install methods, data path, availability, locked state, and keyboard radiogroup behavior.
-[42] redeven:internal/envapp/ui_src/src/ui/services/browserEditorSetupError.ts:1 - Env App maps stable Desktop and Runtime failure sources without inspecting user-facing error text.
-[43] redeven:internal/envapp/ui_src/src/ui/services/browserEditorRuntimeOperation.ts:85 - Setup creation reconciles typed conflicts and uncertain responses without issuing a second create request.
-[44] redeven:internal/envapp/ui_src/src/ui/services/codeRuntimeApi.ts:346 - Env App normalizes setup creation as a strict method-discriminated contract.
-[45] redeven:internal/codeapp/appserver/server.go:2750 - AppServer maps the typed Runtime setup conflict to HTTP 409 and `CODE_RUNTIME_OPERATION_CONFLICT`.
+- `redeven:internal/codeapp/appserver/server.go:80` - App server backend owns codespace start, stop, delete, and port resolution.
+- `redeven:internal/localui/localui.go:132` - Local UI mounts `/cs/` for codespace routes.
+- `redeven:internal/localui/runtime_control.go:1` - Runtime Control no longer exposes Browser Editor binary import routes.
+- `redeven:internal/codeapp/codeserver/runner.go:274` - code-server uses `/cs/<code_space_id>` as the absolute proxy base path.
+- `redeven:internal/codeapp/codeserver/artifact.go:22` - Runtime uses a 2 GiB workspace engine archive safety cap.
+- `redeven:internal/envapp/ui_src/src/ui/pages/EnvCodespacesPage.tsx:158` - Env App resolves codespace open targets into Desktop codespace-window, Desktop external-browser, or browser popup strategies.
+- `redeven:desktop/src/shared/desktopShellCodespaceWindowIPC.ts:3` - Desktop shell codespace-window IPC defines loading and navigate request variants.
+- `redeven:desktop/src/preload/desktopShell.ts:70` - The trusted Desktop preload exposes `openCodespaceWindow` through the shell bridge.
+- `redeven:desktop/src/main/navigation.ts:212` - Desktop recognizes codespace URLs by local `/cs/<id>/` paths or remote `cs-<id>` host labels.
+- `redeven:desktop/src/main/main.ts:6902` - Desktop builds a local CSP-bound loading document for codespace child windows.
+- `redeven:internal/envapp/ui_src/src/ui/services/browserEditorSetupActivity.ts:108` - Browser Editor activity derives structured, non-retryable platform diagnoses from Runtime status.
+- `redeven:internal/envapp/ui_src/src/ui/pages/BrowserEditorSetupActivityPanel.tsx:80` - The shared setup component renders wide and compact layouts from the same activity contract.
+- `redeven:internal/envapp/ui_src/src/ui/pages/settings/CodeRuntimeSettingsCard.tsx:405` - Settings keeps the update action out of the header while the compact activity owns setup and retry actions, and opens the method selector for ready-state updates.
+- `redeven:internal/codeapp/ui_src/src/runtimeBridge.ts:63` - Code App restores the session-scoped bridge capability and WebSocket frame limit with the legacy fallback.
+- `redeven:internal/codeapp/ui_src/src/runtimeBridge.test.ts:81` - Focused tests cover restored capability values, malformed limits, and unavailable storage.
+- `redeven:desktop/src/shared/desktopCodeWorkspaceIPC.ts:1` - Desktop defines operation-scoped Browser Editor preparation progress and cancellation IPC contracts.
+- `redeven:desktop/src/main/codeWorkspaceEngineReleaseAssets.ts:160` - Desktop streams Browser Editor package downloads to disk with separate response-header and continuous-idle timeouts.
+- `redeven:internal/codeapp/codeserver/runtime.go:83` - Runtime operation status exposes optional environment-confirmed transfer byte counts.
+- `redeven:internal/envapp/ui_src/src/ui/services/browserEditorSetupProgress.ts:1` - Env App calculates smoothed transfer rate, current-stage ETA, and stalled state from structured progress snapshots.
+- `redeven:internal/codeapp/codeserver/setup_operation.go:65` - Runtime creates explicit, operation-scoped Desktop transfer or environment download setup operations.
+- `redeven:internal/codeapp/codeserver/remote_download.go:18` - Environment download fixes the catalog and package-service origins and defines response and idle timeouts.
+- `redeven:desktop/src/main/codeWorkspaceEnginePackageJobs.ts:1` - Desktop package jobs own bounded chunk reads, cancellation, disposal, and expiry.
+- `redeven:internal/envapp/ui_src/src/ui/services/browserEditorSetup.ts:40` - The shared Env App orchestration owns requested and observed identities, local progress, Runtime snapshots, cancellation, and terminal results.
+- `redeven:internal/envapp/ui_src/src/ui/pages/BrowserEditorInstallMethodSelector.tsx:15` - The shared selector renders both install methods, data path, availability, locked state, and keyboard radiogroup behavior.
+- `redeven:internal/envapp/ui_src/src/ui/services/browserEditorSetupError.ts:1` - Env App maps stable Desktop and Runtime failure sources without inspecting user-facing error text.
+- `redeven:internal/envapp/ui_src/src/ui/services/browserEditorRuntimeOperation.ts:85` - Setup creation reconciles typed conflicts and uncertain responses without issuing a second create request.
+- `redeven:internal/envapp/ui_src/src/ui/services/codeRuntimeApi.ts:346` - Env App normalizes setup creation as a strict method-discriminated contract.

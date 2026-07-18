@@ -86,6 +86,7 @@ check_shell_syntax() {
   bash -n scripts/check_runtime_compatibility_contract.sh
   bash -n scripts/check_flower_live_protocol.sh
   bash -n scripts/check_flower_ui.sh
+  bash -n scripts/okf/check_content_quality.sh
   bash -n scripts/ui_package_common.sh
   bash -n scripts/open_source_hygiene_check.sh
   bash -n scripts/install_git_hooks.sh
@@ -119,6 +120,7 @@ run_step "checking Desktop" ./scripts/check_desktop.sh --full
 run_step "checking Docker Runtime E2E" ./scripts/check_docker_runtime_e2e.sh
 run_step "checking open-source hygiene" ./scripts/open_source_hygiene_check.sh --all
 run_step "checking OKF source integrity" ./scripts/okf/check_source_integrity.sh
+run_step "checking OKF content quality" ./scripts/okf/check_content_quality.sh --strict
 run_step "verifying OKF bundle" ./scripts/build_okf_bundle.sh --verify-only
 
 if [ -n "$(git status --porcelain)" ]; then
