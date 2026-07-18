@@ -22,6 +22,8 @@ This concept is the stable overview for the subject. Detailed contracts are main
 - [Floret thread runtime integration](floret-thread-runtime.md)
 - [Flower subagent runtime](subagent-runtime.md)
 
+Floret receives current user input through `RunTurnRequest.SupplementalContext` as typed `TurnSupplementalContextItem` values. Redeven supplies only product context such as `attachment_metadata`; Floret owns provider-visible history and continuation state.
+
 # Boundaries
 
 Redeven must consume published Floret releases and must not persist a second copy of Floret-owned conversation, tool, approval, todo, context, projection, or provider state. Tool and execution provenance must come from explicit contracts and results rather than inference.

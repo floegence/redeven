@@ -21,6 +21,8 @@ This concept is the stable overview for the subject. Detailed contracts are main
 - [Flower approval and context state](flower-approval-context.md)
 - [Flower subagent detail presentation](flower-subagent-detail.md)
 
+The focused timeline contract preserves Floret `ThroughOrdinal` and `ListThreadTurns` ordering, maps a valid non-renderable turn to `turn_projection_unavailable`, and records rejected public contracts as `floret.contract.rejected`; the detailed rules live in [Flower timeline ordering](flower-timeline-ordering.md).
+
 # Boundaries
 
 Flower must not reconstruct canonical execution, approval, context, read, or child state from transcript text, audit rows, previews, timestamps, or local heuristics. Full timeline replacement is reserved for explicit resynchronization, snapshot recovery, and terminal settlement finalization.
