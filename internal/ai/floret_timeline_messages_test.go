@@ -209,6 +209,53 @@ func TestUnmatchedLiveDraftTriggersResyncInsteadOfTailAppend(t *testing.T) {
 	}
 }
 
+func TestTerminalCanonicalTurnDropsStaleLiveDraftBeforeRendering(t *testing.T) {
+	ctx := context.Background()
+	svc := newTestService(t, nil)
+	meta := timelineTestMeta("env_timeline_terminal_draft")
+	thread, err := svc.CreateThread(ctx, meta, "terminal draft", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := newTestFloretHost(t, svc.floretStore, "canonical terminal")
+	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
+		ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_terminal", RunID: "run_terminal", Input: "hello",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	state := FlowerLiveMaterializedState{Messages: map[string]FlowerLiveMessageDraft{
+		"turn_terminal": {
+			ThreadID:  thread.ThreadID,
+			TurnID:    "turn_terminal",
+			RunID:     "run_terminal",
+			MessageID: "turn_terminal",
+			Role:      "assistant",
+			Status:    "streaming",
+		},
+	}}
+	threadKey := runThreadKey(meta.EndpointID, thread.ThreadID)
+	svc.mu.Lock()
+	stream := newFlowerLiveThreadStream()
+	stream.State.Messages["turn_terminal"] = state.Messages["turn_terminal"]
+	svc.flowerLiveByThread[threadKey] = stream
+	svc.mu.Unlock()
+
+	projection, err := svc.buildFlowerTimelineProjection(ctx, meta.EndpointID, thread.ThreadID, state)
+	if err != nil {
+		t.Fatalf("buildFlowerTimelineProjection: %v", err)
+	}
+	if len(projection.Messages) != 2 || projection.Messages[1].MessageID != "turn_terminal" || projection.Messages[1].Content != "canonical terminal" {
+		t.Fatalf("projection messages=%#v, want canonical terminal replacement", projection.Messages)
+	}
+	svc.mu.Lock()
+	_, stillLive := svc.flowerLiveByThread[threadKey].State.Messages["turn_terminal"]
+	svc.mu.Unlock()
+	if stillLive {
+		t.Fatal("terminal canonical turn retained stale live draft")
+	}
+}
+
 type timelineMessageRecord struct {
 	ID      string `json:"id"`
 	Role    string `json:"role"`

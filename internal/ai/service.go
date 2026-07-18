@@ -1582,9 +1582,6 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 	effectiveCurrentInput.MessageID = prepared.messageID
 	effectiveCurrentInput.MessageCreatedAtUnixMs = preparedUser.CreatedAtUnixMs
 	s.scheduleAutoThreadTitle(meta, threadID, effectiveCurrentInput)
-	prepared.r.ensureAssistantMessageStarted()
-	prepared.r.updateModelIOStatus(FlowerModelIOPhasePreparing, 0)
-
 	go func() {
 		if err := s.executePreparedRun(context.Background(), prepared); err != nil {
 			if s.log != nil {
@@ -1768,6 +1765,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		},
 		Writer: w,
 	})
+	r.awaitFloretAdmission.Store(true)
 	r.subagentRuntime = s.ensureThreadSubagentRuntimeLocked(thKey, r)
 	s.activeRunByTh[thKey] = runID
 	s.runs[runID] = r

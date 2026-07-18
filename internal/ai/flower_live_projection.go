@@ -456,15 +456,30 @@ func (s *Service) buildFlowerTimelineProjection(ctx context.Context, endpointID 
 		}
 	}
 	activeMessageID := activeFlowerCursorMessageID(state)
+	terminalDraftIDs := make([]string, 0)
 	for key, draft := range state.Messages {
 		messageID := strings.TrimSpace(key)
 		ref, ok := canonicalTurns[messageID]
 		if !ok || strings.TrimSpace(draft.MessageID) != messageID || strings.TrimSpace(draft.ThreadID) != threadID ||
-			strings.TrimSpace(draft.TurnID) != messageID || strings.TrimSpace(draft.RunID) == "" || strings.TrimSpace(draft.RunID) != ref.runID ||
-			ref.status == flruntime.TurnStatusCompleted || ref.status == flruntime.TurnStatusFailed || ref.status == flruntime.TurnStatusCancelled {
+			strings.TrimSpace(draft.TurnID) != messageID || strings.TrimSpace(draft.RunID) == "" || strings.TrimSpace(draft.RunID) != ref.runID {
 			reason := "live_draft_canonical_identity_mismatch"
 			s.triggerFlowerLiveTimelineResync(endpointID, threadID, reason)
 			return flowerTimelineProjection{}, fmt.Errorf("flower live timeline resync required: %s", reason)
+		}
+		if ref.status == flruntime.TurnStatusCompleted || ref.status == flruntime.TurnStatusFailed || ref.status == flruntime.TurnStatusCancelled {
+			terminalDraftIDs = append(terminalDraftIDs, messageID)
+		}
+	}
+	if len(terminalDraftIDs) > 0 {
+		s.mu.Lock()
+		if stream := s.flowerLiveByThread[runThreadKey(endpointID, threadID)]; stream != nil {
+			for _, messageID := range terminalDraftIDs {
+				delete(stream.State.Messages, messageID)
+			}
+		}
+		s.mu.Unlock()
+		for _, messageID := range terminalDraftIDs {
+			delete(state.Messages, messageID)
 		}
 	}
 	usedDrafts := make(map[string]struct{}, len(state.Messages))

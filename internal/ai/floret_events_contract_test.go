@@ -41,3 +41,56 @@ func TestValidateFloretRuntimeEventRequiresConfiguredProductAssociation(t *testi
 		t.Fatalf("validate standalone compaction association: %v", err)
 	}
 }
+
+func TestFloretEventSinkStartsLiveDraftAfterCanonicalIdentityValidation(t *testing.T) {
+	t.Parallel()
+
+	var events []any
+	r := newRun(runOptions{
+		RunID:     "run-live-admission",
+		ThreadID:  "thread-live-admission",
+		MessageID: "turn-live-admission",
+		OnStreamEvent: func(event any) {
+			events = append(events, event)
+		},
+	})
+	r.expectFloretRuntimeEventIdentity("run-live-admission", "thread-live-admission", "turn-live-admission", true)
+
+	floretEventSink{run: r}.EmitEvent(flruntime.Event{
+		Type:     observation.EventTypeThreadEntryCommitted,
+		RunID:    "run-live-admission",
+		ThreadID: "thread-live-admission",
+		TurnID:   "turn-live-admission",
+		Committed: &flruntime.ThreadDetailEvent{
+			ID:       "entry-live-admission",
+			ThreadID: "thread-live-admission",
+			TurnID:   "turn-live-admission",
+			RunID:    "run-live-admission",
+			Kind:     flruntime.ThreadDetailEventUserMessage,
+		},
+	})
+	if len(events) != 2 {
+		t.Fatalf("validated event emitted %d live-start events, want 2", len(events))
+	}
+
+	var rejectedEvents []any
+	rejected := newRun(runOptions{
+		RunID:     "run-live-admission",
+		ThreadID:  "thread-live-admission",
+		MessageID: "turn-live-admission",
+		OnStreamEvent: func(event any) {
+			rejectedEvents = append(rejectedEvents, event)
+		},
+	})
+	rejected.expectFloretRuntimeEventIdentity("run-live-admission", "thread-live-admission", "turn-live-admission", true)
+	floretEventSink{run: rejected}.EmitEvent(flruntime.Event{
+		Type:     observation.EventTypeStepStart,
+		RunID:    "other-run",
+		ThreadID: "thread-live-admission",
+		TurnID:   "turn-live-admission",
+		Step:     1,
+	})
+	if len(rejectedEvents) != 0 {
+		t.Fatalf("mismatched event created live draft events: %#v", rejectedEvents)
+	}
+}

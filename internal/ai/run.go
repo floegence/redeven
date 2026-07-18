@@ -116,20 +116,22 @@ type run struct {
 	doneCh         chan struct{}
 	doneOnce       sync.Once
 
-	muCancel         sync.Mutex
-	cancelReason     string // "canceled"|"timed_out"|""
-	endReason        string // "complete"|"canceled"|"timed_out"|"disconnected"|"error"
-	runErrorCode     string
-	cancelRequested  bool
-	cancelFn         context.CancelFunc
-	detached         atomic.Bool // hard-canceled: stop emitting realtime events and skip thread state updates
-	busyCount        atomic.Int32
-	runtimeToolCalls atomic.Int64
-	runtimeTokens    atomic.Int64
-	uploadsDir       string
-	threadsDB        *threadstore.Store
-	floretStore      *flruntime.Store
-	persistOpTimeout time.Duration
+	muCancel             sync.Mutex
+	cancelReason         string // "canceled"|"timed_out"|""
+	endReason            string // "complete"|"canceled"|"timed_out"|"disconnected"|"error"
+	runErrorCode         string
+	cancelRequested      bool
+	cancelFn             context.CancelFunc
+	detached             atomic.Bool // hard-canceled: stop emitting realtime events and skip thread state updates
+	awaitFloretAdmission atomic.Bool
+	floretAdmitted       atomic.Bool
+	busyCount            atomic.Int32
+	runtimeToolCalls     atomic.Int64
+	runtimeTokens        atomic.Int64
+	uploadsDir           string
+	threadsDB            *threadstore.Store
+	floretStore          *flruntime.Store
+	persistOpTimeout     time.Duration
 
 	onStreamEvent func(any)
 	w             http.ResponseWriter
@@ -722,7 +724,10 @@ func (r *run) isDetached() bool {
 }
 
 func (r *run) acceptsPresentationUpdates() bool {
-	return r != nil && !r.isDetached()
+	if r == nil || r.isDetached() {
+		return false
+	}
+	return !r.awaitFloretAdmission.Load() || r.floretAdmitted.Load()
 }
 
 func (r *run) acceptsEngineResultProjection() bool {
@@ -735,7 +740,7 @@ func (r *run) sendStreamEvent(ev any) {
 	}
 
 	r.touchActivity()
-	if r.detached.Load() {
+	if !r.acceptsPresentationUpdates() {
 		return
 	}
 	if r.onStreamEvent != nil {
