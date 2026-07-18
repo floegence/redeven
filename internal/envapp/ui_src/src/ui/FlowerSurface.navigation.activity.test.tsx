@@ -93,7 +93,6 @@ function parentThreadWithRunningSubagent(childStatus = 'running'): FlowerThreadS
                 agent_type: 'reviewer',
                 items: [{
                   thread_id: 'thread-child-review',
-                  subagent_id: 'thread-child-review',
                   task_name: 'Review API contract',
                   task_description: 'Review the API boundary.',
                   agent_type: 'reviewer',
@@ -159,12 +158,12 @@ describe('FlowerSurface navigation activity', () => {
       thread_id: 'thread-subagent-keyboard',
       title: 'Keyboard subagents',
       subagents: [
-        subagentSummary({ subagent_id: 'child-completed', thread_id: 'child-completed', task_name: 'Completed Review', title: 'Completed Review', status: 'completed', updated_at_ms: 600 }),
-        subagentSummary({ subagent_id: 'child-running', thread_id: 'child-running', task_name: 'Running Review', title: 'Running Review', status: 'running', updated_at_ms: 100 }),
-        subagentSummary({ subagent_id: 'child-queued', thread_id: 'child-queued', task_name: 'Queued Review', title: 'Queued Review', status: 'queued', updated_at_ms: 900 }),
-        subagentSummary({ subagent_id: 'child-failed', thread_id: 'child-failed', task_name: 'Failed Review', title: 'Failed Review', status: 'failed', updated_at_ms: 200 }),
-        subagentSummary({ subagent_id: 'child-waiting', thread_id: 'child-waiting', task_name: 'Waiting Review', title: 'Waiting Review', status: 'waiting_input', updated_at_ms: 300 }),
-        subagentSummary({ subagent_id: 'child-canceled', thread_id: 'child-canceled', task_name: 'Canceled Review', title: 'Canceled Review', status: 'canceled', updated_at_ms: 1000 }),
+        subagentSummary({ thread_id: 'child-completed', task_name: 'Completed Review', status: 'completed', updated_at_ms: 600 }),
+        subagentSummary({ thread_id: 'child-running', task_name: 'Running Review', status: 'running', updated_at_ms: 100 }),
+        subagentSummary({ thread_id: 'child-queued', task_name: 'Queued Review', status: 'queued', updated_at_ms: 900 }),
+        subagentSummary({ thread_id: 'child-failed', task_name: 'Failed Review', status: 'failed', updated_at_ms: 200 }),
+        subagentSummary({ thread_id: 'child-waiting', task_name: 'Waiting Review', status: 'waiting_input', updated_at_ms: 300 }),
+        subagentSummary({ thread_id: 'child-canceled', task_name: 'Canceled Review', status: 'canceled', updated_at_ms: 1000 }),
       ],
     });
     const loadSubagentDetail = vi.fn(async () => subagentDetail());
@@ -444,26 +443,20 @@ describe('FlowerSurface navigation activity', () => {
           can_interrupt: false,
         }),
         subagentSummary({
-          subagent_id: 'thread-child-implementation',
           thread_id: 'thread-child-implementation',
           task_name: 'Review implementation',
-          title: 'Review implementation',
           status: 'completed',
           can_interrupt: false,
         }),
         subagentSummary({
-          subagent_id: 'thread-child-tests',
           thread_id: 'thread-child-tests',
           task_name: 'Review tests',
-          title: 'Review tests',
           status: 'completed',
           can_interrupt: false,
         }),
         subagentSummary({
-          subagent_id: 'thread-child-docs',
           thread_id: 'thread-child-docs',
           task_name: 'Review docs',
-          title: 'Review docs',
           status: 'completed',
           can_interrupt: false,
         }),
@@ -924,7 +917,6 @@ describe('FlowerSurface navigation activity', () => {
                   agent_type: 'reviewer',
                   items: [{
                     thread_id: 'thread-child-review',
-                    subagent_id: 'thread-child-review',
                     task_name: 'Review API contract',
                     task_description: 'Review the API boundary.',
                     agent_type: 'reviewer',
@@ -1875,7 +1867,6 @@ describe('FlowerSurface navigation activity', () => {
                     agent_count: 1,
                     items: [{
                       thread_id: 'thread-child-hidden',
-                      subagent_id: 'thread-child-hidden',
                       task_name: 'Review API contract',
                       task_description: 'Review the public API boundary.',
                       agent_type: 'reviewer',
@@ -1903,7 +1894,6 @@ describe('FlowerSurface navigation activity', () => {
       ],
       subagents: [subagentSummary({
         parent_thread_id: 'thread-subagent-details',
-        subagent_id: 'thread-child-hidden',
         thread_id: 'thread-child-hidden',
         status: 'completed',
         task_description: 'Review the public API boundary.',
@@ -2075,7 +2065,6 @@ describe('FlowerSurface navigation activity', () => {
         parent_thread_id: 'thread-delegated-approval',
         parent_run_id: 'run-parent-delegated',
         parent_turn_id: 'm-delegated-approval',
-        subagent_id: 'thread-child-review',
         child_thread_id: 'thread-child-review',
         child_run_id: 'run-child-review',
         child_tool_call_id: 'tool-child-shell',

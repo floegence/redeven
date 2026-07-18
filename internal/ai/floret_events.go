@@ -21,6 +21,8 @@ const (
 	floretEventToolApprovalRejected  = observation.EventTypeToolApprovalRejected
 	floretEventToolApprovalTimedOut  = observation.EventTypeToolApprovalTimedOut
 	floretEventToolApprovalCanceled  = observation.EventTypeToolApprovalCanceled
+	floretEventThreadTitleUpdated    = observation.EventTypeThreadTitleUpdated
+	floretEventThreadTitleFailed     = observation.EventTypeThreadTitleFailed
 )
 
 type floretEventSink struct {
@@ -40,6 +42,15 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	if r.awaitFloretAdmission.Load() && canonicalUserEntry {
 		r.floretAdmitted.Store(true)
 	}
+	if canonicalUserEntry {
+		if err := r.commitPendingTurnCommandAdmission(false); err != nil {
+			r.rejectFloretContract("turn_admission", err)
+			return
+		}
+	}
+	if ev.Type == floretEventThreadTitleUpdated && r.service != nil {
+		r.service.broadcastThreadSummary(r.endpointID, r.threadID)
+	}
 	// The validated canonical user entry is the admission boundary for live
 	// assistant state. A draft created after it can be rendered against the
 	// canonical timeline without guessing its place.
@@ -48,9 +59,6 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	}
 	if canonicalUserEntry {
 		r.ensureAssistantMessageStarted()
-	}
-	if ev.Type == observation.EventTypeThreadEntryCommitted && ev.Committed != nil && ev.Committed.Kind == flruntime.ThreadDetailEventUserMessage {
-		r.commitPendingTurnCommandAdmission(false)
 	}
 	r.applyFloretStreamObservation(ev.Stream)
 	r.applyFloretSourceObservation(ev.Sources)
@@ -110,10 +118,20 @@ func (r *run) validateFloretRuntimeEvent(ev flruntime.Event) error {
 	}
 	identity := r.floretEventIdentity
 	if identity.configured {
-		if strings.TrimSpace(string(ev.ThreadID)) != identity.threadID || strings.TrimSpace(string(ev.TurnID)) != identity.turnID {
+		eventThreadID := strings.TrimSpace(string(ev.ThreadID))
+		eventTurnID := strings.TrimSpace(string(ev.TurnID))
+		eventRunID := strings.TrimSpace(string(ev.RunID))
+		if eventThreadID != identity.threadID {
 			return errors.New("Floret event thread or turn identity mismatch")
 		}
-		if identity.checkRunID && strings.TrimSpace(string(ev.RunID)) != identity.runID {
+		isTitleEvent := ev.Type == floretEventThreadTitleUpdated || ev.Type == floretEventThreadTitleFailed
+		if isTitleEvent {
+			if eventRunID != "" || (eventTurnID != "" && eventTurnID != identity.turnID) {
+				return errors.New("Floret title event identity mismatch")
+			}
+		} else if eventTurnID != identity.turnID {
+			return errors.New("Floret event thread or turn identity mismatch")
+		} else if identity.checkRunID && eventRunID != identity.runID {
 			return errors.New("Floret event run identity mismatch")
 		}
 	}

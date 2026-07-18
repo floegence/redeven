@@ -127,10 +127,9 @@ func newFloretProviderAdapterRunTest(t *testing.T, provider ModelGateway) (*flor
 		t.Fatalf("threadstore.Open: %v", err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	if err := store.CreateThread(context.Background(), threadstore.Thread{
+	if err := store.CreateThread(context.Background(), threadstore.ThreadSettings{
 		EndpointID: "env_floret_reasoning",
 		ThreadID:   "thread_floret_reasoning",
-		Title:      "Floret reasoning",
 	}); err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
@@ -607,7 +606,8 @@ func TestFloretProviderAdapter_ProjectsThinkingWithoutVisibleTextPollution(t *te
 func TestFloretMessagesToFlowerRejectsUnsupportedRole(t *testing.T) {
 	t.Parallel()
 
-	_, err := floretMessagesToFlower([]flruntime.ModelMessage{{Role: "developer", Text: "unsupported"}})
+	adapter := &floretProviderAdapter{}
+	_, err := adapter.floretMessagesToFlower(context.Background(), []flruntime.ModelMessage{{Role: "developer", Text: "unsupported"}})
 	if err == nil || !strings.Contains(err.Error(), "unsupported model message role") {
 		t.Fatalf("error=%v, want unsupported role rejection", err)
 	}
@@ -616,7 +616,8 @@ func TestFloretMessagesToFlowerRejectsUnsupportedRole(t *testing.T) {
 func TestFloretMessagesToFlowerMapsGroupedAssistantToolCallsDirectly(t *testing.T) {
 	t.Parallel()
 
-	got, err := floretMessagesToFlower([]flruntime.ModelMessage{
+	adapter := &floretProviderAdapter{}
+	got, err := adapter.floretMessagesToFlower(context.Background(), []flruntime.ModelMessage{
 		{Role: flruntime.ModelMessageRoleUser, Text: "inspect and edit"},
 		{
 			Role:      flruntime.ModelMessageRoleAssistant,
@@ -664,7 +665,8 @@ func TestFloretMessagesToFlowerMapsGroupedAssistantToolCallsDirectly(t *testing.
 func TestFloretMessagesToFlowerKeepsProviderSafeControlTextOpaque(t *testing.T) {
 	t.Parallel()
 
-	got, err := floretMessagesToFlower([]flruntime.ModelMessage{
+	adapter := &floretProviderAdapter{}
+	got, err := adapter.floretMessagesToFlower(context.Background(), []flruntime.ModelMessage{
 		{Role: flruntime.ModelMessageRoleUser, Text: "ask a structured question"},
 		{Role: flruntime.ModelMessageRoleAssistant, Text: `Host processed control signal "ask_user".`},
 	})
@@ -693,7 +695,8 @@ func TestFloretMessagesToFlowerKeepsProviderSafeControlTextOpaque(t *testing.T) 
 func TestFloretMessagesToFlowerRejectsInvalidToolArgs(t *testing.T) {
 	t.Parallel()
 
-	_, err := floretMessagesToFlower([]flruntime.ModelMessage{{
+	adapter := &floretProviderAdapter{}
+	_, err := adapter.floretMessagesToFlower(context.Background(), []flruntime.ModelMessage{{
 		Role: flruntime.ModelMessageRoleAssistant,
 		ToolCalls: []fltools.ToolCall{{
 			ID:   "call-1",

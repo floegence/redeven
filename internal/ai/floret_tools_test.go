@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/floegence/floret/observation"
 	fltools "github.com/floegence/floret/tools"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
@@ -1158,14 +1160,12 @@ func TestFloretToolResultActivityProjectsPublicSubagentDisplayPayload(t *testing
 
 	r := newRun(runOptions{})
 	normalized, truncated := normalizeTruncatedToolPayload("subagents", map[string]any{
-		"action":      "close",
-		"status":      "ok",
-		"target":      "subagent-1",
-		"subagent_id": "subagent-1",
-		"thread_id":   "subagent-1",
-		"closed":      true,
+		"action":    "close",
+		"status":    "ok",
+		"target":    "subagent-1",
+		"thread_id": "subagent-1",
+		"closed":    true,
 		"items": []any{map[string]any{
-			"subagent_id":      "subagent-1",
 			"thread_id":        "subagent-1",
 			"task_name":        "Review prompt contract",
 			"task_description": "Review whether the prompt contract is user-facing and concise.",
@@ -1519,6 +1519,7 @@ func TestFloretToolRegistryKeepsTerminalExecOnLocalRuntime(t *testing.T) {
 		ToolTargetPolicy:   ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget, DefaultTargetID: "provider:https%3A%2F%2Fredeven.test:env:target_1"},
 		TargetToolExecutor: executor,
 	})
+	allowToolsForTest(t, r, "terminal.exec")
 	owner := &terminalProcessTestOwner{}
 	r.setPendingToolSettlementOwnerResolver(func() floretPendingToolSettler { return owner })
 	registry, err := buildFloretToolRegistry(r, []ToolDef{{
@@ -1568,6 +1569,7 @@ func TestFloretToolRegistryPublishesTerminalProcessActivityUpdateBeforeYieldResu
 		MessageID:    "turn_terminal_activity",
 		Service:      &Service{terminalProcesses: manager},
 	})
+	allowToolsForTest(t, r, "terminal.exec")
 	owner := &terminalProcessTestOwner{}
 	r.setPendingToolSettlementOwnerResolver(func() floretPendingToolSettler { return owner })
 	registry, err := buildFloretToolRegistry(r, []ToolDef{{
@@ -1630,6 +1632,7 @@ func TestFloretToolRegistryDoesNotAddProfileOnlyMutationBlock(t *testing.T) {
 		AgentHomeDir: t.TempDir(),
 		SessionMeta:  &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
 	})
+	allowToolsForTest(t, r, "file.write")
 	registry, err := buildFloretToolRegistry(r, []ToolDef{{
 		Name: "file.write",
 		InputSchema: json.RawMessage(
@@ -1704,6 +1707,7 @@ func TestFloretToolRegistryAllowsWorkerSubagentMutatingTools(t *testing.T) {
 		ToolTargetPolicy:   ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget, DefaultTargetID: "provider:https%3A%2F%2Fredeven.test:env:target_1"},
 		TargetToolExecutor: executor,
 	})
+	allowToolsForTest(t, r, "file.write")
 	registry, err := buildFloretToolRegistry(r, []ToolDef{{
 		Name: "file.write",
 		InputSchema: json.RawMessage(
@@ -1777,10 +1781,14 @@ func TestFloretToolRegistryUsesExplicitChildHostIdentityForSubagentTools(t *test
 	t.Parallel()
 
 	ctx := context.Background()
-	childRunID := "child_run_identity"
 
 	manager := newTerminalProcessManager()
 	defer func() { _ = manager.Close(context.Background()) }()
+	store, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))
+	if err != nil {
+		t.Fatalf("threadstore.Open: %v", err)
+	}
+	defer func() { _ = store.Close() }()
 	r := newRun(runOptions{
 		Log:              slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
 		RunID:            "run_parent",
@@ -1789,10 +1797,20 @@ func TestFloretToolRegistryUsesExplicitChildHostIdentityForSubagentTools(t *test
 		MessageID:        "msg_parent",
 		AgentHomeDir:     t.TempDir(),
 		Shell:            "bash",
-		Service:          &Service{terminalProcesses: manager},
+		Service:          &Service{terminalProcesses: manager, threadsDB: store},
+		ThreadsDB:        store,
 		SessionMeta:      &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
 		PersistOpTimeout: 5 * time.Second,
 	})
+	r.permissionType = FlowerPermissionFullAccess
+	r.subagentDepth = 1
+	r.noUserInteraction = true
+	if err := store.CreateThread(ctx, threadstore.ThreadSettings{EndpointID: r.endpointID, ThreadID: r.threadID, PermissionType: config.AIPermissionFullAccess}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	freezePermissionPolicyTestSnapshot(t, r)
+	childRunID := permissionPolicyTestChildRunID("thread_child")
+	insertPermissionPolicyChildSnapshot(t, r, "thread_child", "terminal.exec")
 	owner := &terminalProcessTestOwner{}
 	r.setPendingToolSettlementOwnerResolver(func() floretPendingToolSettler { return owner })
 	registry, err := buildFloretToolRegistry(r, []ToolDef{{
@@ -1819,7 +1837,6 @@ func TestFloretToolRegistryUsesExplicitChildHostIdentityForSubagentTools(t *test
 		HostContext: map[string]string{
 			subagentToolHostContextAgentTypeKey:        subagentAgentTypeWorker,
 			subagentToolHostContextChildThreadIDKey:    "thread_child",
-			subagentToolHostContextSubagentIDKey:       "thread_child",
 			subagentToolHostContextChildRunIDKey:       childRunID,
 			subagentToolHostContextParentPermissionKey: permissionTypeString(FlowerPermissionFullAccess),
 		},
@@ -1886,7 +1903,6 @@ func TestFloretToolRegistryDeniesNoUserInteractionApprovalWithoutDelegation(t *t
 		HostContext: map[string]string{
 			subagentToolHostContextAgentTypeKey:        subagentAgentTypeWorker,
 			subagentToolHostContextChildThreadIDKey:    "thread_worker",
-			subagentToolHostContextSubagentIDKey:       "thread_worker",
 			subagentToolHostContextChildRunIDKey:       "child_run_no_grant",
 			subagentToolHostContextParentPermissionKey: permissionTypeString(FlowerPermissionApprovalRequired),
 		},

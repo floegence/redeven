@@ -267,6 +267,7 @@ This content should appear in overlay.`
 	r.skillManager = newSkillManager(workspace, workspace)
 	r.skillManager.userHome = workspace
 	r.skillManager.Discover()
+	allowToolsForTest(t, r, "use_skill")
 	if _, _, err := r.activateSkill(skillName); err != nil {
 		t.Fatalf("activate skill: %v", err)
 	}
@@ -380,6 +381,25 @@ func prepareSubagentPermissionSnapshot(t *testing.T, r *run) {
 		t.Cleanup(func() { _ = store.Close() })
 		r.floretStore = store
 	}
+	if r.service == nil {
+		r.service = &Service{}
+	}
+	r.service.threadsDB = r.threadsDB
+	r.service.floretStore = r.floretStore
+	r.service.persistOpTO = time.Second
+	settings, err := r.threadsDB.GetThread(context.Background(), r.endpointID, r.threadID)
+	if err != nil {
+		t.Fatalf("GetThread: %v", err)
+	}
+	if settings == nil {
+		if err := r.threadsDB.CreateThread(context.Background(), threadstore.ThreadSettings{
+			EndpointID:     r.endpointID,
+			ThreadID:       r.threadID,
+			PermissionType: permissionTypeString(r.permissionType),
+		}); err != nil {
+			t.Fatalf("CreateThread: %v", err)
+		}
+	}
 	if resolved, err := r.resolveSubagentRunModel(context.Background()); err == nil {
 		webSearchCapability := resolveProviderWebSearchCapability(resolved.RunModel.Provider, strings.TrimSpace(resolved.ModelName))
 		if enableFlowerWebSearchTool(resolved.RunModel.Provider, webSearchCapability) {
@@ -396,7 +416,10 @@ func prepareSubagentPermissionSnapshot(t *testing.T, r *run) {
 	permissionFilter = r.withToolAllowlistFilter(permissionFilter)
 	activeTools := permissionFilter.FilterTools(r.permissionType, registry.Snapshot())
 	activeSignals := permissionFilter.FilterTools(r.permissionType, builtInControlSignalDefinitions())
-	snapshot := r.freezePermissionSnapshot(buildPermissionSnapshot(r.permissionType, activeTools, activeSignals))
+	snapshot, err := r.freezePermissionSnapshot(buildPermissionSnapshot(r.permissionType, activeTools, activeSignals))
+	if err != nil {
+		t.Fatalf("freezePermissionSnapshot: %v", err)
+	}
 	if err := validatePermissionSnapshotConsistency(snapshot); err != nil {
 		t.Fatalf("invalid parent permission snapshot: %v", err)
 	}
@@ -458,21 +481,14 @@ func TestFloretSubagents_DelegateAndWait(t *testing.T) {
 		"task_name":        "Workspace status summary",
 		"task_description": "Summarize current workspace status and cite concrete evidence.",
 		"message":          "Summarize current workspace status and cite concrete evidence.",
-		"objective":        "Summarize current workspace status.",
 		"agent_type":       "explore",
 	})
 	if err != nil {
 		t.Fatalf("manageSubagents(spawn): %v", err)
 	}
-	id := strings.TrimSpace(anyToString(created["subagent_id"]))
+	id := strings.TrimSpace(anyToString(created["thread_id"]))
 	if id == "" {
-		t.Fatalf("missing subagent_id in result: %#v", created)
-	}
-	if strings.TrimSpace(anyToString(created["thread_id"])) != id {
-		t.Fatalf("thread_id must match subagent_id: %#v", created)
-	}
-	if strings.TrimSpace(anyToString(created["title"])) == "" {
-		t.Fatalf("missing title in spawn result: %#v", created)
+		t.Fatalf("missing thread_id in result: %#v", created)
 	}
 	assertNoRecursiveKey(t, created, "path")
 
@@ -514,8 +530,8 @@ func TestFloretSubagents_DelegateAndWait(t *testing.T) {
 	if !strings.Contains(fmt.Sprintf("%v", report["reports"]), "Subagent completed") {
 		t.Fatalf("final_handoff_report missing child handoff: %#v", report)
 	}
-	if strings.TrimSpace(anyToString(entry["title"])) == "" {
-		t.Fatalf("missing title in wait snapshot: %#v", entry)
+	if strings.TrimSpace(anyToString(entry["task_name"])) == "" {
+		t.Fatalf("missing task_name in wait snapshot: %#v", entry)
 	}
 	assertNoSubagentModelDetailFields(t, waited)
 	firstRequest := mock.firstRequest()
@@ -564,7 +580,7 @@ func TestFloretSubagents_DelegateAndWait(t *testing.T) {
 			}
 		}
 	}
-	if len(items) != 1 || strings.TrimSpace(anyToString(items[0]["subagent_id"])) != id {
+	if len(items) != 1 || strings.TrimSpace(anyToString(items[0]["thread_id"])) != id {
 		t.Fatalf("unexpected inspect items payload: %#v", inspected)
 	}
 	assertNoRecursiveKey(t, inspected, "path")
@@ -742,23 +758,21 @@ func TestFloretSubagents_ActivityRefreshDoesNotMutateProductThread(t *testing.T)
 
 	const endpointID = "env_subagent_collision"
 	const parentThreadID = "th_parent_collision"
-	if err := db.CreateThread(context.Background(), threadstore.Thread{
+	if err := db.CreateThread(context.Background(), threadstore.ThreadSettings{
 		ThreadID:          parentThreadID,
 		EndpointID:        endpointID,
 		NamespacePublicID: "ns_test",
 		ModelID:           "openai/gpt-5-mini",
 		PermissionType:    config.AIPermissionApprovalRequired,
-		Title:             "Parent",
 	}); err != nil {
 		t.Fatalf("CreateThread parent: %v", err)
 	}
-	if err := db.CreateThread(context.Background(), threadstore.Thread{
+	if err := db.CreateThread(context.Background(), threadstore.ThreadSettings{
 		ThreadID:          "th_existing_product",
 		EndpointID:        endpointID,
 		NamespacePublicID: "ns_test",
 		ModelID:           "openai/gpt-5-mini",
 		PermissionType:    config.AIPermissionApprovalRequired,
-		Title:             "Existing product thread",
 	}); err != nil {
 		t.Fatalf("CreateThread existing: %v", err)
 	}
@@ -793,7 +807,7 @@ func TestFloretSubagents_ActivityRefreshDoesNotMutateProductThread(t *testing.T)
 	if err != nil {
 		t.Fatalf("GetThread existing: %v", err)
 	}
-	if existing == nil || existing.Title != "Existing product thread" {
+	if existing == nil || existing.ModelID != "openai/gpt-5-mini" {
 		t.Fatalf("existing product thread was overwritten: %#v", existing)
 	}
 	meta, err := db.GetFlowerThreadMetadata(context.Background(), endpointID, "th_existing_product")
@@ -1006,15 +1020,14 @@ func TestFloretSubagents_InheritsWebSearchResolver(t *testing.T) {
 		"task_name":        "Web source summary",
 		"task_description": "Search the web and summarize the results with source URLs.",
 		"message":          "Search the web and summarize the results with source URLs.",
-		"objective":        "Search the web and summarize the results.",
 		"agent_type":       "explore",
 	})
 	if err != nil {
 		t.Fatalf("manageSubagents(spawn): %v", err)
 	}
-	id := strings.TrimSpace(anyToString(created["subagent_id"]))
+	id := strings.TrimSpace(anyToString(created["thread_id"]))
 	if id == "" {
-		t.Fatalf("missing subagent_id in result: %#v", created)
+		t.Fatalf("missing thread_id in result: %#v", created)
 	}
 
 	waited, err := r.manageSubagents(context.Background(), map[string]any{
@@ -1173,14 +1186,14 @@ func subagentItemByID(payload map[string]any, id string) map[string]any {
 	switch typed := itemsRaw.(type) {
 	case []map[string]any:
 		for _, item := range typed {
-			if strings.TrimSpace(anyToString(item["thread_id"])) == id || strings.TrimSpace(anyToString(item["subagent_id"])) == id {
+			if strings.TrimSpace(anyToString(item["thread_id"])) == id {
 				return item
 			}
 		}
 	case []any:
 		for _, raw := range typed {
 			item, _ := raw.(map[string]any)
-			if strings.TrimSpace(anyToString(item["thread_id"])) == id || strings.TrimSpace(anyToString(item["subagent_id"])) == id {
+			if strings.TrimSpace(anyToString(item["thread_id"])) == id {
 				return item
 			}
 		}
@@ -1215,10 +1228,8 @@ func TestSubagentsTool_TrimmedResultHasHardCapAndDetailRefs(t *testing.T) {
 	for i := 0; i < 80; i++ {
 		id := fmt.Sprintf("child-%02d", i)
 		items = append(items, map[string]any{
-			"subagent_id":    id,
 			"thread_id":      id,
 			"status":         subagentStatusRunning,
-			"title":          strings.Repeat("title ", 500),
 			"task_name":      strings.Repeat("task ", 500),
 			"last_message":   strings.Repeat("message ", 2000),
 			"result_digest":  strings.Repeat("digest ", 2000),
@@ -1271,9 +1282,8 @@ func TestSubagentsTool_TrimmedResultProjectsCurrentFields(t *testing.T) {
 		"tool_result": map[string]any{"stdout": "raw child output"},
 		"debug":       map[string]any{"path": "/private/worktree"},
 		"items": []map[string]any{{
-			"subagent_id": "child-1",
-			"thread_id":   "child-1",
-			"status":      subagentStatusRunning,
+			"thread_id": "child-1",
+			"status":    subagentStatusRunning,
 		}},
 	})
 	assertNoRecursiveKey(t, out, "messages")
@@ -1430,7 +1440,7 @@ func TestSubagentsTool_ManageActions(t *testing.T) {
 		t.Fatalf("inspect items payload mismatch: %#v", inspectOut)
 	}
 	item, _ := itemsRaw[0].(map[string]any)
-	if strings.TrimSpace(anyToString(item["subagent_id"])) != "tool_running" {
+	if strings.TrimSpace(anyToString(item["thread_id"])) != "tool_running" {
 		t.Fatalf("inspect item mismatch: %#v", inspectOut)
 	}
 	assertNoRecursiveKey(t, inspectOut, "path")
@@ -1645,8 +1655,8 @@ func (h *fakeCloseAllFloretHost) ReadSubAgentDetail(context.Context, flruntime.R
 	return flruntime.SubAgentDetail{}, nil
 }
 
-func (h *fakeCloseAllFloretHost) ListSubAgentDetailEvents(context.Context, flruntime.ListSubAgentDetailEventsRequest) (flruntime.SubAgentDetailEvents, error) {
-	return flruntime.SubAgentDetailEvents{}, nil
+func (h *fakeCloseAllFloretHost) ListSubAgentDetailEvents(context.Context, flruntime.ListSubAgentDetailEventsRequest) (flruntime.ThreadDetailEvents, error) {
+	return flruntime.ThreadDetailEvents{}, nil
 }
 
 func (h *fakeCloseAllFloretHost) DeleteThread(context.Context, flruntime.ThreadID) error {
@@ -1871,13 +1881,13 @@ func TestSubagentsTool_SpawnRequiresDescriptionMessageAndAgentType(t *testing.T)
 
 	_, err := r.manageSubagents(context.Background(), map[string]any{"action": "spawn", "agent_type": "explore"})
 	if err == nil {
-		t.Fatalf("expected missing task_description to fail")
+		t.Fatalf("expected missing task_name to fail")
 	}
-	if !strings.Contains(err.Error(), "spawn requires task_description") {
+	if !strings.Contains(err.Error(), "spawn requires task_name") {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	_, err = r.manageSubagents(context.Background(), map[string]any{"action": "spawn", "task_description": "Summarize workspace.", "agent_type": "explore"})
+	_, err = r.manageSubagents(context.Background(), map[string]any{"action": "spawn", "task_name": "Workspace Summary", "task_description": "Summarize workspace.", "agent_type": "explore"})
 	if err == nil {
 		t.Fatalf("expected missing message to fail")
 	}
@@ -1885,12 +1895,20 @@ func TestSubagentsTool_SpawnRequiresDescriptionMessageAndAgentType(t *testing.T)
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	_, err = r.manageSubagents(context.Background(), map[string]any{"action": "spawn", "task_description": "Summarize workspace.", "message": "summarize workspace", "agent_type": "invalid"})
+	_, err = r.manageSubagents(context.Background(), map[string]any{"action": "spawn", "task_name": "Workspace Summary", "task_description": "Summarize workspace.", "message": "summarize workspace", "agent_type": "invalid"})
 	if err == nil {
 		t.Fatalf("expected invalid agent_type to fail")
 	}
 	if !strings.Contains(err.Error(), "invalid agent_type") {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	_, err = r.manageSubagents(context.Background(), map[string]any{"action": "spawn", "title": "Legacy", "task_name": "Workspace Summary", "task_description": "Summarize workspace.", "message": "summarize workspace", "agent_type": "explore"})
+	if err == nil || !strings.Contains(err.Error(), "does not accept title") {
+		t.Fatalf("spawn title alias error=%v", err)
+	}
+	_, err = r.manageSubagents(context.Background(), map[string]any{"action": "spawn", "objective": "legacy objective", "task_name": "Workspace Summary", "task_description": "Summarize workspace.", "message": "summarize workspace", "agent_type": "explore"})
+	if err == nil || !strings.Contains(err.Error(), "does not accept objective") {
+		t.Fatalf("spawn objective alias error=%v", err)
 	}
 }
 
@@ -1920,6 +1938,8 @@ Use this handler skill.`, skillName)
 	r.skillManager.userHome = workspace
 	r.skillManager.Discover()
 	meta := &session.Meta{CanRead: true, CanWrite: true, CanExecute: true}
+	r.permissionType = FlowerPermissionFullAccess
+	allowToolsForTest(t, r, "use_skill")
 	out, err := r.execTool(context.Background(), meta, "tool_1", "use_skill", map[string]any{"name": skillName})
 	if err != nil {
 		t.Fatalf("execTool error: %v", err)

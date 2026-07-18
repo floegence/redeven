@@ -22,7 +22,7 @@ This concept is the stable overview for the subject. Detailed contracts are main
 - [Floret thread runtime integration](floret-thread-runtime.md)
 - [Flower subagent runtime](subagent-runtime.md)
 
-Floret receives current user input through `RunTurnRequest.SupplementalContext` as typed `TurnSupplementalContextItem` values. Redeven supplies only product context such as `attachment_metadata`; Floret owns provider-visible history and continuation state.
+Floret receives current-turn product context through `RunTurnRequest.SupplementalContext` as typed `TurnSupplementalContextItem` values. Structured message attachments travel separately through `TurnInput.Attachments`; Floret persists their opaque `ResourceRef` metadata in the canonical user message, while Redeven resolves the referenced upload bytes only in its provider adapter. Floret owns provider-visible history and continuation state.
 
 # Boundaries
 

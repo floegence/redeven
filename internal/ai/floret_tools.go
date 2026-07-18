@@ -26,7 +26,6 @@ const (
 	subagentToolHostContextChildRunIDKey       = "child_run_id"
 	subagentToolHostContextChildThreadIDKey    = "child_thread_id"
 	subagentToolHostContextParentPermissionKey = "subagent_parent_permission"
-	subagentToolHostContextSubagentIDKey       = "subagent_id"
 )
 
 func newFloretToolRuntimeState(state runtimeState) *floretToolRuntimeState {
@@ -133,9 +132,6 @@ func floretApprovalRunContext(base *run, req fltools.ApprovalRequest) (*run, err
 	}
 	threadID := strings.TrimSpace(req.HostContext[subagentToolHostContextChildThreadIDKey])
 	if threadID == "" {
-		threadID = strings.TrimSpace(req.HostContext[subagentToolHostContextSubagentIDKey])
-	}
-	if threadID == "" {
 		return floretRunContextForIDs(base, req.RunID, req.ThreadID, req.TurnID, req.HostContext)
 	}
 	runID := strings.TrimSpace(req.HostContext[subagentToolHostContextChildRunIDKey])
@@ -153,9 +149,6 @@ func floretRunContextForIDs(base *run, rawRunID string, rawThreadID string, rawT
 	settlementThreadID := threadID
 	settlementTurnID := turnID
 	childThreadID := strings.TrimSpace(hostContext[subagentToolHostContextChildThreadIDKey])
-	if childThreadID == "" {
-		childThreadID = strings.TrimSpace(hostContext[subagentToolHostContextSubagentIDKey])
-	}
 	childRunID := strings.TrimSpace(hostContext[subagentToolHostContextChildRunIDKey])
 	if childThreadID == "" && childRunID == "" {
 		if err := requireFloretRunIdentity("parent tool invocation", runID, threadID, turnID, strings.TrimSpace(base.id), strings.TrimSpace(base.threadID), strings.TrimSpace(base.messageID)); err != nil {
@@ -234,7 +227,9 @@ func floretRunContextForIDs(base *run, rawRunID string, rawThreadID string, rawT
 		child.permissionType = normalized
 	}
 	child.currentModelID = base.currentModelID
-	child.bindStoredChildPermissionSnapshot(threadID, runID)
+	if err := child.bindStoredChildPermissionSnapshot(threadID, runID); err != nil {
+		return nil, err
+	}
 	return child, nil
 }
 
@@ -264,62 +259,38 @@ func floretIdentityMismatchError(label string, field string, got string, want st
 	return fmt.Errorf("floret %s %s identity mismatch: got %q, want %q", label, field, got, want)
 }
 
-func (r *run) bindStoredChildPermissionSnapshot(childThreadID string, childRunID string) {
+func (r *run) bindStoredChildPermissionSnapshot(childThreadID string, childRunID string) error {
 	if r == nil || r.subagentDepth <= 0 || !r.noUserInteraction {
-		return
+		return nil
 	}
 	childThreadID = strings.TrimSpace(childThreadID)
 	childRunID = strings.TrimSpace(childRunID)
 	if childThreadID == "" || childRunID == "" {
-		r.permissionSnapshot = denyAllChildPermissionSnapshot(r.permissionType)
-		r.toolAllowlist = map[string]struct{}{}
-		return
+		return errors.New("child permission snapshot identity is incomplete")
 	}
 	if r.threadsDB == nil {
-		r.permissionSnapshot = denyAllChildPermissionSnapshot(r.permissionType)
-		r.toolAllowlist = map[string]struct{}{}
-		return
+		return errors.New("child permission snapshot store is unavailable")
 	}
 	ctx, cancel := persistContextForRun(r)
 	rec, ok, err := r.threadsDB.GetFinalizedChildPermissionSnapshot(ctx, strings.TrimSpace(r.endpointID), childThreadID, childRunID)
 	cancel()
-	if err != nil || !ok {
-		r.permissionSnapshot = denyAllChildPermissionSnapshot(r.permissionType)
-		r.toolAllowlist = map[string]struct{}{}
-		return
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return errors.New("finalized child permission snapshot is missing")
 	}
 	snapshot, err := decodePermissionSnapshot(rec.SnapshotJSON)
 	if err != nil {
-		r.permissionSnapshot = denyAllChildPermissionSnapshot(r.permissionType)
-		r.toolAllowlist = map[string]struct{}{}
-		return
-	}
-	if strings.TrimSpace(snapshot.SnapshotID) == "" {
-		snapshot.SnapshotID = strings.TrimSpace(rec.ChildSnapshotID)
-	}
-	if strings.TrimSpace(snapshot.SnapshotHash) == "" {
-		snapshot.SnapshotHash = strings.TrimSpace(rec.SnapshotHash)
-	}
-	if strings.TrimSpace(snapshot.RegistryHash) == "" {
-		snapshot.RegistryHash = strings.TrimSpace(rec.RegistryHash)
-	}
-	if strings.TrimSpace(snapshot.SchemaHash) == "" {
-		snapshot.SchemaHash = strings.TrimSpace(rec.SchemaHash)
-	}
-	if strings.TrimSpace(snapshot.PresentationHash) == "" {
-		snapshot.PresentationHash = strings.TrimSpace(rec.PresentationHash)
+		return err
 	}
 	if !permissionSnapshotActive(snapshot) {
-		r.permissionSnapshot = denyAllChildPermissionSnapshot(r.permissionType)
-		r.toolAllowlist = map[string]struct{}{}
-		return
+		return errors.New("child permission snapshot is empty")
 	}
 	ctx, cancel = persistContextForRun(r)
 	if err := r.validateStoredChildPermissionSnapshot(ctx, rec, snapshot); err != nil {
 		cancel()
-		r.permissionSnapshot = denyAllChildPermissionSnapshot(r.permissionType)
-		r.toolAllowlist = map[string]struct{}{}
-		return
+		return err
 	}
 	cancel()
 	r.permissionSnapshot = snapshot
@@ -327,6 +298,7 @@ func (r *run) bindStoredChildPermissionSnapshot(childThreadID string, childRunID
 		r.permissionType = snapshot.PermissionType
 	}
 	r.toolAllowlist = stringSet(snapshot.VisibleToolNames...)
+	return nil
 }
 
 func (r *run) validateStoredChildPermissionSnapshot(ctx context.Context, rec threadstore.ChildPermissionSnapshotRecord, snapshot PermissionSnapshot) error {
@@ -433,9 +405,6 @@ func (r *run) validateCurrentChildPermissionSnapshotCompatibility(snapshot Permi
 		return err
 	}
 	registryHash := stableToolRegistryHash(floretTools)
-	if snapshot.Version == permissionSnapshotVersionLegacy {
-		registryHash = stableToolRegistryHashV1(floretTools, snapshot.legacyConcurrency)
-	}
 	if registryHash != strings.TrimSpace(snapshot.RegistryHash) {
 		return errors.New("child permission snapshot registry is incompatible with current tools")
 	}
@@ -474,17 +443,6 @@ func requireToolDefsByName(all []ToolDef, names []string) ([]ToolDef, error) {
 		out = append(out, def)
 	}
 	return out, nil
-}
-
-func denyAllChildPermissionSnapshot(permissionType FlowerPermissionType) PermissionSnapshot {
-	if permissionType == "" {
-		permissionType = FlowerPermissionApprovalRequired
-	}
-	return PermissionSnapshot{
-		SnapshotID:     "missing_child_permission_snapshot",
-		PermissionType: permissionType,
-		ToolPolicies:   map[string]ToolPermissionPolicy{},
-	}
 }
 
 func mapKeys(in map[string]struct{}) []string {

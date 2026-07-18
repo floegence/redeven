@@ -153,7 +153,7 @@ func (s *Service) loadThreadTimelineMessages(ctx context.Context, endpointID str
 			return nil, fmt.Errorf("Floret turn %q has incomplete canonical identity", turnID)
 		}
 		userCreatedAt := turn.StartedAt.UnixMilli()
-		userRaw, err := canonicalUserTimelineMessage(userEntryID, turn.UserInput, userCreatedAt)
+		userRaw, err := canonicalUserTimelineMessage(userEntryID, turn.UserInput, turn.UserAttachments, userCreatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -232,10 +232,32 @@ func canonicalTimelineResyncErrorf(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", ErrCanonicalTimelineResyncRequired, fmt.Sprintf(format, args...))
 }
 
-func canonicalUserTimelineMessage(entryID string, input string, createdAt int64) (json.RawMessage, error) {
+func canonicalUserTimelineMessage(entryID string, input string, attachments []flruntime.MessageAttachment, createdAt int64) (json.RawMessage, error) {
+	blocks := make([]any, 0, len(attachments)+1)
+	for index, attachment := range attachments {
+		uploadID, err := uploadIDFromFloretResourceRef(attachment.ResourceRef)
+		if err != nil {
+			return nil, fmt.Errorf("canonical user attachment %d: %w", index, err)
+		}
+		url := uploadURLPrefix + uploadID
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(attachment.MIMEType)), "image/") {
+			blocks = append(blocks, persistedImageBlock{Type: "image", Src: url, Alt: strings.TrimSpace(attachment.Name)})
+			continue
+		}
+		blocks = append(blocks, persistedFileBlock{
+			Type: "file", Name: strings.TrimSpace(attachment.Name), Size: attachment.SizeBytes,
+			MimeType: strings.TrimSpace(attachment.MIMEType), URL: url,
+		})
+	}
+	if input = strings.TrimSpace(input); input != "" {
+		blocks = append(blocks, persistedMarkdownBlock{Type: "markdown", Content: input})
+	}
+	if len(blocks) == 0 {
+		return nil, errors.New("canonical user message has no content")
+	}
 	message := map[string]any{
 		"id": entryID, "role": "user", "status": "complete", "timestamp": createdAt,
-		"blocks": []map[string]any{{"type": "markdown", "content": input}},
+		"blocks": blocks,
 	}
 	raw, err := json.Marshal(message)
 	return json.RawMessage(raw), err

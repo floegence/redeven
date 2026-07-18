@@ -277,14 +277,12 @@ func TestNormalizeTruncatedToolPayload_PreservesSubagentLifecycleItems(t *testin
 	t.Parallel()
 
 	payload := map[string]any{
-		"status":      "ok",
-		"action":      "close",
-		"target":      "subagent-1",
-		"closed":      true,
-		"subagent_id": "subagent-1",
-		"thread_id":   "subagent-1",
+		"status":    "ok",
+		"action":    "close",
+		"target":    "subagent-1",
+		"closed":    true,
+		"thread_id": "subagent-1",
 		"items": []any{map[string]any{
-			"subagent_id":     "subagent-1",
 			"thread_id":       "subagent-1",
 			"task_name":       "Review prompt contract",
 			"agent_type":      "reviewer",
@@ -323,7 +321,7 @@ func TestNormalizeTruncatedToolPayload_PreservesSubagentLifecycleItems(t *testin
 	if !ok {
 		t.Fatalf("item type=%T, want map", items[0])
 	}
-	for _, field := range []string{"subagent_id", "thread_id", "task_name", "agent_type", "status", "updated_at_ms", "closed", "can_close"} {
+	for _, field := range []string{"thread_id", "task_name", "agent_type", "status", "updated_at_ms", "closed", "can_close"} {
 		if _, ok := item[field]; !ok {
 			t.Fatalf("item missing %s: %#v", field, item)
 		}
@@ -394,6 +392,8 @@ func TestBuiltInToolHandlerExecute_PreservesLargeApplyPatchActivityPayload(t *te
 		WorkingDir:   workingDir,
 		SessionMeta:  &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
 	})
+	r.permissionType = FlowerPermissionFullAccess
+	allowToolsForTest(t, r, "apply_patch")
 	handler := &builtInToolHandler{r: r, toolName: "apply_patch"}
 	result, err := handler.Execute(context.Background(), ToolCall{
 		ID:   "call_patch_large",

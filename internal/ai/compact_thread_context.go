@@ -414,7 +414,7 @@ func (a *threadActor) handleCompactThreadContext(ctx context.Context, meta *sess
 	return CompactThreadContextResponse{RequestID: requestID, Kind: "started"}, nil
 }
 
-func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Meta, th *threadstore.Thread, runID string, manual flruntime.ManualCompactionRequest, anchor FlowerTimelineAnchor) error {
+func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Meta, th *threadstore.ThreadSettings, runID string, manual flruntime.ManualCompactionRequest, anchor FlowerTimelineAnchor) error {
 	if s == nil {
 		return errors.New("nil service")
 	}
@@ -448,9 +448,9 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 	if !cfg.HasModelProfile() && (desktopModelSource == nil || !desktopModelSource.hasBinding()) {
 		return ErrNotConfigured
 	}
-	permissionType, err := normalizePermissionType(threadPermissionTypeString(th), FlowerPermissionApprovalRequired)
+	permissionType, err := threadPermissionType(th)
 	if err != nil {
-		permissionType = FlowerPermissionApprovalRequired
+		return err
 	}
 	runWorkingDir := strings.TrimSpace(th.WorkingDir)
 	if runWorkingDir == "" {
@@ -542,6 +542,8 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 		},
 		TurnBudgets{},
 		"",
+		withFloretAttachmentResolver(r.resolveFloretMessageAttachment, modelCapability.SupportsImageInput, modelCapability.SupportsFileInput),
+		withFloretBeforeRequest(r.floretContractError),
 	)
 	labels := flruntime.RunLabels{
 		Correlation: map[string]string{"thread_id": threadID, "message_id": messageID},
@@ -566,7 +568,7 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 		ModelGatewayIdentity: gatewayIdentity,
 		Store:                store,
 		Sink:                 floretEventSink{run: r},
-		ThreadTitleMode:      flruntime.ThreadTitleModeHostOwned,
+		ThreadTitleMode:      flruntime.ThreadTitleModeProvider,
 		LoopLimits: flruntime.LoopLimits{
 			NoProgressLimit:    2,
 			DuplicateToolLimit: 3,
@@ -607,7 +609,7 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 	return nil
 }
 
-func (s *Service) resolveIdleCompactionModel(ctx context.Context, cfg *config.AIConfig, th *threadstore.Thread, r *run) (string, contextmodel.ModelCapability, config.AIReasoningSelection, config.AIProvider, string, ModelGateway, error) {
+func (s *Service) resolveIdleCompactionModel(ctx context.Context, cfg *config.AIConfig, th *threadstore.ThreadSettings, r *run) (string, contextmodel.ModelCapability, config.AIReasoningSelection, config.AIProvider, string, ModelGateway, error) {
 	if th == nil || r == nil {
 		return "", contextmodel.ModelCapability{}, config.AIReasoningSelection{}, config.AIProvider{}, "", nil, errors.New("invalid request")
 	}

@@ -7,6 +7,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/floegence/redeven/internal/ai/threadstore"
 )
 
 func TestContextActionWireFixturesNormalizeAndMarshalCanonically(t *testing.T) {
@@ -63,6 +65,38 @@ func TestContextActionWireFixturesNormalizeAndMarshalCanonically(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestQueuedTurnRecordRejectsDamagedStoredShapes(t *testing.T) {
+	t.Parallel()
+
+	base := threadstore.QueuedTurn{
+		QueueID: "queue_strict", EndpointID: "env_strict", ThreadID: "thread_strict", ChannelID: "channel_strict",
+		TurnID: "turn_strict", RunID: "run_strict", AttachmentsJSON: "[]", OptionsJSON: "{}", SessionMetaJSON: "{}",
+	}
+	testCases := []struct {
+		name       string
+		record     threadstore.QueuedTurn
+		permission string
+	}{
+		{name: "invalid options", record: func() threadstore.QueuedTurn { record := base; record.OptionsJSON = "{"; return record }(), permission: "approval_required"},
+		{name: "invalid attachments", record: func() threadstore.QueuedTurn { record := base; record.AttachmentsJSON = `[{"url":""}]`; return record }(), permission: "approval_required"},
+		{name: "invalid context action", record: func() threadstore.QueuedTurn { record := base; record.ContextActionJSON = "{"; return record }(), permission: "approval_required"},
+		{name: "invalid permission", record: base, permission: "legacy_permission"},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if _, err := queuedTurnRecordToRunStartRequest(testCase.record, testCase.permission); err == nil {
+				t.Fatal("damaged queued turn was restored with fallback values")
+			}
+		})
+	}
+
+	damagedView := base
+	damagedView.OptionsJSON = "{"
+	if _, err := followupRecordToView(damagedView, 1); err == nil {
+		t.Fatal("damaged queued turn was projected with fallback values")
 	}
 }
 
@@ -236,8 +270,8 @@ func TestQueuedTurnContextActionPersistsThroughStoreRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("floretSupplementalContextForInput: %v", err)
 	}
-	if len(projection.Items) != 2 {
-		t.Fatalf("supplemental context items=%#v, want queued file path plus attachment metadata", projection.Items)
+	if len(projection.Items) != 1 {
+		t.Fatalf("supplemental context items=%#v, want queued file path only", projection.Items)
 	}
 	if got := projection.Items[0].Metadata["path"]; got != "/workspace/app/index.ts" {
 		t.Fatalf("supplemental context path=%q, want queued file path", got)

@@ -278,7 +278,7 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 
 	const (
 		floretModule  = "github.com/floegence/floret"
-		floretVersion = "v0.11.4"
+		floretVersion = "v0.12.0"
 	)
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
@@ -352,11 +352,11 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 	root := repoRootForTest(t)
 	expectedMarkers := map[string][]string{
 		filepath.Join("okf", "ai", "flower-context-action-records.md"): {
-			"SupplementalContext",
+			"RunTurnRequest.SupplementalContext",
 			"metadata-only",
-			"attachment_metadata",
+			"structured Floret attachments",
 			"flower.context_action.injected",
-			"v0.3.89",
+			"v0.12.0",
 		},
 		filepath.Join("okf", "ui", "flower-turn-launcher.md"): {
 			"file_path",
@@ -366,7 +366,8 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 		filepath.Join("okf", "ai", "ai-tool-runtime.md"): {
 			"RunTurnRequest.SupplementalContext",
 			"TurnSupplementalContextItem",
-			"attachment_metadata",
+			"TurnInput.Attachments",
+			"ResourceRef",
 		},
 		filepath.Join("okf", "ui", "flower-live-timeline.md"): {
 			"ThroughOrdinal",
@@ -380,12 +381,12 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"ForkOperationID",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
-			"Floret v0.11.4",
+			"Floret v0.12.0",
 			"single persistent source of truth",
-			"host-owned thread titles",
+			"provider-owned thread titles",
 			"public contracts",
 			"turn_projection_unavailable",
-			"Thread deletion persists an immutable cleanup snapshot",
+			"Thread deletion persists an immutable user-intent and upload cleanup snapshot",
 			"redeven-runtime-v1",
 		},
 	}
@@ -515,8 +516,8 @@ func TestFloretGatewayBoundaryUsesGatewayIdentity(t *testing.T) {
 		if !strings.Contains(content, "ModelGatewayIdentity:") {
 			t.Fatalf("%s must pass Floret ModelGatewayIdentity for gateway-backed hosts", rel)
 		}
-		if !strings.Contains(content, "ThreadTitleMode:") || !strings.Contains(content, "flruntime.ThreadTitleModeHostOwned") {
-			t.Fatalf("%s must declare Redeven ownership of thread titles", rel)
+		if !strings.Contains(content, "ThreadTitleMode:") || !strings.Contains(content, "flruntime.ThreadTitleModeProvider") {
+			t.Fatalf("%s must delegate provider title ownership to Floret", rel)
 		}
 	}
 }

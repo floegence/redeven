@@ -87,13 +87,9 @@ func (s *Store) PrepareThreadDeleteOperation(ctx context.Context, endpointID str
 		return ThreadDeleteOperation{}, sql.ErrNoRows
 	}
 	now := time.Now().UnixMilli()
-	uploads, err := prepareUploadCleanupForThreadTx(ctx, tx, endpointID, threadID, now)
+	uploadIDs, err := listUploadIDsForThreadTx(ctx, tx, endpointID, threadID)
 	if err != nil {
 		return ThreadDeleteOperation{}, err
-	}
-	uploadIDs := make([]string, 0, len(uploads))
-	for _, upload := range uploads {
-		uploadIDs = append(uploadIDs, strings.TrimSpace(upload.UploadID))
 	}
 	snapshot := ThreadDeleteSnapshotV1{
 		SchemaVersion:         ThreadDeleteSnapshotSchemaV1,
@@ -104,23 +100,13 @@ func (s *Store) PrepareThreadDeleteOperation(ctx context.Context, endpointID str
 	if err != nil {
 		return ThreadDeleteOperation{}, err
 	}
-	if err := deleteThreadScopedRowsTx(ctx, tx, endpointID, threadID); err != nil {
-		return ThreadDeleteOperation{}, err
-	}
-	result, err := tx.ExecContext(ctx, `DELETE FROM ai_threads WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID)
-	if err != nil {
-		return ThreadDeleteOperation{}, err
-	}
-	if affected, _ := result.RowsAffected(); affected != 1 {
-		return ThreadDeleteOperation{}, sql.ErrNoRows
-	}
 	operationID := stableThreadDeleteOperationID(endpointID, threadID)
 	if _, err := tx.ExecContext(ctx, `
 INSERT INTO ai_thread_delete_operations(
   operation_id, endpoint_id, thread_id, status, snapshot_schema_version, snapshot_json,
   read_state_required, product_data_deleted_at_unix_ms, created_at_unix_ms, updated_at_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, operationID, endpointID, threadID, ThreadDeleteOperationPending, ThreadDeleteSnapshotSchemaV1, string(snapshotJSON), boolToInt(deleteFlowerReadState), now, now, now); err != nil {
+) VALUES(?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+`, operationID, endpointID, threadID, ThreadDeleteOperationPending, ThreadDeleteSnapshotSchemaV1, string(snapshotJSON), boolToInt(deleteFlowerReadState), now, now); err != nil {
 		return ThreadDeleteOperation{}, err
 	}
 	operation, err := loadThreadDeleteOperationByIDTx(ctx, tx, operationID)
@@ -129,6 +115,68 @@ INSERT INTO ai_thread_delete_operations(
 	}
 	if operation == nil {
 		return ThreadDeleteOperation{}, errors.New("thread delete operation missing after insert")
+	}
+	if err := tx.Commit(); err != nil {
+		return ThreadDeleteOperation{}, err
+	}
+	return *operation, nil
+}
+
+func (s *Store) CommitThreadDeleteProductData(ctx context.Context, operationID string) (ThreadDeleteOperation, error) {
+	if s == nil || s.db == nil {
+		return ThreadDeleteOperation{}, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	operationID = strings.TrimSpace(operationID)
+	if operationID == "" {
+		return ThreadDeleteOperation{}, errors.New("missing operation_id")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return ThreadDeleteOperation{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	operation, err := loadThreadDeleteOperationByIDTx(ctx, tx, operationID)
+	if err != nil {
+		return ThreadDeleteOperation{}, err
+	}
+	if operation == nil {
+		return ThreadDeleteOperation{}, sql.ErrNoRows
+	}
+	if operation.Status != ThreadDeleteOperationPending || operation.FloretDeletedAtUnixMs <= 0 {
+		return ThreadDeleteOperation{}, errors.New("thread delete product commit requires completed Floret deletion")
+	}
+	if operation.ProductDataDeletedAtUnixMs > 0 {
+		if err := tx.Commit(); err != nil {
+			return ThreadDeleteOperation{}, err
+		}
+		return *operation, nil
+	}
+	now := time.Now().UnixMilli()
+	if _, err := prepareUploadCleanupForThreadTx(ctx, tx, operation.EndpointID, operation.ThreadID, now); err != nil {
+		return ThreadDeleteOperation{}, err
+	}
+	if err := deleteThreadScopedRowsTx(ctx, tx, operation.EndpointID, operation.ThreadID); err != nil {
+		return ThreadDeleteOperation{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM ai_thread_settings WHERE endpoint_id = ? AND thread_id = ?`, operation.EndpointID, operation.ThreadID); err != nil {
+		return ThreadDeleteOperation{}, err
+	}
+	if _, err := tx.ExecContext(ctx, `
+UPDATE ai_thread_delete_operations
+SET product_data_deleted_at_unix_ms = ?, error_code = '', error_message = '', updated_at_unix_ms = ?
+WHERE operation_id = ? AND status = ? AND product_data_deleted_at_unix_ms = 0
+`, now, now, operation.OperationID, ThreadDeleteOperationPending); err != nil {
+		return ThreadDeleteOperation{}, err
+	}
+	operation, err = loadThreadDeleteOperationByIDTx(ctx, tx, operationID)
+	if err != nil {
+		return ThreadDeleteOperation{}, err
+	}
+	if operation == nil || operation.ProductDataDeletedAtUnixMs <= 0 {
+		return ThreadDeleteOperation{}, errors.New("thread delete product data commit did not persist")
 	}
 	if err := tx.Commit(); err != nil {
 		return ThreadDeleteOperation{}, err

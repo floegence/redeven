@@ -141,7 +141,7 @@ func TestFloretTurnResultProjectionDoesNotDowngradeFullAssistantMarkdown(t *test
 		RunID:    "run_full_result_projection",
 		ThreadID: "thread_full_result_projection",
 		TurnID:   "msg_full_result_projection",
-		Input:    "find options",
+		Input:    flruntime.TurnInput{Text: "find options"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -357,7 +357,7 @@ func TestFloretHostPublishesRunningToolProjectionToFlowerLiveEvents(t *testing.T
 			RunID:    flruntime.RunID(runID),
 			ThreadID: flruntime.ThreadID(thread.ThreadID),
 			TurnID:   flruntime.TurnID(turnID),
-			Input:    "run the blocking tool",
+			Input:    flruntime.TurnInput{Text: "run the blocking tool"},
 			Limits:   flruntime.TurnLimits{MaxToolCalls: 4},
 		})
 		outcomeCh <- turnOutcome{result: result, err: runErr}
@@ -1268,7 +1268,7 @@ func TestApplyFloretPendingToolSettlementProjectionPublishesTimelineReplacement(
 		ThreadID: flruntime.ThreadID(thread.ThreadID),
 		TurnID:   flruntime.TurnID(messageID),
 		RunID:    flruntime.RunID(runID),
-		Input:    "run terminal command",
+		Input:    flruntime.TurnInput{Text: "run terminal command"},
 	}); err != nil {
 		t.Fatalf("seed canonical turn: %v", err)
 	}
@@ -1376,6 +1376,7 @@ func TestRunFloretHostedTurnTerminalProjectionPublishesCanonicalReplacement(t *t
 	turnID := "turn_ordinary_terminal_replacement"
 	r := newRun(runOptions{
 		Service:      svc,
+		ThreadsDB:    svc.threadsDB,
 		FloretStore:  svc.floretStore,
 		StateDir:     svc.stateDir,
 		AgentHomeDir: t.TempDir(),

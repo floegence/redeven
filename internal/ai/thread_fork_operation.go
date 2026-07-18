@@ -13,7 +13,7 @@ import (
 
 const threadForkReplayBatchSize = 20
 
-func (s *Service) resumeThreadForkOperation(ctx context.Context, db *threadstore.Store, operation *threadstore.ForkOperation) (*threadstore.Thread, error) {
+func (s *Service) resumeThreadForkOperation(ctx context.Context, db *threadstore.Store, operation *threadstore.ForkOperation) (*threadstore.ThreadSettings, error) {
 	if s == nil {
 		return nil, errors.New("nil service")
 	}
@@ -53,10 +53,18 @@ func (s *Service) resumeThreadForkOperation(ctx context.Context, db *threadstore
 		err := errors.New("Floret fork result identity mismatch")
 		return nil, s.recordThreadForkOperationError(ctx, db, operation.OperationID, "floret_contract_mismatch", err, true)
 	}
+	if title := strings.TrimSpace(operation.RequestedTitle); title != "" {
+		host, hostErr := s.openFloretMaintenanceHost()
+		if hostErr != nil {
+			return nil, s.recordThreadForkOperationError(ctx, db, operation.OperationID, "floret_title_failed", hostErr, false)
+		}
+		if _, titleErr := host.SetThreadTitle(ctx, flruntime.SetThreadTitleRequest{ThreadID: flruntime.ThreadID(operation.DestinationThreadID), Title: title}); titleErr != nil {
+			return nil, s.recordThreadForkOperationError(ctx, db, operation.OperationID, "floret_title_failed", titleErr, false)
+		}
+	}
 	committedAt := time.Now().UnixMilli()
 	forked, err := db.CommitForkOperation(ctx, threadstore.CommitForkOperationRequest{
 		OperationID:     operation.OperationID,
-		FloretTurnRefs:  threadstoreForkTurnRefs(floretResult.Turns),
 		UpdatedAtUnixMs: committedAt,
 	})
 	if err != nil {

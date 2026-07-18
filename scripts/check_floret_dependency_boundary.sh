@@ -130,9 +130,17 @@ check_no_floret_schema_access() {
     return
   fi
 
-  if matches=$(rg -n --pcre2 --glob '!scripts/check_floret_dependency_boundary.sh' --glob '!internal/session/dependency_contract_test.go' 'active_turn_leases|schema_meta|raw_encoder_version' "${scan_paths[@]}" 2>/dev/null); then
+  local floret_schema_pattern='active_turn_leases|schema_meta|raw_encoder_version|provider_states|agent_todo_states|prompt_segments|prompt_toolsets|prompt_requests|prompt_responses|tool_output_artifacts|metadata_records'
+  local floret_raw_sql_pattern='(?i)(CREATE[[:space:]]+TABLE|ALTER[[:space:]]+TABLE|DROP[[:space:]]+TABLE|INSERT[[:space:]]+INTO|UPDATE|DELETE[[:space:]]+FROM|FROM|JOIN)[[:space:]]+(schema_meta|fork_operations|threads|entries|provider_states|agent_todo_states|prompt_segments|prompt_toolsets|prompt_requests|prompt_responses|tool_output_artifacts|metadata_records|active_turn_leases)\b'
+
+  if matches=$(rg -n --pcre2 --glob '!scripts/check_floret_dependency_boundary.sh' --glob '!internal/session/dependency_contract_test.go' "$floret_schema_pattern" "${scan_paths[@]}" 2>/dev/null); then
     printf '%s\n' "$matches"
     fail "Redeven must not reference Floret-owned storage schema tables or columns."
+  fi
+
+  if matches=$(rg -n --pcre2 --glob '!scripts/check_floret_dependency_boundary.sh' "$floret_raw_sql_pattern" "${scan_paths[@]}" 2>/dev/null); then
+    printf '%s\n' "$matches"
+    fail "Redeven must not execute raw SQL against Floret-owned tables."
   fi
 
   if matches=$(rg -n --pcre2 --glob '!scripts/check_floret_dependency_boundary.sh' --glob '!internal/ai/floret_runtime.go' --glob '!internal/ai/subagent_lifecycle_test.go' --glob '!internal/codeapp/appserver/*_test.go' --glob '!internal/codeapp/codeapp_migration_test.go' 'floret_threads\.sqlite|floret_subagents\.sqlite' "${scan_paths[@]}" 2>/dev/null); then
@@ -145,14 +153,13 @@ check_no_floret_schema_access() {
 
 check_no_agent_shadow_storage() {
   local matches
-	local shadow_pattern='ai_messages|ai_runs|ai_tool_calls|ai_run_events|execution_spans|ai_thread_state|ai_thread_todos|ai_thread_checkpoints|transcript_messages|conversation_turns|memory_items|memory_embeddings|structured_user_inputs|request_user_input_secret_answers|ai_delegated_approval_(requests|events|outbox|idempotency)'
+  local shadow_pattern='ai_messages|ai_runs|ai_tool_calls|ai_run_events|execution_spans|ai_thread_state|ai_thread_todos|ai_thread_checkpoints|transcript_messages|conversation_turns|memory_items|memory_embeddings|structured_user_inputs|request_user_input_secret_answers|ai_delegated_approval_(requests|events|outbox|idempotency)'
 
   if matches=$(rg -n --pcre2 \
     --glob '*.go' \
     --glob '!**/*_test.go' \
     --glob '!internal/testutil/legacydb/**' \
     --glob '!internal/ai/threadstore/schema.go' \
-		--glob '!internal/ai/threadstore/canonical_migrations.go' \
     "$shadow_pattern" internal 2>/dev/null); then
     printf '%s\n' "$matches"
     fail "Redeven production code must not define, query, or persist Agent shadow conversation state."

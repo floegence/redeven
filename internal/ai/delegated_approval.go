@@ -291,17 +291,14 @@ func delegatedApprovalParentRunID(action FlowerApprovalAction) string {
 }
 
 func delegatedApprovalRef(parent *run, child *run, req fltools.ApprovalRequest) DelegatedApprovalRef {
-	subagentID := firstNonEmptyString(
+	childThreadID := firstNonEmptyString(
 		strings.TrimSpace(child.threadID),
-		strings.TrimSpace(req.Labels["host."+subagentToolHostContextSubagentIDKey]),
 		strings.TrimSpace(req.Labels["host."+subagentToolHostContextChildThreadIDKey]),
-		strings.TrimSpace(req.HostContext[subagentToolHostContextSubagentIDKey]),
 		strings.TrimSpace(req.HostContext[subagentToolHostContextChildThreadIDKey]),
 	)
-	childThreadID := firstNonEmptyString(strings.TrimSpace(child.threadID), subagentID)
 	return DelegatedApprovalRef{
 		ParentThreadID: strings.TrimSpace(parent.threadID), ParentRunID: strings.TrimSpace(parent.id), ParentTurnID: strings.TrimSpace(parent.messageID),
-		SubagentID: subagentID, ChildThreadID: childThreadID,
+		ChildThreadID:   childThreadID,
 		ChildRunID:      delegatedApprovalChildRunID(child, req, childThreadID, strings.TrimSpace(parent.id)),
 		ChildTurnID:     strings.TrimSpace(child.messageID),
 		ChildToolCallID: firstNonEmptyString(strings.TrimSpace(req.ID), strings.TrimSpace(req.ApprovalID)),
@@ -318,7 +315,7 @@ func delegatedApprovalChildRunID(child *run, req fltools.ApprovalRequest, childT
 }
 
 func validDelegatedApprovalRef(ref DelegatedApprovalRef) bool {
-	return strings.TrimSpace(ref.ParentThreadID) != "" && strings.TrimSpace(ref.ParentRunID) != "" && strings.TrimSpace(ref.SubagentID) != "" && strings.TrimSpace(ref.ChildThreadID) != "" && strings.TrimSpace(ref.ChildRunID) != "" && strings.TrimSpace(ref.ChildToolCallID) != "" && strings.TrimSpace(ref.ApprovalID) != ""
+	return strings.TrimSpace(ref.ParentThreadID) != "" && strings.TrimSpace(ref.ParentRunID) != "" && strings.TrimSpace(ref.ChildThreadID) != "" && strings.TrimSpace(ref.ChildRunID) != "" && strings.TrimSpace(ref.ChildToolCallID) != "" && strings.TrimSpace(ref.ApprovalID) != ""
 }
 
 func delegatedApprovalAction(parent *run, child *run, req fltools.ApprovalRequest, ref DelegatedApprovalRef, actionID string, requestedAt int64, expiresAt int64) (FlowerApprovalAction, error) {
@@ -333,8 +330,8 @@ func delegatedApprovalAction(parent *run, child *run, req fltools.ApprovalReques
 		targets: floretApprovalTargets(req), requestedAtMs: requestedAt, expiresAtMs: expiresAt,
 	}
 	description := toolApprovalDescription(approval)
-	if subagent := strings.TrimSpace(ref.SubagentID); subagent != "" {
-		description = "Subagent " + subagent + " requests approval. " + description
+	if childThreadID := strings.TrimSpace(ref.ChildThreadID); childThreadID != "" {
+		description = "Subagent " + childThreadID + " requests approval. " + description
 	}
 	command, cwd := strings.TrimSpace(approval.command), strings.TrimSpace(approval.cwd)
 	targets := append([]FlowerSafeTarget(nil), approval.targets...)

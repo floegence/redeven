@@ -426,7 +426,6 @@ describe('runtime Flower surface adapter read state', () => {
     const delegatedRef = {
       parent_thread_id: 'thread_1',
       parent_run_id: 'run_parent',
-      subagent_id: 'child_1',
       child_thread_id: 'thread_child',
       child_run_id: 'run_child',
       child_tool_call_id: 'tool_child',

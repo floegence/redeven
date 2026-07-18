@@ -157,6 +157,8 @@ func TestToolTerminalExec_CwdRules(t *testing.T) {
 	manager := newTerminalProcessManager()
 	defer func() { _ = manager.Close(context.Background()) }()
 	r := newTerminalProcessTestRun(workingDir, &Service{terminalProcesses: manager}, nil, "env_paths", "thread_paths", "run_paths", "turn_paths")
+	r.permissionType = FlowerPermissionFullAccess
+	allowToolsForTest(t, r, "terminal.exec")
 
 	t.Run("passes stdin to the command", func(t *testing.T) {
 		stdin := "hello\nworld\n"

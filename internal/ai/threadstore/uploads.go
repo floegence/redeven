@@ -15,7 +15,7 @@ const (
 	UploadStateLive     = "live"
 	UploadStateDeleting = "deleting"
 
-	UploadRefKindTurn       = "turn"
+	UploadRefKindThread     = "thread"
 	UploadRefKindQueuedTurn = "queued_turn"
 
 	sqliteAutoVacuumNone        = 0
@@ -91,8 +91,10 @@ func normalizeUploadRefKind(kind string) string {
 	switch strings.ToLower(strings.TrimSpace(kind)) {
 	case UploadRefKindQueuedTurn:
 		return UploadRefKindQueuedTurn
+	case UploadRefKindThread:
+		return UploadRefKindThread
 	default:
-		return UploadRefKindTurn
+		return ""
 	}
 }
 
@@ -236,6 +238,45 @@ WHERE endpoint_id = ? AND upload_id = ?
 	return &rec, nil
 }
 
+func (s *Store) GetThreadOwnedUpload(ctx context.Context, endpointID string, threadID string, uploadID string) (*UploadRecord, error) {
+	return s.getOwnedUpload(ctx, endpointID, threadID, UploadRefKindThread, threadID, uploadID)
+}
+
+func (s *Store) GetQueuedTurnOwnedUpload(ctx context.Context, endpointID string, threadID string, queueID string, uploadID string) (*UploadRecord, error) {
+	return s.getOwnedUpload(ctx, endpointID, threadID, UploadRefKindQueuedTurn, queueID, uploadID)
+}
+
+func (s *Store) getOwnedUpload(ctx context.Context, endpointID string, threadID string, refKind string, refID string, uploadID string) (*UploadRecord, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	refKind = normalizeUploadRefKind(refKind)
+	refID = strings.TrimSpace(refID)
+	uploadID = strings.TrimSpace(uploadID)
+	if endpointID == "" || threadID == "" || refKind == "" || refID == "" || uploadID == "" {
+		return nil, errors.New("invalid request")
+	}
+	var rec UploadRecord
+	if err := scanUploadRow(s.db.QueryRowContext(ctx, `
+SELECT u.upload_id, u.endpoint_id, u.storage_relpath, u.name, u.mime_type, u.size_bytes,
+       u.state, u.created_at_unix_ms, u.claimed_at_unix_ms, u.delete_after_unix_ms
+FROM ai_uploads u
+JOIN ai_upload_refs r
+  ON r.endpoint_id = u.endpoint_id AND r.upload_id = u.upload_id
+WHERE u.endpoint_id = ? AND u.upload_id = ? AND u.state = ?
+  AND r.thread_id = ? AND r.ref_kind = ? AND r.ref_id = ?
+LIMIT 1
+`, endpointID, uploadID, UploadStateLive, threadID, refKind, refID), &rec); err != nil {
+		return nil, err
+	}
+	return &rec, nil
+}
+
 func (s *Store) BindUploadsToRef(ctx context.Context, endpointID string, threadID string, refKind string, refID string, uploadIDs []string, claimedAtUnixMs int64) error {
 	if s == nil || s.db == nil {
 		return errors.New("store not initialized")
@@ -248,7 +289,7 @@ func (s *Store) BindUploadsToRef(ctx context.Context, endpointID string, threadI
 	refKind = normalizeUploadRefKind(refKind)
 	refID = strings.TrimSpace(refID)
 	uploadIDs = dedupeNonEmptyStrings(uploadIDs)
-	if endpointID == "" || threadID == "" || refID == "" {
+	if endpointID == "" || threadID == "" || refKind == "" || refID == "" {
 		return errors.New("invalid request")
 	}
 	if len(uploadIDs) == 0 {
@@ -330,7 +371,7 @@ func (s *Store) CreateFollowupWithUploadRefs(ctx context.Context, rec QueuedTurn
 	return queued, position, revision, nil
 }
 
-func (s *Store) CommitPendingTurnAdmission(ctx context.Context, endpointID string, threadID string, commandID string, turnID string, admittedAtUnixMs int64) error {
+func (s *Store) CommitPendingTurnAdmission(ctx context.Context, endpointID string, threadID string, commandID string, turnID string, uploadIDs []string, admittedAtUnixMs int64) error {
 	if s == nil || s.db == nil {
 		return errors.New("store not initialized")
 	}
@@ -341,7 +382,8 @@ func (s *Store) CommitPendingTurnAdmission(ctx context.Context, endpointID strin
 	threadID = strings.TrimSpace(threadID)
 	commandID = strings.TrimSpace(commandID)
 	turnID = strings.TrimSpace(turnID)
-	if endpointID == "" || threadID == "" || commandID == "" || turnID == "" {
+	uploadIDs = dedupeNonEmptyStrings(uploadIDs)
+	if endpointID == "" || threadID == "" || turnID == "" || commandID == "" {
 		return errors.New("invalid request")
 	}
 	if admittedAtUnixMs <= 0 {
@@ -368,13 +410,30 @@ WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
 	if strings.TrimSpace(storedTurnID) != turnID || normalizeFollowupLane(lane) != FollowupLaneQueued {
 		return errors.New("pending turn command identity mismatch")
 	}
-	if _, err := tx.ExecContext(ctx, `
-INSERT INTO ai_upload_refs(endpoint_id, upload_id, thread_id, ref_kind, ref_id, created_at_unix_ms)
-SELECT endpoint_id, upload_id, thread_id, ?, ?, ?
+	queryRows, err := tx.QueryContext(ctx, `
+SELECT upload_id
 FROM ai_upload_refs
 WHERE endpoint_id = ? AND thread_id = ? AND ref_kind = ? AND ref_id = ?
-ON CONFLICT(endpoint_id, upload_id, ref_kind, ref_id) DO NOTHING
-`, UploadRefKindTurn, turnID, admittedAtUnixMs, endpointID, threadID, UploadRefKindQueuedTurn, commandID); err != nil {
+`, endpointID, threadID, UploadRefKindQueuedTurn, commandID)
+	if err != nil {
+		return err
+	}
+	for queryRows.Next() {
+		var uploadID string
+		if err := queryRows.Scan(&uploadID); err != nil {
+			_ = queryRows.Close()
+			return err
+		}
+		uploadIDs = append(uploadIDs, strings.TrimSpace(uploadID))
+	}
+	if err := queryRows.Err(); err != nil {
+		_ = queryRows.Close()
+		return err
+	}
+	if err := queryRows.Close(); err != nil {
+		return err
+	}
+	if err := bindUploadsToRefTx(ctx, tx, endpointID, threadID, UploadRefKindThread, threadID, dedupeNonEmptyStrings(uploadIDs), admittedAtUnixMs); err != nil {
 		return err
 	}
 	if _, err := tx.ExecContext(ctx, `
@@ -390,8 +449,8 @@ WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ? AND lane = ? AND turn_i
 	if err != nil {
 		return err
 	}
-	rows, _ := result.RowsAffected()
-	if rows != 1 {
+	rowsAffected, _ := result.RowsAffected()
+	if rowsAffected != 1 {
 		return errors.New("pending turn command changed during admission")
 	}
 	if _, err := bumpThreadFollowupsRevisionTx(ctx, tx, endpointID, threadID); err != nil {
@@ -406,7 +465,7 @@ func bindUploadsToRefTx(ctx context.Context, tx *sql.Tx, endpointID string, thre
 	refKind = normalizeUploadRefKind(refKind)
 	refID = strings.TrimSpace(refID)
 	uploadIDs = dedupeNonEmptyStrings(uploadIDs)
-	if endpointID == "" || threadID == "" || refID == "" {
+	if endpointID == "" || threadID == "" || refKind == "" || refID == "" {
 		return errors.New("invalid request")
 	}
 	if len(uploadIDs) == 0 {
@@ -472,7 +531,7 @@ func (s *Store) DeleteThreadResources(ctx context.Context, endpointID string, th
 	if err := deleteThreadScopedRowsTx(ctx, tx, endpointID, threadID); err != nil {
 		return ThreadDeleteResourcesResult{}, err
 	}
-	res, err := tx.ExecContext(ctx, `DELETE FROM ai_threads WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID)
+	res, err := tx.ExecContext(ctx, `DELETE FROM ai_thread_settings WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID)
 	if err != nil {
 		return ThreadDeleteResourcesResult{}, err
 	}
@@ -551,6 +610,11 @@ WHERE endpoint_id = ? AND thread_id = ?
 }
 
 func prepareUploadCleanupForRefTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, refKind string, refID string, deleteAfterUnixMs int64) ([]UploadRecord, error) {
+	refKind = normalizeUploadRefKind(refKind)
+	refID = strings.TrimSpace(refID)
+	if refKind == "" || refID == "" {
+		return nil, errors.New("invalid upload reference")
+	}
 	uploadIDs, err := listUploadIDsForRefTx(ctx, tx, endpointID, threadID, refKind, refID)
 	if err != nil {
 		return nil, err
@@ -561,7 +625,7 @@ func prepareUploadCleanupForRefTx(ctx context.Context, tx *sql.Tx, endpointID st
 	if _, err := tx.ExecContext(ctx, `
 DELETE FROM ai_upload_refs
 WHERE endpoint_id = ? AND thread_id = ? AND ref_kind = ? AND ref_id = ?
-`, endpointID, threadID, normalizeUploadRefKind(refKind), strings.TrimSpace(refID)); err != nil {
+`, endpointID, threadID, refKind, refID); err != nil {
 		return nil, err
 	}
 	return collectUnreferencedUploadsTx(ctx, tx, endpointID, uploadIDs, deleteAfterUnixMs)
@@ -596,11 +660,16 @@ WHERE endpoint_id = ? AND thread_id = ?
 }
 
 func listUploadIDsForRefTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, refKind string, refID string) ([]string, error) {
+	refKind = normalizeUploadRefKind(refKind)
+	refID = strings.TrimSpace(refID)
+	if refKind == "" || refID == "" {
+		return nil, errors.New("invalid upload reference")
+	}
 	rows, err := tx.QueryContext(ctx, `
 SELECT DISTINCT upload_id
 FROM ai_upload_refs
 WHERE endpoint_id = ? AND thread_id = ? AND ref_kind = ? AND ref_id = ?
-`, endpointID, threadID, normalizeUploadRefKind(refKind), strings.TrimSpace(refID))
+`, endpointID, threadID, refKind, refID)
 	if err != nil {
 		return nil, err
 	}

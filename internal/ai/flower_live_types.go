@@ -387,7 +387,6 @@ type DelegatedApprovalRef struct {
 	ParentThreadID  string `json:"parent_thread_id"`
 	ParentRunID     string `json:"parent_run_id"`
 	ParentTurnID    string `json:"parent_turn_id,omitempty"`
-	SubagentID      string `json:"subagent_id"`
 	ChildThreadID   string `json:"child_thread_id"`
 	ChildRunID      string `json:"child_run_id"`
 	ChildTurnID     string `json:"child_turn_id,omitempty"`

@@ -127,7 +127,6 @@ export type FlowerActivityErrorDetail = Readonly<{
 
 export type FlowerActivitySubagentMessageAction = Readonly<{
   thread_id: string;
-  subagent_id: string;
 }>;
 
 export type FlowerActivitySubagentDetailItem = Readonly<{
@@ -275,7 +274,6 @@ const DETAIL_LABELS: Readonly<Record<string, string>> = {
   contains_secret: 'secret',
   result: 'result',
   thread_id: 'thread',
-  subagent_id: 'subagent',
   task_name: 'task',
   task_description: 'task',
   title: 'title',
@@ -544,8 +542,6 @@ function detailLabel(key: string, copy?: FlowerActivityPresentationCopy): string
       return subagents?.status ?? DETAIL_LABELS[key] ?? key;
     case 'thread_id':
       return subagents?.thread ?? DETAIL_LABELS[key] ?? key;
-    case 'subagent_id':
-      return subagents?.subagent ?? DETAIL_LABELS[key] ?? key;
     case 'task_name':
     case 'task_description':
       return subagents?.task ?? DETAIL_LABELS[key] ?? key;
@@ -768,21 +764,13 @@ function subagentDisplayStatus(raw: string, copy?: FlowerActivityPresentationCop
 }
 
 function subagentThreadID(record: Readonly<Record<string, unknown>>): string {
-  return payloadValue(record, 'thread_id', 'subagent_id');
-}
-
-function subagentSubagentID(record: Readonly<Record<string, unknown>>): string {
-  return payloadValue(record, 'subagent_id', 'thread_id');
+  return payloadValue(record, 'thread_id');
 }
 
 function subagentNameFromRecord(record: Readonly<Record<string, unknown>>): string {
   const threadID = subagentThreadID(record);
-  const subagentID = subagentSubagentID(record);
   const task = payloadValue(record, 'task_name');
-  const title = payloadValue(record, 'title');
-  const safeTitle = title && title !== threadID && title !== subagentID ? title : '';
-  const safeTask = task && task !== threadID && task !== subagentID ? task : '';
-  return safeTitle || safeTask;
+  return task && task !== threadID ? task : '';
 }
 
 function subagentDescriptionFromRecord(record: Readonly<Record<string, unknown>>, fallback: Readonly<Record<string, unknown>>): string {
@@ -816,7 +804,6 @@ function subagentDetailItemFromRecord(
   const normalizedStatus = normalizedSubagentStatus(rawStatus);
   const status = subagentDisplayStatus(rawStatus, copy);
   const threadID = subagentThreadID(record) || subagentThreadID(payload);
-  const subagentID = subagentSubagentID(record) || subagentSubagentID(payload) || threadID;
   const name = subagentNameFromRecord(record);
   const description = subagentDescriptionFromRecord(record, payload);
   const agentType = payloadValue(record, 'agent_type') || payloadValue(payload, 'agent_type');
@@ -834,7 +821,6 @@ function subagentDetailItemFromRecord(
     ...(threadID ? {
       open_messages: {
         thread_id: threadID,
-        subagent_id: subagentID || threadID,
       },
     } : {}),
   };

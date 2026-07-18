@@ -16,7 +16,7 @@ func ensureThreadstoreThreadForTest(t *testing.T, store *threadstore.Store, endp
 	if thread != nil {
 		return
 	}
-	if err := store.CreateThread(context.Background(), threadstore.Thread{ThreadID: threadID, EndpointID: endpointID, Title: threadID}); err != nil {
+	if err := store.CreateThread(context.Background(), threadstore.ThreadSettings{ThreadID: threadID, EndpointID: endpointID}); err != nil {
 		t.Fatalf("CreateThread(%s): %v", threadID, err)
 	}
 }

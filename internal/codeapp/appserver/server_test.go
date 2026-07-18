@@ -3225,7 +3225,7 @@ func seedFloretThreadTurn(t *testing.T, stateDir string, threadID string, turnID
 		ThreadID: flruntime.ThreadID(threadID),
 		TurnID:   flruntime.TurnID(turnID),
 		RunID:    flruntime.RunID(runID),
-		Input:    input,
+		Input:    flruntime.TurnInput{Text: input},
 	}); err != nil {
 		t.Fatalf("RunTurn: %v", err)
 	}
@@ -3458,8 +3458,8 @@ func TestServer_AIThreadDeleteReturnsAcceptedForPersistedPendingOperation(t *tes
 	}
 
 	detail := performServerRequest(srv, http.MethodGet, deletePath, envOriginWithChannel(channelID), "")
-	if detail.Code != http.StatusNotFound {
-		t.Fatalf("GET deleted thread status=%d body=%s", detail.Code, detail.Body.String())
+	if detail.Code != http.StatusOK {
+		t.Fatalf("GET pending-delete thread status=%d body=%s", detail.Code, detail.Body.String())
 	}
 }
 

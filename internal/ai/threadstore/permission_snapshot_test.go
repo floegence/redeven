@@ -27,8 +27,8 @@ func TestPermissionSnapshotStore_PersistsParentAndChildSnapshotsIdempotently(t *
 		t.Fatalf("InsertPermissionSnapshot first: %v", err)
 	}
 	parent.SnapshotJSON = `{"changed":true}`
-	if err := store.InsertPermissionSnapshot(ctx, parent); err != nil {
-		t.Fatalf("InsertPermissionSnapshot second: %v", err)
+	if err := store.InsertPermissionSnapshot(ctx, parent); err == nil {
+		t.Fatal("InsertPermissionSnapshot accepted conflicting duplicate id")
 	}
 	child := ChildPermissionSnapshotRecord{
 		ChildSnapshotID:   "psnap_child",
@@ -37,7 +37,6 @@ func TestPermissionSnapshotStore_PersistsParentAndChildSnapshotsIdempotently(t *
 		SpawnToolCallID:   "spawn_1",
 		ParentThreadID:    "thread_parent",
 		ParentRunID:       "run_parent",
-		SubagentID:        "subagent_1",
 		ChildThreadID:     "thread_child",
 		ChildRunID:        "run_child",
 		State:             "finalized",
@@ -90,7 +89,6 @@ func TestPermissionSnapshotStore_FinalizesProvisionalChildSnapshot(t *testing.T)
 		SpawnToolCallID:  "spawn_provisional_1",
 		ParentThreadID:   "thread_parent",
 		ParentRunID:      "run_parent",
-		SubagentID:       "subagent_1",
 		ChildThreadID:    "thread_child",
 		ChildRunID:       "run_child",
 		SnapshotJSON:     `{"visible_tool_names":["terminal.exec"]}`,
@@ -159,7 +157,6 @@ func TestPermissionSnapshotStore_RejectsInvalidChildRunIdentity(t *testing.T) {
 		SpawnToolCallID:   "spawn_1",
 		ParentThreadID:    "thread_parent",
 		ParentRunID:       "run_parent",
-		SubagentID:        "subagent_1",
 		ChildThreadID:     "thread_child",
 		ChildRunID:        "run_child",
 		State:             "finalized",

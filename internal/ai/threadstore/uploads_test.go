@@ -21,7 +21,7 @@ func TestStore_DeleteThreadResources_RespectsSharedUploadRefs(t *testing.T) {
 
 	ctx := context.Background()
 	for _, threadID := range []string{"th_1", "th_2"} {
-		if err := s.CreateThread(ctx, Thread{ThreadID: threadID, EndpointID: "env_1", Title: threadID}); err != nil {
+		if err := s.CreateThread(ctx, ThreadSettings{ThreadID: threadID, EndpointID: "env_1"}); err != nil {
 			t.Fatalf("CreateThread(%s): %v", threadID, err)
 		}
 	}
@@ -41,7 +41,7 @@ func TestStore_DeleteThreadResources_RespectsSharedUploadRefs(t *testing.T) {
 
 	appendWithUpload := func(threadID string, messageID string) {
 		t.Helper()
-		if err := s.BindUploadsToRef(ctx, "env_1", threadID, UploadRefKindTurn, messageID, []string{"upl_shared"}, 1000); err != nil {
+		if err := s.BindUploadsToRef(ctx, "env_1", threadID, UploadRefKindThread, threadID, []string{"upl_shared"}, 1000); err != nil {
 			t.Fatalf("BindUploadsToRef(%s): %v", threadID, err)
 		}
 	}
@@ -79,7 +79,7 @@ func TestStore_DeleteFollowupResources_ReturnsUploadCandidate(t *testing.T) {
 	defer func() { _ = s.Close() }()
 
 	ctx := context.Background()
-	if err := s.CreateThread(ctx, Thread{ThreadID: "th_1", EndpointID: "env_1", Title: "followup"}); err != nil {
+	if err := s.CreateThread(ctx, ThreadSettings{ThreadID: "th_1", EndpointID: "env_1"}); err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
 	if err := s.InsertUpload(ctx, UploadRecord{
@@ -135,7 +135,7 @@ func TestStore_CommitPendingTurnAdmissionAtomicallyTransfersUploadRefs(t *testin
 
 	s := openStoreForTest(t)
 	ctx := context.Background()
-	if err := s.CreateThread(ctx, Thread{ThreadID: "th_admission", EndpointID: "env_1", Title: "admission"}); err != nil {
+	if err := s.CreateThread(ctx, ThreadSettings{ThreadID: "th_admission", EndpointID: "env_1"}); err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
 	if err := s.InsertUpload(ctx, UploadRecord{
@@ -152,7 +152,7 @@ func TestStore_CommitPendingTurnAdmissionAtomicallyTransfersUploadRefs(t *testin
 	if err != nil {
 		t.Fatalf("CreateFollowupWithUploadRefs: %v", err)
 	}
-	if err := s.CommitPendingTurnAdmission(ctx, "env_1", "th_admission", command.QueueID, command.TurnID, 300); err != nil {
+	if err := s.CommitPendingTurnAdmission(ctx, "env_1", "th_admission", command.QueueID, command.TurnID, nil, 300); err != nil {
 		t.Fatalf("CommitPendingTurnAdmission: %v", err)
 	}
 	if count := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_queued_turns WHERE queue_id = ?`, command.QueueID); count != 0 {
@@ -161,10 +161,10 @@ func TestStore_CommitPendingTurnAdmissionAtomicallyTransfersUploadRefs(t *testin
 	if count := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_upload_refs WHERE upload_id = ? AND ref_kind = ? AND ref_id = ?`, "upl_admission", UploadRefKindQueuedTurn, command.QueueID); count != 0 {
 		t.Fatalf("queued upload refs=%d, want 0", count)
 	}
-	if count := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_upload_refs WHERE upload_id = ? AND ref_kind = ? AND ref_id = ?`, "upl_admission", UploadRefKindTurn, command.TurnID); count != 1 {
-		t.Fatalf("turn upload refs=%d, want 1", count)
+	if count := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_upload_refs WHERE upload_id = ? AND ref_kind = ? AND ref_id = ?`, "upl_admission", UploadRefKindThread, "th_admission"); count != 1 {
+		t.Fatalf("thread upload refs=%d, want 1", count)
 	}
-	if err := s.CommitPendingTurnAdmission(ctx, "env_1", "th_admission", command.QueueID, command.TurnID, 400); err != nil {
+	if err := s.CommitPendingTurnAdmission(ctx, "env_1", "th_admission", command.QueueID, command.TurnID, nil, 400); err != nil {
 		t.Fatalf("idempotent CommitPendingTurnAdmission: %v", err)
 	}
 }
@@ -174,7 +174,7 @@ func TestStore_CommitPendingTurnAdmissionRejectsIdentityMismatchWithoutMutation(
 
 	s := openStoreForTest(t)
 	ctx := context.Background()
-	if err := s.CreateThread(ctx, Thread{ThreadID: "th_admission_mismatch", EndpointID: "env_1", Title: "admission"}); err != nil {
+	if err := s.CreateThread(ctx, ThreadSettings{ThreadID: "th_admission_mismatch", EndpointID: "env_1"}); err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
 	command, _, _, err := s.CreateFollowup(ctx, QueuedTurn{
@@ -184,7 +184,7 @@ func TestStore_CommitPendingTurnAdmissionRejectsIdentityMismatchWithoutMutation(
 	if err != nil {
 		t.Fatalf("CreateFollowup: %v", err)
 	}
-	if err := s.CommitPendingTurnAdmission(ctx, "env_1", "th_admission_mismatch", command.QueueID, "turn_other", 300); err == nil {
+	if err := s.CommitPendingTurnAdmission(ctx, "env_1", "th_admission_mismatch", command.QueueID, "turn_other", nil, 300); err == nil {
 		t.Fatal("CommitPendingTurnAdmission accepted a different turn identity")
 	}
 	stored, err := s.GetQueuedTurn(ctx, "env_1", "th_admission_mismatch", command.QueueID)

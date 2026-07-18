@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -23,7 +24,7 @@ func NewQueuedTurnID() (string, error) {
 	return "qt_" + base64.RawURLEncoding.EncodeToString(b), nil
 }
 
-func (s *Service) commitPendingTurnCommandAdmission(ctx context.Context, endpointID string, threadID string, commandID string, turnID string) error {
+func (s *Service) commitPendingTurnCommandAdmission(ctx context.Context, endpointID string, threadID string, commandID string, turnID string, uploadIDs []string) error {
 	if s == nil {
 		return errors.New("nil service")
 	}
@@ -33,10 +34,10 @@ func (s *Service) commitPendingTurnCommandAdmission(ctx context.Context, endpoin
 	if db == nil {
 		return errors.New("threads store not ready")
 	}
-	return db.CommitPendingTurnAdmission(ctx, endpointID, threadID, commandID, turnID, time.Now().UnixMilli())
+	return db.CommitPendingTurnAdmission(ctx, endpointID, threadID, commandID, turnID, uploadIDs, time.Now().UnixMilli())
 }
 
-func (s *Service) reconcilePendingTurnCommand(ctx context.Context, endpointID string, threadID string, commandID string, turnID string) (bool, error) {
+func (s *Service) reconcilePendingTurnCommand(ctx context.Context, endpointID string, threadID string, commandID string, turnID string, uploadIDs []string) (bool, error) {
 	if s == nil {
 		return false, errors.New("nil service")
 	}
@@ -81,21 +82,21 @@ func (s *Service) reconcilePendingTurnCommand(ctx context.Context, endpointID st
 	if !accepted {
 		return false, nil
 	}
-	if err := s.commitPendingTurnCommandAdmission(ctx, endpointID, threadID, commandID, turnID); err != nil {
+	if err := s.commitPendingTurnCommandAdmission(ctx, endpointID, threadID, commandID, turnID, uploadIDs); err != nil {
 		return false, err
 	}
 	return true, nil
 }
 
-func marshalQueuedTurnAttachments(items []RunAttachmentIn) string {
+func marshalQueuedTurnAttachments(items []RunAttachmentIn) (string, error) {
 	if len(items) == 0 {
-		return "[]"
+		return "[]", nil
 	}
 	b, err := json.Marshal(items)
 	if err != nil {
-		return "[]"
+		return "", err
 	}
-	return string(b)
+	return string(b), nil
 }
 
 func marshalQueuedTurnContextAction(action *ContextActionEnvelope) (string, error) {
@@ -111,17 +112,17 @@ func marshalQueuedTurnContextAction(action *ContextActionEnvelope) (string, erro
 	return string(b), nil
 }
 
-func marshalQueuedTurnOptions(opts RunOptions) string {
+func marshalQueuedTurnOptions(opts RunOptions) (string, error) {
 	b, err := json.Marshal(opts)
 	if err != nil {
-		return "{}"
+		return "", err
 	}
-	return string(b)
+	return string(b), nil
 }
 
-func marshalQueuedTurnSessionMeta(meta *session.Meta) string {
+func marshalQueuedTurnSessionMeta(meta *session.Meta) (string, error) {
 	if meta == nil {
-		return "{}"
+		return "", errors.New("queued turn session metadata is missing")
 	}
 	snapshot := session.Meta{
 		ChannelID:         strings.TrimSpace(meta.ChannelID),
@@ -140,40 +141,43 @@ func marshalQueuedTurnSessionMeta(meta *session.Meta) string {
 	}
 	b, err := json.Marshal(snapshot)
 	if err != nil {
-		return "{}"
+		return "", err
 	}
-	return string(b)
+	return string(b), nil
 }
 
-func unmarshalQueuedTurnSessionMeta(raw string) (session.Meta, bool) {
+func unmarshalQueuedTurnSessionMeta(raw string) (session.Meta, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return session.Meta{}, false
+		return session.Meta{}, errors.New("queued turn session metadata is empty")
 	}
 	var out session.Meta
 	if err := json.Unmarshal([]byte(raw), &out); err != nil {
-		return session.Meta{}, false
+		return session.Meta{}, fmt.Errorf("decode queued turn session metadata: %w", err)
 	}
 	if strings.TrimSpace(out.ChannelID) == "" || strings.TrimSpace(out.EndpointID) == "" {
-		return session.Meta{}, false
+		return session.Meta{}, errors.New("queued turn session metadata has incomplete identity")
 	}
-	return out, true
+	return out, nil
 }
 
-func unmarshalQueuedTurnAttachments(raw string) []RunAttachmentIn {
+func unmarshalQueuedTurnAttachments(raw string) ([]RunAttachmentIn, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return nil
+		return nil, errors.New("queued turn attachments are empty")
 	}
 	var out []RunAttachmentIn
 	if err := json.Unmarshal([]byte(raw), &out); err != nil {
-		return nil
+		return nil, fmt.Errorf("decode queued turn attachments: %w", err)
 	}
 	cleaned := make([]RunAttachmentIn, 0, len(out))
-	for _, item := range out {
+	for index, item := range out {
 		url := strings.TrimSpace(item.URL)
 		if url == "" {
-			continue
+			return nil, fmt.Errorf("queued turn attachment %d has no URL", index)
+		}
+		if parseUploadIDFromURL(url) == "" {
+			return nil, fmt.Errorf("queued turn attachment %d is not a Redeven upload", index)
 		}
 		cleaned = append(cleaned, RunAttachmentIn{
 			Name:     strings.TrimSpace(item.Name),
@@ -181,7 +185,7 @@ func unmarshalQueuedTurnAttachments(raw string) []RunAttachmentIn {
 			URL:      url,
 		})
 	}
-	return cleaned
+	return cleaned, nil
 }
 
 func unmarshalQueuedTurnContextAction(raw string) (*ContextActionEnvelope, error) {
@@ -200,20 +204,23 @@ func unmarshalQueuedTurnContextAction(raw string) (*ContextActionEnvelope, error
 	return action, nil
 }
 
-func unmarshalQueuedTurnOptions(raw string) RunOptions {
+func unmarshalQueuedTurnOptions(raw string) (RunOptions, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return RunOptions{}
+		return RunOptions{}, errors.New("queued turn options are empty")
 	}
 	var out RunOptions
 	if err := json.Unmarshal([]byte(raw), &out); err != nil {
-		return RunOptions{}
+		return RunOptions{}, fmt.Errorf("decode queued turn options: %w", err)
 	}
-	return out
+	return out, nil
 }
 
-func followupRecordToView(rec threadstore.QueuedTurn, position int) FollowupItemView {
-	attachments := unmarshalQueuedTurnAttachments(rec.AttachmentsJSON)
+func followupRecordToView(rec threadstore.QueuedTurn, position int) (FollowupItemView, error) {
+	attachments, err := unmarshalQueuedTurnAttachments(rec.AttachmentsJSON)
+	if err != nil {
+		return FollowupItemView{}, err
+	}
 	views := make([]FollowupAttachmentView, 0, len(attachments))
 	for _, item := range attachments {
 		views = append(views, FollowupAttachmentView{
@@ -222,7 +229,10 @@ func followupRecordToView(rec threadstore.QueuedTurn, position int) FollowupItem
 			URL:      strings.TrimSpace(item.URL),
 		})
 	}
-	options := unmarshalQueuedTurnOptions(rec.OptionsJSON)
+	options, err := unmarshalQueuedTurnOptions(rec.OptionsJSON)
+	if err != nil {
+		return FollowupItemView{}, err
+	}
 	view := FollowupItemView{
 		FollowupID:      strings.TrimSpace(rec.QueueID),
 		Lane:            strings.TrimSpace(rec.Lane),
@@ -236,32 +246,43 @@ func followupRecordToView(rec threadstore.QueuedTurn, position int) FollowupItem
 	if len(views) > 0 {
 		view.Attachments = views
 	}
-	if contextAction, err := unmarshalQueuedTurnContextAction(rec.ContextActionJSON); err == nil {
-		view.ContextAction = contextAction
+	contextAction, err := unmarshalQueuedTurnContextAction(rec.ContextActionJSON)
+	if err != nil {
+		return FollowupItemView{}, err
 	}
-	return view
+	view.ContextAction = contextAction
+	return view, nil
 }
 
-func queuedTurnRecordToThreadView(rec threadstore.QueuedTurn) QueuedTurnView {
+func queuedTurnRecordToThreadView(rec threadstore.QueuedTurn) (QueuedTurnView, error) {
 	view := QueuedTurnView{
 		MessageID:       strings.TrimSpace(rec.TurnID),
 		Text:            strings.TrimSpace(rec.TextContent),
 		CreatedAtUnixMs: rec.CreatedAtUnixMs,
 	}
-	if contextAction, err := unmarshalQueuedTurnContextAction(rec.ContextActionJSON); err == nil {
-		view.ContextAction = contextAction
+	contextAction, err := unmarshalQueuedTurnContextAction(rec.ContextActionJSON)
+	if err != nil {
+		return QueuedTurnView{}, err
 	}
-	return view
+	view.ContextAction = contextAction
+	return view, nil
 }
 
 func queuedTurnRecordToRunStartRequest(rec threadstore.QueuedTurn, threadPermissionType string) (RunStartRequest, error) {
-	options := unmarshalQueuedTurnOptions(rec.OptionsJSON)
-	permissionFallback, err := normalizePermissionType(strings.TrimSpace(threadPermissionType), FlowerPermissionApprovalRequired)
+	options, err := unmarshalQueuedTurnOptions(rec.OptionsJSON)
 	if err != nil {
-		permissionFallback = FlowerPermissionApprovalRequired
+		return RunStartRequest{}, err
 	}
-	options.PermissionType = permissionTypeString(permissionFallback)
+	permissionType, err := normalizePermissionType(strings.TrimSpace(threadPermissionType), "")
+	if err != nil {
+		return RunStartRequest{}, fmt.Errorf("parse queued turn permission setting: %w", err)
+	}
+	options.PermissionType = permissionTypeString(permissionType)
 	contextAction, err := unmarshalQueuedTurnContextAction(rec.ContextActionJSON)
+	if err != nil {
+		return RunStartRequest{}, err
+	}
+	attachments, err := unmarshalQueuedTurnAttachments(rec.AttachmentsJSON)
 	if err != nil {
 		return RunStartRequest{}, err
 	}
@@ -271,30 +292,31 @@ func queuedTurnRecordToRunStartRequest(rec threadstore.QueuedTurn, threadPermiss
 		Input: RunInput{
 			MessageID:     strings.TrimSpace(rec.TurnID),
 			Text:          strings.TrimSpace(rec.TextContent),
-			Attachments:   unmarshalQueuedTurnAttachments(rec.AttachmentsJSON),
+			Attachments:   attachments,
 			ContextAction: contextAction,
 		},
 		Options: options,
 	}, nil
 }
 
-func queuedTurnRecordToSessionMeta(rec threadstore.QueuedTurn, namespacePublicID string) *session.Meta {
-	meta, ok := unmarshalQueuedTurnSessionMeta(rec.SessionMetaJSON)
-	if !ok {
-		meta = session.Meta{}
+func queuedTurnRecordToSessionMeta(rec threadstore.QueuedTurn, namespacePublicID string) (*session.Meta, error) {
+	meta, err := unmarshalQueuedTurnSessionMeta(rec.SessionMetaJSON)
+	if err != nil {
+		return nil, err
 	}
-	meta.ChannelID = strings.TrimSpace(rec.ChannelID)
-	meta.EndpointID = strings.TrimSpace(rec.EndpointID)
-	meta.NamespacePublicID = strings.TrimSpace(namespacePublicID)
-	meta.UserPublicID = strings.TrimSpace(meta.UserPublicID)
-	if meta.UserPublicID == "" {
-		meta.UserPublicID = strings.TrimSpace(rec.CreatedByUserPublicID)
+	if strings.TrimSpace(meta.ChannelID) != strings.TrimSpace(rec.ChannelID) || strings.TrimSpace(meta.EndpointID) != strings.TrimSpace(rec.EndpointID) {
+		return nil, errors.New("queued turn session identity conflicts with queue record")
 	}
-	meta.UserEmail = strings.TrimSpace(meta.UserEmail)
-	if meta.UserEmail == "" {
-		meta.UserEmail = strings.TrimSpace(rec.CreatedByUserEmail)
+	if strings.TrimSpace(meta.NamespacePublicID) != strings.TrimSpace(namespacePublicID) {
+		return nil, errors.New("queued turn namespace conflicts with thread settings")
 	}
-	return &meta
+	if createdBy := strings.TrimSpace(rec.CreatedByUserPublicID); createdBy != "" && strings.TrimSpace(meta.UserPublicID) != createdBy {
+		return nil, errors.New("queued turn user identity conflicts with audit record")
+	}
+	if createdBy := strings.TrimSpace(rec.CreatedByUserEmail); createdBy != "" && strings.TrimSpace(meta.UserEmail) != createdBy {
+		return nil, errors.New("queued turn user email conflicts with audit record")
+	}
+	return &meta, nil
 }
 
 func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req SendUserTurnRequest) (threadstore.QueuedTurn, int, error) {
@@ -342,6 +364,18 @@ func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req
 	if err != nil {
 		return threadstore.QueuedTurn{}, 0, err
 	}
+	attachmentsJSON, err := marshalQueuedTurnAttachments(normalizedInput.Attachments)
+	if err != nil {
+		return threadstore.QueuedTurn{}, 0, err
+	}
+	optionsJSON, err := marshalQueuedTurnOptions(req.Options)
+	if err != nil {
+		return threadstore.QueuedTurn{}, 0, err
+	}
+	sessionMetaJSON, err := marshalQueuedTurnSessionMeta(meta)
+	if err != nil {
+		return threadstore.QueuedTurn{}, 0, err
+	}
 	queueID, err := NewQueuedTurnID()
 	if err != nil {
 		return threadstore.QueuedTurn{}, 0, err
@@ -358,10 +392,10 @@ func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req
 		RunID:                 runID,
 		ModelID:               strings.TrimSpace(req.Model),
 		TextContent:           strings.TrimSpace(normalizedInput.Text),
-		AttachmentsJSON:       marshalQueuedTurnAttachments(normalizedInput.Attachments),
+		AttachmentsJSON:       attachmentsJSON,
 		ContextActionJSON:     contextActionJSON,
-		OptionsJSON:           marshalQueuedTurnOptions(req.Options),
-		SessionMetaJSON:       marshalQueuedTurnSessionMeta(meta),
+		OptionsJSON:           optionsJSON,
+		SessionMetaJSON:       sessionMetaJSON,
 		CreatedByUserPublicID: strings.TrimSpace(meta.UserPublicID),
 		CreatedByUserEmail:    strings.TrimSpace(meta.UserEmail),
 		CreatedAtUnixMs:       createdAtUnixMs,
@@ -489,10 +523,18 @@ func (s *Service) ListFollowups(ctx context.Context, meta *session.Meta, threadI
 		Drafts:       make([]FollowupItemView, 0, len(drafts)),
 	}
 	for i, rec := range queued {
-		out.Queued = append(out.Queued, followupRecordToView(rec, i+1))
+		view, err := followupRecordToView(rec, i+1)
+		if err != nil {
+			return nil, fmt.Errorf("decode queued followup %q: %w", rec.QueueID, err)
+		}
+		out.Queued = append(out.Queued, view)
 	}
 	for i, rec := range drafts {
-		out.Drafts = append(out.Drafts, followupRecordToView(rec, i+1))
+		view, err := followupRecordToView(rec, i+1)
+		if err != nil {
+			return nil, fmt.Errorf("decode draft followup %q: %w", rec.QueueID, err)
+		}
+		out.Drafts = append(out.Drafts, view)
 	}
 	return out, nil
 }

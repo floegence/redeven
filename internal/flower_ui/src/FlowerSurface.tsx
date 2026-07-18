@@ -71,7 +71,6 @@ import {
 import {
   buildFlowerSubagentPanelItems,
   presentSubagentTaskName,
-  subagentTaskNameRoleFallback,
   type FlowerSubagentPanelItem,
   type FlowerSubagentPanelStatus,
 } from './flowerSubagentProjection';
@@ -3343,7 +3342,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const openSubagentDetail = async (item: FlowerSubagentPanelItem) => {
     const parentID = trimString(selectedThread()?.thread_id);
-    const childID = trimString(item.threadID || item.subagentID);
+    const childID = trimString(item.threadID);
     if (!parentID || !childID) return;
     const openedRevision = untrack(subagentDetailOpenedRevision) + 1;
     const requestID = `${parentID}\x00${childID}\x00${openedRevision}`;
@@ -3949,7 +3948,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const activeSubagentItem = createMemo(() => {
     const activeID = trimString(activeSubagentID());
     if (!activeID) return null;
-    return selectedSubagentItems().find((item) => trimString(item.threadID || item.subagentID) === activeID) ?? null;
+    return selectedSubagentItems().find((item) => trimString(item.threadID) === activeID) ?? null;
   });
   createEffect(() => {
     const activeID = trimString(activeSubagentID());
@@ -4955,7 +4954,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const descriptionID = `flower-approval-description-${action.action_id}`;
     const statusID = `flower-approval-status-${action.action_id}`;
     const actionLabel = action.summary.label || action.tool_name || copy().chat.toolApprovalRequired;
-    const subtaskLabel = action.delegated_ref?.subagent_id ? copy().chat.toolApprovalSubtaskSuffix(action.delegated_ref.subagent_id) : '';
+    const subtaskLabel = action.delegated_ref?.child_thread_id ? copy().chat.toolApprovalSubtaskSuffix(action.delegated_ref.child_thread_id) : '';
     const commandText = trimString(action.summary.command);
     const descriptionText = action.summary.description || action.read_only_reason || '';
     const hasDescription = Boolean(descriptionText);
@@ -5774,11 +5773,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     void openSubagentDetail({
       key: action.thread_id,
       threadID: action.thread_id,
-      subagentID: action.subagent_id || action.thread_id,
       taskName: agent.name,
       taskDescription: agent.description,
       title: agent.name,
-      displayName: presentSubagentTaskName(agent.name, subagentTaskNameRoleFallback(agent.agent_type)),
+      displayName: presentSubagentTaskName(agent.name),
       agentType: agent.agent_type,
       status: 'unknown',
       action: 'inspect',
@@ -6451,15 +6449,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return count > 99 ? '99+' : String(count);
   };
   const subagentRowTitle = (item: FlowerSubagentPanelItem): string => (
-    trimString(item.displayName) || trimString(item.title) || trimString(item.taskName) || trimString(item.threadID || item.subagentID) || subagentsCopy().typeLabels.unknown
+    trimString(item.displayName) || trimString(item.title) || trimString(item.taskName) || subagentsCopy().typeLabels.unknown
   );
   const activeSubagentTitle = createMemo(() => {
     const item = activeSubagentItem();
     if (item) return subagentRowTitle(item);
     const summary = subagentDetail()?.summary;
-    const rawTitle = trimString(summary?.title) || trimString(summary?.task_name);
-    const roleFallback = subagentTaskNameRoleFallback(summary?.agent_type || activeSubagentItem()?.agentType || '');
-    return rawTitle ? presentSubagentTaskName(rawTitle, roleFallback) : roleFallback;
+    const taskName = trimString(summary?.task_name);
+    return taskName ? presentSubagentTaskName(taskName) : subagentsCopy().typeLabels.unknown;
   });
   const subagentSummaryStatus = createMemo(() => {
     return subagentStatusLabel(subagentDetailActiveStatus());
@@ -6522,7 +6519,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   class={cn(
                     'flower-subagent-dropdown-row',
                     `flower-subagent-dropdown-row-${item.status}`,
-                    activeSubagentID() === trimString(item.threadID || item.subagentID) && 'flower-subagent-dropdown-row-active',
+                    activeSubagentID() === trimString(item.threadID) && 'flower-subagent-dropdown-row-active',
                   )}
                   data-flower-subagent-row={selectedSubagentItems().findIndex((candidate) => candidate.key === item.key)}
                   data-flower-subagent-status={item.status}
@@ -6607,7 +6604,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </Show>
   );
 
-  const subagentDetailThread = createMemo(() => projectSubagentDetailThread(subagentDetail(), activeSubagentID(), activeSubagentTitle()));
+  const subagentDetailThread = createMemo(() => projectSubagentDetailThread(subagentDetail()));
   const subagentDetailTimelineEntries = createMemo(() => buildFlowerTimelineEntries(subagentDetailThread()));
   const subagentDetailWindowTitle = createMemo(() => activeSubagentTitle());
   const showSubagentDetailScrollToLatestButton = createMemo(() => (
@@ -7382,7 +7379,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           const actionLabel = () => approvalAction.summary.label || approvalAction.tool_name || copy().chat.toolApprovalRequired;
                           const subtaskLabel = () => {
                             const ref = approvalAction.delegated_ref;
-                            return ref?.subagent_id ? copy().chat.toolApprovalSubtaskSuffix(ref.subagent_id) : '';
+                            return ref?.child_thread_id ? copy().chat.toolApprovalSubtaskSuffix(ref.child_thread_id) : '';
                           };
                           return (
                             <div class="flower-composer-approval-actions">

@@ -1808,7 +1808,6 @@ describe('Flower live projection', () => {
     const delegatedRef = {
       parent_thread_id: 'th-live',
       parent_run_id: 'run-parent',
-      subagent_id: 'child-1',
       child_thread_id: 'child-thread-1',
       child_run_id: 'child-run-1',
       child_tool_call_id: 'tool-child-1',
@@ -1915,7 +1914,6 @@ describe('Flower live projection', () => {
     const delegatedRef = {
       parent_thread_id: 'th-live',
       parent_run_id: 'run-parent',
-      subagent_id: 'child-1',
       child_thread_id: 'child-thread-1',
       child_run_id: 'child-run-1',
       child_tool_call_id: 'tool-child-1',
@@ -1970,13 +1968,12 @@ describe('Flower live projection', () => {
     const delegatedRef = {
       parent_thread_id: 'th-live',
       parent_run_id: 'run-parent',
-      subagent_id: 'child-1',
       child_thread_id: 'child-thread-1',
       child_run_id: 'child-run-1',
       child_tool_call_id: 'tool-child-1',
       approval_id: 'approval-child-1',
     };
-    const action = (actionID: string, requestedAtMs: number, subagentID: string) => ({
+    const action = (actionID: string, requestedAtMs: number, childThreadKey: string) => ({
       action_id: actionID,
       origin: 'delegated_subagent' as const,
       tool_name: 'terminal.exec',
@@ -1995,11 +1992,10 @@ describe('Flower live projection', () => {
       child_execution_state: 'pending' as const,
       delegated_ref: {
         ...delegatedRef,
-        subagent_id: subagentID,
-        child_thread_id: `thread-${subagentID}`,
-        child_run_id: `run-${subagentID}`,
-        child_tool_call_id: `tool-${subagentID}`,
-        approval_id: `approval-${subagentID}`,
+        child_thread_id: `thread-${childThreadKey}`,
+        child_run_id: `run-${childThreadKey}`,
+        child_tool_call_id: `tool-${childThreadKey}`,
+        approval_id: `approval-${childThreadKey}`,
       },
       summary: { label: 'Run command' },
     });
@@ -3019,7 +3015,6 @@ describe('Flower live projection', () => {
         subagents: [{
           parent_thread_id: 'th-live',
           thread_id: 'child-1',
-          subagent_id: 'child-1',
           task_name: 'Review API',
           task_description: 'Review the public API boundary.',
           agent_type: 'reviewer',
@@ -3048,7 +3043,6 @@ describe('Flower live projection', () => {
       expect.objectContaining({
         parent_thread_id: 'th-live',
         thread_id: 'child-1',
-        subagent_id: 'child-1',
         task_name: 'Review API',
         status: 'completed',
       }),
@@ -3068,7 +3062,6 @@ describe('Flower live projection', () => {
             subagents: [{
               parent_thread_id: 'th-live',
               thread_id: 'child-2',
-              subagent_id: 'child-2',
               task_name: 'Check tests',
               task_description: 'Run focused tests.',
               status: 'running',
@@ -3089,7 +3082,6 @@ describe('Flower live projection', () => {
       expect.objectContaining({
         parent_thread_id: 'th-live',
         thread_id: 'child-2',
-        subagent_id: 'child-2',
         task_name: 'Check tests',
         status: 'running',
       }),

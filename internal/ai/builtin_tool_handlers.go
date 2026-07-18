@@ -419,14 +419,8 @@ func subagentsToolInputSchema() map[string]any {
 				"maxLength":   140,
 				"description": "Short human-facing English name with 1-5 Title Case words, for example Safety Review or API Contract Review. Never use snake_case or kebab-case.",
 			},
-			"title": map[string]any{
-				"type":        "string",
-				"maxLength":   140,
-				"description": "Legacy alias for task_name. New spawn calls should use task_name.",
-			},
 			"task_description": map[string]any{"type": "string", "maxLength": 500},
 			"message":          map[string]any{"type": "string", "maxLength": 4000},
-			"objective":        map[string]any{"type": "string", "maxLength": 4000},
 			"agent_type":       map[string]any{"type": "string", "enum": []string{"explore", "worker", "reviewer"}},
 			"context_mode": map[string]any{
 				"type":        "string",

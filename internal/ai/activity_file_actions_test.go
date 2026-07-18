@@ -89,7 +89,7 @@ func TestSanitizeActivityTimelineMessageJSONKeepsSubagentPublicPayload(t *testin
 		"timestamp":1700000000000,
 		"blocks":[
 			{"type":"activity-timeline","schema_version":1,"run_id":"run_subagents","thread_id":"thread_parent","turn_id":"msg_subagents","trace_id":"trace_subagents","summary":{"status":"success","severity":"quiet","needs_attention":false,"total_items":1,"counts":{"success":1}},"items":[
-				{"item_id":"tool_subagents_spawn","tool_id":"tool_subagents_spawn","tool_name":"subagents","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,"label":"Spawn reviewer","renderer":"structured","payload":{"action":"spawn","status":"ok","subagent_id":"thread_child_review","thread_id":"thread_child_review","parent_thread_id":"thread_parent","parent_turn_id":"msg_subagents","task_name":"Review API","task_description":"Review the public API boundary.","agent_type":"reviewer","created_at_ms":100,"updated_at_ms":120,"items":[{"subagent_id":"thread_child_review","thread_id":"thread_child_review","parent_thread_id":"thread_parent","parent_turn_id":"msg_subagents","task_name":"Review API","task_description":"Review the public API boundary.","agent_type":"reviewer","status":"completed","created_at_ms":100,"updated_at_ms":120}],"counts":{"completed":1,"total":1}}}
+				{"item_id":"tool_subagents_spawn","tool_id":"tool_subagents_spawn","tool_name":"subagents","kind":"tool","status":"success","severity":"quiet","needs_attention":false,"requires_approval":false,"label":"Spawn reviewer","renderer":"structured","payload":{"action":"spawn","status":"ok","thread_id":"thread_child_review","parent_thread_id":"thread_parent","parent_turn_id":"msg_subagents","task_name":"Review API","task_description":"Review the public API boundary.","agent_type":"reviewer","created_at_ms":100,"updated_at_ms":120,"items":[{"thread_id":"thread_child_review","parent_thread_id":"thread_parent","parent_turn_id":"msg_subagents","task_name":"Review API","task_description":"Review the public API boundary.","agent_type":"reviewer","status":"completed","created_at_ms":100,"updated_at_ms":120}],"counts":{"completed":1,"total":1}}}
 			]}
 		]
 	}`
@@ -101,7 +101,6 @@ func TestSanitizeActivityTimelineMessageJSONKeepsSubagentPublicPayload(t *testin
 	body := string(sanitized)
 	for _, required := range []string{
 		`"thread_id":"thread_child_review"`,
-		`"subagent_id":"thread_child_review"`,
 		`"parent_thread_id":"thread_parent"`,
 		`"parent_turn_id":"msg_subagents"`,
 		`"items"`,

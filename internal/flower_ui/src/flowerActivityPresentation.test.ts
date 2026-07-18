@@ -242,7 +242,6 @@ describe('presentFlowerActivityItem', () => {
         context_mode: 'mission_only',
         items: [{
           thread_id: 'child-thread-1',
-          subagent_id: 'child-thread-1',
           task_name: 'Review API boundary',
           task_description: 'Review the API boundary and identify contract risks.',
           agent_type: 'reviewer',
@@ -270,7 +269,6 @@ describe('presentFlowerActivityItem', () => {
           show_status: false,
           open_messages: {
             thread_id: 'child-thread-1',
-            subagent_id: 'child-thread-1',
           },
         }],
       },
@@ -287,7 +285,6 @@ describe('presentFlowerActivityItem', () => {
       label: 'Review API boundary',
       payload: {
         thread_id: 'child-thread-1',
-        subagent_id: 'child-thread-1',
         task_name: 'Review API boundary',
         task_description: 'Review the API boundary and identify contract risks.',
         agent_type: 'reviewer',
@@ -309,7 +306,6 @@ describe('presentFlowerActivityItem', () => {
           show_status: false,
           open_messages: {
             thread_id: 'child-thread-1',
-            subagent_id: 'child-thread-1',
           },
         }],
       },

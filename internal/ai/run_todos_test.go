@@ -121,7 +121,7 @@ func newTodoTestRun(t *testing.T) (*run, *flruntime.Host) {
 	if _, err := host.EnsureThread(context.Background(), flruntime.EnsureThreadRequest{ThreadID: "thread_1"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := host.RunTurn(context.Background(), flruntime.RunTurnRequest{ThreadID: "thread_1", TurnID: "turn_1", RunID: "run_1", Input: "track work"}); err != nil {
+	if _, err := host.RunTurn(context.Background(), flruntime.RunTurnRequest{ThreadID: "thread_1", TurnID: "turn_1", RunID: "run_1", Input: flruntime.TurnInput{Text: "track work"}}); err != nil {
 		t.Fatal(err)
 	}
 	r := &run{id: "run_1", threadID: "thread_1", messageID: "turn_1"}

@@ -175,6 +175,7 @@ type run struct {
 	muPendingCommand         sync.Mutex
 	pendingCommandID         string
 	pendingCommandReconciled bool
+	canonicalAttachmentIDs   []string
 
 	finalizationReason string
 	currentModelID     string
@@ -942,38 +943,48 @@ func (r *run) setPendingTurnCommand(commandID string) {
 	r.muPendingCommand.Unlock()
 }
 
-func (r *run) commitPendingTurnCommandAdmission(verifyCanonicalTurn bool) {
-	if r == nil || r.service == nil {
-		return
+func (r *run) commitPendingTurnCommandAdmission(verifyCanonicalTurn bool) error {
+	if r == nil {
+		return errors.New("run admission coordinator is unavailable")
 	}
 	r.muPendingCommand.Lock()
 	defer r.muPendingCommand.Unlock()
-	if r.pendingCommandReconciled || strings.TrimSpace(r.pendingCommandID) == "" {
-		return
+	if r.pendingCommandReconciled {
+		return nil
+	}
+	if strings.TrimSpace(r.pendingCommandID) == "" {
+		if len(r.canonicalAttachmentIDs) != 0 {
+			return errors.New("attachment admission requires a pending command")
+		}
+		r.pendingCommandReconciled = true
+		return nil
+	}
+	if r.service == nil {
+		return errors.New("run admission coordinator is unavailable")
 	}
 	timeout := r.persistTimeout()
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	accepted := true
 	var err error
 	if verifyCanonicalTurn {
-		accepted, err = r.service.reconcilePendingTurnCommand(ctx, r.endpointID, r.threadID, r.pendingCommandID, r.messageID)
+		accepted, err = r.service.reconcilePendingTurnCommand(ctx, r.endpointID, r.threadID, r.pendingCommandID, r.messageID, r.canonicalAttachmentIDs)
 	} else {
-		err = r.service.commitPendingTurnCommandAdmission(ctx, r.endpointID, r.threadID, r.pendingCommandID, r.messageID)
+		err = r.service.commitPendingTurnCommandAdmission(ctx, r.endpointID, r.threadID, r.pendingCommandID, r.messageID, r.canonicalAttachmentIDs)
 	}
 	cancel()
 	if err != nil {
-		if r.log != nil {
-			r.log.Warn("ai: reconcile pending turn command failed", "thread_id", r.threadID, "turn_id", r.messageID, "error", err)
-		}
-		return
+		return err
 	}
 	if accepted {
 		r.pendingCommandReconciled = true
 	}
+	return nil
 }
 
 func (r *run) reconcilePendingTurnCommand() {
-	r.commitPendingTurnCommandAdmission(true)
+	if err := r.commitPendingTurnCommandAdmission(true); err != nil {
+		r.rejectFloretContract("turn_admission", err)
+	}
 }
 
 func (r *run) recordRunDiagnostic(eventType string, streamKind RealtimeStreamKind, payload map[string]any) {
@@ -2918,8 +2929,11 @@ func (r *run) canExecuteReadonlyExclusiveTool() bool {
 }
 
 func (r *run) authorizeToolExecutionFromSnapshot(ctx context.Context, toolID string, toolName string) error {
-	if r == nil || !permissionSnapshotActive(r.permissionSnapshot) {
-		return nil
+	if r == nil {
+		return errors.New("permission snapshot runtime is unavailable")
+	}
+	if !permissionSnapshotActive(r.permissionSnapshot) {
+		return errors.New("permission snapshot is unavailable")
 	}
 	if r.subagentDepth <= 0 && !r.noUserInteraction && r.threadsDB != nil {
 		previousEpoch := permissionSurfaceEpoch(r.permissionSnapshot)
@@ -2928,18 +2942,20 @@ func (r *run) authorizeToolExecutionFromSnapshot(ctx context.Context, toolID str
 			surfaceConfig.UseLatestThreadPermission = true
 		}
 		surfaceConfig.IncludeControlSignalsInSnapshot = true
-		if surface, err := r.buildRunToolSurface(ctx, surfaceConfig, r.permissionType); err == nil {
-			if surface.Epoch != "" && surface.Epoch != previousEpoch {
-				r.recordRunDiagnostic("tool_surface.updated", RealtimeStreamKindLifecycle, map[string]any{
-					"phase":             "local_tool_dispatch",
-					"permission_type":   permissionTypeString(surface.PermissionType),
-					"snapshot_id":       strings.TrimSpace(surface.PermissionSnapshot.SnapshotID),
-					"snapshot_hash":     strings.TrimSpace(surface.PermissionSnapshot.SnapshotHash),
-					"registry_hash":     strings.TrimSpace(surface.PermissionSnapshot.RegistryHash),
-					"schema_hash":       strings.TrimSpace(surface.PermissionSnapshot.SchemaHash),
-					"presentation_hash": strings.TrimSpace(surface.PermissionSnapshot.PresentationHash),
-				})
-			}
+		surface, err := r.buildRunToolSurface(ctx, surfaceConfig, r.permissionType)
+		if err != nil {
+			return fmt.Errorf("refresh current permission snapshot: %w", err)
+		}
+		if surface.Epoch != "" && surface.Epoch != previousEpoch {
+			r.recordRunDiagnostic("tool_surface.updated", RealtimeStreamKindLifecycle, map[string]any{
+				"phase":             "local_tool_dispatch",
+				"permission_type":   permissionTypeString(surface.PermissionType),
+				"snapshot_id":       strings.TrimSpace(surface.PermissionSnapshot.SnapshotID),
+				"snapshot_hash":     strings.TrimSpace(surface.PermissionSnapshot.SnapshotHash),
+				"registry_hash":     strings.TrimSpace(surface.PermissionSnapshot.RegistryHash),
+				"schema_hash":       strings.TrimSpace(surface.PermissionSnapshot.SchemaHash),
+				"presentation_hash": strings.TrimSpace(surface.PermissionSnapshot.PresentationHash),
+			})
 		}
 	}
 	toolName = strings.TrimSpace(toolName)

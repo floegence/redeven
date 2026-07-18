@@ -13,7 +13,6 @@ import (
 
 func marshalPermissionSnapshot(snapshot PermissionSnapshot) ([]byte, error) {
 	snapshot.Version = permissionSnapshotVersionCurrent
-	snapshot.legacyConcurrency = nil
 	return json.Marshal(snapshot)
 }
 
@@ -28,55 +27,29 @@ func decodePermissionSnapshot(raw string) (PermissionSnapshot, error) {
 	if err := json.Unmarshal([]byte(raw), &header); err != nil {
 		return PermissionSnapshot{}, err
 	}
-	switch header.Version {
-	case 0, permissionSnapshotVersionLegacy:
-		var legacy permissionSnapshotV1
-		if err := json.Unmarshal([]byte(raw), &legacy); err != nil {
-			return PermissionSnapshot{}, err
-		}
-		snapshot := PermissionSnapshot{
-			Version:               permissionSnapshotVersionLegacy,
-			SnapshotID:            legacy.SnapshotID,
-			PermissionType:        legacy.PermissionType,
-			VisibleToolNames:      append([]string(nil), legacy.VisibleToolNames...),
-			PromptCapabilityNames: append([]string(nil), legacy.PromptCapabilityNames...),
-			FloretToolNames:       append([]string(nil), legacy.FloretToolNames...),
-			ToolPolicies:          make(map[string]ToolPermissionPolicy, len(legacy.ToolPolicies)),
-			SnapshotHash:          legacy.SnapshotHash,
-			RegistryHash:          legacy.RegistryHash,
-			SchemaHash:            legacy.SchemaHash,
-			PresentationHash:      legacy.PresentationHash,
-			legacyConcurrency:     make(map[string]bool, len(legacy.ToolPolicies)),
-		}
-		for name, policy := range legacy.ToolPolicies {
-			snapshot.ToolPolicies[name] = ToolPermissionPolicy{
-				Visibility:       policy.Visibility,
-				Capabilities:     append([]ToolCapabilityClass(nil), policy.Capabilities...),
-				ResourceKinds:    append([]string(nil), policy.ResourceKinds...),
-				ApprovalDecision: policy.ApprovalDecision,
-			}
-			snapshot.legacyConcurrency[name] = policy.LegacyConcurrency
-		}
-		return snapshot, nil
-	case permissionSnapshotVersionCurrent:
-		var snapshot PermissionSnapshot
-		if err := json.Unmarshal([]byte(raw), &snapshot); err != nil {
-			return PermissionSnapshot{}, err
-		}
-		return snapshot, nil
-	default:
+	if header.Version != permissionSnapshotVersionCurrent {
 		return PermissionSnapshot{}, fmt.Errorf("unsupported permission snapshot version %d", header.Version)
 	}
+	var snapshot PermissionSnapshot
+	if err := json.Unmarshal([]byte(raw), &snapshot); err != nil {
+		return PermissionSnapshot{}, err
+	}
+	return snapshot, nil
 }
 
-func (r *run) freezePermissionSnapshot(snapshot PermissionSnapshot) PermissionSnapshot {
+func (r *run) freezePermissionSnapshot(snapshot PermissionSnapshot) (PermissionSnapshot, error) {
 	if r == nil {
-		return snapshot
+		return PermissionSnapshot{}, errors.New("missing permission snapshot owner")
 	}
 	snapshot = permissionSnapshotWithOwnerIdentity(snapshot, r.endpointID, r.threadID, r.id)
+	if !permissionSnapshotActive(snapshot) || strings.TrimSpace(snapshot.SnapshotHash) == "" {
+		return PermissionSnapshot{}, errors.New("permission snapshot is empty")
+	}
+	if err := r.persistPermissionSnapshot(snapshot); err != nil {
+		return PermissionSnapshot{}, err
+	}
 	r.permissionSnapshot = snapshot
-	r.persistPermissionSnapshot(snapshot)
-	return snapshot
+	return snapshot, nil
 }
 
 func persistContextForRun(r *run) (context.Context, context.CancelFunc) {
@@ -87,17 +60,20 @@ func persistContextForRun(r *run) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(context.Background(), persistTO)
 }
 
-func (r *run) persistPermissionSnapshot(snapshot PermissionSnapshot) {
-	if r == nil || r.threadsDB == nil || strings.TrimSpace(snapshot.SnapshotID) == "" {
-		return
+func (r *run) persistPermissionSnapshot(snapshot PermissionSnapshot) error {
+	if r == nil || r.threadsDB == nil {
+		return errors.New("permission snapshot store is unavailable")
+	}
+	if strings.TrimSpace(snapshot.SnapshotID) == "" {
+		return errors.New("permission snapshot id is missing")
 	}
 	payload, err := marshalPermissionSnapshot(snapshot)
 	if err != nil {
-		return
+		return err
 	}
 	ctx, cancel := persistContextForRun(r)
 	defer cancel()
-	_ = r.threadsDB.InsertPermissionSnapshot(ctx, threadstore.PermissionSnapshotRecord{
+	if err := r.threadsDB.InsertPermissionSnapshot(ctx, threadstore.PermissionSnapshotRecord{
 		SnapshotID:       snapshot.SnapshotID,
 		EndpointID:       strings.TrimSpace(r.endpointID),
 		OwnerThreadID:    strings.TrimSpace(r.threadID),
@@ -109,7 +85,10 @@ func (r *run) persistPermissionSnapshot(snapshot PermissionSnapshot) {
 		SchemaHash:       snapshot.SchemaHash,
 		PresentationHash: snapshot.PresentationHash,
 		CreatedAtUnixMs:  time.Now().UnixMilli(),
-	})
+	}); err != nil {
+		return fmt.Errorf("persist permission snapshot: %w", err)
+	}
+	return nil
 }
 
 func (r *run) insertChildPermissionSnapshot(childThreadID string, childRunID string, spawnToolCallID string, child PermissionSnapshot) error {
@@ -152,7 +131,6 @@ func (r *run) persistChildPermissionSnapshot(childThreadID string, childRunID st
 		SpawnToolCallID:  spawnToolCallID,
 		ParentThreadID:   strings.TrimSpace(r.threadID),
 		ParentRunID:      strings.TrimSpace(r.id),
-		SubagentID:       childThreadID,
 		ChildThreadID:    childThreadID,
 		ChildRunID:       childRunID,
 		State:            state,

@@ -57,7 +57,7 @@ type Options struct {
 
 	ToolTargetPolicy       ToolTargetPolicy
 	TargetToolExecutor     TargetToolExecutor
-	ToolTargetPolicyForRun func(meta *session.Meta, thread threadstore.Thread, flowerMeta *threadstore.FlowerThreadMetadata) ToolTargetPolicy
+	ToolTargetPolicyForRun func(meta *session.Meta, thread threadstore.ThreadSettings, flowerMeta *threadstore.FlowerThreadMetadata) ToolTargetPolicy
 
 	// PersistOpTimeout is the per-operation timeout for threadstore persistence
 	// (SQLite reads/writes). It must NOT be tied to a run's overall lifetime, since
@@ -120,7 +120,7 @@ type Service struct {
 
 	toolTargetPolicy       ToolTargetPolicy
 	targetToolExecutor     TargetToolExecutor
-	toolTargetPolicyForRun func(meta *session.Meta, thread threadstore.Thread, flowerMeta *threadstore.FlowerThreadMetadata) ToolTargetPolicy
+	toolTargetPolicyForRun func(meta *session.Meta, thread threadstore.ThreadSettings, flowerMeta *threadstore.FlowerThreadMetadata) ToolTargetPolicy
 
 	mu                      sync.Mutex
 	activeRunByTh           map[string]string // <endpoint_id>:<thread_id> -> run_id
@@ -152,7 +152,6 @@ type Service struct {
 	skillManager       *skillManager
 	terminalProcesses  *terminalProcessManager
 
-	threadTitleCoordinator    *autoThreadTitleCoordinator
 	flowerReadStateCleaner    FlowerReadStateCleaner
 	openDeleteMaintenanceHost func() (ThreadMaintenanceHost, error)
 	threadForkBroadcastMu     sync.Mutex
@@ -260,11 +259,23 @@ func NewService(opts Options) (*Service, error) {
 		return nil, err
 	}
 	threadsPath := filepath.Join(strings.TrimSpace(opts.StateDir), "ai", "threads.sqlite")
-	ts, err := threadstore.Open(threadsPath, threadstore.WithThreadIdentityEnsurer(func(threadID string) error {
+	ts, err := threadstore.Open(threadsPath, threadstore.WithLegacyThreadTitleMigrator(func(_ context.Context, legacy threadstore.LegacyThreadTitle) error {
 		ctx, cancel := context.WithTimeout(context.Background(), persistTO)
 		defer cancel()
-		_, err := migrationHost.EnsureThread(ctx, flruntime.EnsureThreadRequest{ThreadID: flruntime.ThreadID(threadID)})
-		return err
+		overview, err := migrationHost.ReadThreadOverview(ctx, flruntime.ThreadID(legacy.ThreadID))
+		if err != nil {
+			return fmt.Errorf("read canonical Floret title: %w", err)
+		}
+		canonicalTitle := strings.TrimSpace(overview.Thread.Title)
+		switch {
+		case canonicalTitle == "":
+			_, err = migrationHost.SetThreadTitle(ctx, flruntime.SetThreadTitleRequest{ThreadID: flruntime.ThreadID(legacy.ThreadID), Title: legacy.Title})
+			return err
+		case canonicalTitle == strings.TrimSpace(legacy.Title):
+			return nil
+		default:
+			return fmt.Errorf("canonical Floret title %q conflicts with Redeven title %q", canonicalTitle, strings.TrimSpace(legacy.Title))
+		}
 	}))
 	if err != nil {
 		_ = floretStore.Close()
@@ -352,7 +363,6 @@ func NewService(opts Options) (*Service, error) {
 		svc.skillManager.Discover()
 	}
 	svc.threadMgr = newThreadManager(svc)
-	svc.threadTitleCoordinator = newAutoThreadTitleCoordinator(svc)
 	deleteReplayCtx, cancelDeleteReplay := context.WithTimeout(context.Background(), persistTO)
 	deleteReplayCount, deleteReplayErr := svc.replayPendingThreadDeletes(deleteReplayCtx, threadDeleteReplayBatchSize)
 	cancelDeleteReplay()
@@ -360,9 +370,6 @@ func NewService(opts Options) (*Service, error) {
 		logger.Warn("ai: pending thread delete recovery failed", "error", deleteReplayErr)
 	} else if deleteReplayCount > 0 {
 		logger.Info("ai: pending thread delete recovery completed", "count", deleteReplayCount)
-	}
-	if svc.threadTitleCoordinator != nil {
-		svc.threadTitleCoordinator.ScheduleRecovery()
 	}
 	svc.scheduleQueuedTurnRecovery()
 	svc.startBackgroundMaintenance()
@@ -409,7 +416,7 @@ func (s *Service) scheduleQueuedTurnRecovery() {
 		}
 		for _, command := range commands {
 			reconcileCtx, reconcileCancel := context.WithTimeout(context.Background(), persistTO)
-			_, reconcileErr := s.reconcilePendingTurnCommand(reconcileCtx, endpointID, threadID, command.QueueID, command.TurnID)
+			_, reconcileErr := s.reconcilePendingTurnCommand(reconcileCtx, endpointID, threadID, command.QueueID, command.TurnID, nil)
 			reconcileCancel()
 			if reconcileErr != nil && s.log != nil {
 				s.log.Warn("ai: pending turn command reconciliation failed", "thread_id", threadID, "turn_id", command.TurnID, "error", reconcileErr)
@@ -439,8 +446,6 @@ func (s *Service) Close() error {
 		s.threadMgr.Close()
 	}
 	s.mu.Lock()
-	coordinator := s.threadTitleCoordinator
-	s.threadTitleCoordinator = nil
 	terminalProcesses := s.terminalProcesses
 	s.terminalProcesses = nil
 	ts := s.threadsDB
@@ -483,9 +488,6 @@ func (s *Service) Close() error {
 	}
 	s.mu.Unlock()
 
-	if coordinator != nil {
-		coordinator.Close()
-	}
 	waitTO := s.persistOpTO
 	if waitTO <= 0 {
 		waitTO = defaultPersistOpTimeout
@@ -784,11 +786,7 @@ func (s *Service) UpdateConfig(next *config.AIConfig, persist func() error) erro
 	}
 
 	s.cfg = next
-	coordinator := s.threadTitleCoordinator
 	s.mu.Unlock()
-	if coordinator != nil {
-		coordinator.Wake()
-	}
 	return nil
 }
 
@@ -868,11 +866,7 @@ func (s *Service) SetModelProfile(profile *config.AIModelProfile, persist func(n
 	if s.desktopModelSource != nil {
 		s.desktopModelSource.SetCurrentModelID("")
 	}
-	coordinator := s.threadTitleCoordinator
 	s.mu.Unlock()
-	if coordinator != nil {
-		coordinator.Wake()
-	}
 	return nil
 }
 
@@ -957,11 +951,7 @@ func (s *Service) SetCurrentModelID(modelID string, persist func(next *config.AI
 		if s.desktopModelSource != nil {
 			s.desktopModelSource.SetCurrentModelID("")
 		}
-		coordinator := s.threadTitleCoordinator
 		s.mu.Unlock()
-		if coordinator != nil {
-			coordinator.Wake()
-		}
 		return nil
 	}
 	if modelSource == nil || !isDesktopModelSourceModelID(modelID) {
@@ -982,11 +972,7 @@ func (s *Service) SetCurrentModelID(modelID string, persist func(next *config.AI
 		return ErrNotConfigured
 	}
 	s.desktopModelSource.SetCurrentModelID(modelID)
-	coordinator := s.threadTitleCoordinator
 	s.mu.Unlock()
-	if coordinator != nil {
-		coordinator.Wake()
-	}
 	return nil
 }
 
@@ -1555,12 +1541,27 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 			s.releasePreparedRun(prepared)
 			return persistedUserMessage{}, normalizedInput, marshalErr
 		}
+		attachmentsJSON, marshalErr := marshalQueuedTurnAttachments(normalizedInput.Attachments)
+		if marshalErr != nil {
+			s.releasePreparedRun(prepared)
+			return persistedUserMessage{}, normalizedInput, marshalErr
+		}
+		optionsJSON, marshalErr := marshalQueuedTurnOptions(req.Options)
+		if marshalErr != nil {
+			s.releasePreparedRun(prepared)
+			return persistedUserMessage{}, normalizedInput, marshalErr
+		}
+		sessionMetaJSON, marshalErr := marshalQueuedTurnSessionMeta(meta)
+		if marshalErr != nil {
+			s.releasePreparedRun(prepared)
+			return persistedUserMessage{}, normalizedInput, marshalErr
+		}
 		record := threadstore.QueuedTurn{
 			QueueID: commandID, EndpointID: endpointID, ThreadID: threadID,
 			ChannelID: strings.TrimSpace(meta.ChannelID), Lane: threadstore.FollowupLaneQueued,
 			TurnID: prepared.messageID, RunID: runID, ModelID: strings.TrimSpace(req.Model),
-			TextContent: strings.TrimSpace(normalizedInput.Text), AttachmentsJSON: marshalQueuedTurnAttachments(normalizedInput.Attachments),
-			ContextActionJSON: contextActionJSON, OptionsJSON: marshalQueuedTurnOptions(req.Options), SessionMetaJSON: marshalQueuedTurnSessionMeta(meta),
+			TextContent: strings.TrimSpace(normalizedInput.Text), AttachmentsJSON: attachmentsJSON,
+			ContextActionJSON: contextActionJSON, OptionsJSON: optionsJSON, SessionMetaJSON: sessionMetaJSON,
 			CreatedByUserPublicID: strings.TrimSpace(meta.UserPublicID), CreatedByUserEmail: strings.TrimSpace(meta.UserEmail),
 			CreatedAtUnixMs: preparedUser.CreatedAtUnixMs,
 		}
@@ -1588,10 +1589,6 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 	prepared.req.Input = normalizedInput
 	s.broadcastThreadState(endpointID, threadID, runID, string(RunStateRunning), "", "")
 	s.broadcastThreadSummary(endpointID, threadID)
-	effectiveCurrentInput := deriveEffectiveCurrentUserInput(normalizedInput)
-	effectiveCurrentInput.MessageID = prepared.messageID
-	effectiveCurrentInput.MessageCreatedAtUnixMs = preparedUser.CreatedAtUnixMs
-	s.scheduleAutoThreadTitle(meta, threadID, effectiveCurrentInput)
 	go func() {
 		if err := s.executePreparedRun(context.Background(), prepared); err != nil {
 			if s.log != nil {
@@ -1679,6 +1676,10 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	if th == nil {
 		return nil, errors.New("thread not found")
 	}
+	threadPermission, err := threadPermissionType(th)
+	if err != nil {
+		return nil, err
+	}
 	var flowerMeta *threadstore.FlowerThreadMetadata
 	pctx, cancelPersist = context.WithTimeout(context.Background(), persistTO)
 	flowerMeta, err = db.GetFlowerThreadMetadata(pctx, endpointID, threadID)
@@ -1716,7 +1717,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	}
 	cfg := s.cfg
 	desktopModelSource := s.desktopModelSource
-	req.Options.PermissionType = threadPermissionTypeString(th)
+	req.Options.PermissionType = permissionTypeString(threadPermission)
 	uploadsDir := s.uploadsDir
 	db = s.threadsDB
 	messageID := strings.TrimSpace(req.Input.MessageID)
@@ -2143,33 +2144,6 @@ func (s *Service) resolvedDesktopModelSourceDefaultModel(ctx context.Context) (s
 		return strings.TrimSpace(snapshot.CurrentModel), true
 	}
 	return "", false
-}
-
-type effectiveCurrentUserInput struct {
-	MessageID              string
-	MessageRowID           int64
-	MessageCreatedAtUnixMs int64
-	PublicText             string
-	StructuredResponse     *RequestUserInputResponseRecord
-}
-
-func deriveEffectiveCurrentUserInput(input RunInput) effectiveCurrentUserInput {
-	out := effectiveCurrentUserInput{
-		MessageID:  strings.TrimSpace(input.MessageID),
-		PublicText: strings.TrimSpace(input.Text),
-	}
-	if input.StructuredResponse != nil {
-		record := *input.StructuredResponse
-		out.StructuredResponse = &record
-		summary := strings.TrimSpace(record.PublicSummary)
-		switch {
-		case summary != "" && out.PublicText != "":
-			out.PublicText = summary + "\n\n" + out.PublicText
-		case summary != "":
-			out.PublicText = summary
-		}
-	}
-	return out
 }
 
 func defaultModelCapability(providerID string, modelName string, wireModelName string) contextmodel.ModelCapability {

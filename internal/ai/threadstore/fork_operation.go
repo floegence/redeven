@@ -44,18 +44,18 @@ type ForkOperation struct {
 	DestinationBroadcastedAtUnixMs int64
 	CreatedAtUnixMs                int64
 	UpdatedAtUnixMs                int64
+	RequestedTitle                 string
 }
 
 type CommitForkOperationRequest struct {
 	OperationID     string
-	FloretTurnRefs  []ForkTurnRef
 	UpdatedAtUnixMs int64
 }
 
 type forkSnapshotV2 struct {
 	SchemaVersion  int                     `json:"schema_version"`
 	Request        forkSnapshotRequest     `json:"request"`
-	SourceThread   Thread                  `json:"source_thread"`
+	SourceThread   ThreadSettings          `json:"source_thread"`
 	UploadRefs     []forkSnapshotUploadRef `json:"upload_refs"`
 	FlowerMetadata *FlowerThreadMetadata   `json:"flower_metadata,omitempty"`
 }
@@ -105,7 +105,7 @@ func (s *Store) PrepareForkOperation(ctx context.Context, req ForkThreadRequest)
 		return nil, err
 	}
 	var destinationCount int
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM ai_threads WHERE endpoint_id = ? AND thread_id = ?`, req.EndpointID, req.DestinationThreadID).Scan(&destinationCount); err != nil {
+	if err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM ai_thread_settings WHERE endpoint_id = ? AND thread_id = ?`, req.EndpointID, req.DestinationThreadID).Scan(&destinationCount); err != nil {
 		return nil, err
 	}
 	if destinationCount != 0 {
@@ -141,10 +141,11 @@ INSERT INTO ai_thread_fork_operations(
 		DestinationThreadID: req.DestinationThreadID, RequestFingerprint: fingerprint,
 		Status: ForkOperationPending, SnapshotSchemaVersion: ForkSnapshotSchemaVersion,
 		SnapshotJSON: string(snapshotJSON), CreatedAtUnixMs: req.CreatedAtUnixMs, UpdatedAtUnixMs: req.CreatedAtUnixMs,
+		RequestedTitle: req.Title,
 	}, nil
 }
 
-func (s *Store) CommitForkOperation(ctx context.Context, req CommitForkOperationRequest) (*Thread, error) {
+func (s *Store) CommitForkOperation(ctx context.Context, req CommitForkOperationRequest) (*ThreadSettings, error) {
 	if s == nil || s.db == nil {
 		return nil, errors.New("store not initialized")
 	}
@@ -180,7 +181,7 @@ func (s *Store) CommitForkOperation(ctx context.Context, req CommitForkOperation
 	if err := validateForkSnapshot(operation, snapshot); err != nil {
 		return nil, err
 	}
-	if err := materializeForkSnapshotV2(ctx, tx, snapshot, req.FloretTurnRefs); err != nil {
+	if err := materializeForkSnapshotV2(ctx, tx, snapshot); err != nil {
 		return nil, err
 	}
 	result, err := tx.ExecContext(ctx, `
@@ -284,6 +285,13 @@ func scanForkOperation(scanner interface{ Scan(...any) error }, operation *ForkO
 		return err
 	}
 	operation.Status = ForkOperationStatus(status)
+	if strings.TrimSpace(operation.SnapshotJSON) != "" {
+		var snapshot forkSnapshotV2
+		if err := json.Unmarshal([]byte(operation.SnapshotJSON), &snapshot); err != nil {
+			return fmt.Errorf("decode fork operation snapshot: %w", err)
+		}
+		operation.RequestedTitle = strings.TrimSpace(snapshot.Request.Title)
+	}
 	return nil
 }
 
@@ -299,9 +307,9 @@ func loadForkOperationTx(ctx context.Context, tx *sql.Tx, operationID string) (*
 	return loadForkOperationRow(tx.QueryRowContext(ctx, forkOperationSelectSQL+` WHERE operation_id = ?`, strings.TrimSpace(operationID)))
 }
 
-func loadForkDestinationThreadTx(ctx context.Context, tx *sql.Tx, operation *ForkOperation) (*Thread, error) {
-	var thread Thread
-	if err := scanThreadRow(tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT %s FROM ai_threads WHERE endpoint_id = ? AND thread_id = ?`, threadSelectColumnsSQL), operation.EndpointID, operation.DestinationThreadID), &thread); err != nil {
+func loadForkDestinationThreadTx(ctx context.Context, tx *sql.Tx, operation *ForkOperation) (*ThreadSettings, error) {
+	var thread ThreadSettings
+	if err := scanThreadRow(tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT %s FROM ai_thread_settings WHERE endpoint_id = ? AND thread_id = ?`, threadSelectColumnsSQL), operation.EndpointID, operation.DestinationThreadID), &thread); err != nil {
 		return nil, err
 	}
 	return &thread, nil
@@ -331,18 +339,20 @@ func forkRequestFingerprint(req ForkThreadRequest) (string, error) {
 }
 
 func captureForkSnapshotV2(ctx context.Context, tx *sql.Tx, req ForkThreadRequest) (forkSnapshotV2, error) {
-	var source Thread
-	if err := scanThreadRow(tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT %s FROM ai_threads WHERE endpoint_id = ? AND thread_id = ?`, threadSelectColumnsSQL), req.EndpointID, req.SourceThreadID), &source); err != nil {
+	var source ThreadSettings
+	if err := scanThreadRow(tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT %s FROM ai_thread_settings WHERE endpoint_id = ? AND thread_id = ?`, threadSelectColumnsSQL), req.EndpointID, req.SourceThreadID), &source); err != nil {
 		return forkSnapshotV2{}, err
-	}
-	if req.Title == "" {
-		req.Title = strings.TrimSpace(source.Title)
 	}
 	snapshot := forkSnapshotV2{SchemaVersion: ForkSnapshotSchemaVersion, Request: forkSnapshotRequest{
 		EndpointID: req.EndpointID, SourceThreadID: req.SourceThreadID, DestinationThreadID: req.DestinationThreadID,
 		Title: req.Title, CreatedByUserPublicID: req.CreatedByUserPublicID, CreatedByUserEmail: req.CreatedByUserEmail, CreatedAtUnixMs: req.CreatedAtUnixMs,
 	}, SourceThread: source}
-	rows, err := tx.QueryContext(ctx, `SELECT upload_id, ref_kind, ref_id, created_at_unix_ms FROM ai_upload_refs WHERE endpoint_id = ? AND thread_id = ? ORDER BY id ASC`, req.EndpointID, req.SourceThreadID)
+	rows, err := tx.QueryContext(ctx, `
+SELECT upload_id, ref_kind, ref_id, created_at_unix_ms
+FROM ai_upload_refs
+WHERE endpoint_id = ? AND thread_id = ? AND ref_kind = ? AND ref_id = ?
+ORDER BY id ASC
+`, req.EndpointID, req.SourceThreadID, UploadRefKindThread, req.SourceThreadID)
 	if err != nil {
 		return forkSnapshotV2{}, err
 	}
@@ -386,30 +396,21 @@ func validateForkSnapshot(operation *ForkOperation, snapshot forkSnapshotV2) err
 	return nil
 }
 
-func materializeForkSnapshotV2(ctx context.Context, tx *sql.Tx, snapshot forkSnapshotV2, refs []ForkTurnRef) error {
+func materializeForkSnapshotV2(ctx context.Context, tx *sql.Tx, snapshot forkSnapshotV2) error {
 	req := ForkThreadRequest{
 		EndpointID: snapshot.Request.EndpointID, SourceThreadID: snapshot.Request.SourceThreadID,
 		DestinationThreadID: snapshot.Request.DestinationThreadID, Title: snapshot.Request.Title,
 		CreatedByUserPublicID: snapshot.Request.CreatedByUserPublicID, CreatedByUserEmail: snapshot.Request.CreatedByUserEmail,
 		CreatedAtUnixMs: snapshot.Request.CreatedAtUnixMs,
 	}
-	if err := insertForkedThreadTx(ctx, tx, req, snapshot.SourceThread, snapshot.Request.Title); err != nil {
-		return err
-	}
-	rewrite, err := forkTurnRefsBySource(refs)
-	if err != nil {
+	if err := insertForkedThreadTx(ctx, tx, req, snapshot.SourceThread); err != nil {
 		return err
 	}
 	for _, ref := range snapshot.UploadRefs {
-		mapping, ok := rewrite[strings.TrimSpace(ref.RefID)]
-		if !ok {
-			continue
+		if normalizeUploadRefKind(ref.RefKind) != UploadRefKindThread || strings.TrimSpace(ref.RefID) != req.SourceThreadID {
+			return errors.New("fork snapshot contains non-thread upload ownership")
 		}
-		destinationID := mapping.DestinationTurnID
-		if strings.TrimSpace(ref.RefID) == mapping.SourceRunID {
-			destinationID = mapping.DestinationRunID
-		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO ai_upload_refs(endpoint_id, upload_id, thread_id, ref_kind, ref_id, created_at_unix_ms) VALUES(?, ?, ?, ?, ?, ?) ON CONFLICT(endpoint_id, upload_id, ref_kind, ref_id) DO NOTHING`, req.EndpointID, strings.TrimSpace(ref.UploadID), req.DestinationThreadID, normalizeUploadRefKind(ref.RefKind), destinationID, ref.CreatedAtUnixMs); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO ai_upload_refs(endpoint_id, upload_id, thread_id, ref_kind, ref_id, created_at_unix_ms) VALUES(?, ?, ?, ?, ?, ?) ON CONFLICT(endpoint_id, upload_id, ref_kind, ref_id) DO NOTHING`, req.EndpointID, strings.TrimSpace(ref.UploadID), req.DestinationThreadID, UploadRefKindThread, req.DestinationThreadID, ref.CreatedAtUnixMs); err != nil {
 			return err
 		}
 	}

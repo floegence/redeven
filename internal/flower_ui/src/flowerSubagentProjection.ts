@@ -18,7 +18,6 @@ export type FlowerSubagentPanelStatus =
 export type FlowerSubagentPanelItem = Readonly<{
   key: string;
   threadID: string;
-  subagentID: string;
   taskName: string;
   taskDescription: string;
   title: string;
@@ -56,12 +55,10 @@ function formatTaskNameToken(value: string): string {
   return `${lower.slice(0, 1).toUpperCase()}${lower.slice(1)}`;
 }
 
-export function presentSubagentTaskName(value: string, fallback = ''): string {
+export function presentSubagentTaskName(value: string): string {
   const raw = trimString(value);
-  const fallbackRaw = trimString(fallback);
-  const primaryTokens = taskNameTokens(raw);
-  const tokens = primaryTokens.length > 0 ? primaryTokens : taskNameTokens(fallbackRaw);
-  if (tokens.length === 0) return fallbackRaw || raw;
+  const tokens = taskNameTokens(raw);
+  if (tokens.length === 0) return raw;
 
   const words: string[] = [];
   for (const token of tokens) {
@@ -75,17 +72,6 @@ export function presentSubagentTaskName(value: string, fallback = ''): string {
     words.push(word);
   }
   return words.join(' ') || raw;
-}
-
-export function subagentTaskNameRoleFallback(agentType: string): string {
-  switch (trimString(agentType).toLowerCase()) {
-    case 'worker':
-      return 'Implementation Task';
-    case 'reviewer':
-      return 'Review Task';
-    default:
-      return 'Research Task';
-  }
 }
 
 function numberValue(value: unknown): number {
@@ -143,27 +129,21 @@ function subagentUpdatedAtMs(summary: FlowerSubagentSummary): number {
 }
 
 function itemFromSummary(summary: FlowerSubagentSummary, ownerThreadID: string): FlowerSubagentPanelItem | null {
-  const threadID = trimString(summary.thread_id) || trimString(summary.subagent_id);
-  const subagentID = trimString(summary.subagent_id) || threadID;
+  const threadID = trimString(summary.thread_id);
   if (!threadID || threadID === ownerThreadID) return null;
   const taskName = trimString(summary.task_name);
+  if (!taskName) return null;
   const taskDescription = trimString(summary.task_description);
-  const rawTitle = trimString(summary.title);
-  const title = rawTitle && rawTitle !== threadID && rawTitle !== subagentID ? rawTitle : taskName;
   const agentType = trimString(summary.agent_type);
-  const roleFallback = subagentTaskNameRoleFallback(agentType);
-  const displayName = title || taskName
-    ? presentSubagentTaskName(title || taskName, roleFallback)
-    : roleFallback;
+  const displayName = presentSubagentTaskName(taskName);
   const createdAtMs = numberValue(summary.created_at_ms);
   const updatedAtMs = subagentUpdatedAtMs(summary);
   return {
     key: threadID,
     threadID,
-    subagentID,
     taskName,
     taskDescription,
-    title: title || threadID,
+    title: taskName,
     displayName,
     agentType,
     status: normalizeStatus(summary.status),

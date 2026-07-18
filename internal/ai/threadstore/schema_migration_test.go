@@ -1,167 +1,129 @@
 package threadstore
 
 import (
+	"context"
 	"database/sql"
 	"errors"
-	"fmt"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
-
-	"github.com/floegence/redeven/internal/testutil/legacydb"
-	_ "modernc.org/sqlite"
 )
 
-func TestOpenMigratesCanonicalV15ToProductV2(t *testing.T) {
-	t.Parallel()
-
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	if err := legacydb.SeedThreadstoreV15(dbPath); err != nil {
-		t.Fatalf("seed legacy threadstore: %v", err)
-	}
-	raw, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		t.Fatalf("open legacy threadstore: %v", err)
-	}
-	if _, err := raw.Exec(`
-INSERT INTO ai_threads(thread_id, endpoint_id, namespace_public_id, model_id, title, created_at_unix_ms, updated_at_unix_ms)
-VALUES('thread_product', 'env_1', 'ns_1', 'model_1', 'Keep this thread', 100, 200);
-INSERT INTO ai_queued_turns(queue_id, endpoint_id, thread_id, message_id, model_id, text_content, created_at_unix_ms)
-VALUES('queue_1', 'env_1', 'thread_product', 'message_1', 'model_1', 'pending prompt', 300);
-`); err != nil {
-		_ = raw.Close()
-		t.Fatalf("seed product and queued data: %v", err)
-	}
-	if err := raw.Close(); err != nil {
-		t.Fatalf("close legacy threadstore: %v", err)
-	}
-
-	var ensured []string
-	store, err := Open(dbPath, WithThreadIdentityEnsurer(func(threadID string) error {
-		ensured = append(ensured, threadID)
-		return nil
-	}))
-	if err != nil {
-		t.Fatalf("Open migrated threadstore: %v", err)
-	}
-	if !slices.Equal(ensured, []string{"thread_product"}) {
-		t.Fatalf("ensured Floret thread identities = %v", ensured)
-	}
-	if err := store.Close(); err != nil {
-		t.Fatalf("close migrated threadstore: %v", err)
-	}
-
-	raw, err = sql.Open("sqlite", dbPath)
-	if err != nil {
-		t.Fatalf("reopen migrated threadstore: %v", err)
-	}
-	defer func() { _ = raw.Close() }()
-
-	var version int
-	if err := raw.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
-		t.Fatalf("read schema version: %v", err)
-	}
-	if version != CurrentSchemaVersion() {
-		t.Fatalf("schema version=%d, want %d", version, CurrentSchemaVersion())
-	}
-	var kind string
-	if err := raw.QueryRow(`SELECT db_kind FROM __redeven_db_meta WHERE singleton = 1`).Scan(&kind); err != nil {
-		t.Fatalf("read schema kind: %v", err)
-	}
-	if kind != threadstoreSchemaKind {
-		t.Fatalf("schema kind=%q, want %q", kind, threadstoreSchemaKind)
-	}
-
-	var title string
-	if err := raw.QueryRow(`SELECT title FROM ai_threads WHERE thread_id = 'thread_product'`).Scan(&title); err != nil {
-		t.Fatalf("read preserved product thread: %v", err)
-	}
-	if title != "Keep this thread" {
-		t.Fatalf("preserved thread title=%q, want %q", title, "Keep this thread")
-	}
-	var turnID, runID, text string
-	if err := raw.QueryRow(`SELECT turn_id, run_id, text_content FROM ai_queued_turns WHERE queue_id = 'queue_1'`).Scan(&turnID, &runID, &text); err != nil {
-		t.Fatalf("read migrated pending command: %v", err)
-	}
-	if turnID != "message_1" || runID != "run_migrated_queue_1" || text != "pending prompt" {
-		t.Fatalf("migrated pending command=(%q, %q, %q), want message identity and deterministic run", turnID, runID, text)
-	}
-
-	var shadowTables int
-	if err := raw.QueryRow(`SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name IN ('ai_messages', 'ai_runs', 'ai_tool_calls', 'ai_run_events', 'ai_thread_state', 'ai_thread_todos', 'ai_thread_checkpoints', 'transcript_messages', 'conversation_turns', 'memory_items', 'memory_embeddings')`).Scan(&shadowTables); err != nil {
-		t.Fatalf("check removed Agent tables: %v", err)
-	}
-	if shadowTables != 0 {
-		t.Fatalf("removed Agent table count=%d, want 0", shadowTables)
-	}
-	var legacyColumns int
-	if err := raw.QueryRow(`SELECT COUNT(1) FROM pragma_table_info('ai_threads') WHERE name IN ('execution_mode', 'run_status', 'run_error', 'last_message_preview')`).Scan(&legacyColumns); err != nil {
-		t.Fatalf("check removed Agent columns: %v", err)
-	}
-	if legacyColumns != 0 {
-		t.Fatalf("removed Agent column count=%d, want 0", legacyColumns)
-	}
-}
-
-func TestOpenMigratesProductV1ToV2(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	raw, err := sql.Open("sqlite", dbPath)
+func createProductV2DatabaseForTest(t *testing.T, path string) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	tx, err := raw.Begin()
+	tx, err := db.Begin()
 	if err != nil {
-		_ = raw.Close()
-		t.Fatal(err)
-	}
-	if err := createThreadstoreSchemaV1(tx); err != nil {
-		_ = tx.Rollback()
-		_ = raw.Close()
 		t.Fatal(err)
 	}
 	if _, err := tx.Exec(`
 CREATE TABLE __redeven_db_meta (
   singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
   db_kind TEXT NOT NULL,
-  created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  last_migrated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+	created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+	last_migrated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
   last_migrated_from_version INTEGER NOT NULL DEFAULT 0,
-  last_migrated_to_version INTEGER NOT NULL DEFAULT 0
+	last_migrated_to_version INTEGER NOT NULL DEFAULT 0
 );
 INSERT INTO __redeven_db_meta(singleton, db_kind, last_migrated_from_version, last_migrated_to_version)
-VALUES(1, 'ai_threadstore_product_v2', 1, 1);
-PRAGMA user_version=1;
-INSERT INTO ai_threads(thread_id, endpoint_id, permission_type, created_at_unix_ms, updated_at_unix_ms)
-VALUES('thread_product_v1', 'env_1', 'approval_required', 100, 100);
-INSERT INTO ai_thread_fork_operations(
-  operation_id, endpoint_id, source_thread_id, destination_thread_id,
-  request_fingerprint, status, snapshot_schema_version, snapshot_json,
-  floret_result_json, created_at_unix_ms, updated_at_unix_ms
-)
-VALUES('fork_v1', 'env_1', 'thread_product_v1', 'thread_product_v1_fork',
-  'fingerprint', 'pending', 1, '{}', '{"shadow":true}', 100, 100);
+VALUES(1, 'ai_threadstore_product_v2', 2, 2);
 `); err != nil {
 		_ = tx.Rollback()
-		_ = raw.Close()
+		t.Fatal(err)
+	}
+	if err := createThreadstoreSchemaV2(tx); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`PRAGMA user_version=2`); err != nil {
+		_ = tx.Rollback()
 		t.Fatal(err)
 	}
 	if err := tx.Commit(); err != nil {
-		_ = raw.Close()
+		t.Fatal(err)
+	}
+	return db
+}
+
+func TestThreadstoreSchemaV3ContainsOnlyHostThreadSettings(t *testing.T) {
+	store := openStoreForTest(t)
+	for _, table := range []string{"ai_threads"} {
+		if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = ?`, table) != 0 {
+			t.Fatalf("legacy table %s exists", table)
+		}
+	}
+	if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = 'ai_thread_settings'`) != 1 {
+		t.Fatal("ai_thread_settings is missing")
+	}
+	for _, column := range []string{"title", "title_source", "title_generated_at_unix_ms", "title_input_message_id", "title_model_id", "title_prompt_version"} {
+		if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM pragma_table_info('ai_thread_settings') WHERE name = ?`, column) != 0 {
+			t.Fatalf("canonical title column %s exists in host settings", column)
+		}
+	}
+	if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM pragma_table_info('ai_child_permission_snapshots') WHERE name = 'subagent_id'`) != 0 {
+		t.Fatal("subagent_id compatibility column exists")
+	}
+}
+
+func TestThreadstoreMigratesV2TitlesAndOwnershipBeforeSchemaCommit(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "threads.sqlite")
+	raw := createProductV2DatabaseForTest(t, path)
+	if _, err := raw.Exec(`
+INSERT INTO ai_threads(thread_id, endpoint_id, title, title_source, followups_revision, created_at_unix_ms, updated_at_unix_ms)
+VALUES('thread_product', 'env_product', 'Canonical title', 'user', 7, 100, 120);
+INSERT INTO ai_uploads(upload_id, endpoint_id, storage_relpath, created_at_unix_ms) VALUES('upload_1', 'env_product', 'upload_1.data', 90);
+INSERT INTO ai_upload_refs(endpoint_id, upload_id, thread_id, ref_kind, ref_id, created_at_unix_ms)
+VALUES
+  ('env_product', 'upload_1', 'thread_product', 'turn', 'turn_1', 100),
+  ('env_product', 'upload_1', 'thread_product', 'turn', 'turn_2', 110);
+INSERT INTO ai_permission_snapshots(snapshot_id, endpoint_id, owner_thread_id, snapshot_json)
+VALUES('v1', 'env_product', 'thread_product', '{"version":1}'), ('v2', 'env_product', 'thread_product', '{"version":2}');
+`); err != nil {
 		t.Fatal(err)
 	}
 	if err := raw.Close(); err != nil {
 		t.Fatal(err)
 	}
 
-	store, err := Open(dbPath)
+	var migrated []LegacyThreadTitle
+	store, err := Open(path, WithLegacyThreadTitleMigrator(func(_ context.Context, title LegacyThreadTitle) error {
+		migrated = append(migrated, title)
+		return nil
+	}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.Close(); err != nil {
+	defer store.Close()
+	if len(migrated) != 1 || migrated[0].ThreadID != "thread_product" || migrated[0].Title != "Canonical title" {
+		t.Fatalf("migrated titles=%#v", migrated)
+	}
+	settings, err := store.GetThread(context.Background(), "env_product", "thread_product")
+	if err != nil || settings == nil || settings.QueueRevision != 7 {
+		t.Fatalf("settings=%#v err=%v", settings, err)
+	}
+	if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_upload_refs WHERE upload_id = 'upload_1' AND ref_kind = 'thread' AND ref_id = 'thread_product'`) != 1 {
+		t.Fatal("admitted upload ownership was not deduplicated to the thread")
+	}
+	if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_permission_snapshots WHERE snapshot_id = 'v1'`) != 0 || countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_permission_snapshots WHERE snapshot_id = 'v2'`) != 1 {
+		t.Fatal("permission snapshot version filtering is incorrect")
+	}
+}
+
+func TestThreadstoreV2TitleMigrationFailureLeavesSchemaAtV2(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "threads.sqlite")
+	raw := createProductV2DatabaseForTest(t, path)
+	if _, err := raw.Exec(`INSERT INTO ai_threads(thread_id, endpoint_id, title, created_at_unix_ms, updated_at_unix_ms) VALUES('thread_1', 'env_1', 'Title', 1, 1)`); err != nil {
 		t.Fatal(err)
 	}
-	raw, err = sql.Open("sqlite", dbPath)
+	_ = raw.Close()
+	want := errors.New("canonical title conflict")
+	if _, err := Open(path, WithLegacyThreadTitleMigrator(func(context.Context, LegacyThreadTitle) error { return want })); !errors.Is(err, want) {
+		t.Fatalf("Open error=%v", err)
+	}
+	raw, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -170,243 +132,36 @@ VALUES('fork_v1', 'env_1', 'thread_product_v1', 'thread_product_v1_fork',
 	if err := raw.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
 		t.Fatal(err)
 	}
-	if version != threadstoreCurrentSchemaVersion {
-		t.Fatalf("user_version = %d, want %d", version, threadstoreCurrentSchemaVersion)
-	}
-	if count := countRowsForTest(t, raw, `SELECT COUNT(1) FROM pragma_table_info('ai_thread_fork_operations') WHERE name = 'floret_result_json'`); count != 0 {
-		t.Fatal("product v1 Floret result shadow column remains")
-	}
-	if count := countRowsForTest(t, raw, `SELECT COUNT(1) FROM ai_thread_fork_operations WHERE operation_id = 'fork_v1'`); count != 1 {
-		t.Fatalf("preserved fork operation count = %d, want 1", count)
+	if version != 2 || countRowsForTest(t, raw, `SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = 'ai_threads'`) != 1 {
+		t.Fatalf("failed migration changed schema version=%d", version)
 	}
 }
 
-func TestOpenMigratesEverySupportedCanonicalVersion(t *testing.T) {
-	for version := canonicalMinimumVersion; version <= canonicalCurrentVersion; version++ {
-		version := version
-		t.Run(fmt.Sprintf("v%d", version), func(t *testing.T) {
-			dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-			seedCanonicalThreadstoreVersion(t, dbPath, version)
-			var ensured []string
-			store, err := Open(dbPath, WithThreadIdentityEnsurer(func(threadID string) error {
-				ensured = append(ensured, threadID)
-				return nil
-			}))
-			if err != nil {
-				t.Fatalf("Open canonical v%d: %v", version, err)
-			}
-			if err := store.Close(); err != nil {
-				t.Fatal(err)
-			}
-			if !slices.Equal(ensured, []string{"thread_product"}) {
-				t.Fatalf("ensured thread identities = %v", ensured)
-			}
-			raw, err := sql.Open("sqlite", dbPath)
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer raw.Close()
-			var title, turnID, runID string
-			if err := raw.QueryRow(`SELECT title FROM ai_threads WHERE thread_id = 'thread_product'`).Scan(&title); err != nil {
-				t.Fatal(err)
-			}
-			if err := raw.QueryRow(`SELECT turn_id, run_id FROM ai_queued_turns WHERE queue_id = 'queue_1'`).Scan(&turnID, &runID); err != nil {
-				t.Fatal(err)
-			}
-			if title != "Keep this thread" || turnID != "message_1" || runID != "run_migrated_queue_1" {
-				t.Fatalf("migrated data = title %q turn %q run %q", title, turnID, runID)
-			}
-		})
-	}
-}
-
-func TestOpenRejectsCanonicalVersionsOutsideSupportedRange(t *testing.T) {
-	for _, version := range []int{canonicalMinimumVersion - 1, canonicalCurrentVersion + 1} {
-		version := version
-		t.Run(fmt.Sprintf("v%d", version), func(t *testing.T) {
-			dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-			seedCanonicalThreadstoreVersion(t, dbPath, canonicalMinimumVersion)
-			raw, err := sql.Open("sqlite", dbPath)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if _, err := raw.Exec(fmt.Sprintf(`UPDATE __redeven_db_meta SET last_migrated_from_version = %d, last_migrated_to_version = %d; PRAGMA user_version=%d;`, version, version, version)); err != nil {
-				_ = raw.Close()
-				t.Fatal(err)
-			}
-			if err := raw.Close(); err != nil {
-				t.Fatal(err)
-			}
-			if _, err := Open(dbPath, WithThreadIdentityEnsurer(func(string) error { return nil })); err == nil {
-				t.Fatal("Open succeeded, want unsupported canonical version error")
-			}
-		})
-	}
-}
-
-func TestCanonicalMigrationRejectsSchemaDriftBeforeEnsuringOrDeleting(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	seedCanonicalThreadstoreVersion(t, dbPath, canonicalMinimumVersion)
-	raw, err := sql.Open("sqlite", dbPath)
+func TestThreadstoreRejectsUnsupportedLegacyKindWithoutMutation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "threads.sqlite")
+	db, err := sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := raw.Exec(`ALTER TABLE ai_threads ADD COLUMN unexpected_patch TEXT NOT NULL DEFAULT ''`); err != nil {
-		_ = raw.Close()
+	if _, err := db.Exec(`
+CREATE TABLE __redeven_db_meta(singleton INTEGER PRIMARY KEY, db_kind TEXT NOT NULL, created_at_unix_ms INTEGER NOT NULL DEFAULT 0, last_migrated_at_unix_ms INTEGER NOT NULL DEFAULT 0, last_migrated_from_version INTEGER NOT NULL, last_migrated_to_version INTEGER NOT NULL);
+INSERT INTO __redeven_db_meta VALUES(1, 'ai_threadstore_canonical', 0, 0, 40, 40);
+CREATE TABLE sentinel(value TEXT);
+PRAGMA user_version=40;
+`); err != nil {
 		t.Fatal(err)
 	}
-	if err := raw.Close(); err != nil {
-		t.Fatal(err)
+	_ = db.Close()
+	_, err = Open(path)
+	if err == nil || !strings.Contains(err.Error(), "only") || !strings.Contains(err.Error(), "v2 and v3") {
+		t.Fatalf("Open error=%v", err)
 	}
-	ensureCalls := 0
-	_, err = Open(dbPath, WithThreadIdentityEnsurer(func(string) error {
-		ensureCalls++
-		return nil
-	}))
-	if err == nil || !strings.Contains(err.Error(), "contract mismatch") {
-		t.Fatalf("Open schema drift err = %v", err)
-	}
-	if ensureCalls != 0 {
-		t.Fatalf("ensure calls = %d, want 0", ensureCalls)
-	}
-	assertCanonicalDatabaseUnchanged(t, dbPath, canonicalMinimumVersion)
-}
-
-func TestCanonicalMigrationRejectsInvalidQueuedIdentityBeforeEnsuringThreads(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	seedCanonicalThreadstoreVersion(t, dbPath, canonicalMinimumVersion)
-	raw, err := sql.Open("sqlite", dbPath)
+	db, err = sql.Open("sqlite", path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := raw.Exec(`UPDATE ai_queued_turns SET message_id = '' WHERE queue_id = 'queue_1'`); err != nil {
-		_ = raw.Close()
-		t.Fatal(err)
-	}
-	if err := raw.Close(); err != nil {
-		t.Fatal(err)
-	}
-	ensureCalls := 0
-	_, err = Open(dbPath, WithThreadIdentityEnsurer(func(string) error {
-		ensureCalls++
-		return nil
-	}))
-	if err == nil || !strings.Contains(err.Error(), "incomplete identity") {
-		t.Fatalf("Open invalid queued identity err = %v", err)
-	}
-	if ensureCalls != 0 {
-		t.Fatalf("ensure calls = %d, want 0", ensureCalls)
-	}
-	assertCanonicalDatabaseUnchanged(t, dbPath, canonicalMinimumVersion)
-}
-
-func TestCanonicalMigrationRejectsInvalidPermissionBeforeEnsuringThreads(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	seedCanonicalThreadstoreVersion(t, dbPath, canonicalCurrentVersion)
-	raw, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := raw.Exec(`UPDATE ai_threads SET permission_type = 'unknown' WHERE thread_id = 'thread_product'`); err != nil {
-		_ = raw.Close()
-		t.Fatal(err)
-	}
-	if err := raw.Close(); err != nil {
-		t.Fatal(err)
-	}
-	ensureCalls := 0
-	_, err = Open(dbPath, WithThreadIdentityEnsurer(func(string) error {
-		ensureCalls++
-		return nil
-	}))
-	if err == nil || !strings.Contains(err.Error(), "invalid product data") {
-		t.Fatalf("Open invalid permission err = %v", err)
-	}
-	if ensureCalls != 0 {
-		t.Fatalf("ensure calls = %d, want 0", ensureCalls)
-	}
-	assertCanonicalDatabaseUnchanged(t, dbPath, canonicalCurrentVersion)
-}
-
-func TestCanonicalMigrationRollsBackWhenFloretThreadEnsureFails(t *testing.T) {
-	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
-	seedCanonicalThreadstoreVersion(t, dbPath, canonicalMinimumVersion)
-	_, err := Open(dbPath, WithThreadIdentityEnsurer(func(threadID string) error {
-		return fmt.Errorf("ensure %s: %w", threadID, errors.New("deliberate failure"))
-	}))
-	if err == nil || !strings.Contains(err.Error(), "deliberate failure") {
-		t.Fatalf("Open ensure failure err = %v", err)
-	}
-	assertCanonicalDatabaseUnchanged(t, dbPath, canonicalMinimumVersion)
-}
-
-func seedCanonicalThreadstoreVersion(t *testing.T, dbPath string, version int) {
-	t.Helper()
-	raw, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer raw.Close()
-	if _, err := raw.Exec(canonicalV15SchemaSQL); err != nil {
-		t.Fatal(err)
-	}
-	for current := canonicalMinimumVersion; current < version; current++ {
-		migration := canonicalMigrationFrom(current)
-		if migration == nil {
-			t.Fatalf("missing fixture migration from v%d", current)
-		}
-		tx, err := raw.Begin()
-		if err != nil {
-			t.Fatal(err)
-		}
-		if err := migration.apply(tx); err != nil {
-			_ = tx.Rollback()
-			t.Fatalf("seed canonical v%d: %v", migration.to, err)
-		}
-		if err := tx.Commit(); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if _, err := raw.Exec(fmt.Sprintf(`
-CREATE TABLE __redeven_db_meta (
-  singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
-  db_kind TEXT NOT NULL,
-  created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  last_migrated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
-  last_migrated_from_version INTEGER NOT NULL DEFAULT 0,
-  last_migrated_to_version INTEGER NOT NULL DEFAULT 0
-);
-INSERT INTO __redeven_db_meta(singleton, db_kind, last_migrated_from_version, last_migrated_to_version)
-VALUES(1, '%s', %d, %d);
-PRAGMA user_version=%d;
-INSERT INTO ai_threads(thread_id, endpoint_id, title, created_at_unix_ms, updated_at_unix_ms)
-VALUES('thread_product', 'env_1', 'Keep this thread', 100, 200);
-INSERT INTO ai_queued_turns(queue_id, endpoint_id, thread_id, message_id, text_content, created_at_unix_ms)
-VALUES('queue_1', 'env_1', 'thread_product', 'message_1', 'pending prompt', 300);
-`, threadstoreLegacySchemaKind, version, version, version)); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func assertCanonicalDatabaseUnchanged(t *testing.T, dbPath string, version int) {
-	t.Helper()
-	raw, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer raw.Close()
-	var actualVersion int
-	if err := raw.QueryRow(`PRAGMA user_version`).Scan(&actualVersion); err != nil {
-		t.Fatal(err)
-	}
-	if actualVersion != version {
-		t.Fatalf("user_version = %d, want %d", actualVersion, version)
-	}
-	var shadowTables int
-	if err := raw.QueryRow(`SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = 'ai_messages'`).Scan(&shadowTables); err != nil {
-		t.Fatal(err)
-	}
-	if shadowTables != 1 {
-		t.Fatalf("ai_messages table count = %d, want 1", shadowTables)
+	defer db.Close()
+	if countRowsForTest(t, db, `SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = 'sentinel'`) != 1 {
+		t.Fatal("unsupported database was modified")
 	}
 }

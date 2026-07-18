@@ -424,11 +424,9 @@ export function activityTimeline(args: {
 export function subagentSummary(overrides: Partial<FlowerSubagentSummary> = {}): FlowerSubagentSummary {
   return {
     parent_thread_id: 'thread-parent-subagents',
-    subagent_id: 'thread-child-review',
     thread_id: 'thread-child-review',
     task_name: 'Review API contract',
     task_description: 'Review the API boundary.',
-    title: 'Review API contract',
     agent_type: 'reviewer',
     status: 'running',
     can_send_input: false,
@@ -444,10 +442,8 @@ export function subagentDetail(overrides: Partial<FlowerSubagentDetail> = {}): F
   return {
     summary: {
       parent_thread_id: 'thread-parent-subagents',
-      subagent_id: 'thread-child-review',
       thread_id: 'thread-child-review',
       task_name: 'Review API contract',
-      title: 'Review API contract',
       agent_type: 'reviewer',
       status: 'running',
       last_message: 'Reading the API boundary.',

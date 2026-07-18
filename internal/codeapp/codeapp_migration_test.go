@@ -8,9 +8,9 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
-	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/terminal"
@@ -86,28 +86,13 @@ func TestAppServerThreadReadStatePathMigratesLegacyStore(t *testing.T) {
 	}
 }
 
-func TestNewMigratesLegacyThreadstoreSchema(t *testing.T) {
+func TestNewRejectsUnsupportedThreadstoreVersionWithoutMutation(t *testing.T) {
 	t.Parallel()
 
 	stateDir := t.TempDir()
 	dbPath := filepath.Join(stateDir, "ai", "threads.sqlite")
-	if err := legacydb.SeedThreadstoreV15(dbPath); err != nil {
-		t.Fatalf("seedLegacyFollowupQueueDB: %v", err)
-	}
-	raw, err := sql.Open("sqlite", dbPath)
-	if err != nil {
-		t.Fatalf("sql.Open seed database: %v", err)
-	}
-	if _, err := raw.Exec(`INSERT INTO ai_threads(thread_id, endpoint_id, created_at_unix_ms, updated_at_unix_ms) VALUES('thread_product', 'env_1', 100, 100)`); err != nil {
-		_ = raw.Close()
-		t.Fatalf("seed product thread: %v", err)
-	}
-	if _, err := raw.Exec(`INSERT INTO ai_messages(thread_id, endpoint_id, message_id, role, status, created_at_unix_ms, updated_at_unix_ms, message_json) VALUES('thread_product', 'env_1', 'legacy_message', 'user', 'completed', 100, 100, '{}')`); err != nil {
-		_ = raw.Close()
-		t.Fatalf("seed legacy agent message: %v", err)
-	}
-	if err := raw.Close(); err != nil {
-		t.Fatalf("close seed database: %v", err)
+	if err := legacydb.SeedUnsupportedThreadstore(dbPath, "ai_threadstore_canonical", 15); err != nil {
+		t.Fatalf("SeedUnsupportedThreadstore: %v", err)
 	}
 
 	svc, err := New(context.Background(), Options{
@@ -124,17 +109,17 @@ func TestNewMigratesLegacyThreadstoreSchema(t *testing.T) {
 			return "", false
 		},
 	})
-	if err != nil {
-		t.Fatalf("New migrated legacy threadstore: %v", err)
+	if err == nil {
+		if svc != nil {
+			_ = svc.Close()
+		}
+		t.Fatal("New accepted unsupported threadstore version 15")
 	}
-	if svc == nil {
-		t.Fatal("New returned nil service after migrating threadstore")
-	}
-	if err := svc.Close(); err != nil {
-		t.Fatalf("close service: %v", err)
+	if !strings.Contains(err.Error(), "15") || !strings.Contains(err.Error(), "v2 and v3") {
+		t.Fatalf("New error=%v, want actual version and supported v2/v3 contract", err)
 	}
 
-	raw, err = sql.Open("sqlite", dbPath)
+	raw, err := sql.Open("sqlite", dbPath)
 	if err != nil {
 		t.Fatalf("sql.Open: %v", err)
 	}
@@ -144,41 +129,29 @@ func TestNewMigratesLegacyThreadstoreSchema(t *testing.T) {
 	if err := raw.QueryRow(`PRAGMA user_version;`).Scan(&version); err != nil {
 		t.Fatalf("read user_version: %v", err)
 	}
-	if version != threadstore.CurrentSchemaVersion() {
-		t.Fatalf("user_version=%d, want %d", version, threadstore.CurrentSchemaVersion())
+	if version != 15 {
+		t.Fatalf("user_version=%d, want unsupported version left unchanged", version)
 	}
-	var legacyAgentTables int
-	if err := raw.QueryRow(`SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name IN ('ai_messages', 'ai_runs', 'ai_thread_state', 'conversation_turns')`).Scan(&legacyAgentTables); err != nil {
-		t.Fatalf("check legacy Agent tables: %v", err)
+	var kind string
+	if err := raw.QueryRow(`SELECT db_kind FROM __redeven_db_meta WHERE singleton = 1`).Scan(&kind); err != nil {
+		t.Fatalf("read db kind: %v", err)
 	}
-	if legacyAgentTables != 0 {
-		t.Fatalf("legacy Agent table count=%d, want 0", legacyAgentTables)
+	if kind != "ai_threadstore_canonical" {
+		t.Fatalf("db kind=%q, want unsupported kind left unchanged", kind)
 	}
-	var threadCount int
-	if err := raw.QueryRow(`SELECT COUNT(1) FROM ai_threads WHERE thread_id = 'thread_product'`).Scan(&threadCount); err != nil {
-		t.Fatalf("check product thread: %v", err)
+	var sentinel string
+	if err := raw.QueryRow(`SELECT payload FROM legacy_thread_data WHERE id = 'sentinel'`).Scan(&sentinel); err != nil {
+		t.Fatalf("read sentinel: %v", err)
 	}
-	if threadCount != 1 {
-		t.Fatalf("product thread count=%d, want 1", threadCount)
+	if sentinel != "preserve me" {
+		t.Fatalf("sentinel=%q, want unsupported database left unchanged", sentinel)
 	}
-	var hasLegacyExecutionColumn int
-	if err := raw.QueryRow(`SELECT COUNT(1) FROM pragma_table_info('ai_threads') WHERE name = 'run_status'`).Scan(&hasLegacyExecutionColumn); err != nil {
-		t.Fatalf("check legacy thread column: %v", err)
+	var settingsTables int
+	if err := raw.QueryRow(`SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = 'ai_thread_settings'`).Scan(&settingsTables); err != nil {
+		t.Fatalf("check settings table: %v", err)
 	}
-	if hasLegacyExecutionColumn != 0 {
-		t.Fatal("legacy run_status column remains after migration")
-	}
-	floretStore, err := flruntime.OpenSQLiteStore(filepath.Join(stateDir, "ai", "floret_threads.sqlite"))
-	if err != nil {
-		t.Fatalf("open migrated Floret store: %v", err)
-	}
-	defer floretStore.Close()
-	maintenance, err := flruntime.NewThreadMaintenanceHost(flruntime.ThreadMaintenanceHostOptions{Store: floretStore})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := maintenance.ReadThread(context.Background(), "thread_product"); err != nil {
-		t.Fatalf("read ensured Floret thread identity: %v", err)
+	if settingsTables != 0 {
+		t.Fatal("unsupported database was rewritten with current settings schema")
 	}
 }
 
@@ -191,7 +164,7 @@ func TestNewRejectsCurrentThreadstoreSchemaDrift(t *testing.T) {
 	if err != nil {
 		t.Fatalf("threadstore.Open: %v", err)
 	}
-	if err := store.CreateThread(context.Background(), threadstore.Thread{ThreadID: "th_old", EndpointID: "env_1", Title: "old"}); err != nil {
+	if err := store.CreateThread(context.Background(), threadstore.ThreadSettings{ThreadID: "th_old", EndpointID: "env_1"}); err != nil {
 		_ = store.Close()
 		t.Fatalf("CreateThread: %v", err)
 	}
@@ -237,11 +210,11 @@ func TestNewRejectsCurrentThreadstoreSchemaDrift(t *testing.T) {
 		t.Fatalf("conversation_turns table count=%d, want drift left untouched", shadowTableCount)
 	}
 	var threadCount int
-	if err := raw.QueryRow(`SELECT COUNT(1) FROM ai_threads`).Scan(&threadCount); err != nil {
-		t.Fatalf("count ai_threads: %v", err)
+	if err := raw.QueryRow(`SELECT COUNT(1) FROM ai_thread_settings`).Scan(&threadCount); err != nil {
+		t.Fatalf("count ai_thread_settings: %v", err)
 	}
 	if threadCount != 1 {
-		t.Fatalf("ai_threads row count=%d, want existing data preserved", threadCount)
+		t.Fatalf("ai_thread_settings row count=%d, want existing data preserved", threadCount)
 	}
 }
 

@@ -22,7 +22,7 @@ func TestStoreOpenRejectsLegacyProductColumns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sql.Open: %v", err)
 	}
-	if _, err := raw.Exec(`ALTER TABLE ai_threads ADD COLUMN last_context_run_id TEXT NOT NULL DEFAULT ''`); err != nil {
+	if _, err := raw.Exec(`ALTER TABLE ai_thread_settings ADD COLUMN last_context_run_id TEXT NOT NULL DEFAULT ''`); err != nil {
 		_ = raw.Close()
 		t.Fatalf("add legacy column: %v", err)
 	}
