@@ -574,8 +574,8 @@
               "sqlite",
               "storage"
             ],
-            "summary": "Floret is the only durable authority for admitted conversation, thread path,\nturn and run lifecycle, projections, control signals, approvals, Agent todos,\ntool lifecycle, provider continuation, prompt state, and subagent lifecycle.\nRedeven never reads Floret SQLite, imports Floret internals, or persists a\nqueryable mapping of those records. Redeven threadstore contains only product\nthread configuration, queued commands that Floret has not admitted, uploads and\nresource references, Flower routing and handoff metadata, permission audit\nsnapshots, read acknowledgement, and fork or delete coordination records.",
-            "section_count": 5
+            "summary": "- Authority: Floret owns admitted Agent state; Redeven owns product metadata and migration coordination.\n- Outcome: Product threadstore opens only after its schema and any supported canonical legacy source are validated and migrated through explicit steps.\n- Invariants: Redeven never queries Floret SQLite, copies Agent state into product tables, or synthesizes missing permission, approval, event, or control values.\n- Failure boundary: Unknown kinds, unsupported versions, schema drift, invalid data, and failed Floret identity establishment abort the transaction without repair or partial conversion.",
+            "section_count": 2
           },
           {
             "concept_id": "ai.tool-permission-runtime",
@@ -1278,12 +1278,6 @@
       ],
       "backlinks": [
         {
-          "label": "Flower storage ownership and migrations",
-          "path": "ai/flower-storage-ownership-and-migrations.md",
-          "concept_id": "ai.flower-storage-ownership-and-migrations",
-          "title": "Flower storage ownership and migrations"
-        },
-        {
           "label": "Redeven OKF Bundle",
           "path": "index.md",
           "title": "Redeven OKF Bundle"
@@ -1462,6 +1456,12 @@
           "path": "ai/ai-tool-runtime.md",
           "concept_id": "ai.ai-tool-runtime",
           "title": "AI tool runtime"
+        },
+        {
+          "label": "Flower storage ownership and migrations",
+          "path": "ai/flower-storage-ownership-and-migrations.md",
+          "concept_id": "ai.flower-storage-ownership-and-migrations",
+          "title": "Flower storage ownership and migrations"
         },
         {
           "label": "Redeven OKF Bundle",
@@ -1675,64 +1675,69 @@
         "title": "Flower storage ownership and migrations",
         "type": "Storage Contract"
       },
-      "body_length": 5068,
-      "summary": "Floret is the only durable authority for admitted conversation, thread path,\nturn and run lifecycle, projections, control signals, approvals, Agent todos,\ntool lifecycle, provider continuation, prompt state, and subagent lifecycle.\nRedeven never reads Floret SQLite, imports Floret internals, or persists a\nqueryable mapping of those records. Redeven threadstore contains only product\nthread configuration, queued commands that Floret has not admitted, uploads and\nresource references, Flower routing and handoff metadata, permission audit\nsnapshots, read acknowledgement, and fork or delete coordination records.",
+      "body_length": 4554,
+      "summary": "- Authority: Floret owns admitted Agent state; Redeven owns product metadata and migration coordination.\n- Outcome: Product threadstore opens only after its schema and any supported canonical legacy source are validated and migrated through explicit steps.\n- Invariants: Redeven never queries Floret SQLite, copies Agent state into product tables, or synthesizes missing permission, approval, event, or control values.\n- Failure boundary: Unknown kinds, unsupported versions, schema drift, invalid data, and failed Floret identity establishment abort the transaction without repair or partial conversion.",
       "sections": [
         {
-          "id": "migration-contract",
-          "title": "Migration contract",
+          "id": "contract",
+          "title": "Contract",
           "level": 1,
-          "body": "The current Redeven threadstore is product schema v2. The only supported legacy\nkind is the explicitly identified canonical threadstore at versions v15 through\nv40. A canonical database is verified at its declared source version, migrated\nthrough every consecutive canonical version to v40, validated for product data,\nand then asked to establish every non-empty product thread identity through\nFloret `ThreadMaintenanceHost.EnsureThread`. Only after all identity calls\nsucceed does the same Redeven transaction delete Agent shadow tables and convert\nthe retained product records to product v1. The standard product v1-to-v2\nmigration then removes the obsolete Floret result shadow column through a\ndeterministic table rebuild. Redeven never copies canonical transcript, run,\ntool, todo, memory, checkpoint, delegated Agent lifecycle, or projection data\ninto a replacement product table.\n\nQueued command identity conversion exists only in the canonical conversion:\n`turn_id` is the declared legacy `message_id`, and `run_id` is\n`run_migrated_` plus `queue_id`. Empty or duplicate identities fail before any\nFloret thread is established. A failed Floret identity call, canonical step,\nproduct conversion, version update, or final schema verification rolls back the\nRedeven transaction. Already-created empty Floret identities are harmless and\nmake a retry idempotent; Redeven does not add a runtime repair branch.\n\nEvery Redeven SQLite store uses one immediate-lock migration transaction. The\ntransaction reads `PRAGMA user_version` only after acquiring the write lock,\nverifies the exact metadata table and one metadata row, applies consecutive\nmigrations, verifies the final table, column, index, trigger, constraint, and\nkind contract, updates version metadata, and commits. Fresh empty databases\ncreate the current schema through the declared version chain. Non-empty\ndatabases without metadata, malformed metadata, unknown kinds, unsupported old\nversions, future versions, schema drift, and invalid data fail without repair,\nfile deletion, schema claiming, or conditional DDL.\n\nNotes, thread read state, Workbench layout, Code App registry, and port-forward\nregistry follow the same engine. Their migrations use exact version SQL and\nsource verification. Code App's removed `code_port` shape is accepted only as\nthe explicitly identified `codeapp_registry_legacy` v1 kind; field-existence\nprobing is not a migration contract.",
-          "char_count": 2429
+          "body": "## Ownership\n\nFloret is the only durable authority for admitted conversation, thread path, turn and run lifecycle, projections, control signals, approvals, Agent todos, tool lifecycle, provider continuation, prompt state, and subagent lifecycle. Redeven threadstore contains only product thread configuration, commands that Floret has not admitted, uploads and resource references, Flower routing and handoff metadata, permission audit snapshots, read acknowledgement, and fork or delete coordination records.\n\n## State and flow\n\nThe current Redeven threadstore is product schema v2. The supported canonical legacy kind is explicitly versioned v15 through v40. Migration verifies the declared source version, applies each consecutive canonical step to v40, validates product data, and establishes every non-empty product thread identity through Floret `ThreadMaintenanceHost.EnsureThread`. Only after those calls succeed does the same transaction remove Agent shadow tables and convert retained product records to product v1; the deterministic product v1-to-v2 migration then removes the obsolete Floret result shadow column. Queued command conversion maps `turn_id` from the legacy `message_id` and `run_id` from `queue_id`; empty or duplicate identities fail before Floret calls.\n\nEvery SQLite store uses one immediate-lock migration transaction. The engine acquires the write lock before reading `PRAGMA user_version`, verifies the exact metadata row and schema contract, applies consecutive migrations, verifies tables, columns, indexes, triggers, constraints, and kind, updates version metadata, and commits. Fresh empty databases follow the same declared version chain. The same ownership rules apply to notes, thread read state, Workbench layout, Code App registry, and port-forward registry.\n\n## Failure semantics\n\nAny failed Floret identity call, canonical step, product conversion, version update, final verification, or input validation rolls back the Redeven transaction. Non-empty databases without metadata, malformed metadata, unknown kinds, unsupported old versions, future versions, schema drift, and invalid data fail without file deletion, schema claiming, conditional DDL, or runtime repair. Pending approvals and events must carry complete identity, lifecycle, batch, timestamp, and argument-hash contracts; missing values are errors. Projection unavailability remains diagnostic state and does not rewrite a successful Floret execution as failed. A malformed `ask_user` signal is rejected instead of receiving generated clarification text.",
+          "char_count": 2561
         },
         {
-          "id": "runtime-consequences",
-          "title": "Runtime consequences",
+          "id": "boundaries",
+          "title": "Boundaries",
           "level": 1,
-          "body": "Permission values are limited to `readonly`, `approval_required`, and\n`full_access`; unknown persisted or incoming values are contract errors. Floret\npending approvals and events must carry complete identity, lifecycle, batch,\ntimestamp, and argument-hash contracts. Redeven does not invent missing approval\nstate, timestamps, revisions, tool names, or `ask_user` questions. A malformed\nFloret event aborts the corresponding run processing. Projection availability\nremains independent from execution status: an unavailable final projection is\ndiagnostic state and does not rewrite a successful Floret execution as failed.",
-          "char_count": 621
-        },
-        {
-          "id": "verification",
-          "title": "Verification",
-          "level": 1,
-          "body": "Table-driven tests cover every canonical start version v15 through v40,\nproduct v1 through v2, Floret identity failure, invalid product data, schema\ndrift, transaction rollback, current and future versions, malformed metadata,\nunversioned non-empty databases, and concurrent open serialization. Focused\nstore and AI tests also cover strict permission, approval, event, and\n`ask_user` contracts.",
-          "char_count": 394
-        },
-        {
-          "id": "related",
-          "title": "Related",
-          "level": 1,
-          "body": "- [AI tool runtime](ai-tool-runtime.md)\n- [Flower thread fork coordination](flower-thread-fork-coordination.md)\n- [Flower thread deletion coordination](flower-thread-deletion-coordination.md)",
-          "char_count": 191
-        },
-        {
-          "id": "citations",
-          "title": "Citations",
-          "level": 1,
-          "body": "[1] redeven:internal/persistence/sqliteutil/engine.go - The shared engine owns immediate-lock version and kind migration.\n[2] redeven:internal/ai/threadstore/canonical_migrations.go - Canonical v15-v40 verification, identity establishment, and product conversion.\n[3] redeven:internal/ai/threadstore/product_migrations.go - Product v1-to-v2 deterministic rebuild.\n[4] redeven:internal/ai/service.go - Service opens Floret first and supplies the idempotent thread identity ensurer.\n[5] redeven:internal/ai/threadstore/schema_migration_test.go - Canonical, product, rollback, and invalid-data migration coverage.\n[6] redeven:internal/persistence/sqliteutil/engine_test.go - Metadata, concurrency, and migration-chain coverage.",
-          "char_count": 724
+          "body": "Redeven must not import Floret internals, query Floret-managed tables, persist transcript, run, projection, control, approval, todo, context, provider, or tool mirrors, or use local dependency wiring. Migration code may retain only product records and opaque references needed to call public Floret maintenance APIs. [Floret thread runtime integration](floret-thread-runtime.md) owns the runtime authority boundary; this concept owns storage conversion and schema failure behavior.",
+          "char_count": 481
         }
       ],
-      "snippet": "Floret is the only durable authority for admitted conversation, thread path, turn and run lifecycle, projections, control signals, approvals, Agent todos, tool lifecycle, provider continuation, prompt state, and subagent lifecycle.",
+      "evidence": [
+        {
+          "id": "redeven:internal/persistence/sqliteutil/engine.go:123:the shared engine opens stores through the immediate-lock schema contract.",
+          "source": "redeven:internal/persistence/sqliteutil/engine.go",
+          "line": 123,
+          "description": "The shared engine opens stores through the immediate-lock schema contract."
+        },
+        {
+          "id": "redeven:internal/ai/threadstore/schema.go:23:the threadstore schema registers consecutive product migrations and canonical v15-v40 migrations.",
+          "source": "redeven:internal/ai/threadstore/schema.go",
+          "line": 23,
+          "description": "The threadstore schema registers consecutive product migrations and canonical v15-v40 migrations."
+        },
+        {
+          "id": "redeven:internal/ai/threadstore/canonical_migrations.go:65:canonical migration validates source versions, converts product data, and establishes floret thread identities.",
+          "source": "redeven:internal/ai/threadstore/canonical_migrations.go",
+          "line": 65,
+          "description": "Canonical migration validates source versions, converts product data, and establishes Floret thread identities."
+        },
+        {
+          "id": "redeven:internal/ai/threadstore/product_migrations.go:34:product v1-to-v2 performs the deterministic product schema rebuild.",
+          "source": "redeven:internal/ai/threadstore/product_migrations.go",
+          "line": 34,
+          "description": "Product v1-to-v2 performs the deterministic product schema rebuild."
+        },
+        {
+          "id": "redeven:internal/ai/threadstore/schema_migration_test.go:16:migration tests cover canonical v15-v40 conversion and product schema outcomes.",
+          "source": "redeven:internal/ai/threadstore/schema_migration_test.go",
+          "line": 16,
+          "description": "Migration tests cover canonical v15-v40 conversion and product schema outcomes."
+        },
+        {
+          "id": "redeven:internal/ai/floret_runtime.go:209:invalid floret turn contracts are rejected at the runtime boundary.",
+          "source": "redeven:internal/ai/floret_runtime.go",
+          "line": 209,
+          "description": "Invalid Floret turn contracts are rejected at the runtime boundary."
+        }
+      ],
+      "snippet": "- Authority: Floret owns admitted Agent state; Redeven owns product metadata and migration coordination. - Outcome: Product threadstore opens only after its schema and any supported canonical legacy source are validated and migrated through",
       "links": [
         {
-          "label": "AI tool runtime",
-          "path": "ai/ai-tool-runtime.md",
-          "concept_id": "ai.ai-tool-runtime",
-          "title": "AI tool runtime"
-        },
-        {
-          "label": "Flower thread deletion coordination",
-          "path": "ai/flower-thread-deletion-coordination.md",
-          "concept_id": "ai.flower-thread-deletion-coordination",
-          "title": "Flower thread deletion coordination"
-        },
-        {
-          "label": "Flower thread fork coordination",
-          "path": "ai/flower-thread-fork-coordination.md",
-          "concept_id": "ai.flower-thread-fork-coordination",
-          "title": "Flower thread fork coordination"
+          "label": "Floret thread runtime integration",
+          "path": "ai/floret-thread-runtime.md",
+          "concept_id": "ai.floret-thread-runtime",
+          "title": "Floret thread runtime integration"
         }
       ],
       "backlinks": [
@@ -1847,12 +1852,6 @@
       "snippet": "Flower thread deletion crosses three ownership domains. Redeven owns product thread metadata, resource references, delete-operation coordination, authorization audit, uploads, and user-scoped Flower read state. Floret owns the complete dura",
       "backlinks": [
         {
-          "label": "Flower storage ownership and migrations",
-          "path": "ai/flower-storage-ownership-and-migrations.md",
-          "concept_id": "ai.flower-storage-ownership-and-migrations",
-          "title": "Flower storage ownership and migrations"
-        },
-        {
           "label": "Flower subagent runtime",
           "path": "ai/subagent-runtime.md",
           "concept_id": "ai.subagent-runtime",
@@ -1960,12 +1959,6 @@
       ],
       "snippet": "Flower thread fork is a cross-repository durable operation. Floret owns the engine journal, conversation, turn/run identity mapping, projections, control signals, approvals, and Agent todo state. Redeven owns only the product thread configu",
       "backlinks": [
-        {
-          "label": "Flower storage ownership and migrations",
-          "path": "ai/flower-storage-ownership-and-migrations.md",
-          "concept_id": "ai.flower-storage-ownership-and-migrations",
-          "title": "Flower storage ownership and migrations"
-        },
         {
           "label": "Redeven OKF Bundle",
           "path": "index.md",
@@ -7414,5 +7407,5 @@
       ]
     }
   ],
-  "source_sha256": "8f4f76e606ab5c0f97ee676a41711699c30df99a226b1f2315926a1eb638c875"
+  "source_sha256": "f4b4a214b612c9436da22bc2729888605e183b1f174feee6c0696b9e774a6b13"
 }
