@@ -116,7 +116,7 @@ Redeven 以能力为先，但运行时仍然是信任边界，因为它实际掌
 
 - 运行时位于端点，明文数据始终保留在端点。
 - 控制平面签发引导载荷、授权和不可变的会话元数据。
-- [Flowersec](https://github.com/floegence/flowersec) 在客户端与端点运行时之间传输加密字节；当前运行时集成以 `flowersec-go/v0.20.2` 为准。
+- [Flowersec](https://github.com/floegence/flowersec) 在客户端与端点运行时之间传输加密字节；当前运行时集成以 `flowersec-go/v0.27.0` 为准。
 - 有效权限来自服务器签发的会话授权，并受本地权限策略约束（`read`、`write`、`execute`、`admin`，任何类别都不会隐含其他类别）。
 - 本地配置、E2EE 材料、审计日志和诊断数据保留在端点状态目录中。
 - GitHub Releases 始终是二进制文件、校验和、签名及 OKF 验证资产的公开权威来源。

@@ -30,8 +30,8 @@ importers:
         specifier: ^9.39.4
         version: 9.39.4
       '@floegence/floe-webapp-core':
-        specifier: ^0.37.4
-        version: 0.37.4(solid-js@1.9.13)
+        specifier: ^0.38.0
+        version: 0.38.0(solid-js@1.9.13)
       '@fontsource-variable/inter':
         specifier: ^5.2.8
         version: 5.2.8
@@ -502,8 +502,8 @@ packages:
       '@noble/hashes':
         optional: true
 
-  '@floegence/floe-webapp-core@0.37.4':
-    resolution: {integrity: sha512-w4RWSOOftAOtvFRtXL9oXtZqd31CrGzjaQE4etJs/9q2e14MdQYfx1QSOEuS35+UTeuvFgOUjCXrrKMaVaU88A==}
+  '@floegence/floe-webapp-core@0.38.0':
+    resolution: {integrity: sha512-HhbDbfRaWS0MC9HFF/TPC2c4oTP5bz+IjD3tEAlLT6TZUIYW8tZGZS0Gfpl1ZVJBBdZxls3ivKgRvrll9q3VpQ==}
     engines: {node: '>=24.0.0'}
     peerDependencies:
       solid-js: ^1.8.0
@@ -3477,7 +3477,7 @@ snapshots:
 
   '@exodus/bytes@1.15.1': {}
 
-  '@floegence/floe-webapp-core@0.37.4(solid-js@1.9.13)':
+  '@floegence/floe-webapp-core@0.38.0(solid-js@1.9.13)':
     dependencies:
       clsx: 2.1.1
       diff: 8.0.4
