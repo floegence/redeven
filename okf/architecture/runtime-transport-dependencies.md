@@ -3,7 +3,7 @@ type: Runtime Contract
 title: Runtime transport dependencies
 description: Runtime transport uses Flowersec sessions while terminal lifecycle is delegated to Floeterm managers.
 tags: [architecture, dependencies, terminal]
-timestamp: 2026-07-19T00:00:00Z
+timestamp: 2026-07-20T00:00:00Z
 quality_exception: Cross-domain published dependency contract spanning transport, terminal, and session security.
 ---
 # Summary
@@ -34,7 +34,7 @@ Every live stream owns one connection and is removed by Floeterm when the stream
 
 Floeterm performs shell resolution, environment construction, initialization, argument selection, and PTY startup outside the session lock and owns activation cancellation. Redeven's session delete lifecycle hides a closing session immediately and shares one in-flight delete result across callers; Floeterm closes the attached live streams as part of the terminal session lifecycle. A real cleanup failure restores an open, visible, retryable lifecycle. Redeven retains no attachment-generation high-water, sink lifecycle token, connection-ownership map, or rollback state machine outside Floeterm.
 
-Terminal recovery verification is layered and automated without starting Redeven Desktop. A deterministic Go fixture covers cleared 0-byte history plus exact 64 KiB, 512 KiB, and 8 MiB retained snapshots with full fixed-generation pagination and exact replayed-byte equality. A production-dist process carrier starts a temporary Redeven Runtime, Local UI, Direct WebSocket/RPC path, real terminal-go session and PTY, then drives the actual Activity and Workbench terminal surfaces in headless Chromium across reused and fresh browser contexts. The 64 KiB, 448 KiB, and exact 8 MiB boundary payload classes must reach parser-committed interactive state, report actual retained and fetched bytes, match the seeded history canvas fingerprint, accept a real filesystem input probe, avoid blocking recovery UI, and emit no renderer, request, response, or page errors. Standard GitHub-hosted jobs use these as correctness gates and retain raw timings; absolute percentile claims require a separately controlled runner class and sample plan.
+Terminal recovery verification is layered and automated without starting Redeven Desktop. A deterministic Go fixture covers cleared 0-byte history plus exact 64 KiB, 512 KiB, and 8 MiB retained snapshots with full fixed-generation pagination and exact replayed-byte equality. A production-dist process carrier starts a temporary Redeven Runtime, Local UI, Direct WebSocket/RPC path, real terminal-go session and PTY, then drives the actual Activity and Workbench terminal surfaces in headed Chromium across reused and fresh browser contexts. GitHub-hosted Linux jobs provide that display explicitly through `xvfb-run -a`; the carrier runner policy test rejects any fixture job that omits the display server contract. The 64 KiB, 448 KiB, and exact 8 MiB boundary payload classes must reach parser-committed interactive state, report actual retained and fetched bytes, match the seeded history canvas fingerprint, accept a real filesystem input probe, avoid blocking recovery UI, and emit no renderer, request, response, or page errors. Standard GitHub-hosted jobs use these as correctness gates and retain raw timings; absolute percentile claims require a separately controlled runner class and sample plan.
 
 ## Terminal startup and warmup
 
@@ -62,4 +62,5 @@ Compatibility depends on these transport and terminal interfaces staying aligned
 - `redeven:internal/runtimeservice/compatibility_contract.json:2` - Local UI exposure requires compatibility epoch 8 and a matched v0.10.0 Desktop and Runtime pair.
 - `redeven:internal/terminal/manager_test.go:313` - Deterministic history fixtures verify exact pagination and replay across retained-size classes.
 - `redeven:internal/envapp/ui_src/scripts/checkTerminalRecoveryCarrier.mjs:450` - The production-dist process carrier starts a temporary Runtime and exercises real PTY recovery in Chromium.
+- `redeven:internal/envapp/ui_src/scripts/terminalCarrierRunnerPolicy.node-test.mjs:1` - Hosted carrier jobs must provide Xvfb for the headed renderer path.
 - `redeven:.github/workflows/release.yml:44` - Release correctness gates run the 64 KiB, 448 KiB, and exact 8 MiB boundary terminal carrier classes.
