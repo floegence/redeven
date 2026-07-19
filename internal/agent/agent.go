@@ -2,7 +2,9 @@ package agent
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/base32"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -492,7 +494,18 @@ func (a *Agent) runControlLoop(ctx context.Context) {
 		a.log.Warn("control channel not started: invalid remote config", "error", err)
 		return
 	}
-	backoff := newBackoff()
+	a.runControlAttempts(ctx, a.runControlOnce, newBackoff(), waitControlRetry)
+}
+
+type controlAttemptResult struct {
+	registered bool
+}
+
+type controlAttemptFunc func(context.Context) (controlAttemptResult, error)
+
+type controlRetryWaitFunc func(context.Context, time.Duration) bool
+
+func (a *Agent) runControlAttempts(ctx context.Context, attempt controlAttemptFunc, backoff *backoff, wait controlRetryWaitFunc) {
 	for {
 		if ctx.Err() != nil {
 			return
@@ -500,34 +513,49 @@ func (a *Agent) runControlLoop(ctx context.Context) {
 		if a.onControlConnecting != nil {
 			a.onControlConnecting()
 		}
-		err := a.runControlOnce(ctx)
+		result, attemptErr := attempt(ctx)
 		if ctx.Err() != nil {
 			return
 		}
-		a.log.Warn("control channel disconnected; retrying", "error", err)
+		a.log.Warn("control channel disconnected; retrying", "error", attemptErr)
 
-		d := backoff.Next()
-		if a.onControlRetry != nil {
-			a.onControlRetry(err, d)
+		if result.registered {
+			backoff.Reset()
 		}
-		timer := time.NewTimer(d)
-		select {
-		case <-ctx.Done():
-			timer.Stop()
+		d, err := backoff.Next()
+		if err != nil {
+			a.log.Error("control channel retry scheduling failed", "error", err)
 			return
-		case <-timer.C:
+		}
+		if a.onControlRetry != nil {
+			a.onControlRetry(attemptErr, d)
+		}
+		if !wait(ctx, d) {
+			return
 		}
 	}
 }
 
-func (a *Agent) runControlOnce(ctx context.Context) error {
+func waitControlRetry(ctx context.Context, delay time.Duration) bool {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
+	}
+}
+
+func (a *Agent) runControlOnce(ctx context.Context) (controlAttemptResult, error) {
+	result := controlAttemptResult{}
 	cfg := a.remoteConfigSnapshot()
 	if cfg == nil {
-		return errors.New("missing config")
+		return result, errors.New("missing config")
 	}
 	origin, err := origin.FromWSURL(cfg.Direct.WsUrl)
 	if err != nil {
-		return err
+		return result, err
 	}
 
 	c, err := fsclient.ConnectDirect(ctx, cfg.Direct,
@@ -548,13 +576,13 @@ func (a *Agent) runControlOnce(ctx context.Context) error {
 		fsclient.WithTransportSecurityPolicy(fsclient.RequireTLS),
 	)
 	if err != nil {
-		return err
+		return result, err
 	}
 	defer c.Close()
 
 	rpcC := c.RPC()
 	if rpcC == nil {
-		return errors.New("missing rpc client")
+		return result, errors.New("missing rpc client")
 	}
 	controlRPCSerial := a.setCurrentControlRPC(rpcC)
 	defer a.clearCurrentControlRPC(controlRPCSerial)
@@ -579,8 +607,9 @@ func (a *Agent) runControlOnce(ctx context.Context) error {
 		RemoteEnabled:            a.remoteEnabled,
 	})
 	if err != nil {
-		return err
+		return result, err
 	}
+	result.registered = true
 
 	a.controlConnectedOnce.Do(func() {
 		if a.onControlConnected != nil {
@@ -595,19 +624,19 @@ func (a *Agent) runControlOnce(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return result, ctx.Err()
 		case <-t.C:
 			if shouldRenewDirectCredentials(cfg.Direct, time.Now()) {
 				if err := a.renewDirectCredentials(ctx, rpcC, cfg); err != nil {
-					return err
+					return result, err
 				}
-				return errors.New("control credentials renewed; reconnecting")
+				return result, errors.New("control credentials renewed; reconnecting")
 			}
 			_, err := callControlJSON[heartbeatReq, heartbeatResp](ctx, a, rpcC, controlRPCTypeHeartbeat, &heartbeatReq{
 				NowUnixMs: time.Now().UnixMilli(),
 			})
 			if err != nil {
-				return err
+				return result, err
 			}
 		}
 	}
@@ -1480,10 +1509,20 @@ type runtimeDisconnectResp struct {
 // --- helper: backoff ---
 
 type backoff struct {
-	attempt int
+	next       time.Duration
+	randomUnit func() (float64, error)
 }
 
-func newBackoff() *backoff { return &backoff{} }
+func newBackoff() *backoff {
+	return newBackoffWithRandom(secureRandomUnit)
+}
+
+func newBackoffWithRandom(randomUnit func() (float64, error)) *backoff {
+	return &backoff{
+		next:       250 * time.Millisecond,
+		randomUnit: randomUnit,
+	}
+}
 
 func normalizeEffectiveRunMode(raw string) string {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
@@ -1498,26 +1537,42 @@ func normalizeEffectiveRunMode(raw string) string {
 	}
 }
 
-func (b *backoff) Next() time.Duration {
-	// 250ms, 450ms, 810ms, ... capped at 10s
-	if b.attempt < 0 {
-		b.attempt = 0
-	}
-	base := 250 * time.Millisecond
-	d := time.Duration(float64(base) * pow(1.8, b.attempt))
-	b.attempt++
-	if d > 10*time.Second {
-		d = 10 * time.Second
-	}
-	return d
+func (b *backoff) Reset() {
+	b.next = 250 * time.Millisecond
 }
 
-func pow(base float64, exp int) float64 {
-	out := 1.0
-	for i := 0; i < exp; i++ {
-		out *= base
+func (b *backoff) Next() (time.Duration, error) {
+	unit, err := b.randomUnit()
+	if err != nil {
+		return 0, err
 	}
-	return out
+	if unit < 0 || unit >= 1 {
+		return 0, fmt.Errorf("control retry random value %v is outside [0, 1)", unit)
+	}
+
+	base := b.next
+	lower := time.Duration(float64(base) * 0.8)
+	upper := time.Duration(float64(base) * 1.2)
+	if upper > 10*time.Second {
+		upper = 10 * time.Second
+	}
+	delay := lower + time.Duration(float64(upper-lower)*unit)
+
+	next := time.Duration(float64(base) * 1.8)
+	if next > 10*time.Second {
+		next = 10 * time.Second
+	}
+	b.next = next
+	return delay, nil
+}
+
+func secureRandomUnit() (float64, error) {
+	var data [8]byte
+	if _, err := rand.Read(data[:]); err != nil {
+		return 0, fmt.Errorf("read control retry random source: %w", err)
+	}
+	const unitScale = 1 << 53
+	return float64(binary.LittleEndian.Uint64(data[:])>>11) / float64(unitScale), nil
 }
 
 // --- logger ---
