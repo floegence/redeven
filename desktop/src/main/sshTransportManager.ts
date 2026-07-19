@@ -558,6 +558,7 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
       },
       stream: (command, options = {}) => {
         assertCurrent();
+        let terminationRequested = false;
         const child = this.deps.spawnProcess(entry.sshBinary, [
           ...sharedArgs(entry),
           ...targetArgs(entry.target),
@@ -580,6 +581,9 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
           });
         });
         const closed = result.then(async (commandResult) => {
+          if (terminationRequested) {
+            return;
+          }
           if (commandResult.exit_code === 0 && !commandResult.signal) {
             return;
           }
@@ -615,7 +619,10 @@ export class DefaultDesktopSSHTransportManager implements DesktopSSHTransportMan
           stderr: child.stderr,
           result,
           closed,
-          kill: (signal = 'SIGTERM') => child.kill(signal),
+          kill: (signal = 'SIGTERM') => {
+            terminationRequested = true;
+            child.kill(signal);
+          },
         };
       },
       release: async () => {
