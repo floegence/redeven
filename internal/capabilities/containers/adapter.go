@@ -5,19 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 )
 
 var (
-	ErrEngineUnavailable           = errors.New("container engine is unavailable")
-	ErrInvalidEngine               = errors.New("container engine is invalid")
-	ErrInvalidMethod               = errors.New("container method is invalid")
-	ErrLogStreamBackpressure       = errors.New("logs stream sink backpressure")
-	ErrLogsFollowUnsupported       = errors.New("logs follow requires a streaming adapter")
-	ErrContainerOperationIDMissing = errors.New("container operation_id is required")
-	ErrContainerOperationActive    = errors.New("container operation is already active")
-	ErrContainerOperationNotFound  = errors.New("container operation is not active")
-	ErrContainerOperationMismatch  = errors.New("container operation method mismatch")
+	ErrEngineUnavailable     = errors.New("container engine is unavailable")
+	ErrInvalidEngine         = errors.New("container engine is invalid")
+	ErrInvalidMethod         = errors.New("container method is invalid")
+	ErrLogStreamBackpressure = errors.New("logs stream sink backpressure")
+	ErrLogsFollowUnsupported = errors.New("logs follow requires a streaming adapter")
 )
 
 type EngineStatus struct {
@@ -104,17 +99,6 @@ type EngineImageResult struct {
 	Completed bool
 }
 
-type ContainerOperationCancelRequest struct {
-	OperationID string `json:"operation_id"`
-	Method      Method `json:"method,omitempty"`
-}
-
-type ContainerOperationCancelResult struct {
-	OperationID     string `json:"operation_id"`
-	Method          Method `json:"method"`
-	CancelRequested bool   `json:"cancel_requested"`
-}
-
 type EngineClient interface {
 	Status(ctx context.Context, engine Engine) (EngineStatus, error)
 	List(ctx context.Context, engine Engine, all bool) ([]EngineContainer, error)
@@ -131,14 +115,6 @@ type EngineLogFollower interface {
 type Adapter struct {
 	client      EngineClient
 	engineOrder []Engine
-
-	operationsMu sync.Mutex
-	operations   map[string]containerOperationCancel
-}
-
-type containerOperationCancel struct {
-	method Method
-	cancel context.CancelFunc
 }
 
 func NewAdapter(client EngineClient) *Adapter {
@@ -152,20 +128,14 @@ func (a *Adapter) Status(ctx context.Context, req StatusRequest) (StatusResponse
 	engine, status, err := a.resolveEngine(ctx, req.Engine)
 	if err != nil {
 		return StatusResponse{
-			SchemaVersion:     SchemaVersion,
-			CapabilityID:      CapabilityID,
-			CapabilityVersion: CapabilityVersion,
-			Engine:            engine,
-			Available:         false,
+			Engine:    engine,
+			Available: false,
 		}, err
 	}
 	return StatusResponse{
-		SchemaVersion:     SchemaVersion,
-		CapabilityID:      CapabilityID,
-		CapabilityVersion: CapabilityVersion,
-		Engine:            engine,
-		Available:         status.Available,
-		EngineVersion:     status.Version,
+		Engine:        engine,
+		Available:     status.Available,
+		EngineVersion: status.Version,
 	}, nil
 }
 
@@ -183,10 +153,8 @@ func (a *Adapter) List(ctx context.Context, req ContainerListRequest) (Container
 		out = append(out, containerSummary(container))
 	}
 	return ContainerListResponse{
-		SchemaVersion: SchemaVersion,
-		CapabilityID:  CapabilityID,
-		Engine:        engine,
-		Containers:    out,
+		Engine:     engine,
+		Containers: out,
 	}, nil
 }
 
@@ -203,10 +171,8 @@ func (a *Adapter) Inspect(ctx context.Context, req ContainerInspectRequest) (Con
 		return ContainerInspectResponse{}, err
 	}
 	return ContainerInspectResponse{
-		SchemaVersion: SchemaVersion,
-		CapabilityID:  CapabilityID,
-		Engine:        req.Engine,
-		Container:     containerInspect(container),
+		Engine:    req.Engine,
+		Container: containerInspect(container),
 	}, nil
 }
 
@@ -239,25 +205,8 @@ func (a *Adapter) Start(ctx context.Context, req ContainerStartRequest) (Contain
 	})
 }
 
-func (a *Adapter) StartWithOperation(ctx context.Context, operationID string, req ContainerStartRequest) (ContainerActionResponse, error) {
-	return a.runActionWithOperation(ctx, operationID, EngineActionRequest{
-		Engine:      req.Engine,
-		Method:      MethodStart,
-		ContainerID: req.ContainerID,
-	})
-}
-
 func (a *Adapter) Stop(ctx context.Context, req ContainerActionRequest) (ContainerActionResponse, error) {
 	return a.runAction(ctx, EngineActionRequest{
-		Engine:      req.Engine,
-		Method:      MethodStop,
-		ContainerID: req.ContainerID,
-		TimeoutSec:  req.TimeoutSec,
-	})
-}
-
-func (a *Adapter) StopWithOperation(ctx context.Context, operationID string, req ContainerActionRequest) (ContainerActionResponse, error) {
-	return a.runActionWithOperation(ctx, operationID, EngineActionRequest{
 		Engine:      req.Engine,
 		Method:      MethodStop,
 		ContainerID: req.ContainerID,
@@ -274,26 +223,8 @@ func (a *Adapter) Restart(ctx context.Context, req ContainerActionRequest) (Cont
 	})
 }
 
-func (a *Adapter) RestartWithOperation(ctx context.Context, operationID string, req ContainerActionRequest) (ContainerActionResponse, error) {
-	return a.runActionWithOperation(ctx, operationID, EngineActionRequest{
-		Engine:      req.Engine,
-		Method:      MethodRestart,
-		ContainerID: req.ContainerID,
-		TimeoutSec:  req.TimeoutSec,
-	})
-}
-
 func (a *Adapter) Remove(ctx context.Context, req ContainerActionRequest) (ContainerActionResponse, error) {
 	return a.runAction(ctx, EngineActionRequest{
-		Engine:      req.Engine,
-		Method:      MethodRemove,
-		ContainerID: req.ContainerID,
-		Force:       req.Force,
-	})
-}
-
-func (a *Adapter) RemoveWithOperation(ctx context.Context, operationID string, req ContainerActionRequest) (ContainerActionResponse, error) {
-	return a.runActionWithOperation(ctx, operationID, EngineActionRequest{
 		Engine:      req.Engine,
 		Method:      MethodRemove,
 		ContainerID: req.ContainerID,
@@ -320,12 +251,9 @@ func (a *Adapter) TailLogs(ctx context.Context, req LogsTailRequest) (LogsTailRe
 		return LogsTailResponse{}, err
 	}
 	return LogsTailResponse{
-		SchemaVersion:     SchemaVersion,
-		CapabilityID:      CapabilityID,
-		CapabilityVersion: CapabilityVersion,
-		Engine:            result.Engine,
-		ContainerID:       strings.TrimSpace(result.ContainerID),
-		Lines:             append([]LogLine(nil), result.Lines...),
+		Engine:      result.Engine,
+		ContainerID: strings.TrimSpace(result.ContainerID),
+		Lines:       append([]LogLine(nil), result.Lines...),
 	}, nil
 }
 
@@ -361,52 +289,15 @@ func (a *Adapter) PullImage(ctx context.Context, req ImagePullRequest) (ImagePul
 	return a.pullImage(ctx, engine, imageRef)
 }
 
-func (a *Adapter) PullImageWithOperation(ctx context.Context, operationID string, req ImagePullRequest) (ImagePullResponse, error) {
-	engine, imageRef, err := validateImagePull(req)
-	if err != nil {
-		return ImagePullResponse{}, err
-	}
-	operationCtx, cleanup, err := a.operationContext(ctx, operationID, MethodImagesPull)
-	if err != nil {
-		return ImagePullResponse{}, err
-	}
-	defer cleanup()
-
-	return a.pullImage(operationCtx, engine, imageRef)
-}
-
-func (a *Adapter) CancelOperation(_ context.Context, req ContainerOperationCancelRequest) (ContainerOperationCancelResult, error) {
-	operationID := strings.TrimSpace(req.OperationID)
-	if operationID == "" {
-		return ContainerOperationCancelResult{}, ErrContainerOperationIDMissing
-	}
-	cancel, method, err := a.lookupOperationCancel(operationID)
-	if err != nil {
-		return ContainerOperationCancelResult{}, err
-	}
-	if req.Method != "" && req.Method != method {
-		return ContainerOperationCancelResult{}, fmt.Errorf("%w: %s cannot cancel %s", ErrContainerOperationMismatch, req.Method, method)
-	}
-	cancel()
-	return ContainerOperationCancelResult{
-		OperationID:     operationID,
-		Method:          method,
-		CancelRequested: true,
-	}, nil
-}
-
 func (a *Adapter) pullImage(ctx context.Context, engine Engine, imageRef string) (ImagePullResponse, error) {
 	result, err := a.client.PullImage(ctx, engine, imageRef)
 	if err != nil {
 		return ImagePullResponse{}, err
 	}
 	return ImagePullResponse{
-		SchemaVersion:     SchemaVersion,
-		CapabilityID:      CapabilityID,
-		CapabilityVersion: CapabilityVersion,
-		Engine:            result.Engine,
-		Image:             imageSummary(result.Image),
-		Completed:         result.Completed,
+		Engine:    result.Engine,
+		Image:     imageSummary(result.Image),
+		Completed: result.Completed,
 	}, nil
 }
 
@@ -421,76 +312,11 @@ func validateImagePull(req ImagePullRequest) (Engine, string, error) {
 	return req.Engine, imageRef, nil
 }
 
-func (a *Adapter) operationContext(ctx context.Context, operationID string, method Method) (context.Context, func(), error) {
-	operationID = strings.TrimSpace(operationID)
-	if operationID == "" {
-		return nil, nil, ErrContainerOperationIDMissing
-	}
-	operationCtx, cancel := context.WithCancel(ctx)
-	if err := a.registerOperationCancel(operationID, method, cancel); err != nil {
-		cancel()
-		return nil, nil, err
-	}
-	cleanup := func() {
-		a.unregisterOperationCancel(operationID)
-		cancel()
-	}
-	return operationCtx, cleanup, nil
-}
-
-func (a *Adapter) registerOperationCancel(operationID string, method Method, cancel context.CancelFunc) error {
-	a.operationsMu.Lock()
-	defer a.operationsMu.Unlock()
-
-	if a.operations == nil {
-		a.operations = make(map[string]containerOperationCancel)
-	}
-	if _, ok := a.operations[operationID]; ok {
-		return fmt.Errorf("%w: %s", ErrContainerOperationActive, operationID)
-	}
-	a.operations[operationID] = containerOperationCancel{
-		method: method,
-		cancel: cancel,
-	}
-	return nil
-}
-
-func (a *Adapter) unregisterOperationCancel(operationID string) {
-	a.operationsMu.Lock()
-	defer a.operationsMu.Unlock()
-
-	delete(a.operations, operationID)
-}
-
-func (a *Adapter) lookupOperationCancel(operationID string) (context.CancelFunc, Method, error) {
-	a.operationsMu.Lock()
-	defer a.operationsMu.Unlock()
-
-	operation, ok := a.operations[operationID]
-	if !ok {
-		return nil, "", fmt.Errorf("%w: %s", ErrContainerOperationNotFound, operationID)
-	}
-	return operation.cancel, operation.method, nil
-}
-
 func (a *Adapter) runAction(ctx context.Context, req EngineActionRequest) (ContainerActionResponse, error) {
 	if err := validateAction(req); err != nil {
 		return ContainerActionResponse{}, err
 	}
 	return a.action(ctx, req)
-}
-
-func (a *Adapter) runActionWithOperation(ctx context.Context, operationID string, req EngineActionRequest) (ContainerActionResponse, error) {
-	if err := validateAction(req); err != nil {
-		return ContainerActionResponse{}, err
-	}
-	operationCtx, cleanup, err := a.operationContext(ctx, operationID, req.Method)
-	if err != nil {
-		return ContainerActionResponse{}, err
-	}
-	defer cleanup()
-
-	return a.action(operationCtx, req)
 }
 
 func (a *Adapter) action(ctx context.Context, req EngineActionRequest) (ContainerActionResponse, error) {
@@ -499,13 +325,10 @@ func (a *Adapter) action(ctx context.Context, req EngineActionRequest) (Containe
 		return ContainerActionResponse{}, err
 	}
 	return ContainerActionResponse{
-		SchemaVersion:     SchemaVersion,
-		CapabilityID:      CapabilityID,
-		CapabilityVersion: CapabilityVersion,
-		Engine:            result.Engine,
-		Method:            result.Method,
-		ContainerID:       strings.TrimSpace(result.ContainerID),
-		Completed:         result.Completed,
+		Engine:      result.Engine,
+		Method:      result.Method,
+		ContainerID: strings.TrimSpace(result.ContainerID),
+		Completed:   result.Completed,
 	}, nil
 }
 

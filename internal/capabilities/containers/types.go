@@ -2,12 +2,6 @@ package containers
 
 import "strings"
 
-const (
-	SchemaVersion     = "redeven.capability.container_resources.v1"
-	CapabilityID      = "redeven.capability.container_resources"
-	CapabilityVersion = "1.0.0"
-)
-
 type Engine string
 
 const (
@@ -86,91 +80,71 @@ const (
 )
 
 type StatusRequest struct {
-	SchemaVersion string `json:"schema_version"`
-	Engine        Engine `json:"engine,omitempty"`
+	Engine Engine `json:"engine,omitempty"`
 }
 
 type StatusResponse struct {
-	SchemaVersion     string `json:"schema_version"`
-	CapabilityID      string `json:"capability_id"`
-	CapabilityVersion string `json:"capability_version"`
-	Engine            Engine `json:"engine"`
-	Available         bool   `json:"available"`
-	EngineVersion     string `json:"engine_version,omitempty"`
+	Engine        Engine `json:"engine"`
+	Available     bool   `json:"available"`
+	EngineVersion string `json:"engine_version,omitempty"`
 }
 
 type ContainerListRequest struct {
-	SchemaVersion string `json:"schema_version"`
-	Engine        Engine `json:"engine,omitempty"`
-	All           bool   `json:"all,omitempty"`
+	Engine Engine `json:"engine,omitempty"`
+	All    bool   `json:"all,omitempty"`
 }
 
 type ContainerListResponse struct {
-	SchemaVersion string             `json:"schema_version"`
-	CapabilityID  string             `json:"capability_id"`
-	Engine        Engine             `json:"engine"`
-	Containers    []ContainerSummary `json:"containers"`
+	Engine     Engine             `json:"engine"`
+	Containers []ContainerSummary `json:"containers"`
 }
 
 type ContainerInspectRequest struct {
-	SchemaVersion string `json:"schema_version"`
-	Engine        Engine `json:"engine"`
-	ContainerID   string `json:"container_id"`
+	Engine      Engine `json:"engine"`
+	ContainerID string `json:"container_id"`
 }
 
 type ContainerInspectResponse struct {
-	SchemaVersion string           `json:"schema_version"`
-	CapabilityID  string           `json:"capability_id"`
-	Engine        Engine           `json:"engine"`
-	Container     ContainerInspect `json:"container"`
+	Engine    Engine           `json:"engine"`
+	Container ContainerInspect `json:"container"`
 }
 
 type ContainerActionResponse struct {
-	SchemaVersion     string `json:"schema_version"`
-	CapabilityID      string `json:"capability_id"`
-	CapabilityVersion string `json:"capability_version"`
-	Engine            Engine `json:"engine"`
-	Method            Method `json:"method"`
-	ContainerID       string `json:"container_id"`
-	Completed         bool   `json:"completed"`
+	Engine      Engine `json:"engine"`
+	Method      Method `json:"method"`
+	ContainerID string `json:"container_id"`
+	Completed   bool   `json:"completed"`
 }
 
 type ContainerActionRequest struct {
-	SchemaVersion string `json:"schema_version"`
-	Engine        Engine `json:"engine"`
-	ContainerID   string `json:"container_id"`
-	Force         bool   `json:"force,omitempty"`
-	TimeoutSec    int    `json:"timeout_sec,omitempty"`
+	Engine      Engine `json:"engine"`
+	ContainerID string `json:"container_id"`
+	Force       bool   `json:"force,omitempty"`
+	TimeoutSec  int    `json:"timeout_sec,omitempty"`
 }
 
 type ContainerStartRequest struct {
-	SchemaVersion string `json:"schema_version"`
-	Engine        Engine `json:"engine"`
-	ContainerID   string `json:"container_id"`
+	Engine      Engine `json:"engine"`
+	ContainerID string `json:"container_id"`
 }
 
 type LogsTailRequest struct {
-	SchemaVersion string `json:"schema_version"`
-	Engine        Engine `json:"engine"`
-	ContainerID   string `json:"container_id"`
-	TailLines     int    `json:"tail_lines,omitempty"`
-	SinceUnixMs   int64  `json:"since_unix_ms,omitempty"`
-	Follow        bool   `json:"follow,omitempty"`
+	Engine      Engine `json:"engine"`
+	ContainerID string `json:"container_id"`
+	TailLines   int    `json:"tail_lines,omitempty"`
+	SinceUnixMs int64  `json:"since_unix_ms,omitempty"`
+	Follow      bool   `json:"follow,omitempty"`
 }
 
 type ImagePullRequest struct {
-	SchemaVersion string `json:"schema_version"`
-	Engine        Engine `json:"engine"`
-	ImageRef      string `json:"image_ref"`
+	Engine   Engine `json:"engine"`
+	ImageRef string `json:"image_ref"`
 }
 
 type LogsTailResponse struct {
-	SchemaVersion     string    `json:"schema_version"`
-	CapabilityID      string    `json:"capability_id"`
-	CapabilityVersion string    `json:"capability_version"`
-	Engine            Engine    `json:"engine"`
-	ContainerID       string    `json:"container_id"`
-	Lines             []LogLine `json:"lines"`
+	Engine      Engine    `json:"engine"`
+	ContainerID string    `json:"container_id"`
+	Lines       []LogLine `json:"lines"`
 }
 
 type LogLine struct {
@@ -179,12 +153,9 @@ type LogLine struct {
 }
 
 type ImagePullResponse struct {
-	SchemaVersion     string       `json:"schema_version"`
-	CapabilityID      string       `json:"capability_id"`
-	CapabilityVersion string       `json:"capability_version"`
-	Engine            Engine       `json:"engine"`
-	Image             ImageSummary `json:"image"`
-	Completed         bool         `json:"completed"`
+	Engine    Engine       `json:"engine"`
+	Image     ImageSummary `json:"image"`
+	Completed bool         `json:"completed"`
 }
 
 type ContainerSummary struct {
@@ -300,24 +271,20 @@ type RiskFlag struct {
 }
 
 type StartPreflightPlan struct {
-	SchemaVersion     string                `json:"schema_version"`
-	CapabilityID      string                `json:"capability_id"`
-	CapabilityVersion string                `json:"capability_version"`
-	Method            Method                `json:"method"`
-	Request           ContainerStartRequest `json:"request"`
-	Target            TargetSummary         `json:"target"`
-	Image             ImageSummary          `json:"image"`
-	Runtime           RuntimeSummary        `json:"runtime"`
-	RiskLevel         RiskLevel             `json:"risk_level"`
-	RiskFlags         []RiskFlag            `json:"risk_flags"`
-	RequiresAdmin     bool                  `json:"requires_admin"`
-	Summary           []string              `json:"summary,omitempty"`
+	Method        Method                `json:"method"`
+	Request       ContainerStartRequest `json:"request"`
+	Target        TargetSummary         `json:"target"`
+	Image         ImageSummary          `json:"image"`
+	Runtime       RuntimeSummary        `json:"runtime"`
+	RiskLevel     RiskLevel             `json:"risk_level"`
+	RiskFlags     []RiskFlag            `json:"risk_flags"`
+	RequiresAdmin bool                  `json:"requires_admin"`
+	Summary       []string              `json:"summary,omitempty"`
 }
 
 func NewStartRequest(engine Engine, containerID string) ContainerStartRequest {
 	return ContainerStartRequest{
-		SchemaVersion: SchemaVersion,
-		Engine:        engine,
-		ContainerID:   strings.TrimSpace(containerID),
+		Engine:      engine,
+		ContainerID: strings.TrimSpace(containerID),
 	}
 }

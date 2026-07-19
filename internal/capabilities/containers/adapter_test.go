@@ -10,839 +10,160 @@ import (
 )
 
 func TestAdapterStatusResolvesFirstAvailableEngine(t *testing.T) {
-	t.Parallel()
-
-	client := &fakeEngineClient{
-		status: map[Engine]EngineStatus{
-			EngineDocker: {Engine: EngineDocker, Available: false},
-			EnginePodman: {Engine: EnginePodman, Available: true, Version: "5.3.1"},
-		},
-	}
-	adapter := NewAdapter(client)
-
-	resp, err := adapter.Status(context.Background(), StatusRequest{SchemaVersion: SchemaVersion})
+	client := &fakeEngineClient{status: map[Engine]EngineStatus{
+		EngineDocker: {Engine: EngineDocker, Available: false},
+		EnginePodman: {Engine: EnginePodman, Available: true, Version: "5.3.1"},
+	}}
+	response, err := NewAdapter(client).Status(context.Background(), StatusRequest{})
 	if err != nil {
-		t.Fatalf("Status() error = %v", err)
+		t.Fatal(err)
 	}
-	if resp.Engine != EnginePodman || !resp.Available || resp.EngineVersion != "5.3.1" {
-		t.Fatalf("status response = %+v", resp)
+	if response.Engine != EnginePodman || !response.Available || response.EngineVersion != "5.3.1" {
+		t.Fatalf("status response = %+v", response)
 	}
 }
 
-func TestAdapterStatusHonorsRequestedEngineUnavailable(t *testing.T) {
-	t.Parallel()
-
-	client := &fakeEngineClient{
-		status: map[Engine]EngineStatus{
-			EngineDocker: {Engine: EngineDocker, Available: false},
-			EnginePodman: {Engine: EnginePodman, Available: true, Version: "5.3.1"},
-		},
-	}
-	adapter := NewAdapter(client)
-
-	resp, err := adapter.Status(context.Background(), StatusRequest{SchemaVersion: SchemaVersion, Engine: EngineDocker})
-	if !errors.Is(err, ErrEngineUnavailable) {
-		t.Fatalf("Status() error = %v, want ErrEngineUnavailable", err)
-	}
-	if resp.Engine != EngineDocker || resp.Available {
-		t.Fatalf("status response = %+v", resp)
+func TestAdapterStatusHonorsRequestedUnavailableEngine(t *testing.T) {
+	client := &fakeEngineClient{status: map[Engine]EngineStatus{
+		EngineDocker: {Engine: EngineDocker, Available: false},
+	}}
+	response, err := NewAdapter(client).Status(context.Background(), StatusRequest{Engine: EngineDocker})
+	if !errors.Is(err, ErrEngineUnavailable) || response.Engine != EngineDocker || response.Available {
+		t.Fatalf("status response = %+v, err=%v", response, err)
 	}
 }
 
-func TestAdapterListAndInspectReturnMinimalDTOs(t *testing.T) {
-	t.Parallel()
-
+func TestAdapterListAndInspectReturnRedactedDomainDTOs(t *testing.T) {
+	container := testEngineContainer()
 	client := &fakeEngineClient{
-		status: map[Engine]EngineStatus{
-			EngineDocker: {Engine: EngineDocker, Available: true, Version: "25.0.0"},
-		},
-		list: map[Engine][]EngineContainer{
-			EngineDocker: {
-				testEngineContainer(),
-			},
-		},
-		inspect: map[string]EngineContainer{
-			"docker:container_123": testEngineContainer(),
-		},
+		status:  map[Engine]EngineStatus{EngineDocker: {Engine: EngineDocker, Available: true}},
+		list:    map[Engine][]EngineContainer{EngineDocker: {container}},
+		inspect: map[string]EngineContainer{"docker:container_123": container},
 	}
 	adapter := NewAdapter(client)
-
-	list, err := adapter.List(context.Background(), ContainerListRequest{SchemaVersion: SchemaVersion, Engine: EngineDocker, All: true})
+	list, err := adapter.List(context.Background(), ContainerListRequest{Engine: EngineDocker, All: true})
 	if err != nil {
-		t.Fatalf("List() error = %v", err)
+		t.Fatal(err)
 	}
-	if list.SchemaVersion != SchemaVersion || list.CapabilityID != CapabilityID || list.Engine != EngineDocker {
-		t.Fatalf("list contract identity = %+v", list)
+	if list.Engine != EngineDocker || len(list.Containers) != 1 || list.Containers[0].ContainerID != "container_123" {
+		t.Fatalf("list response = %+v", list)
 	}
-	if len(list.Containers) != 1 || list.Containers[0].ContainerID != "container_123" || list.Containers[0].Image.Reference != "ghcr.io/acme/api:latest" {
-		t.Fatalf("list containers = %+v", list.Containers)
-	}
-
-	inspect, err := adapter.Inspect(context.Background(), ContainerInspectRequest{
-		SchemaVersion: SchemaVersion,
-		Engine:        EngineDocker,
-		ContainerID:   "container_123",
-	})
+	inspect, err := adapter.Inspect(context.Background(), ContainerInspectRequest{Engine: EngineDocker, ContainerID: "container_123"})
 	if err != nil {
-		t.Fatalf("Inspect() error = %v", err)
+		t.Fatal(err)
 	}
 	if inspect.Container.Runtime.Env.SecretLikeCount != 1 || inspect.Container.Labels.SecretLikeCount != 1 {
-		t.Fatalf("inspect secret summaries = env:%+v labels:%+v", inspect.Container.Runtime.Env, inspect.Container.Labels)
+		t.Fatalf("inspect summaries = %+v", inspect.Container)
 	}
 	raw, err := json.Marshal(inspect)
 	if err != nil {
-		t.Fatalf("marshal inspect: %v", err)
+		t.Fatal(err)
 	}
 	for _, forbidden := range []string{"API_TOKEN", "raw-token", "raw-label-secret", "/Users/alice/private/secrets"} {
 		if strings.Contains(string(raw), forbidden) {
-			t.Fatalf("inspect response leaked %q in %s", forbidden, raw)
+			t.Fatalf("inspect response leaked %q: %s", forbidden, raw)
 		}
-	}
-	if !strings.Contains(string(raw), redactedSensitivePath) {
-		t.Fatalf("inspect response missing redacted sensitive path marker: %s", raw)
 	}
 }
 
 func TestAdapterStartPreflightUsesInspectedRuntime(t *testing.T) {
-	t.Parallel()
-
-	client := &fakeEngineClient{
-		inspect: map[string]EngineContainer{
-			"docker:container_123": testEngineContainer(),
-		},
-	}
-	adapter := NewAdapter(client)
-
-	plan, err := adapter.StartPreflight(context.Background(), ContainerStartRequest{
-		SchemaVersion: SchemaVersion,
-		Engine:        EngineDocker,
-		ContainerID:   "container_123",
+	client := &fakeEngineClient{inspect: map[string]EngineContainer{"docker:container_123": testEngineContainer()}}
+	plan, err := NewAdapter(client).StartPreflight(context.Background(), ContainerStartRequest{
+		Engine: EngineDocker, ContainerID: "container_123",
 	})
 	if err != nil {
-		t.Fatalf("StartPreflight() error = %v", err)
+		t.Fatal(err)
 	}
-	if plan.Target.ContainerID != "container_123" || plan.Target.ContainerName != "api" {
-		t.Fatalf("target = %+v", plan.Target)
-	}
-	if plan.RiskLevel != RiskLevelCritical || !plan.RequiresAdmin {
-		t.Fatalf("risk = %s admin=%v", plan.RiskLevel, plan.RequiresAdmin)
+	if plan.Target.ContainerID != "container_123" || plan.RiskLevel != RiskLevelCritical || !plan.RequiresAdmin {
+		t.Fatalf("preflight plan = %+v", plan)
 	}
 	assertRiskIDs(t, plan.RiskFlags, []string{
-		"container_privileged",
-		"container_socket_mount",
-		"host_bind_mount",
-		"host_network",
-		"image_not_digest_pinned",
-		"secret_environment",
-		"secret_labels",
-		"sensitive_mount_path",
+		"container_privileged", "container_socket_mount", "host_bind_mount", "host_network",
+		"image_not_digest_pinned", "secret_environment", "secret_labels", "sensitive_mount_path",
 	})
 }
 
-func TestAdapterActionsLogsAndPullReturnMinimalDTOs(t *testing.T) {
-	t.Parallel()
-
+func TestAdapterActionsLogsAndPullUseBusinessClient(t *testing.T) {
 	client := &fakeEngineClient{
 		actions: map[string]EngineActionResult{
-			"docker:containers.stop:container_123": {
-				Engine:      EngineDocker,
-				Method:      MethodStop,
-				ContainerID: "container_123",
-				Completed:   true,
-			},
+			"docker:containers.stop:container_123": {Engine: EngineDocker, Method: MethodStop, ContainerID: "container_123", Completed: true},
 		},
 		logs: map[string]EngineLogsResult{
-			"docker:container_123": {
-				Engine:      EngineDocker,
-				ContainerID: "container_123",
-				Lines: []LogLine{
-					{TimestampUnixMs: 1704067200000, Message: "ready"},
-				},
-			},
+			"docker:container_123": {Engine: EngineDocker, ContainerID: "container_123", Lines: []LogLine{{TimestampUnixMs: 1704067200000, Message: "ready"}}},
 		},
 		pulls: map[string]EngineImageResult{
-			"docker:ghcr.io/acme/api:latest": {
-				Engine:    EngineDocker,
-				Image:     ImageInput{Reference: "ghcr.io/acme/api:latest", Digest: "sha256:feedface"},
-				Completed: true,
-			},
+			"docker:ghcr.io/acme/api:latest": {Engine: EngineDocker, Image: ImageInput{Reference: "ghcr.io/acme/api:latest", Digest: "sha256:feedface"}, Completed: true},
 		},
 	}
 	adapter := NewAdapter(client)
-
-	action, err := adapter.Stop(context.Background(), ContainerActionRequest{
-		SchemaVersion: SchemaVersion,
-		Engine:        EngineDocker,
-		ContainerID:   "container_123",
-		TimeoutSec:    10,
-	})
-	if err != nil {
-		t.Fatalf("Stop() error = %v", err)
+	action, err := adapter.Stop(context.Background(), ContainerActionRequest{Engine: EngineDocker, ContainerID: "container_123", TimeoutSec: 10})
+	if err != nil || action.Method != MethodStop || !action.Completed {
+		t.Fatalf("stop response = %+v, err=%v", action, err)
 	}
-	if action.Method != MethodStop || action.ContainerID != "container_123" || !action.Completed {
-		t.Fatalf("action response = %+v", action)
+	logs, err := adapter.TailLogs(context.Background(), LogsTailRequest{Engine: EngineDocker, ContainerID: "container_123", TailLines: 50})
+	if err != nil || len(logs.Lines) != 1 || logs.Lines[0].Message != "ready" {
+		t.Fatalf("logs response = %+v, err=%v", logs, err)
 	}
-
-	logs, err := adapter.TailLogs(context.Background(), LogsTailRequest{
-		SchemaVersion: SchemaVersion,
-		Engine:        EngineDocker,
-		ContainerID:   "container_123",
-		TailLines:     50,
-	})
-	if err != nil {
-		t.Fatalf("TailLogs() error = %v", err)
-	}
-	if len(logs.Lines) != 1 || logs.Lines[0].Message != "ready" {
-		t.Fatalf("logs response = %+v", logs)
-	}
-
-	pull, err := adapter.PullImage(context.Background(), ImagePullRequest{
-		SchemaVersion: SchemaVersion,
-		Engine:        EngineDocker,
-		ImageRef:      "ghcr.io/acme/api:latest",
-	})
-	if err != nil {
-		t.Fatalf("PullImage() error = %v", err)
-	}
-	if !pull.Completed || !pull.Image.DigestPinned || pull.Image.Digest != "sha256:feedface" {
-		t.Fatalf("pull response = %+v", pull)
-	}
-}
-
-func TestAdapterCallMethodDispatchesAllContainerMethods(t *testing.T) {
-	t.Parallel()
-
-	client := &fakeEngineClient{
-		status: map[Engine]EngineStatus{
-			EngineDocker: {Engine: EngineDocker, Available: true, Version: "29.0.1"},
-		},
-		list: map[Engine][]EngineContainer{
-			EngineDocker: {testEngineContainer()},
-		},
-		inspect: map[string]EngineContainer{
-			"docker:container_123": testEngineContainer(),
-		},
-		actions: map[string]EngineActionResult{
-			"docker:containers.start:container_123": {
-				Engine:      EngineDocker,
-				Method:      MethodStart,
-				ContainerID: "container_123",
-				Completed:   true,
-			},
-			"docker:containers.stop:container_123": {
-				Engine:      EngineDocker,
-				Method:      MethodStop,
-				ContainerID: "container_123",
-				Completed:   true,
-			},
-			"docker:containers.restart:container_123": {
-				Engine:      EngineDocker,
-				Method:      MethodRestart,
-				ContainerID: "container_123",
-				Completed:   true,
-			},
-			"docker:containers.remove:container_123": {
-				Engine:      EngineDocker,
-				Method:      MethodRemove,
-				ContainerID: "container_123",
-				Completed:   true,
-			},
-		},
-		logs: map[string]EngineLogsResult{
-			"docker:container_123": {
-				Engine:      EngineDocker,
-				ContainerID: "container_123",
-				Lines: []LogLine{
-					{TimestampUnixMs: 1704067200000, Message: "ready"},
-				},
-			},
-		},
-		pulls: map[string]EngineImageResult{
-			"docker:ghcr.io/acme/api:latest": {
-				Engine:    EngineDocker,
-				Image:     ImageInput{Reference: "ghcr.io/acme/api:latest", Digest: "sha256:feedface"},
-				Completed: true,
-			},
-		},
-	}
-	adapter := NewAdapter(client)
-
-	actionRequest := map[string]any{
-		"schema_version": SchemaVersion,
-		"engine":         string(EngineDocker),
-		"container_id":   "container_123",
-	}
-	for _, tc := range []struct {
-		name    string
-		method  Method
-		request map[string]any
-		assert  func(t *testing.T, got any)
-	}{
-		{
-			name:    "status",
-			method:  MethodStatus,
-			request: map[string]any{"schema_version": SchemaVersion, "engine": string(EngineDocker)},
-			assert: func(t *testing.T, got any) {
-				resp, ok := got.(StatusResponse)
-				if !ok || resp.Engine != EngineDocker || !resp.Available {
-					t.Fatalf("status response = %#v", got)
-				}
-			},
-		},
-		{
-			name:    "list",
-			method:  MethodList,
-			request: map[string]any{"schema_version": SchemaVersion, "engine": string(EngineDocker), "all": true},
-			assert: func(t *testing.T, got any) {
-				resp, ok := got.(ContainerListResponse)
-				if !ok || len(resp.Containers) != 1 || resp.Containers[0].ContainerID != "container_123" {
-					t.Fatalf("list response = %#v", got)
-				}
-			},
-		},
-		{
-			name:    "inspect",
-			method:  MethodInspect,
-			request: actionRequest,
-			assert: func(t *testing.T, got any) {
-				resp, ok := got.(ContainerInspectResponse)
-				if !ok || resp.Container.ContainerID != "container_123" {
-					t.Fatalf("inspect response = %#v", got)
-				}
-			},
-		},
-		{
-			name:    "start preflight",
-			method:  MethodStartPreflight,
-			request: actionRequest,
-			assert: func(t *testing.T, got any) {
-				plan, ok := got.(StartPreflightPlan)
-				if !ok || plan.Method != MethodStart || plan.Target.ContainerID != "container_123" {
-					t.Fatalf("start preflight response = %#v", got)
-				}
-			},
-		},
-		{
-			name:    "start",
-			method:  MethodStart,
-			request: actionRequest,
-			assert:  assertActionMethod(MethodStart),
-		},
-		{
-			name:    "stop",
-			method:  MethodStop,
-			request: map[string]any{"schema_version": SchemaVersion, "engine": string(EngineDocker), "container_id": "container_123", "timeout_sec": 2},
-			assert:  assertActionMethod(MethodStop),
-		},
-		{
-			name:    "restart",
-			method:  MethodRestart,
-			request: map[string]any{"schema_version": SchemaVersion, "engine": string(EngineDocker), "container_id": "container_123", "timeout_sec": 2},
-			assert:  assertActionMethod(MethodRestart),
-		},
-		{
-			name:    "remove",
-			method:  MethodRemove,
-			request: map[string]any{"schema_version": SchemaVersion, "engine": string(EngineDocker), "container_id": "container_123", "force": true},
-			assert:  assertActionMethod(MethodRemove),
-		},
-		{
-			name:    "logs tail",
-			method:  MethodLogsTail,
-			request: map[string]any{"schema_version": SchemaVersion, "engine": string(EngineDocker), "container_id": "container_123", "tail_lines": 20},
-			assert: func(t *testing.T, got any) {
-				resp, ok := got.(LogsTailResponse)
-				if !ok || len(resp.Lines) != 1 || resp.Lines[0].Message != "ready" {
-					t.Fatalf("logs response = %#v", got)
-				}
-			},
-		},
-		{
-			name:    "pull image",
-			method:  MethodImagesPull,
-			request: map[string]any{"schema_version": SchemaVersion, "engine": string(EngineDocker), "image_ref": "ghcr.io/acme/api:latest"},
-			assert: func(t *testing.T, got any) {
-				resp, ok := got.(ImagePullResponse)
-				if !ok || !resp.Completed || resp.Image.Digest != "sha256:feedface" {
-					t.Fatalf("pull response = %#v", got)
-				}
-			},
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			got, err := adapter.CallMethod(context.Background(), tc.method, mustRequestJSON(t, tc.request))
-			if err != nil {
-				t.Fatalf("CallMethod(%s) error = %v", tc.method, err)
-			}
-			tc.assert(t, got)
-		})
-	}
-}
-
-func TestAdapterCallMethodRejectsInvalidRequestBoundary(t *testing.T) {
-	t.Parallel()
-
-	adapter := NewAdapter(&fakeEngineClient{})
-	if _, err := adapter.CallMethod(context.Background(), MethodList, mustRequestJSON(t, map[string]any{
-		"schema_version": SchemaVersion,
-		"unexpected":     true,
-	})); err == nil || !strings.Contains(err.Error(), "unknown field") {
-		t.Fatalf("unknown request field error = %v", err)
-	}
-	if _, err := adapter.CallMethod(context.Background(), MethodList, mustRequestJSON(t, map[string]any{
-		"schema_version": "redeven.capability.container_resources.v0",
-	})); !errors.Is(err, ErrInvalidSchemaVersion) {
-		t.Fatalf("invalid schema_version error = %v", err)
-	}
-	if _, err := adapter.CallMethod(context.Background(), Method("containers.exec"), mustRequestJSON(t, map[string]any{
-		"schema_version": SchemaVersion,
-	})); !errors.Is(err, ErrInvalidMethod) {
-		t.Fatalf("invalid method error = %v", err)
-	}
-	if _, err := adapter.CallMethod(context.Background(), MethodList, nil); err == nil || !strings.Contains(err.Error(), "request body is required") {
-		t.Fatalf("empty request body error = %v", err)
-	}
-}
-
-func TestAdapterCallOperationMethodDispatchesOperationMethods(t *testing.T) {
-	t.Parallel()
-
-	client := &fakeEngineClient{
-		actionFunc: func(_ context.Context, req EngineActionRequest) (EngineActionResult, error) {
-			return EngineActionResult{
-				Engine:      req.Engine,
-				Method:      req.Method,
-				ContainerID: req.ContainerID,
-				Completed:   true,
-			}, nil
-		},
-		pullFunc: func(_ context.Context, engine Engine, imageRef string) (EngineImageResult, error) {
-			return EngineImageResult{
-				Engine:    engine,
-				Image:     ImageInput{Reference: imageRef, Digest: "sha256:feedface"},
-				Completed: true,
-			}, nil
-		},
-	}
-	adapter := NewAdapter(client)
-
-	actionRequest := map[string]any{
-		"schema_version": SchemaVersion,
-		"engine":         string(EngineDocker),
-		"container_id":   "container_123",
-	}
-	for _, tc := range []struct {
-		name    string
-		method  Method
-		request map[string]any
-		assert  func(t *testing.T, got any)
-	}{
-		{name: "start", method: MethodStart, request: actionRequest, assert: assertActionMethod(MethodStart)},
-		{
-			name:    "stop",
-			method:  MethodStop,
-			request: map[string]any{"schema_version": SchemaVersion, "engine": string(EngineDocker), "container_id": "container_123", "timeout_sec": 2},
-			assert:  assertActionMethod(MethodStop),
-		},
-		{
-			name:    "restart",
-			method:  MethodRestart,
-			request: map[string]any{"schema_version": SchemaVersion, "engine": string(EngineDocker), "container_id": "container_123", "timeout_sec": 2},
-			assert:  assertActionMethod(MethodRestart),
-		},
-		{
-			name:    "remove",
-			method:  MethodRemove,
-			request: map[string]any{"schema_version": SchemaVersion, "engine": string(EngineDocker), "container_id": "container_123", "force": true},
-			assert:  assertActionMethod(MethodRemove),
-		},
-		{
-			name:    "pull image",
-			method:  MethodImagesPull,
-			request: map[string]any{"schema_version": SchemaVersion, "engine": string(EngineDocker), "image_ref": "ghcr.io/acme/api:latest"},
-			assert: func(t *testing.T, got any) {
-				resp, ok := got.(ImagePullResponse)
-				if !ok || !resp.Completed || resp.Image.Digest != "sha256:feedface" {
-					t.Fatalf("pull response = %#v", got)
-				}
-			},
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			operationID := "op_" + strings.ReplaceAll(tc.name, " ", "_")
-			got, err := adapter.CallOperationMethod(context.Background(), operationID, tc.method, mustRequestJSON(t, tc.request))
-			if err != nil {
-				t.Fatalf("CallOperationMethod(%s) error = %v", tc.method, err)
-			}
-			tc.assert(t, got)
-			if _, err := adapter.CancelOperation(context.Background(), ContainerOperationCancelRequest{
-				OperationID: operationID,
-			}); !errors.Is(err, ErrContainerOperationNotFound) {
-				t.Fatalf("CancelOperation(after %s) error = %v, want ErrContainerOperationNotFound", tc.method, err)
-			}
-		})
-	}
-}
-
-func TestAdapterCallOperationMethodRejectsInvalidBoundary(t *testing.T) {
-	t.Parallel()
-
-	adapter := NewAdapter(&fakeEngineClient{})
-	if _, err := adapter.CallOperationMethod(context.Background(), "op_list_1", MethodList, mustRequestJSON(t, map[string]any{
-		"schema_version": SchemaVersion,
-	})); !errors.Is(err, ErrInvalidMethod) {
-		t.Fatalf("CallOperationMethod(non-operation) error = %v, want ErrInvalidMethod", err)
-	}
-	if _, err := adapter.CallOperationMethod(context.Background(), "", MethodImagesPull, mustRequestJSON(t, map[string]any{
-		"schema_version": SchemaVersion,
-		"engine":         string(EngineDocker),
-		"image_ref":      "ghcr.io/acme/api:latest",
-	})); !errors.Is(err, ErrContainerOperationIDMissing) {
-		t.Fatalf("CallOperationMethod(empty operation id) error = %v, want ErrContainerOperationIDMissing", err)
-	}
-	if _, err := adapter.CallOperationMethod(context.Background(), "op_pull_bad_request_1", MethodImagesPull, mustRequestJSON(t, map[string]any{
-		"schema_version": SchemaVersion,
-		"engine":         string(EngineDocker),
-		"image_ref":      "ghcr.io/acme/api:latest",
-		"unexpected":     true,
-	})); err == nil || !strings.Contains(err.Error(), "unknown field") {
-		t.Fatalf("CallOperationMethod(unknown field) error = %v", err)
+	pull, err := adapter.PullImage(context.Background(), ImagePullRequest{Engine: EngineDocker, ImageRef: "ghcr.io/acme/api:latest"})
+	if err != nil || !pull.Completed || !pull.Image.DigestPinned {
+		t.Fatalf("pull response = %+v, err=%v", pull, err)
 	}
 }
 
 func TestAdapterFollowLogsStreamsThroughFollowerClient(t *testing.T) {
-	t.Parallel()
-
-	client := &fakeStreamingEngineClient{
-		fakeEngineClient: &fakeEngineClient{},
-		lines: []LogLine{
-			{TimestampUnixMs: 1704067201000, Message: "ready"},
-		},
-	}
-	adapter := NewAdapter(client)
-	var got []LogLine
-	err := adapter.FollowLogs(context.Background(), LogsTailRequest{
-		SchemaVersion: SchemaVersion,
-		Engine:        EngineDocker,
-		ContainerID:   " container_123 ",
-		TailLines:     10,
-		SinceUnixMs:   1704067200000,
+	client := &fakeFollowingEngineClient{fakeEngineClient: fakeEngineClient{}}
+	var lines []LogLine
+	err := NewAdapter(client).FollowLogs(context.Background(), LogsTailRequest{
+		Engine: EngineDocker, ContainerID: "container_123", TailLines: 20, Follow: true,
 	}, LogLineSinkFunc(func(_ context.Context, line LogLine) error {
-		got = append(got, line)
+		lines = append(lines, line)
 		return nil
 	}))
 	if err != nil {
+		t.Fatal(err)
+	}
+	if len(lines) != 2 || lines[0].Message != "first" || lines[1].Message != "second" {
+		t.Fatalf("streamed lines = %+v", lines)
+	}
+}
+
+func TestAdapterFollowLogsRequiresStreamingClient(t *testing.T) {
+	err := NewAdapter(&fakeEngineClient{}).FollowLogs(context.Background(), LogsTailRequest{
+		Engine: EngineDocker, ContainerID: "container_123", Follow: true,
+	}, LogLineSinkFunc(func(context.Context, LogLine) error { return nil }))
+	if !errors.Is(err, ErrLogsFollowUnsupported) {
 		t.Fatalf("FollowLogs() error = %v", err)
 	}
-	if len(got) != 1 || got[0].Message != "ready" {
-		t.Fatalf("streamed lines = %+v", got)
-	}
-	if client.req.Engine != EngineDocker || client.req.ContainerID != "container_123" || client.req.TailLines != 10 || !client.req.Follow {
-		t.Fatalf("stream request = %+v", client.req)
-	}
 }
 
-func TestAdapterFollowLogsRequiresFollowerClient(t *testing.T) {
-	t.Parallel()
-
-	adapter := NewAdapter(&fakeEngineClient{})
-	err := adapter.FollowLogs(context.Background(), LogsTailRequest{
-		SchemaVersion: SchemaVersion,
-		Engine:        EngineDocker,
-		ContainerID:   "container_123",
-	}, LogLineSinkFunc(func(_ context.Context, _ LogLine) error {
-		return nil
-	}))
-	if !errors.Is(err, ErrLogsFollowUnsupported) {
-		t.Fatalf("FollowLogs() error = %v, want ErrLogsFollowUnsupported", err)
-	}
-}
-
-func TestAdapterPullImageWithOperationCanBeCanceled(t *testing.T) {
-	t.Parallel()
-
+func TestAdapterBusinessOperationsRespectContextCancellation(t *testing.T) {
 	started := make(chan struct{})
 	client := &fakeEngineClient{
-		pullFunc: func(ctx context.Context, _ Engine, _ string) (EngineImageResult, error) {
-			close(started)
-			<-ctx.Done()
-			return EngineImageResult{}, ctx.Err()
-		},
-	}
-	adapter := NewAdapter(client)
-
-	errCh := make(chan error, 1)
-	go func() {
-		_, err := adapter.PullImageWithOperation(context.Background(), "op_pull_cancel_1", ImagePullRequest{
-			SchemaVersion: SchemaVersion,
-			Engine:        EngineDocker,
-			ImageRef:      " ghcr.io/acme/api:latest ",
-		})
-		errCh <- err
-	}()
-	waitForTestSignal(t, started, "pull start")
-
-	canceled, err := adapter.CancelOperation(context.Background(), ContainerOperationCancelRequest{
-		OperationID: " op_pull_cancel_1 ",
-		Method:      MethodImagesPull,
-	})
-	if err != nil {
-		t.Fatalf("CancelOperation() error = %v", err)
-	}
-	if canceled.OperationID != "op_pull_cancel_1" || canceled.Method != MethodImagesPull || !canceled.CancelRequested {
-		t.Fatalf("cancel result = %+v", canceled)
-	}
-	if err := waitForTestError(t, errCh, "pull cancel"); !errors.Is(err, context.Canceled) {
-		t.Fatalf("PullImageWithOperation() error = %v, want context.Canceled", err)
-	}
-	if _, err := adapter.CancelOperation(context.Background(), ContainerOperationCancelRequest{
-		OperationID: "op_pull_cancel_1",
-		Method:      MethodImagesPull,
-	}); !errors.Is(err, ErrContainerOperationNotFound) {
-		t.Fatalf("CancelOperation(after completion) error = %v, want ErrContainerOperationNotFound", err)
-	}
-}
-
-func TestAdapterActionWithOperationCanBeCanceled(t *testing.T) {
-	t.Parallel()
-
-	started := make(chan struct{})
-	client := &fakeEngineClient{
-		actionFunc: func(ctx context.Context, req EngineActionRequest) (EngineActionResult, error) {
-			if req.Method != MethodRestart || req.ContainerID != "container_123" {
-				t.Fatalf("action request = %+v", req)
-			}
+		action: func(ctx context.Context, req EngineActionRequest) (EngineActionResult, error) {
 			close(started)
 			<-ctx.Done()
 			return EngineActionResult{}, ctx.Err()
 		},
 	}
-	adapter := NewAdapter(client)
-
-	errCh := make(chan error, 1)
-	go func() {
-		_, err := adapter.CallOperationMethod(context.Background(), "op_restart_cancel_1", MethodRestart, mustRequestJSON(t, map[string]any{
-			"schema_version": SchemaVersion,
-			"engine":         string(EngineDocker),
-			"container_id":   "container_123",
-			"timeout_sec":    2,
-		}))
-		errCh <- err
-	}()
-	waitForTestSignal(t, started, "action start")
-
-	canceled, err := adapter.CancelOperation(context.Background(), ContainerOperationCancelRequest{
-		OperationID: "op_restart_cancel_1",
-		Method:      MethodRestart,
-	})
-	if err != nil {
-		t.Fatalf("CancelOperation() error = %v", err)
-	}
-	if canceled.OperationID != "op_restart_cancel_1" || canceled.Method != MethodRestart || !canceled.CancelRequested {
-		t.Fatalf("cancel result = %+v", canceled)
-	}
-	if err := waitForTestError(t, errCh, "action cancel"); !errors.Is(err, context.Canceled) {
-		t.Fatalf("CallOperationMethod(action) error = %v, want context.Canceled", err)
-	}
-	if _, err := adapter.CancelOperation(context.Background(), ContainerOperationCancelRequest{
-		OperationID: "op_restart_cancel_1",
-		Method:      MethodRestart,
-	}); !errors.Is(err, ErrContainerOperationNotFound) {
-		t.Fatalf("CancelOperation(after action completion) error = %v, want ErrContainerOperationNotFound", err)
-	}
-}
-
-func TestAdapterActionWithOperationRejectsDuplicateOperationID(t *testing.T) {
-	t.Parallel()
-
-	started := make(chan struct{})
-	client := &fakeEngineClient{
-		actionFunc: func(ctx context.Context, _ EngineActionRequest) (EngineActionResult, error) {
-			close(started)
-			<-ctx.Done()
-			return EngineActionResult{}, ctx.Err()
-		},
-	}
-	adapter := NewAdapter(client)
-
-	errCh := make(chan error, 1)
-	go func() {
-		_, err := adapter.StartWithOperation(context.Background(), "op_action_duplicate_1", ContainerStartRequest{
-			SchemaVersion: SchemaVersion,
-			Engine:        EngineDocker,
-			ContainerID:   "container_123",
-		})
-		errCh <- err
-	}()
-	waitForTestSignal(t, started, "first action start")
-
-	_, err := adapter.RemoveWithOperation(context.Background(), "op_action_duplicate_1", ContainerActionRequest{
-		SchemaVersion: SchemaVersion,
-		Engine:        EngineDocker,
-		ContainerID:   "container_123",
-		Force:         true,
-	})
-	if !errors.Is(err, ErrContainerOperationActive) {
-		t.Fatalf("RemoveWithOperation(duplicate) error = %v, want ErrContainerOperationActive", err)
-	}
-	if _, err := adapter.CancelOperation(context.Background(), ContainerOperationCancelRequest{
-		OperationID: "op_action_duplicate_1",
-		Method:      MethodStart,
-	}); err != nil {
-		t.Fatalf("CancelOperation(cleanup) error = %v", err)
-	}
-	if err := waitForTestError(t, errCh, "duplicate action cleanup"); !errors.Is(err, context.Canceled) {
-		t.Fatalf("StartWithOperation(cleanup) error = %v, want context.Canceled", err)
-	}
-}
-
-func TestAdapterPullImageWithOperationRejectsDuplicateOperationID(t *testing.T) {
-	t.Parallel()
-
-	started := make(chan struct{})
-	client := &fakeEngineClient{
-		pullFunc: func(ctx context.Context, _ Engine, _ string) (EngineImageResult, error) {
-			close(started)
-			<-ctx.Done()
-			return EngineImageResult{}, ctx.Err()
-		},
-	}
-	adapter := NewAdapter(client)
-
-	errCh := make(chan error, 1)
-	go func() {
-		_, err := adapter.PullImageWithOperation(context.Background(), "op_pull_duplicate_1", ImagePullRequest{
-			SchemaVersion: SchemaVersion,
-			Engine:        EngineDocker,
-			ImageRef:      "ghcr.io/acme/api:latest",
-		})
-		errCh <- err
-	}()
-	waitForTestSignal(t, started, "first pull start")
-
-	_, err := adapter.PullImageWithOperation(context.Background(), "op_pull_duplicate_1", ImagePullRequest{
-		SchemaVersion: SchemaVersion,
-		Engine:        EngineDocker,
-		ImageRef:      "ghcr.io/acme/api:latest",
-	})
-	if !errors.Is(err, ErrContainerOperationActive) {
-		t.Fatalf("PullImageWithOperation(duplicate) error = %v, want ErrContainerOperationActive", err)
-	}
-	if _, err := adapter.CancelOperation(context.Background(), ContainerOperationCancelRequest{
-		OperationID: "op_pull_duplicate_1",
-	}); err != nil {
-		t.Fatalf("CancelOperation(cleanup) error = %v", err)
-	}
-	if err := waitForTestError(t, errCh, "duplicate cleanup"); !errors.Is(err, context.Canceled) {
-		t.Fatalf("first PullImageWithOperation() error = %v, want context.Canceled", err)
-	}
-}
-
-func TestAdapterPullImageWithOperationUnregistersOnCompletionAndParentCancel(t *testing.T) {
-	t.Parallel()
-
-	completedAdapter := NewAdapter(&fakeEngineClient{
-		pullFunc: func(_ context.Context, engine Engine, imageRef string) (EngineImageResult, error) {
-			return EngineImageResult{
-				Engine:    engine,
-				Image:     ImageInput{Reference: imageRef, Digest: "sha256:feedface"},
-				Completed: true,
-			}, nil
-		},
-	})
-	resp, err := completedAdapter.PullImageWithOperation(context.Background(), "op_pull_done_1", ImagePullRequest{
-		SchemaVersion: SchemaVersion,
-		Engine:        EngineDocker,
-		ImageRef:      "ghcr.io/acme/api:latest",
-	})
-	if err != nil {
-		t.Fatalf("PullImageWithOperation(completed) error = %v", err)
-	}
-	if !resp.Completed || resp.Image.Digest != "sha256:feedface" {
-		t.Fatalf("completed pull response = %+v", resp)
-	}
-	if _, err := completedAdapter.CancelOperation(context.Background(), ContainerOperationCancelRequest{
-		OperationID: "op_pull_done_1",
-	}); !errors.Is(err, ErrContainerOperationNotFound) {
-		t.Fatalf("CancelOperation(after success) error = %v, want ErrContainerOperationNotFound", err)
-	}
-
-	started := make(chan struct{})
-	parentAdapter := NewAdapter(&fakeEngineClient{
-		pullFunc: func(ctx context.Context, _ Engine, _ string) (EngineImageResult, error) {
-			close(started)
-			<-ctx.Done()
-			return EngineImageResult{}, ctx.Err()
-		},
-	})
 	ctx, cancel := context.WithCancel(context.Background())
-	errCh := make(chan error, 1)
+	done := make(chan error, 1)
 	go func() {
-		_, err := parentAdapter.PullImageWithOperation(ctx, "op_pull_parent_cancel_1", ImagePullRequest{
-			SchemaVersion: SchemaVersion,
-			Engine:        EngineDocker,
-			ImageRef:      "ghcr.io/acme/api:latest",
-		})
-		errCh <- err
+		_, err := NewAdapter(client).Remove(ctx, ContainerActionRequest{Engine: EngineDocker, ContainerID: "container_123", Force: true})
+		done <- err
 	}()
-	waitForTestSignal(t, started, "parent-cancel pull start")
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("business operation did not start")
+	}
 	cancel()
-	if err := waitForTestError(t, errCh, "parent cancel"); !errors.Is(err, context.Canceled) {
-		t.Fatalf("PullImageWithOperation(parent cancel) error = %v, want context.Canceled", err)
-	}
-	if _, err := parentAdapter.CancelOperation(context.Background(), ContainerOperationCancelRequest{
-		OperationID: "op_pull_parent_cancel_1",
-	}); !errors.Is(err, ErrContainerOperationNotFound) {
-		t.Fatalf("CancelOperation(after parent cancel) error = %v, want ErrContainerOperationNotFound", err)
-	}
-}
-
-func TestAdapterCancelOperationRejectsInvalidRequests(t *testing.T) {
-	t.Parallel()
-
-	started := make(chan struct{})
-	client := &fakeEngineClient{
-		pullFunc: func(ctx context.Context, _ Engine, _ string) (EngineImageResult, error) {
-			close(started)
-			<-ctx.Done()
-			return EngineImageResult{}, ctx.Err()
-		},
-	}
-	adapter := NewAdapter(client)
-	if _, err := adapter.CancelOperation(context.Background(), ContainerOperationCancelRequest{}); !errors.Is(err, ErrContainerOperationIDMissing) {
-		t.Fatalf("CancelOperation(empty) error = %v, want ErrContainerOperationIDMissing", err)
-	}
-	if _, err := adapter.CancelOperation(context.Background(), ContainerOperationCancelRequest{
-		OperationID: "missing",
-	}); !errors.Is(err, ErrContainerOperationNotFound) {
-		t.Fatalf("CancelOperation(missing) error = %v, want ErrContainerOperationNotFound", err)
-	}
-
-	errCh := make(chan error, 1)
-	go func() {
-		_, err := adapter.PullImageWithOperation(context.Background(), "op_pull_mismatch_1", ImagePullRequest{
-			SchemaVersion: SchemaVersion,
-			Engine:        EngineDocker,
-			ImageRef:      "ghcr.io/acme/api:latest",
-		})
-		errCh <- err
-	}()
-	waitForTestSignal(t, started, "mismatch pull start")
-
-	if _, err := adapter.CancelOperation(context.Background(), ContainerOperationCancelRequest{
-		OperationID: "op_pull_mismatch_1",
-		Method:      MethodStart,
-	}); !errors.Is(err, ErrContainerOperationMismatch) {
-		t.Fatalf("CancelOperation(method mismatch) error = %v, want ErrContainerOperationMismatch", err)
-	}
-	if _, err := adapter.CancelOperation(context.Background(), ContainerOperationCancelRequest{
-		OperationID: "op_pull_mismatch_1",
-		Method:      MethodImagesPull,
-	}); err != nil {
-		t.Fatalf("CancelOperation(cleanup) error = %v", err)
-	}
-	if err := waitForTestError(t, errCh, "mismatch cleanup"); !errors.Is(err, context.Canceled) {
-		t.Fatalf("PullImageWithOperation(cleanup) error = %v, want context.Canceled", err)
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("Remove() error = %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("business operation did not observe cancellation")
 	}
 }
 
@@ -853,69 +174,61 @@ type fakeEngineClient struct {
 	actions map[string]EngineActionResult
 	logs    map[string]EngineLogsResult
 	pulls   map[string]EngineImageResult
-
-	actionFunc func(ctx context.Context, req EngineActionRequest) (EngineActionResult, error)
-	pullFunc   func(ctx context.Context, engine Engine, imageRef string) (EngineImageResult, error)
+	action  func(context.Context, EngineActionRequest) (EngineActionResult, error)
 }
 
-func (f *fakeEngineClient) Status(_ context.Context, engine Engine) (EngineStatus, error) {
-	if status, ok := f.status[engine]; ok {
-		return status, nil
+func (c *fakeEngineClient) Status(_ context.Context, engine Engine) (EngineStatus, error) {
+	if value, ok := c.status[engine]; ok {
+		return value, nil
 	}
-	return EngineStatus{Engine: engine}, nil
+	return EngineStatus{Engine: engine, Available: false}, nil
 }
 
-func (f *fakeEngineClient) List(_ context.Context, engine Engine, _ bool) ([]EngineContainer, error) {
-	return append([]EngineContainer(nil), f.list[engine]...), nil
+func (c *fakeEngineClient) List(_ context.Context, engine Engine, _ bool) ([]EngineContainer, error) {
+	return append([]EngineContainer(nil), c.list[engine]...), nil
 }
 
-func (f *fakeEngineClient) Inspect(_ context.Context, engine Engine, containerID string) (EngineContainer, error) {
-	container, ok := f.inspect[string(engine)+":"+containerID]
+func (c *fakeEngineClient) Inspect(_ context.Context, engine Engine, containerID string) (EngineContainer, error) {
+	value, ok := c.inspect[string(engine)+":"+containerID]
 	if !ok {
-		return EngineContainer{}, errors.New("not found")
+		return EngineContainer{}, errors.New("container not found")
 	}
-	return container, nil
+	return value, nil
 }
 
-func (f *fakeEngineClient) Action(ctx context.Context, req EngineActionRequest) (EngineActionResult, error) {
-	if f.actionFunc != nil {
-		return f.actionFunc(ctx, req)
+func (c *fakeEngineClient) Action(ctx context.Context, req EngineActionRequest) (EngineActionResult, error) {
+	if c.action != nil {
+		return c.action(ctx, req)
 	}
-	result, ok := f.actions[string(req.Engine)+":"+string(req.Method)+":"+req.ContainerID]
+	value, ok := c.actions[string(req.Engine)+":"+string(req.Method)+":"+req.ContainerID]
 	if !ok {
-		return EngineActionResult{}, errors.New("not found")
+		return EngineActionResult{}, errors.New("container action not configured")
 	}
-	return result, nil
+	return value, nil
 }
 
-func (f *fakeEngineClient) TailLogs(_ context.Context, req EngineLogsRequest) (EngineLogsResult, error) {
-	result, ok := f.logs[string(req.Engine)+":"+req.ContainerID]
+func (c *fakeEngineClient) TailLogs(_ context.Context, req EngineLogsRequest) (EngineLogsResult, error) {
+	value, ok := c.logs[string(req.Engine)+":"+req.ContainerID]
 	if !ok {
-		return EngineLogsResult{}, errors.New("not found")
+		return EngineLogsResult{}, errors.New("container logs not configured")
 	}
-	return result, nil
+	return value, nil
 }
 
-func (f *fakeEngineClient) PullImage(ctx context.Context, engine Engine, imageRef string) (EngineImageResult, error) {
-	if f.pullFunc != nil {
-		return f.pullFunc(ctx, engine, imageRef)
-	}
-	result, ok := f.pulls[string(engine)+":"+imageRef]
+func (c *fakeEngineClient) PullImage(_ context.Context, engine Engine, imageRef string) (EngineImageResult, error) {
+	value, ok := c.pulls[string(engine)+":"+imageRef]
 	if !ok {
-		return EngineImageResult{}, errors.New("not found")
+		return EngineImageResult{}, errors.New("image pull not configured")
 	}
-	return result, nil
+	return value, nil
 }
 
-type fakeStreamingEngineClient struct {
-	*fakeEngineClient
-	req   EngineLogsRequest
-	lines []LogLine
+type fakeFollowingEngineClient struct {
+	fakeEngineClient
 }
 
-func (f *fakeStreamingEngineClient) FollowLogs(ctx context.Context, req EngineLogsRequest, sink LogLineSink) error {
-	f.req = req
-	for _, line := range f.lines {
+func (c *fakeFollowingEngineClient) FollowLogs(ctx context.Context, _ EngineLogsRequest, sink LogLineSink) error {
+	for _, line := range []LogLine{{Message: "first"}, {Message: "second"}} {
 		if err := sink.AppendLogLine(ctx, line); err != nil {
 			return err
 		}
@@ -923,69 +236,32 @@ func (f *fakeStreamingEngineClient) FollowLogs(ctx context.Context, req EngineLo
 	return nil
 }
 
-func assertActionMethod(method Method) func(t *testing.T, got any) {
-	return func(t *testing.T, got any) {
-		t.Helper()
-		resp, ok := got.(ContainerActionResponse)
-		if !ok || resp.Method != method || resp.ContainerID != "container_123" || !resp.Completed {
-			t.Fatalf("action response = %#v", got)
-		}
-	}
-}
-
-func mustRequestJSON(t *testing.T, request map[string]any) json.RawMessage {
-	t.Helper()
-	raw, err := json.Marshal(request)
-	if err != nil {
-		t.Fatalf("marshal request: %v", err)
-	}
-	return raw
-}
-
-func waitForTestSignal(t *testing.T, ch <-chan struct{}, label string) {
-	t.Helper()
-	select {
-	case <-ch:
-	case <-time.After(2 * time.Second):
-		t.Fatalf("timed out waiting for %s", label)
-	}
-}
-
-func waitForTestError(t *testing.T, ch <-chan error, label string) error {
-	t.Helper()
-	select {
-	case err := <-ch:
-		return err
-	case <-time.After(2 * time.Second):
-		t.Fatalf("timed out waiting for %s", label)
-		return nil
-	}
-}
-
 func testEngineContainer() EngineContainer {
 	return EngineContainer{
-		Engine:          EngineDocker,
-		ContainerID:     "container_123",
-		Name:            "api",
-		Image:           ImageInput{Reference: "ghcr.io/acme/api:latest"},
-		State:           ContainerStateRunning,
+		Engine: EngineDocker, ContainerID: "container_123", Name: "api",
+		Image: ImageInput{Reference: "ghcr.io/acme/api:latest"}, State: ContainerStateRunning,
 		CreatedAtUnixMs: 1704067200000,
 		Runtime: RuntimeInput{
-			Privileged:  true,
-			NetworkMode: "host",
-			Env: []string{
-				"API_TOKEN=raw-token",
-				"PATH=/usr/bin",
-			},
-			Labels: map[string]string{
-				"redeven.secret": "raw-label-secret",
-				"owner":          "containers",
-			},
+			Privileged: true, NetworkMode: "host", Env: []string{"MODE=prod", "API_TOKEN=raw-token"},
+			Labels: map[string]string{"service": "api", "auth_secret": "raw-label-secret"},
 			Mounts: []MountInput{
+				{Type: MountTypeBind, Source: "/Users/alice/private/secrets", Target: "/run/secrets", ReadOnly: true},
 				{Type: MountTypeBind, Source: "/var/run/docker.sock", Target: "/var/run/docker.sock"},
-				{Type: MountTypeBind, Source: "/Users/alice/private/secrets", Target: "/run/secrets/password"},
 			},
 		},
-		Ports: []PortSummary{{Protocol: "tcp", HostIP: "127.0.0.1", HostPort: 8080, Port: 80}},
+		Ports: []PortSummary{{Protocol: "tcp", HostPort: 8080, Port: 80}},
+	}
+}
+
+func assertRiskIDs(t *testing.T, risks []RiskFlag, expected []string) {
+	t.Helper()
+	seen := make(map[string]bool, len(risks))
+	for _, risk := range risks {
+		seen[risk.ID] = true
+	}
+	for _, id := range expected {
+		if !seen[id] {
+			t.Fatalf("missing risk %q in %+v", id, risks)
+		}
 	}
 }

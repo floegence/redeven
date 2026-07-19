@@ -12,6 +12,7 @@ import (
 )
 
 const redactedSensitivePath = "[redacted:sensitive_path]"
+const containerTargetHashVersion = "redeven.container_target.v1"
 
 type StartPreflightInput struct {
 	Engine        Engine
@@ -87,7 +88,7 @@ func BuildStartPreflightPlan(input StartPreflightInput) (StartPreflightPlan, err
 		ContainerID:   containerID,
 		ContainerName: strings.TrimSpace(input.ContainerName),
 		TargetHash: hashTarget(targetHashInput{
-			SchemaVersion:  SchemaVersion,
+			Version:        containerTargetHashVersion,
 			Engine:         engine,
 			ContainerID:    containerID,
 			ContainerName:  strings.TrimSpace(input.ContainerName),
@@ -105,23 +106,20 @@ func BuildStartPreflightPlan(input StartPreflightInput) (StartPreflightPlan, err
 	})
 
 	return StartPreflightPlan{
-		SchemaVersion:     SchemaVersion,
-		CapabilityID:      CapabilityID,
-		CapabilityVersion: CapabilityVersion,
-		Method:            MethodStart,
-		Request:           NewStartRequest(engine, containerID),
-		Target:            target,
-		Image:             image,
-		Runtime:           runtime,
-		RiskLevel:         maxRiskLevel(risks),
-		RiskFlags:         risks,
-		RequiresAdmin:     requiresAdmin(risks),
-		Summary:           startRiskSummary(risks),
+		Method:        MethodStart,
+		Request:       NewStartRequest(engine, containerID),
+		Target:        target,
+		Image:         image,
+		Runtime:       runtime,
+		RiskLevel:     maxRiskLevel(risks),
+		RiskFlags:     risks,
+		RequiresAdmin: requiresAdmin(risks),
+		Summary:       startRiskSummary(risks),
 	}, nil
 }
 
 type targetHashInput struct {
-	SchemaVersion  string `json:"schema_version"`
+	Version        string `json:"version"`
 	Engine         Engine `json:"engine"`
 	ContainerID    string `json:"container_id"`
 	ContainerName  string `json:"container_name,omitempty"`
