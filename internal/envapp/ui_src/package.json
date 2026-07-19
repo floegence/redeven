@@ -13,7 +13,7 @@
     "check:workbench-wheel": "node scripts/checkWorkbenchWheelContract.mjs",
     "preview": "vite preview --host 0.0.0.0 --port 8096",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test scripts/initialBuildGraphPolicy.node-test.mjs scripts/terminalCarrierThreshold.node-test.mjs && vitest run --environment=node --exclude \"src/**/*.browser.test.tsx\" --maxWorkers=2 --testTimeout=10000",
+    "test": "node --test scripts/initialBuildGraphPolicy.node-test.mjs scripts/terminalCarrierRunnerPolicy.node-test.mjs scripts/terminalCarrierThreshold.node-test.mjs && vitest run --environment=node --exclude \"src/**/*.browser.test.tsx\" --maxWorkers=2 --testTimeout=10000",
     "test:browser": "node scripts/runVitestBrowser.mjs",
     "test:built-dist-shell": "node scripts/checkPackagedRenderer.mjs",
     "test:terminal-carrier": "node scripts/checkTerminalRecoveryCarrier.mjs",
