@@ -8,10 +8,28 @@ import {
   assertTerminalCarrierP95Limit,
   buildFixedTerminalPerformanceReport,
   parseFixedTerminalPerformanceMetrics,
+  terminalCarrierExpectedRetainedBytes,
   terminalCarrierSampleMarkerName,
   terminalPerformanceSourceStateHash,
   terminalCarrierPercentile,
 } from './terminalCarrierThreshold.mjs';
+
+test('requires byte-exact terminal carrier fixtures within the retained history cap', () => {
+  const historyMaxBytes = 8 * 1024 * 1024;
+  assert.equal(terminalCarrierExpectedRetainedBytes({ fixtureBytes: 0, historyMaxBytes }), 0);
+  assert.equal(terminalCarrierExpectedRetainedBytes({
+    fixtureBytes: 448 * 1024,
+    historyMaxBytes,
+  }), 448 * 1024);
+  assert.equal(terminalCarrierExpectedRetainedBytes({
+    fixtureBytes: historyMaxBytes,
+    historyMaxBytes,
+  }), historyMaxBytes);
+  assert.throws(
+    () => terminalCarrierExpectedRetainedBytes({ fixtureBytes: historyMaxBytes + 1, historyMaxBytes }),
+    /must not exceed the retained history cap/,
+  );
+});
 
 test('allows disabled and in-budget terminal carrier samples', () => {
   assert.doesNotThrow(() => assertTerminalCarrierInteractiveLimit({
