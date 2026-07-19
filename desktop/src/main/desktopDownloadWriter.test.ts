@@ -76,15 +76,21 @@ describe('DesktopDownloadWriter', () => {
     const { DesktopDownloadWriter } = await import('./desktopDownloadWriter');
     const writer = new DesktopDownloadWriter(() => 'zh-CN');
 
-    await writer.prepare(null, {
+    const prepared = await writer.prepare(null, {
       task_id: 'task-localized',
       suggested_name: 'report.txt',
     });
-
-    expect(showSaveDialog).toHaveBeenCalledWith(expect.objectContaining({
-      title: '保存下载',
-      buttonLabel: '保存',
-    }));
+    try {
+      expect(prepared.ok).toBe(true);
+      expect(showSaveDialog).toHaveBeenCalledWith(expect.objectContaining({
+        title: '保存下载',
+        buttonLabel: '保存',
+      }));
+    } finally {
+      if (prepared.destination) {
+        await writer.abort({ token: prepared.destination.token, reason: 'canceled' });
+      }
+    }
   });
 
   it('localizes desktop-side download action failures', async () => {

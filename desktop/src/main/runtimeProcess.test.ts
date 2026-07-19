@@ -735,8 +735,13 @@ describe('runtimeProcess', () => {
     const statusFile = path.join(dir, 'status.json');
     const executablePath = await writeFakeRuntimeExecutable(dir);
     const controller = new AbortController();
+    let launch: ReturnType<typeof startManagedRuntime> | null = null;
     try {
-      const launch = startManagedRuntime({
+      let resolveStartingRuntime!: () => void;
+      const startingRuntime = new Promise<void>((resolve) => {
+        resolveStartingRuntime = resolve;
+      });
+      launch = startManagedRuntime({
         executablePath,
         runtimeArgs: ['--state-root', stateRoot],
         stateRoot,
@@ -749,8 +754,24 @@ describe('runtimeProcess', () => {
         },
         tempRoot: dir,
         signal: controller.signal,
+        onProgress: (progress) => {
+          if (progress.phase === 'starting_runtime') {
+            resolveStartingRuntime();
+          }
+        },
       });
-      await waitForFile(inventoryFile);
+      const unexpectedLaunchSettlement = launch.then(
+        () => { throw new Error('Runtime launch settled before the cancellation fixture aborted it.'); },
+        (error: unknown) => { throw error; },
+      );
+      await Promise.race([
+        startingRuntime,
+        unexpectedLaunchSettlement,
+      ]);
+      await Promise.race([
+        waitForFile(inventoryFile),
+        unexpectedLaunchSettlement,
+      ]);
       const inventory = JSON.parse(await fs.readFile(inventoryFile, 'utf8')) as { instances?: Array<{ pid?: number }> };
       const pid = Number(inventory.instances?.[0]?.pid ?? 0);
       expect(pid).toBeGreaterThan(0);
@@ -763,6 +784,11 @@ describe('runtimeProcess', () => {
       expect((await fs.readdir(dir)).filter((entry) => entry.startsWith('redeven-desktop-'))).toEqual([]);
       expect(() => process.kill(pid, 0)).toThrow();
     } finally {
+      controller.abort(new DOMException('Test cleanup.', 'AbortError'));
+      const settledLaunch = await launch?.catch(() => null);
+      if (settledLaunch?.kind === 'ready') {
+        await settledLaunch.managedRuntime.stop();
+      }
       await fs.rm(dir, { recursive: true, force: true });
     }
   });
