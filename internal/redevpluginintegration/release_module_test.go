@@ -11,8 +11,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/redeven/internal/capabilities/containers"
-	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionhop"
 	redevpluginartifacts "github.com/floegence/redeven/spec/redevplugin"
@@ -107,15 +105,11 @@ func TestOfficialReleaseProviderReturnsOwnedArtifactBytes(t *testing.T) {
 
 func TestOfficialContainersReleaseInstallsThroughHTTP(t *testing.T) {
 	stateDir := t.TempDir()
-	configPath := filepath.Join(stateDir, "config.json")
-	if err := config.Save(configPath, &config.Config{PermissionPolicy: testPermissionPolicy(t, "execute_read_write")}); err != nil {
-		t.Fatal(err)
-	}
 	integration, err := New(context.Background(), Options{
-		StateDir:    stateDir,
-		ConfigPath:  configPath,
-		RuntimePath: filepath.Join(stateDir, "redevplugin-runtime"),
-		Containers:  containers.NewAdapter(nil),
+		StateDir:         stateDir,
+		PermissionPolicy: testPermissionPolicy(t, "execute_read_write"),
+		RuntimePath:      filepath.Join(stateDir, "redevplugin-runtime"),
+		Containers:       mustContainersAdapter(t, &capabilityEngineClient{}),
 		ResolveSessionMeta: func(channelID string) (*session.Meta, bool) {
 			if channelID != "ch_release" {
 				return nil, false

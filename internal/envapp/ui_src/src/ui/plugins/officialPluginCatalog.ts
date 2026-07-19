@@ -1,22 +1,23 @@
 import type { OfficialPluginCatalogItem } from './pluginTypes';
+import { OFFICIAL_CONTAINERS_RELEASE_REF } from './officialContainersRelease.generated';
 
 export const OFFICIAL_PLUGIN_CATALOG_SEED: readonly OfficialPluginCatalogItem[] = Object.freeze([
   {
     pluginID: 'com.redeven.official.containers',
+    publisherID: 'com.redeven.official',
+    pluginInstanceID: 'plugini_redeven_official_containers',
     displayName: 'Containers',
     description: "Manage Docker and Podman resources through Redeven's official container capability.",
     publisher: 'Redeven',
-    latestVersion: '1.0.0',
-    stableVersion: '1.0.0',
-    minRedevenVersion: '0.1.0',
-    minReDevPluginVersion: '0.1.1',
+    latestVersion: '2.0.0',
+    stableVersion: '2.0.0',
+    minRedevenVersion: '0.9.0',
+    minReDevPluginVersion: '0.5.1',
     rolloutState: 'stable',
-    defaultSurfaceID: 'containers.activity',
+    defaultSurfaceID: 'containers.dashboard',
     iconFallback: 'containers',
     distribution: {
-      releaseChannel: 'github_release_and_redeven_cdn',
-      artifactName: 'containers-1.0.0.redevplugin',
-      officialArtifactPath: 'official/containers/1.0.0/containers-1.0.0.redevplugin',
+      releaseRef: OFFICIAL_CONTAINERS_RELEASE_REF,
     },
   },
 ]);

@@ -303,7 +303,7 @@ func TestServer_handleEnvAppProxy_rejectsEnvAppDirectoryListingWhenLocked(t *tes
 	}
 }
 
-func TestServer_PluginPlatformAPIUnavailableWithoutHandler(t *testing.T) {
+func TestServer_PluginPlatformRoutesAreAbsentWithoutHandler(t *testing.T) {
 	gate := accessgate.New(accessgate.Options{Password: "secret"})
 	s := newTestServer(t, gate)
 
@@ -326,19 +326,11 @@ func TestServer_PluginPlatformAPIUnavailableWithoutHandler(t *testing.T) {
 			if res.Result().StatusCode != http.StatusNotFound {
 				t.Fatalf("plugin management API status = %d, want %d; body=%q", res.Result().StatusCode, http.StatusNotFound, res.Body.String())
 			}
-			if got := res.Result().Header.Get("Content-Type"); !strings.Contains(got, "application/json") {
-				t.Fatalf("plugin management API content-type = %q, want application/json", got)
+			if got := res.Result().Header.Get("Content-Type"); !strings.Contains(got, "text/plain") {
+				t.Fatalf("plugin management API content-type = %q, want standard not-found text", got)
 			}
-			var body struct {
-				OK        bool   `json:"ok"`
-				Error     string `json:"error"`
-				ErrorCode string `json:"error_code"`
-			}
-			if err := json.Unmarshal(res.Body.Bytes(), &body); err != nil {
-				t.Fatalf("plugin management API response is not flat appserver json: %v; body=%q", err, res.Body.String())
-			}
-			if body.OK || body.Error != "not found" || body.ErrorCode != "" {
-				t.Fatalf("plugin management API response = %+v, want ok=false error=not found without plugin-owned error_code", body)
+			if got := res.Body.String(); got != "404 page not found\n" {
+				t.Fatalf("plugin management API body = %q, want the unmounted-route response", got)
 			}
 			if strings.Contains(res.Body.String(), "access password required") {
 				t.Fatalf("plugin management API was intercepted by local access gate: %q", res.Body.String())

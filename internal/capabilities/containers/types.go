@@ -80,7 +80,7 @@ const (
 )
 
 type StatusRequest struct {
-	Engine Engine `json:"engine,omitempty"`
+	Engine Engine `json:"engine"`
 }
 
 type StatusResponse struct {
@@ -90,7 +90,7 @@ type StatusResponse struct {
 }
 
 type ContainerListRequest struct {
-	Engine Engine `json:"engine,omitempty"`
+	Engine Engine `json:"engine"`
 	All    bool   `json:"all,omitempty"`
 }
 

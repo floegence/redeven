@@ -12,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/terminal"
 	"github.com/floegence/redeven/internal/testutil/legacydb"
@@ -96,12 +97,14 @@ func TestNewRejectsUnsupportedThreadstoreVersionWithoutMutation(t *testing.T) {
 	}
 
 	svc, err := New(context.Background(), Options{
-		Logger:       slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError})),
-		StateDir:     stateDir,
-		StateRoot:    stateDir,
-		ConfigPath:   filepath.Join(stateDir, "config.json"),
-		AgentHomeDir: stateDir,
-		Shell:        "/bin/sh",
+		Logger:                 slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError})),
+		StateDir:               stateDir,
+		StateRoot:              stateDir,
+		ConfigPath:             filepath.Join(stateDir, "config.json"),
+		PermissionPolicy:       testCodeappPermissionPolicy(t),
+		ReDevPluginRuntimePath: filepath.Join(stateDir, "redevplugin-runtime"),
+		AgentHomeDir:           stateDir,
+		Shell:                  "/bin/sh",
 		ResolveSessionMeta: func(string) (*session.Meta, bool) {
 			return nil, false
 		},
@@ -176,12 +179,14 @@ func TestNewRejectsCurrentThreadstoreSchemaDrift(t *testing.T) {
 	}
 
 	svc, err := New(context.Background(), Options{
-		Logger:       slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError})),
-		StateDir:     stateDir,
-		StateRoot:    stateDir,
-		ConfigPath:   filepath.Join(stateDir, "config.json"),
-		AgentHomeDir: stateDir,
-		Shell:        "/bin/sh",
+		Logger:                 slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError})),
+		StateDir:               stateDir,
+		StateRoot:              stateDir,
+		ConfigPath:             filepath.Join(stateDir, "config.json"),
+		PermissionPolicy:       testCodeappPermissionPolicy(t),
+		ReDevPluginRuntimePath: filepath.Join(stateDir, "redevplugin-runtime"),
+		AgentHomeDir:           stateDir,
+		Shell:                  "/bin/sh",
 		ResolveSessionMeta: func(string) (*session.Meta, bool) {
 			return nil, false
 		},
@@ -254,13 +259,15 @@ func TestNewPrunesStaleWorkbenchTerminalSessions(t *testing.T) {
 	t.Cleanup(term.Cleanup)
 
 	svc, err := New(context.Background(), Options{
-		Logger:       slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError})),
-		StateDir:     stateDir,
-		StateRoot:    stateDir,
-		ConfigPath:   filepath.Join(stateDir, "config.json"),
-		AgentHomeDir: stateDir,
-		Shell:        "/bin/sh",
-		Terminal:     term,
+		Logger:                 slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError})),
+		StateDir:               stateDir,
+		StateRoot:              stateDir,
+		ConfigPath:             filepath.Join(stateDir, "config.json"),
+		PermissionPolicy:       testCodeappPermissionPolicy(t),
+		ReDevPluginRuntimePath: filepath.Join(stateDir, "redevplugin-runtime"),
+		AgentHomeDir:           stateDir,
+		Shell:                  "/bin/sh",
+		Terminal:               term,
 		ResolveSessionMeta: func(string) (*session.Meta, bool) {
 			return nil, false
 		},
@@ -287,4 +294,13 @@ func TestNewPrunesStaleWorkbenchTerminalSessions(t *testing.T) {
 	if len(state.State.SessionIDs) != 0 {
 		t.Fatalf("session_ids=%#v, want stale sessions pruned", state.State.SessionIDs)
 	}
+}
+
+func testCodeappPermissionPolicy(t *testing.T) *config.PermissionPolicy {
+	t.Helper()
+	policy, err := config.ParsePermissionPolicyPreset("execute_read")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return policy
 }

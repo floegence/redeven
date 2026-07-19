@@ -3,7 +3,6 @@ package redevpluginintegration
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -31,10 +30,8 @@ import (
 )
 
 type Options struct {
-	Logger             *slog.Logger
 	StateDir           string
-	StateRoot          string
-	ConfigPath         string
+	PermissionPolicy   *config.PermissionPolicy
 	RuntimePath        string
 	ResolveSessionMeta func(channelID string) (*session.Meta, bool)
 	Audit              *auditlog.Store
@@ -64,18 +61,13 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 	if opts.ResolveSessionMeta == nil {
 		return nil, errors.New("missing ResolveSessionMeta")
 	}
-	configPath := strings.TrimSpace(opts.ConfigPath)
-	if configPath == "" {
-		return nil, errors.New("missing ConfigPath")
-	}
-	runtimeConfig, err := config.Load(configPath)
-	if err != nil {
-		return nil, err
-	}
-	if runtimeConfig == nil || runtimeConfig.PermissionPolicy == nil {
+	if opts.PermissionPolicy == nil {
 		return nil, errors.New("missing permission policy")
 	}
-	if err := runtimeConfig.PermissionPolicy.Validate(); err != nil {
+	if err := opts.PermissionPolicy.Validate(); err != nil {
+		return nil, err
+	}
+	if err := opts.Containers.Validate(); err != nil {
 		return nil, err
 	}
 	packageTrustVerifier, err := newPackageTrustVerifier()
@@ -167,7 +159,7 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		return nil, err
 	}
 
-	sessions, err := newSessionAdapter(opts.ResolveSessionMeta, runtimeConfig.PermissionPolicy)
+	sessions, err := newSessionAdapter(opts.ResolveSessionMeta, opts.PermissionPolicy)
 	if err != nil {
 		_ = pluginData.Close()
 		_ = assetStore.Close()
@@ -251,9 +243,6 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 }
 
 func (i *Integration) Handler() http.Handler {
-	if i == nil || i.handler == nil {
-		return http.NotFoundHandler()
-	}
 	return i.handler
 }
 

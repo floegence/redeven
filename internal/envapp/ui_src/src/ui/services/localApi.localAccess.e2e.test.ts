@@ -198,7 +198,7 @@ describe('localApi access credentials', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const mod = await import('./localApi');
-    await expect(mod.fetchLocalApiJSON('/_redeven_proxy/api/plugins/rpc', { method: 'POST' })).rejects.toMatchObject({
+    await expect(mod.fetchLocalApiJSON('/api/test/error-code', { method: 'POST' })).rejects.toMatchObject({
       name: 'LocalApiError',
       message: 'confirmation required',
       status: 403,
@@ -232,7 +232,7 @@ describe('localApi access credentials', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     const mod = await import('./localApi');
-    await expect(mod.fetchLocalApiJSON('/_redeven_proxy/api/plugins/rpc', { method: 'POST' })).rejects.toMatchObject({
+    await expect(mod.fetchLocalApiJSON('/api/test/error-envelope', { method: 'POST' })).rejects.toMatchObject({
       name: 'LocalApiError',
       message: 'permission denied',
       status: 200,

@@ -48,8 +48,8 @@ importers:
         specifier: ^0.27.0
         version: 0.27.0
       '@floegence/redevplugin-ui':
-        specifier: 0.1.5
-        version: 0.1.5
+        specifier: 0.5.1
+        version: 0.5.1
       '@fontsource/iosevka':
         specifier: ^5.2.5
         version: 5.2.5
@@ -92,6 +92,9 @@ importers:
       pdfjs-dist:
         specifier: ^5.6.205
         version: 5.7.284
+      semver:
+        specifier: ^7.8.5
+        version: 7.8.5
       shiki:
         specifier: ^3.22.0
         version: 3.23.0
@@ -117,6 +120,9 @@ importers:
       '@types/node':
         specifier: ^20.0.0
         version: 20.19.41
+      '@types/semver':
+        specifier: ^7.7.1
+        version: 7.7.1
       '@typescript-eslint/eslint-plugin':
         specifier: ^8.57.0
         version: 8.60.0(@typescript-eslint/parser@8.60.0(eslint@9.39.4(jiti@2.7.0))(typescript@5.9.3))(eslint@9.39.4(jiti@2.7.0))(typescript@5.9.3)
@@ -381,8 +387,8 @@ packages:
     resolution: {integrity: sha512-iSKC7vQUMVzYOWbgNGFo+Hz4rTOuqCn+UGRj2lLiuT5vBqXo1GwImMf7+1h8GaKrahAv9t3EtiD4TglCwwTjhQ==}
     engines: {node: '>=24.0.0'}
 
-  '@floegence/redevplugin-ui@0.1.5':
-    resolution: {integrity: sha512-jIxdfW5PuAykfngSAbEa3lFHH1svDo0ysyAe/UnTZ0x1l6Q+v00wPCb8bbu1OTO23OkXnb0AmwqrRZ8roEKjmA==}
+  '@floegence/redevplugin-ui@0.5.1':
+    resolution: {integrity: sha512-WyRUQ489hkBLGYixXFSSyErIn8MpKpU6spHCYaD3HH6/DH7XYChKXCTznT6y2rV1kB8hDMM3WpYj3GVooa9OPQ==}
 
   '@fontsource/iosevka@5.2.5':
     resolution: {integrity: sha512-Zv/UHJodDug1LcnWv2u2+GPp3oWP3U6Xp16cJOsqqZQNsCu8sA/ttT331N0NypxBZ+7c8szlSRlYDcy9liZ8pw==}
@@ -933,6 +939,9 @@ packages:
 
   '@types/node@20.19.41':
     resolution: {integrity: sha512-ECymXOukMnOoVkC2bb1Vc/w/836DXncOg5m8Xj1RH7xSHZJWNYY6Zh7EH477vcnD5egKNNfy2RpNOmuChhFPgQ==}
+
+  '@types/semver@7.7.1':
+    resolution: {integrity: sha512-FmgJfu+MOcQ370SD0ev7EI8TlCAfKYU+B4m5T3yXc1CiRN94g/SZPtsCkk506aUDtlMnFZvasDwHHUcZUEaYuA==}
 
   '@types/trusted-types@2.0.7':
     resolution: {integrity: sha512-ScaPdn1dQczgbl0QFTeTOmVHFULt394XJgOQNoyVhZ6r2vLnMLJfBPd53SB52T/3G36VI1/g2MZaX0cwDuXsfw==}
@@ -2213,8 +2222,8 @@ packages:
     resolution: {integrity: sha512-BR7VvDCVHO+q2xBEWskxS6DJE1qRnb7DxzUrogb71CWoSficBxYsiAGd+Kl0mmq/MprG9yArRkyrQxTO6XjMzA==}
     hasBin: true
 
-  semver@7.8.1:
-    resolution: {integrity: sha512-rkVq3IXh+4FDGch+KwzX3aV9W3kO54GyEgpvBzSyctDA6Xtd7RJQV1xmXbeQp5v7+VzLOfVqiutSE6GICgPFvg==}
+  semver@7.8.5:
+    resolution: {integrity: sha512-Y7/KDsb8LjooZpwaqGyulO6DQlksgCncchHGk+sZIY4SBvUocMBEFH5Ur1fI4dV+Jvl0w6cjvucaIi40puRioA==}
     engines: {node: '>=10'}
     hasBin: true
 
@@ -2889,7 +2898,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/redevplugin-ui@0.1.5': {}
+  '@floegence/redevplugin-ui@0.5.1': {}
 
   '@fontsource/iosevka@5.2.5': {}
 
@@ -3398,6 +3407,8 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
+  '@types/semver@7.7.1': {}
+
   '@types/trusted-types@2.0.7':
     optional: true
 
@@ -3471,7 +3482,7 @@ snapshots:
       '@typescript-eslint/visitor-keys': 8.60.0
       debug: 4.4.3
       minimatch: 10.2.5
-      semver: 7.8.1
+      semver: 7.8.5
       tinyglobby: 0.2.16
       ts-api-utils: 2.5.0(typescript@5.9.3)
       typescript: 5.9.3
@@ -4789,7 +4800,7 @@ snapshots:
 
   semver@6.3.1: {}
 
-  semver@7.8.1: {}
+  semver@7.8.5: {}
 
   seroval-plugins@1.5.4(seroval@1.5.4):
     dependencies:

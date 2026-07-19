@@ -1,103 +1,89 @@
-import { fetchLocalApiJSON } from '../services/localApi';
-import { officialPluginPackage } from './officialPluginPackages';
+import type { PluginPlatformClient, PluginRequestOptions } from '@floegence/redevplugin-ui';
+
+import { officialPluginCatalog } from './officialPluginCatalog';
 import { projectPluginInventory } from './pluginInventoryProjection';
 import type {
+  OfficialPluginCatalogItem,
   PluginInventoryProjection,
-  PluginLifecycleCommand,
-  PluginOpenSurfaceResult,
-  PluginSurfaceLaunchTarget,
-  ReDevPluginCatalogResult,
+  PluginManagementCommand,
   ReDevPluginRecord,
 } from './pluginTypes';
 
-const pluginAPIBase = '/_redeven_proxy/api/plugins';
+export type PluginLifecycleAPI = ReturnType<typeof createPluginLifecycleAPI>;
 
-export async function listInstalledPlugins(): Promise<ReDevPluginRecord[]> {
-  const result = await fetchLocalApiJSON<ReDevPluginCatalogResult>(`${pluginAPIBase}/catalog`, { method: 'GET' });
-  return Array.isArray(result.plugins) ? result.plugins : [];
+export function createPluginLifecycleAPI(
+  client: PluginPlatformClient,
+  catalog: readonly OfficialPluginCatalogItem[] = officialPluginCatalog(),
+) {
+  const officialByPluginID = new Map(catalog.map((item) => [item.pluginID, item]));
+
+  const listInstalledPlugins = async (options: PluginRequestOptions = {}): Promise<ReDevPluginRecord[]> => {
+    const result = await client.catalog(options);
+    return result.plugins;
+  };
+
+  const loadInventoryProjection = async (options: PluginRequestOptions = {}): Promise<PluginInventoryProjection> => projectPluginInventory({
+    officialCatalog: catalog,
+    installedPlugins: await listInstalledPlugins(options),
+  });
+
+  const execute = async (
+    command: PluginManagementCommand,
+    options: PluginRequestOptions = {},
+  ): Promise<ReDevPluginRecord> => {
+    switch (command.type) {
+      case 'install': {
+        const official = requireOfficialPlugin(officialByPluginID, command.pluginID);
+        return client.installReleaseRef({
+          plugin_instance_id: official.pluginInstanceID,
+          release_ref: official.distribution.releaseRef,
+        }, options);
+      }
+      case 'enable':
+        return client.enablePlugin({
+          plugin_instance_id: command.pluginInstanceID,
+          expected_management_revision: command.expectedManagementRevision,
+        }, options);
+      case 'disable':
+        return client.disablePlugin({
+          plugin_instance_id: command.pluginInstanceID,
+          expected_management_revision: command.expectedManagementRevision,
+          reason: 'user_disabled',
+        }, options);
+      case 'uninstall':
+        return client.uninstallPlugin({
+          plugin_instance_id: command.pluginInstanceID,
+          expected_management_revision: command.expectedManagementRevision,
+          delete_data: command.dataRetention === 'delete_data',
+        }, options);
+      case 'update': {
+        const official = requireOfficialPlugin(officialByPluginID, command.pluginID);
+        if (command.targetVersion !== official.distribution.releaseRef.version) {
+          throw new Error('Official plugin update target does not match its signed release reference');
+        }
+        return client.updateReleaseRef({
+          plugin_instance_id: command.pluginInstanceID,
+          expected_management_revision: command.expectedManagementRevision,
+          release_ref: official.distribution.releaseRef,
+        }, options);
+      }
+      default:
+        return assertNever(command);
+    }
+  };
+
+  return Object.freeze({ listInstalledPlugins, loadInventoryProjection, execute });
 }
 
-export async function loadPluginInventoryProjection(): Promise<PluginInventoryProjection> {
-  return projectPluginInventory({ installedPlugins: await listInstalledPlugins() });
-}
-
-export const pluginLifecycleApi = {
-  enable(pluginInstanceID: string): Promise<ReDevPluginRecord> {
-    return fetchLocalApiJSON<ReDevPluginRecord>(`${pluginAPIBase}/enable`, {
-      method: 'POST',
-      body: JSON.stringify({ plugin_instance_id: pluginInstanceID }),
-    });
-  },
-  disable(pluginInstanceID: string): Promise<ReDevPluginRecord> {
-    return fetchLocalApiJSON<ReDevPluginRecord>(`${pluginAPIBase}/disable`, {
-      method: 'POST',
-      body: JSON.stringify({ plugin_instance_id: pluginInstanceID, reason: 'user_disabled' }),
-    });
-  },
-  uninstall(pluginInstanceID: string, dataRetention: 'keep_data' | 'delete_data'): Promise<ReDevPluginRecord> {
-    return fetchLocalApiJSON<ReDevPluginRecord>(`${pluginAPIBase}/uninstall`, {
-      method: 'POST',
-      body: JSON.stringify({ plugin_instance_id: pluginInstanceID, delete_data: dataRetention === 'delete_data' }),
-    });
-  },
-  installOfficial(pluginID: string): Promise<ReDevPluginRecord> {
-    const pkg = requireOfficialPackage(pluginID);
-    return fetchLocalApiJSON<ReDevPluginRecord>(`${pluginAPIBase}/install`, {
-      method: 'POST',
-      body: JSON.stringify({
-        package_base64: pkg.packageBase64,
-        trust_state: 'bundled',
-      }),
-    });
-  },
-  updateOfficial(pluginID: string, pluginInstanceID: string): Promise<ReDevPluginRecord> {
-    const pkg = requireOfficialPackage(pluginID);
-    return fetchLocalApiJSON<ReDevPluginRecord>(`${pluginAPIBase}/update`, {
-      method: 'POST',
-      body: JSON.stringify({
-        plugin_instance_id: pluginInstanceID,
-        package_base64: pkg.packageBase64,
-        trust_state: 'bundled',
-      }),
-    });
-  },
-  openSurface(target: PluginSurfaceLaunchTarget): Promise<PluginOpenSurfaceResult> {
-    return fetchLocalApiJSON<PluginOpenSurfaceResult>(`${pluginAPIBase}/surfaces/open`, {
-      method: 'POST',
-      body: JSON.stringify({ plugin_instance_id: target.pluginInstanceID, surface_id: target.surfaceID }),
-    });
-  },
-};
-
-export async function executePluginLifecycleCommand(command: PluginLifecycleCommand): Promise<unknown> {
-  switch (command.type) {
-    case 'enable':
-      return pluginLifecycleApi.enable(command.pluginInstanceID);
-    case 'disable':
-      return pluginLifecycleApi.disable(command.pluginInstanceID);
-    case 'uninstall':
-      return pluginLifecycleApi.uninstall(command.pluginInstanceID, command.dataRetention);
-    case 'update':
-      return pluginLifecycleApi.updateOfficial(command.pluginID, command.pluginInstanceID);
-    case 'open_surface':
-      return pluginLifecycleApi.openSurface({
-        pluginInstanceID: command.pluginInstanceID,
-        surfaceID: command.surfaceID,
-        preferredPlacement: command.placement,
-      });
-    case 'install':
-      return pluginLifecycleApi.installOfficial(command.pluginID);
-    default:
-      return assertNever(command);
+function requireOfficialPlugin(
+  catalog: ReadonlyMap<string, OfficialPluginCatalogItem>,
+  pluginID: string,
+): OfficialPluginCatalogItem {
+  const item = catalog.get(pluginID);
+  if (!item) {
+    throw new Error('Official plugin release is unavailable');
   }
-}
-
-function requireOfficialPackage(pluginID: string) {
-  const pkg = officialPluginPackage(pluginID);
-  if (!pkg) {
-    throw new Error(`Official bundled package is unavailable for ${pluginID}`);
-  }
-  return pkg;
+  return item;
 }
 
 function assertNever(value: never): never {

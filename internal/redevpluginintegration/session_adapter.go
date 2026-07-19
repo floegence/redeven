@@ -40,6 +40,7 @@ func newSessionAdapter(resolve func(channelID string) (*session.Meta, bool), per
 	if permissionPolicy == nil {
 		return nil, errors.New("permission policy is required")
 	}
+	permissionPolicy = clonePermissionPolicy(permissionPolicy)
 	if err := permissionPolicy.Validate(); err != nil {
 		return nil, err
 	}
@@ -58,6 +59,35 @@ func newSessionAdapter(resolve func(channelID string) (*session.Meta, bool), per
 			sessions: cache,
 		},
 	}, nil
+}
+
+func clonePermissionPolicy(source *config.PermissionPolicy) *config.PermissionPolicy {
+	if source == nil {
+		return nil
+	}
+	cloneSet := func(value *config.PermissionSet) *config.PermissionSet {
+		if value == nil {
+			return nil
+		}
+		copy := *value
+		return &copy
+	}
+	cloneMap := func(values map[string]*config.PermissionSet) map[string]*config.PermissionSet {
+		if values == nil {
+			return nil
+		}
+		copy := make(map[string]*config.PermissionSet, len(values))
+		for key, value := range values {
+			copy[key] = cloneSet(value)
+		}
+		return copy
+	}
+	return &config.PermissionPolicy{
+		SchemaVersion: source.SchemaVersion,
+		LocalMax:      cloneSet(source.LocalMax),
+		ByUser:        cloneMap(source.ByUser),
+		ByApp:         cloneMap(source.ByApp),
+	}
 }
 
 func (a *sessionAdapter) EvaluateLocalPolicy(ctx context.Context, session sessionctx.Context, plugin host.PluginRef, method manifest.MethodSpec) (host.PolicyDecision, error) {
@@ -301,10 +331,13 @@ func authorizationTargetMatchesSession(session sessionctx.Context, target host.A
 }
 
 func permissionsAllowAction(perms sessionPermissions, action host.ManagementAction) bool {
+	dataPlane := perms.read || perms.write || perms.execute || perms.admin
 	switch action {
 	case host.ManagementActionOpenSurface,
 		host.ManagementActionPrepareSurface,
 		host.ManagementActionMintBridgeToken,
+		host.ManagementActionDisposeSurface,
+		host.ManagementActionRevokeSurfaceScope,
 		host.ManagementActionReadSurfaceAsset,
 		host.ManagementActionReadSurfaceStream,
 		host.ManagementActionAcknowledgeSurfaceStream,
@@ -328,17 +361,13 @@ func permissionsAllowAction(perms sessionPermissions, action host.ManagementActi
 		host.ManagementActionRejectSurfaceConfirmation,
 		host.ManagementActionInvokeIntent,
 		host.ManagementActionCancelSurfaceOperation,
-		host.ManagementActionCancelOperation,
-		host.ManagementActionStartRuntime,
-		host.ManagementActionStopRuntime,
-		host.ManagementActionRefreshEnabledPlugins,
-		host.ManagementActionMintConnectionGrant,
+		host.ManagementActionCancelOperation:
+		return dataPlane
+	case host.ManagementActionMintConnectionGrant,
 		host.ManagementActionMintNetworkHandleGrant,
 		host.ManagementActionMintStorageHandleGrant:
 		return perms.execute
-	case host.ManagementActionDisposeSurface,
-		host.ManagementActionRevokeSurfaceScope,
-		host.ManagementActionDeleteRetainedData,
+	case host.ManagementActionDeleteRetainedData,
 		host.ManagementActionBindRetainedData,
 		host.ManagementActionCleanupExpiredRetainedData,
 		host.ManagementActionExportPluginData,
@@ -360,7 +389,10 @@ func permissionsAllowAction(perms sessionPermissions, action host.ManagementActi
 		host.ManagementActionDeleteSecurityPolicy,
 		host.ManagementActionBindSecretRef,
 		host.ManagementActionTestSecretRef,
-		host.ManagementActionDeleteSecretRef:
+		host.ManagementActionDeleteSecretRef,
+		host.ManagementActionStartRuntime,
+		host.ManagementActionStopRuntime,
+		host.ManagementActionRefreshEnabledPlugins:
 		return perms.admin
 	default:
 		return false

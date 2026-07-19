@@ -3,6 +3,7 @@ package containers
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -25,6 +26,34 @@ func TestCLIClientStatusParsesNestedEngineVersion(t *testing.T) {
 	}
 	if !status.Available || status.Version != "25.0.3" {
 		t.Fatalf("status = %+v", status)
+	}
+}
+
+func TestCLIClientStatusPropagatesCancellation(t *testing.T) {
+	t.Parallel()
+
+	client := &CLIClient{Runner: CommandRunnerFunc(func(context.Context, string, ...string) ([]byte, error) {
+		return nil, context.Canceled
+	})}
+	status, err := client.Status(context.Background(), EngineDocker)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("Status() error = %v, want context.Canceled", err)
+	}
+	if status.Available {
+		t.Fatalf("Status() = %+v, want unavailable cancellation result", status)
+	}
+}
+
+func TestCLIClientStatusPropagatesDeadline(t *testing.T) {
+	t.Parallel()
+
+	client := &CLIClient{Runner: &contextCancelRunner{}, Timeout: 5 * time.Millisecond}
+	status, err := client.Status(context.Background(), EnginePodman)
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("Status() error = %v, want context.DeadlineExceeded", err)
+	}
+	if status.Available {
+		t.Fatalf("Status() = %+v, want unavailable timeout result", status)
 	}
 }
 
@@ -209,6 +238,48 @@ func TestExecRunnerReturnsContextErrorAfterCommandCancellation(t *testing.T) {
 	}
 	if elapsed := time.Since(started); elapsed > time.Second {
 		t.Fatalf("Run() cancellation took %s", elapsed)
+	}
+}
+
+func TestExecRunnerRejectsOutputBeyondTheBoundedCommandLimit(t *testing.T) {
+	t.Parallel()
+
+	command := fmt.Sprintf("head -c %d /dev/zero", maxCommandOutputBytes+1)
+	_, err := execRunner{}.Run(context.Background(), "sh", "-c", command)
+	if !errors.Is(err, ErrCommandOutputLimit) {
+		t.Fatalf("Run() error = %v, want ErrCommandOutputLimit", err)
+	}
+}
+
+func TestCommandFailureClassificationReturnsOnlyStableDomainErrors(t *testing.T) {
+	t.Parallel()
+
+	inspect := classifyCommandFailure([]string{"inspect", "container_404"}, errors.New("exit status 1"))
+	if errors.Is(inspect, ErrContainerNotFound) || inspect.Error() != "container command failed: exit status 1" {
+		t.Fatalf("inspect classification = %v", inspect)
+	}
+	logs := classifyCommandFailure([]string{"logs", "container_1"}, errors.New("exit status 1"))
+	if !errors.Is(logs, ErrLogsUnavailable) || strings.Contains(logs.Error(), "secret") {
+		t.Fatalf("logs classification = %v", logs)
+	}
+}
+
+func TestExecRunnerDiscardsSensitiveStderr(t *testing.T) {
+	t.Parallel()
+
+	_, err := execRunner{}.Run(
+		context.Background(),
+		"sh",
+		"-c",
+		"printf '%s' 'bearer-secret https://example.test/?token=secret /Users/private/key' >&2; exit 9",
+	)
+	if err == nil {
+		t.Fatal("Run() error = nil")
+	}
+	for _, forbidden := range []string{"bearer-secret", "example.test", "token=secret", "/Users/private/key"} {
+		if strings.Contains(err.Error(), forbidden) {
+			t.Fatalf("Run() error contains stderr data %q: %v", forbidden, err)
+		}
 	}
 }
 

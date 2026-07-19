@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 )
 
@@ -11,9 +12,20 @@ var (
 	ErrEngineUnavailable     = errors.New("container engine is unavailable")
 	ErrInvalidEngine         = errors.New("container engine is invalid")
 	ErrInvalidMethod         = errors.New("container method is invalid")
+	ErrCommandOutputLimit    = errors.New("container command output limit exceeded")
+	ErrContainerNotFound     = errors.New("container not found")
+	ErrLogsUnavailable       = errors.New("container logs unavailable")
 	ErrLogStreamBackpressure = errors.New("logs stream sink backpressure")
 	ErrLogsFollowUnsupported = errors.New("logs follow requires a streaming adapter")
 )
+
+type ContainerNotFoundError struct {
+	ContainerID string
+}
+
+func (e *ContainerNotFoundError) Error() string { return ErrContainerNotFound.Error() }
+
+func (e *ContainerNotFoundError) Is(target error) bool { return target == ErrContainerNotFound }
 
 type EngineStatus struct {
 	Engine    Engine
@@ -113,14 +125,33 @@ type EngineLogFollower interface {
 }
 
 type Adapter struct {
-	client      EngineClient
-	engineOrder []Engine
+	client EngineClient
 }
 
-func NewAdapter(client EngineClient) *Adapter {
-	return &Adapter{
-		client:      client,
-		engineOrder: []Engine{EngineDocker, EnginePodman},
+func NewAdapter(client EngineClient) (*Adapter, error) {
+	if engineClientIsNil(client) {
+		return nil, errors.New("container engine client is required")
+	}
+	return &Adapter{client: client}, nil
+}
+
+func (a *Adapter) Validate() error {
+	if a == nil || engineClientIsNil(a.client) {
+		return errors.New("container engine client is required")
+	}
+	return nil
+}
+
+func engineClientIsNil(client EngineClient) bool {
+	if client == nil {
+		return true
+	}
+	value := reflect.ValueOf(client)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
 	}
 }
 
@@ -168,7 +199,7 @@ func (a *Adapter) Inspect(ctx context.Context, req ContainerInspectRequest) (Con
 	}
 	container, err := a.client.Inspect(ctx, req.Engine, containerID)
 	if err != nil {
-		return ContainerInspectResponse{}, err
+		return ContainerInspectResponse{}, normalizeContainerResourceError(containerID, err)
 	}
 	return ContainerInspectResponse{
 		Engine:    req.Engine,
@@ -186,7 +217,7 @@ func (a *Adapter) StartPreflight(ctx context.Context, req ContainerStartRequest)
 	}
 	container, err := a.client.Inspect(ctx, req.Engine, containerID)
 	if err != nil {
-		return StartPreflightPlan{}, err
+		return StartPreflightPlan{}, normalizeContainerResourceError(containerID, err)
 	}
 	return BuildStartPreflightPlan(StartPreflightInput{
 		Engine:        req.Engine,
@@ -248,7 +279,7 @@ func (a *Adapter) TailLogs(ctx context.Context, req LogsTailRequest) (LogsTailRe
 		Follow:      req.Follow,
 	})
 	if err != nil {
-		return LogsTailResponse{}, err
+		return LogsTailResponse{}, normalizeContainerResourceError(containerID, err)
 	}
 	return LogsTailResponse{
 		Engine:      result.Engine,
@@ -272,13 +303,14 @@ func (a *Adapter) FollowLogs(ctx context.Context, req LogsTailRequest, sink LogL
 	if !ok {
 		return ErrLogsFollowUnsupported
 	}
-	return follower.FollowLogs(ctx, EngineLogsRequest{
+	err := follower.FollowLogs(ctx, EngineLogsRequest{
 		Engine:      req.Engine,
 		ContainerID: containerID,
 		TailLines:   req.TailLines,
 		SinceUnixMs: req.SinceUnixMs,
 		Follow:      true,
 	}, sink)
+	return normalizeContainerResourceError(containerID, err)
 }
 
 func (a *Adapter) PullImage(ctx context.Context, req ImagePullRequest) (ImagePullResponse, error) {
@@ -322,7 +354,7 @@ func (a *Adapter) runAction(ctx context.Context, req EngineActionRequest) (Conta
 func (a *Adapter) action(ctx context.Context, req EngineActionRequest) (ContainerActionResponse, error) {
 	result, err := a.client.Action(ctx, req)
 	if err != nil {
-		return ContainerActionResponse{}, err
+		return ContainerActionResponse{}, normalizeContainerResourceError(strings.TrimSpace(req.ContainerID), err)
 	}
 	return ContainerActionResponse{
 		Engine:      result.Engine,
@@ -332,31 +364,28 @@ func (a *Adapter) action(ctx context.Context, req EngineActionRequest) (Containe
 	}, nil
 }
 
+func normalizeContainerResourceError(containerID string, err error) error {
+	if err == nil || !errors.Is(err, ErrContainerNotFound) {
+		return err
+	}
+	return &ContainerNotFoundError{ContainerID: strings.TrimSpace(containerID)}
+}
+
 func (a *Adapter) resolveEngine(ctx context.Context, requested Engine) (Engine, EngineStatus, error) {
-	if a == nil || a.client == nil {
-		return EngineDocker, EngineStatus{Engine: EngineDocker}, errors.New("container engine client is required")
+	if err := a.Validate(); err != nil {
+		return requested, EngineStatus{Engine: requested}, err
 	}
-	if requested != "" {
-		if err := validateEngine(requested); err != nil {
-			return requested, EngineStatus{Engine: requested}, err
-		}
-		status, err := a.client.Status(ctx, requested)
-		if err != nil {
-			return requested, EngineStatus{Engine: requested}, err
-		}
-		if !status.Available {
-			return requested, status, fmt.Errorf("%w: %s", ErrEngineUnavailable, requested)
-		}
-		return requested, status, nil
+	if err := validateEngine(requested); err != nil {
+		return requested, EngineStatus{Engine: requested}, err
 	}
-	for _, engine := range a.engineOrder {
-		status, err := a.client.Status(ctx, engine)
-		if err != nil || !status.Available {
-			continue
-		}
-		return engine, status, nil
+	status, err := a.client.Status(ctx, requested)
+	if err != nil {
+		return requested, EngineStatus{Engine: requested}, err
 	}
-	return EngineDocker, EngineStatus{Engine: EngineDocker}, ErrEngineUnavailable
+	if !status.Available {
+		return requested, status, fmt.Errorf("%w: %s", ErrEngineUnavailable, requested)
+	}
+	return requested, status, nil
 }
 
 func validateEngine(engine Engine) error {

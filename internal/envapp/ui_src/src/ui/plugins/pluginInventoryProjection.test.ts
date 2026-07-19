@@ -1,57 +1,78 @@
 import { describe, expect, it } from 'vitest';
 
+import { OFFICIAL_PLUGIN_CATALOG_SEED } from './officialPluginCatalog';
 import {
   buildPluginCenterModel,
   buildPluginPanelModel,
   projectPluginInventory,
 } from './pluginInventoryProjection';
-import type { OfficialPluginCatalogItem, ReDevPluginRecord } from './pluginTypes';
+import type { ReDevPluginRecord } from './pluginTypes';
 
-const officialContainers: OfficialPluginCatalogItem = {
-  pluginID: 'com.redeven.official.containers',
-  displayName: 'Containers',
-  description: 'Manage Docker and Podman resources.',
-  publisher: 'Redeven',
-  latestVersion: '1.0.0',
-  stableVersion: '1.0.0',
-  minRedevenVersion: '0.1.0',
-  minReDevPluginVersion: '0.1.1',
-  rolloutState: 'stable',
-  defaultSurfaceID: 'containers.activity',
-  iconFallback: 'containers',
-  distribution: {
-    releaseChannel: 'github_release_and_redeven_cdn',
-    artifactName: 'containers-1.0.0.redevplugin',
-    officialArtifactPath: 'official/containers/1.0.0/containers-1.0.0.redevplugin',
-  },
-};
+const officialContainers = OFFICIAL_PLUGIN_CATALOG_SEED[0];
+const packageHash = 'sha256:8ecf6c0d206ee557c5528e2192b2594b5d097912b83028d43ff1336532b06d13';
+const manifestHash = 'sha256:f96534ca709165d0e30f6e7713a57ec0754f84f84ccadc2edc000f19dde7cc3d';
+const entriesHash = 'sha256:8a0048517719d934e52406dc6e9964d9ca165728d3e530d2c4df16f619bf17fa';
 
 function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPluginRecord {
   return {
-    plugin_instance_id: 'plugininst_containers',
+    plugin_instance_id: officialContainers.pluginInstanceID,
+    publisher_id: officialContainers.publisherID,
     plugin_id: officialContainers.pluginID,
-    version: '1.0.0',
-    active_fingerprint: 'sha256:pkg',
+    version: officialContainers.stableVersion,
+    active_fingerprint: packageHash,
+    package_hash: packageHash,
+    manifest_hash: manifestHash,
+    entries_hash: entriesHash,
     trust_state: 'verified',
+    trust_assessment: {
+      trust_state: 'verified',
+      verified_hashes: {
+        package_sha256: packageHash,
+        manifest_sha256: manifestHash,
+        entries_sha256: entriesHash,
+      },
+      verified_signature: {
+        algorithm: 'ed25519',
+        key_id: 'redeven-official-v1',
+      },
+    },
     enable_state: 'enabled',
-    installed_at: '2026-07-04T10:00:00Z',
-    enabled_at: '2026-07-04T10:01:00Z',
+    policy_revision: 3,
+    management_revision: 7,
+    revoke_epoch: 0,
     manifest: {
+      schema_version: 'redevplugin.manifest.v5',
+      publisher: {
+        publisher_id: officialContainers.publisherID,
+        display_name: officialContainers.publisher,
+      },
       plugin: {
-        display_name: 'Containers',
+        plugin_id: officialContainers.pluginID,
+        display_name: officialContainers.displayName,
+        version: officialContainers.stableVersion,
+        api_version: 'plugin-v1',
+        min_runtime_version: '0.5.1',
+        ui_protocol_version: 'plugin-ui-v5',
       },
       surfaces: [
         {
-          surface_id: 'containers.activity',
-          label: 'Containers',
+          surface_id: officialContainers.defaultSurfaceID,
+          kind: 'view',
+          intent: 'primary',
+          label: officialContainers.displayName,
+          entry: 'ui/index.html',
         },
       ],
     },
+    package_entries: [],
+    installed_at: '2026-07-04T10:00:00Z',
+    enabled_at: '2026-07-04T10:01:00Z',
+    updated_at: '2026-07-04T10:01:00Z',
     ...overrides,
   };
 }
 
-describe('plugin inventory projection', () => {
+describe('v0.5.1 plugin inventory projection', () => {
   it('keeps Plugin Center as the first panel tile', () => {
     const projection = projectPluginInventory({
       officialCatalog: [officialContainers],
@@ -62,7 +83,7 @@ describe('plugin inventory projection', () => {
     expect(panel.tiles[0]).toMatchObject({ kind: 'open_center', id: 'plugin-center' });
   });
 
-  it('merges official catalog and installed registry records by plugin id', () => {
+  it('joins the registry record only by exact publisher, plugin, and instance identity', () => {
     const projection = projectPluginInventory({
       officialCatalog: [officialContainers],
       installedPlugins: [installedRecord()],
@@ -71,53 +92,64 @@ describe('plugin inventory projection', () => {
     expect(projection.items).toHaveLength(1);
     expect(projection.items[0]).toMatchObject({
       pluginID: officialContainers.pluginID,
-      pluginInstanceID: 'plugininst_containers',
-      displayName: 'Containers',
+      pluginInstanceID: officialContainers.pluginInstanceID,
+      displayName: officialContainers.displayName,
       lifecycleState: 'enabled',
       trustBadge: 'official',
+      managementRevision: 7,
       defaultLaunchTarget: {
-        pluginInstanceID: 'plugininst_containers',
-        surfaceID: 'containers.activity',
+        pluginID: officialContainers.pluginID,
+        pluginInstanceID: officialContainers.pluginInstanceID,
+        surfaceID: officialContainers.defaultSurfaceID,
+        expectedManagementRevision: 7,
         preferredPlacement: 'activity',
       },
     });
   });
 
-  it('keeps non-official installed records out of the official-only inventory', () => {
+  it('does not join records with a mismatched publisher or plugin instance', () => {
     const projection = projectPluginInventory({
       officialCatalog: [officialContainers],
       installedPlugins: [
-        installedRecord({
-          plugin_id: 'com.example.local.plugin',
-          plugin_instance_id: 'plugininst_local',
-          manifest: {
-            plugin: {
-              display_name: 'Local Plugin',
-            },
-            surfaces: [
-              {
-                surface_id: 'local.activity',
-                label: 'Local',
-              },
-            ],
-          },
-        }),
+        installedRecord({ publisher_id: 'com.example.publisher' }),
+        installedRecord({ plugin_instance_id: 'plugini_different_instance' }),
       ],
     });
 
     expect(projection.items).toHaveLength(1);
-    expect(projection.items[0].pluginID).toBe(officialContainers.pluginID);
-    expect(projection.items.some((item) => item.pluginID === 'com.example.local.plugin')).toBe(false);
+    expect(projection.items[0]).toMatchObject({
+      pluginID: officialContainers.pluginID,
+      lifecycleState: 'not_installed',
+    });
+    expect(projection.items[0]).not.toHaveProperty('pluginInstanceID');
+    expect(projection.items[0]).not.toHaveProperty('defaultLaunchTarget');
   });
 
-  it('routes enabled plugins to surface launch targets when the shell can host surfaces', () => {
+  it('keeps non-official installed records out of the official-only inventory', () => {
+    const projection = projectPluginInventory({
+      officialCatalog: [officialContainers],
+      installedPlugins: [installedRecord({
+        publisher_id: 'com.example.publisher',
+        plugin_id: 'com.example.local.plugin',
+        plugin_instance_id: 'plugini_local',
+      })],
+    });
+
+    expect(projection.items).toHaveLength(1);
+    expect(projection.items[0]).toMatchObject({
+      pluginID: officialContainers.pluginID,
+      lifecycleState: 'not_installed',
+    });
+  });
+
+  it('routes only enabled verified records with a revision-bound launch target', () => {
     const enabledProjection = projectPluginInventory({
       officialCatalog: [officialContainers],
       installedPlugins: [installedRecord()],
     });
     const disabledProjection = projectPluginInventory({
       officialCatalog: [officialContainers],
-      installedPlugins: [installedRecord({ enable_state: 'disabled', disabled_reason: 'user' })],
+      installedPlugins: [installedRecord({ enable_state: 'disabled', disabled_reason: 'user_disabled' })],
     });
 
     expect(buildPluginPanelModel(enabledProjection).tiles[1]).toMatchObject({
@@ -127,17 +159,21 @@ describe('plugin inventory projection', () => {
     expect(buildPluginPanelModel(enabledProjection, undefined, { canOpenSurfaces: true }).tiles[1]).toMatchObject({
       kind: 'plugin',
       action: 'open_surface',
+      item: {
+        defaultLaunchTarget: {
+          expectedManagementRevision: 7,
+        },
+      },
     });
-    expect(buildPluginPanelModel(disabledProjection).tiles[1]).toMatchObject({
+    expect(buildPluginPanelModel(disabledProjection, undefined, { canOpenSurfaces: true }).tiles[1]).toMatchObject({
       kind: 'plugin',
       action: 'open_details',
     });
   });
 
-  it('does not show revoked official plugins as installable', () => {
-    const revoked: OfficialPluginCatalogItem = { ...officialContainers, rolloutState: 'revoked' };
+  it('does not show a revoked official release as installable', () => {
     const projection = projectPluginInventory({
-      officialCatalog: [revoked],
+      officialCatalog: [{ ...officialContainers, rolloutState: 'revoked' }],
       installedPlugins: [],
     });
 
@@ -146,35 +182,22 @@ describe('plugin inventory projection', () => {
       trustBadge: 'revoked',
       attentionReason: 'catalog_revoked',
     });
-    expect(buildPluginPanelModel(projection).tiles[1]).toMatchObject({
-      kind: 'plugin',
-      action: 'open_details',
-    });
   });
 
-  it('keeps non-runnable installed trust states out of enable and open flows', () => {
+  it('keeps non-runnable trust states out of enable and open flows', () => {
     const projection = projectPluginInventory({
       officialCatalog: [officialContainers],
-      installedPlugins: [installedRecord({ trust_state: 'needs_review' })],
-    });
-
-    expect(projection.items[0]).toMatchObject({
-      lifecycleState: 'needs_attention',
-      trustBadge: 'unavailable',
-      attentionReason: 'trust_unavailable',
-      defaultLaunchTarget: undefined,
-    });
-    expect(buildPluginPanelModel(projection, undefined, { canOpenSurfaces: true }).tiles[1]).toMatchObject({
-      kind: 'plugin',
-      action: 'open_details',
-    });
-    expect(buildPluginCenterModel(projection).updates).toHaveLength(0);
-  });
-
-  it('does not treat unsigned local installs as official runnable plugins', () => {
-    const projection = projectPluginInventory({
-      officialCatalog: [officialContainers],
-      installedPlugins: [installedRecord({ trust_state: 'unsigned_local' })],
+      installedPlugins: [installedRecord({
+        trust_state: 'needs_review',
+        trust_assessment: {
+          trust_state: 'needs_review',
+          verified_hashes: {
+            package_sha256: packageHash,
+            manifest_sha256: manifestHash,
+            entries_sha256: entriesHash,
+          },
+        },
+      })],
     });
 
     expect(projection.items[0]).toMatchObject({
@@ -189,41 +212,39 @@ describe('plugin inventory projection', () => {
     });
   });
 
-  it('sorts pinned and recently opened plugins deterministically after the center tile', () => {
-    const github: OfficialPluginCatalogItem = {
-      ...officialContainers,
-      pluginID: 'com.redeven.official.github',
-      displayName: 'GitHub',
-      defaultSurfaceID: 'github.activity',
-      iconFallback: 'github',
-    };
-
-    const projection = projectPluginInventory({
-      officialCatalog: [github, officialContainers],
-      installedPlugins: [
-        installedRecord({ plugin_id: github.pluginID, plugin_instance_id: 'plugininst_github', metadata: { pinned: 'true' } }),
-        installedRecord({ plugin_instance_id: 'plugininst_containers', metadata: { last_opened_at: '2026-07-04T11:00:00Z' } }),
-      ],
-    });
-
-    const panel = buildPluginPanelModel(projection);
-    expect(panel.tiles.map((tile) => (tile.kind === 'plugin' ? tile.item.pluginID : tile.id))).toEqual([
-      'plugin-center',
-      github.pluginID,
-      officialContainers.pluginID,
-    ]);
-  });
-
-  it('builds installed, discover, and updates center buckets', () => {
+  it('builds installed and update buckets from the typed registry record', () => {
     const projection = projectPluginInventory({
       officialCatalog: [officialContainers],
-      installedPlugins: [installedRecord({ version: '0.9.0' })],
+      installedPlugins: [installedRecord({ version: '1.9.0' })],
     });
 
     const center = buildPluginCenterModel(projection, 'updates');
     expect(center.installed).toHaveLength(1);
     expect(center.discover).toHaveLength(0);
     expect(center.updates).toHaveLength(1);
-    expect(center.updates[0].lifecycleState).toBe('update_available');
+    expect(center.updates[0]).toMatchObject({
+      lifecycleState: 'update_available',
+      managementRevision: 7,
+    });
   });
+
+  it('orders strict SemVer prereleases before the matching stable release', () => {
+    const projection = projectPluginInventory({
+      officialCatalog: [officialContainers],
+      installedPlugins: [installedRecord({ version: '2.0.0-rc.1' })],
+    });
+
+    expect(projection.items[0]).toMatchObject({ lifecycleState: 'update_available' });
+    expect(buildPluginCenterModel(projection, 'updates').updates).toHaveLength(1);
+  });
+
+  it.each(['v2.0.0', ' 2.0.0', '2.0.0 ', '02.0.0'])(
+    'rejects a non-canonical plugin version %j',
+    (version) => {
+      expect(() => projectPluginInventory({
+        officialCatalog: [officialContainers],
+        installedPlugins: [installedRecord({ version })],
+      })).toThrow('canonical strict SemVer');
+    },
+  );
 });

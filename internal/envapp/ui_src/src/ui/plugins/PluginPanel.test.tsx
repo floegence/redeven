@@ -22,13 +22,16 @@ function pluginItem(overrides: Partial<PluginInventoryItem> = {}): PluginInvento
     description: 'Manage Docker and Podman resources.',
     iconFallback: 'containers',
     publisher: 'Redeven',
-    version: '1.0.0',
+    version: '2.0.0',
+    managementRevision: 23,
     lifecycleState: 'enabled',
     trustBadge: 'official',
     pinned: false,
     defaultLaunchTarget: {
+      pluginID: 'com.redeven.official.containers',
       pluginInstanceID: 'plugininst_containers',
-      surfaceID: 'containers.activity',
+      surfaceID: 'containers.dashboard',
+      expectedManagementRevision: 23,
       preferredPlacement: 'activity',
     },
     ...overrides,
@@ -86,8 +89,10 @@ describe('PluginPanel', () => {
 
     (mount.querySelectorAll('[data-plugin-panel-tile]')[1] as HTMLButtonElement).click();
     expect(onOpenPluginSurface).toHaveBeenCalledWith({
+      pluginID: 'com.redeven.official.containers',
       pluginInstanceID: 'plugininst_containers',
-      surfaceID: 'containers.activity',
+      surfaceID: 'containers.dashboard',
+      expectedManagementRevision: 23,
       preferredPlacement: 'activity',
     });
   });

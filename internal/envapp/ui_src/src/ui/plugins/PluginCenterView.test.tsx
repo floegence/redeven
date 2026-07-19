@@ -1,28 +1,13 @@
 // @vitest-environment jsdom
 
 import { render } from 'solid-js/web';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PluginCenterView } from './PluginCenterView';
+import { OFFICIAL_CONTAINERS_RELEASE_REF } from './officialContainersRelease.generated';
 import type { PluginInventoryProjection } from './pluginTypes';
 
-const pluginApiMocks = vi.hoisted(() => ({
-  executePluginLifecycleCommand: vi.fn(async () => ({})),
-  loadPluginInventoryProjection: vi.fn(),
-}));
-
-vi.mock('./pluginApi', () => ({
-  executePluginLifecycleCommand: pluginApiMocks.executePluginLifecycleCommand,
-  loadPluginInventoryProjection: pluginApiMocks.loadPluginInventoryProjection,
-}));
-
 let dispose: (() => void) | undefined;
-
-beforeEach(() => {
-  pluginApiMocks.executePluginLifecycleCommand.mockClear();
-  pluginApiMocks.loadPluginInventoryProjection.mockReset();
-  pluginApiMocks.loadPluginInventoryProjection.mockResolvedValue(projection);
-});
 
 afterEach(() => {
   dispose?.();
@@ -41,20 +26,20 @@ const containersPlugin = {
   pinned: false,
   officialCatalog: {
     pluginID: 'com.redeven.official.containers',
+    publisherID: 'com.redeven.official',
+    pluginInstanceID: 'plugini_redeven_official_containers',
     displayName: 'Containers',
     description: 'Manage Docker and Podman resources.',
     publisher: 'Redeven',
-    latestVersion: '1.0.0',
-    stableVersion: '1.0.0',
-    minRedevenVersion: '0.1.0',
-    minReDevPluginVersion: '0.1.1',
+    latestVersion: '2.0.0',
+    stableVersion: '2.0.0',
+    minRedevenVersion: '0.9.0',
+    minReDevPluginVersion: '0.5.1',
     rolloutState: 'stable',
-    defaultSurfaceID: 'containers.activity',
+    defaultSurfaceID: 'containers.dashboard',
     iconFallback: 'containers',
     distribution: {
-      releaseChannel: 'github_release_and_redeven_cdn',
-      artifactName: 'containers-1.0.0.redevplugin',
-      officialArtifactPath: 'official/containers/1.0.0/containers-1.0.0.redevplugin',
+      releaseRef: OFFICIAL_CONTAINERS_RELEASE_REF,
     },
   },
 } satisfies PluginInventoryProjection['items'][number];
@@ -65,19 +50,7 @@ const databasePlugin = {
   displayName: 'Database Tools',
   description: 'Inspect local database connections.',
   iconFallback: 'database',
-  officialCatalog: {
-    ...containersPlugin.officialCatalog,
-    pluginID: 'com.redeven.official.database',
-    displayName: 'Database Tools',
-    description: 'Inspect local database connections.',
-    defaultSurfaceID: 'database.activity',
-    iconFallback: 'database',
-    distribution: {
-      ...containersPlugin.officialCatalog.distribution,
-      artifactName: 'database-1.0.0.redevplugin',
-      officialArtifactPath: 'official/database/1.0.0/database-1.0.0.redevplugin',
-    },
-  },
+  officialCatalog: undefined,
 } satisfies PluginInventoryProjection['items'][number];
 
 const projection: PluginInventoryProjection = {
@@ -95,7 +68,9 @@ describe('PluginCenterView', () => {
         loading={false}
         error={null}
         onCommand={vi.fn()}
+        onRefresh={vi.fn()}
         canManagePlugins
+        canOpenPluginSurfaces={false}
       />
     ), mount);
 
@@ -124,7 +99,8 @@ describe('PluginCenterView', () => {
         {
           ...containersPlugin,
           pluginInstanceID: 'plugininst_containers',
-          version: '1.0.0',
+          version: '2.0.0',
+          managementRevision: 7,
           lifecycleState: 'disabled',
           attentionReason: 'disabled',
         },
@@ -140,7 +116,9 @@ describe('PluginCenterView', () => {
         error={null}
         selectedPluginID="com.redeven.official.containers"
         onCommand={vi.fn()}
+        onRefresh={vi.fn()}
         canManagePlugins
+        canOpenPluginSurfaces={false}
       />
     ), mount);
 
@@ -159,6 +137,7 @@ describe('PluginCenterView', () => {
         loading={false}
         error={null}
         onCommand={onCommand}
+        onRefresh={vi.fn()}
         canManagePlugins
         canOpenPluginSurfaces
       />
@@ -167,12 +146,13 @@ describe('PluginCenterView', () => {
     const install = mount.querySelector('[data-plugin-action="install"]') as HTMLButtonElement;
     expect(install.disabled).toBe(false);
     expect(install.textContent).toContain('Install');
+    expect(containersPlugin.officialCatalog.distribution.releaseRef).toBe(OFFICIAL_CONTAINERS_RELEASE_REF);
     install.click();
     expect(onCommand).toHaveBeenCalledWith({
       type: 'install',
       pluginID: 'com.redeven.official.containers',
       source: 'official_catalog',
-    });
+    }, expect.any(AbortSignal));
   });
 
   it('disables management actions when the runtime user cannot manage plugins', () => {
@@ -181,11 +161,14 @@ describe('PluginCenterView', () => {
         {
           ...containersPlugin,
           pluginInstanceID: 'plugininst_containers',
-          version: '1.0.0',
+          version: '2.0.0',
+          managementRevision: 7,
           lifecycleState: 'enabled',
           defaultLaunchTarget: {
+            pluginID: 'com.redeven.official.containers',
             pluginInstanceID: 'plugininst_containers',
-            surfaceID: 'containers.activity',
+            surfaceID: 'containers.dashboard',
+            expectedManagementRevision: 7,
             preferredPlacement: 'activity',
           },
         },
@@ -200,6 +183,7 @@ describe('PluginCenterView', () => {
         loading={false}
         error={null}
         onCommand={vi.fn()}
+        onRefresh={vi.fn()}
         canManagePlugins={false}
         canOpenPluginSurfaces
       />
@@ -217,11 +201,14 @@ describe('PluginCenterView', () => {
         {
           ...containersPlugin,
           pluginInstanceID: 'plugininst_containers',
-          version: '1.0.0',
+          version: '2.0.0',
+          managementRevision: 11,
           lifecycleState: 'enabled',
           defaultLaunchTarget: {
+            pluginID: 'com.redeven.official.containers',
             pluginInstanceID: 'plugininst_containers',
-            surfaceID: 'containers.activity',
+            surfaceID: 'containers.dashboard',
+            expectedManagementRevision: 11,
             preferredPlacement: 'activity',
           },
         },
@@ -236,6 +223,7 @@ describe('PluginCenterView', () => {
         loading={false}
         error={null}
         onCommand={onCommand}
+        onRefresh={vi.fn()}
         canManagePlugins
         canOpenPluginSurfaces
       />
@@ -246,10 +234,12 @@ describe('PluginCenterView', () => {
     open.click();
     expect(onCommand).toHaveBeenCalledWith({
       type: 'open_surface',
+      pluginID: 'com.redeven.official.containers',
       pluginInstanceID: 'plugininst_containers',
-      surfaceID: 'containers.activity',
+      surfaceID: 'containers.dashboard',
+      expectedManagementRevision: 11,
       placement: 'activity',
-    });
+    }, expect.any(AbortSignal));
   });
 
   it('updates official catalog packages through the bundled lifecycle API', () => {
@@ -259,7 +249,8 @@ describe('PluginCenterView', () => {
         {
           ...containersPlugin,
           pluginInstanceID: 'plugininst_containers',
-          version: '0.9.0',
+          version: '1.9.0',
+          managementRevision: 13,
           lifecycleState: 'update_available',
         },
       ],
@@ -273,7 +264,9 @@ describe('PluginCenterView', () => {
         loading={false}
         error={null}
         onCommand={onCommand}
+        onRefresh={vi.fn()}
         canManagePlugins
+        canOpenPluginSurfaces={false}
       />
     ), mount);
 
@@ -284,8 +277,9 @@ describe('PluginCenterView', () => {
       type: 'update',
       pluginID: 'com.redeven.official.containers',
       pluginInstanceID: 'plugininst_containers',
-      targetVersion: '1.0.0',
-    });
+      expectedManagementRevision: 13,
+      targetVersion: '2.0.0',
+    }, expect.any(AbortSignal));
   });
 
   it('does not offer enable for plugins that need trust attention or updates', () => {
@@ -294,7 +288,8 @@ describe('PluginCenterView', () => {
         {
           ...containersPlugin,
           pluginInstanceID: 'plugininst_containers',
-          version: '1.0.0',
+          version: '2.0.0',
+          managementRevision: 17,
           lifecycleState: 'needs_attention',
           trustBadge: 'unavailable',
           attentionReason: 'trust_unavailable',
@@ -306,7 +301,8 @@ describe('PluginCenterView', () => {
         {
           ...containersPlugin,
           pluginInstanceID: 'plugininst_containers',
-          version: '0.9.0',
+          version: '1.9.0',
+          managementRevision: 19,
           lifecycleState: 'update_available',
         },
       ],
@@ -320,7 +316,9 @@ describe('PluginCenterView', () => {
         loading={false}
         error={null}
         onCommand={vi.fn()}
+        onRefresh={vi.fn()}
         canManagePlugins
+        canOpenPluginSurfaces={false}
       />
     ), mount);
 
@@ -336,7 +334,9 @@ describe('PluginCenterView', () => {
         loading={false}
         error={null}
         onCommand={vi.fn()}
+        onRefresh={vi.fn()}
         canManagePlugins
+        canOpenPluginSurfaces={false}
       />
     ), mount);
 
@@ -344,17 +344,59 @@ describe('PluginCenterView', () => {
     expect(mount.querySelector('[data-plugin-action="enable"]')).toBeNull();
   });
 
-  it('loads live plugin inventory when no projection is injected', async () => {
+  it('uses explicit inventory and refresh props without owning an implicit API client', () => {
+    const onRefresh = vi.fn();
     const mount = document.createElement('div');
     document.body.append(mount);
 
-    dispose = render(() => <PluginCenterView />, mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={projection}
+        loading={false}
+        error={null}
+        canManagePlugins
+        canOpenPluginSurfaces={false}
+        onRefresh={onRefresh}
+        onCommand={vi.fn()}
+      />
+    ), mount);
 
+    (mount.querySelector('[data-plugin-center-refresh]') as HTMLButtonElement).click();
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it('admits one management mutation at a time and supplies an abort signal', async () => {
+    let finish!: () => void;
+    const onCommand = vi.fn((_command, signal: AbortSignal) => {
+      expect(signal.aborted).toBe(false);
+      return new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+    });
+    const mount = document.createElement('div');
+    document.body.append(mount);
+
+    dispose = render(() => (
+      <PluginCenterView
+        projection={projection}
+        loading={false}
+        error={null}
+        canManagePlugins
+        canOpenPluginSurfaces={false}
+        onRefresh={vi.fn()}
+        onCommand={onCommand}
+      />
+    ), mount);
+
+    const install = mount.querySelector('[data-plugin-action="install"]') as HTMLButtonElement;
+    install.click();
+    install.click();
+    expect(onCommand).toHaveBeenCalledTimes(1);
+    expect(install.disabled).toBe(true);
+
+    finish();
     await Promise.resolve();
     await Promise.resolve();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-
-    expect(pluginApiMocks.loadPluginInventoryProjection).toHaveBeenCalledTimes(1);
-    expect(mount.textContent).toContain('Containers');
+    expect(install.disabled).toBe(false);
   });
 });

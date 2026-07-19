@@ -3,6 +3,8 @@
 import { For, Show, createContext, createEffect, createSignal, onCleanup, onMount, useContext, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { OFFICIAL_CONTAINERS_RELEASE_REF } from './plugins/officialContainersRelease.generated';
+import type { PluginInventoryProjection } from './plugins/pluginTypes';
 import { NETWORK_EXPOSURE_WARNING_PREFERENCE_STORAGE_KEY } from './security/networkExposureWarningPreference';
 
 const getLocalRuntimeMock = vi.fn();
@@ -50,14 +52,111 @@ const activitySurfaceLifecycleState = vi.hoisted(() => ({
   codexSidebarMounts: 0,
   codexSidebarCleanups: 0,
 }));
-const pluginApiMocks = vi.hoisted(() => ({
-  executePluginLifecycleCommand: vi.fn(async (_command: any) => ({})),
-  loadPluginInventoryProjection: vi.fn(),
+const pluginLifecycleMocks = vi.hoisted(() => {
+  const listInstalledPlugins = vi.fn(async () => []);
+  const loadInventoryProjection = vi.fn();
+  const execute = vi.fn(async (_command: any) => ({}));
+  return {
+    listInstalledPlugins,
+    loadInventoryProjection,
+    execute,
+    createPluginLifecycleAPI: vi.fn(() => ({
+      listInstalledPlugins,
+      loadInventoryProjection,
+      execute,
+    })),
+  };
+});
+const pluginSurfaceFrameState = vi.hoisted(() => ({
+  lastProps: null as any,
 }));
+const pluginCenterViewState = vi.hoisted(() => ({
+  lastProps: null as any,
+}));
+const pluginPlatformMocks = vi.hoisted(() => {
+  const client = {};
+  const close = vi.fn(async () => undefined);
+  const coordinator = {
+    open: vi.fn(),
+    setVisible: vi.fn(),
+    fail: vi.fn(async () => undefined),
+    release: vi.fn(async () => undefined),
+    closeActive: vi.fn(async () => undefined),
+    disposeActive: vi.fn(async () => undefined),
+    dispose: vi.fn(async () => undefined),
+  };
+  const state = {
+    onMutationOutcomeUnknown: undefined as undefined | (() => void),
+  };
+  return {
+    client,
+    close,
+    coordinator,
+    state,
+    createRedevenPluginPlatform: vi.fn((options?: { onMutationOutcomeUnknown?: () => void }) => {
+      state.onMutationOutcomeUnknown = options?.onMutationOutcomeUnknown;
+      return { client, close };
+    }),
+    createPluginSurfacePlacementCoordinator: vi.fn(() => coordinator),
+  };
+});
 const terminalFeaturePreloadMocks = vi.hoisted(() => ({
   preloadTerminalFeatureResources: vi.fn(async () => undefined),
   scheduleTerminalFeaturePreload: vi.fn(() => () => undefined),
 }));
+
+const officialContainersCatalog = {
+  pluginID: 'com.redeven.official.containers',
+  publisherID: 'com.redeven.official',
+  pluginInstanceID: 'plugini_redeven_official_containers',
+  displayName: 'Containers',
+  description: "Manage Docker and Podman resources through Redeven's official container capability.",
+  publisher: 'Redeven',
+  latestVersion: '2.0.0',
+  stableVersion: '2.0.0',
+  minRedevenVersion: '0.9.0',
+  minReDevPluginVersion: '0.5.1',
+  rolloutState: 'stable',
+  defaultSurfaceID: 'containers.dashboard',
+  iconFallback: 'containers',
+  distribution: {
+    releaseRef: OFFICIAL_CONTAINERS_RELEASE_REF,
+  },
+} as const;
+
+function officialContainersProjection(
+  state: 'not_installed' | 'disabled' | 'enabled' = 'not_installed',
+): PluginInventoryProjection {
+  const installed = state !== 'not_installed';
+  return {
+    items: [{
+      pluginID: officialContainersCatalog.pluginID,
+      ...(installed ? {
+        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
+        version: officialContainersCatalog.stableVersion,
+        managementRevision: 11,
+      } : {}),
+      displayName: officialContainersCatalog.displayName,
+      description: officialContainersCatalog.description,
+      iconFallback: officialContainersCatalog.iconFallback,
+      publisher: officialContainersCatalog.publisher,
+      lifecycleState: state,
+      trustBadge: 'official',
+      pinned: false,
+      ...(state === 'disabled' ? { attentionReason: 'disabled' as const } : {}),
+      ...(state === 'enabled' ? {
+        defaultLaunchTarget: {
+          pluginID: officialContainersCatalog.pluginID,
+          pluginInstanceID: officialContainersCatalog.pluginInstanceID,
+          surfaceID: officialContainersCatalog.defaultSurfaceID,
+          expectedManagementRevision: 11,
+          preferredPlacement: 'activity' as const,
+        },
+      } : {}),
+      officialCatalog: officialContainersCatalog,
+    }],
+  };
+}
 
 const connectMock = vi.fn(async (_config: Record<string, unknown>) => {
   protocolStatus = 'connected';
@@ -396,6 +495,16 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       {props.children}
     </button>
   ),
+  ConfirmDialog: (props: any) => (
+    <Show when={props.open}>
+      <section role="alertdialog" aria-label={props.title}>
+        <h2>{props.title}</h2>
+        {props.children}
+        <button type="button" onClick={() => props.onOpenChange?.(false)}>Cancel</button>
+        <button type="button" onClick={() => props.onConfirm?.()}>Confirm</button>
+      </section>
+    </Show>
+  ),
   Dialog: (props: any) => (
     <Show when={props.open}>
       <section role="dialog" aria-label={props.title} class={props.class}>
@@ -469,16 +578,23 @@ vi.mock('./notes/NotesOverlay', () => ({
 }));
 
 vi.mock('./plugins/PluginSurfaceFrame', () => ({
-  PluginSurfaceFrame: (props: any) => (
-    <section
-      data-plugin-surface-host
-      data-plugin-id={props.surface?.plugin_id ?? ''}
-      data-surface-id={props.surface?.surface_id ?? ''}
-    >
-      <button type="button" aria-label="Close Plugin Surface" onClick={() => props.onClose?.()}>Close</button>
-      <iframe data-plugin-surface-iframe />
-    </section>
-  ),
+  PluginSurfaceFrame: (props: any) => {
+    pluginSurfaceFrameState.lastProps = props;
+    return (
+      <section
+        data-plugin-surface-host
+        data-plugin-id={props.target?.pluginID ?? ''}
+        data-plugin-instance-id={props.target?.pluginInstanceID ?? ''}
+        data-surface-id={props.target?.surfaceID ?? ''}
+        data-placement={props.target?.preferredPlacement ?? ''}
+        data-management-revision={String(props.target?.expectedManagementRevision ?? '')}
+        data-visible={String(Boolean(props.visible))}
+      >
+        <button type="button" aria-label="Close Plugin Surface" onClick={() => props.onClose?.()}>Close</button>
+        <iframe data-plugin-surface-iframe />
+      </section>
+    );
+  },
 }));
 vi.mock('./plugins/PluginPanel', () => ({
   PluginPanel: (props: any) => (
@@ -510,15 +626,18 @@ vi.mock('./plugins/PluginPanel', () => ({
   ),
 }));
 vi.mock('./plugins/PluginCenterView', () => ({
-  PluginCenterView: (props: any) => (
-    <section data-plugin-center-view data-plugin-center-shell>
-      <Show when={props.selectedPluginID}>
-        <div data-plugin-center-item={props.selectedPluginID}>Selected plugin</div>
-        <div data-plugin-center-details>Disabled</div>
-      </Show>
-      <button type="button" aria-label="Close Plugin Center" onClick={() => props.onClose?.()}>Close</button>
-    </section>
-  ),
+  PluginCenterView: (props: any) => {
+    pluginCenterViewState.lastProps = props;
+    return (
+      <section data-plugin-center-view data-plugin-center-shell>
+        <Show when={props.selectedPluginID}>
+          <div data-plugin-center-item={props.selectedPluginID}>Selected plugin</div>
+          <div data-plugin-center-details>Disabled</div>
+        </Show>
+        <button type="button" aria-label="Close Plugin Center" onClick={() => props.onClose?.()}>Close</button>
+      </section>
+    );
+  },
 }));
 
 vi.mock('@floegence/floe-webapp-core/icons', () => {
@@ -777,8 +896,11 @@ vi.mock('./services/localApi', () => ({
   unlockEnvAppAccess: unlockEnvAppAccessMock,
 }));
 vi.mock('./plugins/pluginApi', () => ({
-  executePluginLifecycleCommand: pluginApiMocks.executePluginLifecycleCommand,
-  loadPluginInventoryProjection: pluginApiMocks.loadPluginInventoryProjection,
+  createPluginLifecycleAPI: pluginLifecycleMocks.createPluginLifecycleAPI,
+}));
+vi.mock('./plugins/pluginPlatform', () => ({
+  createRedevenPluginPlatform: pluginPlatformMocks.createRedevenPluginPlatform,
+  createPluginSurfacePlacementCoordinator: pluginPlatformMocks.createPluginSurfacePlacementCoordinator,
 }));
 vi.mock('./services/sandboxWindowRegistry', () => ({ getSandboxWindowInfo: () => null }));
 vi.mock('./pages/EnvContext', () => ({
@@ -939,56 +1061,27 @@ beforeEach(() => {
   accessResumeMock.mockImplementation(async ({ token }: { token: string }) => {
     resumeCalls.push(token);
   });
-  pluginApiMocks.executePluginLifecycleCommand.mockClear();
-  pluginApiMocks.executePluginLifecycleCommand.mockImplementation(async (command: any) => (
-    command?.type === 'open_surface'
-      ? {
-          plugin_id: 'com.redeven.official.containers',
-          plugin_instance_id: 'plugininst_containers',
-          surface_id: 'containers.activity',
-          surface_instance_id: 'surface_containers',
-          active_fingerprint: 'sha256:official-containers',
-          asset_ticket: 'asset_ticket_containers',
-          asset_ticket_id: 'assetticket_containers',
-          bridge_nonce: 'bridge_nonce_containers',
-        }
-      : {}
-  ));
-  pluginApiMocks.loadPluginInventoryProjection.mockReset();
+  pluginLifecycleMocks.createPluginLifecycleAPI.mockClear();
+  pluginLifecycleMocks.listInstalledPlugins.mockClear();
+  pluginLifecycleMocks.loadInventoryProjection.mockReset();
+  pluginLifecycleMocks.execute.mockReset();
+  pluginLifecycleMocks.execute.mockImplementation(async (_command: any) => ({}));
+  pluginSurfaceFrameState.lastProps = null;
+  pluginCenterViewState.lastProps = null;
+  pluginPlatformMocks.createRedevenPluginPlatform.mockClear();
+  pluginPlatformMocks.createPluginSurfacePlacementCoordinator.mockClear();
+  pluginPlatformMocks.close.mockClear();
+  pluginPlatformMocks.coordinator.open.mockClear();
+  pluginPlatformMocks.coordinator.setVisible.mockClear();
+  pluginPlatformMocks.coordinator.fail.mockClear();
+  pluginPlatformMocks.coordinator.release.mockClear();
+  pluginPlatformMocks.coordinator.closeActive.mockClear();
+  pluginPlatformMocks.coordinator.disposeActive.mockClear();
+  pluginPlatformMocks.state.onMutationOutcomeUnknown = undefined;
+  pluginPlatformMocks.coordinator.dispose.mockClear();
   terminalFeaturePreloadMocks.preloadTerminalFeatureResources.mockClear();
   terminalFeaturePreloadMocks.scheduleTerminalFeaturePreload.mockClear();
-  pluginApiMocks.loadPluginInventoryProjection.mockResolvedValue({
-    items: [
-      {
-        pluginID: 'com.redeven.official.containers',
-        displayName: 'Containers',
-        description: 'Manage Docker and Podman resources.',
-        iconFallback: 'containers',
-        publisher: 'Redeven',
-        lifecycleState: 'not_installed',
-        trustBadge: 'official',
-        pinned: false,
-        officialCatalog: {
-          pluginID: 'com.redeven.official.containers',
-          displayName: 'Containers',
-          description: 'Manage Docker and Podman resources.',
-          publisher: 'Redeven',
-          latestVersion: '1.0.0',
-          stableVersion: '1.0.0',
-          minRedevenVersion: '0.1.0',
-          minReDevPluginVersion: '0.1.1',
-          rolloutState: 'stable',
-          defaultSurfaceID: 'containers.activity',
-          iconFallback: 'containers',
-          distribution: {
-            releaseChannel: 'github_release_and_redeven_cdn',
-            artifactName: 'containers-1.0.0.redevplugin',
-            officialArtifactPath: 'official/containers/1.0.0/containers-1.0.0.redevplugin',
-          },
-        },
-      },
-    ],
-  });
+  pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection());
   getLocalRuntimeMock.mockResolvedValue({ mode: 'local', env_public_id: 'env_local', direct_ws_url: 'ws://localhost/_redeven_direct/ws' });
   refreshLocalRuntimeMock.mockResolvedValue({ mode: 'local', env_public_id: 'env_local', direct_ws_url: 'ws://localhost/_redeven_direct/ws' });
   getLocalAccessStatusMock.mockResolvedValue({ password_required: true, unlocked: false });
@@ -1402,7 +1495,7 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushAsync();
 
       (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
-      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="plugin-center"]')));
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="plugin-center"]')), 40);
 
       (host.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement | null)?.click();
       await flushUntil(() => Boolean(host.querySelector('[data-plugin-center-view]')));
@@ -1412,6 +1505,52 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(host.querySelector('[data-testid="settings-page"]')).toBeNull();
       expect(settingsPageState.focusSection).not.toBe('plugins');
       expect(sidebarActiveTabValue).toBe('plugin-center');
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('keeps an unknown-outcome mutation lane closed until local surface invalidation completes', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('not_installed'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const unknownOutcome = new Error('plugin mutation outcome is unknown');
+    let finishDisposal!: () => void;
+    pluginPlatformMocks.coordinator.disposeActive.mockImplementationOnce(() => new Promise<undefined>((resolve) => {
+      finishDisposal = () => resolve(undefined);
+    }));
+    pluginLifecycleMocks.execute.mockImplementationOnce(async () => {
+      pluginPlatformMocks.state.onMutationOutcomeUnknown?.();
+      throw unknownOutcome;
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushAsync();
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="plugin-center"]')), 40);
+      (host.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand), 40);
+
+      let settled = false;
+      const command = Promise.resolve(pluginCenterViewState.lastProps.onCommand({
+        type: 'install',
+        pluginID: officialContainersCatalog.pluginID,
+        source: 'official_catalog',
+      }, new AbortController().signal));
+      void command.then(() => { settled = true; }, () => { settled = true; });
+      await flushAsync();
+      expect(pluginPlatformMocks.coordinator.disposeActive).toHaveBeenCalledTimes(1);
+      expect(settled).toBe(false);
+
+      finishDisposal();
+      await expect(command).rejects.toBe(unknownOutcome);
     } finally {
       dispose();
     }
@@ -1458,41 +1597,7 @@ describe('EnvAppShell environment entry affordances', () => {
   it('routes disabled plugin panel tiles to the dedicated Plugin Center details', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    pluginApiMocks.loadPluginInventoryProjection.mockResolvedValue({
-      items: [
-        {
-          pluginID: 'com.redeven.official.containers',
-          pluginInstanceID: 'plugininst_containers',
-          displayName: 'Containers',
-          description: 'Manage Docker and Podman resources.',
-          iconFallback: 'containers',
-          publisher: 'Redeven',
-          version: '1.0.0',
-          lifecycleState: 'disabled',
-          trustBadge: 'official',
-          pinned: false,
-          attentionReason: 'disabled',
-          officialCatalog: {
-            pluginID: 'com.redeven.official.containers',
-            displayName: 'Containers',
-            description: 'Manage Docker and Podman resources.',
-            publisher: 'Redeven',
-            latestVersion: '1.0.0',
-            stableVersion: '1.0.0',
-            minRedevenVersion: '0.1.0',
-            minReDevPluginVersion: '0.1.1',
-            rolloutState: 'stable',
-            defaultSurfaceID: 'containers.activity',
-            iconFallback: 'containers',
-            distribution: {
-              releaseChannel: 'github_release_and_redeven_cdn',
-              artifactName: 'containers-1.0.0.redevplugin',
-              officialArtifactPath: 'official/containers/1.0.0/containers-1.0.0.redevplugin',
-            },
-          },
-        },
-      ],
-    });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('disabled'));
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
 
     const host = document.createElement('div');
@@ -1526,55 +1631,7 @@ describe('EnvAppShell environment entry affordances', () => {
   it('opens enabled plugin panel tiles in the sandboxed plugin surface activity', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    pluginApiMocks.executePluginLifecycleCommand.mockResolvedValueOnce({
-      plugin_id: 'com.redeven.official.containers',
-      plugin_instance_id: 'plugininst_containers',
-      surface_id: 'containers.activity',
-      surface_instance_id: 'surface_containers_1',
-      active_fingerprint: 'sha256:containers',
-      asset_ticket: 'asset_ticket_1',
-      asset_ticket_id: 'asset_ticket_id_1',
-      bridge_nonce: 'bridge_nonce_1',
-    });
-    pluginApiMocks.loadPluginInventoryProjection.mockResolvedValue({
-      items: [
-        {
-          pluginID: 'com.redeven.official.containers',
-          pluginInstanceID: 'plugininst_containers',
-          displayName: 'Containers',
-          description: 'Manage Docker and Podman resources.',
-          iconFallback: 'containers',
-          publisher: 'Redeven',
-          version: '1.0.0',
-          lifecycleState: 'enabled',
-          trustBadge: 'official',
-          pinned: false,
-          defaultLaunchTarget: {
-            pluginInstanceID: 'plugininst_containers',
-            surfaceID: 'containers.activity',
-            preferredPlacement: 'activity',
-          },
-          officialCatalog: {
-            pluginID: 'com.redeven.official.containers',
-            displayName: 'Containers',
-            description: 'Manage Docker and Podman resources.',
-            publisher: 'Redeven',
-            latestVersion: '1.0.0',
-            stableVersion: '1.0.0',
-            minRedevenVersion: '0.1.0',
-            minReDevPluginVersion: '0.1.1',
-            rolloutState: 'stable',
-            defaultSurfaceID: 'containers.activity',
-            iconFallback: 'containers',
-            distribution: {
-              releaseChannel: 'github_release_and_redeven_cdn',
-              artifactName: 'containers-1.0.0.redevplugin',
-              officialArtifactPath: 'official/containers/1.0.0/containers-1.0.0.redevplugin',
-            },
-          },
-        },
-      ],
-    });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
 
     const host = document.createElement('div');
@@ -1600,13 +1657,37 @@ describe('EnvAppShell environment entry affordances', () => {
       const main = host.querySelector('[data-floe-shell-slot="main"]');
       expect(surfaceHost).toBeTruthy();
       expect(main?.contains(surfaceHost)).toBe(true);
-      expect(surfaceHost?.getAttribute('data-plugin-id')).toBe('com.redeven.official.containers');
-      expect(pluginApiMocks.executePluginLifecycleCommand).toHaveBeenCalledWith({
-        type: 'open_surface',
-        pluginInstanceID: 'plugininst_containers',
-        surfaceID: 'containers.activity',
-        placement: 'activity',
+      expect(surfaceHost).toMatchObject({
+        dataset: expect.objectContaining({
+          pluginId: officialContainersCatalog.pluginID,
+          pluginInstanceId: officialContainersCatalog.pluginInstanceID,
+          surfaceId: officialContainersCatalog.defaultSurfaceID,
+          placement: 'activity',
+          managementRevision: '11',
+          visible: 'true',
+        }),
       });
+      expect(pluginSurfaceFrameState.lastProps?.target).toEqual({
+        pluginID: officialContainersCatalog.pluginID,
+        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
+        surfaceID: officialContainersCatalog.defaultSurfaceID,
+        expectedManagementRevision: 11,
+        preferredPlacement: 'activity',
+      });
+      expect(pluginSurfaceFrameState.lastProps?.coordinator).toMatchObject({
+        open: expect.any(Function),
+        setVisible: expect.any(Function),
+        fail: expect.any(Function),
+        release: expect.any(Function),
+        closeActive: expect.any(Function),
+        disposeActive: expect.any(Function),
+      });
+      expect(pluginSurfaceFrameState.lastProps?.confirmationQueue).toMatchObject({
+        createHandler: expect.any(Function),
+        cancelOwner: expect.any(Function),
+      });
+      expect(pluginSurfaceFrameState.lastProps?.onRetirementError).toEqual(expect.any(Function));
+      expect(pluginLifecycleMocks.execute).not.toHaveBeenCalled();
       expect(host.querySelector('[data-plugin-center-view]')).toBeNull();
       expect(host.querySelector('[data-testid="settings-page"]')).toBeNull();
       expect(settingsPageState.focusSection).not.toBe('plugins');
@@ -1614,10 +1695,45 @@ describe('EnvAppShell environment entry affordances', () => {
 
       (host.querySelector('[aria-label="Close Plugin Surface"]') as HTMLButtonElement | null)?.click();
       await flushUntil(() => sidebarActiveTabValue === 'terminal');
-      const hiddenPluginSurface = host.querySelector('[data-plugin-surface-host]');
-      expect(hiddenPluginSurface).toBeTruthy();
-      expect((hiddenPluginSurface?.closest('[data-testid="activity-view-plugin-surface"]') as HTMLElement | null)?.style.display).toBe('none');
+      await flushUntil(() => !host.querySelector('[data-plugin-surface-host]'));
+      expect(host.querySelector('[data-plugin-surface-host]')).toBeNull();
+      expect(pluginPlatformMocks.coordinator.closeActive).toHaveBeenCalled();
       expect(sidebarActiveTabValue).toBe('terminal');
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('rejects Workbench plugin placement until the released SDK owns cross-iframe interaction events', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="plugin-center"]')));
+      (host.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand));
+
+      await expect(pluginCenterViewState.lastProps.onCommand({
+        type: 'open_surface',
+        pluginID: officialContainersCatalog.pluginID,
+        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
+        surfaceID: officialContainersCatalog.defaultSurfaceID,
+        expectedManagementRevision: 11,
+        placement: 'workbench',
+      })).rejects.toThrow('Plugin surface failed');
+
+      expect(pluginSurfaceFrameState.lastProps).toBeNull();
+      expect(host.querySelector('[data-plugin-surface-host]')).toBeNull();
     } finally {
       dispose();
     }

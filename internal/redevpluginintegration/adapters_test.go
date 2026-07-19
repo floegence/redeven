@@ -12,7 +12,6 @@ import (
 	"testing"
 
 	"github.com/floegence/redeven/internal/auditlog"
-	"github.com/floegence/redeven/internal/capabilities/containers"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/session"
@@ -71,12 +70,100 @@ func TestSessionAdapterDerivesIdentityAndPermissionsFromAuthenticatedSession(t *
 	}); err != nil {
 		t.Fatalf("direct Host read authorization error = %v", err)
 	}
+	for _, request := range []host.AuthorizationRequest{
+		{
+			Session: sessionContext,
+			Action:  host.ManagementActionDisposeSurface,
+			Target:  host.AuthorizationTarget{Kind: host.ResourceSurface, ID: "surface_123"},
+		},
+		{
+			Session: sessionContext,
+			Action:  host.ManagementActionRevokeSurfaceScope,
+			Target:  host.AuthorizationTarget{Kind: host.ResourceSurface, Collection: true},
+		},
+	} {
+		if err := adapter.Authorize(context.Background(), request); err != nil {
+			t.Fatalf("read-authorized surface teardown %s error = %v", request.Action, err)
+		}
+	}
 	if err := adapter.Authorize(context.Background(), host.AuthorizationRequest{
 		Session: sessionContext,
 		Action:  host.ManagementActionPatchPluginSettings,
 		Target:  host.AuthorizationTarget{Kind: host.ResourceSettings, ID: "plugini_123"},
 	}); !errors.Is(err, host.ErrActionDenied) {
 		t.Fatalf("direct Host write authorization error = %v, want ErrActionDenied", err)
+	}
+}
+
+func TestSessionAdapterOwnsPermissionPolicySnapshot(t *testing.T) {
+	policy := testPermissionPolicy(t, "read_only")
+	adapter, err := newSessionAdapter(func(channelID string) (*session.Meta, bool) {
+		return &session.Meta{
+			ChannelID:    channelID,
+			EndpointID:   "env_snapshot",
+			UserPublicID: "user_snapshot",
+			CanRead:      true,
+		}, true
+	}, policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy.LocalMax.Read = false
+
+	resolved, err := adapter.resolver.ResolveSession(context.Background(), "ch_snapshot")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := adapter.Authorize(context.Background(), host.AuthorizationRequest{
+		Session: resolved,
+		Action:  host.ManagementActionListPlugins,
+		Target:  host.AuthorizationTarget{Kind: host.ResourcePlugin, Collection: true},
+	}); err != nil {
+		t.Fatalf("authorization changed after caller mutated its policy: %v", err)
+	}
+}
+
+func TestMethodAuthorizationDefersExactEffectToLocalPolicy(t *testing.T) {
+	for _, testCase := range []struct {
+		name  string
+		perms sessionPermissions
+	}{
+		{name: "read", perms: sessionPermissions{read: true}},
+		{name: "write", perms: sessionPermissions{write: true}},
+		{name: "execute", perms: sessionPermissions{execute: true}},
+		{name: "admin", perms: sessionPermissions{admin: true}},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			for _, action := range []host.ManagementAction{
+				host.ManagementActionCallPluginMethod,
+				host.ManagementActionPrepareMethodConfirmation,
+				host.ManagementActionInvokeIntent,
+				host.ManagementActionCancelOperation,
+				host.ManagementActionCancelSurfaceOperation,
+			} {
+				if !permissionsAllowAction(testCase.perms, action) {
+					t.Fatalf("%s unexpectedly denied for %+v", action, testCase.perms)
+				}
+			}
+		})
+	}
+	if permissionsAllowAction(sessionPermissions{}, host.ManagementActionCallPluginMethod) {
+		t.Fatal("method call accepted without any data-plane permission")
+	}
+}
+
+func TestSharedRuntimeManagementRequiresAdmin(t *testing.T) {
+	for _, action := range []host.ManagementAction{
+		host.ManagementActionStartRuntime,
+		host.ManagementActionStopRuntime,
+		host.ManagementActionRefreshEnabledPlugins,
+	} {
+		if permissionsAllowAction(sessionPermissions{execute: true}, action) {
+			t.Fatalf("%s accepted execute-only shared runtime control", action)
+		}
+		if !permissionsAllowAction(sessionPermissions{admin: true}, action) {
+			t.Fatalf("%s denied admin shared runtime control", action)
+		}
 	}
 }
 
@@ -295,15 +382,11 @@ func TestPackageTrustVerifierUsesV5Provenance(t *testing.T) {
 
 func TestNewCreatesDurableReDevPluginState(t *testing.T) {
 	stateDir := t.TempDir()
-	configPath := filepath.Join(stateDir, "config.json")
-	if err := config.Save(configPath, &config.Config{PermissionPolicy: testPermissionPolicy(t, "execute_read")}); err != nil {
-		t.Fatalf("save config: %v", err)
-	}
 	integration, err := New(context.Background(), Options{
-		StateDir:    stateDir,
-		ConfigPath:  configPath,
-		RuntimePath: filepath.Join(stateDir, "redevplugin-runtime"),
-		Containers:  containers.NewAdapter(nil),
+		StateDir:         stateDir,
+		PermissionPolicy: testPermissionPolicy(t, "execute_read"),
+		RuntimePath:      filepath.Join(stateDir, "redevplugin-runtime"),
+		Containers:       mustContainersAdapter(t, &capabilityEngineClient{}),
 		ResolveSessionMeta: func(string) (*session.Meta, bool) {
 			return nil, false
 		},
@@ -328,15 +411,11 @@ func TestNewCreatesDurableReDevPluginState(t *testing.T) {
 
 func TestNewRejectsNonCanonicalRuntimePath(t *testing.T) {
 	stateDir := t.TempDir()
-	configPath := filepath.Join(stateDir, "config.json")
-	if err := config.Save(configPath, &config.Config{PermissionPolicy: testPermissionPolicy(t, "execute_read")}); err != nil {
-		t.Fatal(err)
-	}
 	_, err := New(context.Background(), Options{
 		StateDir:           stateDir,
-		ConfigPath:         configPath,
+		PermissionPolicy:   testPermissionPolicy(t, "execute_read"),
 		RuntimePath:        "redevplugin-runtime",
-		Containers:         containers.NewAdapter(nil),
+		Containers:         mustContainersAdapter(t, &capabilityEngineClient{}),
 		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
 	})
 	if err == nil || !strings.Contains(err.Error(), "absolute canonical path") {
@@ -344,19 +423,28 @@ func TestNewRejectsNonCanonicalRuntimePath(t *testing.T) {
 	}
 }
 
-func TestNewRejectsUnreadablePermissionPolicy(t *testing.T) {
-	stateDir := t.TempDir()
-	configPath := filepath.Join(stateDir, "config.json")
-	if err := os.WriteFile(configPath, []byte(`{"permission_policy":`), 0o600); err != nil {
-		t.Fatal(err)
-	}
+func TestNewRejectsMissingPermissionPolicy(t *testing.T) {
 	_, err := New(context.Background(), Options{
-		StateDir:           stateDir,
-		ConfigPath:         configPath,
+		StateDir:           t.TempDir(),
 		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
 	})
 	if err == nil {
-		t.Fatal("New() unexpectedly accepted an invalid permission policy config")
+		t.Fatal("New() unexpectedly accepted a missing permission policy")
+	}
+}
+
+func TestNewRejectsMissingContainerAdapterBeforeCreatingState(t *testing.T) {
+	stateDir := filepath.Join(t.TempDir(), "not-created")
+	_, err := New(context.Background(), Options{
+		StateDir:           stateDir,
+		PermissionPolicy:   testPermissionPolicy(t, "execute_read"),
+		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
+	})
+	if err == nil || !strings.Contains(err.Error(), "container engine client is required") {
+		t.Fatalf("New() container adapter error = %v", err)
+	}
+	if _, statErr := os.Stat(stateDir); !errors.Is(statErr, os.ErrNotExist) {
+		t.Fatalf("invalid adapter created persistent state: %v", statErr)
 	}
 }
 

@@ -22,16 +22,6 @@ function parseReportPath(args) {
   return path.resolve(value);
 }
 
-function parsePluginEntryExpectation(args) {
-  const index = args.indexOf('--expect-plugin-entry');
-  if (index === -1) return 'hidden';
-  const value = String(args[index + 1] ?? '').trim();
-  if (value !== 'hidden' && value !== 'visible') {
-    throw new Error('--expect-plugin-entry requires hidden or visible');
-  }
-  return value;
-}
-
 function contentType(filePath) {
   switch (path.extname(filePath).toLowerCase()) {
     case '.css': return 'text/css; charset=utf-8';
@@ -87,8 +77,8 @@ async function createBuiltDistServer() {
         });
         return;
       }
-      if (requestURL.pathname === '/_redeven_proxy/api/plugins/catalog') {
-        jsonResponse(response, { plugins: [] });
+      if (requestURL.pathname === '/_redevplugin/api/plugins/catalog') {
+        jsonResponse(response, { ok: true, data: { plugins: [] } });
         return;
       }
 
@@ -141,7 +131,6 @@ async function createBuiltDistServer() {
 async function main() {
   const args = process.argv.slice(2);
   const reportPath = parseReportPath(args);
-  const pluginEntryExpectation = parsePluginEntryExpectation(args);
   const indexHTML = await readFile(path.join(distDir, 'index.html'), 'utf8');
   const initialAssetPaths = Array.from(indexHTML.matchAll(/(?:src|href)="(\/_redeven_proxy\/env\/assets\/[^"]+)"/g))
     .map((match) => match[1]);
@@ -194,7 +183,7 @@ async function main() {
   });
   page.on('request', (request) => {
     const requestPath = new URL(request.url()).pathname;
-    if (requestPath.startsWith('/_redeven_proxy/api/plugins')) {
+    if (requestPath.startsWith('/_redevplugin/api/plugins')) {
       pluginRequests.push({ method: request.method(), path: requestPath });
     }
   });
@@ -228,32 +217,13 @@ async function main() {
 
     const pluginEntry = page.getByRole('button', { name: 'Plugins', exact: true });
     const pluginEntryCount = await pluginEntry.count();
-    let pluginPanelTileCount = 0;
-    if (pluginEntryExpectation === 'visible') {
-      if (pluginEntryCount !== 1) {
-        throw new Error(`development Plugin entry count = ${pluginEntryCount}, expected 1`);
-      }
-      await pluginEntry.click();
-      const pluginCenterTile = page.locator('[data-plugin-panel-tile="plugin-center"]');
-      await pluginCenterTile.waitFor({ state: 'visible', timeout: 10_000 });
-      pluginPanelTileCount = await pluginCenterTile.count();
-    } else {
-      if (pluginEntryCount !== 0) {
-        throw new Error(`production Plugin entry count = ${pluginEntryCount}, expected 0`);
-      }
-      const exposedPluginSurfaceCount = await page.locator([
-        '[data-plugin-panel-tile]',
-        '[data-plugin-center-view]',
-        '[data-plugin-surface-host]',
-        '[data-plugin-surface-empty]',
-      ].join(',')).count();
-      if (exposedPluginSurfaceCount !== 0) {
-        throw new Error(`production Plugin surface count = ${exposedPluginSurfaceCount}, expected 0`);
-      }
-      if (pluginRequests.length !== 0) {
-        throw new Error(`production Plugin request count = ${pluginRequests.length}, expected 0`);
-      }
+    if (pluginEntryCount !== 1) {
+      throw new Error(`built Plugin entry count = ${pluginEntryCount}, expected 1`);
     }
+    await pluginEntry.click();
+    const pluginCenterTile = page.locator('[data-plugin-panel-tile="plugin-center"]');
+    await pluginCenterTile.waitFor({ state: 'visible', timeout: 10_000 });
+    const pluginPanelTileCount = await pluginCenterTile.count();
 
     const overlayCount = await page.locator([
       'vite-error-overlay',
@@ -330,7 +300,6 @@ async function main() {
       root: rootSnapshot,
       framework_overlay_count: overlayCount,
       plugin_ui: {
-        expected_entry: pluginEntryExpectation,
         entry_count: pluginEntryCount,
         panel_center_tile_count: pluginPanelTileCount,
         request_count: pluginRequests.length,
