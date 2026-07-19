@@ -219,7 +219,7 @@ describe('Redeven Env App surface theme contract', () => {
     expect(css).toContain('border-color: var(--redeven-settings-choice-selected-border) !important;');
     expect(css).toContain('background: var(--redeven-settings-choice-selected-bg) !important;');
     expect(css).toContain('background: var(--redeven-settings-selection-bg) !important;');
-    expect(flower.match(/redeven-settings-choice--selected-neutral/g)).toHaveLength(4);
+    expect(flower.match(/redeven-settings-choice--selected-neutral/g)).toHaveLength(3);
     expect(flower).not.toContain("&& 'redeven-settings-choice--selected'");
   });
 
