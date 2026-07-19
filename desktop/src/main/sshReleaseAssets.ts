@@ -2,7 +2,10 @@ import { createHash, randomBytes } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 
-import { verifyDesktopSSHReleaseManifestSignature } from './sshReleaseTrust';
+import {
+  canonicalDesktopSSHReleaseTag,
+  verifyDesktopSSHReleaseManifestSignature,
+} from './sshReleaseTrust';
 
 export const PUBLIC_REDEVEN_RELEASE_BASE_URL = 'https://github.com/floegence/redeven/releases';
 export const DEFAULT_DESKTOP_SSH_RELEASE_FETCH_TIMEOUT_MS = 30_000;
@@ -10,9 +13,9 @@ export const DEFAULT_DESKTOP_SSH_RELEASE_FETCH_TIMEOUT_MS = 30_000;
 export type DesktopSSHReleasePackageKind = 'runtime' | 'gateway';
 
 export type DesktopSSHRemotePlatform = Readonly<{
-  goos: 'linux' | 'darwin';
-  goarch: 'amd64' | 'arm64' | 'arm' | '386';
-  platform_id: 'linux_amd64' | 'linux_arm64' | 'linux_arm' | 'linux_386' | 'darwin_amd64' | 'darwin_arm64';
+  goos: 'linux';
+  goarch: 'amd64' | 'arm64';
+  platform_id: 'linux_amd64' | 'linux_arm64';
   release_package_name: string;
   platform_label: string;
 }>;
@@ -78,18 +81,15 @@ function releaseBaseURL(rawURL: string): string {
   return parsed.toString().replace(/\/$/u, '');
 }
 
-function parseRemoteUnameOS(rawOS: string): 'linux' | 'darwin' {
+function parseRemoteUnameOS(rawOS: string): 'linux' {
   const clean = compact(rawOS).toLowerCase();
-  if (clean.startsWith('linux')) {
+  if (clean === 'linux') {
     return 'linux';
-  }
-  if (clean.startsWith('darwin')) {
-    return 'darwin';
   }
   throw new Error(`Unsupported remote operating system for SSH bootstrap: ${rawOS}`);
 }
 
-function parseRemoteUnameArch(rawArch: string): 'amd64' | 'arm64' | 'arm' | '386' {
+function parseRemoteUnameArch(rawArch: string): 'amd64' | 'arm64' {
   const clean = compact(rawArch).toLowerCase();
   switch (clean) {
     case 'x86_64':
@@ -98,12 +98,6 @@ function parseRemoteUnameArch(rawArch: string): 'amd64' | 'arm64' | 'arm' | '386
     case 'aarch64':
     case 'arm64':
       return 'arm64';
-    case 'armv7l':
-    case 'armv6l':
-      return 'arm';
-    case 'i386':
-    case 'i686':
-      return '386';
     default:
       throw new Error(`Unsupported remote architecture for SSH bootstrap: ${rawArch}`);
   }
@@ -112,7 +106,9 @@ function parseRemoteUnameArch(rawArch: string): 'amd64' | 'arm64' | 'arm' | '386
 export function resolveDesktopSSHRemotePlatform(rawOS: string, rawArch: string): DesktopSSHRemotePlatform {
   const goos = parseRemoteUnameOS(rawOS);
   const goarch = parseRemoteUnameArch(rawArch);
-  const platformID = `${goos}_${goarch}` as DesktopSSHRemotePlatform['platform_id'];
+  const platformID: DesktopSSHRemotePlatform['platform_id'] = goarch === 'amd64'
+    ? 'linux_amd64'
+    : 'linux_arm64';
   return {
     goos,
     goarch,
@@ -135,7 +131,8 @@ export function buildDesktopSSHReleaseAssetURL(
   releaseTag: string,
   assetName: string,
 ): string {
-  return `${releaseBaseURL(rawReleaseBaseURL)}/download/${encodeURIComponent(releaseTag)}/${encodeURIComponent(assetName)}`;
+  const canonicalReleaseTag = canonicalDesktopSSHReleaseTag(releaseTag);
+  return `${releaseBaseURL(rawReleaseBaseURL)}/download/${encodeURIComponent(canonicalReleaseTag)}/${encodeURIComponent(assetName)}`;
 }
 
 export function buildDesktopSSHReleaseSourceCacheKey(rawReleaseBaseURL: string): string {
@@ -311,14 +308,16 @@ export function verifyDesktopSSHReleaseManifest(args: Readonly<{
   signature: Buffer | string;
   certificate: Buffer | string;
 }>): DesktopSSHVerifiedReleaseManifest {
+  const releaseTag = canonicalDesktopSSHReleaseTag(args.releaseTag);
   const baseURL = releaseBaseURL(args.releaseBaseURL);
   verifyDesktopSSHReleaseManifestSignature({
+    releaseTag,
     sumsText: args.sumsText,
     signature: args.signature,
     certificate: args.certificate,
   });
   return {
-    release_tag: args.releaseTag,
+    release_tag: releaseTag,
     release_base_url: baseURL,
     source_cache_key: buildDesktopSSHReleaseSourceCacheKey(baseURL),
     sums_text: args.sumsText,
@@ -329,9 +328,10 @@ export function verifyDesktopSSHReleaseManifest(args: Readonly<{
 export async function ensureDesktopSSHVerifiedReleaseManifest(
   args: EnsureDesktopSSHVerifiedReleaseManifestArgs,
 ): Promise<DesktopSSHVerifiedReleaseManifest> {
+  const releaseTag = canonicalDesktopSSHReleaseTag(args.releaseTag);
   const baseURL = releaseBaseURL(args.releaseBaseURL);
   const sourceCacheKey = buildDesktopSSHReleaseSourceCacheKey(baseURL);
-  const cacheDir = path.join(args.cacheRoot, sourceCacheKey, args.releaseTag);
+  const cacheDir = path.join(args.cacheRoot, sourceCacheKey, releaseTag);
   const sumsPath = path.join(cacheDir, 'SHA256SUMS');
   const signaturePath = path.join(cacheDir, 'SHA256SUMS.sig');
   const certificatePath = path.join(cacheDir, 'SHA256SUMS.pem');
@@ -344,7 +344,7 @@ export async function ensureDesktopSSHVerifiedReleaseManifest(
   if (cachedSums && cachedSignature && cachedCertificate) {
     try {
       return verifyDesktopSSHReleaseManifest({
-        releaseTag: args.releaseTag,
+        releaseTag,
         releaseBaseURL: baseURL,
         sumsText: cachedSums.toString('utf8'),
         signature: cachedSignature,
@@ -356,12 +356,12 @@ export async function ensureDesktopSSHVerifiedReleaseManifest(
   }
 
   const [sumsText, signature, certificate] = await Promise.all([
-    downloadText(buildDesktopSSHReleaseAssetURL(baseURL, args.releaseTag, 'SHA256SUMS'), args.fetchPolicy),
-    downloadBuffer(buildDesktopSSHReleaseAssetURL(baseURL, args.releaseTag, 'SHA256SUMS.sig'), args.fetchPolicy),
-    downloadBuffer(buildDesktopSSHReleaseAssetURL(baseURL, args.releaseTag, 'SHA256SUMS.pem'), args.fetchPolicy),
+    downloadText(buildDesktopSSHReleaseAssetURL(baseURL, releaseTag, 'SHA256SUMS'), args.fetchPolicy),
+    downloadBuffer(buildDesktopSSHReleaseAssetURL(baseURL, releaseTag, 'SHA256SUMS.sig'), args.fetchPolicy),
+    downloadBuffer(buildDesktopSSHReleaseAssetURL(baseURL, releaseTag, 'SHA256SUMS.pem'), args.fetchPolicy),
   ]);
   const manifest = verifyDesktopSSHReleaseManifest({
-    releaseTag: args.releaseTag,
+    releaseTag,
     releaseBaseURL: baseURL,
     sumsText,
     signature,
@@ -378,12 +378,13 @@ export async function ensureDesktopSSHVerifiedReleaseManifest(
 export async function ensureDesktopSSHReleaseArchive(
   args: EnsureDesktopSSHReleaseArchiveArgs,
 ): Promise<DesktopSSHResolvedReleaseAsset> {
+  const releaseTag = canonicalDesktopSSHReleaseTag(args.manifest.release_tag);
   const packageName = compact(args.packageName)
     || desktopSSHReleasePackageName(args.platform, args.packageKind ?? 'runtime');
   const cacheDir = path.join(
     args.cacheRoot,
     args.manifest.source_cache_key,
-    args.manifest.release_tag,
+    releaseTag,
     args.platform.platform_id,
   );
   const archivePath = path.join(cacheDir, packageName);
@@ -399,7 +400,7 @@ export async function ensureDesktopSSHReleaseArchive(
     await verifyDesktopSSHReleaseAsset(archivePath, sha256);
   } catch {
     await downloadURLToPath(
-      buildDesktopSSHReleaseAssetURL(args.manifest.release_base_url, args.manifest.release_tag, packageName),
+      buildDesktopSSHReleaseAssetURL(args.manifest.release_base_url, releaseTag, packageName),
       archivePath,
       args.fetchPolicy,
     );
@@ -407,7 +408,7 @@ export async function ensureDesktopSSHReleaseArchive(
   }
 
   return {
-    release_tag: args.manifest.release_tag,
+    release_tag: releaseTag,
     release_base_url: args.manifest.release_base_url,
     source_cache_key: args.manifest.source_cache_key,
     platform: args.platform,

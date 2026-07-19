@@ -1,8 +1,10 @@
 import { verify as verifySignature, X509Certificate } from 'node:crypto';
 
-const REDEVEN_RELEASE_CERTIFICATE_IDENTITY_REGEXP =
-  /^https:\/\/github\.com\/floegence\/redeven\/\.github\/workflows\/release\.yml@refs\/tags\/v.*$/u;
+const REDEVEN_RELEASE_CERTIFICATE_IDENTITY_PREFIX =
+  'https://github.com/floegence/redeven/.github/workflows/release.yml@refs/tags/';
 const REDEVEN_RELEASE_CERTIFICATE_OIDC_ISSUER = 'https://token.actions.githubusercontent.com';
+const CANONICAL_RELEASE_TAG_REGEXP =
+  /^v(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)\.(?:0|[1-9][0-9]*)(?:-(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(?:\.(?:0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*)?$/u;
 const X509_SEQUENCE_TAG = 0x30;
 const X509_OBJECT_IDENTIFIER_TAG = 0x06;
 const X509_OCTET_STRING_TAG = 0x04;
@@ -60,6 +62,13 @@ const TRUSTED_RELEASE_CERTIFICATE_CHAIN = Object.freeze({
 
 function compact(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+export function canonicalDesktopSSHReleaseTag(releaseTag: string): string {
+  if (!CANONICAL_RELEASE_TAG_REGEXP.test(releaseTag)) {
+    throw new Error('Desktop SSH release tag must be canonical SemVer with a leading v.');
+  }
+  return releaseTag;
 }
 
 function maybeDecodeBase64Text(rawText: string): Buffer | null {
@@ -268,16 +277,19 @@ function verifyTrustedCertificateChain(certificate: X509Certificate): void {
 }
 
 export function verifyDesktopSSHReleaseManifestSignature(args: Readonly<{
+  releaseTag: string;
   sumsText: string;
   signature: Buffer | string;
   certificate: Buffer | string;
 }>): void {
+  const releaseTag = canonicalDesktopSSHReleaseTag(args.releaseTag);
   const certificate = new X509Certificate(normalizePEMText(args.certificate));
   verifyTrustedCertificateChain(certificate);
 
   const workflowIdentity = releaseWorkflowIdentityURI(certificate);
-  if (!workflowIdentity || !REDEVEN_RELEASE_CERTIFICATE_IDENTITY_REGEXP.test(workflowIdentity)) {
-    throw new Error('Release manifest certificate identity did not match the Redeven release workflow policy.');
+  const expectedWorkflowIdentity = `${REDEVEN_RELEASE_CERTIFICATE_IDENTITY_PREFIX}${releaseTag}`;
+  if (workflowIdentity !== expectedWorkflowIdentity) {
+    throw new Error(`Release manifest certificate identity did not match the selected release tag ${releaseTag}.`);
   }
 
   const oidcIssuer = releaseOIDCIssuer(certificate);

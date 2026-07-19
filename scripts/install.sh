@@ -54,9 +54,10 @@ REDEVEN_INSTALL_MODE="${REDEVEN_INSTALL_MODE:-install}"
 # Optional explicit target version (for deterministic install/rollback)
 REDEVEN_VERSION="${REDEVEN_VERSION:-}"
 
-# Cosign identity constraint for SHA256SUMS signature verification.
-COSIGN_CERT_IDENTITY_REGEXP='^https://github.com/floegence/redeven/.github/workflows/release\.yml@refs/tags/v.*$'
+# Cosign issuer constraint for SHA256SUMS signature verification. The exact
+# certificate identity is derived only after the canonical release tag is fixed.
 COSIGN_CERT_OIDC_ISSUER='https://token.actions.githubusercontent.com'
+SAFE_EXTRACTOR_NAME='safe_extract_tar.py'
 
 # Installation directories
 INSTALL_DIR="${REDEVEN_HOME}/bin"
@@ -78,14 +79,7 @@ log_error() {
 }
 
 validate_release_version() {
-    case "$1" in
-        v[0-9]*.[0-9]*.[0-9]*|v[0-9]*.[0-9]*.[0-9]*-[0-9A-Za-z.-]*|v[0-9]*.[0-9]*.[0-9]*+[0-9A-Za-z.-]*|v[0-9]*.[0-9]*.[0-9]*-[0-9A-Za-z.-]*+[0-9A-Za-z.-]*)
-            return 0
-            ;;
-        *)
-            return 1
-            ;;
-    esac
+    printf '%s\n' "$1" | grep -Eq '^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?(\+[0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$'
 }
 
 # Determine the best installation directory
@@ -134,7 +128,7 @@ check_environment() {
     fi
 
     # Check for required commands
-    for cmd in curl uname tar grep sed awk mktemp; do
+    for cmd in basename curl uname tar grep sed awk mktemp python3 cp mv chmod rm mkdir ln readlink wc; do
         if ! command -v "$cmd" >/dev/null 2>&1; then
             log_error "Required command not found: $cmd"
             exit 1
@@ -183,12 +177,6 @@ detect_platform() {
         aarch64|arm64)
             ARCH="arm64"
             ;;
-        armv7l|armv6l)
-            ARCH="arm"
-            ;;
-        i386|i686)
-            ARCH="386"
-            ;;
         *)
             log_error "Unsupported architecture: $ARCH"
             exit 1
@@ -204,12 +192,6 @@ detect_platform() {
             ;;
         linux_arm64)
             RG_TARGET="aarch64-unknown-linux-gnu"
-            ;;
-        linux_arm)
-            RG_TARGET="armv7-unknown-linux-musleabihf"
-            ;;
-        linux_386)
-            RG_TARGET="i686-unknown-linux-gnu"
             ;;
         darwin_amd64)
             RG_TARGET="x86_64-apple-darwin"
@@ -291,12 +273,6 @@ resolve_rg_sha256() {
         aarch64-unknown-linux-gnu)
             printf '%s\n' '2b661c6ef508e902f388e9098d9c4c5aca72c87b55922d94abdba830b4dc885e'
             ;;
-        armv7-unknown-linux-musleabihf)
-            printf '%s\n' '89c0230b8ad3c280460e0391f2ecb92f4a7c498b10f4a912540fc0f916336b08'
-            ;;
-        i686-unknown-linux-gnu)
-            printf '%s\n' '0300c58864b1de49da08f714d56ce10328dcbf6de37a404486fe2696e95692f1'
-            ;;
         x86_64-apple-darwin)
             printf '%s\n' '64811cb24e77cac3057d6c40b63ac9becf9082eedd54ca411b475b755d334882'
             ;;
@@ -336,11 +312,12 @@ verify_signature() {
         exit 1
     fi
 
+    COSIGN_CERT_IDENTITY="https://github.com/floegence/redeven/.github/workflows/release.yml@refs/tags/${LATEST_VERSION}"
     log_info "Verifying release signature..."
     if ! cosign verify-blob \
         --certificate "$cert_file" \
         --signature "$sig_file" \
-        --certificate-identity-regexp "$COSIGN_CERT_IDENTITY_REGEXP" \
+        --certificate-identity "$COSIGN_CERT_IDENTITY" \
         --certificate-oidc-issuer "$COSIGN_CERT_OIDC_ISSUER" \
         "$checksums_file" >/dev/null 2>&1; then
         log_error "Signature verification failed"
@@ -353,21 +330,35 @@ verify_checksum() {
     checksums_file="$1"
     archive_file="$2"
 
-    expected=$(awk -v f="$PACKAGE_NAME" '$2 == f || $2 == "*" f {print $1; exit}' "$checksums_file" | tr -d '\r\n')
-    if [ -z "$expected" ]; then
-        log_error "Checksum entry not found for $PACKAGE_NAME"
+    verify_named_checksum "$checksums_file" "$PACKAGE_NAME" "$archive_file"
+}
+
+verify_named_checksum() {
+    checksums_file="$1"
+    artifact_name="$2"
+    artifact_file="$3"
+
+    matches=$(awk -v f="$artifact_name" '$2 == f || $2 == "*" f {print $1}' "$checksums_file" | tr -d '\r')
+    match_count=$(printf '%s\n' "$matches" | awk 'NF { count += 1 } END { print count + 0 }')
+    if [ "$match_count" -ne 1 ]; then
+        log_error "Checksum entry must appear exactly once for $artifact_name"
+        exit 1
+    fi
+    expected=$(printf '%s\n' "$matches" | awk 'NF { print; exit }')
+    if ! printf '%s\n' "$expected" | grep -Eq '^[0-9a-f]{64}$'; then
+        log_error "Checksum entry is not lowercase SHA-256 for $artifact_name"
         exit 1
     fi
 
-    actual=$(sha256_file "$archive_file" | tr -d '\r\n')
+    actual=$(sha256_file "$artifact_file" | tr -d '\r\n')
 
     if [ "$actual" != "$expected" ]; then
-        log_error "Checksum mismatch for $PACKAGE_NAME"
+        log_error "Checksum mismatch for $artifact_name"
         log_error "Expected: $expected"
         log_error "Actual:   $actual"
         exit 1
     fi
-    log_info "Checksum verification passed"
+    log_info "Checksum verification passed for $artifact_name"
 }
 
 download_file() {
@@ -375,6 +366,241 @@ download_file() {
     out_file="$2"
 
     curl -fsSL "$source_url" -o "$out_file"
+}
+
+runtime_install_command() {
+    if [ "${RUNTIME_INSTALL_WITH_SUDO:-0}" = "1" ]; then
+        sudo "$@"
+    else
+        "$@"
+    fi
+}
+
+verify_runtime_suite_directory() {
+    suite_dir="$1"
+    for required in \
+        "$suite_dir/redeven" \
+        "$suite_dir/redevplugin-runtime" \
+        "$suite_dir/REDEVPLUGIN_THIRD_PARTY_NOTICES.md" \
+        "$suite_dir/.redevplugin-release-artifacts-verified.json" \
+        "$suite_dir/REDEVEN_LICENSE" \
+        "$suite_dir/REDEVEN_THIRD_PARTY_NOTICES.md"
+    do
+        if [ ! -f "$required" ] || [ -L "$required" ]; then
+            log_error "Installed runtime suite is incomplete: $required"
+            exit 1
+        fi
+    done
+    if [ ! -x "$suite_dir/redeven" ] || [ ! -x "$suite_dir/redevplugin-runtime" ]; then
+        log_error "Installed runtime executables are not executable"
+        exit 1
+    fi
+    if ! "$suite_dir/redeven" version >/dev/null 2>&1; then
+        log_error "Installed Redeven binary failed its version check"
+        exit 1
+    fi
+}
+
+cleanup_installation_temp() {
+    if [ -n "${RUNTIME_SUITE_STAGING:-}" ]; then
+        runtime_install_command rm -rf "$RUNTIME_SUITE_STAGING"
+    fi
+    if [ -n "${RUNTIME_ACTIVATION_LINK:-}" ]; then
+        runtime_install_command rm -f "$RUNTIME_ACTIVATION_LINK"
+    fi
+    if [ -n "${TMP_DIR:-}" ]; then
+        rm -rf "$TMP_DIR"
+    fi
+}
+
+inspect_runtime_activation() {
+    activation_path="$INSTALL_DIR/redeven"
+    ACTIVE_RUNTIME_SUITE_HASH=""
+
+    if [ ! -e "$activation_path" ] && [ ! -L "$activation_path" ]; then
+        RUNTIME_ACTIVATION_STATE="absent"
+        return 0
+    fi
+    if [ -L "$activation_path" ]; then
+        activation_target=$(readlink "$activation_path")
+        case "$activation_target" in
+            .redeven-runtime-suites/*/redeven)
+                active_hash=${activation_target#'.redeven-runtime-suites/'}
+                active_hash=${active_hash%'/redeven'}
+                ;;
+            *)
+                log_error "Redeven activation link has an unsupported target"
+                exit 1
+                ;;
+        esac
+        if ! printf '%s\n' "$active_hash" | grep -Eq '^[0-9a-f]{64}$' || \
+            [ "$activation_target" != ".redeven-runtime-suites/$active_hash/redeven" ]; then
+            log_error "Redeven activation link is not a canonical runtime suite target"
+            exit 1
+        fi
+        active_suite="$INSTALL_DIR/.redeven-runtime-suites/$active_hash"
+        if [ ! -d "$active_suite" ] || [ -L "$active_suite" ]; then
+            log_error "Redeven activation references an invalid runtime suite"
+            exit 1
+        fi
+        ACTIVE_RUNTIME_SUITE_HASH="$active_hash"
+        RUNTIME_ACTIVATION_STATE="suite:$active_hash"
+        return 0
+    fi
+    if [ -f "$activation_path" ] && [ -x "$activation_path" ]; then
+        RUNTIME_ACTIVATION_STATE="legacy-regular"
+        return 0
+    fi
+
+    log_error "Redeven activation destination is not a supported executable"
+    exit 1
+}
+
+prune_runtime_suites() {
+    suite_parent="$INSTALL_DIR/.redeven-runtime-suites"
+    for suite_path in "$suite_parent"/*; do
+        if [ ! -e "$suite_path" ] && [ ! -L "$suite_path" ]; then
+            continue
+        fi
+        suite_hash=$(basename "$suite_path")
+        if ! printf '%s\n' "$suite_hash" | grep -Eq '^[0-9a-f]{64}$'; then
+            log_error "Runtime suite inventory contains an unsupported entry"
+            exit 1
+        fi
+        if [ ! -d "$suite_path" ] || [ -L "$suite_path" ]; then
+            log_error "Runtime suite inventory entry is not a real directory"
+            exit 1
+        fi
+        if [ "$suite_hash" = "$ARCHIVE_SHA256" ] || [ "$suite_hash" = "${ACTIVE_RUNTIME_SUITE_HASH:-}" ]; then
+            continue
+        fi
+        runtime_install_command rm -rf "$suite_path"
+    done
+}
+
+activate_runtime_suite() {
+    suite_dir="$INSTALL_DIR/.redeven-runtime-suites/$ARCHIVE_SHA256"
+    verify_runtime_suite_directory "$suite_dir"
+
+    expected_activation_state="$RUNTIME_ACTIVATION_SNAPSHOT"
+    inspect_runtime_activation
+    if [ "$RUNTIME_ACTIVATION_STATE" != "$expected_activation_state" ]; then
+        log_error "Redeven activation changed while the runtime suite was being prepared"
+        exit 1
+    fi
+
+    for legacy_name in redevplugin-runtime REDEVPLUGIN_THIRD_PARTY_NOTICES.md .redevplugin-release-artifacts-verified.json REDEVEN_LICENSE REDEVEN_THIRD_PARTY_NOTICES.md; do
+        if [ -d "$INSTALL_DIR/$legacy_name" ] && [ ! -L "$INSTALL_DIR/$legacy_name" ]; then
+            log_error "Legacy runtime destination is a directory: $INSTALL_DIR/$legacy_name"
+            exit 1
+        fi
+    done
+
+    prune_runtime_suites
+
+    activation_link=$(runtime_install_command mktemp "$INSTALL_DIR/.redeven-runtime-activate.XXXXXX")
+    runtime_install_command rm -f "$activation_link"
+    RUNTIME_ACTIVATION_LINK="$activation_link"
+    runtime_install_command ln -s ".redeven-runtime-suites/$ARCHIVE_SHA256/redeven" "$activation_link"
+    if [ "$(readlink "$activation_link")" != ".redeven-runtime-suites/$ARCHIVE_SHA256/redeven" ]; then
+        log_error "Prepared Redeven activation link is invalid"
+        exit 1
+    fi
+
+    # This rename is the single commit point. All required downloads,
+    # verification, tool installation, suite publication, and retention work
+    # have completed before the active executable changes.
+    runtime_install_command mv -f "$activation_link" "$INSTALL_DIR/redeven"
+    RUNTIME_ACTIVATION_LINK=""
+
+    for legacy_name in redevplugin-runtime REDEVPLUGIN_THIRD_PARTY_NOTICES.md .redevplugin-release-artifacts-verified.json REDEVEN_LICENSE REDEVEN_THIRD_PARTY_NOTICES.md; do
+        if ! runtime_install_command rm -f "$INSTALL_DIR/$legacy_name"; then
+            log_warn "Unable to remove obsolete runtime file: $INSTALL_DIR/$legacy_name"
+        fi
+    done
+}
+
+publish_runtime_suite() {
+    extracted_dir="$1"
+
+    if ! printf '%s\n' "${ARCHIVE_SHA256:-}" | grep -Eq '^[0-9a-f]{64}$'; then
+        log_error "Verified runtime archive identity is unavailable"
+        exit 1
+    fi
+    if [ -z "${SAFE_EXTRACTOR_PATH:-}" ] || [ ! -f "$SAFE_EXTRACTOR_PATH" ] || [ -L "$SAFE_EXTRACTOR_PATH" ]; then
+        log_error "Verified runtime suite publisher is unavailable"
+        exit 1
+    fi
+
+    if [ -n "${REDEVEN_INSTALL_DIR:-}" ] && [ ! -w "$INSTALL_DIR" ]; then
+        log_error "Forced install directory is not writable: $INSTALL_DIR"
+        log_error "Please reinstall Redeven into a writable directory, or run the upgrade manually with appropriate permissions."
+        exit 1
+    fi
+    if [ "$INSTALL_DIR" = "/usr/local/bin" ] && [ ! -w "$INSTALL_DIR" ]; then
+        log_info "Installing to system directory (requires sudo)..."
+        sudo mkdir -p "$INSTALL_DIR"
+        RUNTIME_INSTALL_WITH_SUDO=1
+    else
+        mkdir -p "$INSTALL_DIR"
+        RUNTIME_INSTALL_WITH_SUDO=0
+    fi
+
+    inspect_runtime_activation
+    RUNTIME_ACTIVATION_SNAPSHOT="$RUNTIME_ACTIVATION_STATE"
+
+    suite_parent="$INSTALL_DIR/.redeven-runtime-suites"
+    suite_dir="$suite_parent/$ARCHIVE_SHA256"
+    if [ -e "$suite_parent" ] || [ -L "$suite_parent" ]; then
+        if [ ! -d "$suite_parent" ] || [ -L "$suite_parent" ]; then
+            log_error "Runtime suite root is not a real directory"
+            exit 1
+        fi
+    else
+        runtime_install_command mkdir -p "$suite_parent"
+    fi
+
+    for source_name in redeven redevplugin-runtime REDEVPLUGIN_THIRD_PARTY_NOTICES.md .redevplugin-release-artifacts-verified.json LICENSE THIRD_PARTY_NOTICES.md; do
+        if [ ! -f "$extracted_dir/$source_name" ] || [ -L "$extracted_dir/$source_name" ]; then
+            log_error "Runtime source is not a regular file: $source_name"
+            exit 1
+        fi
+    done
+
+    if [ "${ACTIVE_RUNTIME_SUITE_HASH:-}" = "$ARCHIVE_SHA256" ]; then
+        verify_runtime_suite_directory "$suite_dir"
+        RUNTIME_SUITE_DIR="$suite_dir"
+        return 0
+    fi
+
+    suite_staging=$(runtime_install_command mktemp -d "$INSTALL_DIR/.redeven-runtime-suite.XXXXXX")
+    RUNTIME_SUITE_STAGING="$suite_staging"
+
+    runtime_install_command cp "$extracted_dir/redeven" "$suite_staging/redeven"
+    runtime_install_command cp "$extracted_dir/redevplugin-runtime" "$suite_staging/redevplugin-runtime"
+    runtime_install_command cp "$extracted_dir/REDEVPLUGIN_THIRD_PARTY_NOTICES.md" "$suite_staging/REDEVPLUGIN_THIRD_PARTY_NOTICES.md"
+    runtime_install_command cp "$extracted_dir/.redevplugin-release-artifacts-verified.json" "$suite_staging/.redevplugin-release-artifacts-verified.json"
+    runtime_install_command cp "$extracted_dir/LICENSE" "$suite_staging/REDEVEN_LICENSE"
+    runtime_install_command cp "$extracted_dir/THIRD_PARTY_NOTICES.md" "$suite_staging/REDEVEN_THIRD_PARTY_NOTICES.md"
+    runtime_install_command chmod 755 "$suite_staging/redeven" "$suite_staging/redevplugin-runtime"
+    runtime_install_command chmod 644 \
+        "$suite_staging/REDEVPLUGIN_THIRD_PARTY_NOTICES.md" \
+        "$suite_staging/.redevplugin-release-artifacts-verified.json" \
+        "$suite_staging/REDEVEN_LICENSE" \
+        "$suite_staging/REDEVEN_THIRD_PARTY_NOTICES.md"
+
+    if [ -e "$suite_dir" ] || [ -L "$suite_dir" ]; then
+        if [ ! -d "$suite_dir" ] || [ -L "$suite_dir" ]; then
+            log_error "Runtime suite destination is not a real directory: $suite_dir"
+            exit 1
+        fi
+        runtime_install_command python3 "$SAFE_EXTRACTOR_PATH" --replace-dir "$suite_staging" --dest "$suite_dir"
+    else
+        runtime_install_command python3 "$SAFE_EXTRACTOR_PATH" --publish-dir "$suite_staging" --dest "$suite_dir"
+    fi
+    RUNTIME_SUITE_STAGING=""
+    verify_runtime_suite_directory "$suite_dir"
+    RUNTIME_SUITE_DIR="$suite_dir"
 }
 
 # Download and install redeven
@@ -389,15 +615,17 @@ install_redeven() {
     GITHUB_SUMS_URL="${GITHUB_RELEASES_URL}/download/${LATEST_VERSION}/SHA256SUMS"
     GITHUB_SIG_URL="${GITHUB_RELEASES_URL}/download/${LATEST_VERSION}/SHA256SUMS.sig"
     GITHUB_CERT_URL="${GITHUB_RELEASES_URL}/download/${LATEST_VERSION}/SHA256SUMS.pem"
+    GITHUB_SAFE_EXTRACTOR_URL="${GITHUB_RELEASES_URL}/download/${LATEST_VERSION}/${SAFE_EXTRACTOR_NAME}"
 
     # Create temporary directory
     TMP_DIR=$(mktemp -d)
-    trap 'rm -rf "$TMP_DIR"' EXIT
+    trap cleanup_installation_temp EXIT
 
     ARCHIVE_PATH="$TMP_DIR/redeven.tar.gz"
     SUMS_PATH="$TMP_DIR/SHA256SUMS"
     SIG_PATH="$TMP_DIR/SHA256SUMS.sig"
     CERT_PATH="$TMP_DIR/SHA256SUMS.pem"
+    SAFE_EXTRACTOR_PATH="$TMP_DIR/$SAFE_EXTRACTOR_NAME"
 
     log_info "Downloading package from GitHub: $GITHUB_DOWNLOAD_URL"
     if ! download_file "$GITHUB_DOWNLOAD_URL" "$ARCHIVE_PATH"; then
@@ -424,55 +652,34 @@ install_redeven() {
         exit 1
     fi
 
-    verify_signature "$SUMS_PATH" "$SIG_PATH" "$CERT_PATH"
-    verify_checksum "$SUMS_PATH" "$ARCHIVE_PATH"
-
-    # Extract the binary
-    log_info "Extracting binary..."
-    # On some platforms (especially when archives are built on macOS),
-    # tar may emit harmless warnings like:
-    #   Ignoring unknown extended header keyword 'LIBARCHIVE.xattr.com.apple.provenance'
-    # For Linux, try to suppress these with --warning=no-unknown-keyword.
-    if [ "$OS" = "linux" ]; then
-        if ! tar --warning=no-unknown-keyword -xzf "$ARCHIVE_PATH" -C "$TMP_DIR" 2>/dev/null; then
-            # Fallback without the flag if tar does not support --warning
-            if ! tar -xzf "$ARCHIVE_PATH" -C "$TMP_DIR"; then
-                log_error "Failed to extract binary"
-                exit 1
-            fi
-        fi
-    else
-        if ! tar -xzf "$ARCHIVE_PATH" -C "$TMP_DIR"; then
-            log_error "Failed to extract binary"
-            exit 1
-        fi
-    fi
-
-    # Move binary to installation directory
-    if [ -f "$TMP_DIR/$BINARY_NAME" ]; then
-        # In forced install dir mode (runtime self-upgrade), do not attempt sudo or interactive escalation; fail fast if not writable.
-        if [ -n "${REDEVEN_INSTALL_DIR:-}" ] && [ ! -w "$INSTALL_DIR" ]; then
-            log_error "Forced install directory is not writable: $INSTALL_DIR"
-            log_error "Please reinstall Redeven into a writable directory, or run the upgrade manually with appropriate permissions."
-            exit 1
-        fi
-
-        # Check if we need sudo for installation
-        if [ "$INSTALL_DIR" = "/usr/local/bin" ] && [ ! -w "$INSTALL_DIR" ]; then
-            log_info "Installing to system directory (requires sudo)..."
-            sudo mkdir -p "$INSTALL_DIR"
-            sudo mv "$TMP_DIR/$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
-            sudo chmod +x "$INSTALL_DIR/$BINARY_NAME"
-        else
-            mkdir -p "$INSTALL_DIR"
-            mv "$TMP_DIR/$BINARY_NAME" "$INSTALL_DIR/$BINARY_NAME"
-            chmod +x "$INSTALL_DIR/$BINARY_NAME"
-        fi
-        log_info "Binary installed to: $INSTALL_DIR/$BINARY_NAME"
-    else
-        log_error "Binary not found in archive"
+    log_info "Downloading the signed release extractor"
+    if ! download_file "$GITHUB_SAFE_EXTRACTOR_URL" "$SAFE_EXTRACTOR_PATH"; then
+        log_error "Failed to download $SAFE_EXTRACTOR_NAME"
         exit 1
     fi
+
+    verify_signature "$SUMS_PATH" "$SIG_PATH" "$CERT_PATH"
+    verify_checksum "$SUMS_PATH" "$ARCHIVE_PATH"
+    verify_named_checksum "$SUMS_PATH" "$SAFE_EXTRACTOR_NAME" "$SAFE_EXTRACTOR_PATH"
+
+    EXTRACT_DIR="$TMP_DIR/extracted-runtime"
+    ARCHIVE_SHA256=$(sha256_file "$ARCHIVE_PATH" | tr -d '\r\n')
+    ARCHIVE_SIZE=$(wc -c < "$ARCHIVE_PATH" | tr -d '[:space:]')
+    log_info "Extracting the closed runtime suite..."
+    python3 "$SAFE_EXTRACTOR_PATH" \
+        --archive "$ARCHIVE_PATH" \
+        --dest "$EXTRACT_DIR" \
+        --expected-sha256 "$ARCHIVE_SHA256" \
+        --expected-size "$ARCHIVE_SIZE" \
+        --allow-file redeven \
+        --allow-file redevplugin-runtime \
+        --allow-file REDEVPLUGIN_THIRD_PARTY_NOTICES.md \
+        --allow-file .redevplugin-release-artifacts-verified.json \
+        --allow-file LICENSE \
+        --allow-file THIRD_PARTY_NOTICES.md
+
+    publish_runtime_suite "$EXTRACT_DIR"
+    log_info "Runtime suite prepared in: $RUNTIME_SUITE_DIR"
 }
 
 install_ripgrep() {
@@ -497,20 +704,10 @@ install_ripgrep() {
 
     verify_pinned_checksum "$RG_EXPECTED_SHA256" "$RG_ARCHIVE_PATH" "$RG_ARCHIVE_NAME"
 
-    if [ "$OS" = "linux" ]; then
-        if ! tar --warning=no-unknown-keyword -xzf "$RG_ARCHIVE_PATH" -C "$RG_TMP_DIR" 2>/dev/null; then
-            if ! tar -xzf "$RG_ARCHIVE_PATH" -C "$RG_TMP_DIR"; then
-                log_error "Failed to extract ripgrep package"
-                rm -rf "$RG_TMP_DIR"
-                exit 1
-            fi
-        fi
-    else
-        if ! tar -xzf "$RG_ARCHIVE_PATH" -C "$RG_TMP_DIR"; then
-            log_error "Failed to extract ripgrep package"
-            rm -rf "$RG_TMP_DIR"
-            exit 1
-        fi
+    if ! tar -xzf "$RG_ARCHIVE_PATH" -C "$RG_TMP_DIR"; then
+        log_error "Failed to extract ripgrep package"
+        rm -rf "$RG_TMP_DIR"
+        exit 1
     fi
 
     RG_EXTRACTED_BINARY="${RG_TMP_DIR}/ripgrep-${RG_VERSION}-${RG_TARGET}/rg"
@@ -534,6 +731,17 @@ install_ripgrep() {
 
     log_info "ripgrep installed to: $RG_BINARY_PATH"
     log_info "ripgrep symlink updated: $RG_LINK_PATH"
+}
+
+verify_installed_runtime_suite() {
+    expected_link=".redeven-runtime-suites/$ARCHIVE_SHA256/redeven"
+    if [ ! -L "$INSTALL_DIR/redeven" ] || [ "$(readlink "$INSTALL_DIR/redeven")" != "$expected_link" ]; then
+        log_error "Installed Redeven activation does not reference the verified runtime suite"
+        exit 1
+    fi
+    suite_dir="$INSTALL_DIR/.redeven-runtime-suites/$ARCHIVE_SHA256"
+    verify_runtime_suite_directory "$suite_dir"
+    log_info "Installed runtime suite verified"
 }
 
 # Add installation directory to PATH if needed
@@ -631,13 +839,7 @@ print_summary() {
     log_info "  ripgrep: ${REDEVEN_HOME}/bin/rg (v${RG_VERSION})"
     echo ""
 
-    # Test the binary immediately using full path
-    log_info "Testing installation..."
-    if "$INSTALL_DIR/$BINARY_NAME" version >/dev/null 2>&1; then
-        log_info "✓ Binary is working correctly!"
-    else
-        log_warn "Binary test failed, but installation completed."
-    fi
+    log_info "✓ Binary and ReDevPlugin runtime suite are ready"
     echo ""
 
     # Check if binary is in PATH
@@ -722,9 +924,17 @@ main() {
     # Install pinned ripgrep used by shell-first AI workflow
     install_ripgrep
 
-    # Setup PATH + onboarding summary (skip in upgrade mode)
+    # PATH preparation may write shell configuration, so it must finish before
+    # the runtime activation commit point.
     if [ "$REDEVEN_INSTALL_MODE" != "upgrade" ]; then
         setup_path
+    fi
+
+    # Activate only after every fallible preparation step has completed.
+    activate_runtime_suite
+
+    # Onboarding output is presentation over the already committed install.
+    if [ "$REDEVEN_INSTALL_MODE" != "upgrade" ]; then
         print_summary
     else
         log_info "Redeven upgraded successfully!"

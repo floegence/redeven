@@ -28,8 +28,12 @@ type agentLockMetadata struct {
 	RuntimeControlSocketPath string `json:"runtime_control_socket_path,omitempty"`
 }
 
-func newAgentLockMetadata(mode string, instanceID string, desktopManaged bool, desktopOwnerID string, localUIEnabled bool, layout config.StateLayout) agentLockMetadata {
+func newAgentLockMetadata(mode string, instanceID string, desktopManaged bool, desktopOwnerID string, localUIEnabled bool, layout config.StateLayout) (agentLockMetadata, error) {
 	cleanConfigPath := filepath.Clean(strings.TrimSpace(layout.ConfigPath))
+	binaryPath, err := currentExecutablePathForCLI()
+	if err != nil {
+		return agentLockMetadata{}, err
+	}
 	return agentLockMetadata{
 		PID:                      os.Getpid(),
 		Mode:                     strings.TrimSpace(mode),
@@ -37,7 +41,7 @@ func newAgentLockMetadata(mode string, instanceID string, desktopManaged bool, d
 		StartedAtUnixMS:          timeNowUnixMS(),
 		RuntimeVersion:           Version,
 		RuntimeCommit:            Commit,
-		BinaryPath:               currentExecutablePathForCLI(),
+		BinaryPath:               binaryPath,
 		DesktopManaged:           desktopManaged,
 		DesktopOwnerID:           strings.TrimSpace(desktopOwnerID),
 		LocalUIEnabled:           localUIEnabled,
@@ -45,7 +49,7 @@ func newAgentLockMetadata(mode string, instanceID string, desktopManaged bool, d
 		StateRoot:                filepath.Clean(strings.TrimSpace(layout.StateRoot)),
 		StateDir:                 filepath.Dir(cleanConfigPath),
 		RuntimeControlSocketPath: filepath.Clean(strings.TrimSpace(layout.RuntimeControlSocketPath)),
-	}
+	}, nil
 }
 
 func writeAgentLockMetadata(lk *lockfile.Lock, metadata agentLockMetadata) error {

@@ -41,6 +41,7 @@ import (
 	"github.com/floegence/redeven/internal/monitor"
 	"github.com/floegence/redeven/internal/portforward"
 	"github.com/floegence/redeven/internal/rpcutil"
+	"github.com/floegence/redeven/internal/runtimeidentity"
 	"github.com/floegence/redeven/internal/runtimeproxy"
 	"github.com/floegence/redeven/internal/session"
 	syssvc "github.com/floegence/redeven/internal/sys"
@@ -236,6 +237,10 @@ func New(opts Options) (*Agent, error) {
 		}
 		stateRoot = resolvedStateRoot
 	}
+	binaryPath, err := runtimeidentity.CurrentExecutablePath()
+	if err != nil {
+		return nil, fmt.Errorf("resolve Redeven executable identity: %w", err)
+	}
 	a := &Agent{
 		cfg:                    opts.Config,
 		log:                    logger,
@@ -248,7 +253,7 @@ func New(opts Options) (*Agent, error) {
 		stateDir:               stateDir,
 		configPath:             cfgPathAbs,
 		instanceID:             strings.TrimSpace(opts.InstanceID),
-		binaryPath:             currentExecutablePath(),
+		binaryPath:             binaryPath,
 		localUIBind:            strings.TrimSpace(opts.LocalUIBind),
 		processStartedAtMs:     time.Now().UnixMilli(),
 		term:                   terminal.NewManagerWithScope(shell, filesystemScope, logger),
@@ -310,6 +315,7 @@ func New(opts Options) (*Agent, error) {
 		StateDir:               stateDir,
 		StateRoot:              stateRoot,
 		ConfigPath:             cfgPathAbs,
+		PermissionPolicy:       opts.Config.PermissionPolicy,
 		ReDevPluginRuntimePath: redevpluginRuntimePath,
 		ControlplaneBaseURL:    strings.TrimSpace(opts.Config.ControlplaneBaseURL),
 		CodeServerPortMin:      opts.Config.CodeServerPortMin,

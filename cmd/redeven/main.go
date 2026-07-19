@@ -658,7 +658,11 @@ func (c *cli) runCmd(args []string) int {
 	if *desktopManaged {
 		desktopOwnerID = strings.TrimSpace(os.Getenv(desktopOwnerIDEnvName))
 	}
-	if err := writeAgentLockMetadata(lk, newAgentLockMetadata(string(mode), runtimeInstanceID, *desktopManaged, desktopOwnerID, mode != runModeRemote, stateLayout)); err != nil {
+	lockMetadata, err := newAgentLockMetadata(string(mode), runtimeInstanceID, *desktopManaged, desktopOwnerID, mode != runModeRemote, stateLayout)
+	if err != nil {
+		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to resolve runtime executable identity: %v", err))
+	}
+	if err := writeAgentLockMetadata(lk, lockMetadata); err != nil {
 		return failDesktopLaunch(desktopLaunchCodeStartupFailed, fmt.Sprintf("failed to write runtime lock metadata: %v", err))
 	}
 	if err := config.WriteEnvironmentCatalogRecord(stateLayout, cfg, config.EnvironmentCatalogAccess{

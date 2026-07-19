@@ -72,7 +72,7 @@ func (u *sysUpgrader) StartUpgrade(_ctx context.Context, meta *session.Meta, req
 		return nil, err
 	}
 
-	plan, err := resolveSelfExecPlan(a.localUIBind)
+	plan, err := resolveSelfExecPlan(a.binaryPath, a.localUIBind)
 	if err != nil {
 		a.log.Warn("sys_upgrade: resolve self paths failed", "error", err)
 		return nil, &rpc.Error{Code: 500, Message: "failed to resolve runtime executable path"}
@@ -127,8 +127,8 @@ func (a *Agent) runSelfUpgrade(plan selfExecPlan, userPublicID string, channelID
 	ctx, cancel := context.WithTimeout(context.Background(), upgradeTimeout)
 	defer cancel()
 
-	// Run the official install.sh in upgrade mode, forcing the install directory to the
-	// currently running executable directory so we restart into the new binary path.
+	// Run the official install.sh against the stable activation root. The current
+	// executable may live inside a content-addressed runtime suite.
 	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", "curl -fsSL "+upgradeInstallScriptURL+" | sh")
 	env := append(processenv.Current(),
 		"REDEVEN_INSTALL_MODE=upgrade",
@@ -182,11 +182,11 @@ func (a *Agent) runSelfUpgrade(plan selfExecPlan, userPublicID string, channelID
 	a.log.Info("sys_upgrade: restarting",
 		"user_public_id", userPublicID,
 		"channel_id", channelID,
-		"exe_path", plan.exePath,
+		"exe_path", plan.activationPath,
 		"local_ui_bind", plan.localUIBind,
 	)
 
-	if err := syscall.Exec(plan.exePath, plan.argv, processenv.Current()); err != nil {
+	if err := syscall.Exec(plan.activationPath, plan.argv, processenv.Current()); err != nil {
 		failureMessage := summarizeExecFailure("Upgrade restart failed", err)
 		a.log.Error("sys_upgrade: exec failed",
 			"user_public_id", userPublicID,

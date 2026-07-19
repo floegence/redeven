@@ -46,6 +46,10 @@ func (f *providerDisconnectFakeRPC) Call(_ context.Context, typeID uint32, paylo
 
 func providerLinkRemoteConfig(t *testing.T, cfgPath string) *config.Config {
 	t.Helper()
+	policy, err := config.ParsePermissionPolicyPreset("")
+	if err != nil {
+		t.Fatalf("ParsePermissionPolicyPreset() error = %v", err)
+	}
 	cfg := &config.Config{
 		ProviderOrigin:           "https://redeven.test",
 		ControlplaneBaseURL:      "https://dev.redeven.test",
@@ -60,7 +64,8 @@ func providerLinkRemoteConfig(t *testing.T, cfgPath string) *config.Config {
 			E2eePskB64u:              "cHNr",
 			ChannelInitExpireAtUnixS: 4102444800,
 		},
-		AgentHomeDir: t.TempDir(),
+		AgentHomeDir:     t.TempDir(),
+		PermissionPolicy: policy,
 	}
 	if cfgPath != "" {
 		if err := config.Save(cfgPath, cfg); err != nil {
@@ -83,14 +88,16 @@ func linkProviderControlForTest(a *Agent, caller *providerDisconnectFakeRPC) {
 func newProviderLinkTestAgent(t *testing.T, cfgPath string, cfg *config.Config) *Agent {
 	t.Helper()
 	if cfg == nil {
+		cfg = &config.Config{
+			AgentHomeDir: t.TempDir(),
+		}
+	}
+	if cfg.PermissionPolicy == nil {
 		policy, err := config.ParsePermissionPolicyPreset("")
 		if err != nil {
 			t.Fatalf("ParsePermissionPolicyPreset() error = %v", err)
 		}
-		cfg = &config.Config{
-			AgentHomeDir:     t.TempDir(),
-			PermissionPolicy: policy,
-		}
+		cfg.PermissionPolicy = policy
 	}
 	a, err := New(Options{
 		Config:           cfg,
