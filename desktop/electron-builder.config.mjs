@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -40,6 +41,10 @@ function bundledBinaryCandidate(name) {
       `Bundled binary not found at ${candidate}. Run npm run prepare:bundled-runtime or npm run package from the desktop workspace before invoking electron-builder directly.`,
     );
   }
+  const candidateStat = fs.lstatSync(candidate);
+  if (candidateStat.isSymbolicLink() || !candidateStat.isFile()) {
+    throw new Error(`Bundled artifact must be a regular non-symlink file: ${candidate}`);
+  }
   return candidate;
 }
 
@@ -66,6 +71,9 @@ function loadReleaseArtifactHelpers() {
 
 const bundledRuntimeBinary = resolveBundledRuntimeBinary();
 const bundledGatewayBinary = resolveBundledGatewayBinary();
+const bundledReDevPluginRuntimeBinary = bundledBinaryCandidate('redevplugin-runtime');
+const bundledReDevPluginNotices = bundledBinaryCandidate('REDEVPLUGIN_THIRD_PARTY_NOTICES.md');
+const bundledReDevPluginMarker = bundledBinaryCandidate('.redevplugin-release-artifacts-verified.json');
 const { normalizeLinuxDesktopArtifactPaths } = loadReleaseArtifactHelpers();
 
 export default {
@@ -82,6 +90,18 @@ export default {
     const artifactPaths = await normalizeLinuxDesktopArtifactPaths(buildResult.artifactPaths);
     buildResult.artifactPaths.splice(0, buildResult.artifactPaths.length, ...artifactPaths);
     return [];
+  },
+  afterPack: async (context) => {
+    const goos = resolveTargetGoos();
+    const goarch = resolveTargetGoarch();
+    const resourcesDir = goos === 'darwin'
+      ? path.join(context.appOutDir, 'Redeven Desktop.app', 'Contents', 'Resources')
+      : path.join(context.appOutDir, 'resources');
+    execFileSync(
+      path.join(repoRoot, 'scripts', 'check_redevplugin_consumption_gate.sh'),
+      ['--scan-root', path.join(resourcesDir, 'bin'), '--runtime-target', `${goos}/${goarch}`],
+      { stdio: 'inherit' },
+    );
   },
   asar: true,
   npmRebuild: false,
@@ -101,6 +121,18 @@ export default {
     {
       from: bundledGatewayBinary,
       to: 'bin/redeven-gateway',
+    },
+    {
+      from: bundledReDevPluginRuntimeBinary,
+      to: 'bin/redevplugin-runtime',
+    },
+    {
+      from: bundledReDevPluginNotices,
+      to: 'bin/REDEVPLUGIN_THIRD_PARTY_NOTICES.md',
+    },
+    {
+      from: bundledReDevPluginMarker,
+      to: 'bin/.redevplugin-release-artifacts-verified.json',
     },
     {
       from: path.join(repoRoot, 'LICENSE'),

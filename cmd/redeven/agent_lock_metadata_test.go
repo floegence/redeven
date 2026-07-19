@@ -19,7 +19,7 @@ func TestWriteAndReadAgentLockMetadata(t *testing.T) {
 		_ = lk.Release()
 	}()
 
-	metadata := newAgentLockMetadata(
+	metadata, err := newAgentLockMetadata(
 		"desktop",
 		"rt_test",
 		true,
@@ -31,6 +31,9 @@ func TestWriteAndReadAgentLockMetadata(t *testing.T) {
 			RuntimeControlSocketPath: "/Users/tester/.redeven/local-environment/runtime/control.sock",
 		},
 	)
+	if err != nil {
+		t.Fatalf("newAgentLockMetadata() error = %v", err)
+	}
 	if err := writeAgentLockMetadata(lk, metadata); err != nil {
 		t.Fatalf("writeAgentLockMetadata() error = %v", err)
 	}

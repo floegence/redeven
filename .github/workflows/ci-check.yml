@@ -57,6 +57,12 @@ jobs:
       - name: Install golangci-lint
         run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.5
 
+      - name: Install actionlint
+        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.10
+
+      - name: Lint GitHub Actions workflows
+        run: actionlint .github/workflows/*.yml
+
       - name: Shell script syntax check
         run: |
           sh -n scripts/install.sh
@@ -74,6 +80,7 @@ jobs:
           bash -n scripts/check_redevplugin_dependency_boundary.sh
           bash -n scripts/check_redevplugin_release_artifacts.sh
           bash -n scripts/check_redevplugin_consumption_gate.sh
+          bash -n scripts/check_desktop_redevplugin_package.sh
           bash -n scripts/stage_redevplugin_release_artifacts.sh
           bash -n scripts/check_plugin_integration.sh
           bash -n scripts/check_flower_live_protocol.sh
@@ -83,6 +90,12 @@ jobs:
           bash -n scripts/test_git_hooks.sh
           bash -n .githooks/pre-commit
           bash -n .githooks/pre-push
+          python3 -c 'from pathlib import Path; [compile(Path(name).read_text(encoding="utf-8"), name, "exec") for name in ("scripts/safe_extract_tar.py", "scripts/extract_desktop_runtime.py")]'
+          ./scripts/safe_extract_tar.py --self-test
+          ./scripts/extract_desktop_runtime.py --self-test
+          node --check scripts/collect_release_artifacts.mjs
+          node --test scripts/collect_release_artifacts.test.mjs
+          node --test scripts/install_redevplugin_contract.test.mjs
 
       - name: Git hook contract
         run: ./scripts/test_git_hooks.sh

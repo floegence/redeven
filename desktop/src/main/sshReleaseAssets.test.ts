@@ -103,13 +103,24 @@ describe('sshReleaseAssets', () => {
       release_package_name: 'redeven_linux_amd64.tar.gz',
       platform_label: 'linux/amd64',
     });
-    expect(resolveDesktopSSHRemotePlatform('Darwin', 'arm64')).toEqual({
-      goos: 'darwin',
+    expect(resolveDesktopSSHRemotePlatform('Linux', 'arm64')).toEqual({
+      goos: 'linux',
       goarch: 'arm64',
-      platform_id: 'darwin_arm64',
-      release_package_name: 'redeven_darwin_arm64.tar.gz',
-      platform_label: 'darwin/arm64',
+      platform_id: 'linux_arm64',
+      release_package_name: 'redeven_linux_arm64.tar.gz',
+      platform_label: 'linux/arm64',
     });
+  });
+
+  it.each([
+    ['Darwin', 'arm64'],
+    ['LinuxGNU', 'amd64'],
+    ['Linux', 'armv7l'],
+    ['Linux', 'armv6l'],
+    ['Linux', 'i386'],
+    ['Linux', 'i686'],
+  ])('rejects unpublished SSH runtime target %s/%s', (rawOS, rawArch) => {
+    expect(() => resolveDesktopSSHRemotePlatform(rawOS, rawArch)).toThrow('Unsupported remote');
   });
 
   it('builds release asset URLs and parses SHA256SUMS entries', () => {
@@ -118,6 +129,11 @@ describe('sshReleaseAssets', () => {
       'v1.2.3',
       'redeven_linux_amd64.tar.gz',
     )).toBe('https://mirror.example.invalid/releases/download/v1.2.3/redeven_linux_amd64.tar.gz');
+    expect(buildDesktopSSHReleaseAssetURL(
+      'https://mirror.example.invalid/releases',
+      'v0.0.0-dev.1',
+      'redeven_linux_arm64.tar.gz',
+    )).toBe('https://mirror.example.invalid/releases/download/v0.0.0-dev.1/redeven_linux_arm64.tar.gz');
 
     expect(parseDesktopSSHReleaseSHA256(
       'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa  redeven_linux_amd64.tar.gz\n',
@@ -138,6 +154,34 @@ describe('sshReleaseAssets', () => {
       expect(manifest.sha256_by_asset_name.get('redeven_linux_amd64.tar.gz')).toBe(
         '9cdece939c23b293176e846f7c687ccc9a8d7f15eab0e3fdbde4f25f4ba4dc50',
       );
+  });
+
+  it('binds the release certificate identity to the exact selected canonical tag', () => {
+    expect(() => verifyDesktopSSHReleaseManifest({
+      releaseTag: 'v0.4.49',
+      releaseBaseURL: RELEASE_FIXTURE_BASE_URL,
+      sumsText: RELEASE_FIXTURE_SUMS,
+      signature: RELEASE_FIXTURE_SIGNATURE,
+      certificate: RELEASE_FIXTURE_CERTIFICATE,
+    })).toThrow('certificate identity did not match the selected release tag v0.4.49');
+  });
+
+  it.each([
+    '0.4.48',
+    'v00.4.48',
+    'v0.04.48',
+    'v0.4.048',
+    'v0.4.48-01',
+    'v0.4.48-',
+    'v0.4.48+build',
+    ' v0.4.48',
+    'v0.4.48 ',
+  ])('rejects non-canonical release tag %j before trust or cache use', (releaseTag) => {
+    expect(() => buildDesktopSSHReleaseAssetURL(
+      RELEASE_FIXTURE_BASE_URL,
+      releaseTag,
+      'redeven_linux_amd64.tar.gz',
+    )).toThrow('release tag must be canonical SemVer');
   });
 
   it('rejects tampered release manifests', () => {

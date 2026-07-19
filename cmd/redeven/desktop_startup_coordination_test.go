@@ -111,7 +111,7 @@ func TestHandleDesktopLockConflictWritesBlockedReportWhenRuntimeIsUnavailable(t 
 	defer func() {
 		_ = lk.Release()
 	}()
-	if err := writeAgentLockMetadata(lk, newAgentLockMetadata(
+	metadata, err := newAgentLockMetadata(
 		"remote",
 		"rt_conflict",
 		false,
@@ -122,7 +122,11 @@ func TestHandleDesktopLockConflictWritesBlockedReportWhenRuntimeIsUnavailable(t 
 			StateRoot:                filepath.Dir(filepath.Dir(cfgPath)),
 			RuntimeControlSocketPath: config.RuntimeControlSocketPathFromConfigPath(cfgPath),
 		},
-	)); err != nil {
+	)
+	if err != nil {
+		t.Fatalf("newAgentLockMetadata() error = %v", err)
+	}
+	if err := writeAgentLockMetadata(lk, metadata); err != nil {
 		t.Fatalf("writeAgentLockMetadata() error = %v", err)
 	}
 

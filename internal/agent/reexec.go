@@ -1,52 +1,42 @@
 package agent
 
 import (
+	"errors"
 	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/floegence/redeven/internal/runtimeidentity"
 )
 
 type selfExecPlan struct {
-	exePath     string
-	installDir  string
-	argv        []string
-	localUIBind string
+	exePath        string
+	installDir     string
+	activationPath string
+	argv           []string
+	localUIBind    string
 }
 
-func resolveSelfExecPlan(localUIBind string) (selfExecPlan, error) {
-	exePath := currentExecutablePath()
-	if exePath == "" {
-		return selfExecPlan{}, os.ErrInvalid
+func resolveSelfExecPlan(exePath string, localUIBind string) (selfExecPlan, error) {
+	exePath = filepath.Clean(strings.TrimSpace(exePath))
+	if exePath == "" || !filepath.IsAbs(exePath) {
+		return selfExecPlan{}, errors.New("canonical executable path is unavailable")
 	}
-	installDir := filepath.Clean(filepath.Dir(exePath))
-	if strings.TrimSpace(installDir) == "" {
-		return selfExecPlan{}, os.ErrInvalid
+	installDir, err := runtimeidentity.RuntimeSuiteActivationRoot(exePath)
+	if err != nil {
+		return selfExecPlan{}, err
 	}
 
 	argv := rewriteSelfExecArgs(os.Args, localUIBind)
 	return selfExecPlan{
-		exePath:     exePath,
-		installDir:  installDir,
-		argv:        argv,
-		localUIBind: currentLocalUIBindArg(argv),
+		exePath:        exePath,
+		installDir:     installDir,
+		activationPath: filepath.Join(installDir, "redeven"),
+		argv:           argv,
+		localUIBind:    currentLocalUIBindArg(argv),
 	}, nil
-}
-
-func currentExecutablePath() string {
-	exePath, err := os.Executable()
-	if err != nil {
-		return ""
-	}
-	exePath = strings.TrimSpace(exePath)
-	if exePath == "" {
-		return ""
-	}
-	if abs, absErr := filepath.Abs(exePath); absErr == nil && strings.TrimSpace(abs) != "" {
-		exePath = abs
-	}
-	return filepath.Clean(exePath)
 }
 
 func rewriteSelfExecArgs(argv []string, runtimeBind string) []string {

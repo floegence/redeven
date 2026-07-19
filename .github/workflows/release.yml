@@ -6,8 +6,7 @@ on:
       - "v*"
 
 permissions:
-  contents: write
-  id-token: write
+  contents: read
 
 jobs:
   renderer-e2e:
@@ -101,6 +100,9 @@ jobs:
       - name: Enable corepack
         run: corepack enable
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
       - name: Validate runtime compatibility contract
         run: ./scripts/check_runtime_compatibility_contract.sh "${GITHUB_REF_NAME}"
 
@@ -119,14 +121,11 @@ jobs:
           cp LICENSE dist/LICENSE
           cp THIRD_PARTY_NOTICES.md dist/THIRD_PARTY_NOTICES.md
 
-      - name: Build binary
+      - name: Build binaries
         env:
-          GH_TOKEN: ${{ github.token }}
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
-          REDEVEN_RELEASE_REDEVPLUGIN_VERSION: ${{ vars.REDEVEN_RELEASE_REDEVPLUGIN_VERSION }}
-          REDEVEN_RELEASE_REDEVPLUGIN_REPO: ${{ vars.REDEVEN_RELEASE_REDEVPLUGIN_REPO }}
         run: |
           set -euo pipefail
           VERSION="${GITHUB_REF_NAME}"
@@ -145,24 +144,28 @@ jobs:
             -o dist/redeven-gateway \
             ./cmd/redeven-gateway
 
-          if [ -n "${REDEVEN_RELEASE_REDEVPLUGIN_VERSION:-}" ]; then
-            args=(
-              --version "$REDEVEN_RELEASE_REDEVPLUGIN_VERSION"
-              --dest-dir "dist/redevplugin-release"
-              --redeven-goos "$GOOS"
-              --redeven-goarch "$GOARCH"
-              --runtime-out "dist/redevplugin-runtime"
-            )
-            if [ -n "${REDEVEN_RELEASE_REDEVPLUGIN_REPO:-}" ]; then
-              args+=(--repo "$REDEVEN_RELEASE_REDEVPLUGIN_REPO")
-            fi
-            ./scripts/stage_redevplugin_release_artifacts.sh "${args[@]}"
-          fi
+      - name: Stage signed ReDevPlugin runtime and package archives
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          set -euo pipefail
 
-          redeven_entries=(redeven LICENSE THIRD_PARTY_NOTICES.md)
-          if [ -f dist/redevplugin-runtime ]; then
-            redeven_entries+=(redevplugin-runtime REDEVPLUGIN_THIRD_PARTY_NOTICES.md .redevplugin-release-artifacts-verified.json)
-          fi
+          ./scripts/stage_redevplugin_release_artifacts.sh \
+            --dest-dir "dist/redevplugin-release" \
+            --redeven-goos "$GOOS" \
+            --redeven-goarch "$GOARCH" \
+            --runtime-out "dist/redevplugin-runtime"
+
+          redeven_entries=(
+            redeven
+            redevplugin-runtime
+            REDEVPLUGIN_THIRD_PARTY_NOTICES.md
+            .redevplugin-release-artifacts-verified.json
+            LICENSE
+            THIRD_PARTY_NOTICES.md
+          )
           (
             cd dist
             tar -czf "redeven_${GOOS}_${GOARCH}.tar.gz" "${redeven_entries[@]}"
@@ -178,9 +181,7 @@ jobs:
           cp dist/okf_bundle.sha256 "$upload_dir/"
           cp dist/LICENSE "$upload_dir/"
           cp dist/THIRD_PARTY_NOTICES.md "$upload_dir/"
-          if [ -f dist/.redevplugin-release-artifacts-verified.json ]; then
-            cp dist/.redevplugin-release-artifacts-verified.json "$upload_dir/"
-          fi
+          cp dist/.redevplugin-release-artifacts-verified.json "$upload_dir/"
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v6
@@ -194,6 +195,9 @@ jobs:
     name: Desktop ${{ matrix.goos }}-${{ matrix.goarch }}
     needs: build
     runs-on: ${{ matrix.runner }}
+    permissions:
+      actions: read
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -223,6 +227,11 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: "24"
+
+      - name: Setup Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
 
       - name: Download matching runtime package
         env:
@@ -293,8 +302,6 @@ jobs:
           REDEVEN_DESKTOP_RUNTIME_TARBALL: ${{ github.workspace }}/dist/agent/redeven_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
           REDEVEN_DESKTOP_GATEWAY_TARBALL: ${{ github.workspace }}/dist/agent/redeven-gateway_${{ matrix.goos }}_${{ matrix.goarch }}.tar.gz
           REDEVEN_DESKTOP_VERSION: ${{ github.ref_name }}
-          REDEVEN_DESKTOP_REDEVPLUGIN_VERSION: ${{ vars.REDEVEN_RELEASE_REDEVPLUGIN_VERSION }}
-          REDEVEN_DESKTOP_REDEVPLUGIN_REPO: ${{ vars.REDEVEN_RELEASE_REDEVPLUGIN_REPO }}
         run: |
           set -euo pipefail
           cd desktop
@@ -316,6 +323,49 @@ jobs:
           APPLE_API_ISSUER="${apple_api_issuer}" \
           npm run package -- ${{ matrix.builder_args }}
 
+      - name: Install Linux installer inspection tools
+        if: matrix.goos == 'linux'
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install --yes cpio rpm rpm2cpio
+
+      - name: Verify packaged ReDevPlugin runtime
+        run: |
+          set -euo pipefail
+          version="${GITHUB_REF_NAME#v}"
+          case "${{ matrix.goos }}/${{ matrix.goarch }}" in
+            linux/amd64)
+              packages=(
+                "desktop/release/Redeven-Desktop-${version}-linux-x64.deb"
+                "desktop/release/Redeven-Desktop-${version}-linux-x64.rpm"
+              )
+              ;;
+            linux/arm64)
+              packages=(
+                "desktop/release/Redeven-Desktop-${version}-linux-arm64.deb"
+                "desktop/release/Redeven-Desktop-${version}-linux-arm64.rpm"
+              )
+              ;;
+            darwin/amd64)
+              packages=("desktop/release/Redeven-Desktop-${version}-mac-x64.dmg")
+              ;;
+            darwin/arm64)
+              packages=("desktop/release/Redeven-Desktop-${version}-mac-arm64.dmg")
+              ;;
+            *)
+              echo "unsupported Desktop release target" >&2
+              exit 1
+              ;;
+          esac
+          for package in "${packages[@]}"; do
+            test -f "$package"
+            ./scripts/check_desktop_redevplugin_package.sh \
+              --package "$package" \
+              --runtime-target "${{ matrix.goos }}/${{ matrix.goarch }}" \
+              --write-receipt "${package}.redevplugin-verification.json"
+          done
+
       - name: Upload desktop package artifact
         uses: actions/upload-artifact@v6
         with:
@@ -324,6 +374,7 @@ jobs:
             desktop/release/*.deb
             desktop/release/*.rpm
             desktop/release/*.dmg
+            desktop/release/*.redevplugin-verification.json
           if-no-files-found: error
 
   release:
@@ -332,6 +383,10 @@ jobs:
       - build
       - desktop
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+      id-token: write
 
     steps:
       - name: Checkout
@@ -364,21 +419,11 @@ jobs:
       - name: Collect release assets
         run: |
           set -euo pipefail
-          find dist/downloads -type f -name 'redeven_*.tar.gz' -exec cp {} dist/ \;
-          find dist/downloads -type f -name 'redeven-gateway_*.tar.gz' -exec cp {} dist/ \;
-          find dist/downloads -type f \( -name '*.deb' -o -name '*.rpm' -o -name '*.dmg' \) -exec cp {} dist/ \;
-          find dist/downloads -type f -name '.redevplugin-release-artifacts-verified.json' -exec cp {} dist/ \;
-
-          manifest_src="$(find dist/downloads -type f -name 'okf_bundle.manifest.json' -print -quit)"
-          checksum_src="$(find dist/downloads -type f -name 'okf_bundle.sha256' -print -quit)"
-
-          test -n "${manifest_src}"
-          test -n "${checksum_src}"
-
-          cp "${manifest_src}" dist/okf_bundle.manifest.json
-          cp "${checksum_src}" dist/okf_bundle.sha256
-          cp LICENSE dist/LICENSE
-          cp THIRD_PARTY_NOTICES.md dist/THIRD_PARTY_NOTICES.md
+          ./scripts/collect_release_artifacts.mjs \
+            --downloads-dir dist/downloads \
+            --dest-dir dist \
+            --tag "${GITHUB_REF_NAME}"
+          cp scripts/safe_extract_tar.py dist/safe_extract_tar.py
 
       - name: Validate ReDevPlugin consumption gate
         run: ./scripts/check_redevplugin_consumption_gate.sh --scan-root dist
@@ -387,7 +432,20 @@ jobs:
         run: |
           set -euo pipefail
           cd dist
-          sha256sum redeven_*.tar.gz redeven-gateway_*.tar.gz Redeven-Desktop-* LICENSE THIRD_PARTY_NOTICES.md okf_bundle.manifest.json okf_bundle.sha256 > SHA256SUMS
+          cp .redevplugin-release-artifacts-verified.json redevplugin-release-artifacts-verified.json
+          sha256sum \
+            redeven_*.tar.gz \
+            redeven-gateway_*.tar.gz \
+            Redeven-Desktop-*.deb \
+            Redeven-Desktop-*.rpm \
+            Redeven-Desktop-*.dmg \
+            Redeven-Desktop-*.redevplugin-verification.json \
+            redevplugin-release-artifacts-verified.json \
+            safe_extract_tar.py \
+            LICENSE \
+            THIRD_PARTY_NOTICES.md \
+            okf_bundle.manifest.json \
+            okf_bundle.sha256 > SHA256SUMS
 
       - name: Install cosign
         uses: sigstore/cosign-installer@v3
@@ -446,30 +504,69 @@ jobs:
           fi
 
           if gh release view "${GITHUB_REF_NAME}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            gh release edit "${GITHUB_REF_NAME}" \
-              --repo "${GITHUB_REPOSITORY}" \
-              --title "${title}" \
-              --notes-file dist/RELEASE_NOTES_FULL.md \
-              "${release_flags[@]}"
-          else
-            gh release create "${GITHUB_REF_NAME}" \
-              --repo "${GITHUB_REPOSITORY}" \
-              --verify-tag \
-              --title "${title}" \
-              --notes-file dist/RELEASE_NOTES_FULL.md \
-              "${release_flags[@]}"
+            echo "release already exists for ${GITHUB_REF_NAME}; refusing to replace published assets" >&2
+            exit 1
           fi
+
+          assets=(
+            dist/redeven_*.tar.gz
+            dist/redeven-gateway_*.tar.gz
+            dist/Redeven-Desktop-*.deb
+            dist/Redeven-Desktop-*.rpm
+            dist/Redeven-Desktop-*.dmg
+            dist/Redeven-Desktop-*.redevplugin-verification.json
+            dist/SHA256SUMS
+            dist/SHA256SUMS.sig
+            dist/SHA256SUMS.pem
+            dist/redevplugin-release-artifacts-verified.json
+            dist/safe_extract_tar.py
+            dist/LICENSE
+            dist/THIRD_PARTY_NOTICES.md
+            dist/okf_bundle.manifest.json
+            dist/okf_bundle.sha256
+          )
+          for asset in "${assets[@]}"; do
+            test -f "${asset}"
+          done
+
+          gh release create "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --verify-tag \
+            --draft \
+            --title "${title}" \
+            --notes-file dist/RELEASE_NOTES_FULL.md \
+            "${release_flags[@]}"
 
           gh release upload "${GITHUB_REF_NAME}" \
             --repo "${GITHUB_REPOSITORY}" \
-            --clobber \
-            dist/redeven_*.tar.gz \
-            dist/redeven-gateway_*.tar.gz \
-            dist/Redeven-Desktop-* \
-            dist/SHA256SUMS \
-            dist/SHA256SUMS.sig \
-            dist/SHA256SUMS.pem \
-            dist/LICENSE \
-            dist/THIRD_PARTY_NOTICES.md \
-            dist/okf_bundle.manifest.json \
-            dist/okf_bundle.sha256
+            "${assets[@]}"
+
+          local_manifest="$(mktemp)"
+          remote_dir="$(mktemp -d)"
+          for asset in "${assets[@]}"; do
+            printf '%s  %s  %s\n' \
+              "$(sha256sum "${asset}" | awk '{print $1}')" \
+              "$(stat -c '%s' "${asset}")" \
+              "$(basename "${asset}")"
+          done | sort > "${local_manifest}"
+
+          gh release download "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --dir "${remote_dir}"
+          remote_manifest="$(mktemp)"
+          find "${remote_dir}" -mindepth 1 -maxdepth 1 -type f -print0 \
+            | while IFS= read -r -d '' asset; do
+                printf '%s  %s  %s\n' \
+                  "$(sha256sum "${asset}" | awk '{print $1}')" \
+                  "$(stat -c '%s' "${asset}")" \
+                  "$(basename "${asset}")"
+              done \
+            | sort > "${remote_manifest}"
+          cmp "${local_manifest}" "${remote_manifest}"
+
+          gh release edit "${GITHUB_REF_NAME}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --draft=false \
+            --title "${title}" \
+            --notes-file dist/RELEASE_NOTES_FULL.md \
+            "${release_flags[@]}"

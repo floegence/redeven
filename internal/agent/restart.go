@@ -29,7 +29,7 @@ func (r *sysRestarter) StartRestart(_ctx context.Context, meta *session.Meta, _ 
 		return &syssvc.RestartResponse{OK: false, Message: "Windows is not supported for self-restart. Please restart manually."}, nil
 	}
 
-	plan, err := resolveSelfExecPlan(a.localUIBind)
+	plan, err := resolveSelfExecPlan(a.binaryPath, a.localUIBind)
 	if err != nil {
 		a.log.Warn("sys_restart: resolve self paths failed", "error", err)
 		return nil, &rpc.Error{Code: 500, Message: "failed to resolve runtime executable path"}

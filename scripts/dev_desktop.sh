@@ -425,7 +425,6 @@ start_desktop() {
     fi
     export REDEVEN_DESKTOP_BUNDLE_COMMIT="${REDEVEN_DESKTOP_BUNDLE_COMMIT:-$(git -C "$ROOT_DIR" rev-parse --short=12 HEAD)}"
     export REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT="${REDEVEN_DESKTOP_SSH_RUNTIME_SOURCE_ROOT:-$ROOT_DIR}"
-    export REDEVEN_ENVAPP_ENABLE_PLUGIN_UI=1
     npm run build
     npm run prepare:bundled-runtime
     exec "${cmd[@]}"

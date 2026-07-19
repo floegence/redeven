@@ -1,62 +1,72 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+RELEASE_REPO="floegence/redevplugin"
+RELEASE_TAG="v0.5.1"
+RELEASE_VERSION="0.5.1"
+RELEASE_SOURCE_COMMIT="3febcc59bbdb2118a4f105781b4c743bc11ba09f"
+MARKER_SCHEMA="redeven.redevplugin_artifact_verification.v4"
 MARKER_BASENAME=".redevplugin-release-artifacts-verified.json"
 NOTICE_BASENAME="REDEVPLUGIN_THIRD_PARTY_NOTICES.md"
+
+RELEASE_ASSETS=(
+  "SHA256SUMS"
+  "SHA256SUMS.bundle"
+  "SHA256SUMS.sig"
+  "redevplugin-a2-acceptance.json"
+  "redevplugin-a2-acceptance.json.bundle"
+  "redevplugin-a2-acceptance.json.sig"
+  "redevplugin-a2-supported.png"
+  "redevplugin-a2-supported.png.bundle"
+  "redevplugin-a2-supported.png.sig"
+  "redevplugin-a2-unsupported.png"
+  "redevplugin-a2-unsupported.png.bundle"
+  "redevplugin-a2-unsupported.png.sig"
+  "redevplugin-release-stress.json"
+  "redevplugin-release-stress.json.bundle"
+  "redevplugin-release-stress.json.sig"
+  "redevplugin-v0.5.1-aarch64-apple-darwin.tar.gz"
+  "redevplugin-v0.5.1-aarch64-apple-darwin.tar.gz.bundle"
+  "redevplugin-v0.5.1-aarch64-apple-darwin.tar.gz.sig"
+  "redevplugin-v0.5.1-aarch64-unknown-linux-gnu.tar.gz"
+  "redevplugin-v0.5.1-aarch64-unknown-linux-gnu.tar.gz.bundle"
+  "redevplugin-v0.5.1-aarch64-unknown-linux-gnu.tar.gz.sig"
+  "redevplugin-v0.5.1-x86_64-apple-darwin.tar.gz"
+  "redevplugin-v0.5.1-x86_64-apple-darwin.tar.gz.bundle"
+  "redevplugin-v0.5.1-x86_64-apple-darwin.tar.gz.sig"
+  "redevplugin-v0.5.1-x86_64-unknown-linux-gnu.tar.gz"
+  "redevplugin-v0.5.1-x86_64-unknown-linux-gnu.tar.gz.bundle"
+  "redevplugin-v0.5.1-x86_64-unknown-linux-gnu.tar.gz.sig"
+)
 
 usage() {
   cat <<'USAGE'
 Usage:
-  ./scripts/stage_redevplugin_release_artifacts.sh --version <vX.Y.Z> --dest-dir <dir> [--repo <owner/repo>] [--skip-cosign]
-  ./scripts/stage_redevplugin_release_artifacts.sh --source-dir <dir> --dest-dir <dir> [--version <vX.Y.Z>] [--skip-cosign]
-  ./scripts/stage_redevplugin_release_artifacts.sh --version <vX.Y.Z> --dest-dir <dir> --runtime-target <target> --runtime-out <file> [--repo <owner/repo>] [--skip-cosign]
-  ./scripts/stage_redevplugin_release_artifacts.sh --version <vX.Y.Z> --dest-dir <dir> --redeven-goos <goos> --redeven-goarch <goarch> --runtime-out <file> [--repo <owner/repo>] [--skip-cosign]
+  ./scripts/stage_redevplugin_release_artifacts.sh --dest-dir <dir>
+  ./scripts/stage_redevplugin_release_artifacts.sh --dest-dir <dir> --redeven-goos <goos> --redeven-goarch <goarch> --runtime-out <file> [--marker-out <file>]
   ./scripts/stage_redevplugin_release_artifacts.sh --self-test
 
-Downloads or copies a released ReDevPlugin artifact set, verifies the release
-evidence, writes a verifier marker, and validates the staged payloads with the
-Redeven consumption gate. When --runtime-target and --runtime-out are supplied,
-the matching verified redevplugin-runtime binary, verifier marker, and
-REDEVPLUGIN_THIRD_PARTY_NOTICES.md file are extracted so downstream staging
-roots can be scanned directly.
+Downloads the closed 27-file ReDevPlugin v0.5.1 release from
+floegence/redevplugin, verifies its keyless release evidence, writes a v4
+verification marker, and optionally extracts one of the four supported runtime
+targets for a Redeven bundle. Production staging accepts no local source,
+repository override, signature bypass, version override, or raw runtime target.
 USAGE
 }
 
 SCRIPT_DIR=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" >/dev/null 2>&1 && pwd)
 ROOT_DIR=$(cd -- "$SCRIPT_DIR/.." >/dev/null 2>&1 && pwd)
 
-VERSION=""
-SOURCE_DIR=""
 DEST_DIR=""
-REPO="floegence/redevplugin"
-RUNTIME_TARGET=""
 REDEVEN_GOOS=""
 REDEVEN_GOARCH=""
 RUNTIME_OUT=""
 MARKER_OUT=""
-SKIP_COSIGN=0
 SELF_TEST=0
+SELF_TEST_LINUX_AMD64_RUNTIME_SHA256=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --version)
-      if [[ $# -lt 2 ]]; then
-        echo "--version requires a release tag" >&2
-        usage >&2
-        exit 2
-      fi
-      VERSION="$2"
-      shift 2
-      ;;
-    --source-dir)
-      if [[ $# -lt 2 ]]; then
-        echo "--source-dir requires a directory" >&2
-        usage >&2
-        exit 2
-      fi
-      SOURCE_DIR="$2"
-      shift 2
-      ;;
     --dest-dir)
       if [[ $# -lt 2 ]]; then
         echo "--dest-dir requires a directory" >&2
@@ -64,24 +74,6 @@ while [[ $# -gt 0 ]]; do
         exit 2
       fi
       DEST_DIR="$2"
-      shift 2
-      ;;
-    --repo)
-      if [[ $# -lt 2 ]]; then
-        echo "--repo requires an owner/repo value" >&2
-        usage >&2
-        exit 2
-      fi
-      REPO="$2"
-      shift 2
-      ;;
-    --runtime-target)
-      if [[ $# -lt 2 ]]; then
-        echo "--runtime-target requires a ReDevPlugin runtime target" >&2
-        usage >&2
-        exit 2
-      fi
-      RUNTIME_TARGET="$2"
       shift 2
       ;;
     --redeven-goos)
@@ -120,10 +112,6 @@ while [[ $# -gt 0 ]]; do
       MARKER_OUT="$2"
       shift 2
       ;;
-    --skip-cosign)
-      SKIP_COSIGN=1
-      shift
-      ;;
     --self-test)
       SELF_TEST=1
       shift
@@ -156,412 +144,601 @@ require_command() {
   fi
 }
 
-assert_release_tag() {
-  local tag="$1"
-  if [[ ! "$tag" =~ ^v[0-9]+(\.[0-9]+){2}([-.][A-Za-z0-9._-]+)?$ ]]; then
-    die "ReDevPlugin release tag must look like vX.Y.Z: $tag"
+hash_file() {
+  local path="$1"
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$path" | awk '{ print $1 }'
+    return
   fi
+  shasum -a 256 "$path" | awk '{ print $1 }'
 }
 
-resolve_redevplugin_runtime_target() {
+resolve_redevplugin_build_triple() {
   local goos="$1"
   local goarch="$2"
 
   case "${goos}/${goarch}" in
-    linux/amd64)
-      printf 'x86_64-unknown-linux-gnu\n'
-      ;;
-    linux/arm64)
-      printf 'aarch64-unknown-linux-gnu\n'
-      ;;
     darwin/amd64)
       printf 'x86_64-apple-darwin\n'
       ;;
     darwin/arm64)
       printf 'aarch64-apple-darwin\n'
       ;;
+    linux/amd64)
+      printf 'x86_64-unknown-linux-gnu\n'
+      ;;
+    linux/arm64)
+      printf 'aarch64-unknown-linux-gnu\n'
+      ;;
     *)
-      die "unsupported Redeven target for ReDevPlugin runtime artifact: ${goos}/${goarch}"
+      die "unsupported Redeven target for ReDevPlugin v0.5.1: ${goos}/${goarch}"
       ;;
   esac
 }
 
-assert_safe_clean_dir() {
-  local path="$1"
-  if [[ -z "$path" || "$path" == "/" || "$path" == "." || "$path" == "$ROOT_DIR" ]]; then
-    die "refusing to clean unsafe destination: $path"
-  fi
-}
-
-prepare_dest_dir() {
+canonicalize_dest_dir() {
   local dest="$1"
-  assert_safe_clean_dir "$dest"
-  rm -rf "$dest"
-  mkdir -p "$dest"
+  DEST_INPUT="$dest" ROOT_DIR="$ROOT_DIR" node <<'NODE'
+const { existsSync, lstatSync, mkdirSync, realpathSync } = require("node:fs");
+const { basename, dirname, join, resolve } = require("node:path");
+
+const requested = resolve(process.env.DEST_INPUT);
+if (basename(requested) !== "redevplugin-release") {
+  fail("destination basename must be redevplugin-release");
+}
+const parent = dirname(requested);
+if (parent === "/" || parent === resolve(process.env.ROOT_DIR)) {
+  fail("destination parent is not an allowed staging parent");
+}
+mkdirSync(parent, { recursive: true, mode: 0o755 });
+const canonicalParent = realpathSync(parent);
+const canonical = join(canonicalParent, "redevplugin-release");
+if (existsSync(canonical) || lstatExists(canonical)) {
+  fail("destination already exists; verified staging never replaces an existing directory");
+}
+process.stdout.write(`${canonical}\n`);
+
+function lstatExists(path) {
+  try {
+    lstatSync(path);
+    return true;
+  } catch (error) {
+    if (error && error.code === "ENOENT") return false;
+    throw error;
+  }
+}
+function fail(message) {
+  console.error(`[redevplugin-stage] ${message}`);
+  process.exit(1);
+}
+NODE
 }
 
-copy_source_artifacts() {
+publish_file() {
   local source="$1"
-  local dest="$2"
+  local destination="$2"
+  local executable="${3:-0}"
+  local destination_dir destination_name temporary
 
-  if [[ ! -d "$source" ]]; then
-    die "source artifact directory not found: $source"
+  destination_dir=$(dirname -- "$destination")
+  destination_name=$(basename -- "$destination")
+  mkdir -p "$destination_dir"
+  destination_dir=$(cd -- "$destination_dir" >/dev/null 2>&1 && pwd -P)
+  if [[ -L "$destination_dir/$destination_name" || -d "$destination_dir/$destination_name" ]]; then
+    die "refusing to replace non-regular output: $destination"
   fi
-  find "$source" -maxdepth 1 -type f ! -name "$MARKER_BASENAME" -exec cp {} "$dest/" \;
+  temporary=$(mktemp "$destination_dir/.${destination_name}.publish.XXXXXX")
+  cp "$source" "$temporary"
+  if [[ "$executable" == "1" ]]; then
+    chmod 0755 "$temporary"
+  else
+    chmod 0644 "$temporary"
+  fi
+  "$SCRIPT_DIR/safe_extract_tar.py" \
+    --replace-file "$temporary" \
+    --dest "$destination_dir/$destination_name"
+}
+
+assert_exact_release_assets() {
+  local dir="$1"
+  local expected
+  expected=$(printf '%s\n' "${RELEASE_ASSETS[@]}")
+  RELEASE_ASSET_DIR="$dir" EXPECTED_RELEASE_ASSETS="$expected" node <<'NODE'
+const { lstatSync, readdirSync } = require("node:fs");
+const { join } = require("node:path");
+
+const root = process.env.RELEASE_ASSET_DIR;
+const expected = process.env.EXPECTED_RELEASE_ASSETS.split("\n").filter(Boolean).sort();
+const actual = readdirSync(root).sort();
+if (expected.length !== 27) {
+  fail(`internal release inventory must contain exactly 27 files, got ${expected.length}`);
+}
+for (const name of actual) {
+  if (!lstatSync(join(root, name)).isFile()) {
+    fail(`release staging directory contains a non-file entry: ${name}`);
+  }
+}
+if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+  const expectedSet = new Set(expected);
+  const actualSet = new Set(actual);
+  const missing = expected.filter((name) => !actualSet.has(name));
+  const unexpected = actual.filter((name) => !expectedSet.has(name));
+  fail(`release asset inventory mismatch; missing=${JSON.stringify(missing)} unexpected=${JSON.stringify(unexpected)}`);
+}
+
+function fail(message) {
+  console.error(`[redevplugin-stage] ${message}`);
+  process.exit(1);
+}
+NODE
 }
 
 download_release_artifacts() {
-  local version="$1"
-  local repo="$2"
-  local dest="$3"
+  local dest="$1"
+  local args=(release download "$RELEASE_TAG" --repo "$RELEASE_REPO" --dir "$dest")
+  local asset
 
   require_command gh
-  gh release download "$version" \
-    --repo "$repo" \
-    --dir "$dest" \
-    --pattern "SHA256SUMS*" \
-    --pattern "redevplugin-release-stress.json*" \
-    --pattern "redevplugin-${version}-*.tar.gz*"
+  for asset in "${RELEASE_ASSETS[@]}"; do
+    args+=(--pattern "$asset")
+  done
+  gh "${args[@]}"
+  assert_exact_release_assets "$dest"
 }
 
 verify_staged_artifacts() {
   local dest="$1"
   local marker="$dest/$MARKER_BASENAME"
-  local verifier_args=("--artifact-dir" "$dest" "--write-marker" "$marker")
 
-  if [[ "$SKIP_COSIGN" -eq 1 ]]; then
-    verifier_args+=("--skip-cosign")
-  fi
-
-  "$SCRIPT_DIR/check_redevplugin_release_artifacts.sh" "${verifier_args[@]}"
+  "$SCRIPT_DIR/check_redevplugin_release_artifacts.sh" \
+    --artifact-dir "$dest" \
+    --tag "$RELEASE_TAG" \
+    --write-marker "$marker"
+  validate_verifier_marker "$marker"
   "$SCRIPT_DIR/check_redevplugin_consumption_gate.sh" --scan-root "$dest"
 }
 
-resolve_runtime_tarball() {
-  local dest="$1"
-  local version="$2"
-  local target="$3"
-  local expected
+validate_verifier_marker() {
+  local marker="$1"
+  MARKER_PATH="$marker" \
+    EXPECTED_MARKER_SCHEMA="$MARKER_SCHEMA" \
+    EXPECTED_RELEASE_TAG="$RELEASE_TAG" \
+    EXPECTED_RELEASE_VERSION="$RELEASE_VERSION" \
+    EXPECTED_SOURCE_COMMIT="$RELEASE_SOURCE_COMMIT" \
+    SELF_TEST_LINUX_AMD64_RUNTIME_SHA256="$SELF_TEST_LINUX_AMD64_RUNTIME_SHA256" \
+    node <<'NODE'
+const { readFileSync } = require("node:fs");
 
-  if [[ -n "$version" ]]; then
-    expected="$dest/redevplugin-${version}-${target}.tar.gz"
-    if [[ ! -f "$expected" ]]; then
-      die "verified ReDevPlugin runtime tarball not found for target ${target}: $expected"
-    fi
-    printf '%s\n' "$expected"
-    return 0
-  fi
+const marker = JSON.parse(readFileSync(process.env.MARKER_PATH, "utf8"));
+assertExactKeys(marker, [
+  "schema_version", "release_tag", "release_version", "source_commit",
+  "sha256sums_sha256", "compatibility_sha256", "contract_registry_sha256",
+  "npm_package", "worker_sdk", "performance_evidence", "evidence", "signing", "targets",
+], "marker");
+assertEqual(marker.schema_version, process.env.EXPECTED_MARKER_SCHEMA, "marker schema_version");
+assertEqual(marker.release_tag, process.env.EXPECTED_RELEASE_TAG, "marker release_tag");
+assertEqual(marker.release_version, process.env.EXPECTED_RELEASE_VERSION, "marker release_version");
+assertEqual(marker.source_commit, process.env.EXPECTED_SOURCE_COMMIT, "marker source_commit");
+assertSHA256(marker.sha256sums_sha256, "marker sha256sums_sha256");
+assertSHA256(marker.compatibility_sha256, "marker compatibility_sha256");
+assertSHA256(marker.contract_registry_sha256, "marker contract_registry_sha256");
 
-  local matches=()
-  while IFS= read -r match; do
-    matches+=("$match")
-  done < <(find "$dest" -maxdepth 1 -type f -name "redevplugin-*-${target}.tar.gz" | sort)
-  if [[ "${#matches[@]}" -ne 1 ]]; then
-    die "expected exactly one ReDevPlugin tarball for target ${target}, found ${#matches[@]}"
-  fi
-  printf '%s\n' "${matches[0]}"
+assertExactKeys(marker.npm_package, ["name", "version", "path", "sha256", "integrity", "size"], "npm_package");
+assertEqual(marker.npm_package.name, "@floegence/redevplugin-ui", "npm_package.name");
+assertEqual(marker.npm_package.version, "0.5.1", "npm_package.version");
+assertEqual(marker.npm_package.path, "npm/floegence-redevplugin-ui-0.5.1.tgz", "npm_package.path");
+assertSHA256(marker.npm_package.sha256, "npm_package.sha256");
+if (typeof marker.npm_package.integrity !== "string" || !marker.npm_package.integrity.startsWith("sha512-")) {
+  fail("npm_package.integrity must be sha512 SRI");
+}
+assertSize(marker.npm_package.size, "npm_package.size");
+
+assertExactKeys(marker.worker_sdk, ["name", "version", "path", "sha256", "size"], "worker_sdk");
+assertEqual(marker.worker_sdk.name, "redevplugin-worker-sdk", "worker_sdk.name");
+assertEqual(marker.worker_sdk.version, "0.5.1", "worker_sdk.version");
+assertEqual(marker.worker_sdk.path, "sdk/redevplugin-worker-sdk-0.5.1.crate", "worker_sdk.path");
+assertSHA256(marker.worker_sdk.sha256, "worker_sdk.sha256");
+assertSize(marker.worker_sdk.size, "worker_sdk.size");
+
+assertFileRecord(marker.performance_evidence, "performance_evidence");
+assertEqual(marker.performance_evidence.path, "performance-evidence.json", "performance_evidence.path");
+assertExactKeys(marker.evidence, ["stress", "a2_report", "a2_supported", "a2_unsupported"], "evidence");
+const evidencePaths = {
+  stress: "redevplugin-release-stress.json",
+  a2_report: "redevplugin-a2-acceptance.json",
+  a2_supported: "redevplugin-a2-supported.png",
+  a2_unsupported: "redevplugin-a2-unsupported.png",
+};
+for (const [name, path] of Object.entries(evidencePaths)) {
+  assertFileRecord(marker.evidence[name], `evidence.${name}`);
+  assertEqual(marker.evidence[name].path, path, `evidence.${name}.path`);
 }
 
-resolve_extracted_bundle_root() {
-  local extract_root="$1"
-  if [[ -f "$extract_root/release-manifest.json" ]]; then
-    printf '%s\n' "$extract_root"
-    return 0
-  fi
+assertExactKeys(marker.signing, ["certificate_identity", "oidc_issuer"], "signing");
+assertEqual(
+  marker.signing.certificate_identity,
+  "https://github.com/floegence/redevplugin/.github/workflows/release.yml@refs/tags/v0.5.1",
+  "signing.certificate_identity",
+);
+assertEqual(marker.signing.oidc_issuer, "https://token.actions.githubusercontent.com", "signing.oidc_issuer");
 
-  local roots=()
-  while IFS= read -r root; do
-    roots+=("$root")
-  done < <(find "$extract_root" -mindepth 1 -maxdepth 1 -type d | sort)
-  if [[ "${#roots[@]}" -ne 1 || ! -f "${roots[0]}/release-manifest.json" ]]; then
-    die "ReDevPlugin runtime tarball must contain a flat bundle or one top-level bundle directory"
-  fi
-  printf '%s\n' "${roots[0]}"
+const expectedTargets = [
+  ["aarch64-apple-darwin", "darwin/arm64", "fea17883ff27e943eeebc8bf9a68bd3d8c535b95d278fb18da0c3ec3d165dcca"],
+  ["aarch64-unknown-linux-gnu", "linux/arm64", "95cd87a998d8ae5c6ea3451551e72c69b8f5e27040b1016fcd39333e2b251b45"],
+  ["x86_64-apple-darwin", "darwin/amd64", "eca4f841c60a3e2cb4e76c51567ed7d1cab60a16396db6cbdbaf3d1cc9559841"],
+  [
+    "x86_64-unknown-linux-gnu",
+    "linux/amd64",
+    process.env.SELF_TEST_LINUX_AMD64_RUNTIME_SHA256
+      || "4f9ccbe61463fa7dc0053086dca128743b493b74f5b4535994d6dbccde55aef4",
+  ],
+];
+if (!Array.isArray(marker.targets) || marker.targets.length !== expectedTargets.length) {
+  fail(`marker targets must contain exactly ${expectedTargets.length} entries`);
+}
+const targets = [...marker.targets].sort((left, right) => left.build_triple.localeCompare(right.build_triple));
+for (const [index, [buildTriple, runtimeTarget, runtimeSHA256]] of expectedTargets.entries()) {
+  const target = targets[index];
+  assertExactKeys(target, [
+    "build_triple", "runtime_target", "tarball", "release_manifest_sha256", "runtime", "third_party_notices",
+  ], `targets[${index}]`);
+  assertEqual(target.build_triple, buildTriple, `targets[${index}].build_triple`);
+  assertEqual(target.runtime_target, runtimeTarget, `targets[${index}].runtime_target`);
+  assertSHA256(target.release_manifest_sha256, `targets[${index}].release_manifest_sha256`);
+  assertExactKeys(target.tarball, ["name", "sha256", "size"], `targets[${index}].tarball`);
+  assertEqual(target.tarball.name, `redevplugin-v0.5.1-${buildTriple}.tar.gz`, `targets[${index}].tarball.name`);
+  assertSHA256(target.tarball.sha256, `targets[${index}].tarball.sha256`);
+  assertSize(target.tarball.size, `targets[${index}].tarball.size`);
+  assertFileRecord(target.runtime, `targets[${index}].runtime`);
+  assertEqual(target.runtime.path, "bin/redevplugin-runtime", `targets[${index}].runtime.path`);
+  assertEqual(target.runtime.sha256, runtimeSHA256, `targets[${index}].runtime.sha256`);
+  assertFileRecord(target.third_party_notices, `targets[${index}].third_party_notices`);
+  assertEqual(target.third_party_notices.path, "THIRD_PARTY_NOTICES.md", `targets[${index}].third_party_notices.path`);
 }
 
-extract_runtime_binary() {
-  local dest="$1"
-  local version="$2"
-  local target="$3"
-  local runtime_out="$4"
-  local marker="$dest/$MARKER_BASENAME"
-  local tarball tmpdir root runtime_source notices_source runtime_dir
-
-  tarball="$(resolve_runtime_tarball "$dest" "$version" "$target")"
-  tmpdir=$(mktemp -d)
-  tar -xzf "$tarball" -C "$tmpdir"
-  root="$(resolve_extracted_bundle_root "$tmpdir")"
-
-  runtime_source="$root/bin/redevplugin-runtime"
-  if [[ ! -f "$runtime_source" && -f "$root/bin/redevplugin-runtime.exe" ]]; then
-    runtime_source="$root/bin/redevplugin-runtime.exe"
-  fi
-  if [[ ! -f "$runtime_source" ]]; then
-    die "verified runtime tarball does not contain bin/redevplugin-runtime"
-  fi
-  notices_source="$root/THIRD_PARTY_NOTICES.md"
-  if [[ ! -f "$notices_source" ]]; then
-    die "verified runtime tarball does not contain THIRD_PARTY_NOTICES.md"
-  fi
-
-  runtime_dir=$(dirname -- "$runtime_out")
-  mkdir -p "$runtime_dir"
-  cp "$runtime_source" "$runtime_out"
-  chmod +x "$runtime_out"
-  cp "$notices_source" "$runtime_dir/$NOTICE_BASENAME"
-
-  cp "$marker" "$runtime_dir/$MARKER_BASENAME"
-  if [[ -n "$MARKER_OUT" ]]; then
-    mkdir -p "$(dirname -- "$MARKER_OUT")"
-    cp "$marker" "$MARKER_OUT"
-  fi
-  rm -rf "$tmpdir"
-  "$SCRIPT_DIR/check_redevplugin_consumption_gate.sh" --scan-root "$runtime_dir"
-  log "ReDevPlugin runtime staged: $runtime_out"
+function assertFileRecord(value, label) {
+  assertExactKeys(value, ["path", "sha256", "size"], label);
+  if (typeof value.path !== "string" || value.path.length === 0) fail(`${label}.path must be non-empty`);
+  assertSHA256(value.sha256, `${label}.sha256`);
+  assertSize(value.size, `${label}.size`);
 }
-
-run_stage() {
-  if [[ -z "$DEST_DIR" ]]; then
-    usage >&2
-    exit 2
-  fi
-  if [[ -z "$SOURCE_DIR" && -z "$VERSION" ]]; then
-    usage >&2
-    exit 2
-  fi
-  if [[ -n "$VERSION" ]]; then
-    assert_release_tag "$VERSION"
-  fi
-  if [[ -n "$REDEVEN_GOOS$REDEVEN_GOARCH" ]]; then
-    if [[ -z "$REDEVEN_GOOS" || -z "$REDEVEN_GOARCH" ]]; then
-      die "--redeven-goos and --redeven-goarch must be provided together"
-    fi
-    if [[ -n "$RUNTIME_TARGET" ]]; then
-      die "--runtime-target cannot be combined with --redeven-goos/--redeven-goarch"
-    fi
-    if [[ -z "$RUNTIME_OUT" ]]; then
-      die "--redeven-goos/--redeven-goarch require --runtime-out"
-    fi
-    RUNTIME_TARGET="$(resolve_redevplugin_runtime_target "$REDEVEN_GOOS" "$REDEVEN_GOARCH")"
-  fi
-  if [[ -n "$RUNTIME_TARGET" && -z "$RUNTIME_OUT" ]] || [[ -z "$RUNTIME_TARGET" && -n "$RUNTIME_OUT" ]]; then
-    die "--runtime-target and --runtime-out must be provided together"
-  fi
-
-  prepare_dest_dir "$DEST_DIR"
-  if [[ -n "$SOURCE_DIR" ]]; then
-    copy_source_artifacts "$SOURCE_DIR" "$DEST_DIR"
-  else
-    download_release_artifacts "$VERSION" "$REPO" "$DEST_DIR"
-  fi
-
-  verify_staged_artifacts "$DEST_DIR"
-
-  if [[ -n "$RUNTIME_TARGET" ]]; then
-    extract_runtime_binary "$DEST_DIR" "$VERSION" "$RUNTIME_TARGET" "$RUNTIME_OUT"
-  elif [[ -n "$MARKER_OUT" ]]; then
-    mkdir -p "$(dirname -- "$MARKER_OUT")"
-    cp "$DEST_DIR/$MARKER_BASENAME" "$MARKER_OUT"
-  fi
-
-  log "ReDevPlugin release artifacts staged: $DEST_DIR"
+function assertExactKeys(value, expected, label) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) fail(`${label} must be an object`);
+  const actual = Object.keys(value).sort();
+  const wanted = [...expected].sort();
+  if (JSON.stringify(actual) !== JSON.stringify(wanted)) fail(`${label} keys mismatch`);
 }
-
-write_self_test_bundle_manifest() {
-  local bundle_dir="$1"
-  local version="$2"
-  local target="$3"
-
-  SELF_TEST_BUNDLE_DIR="$bundle_dir" SELF_TEST_VERSION="$version" SELF_TEST_TARGET="$target" node <<'NODE'
-const { createHash } = require("node:crypto");
-const { readdirSync, readFileSync, statSync, writeFileSync } = require("node:fs");
-const { join, relative } = require("node:path");
-
-const root = process.env.SELF_TEST_BUNDLE_DIR;
-const files = [];
-walk(root);
-files.sort((a, b) => a.path.localeCompare(b.path));
-writeFileSync(join(root, "release-manifest.json"), `${JSON.stringify({
-  schema_version: "redevplugin.release_manifest.v1",
-  version: process.env.SELF_TEST_VERSION,
-  runtime_target: process.env.SELF_TEST_TARGET,
-  generated_at: "2026-07-03T00:00:00Z",
-  files,
-}, null, 2)}\n`);
-writeFileSync(join(root, "SHA256SUMS"), `${files.map((file) => `${file.sha256}  ${file.path}`).join("\n")}\n`);
-
-function walk(dir) {
-  for (const entry of readdirSync(dir)) {
-    const path = join(dir, entry);
-    const rel = relative(root, path).replaceAll("\\", "/");
-    if (rel === "release-manifest.json" || rel === "SHA256SUMS") {
-      continue;
-    }
-    const stat = statSync(path);
-    if (stat.isDirectory()) {
-      walk(path);
-      continue;
-    }
-    files.push({
-      path: rel,
-      sha256: createHash("sha256").update(readFileSync(path)).digest("hex"),
-      size: stat.size,
-    });
-  }
+function assertEqual(actual, expected, label) {
+  if (actual !== expected) fail(`${label} mismatch: got ${JSON.stringify(actual)}, want ${JSON.stringify(expected)}`);
+}
+function assertSHA256(value, label) {
+  if (typeof value !== "string" || !/^[0-9a-f]{64}$/u.test(value)) fail(`${label} must be lowercase SHA-256 hex`);
+}
+function assertSize(value, label) {
+  if (!Number.isSafeInteger(value) || value < 0) fail(`${label} must be a non-negative safe integer`);
+}
+function fail(message) {
+  console.error(`[redevplugin-stage] ${message}`);
+  process.exit(1);
 }
 NODE
 }
 
-write_self_test_stress_summary() {
-  local path="$1"
-  cat >"$path" <<'JSON'
-{
-  "ok": true,
-  "mode": "release",
-  "stress_categories": ["stream_backpressure", "connectivity_classifier", "runtime_revoke_ack", "storage_quota", "csp_report_flood"],
-  "stress_evidence": [
-    {"category":"stream_backpressure","counters":{"workers":1,"backpressure_denials":1,"core_operation_checks":1}},
-    {"category":"connectivity_classifier","counters":{"minted_grants":1,"stale_grant_denials":1,"blocked_resolved_ips":1,"connector_policy_count":1,"http_redirects_not_followed":1,"dns_rebinding_denials":1,"http_proxy_env_ignored":1,"http_connect_denials":1,"alt_svc_headers_dropped":1,"proxy_auth_headers_dropped":1,"udp_round_trips":1,"udp_source_mismatch_dropped":1,"udp_rate_limit_denials":1}},
-    {"category":"runtime_revoke_ack","counters":{"attempts":1,"p95_ms":1,"max_ms":1,"threshold_ms":500,"hard_timeout_ms":2000,"closed_actor":1,"closed_socket":1,"closed_stream":1,"closed_storage":1}},
-    {"category":"storage_quota","counters":{"writes":1,"quota_denials":1,"imported":1,"usage_bytes":1,"file_quota_denials":1,"file_usage_files":1,"file_quota_files":1,"sqlite_quota_denials":2,"sqlite_rollback_checks":1,"sqlite_page_count":1,"sqlite_sidecar_files":4,"sqlite_sidecar_bytes":1,"sqlite_sparse_logical_bytes":1}},
-    {"category":"csp_report_flood","counters":{"attempts":2,"accepted_reports":1,"rate_limited_reports":1,"diagnostic_events":1,"audit_events":0,"unique_sandbox_origins":1,"unique_active_fingerprints":1}}
-  ],
-  "steps": [
-    {"name":"stress_evidence","status":0,"duration_ms":1},
-    {"name":"release_bundle","status":0,"duration_ms":1}
-  ]
+read_marker_target() {
+  local marker="$1"
+  local runtime_target="$2"
+  MARKER_PATH="$marker" EXPECTED_RUNTIME_TARGET="$runtime_target" node <<'NODE'
+const { readFileSync } = require("node:fs");
+const marker = JSON.parse(readFileSync(process.env.MARKER_PATH, "utf8"));
+const matches = marker.targets.filter((target) => target.runtime_target === process.env.EXPECTED_RUNTIME_TARGET);
+if (matches.length !== 1) {
+  console.error(`[redevplugin-stage] marker must contain exactly one target for ${process.env.EXPECTED_RUNTIME_TARGET}`);
+  process.exit(1);
 }
-JSON
+const target = matches[0];
+process.stdout.write([
+  target.tarball.name,
+  target.tarball.sha256,
+  target.tarball.size,
+  target.release_manifest_sha256,
+  target.runtime.path,
+  target.runtime.sha256,
+  target.third_party_notices.path,
+  target.third_party_notices.sha256,
+].join("\t") + "\n");
+NODE
 }
 
-create_self_test_artifacts() {
-  local source_dir="$1"
-  local version="$2"
-  local target="$3"
-  local bundle_parent="$source_dir/bundles"
-  local bundle_name="redevplugin-${version}-${target}"
-  local bundle_dir="$bundle_parent/$bundle_name"
+extract_runtime_binary() {
+  local dest="$1"
+  local goos="$2"
+  local goarch="$3"
+  local runtime_out="$4"
+  local runtime_target="${goos}/${goarch}"
+  local build_triple marker metadata
+  local tarball_name tarball_sha256 tarball_size manifest_sha256 runtime_path runtime_sha256 notice_path notice_sha256
+  local tarball extract_parent extract_root bundle_root runtime_source notice_source runtime_dir
 
-  mkdir -p "$bundle_dir/bin" "$bundle_dir/contracts/spec/plugin"
-  printf 'self-test runtime\n' >"$bundle_dir/bin/redevplugin-runtime"
-  printf 'self-test cli\n' >"$bundle_dir/bin/redevplugin"
-  chmod +x "$bundle_dir/bin/redevplugin-runtime" "$bundle_dir/bin/redevplugin"
-  printf 'self-test third-party notices\n' >"$bundle_dir/THIRD_PARTY_NOTICES.md"
-  printf '{}\n' >"$bundle_dir/contracts/spec/plugin/release-manifest-v1.schema.json"
-  cat >"$bundle_dir/compatibility.json" <<JSON
-{
-  "schema_version": "redevplugin.compatibility.v1",
-  "matrix": {
-    "redevplugin_go_version": "${version}",
-    "redevplugin_ui_version": "${version}",
-    "redevplugin_runtime_version": "${version}",
-    "plugin_host_protocol_version": "plugin-host-v1",
-    "rust_ipc_version": "rust-ipc-v1",
-    "wasm_abi_version": "redevplugin-wasm-worker-v1",
-    "manifest_schema_version": "manifest-v1",
-    "package_signature_schema_version": "package-signature-v1",
-    "token_ticket_schema_version": "token-ticket-v1",
-    "bridge_schema_version": "bridge-v1",
-    "target_classifier_version": "target-classifier-v1",
-    "network_grant_schema_version": "network-grant-v1",
-    "plugin_platform_openapi_version": "plugin-platform-v1",
-    "compatibility_schema_version": "compatibility-manifest-v1",
-    "worker_invocation_schema_version": "worker-invocation-v1",
-    "error_codes_schema_version": "error-codes-v1"
-  },
-  "contracts": [
-    {
-      "id": "release-manifest-schema",
-      "path": "spec/plugin/release-manifest-v1.schema.json",
-      "version": "release-manifest-v1",
-      "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
-    }
-  ]
+  build_triple=$(resolve_redevplugin_build_triple "$goos" "$goarch")
+  marker="$dest/$MARKER_BASENAME"
+  validate_verifier_marker "$marker"
+  metadata=$(read_marker_target "$marker" "$runtime_target")
+  IFS=$'\t' read -r tarball_name tarball_sha256 tarball_size manifest_sha256 runtime_path runtime_sha256 notice_path notice_sha256 <<<"$metadata"
+
+  if [[ "$tarball_name" != "redevplugin-${RELEASE_TAG}-${build_triple}.tar.gz" ]]; then
+    die "marker target tarball mismatch for ${runtime_target}: $tarball_name"
+  fi
+  tarball="$dest/$tarball_name"
+  if [[ ! -f "$tarball" ]]; then
+    die "verified ReDevPlugin runtime tarball not found for ${runtime_target}: $tarball"
+  fi
+  if [[ "$(hash_file "$tarball")" != "$tarball_sha256" ]]; then
+    die "verified ReDevPlugin runtime tarball changed after verification: $tarball"
+  fi
+
+  require_command python3
+  extract_parent=$(mktemp -d)
+  extract_root="$extract_parent/payload"
+  if ! "$SCRIPT_DIR/safe_extract_tar.py" \
+    --archive "$tarball" \
+    --dest "$extract_root" \
+    --expected-root "redevplugin-${RELEASE_TAG}-${build_triple}" \
+    --expected-sha256 "$tarball_sha256" \
+    --expected-size "$tarball_size" \
+    --max-files 4096 \
+    --max-total-bytes 536870912
+  then
+    rm -rf "$extract_parent"
+    die "verified runtime tarball failed controlled extraction for ${runtime_target}"
+  fi
+  bundle_root="$extract_root/redevplugin-${RELEASE_TAG}-${build_triple}"
+  if [[ ! -d "$bundle_root" ]]; then
+    rm -rf "$extract_parent"
+    die "verified runtime tarball must contain the exact ReDevPlugin v0.5.1 bundle root"
+  fi
+  if [[ "$(hash_file "$bundle_root/release-manifest.json")" != "$manifest_sha256" ]]; then
+    rm -rf "$extract_parent"
+    die "release manifest changed after verification for ${runtime_target}"
+  fi
+
+  runtime_source="$bundle_root/$runtime_path"
+  notice_source="$bundle_root/$notice_path"
+  if [[ ! -f "$runtime_source" || "$(hash_file "$runtime_source")" != "$runtime_sha256" ]]; then
+    rm -rf "$extract_parent"
+    die "runtime binary does not match the verified ${runtime_target} marker target"
+  fi
+  if [[ ! -f "$notice_source" || "$(hash_file "$notice_source")" != "$notice_sha256" ]]; then
+    rm -rf "$extract_parent"
+    die "third-party notices do not match the verified ${runtime_target} marker target"
+  fi
+
+  runtime_dir=$(dirname -- "$runtime_out")
+  mkdir -p "$runtime_dir"
+  publish_file "$runtime_source" "$runtime_out" 1
+  publish_file "$notice_source" "$runtime_dir/$NOTICE_BASENAME"
+  publish_file "$marker" "$runtime_dir/$MARKER_BASENAME"
+  if [[ -n "$MARKER_OUT" ]]; then
+    publish_file "$marker" "$MARKER_OUT"
+  fi
+  rm -rf "$extract_parent"
+  log "ReDevPlugin ${RELEASE_TAG} runtime staged for ${runtime_target}: $runtime_out"
 }
-JSON
-  write_self_test_bundle_manifest "$bundle_dir" "$version" "$target"
-  tar -C "$bundle_parent" -czf "$source_dir/${bundle_name}.tar.gz" "$bundle_name"
-  write_self_test_stress_summary "$source_dir/redevplugin-release-stress.json"
-  (
-    cd "$source_dir"
-    if command -v sha256sum >/dev/null 2>&1; then
-      sha256sum "${bundle_name}.tar.gz" redevplugin-release-stress.json >SHA256SUMS
-    else
-      shasum -a 256 "${bundle_name}.tar.gz" redevplugin-release-stress.json | awk '{ print $1 "  " $2 }' >SHA256SUMS
+
+run_stage() {
+  local canonical_dest staging_parent staging_dir
+  if [[ -z "$DEST_DIR" ]]; then
+    usage >&2
+    exit 2
+  fi
+  if [[ -n "$REDEVEN_GOOS$REDEVEN_GOARCH$RUNTIME_OUT" ]]; then
+    if [[ -z "$REDEVEN_GOOS" || -z "$REDEVEN_GOARCH" || -z "$RUNTIME_OUT" ]]; then
+      die "--redeven-goos, --redeven-goarch, and --runtime-out must be provided together"
     fi
-    for file in "${bundle_name}.tar.gz" redevplugin-release-stress.json SHA256SUMS; do
-      printf 'fixture signature\n' >"${file}.sig"
-      printf 'fixture bundle\n' >"${file}.bundle"
-    done
-  )
-  rm -rf "$bundle_parent"
+    resolve_redevplugin_build_triple "$REDEVEN_GOOS" "$REDEVEN_GOARCH" >/dev/null
+  fi
+
+  canonical_dest=$(canonicalize_dest_dir "$DEST_DIR")
+  staging_parent=$(dirname -- "$canonical_dest")
+  staging_dir=$(mktemp -d "$staging_parent/.redevplugin-release.stage.XXXXXX")
+  if ! download_release_artifacts "$staging_dir" || ! verify_staged_artifacts "$staging_dir"; then
+    rm -rf "$staging_dir"
+    die "ReDevPlugin release staging failed before publication"
+  fi
+  if ! "$SCRIPT_DIR/safe_extract_tar.py" --publish-dir "$staging_dir" --dest "$canonical_dest"; then
+    rm -rf "$staging_dir"
+    die "could not atomically publish verified ReDevPlugin release artifacts"
+  fi
+  DEST_DIR="$canonical_dest"
+
+  if [[ -n "$RUNTIME_OUT" ]]; then
+    extract_runtime_binary "$DEST_DIR" "$REDEVEN_GOOS" "$REDEVEN_GOARCH" "$RUNTIME_OUT"
+    "$SCRIPT_DIR/check_redevplugin_consumption_gate.sh" \
+      --scan-root "$(dirname -- "$RUNTIME_OUT")" \
+      --runtime-target "${REDEVEN_GOOS}/${REDEVEN_GOARCH}"
+  elif [[ -n "$MARKER_OUT" ]]; then
+    publish_file "$DEST_DIR/$MARKER_BASENAME" "$MARKER_OUT"
+  fi
+
+  log "ReDevPlugin ${RELEASE_TAG} release artifacts staged: $DEST_DIR"
 }
 
-if [[ "$SELF_TEST" -eq 1 ]]; then
-  if [[ -n "$SOURCE_DIR$DEST_DIR$RUNTIME_TARGET$RUNTIME_OUT$MARKER_OUT" ]]; then
+write_self_test_marker() {
+  local marker="$1"
+  local tarball="$2"
+  local runtime="$3"
+  local manifest="$4"
+  local notices="$5"
+  MARKER_PATH="$marker" \
+    TARBALL_SHA256="$(hash_file "$tarball")" \
+    TARBALL_SIZE="$(wc -c <"$tarball" | tr -d ' ')" \
+    RUNTIME_SHA256="$(hash_file "$runtime")" \
+    RUNTIME_SIZE="$(wc -c <"$runtime" | tr -d ' ')" \
+    MANIFEST_SHA256="$(hash_file "$manifest")" \
+    NOTICE_SHA256="$(hash_file "$notices")" \
+    NOTICE_SIZE="$(wc -c <"$notices" | tr -d ' ')" \
+    node <<'NODE'
+const { writeFileSync } = require("node:fs");
+const sha = (char) => char.repeat(64);
+const targetSpecs = [
+  ["aarch64-apple-darwin", "darwin/arm64", "fea17883ff27e943eeebc8bf9a68bd3d8c535b95d278fb18da0c3ec3d165dcca"],
+  ["aarch64-unknown-linux-gnu", "linux/arm64", "95cd87a998d8ae5c6ea3451551e72c69b8f5e27040b1016fcd39333e2b251b45"],
+  ["x86_64-apple-darwin", "darwin/amd64", "eca4f841c60a3e2cb4e76c51567ed7d1cab60a16396db6cbdbaf3d1cc9559841"],
+  ["x86_64-unknown-linux-gnu", "linux/amd64", process.env.RUNTIME_SHA256],
+];
+const targets = targetSpecs.map(([buildTriple, runtimeTarget, runtimeSHA256]) => ({
+  build_triple: buildTriple,
+  runtime_target: runtimeTarget,
+  tarball: {
+    name: `redevplugin-v0.5.1-${buildTriple}.tar.gz`,
+    sha256: runtimeTarget === "linux/amd64" ? process.env.TARBALL_SHA256 : sha("a"),
+    size: runtimeTarget === "linux/amd64" ? Number(process.env.TARBALL_SIZE) : 1,
+  },
+  release_manifest_sha256: runtimeTarget === "linux/amd64" ? process.env.MANIFEST_SHA256 : sha("b"),
+  runtime: {
+    path: "bin/redevplugin-runtime",
+    sha256: runtimeSHA256,
+    size: runtimeTarget === "linux/amd64" ? Number(process.env.RUNTIME_SIZE) : 1,
+  },
+  third_party_notices: {
+    path: "THIRD_PARTY_NOTICES.md",
+    sha256: runtimeTarget === "linux/amd64" ? process.env.NOTICE_SHA256 : sha("c"),
+    size: runtimeTarget === "linux/amd64" ? Number(process.env.NOTICE_SIZE) : 1,
+  },
+}));
+writeFileSync(process.env.MARKER_PATH, `${JSON.stringify({
+  schema_version: "redeven.redevplugin_artifact_verification.v4",
+  release_tag: "v0.5.1",
+  release_version: "0.5.1",
+  source_commit: "3febcc59bbdb2118a4f105781b4c743bc11ba09f",
+  sha256sums_sha256: sha("d"),
+  compatibility_sha256: sha("e"),
+  contract_registry_sha256: sha("f"),
+  npm_package: {
+    name: "@floegence/redevplugin-ui",
+    version: "0.5.1",
+    path: "npm/floegence-redevplugin-ui-0.5.1.tgz",
+    sha256: sha("1"),
+    integrity: "sha512-self-test",
+    size: 1,
+  },
+  worker_sdk: {
+    name: "redevplugin-worker-sdk",
+    version: "0.5.1",
+    path: "sdk/redevplugin-worker-sdk-0.5.1.crate",
+    sha256: sha("2"),
+    size: 1,
+  },
+  performance_evidence: { path: "performance-evidence.json", sha256: sha("3"), size: 1 },
+  evidence: {
+    stress: { path: "redevplugin-release-stress.json", sha256: sha("4"), size: 1 },
+    a2_report: { path: "redevplugin-a2-acceptance.json", sha256: sha("5"), size: 1 },
+    a2_supported: { path: "redevplugin-a2-supported.png", sha256: sha("6"), size: 1 },
+    a2_unsupported: { path: "redevplugin-a2-unsupported.png", sha256: sha("7"), size: 1 },
+  },
+  signing: {
+    certificate_identity: "https://github.com/floegence/redevplugin/.github/workflows/release.yml@refs/tags/v0.5.1",
+    oidc_issuer: "https://token.actions.githubusercontent.com",
+  },
+  targets,
+}, null, 2)}\n`);
+NODE
+}
+
+run_self_test() {
+  local tmpdir assets bundle_root tarball runtime_out marker_out marker
+  local forbidden
+
+  if [[ -n "$DEST_DIR$REDEVEN_GOOS$REDEVEN_GOARCH$RUNTIME_OUT$MARKER_OUT" ]]; then
     echo "--self-test cannot be combined with staging arguments" >&2
     exit 2
   fi
+  require_command node
+  require_command tar
+
+  if [[ "$(resolve_redevplugin_build_triple darwin amd64)" != "x86_64-apple-darwin" ]] ||
+     [[ "$(resolve_redevplugin_build_triple darwin arm64)" != "aarch64-apple-darwin" ]] ||
+     [[ "$(resolve_redevplugin_build_triple linux amd64)" != "x86_64-unknown-linux-gnu" ]] ||
+     [[ "$(resolve_redevplugin_build_triple linux arm64)" != "aarch64-unknown-linux-gnu" ]]; then
+    die "self-test target mapping mismatch"
+  fi
+  if (resolve_redevplugin_build_triple linux riscv64 >/dev/null 2>&1); then
+    die "self-test expected unsupported target to fail"
+  fi
+
+  for forbidden in --source-dir --skip-cosign --repo --version --runtime-target; do
+    if "$0" "$forbidden" invalid >/dev/null 2>&1; then
+      die "self-test expected forbidden production option ${forbidden} to fail"
+    fi
+  done
+
   tmpdir=$(mktemp -d)
-  trap 'rm -rf "$tmpdir"' EXIT
-  source_dir="$tmpdir/source"
-  dest_dir="$tmpdir/staged"
+  trap "rm -rf '$tmpdir'" EXIT
+  mkdir -p "$tmpdir/destination-parent"
+  canonical_dest=$(canonicalize_dest_dir "$tmpdir/destination-parent/redevplugin-release")
+  expected_canonical_dest="$(cd "$tmpdir/destination-parent" >/dev/null 2>&1 && pwd -P)/redevplugin-release"
+  if [[ "$canonical_dest" != "$expected_canonical_dest" ]]; then
+    die "self-test canonical destination mismatch"
+  fi
+  mkdir "$canonical_dest"
+  if canonicalize_dest_dir "$canonical_dest" >/dev/null 2>&1; then
+    die "self-test expected an existing destination to fail"
+  fi
+  rmdir "$canonical_dest"
+  if canonicalize_dest_dir "$tmpdir/destination-parent/not-a-release" >/dev/null 2>&1; then
+    die "self-test expected an unsafe destination basename to fail"
+  fi
+  assets="$tmpdir/assets"
+  mkdir -p "$assets"
+  for forbidden in "${RELEASE_ASSETS[@]}"; do
+    : >"$assets/$forbidden"
+  done
+  assert_exact_release_assets "$assets"
+  : >"$assets/unexpected"
+  if (assert_exact_release_assets "$assets" >/dev/null 2>&1); then
+    die "self-test expected unexpected release asset to fail"
+  fi
+  rm "$assets/unexpected"
+
+  bundle_root="$tmpdir/redevplugin-v0.5.1-x86_64-unknown-linux-gnu"
+  mkdir -p "$bundle_root/bin"
+  printf 'self-test runtime\n' >"$bundle_root/bin/redevplugin-runtime"
+  printf 'self-test third-party notices\n' >"$bundle_root/THIRD_PARTY_NOTICES.md"
+  printf '{"schema_version":"redevplugin.release_manifest.v4"}\n' >"$bundle_root/release-manifest.json"
+  chmod +x "$bundle_root/bin/redevplugin-runtime"
+  SELF_TEST_LINUX_AMD64_RUNTIME_SHA256=$(hash_file "$bundle_root/bin/redevplugin-runtime")
+  tarball="$assets/redevplugin-v0.5.1-x86_64-unknown-linux-gnu.tar.gz"
+  COPYFILE_DISABLE=1 tar --format=ustar -C "$tmpdir" -czf "$tarball" "$(basename -- "$bundle_root")"
+  marker="$assets/$MARKER_BASENAME"
+  write_self_test_marker \
+    "$marker" \
+    "$tarball" \
+    "$bundle_root/bin/redevplugin-runtime" \
+    "$bundle_root/release-manifest.json" \
+    "$bundle_root/THIRD_PARTY_NOTICES.md"
+  validate_verifier_marker "$marker"
+
   runtime_out="$tmpdir/runtime/redevplugin-runtime"
   marker_out="$tmpdir/marker/$MARKER_BASENAME"
-  version="v0.0.0-test"
-  target="x86_64-unknown-linux-gnu"
-  mkdir -p "$source_dir"
-  create_self_test_artifacts "$source_dir" "$version" "$target"
-
-  "$0" \
-    --source-dir "$source_dir" \
-    --dest-dir "$dest_dir" \
-    --version "$version" \
-    --redeven-goos linux \
-    --redeven-goarch amd64 \
-    --runtime-out "$runtime_out" \
-    --marker-out "$marker_out" \
-    --skip-cosign
-
+  MARKER_OUT="$marker_out"
+  extract_runtime_binary "$assets" linux amd64 "$runtime_out"
   if [[ ! -x "$runtime_out" ]]; then
-    echo "self-test expected extracted runtime to be executable" >&2
-    exit 1
+    die "self-test expected extracted runtime to be executable"
   fi
-  if [[ ! -s "$dest_dir/$MARKER_BASENAME" || ! -s "$(dirname -- "$runtime_out")/$MARKER_BASENAME" || ! -s "$marker_out" ]]; then
-    echo "self-test expected verifier markers to be written" >&2
-    exit 1
+  if ! cmp -s "$runtime_out" "$bundle_root/bin/redevplugin-runtime"; then
+    die "self-test extracted runtime content mismatch"
   fi
-  if [[ ! -s "$(dirname -- "$runtime_out")/$NOTICE_BASENAME" ]]; then
-    echo "self-test expected third-party notices to be copied next to the runtime" >&2
-    exit 1
+  if ! cmp -s "$(dirname -- "$runtime_out")/$NOTICE_BASENAME" "$bundle_root/THIRD_PARTY_NOTICES.md"; then
+    die "self-test extracted notices content mismatch"
   fi
-  if ! cmp -s "$runtime_out" <(printf 'self-test runtime\n'); then
-    echo "self-test extracted runtime content mismatch" >&2
-    exit 1
-  fi
-  if ! cmp -s "$(dirname -- "$runtime_out")/$NOTICE_BASENAME" <(printf 'self-test third-party notices\n'); then
-    echo "self-test extracted third-party notices content mismatch" >&2
-    exit 1
+  if [[ ! -s "$(dirname -- "$runtime_out")/$MARKER_BASENAME" || ! -s "$marker_out" ]]; then
+    die "self-test expected v4 verifier markers to be copied"
   fi
 
-  bad_source="$tmpdir/bad-source"
-  cp -R "$source_dir" "$bad_source"
-  rm -f "$bad_source/SHA256SUMS.bundle"
-  if "$0" --source-dir "$bad_source" --dest-dir "$tmpdir/bad-staged" --version "$version" --skip-cosign >/dev/null 2>&1; then
-    echo "self-test expected missing signature evidence to fail" >&2
-    exit 1
-  fi
-  if "$0" \
-    --source-dir "$source_dir" \
-    --dest-dir "$tmpdir/bad-target-staged" \
-    --version "$version" \
-    --redeven-goos linux \
-    --redeven-goarch riscv64 \
-    --runtime-out "$tmpdir/bad-target-runtime" \
-    --skip-cosign >/dev/null 2>&1; then
-    echo "self-test expected unsupported Redeven target to fail" >&2
-    exit 1
-  fi
+  log "ReDevPlugin ${RELEASE_TAG} staging self-test passed"
+}
+
+if [[ "$SELF_TEST" -eq 1 ]]; then
+  run_self_test
   exit 0
 fi
 
