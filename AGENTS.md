@@ -304,6 +304,12 @@ Rules:
   compatibility manifest, and contract hashes have all been released together.
   A local `../redevplugin` worktree, branch, copied schema, or draft package is
   not a valid Redeven integration source.
+- The released `compatibility.json` contracts array and
+  `release-manifest.json` file set are the authoritative closed artifact
+  inventory. Upgrade verification must match their exact versions, hashes,
+  source commit, npm integrity, runtime targets, Worker SDK archive, checksums,
+  signatures, signing bundles, and notices. A partial hand-maintained contract
+  list is not sufficient release evidence.
 - Required flow for reusable upstream capability work:
   - implement upstream first in the source repository;
   - run that repository's required quality gates;
@@ -358,6 +364,52 @@ The intended dependency shape is library consumption, not source sharing:
   compatibility hashes. It must not edit, fork, or hand-copy those contracts.
 - Redeven contributes product policy and concrete adapters around those
   imports; it does not become a source tree for ReDevPlugin implementation.
+
+The current released platform contract also fixes the host-integration shape:
+
+- Redeven derives ReDevPlugin resource ownership only from an authenticated
+  session adapter. Persistent plugin resources use the released `user` or
+  `environment` resource scope; request JSON, plugin IPC, and business adapters
+  must never supply or override owner hashes. Persisted state whose owner cannot
+  be determined without guessing must fail with
+  `owner_scope_migration_required`.
+- Short-lived surfaces, operations, streams, handles, confirmations, and token
+  audiences bind the exact `owner_session_hash`, `owner_user_hash`,
+  `owner_env_hash`, and `session_channel_id_hash` derived from the active
+  session. These short-lived audience hashes must not become registry, settings,
+  storage, secret, permission, or security-policy persistence keys.
+- Redeven configures the required closed-action authorization adapter and the
+  explicit authenticate, origin, CSRF, and route-authorization web-security
+  steps. Direct Go Host calls and mounted HTTP routes must enforce the same
+  action, canonical resource target, and session-derived owner boundary. Unsafe
+  asset and stream reads require CSRF validation, and a missing or typed-nil
+  guard or authorization adapter is an initialization error.
+- The trusted product shell owns one `PluginPlatformClient`, authenticated
+  fetch transport, and shared `PluginSurfaceScope`, then opens surfaces only
+  through `PluginPlatformClient.openSurfaceInSlot(...)` into
+  `PluginSurfaceSlot` instances. Redeven must not construct a surface host,
+  bootstrap document, iframe, bridge token, or asset session itself.
+- Activity and Workbench are Redeven placement choices, not manifest surface
+  kinds. ReDevPlugin manifests remain host-neutral, and Redeven places the
+  SDK-owned surface element inside either ordinary Activity content or a
+  Workbench local-interaction surface. Manifest surface kinds remain the closed
+  `view|command|background` set with `primary|secondary|utility` roles; do not
+  add Activity, Workbench, widget, settings-placement, or other Redeven layout
+  fields.
+- Moving a plugin surface between Activity and Workbench must await closure of
+  the old slot and open a fresh slot lease and iframe. Redeven must not move,
+  adopt, or reuse an existing iframe or `surface_instance_id`.
+- Workbench wheel, text-selection, action, activation, focus, and floating-layer
+  markers remain Redeven-owned product interaction policy around the SDK-owned
+  element. They must not be encoded into the plugin manifest or implemented by
+  a second bridge layer.
+- Redeven projects visibility with the released `visible` and `hidden`
+  lifecycle. `PluginSurfaceSlot.close()` owns graceful quiesce and server
+  revocation; `dispose()` is irreversible local teardown. Disable, update,
+  downgrade, uninstall, owner-scope revocation, session teardown, and shell
+  disposal must close every affected slot through the shared
+  `PluginSurfaceScope`. Do not add compatibility shims, fallback surface paths,
+  or best-effort local teardown that leaves platform state active.
 
 The front-end and back-end platform implementation must arrive in Redeven as
 released ReDevPlugin library/runtime artifacts, not as Redeven-local platform
@@ -532,7 +584,7 @@ Redeven's integration layer must keep the ReDevPlugin platform state opaque:
   opaque sandbox iframes, `event.origin` is diagnostic context only and is not
   an authorization input; authorization must bind the window source, transferred
   `MessagePort`, asset session, surface instance, bridge nonce, active
-  fingerprint, session hash, state version, and revoke epoch.
+  fingerprint, session hash, management revision, and revoke epoch.
 - Redeven business adapters may call local product services only after
   ReDevPlugin has resolved the plugin identity, session, permission,
   confirmation, token, runtime lease, and audit context for the request.
