@@ -24,6 +24,7 @@ import (
 	"github.com/floegence/redevplugin/pkg/plugindata"
 	"github.com/floegence/redevplugin/pkg/pluginpkg"
 	"github.com/floegence/redevplugin/pkg/registry"
+	"github.com/floegence/redevplugin/pkg/runtimeclient"
 	"github.com/floegence/redevplugin/pkg/secrets"
 	"github.com/floegence/redevplugin/pkg/security"
 	"github.com/floegence/redevplugin/pkg/stream"
@@ -34,6 +35,7 @@ type Options struct {
 	StateDir           string
 	StateRoot          string
 	ConfigPath         string
+	RuntimePath        string
 	ResolveSessionMeta func(channelID string) (*session.Meta, bool)
 	Audit              *auditlog.Store
 	Diagnostics        *diagnostics.Store
@@ -146,6 +148,13 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 	}
 	closers = append(closers, secretStore.Close)
 
+	runtimeLeaseReplays, err := runtimeclient.NewSQLiteRuntimeLeaseReplayStore(ctx, filepath.Join(dbRoot, "runtime_lease_replays.sqlite"))
+	if err != nil {
+		closeOnError()
+		return nil, err
+	}
+	closers = append(closers, runtimeLeaseReplays.Close)
+
 	assetStore, err := pluginpkg.NewFileAssetStore(filepath.Join(root, "assets"))
 	if err != nil {
 		closeOnError()
@@ -175,6 +184,23 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 	surfaceTokens := bridge.NewSurfaceTokenService(nil, bridge.SurfaceTokenOptions{})
 	connectivityBroker := connectivity.NewMemoryBroker()
 	networkExecutor := connectivity.NewExecutor(connectivity.ExecutorOptions{})
+	runtimeModule, err := newOfficialRuntimeModule(runtimeModuleDependencies{
+		Path:             opts.RuntimePath,
+		Diagnostics:      observability,
+		Assets:           assetStore,
+		SurfaceTokens:    surfaceTokens,
+		PluginData:       pluginData,
+		Connectivity:     connectivityBroker,
+		NetworkExecutor:  networkExecutor,
+		LeaseReplayStore: runtimeLeaseReplays,
+	})
+	if err != nil {
+		_ = capabilityAdapter.Close()
+		_ = pluginData.Close()
+		_ = assetStore.Close()
+		closeOnError()
+		return nil, err
+	}
 
 	h, err := host.Open(ctx, host.Config{
 		Core: host.CoreAdapters{
@@ -194,6 +220,7 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 			Streams:              streamStore,
 		},
 		Release: releaseModule,
+		Runtime: runtimeModule,
 		Connectivity: &host.ConnectivityModule{
 			Broker:          connectivityBroker,
 			NetworkExecutor: networkExecutor,

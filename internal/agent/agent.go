@@ -301,22 +301,27 @@ func New(opts Options) (*Agent, error) {
 		RuntimeService:     a,
 	})
 
+	redevpluginRuntimePath, err := bundledReDevPluginRuntimePath(a.binaryPath)
+	if err != nil {
+		return nil, err
+	}
 	codeSvc, err := codeapp.New(context.Background(), codeapp.Options{
-		Logger:              logger,
-		StateDir:            stateDir,
-		StateRoot:           stateRoot,
-		ConfigPath:          cfgPathAbs,
-		ControlplaneBaseURL: strings.TrimSpace(opts.Config.ControlplaneBaseURL),
-		CodeServerPortMin:   opts.Config.CodeServerPortMin,
-		CodeServerPortMax:   opts.Config.CodeServerPortMax,
-		AgentHomeDir:        agentHomeAbs,
-		FilesystemScope:     filesystemScope,
-		Shell:               shell,
-		AIConfig:            opts.Config.AI,
-		Audit:               auditStore,
-		Diagnostics:         a.diag,
-		Terminal:            a.term,
-		LocalUIEnabled:      a.localUIEnabled,
+		Logger:                 logger,
+		StateDir:               stateDir,
+		StateRoot:              stateRoot,
+		ConfigPath:             cfgPathAbs,
+		ReDevPluginRuntimePath: redevpluginRuntimePath,
+		ControlplaneBaseURL:    strings.TrimSpace(opts.Config.ControlplaneBaseURL),
+		CodeServerPortMin:      opts.Config.CodeServerPortMin,
+		CodeServerPortMax:      opts.Config.CodeServerPortMax,
+		AgentHomeDir:           agentHomeAbs,
+		FilesystemScope:        filesystemScope,
+		Shell:                  shell,
+		AIConfig:               opts.Config.AI,
+		Audit:                  auditStore,
+		Diagnostics:            a.diag,
+		Terminal:               a.term,
+		LocalUIEnabled:         a.localUIEnabled,
 		ResolveSessionMeta: func(channelID string) (*session.Meta, bool) {
 			if a == nil {
 				return nil, false
@@ -364,6 +369,14 @@ func New(opts Options) (*Agent, error) {
 	a.code = codeSvc
 
 	return a, nil
+}
+
+func bundledReDevPluginRuntimePath(redevenBinaryPath string) (string, error) {
+	redevenBinaryPath = strings.TrimSpace(redevenBinaryPath)
+	if redevenBinaryPath == "" || !filepath.IsAbs(redevenBinaryPath) || filepath.Clean(redevenBinaryPath) != redevenBinaryPath {
+		return "", errors.New("Redeven executable path is unavailable for ReDevPlugin runtime resolution")
+	}
+	return filepath.Join(filepath.Dir(redevenBinaryPath), "redevplugin-runtime"), nil
 }
 
 func summarizeFilesystemRoots(scope *filesystemscope.Registry) []map[string]any {

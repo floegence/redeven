@@ -112,9 +112,10 @@ func TestOfficialContainersReleaseInstallsThroughHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 	integration, err := New(context.Background(), Options{
-		StateDir:   stateDir,
-		ConfigPath: configPath,
-		Containers: containers.NewAdapter(nil),
+		StateDir:    stateDir,
+		ConfigPath:  configPath,
+		RuntimePath: filepath.Join(stateDir, "redevplugin-runtime"),
+		Containers:  containers.NewAdapter(nil),
 		ResolveSessionMeta: func(channelID string) (*session.Meta, bool) {
 			if channelID != "ch_release" {
 				return nil, false
