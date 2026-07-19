@@ -195,6 +195,30 @@ describe('DefaultDesktopSSHTransportManager', () => {
     });
   });
 
+  it('treats an explicitly killed streaming command as caller-owned closure', async () => {
+    const fixture = managerFixture();
+    const lease = await fixture.manager.acquire({
+      target: target(),
+      credentialScope: 'environment-a',
+    });
+    const original = fixture.spawnProcess.getMockImplementation()!;
+    fixture.spawnProcess.mockImplementationOnce((_command: string, args: readonly string[]) => {
+      fixture.calls.push([...args]);
+      return fakeProcess({ longLived: true });
+    });
+    fixture.spawnProcess.mockImplementation(original);
+
+    const command = lease.stream('long-running-command');
+    command.kill('SIGTERM');
+
+    await expect(command.result).resolves.toMatchObject({ exit_code: null, signal: 'SIGTERM' });
+    await expect(command.closed).resolves.toBeUndefined();
+    expect(fixture.calls.filter((args) => args.includes('-O'))).toHaveLength(1);
+
+    await lease.release();
+    await fixture.manager.dispose();
+  });
+
   it('rejects an already-aborted acquisition without creating transport resources', async () => {
     const fixture = managerFixture();
     const controller = new AbortController();

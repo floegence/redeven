@@ -1281,7 +1281,7 @@ async function stopStreamingCommand(command: DesktopSSHStreamingCommand | null, 
     return;
   }
   command.kill('SIGTERM');
-  const settled = command.result.then(() => 'closed' as const, () => 'closed' as const);
+  const settled = command.closed.then(() => 'closed' as const, () => 'closed' as const);
   if (await Promise.race([settled, delay(timeoutMs).then(() => 'timeout' as const)]) === 'timeout') {
     command.kill('SIGKILL');
     await settled;
