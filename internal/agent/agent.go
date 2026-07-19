@@ -17,6 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	livev1 "github.com/floegence/floeterm/terminal-go/livev1"
 	fsclient "github.com/floegence/flowersec/flowersec-go/client"
 	"github.com/floegence/flowersec/flowersec-go/endpoint"
 	"github.com/floegence/flowersec/flowersec-go/endpoint/serve"
@@ -1226,6 +1227,7 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess endpoint.Sess
 	srv.Handle("fs/read_file", func(ctx context.Context, stream io.ReadWriteCloser) {
 		fsSvc.ServeReadFileStreamWithAccessGate(ctx, stream, meta, a.accessGate)
 	})
+	a.registerTerminalLiveStream(srv, meta)
 
 	// Env App UI static assets are delivered over flowersec-proxy (Standard Mode only).
 	// Only enable the proxy handler for the reserved Env App code_space_id, and only when the
@@ -1265,6 +1267,17 @@ func (a *Agent) serveRedevenAgentSession(ctx context.Context, sess endpoint.Sess
 	}
 
 	return srv.ServeSession(ctx, sess)
+}
+
+func (a *Agent) registerTerminalLiveStream(srv *serve.Server, meta *session.Meta) {
+	if a == nil || a.term == nil || srv == nil {
+		return
+	}
+	srv.Handle(livev1.StreamKind, func(ctx context.Context, stream io.ReadWriteCloser) {
+		if err := a.term.ServeLiveStream(ctx, stream, meta, a.accessGate); err != nil && ctx.Err() == nil && a.log != nil {
+			a.log.Debug("terminal live stream closed", "error", err)
+		}
+	})
 }
 
 func (a *Agent) serveRPCStream(ctx context.Context, stream io.ReadWriteCloser, meta *session.Meta, fsSvc *fs.Service, gitRepoSvc *gitrepo.Service) {

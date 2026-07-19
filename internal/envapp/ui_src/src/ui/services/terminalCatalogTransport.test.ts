@@ -9,7 +9,7 @@ vi.mock('@floegence/floe-webapp-protocol', () => ({
 import {
   createRedevenPagedHistoryFetcher,
   createRedevenTerminalCatalogTransport,
-} from './terminalTransport';
+} from './terminalCatalogTransport';
 
 describe('terminal catalog transport', () => {
   it('only uses directory RPCs and never allocates renderer operations', async () => {

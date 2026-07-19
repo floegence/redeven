@@ -1,6 +1,7 @@
 package terminal
 
 import (
+	"context"
 	"io"
 	"log/slog"
 	"os"
@@ -11,7 +12,6 @@ import (
 	"time"
 
 	termgo "github.com/floegence/floeterm/terminal-go"
-	"github.com/floegence/flowersec/flowersec-go/rpc"
 )
 
 const (
@@ -40,9 +40,7 @@ func TestRealShellIntegrationEmitsLifecycleMarkersForBashAndZsh(t *testing.T) {
 			if err != nil {
 				t.Fatalf("createSession() error = %v", err)
 			}
-			if _, err := manager.attachSession(session.ID, "conn-1", 80, 24, nil, 0); err != nil {
-				t.Fatalf("attachSession() error = %v", err)
-			}
+			activateShellTestSession(t, manager, session)
 
 			time.Sleep(250 * time.Millisecond)
 
@@ -108,9 +106,7 @@ func TestRealPosixShellFallbackOmitsLifecycleMarkers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("createSession() error = %v", err)
 	}
-	if _, err := manager.attachSession(session.ID, "conn-1", 80, 24, nil, 0); err != nil {
-		t.Fatalf("attachSession() error = %v", err)
-	}
+	activateShellTestSession(t, manager, session)
 
 	time.Sleep(150 * time.Millisecond)
 
@@ -151,9 +147,7 @@ func TestRealShellIntegrationEmitsCwdMarkersAndNameUpdatesForBashAndZsh(t *testi
 			if err != nil {
 				t.Fatalf("createSession() error = %v", err)
 			}
-			if _, err := manager.attachSession(session.ID, "conn-1", 80, 24, nil, 0); err != nil {
-				t.Fatalf("attachSession() error = %v", err)
-			}
+			activateShellTestSession(t, manager, session)
 
 			time.Sleep(250 * time.Millisecond)
 
@@ -200,11 +194,6 @@ func newShellLifecycleTestManagerWithRecorder(t *testing.T, root string, shellPa
 		agentHomeAbs:     root,
 		scope:            mustTestFilesystemScope(t, root),
 		log:              logger,
-		writers:          make(map[*rpc.Server]*sinkWriter),
-		byServer:         make(map[*rpc.Server]map[string]sinkAttachment),
-		bySession:        make(map[string]map[*rpc.Server]sinkAttachment),
-		attachStates:     make(map[*rpc.Server]map[string]*sinkAttachState),
-		sinkLifecycles:   make(map[*rpc.Server]*terminalSinkLifecycle),
 		sessionLifecycle: make(map[string]SessionLifecycleRecord),
 	}
 
@@ -223,6 +212,15 @@ func newShellLifecycleTestManagerWithRecorder(t *testing.T, root string, shellPa
 	manager.term.SetEventHandler(recorder)
 
 	return manager, recorder
+}
+
+func activateShellTestSession(t *testing.T, manager *Manager, terminalSession *termgo.Session) {
+	t.Helper()
+	terminalSession.AddConnectionWithHistoryBoundary("shell-integration", 80, 24)
+	t.Cleanup(func() { terminalSession.RemoveConnection("shell-integration") })
+	if err := manager.activateSessionFunc(context.Background(), terminalSession.ID, 80, 24); err != nil {
+		t.Fatalf("ActivateSessionContext() error = %v", err)
+	}
 }
 
 func newIsolatedShellHome(t *testing.T) string {
@@ -326,9 +324,9 @@ type shellEventRecorder struct {
 	nameUpdates []shellNameUpdate
 }
 
-func (r *shellEventRecorder) OnTerminalData(sessionID string, data []byte, sequenceNumber int64, isEcho bool, originalSource string) {
+func (r *shellEventRecorder) OnTerminalData(sessionID string, event termgo.TerminalOutputEvent) {
 	if r.delegate != nil {
-		r.delegate.OnTerminalData(sessionID, data, sequenceNumber, isEcho, originalSource)
+		r.delegate.OnTerminalData(sessionID, event)
 	}
 }
 

@@ -21,41 +21,6 @@ export type wire_terminal_session_list_resp = {
   sessions: wire_terminal_session_info[];
 };
 
-export type wire_terminal_session_attach_req = {
-  session_id: string;
-  conn_id: string;
-  cols: number;
-  rows: number;
-  attach_generation: number;
-};
-
-export type wire_terminal_session_attach_resp = {
-  ok: boolean;
-  history_boundary_sequence?: number;
-};
-
-export type wire_terminal_input_notify = {
-  session_id: string;
-  conn_id: string;
-  data_b64: string;
-};
-
-export type wire_terminal_output_notify = {
-  session_id: string;
-  data_b64: string;
-  sequence?: number;
-  timestamp_ms?: number;
-  echo_of_input?: boolean;
-  original_source?: string;
-};
-
-export type wire_terminal_resize_notify = {
-  session_id: string;
-  conn_id: string;
-  cols: number;
-  rows: number;
-};
-
 export type wire_terminal_name_update_notify = {
   session_id: string;
   new_name: string;

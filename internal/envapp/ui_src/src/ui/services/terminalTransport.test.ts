@@ -1,738 +1,201 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { ProtocolNotConnectedError, RpcError } from '@floegence/floe-webapp-protocol';
+import {
+  StreamKind,
+  TerminalLiveDecoder,
+  TerminalLiveErrorCode,
+  TerminalLiveServerError,
+  decodeAttach,
+  decodeInput,
+  decodeResize,
+  encodeAttached,
+  encodeResizeApplied,
+  type TerminalByteStream,
+} from '@floegence/floeterm-terminal-web/live';
 
 import {
   classifyTerminalAttachLifecycleExit,
-  createRedevenTerminalTransport,
+  createTerminalConnId,
+  createRedevenTerminalLiveBundle,
   isBestEffortTerminalDisconnectError,
 } from './terminalTransport';
 
-function createRpcMock(overrides: Partial<Record<string, any>> = {}) {
-  return {
-    terminal: {
-      attach: vi.fn(),
-      resize: vi.fn().mockResolvedValue(undefined),
-      sendTextInput: vi.fn().mockResolvedValue(undefined),
-      history: vi.fn(),
-      clear: vi.fn(),
-      listSessions: vi.fn(),
-      createSession: vi.fn(),
-      deleteSession: vi.fn(),
-      getSessionStats: vi.fn(),
-      onOutput: vi.fn(),
-      onNameUpdate: vi.fn(),
-      ...overrides,
-    },
-  } as any;
+class FakeStream implements TerminalByteStream {
+  readonly writes: Uint8Array[] = [];
+  private readonly reads: Array<Uint8Array | null> = [];
+  private readonly waiters: Array<(value: Uint8Array | null) => void> = [];
+
+  async read(): Promise<Uint8Array | null> {
+    if (this.reads.length > 0) return this.reads.shift() ?? null;
+    return await new Promise(resolve => this.waiters.push(resolve));
+  }
+
+  async write(data: Uint8Array): Promise<void> {
+    this.writes.push(data.slice());
+  }
+
+  async close(): Promise<void> {
+    this.push(null);
+  }
+
+  async reset(): Promise<void> {
+    this.push(null);
+  }
+
+  push(data: Uint8Array | null): void {
+    const waiter = this.waiters.shift();
+    if (waiter) waiter(data);
+    else this.reads.push(data);
+  }
 }
 
-function nextTimer(): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, 0));
-}
-
-beforeEach(() => {
-  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => (
-    setTimeout(() => callback(0), 0) as unknown as number
-  ));
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
-});
-
-describe('terminalTransport', () => {
-  it('classifies closed transport errors as best-effort terminal disconnects', () => {
-    expect(isBestEffortTerminalDisconnectError(new ProtocolNotConnectedError())).toBe(true);
-    expect(isBestEffortTerminalDisconnectError(new RpcError({
-      typeId: 2005,
-      code: -1,
-      message: 'RPC notify transport error',
-      cause: new Error('rpc client closed'),
-    }))).toBe(true);
-    expect(isBestEffortTerminalDisconnectError(new RpcError({
-      typeId: 2005,
-      code: -1,
-      message: 'wording is not part of the disconnect contract',
-    }))).toBe(true);
-    expect(isBestEffortTerminalDisconnectError(Object.assign(new Error('cancelled'), {
-      name: 'AbortError',
-    }))).toBe(true);
-    expect(isBestEffortTerminalDisconnectError(new RpcError({
-      typeId: 2005,
-      code: 500,
-      message: 'request failed',
-    }))).toBe(false);
-  });
-
-  it.each([
-    [404, 'session_gone'],
-    [409, 'superseded'],
-    [410, 'connection_closed'],
-  ] as const)('classifies RPC %s as the %s attach lifecycle exit', (code, expected) => {
-    expect(classifyTerminalAttachLifecycleExit(new RpcError({
-      typeId: 2005,
-      code,
-      message: 'terminal attach lifecycle ended',
-    }))).toBe(expected);
-  });
-
-  it('does not classify a current attach failure as a lifecycle exit', () => {
-    expect(classifyTerminalAttachLifecycleExit(new RpcError({
-      typeId: 2005,
-      code: 500,
-      message: 'failed to attach terminal session',
-    }))).toBeNull();
-  });
-
-  it('suppresses resize and input notify errors after the RPC client closes', async () => {
-    const closedError = new RpcError({
-      typeId: 2005,
-      code: -1,
-      message: 'RPC notify transport error',
-      cause: new Error('rpc client closed'),
-    });
-    const rpc = createRpcMock({
-      resize: vi.fn().mockRejectedValue(closedError),
-      sendTextInput: vi.fn().mockRejectedValue(closedError),
-    });
-    const transport = createRedevenTerminalTransport(rpc, 'conn-1');
-
-    await expect(transport.resize('session-1', 80, 24)).resolves.toBeUndefined();
-    await expect(transport.sendInput('session-1', 'x')).resolves.toBeUndefined();
-  });
-
-  it('coalesces same-frame terminal resize notifications to the latest dimensions', async () => {
-    const rpc = createRpcMock();
-    const transport = createRedevenTerminalTransport(rpc, 'conn-1');
-
-    const first = transport.resize('session-1', 80, 24);
-    const second = transport.resize('session-1', 101.8, 31.2);
-
-    await Promise.all([first, second]);
-
-    expect(rpc.terminal.resize).toHaveBeenCalledTimes(1);
-    expect(rpc.terminal.resize).toHaveBeenLastCalledWith({
-      sessionId: 'session-1',
-      connId: 'conn-1',
-      cols: 101,
-      rows: 31,
-    });
-
-    await transport.resize('session-1', 101, 31);
-
-    expect(rpc.terminal.resize).toHaveBeenCalledTimes(1);
-  });
-
-  it('cancels a scheduled resize when its panel lease is disposed', async () => {
-    const rpc = createRpcMock();
-    const transport = createRedevenTerminalTransport(rpc, 'conn-1');
-
-    const resize = transport.resize('session-1', 80, 24);
-    transport.dispose();
-
-    await expect(resize).resolves.toBeUndefined();
-    await nextTimer();
-    expect(rpc.terminal.resize).not.toHaveBeenCalled();
-  });
-
-  it('cancels the fallback timer resize when its panel lease is disposed', async () => {
-    vi.stubGlobal('requestAnimationFrame', undefined);
-    const rpc = createRpcMock();
-    const transport = createRedevenTerminalTransport(rpc, 'conn-1');
-
-    const resize = transport.resize('session-1', 80, 24);
-    transport.dispose();
-
-    await expect(resize).resolves.toBeUndefined();
-    await nextTimer();
-    expect(rpc.terminal.resize).not.toHaveBeenCalled();
-  });
-
-  it('keeps a zero-reference in-flight resize serialized with a newly acquired panel lease', async () => {
-    let rejectFirstResize!: (error: Error) => void;
-    const firstResize = new Promise<void>((_resolve, reject) => {
-      rejectFirstResize = reject;
-    });
-    const rpc = createRpcMock({
-      resize: vi.fn()
-        .mockImplementationOnce(() => firstResize)
-        .mockResolvedValue(undefined),
-    });
-    const scope = {};
-    const oldTransport = createRedevenTerminalTransport(rpc, 'conn-1', scope);
-
-    const staleResize = oldTransport.resize('session-1', 80, 24);
-    await nextTimer();
-    expect(rpc.terminal.resize).toHaveBeenCalledTimes(1);
-    oldTransport.dispose();
-    await expect(staleResize).resolves.toBeUndefined();
-
-    const nextTransport = createRedevenTerminalTransport(rpc, 'conn-1', scope);
-    const currentResize = nextTransport.resize('session-1', 100, 30);
-    await nextTimer();
-    expect(rpc.terminal.resize).toHaveBeenCalledTimes(1);
-
-    rejectFirstResize(new Error('stale resize failed'));
-    await expect(currentResize).resolves.toBeUndefined();
-    expect(rpc.terminal.resize).toHaveBeenCalledTimes(2);
-    expect(rpc.terminal.resize).toHaveBeenLastCalledWith({
-      sessionId: 'session-1',
-      connId: 'conn-1',
-      cols: 100,
-      rows: 30,
-    });
-  });
-
-  it('invalidates the resize baseline when the protocol client epoch changes', async () => {
-    const rpc = createRpcMock({
-      attach: vi.fn().mockResolvedValue({ ok: true, historyBoundarySequence: 0 }),
-    });
-    const transport = createRedevenTerminalTransport(rpc, 'conn-1');
-    const firstClient = {};
-    const nextClient = {};
-
-    transport.syncConnectionEpoch(firstClient);
-    await transport.attachWithHistoryBoundary('session-1', 80, 24);
-    transport.syncConnectionEpoch(firstClient);
-    transport.syncConnectionEpoch(nextClient);
-    await transport.resize('session-1', 80, 24);
-
-    expect(rpc.terminal.resize).toHaveBeenCalledTimes(1);
-  });
-
-  it('applies a corrective resize when an older in-flight resize can finish after attach', async () => {
-    let releaseFirstResize!: () => void;
-    const firstResize = new Promise<void>((resolve) => {
-      releaseFirstResize = resolve;
-    });
-    const operations: string[] = [];
-    const rpc = createRpcMock({
-      resize: vi.fn().mockImplementation(async ({ cols, rows }) => {
-        operations.push(`resize:${cols}x${rows}`);
-        if (cols === 90) await firstResize;
-      }),
-      attach: vi.fn().mockImplementation(async ({ cols, rows }) => {
-        operations.push(`attach:${cols}x${rows}`);
-        return { ok: true, historyBoundarySequence: 0 };
-      }),
-    });
-    const scope = {};
-    const oldTransport = createRedevenTerminalTransport(rpc, 'conn-1', scope);
-    const nextTransport = createRedevenTerminalTransport(rpc, 'conn-1', scope);
-
-    const oldResize = oldTransport.resize('session-1', 90, 24);
-    await nextTimer();
-    await nextTransport.attachWithHistoryBoundary('session-1', 100, 30);
-    expect(operations).toEqual(['resize:90x24', 'attach:100x30']);
-
-    releaseFirstResize();
-    await oldResize;
-    await expect.poll(() => rpc.terminal.resize.mock.calls.length).toBe(2);
-    expect(operations).toEqual(['resize:90x24', 'attach:100x30', 'resize:100x30']);
-  });
-
-  it('drops a queued resize that predates the attach size fence', async () => {
-    const rpc = createRpcMock({
-      attach: vi.fn().mockResolvedValue({ ok: true, historyBoundarySequence: 0 }),
-    });
-    const transport = createRedevenTerminalTransport(rpc, 'conn-1');
-
-    const staleResize = transport.resize('session-1', 90, 24);
-    await transport.attachWithHistoryBoundary('session-1', 100, 30);
-    await expect(staleResize).resolves.toBeUndefined();
-    await nextTimer();
-
-    expect(rpc.terminal.resize).not.toHaveBeenCalled();
-  });
-
-  it('reapplies a completed resize that was requested while attach was pending', async () => {
-    let releaseAttach!: () => void;
-    const attachPending = new Promise<{ ok: true; historyBoundarySequence: number }>((resolve) => {
-      releaseAttach = () => resolve({ ok: true, historyBoundarySequence: 0 });
-    });
-    const operations: string[] = [];
-    const rpc = createRpcMock({
-      attach: vi.fn().mockImplementation(async ({ cols, rows }) => {
-        operations.push(`attach:${cols}x${rows}`);
-        return attachPending;
-      }),
-      resize: vi.fn().mockImplementation(async ({ cols, rows }) => {
-        operations.push(`resize:${cols}x${rows}`);
-      }),
-    });
-    const transport = createRedevenTerminalTransport(rpc, 'conn-1');
-
-    const attach = transport.attachWithHistoryBoundary('session-1', 100, 30);
-    await transport.resize('session-1', 120, 40);
-    releaseAttach();
-    await attach;
-    await expect.poll(() => rpc.terminal.resize.mock.calls.length).toBe(2);
-
-    expect(operations).toEqual(['attach:100x30', 'resize:120x40', 'resize:120x40']);
-  });
-
-  it('keeps a newer in-flight resize authoritative after attach acknowledgement', async () => {
-    let releaseAttach!: () => void;
-    const attachPending = new Promise<{ ok: true; historyBoundarySequence: number }>((resolve) => {
-      releaseAttach = () => resolve({ ok: true, historyBoundarySequence: 0 });
-    });
-    let releaseResize!: () => void;
-    const resizePending = new Promise<void>((resolve) => {
-      releaseResize = resolve;
-    });
-    const rpc = createRpcMock({
-      attach: vi.fn().mockImplementation(() => attachPending),
-      resize: vi.fn().mockImplementation(() => resizePending),
-    });
-    const transport = createRedevenTerminalTransport(rpc, 'conn-1');
-
-    const attach = transport.attachWithHistoryBoundary('session-1', 100, 30);
-    const resize = transport.resize('session-1', 120, 40);
-    await nextTimer();
-    releaseAttach();
-    await attach;
-    releaseResize();
-    await resize;
-    await nextTimer();
-
-    expect(rpc.terminal.resize).toHaveBeenCalledTimes(1);
-    expect(rpc.terminal.resize).toHaveBeenCalledWith({
-      sessionId: 'session-1',
-      connId: 'conn-1',
-      cols: 120,
-      rows: 40,
-    });
-  });
-
-  it('settles a same-size in-flight resize when attach already applied it', async () => {
-    let releaseAttach!: () => void;
-    const attachPending = new Promise<{ ok: true; historyBoundarySequence: number }>((resolve) => {
-      releaseAttach = () => resolve({ ok: true, historyBoundarySequence: 0 });
-    });
-    let rejectResize!: (error: Error) => void;
-    const resizePending = new Promise<void>((_resolve, reject) => {
-      rejectResize = reject;
-    });
-    const rpc = createRpcMock({
-      attach: vi.fn().mockImplementation(() => attachPending),
-      resize: vi.fn().mockImplementation(() => resizePending),
-    });
-    const transport = createRedevenTerminalTransport(rpc, 'conn-1');
-
-    const attach = transport.attachWithHistoryBoundary('session-1', 100, 30);
-    const resize = transport.resize('session-1', 100, 30);
-    await nextTimer();
-    releaseAttach();
-    await attach;
-    await expect(resize).resolves.toBeUndefined();
-
-    rejectResize(new Error('late same-size resize failed'));
-    await nextTimer();
-    expect(rpc.terminal.resize).toHaveBeenCalledTimes(1);
-  });
-
-  it('disposes only resize ownership and keeps transport commands available', async () => {
-    const rpc = createRpcMock({ listSessions: vi.fn().mockResolvedValue({ sessions: [] }) });
-    const scope = {};
-    const firstTransport = createRedevenTerminalTransport(rpc, 'conn-1', scope);
-    const secondTransport = createRedevenTerminalTransport(rpc, 'conn-1', scope);
-
-    firstTransport.dispose();
-
-    await expect(firstTransport.listSessions!()).resolves.toEqual([]);
-    await secondTransport.resize('session-1', 80, 24);
-    expect(rpc.terminal.resize).toHaveBeenCalledTimes(1);
-  });
-
-  it('forgets resize state after a terminal session is deleted', async () => {
-    const rpc = createRpcMock({
-      attach: vi.fn().mockResolvedValue({ ok: true, historyBoundarySequence: 0 }),
-      deleteSession: vi.fn().mockResolvedValue(undefined),
-    });
-    const transport = createRedevenTerminalTransport(rpc, 'conn-1');
-
-    await transport.attachWithHistoryBoundary('session-1', 80, 24);
-    await transport.deleteSession?.('session-1');
-    await transport.resize('session-1', 80, 24);
-
-    expect(rpc.terminal.resize).toHaveBeenCalledTimes(1);
-  });
-
-  it('forgets shared resize state after the deleting lease is disposed', async () => {
-    const rpc = createRpcMock({
-      attach: vi.fn().mockResolvedValue({ ok: true, historyBoundarySequence: 0 }),
-    });
-    const scope = {};
-    const deletingTransport = createRedevenTerminalTransport(rpc, 'conn-1', scope);
-    const survivingTransport = createRedevenTerminalTransport(rpc, 'conn-1', scope);
-
-    await deletingTransport.attachWithHistoryBoundary('session-1', 80, 24);
-    deletingTransport.dispose();
-    deletingTransport.forgetSession('session-1');
-    await survivingTransport.resize('session-1', 80, 24);
-
-    expect(rpc.terminal.resize).toHaveBeenCalledTimes(1);
-  });
-
-  it('returns the atomic attach history boundary and treats the size as the resize baseline', async () => {
-    const rpc = createRpcMock({
-      attach: vi.fn().mockResolvedValue({ ok: true, historyBoundarySequence: 0 }),
-    });
-    const transport = createRedevenTerminalTransport(rpc, 'conn-1');
-
-    await expect(transport.attachWithHistoryBoundary('session-1', 80, 24)).resolves.toEqual({
-      historyBoundarySequence: 0,
-      runtimeAttachGeneration: 1,
-    });
-    expect(rpc.terminal.attach).toHaveBeenCalledWith({
-      sessionId: 'session-1',
-      connId: 'conn-1',
-      cols: 80,
-      rows: 24,
-      attachGeneration: 1,
-    });
-    await transport.resize('session-1', 80, 24);
-
-    expect(rpc.terminal.resize).not.toHaveBeenCalled();
-  });
-
-  it('orders concurrent attach RPCs with a transport-scoped generation', async () => {
-    let releaseFirstAttach!: () => void;
-    const firstAttach = new Promise<{ ok: true; historyBoundarySequence: number }>((resolve) => {
-      releaseFirstAttach = () => resolve({ ok: true, historyBoundarySequence: 1 });
-    });
-    const rpc = createRpcMock({
-      attach: vi.fn()
-        .mockImplementationOnce(() => firstAttach)
-        .mockResolvedValueOnce({ ok: true, historyBoundarySequence: 2 }),
-    });
-    const transport = createRedevenTerminalTransport(rpc, 'conn-1');
-
-    const first = transport.attachWithHistoryBoundary('session-1', 80, 24);
-    const second = transport.attachWithHistoryBoundary('session-1', 100, 30);
-
-    await expect(second).resolves.toEqual({ historyBoundarySequence: 2, runtimeAttachGeneration: 2 });
-    expect(rpc.terminal.attach).toHaveBeenNthCalledWith(1, {
-      sessionId: 'session-1',
-      connId: 'conn-1',
-      cols: 80,
-      rows: 24,
-      attachGeneration: 1,
-    });
-    expect(rpc.terminal.attach).toHaveBeenNthCalledWith(2, {
-      sessionId: 'session-1',
-      connId: 'conn-1',
-      cols: 100,
-      rows: 30,
-      attachGeneration: 2,
-    });
-
-    releaseFirstAttach();
-    await expect(first).resolves.toEqual({ historyBoundarySequence: 1, runtimeAttachGeneration: 1 });
-
-    await transport.resize('session-1', 100, 30);
-    expect(rpc.terminal.resize).not.toHaveBeenCalled();
-  });
-
-  it('keeps attach generations monotonic across adapters sharing a connection', async () => {
-    const rpc = createRpcMock({
-      attach: vi.fn().mockResolvedValue({ ok: true, historyBoundarySequence: 0 }),
-    });
-    const connId = `shared-conn-${crypto.randomUUID()}`;
-    const activityTransport = createRedevenTerminalTransport(rpc, connId);
-    const workbenchTransport = createRedevenTerminalTransport(rpc, connId);
-
-    await activityTransport.attachWithHistoryBoundary('session-1', 80, 24);
-    await workbenchTransport.attachWithHistoryBoundary('session-1', 100, 30);
-
-    expect(rpc.terminal.attach).toHaveBeenNthCalledWith(1, {
-      sessionId: 'session-1',
-      connId,
-      cols: 80,
-      rows: 24,
-      attachGeneration: 1,
-    });
-    expect(rpc.terminal.attach).toHaveBeenNthCalledWith(2, {
-      sessionId: 'session-1',
-      connId,
-      cols: 100,
-      rows: 30,
-      attachGeneration: 2,
-    });
-  });
-
-  it('keeps attach generations monotonic when adapters rotate connection IDs on one RPC stream', async () => {
-    const rpc = createRpcMock({
-      attach: vi.fn().mockResolvedValue({ ok: true, historyBoundarySequence: 0 }),
-    });
-    const firstTransport = createRedevenTerminalTransport(rpc, 'conn-a');
-    const secondTransport = createRedevenTerminalTransport(rpc, 'conn-b');
-
-    await firstTransport.attachWithHistoryBoundary('session-1', 80, 24);
-    await secondTransport.attachWithHistoryBoundary('session-1', 100, 30);
-
-    expect(rpc.terminal.attach).toHaveBeenNthCalledWith(1, {
-      sessionId: 'session-1',
-      connId: 'conn-a',
-      cols: 80,
-      rows: 24,
-      attachGeneration: 1,
-    });
-    expect(rpc.terminal.attach).toHaveBeenNthCalledWith(2, {
-      sessionId: 'session-1',
-      connId: 'conn-b',
-      cols: 100,
-      rows: 30,
-      attachGeneration: 2,
-    });
-  });
-
-  it('keeps attach generations monotonic across RPC facades sharing one protocol transport', async () => {
-    const attach = vi.fn().mockResolvedValue({ ok: true, historyBoundarySequence: 0 });
-    const activityRpc = createRpcMock({ attach });
-    const workbenchRpc = createRpcMock({ attach });
-    const protocolTransport = {};
-    const activityTransport = createRedevenTerminalTransport(activityRpc, 'conn-1', protocolTransport);
-    const workbenchTransport = createRedevenTerminalTransport(workbenchRpc, 'conn-1', protocolTransport);
-
-    await activityTransport.attachWithHistoryBoundary('session-1', 80, 24);
-    await workbenchTransport.attachWithHistoryBoundary('session-1', 100, 30);
-
-    expect(attach).toHaveBeenNthCalledWith(1, {
-      sessionId: 'session-1',
-      connId: 'conn-1',
-      cols: 80,
-      rows: 24,
-      attachGeneration: 1,
-    });
-    expect(attach).toHaveBeenNthCalledWith(2, {
-      sessionId: 'session-1',
-      connId: 'conn-1',
-      cols: 100,
-      rows: 30,
-      attachGeneration: 2,
-    });
-  });
-
-  it('preserves a missing attach history boundary for fail-closed runtime handling', async () => {
-    const rpc = createRpcMock({ attach: vi.fn().mockResolvedValue({ ok: true }) });
-    const transport = createRedevenTerminalTransport(rpc, 'conn-1');
-
-    const result = await transport.attachWithHistoryBoundary('session-1', 80, 24);
-
-    expect(Object.prototype.hasOwnProperty.call(result, 'historyBoundarySequence')).toBe(false);
-    await transport.resize('session-1', 80, 24);
-    expect(rpc.terminal.resize).toHaveBeenCalledTimes(1);
-  });
-
-  it.each([-1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
-    'preserves invalid attach history boundary %s without marking the resize baseline',
-    async (historyBoundarySequence) => {
-      const rpc = createRpcMock({
-        attach: vi.fn().mockResolvedValue({ ok: true, historyBoundarySequence }),
-      });
-      const transport = createRedevenTerminalTransport(rpc, 'conn-1');
-
-      await expect(transport.attachWithHistoryBoundary('session-1', 80, 24)).resolves.toEqual({
-        historyBoundarySequence: Number.NaN,
-        runtimeAttachGeneration: 1,
-      });
-      await transport.resize('session-1', 80, 24);
-      expect(rpc.terminal.resize).toHaveBeenCalledTimes(1);
-    },
-  );
-
-  it('rejects an attach response that is not acknowledged', async () => {
-    const rpc = createRpcMock({ attach: vi.fn().mockResolvedValue({ ok: false, historyBoundarySequence: 0 }) });
-    const transport = createRedevenTerminalTransport(rpc, 'conn-1');
-
-    await expect(transport.attachWithHistoryBoundary('session-1', 80, 24)).rejects.toThrow(
-      'terminal attach was not acknowledged',
-    );
-    await transport.resize('session-1', 80, 24);
-    expect(rpc.terminal.resize).toHaveBeenCalledTimes(1);
-  });
-
-  it('serializes in-flight terminal resize notifications and keeps only the newest pending size', async () => {
-    let releaseFirstResize!: () => void;
-    const firstResize = new Promise<void>((resolve) => {
-      releaseFirstResize = resolve;
-    });
-    const rpc = createRpcMock({
-      resize: vi.fn()
-        .mockImplementationOnce(() => firstResize)
-        .mockResolvedValue(undefined),
-    });
-    const transport = createRedevenTerminalTransport(rpc, 'conn-1');
-
-    const first = transport.resize('session-1', 80, 24);
-    await nextTimer();
-
-    expect(rpc.terminal.resize).toHaveBeenCalledTimes(1);
-
-    const second = transport.resize('session-1', 90, 24);
-    const third = transport.resize('session-1', 100, 30);
-    await nextTimer();
-
-    expect(rpc.terminal.resize).toHaveBeenCalledTimes(1);
-
-    releaseFirstResize();
-    await first;
-    await Promise.all([second, third]);
-
-    expect(rpc.terminal.resize).toHaveBeenCalledTimes(2);
-    expect(rpc.terminal.resize).toHaveBeenLastCalledWith({
-      sessionId: 'session-1',
-      connId: 'conn-1',
-      cols: 100,
-      rows: 30,
-    });
-  });
-
-  it('requests bounded terminal history pages with cursor metadata', async () => {
-    const chunk = { sequence: 2, timestampMs: 10, data: new Uint8Array([1, 2, 3]) };
-    const rpc = createRpcMock({
-      history: vi.fn().mockResolvedValue({
-        chunks: [chunk],
-        nextStartSeq: 3,
-        hasMore: true,
-        firstSequence: 2,
-        lastSequence: 2,
-        coveredThroughSequence: 2,
-        snapshotEndSequence: 9,
-        firstRetainedSequence: 1,
-        historyGeneration: 4,
-        historyReset: false,
-        historyTruncated: false,
-        coveredBytes: 3,
-        totalBytes: 9,
-      }),
-    });
-    const transport = createRedevenTerminalTransport(rpc, 'conn-1');
-
-    const page = await transport.historyPage('session-1', 2, -1, {
-      limitChunks: 10,
-      maxBytes: 1024,
-      snapshotEndSequence: 9,
-      historyGeneration: 4,
-    });
-
-    expect(rpc.terminal.history).toHaveBeenCalledWith({
-      sessionId: 'session-1',
-      startSeq: 2,
-      endSeq: 9,
-      historyGeneration: 4,
-      limitChunks: 10,
-      maxBytes: 1024,
-    });
-    expect(page).toEqual({
-      chunks: [chunk],
-      nextStartSeq: 3,
-      hasMore: true,
-      firstSequence: 2,
-      lastSequence: 2,
-      coveredThroughSequence: 2,
-      snapshotEndSequence: 9,
+const waitUntil = async (predicate: () => boolean): Promise<void> => {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    if (predicate()) return;
+    await Promise.resolve();
+  }
+  throw new Error('condition was not reached');
+};
+
+const decodeSingleWrite = (data: Uint8Array) => {
+  const frames = new TerminalLiveDecoder().push(data);
+  expect(frames).toHaveLength(1);
+  return frames[0]!;
+};
+
+const createRpcMock = () => {
+  let nameHandler: ((event: { sessionId: string; newName: string; workingDir: string }) => void) | undefined;
+  const terminal = {
+    history: vi.fn().mockResolvedValue({
+      chunks: [],
+      nextStartSeq: 0,
+      hasMore: false,
+      firstSequence: 0,
+      lastSequence: 0,
+      coveredThroughSequence: 4,
+      snapshotEndSequence: 4,
       firstRetainedSequence: 1,
-      historyGeneration: 4,
+      historyGeneration: 2,
       historyReset: false,
       historyTruncated: false,
-      coveredBytes: 3,
-      totalBytes: 9,
+      coveredBytes: 0,
+      totalBytes: 0,
+    }),
+    clear: vi.fn().mockResolvedValue({ ok: true }),
+    listSessions: vi.fn().mockResolvedValue({ sessions: [] }),
+    createSession: vi.fn(),
+    deleteSession: vi.fn().mockResolvedValue({ ok: true }),
+    getSessionStats: vi.fn().mockResolvedValue({ history: { totalBytes: 12 } }),
+    onNameUpdate: vi.fn((handler) => {
+      nameHandler = handler;
+      return () => { nameHandler = undefined; };
+    }),
+  };
+  return {
+    rpc: { terminal } as any,
+    emitName: (event: { sessionId: string; newName: string; workingDir: string }) => nameHandler?.(event),
+  };
+};
+
+describe('terminal live transport', () => {
+  it('uses only the terminal/live_v1 stream for attach, input, and resize', async () => {
+    const { rpc } = createRpcMock();
+    const stream = new FakeStream();
+    const openStream = vi.fn().mockResolvedValue(stream);
+    const bundle = createRedevenTerminalLiveBundle(rpc, () => ({ openStream } as any), 'connection-1');
+
+    const attaching = bundle.transport.attachWithHistoryBoundary('session-1', 80, 24);
+    await waitUntil(() => stream.writes.length === 1);
+    expect(openStream).toHaveBeenCalledWith(StreamKind, undefined);
+    expect(decodeAttach(decodeSingleWrite(stream.writes[0]!))).toEqual({
+      sessionId: 'session-1',
+      connectionId: 'connection-1',
+      attachGeneration: 1n,
+      cols: 80,
+      rows: 24,
     });
+
+    stream.push(encodeAttached({
+      historyBoundarySequence: 4n,
+      historyGeneration: 2n,
+      historyStartSequence: 1n,
+      geometryGeneration: 1n,
+      cols: 80,
+      rows: 24,
+    }));
+    await expect(attaching).resolves.toMatchObject({
+      historyBoundarySequence: 4,
+      historyGeneration: 2,
+      historyStartSequence: 1,
+      geometryGeneration: 1,
+    });
+
+    await bundle.transport.sendInput('session-1', 'aa');
+    const input = decodeInput(decodeSingleWrite(stream.writes[1]!));
+    expect(input.sequence).toBe(1n);
+    expect(new TextDecoder().decode(input.data)).toBe('aa');
+
+    const resizing = bundle.transport.resize('session-1', 100, 30);
+    await waitUntil(() => stream.writes.length === 3);
+    const resize = decodeResize(decodeSingleWrite(stream.writes[2]!));
+    expect(resize).toEqual({ sequence: 1n, cols: 100, rows: 30 });
+    stream.push(encodeResizeApplied({
+      sequence: resize.sequence,
+      geometryGeneration: 2n,
+      outputSequenceBoundary: 4n,
+      cols: 100,
+      rows: 30,
+    }));
+    await resizing;
   });
 
-  it('uses the byte-bounded large-page defaults for small PTY chunks', async () => {
-    const rpc = createRpcMock({ history: vi.fn().mockResolvedValue({ chunks: [] }) });
-    const transport = createRedevenTerminalTransport(rpc, 'conn-1');
+  it('keeps history and name updates on the RPC control plane', async () => {
+    const { rpc, emitName } = createRpcMock();
+    const bundle = createRedevenTerminalLiveBundle(rpc, () => null, 'connection-1');
+    const names: unknown[] = [];
+    const unsubscribe = bundle.eventSource.onTerminalNameUpdate?.('session-1', event => names.push(event));
 
-    await transport.historyPage('session-1', 1, -1);
-
+    const page = await bundle.transport.historyPage('session-1', 1, 4, {
+      historyGeneration: 2,
+      snapshotEndSequence: 4,
+    });
     expect(rpc.terminal.history).toHaveBeenCalledWith(expect.objectContaining({
-      limitChunks: 2048,
-      maxBytes: 512 * 1024,
-    }));
-  });
-
-  it('preserves a missing history coverage field for coordinator validation', async () => {
-    const rpc = createRpcMock({
-      history: vi.fn().mockResolvedValue({
-        chunks: [],
-        nextStartSeq: 0,
-        hasMore: false,
-        firstSequence: 0,
-        lastSequence: 0,
-        historyReset: false,
-        historyTruncated: false,
-        coveredBytes: 0,
-        totalBytes: 0,
-      }),
-    });
-    const transport = createRedevenTerminalTransport(rpc, 'conn-1');
-
-    const page = await transport.historyPage('session-1', 0, -1);
-
-    expect(Object.prototype.hasOwnProperty.call(page, 'coveredThroughSequence')).toBe(false);
-  });
-
-  it('does not infer a missing next cursor from retained chunks', async () => {
-    const rpc = createRpcMock({
-      history: vi.fn().mockResolvedValue({
-        chunks: [{ sequence: 8, timestampMs: 10, data: new Uint8Array([1]) }],
-        nextStartSeq: 0,
-        hasMore: true,
-        firstSequence: 8,
-        lastSequence: 8,
-        coveredThroughSequence: 8,
-      }),
-    });
-    const transport = createRedevenTerminalTransport(rpc, 'conn-1');
-
-    await expect(transport.historyPage('session-1', 8, -1)).resolves.toMatchObject({
-      nextStartSeq: 0,
-      hasMore: true,
-    });
-    await expect(transport.history('session-1', 8, -1)).rejects.toThrow(
-      'terminal history pagination returned an invalid cursor',
-    );
-  });
-
-  it('drains legacy terminal history through bounded pages', async () => {
-    const first = { sequence: 1, timestampMs: 10, data: new Uint8Array([1]) };
-    const second = { sequence: 2, timestampMs: 20, data: new Uint8Array([2]) };
-    const rpc = createRpcMock({
-      history: vi.fn()
-        .mockResolvedValueOnce({
-          chunks: [first],
-          nextStartSeq: 2,
-          hasMore: true,
-          firstSequence: 1,
-          lastSequence: 1,
-          coveredBytes: 1,
-          totalBytes: 2,
-        })
-        .mockResolvedValueOnce({
-          chunks: [second],
-          nextStartSeq: 0,
-          hasMore: false,
-          firstSequence: 2,
-          lastSequence: 2,
-          coveredBytes: 1,
-          totalBytes: 2,
-        }),
-    });
-    const transport = createRedevenTerminalTransport(rpc, 'conn-1');
-
-    await expect(transport.history('session-1', 0, -1)).resolves.toEqual([first, second]);
-    expect(rpc.terminal.history).toHaveBeenNthCalledWith(1, expect.objectContaining({
       sessionId: 'session-1',
-      startSeq: 0,
-      endSeq: -1,
+      startSeq: 1,
+      endSeq: 4,
+      historyGeneration: 2,
     }));
-    expect(rpc.terminal.history).toHaveBeenNthCalledWith(2, expect.objectContaining({
+    expect(page).toMatchObject({ coveredThroughSequence: 4, historyGeneration: 2 });
+
+    emitName({ sessionId: 'other', newName: 'ignored', workingDir: '/' });
+    emitName({ sessionId: 'session-1', newName: 'shell', workingDir: '/workspace' });
+    expect(names).toEqual([{
       sessionId: 'session-1',
-      startSeq: 2,
-      endSeq: -1,
-    }));
+      newName: 'shell',
+      workingDir: '/workspace',
+    }]);
+    unsubscribe?.();
+  });
+
+  it('requires a connected Flowersec client instead of falling back to RPC live calls', async () => {
+    const { rpc } = createRpcMock();
+    const bundle = createRedevenTerminalLiveBundle(rpc, () => null, 'connection-1');
+    await expect(bundle.transport.attach('session-1', 80, 24)).rejects.toBeInstanceOf(ProtocolNotConnectedError);
+  });
+
+  it('classifies explicit attach lifecycle exits', () => {
+    expect(isBestEffortTerminalDisconnectError(new ProtocolNotConnectedError())).toBe(true);
+    expect(classifyTerminalAttachLifecycleExit(new TerminalLiveServerError(
+      TerminalLiveErrorCode.SessionNotFound,
+      'terminal session not found',
+    ))).toBe('session_gone');
+    expect(classifyTerminalAttachLifecycleExit(new RpcError({ typeId: 2007, code: 404 }))).toBe('session_gone');
+    expect(classifyTerminalAttachLifecycleExit(new RpcError({ typeId: 2007, code: 409 }))).toBeNull();
+    expect(classifyTerminalAttachLifecycleExit(new RpcError({ typeId: 2007, code: 410 }))).toBeNull();
+    expect(classifyTerminalAttachLifecycleExit(new RpcError({ typeId: 2007, code: 500 }))).toBeNull();
+  });
+
+  it('allocates a distinct live connection identity for every terminal view', () => {
+    expect(createTerminalConnId()).not.toBe(createTerminalConnId());
   });
 });

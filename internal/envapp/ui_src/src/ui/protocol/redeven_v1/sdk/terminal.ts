@@ -16,19 +16,6 @@ export type TerminalSessionCreateResponse = {
   session: TerminalSessionInfo;
 };
 
-export type TerminalSessionAttachRequest = {
-  sessionId: string;
-  connId: string;
-  cols: number;
-  rows: number;
-  attachGeneration: number;
-};
-
-export type TerminalSessionAttachResponse = {
-  ok: boolean;
-  historyBoundarySequence?: number;
-};
-
 export type TerminalHistoryChunk = {
   sequence: number;
   timestampMs: number;
@@ -84,15 +71,6 @@ export type TerminalSessionStatsResponse = {
   history: {
     totalBytes: number;
   };
-};
-
-export type TerminalOutputEvent = {
-  sessionId: string;
-  data: Uint8Array;
-  sequence?: number;
-  timestampMs?: number;
-  echoOfInput?: boolean;
-  originalSource?: string;
 };
 
 export type TerminalNameUpdateEvent = {

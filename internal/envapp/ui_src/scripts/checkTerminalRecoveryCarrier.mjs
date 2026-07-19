@@ -115,6 +115,99 @@ function analyzeCanvasImage(imageBuffer) {
   };
 }
 
+function analyzeTerminalTypography(imageBuffer) {
+  const image = PNG.sync.read(imageBuffer);
+  const colorCounts = new Map();
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    const key = `${image.data[offset] >> 2}:${image.data[offset + 1] >> 2}:${image.data[offset + 2] >> 2}`;
+    colorCounts.set(key, (colorCounts.get(key) ?? 0) + 1);
+  }
+  const backgroundKey = [...colorCounts.entries()].sort((left, right) => right[1] - left[1])[0]?.[0];
+  if (!backgroundKey) throw new Error('terminal typography image has no pixels');
+  const background = backgroundKey.split(':').map((value) => Number(value) * 4 + 2);
+  const scanWidth = Math.min(image.width, 320);
+  const occupiedRows = [];
+  for (let y = 0; y < image.height; y += 1) {
+    let inkPixels = 0;
+    for (let x = 0; x < scanWidth; x += 1) {
+      const offset = (y * image.width + x) * 4;
+      const distance = Math.abs(image.data[offset] - background[0])
+        + Math.abs(image.data[offset + 1] - background[1])
+        + Math.abs(image.data[offset + 2] - background[2]);
+      if (distance > 18) inkPixels += 1;
+    }
+    if (inkPixels >= 3) occupiedRows.push(y);
+  }
+  const rowRuns = [];
+  for (const y of occupiedRows) {
+    const previous = rowRuns.at(-1);
+    if (!previous || y > previous.end + 1) rowRuns.push({ start: y, end: y });
+    else previous.end = y;
+  }
+  return { width: image.width, height: image.height, rowRuns };
+}
+
+async function captureTerminalTypographyEvidence(page, runtime, surface) {
+  await terminalInput(page, runtime);
+  const canvas = runtime.locator('.redeven-terminal-surface .floeterm-beamterm-canvas:visible').last();
+  await canvas.waitFor({ state: 'visible', timeout: 15_000 });
+  const geometry = await runtime.evaluate((element) => {
+    const target = element.querySelector('.floeterm-beamterm-canvas');
+    const input = globalThis.document.querySelector('body > textarea[aria-label="Terminal input"]:focus');
+    if (!(target instanceof globalThis.HTMLCanvasElement) || !(input instanceof globalThis.HTMLTextAreaElement)) {
+      throw new Error('terminal renderer geometry is unavailable');
+    }
+    const dpr = globalThis.devicePixelRatio;
+    const canvasRect = target.getBoundingClientRect();
+    const visualScaleX = canvasRect.width / target.clientWidth;
+    const visualScaleY = canvasRect.height / target.clientHeight;
+    const metricsCanvas = new globalThis.OffscreenCanvas(128, 128);
+    const context = metricsCanvas.getContext('2d');
+    if (!context) throw new Error('terminal font metrics context is unavailable');
+    context.font = `${12 * dpr}px Monaco, Menlo, "SF Mono", "JetBrains Mono", "Iosevka", monospace`;
+    const metrics = context.measureText('M');
+    const physicalCellWidth = Math.max(1, Math.round(metrics.width));
+    const physicalCellHeight = Math.max(1, Math.round(
+      metrics.fontBoundingBoxAscent + metrics.fontBoundingBoxDescent,
+    ));
+    return {
+      dpr,
+      canvas_backing_width: target.width,
+      canvas_backing_height: target.height,
+      canvas_css_width: target.clientWidth,
+      canvas_css_height: target.clientHeight,
+      visual_scale_x: visualScaleX,
+      visual_scale_y: visualScaleY,
+      expected_input_width: physicalCellWidth / dpr * visualScaleX,
+      expected_input_height: physicalCellHeight / dpr * visualScaleY,
+      actual_input_width: Number.parseFloat(input.style.width),
+      actual_input_height: Number.parseFloat(input.style.height),
+      actual_input_line_height: Number.parseFloat(input.style.lineHeight),
+    };
+  });
+  const tolerance = 0.15;
+  for (const [name, actual, expected] of [
+    ['input_width', geometry.actual_input_width, geometry.expected_input_width],
+    ['input_height', geometry.actual_input_height, geometry.expected_input_height],
+    ['input_line_height', geometry.actual_input_line_height, geometry.expected_input_height],
+  ]) {
+    if (!Number.isFinite(actual) || Math.abs(actual - expected) > tolerance) {
+      throw new Error(`${surface} terminal ${name} does not match font metrics (${actual} vs ${expected})`);
+    }
+  }
+  if (
+    geometry.canvas_backing_width !== Math.round(geometry.canvas_css_width * geometry.dpr)
+    || geometry.canvas_backing_height !== Math.round(geometry.canvas_css_height * geometry.dpr)
+  ) {
+    throw new Error(`${surface} terminal canvas backing size does not match CSS size and DPR`);
+  }
+  const pixels = analyzeTerminalTypography(await canvas.screenshot({ animations: 'disabled' }));
+  if (pixels.rowRuns.length < 5) {
+    throw new Error(`${surface} terminal glyph rows are not visually separated: ${JSON.stringify(pixels)}`);
+  }
+  return { geometry, pixel_row_runs: pixels.rowRuns.length };
+}
+
 class TerminalCarrierStageError extends Error {
   constructor(stage, cause) {
     super(`terminal carrier stage failed: ${stage}`, { cause });
@@ -317,30 +410,28 @@ async function sendTerminalCommand(page, command, scope = page) {
   await page.keyboard.press('Enter');
 }
 
-async function waitForCanvasChange(canvas, beforeHash, timeoutMs = 15_000) {
+async function waitForCanvasChange(canvas, before, timeoutMs = 15_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    try {
-      const afterHash = sha256(await canvas.screenshot());
-      if (afterHash !== beforeHash) return afterHash;
-    } catch {
-      // Clear/recovery can atomically replace the current canvas; retry the live locator.
-    }
+    const afterHash = sha256(await canvas.screenshot());
+    if (afterHash !== before.hash) return afterHash;
     await delay(75);
   }
-  throw new Error('terminal canvas did not change after the input probe');
+  const finalImage = await canvas.screenshot();
+  const finalVisual = analyzeCanvasImage(finalImage);
+  throw new Error(`terminal canvas did not change after the input probe\n${JSON.stringify({
+    before_hash: before.hash,
+    final_hash: sha256(finalImage),
+    before_dimensions: { width: before.visual.width, height: before.visual.height },
+    final_dimensions: { width: finalVisual.width, height: finalVisual.height },
+    before_ink_ratio: before.visual.inkRatio,
+    final_ink_ratio: finalVisual.inkRatio,
+  })}`);
 }
 
-async function captureCanvasHash(canvas, timeoutMs = 10_000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      return sha256(await canvas.screenshot());
-    } catch {
-      await delay(75);
-    }
-  }
-  throw new Error('terminal canvas did not become stable for screenshot evidence');
+async function captureCanvasEvidence(canvas) {
+  const image = await canvas.screenshot();
+  return { hash: sha256(image), visual: analyzeCanvasImage(image) };
 }
 
 async function captureCanvasVisualEvidence(canvas) {
@@ -371,55 +462,168 @@ async function waitForHistoryBytes(scope, minimumBytes, timeoutMs = 30_000) {
 }
 
 async function seedRetainedSession(page, tempDir, fixtureBytes) {
-  const createButton = page.getByRole('button', { name: 'Create session', exact: true });
+  const targetPanel = page.locator('[data-terminal-panel-variant]:visible').last();
+  const workbenchWidget = targetPanel.locator('xpath=ancestor::*[@data-floe-workbench-widget-id][1]');
+  const workbenchWidgetID = await workbenchWidget.getAttribute('data-floe-workbench-widget-id');
+  if (!workbenchWidgetID) throw new Error('terminal fixture panel did not expose its workbench widget identity');
+  const createButton = targetPanel.getByRole('button', { name: 'Create session', exact: true });
   if (await createButton.count()) {
     await createButton.click();
   } else {
-    await page.locator('[data-testid="terminal-sidebar-add-session"]:visible').first().click();
+    await targetPanel.locator('[data-testid="terminal-sidebar-add-session"]:visible').first().click();
   }
-  await terminalInput(page);
-  const anchorSession = page.locator('button[data-terminal-session-active="true"]:visible').first();
+  await terminalInput(page, targetPanel);
+  const anchorSession = targetPanel.locator('button[data-terminal-session-active="true"]:visible').first();
   const anchorSessionID = await anchorSession.getAttribute('data-terminal-session-id');
   if (!anchorSessionID) throw new Error('anchor terminal session did not expose its renderer identity');
+  const targetVariant = await targetPanel.getAttribute('data-terminal-panel-variant');
+  if (!targetVariant) throw new Error('terminal fixture panel did not expose its variant');
 
-  await page.locator('[data-testid="terminal-sidebar-add-session"]:visible').first().click();
-  await page.waitForFunction((previousSessionID) => {
-    const active = globalThis.document.querySelector('button[data-terminal-session-active="true"]');
-    return active?.getAttribute('data-terminal-session-id') !== previousSessionID;
-  }, anchorSessionID, { timeout: 15_000 });
-  await terminalInput(page);
-  const clearButton = page.locator('button[title="Clear"]:visible').last();
-  await clearButton.waitFor({ state: 'visible', timeout: 10_000 });
+  await targetPanel.locator('[data-testid="terminal-sidebar-add-session"]:visible').first().click();
+  await page.waitForFunction(({ previousSessionID, panelVariant }) => {
+    const panel = globalThis.document.querySelector(`[data-terminal-panel-variant="${panelVariant}"]`);
+    if (!panel) return false;
+    return Array.from(panel.querySelectorAll('[data-terminal-runtime-session]')).some((runtime) => (
+      runtime.getAttribute('data-terminal-runtime-session') !== previousSessionID
+      && runtime.getClientRects().length > 0
+      && runtime.querySelector('.redeven-terminal-surface [contenteditable="true"][aria-label="Terminal input"]')
+    ));
+  }, { previousSessionID: anchorSessionID, panelVariant: targetVariant }, { timeout: 15_000 });
+  const targetInputHost = targetPanel.locator(
+    '[data-terminal-runtime-session] .redeven-terminal-surface [contenteditable="true"][aria-label="Terminal input"]:visible',
+  ).last();
+  const targetRuntime = targetInputHost.locator('xpath=ancestor::*[@data-terminal-runtime-session][1]');
+  const sessionID = await targetRuntime.getAttribute('data-terminal-runtime-session');
+  if (!sessionID || sessionID === anchorSessionID) {
+    throw new Error('new terminal session did not become the interactive runtime');
+  }
+  const targetSessionButton = targetPanel.locator(
+    `button[data-terminal-session-id="${sessionID}"]:visible`,
+  ).first();
+  await targetSessionButton.waitFor({ state: 'visible', timeout: 15_000 });
+  if (await targetSessionButton.getAttribute('data-terminal-session-active') !== 'true') {
+    await targetSessionButton.click();
+  }
+  await page.waitForFunction(({ panelVariant, expectedSessionID }) => (
+    globalThis.document.querySelector(
+      `[data-terminal-panel-variant="${panelVariant}"] button[data-terminal-session-id="${expectedSessionID}"][data-terminal-session-active="true"]`,
+    ) !== null
+  ), { panelVariant: targetVariant, expectedSessionID: sessionID }, { timeout: 15_000 });
+  await terminalInput(page, targetRuntime);
+  const clearButton = targetPanel.locator('[data-testid="terminal-clear-active-session"]:visible').last();
+  try {
+    await clearButton.waitFor({ state: 'visible', timeout: 10_000 });
+  } catch (error) {
+    const diagnostics = await page.evaluate(() => ({
+      url: globalThis.location.href,
+      visibility: globalThis.document.visibilityState,
+      active_session_count: globalThis.document.querySelectorAll('button[data-terminal-session-active="true"]').length,
+      terminal_panel_variants: Array.from(globalThis.document.querySelectorAll('[data-terminal-panel-variant]'))
+        .map((element) => ({
+          variant: element.getAttribute('data-terminal-panel-variant'),
+          hidden: element.closest('[hidden]') !== null,
+        })),
+      clear_control_count: globalThis.document.querySelectorAll('[data-testid="terminal-clear-active-session"]').length,
+    }));
+    throw new Error(`terminal clear control did not become visible\n${JSON.stringify(diagnostics)}`, { cause: error });
+  }
   await clearButton.click();
-  await terminalInput(page);
-  await delay(300);
-
-  const activeSession = page.locator('button[data-terminal-session-active="true"]:visible').first();
-  const sessionID = await activeSession.getAttribute('data-terminal-session-id');
-  if (!sessionID) throw new Error('active terminal session did not expose its renderer identity');
-  const targetPanel = page.locator('[data-terminal-panel-variant]:visible').last();
+  await page.waitForFunction((panelVariant) => (
+    globalThis.document.querySelector(
+      `[data-terminal-panel-variant="${panelVariant}"] [data-testid="terminal-clear-active-session"][data-terminal-clear-state="pending"]`,
+    ) !== null
+  ), targetVariant, { timeout: 10_000 });
+  await page.waitForFunction((panelVariant) => (
+    globalThis.document.querySelector(
+      `[data-terminal-panel-variant="${panelVariant}"] [data-testid="terminal-clear-active-session"][data-terminal-clear-state="idle"]:not([disabled])`,
+    ) !== null
+  ), targetVariant, { timeout: 10_000 });
+  await terminalInput(page, targetRuntime);
 
   if (fixtureBytes === 0) {
     const historyBytes = await waitForHistoryBytes(targetPanel, 0);
     const historyLabel = await targetPanel.locator('text=/^History:/').last().textContent().catch(() => '');
-    return { anchorSessionID, sessionID, historyBytes, historyLabel: String(historyLabel ?? '').trim(), historyVisual: null };
+    return {
+      anchorSessionID,
+      sessionID,
+      workbenchWidgetID,
+      historyBytes,
+      historyLabel: String(historyLabel ?? '').trim(),
+      historyVisual: null,
+    };
   }
 
   const markerPath = path.join(tempDir, 'fixture-seeded');
-  const canvas = targetPanel.locator('.redeven-terminal-surface canvas:visible').last();
+  const canvas = targetRuntime.locator('.redeven-terminal-surface .floeterm-beamterm-canvas:visible').last();
   await canvas.waitFor({ state: 'visible', timeout: 10_000 });
-  const beforeHash = await captureCanvasHash(canvas);
   const line = 'redeven-packaged-terminal-history-0123456789abcdefghijklmnopqrstuvwxyz';
+  const visualMarker = 'redeven-terminal-carrier-seeded-visible';
   const command = fixtureBytes > 0
-    ? `yes ${shellQuote(line)} | head -c ${fixtureBytes}; printf '\\n'; export PS1=''; stty -echo; printf seeded > ${shellQuote(markerPath)}`
+    ? `yes ${shellQuote(line)} | head -c ${fixtureBytes}; export PS1=''; stty -echo; printf seeded > ${shellQuote(markerPath)}`
     : `printf seeded > ${shellQuote(markerPath)}`;
-  await sendTerminalCommand(page, command, targetPanel);
+  await sendTerminalCommand(page, command, targetRuntime);
   await waitForFile(markerPath, 30_000);
-  await waitForCanvasChange(canvas, beforeHash, 30_000);
   const historyBytes = await waitForHistoryBytes(targetPanel, minimumRetainedBytesForFixture(fixtureBytes));
+  const beforeVisualProbe = await captureCanvasEvidence(canvas);
+  const visualMarkerPath = path.join(tempDir, 'fixture-visual-probe');
+  await sendTerminalCommand(
+    page,
+    `printf '\\n%s\\n' ${shellQuote(visualMarker)}; printf visible > ${shellQuote(visualMarkerPath)}`,
+    targetRuntime,
+  );
+  await waitForFile(visualMarkerPath, 15_000);
+  try {
+    await waitForCanvasChange(canvas, beforeVisualProbe, 15_000);
+  } catch (error) {
+    const diagnostics = await page.evaluate(({ expectedSessionID, panelVariant }) => ({
+      panel_variant: panelVariant,
+      active_sessions: Array.from(globalThis.document.querySelectorAll(
+        `[data-terminal-panel-variant="${panelVariant}"] button[data-terminal-session-active="true"]`,
+      )).map((element) => element.getAttribute('data-terminal-session-id')),
+      runtimes: Array.from(globalThis.document.querySelectorAll(
+        `[data-terminal-panel-variant="${panelVariant}"] [data-terminal-runtime-session]`,
+      )).map((element) => {
+        const canvasElement = element.querySelector('.floeterm-beamterm-canvas');
+        const rect = element.getBoundingClientRect();
+        return {
+          session_id: element.getAttribute('data-terminal-runtime-session'),
+          expected: element.getAttribute('data-terminal-runtime-session') === expectedSessionID,
+          aria_busy: element.getAttribute('aria-busy'),
+          client_rects: element.getClientRects().length,
+          rect: [rect.width, rect.height],
+          canvas: canvasElement instanceof globalThis.HTMLCanvasElement ? {
+            backing: [canvasElement.width, canvasElement.height],
+            client: [canvasElement.clientWidth, canvasElement.clientHeight],
+            display: globalThis.getComputedStyle(canvasElement).display,
+            visibility: globalThis.getComputedStyle(canvasElement).visibility,
+          } : null,
+        };
+      }),
+      recovery_marks: performance.getEntriesByType('mark')
+        .filter((entry) => entry.name.startsWith('redeven:terminal:'))
+        .slice(-24)
+        .map((entry) => ({ name: entry.name, detail: entry.detail })),
+    }), { expectedSessionID: sessionID, panelVariant: targetVariant });
+    throw new Error(`terminal visual probe was not projected into its active runtime\n${JSON.stringify(diagnostics)}`, {
+      cause: error,
+    });
+  }
   const historyVisual = await captureCanvasVisualEvidence(canvas);
   const historyLabel = await targetPanel.locator('text=/^History:/').last().textContent().catch(() => '');
-  return { anchorSessionID, sessionID, historyBytes, historyLabel: String(historyLabel ?? '').trim(), historyVisual };
+  return {
+    anchorSessionID,
+    sessionID,
+    workbenchWidgetID,
+    historyBytes,
+    historyLabel: String(historyLabel ?? '').trim(),
+    historyVisual,
+  };
+}
+
+function workbenchTerminalPanel(page, widgetID) {
+  return page.locator(
+    `[data-floe-workbench-widget-id="${widgetID}"] [data-terminal-panel-variant="workbench"]:visible`,
+  );
 }
 
 async function selectSurface(page, surface) {
@@ -429,15 +633,17 @@ async function selectSurface(page, surface) {
     if (await workbenchPanel.count()) return 0;
     const notBefore = await page.evaluate(() => performance.now());
     await page.getByRole('tab', { name: 'Workbench', exact: true }).click();
-    await workbenchPanel.waitFor({ state: 'visible', timeout: 15_000 });
+    await workbenchPanel.first().waitFor({ state: 'visible', timeout: 15_000 });
     return notBefore;
   } else {
     const notBefore = await page.evaluate(() => performance.now());
     await page.getByRole('tab', { name: 'Activity', exact: true }).click();
-    const terminalActivity = page.locator('nav[data-floe-shell-slot="activity-bar"] button[aria-label="Terminal"]');
+    const terminalPanel = page.locator('[data-terminal-panel-variant="panel"]:visible');
+    if (await terminalPanel.count()) return notBefore;
+    const terminalActivity = page.locator('nav[data-floe-shell-slot="activity-bar"] button').first();
     await terminalActivity.waitFor({ state: 'visible', timeout: 10_000 });
     await terminalActivity.click();
-    await page.locator('[data-terminal-panel-variant="panel"]:visible').waitFor({ state: 'visible', timeout: 15_000 });
+    await terminalPanel.waitFor({ state: 'visible', timeout: 15_000 });
     return notBefore;
   }
 }
@@ -517,6 +723,16 @@ async function waitForRecoveryMarks(page, surface, notBefore, fixtureBytes, expe
       interactive_ms: interactive.startTime - start.startTime,
     };
   }, { expectedSurface: surface, minimumStart: notBefore, sessionRef: expectedSessionRef });
+}
+
+async function countTerminalAttachStarts(page, surface, sessionRef) {
+  return page.evaluate(({ expectedSurface, expectedSessionRef }) => (
+    performance.getEntriesByType('mark').filter((entry) => (
+      entry.name.startsWith('redeven:terminal:attach-start:')
+      && entry.detail?.variant === expectedSurface
+      && entry.detail?.session_ref === expectedSessionRef
+    )).length
+  ), { expectedSurface: surface, expectedSessionRef: sessionRef });
 }
 
 async function waitForTerminalPerformanceMark(page, stage, notBefore, sessionRef, timeoutMs = 30_000) {
@@ -622,7 +838,8 @@ async function runSharedPreparedHistorySample({
       panelTargetStart = await page.evaluate(() => performance.now());
       await panelSession.click();
     }
-    await terminalInput(page, panel);
+    const panelRuntime = panel.locator(`[data-terminal-runtime-session="${seeded.sessionID}"]`).first();
+    await terminalInput(page, panelRuntime);
     const panelRecovery = await waitForRecoveryMarks(
       page,
       'panel',
@@ -635,8 +852,32 @@ async function runSharedPreparedHistorySample({
       sessionRef,
       45_000,
     );
-    const panelCanvas = panel.locator('.redeven-terminal-surface canvas:visible').last();
+    const panelCanvas = panelRuntime.locator('.redeven-terminal-surface .floeterm-beamterm-canvas:visible').last();
     await panelCanvas.waitFor({ state: 'visible', timeout: 10_000 });
+    if (fixtureBytes === 0) {
+      const typographyLines = [
+        'MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM',
+        'WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW',
+        'iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii',
+        '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijkl',
+        'terminal-typography-row-05-[]{}()<>/\\|_-=+;:,.',
+        'terminal-typography-row-06-中文字符保持网格宽度',
+        'terminal-typography-row-07-ASCII-spacing-remains-visible',
+        'terminal-typography-row-08-0123456789-abcdefghij',
+        'terminal-typography-row-09-XXXXXXXXXXXXXXXXXXXXXXXX',
+        'terminal-typography-row-10-oooooooooooooooooooooooo',
+        'terminal-typography-row-11-mixed-WiMWiMWiMWiMWiMWiM',
+        'terminal-typography-END-12--------------------------',
+      ];
+      const beforeTypography = await captureCanvasEvidence(panelCanvas);
+      await sendTerminalCommand(
+        page,
+        `printf '\\033[3J\\033[2J\\033[H'; printf '%s\\n' ${typographyLines.map(shellQuote).join(' ')}`,
+        panelRuntime,
+      );
+      await waitForCanvasChange(panelCanvas, beforeTypography, 15_000);
+    }
+    const panelTypography = await captureTerminalTypographyEvidence(page, panelRuntime, 'panel');
     const panelBaselineVisual = fixtureBytes > 0
       ? await captureCanvasVisualEvidence(panelCanvas)
       : null;
@@ -645,7 +886,8 @@ async function runSharedPreparedHistorySample({
       : null;
 
     await selectSurface(page, 'workbench');
-    const workbench = page.locator('[data-terminal-panel-variant="workbench"]:visible');
+    const workbench = workbenchTerminalPanel(page, seeded.workbenchWidgetID);
+    await workbench.waitFor({ state: 'visible', timeout: 15_000 });
     const workbenchSession = workbench.locator(`button[data-terminal-session-id="${seeded.sessionID}"]`).first();
     await workbenchSession.waitFor({ state: 'visible', timeout: 15_000 });
     const targetStart = await page.evaluate(() => performance.now());
@@ -706,8 +948,10 @@ async function runSharedPreparedHistorySample({
     if (workbenchRecovery.history_bytes_fetched > maximumDeltaBytes) {
       throw new Error(`shared prepared history fetched too much attach delta (${workbenchRecovery.history_bytes_fetched} > ${maximumDeltaBytes})`);
     }
-    const targetCanvas = workbench.locator('.redeven-terminal-surface canvas:visible').last();
+    const workbenchRuntime = workbench.locator(`[data-terminal-runtime-session="${seeded.sessionID}"]`).first();
+    const targetCanvas = workbenchRuntime.locator('.redeven-terminal-surface .floeterm-beamterm-canvas:visible').last();
     await targetCanvas.waitFor({ state: 'visible', timeout: 10_000 });
+    const workbenchTypography = await captureTerminalTypographyEvidence(page, workbenchRuntime, 'workbench');
     const historyVisualMatch = panelBaselineVisual
       ? assertTerminalCarrierHistoryVisualEvidence({
         baselineVisual: panelBaselineVisual,
@@ -723,10 +967,31 @@ async function runSharedPreparedHistorySample({
     await sendTerminalCommand(
       page,
       `printf ${shellQuote(markerValue)} > ${shellQuote(markerPath)}`,
-      workbench,
+      workbenchRuntime,
     );
     await waitForFile(markerPath, 15_000);
     const inputProbeMs = performance.now() - inputProbeStarted;
+    const panelAttachStartsBeforeReturn = await countTerminalAttachStarts(page, 'panel', sessionRef);
+    await selectSurface(page, 'panel');
+    const returnedPanel = page.locator('[data-terminal-panel-variant="panel"]:visible');
+    const returnedPanelSession = returnedPanel.locator(`button[data-terminal-session-id="${seeded.sessionID}"]`).first();
+    await returnedPanelSession.waitFor({ state: 'visible', timeout: 15_000 });
+    if (await returnedPanelSession.getAttribute('data-terminal-session-active') !== 'true') {
+      await returnedPanelSession.click();
+    }
+    const returnedPanelRuntime = returnedPanel.locator(`[data-terminal-runtime-session="${seeded.sessionID}"]`).first();
+    const returnedPanelTypography = await captureTerminalTypographyEvidence(
+      page,
+      returnedPanelRuntime,
+      'panel_returned',
+    );
+    const panelAttachStartsAfterReturn = await countTerminalAttachStarts(page, 'panel', sessionRef);
+    if (panelAttachStartsAfterReturn !== panelAttachStartsBeforeReturn) {
+      throw new Error(
+        'returning to the retained panel terminal unexpectedly started another attach '
+          + `(before=${panelAttachStartsBeforeReturn} after=${panelAttachStartsAfterReturn})`,
+      );
+    }
     assertTerminalCarrierInteractiveLimit({
       stage: 'shared_prepared_history',
       interactiveMs: workbenchRecovery.interactive_ms,
@@ -754,6 +1019,11 @@ async function runSharedPreparedHistorySample({
       history_visual_layouts_match: historyVisualMatch?.layouts_match ?? null,
       panel_terminal_geometry: { cols: panelRecovery.cols, rows: panelRecovery.rows },
       workbench_terminal_geometry: { cols: workbenchRecovery.cols, rows: workbenchRecovery.rows },
+      renderer_typography: {
+        panel: panelTypography,
+        workbench: workbenchTypography,
+        panel_returned: returnedPanelTypography,
+      },
       history_visual_mean_grid_delta: historyVisualMatch?.meanGridDelta ?? null,
       history_visual_ink_ratio: historyVisualMatch?.recoveredInkRatio ?? null,
       history_visual_baseline_active_grid_ratio: historyVisualMatch?.baselineActiveGridRatio ?? null,
@@ -772,12 +1042,16 @@ async function runRecoverySample({ context, entryURL, fixtureBytes, seeded, surf
   const { page, problems } = await openEnvPage(context, entryURL);
   try {
     const notBefore = await selectSurface(page, surface);
-    const targetPanel = page.locator(`[data-terminal-panel-variant="${surface}"]:visible`);
+    const targetPanel = surface === 'workbench'
+      ? workbenchTerminalPanel(page, seeded.workbenchWidgetID)
+      : page.locator(`[data-terminal-panel-variant="${surface}"]:visible`);
+    await targetPanel.waitFor({ state: 'visible', timeout: 15_000 });
     const sessionButton = targetPanel.locator(`button[data-terminal-session-id="${seeded.sessionID}"]`).first();
     await sessionButton.waitFor({ state: 'visible', timeout: 15_000 });
     await sessionButton.click();
-    const targetCanvas = targetPanel.locator('.redeven-terminal-surface canvas:visible').last();
-    await terminalInput(page, targetPanel);
+    const targetRuntime = targetPanel.locator(`[data-terminal-runtime-session="${seeded.sessionID}"]`).first();
+    const targetCanvas = targetRuntime.locator('.redeven-terminal-surface .floeterm-beamterm-canvas:visible').last();
+    await terminalInput(page, targetRuntime);
     await targetCanvas.waitFor({ state: 'visible', timeout: 15_000 });
     let marks;
     try {
@@ -870,7 +1144,7 @@ async function runRecoverySample({ context, entryURL, fixtureBytes, seeded, surf
     await sendTerminalCommand(
       page,
       `printf packaged-input-ok > ${shellQuote(markerPath)}`,
-      targetPanel,
+      targetRuntime,
     );
     await waitForFile(markerPath, 15_000);
     const inputProbeMs = performance.now() - probeStarted;
@@ -923,7 +1197,10 @@ async function main(options) {
   try {
     runtime = await runStage('runtime_start', () => startRuntime(tempDir));
     const entryURL = new URL('_redeven_proxy/env/', runtime.startup.local_ui_url).toString();
-    browser = await runStage('browser_launch', () => chromium.launch({ headless: true }));
+    browser = await runStage('browser_launch', () => chromium.launch({
+      headless: false,
+      args: ['--disable-background-timer-throttling', '--disable-renderer-backgrounding'],
+    }));
     carrierProgress.runner = {
       platform: process.platform,
       arch: process.arch,
@@ -933,6 +1210,9 @@ async function main(options) {
     };
     const reusedContext = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     const seed = await openEnvPage(reusedContext, entryURL);
+    await seed.page.getByRole('tab', { name: 'Workbench', exact: true }).click();
+    await seed.page.locator('[data-terminal-panel-variant="workbench"]:visible').first()
+      .waitFor({ state: 'visible', timeout: 15_000 });
     const seeded = await runStage('fixture_seed', () => seedRetainedSession(seed.page, tempDir, options.fixtureBytes));
     assertPageHealthy(seed.problems);
     await seed.page.close();

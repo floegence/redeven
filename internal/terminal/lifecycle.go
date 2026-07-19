@@ -226,10 +226,6 @@ func (m *Manager) requestSessionDelete(sessionID string, widgetID string, strict
 	record.FailureCode = ""
 	record.FailureMessage = ""
 	m.sessionLifecycle[sessionID] = record
-	m.completePendingSessionAttachesLocked(
-		sessionID,
-		&rpc.Error{Code: 404, Message: "terminal session not found"},
-	)
 	operation := &sessionDeleteOperation{done: make(chan struct{}), participants: 1}
 	if m.deleteOperations == nil {
 		m.deleteOperations = make(map[string]*sessionDeleteOperation)
@@ -254,8 +250,6 @@ func (m *Manager) runAsyncDeleteSession(sessionID string, operation *sessionDele
 	if sessionID == "" {
 		return
 	}
-
-	m.detachSessionViewers(sessionID)
 
 	deleteFn := m.deleteSessionFunc
 	if deleteFn == nil {
@@ -325,27 +319,6 @@ func (m *Manager) finalizeSessionClosed(sessionID string) string {
 	nowUnixMs := time.Now().UnixMilli()
 
 	m.mu.Lock()
-	if servers := m.bySession[sessionID]; len(servers) > 0 {
-		for server := range servers {
-			if sessions := m.byServer[server]; sessions != nil {
-				delete(sessions, sessionID)
-				if len(sessions) == 0 {
-					delete(m.byServer, server)
-				}
-			}
-		}
-		delete(m.bySession, sessionID)
-	}
-	closedErr := &rpc.Error{Code: 404, Message: "terminal session not found"}
-	for server, states := range m.attachStates {
-		if state := states[sessionID]; state != nil {
-			completePendingAttachState(state, closedErr)
-			delete(states, sessionID)
-			if len(states) == 0 {
-				delete(m.attachStates, server)
-			}
-		}
-	}
 	record, ok := m.sessionLifecycle[sessionID]
 	if !ok {
 		m.mu.Unlock()
@@ -362,42 +335,6 @@ func (m *Manager) finalizeSessionClosed(sessionID string) string {
 	m.mu.Unlock()
 
 	return reason
-}
-
-func (m *Manager) detachSessionViewers(sessionID string) {
-	if m == nil {
-		return
-	}
-	sessionID = strings.TrimSpace(sessionID)
-	if sessionID == "" {
-		return
-	}
-
-	var toRemove []sinkDetach
-
-	m.mu.Lock()
-	if servers := m.bySession[sessionID]; len(servers) > 0 {
-		for srv, attachment := range servers {
-			toRemove = append(toRemove, sinkDetach{sessionID: sessionID, connID: attachment.connID})
-			if sessions := m.byServer[srv]; sessions != nil {
-				delete(sessions, sessionID)
-				if len(sessions) == 0 {
-					delete(m.byServer, srv)
-				}
-			}
-		}
-		delete(m.bySession, sessionID)
-	}
-	if len(toRemove) > 0 {
-		if sess, ok := m.term.GetSession(sessionID); ok && sess != nil {
-			for _, item := range toRemove {
-				if !m.sessionConnectionOwnedLocked(sessionID, item.connID) {
-					sess.RemoveConnection(item.connID)
-				}
-			}
-		}
-	}
-	m.mu.Unlock()
 }
 
 func buildTerminalSessionsChangedPayload(
