@@ -1,0 +1,16 @@
+{
+  "name": "@redeven/official-containers-plugin",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit && node build.mjs"
+  },
+  "dependencies": {
+    "@floegence/redevplugin-ui": "0.5.1"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.1",
+    "typescript": "5.9.3"
+  }
+}

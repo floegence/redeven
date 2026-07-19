@@ -264,7 +264,6 @@ const (
 	localUIRouteEnv
 	localUIRouteCodeSpace
 	localUIRoutePortForward
-	localUIRoutePlugin
 )
 
 type localUIRoute struct {
@@ -291,10 +290,6 @@ func WithLocalUIPortForwardRoute(r *http.Request, forwardID string) *http.Reques
 		kind:      localUIRoutePortForward,
 		forwardID: strings.TrimSpace(forwardID),
 	})
-}
-
-func WithLocalUIPluginRoute(r *http.Request) *http.Request {
-	return withLocalUIRoute(r, localUIRoute{kind: localUIRoutePlugin})
 }
 
 func withLocalUIRoute(r *http.Request, route localUIRoute) *http.Request {
@@ -499,8 +494,6 @@ func (g *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 			originRole = originRoleCodeSpace
 		case localUIRoutePortForward:
 			originRole = originRolePortForward
-		case localUIRoutePlugin:
-			originRole = originRolePlugin
 		default:
 			originRole = originRoleUnknown
 		}
@@ -509,26 +502,13 @@ func (g *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	// No caching: UI + inject are agent-versioned and delivered over E2EE.
 	w.Header().Set("Cache-Control", "no-store")
 
-	if p == "/_redeven_plugin" || strings.HasPrefix(p, "/_redeven_plugin/") {
-		pluginRouteRole := originRole
-		if !localUI {
-			pluginRouteRole = targetHostRoleFromRequest(r)
-		}
-		if g.PluginPlatformEnabled() && pluginRouteRole == originRolePlugin {
-			g.servePluginPlatform(w, r, redevpluginintegration.RouteRolePluginSandbox, "/_redeven_plugin", "/_redevplugin")
-			return
-		}
-		http.Error(w, "not found", http.StatusNotFound)
-		return
-	}
-
-	if isReservedPluginManagementAPIPath(r) {
+	if isPluginPlatformAPIPath(r) {
 		if originRole != originRoleEnv {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
 		if g.PluginPlatformEnabled() {
-			g.servePluginPlatform(w, r, redevpluginintegration.RouteRoleEnvTrusted, "/_redeven_proxy/api/plugins", "/_redevplugin/api/plugins")
+			g.servePluginPlatform(w, r)
 			return
 		}
 		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
@@ -611,32 +591,57 @@ func (g *Server) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (g *Server) servePluginPlatform(w http.ResponseWriter, r *http.Request, role redevpluginintegration.RouteRole, fromPrefix string, toPrefix string) {
+func (g *Server) servePluginPlatform(w http.ResponseWriter, r *http.Request) {
 	if g == nil || g.pluginPlatform == nil || r == nil || r.URL == nil {
 		http.Error(w, "not found", http.StatusNotFound)
 		return
 	}
 	next := r.Clone(r.Context())
-	next.URL = cloneURL(r.URL)
-	next.URL.Path = rewritePluginPlatformPath(next.URL.Path, fromPrefix, toPrefix)
-	next.URL.RawPath = ""
 	next.Header = r.Header.Clone()
-	if role == redevpluginintegration.RouteRoleEnvTrusted {
-		if channelID, ok := g.pluginManagementChannelID(r); ok {
-			next.Header.Set(sessionhop.HeaderChannelID, channelID)
-		} else {
-			next.Header.Del(sessionhop.HeaderChannelID)
-		}
+	trustedOrigin, err := pluginPlatformTrustedOrigin(r)
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
 	}
-	next = redevpluginintegration.WithRouteRole(next, role)
-	if role == redevpluginintegration.RouteRolePluginSandbox {
-		w = &pluginSandboxRewriteResponseWriter{
-			ResponseWriter: w,
-			fromPrefix:     toPrefix,
-			toPrefix:       fromPrefix,
-		}
+	next, err = redevpluginintegration.WithTrustedOrigin(next, trustedOrigin)
+	if err != nil {
+		http.Error(w, "not found", http.StatusNotFound)
+		return
 	}
+	if channelID, ok := g.pluginManagementChannelID(r); ok {
+		next.Header.Set(sessionhop.HeaderChannelID, channelID)
+	} else {
+		next.Header.Del(sessionhop.HeaderChannelID)
+	}
+	next = redevpluginintegration.WithRouteRole(next, redevpluginintegration.RouteRoleEnvTrusted)
 	g.pluginPlatform.ServeHTTP(w, next)
+}
+
+func pluginPlatformTrustedOrigin(r *http.Request) (string, error) {
+	if r == nil {
+		return "", errors.New("request is required")
+	}
+	host := strings.TrimSpace(r.Host)
+	if host == "" || host != r.Host {
+		return "", errors.New("request host is invalid")
+	}
+	scheme := "http"
+	if r.TLS != nil {
+		scheme = "https"
+	}
+	if r.URL != nil && r.URL.Scheme != "" {
+		scheme = r.URL.Scheme
+	}
+	if forwarded := r.Header.Values("X-Forwarded-Proto"); len(forwarded) > 0 {
+		if len(forwarded) != 1 || forwarded[0] != strings.TrimSpace(forwarded[0]) {
+			return "", errors.New("forwarded protocol is invalid")
+		}
+		scheme = strings.ToLower(forwarded[0])
+	}
+	if scheme != "http" && scheme != "https" {
+		return "", errors.New("request scheme is invalid")
+	}
+	return scheme + "://" + host, nil
 }
 
 func (g *Server) pluginManagementChannelID(r *http.Request) (string, bool) {
@@ -653,90 +658,6 @@ func (g *Server) pluginManagementChannelID(r *http.Request) (string, bool) {
 		return "", false
 	}
 	return channelID, true
-}
-
-func rewritePluginPlatformPath(requestPath string, fromPrefix string, toPrefix string) string {
-	if requestPath == fromPrefix {
-		return toPrefix
-	}
-	if strings.HasPrefix(requestPath, fromPrefix+"/") {
-		return toPrefix + strings.TrimPrefix(requestPath, fromPrefix)
-	}
-	return requestPath
-}
-
-type pluginSandboxRewriteResponseWriter struct {
-	http.ResponseWriter
-	fromPrefix string
-	toPrefix   string
-	wrote      bool
-}
-
-func (w *pluginSandboxRewriteResponseWriter) WriteHeader(statusCode int) {
-	w.rewriteHeaders()
-	w.ResponseWriter.WriteHeader(statusCode)
-}
-
-func (w *pluginSandboxRewriteResponseWriter) Write(data []byte) (int, error) {
-	w.rewriteHeaders()
-	return w.ResponseWriter.Write(data)
-}
-
-func (w *pluginSandboxRewriteResponseWriter) Flush() {
-	w.rewriteHeaders()
-	if flusher, ok := w.ResponseWriter.(http.Flusher); ok {
-		flusher.Flush()
-	}
-}
-
-func (w *pluginSandboxRewriteResponseWriter) rewriteHeaders() {
-	if w == nil || w.wrote {
-		return
-	}
-	w.wrote = true
-	rewritePluginSandboxHeaderPrefix(w.Header(), w.fromPrefix, w.toPrefix)
-}
-
-func rewritePluginSandboxHeaderPrefix(header http.Header, fromPrefix string, toPrefix string) {
-	from := strings.TrimRight(strings.TrimSpace(fromPrefix), "/")
-	to := strings.TrimRight(strings.TrimSpace(toPrefix), "/")
-	if from == "" || to == "" || from == to {
-		return
-	}
-	if cookies := header.Values("Set-Cookie"); len(cookies) > 0 {
-		header.Del("Set-Cookie")
-		for _, cookie := range cookies {
-			header.Add("Set-Cookie", rewriteCookiePathPrefix(cookie, from, to))
-		}
-	}
-	if value := strings.TrimSpace(header.Get("Service-Worker-Allowed")); strings.HasPrefix(value, from) {
-		header.Set("Service-Worker-Allowed", to+strings.TrimPrefix(value, from))
-	}
-}
-
-func rewriteCookiePathPrefix(cookie string, fromPrefix string, toPrefix string) string {
-	parts := strings.Split(cookie, ";")
-	for index, part := range parts {
-		trimmed := strings.TrimSpace(part)
-		lower := strings.ToLower(trimmed)
-		if !strings.HasPrefix(lower, "path=") {
-			continue
-		}
-		pathValue := strings.TrimSpace(trimmed[len("path="):])
-		if !strings.HasPrefix(pathValue, fromPrefix) {
-			continue
-		}
-		parts[index] = " Path=" + toPrefix + strings.TrimPrefix(pathValue, fromPrefix)
-	}
-	return strings.Join(parts, ";")
-}
-
-func cloneURL(u *url.URL) *url.URL {
-	if u == nil {
-		return &url.URL{}
-	}
-	next := *u
-	return &next
 }
 
 func (g *Server) serveEnvAppDist(w http.ResponseWriter, r *http.Request) {
@@ -2341,10 +2262,6 @@ func isRenderableMime(ct string) bool {
 }
 
 func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
-	if isReservedPluginManagementAPIPath(r) {
-		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
-		return
-	}
 	if g.handleWorkbenchLayoutAPI(w, r) {
 		return
 	}
@@ -5523,12 +5440,12 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func isReservedPluginManagementAPIPath(r *http.Request) bool {
+func isPluginPlatformAPIPath(r *http.Request) bool {
 	if r == nil || r.URL == nil {
 		return false
 	}
 	p := strings.TrimSpace(r.URL.Path)
-	return p == "/_redeven_proxy/api/plugins" || strings.HasPrefix(p, "/_redeven_proxy/api/plugins/")
+	return p == "/_redevplugin/api/plugins" || strings.HasPrefix(p, "/_redevplugin/api/plugins/")
 }
 
 func (g *Server) handleCodeServerProxy(w http.ResponseWriter, r *http.Request) {
@@ -6387,24 +6304,12 @@ const (
 	originRoleEnv
 	originRoleCodeSpace
 	originRolePortForward
-	originRolePlugin
 )
 
 func originRoleFromRequest(r *http.Request) originRole {
 	_, host, err := externalOriginFromRequest(r)
 	if err != nil {
 		return originRoleUnknown
-	}
-	return originRoleFromHost(host)
-}
-
-func targetHostRoleFromRequest(r *http.Request) originRole {
-	if r == nil {
-		return originRoleUnknown
-	}
-	host := strings.TrimSpace(r.Host)
-	if host == "" {
-		host = strings.TrimSpace(r.Header.Get("Host"))
 	}
 	return originRoleFromHost(host)
 }
@@ -6422,8 +6327,6 @@ func originRoleFromHost(host string) originRole {
 		return originRoleCodeSpace
 	case strings.HasPrefix(first, "pf-"):
 		return originRolePortForward
-	case strings.HasPrefix(first, "plg-"):
-		return originRolePlugin
 	default:
 		return originRoleUnknown
 	}
