@@ -17,7 +17,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/creack/pty"
 	termgo "github.com/floegence/floeterm/terminal-go"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/config"
@@ -849,48 +848,6 @@ func newQuietTestManager(t *testing.T, root string) *Manager {
 	}
 
 	return NewManager(shellPath, root, nil)
-}
-
-func waitForPTYSize(t *testing.T, session *termgo.Session, expectedCols int, expectedRows int, timeout time.Duration) {
-	t.Helper()
-
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		if session.IsActive() && session.PTY != nil {
-			rows, cols, err := pty.Getsize(session.PTY)
-			if err == nil && cols == expectedCols && rows == expectedRows {
-				return
-			}
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-
-	t.Fatalf("timeout waiting for PTY size %dx%d", expectedCols, expectedRows)
-}
-
-func waitForTerminalOutputSequences(t *testing.T, sequences <-chan int64, expected []int64) {
-	t.Helper()
-
-	for index, want := range expected {
-		select {
-		case got := <-sequences:
-			if got != want {
-				t.Fatalf("output sequence[%d] = %d, want %d", index, got, want)
-			}
-		case <-time.After(2 * time.Second):
-			t.Fatalf("timeout waiting for output sequence[%d] = %d", index, want)
-		}
-	}
-}
-
-func assertNoTerminalOutputSequence(t *testing.T, sequences <-chan int64) {
-	t.Helper()
-
-	select {
-	case got := <-sequences:
-		t.Fatalf("unexpected terminal output sequence %d", got)
-	case <-time.After(25 * time.Millisecond):
-	}
 }
 
 func waitForLifecycle(t *testing.T, m *Manager, sessionID string, lifecycle SessionLifecycle, timeout time.Duration) {
