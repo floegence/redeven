@@ -106,14 +106,14 @@
             "path": "architecture/redevplugin-boundary.md",
             "type": "Architecture Boundary",
             "title": "ReDevPlugin host integration boundary",
-            "description": "Redeven consumes ReDevPlugin as a published plugin-platform dependency and keeps host-specific policy in Redeven adapters.",
+            "description": "Redeven consumes ReDevPlugin as a published platform and keeps only host policy, placement, and business adapters.",
             "tags": [
               "architecture",
               "dependencies",
               "plugins",
               "release"
             ],
-            "summary": "Redeven treats ReDevPlugin as a published upstream plugin-platform dependency,\nnot as code to fork or reimplement inside the Redeven tree. ReDevPlugin is an\nindependently released library/runtime repository, not a Redeven source\ndirectory, submodule, or implementation detail.",
+            "summary": "ReDevPlugin is an independently released plugin platform. Redeven consumes its\nGo library, npm UI package, signed Rust runtime, and machine contracts; it does\nnot fork or rebuild platform mechanics. Redeven owns authenticated session\nmapping, product policy, UI placement, release-artifact selection, and concrete\nbusiness adapters. A missing reusable contract blocks downstream integration\nuntil it is released upstream; no Redeven compatibility path may fill the gap.",
             "section_count": 2
           },
           {
@@ -121,14 +121,14 @@
             "path": "architecture/plugin-platform-integration.md",
             "type": "Architecture Contract",
             "title": "Plugin platform integration",
-            "description": "Redeven integrates released ReDevPlugin artifacts through Local UI, AppServer, product adapters, official package bundling, and Env App placement.",
+            "description": "Redeven mounts ReDevPlugin v0.5.1 as a host library and adds only session, release, runtime, placement, and business adapters.",
             "tags": [
               "architecture",
               "local-ui",
               "plugins",
               "redevplugin"
             ],
-            "summary": "Redeven plugin-platform integration is host-product glue over released\nReDevPlugin artifacts. ReDevPlugin owns reusable platform mechanics; Redeven\nowns session mapping, route placement, local policy, product UX, official\ncatalog projection, and concrete business capability adapters. At the current source baseline, Redeven consumes\n`github.com/floegence/redevplugin v0.1.1` and mounts the released HTTP adapter\nthrough `internal/redevpluginintegration`. That integration configures durable\nHost stores, policy/session/security adapters, runtime artifact resolution,\nobservability fanout, official package trust policy, and Redeven-owned\nbusiness capabilities.",
+            "summary": "Redeven integrates ReDevPlugin `v0.5.1` through one Go\nHost, one canonical HTTP namespace, one Env App `PluginPlatformClient`, one\nshared surface scope, and the released Rust ProcessManager. Redeven retains\nproduct policy and business adapters; ReDevPlugin retains platform state and\nprotocol ownership. Unproven session, release, capability, runtime, or surface\nidentity denies the operation. The integration is staged but not\nreleasable: v0.5.1's browser catalog GET cannot satisfy its required Origin\ncontract, session-scope revoke does not terminate every execution and handle,\nWorkbench lacks an iframe interaction ownership contract, and its ad-hoc-signed\nDarwin runtime cannot retain the pinned artifact hash through the required\nRedeven Developer ID signing and notarization chain.",
             "section_count": 2
           },
           {
@@ -136,14 +136,14 @@
             "path": "architecture/container-resources-capability.md",
             "type": "Architecture Contract",
             "title": "Container resources capability",
-            "description": "Redeven-owned Docker and Podman business capability contract for ReDevPlugin adapter registration.",
+            "description": "Redeven-owned Docker and Podman business capability registered through the released ReDevPlugin host contract.",
             "tags": [
               "architecture",
               "capability",
               "containers",
               "plugins"
             ],
-            "summary": "Redeven owns the container resources capability as business-resource adapter\nsurface, not as plugin-platform core. The active v1 contract is\n`redeven.capability.container_resources.v1` with capability id\n`redeven.capability.container_resources`; it lives under `spec/capabilities/`\nand `internal/capabilities/containers` rather than under `internal/plugins*` or\nReDevPlugin-owned `spec/plugin` paths.",
+            "summary": "Redeven owns Docker and Podman access as a business adapter; ReDevPlugin owns\nthe plugin identity, permission, confirmation, operation, stream, quota,\nrevocation, and audit lifecycle around every call. The active capability is\n`redeven.capability.container_resources@1.0.0`, described by the signed\n`redeven.container_resources.v2@2.0.0` host-capability contract and consumed\nthrough ReDevPlugin v0.5.1. Requests never enter a Redeven-local manifest,\ntoken, operation, stream, or runtime protocol.",
             "section_count": 2
           }
         ]
@@ -188,14 +188,14 @@
             "path": "security/plugin-platform-integration-security.md",
             "type": "Security Contract",
             "title": "Plugin platform integration security",
-            "description": "Redeven maps sessions, route ownership, bundled official package trust, and business capabilities onto released ReDevPlugin security contracts.",
+            "description": "Redeven derives ReDevPlugin identity from authenticated sessions and fail-closed signed release, route, runtime, and capability adapters.",
             "tags": [
               "local-ui",
               "permissions",
               "plugins",
               "security"
             ],
-            "summary": "Redeven plugin security is host integration over released ReDevPlugin\ncontracts. ReDevPlugin owns plugin identity, lifecycle, permission evaluation,\ndangerous confirmations, token and asset-ticket issuance, runtime leases,\nbroker enforcement, quota/revocation checks, registry mutation, and stable\nplatform errors. Redeven contributes local session facts, product policy, route\nmounting, official bundled-package trust policy, vault/audit/diagnostics sinks,\nand concrete business capability adapters.",
+            "summary": "Redeven supplies authenticated host facts to ReDevPlugin; it does not accept\nplugin ownership, authority, or trust from browser payloads. Every HTTP route\npasses explicit authentication, origin, CSRF, and closed-action authorization.\nDirect Host calls pass the same owner/action/resource policy. Signed release,\nruntime, secret, storage, network, and capability scope mismatches fail closed.",
             "section_count": 2
           }
         ]
@@ -439,14 +439,15 @@
             "path": "ui/plugin-surfaces.md",
             "type": "UI Contract",
             "title": "Plugin surfaces",
-            "description": "Redeven places official ReDevPlugin sandbox surfaces into Env App chrome without making Plugin Center a Settings page or overlay.",
+            "description": "Env App exposes official plugins through generated lifecycle clients and SDK-owned sandbox surfaces with serialized placement and confirmation.",
             "tags": [
+              "activity",
               "plugin-center",
               "plugins",
               "ui",
               "workbench"
             ],
-            "summary": "Plugin surfaces are ReDevPlugin sandbox documents placed inside Redeven product\nchrome. Redeven decides discovery, placement, and product navigation, while\nReDevPlugin remains responsible for plugin identity, lifecycle, permissions,\nconfirmation, asset tickets, bridge tokens, RPC, streams, leases, audit, and\nregistry state.",
+            "summary": "Plugin UI is a released ReDevPlugin sandbox surface inside Redeven chrome.\nPlugin Panel and Plugin Center are present in production builds, but the\nfeature is not releasable on v0.5.1. Activity's catalog GET cannot satisfy the\nrequired browser Origin contract, and Workbench lacks a cross-iframe\ninteraction ownership contract. Redeven owns navigation and placement;\nReDevPlugin owns iframe bootstrap, first commit, bridge, lifecycle, RPC,\nconfirmation tokens, streams, and surface revocation.",
             "section_count": 2
           },
           {
@@ -850,14 +851,14 @@
             "path": "release/ci-and-release-gates.md",
             "type": "Release Contract",
             "title": "CI and release gates",
-            "description": "Redeven release confidence comes from README localization checks, shell checks, OKF validation, UI checks, ReDevPlugin integration gates, assets, Go tests, and lint.",
+            "description": "Redeven binds published dependencies, generated assets, UI behavior, release payloads, tests, and OKF to the exact main tip being pushed.",
             "tags": [
               "ci",
               "okf",
               "quality",
               "release"
             ],
-            "summary": "Redeven keeps CI and local release checks aligned around source validation,\nREADME localization parity, generated asset determinism, ReDevPlugin dependency\nboundaries, UI behavior, embedded assets, Go tests, and lint. OKF is part of\nthat gate, not optional documentation.",
+            "summary": "Redeven uses focused checks during implementation, a fast staged pre-commit\ngate, and one complete integration gate for the exact main tip being pushed.\nPublished dependency evidence, generated assets, localized public docs, UI\nbehavior, Desktop/runtime bundles, Go tests, lint, and OKF must all agree. A\nmissing, stale, unsigned, optional, or target-mismatched ReDevPlugin artifact\nfails release packaging.",
             "section_count": 2
           },
           {
@@ -3081,131 +3082,119 @@
       "concept_id": "architecture.container-resources-capability",
       "type": "Architecture Contract",
       "title": "Container resources capability",
-      "description": "Redeven-owned Docker and Podman business capability contract for ReDevPlugin adapter registration.",
+      "description": "Redeven-owned Docker and Podman business capability registered through the released ReDevPlugin host contract.",
       "tags": [
         "architecture",
         "capability",
         "containers",
         "plugins"
       ],
-      "timestamp": "2026-07-04T00:00:00Z",
+      "timestamp": "2026-07-19T00:00:00Z",
       "frontmatter": {
-        "description": "Redeven-owned Docker and Podman business capability contract for ReDevPlugin adapter registration.",
+        "description": "Redeven-owned Docker and Podman business capability registered through the released ReDevPlugin host contract.",
         "tags": [
           "architecture",
           "capability",
           "containers",
           "plugins"
         ],
-        "timestamp": "2026-07-04T00:00:00Z",
+        "timestamp": "2026-07-19T00:00:00Z",
         "title": "Container resources capability",
         "type": "Architecture Contract"
       },
-      "body_length": 12900,
-      "summary": "Redeven owns the container resources capability as business-resource adapter\nsurface, not as plugin-platform core. The active v1 contract is\n`redeven.capability.container_resources.v1` with capability id\n`redeven.capability.container_resources`; it lives under `spec/capabilities/`\nand `internal/capabilities/containers` rather than under `internal/plugins*` or\nReDevPlugin-owned `spec/plugin` paths.",
+      "body_length": 8112,
+      "summary": "Redeven owns Docker and Podman access as a business adapter; ReDevPlugin owns\nthe plugin identity, permission, confirmation, operation, stream, quota,\nrevocation, and audit lifecycle around every call. The active capability is\n`redeven.capability.container_resources@1.0.0`, described by the signed\n`redeven.container_resources.v2@2.0.0` host-capability contract and consumed\nthrough ReDevPlugin v0.5.1. Requests never enter a Redeven-local manifest,\ntoken, operation, stream, or runtime protocol.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Mechanism\n\nThe contract covers Docker and Podman engines, container status/list/inspect,\nstart preflight/start, stop/restart/remove, logs tail, and image pull method\nnames. Docker and Podman are distinct engine identities, not display labels.\nEvery container-targeting request carries `engine` and `container_id`, and the\ntarget identity is the tuple `(engine, container_id)`. UI rows, plugin\nmanifest schemas, dangerous confirmation hash fields, and adapter dispatch must\nnot collapse identity to a bare container id or container name because Docker\nand Podman can expose overlapping ids or names on the same host. The JSON\nschema is closed-world and defines request/response DTOs, minimal container\nsummaries, inspect summaries, action results, bounded log batches, image pull\nresults, runtime summaries, target summaries, risk flags, and the start\npreflight plan. The Go DTO constants and schema enum are bound by tests so\nmethod names, schema identity, object closure, and engine fields cannot drift\nsilently.\n\nRedeven also carries an integration-only generated plugin fixture for the\nofficial Containers experience under\n`internal/capabilities/containers/testdata/generated_plugins/containers_integration/`.\nThat fixture models the expected ReDevPlugin manifest surface over this\nbusiness capability: one `container_runtime` capability binding, the exact\n`Methods()` method set, read/write/execute/delete permission coverage,\nrisk-based confirmation for `containers.start`, required confirmation for\nstop/restart/remove, subscription semantics for logs tail, and cancelable\noperation semantics for mutable actions and image pull. The fixture is tested\nagainst Redeven's Go constants and schema fields, but it is not a\nReDevPlugin platform parser, package schema, runtime bridge, or substitute for\nconsuming released ReDevPlugin artifacts.\n\n`Adapter` is the Redeven-owned business adapter for this capability. It wraps\nan `EngineClient`, resolves the first available local engine only for requests\nthat are explicitly engine-optional, maps status/list/inspect/action/log/image\nresults into the public DTOs, and feeds observed inspect metadata into\n`BuildStartPreflightPlan` for `containers.start` confirmation. Container\nactions, inspect, logs, and preflight requests bind the selected engine and\ntarget container id together. `BuildStartPreflightPlan` validates the selected\nengine and target container id, normalizes capability lists and mount/device\nsummaries, computes a stable `target_hash`, and returns image, runtime, risk\nlevel, risk flags, `requires_admin`, and a short summary.\n\n`Adapter.CallMethod` is the Redeven-side method dispatcher used by the\nregistered ReDevPlugin capability adapter. It accepts a declared `Method` plus\nraw JSON, requires `schema_version` to match the active capability contract,\ndecodes requests with unknown fields rejected, routes to the existing typed\nadapter methods, and returns the same typed DTOs. This keeps JSON boundary\nvalidation and method-to-DTO mapping in the business capability package rather\nthan duplicating it in product route glue. It is not a manifest parser,\npackage validator, token issuer, or alternate ReDevPlugin method router.\n\n`Adapter.CallOperationMethod` is the Redeven-side operation dispatcher used by\nthe registered ReDevPlugin capability adapter. It accepts a Host-owned\n`operation_id`, a declared operation method, and raw JSON, then routes\n`containers.start`, `containers.stop`, `containers.restart`,\n`containers.remove`, and `images.pull` through the matching operation-scoped\ntyped adapter method. The adapter validates the normal method request, binds\nthe Host-owned id to a scoped context cancel function, rejects duplicate active\nids, and unregisters the id when the operation returns or the parent context is\ncanceled. `Adapter.CancelOperation` looks up the active id, optionally checks\nthe method, and calls the stored cancel function. This table is limited to\nin-flight container adapter work and does not create a ReDevPlugin operation\nstore, route, ticket, audit path, or platform operation manager.\n\n`CLIClient` is the concrete local engine client. It shells out to Docker or\nPodman with a bounded timeout, probes `version --format \"{{json .}}\"`, lists\ncontainers through `ps --no-trunc --format json`, inspects one container through\n`inspect`, executes container actions through explicit argv, pulls images, and\nreads bounded non-follow log batches through `logs --timestamps`. `FollowLogs`\nis a separate streaming hook that shells out to `logs --follow --timestamps`,\nparses lines incrementally, and appends them to a caller-provided `LogLineSink`.\nThe default channel sink is fail-closed: a full sink returns stable\nbackpressure instead of buffering unbounded log data. Image pull also runs\nthrough the same timeout-scoped command boundary, so parent context cancellation\nand command timeout cancellation are propagated to the Docker/Podman helper.\nThe real process runner returns the context error after `exec.CommandContext`\nterminates a command, preserving stable `context.Canceled` /\n`context.DeadlineExceeded` semantics for ReDevPlugin operation cancel dispatch.\nThe parser accepts Docker's newline-delimited JSON list\nformat and Podman's JSON array list format, prefers server/engine version fields\nwhen probing status, converts Docker-like inspect payloads into the minimal\ninternal `EngineContainer` shape used by the adapter, parses pull digests when\nthe engine reports one, and parses timestamped log lines into stable millisecond\ntimestamps.\n\n`TestCLIClientRealEngineSmoke` is an opt-in local integration smoke for real\nDocker or Podman engines. It is skipped unless\n`REDEVEN_CONTAINERS_ENGINE_SMOKE=1` is set, can be scoped with\n`REDEVEN_CONTAINERS_ENGINE_SMOKE_ENGINES`, and defaults to a BusyBox image\nunless `REDEVEN_CONTAINERS_ENGINE_SMOKE_IMAGE` overrides it. When enabled, it\npulls the image, creates a disposable container, verifies inspect/list/start,\nobserves a bounded log marker, verifies the real `FollowLogs` streaming path\ncan read the same marker and stop through context cancellation, restarts/stops\nthe container, and removes it with cleanup. This gives release and developer\nmachines a true engine smoke without making ordinary CI require a Docker or\nPodman daemon.\n\n`TestCLIClientRealEnginePullCancelSmoke` is a separate opt-in cancellation\nsmoke. It is skipped unless `REDEVEN_CONTAINERS_ENGINE_PULL_CANCEL_SMOKE=1` is\nset, uses the same engine selector as the regular smoke, and defaults to a\nnon-routable registry reference unless\n`REDEVEN_CONTAINERS_ENGINE_PULL_CANCEL_IMAGE` overrides it. When enabled, it\nruns a real Docker or Podman `pull` through the CLI helper with a short timeout\nand requires the command to stop with `context.DeadlineExceeded`. This proves\nthe local engine helper can cancel a live image pull process when the mounted\nReDevPlugin operation cancel adapter dispatches to the Redeven business\nadapter.\n\nThe v1 preflight flags cover privileged containers, host network/PID/IPC\nnamespaces, host devices, added Linux capabilities, Docker or Podman socket\nmounts, bind mounts, sensitive mount paths, secret-like environment variables,\nsecret-like labels, persistent restart policies, and image references that are\nnot digest-pinned. Critical and host-control risks require admin approval in\nthe plan, while ReDevPlugin confirmation and token enforcement remain released\nplatform contracts before the business adapter executes.",
-          "char_count": 7473
+          "body": "## Published contract and official release\n\nRedeven embeds a closed set of public, signed release artifacts under\n`spec/redevplugin/`: the capability pin, schema, manifest, generated client,\ncompatibility metadata, notices, signature, official Containers plugin package,\nrelease metadata, package signature bundle, revocation metadata, and public\nsigning key. Private signing material is not present in source or product\nbinaries.\n\nStartup verifies the capability bundle with ReDevPlugin's\n`capabilitycontract.Verify`, registers the verified contract in a ReDevPlugin\n`capability.Registry`, and exposes the official plugin through ReDevPlugin's\nrelease module. Release identity, package hashes, signature key, source policy,\nrevocation epoch, host requirement, and exact capability pin are closed values.\nThe official package is installed and enabled through released Host APIs; it is\nnot unpacked or interpreted by Redeven.\n\n## Business adapter\n\n`internal/capabilities/containers` owns typed Docker and Podman DTOs, preflight\nrisk analysis, and the local CLI boundary. Docker and Podman remain distinct\nengine identities. Container targets are the tuple `(engine, container_id)`,\nand image targets are `(engine, image_ref)`; no request may collapse those\nidentities to a name or bare id. Every method requires the closed Docker or\nPodman engine explicitly; the adapter never probes engines in preference order.\n\nThe adapter covers engine status, container list and inspect, start preflight,\nstart, stop, restart, remove, bounded/following logs, and image pull. DTOs are\nminimal and do not expose raw inspect JSON, environment values, label values,\nor sensitive host paths. Preflight reduces observed runtime state to stable\nrisk flags, redacted mount/device summaries, a target hash, risk level, and\nadmin requirement suitable for ReDevPlugin's risk-based confirmation flow.\n\n`CLIClient` executes only explicit Docker or Podman argv with bounded command\nduration and output. It accepts Docker NDJSON and Podman JSON-array list\nformats, parses a minimal inspect shape, preserves context cancellation, and\nterminates the command process group when cancellation or the 8 MiB output\nlimit is reached. Public adapter errors do not include argv, stderr, raw output,\ntokens, secrets, URLs, or host paths.\n\nConstruction rejects nil and typed-nil engine clients before ReDevPlugin opens\nany durable store. The CLI does not inspect localized stderr to guess a missing\ncontainer. Exact `CONTAINER_NOT_FOUND` comes only from a typed engine client;\nlogs failures deterministically map to `CONTAINER_LOGS_UNAVAILABLE` without\nexposing engine text. Host-owned operation and stream terminal writes use a\nfinite independent deadline before integration close waits for tasks, and host\nshutdown records active business work as canceled rather than failed.\n\n## ReDevPlugin bridge\n\n`internal/redevpluginintegration/containers_capability.go` is the thin product\nbridge from ReDevPlugin's verified invocation contract to the typed business\nadapter. It performs strict argument decoding, projects only contract-declared\nresponse fields, maps business failures to the published capability errors,\nand uses ReDevPlugin-owned operation and stream sinks.\n\nSynchronous reads return projected data directly. Mutable methods register a\nbounded in-flight business task under the Host-owned operation id and complete\nthe Host-owned operation sink exactly once. Log subscriptions append events to\nthe Host-owned stream sink. Cancellation validates both the operation id and\ntarget method before canceling the task. Adapter close fences new work, cancels\nall registered work, waits for task completion, and reports a stable terminal\nfailure if an asynchronous Host sink could not be finalized.\n\nThe task map is only an in-process cancellation bridge. It is not a durable\noperation store, lifecycle authority, replay protocol, token issuer, audit\nstore, or alternate stream implementation.\n\n## Interaction and placement\n\nThe official Containers UI is a signed ReDevPlugin surface. Redeven may place\nthe SDK-owned element in Activity or Workbench and may surround it with product\nchrome and Workbench interaction markers, but it does not construct or reuse\nthe iframe, bootstrap document, bridge, asset session, or surface instance.\nActivity and Workbench are host placement choices and never become capability\nor plugin manifest fields.",
+          "char_count": 4401
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Container DTOs are intentionally minimal. They do not expose raw inspect JSON,\nraw command stdout, raw environment variable values, raw label values, or\nsensitive host mount paths. Environment and label data are reduced to counts;\nsensitive mount and device paths are replaced with a redacted marker while still\npreserving risk flags. `TailLogs` remains bounded to at most 1000 non-follow\nlines in this adapter, so plain request/response calls cannot accidentally\nbecome unbounded subscriptions. Streaming is exposed only through the explicit\n`FollowLogs` hook and requires a sink that owns backpressure and cancellation.\nThe released ReDevPlugin stream bridge must still own product route tickets,\nstream-close audit, and client read semantics before the official Containers\nplugin exposes follow logs to users. This preserves enough evidence for a\nprofessional confirmation UI without turning the preflight plan into a secret\ntransport.\n\nThis contract is a Redeven-owned capability schema, not a ReDevPlugin platform\nschema. Redeven may evolve the concrete Docker/Podman adapter and local CLI\nclient here, but plugin identity, lifecycle, permission, confirmation, token,\nlease/quota, audit, and revocation checks must still be performed by released\nReDevPlugin artifacts before any container adapter method is called. The\nofficial Containers plugin must expose canonical `container_id` fields in list\nand inspect responses and must pass `engine` back on every action. The local\noperation id table is only a business-adapter cancel target for a Host-owned\nid; official operation records, cancel-request persistence, mounted HTTP\nroutes, stream tickets, audit events, disable/uninstall policy, and final\noperation lifecycle remain ReDevPlugin-owned. If integration needs a reusable\nplatform behavior not represented by a released ReDevPlugin contract, that\nbehavior is added upstream first instead of copied into Redeven.",
-          "char_count": 1921
+          "body": "- Identity, ownership scope, permissions, confirmation, tokens, quotas,\n  operations, streams, audit, revocation, install/update, and runtime execution\n  remain ReDevPlugin responsibilities.\n- Docker/Podman discovery, argv construction, preflight inspection, and domain\n  result mapping remain Redeven responsibilities behind the capability adapter.\n- The signed capability contract is the wire authority. Redeven typed DTOs and\n  projections must match it; Redeven must not publish a second schema or client.\n- Official plugin and capability artifacts are generated and signed release\n  inputs. Production code verifies their exact bytes and never regenerates,\n  weakens, or substitutes them at runtime.\n- Operation and stream work must finish through ReDevPlugin-owned sinks.\n  Disable, uninstall, revocation, session teardown, and integration close must\n  not leave detached container tasks active.\n- A missing reusable platform behavior is fixed and released upstream before\n  Redeven consumes it. No fallback bridge, local package parser, sibling\n  checkout, or compatibility shim is allowed.",
+          "char_count": 1097
         }
       ],
       "evidence": [
         {
-          "id": "redeven:internal/capabilities/containers/types.go:5:the container resources schema and capability identifiers are redeven-owned constants.",
+          "id": "redeven:spec/redevplugin/artifacts.go:42:the embedded set contains only public signed artifacts and materializes closed release and capability bundles.",
+          "source": "redeven:spec/redevplugin/artifacts.go",
+          "line": 42,
+          "description": "The embedded set contains only public signed artifacts and materializes closed release and capability bundles."
+        },
+        {
+          "id": "redeven:spec/redevplugin/official-containers-capability/host-capability.pin.json:1:the pin fixes the v2 contract identity and every artifact hash.",
+          "source": "redeven:spec/redevplugin/official-containers-capability/host-capability.pin.json",
+          "line": 1,
+          "description": "The pin fixes the v2 contract identity and every artifact hash."
+        },
+        {
+          "id": "redeven:spec/redevplugin/official-containers-capability/capabilities/redeven.container_resources.v2/v2.0.0/redeven.container_resources.v2.schema.json:1:the signed machine contract defines closed methods, effects, permissions, confirmation, quotas, errors, operations, and subscription schemas.",
+          "source": "redeven:spec/redevplugin/official-containers-capability/capabilities/redeven.container_resources.v2/v2.0.0/redeven.container_resources.v2.schema.json",
+          "line": 1,
+          "description": "The signed machine contract defines closed methods, effects, permissions, confirmation, quotas, errors, operations, and subscription schemas."
+        },
+        {
+          "id": "redeven:internal/capabilities/containers/types.go:5:redeven business dtos retain explicit engine and canonical resource identity.",
           "source": "redeven:internal/capabilities/containers/types.go",
           "line": 5,
-          "description": "The container resources schema and capability identifiers are Redeven-owned constants."
+          "description": "Redeven business DTOs retain explicit engine and canonical resource identity."
         },
         {
-          "id": "redeven:internal/capabilities/containers/preflight.go:56:`buildstartpreflightplan` builds the typed start confirmation plan from observed container metadata.",
+          "id": "redeven:internal/capabilities/containers/preflight.go:56:preflight derives a redacted, hashed risk plan from inspected runtime state.",
           "source": "redeven:internal/capabilities/containers/preflight.go",
           "line": 56,
-          "description": "`BuildStartPreflightPlan` builds the typed start confirmation plan from observed container metadata."
+          "description": "Preflight derives a redacted, hashed risk plan from inspected runtime state."
         },
         {
-          "id": "redeven:internal/capabilities/containers/adapter.go:131:`adapter` resolves engines and maps status, list, inspect, action, logs, image pull, and start preflight calls into the capability contract.",
-          "source": "redeven:internal/capabilities/containers/adapter.go",
-          "line": 131,
-          "description": "`Adapter` resolves engines and maps status, list, inspect, action, logs, image pull, and start preflight calls into the capability contract."
-        },
-        {
-          "id": "redeven:internal/capabilities/containers/cli_client.go:32:`cliclient` implements the local docker/podman command boundary with timeout-scoped command execution.",
+          "id": "redeven:internal/capabilities/containers/cli_client.go:32:the cli client owns bounded docker/podman process execution and parsing.",
           "source": "redeven:internal/capabilities/containers/cli_client.go",
           "line": 32,
-          "description": "`CLIClient` implements the local Docker/Podman command boundary with timeout-scoped command execution."
+          "description": "The CLI client owns bounded Docker/Podman process execution and parsing."
         },
         {
-          "id": "redeven:spec/capabilities/container-resources-v1.schema.json:1:the machine contract is a json schema under redeven `spec/capabilities`.",
-          "source": "redeven:spec/capabilities/container-resources-v1.schema.json",
-          "line": 1,
-          "description": "The machine contract is a JSON Schema under Redeven `spec/capabilities`."
-        },
-        {
-          "id": "redeven:internal/capabilities/containers/preflight_test.go:14:tests verify start preflight redacts secret values and emits expected risk flags.",
-          "source": "redeven:internal/capabilities/containers/preflight_test.go",
-          "line": 14,
-          "description": "Tests verify start preflight redacts secret values and emits expected risk flags."
-        },
-        {
-          "id": "redeven:internal/capabilities/containers/adapter_test.go:12:adapter tests cover engine resolution, unavailable requested engines, dto mapping, secret redaction, actions, logs, image pull, operation-method dispatch, operation-id cancellation, and preflight use of inspected runtime metadata.",
-          "source": "redeven:internal/capabilities/containers/adapter_test.go",
-          "line": 12,
-          "description": "Adapter tests cover engine resolution, unavailable requested engines, DTO mapping, secret redaction, actions, logs, image pull, operation-method dispatch, operation-id cancellation, and preflight use of inspected runtime metadata."
-        },
-        {
-          "id": "redeven:internal/capabilities/containers/cli_client_test.go:10:cli client tests cover status version preference, docker ndjson, podman arrays, docker inspect runtime parsing, safe action argv, pull digest parsing, pull cancellation propagation, exec-runner context error preservation, bounded logs tail, follow-stream rejection, streaming argv, timestamp parsing, and sink backpressure.",
-          "source": "redeven:internal/capabilities/containers/cli_client_test.go",
+          "id": "redeven:internal/capabilities/containers/cli_client_proc_unix.go:10:unix cancellation targets the isolated process group.",
+          "source": "redeven:internal/capabilities/containers/cli_client_proc_unix.go",
           "line": 10,
-          "description": "CLI client tests cover status version preference, Docker NDJSON, Podman arrays, Docker inspect runtime parsing, safe action argv, pull digest parsing, pull cancellation propagation, exec-runner context error preservation, bounded logs tail, follow-stream rejection, streaming argv, timestamp parsing, and sink backpressure."
+          "description": "Unix cancellation targets the isolated process group."
         },
         {
-          "id": "redeven:internal/capabilities/containers/testdata/generated_plugins/containers_integration/manifest.json:1:the integration-only official containers fixture declares the capability binding, product surface, method manifest, confirmation policy, and cancel policy used for redevplugin registration review.",
-          "source": "redeven:internal/capabilities/containers/testdata/generated_plugins/containers_integration/manifest.json",
-          "line": 1,
-          "description": "The integration-only official Containers fixture declares the capability binding, product surface, method manifest, confirmation policy, and cancel policy used for ReDevPlugin registration review."
+          "id": "redeven:internal/redevpluginintegration/containers_capability.go:48:the bridge verifies and registers signed capability artifacts before exposing the business adapter.",
+          "source": "redeven:internal/redevpluginintegration/containers_capability.go",
+          "line": 48,
+          "description": "The bridge verifies and registers signed capability artifacts before exposing the business adapter."
         },
         {
-          "id": "redeven:internal/capabilities/containers/manifest_fixture_test.go:114:fixture tests bind the manifest to `capabilityid`, `capabilityversion`, `methods()`, method effects, request fields, confirmation semantics, and cancel policies without importing redevplugin code.",
-          "source": "redeven:internal/capabilities/containers/manifest_fixture_test.go",
-          "line": 114,
-          "description": "Fixture tests bind the manifest to `CapabilityID`, `CapabilityVersion`, `Methods()`, method effects, request fields, confirmation semantics, and cancel policies without importing ReDevPlugin code."
+          "id": "redeven:internal/redevpluginintegration/containers_capability.go:133:invocation dispatch uses redevplugin capability inputs, operation sinks, and stream sinks.",
+          "source": "redeven:internal/redevpluginintegration/containers_capability.go",
+          "line": 133,
+          "description": "Invocation dispatch uses ReDevPlugin capability inputs, operation sinks, and stream sinks."
         },
         {
-          "id": "redeven:internal/capabilities/containers/cli_client_integration_test.go:26:the opt-in real engine smoke is gated by `redeven_containers_engine_smoke` and validates docker/podman cli behavior only when an engine is explicitly available.",
-          "source": "redeven:internal/capabilities/containers/cli_client_integration_test.go",
-          "line": 26,
-          "description": "The opt-in real engine smoke is gated by `REDEVEN_CONTAINERS_ENGINE_SMOKE` and validates Docker/Podman CLI behavior only when an engine is explicitly available."
+          "id": "redeven:internal/redevpluginintegration/containers_capability_test.go:19:tests bind registration, projection, contract validation, cancellation, streaming, terminal failures, and close behavior to verified artifacts.",
+          "source": "redeven:internal/redevpluginintegration/containers_capability_test.go",
+          "line": 19,
+          "description": "Tests bind registration, projection, contract validation, cancellation, streaming, terminal failures, and close behavior to verified artifacts."
         },
         {
-          "id": "redeven:internal/capabilities/containers/method_dispatch.go:15:`adapter.callmethod` maps raw json requests for each capability method to the typed adapter methods with schema-version and closed-world request checks.",
-          "source": "redeven:internal/capabilities/containers/method_dispatch.go",
-          "line": 15,
-          "description": "`Adapter.CallMethod` maps raw JSON requests for each capability method to the typed adapter methods with schema-version and closed-world request checks."
+          "id": "redeven:internal/redevpluginintegration/release_module.go:51:the official release module closes source policy, artifact resolution, capability pin, signing key, and revocation evidence.",
+          "source": "redeven:internal/redevpluginintegration/release_module.go",
+          "line": 51,
+          "description": "The official release module closes source policy, artifact resolution, capability pin, signing key, and revocation evidence."
         },
         {
-          "id": "redeven:internal/redevpluginintegration/integration.go:181:the redevplugin host integration registers the redeven containers capability adapter when it is configured.",
-          "source": "redeven:internal/redevpluginintegration/integration.go",
-          "line": 181,
-          "description": "The ReDevPlugin Host integration registers the Redeven Containers capability adapter when it is configured."
-        },
-        {
-          "id": "redeven:internal/redevpluginintegration/adapters.go:381:the containers capability adapter dispatches redevplugin capability calls into the redeven business adapter.",
-          "source": "redeven:internal/redevpluginintegration/adapters.go",
-          "line": 381,
-          "description": "The Containers capability adapter dispatches ReDevPlugin capability calls into the Redeven business adapter."
+          "id": "redeven:internal/redevpluginintegration/release_module_test.go:107:the official package is installed through the released redevplugin http lifecycle.",
+          "source": "redeven:internal/redevpluginintegration/release_module_test.go",
+          "line": 107,
+          "description": "The official package is installed through the released ReDevPlugin HTTP lifecycle."
         }
       ],
-      "snippet": "Redeven owns the container resources capability as business-resource adapter surface, not as plugin-platform core. The active v1 contract is `redeven.capability.container_resources.v1` with capability id `redeven.capability.container_resour",
+      "snippet": "Redeven owns Docker and Podman access as a business adapter; ReDevPlugin owns the plugin identity, permission, confirmation, operation, stream, quota, revocation, and audit lifecycle around every call. The active capability is",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -3556,125 +3545,101 @@
       "concept_id": "architecture.plugin-platform-integration",
       "type": "Architecture Contract",
       "title": "Plugin platform integration",
-      "description": "Redeven integrates released ReDevPlugin artifacts through Local UI, AppServer, product adapters, official package bundling, and Env App placement.",
+      "description": "Redeven mounts ReDevPlugin v0.5.1 as a host library and adds only session, release, runtime, placement, and business adapters.",
       "tags": [
         "architecture",
         "local-ui",
         "plugins",
         "redevplugin"
       ],
-      "timestamp": "2026-07-16T00:00:00Z",
+      "timestamp": "2026-07-19T00:00:00Z",
       "frontmatter": {
-        "description": "Redeven integrates released ReDevPlugin artifacts through Local UI, AppServer, product adapters, official package bundling, and Env App placement.",
+        "description": "Redeven mounts ReDevPlugin v0.5.1 as a host library and adds only session, release, runtime, placement, and business adapters.",
         "tags": [
           "architecture",
           "local-ui",
           "plugins",
           "redevplugin"
         ],
-        "timestamp": "2026-07-16T00:00:00Z",
+        "timestamp": "2026-07-19T00:00:00Z",
         "title": "Plugin platform integration",
         "type": "Architecture Contract"
       },
-      "body_length": 9035,
-      "summary": "Redeven plugin-platform integration is host-product glue over released\nReDevPlugin artifacts. ReDevPlugin owns reusable platform mechanics; Redeven\nowns session mapping, route placement, local policy, product UX, official\ncatalog projection, and concrete business capability adapters. At the current source baseline, Redeven consumes\n`github.com/floegence/redevplugin v0.1.1` and mounts the released HTTP adapter\nthrough `internal/redevpluginintegration`. That integration configures durable\nHost stores, policy/session/security adapters, runtime artifact resolution,\nobservability fanout, official package trust policy, and Redeven-owned\nbusiness capabilities.",
+      "body_length": 8745,
+      "summary": "Redeven integrates ReDevPlugin `v0.5.1` through one Go\nHost, one canonical HTTP namespace, one Env App `PluginPlatformClient`, one\nshared surface scope, and the released Rust ProcessManager. Redeven retains\nproduct policy and business adapters; ReDevPlugin retains platform state and\nprotocol ownership. Unproven session, release, capability, runtime, or surface\nidentity denies the operation. The integration is staged but not\nreleasable: v0.5.1's browser catalog GET cannot satisfy its required Origin\ncontract, session-scope revoke does not terminate every execution and handle,\nWorkbench lacks an iframe interaction ownership contract, and its ad-hoc-signed\nDarwin runtime cannot retain the pinned artifact hash through the required\nRedeven Developer ID signing and notarization chain.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Mechanism\n\nThe dependency shape is library and artifact consumption. Redeven imports\nreleased ReDevPlugin Go packages for Host construction, lifecycle DTOs,\nmountable handlers, policy hooks, capability adapter contracts, operation\nenvelopes, and stable platform errors. Env App imports the published\n`@floegence/redevplugin-ui@0.1.5` npm package for the reusable\n`PluginSurfaceHost` bridge host. Runtime execution uses the released signed\n`redevplugin-runtime` selected by release metadata, and the runtime artifact\nresolver fails closed when the matching artifact is absent.\n\n`PluginSurfaceFrame` is the Redeven product wrapper around that published UI\npackage. It owns Env App Activity placement, close/back behavior, local\nloopback versus regional `plg-*` sandbox origin selection, asset-session iframe\nURL construction, and a narrow fetch adapter that rewrites SDK\n`/_redevplugin/api/plugins*` calls to Redeven's\n`/_redeven_proxy/api/plugins*` route while preserving Local UI access headers.\nLoopback Env App hosts are resolved to `plg-\u003csurface\u003e.localhost` before any\nregional sandbox-domain derivation so `127.0.0.1` Local UI sessions do not\nproduce invalid dotted-decimal-derived plugin origins.\nThe published `PluginSurfaceHost` owns exact-origin bridge filtering, bridge\nhandshake validation, bridge-token requests, RPC forwarding, confirmation\nrequest handling, and lifecycle disposal. Redeven must not turn the frame into\na copied manifest parser, registry, generated SDK, storage broker, stream\nbroker, or runtime implementation.\n\nPlugin UI exposure is a compile-time product decision. Vite serve enables it,\nand Redeven-owned development Desktop/runtime launchers enable production-style\nlocal builds with `REDEVEN_ENVAPP_ENABLE_PLUGIN_UI=1`. Ordinary asset builds and\nrelease automation do not set that value, so the Env App does not register the\nPlugin Panel, Plugin Center, or Plugin Surface. This visibility gate does not\ndisable or bypass the released ReDevPlugin host, route, security, runtime, or\nbusiness-adapter contracts.\n\nLocal UI separates Env App under `/_redeven_proxy/*` from direct sessions\nserved by the agent after E2EE handshake. Plugin management requests under\n`/_redeven_proxy/api/plugins*` are accepted only from Env App origins, rewritten\nto `/_redevplugin/api/plugins*`, tagged with the internal Env-trusted plugin\nroute role, and delegated to the mounted ReDevPlugin handler. Env-trusted\ndelegation binds the current Redeven channel id or the fixed Local UI session\nto a host-derived ReDevPlugin session and overwrites the owner-session hash and\nCSRF headers before the released guard validates the request. Code App wires a\nplugin-platform session resolver that keeps remote control-plane channels\nauthoritative and, only when Local UI is enabled, resolves `local-ui` to the\nsynthetic Env App session used by Local UI routes.\n\nPlugin sandbox requests under `/_redeven_plugin*` are accepted only for the\nplugin sandbox host role whose first label is `plg-*`. AppServer rewrites those\nrequests to `/_redevplugin*`, tags them with the internal plugin-sandbox route\nrole, and delegates to ReDevPlugin. Env App, codespace, port-forward, unknown,\nand missing-origin callers receive fail-closed responses and cannot reach\nplugin assets, stream endpoints, CSP reports, or bootstrap routes through Env\nApp management or codespace helper paths. AppServer also rewrites plugin asset\ncookie paths and `Service-Worker-Allowed` headers from ReDevPlugin's internal\nnamespace to the public `/_redeven_plugin` namespace.\n\nOfficial catalog projection is Redeven product metadata, not registry state.\nEnv App embeds the official catalog seed for\n`com.redeven.official.containers` and merges it with installed ReDevPlugin\nrecords by `plugin_id`. Installed records outside the official catalog are\nexcluded from this first-party management surface. Runnable official records\nmust still have a runnable ReDevPlugin trust state; `needs_review`,\n`untrusted`, `blocked_security`, and other non-runnable trust states stay in\nneeds-attention state.\n\nOfficial install and update use a bundled package allowlist. The\n`redeven-official-plugins` repository builds the Containers `.redevplugin`\npackage and records the canonical package hash, manifest hash, entries hash,\nand package-file checksum. Redeven embeds that package in\n`officialPluginPackages.ts` and the ReDevPlugin integration trust verifier only\naccepts the exact known official Containers hashes as bundled trust. Plugin\nCenter sends the bundled package to the released install/update lifecycle API\nwith `trust_state: \"bundled\"`. The browser does not fetch package URLs, verify\nsignatures, parse manifests, or write ReDevPlugin registry rows.\n\nRedeven business code starts at adapter registration. Containers, files,\nshell, cloud services, database access, vault access, session mapping, and\nproduct audit presentation are Redeven implementations only after ReDevPlugin\nhas constructed identity, lifecycle, permission, confirmation, token or lease,\nquota, revocation, and audit context for the request.\n\nThe first official plugin experience is Containers. Its source, UI, manifest,\ntests, README, catalog seed, and package scripts live in\n`../redeven-official-plugins`. Its package declares the\n`redeven.capability.container_resources.v1` capability and calls Redeven's\nregistered Docker/Podman adapter through ReDevPlugin RPC. The plugin treats\nDocker and Podman as separate engines; container identity is `(engine,\ncontainer_id)` across request schemas, response schemas, UI row keys, and\ndangerous confirmation hash fields.",
-          "char_count": 5601
+          "body": "## Host construction\n\n`internal/redevpluginintegration` opens ReDevPlugin-owned registry, install\nstage, observability, operation, confirmation, stream, secret, runtime replay,\nasset, and plugin-data stores under the configured Redeven state root. It then\nconstructs the released Host with:\n\n- session policy, direct authorization, web security, trust, audit, diagnostics,\n  surface token, data, asset, operation, stream, and confirmation adapters;\n- a signed official-release module;\n- the released runtime ProcessManager and Host-owned connectivity/storage\n  services;\n- the secret store and signed Containers capability registry.\n\nAppServer mounts the released handler without changing its path. The only\npublic management namespace is `/_redevplugin/api/plugins`. AppServer proves an\nEnv-trusted route, binds the exact trusted origin in server-only request\ncontext, and supplies the authenticated channel id. It does not translate to a\nsecond plugin namespace, flatten the ReDevPlugin wire contract, or serve a\nparallel bootstrap path.\n\n## Session and ownership\n\nThe session adapter derives the four active hashes from authenticated Redeven\nmetadata: owner session, owner user, owner environment, and channel. Owner\nfields in JSON, plugin IPC, or capability arguments are never authoritative.\nThe same adapter backs direct Host authorization and mounted HTTP route\nauthorization, so bypassing HTTP does not bypass policy.\n\nPersistent owner behavior follows ReDevPlugin resource scopes. Environment\nresources bind the owner environment; user resources bind environment plus\nuser. Short-lived surfaces, operations, streams, handles, confirmations, and\ntokens bind the full active audience. Redeven does not use short-lived audience\nhashes as registry or plugin-data keys.\n\n## Official release and capability\n\nThe product catalog contains one exact official identity:\n\n- publisher `com.redeven.official`;\n- plugin `com.redeven.official.containers`;\n- instance `plugini_redeven_official_containers`;\n- version `2.0.0`;\n- surface `containers.dashboard`.\n\nThe generated UI release ref and embedded Go release bundle come from the same\nsigned metadata. Install and update use `installReleaseRef` and\n`updateReleaseRef`; browser package bytes and trust-state requests do not\nexist. Publisher, plugin, instance, version, release metadata hash, package\nhashes, Ed25519 key, source policy, revocation evidence, host requirement, and\ncapability pin must all match.\n\nThe Containers capability adapter receives only ReDevPlugin-authorized\ninvocations. Synchronous reads, long operations, cancellation, and log streams\nuse released capability, operation, and stream envelopes. Docker/Podman access\nstays in `internal/capabilities/containers`; plugin-platform mechanics do not.\nOne-shot CLI output is capped before parsing; crossing the cap terminates the\nprocess group and fails rather than truncating a successful result. Stderr and\ncommand arguments are not copied into public error text.\n\n## Runtime integration\n\nRedeven uses one strict, error-returning executable identity resolver for CLI\nlock metadata, Agent construction, self-restart, self-upgrade, and sibling\nruntime selection. It makes the path absolute and resolves every symlink;\nresolution failure stops startup instead of retaining an alias. The only runtime\npath is `\u003ccanonical suite executable directory\u003e/redevplugin-runtime`.\n\nSelf-upgrade keeps three identities separate: the canonical executable in its\ncontent-addressed suite, the stable installation/activation root, and the\nactivation path `\u003croot\u003e/redeven`. A suite executable is accepted only when the\nclosed relative activation link resolves back to that exact suite; a regular\nroot executable is the explicit pre-suite migration shape. The installer writes\nthe new suite at the activation root and restart executes the newly committed\nactivation path, so upgrades neither nest suites nor restart the old generation.\nThis lets the installer switch an immutable Redeven/runtime pair atomically\nwithout mixing generations. The runtime module binds the current closed target,\nReDevPlugin `0.5.1`, Rust IPC v4, the current WASM ABI, the exact target hash,\npersistent lease replay storage, and the released default limits. Missing,\nnon-canonical, wrong-target, or wrong-hash runtimes fail startup.\n\nRuntime storage, connectivity, asset, handle-grant, quota, heartbeat, and\ndiagnostic paths remain ReDevPlugin services. Redeven does not launch an\nalternate process, add hostcalls, or inspect IPC frames.\n\n## Env App integration\n\nEnv App owns one authenticated same-origin fetch adapter, one\n`PluginPlatformClient`, one shared `PluginSurfaceScope`, and one serial\nplacement coordinator. Catalog and lifecycle calls use generated v0.5.1 DTOs.\nEvery mutation carries the current management revision; outcome-unknown errors\ntear down affected surfaces and refresh inventory without automatic retry. The\nPlugin Center mutation lane remains occupied until that local invalidation has\nsettled, so another command cannot race the cleanup.\n\nThe SDK-owned iframe is opened only through `openSurfaceInSlot`. The returned\nPromise is the authoritative handshake and first-commit boundary. Placement\nchanges close and dispose the old slot before a new slot can open, so an iframe\nor surface instance is never moved or reused. A Shell-owned abort-aware FIFO\nqueue serializes confirmation intents and rejects queued work when its surface\nor scope is retired.\n\nFour upstream gaps block release. Activity catalog uses GET, which carries no\nOrigin in a same-origin browser, while v0.5.1 validates Origin on every route.\nWorkbench lacks a host-neutral cross-iframe interaction callback. Session-scope\nrevoke removes surfaces but does not fence operations, streams, confirmations,\nor surface-less handles. The Darwin runtime is linker/ad-hoc signed; Electron's\nDeveloper ID signing must change those bytes, but the runtime manager and\nformal marker correctly require the original release hash. Formal upstream\ncontracts and signed artifacts must fix all four;\nRedeven may not add an alternate route/bridge, forge Origin, relax the guard,\nor compensate with a local task registry. Session deletion must await complete\nfour-hash teardown.",
+          "char_count": 6223
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "The canonical published-dependency and platform-ownership prohibitions are\ndefined by [ReDevPlugin host integration boundary](redevplugin-boundary.md).\nThis concept documents only Redeven's Local UI, AppServer, official-package,\nproduct-placement, and business-adapter integration delta.\n\nDesktop runtime-control, RCPP provider APIs, standalone Gateway APIs, and\nFlower target grants are adjacent host mechanisms, not plugin capability or\ngrant planes. Plugin surfaces and workers must not receive runtime-control\ntokens, raw local direct-session artifacts, Gateway bridge credentials, RCPP\nprovider credentials, or Flower grants as ambient authority.\n\nContainers are a Redeven business capability when exposed to plugins, not a\nplugin runtime mechanism. Gateway environment profiles and RCPP provider\nenvironment catalogs are external environment access/control constructs, not\nplugin installation identities, plugin broker state, or a substitute for the\nclosed-world container resources capability contract.",
-          "char_count": 1009
+          "body": "The canonical ownership rules are in [ReDevPlugin host integration boundary](redevplugin-boundary.md).\nThis concept owns only the concrete Redeven v0.5.1 integration shape.\n\nManifest surfaces remain `view|command|background` with semantic intent. No\nActivity, Workbench, widget, settings, navigation, or product-layout fields are\nadded to plugin manifests.\n\nOfficial catalog projection is product metadata, not registry state. Installed\nitems match the exact publisher/plugin/instance identity; unrelated records are\nnot adopted by plugin id alone.",
+          "char_count": 548
         }
       ],
       "evidence": [
         {
-          "id": "redeven:AGENTS.md:256:redeven consumes redevplugin through published artifacts only.",
-          "source": "redeven:AGENTS.md",
-          "line": 256,
-          "description": "Redeven consumes ReDevPlugin through published artifacts only."
-        },
-        {
-          "id": "redeven:go.mod:11:redeven consumes the published redevplugin go module.",
-          "source": "redeven:go.mod",
-          "line": 11,
-          "description": "Redeven consumes the published ReDevPlugin Go module."
-        },
-        {
-          "id": "redeven:internal/codeapp/appserver/server.go:529:appserver delegates plugin sandbox routes only for plugin sandbox origins.",
-          "source": "redeven:internal/codeapp/appserver/server.go",
-          "line": 529,
-          "description": "AppServer delegates plugin sandbox routes only for plugin sandbox origins."
-        },
-        {
-          "id": "redeven:internal/codeapp/appserver/server_test.go:733:tests bind env app management delegation to the mounted plugin platform handler.",
-          "source": "redeven:internal/codeapp/appserver/server_test.go",
-          "line": 733,
-          "description": "Tests bind Env App management delegation to the mounted plugin platform handler."
-        },
-        {
-          "id": "redeven:internal/codeapp/codeapp.go:1:code app wires the plugin-platform session resolver used by the redevplugin integration.",
-          "source": "redeven:internal/codeapp/codeapp.go",
-          "line": 1,
-          "description": "Code App wires the plugin-platform session resolver used by the ReDevPlugin integration."
-        },
-        {
-          "id": "redeven:internal/codeapp/plugin_local_session_test.go:1:tests bind the local ui `local-ui` resolver fallback for plugin management.",
-          "source": "redeven:internal/codeapp/plugin_local_session_test.go",
-          "line": 1,
-          "description": "Tests bind the Local UI `local-ui` resolver fallback for plugin management."
-        },
-        {
-          "id": "redeven:internal/redevpluginintegration/integration.go:52:the integration package configures the released redevplugin host.",
+          "id": "redeven:internal/redevpluginintegration/integration.go:1:opens host modules and the canonical handler.",
           "source": "redeven:internal/redevpluginintegration/integration.go",
-          "line": 52,
-          "description": "The integration package configures the released ReDevPlugin Host."
+          "line": 1,
+          "description": "Opens Host modules and the canonical handler."
         },
         {
-          "id": "redeven:internal/redevpluginintegration/adapters.go:381:the containers capability adapter dispatches redevplugin calls into redeven business logic.",
-          "source": "redeven:internal/redevpluginintegration/adapters.go",
-          "line": 381,
-          "description": "The Containers capability adapter dispatches ReDevPlugin calls into Redeven business logic."
+          "id": "redeven:internal/redevpluginintegration/session_adapter.go:1:derives session ownership and policy from authenticated metadata.",
+          "source": "redeven:internal/redevpluginintegration/session_adapter.go",
+          "line": 1,
+          "description": "Derives session ownership and policy from authenticated metadata."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1:env app plugin management calls use the redeven proxy plugin namespace.",
+          "id": "redeven:internal/redevpluginintegration/security_adapter.go:1:implements authenticate, origin, csrf, and route authorization.",
+          "source": "redeven:internal/redevpluginintegration/security_adapter.go",
+          "line": 1,
+          "description": "Implements authenticate, origin, CSRF, and route authorization."
+        },
+        {
+          "id": "redeven:internal/redevpluginintegration/release_module.go:1:verifies the official release source and capability requirements.",
+          "source": "redeven:internal/redevpluginintegration/release_module.go",
+          "line": 1,
+          "description": "Verifies the official release source and capability requirements."
+        },
+        {
+          "id": "redeven:internal/redevpluginintegration/runtime_module.go:1:configures the released runtime manager.",
+          "source": "redeven:internal/redevpluginintegration/runtime_module.go",
+          "line": 1,
+          "description": "Configures the released runtime manager."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginPlatform.ts:1:owns the single ui client, fetch boundary, scope, and slot coordinator.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginPlatform.ts",
+          "line": 1,
+          "description": "Owns the single UI client, fetch boundary, scope, and slot coordinator."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1:uses generated release-ref and lifecycle apis.",
           "source": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts",
           "line": 1,
-          "description": "Env App plugin management calls use the Redeven proxy plugin namespace."
+          "description": "Uses generated release-ref and lifecycle APIs."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginPackages.ts:1:redeven embeds the bundled official containers package.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginPackages.ts",
+          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/officialContainersRelease.generated.ts:1:contains the generated signed release ref.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/officialContainersRelease.generated.ts",
           "line": 1,
-          "description": "Redeven embeds the bundled official Containers package."
+          "description": "Contains the generated signed release ref."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/package.json:25:env app consumes the published redevplugin ui package for pluginsurfacehost.",
-          "source": "redeven:internal/envapp/ui_src/package.json",
-          "line": 25,
-          "description": "Env App consumes the published ReDevPlugin UI package for PluginSurfaceHost."
-        },
-        {
-          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginSurfaceFrame.tsx:1:env app wraps pluginsurfacehost with product placement and redeven route adaptation.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginSurfaceFrame.tsx",
-          "line": 1,
-          "description": "Env App wraps PluginSurfaceHost with product placement and Redeven route adaptation."
-        },
-        {
-          "id": "redeven:okf/architecture/container-resources-capability.md:9:the container resources contract is a redeven-owned business capability surface.",
-          "source": "redeven:okf/architecture/container-resources-capability.md",
-          "line": 9,
-          "description": "The container resources contract is a Redeven-owned business capability surface."
+          "id": "redeven:internal/codeapp/appserver/server.go:590:mounts the canonical plugin platform route with server-only context.",
+          "source": "redeven:internal/codeapp/appserver/server.go",
+          "line": 590,
+          "description": "Mounts the canonical plugin platform route with server-only context."
         }
       ],
-      "snippet": "Redeven plugin-platform integration is host-product glue over released ReDevPlugin artifacts. ReDevPlugin owns reusable platform mechanics; Redeven owns session mapping, route placement, local policy, product UX, official",
+      "snippet": "Redeven integrates ReDevPlugin `v0.5.1` through one Go Host, one canonical HTTP namespace, one Env App `PluginPlatformClient`, one shared surface scope, and the released Rust ProcessManager. Redeven retains product policy and business adapt",
       "links": [
         {
           "label": "ReDevPlugin host integration boundary",
@@ -3696,107 +3661,101 @@
       "concept_id": "architecture.redevplugin-boundary",
       "type": "Architecture Boundary",
       "title": "ReDevPlugin host integration boundary",
-      "description": "Redeven consumes ReDevPlugin as a published plugin-platform dependency and keeps host-specific policy in Redeven adapters.",
+      "description": "Redeven consumes ReDevPlugin as a published platform and keeps only host policy, placement, and business adapters.",
       "tags": [
         "architecture",
         "dependencies",
         "plugins",
         "release"
       ],
-      "timestamp": "2026-06-29T00:00:00Z",
+      "timestamp": "2026-07-19T00:00:00Z",
       "frontmatter": {
-        "description": "Redeven consumes ReDevPlugin as a published plugin-platform dependency and keeps host-specific policy in Redeven adapters.",
+        "description": "Redeven consumes ReDevPlugin as a published platform and keeps only host policy, placement, and business adapters.",
         "tags": [
           "architecture",
           "dependencies",
           "plugins",
           "release"
         ],
-        "timestamp": "2026-06-29T00:00:00Z",
+        "timestamp": "2026-07-19T00:00:00Z",
         "title": "ReDevPlugin host integration boundary",
         "type": "Architecture Boundary"
       },
-      "body_length": 11886,
-      "summary": "Redeven treats ReDevPlugin as a published upstream plugin-platform dependency,\nnot as code to fork or reimplement inside the Redeven tree. ReDevPlugin is an\nindependently released library/runtime repository, not a Redeven source\ndirectory, submodule, or implementation detail.",
+      "body_length": 6384,
+      "summary": "ReDevPlugin is an independently released plugin platform. Redeven consumes its\nGo library, npm UI package, signed Rust runtime, and machine contracts; it does\nnot fork or rebuild platform mechanics. Redeven owns authenticated session\nmapping, product policy, UI placement, release-artifact selection, and concrete\nbusiness adapters. A missing reusable contract blocks downstream integration\nuntil it is released upstream; no Redeven compatibility path may fill the gap.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Mechanism\n\nReDevPlugin owns reusable plugin-platform concerns: package and manifest\nvalidation, lifecycle APIs, permission and confirmation machinery, sandboxed\niframe bridge contracts, Rust runtime supervision, WASM execution, storage and\nnetwork brokers, CLI validators, templates, schemas, fixtures, and contract\nhashes. Redeven consumes those artifacts through released Go module versions,\nnpm packages, signed `redevplugin-runtime` binaries, and machine-readable\ncontract hashes.\n\nRedeven integration code is thin host glue over those artifacts: configuration,\nroute mounting, adapter registration, product UI placement, release-artifact\nselection, and business capability implementations. Public plugin-platform\nmechanics belong upstream in ReDevPlugin, including lifecycle endpoints, package\nschemas, bridge protocol, storage/network/runtime brokers, operation/stream\nenvelopes, runtime supervision, generated SDKs, and validators.\n\nReDevPlugin is the source of both front-end and back-end plugin-platform\nimplementation. Redeven consumes released npm packages for sandbox surface\nhosting, bridge lifecycle, settings/intent SDKs, generated clients, and\nsandbox-safe UI helpers. Redeven consumes released Go packages for Host\nconstruction, lifecycle handlers, registry state, permission and confirmation\nenforcement, broker contracts, operation/stream envelopes, token/ticket issuance,\nand stable platform errors. Redeven bundles the released signed Rust\n`redevplugin-runtime` through the released runtime manager/supervisor instead of\nimplementing a second runtime process, WASM executor, IPC protocol, or\nstorage/network hot path.\n\nRedeven's integration layer owns only host-product responsibilities: mapping\nRedeven sessions, local permission caps, CSRF and origin checks, state\ndirectories, audit and diagnostics sinks, secret adapters, Env App surfaces,\nWorkbench and Settings entrypoints, Desktop and installer bundling, Flower/Floret\ntool wiring, product-level plugin generation UX, and Redeven business capability\nadapters.\n\nThe dependency direction is one-way: Redeven imports released ReDevPlugin\nartifacts, and ReDevPlugin never imports Redeven. Redeven-specific sessions,\nEnv App placement, Flower orchestration, Workbench chrome, Desktop packaging,\ninstaller behavior, local policy, and concrete business resources belong in\nRedeven adapters over released ReDevPlugin contracts. If a reusable contract is\nmissing, it must be implemented and released in ReDevPlugin before Redeven\ndepends on it.\n\nRedeven business code starts at adapter registration. Concrete capabilities such\nas containers, files, shells, cloud services, database access, vault access,\nsession mapping, and product audit presentation belong in Redeven only after\nReDevPlugin has constructed the identity, lifecycle, permission, confirmation,\ntoken, lease/quota, revocation, and audit context for the request.\n\nRedeven may choose the state root, backup/export destination, audit sink,\ndiagnostics sink, and secret-vault adapter, but the ReDevPlugin registry,\npackage staging state, token/ticket records, storage namespaces, runtime leases,\nand revoke epochs remain opaque platform state. Redeven may configure and launch\nthe released `redevplugin-runtime` through the released ReDevPlugin runtime\nmanager and present diagnostics, but it must not fork the Rust IPC protocol,\ninject custom hostcalls, run plugin WASM modules in a Redeven-owned execution\npath, implement a parallel supervisor, or bypass runtime lease, quota, and\nrevocation checks.\n\nIf Redeven integration uncovers a plugin-platform contract bug, the durable fix\nbelongs in ReDevPlugin first and Redeven must consume the released artifact that\ncontains it. Redeven integration code must not mint plugin gateway tokens,\nbypass asset tickets, grant plugin storage or network access outside ReDevPlugin\nbrokers, load plugin UI outside sandboxed ReDevPlugin surfaces, execute native\nplugin backends, or call Redeven business adapters outside the ReDevPlugin\npermission, confirmation, token, lease, audit, and lifecycle chain.",
-          "char_count": 4074
+          "body": "## Platform ownership\n\nReDevPlugin owns package and manifest validation, signing and trust, registry\nand lifecycle state, permissions and confirmations, tokens and asset sessions,\nsandbox bootstrap and bridge lifecycle, settings and intents, operations and\nstreams, storage/network/secret brokers, runtime supervision, Rust IPC, WASM\nexecution, quotas, revocation, generated clients, stable errors, schemas,\nfixtures, contract hashes, and release metadata.\n\nRedeven owns the host integration around those contracts: mapping an\nauthenticated Redeven channel into ReDevPlugin session context, applying local\npermission caps, mounting the canonical handler, choosing state roots, routing\naudit and diagnostics, selecting a formally released runtime, placing SDK-owned\nsurface elements, and registering product capabilities. Docker/Podman, files,\nshells, cloud APIs, databases, and vaults remain Redeven business adapters even\nwhen plugins invoke them.\n\nThe dependency direction is one way. Redeven imports released ReDevPlugin\nartifacts; ReDevPlugin never imports Redeven. Redeven must not implement a\nsecond manifest parser, package builder, registry, lifecycle state machine,\nbridge, token issuer, asset session, broker, operation/stream protocol, runtime\nsupervisor, IPC implementation, or WASM executor.\n\n## Published dependency set\n\nThe current integration consumes the coordinated ReDevPlugin `v0.5.1` release:\n\n- `github.com/floegence/redevplugin v0.5.1`;\n- `@floegence/redevplugin-ui@0.5.1`;\n- signed `redevplugin-runtime` artifacts for Darwin/Linux and amd64/arm64;\n- release-manifest v4, compatibility-manifest v6, the closed 28-contract\n  registry, Worker SDK, npm integrity, A2 evidence, stress evidence, checksums,\n  signatures, bundles, and third-party notices.\n\nRedeven release tooling accepts only the fixed formal GitHub release from\n`floegence/redevplugin`. It verifies the exact 27-asset set and keyless signing\nidentity before staging any payload. It does not accept a local source\ndirectory, repository override, version override, sibling checkout, or\nunsigned payload.\n\nForbidden dependency wiring includes `go.work`, `go.work.sum`, Go `replace`,\n`file:`, `link:`, `workspace:`, `portal:`, relative or absolute sibling paths,\nRust path overrides, copied generated contracts, and copied runtime binaries.\nGo dependency checks run with `GOWORK=off`.\n\n## Host modules\n\nRedeven constructs the released Host with explicit core, release, runtime,\nconnectivity, secrets, and capability modules. ReDevPlugin-owned SQLite stores\nremain opaque under the configured state root. Redeven supplies session,\nauthorization, web-security, trust, release-source, observability, secret, and\nbusiness adapters; it does not edit registry rows, token state, leases, revoke\nepochs, or plugin data directly.\n\nThe official runtime path is exactly the `redevplugin-runtime` sibling of the\nRedeven executable. The released ProcessManager owns launch, health,\nheartbeats, shutdown, leases, hostcalls, and restart semantics. Redeven pins the\nfour formal runtime hashes and does not search `PATH`, candidate directories,\nor alternate filenames.\n\nOfficial Containers is a signed ReDevPlugin package over the\n`redeven.capability.container_resources` adapter. The package, release metadata,\nrevocation metadata, capability contract, and keys are verified as a single\nofficial source. `internal/capabilities/containers` contains domain behavior;\nthe ReDevPlugin integration contains only the registered capability projection\nand operation/stream delegation.\n\n## Missing-contract rule\n\nOpaque iframe input does not cross into the parent Workbench document.\nReDevPlugin `v0.5.1` exposes no host-neutral interaction ownership callback for\nactivation or host-owned wheel routing. Redeven therefore must not claim\nWorkbench plugin placement, add an overlay, toggle iframe pointer events, or\ncopy a second bridge. Workbench placement remains rejected until ReDevPlugin\nreleases a source/port-bound interaction contract. Activity placement remains\nvalid because it does not require Workbench canvas ownership.",
+          "char_count": 4087
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Redeven must not point builds, tests, release validation, or examples at a local\n`../redevplugin` checkout through `go.work`, `go.work.sum`, `replace`, local npm\nworkspace/link/file/portal wiring, Rust path overrides, copied source trees, or\nbuild aliases. Redeven must also not copy generated ReDevPlugin source, schemas,\nSDK files, or runtime binaries into its tree as a substitute for a released\ndependency. CLI commands such as `redeven plugin validate` may be thin wrappers\nover released ReDevPlugin validators, but they must not carry a second manifest\nparser, looser validator, alternate packaging flow, divergent fixture format, or\nseparate install lifecycle.\n\nRedeven must not implement an alternate manifest parser, package builder,\nregistry lifecycle, bridge token issuer, asset-ticket system, storage broker,\nnetwork broker, runtime IPC layer, WASM executor, stream envelope, operation\nmanager, runtime supervisor, or plugin lifecycle state machine. Redeven may\nexpose product routes or CLI commands for plugin management, but\nplatform-management handlers must be released ReDevPlugin handlers or thin\nwrappers around them. Redeven may register business\ncapability adapters such as containers, files, shell, cloud, or database access,\nbut each adapter must receive request context that already passed ReDevPlugin\nidentity, permission, confirmation, lease/token, quota, and audit checks.\n\nContainer management, if exposed as an official plugin experience, is a Redeven\nbusiness capability registered through ReDevPlugin. It is not a plugin runtime\nmechanism and must still pass through ReDevPlugin permission, confirmation,\ntoken, lease, audit, and lifecycle contracts. The Redeven-owned v1 business\ncontract lives under `spec/capabilities/container-resources-v1.schema.json` and\n`internal/capabilities/containers`, which keeps the adapter contract visible\nwithout creating an `internal/plugins*` platform-core tree or copying\nReDevPlugin `spec/plugin` contracts.\n\nFlower-generated plugin flows are Redeven orchestration over ReDevPlugin\nprimitives. Flower may draft source, call released ReDevPlugin validators and\nbuilders, ask the user for approval, install and enable through ReDevPlugin\nlifecycle APIs, and open the resulting sandboxed surface. Flower must not write\nplugin registry rows, mint bridge tokens, place UI assets directly under Env App\nroutes, bypass package signatures or trust policy, or grant storage, network, or\nruntime access outside ReDevPlugin brokers.\n\nReDevPlugin upgrades are ordinary published dependency upgrades. A Redeven\nchange that depends on ReDevPlugin behavior must update the released Go module,\nnpm package, runtime artifact reference, compatibility manifest or contract\nhashes, and verification scripts together; unreleased local ReDevPlugin behavior\nis not a valid integration target. Before Redeven bundles a ReDevPlugin runtime\nartifact, the consumer-side release artifact verifier must validate the\ndownloaded release directory: outer checksums and signature evidence,\nrelease-mode stress counters, each tarball's internal release manifest and\nchecksum list, compatibility metadata, `THIRD_PARTY_NOTICES.md`, and runtime\nbinary presence. The verifier must write a consumption marker that includes the\nverified tarball hashes, runtime binary hashes, and ReDevPlugin third-party\nnotice hashes before any checked payload is staged into a Redeven release or\nDesktop bundle. Redeven's release and Desktop bundle gates scan for ReDevPlugin\npayloads and fail when a runtime binary, release tarball, embedded runtime inside\na Redeven tarball, or release stress summary appears without a matching marker\nhash. Direct staged runtimes and embedded Redeven tarballs must also carry\n`REDEVPLUGIN_THIRD_PARTY_NOTICES.md` with a hash recorded in the marker, so\nlicense evidence moves with the runtime payload. The released-artifact staging\npath keeps that boundary explicit: it can download a ReDevPlugin GitHub Release\nor copy an already downloaded artifact directory, runs the verifier with marker\noutput, validates the staged root with the consumption gate, and only then\nextracts an optional target `redevplugin-runtime` binary, marker, and\n`REDEVPLUGIN_THIRD_PARTY_NOTICES.md` for downstream bundle staging. Redeven\nrelease tarballs and Desktop bundles use this path only when a published\nReDevPlugin version is explicitly selected; copied artifact directories remain a\nlocal fixture and preflight input for the helper, not a GitHub release workflow\nselector. The default release and Desktop packaging paths remain no-op for\nReDevPlugin payloads until such a version is configured, so the repository does\nnot silently consume unreleased local behavior.\n\nRedeven-side plugin code layout must make the adapter boundary visible. It may\ncontain host integration, route mounting, capability adapters, and product UI,\nbut not a second platform core under names such as plugin runtime, registry,\nbridge, storage, or network. Generated DTOs, schemas, SDK clients, and manifest\nfixtures must come from released ReDevPlugin artifacts. Redeven tests should\nprove host adapter behavior, permission mapping, route mounting, lifecycle\nwiring, and product UX, while reusable manifest, package, bridge, runtime,\nstorage, network, and lifecycle semantics remain covered by ReDevPlugin\nfixtures and tests. The local dependency boundary guard enforces the current\nno-local-wiring baseline by rejecting Go workspaces, local ReDevPlugin module or\npackage-manager wiring, copied platform contracts, and `internal/plugins*`\nplatform-core directories. The release artifact verifier and consumption gate\nself-tests keep the future runtime-consumption path executable in CI before a\npublished ReDevPlugin artifact is selected by Redeven.",
-          "char_count": 5756
+          "body": "Plugin UI must load through the released SDK's sandbox bootstrap and bridge.\nPlugin backend code must run through the released Rust runtime. Product routes,\nnavigation, Activity/Workbench layout, session semantics, and concrete resource\naccess must not leak into manifests or platform schemas.\n\nFlower may orchestrate scaffold, validate, package, install, enable, and open\noperations through released APIs. It must not write platform state, mint\ntokens, bypass signatures, or grant storage/network/runtime authority itself.\n\nUncertain artifact provenance, owner scope, release identity, contract version,\nruntime target, or capability pin fails closed. Redeven does not guess an owner,\ninvent network provenance, downgrade a contract, or retry a mutation whose\noutcome is unknown.",
+          "char_count": 780
         }
       ],
       "evidence": [
         {
-          "id": "redeven:AGENTS.md:223:published dependency policy lists `redevplugin` as an upstream dependency consumed by redeven.",
-          "source": "redeven:AGENTS.md",
-          "line": 223,
-          "description": "Published dependency policy lists `redevplugin` as an upstream dependency consumed by Redeven."
-        },
-        {
-          "id": "redeven:okf/architecture/container-resources-capability.md:9:the active container resources contract is redeven-owned business capability surface.",
-          "source": "redeven:okf/architecture/container-resources-capability.md",
-          "line": 9,
-          "description": "The active container resources contract is Redeven-owned business capability surface."
-        },
-        {
-          "id": "redeven:go.mod:5:redeven's current required module list is the active go dependency surface for released upstream modules.",
+          "id": "redeven:go.mod:11:pins the released redevplugin go module.",
           "source": "redeven:go.mod",
-          "line": 5,
-          "description": "Redeven's current required module list is the active Go dependency surface for released upstream modules."
+          "line": 11,
+          "description": "Pins the released ReDevPlugin Go module."
         },
         {
-          "id": "redeven:scripts/check_redevplugin_dependency_boundary.sh:1:the dependency boundary guard blocks local redevplugin wiring and copied platform-core paths.",
+          "id": "redeven:internal/envapp/ui_src/package.json:29:pins the released ui package.",
+          "source": "redeven:internal/envapp/ui_src/package.json",
+          "line": 29,
+          "description": "Pins the released UI package."
+        },
+        {
+          "id": "redeven:internal/redevpluginintegration/integration.go:1:constructs the released host modules and stores.",
+          "source": "redeven:internal/redevpluginintegration/integration.go",
+          "line": 1,
+          "description": "Constructs the released Host modules and stores."
+        },
+        {
+          "id": "redeven:internal/redevpluginintegration/runtime_module.go:1:binds the released processmanager, exact runtime path, target, and hashes.",
+          "source": "redeven:internal/redevpluginintegration/runtime_module.go",
+          "line": 1,
+          "description": "Binds the released ProcessManager, exact runtime path, target, and hashes."
+        },
+        {
+          "id": "redeven:internal/redevpluginintegration/release_module.go:1:implements the official signed release-source adapters.",
+          "source": "redeven:internal/redevpluginintegration/release_module.go",
+          "line": 1,
+          "description": "Implements the official signed release-source adapters."
+        },
+        {
+          "id": "redeven:internal/redevpluginintegration/containers_capability.go:1:registers the redeven-owned containers business adapter.",
+          "source": "redeven:internal/redevpluginintegration/containers_capability.go",
+          "line": 1,
+          "description": "Registers the Redeven-owned Containers business adapter."
+        },
+        {
+          "id": "redeven:scripts/check_redevplugin_dependency_boundary.sh:1:rejects local wiring and platform duplication.",
           "source": "redeven:scripts/check_redevplugin_dependency_boundary.sh",
           "line": 1,
-          "description": "The dependency boundary guard blocks local ReDevPlugin wiring and copied platform-core paths."
+          "description": "Rejects local wiring and platform duplication."
         },
         {
-          "id": "redeven:scripts/check_redevplugin_release_artifacts.sh:10:the consumer-side release artifact verifier validates checksums, signature evidence, stress counters, internal manifests, compatibility metadata, third-party notices, and runtime binary presence.",
+          "id": "redeven:scripts/check_redevplugin_release_artifacts.sh:1:verifies the exact formal release set and signing evidence.",
           "source": "redeven:scripts/check_redevplugin_release_artifacts.sh",
-          "line": 10,
-          "description": "The consumer-side release artifact verifier validates checksums, signature evidence, stress counters, internal manifests, compatibility metadata, third-party notices, and runtime binary presence."
+          "line": 1,
+          "description": "Verifies the exact formal release set and signing evidence."
         },
         {
-          "id": "redeven:scripts/check_redevplugin_consumption_gate.sh:10:the consumption gate fails release staging or desktop bundling when redevplugin payloads appear without verifier markers.",
-          "source": "redeven:scripts/check_redevplugin_consumption_gate.sh",
-          "line": 10,
-          "description": "The consumption gate fails release staging or Desktop bundling when ReDevPlugin payloads appear without verifier markers."
-        },
-        {
-          "id": "redeven:.github/workflows/ci-check.yml:108:ci runs the redevplugin release artifact verifier self-test and consumption gate self-test before a real artifact is wired into release packaging.",
-          "source": "redeven:.github/workflows/ci-check.yml",
-          "line": 108,
-          "description": "CI runs the ReDevPlugin release artifact verifier self-test and consumption gate self-test before a real artifact is wired into release packaging."
-        },
-        {
-          "id": "redeven:scripts/stage_redevplugin_release_artifacts.sh:14:the release artifact staging helper verifies downloaded or copied redevplugin artifacts before extracting a runtime payload.",
+          "id": "redeven:scripts/stage_redevplugin_release_artifacts.sh:1:stages only fixed formal release payloads.",
           "source": "redeven:scripts/stage_redevplugin_release_artifacts.sh",
-          "line": 14,
-          "description": "The release artifact staging helper verifies downloaded or copied ReDevPlugin artifacts before extracting a runtime payload."
-        },
-        {
-          "id": "redeven:.github/workflows/release.yml:93:release packaging stages redevplugin runtime payloads only when explicit release inputs are configured.",
-          "source": "redeven:.github/workflows/release.yml",
-          "line": 93,
-          "description": "Release packaging stages ReDevPlugin runtime payloads only when explicit release inputs are configured."
-        },
-        {
-          "id": "redeven:scripts/build_desktop_bundled_runtime.sh:113:desktop bundled-runtime preparation stages redevplugin runtime payloads only when explicit desktop inputs are configured.",
-          "source": "redeven:scripts/build_desktop_bundled_runtime.sh",
-          "line": 113,
-          "description": "Desktop bundled-runtime preparation stages ReDevPlugin runtime payloads only when explicit desktop inputs are configured."
+          "line": 1,
+          "description": "Stages only fixed formal release payloads."
         }
       ],
-      "snippet": "Redeven treats ReDevPlugin as a published upstream plugin-platform dependency, not as code to fork or reimplement inside the Redeven tree. ReDevPlugin is an independently released library/runtime repository, not a Redeven source",
+      "snippet": "ReDevPlugin is an independently released plugin platform. Redeven consumes its Go library, npm UI package, signed Rust runtime, and machine contracts; it does not fork or rebuild platform mechanics. Redeven owns authenticated session",
       "backlinks": [
         {
           "label": "Plugin platform integration",
@@ -5593,149 +5552,149 @@
       "concept_id": "release.ci-and-release-gates",
       "type": "Release Contract",
       "title": "CI and release gates",
-      "description": "Redeven release confidence comes from README localization checks, shell checks, OKF validation, UI checks, ReDevPlugin integration gates, assets, Go tests, and lint.",
+      "description": "Redeven binds published dependencies, generated assets, UI behavior, release payloads, tests, and OKF to the exact main tip being pushed.",
       "tags": [
         "ci",
         "okf",
         "quality",
         "release"
       ],
-      "timestamp": "2026-07-17T00:00:00Z",
+      "timestamp": "2026-07-19T00:00:00Z",
       "frontmatter": {
-        "description": "Redeven release confidence comes from README localization checks, shell checks, OKF validation, UI checks, ReDevPlugin integration gates, assets, Go tests, and lint.",
+        "description": "Redeven binds published dependencies, generated assets, UI behavior, release payloads, tests, and OKF to the exact main tip being pushed.",
         "tags": [
           "ci",
           "okf",
           "quality",
           "release"
         ],
-        "timestamp": "2026-07-17T00:00:00Z",
+        "timestamp": "2026-07-19T00:00:00Z",
         "title": "CI and release gates",
         "type": "Release Contract"
       },
-      "body_length": 12753,
-      "summary": "Redeven keeps CI and local release checks aligned around source validation,\nREADME localization parity, generated asset determinism, ReDevPlugin dependency\nboundaries, UI behavior, embedded assets, Go tests, and lint. OKF is part of\nthat gate, not optional documentation.",
+      "body_length": 12365,
+      "summary": "Redeven uses focused checks during implementation, a fast staged pre-commit\ngate, and one complete integration gate for the exact main tip being pushed.\nPublished dependency evidence, generated assets, localized public docs, UI\nbehavior, Desktop/runtime bundles, Go tests, lint, and OKF must all agree. A\nmissing, stale, unsigned, optional, or target-mismatched ReDevPlugin artifact\nfails release packaging.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Mechanism\n\nCI has a dedicated OKF bundle check that validates source integrity and verifies\nchecked-in dist files. The main check installs Go, Node, corepack,\ngolangci-lint, gitleaks, and ripgrep, then runs the README localization contract,\nshell syntax checks, third-party notice validation, open-source hygiene, release\nnote generator tests, Runtime Service compatibility checks, embedded asset\nbuilds, the ReDevPlugin integration gate, Gateway protocol contract checks, the\nFloret dependency boundary guard, Flower protocol checks, Flower UI behavior\ncontracts, UI lint, Desktop checks, Go tests, and golangci-lint. Embedded asset\nbuilds intentionally precede focused Go gates that import Env App or Code App\nembed packages because fresh checkouts do not contain ignored UI `dist/`\ndirectories. Before the Flower UI gate, CI installs the lockfile-selected\nPlaywright Chromium runtime and its Linux dependencies so the committed browser\ncontract runs on a fresh GitHub runner instead of depending on a pre-populated\nbrowser cache.\n\nLocal validation is staged to keep iteration fast without weakening integration\nevidence. Feature work uses focused checks while implementation, reviews,\ngenerated artifacts, or further upstream synchronization are still pending.\nPre-commit is deliberately limited to staged diff validation, the README\nlocalization contract, and staged open-source hygiene. Heavy product and\nrepository coverage is owned by the remote-main pre-push path instead of every\nfeature commit.\n\nWhen local `main` is pushed, the pre-push hook uses the remote handshake's\nauthoritative main commit and the proposed local commit as the validation\nboundary. It rejects pushes that do not originate from the checked-out local\n`main`, are not fast-forwards, or contain merge commits in the unpublished\nrange. Only then does it invoke the canonical final integration script for that\nexact base and tip. This keeps full Desktop Vitest coverage, Docker Runtime E2E,\nasset builds, repository-wide Go checks, and the remaining local integration\ncontracts off routine commits without making them optional before main moves.\nThe local final gate runs Go package tests serially with caching disabled and\nbefore heavier UI stages. This preserves fresh test evidence while preventing\nwall-clock-sensitive PTY integration tests from competing with other Go package\nprocesses on developer workstations.\n\nThe canonical English `README.md` and every product-supported\n`README.\u003clocale\u003e.md` are bound by `assets/readme/locales.json`. The lightweight\nNode contract verifies locale order, language navigation, section anchors,\nheading and link parity, local targets, executable command literals, protected\nterms, fixed English domain-term forms, Traditional Chinese character rules, content hashes, and the repository\nMarkdown allowlist. Desktop and Env App locale tests independently bind the\nmanifest to their language switchers. Feature work may carry translations with\n`pending_subagent_review`, but the CI invocation uses `--require-reviewed`, so\nno translation can enter `main` without current source/content hashes and an\nindependent locale-review subagent approval recorded in the manifest.\n\nReDevPlugin consumption is a published dependency gate, not a source sync. The\ndependency boundary script rejects `../redevplugin`, `go.work`, Go `replace`,\nlocal npm links, copied contracts, and copied runtime binaries. The release\nartifact verifier and consumption gate remain the path for staging published\nReDevPlugin runtime payloads into Redeven release and Desktop packages.\n\nFloret consumption follows the same published-dependency discipline for Flower\nruntime integration. The Floret boundary guard rejects `../floret`, `go.work`,\nGo `replace`, imports of Floret internal packages, and direct references to\nFloret-owned storage schema tables or columns. Redeven may choose the Floret\nstore file path and pass it to `runtime.OpenSQLiteStore`, but it must not query,\npatch, or shadow Floret's durable ledger.\n\nThe ReDevPlugin integration gate runs the no-local-wiring boundary guard,\nrelease artifact verifier self-test, consumption gate self-test, artifact\nstaging self-test, AppServer and Local UI plugin-origin isolation/delegation\ntests, ReDevPlugin session/security/runtime adapter tests, official package\ntrust tests, and the Redeven-owned Containers capability adapter and fixture\ncontract tests. Before route matrix Go tests run, the gate verifies that ignored\nEnv App and Code App embedded asset directories already exist.\n\nEnv App plugin entry changes are covered by focused Vitest tests before the\ngeneral UI gate. The plugin projection tests bind official catalog plus matching\ninstalled registry merging, exclusion of non-official installed records, panel\ntile ordering, lifecycle action selection, revoked/disabled catalog behavior,\nand update bucketing. The plugin API tests bind the UI wrapper to\n`/_redeven_proxy/api/plugins*`, snake_case lifecycle bodies, official bundled\ninstall/update through `package_base64 + trust_state=bundled`, and the absence\nof URL, file, unsigned local, or developer install helpers.\n\nThe built Env App renderer smoke is the production exposure gate. Its default\nexpectation requires the Activity Bar Plugin entry, Plugin Panel, Plugin Center,\nand Plugin Surface to be absent and observes that startup issues no plugin API\nrequest. The same smoke can opt into a visible expectation for an explicitly\nflagged development build, click the Plugin entry, and require the Plugin Center\ntile to render. Release automation uses only the default hidden expectation.\n\nPlugin Panel and Plugin Center component tests bind the app-grid entry,\npointer cursor affordance, outside-click ordering, dedicated management shell,\nlocal search, details selection, official-only management copy, management\naction disabling for users without management authority, official install,\nupdate, enable, disable, uninstall, and enabled-plugin Open behavior. Settings\nstructure tests bind Plugin Center's absence from Runtime Settings navigation.\n\nShell integration tests run with the development build feature enabled and bind\nthe panel `Plugin Center` tile to the dedicated Activity main-surface view\nwithout entering Runtime Settings or rendering a floating overlay. Disabled or\nattention-needed plugin tiles route to matching Plugin Center details. Enabled\nplugin tiles call the ReDevPlugin surface open lifecycle API and render the\ninternal `plugin-surface` Activity with `PluginSurfaceFrame`. Closing Plugin\nCenter or Plugin Surface returns to the last normal Activity surface.\n\n`PluginSurfaceFrame` tests bind asset bootstrap, iframe asset URL construction,\npublished `PluginSurfaceHost` mounting, SDK platform-path rewriting to\n`/_redeven_proxy/api/plugins*`, lifecycle disposal, and error presentation.\nThe reusable bridge handshake, bridge-token request, RPC forwarding,\nconfirmation request handling, and stream helpers remain covered by the\npublished `@floegence/redevplugin-ui` package instead of being copied into\nRedeven tests.\n\nOfficial plugin repository gates cover the Containers plugin source. Its tests\nbind the manifest method set, Docker/Podman engine enum, canonical\n`container_id` response fields, dangerous confirmation hash fields, stream URL\nshape, and the absence of wildcard `postMessage` or direct internal Redeven\nroutes. Its package gate builds a deterministic unsigned `.redevplugin` package\nwhen no signing key is present and emits release metadata used by Redeven's\nbundled package allowlist.\n\nThe route matrix covers both disabled-handler reservations and enabled-handler\ndelegation. Without a plugin platform handler, `/_redeven_plugin/*` remains\n404-only and cannot fall through to Env App, codespace, port-forward, Local UI\nEnv route, or local access-gate surfaces. With the handler enabled, AppServer\ndelegates `/_redeven_proxy/api/plugins*` only for Env App origins and delegates\n`/_redeven_plugin*` only for plugin sandbox origins after rewriting to\nReDevPlugin internal paths. Local UI verifies that enabled plugin management\nrequests use the normal local access gate before delegation.",
-          "char_count": 8144
+          "body": "## Validation levels\n\nFeature work runs focused checks for affected code and contracts. Pre-commit\nchecks only the staged diff, README localization contract, and staged\nopen-source hygiene. It does not run full asset, Desktop, Docker, or repository\nsuites.\n\nThe main pre-push hook owns final integration. It requires the checked-out local\nmain tip to be the pushed tip, verifies fast-forward ancestry against the\nremote handshake, rejects merge commits in the unpublished range, and invokes\n`scripts/check_final_integration.sh` with the exact base and tip. Evidence from\nan earlier commit or pre-rebase tip does not transfer.\n\nThe final script requires a clean worktree and runs the repository contracts,\ngenerated assets, ReDevPlugin/Gateway/Flower integration, UI/Desktop checks,\nDocker Runtime E2E, OKF, serial uncached Go tests, and golangci-lint. Any\ngenerator that changes the tree fails the gate.\n\n## Documentation and generated assets\n\n`README.md` is canonical. Every supported localized README must preserve\nstructure, links, executable literals, protected terms, hashes, and independent\nsubagent review recorded in `assets/readme/locales.json`. Main requires\n`--require-reviewed`.\n\n`okf/` is the maintained knowledge corpus. Source concepts must match code and\ncontracts, and `okf/dist/okf_bundle.json`, manifest, and checksum are generated\nand committed together. Embedded Env App and Code App assets are built before\nGo tests that import their embed packages.\n\n## ReDevPlugin dependency gate\n\nRedeven consumes only formal ReDevPlugin `v0.5.1` artifacts. The boundary guard\nrejects local sibling paths, Go workspaces/replacements, npm links, copied\ncontracts, copied runtimes, and a second platform-core package tree.\n\nThe release verifier requires exactly 27 upstream assets and validates:\n\n- release-manifest v4, compatibility-manifest v6, and exactly 28 contracts;\n- fixed source commit, checksum-set hash, compatibility hash, contract registry\n  hash, npm tarball/integrity, and Worker SDK;\n- all four runtime tarballs, target/hash/manifest, safe archive shape, and notices;\n- A2 report/screenshots and release stress evidence;\n- the exact keyless release workflow identity and all signatures/bundles.\n\nDeterministic marker `redeven.redevplugin_artifact_verification.v4` binds hashes\nand sizes for the complete verified set. Marker v3, missing/symlink/unbounded\npayloads, and target mismatches are rejected. The downstream consumption gate\nalso pins the complete approved v0.5.1 marker profile; a structurally valid or\nself-consistent marker for another release cannot authorize a payload.\n\nThe staging command has no production repository, version, source-directory,\nor signature-skip override. It always downloads `floegence/redevplugin v0.5.1`,\nverifies the closed asset set, selects the exact GOOS/GOARCH target, and stages\nruntime, notices, and marker. Archive validation and extraction share one\n`O_NOFOLLOW` file descriptor, bind compressed size and SHA-256, cap entries,\nexpanded file bytes, and the complete tar stream, and reject traversal,\nnon-canonical paths, links, devices, sparse/PAX metadata, privileged modes,\nduplicate paths, multiple roots, and unexpected inventory. Verified staging is\npublished with an atomic no-replace directory operation; an existing or unsafe\ndestination is rejected.\n\nRelease matrix jobs always include the verified runtime, notices, and marker in\neach Redeven runtime tarball and package artifact. Desktop assembly validates\nthe Redeven and Gateway archive filenames, exact flat inventories, Go binary\ntargets, formal ReDevPlugin target, and complete bundle in a private sibling\ndirectory before atomically replacing `.bundle/\u003ctarget\u003e`. Electron packages\nthe runtime, notice, and marker beside `redeven`; `afterPack` checks the app\nstaging directory, and each native builder then inspects its final DEB, RPM, or\nread-only mounted DMG and writes a receipt bound to installer bytes, target,\nruntime, notice, and marker hashes. Linux inspection first snapshots the package\nthrough one no-follow descriptor, then parses the DEB tar or RPM newc stream\nwithout invoking a filesystem extractor. It rejects non-canonical or duplicate\npaths, file/directory prefix conflicts, GNU/PAX/sparse metadata, links, devices,\nunexpected privileged modes, hard links, non-canonical trailers, non-zero or\nunbounded trailing data, excessive entry counts, and more than 2 GiB of declared\npayload. Selected executables must be root-owned mode `0755`; the marker and\nnotices must be root-owned mode `0644`. The parser materializes only those five\nexact runtime files and requires EOF under the same interpretation used for the\nclosed inventory.\n\nThe release collector accepts exactly four package artifact directories and\nfour Desktop artifact directories. It proves the closed set of four Redeven\ntarballs, four Gateway tarballs, two DEBs, two RPMs, two DMGs, six installer\nreceipts, byte-identical shared metadata, and one byte-identical marker before\npublishing named assets. Each source is opened once with `O_NOFOLLOW`; the same\ndescriptor is hashed and copied into private same-filesystem staging, checked\nfor inode or metadata changes, fsynced, and linked into the destination without\nreplacement. A failed publication removes every partial output.\n\nThe final job signs and publishes `safe_extract_tar.py`. It refuses an existing\nrelease, creates a draft, uploads without clobber, downloads the draft assets,\ncompares the exact name, size, and SHA-256 set, and only then makes the release\npublic. The standalone marker asset has a non-hidden release name because\nGitHub normalizes leading-dot asset names; the runtime archives retain the\ncanonical hidden marker path. The public installer binds Cosign to the exact\nselected tag, verifies the extractor through those signed checksums, extracts\nexactly the six runtime archive files, publishes them as one content-addressed\nversioned suite, prepares pinned ripgrep and retention, and only then atomically\nreplaces the `redeven` activation symlink. The existing activation must be an\nexecutable pre-suite migration file or the exact closed relative suite link;\nunknown links and inventory entries fail closed. Retention keeps the active and\nnew suite during the commit, yielding current plus previous after activation.\nNo fallible companion installation runs after activation. Unsupported\narchitectures and a failed binary check are fatal. Read-only jobs receive only\nread permissions; only the final release job receives `contents: write` and\nOIDC. Go compilation and npm packaging do not receive `GH_TOKEN`.\n\nThis exact proof exposes a Darwin release blocker rather than weakening it.\nReDevPlugin v0.5.1's Darwin runtime is linker/ad-hoc signed without a Developer\nID team. Electron signs nested Mach-O executables for notarization, which changes\nthe runtime bytes and invalidates the formal marker/runtime-manager SHA-256.\nRedeven must not ignore the runtime during signing, accept the changed hash, or\nrewrite upstream evidence. A formal ReDevPlugin release must provide a Darwin\nsigning/identity contract and artifact compatible with host notarization before\nthe macOS Desktop jobs can pass.\n\n## Plugin integration gate\n\nThe focused plugin gate covers:\n\n- Host construction, authenticated owner/session mapping, direct authorization,\n  explicit origin/CSRF/action policy, and stable observability;\n- signed official release-ref install/update and exact publisher/plugin/instance\n  identity;\n- runtime path/target/hash, ProcessManager health, persistent lease replay, and\n  Host storage/network/stream services;\n- the signed Containers capability, operation/cancellation/stream behavior, and\n  domain-only container package boundary;\n- canonical AppServer route reservation/delegation and Local UI access checks;\n- generated UI lifecycle DTOs, management revisions, production Plugin entry,\n  FIFO confirmation, and close-before-open slot lifecycle;\n- static absence of legacy proxy/bootstrap/base64 package and copied platform\n  paths.\n\nThe built renderer smoke requires the Plugins Activity entry, opens\nthe panel, observes the Plugin Center tile, and accepts only the canonical\nReDevPlugin catalog request envelope. It also verifies content-hashed JS/CSS/WASM,\nnon-blank root output, and zero console, page, request, or HTTP failures.\n\nThat fixture is not browser-to-Go origin evidence. Activity remains blocked:\nits GET omits Origin while the guard denies missing Origin. A formal upstream\ncontract and real-browser test are required; local exceptions are prohibited.\n\nSession disconnect also remains blocked. One four-hash revoke must fence new\nwork and cancel surfaces, tokens, handles, confirmations, operations, and\nstreams without affecting a sibling channel. Redeven must await it before\ndeleting identity; local scans or timers do not satisfy the gate.\n\nWorkbench plugin interaction is not declared passing: v0.5.1 lacks the required\nhost-neutral iframe interaction ownership contract. A Redeven release must not\nhide that gap behind an overlay or input patch. Workbench enablement requires a\nnew formal ReDevPlugin release and corresponding focused/browser evidence.\n\n## Other published boundaries\n\nFloret follows the same published-dependency discipline. The boundary guard\nrejects sibling wiring, internal imports, and direct access to Floret-owned\nschema. Gateway protocol drift fails before packaging. Runtime/Desktop\ncompatibility uses its checked-in compatibility contract, not release-note or\nDesktop conditionals.",
+          "char_count": 9525
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Checked-in generated OKF dist files must match source. Release automation\nshould collect `okf/dist` verification files from the current tree, not from\nremoved `internal/okf` or knowledge paths. Gateway protocol drift must fail\nbefore Gateway binaries are packaged because `spec/openapi/gateway-v1.yaml` is\nthe active source contract for the Gateway HTTP API.\n\nLocalized README files are public product documentation, not an alternate\nknowledge corpus. English remains canonical, localized files cannot introduce\nlocale-only product or architecture claims, and the exact machine-consumed\n`SKILL.md` exception declared by the README manifest does not permit general\nMarkdown documentation outside OKF.\n\nUnreleased ReDevPlugin behavior is not a valid Redeven integration target.\nFeature branches may explore adapters against parallel upstream work, but\ncommitted Redeven code and release validation must consume published\nReDevPlugin artifacts only. The current `PluginSurfaceFrame` is constrained as\nRedeven product placement and route adaptation around the published\n`@floegence/redevplugin-ui` surface host, not a second reusable plugin UI\nplatform.\n\nUnreleased Floret behavior is likewise not a valid Redeven integration target.\nFlower lifecycle fixes that belong to Floret must ship as a published\n`github.com/floegence/floret` release before Redeven consumes them.\n\nA full local quality gate is integration evidence for one exact remote-base and\nlocal-tip pair, not a background check to repeat after every intermediate edit\nor sync. Focused checks provide iteration feedback. A stale or divergent remote\nmain is rejected before heavy checks start; a changed candidate tip receives a\nnew final gate because evidence from another commit does not transfer.",
-          "char_count": 1757
+          "body": "CI confirms a locally validated pushed tip; it is not the first validator.\nRelease jobs do not accept partial ReDevPlugin evidence or mutable repository\nconfiguration as provenance. Generated contracts, markers, lockfiles, assets,\nand OKF are regenerated from authoritative sources instead of manually stitched.\n\nUnreleased ReDevPlugin or Floret behavior is not a valid main dependency.\nIntegration experiments may exist only on an unmerged feature branch and may\nnot become a fallback, shim, or local artifact path.",
+          "char_count": 516
         }
       ],
       "evidence": [
         {
-          "id": "redeven:.github/workflows/ci-check.yml:14:ci defines a dedicated okf bundle check job.",
-          "source": "redeven:.github/workflows/ci-check.yml",
-          "line": 14,
-          "description": "CI defines a dedicated OKF bundle check job."
-        },
-        {
-          "id": "redeven:AGENTS.md:778:repository local quality gates separate focused iteration, fast pre-commit checks, and the final main pre-push gate.",
-          "source": "redeven:AGENTS.md",
-          "line": 778,
-          "description": "Repository local quality gates separate focused iteration, fast pre-commit checks, and the final main pre-push gate."
-        },
-        {
-          "id": "redeven:scripts/check_redevplugin_dependency_boundary.sh:1:the local boundary script rejects local redevplugin wiring and copied platform-core paths.",
-          "source": "redeven:scripts/check_redevplugin_dependency_boundary.sh",
+          "id": "redeven:.githooks/pre-commit:1:defines the fast staged gate.",
+          "source": "redeven:.githooks/pre-commit",
           "line": 1,
-          "description": "The local boundary script rejects local ReDevPlugin wiring and copied platform-core paths."
+          "description": "Defines the fast staged gate."
         },
         {
-          "id": "redeven:scripts/check_floret_dependency_boundary.sh:1:the floret boundary script rejects local floret wiring, internal imports, and direct schema access.",
-          "source": "redeven:scripts/check_floret_dependency_boundary.sh",
+          "id": "redeven:.githooks/pre-push:1:binds full validation to the exact main push.",
+          "source": "redeven:.githooks/pre-push",
           "line": 1,
-          "description": "The Floret boundary script rejects local Floret wiring, internal imports, and direct schema access."
+          "description": "Binds full validation to the exact main push."
         },
         {
-          "id": "redeven:scripts/check_plugin_integration.sh:44:the integration gate requires embedded ui asset directories before go embed tests.",
+          "id": "redeven:scripts/check_final_integration.sh:1:defines the complete local integration gate.",
+          "source": "redeven:scripts/check_final_integration.sh",
+          "line": 1,
+          "description": "Defines the complete local integration gate."
+        },
+        {
+          "id": "redeven:scripts/check_plugin_integration.sh:1:defines focused redevplugin integration coverage.",
           "source": "redeven:scripts/check_plugin_integration.sh",
-          "line": 44,
-          "description": "The integration gate requires embedded UI asset directories before Go embed tests."
-        },
-        {
-          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.test.ts:1:projection tests cover official catalog merging and tile action decisions.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.test.ts",
           "line": 1,
-          "description": "Projection tests cover official catalog merging and tile action decisions."
+          "description": "Defines focused ReDevPlugin integration coverage."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.test.ts:1:plugin api tests cover proxy paths and bundled official install/update bodies.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.test.ts",
+          "id": "redeven:scripts/check_redevplugin_release_artifacts.sh:1:verifies the closed formal upstream asset set.",
+          "source": "redeven:scripts/check_redevplugin_release_artifacts.sh",
           "line": 1,
-          "description": "Plugin API tests cover proxy paths and bundled official install/update bodies."
+          "description": "Verifies the closed formal upstream asset set."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginPanel.test.tsx:1:plugin panel tests cover app-grid entry behavior and pointer affordance.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginPanel.test.tsx",
+          "id": "redeven:scripts/check_redevplugin_consumption_gate.sh:1:binds payloads to marker v4 and exact target.",
+          "source": "redeven:scripts/check_redevplugin_consumption_gate.sh",
           "line": 1,
-          "description": "Plugin Panel tests cover app-grid entry behavior and pointer affordance."
+          "description": "Binds payloads to marker v4 and exact target."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.test.tsx:1:plugin center tests cover the dedicated shell and lifecycle controls.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.test.tsx",
+          "id": "redeven:scripts/stage_redevplugin_release_artifacts.sh:1:performs fixed formal staging.",
+          "source": "redeven:scripts/stage_redevplugin_release_artifacts.sh",
           "line": 1,
-          "description": "Plugin Center tests cover the dedicated shell and lifecycle controls."
+          "description": "Performs fixed formal staging."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginSurfaceFrame.test.tsx:1:plugin surface frame tests cover bootstrap, bridge, rpc, and confirmation behavior.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginSurfaceFrame.test.tsx",
+          "id": "redeven:scripts/safe_extract_tar.py:1:enforces bounded, typed, inode-bound archive extraction and atomic directory publication.",
+          "source": "redeven:scripts/safe_extract_tar.py",
           "line": 1,
-          "description": "Plugin surface frame tests cover bootstrap, bridge, RPC, and confirmation behavior."
+          "description": "Enforces bounded, typed, inode-bound archive extraction and atomic directory publication."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx:807:envappshell tests bind plugin center and plugin surface activity placement.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/EnvAppShell.localAccess.e2e.test.tsx",
-          "line": 807,
-          "description": "EnvAppShell tests bind plugin center and plugin surface Activity placement."
+          "id": "redeven:scripts/build_desktop_bundled_runtime.sh:1:stages the formal runtime into desktop bundles.",
+          "source": "redeven:scripts/build_desktop_bundled_runtime.sh",
+          "line": 1,
+          "description": "Stages the formal runtime into Desktop bundles."
         },
         {
-          "id": "redeven:internal/codeapp/appserver/server_test.go:733:appserver tests bind env app management delegation to the plugin handler.",
-          "source": "redeven:internal/codeapp/appserver/server_test.go",
-          "line": 733,
-          "description": "AppServer tests bind Env App management delegation to the plugin handler."
+          "id": "redeven:scripts/check_desktop_redevplugin_package.sh:1:verifies final native installer contents and writes target-bound receipts.",
+          "source": "redeven:scripts/check_desktop_redevplugin_package.sh",
+          "line": 1,
+          "description": "Verifies final native installer contents and writes target-bound receipts."
         },
         {
-          "id": "redeven:scripts/check_readme_localizations.mjs:1:the readme contract validates structure, links, literals, hashes, language quality, and review state.",
+          "id": "redeven:scripts/extract_desktop_runtime.py:1:parses linux package payload streams and extracts only the closed runtime inventory.",
+          "source": "redeven:scripts/extract_desktop_runtime.py",
+          "line": 1,
+          "description": "Parses Linux package payload streams and extracts only the closed runtime inventory."
+        },
+        {
+          "id": "redeven:scripts/collect_release_artifacts.mjs:1:enforces the exact downstream release artifact inventory.",
+          "source": "redeven:scripts/collect_release_artifacts.mjs",
+          "line": 1,
+          "description": "Enforces the exact downstream release artifact inventory."
+        },
+        {
+          "id": "redeven:scripts/install.sh:1:verifies exact release identity and atomically activates the complete versioned runtime suite.",
+          "source": "redeven:scripts/install.sh",
+          "line": 1,
+          "description": "Verifies exact release identity and atomically activates the complete versioned runtime suite."
+        },
+        {
+          "id": "redeven:.github/workflows/release.yml:1:makes least-privilege four-target runtime and installer proof mandatory.",
+          "source": "redeven:.github/workflows/release.yml",
+          "line": 1,
+          "description": "Makes least-privilege four-target runtime and installer proof mandatory."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/scripts/checkPackagedRenderer.mjs:1:verifies the production plugin entry and built renderer.",
+          "source": "redeven:internal/envapp/ui_src/scripts/checkPackagedRenderer.mjs",
+          "line": 1,
+          "description": "Verifies the production Plugin entry and built renderer."
+        },
+        {
+          "id": "redeven:scripts/check_readme_localizations.mjs:1:enforces public readme localization and review metadata.",
           "source": "redeven:scripts/check_readme_localizations.mjs",
           "line": 1,
-          "description": "The README contract validates structure, links, literals, hashes, language quality, and review state."
+          "description": "Enforces public README localization and review metadata."
         },
         {
-          "id": "redeven:assets/readme/locales.json:1:the readme locale manifest declares language order, file mappings, review hashes, and the shared visual exception.",
-          "source": "redeven:assets/readme/locales.json",
+          "id": "redeven:scripts/okf/check_source_integrity.sh:1:validates the maintained okf corpus.",
+          "source": "redeven:scripts/okf/check_source_integrity.sh",
           "line": 1,
-          "description": "The README locale manifest declares language order, file mappings, review hashes, and the shared visual exception."
-        },
-        {
-          "id": "redeven:.githooks/pre-push:29:the main pre-push hook validates source ref, checked-out tip, fast-forward ancestry, and linear history before running the full gate.",
-          "source": "redeven:.githooks/pre-push",
-          "line": 29,
-          "description": "The main pre-push hook validates source ref, checked-out tip, fast-forward ancestry, and linear history before running the full gate."
-        },
-        {
-          "id": "redeven:scripts/check_final_integration.sh:44:the canonical final integration script binds the complete local gate to explicit base and tip commits and requires a clean worktree.",
-          "source": "redeven:scripts/check_final_integration.sh",
-          "line": 44,
-          "description": "The canonical final integration script binds the complete local gate to explicit base and tip commits and requires a clean worktree."
-        },
-        {
-          "id": "redeven:.githooks/pre-commit:7:commit-time validation contains only fast staged checks.",
-          "source": "redeven:.githooks/pre-commit",
-          "line": 7,
-          "description": "Commit-time validation contains only fast staged checks."
+          "description": "Validates the maintained OKF corpus."
         }
       ],
-      "snippet": "Redeven keeps CI and local release checks aligned around source validation, README localization parity, generated asset determinism, ReDevPlugin dependency boundaries, UI behavior, embedded assets, Go tests, and lint. OKF is part of",
+      "snippet": "Redeven uses focused checks during implementation, a fast staged pre-commit gate, and one complete integration gate for the exact main tip being pushed. Published dependency evidence, generated assets, localized public docs, UI",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -6075,107 +6034,95 @@
       "concept_id": "security.plugin-platform-integration-security",
       "type": "Security Contract",
       "title": "Plugin platform integration security",
-      "description": "Redeven maps sessions, route ownership, bundled official package trust, and business capabilities onto released ReDevPlugin security contracts.",
+      "description": "Redeven derives ReDevPlugin identity from authenticated sessions and fail-closed signed release, route, runtime, and capability adapters.",
       "tags": [
         "local-ui",
         "permissions",
         "plugins",
         "security"
       ],
-      "timestamp": "2026-07-06T00:00:00Z",
+      "timestamp": "2026-07-19T00:00:00Z",
       "frontmatter": {
-        "description": "Redeven maps sessions, route ownership, bundled official package trust, and business capabilities onto released ReDevPlugin security contracts.",
+        "description": "Redeven derives ReDevPlugin identity from authenticated sessions and fail-closed signed release, route, runtime, and capability adapters.",
         "tags": [
           "local-ui",
           "permissions",
           "plugins",
           "security"
         ],
-        "timestamp": "2026-07-06T00:00:00Z",
+        "timestamp": "2026-07-19T00:00:00Z",
         "title": "Plugin platform integration security",
         "type": "Security Contract"
       },
-      "body_length": 6926,
-      "summary": "Redeven plugin security is host integration over released ReDevPlugin\ncontracts. ReDevPlugin owns plugin identity, lifecycle, permission evaluation,\ndangerous confirmations, token and asset-ticket issuance, runtime leases,\nbroker enforcement, quota/revocation checks, registry mutation, and stable\nplatform errors. Redeven contributes local session facts, product policy, route\nmounting, official bundled-package trust policy, vault/audit/diagnostics sinks,\nand concrete business capability adapters.",
+      "body_length": 8130,
+      "summary": "Redeven supplies authenticated host facts to ReDevPlugin; it does not accept\nplugin ownership, authority, or trust from browser payloads. Every HTTP route\npasses explicit authentication, origin, CSRF, and closed-action authorization.\nDirect Host calls pass the same owner/action/resource policy. Signed release,\nruntime, secret, storage, network, and capability scope mismatches fail closed.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Mechanism\n\nRedeven session metadata is authoritative only when it comes from the control\nchannel or the local direct-session path. Browser-provided permission or app\nclaims are not trusted input to plugin adapters. The current session metadata\nsurface contains `can_read`, `can_write`, `can_execute`, and `can_admin`;\n`can_admin` gates management actions but is not part of the RWX capability\nclamp. The ReDevPlugin integration derives owner/session hashes from\n`session.Meta`, applies Redeven's local permission cap, caches the resolved\nsession by hash, and evaluates method effects against the cached host-derived\npermission set.\n\nRoute ownership is role-gated. Env App origins may reach local management APIs\nand Env App dist under `/_redeven_proxy/*`; codespace origins may reach only\n`/_redeven_proxy/inject.js`; plugin sandbox origins are recognized by the\n`plg-*` first host label and remain denied for Env App management APIs, Env App\ndist, and codespace helpers. `/_redeven_proxy/api/plugins*` is delegated to\n`/_redevplugin/api/plugins*` only for Env App origins. `/_redeven_plugin*` is\ndelegated to `/_redevplugin*` only for plugin sandbox origins. The AppServer\nroute role is passed to the ReDevPlugin web security adapter so the released\nhandler can allow only the matching route family.\n\nUnsafe plugin management requests must reach the released ReDevPlugin handler\nwith a CSRF header that matches the host-derived ReDevPlugin session context.\nRedeven's Env-trusted proxy derives the authoritative channel id from the Env\nApp origin label, or from the fixed Local UI session in Local UI mode. The\nReDevPlugin integration wrapper resolves that channel and overwrites both\n`X-ReDevPlugin-Owner-Session-Hash` and `X-ReDevPlugin-CSRF` before delegation.\nFor Local UI, Code App resolves `local-ui` to the same synthetic Env App\nsession shape used by AppServer Local UI routes before ReDevPlugin derives the\nsession hash and CSRF generation. Env App UI code does not compute or own the\ntoken.\n\nPlugin sandbox assets use the plugin namespace, not Env App management routes.\nWhen the handler is mounted, AppServer rewrites plugin asset cookie paths and\n`Service-Worker-Allowed` headers from ReDevPlugin's internal `/_redevplugin`\nnamespace to Redeven's public `/_redeven_plugin` namespace. Plugin sandbox\norigins cannot inherit Env App management authority, codespace injection,\nport-forward proxying, local access-gate behavior, or nested Local UI API\nerrors.\n\nOfficial catalog discovery is not a trust bypass. Redeven's UI may show the\nbundled official catalog seed, but package validation, registry writes,\nlifecycle transitions, retained data behavior, and audit remain ReDevPlugin\nHost responsibilities. For the current official Containers slice, Redeven\nembeds one bundled `.redevplugin` package and sends it to ReDevPlugin lifecycle\ninstall/update with `trust_state: \"bundled\"`. The integration trust verifier\nallows bundled trust only for the exact official Containers package hash,\nmanifest hash, and entries hash. The browser does not fetch package URLs,\nverify signatures, parse manifests, or mark an arbitrary package as trusted.\n\nBusiness capability adapters such as containers begin after ReDevPlugin has\nconstructed the request context. The adapter receives a request that has\nalready passed plugin identity, lifecycle, permission, confirmation, token or\nlease, quota, revoke-epoch, and audit construction. Redeven product policy may\nnarrow or deny a capability; it must not mint plugin tokens, grant\nstorage/network access, or call the business adapter outside ReDevPlugin\nbrokers.\n\nThe container resources v1 contract follows that boundary. Its start preflight\nplan summarizes Docker and Podman runtime state without leaking raw environment\nvalues, raw label values, raw inspect JSON, or sensitive host paths. Official\nContainers must bind every container operation to `(engine, container_id)`;\ndangerous confirmations and request hashes include both fields so a Docker\ncontainer cannot be confused with a Podman container that happens to share a\nshort id or name.\n\nRuntime leases are capability-bearing execution context, not Redeven session\ntokens. Redeven may route resulting audit events into its audit sink, but it\nmust not persist cleartext bearer lease tokens or bypass method/effect,\ndescriptor, quota, revocation, runtime-generation, or signature bindings owned\nby ReDevPlugin.",
-          "char_count": 4412
+          "body": "## Authenticated session boundary\n\nThe session resolver accepts only a Redeven channel id whose stored metadata\nhas exact non-empty channel, user, and environment identities. It derives:\n\n- `owner_session_hash` from the active channel;\n- `owner_user_hash` from the authenticated user;\n- `owner_env_hash` from the environment endpoint;\n- `session_channel_id_hash` from the active channel.\n\nThe resolver also intersects session RWX facts with Redeven's local permission\ncap and carries admin separately for management. The bounded session cache is\nkeyed by owner-session hash and accepts a hit only when all four hashes match.\nJSON, query, plugin IPC, release metadata, and capability arguments cannot\noverride any owner field.\n\nPersistent registry, policy, permission, settings, data, secret, connector, and\nworker ownership follows ReDevPlugin `user` or `environment` resource scope.\nShort-lived surfaces, handles, confirmations, operations, streams, and token\naudiences bind all four active hashes. Unknown legacy ownership is not guessed.\n\nBinding is not yet equivalent to complete teardown in v0.5.1. Its surface-scope\nrevoke does not atomically fence or cancel every exact-scope operation, stream,\nconfirmation, and surface-less handle grant. A disconnected session can\ntherefore retain short-lived authority or asynchronous work. This blocks\nrelease until ReDevPlugin supplies indexed four-hash teardown and Redeven can\nawait it before removing the authenticated session. A Redeven-local task map,\ntimer, or guessed owner sweep is prohibited.\n\n## HTTP and direct authorization\n\nThe canonical route is `/_redevplugin/api/plugins`. AppServer delegates it only\nfrom an Env App or Local UI Env route after local access checks. It attaches the\nauthenticated channel id and a validated same-origin value in server-only\nrequest context. Codespace, port-forward, plugin, unknown, null-origin, and\nmissing-origin callers are not delegated.\n\nThe released handler then invokes four explicit steps:\n\n1. `Authenticate` resolves the host session.\n2. `ValidateOrigin` requires one exact non-null Origin equal to the server-bound\n   trusted origin.\n3. `ValidateCSRF` requires the exact `X-ReDevPlugin-CSRF` proof on every route\n   whose released policy marks it required, including unsafe reads.\n4. `AuthorizeRoute` accepts only a valid closed `RouteAction` permitted by the\n   cached session.\n\nThis closed policy exposes a v0.5.1 browser contract mismatch. The generated\ncatalog method is a same-origin GET, and Chromium does not send Origin for that\nrequest. JavaScript cannot set the forbidden Origin header. Therefore Activity\ninventory fails closed even with a valid CSRF proof. Redeven must not accept\nReferer or Fetch Metadata as an undocumented substitute, inject Origin, or\nexempt catalog locally. A new formal ReDevPlugin contract and release must\ndefine a browser-executable request whose origin policy remains explicit and\nconformance-tested.\n\nThe Host `AuthorizationAdapter` separately checks action, canonical resource,\nowner context, and permissions for direct Go calls. An absent or typed-nil Host,\nguard, authorization adapter, or container engine client fails construction\nbefore persistent state is opened. Method, confirmation, intent, and owned\noperation-cancel actions admit any authenticated data-plane permission at the\nearly action gate; the resolved method effect is then clamped by\n`EvaluateLocalPolicy`. This avoids inventing an execute requirement for read or\nwrite methods. Shared runtime start, stop, and refresh remain admin-only.\n\n## Release and runtime trust\n\nOfficial install/update is release-ref based. Redeven's release module accepts\nonly the exact official source, publisher, plugin, version, key, signed release\nmetadata, package hashes, signed revocation metadata, host requirement, and\ncapability contract pin. Unsigned input, browser-supplied trust state, arbitrary\npackage bytes, downgrade, unknown publisher, expired revocation evidence, and\ninvented fetch provenance are denied.\n\nThe runtime path and current target are closed. Runtime descriptors bind version,\ntarget, Rust IPC version, WASM ABI, and exact artifact SHA-256. Handle grants\nbind plugin instance, active fingerprint, runtime generation/shard, all owner\nhashes, method, handle, resource scope, policy revision, management revision,\nand revoke epoch. Storage/network scope from a plugin cannot replace the\nlease-derived scope.\n\nDarwin code signing cannot become a downstream exception to that identity.\nThe current upstream runtime is linker/ad-hoc signed, while Redeven Desktop must\nDeveloper-ID sign nested executables before notarization. Re-signing changes the\npinned bytes; skipping signing leaves an unproven nested executable. Both paths\nfail closed until an upstream release defines and ships the compatible signed\nartifact contract.\n\n## Business adapter and observability boundary\n\nContainers is invoked only after ReDevPlugin resolves lifecycle, permission,\nconfirmation, token/lease, quota, revocation, and audit context. Container\nidentity is `(engine, container_id)` for lookup, confirmation, operation, and\nstream behavior. Redeven product code cannot call the adapter as a substitute\nfor the platform authorization chain. CLI stdout is bounded before parsing;\noverflow terminates the command process group and returns a stable failure.\nCLI failures never parse localized stderr to guess resource identity. A typed\nengine adapter may report an exact not-found target; the CLI adapter maps only\nthe deterministic logs operation class and otherwise returns a generic stable\nfailure. Stderr and argv are never copied into adapter errors. Operation and\nstream terminal writes use an independent finite\ndeadline, so integration close cannot wait forever on a canceled request's\nterminal sink. A truncated payload is never accepted as success.\n\nAudit, diagnostics, and public errors record stable component, operation,\nfailure code, correlation/request identity, and mutation outcome. Raw adapter\nerrors, tokens, secrets, cookies, query strings, absolute paths, and complete\nURLs are not copied into public or durable diagnostic detail.",
+          "char_count": 6143
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "The canonical published-dependency, opaque-state, and platform-mechanism\nprohibitions are defined by [ReDevPlugin host integration boundary](../architecture/redevplugin-boundary.md).\nThis concept owns only Redeven's session, route, official-package trust, and\nbusiness-capability security projection.\n\nPlugin surfaces and workers must not receive Desktop runtime-control tokens,\nraw local direct-session artifacts, standalone Gateway bridge credentials, RCPP\nprovider credentials, or Flower target grants as ambient authority. Access to\nRedeven business resources must always arrive through a released ReDevPlugin\nrequest context and a Redeven-registered adapter.",
-          "char_count": 663
+          "body": "Desktop runtime-control tokens, direct-session artifacts, Gateway credentials,\nRCPP credentials, and Flower grants are not plugin ambient authority. A plugin\ngets business access only through a released ReDevPlugin request context.\n\nThe platform boundary is defined by [ReDevPlugin host integration boundary](../architecture/redevplugin-boundary.md).\nRedeven security adapters may narrow authority; they may not mint platform\ntokens, weaken route policy, edit opaque state, or replace released brokers.",
+          "char_count": 502
         }
       ],
       "evidence": [
         {
-          "id": "redeven:AGENTS.md:256:redeven consumes redevplugin through published artifacts only.",
-          "source": "redeven:AGENTS.md",
-          "line": 256,
-          "description": "Redeven consumes ReDevPlugin through published artifacts only."
+          "id": "redeven:internal/redevpluginintegration/session_adapter.go:1:derives exact owner hashes and bounded permission cache entries.",
+          "source": "redeven:internal/redevpluginintegration/session_adapter.go",
+          "line": 1,
+          "description": "Derives exact owner hashes and bounded permission cache entries."
         },
         {
-          "id": "redeven:internal/session/types.go:7:session metadata is delivered by the control plane and browser claims are not trusted.",
-          "source": "redeven:internal/session/types.go",
-          "line": 7,
-          "description": "Session metadata is delivered by the control plane and browser claims are not trusted."
+          "id": "redeven:internal/redevpluginintegration/security_adapter.go:1:implements the four-step web security contract.",
+          "source": "redeven:internal/redevpluginintegration/security_adapter.go",
+          "line": 1,
+          "description": "Implements the four-step web security contract."
         },
         {
-          "id": "redeven:internal/codeapp/appserver/server.go:529:plugin sandbox routes are delegated only for plugin sandbox origins.",
-          "source": "redeven:internal/codeapp/appserver/server.go",
-          "line": 529,
-          "description": "Plugin sandbox routes are delegated only for plugin sandbox origins."
+          "id": "redeven:internal/redevpluginintegration/adapters_test.go:1:covers origin, csrf, session, and action denial.",
+          "source": "redeven:internal/redevpluginintegration/adapters_test.go",
+          "line": 1,
+          "description": "Covers origin, CSRF, session, and action denial."
         },
         {
-          "id": "redeven:internal/codeapp/appserver/server_test.go:548:tests bind the proxy route matrix across caller roles.",
+          "id": "redeven:internal/redevpluginintegration/release_module.go:1:enforces official source, signature, revocation, and capability pins.",
+          "source": "redeven:internal/redevpluginintegration/release_module.go",
+          "line": 1,
+          "description": "Enforces official source, signature, revocation, and capability pins."
+        },
+        {
+          "id": "redeven:internal/redevpluginintegration/runtime_module.go:1:binds runtime target, hash, ipc, abi, leases, and host services.",
+          "source": "redeven:internal/redevpluginintegration/runtime_module.go",
+          "line": 1,
+          "description": "Binds runtime target, hash, IPC, ABI, leases, and Host services."
+        },
+        {
+          "id": "redeven:internal/redevpluginintegration/containers_capability.go:1:adapts authorized capability invocations to domain behavior.",
+          "source": "redeven:internal/redevpluginintegration/containers_capability.go",
+          "line": 1,
+          "description": "Adapts authorized capability invocations to domain behavior."
+        },
+        {
+          "id": "redeven:internal/codeapp/appserver/server_test.go:810:covers canonical route reservation and origin delegation.",
           "source": "redeven:internal/codeapp/appserver/server_test.go",
-          "line": 548,
-          "description": "Tests bind the proxy route matrix across caller roles."
+          "line": 810,
+          "description": "Covers canonical route reservation and origin delegation."
         },
         {
-          "id": "redeven:internal/codeapp/codeapp.go:1:code app supplies the plugin-platform resolver that includes the local ui session fallback.",
-          "source": "redeven:internal/codeapp/codeapp.go",
+          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginPlatform.ts:1:restricts ui transport to the canonical same-origin namespace and attaches csrf proof.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginPlatform.ts",
           "line": 1,
-          "description": "Code App supplies the plugin-platform resolver that includes the Local UI session fallback."
-        },
-        {
-          "id": "redeven:internal/codeapp/plugin_local_session_test.go:1:tests prove `local-ui` resolves only when local ui is enabled.",
-          "source": "redeven:internal/codeapp/plugin_local_session_test.go",
-          "line": 1,
-          "description": "Tests prove `local-ui` resolves only when Local UI is enabled."
-        },
-        {
-          "id": "redeven:internal/redevpluginintegration/adapters.go:85:the session resolver projects redeven session metadata into redevplugin session context.",
-          "source": "redeven:internal/redevpluginintegration/adapters.go",
-          "line": 85,
-          "description": "The session resolver projects Redeven session metadata into ReDevPlugin session context."
-        },
-        {
-          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1:plugin management api calls use `/_redeven_proxy/api/plugins*`.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts",
-          "line": 1,
-          "description": "Plugin management API calls use `/_redeven_proxy/api/plugins*`."
-        },
-        {
-          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginPackages.ts:1:the bundled official containers package is embedded with expected hashes.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginPackages.ts",
-          "line": 1,
-          "description": "The bundled official Containers package is embedded with expected hashes."
-        },
-        {
-          "id": "redeven:okf/architecture/container-resources-capability.md:1:container resources are a redeven-owned docker/podman business capability.",
-          "source": "redeven:okf/architecture/container-resources-capability.md",
-          "line": 1,
-          "description": "Container resources are a Redeven-owned Docker/Podman business capability."
+          "description": "Restricts UI transport to the canonical same-origin namespace and attaches CSRF proof."
         }
       ],
-      "snippet": "Redeven plugin security is host integration over released ReDevPlugin contracts. ReDevPlugin owns plugin identity, lifecycle, permission evaluation, dangerous confirmations, token and asset-ticket issuance, runtime leases,",
+      "snippet": "Redeven supplies authenticated host facts to ReDevPlugin; it does not accept plugin ownership, authority, or trust from browser payloads. Every HTTP route passes explicit authentication, origin, CSRF, and closed-action authorization.",
       "links": [
         {
           "label": "ReDevPlugin host integration boundary",
@@ -7450,107 +7397,97 @@
       "concept_id": "ui.plugin-surfaces",
       "type": "UI Contract",
       "title": "Plugin surfaces",
-      "description": "Redeven places official ReDevPlugin sandbox surfaces into Env App chrome without making Plugin Center a Settings page or overlay.",
+      "description": "Env App exposes official plugins through generated lifecycle clients and SDK-owned sandbox surfaces with serialized placement and confirmation.",
       "tags": [
+        "activity",
         "plugin-center",
         "plugins",
         "ui",
         "workbench"
       ],
-      "timestamp": "2026-07-16T00:00:00Z",
+      "timestamp": "2026-07-19T00:00:00Z",
       "frontmatter": {
-        "description": "Redeven places official ReDevPlugin sandbox surfaces into Env App chrome without making Plugin Center a Settings page or overlay.",
+        "description": "Env App exposes official plugins through generated lifecycle clients and SDK-owned sandbox surfaces with serialized placement and confirmation.",
         "tags": [
+          "activity",
           "plugin-center",
           "plugins",
           "ui",
           "workbench"
         ],
-        "timestamp": "2026-07-16T00:00:00Z",
+        "timestamp": "2026-07-19T00:00:00Z",
         "title": "Plugin surfaces",
         "type": "UI Contract"
       },
-      "body_length": 7342,
-      "summary": "Plugin surfaces are ReDevPlugin sandbox documents placed inside Redeven product\nchrome. Redeven decides discovery, placement, and product navigation, while\nReDevPlugin remains responsible for plugin identity, lifecycle, permissions,\nconfirmation, asset tickets, bridge tokens, RPC, streams, leases, audit, and\nregistry state.",
+      "body_length": 7959,
+      "summary": "Plugin UI is a released ReDevPlugin sandbox surface inside Redeven chrome.\nPlugin Panel and Plugin Center are present in production builds, but the\nfeature is not releasable on v0.5.1. Activity's catalog GET cannot satisfy the\nrequired browser Origin contract, and Workbench lacks a cross-iframe\ninteraction ownership contract. Redeven owns navigation and placement;\nReDevPlugin owns iframe bootstrap, first commit, bridge, lifecycle, RPC,\nconfirmation tokens, streams, and surface revocation.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Mechanism\n\nEnv App source contains a two-level official plugin entry, but product discovery\nis development-only until the feature is ready for users. Vite serve enables the\nentry automatically. Production-style builds enable it only when the owning\ndevelopment launcher sets `REDEVEN_ENVAPP_ENABLE_PLUGIN_UI=1`; ordinary builds,\nCI builds, and releases fail closed. A disabled build does not add the Activity\nBar `Plugins` item, register the internal Plugin Center or Plugin Surface\nActivities, mount the panel, or start the plugin inventory resource.\n\nWhen enabled, the Activity Bar `Plugins` item opens an app-grid panel without\nchanging the current normal Activity or Workbench surface. The first panel tile\nis always `Plugin Center`. Enabled official plugins with a default launch target\nopen a sandbox plugin surface; unavailable, disabled, attention-needed, or\nnot-installed plugins route to Plugin Center details instead of pretending that\nan iframe opened.\n\nPlugin Center is a dedicated Env App management Activity, not Runtime Settings,\nnot a modal, and not a floating overlay. Opening it activates the internal\n`plugin-center` Activity id and renders `PluginCenterView` in the Floe shell\nmain slot. Closing it returns to the last normal Activity surface, with\n`terminal` as the default return target. Runtime Settings remains free of a\nplugins section.\n\nOfficial discovery is limited to the bundled Redeven official catalog seed.\nThe current seed contains `com.redeven.official.containers`. Plugin Center\nmerges that official catalog item with matching installed ReDevPlugin records\nby `plugin_id`, excludes non-official installed records from this management\nsurface, and treats non-runnable trust states as needs-attention even when the\nplugin id is official. First-release UX deliberately omits third-party\nmarketplace, developer mode, URL install, file install, unsigned local install,\nratings, comments, and remote search.\n\nOfficial install and update use a bundled official package. Env App embeds the\nContainers `.redevplugin` package as `officialPluginPackages.ts`; the UI sends\n`package_base64` with `trust_state: \"bundled\"` to\n`/_redeven_proxy/api/plugins/install` or `/_redeven_proxy/api/plugins/update`.\nThe UI does not download package URLs, verify signatures, parse manifests, or\nwrite registry state. It delegates package validation, staging, trust-state\nassignment, lifecycle mutation, retained data, and audit to the mounted\nReDevPlugin handler.\n\nEnabled official plugin surfaces open through the released ReDevPlugin surface\nopen endpoint under `/_redeven_proxy/api/plugins/surfaces/open`. Env App then\nrenders the internal `plugin-surface` Activity using `PluginSurfaceFrame`, a\nthin Redeven placement wrapper over the published\n`@floegence/redevplugin-ui@0.1.5` `PluginSurfaceHost`. The frame requests\nasset bootstrap from the plugin sandbox origin under\n`/_redeven_plugin/bootstrap`, loads the iframe document from\n`/_redeven_plugin/assets/{asset_session_id}/ui/index.html`, and adapts SDK\nmanagement calls from `/_redevplugin/api/plugins*` to\n`/_redeven_proxy/api/plugins*`. The published SDK remains responsible for\nexact-origin bridge filtering, bridge handshake validation, bridge-token\nrequests, RPC forwarding, confirmation handling, and lifecycle disposal.\n\n`PluginSurfaceFrame` must stay narrow and product-placement oriented. It may\nconnect released ReDevPlugin routes to Env App chrome, choose the correct\nregional or local loopback plugin sandbox origin, and project SDK errors into\nthe Activity frame. It must not grow into a copied SDK, generated client,\nregistry, manifest parser, storage broker, stream broker, or runtime platform.\n\nWorkbench placement remains shell ownership. If a future plugin surface is\nplaced in Workbench, the wrapper must preserve Workbench wheel, text selection,\ncopy, action-control, and activation contracts through the existing exported\ninteraction markers. A native Redeven component that does not exercise the\nReDevPlugin sandbox bootstrap and bridge lifecycle is a Redeven feature, not an\nofficial plugin surface.",
-          "char_count": 4093
+          "body": "## Discovery and management\n\nThe Activity Bar `Plugins` entry opens a product app-grid panel without changing\nthe current normal surface. The first tile opens Plugin Center. An enabled\nofficial plugin with a valid launch target opens its surface; a disabled,\nuntrusted, unavailable, or not-installed item opens management details.\n\nPlugin Center is a dedicated Activity main surface, not Runtime Settings, a\nmodal, or an overlay. It receives explicit inventory, loading, error,\nauthorization, refresh, and command props from the Shell. The Shell owns the\nsingle `PluginPlatformClient`; view components do not construct clients or\nperform hidden lifecycle fetches.\n\nThe official catalog currently contains exact Containers identity:\n`com.redeven.official` / `com.redeven.official.containers` /\n`plugini_redeven_official_containers`. Projection matches all three fields and\nuses server-provided management revision. Unrelated installed records are not\nadopted. Install/update use the generated signed release ref; no browser package\nbytes, trust-state selector, URL install, file install, or local developer\npackage path exists.\n\nEnable, disable, update, uninstall, and open commands carry\n`expected_management_revision`. A successful mutation refreshes inventory.\nMutation outcome unknown tears down affected surfaces, tells the user that\nstate needs attention, and refreshes rather than retrying. The mutation lane\nstays closed until local invalidation settles. Catalog records are consumed\nfrom the generated SDK result without an empty-list fallback.\nManagement calls receive a per-call `AbortSignal`, and Plugin Center admits one\nmutation at a time so rapid clicks cannot submit the same revision twice.\n\n## Activity surface lifecycle\n\nThe Shell creates one authenticated same-origin transport, one\n`PluginPlatformClient`, one `PluginSurfaceScope`, and one serial placement\ncoordinator. A `PluginSurfaceFrame` creates a fresh `PluginSurfaceSlot` for its\nstage and calls `openSurfaceInSlot` with plugin instance, surface id, and exact\nmanagement revision.\n\nThe SDK-owned Promise is the only opening boundary. It resolves after the\nsandbox load, bridge handshake, worker readiness, and first commit; Redeven does\nnot implement another bootstrap or first-paint message. The iframe is SDK-owned\nand is never reconstructed, moved, adopted, or given a Redeven bridge.\n\nEvery replacement is serialized:\n\n1. publish `hidden` to the current ready host;\n2. abort an in-flight opening;\n3. await old slot `close()`;\n4. await old slot `dispose()`;\n5. remove the old placement;\n6. create a new stage and slot;\n7. await `openSurfaceInSlot()` and first commit;\n8. publish the actual `visible` or `hidden` state.\n\nA terminal SDK error marks the placement failed before retirement. The\ncoordinator does not publish lifecycle to that disposed host; it serializes\nslot close/dispose and reports cleanup failure to the surface UI. If `hidden`\ndelivery throws, retirement records that failure but still aborts, closes, and\ndisposes before returning an aggregate error. Retirement work executes once;\nevery later release observes the same terminal success or failure instead of\nturning an earlier revoke failure into success.\n\nExplicit navigation close awaits slot close/revoke. Disable, update, and\nuninstall first execute the authoritative SDK mutation, whose success or\nunknown outcome invalidates the shared scope; Redeven then performs local-only\nslot disposal and clears placement state. A failed local quiesce cannot block a\nsecurity mutation. Shell disposal cancels pending reads and confirmations and\nrevokes the shared scope. Read-authorized sessions may dispose the surfaces they\ncould open. Full disconnected-session teardown is\nnot declared complete because v0.5.1 does not cancel every exact-scope\nexecution, stream, confirmation, and handle grant. Redeven must not hide that\nupstream gap behind best-effort local cleanup.\n\nThe generated catalog call is currently a GET. A real same-origin browser GET\ndoes not carry Origin, so v0.5.1's mandatory `ValidateOrigin` denies the first\ninventory request. Built-renderer mocks prove packaging only, not this HTTP\ncontract. Activity cannot be declared accepted until a formal upstream release\nprovides a browser-executable request with explicit origin and CSRF semantics.\nRedeven must not add an alternate endpoint, forge Origin, or relax the guard.\n\n## Confirmation UX\n\nNative blocking confirmation is prohibited. The Shell owns one asynchronous\nFIFO queue shared by all plugin surfaces. Each intent is deep-cloned across the\nasync UI boundary while retaining its live `AbortSignal`. Aborted, retired, or\nscope-revoked intents resolve as rejected and the next item advances. Each item\nsettles once.\n\nThe dialog uses product modal chrome and shows the requesting plugin and surface\nidentity together with the signed plan summary, target, method, and request\nhash. Hidden surfaces cannot enqueue or approve a confirmation. Approval and\nrejection are explicit. The queue does not infer success, retry a mutation, or\ndisplay secret params.\n\n## Workbench requirement\n\nWorkbench wrapper markers alone cannot route events that occur inside an opaque\niframe. Unselected-widget canvas wheel, selected-widget local wheel, iframe text\nselection, actions, and click activation cannot all be correct without a\nsource/port-bound SDK interaction callback. ReDevPlugin `v0.5.1` has no such\npublic callback.\n\nRedeven therefore rejects Workbench plugin placement. It must not use an\noverlay, `pointer-events` switching, focus guessing, synthetic DOM events, or a\nsecond MessageChannel bridge. The upstream contract must expose only\nhost-neutral activation and normalized host-owned wheel events, bound to the\nactive frame generation and surface instance. Redeven will remain responsible\nfor Workbench policy and exported wheel/text/action/activation markers after a\nformal upstream release is consumed.",
+          "char_count": 5922
         },
         {
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Redeven UI state is a projection and command surface, not a plugin registry or\nlifecycle source of truth. Install, enable, open, disable, uninstall, update,\ndiagnostics, export/import, and data-retention actions must call mounted\nReDevPlugin lifecycle APIs or released generated clients. The UI must not\ncompute CSRF tokens; AppServer and the ReDevPlugin integration wrapper attach\nauthoritative session headers before delegating management requests.\n\nThe build-time UI gate controls product discovery, not platform authorization.\nReleased backend integration, route isolation, runtime supervision, and business\nadapters remain mounted and governed by ReDevPlugin policy while the production\nEnv App omits every user entry. The gate is not a runtime setting, URL option,\nlocal-storage preference, or permission override.\n\nPlugin assets and plugin RPC must not be smuggled through Env App dist,\ncodespace injection, port forwarding, direct Local UI session artifacts,\nGateway credentials, runtime-control tokens, or Flower grants. Plugin sandbox\ndocuments load only through the plugin sandbox route family, and management\nactions are Env App management routes only after Env App origin and Local UI\naccess gates have passed.\n\nOfficial Containers is a sandboxed plugin surface over the Redeven\n`container_resources` business capability. Containers are not a plugin runtime\nmechanism and must not be used to execute third-party plugin backends.",
-          "char_count": 1441
+          "body": "Manifest surface kinds remain `view|command|background` with semantic intent.\nActivity, Workbench, widget, navigation, settings, and layout are Redeven\nplacement concepts and never manifest fields.\n\nPlugin UI state is a projection, not registry authority. The browser does not\nverify releases, parse manifests, write registry state, mint CSRF or bridge\ntokens, serve plugin assets, or call business adapters directly.",
+          "char_count": 417
         }
       ],
       "evidence": [
         {
-          "id": "redeven:AGENTS.md:256:redeven consumes redevplugin through published artifacts only.",
-          "source": "redeven:AGENTS.md",
-          "line": 256,
-          "description": "Redeven consumes ReDevPlugin through published artifacts only."
-        },
-        {
-          "id": "redeven:internal/envapp/ui_src/vite.config.ts:1:env app resolves the development-only plugin ui build constant.",
-          "source": "redeven:internal/envapp/ui_src/vite.config.ts",
-          "line": 1,
-          "description": "Env App resolves the development-only Plugin UI build constant."
-        },
-        {
-          "id": "redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:858:env app gates inventory loading, entries, and activity registration with the build constant.",
+          "id": "redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1:owns production discovery, client lifetime, lifecycle commands, and activity placement.",
           "source": "redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx",
-          "line": 858,
-          "description": "Env App gates inventory loading, entries, and Activity registration with the build constant."
-        },
-        {
-          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.tsx:1:plugin center renders the dedicated official management activity view.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginCenterView.tsx",
           "line": 1,
-          "description": "Plugin Center renders the dedicated official management Activity view."
+          "description": "Owns production discovery, client lifetime, lifecycle commands, and Activity placement."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1:plugin lifecycle wrappers call the redeven proxy plugin namespace.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts",
+          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginPlatform.ts:1:implements canonical transport and serialized slot coordination.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginPlatform.ts",
           "line": 1,
-          "description": "Plugin lifecycle wrappers call the Redeven proxy plugin namespace."
+          "description": "Implements canonical transport and serialized slot coordination."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginPackages.ts:1:redeven embeds the bundled official containers package for lifecycle install/update.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginPackages.ts",
-          "line": 1,
-          "description": "Redeven embeds the bundled official Containers package for lifecycle install/update."
-        },
-        {
-          "id": "redeven:internal/envapp/ui_src/package.json:25:env app consumes the published redevplugin ui package for pluginsurfacehost.",
-          "source": "redeven:internal/envapp/ui_src/package.json",
-          "line": 25,
-          "description": "Env App consumes the published ReDevPlugin UI package for PluginSurfaceHost."
-        },
-        {
-          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginSurfaceFrame.tsx:1:the plugin surface frame bridges env app placement to the published surface host.",
+          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginSurfaceFrame.tsx:1:mounts only an sdk slot and projects lifecycle visibility.",
           "source": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginSurfaceFrame.tsx",
           "line": 1,
-          "description": "The plugin surface frame bridges Env App placement to the published surface host."
+          "description": "Mounts only an SDK slot and projects lifecycle visibility."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/src/ui/pages/settings/settingsStructure.ts:45:runtime settings sections do not include plugin center.",
-          "source": "redeven:internal/envapp/ui_src/src/ui/pages/settings/settingsStructure.ts",
-          "line": 45,
-          "description": "Runtime Settings sections do not include Plugin Center."
+          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginConfirmationQueue.tsx:1:implements abort-aware fifo confirmation ux.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/PluginConfirmationQueue.tsx",
+          "line": 1,
+          "description": "Implements abort-aware FIFO confirmation UX."
         },
         {
-          "id": "redeven:internal/envapp/ui_src/scripts/checkPackagedRenderer.mjs:1:built renderer smoke tests require plugin ui to be hidden by default and can verify explicit development visibility.",
+          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1:uses generated v0.5.1 lifecycle dtos and signed release refs.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts",
+          "line": 1,
+          "description": "Uses generated v0.5.1 lifecycle DTOs and signed release refs."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.ts:1:matches exact official identity and management revision.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.ts",
+          "line": 1,
+          "description": "Matches exact official identity and management revision."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/scripts/checkPackagedRenderer.mjs:1:requires plugin discovery in the built renderer.",
           "source": "redeven:internal/envapp/ui_src/scripts/checkPackagedRenderer.mjs",
           "line": 1,
-          "description": "Built renderer smoke tests require Plugin UI to be hidden by default and can verify explicit development visibility."
+          "description": "Requires Plugin discovery in the built renderer."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginPlatform.test.ts:1:covers canonical fetch and close-before-open ordering.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/plugins/pluginPlatform.test.ts",
+          "line": 1,
+          "description": "Covers canonical fetch and close-before-open ordering."
         }
       ],
-      "snippet": "Plugin surfaces are ReDevPlugin sandbox documents placed inside Redeven product chrome. Redeven decides discovery, placement, and product navigation, while ReDevPlugin remains responsible for plugin identity, lifecycle, permissions,",
+      "snippet": "Plugin UI is a released ReDevPlugin sandbox surface inside Redeven chrome. Plugin Panel and Plugin Center are present in production builds, but the feature is not releasable on v0.5.1. Activity's catalog GET cannot satisfy the",
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -8165,5 +8102,5 @@
       ]
     }
   ],
-  "source_sha256": "96a5bbbb6b494e2e51dce694c2c576076586552008b498c2bad445e80d4b5315"
+  "source_sha256": "c2216e98620a8dae7a0f821402bb642ff14ff78014b7a81216620bb5f4c7c64c"
 }
