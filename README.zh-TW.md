@@ -116,7 +116,7 @@ Redeven 以能力為核心，但執行階段仍是信任邊界，因為它實際
 
 - 執行階段位於端點，明文資料始終保留在端點。
 - 控制平面簽發引導初始化資料、授權及不可變的工作階段中繼資料。
-- [Flowersec](https://github.com/floegence/flowersec) 在用戶端與端點執行階段之間傳輸加密位元組；目前執行階段整合以 `flowersec-go/v0.20.2` 為準。
+- [Flowersec](https://github.com/floegence/flowersec) 在用戶端與端點執行階段之間傳輸加密位元組；目前執行階段整合以 `flowersec-go/v0.27.0` 為準。
 - 有效權限來自伺服器簽發的工作階段授權，並受本機權限原則限制（`read`、`write`、`execute`、`admin`，任何類別都不隱含其他類別）。
 - 本機設定、E2EE 資料、稽核記錄與診斷資料都保留在端點狀態目錄。
 - GitHub Releases 始終是二進位檔、總和檢查碼、簽章及 OKF 驗證資產的公開權威來源。

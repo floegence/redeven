@@ -116,7 +116,7 @@ O Redeven prioriza os recursos, mas o ambiente de execução continua sendo o li
 
 - O ambiente de execução reside no endpoint e mantém nele os dados em texto simples.
 - O plano de controle emite cargas de inicialização, concessões e metadados de sessão imutáveis.
-- O [Flowersec](https://github.com/floegence/flowersec) transporta bytes criptografados entre o cliente e o ambiente de execução do endpoint. A integração atual está documentada para `flowersec-go/v0.20.2`.
+- O [Flowersec](https://github.com/floegence/flowersec) transporta bytes criptografados entre o cliente e o ambiente de execução do endpoint. A integração atual está documentada para `flowersec-go/v0.27.0`.
 - As permissões efetivas vêm de concessões de sessão emitidas pelo servidor e são limitadas pela política local (`read`, `write`, `execute`, `admin`; nenhuma categoria implica outra).
 - Configuração local, material E2EE, logs de auditoria e diagnósticos permanecem no diretório de estado do endpoint.
 - GitHub Releases continua sendo a fonte pública de referência para binários, somas de verificação, assinaturas e recursos de verificação OKF.

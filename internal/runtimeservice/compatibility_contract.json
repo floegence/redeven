@@ -3,9 +3,9 @@
   "release_review": {
     "release_version": "v0.10.0",
     "previous_release": "v0.9.0",
-    "reviewed_at": "2026-07-18",
-    "review_id": "floret-v0-12-agent-boundary",
-    "summary": "Redeven v0.10.0 consumes published Floret v0.12.0 and treats Floret as the only authority for thread titles, messages, attachments, turns, runs, projections, approvals, todos, and subagent hierarchy.",
+    "reviewed_at": "2026-07-20",
+    "review_id": "flowersec-v0-27-control-reconnect",
+    "summary": "Redeven v0.10.0 consumes published Floret v0.12.0, Flowersec v0.27.0, and Floe Webapp v0.38.0 while preserving Floret authority and the existing Runtime Service wire contract.",
     "same_window_rationale": "The project has no deployed older Runtime or Desktop population. Only the current ai_threadstore_product_v2 schema v2 is migrated to v3; unsupported kinds and versions are rejected without modification. The Runtime Service wire protocol remains redeven-runtime-v1.",
     "checked_surfaces": [
       "Flower production hosts explicitly select Floret provider-owned thread titles; manual names, create-time explicit titles, migrations, and fork titles use Floret SetThreadTitle without a Redeven title shadow or retry worker",
@@ -32,6 +32,9 @@
       "Completed terminal status, output, exit code, and duration come from Floret Activity payloads, while Redeven process reads are available only for running PTYs and raw backend errors remain diagnostic-only",
       "Redeven terminal operation audit records only operation outcome, actor context, process_id, and write input byte count; it does not copy Floret run, tool, status, output, result, error, exit, or duration fields",
       "Redeven consumes github.com/floegence/floret v0.12.0 only from the published module with GOWORK=off verification and no replace, go.work, local sibling path, copied contract, Floret schema access, or Floret internal import",
+      "Redeven consumes published Flowersec Go and Core v0.27.0 plus Floe Webapp v0.38.0, uses ConnectArtifact for generic connect entry points, retains explicit Direct and Tunnel APIs, and rejects removed grant helpers and Flowersec internal package imports through the existing dependency contract gate",
+      "Control reconnect attempts return whether register completed; every registered attempt resets exponential backoff before the next retry, secure random jitter stays within plus or minus 20 percent and the existing 10-second cap, and cancellation ends the wait without another connection attempt",
+      "Flowersec RPC request handlers now start lazily with at most 32 active handlers and a bounded 128-request FIFO queue, so Redeven retains the existing concurrency contract without per-stream worker preallocation",
       "Flower keeps the existing message.block_set and timeline.replaced transports while intentionally breaking unsupported pre-release SubAgent aliases and sourcing thread title, lifecycle, latest turn, and attachments from Floret v0.12.0",
       "Runtime Service protocol_version remains redeven-runtime-v1, while compatibility_epoch advances to 8 and both minimum versions advance to v0.10.0 so an older Desktop cannot parse LocalUIExposure and an older Runtime cannot provide the network exposure contract",
       "Runtime attach status and the private 0600 Desktop launch/status machine report require local_ui_bridge_url for the independent loopback trusted listener; Local UI health may return public local_ui_url and local_ui_urls for display refresh, while public startup events, health, access status, catalogs, display URLs, preferences, and renderer projections never expose the machine-only bridge endpoint",
