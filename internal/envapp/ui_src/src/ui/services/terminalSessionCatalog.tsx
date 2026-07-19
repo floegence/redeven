@@ -11,7 +11,7 @@ import { canLaunchProcess, isPermissionDeniedError } from '../utils/permission';
 import {
   createRedevenPagedHistoryFetcher,
   createRedevenTerminalCatalogTransport,
-} from './terminalTransport';
+} from './terminalCatalogTransport';
 import { createRedevenTerminalSessionsCoordinator } from './terminalSessions';
 import { scheduleTerminalFeaturePreload } from './terminalFeaturePreload';
 import {

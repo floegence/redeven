@@ -24,7 +24,7 @@
     "@floegence/floe-webapp-boot": "^0.37.4",
     "@floegence/floe-webapp-core": "^0.37.4",
     "@floegence/floe-webapp-protocol": "^0.37.4",
-    "@floegence/floeterm-terminal-web": "^0.5.24",
+    "@floegence/floeterm-terminal-web": "0.6.0",
     "@floegence/flowersec-core": "^0.26.0",
     "@floegence/redevplugin-ui": "0.1.5",
     "@fontsource/iosevka": "^5.2.5",

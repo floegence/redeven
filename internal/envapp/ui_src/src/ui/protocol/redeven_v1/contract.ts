@@ -1,5 +1,5 @@
 import type { ProtocolContract, RpcHelpers } from '@floegence/floe-webapp-protocol';
-import { captureDebugConsoleProtocolCall, captureDebugConsoleProtocolNotify } from '../../services/debugConsoleCapture';
+import { captureDebugConsoleProtocolCall } from '../../services/debugConsoleCapture';
 import { redevenV1TypeIds } from './typeIds';
 import type {
   AICompactThreadContextRequest,
@@ -87,7 +87,7 @@ import type {
 } from './sdk/monitor';
 import type { SessionsListActiveResponse } from './sdk/sessions';
 import type { SysPingResponse, SysRestartResponse, SysUpgradeRequest, SysUpgradeResponse } from './sdk/sys';
-import type { TerminalClearRequest, TerminalClearResponse, TerminalHistoryRequest, TerminalHistoryResponse, TerminalNameUpdateEvent, TerminalOutputEvent, TerminalSessionAttachRequest, TerminalSessionAttachResponse, TerminalSessionCreateRequest, TerminalSessionCreateResponse, TerminalSessionDeleteRequest, TerminalSessionDeleteResponse, TerminalSessionInfo, TerminalSessionStatsRequest, TerminalSessionStatsResponse, TerminalSessionsChangedEvent } from './sdk/terminal';
+import type { TerminalClearRequest, TerminalClearResponse, TerminalHistoryRequest, TerminalHistoryResponse, TerminalNameUpdateEvent, TerminalSessionCreateRequest, TerminalSessionCreateResponse, TerminalSessionDeleteRequest, TerminalSessionDeleteResponse, TerminalSessionInfo, TerminalSessionStatsRequest, TerminalSessionStatsResponse, TerminalSessionsChangedEvent } from './sdk/terminal';
 import {
   fromWireAIEventNotify,
   fromWireAICompactThreadContextResponse,
@@ -174,7 +174,7 @@ import {
 } from './codec/monitor';
 import { fromWireSessionsListActiveResponse } from './codec/sessions';
 import { fromWireSysPingResponse, fromWireSysRestartResponse, fromWireSysUpgradeResponse, toWireSysRestartRequest, toWireSysUpgradeRequest } from './codec/sys';
-import { fromWireTerminalNameUpdateNotify, fromWireTerminalOutputNotify, fromWireTerminalSessionAttachResponse, fromWireTerminalSessionCreateResponse, fromWireTerminalSessionDeleteResponse, fromWireTerminalSessionListResponse, fromWireTerminalSessionStatsResponse, fromWireTerminalHistoryResponse, toWireTerminalInputNotify, toWireTerminalResizeNotify, toWireTerminalSessionAttachRequest, toWireTerminalSessionCreateRequest, toWireTerminalSessionDeleteRequest, toWireTerminalSessionStatsRequest, toWireTerminalHistoryRequest, toWireTerminalClearRequest, fromWireTerminalClearResponse, fromWireTerminalSessionsChangedNotify } from './codec/terminal';
+import { fromWireTerminalNameUpdateNotify, fromWireTerminalSessionCreateResponse, fromWireTerminalSessionDeleteResponse, fromWireTerminalSessionListResponse, fromWireTerminalSessionStatsResponse, fromWireTerminalHistoryResponse, toWireTerminalSessionCreateRequest, toWireTerminalSessionDeleteRequest, toWireTerminalSessionStatsRequest, toWireTerminalHistoryRequest, toWireTerminalClearRequest, fromWireTerminalClearResponse, fromWireTerminalSessionsChangedNotify } from './codec/terminal';
 import type { wire_access_resume_req, wire_access_resume_resp, wire_access_status_resp } from './wire/access';
 import type {
   wire_ai_event_notify,
@@ -261,7 +261,7 @@ import type {
 } from './wire/monitor';
 import type { wire_sessions_list_active_resp } from './wire/sessions';
 import type { wire_sys_ping_resp, wire_sys_restart_req, wire_sys_restart_resp, wire_sys_upgrade_req, wire_sys_upgrade_resp } from './wire/sys';
-import type { wire_terminal_clear_req, wire_terminal_clear_resp, wire_terminal_history_req, wire_terminal_history_resp, wire_terminal_name_update_notify, wire_terminal_output_notify, wire_terminal_session_attach_req, wire_terminal_session_attach_resp, wire_terminal_session_create_req, wire_terminal_session_create_resp, wire_terminal_session_delete_req, wire_terminal_session_delete_resp, wire_terminal_session_list_resp, wire_terminal_session_stats_req, wire_terminal_session_stats_resp, wire_terminal_sessions_changed_notify } from './wire/terminal';
+import type { wire_terminal_clear_req, wire_terminal_clear_resp, wire_terminal_history_req, wire_terminal_history_resp, wire_terminal_name_update_notify, wire_terminal_session_create_req, wire_terminal_session_create_resp, wire_terminal_session_delete_req, wire_terminal_session_delete_resp, wire_terminal_session_list_resp, wire_terminal_session_stats_req, wire_terminal_session_stats_resp, wire_terminal_sessions_changed_notify } from './wire/terminal';
 
 export type RedevenV1Rpc = {
   fs: {
@@ -308,15 +308,10 @@ export type RedevenV1Rpc = {
   terminal: {
     createSession: (req: TerminalSessionCreateRequest) => Promise<TerminalSessionCreateResponse>;
     listSessions: () => Promise<{ sessions: TerminalSessionInfo[] }>;
-    attach: (req: TerminalSessionAttachRequest) => Promise<TerminalSessionAttachResponse>;
     history: (req: TerminalHistoryRequest) => Promise<TerminalHistoryResponse>;
     clear: (req: TerminalClearRequest) => Promise<TerminalClearResponse>;
     deleteSession: (req: TerminalSessionDeleteRequest) => Promise<TerminalSessionDeleteResponse>;
     getSessionStats: (req: TerminalSessionStatsRequest) => Promise<TerminalSessionStatsResponse>;
-    resize: (args: { sessionId: string; connId: string; cols: number; rows: number }) => Promise<void>;
-    sendInput: (args: { sessionId: string; connId: string; data: Uint8Array }) => Promise<void>;
-    sendTextInput: (args: { sessionId: string; connId: string; text: string }) => Promise<void>;
-    onOutput: (handler: (event: TerminalOutputEvent) => void) => () => void;
     onNameUpdate: (handler: (event: TerminalNameUpdateEvent) => void) => () => void;
     onSessionsChanged: (handler: (event: TerminalSessionsChangedEvent) => void) => () => void;
   };
@@ -348,27 +343,12 @@ export type RedevenV1Rpc = {
   };
 };
 
-function encodeUtf8(text: string): Uint8Array {
-  const t = String(text ?? '');
-  if (t === '') return new Uint8Array();
-  if (typeof TextEncoder !== 'undefined') {
-    return new TextEncoder().encode(t);
-  }
-  throw new Error('TextEncoder is not available in this environment');
-}
-
 export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
   const call = <Req, Resp>(typeID: number, payload: Req) =>
     captureDebugConsoleProtocolCall<Req, Resp>({
       typeID,
       payload,
       execute: () => helpers.call<Req, Resp>(typeID, payload),
-    });
-  const notify = <Payload>(typeID: number, payload: Payload) =>
-    captureDebugConsoleProtocolNotify<Payload>({
-      typeID,
-      payload,
-      execute: () => helpers.notify<Payload>(typeID, payload),
     });
   const onNotify = helpers.onNotify;
 
@@ -571,11 +551,6 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
         const resp = await call<Record<string, never>, wire_terminal_session_list_resp>(redevenV1TypeIds.terminal.sessionList, {});
         return fromWireTerminalSessionListResponse(resp);
       },
-      attach: async (req) => {
-        const payload = toWireTerminalSessionAttachRequest(req);
-        const resp = await call<wire_terminal_session_attach_req, wire_terminal_session_attach_resp>(redevenV1TypeIds.terminal.sessionAttach, payload);
-        return fromWireTerminalSessionAttachResponse(resp);
-      },
       history: async (req) => {
         const payload = toWireTerminalHistoryRequest(req);
         const resp = await call<wire_terminal_history_req, wire_terminal_history_resp>(redevenV1TypeIds.terminal.history, payload);
@@ -596,23 +571,6 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
         const resp = await call<wire_terminal_session_stats_req, wire_terminal_session_stats_resp>(redevenV1TypeIds.terminal.sessionStats, payload);
         return fromWireTerminalSessionStatsResponse(resp);
       },
-      resize: async ({ sessionId, connId, cols, rows }) => {
-        await notify(redevenV1TypeIds.terminal.resize, toWireTerminalResizeNotify({ sessionId, connId, cols, rows }));
-      },
-      sendInput: async ({ sessionId, connId, data }) => {
-        if (!(data instanceof Uint8Array) || data.length === 0) return;
-        await notify(redevenV1TypeIds.terminal.input, toWireTerminalInputNotify({ sessionId, connId, data }));
-      },
-      sendTextInput: async ({ sessionId, connId, text }) => {
-        const bytes = encodeUtf8(text);
-        if (bytes.length === 0) return;
-        await notify(redevenV1TypeIds.terminal.input, toWireTerminalInputNotify({ sessionId, connId, data: bytes }));
-      },
-      onOutput: (handler) =>
-        onNotify<wire_terminal_output_notify>(redevenV1TypeIds.terminal.output, (payload) => {
-          const ev = fromWireTerminalOutputNotify(payload);
-          if (ev) handler(ev);
-        }),
       onNameUpdate: (handler) =>
         onNotify<wire_terminal_name_update_notify>(redevenV1TypeIds.terminal.nameUpdate, (payload) => {
           const ev = fromWireTerminalNameUpdateNotify(payload);

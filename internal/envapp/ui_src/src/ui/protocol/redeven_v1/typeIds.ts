@@ -43,11 +43,6 @@ export const redevenV1TypeIds = {
   terminal: {
     sessionCreate: 2001,
     sessionList: 2002,
-    sessionAttach: 2003,
-
-    output: 2004,
-    resize: 2005,
-    input: 2006,
     history: 2007,
     clear: 2008,
 

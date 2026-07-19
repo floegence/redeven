@@ -5,7 +5,7 @@ go 1.26.5
 require (
 	github.com/anthropics/anthropic-sdk-go v1.22.1
 	github.com/creack/pty v1.1.24
-	github.com/floegence/floeterm/terminal-go v0.4.26
+	github.com/floegence/floeterm/terminal-go v0.6.0
 	github.com/floegence/floret v0.12.0
 	github.com/floegence/flowersec/flowersec-go v0.26.0
 	github.com/floegence/redevplugin v0.1.1

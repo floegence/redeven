@@ -23,9 +23,8 @@ import {
   type TerminalTouchScrollRuntime,
 } from '@floegence/floeterm-terminal-web';
 import {
-  createRedevenTerminalEventSource,
-  createRedevenTerminalTransport,
-  getOrCreateTerminalConnId,
+  createRedevenTerminalLiveBundle,
+  createTerminalConnId,
 } from '../services/terminalTransport';
 import { disposeRedevenTerminalSessionsCoordinator, getRedevenTerminalSessionsCoordinator } from '../services/terminalSessions';
 import { useTerminalSessionCatalog } from '../services/terminalSessionCatalog';
@@ -761,7 +760,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       };
     }
   })();
-  const connId = getOrCreateTerminalConnId();
+  const connId = createTerminalConnId();
   const panelId = (() => {
     const wid = String(widgetId ?? '').trim();
     return wid ? `embedded:${wid}` : 'terminal_page';
@@ -801,9 +800,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const terminalPrefs = useTerminalPreferences();
   const terminalCatalog = useTerminalSessionCatalog();
 
-  const attachGenerationScope = protocol.rpcTransport?.() ?? protocol;
-  const transport = createRedevenTerminalTransport(rpc, connId, attachGenerationScope);
-  const eventSource = createRedevenTerminalEventSource(rpc);
+  const terminalLive = createRedevenTerminalLiveBundle(rpc, () => protocol.client(), connId);
+  const transport = terminalLive.transport;
+  const eventSource = terminalLive.eventSource;
   const fallbackSessionsCoordinator = terminalCatalog
     ? null
     : getRedevenTerminalSessionsCoordinator({ connId, transport, logger: buildLogger() });
@@ -1951,8 +1950,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const activeRuntimeStatusMessage = createMemo(() => {
     switch (activeRuntimeStatus().state) {
-      case 'waiting_for_ownership':
-        return i18n.t('terminal.waitingForActivation');
       case 'reconnecting':
         return i18n.t('terminal.reconnecting');
       case 'retrying':
@@ -2545,9 +2542,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     })();
   });
 
+  const [clearingSessionId, setClearingSessionId] = createSignal<string | null>(null);
+
   const clearSession = async (sessionId: string) => {
     const sid = String(sessionId ?? '').trim();
-    if (!sid) return;
+    if (!sid || clearingSessionId()) return;
+    setClearingSessionId(sid);
     setError(null);
 
     try {
@@ -2559,6 +2559,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     } catch (e) {
       if (handleExecuteDenied(e)) return;
       setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setClearingSessionId((current) => current === sid ? null : current);
     }
   };
 
@@ -3791,7 +3793,16 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                   </Show>
                 </div>
               </div>
-              <Button size="sm" variant="ghost" onClick={clearActive} disabled={!connected() || !activeSessionId()} title={i18n.t('terminal.clear')}>
+              <Button
+                aria-busy={clearingSessionId() !== null}
+                data-terminal-clear-state={clearingSessionId() ? 'pending' : 'idle'}
+                data-testid="terminal-clear-active-session"
+                size="sm"
+                variant="ghost"
+                onClick={clearActive}
+                disabled={!connected() || !activeSessionId() || clearingSessionId() !== null}
+                title={i18n.t('terminal.clear')}
+              >
                 <Trash class="w-3.5 h-3.5" />
               </Button>
               <Dropdown
@@ -3859,7 +3870,6 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                               connected={connected}
                               protocolClient={() => protocol.client()}
                               viewActive={viewActive}
-                              ownsAttachment={ownsTerminalAttachment}
                               autoFocus={shouldAutoFocus}
                               themeColors={terminalThemeColors}
                               fontSize={fontSize}

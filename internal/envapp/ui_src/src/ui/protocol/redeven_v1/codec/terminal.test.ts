@@ -1,63 +1,12 @@
 import { describe, expect, it } from 'vitest';
 
 import {
-  fromWireTerminalSessionAttachResponse,
   fromWireTerminalHistoryResponse,
   fromWireTerminalSessionsChangedNotify,
-  toWireTerminalSessionAttachRequest,
   toWireTerminalHistoryRequest,
 } from './terminal';
 
 describe('terminal codec', () => {
-  it('encodes the ordered terminal attach generation', () => {
-    expect(toWireTerminalSessionAttachRequest({
-      sessionId: 'session-1',
-      connId: 'conn-1',
-      cols: 80,
-      rows: 24,
-      attachGeneration: 3,
-    })).toEqual({
-      session_id: 'session-1',
-      conn_id: 'conn-1',
-      cols: 80,
-      rows: 24,
-      attach_generation: 3,
-    });
-  });
-
-  it('preserves an explicit zero attach history boundary', () => {
-    expect(fromWireTerminalSessionAttachResponse({
-      ok: true,
-      history_boundary_sequence: 0,
-    })).toEqual({
-      ok: true,
-      historyBoundarySequence: 0,
-    });
-
-    const missing = fromWireTerminalSessionAttachResponse({ ok: true });
-    expect(Object.prototype.hasOwnProperty.call(missing, 'historyBoundarySequence')).toBe(false);
-  });
-
-  it('preserves a positive attach history boundary', () => {
-    expect(fromWireTerminalSessionAttachResponse({
-      ok: true,
-      history_boundary_sequence: 42,
-    })).toEqual({
-      ok: true,
-      historyBoundarySequence: 42,
-    });
-  });
-
-  it.each([null, -1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
-    'preserves invalid attach history boundary %s for the runtime validator',
-    (historyBoundarySequence) => {
-      expect(fromWireTerminalSessionAttachResponse({
-        ok: true,
-        history_boundary_sequence: historyBoundarySequence as number,
-      }).historyBoundarySequence).toBeNaN();
-    },
-  );
-
   it('encodes terminal history page options', () => {
     expect(toWireTerminalHistoryRequest({
       sessionId: 'session-1',

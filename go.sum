@@ -56,8 +56,8 @@ github.com/ebitengine/purego v0.9.1 h1:a/k2f2HQU3Pi399RPW1MOaZyhKJL9w/xFpKAg4q1s
 github.com/ebitengine/purego v0.9.1/go.mod h1:iIjxzd6CiRiOG0UyXP+V1+jWqUXVjPKLAI0mRfJZTmQ=
 github.com/felixge/httpsnoop v1.0.4 h1:NFTV2Zj1bL4mc9sqWACXbQFVBBg2W3GPvqp8/ESS2Wg=
 github.com/felixge/httpsnoop v1.0.4/go.mod h1:m8KPJKqk1gH5J9DgRY2ASl2lWCfGKXixSwevea8zH2U=
-github.com/floegence/floeterm/terminal-go v0.4.26 h1:dGq8fEi7aB8bYSPVMMWsh7fRF3NvbVY4ByxMSdUMHXg=
-github.com/floegence/floeterm/terminal-go v0.4.26/go.mod h1:MMRZG0JBuR8VCIKoL6D9Cs5yHdcclwdpB6de6MWKp9M=
+github.com/floegence/floeterm/terminal-go v0.6.0 h1:T8nG0at23IuZz3BBeDYRFVsjpJQwV/27tVszQx7yhPc=
+github.com/floegence/floeterm/terminal-go v0.6.0/go.mod h1:MMRZG0JBuR8VCIKoL6D9Cs5yHdcclwdpB6de6MWKp9M=
 github.com/floegence/floret v0.12.0 h1:xt21L0CsZ6BlmMB72YFUo4ijaLl2COGrxrXVSkQuxNw=
 github.com/floegence/floret v0.12.0/go.mod h1:u2oNhsSB8OppYPHo/cTmXITL+3pxv7ckjYDiq3SjoCg=
 github.com/floegence/flowersec/flowersec-go v0.26.0 h1:YtqOop43XSCEVKUhVygMSCHcFb/KW3LTne0HYtUAT1E=

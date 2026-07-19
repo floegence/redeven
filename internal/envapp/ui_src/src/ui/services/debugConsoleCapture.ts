@@ -486,37 +486,6 @@ function booleanValue(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
 }
 
-function base64ByteLength(value: unknown): number {
-  if (typeof value !== 'string') return 0;
-  const normalized = value.replace(/\s/gu, '');
-  if (!normalized) return 0;
-  const padding = normalized.endsWith('==') ? 2 : normalized.endsWith('=') ? 1 : 0;
-  return Math.max(0, Math.floor((normalized.length * 3) / 4) - padding);
-}
-
-function projectTerminalInputRequest(payload: unknown): Record<string, unknown> {
-  return {
-    input_bytes: base64ByteLength(objectRecord(payload).data_b64),
-  };
-}
-
-function projectTerminalAttachRequest(payload: unknown): Record<string, unknown> {
-  const record = objectRecord(payload);
-  return {
-    attach_generation: finiteNumber(record.attach_generation),
-    cols: finiteNumber(record.cols),
-    rows: finiteNumber(record.rows),
-  };
-}
-
-function projectTerminalAttachResponse(response: unknown): Record<string, unknown> {
-  const record = objectRecord(response);
-  return {
-    ok: booleanValue(record.ok),
-    history_boundary_sequence: finiteNumber(record.history_boundary_sequence),
-  };
-}
-
 function projectTerminalHistoryRequest(payload: unknown): Record<string, unknown> {
   const record = objectRecord(payload);
   return {
@@ -550,14 +519,6 @@ function projectTerminalHistoryResponse(response: unknown): Record<string, unkno
 }
 
 function projectProtocolPayload(operation: string, direction: 'request' | 'response', value: unknown): unknown {
-  if (operation === 'terminal.sessionAttach') {
-    return direction === 'request'
-      ? projectTerminalAttachRequest(value)
-      : projectTerminalAttachResponse(value);
-  }
-  if (operation === 'terminal.input') {
-    return direction === 'request' ? projectTerminalInputRequest(value) : {};
-  }
   if (operation === 'terminal.history') {
     return direction === 'request'
       ? projectTerminalHistoryRequest(value)
@@ -567,8 +528,6 @@ function projectProtocolPayload(operation: string, direction: 'request' | 'respo
 }
 
 function terminalProtocolFailureMessage(operation: string): string | undefined {
-  if (operation === 'terminal.sessionAttach') return 'Terminal attach request failed';
-  if (operation === 'terminal.input') return 'Terminal input delivery failed';
   if (operation === 'terminal.history') return 'Terminal history request failed';
   return undefined;
 }

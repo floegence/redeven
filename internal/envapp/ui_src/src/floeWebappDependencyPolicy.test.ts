@@ -63,6 +63,12 @@ function escapeRegExp(value: string): string {
 
 function expectedTarballUrl(packageName: string, version: string): string {
   const tarballName = packageName.split('/')[1];
+  if (
+    packageName === '@floegence/floeterm-terminal-web'
+    && /^\d+\.\d+\.\d+-rc\.\d+$/.test(version)
+  ) {
+    return `http://127.0.0.1:4873/${packageName}/-/${tarballName}-${version}.tgz`;
+  }
   return `https://registry.npmjs.org/${packageName}/-/${tarballName}-${version}.tgz`;
 }
 
@@ -90,7 +96,7 @@ describe('published npm dependency policy', () => {
     }
   });
 
-  it('keeps package-lock pinned to npm tarballs for declared published UI releases', () => {
+  it('keeps package-lock pinned to npm tarballs, with loopback allowed only for exact Floeterm RCs', () => {
     const dependencies = readDependencySpecifiers();
     const packageLock = readJson<PackageLockJson>('package-lock.json');
 
@@ -100,10 +106,16 @@ describe('published npm dependency policy', () => {
       const packageEntry = packageLock.packages?.[`node_modules/${dependencyName}`];
 
       expect(packageEntry?.version, `${dependencyName} package-lock version must match package.json`).toBe(expectedVersion);
-      expect(packageEntry?.resolved, `${dependencyName} package-lock entry must resolve from npm`).toBe(
+      expect(packageEntry?.resolved, `${dependencyName} package-lock entry must resolve from its approved registry`).toBe(
         expectedTarballUrl(dependencyName, expectedVersion),
       );
     }
+  });
+
+  it('requires stable Floeterm releases to resolve from the public npm registry', () => {
+    expect(expectedTarballUrl('@floegence/floeterm-terminal-web', '0.6.0')).toBe(
+      'https://registry.npmjs.org/@floegence/floeterm-terminal-web/-/floeterm-terminal-web-0.6.0.tgz',
+    );
   });
 
   it('keeps pnpm-lock aligned to declared published UI releases without local link entries', () => {
