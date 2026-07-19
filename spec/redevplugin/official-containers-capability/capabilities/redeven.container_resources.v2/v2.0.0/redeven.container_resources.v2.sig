@@ -1,0 +1,1 @@
+{"schema_version":"redevplugin.host_capability_signature.v1","algorithm":"ed25519","key_id":"redeven-official-v1","manifest_sha256":"ecd00e9894878a6b5c6662730a734ac9070fd8d9f339e5f96e8228f9367881fc","signature_base64":"c5FVAdfGXLPGEeLIjubmK4ZstlbKSbF0LMf2yBOglwDV9W8vv8zNqJtFgJdWefmmfSjP5jXf83P3mst2P1iqDA=="}
