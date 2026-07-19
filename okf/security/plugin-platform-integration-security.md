@@ -1,117 +1,146 @@
 ---
 type: Security Contract
 title: Plugin platform integration security
-description: Redeven maps sessions, route ownership, bundled official package trust, and business capabilities onto released ReDevPlugin security contracts.
+description: Redeven derives ReDevPlugin identity from authenticated sessions and fail-closed signed release, route, runtime, and capability adapters.
 tags: [security, plugins, permissions, local-ui]
-timestamp: 2026-07-06T00:00:00Z
+timestamp: 2026-07-19T00:00:00Z
 ---
 # Summary
 
-Redeven plugin security is host integration over released ReDevPlugin
-contracts. ReDevPlugin owns plugin identity, lifecycle, permission evaluation,
-dangerous confirmations, token and asset-ticket issuance, runtime leases,
-broker enforcement, quota/revocation checks, registry mutation, and stable
-platform errors. Redeven contributes local session facts, product policy, route
-mounting, official bundled-package trust policy, vault/audit/diagnostics sinks,
-and concrete business capability adapters.
+Redeven supplies authenticated host facts to ReDevPlugin; it does not accept
+plugin ownership, authority, or trust from browser payloads. Every HTTP route
+passes explicit authentication, origin, CSRF, and closed-action authorization.
+Direct Host calls pass the same owner/action/resource policy. Signed release,
+runtime, secret, storage, network, and capability scope mismatches fail closed.
 
 # Contract
 
-## Mechanism
+## Authenticated session boundary
 
-Redeven session metadata is authoritative only when it comes from the control
-channel or the local direct-session path. Browser-provided permission or app
-claims are not trusted input to plugin adapters. The current session metadata
-surface contains `can_read`, `can_write`, `can_execute`, and `can_admin`;
-`can_admin` gates management actions but is not part of the RWX capability
-clamp. The ReDevPlugin integration derives owner/session hashes from
-`session.Meta`, applies Redeven's local permission cap, caches the resolved
-session by hash, and evaluates method effects against the cached host-derived
-permission set.
+The session resolver accepts only a Redeven channel id whose stored metadata
+has exact non-empty channel, user, and environment identities. It derives:
 
-Route ownership is role-gated. Env App origins may reach local management APIs
-and Env App dist under `/_redeven_proxy/*`; codespace origins may reach only
-`/_redeven_proxy/inject.js`; plugin sandbox origins are recognized by the
-`plg-*` first host label and remain denied for Env App management APIs, Env App
-dist, and codespace helpers. `/_redeven_proxy/api/plugins*` is delegated to
-`/_redevplugin/api/plugins*` only for Env App origins. `/_redeven_plugin*` is
-delegated to `/_redevplugin*` only for plugin sandbox origins. The AppServer
-route role is passed to the ReDevPlugin web security adapter so the released
-handler can allow only the matching route family.
+- `owner_session_hash` from the active channel;
+- `owner_user_hash` from the authenticated user;
+- `owner_env_hash` from the environment endpoint;
+- `session_channel_id_hash` from the active channel.
 
-Unsafe plugin management requests must reach the released ReDevPlugin handler
-with a CSRF header that matches the host-derived ReDevPlugin session context.
-Redeven's Env-trusted proxy derives the authoritative channel id from the Env
-App origin label, or from the fixed Local UI session in Local UI mode. The
-ReDevPlugin integration wrapper resolves that channel and overwrites both
-`X-ReDevPlugin-Owner-Session-Hash` and `X-ReDevPlugin-CSRF` before delegation.
-For Local UI, Code App resolves `local-ui` to the same synthetic Env App
-session shape used by AppServer Local UI routes before ReDevPlugin derives the
-session hash and CSRF generation. Env App UI code does not compute or own the
-token.
+The resolver also intersects session RWX facts with Redeven's local permission
+cap and carries admin separately for management. The bounded session cache is
+keyed by owner-session hash and accepts a hit only when all four hashes match.
+JSON, query, plugin IPC, release metadata, and capability arguments cannot
+override any owner field.
 
-Plugin sandbox assets use the plugin namespace, not Env App management routes.
-When the handler is mounted, AppServer rewrites plugin asset cookie paths and
-`Service-Worker-Allowed` headers from ReDevPlugin's internal `/_redevplugin`
-namespace to Redeven's public `/_redeven_plugin` namespace. Plugin sandbox
-origins cannot inherit Env App management authority, codespace injection,
-port-forward proxying, local access-gate behavior, or nested Local UI API
-errors.
+Persistent registry, policy, permission, settings, data, secret, connector, and
+worker ownership follows ReDevPlugin `user` or `environment` resource scope.
+Short-lived surfaces, handles, confirmations, operations, streams, and token
+audiences bind all four active hashes. Unknown legacy ownership is not guessed.
 
-Official catalog discovery is not a trust bypass. Redeven's UI may show the
-bundled official catalog seed, but package validation, registry writes,
-lifecycle transitions, retained data behavior, and audit remain ReDevPlugin
-Host responsibilities. For the current official Containers slice, Redeven
-embeds one bundled `.redevplugin` package and sends it to ReDevPlugin lifecycle
-install/update with `trust_state: "bundled"`. The integration trust verifier
-allows bundled trust only for the exact official Containers package hash,
-manifest hash, and entries hash. The browser does not fetch package URLs,
-verify signatures, parse manifests, or mark an arbitrary package as trusted.
+Binding is not yet equivalent to complete teardown in v0.5.1. Its surface-scope
+revoke does not atomically fence or cancel every exact-scope operation, stream,
+confirmation, and surface-less handle grant. A disconnected session can
+therefore retain short-lived authority or asynchronous work. This blocks
+release until ReDevPlugin supplies indexed four-hash teardown and Redeven can
+await it before removing the authenticated session. A Redeven-local task map,
+timer, or guessed owner sweep is prohibited.
 
-Business capability adapters such as containers begin after ReDevPlugin has
-constructed the request context. The adapter receives a request that has
-already passed plugin identity, lifecycle, permission, confirmation, token or
-lease, quota, revoke-epoch, and audit construction. Redeven product policy may
-narrow or deny a capability; it must not mint plugin tokens, grant
-storage/network access, or call the business adapter outside ReDevPlugin
-brokers.
+## HTTP and direct authorization
 
-The container resources v1 contract follows that boundary. Its start preflight
-plan summarizes Docker and Podman runtime state without leaking raw environment
-values, raw label values, raw inspect JSON, or sensitive host paths. Official
-Containers must bind every container operation to `(engine, container_id)`;
-dangerous confirmations and request hashes include both fields so a Docker
-container cannot be confused with a Podman container that happens to share a
-short id or name.
+The canonical route is `/_redevplugin/api/plugins`. AppServer delegates it only
+from an Env App or Local UI Env route after local access checks. It attaches the
+authenticated channel id and a validated same-origin value in server-only
+request context. Codespace, port-forward, plugin, unknown, null-origin, and
+missing-origin callers are not delegated.
 
-Runtime leases are capability-bearing execution context, not Redeven session
-tokens. Redeven may route resulting audit events into its audit sink, but it
-must not persist cleartext bearer lease tokens or bypass method/effect,
-descriptor, quota, revocation, runtime-generation, or signature bindings owned
-by ReDevPlugin.
+The released handler then invokes four explicit steps:
+
+1. `Authenticate` resolves the host session.
+2. `ValidateOrigin` requires one exact non-null Origin equal to the server-bound
+   trusted origin.
+3. `ValidateCSRF` requires the exact `X-ReDevPlugin-CSRF` proof on every route
+   whose released policy marks it required, including unsafe reads.
+4. `AuthorizeRoute` accepts only a valid closed `RouteAction` permitted by the
+   cached session.
+
+This closed policy exposes a v0.5.1 browser contract mismatch. The generated
+catalog method is a same-origin GET, and Chromium does not send Origin for that
+request. JavaScript cannot set the forbidden Origin header. Therefore Activity
+inventory fails closed even with a valid CSRF proof. Redeven must not accept
+Referer or Fetch Metadata as an undocumented substitute, inject Origin, or
+exempt catalog locally. A new formal ReDevPlugin contract and release must
+define a browser-executable request whose origin policy remains explicit and
+conformance-tested.
+
+The Host `AuthorizationAdapter` separately checks action, canonical resource,
+owner context, and permissions for direct Go calls. An absent or typed-nil Host,
+guard, authorization adapter, or container engine client fails construction
+before persistent state is opened. Method, confirmation, intent, and owned
+operation-cancel actions admit any authenticated data-plane permission at the
+early action gate; the resolved method effect is then clamped by
+`EvaluateLocalPolicy`. This avoids inventing an execute requirement for read or
+write methods. Shared runtime start, stop, and refresh remain admin-only.
+
+## Release and runtime trust
+
+Official install/update is release-ref based. Redeven's release module accepts
+only the exact official source, publisher, plugin, version, key, signed release
+metadata, package hashes, signed revocation metadata, host requirement, and
+capability contract pin. Unsigned input, browser-supplied trust state, arbitrary
+package bytes, downgrade, unknown publisher, expired revocation evidence, and
+invented fetch provenance are denied.
+
+The runtime path and current target are closed. Runtime descriptors bind version,
+target, Rust IPC version, WASM ABI, and exact artifact SHA-256. Handle grants
+bind plugin instance, active fingerprint, runtime generation/shard, all owner
+hashes, method, handle, resource scope, policy revision, management revision,
+and revoke epoch. Storage/network scope from a plugin cannot replace the
+lease-derived scope.
+
+Darwin code signing cannot become a downstream exception to that identity.
+The current upstream runtime is linker/ad-hoc signed, while Redeven Desktop must
+Developer-ID sign nested executables before notarization. Re-signing changes the
+pinned bytes; skipping signing leaves an unproven nested executable. Both paths
+fail closed until an upstream release defines and ships the compatible signed
+artifact contract.
+
+## Business adapter and observability boundary
+
+Containers is invoked only after ReDevPlugin resolves lifecycle, permission,
+confirmation, token/lease, quota, revocation, and audit context. Container
+identity is `(engine, container_id)` for lookup, confirmation, operation, and
+stream behavior. Redeven product code cannot call the adapter as a substitute
+for the platform authorization chain. CLI stdout is bounded before parsing;
+overflow terminates the command process group and returns a stable failure.
+CLI failures never parse localized stderr to guess resource identity. A typed
+engine adapter may report an exact not-found target; the CLI adapter maps only
+the deterministic logs operation class and otherwise returns a generic stable
+failure. Stderr and argv are never copied into adapter errors. Operation and
+stream terminal writes use an independent finite
+deadline, so integration close cannot wait forever on a canceled request's
+terminal sink. A truncated payload is never accepted as success.
+
+Audit, diagnostics, and public errors record stable component, operation,
+failure code, correlation/request identity, and mutation outcome. Raw adapter
+errors, tokens, secrets, cookies, query strings, absolute paths, and complete
+URLs are not copied into public or durable diagnostic detail.
 
 # Boundaries
 
-The canonical published-dependency, opaque-state, and platform-mechanism
-prohibitions are defined by [ReDevPlugin host integration boundary](../architecture/redevplugin-boundary.md).
-This concept owns only Redeven's session, route, official-package trust, and
-business-capability security projection.
+Desktop runtime-control tokens, direct-session artifacts, Gateway credentials,
+RCPP credentials, and Flower grants are not plugin ambient authority. A plugin
+gets business access only through a released ReDevPlugin request context.
 
-Plugin surfaces and workers must not receive Desktop runtime-control tokens,
-raw local direct-session artifacts, standalone Gateway bridge credentials, RCPP
-provider credentials, or Flower target grants as ambient authority. Access to
-Redeven business resources must always arrive through a released ReDevPlugin
-request context and a Redeven-registered adapter.
+The platform boundary is defined by [ReDevPlugin host integration boundary](../architecture/redevplugin-boundary.md).
+Redeven security adapters may narrow authority; they may not mint platform
+tokens, weaken route policy, edit opaque state, or replace released brokers.
 
 # Evidence
 
-- `redeven:AGENTS.md:256` - Redeven consumes ReDevPlugin through published artifacts only.
-- `redeven:internal/session/types.go:7` - Session metadata is delivered by the control plane and browser claims are not trusted.
-- `redeven:internal/codeapp/appserver/server.go:529` - Plugin sandbox routes are delegated only for plugin sandbox origins.
-- `redeven:internal/codeapp/appserver/server_test.go:548` - Tests bind the proxy route matrix across caller roles.
-- `redeven:internal/codeapp/codeapp.go:1` - Code App supplies the plugin-platform resolver that includes the Local UI session fallback.
-- `redeven:internal/codeapp/plugin_local_session_test.go:1` - Tests prove `local-ui` resolves only when Local UI is enabled.
-- `redeven:internal/redevpluginintegration/adapters.go:85` - The session resolver projects Redeven session metadata into ReDevPlugin session context.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1` - Plugin management API calls use `/_redeven_proxy/api/plugins*`.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/officialPluginPackages.ts:1` - The bundled official Containers package is embedded with expected hashes.
-- `redeven:okf/architecture/container-resources-capability.md:1` - Container resources are a Redeven-owned Docker/Podman business capability.
+- `redeven:internal/redevpluginintegration/session_adapter.go:1` - Derives exact owner hashes and bounded permission cache entries.
+- `redeven:internal/redevpluginintegration/security_adapter.go:1` - Implements the four-step web security contract.
+- `redeven:internal/redevpluginintegration/adapters_test.go:1` - Covers origin, CSRF, session, and action denial.
+- `redeven:internal/redevpluginintegration/release_module.go:1` - Enforces official source, signature, revocation, and capability pins.
+- `redeven:internal/redevpluginintegration/runtime_module.go:1` - Binds runtime target, hash, IPC, ABI, leases, and Host services.
+- `redeven:internal/redevpluginintegration/containers_capability.go:1` - Adapts authorized capability invocations to domain behavior.
+- `redeven:internal/codeapp/appserver/server_test.go:810` - Covers canonical route reservation and origin delegation.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginPlatform.ts:1` - Restricts UI transport to the canonical same-origin namespace and attaches CSRF proof.

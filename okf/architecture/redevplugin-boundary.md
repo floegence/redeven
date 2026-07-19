@@ -1,180 +1,122 @@
 ---
 type: Architecture Boundary
 title: ReDevPlugin host integration boundary
-description: Redeven consumes ReDevPlugin as a published plugin-platform dependency and keeps host-specific policy in Redeven adapters.
+description: Redeven consumes ReDevPlugin as a published platform and keeps only host policy, placement, and business adapters.
 tags: [architecture, dependencies, plugins, release]
-timestamp: 2026-06-29T00:00:00Z
+timestamp: 2026-07-19T00:00:00Z
 ---
 # Summary
 
-Redeven treats ReDevPlugin as a published upstream plugin-platform dependency,
-not as code to fork or reimplement inside the Redeven tree. ReDevPlugin is an
-independently released library/runtime repository, not a Redeven source
-directory, submodule, or implementation detail.
+ReDevPlugin is an independently released plugin platform. Redeven consumes its
+Go library, npm UI package, signed Rust runtime, and machine contracts; it does
+not fork or rebuild platform mechanics. Redeven owns authenticated session
+mapping, product policy, UI placement, release-artifact selection, and concrete
+business adapters. A missing reusable contract blocks downstream integration
+until it is released upstream; no Redeven compatibility path may fill the gap.
 
 # Contract
 
-## Mechanism
+## Platform ownership
 
-ReDevPlugin owns reusable plugin-platform concerns: package and manifest
-validation, lifecycle APIs, permission and confirmation machinery, sandboxed
-iframe bridge contracts, Rust runtime supervision, WASM execution, storage and
-network brokers, CLI validators, templates, schemas, fixtures, and contract
-hashes. Redeven consumes those artifacts through released Go module versions,
-npm packages, signed `redevplugin-runtime` binaries, and machine-readable
-contract hashes.
+ReDevPlugin owns package and manifest validation, signing and trust, registry
+and lifecycle state, permissions and confirmations, tokens and asset sessions,
+sandbox bootstrap and bridge lifecycle, settings and intents, operations and
+streams, storage/network/secret brokers, runtime supervision, Rust IPC, WASM
+execution, quotas, revocation, generated clients, stable errors, schemas,
+fixtures, contract hashes, and release metadata.
 
-Redeven integration code is thin host glue over those artifacts: configuration,
-route mounting, adapter registration, product UI placement, release-artifact
-selection, and business capability implementations. Public plugin-platform
-mechanics belong upstream in ReDevPlugin, including lifecycle endpoints, package
-schemas, bridge protocol, storage/network/runtime brokers, operation/stream
-envelopes, runtime supervision, generated SDKs, and validators.
+Redeven owns the host integration around those contracts: mapping an
+authenticated Redeven channel into ReDevPlugin session context, applying local
+permission caps, mounting the canonical handler, choosing state roots, routing
+audit and diagnostics, selecting a formally released runtime, placing SDK-owned
+surface elements, and registering product capabilities. Docker/Podman, files,
+shells, cloud APIs, databases, and vaults remain Redeven business adapters even
+when plugins invoke them.
 
-ReDevPlugin is the source of both front-end and back-end plugin-platform
-implementation. Redeven consumes released npm packages for sandbox surface
-hosting, bridge lifecycle, settings/intent SDKs, generated clients, and
-sandbox-safe UI helpers. Redeven consumes released Go packages for Host
-construction, lifecycle handlers, registry state, permission and confirmation
-enforcement, broker contracts, operation/stream envelopes, token/ticket issuance,
-and stable platform errors. Redeven bundles the released signed Rust
-`redevplugin-runtime` through the released runtime manager/supervisor instead of
-implementing a second runtime process, WASM executor, IPC protocol, or
-storage/network hot path.
+The dependency direction is one way. Redeven imports released ReDevPlugin
+artifacts; ReDevPlugin never imports Redeven. Redeven must not implement a
+second manifest parser, package builder, registry, lifecycle state machine,
+bridge, token issuer, asset session, broker, operation/stream protocol, runtime
+supervisor, IPC implementation, or WASM executor.
 
-Redeven's integration layer owns only host-product responsibilities: mapping
-Redeven sessions, local permission caps, CSRF and origin checks, state
-directories, audit and diagnostics sinks, secret adapters, Env App surfaces,
-Workbench and Settings entrypoints, Desktop and installer bundling, Flower/Floret
-tool wiring, product-level plugin generation UX, and Redeven business capability
-adapters.
+## Published dependency set
 
-The dependency direction is one-way: Redeven imports released ReDevPlugin
-artifacts, and ReDevPlugin never imports Redeven. Redeven-specific sessions,
-Env App placement, Flower orchestration, Workbench chrome, Desktop packaging,
-installer behavior, local policy, and concrete business resources belong in
-Redeven adapters over released ReDevPlugin contracts. If a reusable contract is
-missing, it must be implemented and released in ReDevPlugin before Redeven
-depends on it.
+The current integration consumes the coordinated ReDevPlugin `v0.5.1` release:
 
-Redeven business code starts at adapter registration. Concrete capabilities such
-as containers, files, shells, cloud services, database access, vault access,
-session mapping, and product audit presentation belong in Redeven only after
-ReDevPlugin has constructed the identity, lifecycle, permission, confirmation,
-token, lease/quota, revocation, and audit context for the request.
+- `github.com/floegence/redevplugin v0.5.1`;
+- `@floegence/redevplugin-ui@0.5.1`;
+- signed `redevplugin-runtime` artifacts for Darwin/Linux and amd64/arm64;
+- release-manifest v4, compatibility-manifest v6, the closed 28-contract
+  registry, Worker SDK, npm integrity, A2 evidence, stress evidence, checksums,
+  signatures, bundles, and third-party notices.
 
-Redeven may choose the state root, backup/export destination, audit sink,
-diagnostics sink, and secret-vault adapter, but the ReDevPlugin registry,
-package staging state, token/ticket records, storage namespaces, runtime leases,
-and revoke epochs remain opaque platform state. Redeven may configure and launch
-the released `redevplugin-runtime` through the released ReDevPlugin runtime
-manager and present diagnostics, but it must not fork the Rust IPC protocol,
-inject custom hostcalls, run plugin WASM modules in a Redeven-owned execution
-path, implement a parallel supervisor, or bypass runtime lease, quota, and
-revocation checks.
+Redeven release tooling accepts only the fixed formal GitHub release from
+`floegence/redevplugin`. It verifies the exact 27-asset set and keyless signing
+identity before staging any payload. It does not accept a local source
+directory, repository override, version override, sibling checkout, or
+unsigned payload.
 
-If Redeven integration uncovers a plugin-platform contract bug, the durable fix
-belongs in ReDevPlugin first and Redeven must consume the released artifact that
-contains it. Redeven integration code must not mint plugin gateway tokens,
-bypass asset tickets, grant plugin storage or network access outside ReDevPlugin
-brokers, load plugin UI outside sandboxed ReDevPlugin surfaces, execute native
-plugin backends, or call Redeven business adapters outside the ReDevPlugin
-permission, confirmation, token, lease, audit, and lifecycle chain.
+Forbidden dependency wiring includes `go.work`, `go.work.sum`, Go `replace`,
+`file:`, `link:`, `workspace:`, `portal:`, relative or absolute sibling paths,
+Rust path overrides, copied generated contracts, and copied runtime binaries.
+Go dependency checks run with `GOWORK=off`.
+
+## Host modules
+
+Redeven constructs the released Host with explicit core, release, runtime,
+connectivity, secrets, and capability modules. ReDevPlugin-owned SQLite stores
+remain opaque under the configured state root. Redeven supplies session,
+authorization, web-security, trust, release-source, observability, secret, and
+business adapters; it does not edit registry rows, token state, leases, revoke
+epochs, or plugin data directly.
+
+The official runtime path is exactly the `redevplugin-runtime` sibling of the
+Redeven executable. The released ProcessManager owns launch, health,
+heartbeats, shutdown, leases, hostcalls, and restart semantics. Redeven pins the
+four formal runtime hashes and does not search `PATH`, candidate directories,
+or alternate filenames.
+
+Official Containers is a signed ReDevPlugin package over the
+`redeven.capability.container_resources` adapter. The package, release metadata,
+revocation metadata, capability contract, and keys are verified as a single
+official source. `internal/capabilities/containers` contains domain behavior;
+the ReDevPlugin integration contains only the registered capability projection
+and operation/stream delegation.
+
+## Missing-contract rule
+
+Opaque iframe input does not cross into the parent Workbench document.
+ReDevPlugin `v0.5.1` exposes no host-neutral interaction ownership callback for
+activation or host-owned wheel routing. Redeven therefore must not claim
+Workbench plugin placement, add an overlay, toggle iframe pointer events, or
+copy a second bridge. Workbench placement remains rejected until ReDevPlugin
+releases a source/port-bound interaction contract. Activity placement remains
+valid because it does not require Workbench canvas ownership.
 
 # Boundaries
 
-Redeven must not point builds, tests, release validation, or examples at a local
-`../redevplugin` checkout through `go.work`, `go.work.sum`, `replace`, local npm
-workspace/link/file/portal wiring, Rust path overrides, copied source trees, or
-build aliases. Redeven must also not copy generated ReDevPlugin source, schemas,
-SDK files, or runtime binaries into its tree as a substitute for a released
-dependency. CLI commands such as `redeven plugin validate` may be thin wrappers
-over released ReDevPlugin validators, but they must not carry a second manifest
-parser, looser validator, alternate packaging flow, divergent fixture format, or
-separate install lifecycle.
+Plugin UI must load through the released SDK's sandbox bootstrap and bridge.
+Plugin backend code must run through the released Rust runtime. Product routes,
+navigation, Activity/Workbench layout, session semantics, and concrete resource
+access must not leak into manifests or platform schemas.
 
-Redeven must not implement an alternate manifest parser, package builder,
-registry lifecycle, bridge token issuer, asset-ticket system, storage broker,
-network broker, runtime IPC layer, WASM executor, stream envelope, operation
-manager, runtime supervisor, or plugin lifecycle state machine. Redeven may
-expose product routes or CLI commands for plugin management, but
-platform-management handlers must be released ReDevPlugin handlers or thin
-wrappers around them. Redeven may register business
-capability adapters such as containers, files, shell, cloud, or database access,
-but each adapter must receive request context that already passed ReDevPlugin
-identity, permission, confirmation, lease/token, quota, and audit checks.
+Flower may orchestrate scaffold, validate, package, install, enable, and open
+operations through released APIs. It must not write platform state, mint
+tokens, bypass signatures, or grant storage/network/runtime authority itself.
 
-Container management, if exposed as an official plugin experience, is a Redeven
-business capability registered through ReDevPlugin. It is not a plugin runtime
-mechanism and must still pass through ReDevPlugin permission, confirmation,
-token, lease, audit, and lifecycle contracts. The Redeven-owned v1 business
-contract lives under `spec/capabilities/container-resources-v1.schema.json` and
-`internal/capabilities/containers`, which keeps the adapter contract visible
-without creating an `internal/plugins*` platform-core tree or copying
-ReDevPlugin `spec/plugin` contracts.
-
-Flower-generated plugin flows are Redeven orchestration over ReDevPlugin
-primitives. Flower may draft source, call released ReDevPlugin validators and
-builders, ask the user for approval, install and enable through ReDevPlugin
-lifecycle APIs, and open the resulting sandboxed surface. Flower must not write
-plugin registry rows, mint bridge tokens, place UI assets directly under Env App
-routes, bypass package signatures or trust policy, or grant storage, network, or
-runtime access outside ReDevPlugin brokers.
-
-ReDevPlugin upgrades are ordinary published dependency upgrades. A Redeven
-change that depends on ReDevPlugin behavior must update the released Go module,
-npm package, runtime artifact reference, compatibility manifest or contract
-hashes, and verification scripts together; unreleased local ReDevPlugin behavior
-is not a valid integration target. Before Redeven bundles a ReDevPlugin runtime
-artifact, the consumer-side release artifact verifier must validate the
-downloaded release directory: outer checksums and signature evidence,
-release-mode stress counters, each tarball's internal release manifest and
-checksum list, compatibility metadata, `THIRD_PARTY_NOTICES.md`, and runtime
-binary presence. The verifier must write a consumption marker that includes the
-verified tarball hashes, runtime binary hashes, and ReDevPlugin third-party
-notice hashes before any checked payload is staged into a Redeven release or
-Desktop bundle. Redeven's release and Desktop bundle gates scan for ReDevPlugin
-payloads and fail when a runtime binary, release tarball, embedded runtime inside
-a Redeven tarball, or release stress summary appears without a matching marker
-hash. Direct staged runtimes and embedded Redeven tarballs must also carry
-`REDEVPLUGIN_THIRD_PARTY_NOTICES.md` with a hash recorded in the marker, so
-license evidence moves with the runtime payload. The released-artifact staging
-path keeps that boundary explicit: it can download a ReDevPlugin GitHub Release
-or copy an already downloaded artifact directory, runs the verifier with marker
-output, validates the staged root with the consumption gate, and only then
-extracts an optional target `redevplugin-runtime` binary, marker, and
-`REDEVPLUGIN_THIRD_PARTY_NOTICES.md` for downstream bundle staging. Redeven
-release tarballs and Desktop bundles use this path only when a published
-ReDevPlugin version is explicitly selected; copied artifact directories remain a
-local fixture and preflight input for the helper, not a GitHub release workflow
-selector. The default release and Desktop packaging paths remain no-op for
-ReDevPlugin payloads until such a version is configured, so the repository does
-not silently consume unreleased local behavior.
-
-Redeven-side plugin code layout must make the adapter boundary visible. It may
-contain host integration, route mounting, capability adapters, and product UI,
-but not a second platform core under names such as plugin runtime, registry,
-bridge, storage, or network. Generated DTOs, schemas, SDK clients, and manifest
-fixtures must come from released ReDevPlugin artifacts. Redeven tests should
-prove host adapter behavior, permission mapping, route mounting, lifecycle
-wiring, and product UX, while reusable manifest, package, bridge, runtime,
-storage, network, and lifecycle semantics remain covered by ReDevPlugin
-fixtures and tests. The local dependency boundary guard enforces the current
-no-local-wiring baseline by rejecting Go workspaces, local ReDevPlugin module or
-package-manager wiring, copied platform contracts, and `internal/plugins*`
-platform-core directories. The release artifact verifier and consumption gate
-self-tests keep the future runtime-consumption path executable in CI before a
-published ReDevPlugin artifact is selected by Redeven.
+Uncertain artifact provenance, owner scope, release identity, contract version,
+runtime target, or capability pin fails closed. Redeven does not guess an owner,
+invent network provenance, downgrade a contract, or retry a mutation whose
+outcome is unknown.
 
 # Evidence
 
-- `redeven:AGENTS.md:223` - Published dependency policy lists `redevplugin` as an upstream dependency consumed by Redeven.
-- `redeven:okf/architecture/container-resources-capability.md:9` - The active container resources contract is Redeven-owned business capability surface.
-- `redeven:go.mod:5` - Redeven's current required module list is the active Go dependency surface for released upstream modules.
-- `redeven:scripts/check_redevplugin_dependency_boundary.sh:1` - The dependency boundary guard blocks local ReDevPlugin wiring and copied platform-core paths.
-- `redeven:scripts/check_redevplugin_release_artifacts.sh:10` - The consumer-side release artifact verifier validates checksums, signature evidence, stress counters, internal manifests, compatibility metadata, third-party notices, and runtime binary presence.
-- `redeven:scripts/check_redevplugin_consumption_gate.sh:10` - The consumption gate fails release staging or Desktop bundling when ReDevPlugin payloads appear without verifier markers.
-- `redeven:.github/workflows/ci-check.yml:108` - CI runs the ReDevPlugin release artifact verifier self-test and consumption gate self-test before a real artifact is wired into release packaging.
-- `redeven:scripts/stage_redevplugin_release_artifacts.sh:14` - The release artifact staging helper verifies downloaded or copied ReDevPlugin artifacts before extracting a runtime payload.
-- `redeven:.github/workflows/release.yml:93` - Release packaging stages ReDevPlugin runtime payloads only when explicit release inputs are configured.
-- `redeven:scripts/build_desktop_bundled_runtime.sh:113` - Desktop bundled-runtime preparation stages ReDevPlugin runtime payloads only when explicit desktop inputs are configured.
+- `redeven:go.mod:11` - Pins the released ReDevPlugin Go module.
+- `redeven:internal/envapp/ui_src/package.json:29` - Pins the released UI package.
+- `redeven:internal/redevpluginintegration/integration.go:1` - Constructs the released Host modules and stores.
+- `redeven:internal/redevpluginintegration/runtime_module.go:1` - Binds the released ProcessManager, exact runtime path, target, and hashes.
+- `redeven:internal/redevpluginintegration/release_module.go:1` - Implements the official signed release-source adapters.
+- `redeven:internal/redevpluginintegration/containers_capability.go:1` - Registers the Redeven-owned Containers business adapter.
+- `redeven:scripts/check_redevplugin_dependency_boundary.sh:1` - Rejects local wiring and platform duplication.
+- `redeven:scripts/check_redevplugin_release_artifacts.sh:1` - Verifies the exact formal release set and signing evidence.
+- `redeven:scripts/stage_redevplugin_release_artifacts.sh:1` - Stages only fixed formal release payloads.
