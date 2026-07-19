@@ -16,13 +16,17 @@ import {
   assertTerminalCarrierP95Limit,
   terminalCarrierSampleMarkerName,
 } from './terminalCarrierThreshold.mjs';
+import {
+  historyFixtureDriftIsValid,
+  minimumRetainedBytesForFixture,
+  terminalHistoryChunkMaxBytes,
+  terminalHistoryMaxBytes,
+} from './terminalCarrierFixturePolicy.mjs';
 import { classifyTerminalCarrierConsoleMessage } from './terminalCarrierRunnerPolicy.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '../../../..');
 const defaultFixtureBytes = 64 * 1024;
-const terminalHistoryMaxBytes = 8 * 1024 * 1024;
-const terminalReadChunkBytes = 4 * 1024;
 const visualGridColumns = 32;
 const visualGridRows = 18;
 
@@ -33,11 +37,6 @@ function fixtureID(fixtureBytes) {
   if (fixtureBytes === 7 * 1024 * 1024) return '7MiB';
   if (fixtureBytes === 8 * 1024 * 1024) return '8MiB-boundary';
   return `${fixtureBytes}B`;
-}
-
-function minimumRetainedBytesForFixture(fixtureBytes) {
-  if (fixtureBytes >= terminalHistoryMaxBytes) return terminalHistoryMaxBytes - terminalReadChunkBytes;
-  return fixtureBytes;
 }
 
 function readOption(args, name, fallback = '') {
@@ -457,14 +456,18 @@ async function readHistoryBytes(scope) {
 
 async function waitForHistoryBytes(scope, minimumBytes, timeoutMs = 30_000) {
   const deadline = Date.now() + timeoutMs;
+  let lastObservedBytes = null;
   while (Date.now() < deadline) {
     const historyBytes = await readHistoryBytes(scope).catch(() => null);
+    lastObservedBytes = historyBytes;
     if (historyBytes !== null && historyBytes >= minimumBytes && historyBytes <= terminalHistoryMaxBytes) {
       return historyBytes;
     }
     await delay(50);
   }
-  throw new Error('terminal history stats did not reach the requested retained-byte fixture');
+  throw new Error(
+    `terminal history stats did not reach the requested retained-byte fixture (observed=${lastObservedBytes ?? 'unavailable'} required=${minimumBytes} max=${terminalHistoryMaxBytes})`,
+  );
 }
 
 async function seedRetainedSession(page, tempDir, fixtureBytes) {
@@ -950,7 +953,7 @@ async function runSharedPreparedHistorySample({
     if (workbenchRecovery.history_page_count > 1) {
       throw new Error('shared prepared history required more than one attach-delta history page');
     }
-    const maximumDeltaBytes = Math.max(terminalReadChunkBytes * 4, Math.floor(seeded.historyBytes / 4));
+    const maximumDeltaBytes = Math.max(terminalHistoryChunkMaxBytes * 4, Math.floor(seeded.historyBytes / 4));
     if (workbenchRecovery.history_bytes_fetched > maximumDeltaBytes) {
       throw new Error(`shared prepared history fetched too much attach delta (${workbenchRecovery.history_bytes_fetched} > ${maximumDeltaBytes})`);
     }
@@ -1116,7 +1119,7 @@ async function runRecoverySample({ context, entryURL, fixtureBytes, seeded, surf
       throw new Error(`terminal recovery fetched fewer history bytes than the fixture requires (fetched=${marks.history_bytes_fetched} required=${minimumRetainedBytesForFixture(fixtureBytes)})`);
     }
     if (preparedHistoryHit) {
-      const maximumDeltaBytes = Math.max(terminalReadChunkBytes * 4, Math.floor(seeded.historyBytes / 4));
+      const maximumDeltaBytes = Math.max(terminalHistoryChunkMaxBytes * 4, Math.floor(seeded.historyBytes / 4));
       if (marks.history_page_count > 1 || marks.history_bytes_fetched > maximumDeltaBytes) {
         throw new Error(`prepared terminal recovery exceeded the attach-delta budget (pages=${marks.history_page_count} bytes=${marks.history_bytes_fetched} max_bytes=${maximumDeltaBytes})`);
       }
@@ -1132,10 +1135,7 @@ async function runRecoverySample({ context, entryURL, fixtureBytes, seeded, surf
       minimumRetainedBytesForFixture(fixtureBytes),
     ));
     const fixtureDrift = historyBytes - seeded.historyBytes;
-    const fixtureDriftInvalid = fixtureBytes >= terminalHistoryMaxBytes
-      ? Math.abs(fixtureDrift) > terminalReadChunkBytes
-      : fixtureDrift < 0 || fixtureDrift > terminalReadChunkBytes;
-    if (fixtureDriftInvalid) {
+    if (!historyFixtureDriftIsValid(fixtureBytes, seeded.historyBytes, historyBytes)) {
       throw new Error(`terminal history fixture drifted outside one PTY read (seeded=${seeded.historyBytes} recovered=${historyBytes} drift=${fixtureDrift})`);
     }
     let historyVisualMatch = null;
