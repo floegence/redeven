@@ -14,19 +14,16 @@ import {
   assertTerminalCarrierHistoryVisualMatch,
   assertTerminalCarrierInteractiveLimit,
   assertTerminalCarrierP95Limit,
+  terminalCarrierExpectedRetainedBytes,
   terminalCarrierSampleMarkerName,
 } from './terminalCarrierThreshold.mjs';
-import {
-  historyFixtureDriftIsValid,
-  minimumRetainedBytesForFixture,
-  terminalHistoryChunkMaxBytes,
-  terminalHistoryMaxBytes,
-} from './terminalCarrierFixturePolicy.mjs';
 import { classifyTerminalCarrierConsoleMessage } from './terminalCarrierRunnerPolicy.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '../../../..');
 const defaultFixtureBytes = 64 * 1024;
+const terminalHistoryMaxBytes = 8 * 1024 * 1024;
+const terminalHistoryChunkMaxBytes = 32 * 1024;
 const visualGridColumns = 32;
 const visualGridRows = 18;
 
@@ -454,19 +451,25 @@ async function readHistoryBytes(scope) {
   return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
 }
 
-async function waitForHistoryBytes(scope, minimumBytes, timeoutMs = 30_000) {
+async function waitForHistoryBytes(scope, expectedBytes, timeoutMs = 30_000) {
   const deadline = Date.now() + timeoutMs;
+  let minimumObservedBytes = null;
   let lastObservedBytes = null;
   while (Date.now() < deadline) {
     const historyBytes = await readHistoryBytes(scope).catch(() => null);
-    lastObservedBytes = historyBytes;
-    if (historyBytes !== null && historyBytes >= minimumBytes && historyBytes <= terminalHistoryMaxBytes) {
-      return historyBytes;
+    if (historyBytes !== null) {
+      minimumObservedBytes = minimumObservedBytes === null
+        ? historyBytes
+        : Math.min(minimumObservedBytes, historyBytes);
+      lastObservedBytes = historyBytes;
+      if (historyBytes === expectedBytes) return historyBytes;
     }
     await delay(50);
   }
   throw new Error(
-    `terminal history stats did not reach the requested retained-byte fixture (observed=${lastObservedBytes ?? 'unavailable'} required=${minimumBytes} max=${terminalHistoryMaxBytes})`,
+    'terminal history stats did not reach the exact retained-byte fixture '
+      + `(expected_bytes=${expectedBytes}, minimum_observed_bytes=${minimumObservedBytes}, `
+      + `last_observed_bytes=${lastObservedBytes})`,
   );
 }
 
@@ -519,6 +522,16 @@ async function seedRetainedSession(page, tempDir, fixtureBytes) {
     ) !== null
   ), { panelVariant: targetVariant, expectedSessionID: sessionID }, { timeout: 15_000 });
   await terminalInput(page, targetRuntime);
+
+  const quietShellMarkerPath = path.join(tempDir, 'fixture-shell-quiet');
+  await sendTerminalCommand(
+    page,
+    'stty -echo -onlcr; exec env PS1= PROMPT_COMMAND= bash --noprofile --norc -i',
+    targetRuntime,
+  );
+  await sendTerminalCommand(page, `printf quiet > ${shellQuote(quietShellMarkerPath)}`, targetRuntime);
+  await waitForFile(quietShellMarkerPath, 15_000);
+
   const clearButton = targetPanel.locator('[data-testid="terminal-clear-active-session"]:visible').last();
   try {
     await clearButton.waitFor({ state: 'visible', timeout: 10_000 });
@@ -548,9 +561,10 @@ async function seedRetainedSession(page, tempDir, fixtureBytes) {
     ) !== null
   ), targetVariant, { timeout: 10_000 });
   await terminalInput(page, targetRuntime);
+  await waitForHistoryBytes(targetPanel, 0);
 
   if (fixtureBytes === 0) {
-    const historyBytes = await waitForHistoryBytes(targetPanel, 0);
+    const historyBytes = 0;
     const historyLabel = await targetPanel.locator('text=/^History:/').last().textContent().catch(() => '');
     return {
       anchorSessionID,
@@ -565,24 +579,18 @@ async function seedRetainedSession(page, tempDir, fixtureBytes) {
   const markerPath = path.join(tempDir, 'fixture-seeded');
   const canvas = targetRuntime.locator('.redeven-terminal-surface .floeterm-beamterm-canvas:visible').last();
   await canvas.waitFor({ state: 'visible', timeout: 10_000 });
+  const beforeFixture = await captureCanvasEvidence(canvas);
   const line = 'redeven-packaged-terminal-history-0123456789abcdefghijklmnopqrstuvwxyz';
-  const visualMarker = 'redeven-terminal-carrier-seeded-visible';
-  const command = fixtureBytes > 0
-    ? `yes ${shellQuote(line)} | head -c ${fixtureBytes}; export PS1=''; stty -echo; printf seeded > ${shellQuote(markerPath)}`
-    : `printf seeded > ${shellQuote(markerPath)}`;
+  const command = `yes ${shellQuote(line)} | head -c ${fixtureBytes}; printf seeded > ${shellQuote(markerPath)}`;
   await sendTerminalCommand(page, command, targetRuntime);
   await waitForFile(markerPath, 30_000);
-  const historyBytes = await waitForHistoryBytes(targetPanel, minimumRetainedBytesForFixture(fixtureBytes));
-  const beforeVisualProbe = await captureCanvasEvidence(canvas);
-  const visualMarkerPath = path.join(tempDir, 'fixture-visual-probe');
-  await sendTerminalCommand(
-    page,
-    `printf '\\n%s\\n' ${shellQuote(visualMarker)}; printf visible > ${shellQuote(visualMarkerPath)}`,
-    targetRuntime,
-  );
-  await waitForFile(visualMarkerPath, 15_000);
+  const expectedHistoryBytes = terminalCarrierExpectedRetainedBytes({
+    fixtureBytes,
+    historyMaxBytes: terminalHistoryMaxBytes,
+  });
+  const historyBytes = await waitForHistoryBytes(targetPanel, expectedHistoryBytes);
   try {
-    await waitForCanvasChange(canvas, beforeVisualProbe, 15_000);
+    await waitForCanvasChange(canvas, beforeFixture, 15_000);
   } catch (error) {
     const diagnostics = await page.evaluate(({ expectedSessionID, panelVariant }) => ({
       panel_variant: panelVariant,
@@ -618,6 +626,21 @@ async function seedRetainedSession(page, tempDir, fixtureBytes) {
     });
   }
   const historyVisual = await captureCanvasVisualEvidence(canvas);
+  const historyLayout = await page.evaluate(({ panelVariant, sessionRef }) => {
+    const attachStart = performance.getEntriesByType('mark').filter((entry) => (
+      entry.name.startsWith('redeven:terminal:attach-start:')
+      && entry.detail?.variant === panelVariant
+      && entry.detail?.session_ref === sessionRef
+    )).at(-1);
+    return {
+      cols: Number(attachStart?.detail?.cols ?? 0),
+      rows: Number(attachStart?.detail?.rows ?? 0),
+    };
+  }, { panelVariant: targetVariant, sessionRef: pseudonymousTerminalSessionRef(sessionID) });
+  if (!Number.isSafeInteger(historyLayout.cols) || historyLayout.cols <= 0
+    || !Number.isSafeInteger(historyLayout.rows) || historyLayout.rows <= 0) {
+    throw new Error('terminal fixture did not expose its renderer layout');
+  }
   const historyLabel = await targetPanel.locator('text=/^History:/').last().textContent().catch(() => '');
   return {
     anchorSessionID,
@@ -625,6 +648,7 @@ async function seedRetainedSession(page, tempDir, fixtureBytes) {
     workbenchWidgetID,
     historyBytes,
     historyLabel: String(historyLabel ?? '').trim(),
+    historyLayout,
     historyVisual,
   };
 }
@@ -933,8 +957,12 @@ async function runSharedPreparedHistorySample({
       ))
     ), { minimumStart: targetStart, expectedSessionRef: sessionRef });
 
-    if (Number(prepared.detail?.byte_length ?? 0) < minimumRetainedBytesForFixture(fixtureBytes)) {
-      throw new Error('shared prepared history did not cover the retained fixture');
+    if (Number(prepared.detail?.byte_length ?? 0) !== seeded.historyBytes) {
+      throw new Error(
+        'shared prepared history did not exactly cover the retained fixture '
+          + `(prepared_bytes=${Number(prepared.detail?.byte_length ?? 0)}, `
+          + `retained_bytes=${seeded.historyBytes})`,
+      );
     }
     if (workbenchRecovery.attach_start_count !== 1) {
       throw new Error(`shared prepared history started attach ${workbenchRecovery.attach_start_count} times`);
@@ -953,7 +981,10 @@ async function runSharedPreparedHistorySample({
     if (workbenchRecovery.history_page_count > 1) {
       throw new Error('shared prepared history required more than one attach-delta history page');
     }
-    const maximumDeltaBytes = Math.max(terminalHistoryChunkMaxBytes * 4, Math.floor(seeded.historyBytes / 4));
+    const maximumDeltaBytes = Math.max(
+      terminalHistoryChunkMaxBytes * 4,
+      Math.floor(seeded.historyBytes / 4),
+    );
     if (workbenchRecovery.history_bytes_fetched > maximumDeltaBytes) {
       throw new Error(`shared prepared history fetched too much attach delta (${workbenchRecovery.history_bytes_fetched} > ${maximumDeltaBytes})`);
     }
@@ -1115,11 +1146,17 @@ async function runRecoverySample({ context, entryURL, fixtureBytes, seeded, surf
     if (marks.covered_through_sequence !== marks.snapshot_end_sequence) {
       throw new Error('terminal recovery coverage did not reach the fixed snapshot end');
     }
-    if (fixtureBytes > 0 && !preparedHistoryHit && marks.history_bytes_fetched < minimumRetainedBytesForFixture(fixtureBytes)) {
-      throw new Error(`terminal recovery fetched fewer history bytes than the fixture requires (fetched=${marks.history_bytes_fetched} required=${minimumRetainedBytesForFixture(fixtureBytes)})`);
+    if (fixtureBytes > 0 && !preparedHistoryHit && marks.history_bytes_fetched < seeded.historyBytes) {
+      throw new Error(
+        'terminal recovery fetched fewer history bytes than the fixture requires '
+          + `(fetched=${marks.history_bytes_fetched} required=${seeded.historyBytes})`,
+      );
     }
     if (preparedHistoryHit) {
-      const maximumDeltaBytes = Math.max(terminalHistoryChunkMaxBytes * 4, Math.floor(seeded.historyBytes / 4));
+      const maximumDeltaBytes = Math.max(
+        terminalHistoryChunkMaxBytes * 4,
+        Math.floor(seeded.historyBytes / 4),
+      );
       if (marks.history_page_count > 1 || marks.history_bytes_fetched > maximumDeltaBytes) {
         throw new Error(`prepared terminal recovery exceeded the attach-delta budget (pages=${marks.history_page_count} bytes=${marks.history_bytes_fetched} max_bytes=${maximumDeltaBytes})`);
       }
@@ -1130,20 +1167,15 @@ async function runRecoverySample({ context, entryURL, fixtureBytes, seeded, surf
       )), undefined, { timeout: 10_000 });
     }
 
-    const historyBytes = await waitForHistoryBytes(targetPanel, Math.min(
-      seeded.historyBytes,
-      minimumRetainedBytesForFixture(fixtureBytes),
-    ));
-    const fixtureDrift = historyBytes - seeded.historyBytes;
-    if (!historyFixtureDriftIsValid(fixtureBytes, seeded.historyBytes, historyBytes)) {
-      throw new Error(`terminal history fixture drifted outside one PTY read (seeded=${seeded.historyBytes} recovered=${historyBytes} drift=${fixtureDrift})`);
-    }
+    const historyBytes = await waitForHistoryBytes(targetPanel, seeded.historyBytes);
     let historyVisualMatch = null;
     if (seeded.historyVisual) {
-      historyVisualMatch = assertTerminalCarrierHistoryVisualMatch(
-        seeded.historyVisual,
-        await captureCanvasVisualEvidence(targetCanvas),
-      );
+      historyVisualMatch = assertTerminalCarrierHistoryVisualEvidence({
+        baselineVisual: seeded.historyVisual,
+        recoveredVisual: await captureCanvasVisualEvidence(targetCanvas),
+        baselineLayout: seeded.historyLayout,
+        recoveredLayout: { cols: marks.cols, rows: marks.rows },
+      });
     }
     const markerPath = path.join(tempDir, `input-${temperature}-${surface}-${sampleIndex}`);
     const probeStarted = performance.now();
@@ -1174,9 +1206,14 @@ async function runRecoverySample({ context, entryURL, fixtureBytes, seeded, surf
       prepared_history_hit: preparedHistoryHit,
       input_probe_ms: inputProbeMs,
       history_visual_evidence_passed: historyVisualMatch !== null,
-      history_visual_match: historyVisualMatch !== null,
+      history_visual_match: historyVisualMatch?.layouts_match ? true : null,
+      history_visual_comparison: historyVisualMatch?.mode ?? null,
+      history_visual_layouts_match: historyVisualMatch?.layouts_match ?? null,
       history_visual_mean_grid_delta: historyVisualMatch?.meanGridDelta ?? null,
       history_visual_ink_ratio: historyVisualMatch?.recoveredInkRatio ?? null,
+      history_visual_baseline_active_grid_ratio: historyVisualMatch?.baselineActiveGridRatio ?? null,
+      history_visual_recovered_active_grid_ratio: historyVisualMatch?.recoveredActiveGridRatio ?? null,
+      history_visual_ink_ratio_scale: historyVisualMatch?.inkRatioScale ?? null,
       status: 'passed',
     };
   } finally {

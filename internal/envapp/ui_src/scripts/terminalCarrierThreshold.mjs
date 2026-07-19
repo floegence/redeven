@@ -1,6 +1,24 @@
 import { createHash } from 'node:crypto';
 import { stripVTControlCharacters } from 'node:util';
 
+export function terminalCarrierExpectedRetainedBytes({ fixtureBytes, historyMaxBytes }) {
+  const requested = Number(fixtureBytes);
+  const maximum = Number(historyMaxBytes);
+  if (!Number.isSafeInteger(requested) || requested < 0) {
+    throw new Error('terminal carrier fixture bytes must be a non-negative safe integer');
+  }
+  if (!Number.isSafeInteger(maximum) || maximum <= 0) {
+    throw new Error('terminal carrier retained history cap must be a positive safe integer');
+  }
+  if (requested > maximum) {
+    throw new Error(
+      'terminal carrier fixture bytes must not exceed the retained history cap '
+        + `(fixture_bytes=${requested}, history_max_bytes=${maximum})`,
+    );
+  }
+  return requested;
+}
+
 export function assertTerminalCarrierInteractiveLimit({ stage, interactiveMs, maxInteractiveMs }) {
   const limit = Number(maxInteractiveMs) || 0;
   if (limit <= 0) return;
