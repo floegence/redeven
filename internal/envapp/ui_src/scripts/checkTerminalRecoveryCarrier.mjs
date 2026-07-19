@@ -16,6 +16,7 @@ import {
   assertTerminalCarrierP95Limit,
   terminalCarrierSampleMarkerName,
 } from './terminalCarrierThreshold.mjs';
+import { classifyTerminalCarrierConsoleMessage } from './terminalCarrierRunnerPolicy.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '../../../..');
@@ -357,10 +358,15 @@ async function startRuntime(tempDir) {
 }
 
 function observePage(page) {
-  const problems = { console: [], page: [], requests: [], responses: [] };
+  const problems = { console: [], browserDiagnostics: [], page: [], requests: [], responses: [] };
   page.on('console', (message) => {
-    if (message.type() === 'error' || message.type() === 'warning') {
-      problems.console.push({ type: message.type(), text: message.text() });
+    const entry = { type: message.type(), text: message.text(), location: message.location() };
+    const classification = classifyTerminalCarrierConsoleMessage(entry);
+    if (classification === 'browser_driver_diagnostic') {
+      problems.browserDiagnostics.push(entry);
+      if (carrierProgress.runner) carrierProgress.runner.browser_driver_diagnostic_count += 1;
+    } else if (classification === 'renderer_problem') {
+      problems.console.push(entry);
     }
   });
   page.on('pageerror', (error) => problems.page.push(error.message));
@@ -1207,6 +1213,7 @@ async function main(options) {
       node: process.version,
       chromium: browser.version(),
       cpu_count: os.cpus().length,
+      browser_driver_diagnostic_count: 0,
     };
     const reusedContext = await browser.newContext({ viewport: { width: 1280, height: 800 } });
     const seed = await openEnvPage(reusedContext, entryURL);
