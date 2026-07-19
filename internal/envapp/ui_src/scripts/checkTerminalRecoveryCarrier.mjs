@@ -523,9 +523,12 @@ async function seedRetainedSession(page, tempDir, fixtureBytes) {
   await terminalInput(page, targetRuntime);
 
   const quietShellMarkerPath = path.join(tempDir, 'fixture-shell-quiet');
+  const quietShellInputRCPath = path.join(tempDir, 'fixture-inputrc');
+  await writeFile(quietShellInputRCPath, 'set enable-bracketed-paste off\n');
   await sendTerminalCommand(
     page,
-    'stty -echo -onlcr; exec env PS1= PROMPT_COMMAND= bash --noprofile --norc -i',
+    'stty -echo -onlcr; exec env PS1= PROMPT_COMMAND= '
+      + `INPUTRC=${shellQuote(quietShellInputRCPath)} bash --noprofile --norc -i`,
     targetRuntime,
   );
   await sendTerminalCommand(page, `printf quiet > ${shellQuote(quietShellMarkerPath)}`, targetRuntime);

@@ -36,3 +36,8 @@ test('reports Chromium readback diagnostics without weakening renderer failures'
   }), 'renderer_problem');
   assert.equal(classifyTerminalCarrierConsoleMessage({ type: 'log', text: 'ordinary output' }), 'ignore');
 });
+
+test('disables Readline bracketed paste before seeding byte-exact terminal fixtures', () => {
+  assert.match(carrierSource, /set enable-bracketed-paste off/u);
+  assert.match(carrierSource, /INPUTRC=/u);
+});
