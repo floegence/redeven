@@ -44,8 +44,9 @@ type Options struct {
 	StateDir  string
 	StateRoot string
 	// ConfigPath is the absolute path to the runtime config file (used to persist settings updates from the Env App UI).
-	ConfigPath          string
-	ControlplaneBaseURL string
+	ConfigPath             string
+	ControlplaneBaseURL    string
+	ReDevPluginRuntimePath string
 
 	// CodeServerPortMin/Max configures the dynamic port range used for code-server processes.
 	// If unset/invalid, a safe default range is used.
@@ -294,6 +295,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		StateDir:           stateAbs,
 		StateRoot:          stateRootAbs,
 		ConfigPath:         strings.TrimSpace(opts.ConfigPath),
+		RuntimePath:        strings.TrimSpace(opts.ReDevPluginRuntimePath),
 		ResolveSessionMeta: resolvePluginPlatformSessionMeta(opts),
 		Audit:              opts.Audit,
 		Diagnostics:        opts.Diagnostics,

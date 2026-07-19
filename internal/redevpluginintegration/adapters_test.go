@@ -300,9 +300,10 @@ func TestNewCreatesDurableReDevPluginState(t *testing.T) {
 		t.Fatalf("save config: %v", err)
 	}
 	integration, err := New(context.Background(), Options{
-		StateDir:   stateDir,
-		ConfigPath: configPath,
-		Containers: containers.NewAdapter(nil),
+		StateDir:    stateDir,
+		ConfigPath:  configPath,
+		RuntimePath: filepath.Join(stateDir, "redevplugin-runtime"),
+		Containers:  containers.NewAdapter(nil),
 		ResolveSessionMeta: func(string) (*session.Meta, bool) {
 			return nil, false
 		},
@@ -315,12 +316,31 @@ func TestNewCreatesDurableReDevPluginState(t *testing.T) {
 		"apps/redevplugin/db/registry.sqlite",
 		"apps/redevplugin/db/operations.sqlite",
 		"apps/redevplugin/db/observability.sqlite",
+		"apps/redevplugin/db/runtime_lease_replays.sqlite",
 		"apps/redevplugin/assets",
 		"apps/redevplugin/storage",
 	} {
 		if _, err := os.Stat(filepath.Join(stateDir, rel)); err != nil {
 			t.Fatalf("expected durable state %s: %v", rel, err)
 		}
+	}
+}
+
+func TestNewRejectsNonCanonicalRuntimePath(t *testing.T) {
+	stateDir := t.TempDir()
+	configPath := filepath.Join(stateDir, "config.json")
+	if err := config.Save(configPath, &config.Config{PermissionPolicy: testPermissionPolicy(t, "execute_read")}); err != nil {
+		t.Fatal(err)
+	}
+	_, err := New(context.Background(), Options{
+		StateDir:           stateDir,
+		ConfigPath:         configPath,
+		RuntimePath:        "redevplugin-runtime",
+		Containers:         containers.NewAdapter(nil),
+		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
+	})
+	if err == nil || !strings.Contains(err.Error(), "absolute canonical path") {
+		t.Fatalf("New() runtime path error = %v", err)
 	}
 }
 
