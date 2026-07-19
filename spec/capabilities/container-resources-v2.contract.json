@@ -667,12 +667,15 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
+          "accepted",
           "engine",
-          "method",
           "container_id",
-          "completed"
+          "method"
         ],
         "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
           "engine": {
             "type": "string",
             "enum": [
@@ -680,15 +683,13 @@
               "podman"
             ]
           },
-          "method": {
-            "type": "string"
-          },
           "container_id": {
             "type": "string",
             "minLength": 1
           },
-          "completed": {
-            "type": "boolean"
+          "method": {
+            "type": "string",
+            "const": "containers.start"
           }
         }
       },
@@ -776,12 +777,15 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
+          "accepted",
           "engine",
-          "method",
           "container_id",
-          "completed"
+          "method"
         ],
         "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
           "engine": {
             "type": "string",
             "enum": [
@@ -789,15 +793,13 @@
               "podman"
             ]
           },
-          "method": {
-            "type": "string"
-          },
           "container_id": {
             "type": "string",
             "minLength": 1
           },
-          "completed": {
-            "type": "boolean"
+          "method": {
+            "type": "string",
+            "const": "containers.stop"
           }
         }
       },
@@ -885,12 +887,15 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
+          "accepted",
           "engine",
-          "method",
           "container_id",
-          "completed"
+          "method"
         ],
         "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
           "engine": {
             "type": "string",
             "enum": [
@@ -898,15 +903,13 @@
               "podman"
             ]
           },
-          "method": {
-            "type": "string"
-          },
           "container_id": {
             "type": "string",
             "minLength": 1
           },
-          "completed": {
-            "type": "boolean"
+          "method": {
+            "type": "string",
+            "const": "containers.restart"
           }
         }
       },
@@ -993,12 +996,15 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
+          "accepted",
           "engine",
-          "method",
           "container_id",
-          "completed"
+          "method"
         ],
         "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
           "engine": {
             "type": "string",
             "enum": [
@@ -1006,15 +1012,13 @@
               "podman"
             ]
           },
-          "method": {
-            "type": "string"
-          },
           "container_id": {
             "type": "string",
             "minLength": 1
           },
-          "completed": {
-            "type": "boolean"
+          "method": {
+            "type": "string",
+            "const": "containers.remove"
           }
         }
       },
@@ -1219,11 +1223,14 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
+          "accepted",
           "engine",
-          "image",
-          "completed"
+          "image_ref"
         ],
         "properties": {
+          "accepted": {
+            "type": "boolean"
+          },
           "engine": {
             "type": "string",
             "enum": [
@@ -1231,26 +1238,9 @@
               "podman"
             ]
           },
-          "image": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "digest_pinned"
-            ],
-            "properties": {
-              "reference": {
-                "type": "string"
-              },
-              "digest": {
-                "type": "string"
-              },
-              "digest_pinned": {
-                "type": "boolean"
-              }
-            }
-          },
-          "completed": {
-            "type": "boolean"
+          "image_ref": {
+            "type": "string",
+            "minLength": 1
           }
         }
       },
