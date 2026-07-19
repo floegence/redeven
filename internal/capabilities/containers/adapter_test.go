@@ -9,17 +9,24 @@ import (
 	"time"
 )
 
-func TestAdapterStatusResolvesFirstAvailableEngine(t *testing.T) {
+func TestAdapterStatusRequiresExplicitEngine(t *testing.T) {
 	client := &fakeEngineClient{status: map[Engine]EngineStatus{
 		EngineDocker: {Engine: EngineDocker, Available: false},
 		EnginePodman: {Engine: EnginePodman, Available: true, Version: "5.3.1"},
 	}}
-	response, err := NewAdapter(client).Status(context.Background(), StatusRequest{})
-	if err != nil {
-		t.Fatal(err)
+	response, err := mustNewAdapter(t, client).Status(context.Background(), StatusRequest{})
+	if !errors.Is(err, ErrInvalidEngine) || response.Engine != "" || response.Available {
+		t.Fatalf("status response = %+v, err=%v", response, err)
 	}
-	if response.Engine != EnginePodman || !response.Available || response.EngineVersion != "5.3.1" {
-		t.Fatalf("status response = %+v", response)
+}
+
+func TestNewAdapterRejectsNilAndTypedNilEngineClients(t *testing.T) {
+	if _, err := NewAdapter(nil); err == nil {
+		t.Fatal("NewAdapter() accepted a nil engine client")
+	}
+	var typedNil *fakeEngineClient
+	if _, err := NewAdapter(typedNil); err == nil {
+		t.Fatal("NewAdapter() accepted a typed-nil engine client")
 	}
 }
 
@@ -27,7 +34,7 @@ func TestAdapterStatusHonorsRequestedUnavailableEngine(t *testing.T) {
 	client := &fakeEngineClient{status: map[Engine]EngineStatus{
 		EngineDocker: {Engine: EngineDocker, Available: false},
 	}}
-	response, err := NewAdapter(client).Status(context.Background(), StatusRequest{Engine: EngineDocker})
+	response, err := mustNewAdapter(t, client).Status(context.Background(), StatusRequest{Engine: EngineDocker})
 	if !errors.Is(err, ErrEngineUnavailable) || response.Engine != EngineDocker || response.Available {
 		t.Fatalf("status response = %+v, err=%v", response, err)
 	}
@@ -40,7 +47,7 @@ func TestAdapterListAndInspectReturnRedactedDomainDTOs(t *testing.T) {
 		list:    map[Engine][]EngineContainer{EngineDocker: {container}},
 		inspect: map[string]EngineContainer{"docker:container_123": container},
 	}
-	adapter := NewAdapter(client)
+	adapter := mustNewAdapter(t, client)
 	list, err := adapter.List(context.Background(), ContainerListRequest{Engine: EngineDocker, All: true})
 	if err != nil {
 		t.Fatal(err)
@@ -68,7 +75,7 @@ func TestAdapterListAndInspectReturnRedactedDomainDTOs(t *testing.T) {
 
 func TestAdapterStartPreflightUsesInspectedRuntime(t *testing.T) {
 	client := &fakeEngineClient{inspect: map[string]EngineContainer{"docker:container_123": testEngineContainer()}}
-	plan, err := NewAdapter(client).StartPreflight(context.Background(), ContainerStartRequest{
+	plan, err := mustNewAdapter(t, client).StartPreflight(context.Background(), ContainerStartRequest{
 		Engine: EngineDocker, ContainerID: "container_123",
 	})
 	if err != nil {
@@ -95,7 +102,7 @@ func TestAdapterActionsLogsAndPullUseBusinessClient(t *testing.T) {
 			"docker:ghcr.io/acme/api:latest": {Engine: EngineDocker, Image: ImageInput{Reference: "ghcr.io/acme/api:latest", Digest: "sha256:feedface"}, Completed: true},
 		},
 	}
-	adapter := NewAdapter(client)
+	adapter := mustNewAdapter(t, client)
 	action, err := adapter.Stop(context.Background(), ContainerActionRequest{Engine: EngineDocker, ContainerID: "container_123", TimeoutSec: 10})
 	if err != nil || action.Method != MethodStop || !action.Completed {
 		t.Fatalf("stop response = %+v, err=%v", action, err)
@@ -110,10 +117,29 @@ func TestAdapterActionsLogsAndPullUseBusinessClient(t *testing.T) {
 	}
 }
 
+func TestAdapterPreservesPublishedContainerResourceFailures(t *testing.T) {
+	adapter := mustNewAdapter(t, &fakeEngineClient{inspectErr: ErrContainerNotFound})
+	_, err := adapter.Inspect(context.Background(), ContainerInspectRequest{
+		Engine: EngineDocker, ContainerID: "container_404",
+	})
+	var notFound *ContainerNotFoundError
+	if !errors.As(err, &notFound) || notFound.ContainerID != "container_404" {
+		t.Fatalf("Inspect() error = %#v, want typed container target", err)
+	}
+
+	adapter = mustNewAdapter(t, &fakeEngineClient{logsErr: ErrLogsUnavailable})
+	_, err = adapter.TailLogs(context.Background(), LogsTailRequest{
+		Engine: EngineDocker, ContainerID: "container_1",
+	})
+	if !errors.Is(err, ErrLogsUnavailable) {
+		t.Fatalf("TailLogs() error = %v, want ErrLogsUnavailable", err)
+	}
+}
+
 func TestAdapterFollowLogsStreamsThroughFollowerClient(t *testing.T) {
 	client := &fakeFollowingEngineClient{fakeEngineClient: fakeEngineClient{}}
 	var lines []LogLine
-	err := NewAdapter(client).FollowLogs(context.Background(), LogsTailRequest{
+	err := mustNewAdapter(t, client).FollowLogs(context.Background(), LogsTailRequest{
 		Engine: EngineDocker, ContainerID: "container_123", TailLines: 20, Follow: true,
 	}, LogLineSinkFunc(func(_ context.Context, line LogLine) error {
 		lines = append(lines, line)
@@ -128,7 +154,7 @@ func TestAdapterFollowLogsStreamsThroughFollowerClient(t *testing.T) {
 }
 
 func TestAdapterFollowLogsRequiresStreamingClient(t *testing.T) {
-	err := NewAdapter(&fakeEngineClient{}).FollowLogs(context.Background(), LogsTailRequest{
+	err := mustNewAdapter(t, &fakeEngineClient{}).FollowLogs(context.Background(), LogsTailRequest{
 		Engine: EngineDocker, ContainerID: "container_123", Follow: true,
 	}, LogLineSinkFunc(func(context.Context, LogLine) error { return nil }))
 	if !errors.Is(err, ErrLogsFollowUnsupported) {
@@ -148,7 +174,7 @@ func TestAdapterBusinessOperationsRespectContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() {
-		_, err := NewAdapter(client).Remove(ctx, ContainerActionRequest{Engine: EngineDocker, ContainerID: "container_123", Force: true})
+		_, err := mustNewAdapter(t, client).Remove(ctx, ContainerActionRequest{Engine: EngineDocker, ContainerID: "container_123", Force: true})
 		done <- err
 	}()
 	select {
@@ -167,14 +193,25 @@ func TestAdapterBusinessOperationsRespectContextCancellation(t *testing.T) {
 	}
 }
 
+func mustNewAdapter(t *testing.T, client EngineClient) *Adapter {
+	t.Helper()
+	adapter, err := NewAdapter(client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return adapter
+}
+
 type fakeEngineClient struct {
-	status  map[Engine]EngineStatus
-	list    map[Engine][]EngineContainer
-	inspect map[string]EngineContainer
-	actions map[string]EngineActionResult
-	logs    map[string]EngineLogsResult
-	pulls   map[string]EngineImageResult
-	action  func(context.Context, EngineActionRequest) (EngineActionResult, error)
+	status     map[Engine]EngineStatus
+	list       map[Engine][]EngineContainer
+	inspect    map[string]EngineContainer
+	actions    map[string]EngineActionResult
+	logs       map[string]EngineLogsResult
+	pulls      map[string]EngineImageResult
+	action     func(context.Context, EngineActionRequest) (EngineActionResult, error)
+	inspectErr error
+	logsErr    error
 }
 
 func (c *fakeEngineClient) Status(_ context.Context, engine Engine) (EngineStatus, error) {
@@ -189,6 +226,9 @@ func (c *fakeEngineClient) List(_ context.Context, engine Engine, _ bool) ([]Eng
 }
 
 func (c *fakeEngineClient) Inspect(_ context.Context, engine Engine, containerID string) (EngineContainer, error) {
+	if c.inspectErr != nil {
+		return EngineContainer{}, c.inspectErr
+	}
 	value, ok := c.inspect[string(engine)+":"+containerID]
 	if !ok {
 		return EngineContainer{}, errors.New("container not found")
@@ -208,6 +248,9 @@ func (c *fakeEngineClient) Action(ctx context.Context, req EngineActionRequest) 
 }
 
 func (c *fakeEngineClient) TailLogs(_ context.Context, req EngineLogsRequest) (EngineLogsResult, error) {
+	if c.logsErr != nil {
+		return EngineLogsResult{}, c.logsErr
+	}
 	value, ok := c.logs[string(req.Engine)+":"+req.ContainerID]
 	if !ok {
 		return EngineLogsResult{}, errors.New("container logs not configured")

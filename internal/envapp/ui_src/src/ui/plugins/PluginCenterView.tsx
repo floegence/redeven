@@ -1,9 +1,8 @@
-import { For, Show, createEffect, createMemo, createResource, createSignal, type JSX } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
 import { cn, createUIFirstSelection } from '@floegence/floe-webapp-core';
 import { CheckCircle, Download, Grid3x3, RefreshIcon, Search, Settings, Trash, X } from '@floegence/floe-webapp-core/icons';
 
 import { buildPluginCenterModel } from './pluginInventoryProjection';
-import { executePluginLifecycleCommand, loadPluginInventoryProjection } from './pluginApi';
 import { useI18n, type I18nHelpers } from '../i18n';
 import type {
   PluginCenterTab,
@@ -13,33 +12,32 @@ import type {
 } from './pluginTypes';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
 
-type PluginCenterResourceSource = PluginInventoryProjection | 'live';
-
 export type PluginCenterViewProps = {
-  projection?: PluginInventoryProjection;
-  loading?: boolean;
+  projection: PluginInventoryProjection;
+  loading: boolean;
   error?: unknown;
   selectedPluginID?: string;
-  canManagePlugins?: boolean;
-  canOpenPluginSurfaces?: boolean;
+  canManagePlugins: boolean;
+  canOpenPluginSurfaces: boolean;
   onClose?: () => void;
-  onCommand?: (command: PluginLifecycleCommand) => Promise<unknown> | unknown;
+  onRefresh: () => Promise<unknown> | unknown;
+  onCommand: (command: PluginLifecycleCommand, signal: AbortSignal) => Promise<unknown> | unknown;
 };
 
-export function PluginCenterView(props: PluginCenterViewProps = {}): JSX.Element {
+export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const i18n = useI18n();
   const [activeTab, setActiveTab] = createSignal<PluginCenterTab>(initialTabForProjection(props.projection));
   const [initialTabResolved, setInitialTabResolved] = createSignal(Boolean(props.projection));
   const [query, setQuery] = createSignal('');
   const [selectedPluginID, setSelectedPluginID] = createSignal<string | undefined>(props.selectedPluginID);
-  const [resource, { refetch }] = createResource<PluginInventoryProjection, PluginCenterResourceSource>(
-    () => props.projection ?? 'live',
-    async (source) => (source === 'live' ? loadPluginInventoryProjection() : source),
-  );
   const [commandError, setCommandError] = createSignal<string | null>(null);
+  const [commandPending, setCommandPending] = createSignal(false);
   const [uninstallChoiceFor, setUninstallChoiceFor] = createSignal<string | null>(null);
+  let commandController: AbortController | undefined;
 
-  const projection = createMemo(() => props.projection ?? resource() ?? { items: [] });
+  onCleanup(() => commandController?.abort('Plugin Center disposed'));
+
+  const projection = createMemo(() => props.projection);
   const model = createMemo(() => buildPluginCenterModel(projection(), activeTab()));
   const allItems = createMemo(() => projection().items);
   const tabItems = createMemo(() => {
@@ -55,10 +53,10 @@ export function PluginCenterView(props: PluginCenterViewProps = {}): JSX.Element
     }
   });
   const visibleItems = createMemo(() => filterItems(tabItems(), query(), i18n));
-  const loading = createMemo(() => props.loading ?? resource.loading);
-  const errorMessage = createMemo(() => messageFromUnknown(props.error ?? resource.error ?? commandError()));
-  const canManage = createMemo(() => props.canManagePlugins ?? true);
-  const canOpenSurfaces = createMemo(() => props.canOpenPluginSurfaces ?? false);
+  const loading = createMemo(() => props.loading);
+  const errorMessage = createMemo(() => messageFromUnknown(props.error ?? commandError()));
+  const canManage = createMemo(() => props.canManagePlugins);
+  const canOpenSurfaces = createMemo(() => props.canOpenPluginSurfaces);
   const tabSelection = createUIFirstSelection<PluginCenterTab>({
     committed: activeTab,
     commit: setActiveTab,
@@ -103,33 +101,32 @@ export function PluginCenterView(props: PluginCenterViewProps = {}): JSX.Element
   ));
 
   const runCommand = async (command: PluginLifecycleCommand) => {
+    if (commandPending()) return;
+    const controller = new AbortController();
+    commandController = controller;
+    setCommandPending(true);
     setCommandError(null);
     try {
-      if (props.onCommand) {
-        await props.onCommand(command);
-        if (command.type !== 'open_surface') {
-          await refetch();
-        }
-      } else {
-        await executePluginLifecycleCommand(command);
-        await refetch();
-      }
+      await props.onCommand(command, controller.signal);
       setUninstallChoiceFor(null);
     } catch (error) {
       setCommandError(messageFromUnknown(error));
+    } finally {
+      if (commandController === controller) commandController = undefined;
+      setCommandPending(false);
     }
   };
 
   return (
     <PluginCenterShell
       query={query()}
-      loading={loading()}
+      loading={loading() || commandPending()}
       activeTab={tabSelection.visual()}
       installedCount={model().installed.length}
       discoverCount={model().discover.length}
       updatesCount={model().updates.length}
       onQueryInput={setQuery}
-      onRefresh={() => void refetch()}
+      onRefresh={() => void props.onRefresh()}
       onTabSelect={tabSelection.request}
       onClose={props.onClose}
     >
@@ -179,6 +176,7 @@ export function PluginCenterView(props: PluginCenterViewProps = {}): JSX.Element
           item={selectedItem()}
           canManage={canManage()}
           canOpenSurfaces={canOpenSurfaces()}
+          commandPending={commandPending()}
           uninstallChoiceFor={uninstallChoiceFor()}
           onCommand={(command) => void runCommand(command)}
           onAskUninstall={setUninstallChoiceFor}
@@ -262,6 +260,7 @@ export function PluginCenterDetails(props: {
   item?: PluginInventoryItem;
   canManage: boolean;
   canOpenSurfaces: boolean;
+  commandPending: boolean;
   uninstallChoiceFor: string | null;
   onCommand: (command: PluginLifecycleCommand) => void;
   onAskUninstall: (pluginInstanceID: string) => void;
@@ -303,6 +302,7 @@ export function PluginCenterDetails(props: {
                   item={item()}
                   canManage={props.canManage}
                   canOpenSurfaces={props.canOpenSurfaces}
+                  commandPending={props.commandPending}
                   onCommand={props.onCommand}
                   onAskUninstall={props.onAskUninstall}
                 />
@@ -311,15 +311,27 @@ export function PluginCenterDetails(props: {
                 <div class="mt-3 flex flex-wrap gap-2">
                   <button
                     type="button"
-                    class="cursor-pointer rounded-md border px-2.5 py-1 text-xs hover:bg-muted"
-                    onClick={() => props.onCommand({ type: 'uninstall', pluginInstanceID: item().pluginInstanceID!, dataRetention: 'keep_data' })}
+                    class="cursor-pointer rounded-md border px-2.5 py-1 text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={props.commandPending}
+                    onClick={() => props.onCommand({
+                      type: 'uninstall',
+                      pluginInstanceID: item().pluginInstanceID!,
+                      expectedManagementRevision: item().managementRevision!,
+                      dataRetention: 'keep_data',
+                    })}
                   >
                     {i18n.t('uiCopy.plugin.keepData')}
                   </button>
                   <button
                     type="button"
-                    class="cursor-pointer rounded-md border border-destructive/30 px-2.5 py-1 text-xs text-destructive hover:bg-destructive/10"
-                    onClick={() => props.onCommand({ type: 'uninstall', pluginInstanceID: item().pluginInstanceID!, dataRetention: 'delete_data' })}
+                    class="cursor-pointer rounded-md border border-destructive/30 px-2.5 py-1 text-xs text-destructive hover:bg-destructive/10 disabled:cursor-not-allowed disabled:opacity-50"
+                    disabled={props.commandPending}
+                    onClick={() => props.onCommand({
+                      type: 'uninstall',
+                      pluginInstanceID: item().pluginInstanceID!,
+                      expectedManagementRevision: item().managementRevision!,
+                      dataRetention: 'delete_data',
+                    })}
                   >
                     {i18n.t('uiCopy.plugin.deleteData')}
                   </button>
@@ -358,11 +370,12 @@ function PluginActions(props: {
   item: PluginInventoryItem;
   canManage: boolean;
   canOpenSurfaces: boolean;
+  commandPending: boolean;
   onCommand: (command: PluginLifecycleCommand) => void;
   onAskUninstall: (pluginInstanceID: string) => void;
 }) {
   const i18n = useI18n();
-  const disabledManagement = () => !props.canManage;
+  const disabledManagement = () => !props.canManage || props.commandPending;
   const item = () => props.item;
   return (
     <>
@@ -388,8 +401,10 @@ function PluginActions(props: {
             const target = item().defaultLaunchTarget!;
             props.onCommand({
               type: 'open_surface',
+              pluginID: target.pluginID,
               pluginInstanceID: target.pluginInstanceID,
               surfaceID: target.surfaceID,
+              expectedManagementRevision: target.expectedManagementRevision,
               placement: target.preferredPlacement,
             });
           }}
@@ -404,7 +419,11 @@ function PluginActions(props: {
           data-plugin-action="enable"
           class="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
           disabled={disabledManagement()}
-          onClick={() => props.onCommand({ type: 'enable', pluginInstanceID: item().pluginInstanceID! })}
+          onClick={() => props.onCommand({
+            type: 'enable',
+            pluginInstanceID: item().pluginInstanceID!,
+            expectedManagementRevision: item().managementRevision!,
+          })}
         >
           <Settings class="h-3.5 w-3.5" />
           {i18n.t('uiCopy.plugin.enable')}
@@ -416,7 +435,11 @@ function PluginActions(props: {
           data-plugin-action="disable"
           class="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
           disabled={disabledManagement()}
-          onClick={() => props.onCommand({ type: 'disable', pluginInstanceID: item().pluginInstanceID! })}
+          onClick={() => props.onCommand({
+            type: 'disable',
+            pluginInstanceID: item().pluginInstanceID!,
+            expectedManagementRevision: item().managementRevision!,
+          })}
         >
           <Settings class="h-3.5 w-3.5" />
           {i18n.t('uiCopy.plugin.disable')}
@@ -432,6 +455,7 @@ function PluginActions(props: {
             type: 'update',
             pluginID: item().pluginID,
             pluginInstanceID: item().pluginInstanceID!,
+            expectedManagementRevision: item().managementRevision!,
             targetVersion: item().officialCatalog?.stableVersion ?? '',
           })}
         >

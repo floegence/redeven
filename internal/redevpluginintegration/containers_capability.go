@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/floegence/redeven/internal/capabilities/containers"
 	redevpluginartifacts "github.com/floegence/redeven/spec/redevplugin"
@@ -22,14 +23,16 @@ const (
 	containersCapabilityVersion = "1.0.0"
 	containerTaskCanceledReason = "container operation canceled"
 	containerTerminalFailure    = "container capability terminal state failed"
+	containerTerminalTimeout    = 2 * time.Second
 )
 
 var errContainerTaskCanceled = errors.New(containerTaskCanceledReason)
 var errContainersCapabilityClosed = errors.New("containers capability adapter is closed")
 
 type containersCapabilityAdapter struct {
-	containers  *containers.Adapter
-	diagnostics observability.DiagnosticsSink
+	containers      *containers.Adapter
+	diagnostics     observability.DiagnosticsSink
+	terminalTimeout time.Duration
 
 	tasksMu sync.Mutex
 	tasks   map[string]containerCapabilityTask
@@ -46,8 +49,8 @@ type containerCapabilityTask struct {
 }
 
 func newContainersCapabilityRegistry(adapter *containers.Adapter, diagnostics observability.DiagnosticsSink) (*capability.Registry, *containersCapabilityAdapter, error) {
-	if adapter == nil {
-		return nil, nil, errors.New("containers capability adapter is required")
+	if err := adapter.Validate(); err != nil {
+		return nil, nil, err
 	}
 	bundle, trustedKey, err := redevpluginartifacts.ContainersCapabilityBundle()
 	if err != nil {
@@ -63,9 +66,10 @@ func newContainersCapabilityRegistry(adapter *containers.Adapter, diagnostics ob
 		return nil, nil, fmt.Errorf("verify containers capability artifacts: %w", err)
 	}
 	bridge := &containersCapabilityAdapter{
-		containers:  adapter,
-		diagnostics: diagnostics,
-		tasks:       make(map[string]containerCapabilityTask),
+		containers:      adapter,
+		diagnostics:     diagnostics,
+		terminalTimeout: containerTerminalTimeout,
+		tasks:           make(map[string]containerCapabilityTask),
 	}
 	registry := capability.NewRegistry()
 	if err := registry.Register(capability.Registration{
@@ -379,16 +383,17 @@ func (a *containersCapabilityAdapter) unregisterTask(operationID string) {
 func (a *containersCapabilityAdapter) runOperationTask(ctx context.Context, binding capability.ExecutionBinding, sink capability.OperationSink, run func(context.Context) error) {
 	defer a.unregisterTask(sink.ID())
 	err := runContainerTask(ctx, run)
-	terminalCtx := context.WithoutCancel(ctx)
+	terminalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), a.terminalTimeout)
+	defer cancel()
 	if err == nil {
-		a.recordTerminalResult(terminalCtx, binding, sink.Complete(terminalCtx))
+		a.recordTerminalResult(binding, sink.Complete(terminalCtx))
 		return
 	}
 	if containerTaskWasCanceled(ctx, sink.CancelRequested()) {
-		a.recordTerminalResult(terminalCtx, binding, sink.Cancel(terminalCtx, containerTaskCanceledReason))
+		a.recordTerminalResult(binding, sink.Cancel(terminalCtx, containerTaskCanceledReason))
 		return
 	}
-	a.recordTerminalResult(terminalCtx, binding, sink.Fail(terminalCtx, capability.ExecutionFailureAdapterFailed, err))
+	a.recordTerminalResult(binding, sink.Fail(terminalCtx, capability.ExecutionFailureAdapterFailed, containerBusinessError(err)))
 }
 
 func (a *containersCapabilityAdapter) runLogTask(ctx context.Context, binding capability.ExecutionBinding, operation capability.OperationSink, stream capability.StreamSink, input logArguments) {
@@ -422,19 +427,20 @@ func (a *containersCapabilityAdapter) runLogTask(ctx context.Context, binding ca
 		return nil
 	}
 	err := runContainerTask(ctx, run)
-	terminalCtx := context.WithoutCancel(ctx)
+	terminalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), a.terminalTimeout)
+	defer cancel()
 	if err == nil {
-		a.recordTerminalResult(terminalCtx, binding, stream.Close(terminalCtx))
+		a.recordTerminalResult(binding, stream.Close(terminalCtx))
 		return
 	}
 	if containerTaskWasCanceled(ctx, operation.CancelRequested()) {
-		a.recordTerminalResult(terminalCtx, binding, operation.Cancel(terminalCtx, containerTaskCanceledReason))
+		a.recordTerminalResult(binding, operation.Cancel(terminalCtx, containerTaskCanceledReason))
 		return
 	}
-	a.recordTerminalResult(terminalCtx, binding, stream.Fail(terminalCtx, capability.ExecutionFailureAdapterFailed, err))
+	a.recordTerminalResult(binding, stream.Fail(terminalCtx, capability.ExecutionFailureAdapterFailed, containerBusinessError(err)))
 }
 
-func (a *containersCapabilityAdapter) recordTerminalResult(ctx context.Context, binding capability.ExecutionBinding, err error) {
+func (a *containersCapabilityAdapter) recordTerminalResult(binding capability.ExecutionBinding, err error) {
 	if err == nil {
 		return
 	}
@@ -444,6 +450,8 @@ func (a *containersCapabilityAdapter) recordTerminalResult(ctx context.Context, 
 	if a.diagnostics == nil {
 		return
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), a.terminalTimeout)
+	defer cancel()
 	_ = a.diagnostics.AppendPluginDiagnostic(ctx, observability.DiagnosticEvent{
 		Type:                 "plugin.container_capability.terminal_failed",
 		Severity:             observability.DiagnosticSeverityWarning,
@@ -487,7 +495,8 @@ func containerTaskWasCanceled(ctx context.Context, requested <-chan struct{}) bo
 		return true
 	default:
 	}
-	return errors.Is(context.Cause(ctx), errContainerTaskCanceled)
+	cause := context.Cause(ctx)
+	return errors.Is(cause, errContainerTaskCanceled) || errors.Is(cause, errContainersCapabilityClosed)
 }
 
 type engineArguments struct {
@@ -670,11 +679,23 @@ func projectStartPreflight(plan containers.StartPreflightPlan) map[string]any {
 func containerBusinessError(cause error) error {
 	code := "CONTAINER_OPERATION_FAILED"
 	message := "The container operation failed"
+	var details map[string]any
 	if errors.Is(cause, containers.ErrEngineUnavailable) {
 		code = "CONTAINER_ENGINE_UNAVAILABLE"
 		message = "The selected container engine is unavailable"
+	} else if errors.Is(cause, containers.ErrContainerNotFound) {
+		code = "CONTAINER_NOT_FOUND"
+		message = "The requested container does not exist"
+		var notFound *containers.ContainerNotFoundError
+		if !errors.As(cause, &notFound) || strings.TrimSpace(notFound.ContainerID) == "" {
+			return errors.New("container not-found error is missing its canonical target")
+		}
+		details = map[string]any{"container_id": strings.TrimSpace(notFound.ContainerID)}
+	} else if errors.Is(cause, containers.ErrLogsUnavailable) {
+		code = "CONTAINER_LOGS_UNAVAILABLE"
+		message = "Container logs are unavailable"
 	}
-	businessError, err := capability.NewBusinessError(code, message, nil)
+	businessError, err := capability.NewBusinessError(code, message, details)
 	if err != nil {
 		return errors.New("container capability business error is invalid")
 	}

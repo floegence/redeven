@@ -78,6 +78,11 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
             {props.model.errorMessage}
           </div>
         </Show>
+        <Show when={props.model.loading}>
+          <div class="mb-2 rounded-md border bg-muted/35 px-2 py-1.5 text-xs text-muted-foreground">
+            {i18n.t('uiCopy.plugin.loadingOfficial')}
+          </div>
+        </Show>
         <div class="grid grid-cols-3 gap-2">
           <For each={props.model.tiles}>
             {(tile) => (

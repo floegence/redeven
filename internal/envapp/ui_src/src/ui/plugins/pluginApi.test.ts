@@ -1,97 +1,120 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { PluginPlatformClient } from '@floegence/redevplugin-ui';
+import { describe, expect, it, vi } from 'vitest';
 
-const localApiMocks = vi.hoisted(() => ({
-  fetchLocalApiJSON: vi.fn(async (_url: string, _init: RequestInit) => ({ plugins: [] })),
-}));
+import { createPluginLifecycleAPI } from './pluginApi';
+import { OFFICIAL_PLUGIN_CATALOG_SEED } from './officialPluginCatalog';
+import { OFFICIAL_CONTAINERS_RELEASE_REF } from './officialContainersRelease.generated';
 
-vi.mock('../services/localApi', () => ({
-  fetchLocalApiJSON: localApiMocks.fetchLocalApiJSON,
-}));
+const officialContainers = OFFICIAL_PLUGIN_CATALOG_SEED[0];
 
-describe('plugin API wrapper', () => {
-  beforeEach(() => {
-    localApiMocks.fetchLocalApiJSON.mockClear();
+function createClientHarness() {
+  const mocks = {
+    catalog: vi.fn(async () => ({ plugins: [] })),
+    installReleaseRef: vi.fn(async () => ({})),
+    updateReleaseRef: vi.fn(async () => ({})),
+    enablePlugin: vi.fn(async () => ({})),
+    disablePlugin: vi.fn(async () => ({})),
+    uninstallPlugin: vi.fn(async () => ({})),
+  };
+  return {
+    mocks,
+    lifecycle: createPluginLifecycleAPI(mocks as unknown as PluginPlatformClient),
+  };
+}
+
+describe('v0.5.1 plugin lifecycle client integration', () => {
+  it('loads inventory exclusively through the platform catalog client', async () => {
+    const { lifecycle, mocks } = createClientHarness();
+
+    await expect(lifecycle.listInstalledPlugins()).resolves.toEqual([]);
+    expect(mocks.catalog).toHaveBeenCalledOnce();
+    expect(mocks.catalog).toHaveBeenCalledWith({});
   });
 
-  it('uses the Redeven proxy plugin namespace for catalog reads', async () => {
-    const { listInstalledPlugins } = await import('./pluginApi');
-    await listInstalledPlugins();
+  it('installs the generated signed release under the fixed official identity', async () => {
+    const { lifecycle, mocks } = createClientHarness();
 
-    expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/plugins/catalog', { method: 'GET' });
-  });
-
-  it('never exposes direct _redevplugin paths from the UI API wrapper', async () => {
-    const source = await import('./pluginApi');
-    expect(JSON.stringify(source)).not.toContain('/_redevplugin');
-  });
-
-  it('maps lifecycle commands to snake_case ReDevPlugin request bodies', async () => {
-    const { pluginLifecycleApi } = await import('./pluginApi');
-
-    await pluginLifecycleApi.disable('plugininst_containers');
-    await pluginLifecycleApi.uninstall('plugininst_containers', 'delete_data');
-    await pluginLifecycleApi.openSurface({
-      pluginInstanceID: 'plugininst_containers',
-      surfaceID: 'containers.activity',
-      preferredPlacement: 'activity',
-    });
-
-    expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/plugins/disable', {
-      method: 'POST',
-      body: JSON.stringify({ plugin_instance_id: 'plugininst_containers', reason: 'user_disabled' }),
-    });
-    expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/plugins/uninstall', {
-      method: 'POST',
-      body: JSON.stringify({ plugin_instance_id: 'plugininst_containers', delete_data: true }),
-    });
-    expect(localApiMocks.fetchLocalApiJSON).toHaveBeenCalledWith('/_redeven_proxy/api/plugins/surfaces/open', {
-      method: 'POST',
-      body: JSON.stringify({ plugin_instance_id: 'plugininst_containers', surface_id: 'containers.activity' }),
-    });
-  });
-
-  it('installs official catalog packages through the host lifecycle API with bundled trust', async () => {
-    const { executePluginLifecycleCommand } = await import('./pluginApi');
-
-    await executePluginLifecycleCommand({
+    await lifecycle.execute({
       type: 'install',
-      pluginID: 'com.redeven.official.containers',
+      pluginID: officialContainers.pluginID,
       source: 'official_catalog',
     });
 
-    const installCall = localApiMocks.fetchLocalApiJSON.mock.calls.find(([url]) => url === '/_redeven_proxy/api/plugins/install');
-    expect(installCall).toBeTruthy();
-    expect(installCall?.[1]).toMatchObject({ method: 'POST' });
-    const body = JSON.parse(String(installCall?.[1]?.body ?? '{}'));
-    expect(body.trust_state).toBe('bundled');
-    expect(typeof body.package_base64).toBe('string');
-    expect(body.package_base64.length).toBeGreaterThan(1000);
-    expect(body.package_base64).not.toMatch(new RegExp('https?:|file:|\\.\\./', 'i'));
+    expect(mocks.installReleaseRef).toHaveBeenCalledWith({
+      plugin_instance_id: officialContainers.pluginInstanceID,
+      release_ref: OFFICIAL_CONTAINERS_RELEASE_REF,
+    }, {});
+    expect(OFFICIAL_CONTAINERS_RELEASE_REF).toMatchObject({
+      publisher_id: officialContainers.publisherID,
+      plugin_id: officialContainers.pluginID,
+      version: officialContainers.stableVersion,
+    });
   });
 
-  it('updates official catalog packages through the host lifecycle API with bundled trust', async () => {
-    const { executePluginLifecycleCommand } = await import('./pluginApi');
+  it('updates the exact installed instance with its management revision and generated release ref', async () => {
+    const { lifecycle, mocks } = createClientHarness();
 
-    await executePluginLifecycleCommand({
+    await lifecycle.execute({
       type: 'update',
-      pluginID: 'com.redeven.official.containers',
-      pluginInstanceID: 'plugininst_containers',
-      targetVersion: '1.0.0',
+      pluginID: officialContainers.pluginID,
+      pluginInstanceID: officialContainers.pluginInstanceID,
+      expectedManagementRevision: 17,
+      targetVersion: OFFICIAL_CONTAINERS_RELEASE_REF.version,
     });
 
-    const updateCall = localApiMocks.fetchLocalApiJSON.mock.calls.find(([url]) => url === '/_redeven_proxy/api/plugins/update');
-    expect(updateCall).toBeTruthy();
-    expect(updateCall?.[1]).toMatchObject({ method: 'POST' });
-    const body = JSON.parse(String(updateCall?.[1]?.body ?? '{}'));
-    expect(body.plugin_instance_id).toBe('plugininst_containers');
-    expect(body.trust_state).toBe('bundled');
-    expect(typeof body.package_base64).toBe('string');
-    expect(body.package_base64.length).toBeGreaterThan(1000);
-    expect(body.package_base64).not.toMatch(new RegExp('https?:|file:|\\.\\./', 'i'));
+    expect(mocks.updateReleaseRef).toHaveBeenCalledWith({
+      plugin_instance_id: officialContainers.pluginInstanceID,
+      expected_management_revision: 17,
+      release_ref: OFFICIAL_CONTAINERS_RELEASE_REF,
+    }, {});
   });
 
-  it('does not provide URL, file, unsigned local, or developer install helpers', async () => {
-    const source = await import('./pluginApi');
-    expect(Object.keys(source).join(' ')).not.toMatch(/url|file|unsigned|developer/i);
+  it('rejects an update whose requested version is not the signed release version', async () => {
+    const { lifecycle, mocks } = createClientHarness();
+
+    await expect(lifecycle.execute({
+      type: 'update',
+      pluginID: officialContainers.pluginID,
+      pluginInstanceID: officialContainers.pluginInstanceID,
+      expectedManagementRevision: 17,
+      targetVersion: '1.9.9',
+    })).rejects.toThrow('does not match its signed release reference');
+    expect(mocks.updateReleaseRef).not.toHaveBeenCalled();
+  });
+
+  it('propagates management revisions through enable, disable, and uninstall mutations', async () => {
+    const { lifecycle, mocks } = createClientHarness();
+
+    await lifecycle.execute({
+      type: 'enable',
+      pluginInstanceID: officialContainers.pluginInstanceID,
+      expectedManagementRevision: 4,
+    });
+    await lifecycle.execute({
+      type: 'disable',
+      pluginInstanceID: officialContainers.pluginInstanceID,
+      expectedManagementRevision: 5,
+    });
+    await lifecycle.execute({
+      type: 'uninstall',
+      pluginInstanceID: officialContainers.pluginInstanceID,
+      expectedManagementRevision: 6,
+      dataRetention: 'delete_data',
+    });
+
+    expect(mocks.enablePlugin).toHaveBeenCalledWith({
+      plugin_instance_id: officialContainers.pluginInstanceID,
+      expected_management_revision: 4,
+    }, {});
+    expect(mocks.disablePlugin).toHaveBeenCalledWith({
+      plugin_instance_id: officialContainers.pluginInstanceID,
+      expected_management_revision: 5,
+      reason: 'user_disabled',
+    }, {});
+    expect(mocks.uninstallPlugin).toHaveBeenCalledWith({
+      plugin_instance_id: officialContainers.pluginInstanceID,
+      expected_management_revision: 6,
+      delete_data: true,
+    }, {});
   });
 });

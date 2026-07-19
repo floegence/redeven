@@ -17,7 +17,7 @@ import (
 )
 
 func TestContainersCapabilityRegistryUsesVerifiedSignedArtifacts(t *testing.T) {
-	registry, bridge, err := newContainersCapabilityRegistry(containers.NewAdapter(&capabilityEngineClient{}), nil)
+	registry, bridge, err := newContainersCapabilityRegistry(mustContainersAdapter(t, &capabilityEngineClient{}), nil)
 	if err != nil {
 		t.Fatalf("newContainersCapabilityRegistry() error = %v", err)
 	}
@@ -102,6 +102,24 @@ func TestContainersCapabilityReturnsPublishedBusinessError(t *testing.T) {
 	var businessError *capability.BusinessError
 	if !errors.As(err, &businessError) || businessError.Code != "CONTAINER_ENGINE_UNAVAILABLE" || len(businessError.Details) != 0 {
 		t.Fatalf("business error = %#v, err=%v", businessError, err)
+	}
+}
+
+func TestContainersCapabilityReturnsEveryPublishedResourceError(t *testing.T) {
+	adapter := newTestContainersCapabilityAdapter(&capabilityEngineClient{inspectErr: containers.ErrContainerNotFound})
+	_, err := adapter.Invoke(context.Background(), capability.Invocation{
+		Execution: capability.ExecutionContext{ExecutionBinding: capability.ExecutionBinding{TargetMethod: string(containers.MethodInspect)}},
+		Arguments: map[string]any{"engine": "docker", "container_id": "container_404"},
+	})
+	var notFound *capability.BusinessError
+	if !errors.As(err, &notFound) || notFound.Code != "CONTAINER_NOT_FOUND" || notFound.Details["container_id"] != "container_404" {
+		t.Fatalf("not-found business error = %#v, err=%v", notFound, err)
+	}
+
+	logsError := containerBusinessError(containers.ErrLogsUnavailable)
+	var unavailable *capability.BusinessError
+	if !errors.As(logsError, &unavailable) || unavailable.Code != "CONTAINER_LOGS_UNAVAILABLE" || len(unavailable.Details) != 0 {
+		t.Fatalf("logs business error = %#v, err=%v", unavailable, logsError)
 	}
 }
 
@@ -258,7 +276,7 @@ func TestContainersCapabilityCloseCancelsAndWaitsForTasks(t *testing.T) {
 	if err := adapter.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if terminal := waitTerminal(t, sink.terminal); terminal != "failed" {
+	if terminal := waitTerminal(t, sink.terminal); terminal != "canceled" {
 		t.Fatalf("operation terminal = %q", terminal)
 	}
 	if _, err := adapter.registerTask(context.Background(), "operation_after_close", string(containers.MethodStart)); !errors.Is(err, errContainersCapabilityClosed) {
@@ -266,8 +284,58 @@ func TestContainersCapabilityCloseCancelsAndWaitsForTasks(t *testing.T) {
 	}
 }
 
+func TestContainersCapabilityTerminalizationDeadlineBoundsClose(t *testing.T) {
+	adapter := newTestContainersCapabilityAdapter(&capabilityEngineClient{})
+	adapter.terminalTimeout = 25 * time.Millisecond
+	started := make(chan struct{})
+	sink := newTestOperationSink("operation_blocked_terminal")
+	sink.complete = func(ctx context.Context) error {
+		close(started)
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	_, err := adapter.Invoke(context.Background(), capability.Invocation{
+		Execution: capability.ExecutionContext{
+			ExecutionBinding: capability.ExecutionBinding{TargetMethod: string(containers.MethodStart)},
+			Operation:        sink,
+		},
+		Arguments: map[string]any{"engine": "docker", "container_id": "container_1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		t.Fatal("terminal sink did not start")
+	}
+	begin := time.Now()
+	if err := adapter.Close(); err == nil || err.Error() != containerTerminalFailure {
+		t.Fatalf("Close() error = %v, want stable terminal failure", err)
+	}
+	if elapsed := time.Since(begin); elapsed > time.Second {
+		t.Fatalf("Close() exceeded the terminalization deadline: %s", elapsed)
+	}
+}
+
 func newTestContainersCapabilityAdapter(client containers.EngineClient) *containersCapabilityAdapter {
-	return &containersCapabilityAdapter{containers: containers.NewAdapter(client), tasks: make(map[string]containerCapabilityTask)}
+	adapter, err := containers.NewAdapter(client)
+	if err != nil {
+		panic(err)
+	}
+	return &containersCapabilityAdapter{
+		containers: adapter, terminalTimeout: containerTerminalTimeout,
+		tasks: make(map[string]containerCapabilityTask),
+	}
+}
+
+func mustContainersAdapter(t *testing.T, client containers.EngineClient) *containers.Adapter {
+	t.Helper()
+	adapter, err := containers.NewAdapter(client)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return adapter
 }
 
 func validateContainersCapabilityResponse(t *testing.T, method string, value any) {
@@ -336,6 +404,8 @@ type capabilityEngineClient struct {
 	containers []containers.EngineContainer
 	logs       containers.EngineLogsResult
 	action     func(context.Context, containers.EngineActionRequest) (containers.EngineActionResult, error)
+	inspectErr error
+	logsErr    error
 }
 
 func (c *capabilityEngineClient) Status(_ context.Context, engine containers.Engine) (containers.EngineStatus, error) {
@@ -350,6 +420,9 @@ func (c *capabilityEngineClient) List(context.Context, containers.Engine, bool) 
 }
 
 func (c *capabilityEngineClient) Inspect(_ context.Context, engine containers.Engine, containerID string) (containers.EngineContainer, error) {
+	if c.inspectErr != nil {
+		return containers.EngineContainer{}, c.inspectErr
+	}
 	for _, item := range c.containers {
 		if item.ContainerID == containerID {
 			return item, nil
@@ -370,6 +443,9 @@ func (c *capabilityEngineClient) Action(ctx context.Context, req containers.Engi
 }
 
 func (c *capabilityEngineClient) TailLogs(context.Context, containers.EngineLogsRequest) (containers.EngineLogsResult, error) {
+	if c.logsErr != nil {
+		return containers.EngineLogsResult{}, c.logsErr
+	}
 	return c.logs, nil
 }
 
@@ -382,6 +458,7 @@ type testOperationSink struct {
 	terminal        chan string
 	cancelRequested chan struct{}
 	completeErr     error
+	complete        func(context.Context) error
 }
 
 func newTestOperationSink(id string) *testOperationSink {
@@ -390,7 +467,10 @@ func newTestOperationSink(id string) *testOperationSink {
 
 func (s *testOperationSink) ID() string { return s.id }
 
-func (s *testOperationSink) Complete(context.Context) error {
+func (s *testOperationSink) Complete(ctx context.Context) error {
+	if s.complete != nil {
+		return s.complete(ctx)
+	}
 	if s.completeErr != nil {
 		return s.completeErr
 	}

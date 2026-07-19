@@ -24,13 +24,13 @@ export type PluginAttentionReason =
   | 'trust_unavailable';
 
 export type OfficialPluginDistribution = {
-  releaseChannel: 'github_release_and_redeven_cdn';
-  artifactName: string;
-  officialArtifactPath: string;
+  releaseRef: PluginReleaseRef;
 };
 
 export type OfficialPluginCatalogItem = {
   pluginID: string;
+  publisherID: string;
+  pluginInstanceID: string;
   displayName: string;
   description: string;
   publisher: 'Redeven';
@@ -45,8 +45,10 @@ export type OfficialPluginCatalogItem = {
 };
 
 export type PluginSurfaceLaunchTarget = {
+  pluginID: string;
   pluginInstanceID: string;
   surfaceID: string;
+  expectedManagementRevision: number;
   preferredPlacement: 'activity' | 'workbench';
 };
 
@@ -59,6 +61,7 @@ export type PluginInventoryItem = {
   iconFallback: 'containers' | 'database' | 'github' | 'generic';
   publisher: string;
   version?: string;
+  managementRevision?: number;
   lifecycleState: PluginLifecycleState;
   trustBadge: PluginTrustBadge;
   pinned: boolean;
@@ -100,58 +103,29 @@ export type PluginCenterModel = {
   selectedPluginID?: string;
 };
 
-export type PluginLifecycleCommand =
+export type PluginManagementCommand =
   | { type: 'install'; pluginID: string; source: 'official_catalog' }
-  | { type: 'enable'; pluginInstanceID: string }
-  | { type: 'disable'; pluginInstanceID: string }
-  | { type: 'uninstall'; pluginInstanceID: string; dataRetention: 'keep_data' | 'delete_data' }
-  | { type: 'update'; pluginID: string; pluginInstanceID: string; targetVersion: string }
-  | { type: 'open_surface'; pluginInstanceID: string; surfaceID: string; placement: 'activity' | 'workbench' };
+  | { type: 'enable'; pluginInstanceID: string; expectedManagementRevision: number }
+  | { type: 'disable'; pluginInstanceID: string; expectedManagementRevision: number }
+  | { type: 'uninstall'; pluginInstanceID: string; expectedManagementRevision: number; dataRetention: 'keep_data' | 'delete_data' }
+  | { type: 'update'; pluginID: string; pluginInstanceID: string; expectedManagementRevision: number; targetVersion: string };
 
-export type ReDevPluginRecord = {
-  plugin_instance_id: string;
-  publisher_id?: string;
-  plugin_id: string;
-  version: string;
-  active_fingerprint?: string;
-  package_hash?: string;
-  manifest_hash?: string;
-  trust_state: string;
-  enable_state: string;
-  disabled_reason?: string;
-  retained_data_state?: string;
-  manifest?: {
-    plugin?: {
-      display_name?: string;
-      description?: string;
-    };
-    surfaces?: Array<{
-      surface_id?: string;
-      label?: string;
-    }>;
-  } & Record<string, unknown>;
-  installed_at?: string;
-  enabled_at?: string;
-  updated_at?: string;
-  metadata?: Record<string, string>;
+export type PluginOpenSurfaceCommand = {
+  type: 'open_surface';
+  pluginID: string;
+  pluginInstanceID: string;
+  surfaceID: string;
+  expectedManagementRevision: number;
+  placement: 'activity' | 'workbench';
 };
 
-export type ReDevPluginCatalogResult = {
-  plugins?: ReDevPluginRecord[];
-};
+export type PluginLifecycleCommand = PluginManagementCommand | PluginOpenSurfaceCommand;
 
-export type PluginOpenSurfaceResult = {
-  plugin_id: string;
-  plugin_instance_id: string;
-  surface_id: string;
-  surface_instance_id: string;
-  active_fingerprint: string;
-  owner_session_hash?: string;
-  owner_user_hash?: string;
-  session_channel_id_hash?: string;
-  asset_ticket: string;
-  asset_ticket_id: string;
-  bridge_nonce: string;
-  issued_at?: string;
-  expires_at?: string;
-};
+export type ReDevPluginRecord = PluginRecord;
+
+export type ReDevPluginCatalogResult = PluginCatalogResult;
+import type {
+  PluginCatalogResult,
+  PluginRecord,
+  PluginReleaseRef,
+} from '@floegence/redevplugin-ui';

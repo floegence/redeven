@@ -4,10 +4,6 @@ import { defineConfig, type Plugin } from 'vite';
 import wasm from 'vite-plugin-wasm';
 import solid from 'vite-plugin-solid';
 
-import {
-  REDEVEN_ENVAPP_ENABLE_PLUGIN_UI_ENV,
-  resolveEnvAppPluginUIEnabled,
-} from './src/build/envAppBuildFeatures';
 import { REDEVEN_ENV_APP_BASE_PATH } from './src/build/envAppBasePath';
 
 function normalizeBuildModuleId(moduleId: string): string {
@@ -39,25 +35,8 @@ function chunkModuleManifest(): Plugin {
   };
 }
 
-function envAppBuildFeatures(): Plugin {
-  return {
-    name: 'redeven-env-app-build-features',
-    config(_config, { command }) {
-      const pluginUIEnabled = resolveEnvAppPluginUIEnabled(
-        command,
-        process.env[REDEVEN_ENVAPP_ENABLE_PLUGIN_UI_ENV],
-      );
-      return {
-        define: {
-          __REDEVEN_PLUGIN_UI_ENABLED__: JSON.stringify(pluginUIEnabled),
-        },
-      };
-    },
-  };
-}
-
 export default defineConfig({
-  plugins: [envAppBuildFeatures(), wasm(), solid(), tailwindcss(), chunkModuleManifest()],
+  plugins: [wasm(), solid(), tailwindcss(), chunkModuleManifest()],
   resolve: {
     alias: [
       { find: /^@floegence\/floe-webapp-core\/(icons|layout|loading|ui)$/, replacement: path.resolve(__dirname, 'node_modules/@floegence/floe-webapp-core/dist/$1.js') },

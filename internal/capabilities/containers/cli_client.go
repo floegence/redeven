@@ -19,6 +19,7 @@ import (
 const (
 	defaultCommandTimeout = 10 * time.Second
 	defaultLogTailLines   = 100
+	maxCommandOutputBytes = 8 * 1024 * 1024
 	maxLogLineBytes       = 1024 * 1024
 	maxLogTailLines       = 1000
 )
@@ -53,6 +54,9 @@ func (c *CLIClient) Status(ctx context.Context, engine Engine) (EngineStatus, er
 	}
 	raw, err := c.run(ctx, engine, "version", "--format", "{{json .}}")
 	if err != nil {
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return EngineStatus{Engine: engine}, err
+		}
 		return EngineStatus{Engine: engine, Available: false}, nil
 	}
 	version := extractVersion(raw)
@@ -207,7 +211,14 @@ func (c *CLIClient) run(ctx context.Context, engine Engine, args ...string) ([]b
 	}
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	return runner.Run(runCtx, string(engine), args...)
+	out, err := runner.Run(runCtx, string(engine), args...)
+	if ctxErr := runCtx.Err(); ctxErr != nil {
+		return nil, ctxErr
+	}
+	if len(out) > maxCommandOutputBytes {
+		return nil, ErrCommandOutputLimit
+	}
+	return out, err
 }
 
 func (c *CLIClient) stream(ctx context.Context, engine Engine, args []string, onStdoutLine func(context.Context, []byte) error) error {
@@ -284,18 +295,37 @@ func (execRunner) Run(ctx context.Context, name string, args ...string) ([]byte,
 	cmd.Cancel = func() error {
 		return terminateCommandProcessTree(cmd)
 	}
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
-	out, err := cmd.Output()
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
+		return nil, errors.New("container command stdout pipe failed")
+	}
+	cmd.Stderr = io.Discard
+	if err := cmd.Start(); err != nil {
+		return nil, errors.New("container command start failed")
+	}
+	out, readErr := io.ReadAll(io.LimitReader(stdout, maxCommandOutputBytes+1))
+	if len(out) > maxCommandOutputBytes {
+		if cmd.Process != nil {
+			_ = terminateCommandProcessTree(cmd)
+		}
+		_ = cmd.Wait()
+		return nil, ErrCommandOutputLimit
+	}
+	if readErr != nil && cmd.Process != nil {
+		_ = terminateCommandProcessTree(cmd)
+	}
+	waitErr := cmd.Wait()
+	if readErr != nil {
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return nil, ctxErr
 		}
-		detail := strings.TrimSpace(stderr.String())
-		if detail != "" {
-			return nil, fmt.Errorf("%s %s: %w: %s", name, strings.Join(args, " "), err, detail)
+		return nil, errors.New("container command output read failed")
+	}
+	if waitErr != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, ctxErr
 		}
-		return nil, fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), err)
+		return nil, classifyCommandFailure(args, waitErr)
 	}
 	return out, nil
 }
@@ -317,8 +347,7 @@ func (execRunner) Stream(ctx context.Context, name string, args []string, onStdo
 	if err != nil {
 		return err
 	}
-	var stderr bytes.Buffer
-	cmd.Stderr = &stderr
+	cmd.Stderr = io.Discard
 	if err := cmd.Start(); err != nil {
 		return err
 	}
@@ -344,19 +373,22 @@ func (execRunner) Stream(ctx context.Context, name string, args []string, onStdo
 		return callbackErr
 	}
 	if scanErr != nil {
-		return fmt.Errorf("%s %s: read stdout: %w", name, strings.Join(args, " "), scanErr)
+		return fmt.Errorf("container stream output read failed: %w", scanErr)
 	}
 	if ctxErr := ctx.Err(); ctxErr != nil {
 		return ctxErr
 	}
 	if waitErr != nil {
-		detail := strings.TrimSpace(stderr.String())
-		if detail != "" {
-			return fmt.Errorf("%s %s: %w: %s", name, strings.Join(args, " "), waitErr, detail)
-		}
-		return fmt.Errorf("%s %s: %w", name, strings.Join(args, " "), waitErr)
+		return classifyCommandFailure(args, waitErr)
 	}
 	return nil
+}
+
+func classifyCommandFailure(args []string, cause error) error {
+	if len(args) > 0 && args[0] == "logs" {
+		return ErrLogsUnavailable
+	}
+	return fmt.Errorf("container command failed: %w", cause)
 }
 
 type inspectDocument struct {

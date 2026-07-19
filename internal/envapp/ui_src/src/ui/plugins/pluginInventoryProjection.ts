@@ -1,3 +1,6 @@
+import compareSemVer from 'semver/functions/compare.js';
+import validSemVer from 'semver/functions/valid.js';
+
 import { officialPluginCatalog } from './officialPluginCatalog';
 import type {
   OfficialPluginCatalogItem,
@@ -12,14 +15,22 @@ import type {
 
 export function projectPluginInventory(input: {
   officialCatalog?: readonly OfficialPluginCatalogItem[];
-  installedPlugins?: readonly ReDevPluginRecord[];
+  installedPlugins: readonly ReDevPluginRecord[];
 }): PluginInventoryProjection {
   const catalog = [...(input.officialCatalog ?? officialPluginCatalog())];
-  const installedByPluginID = new Map((input.installedPlugins ?? []).map((record) => [record.plugin_id, record]));
+  const installedByIdentity = new Map(input.installedPlugins.map((record) => [pluginIdentityKey(
+    record.publisher_id,
+    record.plugin_id,
+    record.plugin_instance_id,
+  ), record]));
   const items: PluginInventoryItem[] = [];
 
   for (const catalogItem of catalog) {
-    const installed = installedByPluginID.get(catalogItem.pluginID);
+    const installed = installedByIdentity.get(pluginIdentityKey(
+      catalogItem.publisherID,
+      catalogItem.pluginID,
+      catalogItem.pluginInstanceID,
+    ));
     items.push(projectCatalogItem(catalogItem, installed));
   }
 
@@ -29,7 +40,7 @@ export function projectPluginInventory(input: {
 export function buildPluginPanelModel(
   projection: PluginInventoryProjection,
   errorMessage?: string,
-  options: { canOpenSurfaces?: boolean } = {},
+  options: { canOpenSurfaces?: boolean; loading?: boolean } = {},
 ): PluginPanelModel {
   const tiles: PluginPanelTile[] = [
     { kind: 'open_center', id: 'plugin-center', label: 'Plugin Center' },
@@ -39,7 +50,7 @@ export function buildPluginPanelModel(
       action: options.canOpenSurfaces && item.lifecycleState === 'enabled' && item.defaultLaunchTarget ? 'open_surface' : 'open_details',
     })),
   ];
-  return { loading: false, errorMessage, tiles };
+  return { loading: Boolean(options.loading), errorMessage, tiles };
 }
 
 export function buildPluginCenterModel(projection: PluginInventoryProjection, activeTab: PluginCenterTab = 'installed'): PluginCenterModel {
@@ -71,24 +82,31 @@ function projectCatalogItem(catalogItem: OfficialPluginCatalogItem, installed?: 
     pluginID: catalogItem.pluginID,
     pluginInstanceID: installed.plugin_instance_id,
     displayName: manifestDisplayName(installed) || catalogItem.displayName,
-    description: manifestDescription(installed) || catalogItem.description,
+    description: catalogItem.description,
     iconFallback: catalogItem.iconFallback,
     publisher: catalogItem.publisher,
     version: installed.version,
+    managementRevision: installed.management_revision,
     lifecycleState,
     trustBadge: installedTrustBadge(installed, catalogItem),
     pinned: installed.metadata?.pinned === 'true',
     lastOpenedAt: installed.metadata?.last_opened_at,
     defaultLaunchTarget: lifecycleState === 'enabled'
       ? {
+          pluginID: installed.plugin_id,
           pluginInstanceID: installed.plugin_instance_id,
           surfaceID: catalogItem.defaultSurfaceID,
+          expectedManagementRevision: installed.management_revision,
           preferredPlacement: 'activity',
         }
       : undefined,
     attentionReason,
     officialCatalog: catalogItem,
   };
+}
+
+function pluginIdentityKey(publisherID: string, pluginID: string, pluginInstanceID: string): string {
+  return `${publisherID}\u0000${pluginID}\u0000${pluginInstanceID}`;
 }
 
 function installedLifecycleState(installed: ReDevPluginRecord, catalogItem: OfficialPluginCatalogItem): PluginInventoryItem['lifecycleState'] {
@@ -122,7 +140,6 @@ function installedAttentionReason(
 
 function isRunnableInstalledTrust(trustState: string): boolean {
   switch (normalizeTrustState(trustState)) {
-    case 'bundled':
     case 'verified':
       return true;
     default:
@@ -155,10 +172,6 @@ function manifestDisplayName(installed: ReDevPluginRecord): string {
   return String(installed.manifest?.plugin?.display_name ?? '').trim();
 }
 
-function manifestDescription(installed: ReDevPluginRecord): string {
-  return String(installed.manifest?.plugin?.description ?? '').trim();
-}
-
 function compareInventoryItems(a: PluginInventoryItem, b: PluginInventoryItem): number {
   if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
   const aOpened = Date.parse(a.lastOpenedAt ?? '');
@@ -169,12 +182,8 @@ function compareInventoryItems(a: PluginInventoryItem, b: PluginInventoryItem): 
 }
 
 function compareVersion(a: string, b: string): number {
-  const left = a.split('.').map((part) => Number.parseInt(part, 10) || 0);
-  const right = b.split('.').map((part) => Number.parseInt(part, 10) || 0);
-  const max = Math.max(left.length, right.length);
-  for (let index = 0; index < max; index += 1) {
-    const diff = (left[index] ?? 0) - (right[index] ?? 0);
-    if (diff !== 0) return diff;
+  if (validSemVer(a) !== a || validSemVer(b) !== b) {
+    throw new TypeError('Plugin version is not canonical strict SemVer');
   }
-  return 0;
+  return compareSemVer(a, b);
 }

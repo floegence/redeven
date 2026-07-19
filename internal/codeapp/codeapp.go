@@ -45,6 +45,7 @@ type Options struct {
 	StateRoot string
 	// ConfigPath is the absolute path to the runtime config file (used to persist settings updates from the Env App UI).
 	ConfigPath             string
+	PermissionPolicy       *config.PermissionPolicy
 	ControlplaneBaseURL    string
 	ReDevPluginRuntimePath string
 
@@ -103,6 +104,10 @@ type Service struct {
 func New(ctx context.Context, opts Options) (*Service, error) {
 	if ctx == nil {
 		ctx = context.Background()
+	}
+	containerAdapter, err := containers.NewAdapter(containers.NewCLIClient())
+	if err != nil {
+		return nil, err
 	}
 
 	stateDir := strings.TrimSpace(opts.StateDir)
@@ -291,15 +296,13 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	terminalLayoutCleanup := registerWorkbenchTerminalSessionCleanup(logger, workbenchLayoutSvc, opts.Terminal)
 
 	pluginIntegration, err := redevpluginintegration.New(ctx, redevpluginintegration.Options{
-		Logger:             logger,
 		StateDir:           stateAbs,
-		StateRoot:          stateRootAbs,
-		ConfigPath:         strings.TrimSpace(opts.ConfigPath),
+		PermissionPolicy:   opts.PermissionPolicy,
 		RuntimePath:        strings.TrimSpace(opts.ReDevPluginRuntimePath),
 		ResolveSessionMeta: resolvePluginPlatformSessionMeta(opts),
 		Audit:              opts.Audit,
 		Diagnostics:        opts.Diagnostics,
-		Containers:         containers.NewAdapter(containers.NewCLIClient()),
+		Containers:         containerAdapter,
 	})
 	if err != nil {
 		terminalLayoutCleanup()
