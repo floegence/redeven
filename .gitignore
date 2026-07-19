@@ -20,6 +20,7 @@ desktop/dist/
 desktop/release/
 desktop/.bundle/
 desktop/diagnostics/
+plugins/official/containers/dist/
 
 # Local agent blueprint draft (do not commit)
 .agent.md

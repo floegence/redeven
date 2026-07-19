@@ -303,7 +303,7 @@ func TestServer_handleEnvAppProxy_rejectsEnvAppDirectoryListingWhenLocked(t *tes
 	}
 }
 
-func TestServer_PluginManagementAPINamespaceReserved(t *testing.T) {
+func TestServer_PluginPlatformAPIUnavailableWithoutHandler(t *testing.T) {
 	gate := accessgate.New(accessgate.Options{Password: "secret"})
 	s := newTestServer(t, gate)
 
@@ -312,10 +312,9 @@ func TestServer_PluginManagementAPINamespaceReserved(t *testing.T) {
 		method string
 		target string
 	}{
-		{name: "root", method: http.MethodGet, target: "http://localhost:23998/_redeven_proxy/api/plugins"},
-		{name: "catalog", method: http.MethodGet, target: "http://localhost:23998/_redeven_proxy/api/plugins/catalog"},
-		{name: "validate", method: http.MethodPost, target: "http://localhost:23998/_redeven_proxy/api/plugins/packages/validate"},
-		{name: "staged_delete", method: http.MethodDelete, target: "http://localhost:23998/_redeven_proxy/api/plugins/staged/pkg_123"},
+		{name: "root", method: http.MethodGet, target: "http://localhost:23998/_redevplugin/api/plugins"},
+		{name: "catalog", method: http.MethodGet, target: "http://localhost:23998/_redevplugin/api/plugins/catalog"},
+		{name: "enable", method: http.MethodPost, target: "http://localhost:23998/_redevplugin/api/plugins/enable"},
 	}
 
 	for _, route := range routes {
@@ -360,7 +359,7 @@ func TestServer_PluginManagementAPIUsesAccessGateWhenPlatformEnabled(t *testing.
 	}))
 	s := newTestServerWithAppServer(t, gate, appSrv, cfgPath)
 
-	lockedReq := httptest.NewRequest(http.MethodGet, "http://localhost:23998/_redeven_proxy/api/plugins/catalog", nil)
+	lockedReq := httptest.NewRequest(http.MethodGet, "http://localhost:23998/_redevplugin/api/plugins/catalog", nil)
 	lockedReq.Header.Set("Origin", "https://env-local.example.com")
 	lockedRes := httptest.NewRecorder()
 	s.handler().ServeHTTP(lockedRes, lockedReq)
@@ -369,7 +368,7 @@ func TestServer_PluginManagementAPIUsesAccessGateWhenPlatformEnabled(t *testing.
 	}
 
 	open := newTestServerWithAppServer(t, nil, appSrv, cfgPath)
-	openReq := httptest.NewRequest(http.MethodGet, "http://localhost:23998/_redeven_proxy/api/plugins/catalog", nil)
+	openReq := httptest.NewRequest(http.MethodGet, "http://localhost:23998/_redevplugin/api/plugins/catalog", nil)
 	openReq.Header.Set("Origin", "https://env-local.example.com")
 	openRes := httptest.NewRecorder()
 	open.handler().ServeHTTP(openRes, openReq)
@@ -390,7 +389,7 @@ func TestServer_PluginManagementAPILocalUIProvidesSessionChannel(t *testing.T) {
 	}))
 	s := newTestServerWithAppServer(t, nil, appSrv, cfgPath)
 
-	req := httptest.NewRequest(http.MethodPost, "http://localhost:23998/_redeven_proxy/api/plugins/enable", strings.NewReader(`{}`))
+	req := httptest.NewRequest(http.MethodPost, "http://localhost:23998/_redevplugin/api/plugins/enable", strings.NewReader(`{}`))
 	req.Header.Set("Origin", "http://localhost:23998")
 	res := httptest.NewRecorder()
 	s.handler().ServeHTTP(res, req)
@@ -400,86 +399,6 @@ func TestServer_PluginManagementAPILocalUIProvidesSessionChannel(t *testing.T) {
 	}
 	if gotChannelID != "local-ui" {
 		t.Fatalf("delegated channel header = %q, want local-ui", gotChannelID)
-	}
-}
-
-func TestServer_PluginNamespaceRouteMatrix(t *testing.T) {
-	gate := accessgate.New(accessgate.Options{Password: "secret"})
-	s := newTestServer(t, gate)
-
-	routes := []struct {
-		name   string
-		method string
-		target string
-	}{
-		{name: "root", method: http.MethodGet, target: "http://localhost:23998/_redeven_plugin"},
-		{name: "root_slash", method: http.MethodGet, target: "http://localhost:23998/_redeven_plugin/"},
-		{name: "bootstrap", method: http.MethodGet, target: "http://localhost:23998/_redeven_plugin/bootstrap"},
-		{name: "asset", method: http.MethodGet, target: "http://localhost:23998/_redeven_plugin/assets/index.js"},
-		{name: "stream", method: http.MethodGet, target: "http://localhost:23998/_redeven_plugin/stream/logs?ticket=fixture"},
-		{name: "csp_report", method: http.MethodPost, target: "http://localhost:23998/_redeven_plugin/csp-report"},
-	}
-	origins := []struct {
-		name   string
-		origin string
-	}{
-		{name: "missing_origin"},
-		{name: "env", origin: "https://env-local.example.com"},
-		{name: "codespace", origin: "https://cs-abc.example.com"},
-		{name: "port_forward", origin: "https://pf-3000.example.com"},
-		{name: "plugin", origin: "https://plg-containers.example.com"},
-		{name: "unknown", origin: "https://unknown.example.com"},
-	}
-
-	for _, origin := range origins {
-		for _, route := range routes {
-			t.Run(origin.name+"/"+route.name, func(t *testing.T) {
-				req := httptest.NewRequest(route.method, route.target, nil)
-				if origin.origin != "" {
-					req.Header.Set("Origin", origin.origin)
-				}
-				res := httptest.NewRecorder()
-				s.handler().ServeHTTP(res, req)
-				if res.Result().StatusCode != http.StatusNotFound {
-					t.Fatalf("plugin namespace status = %d, want %d; body=%q", res.Result().StatusCode, http.StatusNotFound, res.Body.String())
-				}
-				if strings.Contains(res.Body.String(), "access password required") {
-					t.Fatalf("plugin namespace was intercepted by local access gate: %q", res.Body.String())
-				}
-				if strings.Contains(res.Body.String(), "<html>env</html>") {
-					t.Fatalf("plugin namespace was served as Env App shell: %q", res.Body.String())
-				}
-				if strings.Contains(res.Body.String(), "console.log('env');") {
-					t.Fatalf("plugin namespace was served as Env App asset: %q", res.Body.String())
-				}
-			})
-		}
-	}
-}
-
-func TestServer_handlePluginNamespace_ForwardsWithoutEnvRouteOverride(t *testing.T) {
-	gate := accessgate.New(accessgate.Options{Password: "secret"})
-	s := newTestServer(t, gate)
-
-	for _, target := range []string{
-		"http://localhost:23998/_redeven_plugin",
-		"http://localhost:23998/_redeven_plugin/surfaces/containers/index.html",
-	} {
-		t.Run(target, func(t *testing.T) {
-			req := httptest.NewRequest(http.MethodGet, target, nil)
-			req.Header.Set("Origin", "https://plg-containers.example.com")
-			res := httptest.NewRecorder()
-			s.handler().ServeHTTP(res, req)
-			if res.Result().StatusCode != http.StatusNotFound {
-				t.Fatalf("plugin namespace status = %d, want %d; body=%q", res.Result().StatusCode, http.StatusNotFound, res.Body.String())
-			}
-			if strings.Contains(res.Body.String(), "access password required") {
-				t.Fatalf("plugin namespace was intercepted by local access gate: %q", res.Body.String())
-			}
-			if strings.Contains(res.Body.String(), "<html>env</html>") {
-				t.Fatalf("plugin namespace was served as Env App shell: %q", res.Body.String())
-			}
-		})
 	}
 }
 

@@ -155,8 +155,8 @@ func (s *Server) handler() http.Handler {
 	mux.HandleFunc("/api/local/environment", s.handleEnvironment)
 	mux.HandleFunc("/api/local/agent/version/latest", s.handleLatestVersion)
 	mux.HandleFunc("/_redeven_direct/ws", s.handleDirectWS)
-	mux.HandleFunc("/_redeven_plugin", s.handlePluginNamespace)
-	mux.HandleFunc("/_redeven_plugin/", s.handlePluginNamespace)
+	mux.HandleFunc("/_redevplugin/api/plugins", s.handlePluginPlatform)
+	mux.HandleFunc("/_redevplugin/api/plugins/", s.handlePluginPlatform)
 	// Reuse the existing app server for Env App UI and management APIs.
 	mux.HandleFunc("/_redeven_proxy/", s.handleEnvAppProxy)
 	var handler http.Handler = mux
@@ -808,11 +808,6 @@ func (s *Server) handleEnvAppProxy(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if isReservedPluginManagementProxyPath(r) && !s.appServer.PluginPlatformEnabled() {
-		// Keep plugin management fail-closed before the released platform handler is enabled.
-		writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "error": "not found"})
-		return
-	}
 	if s.accessEnabled() && !s.isPublicEnvAppRequest(r) {
 		if !s.ensureLocalAccessHTTPResponse(w, r) {
 			http.Error(w, "access password required", http.StatusLocked)
@@ -822,23 +817,19 @@ func (s *Server) handleEnvAppProxy(w http.ResponseWriter, r *http.Request) {
 	s.appServer.ServeHTTP(w, appserver.WithLocalUIEnvRoute(r))
 }
 
-func isReservedPluginManagementProxyPath(r *http.Request) bool {
-	if r == nil || r.URL == nil {
-		return false
-	}
-	p := strings.TrimSpace(r.URL.Path)
-	return p == "/_redeven_proxy/api/plugins" || strings.HasPrefix(p, "/_redeven_proxy/api/plugins/")
-}
-
-func (s *Server) handlePluginNamespace(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handlePluginPlatform(w http.ResponseWriter, r *http.Request) {
 	if s == nil || w == nil || r == nil {
 		return
 	}
-	if s.appServer == nil {
+	if s.appServer == nil || !s.appServer.PluginPlatformEnabled() {
 		http.NotFound(w, r)
 		return
 	}
-	s.appServer.ServeHTTP(w, appserver.WithLocalUIPluginRoute(r))
+	if s.accessEnabled() && !s.ensureLocalAccessHTTPResponse(w, r) {
+		http.Error(w, "access password required", http.StatusLocked)
+		return
+	}
+	s.appServer.ServeHTTP(w, appserver.WithLocalUIEnvRoute(r))
 }
 
 func (s *Server) handleCodeSpace(w http.ResponseWriter, r *http.Request) {

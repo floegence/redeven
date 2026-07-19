@@ -683,10 +683,9 @@ func TestServer_ProxyOriginRouteMatrix(t *testing.T) {
 	}
 	routes := []routeCase{
 		{name: "api", path: "/_redeven_proxy/api/spaces"},
-		{name: "plugin_api", path: "/_redeven_proxy/api/plugins/catalog"},
+		{name: "plugin_api", path: "/_redevplugin/api/plugins/catalog"},
 		{name: "env", path: "/_redeven_proxy/env/"},
 		{name: "inject", path: "/_redeven_proxy/inject.js"},
-		{name: "plugin_namespace", path: "/_redeven_plugin/surfaces/containers/index.html"},
 	}
 	origins := []struct {
 		name       string
@@ -697,66 +696,60 @@ func TestServer_ProxyOriginRouteMatrix(t *testing.T) {
 			name:   "env",
 			origin: envOrigin,
 			wantStatus: map[string]int{
-				"api":              http.StatusOK,
-				"plugin_api":       http.StatusNotFound,
-				"env":              http.StatusOK,
-				"inject":           http.StatusNotFound,
-				"plugin_namespace": http.StatusNotFound,
+				"api":        http.StatusOK,
+				"plugin_api": http.StatusNotFound,
+				"env":        http.StatusOK,
+				"inject":     http.StatusNotFound,
 			},
 		},
 		{
 			name:   "codespace",
 			origin: "https://cs-abc.example.com",
 			wantStatus: map[string]int{
-				"api":              http.StatusNotFound,
-				"plugin_api":       http.StatusNotFound,
-				"env":              http.StatusNotFound,
-				"inject":           http.StatusOK,
-				"plugin_namespace": http.StatusNotFound,
+				"api":        http.StatusNotFound,
+				"plugin_api": http.StatusNotFound,
+				"env":        http.StatusNotFound,
+				"inject":     http.StatusOK,
 			},
 		},
 		{
 			name:   "port_forward",
 			origin: "https://pf-abc.example.com",
 			wantStatus: map[string]int{
-				"api":              http.StatusNotFound,
-				"plugin_api":       http.StatusNotFound,
-				"env":              http.StatusNotFound,
-				"inject":           http.StatusNotFound,
-				"plugin_namespace": http.StatusNotFound,
+				"api":        http.StatusNotFound,
+				"plugin_api": http.StatusNotFound,
+				"env":        http.StatusNotFound,
+				"inject":     http.StatusNotFound,
 			},
 		},
 		{
 			name:   "plugin",
 			origin: "https://plg-containers.example.com",
 			wantStatus: map[string]int{
-				"api":              http.StatusNotFound,
-				"plugin_api":       http.StatusNotFound,
-				"env":              http.StatusNotFound,
-				"inject":           http.StatusNotFound,
-				"plugin_namespace": http.StatusNotFound,
+				"api":        http.StatusNotFound,
+				"plugin_api": http.StatusNotFound,
+				"env":        http.StatusNotFound,
+				"inject":     http.StatusNotFound,
 			},
 		},
 		{
 			name:   "unknown",
 			origin: "https://unknown.example.com",
 			wantStatus: map[string]int{
-				"api":              http.StatusNotFound,
-				"plugin_api":       http.StatusNotFound,
-				"env":              http.StatusNotFound,
-				"inject":           http.StatusNotFound,
-				"plugin_namespace": http.StatusNotFound,
+				"api":        http.StatusNotFound,
+				"plugin_api": http.StatusNotFound,
+				"env":        http.StatusNotFound,
+				"inject":     http.StatusNotFound,
 			},
 		},
 		{
 			name:   "missing_origin",
 			origin: "",
 			wantStatus: map[string]int{
-				"api":              http.StatusNotFound,
-				"plugin_api":       http.StatusNotFound,
-				"env":              http.StatusNotFound,
-				"inject":           http.StatusNotFound,
-				"plugin_namespace": http.StatusNotFound,
+				"api":        http.StatusNotFound,
+				"plugin_api": http.StatusNotFound,
+				"env":        http.StatusNotFound,
+				"inject":     http.StatusNotFound,
 			},
 		},
 	}
@@ -796,7 +789,7 @@ func TestServer_ProxyOriginRouteMatrix(t *testing.T) {
 	}
 }
 
-func TestServer_PluginManagementAPINamespaceReserved(t *testing.T) {
+func TestServer_PluginPlatformAPIUnavailableWithoutHandler(t *testing.T) {
 	t.Parallel()
 
 	srv := newDistRouteTestServer(t, fstest.MapFS{
@@ -809,10 +802,9 @@ func TestServer_PluginManagementAPINamespaceReserved(t *testing.T) {
 		method string
 		path   string
 	}{
-		{name: "root", method: http.MethodGet, path: "/_redeven_proxy/api/plugins"},
-		{name: "catalog", method: http.MethodGet, path: "/_redeven_proxy/api/plugins/catalog"},
-		{name: "validate", method: http.MethodPost, path: "/_redeven_proxy/api/plugins/packages/validate"},
-		{name: "staged_delete", method: http.MethodDelete, path: "/_redeven_proxy/api/plugins/staged/pkg_123"},
+		{name: "root", method: http.MethodGet, path: "/_redevplugin/api/plugins"},
+		{name: "catalog", method: http.MethodGet, path: "/_redevplugin/api/plugins/catalog"},
+		{name: "enable", method: http.MethodPost, path: "/_redevplugin/api/plugins/enable"},
 	}
 
 	for _, route := range routes {
@@ -855,7 +847,7 @@ func TestServer_PluginManagementAPIDelegatesToPluginPlatform(t *testing.T) {
 		writeJSON(w, 218, apiResp{OK: true, Data: map[string]any{"delegated": true}})
 	})
 
-	req := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/plugins/catalog?filter=enabled", nil)
+	req := httptest.NewRequest(http.MethodGet, "/_redevplugin/api/plugins/catalog?filter=enabled", nil)
 	req.Header.Set("Origin", "https://env-local.example.com")
 	rr := httptest.NewRecorder()
 	srv.serveHTTP(rr, req)
@@ -866,8 +858,8 @@ func TestServer_PluginManagementAPIDelegatesToPluginPlatform(t *testing.T) {
 		t.Fatalf("delegated call = %d path=%q query=%q", called, gotPath, gotQuery)
 	}
 
-	blockedReq := httptest.NewRequest(http.MethodGet, "/_redeven_proxy/api/plugins/catalog", nil)
-	blockedReq.Header.Set("Origin", "https://plg-containers.example.com")
+	blockedReq := httptest.NewRequest(http.MethodGet, "/_redevplugin/api/plugins/catalog", nil)
+	blockedReq.Header.Set("Origin", "https://cs-workspace.example.com")
 	blockedRes := httptest.NewRecorder()
 	srv.serveHTTP(blockedRes, blockedReq)
 	if blockedRes.Code != http.StatusNotFound {
@@ -878,107 +870,50 @@ func TestServer_PluginManagementAPIDelegatesToPluginPlatform(t *testing.T) {
 	}
 }
 
-func TestServer_PluginNamespaceRouteMatrix(t *testing.T) {
+func TestServer_PluginPlatformRejectsMissingOrigin(t *testing.T) {
 	t.Parallel()
 
 	srv := newDistRouteTestServer(t, fstest.MapFS{
-		"env/index.html":           {Data: []byte("<html>env</html>")},
-		"env/assets/index.js":      {Data: []byte("console.log('env');")},
-		"inject.js":                {Data: []byte("console.log('inject');")},
-		"surfaces/plugin/app.html": {Data: []byte("<html>plugin</html>")},
+		"env/index.html": {Data: []byte("<html>env</html>")},
+		"inject.js":      {Data: []byte("console.log('inject');")},
 	}, nil)
-
-	routes := []struct {
-		name   string
-		method string
-		path   string
-	}{
-		{name: "root", method: http.MethodGet, path: "/_redeven_plugin"},
-		{name: "root_slash", method: http.MethodGet, path: "/_redeven_plugin/"},
-		{name: "bootstrap", method: http.MethodGet, path: "/_redeven_plugin/bootstrap"},
-		{name: "asset", method: http.MethodGet, path: "/_redeven_plugin/assets/index.js"},
-		{name: "stream", method: http.MethodGet, path: "/_redeven_plugin/stream/logs?ticket=fixture"},
-		{name: "csp_report", method: http.MethodPost, path: "/_redeven_plugin/csp-report"},
-	}
-	origins := []struct {
-		name   string
-		origin string
-	}{
-		{name: "missing_origin"},
-		{name: "env", origin: "https://env-local.example.com"},
-		{name: "codespace", origin: "https://cs-abc.example.com"},
-		{name: "port_forward", origin: "https://pf-3000.example.com"},
-		{name: "plugin", origin: "https://plg-containers.example.com"},
-		{name: "unknown", origin: "https://unknown.example.com"},
-	}
-
-	for _, origin := range origins {
-		for _, route := range routes {
-			t.Run(origin.name+"/"+route.name, func(t *testing.T) {
-				req := httptest.NewRequest(route.method, route.path, nil)
-				if origin.origin != "" {
-					req.Header.Set("Origin", origin.origin)
-				}
-				rr := httptest.NewRecorder()
-				srv.serveHTTP(rr, req)
-				if rr.Code != http.StatusNotFound {
-					t.Fatalf("%s from %s status = %d, want %d; body=%q", route.path, origin.name, rr.Code, http.StatusNotFound, rr.Body.String())
-				}
-				if strings.Contains(rr.Body.String(), "<html>env</html>") {
-					t.Fatalf("plugin namespace fell through to Env App shell: %q", rr.Body.String())
-				}
-				if strings.Contains(rr.Body.String(), "console.log('env');") {
-					t.Fatalf("plugin namespace fell through to Env App asset: %q", rr.Body.String())
-				}
-				if strings.Contains(rr.Body.String(), "console.log('inject');") {
-					t.Fatalf("plugin namespace fell through to codespace inject script: %q", rr.Body.String())
-				}
-			})
-		}
-	}
-}
-
-func TestServer_PluginNamespaceDelegatesToPluginPlatformForPluginOrigin(t *testing.T) {
-	t.Parallel()
-
-	srv := newDistRouteTestServer(t, fstest.MapFS{
-		"env/index.html":      {Data: []byte("<html>env</html>")},
-		"env/assets/index.js": {Data: []byte("console.log('env');")},
-		"inject.js":           {Data: []byte("console.log('inject');")},
-	}, nil)
-	var called int
-	var gotPath string
-	srv.pluginPlatform = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		called++
-		gotPath = r.URL.Path
-		writeJSON(w, 219, apiResp{OK: true, Data: map[string]any{"delegated": true}})
+	srv.pluginPlatform = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
 	})
-
-	req := httptest.NewRequest(http.MethodPost, "/_redeven_plugin/bootstrap", nil)
-	req.Host = "plg-containers.example.com"
-	req.Header.Set("Origin", "https://plg-containers.example.com")
+	req := httptest.NewRequest(http.MethodGet, "/_redevplugin/api/plugins/catalog", nil)
 	rr := httptest.NewRecorder()
 	srv.serveHTTP(rr, req)
-	if rr.Code != 219 {
-		t.Fatalf("status = %d, want delegated 219; body=%q", rr.Code, rr.Body.String())
-	}
-	if called != 1 || gotPath != "/_redevplugin/bootstrap" {
-		t.Fatalf("delegated call = %d path=%q", called, gotPath)
-	}
-
-	blockedReq := httptest.NewRequest(http.MethodPost, "/_redeven_plugin/bootstrap", nil)
-	blockedReq.Header.Set("Origin", "https://env-local.example.com")
-	blockedRes := httptest.NewRecorder()
-	srv.serveHTTP(blockedRes, blockedReq)
-	if blockedRes.Code != http.StatusNotFound {
-		t.Fatalf("env-origin plugin namespace status = %d, want 404", blockedRes.Code)
-	}
-	if called != 1 {
-		t.Fatalf("env-origin plugin namespace request delegated unexpectedly")
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("missing-origin status = %d, want %d", rr.Code, http.StatusNotFound)
 	}
 }
 
-func TestServer_PluginNamespaceDelegatesByPluginHostForCrossOriginBootstrap(t *testing.T) {
+func TestServer_PluginPlatformRejectsCodeSpaceOrigin(t *testing.T) {
+	t.Parallel()
+
+	srv := newDistRouteTestServer(t, fstest.MapFS{
+		"env/index.html": {Data: []byte("<html>env</html>")},
+		"inject.js":      {Data: []byte("console.log('inject');")},
+	}, nil)
+	var called int
+	srv.pluginPlatform = http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called++
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/_redevplugin/api/plugins/catalog", nil)
+	req.Header.Set("Origin", "https://cs-workspace.example.com")
+	rr := httptest.NewRecorder()
+	srv.serveHTTP(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Fatalf("codespace-origin status = %d, want %d", rr.Code, http.StatusNotFound)
+	}
+	if called != 0 {
+		t.Fatalf("codespace-origin request delegated unexpectedly")
+	}
+}
+
+func TestServer_PluginPlatformPreservesCanonicalPath(t *testing.T) {
 	t.Parallel()
 
 	srv := newDistRouteTestServer(t, fstest.MapFS{
@@ -990,80 +925,54 @@ func TestServer_PluginNamespaceDelegatesByPluginHostForCrossOriginBootstrap(t *t
 	srv.pluginPlatform = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		called++
 		gotPath = r.URL.Path
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"asset_session_id": "asset_session"}})
+		w.WriteHeader(http.StatusNoContent)
 	})
 
-	req := httptest.NewRequest(http.MethodPost, "/_redeven_plugin/bootstrap", nil)
-	req.Host = "plg-containers.example.com"
+	req := httptest.NewRequest(http.MethodGet, "/_redevplugin/api/plugins/catalog", nil)
+	req.Host = "env-local.example.com"
 	req.Header.Set("Origin", "https://env-local.example.com")
 	rr := httptest.NewRecorder()
 	srv.serveHTTP(rr, req)
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want delegated 200; body=%q", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want delegated 204; body=%q", rr.Code, rr.Body.String())
 	}
-	if called != 1 || gotPath != "/_redevplugin/bootstrap" {
+	if called != 1 || gotPath != "/_redevplugin/api/plugins/catalog" {
 		t.Fatalf("delegated call = %d path=%q", called, gotPath)
-	}
-
-	blockedReq := httptest.NewRequest(http.MethodPost, "/_redeven_plugin/bootstrap", nil)
-	blockedReq.Host = "env-local.example.com"
-	blockedReq.Header.Set("Origin", "https://env-local.example.com")
-	blockedRes := httptest.NewRecorder()
-	srv.serveHTTP(blockedRes, blockedReq)
-	if blockedRes.Code != http.StatusNotFound {
-		t.Fatalf("env-host plugin namespace status = %d, want 404", blockedRes.Code)
-	}
-	if called != 1 {
-		t.Fatalf("env-host plugin namespace request delegated unexpectedly")
 	}
 }
 
-func TestServer_PluginNamespaceRewritesSandboxCookiePath(t *testing.T) {
+func TestServer_LocalUIEnvRouteDelegatesPluginPlatform(t *testing.T) {
 	t.Parallel()
 
 	srv := newDistRouteTestServer(t, fstest.MapFS{}, nil)
+	var gotRoute localUIRoute
 	srv.pluginPlatform = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.SetCookie(w, &http.Cookie{
-			Name:     "__Secure-redevplugin-asset-session",
-			Value:    "asset_session",
-			Path:     "/_redevplugin/assets/as_123/",
-			HttpOnly: true,
-			Secure:   true,
-			SameSite: http.SameSiteStrictMode,
-		})
-		w.Header().Set("Service-Worker-Allowed", "/_redevplugin/assets/as_123/")
-		writeJSON(w, http.StatusOK, apiResp{OK: true})
+		gotRoute, _ = localUIRouteFromRequest(r)
+		w.WriteHeader(http.StatusNoContent)
 	})
 
-	req := WithLocalUIPluginRoute(httptest.NewRequest(http.MethodPost, "/_redeven_plugin/bootstrap", nil))
+	req := WithLocalUIEnvRoute(httptest.NewRequest(http.MethodGet, "/_redevplugin/api/plugins/catalog", nil))
 	rr := httptest.NewRecorder()
 	srv.serveHTTP(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200; body=%q", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("status = %d, want 204; body=%q", rr.Code, rr.Body.String())
 	}
-	cookies := rr.Result().Cookies()
-	if len(cookies) != 1 {
-		t.Fatalf("cookies = %#v, want one asset session cookie", cookies)
-	}
-	if cookies[0].Path != "/_redeven_plugin/assets/as_123/" {
-		t.Fatalf("cookie path = %q, want redeven plugin namespace", cookies[0].Path)
-	}
-	if got := rr.Result().Header.Get("Service-Worker-Allowed"); got != "/_redeven_plugin/assets/as_123/" {
-		t.Fatalf("Service-Worker-Allowed = %q, want redeven plugin namespace", got)
+	if gotRoute.kind != localUIRouteEnv {
+		t.Fatalf("route kind = %v, want %v", gotRoute.kind, localUIRouteEnv)
 	}
 }
 
-func TestWithLocalUIPluginRoute_SetsPluginRouteKind(t *testing.T) {
+func TestWithLocalUIEnvRouteSetsEnvRouteKind(t *testing.T) {
 	t.Parallel()
 
-	req := WithLocalUIPluginRoute(httptest.NewRequest(http.MethodGet, "/_redeven_plugin/bootstrap", nil))
+	req := WithLocalUIEnvRoute(httptest.NewRequest(http.MethodGet, "/_redevplugin/api/plugins/catalog", nil))
 	route, ok := localUIRouteFromRequest(req)
 	if !ok {
-		t.Fatal("local UI plugin route context missing")
+		t.Fatal("local UI env route context missing")
 	}
-	if route.kind != localUIRoutePlugin {
-		t.Fatalf("route kind = %v, want %v", route.kind, localUIRoutePlugin)
+	if route.kind != localUIRouteEnv {
+		t.Fatalf("route kind = %v, want %v", route.kind, localUIRouteEnv)
 	}
 }
 

@@ -8,30 +8,24 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/floegence/redeven/internal/auditlog"
 	"github.com/floegence/redeven/internal/capabilities/containers"
+	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redevplugin/pkg/bridge"
-	"github.com/floegence/redevplugin/pkg/browsersite"
-	"github.com/floegence/redevplugin/pkg/capability"
-	"github.com/floegence/redevplugin/pkg/cleanup"
 	"github.com/floegence/redevplugin/pkg/connectivity"
 	"github.com/floegence/redevplugin/pkg/host"
 	"github.com/floegence/redevplugin/pkg/httpadapter"
 	"github.com/floegence/redevplugin/pkg/installstage"
 	rpobservability "github.com/floegence/redevplugin/pkg/observability"
 	"github.com/floegence/redevplugin/pkg/operation"
-	"github.com/floegence/redevplugin/pkg/permissions"
+	"github.com/floegence/redevplugin/pkg/plugindata"
 	"github.com/floegence/redevplugin/pkg/pluginpkg"
 	"github.com/floegence/redevplugin/pkg/registry"
-	"github.com/floegence/redevplugin/pkg/retaineddata"
 	"github.com/floegence/redevplugin/pkg/secrets"
 	"github.com/floegence/redevplugin/pkg/security"
-	"github.com/floegence/redevplugin/pkg/settings"
-	"github.com/floegence/redevplugin/pkg/storage"
 	"github.com/floegence/redevplugin/pkg/stream"
 )
 
@@ -47,14 +41,15 @@ type Options struct {
 }
 
 type Integration struct {
-	handler http.Handler
-	host    *host.Host
-	closers []func() error
+	handler      http.Handler
+	host         *host.Host
+	capabilities *containersCapabilityAdapter
+	closers      []func() error
 }
 
 func New(ctx context.Context, opts Options) (*Integration, error) {
 	if ctx == nil {
-		ctx = context.Background()
+		return nil, errors.New("context is required")
 	}
 	stateDir := strings.TrimSpace(opts.StateDir)
 	if stateDir == "" {
@@ -67,6 +62,28 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 	if opts.ResolveSessionMeta == nil {
 		return nil, errors.New("missing ResolveSessionMeta")
 	}
+	configPath := strings.TrimSpace(opts.ConfigPath)
+	if configPath == "" {
+		return nil, errors.New("missing ConfigPath")
+	}
+	runtimeConfig, err := config.Load(configPath)
+	if err != nil {
+		return nil, err
+	}
+	if runtimeConfig == nil || runtimeConfig.PermissionPolicy == nil {
+		return nil, errors.New("missing permission policy")
+	}
+	if err := runtimeConfig.PermissionPolicy.Validate(); err != nil {
+		return nil, err
+	}
+	packageTrustVerifier, err := newPackageTrustVerifier()
+	if err != nil {
+		return nil, err
+	}
+	releaseModule, _, err := newOfficialReleaseModule(packageTrustVerifier)
+	if err != nil {
+		return nil, err
+	}
 
 	root := filepath.Join(stateAbs, "apps", "redevplugin")
 	if err := os.MkdirAll(root, 0o700); err != nil {
@@ -78,9 +95,7 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 	}
 
 	var closers []func() error
-	closeOnError := func() {
-		_ = closeAll(closers)
-	}
+	closeOnError := func() { _ = closeAll(closers) }
 
 	registryStore, err := registry.NewSQLiteStore(ctx, filepath.Join(dbRoot, "registry.sqlite"))
 	if err != nil {
@@ -101,11 +116,7 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		return nil, err
 	}
 	closers = append(closers, observabilityStore.Close)
-	observability := &observabilityFanout{
-		primary:     observabilityStore,
-		audit:       opts.Audit,
-		diagnostics: opts.Diagnostics,
-	}
+	observability := newObservabilityAdapter(observabilityStore, opts.Audit, opts.Diagnostics)
 
 	operationStore, err := operation.NewSQLiteStore(ctx, filepath.Join(dbRoot, "operations.sqlite"))
 	if err != nil {
@@ -114,33 +125,12 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 	}
 	closers = append(closers, operationStore.Close)
 
-	permissionsStore, err := permissions.NewSQLiteStore(ctx, filepath.Join(dbRoot, "permissions.sqlite"))
-	if err != nil {
-		closeOnError()
-		return nil, err
-	}
-	closers = append(closers, permissionsStore.Close)
-
-	securityPolicy, err := security.NewSQLitePolicyStore(ctx, filepath.Join(dbRoot, "security_policy.sqlite"))
-	if err != nil {
-		closeOnError()
-		return nil, err
-	}
-	closers = append(closers, securityPolicy.Close)
-
 	confirmationIntents, err := security.NewSQLiteConfirmationIntentStore(ctx, filepath.Join(dbRoot, "confirmation_intents.sqlite"))
 	if err != nil {
 		closeOnError()
 		return nil, err
 	}
 	closers = append(closers, confirmationIntents.Close)
-
-	settingsStore, err := settings.NewSQLiteStore(ctx, filepath.Join(dbRoot, "settings.sqlite"))
-	if err != nil {
-		closeOnError()
-		return nil, err
-	}
-	closers = append(closers, settingsStore.Close)
 
 	streamStore, err := stream.NewSQLiteStore(ctx, filepath.Join(dbRoot, "streams.sqlite"))
 	if err != nil {
@@ -149,20 +139,6 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 	}
 	closers = append(closers, streamStore.CloseDatabase)
 
-	browserSiteStore, err := browsersite.NewSQLiteStore(ctx, filepath.Join(dbRoot, "browser_site.sqlite"))
-	if err != nil {
-		closeOnError()
-		return nil, err
-	}
-	closers = append(closers, browserSiteStore.Close)
-
-	retainedData, err := retaineddata.NewSQLiteStore(ctx, filepath.Join(dbRoot, "retained_data.sqlite"))
-	if err != nil {
-		closeOnError()
-		return nil, err
-	}
-	closers = append(closers, retainedData.Close)
-
 	secretStore, err := secrets.NewSQLiteStore(ctx, filepath.Join(dbRoot, "secrets.sqlite"))
 	if err != nil {
 		closeOnError()
@@ -170,69 +146,81 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 	}
 	closers = append(closers, secretStore.Close)
 
-	cleanupStore, err := cleanup.NewSQLiteOrchestrator(ctx, filepath.Join(dbRoot, "cleanup.sqlite"))
-	if err != nil {
-		closeOnError()
-		return nil, err
-	}
-	closers = append(closers, cleanupStore.Close)
-
 	assetStore, err := pluginpkg.NewFileAssetStore(filepath.Join(root, "assets"))
 	if err != nil {
 		closeOnError()
 		return nil, err
 	}
-	storageBroker, err := storage.NewFileBroker(filepath.Join(root, "storage"))
+	pluginData, err := plugindata.Open(ctx, filepath.Join(root, "storage"), registryStore)
 	if err != nil {
+		_ = assetStore.Close()
 		closeOnError()
 		return nil, err
 	}
 
-	sessionCache := newSessionPermissionCache()
-	capabilities := capability.NewRegistry()
-	if opts.Containers != nil {
-		capabilities.Register(containers.CapabilityID, newContainersCapabilityAdapter(opts.Containers, operationStore, streamStore))
+	sessions, err := newSessionAdapter(opts.ResolveSessionMeta, runtimeConfig.PermissionPolicy)
+	if err != nil {
+		_ = pluginData.Close()
+		_ = assetStore.Close()
+		closeOnError()
+		return nil, err
 	}
+	capabilities, capabilityAdapter, err := newContainersCapabilityRegistry(opts.Containers, observability)
+	if err != nil {
+		_ = pluginData.Close()
+		_ = assetStore.Close()
+		closeOnError()
+		return nil, err
+	}
+	surfaceTokens := bridge.NewSurfaceTokenService(nil, bridge.SurfaceTokenOptions{})
+	connectivityBroker := connectivity.NewMemoryBroker()
+	networkExecutor := connectivity.NewExecutor(connectivity.ExecutorOptions{})
 
-	h, err := host.New(host.Adapters{
-		SessionResolver:      &sessionResolver{resolve: opts.ResolveSessionMeta, configPath: opts.ConfigPath, cache: sessionCache},
-		Policy:               &policyAdapter{sessions: sessionCache},
-		PackageTrustVerifier: strictPackageTrustVerifier{},
-		Registry:             registryStore,
-		Audit:                observability,
-		Diagnostics:          observability,
-		Secrets:              secretStore,
-		RuntimeArtifactResolver: &runtimeArtifactResolver{
-			stateRoot: strings.TrimSpace(opts.StateRoot),
+	h, err := host.Open(ctx, host.Config{
+		Core: host.CoreAdapters{
+			Policy:               sessions,
+			Authorization:        sessions,
+			PackageTrustVerifier: packageTrustVerifier,
+			Registry:             registryStore,
+			Audit:                observability,
+			SecurityAudit:        observabilityStore,
+			Diagnostics:          observability,
+			SurfaceTokens:        surfaceTokens,
+			PluginData:           pluginData,
+			Assets:               assetStore,
+			InstallStages:        installStages,
+			Operations:           operationStore,
+			ConfirmationIntents:  confirmationIntents,
+			Streams:              streamStore,
 		},
-		SurfaceTokens:       bridge.NewSurfaceTokenService(nil, bridge.SurfaceTokenOptions{}),
-		Assets:              assetStore,
-		InstallStages:       installStages,
-		Capabilities:        capabilities,
-		OperationCanceler:   &operationCanceler{containers: opts.Containers},
-		Storage:             storageBroker,
-		Connectivity:        connectivity.NewMemoryBroker(),
-		NetworkExecutor:     connectivity.NewExecutor(connectivity.ExecutorOptions{}),
-		Operations:          operationStore,
-		Permissions:         permissionsStore,
-		SecurityPolicy:      securityPolicy,
-		ConfirmationIntents: confirmationIntents,
-		Cleanup:             cleanupStore,
-		RetainedData:        retainedData,
-		BrowserSite:         browserSiteStore,
-		Settings:            settingsStore,
-		Streams:             streamStore,
+		Release: releaseModule,
+		Connectivity: &host.ConnectivityModule{
+			Broker:          connectivityBroker,
+			NetworkExecutor: networkExecutor,
+		},
+		Secrets:    &host.SecretsModule{Store: secretStore},
+		Capability: &host.CapabilityModule{Registry: capabilities},
 	})
 	if err != nil {
+		_ = pluginData.Close()
+		_ = assetStore.Close()
 		closeOnError()
 		return nil, err
 	}
 
-	handler := httpadapter.Handler{
-		Host:        h,
-		WebSecurity: webSecurityGuard{sessions: sessionCache},
+	handler, err := httpadapter.NewHandler(httpadapter.Dependencies{Host: h, Guard: sessions})
+	if err != nil {
+		_ = h.Close()
+		closeOnError()
+		return nil, err
 	}
-	return &Integration{handler: pluginHTTPHandler{next: handler, resolver: &sessionResolver{resolve: opts.ResolveSessionMeta, configPath: opts.ConfigPath, cache: sessionCache}}, host: h, closers: closers}, nil
+	integration := &Integration{
+		handler:      handler,
+		host:         h,
+		capabilities: capabilityAdapter,
+		closers:      closers,
+	}
+	return integration, nil
 }
 
 func (i *Integration) Handler() http.Handler {
@@ -246,23 +234,24 @@ func (i *Integration) Close() error {
 	if i == nil {
 		return nil
 	}
-	if i.host != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		_ = i.host.StopRuntime(ctx)
-		cancel()
+	var out error
+	if i.capabilities != nil {
+		out = errors.Join(out, i.capabilities.Close())
 	}
-	return closeAll(i.closers)
+	if i.host != nil {
+		out = errors.Join(out, i.host.Close())
+	}
+	out = errors.Join(out, closeAll(i.closers))
+	return out
 }
 
 func closeAll(closers []func() error) error {
 	var out error
-	for i := len(closers) - 1; i >= 0; i-- {
-		if closers[i] == nil {
+	for index := len(closers) - 1; index >= 0; index-- {
+		if closers[index] == nil {
 			continue
 		}
-		if err := closers[i](); err != nil {
-			out = errors.Join(out, err)
-		}
+		out = errors.Join(out, closers[index]())
 	}
 	return out
 }
