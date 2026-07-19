@@ -11,7 +11,6 @@ import { PNG } from 'pngjs';
 
 import {
   assertTerminalCarrierHistoryVisualEvidence,
-  assertTerminalCarrierHistoryVisualMatch,
   assertTerminalCarrierInteractiveLimit,
   assertTerminalCarrierP95Limit,
   terminalCarrierExpectedRetainedBytes,
