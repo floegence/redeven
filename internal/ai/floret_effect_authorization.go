@@ -285,23 +285,27 @@ func floretEffectJoin(req flruntime.EffectAuthorizationRequest) (threadEffectJoi
 		return threadEffectJoin{}, nil
 	}
 	action := ""
-	target := ""
+	targets := make([]string, 0, len(req.Resources))
 	for _, resource := range req.Resources {
 		switch strings.TrimSpace(resource.Kind) {
 		case "subagent":
 			action = strings.TrimSpace(resource.Value)
 		case "subagent_thread":
-			target = strings.TrimSpace(resource.Value)
+			targets = append(targets, resource.Value)
 		}
 	}
+	targets = normalizeSubagentThreadIDs(targets)
 	switch action {
 	case subagentActionWait:
-		return threadEffectJoin{allChildren: true}, nil
+		if len(targets) == 0 {
+			return threadEffectJoin{}, errors.New("SubAgent wait effect is missing its child authority scope")
+		}
+		return threadEffectJoin{childThreadIDs: targets}, nil
 	case subagentActionClose:
-		if target == "" {
+		if len(targets) != 1 {
 			return threadEffectJoin{}, errors.New("SubAgent close effect is missing its child authority scope")
 		}
-		return threadEffectJoin{childThreadID: target}, nil
+		return threadEffectJoin{childThreadIDs: targets}, nil
 	case subagentActionCloseAll:
 		return threadEffectJoin{allChildren: true}, nil
 	default:

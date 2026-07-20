@@ -689,12 +689,13 @@ Redeven code must not bypass those Floret lifecycles:
   exclusive side of the same root-thread gate. Read-only `subagents` `list`
   and `inspect` release the gate before their handler; `wait` remains gated
   because it may admit pending child input and start provider work, and it
-  opens the canonical descendant join scope required for that work. Parent and
-  child effects may safely hold shared leases concurrently. A
+  opens only the exact requested child join scopes required for that work.
+  Parent and child effects may safely hold shared leases concurrently. A
   lifecycle writer queued behind an active scoped cohort may allow only the
-  exact child named by `close`, or canonical children covered by `close_all`
-  or `wait`, to finish; unrelated root/child effects remain fenced. After that cohort
-  reaches zero, the writer takes exclusive authority before new effects;
+  exact child named by `close`, exact children named by `wait`, or canonical
+  children covered by `close_all`, to finish; unrelated root/child effects
+  remain fenced. After that cohort reaches zero, the writer takes exclusive
+  authority before new effects;
 - control signals must not be registered as ordinary tools;
 - `ask_user`, `task_complete`, and custom control signals receive no synthetic
   tool result or Redeven completion gate. Redeven may apply product confirmation
@@ -702,7 +703,10 @@ Redeven code must not bypass those Floret lifecycles:
 - a user command may retain prompt text and queued upload ownership only before
   Floret admission. A committed public Floret turn causes Redeven to atomically
   remove that command and move its uploads to thread ownership; restart
-  reconciliation checks the exact opaque `TurnID` through `ListThreadTurns`;
+  reconciliation checks the exact opaque `TurnID` through `ListThreadTurns`.
+  Before runtime authority reopens, an `in_flight` command without that
+  canonical turn is atomically released through its exact command, turn, and
+  run identity so one runtime settlement owner may retry it;
 - admitted attachment metadata and opaque `ResourceRef` values live only in the
   Floret canonical user message. Redeven owns upload bytes and thread-level
   resource ownership. Before admission it freezes the exact bytes and binds a

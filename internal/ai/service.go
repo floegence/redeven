@@ -413,7 +413,6 @@ func NewService(opts Options) (*Service, error) {
 		closeServiceBeforeMaintenance(svc)
 		return nil, err
 	}
-	svc.scheduleQueuedTurnRecovery()
 	svc.startBackgroundMaintenance()
 	return svc, nil
 }
@@ -443,45 +442,45 @@ func closeServiceBeforeMaintenance(s *Service) {
 	}
 }
 
-func (s *Service) scheduleQueuedTurnRecovery() {
+type queuedTurnRecoveryTarget struct {
+	endpointID string
+	threadID   string
+}
+
+func (s *Service) recoverQueuedTurnCommandsForStartup(ctx context.Context) ([]queuedTurnRecoveryTarget, error) {
 	if s == nil {
-		return
+		return nil, errors.New("queued turn recovery coordinator is unavailable")
 	}
 	s.mu.Lock()
 	db := s.threadsDB
 	persistTO := s.persistOpTO
 	s.mu.Unlock()
 	if db == nil {
-		return
+		return nil, errors.New("threads store not ready")
 	}
 	if persistTO <= 0 {
 		persistTO = defaultPersistOpTimeout
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), persistTO)
-	queuedThreads, err := db.ListThreadsWithQueuedTurns(ctx, 5000)
-	cancel()
+	recoveryCtx, cancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
+	defer cancel()
+	queuedThreads, err := db.ListAllThreadsWithQueuedTurnsForRecovery(recoveryCtx)
 	if err != nil {
-		if s.log != nil {
-			s.log.Warn("ai: queued turn recovery scan failed", "error", err)
-		}
-		return
+		return nil, fmt.Errorf("scan queued turns for startup recovery: %w", err)
 	}
+	targets := make([]queuedTurnRecoveryTarget, 0, len(queuedThreads))
 	for _, queued := range queuedThreads {
 		endpointID := strings.TrimSpace(queued.EndpointID)
 		threadID := strings.TrimSpace(queued.ThreadID)
 		if endpointID == "" || threadID == "" {
-			continue
+			return nil, errors.New("queued turn recovery target identity is incomplete")
 		}
-		func() {
+		wake, err := func() (bool, error) {
 			if s.threadMgr == nil {
-				return
+				return false, errors.New("thread lifecycle authority is unavailable")
 			}
 			unlock, lockErr := s.threadMgr.lockThreadLifecycle(endpointID, threadID)
 			if lockErr != nil {
-				if s.log != nil {
-					s.log.Warn("ai: queued turn recovery lifecycle lock failed", "thread_id", threadID, "error", lockErr)
-				}
-				return
+				return false, lockErr
 			}
 			defer unlock()
 			s.mu.Lock()
@@ -491,43 +490,64 @@ func (s *Service) scheduleQueuedTurnRecovery() {
 			idleCompaction := s.idleCompactionByTh[threadKey]
 			s.mu.Unlock()
 			if activeRunID != "" || finalizingRunID != "" || (idleCompaction != nil && idleCompaction.busy()) {
-				return
+				return false, errors.New("queued turn startup recovery encountered an active runtime settlement owner")
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), persistTO)
-			commands, listErr := db.ListFollowupsByLane(ctx, endpointID, threadID, threadstore.FollowupLaneQueued, 500)
-			cancel()
+			commands, listErr := db.ListAllFollowupsByLaneForRecovery(recoveryCtx, endpointID, threadID, threadstore.FollowupLaneQueued)
 			if listErr != nil {
-				if s.log != nil {
-					s.log.Warn("ai: pending turn command reconciliation failed", "thread_id", threadID, "error", listErr)
-				}
-				return
+				return false, listErr
+			}
+			turnIDs, turnErr := s.readCanonicalThreadTurnIDs(recoveryCtx, threadID)
+			if turnErr != nil {
+				return false, turnErr
 			}
 			for _, command := range commands {
-				reconcileCtx, reconcileCancel := context.WithTimeout(context.Background(), persistTO)
-				_, reconcileErr := s.reconcilePendingTurnCommand(reconcileCtx, endpointID, threadID, command.QueueID, command.TurnID, nil)
-				reconcileCancel()
-				if reconcileErr != nil && s.log != nil {
-					s.log.Warn("ai: pending turn command reconciliation failed", "thread_id", threadID, "turn_id", command.TurnID, "error", reconcileErr)
+				if _, accepted := turnIDs[strings.TrimSpace(command.TurnID)]; accepted {
+					if err := s.commitPendingTurnCommandAdmission(recoveryCtx, endpointID, threadID, command.QueueID, command.TurnID, nil); err != nil {
+						return false, fmt.Errorf("settle admitted command %q turn %q: %w", command.QueueID, command.TurnID, err)
+					}
+					continue
+				}
+				if command.AdmissionState == threadstore.PendingTurnAdmissionInFlight {
+					releaseErr := s.releasePendingTurnCommandAdmission(
+						recoveryCtx,
+						endpointID,
+						threadID,
+						command.QueueID,
+						command.TurnID,
+						command.RunID,
+						threadstore.FollowupLaneQueued,
+					)
+					if releaseErr != nil {
+						return false, fmt.Errorf("release unadmitted command %q turn %q run %q: %w", command.QueueID, command.TurnID, command.RunID, releaseErr)
+					}
 				}
 			}
-			readCtx, readCancel := context.WithTimeout(context.Background(), persistTO)
-			host, hostErr := s.openFloretThreadReadHost(readCtx, threadID)
+			host, hostErr := s.openFloretThreadReadHost(recoveryCtx, threadID)
 			var snapshot flruntime.ThreadSnapshot
 			if hostErr == nil {
-				snapshot, hostErr = host.ReadThread(readCtx, flruntime.ThreadID(threadID))
+				snapshot, hostErr = host.ReadThread(recoveryCtx, flruntime.ThreadID(threadID))
 			}
-			readCancel()
 			if hostErr != nil {
-				if s.log != nil {
-					s.log.Warn("ai: queued turn canonical thread read failed", "thread_id", threadID, "error", hostErr)
-				}
-				return
+				return false, hostErr
 			}
-			if !snapshot.CanAppendMessage {
-				return
-			}
-			s.threadMgr.Wake(endpointID, threadID)
+			return snapshot.CanAppendMessage, nil
 		}()
+		if err != nil {
+			return nil, fmt.Errorf("recover queued turns for thread %q: %w", threadID, err)
+		}
+		if wake {
+			targets = append(targets, queuedTurnRecoveryTarget{endpointID: endpointID, threadID: threadID})
+		}
+	}
+	return targets, nil
+}
+
+func (s *Service) wakeQueuedTurnRecoveryTargets(targets []queuedTurnRecoveryTarget) {
+	if s == nil || s.threadMgr == nil {
+		return
+	}
+	for _, target := range targets {
+		s.threadMgr.Wake(target.endpointID, target.threadID)
 	}
 }
 

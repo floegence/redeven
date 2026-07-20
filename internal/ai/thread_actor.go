@@ -37,8 +37,8 @@ type threadLifecycleGate struct {
 }
 
 type threadEffectJoin struct {
-	childThreadID string
-	allChildren   bool
+	childThreadIDs []string
+	allChildren    bool
 }
 
 type threadEffectGateRequest struct {
@@ -95,8 +95,8 @@ func (g *threadLifecycleGate) addJoinScope(join threadEffectJoin) {
 	if join.allChildren {
 		g.joinAllChildren++
 	}
-	if join.childThreadID != "" {
-		g.joinChildren[join.childThreadID]++
+	for _, childThreadID := range join.childThreadIDs {
+		g.joinChildren[childThreadID]++
 	}
 }
 
@@ -104,10 +104,10 @@ func (g *threadLifecycleGate) removeJoinScope(join threadEffectJoin) {
 	if join.allChildren {
 		g.joinAllChildren--
 	}
-	if join.childThreadID != "" {
-		g.joinChildren[join.childThreadID]--
-		if g.joinChildren[join.childThreadID] <= 0 {
-			delete(g.joinChildren, join.childThreadID)
+	for _, childThreadID := range join.childThreadIDs {
+		g.joinChildren[childThreadID]--
+		if g.joinChildren[childThreadID] <= 0 {
+			delete(g.joinChildren, childThreadID)
 		}
 	}
 }
@@ -131,15 +131,17 @@ func (m *threadManager) lockThreadLifecycle(endpointID string, threadID string) 
 func (m *threadManager) lockThreadEffect(endpointID string, authorityThreadID string, executionThreadID string, join threadEffectJoin) (func(), error) {
 	authorityThreadID = strings.TrimSpace(authorityThreadID)
 	executionThreadID = strings.TrimSpace(executionThreadID)
-	join.childThreadID = strings.TrimSpace(join.childThreadID)
+	join.childThreadIDs = normalizeSubagentThreadIDs(join.childThreadIDs)
 	if authorityThreadID == "" || executionThreadID == "" {
 		return nil, errors.New("invalid thread effect authority")
 	}
-	if join.allChildren && join.childThreadID != "" {
+	if join.allChildren && len(join.childThreadIDs) > 0 {
 		return nil, errors.New("invalid thread effect join scope")
 	}
-	if join.childThreadID == authorityThreadID {
-		return nil, errors.New("invalid thread effect child scope")
+	for _, childThreadID := range join.childThreadIDs {
+		if childThreadID == authorityThreadID {
+			return nil, errors.New("invalid thread effect child scope")
+		}
 	}
 	return m.lockThreadGate(endpointID, authorityThreadID, true, threadEffectGateRequest{
 		authorityThreadID: authorityThreadID,

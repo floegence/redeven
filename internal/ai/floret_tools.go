@@ -687,7 +687,11 @@ func floretToolResources(inv fltools.Invocation[map[string]any]) ([]fltools.Reso
 	case "subagents":
 		if action := strings.TrimSpace(anyToString(args["action"])); action != "" {
 			out := []fltools.ResourceRef{{Kind: "subagent", Value: action}}
-			if target := strings.TrimSpace(anyToString(args["target"])); target != "" {
+			if action == subagentActionWait {
+				for _, id := range normalizeSubagentThreadIDs(args["ids"]) {
+					out = append(out, fltools.ResourceRef{Kind: "subagent_thread", Value: id})
+				}
+			} else if target := strings.TrimSpace(anyToString(args["target"])); target != "" {
 				out = append(out, fltools.ResourceRef{Kind: "subagent_thread", Value: target})
 			}
 			return out, nil

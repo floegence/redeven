@@ -104,7 +104,7 @@ func TestThreadEffectGateLetsActiveCohortFinishAfterWriterQueues(t *testing.T) {
 	const endpointID = "env_effect_cohort"
 	const threadID = "thread_effect_cohort"
 	const childThreadID = "child_effect_cohort"
-	firstRelease, err := svc.threadMgr.lockThreadEffect(endpointID, threadID, threadID, threadEffectJoin{childThreadID: childThreadID})
+	firstRelease, err := svc.threadMgr.lockThreadEffect(endpointID, threadID, threadID, threadEffectJoin{childThreadIDs: []string{childThreadID}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -377,7 +377,10 @@ func TestQueuedRecoveryDoesNotCompeteWithActiveAdmissionSettlementOwner(t *testi
 	svc.mu.Lock()
 	svc.activeRunByTh[threadKey] = command.RunID
 	svc.mu.Unlock()
-	svc.scheduleQueuedTurnRecovery()
+	targets, err := svc.recoverQueuedTurnCommandsForStartup(context.Background())
+	if err == nil || !strings.Contains(err.Error(), "active runtime settlement owner") {
+		t.Fatalf("queued recovery targets=%#v err=%v, want active settlement owner rejection", targets, err)
+	}
 	if queued, err := svc.threadsDB.GetQueuedTurn(ctx, meta.EndpointID, thread.ThreadID, command.QueueID); err != nil || queued == nil {
 		t.Fatalf("active-owner queued command=%#v err=%v, want preserved", queued, err)
 	}
@@ -390,7 +393,11 @@ func TestQueuedRecoveryDoesNotCompeteWithActiveAdmissionSettlementOwner(t *testi
 	svc.mu.Lock()
 	delete(svc.activeRunByTh, threadKey)
 	svc.mu.Unlock()
-	svc.scheduleQueuedTurnRecovery()
+	targets, err = svc.recoverQueuedTurnCommandsForStartup(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	svc.wakeQueuedTurnRecoveryTargets(targets)
 	if queued, err := svc.threadsDB.GetQueuedTurn(ctx, meta.EndpointID, thread.ThreadID, command.QueueID); !errors.Is(err, sql.ErrNoRows) || queued != nil {
 		t.Fatalf("idle recovery queued command=%#v err=%v, want settled", queued, err)
 	}

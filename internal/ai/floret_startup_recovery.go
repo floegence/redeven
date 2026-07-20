@@ -118,13 +118,15 @@ func (s *Service) startFloretStartupRecovery(targets []floretStartupRecoveryTarg
 		return err
 	}
 	if !result.pending {
-		if err := s.recoverPostTurnStartupOperations(ctx); err != nil {
+		queuedTargets, err := s.completePostTurnStartupRecovery(ctx)
+		if err != nil {
 			cancel()
 			s.setFloretStartupRecoveryState(false, err)
 			return err
 		}
 		cancel()
 		s.setFloretStartupRecoveryState(false, nil)
+		s.wakeQueuedTurnRecoveryTargets(queuedTargets)
 		return nil
 	}
 	cancel()
@@ -151,7 +153,8 @@ func (s *Service) startFloretStartupRecovery(targets []floretStartupRecoveryTarg
 					cancel()
 					continue
 				}
-				if err := s.recoverPostTurnStartupOperations(ctx); err != nil {
+				queuedTargets, err := s.completePostTurnStartupRecovery(ctx)
+				if err != nil {
 					cancel()
 					s.setFloretStartupRecoveryState(false, err)
 					if s.log != nil {
@@ -161,7 +164,7 @@ func (s *Service) startFloretStartupRecovery(targets []floretStartupRecoveryTarg
 				}
 				cancel()
 				s.setFloretStartupRecoveryState(false, nil)
-				s.scheduleQueuedTurnRecovery()
+				s.wakeQueuedTurnRecoveryTargets(queuedTargets)
 				return
 			case <-s.recoveryStopCh:
 				return
@@ -169,6 +172,17 @@ func (s *Service) startFloretStartupRecovery(targets []floretStartupRecoveryTarg
 		}
 	}()
 	return nil
+}
+
+func (s *Service) completePostTurnStartupRecovery(ctx context.Context) ([]queuedTurnRecoveryTarget, error) {
+	if err := s.recoverPostTurnStartupOperations(ctx); err != nil {
+		return nil, err
+	}
+	targets, err := s.recoverQueuedTurnCommandsForStartup(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("recover queued turn admissions: %w", err)
+	}
+	return targets, nil
 }
 
 func (s *Service) recoverPostTurnStartupOperations(ctx context.Context) error {

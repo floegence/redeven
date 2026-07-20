@@ -11,6 +11,24 @@ func cloneStringSlice(in []string) []string {
 	return out
 }
 
+func normalizeSubagentThreadIDs(value any) []string {
+	ids := extractStringSlice(value)
+	out := make([]string, 0, len(ids))
+	seen := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
+}
+
 func parseBoolArg(args map[string]any, key string, fallback bool) bool {
 	raw, ok := args[key]
 	if !ok {
