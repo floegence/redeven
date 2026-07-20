@@ -2703,6 +2703,8 @@ describe('TerminalPanel', () => {
   });
 
   it('marks the first render after baseline commit without delaying interaction', async () => {
+    vi.useFakeTimers();
+    installRequestAnimationFrameMock('timer');
     terminalWriteCompletionState.deferHistory = true;
     transportMocks.getSessionStats.mockResolvedValue({ history: { totalBytes: 5 } });
     transportMocks.historyPage.mockResolvedValue(makeTerminalHistoryPage({
@@ -2725,18 +2727,23 @@ describe('TerminalPanel', () => {
     core?.handlers?.onRender?.(1);
     expect(mark.mock.calls.some(([name]) => String(name).includes(':baseline-rendered:'))).toBe(false);
 
+    forceResizeSpy.mockClear();
     terminalWriteCompletionState.historyCallbacks.shift()?.();
-    await waitForTerminalPanelCondition(() => {
-      expect(host.querySelector('[data-terminal-runtime-session="session-1"]')?.getAttribute('aria-busy')).toBe('false');
-    });
+    await settleTerminalPanelMicrotasks();
+    expect(host.querySelector('[data-terminal-runtime-session="session-1"]')?.getAttribute('aria-busy')).toBe('false');
 
     transportMocks.sendInput.mockClear();
     core?.handlers?.onData?.('after-baseline\r');
     expect(transportMocks.sendInput).toHaveBeenCalledWith('session-1', 'after-baseline\r', 'conn-1');
-    expect(mark.mock.calls.some(([name]) => String(name).includes(':baseline-rendered:'))).toBe(false);
+    expect(forceResizeSpy).not.toHaveBeenCalled();
 
     core?.handlers?.onRender?.(2);
+    expect(mark.mock.calls.some(([name]) => String(name).includes(':baseline-rendered:'))).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(forceResizeSpy).toHaveBeenCalledTimes(1);
     core?.handlers?.onRender?.(3);
+    core?.handlers?.onRender?.(4);
 
     const renderedMarks = mark.mock.calls.filter(([name]) => String(name).includes(':baseline-rendered:'));
     expect(renderedMarks).toHaveLength(1);
@@ -2746,6 +2753,38 @@ describe('TerminalPanel', () => {
       coordinator_attach_generation: expect.any(Number),
       covered_through_sequence: 1,
     }));
+  });
+
+  it('cancels the pending baseline render fence after a blocking core failure', async () => {
+    vi.useFakeTimers();
+    installRequestAnimationFrameMock('timer');
+    terminalWriteCompletionState.deferHistory = true;
+    transportMocks.historyPage.mockResolvedValue(makeTerminalHistoryPage({
+      chunks: [{ sequence: 1, timestampMs: 10, data: textEncoder.encode('ready') }],
+      firstSequence: 1,
+      lastSequence: 1,
+      coveredBytes: 5,
+      totalBytes: 5,
+    }));
+    const mark = vi.spyOn(performance, 'mark').mockImplementation(() => ({}) as PerformanceMark);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await waitForTerminalPanelCondition(() => {
+      expect(terminalCoreInstances[0]?.writeHistory).toHaveBeenCalledTimes(1);
+    });
+
+    const core = terminalCoreInstances[0];
+    terminalWriteCompletionState.historyCallbacks.shift()?.();
+    await settleTerminalPanelMicrotasks();
+    core?.handlers?.onError?.(new Error('renderer failed'));
+
+    await vi.advanceTimersByTimeAsync(1);
+    core?.handlers?.onRender?.(1);
+
+    expect(mark.mock.calls.some(([name]) => String(name).includes(':baseline-rendered:'))).toBe(false);
+    expect(host.textContent).toContain('This terminal could not be restored.');
   });
 
   it('connects the Beamterm renderer after live_v1 attach and before history replay', async () => {
