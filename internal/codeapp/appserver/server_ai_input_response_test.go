@@ -27,6 +27,15 @@ func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	stateDir := t.TempDir()
+	providerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.Header().Set("Cache-Control", "no-store")
+		w.WriteHeader(http.StatusOK)
+		_, _ = io.WriteString(w, "data: {\"type\":\"response.output_text.delta\",\"delta\":\"accepted\"}\n\n")
+		_, _ = io.WriteString(w, "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_input_response\",\"model\":\"gpt-5-mini\",\"status\":\"completed\"}}\n\n")
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+	}))
+	t.Cleanup(providerServer.Close)
 	channelID := "ch_test_ai_input_response"
 	envOrigin := envOriginWithChannel(channelID)
 	meta := session.Meta{
@@ -47,9 +56,10 @@ func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 		Config: &config.AIConfig{
 			CurrentModelID: "openai/gpt-5-mini",
 			Providers: []config.AIProvider{{
-				ID:   "openai",
-				Name: "OpenAI",
-				Type: "openai",
+				ID:      "openai",
+				Name:    "OpenAI",
+				Type:    "openai",
+				BaseURL: providerServer.URL + "/v1",
 				Models: []config.AIProviderModel{{
 					ModelName: "gpt-5-mini",
 				}},
@@ -58,6 +68,9 @@ func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 		RunMaxWallTime:   3 * time.Second,
 		RunIdleTimeout:   3 * time.Second,
 		PersistOpTimeout: 2 * time.Second,
+		ResolveProviderAPIKey: func(string) (string, bool, error) {
+			return "sk-test", true, nil
+		},
 	})
 	if err != nil {
 		t.Fatalf("ai.NewService: %v", err)
