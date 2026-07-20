@@ -183,9 +183,9 @@ func (r *run) withAuthorizedFloretEffect(ctx context.Context, req flruntime.Effe
 			AuditReference: "permission_snapshot:" + strings.TrimSpace(currentSnapshot.SnapshotID) + "/effect:" + strings.TrimSpace(req.EffectAttemptID),
 			AuditHash:      floretEffectAuditHash(req, currentSnapshot, policyRevision, approvalID), AuthorizedAt: time.Now(),
 		}
-		// Passive SubAgent coordination has no product or canonical mutation and
-		// may wait for child progress. Release the lifecycle gate before that
-		// wait so permission changes and deletes are not needlessly delayed.
+		// Read-only SubAgent inspection has no product or canonical mutation.
+		// Wait is intentionally excluded: Floret may admit pending child input
+		// while waiting, so it must remain inside the lifecycle authority gate.
 		if passiveSubagentEffectRequest(req) {
 			unlock()
 			dispatchErr := dispatch(proof)
@@ -208,7 +208,7 @@ func passiveSubagentEffectRequest(req flruntime.EffectAuthorizationRequest) bool
 			continue
 		}
 		switch strings.TrimSpace(resource.Value) {
-		case subagentActionWait, subagentActionList, subagentActionInspect:
+		case subagentActionList, subagentActionInspect:
 			return true
 		default:
 			return false
@@ -295,6 +295,8 @@ func floretEffectJoin(req flruntime.EffectAuthorizationRequest) (threadEffectJoi
 		}
 	}
 	switch action {
+	case subagentActionWait:
+		return threadEffectJoin{allChildren: true}, nil
 	case subagentActionClose:
 		if target == "" {
 			return threadEffectJoin{}, errors.New("SubAgent close effect is missing its child authority scope")

@@ -77,6 +77,20 @@ func TestFloretEffectAuthorizationRegistryConsumesExactProofOnce(t *testing.T) {
 
 func TestFloretEffectJoinRequiresExplicitCloseScope(t *testing.T) {
 	join, err := floretEffectJoin(flruntime.EffectAuthorizationRequest{
+		ToolName:  "subagents",
+		Resources: []fltools.ResourceRef{{Kind: "subagent", Value: subagentActionWait}},
+	})
+	if err != nil || !join.allChildren || join.childThreadID != "" {
+		t.Fatalf("wait join=%#v err=%v", join, err)
+	}
+	if passiveSubagentEffectRequest(flruntime.EffectAuthorizationRequest{
+		ToolName:  "subagents",
+		Resources: []fltools.ResourceRef{{Kind: "subagent", Value: subagentActionWait}},
+	}) {
+		t.Fatal("SubAgent wait must not release lifecycle authority before dispatch")
+	}
+
+	join, err = floretEffectJoin(flruntime.EffectAuthorizationRequest{
 		ToolName: "subagents",
 		Resources: []fltools.ResourceRef{
 			{Kind: "subagent", Value: subagentActionClose},
@@ -98,6 +112,152 @@ func TestFloretEffectJoinRequiresExplicitCloseScope(t *testing.T) {
 	})
 	if err != nil || !join.allChildren || join.childThreadID != "" {
 		t.Fatalf("close-all join=%#v err=%v", join, err)
+	}
+}
+
+func TestFloretEffectAuthorizationKeepsSubagentWaitInsideLifecycleGate(t *testing.T) {
+	r := newPermissionPolicyTestRun(t, t.TempDir(), FlowerPermissionFullAccess, "effect_subagent_wait")
+	svc := testServiceForRun(t, r)
+	snapshot := r.currentPermissionSnapshot()
+	dispatched := make(chan struct{})
+	finish := make(chan struct{})
+	done := make(chan error, 1)
+	go func() {
+		done <- r.withAuthorizedFloretEffect(context.Background(), flruntime.EffectAuthorizationRequest{
+			EffectAttemptID: "effect_subagent_wait", RequestFingerprint: "fingerprint_subagent_wait",
+			ThreadID: flruntime.ThreadID(r.threadID), TurnID: flruntime.TurnID(r.messageID), RunID: flruntime.RunID(r.id),
+			ToolCallID: "call_subagent_wait", ToolName: "subagents", ArgumentHash: floretEffectArgumentHash(`{"action":"wait"}`),
+			Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}, LeaseOwnerID: "lease_subagent_wait", LeaseGeneration: 1,
+			Resources: []fltools.ResourceRef{{Kind: "subagent", Value: subagentActionWait}},
+			HostContext: map[string]string{
+				floretToolHostContextPermissionSnapshotIDKey: snapshot.SnapshotID,
+				floretToolHostContextPermissionEpochKey:      permissionSurfaceEpoch(snapshot),
+				floretToolHostContextAuthorityThreadIDKey:    r.threadID,
+			},
+		}, func(flruntime.EffectAuthorizationProof) error {
+			close(dispatched)
+			<-finish
+			return nil
+		})
+	}()
+	select {
+	case <-dispatched:
+	case <-time.After(time.Second):
+		t.Fatal("SubAgent wait did not reach dispatch")
+	}
+
+	writerAcquired := make(chan func(), 1)
+	go func() {
+		unlock, err := svc.threadMgr.lockThreadLifecycle(r.endpointID, r.threadID)
+		if err != nil {
+			writerAcquired <- nil
+			return
+		}
+		writerAcquired <- unlock
+	}()
+	key := runThreadKey(r.endpointID, r.threadID)
+	deadline := time.Now().Add(time.Second)
+	for {
+		svc.threadMgr.mu.Lock()
+		gate := svc.threadMgr.lifecycleGates[key]
+		svc.threadMgr.mu.Unlock()
+		queued := false
+		if gate != nil {
+			gate.mu.Lock()
+			queued = gate.waitingWriters > 0
+			gate.mu.Unlock()
+		}
+		if queued {
+			break
+		}
+		if time.Now().After(deadline) {
+			close(finish)
+			<-done
+			t.Fatal("lifecycle writer did not queue behind SubAgent wait")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	select {
+	case unlock := <-writerAcquired:
+		if unlock != nil {
+			unlock()
+		}
+		t.Fatal("lifecycle writer crossed SubAgent wait dispatch")
+	case <-time.After(25 * time.Millisecond):
+	}
+	childAcquired := make(chan func(), 1)
+	go func() {
+		release, lockErr := svc.threadMgr.lockThreadEffect(r.endpointID, r.threadID, "child_wait_admission", threadEffectJoin{})
+		if lockErr != nil {
+			childAcquired <- nil
+			return
+		}
+		childAcquired <- release
+	}()
+	var childRelease func()
+	select {
+	case childRelease = <-childAcquired:
+		if childRelease == nil {
+			close(finish)
+			<-done
+			if release := <-writerAcquired; release != nil {
+				release()
+			}
+			t.Fatal("child work required by SubAgent wait failed to join its active cohort")
+		}
+	case <-time.After(time.Second):
+		close(finish)
+		<-done
+		if release := <-writerAcquired; release != nil {
+			release()
+		}
+		if release := <-childAcquired; release != nil {
+			release()
+		}
+		t.Fatal("lifecycle writer blocked child work required by SubAgent wait")
+	}
+	childRelease()
+
+	close(finish)
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	var writerRelease func()
+	select {
+	case writerRelease = <-writerAcquired:
+		if writerRelease == nil {
+			t.Fatal("lifecycle writer failed after SubAgent wait completed")
+		}
+	case <-time.After(time.Second):
+		t.Fatal("lifecycle writer did not resume after SubAgent wait completed")
+	}
+	lateChildAcquired := make(chan func(), 1)
+	go func() {
+		release, lockErr := svc.threadMgr.lockThreadEffect(r.endpointID, r.threadID, "child_after_wait", threadEffectJoin{})
+		if lockErr != nil {
+			lateChildAcquired <- nil
+			return
+		}
+		lateChildAcquired <- release
+	}()
+	select {
+	case release := <-lateChildAcquired:
+		if release != nil {
+			release()
+		}
+		writerRelease()
+		t.Fatal("child work crossed the lifecycle writer after SubAgent wait")
+	case <-time.After(25 * time.Millisecond):
+	}
+	writerRelease()
+	select {
+	case release := <-lateChildAcquired:
+		if release == nil {
+			t.Fatal("child work failed after the lifecycle writer completed")
+		}
+		release()
+	case <-time.After(time.Second):
+		t.Fatal("child work did not resume after the lifecycle writer completed")
 	}
 }
 
