@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -11,17 +12,35 @@ import (
 const (
 	FollowupLaneQueued = "queued"
 	FollowupLaneDraft  = "draft"
+
+	PendingTurnAdmissionReady    = "ready"
+	PendingTurnAdmissionInFlight = "in_flight"
 )
 
 var ErrFollowupsRevisionChanged = errors.New("followups revision changed")
 var ErrInvalidFollowupOrder = errors.New("invalid followup order")
+var ErrPendingTurnAdmissionInProgress = errors.New("pending turn admission is in progress")
+var ErrFollowupReplacementConflict = errors.New("followup replacement conflict")
 
-func normalizeFollowupLane(raw string) string {
+func parseFollowupLane(raw string) (string, error) {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case FollowupLaneQueued:
+		return FollowupLaneQueued, nil
 	case FollowupLaneDraft:
-		return FollowupLaneDraft
+		return FollowupLaneDraft, nil
 	default:
-		return FollowupLaneQueued
+		return "", fmt.Errorf("invalid followup lane %q", raw)
+	}
+}
+
+func parsePendingTurnAdmissionState(raw string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case PendingTurnAdmissionReady:
+		return PendingTurnAdmissionReady, nil
+	case PendingTurnAdmissionInFlight:
+		return PendingTurnAdmissionInFlight, nil
+	default:
+		return "", fmt.Errorf("invalid pending turn admission state %q", raw)
 	}
 }
 
@@ -33,6 +52,7 @@ func scanFollowup(scanner interface{ Scan(...any) error }) (QueuedTurn, error) {
 		&rec.ThreadID,
 		&rec.ChannelID,
 		&rec.Lane,
+		&rec.AdmissionState,
 		&rec.TurnID,
 		&rec.RunID,
 		&rec.ModelID,
@@ -50,7 +70,14 @@ func scanFollowup(scanner interface{ Scan(...any) error }) (QueuedTurn, error) {
 	if err != nil {
 		return QueuedTurn{}, err
 	}
-	rec.Lane = normalizeFollowupLane(rec.Lane)
+	rec.Lane, err = parseFollowupLane(rec.Lane)
+	if err != nil {
+		return QueuedTurn{}, err
+	}
+	rec.AdmissionState, err = parsePendingTurnAdmissionState(rec.AdmissionState)
+	if err != nil {
+		return QueuedTurn{}, err
+	}
 	return rec, nil
 }
 
@@ -82,9 +109,12 @@ WHERE endpoint_id = ? AND thread_id = ?
 }
 
 func getNextFollowupSortIndexTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, lane string) (int64, error) {
-	lane = normalizeFollowupLane(lane)
+	lane, err := parseFollowupLane(lane)
+	if err != nil {
+		return 0, err
+	}
 	var next int64
-	err := tx.QueryRowContext(ctx, `
+	err = tx.QueryRowContext(ctx, `
 SELECT COALESCE(MAX(sort_index), 0) + 1
 FROM ai_queued_turns
 WHERE endpoint_id = ? AND thread_id = ? AND lane = ?
@@ -99,9 +129,12 @@ WHERE endpoint_id = ? AND thread_id = ? AND lane = ?
 }
 
 func followupPositionTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, lane string, queueID string, sortIndex int64) (int, error) {
-	lane = normalizeFollowupLane(lane)
+	lane, err := parseFollowupLane(lane)
+	if err != nil {
+		return 0, err
+	}
 	var count int
-	err := tx.QueryRowContext(ctx, `
+	err = tx.QueryRowContext(ctx, `
 SELECT COUNT(1)
 FROM ai_queued_turns
 WHERE endpoint_id = ? AND thread_id = ? AND lane = ?
@@ -114,7 +147,10 @@ WHERE endpoint_id = ? AND thread_id = ? AND lane = ?
 }
 
 func listFollowupsByLaneTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, lane string, limit int) ([]QueuedTurn, error) {
-	lane = normalizeFollowupLane(lane)
+	lane, err := parseFollowupLane(lane)
+	if err != nil {
+		return nil, err
+	}
 	if limit <= 0 {
 		limit = 100
 	}
@@ -122,7 +158,7 @@ func listFollowupsByLaneTx(ctx context.Context, tx *sql.Tx, endpointID string, t
 		limit = 500
 	}
 	rows, err := tx.QueryContext(ctx, `
-SELECT queue_id, endpoint_id, thread_id, channel_id, lane, turn_id, run_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
+SELECT queue_id, endpoint_id, thread_id, channel_id, lane, admission_state, turn_id, run_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
        created_by_user_public_id, created_by_user_email, sort_index, created_at_unix_ms, updated_at_unix_ms
 FROM ai_queued_turns
 WHERE endpoint_id = ? AND thread_id = ? AND lane = ?
@@ -148,9 +184,12 @@ LIMIT ?
 }
 
 func getFollowupByLaneAndTurnIDTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, lane string, turnID string) (QueuedTurn, error) {
-	lane = normalizeFollowupLane(lane)
+	lane, err := parseFollowupLane(lane)
+	if err != nil {
+		return QueuedTurn{}, err
+	}
 	row := tx.QueryRowContext(ctx, `
-SELECT queue_id, endpoint_id, thread_id, channel_id, lane, turn_id, run_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
+SELECT queue_id, endpoint_id, thread_id, channel_id, lane, admission_state, turn_id, run_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
        created_by_user_public_id, created_by_user_email, sort_index, created_at_unix_ms, updated_at_unix_ms
 FROM ai_queued_turns
 WHERE endpoint_id = ? AND thread_id = ? AND lane = ? AND turn_id = ?
@@ -196,7 +235,12 @@ func (s *Store) CreateFollowup(ctx context.Context, rec QueuedTurn) (QueuedTurn,
 	rec.EndpointID = strings.TrimSpace(rec.EndpointID)
 	rec.ThreadID = strings.TrimSpace(rec.ThreadID)
 	rec.ChannelID = strings.TrimSpace(rec.ChannelID)
-	rec.Lane = normalizeFollowupLane(rec.Lane)
+	lane, err := parseFollowupLane(rec.Lane)
+	if err != nil {
+		return QueuedTurn{}, 0, 0, err
+	}
+	rec.Lane = lane
+	rec.AdmissionState = PendingTurnAdmissionReady
 	rec.TurnID = strings.TrimSpace(rec.TurnID)
 	rec.RunID = strings.TrimSpace(rec.RunID)
 	rec.ModelID = strings.TrimSpace(rec.ModelID)
@@ -241,7 +285,175 @@ func (s *Store) CreateFollowup(ctx context.Context, rec QueuedTurn) (QueuedTurn,
 	return queued, position, revision, nil
 }
 
+func requireFollowupMutableTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string, followupID string) error {
+	var admissionState string
+	err := tx.QueryRowContext(ctx, `
+SELECT admission_state
+FROM ai_queued_turns
+WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
+`, endpointID, threadID, followupID).Scan(&admissionState)
+	if err != nil {
+		return err
+	}
+	admissionState, err = parsePendingTurnAdmissionState(admissionState)
+	if err != nil {
+		return err
+	}
+	if admissionState == PendingTurnAdmissionInFlight {
+		return ErrPendingTurnAdmissionInProgress
+	}
+	return nil
+}
+
+func (s *Store) BeginPendingTurnAdmission(ctx context.Context, endpointID string, threadID string, queueID string, turnID string, runID string) error {
+	if s == nil || s.db == nil {
+		return errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	queueID = strings.TrimSpace(queueID)
+	turnID = strings.TrimSpace(turnID)
+	runID = strings.TrimSpace(runID)
+	if endpointID == "" || threadID == "" || queueID == "" || turnID == "" || runID == "" {
+		return errors.New("invalid pending turn admission identity")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
+		return err
+	}
+	var storedTurnID, storedRunID, lane, admissionState string
+	var sortIndex int64
+	err = tx.QueryRowContext(ctx, `
+SELECT turn_id, run_id, lane, admission_state, sort_index
+FROM ai_queued_turns
+WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
+`, endpointID, threadID, queueID).Scan(&storedTurnID, &storedRunID, &lane, &admissionState, &sortIndex)
+	if err != nil {
+		return err
+	}
+	lane, err = parseFollowupLane(lane)
+	if err != nil {
+		return err
+	}
+	admissionState, err = parsePendingTurnAdmissionState(admissionState)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(storedTurnID) != turnID || strings.TrimSpace(storedRunID) != runID {
+		return errors.New("pending turn command identity mismatch")
+	}
+	if admissionState == PendingTurnAdmissionInFlight {
+		if lane != FollowupLaneQueued {
+			return errors.New("in-flight pending turn is not queued")
+		}
+		return tx.Commit()
+	}
+	if lane == FollowupLaneDraft {
+		sortIndex, err = getNextFollowupSortIndexTx(ctx, tx, endpointID, threadID, FollowupLaneQueued)
+		if err != nil {
+			return err
+		}
+	}
+	result, err := tx.ExecContext(ctx, `
+UPDATE ai_queued_turns
+SET lane = ?, admission_state = ?, sort_index = ?, updated_at_unix_ms = ?
+WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ? AND admission_state = ?
+`, FollowupLaneQueued, PendingTurnAdmissionInFlight, sortIndex, time.Now().UnixMilli(), endpointID, threadID, queueID, PendingTurnAdmissionReady)
+	if err != nil {
+		return err
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return ErrPendingTurnAdmissionInProgress
+	}
+	if _, err := bumpThreadFollowupsRevisionTx(ctx, tx, endpointID, threadID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (s *Store) ReleasePendingTurnAdmission(ctx context.Context, endpointID string, threadID string, queueID string, turnID string, runID string, targetLane string) error {
+	if s == nil || s.db == nil {
+		return errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	queueID = strings.TrimSpace(queueID)
+	turnID = strings.TrimSpace(turnID)
+	runID = strings.TrimSpace(runID)
+	var err error
+	targetLane, err = parseFollowupLane(targetLane)
+	if err != nil {
+		return err
+	}
+	if endpointID == "" || threadID == "" || queueID == "" || turnID == "" || runID == "" {
+		return errors.New("invalid pending turn admission identity")
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
+		return err
+	}
+	var storedTurnID, storedRunID, lane, admissionState string
+	var sortIndex int64
+	err = tx.QueryRowContext(ctx, `
+SELECT turn_id, run_id, lane, admission_state, sort_index
+FROM ai_queued_turns
+WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
+`, endpointID, threadID, queueID).Scan(&storedTurnID, &storedRunID, &lane, &admissionState, &sortIndex)
+	if err != nil {
+		return err
+	}
+	lane, err = parseFollowupLane(lane)
+	if err != nil {
+		return err
+	}
+	admissionState, err = parsePendingTurnAdmissionState(admissionState)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(storedTurnID) != turnID || strings.TrimSpace(storedRunID) != runID || lane != FollowupLaneQueued || admissionState != PendingTurnAdmissionInFlight {
+		return errors.New("pending turn admission release identity mismatch")
+	}
+	if targetLane == FollowupLaneDraft {
+		sortIndex, err = getNextFollowupSortIndexTx(ctx, tx, endpointID, threadID, FollowupLaneDraft)
+		if err != nil {
+			return err
+		}
+	}
+	result, err := tx.ExecContext(ctx, `
+UPDATE ai_queued_turns
+SET lane = ?, admission_state = ?, sort_index = ?, updated_at_unix_ms = ?
+WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ? AND turn_id = ? AND run_id = ? AND lane = ? AND admission_state = ?
+`, targetLane, PendingTurnAdmissionReady, sortIndex, time.Now().UnixMilli(), endpointID, threadID, queueID, turnID, runID, FollowupLaneQueued, PendingTurnAdmissionInFlight)
+	if err != nil {
+		return err
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return errors.New("pending turn admission changed during release")
+	}
+	if _, err := bumpThreadFollowupsRevisionTx(ctx, tx, endpointID, threadID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 func createFollowupTx(ctx context.Context, tx *sql.Tx, rec QueuedTurn) (QueuedTurn, int, int64, error) {
+	if err := requireThreadWritableTx(ctx, tx, rec.EndpointID, rec.ThreadID); err != nil {
+		return QueuedTurn{}, 0, 0, err
+	}
 	if _, err := getThreadFollowupsRevisionTx(ctx, tx, rec.EndpointID, rec.ThreadID); err != nil {
 		return QueuedTurn{}, 0, 0, err
 	}
@@ -300,12 +512,16 @@ func (s *Store) CountFollowupsByLane(ctx context.Context, endpointID string, thr
 	}
 	endpointID = strings.TrimSpace(endpointID)
 	threadID = strings.TrimSpace(threadID)
-	lane = normalizeFollowupLane(lane)
+	var err error
+	lane, err = parseFollowupLane(lane)
+	if err != nil {
+		return 0, err
+	}
 	if endpointID == "" || threadID == "" {
 		return 0, errors.New("invalid request")
 	}
 	var count int
-	err := s.db.QueryRowContext(ctx, `
+	err = s.db.QueryRowContext(ctx, `
 SELECT COUNT(1)
 FROM ai_queued_turns
 WHERE endpoint_id = ? AND thread_id = ? AND lane = ?
@@ -324,7 +540,11 @@ func (s *Store) CountFollowupsByThreadAndLane(ctx context.Context, endpointID st
 		ctx = context.Background()
 	}
 	endpointID = strings.TrimSpace(endpointID)
-	lane = normalizeFollowupLane(lane)
+	var err error
+	lane, err = parseFollowupLane(lane)
+	if err != nil {
+		return nil, err
+	}
 	if endpointID == "" {
 		return nil, errors.New("invalid request")
 	}
@@ -385,7 +605,11 @@ func (s *Store) ListFollowupsByLane(ctx context.Context, endpointID string, thre
 	}
 	endpointID = strings.TrimSpace(endpointID)
 	threadID = strings.TrimSpace(threadID)
-	lane = normalizeFollowupLane(lane)
+	var err error
+	lane, err = parseFollowupLane(lane)
+	if err != nil {
+		return nil, err
+	}
 	if endpointID == "" || threadID == "" {
 		return nil, errors.New("invalid request")
 	}
@@ -396,7 +620,7 @@ func (s *Store) ListFollowupsByLane(ctx context.Context, endpointID string, thre
 		limit = 500
 	}
 	rows, err := s.db.QueryContext(ctx, `
-SELECT queue_id, endpoint_id, thread_id, channel_id, lane, turn_id, run_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
+SELECT queue_id, endpoint_id, thread_id, channel_id, lane, admission_state, turn_id, run_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
        created_by_user_public_id, created_by_user_email, sort_index, created_at_unix_ms, updated_at_unix_ms
 FROM ai_queued_turns
 WHERE endpoint_id = ? AND thread_id = ? AND lane = ?
@@ -509,6 +733,12 @@ func (s *Store) UpdateFollowupText(ctx context.Context, endpointID string, threa
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
+		return 0, err
+	}
+	if err := requireFollowupMutableTx(ctx, tx, endpointID, threadID, followupID); err != nil {
+		return 0, err
+	}
 	now := time.Now().UnixMilli()
 	res, err := tx.ExecContext(ctx, `
 UPDATE ai_queued_turns
@@ -550,6 +780,12 @@ func (s *Store) DeleteFollowup(ctx context.Context, endpointID string, threadID 
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
+		return 0, err
+	}
+	if err := requireFollowupMutableTx(ctx, tx, endpointID, threadID, followupID); err != nil {
+		return 0, err
+	}
 	res, err := tx.ExecContext(ctx, `
 DELETE FROM ai_queued_turns
 WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
@@ -580,7 +816,11 @@ func (s *Store) ReorderFollowups(ctx context.Context, endpointID string, threadI
 	}
 	endpointID = strings.TrimSpace(endpointID)
 	threadID = strings.TrimSpace(threadID)
-	lane = normalizeFollowupLane(lane)
+	var err error
+	lane, err = parseFollowupLane(lane)
+	if err != nil {
+		return 0, err
+	}
 	if endpointID == "" || threadID == "" {
 		return 0, errors.New("invalid request")
 	}
@@ -602,6 +842,9 @@ func (s *Store) ReorderFollowups(ctx context.Context, endpointID string, threadI
 		return 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
+		return 0, err
+	}
 	currentRevision, err := getThreadFollowupsRevisionTx(ctx, tx, endpointID, threadID)
 	if err != nil {
 		return 0, err
@@ -618,6 +861,9 @@ func (s *Store) ReorderFollowups(ctx context.Context, endpointID string, threadI
 	}
 	currentSet := make(map[string]struct{}, len(current))
 	for _, rec := range current {
+		if rec.AdmissionState == PendingTurnAdmissionInFlight {
+			return 0, ErrPendingTurnAdmissionInProgress
+		}
 		currentSet[strings.TrimSpace(rec.QueueID)] = struct{}{}
 	}
 	for _, id := range normalizedIDs {
@@ -662,6 +908,9 @@ func (s *Store) RecoverQueuedTurnsToDrafts(ctx context.Context, endpointID strin
 		return nil, 0, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
+		return nil, 0, err
+	}
 	if _, err := getThreadFollowupsRevisionTx(ctx, tx, endpointID, threadID); err != nil {
 		return nil, 0, err
 	}
@@ -685,19 +934,33 @@ func (s *Store) RecoverQueuedTurnsToDrafts(ctx context.Context, endpointID strin
 	}
 	now := time.Now().UnixMilli()
 	recovered := make([]QueuedTurn, 0, len(queued))
-	for i, rec := range queued {
-		nextSort := nextDraftSort + int64(i)
+	for _, rec := range queued {
+		if rec.AdmissionState == PendingTurnAdmissionInFlight {
+			continue
+		}
+		nextSort := nextDraftSort + int64(len(recovered))
 		if _, err := tx.ExecContext(ctx, `
 UPDATE ai_queued_turns
-SET lane = ?, sort_index = ?, updated_at_unix_ms = ?
+SET lane = ?, admission_state = ?, sort_index = ?, updated_at_unix_ms = ?
 WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
-`, FollowupLaneDraft, nextSort, now, endpointID, threadID, rec.QueueID); err != nil {
+`, FollowupLaneDraft, PendingTurnAdmissionReady, nextSort, now, endpointID, threadID, rec.QueueID); err != nil {
 			return nil, 0, err
 		}
 		rec.Lane = FollowupLaneDraft
+		rec.AdmissionState = PendingTurnAdmissionReady
 		rec.SortIndex = nextSort
 		rec.UpdatedAtUnixMs = now
 		recovered = append(recovered, rec)
+	}
+	if len(recovered) == 0 {
+		revision, err := getThreadFollowupsRevisionTx(ctx, tx, endpointID, threadID)
+		if err != nil {
+			return nil, 0, err
+		}
+		if err := tx.Commit(); err != nil {
+			return nil, 0, err
+		}
+		return nil, revision, nil
 	}
 	revision, err := bumpThreadFollowupsRevisionTx(ctx, tx, endpointID, threadID)
 	if err != nil {

@@ -25,6 +25,35 @@ type terminalProcessTestOwner struct {
 	settle   func(context.Context, flruntime.PendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error)
 }
 
+type failingTerminalInitialInputWriter struct{}
+
+func (failingTerminalInitialInputWriter) Write([]byte) (int, error) {
+	return 0, errors.New("deterministic initial input failure")
+}
+
+func TestCompleteTerminalProcessStartReturnsObservableProcessAfterInitialInputFailure(t *testing.T) {
+	proc := &terminalProcess{
+		id:        "tp_initial_input_failure",
+		status:    terminalProcessStatusRunning,
+		startedAt: time.Now(),
+	}
+	proc.cond = sync.NewCond(&proc.mu)
+	got, err := completeTerminalProcessStart(proc, failingTerminalInitialInputWriter{}, "input")
+	if err != nil {
+		t.Fatalf("completeTerminalProcessStart: %v", err)
+	}
+	if got != proc {
+		t.Fatalf("returned process=%p, want dispatched process %p", got, proc)
+	}
+	snapshot := got.Snapshot()
+	if snapshot.Status != terminalProcessStatusError || snapshot.Error == nil {
+		t.Fatalf("snapshot=%#v, want observable terminal error", snapshot)
+	}
+	if snapshot.Error.Retryable || !strings.Contains(snapshot.Error.Message, "after the process started") {
+		t.Fatalf("terminal error=%#v, want non-retryable post-dispatch failure", snapshot.Error)
+	}
+}
+
 func pendingToolSettlementResultForTest(target flruntime.PendingToolSettlementTarget, availability flruntime.TurnProjectionAvailability, projection *flruntime.ThreadTurnProjection, projectionError string) flruntime.PendingToolSettlementResult {
 	return flruntime.PendingToolSettlementResult{
 		Target: target,
@@ -106,6 +135,7 @@ func TestTerminalProcessStartRequiresOwnerAndCompleteTarget(t *testing.T) {
 		{name: "missing call", mutate: func(req *terminalProcessStartRequest) { req.SettlementTarget.ToolCallID = "" }, wantErr: "settlement target incomplete"},
 		{name: "missing tool", mutate: func(req *terminalProcessStartRequest) { req.SettlementTarget.ToolName = "" }, wantErr: "settlement target incomplete"},
 		{name: "missing handle", mutate: func(req *terminalProcessStartRequest) { req.SettlementTarget.Handle = "" }, wantErr: "settlement target incomplete"},
+		{name: "missing effect attempt", mutate: func(req *terminalProcessStartRequest) { req.SettlementTarget.EffectAttemptID = "" }, wantErr: "settlement target incomplete"},
 		{name: "mismatched handle", mutate: func(req *terminalProcessStartRequest) { req.SettlementTarget.Handle = "tp_other" }, wantErr: "settlement target mismatch"},
 	}
 	for _, test := range tests {
@@ -205,7 +235,12 @@ func TestTerminalProcessReadAndWriteDoNotTriggerSettlement(t *testing.T) {
 	proc.MarkPending()
 
 	meta := &session.Meta{EndpointID: "env_test", CanRead: true, CanWrite: true, CanExecute: true}
-	svc := &Service{terminalProcesses: manager}
+	store := openTerminalProcessTestStore(t)
+	defer store.Close()
+	ensureThreadstoreThreadForTest(t, store, "env_test", "thread_test")
+	svc := &Service{terminalProcesses: manager, threadsDB: store}
+	svc.threadMgr = newThreadManager(svc)
+	defer svc.threadMgr.Close()
 	if _, err := svc.WriteTerminalProcess(context.Background(), meta, "run_test", proc.id, "hello\n"); err != nil {
 		t.Fatalf("WriteTerminalProcess: %v", err)
 	}
@@ -221,6 +256,30 @@ func TestTerminalProcessReadAndWriteDoNotTriggerSettlement(t *testing.T) {
 	}
 	if finalized.Load() != 1 {
 		t.Fatalf("terminate finalizations=%d, want 1", finalized.Load())
+	}
+}
+
+func TestTerminalProcessWriteRejectsPersistedDeleteIntent(t *testing.T) {
+	manager := newTerminalProcessManager()
+	defer func() { _ = manager.Close(context.Background()) }()
+	owner := &terminalProcessTestOwner{}
+	req := terminalProcessTestStartRequest(t.TempDir(), owner, "tool_delete_fence", "read line; printf 'unexpected:%s\\n' \"$line\"; sleep 5")
+	proc, err := manager.Start(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	store := openTerminalProcessTestStore(t)
+	defer store.Close()
+	ensureThreadstoreThreadForTest(t, store, req.EndpointID, req.ThreadID)
+	if _, err := store.PrepareThreadDeleteOperation(context.Background(), req.EndpointID, req.ThreadID, true); err != nil {
+		t.Fatal(err)
+	}
+	svc := &Service{terminalProcesses: manager, threadsDB: store}
+	svc.threadMgr = newThreadManager(svc)
+	defer svc.threadMgr.Close()
+	meta := &session.Meta{EndpointID: req.EndpointID, CanRead: true, CanWrite: true, CanExecute: true}
+	if _, err := svc.WriteTerminalProcess(context.Background(), meta, req.RunID, proc.id, "must-not-write\n"); !errors.Is(err, threadstore.ErrThreadIDRetired) {
+		t.Fatalf("WriteTerminalProcess error=%v, want %v", err, threadstore.ErrThreadIDRetired)
 	}
 }
 
@@ -422,7 +481,7 @@ func TestServiceCloseFinalizesBeforeClosingThreadstore(t *testing.T) {
 	manager := newTerminalProcessManager()
 	owner := &terminalProcessTestOwner{}
 	owner.settle = func(_ context.Context, req flruntime.PendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {
-		thread, err := store.GetThread(context.Background(), endpointID, threadID)
+		thread, err := store.GetThreadSettings(context.Background(), endpointID, threadID)
 		if err != nil || thread == nil {
 			return flruntime.PendingToolSettlementResult{}, errors.New("threadstore closed before terminal settlement")
 		}
@@ -491,12 +550,13 @@ func terminalProcessTestStartRequestWithIdentity(workspace string, owner floretP
 		TurnID:          turnID,
 		SettlementOwner: owner,
 		SettlementTarget: flruntime.PendingToolSettlementTarget{
-			ThreadID:   flruntime.ThreadID(threadID),
-			TurnID:     flruntime.TurnID(settlementTurnID),
-			RunID:      flruntime.RunID(settlementRunID),
-			ToolCallID: toolID,
-			ToolName:   "terminal.exec",
-			Handle:     processID,
+			ThreadID:        flruntime.ThreadID(threadID),
+			TurnID:          flruntime.TurnID(settlementTurnID),
+			RunID:           flruntime.RunID(settlementRunID),
+			ToolCallID:      toolID,
+			ToolName:        "terminal.exec",
+			Handle:          processID,
+			EffectAttemptID: "test_effect:" + toolID,
 		},
 		Finalize: func(owner floretPendingToolSettler, target flruntime.PendingToolSettlementTarget, snapshot terminalProcessSnapshot) error {
 			request, err := terminalProcessSettlementRequest(target, snapshot, terminalProcessResultPayload(snapshot))
@@ -528,8 +588,12 @@ func upsertTerminalProcessTestRun(t *testing.T, store *threadstore.Store, endpoi
 	ensureThreadstoreThreadForTest(t, store, endpointID, threadID)
 }
 
-func newTerminalProcessTestRun(workspace string, svc *Service, store *threadstore.Store, endpointID string, threadID string, runID string, turnID string) *run {
-	r := newRun(runOptions{
+func newTerminalProcessTestRun(t *testing.T, workspace string, svc *Service, store *threadstore.Store, endpointID string, threadID string, runID string, turnID string) *run {
+	t.Helper()
+	if svc != nil && store != nil && svc.threadMgr == nil {
+		svc.threadMgr = newThreadManager(svc)
+	}
+	options := runOptions{
 		Log:              slog.New(slog.NewTextHandler(io.Discard, nil)),
 		RunID:            runID,
 		EndpointID:       endpointID,
@@ -538,8 +602,7 @@ func newTerminalProcessTestRun(workspace string, svc *Service, store *threadstor
 		AgentHomeDir:     workspace,
 		WorkingDir:       workspace,
 		Shell:            "/bin/bash",
-		Service:          svc,
-		ThreadsDB:        store,
+		HostCapabilities: bindTestRunHostCapabilities(t, svc, endpointID, threadID),
 		PersistOpTimeout: 5 * time.Second,
 		SessionMeta: &session.Meta{
 			EndpointID: endpointID,
@@ -547,7 +610,19 @@ func newTerminalProcessTestRun(workspace string, svc *Service, store *threadstor
 			CanWrite:   true,
 			CanExecute: true,
 		},
-	})
+	}
+	if store != nil {
+		capabilities, err := bindRootRunProductCapabilities(store, endpointID, threadID, runID)
+		if err != nil {
+			t.Fatalf("bindRootRunProductCapabilities: %v", err)
+		}
+		options.ProductCapabilities = capabilities
+	}
+	r := newRun(options)
+	if store != nil {
+		runThreadStoresForTest.Store(r, store)
+		t.Cleanup(func() { runThreadStoresForTest.Delete(r) })
+	}
 	r.settlementThreadID = threadID
 	r.settlementRunID = runID
 	r.settlementTurnID = turnID

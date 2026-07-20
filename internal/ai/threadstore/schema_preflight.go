@@ -66,6 +66,26 @@ func migrateLegacyThreadTitles(path string, migrate func(context.Context, Legacy
 	if err != nil {
 		return err
 	}
+	if err := verifyProductSchemaVersion(tx, 2); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("verify product threadstore v2 before title migration: %w", err)
+	}
+	if err := validateProductV2UploadRefs(tx); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if err := validateProductV2PermissionSnapshots(tx); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if err := validateProductV2ForkOperationSnapshots(tx); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	if err := validateProductV2DeleteOperationSnapshots(tx); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
 	rows, err := tx.QueryContext(ctx, `
 SELECT endpoint_id, thread_id, title
 FROM ai_threads

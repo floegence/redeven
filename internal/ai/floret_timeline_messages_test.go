@@ -19,7 +19,7 @@ func TestThreadTimelineUsesCanonicalFloretOrdinalOrder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	host := newTestFloretHost(t, svc.floretStore, "done")
+	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "done")
 	for i := 1; i <= 3; i++ {
 		_, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
 			ThreadID: flruntime.ThreadID(thread.ThreadID),
@@ -63,7 +63,7 @@ func TestThreadTimelineBeforeAndAfterPaginationPreservesCanonicalOrder(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	host := newTestFloretHost(t, svc.floretStore, "done")
+	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "done")
 	for i := 1; i <= 3; i++ {
 		if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: flruntime.TurnID(fmt.Sprintf("turn_%d", i)), RunID: flruntime.RunID(fmt.Sprintf("run_%d", i)), Input: flruntime.TurnInput{Text: fmt.Sprintf("user %d", i)}}); err != nil {
 			t.Fatal(err)
@@ -100,7 +100,7 @@ func TestThreadTimelineRejectsUnknownPaginationCursor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	host := newTestFloretHost(t, svc.floretStore, "done")
+	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "done")
 	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_1", RunID: "run_1", Input: flruntime.TurnInput{Text: "hello"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -121,7 +121,7 @@ func TestReadCanonicalThreadStateUsesLatestAdmittedTurn(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	host := newTestFloretHost(t, svc.floretStore, "done")
+	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "done")
 	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_1", RunID: "run_1", Input: flruntime.TurnInput{Text: "hello"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -151,7 +151,7 @@ func TestUnmatchedLiveDraftTriggersResyncAndUsesCanonicalTimeline(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	host := newTestFloretHost(t, svc.floretStore, "done")
+	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "done")
 	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_1", RunID: "run_1", Input: flruntime.TurnInput{Text: "hello"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -184,7 +184,7 @@ func TestMismatchedLiveDraftIdentityResyncsBootstrapWithoutSendFailure(t *testin
 	if err != nil {
 		t.Fatal(err)
 	}
-	host := newTestFloretHost(t, svc.floretStore, "canonical answer")
+	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "canonical answer")
 	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
 		ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_identity", RunID: "run_identity", Input: flruntime.TurnInput{Text: "hello"},
 	}); err != nil {
@@ -236,7 +236,7 @@ func TestTerminalCanonicalTurnDropsStaleLiveDraftBeforeRendering(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	host := newTestFloretHost(t, svc.floretStore, "canonical terminal")
+	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "canonical terminal")
 	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
 		ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_terminal", RunID: "run_terminal", Input: flruntime.TurnInput{Text: "hello"},
 	}); err != nil {
@@ -283,7 +283,7 @@ func TestTerminalCanonicalReplacementRecoversMismatchedLiveDraft(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	host := newTestFloretHost(t, svc.floretStore, "canonical terminal")
+	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "canonical terminal")
 	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
 		ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_terminal_identity", RunID: "run_terminal_identity", Input: flruntime.TurnInput{Text: "hello"},
 	}); err != nil {

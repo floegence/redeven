@@ -23,10 +23,10 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 	return sqliteutil.Spec{
 		Kind:           threadstoreSchemaKind,
 		CurrentVersion: threadstoreCurrentSchemaVersion,
+		MinimumVersion: 2,
 		Pragmas:        []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`, `PRAGMA auto_vacuum=INCREMENTAL;`},
+		Initialize:     createThreadstoreSchema,
 		Migrations: []sqliteutil.Migration{
-			{FromVersion: 0, ToVersion: 1, Apply: createThreadstoreSchemaV1},
-			{FromVersion: 1, ToVersion: 2, Apply: migrateProductV1ToV2},
 			{FromVersion: 2, ToVersion: 3, Apply: migrateProductV2ToV3},
 		},
 		Verify: verifyThreadstoreSchema,
@@ -63,9 +63,11 @@ CREATE INDEX idx_ai_thread_settings_endpoint_pinned_created ON ai_thread_setting
 		createUploadTablesTx,
 		createFlowerTransferHandoffTablesTx,
 		createPermissionSnapshotTablesV3Tx,
+		createSubAgentPublicationOperationsTableTx,
 		createThreadCreateOperationsTableTx,
-		createThreadForkOperationsTableTx,
+		createThreadForkOperationsTableV3Tx,
 		createThreadDeleteOperationsTableV3Tx,
+		addPendingTurnAdmissionStateTx,
 	}
 	for _, build := range builders {
 		if err := build(tx); err != nil {
@@ -76,11 +78,7 @@ CREATE INDEX idx_ai_thread_settings_endpoint_pinned_created ON ai_thread_setting
 }
 
 func createThreadstoreSchemaV2(tx *sql.Tx) error {
-	return createThreadstoreSchemaWithFork(tx, createThreadForkOperationsTableTx)
-}
-
-func createThreadstoreSchemaV1(tx *sql.Tx) error {
-	return createThreadstoreSchemaWithFork(tx, createThreadForkOperationsTableV1Tx)
+	return createThreadstoreSchemaWithFork(tx, createThreadForkOperationsTableV2Tx)
 }
 
 func createThreadstoreSchemaWithFork(tx *sql.Tx, createFork func(*sql.Tx) error) error {
@@ -157,6 +155,11 @@ CREATE TABLE ai_queued_turns (
 CREATE INDEX idx_ai_queued_turns_thread_created ON ai_queued_turns(endpoint_id, thread_id, created_at_unix_ms ASC, queue_id ASC);
 CREATE INDEX idx_ai_queued_turns_thread_lane_sort ON ai_queued_turns(endpoint_id, thread_id, lane, sort_index ASC, queue_id ASC);
 `)
+	return err
+}
+
+func addPendingTurnAdmissionStateTx(tx *sql.Tx) error {
+	_, err := tx.Exec(`ALTER TABLE ai_queued_turns ADD COLUMN admission_state TEXT NOT NULL DEFAULT 'ready'`)
 	return err
 }
 
@@ -344,7 +347,35 @@ CREATE INDEX idx_ai_child_permission_snapshots_child ON ai_child_permission_snap
 	return err
 }
 
-func createThreadForkOperationsTableTx(tx *sql.Tx) error {
+func createSubAgentPublicationOperationsTableTx(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+CREATE TABLE ai_subagent_publication_operations (
+  publication_id TEXT PRIMARY KEY,
+  endpoint_id TEXT NOT NULL,
+  parent_thread_id TEXT NOT NULL,
+  parent_turn_id TEXT NOT NULL,
+  parent_run_id TEXT NOT NULL,
+  spawn_tool_call_id TEXT NOT NULL,
+  child_thread_id TEXT NOT NULL UNIQUE,
+  child_run_id TEXT NOT NULL UNIQUE,
+  child_snapshot_id TEXT NOT NULL UNIQUE,
+  request_json TEXT NOT NULL,
+  request_hash TEXT NOT NULL,
+  session_meta_json TEXT NOT NULL,
+  model_id TEXT NOT NULL,
+  reasoning_selection_json TEXT NOT NULL DEFAULT '',
+	  state TEXT NOT NULL CHECK(state IN ('pending', 'committed', 'failed')),
+	  created_at_unix_ms INTEGER NOT NULL,
+	  committed_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+	  failed_at_unix_ms INTEGER NOT NULL DEFAULT 0
+);
+CREATE UNIQUE INDEX idx_ai_subagent_publication_spawn ON ai_subagent_publication_operations(endpoint_id, spawn_tool_call_id);
+CREATE INDEX idx_ai_subagent_publication_pending ON ai_subagent_publication_operations(state, created_at_unix_ms ASC, publication_id ASC);
+`)
+	return err
+}
+
+func createThreadForkOperationsTableV2Tx(tx *sql.Tx) error {
 	_, err := tx.Exec(`
 CREATE TABLE ai_thread_fork_operations (
   operation_id TEXT PRIMARY KEY,
@@ -369,6 +400,31 @@ CREATE INDEX idx_ai_thread_fork_operations_source ON ai_thread_fork_operations(e
 	return err
 }
 
+func createThreadForkOperationsTableV3Tx(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+CREATE TABLE ai_thread_fork_operations (
+  operation_id TEXT PRIMARY KEY,
+  endpoint_id TEXT NOT NULL,
+  source_thread_id TEXT NOT NULL,
+  destination_thread_id TEXT NOT NULL UNIQUE,
+  request_fingerprint TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('pending', 'committed', 'failed')),
+  snapshot_schema_version INTEGER NOT NULL,
+  snapshot_json TEXT NOT NULL,
+  retry_count INTEGER NOT NULL DEFAULT 0,
+  error_code TEXT NOT NULL DEFAULT '',
+  error_message TEXT NOT NULL DEFAULT '',
+  source_broadcasted_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  destination_broadcasted_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  created_at_unix_ms INTEGER NOT NULL,
+  updated_at_unix_ms INTEGER NOT NULL
+, snapshot_fingerprint TEXT NOT NULL DEFAULT '');
+CREATE INDEX idx_ai_thread_fork_operations_status_updated ON ai_thread_fork_operations(status, updated_at_unix_ms ASC, operation_id ASC);
+CREATE INDEX idx_ai_thread_fork_operations_source ON ai_thread_fork_operations(endpoint_id, source_thread_id, created_at_unix_ms DESC);
+`)
+	return err
+}
+
 func createThreadCreateOperationsTableTx(tx *sql.Tx) error {
 	_, err := tx.Exec(`
 CREATE TABLE ai_thread_create_operations (
@@ -379,7 +435,7 @@ CREATE TABLE ai_thread_create_operations (
   status TEXT NOT NULL CHECK(status IN ('pending', 'committed', 'failed')),
   snapshot_schema_version INTEGER NOT NULL,
   snapshot_json TEXT NOT NULL,
-  floret_ensured_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  floret_created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
   title_set_at_unix_ms INTEGER NOT NULL DEFAULT 0,
   settings_committed_at_unix_ms INTEGER NOT NULL DEFAULT 0,
   retry_count INTEGER NOT NULL DEFAULT 0,
@@ -448,7 +504,7 @@ CREATE TABLE ai_thread_delete_operations (
   error_message TEXT NOT NULL DEFAULT '',
   created_at_unix_ms INTEGER NOT NULL,
   updated_at_unix_ms INTEGER NOT NULL,
-  committed_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  committed_at_unix_ms INTEGER NOT NULL DEFAULT 0, snapshot_fingerprint TEXT NOT NULL DEFAULT '',
   UNIQUE(endpoint_id, thread_id)
 );
 CREATE INDEX idx_ai_thread_delete_operations_status_updated ON ai_thread_delete_operations(status, updated_at_unix_ms ASC, operation_id ASC);
@@ -470,66 +526,79 @@ func verifyThreadstoreSchema(tx *sql.Tx) error {
 }
 
 var (
-	productSchemaContractsOnce sync.Once
-	productSchemaContracts     map[int][]canonicalSchemaObject
-	productSchemaContractsErr  error
+	productSchemaContractsMu sync.Mutex
+	productSchemaContracts   = make(map[int][]canonicalSchemaObject, threadstoreCurrentSchemaVersion-1)
 )
 
 func verifyProductSchemaVersion(tx *sql.Tx, version int) error {
-	contracts, err := expectedProductSchemaContracts()
+	expected, err := expectedProductSchemaContract(version)
 	if err != nil {
 		return err
-	}
-	expected, ok := contracts[version]
-	if !ok {
-		return fmt.Errorf("unsupported product threadstore schema version %d", version)
 	}
 	actual, err := readCanonicalSchemaObjects(tx)
 	if err != nil {
 		return err
 	}
 	if !reflect.DeepEqual(actual, expected) {
-		return fmt.Errorf("product threadstore schema v%d contract mismatch", version)
+		for index := 0; index < len(actual) && index < len(expected); index++ {
+			if actual[index] != expected[index] {
+				return fmt.Errorf(
+					"product threadstore schema v%d contract mismatch at object %d: actual=%#v expected=%#v",
+					version,
+					index,
+					actual[index],
+					expected[index],
+				)
+			}
+		}
+		return fmt.Errorf(
+			"product threadstore schema v%d contract mismatch: actual object count=%d expected=%d",
+			version,
+			len(actual),
+			len(expected),
+		)
 	}
 	return nil
 }
 
-func expectedProductSchemaContracts() (map[int][]canonicalSchemaObject, error) {
-	productSchemaContractsOnce.Do(func() {
-		productSchemaContracts = make(map[int][]canonicalSchemaObject, threadstoreCurrentSchemaVersion)
-		builders := map[int]func(*sql.Tx) error{
-			1: createThreadstoreSchemaV1,
-			2: createThreadstoreSchemaV2,
-			3: createThreadstoreSchema,
-		}
-		for version := 1; version <= threadstoreCurrentSchemaVersion; version++ {
-			db, err := sql.Open("sqlite", fmt.Sprintf("file:redeven-product-contract-v%d?mode=memory&cache=shared&_txlock=immediate", version))
-			if err != nil {
-				productSchemaContractsErr = err
-				return
-			}
-			db.SetMaxOpenConns(1)
-			db.SetMaxIdleConns(1)
-			tx, err := db.Begin()
-			if err == nil {
-				err = builders[version](tx)
-			}
-			var objects []canonicalSchemaObject
-			if err == nil {
-				objects, err = readCanonicalSchemaObjects(tx)
-			}
-			if err == nil {
-				err = tx.Commit()
-			} else if tx != nil {
-				_ = tx.Rollback()
-			}
-			_ = db.Close()
-			if err != nil {
-				productSchemaContractsErr = fmt.Errorf("build product threadstore v%d contract: %w", version, err)
-				return
-			}
-			productSchemaContracts[version] = objects
-		}
-	})
-	return productSchemaContracts, productSchemaContractsErr
+func expectedProductSchemaContract(version int) ([]canonicalSchemaObject, error) {
+	var build func(*sql.Tx) error
+	switch version {
+	case 2:
+		build = createThreadstoreSchemaV2
+	case threadstoreCurrentSchemaVersion:
+		build = createThreadstoreSchema
+	default:
+		return nil, fmt.Errorf("unsupported product threadstore schema version %d", version)
+	}
+	productSchemaContractsMu.Lock()
+	defer productSchemaContractsMu.Unlock()
+	if cached, ok := productSchemaContracts[version]; ok {
+		return append([]canonicalSchemaObject(nil), cached...), nil
+	}
+	db, err := sql.Open("sqlite", fmt.Sprintf("file:redeven-product-contract-v%d?mode=memory&cache=shared&_txlock=immediate", version))
+	if err != nil {
+		return nil, err
+	}
+	db.SetMaxOpenConns(1)
+	db.SetMaxIdleConns(1)
+	tx, err := db.Begin()
+	if err == nil {
+		err = build(tx)
+	}
+	var objects []canonicalSchemaObject
+	if err == nil {
+		objects, err = readCanonicalSchemaObjects(tx)
+	}
+	if err == nil {
+		err = tx.Commit()
+	} else if tx != nil {
+		_ = tx.Rollback()
+	}
+	_ = db.Close()
+	if err != nil {
+		return nil, fmt.Errorf("build product threadstore v%d contract: %w", version, err)
+	}
+	productSchemaContracts[version] = append([]canonicalSchemaObject(nil), objects...)
+	return objects, nil
 }

@@ -242,16 +242,11 @@ func openTestThreadReadStateStore(t *testing.T) *threadreadstate.Store {
 	return store
 }
 
-type failingThreadMaintenanceHost struct {
-	ai.ThreadMaintenanceHost
-	err error
-}
+type failingFlowerReadStateCleaner struct{ err error }
 
-func (h *failingThreadMaintenanceHost) DeleteThread(context.Context, flruntime.ThreadID) error {
-	return h.err
+func (c *failingFlowerReadStateCleaner) RetireFlowerThreadReadState(context.Context, string, string) error {
+	return c.err
 }
-
-func (h *failingThreadMaintenanceHost) Close() error { return nil }
 
 func performServerRequest(srv *Server, method string, path string, origin string, body string) *httptest.ResponseRecorder {
 	req := httptest.NewRequest(method, path, bytes.NewBufferString(body))
@@ -3202,14 +3197,19 @@ func seedFloretThreadTurn(t *testing.T, stateDir string, threadID string, turnID
 	if err != nil {
 		t.Fatalf("OpenSQLiteStore: %v", err)
 	}
-	host, err := flruntime.NewHost(flruntime.HostOptions{
+	turnBinder := configureAppserverFloretTestTurnBinder(t, store)
+	turnFactory, err := turnBinder.Bind(flruntime.ThreadID(threadID))
+	if err != nil {
+		_ = store.Close()
+		t.Fatalf("bind turn execution host: %v", err)
+	}
+	host, err := turnFactory.NewHost(context.Background(), flruntime.TurnExecutionHostOptions{
 		Config: flconfig.Config{
 			Provider:     flconfig.ProviderFake,
 			Model:        "fake-model",
 			FakeResponse: output,
 			SystemPrompt: "test",
 		},
-		Store: store,
 	})
 	if err != nil {
 		_ = store.Close()
@@ -3218,9 +3218,6 @@ func seedFloretThreadTurn(t *testing.T, stateDir string, threadID string, turnID
 	defer func() { _ = store.Close() }()
 
 	ctx := context.Background()
-	if _, err := host.EnsureThread(ctx, flruntime.EnsureThreadRequest{ThreadID: flruntime.ThreadID(threadID)}); err != nil {
-		t.Fatalf("EnsureThread: %v", err)
-	}
 	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
 		ThreadID: flruntime.ThreadID(threadID),
 		TurnID:   flruntime.TurnID(turnID),
@@ -3326,14 +3323,11 @@ func TestServer_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 		t.Fatalf("DELETE /api/ai/threads/:id status=%d body=%s", rr.Code, rr.Body.String())
 	}
 
-	verified, err := store.EnsureFlower(context.Background(), creatorMeta.EndpointID, creatorMeta.UserPublicID, map[string]threadreadstate.FlowerSnapshot{
+	_, err = store.EnsureFlower(context.Background(), creatorMeta.EndpointID, creatorMeta.UserPublicID, map[string]threadreadstate.FlowerSnapshot{
 		thread.ThreadID: {ActivityRevision: 1, LastMessageAtUnixMs: 1, ActivitySignature: "deleted"},
 	})
-	if err != nil {
-		t.Fatalf("EnsureFlower(read_state verify): %v", err)
-	}
-	if verified[thread.ThreadID].LastSeenActivityRevision != 1 {
-		t.Fatalf("read-state record=%+v, want newly seeded record after delete", verified[thread.ThreadID])
+	if !errors.Is(err, threadreadstate.ErrThreadRetired) {
+		t.Fatalf("EnsureFlower(read_state verify) error=%v, want %v", err, threadreadstate.ErrThreadRetired)
 	}
 
 	detailRR := performServerRequest(srv, http.MethodGet, "/_redeven_proxy/api/ai/threads/"+url.PathEscape(thread.ThreadID), originUser1, "")
@@ -3351,20 +3345,11 @@ func TestServer_AIThreadDeleteReturnsAcceptedForPersistedPendingOperation(t *tes
 	}
 	store := openTestThreadReadStateStore(t)
 	stateDir := t.TempDir()
-	canonicalStore := flruntime.NewMemoryStore()
-	t.Cleanup(func() { _ = canonicalStore.Close() })
-	canonicalHost, err := flruntime.NewThreadMaintenanceHost(flruntime.ThreadMaintenanceHostOptions{Store: canonicalStore})
-	if err != nil {
-		t.Fatalf("NewThreadMaintenanceHost: %v", err)
-	}
 	aiSvc, err := ai.NewService(ai.Options{
 		StateDir:               stateDir,
 		AgentHomeDir:           t.TempDir(),
 		Shell:                  "/bin/sh",
-		FlowerReadStateCleaner: store,
-		OpenThreadMaintenanceHost: func() (ai.ThreadMaintenanceHost, error) {
-			return &failingThreadMaintenanceHost{ThreadMaintenanceHost: canonicalHost, err: errors.New("temporary Floret delete failure")}, nil
-		},
+		FlowerReadStateCleaner: &failingFlowerReadStateCleaner{err: errors.New("temporary read-state cleanup failure")},
 	})
 	if err != nil {
 		t.Fatalf("ai.NewService: %v", err)
@@ -3458,8 +3443,8 @@ func TestServer_AIThreadDeleteReturnsAcceptedForPersistedPendingOperation(t *tes
 	}
 
 	detail := performServerRequest(srv, http.MethodGet, deletePath, envOriginWithChannel(channelID), "")
-	if detail.Code != http.StatusOK {
-		t.Fatalf("GET pending-delete thread status=%d body=%s", detail.Code, detail.Body.String())
+	if detail.Code != http.StatusNotFound {
+		t.Fatalf("GET product-deleted thread status=%d body=%s", detail.Code, detail.Body.String())
 	}
 }
 

@@ -2,8 +2,10 @@ package ai
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -16,8 +18,14 @@ import (
 
 const (
 	floretUploadResourcePrefix = "redeven-upload:"
+	floretUploadDigestMarker   = ":sha256:"
 	floretAttachmentMaxBytes   = 10 << 20
 )
+
+type frozenFloretAttachment struct {
+	attachment flruntime.MessageAttachment
+	part       ContentPart
+}
 
 func floretUploadResourceRef(uploadID string) (string, error) {
 	uploadID = strings.TrimSpace(uploadID)
@@ -28,15 +36,49 @@ func floretUploadResourceRef(uploadID string) (string, error) {
 }
 
 func uploadIDFromFloretResourceRef(resourceRef string) (string, error) {
+	uploadID, _, err := immutableUploadIdentityFromFloretResourceRef(resourceRef)
+	return uploadID, err
+}
+
+func immutableFloretUploadResourceRef(uploadID string, digest string) (string, error) {
+	base, err := floretUploadResourceRef(uploadID)
+	if err != nil {
+		return "", err
+	}
+	digest = strings.ToLower(strings.TrimSpace(digest))
+	if len(digest) != sha256.Size*2 {
+		return "", errors.New("invalid attachment content digest")
+	}
+	if _, err := hex.DecodeString(digest); err != nil {
+		return "", errors.New("invalid attachment content digest")
+	}
+	return base + floretUploadDigestMarker + digest, nil
+}
+
+func immutableUploadIdentityFromFloretResourceRef(resourceRef string) (string, string, error) {
 	resourceRef = strings.TrimSpace(resourceRef)
 	if !strings.HasPrefix(resourceRef, floretUploadResourcePrefix) {
-		return "", errors.New("unsupported attachment resource reference")
+		return "", "", errors.New("unsupported attachment resource reference")
 	}
-	uploadID := strings.TrimSpace(strings.TrimPrefix(resourceRef, floretUploadResourcePrefix))
+	remainder := strings.TrimSpace(strings.TrimPrefix(resourceRef, floretUploadResourcePrefix))
+	uploadID := remainder
+	digest := ""
+	if index := strings.Index(remainder, floretUploadDigestMarker); index >= 0 {
+		uploadID = strings.TrimSpace(remainder[:index])
+		digest = strings.ToLower(strings.TrimSpace(remainder[index+len(floretUploadDigestMarker):]))
+	}
 	if uploadID == "" || strings.ContainsAny(uploadID, "\r\n:/\\") {
-		return "", errors.New("invalid attachment resource reference")
+		return "", "", errors.New("invalid attachment resource reference")
 	}
-	return uploadID, nil
+	if digest != "" {
+		if len(digest) != sha256.Size*2 {
+			return "", "", errors.New("invalid attachment content digest")
+		}
+		if _, err := hex.DecodeString(digest); err != nil {
+			return "", "", errors.New("invalid attachment content digest")
+		}
+	}
+	return uploadID, digest, nil
 }
 
 func (r *run) floretTurnInput(ctx context.Context, input RunInput) (flruntime.TurnInput, error) {
@@ -62,15 +104,21 @@ func (r *run) floretTurnInput(ctx context.Context, input RunInput) (flruntime.Tu
 		}
 		return out, nil
 	}
-	if r == nil || r.threadsDB == nil {
+	if r == nil || r.product.getQueuedTurnOwnedUpload == nil {
 		return flruntime.TurnInput{}, errors.New("attachment store is unavailable")
+	}
+	r.muPendingCommand.Lock()
+	commandID := strings.TrimSpace(r.pendingCommandID)
+	r.muPendingCommand.Unlock()
+	if commandID == "" {
+		return flruntime.TurnInput{}, errors.New("attachment admission requires a pending command")
 	}
 	for index, attachment := range input.Attachments {
 		uploadID := parseUploadIDFromURL(attachment.URL)
 		if uploadID == "" {
 			return flruntime.TurnInput{}, fmt.Errorf("attachment %d does not reference a Redeven upload", index)
 		}
-		record, err := r.threadsDB.GetUpload(ctxOrBackground(ctx), strings.TrimSpace(r.endpointID), uploadID)
+		record, err := r.product.loadQueuedTurnOwnedUpload(ctxOrBackground(ctx), commandID, uploadID)
 		if err != nil {
 			return flruntime.TurnInput{}, fmt.Errorf("load attachment %d: %w", index, err)
 		}
@@ -99,96 +147,130 @@ func (r *run) floretTurnInput(ctx context.Context, input RunInput) (flruntime.Tu
 }
 
 func (r *run) resolveFloretMessageAttachment(ctx context.Context, attachment flruntime.MessageAttachment) (ContentPart, error) {
-	if r == nil || r.threadsDB == nil {
+	if r == nil || r.product.getThreadOwnedUpload == nil {
 		return ContentPart{}, errors.New("attachment store is unavailable")
 	}
-	uploadID, err := uploadIDFromFloretResourceRef(attachment.ResourceRef)
+	uploadID, expectedDigest, err := immutableUploadIdentityFromFloretResourceRef(attachment.ResourceRef)
 	if err != nil {
 		return ContentPart{}, err
 	}
-	record, err := r.threadsDB.GetThreadOwnedUpload(ctxOrBackground(ctx), strings.TrimSpace(r.endpointID), strings.TrimSpace(r.threadID), uploadID)
+	if expectedDigest == "" {
+		return ContentPart{}, errors.New("attachment resource reference is not content-addressed")
+	}
+	record, err := r.product.loadThreadOwnedUpload(ctxOrBackground(ctx), uploadID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ContentPart{}, fmt.Errorf("attachment resource %q is not owned by thread %q", uploadID, strings.TrimSpace(r.threadID))
 	}
 	if err != nil {
 		return ContentPart{}, err
 	}
-	return r.providerContentPartForUpload(attachment, *record)
+	part, actualDigest, err := r.providerContentPartAndDigestForUpload(attachment, *record)
+	if err != nil {
+		return ContentPart{}, err
+	}
+	if actualDigest != expectedDigest {
+		return ContentPart{}, errors.New("attachment content differs from its canonical resource reference")
+	}
+	return part, nil
 }
 
-func (r *run) preflightFloretTurnAttachments(ctx context.Context, input flruntime.TurnInput, provider *floretProviderAdapter) error {
+func (r *run) preflightFloretTurnAttachments(ctx context.Context, input flruntime.TurnInput, provider *floretProviderAdapter) (flruntime.TurnInput, map[string]frozenFloretAttachment, error) {
 	if len(input.Attachments) == 0 {
-		return nil
+		return input, nil, nil
 	}
-	if r == nil || r.threadsDB == nil {
-		return errors.New("attachment store is unavailable")
+	if r == nil || r.product.getQueuedTurnOwnedUpload == nil {
+		return flruntime.TurnInput{}, nil, errors.New("attachment store is unavailable")
 	}
 	if provider == nil {
-		return errors.New("provider adapter is unavailable")
+		return flruntime.TurnInput{}, nil, errors.New("provider adapter is unavailable")
 	}
 	r.muPendingCommand.Lock()
 	commandID := strings.TrimSpace(r.pendingCommandID)
 	r.muPendingCommand.Unlock()
 	if commandID == "" {
-		return errors.New("attachment admission requires a pending command")
+		return flruntime.TurnInput{}, nil, errors.New("attachment admission requires a pending command")
 	}
+	frozen := make(map[string]frozenFloretAttachment, len(input.Attachments))
 	for index, attachment := range input.Attachments {
-		uploadID, err := uploadIDFromFloretResourceRef(attachment.ResourceRef)
+		uploadID, digest, err := immutableUploadIdentityFromFloretResourceRef(attachment.ResourceRef)
 		if err != nil {
-			return fmt.Errorf("preflight attachment %d: %w", index, err)
+			return flruntime.TurnInput{}, nil, fmt.Errorf("preflight attachment %d: %w", index, err)
 		}
-		record, err := r.threadsDB.GetQueuedTurnOwnedUpload(ctxOrBackground(ctx), strings.TrimSpace(r.endpointID), strings.TrimSpace(r.threadID), commandID, uploadID)
+		if digest != "" {
+			return flruntime.TurnInput{}, nil, fmt.Errorf("preflight attachment %d: resource reference was already finalized", index)
+		}
+		record, err := r.product.loadQueuedTurnOwnedUpload(ctxOrBackground(ctx), commandID, uploadID)
 		if errors.Is(err, sql.ErrNoRows) {
-			return fmt.Errorf("preflight attachment %d: resource %q is not owned by pending command %q", index, uploadID, commandID)
+			return flruntime.TurnInput{}, nil, fmt.Errorf("preflight attachment %d: resource %q is not owned by pending command %q", index, uploadID, commandID)
 		}
 		if err != nil {
-			return fmt.Errorf("preflight attachment %d: %w", index, err)
+			return flruntime.TurnInput{}, nil, fmt.Errorf("preflight attachment %d: %w", index, err)
 		}
-		part, err := r.providerContentPartForUpload(attachment, *record)
+		part, contentDigest, err := r.providerContentPartAndDigestForUpload(attachment, *record)
 		if err != nil {
-			return fmt.Errorf("preflight attachment %d: %w", index, err)
+			return flruntime.TurnInput{}, nil, fmt.Errorf("preflight attachment %d: %w", index, err)
 		}
 		if err := provider.validateResolvedAttachment(part); err != nil {
-			return fmt.Errorf("preflight attachment %d: %w", index, err)
+			return flruntime.TurnInput{}, nil, fmt.Errorf("preflight attachment %d: %w", index, err)
 		}
+		resourceRef, err := immutableFloretUploadResourceRef(uploadID, contentDigest)
+		if err != nil {
+			return flruntime.TurnInput{}, nil, fmt.Errorf("preflight attachment %d: %w", index, err)
+		}
+		attachment.ResourceRef = resourceRef
+		input.Attachments[index] = attachment
+		frozen[resourceRef] = frozenFloretAttachment{attachment: attachment, part: part}
 	}
-	return nil
+	return input, frozen, nil
 }
 
-func (r *run) providerContentPartForUpload(attachment flruntime.MessageAttachment, record threadstore.UploadRecord) (ContentPart, error) {
+func (r *run) providerContentPartAndDigestForUpload(attachment flruntime.MessageAttachment, record threadstore.UploadRecord) (ContentPart, string, error) {
 	if strings.TrimSpace(record.Name) != strings.TrimSpace(attachment.Name) ||
 		strings.TrimSpace(record.MimeType) != strings.TrimSpace(attachment.MIMEType) ||
 		record.SizeBytes != attachment.SizeBytes {
-		return ContentPart{}, errors.New("attachment metadata differs from the canonical message")
+		return ContentPart{}, "", errors.New("attachment metadata differs from the canonical message")
 	}
 	if record.SizeBytes < 0 || record.SizeBytes > floretAttachmentMaxBytes {
-		return ContentPart{}, errors.New("attachment exceeds the supported size limit")
+		return ContentPart{}, "", errors.New("attachment exceeds the supported size limit")
 	}
 	r.mu.Lock()
 	uploadsDir := strings.TrimSpace(r.uploadsDir)
 	r.mu.Unlock()
 	if uploadsDir == "" {
-		return ContentPart{}, errors.New("attachment storage directory is unavailable")
+		return ContentPart{}, "", errors.New("attachment storage directory is unavailable")
 	}
 	path := filepath.Join(uploadsDir, filepath.Base(strings.TrimSpace(record.StorageRelPath)))
 	body, err := os.ReadFile(path)
 	if err != nil {
-		return ContentPart{}, fmt.Errorf("read attachment resource: %w", err)
+		return ContentPart{}, "", fmt.Errorf("read attachment resource: %w", err)
 	}
 	if int64(len(body)) != record.SizeBytes {
-		return ContentPart{}, errors.New("attachment size differs from its stored metadata")
+		return ContentPart{}, "", errors.New("attachment size differs from its stored metadata")
 	}
 	mimeType := strings.ToLower(strings.TrimSpace(record.MimeType))
 	partType := "file"
 	if strings.HasPrefix(mimeType, "image/") {
 		partType = "image"
 	}
+	sum := sha256.Sum256(body)
 	return ContentPart{
 		Type:     partType,
 		Text:     strings.TrimSpace(record.Name),
 		MimeType: mimeType,
 		FileURI:  "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(body),
-	}, nil
+	}, hex.EncodeToString(sum[:]), nil
+}
+
+func (r *run) floretAttachmentResolver(frozen map[string]frozenFloretAttachment) func(context.Context, flruntime.MessageAttachment) (ContentPart, error) {
+	return func(ctx context.Context, attachment flruntime.MessageAttachment) (ContentPart, error) {
+		if entry, ok := frozen[strings.TrimSpace(attachment.ResourceRef)]; ok {
+			if entry.attachment.Name != attachment.Name || entry.attachment.MIMEType != attachment.MIMEType || entry.attachment.SizeBytes != attachment.SizeBytes {
+				return ContentPart{}, errors.New("attachment metadata differs from the pre-admission resource")
+			}
+			return entry.part, nil
+		}
+		return r.resolveFloretMessageAttachment(ctx, attachment)
+	}
 }
 
 func (p *floretProviderAdapter) validateResolvedAttachmentForProvider(part ContentPart) error {

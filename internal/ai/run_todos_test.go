@@ -3,27 +3,55 @@ package ai
 import (
 	"context"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	flruntime "github.com/floegence/floret/runtime"
-	fltools "github.com/floegence/floret/tools"
-	"github.com/floegence/redeven/internal/config"
 )
 
-type todoToolCallGateway struct{ calls int }
+type todoTestHost struct {
+	mu    sync.Mutex
+	state flruntime.ThreadAgentTodoState
+}
 
-func (g *todoToolCallGateway) StreamModel(_ context.Context, _ flruntime.ModelRequest) (<-chan flruntime.ModelEvent, error) {
-	g.calls++
-	events := make(chan flruntime.ModelEvent, 2)
-	if g.calls == 1 {
-		events <- flruntime.ModelEvent{Type: flruntime.ModelEventToolCalls, ToolCalls: []fltools.ToolCall{{ID: "tool_1", Name: "write_todos", Args: `{}`}}}
-		events <- flruntime.ModelEvent{Type: flruntime.ModelEventDone, Reason: "tool_calls"}
-	} else {
-		events <- flruntime.ModelEvent{Type: flruntime.ModelEventDelta, Text: "done"}
-		events <- flruntime.ModelEvent{Type: flruntime.ModelEventDone, Reason: "stop"}
+func (h *todoTestHost) RunTurn(context.Context, flruntime.RunTurnRequest) (flruntime.TurnResult, error) {
+	return flruntime.TurnResult{}, nil
+}
+
+func (h *todoTestHost) ListPendingApprovals(context.Context, flruntime.ListPendingApprovalsRequest) (flruntime.PendingApprovals, error) {
+	return flruntime.PendingApprovals{}, nil
+}
+
+func (h *todoTestHost) SettlePendingTool(context.Context, flruntime.PendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {
+	return flruntime.PendingToolSettlementResult{}, nil
+}
+
+func (h *todoTestHost) ReadThreadAgentTodos(_ context.Context, threadID flruntime.ThreadID) (flruntime.ThreadAgentTodoState, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	state := h.state
+	state.ThreadID = threadID
+	state.Items = append([]flruntime.AgentTodo(nil), state.Items...)
+	return state, nil
+}
+
+func (h *todoTestHost) UpdateThreadAgentTodos(_ context.Context, req flruntime.UpdateThreadAgentTodosRequest) (flruntime.ThreadAgentTodoState, error) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if req.ExpectedVersion != h.state.Version {
+		return flruntime.ThreadAgentTodoState{}, flruntime.ErrAgentTodoVersionConflict
 	}
-	close(events)
-	return events, nil
+	h.state = flruntime.ThreadAgentTodoState{
+		ThreadID:          req.ThreadID,
+		Version:           h.state.Version + 1,
+		Items:             append([]flruntime.AgentTodo(nil), req.Items...),
+		UpdatedAt:         time.Now(),
+		UpdatedByTurnID:   req.TurnID,
+		UpdatedByRunID:    req.RunID,
+		UpdatedByToolCall: req.ToolCallID,
+	}
+	return h.state, nil
 }
 
 func TestRunToolWriteTodosUsesCanonicalFloretState(t *testing.T) {
@@ -93,37 +121,9 @@ func TestRunToolWriteTodosRejectsControlSignalTodo(t *testing.T) {
 	}
 }
 
-func newTodoTestRun(t *testing.T) (*run, *flruntime.Host) {
+func newTodoTestRun(t *testing.T) (*run, floretTurnHost) {
 	t.Helper()
-	store := flruntime.NewMemoryStore()
-	t.Cleanup(func() { _ = store.Close() })
-	registry := fltools.NewRegistry(fltools.Define(
-		fltools.Definition{
-			Name: "write_todos", Description: "record todos", ReadOnly: true,
-			Permission:  fltools.PermissionSpec{Mode: fltools.PermissionAllow},
-			InputSchema: map[string]any{"type": "object", "properties": map[string]any{}, "additionalProperties": false},
-		},
-		func([]byte) (map[string]any, error) { return map[string]any{}, nil }, nil,
-		func(_ context.Context, inv fltools.Invocation[map[string]any]) (fltools.Result, error) {
-			return fltools.Result{CallID: inv.CallID, Name: inv.Name, Text: "recorded"}, nil
-		},
-	))
-	host, err := flruntime.NewHost(flruntime.HostOptions{
-		Config:               redevenFloretAdapterConfig("", floretModelContextPolicy(128000, 4096), config.AIReasoningSelection{}),
-		Store:                store,
-		ModelGateway:         &todoToolCallGateway{},
-		ModelGatewayIdentity: flruntime.ModelGatewayIdentity{Provider: "test", Model: "todo-test", StateCompatibilityKey: "test:todo-test"},
-		Tools:                registry,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := host.EnsureThread(context.Background(), flruntime.EnsureThreadRequest{ThreadID: "thread_1"}); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := host.RunTurn(context.Background(), flruntime.RunTurnRequest{ThreadID: "thread_1", TurnID: "turn_1", RunID: "run_1", Input: flruntime.TurnInput{Text: "track work"}}); err != nil {
-		t.Fatal(err)
-	}
+	host := &todoTestHost{}
 	r := &run{id: "run_1", threadID: "thread_1", messageID: "turn_1"}
 	r.setActiveFloretHost(host)
 	return r, host

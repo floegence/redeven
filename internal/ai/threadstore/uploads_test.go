@@ -5,11 +5,12 @@ import (
 	"database/sql"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
 
-func TestStore_DeleteThreadResources_RespectsSharedUploadRefs(t *testing.T) {
+func TestStore_ThreadDeleteOperationRespectsSharedUploadRefs(t *testing.T) {
 	t.Parallel()
 
 	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
@@ -21,7 +22,7 @@ func TestStore_DeleteThreadResources_RespectsSharedUploadRefs(t *testing.T) {
 
 	ctx := context.Background()
 	for _, threadID := range []string{"th_1", "th_2"} {
-		if err := s.CreateThread(ctx, ThreadSettings{ThreadID: threadID, EndpointID: "env_1"}); err != nil {
+		if err := s.CreateThreadSettings(ctx, ThreadSettings{ThreadID: threadID, EndpointID: "env_1", PermissionType: "approval_required"}); err != nil {
 			t.Fatalf("CreateThread(%s): %v", threadID, err)
 		}
 	}
@@ -48,23 +49,75 @@ func TestStore_DeleteThreadResources_RespectsSharedUploadRefs(t *testing.T) {
 	appendWithUpload("th_1", "msg_1")
 	appendWithUpload("th_2", "msg_2")
 
-	result, err := s.DeleteThreadResources(ctx, "env_1", "th_1")
+	first, err := s.PrepareThreadDeleteOperation(ctx, "env_1", "th_1", false)
 	if err != nil {
-		t.Fatalf("DeleteThreadResources first: %v", err)
+		t.Fatalf("PrepareThreadDeleteOperation first: %v", err)
 	}
-	if len(result.UploadsToDelete) != 0 {
-		t.Fatalf("first delete uploads=%v, want none for shared upload", result.UploadsToDelete)
+	if _, err := s.ConfirmThreadDeleteFloretDeleted(ctx, first.OperationID); err != nil {
+		t.Fatalf("ConfirmThreadDeleteFloretDeleted first: %v", err)
+	}
+	if _, err := s.CommitThreadDeleteProductData(ctx, first.OperationID); err != nil {
+		t.Fatalf("CommitThreadDeleteProductData first: %v", err)
 	}
 	if refs := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_upload_refs WHERE endpoint_id = ? AND upload_id = ?`, "env_1", "upl_shared"); refs != 1 {
 		t.Fatalf("remaining refs=%d, want 1", refs)
 	}
-
-	result, err = s.DeleteThreadResources(ctx, "env_1", "th_2")
-	if err != nil {
-		t.Fatalf("DeleteThreadResources second: %v", err)
+	shared, err := s.GetUpload(ctx, "env_1", "upl_shared")
+	if err != nil || shared == nil || shared.State != UploadStateLive {
+		t.Fatalf("shared upload after first delete=%#v err=%v", shared, err)
 	}
-	if len(result.UploadsToDelete) != 1 || result.UploadsToDelete[0].UploadID != "upl_shared" {
-		t.Fatalf("second delete uploads=%v, want shared upload", result.UploadsToDelete)
+
+	second, err := s.PrepareThreadDeleteOperation(ctx, "env_1", "th_2", false)
+	if err != nil {
+		t.Fatalf("PrepareThreadDeleteOperation second: %v", err)
+	}
+	if _, err := s.ConfirmThreadDeleteFloretDeleted(ctx, second.OperationID); err != nil {
+		t.Fatalf("ConfirmThreadDeleteFloretDeleted second: %v", err)
+	}
+	if _, err := s.CommitThreadDeleteProductData(ctx, second.OperationID); err != nil {
+		t.Fatalf("CommitThreadDeleteProductData second: %v", err)
+	}
+	shared, err = s.GetUpload(ctx, "env_1", "upl_shared")
+	if err != nil || shared == nil || shared.State != UploadStateDeleting {
+		t.Fatalf("shared upload after second delete=%#v err=%v", shared, err)
+	}
+}
+
+func TestStore_CommitPendingTurnAdmissionRejectsInvalidPersistedLane(t *testing.T) {
+	t.Parallel()
+
+	store := openStoreForTest(t)
+	ctx := context.Background()
+	if err := store.CreateThreadSettings(ctx, ThreadSettings{ThreadID: "thread_lane", EndpointID: "env_lane", PermissionType: "approval_required"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.InsertUpload(ctx, UploadRecord{
+		UploadID: "upload_lane", EndpointID: "env_lane", StorageRelPath: "upload_lane.data",
+		Name: "lane.txt", MimeType: "text/plain", SizeBytes: 4, CreatedAtUnixMs: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	command, _, _, err := store.CreateFollowupWithUploadRefs(ctx, QueuedTurn{
+		QueueID: "queue_lane", EndpointID: "env_lane", ThreadID: "thread_lane", ChannelID: "channel_lane",
+		Lane: FollowupLaneQueued, TurnID: "turn_lane", RunID: "run_lane", TextContent: "queued",
+	}, []string{"upload_lane"}, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.ExecContext(ctx, `UPDATE ai_queued_turns SET lane = 'legacy_pending' WHERE queue_id = ?`, command.QueueID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CommitPendingTurnAdmission(ctx, "env_lane", "thread_lane", command.QueueID, command.TurnID, []string{"upload_lane"}, 3); err == nil || !strings.Contains(err.Error(), "invalid followup lane") {
+		t.Fatalf("CommitPendingTurnAdmission error=%v, want invalid lane", err)
+	}
+	if count := countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_queued_turns WHERE queue_id = ?`, command.QueueID); count != 1 {
+		t.Fatalf("queued commands=%d, want 1", count)
+	}
+	if count := countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_upload_refs WHERE upload_id = ? AND ref_kind = ? AND ref_id = ?`, "upload_lane", UploadRefKindQueuedTurn, command.QueueID); count != 1 {
+		t.Fatalf("queued upload refs=%d, want 1", count)
+	}
+	if count := countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_upload_refs WHERE upload_id = ? AND ref_kind = ?`, "upload_lane", UploadRefKindThread); count != 0 {
+		t.Fatalf("thread upload refs=%d, want 0", count)
 	}
 }
 
@@ -79,7 +132,7 @@ func TestStore_DeleteFollowupResources_ReturnsUploadCandidate(t *testing.T) {
 	defer func() { _ = s.Close() }()
 
 	ctx := context.Background()
-	if err := s.CreateThread(ctx, ThreadSettings{ThreadID: "th_1", EndpointID: "env_1"}); err != nil {
+	if err := s.CreateThreadSettings(ctx, ThreadSettings{ThreadID: "th_1", EndpointID: "env_1", PermissionType: "approval_required"}); err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
 	if err := s.InsertUpload(ctx, UploadRecord{
@@ -130,12 +183,79 @@ func TestStore_DeleteFollowupResources_ReturnsUploadCandidate(t *testing.T) {
 	}
 }
 
+func TestStore_ReplaceFollowupWithUploadRefsIsAtomicAndStrict(t *testing.T) {
+	t.Parallel()
+
+	s := openStoreForTest(t)
+	ctx := context.Background()
+	const endpointID = "env_replace"
+	const threadID = "thread_replace"
+	if err := s.CreateThreadSettings(ctx, ThreadSettings{ThreadID: threadID, EndpointID: endpointID, PermissionType: "approval_required"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, uploadID := range []string{"upload_keep", "upload_drop"} {
+		if err := s.InsertUpload(ctx, UploadRecord{
+			UploadID: uploadID, EndpointID: endpointID, StorageRelPath: uploadID + ".data",
+			Name: uploadID + ".txt", MimeType: "text/plain", SizeBytes: 4, CreatedAtUnixMs: 1,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	source, _, beforeRevision, err := s.CreateFollowupWithUploadRefs(ctx, QueuedTurn{
+		QueueID: "queue_source", EndpointID: endpointID, ThreadID: threadID, ChannelID: "channel_replace",
+		Lane: FollowupLaneQueued, TurnID: "turn_source", RunID: "run_source", TextContent: "source",
+	}, []string{"upload_keep", "upload_drop"}, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	replacement, err := s.ReplaceFollowupWithUploadRefs(ctx, source.QueueID, QueuedTurn{
+		QueueID: "queue_destination", EndpointID: endpointID, ThreadID: threadID, ChannelID: "channel_replace",
+		Lane: FollowupLaneQueued, TurnID: "turn_destination", RunID: "run_destination", TextContent: "replacement",
+	}, []string{"upload_keep"}, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replacement.Revision != beforeRevision+1 {
+		t.Fatalf("revision=%d, want %d", replacement.Revision, beforeRevision+1)
+	}
+	if replacement.Queued.QueueID != "queue_destination" || replacement.Position != 1 {
+		t.Fatalf("replacement=%+v", replacement)
+	}
+	if len(replacement.UploadsToDelete) != 1 || replacement.UploadsToDelete[0].UploadID != "upload_drop" {
+		t.Fatalf("cleanup candidates=%#v, want upload_drop", replacement.UploadsToDelete)
+	}
+	if stored, getErr := s.GetQueuedTurn(ctx, endpointID, threadID, source.QueueID); !errors.Is(getErr, sql.ErrNoRows) || stored != nil {
+		t.Fatalf("source remains after replacement: stored=%#v err=%v", stored, getErr)
+	}
+	if stored, getErr := s.GetQueuedTurn(ctx, endpointID, threadID, replacement.Queued.QueueID); getErr != nil || stored == nil || stored.TextContent != "replacement" {
+		t.Fatalf("destination missing after replacement: stored=%#v err=%v", stored, getErr)
+	}
+	if count := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_upload_refs WHERE endpoint_id = ? AND upload_id = ? AND ref_kind = ? AND ref_id = ?`, endpointID, "upload_keep", UploadRefKindQueuedTurn, replacement.Queued.QueueID); count != 1 {
+		t.Fatalf("replacement upload refs=%d, want 1", count)
+	}
+	if count := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_queued_turns WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); count != 1 {
+		t.Fatalf("queued row count=%d, want 1", count)
+	}
+
+	_, err = s.ReplaceFollowupWithUploadRefs(ctx, source.QueueID, QueuedTurn{
+		QueueID: "queue_retry", EndpointID: endpointID, ThreadID: threadID, ChannelID: "channel_replace",
+		Lane: FollowupLaneQueued, TurnID: "turn_retry", RunID: "run_retry", TextContent: "must not duplicate",
+	}, nil, 4)
+	if !errors.Is(err, ErrFollowupReplacementConflict) {
+		t.Fatalf("replacement retry error=%v, want %v", err, ErrFollowupReplacementConflict)
+	}
+	if count := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_queued_turns WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); count != 1 {
+		t.Fatalf("queued row count after retry=%d, want 1", count)
+	}
+}
+
 func TestStore_CommitPendingTurnAdmissionAtomicallyTransfersUploadRefs(t *testing.T) {
 	t.Parallel()
 
 	s := openStoreForTest(t)
 	ctx := context.Background()
-	if err := s.CreateThread(ctx, ThreadSettings{ThreadID: "th_admission", EndpointID: "env_1"}); err != nil {
+	if err := s.CreateThreadSettings(ctx, ThreadSettings{ThreadID: "th_admission", EndpointID: "env_1", PermissionType: "approval_required"}); err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
 	if err := s.InsertUpload(ctx, UploadRecord{
@@ -152,6 +272,9 @@ func TestStore_CommitPendingTurnAdmissionAtomicallyTransfersUploadRefs(t *testin
 	if err != nil {
 		t.Fatalf("CreateFollowupWithUploadRefs: %v", err)
 	}
+	if err := s.BeginPendingTurnAdmission(ctx, "env_1", "th_admission", command.QueueID, command.TurnID, command.RunID); err != nil {
+		t.Fatalf("BeginPendingTurnAdmission: %v", err)
+	}
 	if err := s.CommitPendingTurnAdmission(ctx, "env_1", "th_admission", command.QueueID, command.TurnID, nil, 300); err != nil {
 		t.Fatalf("CommitPendingTurnAdmission: %v", err)
 	}
@@ -164,8 +287,89 @@ func TestStore_CommitPendingTurnAdmissionAtomicallyTransfersUploadRefs(t *testin
 	if count := countRowsForTest(t, s.db, `SELECT COUNT(1) FROM ai_upload_refs WHERE upload_id = ? AND ref_kind = ? AND ref_id = ?`, "upl_admission", UploadRefKindThread, "th_admission"); count != 1 {
 		t.Fatalf("thread upload refs=%d, want 1", count)
 	}
-	if err := s.CommitPendingTurnAdmission(ctx, "env_1", "th_admission", command.QueueID, command.TurnID, nil, 400); err != nil {
-		t.Fatalf("idempotent CommitPendingTurnAdmission: %v", err)
+	if err := s.CommitPendingTurnAdmission(ctx, "env_1", "th_admission", command.QueueID, command.TurnID, nil, 400); err == nil || !strings.Contains(err.Error(), "missing during admission settlement") {
+		t.Fatalf("second CommitPendingTurnAdmission error=%v, want missing command failure", err)
+	}
+}
+
+func TestStore_InFlightPendingTurnRejectsUserMutation(t *testing.T) {
+	t.Parallel()
+
+	s := openStoreForTest(t)
+	ctx := context.Background()
+	const endpointID = "env_in_flight"
+	const threadID = "thread_in_flight"
+	if err := s.CreateThreadSettings(ctx, ThreadSettings{ThreadID: threadID, EndpointID: endpointID, PermissionType: "approval_required"}); err != nil {
+		t.Fatal(err)
+	}
+	command, _, revision, err := s.CreateFollowup(ctx, QueuedTurn{
+		QueueID: "queue_in_flight", EndpointID: endpointID, ThreadID: threadID, ChannelID: "channel_in_flight",
+		Lane: FollowupLaneQueued, TurnID: "turn_in_flight", RunID: "run_in_flight", TextContent: "original",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.BeginPendingTurnAdmission(ctx, endpointID, threadID, command.QueueID, command.TurnID, command.RunID); err != nil {
+		t.Fatal(err)
+	}
+	stored, err := s.GetQueuedTurn(ctx, endpointID, threadID, command.QueueID)
+	if err != nil || stored.AdmissionState != PendingTurnAdmissionInFlight {
+		t.Fatalf("stored=%#v err=%v", stored, err)
+	}
+	operations := []struct {
+		name string
+		run  func() error
+	}{
+		{name: "update followup", run: func() error {
+			_, err := s.UpdateFollowupText(ctx, endpointID, threadID, command.QueueID, "changed")
+			return err
+		}},
+		{name: "delete followup", run: func() error { _, err := s.DeleteFollowup(ctx, endpointID, threadID, command.QueueID); return err }},
+		{name: "reorder followups", run: func() error {
+			_, err := s.ReorderFollowups(ctx, endpointID, threadID, FollowupLaneQueued, []string{command.QueueID}, revision+1)
+			return err
+		}},
+		{name: "legacy update", run: func() error { return s.UpdateQueuedTurn(ctx, endpointID, threadID, command.QueueID, "changed") }},
+		{name: "legacy delete", run: func() error { return s.DeleteQueuedTurn(ctx, endpointID, threadID, command.QueueID) }},
+		{name: "delete resources", run: func() error {
+			_, err := s.DeleteFollowupResources(ctx, endpointID, threadID, command.QueueID)
+			return err
+		}},
+	}
+	for _, operation := range operations {
+		t.Run(operation.name, func(t *testing.T) {
+			if err := operation.run(); !errors.Is(err, ErrPendingTurnAdmissionInProgress) {
+				t.Fatalf("error=%v, want %v", err, ErrPendingTurnAdmissionInProgress)
+			}
+		})
+	}
+	beforeRecoveryRevision, err := s.GetThreadFollowupsRevision(ctx, endpointID, threadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recovered, recoveryRevision, err := s.RecoverQueuedTurnsToDrafts(ctx, endpointID, threadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recovered) != 0 {
+		t.Fatalf("in-flight command recovered before admission resolved: %#v", recovered)
+	}
+	if recoveryRevision != beforeRecoveryRevision {
+		t.Fatalf("in-flight-only recovery changed revision from %d to %d", beforeRecoveryRevision, recoveryRevision)
+	}
+	stored, err = s.GetQueuedTurn(ctx, endpointID, threadID, command.QueueID)
+	if err != nil || stored.TextContent != "original" || stored.AdmissionState != PendingTurnAdmissionInFlight {
+		t.Fatalf("in-flight command mutated: stored=%#v err=%v", stored, err)
+	}
+	if err := s.ReleasePendingTurnAdmission(ctx, endpointID, threadID, command.QueueID, command.TurnID, command.RunID, FollowupLaneDraft); err != nil {
+		t.Fatal(err)
+	}
+	if stored, err := s.GetQueuedTurn(ctx, endpointID, threadID, command.QueueID); !errors.Is(err, sql.ErrNoRows) || stored != nil {
+		t.Fatalf("released command remained queued: stored=%#v err=%v", stored, err)
+	}
+	drafts, err := s.ListFollowupsByLane(ctx, endpointID, threadID, FollowupLaneDraft, 10)
+	if err != nil || len(drafts) != 1 || drafts[0].AdmissionState != PendingTurnAdmissionReady {
+		t.Fatalf("released drafts=%#v err=%v", drafts, err)
 	}
 }
 
@@ -174,7 +378,7 @@ func TestStore_CommitPendingTurnAdmissionRejectsIdentityMismatchWithoutMutation(
 
 	s := openStoreForTest(t)
 	ctx := context.Background()
-	if err := s.CreateThread(ctx, ThreadSettings{ThreadID: "th_admission_mismatch", EndpointID: "env_1"}); err != nil {
+	if err := s.CreateThreadSettings(ctx, ThreadSettings{ThreadID: "th_admission_mismatch", EndpointID: "env_1", PermissionType: "approval_required"}); err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
 	command, _, _, err := s.CreateFollowup(ctx, QueuedTurn{

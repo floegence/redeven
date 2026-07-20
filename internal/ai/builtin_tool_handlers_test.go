@@ -1,7 +1,6 @@
 package ai
 
 import (
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -395,7 +394,7 @@ func TestBuiltInToolHandlerExecute_PreservesLargeApplyPatchActivityPayload(t *te
 	r.permissionType = FlowerPermissionFullAccess
 	allowToolsForTest(t, r, "apply_patch")
 	handler := &builtInToolHandler{r: r, toolName: "apply_patch"}
-	result, err := handler.Execute(context.Background(), ToolCall{
+	result, err := handler.Execute(authorizedToolContextForTest(t, r, "call_patch_large", "apply_patch"), ToolCall{
 		ID:   "call_patch_large",
 		Name: "apply_patch",
 		Args: map[string]any{"patch": patch},

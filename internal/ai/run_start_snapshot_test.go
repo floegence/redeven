@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -91,7 +92,7 @@ func TestStartUserTurnDetachedDoesNotPublishDraftBeforeFloretAcceptance(t *testi
 		ThreadID: thread.ThreadID,
 		Model:    "missing/provider",
 		Input:    RunInput{Text: "provider resolution fails before Floret admission"},
-	}, "", false)
+	}, "")
 	if err != nil {
 		t.Fatalf("startUserTurnDetached: %v", err)
 	}
@@ -105,6 +106,13 @@ func TestStartUserTurnDetachedDoesNotPublishDraftBeforeFloretAcceptance(t *testi
 	}
 	if len(bootstrap.LiveState.Messages) != 0 {
 		t.Fatalf("pre-admission draft entered live state: %#v", bootstrap.LiveState.Messages)
+	}
+	commands, err := svc.threadsDB.ListFollowupsByLane(ctx, meta.EndpointID, thread.ThreadID, threadstore.FollowupLaneQueued, 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(commands) != 1 || commands[0].AdmissionState != threadstore.PendingTurnAdmissionInFlight {
+		t.Fatalf("pre-admission command=%#v, want durable in-flight state", commands)
 	}
 }
 

@@ -286,7 +286,7 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 		}
 
 		// Ensure thread exists (consistent with other endpoints).
-		if th, err := db.GetThread(ctx, strings.TrimSpace(meta.EndpointID), threadID); err != nil {
+		if th, err := db.GetThreadSettings(ctx, strings.TrimSpace(meta.EndpointID), threadID); err != nil {
 			return nil, &rpc.Error{Code: 400, Message: err.Error()}
 		} else if th == nil {
 			return nil, &rpc.Error{Code: 404, Message: "thread not found"}

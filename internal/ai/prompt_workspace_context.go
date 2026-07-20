@@ -130,7 +130,7 @@ func collectPromptEnvironmentFacts(r *run, capability runCapabilityContract) pro
 		}
 	}
 	out.Shell = strings.TrimSpace(r.shell)
-	out.PermissionType = r.permissionType
+	out.PermissionType = r.currentPermissionType()
 	out.SubagentDelegation = r.allowSubagentDelegate
 	return out
 }

@@ -48,8 +48,8 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 			return
 		}
 	}
-	if ev.Type == floretEventThreadTitleUpdated && r.service != nil {
-		r.service.broadcastThreadSummary(r.endpointID, r.threadID)
+	if ev.Type == floretEventThreadTitleUpdated && r.host.broadcastThreadSummary != nil {
+		r.host.broadcastThreadSummary()
 	}
 	// The validated canonical user entry is the admission boundary for live
 	// assistant state. A draft created after it can be rendered against the
@@ -279,10 +279,10 @@ func (r *run) captureFlowerTimelineAnchor() FlowerTimelineAnchor {
 	if anchor := r.captureAssistantDraftTimelineAnchor(); validFlowerTimelineAnchor(anchor) {
 		return anchor
 	}
-	if r.service == nil {
+	if r.host.lastVisibleTimelineAnchor == nil {
 		return FlowerTimelineAnchor{}
 	}
-	anchor, err := r.service.lastVisibleFlowerTimelineAnchor(context.Background(), r.endpointID, r.threadID)
+	anchor, err := r.host.lastVisibleTimelineAnchor(context.Background())
 	if err != nil {
 		return FlowerTimelineAnchor{}
 	}

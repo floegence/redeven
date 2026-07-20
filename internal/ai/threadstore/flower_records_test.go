@@ -21,10 +21,10 @@ func TestStore_FlowerThreadMetadataTransferAndHandoffRoundTrip(t *testing.T) {
 	defer func() { _ = s.Close() }()
 
 	ctx := context.Background()
-	if err := s.CreateThread(ctx, ThreadSettings{ThreadID: "th_src", EndpointID: "env_1"}); err != nil {
+	if err := s.CreateThreadSettings(ctx, ThreadSettings{ThreadID: "th_src", EndpointID: "env_1", PermissionType: "approval_required"}); err != nil {
 		t.Fatalf("CreateThread source: %v", err)
 	}
-	if err := s.CreateThread(ctx, ThreadSettings{ThreadID: "th_dest", EndpointID: "env_1"}); err != nil {
+	if err := s.CreateThreadSettings(ctx, ThreadSettings{ThreadID: "th_dest", EndpointID: "env_1", PermissionType: "approval_required"}); err != nil {
 		t.Fatalf("CreateThread dest: %v", err)
 	}
 

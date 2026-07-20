@@ -179,6 +179,7 @@ func TestParallelToolCallsWireSerializationNeverSendsFalse(t *testing.T) {
 func TestPermissionSnapshotV2RejectsLegacyV1(t *testing.T) {
 	t.Parallel()
 	snapshot := PermissionSnapshot{
+		Version:          permissionSnapshotVersionCurrent,
 		PermissionType:   FlowerPermissionApprovalRequired,
 		VisibleToolNames: []string{"terminal.exec"},
 		FloretToolNames:  []string{"terminal.exec"},
@@ -193,6 +194,14 @@ func TestPermissionSnapshotV2RejectsLegacyV1(t *testing.T) {
 	if !strings.Contains(string(rawV2), `"version":2`) || strings.Contains(string(rawV2), "parallel"+"_"+"safe") {
 		t.Fatalf("unexpected v2 JSON: %s", rawV2)
 	}
+	missingVersion := snapshot
+	missingVersion.Version = 0
+	if _, err := marshalPermissionSnapshot(missingVersion); err == nil {
+		t.Fatal("permission snapshot without an explicit version was serialized")
+	}
+	if permissionSnapshotHash(missingVersion) != "" || permissionSurfaceEpoch(missingVersion) != "" {
+		t.Fatal("permission snapshot without an explicit version produced authorization identity")
+	}
 
 	legacyJSON := `{"SnapshotID":"legacy","PermissionType":"approval_required","VisibleToolNames":["terminal.exec"],"FloretToolNames":["terminal.exec"],"ToolPolicies":{}}`
 	if _, err := decodePermissionSnapshot(legacyJSON); err == nil {
@@ -200,5 +209,32 @@ func TestPermissionSnapshotV2RejectsLegacyV1(t *testing.T) {
 	}
 	if _, err := decodePermissionSnapshot(`{"version":99}`); err == nil {
 		t.Fatal("unknown snapshot version was accepted")
+	}
+	valid := permissionSnapshotWithOwnerIdentity(buildPermissionSnapshot(FlowerPermissionFullAccess, nil, nil), "env", "thread", "run")
+	validJSON, err := marshalPermissionSnapshot(valid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	withLegacyField := strings.Replace(string(validJSON), "{", `{"parallel_safe":true,`, 1)
+	if _, err := decodePermissionSnapshot(withLegacyField); err == nil || !strings.Contains(err.Error(), "unknown field") {
+		t.Fatalf("legacy v2 field error=%v, want unknown field rejection", err)
+	}
+	withoutID := valid
+	withoutID.SnapshotID = ""
+	withoutIDJSON, err := json.Marshal(withoutID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := decodePermissionSnapshot(string(withoutIDJSON)); err == nil {
+		t.Fatal("permission snapshot without id was accepted")
+	}
+	withoutHash := valid
+	withoutHash.SnapshotHash = ""
+	withoutHashJSON, err := json.Marshal(withoutHash)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := decodePermissionSnapshot(string(withoutHashJSON)); err == nil {
+		t.Fatal("permission snapshot without hash was accepted")
 	}
 }

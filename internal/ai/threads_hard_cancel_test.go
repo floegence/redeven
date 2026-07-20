@@ -76,6 +76,10 @@ func TestService_DeleteThreadForce_DoesNotWaitForRunExit(t *testing.T) {
 	if thKey == "" {
 		t.Fatalf("invalid thread key")
 	}
+	productCapabilities, err := bindRootRunProductCapabilities(svc.threadsDB, meta.EndpointID, th.ThreadID, runID)
+	if err != nil {
+		t.Fatalf("bindRootRunProductCapabilities: %v", err)
+	}
 
 	// Keep a real run object blocked while force deletion removes its durable rows.
 	stuck := &run{
@@ -84,7 +88,7 @@ func TestService_DeleteThreadForce_DoesNotWaitForRunExit(t *testing.T) {
 		endpointID:       meta.EndpointID,
 		threadID:         th.ThreadID,
 		messageID:        "message_force_delete_test",
-		threadsDB:        svc.threadsDB,
+		product:          productCapabilities,
 		persistOpTimeout: time.Second,
 		doneCh:           make(chan struct{}),
 	}
@@ -105,7 +109,7 @@ func TestService_DeleteThreadForce_DoesNotWaitForRunExit(t *testing.T) {
 		t.Fatalf("DeleteThread(force=true): %v", err)
 	}
 
-	got, err := svc.threadsDB.GetThread(ctx, meta.EndpointID, th.ThreadID)
+	got, err := svc.threadsDB.GetThreadSettings(ctx, meta.EndpointID, th.ThreadID)
 	if err != nil {
 		t.Fatalf("GetThread: %v", err)
 	}
@@ -163,7 +167,7 @@ func TestService_DeleteThreadHandlesIdleCompactionBusyAndForce(t *testing.T) {
 	if _, err := svc.DeleteThread(ctx, meta, th.ThreadID, false); !errors.Is(err, ErrThreadBusy) {
 		t.Fatalf("DeleteThread(force=false) err=%v, want %v", err, ErrThreadBusy)
 	}
-	if got, err := svc.threadsDB.GetThread(ctx, meta.EndpointID, th.ThreadID); err != nil {
+	if got, err := svc.threadsDB.GetThreadSettings(ctx, meta.EndpointID, th.ThreadID); err != nil {
 		t.Fatalf("GetThread after busy delete: %v", err)
 	} else if got == nil {
 		t.Fatalf("thread should remain after busy delete")
@@ -174,7 +178,7 @@ func TestService_DeleteThreadHandlesIdleCompactionBusyAndForce(t *testing.T) {
 	if !cancelCalled {
 		t.Fatalf("idle compaction cancel callback was not called")
 	}
-	got, err := svc.threadsDB.GetThread(ctx, meta.EndpointID, th.ThreadID)
+	got, err := svc.threadsDB.GetThreadSettings(ctx, meta.EndpointID, th.ThreadID)
 	if err != nil {
 		t.Fatalf("GetThread after force delete: %v", err)
 	}

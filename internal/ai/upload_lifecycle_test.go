@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -147,6 +148,71 @@ func TestService_DeleteFollowupRemovesUploadArtifacts(t *testing.T) {
 	}
 	if _, err := svc.threadsDB.GetUpload(ctx, meta.EndpointID, uploadID); !errors.Is(err, sql.ErrNoRows) {
 		t.Fatalf("GetUpload err=%v, want %v", err, sql.ErrNoRows)
+	}
+}
+
+func TestQueuedTurnMissingAttachmentPreservesCommandAndOwnership(t *testing.T) {
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+	thread, err := svc.CreateThread(ctx, meta, "queued attachment failure", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	upload, err := svc.SaveUpload(ctx, meta.EndpointID, strings.NewReader("queued"), "queued.txt", "text/plain", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	uploadID := parseUploadIDFromURL(upload.URL)
+	queued, _, err := svc.enqueueQueuedTurn(ctx, meta, SendUserTurnRequest{
+		ThreadID: thread.ThreadID,
+		Input: RunInput{Text: "inspect queued attachment", Attachments: []RunAttachmentIn{{
+			Name: "queued.txt", MimeType: "text/plain", URL: upload.URL,
+		}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	db, err := sql.Open("sqlite", "file:"+filepath.Join(svc.stateDir, "ai", "threads.sqlite")+"?_pragma=busy_timeout(3000)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	defer func() { _ = db.Close() }()
+	missingAttachments := `[{"name":"missing.txt","mime_type":"text/plain","url":"/_redeven_proxy/api/ai/uploads/upl_missing"}]`
+	if _, err := db.ExecContext(ctx, `UPDATE ai_queued_turns SET attachments_json = ? WHERE queue_id = ?`, missingAttachments, queued.QueueID); err != nil {
+		t.Fatal(err)
+	}
+
+	actor := svc.threadMgr.Get(meta.EndpointID, thread.ThreadID)
+	if actor == nil {
+		t.Fatal("thread actor is unavailable")
+	}
+	if err := actor.handleMaybeStartQueuedTurn(ctx); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("handleMaybeStartQueuedTurn error=%v, want %v", err, sql.ErrNoRows)
+	}
+	stored, err := svc.threadsDB.GetQueuedTurn(ctx, meta.EndpointID, thread.ThreadID, queued.QueueID)
+	if err != nil || stored == nil {
+		t.Fatalf("queued command=%#v err=%v, want preserved", stored, err)
+	}
+	owned, err := svc.threadsDB.GetQueuedTurnOwnedUpload(ctx, meta.EndpointID, thread.ThreadID, queued.QueueID, uploadID)
+	if err != nil || owned == nil {
+		t.Fatalf("queued upload ownership=%#v err=%v, want preserved", owned, err)
+	}
+	if svc.HasActiveThreadForEndpoint(meta.EndpointID, thread.ThreadID) {
+		t.Fatal("attachment failure registered an active run")
+	}
+	host, err := svc.openFloretThreadReadHost(ctx, thread.ThreadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	overview, err := host.ReadThreadOverview(ctx, flruntime.ThreadID(thread.ThreadID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overview.LatestTurn != nil {
+		t.Fatalf("attachment failure admitted canonical turn: %#v", overview.LatestTurn)
 	}
 }
 

@@ -47,18 +47,6 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		req.Options.ResponseFormat = "json_object"
 	}
 
-	permissionType, err := normalizePermissionType(req.Options.PermissionType, "")
-	if err != nil {
-		return r.failRun("Invalid permission type", err)
-	}
-	if strings.TrimSpace(req.Options.PermissionType) == "" {
-		permissionType, err = normalizePermissionType(r.cfg.EffectivePermissionType(), permissionType)
-		if err != nil {
-			return r.failRun("Invalid configured permission type", err)
-		}
-	}
-	req.Options.PermissionType = permissionTypeString(permissionType)
-	r.permissionType = permissionType
 	taskComplexity := TaskComplexityStandard
 
 	var adapter ModelGateway
@@ -86,15 +74,6 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		"provider_base_url": strings.TrimSpace(providerCfg.BaseURL),
 		"model":             modelName,
 	})
-	r.recordRunDiagnostic("floret.host_turn.start", RealtimeStreamKindLifecycle, map[string]any{
-		"engine":                        "floret",
-		"provider_type":                 providerType,
-		"parallel_tool_calls_wire_mode": string(resolveParallelToolCallsWireMode(providerType, strings.TrimSpace(providerCfg.BaseURL))),
-		"model":                         modelName,
-		"max_tool_calls":                modelGatewayHardMaxToolCalls,
-		"permission_type":               permissionTypeString(permissionType),
-	})
-
 	state := newRuntimeState(taskObjective)
 	if source, hydrated := r.hydrateTodoRuntimeState(ctx, &state); hydrated {
 		r.recordRunDiagnostic("todo.hydrated", RealtimeStreamKindLifecycle, map[string]any{
@@ -115,12 +94,21 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	hostLabels := floretHostLabelsForRun(r)
 	surfaceConfig := r.buildDynamicToolSurfaceConfig(taskObjective, taskComplexity, req.ModelCapability.SupportsAskUserQuestionBatches, sharedState, hostLabels)
 	r.dynamicSurfaceConfig = surfaceConfig
-	initialSurface, err := r.buildRunToolSurface(ctx, surfaceConfig, permissionType)
+	initialSurface, err := r.prepareRunToolSurface(ctx, surfaceConfig)
 	if err != nil {
 		return r.failRun("Failed to initialize dynamic tool surface", err)
 	}
+	req.Options.PermissionType = permissionTypeString(initialSurface.PermissionType)
+	r.recordRunDiagnostic("floret.host_turn.start", RealtimeStreamKindLifecycle, map[string]any{
+		"engine":                        "floret",
+		"provider_type":                 providerType,
+		"parallel_tool_calls_wire_mode": string(resolveParallelToolCallsWireMode(providerType, strings.TrimSpace(providerCfg.BaseURL))),
+		"model":                         modelName,
+		"max_tool_calls":                modelGatewayHardMaxToolCalls,
+		"permission_type":               permissionTypeString(initialSurface.PermissionType),
+	})
 	r.recordRunDiagnostic("capability.contract.resolved", RealtimeStreamKindLifecycle, initialSurface.CapabilityContract.eventPayload())
-	toolSurfaceProvider := r.dynamicToolSurfaceProvider(surfaceConfig, initialSurface.PermissionType, true)
+	toolSurfaceProvider := r.dynamicToolSurfaceProvider(surfaceConfig, true)
 	flProvider := newFloretProviderAdapter(
 		adapter,
 		providerType,
@@ -148,24 +136,35 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	}
 	labels := flruntime.RunLabels{Correlation: map[string]string{"thread_id": strings.TrimSpace(r.threadID), "message_id": strings.TrimSpace(r.messageID)}, Host: initialSurface.HostContext}
 	floretCfg := redevenFloretAdapterConfig(initialSurface.SystemPrompt, floretModelContextPolicy(contextWindow, req.Options.MaxOutputTokens), req.Options.ReasoningSelection)
-	store := r.floretStore
-	if store == nil {
-		return r.failRun("Failed to initialize Floret context store", errors.New("floret store not ready"))
+	if r.floretHostFactory == nil {
+		return r.failRun("Failed to initialize Floret host", errors.New("floret host factory not ready"))
 	}
 	gatewayIdentity, err := redevenFloretGatewayIdentity(providerCfg.ID, providerType, providerCfg.BaseURL, capability.WireModelName, flProvider.stateCompatibilityRoute())
 	if err != nil {
 		return r.failRun("Failed to initialize Floret model identity", err)
 	}
-	host, err := flruntime.NewHost(flruntime.HostOptions{
-		Config:               floretCfg,
-		ModelGateway:         flProvider,
-		ModelGatewayIdentity: gatewayIdentity,
-		Store:                store,
-		Tools:                initialSurface.FloretTools,
-		Approver:             floretToolApproverForRun(r),
-		Sink:                 floretEventSink{run: r},
-		ToolSurfaceProvider:  toolSurfaceProvider,
-		ThreadTitleMode:      flruntime.ThreadTitleModeProvider,
+	supplementalContext, err := floretSupplementalContextForInput(req.Input)
+	if err != nil {
+		return r.failRun("Failed to prepare linked context", err)
+	}
+	turnInput, err := r.floretTurnInput(ctx, req.Input)
+	if err != nil {
+		return r.failRun("Failed to prepare message attachments", err)
+	}
+	turnInput, frozenAttachments, err := r.preflightFloretTurnAttachments(ctx, turnInput, flProvider)
+	if err != nil {
+		return r.failRun("Failed to validate message attachments", err)
+	}
+	flProvider.attachmentResolver = r.floretAttachmentResolver(frozenAttachments)
+	host, err := r.floretHostFactory(ctx, flruntime.TurnExecutionHostOptions{
+		Config:                  floretCfg,
+		ModelGateway:            flProvider,
+		ModelGatewayIdentity:    gatewayIdentity,
+		Tools:                   initialSurface.FloretTools,
+		EffectAuthorizationGate: floretEffectAuthorizationGateForRun(r),
+		Sink:                    floretEventSink{run: r},
+		ToolSurfaceProvider:     toolSurfaceProvider,
+		ThreadTitleMode:         flruntime.ThreadTitleModeProvider,
 		LoopLimits: flruntime.LoopLimits{
 			NoProgressLimit:    2,
 			DuplicateToolLimit: 3,
@@ -174,28 +173,17 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	if err != nil {
 		return r.failRun("Failed to initialize Floret host", err)
 	}
+	if err := r.commitPermissionSnapshot(initialSurface.PermissionSnapshot); err != nil {
+		return r.failRun("Failed to persist permission snapshot", err)
+	}
 	var turnHost floretTurnHost = host
 	r.setActiveFloretHost(turnHost)
 	defer r.setActiveFloretHost(nil)
 	threadID := flruntime.ThreadID(strings.TrimSpace(r.threadID))
-	if err := ensureFloretThread(ctx, turnHost, threadID); err != nil {
-		return r.failRun("Failed to initialize Floret thread", err)
-	}
 	r.expectFloretRuntimeEventIdentity(r.id, r.threadID, r.messageID, true)
 	r.emitLifecyclePhase("executing", map[string]any{"engine": "floret"})
-	supplementalContext, err := floretSupplementalContextForInput(req.Input)
-	if err != nil {
-		return r.failRun("Failed to prepare linked context", err)
-	}
 	if payload := floretContextActionInjectedEventPayload(req.Input.ContextAction, supplementalContext); payload != nil {
 		r.recordRunDiagnostic("flower.context_action.injected", RealtimeStreamKindLifecycle, payload)
-	}
-	turnInput, err := r.floretTurnInput(ctx, req.Input)
-	if err != nil {
-		return r.failRun("Failed to prepare message attachments", err)
-	}
-	if err := r.preflightFloretTurnAttachments(ctx, turnInput, flProvider); err != nil {
-		return r.failRun("Failed to validate message attachments", err)
 	}
 	result, err := turnHost.RunTurn(ctx, flruntime.RunTurnRequest{
 		RunID:               flruntime.RunID(strings.TrimSpace(r.id)),
@@ -221,13 +209,16 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		}
 		return r.failRunWithCode(runErrorCodeFloretEngineFailed, "", contractErr)
 	}
-	projectionUnavailable := result.ProjectionAvailability == flruntime.TurnProjectionAvailabilityUnavailable
-	if projectionErr := result.Validate(); projectionErr != nil {
-		r.rejectFloretContract("turn_projection_outcome", projectionErr)
-		if r.isDetached() {
-			return nil
+	projectionUnavailable := false
+	if result.Status != "" {
+		projectionUnavailable = result.ProjectionAvailability == flruntime.TurnProjectionAvailabilityUnavailable
+		if projectionErr := result.Validate(); projectionErr != nil {
+			r.rejectFloretContract("turn_projection_outcome", projectionErr)
+			if r.isDetached() {
+				return nil
+			}
+			return r.failRunWithCode(runErrorCodeFloretEngineFailed, "", projectionErr)
 		}
-		return r.failRunWithCode(runErrorCodeFloretEngineFailed, "", projectionErr)
 	}
 	if projectionUnavailable {
 		r.recordRunDiagnostic("floret.projection.unavailable", RealtimeStreamKindLifecycle, map[string]any{
@@ -235,13 +226,13 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 			"error":  sanitizeLogText(result.ProjectionError, 240),
 		})
 	}
-	if result.Status.IsTerminal() && r.service != nil {
-		if replaceErr := r.service.replaceFlowerLiveDraftWithCanonicalTimeline(context.Background(), r.endpointID, r.threadID, r.id, r.messageID, "terminal_projection"); replaceErr != nil {
+	if result.Status.IsTerminal() && r.host.replaceLiveDraftWithCanonicalTimeline != nil {
+		if replaceErr := r.host.replaceLiveDraftWithCanonicalTimeline(context.Background(), r.id, r.messageID, "terminal_projection"); replaceErr != nil {
 			r.recordRunDiagnostic("flower.timeline.replace_failed", RealtimeStreamKindLifecycle, map[string]any{"error": replaceErr.Error()})
 		}
 	}
 	if reason := r.floretParentTerminalSubagentCloseReason(ctx, result, err); reason != "" {
-		if closeErr := r.closeParentTerminalSubagents(context.Background(), turnHost, reason); closeErr != nil {
+		if closeErr := r.closeParentTerminalSubagents(context.Background(), reason); closeErr != nil {
 			if r.log != nil {
 				r.log.Warn("ai: close parent terminal subagents failed", "run_id", r.id, "thread_id", r.threadID, "reason", reason, "error", closeErr)
 			}
@@ -347,7 +338,7 @@ func (r *run) floretParentTerminalSubagentCloseReason(ctx context.Context, resul
 	}
 }
 
-func (r *run) closeParentTerminalSubagents(ctx context.Context, host floretSubagentsCloser, reason string) error {
+func (r *run) closeParentTerminalSubagents(ctx context.Context, reason string) error {
 	if r == nil {
 		return nil
 	}
@@ -369,36 +360,22 @@ func (r *run) closeParentTerminalSubagents(ctx context.Context, host floretSubag
 	closeCtx, cancel := context.WithTimeout(ctxOrBackground(ctx), timeout)
 	defer cancel()
 
-	var closeHost interface {
-		CloseSubAgents(context.Context, flruntime.CloseSubAgentsRequest) (flruntime.CloseSubAgentsResult, error)
+	runtime, ok := r.subagentRuntime.(*floretSubagentRuntime)
+	if !ok || runtime == nil {
+		return nil
 	}
-	closeHost = host
-	if runtime, ok := r.subagentRuntime.(*floretSubagentRuntime); ok {
-		if subagentHost := runtime.currentHost(); subagentHost != nil {
-			closeHost = subagentHost
-		}
+	host := runtime.currentHost()
+	if host == nil {
+		return nil
 	}
-	if closeHost == nil && r.service != nil {
-		maintenance, err := r.service.openFloretMaintenanceHost()
-		if err != nil {
-			return err
-		}
-		closeHost = maintenance
-	}
-	if closeHost == nil {
-		return errors.New("floret host not available")
-	}
-	result, err := closeHost.CloseSubAgents(closeCtx, flruntime.CloseSubAgentsRequest{
-		ParentThreadID: flruntime.ThreadID(threadID),
-		Reason:         reason,
-	})
+	result, err := closeSubagentsWithHost(closeCtx, host, threadID, reason, strings.TrimSpace(r.messageID))
 	if err != nil {
 		return err
 	}
 	if r.subagentRuntime != nil {
 		if runtime, ok := r.subagentRuntime.(*floretSubagentRuntime); ok {
-			snapshots := make([]subagentSnapshot, 0, len(result.Snapshots))
-			for _, snapshot := range result.Snapshots {
+			snapshots := make([]subagentSnapshot, 0, len(result))
+			for _, snapshot := range result {
 				snapshots = append(snapshots, subagentSnapshotFromFloret(snapshot))
 			}
 			runtime.refreshSubagentsPatch(closeCtx, snapshots...)
@@ -406,7 +383,7 @@ func (r *run) closeParentTerminalSubagents(ctx context.Context, host floretSubag
 	}
 	r.recordRunDiagnostic("subagent.parent_terminal_close", RealtimeStreamKindLifecycle, map[string]any{
 		"reason":       reason,
-		"closed_count": result.Closed,
+		"closed_count": len(result),
 	})
 	return nil
 }

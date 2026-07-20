@@ -54,9 +54,9 @@ func TestHandleToolCall_ExplicitTargetPolicyBlocksLocalFileToolWithoutTarget(t *
 		SessionMeta:      &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
 		ToolTargetPolicy: ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget},
 	})
-	allowToolsForTest(t, r, "file.read")
+	allowToolsForTest(t, r, "read_file")
 
-	outcome, err := r.handleToolCall(context.Background(), "tool_read_1", "file.read", map[string]any{
+	outcome, err := r.handleToolCall(authorizedToolContextForTest(t, r, "tool_read_1", "read_file"), "tool_read_1", "read_file", map[string]any{
 		"path": "/tmp/example.txt",
 	})
 	if err != nil {
@@ -81,9 +81,9 @@ func TestHandleToolCall_ExplicitTargetPolicyUsesTargetExecutor(t *testing.T) {
 		ToolTargetPolicy:   ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget},
 		TargetToolExecutor: executor,
 	})
-	allowToolsForTest(t, r, "file.read")
+	allowToolsForTest(t, r, "read_file")
 
-	outcome, err := r.handleToolCall(context.Background(), "tool_file_read_1", "file.read", map[string]any{
+	outcome, err := r.handleToolCall(authorizedToolContextForTest(t, r, "tool_file_read_1", "read_file"), "tool_file_read_1", "read_file", map[string]any{
 		"target_id": "provider:https%3A%2F%2Fredeven.test:env:env_a",
 		"path":      "/workspace/note.txt",
 	})
@@ -96,7 +96,7 @@ func TestHandleToolCall_ExplicitTargetPolicyUsesTargetExecutor(t *testing.T) {
 	if executor.call.TargetID != "provider:https%3A%2F%2Fredeven.test:env:env_a" {
 		t.Fatalf("target_id=%q", executor.call.TargetID)
 	}
-	if executor.call.ToolName != "file.read" {
+	if executor.call.ToolName != "read_file" {
 		t.Fatalf("tool_name=%q", executor.call.ToolName)
 	}
 	if len(executor.call.RequiredCapabilities) != 1 || executor.call.RequiredCapabilities[0] != "read" {
@@ -125,9 +125,9 @@ func TestHandleToolCall_ExplicitTargetPolicyPreservesTargetProvenance(t *testing
 		ToolTargetPolicy:   ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget},
 		TargetToolExecutor: executor,
 	})
-	allowToolsForTest(t, r, "file.read")
+	allowToolsForTest(t, r, "read_file")
 
-	outcome, err := r.handleToolCall(context.Background(), "tool_file_read_1", "file.read", map[string]any{
+	outcome, err := r.handleToolCall(authorizedToolContextForTest(t, r, "tool_file_read_1", "read_file"), "tool_file_read_1", "read_file", map[string]any{
 		"target_id": "ssh:ssh%3Adevbox%3Adefault%3Akey_agent%3Aremote_default",
 		"path":      "/workspace/note.txt",
 	})
@@ -162,9 +162,9 @@ func TestHandleToolCall_ExplicitTargetPolicyRejectsUnallowedTarget(t *testing.T)
 		},
 		TargetToolExecutor: executor,
 	})
-	allowToolsForTest(t, r, "file.read")
+	allowToolsForTest(t, r, "read_file")
 
-	outcome, err := r.handleToolCall(context.Background(), "tool_file_read_1", "file.read", map[string]any{
+	outcome, err := r.handleToolCall(authorizedToolContextForTest(t, r, "tool_file_read_1", "read_file"), "tool_file_read_1", "read_file", map[string]any{
 		"target_id": "provider:https%3A%2F%2Fredeven.test:env:env_b",
 		"path":      "/workspace/note.txt",
 	})
@@ -194,7 +194,7 @@ func TestHandleToolCall_LocalRuntimePolicyKeepsExistingToolBehavior(t *testing.T
 	})
 	allowToolsForTest(t, r, "file.write")
 
-	outcome, err := r.handleToolCall(context.Background(), "tool_write_1", "file.write", map[string]any{
+	outcome, err := r.handleToolCall(authorizedToolContextForTest(t, r, "tool_write_1", "file.write"), "tool_write_1", "file.write", map[string]any{
 		"file_path": "note.txt",
 		"content":   "ok\n",
 	})

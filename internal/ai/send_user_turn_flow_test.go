@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -77,7 +78,7 @@ func TestPendingTurnCommandIsDeletedAfterCanonicalAcceptance(t *testing.T) {
 		t.Fatal(err)
 	}
 	command := createPendingCommandForTest(t, svc, meta, thread.ThreadID, "command_1", "turn_1", "run_1")
-	host := newTestFloretHost(t, svc.floretStore, "accepted")
+	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "accepted")
 	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: flruntime.TurnID(command.TurnID), RunID: flruntime.RunID(command.RunID), Input: flruntime.TurnInput{Text: command.TextContent}}); err != nil {
 		t.Fatal(err)
 	}
@@ -89,8 +90,8 @@ func TestPendingTurnCommandIsDeletedAfterCanonicalAcceptance(t *testing.T) {
 		t.Fatalf("accepted prompt still stored: %#v err=%v", stored, err)
 	}
 	accepted, err = svc.reconcilePendingTurnCommand(ctx, meta.EndpointID, thread.ThreadID, command.QueueID, command.TurnID, nil)
-	if err != nil || !accepted {
-		t.Fatalf("idempotent reconcile accepted=%v err=%v", accepted, err)
+	if err == nil || accepted || !strings.Contains(err.Error(), "missing during admission settlement") {
+		t.Fatalf("second reconcile accepted=%v err=%v, want missing command failure", accepted, err)
 	}
 }
 
@@ -103,11 +104,15 @@ func TestPendingTurnCommandIsDeletedOnCanonicalUserEntryEvent(t *testing.T) {
 		t.Fatal(err)
 	}
 	command := createPendingCommandForTest(t, svc, meta, thread.ThreadID, "command_event", "turn_event", "run_event")
-	r := newRun(runOptions{
-		Log: svc.log, Service: svc, RunID: command.RunID, EndpointID: meta.EndpointID,
-		ThreadID: thread.ThreadID, MessageID: command.TurnID, ThreadsDB: svc.threadsDB,
-		FloretStore: svc.floretStore, PersistOpTimeout: time.Second,
-	})
+	floretRuntime, err := svc.bindFloretThreadRuntime(thread.ThreadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := newRunWithProductStoreForTest(t, runOptions{
+		Log: svc.log, HostCapabilities: bindTestRunHostCapabilities(t, svc, meta.EndpointID, thread.ThreadID), RunID: command.RunID, EndpointID: meta.EndpointID,
+		ThreadID: thread.ThreadID, MessageID: command.TurnID,
+		FloretHostFactory: floretRuntime.Turn, PersistOpTimeout: time.Second,
+	}, svc.threadsDB)
 	r.setPendingTurnCommand(command.QueueID)
 	r.expectFloretRuntimeEventIdentity(command.RunID, thread.ThreadID, command.TurnID, true)
 	floretEventSink{run: r}.EmitEvent(flruntime.Event{
@@ -132,7 +137,7 @@ func TestPendingTurnReconciliationMatchesExactTurnID(t *testing.T) {
 		t.Fatal(err)
 	}
 	command := createPendingCommandForTest(t, svc, meta, thread.ThreadID, "command_2", "turn_expected", "run_expected")
-	host := newTestFloretHost(t, svc.floretStore, "other")
+	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "other")
 	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_other", RunID: "run_other", Input: flruntime.TurnInput{Text: command.TextContent}}); err != nil {
 		t.Fatal(err)
 	}
@@ -145,6 +150,50 @@ func TestPendingTurnReconciliationMatchesExactTurnID(t *testing.T) {
 	}
 }
 
+func TestRunEndReleasesUnadmittedPendingCommandByCancelIntent(t *testing.T) {
+	for _, testCase := range []struct {
+		name       string
+		id         string
+		cancel     bool
+		targetLane string
+	}{
+		{name: "retryable failure", id: "retry", targetLane: threadstore.FollowupLaneQueued},
+		{name: "user cancellation", id: "cancel", cancel: true, targetLane: threadstore.FollowupLaneDraft},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			svc := newSendTurnTestService(t)
+			meta := testSendTurnMeta()
+			ctx := context.Background()
+			thread, err := svc.CreateThread(ctx, meta, "release unadmitted", "", "", "")
+			if err != nil {
+				t.Fatal(err)
+			}
+			command := createPendingCommandForTest(t, svc, meta, thread.ThreadID, "command_release_"+testCase.id, "turn_release_"+testCase.id, "run_release_"+testCase.id)
+			floretRuntime, err := svc.bindFloretThreadRuntime(thread.ThreadID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := newRunWithProductStoreForTest(t, runOptions{
+				HostCapabilities: bindTestRunHostCapabilities(t, svc, meta.EndpointID, thread.ThreadID), RunID: command.RunID, EndpointID: meta.EndpointID,
+				ThreadID: thread.ThreadID, MessageID: command.TurnID,
+				FloretHostFactory: floretRuntime.Turn, PersistOpTimeout: time.Second,
+			}, svc.threadsDB)
+			r.setPendingTurnCommand(command.QueueID)
+			if testCase.cancel {
+				r.requestCancel("canceled")
+			}
+			r.reconcilePendingTurnCommand()
+			items, err := svc.threadsDB.ListFollowupsByLane(ctx, meta.EndpointID, thread.ThreadID, testCase.targetLane, 10)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(items) != 1 || items[0].QueueID != command.QueueID || items[0].AdmissionState != threadstore.PendingTurnAdmissionReady {
+				t.Fatalf("released items=%#v", items)
+			}
+		})
+	}
+}
+
 func createPendingCommandForTest(t *testing.T, svc *Service, meta *session.Meta, threadID, commandID, turnID, runID string) threadstore.QueuedTurn {
 	t.Helper()
 	record, _, _, err := svc.threadsDB.CreateFollowup(context.Background(), threadstore.QueuedTurn{
@@ -154,6 +203,9 @@ func createPendingCommandForTest(t *testing.T, svc *Service, meta *session.Meta,
 		CreatedByUserPublicID: meta.UserPublicID, CreatedByUserEmail: meta.UserEmail,
 	})
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.threadsDB.BeginPendingTurnAdmission(context.Background(), meta.EndpointID, threadID, record.QueueID, record.TurnID, record.RunID); err != nil {
 		t.Fatal(err)
 	}
 	return record

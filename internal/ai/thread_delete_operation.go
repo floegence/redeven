@@ -15,6 +15,17 @@ const threadDeleteReplayBatchSize = 50
 
 var ErrThreadDeleteOperationFailed = errors.New("thread delete operation failed")
 
+type threadDeleteFloretCoordinator struct {
+	authority floretThreadDeleteAuthority
+}
+
+func (c *threadDeleteFloretCoordinator) delete(ctx context.Context, threadID string) error {
+	if c == nil || c.authority == nil {
+		return errors.New("Floret delete coordinator authority is unavailable")
+	}
+	return c.authority.DeleteThread(ctxOrBackground(ctx), flruntime.ThreadID(strings.TrimSpace(threadID)))
+}
+
 type ThreadDeleteStatus string
 
 const (
@@ -61,6 +72,45 @@ func (s *Service) replayPendingThreadDeletes(ctx context.Context, limit int) (in
 	return completed, replayErr
 }
 
+func (s *Service) replayAllPendingThreadDeletesForStartup(ctx context.Context, limit int) (int, error) {
+	if s == nil || s.threadsDB == nil {
+		return 0, errors.New("threads store not ready")
+	}
+	if limit <= 0 {
+		limit = threadDeleteReplayBatchSize
+	}
+	completed := 0
+	afterOperationID := ""
+	for {
+		operations, err := s.threadsDB.ListPendingThreadDeleteOperationsAfter(ctxOrBackground(ctx), afterOperationID, limit)
+		if err != nil {
+			return completed, err
+		}
+		if len(operations) == 0 {
+			return completed, nil
+		}
+		for _, operation := range operations {
+			afterOperationID = operation.OperationID
+			result, err := s.replayThreadDeleteOperation(ctxOrBackground(ctx), operation)
+			if err != nil {
+				return completed, fmt.Errorf("replay thread delete %q: %w", operation.OperationID, err)
+			}
+			switch result.Status {
+			case threadstore.ThreadDeleteOperationCommitted:
+				completed++
+			case threadstore.ThreadDeleteOperationPending:
+				if result.ProductDataDeletedAtUnixMs <= 0 {
+					return completed, fmt.Errorf("thread delete %q remains pending before product data removal", operation.OperationID)
+				}
+			case threadstore.ThreadDeleteOperationFailed:
+				return completed, fmt.Errorf("thread delete %q is terminally failed", operation.OperationID)
+			default:
+				return completed, fmt.Errorf("thread delete %q has invalid status %q", operation.OperationID, result.Status)
+			}
+		}
+	}
+}
+
 func (s *Service) replayThreadDeleteOperation(ctx context.Context, operation threadstore.ThreadDeleteOperation) (threadstore.ThreadDeleteOperation, error) {
 	if s == nil {
 		return operation, errors.New("nil service")
@@ -83,11 +133,10 @@ func (s *Service) replayThreadDeleteOperation(ctx context.Context, operation thr
 		return failed, ErrThreadDeleteOperationFailed
 	}
 	if operation.FloretDeletedAtUnixMs <= 0 {
-		host, err := s.openThreadDeleteMaintenanceHost()
-		if err != nil {
-			return s.keepThreadDeletePending(ctx, operation, "floret_host_open_failed", err)
+		if s.threadDeleteFloret == nil {
+			return s.keepThreadDeletePending(ctx, operation, "floret_host_open_failed", errors.New("Floret delete coordinator authority is unavailable"))
 		}
-		deleteErr := host.DeleteThread(ctxOrBackground(ctx), flruntime.ThreadID(operation.ThreadID))
+		deleteErr := s.threadDeleteFloret.delete(ctx, operation.ThreadID)
 		if deleteErr != nil && !errors.Is(deleteErr, flruntime.ErrThreadNotFound) {
 			return s.keepThreadDeletePending(ctx, operation, "floret_delete_failed", deleteErr)
 		}
@@ -108,7 +157,7 @@ func (s *Service) replayThreadDeleteOperation(ctx context.Context, operation thr
 		if cleaner == nil {
 			return s.keepThreadDeletePending(ctx, operation, "read_state_cleaner_unavailable", errors.New("Flower read-state cleaner is unavailable"))
 		}
-		if err := cleaner.DeleteFlowerThreadReadState(ctxOrBackground(ctx), operation.EndpointID, operation.ThreadID); err != nil {
+		if err := cleaner.RetireFlowerThreadReadState(ctxOrBackground(ctx), operation.EndpointID, operation.ThreadID); err != nil {
 			return s.keepThreadDeletePending(ctx, operation, "read_state_delete_failed", err)
 		}
 		confirmed, err := db.ConfirmThreadDeleteReadStateDeleted(ctxOrBackground(ctx), operation.OperationID)
@@ -194,17 +243,4 @@ func (s *Service) cleanupThreadDeleteFiles(ctx context.Context, operation thread
 		}
 	}
 	return nil
-}
-
-func (s *Service) openThreadDeleteMaintenanceHost() (ThreadMaintenanceHost, error) {
-	if s == nil {
-		return nil, errors.New("nil service")
-	}
-	s.mu.Lock()
-	openHost := s.openDeleteMaintenanceHost
-	s.mu.Unlock()
-	if openHost != nil {
-		return openHost()
-	}
-	return s.openFloretMaintenanceHost()
 }

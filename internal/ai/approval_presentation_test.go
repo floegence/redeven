@@ -115,12 +115,12 @@ func TestDelegatedApprovalActionUsesCommandPresentationLabel(t *testing.T) {
 
 	parent := newRun(runOptions{RunID: "run_parent_label", MessageID: "msg_parent_label"})
 	child := newRun(runOptions{RunID: "run_child_label", MessageID: "msg_child_label"})
-	action, err := delegatedApprovalAction(parent, child, fltools.ApprovalRequest{
-		ID:   "tool_child_label",
-		Name: "terminal.exec",
-		ValidatedArgs: map[string]any{
-			"command": "curl -s https://example.test/delegated",
-			"cwd":     "/repo",
+	action, err := delegatedApprovalAction(parent, child, flruntime.EffectAuthorizationRequest{
+		ToolCallID: "tool_child_label",
+		ToolName:   "terminal.exec",
+		Resources: []fltools.ResourceRef{
+			{Kind: "command", Value: "curl -s https://example.test/delegated"},
+			{Kind: "working_directory", Value: "/repo"},
 		},
 		Effects: []fltools.Effect{fltools.EffectShell},
 	}, DelegatedApprovalRef{

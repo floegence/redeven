@@ -50,11 +50,14 @@ type UploadRefRecord struct {
 	CreatedAtUnixMs int64  `json:"created_at_unix_ms"`
 }
 
-type ThreadDeleteResourcesResult struct {
+type FollowupDeleteResourcesResult struct {
+	Revision        int64
 	UploadsToDelete []UploadRecord
 }
 
-type FollowupDeleteResourcesResult struct {
+type FollowupReplacementResult struct {
+	Queued          QueuedTurn
+	Position        int
 	Revision        int64
 	UploadsToDelete []UploadRecord
 }
@@ -320,7 +323,11 @@ func (s *Store) CreateFollowupWithUploadRefs(ctx context.Context, rec QueuedTurn
 	rec.EndpointID = strings.TrimSpace(rec.EndpointID)
 	rec.ThreadID = strings.TrimSpace(rec.ThreadID)
 	rec.ChannelID = strings.TrimSpace(rec.ChannelID)
-	rec.Lane = normalizeFollowupLane(rec.Lane)
+	lane, err := parseFollowupLane(rec.Lane)
+	if err != nil {
+		return QueuedTurn{}, 0, 0, err
+	}
+	rec.Lane = lane
 	rec.TurnID = strings.TrimSpace(rec.TurnID)
 	rec.RunID = strings.TrimSpace(rec.RunID)
 	rec.ModelID = strings.TrimSpace(rec.ModelID)
@@ -371,6 +378,143 @@ func (s *Store) CreateFollowupWithUploadRefs(ctx context.Context, rec QueuedTurn
 	return queued, position, revision, nil
 }
 
+func (s *Store) ReplaceFollowupWithUploadRefs(ctx context.Context, sourceFollowupID string, rec QueuedTurn, uploadIDs []string, claimedAtUnixMs int64) (FollowupReplacementResult, error) {
+	if s == nil || s.db == nil {
+		return FollowupReplacementResult{}, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	sourceFollowupID = strings.TrimSpace(sourceFollowupID)
+	rec.QueueID = strings.TrimSpace(rec.QueueID)
+	rec.EndpointID = strings.TrimSpace(rec.EndpointID)
+	rec.ThreadID = strings.TrimSpace(rec.ThreadID)
+	rec.ChannelID = strings.TrimSpace(rec.ChannelID)
+	lane, err := parseFollowupLane(rec.Lane)
+	if err != nil {
+		return FollowupReplacementResult{}, err
+	}
+	rec.Lane = lane
+	rec.AdmissionState = PendingTurnAdmissionReady
+	rec.TurnID = strings.TrimSpace(rec.TurnID)
+	rec.RunID = strings.TrimSpace(rec.RunID)
+	rec.ModelID = strings.TrimSpace(rec.ModelID)
+	rec.TextContent = strings.TrimSpace(rec.TextContent)
+	rec.AttachmentsJSON = strings.TrimSpace(rec.AttachmentsJSON)
+	rec.ContextActionJSON = strings.TrimSpace(rec.ContextActionJSON)
+	rec.OptionsJSON = strings.TrimSpace(rec.OptionsJSON)
+	rec.SessionMetaJSON = strings.TrimSpace(rec.SessionMetaJSON)
+	rec.CreatedByUserPublicID = strings.TrimSpace(rec.CreatedByUserPublicID)
+	rec.CreatedByUserEmail = strings.TrimSpace(rec.CreatedByUserEmail)
+	uploadIDs = dedupeNonEmptyStrings(uploadIDs)
+	if sourceFollowupID == "" || rec.QueueID == "" || rec.QueueID == sourceFollowupID || rec.EndpointID == "" || rec.ThreadID == "" || rec.ChannelID == "" || rec.TurnID == "" || rec.RunID == "" {
+		return FollowupReplacementResult{}, errors.New("invalid followup replacement request")
+	}
+	if rec.AttachmentsJSON == "" {
+		rec.AttachmentsJSON = "[]"
+	}
+	if rec.OptionsJSON == "" {
+		rec.OptionsJSON = "{}"
+	}
+	if rec.SessionMetaJSON == "" {
+		rec.SessionMetaJSON = "{}"
+	}
+	now := time.Now().UnixMilli()
+	if rec.CreatedAtUnixMs <= 0 {
+		rec.CreatedAtUnixMs = now
+	}
+	if rec.UpdatedAtUnixMs <= 0 {
+		rec.UpdatedAtUnixMs = rec.CreatedAtUnixMs
+	}
+	if claimedAtUnixMs <= 0 {
+		claimedAtUnixMs = rec.CreatedAtUnixMs
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return FollowupReplacementResult{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := requireThreadWritableTx(ctx, tx, rec.EndpointID, rec.ThreadID); err != nil {
+		return FollowupReplacementResult{}, err
+	}
+	var sourceLane, sourceAdmissionState string
+	var sourceSortIndex int64
+	err = tx.QueryRowContext(ctx, `
+SELECT lane, admission_state, sort_index
+FROM ai_queued_turns
+WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
+`, rec.EndpointID, rec.ThreadID, sourceFollowupID).Scan(&sourceLane, &sourceAdmissionState, &sourceSortIndex)
+	if errors.Is(err, sql.ErrNoRows) {
+		return FollowupReplacementResult{}, fmt.Errorf("%w: source followup %q is missing", ErrFollowupReplacementConflict, sourceFollowupID)
+	}
+	if err != nil {
+		return FollowupReplacementResult{}, err
+	}
+	sourceLane, err = parseFollowupLane(sourceLane)
+	if err != nil {
+		return FollowupReplacementResult{}, err
+	}
+	sourceAdmissionState, err = parsePendingTurnAdmissionState(sourceAdmissionState)
+	if err != nil {
+		return FollowupReplacementResult{}, err
+	}
+	if sourceAdmissionState != PendingTurnAdmissionReady {
+		return FollowupReplacementResult{}, fmt.Errorf("%w: source followup %q is not mutable", ErrFollowupReplacementConflict, sourceFollowupID)
+	}
+	if sourceLane == rec.Lane && sourceSortIndex > 0 {
+		rec.SortIndex = sourceSortIndex
+	} else {
+		rec.SortIndex, err = getNextFollowupSortIndexTx(ctx, tx, rec.EndpointID, rec.ThreadID, rec.Lane)
+		if err != nil {
+			return FollowupReplacementResult{}, err
+		}
+	}
+	_, err = tx.ExecContext(ctx, `
+INSERT INTO ai_queued_turns(
+  queue_id, endpoint_id, thread_id, channel_id, lane, admission_state, sort_index, turn_id, run_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
+  created_by_user_public_id, created_by_user_email, created_at_unix_ms, updated_at_unix_ms
+)
+VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`, rec.QueueID, rec.EndpointID, rec.ThreadID, rec.ChannelID, rec.Lane, rec.AdmissionState, rec.SortIndex, rec.TurnID, rec.RunID, rec.ModelID, rec.TextContent, rec.AttachmentsJSON, rec.ContextActionJSON, rec.OptionsJSON, rec.SessionMetaJSON,
+		rec.CreatedByUserPublicID, rec.CreatedByUserEmail, rec.CreatedAtUnixMs, rec.UpdatedAtUnixMs)
+	if err != nil {
+		if isUniqueConstraintError(err) {
+			return FollowupReplacementResult{}, fmt.Errorf("%w: destination identity already exists", ErrFollowupReplacementConflict)
+		}
+		return FollowupReplacementResult{}, err
+	}
+	if err := bindUploadsToRefTx(ctx, tx, rec.EndpointID, rec.ThreadID, UploadRefKindQueuedTurn, rec.QueueID, uploadIDs, claimedAtUnixMs); err != nil {
+		return FollowupReplacementResult{}, err
+	}
+	deleted, err := tx.ExecContext(ctx, `
+DELETE FROM ai_queued_turns
+WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ? AND admission_state = ?
+`, rec.EndpointID, rec.ThreadID, sourceFollowupID, PendingTurnAdmissionReady)
+	if err != nil {
+		return FollowupReplacementResult{}, err
+	}
+	if affected, _ := deleted.RowsAffected(); affected != 1 {
+		return FollowupReplacementResult{}, fmt.Errorf("%w: source followup changed during replacement", ErrFollowupReplacementConflict)
+	}
+	uploadsToDelete, err := prepareUploadCleanupForRefTx(ctx, tx, rec.EndpointID, rec.ThreadID, UploadRefKindQueuedTurn, sourceFollowupID, now)
+	if err != nil {
+		return FollowupReplacementResult{}, err
+	}
+	position, err := followupPositionTx(ctx, tx, rec.EndpointID, rec.ThreadID, rec.Lane, rec.QueueID, rec.SortIndex)
+	if err != nil {
+		return FollowupReplacementResult{}, err
+	}
+	revision, err := bumpThreadFollowupsRevisionTx(ctx, tx, rec.EndpointID, rec.ThreadID)
+	if err != nil {
+		return FollowupReplacementResult{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return FollowupReplacementResult{}, err
+	}
+	return FollowupReplacementResult{Queued: rec, Position: position, Revision: revision, UploadsToDelete: uploadsToDelete}, nil
+}
+
 func (s *Store) CommitPendingTurnAdmission(ctx context.Context, endpointID string, threadID string, commandID string, turnID string, uploadIDs []string, admittedAtUnixMs int64) error {
 	if s == nil || s.db == nil {
 		return errors.New("store not initialized")
@@ -395,20 +539,34 @@ func (s *Store) CommitPendingTurnAdmission(ctx context.Context, endpointID strin
 	}
 	defer func() { _ = tx.Rollback() }()
 	var storedTurnID string
-	var lane string
+	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
+		return err
+	}
+	var lane, admissionState string
 	err = tx.QueryRowContext(ctx, `
-SELECT turn_id, lane
+SELECT turn_id, lane, admission_state
 FROM ai_queued_turns
 WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
-`, endpointID, threadID, commandID).Scan(&storedTurnID, &lane)
+`, endpointID, threadID, commandID).Scan(&storedTurnID, &lane, &admissionState)
 	if errors.Is(err, sql.ErrNoRows) {
-		return nil
+		return errors.New("pending turn command is missing during admission settlement")
 	}
 	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(storedTurnID) != turnID || normalizeFollowupLane(lane) != FollowupLaneQueued {
+	storedLane, err := parseFollowupLane(lane)
+	if err != nil {
+		return err
+	}
+	storedAdmissionState, err := parsePendingTurnAdmissionState(admissionState)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(storedTurnID) != turnID || storedLane != FollowupLaneQueued {
 		return errors.New("pending turn command identity mismatch")
+	}
+	if storedAdmissionState != PendingTurnAdmissionReady && storedAdmissionState != PendingTurnAdmissionInFlight {
+		return errors.New("pending turn command admission state mismatch")
 	}
 	queryRows, err := tx.QueryContext(ctx, `
 SELECT upload_id
@@ -468,6 +626,9 @@ func bindUploadsToRefTx(ctx context.Context, tx *sql.Tx, endpointID string, thre
 	if endpointID == "" || threadID == "" || refKind == "" || refID == "" {
 		return errors.New("invalid request")
 	}
+	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
+		return err
+	}
 	if len(uploadIDs) == 0 {
 		return nil
 	}
@@ -506,45 +667,6 @@ WHERE endpoint_id = ? AND upload_id = ?
 	return nil
 }
 
-func (s *Store) DeleteThreadResources(ctx context.Context, endpointID string, threadID string) (ThreadDeleteResourcesResult, error) {
-	if s == nil || s.db == nil {
-		return ThreadDeleteResourcesResult{}, errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	if endpointID == "" || threadID == "" {
-		return ThreadDeleteResourcesResult{}, errors.New("invalid request")
-	}
-	now := time.Now().UnixMilli()
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return ThreadDeleteResourcesResult{}, err
-	}
-	defer func() { _ = tx.Rollback() }()
-	uploadsToDelete, err := prepareUploadCleanupForThreadTx(ctx, tx, endpointID, threadID, now)
-	if err != nil {
-		return ThreadDeleteResourcesResult{}, err
-	}
-	if err := deleteThreadScopedRowsTx(ctx, tx, endpointID, threadID); err != nil {
-		return ThreadDeleteResourcesResult{}, err
-	}
-	res, err := tx.ExecContext(ctx, `DELETE FROM ai_thread_settings WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID)
-	if err != nil {
-		return ThreadDeleteResourcesResult{}, err
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return ThreadDeleteResourcesResult{}, sql.ErrNoRows
-	}
-	if err := tx.Commit(); err != nil {
-		return ThreadDeleteResourcesResult{}, err
-	}
-	return ThreadDeleteResourcesResult{UploadsToDelete: uploadsToDelete}, nil
-}
-
 func (s *Store) DeleteFollowupResources(ctx context.Context, endpointID string, threadID string, followupID string) (FollowupDeleteResourcesResult, error) {
 	if s == nil || s.db == nil {
 		return FollowupDeleteResourcesResult{}, errors.New("store not initialized")
@@ -564,6 +686,12 @@ func (s *Store) DeleteFollowupResources(ctx context.Context, endpointID string, 
 		return FollowupDeleteResourcesResult{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
+		return FollowupDeleteResourcesResult{}, err
+	}
+	if err := requireFollowupMutableTx(ctx, tx, endpointID, threadID, followupID); err != nil {
+		return FollowupDeleteResourcesResult{}, err
+	}
 	res, err := tx.ExecContext(ctx, `
 DELETE FROM ai_queued_turns
 WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?

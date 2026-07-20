@@ -7,83 +7,61 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/floegence/redeven/internal/ai/permissionsnapshot"
 )
 
-type FlowerPermissionType string
+type FlowerPermissionType = permissionsnapshot.PermissionType
 
 const (
-	FlowerPermissionReadonly         FlowerPermissionType = "readonly"
-	FlowerPermissionApprovalRequired FlowerPermissionType = "approval_required"
-	FlowerPermissionFullAccess       FlowerPermissionType = "full_access"
+	FlowerPermissionReadonly         = permissionsnapshot.PermissionReadonly
+	FlowerPermissionApprovalRequired = permissionsnapshot.PermissionApprovalRequired
+	FlowerPermissionFullAccess       = permissionsnapshot.PermissionFullAccess
 )
 
 const (
-	permissionSnapshotVersionCurrent = 2
+	permissionSnapshotVersionCurrent = permissionsnapshot.VersionCurrent
 )
 
-type ToolVisibilityClass string
+type ToolVisibilityClass = permissionsnapshot.VisibilityClass
 
 const (
-	ToolVisibilityReadonlyExclusive ToolVisibilityClass = "readonly_exclusive"
-	ToolVisibilityStandard          ToolVisibilityClass = "standard"
-	ToolVisibilitySharedReadonly    ToolVisibilityClass = "shared_readonly"
-	ToolVisibilityInteraction       ToolVisibilityClass = "interaction"
-	ToolVisibilityControl           ToolVisibilityClass = "control"
-	ToolVisibilityDelegationControl ToolVisibilityClass = "delegation_control"
+	ToolVisibilityReadonlyExclusive = permissionsnapshot.VisibilityReadonlyExclusive
+	ToolVisibilityStandard          = permissionsnapshot.VisibilityStandard
+	ToolVisibilitySharedReadonly    = permissionsnapshot.VisibilitySharedReadonly
+	ToolVisibilityInteraction       = permissionsnapshot.VisibilityInteraction
+	ToolVisibilityControl           = permissionsnapshot.VisibilityControl
+	ToolVisibilityDelegationControl = permissionsnapshot.VisibilityDelegationControl
 )
 
-type ToolCapabilityClass string
+type ToolCapabilityClass = permissionsnapshot.CapabilityClass
 
 const (
-	ToolCapabilityReadonlyLocal   ToolCapabilityClass = "readonly_local"
-	ToolCapabilityReadonlyNetwork ToolCapabilityClass = "readonly_network"
-	ToolCapabilityInteraction     ToolCapabilityClass = "interaction"
-	ToolCapabilityMutation        ToolCapabilityClass = "mutation"
-	ToolCapabilityShell           ToolCapabilityClass = "shell"
-	ToolCapabilityDelegation      ToolCapabilityClass = "delegation"
-	ToolCapabilityOpenWorld       ToolCapabilityClass = "open_world"
+	ToolCapabilityReadonlyLocal   = permissionsnapshot.CapabilityReadonlyLocal
+	ToolCapabilityReadonlyNetwork = permissionsnapshot.CapabilityReadonlyNetwork
+	ToolCapabilityInteraction     = permissionsnapshot.CapabilityInteraction
+	ToolCapabilityMutation        = permissionsnapshot.CapabilityMutation
+	ToolCapabilityShell           = permissionsnapshot.CapabilityShell
+	ToolCapabilityDelegation      = permissionsnapshot.CapabilityDelegation
+	ToolCapabilityOpenWorld       = permissionsnapshot.CapabilityOpenWorld
 )
 
-type ApprovalDecisionKind string
+type ApprovalDecisionKind = permissionsnapshot.ApprovalDecision
 
 const (
-	ApprovalDecisionAllow ApprovalDecisionKind = "allow"
-	ApprovalDecisionAsk   ApprovalDecisionKind = "ask"
-	ApprovalDecisionDeny  ApprovalDecisionKind = "deny"
+	ApprovalDecisionAllow = permissionsnapshot.ApprovalAllow
+	ApprovalDecisionAsk   = permissionsnapshot.ApprovalAsk
+	ApprovalDecisionDeny  = permissionsnapshot.ApprovalDeny
 )
 
-type ToolPermissionPolicy struct {
-	Visibility       ToolVisibilityClass   `json:"visibility"`
-	Capabilities     []ToolCapabilityClass `json:"capabilities,omitempty"`
-	ResourceKinds    []string              `json:"resource_kinds,omitempty"`
-	ApprovalDecision ApprovalDecisionKind  `json:"approval_decision"`
-}
+type ToolPermissionPolicy = permissionsnapshot.ToolPolicy
 
-type PermissionSnapshot struct {
-	Version               int                             `json:"version"`
-	SnapshotID            string                          `json:"snapshot_id,omitempty"`
-	PermissionType        FlowerPermissionType            `json:"permission_type"`
-	VisibleToolNames      []string                        `json:"visible_tool_names"`
-	PromptCapabilityNames []string                        `json:"prompt_capability_names"`
-	FloretToolNames       []string                        `json:"floret_tool_names"`
-	ToolPolicies          map[string]ToolPermissionPolicy `json:"tool_policies"`
-	SnapshotHash          string                          `json:"snapshot_hash,omitempty"`
-	RegistryHash          string                          `json:"registry_hash,omitempty"`
-	SchemaHash            string                          `json:"schema_hash,omitempty"`
-	PresentationHash      string                          `json:"presentation_hash,omitempty"`
-}
+type PermissionSnapshot = permissionsnapshot.Snapshot
 
-func normalizePermissionType(raw string, fallback FlowerPermissionType) (FlowerPermissionType, error) {
+func parsePermissionType(raw string) (FlowerPermissionType, error) {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "":
-		switch fallback {
-		case "":
-			return FlowerPermissionApprovalRequired, nil
-		case FlowerPermissionReadonly, FlowerPermissionApprovalRequired, FlowerPermissionFullAccess:
-			return fallback, nil
-		default:
-			return "", fmt.Errorf("invalid fallback flower permission type %q", fallback)
-		}
+		return "", fmt.Errorf("flower permission type is empty")
 	case string(FlowerPermissionReadonly):
 		return FlowerPermissionReadonly, nil
 	case string(FlowerPermissionApprovalRequired):
@@ -95,6 +73,16 @@ func normalizePermissionType(raw string, fallback FlowerPermissionType) (FlowerP
 	}
 }
 
+func permissionTypeOrDefault(raw string, defaultType FlowerPermissionType) (FlowerPermissionType, error) {
+	if strings.TrimSpace(raw) != "" {
+		return parsePermissionType(raw)
+	}
+	if _, err := parsePermissionType(string(defaultType)); err != nil {
+		return "", fmt.Errorf("invalid default flower permission type %q", defaultType)
+	}
+	return defaultType, nil
+}
+
 func permissionTypeString(p FlowerPermissionType) string {
 	return string(p)
 }
@@ -104,6 +92,7 @@ func buildPermissionSnapshot(permissionType FlowerPermissionType, activeTools []
 	signalNames := toolNames(activeSignals)
 	policies := make(map[string]ToolPermissionPolicy, len(activeTools)+len(activeSignals))
 	for _, def := range append(append([]ToolDef{}, activeTools...), activeSignals...) {
+		def = normalizeToolPermissionMetadata(def)
 		name := strings.TrimSpace(def.Name)
 		if name == "" {
 			continue
@@ -139,188 +128,15 @@ func buildPermissionSnapshot(permissionType FlowerPermissionType, activeTools []
 }
 
 func validatePermissionSnapshotConsistency(snapshot PermissionSnapshot) error {
-	if snapshot.Version != permissionSnapshotVersionCurrent {
-		return fmt.Errorf("permission snapshot has unsupported version %d", snapshot.Version)
-	}
-	visible, err := uniqueStringSet("visible tools", snapshot.VisibleToolNames)
-	if err != nil {
+	if err := permissionsnapshot.Validate(snapshot); err != nil {
 		return err
-	}
-	prompt, err := uniqueStringSet("prompt capabilities", snapshot.PromptCapabilityNames)
-	if err != nil {
-		return err
-	}
-	if !sameStringSet(visible, prompt) {
-		return fmt.Errorf("permission snapshot prompt capabilities differ from visible tools")
 	}
 	for _, name := range snapshot.FloretToolNames {
-		name = strings.TrimSpace(name)
-		if name == "" {
-			return fmt.Errorf("permission snapshot has empty floret tool")
-		}
-		if _, ok := visible[name]; !ok {
-			return fmt.Errorf("permission snapshot floret tool %q is not visible", name)
-		}
 		if isFlowerControlTool(name) {
 			return fmt.Errorf("permission snapshot floret tool %q is a Flower control signal", name)
 		}
-		if _, ok := snapshot.ToolPolicies[name]; !ok {
-			return fmt.Errorf("permission snapshot floret tool %q is missing policy", name)
-		}
-	}
-	for name, policy := range snapshot.ToolPolicies {
-		name = strings.TrimSpace(name)
-		if name == "" {
-			return fmt.Errorf("permission snapshot has empty policy name")
-		}
-		if _, ok := visible[name]; !ok {
-			return fmt.Errorf("permission snapshot policy %q is not visible", name)
-		}
-		switch snapshot.PermissionType {
-		case FlowerPermissionReadonly:
-			if policy.Visibility == ToolVisibilityStandard {
-				return fmt.Errorf("readonly permission snapshot exposes standard tool %q", name)
-			}
-		case FlowerPermissionApprovalRequired, FlowerPermissionFullAccess:
-			if policy.Visibility == ToolVisibilityReadonlyExclusive {
-				return fmt.Errorf("%s permission snapshot exposes readonly-exclusive tool %q", snapshot.PermissionType, name)
-			}
-		default:
-			return fmt.Errorf("permission snapshot has invalid permission type %q", snapshot.PermissionType)
-		}
 	}
 	return nil
-}
-
-func validateChildPermissionSnapshotSubset(parent PermissionSnapshot, child PermissionSnapshot) error {
-	if parent.PermissionType == "" || child.PermissionType == "" {
-		return fmt.Errorf("permission snapshot subset has missing permission type")
-	}
-	if parent.PermissionType != child.PermissionType {
-		return fmt.Errorf("child permission snapshot permission type %q differs from parent %q", child.PermissionType, parent.PermissionType)
-	}
-	if err := ensureStringListSubset("visible tools", child.VisibleToolNames, parent.VisibleToolNames); err != nil {
-		return err
-	}
-	if err := ensureStringListSubset("prompt capabilities", child.PromptCapabilityNames, parent.PromptCapabilityNames); err != nil {
-		return err
-	}
-	if err := ensureStringListSubset("floret tools", child.FloretToolNames, parent.FloretToolNames); err != nil {
-		return err
-	}
-	for name, childPolicy := range child.ToolPolicies {
-		name = strings.TrimSpace(name)
-		if name == "" {
-			return fmt.Errorf("child permission snapshot has empty policy name")
-		}
-		parentPolicy, ok := parent.ToolPolicies[name]
-		if !ok {
-			return fmt.Errorf("child permission snapshot policy %q is not present in parent", name)
-		}
-		if err := validateChildToolPolicySubset(name, parentPolicy, childPolicy); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func ensureStringListSubset(label string, child []string, parent []string) error {
-	parentSet := make(map[string]struct{}, len(parent))
-	for _, item := range parent {
-		item = strings.TrimSpace(item)
-		if item != "" {
-			parentSet[item] = struct{}{}
-		}
-	}
-	for _, item := range child {
-		item = strings.TrimSpace(item)
-		if item == "" {
-			return fmt.Errorf("child permission snapshot has empty %s entry", label)
-		}
-		if _, ok := parentSet[item]; !ok {
-			return fmt.Errorf("child permission snapshot %s entry %q is not present in parent", label, item)
-		}
-	}
-	return nil
-}
-
-func validateChildToolPolicySubset(name string, parent ToolPermissionPolicy, child ToolPermissionPolicy) error {
-	if parent.Visibility != child.Visibility {
-		return fmt.Errorf("child permission snapshot policy %q visibility %q differs from parent %q", name, child.Visibility, parent.Visibility)
-	}
-	if err := ensureCapabilitySubset(name, child.Capabilities, parent.Capabilities); err != nil {
-		return err
-	}
-	if err := ensureStringListSubset("resource kinds for policy "+name, child.ResourceKinds, parent.ResourceKinds); err != nil {
-		return err
-	}
-	parentDecisionRank := approvalDecisionRank(parent.ApprovalDecision)
-	childDecisionRank := approvalDecisionRank(child.ApprovalDecision)
-	if parentDecisionRank < 0 || childDecisionRank < 0 {
-		return fmt.Errorf("child permission snapshot policy %q has invalid approval decision", name)
-	}
-	if childDecisionRank < parentDecisionRank {
-		return fmt.Errorf("child permission snapshot policy %q weakens approval decision from %q to %q", name, parent.ApprovalDecision, child.ApprovalDecision)
-	}
-	return nil
-}
-
-func ensureCapabilitySubset(name string, child []ToolCapabilityClass, parent []ToolCapabilityClass) error {
-	parentSet := make(map[ToolCapabilityClass]struct{}, len(parent))
-	for _, item := range parent {
-		if item != "" {
-			parentSet[item] = struct{}{}
-		}
-	}
-	for _, item := range child {
-		if item == "" {
-			return fmt.Errorf("child permission snapshot policy %q has empty capability", name)
-		}
-		if _, ok := parentSet[item]; !ok {
-			return fmt.Errorf("child permission snapshot policy %q capability %q is not present in parent", name, item)
-		}
-	}
-	return nil
-}
-
-func approvalDecisionRank(decision ApprovalDecisionKind) int {
-	switch decision {
-	case ApprovalDecisionAllow:
-		return 0
-	case ApprovalDecisionAsk:
-		return 1
-	case ApprovalDecisionDeny:
-		return 2
-	default:
-		return -1
-	}
-}
-
-func uniqueStringSet(label string, values []string) (map[string]struct{}, error) {
-	out := make(map[string]struct{}, len(values))
-	for _, value := range values {
-		value = strings.TrimSpace(value)
-		if value == "" {
-			return nil, fmt.Errorf("permission snapshot has empty %s entry", label)
-		}
-		if _, ok := out[value]; ok {
-			return nil, fmt.Errorf("permission snapshot has duplicate %s entry %q", label, value)
-		}
-		out[value] = struct{}{}
-	}
-	return out, nil
-}
-
-func sameStringSet(a map[string]struct{}, b map[string]struct{}) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for key := range a {
-		if _, ok := b[key]; !ok {
-			return false
-		}
-	}
-	return true
 }
 
 func toolNames(tools []ToolDef) []string {
@@ -404,12 +220,6 @@ func normalizeToolPermissionMetadata(def ToolDef) ToolDef {
 }
 
 func permissionSnapshotWithOwnerIdentity(snapshot PermissionSnapshot, endpointID string, threadID string, runID string) PermissionSnapshot {
-	if snapshot.Version == 0 {
-		snapshot.Version = permissionSnapshotVersionCurrent
-	}
-	if snapshot.SnapshotHash == "" {
-		snapshot.SnapshotHash = permissionSnapshotHash(snapshot)
-	}
 	seed := strings.Join([]string{
 		strings.TrimSpace(endpointID),
 		strings.TrimSpace(threadID),
@@ -422,54 +232,7 @@ func permissionSnapshotWithOwnerIdentity(snapshot PermissionSnapshot, endpointID
 }
 
 func permissionSnapshotHash(snapshot PermissionSnapshot) string {
-	version := snapshot.Version
-	if version == 0 {
-		version = permissionSnapshotVersionCurrent
-	}
-	if version != permissionSnapshotVersionCurrent {
-		return ""
-	}
-	type hashView struct {
-		Version               int                             `json:"version"`
-		PermissionType        FlowerPermissionType            `json:"permission_type"`
-		VisibleToolNames      []string                        `json:"visible_tool_names"`
-		PromptCapabilityNames []string                        `json:"prompt_capability_names"`
-		FloretToolNames       []string                        `json:"floret_tool_names"`
-		ToolPolicies          map[string]ToolPermissionPolicy `json:"tool_policies"`
-		RegistryHash          string                          `json:"registry_hash,omitempty"`
-		SchemaHash            string                          `json:"schema_hash,omitempty"`
-		PresentationHash      string                          `json:"presentation_hash,omitempty"`
-	}
-	view := hashView{
-		Version:               version,
-		PermissionType:        snapshot.PermissionType,
-		VisibleToolNames:      append([]string(nil), snapshot.VisibleToolNames...),
-		PromptCapabilityNames: append([]string(nil), snapshot.PromptCapabilityNames...),
-		FloretToolNames:       append([]string(nil), snapshot.FloretToolNames...),
-		ToolPolicies:          snapshot.ToolPolicies,
-		RegistryHash:          strings.TrimSpace(snapshot.RegistryHash),
-		SchemaHash:            strings.TrimSpace(snapshot.SchemaHash),
-		PresentationHash:      strings.TrimSpace(snapshot.PresentationHash),
-	}
-	sort.Strings(view.VisibleToolNames)
-	sort.Strings(view.PromptCapabilityNames)
-	sort.Strings(view.FloretToolNames)
-	payload, _ := json.Marshal(view)
-	sum := sha256.Sum256(payload)
-	return base64.RawURLEncoding.EncodeToString(sum[:])
-}
-
-func stableStringListHash(values []string) string {
-	cleaned := make([]string, 0, len(values))
-	for _, value := range values {
-		if value = strings.TrimSpace(value); value != "" {
-			cleaned = append(cleaned, value)
-		}
-	}
-	sort.Strings(cleaned)
-	payload, _ := json.Marshal(cleaned)
-	sum := sha256.Sum256(payload)
-	return base64.RawURLEncoding.EncodeToString(sum[:])
+	return permissionsnapshot.Hash(snapshot)
 }
 
 func stableToolRegistryHash(tools []ToolDef) string {

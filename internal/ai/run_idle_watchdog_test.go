@@ -22,17 +22,17 @@ func TestRunIdleWatchdog_DoesNotCancelWhileToolBusy(t *testing.T) {
 	t.Cleanup(func() { _ = svc.terminalProcesses.Close(context.Background()) })
 
 	r := newRun(runOptions{
-		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
-		AgentHomeDir: root,
-		Shell:        "bash",
-		Service:      svc,
-		SessionMeta:  meta,
-		RunID:        "run_test_idle_watchdog",
-		ChannelID:    "ch_test",
-		EndpointID:   "env_test",
-		ThreadID:     "th_test",
-		MessageID:    "m_test",
-		IdleTimeout:  150 * time.Millisecond,
+		Log:              slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		AgentHomeDir:     root,
+		Shell:            "bash",
+		HostCapabilities: bindTestRunHostCapabilities(t, svc, "env_test", "th_test"),
+		SessionMeta:      meta,
+		RunID:            "run_test_idle_watchdog",
+		ChannelID:        "ch_test",
+		EndpointID:       "env_test",
+		ThreadID:         "th_test",
+		MessageID:        "m_test",
+		IdleTimeout:      150 * time.Millisecond,
 	})
 	owner := &terminalProcessTestOwner{}
 	r.permissionType = FlowerPermissionFullAccess
@@ -45,7 +45,7 @@ func TestRunIdleWatchdog_DoesNotCancelWhileToolBusy(t *testing.T) {
 
 	go r.runIdleWatchdog(ctx)
 
-	outcome, err := r.handleToolCall(ctx, "tool_1", "terminal.exec", map[string]any{
+	outcome, err := r.handleToolCall(authorizedToolContextForTestFrom(t, ctx, r, "tool_1", "terminal.exec"), "tool_1", "terminal.exec", map[string]any{
 		"command":  "sleep 0.3; echo ok",
 		"yield_ms": 1000,
 	})
@@ -88,7 +88,7 @@ func TestHandleToolCall_FileWriteDoesNotRequireWorkspaceCheckpoint(t *testing.T)
 	r.permissionType = FlowerPermissionFullAccess
 	allowToolsForTest(t, r, "file.write")
 
-	outcome, err := r.handleToolCall(context.Background(), "tool_file_write_1", "file.write", map[string]any{
+	outcome, err := r.handleToolCall(authorizedToolContextForTest(t, r, "tool_file_write_1", "file.write"), "tool_file_write_1", "file.write", map[string]any{
 		"file_path": "note.txt",
 		"content":   "ok\n",
 	})

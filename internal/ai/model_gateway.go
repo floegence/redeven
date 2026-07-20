@@ -3069,7 +3069,7 @@ func (r *run) waitForTaskCompleteConfirm(ctx context.Context, resultText string)
 		requestedAtMs: time.Now().UnixMilli(),
 	}
 	r.mu.Unlock()
-	if r.service == nil {
+	if r.host.hasPendingApprovals == nil {
 		r.promoteToolApproval(toolID)
 	}
 	r.publishControlConfirmationRequested(toolID)

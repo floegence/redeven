@@ -22,6 +22,8 @@ type Store struct {
 	db *sql.DB
 }
 
+var ErrThreadRetired = errors.New("thread read state retired")
+
 type Record struct {
 	EndpointID                string  `json:"endpoint_id"`
 	ScopeID                   string  `json:"scope_id"`
@@ -118,35 +120,40 @@ func (s *Store) AdvanceCodex(
 	return record, nil
 }
 
-func (s *Store) DeleteThread(
-	ctx context.Context,
-	endpointID string,
-	surface Surface,
-	threadID string,
-) error {
+func (s *Store) RetireFlowerThreadReadState(ctx context.Context, endpointID string, threadID string) error {
+	return s.retireThread(ctx, endpointID, SurfaceFlower, threadID)
+}
+
+func (s *Store) retireThread(ctx context.Context, endpointID string, surface Surface, threadID string) error {
 	if s == nil || s.db == nil {
 		return errors.New("thread read state store not initialized")
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	scope, err := normalizeThreadScope(threadScopeKey{
-		EndpointID: endpointID,
-		Surface:    surface,
-		ThreadID:   threadID,
-	})
+	scope, err := normalizeThreadScope(threadScopeKey{EndpointID: endpointID, Surface: surface, ThreadID: threadID})
 	if err != nil {
 		return err
 	}
-	_, err = s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.ExecContext(ctx, `
+INSERT INTO thread_read_state_retirements(endpoint_id, surface, thread_id, retired_at_unix_ms)
+VALUES(?, ?, ?, ?)
+ON CONFLICT(endpoint_id, surface, thread_id) DO NOTHING
+`, scope.EndpointID, string(scope.Surface), scope.ThreadID, time.Now().UnixMilli()); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `
 DELETE FROM thread_read_state
 WHERE endpoint_id = ? AND surface = ? AND thread_id = ?
-`, scope.EndpointID, string(scope.Surface), scope.ThreadID)
-	return err
-}
-
-func (s *Store) DeleteFlowerThreadReadState(ctx context.Context, endpointID string, threadID string) error {
-	return s.DeleteThread(ctx, endpointID, SurfaceFlower, threadID)
+`, scope.EndpointID, string(scope.Surface), scope.ThreadID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 type recordKey struct {
@@ -205,6 +212,9 @@ func (s *Store) ensure(
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := rejectRetiredThreadsTx(ctx, tx, key.EndpointID, key.Surface, threadIDs); err != nil {
+		return nil, err
+	}
 
 	out, err := loadRecordsByThreadTx(ctx, tx, key, threadIDs)
 	if err != nil {
@@ -258,6 +268,9 @@ func (s *Store) advance(
 		return Record{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := rejectRetiredThreadsTx(ctx, tx, key.EndpointID, key.Surface, []string{key.ThreadID}); err != nil {
+		return Record{}, err
+	}
 
 	current, err := loadRecordTx(ctx, tx, key)
 	if err != nil {
@@ -289,6 +302,29 @@ func (s *Store) advance(
 		return Record{}, err
 	}
 	return next, nil
+}
+
+func rejectRetiredThreadsTx(ctx context.Context, tx *sql.Tx, endpointID string, surface Surface, threadIDs []string) error {
+	if tx == nil {
+		return errors.New("thread read state transaction is unavailable")
+	}
+	for _, threadID := range threadIDs {
+		var retired int
+		err := tx.QueryRowContext(ctx, `
+SELECT 1
+FROM thread_read_state_retirements
+WHERE endpoint_id = ? AND surface = ? AND thread_id = ?
+`, strings.TrimSpace(endpointID), string(surface), normalizeThreadID(threadID)).Scan(&retired)
+		switch {
+		case err == nil:
+			return ErrThreadRetired
+		case errors.Is(err, sql.ErrNoRows):
+			continue
+		default:
+			return err
+		}
+	}
+	return nil
 }
 
 func loadRecordTx(ctx context.Context, tx *sql.Tx, key recordKey) (*Record, error) {

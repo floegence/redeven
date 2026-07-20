@@ -93,8 +93,7 @@ type Options struct {
 	// It should read from a local secrets store, not from config.json.
 	ResolveWebSearchProviderAPIKey func(providerID string) (string, bool, error)
 
-	FlowerReadStateCleaner    FlowerReadStateCleaner
-	OpenThreadMaintenanceHost func() (ThreadMaintenanceHost, error)
+	FlowerReadStateCleaner FlowerReadStateCleaner
 }
 
 type Service struct {
@@ -144,20 +143,31 @@ type Service struct {
 
 	delegatedApprovals map[string]*delegatedApprovalHandle
 
-	uploadsDir  string
-	threadsDB   *threadstore.Store
-	floretStore *flruntime.Store
+	uploadsDir string
+	threadsDB  *threadstore.Store
+
+	closeFloret        func() error
+	floretReads        *floretReadCapabilities
+	floretRuntime      *floretRuntimeCapabilityIssuer
+	threadCreateFloret *threadCreateFloretCoordinator
+	threadTitleFloret  *threadTitleFloretCoordinator
+	threadForkFloret   *threadForkFloretCoordinator
+	threadDeleteFloret *threadDeleteFloretCoordinator
 
 	capabilityResolver *contextadapter.Resolver
 	skillManager       *skillManager
 	terminalProcesses  *terminalProcessManager
 
-	flowerReadStateCleaner    FlowerReadStateCleaner
-	openDeleteMaintenanceHost func() (ThreadMaintenanceHost, error)
-	threadForkBroadcastMu     sync.Mutex
-	maintenanceStopCh         chan struct{}
-	maintenanceDoneCh         chan struct{}
-	compactionScheduled       bool
+	flowerReadStateCleaner FlowerReadStateCleaner
+	threadForkBroadcastMu  sync.Mutex
+	maintenanceStopCh      chan struct{}
+	maintenanceDoneCh      chan struct{}
+	compactionScheduled    bool
+	recoveryMu             sync.RWMutex
+	recoveryPending        bool
+	recoveryErr            error
+	recoveryStopCh         chan struct{}
+	recoveryWG             sync.WaitGroup
 }
 
 var flowerLiveGenerationSeed atomic.Int64
@@ -249,27 +259,31 @@ func NewService(opts Options) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	floretStore, err := flruntime.OpenSQLiteStore(floretStorePath)
+	floretBootstrap, floretRecovery, err := openFloretRuntime(floretStorePath)
 	if err != nil {
-		return nil, err
-	}
-	migrationHost, err := flruntime.NewThreadMaintenanceHost(flruntime.ThreadMaintenanceHostOptions{Store: floretStore})
-	if err != nil {
-		_ = floretStore.Close()
 		return nil, err
 	}
 	threadsPath := filepath.Join(strings.TrimSpace(opts.StateDir), "ai", "threads.sqlite")
 	ts, err := threadstore.Open(threadsPath, threadstore.WithLegacyThreadTitleMigrator(func(_ context.Context, legacy threadstore.LegacyThreadTitle) error {
 		ctx, cancel := context.WithTimeout(context.Background(), persistTO)
 		defer cancel()
-		overview, err := migrationHost.ReadThreadOverview(ctx, flruntime.ThreadID(legacy.ThreadID))
+		threadID := flruntime.ThreadID(strings.TrimSpace(legacy.ThreadID))
+		readHost, err := floretBootstrap.newThreadRead(ctx, threadID)
+		if err != nil {
+			return fmt.Errorf("bind canonical Floret title read: %w", err)
+		}
+		overview, err := readHost.ReadThreadOverview(ctx, threadID)
 		if err != nil {
 			return fmt.Errorf("read canonical Floret title: %w", err)
 		}
 		canonicalTitle := strings.TrimSpace(overview.Thread.Title)
 		switch {
 		case canonicalTitle == "":
-			_, err = migrationHost.SetThreadTitle(ctx, flruntime.SetThreadTitleRequest{ThreadID: flruntime.ThreadID(legacy.ThreadID), Title: legacy.Title})
+			titleHost, bindErr := floretBootstrap.newThreadTitle(ctx, threadID, nil)
+			if bindErr != nil {
+				return fmt.Errorf("bind canonical Floret title write: %w", bindErr)
+			}
+			_, err = titleHost.SetThreadTitle(ctx, flruntime.SetThreadTitleRequest{ThreadID: threadID, Title: legacy.Title})
 			return err
 		case canonicalTitle == strings.TrimSpace(legacy.Title):
 			return nil
@@ -278,7 +292,7 @@ func NewService(opts Options) (*Service, error) {
 		}
 	}))
 	if err != nil {
-		_ = floretStore.Close()
+		_ = floretBootstrap.close()
 		return nil, err
 	}
 
@@ -293,7 +307,7 @@ func NewService(opts Options) (*Service, error) {
 	toolTargetPolicy := normalizeToolTargetPolicy(opts.ToolTargetPolicy)
 	if toolTargetPolicy.requiresExplicitTarget() && opts.TargetToolExecutor == nil {
 		_ = ts.Close()
-		_ = floretStore.Close()
+		_ = floretBootstrap.close()
 		return nil, errors.New("explicit target tool policy requires TargetToolExecutor")
 	}
 	maxWall := opts.RunMaxWallTime
@@ -350,13 +364,22 @@ func NewService(opts Options) (*Service, error) {
 		suppressQueuedDrainByTh:      make(map[string]bool),
 		uploadsDir:                   uploadsDir,
 		threadsDB:                    ts,
-		floretStore:                  floretStore,
-		capabilityResolver:           capabilityResolver,
-		skillManager:                 newSkillManager(agentHomeDir, strings.TrimSpace(opts.StateDir)),
-		flowerReadStateCleaner:       opts.FlowerReadStateCleaner,
-		openDeleteMaintenanceHost:    opts.OpenThreadMaintenanceHost,
-		maintenanceStopCh:            make(chan struct{}),
-		maintenanceDoneCh:            make(chan struct{}),
+		closeFloret:                  floretBootstrap.close,
+		floretReads: &floretReadCapabilities{
+			thread:   floretBootstrap.newThreadRead,
+			subagent: floretBootstrap.newSubagentRead,
+		},
+		floretRuntime:          &floretRuntimeCapabilityIssuer{bind: floretBootstrap.bindThreadRuntime},
+		threadCreateFloret:     &threadCreateFloretCoordinator{authority: floretBootstrap.threadCreate},
+		threadTitleFloret:      &threadTitleFloretCoordinator{authority: floretBootstrap.threadTitle},
+		threadForkFloret:       &threadForkFloretCoordinator{authority: floretBootstrap.threadFork},
+		threadDeleteFloret:     &threadDeleteFloretCoordinator{authority: floretBootstrap.threadDelete},
+		capabilityResolver:     capabilityResolver,
+		skillManager:           newSkillManager(agentHomeDir, strings.TrimSpace(opts.StateDir)),
+		flowerReadStateCleaner: opts.FlowerReadStateCleaner,
+		maintenanceStopCh:      make(chan struct{}),
+		maintenanceDoneCh:      make(chan struct{}),
+		recoveryStopCh:         make(chan struct{}),
 	}
 	svc.terminalProcesses = newTerminalProcessManager()
 	if svc.skillManager != nil {
@@ -364,16 +387,60 @@ func NewService(opts Options) (*Service, error) {
 	}
 	svc.threadMgr = newThreadManager(svc)
 	deleteReplayCtx, cancelDeleteReplay := context.WithTimeout(context.Background(), persistTO)
-	deleteReplayCount, deleteReplayErr := svc.replayPendingThreadDeletes(deleteReplayCtx, threadDeleteReplayBatchSize)
+	deleteReplayCount, deleteReplayErr := svc.replayAllPendingThreadDeletesForStartup(deleteReplayCtx, threadDeleteReplayBatchSize)
 	cancelDeleteReplay()
 	if deleteReplayErr != nil {
-		logger.Warn("ai: pending thread delete recovery failed", "error", deleteReplayErr)
+		closeServiceBeforeMaintenance(svc)
+		return nil, fmt.Errorf("recover pending thread deletes: %w", deleteReplayErr)
 	} else if deleteReplayCount > 0 {
 		logger.Info("ai: pending thread delete recovery completed", "count", deleteReplayCount)
+	}
+	createReplayCtx, cancelCreateReplay := context.WithTimeout(context.Background(), persistTO)
+	createReplayErr := svc.recoverPreTurnStartupOperations(createReplayCtx)
+	cancelCreateReplay()
+	if createReplayErr != nil {
+		closeServiceBeforeMaintenance(svc)
+		return nil, createReplayErr
+	}
+	recoveryTargetsCtx, recoveryTargetsCancel := context.WithTimeout(context.Background(), persistTO)
+	recoveryTargets, recoveryTargetsErr := buildFloretStartupRecoveryTargets(recoveryTargetsCtx, ts, floretRecovery)
+	recoveryTargetsCancel()
+	if recoveryTargetsErr != nil {
+		closeServiceBeforeMaintenance(svc)
+		return nil, fmt.Errorf("bind exact Floret startup recovery targets: %w", recoveryTargetsErr)
+	}
+	if err := svc.startFloretStartupRecovery(recoveryTargets); err != nil {
+		closeServiceBeforeMaintenance(svc)
+		return nil, err
 	}
 	svc.scheduleQueuedTurnRecovery()
 	svc.startBackgroundMaintenance()
 	return svc, nil
+}
+
+func closeServiceBeforeMaintenance(s *Service) {
+	if s == nil {
+		return
+	}
+	if s.threadMgr != nil {
+		s.threadMgr.Close()
+	}
+	if s.recoveryStopCh != nil {
+		close(s.recoveryStopCh)
+		s.recoveryStopCh = nil
+	}
+	s.recoveryWG.Wait()
+	if s.terminalProcesses != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), s.persistTimeout())
+		_ = s.terminalProcesses.Close(ctx)
+		cancel()
+	}
+	if s.threadsDB != nil {
+		_ = s.threadsDB.Close()
+	}
+	if s.closeFloret != nil {
+		_ = s.closeFloret()
+	}
 }
 
 func (s *Service) scheduleQueuedTurnRecovery() {
@@ -405,36 +472,62 @@ func (s *Service) scheduleQueuedTurnRecovery() {
 		if endpointID == "" || threadID == "" {
 			continue
 		}
-		ctx, cancel := context.WithTimeout(context.Background(), persistTO)
-		commands, listErr := db.ListFollowupsByLane(ctx, endpointID, threadID, threadstore.FollowupLaneQueued, 500)
-		cancel()
-		if listErr != nil {
-			if s.log != nil {
-				s.log.Warn("ai: pending turn command reconciliation failed", "thread_id", threadID, "error", listErr)
+		func() {
+			if s.threadMgr == nil {
+				return
 			}
-			continue
-		}
-		for _, command := range commands {
-			reconcileCtx, reconcileCancel := context.WithTimeout(context.Background(), persistTO)
-			_, reconcileErr := s.reconcilePendingTurnCommand(reconcileCtx, endpointID, threadID, command.QueueID, command.TurnID, nil)
-			reconcileCancel()
-			if reconcileErr != nil && s.log != nil {
-				s.log.Warn("ai: pending turn command reconciliation failed", "thread_id", threadID, "turn_id", command.TurnID, "error", reconcileErr)
+			unlock, lockErr := s.threadMgr.lockThreadLifecycle(endpointID, threadID)
+			if lockErr != nil {
+				if s.log != nil {
+					s.log.Warn("ai: queued turn recovery lifecycle lock failed", "thread_id", threadID, "error", lockErr)
+				}
+				return
 			}
-		}
-		readCtx, readCancel := context.WithTimeout(context.Background(), persistTO)
-		host, hostErr := s.openFloretMaintenanceHost()
-		var snapshot flruntime.ThreadSnapshot
-		if hostErr == nil {
-			snapshot, hostErr = host.ReadThread(readCtx, flruntime.ThreadID(threadID))
-		}
-		readCancel()
-		if hostErr == nil && !snapshot.CanAppendMessage {
-			continue
-		}
-		if s.threadMgr != nil {
+			defer unlock()
+			s.mu.Lock()
+			threadKey := runThreadKey(endpointID, threadID)
+			activeRunID := strings.TrimSpace(s.activeRunByTh[threadKey])
+			finalizingRunID := strings.TrimSpace(s.stopFinalizingByTh[threadKey])
+			idleCompaction := s.idleCompactionByTh[threadKey]
+			s.mu.Unlock()
+			if activeRunID != "" || finalizingRunID != "" || (idleCompaction != nil && idleCompaction.busy()) {
+				return
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), persistTO)
+			commands, listErr := db.ListFollowupsByLane(ctx, endpointID, threadID, threadstore.FollowupLaneQueued, 500)
+			cancel()
+			if listErr != nil {
+				if s.log != nil {
+					s.log.Warn("ai: pending turn command reconciliation failed", "thread_id", threadID, "error", listErr)
+				}
+				return
+			}
+			for _, command := range commands {
+				reconcileCtx, reconcileCancel := context.WithTimeout(context.Background(), persistTO)
+				_, reconcileErr := s.reconcilePendingTurnCommand(reconcileCtx, endpointID, threadID, command.QueueID, command.TurnID, nil)
+				reconcileCancel()
+				if reconcileErr != nil && s.log != nil {
+					s.log.Warn("ai: pending turn command reconciliation failed", "thread_id", threadID, "turn_id", command.TurnID, "error", reconcileErr)
+				}
+			}
+			readCtx, readCancel := context.WithTimeout(context.Background(), persistTO)
+			host, hostErr := s.openFloretThreadReadHost(readCtx, threadID)
+			var snapshot flruntime.ThreadSnapshot
+			if hostErr == nil {
+				snapshot, hostErr = host.ReadThread(readCtx, flruntime.ThreadID(threadID))
+			}
+			readCancel()
+			if hostErr != nil {
+				if s.log != nil {
+					s.log.Warn("ai: queued turn canonical thread read failed", "thread_id", threadID, "error", hostErr)
+				}
+				return
+			}
+			if !snapshot.CanAppendMessage {
+				return
+			}
 			s.threadMgr.Wake(endpointID, threadID)
-		}
+		}()
 	}
 }
 
@@ -449,7 +542,14 @@ func (s *Service) Close() error {
 	terminalProcesses := s.terminalProcesses
 	s.terminalProcesses = nil
 	ts := s.threadsDB
-	floretStore := s.floretStore
+	closeFloret := s.closeFloret
+	s.closeFloret = nil
+	s.floretReads = nil
+	s.floretRuntime = nil
+	s.threadCreateFloret = nil
+	s.threadTitleFloret = nil
+	s.threadForkFloret = nil
+	s.threadDeleteFloret = nil
 	writers := make([]*aiSinkWriter, 0, len(s.realtimeWriters))
 	for srv, w := range s.realtimeWriters {
 		if w == nil {
@@ -466,8 +566,10 @@ func (s *Service) Close() error {
 	s.delegatedApprovals = make(map[string]*delegatedApprovalHandle)
 	maintenanceStopCh := s.maintenanceStopCh
 	maintenanceDoneCh := s.maintenanceDoneCh
+	recoveryStopCh := s.recoveryStopCh
 	s.maintenanceStopCh = nil
 	s.maintenanceDoneCh = nil
+	s.recoveryStopCh = nil
 	runs := make([]*run, 0, len(s.runs))
 	for _, r := range s.runs {
 		if r != nil {
@@ -501,9 +603,13 @@ func (s *Service) Close() error {
 	if maintenanceStopCh != nil {
 		close(maintenanceStopCh)
 	}
+	if recoveryStopCh != nil {
+		close(recoveryStopCh)
+	}
 	if maintenanceDoneCh != nil {
 		<-maintenanceDoneCh
 	}
+	s.recoveryWG.Wait()
 	for _, w := range writers {
 		w.Close()
 	}
@@ -525,9 +631,6 @@ func (s *Service) Close() error {
 	if s.threadsDB == ts {
 		s.threadsDB = nil
 	}
-	if s.floretStore == floretStore {
-		s.floretStore = nil
-	}
 	s.runs = make(map[string]*run)
 	s.activeRunByTh = make(map[string]string)
 	s.stopFinalizingByTh = make(map[string]string)
@@ -538,8 +641,8 @@ func (s *Service) Close() error {
 		runtime.release()
 	}
 	var floretCloseErr error
-	if floretStore != nil {
-		floretCloseErr = floretStore.Close()
+	if closeFloret != nil {
+		floretCloseErr = closeFloret()
 	}
 	var threadCloseErr error
 	if ts != nil {
@@ -564,12 +667,27 @@ func (s *Service) ensureThreadSubagentRuntimeLocked(thKey string, r *run) subage
 	}
 	runtime := s.subagentRuntimes[thKey]
 	if runtime == nil {
-		runtime = newFloretSubagentRuntime(r)
+		runtime = newFloretSubagentRuntimeWithExecutionOwner(r, s.bindSubagentExecutionForParent)
 		s.subagentRuntimes[thKey] = runtime
 	} else {
 		runtime.attachParentRun(r)
 	}
 	return runtime
+}
+
+func (s *Service) bindSubagentExecutionForParent(parent *run, childThreadID string, childRunID string) (subagentExecutionCapabilities, error) {
+	if s == nil || parent == nil {
+		return subagentExecutionCapabilities{}, errors.New("SubAgent execution coordinator is unavailable")
+	}
+	host, err := s.bindExactRunExecutionCapabilities(parent.endpointID, childThreadID, parent.threadID)
+	if err != nil {
+		return subagentExecutionCapabilities{}, err
+	}
+	product, err := bindChildRunProductCapabilities(s.threadsDB, parent.endpointID, parent.threadID, childThreadID, childRunID)
+	if err != nil {
+		return subagentExecutionCapabilities{}, err
+	}
+	return subagentExecutionCapabilities{host: host, product: product}, nil
 }
 
 func (s *Service) removeThreadSubagentRuntime(thKey string) *floretSubagentRuntime {
@@ -587,13 +705,13 @@ func (s *Service) removeThreadSubagentRuntime(thKey string) *floretSubagentRunti
 	return runtime
 }
 
-func (s *Service) closeThreadSubagents(ctx context.Context, endpointID string, threadID string, timeout time.Duration) {
+func (s *Service) closeThreadSubagents(ctx context.Context, endpointID string, threadID string, timeout time.Duration) error {
 	if s == nil {
-		return
+		return errors.New("nil service")
 	}
 	thKey := runThreadKey(endpointID, threadID)
 	if thKey == "" {
-		return
+		return errors.New("invalid thread identity")
 	}
 	s.mu.Lock()
 	runtime := s.subagentRuntimes[thKey]
@@ -605,56 +723,64 @@ func (s *Service) closeThreadSubagents(ctx context.Context, endpointID string, t
 		closeCtx, cancel := context.WithTimeout(ctxOrBackground(ctx), timeout)
 		defer cancel()
 		if runtime.currentHost() != nil {
-			runtime.closeAllExisting(closeCtx)
-			return
+			return runtime.closeAllExisting(closeCtx)
 		}
-		s.closeThreadSubagentsWithMaintenanceHost(closeCtx, threadID)
-		return
+		return s.requireNoUnownedActiveSubagents(closeCtx, threadID)
 	}
 	if timeout <= 0 {
 		timeout = defaultPersistOpTimeout
 	}
 	closeCtx, cancel := context.WithTimeout(ctxOrBackground(ctx), timeout)
 	defer cancel()
-	s.closeThreadSubagentsWithMaintenanceHost(closeCtx, threadID)
+	return s.requireNoUnownedActiveSubagents(closeCtx, threadID)
 }
 
-func (s *Service) closeThreadSubagentsWithMaintenanceHost(ctx context.Context, threadID string) {
+func (s *Service) requireNoUnownedActiveSubagents(ctx context.Context, threadID string) error {
 	if s == nil {
-		return
+		return errors.New("nil service")
 	}
 	threadID = strings.TrimSpace(threadID)
 	if threadID == "" {
-		return
+		return errors.New("missing thread_id")
 	}
-	host, err := s.openFloretMaintenanceHost()
+	host, err := s.openFloretSubagentReadHost(ctx, threadID)
 	if err != nil {
-		return
+		return err
 	}
-	_, _ = host.CloseSubAgents(ctx, flruntime.CloseSubAgentsRequest{
-		ParentThreadID: flruntime.ThreadID(threadID),
-		Reason:         "parent_stop",
-	})
+	snapshots, err := host.ListSubAgents(ctx, flruntime.ThreadID(threadID))
+	if err != nil {
+		return err
+	}
+	for _, snapshot := range snapshots {
+		if snapshot.CanClose && !snapshot.Closed {
+			return errors.New("active SubAgent lifecycle owner is unavailable")
+		}
+	}
+	return nil
 }
 
-func isFloretThreadNotFoundError(err error) bool {
-	if err == nil {
-		return false
+func (s *Service) openFloretThreadReadHost(ctx context.Context, threadID string) (floretThreadReadHost, error) {
+	if s == nil || s.floretReads == nil {
+		return nil, errors.New("floret read capability not ready")
 	}
-	return errors.Is(err, flruntime.ErrThreadNotFound)
+	return s.floretReads.openThread(ctx, threadID)
 }
 
-func (s *Service) openFloretMaintenanceHost() (*flruntime.ThreadMaintenanceHost, error) {
-	if s == nil {
-		return nil, errors.New("nil service")
+func (s *Service) openFloretSubagentReadHost(ctx context.Context, parentThreadID string) (floretSubagentReadHost, error) {
+	if s == nil || s.floretReads == nil {
+		return nil, errors.New("floret SubAgent read capability not ready")
 	}
-	s.mu.Lock()
-	store := s.floretStore
-	s.mu.Unlock()
-	if store == nil {
-		return nil, errors.New("floret store not ready")
+	return s.floretReads.openSubagent(ctx, parentThreadID)
+}
+
+func (s *Service) bindFloretThreadRuntime(threadID string) (floretThreadRuntimeCapabilities, error) {
+	if s == nil || s.floretRuntime == nil {
+		return floretThreadRuntimeCapabilities{}, errors.New("floret thread runtime capability not ready")
 	}
-	return flruntime.NewThreadMaintenanceHost(flruntime.ThreadMaintenanceHostOptions{Store: store})
+	if err := s.requireFloretStartupRecoveryComplete(); err != nil {
+		return floretThreadRuntimeCapabilities{}, err
+	}
+	return s.floretRuntime.bindThread(threadID)
 }
 
 func (s *Service) Enabled() bool {
@@ -1504,7 +1630,7 @@ func (s *Service) StartRunDetached(meta *session.Meta, runID string, req RunStar
 	return nil
 }
 
-func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta, runID string, req RunStartRequest, sourceFollowupID string, requireSourceFollowup bool) (persistedUserMessage, RunInput, error) {
+func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta, runID string, req RunStartRequest, sourceFollowupID string) (persistedUserMessage, RunInput, error) {
 	if s == nil {
 		return persistedUserMessage{}, req.Input, errors.New("nil service")
 	}
@@ -1529,62 +1655,67 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 	if err != nil {
 		return persistedUserMessage{}, normalizedInput, err
 	}
-	commandID := strings.TrimSpace(sourceFollowupID)
-	if commandID == "" {
-		commandID, err = NewQueuedTurnID()
-		if err != nil {
+	commandID, err := NewQueuedTurnID()
+	if err != nil {
+		s.releasePreparedRun(prepared)
+		return persistedUserMessage{}, normalizedInput, err
+	}
+	contextActionJSON, marshalErr := marshalQueuedTurnContextAction(normalizedInput.ContextAction)
+	if marshalErr != nil {
+		s.releasePreparedRun(prepared)
+		return persistedUserMessage{}, normalizedInput, marshalErr
+	}
+	attachmentsJSON, marshalErr := marshalQueuedTurnAttachments(normalizedInput.Attachments)
+	if marshalErr != nil {
+		s.releasePreparedRun(prepared)
+		return persistedUserMessage{}, normalizedInput, marshalErr
+	}
+	optionsJSON, marshalErr := marshalQueuedTurnOptions(req.Options)
+	if marshalErr != nil {
+		s.releasePreparedRun(prepared)
+		return persistedUserMessage{}, normalizedInput, marshalErr
+	}
+	sessionMetaJSON, marshalErr := marshalQueuedTurnSessionMeta(meta)
+	if marshalErr != nil {
+		s.releasePreparedRun(prepared)
+		return persistedUserMessage{}, normalizedInput, marshalErr
+	}
+	record := threadstore.QueuedTurn{
+		QueueID: commandID, EndpointID: endpointID, ThreadID: threadID,
+		ChannelID: strings.TrimSpace(meta.ChannelID), Lane: threadstore.FollowupLaneQueued,
+		TurnID: prepared.messageID, RunID: runID, ModelID: strings.TrimSpace(req.Model),
+		TextContent: strings.TrimSpace(normalizedInput.Text), AttachmentsJSON: attachmentsJSON,
+		ContextActionJSON: contextActionJSON, OptionsJSON: optionsJSON, SessionMetaJSON: sessionMetaJSON,
+		CreatedByUserPublicID: strings.TrimSpace(meta.UserPublicID), CreatedByUserEmail: strings.TrimSpace(meta.UserEmail),
+		CreatedAtUnixMs: preparedUser.CreatedAtUnixMs,
+	}
+	pctx, cancel := context.WithTimeout(ctx, prepared.persistTO)
+	if sourceID := strings.TrimSpace(sourceFollowupID); sourceID != "" {
+		replacement, replaceErr := prepared.db.ReplaceFollowupWithUploadRefs(pctx, sourceID, record, preparedUser.UploadIDs, preparedUser.CreatedAtUnixMs)
+		cancel()
+		if replaceErr != nil {
 			s.releasePreparedRun(prepared)
-			return persistedUserMessage{}, normalizedInput, err
+			return persistedUserMessage{}, normalizedInput, replaceErr
 		}
-		contextActionJSON, marshalErr := marshalQueuedTurnContextAction(normalizedInput.ContextAction)
-		if marshalErr != nil {
-			s.releasePreparedRun(prepared)
-			return persistedUserMessage{}, normalizedInput, marshalErr
+		if _, cleanupErr := s.processUploadCleanupCandidates(ctx, replacement.UploadsToDelete); cleanupErr != nil && s.log != nil {
+			s.log.Warn("pending turn replacement physical cleanup deferred", "thread_id", threadID, "source_followup_id", sourceID, "error", cleanupErr)
 		}
-		attachmentsJSON, marshalErr := marshalQueuedTurnAttachments(normalizedInput.Attachments)
-		if marshalErr != nil {
-			s.releasePreparedRun(prepared)
-			return persistedUserMessage{}, normalizedInput, marshalErr
-		}
-		optionsJSON, marshalErr := marshalQueuedTurnOptions(req.Options)
-		if marshalErr != nil {
-			s.releasePreparedRun(prepared)
-			return persistedUserMessage{}, normalizedInput, marshalErr
-		}
-		sessionMetaJSON, marshalErr := marshalQueuedTurnSessionMeta(meta)
-		if marshalErr != nil {
-			s.releasePreparedRun(prepared)
-			return persistedUserMessage{}, normalizedInput, marshalErr
-		}
-		record := threadstore.QueuedTurn{
-			QueueID: commandID, EndpointID: endpointID, ThreadID: threadID,
-			ChannelID: strings.TrimSpace(meta.ChannelID), Lane: threadstore.FollowupLaneQueued,
-			TurnID: prepared.messageID, RunID: runID, ModelID: strings.TrimSpace(req.Model),
-			TextContent: strings.TrimSpace(normalizedInput.Text), AttachmentsJSON: attachmentsJSON,
-			ContextActionJSON: contextActionJSON, OptionsJSON: optionsJSON, SessionMetaJSON: sessionMetaJSON,
-			CreatedByUserPublicID: strings.TrimSpace(meta.UserPublicID), CreatedByUserEmail: strings.TrimSpace(meta.UserEmail),
-			CreatedAtUnixMs: preparedUser.CreatedAtUnixMs,
-		}
-		pctx, cancel := context.WithTimeout(ctx, prepared.persistTO)
+	} else {
 		_, _, _, err = prepared.db.CreateFollowupWithUploadRefs(pctx, record, preparedUser.UploadIDs, preparedUser.CreatedAtUnixMs)
 		cancel()
 		if err != nil {
 			s.releasePreparedRun(prepared)
 			return persistedUserMessage{}, normalizedInput, err
 		}
-	} else if requireSourceFollowup {
-		pctx, cancel := context.WithTimeout(ctx, prepared.persistTO)
-		record, loadErr := prepared.db.GetQueuedTurn(pctx, endpointID, threadID, commandID)
-		cancel()
-		if loadErr != nil || record == nil || strings.TrimSpace(record.TurnID) != prepared.messageID || strings.TrimSpace(record.RunID) != runID {
-			s.releasePreparedRun(prepared)
-			if loadErr != nil {
-				return persistedUserMessage{}, normalizedInput, loadErr
-			}
-			return persistedUserMessage{}, normalizedInput, errors.New("pending turn command identity mismatch")
-		}
 	}
 
+	pctx, cancel = context.WithTimeout(ctx, prepared.persistTO)
+	err = prepared.db.BeginPendingTurnAdmission(pctx, endpointID, threadID, commandID, prepared.messageID, runID)
+	cancel()
+	if err != nil {
+		s.releasePreparedRun(prepared)
+		return persistedUserMessage{}, normalizedInput, err
+	}
 	prepared.r.setPendingTurnCommand(commandID)
 	prepared.req.Input = normalizedInput
 	s.broadcastThreadState(endpointID, threadID, runID, string(RunStateRunning), "", "")
@@ -1666,9 +1797,24 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	if db == nil {
 		return nil, errors.New("threads store not ready")
 	}
+	if s.threadMgr == nil {
+		return nil, errors.New("thread manager not ready")
+	}
+	unlockLifecycle, err := s.threadMgr.lockThreadLifecycle(endpointID, threadID)
+	if err != nil {
+		return nil, err
+	}
+	defer unlockLifecycle()
 
 	pctx, cancelPersist := context.WithTimeout(context.Background(), persistTO)
-	th, err := db.GetThread(pctx, endpointID, threadID)
+	err = db.RequireThreadSettingsWritable(pctx, endpointID, threadID)
+	cancelPersist()
+	if err != nil {
+		return nil, err
+	}
+
+	pctx, cancelPersist = context.WithTimeout(context.Background(), persistTO)
+	th, err := db.GetThreadSettings(pctx, endpointID, threadID)
 	cancelPersist()
 	if err != nil {
 		return nil, err
@@ -1688,9 +1834,13 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		return nil, err
 	}
 
-	runWorkingDir := strings.TrimSpace(th.WorkingDir)
-	if runWorkingDir == "" {
-		runWorkingDir = strings.TrimSpace(s.agentHomeDir)
+	runWorkingDir, err := threadWorkingDir(th)
+	if err != nil {
+		return nil, err
+	}
+	floretRuntime, err := s.bindFloretThreadRuntime(threadID)
+	if err != nil {
+		return nil, err
 	}
 
 	s.mu.Lock()
@@ -1734,38 +1884,50 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	if toolTargetPolicyForRun != nil {
 		toolTargetPolicy = normalizeToolTargetPolicy(toolTargetPolicyForRun(metaRef, *th, flowerMeta))
 	}
+	runHost, err := s.bindRunHostCapabilities(endpointID, threadID)
+	if err != nil {
+		s.mu.Unlock()
+		return nil, err
+	}
+	productCapabilities, err := bindRootRunProductCapabilities(db, endpointID, threadID, runID)
+	if err != nil {
+		s.mu.Unlock()
+		return nil, err
+	}
 	r := newRun(runOptions{
-		Log:                 s.log,
-		StateDir:            s.stateDir,
-		AgentHomeDir:        s.agentHomeDir,
-		WorkingDir:          runWorkingDir,
-		FilesystemScope:     s.scope,
-		Shell:               s.shell,
-		Service:             s,
-		AIConfig:            cfg,
-		SessionMeta:         metaRef,
-		ResolveProviderKey:  s.resolveProviderKey,
-		ResolveWebSearchKey: s.resolveWebSearchKey,
-		DesktopModelSource:  desktopModelSource,
-		RunID:               runID,
-		ChannelID:           channelID,
-		EndpointID:          endpointID,
-		ThreadID:            threadID,
-		MaxWallTime:         s.runMaxWallTime,
-		IdleTimeout:         s.runIdleTimeout,
-		ToolApprovalTimeout: s.approvalTimeout,
-		StreamWriteTimeout:  s.streamWriteTO,
-		UserPublicID:        strings.TrimSpace(metaRef.UserPublicID),
-		MessageID:           messageID,
-		UploadsDir:          uploadsDir,
-		ThreadsDB:           db,
-		FloretStore:         s.floretStore,
-		PersistOpTimeout:    persistTO,
-		SkillManager:        s.skillManager,
-		ToolAllowlist:       append([]string(nil), req.Options.ToolAllowlist...),
-		NoUserInteraction:   req.Options.NoUserInteraction,
-		ToolTargetPolicy:    toolTargetPolicy,
-		TargetToolExecutor:  s.targetToolExecutor,
+		Log:                         s.log,
+		StateDir:                    s.stateDir,
+		AgentHomeDir:                s.agentHomeDir,
+		WorkingDir:                  runWorkingDir,
+		FilesystemScope:             s.scope,
+		Shell:                       s.shell,
+		HostCapabilities:            runHost,
+		AIConfig:                    cfg,
+		SessionMeta:                 metaRef,
+		ResolveProviderKey:          s.resolveProviderKey,
+		ResolveWebSearchKey:         s.resolveWebSearchKey,
+		DesktopModelSource:          desktopModelSource,
+		RunID:                       runID,
+		ChannelID:                   channelID,
+		EndpointID:                  endpointID,
+		ThreadID:                    threadID,
+		MaxWallTime:                 s.runMaxWallTime,
+		IdleTimeout:                 s.runIdleTimeout,
+		ToolApprovalTimeout:         s.approvalTimeout,
+		StreamWriteTimeout:          s.streamWriteTO,
+		UserPublicID:                strings.TrimSpace(metaRef.UserPublicID),
+		MessageID:                   messageID,
+		UploadsDir:                  uploadsDir,
+		ProductCapabilities:         productCapabilities,
+		FloretHostFactory:           floretRuntime.Turn,
+		FloretCompactionHostFactory: floretRuntime.Compaction,
+		FloretSubagentHostFactory:   floretRuntime.SubAgent,
+		PersistOpTimeout:            persistTO,
+		SkillManager:                s.skillManager,
+		ToolAllowlist:               append([]string(nil), req.Options.ToolAllowlist...),
+		NoUserInteraction:           req.Options.NoUserInteraction,
+		ToolTargetPolicy:            toolTargetPolicy,
+		TargetToolExecutor:          s.targetToolExecutor,
 		OnStreamEvent: func(ev any) {
 			if !finalizingThreadStatePublished && isFinalizingLifecycleStreamEvent(ev) {
 				finalizingThreadStatePublished = true
@@ -1893,7 +2055,10 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	model := resolvedModel.ID
 	modelCapability := resolvedModel.Capability
 	reasoningCapability, modelDefaultReasoning := modelReasoningDefaultsFromCapability(modelCapability)
-	threadDefaultReasoning := unmarshalReasoningSelection(prepared.threadReasoningSelectionJSON)
+	threadDefaultReasoning, err := parseStoredReasoningSelection(prepared.threadReasoningSelectionJSON)
+	if err != nil {
+		return streamEarlyError(err)
+	}
 	reasoning, err := resolveEffectiveReasoning(reasoningCapability, req.Options.ReasoningSelection, threadDefaultReasoning, modelDefaultReasoning)
 	if err != nil {
 		return streamEarlyError(reasoningSelectionError(model, err))
@@ -2305,7 +2470,9 @@ func (s *Service) CancelRun(meta *session.Meta, runID string) error {
 		r.requestCancel("canceled")
 	}
 	if threadID != "" {
-		s.closeThreadSubagents(context.Background(), endpointID, threadID, persistTO)
+		if err := s.closeThreadSubagents(context.Background(), endpointID, threadID, persistTO); err != nil {
+			return err
+		}
 	}
 
 	if db != nil && threadID != "" {

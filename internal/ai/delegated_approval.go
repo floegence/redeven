@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	fltools "github.com/floegence/floret/tools"
+	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -99,7 +99,7 @@ func (h *delegatedApprovalHandle) cancel() {
 	close(h.done)
 }
 
-func (s *Service) registerDelegatedApproval(parent *run, child *run, req fltools.ApprovalRequest) (*delegatedApprovalHandle, bool, error) {
+func (s *Service) registerDelegatedApproval(parent *run, child *run, req flruntime.EffectAuthorizationRequest) (*delegatedApprovalHandle, bool, error) {
 	if s == nil || parent == nil || child == nil {
 		return nil, false, errors.New("delegated approval missing lineage")
 	}
@@ -146,8 +146,14 @@ func (s *Service) registerDelegatedApproval(parent *run, child *run, req fltools
 }
 
 func (s *Service) validateDelegatedApprovalSnapshotIdentity(parent *run, ref DelegatedApprovalRef) error {
-	if s == nil || s.threadsDB == nil || parent == nil {
-		return nil
+	if s == nil {
+		return errors.New("delegated approval service is unavailable")
+	}
+	if s.threadsDB == nil {
+		return errors.New("delegated approval snapshot store is unavailable")
+	}
+	if parent == nil {
+		return errors.New("delegated approval parent authority is unavailable")
 	}
 	endpointID := strings.TrimSpace(parent.endpointID)
 	childThreadID := strings.TrimSpace(ref.ChildThreadID)
@@ -155,7 +161,11 @@ func (s *Service) validateDelegatedApprovalSnapshotIdentity(parent *run, ref Del
 	if endpointID == "" || childThreadID == "" || childRunID == "" {
 		return errors.New("delegated approval child identity is incomplete")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), s.persistOpTO)
+	timeout := s.persistOpTO
+	if timeout <= 0 {
+		timeout = defaultPersistOpTimeout
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	_, ok, err := s.threadsDB.GetFinalizedChildPermissionSnapshot(ctx, endpointID, childThreadID, childRunID)
 	if err != nil {
@@ -290,7 +300,7 @@ func delegatedApprovalParentRunID(action FlowerApprovalAction) string {
 	return ""
 }
 
-func delegatedApprovalRef(parent *run, child *run, req fltools.ApprovalRequest) DelegatedApprovalRef {
+func delegatedApprovalRef(parent *run, child *run, req flruntime.EffectAuthorizationRequest) DelegatedApprovalRef {
 	childThreadID := firstNonEmptyString(
 		strings.TrimSpace(child.threadID),
 		strings.TrimSpace(req.Labels["host."+subagentToolHostContextChildThreadIDKey]),
@@ -301,12 +311,12 @@ func delegatedApprovalRef(parent *run, child *run, req fltools.ApprovalRequest) 
 		ChildThreadID:   childThreadID,
 		ChildRunID:      delegatedApprovalChildRunID(child, req, childThreadID, strings.TrimSpace(parent.id)),
 		ChildTurnID:     strings.TrimSpace(child.messageID),
-		ChildToolCallID: firstNonEmptyString(strings.TrimSpace(req.ID), strings.TrimSpace(req.ApprovalID)),
-		ApprovalID:      firstNonEmptyString(strings.TrimSpace(req.ApprovalID), strings.TrimSpace(req.ID)),
+		ChildToolCallID: strings.TrimSpace(req.ToolCallID),
+		ApprovalID:      strings.TrimSpace(req.EffectAttemptID),
 	}
 }
 
-func delegatedApprovalChildRunID(child *run, req fltools.ApprovalRequest, childThreadID string, parentRunID string) string {
+func delegatedApprovalChildRunID(child *run, req flruntime.EffectAuthorizationRequest, childThreadID string, parentRunID string) string {
 	explicit := firstNonEmptyString(strings.TrimSpace(req.HostContext[subagentToolHostContextChildRunIDKey]), strings.TrimSpace(req.Labels["host."+subagentToolHostContextChildRunIDKey]))
 	if explicit != "" && explicit != strings.TrimSpace(childThreadID) && explicit != strings.TrimSpace(parentRunID) {
 		return explicit
@@ -318,14 +328,14 @@ func validDelegatedApprovalRef(ref DelegatedApprovalRef) bool {
 	return strings.TrimSpace(ref.ParentThreadID) != "" && strings.TrimSpace(ref.ParentRunID) != "" && strings.TrimSpace(ref.ChildThreadID) != "" && strings.TrimSpace(ref.ChildRunID) != "" && strings.TrimSpace(ref.ChildToolCallID) != "" && strings.TrimSpace(ref.ApprovalID) != ""
 }
 
-func delegatedApprovalAction(parent *run, child *run, req fltools.ApprovalRequest, ref DelegatedApprovalRef, actionID string, requestedAt int64, expiresAt int64) (FlowerApprovalAction, error) {
+func delegatedApprovalAction(parent *run, child *run, req flruntime.EffectAuthorizationRequest, ref DelegatedApprovalRef, actionID string, requestedAt int64, expiresAt int64) (FlowerApprovalAction, error) {
 	args, err := floretApprovalArgs(req)
 	if err != nil {
 		return FlowerApprovalAction{}, err
 	}
-	toolName := firstNonEmptyString(strings.TrimSpace(req.Name), "tool")
+	toolName := firstNonEmptyString(strings.TrimSpace(req.ToolName), "tool")
 	approval := &toolApprovalRequest{
-		toolName: toolName, argsHash: strings.TrimSpace(req.ArgsHash), command: approvalCommandForTool(toolName, args),
+		toolName: toolName, argsHash: strings.TrimSpace(req.ArgumentHash), command: approvalCommandForTool(toolName, args),
 		cwd: approvalCwdForTool(toolName, args), effects: floretApprovalEffects(req), flags: floretApprovalFlags(req),
 		targets: floretApprovalTargets(req), requestedAtMs: requestedAt, expiresAtMs: expiresAt,
 	}

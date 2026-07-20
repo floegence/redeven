@@ -19,14 +19,15 @@ type floretProviderAdapter struct {
 	modelName    string
 	webSearch    string
 
-	controls                 ProviderControls
-	budgets                  TurnBudgets
-	disabledCoreControlTools map[string]struct{}
-	continuationSupported    bool
-	attachmentResolver       func(context.Context, flruntime.MessageAttachment) (ContentPart, error)
-	supportsImageInput       bool
-	supportsFileInput        bool
-	beforeRequest            func() error
+	controls                  ProviderControls
+	budgets                   TurnBudgets
+	disabledCoreControlTools  map[string]struct{}
+	continuationSupported     bool
+	attachmentResolver        func(context.Context, flruntime.MessageAttachment) (ContentPart, error)
+	requestAttachmentResolver func(context.Context, flruntime.ModelRequest, flruntime.MessageAttachment) (ContentPart, error)
+	supportsImageInput        bool
+	supportsFileInput         bool
+	beforeRequest             func() error
 }
 
 type floretProviderAdapterOption func(*floretProviderAdapter)
@@ -72,6 +73,17 @@ func withFloretAttachmentResolver(resolver func(context.Context, flruntime.Messa
 			return
 		}
 		adapter.attachmentResolver = resolver
+		adapter.supportsImageInput = supportsImageInput
+		adapter.supportsFileInput = supportsFileInput
+	}
+}
+
+func withFloretRequestAttachmentResolver(resolver func(context.Context, flruntime.ModelRequest, flruntime.MessageAttachment) (ContentPart, error), supportsImageInput bool, supportsFileInput bool) floretProviderAdapterOption {
+	return func(adapter *floretProviderAdapter) {
+		if adapter == nil {
+			return
+		}
+		adapter.requestAttachmentResolver = resolver
 		adapter.supportsImageInput = supportsImageInput
 		adapter.supportsFileInput = supportsFileInput
 	}
@@ -226,7 +238,13 @@ func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flruntime.M
 		controls.ReasoningSelection = reasoning
 	}
 
-	messages, err := p.floretMessagesToFlower(ctx, req.Messages)
+	resolver := p.attachmentResolver
+	if p.requestAttachmentResolver != nil {
+		resolver = func(ctx context.Context, attachment flruntime.MessageAttachment) (ContentPart, error) {
+			return p.requestAttachmentResolver(ctx, req, attachment)
+		}
+	}
+	messages, err := p.floretMessagesToFlowerWithResolver(ctx, req.Messages, resolver)
 	if err != nil {
 		return ModelGatewayRequest{}, err
 	}
@@ -336,6 +354,10 @@ func sendFloretProviderEvent(ctx context.Context, out chan<- flruntime.ModelEven
 }
 
 func (p *floretProviderAdapter) floretMessagesToFlower(ctx context.Context, messages []flruntime.ModelMessage) ([]Message, error) {
+	return p.floretMessagesToFlowerWithResolver(ctx, messages, p.attachmentResolver)
+}
+
+func (p *floretProviderAdapter) floretMessagesToFlowerWithResolver(ctx context.Context, messages []flruntime.ModelMessage, resolver func(context.Context, flruntime.MessageAttachment) (ContentPart, error)) ([]Message, error) {
 	out := make([]Message, 0, len(messages))
 	for i, msg := range messages {
 		if err := msg.Validate(); err != nil {
@@ -346,10 +368,10 @@ func (p *floretProviderAdapter) floretMessagesToFlower(ctx context.Context, mess
 			parts = append(parts, ContentPart{Type: "text", Text: msg.Text})
 		}
 		for attachmentIndex, attachment := range msg.Attachments {
-			if p == nil || p.attachmentResolver == nil {
+			if p == nil || resolver == nil {
 				return nil, fmt.Errorf("Floret model message %d attachment %d has no host resolver", i, attachmentIndex)
 			}
-			part, err := p.attachmentResolver(ctx, attachment)
+			part, err := resolver(ctx, attachment)
 			if err != nil {
 				return nil, fmt.Errorf("resolve Floret model message %d attachment %d: %w", i, attachmentIndex, err)
 			}

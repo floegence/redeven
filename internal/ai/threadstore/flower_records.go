@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -59,29 +60,36 @@ type sqlContextExecutor interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
 }
 
-func normalizeFlowerJSON(raw string) string {
+func normalizeFlowerJSON(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return "{}"
+		return "{}", nil
 	}
-	return raw
+	var value map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &value); err != nil {
+		return "", err
+	}
+	if value == nil {
+		return "", errors.New("flower JSON value must be an object")
+	}
+	return raw, nil
 }
 
-func normalizeFlowerStringArrayJSON(raw string) string {
+func normalizeFlowerStringArrayJSON(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return "[]"
+		return "[]", nil
 	}
 	var values []string
 	if err := json.Unmarshal([]byte(raw), &values); err != nil {
-		return "[]"
+		return "", err
 	}
 	out := make([]string, 0, len(values))
 	seen := make(map[string]struct{}, len(values))
 	for _, value := range values {
 		value = strings.TrimSpace(value)
 		if value == "" {
-			continue
+			return "", errors.New("flower string array contains an empty value")
 		}
 		if _, ok := seen[value]; ok {
 			continue
@@ -91,9 +99,9 @@ func normalizeFlowerStringArrayJSON(raw string) string {
 	}
 	body, err := json.Marshal(out)
 	if err != nil {
-		return "[]"
+		return "", err
 	}
-	return string(body)
+	return string(body), nil
 }
 
 func normalizeFlowerState(raw string, fallback string) string {
@@ -111,13 +119,23 @@ func normalizeFlowerThreadMetadata(rec FlowerThreadMetadata) (FlowerThreadMetada
 	rec.OwnerID = strings.TrimSpace(rec.OwnerID)
 	rec.ParentThreadID = strings.TrimSpace(rec.ParentThreadID)
 	rec.ParentRunID = strings.TrimSpace(rec.ParentRunID)
-	rec.ContextJSON = normalizeFlowerJSON(rec.ContextJSON)
-	rec.ActionJSON = normalizeFlowerJSON(rec.ActionJSON)
+	var err error
+	rec.ContextJSON, err = normalizeFlowerJSON(rec.ContextJSON)
+	if err != nil {
+		return FlowerThreadMetadata{}, fmt.Errorf("invalid flower context JSON: %w", err)
+	}
+	rec.ActionJSON, err = normalizeFlowerJSON(rec.ActionJSON)
+	if err != nil {
+		return FlowerThreadMetadata{}, fmt.Errorf("invalid flower action JSON: %w", err)
+	}
 	rec.HomeRuntimeID = strings.TrimSpace(rec.HomeRuntimeID)
 	rec.HomeRuntimeKind = strings.TrimSpace(strings.ToLower(rec.HomeRuntimeKind))
 	rec.OriginEnvPublicID = strings.TrimSpace(rec.OriginEnvPublicID)
 	rec.PrimaryTargetID = strings.TrimSpace(rec.PrimaryTargetID)
-	rec.ActiveTargetIDsJSON = normalizeFlowerStringArrayJSON(rec.ActiveTargetIDsJSON)
+	rec.ActiveTargetIDsJSON, err = normalizeFlowerStringArrayJSON(rec.ActiveTargetIDsJSON)
+	if err != nil {
+		return FlowerThreadMetadata{}, fmt.Errorf("invalid flower active target ids JSON: %w", err)
+	}
 	if rec.EndpointID == "" || rec.ThreadID == "" {
 		return FlowerThreadMetadata{}, errors.New("invalid flower thread metadata")
 	}
@@ -138,7 +156,18 @@ func (s *Store) UpsertFlowerThreadMetadata(ctx context.Context, rec FlowerThread
 	if err != nil {
 		return err
 	}
-	return upsertFlowerThreadMetadataExec(ctx, s.db, rec)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := requireThreadWritableTx(ctx, tx, rec.EndpointID, rec.ThreadID); err != nil {
+		return err
+	}
+	if err := upsertFlowerThreadMetadataExec(ctx, tx, rec); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func upsertFlowerThreadMetadataExec(ctx context.Context, exec sqlContextExecutor, rec FlowerThreadMetadata) error {
@@ -273,33 +302,56 @@ func (s *Store) InsertFlowerTransfer(ctx context.Context, rec FlowerTransferReco
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	rec = normalizeFlowerTransferRecord(rec)
+	var err error
+	rec, err = normalizeFlowerTransferRecord(rec)
+	if err != nil {
+		return FlowerTransferRecord{}, err
+	}
 	if rec.TransferID == "" || rec.EndpointID == "" || rec.IdempotencyKey == "" || rec.PlanJSON == "{}" || rec.ApprovalHash == "" {
 		return FlowerTransferRecord{}, errors.New("invalid flower transfer")
 	}
-	_, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return FlowerTransferRecord{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := requireFlowerThreadRefsWritableTx(ctx, tx, rec.EndpointID, rec.SourceThreadID, rec.DestinationThreadID); err != nil {
+		return FlowerTransferRecord{}, err
+	}
+	_, err = tx.ExecContext(ctx, `
 INSERT INTO ai_flower_transfers(
   transfer_id, endpoint_id, source_thread_id, destination_thread_id, idempotency_key,
   manifest_hash, approval_hash, state, plan_json, created_at_unix_ms, updated_at_unix_ms
 ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, rec.TransferID, rec.EndpointID, rec.SourceThreadID, rec.DestinationThreadID, rec.IdempotencyKey, rec.ManifestHash, rec.ApprovalHash, rec.State, rec.PlanJSON, rec.CreatedAtUnixMs, rec.UpdatedAtUnixMs)
+	`, rec.TransferID, rec.EndpointID, rec.SourceThreadID, rec.DestinationThreadID, rec.IdempotencyKey, rec.ManifestHash, rec.ApprovalHash, rec.State, rec.PlanJSON, rec.CreatedAtUnixMs, rec.UpdatedAtUnixMs)
 	if err == nil {
+		if err := tx.Commit(); err != nil {
+			return FlowerTransferRecord{}, err
+		}
 		return rec, nil
 	}
 	if !isUniqueConstraintError(err) {
 		return FlowerTransferRecord{}, err
 	}
-	existing, getErr := s.GetFlowerTransferByIdempotencyKey(ctx, rec.EndpointID, rec.IdempotencyKey)
+	existing, getErr := scanFlowerTransfer(tx.QueryRowContext(ctx, `
+SELECT transfer_id, endpoint_id, source_thread_id, destination_thread_id, idempotency_key,
+       manifest_hash, approval_hash, state, plan_json, created_at_unix_ms, updated_at_unix_ms
+FROM ai_flower_transfers
+WHERE endpoint_id = ? AND idempotency_key = ?
+`, rec.EndpointID, rec.IdempotencyKey))
 	if getErr != nil {
 		return FlowerTransferRecord{}, getErr
 	}
 	if existing != nil && existing.ApprovalHash == rec.ApprovalHash && strings.TrimSpace(existing.PlanJSON) == strings.TrimSpace(rec.PlanJSON) {
+		if err := tx.Commit(); err != nil {
+			return FlowerTransferRecord{}, err
+		}
 		return *existing, nil
 	}
 	return FlowerTransferRecord{}, ErrFlowerIdempotencyCollision
 }
 
-func normalizeFlowerTransferRecord(rec FlowerTransferRecord) FlowerTransferRecord {
+func normalizeFlowerTransferRecord(rec FlowerTransferRecord) (FlowerTransferRecord, error) {
 	now := time.Now().UnixMilli()
 	rec.TransferID = strings.TrimSpace(rec.TransferID)
 	rec.EndpointID = strings.TrimSpace(rec.EndpointID)
@@ -309,14 +361,18 @@ func normalizeFlowerTransferRecord(rec FlowerTransferRecord) FlowerTransferRecor
 	rec.ManifestHash = strings.TrimSpace(rec.ManifestHash)
 	rec.ApprovalHash = strings.TrimSpace(rec.ApprovalHash)
 	rec.State = normalizeFlowerState(rec.State, "planned")
-	rec.PlanJSON = normalizeFlowerJSON(rec.PlanJSON)
+	var err error
+	rec.PlanJSON, err = normalizeFlowerJSON(rec.PlanJSON)
+	if err != nil {
+		return FlowerTransferRecord{}, fmt.Errorf("invalid flower transfer plan JSON: %w", err)
+	}
 	if rec.CreatedAtUnixMs <= 0 {
 		rec.CreatedAtUnixMs = now
 	}
 	if rec.UpdatedAtUnixMs <= 0 {
 		rec.UpdatedAtUnixMs = rec.CreatedAtUnixMs
 	}
-	return rec
+	return rec, nil
 }
 
 func (s *Store) GetFlowerTransferByIdempotencyKey(ctx context.Context, endpointID string, idempotencyKey string) (*FlowerTransferRecord, error) {
@@ -340,8 +396,12 @@ WHERE endpoint_id = ? AND idempotency_key = ?
 }
 
 func (s *Store) getFlowerTransfer(ctx context.Context, q string, args ...any) (*FlowerTransferRecord, error) {
+	return scanFlowerTransfer(s.db.QueryRowContext(ctx, q, args...))
+}
+
+func scanFlowerTransfer(scanner rowScanner) (*FlowerTransferRecord, error) {
 	var rec FlowerTransferRecord
-	err := s.db.QueryRowContext(ctx, q, args...).Scan(
+	err := scanner.Scan(
 		&rec.TransferID,
 		&rec.EndpointID,
 		&rec.SourceThreadID,
@@ -370,33 +430,56 @@ func (s *Store) InsertFlowerHandoff(ctx context.Context, rec FlowerHandoffRecord
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	rec = normalizeFlowerHandoffRecord(rec)
+	var err error
+	rec, err = normalizeFlowerHandoffRecord(rec)
+	if err != nil {
+		return FlowerHandoffRecord{}, err
+	}
 	if rec.HandoffID == "" || rec.EndpointID == "" || rec.IdempotencyKey == "" || rec.EnvelopeHash == "" || rec.EnvelopeJSON == "{}" {
 		return FlowerHandoffRecord{}, errors.New("invalid flower handoff")
 	}
-	_, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return FlowerHandoffRecord{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := requireFlowerThreadRefsWritableTx(ctx, tx, rec.EndpointID, rec.SourceThreadID, rec.DestinationThreadID); err != nil {
+		return FlowerHandoffRecord{}, err
+	}
+	_, err = tx.ExecContext(ctx, `
 INSERT INTO ai_flower_handoffs(
   handoff_id, endpoint_id, source_thread_id, destination_thread_id, idempotency_key,
   envelope_hash, state, envelope_json, created_at_unix_ms, updated_at_unix_ms
 ) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-`, rec.HandoffID, rec.EndpointID, rec.SourceThreadID, rec.DestinationThreadID, rec.IdempotencyKey, rec.EnvelopeHash, rec.State, rec.EnvelopeJSON, rec.CreatedAtUnixMs, rec.UpdatedAtUnixMs)
+	`, rec.HandoffID, rec.EndpointID, rec.SourceThreadID, rec.DestinationThreadID, rec.IdempotencyKey, rec.EnvelopeHash, rec.State, rec.EnvelopeJSON, rec.CreatedAtUnixMs, rec.UpdatedAtUnixMs)
 	if err == nil {
+		if err := tx.Commit(); err != nil {
+			return FlowerHandoffRecord{}, err
+		}
 		return rec, nil
 	}
 	if !isUniqueConstraintError(err) {
 		return FlowerHandoffRecord{}, err
 	}
-	existing, getErr := s.GetFlowerHandoffByIdempotencyKey(ctx, rec.EndpointID, rec.IdempotencyKey)
+	existing, getErr := scanFlowerHandoff(tx.QueryRowContext(ctx, `
+SELECT handoff_id, endpoint_id, source_thread_id, destination_thread_id, idempotency_key,
+       envelope_hash, state, envelope_json, created_at_unix_ms, updated_at_unix_ms
+FROM ai_flower_handoffs
+WHERE endpoint_id = ? AND idempotency_key = ?
+`, rec.EndpointID, rec.IdempotencyKey))
 	if getErr != nil {
 		return FlowerHandoffRecord{}, getErr
 	}
 	if existing != nil && existing.EnvelopeHash == rec.EnvelopeHash && strings.TrimSpace(existing.EnvelopeJSON) == strings.TrimSpace(rec.EnvelopeJSON) {
+		if err := tx.Commit(); err != nil {
+			return FlowerHandoffRecord{}, err
+		}
 		return *existing, nil
 	}
 	return FlowerHandoffRecord{}, ErrFlowerIdempotencyCollision
 }
 
-func normalizeFlowerHandoffRecord(rec FlowerHandoffRecord) FlowerHandoffRecord {
+func normalizeFlowerHandoffRecord(rec FlowerHandoffRecord) (FlowerHandoffRecord, error) {
 	now := time.Now().UnixMilli()
 	rec.HandoffID = strings.TrimSpace(rec.HandoffID)
 	rec.EndpointID = strings.TrimSpace(rec.EndpointID)
@@ -405,14 +488,18 @@ func normalizeFlowerHandoffRecord(rec FlowerHandoffRecord) FlowerHandoffRecord {
 	rec.IdempotencyKey = strings.TrimSpace(rec.IdempotencyKey)
 	rec.EnvelopeHash = strings.TrimSpace(rec.EnvelopeHash)
 	rec.State = normalizeFlowerState(rec.State, "created")
-	rec.EnvelopeJSON = normalizeFlowerJSON(rec.EnvelopeJSON)
+	var err error
+	rec.EnvelopeJSON, err = normalizeFlowerJSON(rec.EnvelopeJSON)
+	if err != nil {
+		return FlowerHandoffRecord{}, fmt.Errorf("invalid flower handoff envelope JSON: %w", err)
+	}
 	if rec.CreatedAtUnixMs <= 0 {
 		rec.CreatedAtUnixMs = now
 	}
 	if rec.UpdatedAtUnixMs <= 0 {
 		rec.UpdatedAtUnixMs = rec.CreatedAtUnixMs
 	}
-	return rec
+	return rec, nil
 }
 
 func (s *Store) GetFlowerHandoffByIdempotencyKey(ctx context.Context, endpointID string, idempotencyKey string) (*FlowerHandoffRecord, error) {
@@ -436,8 +523,12 @@ WHERE endpoint_id = ? AND idempotency_key = ?
 }
 
 func (s *Store) getFlowerHandoff(ctx context.Context, q string, args ...any) (*FlowerHandoffRecord, error) {
+	return scanFlowerHandoff(s.db.QueryRowContext(ctx, q, args...))
+}
+
+func scanFlowerHandoff(scanner rowScanner) (*FlowerHandoffRecord, error) {
 	var rec FlowerHandoffRecord
-	err := s.db.QueryRowContext(ctx, q, args...).Scan(
+	err := scanner.Scan(
 		&rec.HandoffID,
 		&rec.EndpointID,
 		&rec.SourceThreadID,
@@ -456,4 +547,22 @@ func (s *Store) getFlowerHandoff(ctx context.Context, q string, args ...any) (*F
 		return nil, err
 	}
 	return &rec, nil
+}
+
+func requireFlowerThreadRefsWritableTx(ctx context.Context, tx *sql.Tx, endpointID string, threadIDs ...string) error {
+	seen := make(map[string]struct{}, len(threadIDs))
+	for _, threadID := range threadIDs {
+		threadID = strings.TrimSpace(threadID)
+		if threadID == "" {
+			continue
+		}
+		if _, ok := seen[threadID]; ok {
+			continue
+		}
+		seen[threadID] = struct{}{}
+		if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
+			return err
+		}
+	}
+	return nil
 }

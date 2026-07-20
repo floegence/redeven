@@ -32,13 +32,13 @@ import (
 )
 
 type runOptions struct {
-	Log             *slog.Logger
-	StateDir        string
-	AgentHomeDir    string
-	WorkingDir      string
-	FilesystemScope *filesystemscope.Registry
-	Shell           string
-	Service         *Service
+	Log              *slog.Logger
+	StateDir         string
+	AgentHomeDir     string
+	WorkingDir       string
+	FilesystemScope  *filesystemscope.Registry
+	Shell            string
+	HostCapabilities runHostCapabilities
 
 	AIConfig *config.AIConfig
 
@@ -59,10 +59,13 @@ type runOptions struct {
 	ToolApprovalTimeout time.Duration
 	StreamWriteTimeout  time.Duration
 
-	UploadsDir       string
-	ThreadsDB        *threadstore.Store
-	FloretStore      *flruntime.Store
-	PersistOpTimeout time.Duration
+	UploadsDir                  string
+	ProductCapabilities         runProductCapabilities
+	FloretHostFactory           floretHostFactory
+	FloretCompactionHostFactory floretCompactionHostFactory
+	FloretSubagentHostFactory   floretSubagentHostFactory
+	EffectAuthorizations        *floretEffectAuthorizationRegistry
+	PersistOpTimeout            time.Duration
 
 	OnStreamEvent func(any)
 	Writer        http.ResponseWriter
@@ -90,9 +93,10 @@ type run struct {
 	workingDir     string
 	scope          *filesystemscope.Registry
 	shell          string
-	service        *Service
+	host           runHostCapabilities
 	cfg            *config.AIConfig
 	permissionType FlowerPermissionType
+	muPermission   sync.RWMutex
 
 	sessionMeta         *session.Meta
 	resolveProviderKey  func(providerID string) (string, bool, error)
@@ -116,22 +120,25 @@ type run struct {
 	doneCh         chan struct{}
 	doneOnce       sync.Once
 
-	muCancel             sync.Mutex
-	cancelReason         string // "canceled"|"timed_out"|""
-	endReason            string // "complete"|"canceled"|"timed_out"|"disconnected"|"error"
-	runErrorCode         string
-	cancelRequested      bool
-	cancelFn             context.CancelFunc
-	detached             atomic.Bool // hard-canceled: stop emitting realtime events and skip thread state updates
-	awaitFloretAdmission atomic.Bool
-	floretAdmitted       atomic.Bool
-	busyCount            atomic.Int32
-	runtimeToolCalls     atomic.Int64
-	runtimeTokens        atomic.Int64
-	uploadsDir           string
-	threadsDB            *threadstore.Store
-	floretStore          *flruntime.Store
-	persistOpTimeout     time.Duration
+	muCancel                    sync.Mutex
+	cancelReason                string // "canceled"|"timed_out"|""
+	endReason                   string // "complete"|"canceled"|"timed_out"|"disconnected"|"error"
+	runErrorCode                string
+	cancelRequested             bool
+	cancelFn                    context.CancelFunc
+	detached                    atomic.Bool // hard-canceled: stop emitting realtime events and skip thread state updates
+	awaitFloretAdmission        atomic.Bool
+	floretAdmitted              atomic.Bool
+	busyCount                   atomic.Int32
+	runtimeToolCalls            atomic.Int64
+	runtimeTokens               atomic.Int64
+	uploadsDir                  string
+	product                     runProductCapabilities
+	floretHostFactory           floretHostFactory
+	floretCompactionHostFactory floretCompactionHostFactory
+	floretSubagentHostFactory   floretSubagentHostFactory
+	effectAuthorizations        *floretEffectAuthorizationRegistry
+	persistOpTimeout            time.Duration
 
 	onStreamEvent func(any)
 	w             http.ResponseWriter
@@ -197,7 +204,7 @@ type run struct {
 	toolAllowlist           map[string]struct{}
 	noUserInteraction       bool
 	allowDelegatedApproval  bool
-	delegatedApprovalParent *run
+	subagentParentAuthority *subagentParentAuthority
 	permissionSnapshot      PermissionSnapshot
 	dynamicSurfaceConfig    runToolSurfaceConfig
 	toolTargetPolicy        ToolTargetPolicy
@@ -270,54 +277,61 @@ func newRun(opts runOptions) *run {
 		workingDir = agentHomeDir
 	}
 
+	effectAuthorizations := opts.EffectAuthorizations
+	if effectAuthorizations == nil {
+		effectAuthorizations = newFloretEffectAuthorizationRegistry()
+	}
 	r := &run{
-		log:                       opts.Log,
-		stateDir:                  strings.TrimSpace(opts.StateDir),
-		agentHomeDir:              agentHomeDir,
-		workingDir:                workingDir,
-		scope:                     opts.FilesystemScope,
-		shell:                     strings.TrimSpace(opts.Shell),
-		service:                   opts.Service,
-		cfg:                       opts.AIConfig,
-		permissionType:            FlowerPermissionApprovalRequired,
-		sessionMeta:               runMeta,
-		resolveProviderKey:        opts.ResolveProviderKey,
-		resolveWebSearchKey:       opts.ResolveWebSearchKey,
-		desktopModelSource:        opts.DesktopModelSource,
-		id:                        runID,
-		channelID:                 strings.TrimSpace(opts.ChannelID),
-		endpointID:                strings.TrimSpace(opts.EndpointID),
-		threadID:                  strings.TrimSpace(opts.ThreadID),
-		userPublicID:              strings.TrimSpace(opts.UserPublicID),
-		messageID:                 strings.TrimSpace(opts.MessageID),
-		settlementThreadID:        strings.TrimSpace(opts.ThreadID),
-		settlementRunID:           runID,
-		settlementTurnID:          strings.TrimSpace(opts.MessageID),
-		uploadsDir:                strings.TrimSpace(opts.UploadsDir),
-		threadsDB:                 opts.ThreadsDB,
-		floretStore:               opts.FloretStore,
-		persistOpTimeout:          opts.PersistOpTimeout,
-		onStreamEvent:             opts.OnStreamEvent,
-		w:                         opts.Writer,
-		toolApprovals:             make(map[string]*toolApprovalRequest),
-		maxWallTime:               opts.MaxWallTime,
-		idleTimeout:               opts.IdleTimeout,
-		toolApprovalTO:            opts.ToolApprovalTimeout,
-		doneCh:                    make(chan struct{}),
-		lifecycleMinEmitGap:       600 * time.Millisecond,
-		collectedWebSources:       make(map[string]SourceRef),
-		collectedWebSourceOrder:   make([]string, 0, 8),
-		webSearchToolEnabled:      opts.WebSearchToolEnabled,
-		webSearchMode:             strings.TrimSpace(opts.WebSearchMode),
-		subagentRuntime:           opts.SubagentRuntime,
-		currentThinkingBlockIndex: -1,
-		activityFileActions:       make(map[string]FlowerActivityFileAction),
-		contextCompactionAnchors:  make(map[string]FlowerTimelineAnchor),
-		subagentDepth:             opts.SubagentDepth,
-		toolTargetPolicy:          normalizeToolTargetPolicy(opts.ToolTargetPolicy),
-		targetToolExecutor:        opts.TargetToolExecutor,
-		skillManager:              opts.SkillManager,
-		noUserInteraction:         opts.NoUserInteraction,
+		log:                         opts.Log,
+		stateDir:                    strings.TrimSpace(opts.StateDir),
+		agentHomeDir:                agentHomeDir,
+		workingDir:                  workingDir,
+		scope:                       opts.FilesystemScope,
+		shell:                       strings.TrimSpace(opts.Shell),
+		host:                        opts.HostCapabilities,
+		cfg:                         opts.AIConfig,
+		permissionType:              FlowerPermissionApprovalRequired,
+		sessionMeta:                 runMeta,
+		resolveProviderKey:          opts.ResolveProviderKey,
+		resolveWebSearchKey:         opts.ResolveWebSearchKey,
+		desktopModelSource:          opts.DesktopModelSource,
+		id:                          runID,
+		channelID:                   strings.TrimSpace(opts.ChannelID),
+		endpointID:                  strings.TrimSpace(opts.EndpointID),
+		threadID:                    strings.TrimSpace(opts.ThreadID),
+		userPublicID:                strings.TrimSpace(opts.UserPublicID),
+		messageID:                   strings.TrimSpace(opts.MessageID),
+		settlementThreadID:          strings.TrimSpace(opts.ThreadID),
+		settlementRunID:             runID,
+		settlementTurnID:            strings.TrimSpace(opts.MessageID),
+		uploadsDir:                  strings.TrimSpace(opts.UploadsDir),
+		product:                     opts.ProductCapabilities,
+		floretHostFactory:           opts.FloretHostFactory,
+		floretCompactionHostFactory: opts.FloretCompactionHostFactory,
+		floretSubagentHostFactory:   opts.FloretSubagentHostFactory,
+		effectAuthorizations:        effectAuthorizations,
+		persistOpTimeout:            opts.PersistOpTimeout,
+		onStreamEvent:               opts.OnStreamEvent,
+		w:                           opts.Writer,
+		toolApprovals:               make(map[string]*toolApprovalRequest),
+		maxWallTime:                 opts.MaxWallTime,
+		idleTimeout:                 opts.IdleTimeout,
+		toolApprovalTO:              opts.ToolApprovalTimeout,
+		doneCh:                      make(chan struct{}),
+		lifecycleMinEmitGap:         600 * time.Millisecond,
+		collectedWebSources:         make(map[string]SourceRef),
+		collectedWebSourceOrder:     make([]string, 0, 8),
+		webSearchToolEnabled:        opts.WebSearchToolEnabled,
+		webSearchMode:               strings.TrimSpace(opts.WebSearchMode),
+		subagentRuntime:             opts.SubagentRuntime,
+		currentThinkingBlockIndex:   -1,
+		activityFileActions:         make(map[string]FlowerActivityFileAction),
+		contextCompactionAnchors:    make(map[string]FlowerTimelineAnchor),
+		subagentDepth:               opts.SubagentDepth,
+		toolTargetPolicy:            normalizeToolTargetPolicy(opts.ToolTargetPolicy),
+		targetToolExecutor:          opts.TargetToolExecutor,
+		skillManager:                opts.SkillManager,
+		noUserInteraction:           opts.NoUserInteraction,
 		allowSubagentDelegate: func() bool {
 			if opts.AllowSubagentDelegate {
 				return true
@@ -412,7 +426,7 @@ func (r *run) isWaitingApproval() bool {
 	if r == nil {
 		return false
 	}
-	if r.service != nil && r.service.threadHasPendingApprovals(r.endpointID, r.threadID) {
+	if r.host.hasPendingApprovals != nil && r.host.hasPendingApprovals() {
 		return true
 	}
 	r.mu.Lock()
@@ -959,7 +973,7 @@ func (r *run) commitPendingTurnCommandAdmission(verifyCanonicalTurn bool) error 
 		r.pendingCommandReconciled = true
 		return nil
 	}
-	if r.service == nil {
+	if r.host.reconcilePendingTurnCommand == nil || r.host.commitPendingTurnCommandAdmission == nil || r.host.releasePendingTurnCommandAdmission == nil {
 		return errors.New("run admission coordinator is unavailable")
 	}
 	timeout := r.persistTimeout()
@@ -967,17 +981,28 @@ func (r *run) commitPendingTurnCommandAdmission(verifyCanonicalTurn bool) error 
 	accepted := true
 	var err error
 	if verifyCanonicalTurn {
-		accepted, err = r.service.reconcilePendingTurnCommand(ctx, r.endpointID, r.threadID, r.pendingCommandID, r.messageID, r.canonicalAttachmentIDs)
+		accepted, err = r.host.reconcilePendingTurnCommand(ctx, r.pendingCommandID, r.messageID, r.canonicalAttachmentIDs)
 	} else {
-		err = r.service.commitPendingTurnCommandAdmission(ctx, r.endpointID, r.threadID, r.pendingCommandID, r.messageID, r.canonicalAttachmentIDs)
+		err = r.host.commitPendingTurnCommandAdmission(ctx, r.pendingCommandID, r.messageID, r.canonicalAttachmentIDs)
 	}
 	cancel()
 	if err != nil {
 		return err
 	}
-	if accepted {
-		r.pendingCommandReconciled = true
+	if !accepted {
+		targetLane := threadstore.FollowupLaneQueued
+		if strings.TrimSpace(r.getCancelReason()) == "canceled" {
+			targetLane = threadstore.FollowupLaneDraft
+		}
+		timeout := r.persistTimeout()
+		releaseCtx, releaseCancel := context.WithTimeout(context.Background(), timeout)
+		err = r.host.releasePendingTurnCommandAdmission(releaseCtx, r.pendingCommandID, r.messageID, r.id, targetLane)
+		releaseCancel()
+		if err != nil {
+			return err
+		}
 	}
+	r.pendingCommandReconciled = true
 	return nil
 }
 
@@ -1965,32 +1990,57 @@ func cloneAnyMap(in map[string]any) map[string]any {
 }
 
 type floretToolExecutionAuthorization struct {
-	toolID   string
-	toolName string
+	toolID            string
+	toolName          string
+	effectAttemptID   string
+	snapshotID        string
+	epoch             string
+	decision          ApprovalDecisionKind
+	approvalSatisfied bool
+	authorityThreadID string
+	subagentForkMode  flruntime.SubAgentForkMode
 }
 
 type floretToolExecutionAuthorizationContextKey struct{}
 
-func contextWithFloretToolExecutionAuthorization(ctx context.Context, toolID string, toolName string) context.Context {
+func contextWithFloretToolExecutionAuthorization(
+	ctx context.Context,
+	toolID string,
+	toolName string,
+	effectAttemptID string,
+	snapshot PermissionSnapshot,
+	decision ApprovalDecisionKind,
+	approvalSatisfied bool,
+	hostContext map[string]string,
+) context.Context {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	return context.WithValue(ctx, floretToolExecutionAuthorizationContextKey{}, floretToolExecutionAuthorization{
-		toolID:   strings.TrimSpace(toolID),
-		toolName: strings.TrimSpace(toolName),
+		toolID:            strings.TrimSpace(toolID),
+		toolName:          strings.TrimSpace(toolName),
+		effectAttemptID:   strings.TrimSpace(effectAttemptID),
+		snapshotID:        strings.TrimSpace(snapshot.SnapshotID),
+		epoch:             permissionSurfaceEpoch(snapshot),
+		decision:          decision,
+		approvalSatisfied: approvalSatisfied,
+		authorityThreadID: strings.TrimSpace(hostContext[floretToolHostContextAuthorityThreadIDKey]),
+		subagentForkMode:  flruntime.SubAgentForkMode(strings.TrimSpace(hostContext[subagentToolHostContextForkModeKey])),
 	})
 }
 
-func contextHasFloretToolExecutionAuthorization(ctx context.Context, toolID string, toolName string) bool {
+func floretToolExecutionAuthorizationFromContext(ctx context.Context, toolID string, toolName string) (floretToolExecutionAuthorization, bool) {
 	if ctx == nil {
-		return false
+		return floretToolExecutionAuthorization{}, false
 	}
 	auth, ok := ctx.Value(floretToolExecutionAuthorizationContextKey{}).(floretToolExecutionAuthorization)
 	if !ok {
-		return false
+		return floretToolExecutionAuthorization{}, false
 	}
-	return strings.TrimSpace(auth.toolID) == strings.TrimSpace(toolID) &&
-		strings.TrimSpace(auth.toolName) == strings.TrimSpace(toolName)
+	if strings.TrimSpace(auth.toolID) != strings.TrimSpace(toolID) || strings.TrimSpace(auth.toolName) != strings.TrimSpace(toolName) {
+		return floretToolExecutionAuthorization{}, false
+	}
+	return auth, true
 }
 
 func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string, args map[string]any, activityUpdaters ...toolActivityUpdater) (*toolCallOutcome, error) {
@@ -2524,15 +2574,17 @@ func (r *run) recordWebSearchSources(res websearch.SearchResult) {
 }
 
 func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, toolName string, args map[string]any) (any, error) {
-	if err := r.authorizeToolExecutionFromSnapshot(ctx, toolID, toolName); err != nil {
+	authorizationSnapshot, _, err := r.authorizeToolExecutionFromSnapshot(ctx, toolID, toolName)
+	if err != nil {
 		return nil, err
 	}
+	ctx = contextWithToolAuthorizationSnapshot(ctx, authorizationSnapshot)
 	if r.shouldRouteTargetTool(toolName) {
 		return r.execTargetTool(ctx, toolID, toolName, args)
 	}
 	switch toolName {
 	case "read_file":
-		if !r.canExecuteReadonlyExclusiveTool() {
+		if !r.canExecuteReadonlyExclusiveTool(ctx) {
 			return nil, errors.New("readonly tool unavailable for current permission type")
 		}
 		if meta == nil || !meta.CanRead {
@@ -2550,7 +2602,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		return r.toolFileRead(ctx, FileReadArgs{FilePath: p.Path, Offset: p.Offset, Limit: p.Limit})
 
 	case "read_files":
-		if !r.canExecuteReadonlyExclusiveTool() {
+		if !r.canExecuteReadonlyExclusiveTool(ctx) {
 			return nil, errors.New("readonly tool unavailable for current permission type")
 		}
 		if meta == nil || !meta.CanRead {
@@ -2567,7 +2619,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		return r.toolReadFiles(ctx, p.Paths, p.Limit)
 
 	case "find":
-		if !r.canExecuteReadonlyExclusiveTool() {
+		if !r.canExecuteReadonlyExclusiveTool(ctx) {
 			return nil, errors.New("readonly tool unavailable for current permission type")
 		}
 		if meta == nil || !meta.CanRead {
@@ -2588,7 +2640,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		return r.toolReadonlyFind(ctx, p.Root, p.Name, p.Type, p.MaxResults, p.MaxDepth, p.IncludeHidden)
 
 	case "rgrep":
-		if !r.canExecuteReadonlyExclusiveTool() {
+		if !r.canExecuteReadonlyExclusiveTool(ctx) {
 			return nil, errors.New("readonly tool unavailable for current permission type")
 		}
 		if meta == nil || !meta.CanRead {
@@ -2610,7 +2662,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		return r.toolReadonlyGrep(ctx, p.Query, p.Paths, p.Glob, p.CaseSensitive, p.FixedStrings, p.MaxMatches, p.ContextLines)
 
 	case "web_fetch":
-		if !r.canExecuteReadonlyExclusiveTool() {
+		if !r.canExecuteReadonlyExclusiveTool(ctx) {
 			return nil, errors.New("readonly tool unavailable for current permission type")
 		}
 		if meta == nil || !meta.CanRead {
@@ -2624,7 +2676,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		return r.toolWebFetch(ctx, p)
 
 	case "file.read":
-		if !r.canExecuteReadonlyExclusiveTool() {
+		if !r.canExecuteReadonlyExclusiveTool(ctx) {
 			return nil, errors.New("readonly tool unavailable for current permission type")
 		}
 		if meta == nil || !meta.CanRead {
@@ -2882,7 +2934,7 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 			return nil, errors.New("missing name")
 		}
 		reason := strings.TrimSpace(p.Reason)
-		activation, alreadyActive, err := r.activateSkill(name)
+		activation, alreadyActive, err := r.activateSkill(ctx, name)
 		if err != nil {
 			return nil, err
 		}
@@ -2924,57 +2976,49 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 	}
 }
 
-func (r *run) canExecuteReadonlyExclusiveTool() bool {
-	return r != nil && r.permissionType == FlowerPermissionReadonly
+func (r *run) canExecuteReadonlyExclusiveTool(ctx context.Context) bool {
+	snapshot, ok := toolAuthorizationSnapshotFromContext(ctx)
+	return r != nil && ok && snapshot.PermissionType == FlowerPermissionReadonly
 }
 
-func (r *run) authorizeToolExecutionFromSnapshot(ctx context.Context, toolID string, toolName string) error {
+func (r *run) authorizeToolExecutionFromSnapshot(ctx context.Context, toolID string, toolName string) (PermissionSnapshot, floretToolExecutionAuthorization, error) {
 	if r == nil {
-		return errors.New("permission snapshot runtime is unavailable")
+		return PermissionSnapshot{}, floretToolExecutionAuthorization{}, errors.New("permission snapshot runtime is unavailable")
 	}
-	if !permissionSnapshotActive(r.permissionSnapshot) {
-		return errors.New("permission snapshot is unavailable")
+	authorization, ok := floretToolExecutionAuthorizationFromContext(ctx, toolID, toolName)
+	if !ok || strings.TrimSpace(authorization.effectAttemptID) == "" || strings.TrimSpace(authorization.snapshotID) == "" || strings.TrimSpace(authorization.epoch) == "" || authorization.decision == "" {
+		return PermissionSnapshot{}, floretToolExecutionAuthorization{}, errors.New("permission denied: Floret tool authorization proof is unavailable")
 	}
-	if r.subagentDepth <= 0 && !r.noUserInteraction && r.threadsDB != nil {
-		previousEpoch := permissionSurfaceEpoch(r.permissionSnapshot)
-		surfaceConfig := r.dynamicSurfaceConfig
-		if !surfaceConfig.UseLatestThreadPermission {
-			surfaceConfig.UseLatestThreadPermission = true
-		}
-		surfaceConfig.IncludeControlSignalsInSnapshot = true
-		surface, err := r.buildRunToolSurface(ctx, surfaceConfig, r.permissionType)
-		if err != nil {
-			return fmt.Errorf("refresh current permission snapshot: %w", err)
-		}
-		if surface.Epoch != "" && surface.Epoch != previousEpoch {
-			r.recordRunDiagnostic("tool_surface.updated", RealtimeStreamKindLifecycle, map[string]any{
-				"phase":             "local_tool_dispatch",
-				"permission_type":   permissionTypeString(surface.PermissionType),
-				"snapshot_id":       strings.TrimSpace(surface.PermissionSnapshot.SnapshotID),
-				"snapshot_hash":     strings.TrimSpace(surface.PermissionSnapshot.SnapshotHash),
-				"registry_hash":     strings.TrimSpace(surface.PermissionSnapshot.RegistryHash),
-				"schema_hash":       strings.TrimSpace(surface.PermissionSnapshot.SchemaHash),
-				"presentation_hash": strings.TrimSpace(surface.PermissionSnapshot.PresentationHash),
-			})
-		}
+	authorizationSnapshot, _ := toolAuthorizationSnapshotFromContext(ctx)
+	if !permissionSnapshotActive(authorizationSnapshot) {
+		return PermissionSnapshot{}, floretToolExecutionAuthorization{}, errors.New("permission snapshot is unavailable")
+	}
+	if strings.TrimSpace(authorizationSnapshot.SnapshotID) != authorization.snapshotID || permissionSurfaceEpoch(authorizationSnapshot) != authorization.epoch {
+		return PermissionSnapshot{}, floretToolExecutionAuthorization{}, errors.New("permission denied: Floret effect authorization snapshot mismatch")
 	}
 	toolName = strings.TrimSpace(toolName)
 	if toolName == "" {
-		return errors.New("missing tool_name")
+		return PermissionSnapshot{}, floretToolExecutionAuthorization{}, errors.New("missing tool_name")
 	}
-	policy, ok := r.permissionSnapshot.ToolPolicies[toolName]
-	if !ok || !stringSliceContains(r.permissionSnapshot.FloretToolNames, toolName) {
-		return errors.New("permission denied: tool unavailable for current permission snapshot")
+	policy, ok := authorizationSnapshot.ToolPolicies[toolName]
+	if !ok || !stringSliceContains(authorizationSnapshot.FloretToolNames, toolName) {
+		return PermissionSnapshot{}, floretToolExecutionAuthorization{}, errors.New("permission denied: tool unavailable for current permission snapshot")
+	}
+	if policy.ApprovalDecision != authorization.decision {
+		return PermissionSnapshot{}, floretToolExecutionAuthorization{}, errors.New("permission denied: Floret effect authorization decision mismatch")
 	}
 	switch policy.ApprovalDecision {
 	case ApprovalDecisionDeny:
-		return errors.New("permission denied: tool denied by current permission snapshot")
+		return PermissionSnapshot{}, floretToolExecutionAuthorization{}, errors.New("permission denied: tool denied by current permission snapshot")
 	case ApprovalDecisionAsk:
-		if !contextHasFloretToolExecutionAuthorization(ctx, toolID, toolName) {
-			return errors.New("permission denied: tool approval required before execution")
+		if !authorization.approvalSatisfied {
+			return PermissionSnapshot{}, floretToolExecutionAuthorization{}, errors.New("permission denied: tool approval required before execution")
 		}
+	case ApprovalDecisionAllow:
+	default:
+		return PermissionSnapshot{}, floretToolExecutionAuthorization{}, fmt.Errorf("permission denied: unsupported approval decision %q", policy.ApprovalDecision)
 	}
-	return nil
+	return authorizationSnapshot, authorization, nil
 }
 
 func permissionSnapshotActive(snapshot PermissionSnapshot) bool {
@@ -3956,7 +4000,8 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 		ToolName: "terminal.exec",
 		Args:     cloneAnyMap(args),
 	}
-	if err := r.authorizeToolExecutionFromSnapshot(ctx, toolID, "terminal.exec"); err != nil {
+	_, authorization, err := r.authorizeToolExecutionFromSnapshot(ctx, toolID, "terminal.exec")
+	if err != nil {
 		return outcome, aitools.ClassifyError(aitools.Invocation{ToolName: "terminal.exec", Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, err)
 	}
 	if !session.AllowsProcessLaunch(meta) {
@@ -3988,11 +4033,8 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 	if err != nil {
 		return outcome, aitools.ClassifyError(aitools.Invocation{ToolName: "terminal.exec", Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, mapToolCwdError(err))
 	}
-	manager := (*terminalProcessManager)(nil)
-	if r.service != nil {
-		manager = r.service.terminalProcessManager()
-	}
-	if manager == nil {
+	terminalHost := r.host.terminal
+	if terminalHost == nil {
 		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "terminal process manager unavailable", Retryable: true}
 	}
 	settlementOwner := r.pendingToolSettlementOwner()
@@ -4004,12 +4046,13 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 		return outcome, aitools.ClassifyError(aitools.Invocation{ToolName: "terminal.exec", Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, err)
 	}
 	settlementTarget := flruntime.PendingToolSettlementTarget{
-		ThreadID:   flruntime.ThreadID(strings.TrimSpace(r.settlementThreadID)),
-		TurnID:     flruntime.TurnID(strings.TrimSpace(r.settlementTurnID)),
-		RunID:      flruntime.RunID(strings.TrimSpace(r.settlementRunID)),
-		ToolCallID: strings.TrimSpace(toolID),
-		ToolName:   "terminal.exec",
-		Handle:     processID,
+		ThreadID:        flruntime.ThreadID(strings.TrimSpace(r.settlementThreadID)),
+		TurnID:          flruntime.TurnID(strings.TrimSpace(r.settlementTurnID)),
+		RunID:           flruntime.RunID(strings.TrimSpace(r.settlementRunID)),
+		ToolCallID:      strings.TrimSpace(toolID),
+		ToolName:        "terminal.exec",
+		Handle:          processID,
+		EffectAttemptID: authorization.effectAttemptID,
 	}
 	shell := strings.TrimSpace(r.shell)
 	if shell == "" {
@@ -4020,7 +4063,7 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 	endBusy := r.beginBusy()
 	defer endBusy()
 
-	proc, err := manager.Start(terminalProcessStartRequest{
+	proc, err := terminalHost.Start(terminalProcessStartRequest{
 		ProcessID:        processID,
 		EndpointID:       strings.TrimSpace(r.endpointID),
 		ThreadID:         strings.TrimSpace(r.threadID),
@@ -4028,7 +4071,7 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 		TurnID:           strings.TrimSpace(r.messageID),
 		SettlementOwner:  settlementOwner,
 		SettlementTarget: settlementTarget,
-		Finalize:         r.service.finalizeTerminalProcess,
+		Finalize:         terminalHost.Finalize,
 		ToolID:           strings.TrimSpace(toolID),
 		ToolName:         "terminal.exec",
 		Command:          parsed.Command,
@@ -4083,15 +4126,11 @@ func (r *run) terminalProcessForTool(processID string) (*terminalProcess, error)
 	if processID == "" {
 		return nil, errors.New("missing process_id")
 	}
-	if r == nil || r.service == nil {
+	if r == nil || r.host.terminal == nil {
 		return nil, errors.New("terminal process manager unavailable")
 	}
-	manager := r.service.terminalProcessManager()
-	if manager == nil {
-		return nil, errors.New("terminal process manager unavailable")
-	}
-	proc, ok := manager.Get(processID)
-	if !ok || proc == nil {
+	proc, err := r.host.terminal.Get(processID)
+	if err != nil {
 		return nil, errors.New("terminal process not found")
 	}
 	snapshot := proc.Snapshot()

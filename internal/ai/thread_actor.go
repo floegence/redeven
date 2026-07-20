@@ -2,7 +2,6 @@ package ai
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"strings"
 	"sync"
@@ -20,16 +19,169 @@ import (
 type threadManager struct {
 	svc *Service
 
-	mu     sync.Mutex
-	actors map[string]*threadActor // thread_key -> actor
-	closed bool
+	mu             sync.Mutex
+	actors         map[string]*threadActor // thread_key -> actor
+	lifecycleGates map[string]*threadLifecycleGate
+	closed         bool
+}
+
+type threadLifecycleGate struct {
+	mu              sync.Mutex
+	cond            *sync.Cond
+	readers         int
+	writer          bool
+	waitingWriters  int
+	joinAllChildren int
+	joinChildren    map[string]int
+	refs            int
+}
+
+type threadEffectJoin struct {
+	childThreadID string
+	allChildren   bool
+}
+
+type threadEffectGateRequest struct {
+	authorityThreadID string
+	executionThreadID string
+	join              threadEffectJoin
+}
+
+func newThreadLifecycleGate() *threadLifecycleGate {
+	gate := &threadLifecycleGate{joinChildren: make(map[string]int)}
+	gate.cond = sync.NewCond(&gate.mu)
+	return gate
+}
+
+func (g *threadLifecycleGate) lock(shared bool, request threadEffectGateRequest) {
+	g.mu.Lock()
+	if shared {
+		for g.writer || (g.waitingWriters > 0 && !g.canJoinActiveCohort(request)) {
+			g.cond.Wait()
+		}
+		g.readers++
+		g.addJoinScope(request.join)
+	} else {
+		g.waitingWriters++
+		for g.writer || g.readers > 0 {
+			g.cond.Wait()
+		}
+		g.waitingWriters--
+		g.writer = true
+	}
+	g.mu.Unlock()
+}
+
+func (g *threadLifecycleGate) unlock(shared bool, request threadEffectGateRequest) {
+	g.mu.Lock()
+	if shared {
+		g.readers--
+		g.removeJoinScope(request.join)
+	} else {
+		g.writer = false
+	}
+	g.cond.Broadcast()
+	g.mu.Unlock()
+}
+
+func (g *threadLifecycleGate) canJoinActiveCohort(request threadEffectGateRequest) bool {
+	if g.readers <= 0 || request.executionThreadID == "" || request.executionThreadID == request.authorityThreadID {
+		return false
+	}
+	return g.joinAllChildren > 0 || g.joinChildren[request.executionThreadID] > 0
+}
+
+func (g *threadLifecycleGate) addJoinScope(join threadEffectJoin) {
+	if join.allChildren {
+		g.joinAllChildren++
+	}
+	if join.childThreadID != "" {
+		g.joinChildren[join.childThreadID]++
+	}
+}
+
+func (g *threadLifecycleGate) removeJoinScope(join threadEffectJoin) {
+	if join.allChildren {
+		g.joinAllChildren--
+	}
+	if join.childThreadID != "" {
+		g.joinChildren[join.childThreadID]--
+		if g.joinChildren[join.childThreadID] <= 0 {
+			delete(g.joinChildren, join.childThreadID)
+		}
+	}
 }
 
 func newThreadManager(svc *Service) *threadManager {
 	return &threadManager{
-		svc:    svc,
-		actors: make(map[string]*threadActor),
+		svc:            svc,
+		actors:         make(map[string]*threadActor),
+		lifecycleGates: make(map[string]*threadLifecycleGate),
 	}
+}
+
+func (m *threadManager) lockThreadLifecycle(endpointID string, threadID string) (func(), error) {
+	return m.lockThreadGate(endpointID, threadID, false, threadEffectGateRequest{})
+}
+
+// lockThreadEffect shares one authority gate across concurrent effects while
+// lifecycle mutations remain exclusive. This lets parent and child effects make
+// progress together without allowing delete, fork, or permission changes to
+// cross an in-flight effect boundary.
+func (m *threadManager) lockThreadEffect(endpointID string, authorityThreadID string, executionThreadID string, join threadEffectJoin) (func(), error) {
+	authorityThreadID = strings.TrimSpace(authorityThreadID)
+	executionThreadID = strings.TrimSpace(executionThreadID)
+	join.childThreadID = strings.TrimSpace(join.childThreadID)
+	if authorityThreadID == "" || executionThreadID == "" {
+		return nil, errors.New("invalid thread effect authority")
+	}
+	if join.allChildren && join.childThreadID != "" {
+		return nil, errors.New("invalid thread effect join scope")
+	}
+	if join.childThreadID == authorityThreadID {
+		return nil, errors.New("invalid thread effect child scope")
+	}
+	return m.lockThreadGate(endpointID, authorityThreadID, true, threadEffectGateRequest{
+		authorityThreadID: authorityThreadID,
+		executionThreadID: executionThreadID,
+		join:              join,
+	})
+}
+
+func (m *threadManager) lockThreadGate(endpointID string, threadID string, shared bool, request threadEffectGateRequest) (func(), error) {
+	if m == nil {
+		return nil, errors.New("thread manager not ready")
+	}
+	key := runThreadKey(endpointID, threadID)
+	if key == "" {
+		return nil, errors.New("invalid thread identity")
+	}
+	m.mu.Lock()
+	if m.closed {
+		m.mu.Unlock()
+		return nil, errors.New("thread manager closed")
+	}
+	gate := m.lifecycleGates[key]
+	if gate == nil {
+		gate = newThreadLifecycleGate()
+		m.lifecycleGates[key] = gate
+	}
+	gate.refs++
+	m.mu.Unlock()
+
+	gate.lock(shared, request)
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			gate.unlock(shared, request)
+			m.mu.Lock()
+			gate.refs--
+			if gate.refs == 0 && m.lifecycleGates[key] == gate {
+				delete(m.lifecycleGates, key)
+			}
+			m.mu.Unlock()
+		})
+	}, nil
 }
 
 func (m *threadManager) Get(endpointID string, threadID string) *threadActor {
@@ -409,13 +561,6 @@ func queuedTurnStartLogAttrs(err error, endpointID string, threadID string) []an
 	return append(attrs, "error", err)
 }
 
-func queuedTurnStartErrorIsPermanent(err error) bool {
-	return errors.Is(err, sql.ErrNoRows) ||
-		errors.Is(err, ErrReadOnlyThread) ||
-		errors.Is(err, ErrWaitingPromptChanged) ||
-		errors.Is(err, ErrWaitingUserQueueConflict)
-}
-
 func (a *threadActor) lookupActiveRun(endpointID string, threadID string) (string, *run) {
 	if a == nil || a.mgr == nil || a.mgr.svc == nil {
 		return "", nil
@@ -474,7 +619,7 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 	}
 
 	tctx, cancel := context.WithTimeout(ctx, persistTO)
-	th, err := db.GetThread(tctx, endpointID, threadID)
+	th, err := db.GetThreadSettings(tctx, endpointID, threadID)
 	cancel()
 	if err != nil {
 		return err
@@ -483,10 +628,14 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 		return nil
 	}
 	snapshot, latest, canonicalErr := a.mgr.svc.readCanonicalThreadState(ctx, threadID)
-	if canonicalErr != nil && !isFloretThreadNotFoundError(canonicalErr) {
+	if canonicalErr != nil {
 		return canonicalErr
 	}
-	if canonicalErr == nil && (!snapshot.CanAppendMessage || requestUserInputPromptFromFloretTurn(latest) != nil) {
+	waitingPrompt, err := requestUserInputPromptFromFloretTurn(latest)
+	if err != nil {
+		return err
+	}
+	if !snapshot.CanAppendMessage || waitingPrompt != nil {
 		return nil
 	}
 
@@ -510,9 +659,6 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 	}
 	startReq, err := queuedTurnRecordToRunStartRequest(rec, th.PermissionType)
 	if err != nil {
-		if consumeErr := a.mgr.svc.consumeSourceFollowup(context.Background(), meta, threadID, rec.QueueID); consumeErr != nil && !errors.Is(consumeErr, sql.ErrNoRows) {
-			err = errors.Join(err, consumeErr)
-		}
 		return &queuedTurnStartError{
 			endpointID:         endpointID,
 			threadID:           threadID,
@@ -523,15 +669,7 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 			err:                err,
 		}
 	}
-	if _, _, err := a.mgr.svc.startUserTurnDetached(ctx, meta, runID, startReq, rec.QueueID, true); err != nil {
-		if queuedTurnStartErrorIsPermanent(err) {
-			if consumeErr := a.mgr.svc.consumeSourceFollowup(context.Background(), meta, threadID, rec.QueueID); consumeErr != nil && !errors.Is(consumeErr, sql.ErrNoRows) {
-				err = errors.Join(err, consumeErr)
-			}
-			if a.mgr != nil {
-				a.mgr.Wake(endpointID, threadID)
-			}
-		}
+	if _, _, err := a.mgr.svc.startUserTurnDetached(ctx, meta, runID, startReq, rec.QueueID); err != nil {
 		return &queuedTurnStartError{
 			endpointID:         endpointID,
 			threadID:           threadID,
@@ -593,7 +731,7 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		persistTO = defaultPersistOpTimeout
 	}
 	tctx, cancel := context.WithTimeout(ctx, persistTO)
-	th, err := db.GetThread(tctx, endpointID, threadID)
+	th, err := db.GetThreadSettings(tctx, endpointID, threadID)
 	cancel()
 	if err != nil {
 		return SendUserTurnResponse{}, err
@@ -610,16 +748,14 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 	if err != nil {
 		return SendUserTurnResponse{}, err
 	}
-	consumeSourceFollowup := func() {
-		if err := a.mgr.svc.consumeSourceFollowup(context.Background(), meta, threadID, req.SourceFollowupID); err != nil && a.mgr.svc.log != nil {
-			a.mgr.svc.log.Warn("failed to consume source followup", "thread_id", threadID, "followup_id", strings.TrimSpace(req.SourceFollowupID), "error", err)
-		}
-	}
 	_, latest, canonicalErr := a.mgr.svc.readCanonicalThreadState(ctx, threadID)
-	if canonicalErr != nil && !isFloretThreadNotFoundError(canonicalErr) {
+	if canonicalErr != nil {
 		return SendUserTurnResponse{}, canonicalErr
 	}
-	openPrompt := requestUserInputPromptFromFloretTurn(latest)
+	openPrompt, err := requestUserInputPromptFromFloretTurn(latest)
+	if err != nil {
+		return SendUserTurnResponse{}, err
+	}
 	normalizeTurnReasoning := func(options *RunOptions) error {
 		if options == nil {
 			return nil
@@ -628,8 +764,14 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		if modelID == "" {
 			modelID = strings.TrimSpace(th.ModelID)
 		}
-		capability, modelDefault, _ := a.mgr.svc.threadReasoningDefaults(ctx, modelID)
-		threadDefault := unmarshalReasoningSelection(th.ReasoningSelectionJSON)
+		capability, modelDefault, _, err := a.mgr.svc.threadReasoningDefaults(ctx, modelID)
+		if err != nil {
+			return err
+		}
+		threadDefault, err := parseStoredReasoningSelection(th.ReasoningSelectionJSON)
+		if err != nil {
+			return err
+		}
 		resolved, err := resolveEffectiveReasoning(capability, options.ReasoningSelection, threadDefault, modelDefault)
 		if err != nil {
 			return reasoningSelectionError(modelID, err)
@@ -647,7 +789,6 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		if err != nil {
 			return SendUserTurnResponse{}, err
 		}
-		consumeSourceFollowup()
 		return SendUserTurnResponse{
 			Kind:                  "queued",
 			QueueID:               strings.TrimSpace(queued.QueueID),
@@ -669,7 +810,6 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		if err != nil {
 			return SendUserTurnResponse{}, err
 		}
-		consumeSourceFollowup()
 		return SendUserTurnResponse{
 			Kind:                  "queued",
 			QueueID:               strings.TrimSpace(queued.QueueID),
@@ -682,7 +822,6 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		if err != nil {
 			return SendUserTurnResponse{}, err
 		}
-		consumeSourceFollowup()
 		return SendUserTurnResponse{
 			Kind:                  "queued",
 			QueueID:               strings.TrimSpace(queued.QueueID),
@@ -701,7 +840,6 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		if err != nil {
 			return SendUserTurnResponse{}, err
 		}
-		consumeSourceFollowup()
 		return SendUserTurnResponse{
 			Kind:                  "queued",
 			QueueID:               strings.TrimSpace(queued.QueueID),
@@ -721,7 +859,7 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		Input:    req.Input,
 		Options:  req.Options,
 	}
-	if _, _, err := a.mgr.svc.startUserTurnDetached(ctx, meta, runID, startReq, req.SourceFollowupID, false); err != nil {
+	if _, _, err := a.mgr.svc.startUserTurnDetached(ctx, meta, runID, startReq, req.SourceFollowupID); err != nil {
 		return SendUserTurnResponse{}, err
 	}
 	return SendUserTurnResponse{
@@ -771,7 +909,7 @@ func (a *threadActor) handleSubmitRequestUserInputResponse(ctx context.Context, 
 		persistTO = defaultPersistOpTimeout
 	}
 	tctx, cancel := context.WithTimeout(ctx, persistTO)
-	th, err := db.GetThread(tctx, endpointID, threadID)
+	th, err := db.GetThreadSettings(tctx, endpointID, threadID)
 	cancel()
 	if err != nil {
 		return SubmitRequestUserInputResponseResponse{}, err
@@ -792,7 +930,10 @@ func (a *threadActor) handleSubmitRequestUserInputResponse(ctx context.Context, 
 	if canonicalErr != nil {
 		return SubmitRequestUserInputResponseResponse{}, canonicalErr
 	}
-	openPrompt := requestUserInputPromptFromFloretTurn(latest)
+	openPrompt, err := requestUserInputPromptFromFloretTurn(latest)
+	if err != nil {
+		return SubmitRequestUserInputResponseResponse{}, err
+	}
 	if openPrompt == nil {
 		return SubmitRequestUserInputResponseResponse{}, ErrWaitingPromptChanged
 	}
@@ -815,8 +956,14 @@ func (a *threadActor) handleSubmitRequestUserInputResponse(ctx context.Context, 
 		if modelID == "" {
 			modelID = strings.TrimSpace(th.ModelID)
 		}
-		capability, modelDefault, _ := a.mgr.svc.threadReasoningDefaults(ctx, modelID)
-		threadDefault := unmarshalReasoningSelection(th.ReasoningSelectionJSON)
+		capability, modelDefault, _, err := a.mgr.svc.threadReasoningDefaults(ctx, modelID)
+		if err != nil {
+			return SubmitRequestUserInputResponseResponse{}, err
+		}
+		threadDefault, err := parseStoredReasoningSelection(th.ReasoningSelectionJSON)
+		if err != nil {
+			return SubmitRequestUserInputResponseResponse{}, err
+		}
 		resolved, err := resolveEffectiveReasoning(capability, req.Options.ReasoningSelection, threadDefault, modelDefault)
 		if err != nil {
 			return SubmitRequestUserInputResponseResponse{}, reasoningSelectionError(modelID, err)
@@ -837,7 +984,7 @@ func (a *threadActor) handleSubmitRequestUserInputResponse(ctx context.Context, 
 		Input:    req.Input,
 		Options:  req.Options,
 	}
-	if _, _, err := a.mgr.svc.startUserTurnDetached(ctx, meta, runID, startReq, req.SourceFollowupID, false); err != nil {
+	if _, _, err := a.mgr.svc.startUserTurnDetached(ctx, meta, runID, startReq, req.SourceFollowupID); err != nil {
 		return SubmitRequestUserInputResponseResponse{}, err
 	}
 	return SubmitRequestUserInputResponseResponse{

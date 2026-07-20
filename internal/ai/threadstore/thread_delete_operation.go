@@ -22,6 +22,66 @@ const (
 
 var ErrThreadIDRetired = errors.New("thread id retired")
 
+func requireThreadWritableTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string) error {
+	if err := requireThreadNotRetiredTx(ctx, tx, endpointID, threadID); err != nil {
+		return err
+	}
+	var pendingFork int
+	err := tx.QueryRowContext(ctx, `
+SELECT 1
+FROM ai_thread_fork_operations
+WHERE endpoint_id = ? AND status = ? AND (source_thread_id = ? OR destination_thread_id = ?)
+LIMIT 1
+`, strings.TrimSpace(endpointID), string(ForkOperationPending), strings.TrimSpace(threadID), strings.TrimSpace(threadID)).Scan(&pendingFork)
+	switch {
+	case err == nil:
+		return ErrThreadOperationInProgress
+	case errors.Is(err, sql.ErrNoRows):
+		return nil
+	default:
+		return err
+	}
+}
+
+func requireThreadNotRetiredTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string) error {
+	if tx == nil {
+		return errors.New("store transaction is unavailable")
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	if endpointID == "" || threadID == "" {
+		return errors.New("invalid thread identity")
+	}
+	var retired int
+	err := tx.QueryRowContext(ctx, `SELECT 1 FROM ai_thread_delete_operations WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID).Scan(&retired)
+	switch {
+	case err == nil:
+		return ErrThreadIDRetired
+	case errors.Is(err, sql.ErrNoRows):
+		return nil
+	default:
+		return err
+	}
+}
+
+func (s *Store) RequireThreadSettingsWritable(ctx context.Context, endpointID string, threadID string) error {
+	if s == nil || s.db == nil {
+		return errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	tx, err := s.db.BeginTx(ctx, &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
 type ThreadDeleteSnapshotV1 struct {
 	SchemaVersion         int      `json:"schema_version"`
 	UploadCleanupIDs      []string `json:"upload_cleanup_ids"`
@@ -34,6 +94,7 @@ type ThreadDeleteOperation struct {
 	ThreadID                   string
 	Status                     string
 	Snapshot                   ThreadDeleteSnapshotV1
+	SnapshotFingerprint        string
 	SnapshotValid              bool
 	SnapshotErrorCode          string
 	ProductDataDeletedAtUnixMs int64
@@ -86,6 +147,17 @@ func (s *Store) PrepareThreadDeleteOperation(ctx context.Context, endpointID str
 	if thread == nil {
 		return ThreadDeleteOperation{}, sql.ErrNoRows
 	}
+	var pendingForks int
+	if err := tx.QueryRowContext(ctx, `
+SELECT COUNT(1)
+FROM ai_thread_fork_operations
+WHERE endpoint_id = ? AND status = ? AND (source_thread_id = ? OR destination_thread_id = ?)
+`, endpointID, string(ForkOperationPending), threadID, threadID).Scan(&pendingForks); err != nil {
+		return ThreadDeleteOperation{}, err
+	}
+	if pendingForks > 0 {
+		return ThreadDeleteOperation{}, ErrThreadOperationInProgress
+	}
 	now := time.Now().UnixMilli()
 	uploadIDs, err := listUploadIDsForThreadTx(ctx, tx, endpointID, threadID)
 	if err != nil {
@@ -100,13 +172,17 @@ func (s *Store) PrepareThreadDeleteOperation(ctx context.Context, endpointID str
 	if err != nil {
 		return ThreadDeleteOperation{}, err
 	}
+	snapshotFingerprint, err := threadDeleteSnapshotFingerprint(endpointID, threadID, snapshot)
+	if err != nil {
+		return ThreadDeleteOperation{}, err
+	}
 	operationID := stableThreadDeleteOperationID(endpointID, threadID)
 	if _, err := tx.ExecContext(ctx, `
 INSERT INTO ai_thread_delete_operations(
-  operation_id, endpoint_id, thread_id, status, snapshot_schema_version, snapshot_json,
+  operation_id, endpoint_id, thread_id, status, snapshot_schema_version, snapshot_json, snapshot_fingerprint,
   read_state_required, product_data_deleted_at_unix_ms, created_at_unix_ms, updated_at_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
-`, operationID, endpointID, threadID, ThreadDeleteOperationPending, ThreadDeleteSnapshotSchemaV1, string(snapshotJSON), boolToInt(deleteFlowerReadState), now, now); err != nil {
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+`, operationID, endpointID, threadID, ThreadDeleteOperationPending, ThreadDeleteSnapshotSchemaV1, string(snapshotJSON), snapshotFingerprint, boolToInt(deleteFlowerReadState), now, now); err != nil {
 		return ThreadDeleteOperation{}, err
 	}
 	operation, err := loadThreadDeleteOperationByIDTx(ctx, tx, operationID)
@@ -213,6 +289,41 @@ func (s *Store) ListPendingThreadDeleteOperations(ctx context.Context, limit int
 		limit = 500
 	}
 	rows, err := s.db.QueryContext(ctx, threadDeleteOperationSelectSQL+` WHERE status = ? ORDER BY updated_at_unix_ms ASC, operation_id ASC LIMIT ?`, ThreadDeleteOperationPending, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]ThreadDeleteOperation, 0, limit)
+	for rows.Next() {
+		operation, err := scanThreadDeleteOperation(rows)
+		if err != nil {
+			return nil, err
+		}
+		if operation != nil {
+			out = append(out, *operation)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (s *Store) ListPendingThreadDeleteOperationsAfter(ctx context.Context, afterOperationID string, limit int) ([]ThreadDeleteOperation, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	afterOperationID = strings.TrimSpace(afterOperationID)
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	rows, err := s.db.QueryContext(ctx, threadDeleteOperationSelectSQL+` WHERE status = ? AND operation_id > ? ORDER BY operation_id ASC LIMIT ?`, ThreadDeleteOperationPending, afterOperationID, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -343,7 +454,7 @@ WHERE operation_id = ? AND status = ?
 }
 
 const threadDeleteOperationSelectSQL = `
-SELECT operation_id, endpoint_id, thread_id, status, snapshot_schema_version, snapshot_json,
+SELECT operation_id, endpoint_id, thread_id, status, snapshot_schema_version, snapshot_json, snapshot_fingerprint,
        read_state_required, product_data_deleted_at_unix_ms, files_cleaned_at_unix_ms,
        floret_deleted_at_unix_ms, read_state_deleted_at_unix_ms, retry_count, error_code,
        error_message, created_at_unix_ms, updated_at_unix_ms, committed_at_unix_ms
@@ -369,6 +480,7 @@ func scanThreadDeleteOperation(scanner rowScanner) (*ThreadDeleteOperation, erro
 		&operation.Status,
 		&snapshotSchemaVersion,
 		&snapshotJSON,
+		&operation.SnapshotFingerprint,
 		&readStateRequired,
 		&operation.ProductDataDeletedAtUnixMs,
 		&operation.FilesCleanedAtUnixMs,
@@ -392,7 +504,7 @@ func scanThreadDeleteOperation(scanner rowScanner) (*ThreadDeleteOperation, erro
 		operation.SnapshotErrorCode = "unsupported_snapshot_schema"
 		return &operation, nil
 	}
-	if err := json.Unmarshal([]byte(snapshotJSON), &operation.Snapshot); err != nil {
+	if err := decodeStrictJSON(snapshotJSON, &operation.Snapshot); err != nil {
 		operation.SnapshotValid = false
 		operation.SnapshotErrorCode = "invalid_snapshot_json"
 		return &operation, nil
@@ -402,8 +514,31 @@ func scanThreadDeleteOperation(scanner rowScanner) (*ThreadDeleteOperation, erro
 		!validThreadDeleteSnapshotIDs(operation.Snapshot.UploadCleanupIDs) {
 		operation.SnapshotValid = false
 		operation.SnapshotErrorCode = "invalid_snapshot_contract"
+		return &operation, nil
+	}
+	fingerprint, err := threadDeleteSnapshotFingerprint(operation.EndpointID, operation.ThreadID, operation.Snapshot)
+	if err != nil || strings.TrimSpace(operation.SnapshotFingerprint) == "" || fingerprint != strings.TrimSpace(operation.SnapshotFingerprint) {
+		operation.SnapshotValid = false
+		operation.SnapshotErrorCode = "snapshot_fingerprint_mismatch"
 	}
 	return &operation, nil
+}
+
+func threadDeleteSnapshotFingerprint(endpointID string, threadID string, snapshot ThreadDeleteSnapshotV1) (string, error) {
+	body, err := json.Marshal(struct {
+		EndpointID string                 `json:"endpoint_id"`
+		ThreadID   string                 `json:"thread_id"`
+		Snapshot   ThreadDeleteSnapshotV1 `json:"snapshot"`
+	}{
+		EndpointID: strings.TrimSpace(endpointID),
+		ThreadID:   strings.TrimSpace(threadID),
+		Snapshot:   snapshot,
+	})
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(body)
+	return hex.EncodeToString(sum[:]), nil
 }
 
 func validThreadDeleteSnapshotIDs(ids []string) bool {

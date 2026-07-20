@@ -63,7 +63,7 @@ type TargetToolResult struct {
 func toolRequiresTarget(toolName string) bool {
 	toolName = strings.TrimSpace(toolName)
 	switch toolName {
-	case "file.read", "file.edit", "file.write", "apply_patch":
+	case "file.read", "read_file", "file.edit", "file.write", "apply_patch":
 		return true
 	}
 	return false
@@ -71,7 +71,7 @@ func toolRequiresTarget(toolName string) bool {
 
 func requiredTargetCapabilities(toolName string) []string {
 	switch strings.TrimSpace(toolName) {
-	case "file.read":
+	case "file.read", "read_file":
 		return []string{"read"}
 	case "file.edit", "file.write", "apply_patch":
 		return []string{"write"}

@@ -12,7 +12,6 @@ import (
 	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
 	fltools "github.com/floegence/floret/tools"
-	"github.com/floegence/redeven/internal/ai/threadstore"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
@@ -22,10 +21,14 @@ type floretToolRuntimeState struct {
 }
 
 const (
-	subagentToolHostContextAgentTypeKey        = "subagent_agent_type"
-	subagentToolHostContextChildRunIDKey       = "child_run_id"
-	subagentToolHostContextChildThreadIDKey    = "child_thread_id"
-	subagentToolHostContextParentPermissionKey = "subagent_parent_permission"
+	subagentToolHostContextAgentTypeKey     = "subagent_agent_type"
+	subagentToolHostContextChildRunIDKey    = "child_run_id"
+	subagentToolHostContextChildThreadIDKey = "child_thread_id"
+	subagentToolHostContextForkModeKey      = "subagent_fork_mode"
+
+	floretToolHostContextPermissionSnapshotIDKey = "permission_snapshot_id"
+	floretToolHostContextPermissionEpochKey      = "permission_surface_epoch"
+	floretToolHostContextAuthorityThreadIDKey    = "permission_authority_thread_id"
 )
 
 func newFloretToolRuntimeState(state runtimeState) *floretToolRuntimeState {
@@ -54,6 +57,13 @@ func (s *floretToolRuntimeState) updateFromToolResult(call ToolCall, result Tool
 }
 
 func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRuntimeState) (*fltools.Registry, error) {
+	if r == nil {
+		return nil, errors.New("missing Floret tool registry run")
+	}
+	authorizationSnapshot := r.currentPermissionSnapshot()
+	if !permissionSnapshotActive(authorizationSnapshot) || strings.TrimSpace(authorizationSnapshot.SnapshotID) == "" {
+		return nil, errors.New("Floret tool registry permission snapshot is unavailable")
+	}
 	registry := fltools.NewRegistry()
 	for _, def := range activeTools {
 		name := strings.TrimSpace(def.Name)
@@ -61,7 +71,7 @@ func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRun
 			continue
 		}
 		def := def
-		toolDef, err := floretToolDefinition(r, def)
+		toolDef, err := floretToolDefinitionForSnapshot(def, authorizationSnapshot)
 		if err != nil {
 			return nil, err
 		}
@@ -78,11 +88,23 @@ func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRun
 				if call.Name == "" {
 					call.Name = strings.TrimSpace(def.Name)
 				}
-				execRun, err := floretInvocationRunContext(r, inv)
+				if err := validateFloretToolPermissionHostContext(inv.HostContext, authorizationSnapshot); err != nil {
+					return fltools.Result{}, err
+				}
+				authorizedSnapshot, effectAttemptID, err := r.effectAuthorizations.snapshotForInvocation(inv)
 				if err != nil {
 					return fltools.Result{}, err
 				}
-				ctx = contextWithFloretToolExecutionAuthorization(ctx, call.ID, call.Name)
+				execRun, err := floretInvocationRunContext(ctx, r, inv, authorizedSnapshot)
+				if err != nil {
+					return fltools.Result{}, err
+				}
+				policy, ok := authorizedSnapshot.ToolPolicies[call.Name]
+				if !ok {
+					return fltools.Result{}, fmt.Errorf("permission snapshot is missing tool policy %q", call.Name)
+				}
+				ctx = contextWithFloretToolExecutionAuthorization(ctx, call.ID, call.Name, effectAttemptID, authorizedSnapshot, policy.ApprovalDecision, true, inv.HostContext)
+				ctx = contextWithToolAuthorizationSnapshot(ctx, authorizedSnapshot)
 				handler := &builtInToolHandler{
 					r:        execRun,
 					toolName: call.Name,
@@ -119,26 +141,41 @@ func buildFloretToolRegistry(r *run, activeTools []ToolDef, state *floretToolRun
 	return registry, nil
 }
 
-func floretInvocationRunContext(base *run, inv fltools.Invocation[map[string]any]) (*run, error) {
+func validateFloretToolPermissionHostContext(hostContext map[string]string, snapshot PermissionSnapshot) error {
+	wantID := strings.TrimSpace(snapshot.SnapshotID)
+	wantEpoch := permissionSurfaceEpoch(snapshot)
+	if wantID == "" || wantEpoch == "" {
+		return errors.New("Floret tool permission snapshot identity is incomplete")
+	}
+	if got := strings.TrimSpace(hostContext[floretToolHostContextPermissionSnapshotIDKey]); got != wantID {
+		return fmt.Errorf("Floret tool permission snapshot mismatch: got %q, want %q", got, wantID)
+	}
+	if got := strings.TrimSpace(hostContext[floretToolHostContextPermissionEpochKey]); got != wantEpoch {
+		return fmt.Errorf("Floret tool permission epoch mismatch: got %q, want %q", got, wantEpoch)
+	}
+	return nil
+}
+
+func floretInvocationRunContext(ctx context.Context, base *run, inv fltools.Invocation[map[string]any], authorizationSnapshot PermissionSnapshot) (*run, error) {
 	if base == nil {
 		return nil, errors.New("missing floret invocation run context")
 	}
-	return floretRunContextForIDs(base, inv.RunID, inv.ThreadID, inv.TurnID, inv.HostContext)
+	return floretRunContextForIDs(ctx, base, inv.RunID, inv.ThreadID, inv.TurnID, inv.HostContext, authorizationSnapshot)
 }
 
-func floretApprovalRunContext(base *run, req fltools.ApprovalRequest) (*run, error) {
+func floretEffectAuthorizationRunContext(ctx context.Context, base *run, req flruntime.EffectAuthorizationRequest, authorizationSnapshot PermissionSnapshot) (*run, error) {
 	if base == nil {
-		return nil, errors.New("missing floret approval run context")
+		return nil, errors.New("missing Floret effect authorization run context")
 	}
 	threadID := strings.TrimSpace(req.HostContext[subagentToolHostContextChildThreadIDKey])
 	if threadID == "" {
-		return floretRunContextForIDs(base, req.RunID, req.ThreadID, req.TurnID, req.HostContext)
+		return floretRunContextForIDs(ctx, base, string(req.RunID), string(req.ThreadID), string(req.TurnID), req.HostContext, authorizationSnapshot)
 	}
 	runID := strings.TrimSpace(req.HostContext[subagentToolHostContextChildRunIDKey])
-	return floretRunContextForIDs(base, runID, req.ThreadID, req.TurnID, req.HostContext)
+	return floretRunContextForIDs(ctx, base, runID, string(req.ThreadID), string(req.TurnID), req.HostContext, authorizationSnapshot)
 }
 
-func floretRunContextForIDs(base *run, rawRunID string, rawThreadID string, rawTurnID string, hostContext map[string]string) (*run, error) {
+func floretRunContextForIDs(ctx context.Context, base *run, rawRunID string, rawThreadID string, rawTurnID string, hostContext map[string]string, authorizationSnapshot PermissionSnapshot) (*run, error) {
 	if base == nil {
 		return nil, errors.New("missing floret run context")
 	}
@@ -173,6 +210,28 @@ func floretRunContextForIDs(base *run, rawRunID string, rawThreadID string, rawT
 	}
 	runID = childRunID
 	threadID = childThreadID
+	if base.subagentDepth > 0 {
+		if err := requireFloretRunIdentity("bound child tool invocation", runID, threadID, turnID, strings.TrimSpace(base.id), strings.TrimSpace(base.threadID), strings.TrimSpace(base.messageID)); err != nil {
+			return nil, err
+		}
+		return base, nil
+	}
+	var runtime *floretSubagentRuntime
+	if base.host.subagentRuntime != nil {
+		runtime = base.host.subagentRuntime()
+	}
+	if runtime == nil {
+		if candidate, ok := base.subagentRuntime.(*floretSubagentRuntime); ok {
+			runtime = candidate
+		}
+	}
+	if runtime == nil {
+		return nil, errors.New("floret child execution authority is unavailable")
+	}
+	execution, err := runtime.childExecutionCapabilities(ctx, childThreadID, childRunID)
+	if err != nil {
+		return nil, err
+	}
 	child := newRun(runOptions{
 		Log:                   base.log,
 		StateDir:              base.stateDir,
@@ -180,7 +239,7 @@ func floretRunContextForIDs(base *run, rawRunID string, rawThreadID string, rawT
 		WorkingDir:            base.workingDir,
 		FilesystemScope:       base.scope,
 		Shell:                 base.shell,
-		Service:               base.service,
+		HostCapabilities:      execution.host,
 		AIConfig:              base.cfg,
 		SessionMeta:           base.sessionMeta,
 		ResolveProviderKey:    base.resolveProviderKey,
@@ -193,23 +252,24 @@ func floretRunContextForIDs(base *run, rawRunID string, rawThreadID string, rawT
 		UserPublicID:          base.userPublicID,
 		MessageID:             turnID,
 		UploadsDir:            base.uploadsDir,
-		ThreadsDB:             base.threadsDB,
-		FloretStore:           base.floretStore,
+		ProductCapabilities:   execution.product,
+		EffectAuthorizations:  base.effectAuthorizations,
 		PersistOpTimeout:      base.persistOpTimeout,
 		MaxWallTime:           base.maxWallTime,
 		IdleTimeout:           base.idleTimeout,
 		ToolApprovalTimeout:   base.toolApprovalTO,
-		SubagentDepth:         base.subagentDepth,
-		AllowSubagentDelegate: base.allowSubagentDelegate,
+		SubagentDepth:         base.subagentDepth + 1,
+		AllowSubagentDelegate: false,
 		ToolAllowlist:         mapKeys(base.toolAllowlist),
-		NoUserInteraction:     base.noUserInteraction,
+		NoUserInteraction:     true,
 		WebSearchToolEnabled:  base.webSearchToolEnabled,
 		WebSearchMode:         base.webSearchMode,
 		SkillManager:          base.skillManager,
 		ToolTargetPolicy:      base.toolTargetPolicy,
 		TargetToolExecutor:    base.targetToolExecutor,
 	})
-	child.permissionType = base.permissionType
+	child.setPermissionState(authorizationSnapshot.PermissionType, authorizationSnapshot)
+	child.toolAllowlist = stringSet(authorizationSnapshot.VisibleToolNames...)
 	child.settlementThreadID = settlementThreadID
 	child.settlementRunID = settlementRunID
 	child.settlementTurnID = settlementTurnID
@@ -217,19 +277,9 @@ func floretRunContextForIDs(base *run, rawRunID string, rawThreadID string, rawT
 	settlementOwnerResolver := base.settlementOwnerResolver
 	base.mu.Unlock()
 	child.setPendingToolSettlementOwnerResolver(settlementOwnerResolver)
-	child.allowDelegatedApproval = base.allowDelegatedApproval
-	child.delegatedApprovalParent = base.delegatedApprovalParent
-	if permission := strings.TrimSpace(hostContext[subagentToolHostContextParentPermissionKey]); permission != "" {
-		normalized, err := normalizePermissionType(permission, child.permissionType)
-		if err != nil {
-			return nil, fmt.Errorf("invalid subagent parent permission: %w", err)
-		}
-		child.permissionType = normalized
-	}
+	child.allowDelegatedApproval = true
+	child.bindSubagentParentAuthority(base)
 	child.currentModelID = base.currentModelID
-	if err := child.bindStoredChildPermissionSnapshot(threadID, runID); err != nil {
-		return nil, err
-	}
 	return child, nil
 }
 
@@ -259,121 +309,6 @@ func floretIdentityMismatchError(label string, field string, got string, want st
 	return fmt.Errorf("floret %s %s identity mismatch: got %q, want %q", label, field, got, want)
 }
 
-func (r *run) bindStoredChildPermissionSnapshot(childThreadID string, childRunID string) error {
-	if r == nil || r.subagentDepth <= 0 || !r.noUserInteraction {
-		return nil
-	}
-	childThreadID = strings.TrimSpace(childThreadID)
-	childRunID = strings.TrimSpace(childRunID)
-	if childThreadID == "" || childRunID == "" {
-		return errors.New("child permission snapshot identity is incomplete")
-	}
-	if r.threadsDB == nil {
-		return errors.New("child permission snapshot store is unavailable")
-	}
-	ctx, cancel := persistContextForRun(r)
-	rec, ok, err := r.threadsDB.GetFinalizedChildPermissionSnapshot(ctx, strings.TrimSpace(r.endpointID), childThreadID, childRunID)
-	cancel()
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return errors.New("finalized child permission snapshot is missing")
-	}
-	snapshot, err := decodePermissionSnapshot(rec.SnapshotJSON)
-	if err != nil {
-		return err
-	}
-	if !permissionSnapshotActive(snapshot) {
-		return errors.New("child permission snapshot is empty")
-	}
-	ctx, cancel = persistContextForRun(r)
-	if err := r.validateStoredChildPermissionSnapshot(ctx, rec, snapshot); err != nil {
-		cancel()
-		return err
-	}
-	cancel()
-	r.permissionSnapshot = snapshot
-	if snapshot.PermissionType != "" {
-		r.permissionType = snapshot.PermissionType
-	}
-	r.toolAllowlist = stringSet(snapshot.VisibleToolNames...)
-	return nil
-}
-
-func (r *run) validateStoredChildPermissionSnapshot(ctx context.Context, rec threadstore.ChildPermissionSnapshotRecord, snapshot PermissionSnapshot) error {
-	if r == nil || r.threadsDB == nil {
-		return errors.New("missing child permission snapshot store")
-	}
-	if strings.TrimSpace(rec.ChildSnapshotID) == "" || strings.TrimSpace(rec.ParentSnapshotID) == "" || strings.TrimSpace(rec.SnapshotHash) == "" {
-		return errors.New("incomplete child permission snapshot identity")
-	}
-	if err := validateStoredChildPermissionSnapshotIdentity(rec); err != nil {
-		return err
-	}
-	if strings.TrimSpace(snapshot.SnapshotID) != strings.TrimSpace(rec.ChildSnapshotID) {
-		return errors.New("child permission snapshot id mismatch")
-	}
-	if got := permissionSnapshotHash(snapshot); got != strings.TrimSpace(rec.SnapshotHash) || strings.TrimSpace(snapshot.SnapshotHash) != got {
-		return errors.New("child permission snapshot hash mismatch")
-	}
-	if err := validateStoredPermissionSnapshotHashes("child", rec.RegistryHash, rec.SchemaHash, rec.PresentationHash, snapshot); err != nil {
-		return err
-	}
-	if err := r.validateCurrentChildPermissionSnapshotCompatibility(snapshot); err != nil {
-		return err
-	}
-	parentRec, ok, err := r.threadsDB.GetPermissionSnapshot(ctx, strings.TrimSpace(r.endpointID), strings.TrimSpace(rec.ParentSnapshotID))
-	if err != nil {
-		return err
-	}
-	if !ok {
-		return errors.New("parent permission snapshot missing")
-	}
-	parent, err := decodePermissionSnapshot(parentRec.SnapshotJSON)
-	if err != nil {
-		return err
-	}
-	if strings.TrimSpace(parent.SnapshotID) == "" {
-		parent.SnapshotID = strings.TrimSpace(parentRec.SnapshotID)
-	}
-	if strings.TrimSpace(parent.SnapshotHash) == "" {
-		parent.SnapshotHash = strings.TrimSpace(parentRec.SnapshotHash)
-	}
-	if strings.TrimSpace(parent.SnapshotID) != strings.TrimSpace(parentRec.SnapshotID) {
-		return errors.New("parent permission snapshot id mismatch")
-	}
-	if strings.TrimSpace(parentRec.OwnerThreadID) == "" || strings.TrimSpace(parentRec.OwnerThreadID) != strings.TrimSpace(rec.ParentThreadID) {
-		return errors.New("child permission snapshot parent thread owner mismatch")
-	}
-	if strings.TrimSpace(parentRec.OwnerRunID) == "" || strings.TrimSpace(parentRec.OwnerRunID) != strings.TrimSpace(rec.ParentRunID) {
-		return errors.New("child permission snapshot parent run owner mismatch")
-	}
-	if got := permissionSnapshotHash(parent); got != strings.TrimSpace(parentRec.SnapshotHash) || strings.TrimSpace(parent.SnapshotHash) != got {
-		return errors.New("parent permission snapshot hash mismatch")
-	}
-	if err := validateStoredPermissionSnapshotHashes("parent", parentRec.RegistryHash, parentRec.SchemaHash, parentRec.PresentationHash, parent); err != nil {
-		return err
-	}
-	return validateChildPermissionSnapshotSubset(parent, snapshot)
-}
-
-func validateStoredChildPermissionSnapshotIdentity(rec threadstore.ChildPermissionSnapshotRecord) error {
-	childRunID := strings.TrimSpace(rec.ChildRunID)
-	childThreadID := strings.TrimSpace(rec.ChildThreadID)
-	parentRunID := strings.TrimSpace(rec.ParentRunID)
-	if childRunID == "" {
-		return errors.New("child permission snapshot missing child run identity")
-	}
-	if childRunID == childThreadID {
-		return errors.New("child permission snapshot child run identity aliases child thread")
-	}
-	if parentRunID != "" && childRunID == parentRunID {
-		return errors.New("child permission snapshot child run identity aliases parent run")
-	}
-	return nil
-}
-
 func validateStoredPermissionSnapshotHashes(label string, registryHash string, schemaHash string, presentationHash string, snapshot PermissionSnapshot) error {
 	if strings.TrimSpace(snapshot.RegistryHash) != strings.TrimSpace(registryHash) {
 		return fmt.Errorf("%s permission snapshot registry hash mismatch", label)
@@ -385,64 +320,6 @@ func validateStoredPermissionSnapshotHashes(label string, registryHash string, s
 		return fmt.Errorf("%s permission snapshot presentation hash mismatch", label)
 	}
 	return nil
-}
-
-func (r *run) validateCurrentChildPermissionSnapshotCompatibility(snapshot PermissionSnapshot) error {
-	if r == nil {
-		return errors.New("missing child permission snapshot runtime")
-	}
-	registry := NewInMemoryToolRegistry()
-	if err := registerBuiltInTools(registry, r); err != nil {
-		return err
-	}
-	allTools := registry.Snapshot()
-	floretTools, err := requireToolDefsByName(allTools, snapshot.FloretToolNames)
-	if err != nil {
-		return err
-	}
-	presentationTools, err := requireToolDefsByName(append(append([]ToolDef{}, allTools...), builtInControlSignalDefinitions()...), snapshot.PromptCapabilityNames)
-	if err != nil {
-		return err
-	}
-	registryHash := stableToolRegistryHash(floretTools)
-	if registryHash != strings.TrimSpace(snapshot.RegistryHash) {
-		return errors.New("child permission snapshot registry is incompatible with current tools")
-	}
-	if got := stableToolSchemaHash(floretTools); got != strings.TrimSpace(snapshot.SchemaHash) {
-		return errors.New("child permission snapshot schema is incompatible with current tools")
-	}
-	if got := stableToolPresentationHash(presentationTools); got != strings.TrimSpace(snapshot.PresentationHash) {
-		return errors.New("child permission snapshot presentation is incompatible with current tools")
-	}
-	return nil
-}
-
-func requireToolDefsByName(all []ToolDef, names []string) ([]ToolDef, error) {
-	byName := make(map[string]ToolDef, len(all))
-	for _, def := range all {
-		name := strings.TrimSpace(def.Name)
-		if name != "" {
-			byName[name] = def
-		}
-	}
-	out := make([]ToolDef, 0, len(names))
-	seen := map[string]struct{}{}
-	for _, rawName := range names {
-		name := strings.TrimSpace(rawName)
-		if name == "" {
-			return nil, errors.New("permission snapshot has empty tool name")
-		}
-		if _, ok := seen[name]; ok {
-			return nil, fmt.Errorf("permission snapshot has duplicate tool %q", name)
-		}
-		def, ok := byName[name]
-		if !ok {
-			return nil, fmt.Errorf("permission snapshot tool %q is not registered", name)
-		}
-		seen[name] = struct{}{}
-		out = append(out, def)
-	}
-	return out, nil
 }
 
 func mapKeys(in map[string]struct{}) []string {
@@ -457,15 +334,6 @@ func mapKeys(in map[string]struct{}) []string {
 		}
 	}
 	return out
-}
-
-func floretToolApproverForRun(r *run) fltools.Approver {
-	if r == nil {
-		return nil
-	}
-	return func(ctx context.Context, req fltools.ApprovalRequest) (fltools.PermissionDecision, error) {
-		return r.approveFloretTool(ctx, req)
-	}
 }
 
 func floretHostLabelsForRun(r *run) map[string]string {
@@ -617,7 +485,7 @@ func contractSafeToolResultPayload(result ToolResult) (map[string]any, error) {
 	return payload, nil
 }
 
-func floretToolDefinition(r *run, def ToolDef) (fltools.Definition, error) {
+func floretToolDefinitionForSnapshot(def ToolDef, authorizationSnapshot PermissionSnapshot) (fltools.Definition, error) {
 	def = normalizeToolPermissionMetadata(def)
 	toolName := strings.TrimSpace(def.Name)
 	inputSchema := map[string]any{"type": "object", "additionalProperties": true}
@@ -630,9 +498,9 @@ func floretToolDefinition(r *run, def ToolDef) (fltools.Definition, error) {
 	}
 	effects := floretToolEffects(def)
 	readOnly := !def.Mutating && !floretToolOpenWorld(def) && toolName != "terminal.exec"
-	permissionType := FlowerPermissionApprovalRequired
-	if r != nil && r.permissionType != "" {
-		permissionType = r.permissionType
+	permissionType := authorizationSnapshot.PermissionType
+	if permissionType == "" {
+		return fltools.Definition{}, fmt.Errorf("permission snapshot for Floret tool %s is missing permission type", toolName)
 	}
 	permission := floretToolPermission(permissionType, def)
 	annotations := map[string]any{
@@ -655,18 +523,7 @@ func floretToolDefinition(r *run, def ToolDef) (fltools.Definition, error) {
 		Permission:  permission,
 		PermissionFor: func(req fltools.PermissionRequest) (fltools.PermissionSpec, error) {
 			args, _ := req.Args.(map[string]any)
-			currentPermissionType := permissionType
-			if r != nil && r.permissionType != "" {
-				currentPermissionType = r.permissionType
-			}
-			if raw := strings.TrimSpace(req.HostContext[subagentToolHostContextParentPermissionKey]); raw != "" {
-				normalized, err := normalizePermissionType(raw, currentPermissionType)
-				if err != nil {
-					return fltools.PermissionSpec{}, fmt.Errorf("invalid subagent parent permission: %w", err)
-				}
-				currentPermissionType = normalized
-			}
-			return floretPermissionForInvocation(currentPermissionType, def, cloneAnyMap(args)), nil
+			return floretPermissionForInvocation(permissionType, def, cloneAnyMap(args)), nil
 		},
 		Activity: func(inv fltools.Invocation[any]) (*observation.ActivityPresentation, error) {
 			args, _ := inv.Args.(map[string]any)
@@ -722,7 +579,7 @@ func floretToolResourceKinds(toolName string) []string {
 	case "use_skill":
 		return []string{"skill"}
 	case "subagents":
-		return []string{"subagent"}
+		return []string{"subagent", "subagent_thread"}
 	default:
 		return nil
 	}
@@ -829,7 +686,11 @@ func floretToolResources(inv fltools.Invocation[map[string]any]) ([]fltools.Reso
 		}
 	case "subagents":
 		if action := strings.TrimSpace(anyToString(args["action"])); action != "" {
-			return []fltools.ResourceRef{{Kind: "subagent", Value: action}}, nil
+			out := []fltools.ResourceRef{{Kind: "subagent", Value: action}}
+			if target := strings.TrimSpace(anyToString(args["target"])); target != "" {
+				out = append(out, fltools.ResourceRef{Kind: "subagent_thread", Value: target})
+			}
+			return out, nil
 		}
 	}
 	return nil, nil

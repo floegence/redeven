@@ -122,19 +122,27 @@ func TestFloretTurnResultProjectionDoesNotDowngradeFullAssistantMarkdown(t *test
 	ctx := context.Background()
 	floretStore := flruntime.NewMemoryStore()
 	defer floretStore.Close()
-	host, err := flruntime.NewHost(flruntime.HostOptions{
+	adapter := testFloretBootstrap(t, floretStore)
+	create, err := adapter.newThreadCreate("thread_full_result_projection", "create-thread-full-result-projection")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := create.CreateThread(ctx, flruntime.CreateThreadRequest{ThreadID: "thread_full_result_projection", CreateIntentID: "create-thread-full-result-projection"}); err != nil {
+		t.Fatal(err)
+	}
+	threadRuntime, err := adapter.bindThreadRuntime("thread_full_result_projection")
+	if err != nil {
+		t.Fatal(err)
+	}
+	host, err := threadRuntime.Turn(ctx, flruntime.TurnExecutionHostOptions{
 		Config: flconfig.Config{
 			Provider:     flconfig.ProviderFake,
 			Model:        "fake-model",
 			FakeResponse: fullAnswer,
 			SystemPrompt: "test",
 		},
-		Store: floretStore,
 	})
 	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := host.EnsureThread(ctx, flruntime.EnsureThreadRequest{ThreadID: "thread_full_result_projection"}); err != nil {
 		t.Fatal(err)
 	}
 	result, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
@@ -250,10 +258,9 @@ func TestFloretHostPublishesRunningToolProjectionToFlowerLiveEvents(t *testing.T
 		turnID = "turn_floret_host_live_projection"
 		toolID = "call_blocking_projection"
 	)
-	r := newRun(runOptions{
+	r := newRunWithProductStoreForTest(t, runOptions{
 		Log:              svc.log,
-		Service:          svc,
-		ThreadsDB:        svc.threadsDB,
+		HostCapabilities: bindTestRunHostCapabilities(t, svc, meta.EndpointID, thread.ThreadID),
 		RunID:            runID,
 		EndpointID:       meta.EndpointID,
 		ThreadID:         thread.ThreadID,
@@ -262,7 +269,7 @@ func TestFloretHostPublishesRunningToolProjectionToFlowerLiveEvents(t *testing.T
 		OnStreamEvent: func(ev any) {
 			svc.broadcastStreamEvent(meta.EndpointID, thread.ThreadID, runID, ev)
 		},
-	})
+	}, svc.threadsDB)
 
 	started := make(chan struct{})
 	release := make(chan struct{})
@@ -326,25 +333,33 @@ func TestFloretHostPublishesRunningToolProjectionToFlowerLiveEvents(t *testing.T
 	capture := &capturingFloretEventSink{downstream: floretEventSink{run: r}}
 	floretStore := flruntime.NewMemoryStore()
 	defer floretStore.Close()
-	host, err := flruntime.NewHost(flruntime.HostOptions{
+	adapter := testFloretBootstrap(t, floretStore)
+	create, err := adapter.newThreadCreate(flruntime.ThreadID(thread.ThreadID), flruntime.CreateIntentID("create-"+thread.ThreadID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := create.CreateThread(ctx, flruntime.CreateThreadRequest{ThreadID: flruntime.ThreadID(thread.ThreadID), CreateIntentID: flruntime.CreateIntentID("create-" + thread.ThreadID)}); err != nil {
+		t.Fatalf("CreateThread: %v", err)
+	}
+	threadRuntime, err := adapter.bindThreadRuntime(flruntime.ThreadID(thread.ThreadID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	host, err := threadRuntime.Turn(ctx, flruntime.TurnExecutionHostOptions{
 		Config: flconfig.Config{
 			SystemPrompt: "test",
 			ContextPolicy: flconfig.ContextPolicy{
 				ContextWindowTokens: flconfig.DefaultContextWindowTokens,
 			},
 		},
-		ModelGateway:         gateway,
-		ModelGatewayIdentity: flruntime.ModelGatewayIdentity{Provider: "fake", Model: "fake-model", StateCompatibilityKey: "fake-model:test"},
-		Store:                floretStore,
-		Tools:                registry,
-		Sink:                 capture,
-		ThreadTitleMode:      flruntime.ThreadTitleModeHostOwned,
+		ModelGateway:            gateway,
+		ModelGatewayIdentity:    flruntime.ModelGatewayIdentity{Provider: "fake", Model: "fake-model", StateCompatibilityKey: "fake-model:test"},
+		Tools:                   registry,
+		EffectAuthorizationGate: allowFloretEffectGateForTest{},
+		Sink:                    capture,
 	})
 	if err != nil {
 		t.Fatalf("NewHost: %v", err)
-	}
-	if _, err := host.EnsureThread(ctx, flruntime.EnsureThreadRequest{ThreadID: flruntime.ThreadID(thread.ThreadID)}); err != nil {
-		t.Fatalf("StartThread: %v", err)
 	}
 
 	type turnOutcome struct {
@@ -1263,7 +1278,7 @@ func TestApplyFloretPendingToolSettlementProjectionPublishesTimelineReplacement(
 
 	runID := "run_terminal_settlement_live"
 	messageID := "msg_terminal_settlement_live"
-	host := newTestFloretHost(t, svc.floretStore, "canonical terminal output")
+	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "canonical terminal output")
 	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
 		ThreadID: flruntime.ThreadID(thread.ThreadID),
 		TurnID:   flruntime.TurnID(messageID),
@@ -1273,11 +1288,11 @@ func TestApplyFloretPendingToolSettlementProjectionPublishesTimelineReplacement(
 		t.Fatalf("seed canonical turn: %v", err)
 	}
 	activeRun := newRun(runOptions{
-		Service:    svc,
-		RunID:      runID,
-		EndpointID: meta.EndpointID,
-		ThreadID:   thread.ThreadID,
-		MessageID:  messageID,
+		HostCapabilities: bindTestRunHostCapabilities(t, svc, meta.EndpointID, thread.ThreadID),
+		RunID:            runID,
+		EndpointID:       meta.EndpointID,
+		ThreadID:         thread.ThreadID,
+		MessageID:        messageID,
 		OnStreamEvent: func(ev any) {
 			svc.broadcastStreamEvent(meta.EndpointID, thread.ThreadID, runID, ev)
 		},
@@ -1374,24 +1389,27 @@ func TestRunFloretHostedTurnTerminalProjectionPublishesCanonicalReplacement(t *t
 
 	runID := "run_ordinary_terminal_replacement"
 	turnID := "turn_ordinary_terminal_replacement"
-	r := newRun(runOptions{
-		Service:      svc,
-		ThreadsDB:    svc.threadsDB,
-		FloretStore:  svc.floretStore,
-		StateDir:     svc.stateDir,
-		AgentHomeDir: t.TempDir(),
-		WorkingDir:   t.TempDir(),
-		Shell:        "bash",
-		AIConfig:     &config.AIConfig{},
-		SessionMeta:  meta,
-		RunID:        runID,
-		EndpointID:   meta.EndpointID,
-		ThreadID:     thread.ThreadID,
-		MessageID:    turnID,
+	floretRuntime, err := svc.bindFloretThreadRuntime(thread.ThreadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := newRunWithProductStoreForTest(t, runOptions{
+		HostCapabilities:  bindTestRunHostCapabilities(t, svc, meta.EndpointID, thread.ThreadID),
+		FloretHostFactory: floretRuntime.Turn,
+		StateDir:          svc.stateDir,
+		AgentHomeDir:      t.TempDir(),
+		WorkingDir:        t.TempDir(),
+		Shell:             "bash",
+		AIConfig:          &config.AIConfig{},
+		SessionMeta:       meta,
+		RunID:             runID,
+		EndpointID:        meta.EndpointID,
+		ThreadID:          thread.ThreadID,
+		MessageID:         turnID,
 		OnStreamEvent: func(event any) {
 			svc.broadcastStreamEvent(meta.EndpointID, thread.ThreadID, runID, event)
 		},
-	})
+	}, svc.threadsDB)
 	provider := &capturingTurnProvider{result: ModelGatewayResult{FinishReason: "stop", Text: "canonical final answer"}}
 	if err := r.runFloretHostedTurn(ctx, RunRequest{
 		Model: "compat/gpt-5-mini",

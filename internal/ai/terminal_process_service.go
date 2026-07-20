@@ -67,6 +67,21 @@ func (s *Service) WriteTerminalProcess(ctx context.Context, meta *session.Meta, 
 	if err := validateTerminalProcessAccess(meta, strings.TrimSpace(runID), before); err != nil {
 		return nil, err
 	}
+	if s == nil || s.threadMgr == nil || s.threadsDB == nil {
+		return nil, errors.New("terminal process write authority is unavailable")
+	}
+	unlock, err := s.threadMgr.lockThreadEffect(before.EndpointID, before.ThreadID, before.ThreadID, threadEffectJoin{})
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	before = proc.Snapshot()
+	if err := validateTerminalProcessAccess(meta, strings.TrimSpace(runID), before); err != nil {
+		return nil, err
+	}
+	if err := s.threadsDB.RequireThreadSettingsWritable(ctxOrBackground(ctx), before.EndpointID, before.ThreadID); err != nil {
+		return nil, err
+	}
 	snapshot, err := proc.Write(input)
 	if err != nil {
 		return &snapshot, err
@@ -129,7 +144,8 @@ func (s *Service) finalizeTerminalProcess(owner floretPendingToolSettler, target
 		strings.TrimSpace(string(target.TurnID)) == "" ||
 		strings.TrimSpace(target.ToolCallID) == "" ||
 		strings.TrimSpace(target.ToolName) == "" ||
-		strings.TrimSpace(target.Handle) == "" {
+		strings.TrimSpace(target.Handle) == "" ||
+		strings.TrimSpace(target.EffectAttemptID) == "" {
 		return errors.New("terminal process settlement target incomplete")
 	}
 	if strings.TrimSpace(target.ToolCallID) != strings.TrimSpace(snapshot.ToolID) ||

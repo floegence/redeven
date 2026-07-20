@@ -330,14 +330,11 @@ func (s *Service) flowerLiveCanonicalContextState(ctx context.Context, endpointI
 	if endpointID == "" || threadID == "" {
 		return emptyFlowerLiveMaterializedState(), errors.New("invalid request")
 	}
-	host, err := s.openFloretMaintenanceHost()
+	host, err := s.openFloretThreadReadHost(ctx, threadID)
 	if err != nil {
 		return emptyFlowerLiveMaterializedState(), err
 	}
 	snapshot, err := host.ReadThreadContext(ctx, flruntime.ThreadID(threadID))
-	if errors.Is(err, flruntime.ErrThreadNotFound) {
-		return emptyFlowerLiveMaterializedState(), nil
-	}
 	if err != nil {
 		return emptyFlowerLiveMaterializedState(), err
 	}

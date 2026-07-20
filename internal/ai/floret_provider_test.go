@@ -127,9 +127,9 @@ func newFloretProviderAdapterRunTest(t *testing.T, provider ModelGateway) (*flor
 		t.Fatalf("threadstore.Open: %v", err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	if err := store.CreateThread(context.Background(), threadstore.ThreadSettings{
-		EndpointID: "env_floret_reasoning",
-		ThreadID:   "thread_floret_reasoning",
+	if err := store.CreateThreadSettings(context.Background(), threadstore.ThreadSettings{
+		EndpointID: "env_floret_reasoning", ThreadID: "thread_floret_reasoning",
+		PermissionType: config.AIPermissionFullAccess, WorkingDir: t.TempDir(),
 	}); err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
@@ -140,9 +140,8 @@ func newFloretProviderAdapterRunTest(t *testing.T, provider ModelGateway) (*flor
 		EndpointID:    "env_floret_reasoning",
 		ThreadID:      "thread_floret_reasoning",
 		MessageID:     "msg_floret_reasoning",
-		ThreadsDB:     store,
 		OnStreamEvent: func(ev any) { events = append(events, ev) },
-	})
+	}, store)
 	adapter := newFloretProviderAdapter(
 		provider,
 		"openai",

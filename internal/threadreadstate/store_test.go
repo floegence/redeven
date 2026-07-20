@@ -2,8 +2,11 @@ package threadreadstate
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
+
+	"github.com/floegence/redeven/internal/persistence/sqliteutil"
 )
 
 func openTestStore(t *testing.T) *Store {
@@ -220,75 +223,89 @@ func TestStore_EnsureCodexSeedsMissingBaselineAndAdvanceIsMonotonic(t *testing.T
 	}
 }
 
-func TestStore_DeleteThreadRemovesSurfaceRecordsIdempotently(t *testing.T) {
+func TestStore_MigratesV1ReadStateAndEnforcesV2Retirement(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "thread_read_state.sqlite")
+	v1Spec := schemaSpec()
+	v1Spec.CurrentVersion = 1
+	v1Spec.Migrations = v1Spec.Migrations[:1]
+	v1Spec.Verify = nil
+	v1DB, err := sqliteutil.Open(dbPath, v1Spec)
+	if err != nil {
+		t.Fatalf("open v1 store: %v", err)
+	}
+	if _, err := v1DB.ExecContext(ctx, `
+INSERT INTO thread_read_state (
+  endpoint_id, scope_id, surface, thread_id,
+  last_seen_activity_revision, last_read_message_at_unix_ms,
+  last_seen_waiting_prompt_id, last_read_updated_at_unix_s,
+  last_seen_activity_signature, updated_at_unix_ms
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`, "env_1", "user_1", string(SurfaceFlower), "thread_1", 17, 23, "prompt_1", 0, "activity:17", 29); err != nil {
+		_ = v1DB.Close()
+		t.Fatalf("insert v1 read state: %v", err)
+	}
+	if err := v1DB.Close(); err != nil {
+		t.Fatalf("close v1 store: %v", err)
+	}
+
+	store, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("migrate v1 store: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	records, err := store.EnsureFlower(ctx, "env_1", "user_1", map[string]FlowerSnapshot{
+		"thread_1": {
+			ActivityRevision:    17,
+			LastMessageAtUnixMs: 23,
+			WaitingPromptID:     "prompt_1",
+			ActivitySignature:   "activity:17",
+		},
+	})
+	if err != nil {
+		t.Fatalf("load migrated read state: %v", err)
+	}
+	if got := records["thread_1"]; got.LastSeenActivityRevision != 17 || got.LastReadMessageAtUnixMs != 23 || got.LastSeenWaitingPromptID != "prompt_1" || got.LastSeenActivitySignature != "activity:17" {
+		t.Fatalf("migrated read state = %+v", got)
+	}
+	if err := store.RetireFlowerThreadReadState(ctx, "env_1", "thread_1"); err != nil {
+		t.Fatalf("retire migrated thread: %v", err)
+	}
+	if _, err := store.EnsureFlower(ctx, "env_1", "user_1", map[string]FlowerSnapshot{
+		"thread_1": {ActivityRevision: 18},
+	}); !errors.Is(err, ErrThreadRetired) {
+		t.Fatalf("EnsureFlower after migration retirement error = %v, want %v", err, ErrThreadRetired)
+	}
+}
+
+func TestStore_RetireFlowerThreadRejectsFutureEnsureAndAdvance(t *testing.T) {
 	t.Parallel()
 
 	ctx := context.Background()
 	store := openTestStore(t)
-
-	if _, err := store.EnsureFlower(ctx, "env_1", "user_1", map[string]FlowerSnapshot{
-		"th_1": {
-			LastMessageAtUnixMs: 120,
-			WaitingPromptID:     "prompt_1",
-		},
-		"th_other": {
-			LastMessageAtUnixMs: 90,
-			WaitingPromptID:     "prompt_other",
-		},
-	}); err != nil {
-		t.Fatalf("EnsureFlower(user_1 first): %v", err)
+	snapshot := FlowerSnapshot{ActivityRevision: 10, LastMessageAtUnixMs: 20, ActivitySignature: "activity:10"}
+	if _, err := store.EnsureFlower(ctx, "env_retired", "user_1", map[string]FlowerSnapshot{"thread_retired": snapshot}); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := store.EnsureFlower(ctx, "env_1", "user_1", map[string]FlowerSnapshot{
-		"th_1": {
-			LastMessageAtUnixMs: 130,
-			WaitingPromptID:     "prompt_2",
-		},
-	}); err != nil {
-		t.Fatalf("EnsureFlower(user_1 second): %v", err)
+	if err := store.RetireFlowerThreadReadState(ctx, "env_retired", "thread_retired"); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := store.EnsureFlower(ctx, "env_1", "user_2", map[string]FlowerSnapshot{
-		"th_1": {
-			LastMessageAtUnixMs: 140,
-			WaitingPromptID:     "prompt_user_2",
-		},
-	}); err != nil {
-		t.Fatalf("EnsureFlower(user_2): %v", err)
+	if err := store.RetireFlowerThreadReadState(ctx, "env_retired", "thread_retired"); err != nil {
+		t.Fatalf("idempotent retirement: %v", err)
 	}
-	if _, err := store.EnsureCodex(ctx, "env_1", "user_1", map[string]CodexSnapshot{
-		"th_1": {
-			UpdatedAtUnixS:    42,
-			ActivitySignature: "status:idle",
-		},
-	}); err != nil {
-		t.Fatalf("EnsureCodex(user_1): %v", err)
+	if _, err := store.EnsureFlower(ctx, "env_retired", "user_2", map[string]FlowerSnapshot{"thread_retired": snapshot}); !errors.Is(err, ErrThreadRetired) {
+		t.Fatalf("EnsureFlower error=%v, want %v", err, ErrThreadRetired)
 	}
-
-	if err := store.DeleteThread(ctx, "env_1", SurfaceFlower, "th_1"); err != nil {
-		t.Fatalf("DeleteThread(flower): %v", err)
+	if _, err := store.AdvanceFlower(ctx, "env_retired", "user_1", "thread_retired", snapshot); !errors.Is(err, ErrThreadRetired) {
+		t.Fatalf("AdvanceFlower error=%v, want %v", err, ErrThreadRetired)
 	}
-	var flowerRows int
-	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM thread_read_state WHERE endpoint_id = ? AND surface = ? AND thread_id = ?`, "env_1", string(SurfaceFlower), "th_1").Scan(&flowerRows); err != nil {
-		t.Fatalf("count Flower rows: %v", err)
+	var records int
+	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM thread_read_state WHERE endpoint_id = ? AND surface = ? AND thread_id = ?`, "env_retired", string(SurfaceFlower), "thread_retired").Scan(&records); err != nil {
+		t.Fatal(err)
 	}
-	if flowerRows != 0 {
-		t.Fatalf("Flower rows=%d, want 0", flowerRows)
-	}
-
-	if err := store.DeleteThread(ctx, "env_1", SurfaceFlower, "th_1"); err != nil {
-		t.Fatalf("DeleteThread(flower, second): %v", err)
-	}
-
-	if err := store.DeleteThread(ctx, "env_1", SurfaceCodex, "th_1"); err != nil {
-		t.Fatalf("DeleteThread(codex): %v", err)
-	}
-
-	if err := store.DeleteThread(ctx, "env_1", SurfaceFlower, "th_other"); err != nil {
-		t.Fatalf("DeleteThread(flower other): %v", err)
-	}
-	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(1) FROM thread_read_state WHERE endpoint_id = ? AND surface = ? AND thread_id = ?`, "env_1", string(SurfaceFlower), "th_other").Scan(&flowerRows); err != nil {
-		t.Fatalf("count other Flower rows: %v", err)
-	}
-	if flowerRows != 0 {
-		t.Fatalf("other Flower rows=%d, want 0", flowerRows)
+	if records != 0 {
+		t.Fatalf("retired thread read-state rows=%d, want 0", records)
 	}
 }

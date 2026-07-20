@@ -54,7 +54,7 @@ func TestExecutePreparedRun_DoesNotMutateThreadDefaultForExplicitModel(t *testin
 	defer cancel()
 	_ = svc.executePreparedRun(execCtx, prepared)
 
-	latest, err := svc.threadsDB.GetThread(ctx, meta.EndpointID, th.ThreadID)
+	latest, err := svc.threadsDB.GetThreadSettings(ctx, meta.EndpointID, th.ThreadID)
 	if err != nil {
 		t.Fatalf("GetThread: %v", err)
 	}

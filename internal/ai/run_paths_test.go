@@ -156,7 +156,7 @@ func TestToolTerminalExec_CwdRules(t *testing.T) {
 	workingDir := t.TempDir()
 	manager := newTerminalProcessManager()
 	defer func() { _ = manager.Close(context.Background()) }()
-	r := newTerminalProcessTestRun(workingDir, &Service{terminalProcesses: manager}, nil, "env_paths", "thread_paths", "run_paths", "turn_paths")
+	r := newTerminalProcessTestRun(t, workingDir, &Service{terminalProcesses: manager}, nil, "env_paths", "thread_paths", "run_paths", "turn_paths")
 	r.permissionType = FlowerPermissionFullAccess
 	allowToolsForTest(t, r, "terminal.exec")
 
@@ -228,10 +228,11 @@ func TestToolTerminalExec_CwdRules(t *testing.T) {
 		if err != nil {
 			t.Fatalf("NewRegistry: %v", err)
 		}
-		r := newTerminalProcessTestRun(project, &Service{terminalProcesses: manager}, nil, "env_paths", "thread_paths", "run_paths_reject", "turn_paths")
+		r := newTerminalProcessTestRun(t, project, &Service{terminalProcesses: manager}, nil, "env_paths", "thread_paths", "run_paths_reject", "turn_paths")
 		r.agentHomeDir = home
 		r.scope = scope
-		outcome, err := r.handleToolCall(context.Background(), "tool_paths_outside_cwd", "terminal.exec", map[string]any{
+		allowToolsForTest(t, r, "terminal.exec")
+		outcome, err := r.handleToolCall(authorizedToolContextForTest(t, r, "tool_paths_outside_cwd", "terminal.exec"), "tool_paths_outside_cwd", "terminal.exec", map[string]any{
 			"command":  "pwd",
 			"cwd":      outside,
 			"yield_ms": 1000,
@@ -262,7 +263,7 @@ func TestToolTerminalExec_CwdRules(t *testing.T) {
 
 func runTerminalExecForPathTest(t *testing.T, r *run, toolID string, args map[string]any) map[string]any {
 	t.Helper()
-	outcome, err := r.handleToolCall(context.Background(), toolID, "terminal.exec", args)
+	outcome, err := r.handleToolCall(authorizedToolContextForTest(t, r, toolID, "terminal.exec"), toolID, "terminal.exec", args)
 	if err != nil {
 		t.Fatalf("handleToolCall: %v", err)
 	}

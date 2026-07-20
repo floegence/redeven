@@ -37,6 +37,19 @@ func (s *Service) commitPendingTurnCommandAdmission(ctx context.Context, endpoin
 	return db.CommitPendingTurnAdmission(ctx, endpointID, threadID, commandID, turnID, uploadIDs, time.Now().UnixMilli())
 }
 
+func (s *Service) releasePendingTurnCommandAdmission(ctx context.Context, endpointID string, threadID string, commandID string, turnID string, runID string, targetLane string) error {
+	if s == nil {
+		return errors.New("nil service")
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	s.mu.Unlock()
+	if db == nil {
+		return errors.New("threads store not ready")
+	}
+	return db.ReleasePendingTurnAdmission(ctx, endpointID, threadID, commandID, turnID, runID, targetLane)
+}
+
 func (s *Service) reconcilePendingTurnCommand(ctx context.Context, endpointID string, threadID string, commandID string, turnID string, uploadIDs []string) (bool, error) {
 	if s == nil {
 		return false, errors.New("nil service")
@@ -48,44 +61,98 @@ func (s *Service) reconcilePendingTurnCommand(ctx context.Context, endpointID st
 	if endpointID == "" || threadID == "" || commandID == "" || turnID == "" {
 		return false, errors.New("invalid pending turn command identity")
 	}
-	host, err := s.openFloretMaintenanceHost()
+	turnIDs, err := s.readCanonicalThreadTurnIDs(ctx, threadID)
 	if err != nil {
 		return false, err
 	}
-	afterOrdinal := int64(0)
-	accepted := false
-	for {
-		page, err := host.ListThreadTurns(ctx, flruntime.ListThreadTurnsRequest{
-			ThreadID: flruntime.ThreadID(threadID), AfterOrdinal: afterOrdinal, Limit: 200,
-		})
-		if err != nil {
-			if isFloretThreadNotFoundError(err) {
-				return false, nil
-			}
-			return false, err
-		}
-		for _, turn := range page.Turns {
-			if strings.TrimSpace(string(turn.TurnID)) == turnID {
-				accepted = true
-				break
-			}
-		}
-		if accepted || !page.HasMore || len(page.Turns) == 0 {
-			break
-		}
-		next := page.Turns[len(page.Turns)-1].Ordinal
-		if next <= afterOrdinal {
-			return false, errors.New("Floret turn pagination did not advance")
-		}
-		afterOrdinal = next
-	}
-	if !accepted {
+	if _, accepted := turnIDs[turnID]; !accepted {
 		return false, nil
 	}
 	if err := s.commitPendingTurnCommandAdmission(ctx, endpointID, threadID, commandID, turnID, uploadIDs); err != nil {
 		return false, err
 	}
 	return true, nil
+}
+
+func (s *Service) readCanonicalThreadTurnIDs(ctx context.Context, threadID string) (map[string]struct{}, error) {
+	if s == nil {
+		return nil, errors.New("nil service")
+	}
+	threadID = strings.TrimSpace(threadID)
+	if threadID == "" {
+		return nil, errors.New("invalid canonical thread identity")
+	}
+	host, err := s.openFloretThreadReadHost(ctx, threadID)
+	if err != nil {
+		return nil, err
+	}
+	afterOrdinal := int64(0)
+	turnIDs := make(map[string]struct{})
+	for {
+		page, err := host.ListThreadTurns(ctx, flruntime.ListThreadTurnsRequest{
+			ThreadID: flruntime.ThreadID(threadID), AfterOrdinal: afterOrdinal, Limit: 200,
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, turn := range page.Turns {
+			turnID := strings.TrimSpace(string(turn.TurnID))
+			if turnID == "" {
+				return nil, errors.New("Floret returned an empty turn identity")
+			}
+			turnIDs[turnID] = struct{}{}
+		}
+		if !page.HasMore {
+			break
+		}
+		if len(page.Turns) == 0 {
+			return nil, errors.New("Floret turn pagination stopped before completion")
+		}
+		next := page.Turns[len(page.Turns)-1].Ordinal
+		if next <= afterOrdinal {
+			return nil, errors.New("Floret turn pagination did not advance")
+		}
+		afterOrdinal = next
+	}
+	return turnIDs, nil
+}
+
+func (s *Service) reconcileCanonicalPendingTurnCommands(ctx context.Context, endpointID string, threadID string, db *threadstore.Store) error {
+	if s == nil {
+		return errors.New("nil service")
+	}
+	if db == nil {
+		return errors.New("threads store not ready")
+	}
+	endpointID = strings.TrimSpace(endpointID)
+	threadID = strings.TrimSpace(threadID)
+	if endpointID == "" || threadID == "" {
+		return errors.New("invalid pending turn reconciliation identity")
+	}
+	commands, err := db.ListFollowupsByLane(ctx, endpointID, threadID, threadstore.FollowupLaneQueued, 500)
+	if err != nil {
+		return err
+	}
+	if len(commands) == 0 {
+		return nil
+	}
+	turnIDs, err := s.readCanonicalThreadTurnIDs(ctx, threadID)
+	if err != nil {
+		return err
+	}
+	for _, command := range commands {
+		turnID := strings.TrimSpace(command.TurnID)
+		if turnID == "" {
+			return fmt.Errorf("pending turn command %q has no turn identity", command.QueueID)
+		}
+		if _, accepted := turnIDs[turnID]; !accepted {
+			continue
+		}
+		if err := s.commitPendingTurnCommandAdmission(ctx, endpointID, threadID, command.QueueID, turnID, nil); err != nil {
+			return fmt.Errorf("settle admitted pending turn %q: %w", command.QueueID, err)
+		}
+	}
+	return nil
 }
 
 func marshalQueuedTurnAttachments(items []RunAttachmentIn) (string, error) {
@@ -152,7 +219,7 @@ func unmarshalQueuedTurnSessionMeta(raw string) (session.Meta, error) {
 		return session.Meta{}, errors.New("queued turn session metadata is empty")
 	}
 	var out session.Meta
-	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+	if err := decodeStrictJSON(raw, &out); err != nil {
 		return session.Meta{}, fmt.Errorf("decode queued turn session metadata: %w", err)
 	}
 	if strings.TrimSpace(out.ChannelID) == "" || strings.TrimSpace(out.EndpointID) == "" {
@@ -167,7 +234,7 @@ func unmarshalQueuedTurnAttachments(raw string) ([]RunAttachmentIn, error) {
 		return nil, errors.New("queued turn attachments are empty")
 	}
 	var out []RunAttachmentIn
-	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+	if err := decodeStrictJSON(raw, &out); err != nil {
 		return nil, fmt.Errorf("decode queued turn attachments: %w", err)
 	}
 	cleaned := make([]RunAttachmentIn, 0, len(out))
@@ -194,7 +261,7 @@ func unmarshalQueuedTurnContextAction(raw string) (*ContextActionEnvelope, error
 		return nil, nil
 	}
 	var out ContextActionEnvelope
-	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+	if err := decodeStrictJSON(raw, &out); err != nil {
 		return nil, err
 	}
 	action, err := normalizeAskFlowerContextActionEnvelope(&out)
@@ -210,7 +277,7 @@ func unmarshalQueuedTurnOptions(raw string) (RunOptions, error) {
 		return RunOptions{}, errors.New("queued turn options are empty")
 	}
 	var out RunOptions
-	if err := json.Unmarshal([]byte(raw), &out); err != nil {
+	if err := decodeStrictJSON(raw, &out); err != nil {
 		return RunOptions{}, fmt.Errorf("decode queued turn options: %w", err)
 	}
 	return out, nil
@@ -273,7 +340,7 @@ func queuedTurnRecordToRunStartRequest(rec threadstore.QueuedTurn, threadPermiss
 	if err != nil {
 		return RunStartRequest{}, err
 	}
-	permissionType, err := normalizePermissionType(strings.TrimSpace(threadPermissionType), "")
+	permissionType, err := parsePermissionType(threadPermissionType)
 	if err != nil {
 		return RunStartRequest{}, fmt.Errorf("parse queued turn permission setting: %w", err)
 	}
@@ -403,29 +470,27 @@ func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req
 
 	pctx, cancel := context.WithTimeout(ctx, persistTO)
 	defer cancel()
-	queued, position, _, err := db.CreateFollowupWithUploadRefs(pctx, rec, uploadIDs, createdAtUnixMs)
-	if err != nil {
-		return threadstore.QueuedTurn{}, 0, err
+	var queued threadstore.QueuedTurn
+	var position int
+	if sourceFollowupID := strings.TrimSpace(req.SourceFollowupID); sourceFollowupID != "" {
+		result, replaceErr := db.ReplaceFollowupWithUploadRefs(pctx, sourceFollowupID, rec, uploadIDs, createdAtUnixMs)
+		if replaceErr != nil {
+			return threadstore.QueuedTurn{}, 0, replaceErr
+		}
+		queued = result.Queued
+		position = result.Position
+		if _, cleanupErr := s.processUploadCleanupCandidates(ctx, result.UploadsToDelete); cleanupErr != nil && s.log != nil {
+			s.log.Warn("queued followup replacement physical cleanup deferred", "thread_id", rec.ThreadID, "source_followup_id", sourceFollowupID, "error", cleanupErr)
+		}
+	} else {
+		var createErr error
+		queued, position, _, createErr = db.CreateFollowupWithUploadRefs(pctx, rec, uploadIDs, createdAtUnixMs)
+		if createErr != nil {
+			return threadstore.QueuedTurn{}, 0, createErr
+		}
 	}
 	s.broadcastThreadSummary(strings.TrimSpace(meta.EndpointID), strings.TrimSpace(req.ThreadID))
 	return queued, position, nil
-}
-
-func (s *Service) consumeSourceFollowup(ctx context.Context, meta *session.Meta, threadID string, followupID string) error {
-	if s == nil {
-		return errors.New("nil service")
-	}
-	followupID = strings.TrimSpace(followupID)
-	if followupID == "" {
-		return nil
-	}
-	if err := s.deleteFollowupResources(ctx, strings.TrimSpace(meta.EndpointID), strings.TrimSpace(threadID), followupID); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil
-		}
-		return err
-	}
-	return nil
 }
 
 func (s *Service) deleteFollowupResources(ctx context.Context, endpointID string, threadID string, followupID string) error {
@@ -487,7 +552,7 @@ func (s *Service) ListFollowups(ctx context.Context, meta *session.Meta, threadI
 	if endpointID == "" || threadID == "" {
 		return nil, errors.New("invalid request")
 	}
-	th, err := db.GetThread(ctx, endpointID, threadID)
+	th, err := db.GetThreadSettings(ctx, endpointID, threadID)
 	if err != nil {
 		return nil, err
 	}
@@ -511,7 +576,11 @@ func (s *Service) ListFollowups(ctx context.Context, meta *session.Meta, threadI
 	if err != nil {
 		return nil, err
 	}
-	if requestUserInputPromptFromFloretTurn(latest) != nil {
+	waitingPrompt, err := requestUserInputPromptFromFloretTurn(latest)
+	if err != nil {
+		return nil, err
+	}
+	if waitingPrompt != nil {
 		if len(queued) > 0 {
 			pausedReason = "waiting_user"
 		}

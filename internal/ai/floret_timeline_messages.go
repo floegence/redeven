@@ -136,7 +136,7 @@ func (s *Service) loadThreadTimelineMessages(ctx context.Context, endpointID str
 	if endpointID == "" || threadID == "" {
 		return nil, errors.New("invalid request")
 	}
-	host, err := s.openFloretMaintenanceHost()
+	host, err := s.openFloretThreadReadHost(ctx, threadID)
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +280,7 @@ func (s *Service) floretProjectionMessage(endpointID string, threadID string, tu
 	projectionRun := &run{
 		id: strings.TrimSpace(string(turn.RunID)), endpointID: strings.TrimSpace(endpointID),
 		threadID: strings.TrimSpace(threadID), messageID: strings.TrimSpace(string(turn.TurnID)),
-		service: s, assistantCreatedAtUnixMs: createdAt,
+		assistantCreatedAtUnixMs: createdAt,
 	}
 	if err := projectionRun.validateFloretThreadProjection(projection); err != nil {
 		return nil, "", canonicalTimelineResyncErrorf("turn %q projection does not match its canonical identity: %v", turn.TurnID, err)
