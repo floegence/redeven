@@ -702,13 +702,16 @@ async function waitForRecoveryMarks(page, surface, notBefore, fixtureBytes, expe
     );
     const ack = marks.find((entry) => entry.name.startsWith('redeven:terminal:attach-ack:') && sameTrace(entry));
     const baseline = marks.find((entry) => entry.name.startsWith('redeven:terminal:baseline-parser-committed:') && sameTrace(entry));
+    const rendered = marks.find((entry) => entry.name.startsWith('redeven:terminal:baseline-rendered:') && sameTrace(entry));
     const interactive = marks.find((entry) => entry.name.startsWith('redeven:terminal:interactive:') && sameTrace(entry));
     return Boolean(
       ack
       && baseline
+      && rendered
       && interactive
       && ack.startTime <= baseline.startTime
       && baseline.startTime <= interactive.startTime
+      && baseline.startTime <= rendered.startTime
       && (!requireHistory || Number(ack.detail?.snapshot_end_sequence ?? 0) > 0)
     );
   }, {
@@ -736,6 +739,7 @@ async function waitForRecoveryMarks(page, surface, notBefore, fixtureBytes, expe
     const find = (milestone) => marks.find((entry) => entry.name.startsWith(`redeven:terminal:${milestone}:`) && sameTrace(entry));
     const ack = find('attach-ack');
     const baseline = find('baseline-parser-committed');
+    const rendered = find('baseline-rendered');
     const interactive = find('interactive');
     return {
       session_ref: String(start.detail?.session_ref ?? ''),
@@ -755,6 +759,7 @@ async function waitForRecoveryMarks(page, surface, notBefore, fixtureBytes, expe
       covered_through_sequence: Number(baseline.detail?.covered_through_sequence ?? 0),
       attach_ack_ms: ack.startTime - start.startTime,
       baseline_parser_committed_ms: baseline.startTime - start.startTime,
+      baseline_rendered_ms: rendered.startTime - start.startTime,
       interactive_ms: interactive.startTime - start.startTime,
     };
   }, { expectedSurface: surface, minimumStart: notBefore, sessionRef: expectedSessionRef });
@@ -1142,8 +1147,9 @@ async function runRecoverySample({ context, entryURL, fixtureBytes, seeded, surf
       marks.attach_ack_ms < 0
       || marks.attach_ack_ms > marks.baseline_parser_committed_ms
       || marks.baseline_parser_committed_ms > marks.interactive_ms
+      || marks.baseline_parser_committed_ms > marks.baseline_rendered_ms
     ) {
-      throw new Error('terminal recovery milestones violated the attach/parser/interactive fence');
+      throw new Error('terminal recovery milestones violated the attach/parser/render/interactive fence');
     }
     if (marks.covered_through_sequence !== marks.snapshot_end_sequence) {
       throw new Error('terminal recovery coverage did not reach the fixed snapshot end');

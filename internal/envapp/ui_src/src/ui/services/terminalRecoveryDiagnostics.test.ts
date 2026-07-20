@@ -101,4 +101,28 @@ describe('terminalRecoveryDiagnostics', () => {
       'session-40b62f4d 2 history_contract_missing',
     );
   });
+
+  it('records the renderer fence as a trace-scoped recovery milestone', () => {
+    const mark = vi.spyOn(performance, 'mark').mockImplementation(() => ({}) as PerformanceMark);
+    const trace = startTerminalRecoveryTrace('private-session-id', 'workbench');
+
+    markTerminalRecoveryMilestone(trace, 'baseline-rendered', {
+      coordinator_attach_generation: 3,
+      history_generation: 5,
+      covered_through_sequence: 8,
+    });
+
+    expect(mark).toHaveBeenCalledWith(
+      'redeven:terminal:baseline-rendered:terminal-recovery-session-40b62f4d-1',
+      {
+        detail: expect.objectContaining({
+          variant: 'workbench',
+          surface_generation: 1,
+          coordinator_attach_generation: 3,
+          history_generation: 5,
+          covered_through_sequence: 8,
+        }),
+      },
+    );
+  });
 });

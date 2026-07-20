@@ -10,6 +10,7 @@ export type TerminalRecoveryMilestone =
   | 'attach-ack'
   | 'baseline-queued'
   | 'baseline-parser-committed'
+  | 'baseline-rendered'
   | 'interactive'
   | 'live';
 export type TerminalResizeDecision = 'requested' | 'applied' | 'no_op' | 'failed';
