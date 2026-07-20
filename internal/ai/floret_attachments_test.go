@@ -175,6 +175,7 @@ func TestRunFloretHostedTurnFreezesAttachmentBytesBeforeCanonicalAdmission(t *te
 		t.Fatal(err)
 	}
 	r.setPendingTurnCommand(commandID)
+	r.awaitFloretAdmission.Store(true)
 	originalHostFactory := r.floretHostFactory
 	r.floretHostFactory = func(ctx context.Context, options flruntime.TurnExecutionHostOptions) (floretTurnHost, error) {
 		if err := os.WriteFile(filepath.Join(uploadsDir, record.UploadID+".data"), mutatedBody, 0o600); err != nil {

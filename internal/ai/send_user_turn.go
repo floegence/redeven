@@ -56,6 +56,12 @@ type admittedUserTurn struct {
 	RunID  string
 }
 
+type userTurnAdmissionOutcome struct {
+	TurnID string
+	RunID  string
+	err    error
+}
+
 type preparedUserTurn struct {
 	TurnID          string
 	CreatedAtUnixMs int64

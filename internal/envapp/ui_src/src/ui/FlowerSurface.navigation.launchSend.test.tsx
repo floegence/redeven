@@ -1393,27 +1393,25 @@ describe('FlowerSurface navigation launch/send', () => {
       status: 'running',
       model_io_status: modelIOStatus({ run_id: 'run-running-send' }),
     });
-    const launchedThread = thread({
-      ...runningThread,
-      status: 'running',
-      queued_turn_count: 1,
-      messages: [
-        ...runningThread.messages,
-        {
-          id: 'm-running-send-user',
-          role: 'user',
-          content: 'continue while running',
-          status: 'complete',
-          created_at_ms: 10,
-        },
-      ],
-    });
     const stopThread = vi.fn(async () => liveBootstrap({ ...runningThread, status: 'canceled' }));
-    const launchTurn = vi.fn(async (input: { turn_id?: string }) => launchReceipt(launchedThread.thread_id, input.turn_id ?? 'turn-running'));
+    let acceptedTurnID = '';
+    const queuedThread = () => thread({
+      ...runningThread,
+      queued_turn_count: 1,
+      queued_turns: [{
+        turn_id: acceptedTurnID,
+        prompt: 'continue while running',
+        created_at_ms: 10,
+      }],
+    });
+    const launchTurn = vi.fn(async (input: { turn_id?: string }) => {
+      acceptedTurnID = input.turn_id ?? 'turn-running';
+      return launchReceipt(runningThread.thread_id, acceptedTurnID, 'queued');
+    });
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [runningThread]),
-      loadThread: vi.fn(async () => liveBootstrap(runningThread)),
+      loadThread: vi.fn(async () => liveBootstrap(acceptedTurnID ? queuedThread() : runningThread)),
       stopThread,
       launchTurn,
     });
@@ -1438,7 +1436,8 @@ describe('FlowerSurface navigation launch/send', () => {
       thread_id: 'thread-running-send-queue',
       prompt: 'continue while running',
     }));
-    expect(runtime.querySelector('[data-flower-pending-turn]')?.textContent).toContain('continue while running');
+    await waitFor(() => Boolean(runtime.querySelector(`[data-flower-queued-turn-id="${acceptedTurnID}"]`)));
+    expect(runtime.querySelector(`[data-flower-queued-turn-id="${acceptedTurnID}"]`)?.textContent).toContain('continue while running');
   });
 
   it('compacts a running selected thread without stopping or launching a new turn', async () => {
@@ -2015,13 +2014,23 @@ describe('FlowerSurface navigation launch/send', () => {
     });
     const compactDeferred = deferred<FlowerLiveBootstrap>();
     const compactThreadContext = vi.fn(() => compactDeferred.promise);
-    const launchTurn = vi.fn(async (input: { turn_id?: string }) => (
-      launchReceipt(compactingThread.thread_id, input.turn_id ?? 'turn-idle-compact', 'queued')
-    ));
+    let acceptedTurnID = '';
+    const launchTurn = vi.fn(async (input: { turn_id?: string }) => {
+      acceptedTurnID = input.turn_id ?? 'turn-idle-compact';
+      return launchReceipt(compactingThread.thread_id, acceptedTurnID, 'queued');
+    });
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [compactingThread]),
-      loadThread: vi.fn(async () => liveBootstrap(compactingThread)),
+      loadThread: vi.fn(async () => liveBootstrap(acceptedTurnID ? thread({
+        ...compactingThread,
+        queued_turn_count: 1,
+        queued_turns: [{
+          turn_id: acceptedTurnID,
+          prompt: 'continue after compact starts',
+          created_at_ms: 30,
+        }],
+      }) : compactingThread)),
       compactThreadContext,
       launchTurn,
     });
@@ -2055,14 +2064,14 @@ describe('FlowerSurface navigation launch/send', () => {
       thread_id: 'thread-idle-compact-pending-send',
       prompt: 'continue after compact starts',
     }));
-    await waitFor(() => runtime.querySelector('[data-flower-pending-turn]')?.textContent?.includes('continue after compact starts') ?? false);
-    expect(runtime.querySelector('[data-flower-pending-turn]')?.getAttribute('data-flower-pending-turn-state')).toBe('queued');
+    await waitFor(() => runtime.querySelector(`[data-flower-queued-turn-id="${acceptedTurnID}"]`)?.textContent?.includes('continue after compact starts') ?? false);
+    expect(runtime.querySelector(`[data-flower-queued-turn-id="${acceptedTurnID}"]`)?.getAttribute('data-flower-queued-turn-state')).toBe('queued');
     expect(runtime.querySelector('[data-flower-message-id="m-idle-compact-user"]')).toBeTruthy();
     expect(runtime.querySelector('[data-flower-message-id="continue after compact starts"]')).toBeNull();
     expect(compactThreadContext).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps multiple queued pending sends visible while idle compaction is still pending', async () => {
+  it('renders multiple server-owned queued sends with duplicate prompts as distinct turns', async () => {
     const compactingThread = thread({
       thread_id: 'thread-idle-compact-multi-pending',
       title: 'Idle compact multi pending',
@@ -2094,7 +2103,15 @@ describe('FlowerSurface navigation launch/send', () => {
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [compactingThread]),
-      loadThread: vi.fn(async () => liveBootstrap(compactingThread)),
+      loadThread: vi.fn(async () => liveBootstrap(pendingMessages.length > 0 ? thread({
+        ...compactingThread,
+        queued_turn_count: pendingMessages.length,
+        queued_turns: pendingMessages.map((turnID, index) => ({
+          turn_id: turnID,
+          prompt: 'repeat queued follow-up',
+          created_at_ms: 50_000 + index,
+        })),
+      }) : compactingThread)),
       launchTurn,
     });
 
@@ -2121,9 +2138,9 @@ describe('FlowerSurface navigation launch/send', () => {
     }
 
     await waitFor(() => launchTurn.mock.calls.length === 2);
-    await waitFor(() => runtime.querySelectorAll('[data-flower-pending-turn]').length === 2);
-    const pendingText = Array.from(runtime.querySelectorAll('[data-flower-pending-turn]')).map((node) => node.textContent ?? '').join('\n');
-    expect((pendingText.match(/repeat queued follow-up/g) ?? []).length).toBe(2);
+    await waitFor(() => runtime.querySelectorAll('[data-flower-queued-turn-id]').length === 2);
+    const queuedText = Array.from(runtime.querySelectorAll('[data-flower-queued-turn-id]')).map((node) => node.textContent ?? '').join('\n');
+    expect((queuedText.match(/repeat queued follow-up/g) ?? []).length).toBe(2);
     expect(pendingMessages).toHaveLength(2);
     expect(pendingMessages[0]).toMatch(/^client_/);
     expect(pendingMessages[1]).toMatch(/^client_/);
@@ -2469,13 +2486,12 @@ describe('FlowerSurface navigation launch/send', () => {
 	expect(ids).toHaveLength(4);
 	expect(ids[0]).toBe('m-first-user');
 	expect(ids[1]).toBe('m-first-assistant');
-	expect(ids[2]?.startsWith('pending:')).toBe(false);
+	expect(ids[2]).toBe('m-second-user');
 	expect(ids[3]).toBe('m-second-assistant');
-	expect(runtime.querySelector('[data-flower-pending-turn]')).toBeNull();
 	expect(runtime.querySelectorAll('.flower-model-status-indicator')).toHaveLength(1);
   });
 
-  it('keeps a repeated prompt pending until a new canonical user message arrives', async () => {
+  it('keeps a repeated queued prompt distinct from canonical history by exact TurnID', async () => {
     const existingThread = thread({
       thread_id: 'thread-repeat-pending',
       title: 'Repeat pending',
@@ -2490,17 +2506,19 @@ describe('FlowerSurface navigation launch/send', () => {
         },
       ],
     });
-    const launchedThread = thread({
-      ...existingThread,
-      status: 'running',
-      messages: existingThread.messages,
-      model_io_status: modelIOStatus({ run_id: 'run-repeat' }),
-    });
+    let acceptedTurnID = '';
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [existingThread]),
-      loadThread: vi.fn(async () => liveBootstrap(existingThread)),
-      launchTurn: vi.fn(async (input) => launchReceipt(launchedThread.thread_id, input.turn_id ?? 'turn-repeat-pending')),
+      loadThread: vi.fn(async () => liveBootstrap(acceptedTurnID ? thread({
+        ...existingThread,
+        queued_turn_count: 1,
+        queued_turns: [{ turn_id: acceptedTurnID, prompt: 'continue', created_at_ms: 20 }],
+      }) : existingThread)),
+      launchTurn: vi.fn(async (input) => {
+        acceptedTurnID = input.turn_id ?? 'turn-repeat-queued';
+        return launchReceipt(existingThread.thread_id, acceptedTurnID, 'queued');
+      }),
     });
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-repeat-pending"] button')));
@@ -2512,37 +2530,43 @@ describe('FlowerSurface navigation launch/send', () => {
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
     (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
 
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-pending-turn]')));
+    await waitFor(() => Boolean(runtime.querySelector(`[data-flower-queued-turn-id="${acceptedTurnID}"]`)));
 
     const ids = Array.from(runtime.querySelectorAll('[data-flower-message-id]')).map((node) => node.getAttribute('data-flower-message-id'));
-    expect(ids).toHaveLength(2);
-    expect(ids[0]).toBe('m-old-continue');
-    expect(ids[1]?.startsWith('pending:client_')).toBe(true);
-    expect(runtime.querySelector('[data-flower-pending-turn]')?.textContent).toContain('continue');
+    expect(ids).toEqual(['m-old-continue']);
+    expect(runtime.querySelector(`[data-flower-queued-turn-id="${acceptedTurnID}"]`)?.textContent).toContain('continue');
   });
 
-  it('renders a pending user turn before assistant streaming when live events arrive first', async () => {
+  it('renders the canonical user row before assistant streaming', async () => {
     const selected = thread({
       thread_id: 'thread-pending-before-assistant',
       title: 'Pending before assistant',
       status: 'idle',
       messages: [],
     });
-    const launchedThread = thread({
-      ...selected,
-      status: 'running',
-      messages: [],
-      model_io_status: modelIOStatus({ run_id: 'run-pending-before-assistant' }),
-    });
     let pollCount = 0;
     let acceptedTurnID = '';
+    let admitted = false;
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [selected]),
-      loadThread: vi.fn(async () => liveBootstrap(selected)),
+      loadThread: vi.fn(async () => liveBootstrap(admitted ? thread({
+        ...selected,
+        status: 'running',
+        messages: [{
+          id: 'entry-user-before-assistant',
+          turn_id: acceptedTurnID,
+          role: 'user',
+          content: 'start work',
+          status: 'complete',
+          created_at_ms: 1000,
+        }],
+        model_io_status: modelIOStatus({ run_id: 'run-pending-before-assistant' }),
+      }) : selected)),
       launchTurn: vi.fn(async (input) => {
         acceptedTurnID = input.turn_id ?? 'turn-pending-before-assistant';
-        return launchReceipt(launchedThread.thread_id, acceptedTurnID);
+        admitted = true;
+        return launchReceipt(selected.thread_id, acceptedTurnID);
       }),
       listThreadLiveEvents: vi.fn(async () => {
         pollCount += 1;
@@ -2626,11 +2650,11 @@ describe('FlowerSurface navigation launch/send', () => {
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="m-assistant-first"]')));
 
     const ids = Array.from(runtime.querySelectorAll('[data-flower-message-id]')).map((node) => node.getAttribute('data-flower-message-id'));
-    const pendingIndex = ids.findIndex((id) => id?.startsWith('pending:client_'));
+    const userIndex = ids.indexOf('entry-user-before-assistant');
     const assistantIndex = ids.indexOf('m-assistant-first');
-    expect(pendingIndex).toBeGreaterThanOrEqual(0);
+    expect(userIndex).toBeGreaterThanOrEqual(0);
     expect(assistantIndex).toBeGreaterThanOrEqual(0);
-    expect(pendingIndex).toBeLessThan(assistantIndex);
+    expect(userIndex).toBeLessThan(assistantIndex);
   });
 
   it('ignores stale bootstrap reloads that return after sending on a running thread', async () => {
@@ -2748,7 +2772,6 @@ describe('FlowerSurface navigation launch/send', () => {
 	expect(ids[1]).toBe('m-first-assistant');
 	expect(ids[2]).toBe('m-second-user');
 	expect(ids[3]).toBe('m-second-assistant');
-	expect(runtime.querySelector('[data-flower-pending-turn]')).toBeNull();
 	expect(runtime.querySelector('[data-flower-message-id="m-second-assistant"]')?.textContent).toContain('new answer');
 	expect(runtime.querySelectorAll('.flower-model-status-indicator')).toHaveLength(1);
   });
@@ -3131,7 +3154,7 @@ describe('FlowerSurface navigation launch/send', () => {
     expect(runtime.textContent).toContain('Flower verification is complete.');
   });
 
-  it('shows a local pending send row while waiting for the canonical timeline', async () => {
+  it('retains the composer draft without synthesizing a row while admission is pending', async () => {
     const sendDeferred = deferred<FlowerTurnLaunchReceipt>();
     let launchTurnID = 'turn-user-canonical';
     const launchTurn = vi.fn((input) => {
@@ -3182,20 +3205,21 @@ describe('FlowerSurface navigation launch/send', () => {
     (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
     await waitFor(() => launchTurn.mock.calls.length > 0);
 
-    expect(runtime.querySelector('[data-flower-pending-turn]')?.textContent).toContain('inspect the running turn');
-    expect(runtime.querySelector('[data-flower-pending-turn]')?.getAttribute('data-flower-pending-turn-state')).toBe('sending');
+    expect(runtime.querySelector('[data-flower-message-id]')).toBeNull();
     expect(runtime.querySelector('[data-flower-message-id="entry-user-canonical"]')).toBeNull();
     expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
-    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('inspect the running turn');
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
+    expect(runtime.querySelector('.flower-composer')?.getAttribute('aria-busy')).toBe('true');
 
     sendDeferred.resolve(launchReceipt('thread-canonical-send', launchTurnID));
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="entry-user-canonical"]')));
     expect(runtime.textContent).toContain('inspect the running turn');
-    expect(runtime.querySelector('[data-flower-pending-turn]')).toBeNull();
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
     expect(runtime.querySelector('.flower-model-status-indicator')).toBeTruthy();
   });
 
-  it('replaces the pending row by TurnID when timeline.replaced publishes a distinct user entry id', async () => {
+  it('replaces a server queued row by exact TurnID when canonical admission arrives', async () => {
     const initialThread = thread({
       thread_id: 'thread-live-canonical-send',
       title: 'Live canonical send',
@@ -3212,12 +3236,18 @@ describe('FlowerSurface navigation launch/send', () => {
         ...initialThread,
         status: 'running',
         model_io_status: modelIOStatus({ run_id: 'run-live-canonical-send' }),
+        queued_turn_count: 1,
+        queued_turns: [{
+          turn_id: acceptedTurnID,
+          prompt: 'replace this queued row',
+          created_at_ms: 10,
+        }],
       } : initialThread, 1)),
       listThreadLiveEvents: vi.fn(() => replacement.promise),
       launchTurn: vi.fn(async (input) => {
         loadedAfterLaunch = true;
         acceptedTurnID = input.turn_id ?? 'turn-live-canonical-send';
-        return launchReceipt(initialThread.thread_id, acceptedTurnID);
+        return launchReceipt(initialThread.thread_id, acceptedTurnID, 'queued');
       }),
     });
 
@@ -3225,10 +3255,10 @@ describe('FlowerSurface navigation launch/send', () => {
     (runtime.querySelector('[data-thread-id="thread-live-canonical-send"] button') as HTMLButtonElement).click();
     await waitFor(() => selectedThreadReady(runtime, initialThread.thread_id));
     const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
-    textarea.value = 'replace this pending row';
+    textarea.value = 'replace this queued row';
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
     (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
-    await waitFor(() => acceptedTurnID !== '' && Boolean(runtime.querySelector('[data-flower-pending-turn]')));
+    await waitFor(() => acceptedTurnID !== '' && Boolean(runtime.querySelector(`[data-flower-queued-turn-id="${acceptedTurnID}"]`)));
 
     replacement.resolve({
       events: [{
@@ -3246,7 +3276,7 @@ describe('FlowerSurface navigation launch/send', () => {
             id: 'entry-user-live-canonical',
             turn_id: acceptedTurnID,
             role: 'user',
-            content: 'replace this pending row',
+            content: 'replace this queued row',
             status: 'complete',
             created_at_ms: 10,
           }, {
@@ -3268,11 +3298,11 @@ describe('FlowerSurface navigation launch/send', () => {
     });
 
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="entry-user-live-canonical"]')));
-    expect(runtime.querySelector('[data-flower-pending-turn]')).toBeNull();
+    expect(runtime.querySelector(`[data-flower-queued-turn-id="${acceptedTurnID}"]`)).toBeNull();
     expect(runtime.querySelectorAll('[data-flower-message-role="user"]')).toHaveLength(1);
   });
 
-  it('keeps the accepted pending turn and cleared draft when the post-receipt refresh fails', async () => {
+  it('does not synthesize a message when canonical refresh fails after a reliable receipt', async () => {
     const launchTurn = vi.fn(async (input: { turn_id?: string }) => (
       launchReceipt('thread-refresh-failed-after-send', input.turn_id ?? 'turn-refresh-failed')
     ));
@@ -3296,15 +3326,15 @@ describe('FlowerSurface navigation launch/send', () => {
     expect(launchTurn).toHaveBeenCalledTimes(1);
     expect(loadThread.mock.calls.length).toBeGreaterThanOrEqual(1);
     expect(loadThread).toHaveBeenCalledWith('thread-refresh-failed-after-send');
-    expect(runtime.querySelector('[data-flower-pending-turn]')?.textContent).toContain('send exactly once');
-    expect(runtime.querySelector('[data-flower-pending-turn]')?.getAttribute('data-flower-pending-turn-state')).toBe('sending');
+    expect(runtime.querySelector('[data-flower-message-id]')).toBeNull();
+    expect(runtime.querySelector('[data-flower-queued-turn-id]')).toBeNull();
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
     expect(flowerSurfaceNotifications()).not.toContainEqual(expect.objectContaining({
       title: 'Flower could not send.',
     }));
   });
 
-  it('keeps one exact pending turn when admission succeeds but the receipt response is lost', async () => {
+  it('retains the draft until an uncertain receipt is resolved by the exact server TurnID', async () => {
     const reloadDeferred = deferred<FlowerLiveBootstrap>();
     let proposedTurnID = '';
     const launchTurn = vi.fn(async (input: { turn_id?: string }) => {
@@ -3331,8 +3361,10 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => launchTurn.mock.calls.length === 1 && loadThread.mock.calls.length >= 1);
     expect(proposedTurnID).not.toBe('');
-    expect(runtime.querySelector('[data-flower-pending-turn]')?.textContent).toContain('reconcile this exact turn');
-    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
+    expect(runtime.querySelector('[data-flower-message-id]')).toBeNull();
+    expect(runtime.querySelector('[data-flower-queued-turn-id]')).toBeNull();
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('reconcile this exact turn');
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
     expect(flowerSurfaceNotifications()).not.toContainEqual(expect.objectContaining({
       title: 'Flower could not send.',
     }));
@@ -3354,7 +3386,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="entry-user-after-uncertain-receipt"]')));
     expect(launchTurn).toHaveBeenCalledTimes(1);
-    expect(runtime.querySelector('[data-flower-pending-turn]')).toBeNull();
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
     expect(runtime.querySelectorAll('[data-flower-message-role="user"]')).toHaveLength(1);
   });
 
@@ -3406,7 +3438,9 @@ describe('FlowerSurface navigation launch/send', () => {
 
     await waitFor(() => launchTurn.mock.calls.length === 1 && loadThread.mock.calls.length >= 1);
     expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
-    expect(runtime.querySelector('[data-flower-pending-turn]')?.textContent).toContain('start the model request');
+    expect(runtime.querySelector('[data-flower-message-id]')).toBeNull();
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
+    expect(runtime.querySelector('.flower-composer')?.getAttribute('aria-busy')).toBe('true');
     reloadDeferred.resolve(liveBootstrap({
       ...acceptedThread,
       messages: acceptedThread.messages.map((message) => ({ ...message, turn_id: acceptedTurnID })),
@@ -3423,7 +3457,6 @@ describe('FlowerSurface navigation launch/send', () => {
     expect(runtime.querySelector('.flower-model-status-indicator')?.getAttribute('data-model-io-phase')).toBe('preparing');
     expect(runtime.querySelector('[data-flower-message-id] .flower-model-status-indicator')).toBeNull();
     expect(runtime.querySelector('.flower-chat-transcript .flower-model-status-indicator')).toBeNull();
-    expect(runtime.querySelector('[data-flower-pending-turn]')).toBeNull();
   });
 
   it('does not synthesize timeline rows while the handler is still resolving', async () => {
@@ -3470,7 +3503,10 @@ describe('FlowerSurface navigation launch/send', () => {
     (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
 
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(runtime.querySelector('[data-flower-pending-turn]')?.textContent).toContain('show before route settles');
+    expect(runtime.querySelector('[data-flower-message-id]')).toBeNull();
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('show before route settles');
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).disabled).toBe(true);
+    expect(runtime.querySelector('.flower-composer')?.getAttribute('aria-busy')).toBe('true');
     expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
     expect(launchTurn).not.toHaveBeenCalled();
 
@@ -3576,7 +3612,6 @@ describe('FlowerSurface navigation launch/send', () => {
     expect(ids[1]).toBe('m-first-assistant');
     expect(ids[2]).toBe('m-second-user');
     expect(ids[3]).toBe('m-second-assistant');
-    expect(runtime.querySelector('[data-flower-pending-turn]')).toBeNull();
     expect(runtime.querySelectorAll('.flower-model-status-indicator')).toHaveLength(1);
   });
 });

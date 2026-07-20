@@ -195,12 +195,9 @@ func TestQueuedTurnContextActionPersistsThroughStoreRoundTrip(t *testing.T) {
 	if !strings.Contains(string(viewJSON), `"is_directory":false`) {
 		t.Fatalf("queued context action is not canonical: %s", viewJSON)
 	}
-	threadViewJSON, err := json.Marshal(view)
-	if err != nil {
-		t.Fatalf("json.Marshal thread view: %v", err)
-	}
-	if strings.Contains(string(threadViewJSON), upload.URL) || strings.Contains(string(threadViewJSON), `"attachments"`) {
-		t.Fatalf("queued thread detail exposed attachment transport: %s", threadViewJSON)
+	attachments := view.QueuedTurns[0].Attachments
+	if len(attachments) != 1 || attachments[0].Name != "notes.txt" || attachments[0].MimeType != "text/plain" || attachments[0].URL != upload.URL {
+		t.Fatalf("queued thread attachments=%#v, want exact UI-safe attachment snapshot", attachments)
 	}
 
 	popped, err := svc.threadsDB.PopNextQueuedTurn(ctx, meta.EndpointID, thread.ThreadID)

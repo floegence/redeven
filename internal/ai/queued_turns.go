@@ -322,10 +322,25 @@ func followupRecordToView(rec threadstore.QueuedTurn, position int) (FollowupIte
 }
 
 func queuedTurnRecordToThreadView(rec threadstore.QueuedTurn) (QueuedTurnView, error) {
+	attachments, err := unmarshalQueuedTurnAttachments(rec.AttachmentsJSON)
+	if err != nil {
+		return QueuedTurnView{}, err
+	}
+	views := make([]FollowupAttachmentView, 0, len(attachments))
+	for _, item := range attachments {
+		views = append(views, FollowupAttachmentView{
+			Name:     strings.TrimSpace(item.Name),
+			MimeType: strings.TrimSpace(item.MimeType),
+			URL:      strings.TrimSpace(item.URL),
+		})
+	}
 	view := QueuedTurnView{
 		TurnID:          strings.TrimSpace(rec.TurnID),
 		Text:            strings.TrimSpace(rec.TextContent),
 		CreatedAtUnixMs: rec.CreatedAtUnixMs,
+	}
+	if len(views) > 0 {
+		view.Attachments = views
 	}
 	contextAction, err := unmarshalQueuedTurnContextAction(rec.ContextActionJSON)
 	if err != nil {

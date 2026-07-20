@@ -634,7 +634,7 @@ func (r *run) publishThreadApprovalState(status string) {
 		return
 	}
 	r.host.broadcastThreadState(runID, status, "", "")
-	r.host.broadcastThreadSummary()
+	_ = r.host.broadcastThreadSummary()
 }
 
 func approvalCommandForTool(toolName string, args map[string]any) string {

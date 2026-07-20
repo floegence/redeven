@@ -44,7 +44,7 @@ func TestFloretRunCapabilityShapesAreExact(t *testing.T) {
 		field("hasPendingApprovals", (func() bool)(nil)),
 		field("pendingLiveToolApprovals", (func(string) []FlowerApprovalAction)(nil)),
 		field("broadcastThreadState", (func(string, string, string, string))(nil)),
-		field("broadcastThreadSummary", (func())(nil)),
+		field("broadcastThreadSummary", (func() error)(nil)),
 		field("replaceLiveDraftWithCanonicalTimeline", (func(context.Context, string, string, string, string) error)(nil)),
 		field("lastVisibleTimelineAnchor", (func(context.Context) (FlowerTimelineAnchor, error))(nil)),
 		field("reconcilePendingTurnCommand", (func(context.Context, string, string, []string) (bool, error))(nil)),

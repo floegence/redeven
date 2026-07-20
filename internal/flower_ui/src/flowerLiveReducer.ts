@@ -129,6 +129,7 @@ function applyThreadPatch(thread: FlowerThreadSnapshot, patch: FlowerLiveThreadP
     ...(Number(patch.updated_at_ms ?? 0) > 0 ? { updated_at_ms: Number(patch.updated_at_ms) } : {}),
     status,
     ...(Number(patch.queued_turn_count ?? -1) >= 0 ? { queued_turn_count: Number(patch.queued_turn_count) } : {}),
+    ...(patch.queued_turns !== undefined ? { queued_turns: [...patch.queued_turns] } : {}),
     ...(patch.permission_type !== undefined ? { permission_type: patch.permission_type } : {}),
     ...(patch.reasoning_selection !== undefined ? { reasoning_selection: patch.reasoning_selection ?? undefined } : {}),
     ...(patch.reasoning_capability !== undefined ? { reasoning_capability: patch.reasoning_capability ?? undefined } : {}),

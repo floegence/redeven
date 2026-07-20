@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -34,6 +35,7 @@ var (
 	ErrThreadBusy                      = errors.New("thread already active")
 	ErrThreadForkUnavailable           = errors.New("thread cannot be forked while active or waiting")
 	ErrCanonicalTimelineResyncRequired = errors.New("canonical timeline resync required")
+	ErrUserTurnNotAdmitted             = errors.New("user turn was not admitted by Floret")
 )
 
 const CanonicalTimelineResyncErrorCode = "AI_TIMELINE_RESYNC_REQUIRED"
@@ -1684,61 +1686,81 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 	if err != nil {
 		return admittedUserTurn{}, normalizedInput, err
 	}
-	commandID, err := NewQueuedTurnID()
-	if err != nil {
-		s.releasePreparedRun(prepared)
-		return admittedUserTurn{}, normalizedInput, err
-	}
-	contextActionJSON, marshalErr := marshalQueuedTurnContextAction(normalizedInput.ContextAction)
-	if marshalErr != nil {
-		s.releasePreparedRun(prepared)
-		return admittedUserTurn{}, normalizedInput, marshalErr
-	}
-	attachmentsJSON, marshalErr := marshalQueuedTurnAttachments(normalizedInput.Attachments)
-	if marshalErr != nil {
-		s.releasePreparedRun(prepared)
-		return admittedUserTurn{}, normalizedInput, marshalErr
-	}
-	optionsJSON, marshalErr := marshalQueuedTurnOptions(req.Options)
-	if marshalErr != nil {
-		s.releasePreparedRun(prepared)
-		return admittedUserTurn{}, normalizedInput, marshalErr
-	}
-	sessionMetaJSON, marshalErr := marshalQueuedTurnSessionMeta(meta)
-	if marshalErr != nil {
-		s.releasePreparedRun(prepared)
-		return admittedUserTurn{}, normalizedInput, marshalErr
-	}
-	record := threadstore.QueuedTurn{
-		QueueID: commandID, EndpointID: endpointID, ThreadID: threadID,
-		ChannelID: strings.TrimSpace(meta.ChannelID), Lane: threadstore.FollowupLaneQueued,
-		TurnID: prepared.turnID, RunID: runID, ModelID: strings.TrimSpace(req.Model),
-		TextContent: strings.TrimSpace(normalizedInput.Text), AttachmentsJSON: attachmentsJSON,
-		ContextActionJSON: contextActionJSON, OptionsJSON: optionsJSON, SessionMetaJSON: sessionMetaJSON,
-		CreatedByUserPublicID: strings.TrimSpace(meta.UserPublicID), CreatedByUserEmail: strings.TrimSpace(meta.UserEmail),
-		CreatedAtUnixMs: preparedUser.CreatedAtUnixMs,
-	}
-	pctx, cancel := context.WithTimeout(ctx, prepared.persistTO)
-	if sourceID := strings.TrimSpace(sourceFollowupID); sourceID != "" {
-		replacement, replaceErr := prepared.db.ReplaceFollowupWithUploadRefs(pctx, sourceID, record, preparedUser.UploadIDs, preparedUser.CreatedAtUnixMs)
+	sourceID := strings.TrimSpace(sourceFollowupID)
+	commandID := ""
+	if sourceID != "" {
+		pctx, cancel := context.WithTimeout(ctx, prepared.persistTO)
+		source, sourceErr := prepared.db.GetQueuedTurn(pctx, endpointID, threadID, sourceID)
 		cancel()
-		if replaceErr != nil {
+		if sourceErr != nil && !errors.Is(sourceErr, sql.ErrNoRows) {
 			s.releasePreparedRun(prepared)
-			return admittedUserTurn{}, normalizedInput, replaceErr
+			return admittedUserTurn{}, normalizedInput, sourceErr
 		}
-		if _, cleanupErr := s.processUploadCleanupCandidates(ctx, replacement.UploadsToDelete); cleanupErr != nil && s.log != nil {
-			s.log.Warn("pending turn replacement physical cleanup deferred", "thread_id", threadID, "source_followup_id", sourceID, "error", cleanupErr)
+		if source != nil && strings.TrimSpace(source.TurnID) == prepared.turnID && strings.TrimSpace(source.RunID) == runID {
+			if source.AdmissionState != threadstore.PendingTurnAdmissionReady {
+				s.releasePreparedRun(prepared)
+				return admittedUserTurn{}, normalizedInput, threadstore.ErrPendingTurnAdmissionInProgress
+			}
+			commandID = sourceID
 		}
-	} else {
-		_, _, _, err = prepared.db.CreateFollowupWithUploadRefs(pctx, record, preparedUser.UploadIDs, preparedUser.CreatedAtUnixMs)
-		cancel()
+	}
+	if commandID == "" {
+		commandID, err = NewQueuedTurnID()
 		if err != nil {
 			s.releasePreparedRun(prepared)
 			return admittedUserTurn{}, normalizedInput, err
 		}
+		contextActionJSON, marshalErr := marshalQueuedTurnContextAction(normalizedInput.ContextAction)
+		if marshalErr != nil {
+			s.releasePreparedRun(prepared)
+			return admittedUserTurn{}, normalizedInput, marshalErr
+		}
+		attachmentsJSON, marshalErr := marshalQueuedTurnAttachments(normalizedInput.Attachments)
+		if marshalErr != nil {
+			s.releasePreparedRun(prepared)
+			return admittedUserTurn{}, normalizedInput, marshalErr
+		}
+		optionsJSON, marshalErr := marshalQueuedTurnOptions(req.Options)
+		if marshalErr != nil {
+			s.releasePreparedRun(prepared)
+			return admittedUserTurn{}, normalizedInput, marshalErr
+		}
+		sessionMetaJSON, marshalErr := marshalQueuedTurnSessionMeta(meta)
+		if marshalErr != nil {
+			s.releasePreparedRun(prepared)
+			return admittedUserTurn{}, normalizedInput, marshalErr
+		}
+		record := threadstore.QueuedTurn{
+			QueueID: commandID, EndpointID: endpointID, ThreadID: threadID,
+			ChannelID: strings.TrimSpace(meta.ChannelID), Lane: threadstore.FollowupLaneQueued,
+			TurnID: prepared.turnID, RunID: runID, ModelID: strings.TrimSpace(req.Model),
+			TextContent: strings.TrimSpace(normalizedInput.Text), AttachmentsJSON: attachmentsJSON,
+			ContextActionJSON: contextActionJSON, OptionsJSON: optionsJSON, SessionMetaJSON: sessionMetaJSON,
+			CreatedByUserPublicID: strings.TrimSpace(meta.UserPublicID), CreatedByUserEmail: strings.TrimSpace(meta.UserEmail),
+			CreatedAtUnixMs: preparedUser.CreatedAtUnixMs,
+		}
+		pctx, cancel := context.WithTimeout(ctx, prepared.persistTO)
+		if sourceID != "" {
+			replacement, replaceErr := prepared.db.ReplaceFollowupWithUploadRefs(pctx, sourceID, record, preparedUser.UploadIDs, preparedUser.CreatedAtUnixMs)
+			cancel()
+			if replaceErr != nil {
+				s.releasePreparedRun(prepared)
+				return admittedUserTurn{}, normalizedInput, replaceErr
+			}
+			if _, cleanupErr := s.processUploadCleanupCandidates(ctx, replacement.UploadsToDelete); cleanupErr != nil && s.log != nil {
+				s.log.Warn("pending turn replacement physical cleanup deferred", "thread_id", threadID, "source_followup_id", sourceID, "error", cleanupErr)
+			}
+		} else {
+			_, _, _, err = prepared.db.CreateFollowupWithUploadRefs(pctx, record, preparedUser.UploadIDs, preparedUser.CreatedAtUnixMs)
+			cancel()
+			if err != nil {
+				s.releasePreparedRun(prepared)
+				return admittedUserTurn{}, normalizedInput, err
+			}
+		}
 	}
 
-	pctx, cancel = context.WithTimeout(ctx, prepared.persistTO)
+	pctx, cancel := context.WithTimeout(ctx, prepared.persistTO)
 	err = prepared.db.BeginPendingTurnAdmission(pctx, endpointID, threadID, commandID, prepared.turnID, runID)
 	cancel()
 	if err != nil {
@@ -1750,13 +1772,19 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 	s.broadcastThreadState(endpointID, threadID, runID, string(RunStateRunning), "", "")
 	s.broadcastThreadSummary(endpointID, threadID)
 	go func() {
-		if err := s.executePreparedRun(context.Background(), prepared); err != nil {
+		runErr := s.executePreparedRun(context.Background(), prepared)
+		prepared.r.completeUserTurnAdmissionAfterExecution(runErr)
+		if runErr != nil {
 			if s.log != nil {
-				s.log.Warn("ai detached run failed", "run_id", runID, "thread_id", threadID, "error", err)
+				s.log.Warn("ai detached run failed", "run_id", runID, "thread_id", threadID, "error", runErr)
 			}
 		}
 	}()
-	return admittedUserTurn{TurnID: prepared.turnID, RunID: runID}, normalizedInput, nil
+	admitted, err := prepared.r.waitForUserTurnAdmission(ctx)
+	if err != nil {
+		return admittedUserTurn{}, normalizedInput, err
+	}
+	return admitted, normalizedInput, nil
 }
 
 func (s *Service) releasePreparedRun(prepared *preparedRun) {
@@ -2043,6 +2071,7 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	engineRunStarted := false
 
 	defer func() {
+		r.reconcilePendingTurnCommand()
 		s.mu.Lock()
 		delete(s.runs, runID)
 		if strings.TrimSpace(s.activeRunByTh[thKey]) == runID {
@@ -2140,7 +2169,6 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	}
 	engineRunStarted = true
 	runErr := r.run(ctx, runReq)
-	r.reconcilePendingTurnCommand()
 	finalErr := runErr
 	if runErr != nil {
 		handledCancel := false

@@ -2,7 +2,9 @@ package ai
 
 import (
 	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
@@ -80,14 +82,27 @@ func TestFloretEventSinkStartsLiveDraftAfterCanonicalIdentityValidation(t *testi
 	t.Parallel()
 
 	var events []any
+	var admissionSteps []string
 	r := newRun(runOptions{
 		RunID:     "run-live-admission",
 		ThreadID:  "thread-live-admission",
+		TurnID:    "turn-live-admission",
 		MessageID: "turn-live-admission",
+		HostCapabilities: runHostCapabilities{
+			broadcastThreadSummary: func() error {
+				admissionSteps = append(admissionSteps, "thread_snapshot")
+				return nil
+			},
+			replaceLiveDraftWithCanonicalTimeline: func(context.Context, string, string, string, string) error {
+				admissionSteps = append(admissionSteps, "canonical_timeline")
+				return nil
+			},
+		},
 		OnStreamEvent: func(event any) {
 			events = append(events, event)
 		},
 	})
+	r.awaitFloretAdmission.Store(true)
 	r.expectFloretRuntimeEventIdentity("run-live-admission", "thread-live-admission", "turn-live-admission", true)
 
 	floretEventSink{run: r}.EmitEvent(flruntime.Event{
@@ -96,13 +111,18 @@ func TestFloretEventSinkStartsLiveDraftAfterCanonicalIdentityValidation(t *testi
 		ThreadID: "thread-live-admission",
 		TurnID:   "turn-live-admission",
 		Committed: &flruntime.ThreadDetailEvent{
-			ID:       "entry-live-admission",
-			ThreadID: "thread-live-admission",
-			TurnID:   "turn-live-admission",
-			RunID:    "run-live-admission",
-			Kind:     flruntime.ThreadDetailEventUserMessage,
+			ID: "entry-live-admission", ThreadID: "thread-live-admission", TurnID: "turn-live-admission", RunID: "run-live-admission",
+			Kind: flruntime.ThreadDetailEventUserMessage, CreatedAt: time.Now(),
+			Message: &flruntime.ThreadDetailMessage{Role: "user", Content: "canonical input"},
 		},
 	})
+	admitted, err := r.waitForUserTurnAdmission(context.Background())
+	if err != nil || admitted.TurnID != "turn-live-admission" || admitted.RunID != "run-live-admission" {
+		t.Fatalf("admission outcome=%#v err=%v", admitted, err)
+	}
+	if len(admissionSteps) != 2 || admissionSteps[0] != "thread_snapshot" || admissionSteps[1] != "canonical_timeline" {
+		t.Fatalf("admission steps=%#v", admissionSteps)
+	}
 	if len(events) != 2 {
 		t.Fatalf("validated event emitted %d live-start events, want 2", len(events))
 	}
@@ -129,6 +149,51 @@ func TestFloretEventSinkStartsLiveDraftAfterCanonicalIdentityValidation(t *testi
 	}
 	if rejected.floretContractError() == nil {
 		t.Fatal("mismatched event did not abort Floret contract processing")
+	}
+}
+
+func TestFloretEventSinkReturnsAdmittedIdentityWithoutPublishingAssistantWhenCanonicalPresentationFails(t *testing.T) {
+	t.Parallel()
+
+	var events []any
+	presentationErr := errors.New("canonical timeline unavailable")
+	r := newRun(runOptions{
+		RunID:     "run-presentation-failure",
+		ThreadID:  "thread-presentation-failure",
+		TurnID:    "turn-presentation-failure",
+		MessageID: "turn-presentation-failure",
+		HostCapabilities: runHostCapabilities{
+			broadcastThreadSummary: func() error { return nil },
+			replaceLiveDraftWithCanonicalTimeline: func(context.Context, string, string, string, string) error {
+				return presentationErr
+			},
+		},
+		OnStreamEvent: func(event any) { events = append(events, event) },
+	})
+	r.awaitFloretAdmission.Store(true)
+	r.expectFloretRuntimeEventIdentity(r.id, r.threadID, r.turnID, true)
+
+	floretEventSink{run: r}.EmitEvent(flruntime.Event{
+		Type: observation.EventTypeThreadEntryCommitted, RunID: flruntime.RunID(r.id), ThreadID: flruntime.ThreadID(r.threadID), TurnID: flruntime.TurnID(r.turnID),
+		Committed: &flruntime.ThreadDetailEvent{
+			ID: "entry-presentation-failure", ThreadID: flruntime.ThreadID(r.threadID), TurnID: flruntime.TurnID(r.turnID), RunID: flruntime.RunID(r.id),
+			Kind: flruntime.ThreadDetailEventUserMessage, CreatedAt: time.Now(),
+			Message: &flruntime.ThreadDetailMessage{Role: "user", Content: "canonical input"},
+		},
+	})
+
+	admitted, err := r.waitForUserTurnAdmission(context.Background())
+	if err != nil || admitted.TurnID != r.turnID || admitted.RunID != r.id {
+		t.Fatalf("admission outcome=%#v err=%v", admitted, err)
+	}
+	if len(events) != 0 {
+		t.Fatalf("presentation failure published assistant events: %#v", events)
+	}
+	if !r.floretAdmitted.Load() || r.floretPresentationReady.Load() {
+		t.Fatalf("admitted=%t presentation_ready=%t", r.floretAdmitted.Load(), r.floretPresentationReady.Load())
+	}
+	if contractErr := r.floretContractError(); contractErr == nil || !errors.Is(contractErr, presentationErr) {
+		t.Fatalf("contract error=%v, want %v", contractErr, presentationErr)
 	}
 }
 

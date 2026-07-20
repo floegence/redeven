@@ -208,10 +208,11 @@ func TestFloretEventProjectionReplacesDuplicateLiveActivityTail(t *testing.T) {
 	r.nextBlockIndex = len(r.assistantBlocks)
 
 	floretEventSink{run: r}.EmitEvent(flruntime.Event{
-		Type:     "thread_entry_committed",
+		Type:     observation.EventTypeStepStart,
 		RunID:    "run_live_projection",
 		ThreadID: "thread_live_projection",
 		TurnID:   "msg_live_projection",
+		Step:     1,
 		Projection: &flruntime.ThreadTurnProjection{
 			ThreadID:       "thread_live_projection",
 			TurnID:         "msg_live_projection",
@@ -238,8 +239,8 @@ func TestFloretEventProjectionReplacesDuplicateLiveActivityTail(t *testing.T) {
 	if block, ok := r.assistantBlocks[1].(*persistedMarkdownBlock); !ok || block.Content != "live text" {
 		t.Fatalf("assistantBlocks[1]=%T %#v, want canonical markdown", r.assistantBlocks[1], r.assistantBlocks[1])
 	}
-	if len(events) != 3 {
-		t.Fatalf("stream events=%d, want two canonical block sets plus stale tail clear: %#v", len(events), events)
+	if len(events) != 4 {
+		t.Fatalf("stream events=%d, want two canonical block sets, stale tail clear, and step status: %#v", len(events), events)
 	}
 	cleared, ok := events[2].(streamEventBlockSet)
 	if !ok || cleared.BlockIndex != 2 {

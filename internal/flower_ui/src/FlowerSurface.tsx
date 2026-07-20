@@ -10,11 +10,6 @@ import { FlowerChatContextChips } from './chat/FlowerChatContextChips';
 import { FlowerChatContextPreview } from './chat/FlowerChatContextPreview';
 import { parseChatContextAction } from './chat/flowerChatContextModel';
 import {
-  pendingTurnCanonicalMessage,
-  reconcilePendingTurnsForThread,
-  type PendingFlowerTurn,
-} from './flowerPendingTurns';
-import {
   createFlowerClientTurnID,
   flowerTurnAdmissionUncertainIdentity,
 } from './flowerTurnAdmission';
@@ -49,6 +44,7 @@ import type {
   FlowerThreadStatus,
   FlowerThreadSnapshot,
   FlowerChatMessage,
+  FlowerQueuedTurn,
   FlowerContextUsage,
   FlowerTimelineAnchor,
   FlowerTimelineDecoration,
@@ -774,7 +770,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [threadStopping, setThreadStopping] = createSignal(false);
   const [compactSubmitting, setCompactSubmitting] = createSignal(false);
   const [pendingContextCompaction, setPendingContextCompaction] = createSignal<PendingContextCompactionDecoration | null>(null);
-  const [pendingTurns, setPendingTurns] = createSignal<readonly PendingFlowerTurn[]>([]);
   const [settingsSaving, setSettingsSaving] = createSignal(false);
   const [modelSourceRefreshing, setModelSourceRefreshing] = createSignal(false);
   const [threadsRefreshing, setThreadsRefreshing] = createSignal(false);
@@ -1107,6 +1102,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   );
   const threadHasLoadedDetail = (thread: FlowerThreadSnapshot): boolean => (
     thread.messages.length > 0
+    || thread.queued_turns !== undefined
     || visibleInputRequest(thread) !== null
     || (thread.approval_actions?.length ?? 0) > 0
     || thread.error != null
@@ -1119,6 +1115,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const thread = selectedThread();
     if (!thread) return false;
     return thread.messages.length > 0
+      || (thread.queued_turns?.length ?? 0) > 0
       || !!visibleInputRequest(thread)
       || (thread.approval_actions?.length ?? 0) > 0
       || trimString(thread.error?.message) !== '';
@@ -1303,40 +1300,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     clearApprovalDecisionFallbackTimer();
     clearApprovalHandoffStyleSchedule();
   });
-  const pendingTurnsForThread = (threadID: string): readonly PendingFlowerTurn[] => {
-    const tid = trimString(threadID) || PENDING_NEW_THREAD_ID;
-    return pendingTurns().filter((pending) => pending.thread_id === tid);
-  };
-  const pendingTurnsForSelectedThread = createMemo(() => pendingTurnsForThread(selectedThreadID() || PENDING_NEW_THREAD_ID));
-  const hasPendingTurnForSelectedThread = createMemo(() => pendingTurnsForSelectedThread().length > 0);
-  const addPendingTurn = (pending: PendingFlowerTurn) => {
-    setPendingTurns((current) => [...current.filter((item) => (
-      item.thread_id !== pending.thread_id || item.turn_id !== pending.turn_id
-    )), pending]);
-  };
-  const removePendingTurn = (pending: PendingFlowerTurn) => {
-    setPendingTurns((current) => current.filter((item) => (
-      item.thread_id !== pending.thread_id || item.turn_id !== pending.turn_id
-    )));
-  };
-  const removePendingTurnsForThread = (threadID: string) => {
-    const tid = trimString(threadID);
-    if (!tid) return;
-    setPendingTurns((current) => current.filter((item) => trimString(item.thread_id) !== tid));
-  };
-  const replacePendingTurn = (previous: PendingFlowerTurn, next: PendingFlowerTurn) => {
-    setPendingTurns((current) => {
-      const nextTurns = current.filter((item) => (
-        item.thread_id !== previous.thread_id || item.turn_id !== previous.turn_id
-      ));
-      if (next.thread_id) nextTurns.push(next);
-      return nextTurns;
-    });
-  };
-  const clearPendingTurns = () => setPendingTurns([]);
-  const updatePendingTurnsForSelectedThread = (thread: FlowerThreadSnapshot) => {
-    setPendingTurns((current) => reconcilePendingTurnsForThread(current, thread));
-  };
   const pendingContextCompactionVisible = (thread: FlowerThreadSnapshot | null, pending: PendingContextCompactionDecoration | null): boolean => {
     if (!pending) return false;
     if (!thread || trimString(thread.thread_id) !== trimString(pending.thread_id)) return true;
@@ -1860,7 +1823,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const warmupCanReplaceTranscript = createMemo(() => (
     surfaceWarmupActive()
     && !selectedThreadHasContent()
-    && !hasPendingTurnForSelectedThread()
     && !selectedThreadLoading()
   ));
   const warmupTitle = createMemo(() => trimString(warmupState()?.title) || copy().chat.warmupTitle);
@@ -2924,7 +2886,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       setThreads((current) => {
         mergedThreads = mergeFlowerThreadListRefresh(current, next, {
           selectedThreadID: pendingSelectedMissing ? '' : selectedID,
-          pendingThreadIDs: pendingTurns().map((pending) => pending.thread_id),
           preserveMissingCurrentThreads: startedMutationRevision !== threadLocalMutationRevision && !pendingSelectedMissing,
           sameThreadSnapshot,
         });
@@ -3150,8 +3111,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       || status === 'waiting_user'
       || selectedThreadHasRunningContextCompaction()
       || hasPendingContextCompaction
-      || selectedThreadHasQueuedTurns()
-      || hasPendingTurnForSelectedThread();
+      || selectedThreadHasQueuedTurns();
     if (!threadID || !shouldPollLive) {
       return;
     }
@@ -3445,36 +3405,31 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const draftModelID = !selectedID ? selectedComposerModelID() : '';
     const draftWorkingDir = !selectedID ? draftWorkingDirectory() : '';
     const turnID = createFlowerClientTurnID();
-    const pending: PendingFlowerTurn = {
-      thread_id: selectedThreadID() || PENDING_NEW_THREAD_ID,
-      turn_id: turnID,
-      prompt,
-      state: 'sending',
-      origin: 'admission',
-      created_at_ms: Date.now(),
+    const clearAcceptedComposerDraft = (...sessionKeys: string[]) => {
+      for (const sessionKey of new Set([launchSessionKey, ...sessionKeys].map((value) => trimString(value) || PENDING_NEW_THREAD_ID))) {
+        updateComposerSessionDraft(sessionKey, (draft) => ({
+          ...draft,
+          chatDraft: '',
+          inputPromptSignature: '',
+          inputDrafts: {},
+          activeInputQuestionID: '',
+          ...(draft.reasoningOverride ? { reasoningOverride: undefined } : {}),
+        }));
+      }
     };
-    let accepted = false;
+    const threadOwnsTurn = (thread: FlowerThreadSnapshot | null, acceptedTurnID: string): boolean => {
+      const tid = trimString(acceptedTurnID);
+      if (!thread || !tid) return false;
+      return thread.messages.some((message) => message.role === 'user' && trimString(message.turn_id) === tid)
+        || (thread.queued_turns ?? []).some((turn) => trimString(turn.turn_id) === tid);
+    };
     setChatRunning(true);
-    addPendingTurn(pending);
     transcriptScroll.startFollowing();
-    requestTranscriptAnimationFrame(() => transcriptScroll.scheduleTailScroll({ smooth: false, force: true }));
-    updateCurrentComposerSessionDraft((draft) => ({
-      ...draft,
-      chatDraft: '',
-      inputPromptSignature: '',
-      inputDrafts: {},
-      activeInputQuestionID: '',
-    }));
     try {
       let receipt: FlowerTurnLaunchReceipt;
       try {
         const decision = currentHandlerDecision() ?? await resolveHandlerDecision();
         if (!decision.selected_handler || decision.blocker || decision.route === 'blocked') {
-          removePendingTurn(pending);
-          updateComposerSessionDraft(launchSessionKey, (draft) => ({
-            ...draft,
-            chatDraft: prompt,
-          }));
           if (composerSessionStillCurrent(launchSessionKey)) {
             notifyComposerError(decision.blocker?.message || copy().chat.handlerStillStarting);
           }
@@ -3497,56 +3452,38 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         }
         const uncertain = flowerTurnAdmissionUncertainIdentity(failure);
         if (uncertain) {
-          accepted = true;
+          const uncertainSessionKey = trimString(uncertain.thread_id);
+          if (uncertainSessionKey && uncertainSessionKey !== launchSessionKey) {
+            updateComposerSessionDraft(uncertainSessionKey, (draft) => ({
+              ...draft,
+              chatDraft: promptInput,
+            }));
+          }
           const selectionCurrent = setSelectedThreadWithDetailIfSessionCurrent(launchSessionKey, uncertain.thread_id);
-          replacePendingTurn(pending, {
-            ...pending,
-            thread_id: uncertain.thread_id,
-            turn_id: uncertain.turn_id,
-            state: 'sending',
-          });
           if (selectionCurrent) {
             setThreadLoadError(getErrorMessage(error));
             returnToChat();
             await refreshSelectedThread(uncertain.thread_id);
+            const serverThread = threads().find((thread) => thread.thread_id === uncertain.thread_id) ?? null;
+            if (threadOwnsTurn(serverThread, uncertain.turn_id)) {
+              clearAcceptedComposerDraft(uncertainSessionKey);
+            }
           }
           return;
         }
-        removePendingTurn(pending);
-        updateComposerSessionDraft(launchSessionKey, (draft) => ({
-          ...draft,
-          chatDraft: prompt,
-        }));
         if (composerSessionStillCurrent(launchSessionKey)) {
           notifyComposerError(getErrorMessage(error));
         }
         return;
       }
-      accepted = true;
+      clearAcceptedComposerDraft();
       const selectionCurrent = setSelectedThreadWithDetailIfSessionCurrent(launchSessionKey, receipt.thread_id);
-      const acceptedPending: PendingFlowerTurn = {
-        ...pending,
-        thread_id: receipt.thread_id,
-        turn_id: receipt.turn_id,
-        state: receipt.kind === 'queued' ? 'queued' : 'sending',
-      };
-      const currentThread = threads().find((thread) => thread.thread_id === receipt.thread_id) ?? null;
-      if (currentThread && pendingTurnCanonicalMessage(currentThread, acceptedPending)) {
-        removePendingTurn(pending);
-      } else {
-        replacePendingTurn(pending, acceptedPending);
-      }
       if (selectionCurrent) {
         setLoadError('');
         returnToChat();
         await refreshSelectedThread(receipt.thread_id);
       }
     } finally {
-      if (accepted) {
-        updateComposerSessionDraft(launchSessionKey, (draft) => (
-          draft.reasoningOverride ? { ...draft, reasoningOverride: undefined } : draft
-        ));
-      }
       setChatRunning(false);
     }
   };
@@ -3557,7 +3494,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!threadID) throw new Error('Missing thread id.');
     const live = await props.adapter.stopThread(threadID);
     const thread = applyLiveBootstrap(live);
-    removePendingTurnsForThread(threadID);
     if (selectedThreadDetailMatches(threadID)) {
       setSelectedThreadWithDetail(thread.thread_id);
       setLoadError('');
@@ -3822,7 +3758,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setSelectedThreadID('');
     setSelectedThreadDetailID('');
     setSidebarActiveThreadID('');
-    clearPendingTurns();
     setThreadLoadError('');
     requestComposerFocus();
     void resolveHandlerDecision();
@@ -3942,12 +3877,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const sourceEntry = selectedTimelineEntries().find((entry) => (
       entry.type === 'message' && entry.message.id === preview.message_id
     ));
-    const pendingSource = pendingTurnsForSelectedThread().find((pending) => (
-      `pending:${pending.turn_id}` === preview.message_id
+    const queuedSource = selectedTimelineEntries().find((entry) => (
+      entry.type === 'queued_turn' && `queued:${entry.turn.turn_id}` === preview.message_id
     ));
     const sourceContextAction = sourceEntry?.type === 'message'
       ? sourceEntry.message.context_action
-      : pendingSource?.context_action;
+      : queuedSource?.type === 'queued_turn' ? queuedSource.turn.context_action : undefined;
     if (!sourceContextAction) {
       setContextSnapshotPreview(null);
       return;
@@ -4117,58 +4052,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const visibleTimelineEntries = createMemo((): readonly FlowerTimelineEntry[] => {
     const thread = selectedThread();
     const pending = pendingContextCompactionForSelectedThread();
-    let entries = pending && pendingContextCompactionVisibleForSelectedThread() && thread
+    const entries = pending && pendingContextCompactionVisibleForSelectedThread() && thread
       ? [...buildFlowerTimelineEntries({
         ...thread,
         timeline_decorations: [...(thread.timeline_decorations ?? []), pending.decoration],
       })]
       : [...selectedTimelineEntries()];
-    for (const pendingTurnValue of pendingTurnsForSelectedThread()) {
-      if (thread && pendingTurnCanonicalMessage(thread, pendingTurnValue)) continue;
-      const pendingMessage: FlowerChatMessage = {
-        id: `pending:${pendingTurnValue.turn_id}`,
-        turn_id: pendingTurnValue.turn_id,
-        role: 'user',
-        content: pendingTurnValue.prompt,
-        status: 'sending',
-        created_at_ms: pendingTurnValue.created_at_ms,
-        blocks: [{ type: 'text', content: pendingTurnValue.prompt }],
-        ...(pendingTurnValue.context_action ? { context_action: pendingTurnValue.context_action } : {}),
-      };
-      const pendingEntry: FlowerTimelineEntry = {
-        type: 'message',
-        key: `pending-turn:${pendingTurnValue.thread_id}:${pendingTurnValue.turn_id}`,
-        message: pendingMessage,
-        blocks: [{
-          type: 'content',
-          key: `${pendingMessage.id}:content`,
-          block_index: 0,
-          block_type: 'text',
-          content: pendingTurnValue.prompt,
-        }],
-      };
-      const insertAt = entries.findIndex((entry) => (
-        entry.type === 'message'
-        && entry.message.role === 'assistant'
-        && (
-          (pendingTurnValue.state === 'sending' && (entry.message.active_cursor === true || entry.message.status === 'streaming'))
-          || Number(entry.message.created_at_ms ?? 0) >= pendingTurnValue.created_at_ms
-        )
-      ));
-      entries = insertAt >= 0
-        ? [...entries.slice(0, insertAt), pendingEntry, ...entries.slice(insertAt)]
-        : [...entries, pendingEntry];
-    }
     return entries;
   });
   const visibleTimelineEntryKeys = createMemo(() => visibleTimelineEntries().map((entry) => entry.key));
   const visibleTimelineEntriesByKey = createMemo(() => new Map(visibleTimelineEntries().map((entry) => [entry.key, entry] as const)));
 
-  createEffect(() => {
-    const thread = selectedThread();
-    if (!thread) return;
-    updatePendingTurnsForSelectedThread(thread);
-  });
 
   const shouldSubmitOnEnterKeydown = (event: KeyboardEvent): boolean => {
     if (event.isComposing || isComposing()) {
@@ -4381,7 +4275,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     selectedThreadID();
     selectedThreadHasContent();
     selectedThreadHasModelStatus();
-    hasPendingTurnForSelectedThread();
     transcriptLayoutRevision();
     measureTranscriptNearBottomAfterLayout();
   });
@@ -4563,6 +4456,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (selectedComposerApprovalDisplayAction()) return true;
     if (selectedThreadDetailPending()) return true;
     if (selectedThreadReadOnly()) return true;
+    if (chatRunning()) return true;
     if (!selectedInputRequest()) return false;
     return inputSubmitting() || !activeInputQuestion();
   });
@@ -6158,7 +6052,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         message().role === 'user'
           ? 'flower-message-bubble-user'
           : 'flower-message-bubble-assistant',
-        message().id.startsWith('pending:') && 'flower-pending-turn-bubble',
         streaming() && 'flower-message-bubble-streaming',
         failed() && 'flower-message-bubble-error',
         block().block_type === 'thinking' && 'flower-message-bubble-thinking',
@@ -6217,8 +6110,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           <span class="flower-message-file-copy">
             <span class="flower-message-file-name">{(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).name}</span>
             <span class="flower-message-file-meta">
-              {formatAttachmentSize((block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).size)}
-              {' · '}
+              <Show when={(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).size !== undefined}>
+                {formatAttachmentSize((block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).size ?? 0)}{' · '}
+              </Show>
               {(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).mimeType}
             </span>
           </span>
@@ -6279,17 +6173,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const messageEntry = (entry: Accessor<Extract<FlowerTimelineEntry, { type: 'message' }>>) => {
     const message = createMemo(() => entry().message);
-    const pendingMessage = createMemo(() => message().id.startsWith('pending:'));
-    const pendingTurn = createMemo(() => {
-      if (!pendingMessage()) return null;
-      return pendingTurnsForSelectedThread().find((item) => `pending:${item.turn_id}` === message().id) ?? null;
-    });
-    const pendingState = createMemo(() => {
-      if (!pendingMessage()) return '';
-      const pending = pendingTurn();
-      return pending ? pending.state : 'sending';
-    });
-    const pendingStateLabel = createMemo(() => pendingState() === 'queued' ? copy().chat.pendingQueued : copy().chat.pendingSending);
     const activeCursor = createMemo(() => (
       selectedThreadLiveStatus() === 'running'
       && message().role === 'assistant'
@@ -6373,13 +6256,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           class={cn(
             'flower-message-row',
             message().role === 'user' ? 'flower-message-row-user' : 'flower-message-row-assistant',
-            pendingMessage() && 'flower-pending-turn-row',
           )}
           data-flower-message-id={message().id}
           data-flower-message-role={message().role}
           data-flower-message-status={message().status}
-          data-flower-pending-turn={pendingMessage() ? '' : undefined}
-          data-flower-pending-turn-state={pendingMessage() ? pendingState() : undefined}
         >
           <Show
             when={isUnifiedUserBubble()}
@@ -6396,16 +6276,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   }}
                 </For>
                 <Show when={message().role === 'user' && (copyText() || messageTime())}>
-                  <div class={cn('flower-message-action-row flower-message-action-row-user', pendingMessage() && 'flower-pending-turn-meta')}>
-                    <Show when={pendingMessage()}>
-                      <span class="flower-pending-turn-state">{pendingStateLabel()}</span>
-                    </Show>
+                  <div class="flower-message-action-row flower-message-action-row-user">
                     <Show when={messageTime()}>
                       {(value) => <time class="flower-message-time" datetime={new Date(message().created_at_ms).toISOString()}>{value()}</time>}
                     </Show>
-                    <Show when={!pendingMessage()}>
-                      {messageCopyButton(message(), copyText(), 'user')}
-                    </Show>
+                    {messageCopyButton(message(), copyText(), 'user')}
                   </div>
                 </Show>
               </div>
@@ -6440,6 +6315,117 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           </Show>
         </div>
       </Show>
+    );
+  };
+
+  const queuedTurnEntry = (entry: Accessor<Extract<FlowerTimelineEntry, { type: 'queued_turn' }>>) => {
+    const turn = createMemo<FlowerQueuedTurn>(() => entry().turn);
+    const blocks = createMemo(() => entry().blocks);
+    const contextDisplay = createMemo(() => parseChatContextAction(turn().context_action));
+    const canActivateContextChip = (chip: FlowerChatContextChip): boolean => {
+      const action = chip.action;
+      if (!action) return false;
+      if (action.type === 'open_linked_file_preview') return Boolean(props.adapter.openLinkedFilePreview);
+      if (action.type === 'open_linked_directory_browser') return Boolean(props.adapter.openLinkedDirectoryBrowser);
+      return true;
+    };
+    const activateContextChip = async (chip: FlowerChatContextChip): Promise<void> => {
+      const action = chip.action;
+      const display = contextDisplay();
+      if (!action || !display) return;
+      const entryID = `queued:${turn().turn_id}`;
+      if (action.type === 'open_text_preview' || action.type === 'open_process_preview') {
+        setContextSnapshotPreview({
+          title: chip.label,
+          action,
+          thread_id: selectedThreadID(),
+          message_id: entryID,
+        });
+        return;
+      }
+      setContextSnapshotPreview(null);
+      const request = {
+        path: action.path,
+        thread_id: selectedThreadID() || undefined,
+        message_id: entryID,
+        context_index: action.context_index,
+        source_surface: display.surface,
+        target: display.target,
+      };
+      try {
+        if (action.type === 'open_linked_file_preview') {
+          await props.adapter.openLinkedFilePreview?.(request);
+          return;
+        }
+        await props.adapter.openLinkedDirectoryBrowser?.(request);
+      } catch (error) {
+        notifyThreadActionError(getErrorMessage(error));
+      }
+    };
+    const queuedBlock = (block: Accessor<FlowerRenderableMessageBlock>) => (
+      <Show
+        when={block().type === 'content' ? block() as Extract<FlowerRenderableMessageBlock, { type: 'content' }> : null}
+        fallback={(
+          <Show when={block().type === 'image' || block().type === 'file' ? block() as Extract<FlowerRenderableMessageBlock, { type: 'image' | 'file' }> : null}>
+            {(attachment) => messageAttachmentBlock(attachment)}
+          </Show>
+        )}
+      >
+        {(content) => (
+          <div class="flower-message-bubble flower-message-bubble-framed flower-message-bubble-user flower-queued-turn-bubble">
+            <Show
+              when={content().block_type === 'markdown'}
+              fallback={<span class="flower-message-plain-text">{content().content}</span>}
+            >
+              <FlowerMarkdownBlock
+                content={content().content}
+                streaming={false}
+                copyCodeLabel={copy().chat.copyCode}
+                codeCopiedLabel={copy().chat.codeCopied}
+              />
+            </Show>
+          </div>
+        )}
+      </Show>
+    );
+    return (
+      <div
+        class="flower-message-row flower-message-row-user flower-queued-turn-row"
+        data-flower-queued-turn-id={turn().turn_id}
+        data-flower-queued-turn-state="queued"
+      >
+        <div class="flower-message-block-stack flower-message-block-stack-user">
+          <Show
+            when={contextDisplay()}
+            fallback={<For each={blocks()}>{(block) => queuedBlock(() => block)}</For>}
+          >
+            {(display) => (
+              <div class="flower-message-bubble flower-message-bubble-framed flower-message-bubble-user flower-chat-context-unified-bubble flower-queued-turn-bubble">
+                <For each={blocks()}>
+                  {(block) => (
+                    block.type === 'content'
+                      ? <span class="flower-message-plain-text">{block.content}</span>
+                      : block.type === 'image' || block.type === 'file'
+                        ? messageAttachmentBlock(() => block)
+                        : null
+                  )}
+                </For>
+                <FlowerChatContextChips
+                  contextDisplay={display()}
+                  canActivateChip={canActivateContextChip}
+                  onChipClick={(chip) => { void activateContextChip(chip); }}
+                />
+              </div>
+            )}
+          </Show>
+          <div class="flower-message-action-row flower-message-action-row-user flower-queued-turn-meta">
+            <span class="flower-queued-turn-state">{copy().chat.pendingQueued}</span>
+            <Show when={formatMessageTime(turn().created_at_ms)}>
+              {(value) => <time class="flower-message-time" datetime={new Date(turn().created_at_ms).toISOString()}>{value()}</time>}
+            </Show>
+          </div>
+        </div>
+      </div>
     );
   };
 
@@ -6481,6 +6467,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     switch (entry().type) {
       case 'message':
         return messageEntry(() => entry() as Extract<FlowerTimelineEntry, { type: 'message' }>);
+      case 'queued_turn':
+        return queuedTurnEntry(() => entry() as Extract<FlowerTimelineEntry, { type: 'queued_turn' }>);
       case 'context_compaction':
         return compactionDividerEntry(() => entry() as Extract<FlowerTimelineEntry, { type: 'context_compaction' }>);
       case 'turn_projection_unavailable':
@@ -7210,7 +7198,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               {(message) => errorNotice(copy().chat.threadLoadErrorTitle, message())}
             </Show>
             <Show
-              when={selectedThreadHasContent() || hasPendingTurnForSelectedThread() || selectedThreadHasModelStatus()}
+              when={selectedThreadHasContent() || selectedThreadHasModelStatus()}
                 fallback={selectedThreadLoading()
                   ? threadLoadingState()
                   : warmupCanReplaceTranscript()
@@ -7279,7 +7267,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               </Show>
               <div
                 class="flower-composer flower-chat-input-floating chat-input-container p-3"
-                aria-busy={selectedApprovalDecisionHandoff() ? 'true' : undefined}
+                aria-busy={chatRunning() || selectedApprovalDecisionHandoff() ? 'true' : undefined}
+                data-flower-turn-submitting={chatRunning() ? 'true' : undefined}
                 data-flower-approval-handoff={selectedComposerApprovalHandoffActive() ? 'true' : undefined}
                 data-flower-approval-handoff-phase={selectedComposerApprovalHandoffActive() ? selectedComposerApprovalHandoffPhase() : undefined}
               >

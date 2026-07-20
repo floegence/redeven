@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
@@ -421,6 +422,20 @@ func (s *Service) threadSummaryRealtimeEvent(endpointID string, threadID string)
 	if countErr != nil {
 		return RealtimeEvent{}, countErr
 	}
+	queuedTurns := make([]QueuedTurnView, 0, queuedTurnCount)
+	if queuedTurnCount > 0 {
+		records, listErr := db.ListFollowupsByLane(ctx, endpointID, threadID, threadstore.FollowupLaneQueued, queuedTurnCount)
+		if listErr != nil {
+			return RealtimeEvent{}, listErr
+		}
+		for _, record := range records {
+			view, viewErr := queuedTurnRecordToThreadView(record)
+			if viewErr != nil {
+				return RealtimeEvent{}, fmt.Errorf("decode queued turn %q: %w", record.QueueID, viewErr)
+			}
+			queuedTurns = append(queuedTurns, view)
+		}
+	}
 
 	snapshot, latest, err := s.readCanonicalThreadState(ctx, threadID)
 	if err != nil {
@@ -468,6 +483,7 @@ func (s *Service) threadSummaryRealtimeEvent(endpointID string, threadID string)
 		ActiveRunID:         strings.TrimSpace(string(snapshot.LatestRunID)),
 		PermissionType:      permissionTypeString(permissionType),
 		QueuedTurnCount:     queuedTurnCount,
+		QueuedTurns:         queuedTurns,
 		ReasoningSelection:  reasoningSelection,
 		ReasoningCapability: reasoningCapability,
 		WaitingPrompt:       waitingPrompt,

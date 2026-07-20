@@ -2153,6 +2153,8 @@ func flowerLiveThreadPatchFromSummary(ev RealtimeEvent) FlowerLiveThreadPatch {
 		ModelID:                strings.TrimSpace(ev.ModelID),
 		PermissionType:         strings.TrimSpace(ev.PermissionType),
 		QueuedTurnCount:        &queued,
+		QueuedTurns:            cloneQueuedTurnViews(ev.QueuedTurns),
+		QueuedTurnsSet:         true,
 		RunStatus:              strings.TrimSpace(ev.RunStatus),
 		RunErrorCode:           strings.TrimSpace(ev.RunErrorCode),
 		RunError:               strings.TrimSpace(ev.RunError),
@@ -2192,6 +2194,10 @@ func mergeFlowerLiveThreadPatch(current FlowerLiveThreadPatch, patch FlowerLiveT
 	if patch.QueuedTurnCount != nil {
 		value := *patch.QueuedTurnCount
 		current.QueuedTurnCount = &value
+	}
+	if patch.QueuedTurnsSet {
+		current.QueuedTurnsSet = true
+		current.QueuedTurns = cloneQueuedTurnViews(patch.QueuedTurns)
 	}
 	if strings.TrimSpace(patch.RunStatus) != "" {
 		current.RunStatus = strings.TrimSpace(patch.RunStatus)
@@ -2551,6 +2557,8 @@ func cloneFlowerLiveMaterializedState(in FlowerLiveMaterializedState) FlowerLive
 
 func cloneFlowerLiveThreadPatch(in FlowerLiveThreadPatch) FlowerLiveThreadPatch {
 	out := in
+	out.QueuedTurns = cloneQueuedTurnViews(in.QueuedTurns)
+	out.QueuedTurnsSet = in.QueuedTurnsSet
 	out.Subagents = cloneFlowerSubagentSummaries(in.Subagents)
 	out.SubagentsSet = in.SubagentsSet
 	if in.ReasoningSelection != nil {
@@ -2560,6 +2568,19 @@ func cloneFlowerLiveThreadPatch(in FlowerLiveThreadPatch) FlowerLiveThreadPatch 
 	if in.ReasoningCapability != nil {
 		value := in.ReasoningCapability.Normalize()
 		out.ReasoningCapability = &value
+	}
+	return out
+}
+
+func cloneQueuedTurnViews(in []QueuedTurnView) []QueuedTurnView {
+	if in == nil {
+		return nil
+	}
+	out := make([]QueuedTurnView, len(in))
+	for index, item := range in {
+		out[index] = item
+		out[index].Attachments = append([]FollowupAttachmentView(nil), item.Attachments...)
+		out[index].ContextAction = normalizeContextActionEnvelope(item.ContextAction)
 	}
 	return out
 }

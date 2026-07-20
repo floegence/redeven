@@ -72,6 +72,84 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
 }
 
 describe('buildFlowerTimelineEntries', () => {
+  it('projects server queued turns as non-message entries with attachments and linked context', () => {
+    const contextAction = {
+      schema_version: 2,
+      action_id: 'assistant.ask.flower',
+      provider: 'flower',
+      target: { target_id: 'current', locality: 'auto' },
+      source: { surface: 'file_browser' },
+      context: [{ kind: 'file_path', path: '/workspace/app.ts', is_directory: false }],
+      presentation: { label: 'Ask Flower', priority: 100 },
+    };
+    const entries = buildFlowerTimelineEntries(thread({
+      queued_turn_count: 1,
+      queued_turns: [{
+        turn_id: 'turn-queued-1',
+        prompt: 'Inspect the attachment',
+        created_at_ms: 20,
+        attachments: [
+          { name: 'screenshot.png', mime_type: 'image/png', url: '/api/uploads/image-1' },
+          { name: 'notes.txt', mime_type: 'text/plain', url: '/api/uploads/file-1' },
+        ],
+        context_action: contextAction,
+      }],
+    }));
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.type).toBe('queued_turn');
+    if (entries[0]?.type !== 'queued_turn') throw new Error('expected queued turn entry');
+    expect(entries[0].turn.context_action).toEqual(contextAction);
+    expect(entries[0].blocks.map((block) => block.type)).toEqual(['image', 'file', 'content']);
+  });
+
+  it('keeps duplicate queued prompts distinct by TurnID', () => {
+    const entries = buildFlowerTimelineEntries(thread({
+      queued_turn_count: 2,
+      queued_turns: [
+        { turn_id: 'turn-queued-a', prompt: 'continue', created_at_ms: 20 },
+        { turn_id: 'turn-queued-b', prompt: 'continue', created_at_ms: 21 },
+      ],
+    }));
+
+    expect(entries.map((entry) => entry.key)).toEqual([
+      'queued-turn:thread-1:turn-queued-a',
+      'queued-turn:thread-1:turn-queued-b',
+    ]);
+  });
+
+  it('lets the canonical user row replace stale queued detail by exact TurnID', () => {
+    const entries = buildFlowerTimelineEntries(thread({
+      messages: [{
+        id: 'entry-user-canonical',
+        turn_id: 'turn-admitted',
+        role: 'user',
+        content: 'canonical prompt',
+        status: 'complete',
+        created_at_ms: 20,
+      }],
+      queued_turn_count: 1,
+      queued_turns: [{ turn_id: 'turn-admitted', prompt: 'stale queued prompt', created_at_ms: 19 }],
+    }));
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.type).toBe('message');
+    if (entries[0]?.type !== 'message') throw new Error('expected canonical message entry');
+    expect(entries[0].message.id).toBe('entry-user-canonical');
+  });
+
+  it('rejects malformed queued attachments instead of synthesizing partial content', () => {
+    expect(() => buildFlowerTimelineEntries(thread({
+      queued_turn_count: 1,
+      queued_turns: [{
+        turn_id: 'turn-invalid-attachment',
+        prompt: 'inspect',
+        created_at_ms: 20,
+        attachments: [{ name: 'notes.txt', mime_type: 'text/plain', url: '' }],
+      }],
+    }))).toThrow(/queued turn turn-invalid-attachment attachment 0 is invalid/);
+  });
+
   it('keeps canonical image and file attachments in their original block order', () => {
     const entries = buildFlowerTimelineEntries(thread({
       messages: [{
