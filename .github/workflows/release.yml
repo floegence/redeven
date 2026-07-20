@@ -43,11 +43,11 @@ jobs:
 
       - name: Verify 64 KiB terminal recovery carrier
         working-directory: internal/envapp/ui_src
-        run: corepack pnpm run test:terminal-carrier -- --fixture-bytes 65536 --report "${RUNNER_TEMP}/redeven-terminal-carrier-64KiB.json"
+        run: xvfb-run -a corepack pnpm run test:terminal-carrier -- --fixture-bytes 65536 --report "${RUNNER_TEMP}/redeven-terminal-carrier-64KiB.json"
 
       - name: Verify 448 KiB terminal recovery carrier
         working-directory: internal/envapp/ui_src
-        run: corepack pnpm run test:terminal-carrier -- --fixture-bytes 458752 --report "${RUNNER_TEMP}/redeven-terminal-carrier-448KiB.json"
+        run: xvfb-run -a corepack pnpm run test:terminal-carrier -- --fixture-bytes 458752 --report "${RUNNER_TEMP}/redeven-terminal-carrier-448KiB.json"
 
       - name: Verify terminal history fixture matrix
         env:
