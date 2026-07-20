@@ -73,7 +73,7 @@ describe('operationFailureDisplay', () => {
   });
 
   it('keeps an inline structured failure message out of the compact summary', () => {
-    const rawError = 'gateway request failed with a very long response';
+    const rawError = 'operation request failed with a very long response';
     const display = buildWelcomeOperationFailureDisplay({
       i18n: createDesktopI18n('en-US'),
       failure: {
