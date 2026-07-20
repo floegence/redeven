@@ -113,8 +113,14 @@ describe('published npm dependency policy', () => {
   });
 
   it('requires stable Floeterm releases to resolve from the public npm registry', () => {
-    expect(expectedTarballUrl('@floegence/floeterm-terminal-web', '0.6.0')).toBe(
-      'https://registry.npmjs.org/@floegence/floeterm-terminal-web/-/floeterm-terminal-web-0.6.0.tgz',
+    const version = extractVersionSpecifier(getDependencySpecifier(
+      readDependencySpecifiers(),
+      '@floegence/floeterm-terminal-web',
+    ));
+
+    expect(version).toBe('0.6.1');
+    expect(expectedTarballUrl('@floegence/floeterm-terminal-web', version)).toBe(
+      'https://registry.npmjs.org/@floegence/floeterm-terminal-web/-/floeterm-terminal-web-0.6.1.tgz',
     );
   });
 
