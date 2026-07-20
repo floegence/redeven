@@ -187,6 +187,9 @@ const terminalWriteCompletionState = vi.hoisted(() => ({
   deferHistory: false,
   historyCallbacks: [] as Array<() => void>,
 }));
+const terminalSnapshotRestoreState = vi.hoisted(() => ({
+  succeeds: true,
+}));
 const createOutputPipelineSpy = vi.hoisted(() => vi.fn());
 const createOutputCoordinatorSpy = vi.hoisted(() => vi.fn());
 const outputCoordinatorRetrySpy = vi.hoisted(() => vi.fn());
@@ -869,7 +872,7 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
       rows: 24,
       createdAtMs: Date.now(),
     }));
-    restoreSnapshot = vi.fn().mockResolvedValue(true);
+    restoreSnapshot = vi.fn(async () => terminalSnapshotRestoreState.succeeds);
     getResourceEstimate = vi.fn(() => ({
       bufferBytes: 256 * 1024,
       cellCount: 2_000,
@@ -1845,6 +1848,7 @@ describe('TerminalPanel', () => {
     terminalCoreInstances.splice(0, terminalCoreInstances.length);
     terminalWriteCompletionState.deferHistory = false;
     terminalWriteCompletionState.historyCallbacks = [];
+    terminalSnapshotRestoreState.succeeds = true;
     createOutputPipelineSpy.mockClear();
     createOutputCoordinatorSpy.mockClear();
     outputCoordinatorRetrySpy.mockClear();
@@ -2698,6 +2702,52 @@ describe('TerminalPanel', () => {
     expect(transportMocks.sendInput).toHaveBeenCalledWith('session-1', 'after-baseline\r', 'conn-1');
   });
 
+  it('marks the first render after baseline commit without delaying interaction', async () => {
+    terminalWriteCompletionState.deferHistory = true;
+    transportMocks.getSessionStats.mockResolvedValue({ history: { totalBytes: 5 } });
+    transportMocks.historyPage.mockResolvedValue(makeTerminalHistoryPage({
+      chunks: [{ sequence: 1, timestampMs: 10, data: textEncoder.encode('ready') }],
+      firstSequence: 1,
+      lastSequence: 1,
+      coveredBytes: 5,
+      totalBytes: 5,
+    }));
+    const mark = vi.spyOn(performance, 'mark').mockImplementation(() => ({}) as PerformanceMark);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="panel" />, host);
+    await waitForTerminalPanelCondition(() => {
+      expect(terminalCoreInstances[0]?.writeHistory).toHaveBeenCalledTimes(1);
+    });
+
+    const core = terminalCoreInstances[0];
+    core?.handlers?.onRender?.(1);
+    expect(mark.mock.calls.some(([name]) => String(name).includes(':baseline-rendered:'))).toBe(false);
+
+    terminalWriteCompletionState.historyCallbacks.shift()?.();
+    await waitForTerminalPanelCondition(() => {
+      expect(host.querySelector('[data-terminal-runtime-session="session-1"]')?.getAttribute('aria-busy')).toBe('false');
+    });
+
+    transportMocks.sendInput.mockClear();
+    core?.handlers?.onData?.('after-baseline\r');
+    expect(transportMocks.sendInput).toHaveBeenCalledWith('session-1', 'after-baseline\r', 'conn-1');
+    expect(mark.mock.calls.some(([name]) => String(name).includes(':baseline-rendered:'))).toBe(false);
+
+    core?.handlers?.onRender?.(2);
+    core?.handlers?.onRender?.(3);
+
+    const renderedMarks = mark.mock.calls.filter(([name]) => String(name).includes(':baseline-rendered:'));
+    expect(renderedMarks).toHaveLength(1);
+    expect(renderedMarks[0]?.[0]).toMatch(/^redeven:terminal:baseline-rendered:terminal-recovery-/u);
+    expect(renderedMarks[0]?.[1]?.detail).toEqual(expect.objectContaining({
+      variant: 'panel',
+      coordinator_attach_generation: expect.any(Number),
+      covered_through_sequence: 1,
+    }));
+  });
+
   it('connects the Beamterm renderer after live_v1 attach and before history replay', async () => {
     transportMocks.historyPage.mockResolvedValue(makeTerminalHistoryPage({
       chunks: [{ sequence: 1, timestampMs: 10, data: textEncoder.encode('ready') }],
@@ -3277,6 +3327,33 @@ describe('TerminalPanel', () => {
     });
     expect(failedCore?.dispose).toHaveBeenCalledTimes(1);
     expect(transportMocks.historyPage).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not let a superseded core complete the current baseline render fence', async () => {
+    const mark = vi.spyOn(performance, 'mark').mockImplementation(() => ({}) as PerformanceMark);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="panel" />, host);
+    await settleTerminalPanelAfterPaint();
+
+    const oldCore = terminalCoreInstances[0];
+    oldCore?.handlers?.onError?.(new Error('renderer failed'));
+    await settleTerminalPanel();
+
+    host.querySelector<HTMLButtonElement>('button[aria-label="Retry"]')?.click();
+    await waitForTerminalPanelCondition(() => {
+      expect(terminalCoreInstances.length).toBe(2);
+      expect(host.querySelector('[data-terminal-runtime-session="session-1"]')?.getAttribute('aria-busy')).toBe('false');
+    });
+
+    mark.mockClear();
+    oldCore?.handlers?.onRender?.(1);
+    expect(mark.mock.calls.some(([name]) => String(name).includes(':baseline-rendered:'))).toBe(false);
+
+    terminalCoreInstances[1]?.handlers?.onRender?.(2);
+    const renderedMarks = mark.mock.calls.filter(([name]) => String(name).includes(':baseline-rendered:'));
+    expect(renderedMarks).toHaveLength(1);
+    expect(renderedMarks[0]?.[0]).toMatch(/-2$/u);
   });
 
   it('does not focus the system terminal input after a mobile Floe-keyboard Retry', async () => {
@@ -5872,6 +5949,63 @@ describe('TerminalPanel', () => {
     expect(resumedCore?.restoreSnapshot).toHaveBeenCalledWith(snapshot);
     expect(createOutputCoordinatorSpy).not.toHaveBeenCalled();
     expect(transportMocks.historyPage).not.toHaveBeenCalled();
+  });
+
+  it('marks the first rendered history baseline when working-set snapshot restore falls back to replay', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace/repo',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+    ];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+    findTerminalTab(host, 'Terminal 2')?.click();
+    await settleTerminalPanelAfterPaint();
+    findTerminalTab(host, 'Terminal 1')?.click();
+    await settleTerminalPanel();
+
+    await waitForTerminalPanelCondition(() => {
+      expect(terminalWorkingSetState.runtimes.get('session-2')).toBeTruthy();
+    });
+    const runtime = terminalWorkingSetState.runtimes.get('session-2');
+    vi.useFakeTimers();
+    installRequestAnimationFrameMock('timer');
+    const mark = vi.spyOn(performance, 'mark').mockImplementation(() => ({}) as PerformanceMark);
+    const hibernate = runtime.hibernate();
+    await vi.advanceTimersByTimeAsync(1);
+    const snapshot = await hibernate;
+    terminalSnapshotRestoreState.succeeds = false;
+
+    const resume = runtime.resume(snapshot);
+    await vi.advanceTimersByTimeAsync(1);
+    await resume;
+    await settleTerminalPanelAfterPaint();
+
+    const resumedCore = terminalCoreInstances.at(-1);
+    expect(resumedCore?.restoreSnapshot).toHaveBeenCalledWith(snapshot);
+    expect(terminalSnapshotRestoreState.succeeds).toBe(false);
+    expect(await resumedCore?.restoreSnapshot.mock.results[0]?.value).toBe(false);
+    expect(mark.mock.calls.some(([name]) => String(name).includes(':baseline-parser-committed:'))).toBe(true);
+    expect(mark.mock.calls.some(([name]) => String(name).includes(':baseline-rendered:'))).toBe(false);
+
+    resumedCore?.handlers?.onRender?.(1);
+    resumedCore?.handlers?.onRender?.(2);
+    expect(mark.mock.calls.filter(([name]) => String(name).includes(':baseline-rendered:'))).toHaveLength(1);
   });
 
   it('commits the synchronous live frame before hibernating the terminal core', async () => {

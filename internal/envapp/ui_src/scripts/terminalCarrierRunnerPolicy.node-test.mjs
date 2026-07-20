@@ -41,3 +41,10 @@ test('disables Readline bracketed paste before seeding byte-exact terminal fixtu
   assert.match(carrierSource, /set enable-bracketed-paste off/u);
   assert.match(carrierSource, /INPUTRC=/u);
 });
+
+test('waits for the trace-scoped baseline render before visual sampling', () => {
+  assert.match(carrierSource, /startsWith\('redeven:terminal:baseline-rendered:'\)/u);
+  assert.match(carrierSource, /find\('baseline-rendered'\)/u);
+  assert.match(carrierSource, /baseline\.startTime <= rendered\.startTime/u);
+  assert.match(carrierSource, /baseline_rendered_ms: rendered\.startTime - start\.startTime/u);
+});

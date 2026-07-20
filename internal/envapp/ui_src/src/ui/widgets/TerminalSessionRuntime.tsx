@@ -41,6 +41,7 @@ import {
   publishTerminalRecoveryEvent,
   startTerminalRecoveryTrace,
   terminalRecoveryDiagnosticsQuery,
+  type TerminalRecoveryEventDetail,
   type TerminalRecoveryPhase,
   type TerminalRecoveryTrace,
 } from '../services/terminalRecoveryDiagnostics';
@@ -57,6 +58,13 @@ type SharedTerminalGeometryEvent = Readonly<{
   outputSequenceBoundary: number;
   cols: number;
   rows: number;
+}>;
+
+type PendingBaselineRender = Readonly<{
+  core: TerminalCore;
+  initSequence: number;
+  trace: TerminalRecoveryTrace;
+  detail: TerminalRecoveryEventDetail;
 }>;
 
 export function shouldPublishTerminalOutputCoverage(
@@ -269,6 +277,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   let inputProtectionTimer: ReturnType<typeof setTimeout> | null = null;
   let workingSetRegistered = false;
   let recoveryTrace: TerminalRecoveryTrace | null = null;
+  let pendingBaselineRender: PendingBaselineRender | null = null;
   let recoveryPhase: TerminalRecoveryPhase | null = null;
   let historyPageCount = 0;
   let historyChunkCount = 0;
@@ -305,6 +314,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   };
 
   const startRecoveryTrace = () => {
+    pendingBaselineRender = null;
     recoveryTrace = startTerminalRecoveryTrace(stableSessionId, props.variant);
     recoveryPhase = null;
     historyPageCount = 0;
@@ -605,6 +615,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   const disposeCore = () => {
     cancelPendingAppearanceApply();
     cancelPendingActivationRefresh();
+    pendingBaselineRender = null;
     term?.dispose();
     term = null;
     props.registerCore(sessionId(), null);
@@ -727,7 +738,8 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
   };
 
   const createCore = (id: string, target: HTMLDivElement): TerminalCore => {
-    const core = new TerminalCore(
+    let core: TerminalCore | null = null;
+    core = new TerminalCore(
       target,
       getDefaultTerminalConfig('dark', {
         cursorBlink: false,
@@ -782,6 +794,21 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
         },
         onBell: () => {
           props.onBell?.(id);
+        },
+        onRender: () => {
+          const pending = pendingBaselineRender;
+          if (
+            !pending
+            || !core
+            || pending.core !== core
+            || term !== core
+            || pending.initSequence !== initSeq
+            || recoveryTrace !== pending.trace
+          ) {
+            return;
+          }
+          pendingBaselineRender = null;
+          markTerminalRecoveryMilestone(pending.trace, 'baseline-rendered', pending.detail);
         },
       },
       buildLogger(),
@@ -1140,7 +1167,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
               : {},
           );
         }
-        markTerminalRecoveryMilestone(trace, 'baseline-parser-committed', {
+        const baselineDetail: TerminalRecoveryEventDetail = {
           coordinator_attach_generation: baseline.attachGeneration,
           history_generation: lastHistoryGeneration,
           history_page_count: historyPageCount,
@@ -1151,19 +1178,15 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
           first_retained_sequence: lastFirstRetainedSequence,
           history_reset: historyReset,
           history_truncated: historyTruncated,
-        });
-        publishTerminalRecoveryEvent(trace, 'baseline_ready', {
-          coordinator_attach_generation: baseline.attachGeneration,
-          history_generation: lastHistoryGeneration,
-          history_page_count: historyPageCount,
-          history_chunk_count: historyChunkCount,
-          history_bytes: historyBytes,
-          covered_through_sequence: baseline.coveredThroughSequence,
-          snapshot_end_sequence: lastSnapshotEndSequence,
-          first_retained_sequence: lastFirstRetainedSequence,
-          history_reset: historyReset,
-          history_truncated: historyTruncated,
-        });
+        };
+        markTerminalRecoveryMilestone(trace, 'baseline-parser-committed', baselineDetail);
+        pendingBaselineRender = {
+          core,
+          initSequence: seq,
+          trace,
+          detail: baselineDetail,
+        };
+        publishTerminalRecoveryEvent(trace, 'baseline_ready', baselineDetail);
       } finally {
         setHistoryReplayProgress(null);
       }
@@ -1193,6 +1216,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       });
     } catch (errorValue) {
       if (seq !== initSeq) return;
+      if (pendingBaselineRender?.trace === trace) pendingBaselineRender = null;
       const lifecycleExit = classifyTerminalAttachLifecycleExit(errorValue);
       if (lifecycleExit) {
         if (lifecycleExit === 'session_gone') {
@@ -1290,7 +1314,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
               reportBlockingFailure(baseline.failure?.code ?? 'terminal_unavailable');
               throw new Error('Terminal history baseline unavailable');
             }
-            markTerminalRecoveryMilestone(trace, 'baseline-parser-committed', {
+            const baselineDetail: TerminalRecoveryEventDetail = {
               coordinator_attach_generation: baseline.attachGeneration,
               history_generation: lastHistoryGeneration,
               history_page_count: historyPageCount,
@@ -1301,19 +1325,15 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
               first_retained_sequence: lastFirstRetainedSequence,
               history_reset: historyReset,
               history_truncated: historyTruncated,
-            });
-            publishTerminalRecoveryEvent(trace, 'baseline_ready', {
-              coordinator_attach_generation: baseline.attachGeneration,
-              history_generation: lastHistoryGeneration,
-              history_page_count: historyPageCount,
-              history_chunk_count: historyChunkCount,
-              history_bytes: historyBytes,
-              covered_through_sequence: baseline.coveredThroughSequence,
-              snapshot_end_sequence: lastSnapshotEndSequence,
-              first_retained_sequence: lastFirstRetainedSequence,
-              history_reset: historyReset,
-              history_truncated: historyTruncated,
-            });
+            };
+            markTerminalRecoveryMilestone(trace, 'baseline-parser-committed', baselineDetail);
+            pendingBaselineRender = {
+              core,
+              initSequence: seq,
+              trace,
+              detail: baselineDetail,
+            };
+            publishTerminalRecoveryEvent(trace, 'baseline_ready', baselineDetail);
           } finally {
             setHistoryReplayProgress(null);
           }
@@ -1343,6 +1363,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       });
     } catch (errorValue) {
       if (seq !== initSeq) return;
+      if (pendingBaselineRender?.trace === trace) pendingBaselineRender = null;
       transitionRecoveryPhase('failed');
       setLoading('idle');
       setShowLoading(false);
