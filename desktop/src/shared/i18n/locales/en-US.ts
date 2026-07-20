@@ -808,6 +808,7 @@ export const enUS = {
     titleStoppingOperation: 'Stopping operation',
     stopStartup: 'Stop startup',
     copyLog: 'Copy log',
+    technicalErrorDetails: 'Technical error details',
     dismiss: 'Dismiss',
     stepOf: 'Step {current} of {total}',
     planningStartupPath: 'Planning startup path',

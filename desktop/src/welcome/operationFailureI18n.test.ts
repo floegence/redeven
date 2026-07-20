@@ -4,12 +4,27 @@ import type { DesktopOperationFailurePresentation } from '../shared/desktopOpera
 import { createDesktopI18n } from '../shared/i18n';
 import {
   localizedOperationFailureDetail,
+  localizedOperationFailureCompactSummary,
   localizedOperationFailureRecoveryHint,
   localizedOperationFailureSummary,
   localizedOperationFailureTitle,
 } from './operationFailureI18n';
 
 describe('operationFailureI18n', () => {
+  it('provides a canonical compact summary while retaining raw text for technical disclosure', () => {
+    const failure: DesktopOperationFailurePresentation = {
+      code: 'operation_failed',
+      severity: 'error',
+      title: 'Operation failed',
+      summary: 'raw multiline failure detail',
+    };
+
+    expect(localizedOperationFailureCompactSummary(createDesktopI18n('zh-CN'), failure))
+      .toBe('Desktop 未能完成此操作。');
+    expect(localizedOperationFailureSummary(createDesktopI18n('zh-CN'), failure))
+      .toBe('raw multiline failure detail');
+  });
+
   it('localizes Gateway package preparation failures', () => {
     const failure: DesktopOperationFailurePresentation = {
       code: 'gateway_package_prepare_failed',

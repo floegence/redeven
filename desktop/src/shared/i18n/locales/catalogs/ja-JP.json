@@ -1558,6 +1558,7 @@
     "titleStoppingOperation": "操作を停止中",
     "stopStartup": "起動を停止",
     "copyLog": "ログをコピー",
+    "technicalErrorDetails": "技術的なエラーの詳細",
     "dismiss": "閉じる",
     "stepOf": "{total} 中 {current} ステップ",
     "planningStartupPath": "起動パスを計画中",

@@ -1117,7 +1117,7 @@ describe('DesktopWelcomeShell', () => {
   it('builds retained Gateway failure progress with Refresh-owned recovery actions', () => {
     const appSrc = readWelcomeSource();
     const retainedStart = appSrc.indexOf('function retainedGatewayFailureProgress');
-    const retainedEnd = appSrc.indexOf('function localizedFailureForDisplay');
+    const retainedEnd = appSrc.indexOf('function launcherFailureSummary');
     const retainedSrc = appSrc.slice(retainedStart, retainedEnd);
     const normalizerStart = appSrc.indexOf('function gatewayActionKindForRequest');
     const normalizerEnd = appSrc.indexOf('function retainedGatewayFailureProgress', normalizerStart);
@@ -1710,9 +1710,13 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain("currentRuntimeLifecycle()?.plan_state !== 'planning'");
     expect(appSrc).not.toContain("current.plan_state === 'planning'");
     expect(appSrc).toContain('localizedProgressPlanningLabel(props.i18n, props.progress.action)');
-    expect(appSrc).toContain('<Show when={localizedFailure()}>');
+    expect(appSrc).toContain("props.progress.status === 'failed' || props.progress.status === 'cleanup_failed'");
+    expect(appSrc).toContain('buildWelcomeOperationFailureDisplay({');
+    expect(appSrc).toContain("failureDisplay() ? '' : localizedProgressDetail(props.i18n, props.progress)");
+    expect(appSrc).toContain('<Show when={failureDisplay()}>');
     expect(appSrc).toContain('<div class="redeven-action-popover__notice-detail">{failure().summary}</div>');
-    expect(appSrc).toContain('redeven-action-popover__notice-detail--pre');
+    expect(appSrc).toContain('redeven-action-popover__failure-details-viewport');
+    expect(appSrc).toContain('<For each={failure().technical_details}>');
     expect(appSrc).toContain("action.kind === 'update_runtime'");
     expect(appSrc).toContain('const nextActionGroups = createMemo(() => groupedVisibleOperationNextActions(props.progress));');
     expect(appSrc).toContain('<For each={nextActionGroups()}>');
@@ -1765,8 +1769,7 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).toContain('grid-template-columns: 1rem minmax(0, 1fr);');
     expect(styles).toContain(".redeven-environment-progress__step[data-entering='true']");
     expect(appSrc).toContain('const hasStepTimeline = createMemo(() => Boolean(stepProgress() || startup() || openConnection()));');
-    expect(appSrc).toContain('const failureNoticeHeading = createMemo(() => trimString(localizedFailure()?.title) || failureNoticeTitle());');
-    expect(appSrc).toContain('<div class="redeven-action-popover__notice-title">{failureNoticeHeading()}</div>');
+    expect(appSrc).toContain('<div class="redeven-action-popover__notice-title">{failure().title}</div>');
     const steppedProgressStart = appSrc.indexOf('<Show when={hasStepTimeline()}>');
     const steppedProgressEnd = appSrc.indexOf('<Show when={canCancel()}>', steppedProgressStart);
     const steppedProgressSrc = appSrc.slice(steppedProgressStart, steppedProgressEnd);
@@ -1788,18 +1791,22 @@ describe('DesktopWelcomeShell', () => {
     expect(styles).not.toContain('.redeven-ssh-runtime-activity');
   });
 
-  it('shows structured operation failures with diagnostics behind Details', () => {
+  it('shows structured operation failures in a compact card with scrollable technical details', () => {
     const appSrc = readWelcomeSource();
     const styles = readWelcomeStyles();
 
     expect(appSrc).toContain('formatDesktopOperationFailureForClipboard(failure)');
     expect(appSrc).toContain('{failure().summary}');
     expect(appSrc).toContain('{failure().recovery_hint}');
-    expect(appSrc).toContain("<summary>{props.i18n.t('settings.detailsTitle')}</summary>");
+    expect(appSrc).toContain("props.i18n.t('progress.technicalErrorDetails')");
     expect(appSrc).toContain('diagnostic.label');
     expect(appSrc).toContain('diagnostic.text');
     expect(styles).toContain('.redeven-action-popover__failure-details summary');
     expect(styles).toContain('cursor: pointer;');
+    expect(styles).toContain('.redeven-action-popover__failure-details-viewport');
+    expect(styles).toContain('max-height: 8rem;');
+    expect(styles).toContain('scrollbar-gutter: stable;');
+    expect(styles).toContain('user-select: text;');
     expect(styles).toContain('.redeven-action-popover__failure-diagnostic pre');
     expect(styles).not.toContain('.redeven-environment-card__failure-details');
   });

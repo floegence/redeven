@@ -1558,6 +1558,7 @@
     "titleStoppingOperation": "正在停止操作",
     "stopStartup": "停止启动",
     "copyLog": "复制日志",
+    "technicalErrorDetails": "技术错误详情",
     "dismiss": "关闭",
     "stepOf": "第 {current} / {total} 步",
     "planningStartupPath": "正在规划启动路径",

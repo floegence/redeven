@@ -1558,6 +1558,7 @@
     "titleStoppingOperation": "작업 중지 중",
     "stopStartup": "시작 중지",
     "copyLog": "로그 복사",
+    "technicalErrorDetails": "오류의 기술 세부 정보",
     "dismiss": "닫기",
     "stepOf": "{total}단계 중 {current}단계",
     "planningStartupPath": "시작 경로 계획 중",
