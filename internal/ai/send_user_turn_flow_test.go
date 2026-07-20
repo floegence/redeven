@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -19,6 +20,11 @@ import (
 
 func newSendTurnTestService(t *testing.T) *Service {
 	t.Helper()
+	return newSendTurnTestServiceAt(t, t.TempDir(), t.TempDir())
+}
+
+func newSendTurnTestServiceAt(t *testing.T, stateDir string, agentHomeDir string) *Service {
+	t.Helper()
 	cfg := &config.AIConfig{
 		CurrentModelID: "openai/gpt-5-mini",
 		Providers: []config.AIProvider{{
@@ -28,7 +34,7 @@ func newSendTurnTestService(t *testing.T) *Service {
 	}
 	svc, err := NewService(Options{
 		Logger:   slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelDebug})),
-		StateDir: t.TempDir(), AgentHomeDir: t.TempDir(), Shell: "/bin/bash", Config: cfg,
+		StateDir: stateDir, AgentHomeDir: agentHomeDir, Shell: "/bin/bash", Config: cfg,
 		PersistOpTimeout: 2 * time.Second, RunMaxWallTime: 2 * time.Second, RunIdleTimeout: time.Second,
 		ResolveProviderAPIKey: func(string) (string, bool, error) { return "", false, nil },
 	})
@@ -37,6 +43,97 @@ func newSendTurnTestService(t *testing.T) *Service {
 	}
 	t.Cleanup(func() { _ = svc.Close() })
 	return svc
+}
+
+func TestStartupRecoveryReleasesUnadmittedInFlightCommand(t *testing.T) {
+	stateDir := t.TempDir()
+	agentHomeDir := t.TempDir()
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+	first := newSendTurnTestServiceAt(t, stateDir, agentHomeDir)
+	thread, err := first.CreateThread(ctx, meta, "recover in-flight admission", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := createPendingCommandForTest(t, first, meta, thread.ThreadID, "command_crash_before_admission", "turn_crash_before_admission", "run_crash_before_admission")
+	if err := first.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	restarted := newSendTurnTestServiceAt(t, stateDir, agentHomeDir)
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		stored, getErr := restarted.threadsDB.GetQueuedTurn(ctx, meta.EndpointID, thread.ThreadID, command.QueueID)
+		if getErr == nil && stored != nil && stored.AdmissionState == threadstore.PendingTurnAdmissionReady && stored.Lane == threadstore.FollowupLaneQueued {
+			break
+		}
+		if getErr != nil && !errors.Is(getErr, sql.ErrNoRows) {
+			t.Fatal(getErr)
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("recovered command=%#v err=%v, want queued ready admission", stored, getErr)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	turnIDs, err := restarted.readCanonicalThreadTurnIDs(ctx, thread.ThreadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, admitted := turnIDs[command.TurnID]; admitted {
+		t.Fatal("startup recovery admitted a command that had no canonical user entry before the crash")
+	}
+}
+
+func TestStartupRecoveryFailsBeforeWakeWhenAdmissionReleaseIdentityIsInvalid(t *testing.T) {
+	stateDir := t.TempDir()
+	agentHomeDir := t.TempDir()
+	svc := newSendTurnTestServiceAt(t, stateDir, agentHomeDir)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+	thread, err := svc.CreateThread(ctx, meta, "fail closed admission recovery", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := createPendingCommandForTest(t, svc, meta, thread.ThreadID, "command_release_failure", "turn_release_failure", "run_release_failure")
+	raw, err := sql.Open("sqlite", filepath.Join(stateDir, "ai", "threads.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer raw.Close()
+	if _, err := raw.ExecContext(ctx, `
+UPDATE ai_queued_turns
+SET run_id = ''
+WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
+`, meta.EndpointID, thread.ThreadID, command.QueueID); err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.Close(); err != nil {
+		t.Fatal(err)
+	}
+	restarted, err := NewService(Options{
+		Logger:   slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelDebug})),
+		StateDir: stateDir, AgentHomeDir: agentHomeDir, Shell: "/bin/bash", Config: svc.cfg,
+		PersistOpTimeout: 2 * time.Second, RunMaxWallTime: 2 * time.Second, RunIdleTimeout: time.Second,
+		ResolveProviderAPIKey: func(string) (string, bool, error) { return "", false, nil },
+	})
+	if restarted != nil {
+		_ = restarted.Close()
+		t.Fatal("startup returned a service after incomplete queued admission recovery")
+	}
+	if err == nil || !strings.Contains(err.Error(), "release unadmitted command") {
+		t.Fatalf("startup error=%v, want explicit release failure", err)
+	}
+	var admissionState string
+	if err := raw.QueryRowContext(ctx, `
+SELECT admission_state
+FROM ai_queued_turns
+WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ?
+`, meta.EndpointID, thread.ThreadID, command.QueueID).Scan(&admissionState); err != nil {
+		t.Fatal(err)
+	}
+	if admissionState != threadstore.PendingTurnAdmissionInFlight {
+		t.Fatalf("failed release admission state=%q, want in_flight", admissionState)
+	}
 }
 
 func testSendTurnMeta() *session.Meta {

@@ -1294,7 +1294,7 @@ func (s *floretSubagentRuntime) wait(ctx context.Context, toolCallID string, arg
 		return nil, err
 	}
 	requestedTimeoutMS, effectiveTimeoutMS, timeoutSource := subagentTimeoutDecision(args)
-	ids := extractStringSlice(args["ids"])
+	ids := normalizeSubagentThreadIDs(args["ids"])
 	childIDs := make([]flruntime.ThreadID, 0, len(ids))
 	for _, id := range ids {
 		if id = strings.TrimSpace(id); id != "" {

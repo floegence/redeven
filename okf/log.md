@@ -1,7 +1,8 @@
 # Redeven OKF Update Log
 
 ## 2026-07-20
-* **Security**: Kept `subagents wait` inside the root lifecycle authority gate with a canonical descendant join scope because waiting may admit pending child input and start provider work; only read-only list and inspect release before dispatch.
+* **Coordination**: Moved queued admission reconciliation into startup recovery, atomically released exact unadmitted `in_flight` command/turn/run identities before runtime reopened, and delayed every queued-thread wake until all recovery checks succeeded.
+* **Security**: Kept `subagents wait` inside the root lifecycle authority gate with only its normalized exact requested-child join scopes because waiting may admit pending child input and start provider work; unrelated siblings remain fenced and only read-only list and inspect release before dispatch.
 * **Boundary**: Upgraded to published Floret v0.19.0, removed the Service-wide Floret capability aggregate, split lifecycle/read/runtime ownership, bound ordinary and child execution to exact authority, and isolated interrupted-turn recovery to startup-only exact factories.
 * **Security**: Added the lifecycle-gated `EffectAuthorizationGate` with strict permission snapshot v2, delete-intent exclusion, final policy reread, exact lease identity, and one-shot dispatch proof.
 * **Fix**: Bound pending terminal settlement to the exact Floret effect-attempt identity, released the product lifecycle gate at the one-shot handler-dispatch boundary, and made SubAgent publication/input retry identities deterministic from canonical authority.

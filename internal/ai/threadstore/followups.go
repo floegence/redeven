@@ -597,6 +597,20 @@ GROUP BY thread_id
 }
 
 func (s *Store) ListFollowupsByLane(ctx context.Context, endpointID string, threadID string, lane string, limit int) ([]QueuedTurn, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	return s.listFollowupsByLane(ctx, endpointID, threadID, lane, limit)
+}
+
+func (s *Store) ListAllFollowupsByLaneForRecovery(ctx context.Context, endpointID string, threadID string, lane string) ([]QueuedTurn, error) {
+	return s.listFollowupsByLane(ctx, endpointID, threadID, lane, 0)
+}
+
+func (s *Store) listFollowupsByLane(ctx context.Context, endpointID string, threadID string, lane string, limit int) ([]QueuedTurn, error) {
 	if s == nil || s.db == nil {
 		return nil, errors.New("store not initialized")
 	}
@@ -613,20 +627,18 @@ func (s *Store) ListFollowupsByLane(ctx context.Context, endpointID string, thre
 	if endpointID == "" || threadID == "" {
 		return nil, errors.New("invalid request")
 	}
-	if limit <= 0 {
-		limit = 100
-	}
-	if limit > 500 {
-		limit = 500
-	}
-	rows, err := s.db.QueryContext(ctx, `
+	query := `
 SELECT queue_id, endpoint_id, thread_id, channel_id, lane, admission_state, turn_id, run_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
        created_by_user_public_id, created_by_user_email, sort_index, created_at_unix_ms, updated_at_unix_ms
 FROM ai_queued_turns
 WHERE endpoint_id = ? AND thread_id = ? AND lane = ?
-ORDER BY sort_index ASC, queue_id ASC
-LIMIT ?
-`, endpointID, threadID, lane, limit)
+ORDER BY sort_index ASC, queue_id ASC`
+	args := []any{endpointID, threadID, lane}
+	if limit > 0 {
+		query += "\nLIMIT ?"
+		args = append(args, limit)
+	}
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -646,19 +658,27 @@ LIMIT ?
 }
 
 func (s *Store) ListThreadsWithQueuedTurns(ctx context.Context, limit int) ([]QueuedThread, error) {
-	if s == nil || s.db == nil {
-		return nil, errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
 	if limit <= 0 {
 		limit = 500
 	}
 	if limit > 5000 {
 		limit = 5000
 	}
-	rows, err := s.db.QueryContext(ctx, `
+	return s.listThreadsWithQueuedTurns(ctx, limit)
+}
+
+func (s *Store) ListAllThreadsWithQueuedTurnsForRecovery(ctx context.Context) ([]QueuedThread, error) {
+	return s.listThreadsWithQueuedTurns(ctx, 0)
+}
+
+func (s *Store) listThreadsWithQueuedTurns(ctx context.Context, limit int) ([]QueuedThread, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	query := `
 SELECT
   t.endpoint_id,
   t.thread_id,
@@ -684,9 +704,13 @@ GROUP BY
   t.endpoint_id,
   t.thread_id,
   t.namespace_public_id
-ORDER BY first_queued_sort_index ASC, first_queued_at_unix_ms ASC, t.thread_id ASC
-LIMIT ?
-`, FollowupLaneQueued, FollowupLaneQueued, limit)
+ORDER BY first_queued_sort_index ASC, first_queued_at_unix_ms ASC, t.thread_id ASC`
+	args := []any{FollowupLaneQueued, FollowupLaneQueued}
+	if limit > 0 {
+		query += "\nLIMIT ?"
+		args = append(args, limit)
+	}
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

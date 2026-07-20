@@ -75,12 +75,17 @@ func TestFloretEffectAuthorizationRegistryConsumesExactProofOnce(t *testing.T) {
 	}
 }
 
-func TestFloretEffectJoinRequiresExplicitCloseScope(t *testing.T) {
+func TestFloretEffectJoinRequiresExplicitChildScopes(t *testing.T) {
 	join, err := floretEffectJoin(flruntime.EffectAuthorizationRequest{
-		ToolName:  "subagents",
-		Resources: []fltools.ResourceRef{{Kind: "subagent", Value: subagentActionWait}},
+		ToolName: "subagents",
+		Resources: []fltools.ResourceRef{
+			{Kind: "subagent", Value: subagentActionWait},
+			{Kind: "subagent_thread", Value: "child_wait_a"},
+			{Kind: "subagent_thread", Value: " child_wait_b "},
+			{Kind: "subagent_thread", Value: "child_wait_a"},
+		},
 	})
-	if err != nil || !join.allChildren || join.childThreadID != "" {
+	if err != nil || join.allChildren || !reflect.DeepEqual(join.childThreadIDs, []string{"child_wait_a", "child_wait_b"}) {
 		t.Fatalf("wait join=%#v err=%v", join, err)
 	}
 	if passiveSubagentEffectRequest(flruntime.EffectAuthorizationRequest{
@@ -88,6 +93,12 @@ func TestFloretEffectJoinRequiresExplicitCloseScope(t *testing.T) {
 		Resources: []fltools.ResourceRef{{Kind: "subagent", Value: subagentActionWait}},
 	}) {
 		t.Fatal("SubAgent wait must not release lifecycle authority before dispatch")
+	}
+	if _, err := floretEffectJoin(flruntime.EffectAuthorizationRequest{
+		ToolName:  "subagents",
+		Resources: []fltools.ResourceRef{{Kind: "subagent", Value: subagentActionWait}},
+	}); err == nil || !strings.Contains(err.Error(), "missing its child authority scope") {
+		t.Fatalf("missing wait scope error=%v", err)
 	}
 
 	join, err = floretEffectJoin(flruntime.EffectAuthorizationRequest{
@@ -97,7 +108,7 @@ func TestFloretEffectJoinRequiresExplicitCloseScope(t *testing.T) {
 			{Kind: "subagent_thread", Value: "child_exact"},
 		},
 	})
-	if err != nil || join.childThreadID != "child_exact" || join.allChildren {
+	if err != nil || !reflect.DeepEqual(join.childThreadIDs, []string{"child_exact"}) || join.allChildren {
 		t.Fatalf("close join=%#v err=%v", join, err)
 	}
 	if _, err := floretEffectJoin(flruntime.EffectAuthorizationRequest{
@@ -110,7 +121,7 @@ func TestFloretEffectJoinRequiresExplicitCloseScope(t *testing.T) {
 		ToolName:  "subagents",
 		Resources: []fltools.ResourceRef{{Kind: "subagent", Value: subagentActionCloseAll}},
 	})
-	if err != nil || !join.allChildren || join.childThreadID != "" {
+	if err != nil || !join.allChildren || len(join.childThreadIDs) != 0 {
 		t.Fatalf("close-all join=%#v err=%v", join, err)
 	}
 }
@@ -128,7 +139,10 @@ func TestFloretEffectAuthorizationKeepsSubagentWaitInsideLifecycleGate(t *testin
 			ThreadID: flruntime.ThreadID(r.threadID), TurnID: flruntime.TurnID(r.messageID), RunID: flruntime.RunID(r.id),
 			ToolCallID: "call_subagent_wait", ToolName: "subagents", ArgumentHash: floretEffectArgumentHash(`{"action":"wait"}`),
 			Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}, LeaseOwnerID: "lease_subagent_wait", LeaseGeneration: 1,
-			Resources: []fltools.ResourceRef{{Kind: "subagent", Value: subagentActionWait}},
+			Resources: []fltools.ResourceRef{
+				{Kind: "subagent", Value: subagentActionWait},
+				{Kind: "subagent_thread", Value: "child_wait_admission"},
+			},
 			HostContext: map[string]string{
 				floretToolHostContextPermissionSnapshotIDKey: snapshot.SnapshotID,
 				floretToolHostContextPermissionEpochKey:      permissionSurfaceEpoch(snapshot),
@@ -217,6 +231,28 @@ func TestFloretEffectAuthorizationKeepsSubagentWaitInsideLifecycleGate(t *testin
 		t.Fatal("lifecycle writer blocked child work required by SubAgent wait")
 	}
 	childRelease()
+	siblingAcquired := make(chan func(), 1)
+	go func() {
+		release, lockErr := svc.threadMgr.lockThreadEffect(r.endpointID, r.threadID, "child_wait_sibling", threadEffectJoin{})
+		if lockErr != nil {
+			siblingAcquired <- nil
+			return
+		}
+		siblingAcquired <- release
+	}()
+	select {
+	case release := <-siblingAcquired:
+		if release != nil {
+			release()
+		}
+		close(finish)
+		<-done
+		if writerRelease := <-writerAcquired; writerRelease != nil {
+			writerRelease()
+		}
+		t.Fatal("unrequested sibling joined the SubAgent wait cohort")
+	case <-time.After(25 * time.Millisecond):
+	}
 
 	close(finish)
 	if err := <-done; err != nil {
@@ -231,33 +267,24 @@ func TestFloretEffectAuthorizationKeepsSubagentWaitInsideLifecycleGate(t *testin
 	case <-time.After(time.Second):
 		t.Fatal("lifecycle writer did not resume after SubAgent wait completed")
 	}
-	lateChildAcquired := make(chan func(), 1)
-	go func() {
-		release, lockErr := svc.threadMgr.lockThreadEffect(r.endpointID, r.threadID, "child_after_wait", threadEffectJoin{})
-		if lockErr != nil {
-			lateChildAcquired <- nil
-			return
-		}
-		lateChildAcquired <- release
-	}()
 	select {
-	case release := <-lateChildAcquired:
+	case release := <-siblingAcquired:
 		if release != nil {
 			release()
 		}
 		writerRelease()
-		t.Fatal("child work crossed the lifecycle writer after SubAgent wait")
+		t.Fatal("unrequested sibling crossed the lifecycle writer after SubAgent wait")
 	case <-time.After(25 * time.Millisecond):
 	}
 	writerRelease()
 	select {
-	case release := <-lateChildAcquired:
+	case release := <-siblingAcquired:
 		if release == nil {
-			t.Fatal("child work failed after the lifecycle writer completed")
+			t.Fatal("unrequested sibling failed after the lifecycle writer completed")
 		}
 		release()
 	case <-time.After(time.Second):
-		t.Fatal("child work did not resume after the lifecycle writer completed")
+		t.Fatal("unrequested sibling did not resume after the lifecycle writer completed")
 	}
 }
 
@@ -272,6 +299,28 @@ func TestFloretSubagentCloseResourcesCarryExactChildScope(t *testing.T) {
 	want := []fltools.ResourceRef{
 		{Kind: "subagent", Value: subagentActionClose},
 		{Kind: "subagent_thread", Value: "child_exact"},
+	}
+	if !reflect.DeepEqual(resources, want) {
+		t.Fatalf("resources=%#v, want %#v", resources, want)
+	}
+}
+
+func TestFloretSubagentWaitResourcesCarryExactChildScopes(t *testing.T) {
+	resources, err := floretToolResources(fltools.Invocation[map[string]any]{
+		Name: "subagents",
+		Args: map[string]any{
+			"action": subagentActionWait,
+			"ids":    []string{"child_wait_a", " child_wait_b ", "child_wait_a"},
+			"target": "unrequested_child",
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []fltools.ResourceRef{
+		{Kind: "subagent", Value: subagentActionWait},
+		{Kind: "subagent_thread", Value: "child_wait_a"},
+		{Kind: "subagent_thread", Value: "child_wait_b"},
 	}
 	if !reflect.DeepEqual(resources, want) {
 		t.Fatalf("resources=%#v, want %#v", resources, want)

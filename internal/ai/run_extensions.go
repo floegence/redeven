@@ -179,7 +179,7 @@ func validateSubagentsArgsByAction(action string, args map[string]any) error {
 		}
 		return nil
 	case subagentActionWait:
-		if len(extractStringSlice(args["ids"])) == 0 {
+		if len(normalizeSubagentThreadIDs(args["ids"])) == 0 {
 			return invalidSubagentArguments("invalid_arguments.subagents.wait_requires_ids", "wait requires ids", nil)
 		}
 		return nil
