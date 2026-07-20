@@ -686,12 +686,14 @@ Redeven code must not bypass those Floret lifecycles:
 - non-passive handlers and direct PTY writes hold a shared effect-authority
   lease from the final current-permission read through the concrete effect;
   delete, fork, permission changes, and other lifecycle mutations take the
-  exclusive side of the same root-thread gate. Pure `subagents`
-  `wait`/`list`/`inspect` coordination releases the gate before waiting, while
-  parent and child effects may safely hold shared leases concurrently. A
-  lifecycle writer queued behind an active close cohort may allow only the
-  exact child named by `close`, or canonical children covered by `close_all`,
-  to finish; unrelated root/child effects remain fenced. After that cohort
+  exclusive side of the same root-thread gate. Read-only `subagents` `list`
+  and `inspect` release the gate before their handler; `wait` remains gated
+  because it may admit pending child input and start provider work, and it
+  opens the canonical descendant join scope required for that work. Parent and
+  child effects may safely hold shared leases concurrently. A
+  lifecycle writer queued behind an active scoped cohort may allow only the
+  exact child named by `close`, or canonical children covered by `close_all`
+  or `wait`, to finish; unrelated root/child effects remain fenced. After that cohort
   reaches zero, the writer takes exclusive authority before new effects;
 - control signals must not be registered as ordinary tools;
 - `ask_user`, `task_complete`, and custom control signals receive no synthetic
