@@ -1,6 +1,8 @@
 # Redeven OKF Update Log
 
 ## 2026-07-20
+* **Dependency**: Upgraded to published Floret v0.19.1 so a complete canonical user entry is publicly readable before its admission event and every provider, assistant, or tool event follows that boundary.
+* **Fix**: Made `kind=start` wait for canonical admission and `timeline.replaced`, removed Flower synthetic pending user messages, and projected Redeven-owned unadmitted commands only as server-rebuildable `queued_turn` entries keyed by exact TurnID.
 * **Fix**: Kept canonical image and file attachment blocks visible under atomic message decoding, and required live activity blocks to match their enclosing thread, turn, and run before presentation.
 * **Fix**: Made canonical timeline arrays atomic, bound browser live drafts and SubAgent lineage to exact thread/turn/run/message authority, preserved owned empty queued-turn detail, and added real HTTP/RPC zero-side-effect rejection coverage.
 * **Fix**: Classified Flower admission outcomes at typed transport boundaries, restored drafts only for explicit server rejection, kept response-loss or malformed-receipt attempts bound to an exact reconciliation identity, and required live block events plus canonical raw blocks to satisfy strict message identity and whole-message validation.

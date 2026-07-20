@@ -39,17 +39,20 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 		return
 	}
 	canonicalUserEntry := ev.Type == observation.EventTypeThreadEntryCommitted && ev.Committed != nil && ev.Committed.Kind == flruntime.ThreadDetailEventUserMessage
-	if r.awaitFloretAdmission.Load() && canonicalUserEntry {
-		r.floretAdmitted.Store(true)
-	}
 	if canonicalUserEntry {
-		if err := r.commitPendingTurnCommandAdmission(false); err != nil {
-			r.rejectFloretContract("turn_admission", err)
-			return
+		r.floretAdmitted.Store(true)
+		if r.awaitFloretAdmission.Load() {
+			if err := r.publishCanonicalUserAdmission(); err != nil {
+				r.completeUserTurnAdmission(nil)
+				r.rejectFloretContract("turn_admission", err)
+				return
+			}
+			r.floretPresentationReady.Store(true)
+			r.completeUserTurnAdmission(nil)
 		}
 	}
 	if ev.Type == floretEventThreadTitleUpdated && r.host.broadcastThreadSummary != nil {
-		r.host.broadcastThreadSummary()
+		_ = r.host.broadcastThreadSummary()
 	}
 	// The validated canonical user entry is the admission boundary for live
 	// assistant state. A draft created after it can be rendered against the
@@ -110,6 +113,30 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 			"metadata":  ev.Metadata,
 		})
 	}
+}
+
+func (r *run) publishCanonicalUserAdmission() error {
+	if r == nil {
+		return errors.New("run admission coordinator is unavailable")
+	}
+	if err := r.commitPendingTurnCommandAdmission(false); err != nil {
+		return err
+	}
+	if r.host.broadcastThreadSummary == nil {
+		return errors.New("run thread snapshot publisher is unavailable")
+	}
+	if err := r.host.broadcastThreadSummary(); err != nil {
+		return fmt.Errorf("publish admitted thread snapshot: %w", err)
+	}
+	if r.host.replaceLiveDraftWithCanonicalTimeline == nil {
+		return errors.New("canonical timeline publisher is unavailable")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), r.persistTimeout())
+	defer cancel()
+	if err := r.host.replaceLiveDraftWithCanonicalTimeline(ctx, r.id, r.turnID, r.messageID, "canonical_admission"); err != nil {
+		return fmt.Errorf("publish canonical admission timeline: %w", err)
+	}
+	return nil
 }
 
 func (r *run) validateFloretRuntimeEvent(ev flruntime.Event) error {

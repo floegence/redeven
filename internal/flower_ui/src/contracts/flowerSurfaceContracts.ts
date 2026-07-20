@@ -460,6 +460,7 @@ export type FlowerQueuedTurn = Readonly<{
   turn_id: string;
   prompt: string;
   created_at_ms: number;
+  attachments?: readonly FlowerTurnAttachment[];
   context_action?: unknown;
 }>;
 
@@ -728,6 +729,7 @@ export type FlowerLiveThreadPatch = Readonly<{
   permission_type?: FlowerPermissionType;
   working_dir?: string;
   queued_turn_count?: number;
+  queued_turns?: readonly FlowerQueuedTurn[];
   run_status?: string;
   run_updated_at_ms?: number;
   run_error_code?: string;

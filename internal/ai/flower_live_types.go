@@ -108,6 +108,8 @@ type FlowerLiveThreadPatch struct {
 	PermissionType         string                        `json:"permission_type,omitempty"`
 	WorkingDir             string                        `json:"working_dir,omitempty"`
 	QueuedTurnCount        *int                          `json:"queued_turn_count,omitempty"`
+	QueuedTurns            []QueuedTurnView              `json:"queued_turns,omitempty"`
+	QueuedTurnsSet         bool                          `json:"-"`
 	RunStatus              string                        `json:"run_status,omitempty"`
 	RunUpdatedAtUnixMs     int64                         `json:"run_updated_at_unix_ms,omitempty"`
 	RunErrorCode           string                        `json:"run_error_code,omitempty"`
@@ -136,6 +138,7 @@ func (p FlowerLiveThreadPatch) MarshalJSON() ([]byte, error) {
 		PermissionType      string                        `json:"permission_type,omitempty"`
 		WorkingDir          string                        `json:"working_dir,omitempty"`
 		QueuedTurnCount     *int                          `json:"queued_turn_count,omitempty"`
+		QueuedTurns         []QueuedTurnView              `json:"queued_turns,omitempty"`
 		RunStatus           string                        `json:"run_status,omitempty"`
 		RunUpdatedAtUnixMs  int64                         `json:"run_updated_at_unix_ms,omitempty"`
 		RunErrorCode        string                        `json:"run_error_code,omitempty"`
@@ -159,6 +162,7 @@ func (p FlowerLiveThreadPatch) MarshalJSON() ([]byte, error) {
 		PermissionType:      p.PermissionType,
 		WorkingDir:          p.WorkingDir,
 		QueuedTurnCount:     p.QueuedTurnCount,
+		QueuedTurns:         cloneQueuedTurnViews(p.QueuedTurns),
 		RunStatus:           p.RunStatus,
 		RunUpdatedAtUnixMs:  p.RunUpdatedAtUnixMs,
 		RunErrorCode:        p.RunErrorCode,
@@ -177,6 +181,7 @@ func (p FlowerLiveThreadPatch) MarshalJSON() ([]byte, error) {
 	}
 	needsRecordPatch := (p.ReasoningSelectionSet && p.ReasoningSelection == nil) ||
 		(p.ReasoningCapabilitySet && p.ReasoningCapability == nil) ||
+		p.QueuedTurnsSet ||
 		p.SubagentsSet
 	if !needsRecordPatch {
 		return json.Marshal(out)
@@ -194,6 +199,17 @@ func (p FlowerLiveThreadPatch) MarshalJSON() ([]byte, error) {
 	}
 	if p.ReasoningCapabilitySet && p.ReasoningCapability == nil {
 		record["reasoning_capability"] = json.RawMessage("null")
+	}
+	if p.QueuedTurnsSet {
+		queuedTurns := cloneQueuedTurnViews(p.QueuedTurns)
+		if queuedTurns == nil {
+			queuedTurns = []QueuedTurnView{}
+		}
+		queuedTurnsData, err := json.Marshal(queuedTurns)
+		if err != nil {
+			return nil, err
+		}
+		record["queued_turns"] = queuedTurnsData
 	}
 	if p.SubagentsSet {
 		subagents := cloneFlowerSubagentSummaries(p.Subagents)
@@ -221,6 +237,7 @@ func (p *FlowerLiveThreadPatch) UnmarshalJSON(data []byte) error {
 		PermissionType      string                  `json:"permission_type,omitempty"`
 		WorkingDir          string                  `json:"working_dir,omitempty"`
 		QueuedTurnCount     *int                    `json:"queued_turn_count,omitempty"`
+		QueuedTurns         []QueuedTurnView        `json:"queued_turns,omitempty"`
 		RunStatus           string                  `json:"run_status,omitempty"`
 		RunUpdatedAtUnixMs  int64                   `json:"run_updated_at_unix_ms,omitempty"`
 		RunErrorCode        string                  `json:"run_error_code,omitempty"`
@@ -247,6 +264,7 @@ func (p *FlowerLiveThreadPatch) UnmarshalJSON(data []byte) error {
 		PermissionType:      raw.PermissionType,
 		WorkingDir:          raw.WorkingDir,
 		QueuedTurnCount:     raw.QueuedTurnCount,
+		QueuedTurns:         cloneQueuedTurnViews(raw.QueuedTurns),
 		RunStatus:           raw.RunStatus,
 		RunUpdatedAtUnixMs:  raw.RunUpdatedAtUnixMs,
 		RunErrorCode:        raw.RunErrorCode,
@@ -260,6 +278,12 @@ func (p *FlowerLiveThreadPatch) UnmarshalJSON(data []byte) error {
 		LastMessagePreview:  raw.LastMessagePreview,
 		ReadStatus:          raw.ReadStatus,
 		Subagents:           cloneFlowerSubagentSummaries(raw.Subagents),
+	}
+	if _, ok := fields["queued_turns"]; ok {
+		p.QueuedTurnsSet = true
+		if p.QueuedTurns == nil {
+			p.QueuedTurns = []QueuedTurnView{}
+		}
 	}
 	if _, ok := fields["subagents"]; ok {
 		p.SubagentsSet = true

@@ -326,10 +326,11 @@ type FollowupItemView struct {
 }
 
 type QueuedTurnView struct {
-	TurnID          string                 `json:"turn_id"`
-	Text            string                 `json:"text"`
-	CreatedAtUnixMs int64                  `json:"created_at_unix_ms"`
-	ContextAction   *ContextActionEnvelope `json:"context_action,omitempty"`
+	TurnID          string                   `json:"turn_id"`
+	Text            string                   `json:"text"`
+	CreatedAtUnixMs int64                    `json:"created_at_unix_ms"`
+	Attachments     []FollowupAttachmentView `json:"attachments,omitempty"`
+	ContextAction   *ContextActionEnvelope   `json:"context_action,omitempty"`
 }
 
 type ListFollowupsResponse struct {
@@ -627,6 +628,7 @@ type RealtimeEvent struct {
 	ActiveRunID         string                       `json:"active_run_id,omitempty"`
 	PermissionType      string                       `json:"permission_type,omitempty"`
 	QueuedTurnCount     int                          `json:"queued_turn_count,omitempty"`
+	QueuedTurns         []QueuedTurnView             `json:"queued_turns,omitempty"`
 	ReasoningSelection  config.AIReasoningSelection  `json:"reasoning_selection,omitempty"`
 	ReasoningCapability config.AIReasoningCapability `json:"reasoning_capability,omitempty"`
 }

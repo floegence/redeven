@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/floegence/floret/observation"
+	flconfig "github.com/floegence/floret/config"
 	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/ai/threadstore"
@@ -155,9 +155,7 @@ func TestAdmissionRPCDecodersRejectLegacyAndInvalidTurnIdentityWithoutSideEffect
 }
 
 func TestSendUserTurnReturnsAcceptedTurnAndRunIdentity(t *testing.T) {
-	t.Parallel()
-
-	svc := newSendTurnTestService(t)
+	svc := newRealtimeTestService(t, 2*time.Second)
 	meta := testSendTurnMeta()
 	ctx := context.Background()
 	thread, err := svc.CreateThread(ctx, meta, "turn receipt", "", "", "")
@@ -174,6 +172,100 @@ func TestSendUserTurnReturnsAcceptedTurnAndRunIdentity(t *testing.T) {
 	}
 	if response.Kind != "start" || response.TurnID != "turn_client_receipt" || strings.TrimSpace(response.RunID) == "" {
 		t.Fatalf("response=%#v, want exact start receipt", response)
+	}
+	bootstrap, err := svc.GetFlowerThreadLiveBootstrap(ctx, meta, thread.ThreadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	canonicalUserIndex := -1
+	for index, message := range bootstrap.TimelineMessages {
+		if message.Role == "user" && message.TurnID == response.TurnID && message.RunID == response.RunID && message.MessageID != response.TurnID {
+			canonicalUserIndex = index
+			break
+		}
+	}
+	if canonicalUserIndex < 0 {
+		t.Fatalf("start receipt returned before canonical user timeline: %#v", bootstrap.TimelineMessages)
+	}
+	events, err := svc.ListFlowerThreadLiveEvents(ctx, meta, thread.ThreadID, 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	replacementIndex := -1
+	assistantIndex := -1
+	for index, event := range events.Events {
+		if event.Kind == FlowerLiveTimelineReplaced && replacementIndex < 0 {
+			replacementIndex = index
+		}
+		if event.Kind == FlowerLiveMessageStarted && assistantIndex < 0 {
+			assistantIndex = index
+		}
+	}
+	if replacementIndex < 0 || (assistantIndex >= 0 && replacementIndex >= assistantIndex) {
+		t.Fatalf("live event order replacement=%d assistant=%d events=%#v", replacementIndex, assistantIndex, events.Events)
+	}
+	queued, err := svc.threadsDB.CountFollowupsByLane(ctx, meta.EndpointID, thread.ThreadID, threadstore.FollowupLaneQueued)
+	if err != nil || queued != 0 {
+		t.Fatalf("admitted command remains queued: count=%d err=%v", queued, err)
+	}
+}
+
+func TestQueuedSecondTurnTransitionsFromServerSnapshotToCanonicalFloretRow(t *testing.T) {
+	svc := newRealtimeTestService(t, 50*time.Millisecond)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+	thread, err := svc.CreateThread(ctx, meta, "queued admission handoff", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
+		ThreadID: thread.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input:    RunInput{TurnID: "turn_queued_handoff_first", Text: "run long enough to queue the next turn"},
+	})
+	if err != nil || first.Kind != "start" {
+		t.Fatalf("first turn response=%#v err=%v", first, err)
+	}
+	second, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
+		ThreadID: thread.ThreadID,
+		Model:    "openai/gpt-5-mini",
+		Input:    RunInput{TurnID: "turn_queued_handoff_second", Text: "continue after the first turn"},
+	})
+	if err != nil || second.Kind != "queued" || second.TurnID != "turn_queued_handoff_second" {
+		t.Fatalf("second turn response=%#v err=%v", second, err)
+	}
+
+	queuedView, err := svc.GetThread(ctx, meta, thread.ThreadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if queuedView == nil || len(queuedView.QueuedTurns) != 1 || queuedView.QueuedTurns[0].TurnID != second.TurnID || queuedView.QueuedTurns[0].Text != "continue after the first turn" {
+		t.Fatalf("queued thread snapshot=%#v", queuedView)
+	}
+
+	var admittedBootstrap *FlowerLiveBootstrapResponse
+	waitForSinkCondition(t, "queued turn canonical admission", func() bool {
+		bootstrap, readErr := svc.GetFlowerThreadLiveBootstrap(ctx, meta, thread.ThreadID)
+		if readErr != nil {
+			return false
+		}
+		userRows := 0
+		for _, message := range bootstrap.TimelineMessages {
+			if message.Role == "user" && message.TurnID == second.TurnID {
+				userRows++
+			}
+		}
+		if userRows != 1 || len(bootstrap.Thread.QueuedTurns) != 0 {
+			return false
+		}
+		admittedBootstrap = bootstrap
+		return true
+	})
+	if admittedBootstrap == nil {
+		t.Fatal("canonical bootstrap was not captured")
+	}
+	if stored, getErr := svc.threadsDB.GetQueuedTurn(ctx, meta.EndpointID, thread.ThreadID, second.QueueID); !errors.Is(getErr, sql.ErrNoRows) || stored != nil {
+		t.Fatalf("admitted queued command remains stored: %#v err=%v", stored, getErr)
 	}
 }
 
@@ -368,15 +460,21 @@ func TestPendingTurnCommandIsDeletedOnCanonicalUserEntryEvent(t *testing.T) {
 		t.Fatalf("admission identity turn=%q message=%q, want exact distinct identities", r.turnID, r.messageID)
 	}
 	r.setPendingTurnCommand(command.QueueID)
+	r.awaitFloretAdmission.Store(true)
 	r.expectFloretRuntimeEventIdentity(command.RunID, thread.ThreadID, command.TurnID, true)
-	floretEventSink{run: r}.EmitEvent(flruntime.Event{
-		Type: observation.EventTypeThreadEntryCommitted, RunID: flruntime.RunID(command.RunID),
-		ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: flruntime.TurnID(command.TurnID),
-		Committed: &flruntime.ThreadDetailEvent{
-			ID: "entry_event", ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: flruntime.TurnID(command.TurnID),
-			RunID: flruntime.RunID(command.RunID), Kind: flruntime.ThreadDetailEventUserMessage,
-		},
+	turnHost, err := floretRuntime.Turn(ctx, flruntime.TurnExecutionHostOptions{
+		Config: flconfig.Config{Provider: flconfig.ProviderFake, Model: "fake-model", FakeResponse: "accepted"},
+		Sink:   floretEventSink{run: r},
 	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := turnHost.RunTurn(ctx, flruntime.RunTurnRequest{
+		ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: flruntime.TurnID(command.TurnID),
+		RunID: flruntime.RunID(command.RunID), Input: flruntime.TurnInput{Text: command.TextContent},
+	}); err != nil {
+		t.Fatal(err)
+	}
 	if stored, err := svc.threadsDB.GetQueuedTurn(ctx, meta.EndpointID, thread.ThreadID, command.QueueID); !errors.Is(err, sql.ErrNoRows) || stored != nil {
 		t.Fatalf("committed user entry left pending prompt stored: %#v err=%v", stored, err)
 	}
@@ -411,7 +509,7 @@ func TestRunEndReleasesUnadmittedPendingCommandByCancelIntent(t *testing.T) {
 		cancel     bool
 		targetLane string
 	}{
-		{name: "retryable failure", id: "retry", targetLane: threadstore.FollowupLaneQueued},
+		{name: "execution failure", id: "retry", targetLane: threadstore.FollowupLaneDraft},
 		{name: "user cancellation", id: "cancel", cancel: true, targetLane: threadstore.FollowupLaneDraft},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {

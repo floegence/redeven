@@ -972,10 +972,26 @@ function mapFlowerQueuedTurns(raw: unknown): FlowerThreadSnapshot['queued_turns'
     const turnID = trim(record.turn_id);
     if (!turnID) throw new Error('Flower contract error: queued turn requires turn_id.');
     const contextAction = recordValue(record.context_action);
+    if (record.attachments !== undefined && !Array.isArray(record.attachments)) {
+      throw new Error(`Flower contract error: queued turn ${index} attachments must be an array.`);
+    }
+    const attachments = Array.isArray(record.attachments)
+      ? record.attachments.map((value, attachmentIndex) => {
+          const attachment = recordValue(value);
+          const name = trim(attachment?.name);
+          const mimeType = trim(attachment?.mime_type);
+          const url = trim(attachment?.url);
+          if (!name || !mimeType || !url) {
+            throw new Error(`Flower contract error: queued turn ${index} attachment ${attachmentIndex} is invalid.`);
+          }
+          return { name, mime_type: mimeType, url };
+        })
+      : undefined;
     return {
       turn_id: turnID,
       prompt: trim(record.text),
       created_at_ms: unixMs(record.created_at_unix_ms, 'queued_turn.created_at_unix_ms'),
+      ...(attachments && attachments.length > 0 ? { attachments } : {}),
       ...(contextAction ? { context_action: contextAction } : {}),
     };
   });
@@ -1094,6 +1110,7 @@ function mapThreadPatch(raw: unknown): FlowerLiveThreadPatch | null {
   const queuedTurnCount = patch.queued_turn_count === undefined
     ? undefined
     : nonNegativeInteger(patch.queued_turn_count, 'thread.patch.queued_turn_count');
+  const queuedTurns = mapFlowerQueuedTurns(patch.queued_turns);
   const readStatus = patch.read_status === undefined ? null : mapFlowerReadStatus(patch.read_status);
   const reasoningSelection = hasOwn(patch, 'reasoning_selection') ? normalizeFlowerReasoningSelection(patch.reasoning_selection) ?? null : undefined;
   const reasoningCapability = hasOwn(patch, 'reasoning_capability') ? normalizeFlowerReasoningCapability(patch.reasoning_capability) ?? null : undefined;
@@ -1105,6 +1122,7 @@ function mapThreadPatch(raw: unknown): FlowerLiveThreadPatch | null {
     ...(normalizePermissionType(patch.permission_type) ? { permission_type: normalizePermissionType(patch.permission_type) } : {}),
     ...(trim(patch.working_dir) ? { working_dir: trim(patch.working_dir) } : {}),
     ...(queuedTurnCount !== undefined ? { queued_turn_count: queuedTurnCount } : {}),
+    ...(queuedTurns !== undefined ? { queued_turns: queuedTurns } : {}),
     ...(trim(patch.run_status) ? { run_status: trim(patch.run_status) } : {}),
     ...(positiveInteger(patch.run_updated_at_unix_ms) ? { run_updated_at_ms: positiveInteger(patch.run_updated_at_unix_ms) } : {}),
     ...(trim(patch.run_error_code) ? { run_error_code: trim(patch.run_error_code) } : {}),

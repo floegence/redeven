@@ -42,8 +42,40 @@ const mocks = vi.hoisted(() => {
       } : {}),
     };
   };
+  const withCanonicalTimelineIdentity = (threadID: string, messages: unknown[]): unknown[] => messages.map((value, index) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return value;
+    const record = value as Record<string, unknown>;
+    const messageID = String(record.id ?? `message-${index}`).trim();
+    const blocks = Array.isArray(record.blocks) ? record.blocks : [];
+    const activity = blocks.find((block) => (
+      block && typeof block === 'object' && !Array.isArray(block) && (block as Record<string, unknown>).type === 'activity-timeline'
+    )) as Record<string, unknown> | undefined;
+    const turnID = String(record.turn_id ?? activity?.turn_id ?? `turn-${messageID}`).trim();
+    const runID = String(record.run_id ?? activity?.run_id ?? `run-${turnID}`).trim();
+    const canonicalBlocks = blocks.map((block) => {
+      if (!block || typeof block !== 'object' || Array.isArray(block)) return block;
+      const blockRecord = block as Record<string, unknown>;
+      if (blockRecord.type !== 'activity-timeline') return block;
+      return {
+        ...blockRecord,
+        thread_id: String(blockRecord.thread_id ?? threadID).trim(),
+        turn_id: String(blockRecord.turn_id ?? turnID).trim(),
+        run_id: String(blockRecord.run_id ?? runID).trim(),
+      };
+    });
+    return {
+      ...record,
+      thread_id: String(record.thread_id ?? threadID).trim(),
+      turn_id: turnID,
+      run_id: runID,
+      ...(Array.isArray(record.blocks) ? { blocks: canonicalBlocks } : {}),
+    };
+  });
   const timelineMessagesMock = vi.fn(async ({ threadId }: { threadId: string }): Promise<unknown[]> => [{
     id: `msg-${threadId}`,
+    thread_id: threadId,
+    turn_id: `turn-${threadId}`,
+    run_id: `run-${threadId}`,
     role: 'assistant',
     status: 'complete',
     timestamp: 10,
@@ -107,7 +139,10 @@ const mocks = vi.hoisted(() => {
         cursor: 0,
         retained_from_seq: 1,
         thread,
-        timeline_messages: state.timelineMessages ?? await timelineMessagesMock({ threadId: threadID }),
+        timeline_messages: withCanonicalTimelineIdentity(
+          threadID,
+          state.timelineMessages ?? await timelineMessagesMock({ threadId: threadID }),
+        ),
         live_state: state.liveState,
         read_status: thread.read_status,
         generated_at_ms: 12_000,
@@ -128,7 +163,11 @@ const mocks = vi.hoisted(() => {
     return {};
   });
 
-  const sendUserTurnMock = vi.fn(async () => ({ runId: 'run-1', kind: 'start' }));
+  const sendUserTurnMock = vi.fn(async (request: { input?: { turnId?: string } }) => ({
+    turnId: String(request.input?.turnId ?? '').trim(),
+    runId: 'run-1',
+    kind: 'start',
+  }));
   const subscribeThreadMock = vi.fn(async () => ({ runId: 'run-subscribe' }));
   const openFileBrowserAtPathMock = vi.fn(async () => undefined);
   const openFilePreviewMock = vi.fn(async () => undefined);

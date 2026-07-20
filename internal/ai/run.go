@@ -131,6 +131,9 @@ type run struct {
 	detached                    atomic.Bool // hard-canceled: stop emitting realtime events and skip thread state updates
 	awaitFloretAdmission        atomic.Bool
 	floretAdmitted              atomic.Bool
+	floretPresentationReady     atomic.Bool
+	admissionOnce               sync.Once
+	admissionCh                 chan userTurnAdmissionOutcome
 	busyCount                   atomic.Int32
 	runtimeToolCalls            atomic.Int64
 	runtimeTokens               atomic.Int64
@@ -321,6 +324,7 @@ func newRun(opts runOptions) *run {
 		idleTimeout:                 opts.IdleTimeout,
 		toolApprovalTO:              opts.ToolApprovalTimeout,
 		doneCh:                      make(chan struct{}),
+		admissionCh:                 make(chan userTurnAdmissionOutcome, 1),
 		lifecycleMinEmitGap:         600 * time.Millisecond,
 		collectedWebSources:         make(map[string]SourceRef),
 		collectedWebSourceOrder:     make([]string, 0, 8),
@@ -747,7 +751,7 @@ func (r *run) acceptsPresentationUpdates() bool {
 	if r == nil || r.isDetached() {
 		return false
 	}
-	return !r.awaitFloretAdmission.Load() || r.floretAdmitted.Load()
+	return !r.awaitFloretAdmission.Load() || r.floretPresentationReady.Load()
 }
 
 func (r *run) acceptsEngineResultProjection() bool {
@@ -960,6 +964,59 @@ func (r *run) setPendingTurnCommand(commandID string) {
 	r.muPendingCommand.Unlock()
 }
 
+func (r *run) completeUserTurnAdmission(err error) {
+	if r == nil || r.admissionCh == nil {
+		return
+	}
+	outcome := userTurnAdmissionOutcome{
+		TurnID: strings.TrimSpace(r.turnID),
+		RunID:  strings.TrimSpace(r.id),
+		err:    err,
+	}
+	r.admissionOnce.Do(func() {
+		r.admissionCh <- outcome
+		close(r.admissionCh)
+	})
+}
+
+func (r *run) completeUserTurnAdmissionAfterExecution(runErr error) {
+	if r == nil {
+		return
+	}
+	if r.floretAdmitted.Load() {
+		r.completeUserTurnAdmission(nil)
+		return
+	}
+	if runErr == nil {
+		runErr = errors.New("execution ended before canonical user admission")
+	}
+	r.completeUserTurnAdmission(fmt.Errorf("%w: %v", ErrUserTurnNotAdmitted, runErr))
+}
+
+func (r *run) waitForUserTurnAdmission(ctx context.Context) (admittedUserTurn, error) {
+	if r == nil || r.admissionCh == nil {
+		return admittedUserTurn{}, errors.New("run admission signal is unavailable")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	select {
+	case <-ctx.Done():
+		return admittedUserTurn{}, ctx.Err()
+	case outcome, ok := <-r.admissionCh:
+		if !ok {
+			return admittedUserTurn{}, errors.New("run admission signal closed without an outcome")
+		}
+		if outcome.err != nil {
+			return admittedUserTurn{}, outcome.err
+		}
+		if outcome.TurnID == "" || outcome.RunID == "" || outcome.TurnID != strings.TrimSpace(r.turnID) || outcome.RunID != strings.TrimSpace(r.id) {
+			return admittedUserTurn{}, errors.New("run admission outcome identity mismatch")
+		}
+		return admittedUserTurn{TurnID: outcome.TurnID, RunID: outcome.RunID}, nil
+	}
+}
+
 func (r *run) commitPendingTurnCommandAdmission(verifyCanonicalTurn bool) error {
 	if r == nil {
 		return errors.New("run admission coordinator is unavailable")
@@ -993,10 +1050,7 @@ func (r *run) commitPendingTurnCommandAdmission(verifyCanonicalTurn bool) error 
 		return err
 	}
 	if !accepted {
-		targetLane := threadstore.FollowupLaneQueued
-		if strings.TrimSpace(r.getCancelReason()) == "canceled" {
-			targetLane = threadstore.FollowupLaneDraft
-		}
+		targetLane := threadstore.FollowupLaneDraft
 		timeout := r.persistTimeout()
 		releaseCtx, releaseCancel := context.WithTimeout(context.Background(), timeout)
 		err = r.host.releasePendingTurnCommandAdmission(releaseCtx, r.pendingCommandID, r.turnID, r.id, targetLane)

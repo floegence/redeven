@@ -1185,7 +1185,10 @@ describe('Flower live projection', () => {
   });
 
   it('applies queued turn count patches down to zero', () => {
-    const initial = thread({ queued_turn_count: 1 });
+    const initial = thread({
+      queued_turn_count: 1,
+      queued_turns: [{ turn_id: 'turn-queued', prompt: 'queued prompt', created_at_ms: 2000 }],
+    });
     const mapped = mapFlowerLiveEvents({
       schema_version: 1,
       stream_generation: 1,
@@ -1200,6 +1203,7 @@ describe('Flower live projection', () => {
         payload: {
           patch: {
             queued_turn_count: 0,
+            queued_turns: [],
           },
         },
       }],
@@ -1207,6 +1211,7 @@ describe('Flower live projection', () => {
     const result = applyFlowerLiveEvent(initial, 9, mapped.events[0]);
 
     expect(result.thread.queued_turn_count).toBe(0);
+    expect(result.thread.queued_turns).toEqual([]);
   });
 
   it('keeps queued turn count from thread bootstrap payload', () => {
@@ -1283,6 +1288,44 @@ describe('Flower live projection', () => {
     }, mapperOptions())).toThrow(/queued turn 0 must be an object/);
   });
 
+  it('rejects malformed queued attachment contracts', () => {
+    const raw = rawBootstrapWithTimelineDecoration({
+      decoration_id: 'context-compaction:invalid-queued-attachment',
+      kind: 'context_compaction',
+      anchor: { target_kind: 'message', message_id: 'msg-user', edge: 'after' },
+      ordinal: 0,
+      compaction: { operation_id: 'invalid-queued-attachment', phase: 'complete', status: 'compacted', updated_at_ms: 1000 },
+    });
+
+    expect(() => mapFlowerLiveBootstrap({
+      ...raw,
+      thread: {
+        ...raw.thread,
+        queued_turn_count: 1,
+        queued_turns: [{
+          turn_id: 'turn-invalid-attachment',
+          text: 'Inspect this file',
+          created_at_unix_ms: 1_710_000_000_000,
+          attachments: { name: 'notes.txt' },
+        }],
+      },
+    }, mapperOptions())).toThrow(/queued turn 0 attachments must be an array/);
+
+    expect(() => mapFlowerLiveBootstrap({
+      ...raw,
+      thread: {
+        ...raw.thread,
+        queued_turn_count: 1,
+        queued_turns: [{
+          turn_id: 'turn-invalid-attachment',
+          text: 'Inspect this file',
+          created_at_unix_ms: 1_710_000_000_000,
+          attachments: [{ name: 'notes.txt', mime_type: 'text/plain', url: '' }],
+        }],
+      },
+    }, mapperOptions())).toThrow(/queued turn 0 attachment 0 is invalid/);
+  });
+
   it('maps queued turn linked context for pending hydration', () => {
     const contextAction = {
       schema_version: 2,
@@ -1313,6 +1356,7 @@ describe('Flower live projection', () => {
           turn_id: 'turn-linked-file',
           text: 'Inspect this file',
           created_at_unix_ms: 1_710_000_000_000,
+          attachments: [{ name: 'notes.txt', mime_type: 'text/plain', url: '/api/uploads/notes' }],
           context_action: contextAction,
         }],
         read_status: readStatus(),
@@ -1332,6 +1376,7 @@ describe('Flower live projection', () => {
       turn_id: 'turn-linked-file',
       prompt: 'Inspect this file',
       created_at_ms: 1_710_000_000_000,
+      attachments: [{ name: 'notes.txt', mime_type: 'text/plain', url: '/api/uploads/notes' }],
       context_action: contextAction,
     }]);
   });

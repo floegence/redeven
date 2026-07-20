@@ -943,6 +943,42 @@ describe('FlowerSurface navigation threads', () => {
     expect(runtime.querySelector('[data-flower-chat-context-chip="true"]')).toBeTruthy();
   });
 
+  it('renders server queued attachments and linked context outside canonical message history', async () => {
+    const queuedThread = thread({
+      thread_id: 'thread-queued-attachments',
+      title: 'Queued attachments',
+      messages: [],
+      queued_turn_count: 1,
+      queued_turns: [{
+        turn_id: 'turn-queued-attachments',
+        prompt: 'Inspect these queued files.',
+        created_at_ms: 1_000,
+        attachments: [
+          { name: 'Screenshot', mime_type: 'image/png', url: '/_redeven_proxy/api/ai/uploads/image-queued' },
+          { name: 'notes.txt', mime_type: 'text/plain', url: '/_redeven_proxy/api/ai/uploads/file-queued' },
+        ],
+        context_action: askFlowerContextAction(),
+      }],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [queuedThread]),
+      loadThread: vi.fn(async () => liveBootstrap(queuedThread)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-queued-attachments"] button')));
+    (runtime.querySelector('[data-thread-id="thread-queued-attachments"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-queued-turn-id="turn-queued-attachments"]')));
+
+    const queued = runtime.querySelector('[data-flower-queued-turn-id="turn-queued-attachments"]') as HTMLElement;
+    expect(queued.querySelector('.flower-message-image img')?.getAttribute('src')).toBe('/_redeven_proxy/api/ai/uploads/image-queued');
+    expect(queued.querySelector('.flower-message-file')?.getAttribute('href')).toBe('/_redeven_proxy/api/ai/uploads/file-queued');
+    expect(queued.textContent).toContain('notes.txt');
+    expect(queued.textContent).toContain('Inspect these queued files.');
+    expect(queued.querySelector('[data-flower-chat-context-chip="true"]')).toBeTruthy();
+    expect(runtime.querySelector('[data-flower-message-id]')).toBeNull();
+  });
+
   it('restores a historical file reference in a canceled thread when is_directory was omitted', async () => {
     const openLinkedFilePreview = vi.fn(async () => undefined);
     const contextThread = thread({
@@ -1104,13 +1140,13 @@ describe('FlowerSurface navigation threads', () => {
     expect(runtime.querySelector('.flower-chat-context-preview-window')).toBeNull();
   });
 
-  it('preserves canonical message IDs that use the reserved pending prefix', async () => {
+  it('preserves opaque canonical message IDs for linked context navigation', async () => {
     const openLinkedFilePreview = vi.fn(async () => undefined);
     const contextThread = thread({
       thread_id: 'thread-prefixed-message-context',
       title: 'Prefixed message context',
       messages: [{
-        id: 'pending:canonical-message',
+        id: 'entry:canonical-message',
         role: 'user',
         content: 'Inspect this file',
         status: 'complete',
@@ -1136,7 +1172,7 @@ describe('FlowerSurface navigation threads', () => {
     await waitFor(() => openLinkedFilePreview.mock.calls.length === 1);
 
     expect(openLinkedFilePreview).toHaveBeenCalledWith(expect.objectContaining({
-      message_id: 'pending:canonical-message',
+      message_id: 'entry:canonical-message',
     }));
   });
 
