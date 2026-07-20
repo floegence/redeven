@@ -1,6 +1,7 @@
 # Redeven OKF Update Log
 
 ## 2026-07-20
+* **Fix**: Migrated the one known reordered Code App registry v1 shape to strict schema v2 transactionally, preserving codespace metadata while rejecting unknown shapes without mutation.
 * **Coordination**: Moved queued admission reconciliation into startup recovery, atomically released exact unadmitted `in_flight` command/turn/run identities before runtime reopened, and delayed every queued-thread wake until all recovery checks succeeded.
 * **Security**: Kept `subagents wait` inside the root lifecycle authority gate with only its normalized exact requested-child join scopes because waiting may admit pending child input and start provider work; unrelated siblings remain fenced and only read-only list and inspect release before dispatch.
 * **Boundary**: Upgraded to published Floret v0.19.0, removed the Service-wide Floret capability aggregate, split lifecycle/read/runtime ownership, bound ordinary and child execution to exact authority, and isolated interrupted-turn recovery to startup-only exact factories.
