@@ -907,6 +907,7 @@ func TestDeleteThreadClosesRuntimeWithoutChildThreadstoreProjection(t *testing.T
 	t.Parallel()
 
 	svc := newSendTurnTestService(t)
+	stopTestServiceMaintenance(t, svc)
 	meta := testSendTurnMeta()
 	ctx := context.Background()
 
