@@ -65,6 +65,7 @@ type PendingBaselineRender = Readonly<{
   initSequence: number;
   trace: TerminalRecoveryTrace;
   detail: TerminalRecoveryEventDetail;
+  armed: boolean;
 }>;
 
 export function shouldPublishTerminalOutputCoverage(
@@ -334,7 +335,25 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     return recoveryTrace;
   };
 
+  const armBaselineRender = (
+    core: TerminalCore,
+    trace: TerminalRecoveryTrace,
+    initSequence: number,
+  ) => {
+    const pending = pendingBaselineRender;
+    if (
+      !pending
+      || pending.core !== core
+      || pending.trace !== trace
+      || pending.initSequence !== initSequence
+    ) {
+      return;
+    }
+    pendingBaselineRender = { ...pending, armed: true };
+  };
+
   const reportBlockingFailure = (code: 'terminal_unavailable' | PagedTerminalOutputFailureCode) => {
+    pendingBaselineRender = null;
     const trace = recoveryTrace;
     if (trace) {
       const eventKey = `${trace.surfaceGeneration}:${code}`;
@@ -799,6 +818,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
           const pending = pendingBaselineRender;
           if (
             !pending
+            || !pending.armed
             || !core
             || pending.core !== core
             || term !== core
@@ -1185,6 +1205,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
           initSequence: seq,
           trace,
           detail: baselineDetail,
+          armed: false,
         };
         publishTerminalRecoveryEvent(trace, 'baseline_ready', baselineDetail);
       } finally {
@@ -1202,6 +1223,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
 
       requestAnimationFrame(() => {
         if (seq !== initSeq || recoveryTrace !== trace || term !== core) return;
+        armBaselineRender(core, trace, seq);
         core.forceResize();
         const activeElement = typeof document === 'undefined' ? null : document.activeElement;
         const focusStillOwned = focusWasAvailableAtStart && (activeElement == null
@@ -1332,6 +1354,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
               initSequence: seq,
               trace,
               detail: baselineDetail,
+              armed: false,
             };
             publishTerminalRecoveryEvent(trace, 'baseline_ready', baselineDetail);
           } finally {
@@ -1353,6 +1376,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
       coordinator.setActive(liveRenderActive());
       requestAnimationFrame(() => {
         if (term !== core || seq !== initSeq || recoveryTrace !== trace) return;
+        armBaselineRender(core, trace, seq);
         core.forceResize();
         const activeElement = typeof document === 'undefined' ? null : document.activeElement;
         const focusStillOwned = focusWasAvailableAtStart && (activeElement == null
