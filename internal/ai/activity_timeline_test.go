@@ -1,7 +1,6 @@
 package ai
 
 import (
-	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -167,7 +166,7 @@ func TestHandleToolCallDoesNotEmitActivityTimeline(t *testing.T) {
 	r.permissionType = FlowerPermissionReadonly
 	allowToolsForTest(t, r, "read_file")
 
-	outcome, err := r.handleToolCall(context.Background(), "tool_read_file_1", "read_file", map[string]any{"path": "note.txt"})
+	outcome, err := r.handleToolCall(authorizedToolContextForTest(t, r, "tool_read_file_1", "read_file"), "tool_read_file_1", "read_file", map[string]any{"path": "note.txt"})
 	if err != nil {
 		t.Fatalf("handleToolCall: %v", err)
 	}

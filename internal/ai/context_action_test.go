@@ -83,6 +83,7 @@ func TestQueuedTurnRecordRejectsDamagedStoredShapes(t *testing.T) {
 		{name: "invalid options", record: func() threadstore.QueuedTurn { record := base; record.OptionsJSON = "{"; return record }(), permission: "approval_required"},
 		{name: "invalid attachments", record: func() threadstore.QueuedTurn { record := base; record.AttachmentsJSON = `[{"url":""}]`; return record }(), permission: "approval_required"},
 		{name: "invalid context action", record: func() threadstore.QueuedTurn { record := base; record.ContextActionJSON = "{"; return record }(), permission: "approval_required"},
+		{name: "empty permission", record: base, permission: ""},
 		{name: "invalid permission", record: base, permission: "legacy_permission"},
 	}
 	for _, testCase := range testCases {

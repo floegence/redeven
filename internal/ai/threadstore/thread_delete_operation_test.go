@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
+
+	"github.com/floegence/redeven/internal/ai/permissionsnapshot"
 )
 
 func TestStorePrepareThreadDeleteOperationPersistsReplaySnapshotAndRetiresThreadID(t *testing.T) {
@@ -19,7 +22,7 @@ func TestStorePrepareThreadDeleteOperationPersistsReplaySnapshotAndRetiresThread
 	ctx := context.Background()
 	const endpointID = "env_delete_operation"
 	const threadID = "thread_delete_operation"
-	if err := store.CreateThread(ctx, ThreadSettings{ThreadID: threadID, EndpointID: endpointID}); err != nil {
+	if err := store.CreateThreadSettings(ctx, ThreadSettings{ThreadID: threadID, EndpointID: endpointID, PermissionType: "approval_required"}); err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
 	if err := store.InsertUpload(ctx, UploadRecord{
@@ -52,7 +55,7 @@ func TestStorePrepareThreadDeleteOperationPersistsReplaySnapshotAndRetiresThread
 	if len(operation.Snapshot.UploadCleanupIDs) != 1 || operation.Snapshot.UploadCleanupIDs[0] != "upload_delete_operation" {
 		t.Fatalf("upload ids=%v", operation.Snapshot.UploadCleanupIDs)
 	}
-	thread, err := store.GetThread(ctx, endpointID, threadID)
+	thread, err := store.GetThreadSettings(ctx, endpointID, threadID)
 	if err != nil {
 		t.Fatalf("GetThread: %v", err)
 	}
@@ -82,8 +85,193 @@ func TestStorePrepareThreadDeleteOperationPersistsReplaySnapshotAndRetiresThread
 	if repeated.OperationID != operation.OperationID || repeated.CreatedAtUnixMs != operation.CreatedAtUnixMs {
 		t.Fatalf("repeated=%+v, want stable operation %+v", repeated, operation)
 	}
-	if err := store.CreateThread(ctx, ThreadSettings{ThreadID: threadID, EndpointID: endpointID}); !errors.Is(err, ErrThreadIDRetired) {
+	if err := store.CreateThreadSettings(ctx, ThreadSettings{ThreadID: threadID, EndpointID: endpointID, PermissionType: "approval_required"}); !errors.Is(err, ErrThreadIDRetired) {
 		t.Fatalf("CreateThread reused err=%v, want %v", err, ErrThreadIDRetired)
+	}
+}
+
+func TestStoreThreadDeleteIntentFreezesThreadScopedWrites(t *testing.T) {
+	t.Parallel()
+
+	store, err := Open(filepath.Join(t.TempDir(), "threads.sqlite"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+	ctx := context.Background()
+	const endpointID = "env_write_freeze"
+	const threadID = "thread_write_freeze"
+	const destinationID = "thread_write_freeze_destination"
+	for _, id := range []string{threadID, destinationID} {
+		if err := store.CreateThreadSettings(ctx, ThreadSettings{
+			ThreadID: id, EndpointID: endpointID, ModelID: "openai/gpt-5",
+			ReasoningSelectionJSON: `{"level":"low"}`, PermissionType: "approval_required", WorkingDir: "/workspace",
+		}); err != nil {
+			t.Fatalf("CreateThreadSettings(%s): %v", id, err)
+		}
+	}
+	if err := store.InsertUpload(ctx, UploadRecord{
+		UploadID: "upload_write_freeze", EndpointID: endpointID, StorageRelPath: "upload_write_freeze.data",
+		Name: "queued.txt", MimeType: "text/plain", SizeBytes: 6, State: UploadStateStaged,
+	}); err != nil {
+		t.Fatalf("InsertUpload: %v", err)
+	}
+	queued, _, revision, err := store.CreateFollowupWithUploadRefs(ctx, QueuedTurn{
+		QueueID: "queue_write_freeze", EndpointID: endpointID, ThreadID: threadID, ChannelID: "channel_write_freeze",
+		Lane: FollowupLaneQueued, TurnID: "turn_write_freeze", RunID: "run_write_freeze", TextContent: "queued",
+	}, []string{"upload_write_freeze"}, 100)
+	if err != nil {
+		t.Fatalf("CreateFollowupWithUploadRefs: %v", err)
+	}
+	if err := store.UpsertFlowerThreadMetadata(ctx, FlowerThreadMetadata{
+		EndpointID: endpointID, ThreadID: threadID, OwnerKind: "user", OwnerID: "owner_before_delete",
+	}); err != nil {
+		t.Fatalf("UpsertFlowerThreadMetadata: %v", err)
+	}
+	beforeChildJSON, beforeChildHash, beforeChildRegistry, beforeChildSchema, beforeChildPresentation := permissionSnapshotPayloadForTest(t, "child_snapshot_before_delete", permissionsnapshot.PermissionApprovalRequired)
+	if err := store.InsertChildPermissionSnapshotProvisional(ctx, ChildPermissionSnapshotRecord{
+		ChildSnapshotID: "child_snapshot_before_delete", EndpointID: endpointID, ParentSnapshotID: "parent_snapshot_before_delete",
+		SpawnToolCallID: "spawn_before_delete", ParentThreadID: threadID, ParentRunID: "parent_run_before_delete",
+		ChildThreadID: destinationID, ChildRunID: "child_run_before_delete", SnapshotJSON: beforeChildJSON,
+		SnapshotHash: beforeChildHash, RegistryHash: beforeChildRegistry, SchemaHash: beforeChildSchema, PresentationHash: beforeChildPresentation, CreatedAtUnixMs: 90,
+	}); err != nil {
+		t.Fatalf("InsertChildPermissionSnapshotProvisional: %v", err)
+	}
+	if _, err := store.PrepareThreadDeleteOperation(ctx, endpointID, threadID, false); err != nil {
+		t.Fatalf("PrepareThreadDeleteOperation: %v", err)
+	}
+
+	permissionJSON, permissionHash, permissionRegistry, permissionSchema, permissionPresentation := permissionSnapshotPayloadForTest(t, "permission_snapshot_after_delete", permissionsnapshot.PermissionApprovalRequired)
+	childJSON, childHash, childRegistry, childSchema, childPresentation := permissionSnapshotPayloadForTest(t, "child_snapshot_after_delete", permissionsnapshot.PermissionApprovalRequired)
+	checks := []struct {
+		name string
+		run  func() error
+	}{
+		{name: "writable precheck", run: func() error { return store.RequireThreadSettingsWritable(ctx, endpointID, threadID) }},
+		{name: "model", run: func() error { return store.UpdateThreadModelID(ctx, endpointID, threadID, "openai/gpt-5-mini") }},
+		{name: "model and reasoning", run: func() error {
+			return store.UpdateThreadModelAndReasoningSelection(ctx, endpointID, threadID, "openai/gpt-5-mini", `{"level":"medium"}`)
+		}},
+		{name: "reasoning", run: func() error {
+			return store.UpdateThreadReasoningSelection(ctx, endpointID, threadID, `{"level":"medium"}`)
+		}},
+		{name: "permission", run: func() error { return store.UpdateThreadPermissionType(ctx, endpointID, threadID, "full_access") }},
+		{name: "pin", run: func() error {
+			_, err := store.SetThreadPinned(ctx, endpointID, threadID, true, "user", "user@example.com")
+			return err
+		}},
+		{name: "create queue item", run: func() error {
+			_, _, _, err := store.CreateFollowup(ctx, QueuedTurn{
+				QueueID: "queue_after_delete", EndpointID: endpointID, ThreadID: threadID, ChannelID: "channel_write_freeze",
+				Lane: FollowupLaneQueued, TurnID: "turn_after_delete", RunID: "run_after_delete", TextContent: "blocked",
+			})
+			return err
+		}},
+		{name: "update queue item", run: func() error {
+			_, err := store.UpdateFollowupText(ctx, endpointID, threadID, queued.QueueID, "changed")
+			return err
+		}},
+		{name: "delete queue item", run: func() error {
+			_, err := store.DeleteFollowup(ctx, endpointID, threadID, queued.QueueID)
+			return err
+		}},
+		{name: "reorder queue", run: func() error {
+			_, err := store.ReorderFollowups(ctx, endpointID, threadID, FollowupLaneQueued, []string{queued.QueueID}, revision)
+			return err
+		}},
+		{name: "recover queue", run: func() error {
+			_, _, err := store.RecoverQueuedTurnsToDrafts(ctx, endpointID, threadID)
+			return err
+		}},
+		{name: "legacy update queue", run: func() error {
+			return store.UpdateQueuedTurn(ctx, endpointID, threadID, queued.QueueID, "changed")
+		}},
+		{name: "legacy delete queue", run: func() error {
+			return store.DeleteQueuedTurn(ctx, endpointID, threadID, queued.QueueID)
+		}},
+		{name: "legacy delete all queue", run: func() error { return store.DeleteQueuedTurns(ctx, endpointID, threadID) }},
+		{name: "legacy pop queue", run: func() error {
+			_, err := store.PopNextQueuedTurn(ctx, endpointID, threadID)
+			return err
+		}},
+		{name: "upload ownership", run: func() error {
+			return store.BindUploadsToRef(ctx, endpointID, threadID, UploadRefKindThread, threadID, []string{"upload_write_freeze"}, 200)
+		}},
+		{name: "admission", run: func() error {
+			return store.CommitPendingTurnAdmission(ctx, endpointID, threadID, queued.QueueID, queued.TurnID, nil, 200)
+		}},
+		{name: "queue resource delete", run: func() error {
+			_, err := store.DeleteFollowupResources(ctx, endpointID, threadID, queued.QueueID)
+			return err
+		}},
+		{name: "fork", run: func() error {
+			_, err := store.PrepareForkOperation(ctx, ForkThreadRequest{
+				OperationID: "fork_after_delete", EndpointID: endpointID, SourceThreadID: threadID,
+				DestinationThreadID: "fork_destination_after_delete", CreatedAtUnixMs: 300,
+			})
+			return err
+		}},
+		{name: "flower metadata", run: func() error {
+			return store.UpsertFlowerThreadMetadata(ctx, FlowerThreadMetadata{
+				EndpointID: endpointID, ThreadID: threadID, OwnerKind: "user", OwnerID: "owner_after_delete",
+			})
+		}},
+		{name: "permission snapshot", run: func() error {
+			return store.InsertPermissionSnapshot(ctx, PermissionSnapshotRecord{
+				SnapshotID: "permission_snapshot_after_delete", EndpointID: endpointID, OwnerThreadID: threadID,
+				OwnerRunID: "run_after_delete", PermissionType: "approval_required", SnapshotJSON: permissionJSON,
+				SnapshotHash: permissionHash, RegistryHash: permissionRegistry, SchemaHash: permissionSchema, PresentationHash: permissionPresentation, CreatedAtUnixMs: 400,
+			})
+		}},
+		{name: "child permission snapshot", run: func() error {
+			return store.InsertChildPermissionSnapshot(ctx, ChildPermissionSnapshotRecord{
+				ChildSnapshotID: "child_snapshot_after_delete", EndpointID: endpointID, ParentSnapshotID: "parent_snapshot_after_delete",
+				SpawnToolCallID: "spawn_after_delete", ParentThreadID: threadID, ParentRunID: "parent_run_after_delete",
+				ChildThreadID: destinationID, ChildRunID: "child_run_after_delete", State: "finalized",
+				SnapshotJSON: childJSON, SnapshotHash: childHash, RegistryHash: childRegistry, SchemaHash: childSchema,
+				PresentationHash: childPresentation, CreatedAtUnixMs: 399, FinalizedAtUnixMs: 400,
+			})
+		}},
+		{name: "finalize child permission snapshot", run: func() error {
+			_, err := store.FinalizeChildPermissionSnapshot(ctx, endpointID, "child_snapshot_before_delete", destinationID, "child_run_before_delete", 400)
+			return err
+		}},
+		{name: "flower transfer", run: func() error {
+			_, err := store.InsertFlowerTransfer(ctx, FlowerTransferRecord{
+				TransferID: "transfer_after_delete", EndpointID: endpointID, SourceThreadID: threadID,
+				DestinationThreadID: destinationID, IdempotencyKey: "transfer_key_after_delete",
+				ApprovalHash: "approval_hash", PlanJSON: `{"kind":"transfer"}`,
+			})
+			return err
+		}},
+		{name: "flower handoff", run: func() error {
+			_, err := store.InsertFlowerHandoff(ctx, FlowerHandoffRecord{
+				HandoffID: "handoff_after_delete", EndpointID: endpointID, SourceThreadID: threadID,
+				DestinationThreadID: destinationID, IdempotencyKey: "handoff_key_after_delete",
+				EnvelopeHash: "envelope_hash", EnvelopeJSON: `{"kind":"handoff"}`,
+			})
+			return err
+		}},
+	}
+	for _, check := range checks {
+		t.Run(check.name, func(t *testing.T) {
+			if err := check.run(); !errors.Is(err, ErrThreadIDRetired) {
+				t.Fatalf("error=%v, want %v", err, ErrThreadIDRetired)
+			}
+		})
+	}
+
+	storedQueue, err := store.GetQueuedTurn(ctx, endpointID, threadID, queued.QueueID)
+	if err != nil || storedQueue == nil || storedQueue.TextContent != "queued" {
+		t.Fatalf("stored queue=%#v err=%v", storedQueue, err)
+	}
+	queuedUpload, err := store.GetQueuedTurnOwnedUpload(ctx, endpointID, threadID, queued.QueueID, "upload_write_freeze")
+	if err != nil || queuedUpload == nil {
+		t.Fatalf("queued upload ownership=%#v err=%v", queuedUpload, err)
+	}
+	metadata, err := store.GetFlowerThreadMetadata(ctx, endpointID, threadID)
+	if err != nil || metadata == nil || metadata.OwnerID != "owner_before_delete" {
+		t.Fatalf("flower metadata=%#v err=%v", metadata, err)
 	}
 }
 
@@ -96,7 +284,7 @@ func TestStoreThreadDeleteOperationStepConfirmationCommitsOnlyAfterRequiredSteps
 	}
 	defer func() { _ = store.Close() }()
 	ctx := context.Background()
-	if err := store.CreateThread(ctx, ThreadSettings{ThreadID: "thread_steps", EndpointID: "env_steps"}); err != nil {
+	if err := store.CreateThreadSettings(ctx, ThreadSettings{ThreadID: "thread_steps", EndpointID: "env_steps", PermissionType: "approval_required"}); err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
 	operation, err := store.PrepareThreadDeleteOperation(ctx, "env_steps", "thread_steps", true)
@@ -130,5 +318,54 @@ func TestStoreThreadDeleteOperationStepConfirmationCommitsOnlyAfterRequiredSteps
 	}
 	if len(pending) != 0 {
 		t.Fatalf("pending=%+v, want none", pending)
+	}
+}
+
+func TestStoreThreadDeleteOperationRejectsUnsupportedSnapshotShape(t *testing.T) {
+	for _, snapshot := range []string{
+		`{"schema_version":1,"upload_cleanup_ids":[],"delete_flower_read_state":false,"unknown":true}`,
+		`{"schema_version":1,"upload_cleanup_ids":[],"delete_flower_read_state":false} {}`,
+	} {
+		store := openStoreForTest(t)
+		ctx := context.Background()
+		if err := store.CreateThreadSettings(ctx, ThreadSettings{ThreadID: "thread_delete_shape", EndpointID: "env_delete_shape", PermissionType: "approval_required"}); err != nil {
+			t.Fatal(err)
+		}
+		operation, err := store.PrepareThreadDeleteOperation(ctx, "env_delete_shape", "thread_delete_shape", false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := store.db.ExecContext(ctx, `UPDATE ai_thread_delete_operations SET snapshot_json = ? WHERE operation_id = ?`, snapshot, operation.OperationID); err != nil {
+			t.Fatal(err)
+		}
+		loaded, err := store.GetThreadDeleteOperation(ctx, "env_delete_shape", "thread_delete_shape")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if loaded == nil || loaded.SnapshotValid || !strings.Contains(loaded.SnapshotErrorCode, "invalid_snapshot_json") {
+			t.Fatalf("loaded operation=%#v, want invalid snapshot", loaded)
+		}
+	}
+}
+
+func TestStoreThreadDeleteOperationRejectsTamperedCleanupSnapshot(t *testing.T) {
+	store := openStoreForTest(t)
+	ctx := context.Background()
+	if err := store.CreateThreadSettings(ctx, ThreadSettings{ThreadID: "thread_delete_tamper", EndpointID: "env_delete_tamper", PermissionType: "approval_required"}); err != nil {
+		t.Fatal(err)
+	}
+	operation, err := store.PrepareThreadDeleteOperation(ctx, "env_delete_tamper", "thread_delete_tamper", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.ExecContext(ctx, `UPDATE ai_thread_delete_operations SET snapshot_json = json_set(snapshot_json, '$.upload_cleanup_ids', json_array('upload_injected')) WHERE operation_id = ?`, operation.OperationID); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := store.GetThreadDeleteOperation(ctx, "env_delete_tamper", "thread_delete_tamper")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if loaded == nil || loaded.SnapshotValid || loaded.SnapshotErrorCode != "snapshot_fingerprint_mismatch" {
+		t.Fatalf("loaded operation=%#v, want fingerprint rejection", loaded)
 	}
 }

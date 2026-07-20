@@ -22,6 +22,7 @@ import (
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
+	"github.com/floegence/redeven/internal/websearch"
 )
 
 func TestSkillManager_DiscoverAndActivate(t *testing.T) {
@@ -268,7 +269,7 @@ This content should appear in overlay.`
 	r.skillManager.userHome = workspace
 	r.skillManager.Discover()
 	allowToolsForTest(t, r, "use_skill")
-	if _, _, err := r.activateSkill(skillName); err != nil {
+	if _, _, err := r.activateSkill(contextWithToolAuthorizationSnapshot(context.Background(), r.currentPermissionSnapshot()), skillName); err != nil {
 		t.Fatalf("activate skill: %v", err)
 	}
 	tools := []ToolDef{{Name: "use_skill", Visibility: ToolVisibilityStandard, Capabilities: []ToolCapabilityClass{ToolCapabilityOpenWorld}}}
@@ -368,34 +369,54 @@ func prepareSubagentPermissionSnapshot(t *testing.T, r *run) {
 	if r == nil {
 		t.Fatal("nil run")
 	}
-	if r.threadsDB == nil {
+	if r.product.currentSettings == nil {
 		store, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))
 		if err != nil {
 			t.Fatalf("threadstore.Open: %v", err)
 		}
 		t.Cleanup(func() { _ = store.Close() })
-		r.threadsDB = store
+		setRunThreadStoreForTest(t, r, store)
 	}
-	if r.floretStore == nil {
+	productStore := runThreadStoreForTest(t, r)
+	var svc *Service
+	if registered, ok := testRunServices.Load(r); ok {
+		svc = registered.(*Service)
+	}
+	if svc == nil || svc.floretRuntime == nil {
 		store := flruntime.NewMemoryStore()
 		t.Cleanup(func() { _ = store.Close() })
-		r.floretStore = store
+		svc = &Service{threadsDB: productStore, persistOpTO: time.Second}
+		installTestFloretCapabilities(svc, testFloretBootstrap(t, store))
+		registerTestServiceForRun(t, r, svc)
 	}
-	if r.service == nil {
-		r.service = &Service{}
+	svc.threadsDB = productStore
+	svc.persistOpTO = time.Second
+	r.host = bindTestRunHostCapabilities(t, svc, r.endpointID, r.threadID)
+	r.subagentRuntime = newFloretSubagentRuntimeWithExecutionOwner(r, func(_ *run, childThreadID string, childRunID string) (subagentExecutionCapabilities, error) {
+		return svc.bindSubagentExecutionForParent(r, childThreadID, childRunID)
+	})
+	if _, err := svc.openFloretThreadReadHost(context.Background(), r.threadID); errors.Is(err, flruntime.ErrThreadNotFound) {
+		createCanonicalFloretThreadForTest(t, svc, r.threadID, "test-create-"+r.threadID)
+	} else if err != nil {
+		t.Fatalf("read canonical test thread: %v", err)
 	}
-	r.service.threadsDB = r.threadsDB
-	r.service.floretStore = r.floretStore
-	r.service.persistOpTO = time.Second
-	settings, err := r.threadsDB.GetThread(context.Background(), r.endpointID, r.threadID)
+	floretRuntime, err := svc.bindFloretThreadRuntime(r.threadID)
+	if err != nil {
+		t.Fatalf("bind Floret runtime capability: %v", err)
+	}
+	r.floretHostFactory = floretRuntime.Turn
+	r.floretCompactionHostFactory = floretRuntime.Compaction
+	r.floretSubagentHostFactory = floretRuntime.SubAgent
+	settings, err := productStore.GetThreadSettings(context.Background(), r.endpointID, r.threadID)
 	if err != nil {
 		t.Fatalf("GetThread: %v", err)
 	}
 	if settings == nil {
-		if err := r.threadsDB.CreateThread(context.Background(), threadstore.ThreadSettings{
+		if err := productStore.CreateThreadSettings(context.Background(), threadstore.ThreadSettings{
 			EndpointID:     r.endpointID,
 			ThreadID:       r.threadID,
 			PermissionType: permissionTypeString(r.permissionType),
+			WorkingDir:     r.workingDir,
 		}); err != nil {
 			t.Fatalf("CreateThread: %v", err)
 		}
@@ -648,14 +669,15 @@ func TestFloretSubagents_DoNotProjectChildThreadForFlowerNavigation(t *testing.T
 		t.Fatalf("CreateThread parent: %v", err)
 	}
 
-	r := newRun(runOptions{
-		Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
-		StateDir:     workspace,
-		AgentHomeDir: workspace,
-		WorkingDir:   workspace,
-		Shell:        "bash",
-		AIConfig:     cfg,
-		SessionMeta:  meta,
+	r := newRunWithProductStoreForTest(t, runOptions{
+		Log:              slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
+		HostCapabilities: bindTestRunHostCapabilities(t, svc, meta.EndpointID, parent.ThreadID),
+		StateDir:         workspace,
+		AgentHomeDir:     workspace,
+		WorkingDir:       workspace,
+		Shell:            "bash",
+		AIConfig:         cfg,
+		SessionMeta:      meta,
 		ResolveProviderKey: func(providerID string) (string, bool, error) {
 			if strings.TrimSpace(providerID) == "openai" {
 				return "sk-test", true, nil
@@ -668,8 +690,8 @@ func TestFloretSubagents_DoNotProjectChildThreadForFlowerNavigation(t *testing.T
 		ThreadID:     parent.ThreadID,
 		UserPublicID: meta.UserPublicID,
 		MessageID:    "m_parent_projection",
-		ThreadsDB:    svc.threadsDB,
-	})
+	}, svc.threadsDB)
+	registerTestServiceForRun(t, r, svc)
 	r.currentModelID = "openai/gpt-5-mini"
 	prepareSubagentPermissionSnapshot(t, r)
 
@@ -713,7 +735,7 @@ func TestFloretSubagents_DoNotProjectChildThreadForFlowerNavigation(t *testing.T
 		t.Fatalf("GetFlowerThreadLiveBootstrap(child) bootstrap=%#v err=%v, want no Redeven child thread", bootstrap, err)
 	}
 
-	threadRecord, err := svc.threadsDB.GetThread(context.Background(), meta.EndpointID, id)
+	threadRecord, err := svc.threadsDB.GetThreadSettings(context.Background(), meta.EndpointID, id)
 	if err != nil {
 		t.Fatalf("GetThread child store: %v", err)
 	}
@@ -758,7 +780,7 @@ func TestFloretSubagents_ActivityRefreshDoesNotMutateProductThread(t *testing.T)
 
 	const endpointID = "env_subagent_collision"
 	const parentThreadID = "th_parent_collision"
-	if err := db.CreateThread(context.Background(), threadstore.ThreadSettings{
+	if err := db.CreateThreadSettings(context.Background(), threadstore.ThreadSettings{
 		ThreadID:          parentThreadID,
 		EndpointID:        endpointID,
 		NamespacePublicID: "ns_test",
@@ -767,7 +789,7 @@ func TestFloretSubagents_ActivityRefreshDoesNotMutateProductThread(t *testing.T)
 	}); err != nil {
 		t.Fatalf("CreateThread parent: %v", err)
 	}
-	if err := db.CreateThread(context.Background(), threadstore.ThreadSettings{
+	if err := db.CreateThreadSettings(context.Background(), threadstore.ThreadSettings{
 		ThreadID:          "th_existing_product",
 		EndpointID:        endpointID,
 		NamespacePublicID: "ns_test",
@@ -777,7 +799,7 @@ func TestFloretSubagents_ActivityRefreshDoesNotMutateProductThread(t *testing.T)
 		t.Fatalf("CreateThread existing: %v", err)
 	}
 
-	r := newRun(runOptions{
+	r := newRunWithProductStoreForTest(t, runOptions{
 		Log:              slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
 		StateDir:         workspace,
 		AgentHomeDir:     workspace,
@@ -786,10 +808,9 @@ func TestFloretSubagents_ActivityRefreshDoesNotMutateProductThread(t *testing.T)
 		EndpointID:       endpointID,
 		ThreadID:         parentThreadID,
 		MessageID:        "m_parent_collision",
-		ThreadsDB:        db,
 		UserPublicID:     "u_test",
 		PersistOpTimeout: time.Second,
-	})
+	}, db)
 	r.currentModelID = "openai/gpt-5-mini"
 	runtime := newFloretSubagentRuntime(r)
 
@@ -803,7 +824,7 @@ func TestFloretSubagents_ActivityRefreshDoesNotMutateProductThread(t *testing.T)
 		UpdatedAtMS:    time.Now().UnixMilli(),
 	})
 
-	existing, err := db.GetThread(context.Background(), endpointID, "th_existing_product")
+	existing, err := db.GetThreadSettings(context.Background(), endpointID, "th_existing_product")
 	if err != nil {
 		t.Fatalf("GetThread existing: %v", err)
 	}
@@ -999,11 +1020,11 @@ func TestFloretSubagents_InheritsWebSearchResolver(t *testing.T) {
 			return "", false, nil
 		},
 		ResolveWebSearchKey: func(providerID string) (string, bool, error) {
-			if strings.TrimSpace(strings.ToLower(providerID)) != "dummy" {
-				return "", false, nil
+			if strings.TrimSpace(strings.ToLower(providerID)) == websearch.ProviderBrave {
+				resolverCalled.Store(true)
+				return "dummy-key", true, nil
 			}
-			resolverCalled.Store(true)
-			return "dummy-key", true, nil
+			return "", false, nil
 		},
 		RunID:        "run_parent_websearch",
 		ChannelID:    meta.ChannelID,
@@ -1529,20 +1550,6 @@ type fakeCloseAllFloretHost struct {
 	snapshots []flruntime.SubAgentSnapshot
 }
 
-func (h *fakeCloseAllFloretHost) StartThread(context.Context, flruntime.StartThreadRequest) (flruntime.ThreadSnapshot, error) {
-	return flruntime.ThreadSnapshot{}, nil
-}
-
-func (h *fakeCloseAllFloretHost) EnsureThread(_ context.Context, req flruntime.EnsureThreadRequest) (flruntime.ThreadSummary, error) {
-	now := time.Now()
-	return flruntime.ThreadSummary{
-		ID:               req.ThreadID,
-		CreatedAt:        now,
-		UpdatedAt:        now,
-		CanAppendMessage: true,
-	}, nil
-}
-
 func (h *fakeCloseAllFloretHost) ForkThread(context.Context, flruntime.ForkThreadRequest) (flruntime.ForkThreadResult, error) {
 	return flruntime.ForkThreadResult{}, nil
 }
@@ -1623,40 +1630,8 @@ func (h *fakeCloseAllFloretHost) CloseSubAgent(_ context.Context, req flruntime.
 	return flruntime.SubAgentSnapshot{}, fmt.Errorf("missing subagent %q", req.ChildThreadID)
 }
 
-func (h *fakeCloseAllFloretHost) CloseSubAgents(context.Context, flruntime.CloseSubAgentsRequest) (flruntime.CloseSubAgentsResult, error) {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	result := flruntime.CloseSubAgentsResult{Snapshots: make([]flruntime.SubAgentSnapshot, 0, len(h.snapshots))}
-	for index := range h.snapshots {
-		snapshot := h.snapshots[index]
-		if snapshot.Closed || !snapshot.CanClose {
-			result.Snapshots = append(result.Snapshots, snapshot)
-			continue
-		}
-		switch snapshot.Status {
-		case flruntime.SubAgentStatusCompleted, flruntime.SubAgentStatusFailed, flruntime.SubAgentStatusCancelled, flruntime.SubAgentStatusClosed:
-			result.Snapshots = append(result.Snapshots, snapshot)
-			continue
-		}
-		snapshot.Status = flruntime.SubAgentStatusClosed
-		snapshot.Closed = true
-		snapshot.CanClose = false
-		snapshot.CanSendInput = false
-		snapshot.CanInterrupt = false
-		snapshot.UpdatedAt = time.Now()
-		h.snapshots[index] = snapshot
-		result.Snapshots = append(result.Snapshots, snapshot)
-		result.Closed++
-	}
-	return result, nil
-}
-
 func (h *fakeCloseAllFloretHost) ReadSubAgentDetail(context.Context, flruntime.ReadSubAgentDetailRequest) (flruntime.SubAgentDetail, error) {
 	return flruntime.SubAgentDetail{}, nil
-}
-
-func (h *fakeCloseAllFloretHost) ListSubAgentDetailEvents(context.Context, flruntime.ListSubAgentDetailEventsRequest) (flruntime.ThreadDetailEvents, error) {
-	return flruntime.ThreadDetailEvents{}, nil
 }
 
 func (h *fakeCloseAllFloretHost) DeleteThread(context.Context, flruntime.ThreadID) error {
@@ -1695,14 +1670,7 @@ func TestFloretSubagents_CloseAllActionReturnsTerminalSnapshots(t *testing.T) {
 			CanClose:       false,
 		},
 	}}
-	runtime := &floretSubagentRuntime{
-		parent: newRun(runOptions{
-			Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
-			AgentHomeDir: t.TempDir(),
-			ThreadID:     "parent_close_all",
-		}),
-		host: host,
-	}
+	runtime, _ := newBoundSubagentRuntimeForTest(t, "parent_close_all", host, "child_running", "child_completed")
 
 	out, err := runtime.closeAllAction(context.Background(), "call_test_close_all", nil)
 	if err != nil {
@@ -1764,14 +1732,7 @@ func TestFloretSubagents_CloseActionCapsTimeoutAndReturnsBoundedSnapshot(t *test
 			CanClose:       true,
 		},
 	}}
-	runtime := &floretSubagentRuntime{
-		parent: newRun(runOptions{
-			Log:          slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
-			AgentHomeDir: t.TempDir(),
-			ThreadID:     "parent_close",
-		}),
-		host: host,
-	}
+	runtime, _ := newBoundSubagentRuntimeForTest(t, "parent_close", host, "child_running")
 
 	out, err := runtime.close(context.Background(), "call_test_close", map[string]any{
 		"target":     "child_running",
@@ -1803,7 +1764,7 @@ func TestFloretSubagents_ChildRunInheritsParentToolAllowlist(t *testing.T) {
 		AgentHomeDir:  t.TempDir(),
 		ToolAllowlist: []string{"subagents", "terminal.exec", "apply_patch"},
 	})
-	child := parent.subagentChildRun()
+	child := parent.subagentPolicyRun()
 	if child == nil {
 		t.Fatal("subagentChildRun returned nil")
 	}
@@ -1847,7 +1808,7 @@ func TestFloretSubagents_ChildToolsRespectParentReadonlyPermission(t *testing.T)
 	})
 	parent.permissionType = FlowerPermissionReadonly
 
-	child := parent.subagentChildRun()
+	child := parent.subagentPolicyRun()
 	registry := NewInMemoryToolRegistry()
 	if err := registerBuiltInTools(registry, child); err != nil {
 		t.Fatalf("registerBuiltInTools: %v", err)
@@ -1940,7 +1901,7 @@ Use this handler skill.`, skillName)
 	meta := &session.Meta{CanRead: true, CanWrite: true, CanExecute: true}
 	r.permissionType = FlowerPermissionFullAccess
 	allowToolsForTest(t, r, "use_skill")
-	out, err := r.execTool(context.Background(), meta, "tool_1", "use_skill", map[string]any{"name": skillName})
+	out, err := r.execTool(authorizedToolContextForTest(t, r, "tool_1", "use_skill"), meta, "tool_1", "use_skill", map[string]any{"name": skillName})
 	if err != nil {
 		t.Fatalf("execTool error: %v", err)
 	}
@@ -1953,5 +1914,59 @@ Use this handler skill.`, skillName)
 	}
 	if !strings.Contains(strings.TrimSpace(anyToString(data["content"])), "Handler Skill") {
 		t.Fatalf("unexpected skill content: %#v", data)
+	}
+}
+
+func TestPermissionSensitiveHandlersUseLocalAuthorizationSnapshot(t *testing.T) {
+	t.Parallel()
+
+	workspace := t.TempDir()
+	skillName := "approval-snapshot-skill"
+	skillDir := filepath.Join(workspace, ".redeven", "skills", skillName)
+	if err := os.MkdirAll(skillDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := `---
+name: approval-snapshot-skill
+description: validates handler-local permission snapshots
+permission_hint:
+  - approval_required
+---
+
+# Approval Snapshot Skill
+`
+	if err := os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	r := newRun(runOptions{AgentHomeDir: workspace})
+	r.skillManager = newSkillManager(workspace, workspace)
+	r.skillManager.userHome = workspace
+	r.skillManager.Discover()
+	allowToolsForTest(t, r, "use_skill")
+	useSkillDef := ToolDef{Name: "use_skill", Visibility: ToolVisibilityStandard, Capabilities: []ToolCapabilityClass{ToolCapabilityOpenWorld}}
+	approvalSnapshot := permissionSnapshotWithOwnerIdentity(
+		buildPermissionSnapshot(FlowerPermissionApprovalRequired, []ToolDef{useSkillDef}, nil),
+		"env_local_snapshot",
+		"thread_local_snapshot",
+		"run_local_snapshot",
+	)
+	ctx := contextWithToolAuthorizationSnapshot(context.Background(), approvalSnapshot)
+	if _, _, err := r.activateSkill(ctx, skillName); err != nil {
+		t.Fatalf("activateSkill used shared permission instead of local snapshot: %v", err)
+	}
+
+	readonlyDef := ToolDef{Name: "read_file", Visibility: ToolVisibilityReadonlyExclusive, Capabilities: []ToolCapabilityClass{ToolCapabilityReadonlyLocal}}
+	readonlySnapshot := permissionSnapshotWithOwnerIdentity(
+		buildPermissionSnapshot(FlowerPermissionReadonly, []ToolDef{readonlyDef}, nil),
+		"env_local_snapshot",
+		"thread_local_snapshot",
+		"run_local_snapshot",
+	)
+	if !r.canExecuteReadonlyExclusiveTool(contextWithToolAuthorizationSnapshot(context.Background(), readonlySnapshot)) {
+		t.Fatal("readonly gate ignored handler-local readonly snapshot")
+	}
+	if r.canExecuteReadonlyExclusiveTool(ctx) {
+		t.Fatal("readonly gate used shared run permission instead of handler-local approval_required snapshot")
 	}
 }

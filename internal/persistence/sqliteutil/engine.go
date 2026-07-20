@@ -35,7 +35,9 @@ type LegacyKindMigration struct {
 type Spec struct {
 	Kind                 string
 	CurrentVersion       int
+	MinimumVersion       int
 	Pragmas              []string
+	Initialize           func(tx *sql.Tx) error
 	Migrations           []Migration
 	LegacyKindMigrations []LegacyKindMigration
 	Verify               func(tx *sql.Tx) error
@@ -189,6 +191,15 @@ func ensureSchema(db *sql.DB, spec Spec) error {
 		if err := insertMetaTx(tx, spec.Kind, currentVersion); err != nil {
 			return err
 		}
+		if spec.Initialize != nil {
+			if err := spec.Initialize(tx); err != nil {
+				return fmt.Errorf("initialize %s at v%d: %w", spec.Kind, spec.CurrentVersion, err)
+			}
+			if err := setUserVersionTx(tx, spec.CurrentVersion); err != nil {
+				return err
+			}
+			currentVersion = spec.CurrentVersion
+		}
 	} else if err := verifyMetaTableTx(tx); err != nil {
 		return err
 	}
@@ -229,6 +240,9 @@ func ensureSchema(db *sql.DB, spec Spec) error {
 	if currentVersion > spec.CurrentVersion {
 		return &DatabaseTooNewError{Kind: spec.Kind, Version: currentVersion, CurrentVersion: spec.CurrentVersion}
 	}
+	if currentVersion < spec.MinimumVersion {
+		return &DatabaseTooOldError{Kind: spec.Kind, Version: currentVersion, MinimumVersion: spec.MinimumVersion}
+	}
 
 	for currentVersion < spec.CurrentVersion {
 		migration := findMigration(spec.Migrations, currentVersion)
@@ -266,7 +280,13 @@ func validateSpec(spec Spec) error {
 	if spec.CurrentVersion <= 0 {
 		return &InvalidMigrationChainError{Kind: kind, Reason: "current version must be positive"}
 	}
-	if len(spec.Migrations) == 0 && spec.CurrentVersion != 0 {
+	if spec.MinimumVersion < 0 || spec.MinimumVersion > spec.CurrentVersion {
+		return &InvalidMigrationChainError{Kind: kind, Reason: fmt.Sprintf("minimum version %d is outside 0..%d", spec.MinimumVersion, spec.CurrentVersion)}
+	}
+	if spec.MinimumVersion > 0 && spec.Initialize == nil {
+		return &InvalidMigrationChainError{Kind: kind, Reason: "minimum version above zero requires a fresh-schema initializer"}
+	}
+	if len(spec.Migrations) == 0 && spec.MinimumVersion != spec.CurrentVersion {
 		return &InvalidMigrationChainError{Kind: kind, Reason: "missing migrations"}
 	}
 	legacySources := make(map[string]struct{}, len(spec.LegacyKindMigrations))
@@ -296,7 +316,7 @@ func validateSpec(spec Spec) error {
 		}
 		legacySources[key] = struct{}{}
 	}
-	expectedFrom := 0
+	expectedFrom := spec.MinimumVersion
 	for _, migration := range spec.Migrations {
 		if migration.FromVersion != expectedFrom {
 			return &InvalidMigrationChainError{Kind: kind, Reason: fmt.Sprintf("expected migration from version %d, got %d", expectedFrom, migration.FromVersion)}

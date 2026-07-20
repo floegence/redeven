@@ -164,7 +164,7 @@ func TestNewRejectsCurrentThreadstoreSchemaDrift(t *testing.T) {
 	if err != nil {
 		t.Fatalf("threadstore.Open: %v", err)
 	}
-	if err := store.CreateThread(context.Background(), threadstore.ThreadSettings{ThreadID: "th_old", EndpointID: "env_1"}); err != nil {
+	if err := store.CreateThreadSettings(context.Background(), threadstore.ThreadSettings{ThreadID: "th_old", EndpointID: "env_1", PermissionType: "approval_required"}); err != nil {
 		_ = store.Close()
 		t.Fatalf("CreateThread: %v", err)
 	}

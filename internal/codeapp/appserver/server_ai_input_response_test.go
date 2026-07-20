@@ -164,11 +164,15 @@ func seedAppserverWaitingPrompt(t *testing.T, stateDir string, threadID string, 
 		t.Fatalf("OpenSQLiteStore: %v", err)
 	}
 	defer func() { _ = store.Close() }()
-	host, err := flruntime.NewHost(flruntime.HostOptions{
+	turnBinder := configureAppserverFloretTestTurnBinder(t, store)
+	turnFactory, err := turnBinder.Bind(flruntime.ThreadID(threadID))
+	if err != nil {
+		t.Fatalf("bind turn execution host: %v", err)
+	}
+	host, err := turnFactory.NewHost(context.Background(), flruntime.TurnExecutionHostOptions{
 		Config: flconfig.Config{ContextPolicy: flconfig.ContextPolicy{
 			ContextWindowTokens: 128000, MaxOutputTokens: 4096, ReservedOutputTokens: 4096, MaxCompactionFailures: 2,
 		}},
-		Store:                store,
 		ModelGateway:         appserverAskUserGateway{toolID: toolID, args: string(args)},
 		ModelGatewayIdentity: flruntime.ModelGatewayIdentity{Provider: "test", Model: "ask-user-test", StateCompatibilityKey: "test:ask-user-test"},
 	})

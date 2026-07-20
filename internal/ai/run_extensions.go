@@ -37,7 +37,7 @@ func (r *run) activeSkills() []SkillActivation {
 	return mgr.Active()
 }
 
-func (r *run) activateSkill(name string) (SkillActivation, bool, error) {
+func (r *run) activateSkill(ctx context.Context, name string) (SkillActivation, bool, error) {
 	if r == nil {
 		return SkillActivation{}, false, errors.New("nil run")
 	}
@@ -45,7 +45,11 @@ func (r *run) activateSkill(name string) (SkillActivation, bool, error) {
 	if mgr == nil {
 		return SkillActivation{}, false, errors.New("skill manager unavailable")
 	}
-	activation, alreadyActive, err := mgr.Activate(name, r.skillPermissionType(), false)
+	snapshot, ok := toolAuthorizationSnapshotFromContext(ctx)
+	if !ok || snapshot.PermissionType == "" {
+		return SkillActivation{}, false, errors.New("skill activation authorization snapshot is unavailable")
+	}
+	activation, alreadyActive, err := mgr.Activate(name, permissionTypeString(snapshot.PermissionType), false)
 	if err != nil {
 		r.recordRunDiagnostic("skill.activate.error", RealtimeStreamKindLifecycle, map[string]any{"name": strings.TrimSpace(name), "error": err.Error()})
 		return SkillActivation{}, false, err
@@ -55,10 +59,11 @@ func (r *run) activateSkill(name string) (SkillActivation, bool, error) {
 }
 
 func (r *run) skillPermissionType() string {
-	if r == nil || r.permissionType == "" {
+	permissionType := r.currentPermissionType()
+	if r == nil || permissionType == "" {
 		return ""
 	}
-	return permissionTypeString(r.permissionType)
+	return permissionTypeString(permissionType)
 }
 
 func (r *run) ensureSubagentRuntime() subagentRuntime {
@@ -67,16 +72,10 @@ func (r *run) ensureSubagentRuntime() subagentRuntime {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.subagentRuntime == nil {
-		r.subagentRuntime = newFloretSubagentRuntime(r)
-	} else if runtime, ok := r.subagentRuntime.(*floretSubagentRuntime); ok {
+	if runtime, ok := r.subagentRuntime.(*floretSubagentRuntime); ok {
 		runtime.attachParentRun(r)
 	}
 	return r.subagentRuntime
-}
-
-func (r *run) manageSubagents(ctx context.Context, args map[string]any) (map[string]any, error) {
-	return r.manageSubagentsForTool(ctx, "", args)
 }
 
 func (r *run) manageSubagentsForTool(ctx context.Context, toolCallID string, args map[string]any) (map[string]any, error) {

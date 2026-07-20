@@ -70,7 +70,7 @@ func TestResolveSubagentCapabilityContractHidesParentOnlyTools(t *testing.T) {
 	t.Parallel()
 
 	parent := newRun(runOptions{AgentHomeDir: t.TempDir()})
-	child := parent.subagentChildRun()
+	child := parent.subagentPolicyRun()
 	if child == nil {
 		t.Fatal("subagentChildRun returned nil")
 	}
@@ -114,7 +114,7 @@ func TestSubagentChildRunUsesFrozenParentPermissionSnapshotAllowlist(t *testing.
 		VisibleToolNames: []string{"subagents", "task_complete"},
 		FloretToolNames:  []string{"subagents"},
 	}
-	child := parent.subagentChildRun()
+	child := parent.subagentPolicyRun()
 	if child == nil {
 		t.Fatal("subagentChildRun returned nil")
 	}

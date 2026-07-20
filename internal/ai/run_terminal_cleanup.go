@@ -6,14 +6,10 @@ import (
 )
 
 func (r *run) cleanupRunTerminalProcesses() (bool, error) {
-	if r == nil || r.service == nil {
+	if r == nil || r.host.terminal == nil {
 		return false, nil
 	}
-	manager := r.service.terminalProcessManager()
-	if manager == nil {
-		return false, nil
-	}
-	processes := manager.ProcessesForRun(r.endpointID, r.threadID, r.id)
+	processes := r.host.terminal.ProcessesForRun(r.id)
 	if len(processes) == 0 {
 		return false, nil
 	}

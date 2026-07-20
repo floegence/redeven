@@ -2,9 +2,12 @@ package ai
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"io"
 	"log/slog"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -23,7 +26,6 @@ func TestClassifyFloretForkOperationError(t *testing.T) {
 	}{
 		{name: "operation conflict", err: flruntime.ErrForkOperationConflict, code: "floret_operation_conflict", terminal: true},
 		{name: "destination conflict", err: flruntime.ErrForkDestinationConflict, code: "floret_destination_conflict", terminal: true},
-		{name: "target missing", err: flruntime.ErrForkOperationTargetMissing, code: "floret_operation_target_missing", terminal: true},
 		{name: "source missing", err: flruntime.ErrThreadNotFound, code: "floret_source_missing", terminal: true},
 		{name: "transient", err: errors.New("temporary I/O failure"), code: "floret_fork_failed", terminal: false},
 	}
@@ -34,6 +36,55 @@ func TestClassifyFloretForkOperationError(t *testing.T) {
 				t.Fatalf("classification=(%q,%t), want (%q,%t)", code, terminal, tt.code, tt.terminal)
 			}
 		})
+	}
+}
+
+func TestThreadForkReplayRejectsDamagedSnapshotBeforeFloretFork(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "threads.sqlite")
+	db, err := threadstore.Open(dbPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if err := db.CreateThreadSettings(ctx, threadstore.ThreadSettings{
+		ThreadID: "thread_corrupt_fork_source", EndpointID: "env_corrupt_fork", PermissionType: "approval_required",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	operation, err := db.PrepareForkOperation(ctx, threadstore.ForkThreadRequest{
+		OperationID: "fork_corrupt_replay", EndpointID: "env_corrupt_fork", SourceThreadID: "thread_corrupt_fork_source",
+		DestinationThreadID: "thread_corrupt_fork_destination", CreatedAtUnixMs: 100,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawDB, err := sql.Open("sqlite", "file:"+dbPath+"?_pragma=busy_timeout(3000)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rawDB.Close() }()
+	if _, err := rawDB.ExecContext(ctx, `UPDATE ai_thread_fork_operations SET request_fingerprint = 'damaged' WHERE operation_id = ?`, operation.OperationID); err != nil {
+		t.Fatal(err)
+	}
+	floretStore := flruntime.NewMemoryStore()
+	t.Cleanup(func() { _ = floretStore.Close() })
+	adapter := testFloretBootstrap(t, floretStore)
+	createIntentID := flruntime.CreateIntentID("test-create-fork-source")
+	host, err := adapter.newThreadCreate(flruntime.ThreadID(operation.SourceThreadID), createIntentID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := host.CreateThread(ctx, flruntime.CreateThreadRequest{ThreadID: flruntime.ThreadID(operation.SourceThreadID), CreateIntentID: createIntentID}); err != nil {
+		t.Fatal(err)
+	}
+	service := &Service{threadsDB: db}
+	installTestFloretCapabilities(service, adapter)
+	if completed, err := service.replayPendingThreadForkOperations(ctx); completed != 0 || err == nil || !strings.Contains(err.Error(), "fingerprint mismatch") {
+		t.Fatalf("replay completed=%d error=%v, want strict snapshot failure", completed, err)
+	}
+	if _, err := adapter.newThreadRead(ctx, flruntime.ThreadID(operation.DestinationThreadID)); !errors.Is(err, flruntime.ErrThreadNotFound) {
+		t.Fatalf("fork destination error=%v, want %v", err, flruntime.ErrThreadNotFound)
 	}
 }
 
@@ -64,12 +115,6 @@ func TestThreadForkOperationRecoversAfterFloretCommitAndProcessRestart(t *testin
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	floretHost := newTestFloretHost(t, svc.floretStore, "done")
-	if _, err := floretHost.EnsureThread(ctx, flruntime.EnsureThreadRequest{ThreadID: flruntime.ThreadID(source.ThreadID)}); err != nil {
-		_ = svc.Close()
-		t.Fatalf("StartThread: %v", err)
-	}
-
 	operationID := "fork_restart_recovery"
 	destinationID := "thread_restart_destination"
 	operation, err := svc.threadsDB.PrepareForkOperation(ctx, threadstore.ForkThreadRequest{
@@ -98,7 +143,7 @@ func TestThreadForkOperationRecoversAfterFloretCommitAndProcessRestart(t *testin
 	t.Cleanup(func() { _ = recovered.Close() })
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		forked, getErr := recovered.threadsDB.GetThread(ctx, meta.EndpointID, destinationID)
+		forked, getErr := recovered.threadsDB.GetThreadSettings(ctx, meta.EndpointID, destinationID)
 		if getErr != nil {
 			t.Fatalf("GetThread destination: %v", getErr)
 		}

@@ -87,17 +87,18 @@ type ThreadSettings struct {
 	UpdatedByUserPublicID string `json:"updated_by_user_public_id"`
 	UpdatedByUserEmail    string `json:"updated_by_user_email"`
 
-	CreatedAtUnixMs int64 `json:"settings_created_at_unix_ms"`
-	UpdatedAtUnixMs int64 `json:"settings_updated_at_unix_ms"`
+	SettingsCreatedAtUnixMs int64 `json:"settings_created_at_unix_ms"`
+	SettingsUpdatedAtUnixMs int64 `json:"settings_updated_at_unix_ms"`
 }
 
 type QueuedTurn struct {
 	QueueID string `json:"queue_id"`
 
-	ThreadID   string `json:"thread_id"`
-	EndpointID string `json:"endpoint_id"`
-	ChannelID  string `json:"channel_id"`
-	Lane       string `json:"lane"`
+	ThreadID       string `json:"thread_id"`
+	EndpointID     string `json:"endpoint_id"`
+	ChannelID      string `json:"channel_id"`
+	Lane           string `json:"lane"`
+	AdmissionState string `json:"admission_state"`
 
 	TurnID  string `json:"turn_id"`
 	RunID   string `json:"run_id"`
@@ -128,9 +129,9 @@ type QueuedThread struct {
 }
 
 type ThreadsCursor struct {
-	PinnedAtUnixMs  int64
-	CreatedAtUnixMs int64
-	ThreadID        string
+	PinnedAtUnixMs          int64
+	SettingsCreatedAtUnixMs int64
+	ThreadID                string
 }
 
 const threadSelectColumnsSQL = `
@@ -163,8 +164,8 @@ func scanThreadRow(scan rowScanner, t *ThreadSettings) error {
 		&t.CreatedByUserEmail,
 		&t.UpdatedByUserPublicID,
 		&t.UpdatedByUserEmail,
-		&t.CreatedAtUnixMs,
-		&t.UpdatedAtUnixMs,
+		&t.SettingsCreatedAtUnixMs,
+		&t.SettingsUpdatedAtUnixMs,
 	); err != nil {
 		return err
 	}
@@ -179,10 +180,10 @@ func scanThreadRow(scan rowScanner, t *ThreadSettings) error {
 
 // EncodeCursor encodes a cursor as a URL-safe base64 string.
 func EncodeCursor(c ThreadsCursor) string {
-	if c.CreatedAtUnixMs <= 0 || strings.TrimSpace(c.ThreadID) == "" {
+	if c.SettingsCreatedAtUnixMs <= 0 || strings.TrimSpace(c.ThreadID) == "" {
 		return ""
 	}
-	raw := fmt.Sprintf("%d:%d:%s", nonNegativeInt64(c.PinnedAtUnixMs), c.CreatedAtUnixMs, strings.TrimSpace(c.ThreadID))
+	raw := fmt.Sprintf("%d:%d:%s", nonNegativeInt64(c.PinnedAtUnixMs), c.SettingsCreatedAtUnixMs, strings.TrimSpace(c.ThreadID))
 	return base64.RawURLEncoding.EncodeToString([]byte(raw))
 }
 
@@ -219,7 +220,7 @@ func DecodeCursor(raw string) (ThreadsCursor, bool) {
 	if id == "" {
 		return ThreadsCursor{}, false
 	}
-	return ThreadsCursor{PinnedAtUnixMs: pinnedAt, CreatedAtUnixMs: ms, ThreadID: id}, true
+	return ThreadsCursor{PinnedAtUnixMs: pinnedAt, SettingsCreatedAtUnixMs: ms, ThreadID: id}, true
 }
 
 func parseInt64(raw string) (int64, error) {
@@ -251,7 +252,7 @@ func isUniqueConstraintError(err error) bool {
 	return strings.Contains(msg, "constraint failed") && strings.Contains(msg, "unique")
 }
 
-func (s *Store) ListThreads(ctx context.Context, endpointID string, limit int, cursor ThreadsCursor) ([]ThreadSettings, string, error) {
+func (s *Store) ListThreadSettings(ctx context.Context, endpointID string, limit int, cursor ThreadsCursor) ([]ThreadSettings, string, error) {
 	if s == nil || s.db == nil {
 		return nil, "", errors.New("store not initialized")
 	}
@@ -276,7 +277,7 @@ SELECT
 FROM ai_thread_settings
 WHERE endpoint_id = ?
 `, threadSelectColumnsSQL)
-	if cursor.CreatedAtUnixMs > 0 && strings.TrimSpace(cursor.ThreadID) != "" {
+	if cursor.SettingsCreatedAtUnixMs > 0 && strings.TrimSpace(cursor.ThreadID) != "" {
 		cursorPinned := nonNegativeInt64(cursor.PinnedAtUnixMs)
 		cursorThreadID := strings.TrimSpace(cursor.ThreadID)
 		q += `
@@ -296,8 +297,8 @@ WHERE endpoint_id = ?
 			cursorPinned,
 			cursorPinned,
 			cursorPinned, cursorPinned,
-			cursorPinned, cursorPinned, cursor.CreatedAtUnixMs,
-			cursorPinned, cursorPinned, cursor.CreatedAtUnixMs, cursorThreadID,
+			cursorPinned, cursorPinned, cursor.SettingsCreatedAtUnixMs,
+			cursorPinned, cursorPinned, cursor.SettingsCreatedAtUnixMs, cursorThreadID,
 		)
 	}
 	q += `
@@ -337,12 +338,46 @@ LIMIT ?
 	last := out[len(out)-1]
 	next := ""
 	if hasMore {
-		next = EncodeCursor(ThreadsCursor{PinnedAtUnixMs: last.PinnedAtUnixMs, CreatedAtUnixMs: last.CreatedAtUnixMs, ThreadID: last.ThreadID})
+		next = EncodeCursor(ThreadsCursor{PinnedAtUnixMs: last.PinnedAtUnixMs, SettingsCreatedAtUnixMs: last.SettingsCreatedAtUnixMs, ThreadID: last.ThreadID})
 	}
 	return out, next, nil
 }
 
-func (s *Store) GetThread(ctx context.Context, endpointID string, threadID string) (*ThreadSettings, error) {
+// ListAllThreadSettingsForRecovery returns the host-owned root identities that
+// the startup recovery coordinator must reconcile with Floret. It is not a UI
+// pagination surface and does not project canonical Agent state.
+func (s *Store) ListAllThreadSettingsForRecovery(ctx context.Context) ([]ThreadSettings, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	rows, err := s.db.QueryContext(ctx, fmt.Sprintf(`
+SELECT
+%s
+FROM ai_thread_settings
+ORDER BY endpoint_id ASC, thread_id ASC
+`, threadSelectColumnsSQL))
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := make([]ThreadSettings, 0)
+	for rows.Next() {
+		var settings ThreadSettings
+		if err := scanThreadRow(rows, &settings); err != nil {
+			return nil, err
+		}
+		out = append(out, settings)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (s *Store) GetThreadSettings(ctx context.Context, endpointID string, threadID string) (*ThreadSettings, error) {
 	if s == nil || s.db == nil {
 		return nil, errors.New("store not initialized")
 	}
@@ -383,7 +418,7 @@ func (s *Store) getThreadTx(ctx context.Context, tx *sql.Tx, endpointID string, 
 	return &thread, nil
 }
 
-func (s *Store) CreateThread(ctx context.Context, t ThreadSettings) error {
+func (s *Store) CreateThreadSettings(ctx context.Context, t ThreadSettings) error {
 	if s == nil || s.db == nil {
 		return errors.New("store not initialized")
 	}
@@ -410,21 +445,22 @@ func (s *Store) CreateThread(ctx context.Context, t ThreadSettings) error {
 	if t.ThreadID == "" || t.EndpointID == "" {
 		return errors.New("invalid thread")
 	}
-	var retired int
-	if err := s.db.QueryRowContext(ctx, `SELECT 1 FROM ai_thread_delete_operations WHERE endpoint_id = ? AND thread_id = ?`, t.EndpointID, t.ThreadID).Scan(&retired); err == nil {
-		return ErrThreadIDRetired
-	} else if !errors.Is(err, sql.ErrNoRows) {
+	now := time.Now().UnixMilli()
+	if t.SettingsCreatedAtUnixMs <= 0 {
+		t.SettingsCreatedAtUnixMs = now
+	}
+	if t.SettingsUpdatedAtUnixMs <= 0 {
+		t.SettingsUpdatedAtUnixMs = t.SettingsCreatedAtUnixMs
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
 		return err
 	}
-
-	now := time.Now().UnixMilli()
-	if t.CreatedAtUnixMs <= 0 {
-		t.CreatedAtUnixMs = now
+	defer func() { _ = tx.Rollback() }()
+	if err := requireThreadWritableTx(ctx, tx, t.EndpointID, t.ThreadID); err != nil {
+		return err
 	}
-	if t.UpdatedAtUnixMs <= 0 {
-		t.UpdatedAtUnixMs = t.CreatedAtUnixMs
-	}
-	_, err = s.db.ExecContext(ctx, `
+	_, err = tx.ExecContext(ctx, `
 		INSERT INTO ai_thread_settings(
 		  thread_id, endpoint_id, namespace_public_id, model_id, reasoning_selection_json, permission_type, working_dir,
 	  pinned_at_unix_ms, queue_revision,
@@ -446,13 +482,16 @@ func (s *Store) CreateThread(ctx context.Context, t ThreadSettings) error {
 		t.CreatedByUserEmail,
 		t.UpdatedByUserPublicID,
 		t.UpdatedByUserEmail,
-		t.CreatedAtUnixMs,
-		t.UpdatedAtUnixMs,
+		t.SettingsCreatedAtUnixMs,
+		t.SettingsUpdatedAtUnixMs,
 	)
 	if err != nil && strings.Contains(strings.ToLower(err.Error()), "thread id retired") {
 		return ErrThreadIDRetired
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) UpdateThreadModelID(ctx context.Context, endpointID string, threadID string, modelID string) error {
@@ -472,7 +511,15 @@ func (s *Store) UpdateThreadModelID(ctx context.Context, endpointID string, thre
 		return errors.New("missing model_id")
 	}
 
-	res, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx, `
 UPDATE ai_thread_settings
 SET model_id = ?
 WHERE endpoint_id = ? AND thread_id = ?
@@ -484,7 +531,7 @@ WHERE endpoint_id = ? AND thread_id = ?
 	if n == 0 {
 		return sql.ErrNoRows
 	}
-	return nil
+	return tx.Commit()
 }
 
 func (s *Store) UpdateThreadModelAndReasoningSelection(ctx context.Context, endpointID string, threadID string, modelID string, reasoningSelectionJSON string) error {
@@ -504,7 +551,15 @@ func (s *Store) UpdateThreadModelAndReasoningSelection(ctx context.Context, endp
 	if modelID == "" {
 		return errors.New("missing model_id")
 	}
-	res, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx, `
 UPDATE ai_thread_settings
 SET model_id = ?,
     reasoning_selection_json = ?
@@ -517,7 +572,7 @@ WHERE endpoint_id = ? AND thread_id = ?
 	if n == 0 {
 		return sql.ErrNoRows
 	}
-	return nil
+	return tx.Commit()
 }
 
 func (s *Store) UpdateThreadReasoningSelection(ctx context.Context, endpointID string, threadID string, reasoningSelectionJSON string) error {
@@ -533,7 +588,15 @@ func (s *Store) UpdateThreadReasoningSelection(ctx context.Context, endpointID s
 	if endpointID == "" || threadID == "" {
 		return errors.New("invalid request")
 	}
-	res, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx, `
 UPDATE ai_thread_settings
 SET reasoning_selection_json = ?
 WHERE endpoint_id = ? AND thread_id = ?
@@ -545,7 +608,7 @@ WHERE endpoint_id = ? AND thread_id = ?
 	if n == 0 {
 		return sql.ErrNoRows
 	}
-	return nil
+	return tx.Commit()
 }
 
 func (s *Store) UpdateThreadPermissionType(ctx context.Context, endpointID string, threadID string, permissionType string) error {
@@ -565,7 +628,15 @@ func (s *Store) UpdateThreadPermissionType(ctx context.Context, endpointID strin
 		return errors.New("invalid request")
 	}
 
-	res, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx, `
 UPDATE ai_thread_settings
 SET permission_type = ?
 WHERE endpoint_id = ? AND thread_id = ?
@@ -577,7 +648,7 @@ WHERE endpoint_id = ? AND thread_id = ?
 	if n == 0 {
 		return sql.ErrNoRows
 	}
-	return nil
+	return tx.Commit()
 }
 
 func (s *Store) SetThreadPinned(ctx context.Context, endpointID string, threadID string, pinned bool, updatedByID string, updatedByEmail string) (int64, error) {
@@ -596,7 +667,15 @@ func (s *Store) SetThreadPinned(ctx context.Context, endpointID string, threadID
 	if pinned {
 		pinnedAt = time.Now().UnixMilli()
 	}
-	res, err := s.db.ExecContext(ctx, `
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
+		return 0, err
+	}
+	res, err := tx.ExecContext(ctx, `
 UPDATE ai_thread_settings
 SET pinned_at_unix_ms = ?,
     updated_by_user_public_id = ?,
@@ -610,13 +689,16 @@ WHERE endpoint_id = ? AND thread_id = ?
 	if n == 0 {
 		return 0, sql.ErrNoRows
 	}
+	if err := tx.Commit(); err != nil {
+		return 0, err
+	}
 	return pinnedAt, nil
 }
 
 func canonicalPermissionType(permissionType string) (string, error) {
 	switch strings.TrimSpace(strings.ToLower(permissionType)) {
 	case "":
-		return "approval_required", nil
+		return "", errors.New("thread permission type is empty")
 	case "readonly":
 		return "readonly", nil
 	case "full_access":
@@ -626,39 +708,6 @@ func canonicalPermissionType(permissionType string) (string, error) {
 	default:
 		return "", fmt.Errorf("invalid thread permission type %q", permissionType)
 	}
-}
-
-func (s *Store) DeleteThread(ctx context.Context, endpointID string, threadID string) error {
-	if s == nil || s.db == nil {
-		return errors.New("store not initialized")
-	}
-	if ctx == nil {
-		ctx = context.Background()
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	if endpointID == "" || threadID == "" {
-		return errors.New("invalid request")
-	}
-
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	if err := deleteThreadScopedRowsTx(ctx, tx, endpointID, threadID); err != nil {
-		return err
-	}
-	res, err := tx.ExecContext(ctx, `DELETE FROM ai_thread_settings WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID)
-	if err != nil {
-		return err
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return sql.ErrNoRows
-	}
-	return tx.Commit()
 }
 
 func (s *Store) GetQueuedTurn(ctx context.Context, endpointID string, threadID string, queueID string) (*QueuedTurn, error) {
@@ -676,7 +725,7 @@ func (s *Store) GetQueuedTurn(ctx context.Context, endpointID string, threadID s
 	}
 
 	row := s.db.QueryRowContext(ctx, `
-SELECT queue_id, endpoint_id, thread_id, channel_id, lane, turn_id, run_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
+SELECT queue_id, endpoint_id, thread_id, channel_id, lane, admission_state, turn_id, run_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
        created_by_user_public_id, created_by_user_email, sort_index, created_at_unix_ms, updated_at_unix_ms
 FROM ai_queued_turns
 WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ? AND lane = ?
@@ -825,6 +874,12 @@ func (s *Store) UpdateQueuedTurn(ctx context.Context, endpointID string, threadI
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
+		return err
+	}
+	if err := requireFollowupMutableTx(ctx, tx, endpointID, threadID, queueID); err != nil {
+		return err
+	}
 	now := time.Now().UnixMilli()
 	res, err := tx.ExecContext(ctx, `
 UPDATE ai_queued_turns
@@ -862,6 +917,12 @@ func (s *Store) DeleteQueuedTurn(ctx context.Context, endpointID string, threadI
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
+		return err
+	}
+	if err := requireFollowupMutableTx(ctx, tx, endpointID, threadID, queueID); err != nil {
+		return err
+	}
 	res, err := tx.ExecContext(ctx, `
 DELETE FROM ai_queued_turns
 WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ? AND lane = ?
@@ -896,6 +957,20 @@ func (s *Store) DeleteQueuedTurns(ctx context.Context, endpointID string, thread
 		return err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
+		return err
+	}
+	var inFlight int
+	if err := tx.QueryRowContext(ctx, `
+SELECT COUNT(1)
+FROM ai_queued_turns
+WHERE endpoint_id = ? AND thread_id = ? AND lane = ? AND admission_state = ?
+`, endpointID, threadID, FollowupLaneQueued, PendingTurnAdmissionInFlight).Scan(&inFlight); err != nil {
+		return err
+	}
+	if inFlight != 0 {
+		return ErrPendingTurnAdmissionInProgress
+	}
 	res, err := tx.ExecContext(ctx, `
 DELETE FROM ai_queued_turns
 WHERE endpoint_id = ? AND thread_id = ? AND lane = ?
@@ -929,6 +1004,9 @@ func (s *Store) PopNextQueuedTurn(ctx context.Context, endpointID string, thread
 		return nil, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	if err := requireThreadWritableTx(ctx, tx, endpointID, threadID); err != nil {
+		return nil, err
+	}
 
 	rec, err := getNextQueuedTurnTx(ctx, tx, endpointID, threadID)
 	if err != nil {
@@ -939,8 +1017,8 @@ func (s *Store) PopNextQueuedTurn(ctx context.Context, endpointID string, thread
 	}
 	if _, err := tx.ExecContext(ctx, `
 DELETE FROM ai_queued_turns
-WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ? AND lane = ?
-`, endpointID, threadID, rec.QueueID, FollowupLaneQueued); err != nil {
+WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ? AND lane = ? AND admission_state = ?
+`, endpointID, threadID, rec.QueueID, FollowupLaneQueued, PendingTurnAdmissionReady); err != nil {
 		return nil, err
 	}
 	if _, err := bumpThreadFollowupsRevisionTx(ctx, tx, endpointID, threadID); err != nil {
@@ -954,13 +1032,13 @@ WHERE endpoint_id = ? AND thread_id = ? AND queue_id = ? AND lane = ?
 
 func getNextQueuedTurnTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string) (*QueuedTurn, error) {
 	row := tx.QueryRowContext(ctx, `
-SELECT queue_id, endpoint_id, thread_id, channel_id, lane, turn_id, run_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
+SELECT queue_id, endpoint_id, thread_id, channel_id, lane, admission_state, turn_id, run_id, model_id, text_content, attachments_json, context_action_json, options_json, session_meta_json,
        created_by_user_public_id, created_by_user_email, sort_index, created_at_unix_ms, updated_at_unix_ms
 FROM ai_queued_turns
-WHERE endpoint_id = ? AND thread_id = ? AND lane = ?
+WHERE endpoint_id = ? AND thread_id = ? AND lane = ? AND admission_state = ?
 ORDER BY sort_index ASC, queue_id ASC
 LIMIT 1
-`, endpointID, threadID, FollowupLaneQueued)
+`, endpointID, threadID, FollowupLaneQueued, PendingTurnAdmissionReady)
 	rec, err := scanFollowup(row)
 	if err != nil {
 		return nil, err

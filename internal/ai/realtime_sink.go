@@ -12,6 +12,7 @@ import (
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/config"
 )
 
 func (s *Service) ListActiveThreadRuns(endpointID string) []ActiveThreadRun {
@@ -320,7 +321,7 @@ func (s *Service) broadcastThreadState(endpointID string, threadID string, runID
 		_, latest, err := s.readCanonicalThreadState(ctx, threadID)
 		cancel()
 		if err == nil {
-			waitingPrompt = requestUserInputPromptFromFloretTurn(latest)
+			waitingPrompt, _ = requestUserInputPromptFromFloretTurn(latest)
 		}
 	}
 	ev := RealtimeEvent{
@@ -408,7 +409,7 @@ func (s *Service) threadSummaryRealtimeEvent(endpointID string, threadID string)
 
 	ctx, cancel := context.WithTimeout(context.Background(), persistTO)
 	defer cancel()
-	th, err := db.GetThread(ctx, endpointID, threadID)
+	th, err := db.GetThreadSettings(ctx, endpointID, threadID)
 	if err != nil {
 		return RealtimeEvent{}, err
 	}
@@ -424,15 +425,30 @@ func (s *Service) threadSummaryRealtimeEvent(endpointID string, threadID string)
 	if err != nil {
 		return RealtimeEvent{}, err
 	}
-	runStatus, runErrorCode, runError := threadViewRunState(snapshot, latest)
+	runStatus, runErrorCode, runError, err := threadViewRunState(snapshot, latest)
+	if err != nil {
+		return RealtimeEvent{}, err
+	}
 	permissionType, err := threadPermissionType(th)
 	if err != nil {
 		return RealtimeEvent{}, err
 	}
-	waitingPrompt := requestUserInputPromptFromFloretTurn(latest)
+	waitingPrompt, err := requestUserInputPromptFromFloretTurn(latest)
+	if err != nil {
+		return RealtimeEvent{}, err
+	}
 	lastMessageAt, lastMessagePreview := canonicalThreadPreview(latest)
-	reasoningCapability, _, _ := s.threadReasoningDefaults(ctx, strings.TrimSpace(th.ModelID))
-	reasoningSelection := unmarshalReasoningSelection(th.ReasoningSelectionJSON)
+	reasoningCapability, _, _, err := s.threadReasoningDefaults(ctx, strings.TrimSpace(th.ModelID))
+	if err != nil {
+		return RealtimeEvent{}, err
+	}
+	reasoningSelection, err := parseStoredReasoningSelection(th.ReasoningSelectionJSON)
+	if err != nil {
+		return RealtimeEvent{}, err
+	}
+	if err := config.ValidateAIReasoningSelection(reasoningCapability, reasoningSelection); err != nil {
+		return RealtimeEvent{}, reasoningSelectionError(strings.TrimSpace(th.ModelID), err)
+	}
 
 	return RealtimeEvent{
 		EventType:           RealtimeEventTypeThreadSummary,

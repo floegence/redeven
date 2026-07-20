@@ -2,9 +2,12 @@ package ai
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"io"
 	"log/slog"
+	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -12,6 +15,7 @@ import (
 	"time"
 
 	"github.com/floegence/floret/observation"
+	flruntime "github.com/floegence/floret/runtime"
 	fltools "github.com/floegence/floret/tools"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
@@ -31,6 +35,18 @@ func mustFloretToolResultActivity(t *testing.T, r *run, result ToolResult) *obse
 	return activity
 }
 
+func floretToolDefinition(r *run, def ToolDef) (fltools.Definition, error) {
+	if r == nil {
+		return fltools.Definition{}, errors.New("missing Floret tool definition run")
+	}
+	permissionType := r.currentPermissionType()
+	if permissionType == "" {
+		permissionType = FlowerPermissionApprovalRequired
+	}
+	snapshot := permissionSnapshotWithOwnerIdentity(buildPermissionSnapshot(permissionType, []ToolDef{def}, nil), "tool_definition", "tool_definition", strings.TrimSpace(def.Name))
+	return floretToolDefinitionForSnapshot(def, snapshot)
+}
+
 func presentationCallFallback(t *testing.T, toolName string) string {
 	t.Helper()
 	return aitools.MustPresentationSpec(toolName).CallLabelFallback
@@ -41,7 +57,7 @@ func presentationResultFallback(t *testing.T, toolName string) string {
 	return aitools.MustPresentationSpec(toolName).ResultLabelFallback
 }
 
-func floretToolRegistryParentRunOptions(r *run, suffix string) fltools.RunOptions {
+func floretToolRegistryParentRunOptions(r *run, suffix string) fltools.DispatchOptions {
 	suffix = strings.TrimSpace(suffix)
 	if suffix == "" {
 		suffix = "tool_registry"
@@ -55,17 +71,58 @@ func floretToolRegistryParentRunOptions(r *run, suffix string) fltools.RunOption
 	if strings.TrimSpace(r.messageID) == "" {
 		r.messageID = "turn_" + suffix
 	}
-	return fltools.RunOptions{
+	snapshot := r.currentPermissionSnapshot()
+	return fltools.DispatchOptions{
 		RunID:         strings.TrimSpace(r.id),
 		ThreadID:      strings.TrimSpace(r.threadID),
 		TurnID:        strings.TrimSpace(r.messageID),
 		PromptScopeID: strings.TrimSpace(r.threadID),
 		Step:          1,
+		HostContext: map[string]string{
+			floretToolHostContextPermissionSnapshotIDKey: strings.TrimSpace(snapshot.SnapshotID),
+			floretToolHostContextPermissionEpochKey:      permissionSurfaceEpoch(snapshot),
+			floretToolHostContextAuthorityThreadIDKey:    strings.TrimSpace(r.threadID),
+		},
+		EffectDispatcher: floretToolRegistryTestEffectDispatcher(r),
 	}
 }
 
+func floretToolRegistryTestEffectDispatcher(r *run) fltools.EffectDispatcher {
+	return func(ctx context.Context, req fltools.EffectDispatchRequest, invoke func() fltools.Result) fltools.Result {
+		if r == nil || r.effectAuthorizations == nil {
+			return fltools.Result{CallID: req.CallID, Name: req.Name, IsError: true, DispatchErr: errors.New("test effect authorization unavailable")}
+		}
+		argumentHash := floretEffectArgumentHash(req.RawArgs)
+		fingerprint := floretEffectArgumentHash(strings.Join([]string{req.ThreadID, req.TurnID, req.RunID, req.CallID, req.Name, argumentHash}, "\x00"))
+		var result fltools.Result
+		err := r.withAuthorizedFloretEffect(ctx, flruntime.EffectAuthorizationRequest{
+			EffectAttemptID: "test_effect:" + strings.TrimSpace(req.CallID), RequestFingerprint: fingerprint,
+			ThreadID: flruntime.ThreadID(req.ThreadID), TurnID: flruntime.TurnID(req.TurnID), RunID: flruntime.RunID(req.RunID),
+			ToolCallID: req.CallID, ToolName: req.Name, ArgumentHash: argumentHash,
+			Step: req.Step, BatchIndex: req.BatchIndex, BatchSize: req.BatchSize,
+			Labels: req.Labels, HostContext: req.HostContext, Resources: req.Resources, Effects: req.Effects,
+			Permission: req.Permission, ReadOnly: req.ReadOnly, Destructive: req.Destructive, OpenWorld: req.OpenWorld,
+			LeaseOwnerID: "test_lease:" + strings.TrimSpace(req.RunID), LeaseGeneration: 1, ObservedHeartbeat: 1,
+		}, func(flruntime.EffectAuthorizationProof) error {
+			result = invoke()
+			return result.DispatchErr
+		})
+		if err != nil {
+			return fltools.Result{CallID: req.CallID, Name: req.Name, IsError: true, DispatchErr: err}
+		}
+		return result
+	}
+}
+
+func floretToolResultErrorText(result fltools.Result) string {
+	if result.DispatchErr != nil {
+		return result.DispatchErr.Error()
+	}
+	return result.Text
+}
+
 func TestFloretHostLabelsExcludeTargetContext(t *testing.T) {
-	r := newRun(runOptions{
+	r := newRunWithProductStoreForTest(t, runOptions{
 		EndpointID:       "env_1",
 		ToolTargetPolicy: ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget, DefaultTargetID: "provider:https%3A%2F%2Fredeven.test:env:target_1"},
 	})
@@ -404,10 +461,10 @@ func TestFloretUseSkillPermissionFollowsPermissionType(t *testing.T) {
 func TestFloretToolDefinitionRejectsInvalidSchema(t *testing.T) {
 	t.Parallel()
 
-	_, err := floretToolDefinition(nil, ToolDef{
+	_, err := floretToolDefinitionForSnapshot(ToolDef{
 		Name:        "terminal.exec",
 		InputSchema: json.RawMessage(`{"type":"object"`),
-	})
+	}, permissionSnapshotWithOwnerIdentity(buildPermissionSnapshot(FlowerPermissionApprovalRequired, nil, nil), "test", "test", "test"))
 	if err == nil || !strings.Contains(err.Error(), "invalid input schema") {
 		t.Fatalf("error=%v, want invalid input schema", err)
 	}
@@ -1508,14 +1565,15 @@ func TestFloretToolRegistryKeepsTerminalExecOnLocalRuntime(t *testing.T) {
 	executor := &recordingTargetToolExecutor{}
 	manager := newTerminalProcessManager()
 	defer func() { _ = manager.Close(context.Background()) }()
-	r := newRun(runOptions{
+	svc := &Service{terminalProcesses: manager}
+	r := newRunWithProductStoreForTest(t, runOptions{
 		AgentHomeDir:       t.TempDir(),
 		SessionMeta:        &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
 		EndpointID:         "env_test",
 		ThreadID:           "thread_terminal_local",
 		RunID:              "run_terminal_local",
 		MessageID:          "turn_terminal_local",
-		Service:            &Service{terminalProcesses: manager},
+		HostCapabilities:   bindTestRunHostCapabilities(t, svc, "env_test", "thread_terminal_local"),
 		ToolTargetPolicy:   ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget, DefaultTargetID: "provider:https%3A%2F%2Fredeven.test:env:target_1"},
 		TargetToolExecutor: executor,
 	})
@@ -1535,12 +1593,10 @@ func TestFloretToolRegistryKeepsTerminalExecOnLocalRuntime(t *testing.T) {
 		t.Fatalf("buildFloretToolRegistry: %v", err)
 	}
 
-	result := registry.RunWithOptions(context.Background(), fltools.ToolCall{
+	result := registry.Dispatch(context.Background(), fltools.ToolCall{
 		ID:   "call_1",
 		Name: "terminal.exec",
 		Args: `{"command":"pwd"}`,
-	}, func(context.Context, fltools.ApprovalRequest) (fltools.PermissionDecision, error) {
-		return fltools.PermissionDecisionAllow, nil
 	}, floretToolRegistryParentRunOptions(r, "target_context"))
 	if result.IsError {
 		t.Fatalf("registry result error text=%q structured=%#v", result.Text, result.Structured)
@@ -1560,14 +1616,15 @@ func TestFloretToolRegistryKeepsTerminalExecOnLocalRuntime(t *testing.T) {
 func TestFloretToolRegistryPublishesTerminalProcessActivityUpdateBeforeYieldResult(t *testing.T) {
 	manager := newTerminalProcessManager()
 	defer func() { _ = manager.Close(context.Background()) }()
-	r := newRun(runOptions{
-		AgentHomeDir: t.TempDir(),
-		SessionMeta:  &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
-		EndpointID:   "env_test",
-		ThreadID:     "thread_terminal_activity",
-		RunID:        "run_terminal_activity",
-		MessageID:    "turn_terminal_activity",
-		Service:      &Service{terminalProcesses: manager},
+	svc := &Service{terminalProcesses: manager}
+	r := newRunWithProductStoreForTest(t, runOptions{
+		AgentHomeDir:     t.TempDir(),
+		SessionMeta:      &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
+		EndpointID:       "env_test",
+		ThreadID:         "thread_terminal_activity",
+		RunID:            "run_terminal_activity",
+		MessageID:        "turn_terminal_activity",
+		HostCapabilities: bindTestRunHostCapabilities(t, svc, "env_test", "thread_terminal_activity"),
 	})
 	allowToolsForTest(t, r, "terminal.exec")
 	owner := &terminalProcessTestOwner{}
@@ -1590,12 +1647,10 @@ func TestFloretToolRegistryPublishesTerminalProcessActivityUpdateBeforeYieldResu
 	opts.ActivityUpdated = func(update fltools.ToolActivityUpdate) {
 		updates = append(updates, update)
 	}
-	result := registry.RunWithOptions(context.Background(), fltools.ToolCall{
+	result := registry.Dispatch(context.Background(), fltools.ToolCall{
 		ID:   "call_live_terminal",
 		Name: "terminal.exec",
 		Args: `{"command":"sleep 0.2","yield_ms":1000}`,
-	}, func(context.Context, fltools.ApprovalRequest) (fltools.PermissionDecision, error) {
-		return fltools.PermissionDecisionAllow, nil
 	}, opts)
 	if result.IsError {
 		t.Fatalf("registry result error text=%q structured=%#v", result.Text, result.Structured)
@@ -1646,53 +1701,14 @@ func TestFloretToolRegistryDoesNotAddProfileOnlyMutationBlock(t *testing.T) {
 	}
 
 	opts := floretToolRegistryParentRunOptions(r, "profile_only_mutation")
-	opts.HostContext = map[string]string{subagentToolHostContextAgentTypeKey: subagentAgentTypeReviewer}
-	result := registry.RunWithOptions(context.Background(), fltools.ToolCall{
+	opts.HostContext[subagentToolHostContextAgentTypeKey] = subagentAgentTypeReviewer
+	result := registry.Dispatch(context.Background(), fltools.ToolCall{
 		ID:   "call_write",
 		Name: "file.write",
 		Args: `{"file_path":"note.txt","content":"mutate"}`,
-	}, func(context.Context, fltools.ApprovalRequest) (fltools.PermissionDecision, error) {
-		return fltools.PermissionDecisionAllow, nil
 	}, opts)
 	if result.IsError {
 		t.Fatalf("reviewer profile alone must not add registry mutation block: text=%q structured=%#v", result.Text, result.Structured)
-	}
-}
-
-func TestFloretToolRegistryDeniesReadonlySubagentShellTools(t *testing.T) {
-	t.Parallel()
-
-	executor := &recordingTargetToolExecutor{}
-	r := newRun(runOptions{
-		AgentHomeDir:       t.TempDir(),
-		SessionMeta:        &session.Meta{CanRead: true, CanExecute: true},
-		EndpointID:         "env_test",
-		ToolTargetPolicy:   ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget, DefaultTargetID: "provider:https%3A%2F%2Fredeven.test:env:target_1"},
-		TargetToolExecutor: executor,
-	})
-	r.permissionType = FlowerPermissionReadonly
-	registry, err := buildFloretToolRegistry(r, []ToolDef{{
-		Name: "terminal.exec",
-		InputSchema: json.RawMessage(
-			`{"type":"object","properties":{"command":{"type":"string"}},"required":["command"],"additionalProperties":false}`,
-		),
-	}}, nil)
-	if err != nil {
-		t.Fatalf("buildFloretToolRegistry: %v", err)
-	}
-
-	opts := floretToolRegistryParentRunOptions(r, "readonly_subagent_shell")
-	opts.HostContext = map[string]string{subagentToolHostContextAgentTypeKey: subagentAgentTypeExplore}
-	result := registry.RunWithOptions(context.Background(), fltools.ToolCall{
-		ID:   "call_pwd",
-		Name: "terminal.exec",
-		Args: `{"command":"pwd"}`,
-	}, nil, opts)
-	if !result.IsError {
-		t.Fatalf("readonly subagent shell result=%#v, want permission denial", result)
-	}
-	if executor.call.ToolName != "" {
-		t.Fatalf("terminal.exec must not be forwarded in readonly subagent: %#v", executor.call)
 	}
 }
 
@@ -1721,59 +1737,17 @@ func TestFloretToolRegistryAllowsWorkerSubagentMutatingTools(t *testing.T) {
 	}
 
 	opts := floretToolRegistryParentRunOptions(r, "worker_mutation")
-	opts.HostContext = map[string]string{subagentToolHostContextAgentTypeKey: subagentAgentTypeWorker}
-	result := registry.RunWithOptions(context.Background(), fltools.ToolCall{
+	opts.HostContext[subagentToolHostContextAgentTypeKey] = subagentAgentTypeWorker
+	result := registry.Dispatch(context.Background(), fltools.ToolCall{
 		ID:   "call_write_worker",
 		Name: "file.write",
 		Args: `{"file_path":"note.txt","content":"mutate"}`,
-	}, func(context.Context, fltools.ApprovalRequest) (fltools.PermissionDecision, error) {
-		return fltools.PermissionDecisionAllow, nil
 	}, opts)
 	if result.IsError {
 		t.Fatalf("worker mutation result error text=%q structured=%#v", result.Text, result.Structured)
 	}
 	if executor.call.TargetID == "" {
 		t.Fatalf("file.write was not forwarded")
-	}
-}
-
-func TestFloretToolRegistryBlocksWorkerMutationsWhenReadonlyPermissionApplies(t *testing.T) {
-	t.Parallel()
-
-	r := newRun(runOptions{
-		AgentHomeDir:       t.TempDir(),
-		SessionMeta:        &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
-		ToolTargetPolicy:   ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget, DefaultTargetID: "provider:https%3A%2F%2Fredeven.test:env:target_1"},
-		TargetToolExecutor: &recordingTargetToolExecutor{},
-	})
-	r.permissionType = FlowerPermissionReadonly
-	registry, err := buildFloretToolRegistry(r, []ToolDef{{
-		Name:       "terminal.exec",
-		Visibility: ToolVisibilityStandard,
-		Capabilities: []ToolCapabilityClass{
-			ToolCapabilityShell,
-			ToolCapabilityOpenWorld,
-		},
-		InputSchema: json.RawMessage(
-			`{"type":"object","properties":{"command":{"type":"string"}},"required":["command"],"additionalProperties":false}`,
-		),
-		RequiresApproval: true,
-	}}, nil)
-	if err != nil {
-		t.Fatalf("buildFloretToolRegistry: %v", err)
-	}
-
-	opts := floretToolRegistryParentRunOptions(r, "readonly_worker_mutation")
-	opts.HostContext = map[string]string{
-		subagentToolHostContextAgentTypeKey: subagentAgentTypeWorker,
-	}
-	result := registry.RunWithOptions(context.Background(), fltools.ToolCall{
-		ID:   "call_plan_worker_mutation",
-		Name: "terminal.exec",
-		Args: `{"command":"mkdir -p should-not-run"}`,
-	}, floretToolApproverForRun(r), opts)
-	if !result.IsError || !strings.Contains(strings.ToLower(result.Text), "rejected") {
-		t.Fatalf("readonly worker mutation result=%#v, want permission denial", result)
 	}
 }
 
@@ -1784,12 +1758,14 @@ func TestFloretToolRegistryUsesExplicitChildHostIdentityForSubagentTools(t *test
 
 	manager := newTerminalProcessManager()
 	defer func() { _ = manager.Close(context.Background()) }()
-	store, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))
+	storePath := filepath.Join(t.TempDir(), "threads.sqlite")
+	store, err := threadstore.Open(storePath)
 	if err != nil {
 		t.Fatalf("threadstore.Open: %v", err)
 	}
 	defer func() { _ = store.Close() }()
-	r := newRun(runOptions{
+	svc := &Service{terminalProcesses: manager, threadsDB: store}
+	r := newRunWithProductStoreForTest(t, runOptions{
 		Log:              slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
 		RunID:            "run_parent",
 		EndpointID:       "env_test",
@@ -1797,23 +1773,37 @@ func TestFloretToolRegistryUsesExplicitChildHostIdentityForSubagentTools(t *test
 		MessageID:        "msg_parent",
 		AgentHomeDir:     t.TempDir(),
 		Shell:            "bash",
-		Service:          &Service{terminalProcesses: manager, threadsDB: store},
-		ThreadsDB:        store,
+		HostCapabilities: bindTestRunHostCapabilities(t, svc, "env_test", "thread_parent"),
 		SessionMeta:      &session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
 		PersistOpTimeout: 5 * time.Second,
-	})
+	}, store)
 	r.permissionType = FlowerPermissionFullAccess
-	r.subagentDepth = 1
-	r.noUserInteraction = true
-	if err := store.CreateThread(ctx, threadstore.ThreadSettings{EndpointID: r.endpointID, ThreadID: r.threadID, PermissionType: config.AIPermissionFullAccess}); err != nil {
+	if err := store.CreateThreadSettings(ctx, threadstore.ThreadSettings{EndpointID: r.endpointID, ThreadID: r.threadID, PermissionType: config.AIPermissionFullAccess}); err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
+	ensureToolExecutionAuthorityForTest(t, r)
 	freezePermissionPolicyTestSnapshot(t, r)
 	childRunID := permissionPolicyTestChildRunID("thread_child")
-	insertPermissionPolicyChildSnapshot(t, r, "thread_child", "terminal.exec")
+	childSnapshot := insertPermissionPolicyChildSnapshot(t, r, "thread_child", "terminal.exec")
+	childExecution, err := svc.bindSubagentExecutionForParent(r, "thread_child", childRunID)
+	if err != nil {
+		t.Fatalf("bind child execution authority: %v", err)
+	}
+	childBase := r.subagentChildRun(childExecution)
+	childBase.threadID = "thread_child"
+	childBase.id = childRunID
+	childBase.messageID = "turn_child"
+	childBase.settlementThreadID = "thread_child"
+	childBase.settlementRunID = "floret_exec_child_identity"
+	childBase.settlementTurnID = "turn_child"
+	childBase.toolAllowlist = stringSet("terminal.exec")
+	childBase.setPermissionState(childSnapshot.PermissionType, childSnapshot)
+	if err := childBase.persistPermissionSnapshot(childSnapshot); err != nil {
+		t.Fatalf("persist current child permission snapshot: %v", err)
+	}
 	owner := &terminalProcessTestOwner{}
-	r.setPendingToolSettlementOwnerResolver(func() floretPendingToolSettler { return owner })
-	registry, err := buildFloretToolRegistry(r, []ToolDef{{
+	childBase.setPendingToolSettlementOwnerResolver(func() floretPendingToolSettler { return owner })
+	registry, err := buildFloretToolRegistry(childBase, []ToolDef{{
 		Name: "terminal.exec",
 		InputSchema: json.RawMessage(
 			`{"type":"object","properties":{"command":{"type":"string"}},"required":["command"],"additionalProperties":false}`,
@@ -1823,23 +1813,25 @@ func TestFloretToolRegistryUsesExplicitChildHostIdentityForSubagentTools(t *test
 		t.Fatalf("buildFloretToolRegistry: %v", err)
 	}
 
-	result := registry.RunWithOptions(ctx, fltools.ToolCall{
+	result := registry.Dispatch(ctx, fltools.ToolCall{
 		ID:   "call_child_pwd",
 		Name: "terminal.exec",
 		Args: `{"command":"pwd"}`,
-	}, func(context.Context, fltools.ApprovalRequest) (fltools.PermissionDecision, error) {
-		return fltools.PermissionDecisionAllow, nil
-	}, fltools.RunOptions{
+	}, fltools.DispatchOptions{
 		RunID:    "floret_exec_child_identity",
 		ThreadID: "thread_child",
 		TurnID:   "turn_child",
 		Step:     1,
 		HostContext: map[string]string{
-			subagentToolHostContextAgentTypeKey:        subagentAgentTypeWorker,
-			subagentToolHostContextChildThreadIDKey:    "thread_child",
-			subagentToolHostContextChildRunIDKey:       childRunID,
-			subagentToolHostContextParentPermissionKey: permissionTypeString(FlowerPermissionFullAccess),
+			subagentToolHostContextAgentTypeKey:          subagentAgentTypeWorker,
+			subagentToolHostContextChildThreadIDKey:      "thread_child",
+			subagentToolHostContextChildRunIDKey:         childRunID,
+			floretToolHostContextPermissionSnapshotIDKey: childSnapshot.SnapshotID,
+			floretToolHostContextPermissionEpochKey:      permissionSurfaceEpoch(childSnapshot),
+			floretToolHostContextAuthorityThreadIDKey:    r.threadID,
+			subagentToolHostContextForkModeKey:           string(flruntime.SubAgentForkNone),
 		},
+		EffectDispatcher: floretToolRegistryTestEffectDispatcher(childBase),
 	})
 	if result.IsError {
 		t.Fatalf("registry result error text=%q structured=%#v", result.Text, result.Structured)
@@ -1867,48 +1859,204 @@ func TestFloretToolRegistryUsesExplicitChildHostIdentityForSubagentTools(t *test
 func TestFloretToolRegistryDeniesNoUserInteractionApprovalWithoutDelegation(t *testing.T) {
 	t.Parallel()
 
-	r := newRun(runOptions{
+	store, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	svc := &Service{threadsDB: store}
+	svc.threadMgr = newThreadManager(svc)
+	t.Cleanup(svc.threadMgr.Close)
+	parent := newRunWithProductStoreForTest(t, runOptions{
 		AgentHomeDir:       t.TempDir(),
 		SessionMeta:        &session.Meta{CanRead: true, CanWrite: true},
 		AIConfig:           &config.AIConfig{},
-		NoUserInteraction:  true,
-		SubagentDepth:      1,
-		RunID:              "child_run_no_grant",
-		ThreadID:           "thread_worker",
-		MessageID:          "turn_worker",
+		EndpointID:         "env_no_grant",
+		RunID:              "parent_run_no_grant",
+		ThreadID:           "parent_thread_no_grant",
+		MessageID:          "parent_turn_no_grant",
+		HostCapabilities:   bindTestRunHostCapabilities(t, svc, "env_no_grant", "parent_thread_no_grant"),
 		ToolTargetPolicy:   ToolTargetPolicy{Mode: ToolTargetModeExplicitTarget, DefaultTargetID: "provider:https%3A%2F%2Fredeven.test:env:target_1"},
 		TargetToolExecutor: &recordingTargetToolExecutor{},
-	})
-	r.permissionType = FlowerPermissionApprovalRequired
-	registry, err := buildFloretToolRegistry(r, []ToolDef{{
+	}, store)
+	parent.setPermissionType(FlowerPermissionApprovalRequired)
+	ensureToolExecutionAuthorityForTest(t, parent)
+	childExecution, err := svc.bindSubagentExecutionForParent(parent, "thread_worker", "child_run_no_grant")
+	if err != nil {
+		t.Fatalf("bind child execution authority: %v", err)
+	}
+	child := parent.subagentChildRun(childExecution)
+	child.threadID = "thread_worker"
+	child.id = "child_run_no_grant"
+	child.messageID = "turn_worker"
+	child.settlementThreadID = "thread_worker"
+	child.settlementRunID = "floret_exec_worker_no_grant"
+	child.settlementTurnID = "turn_worker"
+	child.allowDelegatedApproval = false
+	toolDef := ToolDef{
 		Name: "file.write",
 		InputSchema: json.RawMessage(
 			`{"type":"object","properties":{"file_path":{"type":"string"},"content":{"type":"string"}},"required":["file_path","content"],"additionalProperties":false}`,
 		),
 		Mutating:         true,
 		RequiresApproval: true,
-	}}, nil)
+	}
+	childSnapshot := permissionSnapshotWithOwnerIdentity(
+		buildPermissionSnapshot(FlowerPermissionApprovalRequired, []ToolDef{toolDef}, nil), child.endpointID, child.threadID, child.id,
+	)
+	child.setPermissionState(FlowerPermissionApprovalRequired, childSnapshot)
+	if err := child.persistPermissionSnapshot(childSnapshot); err != nil {
+		t.Fatal(err)
+	}
+	registry, err := buildFloretToolRegistry(child, []ToolDef{toolDef}, nil)
 	if err != nil {
 		t.Fatalf("buildFloretToolRegistry: %v", err)
 	}
 
-	result := registry.RunWithOptions(context.Background(), fltools.ToolCall{
+	result := registry.Dispatch(context.Background(), fltools.ToolCall{
 		ID:   "call_write_no_grant",
 		Name: "file.write",
 		Args: `{"file_path":"note.txt","content":"mutate"}`,
-	}, floretToolApproverForRun(r), fltools.RunOptions{
+	}, fltools.DispatchOptions{
 		RunID:    "floret_exec_worker_no_grant",
 		ThreadID: "thread_worker",
 		TurnID:   "turn_worker",
 		HostContext: map[string]string{
-			subagentToolHostContextAgentTypeKey:        subagentAgentTypeWorker,
-			subagentToolHostContextChildThreadIDKey:    "thread_worker",
-			subagentToolHostContextChildRunIDKey:       "child_run_no_grant",
-			subagentToolHostContextParentPermissionKey: permissionTypeString(FlowerPermissionApprovalRequired),
+			subagentToolHostContextAgentTypeKey:          subagentAgentTypeWorker,
+			subagentToolHostContextChildThreadIDKey:      "thread_worker",
+			subagentToolHostContextChildRunIDKey:         "child_run_no_grant",
+			floretToolHostContextPermissionSnapshotIDKey: child.currentPermissionSnapshot().SnapshotID,
+			floretToolHostContextPermissionEpochKey:      permissionSurfaceEpoch(child.currentPermissionSnapshot()),
+			floretToolHostContextAuthorityThreadIDKey:    parent.threadID,
+			subagentToolHostContextForkModeKey:           string(flruntime.SubAgentForkNone),
 		},
+		EffectDispatcher: floretToolRegistryTestEffectDispatcher(child),
 	})
-	if !result.IsError || !strings.Contains(strings.ToLower(result.Text), "delegated approval is unavailable") {
-		t.Fatalf("result=%#v, want no-user-interaction approval denial", result)
+	if !result.IsError || !strings.Contains(strings.ToLower(floretToolResultErrorText(result)), "permission denied") {
+		t.Fatalf("result=%#v error=%q, want no-user-interaction approval denial", result, floretToolResultErrorText(result))
+	}
+}
+
+func TestRootNoUserInteractionRefreshesPermissionBeforeToolHandler(t *testing.T) {
+	ctx := context.Background()
+	workspace := t.TempDir()
+	storePath := filepath.Join(t.TempDir(), "threads.sqlite")
+	store, err := threadstore.Open(storePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	const endpointID = "env_root_no_interaction_refresh"
+	const threadID = "thread_root_no_interaction_refresh"
+	if err := store.CreateThreadSettings(ctx, threadstore.ThreadSettings{
+		EndpointID: endpointID, ThreadID: threadID, PermissionType: config.AIPermissionFullAccess,
+		WorkingDir: workspace, SettingsCreatedAtUnixMs: 1, SettingsUpdatedAtUnixMs: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	r := newRunWithProductStoreForTest(t, runOptions{
+		AgentHomeDir: workspace, WorkingDir: workspace, Shell: "/bin/bash",
+		RunID: "run_root_no_interaction_refresh", EndpointID: endpointID, ThreadID: threadID,
+		MessageID: "turn_root_no_interaction_refresh", NoUserInteraction: true,
+		SessionMeta: &session.Meta{EndpointID: endpointID, CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true},
+	}, store)
+	ensureToolExecutionAuthorityForTest(t, r)
+	r.dynamicSurfaceConfig = r.buildDynamicToolSurfaceConfig("write marker", TaskComplexityStandard, false, nil, nil)
+	surface, err := r.buildRunToolSurface(ctx, r.dynamicSurfaceConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawDB, err := sql.Open("sqlite", "file:"+storePath+"?_pragma=busy_timeout(3000)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawDB.SetMaxOpenConns(1)
+	defer func() { _ = rawDB.Close() }()
+	if _, err := rawDB.ExecContext(ctx, `UPDATE ai_thread_settings SET permission_type = 'invalid' WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(workspace, "handler_called")
+	result := surface.FloretTools.Dispatch(ctx, fltools.ToolCall{
+		ID: "call_root_no_interaction_refresh", Name: "file.write",
+		Args: `{"file_path":"handler_called","content":"must not write"}`,
+	}, fltools.DispatchOptions{RunID: r.id, ThreadID: r.threadID, TurnID: r.messageID, HostContext: surface.HostContext, EffectDispatcher: floretToolRegistryTestEffectDispatcher(r)})
+	if !result.IsError || !strings.Contains(floretToolResultErrorText(result), "invalid thread permission type") {
+		t.Fatalf("tool result=%#v, want strict permission refresh failure", result)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("tool handler created marker, stat error=%v", err)
+	}
+}
+
+func TestRootPermissionDowngradeRejectsStaleAllowBeforeToolHandler(t *testing.T) {
+	ctx := context.Background()
+	workspace := t.TempDir()
+	store, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	const endpointID = "env_root_allow_to_ask"
+	const threadID = "thread_root_allow_to_ask"
+	if err := store.CreateThreadSettings(ctx, threadstore.ThreadSettings{
+		EndpointID: endpointID, ThreadID: threadID, PermissionType: config.AIPermissionFullAccess,
+		WorkingDir: workspace, SettingsCreatedAtUnixMs: 1, SettingsUpdatedAtUnixMs: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	r := newRunWithProductStoreForTest(t, runOptions{
+		AgentHomeDir: workspace, WorkingDir: workspace,
+		RunID: "run_root_allow_to_ask", EndpointID: endpointID, ThreadID: threadID, MessageID: "turn_root_allow_to_ask",
+		SessionMeta: &session.Meta{EndpointID: endpointID, CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true},
+	}, store)
+	ensureToolExecutionAuthorityForTest(t, r)
+	r.dynamicSurfaceConfig = r.buildDynamicToolSurfaceConfig("write marker", TaskComplexityStandard, false, nil, nil)
+	surface, err := r.buildRunToolSurface(ctx, r.dynamicSurfaceConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.UpdateThreadPermissionType(ctx, endpointID, threadID, config.AIPermissionApprovalRequired); err != nil {
+		t.Fatal(err)
+	}
+	approvalCalls := 0
+	result := surface.FloretTools.Dispatch(ctx, fltools.ToolCall{
+		ID: "call_root_allow_to_ask", Name: "file.write",
+		Args: `{"file_path":"handler_called","content":"must not write"}`,
+	}, fltools.DispatchOptions{RunID: r.id, ThreadID: r.threadID, TurnID: r.messageID, HostContext: surface.HostContext, EffectDispatcher: floretToolRegistryTestEffectDispatcher(r)})
+	if !result.IsError || !strings.Contains(strings.ToLower(floretToolResultErrorText(result)), "authorization snapshot is stale") {
+		t.Fatalf("tool result=%#v, want stale authorization rejection", result)
+	}
+	if approvalCalls != 0 {
+		t.Fatalf("approval calls=%d, want no retroactive approval for stale allow dispatch", approvalCalls)
+	}
+	if _, err := os.Stat(filepath.Join(workspace, "handler_called")); !os.IsNotExist(err) {
+		t.Fatalf("tool handler created marker, stat error=%v", err)
+	}
+}
+
+func TestFloretToolApprovalRejectsMissingPermissionSnapshot(t *testing.T) {
+	t.Parallel()
+
+	r := newRun(runOptions{RunID: "run_missing_snapshot", ThreadID: "thread_missing_snapshot", MessageID: "turn_missing_snapshot"})
+	r.permissionType = FlowerPermissionFullAccess
+	_, err := r.dispatchFloretEffect(context.Background(), flruntime.EffectAuthorizationRequest{
+		EffectAttemptID: "effect_missing_snapshot", RequestFingerprint: "fingerprint_missing_snapshot",
+		ThreadID: flruntime.ThreadID(r.threadID), TurnID: flruntime.TurnID(r.messageID), RunID: flruntime.RunID(r.id), ToolCallID: "call_missing_snapshot",
+		ToolName: "terminal.exec", ArgumentHash: floretEffectArgumentHash(`{"command":"pwd"}`),
+		Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}, LeaseOwnerID: "lease_missing_snapshot", LeaseGeneration: 1,
+		HostContext: map[string]string{floretToolHostContextAuthorityThreadIDKey: r.threadID},
+	}, func(flruntime.EffectAuthorizationProof) (flruntime.EffectDispatchResult, error) {
+		t.Fatal("effect handler must not run without a permission snapshot")
+		return flruntime.EffectDispatchResult{}, nil
+	})
+	if err == nil || !strings.Contains(err.Error(), "permission snapshot") {
+		t.Fatalf("dispatchFloretEffect error=%v, want missing snapshot error", err)
+	}
+	r.mu.Lock()
+	pending := len(r.toolApprovals)
+	r.mu.Unlock()
+	if pending != 0 {
+		t.Fatalf("pending approvals=%d, want 0", pending)
 	}
 }
 

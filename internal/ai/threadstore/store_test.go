@@ -61,9 +61,9 @@ func TestStoreThreadMetadataAndPendingCommandRoundTrip(t *testing.T) {
 		ModelID: "openai/gpt-5", ReasoningSelectionJSON: `{"effort":"high"}`,
 		PermissionType: "approval_required", WorkingDir: "/workspace",
 		CreatedByUserPublicID: "user_1", UpdatedByUserPublicID: "user_1",
-		CreatedAtUnixMs: 10, UpdatedAtUnixMs: 10,
+		SettingsCreatedAtUnixMs: 10, SettingsUpdatedAtUnixMs: 10,
 	}
-	if err := store.CreateThread(ctx, thread); err != nil {
+	if err := store.CreateThreadSettings(ctx, thread); err != nil {
 		t.Fatal(err)
 	}
 	record, position, revision, err := store.CreateFollowup(ctx, QueuedTurn{
@@ -77,7 +77,7 @@ func TestStoreThreadMetadataAndPendingCommandRoundTrip(t *testing.T) {
 	if position != 1 || revision != 1 || record.TurnID != "turn_1" || record.RunID != "run_1" {
 		t.Fatalf("unexpected pending command: %#v position=%d revision=%d", record, position, revision)
 	}
-	loaded, err := store.GetThread(ctx, "env_1", "th_1")
+	loaded, err := store.GetThreadSettings(ctx, "env_1", "th_1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestStoreThreadMetadataAndPendingCommandRoundTrip(t *testing.T) {
 func TestStoreThreadMetadataUpdatesDoNotCreateConversationState(t *testing.T) {
 	store := openStoreForTest(t)
 	ctx := context.Background()
-	if err := store.CreateThread(ctx, ThreadSettings{ThreadID: "th_1", EndpointID: "env_1", ModelID: "openai/gpt-5", PermissionType: "approval_required", CreatedAtUnixMs: 10, UpdatedAtUnixMs: 10}); err != nil {
+	if err := store.CreateThreadSettings(ctx, ThreadSettings{ThreadID: "th_1", EndpointID: "env_1", ModelID: "openai/gpt-5", PermissionType: "approval_required", SettingsCreatedAtUnixMs: 10, SettingsUpdatedAtUnixMs: 10}); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.UpdateThreadModelAndReasoningSelection(ctx, "env_1", "th_1", "openai/gpt-5.1", `{"effort":"medium"}`); err != nil {
@@ -108,7 +108,7 @@ func TestStoreThreadMetadataUpdatesDoNotCreateConversationState(t *testing.T) {
 	if _, err := store.SetThreadPinned(ctx, "env_1", "th_1", true, "user_1", "user@example.com"); err != nil {
 		t.Fatal(err)
 	}
-	thread, err := store.GetThread(ctx, "env_1", "th_1")
+	thread, err := store.GetThreadSettings(ctx, "env_1", "th_1")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -120,10 +120,13 @@ func TestStoreThreadMetadataUpdatesDoNotCreateConversationState(t *testing.T) {
 func TestStoreRejectsInvalidThreadPermissionContracts(t *testing.T) {
 	store := openStoreForTest(t)
 	ctx := context.Background()
-	if err := store.CreateThread(ctx, ThreadSettings{ThreadID: "invalid_create", EndpointID: "env_1", PermissionType: "unknown"}); err == nil {
+	if err := store.CreateThreadSettings(ctx, ThreadSettings{ThreadID: "invalid_create", EndpointID: "env_1", PermissionType: "unknown"}); err == nil {
 		t.Fatal("CreateThread succeeded with invalid permission")
 	}
-	if err := store.CreateThread(ctx, ThreadSettings{ThreadID: "valid", EndpointID: "env_1", PermissionType: "approval_required"}); err != nil {
+	if err := store.CreateThreadSettings(ctx, ThreadSettings{ThreadID: "empty_create", EndpointID: "env_1"}); err == nil {
+		t.Fatal("CreateThread succeeded with empty permission")
+	}
+	if err := store.CreateThreadSettings(ctx, ThreadSettings{ThreadID: "valid", EndpointID: "env_1", PermissionType: "approval_required"}); err != nil {
 		t.Fatal(err)
 	}
 	if err := store.UpdateThreadPermissionType(ctx, "env_1", "valid", "unknown"); err == nil {
@@ -132,8 +135,14 @@ func TestStoreRejectsInvalidThreadPermissionContracts(t *testing.T) {
 	if _, err := store.db.Exec(`UPDATE ai_thread_settings SET permission_type = 'unknown' WHERE thread_id = 'valid'`); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.GetThread(ctx, "env_1", "valid"); err == nil {
+	if _, err := store.GetThreadSettings(ctx, "env_1", "valid"); err == nil {
 		t.Fatal("GetThread accepted invalid persisted permission")
+	}
+	if _, err := store.db.Exec(`UPDATE ai_thread_settings SET permission_type = '' WHERE thread_id = 'valid'`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.GetThreadSettings(ctx, "env_1", "valid"); err == nil {
+		t.Fatal("GetThread accepted empty persisted permission")
 	}
 }
 

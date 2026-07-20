@@ -30,7 +30,6 @@ type runToolSurfaceConfig struct {
 	State                           *floretToolRuntimeState
 	HostLabels                      map[string]string
 	SupportsAskUserQuestionBatches  bool
-	UseLatestThreadPermission       bool
 	IncludeControlSignalsInSnapshot bool
 }
 
@@ -41,13 +40,12 @@ func (r *run) buildDynamicToolSurfaceConfig(taskObjective string, taskComplexity
 		State:                           state,
 		HostLabels:                      cloneStringMap(hostLabels),
 		SupportsAskUserQuestionBatches:  capabilitySupportsAskUserBatches,
-		UseLatestThreadPermission:       true,
 		IncludeControlSignalsInSnapshot: true,
 	}
 }
 
 func (r *run) currentThreadPermissionType(ctx context.Context) (FlowerPermissionType, error) {
-	if r == nil || r.threadsDB == nil {
+	if r == nil || r.product.currentSettings == nil {
 		return "", errors.New("thread permission store is unavailable")
 	}
 	endpointID := strings.TrimSpace(r.endpointID)
@@ -58,7 +56,7 @@ func (r *run) currentThreadPermissionType(ctx context.Context) (FlowerPermission
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	th, err := r.threadsDB.GetThread(ctx, endpointID, threadID)
+	th, err := r.product.currentThreadSettings(ctx)
 	if err != nil {
 		return "", fmt.Errorf("read current thread permission: %w", err)
 	}
@@ -69,30 +67,29 @@ func (r *run) currentThreadPermissionType(ctx context.Context) (FlowerPermission
 	if raw == "" {
 		return "", errors.New("current thread permission setting is empty")
 	}
-	permissionType, err := normalizePermissionType(raw, "")
+	permissionType, err := parsePermissionType(raw)
 	if err != nil {
 		return "", fmt.Errorf("parse current thread permission: %w", err)
 	}
 	return permissionType, nil
 }
 
-func (r *run) buildRunToolSurface(ctx context.Context, cfg runToolSurfaceConfig, fallback FlowerPermissionType) (runToolSurface, error) {
+func (r *run) buildRunToolSurface(ctx context.Context, cfg runToolSurfaceConfig) (runToolSurface, error) {
+	return r.buildRunToolSurfaceWithSnapshotCommit(ctx, cfg, true)
+}
+
+func (r *run) prepareRunToolSurface(ctx context.Context, cfg runToolSurfaceConfig) (runToolSurface, error) {
+	return r.buildRunToolSurfaceWithSnapshotCommit(ctx, cfg, false)
+}
+
+func (r *run) buildRunToolSurfaceWithSnapshotCommit(ctx context.Context, cfg runToolSurfaceConfig, commitSnapshot bool) (runToolSurface, error) {
 	if r == nil {
 		return runToolSurface{}, fmt.Errorf("nil run")
 	}
-	if fallback == "" {
-		fallback = FlowerPermissionApprovalRequired
+	permissionType, err := r.currentThreadPermissionType(ctx)
+	if err != nil {
+		return runToolSurface{}, err
 	}
-	permissionType := fallback
-	if cfg.UseLatestThreadPermission {
-		var err error
-		permissionType, err = r.currentThreadPermissionType(ctx)
-		if err != nil {
-			return runToolSurface{}, err
-		}
-	}
-	r.permissionType = permissionType
-
 	registry := NewInMemoryToolRegistry()
 	if err := registerBuiltInTools(registry, r); err != nil {
 		return runToolSurface{}, err
@@ -109,7 +106,11 @@ func (r *run) buildRunToolSurface(ctx context.Context, cfg runToolSurfaceConfig,
 	if err := validatePermissionSnapshotConsistency(permissionSnapshot); err != nil {
 		return runToolSurface{}, err
 	}
-	permissionSnapshot, err := r.freezePermissionSnapshot(permissionSnapshot)
+	if commitSnapshot {
+		permissionSnapshot, err = r.freezePermissionSnapshot(permissionSnapshot)
+	} else {
+		permissionSnapshot, err = r.preparePermissionSnapshot(permissionSnapshot)
+	}
 	if err != nil {
 		return runToolSurface{}, err
 	}
@@ -142,7 +143,9 @@ func (r *run) buildRunToolSurface(ctx context.Context, cfg runToolSurfaceConfig,
 	if hostContext == nil {
 		hostContext = map[string]string{}
 	}
-	hostContext[subagentToolHostContextParentPermissionKey] = permissionTypeString(permissionType)
+	hostContext[floretToolHostContextPermissionSnapshotIDKey] = strings.TrimSpace(permissionSnapshot.SnapshotID)
+	hostContext[floretToolHostContextPermissionEpochKey] = permissionSurfaceEpoch(permissionSnapshot)
+	hostContext[floretToolHostContextAuthorityThreadIDKey] = strings.TrimSpace(r.threadID)
 	return runToolSurface{
 		PermissionType:     permissionType,
 		ActiveTools:        activeTools,
@@ -157,14 +160,15 @@ func (r *run) buildRunToolSurface(ctx context.Context, cfg runToolSurfaceConfig,
 	}, nil
 }
 
-func (r *run) dynamicToolSurfaceProvider(cfg runToolSurfaceConfig, fallback FlowerPermissionType, recordInitial bool) flruntime.ToolSurfaceProvider {
+func (r *run) dynamicToolSurfaceProvider(cfg runToolSurfaceConfig, recordInitial bool) flruntime.ToolSurfaceProvider {
 	var mu sync.Mutex
 	lastEpoch := ""
-	if recordInitial && permissionSnapshotActive(r.permissionSnapshot) {
-		lastEpoch = permissionSurfaceEpoch(r.permissionSnapshot)
+	initialSnapshot := r.currentPermissionSnapshot()
+	if recordInitial && permissionSnapshotActive(initialSnapshot) {
+		lastEpoch = permissionSurfaceEpoch(initialSnapshot)
 	}
 	return func(ctx context.Context, req flruntime.ToolSurfaceRequest) (flruntime.ToolSurface, error) {
-		surface, err := r.buildRunToolSurface(ctx, cfg, fallback)
+		surface, err := r.buildRunToolSurface(ctx, cfg)
 		if err != nil {
 			return flruntime.ToolSurface{}, err
 		}
@@ -198,8 +202,12 @@ func (r *run) dynamicToolSurfaceProvider(cfg runToolSurfaceConfig, fallback Flow
 }
 
 func permissionSurfaceEpoch(snapshot PermissionSnapshot) string {
-	if snapshot.SnapshotHash == "" {
-		snapshot.SnapshotHash = permissionSnapshotHash(snapshot)
+	if snapshot.Version != permissionSnapshotVersionCurrent ||
+		strings.TrimSpace(snapshot.SnapshotHash) == "" ||
+		strings.TrimSpace(snapshot.RegistryHash) == "" ||
+		strings.TrimSpace(snapshot.SchemaHash) == "" ||
+		strings.TrimSpace(snapshot.PresentationHash) == "" {
+		return ""
 	}
 	return strings.Join([]string{
 		permissionTypeString(snapshot.PermissionType),

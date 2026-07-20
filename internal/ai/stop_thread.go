@@ -143,6 +143,17 @@ func (a *threadActor) handleStopThread(ctx context.Context, meta *session.Meta, 
 	if persistTO <= 0 {
 		persistTO = defaultPersistOpTimeout
 	}
+	unlockLifecycle, err := a.mgr.lockThreadLifecycle(endpointID, threadID)
+	if err != nil {
+		return StopThreadResponse{}, err
+	}
+	defer unlockLifecycle()
+	if _, _, err := a.mgr.svc.readCanonicalThreadState(ctx, threadID); err != nil {
+		return StopThreadResponse{}, err
+	}
+	if err := a.mgr.svc.closeThreadSubagents(ctx, endpointID, threadID, persistTO); err != nil {
+		return StopThreadResponse{}, err
+	}
 
 	rctx, cancel := context.WithTimeout(ctx, persistTO)
 	recovered, _, err := db.RecoverQueuedTurnsToDrafts(rctx, endpointID, threadID)
@@ -159,7 +170,6 @@ func (a *threadActor) handleStopThread(ctx context.Context, meta *session.Meta, 
 	} else {
 		a.mgr.svc.broadcastThreadSummary(endpointID, threadID)
 	}
-	a.mgr.svc.closeThreadSubagents(ctx, endpointID, threadID, persistTO)
 	resp := StopThreadResponse{OK: true, RecoveredFollowups: make([]FollowupItemView, 0, len(recovered))}
 	for i, rec := range recovered {
 		view, err := followupRecordToView(rec, i+1)

@@ -10,7 +10,7 @@ import (
 
 const (
 	schemaKind           = "thread_read_state"
-	currentSchemaVersion = 1
+	currentSchemaVersion = 2
 )
 
 func schemaSpec() sqliteutil.Spec {
@@ -20,9 +20,23 @@ func schemaSpec() sqliteutil.Spec {
 		Pragmas:        []string{`PRAGMA journal_mode=WAL;`, `PRAGMA busy_timeout=3000;`},
 		Migrations: []sqliteutil.Migration{
 			{FromVersion: 0, ToVersion: 1, Apply: migrateToV1},
+			{FromVersion: 1, ToVersion: 2, Apply: migrateToV2},
 		},
 		Verify: verifySchema,
 	}
+}
+
+func migrateToV2(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+CREATE TABLE thread_read_state_retirements (
+  endpoint_id TEXT NOT NULL,
+  surface TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  retired_at_unix_ms INTEGER NOT NULL,
+  PRIMARY KEY (endpoint_id, surface, thread_id)
+);
+`)
+	return err
 }
 
 func migrateToV1(tx *sql.Tx) error {
@@ -51,7 +65,7 @@ func verifySchema(tx *sql.Tx) error {
 	if err != nil {
 		return err
 	}
-	if !slices.Equal(tables, []string{"thread_read_state"}) {
+	if !slices.Equal(tables, []string{"thread_read_state", "thread_read_state_retirements"}) {
 		return fmt.Errorf("thread read state table set mismatch: got %v", tables)
 	}
 	expectedColumns := []string{
@@ -72,6 +86,13 @@ func verifySchema(tx *sql.Tx) error {
 	}
 	if !slices.Equal(columns, expectedColumns) {
 		return fmt.Errorf("thread read state column mismatch: got %v, want %v", columns, expectedColumns)
+	}
+	retirementColumns, err := sqliteutil.TableColumnNamesTx(tx, "thread_read_state_retirements")
+	if err != nil {
+		return err
+	}
+	if !slices.Equal(retirementColumns, []string{"endpoint_id", "surface", "thread_id", "retired_at_unix_ms"}) {
+		return fmt.Errorf("thread read state retirement column mismatch: got %v", retirementColumns)
 	}
 	indexes, err := sqliteutil.ListUserIndexesTx(tx)
 	if err != nil {

@@ -409,6 +409,84 @@ func TestOpenSerializesConcurrentMigrationVersionReads(t *testing.T) {
 	}
 }
 
+func TestOpenUsesCurrentInitializerAndRejectsVersionsBelowMinimum(t *testing.T) {
+	t.Parallel()
+
+	var initializeCount atomic.Int32
+	spec := Spec{
+		Kind:           "minimum_v2",
+		CurrentVersion: 3,
+		MinimumVersion: 2,
+		Initialize: func(tx *sql.Tx) error {
+			initializeCount.Add(1)
+			_, err := tx.Exec(`CREATE TABLE current_data(id INTEGER PRIMARY KEY, current_value TEXT NOT NULL DEFAULT '')`)
+			return err
+		},
+		Migrations: []Migration{{FromVersion: 2, ToVersion: 3, Apply: func(tx *sql.Tx) error {
+			_, err := tx.Exec(`ALTER TABLE current_data ADD COLUMN current_value TEXT NOT NULL DEFAULT ''`)
+			return err
+		}}},
+		Verify: func(tx *sql.Tx) error {
+			var count int
+			if err := tx.QueryRow(`SELECT COUNT(1) FROM pragma_table_info('current_data') WHERE name = 'current_value'`).Scan(&count); err != nil {
+				return err
+			}
+			if count != 1 {
+				return errors.New("missing current_value")
+			}
+			return nil
+		},
+	}
+
+	freshPath := filepath.Join(t.TempDir(), "fresh.sqlite")
+	fresh, err := Open(freshPath, spec)
+	if err != nil {
+		t.Fatalf("Open fresh: %v", err)
+	}
+	defer func() { _ = fresh.Close() }()
+	var version int
+	if err := fresh.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil || version != 3 {
+		t.Fatalf("fresh version=%d err=%v, want 3", version, err)
+	}
+	if initializeCount.Load() != 1 {
+		t.Fatalf("initializer count=%d, want 1", initializeCount.Load())
+	}
+
+	legacyPath := filepath.Join(t.TempDir(), "legacy.sqlite")
+	raw, err := sql.Open("sqlite", legacyPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.Exec(`
+CREATE TABLE __redeven_db_meta (
+  singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+  db_kind TEXT NOT NULL,
+  created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  last_migrated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  last_migrated_from_version INTEGER NOT NULL DEFAULT 0,
+  last_migrated_to_version INTEGER NOT NULL DEFAULT 0
+);
+INSERT INTO __redeven_db_meta(singleton, db_kind) VALUES(1, 'minimum_v2');
+CREATE TABLE current_data(id INTEGER PRIMARY KEY);
+PRAGMA user_version=1;
+`); err != nil {
+		_ = raw.Close()
+		t.Fatal(err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if db, err := Open(legacyPath, spec); err == nil {
+		_ = db.Close()
+		t.Fatal("Open accepted version below minimum")
+	} else {
+		var tooOld *DatabaseTooOldError
+		if !errors.As(err, &tooOld) || tooOld.MinimumVersion != 2 {
+			t.Fatalf("Open legacy error=%v, want DatabaseTooOldError", err)
+		}
+	}
+}
+
 func toySpec(kind string) Spec {
 	return Spec{
 		Kind:           kind,

@@ -22,10 +22,11 @@ const (
 )
 
 var (
-	ErrForkOperationConflict   = errors.New("thread fork operation conflicts with existing request")
-	ErrForkDestinationConflict = errors.New("thread fork destination conflicts with existing operation")
-	ErrForkOperationFailed     = errors.New("thread fork operation is failed")
-	ErrForkResultConflict      = errors.New("thread fork result conflicts with source snapshot")
+	ErrForkOperationConflict     = errors.New("thread fork operation conflicts with existing request")
+	ErrForkDestinationConflict   = errors.New("thread fork destination conflicts with existing operation")
+	ErrForkOperationFailed       = errors.New("thread fork operation is failed")
+	ErrForkResultConflict        = errors.New("thread fork result conflicts with source snapshot")
+	ErrThreadOperationInProgress = errors.New("thread lifecycle operation is in progress")
 )
 
 type ForkOperation struct {
@@ -37,6 +38,7 @@ type ForkOperation struct {
 	Status                         ForkOperationStatus
 	SnapshotSchemaVersion          int
 	SnapshotJSON                   string
+	SnapshotFingerprint            string
 	RetryCount                     int
 	ErrorCode                      string
 	ErrorMessage                   string
@@ -104,6 +106,31 @@ func (s *Store) PrepareForkOperation(ctx context.Context, req ForkThreadRequest)
 	} else if !errors.Is(err, sql.ErrNoRows) {
 		return nil, err
 	}
+	var destinationOperation int
+	err = tx.QueryRowContext(ctx, `
+SELECT 1
+FROM (
+  SELECT endpoint_id, destination_thread_id AS thread_id
+  FROM ai_thread_fork_operations
+  WHERE status = ?
+  UNION ALL
+  SELECT endpoint_id, thread_id
+  FROM ai_thread_create_operations
+  WHERE status = ?
+)
+WHERE endpoint_id = ? AND thread_id = ?
+LIMIT 1
+`, string(ForkOperationPending), ThreadCreateOperationPending, req.EndpointID, req.DestinationThreadID).Scan(&destinationOperation)
+	switch {
+	case err == nil:
+		return nil, ErrForkDestinationConflict
+	case errors.Is(err, sql.ErrNoRows):
+	case err != nil:
+		return nil, err
+	}
+	if err := requireThreadWritableTx(ctx, tx, req.EndpointID, req.SourceThreadID); err != nil {
+		return nil, err
+	}
 	var destinationCount int
 	if err := tx.QueryRowContext(ctx, `SELECT COUNT(1) FROM ai_thread_settings WHERE endpoint_id = ? AND thread_id = ?`, req.EndpointID, req.DestinationThreadID).Scan(&destinationCount); err != nil {
 		return nil, err
@@ -119,14 +146,18 @@ func (s *Store) PrepareForkOperation(ctx context.Context, req ForkThreadRequest)
 	if err != nil {
 		return nil, err
 	}
+	snapshotFingerprint, err := forkSnapshotFingerprint(snapshot)
+	if err != nil {
+		return nil, err
+	}
 	_, err = tx.ExecContext(ctx, `
 INSERT INTO ai_thread_fork_operations(
   operation_id, endpoint_id, source_thread_id, destination_thread_id,
-  request_fingerprint, status, snapshot_schema_version, snapshot_json,
+  request_fingerprint, status, snapshot_schema_version, snapshot_json, snapshot_fingerprint,
   created_at_unix_ms, updated_at_unix_ms
-) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `, req.OperationID, req.EndpointID, req.SourceThreadID, req.DestinationThreadID,
-		fingerprint, string(ForkOperationPending), ForkSnapshotSchemaVersion, string(snapshotJSON), req.CreatedAtUnixMs, req.CreatedAtUnixMs)
+		fingerprint, string(ForkOperationPending), ForkSnapshotSchemaVersion, string(snapshotJSON), snapshotFingerprint, req.CreatedAtUnixMs, req.CreatedAtUnixMs)
 	if err != nil {
 		if isUniqueConstraintError(err) {
 			return nil, ErrForkDestinationConflict
@@ -140,7 +171,8 @@ INSERT INTO ai_thread_fork_operations(
 		OperationID: req.OperationID, EndpointID: req.EndpointID, SourceThreadID: req.SourceThreadID,
 		DestinationThreadID: req.DestinationThreadID, RequestFingerprint: fingerprint,
 		Status: ForkOperationPending, SnapshotSchemaVersion: ForkSnapshotSchemaVersion,
-		SnapshotJSON: string(snapshotJSON), CreatedAtUnixMs: req.CreatedAtUnixMs, UpdatedAtUnixMs: req.CreatedAtUnixMs,
+		SnapshotJSON: string(snapshotJSON), SnapshotFingerprint: snapshotFingerprint,
+		CreatedAtUnixMs: req.CreatedAtUnixMs, UpdatedAtUnixMs: req.CreatedAtUnixMs,
 		RequestedTitle: req.Title,
 	}, nil
 }
@@ -165,6 +197,9 @@ func (s *Store) CommitForkOperation(ctx context.Context, req CommitForkOperation
 	if err != nil {
 		return nil, err
 	}
+	if err := requireThreadNotRetiredTx(ctx, tx, operation.EndpointID, operation.SourceThreadID); err != nil {
+		return nil, err
+	}
 	switch operation.Status {
 	case ForkOperationCommitted:
 		return loadForkDestinationThreadTx(ctx, tx, operation)
@@ -174,11 +209,8 @@ func (s *Store) CommitForkOperation(ctx context.Context, req CommitForkOperation
 	default:
 		return nil, fmt.Errorf("unsupported fork operation status %q", operation.Status)
 	}
-	var snapshot forkSnapshotV2
-	if operation.SnapshotSchemaVersion != ForkSnapshotSchemaVersion || json.Unmarshal([]byte(operation.SnapshotJSON), &snapshot) != nil {
-		return nil, fmt.Errorf("unsupported fork snapshot schema %d", operation.SnapshotSchemaVersion)
-	}
-	if err := validateForkSnapshot(operation, snapshot); err != nil {
+	snapshot, err := decodeForkSnapshot(operation)
+	if err != nil {
 		return nil, err
 	}
 	if err := materializeForkSnapshotV2(ctx, tx, snapshot); err != nil {
@@ -277,21 +309,31 @@ func (s *Store) MarkForkOperationBroadcasted(ctx context.Context, operationID st
 	return nil
 }
 
-const forkOperationSelectSQL = `SELECT operation_id, endpoint_id, source_thread_id, destination_thread_id, request_fingerprint, status, snapshot_schema_version, snapshot_json, retry_count, error_code, error_message, source_broadcasted_at_unix_ms, destination_broadcasted_at_unix_ms, created_at_unix_ms, updated_at_unix_ms FROM ai_thread_fork_operations`
+const forkOperationSelectSQL = `SELECT operation_id, endpoint_id, source_thread_id, destination_thread_id, request_fingerprint, status, snapshot_schema_version, snapshot_json, snapshot_fingerprint, retry_count, error_code, error_message, source_broadcasted_at_unix_ms, destination_broadcasted_at_unix_ms, created_at_unix_ms, updated_at_unix_ms FROM ai_thread_fork_operations`
 
 func scanForkOperation(scanner interface{ Scan(...any) error }, operation *ForkOperation) error {
 	var status string
-	if err := scanner.Scan(&operation.OperationID, &operation.EndpointID, &operation.SourceThreadID, &operation.DestinationThreadID, &operation.RequestFingerprint, &status, &operation.SnapshotSchemaVersion, &operation.SnapshotJSON, &operation.RetryCount, &operation.ErrorCode, &operation.ErrorMessage, &operation.SourceBroadcastedAtUnixMs, &operation.DestinationBroadcastedAtUnixMs, &operation.CreatedAtUnixMs, &operation.UpdatedAtUnixMs); err != nil {
+	if err := scanner.Scan(&operation.OperationID, &operation.EndpointID, &operation.SourceThreadID, &operation.DestinationThreadID, &operation.RequestFingerprint, &status, &operation.SnapshotSchemaVersion, &operation.SnapshotJSON, &operation.SnapshotFingerprint, &operation.RetryCount, &operation.ErrorCode, &operation.ErrorMessage, &operation.SourceBroadcastedAtUnixMs, &operation.DestinationBroadcastedAtUnixMs, &operation.CreatedAtUnixMs, &operation.UpdatedAtUnixMs); err != nil {
 		return err
 	}
 	operation.Status = ForkOperationStatus(status)
-	if strings.TrimSpace(operation.SnapshotJSON) != "" {
-		var snapshot forkSnapshotV2
-		if err := json.Unmarshal([]byte(operation.SnapshotJSON), &snapshot); err != nil {
-			return fmt.Errorf("decode fork operation snapshot: %w", err)
+	switch operation.Status {
+	case ForkOperationCommitted:
+		if strings.TrimSpace(operation.SnapshotJSON) == "" {
+			return nil
 		}
-		operation.RequestedTitle = strings.TrimSpace(snapshot.Request.Title)
+	case ForkOperationPending, ForkOperationFailed:
+		if strings.TrimSpace(operation.SnapshotJSON) == "" {
+			return errors.New("fork operation snapshot is empty")
+		}
+	default:
+		return fmt.Errorf("unsupported fork operation status %q", operation.Status)
 	}
+	snapshot, err := decodeForkSnapshot(operation)
+	if err != nil {
+		return err
+	}
+	operation.RequestedTitle = strings.TrimSpace(snapshot.Request.Title)
 	return nil
 }
 
@@ -331,6 +373,15 @@ func normalizeForkThreadRequest(req *ForkThreadRequest) error {
 
 func forkRequestFingerprint(req ForkThreadRequest) (string, error) {
 	body, err := json.Marshal(req)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(body)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func forkSnapshotFingerprint(snapshot forkSnapshotV2) (string, error) {
+	body, err := json.Marshal(snapshot)
 	if err != nil {
 		return "", err
 	}
@@ -390,10 +441,50 @@ WHERE endpoint_id = ? AND thread_id = ?
 }
 
 func validateForkSnapshot(operation *ForkOperation, snapshot forkSnapshotV2) error {
-	if snapshot.SchemaVersion != ForkSnapshotSchemaVersion || snapshot.Request.EndpointID != operation.EndpointID || snapshot.Request.SourceThreadID != operation.SourceThreadID || snapshot.Request.DestinationThreadID != operation.DestinationThreadID || snapshot.SourceThread.ThreadID != operation.SourceThreadID {
+	if operation == nil || snapshot.SchemaVersion != ForkSnapshotSchemaVersion || snapshot.Request.EndpointID != operation.EndpointID || snapshot.Request.SourceThreadID != operation.SourceThreadID || snapshot.Request.DestinationThreadID != operation.DestinationThreadID || snapshot.SourceThread.EndpointID != operation.EndpointID || snapshot.SourceThread.ThreadID != operation.SourceThreadID {
 		return errors.New("fork snapshot identity mismatch")
 	}
+	req := ForkThreadRequest{
+		OperationID: operation.OperationID, EndpointID: snapshot.Request.EndpointID,
+		SourceThreadID: snapshot.Request.SourceThreadID, DestinationThreadID: snapshot.Request.DestinationThreadID,
+		Title: snapshot.Request.Title, CreatedByUserPublicID: snapshot.Request.CreatedByUserPublicID,
+		CreatedByUserEmail: snapshot.Request.CreatedByUserEmail, CreatedAtUnixMs: snapshot.Request.CreatedAtUnixMs,
+	}
+	if err := normalizeForkThreadRequest(&req); err != nil {
+		return fmt.Errorf("invalid fork snapshot request: %w", err)
+	}
+	fingerprint, err := forkRequestFingerprint(req)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(operation.RequestFingerprint) == "" || fingerprint != operation.RequestFingerprint {
+		return errors.New("fork snapshot request fingerprint mismatch")
+	}
+	snapshotFingerprint, err := forkSnapshotFingerprint(snapshot)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(operation.SnapshotFingerprint) == "" || snapshotFingerprint != strings.TrimSpace(operation.SnapshotFingerprint) {
+		return errors.New("fork snapshot fingerprint mismatch")
+	}
 	return nil
+}
+
+func decodeForkSnapshot(operation *ForkOperation) (forkSnapshotV2, error) {
+	if operation == nil {
+		return forkSnapshotV2{}, errors.New("missing fork operation")
+	}
+	if operation.SnapshotSchemaVersion != ForkSnapshotSchemaVersion {
+		return forkSnapshotV2{}, fmt.Errorf("unsupported fork snapshot schema %d", operation.SnapshotSchemaVersion)
+	}
+	var snapshot forkSnapshotV2
+	if err := decodeStrictJSON(operation.SnapshotJSON, &snapshot); err != nil {
+		return forkSnapshotV2{}, fmt.Errorf("decode fork operation snapshot: %w", err)
+	}
+	if err := validateForkSnapshot(operation, snapshot); err != nil {
+		return forkSnapshotV2{}, err
+	}
+	return snapshot, nil
 }
 
 func materializeForkSnapshotV2(ctx context.Context, tx *sql.Tx, snapshot forkSnapshotV2) error {

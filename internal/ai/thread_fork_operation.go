@@ -13,6 +13,31 @@ import (
 
 const threadForkReplayBatchSize = 20
 
+type threadForkFloretCoordinator struct {
+	authority floretThreadForkAuthority
+}
+
+func (c *threadForkFloretCoordinator) fork(ctx context.Context, operationID string, sourceThreadID string, destinationThreadID string) (flruntime.ForkThreadResult, error) {
+	if c == nil || c.authority == nil {
+		return flruntime.ForkThreadResult{}, errors.New("Floret fork coordinator authority is unavailable")
+	}
+	return c.authority.ForkThread(ctxOrBackground(ctx), flruntime.ForkOperationID(strings.TrimSpace(operationID)), flruntime.ThreadID(strings.TrimSpace(sourceThreadID)), flruntime.ThreadID(strings.TrimSpace(destinationThreadID)))
+}
+
+func (c *threadForkFloretCoordinator) setTitle(ctx context.Context, threadID string, title string) (flruntime.ThreadSnapshot, error) {
+	if c == nil || c.authority == nil {
+		return flruntime.ThreadSnapshot{}, errors.New("Floret fork coordinator authority is unavailable")
+	}
+	return c.authority.SetForkedThreadTitle(ctxOrBackground(ctx), flruntime.ThreadID(strings.TrimSpace(threadID)), title)
+}
+
+func (s *Service) forkFloretThread(ctx context.Context, operationID string, sourceThreadID string, destinationThreadID string) (flruntime.ForkThreadResult, error) {
+	if s == nil || s.threadForkFloret == nil {
+		return flruntime.ForkThreadResult{}, errors.New("nil service")
+	}
+	return s.threadForkFloret.fork(ctx, operationID, sourceThreadID, destinationThreadID)
+}
+
 func (s *Service) resumeThreadForkOperation(ctx context.Context, db *threadstore.Store, operation *threadstore.ForkOperation) (*threadstore.ThreadSettings, error) {
 	if s == nil {
 		return nil, errors.New("nil service")
@@ -28,7 +53,7 @@ func (s *Service) resumeThreadForkOperation(ctx context.Context, db *threadstore
 	}
 	switch operation.Status {
 	case threadstore.ForkOperationCommitted:
-		forked, err := db.GetThread(ctx, operation.EndpointID, operation.DestinationThreadID)
+		forked, err := db.GetThreadSettings(ctx, operation.EndpointID, operation.DestinationThreadID)
 		if err != nil {
 			return nil, err
 		}
@@ -54,11 +79,7 @@ func (s *Service) resumeThreadForkOperation(ctx context.Context, db *threadstore
 		return nil, s.recordThreadForkOperationError(ctx, db, operation.OperationID, "floret_contract_mismatch", err, true)
 	}
 	if title := strings.TrimSpace(operation.RequestedTitle); title != "" {
-		host, hostErr := s.openFloretMaintenanceHost()
-		if hostErr != nil {
-			return nil, s.recordThreadForkOperationError(ctx, db, operation.OperationID, "floret_title_failed", hostErr, false)
-		}
-		if _, titleErr := host.SetThreadTitle(ctx, flruntime.SetThreadTitleRequest{ThreadID: flruntime.ThreadID(operation.DestinationThreadID), Title: title}); titleErr != nil {
+		if _, titleErr := s.threadForkFloret.setTitle(ctx, operation.DestinationThreadID, title); titleErr != nil {
 			return nil, s.recordThreadForkOperationError(ctx, db, operation.OperationID, "floret_title_failed", titleErr, false)
 		}
 	}
@@ -91,8 +112,6 @@ func classifyFloretForkOperationError(err error) (string, bool) {
 		return "floret_operation_conflict", true
 	case errors.Is(err, flruntime.ErrForkDestinationConflict):
 		return "floret_destination_conflict", true
-	case errors.Is(err, flruntime.ErrForkOperationTargetMissing):
-		return "floret_operation_target_missing", true
 	case errors.Is(err, flruntime.ErrThreadNotFound):
 		return "floret_source_missing", true
 	default:
@@ -151,13 +170,13 @@ func (s *Service) publishCommittedThreadForkOperation(db *threadstore.Store, ope
 
 func (s *Service) replayPendingThreadForkOperations(ctx context.Context) (int, error) {
 	if s == nil {
-		return 0, nil
+		return 0, errors.New("thread fork recovery coordinator is unavailable")
 	}
 	s.mu.Lock()
 	db := s.threadsDB
 	s.mu.Unlock()
 	if db == nil {
-		return 0, nil
+		return 0, errors.New("thread fork recovery store is unavailable")
 	}
 	operations, err := db.ListPendingForkOperations(ctx, threadForkReplayBatchSize)
 	if err != nil {

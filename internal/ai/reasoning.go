@@ -2,7 +2,9 @@ package ai
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"strings"
 
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
@@ -65,28 +67,36 @@ func resolveEffectiveReasoning(capability config.AIReasoningCapability, singleTu
 	return normalizedReasoning{Capability: capability, Source: "omitted"}, nil
 }
 
-func marshalReasoningSelection(selection config.AIReasoningSelection) string {
+func marshalReasoningSelection(selection config.AIReasoningSelection) (string, error) {
 	selection = config.NormalizeAIReasoningSelection(selection)
 	if selection.IsZero() {
-		return ""
+		return "", nil
 	}
 	b, err := json.Marshal(selection)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("encode reasoning selection: %w", err)
 	}
-	return string(b)
+	return string(b), nil
 }
 
-func unmarshalReasoningSelection(raw string) config.AIReasoningSelection {
+func parseStoredReasoningSelection(raw string) (config.AIReasoningSelection, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
-		return config.AIReasoningSelection{}
+		return config.AIReasoningSelection{}, nil
 	}
 	var selection config.AIReasoningSelection
-	if err := json.Unmarshal([]byte(raw), &selection); err != nil {
-		return config.AIReasoningSelection{}
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&selection); err != nil {
+		return config.AIReasoningSelection{}, fmt.Errorf("decode stored reasoning selection: %w", err)
 	}
-	return config.NormalizeAIReasoningSelection(selection)
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		if err == nil {
+			err = errors.New("multiple JSON values")
+		}
+		return config.AIReasoningSelection{}, fmt.Errorf("decode stored reasoning selection: %w", err)
+	}
+	return config.NormalizeAIReasoningSelection(selection), nil
 }
 
 func modelReasoningDefaultsFromConfig(cfg *config.AIConfig, modelID string) (config.AIReasoningCapability, config.AIReasoningSelection, bool) {

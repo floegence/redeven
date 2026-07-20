@@ -136,6 +136,7 @@ type terminalProcess struct {
 	pending              bool
 	reaped               bool
 	terminationRequested bool
+	initialInputFailed   bool
 	reapedDone           chan struct{}
 	finalizeOnce         sync.Once
 	finalizationDone     chan struct{}
@@ -183,7 +184,8 @@ func (m *terminalProcessManager) Start(req terminalProcessStartRequest) (*termin
 		strings.TrimSpace(string(target.RunID)) == "" ||
 		strings.TrimSpace(target.ToolCallID) == "" ||
 		strings.TrimSpace(target.ToolName) == "" ||
-		strings.TrimSpace(target.Handle) == "" {
+		strings.TrimSpace(target.Handle) == "" ||
+		strings.TrimSpace(target.EffectAttemptID) == "" {
 		return nil, errors.New("terminal process settlement target incomplete")
 	}
 	if strings.TrimSpace(target.Handle) != processID ||
@@ -244,14 +246,56 @@ func (m *terminalProcessManager) Start(req terminalProcessStartRequest) (*termin
 	go proc.waitLoop()
 	go proc.maxRuntimeLoop()
 
-	if req.Stdin != "" {
-		if _, err := tty.Write([]byte(req.Stdin)); err != nil {
-			_ = terminateTerminalExecProcessTree(cmd)
-			_ = tty.Close()
-			return nil, err
-		}
+	return completeTerminalProcessStart(proc, tty, req.Stdin)
+}
+
+func completeTerminalProcessStart(proc *terminalProcess, writer io.Writer, initialInput string) (*terminalProcess, error) {
+	if proc == nil {
+		return nil, errors.New("terminal process is unavailable after dispatch")
+	}
+	if initialInput == "" {
+		return proc, nil
+	}
+	if writer == nil {
+		proc.recordInitialInputFailure(errors.New("terminal process input is unavailable"))
+		return proc, nil
+	}
+	if _, err := writer.Write([]byte(initialInput)); err != nil {
+		proc.recordInitialInputFailure(err)
 	}
 	return proc, nil
+}
+
+func (p *terminalProcess) recordInitialInputFailure(cause error) {
+	if p == nil || cause == nil {
+		return
+	}
+	toolErr := &aitools.ToolError{
+		Code:      aitools.ErrorCodeUnknown,
+		Message:   "Failed to write initial terminal input after the process started: " + cause.Error(),
+		Retryable: false,
+	}
+	toolErr.Normalize()
+	p.mu.Lock()
+	p.initialInputFailed = true
+	p.err = toolErr
+	cmd := p.cmd
+	running := p.status == terminalProcessStatusRunning && cmd != nil
+	if running {
+		p.terminationRequested = true
+	} else {
+		p.status = terminalProcessStatusError
+		if p.endedAt.IsZero() {
+			p.endedAt = time.Now()
+		}
+	}
+	if p.cond != nil {
+		p.cond.Broadcast()
+	}
+	p.mu.Unlock()
+	if running && cmd != nil {
+		_ = terminateTerminalExecProcessTree(cmd)
+	}
 }
 
 func (m *terminalProcessManager) Get(processID string) (*terminalProcess, bool) {
@@ -572,7 +616,11 @@ func (p *terminalProcess) waitLoop() {
 		}
 	}
 	p.mu.Lock()
-	if p.terminationRequested {
+	if p.initialInputFailed {
+		p.status = terminalProcessStatusError
+		p.exitCode = exitCode
+		p.endedAt = time.Now()
+	} else if p.terminationRequested {
 		p.status = terminalProcessStatusCanceled
 		p.err = &aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Terminal process was canceled", Retryable: false}
 		p.exitCode = exitCode

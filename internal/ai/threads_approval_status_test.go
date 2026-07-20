@@ -15,7 +15,7 @@ func TestGetThreadAndListThreadsUseCanonicalFloretStatus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	host := newTestFloretHost(t, svc.floretStore, "complete")
+	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "complete")
 	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{ThreadID: flruntime.ThreadID(thread.ThreadID), TurnID: "turn_status", RunID: "run_status", Input: flruntime.TurnInput{Text: "work"}}); err != nil {
 		t.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func TestGetThreadReturnsConsistencyErrorWhenFloretThreadIsMissing(t *testing.T)
 	if err != nil {
 		t.Fatal(err)
 	}
-	host, err := svc.openFloretMaintenanceHost()
+	host, err := svc.openFloretMaintenanceHost(ctx, thread.ThreadID)
 	if err != nil {
 		t.Fatal(err)
 	}

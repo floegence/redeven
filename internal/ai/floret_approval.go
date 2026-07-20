@@ -10,172 +10,65 @@ import (
 	"time"
 
 	flruntime "github.com/floegence/floret/runtime"
-	fltools "github.com/floegence/floret/tools"
 	aitools "github.com/floegence/redeven/internal/ai/tools"
 )
 
-func (r *run) approveFloretTool(ctx context.Context, req fltools.ApprovalRequest) (fltools.PermissionDecision, error) {
-	if r == nil {
-		return fltools.PermissionDecisionDenied("tool approval unavailable"), nil
-	}
-	if r.noUserInteraction && r.allowDelegatedApproval && r.delegatedApprovalParent != nil {
-		child, err := floretApprovalRunContext(r, req)
-		if err != nil {
-			return fltools.PermissionDecisionDeny, err
-		}
-		parent := child.delegatedApprovalParent
-		if parent == nil {
-			parent = r.delegatedApprovalParent
-		}
-		return parent.approveDelegatedFloretTool(ctx, child, req)
+func (r *run) waitForCurrentFloretEffectApproval(ctx context.Context, policyRun *run, req flruntime.EffectAuthorizationRequest) (bool, string, error) {
+	if r == nil || policyRun == nil {
+		return false, "", errors.New("Floret effect approval is unavailable")
 	}
 	args, err := floretApprovalArgs(req)
 	if err != nil {
-		return fltools.PermissionDecisionDeny, err
+		return false, "", err
 	}
-	toolID := strings.TrimSpace(req.ID)
-	if toolID == "" {
-		toolID = strings.TrimSpace(req.ApprovalID)
-	}
-	toolName := strings.TrimSpace(req.Name)
-	decision, reason, err := r.floretToolPolicyDecision(toolName, args, req.HostContext)
-	if err != nil {
-		return fltools.PermissionDecisionDeny, err
-	}
-	r.persistFloretToolPolicyEvent(toolID, toolName, args, decision, reason)
-	switch decision {
-	case "allow":
-		return fltools.PermissionDecisionAllow, nil
-	case "deny":
-		return fltools.PermissionDecisionDenied(floretPolicyDenialMessage(reason)), nil
-	case "ask":
-		approved, err := r.waitForFloretToolApproval(ctx, req)
+	policyRun.persistFloretToolPolicyEvent(req.ToolCallID, req.ToolName, args, "ask", "user_approval_required", policyRun.currentPermissionType())
+	if policyRun.noUserInteraction {
+		authority := policyRun.subagentParentAuthority
+		if !policyRun.allowDelegatedApproval || authority == nil || authority.registerApproval == nil || authority.markApprovalUnavailable == nil {
+			return false, "", errors.New("delegated tool approval is unavailable")
+		}
+		handle, _, err := authority.registerApproval(policyRun, req)
 		if err != nil {
-			return fltools.PermissionDecisionDeny, err
+			return false, "", err
 		}
-		if !approved {
-			return fltools.PermissionDecisionDenied("Rejected by user"), nil
-		}
-		return fltools.PermissionDecisionAllow, nil
-	default:
-		return fltools.PermissionDecisionDenied("tool approval denied by policy"), nil
-	}
-}
-
-func (r *run) approveDelegatedFloretTool(ctx context.Context, child *run, req fltools.ApprovalRequest) (fltools.PermissionDecision, error) {
-	if r == nil {
-		return fltools.PermissionDecisionDenied("delegated tool approval unavailable"), nil
-	}
-	if r.service == nil {
-		return fltools.PermissionDecisionDenied("delegated tool approval unavailable"), nil
-	}
-	args, err := floretApprovalArgs(req)
-	if err != nil {
-		return fltools.PermissionDecisionDeny, err
-	}
-	toolID := strings.TrimSpace(req.ID)
-	if toolID == "" {
-		toolID = strings.TrimSpace(req.ApprovalID)
-	}
-	toolName := strings.TrimSpace(req.Name)
-	policyRun := child
-	if policyRun == nil {
-		policyRun = r
-	}
-	decision, reason, err := policyRun.floretToolPolicyDecision(toolName, args, req.HostContext)
-	if err != nil {
-		return fltools.PermissionDecisionDeny, err
-	}
-	policyRun.persistFloretToolPolicyEvent(toolID, toolName, args, decision, reason)
-	switch decision {
-	case "allow":
-		return fltools.PermissionDecisionAllow, nil
-	case "deny":
-		return fltools.PermissionDecisionDenied(floretPolicyDenialMessage(reason)), nil
-	case "ask":
-		handle, _, err := r.service.registerDelegatedApproval(r, child, req)
+		approved, err := handle.wait(ctx, authority.approvalTimeout)
 		if err != nil {
-			return fltools.PermissionDecisionDeny, err
+			authority.markApprovalUnavailable(handle.action.ActionID, err.Error())
+			return false, "", err
 		}
-		approved, err := handle.wait(ctx, r.toolApprovalTO)
-		if err != nil {
-			r.service.markDelegatedApprovalUnavailable(handle.action.ActionID, err.Error())
-			return fltools.PermissionDecisionDeny, err
-		}
-		if !approved {
-			return fltools.PermissionDecisionDenied("Rejected by user"), nil
-		}
-		return fltools.PermissionDecisionAllow, nil
-	default:
-		return fltools.PermissionDecisionDenied("tool approval denied by policy"), nil
+		return approved, strings.TrimSpace(handle.action.ActionID), nil
 	}
-}
-
-func floretApprovalArgs(req fltools.ApprovalRequest) (map[string]any, error) {
-	if args, ok := req.ValidatedArgs.(map[string]any); ok {
-		return cloneAnyMap(args), nil
-	}
-	call, err := flowerToolCallFromFloret(fltools.ToolCall{ID: req.ID, Name: req.Name, Args: req.Args})
+	approved, err := policyRun.waitForFloretToolApproval(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("invalid Floret approval tool call: %w", err)
+		return false, "", err
 	}
-	return cloneAnyMap(call.Args), nil
+	return approved, "effect_approval:" + strings.TrimSpace(req.EffectAttemptID), nil
 }
 
-func (r *run) floretToolPolicyDecision(toolName string, args map[string]any, hostContext ...map[string]string) (string, string, error) {
-	decision, ok := r.permissionDecisionForToolFromSnapshot(toolName)
-	if !ok {
-		permissionType := r.permissionType
-		if len(hostContext) > 0 {
-			if raw := strings.TrimSpace(hostContext[0][subagentToolHostContextParentPermissionKey]); raw != "" {
-				normalized, err := normalizePermissionType(raw, permissionType)
-				if err != nil {
-					return "", "", fmt.Errorf("invalid approval parent permission: %w", err)
-				}
-				permissionType = normalized
-			}
+func floretApprovalArgs(req flruntime.EffectAuthorizationRequest) (map[string]any, error) {
+	args := make(map[string]any)
+	resourcesByKind := make(map[string][]string)
+	for _, resource := range req.Resources {
+		kind := strings.TrimSpace(resource.Kind)
+		value := strings.TrimSpace(resource.Value)
+		if kind == "" || value == "" {
+			return nil, errors.New("Floret effect approval resource is incomplete")
 		}
-		def := ToolDef{
-			Name:             strings.TrimSpace(toolName),
-			Mutating:         aitools.IsMutating(toolName),
-			RequiresApproval: aitools.RequiresApproval(toolName),
-			Visibility:       visibilityForToolName(toolName),
-			Capabilities:     capabilitiesForToolName(toolName),
+		resourcesByKind[kind] = append(resourcesByKind[kind], value)
+		switch kind {
+		case "command":
+			args["command"] = value
+		case "working_directory":
+			args["cwd"] = value
 		}
-		decision = permissionDecisionForTool(permissionType, def)
 	}
-	delegatedApprovalUnavailable := r.subagentDepth > 0 && decision == ApprovalDecisionAsk && !r.allowDelegatedApproval
-	switch {
-	case delegatedApprovalUnavailable:
-		return "deny", "delegated_approval_unavailable", nil
-	case decision == ApprovalDecisionDeny:
-		return "deny", "permission_denied", nil
-	case decision == ApprovalDecisionAsk:
-		return "ask", "user_approval_required", nil
-	default:
-		return "allow", "none", nil
+	for kind, values := range resourcesByKind {
+		args["resource."+kind] = append([]string(nil), values...)
 	}
+	return args, nil
 }
 
-func (r *run) permissionDecisionForToolFromSnapshot(toolName string) (ApprovalDecisionKind, bool) {
-	if r == nil || !permissionSnapshotActive(r.permissionSnapshot) {
-		return "", false
-	}
-	toolName = strings.TrimSpace(toolName)
-	if toolName == "" {
-		return ApprovalDecisionDeny, true
-	}
-	policy, ok := r.permissionSnapshot.ToolPolicies[toolName]
-	if !ok || !stringSliceContains(r.permissionSnapshot.FloretToolNames, toolName) {
-		return ApprovalDecisionDeny, true
-	}
-	if policy.ApprovalDecision == "" {
-		return ApprovalDecisionDeny, true
-	}
-	return policy.ApprovalDecision, true
-}
-
-func (r *run) persistFloretToolPolicyEvent(toolID string, toolName string, args map[string]any, decision string, reason string) {
+func (r *run) persistFloretToolPolicyEvent(toolID string, toolName string, args map[string]any, decision string, reason string, permissionType FlowerPermissionType) {
 	if r == nil || strings.TrimSpace(toolName) != "terminal.exec" {
 		return
 	}
@@ -189,20 +82,9 @@ func (r *run) persistFloretToolPolicyEvent(toolID string, toolName string, args 
 		"classification_reason":      strings.TrimSpace(commandProfile.Reason),
 		"policy_decision":            strings.TrimSpace(decision),
 		"policy_reason":              strings.TrimSpace(reason),
-		"policy_permission_type":     permissionTypeString(r.permissionType),
+		"policy_permission_type":     permissionTypeString(permissionType),
 		"policy_no_user_interaction": r.noUserInteraction,
 	})
-}
-
-func floretPolicyDenialMessage(reason string) string {
-	switch strings.TrimSpace(reason) {
-	case "delegated_approval_unavailable":
-		return "Subagent tool invocation requires user approval, but delegated approval is unavailable for this run"
-	case "permission_denied":
-		return "Tool invocation is not available under the current permission type"
-	default:
-		return "tool invocation denied by policy"
-	}
 }
 
 func visibilityForToolName(toolName string) ToolVisibilityClass {
@@ -243,15 +125,12 @@ func capabilitiesForToolName(toolName string) []ToolCapabilityClass {
 	}
 }
 
-func (r *run) waitForFloretToolApproval(ctx context.Context, req fltools.ApprovalRequest) (bool, error) {
-	toolID := strings.TrimSpace(req.ID)
-	if toolID == "" {
-		toolID = strings.TrimSpace(req.ApprovalID)
-	}
+func (r *run) waitForFloretToolApproval(ctx context.Context, req flruntime.EffectAuthorizationRequest) (bool, error) {
+	toolID := strings.TrimSpace(req.ToolCallID)
 	if toolID == "" {
 		return false, errors.New("missing tool approval id")
 	}
-	toolName := strings.TrimSpace(req.Name)
+	toolName := strings.TrimSpace(req.ToolName)
 	args, err := floretApprovalArgs(req)
 	if err != nil {
 		return false, err
@@ -264,7 +143,7 @@ func (r *run) waitForFloretToolApproval(ctx context.Context, req fltools.Approva
 		decision:      ch,
 		promoted:      promoted,
 		toolName:      toolName,
-		argsHash:      strings.TrimSpace(req.ArgsHash),
+		argsHash:      strings.TrimSpace(req.ArgumentHash),
 		command:       approvalCommandForTool(toolName, args),
 		cwd:           approvalCwdForTool(toolName, args),
 		effects:       floretApprovalEffects(req),
@@ -273,7 +152,7 @@ func (r *run) waitForFloretToolApproval(ctx context.Context, req fltools.Approva
 		requestedAtMs: requestedAt,
 	}
 	r.mu.Unlock()
-	if r.service == nil {
+	if r.host.hasPendingApprovals == nil {
 		r.promoteToolApproval(toolID)
 	}
 	if err := r.syncPendingFloretApprovals(ctx, "approver_registered"); err != nil {
@@ -370,7 +249,7 @@ func (r *run) setPendingToolSettlementOwnerResolver(resolver func() floretPendin
 }
 
 func (r *run) syncPendingFloretApprovals(ctx context.Context, reason string) error {
-	if r == nil || r.service == nil {
+	if r == nil {
 		return nil
 	}
 	host := r.activeFloretHost()
@@ -475,7 +354,7 @@ func flowerApprovalStepNumber(stepID string) int {
 }
 
 func (r *run) pendingLiveToolApprovals() []FlowerApprovalAction {
-	if r == nil || r.service == nil {
+	if r == nil || r.host.pendingLiveToolApprovals == nil {
 		return nil
 	}
 	endpointID := strings.TrimSpace(r.endpointID)
@@ -484,28 +363,11 @@ func (r *run) pendingLiveToolApprovals() []FlowerApprovalAction {
 	if endpointID == "" || threadID == "" || runID == "" {
 		return nil
 	}
-	r.service.mu.Lock()
-	stream := r.service.flowerLiveByThread[runThreadKey(endpointID, threadID)]
-	if stream == nil || len(stream.State.ApprovalActions) == 0 {
-		r.service.mu.Unlock()
-		return nil
-	}
-	out := make([]FlowerApprovalAction, 0, len(stream.State.ApprovalActions))
-	for _, action := range stream.State.ApprovalActions {
-		if action.Origin != FlowerApprovalOriginMainTool ||
-			strings.TrimSpace(action.RunID) != runID ||
-			action.Status != FlowerApprovalStatusPending ||
-			action.State != FlowerApprovalStateRequested {
-			continue
-		}
-		out = append(out, action)
-	}
-	r.service.mu.Unlock()
-	return out
+	return r.host.pendingLiveToolApprovals(runID)
 }
 
 func (r *run) publishRunningAfterApprovalIfNoPending(resolvedActionID string) {
-	if r != nil && r.service != nil && r.service.threadHasPendingApprovals(r.endpointID, r.threadID) {
+	if r != nil && r.host.hasPendingApprovals != nil && r.host.hasPendingApprovals() {
 		return
 	}
 	resolvedActionID = strings.TrimSpace(resolvedActionID)
@@ -758,7 +620,7 @@ func (r *run) resolvedToolApprovalAction(toolID string, state FlowerApprovalStat
 }
 
 func (r *run) publishThreadApprovalState(status string) {
-	if r == nil || r.service == nil {
+	if r == nil || r.host.broadcastThreadState == nil || r.host.broadcastThreadSummary == nil {
 		return
 	}
 	status = strings.TrimSpace(status)
@@ -771,8 +633,8 @@ func (r *run) publishThreadApprovalState(status string) {
 	if endpointID == "" || threadID == "" || runID == "" {
 		return
 	}
-	r.service.broadcastThreadState(endpointID, threadID, runID, status, "", "")
-	r.service.broadcastThreadSummary(endpointID, threadID)
+	r.host.broadcastThreadState(runID, status, "", "")
+	r.host.broadcastThreadSummary()
 }
 
 func approvalCommandForTool(toolName string, args map[string]any) string {
@@ -789,7 +651,7 @@ func approvalCwdForTool(toolName string, args map[string]any) string {
 	return strings.TrimSpace(firstNonEmptyString(anyToString(args["cwd"]), anyToString(args["workdir"])))
 }
 
-func floretApprovalEffects(req fltools.ApprovalRequest) []string {
+func floretApprovalEffects(req flruntime.EffectAuthorizationRequest) []string {
 	seen := map[string]struct{}{}
 	out := make([]string, 0, len(req.Effects))
 	for _, effect := range req.Effects {
@@ -806,7 +668,7 @@ func floretApprovalEffects(req fltools.ApprovalRequest) []string {
 	return out
 }
 
-func floretApprovalFlags(req fltools.ApprovalRequest) []string {
+func floretApprovalFlags(req flruntime.EffectAuthorizationRequest) []string {
 	out := []string{}
 	if req.ReadOnly {
 		out = append(out, "read_only")
@@ -820,7 +682,7 @@ func floretApprovalFlags(req fltools.ApprovalRequest) []string {
 	return out
 }
 
-func floretApprovalTargets(req fltools.ApprovalRequest) []FlowerSafeTarget {
+func floretApprovalTargets(req flruntime.EffectAuthorizationRequest) []FlowerSafeTarget {
 	seen := map[string]struct{}{}
 	out := make([]FlowerSafeTarget, 0, len(req.Resources))
 	for _, resource := range req.Resources {

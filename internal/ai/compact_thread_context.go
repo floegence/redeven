@@ -319,7 +319,7 @@ func (a *threadActor) handleCompactThreadContext(ctx context.Context, meta *sess
 		persistTO = defaultPersistOpTimeout
 	}
 	tctx, cancel := context.WithTimeout(ctx, persistTO)
-	th, err := db.GetThread(tctx, endpointID, threadID)
+	th, err := db.GetThreadSettings(tctx, endpointID, threadID)
 	cancel()
 	if err != nil {
 		return CompactThreadContextResponse{}, err
@@ -331,7 +331,11 @@ func (a *threadActor) handleCompactThreadContext(ctx context.Context, meta *sess
 	if err != nil {
 		return CompactThreadContextResponse{}, err
 	}
-	if requestUserInputPromptFromFloretTurn(latest) != nil {
+	waitingPrompt, err := requestUserInputPromptFromFloretTurn(latest)
+	if err != nil {
+		return CompactThreadContextResponse{}, err
+	}
+	if waitingPrompt != nil {
 		return CompactThreadContextResponse{}, ErrWaitingUserQueueConflict
 	}
 
@@ -382,7 +386,22 @@ func (a *threadActor) handleCompactThreadContext(ctx context.Context, meta *sess
 	}
 	startedAt := time.Now()
 	bgCtx, cancelBg := context.WithCancel(context.Background())
-	if begin, gateErr := a.mgr.svc.beginIdleThreadCompaction(endpointID, threadID, requestID, runID, anchor, cancelBg); gateErr != nil {
+	unlockLifecycle, err := a.mgr.lockThreadLifecycle(endpointID, threadID)
+	if err != nil {
+		cancelBg()
+		return CompactThreadContextResponse{}, err
+	}
+	writableCtx, writableCancel := context.WithTimeout(ctx, persistTO)
+	err = db.RequireThreadSettingsWritable(writableCtx, endpointID, threadID)
+	writableCancel()
+	if err != nil {
+		unlockLifecycle()
+		cancelBg()
+		return CompactThreadContextResponse{}, err
+	}
+	begin, gateErr := a.mgr.svc.beginIdleThreadCompaction(endpointID, threadID, requestID, runID, anchor, cancelBg)
+	unlockLifecycle()
+	if gateErr != nil {
 		return CompactThreadContextResponse{}, gateErr
 	} else if !begin.Started {
 		return CompactThreadContextResponse{RequestID: begin.RequestID, Kind: "already_pending"}, nil
@@ -452,9 +471,13 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 	if err != nil {
 		return err
 	}
-	runWorkingDir := strings.TrimSpace(th.WorkingDir)
-	if runWorkingDir == "" {
-		runWorkingDir = strings.TrimSpace(s.agentHomeDir)
+	runWorkingDir, err := threadWorkingDir(th)
+	if err != nil {
+		return err
+	}
+	floretRuntime, err := s.bindFloretThreadRuntime(threadID)
+	if err != nil {
+		return err
 	}
 	messageID, err := newMessageID()
 	if err != nil {
@@ -464,31 +487,40 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 		return ErrNoCompactableContext
 	}
 	metaCopy := *meta
+	runHost, err := s.bindRunHostCapabilities(endpointID, threadID)
+	if err != nil {
+		return err
+	}
+	productCapabilities, err := bindRootRunProductCapabilities(db, endpointID, threadID, runID)
+	if err != nil {
+		return err
+	}
 	r := newRun(runOptions{
-		Log:                 s.log,
-		StateDir:            s.stateDir,
-		AgentHomeDir:        s.agentHomeDir,
-		WorkingDir:          runWorkingDir,
-		FilesystemScope:     s.scope,
-		Shell:               s.shell,
-		Service:             s,
-		AIConfig:            cfg,
-		SessionMeta:         &metaCopy,
-		ResolveProviderKey:  s.resolveProviderKey,
-		ResolveWebSearchKey: s.resolveWebSearchKey,
-		DesktopModelSource:  desktopModelSource,
-		RunID:               runID,
-		ChannelID:           strings.TrimSpace(meta.ChannelID),
-		EndpointID:          endpointID,
-		ThreadID:            threadID,
-		UserPublicID:        strings.TrimSpace(meta.UserPublicID),
-		MessageID:           messageID,
-		UploadsDir:          uploadsDir,
-		ThreadsDB:           db,
-		FloretStore:         s.floretStore,
-		PersistOpTimeout:    persistTO,
-		MaxWallTime:         runMaxWallTime,
-		IdleTimeout:         runIdleTimeout,
+		Log:                         s.log,
+		StateDir:                    s.stateDir,
+		AgentHomeDir:                s.agentHomeDir,
+		WorkingDir:                  runWorkingDir,
+		FilesystemScope:             s.scope,
+		Shell:                       s.shell,
+		HostCapabilities:            runHost,
+		AIConfig:                    cfg,
+		SessionMeta:                 &metaCopy,
+		ResolveProviderKey:          s.resolveProviderKey,
+		ResolveWebSearchKey:         s.resolveWebSearchKey,
+		DesktopModelSource:          desktopModelSource,
+		RunID:                       runID,
+		ChannelID:                   strings.TrimSpace(meta.ChannelID),
+		EndpointID:                  endpointID,
+		ThreadID:                    threadID,
+		UserPublicID:                strings.TrimSpace(meta.UserPublicID),
+		MessageID:                   messageID,
+		UploadsDir:                  uploadsDir,
+		ProductCapabilities:         productCapabilities,
+		FloretHostFactory:           floretRuntime.Turn,
+		FloretCompactionHostFactory: floretRuntime.Compaction,
+		PersistOpTimeout:            persistTO,
+		MaxWallTime:                 runMaxWallTime,
+		IdleTimeout:                 runIdleTimeout,
 		OnStreamEvent: func(ev any) {
 			s.broadcastStreamEvent(endpointID, threadID, runID, ev)
 		},
@@ -517,7 +549,7 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 		go r.runIdleWatchdog(execCtx)
 	}
 	r.setContextCompactionAnchor(strings.TrimSpace(manual.RequestID), anchor)
-	r.permissionType = permissionType
+	r.setPermissionType(permissionType)
 	_, modelCapability, reasoning, providerCfg, apiKey, adapterOverride, err := s.resolveIdleCompactionModel(execCtx, cfg, th, r)
 	if err != nil {
 		return err
@@ -554,21 +586,18 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 		contextWindow = modelCapability.MaxContextTokens
 	}
 	systemPrompt := r.buildLayeredSystemPrompt("", permissionTypeString(permissionType), TaskComplexityStandard, 0, true, nil, runtimeState{}, "", runCapabilityContract{})
-	store := r.floretStore
-	if store == nil {
-		return errors.New("floret store not ready")
+	if r.floretCompactionHostFactory == nil {
+		return errors.New("floret compaction host factory not ready")
 	}
 	gatewayIdentity, err := redevenFloretGatewayIdentity(providerCfg.ID, providerType, providerCfg.BaseURL, modelCapability.WireModelName, flProvider.stateCompatibilityRoute())
 	if err != nil {
 		return err
 	}
-	host, err := flruntime.NewHost(flruntime.HostOptions{
+	host, err := r.floretCompactionHostFactory(execCtx, flruntime.ThreadCompactionHostOptions{
 		Config:               flconfig.Config{SystemPrompt: systemPrompt, ContextPolicy: floretModelContextPolicy(contextWindow, 0), Reasoning: reasoning},
 		ModelGateway:         flProvider,
 		ModelGatewayIdentity: gatewayIdentity,
-		Store:                store,
 		Sink:                 floretEventSink{run: r},
-		ThreadTitleMode:      flruntime.ThreadTitleModeProvider,
 		LoopLimits: flruntime.LoopLimits{
 			NoProgressLimit:    2,
 			DuplicateToolLimit: 3,
@@ -577,11 +606,9 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 	if err != nil {
 		return err
 	}
-	if err := ensureFloretThread(execCtx, host, flruntime.ThreadID(threadID)); err != nil {
-		return err
-	}
+	var compactionHost floretCompactionHost = host
 	r.expectFloretRuntimeEventIdentity("", threadID, "", false)
-	result, err := host.CompactThread(execCtx, flruntime.CompactThreadRequest{
+	result, err := compactionHost.CompactThread(execCtx, flruntime.CompactThreadRequest{
 		ThreadID:  flruntime.ThreadID(threadID),
 		RequestID: strings.TrimSpace(manual.RequestID),
 		Source:    strings.TrimSpace(manual.Source),
@@ -628,7 +655,10 @@ func (s *Service) resolveIdleCompactionModel(ctx context.Context, cfg *config.AI
 		modelCapability.WireModelName = modelCfg.ModelName
 	}
 	reasoningCapability, modelDefaultReasoning := modelReasoningDefaultsFromCapability(modelCapability)
-	threadDefaultReasoning := unmarshalReasoningSelection(th.ReasoningSelectionJSON)
+	threadDefaultReasoning, err := parseStoredReasoningSelection(th.ReasoningSelectionJSON)
+	if err != nil {
+		return "", contextmodel.ModelCapability{}, config.AIReasoningSelection{}, config.AIProvider{}, "", nil, err
+	}
 	reasoning, err := resolveEffectiveReasoning(reasoningCapability, config.AIReasoningSelection{}, threadDefaultReasoning, modelDefaultReasoning)
 	if err != nil {
 		return "", contextmodel.ModelCapability{}, config.AIReasoningSelection{}, config.AIProvider{}, "", nil, reasoningSelectionError(modelCfg.ID, err)

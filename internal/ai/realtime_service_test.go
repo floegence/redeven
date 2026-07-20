@@ -120,11 +120,7 @@ func TestFlowerLiveBootstrapReadsCanonicalFloretContextAfterServiceRestart(t *te
 		_ = first.Close()
 		t.Fatalf("CreateThread: %v", err)
 	}
-	host := newTestFloretHost(t, first.floretStore, "canonical context answer")
-	if _, err := host.EnsureThread(ctx, flruntime.EnsureThreadRequest{ThreadID: flruntime.ThreadID(thread.ThreadID)}); err != nil {
-		_ = first.Close()
-		t.Fatalf("StartThread: %v", err)
-	}
+	host := newTestFloretHostFromService(t, first, thread.ThreadID, "canonical context answer")
 	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
 		ThreadID: flruntime.ThreadID(thread.ThreadID),
 		TurnID:   "turn_context_restart",
@@ -134,7 +130,7 @@ func TestFlowerLiveBootstrapReadsCanonicalFloretContextAfterServiceRestart(t *te
 		_ = first.Close()
 		t.Fatalf("RunTurn: %v", err)
 	}
-	maintenance, err := first.openFloretMaintenanceHost()
+	maintenance, err := first.openFloretMaintenanceHost(ctx, thread.ThreadID)
 	if err != nil {
 		_ = first.Close()
 		t.Fatalf("openFloretMaintenanceHost: %v", err)
@@ -364,17 +360,16 @@ func TestFlowerLiveEventsProjectRealtimeEventsProgressively(t *testing.T) {
 	}
 
 	runID := "run_live_projection_1"
-	r := newRun(runOptions{
+	r := newRunWithProductStoreForTest(t, runOptions{
 		RunID:               runID,
 		EndpointID:          meta.EndpointID,
 		ThreadID:            th.ThreadID,
 		MessageID:           "msg_live_projection_1",
 		UserPublicID:        meta.UserPublicID,
 		SessionMeta:         &meta,
-		ThreadsDB:           svc.threadsDB,
 		PersistOpTimeout:    time.Second,
 		ToolApprovalTimeout: time.Minute,
-	})
+	}, svc.threadsDB)
 	r.toolApprovals["tool_live_projection_1"] = &toolApprovalRequest{
 		decision:      make(chan bool, 1),
 		toolName:      "terminal.exec",
@@ -967,20 +962,19 @@ func TestRunContextCompactionAnchorRemainsStableAcrossOperationEvents(t *testing
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	host := newTestFloretHost(t, svc.floretStore, "visible output before compact")
+	host := newTestFloretHostFromService(t, svc, th.ThreadID, "visible output before compact")
 	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{ThreadID: flruntime.ThreadID(th.ThreadID), TurnID: "message-before-compact", RunID: "run-before-compact", Input: flruntime.TurnInput{Text: "prepare"}}); err != nil {
 		t.Fatalf("seed canonical timeline: %v", err)
 	}
 
-	r := newRun(runOptions{
-		Service:          svc,
+	r := newRunWithProductStoreForTest(t, runOptions{
+		HostCapabilities: bindTestRunHostCapabilities(t, svc, meta.EndpointID, th.ThreadID),
 		RunID:            "run-anchor-stable",
 		EndpointID:       meta.EndpointID,
 		ThreadID:         th.ThreadID,
 		MessageID:        "message-anchor-stable",
-		ThreadsDB:        svc.threadsDB,
 		PersistOpTimeout: 2 * time.Second,
-	})
+	}, svc.threadsDB)
 	if _, err := r.EnqueueManualCompaction(context.Background(), flruntime.ManualCompactionRequest{
 		RequestID:   "manual-request-1",
 		Source:      "slash_command",
@@ -1155,21 +1149,20 @@ func TestFlowerLiveApprovalRequestedCarriesExpectedSeq(t *testing.T) {
 	}
 
 	runID := "run_live_approval_seq"
-	r := newRun(runOptions{
+	r := newRunWithProductStoreForTest(t, runOptions{
 		RunID:               runID,
 		EndpointID:          meta.EndpointID,
 		ThreadID:            th.ThreadID,
 		MessageID:           "msg_live_approval_seq",
 		UserPublicID:        meta.UserPublicID,
-		Service:             svc,
+		HostCapabilities:    bindTestRunHostCapabilities(t, svc, meta.EndpointID, th.ThreadID),
 		SessionMeta:         &meta,
-		ThreadsDB:           svc.threadsDB,
 		PersistOpTimeout:    time.Second,
 		ToolApprovalTimeout: time.Minute,
 		OnStreamEvent: func(ev any) {
 			svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, ev)
 		},
-	})
+	}, svc.threadsDB)
 	requestedAt := time.Now()
 	r.toolApprovals["tool_live_approval_seq"] = &toolApprovalRequest{
 		decision:      make(chan bool, 1),

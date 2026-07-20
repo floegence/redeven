@@ -62,7 +62,7 @@ func (g testAskUserGateway) StreamModel(_ context.Context, _ flruntime.ModelRequ
 
 func seedWaitingUserPrompt(t *testing.T, svc *Service, ctx context.Context, _ *session.Meta, threadID string, prompt *RequestUserInputPrompt) {
 	t.Helper()
-	if svc == nil || svc.floretStore == nil || prompt == nil {
+	if svc == nil || svc.floretRuntime == nil || prompt == nil {
 		t.Fatalf("prompt must not be nil")
 	}
 	args, err := json.Marshal(map[string]any{
@@ -72,14 +72,17 @@ func seedWaitingUserPrompt(t *testing.T, svc *Service, ctx context.Context, _ *s
 	if err != nil {
 		t.Fatal(err)
 	}
-	r := &run{id: "run_" + prompt.MessageID, threadID: threadID, messageID: prompt.MessageID, service: svc}
+	r := &run{id: "run_" + prompt.MessageID, threadID: threadID, messageID: prompt.MessageID}
 	signalSpec, err := newFloretControlSpec(r, &floretToolRuntimeState{}, builtInControlSignalDefinitions(), "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	host, err := flruntime.NewHost(flruntime.HostOptions{
+	threadRuntime, err := svc.bindFloretThreadRuntime(threadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	host, err := threadRuntime.Turn(ctx, flruntime.TurnExecutionHostOptions{
 		Config:               redevenFloretAdapterConfig("", floretModelContextPolicy(128000, 4096), config.AIReasoningSelection{}),
-		Store:                svc.floretStore,
 		ModelGateway:         testAskUserGateway{toolID: prompt.ToolID, args: string(args)},
 		ModelGatewayIdentity: flruntime.ModelGatewayIdentity{Provider: "test", Model: "ask-user-test", StateCompatibilityKey: "test:ask-user-test"},
 	})

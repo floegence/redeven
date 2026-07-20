@@ -275,7 +275,7 @@ func TestFlowerApprovalQueueSerializesDecisionsWithoutSerializingHandlers(t *tes
 		flowerLiveByThread: map[string]*flowerLiveThreadStream{},
 		runs:               map[string]*run{},
 	}
-	r := newRun(runOptions{Service: svc, RunID: "run_queue", EndpointID: meta.EndpointID, ThreadID: "thread_queue", UserPublicID: meta.UserPublicID, MessageID: "msg_queue"})
+	r := newRun(runOptions{HostCapabilities: bindTestRunHostCapabilities(t, svc, meta.EndpointID, "thread_queue"), RunID: "run_queue", EndpointID: meta.EndpointID, ThreadID: "thread_queue", UserPublicID: meta.UserPublicID, MessageID: "msg_queue"})
 	svc.runs[r.id] = r
 	firstDecision := make(chan bool, 1)
 	secondDecision := make(chan bool, 1)
@@ -379,7 +379,7 @@ func TestFlowerApprovalQueueRejectsTimedOutCardWithoutTouchingPromotedAction(t *
 		flowerLiveByThread: map[string]*flowerLiveThreadStream{},
 		runs:               map[string]*run{},
 	}
-	r := newRun(runOptions{Service: svc, RunID: "run_queue_timeout", EndpointID: meta.EndpointID, ThreadID: "thread_queue_timeout", UserPublicID: meta.UserPublicID, MessageID: "msg_queue_timeout"})
+	r := newRun(runOptions{HostCapabilities: bindTestRunHostCapabilities(t, svc, meta.EndpointID, "thread_queue_timeout"), RunID: "run_queue_timeout", EndpointID: meta.EndpointID, ThreadID: "thread_queue_timeout", UserPublicID: meta.UserPublicID, MessageID: "msg_queue_timeout"})
 	svc.runs[r.id] = r
 	firstDecision := make(chan bool, 1)
 	secondDecision := make(chan bool, 1)

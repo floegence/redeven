@@ -2,6 +2,9 @@ package ai
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
 	"io"
 	"log/slog"
 	"os"
@@ -17,6 +20,16 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
+func immutableAttachmentRefForTest(t *testing.T, uploadID string, body []byte) string {
+	t.Helper()
+	sum := sha256.Sum256(body)
+	ref, err := immutableFloretUploadResourceRef(uploadID, hex.EncodeToString(sum[:]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return ref
+}
+
 func newFloretAttachmentTestRun(t *testing.T) (*run, *threadstore.Store, string) {
 	t.Helper()
 	store, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))
@@ -25,11 +38,11 @@ func newFloretAttachmentTestRun(t *testing.T) (*run, *threadstore.Store, string)
 	}
 	t.Cleanup(func() { _ = store.Close() })
 	uploadsDir := t.TempDir()
-	r := newRun(runOptions{
+	r := newRunWithProductStoreForTest(t, runOptions{
 		EndpointID: "env_attachment", ThreadID: "thread_attachment", RunID: "run_attachment", MessageID: "turn_attachment",
-		ThreadsDB: store, UploadsDir: uploadsDir,
-	})
-	if err := store.CreateThread(context.Background(), threadstore.ThreadSettings{
+		UploadsDir: uploadsDir,
+	}, store)
+	if err := store.CreateThreadSettings(context.Background(), threadstore.ThreadSettings{
 		EndpointID: r.endpointID, ThreadID: r.threadID, PermissionType: "approval_required",
 	}); err != nil {
 		t.Fatal(err)
@@ -68,6 +81,14 @@ func TestFloretTurnInputAllowsAttachmentOnlyAndRejectsInvalidResources(t *testin
 	insertFloretAttachmentUpload(t, store, uploadsDir, threadstore.UploadRecord{
 		UploadID: "upl_only", EndpointID: r.endpointID, Name: "only.txt", MimeType: "text/plain", SizeBytes: 4,
 	}, []byte("only"), "")
+	const commandID = "queue_attachment_only"
+	if _, _, _, err := store.CreateFollowupWithUploadRefs(context.Background(), threadstore.QueuedTurn{
+		QueueID: commandID, EndpointID: r.endpointID, ThreadID: r.threadID, ChannelID: "channel_attachment_only",
+		Lane: threadstore.FollowupLaneQueued, TurnID: r.messageID, RunID: r.id, TextContent: "",
+	}, []string{"upl_only"}, time.Now().UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	r.setPendingTurnCommand(commandID)
 
 	input, err := r.floretTurnInput(context.Background(), RunInput{Attachments: []RunAttachmentIn{{
 		Name: "ignored transport name", MimeType: "application/octet-stream", URL: "/_redeven_proxy/api/ai/uploads/upl_only",
@@ -91,6 +112,9 @@ func TestFloretTurnInputAllowsAttachmentOnlyAndRejectsInvalidResources(t *testin
 	insertFloretAttachmentUpload(t, store, uploadsDir, threadstore.UploadRecord{
 		UploadID: "upl_large", EndpointID: r.endpointID, Name: "large.bin", MimeType: "application/octet-stream", SizeBytes: floretAttachmentMaxBytes + 1,
 	}, nil, "")
+	if err := store.BindUploadsToRef(context.Background(), r.endpointID, r.threadID, threadstore.UploadRefKindQueuedTurn, commandID, []string{"upl_large"}, time.Now().UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := r.floretTurnInput(context.Background(), RunInput{Attachments: []RunAttachmentIn{{URL: "/_redeven_proxy/api/ai/uploads/upl_large"}}}); err == nil || !strings.Contains(err.Error(), "size limit") {
 		t.Fatalf("oversized attachment error=%v", err)
 	}
@@ -104,7 +128,7 @@ func TestResolveFloretMessageAttachmentProjectsImageAndFailsClosed(t *testing.T)
 	}
 	insertFloretAttachmentUpload(t, store, uploadsDir, record, body, r.threadID)
 	attachment := flruntime.MessageAttachment{
-		ResourceRef: "redeven-upload:upl_image", Name: record.Name, MIMEType: record.MimeType, SizeBytes: record.SizeBytes,
+		ResourceRef: immutableAttachmentRefForTest(t, record.UploadID, body), Name: record.Name, MIMEType: record.MimeType, SizeBytes: record.SizeBytes,
 	}
 	part, err := r.resolveFloretMessageAttachment(context.Background(), attachment)
 	if err != nil {
@@ -126,6 +150,107 @@ func TestResolveFloretMessageAttachmentProjectsImageAndFailsClosed(t *testing.T)
 	}
 	if _, err := r.resolveFloretMessageAttachment(context.Background(), flruntime.MessageAttachment{ResourceRef: "https://example.invalid/file"}); err == nil || !strings.Contains(err.Error(), "unsupported attachment resource reference") {
 		t.Fatalf("unsupported resource ref error=%v", err)
+	}
+}
+
+func TestRunFloretHostedTurnFreezesAttachmentBytesBeforeCanonicalAdmission(t *testing.T) {
+	uploadsDir := t.TempDir()
+	r := newFloretRuntimeTestRun(t, runOptions{
+		Log: slog.New(slog.NewTextHandler(io.Discard, nil)), StateDir: t.TempDir(), AgentHomeDir: t.TempDir(), UploadsDir: uploadsDir,
+		Shell: "bash", AIConfig: &config.AIConfig{}, SessionMeta: &session.Meta{CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true},
+		RunID: "run_frozen_attachment", ThreadID: "thread_frozen_attachment", MessageID: "turn_frozen_attachment",
+	})
+	store := runThreadStoreForTest(t, r)
+	originalBody := []byte("original")
+	mutatedBody := []byte("replaced")
+	record := threadstore.UploadRecord{
+		UploadID: "upl_frozen", EndpointID: r.endpointID, Name: "frozen.txt", MimeType: "text/plain", SizeBytes: int64(len(originalBody)),
+	}
+	insertFloretAttachmentUpload(t, store, uploadsDir, record, originalBody, "")
+	const commandID = "queue_frozen_attachment"
+	if _, _, _, err := store.CreateFollowupWithUploadRefs(context.Background(), threadstore.QueuedTurn{
+		QueueID: commandID, EndpointID: r.endpointID, ThreadID: r.threadID, ChannelID: "channel_frozen_attachment",
+		Lane: threadstore.FollowupLaneQueued, TurnID: r.messageID, RunID: r.id, TextContent: "inspect the file",
+	}, []string{record.UploadID}, time.Now().UnixMilli()); err != nil {
+		t.Fatal(err)
+	}
+	r.setPendingTurnCommand(commandID)
+	originalHostFactory := r.floretHostFactory
+	r.floretHostFactory = func(ctx context.Context, options flruntime.TurnExecutionHostOptions) (floretTurnHost, error) {
+		if err := os.WriteFile(filepath.Join(uploadsDir, record.UploadID+".data"), mutatedBody, 0o600); err != nil {
+			return nil, err
+		}
+		return originalHostFactory(ctx, options)
+	}
+	provider := &capturingTurnProvider{}
+	if err := r.runFloretHostedTurn(t.Context(), RunRequest{
+		Model:           "compat/gpt-test",
+		Input:           RunInput{Text: "inspect the file", Attachments: []RunAttachmentIn{{URL: "/_redeven_proxy/api/ai/uploads/" + record.UploadID}}},
+		Options:         RunOptions{PermissionType: config.AIPermissionFullAccess},
+		ModelCapability: contextmodel.ModelCapability{SupportsFileInput: true},
+	}, config.AIProvider{ID: "compat", Type: "openai", BaseURL: "https://api.openai.com/v1"}, "sk-test", "inspect file", provider); err != nil {
+		t.Fatal(err)
+	}
+	wantURI := "data:text/plain;base64," + base64.StdEncoding.EncodeToString(originalBody)
+	found := false
+	for _, message := range provider.firstRequest().Messages {
+		for _, part := range message.Content {
+			if part.Type == "file" && part.FileURI == wantURI {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("provider did not receive the frozen attachment bytes: %#v", provider.firstRequest().Messages)
+	}
+	readHost, err := testServiceForRun(t, r).openFloretThreadReadHost(context.Background(), r.threadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	overview, err := readHost.ReadThreadOverview(context.Background(), flruntime.ThreadID(r.threadID))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if overview.LatestTurn == nil || len(overview.LatestTurn.UserAttachments) != 1 {
+		t.Fatalf("canonical attachment snapshot=%#v", overview.LatestTurn)
+	}
+	canonical := overview.LatestTurn.UserAttachments[0]
+	if canonical.ResourceRef != immutableAttachmentRefForTest(t, record.UploadID, originalBody) {
+		t.Fatalf("canonical resource ref=%q", canonical.ResourceRef)
+	}
+	if _, err := r.resolveFloretMessageAttachment(context.Background(), canonical); err == nil || !strings.Contains(err.Error(), "content differs") {
+		t.Fatalf("historical attachment tamper error=%v", err)
+	}
+}
+
+func TestFullHistorySubagentResolvesOnlyParentOwnedCanonicalAttachments(t *testing.T) {
+	parent, store, uploadsDir := newFloretAttachmentTestRun(t)
+	body := []byte("parent context")
+	record := threadstore.UploadRecord{
+		UploadID: "upl_parent_context", EndpointID: parent.endpointID, Name: "context.txt", MimeType: "text/plain", SizeBytes: int64(len(body)),
+	}
+	insertFloretAttachmentUpload(t, store, uploadsDir, record, body, parent.threadID)
+	const childThreadID = "child_full_history_attachment"
+	host := &recordingFloretHost{snapshots: []flruntime.SubAgentSnapshot{{
+		ParentThreadID: flruntime.ThreadID(parent.threadID), ThreadID: childThreadID, ForkMode: flruntime.SubAgentForkFullPath,
+	}}}
+	runtime := &floretSubagentRuntime{parent: parent, host: host}
+	attachment := flruntime.MessageAttachment{
+		ResourceRef: immutableAttachmentRefForTest(t, record.UploadID, body), Name: record.Name, MIMEType: record.MimeType, SizeBytes: record.SizeBytes,
+	}
+	part, err := runtime.resolveSubagentMessageAttachment(context.Background(), flruntime.ModelRequest{
+		ThreadID: childThreadID,
+		Labels:   flruntime.RunLabels{Host: map[string]string{subagentToolHostContextChildThreadIDKey: childThreadID}},
+	}, attachment)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if part.Type != "file" || part.Text != record.Name || !strings.HasPrefix(part.FileURI, "data:text/plain;base64,") {
+		t.Fatalf("resolved inherited attachment=%#v", part)
+	}
+	host.snapshots[0].ForkMode = flruntime.SubAgentForkNone
+	if _, err := runtime.resolveSubagentMessageAttachment(context.Background(), flruntime.ModelRequest{ThreadID: childThreadID}, attachment); err == nil || !strings.Contains(err.Error(), "outside the child context authority") {
+		t.Fatalf("mission-only attachment error=%v", err)
 	}
 }
 
@@ -199,8 +324,6 @@ func TestRunFloretHostedTurnRejectsInvalidAttachmentBeforeAdmission(t *testing.T
 
 	for _, testCase := range testCases {
 		t.Run(testCase.name, func(t *testing.T) {
-			floretStore := flruntime.NewMemoryStore()
-			t.Cleanup(func() { _ = floretStore.Close() })
 			uploadsDir := t.TempDir()
 			r := newFloretRuntimeTestRun(t, runOptions{
 				Log:          slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -213,9 +336,7 @@ func TestRunFloretHostedTurnRejectsInvalidAttachmentBeforeAdmission(t *testing.T
 				RunID:        "run_preflight_attachment",
 				ThreadID:     "thread_preflight_attachment",
 				MessageID:    "turn_preflight_attachment",
-				FloretStore:  floretStore,
 			})
-			r.service = &Service{threadsDB: r.threadsDB, persistOpTO: time.Second}
 
 			body := testCase.body
 			sizeBytes := testCase.sizeBytes
@@ -225,9 +346,10 @@ func TestRunFloretHostedTurnRejectsInvalidAttachmentBeforeAdmission(t *testing.T
 			record := threadstore.UploadRecord{
 				UploadID: "upl_preflight", EndpointID: r.endpointID, Name: "attachment", MimeType: testCase.mimeType, SizeBytes: sizeBytes,
 			}
-			insertFloretAttachmentUpload(t, r.threadsDB, uploadsDir, record, body, "")
+			store := runThreadStoreForTest(t, r)
+			insertFloretAttachmentUpload(t, store, uploadsDir, record, body, "")
 			const commandID = "queue_preflight_attachment"
-			if _, _, _, err := r.threadsDB.CreateFollowupWithUploadRefs(context.Background(), threadstore.QueuedTurn{
+			if _, _, _, err := store.CreateFollowupWithUploadRefs(context.Background(), threadstore.QueuedTurn{
 				QueueID: commandID, EndpointID: r.endpointID, ThreadID: r.threadID, ChannelID: "channel_preflight_attachment",
 				Lane: threadstore.FollowupLaneQueued, TurnID: r.messageID, RunID: r.id, TextContent: "inspect attachment",
 			}, []string{record.UploadID}, time.Now().UnixMilli()); err != nil {
@@ -250,18 +372,18 @@ func TestRunFloretHostedTurnRejectsInvalidAttachmentBeforeAdmission(t *testing.T
 			if provider.requestCount() != 0 {
 				t.Fatalf("provider request count=%d, want 0", provider.requestCount())
 			}
-			host, err := flruntime.NewThreadMaintenanceHost(flruntime.ThreadMaintenanceHostOptions{Store: floretStore})
+			readHost, err := testServiceForRun(t, r).openFloretThreadReadHost(context.Background(), r.threadID)
 			if err != nil {
 				t.Fatal(err)
 			}
-			overview, err := host.ReadThreadOverview(context.Background(), flruntime.ThreadID(r.threadID))
+			overview, err := readHost.ReadThreadOverview(context.Background(), flruntime.ThreadID(r.threadID))
 			if err != nil {
 				t.Fatal(err)
 			}
 			if overview.LatestTurn != nil {
 				t.Fatalf("invalid attachment was admitted: %#v", overview.LatestTurn)
 			}
-			queued, err := r.threadsDB.GetQueuedTurn(context.Background(), r.endpointID, r.threadID, commandID)
+			queued, err := store.GetQueuedTurn(context.Background(), r.endpointID, r.threadID, commandID)
 			if err != nil || queued == nil {
 				t.Fatalf("queued command was not preserved: queued=%#v error=%v", queued, err)
 			}
