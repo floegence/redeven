@@ -21,6 +21,9 @@ test('keeps the supported terminal carriers explicit in CI and release gates', (
 
   const releaseCarrierCommands = releaseSource.match(/^\s*run: .*test:terminal-carrier.*$/gmu) ?? [];
   assert.equal(releaseCarrierCommands.length, 2);
+  for (const command of releaseCarrierCommands) {
+    assert.match(command, /run: xvfb-run -a corepack pnpm run test:terminal-carrier/u);
+  }
   assert.match(releaseCarrierCommands[0] ?? '', /--fixture-bytes 65536/u);
   assert.match(releaseCarrierCommands[1] ?? '', /--fixture-bytes 458752/u);
 
