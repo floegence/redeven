@@ -171,6 +171,7 @@ import {
   type RuntimeLifecycleIntent,
 } from './runtimeLifecycleCoordinator';
 import { LauncherOperationRegistry, launcherOperationProgress, type LauncherOperationAttemptIdentity } from './launcherOperations';
+import { readRuntimeFlowerHTTPResponse, type RuntimeFlowerHTTPResponse } from './runtimeFlowerHTTP';
 import {
   requireLocalUIBridgeURL,
   resolveDesktopSessionTransport,
@@ -921,6 +922,13 @@ function runtimeFlowerErrorFromUnknown(error: unknown): RuntimeFlowerError {
     Number.isInteger(status) ? status : undefined,
     runtimeFlowerRetryAfterMs(record?.retryAfterMs),
   );
+}
+
+class RuntimeFlowerTransportError extends Error {
+  constructor(cause: unknown) {
+    super(cause instanceof Error ? cause.message : compact(cause) || 'Flower runtime response was unavailable.', { cause });
+    this.name = 'RuntimeFlowerTransportError';
+  }
 }
 
 const LOCAL_UI_ACCESS_COOKIE_NAME = 'redeven_local_access';
@@ -8926,12 +8934,6 @@ async function ensureRuntimeFlowerRecord(): Promise<LocalEnvironmentRuntimeRecor
   return record;
 }
 
-type RuntimeFlowerHTTPResponse = Readonly<{
-  status: number;
-  body: string;
-  headers: http.IncomingHttpHeaders;
-}>;
-
 function runtimeFlowerRequestHTTP(
   url: URL,
   request: RuntimeFlowerRequest,
@@ -8952,17 +8954,7 @@ function runtimeFlowerRequestHTTP(
         } : {}),
       },
     }, (res) => {
-      const chunks: Buffer[] = [];
-      res.on('data', (chunk: Buffer | string) => {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      });
-      res.on('end', () => {
-        resolve({
-          status: res.statusCode ?? 0,
-          body: Buffer.concat(chunks).toString('utf8'),
-          headers: res.headers,
-        });
-      });
+      void readRuntimeFlowerHTTPResponse(res).then(resolve, reject);
     });
     req.on('timeout', () => {
       req.destroy(new Error('Flower runtime request timed out.'));
@@ -9065,17 +9057,26 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
   const url = new URL(path, runtimeFlowerBaseURL(record));
   const environment = preferences.local_environment;
   let accessHeaders = await runtimeFlowerAccessHeaders(record, environment);
-  let response = await runtimeFlowerRequestHTTP(url, { ...request, method, path }, { headers: accessHeaders });
+  let response: RuntimeFlowerHTTPResponse;
+  try {
+    response = await runtimeFlowerRequestHTTP(url, { ...request, method, path }, { headers: accessHeaders });
+  } catch (error) {
+    throw new RuntimeFlowerTransportError(error);
+  }
   if (response.status === 423) {
     runtimeFlowerAccessCookies.delete(runtimeFlowerBaseURL(record));
     const cookie = await unlockRuntimeFlowerAccess(record, environment);
     accessHeaders = { Cookie: runtimeFlowerAccessCookieHeader(cookie) };
-    response = await runtimeFlowerRequestHTTP(url, { ...request, method, path }, { headers: accessHeaders });
+    try {
+      response = await runtimeFlowerRequestHTTP(url, { ...request, method, path }, { headers: accessHeaders });
+    } catch (error) {
+      throw new RuntimeFlowerTransportError(error);
+    }
   }
   const parsed = parseRuntimeFlowerJSON(response.body);
   const error = runtimeFlowerEnvelopeError(parsed, response.status);
   if (error) {
-    return { ok: false, error };
+    return { ok: false, error, failureKind: 'response' };
   }
   const dataRecord = parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null;
   return {
@@ -17525,6 +17526,7 @@ if (!app.requestSingleInstanceLock()) {
       return {
         ok: false,
         error: runtimeFlowerErrorFromUnknown(error),
+        failureKind: error instanceof RuntimeFlowerTransportError ? 'transport_unknown' : 'local',
       };
     }
   });

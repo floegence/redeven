@@ -115,6 +115,7 @@ import {
   FlowerSoftAuraIcon,
   FlowerSurface,
   FlowerTurnLauncherWindow,
+  flowerTurnAdmissionUncertainIdentity,
   type FlowerTurnLauncherAnchor,
   type FlowerTurnLauncherIntent,
   type FlowerTurnLauncherSubmitInput,
@@ -6000,12 +6001,12 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       throw new Error(i18n().t('environmentCenter.askFlowerCardNoMessage'));
     }
     try {
-      const bootstrap = await launchLocalEnvironmentFlowerTurn(props.runtime.settings, {
+      const receipt = await launchLocalEnvironmentFlowerTurn(props.runtime.settings, {
         prompt,
         context_action: input.intent.context_action,
         working_dir: input.intent.suggested_working_dir,
       });
-      const threadID = trimString(bootstrap.thread.thread_id || bootstrap.thread_id);
+      const threadID = trimString(receipt.thread_id);
       if (!threadID) {
         throw new Error('Missing thread id.');
       }
@@ -6018,6 +6019,17 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
       await openFlowerSurface();
       showActionToast(i18n().t('toast.flowerPromptQueued'), 'success');
     } catch (error) {
+      const uncertain = flowerTurnAdmissionUncertainIdentity(error);
+      if (uncertain) {
+        flowerFocusThreadRequestSequence += 1;
+        setFlowerFocusThreadRequest({
+          request_id: `welcome-flower-focus-${flowerFocusThreadRequestSequence}`,
+          thread_id: uncertain.thread_id,
+        });
+        closeFlowerTurnLauncher();
+        await openFlowerSurface();
+        return;
+      }
       showActionToast(getErrorMessage(error), 'error');
       throw error;
     }

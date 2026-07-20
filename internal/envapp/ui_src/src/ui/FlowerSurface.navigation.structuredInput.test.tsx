@@ -13,6 +13,7 @@ import {
   flush,
   flowerSurfaceNotifications,
   inputRequest,
+  launchReceipt,
   liveBootstrap,
   renderSurfaceWithAdapter,
   thread,
@@ -39,6 +40,9 @@ describe('FlowerSurface navigation structured input', () => {
           blocks: [
             { type: 'markdown', content: 'I need one choice before continuing.' },
             activityTimeline({
+              thread_id: 'thread-waiting-input',
+              run_id: 'run-waiting-input',
+              turn_id: 'turn-waiting-input',
               status: 'waiting',
               severity: 'blocking',
               needs_attention: true,
@@ -328,7 +332,7 @@ describe('FlowerSurface navigation structured input', () => {
         },
       ],
     });
-    const launchTurn = vi.fn(async () => liveBootstrap(staleThread));
+    const launchTurn = vi.fn(async (input: { turn_id?: string }) => launchReceipt(staleThread.thread_id, input.turn_id ?? 'turn-stale-input'));
     const submitInput = vi.fn(async () => liveBootstrap(staleThread));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),

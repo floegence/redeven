@@ -133,7 +133,7 @@ func (s *Service) registerDelegatedApproval(parent *run, child *run, req flrunti
 	s.mu.Unlock()
 	event := s.appendFlowerLiveEvent(FlowerLiveEvent{
 		EndpointID: strings.TrimSpace(parent.endpointID), ThreadID: strings.TrimSpace(parent.threadID),
-		RunID: strings.TrimSpace(parent.id), TurnID: strings.TrimSpace(parent.messageID),
+		RunID: strings.TrimSpace(parent.id), TurnID: strings.TrimSpace(parent.turnID),
 		Kind: FlowerLiveApprovalRequested, Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: action}),
 	})
 	var payload FlowerLiveApprovalPayload
@@ -307,10 +307,10 @@ func delegatedApprovalRef(parent *run, child *run, req flruntime.EffectAuthoriza
 		strings.TrimSpace(req.HostContext[subagentToolHostContextChildThreadIDKey]),
 	)
 	return DelegatedApprovalRef{
-		ParentThreadID: strings.TrimSpace(parent.threadID), ParentRunID: strings.TrimSpace(parent.id), ParentTurnID: strings.TrimSpace(parent.messageID),
+		ParentThreadID: strings.TrimSpace(parent.threadID), ParentRunID: strings.TrimSpace(parent.id), ParentTurnID: strings.TrimSpace(parent.turnID),
 		ChildThreadID:   childThreadID,
 		ChildRunID:      delegatedApprovalChildRunID(child, req, childThreadID, strings.TrimSpace(parent.id)),
-		ChildTurnID:     strings.TrimSpace(child.messageID),
+		ChildTurnID:     strings.TrimSpace(child.turnID),
 		ChildToolCallID: strings.TrimSpace(req.ToolCallID),
 		ApprovalID:      strings.TrimSpace(req.EffectAttemptID),
 	}
@@ -346,7 +346,7 @@ func delegatedApprovalAction(parent *run, child *run, req flruntime.EffectAuthor
 	command, cwd := strings.TrimSpace(approval.command), strings.TrimSpace(approval.cwd)
 	targets := append([]FlowerSafeTarget(nil), approval.targets...)
 	return FlowerApprovalAction{
-		ActionID: actionID, Origin: FlowerApprovalOriginDelegatedSubagent, TurnID: strings.TrimSpace(parent.messageID),
+		ActionID: actionID, Origin: FlowerApprovalOriginDelegatedSubagent, TurnID: strings.TrimSpace(parent.turnID),
 		ToolName: toolName, State: FlowerApprovalStateRequested, Status: FlowerApprovalStatusPending,
 		Revision: 1, Version: 1, SurfaceEpoch: 1, SurfaceRole: FlowerApprovalSurfacePrimaryAction,
 		Scope: delegatedApprovalScopeThreadDelegatedWait, RequestedAtMs: requestedAt, ExpiresAtMs: expiresAt,

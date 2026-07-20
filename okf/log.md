@@ -1,6 +1,11 @@
 # Redeven OKF Update Log
 
 ## 2026-07-20
+* **Fix**: Kept canonical image and file attachment blocks visible under atomic message decoding, and required live activity blocks to match their enclosing thread, turn, and run before presentation.
+* **Fix**: Made canonical timeline arrays atomic, bound browser live drafts and SubAgent lineage to exact thread/turn/run/message authority, preserved owned empty queued-turn detail, and added real HTTP/RPC zero-side-effect rejection coverage.
+* **Fix**: Classified Flower admission outcomes at typed transport boundaries, restored drafts only for explicit server rejection, kept response-loss or malformed-receipt attempts bound to an exact reconciliation identity, and required live block events plus canonical raw blocks to satisfy strict message identity and whole-message validation.
+* **Fix**: Bound Flower admission uncertainty, pending reconciliation, canonical rows, and live assistant drafts to explicit thread/turn/message identities so lost receipts and stale queue snapshots cannot produce duplicate sends or duplicate user rows.
+* **Fix**: Separated Flower turn admission receipts from canonical refresh, carried TurnID beside canonical message-row identity through bootstrap, history, and replacement events, and reconciled optimistic or queued rows only by exact thread and TurnID without a persisted correlation map.
 * **Fix**: Migrated the one known reordered Code App registry v1 shape to strict schema v2 transactionally, preserving codespace metadata while rejecting unknown shapes without mutation.
 * **Coordination**: Moved queued admission reconciliation into startup recovery, atomically released exact unadmitted `in_flight` command/turn/run identities before runtime reopened, and delayed every queued-thread wake until all recovery checks succeeded.
 * **Security**: Kept `subagents wait` inside the root lifecycle authority gate with only its normalized exact requested-child join scopes because waiting may admit pending child input and start provider work; unrelated siblings remain fenced and only read-only list and inspect release before dispatch.

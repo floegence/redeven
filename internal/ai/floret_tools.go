@@ -188,7 +188,7 @@ func floretRunContextForIDs(ctx context.Context, base *run, rawRunID string, raw
 	childThreadID := strings.TrimSpace(hostContext[subagentToolHostContextChildThreadIDKey])
 	childRunID := strings.TrimSpace(hostContext[subagentToolHostContextChildRunIDKey])
 	if childThreadID == "" && childRunID == "" {
-		if err := requireFloretRunIdentity("parent tool invocation", runID, threadID, turnID, strings.TrimSpace(base.id), strings.TrimSpace(base.threadID), strings.TrimSpace(base.messageID)); err != nil {
+		if err := requireFloretRunIdentity("parent tool invocation", runID, threadID, turnID, strings.TrimSpace(base.id), strings.TrimSpace(base.threadID), strings.TrimSpace(base.turnID)); err != nil {
 			return nil, err
 		}
 		return base, nil
@@ -211,7 +211,7 @@ func floretRunContextForIDs(ctx context.Context, base *run, rawRunID string, raw
 	runID = childRunID
 	threadID = childThreadID
 	if base.subagentDepth > 0 {
-		if err := requireFloretRunIdentity("bound child tool invocation", runID, threadID, turnID, strings.TrimSpace(base.id), strings.TrimSpace(base.threadID), strings.TrimSpace(base.messageID)); err != nil {
+		if err := requireFloretRunIdentity("bound child tool invocation", runID, threadID, turnID, strings.TrimSpace(base.id), strings.TrimSpace(base.threadID), strings.TrimSpace(base.turnID)); err != nil {
 			return nil, err
 		}
 		return base, nil
@@ -249,6 +249,7 @@ func floretRunContextForIDs(ctx context.Context, base *run, rawRunID string, raw
 		ChannelID:             base.channelID,
 		EndpointID:            base.endpointID,
 		ThreadID:              threadID,
+		TurnID:                turnID,
 		UserPublicID:          base.userPublicID,
 		MessageID:             turnID,
 		UploadsDir:            base.uploadsDir,

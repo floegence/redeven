@@ -29,6 +29,9 @@ function activityThread(status: 'running' | 'success'): FlowerThreadSnapshot {
     status: running ? 'running' : 'success',
     messages: [{
       id: 'm-browser-disclosure',
+      thread_id: 'thread-browser-disclosure',
+      turn_id: 'm-browser-disclosure',
+      run_id: 'run-browser-disclosure',
       role: 'assistant',
       content: running ? 'Running browser checks.' : 'Browser checks passed.',
       status: 'complete',
@@ -36,6 +39,7 @@ function activityThread(status: 'running' | 'success'): FlowerThreadSnapshot {
       blocks: [
         { type: 'markdown', content: running ? 'Running browser checks.' : 'Browser checks passed.' },
         activityTimeline({
+          thread_id: 'thread-browser-disclosure',
           run_id: 'run-browser-disclosure',
           turn_id: 'm-browser-disclosure',
           status,
@@ -94,7 +98,7 @@ function deferred<T>() {
 }
 
 function liveEvent<K extends FlowerLiveEvent['kind']>(
-  threadID: string,
+  identity: { thread_id: string; run_id: string; turn_id: string },
   seq: number,
   kind: K,
   payload: FlowerLiveEvent<K>['payload'],
@@ -103,9 +107,9 @@ function liveEvent<K extends FlowerLiveEvent['kind']>(
     schema_version: 1,
     seq,
     endpoint_id: 'browser-test',
-    thread_id: threadID,
-    run_id: 'run-browser-disclosure',
-    turn_id: 'm-browser-disclosure',
+    thread_id: identity.thread_id,
+    run_id: identity.run_id,
+    turn_id: identity.turn_id,
     at_unix_ms: 10_500,
     kind,
     payload,
@@ -120,6 +124,9 @@ function streamingActivityThread(): FlowerThreadSnapshot {
     active_run_id: 'run-browser-disclosure',
     messages: [{
       id: 'm-browser-disclosure',
+      thread_id: 'thread-browser-disclosure',
+      turn_id: 'm-browser-disclosure',
+      run_id: 'run-browser-disclosure',
       role: 'assistant',
       content: 'Running streaming browser checks.',
       status: 'streaming',
@@ -127,6 +134,7 @@ function streamingActivityThread(): FlowerThreadSnapshot {
       blocks: [
         { type: 'markdown', content: 'Running streaming browser checks.' },
         activityTimeline({
+          thread_id: 'thread-browser-disclosure',
           run_id: 'run-browser-disclosure',
           turn_id: 'm-browser-disclosure',
           status: 'running',
@@ -316,6 +324,7 @@ describe('Flower activity disclosure browser behavior', () => {
     await page.viewport(1440, 900);
     const runningThread = streamingActivityThread();
     const completedActivity = activityTimeline({
+      thread_id: 'thread-browser-disclosure',
       run_id: 'run-browser-disclosure',
       turn_id: 'm-browser-disclosure',
       status: 'success',
@@ -374,9 +383,16 @@ describe('Flower activity disclosure browser behavior', () => {
       stream_generation: 1,
       retained_from_seq: 1,
       next_cursor: 1,
-      events: [liveEvent('thread-browser-disclosure', 1, 'timeline.replaced', {
+      events: [liveEvent({
+        thread_id: 'thread-browser-disclosure',
+        run_id: 'run-browser-disclosure',
+        turn_id: 'm-browser-disclosure',
+      }, 1, 'timeline.replaced', {
         messages: [{
           id: 'm-browser-disclosure',
+          thread_id: 'thread-browser-disclosure',
+          turn_id: 'm-browser-disclosure',
+          run_id: 'run-browser-disclosure',
           role: 'assistant',
           content: 'Running browser checks.\n\nBrowser checks passed.',
           status: 'complete',
@@ -410,6 +426,7 @@ describe('Flower activity disclosure browser behavior', () => {
   it('keeps a late Todo presentation interactive on the same activity row', async () => {
     await page.viewport(1440, 900);
     const runningActivity = activityTimeline({
+      thread_id: 'thread-late-todo',
       run_id: 'run-late-todo',
       turn_id: 'm-late-todo',
       status: 'running',
@@ -425,6 +442,7 @@ describe('Flower activity disclosure browser behavior', () => {
       })],
     });
     const completedActivity = activityTimeline({
+      thread_id: 'thread-late-todo',
       run_id: 'run-late-todo',
       turn_id: 'm-late-todo',
       status: 'success',
@@ -442,6 +460,7 @@ describe('Flower activity disclosure browser behavior', () => {
       })],
     });
     const canonicalActivity = activityTimeline({
+      thread_id: 'thread-late-todo',
       run_id: 'run-late-todo',
       turn_id: 'm-late-todo',
       status: 'success',
@@ -465,6 +484,9 @@ describe('Flower activity disclosure browser behavior', () => {
       active_run_id: 'run-late-todo',
       messages: [{
         id: 'm-late-todo',
+        thread_id: 'thread-late-todo',
+        turn_id: 'm-late-todo',
+        run_id: 'run-late-todo',
         role: 'assistant',
         content: '',
         status: 'streaming',
@@ -495,7 +517,11 @@ describe('Flower activity disclosure browser behavior', () => {
 
     firstEvents.resolve({
       stream_generation: 1,
-      events: [liveEvent('thread-late-todo', 1, 'message.block_set', {
+      events: [liveEvent({
+        thread_id: 'thread-late-todo',
+        run_id: 'run-late-todo',
+        turn_id: 'm-late-todo',
+      }, 1, 'message.block_set', {
         message_id: 'm-late-todo',
         block_index: 0,
         block: { type: 'activity-timeline', block: completedActivity },
@@ -512,9 +538,16 @@ describe('Flower activity disclosure browser behavior', () => {
 
     secondEvents.resolve({
       stream_generation: 1,
-      events: [liveEvent('thread-late-todo', 2, 'timeline.replaced', {
+      events: [liveEvent({
+        thread_id: 'thread-late-todo',
+        run_id: 'run-late-todo',
+        turn_id: 'm-late-todo',
+      }, 2, 'timeline.replaced', {
         messages: [{
           id: 'm-late-todo',
+          thread_id: 'thread-late-todo',
+          turn_id: 'm-late-todo',
+          run_id: 'run-late-todo',
           role: 'assistant',
           content: '',
           status: 'complete',

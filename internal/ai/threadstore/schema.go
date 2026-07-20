@@ -116,7 +116,7 @@ CREATE INDEX idx_ai_threads_endpoint_pinned_created ON ai_threads(endpoint_id, p
 		createProviderCapabilitiesTableTx,
 		createUploadTablesTx,
 		createFlowerTransferHandoffTablesTx,
-		createPermissionSnapshotTablesTx,
+		createPermissionSnapshotTablesV2Tx,
 		createFork,
 		createThreadDeleteOperationsTableTx,
 	}
@@ -264,7 +264,7 @@ CREATE INDEX idx_ai_flower_handoffs_destination ON ai_flower_handoffs(endpoint_i
 	return err
 }
 
-func createPermissionSnapshotTablesTx(tx *sql.Tx) error {
+func createPermissionSnapshotTablesV2Tx(tx *sql.Tx) error {
 	_, err := tx.Exec(`
 CREATE TABLE ai_permission_snapshots (
   snapshot_id TEXT PRIMARY KEY,

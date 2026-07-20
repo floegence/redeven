@@ -40,8 +40,9 @@ func assertFlowerApprovalReceiptCursor(t *testing.T, svc *Service, endpointID st
 func TestFlowerTimelineMessageFromRawExtractsJSONBlockContent(t *testing.T) {
 	t.Parallel()
 
-	msg, ok, err := flowerTimelineMessageFromRaw("msg_assistant", "assistant", "complete", 123, json.RawMessage(`{
+	msg, ok, err := flowerTimelineMessageFromRaw("thread_assistant", "turn_assistant", "run_assistant", "msg_assistant", json.RawMessage(`{
 		"id":"msg_assistant",
+		"turn_id":"turn_assistant",
 		"role":"assistant",
 		"status":"complete",
 		"timestamp":123,
@@ -55,6 +56,224 @@ func TestFlowerTimelineMessageFromRawExtractsJSONBlockContent(t *testing.T) {
 	}
 	if got := strings.TrimSpace(msg.Content); got != "visible answer" {
 		t.Fatalf("Content=%q, want visible answer", got)
+	}
+}
+
+func TestFlowerTimelineMessageFromRawRejectsMissingOrMismatchedTurnIdentity(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name            string
+		canonicalTurnID string
+		raw             json.RawMessage
+	}{
+		{
+			name:            "missing",
+			canonicalTurnID: "turn_assistant",
+			raw:             json.RawMessage(`{"id":"msg_assistant","role":"assistant","status":"complete","blocks":[{"type":"markdown","content":"done"}]}`),
+		},
+		{
+			name:            "mismatched",
+			canonicalTurnID: "turn_assistant",
+			raw:             json.RawMessage(`{"id":"msg_assistant","turn_id":"turn_other","role":"assistant","status":"complete","blocks":[{"type":"markdown","content":"done"}]}`),
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			_, ok, err := flowerTimelineMessageFromRaw("thread_assistant", testCase.canonicalTurnID, "run_assistant", "msg_assistant", testCase.raw)
+			if err == nil || !strings.Contains(err.Error(), "invalid turn identity") {
+				t.Fatalf("flowerTimelineMessageFromRaw error=%v, want invalid turn identity", err)
+			}
+			if ok {
+				t.Fatal("invalid canonical projection reported renderable message")
+			}
+		})
+	}
+}
+
+func TestFlowerTimelineMessageFromRawRejectsInvalidMessageIdentityAndBlocks(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name      string
+		messageID string
+		raw       json.RawMessage
+		wantError string
+	}{
+		{
+			name:      "missing raw message id",
+			messageID: "msg_assistant",
+			raw:       json.RawMessage(`{"turn_id":"turn_assistant","role":"assistant","status":"complete","timestamp":123,"blocks":[]}`),
+			wantError: "missing message identity",
+		},
+		{
+			name:      "raw message id differs from row",
+			messageID: "msg_assistant",
+			raw:       json.RawMessage(`{"id":"msg_other","turn_id":"turn_assistant","role":"assistant","status":"complete","timestamp":123,"blocks":[]}`),
+			wantError: "differs from its row",
+		},
+		{
+			name:      "malformed block",
+			messageID: "msg_assistant",
+			raw:       json.RawMessage(`{"id":"msg_assistant","turn_id":"turn_assistant","role":"assistant","status":"complete","timestamp":123,"blocks":[42]}`),
+			wantError: "block 0 is not an object",
+		},
+		{
+			name:      "null block",
+			messageID: "msg_assistant",
+			raw:       json.RawMessage(`{"id":"msg_assistant","turn_id":"turn_assistant","role":"assistant","status":"complete","timestamp":123,"blocks":[null]}`),
+			wantError: "block 0 is null",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			_, ok, err := flowerTimelineMessageFromRaw(
+				"thread_assistant",
+				"turn_assistant",
+				"run_assistant",
+				testCase.messageID,
+				testCase.raw,
+			)
+			if err == nil || !strings.Contains(err.Error(), testCase.wantError) {
+				t.Fatalf("flowerTimelineMessageFromRaw error=%v, want %q", err, testCase.wantError)
+			}
+			if ok {
+				t.Fatal("invalid canonical projection reported renderable message")
+			}
+		})
+	}
+}
+
+func TestFlowerTimelineMessageFromRawRejectsMissingRoleStatusAndTimestamp(t *testing.T) {
+	t.Parallel()
+
+	for _, testCase := range []struct {
+		name      string
+		raw       json.RawMessage
+		wantError string
+	}{
+		{
+			name:      "missing role",
+			raw:       json.RawMessage(`{"id":"msg_assistant","turn_id":"turn_assistant","status":"complete","timestamp":123,"blocks":[]}`),
+			wantError: "invalid role",
+		},
+		{
+			name:      "unknown status",
+			raw:       json.RawMessage(`{"id":"msg_assistant","turn_id":"turn_assistant","role":"assistant","status":"unknown","timestamp":123,"blocks":[]}`),
+			wantError: "invalid status",
+		},
+		{
+			name:      "missing timestamp",
+			raw:       json.RawMessage(`{"id":"msg_assistant","turn_id":"turn_assistant","role":"assistant","status":"complete","blocks":[]}`),
+			wantError: "invalid timestamp",
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			_, ok, err := flowerTimelineMessageFromRaw(
+				"thread_assistant", "turn_assistant", "run_assistant", "msg_assistant", testCase.raw,
+			)
+			if err == nil || !strings.Contains(err.Error(), testCase.wantError) {
+				t.Fatalf("flowerTimelineMessageFromRaw error=%v, want %q", err, testCase.wantError)
+			}
+			if ok {
+				t.Fatal("invalid canonical projection reported renderable message")
+			}
+		})
+	}
+}
+
+func TestFlowerLiveMessageEventsRequireExactStartedDraftIdentity(t *testing.T) {
+	t.Parallel()
+
+	const (
+		threadID  = "thread_distinct_identity"
+		turnID    = "turn_distinct_identity"
+		runID     = "run_distinct_identity"
+		messageID = "msg_distinct_identity"
+	)
+	state := FlowerLiveMaterializedState{}
+	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
+		ThreadID: threadID,
+		TurnID:   turnID,
+		RunID:    runID,
+		Kind:     FlowerLiveMessageBlockDelta,
+		Payload: mustFlowerPayload(FlowerLiveMessageBlockDeltaPayload{
+			MessageID: messageID, BlockIndex: 0, Delta: "must not synthesize",
+		}),
+	})
+	if len(state.Messages) != 0 {
+		t.Fatalf("block event synthesized a draft before message.started: %#v", state.Messages)
+	}
+
+	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
+		ThreadID: threadID,
+		TurnID:   turnID,
+		RunID:    runID,
+		Kind:     FlowerLiveMessageStarted,
+		Payload: mustFlowerPayload(FlowerLiveMessageStartedPayload{
+			MessageID: messageID, Role: "assistant", Status: "streaming", CreatedAtMs: 100,
+		}),
+	})
+	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
+		ThreadID: threadID,
+		TurnID:   turnID,
+		RunID:    runID,
+		Kind:     FlowerLiveMessageBlockStart,
+		Payload: mustFlowerPayload(FlowerLiveMessageBlockStartedPayload{
+			MessageID: messageID, BlockIndex: 0, BlockType: "markdown",
+		}),
+	})
+	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
+		ThreadID: threadID,
+		TurnID:   turnID,
+		RunID:    runID,
+		Kind:     FlowerLiveMessageBlockDelta,
+		Payload: mustFlowerPayload(FlowerLiveMessageBlockDeltaPayload{
+			MessageID: messageID, BlockIndex: 0, Delta: "before reconnect",
+		}),
+	})
+
+	reconnected := cloneFlowerLiveMaterializedState(state)
+	applyFlowerLiveEventToMaterializedState(&reconnected, nil, FlowerLiveEvent{
+		ThreadID: threadID,
+		TurnID:   turnID,
+		RunID:    runID,
+		Kind:     FlowerLiveMessageBlockDelta,
+		Payload: mustFlowerPayload(FlowerLiveMessageBlockDeltaPayload{
+			MessageID: messageID, BlockIndex: 0, Delta: " after reconnect",
+		}),
+	})
+	draft, ok := reconnected.Messages[messageID]
+	if !ok || draft.MessageID != messageID || draft.TurnID != turnID || draft.RunID != runID || draft.ThreadID != threadID {
+		t.Fatalf("reconnected draft identity=%#v ok=%v", draft, ok)
+	}
+	if len(draft.Blocks) != 1 || draft.Blocks[0].Content != "before reconnect after reconnect" {
+		t.Fatalf("reconnected draft blocks=%#v", draft.Blocks)
+	}
+
+	applyFlowerLiveEventToMaterializedState(&reconnected, nil, FlowerLiveEvent{
+		ThreadID: threadID,
+		TurnID:   "turn_other",
+		RunID:    runID,
+		Kind:     FlowerLiveMessageBlockDelta,
+		Payload: mustFlowerPayload(FlowerLiveMessageBlockDeltaPayload{
+			MessageID: messageID, BlockIndex: 0, Delta: " corrupt",
+		}),
+	})
+	if got := reconnected.Messages[messageID].Blocks[0].Content; got != "before reconnect after reconnect" {
+		t.Fatalf("mismatched event changed exact draft content=%q", got)
+	}
+
+	applyFlowerLiveEventToMaterializedState(&reconnected, nil, FlowerLiveEvent{
+		ThreadID: threadID,
+		TurnID:   turnID,
+		RunID:    runID,
+		Kind:     FlowerLiveMessageFailed,
+		Payload:  mustFlowerPayload(FlowerLiveMessageFailedPayload{MessageID: messageID}),
+	})
+	if got := reconnected.Messages[messageID].Status; got != "error" {
+		t.Fatalf("failed message status=%q, want error", got)
 	}
 }
 
@@ -283,7 +502,7 @@ func TestFlowerApprovalQueueSerializesDecisionsWithoutSerializingHandlers(t *tes
 	r.toolApprovals["tool_second"] = &toolApprovalRequest{decision: secondDecision, promoted: make(chan struct{}), toolName: "task_complete", requestedAtMs: 2}
 	for _, toolID := range []string{"tool_first", "tool_second"} {
 		action := r.controlConfirmationApprovalActionLocked(toolID, r.toolApprovals[toolID])
-		svc.appendFlowerLiveEvent(FlowerLiveEvent{EndpointID: meta.EndpointID, ThreadID: r.threadID, RunID: r.id, TurnID: r.messageID, Kind: FlowerLiveApprovalRequested, Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: action})})
+		svc.appendFlowerLiveEvent(FlowerLiveEvent{EndpointID: meta.EndpointID, ThreadID: r.threadID, RunID: r.id, TurnID: r.turnID, Kind: FlowerLiveApprovalRequested, Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: action})})
 	}
 
 	current := func(actionID string) (FlowerApprovalAction, FlowerApprovalQueue) {
@@ -387,7 +606,7 @@ func TestFlowerApprovalQueueRejectsTimedOutCardWithoutTouchingPromotedAction(t *
 	r.toolApprovals["tool_second"] = &toolApprovalRequest{decision: secondDecision, promoted: make(chan struct{}), toolName: "task_complete", requestedAtMs: 2}
 	for _, toolID := range []string{"tool_first", "tool_second"} {
 		action := r.controlConfirmationApprovalActionLocked(toolID, r.toolApprovals[toolID])
-		svc.appendFlowerLiveEvent(FlowerLiveEvent{EndpointID: meta.EndpointID, ThreadID: r.threadID, RunID: r.id, TurnID: r.messageID, Kind: FlowerLiveApprovalRequested, Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: action})})
+		svc.appendFlowerLiveEvent(FlowerLiveEvent{EndpointID: meta.EndpointID, ThreadID: r.threadID, RunID: r.id, TurnID: r.turnID, Kind: FlowerLiveApprovalRequested, Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: action})})
 	}
 
 	current := func(actionID string) (FlowerApprovalAction, FlowerApprovalQueue) {
@@ -408,7 +627,7 @@ func TestFlowerApprovalQueueRejectsTimedOutCardWithoutTouchingPromotedAction(t *
 		EndpointID: meta.EndpointID,
 		ThreadID:   r.threadID,
 		RunID:      r.id,
-		TurnID:     r.messageID,
+		TurnID:     r.turnID,
 		Kind:       FlowerLiveApprovalResolved,
 		Payload:    mustFlowerPayload(FlowerLiveApprovalPayload{Action: timedOut}),
 	})

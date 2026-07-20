@@ -18,7 +18,7 @@ type runHostCapabilities struct {
 	pendingLiveToolApprovals              func(string) []FlowerApprovalAction
 	broadcastThreadState                  func(string, string, string, string)
 	broadcastThreadSummary                func()
-	replaceLiveDraftWithCanonicalTimeline func(context.Context, string, string, string) error
+	replaceLiveDraftWithCanonicalTimeline func(context.Context, string, string, string, string) error
 	lastVisibleTimelineAnchor             func(context.Context) (FlowerTimelineAnchor, error)
 	reconcilePendingTurnCommand           func(context.Context, string, string, []string) (bool, error)
 	commitPendingTurnCommandAdmission     func(context.Context, string, string, []string) error
@@ -60,8 +60,8 @@ func (s *Service) bindRunHostCapabilities(endpointID string, threadID string) (r
 	host.broadcastThreadSummary = func() {
 		s.broadcastThreadSummary(endpointID, threadID)
 	}
-	host.replaceLiveDraftWithCanonicalTimeline = func(ctx context.Context, runID string, turnID string, reason string) error {
-		return s.replaceFlowerLiveDraftWithCanonicalTimeline(ctx, endpointID, threadID, runID, turnID, reason)
+	host.replaceLiveDraftWithCanonicalTimeline = func(ctx context.Context, runID string, turnID string, messageID string, reason string) error {
+		return s.replaceFlowerLiveDraftWithCanonicalTimeline(ctx, endpointID, threadID, runID, turnID, messageID, reason)
 	}
 	host.lastVisibleTimelineAnchor = func(ctx context.Context) (FlowerTimelineAnchor, error) {
 		return s.lastVisibleFlowerTimelineAnchor(ctx, endpointID, threadID)

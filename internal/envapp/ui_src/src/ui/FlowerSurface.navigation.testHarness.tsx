@@ -15,6 +15,7 @@ import type {
   FlowerThreadReadStatus,
   FlowerLiveBootstrap,
   FlowerThreadSnapshot,
+  FlowerTurnLaunchReceipt,
   FlowerActivityStatus,
   FlowerModelIOStatus,
   FlowerContextCompaction,
@@ -305,6 +306,7 @@ export function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThr
     messages: [
       {
         id: 'm1',
+        turn_id: 'turn-1',
         role: 'user',
         content: 'Plan deploy',
         status: 'complete',
@@ -361,6 +363,15 @@ export function liveBootstrap(threadValue: FlowerThreadSnapshot, cursor = 0): Fl
   };
 }
 
+export function launchReceipt(threadID: string, turnID: string, kind: 'start' | 'queued' = 'start'): FlowerTurnLaunchReceipt {
+  return {
+    thread_id: threadID,
+    turn_id: turnID,
+    run_id: `run-${turnID}`,
+    kind,
+  };
+}
+
 export function activityItem(overrides: Partial<FlowerActivityItem> = {}): FlowerActivityItem {
   return {
     item_id: 'tool-terminal',
@@ -376,8 +387,9 @@ export function activityItem(overrides: Partial<FlowerActivityItem> = {}): Flowe
 }
 
 export function activityTimeline(args: {
-  run_id?: string;
-  turn_id?: string;
+  thread_id: string;
+  run_id: string;
+  turn_id: string;
   status?: FlowerActivityStatus;
   severity?: 'quiet' | 'normal' | 'warning' | 'error' | 'blocking';
   needs_attention?: boolean;
@@ -407,8 +419,9 @@ export function activityTimeline(args: {
   return {
     type: 'activity-timeline' as const,
     schema_version: 1,
-    run_id: args.run_id ?? 'run-1',
-    turn_id: args.turn_id ?? 'm-1',
+    thread_id: args.thread_id,
+    run_id: args.run_id,
+    turn_id: args.turn_id,
     summary: {
       status,
       severity,
@@ -496,6 +509,7 @@ export function subagentDetail(overrides: Partial<FlowerSubagentDetail> = {}): F
       },
     ],
     activity: activityTimeline({
+      thread_id: 'thread-child-review',
       run_id: 'subagent:thread-child-review',
       turn_id: 'child-canonical',
       items: [
@@ -672,7 +686,7 @@ export function adapter(configured = true): FlowerSurfaceAdapter {
     })),
     resolveHandler: vi.fn(async () => decision()),
     persistDefaultModel: vi.fn(async () => settingsSnapshot(configured)),
-    launchTurn: vi.fn(async () => liveBootstrap(thread())),
+    launchTurn: vi.fn(async (input) => launchReceipt(input.thread_id ?? 'thread-1', input.turn_id ?? 'turn-launch')),
     compactThreadContext: vi.fn(async (input) => liveBootstrap(thread({
       thread_id: input.thread_id,
       status: 'running',

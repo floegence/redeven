@@ -19,6 +19,7 @@ import {
   flush,
   flowerSurfaceNotifications,
   inputRequest,
+  launchReceipt,
   liveBootstrap,
   modelIOStatus,
   readStatus,
@@ -435,7 +436,7 @@ describe('FlowerSurface navigation threads', () => {
       }));
       const setThreadPermissionType = vi.fn(async (threadID: string) => liveBootstrap(thread({ thread_id: threadID, permission_type: 'full_access' })));
       const stopThread = vi.fn(async (threadID: string) => liveBootstrap(thread({ thread_id: threadID, status: 'canceled' })));
-      const launchTurn = vi.fn(async () => liveBootstrap(thread()));
+      const launchTurn = vi.fn(async (input: { thread_id?: string; turn_id?: string }) => launchReceipt(input.thread_id ?? 'thread-1', input.turn_id ?? 'turn-thread-test'));
       const compactThreadContext = vi.fn(async (input) => liveBootstrap(thread({ thread_id: input.thread_id, status: 'running' })));
       const runtime = renderSurfaceWithAdapter({
         ...adapter(true),
@@ -890,6 +891,58 @@ describe('FlowerSurface navigation threads', () => {
     await waitFor(() => runtime.querySelector('.flower-chat-context-preview-window') === null);
   });
 
+  it('renders canonical attachments and text in source order inside a contextual user message', async () => {
+    const attachmentThread = thread({
+      thread_id: 'thread-canonical-attachments',
+      title: 'Canonical attachments',
+      messages: [{
+        id: 'entry-canonical-attachments',
+        thread_id: 'thread-canonical-attachments',
+        turn_id: 'turn-canonical-attachments',
+        run_id: 'run-canonical-attachments',
+        role: 'user',
+        content: 'Inspect these files.',
+        status: 'complete',
+        created_at_ms: 1_000,
+        blocks: [
+          { type: 'image', src: '/_redeven_proxy/api/ai/uploads/image-1', alt: 'Screenshot' },
+          {
+            type: 'file', name: 'notes.txt', size: 12, mimeType: 'text/plain',
+            url: '/_redeven_proxy/api/ai/uploads/file-1',
+          },
+          { type: 'markdown', content: 'Inspect these files.' },
+        ],
+        context_action: askFlowerContextAction(),
+      }],
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [attachmentThread]),
+      loadThread: vi.fn(async () => liveBootstrap(attachmentThread)),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-canonical-attachments"] button')));
+    (runtime.querySelector('[data-thread-id="thread-canonical-attachments"] button') as HTMLButtonElement).click();
+    await waitFor(() => Boolean(runtime.querySelector('.flower-message-image img')));
+
+    const image = runtime.querySelector('.flower-message-image img') as HTMLImageElement;
+    const file = runtime.querySelector('.flower-message-file') as HTMLAnchorElement;
+    expect(image.getAttribute('src')).toBe('/_redeven_proxy/api/ai/uploads/image-1');
+    expect(image.getAttribute('alt')).toBe('Screenshot');
+    expect(file.textContent).toContain('notes.txt');
+    expect(file.textContent).toContain('12 B');
+    expect(file.getAttribute('href')).toBe('/_redeven_proxy/api/ai/uploads/file-1');
+    const bubble = runtime.querySelector('.flower-chat-context-unified-bubble') as HTMLElement;
+    expect(Array.from(bubble.children).map((child) => child.className)).toEqual([
+      'flower-message-image',
+      'flower-message-file',
+      'flower-message-plain-text',
+      'flower-chat-context-chips',
+    ]);
+    expect(bubble.textContent).toContain('Inspect these files.');
+    expect(runtime.querySelector('[data-flower-chat-context-chip="true"]')).toBeTruthy();
+  });
+
   it('restores a historical file reference in a canceled thread when is_directory was omitted', async () => {
     const openLinkedFilePreview = vi.fn(async () => undefined);
     const contextThread = thread({
@@ -1323,6 +1376,9 @@ describe('FlowerSurface navigation threads', () => {
       messages: [
         {
           id: 'm-running',
+          thread_id: 'thread-running-wave',
+          turn_id: 'turn-running-wave',
+          run_id: 'run-running-wave',
           role: 'assistant',
           content: 'Working...',
           status: 'streaming',
@@ -1347,6 +1403,7 @@ describe('FlowerSurface navigation threads', () => {
           seq: 2,
           endpoint_id: 'test-runtime',
           thread_id: 'thread-running-wave',
+          turn_id: 'turn-running-wave',
           run_id: 'run-running-wave',
           at_unix_ms: 5_800,
           kind: 'message.block_delta' as const,
@@ -1529,6 +1586,9 @@ describe('FlowerSurface navigation threads', () => {
       status: 'running',
       messages: [{
         id: 'm-generation-reset',
+        thread_id: 'thread-live-generation-reset',
+        turn_id: 'turn-1',
+        run_id: 'run-1',
         role: 'assistant',
         content: 'Old stream',
         status: 'streaming',
@@ -2306,6 +2366,9 @@ describe('FlowerSurface navigation threads', () => {
           blocks: [
             { type: 'markdown', content: 'Loaded detail stays visible.' },
             activityTimeline({
+              thread_id: 'thread-detail',
+              run_id: 'run-detail',
+              turn_id: 'turn-detail',
               status: 'running',
               severity: 'normal',
               needs_attention: true,
@@ -2554,6 +2617,9 @@ describe('FlowerSurface navigation threads', () => {
       messages: [
         {
           id: 'message-streaming-row',
+          thread_id: 'thread-streaming-row',
+          turn_id: 'turn-1',
+          run_id: 'run-1',
           role: 'assistant',
           content: '',
           status: 'streaming',
@@ -2611,6 +2677,9 @@ describe('FlowerSurface navigation threads', () => {
       messages: [
         {
           id: 'message-streaming-markdown-stability',
+          thread_id: 'thread-streaming-markdown-stability',
+          turn_id: 'turn-1',
+          run_id: 'run-1',
           role: 'assistant',
           content: 'Committed paragraph.\n\nGrowing tail',
           status: 'streaming',
@@ -2666,6 +2735,9 @@ describe('FlowerSurface navigation threads', () => {
       messages: [
         {
           id: 'message-running-selection',
+          thread_id: 'thread-running-selection',
+          turn_id: 'turn-1',
+          run_id: 'run-1',
           role: 'assistant',
           content: 'Selectable running text.\n\nStreaming tail',
           status: 'streaming',
@@ -2796,6 +2868,7 @@ describe('FlowerSurface navigation threads', () => {
 
   it('updates running activity rows in place without disturbing selected transcript text', async () => {
     const runningActivity = activityTimeline({
+      thread_id: 'thread-running-activity',
       run_id: 'run-1',
       turn_id: 'turn-1',
       status: 'running',
@@ -2812,6 +2885,7 @@ describe('FlowerSurface navigation threads', () => {
       })],
     });
     const completedActivity = activityTimeline({
+      thread_id: 'thread-running-activity',
       run_id: 'run-1',
       turn_id: 'turn-1',
       status: 'success',
@@ -2839,6 +2913,9 @@ describe('FlowerSurface navigation threads', () => {
       messages: [
         {
           id: 'message-running-activity',
+          thread_id: 'thread-running-activity',
+          turn_id: 'turn-1',
+          run_id: 'run-1',
           role: 'assistant',
           content: 'Stable selected activity text.\n\nWaiting on tool',
           status: 'streaming',
@@ -3390,6 +3467,9 @@ describe('FlowerSurface navigation threads', () => {
       status: 'running',
       messages: [{
         id: 'm-follow-running',
+        thread_id: 'thread-follow-running',
+        turn_id: 'turn-1',
+        run_id: 'run-1',
         role: 'assistant',
         content: 'Working',
         status: 'streaming',
@@ -3445,6 +3525,9 @@ describe('FlowerSurface navigation threads', () => {
       status: 'running',
       messages: [{
         id: 'm-follow-interrupt',
+        thread_id: 'thread-follow-interrupt',
+        turn_id: 'turn-1',
+        run_id: 'run-1',
         role: 'assistant',
         content: 'Working',
         status: 'streaming',

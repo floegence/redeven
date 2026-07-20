@@ -59,8 +59,8 @@ func TestNewService_RecoversDurableQueuedTurnAfterRestart(t *testing.T) {
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input: RunInput{
-			MessageID: "m_restart_queued",
-			Text:      "resume this queued turn",
+			TurnID: "m_restart_queued",
+			Text:   "resume this queued turn",
 			ContextAction: &ContextActionEnvelope{
 				SchemaVersion: ContextActionSchemaVersion,
 				ActionID:      contextActionAskFlowerID,

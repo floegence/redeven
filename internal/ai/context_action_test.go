@@ -127,53 +127,6 @@ func TestNormalizeAskFlowerContextActionRejectsContextFreePayloads(t *testing.T)
 	}
 }
 
-func TestBuildUserMessageJSONPersistsContextActionWithoutPermissionHints(t *testing.T) {
-	raw := []byte(`{
-		"text": "Review this folder",
-		"context_action": {
-			"schema_version": 2,
-			"action_id": "assistant.ask.flower",
-			"provider": "flower",
-			"target": {"target_id": "current", "locality": "auto", "can_write": true},
-			"source": {"surface": "file_browser"},
-			"execution_context": {
-				"current_target_id": "env_a",
-				"source_env_public_id": "env_a",
-				"runtime_hint": "auto",
-				"session_source": "provider_environment",
-				"grant": "secret"
-			},
-			"context": [{"kind": "file_path", "path": "/workspace/app", "is_directory": true}],
-			"presentation": {"label": "Ask Flower", "priority": 100},
-			"suggested_working_dir_abs": "/workspace/app"
-		}
-	}`)
-	var input RunInput
-	if err := json.Unmarshal(raw, &input); err != nil {
-		t.Fatalf("json.Unmarshal RunInput: %v", err)
-	}
-
-	messageJSON, text, err := buildUserMessageJSON("msg_1", input, nil, 123)
-	if err != nil {
-		t.Fatalf("buildUserMessageJSON: %v", err)
-	}
-	if text != "Review this folder" {
-		t.Fatalf("text = %q", text)
-	}
-	if !strings.Contains(messageJSON, `"contextAction"`) {
-		t.Fatalf("message JSON missing contextAction: %s", messageJSON)
-	}
-	if strings.Contains(messageJSON, "can_write") || strings.Contains(messageJSON, "grant") {
-		t.Fatalf("message JSON retained browser permission material: %s", messageJSON)
-	}
-	if !strings.Contains(messageJSON, `"source_env_public_id":"env_a"`) {
-		t.Fatalf("message JSON missing execution routing hint: %s", messageJSON)
-	}
-	if !strings.Contains(messageJSON, `"suggested_working_dir_abs":"/workspace/app"`) {
-		t.Fatalf("message JSON missing suggested working dir: %s", messageJSON)
-	}
-}
-
 func TestQueuedTurnContextActionPersistsThroughStoreRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -212,7 +165,7 @@ func TestQueuedTurnContextActionPersistsThroughStoreRoundTrip(t *testing.T) {
 		ThreadID: thread.ThreadID,
 		Model:    "openai/gpt-5.5",
 		Input: RunInput{
-			MessageID:     "msg_context_action",
+			TurnID:        "msg_context_action",
 			Text:          "queued with context",
 			ContextAction: action,
 			Attachments: []RunAttachmentIn{{

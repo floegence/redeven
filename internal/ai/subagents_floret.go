@@ -731,7 +731,10 @@ func (r *run) newSubagentRun(host runHostCapabilities, product runProductCapabil
 		RunID:                 r.id,
 		ChannelID:             r.channelID,
 		EndpointID:            r.endpointID,
+		ThreadID:              r.threadID,
+		TurnID:                r.turnID,
 		UserPublicID:          r.userPublicID,
+		MessageID:             r.messageID,
 		UploadsDir:            r.uploadsDir,
 		ProductCapabilities:   product,
 		EffectAuthorizations:  r.effectAuthorizations,
@@ -810,6 +813,7 @@ func (s *floretSubagentRuntime) dynamicSubagentToolSurfaceProvider(state *floret
 		childRun.setPendingToolSettlementOwnerResolver(func() floretPendingToolSettler { return s.currentHost() })
 		childRun.threadID = childThreadID
 		childRun.id = childRunID
+		childRun.turnID = strings.TrimSpace(string(req.TurnID))
 		childRun.messageID = strings.TrimSpace(string(req.TurnID))
 		childRun.settlementThreadID = strings.TrimSpace(string(req.ThreadID))
 		childRun.settlementRunID = strings.TrimSpace(string(req.RunID))
@@ -1091,7 +1095,7 @@ func (s *floretSubagentRuntime) spawn(ctx context.Context, toolCallID string, ar
 	}
 	contextMode := normalizeSubagentContextMode(anyToString(args["context_mode"]))
 	forkMode := subagentForkModeForContextMode(contextMode)
-	publicationID, childThreadID, childRunID, err := subagentSpawnIdentities(parent.threadID, parent.messageID, toolCallID)
+	publicationID, childThreadID, childRunID, err := subagentSpawnIdentities(parent.threadID, parent.turnID, toolCallID)
 	if err != nil {
 		return nil, err
 	}
@@ -1121,7 +1125,7 @@ func (s *floretSubagentRuntime) spawn(ctx context.Context, toolCallID string, ar
 	spawnRequest := flruntime.SpawnSubAgentRequest{
 		PublicationID:   publicationID,
 		ParentThreadID:  flruntime.ThreadID(strings.TrimSpace(parent.threadID)),
-		ParentTurnID:    flruntime.TurnID(strings.TrimSpace(parent.messageID)),
+		ParentTurnID:    flruntime.TurnID(strings.TrimSpace(parent.turnID)),
 		ThreadID:        flruntime.ThreadID(childThreadID),
 		TaskName:        taskName,
 		TaskDescription: taskDescription,
@@ -2317,7 +2321,7 @@ func (s *floretSubagentRuntime) closeAllExisting(ctx context.Context) error {
 	if host == nil {
 		return errors.New("active SubAgent host unavailable")
 	}
-	_, err := closeSubagentsWithHost(ctx, host, strings.TrimSpace(parent.threadID), "parent_stop", strings.TrimSpace(parent.messageID))
+	_, err := closeSubagentsWithHost(ctx, host, strings.TrimSpace(parent.threadID), "parent_stop", strings.TrimSpace(parent.turnID))
 	return err
 }
 
@@ -3090,7 +3094,7 @@ func (s *floretSubagentRuntime) runLabels(agentType string, childThreadID string
 		Correlation: map[string]string{
 			"parent_run_id":    strings.TrimSpace(parent.id),
 			"parent_thread_id": strings.TrimSpace(parent.threadID),
-			"parent_turn_id":   strings.TrimSpace(parent.messageID),
+			"parent_turn_id":   strings.TrimSpace(parent.turnID),
 			"child_run_id":     childRunID,
 		},
 		Host: host,

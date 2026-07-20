@@ -833,7 +833,7 @@ func formatRequestUserInputAssistantSummary(prompt RequestUserInputPrompt) strin
 	return truncateRunes(fmt.Sprintf("Input requested (%d questions): %s", len(prompt.Questions), strings.Join(items, "; ")), 240)
 }
 
-func buildRequestUserInputResponseRecord(prompt RequestUserInputPrompt, response RequestUserInputResponse, responseMessageID string) (RequestUserInputResponseRecord, []RequestUserInputSecretAnswer, error) {
+func buildRequestUserInputResponseRecord(prompt RequestUserInputPrompt, response RequestUserInputResponse) (RequestUserInputResponseRecord, []RequestUserInputSecretAnswer, error) {
 	promptPtr := normalizeRequestUserInputPrompt(&prompt)
 	responsePtr, err := validateRequestUserInputResponse(promptPtr, &response)
 	if err != nil {
@@ -843,10 +843,9 @@ func buildRequestUserInputResponseRecord(prompt RequestUserInputPrompt, response
 	response = *responsePtr
 
 	record := RequestUserInputResponseRecord{
-		PromptID:          prompt.PromptID,
-		ToolID:            prompt.ToolID,
-		ReasonCode:        prompt.ReasonCode,
-		ResponseMessageID: strings.TrimSpace(responseMessageID),
+		PromptID:   prompt.PromptID,
+		ToolID:     prompt.ToolID,
+		ReasonCode: prompt.ReasonCode,
 	}
 	secrets := make([]RequestUserInputSecretAnswer, 0, len(prompt.Questions))
 	summaries := make([]string, 0, len(prompt.Questions))

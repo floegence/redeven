@@ -1,4 +1,5 @@
 import type { RedevenV1Rpc } from '../protocol/redeven_v1';
+import { ProtocolNotConnectedError, RpcError } from '@floegence/floe-webapp-protocol';
 import { fetchLocalApiJSON } from '../services/localApi';
 import type { AgentSettingsResponse, AIConfig, AIModelProfile } from '../pages/settings/types';
 import type {
@@ -21,6 +22,11 @@ import type {
 import { requireAskFlowerContextActionEnvelope } from '../contextActions/protocol';
 import { mapFlowerLiveBootstrap } from '../../../../../flower_ui/src/flowerLiveMapper';
 import { createRuntimeFlowerSurfaceAdapter } from '../../../../../flower_ui/src/runtimeFlowerSurfaceAdapter';
+import {
+  createFlowerClientTurnID,
+  flowerTurnAdmissionUncertainIdentity,
+  flowerTurnAdmissionUncertainFailure,
+} from '../../../../../flower_ui/src/flowerTurnAdmission';
 import {
   normalizeFlowerReasoningCapability,
   serializeFlowerReasoningSelection,
@@ -579,21 +585,52 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         });
       }
       await options.rpc.ai.subscribeThread({ threadId: threadID });
-      await options.rpc.ai.sendUserTurn({
-        threadId: threadID,
-        ...(turnModelID ? { model: turnModelID } : {}),
-        input: {
-          ...(trim(input.message_id) ? { messageId: trim(input.message_id) } : {}),
-          text: prompt,
-          attachments,
-          ...(contextAction ? { contextAction } : {}),
-        },
-        options: {
-          permissionType,
-          ...(serializeFlowerReasoningSelection(input.reasoning_selection) ? { reasoningSelection: serializeFlowerReasoningSelection(input.reasoning_selection) } : {}),
-        },
-      });
-      return loadThread(threadID);
+      const proposedTurnID = trim(input.turn_id) || createFlowerClientTurnID();
+      try {
+        const response = await options.rpc.ai.sendUserTurn({
+          threadId: threadID,
+          ...(turnModelID ? { model: turnModelID } : {}),
+          input: {
+            turnId: proposedTurnID,
+            text: prompt,
+            attachments,
+            ...(contextAction ? { contextAction } : {}),
+          },
+          options: {
+            permissionType,
+            ...(serializeFlowerReasoningSelection(input.reasoning_selection) ? { reasoningSelection: serializeFlowerReasoningSelection(input.reasoning_selection) } : {}),
+          },
+        });
+        const turnID = trim(response.turnId);
+        const runID = trim(response.runId);
+        const kind = trim(response.kind);
+        if (!turnID || !runID || (kind !== 'start' && kind !== 'queued')) {
+          throw flowerTurnAdmissionUncertainFailure(
+            new Error('Flower turn admission returned an invalid receipt.'),
+            threadID,
+            proposedTurnID,
+          );
+        }
+        if (proposedTurnID !== turnID) {
+          throw flowerTurnAdmissionUncertainFailure(
+            new Error('Flower turn admission returned a different turn identity.'),
+            threadID,
+            proposedTurnID,
+          );
+        }
+        return { thread_id: threadID, turn_id: turnID, run_id: runID, kind };
+      } catch (error) {
+        if (error instanceof ProtocolNotConnectedError) {
+          throw error;
+        }
+        if (error instanceof RpcError && error.code !== -1) {
+          throw error;
+        }
+        if (flowerTurnAdmissionUncertainIdentity(error)) {
+          throw error;
+        }
+        throw flowerTurnAdmissionUncertainFailure(error, threadID, proposedTurnID);
+      }
     },
     stopThread: async (threadID) => {
       const tid = trim(threadID);
@@ -615,7 +652,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       const promptID = trim(input.prompt_id);
       if (!tid) throw new Error(adapterCopy(options).missingThreadID);
       if (!promptID) throw new Error('Missing input prompt id.');
-      await options.rpc.ai.submitRequestUserInputResponse({
+      const response = await options.rpc.ai.submitRequestUserInputResponse({
         threadId: tid,
         response: {
           promptId: promptID,
@@ -635,6 +672,9 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
           ...(serializeFlowerReasoningSelection(input.reasoning_selection) ? { reasoningSelection: serializeFlowerReasoningSelection(input.reasoning_selection) } : {}),
         },
       });
+      if (!trim(response.turnId) || !trim(response.runId) || trim(response.kind) !== 'start') {
+        throw new Error('Flower input response admission returned an invalid receipt.');
+      }
       return loadThread(tid);
     },
     missingThreadID: copy.missingThreadID,

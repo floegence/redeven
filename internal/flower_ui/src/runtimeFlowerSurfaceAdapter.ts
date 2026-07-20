@@ -9,6 +9,7 @@ import type {
   FlowerResolveHandlerInput,
   FlowerRouterDecision,
   FlowerTurnLaunchInput,
+  FlowerTurnLaunchReceipt,
   FlowerWorkingDirectoryEntry,
   FlowerWorkingDirectoryListInput,
   FlowerWorkingDirectoryPathContext,
@@ -120,7 +121,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   saveModelProfile: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
   persistDefaultModel: (modelID: string) => Promise<FlowerSettingsSnapshot>;
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
-  launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerLiveBootstrap>;
+  launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;
   compactThreadContext: (input: FlowerCompactThreadContextInput) => Promise<FlowerLiveBootstrap>;
   stopThread: (threadID: string) => Promise<FlowerLiveBootstrap>;
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerLiveBootstrap>;

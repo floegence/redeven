@@ -51,8 +51,8 @@ func TestSendUserTurn_WaitingUserQueueAfterWaitingUser_QueuesWithoutConsumingPro
 		Model:                 "openai/gpt-5-mini",
 		QueueAfterWaitingUser: true,
 		Input: RunInput{
-			MessageID: "m_waiting_queue_later_1",
-			Text:      "queue this until I answer",
+			TurnID: "m_waiting_queue_later_1",
+			Text:   "queue this until I answer",
 		},
 		Options: RunOptions{},
 	})
@@ -61,6 +61,9 @@ func TestSendUserTurn_WaitingUserQueueAfterWaitingUser_QueuesWithoutConsumingPro
 	}
 	if resp.Kind != "queued" {
 		t.Fatalf("resp.Kind=%q, want queued", resp.Kind)
+	}
+	if resp.TurnID != "m_waiting_queue_later_1" || strings.TrimSpace(resp.RunID) == "" {
+		t.Fatalf("queued receipt=%#v, want exact turn and allocated run", resp)
 	}
 	if strings.TrimSpace(resp.ConsumedWaitingPromptID) != "" {
 		t.Fatalf("ConsumedWaitingPromptID=%q, want empty", resp.ConsumedWaitingPromptID)
@@ -138,8 +141,8 @@ func TestService_StopThread_RecoversQueuedFollowupsToDraftsAndClearsQueue(t *tes
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input: RunInput{
-			MessageID: "m_stop_recover_1",
-			Text:      "recover this after stop",
+			TurnID: "m_stop_recover_1",
+			Text:   "recover this after stop",
 		},
 		Options: RunOptions{},
 	})
@@ -148,6 +151,9 @@ func TestService_StopThread_RecoversQueuedFollowupsToDraftsAndClearsQueue(t *tes
 	}
 	if queuedResp.Kind != "queued" {
 		t.Fatalf("queuedResp.Kind=%q, want queued", queuedResp.Kind)
+	}
+	if queuedResp.TurnID != "m_stop_recover_1" || strings.TrimSpace(queuedResp.RunID) == "" {
+		t.Fatalf("queued receipt=%#v, want exact turn and allocated run", queuedResp)
 	}
 
 	stopCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
@@ -228,8 +234,8 @@ func TestService_StopThread_CancelsIdleCompactionAndKeepsQueuedTurnDrafted(t *te
 		ThreadID: th.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input: RunInput{
-			MessageID: "m_stop_idle_compaction_followup",
-			Text:      "queued behind compaction",
+			TurnID: "m_stop_idle_compaction_followup",
+			Text:   "queued behind compaction",
 		},
 		Options: RunOptions{},
 	})

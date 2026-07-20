@@ -90,10 +90,49 @@ func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 	}
 
 	inputResponsePath := "/_redeven_proxy/api/ai/threads/" + url.PathEscape(thread.ThreadID) + "/input_response"
+	baseline, err := aiSvc.GetFlowerThreadLiveBootstrap(t.Context(), &meta, thread.ThreadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, testCase := range []struct {
+		name string
+		body string
+	}{
+		{
+			name: "legacy message identity",
+			body: `{"response":{"prompt_id":"` + promptID + `","answers":{"question_1":{"text":"ship it"}}},"input":{"message_id":"legacy","text":"ship it","attachments":[]},"options":{}}`,
+		},
+		{
+			name: "invalid turn identity",
+			body: `{"response":{"prompt_id":"` + promptID + `","answers":{"question_1":{"text":"ship it"}}},"input":{"turn_id":"invalid turn id","text":"ship it","attachments":[]},"options":{}}`,
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			rr := performServerRequest(srv, http.MethodPost, inputResponsePath, envOrigin, testCase.body)
+			if rr.Code != http.StatusBadRequest {
+				t.Fatalf("invalid input response status=%d, want=%d body=%s", rr.Code, http.StatusBadRequest, rr.Body.String())
+			}
+			view, err := aiSvc.GetThread(t.Context(), &meta, thread.ThreadID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if view.QueuedTurnCount != 0 || len(view.QueuedTurns) != 0 || aiSvc.HasActiveThreadForEndpoint(meta.EndpointID, thread.ThreadID) {
+				t.Fatalf("invalid input response changed product admission state: %#v", view)
+			}
+			bootstrap, err := aiSvc.GetFlowerThreadLiveBootstrap(t.Context(), &meta, thread.ThreadID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(bootstrap.TimelineMessages) != len(baseline.TimelineMessages) {
+				t.Fatalf("invalid input response changed canonical timeline: before=%d after=%d", len(baseline.TimelineMessages), len(bootstrap.TimelineMessages))
+			}
+		})
+	}
+
 	mismatch := performServerRequest(srv, http.MethodPost, inputResponsePath, envOrigin, `{
 		"thread_id":"other_thread",
 		"response":{"prompt_id":"`+promptID+`","answers":{"question_1":{"text":"ship it"}}},
-		"input":{"text":"ship it","attachments":[]},
+		"input":{"turn_id":"turn_appserver_input_response","text":"ship it","attachments":[]},
 		"options":{}
 	}`)
 	if mismatch.Code != http.StatusBadRequest {
@@ -107,7 +146,7 @@ func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 
 	body := bytes.NewBufferString(`{
 		"response":{"prompt_id":"` + promptID + `","answers":{"question_1":{"text":"ship it"}}},
-		"input":{"text":"ship it","attachments":[]},
+		"input":{"turn_id":"turn_appserver_input_response","text":"ship it","attachments":[]},
 		"options":{}
 	}`)
 	req := httptest.NewRequest(http.MethodPost, inputResponsePath, body)
@@ -121,6 +160,7 @@ func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 		OK   bool `json:"ok"`
 		Data struct {
 			RunID                   string `json:"run_id"`
+			TurnID                  string `json:"turn_id"`
 			Kind                    string `json:"kind"`
 			ConsumedWaitingPromptID string `json:"consumed_waiting_prompt_id"`
 		} `json:"data"`
@@ -128,7 +168,7 @@ func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 	if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("json.Unmarshal response: %v", err)
 	}
-	if !resp.OK || resp.Data.Kind != "start" || resp.Data.RunID == "" || resp.Data.ConsumedWaitingPromptID != promptID {
+	if !resp.OK || resp.Data.Kind != "start" || resp.Data.RunID == "" || resp.Data.TurnID != "turn_appserver_input_response" || resp.Data.ConsumedWaitingPromptID != promptID {
 		t.Fatalf("unexpected input response payload: %+v", resp)
 	}
 }

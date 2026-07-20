@@ -26,6 +26,7 @@ function activityTimeline(overrides: Partial<FlowerActivityTimelineBlock> = {}):
   return {
     type: 'activity-timeline',
     schema_version: 1,
+    thread_id: 'thread-1',
     run_id: 'run-1',
     turn_id: 'turn-1',
     summary: {
@@ -71,6 +72,31 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
 }
 
 describe('buildFlowerTimelineEntries', () => {
+  it('keeps canonical image and file attachments in their original block order', () => {
+    const entries = buildFlowerTimelineEntries(thread({
+      messages: [{
+        id: 'entry-attachments',
+        thread_id: 'thread-1',
+        turn_id: 'turn-attachments',
+        run_id: 'run-attachments',
+        role: 'user',
+        content: 'Inspect these files.',
+        status: 'complete',
+        created_at_ms: 2,
+        blocks: [
+          { type: 'image', src: '/api/uploads/image-1', alt: 'Screenshot' },
+          { type: 'file', name: 'notes.txt', size: 12, mimeType: 'text/plain', url: '/api/uploads/file-1' },
+          { type: 'markdown', content: 'Inspect these files.' },
+        ],
+      }],
+    }));
+
+    const entry = entries[0];
+    expect(entry?.type).toBe('message');
+    if (entry?.type !== 'message') throw new Error('expected message entry');
+    expect(entry.blocks.map((block) => block.type)).toEqual(['image', 'file', 'content']);
+  });
+
   it('keeps canonical activity render identity when final projection moves its block', () => {
     const runningTimeline = activityTimeline({
       thread_id: 'thread-1',
@@ -159,7 +185,9 @@ describe('buildFlowerTimelineEntries', () => {
     expect(first?.type).toBe('message');
     if (first?.type !== 'message') throw new Error('expected message entry');
     expect(first.blocks.map((block) => block.type)).toEqual(['content', 'activity', 'content']);
-    expect(first.blocks.map((block) => (block.type === 'content' ? block.content : block.block.run_id))).toEqual([
+    expect(first.blocks.map((block) => (
+      block.type === 'content' ? block.content : block.type === 'activity' ? block.block.run_id : ''
+    ))).toEqual([
       'I will inspect.',
       'run-1',
       'Final answer.',
@@ -210,7 +238,9 @@ describe('buildFlowerTimelineEntries', () => {
     expect(first?.type).toBe('message');
     if (first?.type !== 'message') throw new Error('expected message entry');
     expect(first.blocks.map((block) => block.type)).toEqual(['content', 'activity', 'content', 'activity', 'content']);
-    expect(first.blocks.map((block) => (block.type === 'activity' ? block.block.items[0]?.label : block.content))).toEqual([
+    expect(first.blocks.map((block) => (
+      block.type === 'activity' ? block.block.items[0]?.label : block.type === 'content' ? block.content : ''
+    ))).toEqual([
       'I will inspect.',
       'ls -la',
       'Now I will read a file.',

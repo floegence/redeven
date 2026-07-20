@@ -86,6 +86,18 @@ function trim(value: unknown): string {
   return String(value ?? '').trim();
 }
 
+function safeAttachmentURL(value: unknown): string | null {
+  const raw = trim(value);
+  if (!raw) return null;
+  if (raw.startsWith('/') && !raw.startsWith('//')) return raw;
+  try {
+    const parsed = new URL(raw);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:' ? raw : null;
+  } catch {
+    return null;
+  }
+}
+
 function normalizePermissionType(value: unknown): FlowerPermissionType | undefined {
   const raw = trim(value).toLowerCase();
   if (raw === 'readonly' || raw === 'approval_required' || raw === 'full_access') return raw;
@@ -686,6 +698,10 @@ function mapActivityFileActions(raw: unknown): Readonly<Record<string, FlowerAct
 function mapActivityTimelineBlock(raw: unknown): FlowerActivityTimelineBlock | null {
   const record = plainRecordValue(raw);
   if (!record || trim(record.type) !== 'activity-timeline') return null;
+  const runID = trim(record.run_id);
+  const threadID = trim(record.thread_id);
+  const turnID = trim(record.turn_id);
+  if (!runID || !threadID || !turnID) return null;
   const items = Array.isArray(record.items) ? record.items.map(mapActivityItem).filter(isPresent) : [];
   const summary = plainRecordValue(record.summary) ?? {};
   const attention = activityAttentionReasonArray(summary.attention_reasons);
@@ -693,9 +709,9 @@ function mapActivityTimelineBlock(raw: unknown): FlowerActivityTimelineBlock | n
   return {
     type: 'activity-timeline',
     schema_version: positiveInteger(record.schema_version) ?? 1,
-    ...(trim(record.run_id) ? { run_id: trim(record.run_id) } : {}),
-    ...(trim(record.thread_id) ? { thread_id: trim(record.thread_id) } : {}),
-    ...(trim(record.turn_id) ? { turn_id: trim(record.turn_id) } : {}),
+    run_id: runID,
+    thread_id: threadID,
+    turn_id: turnID,
     ...(trim(record.trace_id) ? { trace_id: trim(record.trace_id) } : {}),
     summary: {
       status: activityStatus(summary.status, 'activity summary status'),
@@ -871,6 +887,20 @@ function mapMessageBlock(blockValue: unknown): FlowerMessageBlock | null {
   if (type === 'markdown' || type === 'text' || type === 'thinking') {
     return { type, content: typeof block.content === 'string' ? block.content : '' };
   }
+  if (type === 'image') {
+    const src = safeAttachmentURL(block.src);
+    if (!src) return null;
+    const alt = trim(block.alt);
+    return { type: 'image', src, ...(alt ? { alt } : {}) };
+  }
+  if (type === 'file') {
+    const name = trim(block.name);
+    const mimeType = trim(block.mimeType);
+    const url = safeAttachmentURL(block.url);
+    const size = Number(block.size);
+    if (!name || !mimeType || !url || !Number.isFinite(size) || size < 0) return null;
+    return { type: 'file', name, mimeType, url, size: Math.floor(size) };
+  }
   if (type === 'activity-timeline') {
     return mapActivityTimelineBlock(blockValue);
   }
@@ -882,22 +912,47 @@ function mapMessageStatus(raw: unknown): FlowerChatMessage['status'] {
   if (status === 'sending' || status === 'streaming' || status === 'error' || status === 'complete' || status === 'canceled') {
     return status;
   }
-  return 'complete';
+  throw new Error('Flower contract error: timeline message has invalid status.');
 }
 
-export function mapFlowerMessage(raw: unknown): FlowerChatMessage | null {
+export function mapFlowerMessage(raw: unknown): FlowerChatMessage {
   const message = recordValue(raw);
-  if (!message) return null;
+  if (!message) throw new Error('Flower contract error: timeline message must be an object.');
   const id = trim(message.id);
+  const threadID = trim(message.thread_id);
+  const turnID = trim(message.turn_id);
+  const runID = trim(message.run_id);
   const role = trim(message.role).toLowerCase();
-  if (!id || (role !== 'user' && role !== 'assistant' && role !== 'system')) return null;
+  if (!id) throw new Error('Flower contract error: timeline message requires id.');
+  if (role !== 'user' && role !== 'assistant' && role !== 'system') {
+    throw new Error(`Flower contract error: timeline message ${id} has invalid role.`);
+  }
+  if (!threadID) throw new Error(`Flower contract error: timeline message ${id} requires thread_id.`);
+  if (!turnID) throw new Error(`Flower contract error: timeline message ${id} requires turn_id.`);
+  if (!runID) throw new Error(`Flower contract error: timeline message ${id} requires run_id.`);
+  if (message.blocks !== undefined && !Array.isArray(message.blocks)) {
+    throw new Error(`Flower contract error: timeline message ${id} blocks must be an array.`);
+  }
   const blocksRaw = Array.isArray(message.blocks) ? message.blocks : [];
-  const blocks = blocksRaw.map(mapMessageBlock).filter(isPresent);
-  const contextAction = recordValue(message.context_action) ?? recordValue(message.contextAction);
+  const blocks = blocksRaw.map((block, index) => {
+    const mapped = mapMessageBlock(block);
+    if (!mapped) throw new Error(`Flower contract error: timeline message ${id} block ${index} is invalid.`);
+    if (
+      mapped.type === 'activity-timeline'
+      && (mapped.thread_id !== threadID || mapped.turn_id !== turnID || mapped.run_id !== runID)
+    ) {
+      throw new Error(`Flower contract error: timeline message ${id} activity block ${index} has mismatched identity.`);
+    }
+    return mapped;
+  });
+  const contextAction = recordValue(message.context_action);
   const blockContent = blocks.map(messageBlockPreviewText).filter(Boolean).join('\n\n');
   const content = blockContent || trim(message.content);
   return {
     id,
+    thread_id: threadID,
+    turn_id: turnID,
+    run_id: runID,
     role,
     content,
     status: mapMessageStatus(message.status),
@@ -911,20 +966,20 @@ export function mapFlowerMessage(raw: unknown): FlowerChatMessage | null {
 
 function mapFlowerQueuedTurns(raw: unknown): FlowerThreadSnapshot['queued_turns'] {
   if (!Array.isArray(raw)) return undefined;
-  const turns = raw.flatMap((value) => {
+  const turns = raw.map((value, index) => {
     const record = recordValue(value);
-    if (!record) return [];
-    const messageID = trim(record.message_id);
-    if (!messageID) return [];
+    if (!record) throw new Error(`Flower contract error: queued turn ${index} must be an object.`);
+    const turnID = trim(record.turn_id);
+    if (!turnID) throw new Error('Flower contract error: queued turn requires turn_id.');
     const contextAction = recordValue(record.context_action);
-    return [{
-      message_id: messageID,
+    return {
+      turn_id: turnID,
       prompt: trim(record.text),
       created_at_ms: unixMs(record.created_at_unix_ms, 'queued_turn.created_at_unix_ms'),
       ...(contextAction ? { context_action: contextAction } : {}),
-    }];
+    };
   });
-  return turns.length > 0 ? turns : undefined;
+  return turns;
 }
 
 function mapApprovalAction(raw: unknown): FlowerApprovalAction | null {
@@ -1259,9 +1314,12 @@ function mapLiveEventPayload(kind: string, payload: unknown): unknown {
         }
         return { compaction, timeline_decoration: timelineDecoration } as FlowerLiveContextCompactionUpdatedPayload;
       }
-    case 'timeline.replaced':
+    case 'timeline.replaced': {
+      if (!Array.isArray(record.messages)) {
+        throw new Error('Flower contract error: timeline.replaced requires messages.');
+      }
       return {
-        messages: Array.isArray(record.messages) ? record.messages.map(mapFlowerMessage).filter(isPresent) : [],
+        messages: record.messages.map(mapFlowerMessage),
         stream_generation: positiveIntegerOrOne(record.stream_generation),
         snapshot_through_seq: integerOrZero(record.snapshot_through_seq),
         ...(record.thread_patch !== undefined ? { thread_patch: mapThreadPatch(record.thread_patch) ?? {} } : {}),
@@ -1271,6 +1329,7 @@ function mapLiveEventPayload(kind: string, payload: unknown): unknown {
         ...(record.context_compactions !== undefined ? { context_compactions: mapContextCompactionsSnapshot(record.context_compactions) ?? [] } : {}),
         ...(record.timeline_decorations !== undefined ? { timeline_decorations: mapTimelineDecorationsSnapshot(record.timeline_decorations) ?? [] } : {}),
       };
+    }
     case 'stream.resync_required':
       return { reason: trim(record.reason) } as FlowerLiveResyncRequiredPayload;
     default:
@@ -1317,7 +1376,10 @@ function makeLiveEvent<K extends FlowerLiveKind>(
 
 export function mapFlowerLiveBootstrap(raw: unknown, options: FlowerLiveThreadMapperOptions): FlowerLiveBootstrap {
   const record = recordValue(raw) ?? {};
-  const timelineMessages = Array.isArray(record.timeline_messages) ? record.timeline_messages.map(mapFlowerMessage).filter(isPresent) : [];
+  if (!Array.isArray(record.timeline_messages)) {
+    throw new Error('Flower contract error: live bootstrap requires timeline_messages.');
+  }
+  const timelineMessages = record.timeline_messages.map(mapFlowerMessage);
   const thread = mapFlowerThread(record.thread, timelineMessages, options, record.read_status);
   return {
     schema_version: Math.max(0, Math.floor(Number(record.schema_version ?? 0))),

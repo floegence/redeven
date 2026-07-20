@@ -344,7 +344,7 @@ func (s *Service) broadcastThreadState(endpointID string, threadID string, runID
 	s.broadcastRealtimeEvent(ev)
 }
 
-func (s *Service) broadcastStreamEvent(endpointID string, threadID string, runID string, streamEvent any) {
+func (s *Service) broadcastStreamEvent(endpointID string, threadID string, turnID string, runID string, streamEvent any) {
 	publicStreamEvent, ok := sanitizePublicStreamEvent(streamEvent)
 	if !ok {
 		return
@@ -353,6 +353,7 @@ func (s *Service) broadcastStreamEvent(endpointID string, threadID string, runID
 		EventType:   RealtimeEventTypeStream,
 		EndpointID:  strings.TrimSpace(endpointID),
 		ThreadID:    strings.TrimSpace(threadID),
+		TurnID:      strings.TrimSpace(turnID),
 		RunID:       strings.TrimSpace(runID),
 		AtUnixMs:    time.Now().UnixMilli(),
 		StreamKind:  classifyStreamKind(publicStreamEvent),

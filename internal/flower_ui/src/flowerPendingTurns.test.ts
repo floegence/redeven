@@ -19,7 +19,8 @@ const contextAction = {
 
 function message(status: FlowerChatMessage['status']): FlowerChatMessage {
   return {
-    id: 'msg-linked-file',
+    id: 'entry-linked-file',
+    turn_id: 'turn-linked-file',
     role: 'user',
     content: 'Inspect this file',
     status,
@@ -49,12 +50,13 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
   };
 }
 
-function pending(state: PendingFlowerTurn['state'] = 'sending'): PendingFlowerTurn {
+function pending(state: PendingFlowerTurn['state'] = 'sending', origin: PendingFlowerTurn['origin'] = 'admission'): PendingFlowerTurn {
   return {
     thread_id: 'thread-linked-file',
-    message_id: 'msg-linked-file',
+    turn_id: 'turn-linked-file',
     prompt: 'Inspect this file',
     state,
+    origin,
     created_at_ms: 100,
     context_action: contextAction,
   };
@@ -65,14 +67,14 @@ describe('Flower pending linked context', () => {
     const result = reconcilePendingTurnsForThread([], thread({
       queued_turn_count: 1,
       queued_turns: [{
-        message_id: 'msg-linked-file',
+        turn_id: 'turn-linked-file',
         prompt: 'Inspect this file',
         created_at_ms: 100,
         context_action: contextAction,
       }],
     }));
 
-    expect(result).toEqual([pending('queued')]);
+    expect(result).toEqual([pending('queued', 'queue_snapshot')]);
   });
 
   it.each(['complete', 'error', 'canceled'] as const)(
@@ -91,7 +93,7 @@ describe('Flower pending linked context', () => {
   );
 
   it('keeps unrelated thread state while reconciling the selected thread', () => {
-    const other = { ...pending(), thread_id: 'thread-other', message_id: 'other' };
+    const other = { ...pending(), thread_id: 'thread-other', turn_id: 'turn-other' };
     expect(reconcilePendingTurnsForThread([other], thread())).toEqual([other]);
   });
 
@@ -109,11 +111,45 @@ describe('Flower pending linked context', () => {
       messages: [canonical],
       queued_turn_count: 0,
       queued_turns: [{
-        message_id: 'msg-linked-file',
+        turn_id: 'turn-linked-file',
         prompt: 'Inspect this file',
         created_at_ms: 100,
         context_action: contextAction,
       }],
     }))).toEqual([]);
+  });
+
+  it('keeps a receipt-owned queued pending turn when a stale queue snapshot omits it', () => {
+    const accepted = { ...pending('queued'), turn_id: 'turn-new', prompt: 'Newly accepted' };
+    const result = reconcilePendingTurnsForThread([accepted], thread({
+      queued_turn_count: 1,
+      queued_turns: [{
+        turn_id: 'turn-old',
+        prompt: 'Older queued turn',
+        created_at_ms: 50,
+      }],
+    }));
+
+    expect(result).toContainEqual(accepted);
+    expect(result).toContainEqual(expect.objectContaining({
+      turn_id: 'turn-old',
+      origin: 'queue_snapshot',
+    }));
+  });
+
+  it('does not reconcile equal prompts that belong to different turns', () => {
+    const canonical = { ...message('complete'), turn_id: 'turn-other' };
+    expect(pendingTurnCanonicalMessage(thread({ messages: [canonical] }), pending())).toBeNull();
+  });
+
+  it('does not treat a canonical entry id as the pending turn identity', () => {
+    const canonical = { ...message('complete'), id: 'turn-linked-file', turn_id: 'turn-other' };
+    expect(pendingTurnCanonicalMessage(thread({ messages: [canonical] }), pending())).toBeNull();
+  });
+
+  it('requires both the canonical thread and non-empty turn identity', () => {
+    const canonical = message('complete');
+    expect(pendingTurnCanonicalMessage(thread({ messages: [canonical] }), { ...pending(), thread_id: 'thread-other' })).toBeNull();
+    expect(pendingTurnCanonicalMessage(thread({ messages: [canonical] }), { ...pending(), turn_id: '' })).toBeNull();
   });
 });

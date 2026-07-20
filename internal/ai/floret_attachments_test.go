@@ -84,7 +84,7 @@ func TestFloretTurnInputAllowsAttachmentOnlyAndRejectsInvalidResources(t *testin
 	const commandID = "queue_attachment_only"
 	if _, _, _, err := store.CreateFollowupWithUploadRefs(context.Background(), threadstore.QueuedTurn{
 		QueueID: commandID, EndpointID: r.endpointID, ThreadID: r.threadID, ChannelID: "channel_attachment_only",
-		Lane: threadstore.FollowupLaneQueued, TurnID: r.messageID, RunID: r.id, TextContent: "",
+		Lane: threadstore.FollowupLaneQueued, TurnID: r.turnID, RunID: r.id, TextContent: "",
 	}, []string{"upl_only"}, time.Now().UnixMilli()); err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +170,7 @@ func TestRunFloretHostedTurnFreezesAttachmentBytesBeforeCanonicalAdmission(t *te
 	const commandID = "queue_frozen_attachment"
 	if _, _, _, err := store.CreateFollowupWithUploadRefs(context.Background(), threadstore.QueuedTurn{
 		QueueID: commandID, EndpointID: r.endpointID, ThreadID: r.threadID, ChannelID: "channel_frozen_attachment",
-		Lane: threadstore.FollowupLaneQueued, TurnID: r.messageID, RunID: r.id, TextContent: "inspect the file",
+		Lane: threadstore.FollowupLaneQueued, TurnID: r.turnID, RunID: r.id, TextContent: "inspect the file",
 	}, []string{record.UploadID}, time.Now().UnixMilli()); err != nil {
 		t.Fatal(err)
 	}
@@ -351,7 +351,7 @@ func TestRunFloretHostedTurnRejectsInvalidAttachmentBeforeAdmission(t *testing.T
 			const commandID = "queue_preflight_attachment"
 			if _, _, _, err := store.CreateFollowupWithUploadRefs(context.Background(), threadstore.QueuedTurn{
 				QueueID: commandID, EndpointID: r.endpointID, ThreadID: r.threadID, ChannelID: "channel_preflight_attachment",
-				Lane: threadstore.FollowupLaneQueued, TurnID: r.messageID, RunID: r.id, TextContent: "inspect attachment",
+				Lane: threadstore.FollowupLaneQueued, TurnID: r.turnID, RunID: r.id, TextContent: "inspect attachment",
 			}, []string{record.UploadID}, time.Now().UnixMilli()); err != nil {
 				t.Fatal(err)
 			}

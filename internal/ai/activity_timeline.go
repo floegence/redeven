@@ -46,7 +46,7 @@ func (r *run) newActivityTimelineBlock(timeline observation.ActivityTimeline, fi
 		publicIdentity = activityTimelinePublicIdentity{
 			RunID:    strings.TrimSpace(r.id),
 			ThreadID: strings.TrimSpace(r.threadID),
-			TurnID:   strings.TrimSpace(r.messageID),
+			TurnID:   strings.TrimSpace(r.turnID),
 			TraceID:  strings.TrimSpace(r.id),
 		}
 	}

@@ -63,7 +63,7 @@ export type AISendUserTurnRequest = {
   threadId: string;
   model?: string;
   input: {
-    messageId?: string;
+    turnId?: string;
     text: string;
     attachments: Array<{
       name: string;
@@ -83,6 +83,7 @@ export type AISendUserTurnRequest = {
 
 export type AISendUserTurnResponse = {
   runId: string;
+  turnId: string;
   kind: string;
   queueId?: string;
   queuePosition?: number;
@@ -105,7 +106,7 @@ export type AISubmitRequestUserInputResponseRequest = {
   model?: string;
   response: AIRequestUserInputResponse;
   input: {
-    messageId?: string;
+    turnId?: string;
     text: string;
     attachments: Array<{
       name: string;
@@ -123,6 +124,7 @@ export type AISubmitRequestUserInputResponseRequest = {
 
 export type AISubmitRequestUserInputResponseResponse = {
   runId: string;
+  turnId: string;
   kind: string;
   consumedWaitingPromptId?: string;
 };
@@ -148,7 +150,7 @@ export type AIFollowupAttachment = {
 export type AIFollowupItem = {
   followupId: string;
   lane: 'queued' | 'draft';
-  messageId: string;
+  turnId: string;
   text: string;
   modelId?: string;
   permissionType?: AIPermissionType;
@@ -190,6 +192,7 @@ export type AIRealtimeEvent = {
   eventType: AIRealtimeEventType;
   endpointId: string;
   threadId: string;
+  turnId?: string;
   runId: string;
   atUnixMs: number;
   streamKind?: 'lifecycle' | 'assistant' | 'tool' | 'context';

@@ -7,7 +7,9 @@ import type {
   FlowerLiveEventsResponse,
   FlowerRouterDecision,
   FlowerSettingsSnapshot,
+  FlowerTurnLaunchReceipt,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import { flowerTurnAdmissionUncertainFailure } from '../../../../flower_ui/src/flowerTurnAdmission';
 import {
   adapter,
   decision,
@@ -15,6 +17,7 @@ import {
   flush,
   flowerSurfaceNotifications,
   inputRequest,
+  launchReceipt,
   activityItem,
   activityTimeline,
   liveBootstrap,
@@ -39,11 +42,11 @@ function selectedThreadReady(root: ParentNode, threadID: string): boolean {
     && surface?.getAttribute('data-flower-selected-thread-loading') === 'false';
 }
 
-function withLaunchUserMessageID<T extends { readonly messages: readonly { readonly id: string }[] }>(threadValue: T, currentUserID: string, nextUserID: string): T {
+function withCanonicalUserTurnID<T extends { readonly messages: readonly { readonly id: string }[] }>(threadValue: T, userEntryID: string, turnID: string): T {
   return {
     ...threadValue,
     messages: threadValue.messages.map((message) => (
-      message.id === currentUserID ? { ...message, id: nextUserID } : message
+      message.id === userEntryID ? { ...message, turn_id: turnID } : message
     )),
   } as T;
 }
@@ -161,10 +164,9 @@ describe('FlowerSurface navigation launch/send', () => {
   it('groups remote and Desktop models while keeping Desktop selection session scoped', async () => {
     const snapshot = dualSourceSnapshot();
     const persistDefaultModel = vi.fn(async () => snapshot);
-    const launchTurn = vi.fn(async (input: { model_id?: string }) => liveBootstrap(thread({
-      thread_id: 'thread-desktop-session-draft',
-      model_id: input.model_id ?? 'openai/gpt-5.2',
-    })));
+    const launchTurn = vi.fn(async (input: { model_id?: string; turn_id?: string }) => (
+      launchReceipt('thread-desktop-session-draft', input.turn_id ?? 'turn-desktop-session')
+    ));
     const surfaceAdapter = {
       ...adapter(true),
       runtime: {
@@ -638,7 +640,7 @@ describe('FlowerSurface navigation launch/send', () => {
         },
       ],
     });
-    const launchTurn = vi.fn(async (_input: unknown) => liveBootstrap(launchedThread));
+    const launchTurn = vi.fn(async (input: { turn_id?: string }) => launchReceipt(launchedThread.thread_id, input.turn_id ?? 'turn-permission-new'));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => []),
@@ -706,7 +708,7 @@ describe('FlowerSurface navigation launch/send', () => {
       }
       return [];
     });
-    const launchTurn = vi.fn(async (_input: unknown) => liveBootstrap(launchedThread));
+    const launchTurn = vi.fn(async (input: { turn_id?: string }) => launchReceipt(launchedThread.thread_id, input.turn_id ?? 'turn-working-dir-new'));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => []),
@@ -810,7 +812,7 @@ describe('FlowerSurface navigation launch/send', () => {
       title: 'No reasoning launch',
       model_id: 'openai/plain-text',
     });
-    const launchTurn = vi.fn(async (_input: unknown) => liveBootstrap(launchedThread));
+    const launchTurn = vi.fn(async (input: { turn_id?: string }) => launchReceipt(launchedThread.thread_id, input.turn_id ?? 'turn-model-capability'));
     const surfaceAdapter = {
       ...adapter(true),
       loadSettings: vi.fn(async () => currentSnapshot),
@@ -907,7 +909,7 @@ describe('FlowerSurface navigation launch/send', () => {
       model_id: deepSeekModelID,
       reasoning_selection: { level: 'high' },
     });
-    const launchTurn = vi.fn(async (_input: unknown) => liveBootstrap(launchedThread));
+    const launchTurn = vi.fn(async (input: { turn_id?: string }) => launchReceipt(launchedThread.thread_id, input.turn_id ?? 'turn-reasoning'));
     const persistDefaultModel = vi.fn(async () => currentSnapshot);
     const runtime = renderSurfaceWithAdapter({
       ...adapter(false),
@@ -1124,7 +1126,7 @@ describe('FlowerSurface navigation launch/send', () => {
       }
       return [];
     });
-    const launchTurn = vi.fn(async () => liveBootstrap(launchedThread));
+    const launchTurn = vi.fn(async (input: { turn_id?: string }) => launchReceipt(launchedThread.thread_id, input.turn_id ?? 'turn-working-dir-overflow'));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => []),
@@ -1207,7 +1209,7 @@ describe('FlowerSurface navigation launch/send', () => {
       configurable: true,
       value: { writeText },
     });
-    const launchTurn = vi.fn(async () => liveBootstrap(thread()));
+    const launchTurn = vi.fn(async (input: { thread_id?: string; turn_id?: string }) => launchReceipt(input.thread_id ?? 'thread-1', input.turn_id ?? 'turn-copy-workdir'));
     const existingThread = thread({
       thread_id: 'thread-existing-workdir',
       title: 'Existing working dir',
@@ -1259,7 +1261,7 @@ describe('FlowerSurface navigation launch/send', () => {
       configurable: true,
       value: { writeText },
     });
-    const launchTurn = vi.fn(async () => liveBootstrap(thread()));
+    const launchTurn = vi.fn(async (input: { thread_id?: string; turn_id?: string }) => launchReceipt(input.thread_id ?? 'thread-1', input.turn_id ?? 'turn-copy-workdir-overflow'));
     const existingThread = thread({
       thread_id: 'thread-existing-workdir-overflow',
       title: 'Existing working dir overflow',
@@ -1308,7 +1310,7 @@ describe('FlowerSurface navigation launch/send', () => {
       model_io_status: null,
     });
     const stopThread = vi.fn(async () => liveBootstrap(stoppedThread));
-    const launchTurn = vi.fn(async () => liveBootstrap(stoppedThread));
+    const launchTurn = vi.fn(async (input: { turn_id?: string }) => launchReceipt(stoppedThread.thread_id, input.turn_id ?? 'turn-stopped'));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [runningThread]),
@@ -1407,7 +1409,7 @@ describe('FlowerSurface navigation launch/send', () => {
       ],
     });
     const stopThread = vi.fn(async () => liveBootstrap({ ...runningThread, status: 'canceled' }));
-    const launchTurn = vi.fn(async () => liveBootstrap(launchedThread));
+    const launchTurn = vi.fn(async (input: { turn_id?: string }) => launchReceipt(launchedThread.thread_id, input.turn_id ?? 'turn-running'));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [runningThread]),
@@ -1467,7 +1469,7 @@ describe('FlowerSurface navigation launch/send', () => {
     });
     const compactThreadContext = vi.fn(async () => liveBootstrap(runningThread, 3));
     const stopThread = vi.fn(async () => liveBootstrap({ ...runningThread, status: 'canceled' }));
-    const launchTurn = vi.fn(async () => liveBootstrap(runningThread));
+    const launchTurn = vi.fn(async (input: { turn_id?: string }) => launchReceipt(runningThread.thread_id, input.turn_id ?? 'turn-compaction-running'));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [runningThread]),
@@ -1567,7 +1569,7 @@ describe('FlowerSurface navigation launch/send', () => {
     const compactDeferred = deferred<FlowerLiveBootstrap>();
     const compactThreadContext = vi.fn(() => compactDeferred.promise);
     const stopThread = vi.fn(async () => liveBootstrap({ ...compactingThread, status: 'canceled' }));
-    const launchTurn = vi.fn(async () => liveBootstrap(compactingThread));
+    const launchTurn = vi.fn(async (input: { turn_id?: string }) => launchReceipt(compactingThread.thread_id, input.turn_id ?? 'turn-compacting'));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [compactingThread]),
@@ -1663,7 +1665,7 @@ describe('FlowerSurface navigation launch/send', () => {
     });
     const compactDeferred = deferred<FlowerLiveBootstrap>();
     const compactThreadContext = vi.fn(() => compactDeferred.promise);
-    const launchTurn = vi.fn(async () => liveBootstrap(runningThread));
+    const launchTurn = vi.fn(async (input: { turn_id?: string }) => launchReceipt(runningThread.thread_id, input.turn_id ?? 'turn-running-queued'));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [runningThread]),
@@ -2013,10 +2015,9 @@ describe('FlowerSurface navigation launch/send', () => {
     });
     const compactDeferred = deferred<FlowerLiveBootstrap>();
     const compactThreadContext = vi.fn(() => compactDeferred.promise);
-    const launchTurn = vi.fn(async () => liveBootstrap({
-      ...compactingThread,
-      queued_turn_count: 1,
-    }));
+    const launchTurn = vi.fn(async (input: { turn_id?: string }) => (
+      launchReceipt(compactingThread.thread_id, input.turn_id ?? 'turn-idle-compact', 'queued')
+    ));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [compactingThread]),
@@ -2086,8 +2087,9 @@ describe('FlowerSurface navigation launch/send', () => {
     const pendingMessages: string[] = [];
     const launchTurn = vi
       .fn(async (input) => {
-        pendingMessages.push(input.message_id ?? '');
-        return liveBootstrap({ ...compactingThread, queued_turn_count: pendingMessages.length });
+        const turnID = input.turn_id ?? '';
+        pendingMessages.push(turnID);
+        return launchReceipt(compactingThread.thread_id, turnID, 'queued');
       });
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
@@ -2156,7 +2158,7 @@ describe('FlowerSurface navigation launch/send', () => {
     });
     const compactThreadContext = vi.fn(async () => liveBootstrap(waitingApprovalThread, 3));
     const stopThread = vi.fn(async () => liveBootstrap({ ...waitingApprovalThread, status: 'canceled' }));
-    const launchTurn = vi.fn(async () => liveBootstrap(waitingApprovalThread));
+    const launchTurn = vi.fn(async (input: { turn_id?: string }) => launchReceipt(waitingApprovalThread.thread_id, input.turn_id ?? 'turn-waiting-approval'));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [waitingApprovalThread]),
@@ -2202,7 +2204,7 @@ describe('FlowerSurface navigation launch/send', () => {
       ],
     });
     const compactThreadContext = vi.fn(async () => liveBootstrap(readOnlyThread));
-    const launchTurn = vi.fn(async () => liveBootstrap(readOnlyThread));
+    const launchTurn = vi.fn(async (input: { turn_id?: string }) => launchReceipt(readOnlyThread.thread_id, input.turn_id ?? 'turn-read-only'));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [readOnlyThread]),
@@ -2234,7 +2236,7 @@ describe('FlowerSurface navigation launch/send', () => {
       status: 'running',
     });
     const stopThread = vi.fn(async () => liveBootstrap({ ...runningThread, status: 'canceled' }));
-    const launchTurn = vi.fn(async () => liveBootstrap({ ...runningThread, status: 'running' }));
+    const launchTurn = vi.fn(async (input: { turn_id?: string }) => launchReceipt(runningThread.thread_id, input.turn_id ?? 'turn-running-send'));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [runningThread]),
@@ -2263,6 +2265,7 @@ describe('FlowerSurface navigation launch/send', () => {
 
   it('keeps old agent activity before the queued user message when Enter sends on a running thread', async () => {
     const oldActivity = activityTimeline({
+      thread_id: 'thread-running-enter-send-activity-order',
       run_id: 'run-first',
       turn_id: 'm-first-assistant',
       status: 'running',
@@ -2324,14 +2327,18 @@ describe('FlowerSurface navigation launch/send', () => {
       ],
     });
     let loadedAfterLaunch = false;
+    let admittedTurnID = '';
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [runningThread]),
-      loadThread: vi.fn(async () => liveBootstrap(loadedAfterLaunch ? launchedThread : runningThread)),
+      loadThread: vi.fn(async () => liveBootstrap(loadedAfterLaunch
+        ? withCanonicalUserTurnID(launchedThread, 'm-second-user', admittedTurnID)
+        : runningThread)),
       stopThread: vi.fn(async () => liveBootstrap({ ...runningThread, status: 'canceled' }, 2)),
       launchTurn: vi.fn(async (input) => {
         loadedAfterLaunch = true;
-        return liveBootstrap(withLaunchUserMessageID(launchedThread, 'm-second-user', input.message_id ?? 'm-second-user'), 3);
+        admittedTurnID = input.turn_id ?? 'turn-second-request';
+        return launchReceipt(launchedThread.thread_id, admittedTurnID);
       }),
     });
 
@@ -2350,7 +2357,7 @@ describe('FlowerSurface navigation launch/send', () => {
 	expect(ids).toHaveLength(4);
 	expect(ids[0]).toBe('m-first-user');
 	expect(ids[1]).toBe('m-first-assistant');
-	expect(ids[2]?.startsWith('client_')).toBe(true);
+	expect(ids[2]).toBe('m-second-user');
 	expect(ids[3]).toBe('m-second-assistant');
 	const secondUserText = runtime.querySelector(`[data-flower-message-id="${ids[2]}"]`)?.textContent ?? '';
     const secondAssistantText = runtime.querySelector('[data-flower-message-id="m-second-assistant"]')?.textContent ?? '';
@@ -2410,15 +2417,19 @@ describe('FlowerSurface navigation launch/send', () => {
     });
     const stalePoll = deferred<FlowerLiveEventsResponse>();
     let loadedAfterLaunch = false;
+    let admittedTurnID = '';
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [runningThread]),
-      loadThread: vi.fn(async () => liveBootstrap(loadedAfterLaunch ? launchedThread : runningThread, loadedAfterLaunch ? 3 : 1)),
+      loadThread: vi.fn(async () => liveBootstrap(loadedAfterLaunch
+        ? withCanonicalUserTurnID(launchedThread, 'm-second-user', admittedTurnID)
+        : runningThread, loadedAfterLaunch ? 3 : 1)),
       listThreadLiveEvents: vi.fn(() => stalePoll.promise),
       stopThread: vi.fn(async () => liveBootstrap({ ...runningThread, status: 'canceled' }, 2)),
       launchTurn: vi.fn(async (input) => {
         loadedAfterLaunch = true;
-        return liveBootstrap(withLaunchUserMessageID(launchedThread, 'm-second-user', input.message_id ?? 'm-second-user'), 3);
+        admittedTurnID = input.turn_id ?? 'turn-second-request';
+        return launchReceipt(launchedThread.thread_id, admittedTurnID);
       }),
     });
 
@@ -2489,7 +2500,7 @@ describe('FlowerSurface navigation launch/send', () => {
       ...adapter(true),
       listThreads: vi.fn(async () => [existingThread]),
       loadThread: vi.fn(async () => liveBootstrap(existingThread)),
-      launchTurn: vi.fn(async () => liveBootstrap(launchedThread, 2)),
+      launchTurn: vi.fn(async (input) => launchReceipt(launchedThread.thread_id, input.turn_id ?? 'turn-repeat-pending')),
     });
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-repeat-pending"] button')));
@@ -2517,18 +2528,22 @@ describe('FlowerSurface navigation launch/send', () => {
       status: 'idle',
       messages: [],
     });
-    const launchBootstrap = thread({
+    const launchedThread = thread({
       ...selected,
       status: 'running',
       messages: [],
       model_io_status: modelIOStatus({ run_id: 'run-pending-before-assistant' }),
     });
     let pollCount = 0;
+    let acceptedTurnID = '';
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [selected]),
       loadThread: vi.fn(async () => liveBootstrap(selected)),
-      launchTurn: vi.fn(async () => liveBootstrap(launchBootstrap, 1)),
+      launchTurn: vi.fn(async (input) => {
+        acceptedTurnID = input.turn_id ?? 'turn-pending-before-assistant';
+        return launchReceipt(launchedThread.thread_id, acceptedTurnID);
+      }),
       listThreadLiveEvents: vi.fn(async () => {
         pollCount += 1;
         if (pollCount === 1) {
@@ -2553,6 +2568,7 @@ describe('FlowerSurface navigation launch/send', () => {
                   endpoint_id: 'test-runtime',
                   thread_id: 'thread-pending-before-assistant',
                   run_id: 'run-pending-before-assistant',
+                  turn_id: acceptedTurnID,
                   at_unix_ms: 2000,
                   kind: 'message.started',
                   payload: {
@@ -2568,6 +2584,7 @@ describe('FlowerSurface navigation launch/send', () => {
                   endpoint_id: 'test-runtime',
                   thread_id: 'thread-pending-before-assistant',
                   run_id: 'run-pending-before-assistant',
+                  turn_id: acceptedTurnID,
                   at_unix_ms: 2001,
                   kind: 'message.block_started',
                   payload: {
@@ -2582,6 +2599,7 @@ describe('FlowerSurface navigation launch/send', () => {
                   endpoint_id: 'test-runtime',
                   thread_id: 'thread-pending-before-assistant',
                   run_id: 'run-pending-before-assistant',
+                  turn_id: acceptedTurnID,
                   at_unix_ms: 2002,
                   kind: 'message.block_delta',
                   payload: {
@@ -2624,6 +2642,7 @@ describe('FlowerSurface navigation launch/send', () => {
       messages: [
         {
           id: 'm-first-user',
+          turn_id: 'turn-first-request',
           role: 'user',
           content: 'first request',
           status: 'complete',
@@ -2631,6 +2650,7 @@ describe('FlowerSurface navigation launch/send', () => {
         },
         {
           id: 'm-first-assistant',
+          turn_id: 'turn-first-request',
           role: 'assistant',
           content: 'partial old answer',
           status: 'streaming',
@@ -2647,6 +2667,7 @@ describe('FlowerSurface navigation launch/send', () => {
         ...(runningThread.messages ?? []),
         {
           id: 'm-second-user',
+          turn_id: 'turn-second-request',
           role: 'user',
           content: 'second request',
           status: 'complete',
@@ -2654,6 +2675,7 @@ describe('FlowerSurface navigation launch/send', () => {
         },
         {
           id: 'm-second-assistant',
+          turn_id: 'turn-second-request',
           role: 'assistant',
           content: 'new answer',
           status: 'streaming',
@@ -2665,19 +2687,29 @@ describe('FlowerSurface navigation launch/send', () => {
     });
     const staleLoad = deferred<FlowerLiveBootstrap>();
     let loadCalls = 0;
+    let admittedTurnID = '';
+    let canonicalThread = launchedThread;
+    let canonicalSummaryReady = false;
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
-      listThreads: vi.fn(async () => [runningThread]),
+      listThreads: vi.fn(async () => [{
+        ...runningThread,
+        updated_at_ms: canonicalSummaryReady ? 3 : runningThread.updated_at_ms,
+      }]),
       loadThread: vi.fn(async () => {
         loadCalls += 1;
         if (loadCalls === 1) {
           return liveBootstrap(runningThread, 1);
         }
-        return staleLoad.promise;
+        if (loadCalls === 2) {
+          return staleLoad.promise;
+        }
+        return liveBootstrap(canonicalThread, 3);
       }),
       stopThread: vi.fn(async () => liveBootstrap({ ...runningThread, status: 'canceled' }, 2)),
       launchTurn: vi.fn(async (input) => {
-        return liveBootstrap(withLaunchUserMessageID(launchedThread, 'm-second-user', input.message_id ?? 'm-second-user'), 4);
+        admittedTurnID = input.turn_id ?? 'turn-second-request';
+        return launchReceipt(launchedThread.thread_id, admittedTurnID);
       }),
     });
 
@@ -2691,6 +2723,18 @@ describe('FlowerSurface navigation launch/send', () => {
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
     (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
 
+    await waitFor(() => loadCalls === 2 && admittedTurnID !== '');
+    canonicalThread = {
+      ...withCanonicalUserTurnID(launchedThread, 'm-second-user', admittedTurnID),
+      messages: launchedThread.messages.map((message) => (
+        message.id === 'm-second-user' || message.id === 'm-second-assistant'
+          ? { ...message, turn_id: admittedTurnID }
+          : message
+      )),
+    };
+    canonicalSummaryReady = true;
+    (runtime.querySelector('.flower-thread-refresh-button') as HTMLButtonElement).click();
+    await waitFor(() => loadCalls >= 3);
     await waitFor(() => runtime.querySelector('[data-flower-message-id="m-second-assistant"]')?.textContent?.includes('new answer') ?? false);
     staleLoad.resolve(liveBootstrap(runningThread, 2));
     await waitFor(() => {
@@ -2702,7 +2746,7 @@ describe('FlowerSurface navigation launch/send', () => {
 	expect(ids).toHaveLength(4);
 	expect(ids[0]).toBe('m-first-user');
 	expect(ids[1]).toBe('m-first-assistant');
-	expect(ids[2]?.startsWith('pending:')).toBe(false);
+	expect(ids[2]).toBe('m-second-user');
 	expect(ids[3]).toBe('m-second-assistant');
 	expect(runtime.querySelector('[data-flower-pending-turn]')).toBeNull();
 	expect(runtime.querySelector('[data-flower-message-id="m-second-assistant"]')?.textContent).toContain('new answer');
@@ -2884,6 +2928,7 @@ describe('FlowerSurface navigation launch/send', () => {
           created_at_ms: 20,
           blocks: [
             activityTimeline({
+              thread_id: 'thread-failed-continue',
               run_id: 'run-failed-parent',
               turn_id: 'm-failed-parent',
               status: 'error',
@@ -2932,7 +2977,7 @@ describe('FlowerSurface navigation launch/send', () => {
         },
       ],
     };
-    const launchTurn = vi.fn(async () => liveBootstrap(continuedThread));
+    const launchTurn = vi.fn(async (input: { turn_id?: string }) => launchReceipt(continuedThread.thread_id, input.turn_id ?? 'turn-continued'));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [failedThread]),
@@ -2982,7 +3027,7 @@ describe('FlowerSurface navigation launch/send', () => {
       }),
     });
     const stopThread = vi.fn(async () => liveBootstrap(waitingThread));
-    const launchTurn = vi.fn(async () => liveBootstrap(waitingThread));
+    const launchTurn = vi.fn(async (input: { turn_id?: string }) => launchReceipt(waitingThread.thread_id, input.turn_id ?? 'turn-waiting'));
     const submitInput = vi.fn(async () => liveBootstrap({ ...waitingThread, status: 'running', input_request: null }));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
@@ -3055,7 +3100,7 @@ describe('FlowerSurface navigation launch/send', () => {
         },
       ],
     });
-    const launchTurn = vi.fn(async () => liveBootstrap(sentThread));
+    const launchTurn = vi.fn(async (input: { turn_id?: string }) => launchReceipt(sentThread.thread_id, input.turn_id ?? 'turn-sent'));
     const loadThread = vi.fn(async () => liveBootstrap(completeThread));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
@@ -3087,10 +3132,10 @@ describe('FlowerSurface navigation launch/send', () => {
   });
 
   it('shows a local pending send row while waiting for the canonical timeline', async () => {
-    const sendDeferred = deferred<FlowerLiveBootstrap>();
-    let launchMessageID = 'm-user-canonical';
+    const sendDeferred = deferred<FlowerTurnLaunchReceipt>();
+    let launchTurnID = 'turn-user-canonical';
     const launchTurn = vi.fn((input) => {
-      launchMessageID = input.message_id ?? launchMessageID;
+      launchTurnID = input.turn_id ?? launchTurnID;
       return sendDeferred.promise;
     });
     const runtime = renderSurfaceWithAdapter({
@@ -3104,13 +3149,15 @@ describe('FlowerSurface navigation launch/send', () => {
             status: 'running',
             model_io_status: modelIOStatus({ run_id: 'run-1' }),
             messages: [{
-              id: launchMessageID,
+              id: 'entry-user-canonical',
+              turn_id: launchTurnID,
               role: 'user',
               content: 'inspect the running turn',
               status: 'complete',
               created_at_ms: 10,
             }, {
               id: 'm-assistant-canonical',
+              turn_id: launchTurnID,
               role: 'assistant',
               content: '',
               status: 'streaming',
@@ -3137,37 +3184,181 @@ describe('FlowerSurface navigation launch/send', () => {
 
     expect(runtime.querySelector('[data-flower-pending-turn]')?.textContent).toContain('inspect the running turn');
     expect(runtime.querySelector('[data-flower-pending-turn]')?.getAttribute('data-flower-pending-turn-state')).toBe('sending');
-    expect(runtime.querySelector('[data-flower-message-id="m-user-canonical"]')).toBeNull();
+    expect(runtime.querySelector('[data-flower-message-id="entry-user-canonical"]')).toBeNull();
     expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
 
-    sendDeferred.resolve(liveBootstrap(thread({
-      thread_id: 'thread-canonical-send',
-      title: 'Canonical send',
-      status: 'running',
-      model_io_status: modelIOStatus({ run_id: 'run-1' }),
-      messages: [{
-        id: launchMessageID,
-        role: 'user',
-        content: 'inspect the running turn',
-        status: 'complete',
-        created_at_ms: 10,
-      }, {
-        id: 'm-assistant-canonical',
-        role: 'assistant',
-        content: '',
-        status: 'streaming',
-        active_cursor: true,
-        created_at_ms: 20,
-      }],
-    })));
-    await waitFor(() => Boolean(runtime.querySelector(`[data-flower-message-id="${launchMessageID}"]`)));
+    sendDeferred.resolve(launchReceipt('thread-canonical-send', launchTurnID));
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="entry-user-canonical"]')));
     expect(runtime.textContent).toContain('inspect the running turn');
     expect(runtime.querySelector('[data-flower-pending-turn]')).toBeNull();
     expect(runtime.querySelector('.flower-model-status-indicator')).toBeTruthy();
   });
 
-  it('shows the accepted run preparing status from launch bootstrap before live events arrive', async () => {
+  it('replaces the pending row by TurnID when timeline.replaced publishes a distinct user entry id', async () => {
+    const initialThread = thread({
+      thread_id: 'thread-live-canonical-send',
+      title: 'Live canonical send',
+      status: 'idle',
+      messages: [],
+    });
+    const replacement = deferred<FlowerLiveEventsResponse>();
+    let loadedAfterLaunch = false;
+    let acceptedTurnID = '';
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [initialThread]),
+      loadThread: vi.fn(async () => liveBootstrap(loadedAfterLaunch ? {
+        ...initialThread,
+        status: 'running',
+        model_io_status: modelIOStatus({ run_id: 'run-live-canonical-send' }),
+      } : initialThread, 1)),
+      listThreadLiveEvents: vi.fn(() => replacement.promise),
+      launchTurn: vi.fn(async (input) => {
+        loadedAfterLaunch = true;
+        acceptedTurnID = input.turn_id ?? 'turn-live-canonical-send';
+        return launchReceipt(initialThread.thread_id, acceptedTurnID);
+      }),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-live-canonical-send"] button')));
+    (runtime.querySelector('[data-thread-id="thread-live-canonical-send"] button') as HTMLButtonElement).click();
+    await waitFor(() => selectedThreadReady(runtime, initialThread.thread_id));
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'replace this pending row';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+    await waitFor(() => acceptedTurnID !== '' && Boolean(runtime.querySelector('[data-flower-pending-turn]')));
+
+    replacement.resolve({
+      events: [{
+        schema_version: 1,
+        seq: 2,
+        endpoint_id: 'test-runtime',
+        thread_id: initialThread.thread_id,
+        run_id: 'run-live-canonical-send',
+        at_unix_ms: 20,
+        kind: 'timeline.replaced',
+        payload: {
+          stream_generation: 1,
+          snapshot_through_seq: 2,
+          messages: [{
+            id: 'entry-user-live-canonical',
+            turn_id: acceptedTurnID,
+            role: 'user',
+            content: 'replace this pending row',
+            status: 'complete',
+            created_at_ms: 10,
+          }, {
+            id: 'assistant-live-canonical',
+            turn_id: acceptedTurnID,
+            role: 'assistant',
+            content: '',
+            status: 'streaming',
+            active_cursor: true,
+            created_at_ms: 20,
+          }],
+          thread_patch: { run_status: 'running' },
+        },
+      }],
+      stream_generation: 1,
+      next_cursor: 2,
+      retained_from_seq: 1,
+      has_more: false,
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="entry-user-live-canonical"]')));
+    expect(runtime.querySelector('[data-flower-pending-turn]')).toBeNull();
+    expect(runtime.querySelectorAll('[data-flower-message-role="user"]')).toHaveLength(1);
+  });
+
+  it('keeps the accepted pending turn and cleared draft when the post-receipt refresh fails', async () => {
+    const launchTurn = vi.fn(async (input: { turn_id?: string }) => (
+      launchReceipt('thread-refresh-failed-after-send', input.turn_id ?? 'turn-refresh-failed')
+    ));
+    const loadThread = vi.fn(async () => {
+      throw new Error('Canonical refresh failed.');
+    });
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => []),
+      loadThread,
+      launchTurn,
+    });
+    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'send exactly once';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+
+    await waitFor(() => runtime.querySelector('.flower-error-message')?.textContent === 'Canonical refresh failed.');
+    expect(launchTurn).toHaveBeenCalledTimes(1);
+    expect(loadThread.mock.calls.length).toBeGreaterThanOrEqual(1);
+    expect(loadThread).toHaveBeenCalledWith('thread-refresh-failed-after-send');
+    expect(runtime.querySelector('[data-flower-pending-turn]')?.textContent).toContain('send exactly once');
+    expect(runtime.querySelector('[data-flower-pending-turn]')?.getAttribute('data-flower-pending-turn-state')).toBe('sending');
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
+    expect(flowerSurfaceNotifications()).not.toContainEqual(expect.objectContaining({
+      title: 'Flower could not send.',
+    }));
+  });
+
+  it('keeps one exact pending turn when admission succeeds but the receipt response is lost', async () => {
+    const reloadDeferred = deferred<FlowerLiveBootstrap>();
+    let proposedTurnID = '';
+    const launchTurn = vi.fn(async (input: { turn_id?: string }) => {
+      proposedTurnID = input.turn_id ?? '';
+      throw flowerTurnAdmissionUncertainFailure(
+        new Error('Admission response was lost.'),
+        'thread-admission-uncertain',
+        proposedTurnID,
+      );
+    });
+    const loadThread = vi.fn(() => reloadDeferred.promise);
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => []),
+      loadThread,
+      launchTurn,
+    });
+    await waitFor(() => Boolean(runtime.querySelector('textarea')));
+
+    const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    textarea.value = 'reconcile this exact turn';
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+
+    await waitFor(() => launchTurn.mock.calls.length === 1 && loadThread.mock.calls.length >= 1);
+    expect(proposedTurnID).not.toBe('');
+    expect(runtime.querySelector('[data-flower-pending-turn]')?.textContent).toContain('reconcile this exact turn');
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
+    expect(flowerSurfaceNotifications()).not.toContainEqual(expect.objectContaining({
+      title: 'Flower could not send.',
+    }));
+
+    const canonicalThread = thread({
+      thread_id: 'thread-admission-uncertain',
+      title: 'Admission uncertain',
+      status: 'running',
+      messages: [{
+        id: 'entry-user-after-uncertain-receipt',
+        turn_id: proposedTurnID,
+        role: 'user',
+        content: 'reconcile this exact turn',
+        status: 'complete',
+        created_at_ms: 10,
+      }],
+    });
+    reloadDeferred.resolve(liveBootstrap(canonicalThread, 1));
+
+    await waitFor(() => Boolean(runtime.querySelector('[data-flower-message-id="entry-user-after-uncertain-receipt"]')));
+    expect(launchTurn).toHaveBeenCalledTimes(1);
+    expect(runtime.querySelector('[data-flower-pending-turn]')).toBeNull();
+    expect(runtime.querySelectorAll('[data-flower-message-role="user"]')).toHaveLength(1);
+  });
+
+  it('shows the accepted run preparing status after the post-receipt refresh', async () => {
     const acceptedThread = thread({
       thread_id: 'thread-accepted-preparing',
       title: 'Accepted preparing',
@@ -3178,12 +3369,14 @@ describe('FlowerSurface navigation launch/send', () => {
       }),
       messages: [{
         id: 'm-accepted-user',
+        turn_id: 'turn-accepted',
         role: 'user',
         content: 'start the model request',
         status: 'complete',
         created_at_ms: 10,
       }, {
         id: 'm-accepted-assistant',
+        turn_id: 'turn-accepted',
         role: 'assistant',
         content: '',
         status: 'streaming',
@@ -3192,7 +3385,11 @@ describe('FlowerSurface navigation launch/send', () => {
       }],
     });
     const reloadDeferred = deferred<FlowerLiveBootstrap>();
-    const launchTurn = vi.fn(async () => liveBootstrap(acceptedThread, 1));
+    let acceptedTurnID = 'turn-accepted';
+    const launchTurn = vi.fn(async (input: { turn_id?: string }) => {
+      acceptedTurnID = input.turn_id ?? acceptedTurnID;
+      return launchReceipt(acceptedThread.thread_id, acceptedTurnID);
+    });
     const loadThread = vi.fn(() => reloadDeferred.promise);
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
@@ -3207,6 +3404,13 @@ describe('FlowerSurface navigation launch/send', () => {
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
     (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
 
+    await waitFor(() => launchTurn.mock.calls.length === 1 && loadThread.mock.calls.length >= 1);
+    expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
+    expect(runtime.querySelector('[data-flower-pending-turn]')?.textContent).toContain('start the model request');
+    reloadDeferred.resolve(liveBootstrap({
+      ...acceptedThread,
+      messages: acceptedThread.messages.map((message) => ({ ...message, turn_id: acceptedTurnID })),
+    }, 1));
     await waitFor(() => Boolean(runtime.querySelector('.flower-model-status-indicator')));
 
     expect(launchTurn).toHaveBeenCalledWith(expect.objectContaining({
@@ -3219,25 +3423,17 @@ describe('FlowerSurface navigation launch/send', () => {
     expect(runtime.querySelector('.flower-model-status-indicator')?.getAttribute('data-model-io-phase')).toBe('preparing');
     expect(runtime.querySelector('[data-flower-message-id] .flower-model-status-indicator')).toBeNull();
     expect(runtime.querySelector('.flower-chat-transcript .flower-model-status-indicator')).toBeNull();
-
-    reloadDeferred.resolve(liveBootstrap({
-      ...acceptedThread,
-      status: 'success',
-      model_io_status: null,
-      messages: acceptedThread.messages.map((message) => (
-        message.role === 'assistant'
-          ? { ...message, status: 'complete', active_cursor: false, content: 'done', blocks: [{ type: 'markdown', content: 'done' }] }
-          : message
-      )),
-    }, 2));
-    await waitFor(() => runtime.textContent?.includes('done') ?? false);
-    expect(runtime.querySelector('.flower-model-status-indicator')).toBeNull();
+    expect(runtime.querySelector('[data-flower-pending-turn]')).toBeNull();
   });
 
   it('does not synthesize timeline rows while the handler is still resolving', async () => {
     const handlerDeferred = deferred<FlowerRouterDecision>();
-    const sendDeferred = deferred<FlowerLiveBootstrap>();
-    const launchTurn = vi.fn(() => sendDeferred.promise);
+    const sendDeferred = deferred<FlowerTurnLaunchReceipt>();
+    let routeTurnID = '';
+    const launchTurn = vi.fn((input) => {
+      routeTurnID = input.turn_id ?? 'turn-route-settled';
+      return sendDeferred.promise;
+    });
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => []),
@@ -3249,6 +3445,7 @@ describe('FlowerSurface navigation launch/send', () => {
             status: 'running',
             messages: [{
               id: 'm-route-settled-user',
+              turn_id: routeTurnID,
               role: 'user',
               content: 'show before route settles',
               status: 'complete',
@@ -3282,18 +3479,7 @@ describe('FlowerSurface navigation launch/send', () => {
     expect(launchTurn).toHaveBeenCalledWith(expect.objectContaining({
       prompt: 'show before route settles',
     }));
-    sendDeferred.resolve(liveBootstrap(thread({
-      thread_id: 'thread-route-settled',
-      title: 'Route settled',
-      status: 'running',
-      messages: [{
-        id: 'm-route-settled-user',
-        role: 'user',
-        content: 'show before route settles',
-        status: 'complete',
-        created_at_ms: 10,
-      }],
-    })));
+    sendDeferred.resolve(launchReceipt('thread-route-settled', routeTurnID));
     await waitFor(() => runtime.textContent?.includes('show before route settles') ?? false);
   });
 
@@ -3305,12 +3491,14 @@ describe('FlowerSurface navigation launch/send', () => {
       model_io_status: modelIOStatus({ run_id: 'run-1' }),
       messages: [{
         id: 'm-first-user',
+        turn_id: 'turn-first-request',
         role: 'user',
         content: 'first request',
         status: 'complete',
         created_at_ms: 10,
       }, {
         id: 'm-first-assistant',
+        turn_id: 'turn-first-request',
         role: 'assistant',
         content: 'partial old answer',
         status: 'streaming',
@@ -3325,6 +3513,7 @@ describe('FlowerSurface navigation launch/send', () => {
         ...(runningThread.messages ?? []),
         {
           id: 'm-second-user',
+          turn_id: 'turn-second-request',
           role: 'user',
           content: 'second request',
           status: 'complete',
@@ -3332,6 +3521,7 @@ describe('FlowerSurface navigation launch/send', () => {
         },
         {
           id: 'm-second-assistant',
+          turn_id: 'turn-second-request',
           role: 'assistant',
           content: '',
           status: 'streaming',
@@ -3341,14 +3531,31 @@ describe('FlowerSurface navigation launch/send', () => {
       ],
     });
     let loadedAfterLaunch = false;
+    let admittedTurnID = '';
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [runningThread]),
-      loadThread: vi.fn(async () => liveBootstrap(loadedAfterLaunch ? launchedThread : runningThread)),
+      loadThread: vi.fn(async () => {
+        if (!loadedAfterLaunch) return liveBootstrap(runningThread);
+        const canonical = withCanonicalUserTurnID(launchedThread, 'm-second-user', admittedTurnID);
+        return liveBootstrap({
+          ...canonical,
+          queued_turn_count: 1,
+          queued_turns: [{
+            turn_id: admittedTurnID,
+            prompt: 'second request',
+            created_at_ms: 30,
+          }],
+          messages: canonical.messages.map((message) => (
+            message.id === 'm-second-assistant' ? { ...message, turn_id: admittedTurnID } : message
+          )),
+        });
+      }),
       stopThread: vi.fn(async () => liveBootstrap({ ...runningThread, status: 'canceled' })),
       launchTurn: vi.fn(async (input) => {
         loadedAfterLaunch = true;
-        return liveBootstrap(withLaunchUserMessageID(launchedThread, 'm-second-user', input.message_id ?? 'm-second-user'));
+        admittedTurnID = input.turn_id ?? 'turn-second-request';
+        return launchReceipt(launchedThread.thread_id, admittedTurnID, 'queued');
       }),
     });
 
@@ -3362,14 +3569,14 @@ describe('FlowerSurface navigation launch/send', () => {
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
     (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
 
-	await waitFor(() => Boolean(runtime.querySelector('.flower-model-status-indicator')));
-	const ids = Array.from(runtime.querySelectorAll('[data-flower-message-id]')).map((node) => node.getAttribute('data-flower-message-id'));
-	expect(ids).toHaveLength(4);
-	expect(ids[0]).toBe('m-first-user');
-	expect(ids[1]).toBe('m-first-assistant');
-	expect(ids[2]?.startsWith('pending:')).toBe(false);
-	expect(ids[3]).toBe('m-second-assistant');
-	expect(runtime.querySelector('[data-flower-pending-turn]')).toBeNull();
-	expect(runtime.querySelectorAll('.flower-model-status-indicator')).toHaveLength(1);
+    await waitFor(() => Boolean(runtime.querySelector('.flower-model-status-indicator')));
+    const ids = Array.from(runtime.querySelectorAll('[data-flower-message-id]')).map((node) => node.getAttribute('data-flower-message-id'));
+    expect(ids).toHaveLength(4);
+    expect(ids[0]).toBe('m-first-user');
+    expect(ids[1]).toBe('m-first-assistant');
+    expect(ids[2]).toBe('m-second-user');
+    expect(ids[3]).toBe('m-second-assistant');
+    expect(runtime.querySelector('[data-flower-pending-turn]')).toBeNull();
+    expect(runtime.querySelectorAll('.flower-model-status-indicator')).toHaveLength(1);
   });
 });

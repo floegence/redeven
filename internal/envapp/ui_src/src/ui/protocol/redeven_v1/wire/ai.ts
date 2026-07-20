@@ -58,7 +58,7 @@ export type wire_ai_send_user_turn_req = {
   thread_id: string;
   model?: string;
   input: {
-    message_id?: string;
+    turn_id?: string;
     text: string;
     attachments: wire_ai_attachment[];
     context_action?: ContextActionEnvelope;
@@ -74,6 +74,7 @@ export type wire_ai_send_user_turn_req = {
 
 export type wire_ai_send_user_turn_resp = {
   run_id: string;
+  turn_id: string;
   kind: string;
   queue_id?: string;
   queue_position?: number;
@@ -96,7 +97,7 @@ export type wire_ai_submit_request_user_input_response_req = {
   model?: string;
   response: wire_ai_request_user_input_response;
   input: {
-    message_id?: string;
+    turn_id?: string;
     text: string;
     attachments: wire_ai_attachment[];
   };
@@ -110,6 +111,7 @@ export type wire_ai_submit_request_user_input_response_req = {
 
 export type wire_ai_submit_request_user_input_response_resp = {
   run_id: string;
+  turn_id: string;
   kind: string;
   consumed_waiting_prompt_id?: string;
 };
@@ -137,6 +139,7 @@ export type wire_ai_event_notify = {
   event_type: 'stream_event' | 'thread_state' | 'thread_summary';
   endpoint_id: string;
   thread_id: string;
+  turn_id?: string;
   run_id: string;
   at_unix_ms: number;
   stream_kind?: 'lifecycle' | 'assistant' | 'tool' | 'context';
@@ -167,7 +170,7 @@ export type wire_ai_followup_attachment = {
 export type wire_ai_followup_item = {
   followup_id: string;
   lane: string;
-  message_id: string;
+  turn_id: string;
   text: string;
   model_id?: string;
   permission_type?: string;

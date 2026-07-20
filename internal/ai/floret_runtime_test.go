@@ -236,6 +236,12 @@ func newFloretRuntimeTestRun(t *testing.T, opts runOptions, providedStores ...*t
 	if strings.TrimSpace(opts.RunID) == "" {
 		opts.RunID = "run_floret_runtime_test_" + strings.TrimSpace(opts.ThreadID)
 	}
+	if strings.TrimSpace(opts.MessageID) == "" {
+		opts.MessageID = "msg_floret_runtime_test_" + strings.TrimSpace(opts.RunID)
+	}
+	if strings.TrimSpace(opts.TurnID) == "" {
+		opts.TurnID = "turn_floret_runtime_test_" + strings.TrimSpace(opts.RunID)
+	}
 	var productStore *threadstore.Store
 	if len(providedStores) == 0 || providedStores[0] == nil {
 		store, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))
@@ -1024,7 +1030,7 @@ func TestRunFloretHostedTurnInjectsAskFlowerLinkedContext(t *testing.T) {
 		ThreadID:        r.threadID,
 		ChannelID:       "channel_floret_linked_context",
 		Lane:            threadstore.FollowupLaneQueued,
-		TurnID:          r.messageID,
+		TurnID:          r.turnID,
 		RunID:           r.id,
 		TextContent:     "what is this process",
 		AttachmentsJSON: `[{"name":"notes.txt","mime_type":"text/plain","url":"/_redeven_proxy/api/ai/uploads/upl_notes"}]`,
@@ -1682,12 +1688,12 @@ func TestFloretEventSinkRejectsUnknownContractsBeforePresentation(t *testing.T) 
 	sink.EmitEvent(flruntime.Event{
 		Type:     observation.EventTypeProviderDelta,
 		ThreadID: flruntime.ThreadID(r.threadID),
-		TurnID:   flruntime.TurnID(r.messageID),
+		TurnID:   flruntime.TurnID(r.turnID),
 		RunID:    flruntime.RunID(r.id),
 		Stream:   &flruntime.StreamObservation{Type: flruntime.StreamObservationAssistantDelta, Text: "must not render"},
 		Projection: &flruntime.ThreadTurnProjection{
 			ThreadID:       flruntime.ThreadID(r.threadID),
-			TurnID:         flruntime.TurnID(r.messageID),
+			TurnID:         flruntime.TurnID(r.turnID),
 			RunID:          flruntime.RunID(r.id),
 			Status:         flruntime.TurnStatusCompleted,
 			ThroughOrdinal: 1,
@@ -1984,6 +1990,7 @@ func TestProjectFloretTaskCompleteDoesNotCreateTranscriptMarkdown(t *testing.T) 
 	r := newFloretRuntimeTestRun(t, runOptions{})
 	r.id = "run_floret_task_complete"
 	r.threadID = "thread_floret_task_complete"
+	r.turnID = "msg_floret_task_complete"
 	r.messageID = "msg_floret_task_complete"
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
 
@@ -2027,6 +2034,7 @@ func TestProjectFloretTaskCompleteDoesNotApplyRedevenCompletionGate(t *testing.T
 	r := newFloretRuntimeTestRun(t, runOptions{})
 	r.id = "run_floret_task_complete_no_local_gate"
 	r.threadID = "thread_floret_task_complete_no_local_gate"
+	r.turnID = "msg_floret_task_complete_no_local_gate"
 	r.messageID = "msg_floret_task_complete_no_local_gate"
 
 	err := r.projectFloretResult(
@@ -2053,6 +2061,7 @@ func TestProjectFloretTaskCompletePreservesStreamedMarkdown(t *testing.T) {
 	r := newFloretRuntimeTestRun(t, runOptions{})
 	r.id = "run_floret_task_complete_streamed"
 	r.threadID = "thread_floret_task_complete_streamed"
+	r.turnID = "msg_floret_task_complete_streamed"
 	r.messageID = "msg_floret_task_complete_streamed"
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
 	r.ensureAssistantMessageStarted()
@@ -2111,6 +2120,7 @@ func TestProjectFloretNaturalStopDoesNotCreateTranscriptMarkdown(t *testing.T) {
 	r := newFloretRuntimeTestRun(t, runOptions{})
 	r.id = "run_floret_natural_stop"
 	r.threadID = "thread_floret_natural_stop"
+	r.turnID = "msg_floret_natural_stop"
 	r.messageID = "msg_floret_natural_stop"
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
 
@@ -2146,6 +2156,7 @@ func TestProjectFloretNaturalStopDoesNotUseResultOutputAsTranscriptFallback(t *t
 	r := newFloretRuntimeTestRun(t, runOptions{})
 	r.id = "run_floret_natural_stop_no_fallback"
 	r.threadID = "thread_floret_natural_stop_no_fallback"
+	r.turnID = "msg_floret_natural_stop_no_fallback"
 	r.messageID = "msg_floret_natural_stop_no_fallback"
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
 
@@ -2183,6 +2194,7 @@ func TestProjectFloretNaturalStopPreservesStreamedMarkdown(t *testing.T) {
 	r := newFloretRuntimeTestRun(t, runOptions{})
 	r.id = "run_floret_natural_stop_streamed"
 	r.threadID = "thread_floret_natural_stop_streamed"
+	r.turnID = "msg_floret_natural_stop_streamed"
 	r.messageID = "msg_floret_natural_stop_streamed"
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
 	r.ensureAssistantMessageStarted()
@@ -2236,6 +2248,7 @@ func TestProjectFloretResultIgnoresDetachedRun(t *testing.T) {
 	r := newFloretRuntimeTestRun(t, runOptions{})
 	r.id = "run_floret_detached_result"
 	r.threadID = "thread_floret_detached_result"
+	r.turnID = "msg_floret_detached_result"
 	r.messageID = "msg_floret_detached_result"
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
 	r.markDetached()
@@ -2301,6 +2314,7 @@ func TestProjectFloretCancelledResultUsesCanceledLifecycle(t *testing.T) {
 	r := newFloretRuntimeTestRun(t, runOptions{})
 	r.id = "run_floret_cancelled"
 	r.threadID = "thread_floret_cancelled"
+	r.turnID = "msg_floret_cancelled"
 	r.messageID = "msg_floret_cancelled"
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
 
@@ -2335,6 +2349,7 @@ func TestProjectFloretCancelledResultWithDeadlineUsesTimedOutLifecycle(t *testin
 	r := newFloretRuntimeTestRun(t, runOptions{})
 	r.id = "run_floret_cancelled_timeout"
 	r.threadID = "thread_floret_cancelled_timeout"
+	r.turnID = "msg_floret_cancelled_timeout"
 	r.messageID = "msg_floret_cancelled_timeout"
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
 	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
@@ -2370,6 +2385,7 @@ func TestProjectFloretUnknownWaitingSignalFailsAsUnsupportedSignal(t *testing.T)
 	r := newFloretRuntimeTestRun(t, runOptions{})
 	r.id = "run_unknown_waiting"
 	r.threadID = "thread_unknown_waiting"
+	r.turnID = "msg_unknown_waiting"
 	r.messageID = "msg_unknown_waiting"
 
 	err := r.projectFloretResult(

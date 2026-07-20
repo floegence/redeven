@@ -51,6 +51,7 @@ func newPermissionPolicyTestRun(t *testing.T, workspace string, permissionType F
 			CanAdmin:     true,
 		},
 		MessageID: messageID,
+		TurnID:    "turn_" + messageID,
 	}, store)
 	registerTestServiceForRun(t, r, svc)
 	r.permissionType = permissionType
@@ -238,7 +239,7 @@ func TestPermissionPolicy_ParentInvocationRejectsMismatchedFloretRunID(t *testin
 	execRun, err := floretInvocationRunContext(context.Background(), parent, fltools.Invocation[map[string]any]{
 		RunID:    "wrong_floret_run",
 		ThreadID: parent.threadID,
-		TurnID:   parent.messageID,
+		TurnID:   parent.turnID,
 	}, parent.currentPermissionSnapshot())
 	if err == nil || !strings.Contains(err.Error(), "run identity mismatch") {
 		t.Fatalf("floretInvocationRunContext err=%v, want run identity mismatch", err)
@@ -256,8 +257,8 @@ func TestPermissionPolicy_ParentInvocationRejectsMismatchedFloretRunID(t *testin
 func TestPermissionPolicy_DelegatedApprovalRefUsesExplicitChildRunID(t *testing.T) {
 	t.Parallel()
 
-	parent := &run{threadID: "thread_parent", id: "run_parent", messageID: "turn_parent"}
-	child := &run{threadID: "thread_child", id: "thread_child", messageID: "turn_child"}
+	parent := &run{threadID: "thread_parent", id: "run_parent", turnID: "turn_parent", messageID: "msg_parent"}
+	child := &run{threadID: "thread_child", id: "thread_child", turnID: "turn_child", messageID: "msg_child"}
 	ref := delegatedApprovalRef(parent, child, flruntime.EffectAuthorizationRequest{
 		ToolCallID:      "tool_call_child",
 		EffectAttemptID: "approval_child",
@@ -268,6 +269,9 @@ func TestPermissionPolicy_DelegatedApprovalRefUsesExplicitChildRunID(t *testing.
 	})
 	if ref.ChildRunID != "run_child_actual" {
 		t.Fatalf("child_run_id=%q, want explicit child run id", ref.ChildRunID)
+	}
+	if ref.ParentTurnID != parent.turnID || ref.ChildTurnID != child.turnID {
+		t.Fatalf("delegated turn lineage=%#v, want exact parent/child TurnID", ref)
 	}
 
 	ref = delegatedApprovalRef(parent, child, flruntime.EffectAuthorizationRequest{
@@ -372,8 +376,8 @@ func TestPermissionPolicy_DelegatedApprovalRejectsMissingExactChildSnapshot(t *t
 func TestPermissionPolicy_DelegatedApprovalActionOmitsMainApprovalIDs(t *testing.T) {
 	t.Parallel()
 
-	parent := &run{threadID: "thread_parent", id: "run_parent", messageID: "turn_parent"}
-	child := &run{threadID: "thread_child", id: "run_child", messageID: "turn_child"}
+	parent := &run{threadID: "thread_parent", id: "run_parent", turnID: "turn_parent", messageID: "msg_parent"}
+	child := &run{threadID: "thread_child", id: "run_child", turnID: "turn_child", messageID: "msg_child"}
 	ref := delegatedApprovalRef(parent, child, flruntime.EffectAuthorizationRequest{
 		ToolCallID:      "tool_call_child",
 		EffectAttemptID: "approval_child",
@@ -402,6 +406,9 @@ func TestPermissionPolicy_DelegatedApprovalActionOmitsMainApprovalIDs(t *testing
 	}
 	if _, ok := decoded["tool_id"]; ok {
 		t.Fatalf("delegated approval payload includes tool_id: %s", payload)
+	}
+	if decoded["turn_id"] != "turn_parent" {
+		t.Fatalf("delegated approval turn_id=%v, want parent TurnID", decoded["turn_id"])
 	}
 	refPayload, ok := decoded["delegated_ref"].(map[string]any)
 	if !ok {
@@ -557,7 +564,7 @@ func permissionPolicyTestRunOptions(r *run) fltools.DispatchOptions {
 	opts := fltools.DispatchOptions{
 		RunID:         strings.TrimSpace(r.id),
 		ThreadID:      strings.TrimSpace(r.threadID),
-		TurnID:        strings.TrimSpace(r.messageID),
+		TurnID:        strings.TrimSpace(r.turnID),
 		PromptScopeID: strings.TrimSpace(r.threadID),
 		Step:          1,
 	}

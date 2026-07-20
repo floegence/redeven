@@ -76,6 +76,7 @@ function parentThreadWithRunningSubagent(childStatus = 'running'): FlowerThreadS
         created_at_ms: 20,
         blocks: [
           activityTimeline({
+            thread_id: 'thread-parent-subagents',
             run_id: 'run-subagents',
             turn_id: 'm-parent-subagents',
             items: [activityItem({
@@ -238,6 +239,7 @@ describe('FlowerSurface navigation activity', () => {
             },
           ],
           activity: activityTimeline({
+            thread_id: 'thread-child-review',
             run_id: 'subagent:thread-child-review',
             turn_id: 'child-canonical',
             items: [
@@ -556,6 +558,7 @@ describe('FlowerSurface navigation activity', () => {
           next_ordinal: 7,
           timeline: [],
           activity: activityTimeline({
+            thread_id: 'thread-child-review',
             run_id: sharedRunID,
             turn_id: 'child-canonical',
             items: [
@@ -591,6 +594,7 @@ describe('FlowerSurface navigation activity', () => {
         next_ordinal: 5,
         timeline: [],
         activity: activityTimeline({
+          thread_id: 'thread-child-review',
           run_id: sharedRunID,
           turn_id: 'child-canonical',
           items: [activityItem({
@@ -736,7 +740,12 @@ describe('FlowerSurface navigation activity', () => {
         subagentDetail().timeline[0]!,
         subagentDetail().timeline[3]!,
       ],
-      activity: activityTimeline({ items: operationItems.map((item) => ({ ...item, status: 'success' })) }),
+      activity: activityTimeline({
+        thread_id: 'thread-child-review',
+        run_id: 'subagent:thread-child-review',
+        turn_id: 'child-canonical',
+        items: operationItems.map((item) => ({ ...item, status: 'success' })),
+      }),
       has_more: false,
     }));
     const runtime = renderSurfaceWithAdapter({
@@ -769,7 +778,12 @@ describe('FlowerSurface navigation activity', () => {
         subagentDetail().timeline[0]!,
         subagentDetail().timeline[3]!,
       ],
-      activity: activityTimeline({ items: operationItems }),
+      activity: activityTimeline({
+        thread_id: 'thread-child-review',
+        run_id: 'subagent:thread-child-review',
+        turn_id: 'child-canonical',
+        items: operationItems,
+      }),
       has_more: false,
     }));
     (runtime.querySelector('.flower-chat-header-actions button[title^="Open subagents"]') as HTMLButtonElement).click();
@@ -900,6 +914,7 @@ describe('FlowerSurface navigation activity', () => {
           created_at_ms: 20,
           blocks: [
             activityTimeline({
+              thread_id: 'thread-parent-subagents',
               run_id: 'run-subagents',
               turn_id: 'm-parent-subagents',
               items: [activityItem({
@@ -1037,6 +1052,9 @@ describe('FlowerSurface navigation activity', () => {
               content: 'I will edit the file.',
             },
             activityTimeline({
+              thread_id: 'thread-file-activity',
+              run_id: 'run-file-activity',
+              turn_id: 'turn-file-activity',
               file_actions: {
                 edit_app: {
                   action_id: 'edit_app',
@@ -1315,6 +1333,7 @@ describe('FlowerSurface navigation activity', () => {
           created_at_ms: 5_500,
           blocks: [
             activityTimeline({
+              thread_id: 'thread-tool-gap-model-status',
               run_id: 'run-tool-gap',
               turn_id: 'm-tool-gap',
               status: 'success',
@@ -1409,6 +1428,7 @@ describe('FlowerSurface navigation activity', () => {
           blocks: [
             { type: 'markdown', content: 'I will check the workspace.' },
             activityTimeline({
+              thread_id: 'thread-tools',
               run_id: 'run-tools',
               turn_id: 'm-tools',
               items: tool_names.map((tool_name, index) => activityItem({
@@ -1558,6 +1578,7 @@ describe('FlowerSurface navigation activity', () => {
           created_at_ms: 6_700,
           blocks: [
             activityTimeline({
+              thread_id: 'thread-live-terminal-output',
               run_id: 'run-live-terminal',
               turn_id: 'm-live-terminal-output',
               status: 'running',
@@ -1601,6 +1622,7 @@ describe('FlowerSurface navigation activity', () => {
               block: {
                 type: 'activity-timeline',
                 block: activityTimeline({
+                  thread_id: 'thread-live-terminal-output',
                   run_id: 'run-live-terminal',
                   turn_id: 'm-live-terminal-output',
                   status: 'running',
@@ -1688,6 +1710,7 @@ describe('FlowerSurface navigation activity', () => {
           created_at_ms: 6_650,
           blocks: [
             activityTimeline({
+              thread_id: 'thread-product-activity-details',
               run_id: 'run-product-activity-details',
               turn_id: 'm-product-activity-details',
               items: [
@@ -1779,6 +1802,7 @@ describe('FlowerSurface navigation activity', () => {
           created_at_ms: 6_750,
           blocks: [
             activityTimeline({
+              thread_id: 'thread-failed-todos',
               run_id: 'run-failed-todos',
               turn_id: 'm-failed-todos',
               status: 'error',
@@ -1851,6 +1875,7 @@ describe('FlowerSurface navigation activity', () => {
           created_at_ms: 6_780,
           blocks: [
             activityTimeline({
+              thread_id: 'thread-subagent-details',
               run_id: 'run-subagent-details',
               turn_id: 'm-subagent-details',
               items: [
@@ -1973,6 +1998,7 @@ describe('FlowerSurface navigation activity', () => {
           created_at_ms: 6_900,
           blocks: [
             activityTimeline({
+              thread_id: 'thread-inline-approval',
               run_id: 'run-inline-approval',
               turn_id: 'm-inline-approval',
               status: 'waiting',
@@ -2095,6 +2121,7 @@ describe('FlowerSurface navigation activity', () => {
           created_at_ms: 7_250,
           blocks: [
             activityTimeline({
+              thread_id: 'thread-delegated-approval',
               run_id: 'run-parent-delegated',
               turn_id: 'm-delegated-approval',
               status: 'waiting',
@@ -2769,6 +2796,7 @@ describe('FlowerSurface navigation activity', () => {
           created_at_ms: 7_100,
           blocks: [
             activityTimeline({
+              thread_id: 'thread-stale-approval',
               run_id: 'run-stale-approval',
               turn_id: 'm-stale-approval',
               status: 'waiting',
@@ -2977,6 +3005,7 @@ describe('FlowerSurface navigation activity', () => {
           created_at_ms: 6_700,
           blocks: [
             activityTimeline({
+              thread_id: 'thread-terminal-output',
               run_id: 'run-terminal-output',
               turn_id: 'm-terminal-output',
               items: [activityItem({
@@ -3043,6 +3072,7 @@ describe('FlowerSurface navigation activity', () => {
           created_at_ms: 6_820,
           blocks: [
             activityTimeline({
+              thread_id: 'thread-approved-terminal-output',
               run_id: 'run-approved-terminal-output',
               turn_id: 'm-approved-terminal-output',
               items: [activityItem({
@@ -3130,6 +3160,7 @@ describe('FlowerSurface navigation activity', () => {
           created_at_ms: 6_840,
           blocks: [
             activityTimeline({
+              thread_id: 'thread-waiting-terminal-readonly',
               run_id: 'run-terminal-readonly',
               turn_id: 'm-terminal-readonly',
               status: 'waiting',
@@ -3185,6 +3216,7 @@ describe('FlowerSurface navigation activity', () => {
 
   it('preserves terminal disclosure identity when canonical completion moves its block', async () => {
     const runningActivity = activityTimeline({
+      thread_id: 'thread-refresh-block',
       run_id: 'run-refresh-block',
       turn_id: 'm-refresh-block',
       status: 'running',
@@ -3212,6 +3244,7 @@ describe('FlowerSurface navigation activity', () => {
       })],
     });
     const completeActivity = activityTimeline({
+      thread_id: 'thread-refresh-block',
       run_id: 'run-refresh-block',
       turn_id: 'm-refresh-block',
       status: 'success',
@@ -3335,6 +3368,7 @@ describe('FlowerSurface navigation activity', () => {
           blocks: [
             { type: 'markdown', content: 'I need one choice.' },
             activityTimeline({
+              thread_id: 'thread-waiting-activity',
               run_id: 'run-waiting',
               turn_id: 'm-waiting',
               status: 'success',
@@ -3418,6 +3452,7 @@ describe('FlowerSurface navigation activity', () => {
           blocks: [
             { type: 'markdown', content: `Working on ${scenario.name}.` },
             activityTimeline({
+              thread_id: `thread-${scenario.name}-activity`,
               run_id: `run-${scenario.name}`,
               turn_id: `m-${scenario.name}`,
               status: 'success',

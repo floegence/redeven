@@ -8,7 +8,10 @@ package ai
 // - The LLM orchestration runs inside Go runtime; the Go runtime is the only authority that can execute tools.
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
+	"io"
 	"strings"
 
 	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
@@ -88,13 +91,12 @@ type RequestUserInputResolvedQuestion struct {
 }
 
 type RequestUserInputResponseRecord struct {
-	PromptID          string                             `json:"prompt_id"`
-	ToolID            string                             `json:"tool_id,omitempty"`
-	ReasonCode        string                             `json:"reason_code,omitempty"`
-	Responses         []RequestUserInputResolvedQuestion `json:"responses,omitempty"`
-	PublicSummary     string                             `json:"public_summary,omitempty"`
-	ContainsSecret    bool                               `json:"contains_secret,omitempty"`
-	ResponseMessageID string                             `json:"response_message_id,omitempty"`
+	PromptID       string                             `json:"prompt_id"`
+	ToolID         string                             `json:"tool_id,omitempty"`
+	ReasonCode     string                             `json:"reason_code,omitempty"`
+	Responses      []RequestUserInputResolvedQuestion `json:"responses,omitempty"`
+	PublicSummary  string                             `json:"public_summary,omitempty"`
+	ContainsSecret bool                               `json:"contains_secret,omitempty"`
 }
 
 type RequestUserInputSecretAnswer struct {
@@ -114,6 +116,7 @@ type SubmitRequestUserInputResponseRequest struct {
 
 type SubmitRequestUserInputResponseResponse struct {
 	RunID                   string `json:"run_id"`
+	TurnID                  string `json:"turn_id"`
 	Kind                    string `json:"kind"`
 	ConsumedWaitingPromptID string `json:"consumed_waiting_prompt_id,omitempty"`
 	AppliedPermissionType   string `json:"applied_permission_type,omitempty"`
@@ -142,7 +145,7 @@ type ThreadView struct {
 	PermissionType      string                       `json:"permission_type"`
 	WorkingDir          string                       `json:"working_dir"`
 	QueuedTurnCount     int                          `json:"queued_turn_count"`
-	QueuedTurns         []QueuedTurnView             `json:"queued_turns,omitempty"`
+	QueuedTurns         []QueuedTurnView             `json:"queued_turns"`
 	RunStatus           string                       `json:"run_status"`
 	ReadOnlyReason      string                       `json:"read_only_reason,omitempty"`
 	OwnerKind           string                       `json:"owner_kind,omitempty"`
@@ -312,7 +315,7 @@ type FollowupAttachmentView struct {
 type FollowupItemView struct {
 	FollowupID      string                   `json:"followup_id"`
 	Lane            string                   `json:"lane"`
-	MessageID       string                   `json:"message_id"`
+	TurnID          string                   `json:"turn_id"`
 	Text            string                   `json:"text"`
 	ModelID         string                   `json:"model_id,omitempty"`
 	PermissionType  string                   `json:"permission_type,omitempty"`
@@ -323,7 +326,7 @@ type FollowupItemView struct {
 }
 
 type QueuedTurnView struct {
-	MessageID       string                 `json:"message_id"`
+	TurnID          string                 `json:"turn_id"`
 	Text            string                 `json:"text"`
 	CreatedAtUnixMs int64                  `json:"created_at_unix_ms"`
 	ContextAction   *ContextActionEnvelope `json:"context_action,omitempty"`
@@ -373,16 +376,33 @@ type RunRequest struct {
 }
 
 type RunInput struct {
-	// MessageID is an optional client-supplied id for the user input message persisted in the transcript.
-	//
-	// When set, the agent will prefer this id over generating a new one so the UI can keep a stable
-	// message id across optimistic rendering, realtime events, and history backfill.
-	MessageID          string                          `json:"message_id,omitempty"`
+	// TurnID is an optional client-proposed identity for the Floret turn. A
+	// missing value is allocated by Redeven; an invalid non-empty value is
+	// rejected instead of being replaced.
+	TurnID             string                          `json:"turn_id,omitempty"`
 	Text               string                          `json:"text"`
 	Attachments        []RunAttachmentIn               `json:"attachments"`
 	ContextAction      *ContextActionEnvelope          `json:"context_action,omitempty"`
 	StructuredResponse *RequestUserInputResponseRecord `json:"-"`
 	SecretAnswers      []RequestUserInputSecretAnswer  `json:"-"`
+}
+
+func (input *RunInput) UnmarshalJSON(data []byte) error {
+	type runInputWire RunInput
+	var decoded runInputWire
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&decoded); err != nil {
+		return err
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return errors.New("invalid run input")
+		}
+		return err
+	}
+	*input = RunInput(decoded)
+	return nil
 }
 
 type RunAttachmentIn struct {
@@ -586,6 +606,7 @@ type RealtimeEvent struct {
 	EventType     RealtimeEventType       `json:"event_type"`
 	EndpointID    string                  `json:"endpoint_id"`
 	ThreadID      string                  `json:"thread_id"`
+	TurnID        string                  `json:"turn_id,omitempty"`
 	RunID         string                  `json:"run_id"`
 	AtUnixMs      int64                   `json:"at_unix_ms"`
 	StreamKind    RealtimeStreamKind      `json:"stream_kind,omitempty"`

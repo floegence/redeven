@@ -2017,6 +2017,69 @@ html.dark .flower-component-shell {
   color: var(--foreground);
 }
 
+.flower-message-image {
+  display: block;
+  width: min(24rem, 100%);
+  overflow: hidden;
+  border: 1px solid var(--flower-chat-surface-border);
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+.flower-message-image img {
+  display: block;
+  width: 100%;
+  max-height: 24rem;
+  object-fit: contain;
+  background: var(--flower-chat-surface-elevated);
+}
+
+.flower-message-file {
+  display: flex;
+  width: min(24rem, 100%);
+  min-width: 0;
+  align-items: center;
+  gap: 0.625rem;
+  border: 1px solid var(--flower-chat-surface-border);
+  border-radius: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  color: var(--foreground);
+  text-decoration: none;
+  background: var(--flower-chat-surface-elevated);
+  cursor: pointer;
+}
+
+.flower-message-file:hover,
+.flower-message-file:focus-visible {
+  border-color: color-mix(in srgb, var(--primary) 34%, var(--flower-chat-surface-border));
+  background: color-mix(in srgb, var(--primary) 7%, var(--flower-chat-surface-elevated));
+  outline: none;
+}
+
+.flower-message-file-copy {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.flower-message-file-name {
+  overflow: hidden;
+  font-size: 0.8125rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flower-message-file-meta {
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .flower-message-assistant-copy-line {
   display: flex;
   max-width: min(100%, 58rem);

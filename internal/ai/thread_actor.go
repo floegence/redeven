@@ -520,7 +520,7 @@ type queuedTurnStartError struct {
 	endpointID         string
 	threadID           string
 	queueID            string
-	messageID          string
+	turnID             string
 	runID              string
 	requireSourceQueue bool
 	err                error
@@ -555,7 +555,7 @@ func queuedTurnStartLogAttrs(err error, endpointID string, threadID string) []an
 		}
 		attrs = append(attrs,
 			"queue_id", strings.TrimSpace(queuedErr.queueID),
-			"message_id", strings.TrimSpace(queuedErr.messageID),
+			"turn_id", strings.TrimSpace(queuedErr.turnID),
 			"run_id", strings.TrimSpace(queuedErr.runID),
 			"require_source_queue", queuedErr.requireSourceQueue,
 		)
@@ -665,7 +665,7 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 			endpointID:         endpointID,
 			threadID:           threadID,
 			queueID:            rec.QueueID,
-			messageID:          rec.TurnID,
+			turnID:             rec.TurnID,
 			runID:              runID,
 			requireSourceQueue: true,
 			err:                err,
@@ -676,7 +676,7 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 			endpointID:         endpointID,
 			threadID:           threadID,
 			queueID:            rec.QueueID,
-			messageID:          rec.TurnID,
+			turnID:             rec.TurnID,
 			runID:              runID,
 			requireSourceQueue: true,
 			err:                err,
@@ -792,6 +792,8 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 			return SendUserTurnResponse{}, err
 		}
 		return SendUserTurnResponse{
+			RunID:                 strings.TrimSpace(queued.RunID),
+			TurnID:                strings.TrimSpace(queued.TurnID),
 			Kind:                  "queued",
 			QueueID:               strings.TrimSpace(queued.QueueID),
 			QueuePosition:         position,
@@ -813,6 +815,8 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 			return SendUserTurnResponse{}, err
 		}
 		return SendUserTurnResponse{
+			RunID:                 strings.TrimSpace(queued.RunID),
+			TurnID:                strings.TrimSpace(queued.TurnID),
 			Kind:                  "queued",
 			QueueID:               strings.TrimSpace(queued.QueueID),
 			QueuePosition:         position,
@@ -825,6 +829,8 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 			return SendUserTurnResponse{}, err
 		}
 		return SendUserTurnResponse{
+			RunID:                 strings.TrimSpace(queued.RunID),
+			TurnID:                strings.TrimSpace(queued.TurnID),
 			Kind:                  "queued",
 			QueueID:               strings.TrimSpace(queued.QueueID),
 			QueuePosition:         position,
@@ -843,6 +849,8 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 			return SendUserTurnResponse{}, err
 		}
 		return SendUserTurnResponse{
+			RunID:                 strings.TrimSpace(queued.RunID),
+			TurnID:                strings.TrimSpace(queued.TurnID),
 			Kind:                  "queued",
 			QueueID:               strings.TrimSpace(queued.QueueID),
 			QueuePosition:         position,
@@ -861,11 +869,13 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 		Input:    req.Input,
 		Options:  req.Options,
 	}
-	if _, _, err := a.mgr.svc.startUserTurnDetached(ctx, meta, runID, startReq, req.SourceFollowupID); err != nil {
+	admitted, _, err := a.mgr.svc.startUserTurnDetached(ctx, meta, runID, startReq, req.SourceFollowupID)
+	if err != nil {
 		return SendUserTurnResponse{}, err
 	}
 	return SendUserTurnResponse{
-		RunID:                 runID,
+		RunID:                 strings.TrimSpace(admitted.RunID),
+		TurnID:                strings.TrimSpace(admitted.TurnID),
 		Kind:                  "start",
 		AppliedPermissionType: appliedPermissionType,
 	}, nil
@@ -943,7 +953,7 @@ func (a *threadActor) handleSubmitRequestUserInputResponse(ctx context.Context, 
 	if err != nil {
 		return SubmitRequestUserInputResponseResponse{}, err
 	}
-	responseRecord, secretAnswers, err := buildRequestUserInputResponseRecord(*openPrompt, *validatedResponse, req.Input.MessageID)
+	responseRecord, secretAnswers, err := buildRequestUserInputResponseRecord(*openPrompt, *validatedResponse)
 	if err != nil {
 		return SubmitRequestUserInputResponseResponse{}, err
 	}
@@ -986,11 +996,13 @@ func (a *threadActor) handleSubmitRequestUserInputResponse(ctx context.Context, 
 		Input:    req.Input,
 		Options:  req.Options,
 	}
-	if _, _, err := a.mgr.svc.startUserTurnDetached(ctx, meta, runID, startReq, req.SourceFollowupID); err != nil {
+	admitted, _, err := a.mgr.svc.startUserTurnDetached(ctx, meta, runID, startReq, req.SourceFollowupID)
+	if err != nil {
 		return SubmitRequestUserInputResponseResponse{}, err
 	}
 	return SubmitRequestUserInputResponseResponse{
-		RunID:                   runID,
+		RunID:                   strings.TrimSpace(admitted.RunID),
+		TurnID:                  strings.TrimSpace(admitted.TurnID),
 		Kind:                    "start",
 		ConsumedWaitingPromptID: strings.TrimSpace(openPrompt.PromptID),
 		AppliedPermissionType:   permissionTypeString(resolvedPermissionType),

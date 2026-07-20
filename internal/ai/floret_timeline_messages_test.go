@@ -42,11 +42,15 @@ func TestThreadTimelineUsesCanonicalFloretOrdinalOrder(t *testing.T) {
 	wantIDs := []string{"", "turn_1", "", "turn_2", "", "turn_3"}
 	for index, value := range response.Messages {
 		record := decodeTimelineMessageForTest(t, value)
+		wantTurnID := fmt.Sprintf("turn_%d", index/2+1)
 		if record.Role != wantRoles[index] {
 			t.Fatalf("message %d role = %q, want %q", index, record.Role, wantRoles[index])
 		}
 		if wantIDs[index] != "" && record.ID != wantIDs[index] {
 			t.Fatalf("message %d id = %q, want %q", index, record.ID, wantIDs[index])
+		}
+		if record.TurnID != wantTurnID {
+			t.Fatalf("message %d turn_id = %q, want %q", index, record.TurnID, wantTurnID)
 		}
 	}
 	last := decodeTimelineMessageForTest(t, response.Messages[len(response.Messages)-2])
@@ -340,6 +344,7 @@ func TestTerminalCanonicalReplacementRecoversMismatchedLiveDraft(t *testing.T) {
 
 type timelineMessageRecord struct {
 	ID      string `json:"id"`
+	TurnID  string `json:"turn_id"`
 	Role    string `json:"role"`
 	Content string `json:"content"`
 	Blocks  []struct {

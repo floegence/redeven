@@ -350,12 +350,12 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 	if err != nil {
 		return nil, err
 	}
+	view.QueuedTurns = make([]QueuedTurnView, 0, queuedTurnCount)
 	if queuedTurnCount > 0 {
 		queued, listErr := db.ListFollowupsByLane(ctx, endpointID, threadID, threadstore.FollowupLaneQueued, queuedTurnCount)
 		if listErr != nil {
 			return nil, listErr
 		}
-		view.QueuedTurns = make([]QueuedTurnView, 0, len(queued))
 		for _, record := range queued {
 			queuedView, err := queuedTurnRecordToThreadView(record)
 			if err != nil {

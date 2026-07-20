@@ -228,8 +228,8 @@ func TestPendingForkEstablishedBeforeAdmissionRejectsRunPreparation(t *testing.T
 	go func() {
 		prepared, prepareErr := svc.prepareRun(meta, "run_operation_wins", RunStartRequest{
 			ThreadID: thread.ThreadID,
-			Input:    RunInput{MessageID: "turn_operation_wins", Text: "must not admit"},
-		}, nil, nil)
+			Input:    RunInput{TurnID: "turn_operation_wins", Text: "must not admit"},
+		}, nil)
 		if prepared != nil {
 			svc.releasePreparedRun(prepared)
 		}
@@ -261,8 +261,8 @@ func TestAdmissionRegisteredBeforeForkRejectsOperation(t *testing.T) {
 	}
 	prepared, err := svc.prepareRun(meta, "run_admission_wins", RunStartRequest{
 		ThreadID: thread.ThreadID,
-		Input:    RunInput{MessageID: "turn_admission_wins", Text: "registered"},
-	}, nil, nil)
+		Input:    RunInput{TurnID: "turn_admission_wins", Text: "registered"},
+	}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

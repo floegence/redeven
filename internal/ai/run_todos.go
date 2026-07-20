@@ -18,7 +18,7 @@ func (r *run) toolWriteTodos(ctx context.Context, toolID string, todos []TodoIte
 		return nil, errors.New("Floret host is not ready")
 	}
 	threadID := strings.TrimSpace(r.threadID)
-	turnID := strings.TrimSpace(r.messageID)
+	turnID := strings.TrimSpace(r.turnID)
 	runID := strings.TrimSpace(r.id)
 	toolID = strings.TrimSpace(toolID)
 	if threadID == "" || turnID == "" || runID == "" || toolID == "" {

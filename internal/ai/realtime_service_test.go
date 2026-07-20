@@ -364,6 +364,7 @@ func TestFlowerLiveEventsProjectRealtimeEventsProgressively(t *testing.T) {
 		RunID:               runID,
 		EndpointID:          meta.EndpointID,
 		ThreadID:            th.ThreadID,
+		TurnID:              "turn_live_projection_1",
 		MessageID:           "msg_live_projection_1",
 		UserPublicID:        meta.UserPublicID,
 		SessionMeta:         &meta,
@@ -380,9 +381,9 @@ func TestFlowerLiveEventsProjectRealtimeEventsProgressively(t *testing.T) {
 	svc.activeRunByTh[runThreadKey(meta.EndpointID, th.ThreadID)] = runID
 	svc.mu.Unlock()
 
-	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, streamEventMessageStart{Type: "message-start", MessageID: r.messageID})
-	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: 0, BlockType: "markdown"})
-	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, streamEventBlockDelta{Type: "block-delta", MessageID: r.messageID, BlockIndex: 0, Delta: "working"})
+	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, r.turnID, runID, streamEventMessageStart{Type: "message-start", MessageID: r.messageID})
+	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, r.turnID, runID, streamEventBlockStart{Type: "block-start", MessageID: r.messageID, BlockIndex: 0, BlockType: "markdown"})
+	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, r.turnID, runID, streamEventBlockDelta{Type: "block-delta", MessageID: r.messageID, BlockIndex: 0, Delta: "working"})
 
 	resp, err := svc.ListFlowerThreadLiveEvents(ctx, &meta, th.ThreadID, 0, 10)
 	if err != nil {
@@ -400,6 +401,15 @@ func TestFlowerLiveEventsProjectRealtimeEventsProgressively(t *testing.T) {
 	}
 	if !reflect.DeepEqual(gotKinds, wantKinds) {
 		t.Fatalf("event kinds=%#v, want %#v", gotKinds, wantKinds)
+	}
+	for _, event := range resp.Events {
+		if event.TurnID != r.turnID {
+			t.Fatalf("event turn_id=%q, want %q", event.TurnID, r.turnID)
+		}
+	}
+	var started FlowerLiveMessageStartedPayload
+	if !decodeFlowerPayload(resp.Events[1].Payload, &started) || started.MessageID != r.messageID || started.MessageID == r.turnID {
+		t.Fatalf("message.started identity=%#v turn_id=%q, want distinct message and turn identities", started, resp.Events[1].TurnID)
 	}
 	if err := assertNoFullMessageInDelta(resp.Events[3]); err != nil {
 		t.Fatalf("delta payload shape: %v", err)
@@ -433,10 +443,10 @@ func TestFlowerLiveStreamingDeltasDoNotEmitTimelineReplacements(t *testing.T) {
 
 	runID := "run_live_many_deltas"
 	messageID := "msg_live_many_deltas"
-	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, streamEventMessageStart{Type: "message-start", MessageID: messageID})
-	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, streamEventBlockStart{Type: "block-start", MessageID: messageID, BlockIndex: 0, BlockType: "markdown"})
+	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, messageID, runID, streamEventMessageStart{Type: "message-start", MessageID: messageID})
+	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, messageID, runID, streamEventBlockStart{Type: "block-start", MessageID: messageID, BlockIndex: 0, BlockType: "markdown"})
 	for i := 0; i < 1000; i++ {
-		svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, streamEventBlockDelta{Type: "block-delta", MessageID: messageID, BlockIndex: 0, Delta: "x"})
+		svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, messageID, runID, streamEventBlockDelta{Type: "block-delta", MessageID: messageID, BlockIndex: 0, Delta: "x"})
 	}
 
 	svc.mu.Lock()
@@ -504,8 +514,8 @@ func TestFlowerLiveActivityTimelineProjectsThroughMessageBlockSet(t *testing.T) 
 			Severity: observation.ActivitySeverityNormal,
 		}},
 	}, nil)
-	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, streamEventMessageStart{Type: "message-start", MessageID: messageID})
-	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, streamEventBlockSet{
+	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, messageID, runID, streamEventMessageStart{Type: "message-start", MessageID: messageID})
+	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, messageID, runID, streamEventBlockSet{
 		Type:       "block-set",
 		MessageID:  messageID,
 		BlockIndex: 0,
@@ -574,15 +584,15 @@ func TestFlowerLiveModelIOStatusProjectsProviderLifecycle(t *testing.T) {
 	}
 	runID := "run_model_io_1"
 
-	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, streamEventMessageStart{Type: "message-start", MessageID: "msg_model_io_1"})
-	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, streamEventModelIOStatus{
+	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, "turn_model_io_1", runID, streamEventMessageStart{Type: "message-start", MessageID: "msg_model_io_1"})
+	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, "turn_model_io_1", runID, streamEventModelIOStatus{
 		Type:        "model-io-status",
 		Phase:       string(FlowerModelIOPhaseWaitingResponse),
 		RunID:       runID,
 		StepIndex:   1,
 		UpdatedAtMs: 10_001,
 	})
-	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, streamEventModelIOStatus{
+	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, "turn_model_io_1", runID, streamEventModelIOStatus{
 		Type:        "model-io-status",
 		Phase:       string(FlowerModelIOPhaseStreaming),
 		RunID:       runID,
@@ -794,15 +804,28 @@ func TestFlowerLiveContextCompactionCompleteKeepsRunActive(t *testing.T) {
 
 	state := FlowerLiveMaterializedState{}
 	runID := "run-context-active"
+	turnID := "turn-context-active"
 	messageID := "msg-context-active"
 
 	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
-		RunID: runID,
-		Kind:  FlowerLiveRunStarted,
+		ThreadID: "thread-compaction",
+		TurnID:   turnID,
+		RunID:    runID,
+		Kind:     FlowerLiveRunStarted,
 		Payload: mustFlowerPayload(FlowerLiveRunStartedPayload{
 			RunID:     runID,
+			TurnID:    turnID,
 			MessageID: messageID,
 			Status:    string(RunStateRunning),
+		}),
+	})
+	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
+		ThreadID: "thread-compaction",
+		TurnID:   turnID,
+		RunID:    runID,
+		Kind:     FlowerLiveMessageStarted,
+		Payload: mustFlowerPayload(FlowerLiveMessageStartedPayload{
+			MessageID: messageID, Role: "assistant", Status: "streaming", CreatedAtMs: 10_000,
 		}),
 	})
 	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
@@ -875,7 +898,7 @@ func TestFlowerLiveContextCompactionCompleteKeepsRunActive(t *testing.T) {
 
 	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
 		ThreadID: "thread-compaction",
-		TurnID:   messageID,
+		TurnID:   turnID,
 		RunID:    runID,
 		Kind:     FlowerLiveMessageBlockStart,
 		Payload: mustFlowerPayload(FlowerLiveMessageBlockStartedPayload{
@@ -886,7 +909,7 @@ func TestFlowerLiveContextCompactionCompleteKeepsRunActive(t *testing.T) {
 	})
 	applyFlowerLiveEventToMaterializedState(&state, nil, FlowerLiveEvent{
 		ThreadID: "thread-compaction",
-		TurnID:   messageID,
+		TurnID:   turnID,
 		RunID:    runID,
 		Kind:     FlowerLiveMessageBlockDelta,
 		Payload: mustFlowerPayload(FlowerLiveMessageBlockDeltaPayload{
@@ -1149,10 +1172,12 @@ func TestFlowerLiveApprovalRequestedCarriesExpectedSeq(t *testing.T) {
 	}
 
 	runID := "run_live_approval_seq"
+	turnID := "turn_live_approval_seq"
 	r := newRunWithProductStoreForTest(t, runOptions{
 		RunID:               runID,
 		EndpointID:          meta.EndpointID,
 		ThreadID:            th.ThreadID,
+		TurnID:              turnID,
 		MessageID:           "msg_live_approval_seq",
 		UserPublicID:        meta.UserPublicID,
 		HostCapabilities:    bindTestRunHostCapabilities(t, svc, meta.EndpointID, th.ThreadID),
@@ -1160,7 +1185,7 @@ func TestFlowerLiveApprovalRequestedCarriesExpectedSeq(t *testing.T) {
 		PersistOpTimeout:    time.Second,
 		ToolApprovalTimeout: time.Minute,
 		OnStreamEvent: func(ev any) {
-			svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, ev)
+			svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, turnID, runID, ev)
 		},
 	}, svc.threadsDB)
 	requestedAt := time.Now()
@@ -1176,7 +1201,7 @@ func TestFlowerLiveApprovalRequestedCarriesExpectedSeq(t *testing.T) {
 		ToolKind:    "local",
 		RunID:       flruntime.RunID(r.id),
 		ThreadID:    flruntime.ThreadID(th.ThreadID),
-		TurnID:      flruntime.TurnID(r.messageID),
+		TurnID:      flruntime.TurnID(r.turnID),
 		Step:        2,
 		BatchIndex:  0,
 		BatchSize:   1,
@@ -1246,7 +1271,7 @@ func TestFlowerLiveApprovalRequestedCarriesExpectedSeq(t *testing.T) {
 	if _, ok := bootstrap.LiveState.ApprovalActions[payload.Action.ActionID]; !ok {
 		t.Fatalf("pending approval missing from bootstrap live state")
 	}
-	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, streamEventBlockSet{
+	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, r.turnID, runID, streamEventBlockSet{
 		Type:       "block-set",
 		MessageID:  r.messageID,
 		BlockIndex: 0,
@@ -1254,7 +1279,7 @@ func TestFlowerLiveApprovalRequestedCarriesExpectedSeq(t *testing.T) {
 			SchemaVersion: observation.ActivityTimelineSchemaVersion,
 			RunID:         runID,
 			ThreadID:      th.ThreadID,
-			TurnID:        r.messageID,
+			TurnID:        r.turnID,
 			TraceID:       runID,
 			Summary: observation.ActivitySummary{
 				Status:         observation.ActivityStatusWaiting,
@@ -1285,7 +1310,7 @@ func TestFlowerLiveApprovalRequestedCarriesExpectedSeq(t *testing.T) {
 			t.Fatalf("activity timeline generated a pending approval request event: %#v", event)
 		}
 	}
-	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, runID, streamEventBlockDelta{
+	svc.broadcastStreamEvent(meta.EndpointID, th.ThreadID, r.turnID, runID, streamEventBlockDelta{
 		Type:       "text-delta",
 		MessageID:  r.messageID,
 		BlockIndex: 1,

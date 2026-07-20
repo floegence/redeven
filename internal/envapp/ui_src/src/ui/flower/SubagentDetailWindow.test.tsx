@@ -51,7 +51,7 @@ function activityEntry(key: string, timestamp: number, status: FlowerActivitySta
   return {
     type: 'message',
     key,
-    message: { id: key, role: 'assistant', content: '', status: 'complete', created_at_ms: timestamp },
+    message: { id: key, turn_id: key, role: 'assistant', content: '', status: 'complete', created_at_ms: timestamp },
     blocks: [{
       type: 'activity',
       key: `${key}:activity`,
@@ -78,7 +78,7 @@ function narrativeEntry(key: string, timestamp: number, content: string): Flower
   return {
     type: 'message',
     key,
-    message: { id: key, role: 'assistant', content, status: 'complete', created_at_ms: timestamp },
+    message: { id: key, turn_id: key, role: 'assistant', content, status: 'complete', created_at_ms: timestamp },
     blocks: [{ type: 'content', key: `${key}:content`, block_index: 0, block_type: 'markdown', content }],
   };
 }
