@@ -6,15 +6,26 @@ import { classifyTerminalCarrierConsoleMessage } from './terminalCarrierRunnerPo
 
 const carrierSource = await readFile(new URL('./checkTerminalRecoveryCarrier.mjs', import.meta.url), 'utf8');
 const ciSource = await readFile(new URL('../../../../.github/workflows/ci-check.yml', import.meta.url), 'utf8');
+const releaseSource = await readFile(new URL('../../../../.github/workflows/release.yml', import.meta.url), 'utf8');
 
-test('runs headed terminal carriers under an explicit CI display server', () => {
+test('keeps the supported terminal carriers explicit in CI and release gates', () => {
   assert.match(carrierSource, /chromium\.launch\(\{\s*headless: false,/u);
 
   const carrierCommands = ciSource.match(/^\s*run: .*test:terminal-carrier.*$/gmu) ?? [];
-  assert.equal(carrierCommands.length, 3);
+  assert.equal(carrierCommands.length, 2);
   for (const command of carrierCommands) {
     assert.match(command, /run: xvfb-run -a corepack pnpm run test:terminal-carrier/u);
   }
+  assert.match(carrierCommands[0] ?? '', /--fixture-bytes 65536/u);
+  assert.match(carrierCommands[1] ?? '', /--fixture-bytes 458752/u);
+
+  const releaseCarrierCommands = releaseSource.match(/^\s*run: .*test:terminal-carrier.*$/gmu) ?? [];
+  assert.equal(releaseCarrierCommands.length, 2);
+  assert.match(releaseCarrierCommands[0] ?? '', /--fixture-bytes 65536/u);
+  assert.match(releaseCarrierCommands[1] ?? '', /--fixture-bytes 458752/u);
+
+  assert.doesNotMatch(ciSource, /--fixture-bytes 8388608/u);
+  assert.doesNotMatch(releaseSource, /--fixture-bytes 8388608/u);
 });
 
 test('reports Chromium readback diagnostics without weakening renderer failures', () => {
