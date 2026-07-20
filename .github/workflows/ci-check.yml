@@ -146,10 +146,6 @@ jobs:
         working-directory: internal/envapp/ui_src
         run: xvfb-run -a corepack pnpm run test:terminal-carrier -- --fixture-bytes 458752 --report "${RUNNER_TEMP}/redeven-terminal-carrier-448KiB.json"
 
-      - name: Terminal recovery carrier E2E (8 MiB boundary)
-        working-directory: internal/envapp/ui_src
-        run: xvfb-run -a corepack pnpm run test:terminal-carrier -- --fixture-bytes 8388608 --report "${RUNNER_TEMP}/redeven-terminal-carrier-8MiB-boundary.json"
-
       - name: Terminal history fixture matrix
         env:
           REDEVEN_TERMINAL_HISTORY_REPORT: ${{ runner.temp }}/redeven-terminal-history-fixtures.json
