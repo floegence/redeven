@@ -1562,6 +1562,7 @@
     "titleStoppingOperation": "Arrêt de l’opération",
     "stopStartup": "Arrêter le démarrage",
     "copyLog": "Copier le journal",
+    "technicalErrorDetails": "Détails techniques de l’erreur",
     "dismiss": "Fermer",
     "stepOf": "Étape {current} sur {total}",
     "planningStartupPath": "Planification du chemin de démarrage",

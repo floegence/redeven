@@ -125,6 +125,14 @@ export function localizedOperationFailureSummary(
   return key ? i18n.t(key, failureParams(failure)) : compact(failure.summary);
 }
 
+export function localizedOperationFailureCompactSummary(
+  i18n: DesktopI18n,
+  failure: DesktopOperationFailurePresentation,
+): string {
+  const key = failureSummaryKey(failure);
+  return key ? i18n.t(key, failureParams(failure)) : compact(failure.summary);
+}
+
 export function localizedOperationFailureDetail(
   i18n: DesktopI18n,
   failure: DesktopOperationFailurePresentation,

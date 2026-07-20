@@ -2177,12 +2177,6 @@ html:not(.dark) .redeven-header-separator {
   white-space: normal;
 }
 
-.redeven-action-popover__notice-detail--pre {
-  margin: 0.28rem 0 0;
-  font-family: var(--font-mono);
-  white-space: pre-wrap;
-}
-
 .redeven-action-popover__failure-recovery {
   margin-top: 0.35rem;
   color: var(--popover-foreground);
@@ -2198,18 +2192,72 @@ html:not(.dark) .redeven-header-separator {
 }
 
 .redeven-action-popover__failure-details summary {
-  width: fit-content;
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
   cursor: pointer;
   color: var(--popover-foreground);
   font-size: 0.7rem;
   font-weight: 600;
   line-height: 1.35;
+  list-style: none;
 }
 
-.redeven-action-popover__failure-diagnostics {
+.redeven-action-popover__failure-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.redeven-action-popover__failure-details summary:focus-visible {
+  border-radius: 0.25rem;
+  outline: 2px solid color-mix(in srgb, var(--ring) 78%, transparent);
+  outline-offset: 0.2rem;
+}
+
+.redeven-action-popover__failure-details summary svg {
+  width: 0.8rem;
+  height: 0.8rem;
+  flex: 0 0 auto;
+  color: var(--muted-foreground);
+  transition: transform 150ms ease;
+}
+
+.redeven-action-popover__failure-details[open] summary svg {
+  transform: rotate(90deg);
+}
+
+.redeven-action-popover__failure-details-viewport {
   display: grid;
   gap: 0.45rem;
+  max-height: 8rem;
   margin-top: 0.45rem;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  user-select: text;
+}
+
+.redeven-action-popover__failure-explanation {
+  color: var(--muted-foreground);
+  font-size: 0.68rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.redeven-action-popover__failure-technical-text {
+  margin: 0;
+  border-radius: 0.375rem;
+  background: color-mix(in srgb, var(--muted) 64%, transparent);
+  padding: 0.5rem;
+  color: var(--muted-foreground);
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .redeven-action-popover__failure-diagnostic > div {
@@ -2221,9 +2269,7 @@ html:not(.dark) .redeven-header-separator {
 }
 
 .redeven-action-popover__failure-diagnostic pre {
-  max-height: 8rem;
   margin: 0.2rem 0 0;
-  overflow: auto;
   border-radius: 0.375rem;
   background: color-mix(in srgb, var(--muted) 64%, transparent);
   padding: 0.5rem;
@@ -2232,6 +2278,7 @@ html:not(.dark) .redeven-header-separator {
   font-size: 0.68rem;
   line-height: 1.45;
   white-space: pre-wrap;
+  overflow-wrap: anywhere;
   word-break: break-word;
 }
 
@@ -3590,6 +3637,10 @@ pre,
 
   .redeven-action-popover__status-dot {
     animation-duration: 1ms;
+  }
+
+  .redeven-action-popover__failure-details summary svg {
+    transition-duration: 1ms;
   }
 
   .redeven-dialog-section {

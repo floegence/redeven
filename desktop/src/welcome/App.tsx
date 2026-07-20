@@ -215,12 +215,7 @@ import {
 import {
   launcherActionFailurePresentation,
 } from './launcherActionFeedback';
-import {
-  localizedOperationFailureDetail,
-  localizedOperationFailureRecoveryHint,
-  localizedOperationFailureSummary,
-  localizedOperationFailureTitle,
-} from './operationFailureI18n';
+import { buildWelcomeOperationFailureDisplay } from './operationFailureDisplay';
 import {
   syncSSHConnectionDialogAdvancedState,
   type SSHConnectionDialogAdvancedState,
@@ -1779,19 +1774,6 @@ function retainedGatewayFailureProgress(
     cancelable: false,
     failure: failure.failure ?? inlineFailurePresentation(i18n, presentation.message, severity),
     next_actions: nextActions,
-  };
-}
-
-function localizedFailureForDisplay(
-  i18n: DesktopI18n,
-  failure: DesktopOperationFailurePresentation,
-): DesktopOperationFailurePresentation {
-  return {
-    ...failure,
-    title: localizedOperationFailureTitle(i18n, failure),
-    summary: localizedOperationFailureSummary(i18n, failure),
-    ...(failure.detail ? { detail: localizedOperationFailureDetail(i18n, failure) } : {}),
-    ...(failure.recovery_hint ? { recovery_hint: localizedOperationFailureRecoveryHint(i18n, failure) } : {}),
   };
 }
 
@@ -8741,33 +8723,53 @@ function EnvironmentProgressPanel(props: Readonly<{
     }));
   });
   const failureNoticeTitle = createMemo(() => localizedFailureNoticeTitle(props.i18n, props.progress));
-  const localizedFailure = createMemo(() => {
-    const failure = props.progress.failure;
-    return failure ? localizedFailureForDisplay(props.i18n, failure) : null;
-  });
+  const failureDisplay = createMemo(() => (
+    props.progress.status === 'failed' || props.progress.status === 'cleanup_failed'
+      ? buildWelcomeOperationFailureDisplay({
+          i18n: props.i18n,
+          failure: props.progress.failure,
+          progress_detail: props.progress.detail,
+          fallback_title: failureNoticeTitle(),
+        })
+      : null
+  ));
+  const progressLeadDetail = createMemo(() => (
+    failureDisplay() ? '' : localizedProgressDetail(props.i18n, props.progress)
+  ));
   const hasStepTimeline = createMemo(() => Boolean(stepProgress() || startup() || openConnection()));
-  const failureNoticeHeading = createMemo(() => trimString(localizedFailure()?.title) || failureNoticeTitle());
   const renderFailureNotice = () => (
-    <Show when={localizedFailure()}>
+    <Show when={failureDisplay()}>
       {(failure) => (
         <div
           class="redeven-action-popover__notice"
           data-tone={failure().severity}
           data-placement={hasStepTimeline() ? 'after-steps' : 'inline'}
         >
-          <div class="redeven-action-popover__notice-title">{failureNoticeHeading()}</div>
+          <div class="redeven-action-popover__notice-title">{failure().title}</div>
           <div class="redeven-action-popover__notice-detail">{failure().summary}</div>
-          <Show when={failure().detail}>
-            {(detail) => <pre class="redeven-action-popover__notice-detail redeven-action-popover__notice-detail--pre">{detail()}</pre>}
-          </Show>
           <Show when={failure().recovery_hint}>
             {(hint) => <div class="redeven-action-popover__failure-recovery">{hint()}</div>}
           </Show>
-          <Show when={(failure().diagnostics ?? []).length > 0}>
+          <Show when={Boolean(
+            failure().explanation
+            || failure().technical_details.length > 0
+            || failure().diagnostics.length > 0
+          )}>
             <details class="redeven-action-popover__failure-details">
-              <summary>{props.i18n.t('settings.detailsTitle')}</summary>
-              <div class="redeven-action-popover__failure-diagnostics">
-                <For each={failure().diagnostics ?? []}>
+              <summary>
+                <span>{props.i18n.t('progress.technicalErrorDetails')}</span>
+                <ChevronRight aria-hidden="true" />
+              </summary>
+              <div class="redeven-action-popover__failure-details-viewport">
+                <Show when={failure().explanation}>
+                  {(explanation) => (
+                    <div class="redeven-action-popover__failure-explanation">{explanation()}</div>
+                  )}
+                </Show>
+                <For each={failure().technical_details}>
+                  {(detail) => <pre class="redeven-action-popover__failure-technical-text">{detail}</pre>}
+                </For>
+                <For each={failure().diagnostics}>
                   {(diagnostic) => (
                     <div class="redeven-action-popover__failure-diagnostic">
                       <div>{diagnostic.label}</div>
@@ -8879,7 +8881,9 @@ function EnvironmentProgressPanel(props: Readonly<{
           <div class="redeven-environment-progress__target">{environmentProgressLabel(props.i18n, props.progress)}</div>
         </div>
       </div>
-      <div class="redeven-action-popover__detail">{localizedProgressDetail(props.i18n, props.progress)}</div>
+      <Show when={progressLeadDetail()}>
+        {(detail) => <div class="redeven-action-popover__detail">{detail()}</div>}
+      </Show>
       <Show when={!hasStepTimeline()}>
         {renderFailureNotice()}
         {renderNextActionGroups()}

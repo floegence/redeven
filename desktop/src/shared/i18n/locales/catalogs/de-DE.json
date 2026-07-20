@@ -1562,6 +1562,7 @@
     "titleStoppingOperation": "Operation wird gestoppt",
     "stopStartup": "Start stoppen",
     "copyLog": "Log kopieren",
+    "technicalErrorDetails": "Technische Fehlerdetails",
     "dismiss": "Schließen",
     "stepOf": "Schritt {current} von {total}",
     "planningStartupPath": "Startpfad wird geplant",

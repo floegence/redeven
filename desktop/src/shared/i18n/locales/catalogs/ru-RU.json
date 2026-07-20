@@ -1582,6 +1582,7 @@
     "titleStoppingOperation": "Остановка операции",
     "stopStartup": "Остановить запуск",
     "copyLog": "Копировать журнал",
+    "technicalErrorDetails": "Технические сведения об ошибке",
     "dismiss": "Закрыть",
     "stepOf": "Шаг {current} из {total}",
     "planningStartupPath": "Планирование пути запуска",

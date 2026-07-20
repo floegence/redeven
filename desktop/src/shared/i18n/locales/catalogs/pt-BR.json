@@ -1562,6 +1562,7 @@
     "titleStoppingOperation": "Interrompendo operação",
     "stopStartup": "Parar inicialização",
     "copyLog": "Copiar log",
+    "technicalErrorDetails": "Detalhes técnicos do erro",
     "dismiss": "Fechar",
     "stepOf": "Etapa {current} de {total}",
     "planningStartupPath": "Planejando caminho de inicialização",
