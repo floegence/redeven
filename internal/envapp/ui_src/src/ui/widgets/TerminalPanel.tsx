@@ -69,6 +69,11 @@ import { writeTextToClipboard } from '../utils/clipboard';
 import type { TerminalResolvedLinkTarget } from '../services/terminalLinkProvider';
 import type { TerminalShellIntegrationEvent } from '../services/terminalShellIntegration';
 import { createTerminalTabActivityTracker, type TerminalSessionWorkState, type TerminalTabVisualState } from '../services/terminalTabActivity';
+import {
+  createTerminalForegroundPresentationScheduler,
+  normalizeTerminalForegroundCommand,
+  type TerminalForegroundPresentation,
+} from '../services/terminalForegroundPresentation';
 import { FloatingContextMenu, type FloatingContextMenuItem } from './FloatingContextMenu';
 import { useI18n } from '../i18n';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
@@ -400,32 +405,24 @@ function buildTerminalSidebarAvatarTone(seed: string): terminal_session_avatar_t
 }
 
 function resolveTerminalSidebarStatus(
-  workState: TerminalSessionWorkState | undefined,
+  foregroundRunning: boolean,
   visualState: TerminalTabVisualState | undefined,
 ): TerminalSessionNavigationStatus {
-  if (workState && workState !== 'idle') {
-    return 'running';
-  }
+  if (foregroundRunning) return 'running';
   return visualState === 'unread' ? 'unread' : 'none';
 }
 
-function buildTerminalPanelTitle(session: TerminalSessionInfo | null, terminalLabel: string): string {
+function buildTerminalPanelTitle(
+  session: TerminalSessionInfo | null,
+  terminalLabel: string,
+  foregroundDisplayName = '',
+): string {
   const titlePrefix = terminalLabel.trim() || 'Terminal';
-  const sessionName = String(session?.name ?? '').trim();
-  if (sessionName) {
-    return `${titlePrefix} · ${sessionName}`;
-  }
-
-  const workingDir = normalizeAskFlowerAbsolutePath(String(session?.workingDir ?? '').trim());
-  if (workingDir && workingDir !== '/') {
-    const parts = workingDir.split('/').filter(Boolean);
-    const basename = parts[parts.length - 1] ?? '';
-    if (basename) {
-      return `${titlePrefix} · ${basename}`;
-    }
-  }
-
-  return titlePrefix;
+  if (!session) return titlePrefix;
+  const fallbackLabel = buildTerminalSessionLabel(session, titlePrefix);
+  const sessionTitle = foregroundDisplayName
+    || buildTerminalSidebarDirectoryTitle(session.workingDir, fallbackLabel);
+  return sessionTitle ? `${titlePrefix} · ${sessionTitle}` : titlePrefix;
 }
 
 function buildPendingTerminalPanelTitle(session: pending_terminal_session | null, terminalLabel: string): string {
@@ -452,7 +449,20 @@ function normalizeTerminalSessionInfo(value: TerminalSessionInfo): TerminalSessi
     createdAtMs: normalizeTerminalSessionTimestamp(value?.createdAtMs),
     lastActiveAtMs: normalizeTerminalSessionTimestamp(value?.lastActiveAtMs),
     isActive: Boolean(value?.isActive),
+    foregroundCommand: normalizeTerminalForegroundCommand(value?.foregroundCommand),
   };
+}
+
+function sameTerminalForegroundCommand(
+  left: TerminalSessionInfo['foregroundCommand'],
+  right: TerminalSessionInfo['foregroundCommand'],
+): boolean {
+  const normalizedLeft = normalizeTerminalForegroundCommand(left);
+  const normalizedRight = normalizeTerminalForegroundCommand(right);
+  return normalizedLeft.phase === normalizedRight.phase
+    && normalizedLeft.displayName === normalizedRight.displayName
+    && normalizedLeft.revision === normalizedRight.revision
+    && normalizedLeft.updatedAtMs === normalizedRight.updatedAtMs;
 }
 
 function sameTerminalSessionInfo(a: TerminalSessionInfo | null | undefined, b: TerminalSessionInfo | null | undefined): boolean {
@@ -464,7 +474,8 @@ function sameTerminalSessionInfo(a: TerminalSessionInfo | null | undefined, b: T
     && a.workingDir === b.workingDir
     && a.createdAtMs === b.createdAtMs
     && a.lastActiveAtMs === b.lastActiveAtMs
-    && a.isActive === b.isActive,
+    && a.isActive === b.isActive
+    && sameTerminalForegroundCommand(a.foregroundCommand, b.foregroundCommand),
   );
 }
 
@@ -1085,6 +1096,9 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const [mobileKeyboardPackageScripts, setMobileKeyboardPackageScripts] = createSignal<TerminalMobileKeyboardScript[]>([]);
   const [tabVisualStateBySession, setTabVisualStateBySession] = createSignal<TerminalSessionTabVisualStateMap>({});
   const [workStateBySession, setWorkStateBySession] = createSignal<TerminalSessionWorkStateMap>({});
+  const [foregroundPresentationBySession, setForegroundPresentationBySession] = createSignal<
+    ReadonlyMap<string, TerminalForegroundPresentation>
+  >(new Map());
   const [runtimeStatusBySession, setRuntimeStatusBySession] = createSignal<Record<string, TerminalSessionRuntimeStatus>>({});
 
   const handleExecuteDenied = (e: unknown): boolean => {
@@ -1195,6 +1209,16 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     }
     return orderedVisibleSessions;
   });
+
+  const foregroundPresentationScheduler = createTerminalForegroundPresentationScheduler({
+    publish: setForegroundPresentationBySession,
+  });
+
+  createEffect(() => {
+    foregroundPresentationScheduler.sync(sessions());
+  });
+
+  onCleanup(() => foregroundPresentationScheduler.dispose());
 
   const pendingTerminalSessionById = (sessionId: string): pending_terminal_session | null => {
     const normalizedSessionId = String(sessionId ?? '').trim();
@@ -1866,8 +1890,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   createEffect(() => {
     const terminalLabel = i18n.t('terminal.title');
-    props.onTitleChange?.(activeSession()
-      ? buildTerminalPanelTitle(activeSession(), terminalLabel)
+    const session = activeSession();
+    const foregroundDisplayName = session
+      ? foregroundPresentationBySession().get(session.id)?.displayName ?? ''
+      : '';
+    props.onTitleChange?.(session
+      ? buildTerminalPanelTitle(session, terminalLabel, foregroundDisplayName)
       : buildPendingTerminalPanelTitle(activePendingSession(), terminalLabel));
   });
 
@@ -2832,20 +2860,22 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const sessionListItems = createMemo<TerminalSessionNavigationItem[]>(() => {
     const list = sessions();
     const tabStates = tabVisualStateBySession();
-    const workStates = workStateBySession();
+    const foregroundPresentations = foregroundPresentationBySession();
     const canOpenPath = canBrowseFiles();
     const sessionItems = list.map((s, index) => {
       const fullPath = normalizeAskFlowerAbsolutePath(String(s.workingDir ?? '').trim());
       const fallbackLabel = buildTerminalSessionLabel(s, i18n.t('terminal.terminalName', { index: index + 1 }));
-      const title = buildTerminalSidebarDirectoryTitle(fullPath, fallbackLabel);
+      const directoryTitle = buildTerminalSidebarDirectoryTitle(fullPath, fallbackLabel);
+      const foregroundPresentation = foregroundPresentations.get(s.id);
+      const title = foregroundPresentation?.displayName || directoryTitle;
       return {
         id: s.id,
         label: fallbackLabel,
         title,
-        avatarInitial: buildTerminalSidebarAvatarInitial(title),
-        avatarTone: buildTerminalSidebarAvatarTone(`${s.id}:${fullPath}:${title}`),
+        avatarInitial: buildTerminalSidebarAvatarInitial(directoryTitle),
+        avatarTone: buildTerminalSidebarAvatarTone(`${s.id}:${fullPath}:${directoryTitle}`),
         fullPath,
-        status: resolveTerminalSidebarStatus(workStates[s.id], tabStates[s.id]),
+        status: resolveTerminalSidebarStatus(Boolean(foregroundPresentation), tabStates[s.id]),
         canBrowsePath: Boolean(fullPath) && canOpenPath,
         canClear: true,
         canDuplicate: Boolean(fullPath),
@@ -3287,7 +3317,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     setTerminalSidebarMenu(null);
     void env.openFileBrowserAtPath(item.fullPath, {
       homePath: normalizeAskFlowerAbsolutePath(agentHomePathAbs()) || undefined,
-      title: item.title,
+      title: buildTerminalSidebarDirectoryTitle(item.fullPath, item.label),
       openStrategy: env.viewMode() === 'workbench' ? 'create_new' : undefined,
     });
   };
@@ -3787,7 +3817,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
                   <Terminal class="h-3.5 w-3.5" />
                 </div>
                 <div class="min-w-0">
-                  <div class="truncate text-xs font-semibold text-foreground">{activeToolbarTitle()}</div>
+                  <div
+                    class="truncate text-xs font-semibold text-foreground"
+                    data-terminal-session-title={activeSessionId() ?? ''}
+                  >
+                    {activeToolbarTitle()}
+                  </div>
                   <Show when={activeToolbarSubtitle()}>
                     <div class="truncate text-[10px] leading-3 text-muted-foreground">{activeToolbarSubtitle()}</div>
                   </Show>

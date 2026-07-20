@@ -799,6 +799,94 @@ func TestNameUpdateReachesEveryAuthorizedControlClient(t *testing.T) {
 	}
 }
 
+func TestForegroundCommandUpdateReachesEveryAuthorizedControlClient(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+
+	type clientHarness struct {
+		serverConn net.Conn
+		clientConn net.Conn
+		client     *rpc.Client
+		detach     func()
+		updates    chan terminalForegroundCommandUpdatePayload
+	}
+	newHarness := func() *clientHarness {
+		serverConn, clientConn := net.Pipe()
+		router := rpc.NewRouter()
+		server := rpc.NewServer(serverConn, router)
+		client := rpc.NewClient(clientConn)
+		updates := make(chan terminalForegroundCommandUpdatePayload, 1)
+		client.OnNotify(TypeID_TERMINAL_FOREGROUND_COMMAND_UPDATE, func(payload json.RawMessage) {
+			var update terminalForegroundCommandUpdatePayload
+			if json.Unmarshal(payload, &update) == nil {
+				updates <- update
+			}
+		})
+		detach := m.RegisterWithAccessGate(
+			router,
+			&session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
+			server,
+			nil,
+		)
+		return &clientHarness{
+			serverConn: serverConn,
+			clientConn: clientConn,
+			client:     client,
+			detach:     detach,
+			updates:    updates,
+		}
+	}
+	clients := []*clientHarness{newHarness(), newHarness()}
+	for _, harness := range clients {
+		harness := harness
+		t.Cleanup(func() {
+			harness.detach()
+			_ = harness.client.Close()
+			_ = harness.serverConn.Close()
+			_ = harness.clientConn.Close()
+		})
+	}
+
+	command := termgo.TerminalForegroundCommandInfo{
+		Phase:       termgo.ForegroundCommandRunning,
+		DisplayName: "top",
+		Revision:    3,
+		UpdatedAt:   42,
+	}
+	m.broadcastForegroundCommandUpdate("shared-session", command)
+	for index, harness := range clients {
+		select {
+		case update := <-harness.updates:
+			if update.SessionID != "shared-session" {
+				t.Fatalf("client %d session = %q, want shared-session", index, update.SessionID)
+			}
+			if update.ForegroundCommand.Phase != "running" || update.ForegroundCommand.DisplayName != "top" || update.ForegroundCommand.Revision != 3 || update.ForegroundCommand.UpdatedAtMs != 42 {
+				t.Fatalf("client %d command = %#v", index, update.ForegroundCommand)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("client %d did not receive terminal command update", index)
+		}
+	}
+}
+
+func TestWireSessionInfoIncludesForegroundCommandSnapshot(t *testing.T) {
+	wire := toWireSessionInfo(termgo.TerminalSessionInfo{
+		ID:         "session-1",
+		Name:       "repo",
+		WorkingDir: "/workspace/repo",
+		ForegroundCommand: termgo.TerminalForegroundCommandInfo{
+			Phase:       termgo.ForegroundCommandRunning,
+			DisplayName: "top",
+			Revision:    7,
+			UpdatedAt:   99,
+		},
+	})
+
+	if wire.ForegroundCommand.Phase != "running" || wire.ForegroundCommand.DisplayName != "top" || wire.ForegroundCommand.Revision != 7 || wire.ForegroundCommand.UpdatedAtMs != 99 {
+		t.Fatalf("foreground command = %#v", wire.ForegroundCommand)
+	}
+}
+
 func TestNewTerminalGoManagerConfigUsesRedevenShellIntegration(t *testing.T) {
 	cfg := newTerminalGoManagerConfig("/bin/zsh", nil)
 

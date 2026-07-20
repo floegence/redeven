@@ -78,6 +78,10 @@ export function createRedevenTerminalLiveBundle(
       if (event.sessionId !== sessionId) return;
       handler({ sessionId, newName: event.newName, workingDir: event.workingDir });
     }),
+    onTerminalForegroundCommandUpdate: (sessionId, handler) => rpc.terminal.onForegroundCommandUpdate((event) => {
+      if (event.sessionId !== sessionId) return;
+      handler({ sessionId, foregroundCommand: event.foregroundCommand });
+    }),
   };
   const live = createTerminalLiveTransport({
     connectionId,

@@ -76,6 +76,36 @@ describe('TerminalShellIntegrationParser', () => {
     ]);
   });
 
+  it('preserves upstream and Redeven activity event order within one chunk', () => {
+    const parser = new TerminalShellIntegrationParser();
+    const result = parser.parse(encoder.encode(
+      '\x1b]633;B\u0007\x1b]633;P;RedevenActivity=busy\u0007\x1b]633;D;0\u0007',
+    ));
+
+    expect(result.displayData).toHaveLength(0);
+    expect(result.events).toEqual([
+      { kind: 'command-start' },
+      { kind: 'program-activity', phase: 'busy' },
+      { kind: 'command-finish', exitCode: 0 },
+    ]);
+  });
+
+  it('preserves ordered local and upstream events when the OSC introducer is split', () => {
+    const parser = new TerminalShellIntegrationParser();
+    const first = parser.parse(encoder.encode('left\x1b'));
+    const second = parser.parse(encoder.encode(
+      ']633;P;RedevenActivity=busy\u0007\x1b]633;D\u0007right',
+    ));
+
+    expect(decode(first.displayData)).toBe('left');
+    expect(first.events).toEqual([]);
+    expect(decode(second.displayData)).toBe('right');
+    expect(second.events).toEqual([
+      { kind: 'program-activity', phase: 'busy' },
+      { kind: 'command-finish', exitCode: null },
+    ]);
+  });
+
   it('accepts command-finish markers without an exit code payload', () => {
     const parser = new TerminalShellIntegrationParser();
     const input = encoder.encode('\x1b]633;D\u0007');
@@ -83,6 +113,19 @@ describe('TerminalShellIntegrationParser', () => {
     const result = parser.parse(input);
 
     expect(result.events).toEqual([{ kind: 'command-finish', exitCode: null }]);
+  });
+
+  it('uses the upstream parser for program and command-executed markers without leaking them', () => {
+    const parser = new TerminalShellIntegrationParser();
+    const result = parser.parse(encoder.encode(
+      'x\x1b]633;P;FloetermProgram=top\u0007\x1b]633;C\u0007y',
+    ));
+
+    expect(decode(result.displayData)).toBe('xy');
+    expect(result.events).toEqual([
+      { kind: 'program', displayName: 'top' },
+      { kind: 'command-executed' },
+    ]);
   });
 });
 

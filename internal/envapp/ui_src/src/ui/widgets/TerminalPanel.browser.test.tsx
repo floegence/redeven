@@ -146,6 +146,12 @@ const terminalSessionsState = vi.hoisted(() => ({
     createdAtMs: number;
     isActive: boolean;
     lastActiveAtMs: number;
+    foregroundCommand?: {
+      phase: 'unknown' | 'idle' | 'running';
+      displayName: string;
+      revision: number;
+      updatedAtMs: number;
+    };
   }>,
   subscribers: [] as Array<(value: Array<{
     id: string;
@@ -154,6 +160,12 @@ const terminalSessionsState = vi.hoisted(() => ({
     createdAtMs: number;
     isActive: boolean;
     lastActiveAtMs: number;
+    foregroundCommand?: {
+      phase: 'unknown' | 'idle' | 'running';
+      displayName: string;
+      revision: number;
+      updatedAtMs: number;
+    };
   }>) => void>,
 }));
 
@@ -564,6 +576,21 @@ function emitTerminalData(sessionId: string, data: string, sequence?: number) {
   for (const handler of handlers) {
     handler(event);
   }
+}
+
+function publishTerminalForegroundCommand(
+  sessionId: string,
+  foregroundCommand: {
+    phase: 'unknown' | 'idle' | 'running';
+    displayName: string;
+    revision: number;
+    updatedAtMs: number;
+  },
+) {
+  terminalSessionsState.sessions = terminalSessionsState.sessions.map((session) => (
+    session.id === sessionId ? { ...session, foregroundCommand } : session
+  ));
+  for (const subscriber of terminalSessionsState.subscribers) subscriber(terminalSessionsState.sessions);
 }
 
 function emitTerminalGeometry(
@@ -1265,7 +1292,7 @@ describe('TerminalPanel browser activity integration', () => {
     });
   });
 
-  it('bounds the tab spinner to unread after background command output becomes quiet', async () => {
+  it('does not show the foreground spinner for shell markers or background output', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -1282,16 +1309,33 @@ describe('TerminalPanel browser activity integration', () => {
 
     emitTerminalData('session-2', '\x1b]633;B\u0007', 1);
     emitTerminalData('session-2', 'working...\n', 2);
-    await vi.waitFor(() => {
-      expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
-    });
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).toBeNull();
+    await settleTerminalPanel();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
+  });
 
-    await new Promise<void>((resolve) => setTimeout(resolve, 3_800));
+  it('shows a confirmed program title and spinner, then restores the directory on idle', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
+    publishTerminalForegroundCommand('session-2', {
+      phase: 'running', displayName: 'top', revision: 1, updatedAtMs: 10,
+    });
     expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).not.toBeNull();
+    await new Promise<void>((resolve) => setTimeout(resolve, 170));
+    await settleTerminalPanel();
+
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
+    expect(host.querySelector('[data-terminal-session-title="session-2"]')?.textContent).toBe('top');
+    expect(host.querySelector('[data-testid="terminal-session-path-session-2"]')?.textContent).toBe('/workspace/repo');
+
+    publishTerminalForegroundCommand('session-2', {
+      phase: 'idle', displayName: '', revision: 2, updatedAtMs: 20,
+    });
+    await settleTerminalPanel();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
+    expect(host.querySelector('[data-terminal-session-title="session-2"]')?.textContent).toBe('repo');
   });
 
   it('keeps session switching responsive while a background session is receiving heavy live output', async () => {
@@ -1315,15 +1359,14 @@ describe('TerminalPanel browser activity integration', () => {
 
     const terminal2TabBeforeSwitch = findTerminalTab(host, 'Terminal 2');
     expect(terminal2TabBeforeSwitch?.dataset.terminalSessionActive).toBe('false');
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
 
     terminal2TabBeforeSwitch?.click();
     await settleTerminalPanel();
 
     const terminal2TabAfterSwitch = findTerminalTab(host, 'Terminal 2');
     expect(terminal2TabAfterSwitch?.dataset.terminalSessionActive).toBe('true');
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
   });
 
   it('switches ten warm cores by the next animation frame without new runtime calls', async () => {

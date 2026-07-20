@@ -21,6 +21,8 @@ const rpcState = vi.hoisted(() => ({
   list: vi.fn(),
   onSessionsChanged: vi.fn(),
   lifecycleHandler: null as ((event: any) => void) | null,
+  onForegroundCommandUpdate: vi.fn(),
+  commandHandler: null as ((event: any) => void) | null,
 }));
 
 class FakeCoordinator {
@@ -99,6 +101,7 @@ vi.mock('../protocol/redeven_v1', () => ({
   useRedevenRpc: () => ({ terminal: {
     listSessions: rpcState.list,
     onSessionsChanged: rpcState.onSessionsChanged,
+    onForegroundCommandUpdate: rpcState.onForegroundCommandUpdate,
     createSession: vi.fn(),
     deleteSession: vi.fn(),
   } }),
@@ -151,6 +154,11 @@ describe('TerminalSessionCatalogProvider', () => {
     rpcState.onSessionsChanged.mockImplementation((handler: (event: any) => void) => {
       rpcState.lifecycleHandler = handler;
       return () => { rpcState.lifecycleHandler = null; };
+    });
+    rpcState.onForegroundCommandUpdate.mockReset();
+    rpcState.onForegroundCommandUpdate.mockImplementation((handler: (event: any) => void) => {
+      rpcState.commandHandler = handler;
+      return () => { rpcState.commandHandler = null; };
     });
     coordinatorState.current = null;
   });
@@ -240,6 +248,172 @@ describe('TerminalSessionCatalogProvider', () => {
     expect(latest.sessions().map((session: any) => session.id)).toContain('s2');
     rpcState.lifecycleHandler?.({ reason: 'deleted', sessionId: 's2' });
     expect(latest.sessions().map((session: any) => session.id)).not.toContain('s2');
+    dispose();
+  });
+
+  it('applies command notifications globally before any terminal panel mounts', async () => {
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(latest?.hydrated()).toBe(true));
+
+    rpcState.commandHandler?.({
+      sessionId: 's1',
+      foregroundCommand: { phase: 'running', displayName: 'top', revision: 1, updatedAtMs: 10 },
+    });
+
+    await vi.waitFor(() => expect(latest.sessions()[0]?.foregroundCommand).toEqual({
+      phase: 'running', displayName: 'top', revision: 1, updatedAtMs: 10,
+    }));
+    dispose();
+  });
+
+  it('retains an early command notification across a stale initial snapshot', async () => {
+    let resolveList!: (value: any) => void;
+    rpcState.list.mockImplementationOnce(() => new Promise((resolve) => { resolveList = resolve; }));
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(rpcState.onForegroundCommandUpdate).toHaveBeenCalled());
+
+    rpcState.commandHandler?.({
+      sessionId: 's1',
+      foregroundCommand: { phase: 'running', displayName: 'sleep', revision: 3, updatedAtMs: 30 },
+    });
+    resolveList({ sessions: [{
+      ...rpcState.sessions[0],
+      foregroundCommand: { phase: 'idle', displayName: '', revision: 2, updatedAtMs: 20 },
+    }] });
+
+    await vi.waitFor(() => expect(latest?.hydrated()).toBe(true));
+    expect(latest.sessions()[0]?.foregroundCommand).toEqual({
+      phase: 'running', displayName: 'sleep', revision: 3, updatedAtMs: 30,
+    });
+    dispose();
+  });
+
+  it('reconciles command truth when the bounded early-notification buffer overflows', async () => {
+    const sessionCount = 513;
+    const staleSessions = Array.from({ length: sessionCount }, (_, index) => ({
+      id: `session-${index}`,
+      name: `Terminal ${index}`,
+      workingDir: '/',
+      createdAtMs: index + 1,
+      lastActiveAtMs: index + 1,
+      isActive: index === 0,
+      foregroundCommand: { phase: 'idle', displayName: '', revision: 2, updatedAtMs: 20 },
+    }));
+    const authoritativeSessions = staleSessions.map((session, index) => index === 0 ? {
+      ...session,
+      foregroundCommand: { phase: 'running', displayName: 'top', revision: 3, updatedAtMs: 30 },
+    } : session);
+    let resolveInitialList!: (value: any) => void;
+    let resolveReconcile!: (value: any) => void;
+    rpcState.list
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveInitialList = resolve; }))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveReconcile = resolve; }));
+
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(rpcState.onForegroundCommandUpdate).toHaveBeenCalled());
+
+    for (let index = 0; index < sessionCount; index += 1) {
+      rpcState.commandHandler?.({
+        sessionId: `session-${index}`,
+        foregroundCommand: {
+          phase: 'running',
+          displayName: index === 0 ? 'top' : 'sleep',
+          revision: 3,
+          updatedAtMs: 30,
+        },
+      });
+    }
+    resolveInitialList({ sessions: staleSessions });
+
+    await vi.waitFor(() => expect(rpcState.list).toHaveBeenCalledTimes(2));
+    resolveReconcile({ sessions: authoritativeSessions });
+    await vi.waitFor(() => expect(latest?.sessions()[0]?.foregroundCommand).toEqual({
+      phase: 'running', displayName: 'top', revision: 3, updatedAtMs: 30,
+    }));
+    dispose();
+  });
+
+  it('reschedules overflow reconciliation for a new connection while the old refresh is still pending', async () => {
+    const sessionCount = 513;
+    const staleSessions = Array.from({ length: sessionCount }, (_, index) => ({
+      id: `reconnected-${index}`,
+      name: `Terminal ${index}`,
+      workingDir: '/',
+      createdAtMs: index + 1,
+      lastActiveAtMs: index + 1,
+      isActive: index === 0,
+      foregroundCommand: { phase: 'idle', displayName: '', revision: 2, updatedAtMs: 20 },
+    }));
+    const authoritativeSessions = staleSessions.map((session, index) => index === 0 ? {
+      ...session,
+      foregroundCommand: { phase: 'running', displayName: 'top', revision: 3, updatedAtMs: 30 },
+    } : session);
+    let resolveOldList!: (value: any) => void;
+    let resolveNewList!: (value: any) => void;
+    let resolveNewReconcile!: (value: any) => void;
+    rpcState.list
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveOldList = resolve; }))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveNewList = resolve; }))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveNewReconcile = resolve; }));
+
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(rpcState.onForegroundCommandUpdate).toHaveBeenCalledTimes(1));
+    for (let index = 0; index < sessionCount; index += 1) {
+      rpcState.commandHandler?.({
+        sessionId: `old-${index}`,
+        foregroundCommand: { phase: 'running', displayName: 'sleep', revision: 1, updatedAtMs: 10 },
+      });
+    }
+
+    protocolState.setStatus('connecting');
+    protocolState.setClient(null);
+    await vi.waitFor(() => expect(rpcState.commandHandler).toBeNull());
+    protocolState.setStatus('connected');
+    protocolState.setClient({ id: 'client-2' });
+    await vi.waitFor(() => expect(rpcState.onForegroundCommandUpdate).toHaveBeenCalledTimes(2));
+    for (let index = 0; index < sessionCount; index += 1) {
+      rpcState.commandHandler?.({
+        sessionId: `reconnected-${index}`,
+        foregroundCommand: {
+          phase: 'running',
+          displayName: index === 0 ? 'top' : 'sleep',
+          revision: 3,
+          updatedAtMs: 30,
+        },
+      });
+    }
+
+    resolveNewList({ sessions: staleSessions });
+    await vi.waitFor(() => expect(rpcState.list).toHaveBeenCalledTimes(3));
+    resolveNewReconcile({ sessions: authoritativeSessions });
+    await vi.waitFor(() => expect(latest?.sessions()[0]?.foregroundCommand).toEqual({
+      phase: 'running', displayName: 'top', revision: 3, updatedAtMs: 30,
+    }));
+    resolveOldList({ sessions: [] });
     dispose();
   });
 

@@ -65,6 +65,10 @@ const decodeSingleWrite = (data: Uint8Array) => {
 
 const createRpcMock = () => {
   let nameHandler: ((event: { sessionId: string; newName: string; workingDir: string }) => void) | undefined;
+  let commandHandler: ((event: {
+    sessionId: string;
+    foregroundCommand: { phase: 'unknown' | 'idle' | 'running'; displayName: string; revision: number; updatedAtMs: number };
+  }) => void) | undefined;
   const terminal = {
     history: vi.fn().mockResolvedValue({
       chunks: [],
@@ -90,10 +94,18 @@ const createRpcMock = () => {
       nameHandler = handler;
       return () => { nameHandler = undefined; };
     }),
+    onForegroundCommandUpdate: vi.fn((handler) => {
+      commandHandler = handler;
+      return () => { commandHandler = undefined; };
+    }),
   };
   return {
     rpc: { terminal } as any,
     emitName: (event: { sessionId: string; newName: string; workingDir: string }) => nameHandler?.(event),
+    emitCommand: (event: {
+      sessionId: string;
+      foregroundCommand: { phase: 'unknown' | 'idle' | 'running'; displayName: string; revision: number; updatedAtMs: number };
+    }) => commandHandler?.(event),
   };
 };
 
@@ -173,6 +185,31 @@ describe('terminal live transport', () => {
       sessionId: 'session-1',
       newName: 'shell',
       workingDir: '/workspace',
+    }]);
+    unsubscribe?.();
+  });
+
+  it('forwards foreground command updates on the RPC control plane', () => {
+    const { rpc, emitCommand } = createRpcMock();
+    const bundle = createRedevenTerminalLiveBundle(rpc, () => null, 'connection-1');
+    const commands: unknown[] = [];
+    const unsubscribe = bundle.eventSource.onTerminalForegroundCommandUpdate?.(
+      'session-1',
+      event => commands.push(event),
+    );
+
+    emitCommand({
+      sessionId: 'other',
+      foregroundCommand: { phase: 'running', displayName: 'ignored', revision: 1, updatedAtMs: 1 },
+    });
+    emitCommand({
+      sessionId: 'session-1',
+      foregroundCommand: { phase: 'running', displayName: 'top', revision: 2, updatedAtMs: 2 },
+    });
+
+    expect(commands).toEqual([{
+      sessionId: 'session-1',
+      foregroundCommand: { phase: 'running', displayName: 'top', revision: 2, updatedAtMs: 2 },
     }]);
     unsubscribe?.();
   });

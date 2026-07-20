@@ -1,5 +1,8 @@
 import { bytesFromBase64 } from './base64';
+import { normalizeTerminalForegroundCommandDisplayName } from '@floegence/floeterm-terminal-web/sessions';
 import type {
+  wire_terminal_foreground_command_info,
+  wire_terminal_foreground_command_update_notify,
   wire_terminal_history_req,
   wire_terminal_history_resp,
   wire_terminal_name_update_notify,
@@ -20,6 +23,7 @@ import type {
   TerminalClearResponse,
   TerminalHistoryRequest,
   TerminalHistoryResponse,
+  TerminalForegroundCommandUpdateEvent,
   TerminalNameUpdateEvent,
   TerminalSessionCreateRequest,
   TerminalSessionCreateResponse,
@@ -31,6 +35,38 @@ import type {
   TerminalSessionsChangedEvent,
 } from '../sdk/terminal';
 
+import type { TerminalForegroundCommandInfo } from '@floegence/floeterm-terminal-web';
+
+const UNKNOWN_FOREGROUND_COMMAND: TerminalForegroundCommandInfo = Object.freeze({
+  phase: 'unknown',
+  displayName: '',
+  revision: 0,
+  updatedAtMs: 0,
+});
+
+export function fromWireTerminalForegroundCommandInfo(
+  value: wire_terminal_foreground_command_info | null | undefined,
+): TerminalForegroundCommandInfo | null {
+  if (!value || typeof value !== 'object') return null;
+  const phase = value.phase;
+  const displayName = value.display_name;
+  const revision = value.revision;
+  const updatedAtMs = value.updated_at_ms;
+  if (phase !== 'unknown' && phase !== 'idle' && phase !== 'running') return null;
+  if (typeof displayName !== 'string') return null;
+  if (!Number.isSafeInteger(revision) || revision < 0) return null;
+  if (!Number.isSafeInteger(updatedAtMs) || updatedAtMs < 0) return null;
+  if (phase !== 'running' && displayName !== '') return null;
+  const normalizedDisplayName = normalizeTerminalForegroundCommandDisplayName(displayName);
+  if (displayName && normalizedDisplayName !== displayName) return null;
+  return {
+    phase,
+    displayName: phase === 'running' ? normalizedDisplayName : '',
+    revision,
+    updatedAtMs,
+  };
+}
+
 function toTerminalSessionInfo(s: wire_terminal_session_info): TerminalSessionInfo {
   return {
     id: String(s?.id ?? ''),
@@ -39,6 +75,8 @@ function toTerminalSessionInfo(s: wire_terminal_session_info): TerminalSessionIn
     createdAtMs: Number(s?.created_at_ms ?? 0),
     lastActiveAtMs: Number(s?.last_active_at_ms ?? 0),
     isActive: Boolean(s?.is_active ?? false),
+    foregroundCommand: fromWireTerminalForegroundCommandInfo(s?.foreground_command)
+      ?? { ...UNKNOWN_FOREGROUND_COMMAND },
   };
 }
 
@@ -151,6 +189,15 @@ export function fromWireTerminalNameUpdateNotify(payload: wire_terminal_name_upd
     newName: String(payload?.new_name ?? ''),
     workingDir: String(payload?.working_dir ?? ''),
   };
+}
+
+export function fromWireTerminalForegroundCommandUpdateNotify(
+  payload: wire_terminal_foreground_command_update_notify,
+): TerminalForegroundCommandUpdateEvent | null {
+  const sessionId = String(payload?.session_id ?? '').trim();
+  if (!sessionId) return null;
+  const foregroundCommand = fromWireTerminalForegroundCommandInfo(payload?.foreground_command);
+  return foregroundCommand ? { sessionId, foregroundCommand } : null;
 }
 
 export function fromWireTerminalSessionsChangedNotify(payload: wire_terminal_sessions_changed_notify): TerminalSessionsChangedEvent | null {

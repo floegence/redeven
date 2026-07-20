@@ -411,6 +411,65 @@ async function sendTerminalCommand(page, command, scope = page) {
   await page.keyboard.press('Enter');
 }
 
+async function verifyForegroundCommandPresentation(page, panel, runtime, sessionID, panelVariant, widgetID) {
+  const titleSelector = `[data-terminal-session-title="${sessionID}"]`;
+  const titles = panel.locator(titleSelector);
+  await titles.first().waitFor({ state: 'visible', timeout: 15_000 });
+  const directoryTitle = String(await titles.first().textContent() ?? '').trim();
+  if (!directoryTitle || directoryTitle === 'top') {
+    throw new Error(`terminal command presentation did not expose a stable directory title (${directoryTitle})`);
+  }
+
+  await delay(200);
+  if (await panel.locator('[data-terminal-tab-status="running"]').count() > 0) {
+    throw new Error('idle terminal session rendered a foreground-command spinner');
+  }
+
+  await sendTerminalCommand(page, 'top', runtime);
+  await page.waitForFunction(({ expectedSessionID, expectedPanelVariant, expectedWidgetID }) => {
+    const targetPanel = globalThis.document.querySelector(
+      `[data-floe-workbench-widget-id="${expectedWidgetID}"] [data-terminal-panel-variant="${expectedPanelVariant}"]`,
+    );
+    if (!targetPanel) return false;
+    const commandTitles = Array.from(targetPanel.querySelectorAll(
+      `[data-terminal-session-title="${expectedSessionID}"]`,
+    ));
+    return commandTitles.length >= 2
+      && commandTitles.every((element) => (element.textContent ?? '').trim() === 'top')
+      && targetPanel.querySelector('[data-terminal-tab-status="running"]') !== null;
+  }, {
+    expectedSessionID: sessionID,
+    expectedPanelVariant: panelVariant,
+    expectedWidgetID: widgetID,
+  }, { timeout: 15_000 });
+
+  await page.keyboard.press('Control+C');
+  await page.waitForFunction(({ expectedSessionID, expectedPanelVariant, expectedDirectoryTitle, expectedWidgetID }) => {
+    const targetPanel = globalThis.document.querySelector(
+      `[data-floe-workbench-widget-id="${expectedWidgetID}"] [data-terminal-panel-variant="${expectedPanelVariant}"]`,
+    );
+    if (!targetPanel || targetPanel.querySelector('[data-terminal-tab-status="running"]') !== null) return false;
+    const restoredTitles = Array.from(targetPanel.querySelectorAll(
+      `[data-terminal-session-title="${expectedSessionID}"]`,
+    ));
+    return restoredTitles.length >= 2
+      && restoredTitles.every((element) => (
+        (element.textContent ?? '').trim() === expectedDirectoryTitle
+      ));
+  }, {
+    expectedSessionID: sessionID,
+    expectedPanelVariant: panelVariant,
+    expectedDirectoryTitle: directoryTitle,
+    expectedWidgetID: widgetID,
+  }, { timeout: 15_000 });
+
+  return {
+    idle_without_spinner: true,
+    running_title_and_spinner: true,
+    idle_title_restored: true,
+  };
+}
+
 async function waitForCanvasChange(canvas, before, timeoutMs = 15_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
@@ -522,6 +581,15 @@ async function seedRetainedSession(page, tempDir, fixtureBytes) {
   ), { panelVariant: targetVariant, expectedSessionID: sessionID }, { timeout: 15_000 });
   await terminalInput(page, targetRuntime);
 
+  const foregroundPresentation = await verifyForegroundCommandPresentation(
+    page,
+    targetPanel,
+    targetRuntime,
+    sessionID,
+    targetVariant,
+    workbenchWidgetID,
+  );
+
   const quietShellMarkerPath = path.join(tempDir, 'fixture-shell-quiet');
   const quietShellInputRCPath = path.join(tempDir, 'fixture-inputrc');
   await writeFile(quietShellInputRCPath, 'set enable-bracketed-paste off\n');
@@ -575,6 +643,7 @@ async function seedRetainedSession(page, tempDir, fixtureBytes) {
       historyBytes,
       historyLabel: String(historyLabel ?? '').trim(),
       historyVisual: null,
+      foregroundPresentation,
     };
   }
 
@@ -652,6 +721,7 @@ async function seedRetainedSession(page, tempDir, fixtureBytes) {
     historyLabel: String(historyLabel ?? '').trim(),
     historyLayout,
     historyVisual,
+    foregroundPresentation,
   };
 }
 
@@ -1352,6 +1422,7 @@ async function main(options) {
         requested_bytes: options.fixtureBytes,
         retained_bytes_after_seed: seeded.historyBytes,
         rendered_history_label: seeded.historyLabel,
+        foreground_presentation: seeded.foregroundPresentation,
       },
       sample_plan: {
         shared_prepared_history: options.sharedPreparedSamples,

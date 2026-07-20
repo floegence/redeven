@@ -329,6 +329,12 @@ const terminalSessionsState = vi.hoisted(() => ({
     createdAtMs: number;
     isActive: boolean;
     lastActiveAtMs: number;
+    foregroundCommand?: {
+      phase: 'unknown' | 'idle' | 'running';
+      displayName: string;
+      revision: number;
+      updatedAtMs: number;
+    };
   }>,
   subscribers: [] as Array<(value: Array<{
     id: string;
@@ -337,6 +343,12 @@ const terminalSessionsState = vi.hoisted(() => ({
     createdAtMs: number;
     isActive: boolean;
     lastActiveAtMs: number;
+    foregroundCommand?: {
+      phase: 'unknown' | 'idle' | 'running';
+      displayName: string;
+      revision: number;
+      updatedAtMs: number;
+    };
   }>) => void>,
 }));
 
@@ -755,7 +767,10 @@ vi.mock('../protocol/redeven_v1', () => ({
   }),
 }));
 
-vi.mock('@floegence/floeterm-terminal-web', () => {
+vi.mock('@floegence/floeterm-terminal-web', async () => {
+  const actual = await vi.importActual<typeof import('@floegence/floeterm-terminal-web')>(
+    '@floegence/floeterm-terminal-web',
+  );
   class MockTerminalCore {
     container: HTMLDivElement;
     config: any;
@@ -1383,6 +1398,7 @@ vi.mock('@floegence/floeterm-terminal-web', () => {
   };
 
   return {
+    ...actual,
     TerminalCore: MockTerminalCore,
     createTerminalOutputPipeline: vi.fn(createMockOutputPipeline),
     createPagedTerminalOutputCoordinator: vi.fn(createMockPagedOutputCoordinator),
@@ -1689,6 +1705,21 @@ function publishTerminalSessions() {
   for (const subscriber of terminalSessionsState.subscribers) {
     subscriber(terminalSessionsState.sessions);
   }
+}
+
+function publishTerminalForegroundCommand(
+  sessionId: string,
+  foregroundCommand: {
+    phase: 'unknown' | 'idle' | 'running';
+    displayName: string;
+    revision: number;
+    updatedAtMs: number;
+  },
+) {
+  terminalSessionsState.sessions = terminalSessionsState.sessions.map((session) => (
+    session.id === sessionId ? { ...session, foregroundCommand } : session
+  ));
+  publishTerminalSessions();
 }
 
 function findTerminalTab(host: HTMLElement, label: string): HTMLButtonElement | undefined {
@@ -2343,11 +2374,13 @@ describe('TerminalPanel', () => {
     findTerminalTab(host, 'Terminal 1')?.click();
     await settleTerminalPanel();
 
-    emitTerminalData('session-2', '\x1b]633;B\u0007', 1);
-    await settleTerminalPanel();
+    publishTerminalForegroundCommand('session-2', {
+      phase: 'running', displayName: 'top', revision: 1, updatedAtMs: 10,
+    });
+    await vi.waitFor(() => expect(findTerminalRunningSpinner(host, 'Terminal 2')).not.toBeNull());
 
     const runningSpinner = findTerminalRunningSpinner(host, 'Terminal 2');
-    expect(runningSpinner).not.toBeNull();
+    expect(host.querySelector('[data-terminal-session-title="session-2"]')?.textContent).toBe('top');
 
     host.querySelector<HTMLButtonElement>('[data-testid="terminal-session-path-copy-session-2"]')?.click();
     await settleTerminalPanel();
@@ -4520,6 +4553,9 @@ describe('TerminalPanel', () => {
         createdAtMs: 2,
         isActive: false,
         lastActiveAtMs: 5,
+        foregroundCommand: {
+          phase: 'running', displayName: 'top', revision: 1, updatedAtMs: 10,
+        },
       },
     ];
 
@@ -4553,11 +4589,8 @@ describe('TerminalPanel', () => {
     const initialAttachCallCount = transportMocks.attach.mock.calls.length;
     const mountedCores = [...terminalCoreInstances];
 
-    emitTerminalData('session-2', '\x1b]633;B\u0007', 1);
-    await settleTerminalPanel();
-
+    await vi.waitFor(() => expect(findTerminalRunningSpinner(host, 'Terminal 2')).not.toBeNull());
     const runningSpinner = findTerminalRunningSpinner(host, 'Terminal 2');
-    expect(runningSpinner).not.toBeNull();
 
     terminalSessionsState.sessions = terminalSessionsState.sessions.map((session) => ({ ...session }));
     publishTerminalSessions();
@@ -5447,7 +5480,7 @@ describe('TerminalPanel', () => {
     expect(activeTerminal2Tab?.querySelector('[data-terminal-tab-status="unread"]')).toBeNull();
   });
 
-  it('shows pending background command activity until ordered shell state commits on activation', async () => {
+  it('does not treat shell boundary markers as foreground command truth', async () => {
     terminalSessionsState.sessions = [
       {
         id: 'session-1',
@@ -5483,10 +5516,7 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     let terminal2Tab = findTerminalTab(host, 'Terminal 2');
-    const runningStatuses = Array.from(terminal2Tab?.parentElement?.querySelectorAll('[data-terminal-tab-status="running"]') ?? []);
-    const runningStatusBadge = runningStatuses.find((status) => status.querySelector('svg'));
-    expect(runningStatusBadge).not.toBeUndefined();
-    expect(runningStatusBadge?.querySelector('svg')?.getAttribute('class')).toContain('animate-spin');
+    expect(terminal2Tab?.parentElement?.querySelector('[data-terminal-tab-status="running"]')).toBeNull();
     expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
 
     emitTerminalData('session-2', '\x1b]633;D;0\u0007', 2);
@@ -5518,6 +5548,9 @@ describe('TerminalPanel', () => {
         createdAtMs: 2,
         isActive: false,
         lastActiveAtMs: 5,
+        foregroundCommand: {
+          phase: 'running', displayName: 'top', revision: 1, updatedAtMs: 10,
+        },
       },
     ];
 
@@ -5547,11 +5580,8 @@ describe('TerminalPanel', () => {
     findTerminalTab(host, 'Terminal 1')?.click();
     await settleTerminalPanel();
 
-    emitTerminalData('session-2', '\x1b]633;B\u0007', 1);
-    await settleTerminalPanel();
-
+    await vi.waitFor(() => expect(findTerminalRunningSpinner(host, 'Terminal 2')).not.toBeNull());
     const runningSpinner = findTerminalRunningSpinner(host, 'Terminal 2');
-    expect(runningSpinner).not.toBeNull();
 
     findTerminalTab(host, 'Terminal 2')?.click();
     await settleTerminalPanel();
@@ -5564,7 +5594,7 @@ describe('TerminalPanel', () => {
     expect(findTerminalRunningSpinner(host, 'Terminal 2')).toBe(runningSpinner);
   });
 
-  it('falls back to unread when uncommitted background output goes quiet', async () => {
+  it('does not treat uncommitted background output as a foreground command', async () => {
     terminalSessionsState.sessions = [
       {
         id: 'session-1',
@@ -5600,17 +5630,10 @@ describe('TerminalPanel', () => {
     emitTerminalData('session-2', 'working...\n', 2);
     await settleTerminalPanel();
 
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).toBeNull();
-
-    await new Promise<void>((resolve) => setTimeout(resolve, 3_800));
-    await settleTerminalPanel();
-
     expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).not.toBeNull();
   });
 
-  it('keeps a quiet background command marked running after the start grace window', async () => {
+  it('uses confirmed command metadata for a quiet program title and restores the directory on idle', async () => {
     terminalSessionsState.sessions = [
       {
         id: 'session-1',
@@ -5632,8 +5655,9 @@ describe('TerminalPanel', () => {
 
     const host = document.createElement('div');
     document.body.appendChild(host);
+    const titleChanges = vi.fn();
 
-    render(() => <TerminalPanel variant="workbench" />, host);
+    render(() => <TerminalPanel variant="workbench" onTitleChange={titleChanges} />, host);
     await settleTerminalPanel();
 
     findTerminalTab(host, 'Terminal 2')?.click();
@@ -5642,29 +5666,63 @@ describe('TerminalPanel', () => {
     findTerminalTab(host, 'Terminal 1')?.click();
     await settleTerminalPanel();
 
-    emitTerminalData('session-2', '\x1b]633;B\u0007', 1);
-    await settleTerminalPanelAfterPaint();
-
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
-    expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('running');
-
-    await new Promise<void>((resolve) => setTimeout(resolve, 1_700));
-    await settleTerminalPanel();
-
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
+    publishTerminalForegroundCommand('session-2', {
+      phase: 'running', displayName: 'top', revision: 1, updatedAtMs: 10,
+    });
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
+    await vi.waitFor(() => expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull());
+    expect(host.querySelector('[data-terminal-session-title="session-2"]')?.textContent).toBe('top');
+    expect(host.querySelector('[data-testid="terminal-session-path-session-2"]')?.textContent).toBe('/workspace/repo');
     expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).toBeNull();
-    expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('running');
-
-    emitTerminalData('session-2', '\x1b]633;D;0\u0007', 2);
-    await settleTerminalPanel();
+    expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
 
     findTerminalTab(host, 'Terminal 2')?.click();
-    await settleTerminalPanelAfterPaint();
+    await settleTerminalPanel();
+    expect(Array.from(host.querySelectorAll('[data-terminal-session-title="session-2"]')).map((element) => element.textContent)).toEqual(['top', 'top']);
+    expect(titleChanges).toHaveBeenLastCalledWith('Terminal · top');
 
-    expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
+    publishTerminalForegroundCommand('session-2', {
+      phase: 'idle', displayName: '', revision: 2, updatedAtMs: 20,
+    });
+    await settleTerminalPanel();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
+    expect(Array.from(host.querySelectorAll('[data-terminal-session-title="session-2"]')).map((element) => element.textContent)).toEqual(['repo', 'repo']);
+    expect(titleChanges).toHaveBeenLastCalledWith('Terminal · repo');
   });
 
-  it('commits explicit program idle state only after the background session is activated', async () => {
+  it('does not flash a spinner or program title for a command that finishes inside the confirmation window', async () => {
+    vi.useFakeTimers();
+    terminalSessionsState.sessions = [{
+      id: 'session-1',
+      name: 'Terminal 1',
+      workingDir: '/workspace/repo',
+      createdAtMs: 1,
+      isActive: true,
+      lastActiveAtMs: 10,
+    }];
+    const titleChanges = vi.fn();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" onTitleChange={titleChanges} />, host);
+    await settleTerminalPanel();
+
+    publishTerminalForegroundCommand('session-1', {
+      phase: 'running', displayName: 'top', revision: 1, updatedAtMs: 10,
+    });
+    await settleTerminalPanel();
+    publishTerminalForegroundCommand('session-1', {
+      phase: 'idle', displayName: '', revision: 2, updatedAtMs: 20,
+    });
+    await vi.advanceTimersByTimeAsync(200);
+    await settleTerminalPanel();
+
+    expect(findTerminalTabStatus(host, 'Terminal 1', 'running')).toBeNull();
+    expect(Array.from(host.querySelectorAll('[data-terminal-session-title="session-1"]')).map((element) => element.textContent)).toEqual(['repo', 'repo']);
+    expect(titleChanges.mock.calls.some(([title]) => title === 'Terminal · top')).toBe(false);
+  });
+
+  it('keeps Redeven activity markers separate from foreground command presentation', async () => {
     terminalSessionsState.sessions = [
       {
         id: 'session-1',
@@ -5700,7 +5758,7 @@ describe('TerminalPanel', () => {
     emitTerminalData('session-2', 'thinking...\n', 2);
     await settleTerminalPanel();
 
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
     expect(findTerminalWorkIndicator(host)?.dataset.terminalWorkState).toBe('idle');
 
     emitTerminalData('session-2', '\x1b]633;P;RedevenActivity=idle\u0007', 3);
@@ -6139,8 +6197,7 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     expect(inactiveCore?.write).not.toHaveBeenCalled();
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).not.toBeNull();
-    expect(findTerminalTabStatus(host, 'Terminal 2', 'unread')).toBeNull();
+    expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
 
     findTerminalTab(host, 'Terminal 2')?.click();
     await settleTerminalPanel();
@@ -8298,6 +8355,9 @@ describe('TerminalPanel', () => {
         createdAtMs: 2,
         isActive: false,
         lastActiveAtMs: 5,
+        foregroundCommand: {
+          phase: 'running', displayName: 'top', revision: 1, updatedAtMs: 10,
+        },
       },
       {
         id: 'session-3',
@@ -8372,11 +8432,8 @@ describe('TerminalPanel', () => {
     applyLatestPanelAState();
     await settleTerminalPanel();
 
-    emitTerminalData('session-2', '\x1b]633;B\u0007', 1);
-    await settleTerminalPanel();
-
+    await vi.waitFor(() => expect(findTerminalRunningSpinner(panelA!, 'Terminal 2')).not.toBeNull());
     const runningSpinner = findTerminalRunningSpinner(panelA!, 'Terminal 2');
-    expect(runningSpinner).not.toBeNull();
     expect(findTerminalRunningSpinner(panelB!, 'Terminal 2')).toBeNull();
 
     groupStateSpy.mockClear();

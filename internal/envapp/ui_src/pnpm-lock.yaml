@@ -39,8 +39,8 @@ importers:
         specifier: ^0.38.0
         version: 0.38.0(solid-js@1.9.13)
       '@floegence/floeterm-terminal-web':
-        specifier: 0.6.2
-        version: 0.6.2
+        specifier: 0.6.7
+        version: 0.6.7
       '@floegence/flowersec-core':
         specifier: ^0.27.0
         version: 0.27.0
@@ -371,8 +371,8 @@ packages:
     peerDependencies:
       solid-js: ^1.8.0
 
-  '@floegence/floeterm-terminal-web@0.6.2':
-    resolution: {integrity: sha512-j1p+giN+mX+1B8uK/0LGZbhfigVelMqpD15ou9Nr5uZuDYaAAHkZr8wXZhLm0DhYSYRVmJZNlx9fNOPHIXCoMw==}
+  '@floegence/floeterm-terminal-web@0.6.7':
+    resolution: {integrity: sha512-ARfbeyAqpsRUkb/JmUktu4xMIz2VXunBXy75WJTuVgscuh7pg1F4IoVGxH26Eh6HiL7Cq6b63s2/3BDx0ui7Fw==}
 
   '@floegence/flowersec-core@0.27.0':
     resolution: {integrity: sha512-iSKC7vQUMVzYOWbgNGFo+Hz4rTOuqCn+UGRj2lLiuT5vBqXo1GwImMf7+1h8GaKrahAv9t3EtiD4TglCwwTjhQ==}
@@ -2871,7 +2871,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@floegence/floeterm-terminal-web@0.6.2':
+  '@floegence/floeterm-terminal-web@0.6.7':
     dependencies:
       '@floegence/beamterm-renderer': 1.0.1
       ghostty-web: 0.4.0-next.14.g6a1a50d

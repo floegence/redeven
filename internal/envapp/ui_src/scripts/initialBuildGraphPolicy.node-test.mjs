@@ -21,6 +21,7 @@ test('allows the lightweight sessions facade while ignoring dynamic terminal imp
       'assets/sessions.js': chunk([
         '@floegence/floeterm-terminal-web/dist/entries/sessions.js',
         '@floegence/floeterm-terminal-web/dist/sessions/TerminalSessionsCoordinator.js',
+        '@floegence/floeterm-terminal-web/dist/sessions/TerminalForegroundCommandMetadata.js',
         '@floegence/floeterm-terminal-web/dist/utils/logger.js',
       ]),
       'assets/terminal.js': chunk([
@@ -44,6 +45,8 @@ test('rejects terminal runtime modules hidden in a static shared chunk', () => {
       'assets/index.js': chunk(['src/index.ts']),
       'assets/dist-a1.js': chunk([
         '@floegence/floeterm-terminal-web/dist/index.js',
+        '@floegence/beamterm-renderer',
+        '@floegence/beamterm-renderer/dist/index.js',
         '@beamterm/renderer/dist/index.js',
         'ghostty-web/dist/index.js',
       ]),
@@ -53,6 +56,8 @@ test('rejects terminal runtime modules hidden in a static shared chunk', () => {
   assert.equal(result.javascriptAssets.length, 2);
   assert.deepEqual(result.forbiddenModules.map((item) => item.moduleId), [
     '@floegence/floeterm-terminal-web/dist/index.js',
+    '@floegence/beamterm-renderer',
+    '@floegence/beamterm-renderer/dist/index.js',
     '@beamterm/renderer/dist/index.js',
     'ghostty-web/dist/index.js',
   ]);
