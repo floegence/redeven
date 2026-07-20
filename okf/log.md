@@ -1,6 +1,23 @@
 # Redeven OKF Update Log
 
+## 2026-07-20
+* **Boundary**: Upgraded to published Floret v0.19.0, removed the Service-wide Floret capability aggregate, split lifecycle/read/runtime ownership, bound ordinary and child execution to exact authority, and isolated interrupted-turn recovery to startup-only exact factories.
+* **Security**: Added the lifecycle-gated `EffectAuthorizationGate` with strict permission snapshot v2, delete-intent exclusion, final policy reread, exact lease identity, and one-shot dispatch proof.
+* **Fix**: Bound pending terminal settlement to the exact Floret effect-attempt identity, released the product lifecycle gate at the one-shot handler-dispatch boundary, and made SubAgent publication/input retry identities deterministic from canonical authority.
+* **Boundary**: Replaced root-capability copying with exact child execution objects, enforced exact root host/product capability allowlists, and expanded startup recovery binders into immutable exact factories before any retry owner is retained.
+* **Fix**: Made followup replacement one strict transaction, added deterministic SubAgent publication replay with terminal failed state and payload clearing, recovered creates before target enumeration and forks before publications, and preserved observable non-retryable terminal outcomes after post-dispatch stdin failure.
+* **Storage**: Initialized fresh thread stores directly at schema v3, retained only the existing product v2-to-v3 migration, and rejected product v1 and older canonical schemas without mutation.
+* **Security**: Froze attachment bytes before admission, bound canonical resource references to content digests, verified historical resources on every projection, and restricted inherited SubAgent attachments to canonical full-path children.
+* **Coordination**: Claimed both fork identities, processed every startup delete page before turn recovery, installed recovered SubAgent hosts before callbacks, and treated child `ParentRunID` as lineage rather than current parent-turn authority.
+* **Security**: Replaced the approximate pre-handler dispatch signal with shared effect authority held through concrete handlers, kept lifecycle mutations exclusive, fenced direct PTY writes, and removed arbitrary-child binders from run-reachable SubAgent runtime objects.
+* **Migration**: Moved complete v2 upload, permission, fork, and delete payload validation before any Floret title write, required exact legacy reference literals, and validated full permission owner and lifecycle metadata.
+
+## 2026-07-19
+* **Boundary**: Upgraded to published Floret v0.17.0, confined Store and `HostBootstrap` to one composition-root adapter, replaced the broad provider host with thread/parent-bound execution, compaction, SubAgent read, and maintenance capabilities, and removed active-to-recovery pending settlement fallback.
+
 ## 2026-07-18
+* **Fix**: Serialized per-thread run/compaction admission with fork/delete intent, made operation and queued-command JSON strict, bound create/fork replay to durable identity and fingerprints, preserved damaged queued uploads before admission, and isolated concurrent tool authorization to each dispatch refresh snapshot.
+* **Boundary**: Upgraded to published Floret v0.16.0, removed the alternate thread-start API, restricted canonical thread creation to the durable create coordinator, made missing journals and parent-scoped SubAgent access fail closed, and froze Redeven thread-scoped writes after delete or fork intent.
 * **Dependency**: Upgraded to published Floret v0.12.0 for canonical thread overview, title mutation, structured attachments, and unified Thread/SubAgent detail events.
 * **Breaking**: Advanced Redeven threadstore to schema v3 with `ai_thread_settings`; removed Redeven title ownership, admitted TurnID/RunID upload mappings, permission snapshot v1, and canonical v15-v40 migration support.
 * **Boundary**: Made Floret the only authority for admitted messages and attachments, titles, lifecycle, projections, approvals, todos, context, provider state, and SubAgent hierarchy; Redeven retains only host settings, resources, unadmitted queue, routing/read state, security audit, and durable cross-store intent.

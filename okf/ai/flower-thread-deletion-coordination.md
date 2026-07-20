@@ -14,22 +14,26 @@ timestamp: 2026-07-18T00:00:00Z
 
 # Contract
 
-`PrepareThreadDeleteOperation` verifies that settings exist, captures the exact upload cleanup ids and read-state requirement, and inserts one pending operation for the endpoint/thread identity. Preparation does not delete settings, ownership, files, read state, or Floret data. The operation id is stable and the retired-thread trigger prevents later reuse.
+`PrepareThreadDeleteOperation` runs under the thread lifecycle gate. Before preparation, Redeven settles every queued command whose exact `TurnID` is already admitted in Floret; a read or settlement failure aborts without a delete intent. It then verifies that settings exist and no non-forced run, finalization, or idle compaction is active, captures the exact upload cleanup ids and read-state requirement, fingerprints the complete snapshot, and inserts one pending operation for the endpoint/thread identity. Run and compaction admission use the same gate and recheck writability before registration. Preparation does not delete settings, ownership, files, read state, or Floret data. Force deletion detaches or cancels active work only after this durable intent succeeds, so prepare failure has no runtime side effects. The operation id is stable and the retired-thread trigger prevents later reuse.
+
+Delete snapshots accept only strict schema-v1 single-value JSON plus the stored full-payload fingerprint. Unknown fields, trailing values, unsupported schema, invalid cleanup ids, read-state mismatch, or fingerprint drift marks the operation failed before any Floret delete call. Replay never reconstructs a damaged snapshot from current product state.
 
 Replay has one fixed order:
 
-1. Call Floret `ThreadMaintenanceHost.DeleteThread` for the canonical parent thread tree and durably confirm success. `ErrThreadNotFound` is success only while replaying this persisted delete intent.
+1. Call Floret `ThreadDeleteHost.DeleteThread` for the canonical parent thread tree and durably confirm success. `ErrThreadNotFound` is success only while replaying this persisted delete intent.
 2. In one Redeven transaction, mark the captured uploads for deletion, remove thread-scoped settings, queue, routing, transfer/handoff, permission audit ownership, and resource refs, and confirm product-data deletion.
-3. Remove user-scoped Flower read state when required and confirm it.
+3. Durably retire the Flower read-state identity and remove all current user-scoped read rows in one transaction, then confirm it. Future `EnsureFlower` and `AdvanceFlower` calls for that endpoint/thread are rejected, so concurrent or restarted surfaces cannot recreate read state after product cleanup.
 4. Delete physical upload files, finalize upload rows, and confirm file cleanup.
 
 The operation becomes committed only after every required confirmation is durable. A crash after any boundary repeats the same idempotent step. Floret failure leaves settings and resource ownership intact, so a canonical thread never points at a file that Redeven deleted early. File cleanup is last and retryable because physical deletion does not define Agent or host-data authority.
+
+Startup scans every pending delete page before interrupted-turn targets are built. If a selected operation still has not deleted canonical/product state, startup fails closed instead of recovering a turn for a thread with durable delete intent. Operations that already removed product settings may continue retrying read-state or physical-file cleanup without becoming recovery targets.
 
 The authenticated DELETE endpoint returns the durable operation result: committed is HTTP 200, retryable pending is HTTP 202 with the stable operation id, busy without force is HTTP 409, an unknown identity is HTTP 404, and a failed operation contract is HTTP 500.
 
 # Boundaries
 
-Delete never queries or edits Floret tables, never calls `CloseSubAgents` as a data-deletion substitute, never restores removed rows, never rebuilds a snapshot from current state, and never treats absence as proof for an unrecorded step.
+Delete never queries or edits Floret tables, never uses SubAgent close operations as a data-deletion substitute, never restores removed rows, never rebuilds a snapshot from current state, never treats absence as proof for an unrecorded step, and never uses a row-only read-state deletion that permits later reseeding.
 
 # Evidence
 
