@@ -42,7 +42,7 @@ describe('Redeven v1 AI codec', () => {
       threadId: 'th_1',
       model: 'openai/gpt-5.5',
       input: {
-        messageId: 'msg_1',
+        turnId: 'turn_1',
         text: 'Review this directory',
         attachments: [],
         contextAction: {
@@ -86,6 +86,7 @@ describe('Redeven v1 AI codec', () => {
         source_env_public_id: 'env_a',
       },
     });
+    expect(req.input.turn_id).toBe('turn_1');
     expect(JSON.stringify(req.input.context_action)).not.toContain('can_write');
     expect(JSON.stringify(req.input.context_action)).not.toContain('grant');
     expect(req.options?.permission_type).toBe('approval_required');
@@ -190,6 +191,7 @@ describe('Redeven v1 AI codec', () => {
       event_type: 'thread_state',
       endpoint_id: 'env-1',
       thread_id: 'thread-1',
+      turn_id: 'turn-1',
       run_id: 'run-1',
       at_unix_ms: 1000,
       run_status: 'waiting_user',
@@ -217,6 +219,7 @@ describe('Redeven v1 AI codec', () => {
 			toolName: 'ask_user',
 			reasoningSelection: { level: 'high' },
 		}));
+		expect(event?.turnId).toBe('turn-1');
 	});
 
   it('decodes thread run error codes from realtime events', () => {

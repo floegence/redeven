@@ -105,7 +105,7 @@ func (r *run) floretThreadProjectionMatchesRun(projection flruntime.ThreadTurnPr
 	if runID == "" || threadID == "" || turnID == "" {
 		return false
 	}
-	if projectionIdentityMatchesRun(runID, threadID, turnID, strings.TrimSpace(r.id), strings.TrimSpace(r.threadID), strings.TrimSpace(r.messageID)) {
+	if projectionIdentityMatchesRun(runID, threadID, turnID, strings.TrimSpace(r.id), strings.TrimSpace(r.threadID), strings.TrimSpace(r.turnID)) {
 		return true
 	}
 	return projectionIdentityMatchesRun(runID, threadID, turnID, strings.TrimSpace(r.settlementRunID), strings.TrimSpace(r.settlementThreadID), strings.TrimSpace(r.settlementTurnID))
@@ -170,7 +170,7 @@ func (s *Service) activeRunForFloretProjection(endpointID string, threadID strin
 	return r
 }
 
-func (s *Service) applyFloretPendingToolSettlementProjection(ctx context.Context, endpointID string, threadID string, runID string, messageID string, settled flruntime.PendingToolSettlementResult) error {
+func (s *Service) applyFloretPendingToolSettlementProjection(ctx context.Context, endpointID string, threadID string, runID string, turnID string, settled flruntime.PendingToolSettlementResult) error {
 	if s == nil {
 		return errors.New("nil service")
 	}
@@ -194,10 +194,15 @@ func (s *Service) applyFloretPendingToolSettlementProjection(ctx context.Context
 	if projection == nil {
 		return errors.New("ready pending tool settlement is missing projection")
 	}
-	if active := s.activeRunForFloretProjection(endpointID, threadID, runID); active != nil {
+	active := s.activeRunForFloretProjection(endpointID, threadID, runID)
+	if active != nil {
 		active.applyFloretThreadProjectionInternal(*projection, active.acceptsPresentationUpdates(), true)
 	}
-	if err := s.replaceFlowerLiveDraftWithCanonicalTimeline(ctx, endpointID, threadID, runID, messageID, "terminal_settlement"); err != nil {
+	messageID := ""
+	if active != nil && strings.TrimSpace(active.turnID) == strings.TrimSpace(turnID) {
+		messageID = strings.TrimSpace(active.messageID)
+	}
+	if err := s.replaceFlowerLiveDraftWithCanonicalTimeline(ctx, endpointID, threadID, runID, turnID, messageID, "terminal_settlement"); err != nil {
 		return err
 	}
 	s.broadcastThreadSummary(endpointID, threadID)

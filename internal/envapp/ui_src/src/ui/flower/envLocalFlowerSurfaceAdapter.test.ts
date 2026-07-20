@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ProtocolNotConnectedError, RpcError } from '@floegence/floe-webapp-protocol';
 
 import { createEnvLocalFlowerSurfaceAdapter } from './envLocalFlowerSurfaceAdapter';
 import type { FlowerPermissionType } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -755,7 +756,7 @@ describe('Env local Flower surface adapter', () => {
       throw new Error(`unexpected fetch: ${url}`);
     });
 
-    const sendUserTurn = vi.fn(async () => ({ runId: 'run_1', kind: 'start' }));
+    const sendUserTurn = vi.fn(async () => ({ runId: 'run_1', turnId: 'turn_1', kind: 'start' }));
     const adapter = createEnvLocalFlowerSurfaceAdapter({
       envPublicID: 'env_a',
       envLabel: 'Demo Env',
@@ -797,7 +798,11 @@ describe('Env local Flower surface adapter', () => {
       throw new Error(`unexpected fetch: ${url}`);
     });
     const uploadAttachment = vi.fn(async () => '/_redeven_proxy/api/ai/uploads/upl_notes');
-    const sendUserTurn = vi.fn(async (_request: any) => ({ runId: 'run_upload', kind: 'start' }));
+    const sendUserTurn = vi.fn(async (request: any) => ({
+      runId: 'run_upload',
+      turnId: request.input.turnId,
+      kind: 'start',
+    }));
     const adapter = createEnvLocalFlowerSurfaceAdapter({
       envPublicID: 'env_a',
       envLabel: 'Demo Env',
@@ -879,7 +884,7 @@ describe('Env local Flower surface adapter', () => {
 
   it('passes reasoning selection through create thread and turn launch', async () => {
     const subscribeThread = vi.fn(async () => ({ runId: '' }));
-    const sendUserTurn = vi.fn(async () => ({ runId: 'run_reasoning', kind: 'start' }));
+    const sendUserTurn = vi.fn(async () => ({ runId: 'run_reasoning', turnId: 'client_reasoning-message', kind: 'start' }));
     const createdBodies: unknown[] = [];
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/settings') {
@@ -934,13 +939,14 @@ describe('Env local Flower surface adapter', () => {
       } as any,
     });
 
-    const live = await adapter.launchTurn({
-      message_id: 'client_reasoning-message',
+    const receipt = await adapter.launchTurn({
+      turn_id: 'client_reasoning-message',
       prompt: 'reason about this',
       reasoning_selection: { level: 'high' },
     });
 
-    expect(live.thread.thread_id).toBe('thread_reasoning');
+    expect(receipt.thread_id).toBe('thread_reasoning');
+    expect(receipt.turn_id).toBe('client_reasoning-message');
     expect(createdBodies[0]).toMatchObject({
       model_id: 'default/gpt-5.4',
       reasoning_selection: { level: 'high' },
@@ -949,7 +955,7 @@ describe('Env local Flower surface adapter', () => {
       threadId: 'thread_reasoning',
       model: 'default/gpt-5.4',
       input: expect.objectContaining({
-        messageId: 'client_reasoning-message',
+        turnId: 'client_reasoning-message',
       }),
       options: expect.objectContaining({
         reasoningSelection: { level: 'high' },
@@ -958,9 +964,112 @@ describe('Env local Flower surface adapter', () => {
     expect(subscribeThread).toHaveBeenCalledWith({ threadId: 'thread_reasoning' });
   });
 
+  it('rejects a receipt that changes the client-proposed turn identity', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/settings') {
+        return jsonResponse({
+          ai: {
+            current_model_id: 'default/gpt-5.4',
+            providers: [{ id: 'default', type: 'openai', models: [{ model_name: 'gpt-5.4' }] }],
+          },
+          ai_secrets: {
+            provider_api_key_set: { default: true },
+            web_search_provider_api_key_set: {},
+          },
+        });
+      }
+      if (url === '/_redeven_proxy/api/ai/models') {
+        return jsonResponse({ current_model: 'default/gpt-5.4' });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: {
+        ai: {
+          subscribeThread: vi.fn(async () => ({ runId: '' })),
+          sendUserTurn: vi.fn(async () => ({ runId: 'run_other', turnId: 'turn_other', kind: 'start' })),
+        },
+      } as any,
+    });
+
+    await expect(adapter.launchTurn({
+      thread_id: 'thread_existing',
+      turn_id: 'turn_client',
+      prompt: 'send once',
+    })).rejects.toMatchObject({
+      message: 'Flower turn admission returned a different turn identity.',
+      uncertain_admission: { thread_id: 'thread_existing', turn_id: 'turn_client' },
+    });
+  });
+
+  it('distinguishes definite RPC rejection from unknown transport and receipt outcomes', async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === '/_redeven_proxy/api/settings') {
+        return jsonResponse({
+          ai: {
+            current_model_id: 'default/gpt-5.4',
+            providers: [{ id: 'default', type: 'openai', models: [{ model_name: 'gpt-5.4' }] }],
+          },
+          ai_secrets: { provider_api_key_set: { default: true }, web_search_provider_api_key_set: {} },
+        });
+      }
+      if (url === '/_redeven_proxy/api/ai/models') {
+        return jsonResponse({ current_model: 'default/gpt-5.4' });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    const createAdapter = (sendUserTurn: () => Promise<any>) => createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: {
+        ai: {
+          subscribeThread: vi.fn(async () => ({ runId: '' })),
+          sendUserTurn,
+        },
+      } as any,
+    });
+
+    const definiteFailure = await createAdapter(async () => {
+      throw new RpcError({ typeId: 6001, code: 409, message: 'Turn rejected.' });
+    }).launchTurn({
+      thread_id: 'thread_existing', turn_id: 'turn_definite', prompt: 'send once',
+    }).catch((error: unknown) => error);
+    expect(definiteFailure).toMatchObject({ name: 'RpcError', code: 409, message: 'Turn rejected.' });
+    expect(definiteFailure).not.toHaveProperty('uncertain_admission');
+
+    const disconnectedFailure = await createAdapter(async () => {
+      throw new ProtocolNotConnectedError();
+    }).launchTurn({
+      thread_id: 'thread_existing', turn_id: 'turn_disconnected', prompt: 'send once',
+    }).catch((error: unknown) => error);
+    expect(disconnectedFailure).toBeInstanceOf(ProtocolNotConnectedError);
+    expect(disconnectedFailure).not.toHaveProperty('uncertain_admission');
+
+    await expect(createAdapter(async () => {
+      throw new RpcError({ typeId: 6001, code: -1, message: 'RPC transport error' });
+    }).launchTurn({
+      thread_id: 'thread_existing', turn_id: 'turn_transport', prompt: 'send once',
+    })).rejects.toMatchObject({
+      uncertain_admission: { thread_id: 'thread_existing', turn_id: 'turn_transport' },
+    });
+
+    await expect(createAdapter(async () => ({ turnId: 'turn_malformed', kind: 'start' })).launchTurn({
+      thread_id: 'thread_existing', turn_id: 'turn_malformed', prompt: 'send once',
+    })).rejects.toMatchObject({
+      message: 'Flower turn admission returned an invalid receipt.',
+      uncertain_admission: { thread_id: 'thread_existing', turn_id: 'turn_malformed' },
+    });
+  });
+
   it('omits the global current model when launching a turn in an existing thread', async () => {
     const subscribeThread = vi.fn(async () => ({ runId: '' }));
-    const sendUserTurn = vi.fn(async () => ({ runId: 'run_existing', kind: 'start' }));
+    const sendUserTurn = vi.fn(async (request: any) => ({
+      runId: 'run_existing',
+      turnId: request.input.turnId,
+      kind: 'start',
+    }));
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/settings') {
         return jsonResponse({
@@ -1014,7 +1123,11 @@ describe('Env local Flower surface adapter', () => {
       }
       throw new Error(`unexpected fetch: ${url}`);
     });
-    const submitRequestUserInputResponse = vi.fn(async () => ({ runId: 'run_continue', kind: 'start' }));
+    const submitRequestUserInputResponse = vi.fn(async () => ({
+      runId: 'run_continue',
+      turnId: 'turn_continue',
+      kind: 'start',
+    }));
     const adapter = createEnvLocalFlowerSurfaceAdapter({
       envPublicID: 'env_a',
       envLabel: 'Demo Env',
@@ -1039,6 +1152,23 @@ describe('Env local Flower surface adapter', () => {
         reasoningSelection: { level: 'high' },
       }),
 		}));
+	});
+
+	it('rejects an invalid input response admission receipt before reloading bootstrap', async () => {
+		const submitRequestUserInputResponse = vi.fn(async () => ({ runId: 'run_continue', kind: 'start' }));
+		const adapter = createEnvLocalFlowerSurfaceAdapter({
+			envPublicID: 'env_a',
+			envLabel: 'Demo Env',
+			rpc: { ai: { submitRequestUserInputResponse } } as any,
+		});
+
+		await expect(adapter.submitInput({
+			thread_id: 'thread_waiting',
+			prompt_id: 'prompt_1',
+			answers: { next: { choice_id: 'continue' } },
+		})).rejects.toThrow('Flower input response admission returned an invalid receipt.');
+
+		expect(fetchMock).not.toHaveBeenCalled();
 	});
 
 	it('sends null when resetting thread reasoning selection', async () => {

@@ -38,6 +38,12 @@ func newRunWithProductStoreForTest(t *testing.T, opts runOptions, providedStores
 	if strings.TrimSpace(opts.RunID) == "" {
 		opts.RunID = "run_run_product_test"
 	}
+	if strings.TrimSpace(opts.MessageID) == "" {
+		opts.MessageID = "msg_run_product_test"
+	}
+	if strings.TrimSpace(opts.TurnID) == "" {
+		opts.TurnID = "turn_run_product_test"
+	}
 	capabilities, err := bindRootRunProductCapabilities(store, opts.EndpointID, opts.ThreadID, opts.RunID)
 	if err != nil {
 		t.Fatalf("bindRootRunProductCapabilities: %v", err)

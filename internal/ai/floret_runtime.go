@@ -134,7 +134,11 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	if err != nil {
 		return r.failRun("Failed to initialize Floret control tools", err)
 	}
-	labels := flruntime.RunLabels{Correlation: map[string]string{"thread_id": strings.TrimSpace(r.threadID), "message_id": strings.TrimSpace(r.messageID)}, Host: initialSurface.HostContext}
+	labels := flruntime.RunLabels{Correlation: map[string]string{
+		"thread_id":  strings.TrimSpace(r.threadID),
+		"turn_id":    strings.TrimSpace(r.turnID),
+		"message_id": strings.TrimSpace(r.messageID),
+	}, Host: initialSurface.HostContext}
 	floretCfg := redevenFloretAdapterConfig(initialSurface.SystemPrompt, floretModelContextPolicy(contextWindow, req.Options.MaxOutputTokens), req.Options.ReasoningSelection)
 	if r.floretHostFactory == nil {
 		return r.failRun("Failed to initialize Floret host", errors.New("floret host factory not ready"))
@@ -180,7 +184,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	r.setActiveFloretHost(turnHost)
 	defer r.setActiveFloretHost(nil)
 	threadID := flruntime.ThreadID(strings.TrimSpace(r.threadID))
-	r.expectFloretRuntimeEventIdentity(r.id, r.threadID, r.messageID, true)
+	r.expectFloretRuntimeEventIdentity(r.id, r.threadID, r.turnID, true)
 	r.emitLifecyclePhase("executing", map[string]any{"engine": "floret"})
 	if payload := floretContextActionInjectedEventPayload(req.Input.ContextAction, supplementalContext); payload != nil {
 		r.recordRunDiagnostic("flower.context_action.injected", RealtimeStreamKindLifecycle, payload)
@@ -188,7 +192,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	result, err := turnHost.RunTurn(ctx, flruntime.RunTurnRequest{
 		RunID:               flruntime.RunID(strings.TrimSpace(r.id)),
 		ThreadID:            threadID,
-		TurnID:              flruntime.TurnID(strings.TrimSpace(r.messageID)),
+		TurnID:              flruntime.TurnID(strings.TrimSpace(r.turnID)),
 		Input:               turnInput,
 		SupplementalContext: supplementalContext.Items,
 		Labels:              labels,
@@ -227,7 +231,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		})
 	}
 	if result.Status.IsTerminal() && r.host.replaceLiveDraftWithCanonicalTimeline != nil {
-		if replaceErr := r.host.replaceLiveDraftWithCanonicalTimeline(context.Background(), r.id, r.messageID, "terminal_projection"); replaceErr != nil {
+		if replaceErr := r.host.replaceLiveDraftWithCanonicalTimeline(context.Background(), r.id, r.turnID, r.messageID, "terminal_projection"); replaceErr != nil {
 			r.recordRunDiagnostic("flower.timeline.replace_failed", RealtimeStreamKindLifecycle, map[string]any{"error": replaceErr.Error()})
 		}
 	}
@@ -368,7 +372,7 @@ func (r *run) closeParentTerminalSubagents(ctx context.Context, reason string) e
 	if host == nil {
 		return nil
 	}
-	result, err := closeSubagentsWithHost(closeCtx, host, threadID, reason, strings.TrimSpace(r.messageID))
+	result, err := closeSubagentsWithHost(closeCtx, host, threadID, reason, strings.TrimSpace(r.turnID))
 	if err != nil {
 		return err
 	}

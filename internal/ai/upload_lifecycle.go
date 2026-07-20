@@ -14,6 +14,7 @@ import (
 )
 
 const (
+	uploadURLPrefix            = "/_redeven_proxy/api/ai/uploads/"
 	uploadStagedTTL            = 24 * time.Hour
 	uploadCleanupRetryDelay    = 15 * time.Minute
 	uploadCleanupSweepInterval = 15 * time.Minute

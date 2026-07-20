@@ -68,14 +68,17 @@ func floretToolRegistryParentRunOptions(r *run, suffix string) fltools.DispatchO
 	if strings.TrimSpace(r.threadID) == "" {
 		r.threadID = "thread_" + suffix
 	}
+	if strings.TrimSpace(r.turnID) == "" {
+		r.turnID = "turn_" + suffix
+	}
 	if strings.TrimSpace(r.messageID) == "" {
-		r.messageID = "turn_" + suffix
+		r.messageID = "msg_" + suffix
 	}
 	snapshot := r.currentPermissionSnapshot()
 	return fltools.DispatchOptions{
 		RunID:         strings.TrimSpace(r.id),
 		ThreadID:      strings.TrimSpace(r.threadID),
-		TurnID:        strings.TrimSpace(r.messageID),
+		TurnID:        strings.TrimSpace(r.turnID),
 		PromptScopeID: strings.TrimSpace(r.threadID),
 		Step:          1,
 		HostContext: map[string]string{
@@ -1792,6 +1795,7 @@ func TestFloretToolRegistryUsesExplicitChildHostIdentityForSubagentTools(t *test
 	childBase := r.subagentChildRun(childExecution)
 	childBase.threadID = "thread_child"
 	childBase.id = childRunID
+	childBase.turnID = "turn_child"
 	childBase.messageID = "turn_child"
 	childBase.settlementThreadID = "thread_child"
 	childBase.settlementRunID = "floret_exec_child_identity"
@@ -1888,6 +1892,7 @@ func TestFloretToolRegistryDeniesNoUserInteractionApprovalWithoutDelegation(t *t
 	child := parent.subagentChildRun(childExecution)
 	child.threadID = "thread_worker"
 	child.id = "child_run_no_grant"
+	child.turnID = "turn_worker"
 	child.messageID = "turn_worker"
 	child.settlementThreadID = "thread_worker"
 	child.settlementRunID = "floret_exec_worker_no_grant"
@@ -1979,7 +1984,7 @@ func TestRootNoUserInteractionRefreshesPermissionBeforeToolHandler(t *testing.T)
 	result := surface.FloretTools.Dispatch(ctx, fltools.ToolCall{
 		ID: "call_root_no_interaction_refresh", Name: "file.write",
 		Args: `{"file_path":"handler_called","content":"must not write"}`,
-	}, fltools.DispatchOptions{RunID: r.id, ThreadID: r.threadID, TurnID: r.messageID, HostContext: surface.HostContext, EffectDispatcher: floretToolRegistryTestEffectDispatcher(r)})
+	}, fltools.DispatchOptions{RunID: r.id, ThreadID: r.threadID, TurnID: r.turnID, HostContext: surface.HostContext, EffectDispatcher: floretToolRegistryTestEffectDispatcher(r)})
 	if !result.IsError || !strings.Contains(floretToolResultErrorText(result), "invalid thread permission type") {
 		t.Fatalf("tool result=%#v, want strict permission refresh failure", result)
 	}
@@ -2022,7 +2027,7 @@ func TestRootPermissionDowngradeRejectsStaleAllowBeforeToolHandler(t *testing.T)
 	result := surface.FloretTools.Dispatch(ctx, fltools.ToolCall{
 		ID: "call_root_allow_to_ask", Name: "file.write",
 		Args: `{"file_path":"handler_called","content":"must not write"}`,
-	}, fltools.DispatchOptions{RunID: r.id, ThreadID: r.threadID, TurnID: r.messageID, HostContext: surface.HostContext, EffectDispatcher: floretToolRegistryTestEffectDispatcher(r)})
+	}, fltools.DispatchOptions{RunID: r.id, ThreadID: r.threadID, TurnID: r.turnID, HostContext: surface.HostContext, EffectDispatcher: floretToolRegistryTestEffectDispatcher(r)})
 	if !result.IsError || !strings.Contains(strings.ToLower(floretToolResultErrorText(result)), "authorization snapshot is stale") {
 		t.Fatalf("tool result=%#v, want stale authorization rejection", result)
 	}
@@ -2037,11 +2042,14 @@ func TestRootPermissionDowngradeRejectsStaleAllowBeforeToolHandler(t *testing.T)
 func TestFloretToolApprovalRejectsMissingPermissionSnapshot(t *testing.T) {
 	t.Parallel()
 
-	r := newRun(runOptions{RunID: "run_missing_snapshot", ThreadID: "thread_missing_snapshot", MessageID: "turn_missing_snapshot"})
+	r := newRun(runOptions{
+		RunID: "run_missing_snapshot", ThreadID: "thread_missing_snapshot",
+		TurnID: "turn_missing_snapshot", MessageID: "message_missing_snapshot",
+	})
 	r.permissionType = FlowerPermissionFullAccess
 	_, err := r.dispatchFloretEffect(context.Background(), flruntime.EffectAuthorizationRequest{
 		EffectAttemptID: "effect_missing_snapshot", RequestFingerprint: "fingerprint_missing_snapshot",
-		ThreadID: flruntime.ThreadID(r.threadID), TurnID: flruntime.TurnID(r.messageID), RunID: flruntime.RunID(r.id), ToolCallID: "call_missing_snapshot",
+		ThreadID: flruntime.ThreadID(r.threadID), TurnID: flruntime.TurnID(r.turnID), RunID: flruntime.RunID(r.id), ToolCallID: "call_missing_snapshot",
 		ToolName: "terminal.exec", ArgumentHash: floretEffectArgumentHash(`{"command":"pwd"}`),
 		Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}, LeaseOwnerID: "lease_missing_snapshot", LeaseGeneration: 1,
 		HostContext: map[string]string{floretToolHostContextAuthorityThreadIDKey: r.threadID},

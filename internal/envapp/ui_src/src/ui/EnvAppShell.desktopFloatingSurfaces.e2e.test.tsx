@@ -3,6 +3,7 @@
 import { Show, createContext, useContext } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { flowerTurnAdmissionUncertainFailure } from '../../../../flower_ui/src/flowerTurnAdmission';
 
 const EnvContextMock = createContext({} as any);
 const FilePreviewContextMock = createContext({} as any);
@@ -27,7 +28,9 @@ const mintLocalDirectConnectArtifactMock = vi.fn();
 const connectArtifactEntryMock = vi.fn();
 const flowerLaunchTurnMock = vi.fn(async () => ({
   thread_id: 'thread-launched',
-  thread: { thread_id: 'thread-launched' },
+  turn_id: 'turn-launched',
+  run_id: 'run-launched',
+  kind: 'start' as const,
 }));
 
 let debugConsoleEnabled = false;
@@ -533,7 +536,9 @@ beforeEach(() => {
   desktopSidebarActiveTab = 'terminal';
   flowerLaunchTurnMock.mockResolvedValue({
     thread_id: 'thread-launched',
-    thread: { thread_id: 'thread-launched' },
+    turn_id: 'turn-launched',
+    run_id: 'run-launched',
+    kind: 'start',
   });
   window.open = windowOpenMock as typeof window.open;
   getLocalRuntimeMock.mockResolvedValue({
@@ -662,6 +667,36 @@ describe('EnvAppShell desktop floating surfaces', () => {
       }));
       expect(setSidebarActiveTabMock).toHaveBeenLastCalledWith('ai', expect.objectContaining({ openSidebar: false }));
       expect(windowOpenMock).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('hands off an uncertain admission without leaving a retryable launcher draft', async () => {
+    desktopViewMode = 'activity';
+    flowerLaunchTurnMock.mockRejectedValueOnce(flowerTurnAdmissionUncertainFailure(
+      new Error('Admission response was lost.'),
+      'thread-uncertain-launcher',
+      'turn-uncertain-launcher',
+    ));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushAsync();
+
+      (host.querySelector('[data-testid="activity-open-flower-launcher"]') as HTMLButtonElement).click();
+      await flushAsync();
+      (host.querySelector('[data-testid="flower-turn-launcher-send"]') as HTMLButtonElement).click();
+      await flushAsync();
+
+      expect(flowerLaunchTurnMock).toHaveBeenCalledTimes(1);
+      expect(host.querySelector('[data-testid="flower-turn-launcher"]')).toBeNull();
+      expect(setSidebarActiveTabMock).toHaveBeenLastCalledWith('ai', expect.objectContaining({ openSidebar: false }));
     } finally {
       dispose();
     }

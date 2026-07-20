@@ -643,6 +643,9 @@ func (decoration *FlowerTimelineDecoration) UnmarshalJSON(data []byte) error {
 
 type FlowerTimelineMessage struct {
 	MessageID     string `json:"id"`
+	ThreadID      string `json:"thread_id"`
+	TurnID        string `json:"turn_id"`
+	RunID         string `json:"run_id"`
 	Role          string `json:"role"`
 	Content       string `json:"content"`
 	Status        string `json:"status"`

@@ -52,6 +52,7 @@ func TestFloretThreadProjectionPersistsFullAssistantContentAfterActivity(t *test
 	r := newRun(runOptions{})
 	r.id = "run_full_projection"
 	r.threadID = "thread_full_projection"
+	r.turnID = "msg_full_projection"
 	r.messageID = "msg_full_projection"
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
 
@@ -158,6 +159,7 @@ func TestFloretTurnResultProjectionDoesNotDowngradeFullAssistantMarkdown(t *test
 	r := newRun(runOptions{})
 	r.id = "run_full_result_projection"
 	r.threadID = "thread_full_result_projection"
+	r.turnID = "msg_full_result_projection"
 	r.messageID = "msg_full_result_projection"
 	r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
 		ThreadID:       "thread_full_result_projection",
@@ -195,6 +197,7 @@ func TestFloretEventProjectionReplacesDuplicateLiveActivityTail(t *testing.T) {
 	r := newRun(runOptions{})
 	r.id = "run_live_projection"
 	r.threadID = "thread_live_projection"
+	r.turnID = "msg_live_projection"
 	r.messageID = "msg_live_projection"
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
 	r.assistantBlocks = []any{
@@ -264,10 +267,11 @@ func TestFloretHostPublishesRunningToolProjectionToFlowerLiveEvents(t *testing.T
 		RunID:            runID,
 		EndpointID:       meta.EndpointID,
 		ThreadID:         thread.ThreadID,
+		TurnID:           turnID,
 		MessageID:        turnID,
 		PersistOpTimeout: time.Second,
 		OnStreamEvent: func(ev any) {
-			svc.broadcastStreamEvent(meta.EndpointID, thread.ThreadID, runID, ev)
+			svc.broadcastStreamEvent(meta.EndpointID, thread.ThreadID, turnID, runID, ev)
 		},
 	}, svc.threadsDB)
 
@@ -753,6 +757,7 @@ func TestValidateFloretThreadProjectionRejectsInvalidActivityTimeline(t *testing
 	r := newRun(runOptions{})
 	r.id = "run_invalid_projection"
 	r.threadID = "thread_invalid_projection"
+	r.turnID = "msg_invalid_projection"
 	r.messageID = "msg_invalid_projection"
 	err := r.validateFloretThreadProjection(flruntime.ThreadTurnProjection{
 		RunID:          "run_invalid_projection",
@@ -782,6 +787,7 @@ func TestApplyFloretThreadProjectionRejectsInvalidActivityWithoutClearingLiveBlo
 	r := newRun(runOptions{})
 	r.id = "run_invalid_projection"
 	r.threadID = "thread_invalid_projection"
+	r.turnID = "msg_invalid_projection"
 	r.messageID = "msg_invalid_projection"
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
 	r.assistantBlocks = []any{
@@ -825,6 +831,7 @@ func TestApplyFloretThreadProjectionAdvancesOrdinalOnlyAfterSuccessfulMapping(t 
 	r := newRun(runOptions{})
 	r.id = "run_projection_cursor"
 	r.threadID = "thread_projection_cursor"
+	r.turnID = "turn_projection_cursor"
 	r.messageID = "turn_projection_cursor"
 	invalid := flruntime.ThreadTurnProjection{
 		RunID:          "run_projection_cursor",
@@ -866,6 +873,7 @@ func TestApplyFloretThreadProjectionAcceptsUpstreamControlSignalWithoutBodyBlock
 	r := newRun(runOptions{})
 	r.id = "run_unknown_projection_signal"
 	r.threadID = "thread_unknown_projection_signal"
+	r.turnID = "turn_unknown_projection_signal"
 	r.messageID = "turn_unknown_projection_signal"
 	if !r.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
 		RunID:          "run_unknown_projection_signal",
@@ -926,6 +934,7 @@ func TestApplyFloretThreadProjectionReplacesStreamedBlocks(t *testing.T) {
 	r := newRun(runOptions{})
 	r.id = "run_projection"
 	r.threadID = "thread_projection"
+	r.turnID = "msg_projection"
 	r.messageID = "msg_projection"
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
 	r.assistantBlocks = []any{
@@ -976,6 +985,7 @@ func TestApplyFloretThreadProjectionClearsStreamedBlocksWhenEmpty(t *testing.T) 
 	r := newRun(runOptions{})
 	r.id = "run_empty_projection"
 	r.threadID = "thread_empty_projection"
+	r.turnID = "msg_empty_projection"
 	r.messageID = "msg_empty_projection"
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
 	r.assistantBlocks = []any{
@@ -1026,6 +1036,7 @@ func TestApplyFloretThreadProjectionRejectsMissingOrMismatchedIdentityWithoutCle
 			r := newRun(runOptions{})
 			r.id = "run_projection_identity"
 			r.threadID = "thread_projection_identity"
+			r.turnID = "msg_projection_identity"
 			r.messageID = "msg_projection_identity"
 			r.assistantBlocks = []any{&persistedMarkdownBlock{Type: "markdown", Content: "streamed reply"}}
 			var events []any
@@ -1054,6 +1065,7 @@ func TestApplyFloretThreadProjectionIgnoresOlderOrdinalAfterSettlement(t *testin
 	r := newRun(runOptions{})
 	r.id = "run_terminal_ordinal"
 	r.threadID = "thread_terminal_ordinal"
+	r.turnID = "msg_terminal_ordinal"
 	r.messageID = "msg_terminal_ordinal"
 
 	settledTimeline := floretProjectionTimeline("run_terminal_ordinal", "thread_terminal_ordinal", "msg_terminal_ordinal", "exec-1", "terminal.exec")
@@ -1107,6 +1119,7 @@ func TestApplyFloretThreadProjectionAcceptsSettlementIdentityForChildRun(t *test
 	r := newRun(runOptions{})
 	r.id = "run_child_audit"
 	r.threadID = "thread_child"
+	r.turnID = "turn_child_audit"
 	r.messageID = "turn_child_audit"
 	r.settlementThreadID = "thread_child"
 	r.settlementRunID = "run_floret_execution"
@@ -1201,6 +1214,7 @@ func TestFloretTerminalThreadProjectionUpdatesDetachedSnapshotWithoutStream(t *t
 	r := newRun(runOptions{})
 	r.id = "run_terminal_projection"
 	r.threadID = "thread_terminal_projection"
+	r.turnID = "msg_terminal_projection"
 	r.messageID = "msg_terminal_projection"
 	r.onStreamEvent = func(ev any) { events = append(events, ev) }
 	r.markDetached()
@@ -1243,6 +1257,7 @@ func TestFloretTerminalThreadProjectionRejectsMismatchedRun(t *testing.T) {
 	r := newRun(runOptions{})
 	r.id = "run_terminal_projection"
 	r.threadID = "thread_terminal_projection"
+	r.turnID = "msg_terminal_projection"
 	r.messageID = "msg_terminal_projection"
 	r.assistantBlocks = []any{&persistedMarkdownBlock{Type: "markdown", Content: "canceled"}}
 	r.markDetached()
@@ -1277,11 +1292,12 @@ func TestApplyFloretPendingToolSettlementProjectionPublishesTimelineReplacement(
 	}
 
 	runID := "run_terminal_settlement_live"
+	turnID := "turn_terminal_settlement_live"
 	messageID := "msg_terminal_settlement_live"
 	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "canonical terminal output")
 	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
 		ThreadID: flruntime.ThreadID(thread.ThreadID),
-		TurnID:   flruntime.TurnID(messageID),
+		TurnID:   flruntime.TurnID(turnID),
 		RunID:    flruntime.RunID(runID),
 		Input:    flruntime.TurnInput{Text: "run terminal command"},
 	}); err != nil {
@@ -1292,9 +1308,10 @@ func TestApplyFloretPendingToolSettlementProjectionPublishesTimelineReplacement(
 		RunID:            runID,
 		EndpointID:       meta.EndpointID,
 		ThreadID:         thread.ThreadID,
+		TurnID:           turnID,
 		MessageID:        messageID,
 		OnStreamEvent: func(ev any) {
-			svc.broadcastStreamEvent(meta.EndpointID, thread.ThreadID, runID, ev)
+			svc.broadcastStreamEvent(meta.EndpointID, thread.ThreadID, turnID, runID, ev)
 		},
 	})
 	svc.mu.Lock()
@@ -1311,43 +1328,44 @@ func TestApplyFloretPendingToolSettlementProjectionPublishesTimelineReplacement(
 		EndpointID: meta.EndpointID,
 		ThreadID:   thread.ThreadID,
 		RunID:      runID,
+		TurnID:     turnID,
 		Kind:       FlowerLiveRunStarted,
-		Payload:    mustFlowerPayload(FlowerLiveRunStartedPayload{RunID: runID, TurnID: messageID, MessageID: messageID, Status: string(RunStateRunning)}),
+		Payload:    mustFlowerPayload(FlowerLiveRunStartedPayload{RunID: runID, TurnID: turnID, MessageID: messageID, Status: string(RunStateRunning)}),
 	})
 	activeRun.applyFloretThreadProjection(flruntime.ThreadTurnProjection{
 		ThreadID:       flruntime.ThreadID(thread.ThreadID),
-		TurnID:         flruntime.TurnID(messageID),
+		TurnID:         flruntime.TurnID(turnID),
 		RunID:          flruntime.RunID(runID),
 		TraceID:        flruntime.TraceID(runID),
 		Status:         flruntime.TurnStatusRunning,
 		ThroughOrdinal: 1,
 		Segments: []flruntime.ThreadTurnProjectionSegment{{
 			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
-			ActivityTimeline: floretRunningProjectionTimeline(runID, thread.ThreadID, messageID, "exec-1"),
+			ActivityTimeline: floretRunningProjectionTimeline(runID, thread.ThreadID, turnID, "exec-1"),
 		}},
 	})
 
 	settledProjection := flruntime.ThreadTurnProjection{
 		ThreadID:       flruntime.ThreadID(thread.ThreadID),
-		TurnID:         flruntime.TurnID(messageID),
+		TurnID:         flruntime.TurnID(turnID),
 		RunID:          flruntime.RunID(runID),
 		TraceID:        flruntime.TraceID(runID),
 		Status:         flruntime.TurnStatusCompleted,
 		ThroughOrdinal: 2,
 		Segments: []flruntime.ThreadTurnProjectionSegment{{
 			Kind:             flruntime.ThreadTurnProjectionSegmentActivityTimeline,
-			ActivityTimeline: floretProjectionTimeline(runID, thread.ThreadID, messageID, "exec-1", "terminal.exec"),
+			ActivityTimeline: floretProjectionTimeline(runID, thread.ThreadID, turnID, "exec-1", "terminal.exec"),
 		}},
 	}
 	settlementTarget := flruntime.PendingToolSettlementTarget{
 		ThreadID:   flruntime.ThreadID(thread.ThreadID),
-		TurnID:     flruntime.TurnID(messageID),
+		TurnID:     flruntime.TurnID(turnID),
 		RunID:      flruntime.RunID(runID),
 		ToolCallID: "exec-1",
 		ToolName:   "terminal.exec",
 		Handle:     "process-1",
 	}
-	err = svc.applyFloretPendingToolSettlementProjection(ctx, meta.EndpointID, thread.ThreadID, runID, messageID, pendingToolSettlementResultForTest(settlementTarget, flruntime.TurnProjectionAvailabilityReady, &settledProjection, ""))
+	err = svc.applyFloretPendingToolSettlementProjection(ctx, meta.EndpointID, thread.ThreadID, runID, turnID, pendingToolSettlementResultForTest(settlementTarget, flruntime.TurnProjectionAvailabilityReady, &settledProjection, ""))
 	if err != nil {
 		t.Fatalf("apply settlement projection: %v", err)
 	}
@@ -1370,7 +1388,7 @@ func TestApplyFloretPendingToolSettlementProjectionPublishesTimelineReplacement(
 	if !decodeFlowerPayload(replacement.Payload, &payload) {
 		t.Fatalf("replacement payload decode failed: %#v", replacement)
 	}
-	if len(payload.Messages) != 2 || payload.Messages[1].MessageID != messageID || payload.Messages[1].Content != "canonical terminal output" {
+	if len(payload.Messages) != 2 || payload.Messages[0].TurnID != turnID || payload.Messages[1].TurnID != turnID || payload.Messages[1].MessageID != turnID || payload.Messages[1].Content != "canonical terminal output" {
 		t.Fatalf("replacement messages=%#v, want canonical Floret turn", payload.Messages)
 	}
 	if _, ok := payload.LiveState.Messages[messageID]; ok {
@@ -1405,9 +1423,10 @@ func TestRunFloretHostedTurnTerminalProjectionPublishesCanonicalReplacement(t *t
 		RunID:             runID,
 		EndpointID:        meta.EndpointID,
 		ThreadID:          thread.ThreadID,
+		TurnID:            turnID,
 		MessageID:         turnID,
 		OnStreamEvent: func(event any) {
-			svc.broadcastStreamEvent(meta.EndpointID, thread.ThreadID, runID, event)
+			svc.broadcastStreamEvent(meta.EndpointID, thread.ThreadID, turnID, runID, event)
 		},
 	}, svc.threadsDB)
 	provider := &capturingTurnProvider{result: ModelGatewayResult{FinishReason: "stop", Text: "canonical final answer"}}
@@ -1440,7 +1459,7 @@ func TestRunFloretHostedTurnTerminalProjectionPublishesCanonicalReplacement(t *t
 		t.Fatalf("timeline replacements = %d, want 1; events=%#v", len(replacements), response.Events)
 	}
 	replacement := replacements[0]
-	if len(replacement.Messages) != 2 || replacement.Messages[0].Role != "user" || replacement.Messages[1].MessageID != turnID || replacement.Messages[1].Content != "canonical final answer" {
+	if len(replacement.Messages) != 2 || replacement.Messages[0].Role != "user" || replacement.Messages[0].TurnID != turnID || replacement.Messages[1].TurnID != turnID || replacement.Messages[1].MessageID != turnID || replacement.Messages[1].Content != "canonical final answer" {
 		t.Fatalf("replacement messages = %#v", replacement.Messages)
 	}
 	if _, exists := replacement.LiveState.Messages[turnID]; exists {

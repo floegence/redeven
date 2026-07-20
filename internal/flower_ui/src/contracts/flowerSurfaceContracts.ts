@@ -151,6 +151,11 @@ export type FlowerChatMessageStatus = 'sending' | 'streaming' | 'error' | 'compl
 
 export type FlowerChatMessage = Readonly<{
   id: string;
+  // Canonical root-thread messages always carry turn_id. Synthetic local and
+  // SubAgent detail rows may omit it because they are not admission records.
+  turn_id?: string;
+  thread_id?: string;
+  run_id?: string;
   role: FlowerChatMessageRole;
   content: string;
   status: FlowerChatMessageStatus;
@@ -366,6 +371,18 @@ export type FlowerChatMessageBlock =
     type: 'markdown' | 'text' | 'thinking';
     content?: string;
   }>
+  | Readonly<{
+    type: 'image';
+    src: string;
+    alt?: string;
+  }>
+  | Readonly<{
+    type: 'file';
+    name: string;
+    size: number;
+    mimeType: string;
+    url: string;
+  }>
   | FlowerActivityTimelineBlock;
 
 export type FlowerInputRequestAction = Readonly<{
@@ -440,7 +457,7 @@ export type FlowerThreadReadStatus = Readonly<{
 }>;
 
 export type FlowerQueuedTurn = Readonly<{
-  message_id: string;
+  turn_id: string;
   prompt: string;
   created_at_ms: number;
   context_action?: unknown;
@@ -1013,7 +1030,7 @@ export type FlowerResolveHandlerInput = Readonly<{
 
 export type FlowerTurnLaunchInput = Readonly<{
   thread_id?: string;
-  message_id?: string;
+  turn_id?: string;
   prompt: string;
   decision?: FlowerRouterDecision | null;
   context_action?: unknown;
@@ -1025,6 +1042,13 @@ export type FlowerTurnLaunchInput = Readonly<{
   reasoning_selection?: FlowerReasoningSelection;
 }>;
 
+export type FlowerTurnLaunchReceipt = Readonly<{
+  thread_id: string;
+  turn_id: string;
+  run_id: string;
+  kind: 'start' | 'queued';
+}>;
+
 export type FlowerCompactThreadContextInput = Readonly<{
   thread_id: string;
   active_run_id?: string;
@@ -1032,6 +1056,10 @@ export type FlowerCompactThreadContextInput = Readonly<{
 
 export type FlowerTurnLaunchFailure = Error & Readonly<{
   fresh_decision?: FlowerRouterDecision;
+  uncertain_admission?: Readonly<{
+    thread_id: string;
+    turn_id: string;
+  }>;
 }>;
 
 export type FlowerTurnAttachment = Readonly<{
@@ -1207,7 +1235,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   setThreadReasoningSelection?: (threadID: string, selection: FlowerReasoningSelection | undefined) => Promise<FlowerLiveBootstrap>;
   forkThread?: (threadID: string) => Promise<FlowerLiveBootstrap>;
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
-  launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerLiveBootstrap>;
+  launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;
   compactThreadContext: (input: FlowerCompactThreadContextInput) => Promise<FlowerLiveBootstrap>;
   stopThread: (threadID: string) => Promise<FlowerLiveBootstrap>;
   submitInput: (input: FlowerSubmitInputRequest) => Promise<FlowerLiveBootstrap>;

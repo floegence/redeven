@@ -3,9 +3,11 @@ package ai
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
+	"net"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -13,6 +15,7 @@ import (
 
 	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
+	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
@@ -43,6 +46,157 @@ func newSendTurnTestServiceAt(t *testing.T, stateDir string, agentHomeDir string
 	}
 	t.Cleanup(func() { _ = svc.Close() })
 	return svc
+}
+
+func TestRunInputRejectsLegacyMessageIdentityField(t *testing.T) {
+	t.Parallel()
+
+	var input RunInput
+	err := json.Unmarshal([]byte(`{"message_id":"legacy_message","text":"must fail","attachments":[]}`), &input)
+	if err == nil || !strings.Contains(err.Error(), `unknown field "message_id"`) {
+		t.Fatalf("json.Unmarshal error=%v, want rejected legacy message_id", err)
+	}
+}
+
+func TestSendUserTurnRejectsInvalidExplicitTurnIDWithoutAdmissionSideEffects(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+	thread, err := svc.CreateThread(ctx, meta, "invalid turn identity", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	_, err = svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
+		ThreadID: thread.ThreadID,
+		Input:    RunInput{TurnID: "invalid turn id", Text: "must not be admitted"},
+	})
+	if err == nil || !strings.Contains(err.Error(), "invalid turn_id") {
+		t.Fatalf("SendUserTurn error=%v, want invalid turn_id", err)
+	}
+	queued, err := svc.threadsDB.CountFollowupsByLane(ctx, meta.EndpointID, thread.ThreadID, threadstore.FollowupLaneQueued)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if queued != 0 {
+		t.Fatalf("queued turns=%d, want 0", queued)
+	}
+	turnIDs, err := svc.readCanonicalThreadTurnIDs(ctx, thread.ThreadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(turnIDs) != 0 {
+		t.Fatalf("canonical turns=%v, want none", turnIDs)
+	}
+	if svc.HasActiveThreadForEndpoint(meta.EndpointID, thread.ThreadID) {
+		t.Fatal("invalid turn registered an active run")
+	}
+}
+
+func TestAdmissionRPCDecodersRejectLegacyAndInvalidTurnIdentityWithoutSideEffects(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+	thread, err := svc.CreateThread(ctx, meta, "rpc decoder boundary", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	serverConn, clientConn := net.Pipe()
+	t.Cleanup(func() { _ = serverConn.Close() })
+	t.Cleanup(func() { _ = clientConn.Close() })
+	router := rpc.NewRouter()
+	svc.RegisterRPC(router, meta, nil)
+	server := rpc.NewServer(serverConn, router)
+	serveCtx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go func() { _ = server.Serve(serveCtx) }()
+	client := rpc.NewClient(clientConn)
+
+	callInvalid := func(typeID uint32, payload string) {
+		t.Helper()
+		_, rpcErr, err := client.Call(ctx, typeID, []byte(payload))
+		if err != nil {
+			t.Fatalf("Call type_id=%d: %v", typeID, err)
+		}
+		if rpcErr == nil || rpcErr.Code != 400 {
+			t.Fatalf("Call type_id=%d rpc error=%#v, want code 400", typeID, rpcErr)
+		}
+	}
+	assertState := func(wantCanonicalTurns int) {
+		t.Helper()
+		queued, err := svc.threadsDB.CountFollowupsByLane(ctx, meta.EndpointID, thread.ThreadID, threadstore.FollowupLaneQueued)
+		if err != nil {
+			t.Fatal(err)
+		}
+		turns, err := svc.readCanonicalThreadTurnIDs(ctx, thread.ThreadID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if queued != 0 || len(turns) != wantCanonicalTurns || svc.HasActiveThreadForEndpoint(meta.EndpointID, thread.ThreadID) {
+			t.Fatalf("admission side effects: queued=%d canonical=%v active=%v", queued, turns, svc.HasActiveThreadForEndpoint(meta.EndpointID, thread.ThreadID))
+		}
+	}
+
+	callInvalid(TypeID_AI_SEND_USER_TURN, `{"thread_id":"`+thread.ThreadID+`","input":{"message_id":"legacy","text":"must fail","attachments":[]},"options":{}}`)
+	callInvalid(TypeID_AI_SEND_USER_TURN, `{"thread_id":"`+thread.ThreadID+`","input":{"turn_id":"invalid turn id","text":"must fail","attachments":[]},"options":{}}`)
+	assertState(0)
+
+	prompt := testSingleQuestionPrompt("turn_rpc_waiting", "tool_rpc_waiting", "question_1", "Continue?", nil)
+	seedWaitingUserPrompt(t, svc, ctx, meta, thread.ThreadID, prompt)
+	response := `"response":{"prompt_id":"` + prompt.PromptID + `","answers":{"question_1":{"text":"continue"}}}`
+	callInvalid(TypeID_AI_SUBMIT_REQUEST_USER_INPUT_RESPONSE, `{"thread_id":"`+thread.ThreadID+`",`+response+`,"input":{"message_id":"legacy","text":"continue","attachments":[]},"options":{}}`)
+	callInvalid(TypeID_AI_SUBMIT_REQUEST_USER_INPUT_RESPONSE, `{"thread_id":"`+thread.ThreadID+`",`+response+`,"input":{"turn_id":"invalid turn id","text":"continue","attachments":[]},"options":{}}`)
+	assertState(1)
+}
+
+func TestSendUserTurnReturnsAcceptedTurnAndRunIdentity(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	ctx := context.Background()
+	thread, err := svc.CreateThread(ctx, meta, "turn receipt", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	response, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
+		ThreadID: thread.ThreadID,
+		Input:    RunInput{TurnID: "turn_client_receipt", Text: "start"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.Kind != "start" || response.TurnID != "turn_client_receipt" || strings.TrimSpace(response.RunID) == "" {
+		t.Fatalf("response=%#v, want exact start receipt", response)
+	}
+}
+
+func TestGetThreadSerializesOwnedEmptyQueuedTurns(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(context.Background(), meta, "empty queue", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	view, err := svc.GetThread(context.Background(), meta, thread.ThreadID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := json.Marshal(view)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(raw), `"queued_turns":[]`) {
+		t.Fatalf("thread detail does not own an explicit empty queue: %s", raw)
+	}
 }
 
 func TestStartupRecoveryReleasesUnadmittedInFlightCommand(t *testing.T) {
@@ -207,9 +361,12 @@ func TestPendingTurnCommandIsDeletedOnCanonicalUserEntryEvent(t *testing.T) {
 	}
 	r := newRunWithProductStoreForTest(t, runOptions{
 		Log: svc.log, HostCapabilities: bindTestRunHostCapabilities(t, svc, meta.EndpointID, thread.ThreadID), RunID: command.RunID, EndpointID: meta.EndpointID,
-		ThreadID: thread.ThreadID, MessageID: command.TurnID,
+		ThreadID: thread.ThreadID, TurnID: command.TurnID, MessageID: "message_event",
 		FloretHostFactory: floretRuntime.Turn, PersistOpTimeout: time.Second,
 	}, svc.threadsDB)
+	if r.turnID != command.TurnID || r.messageID == r.turnID {
+		t.Fatalf("admission identity turn=%q message=%q, want exact distinct identities", r.turnID, r.messageID)
+	}
 	r.setPendingTurnCommand(command.QueueID)
 	r.expectFloretRuntimeEventIdentity(command.RunID, thread.ThreadID, command.TurnID, true)
 	floretEventSink{run: r}.EmitEvent(flruntime.Event{
@@ -272,7 +429,7 @@ func TestRunEndReleasesUnadmittedPendingCommandByCancelIntent(t *testing.T) {
 			}
 			r := newRunWithProductStoreForTest(t, runOptions{
 				HostCapabilities: bindTestRunHostCapabilities(t, svc, meta.EndpointID, thread.ThreadID), RunID: command.RunID, EndpointID: meta.EndpointID,
-				ThreadID: thread.ThreadID, MessageID: command.TurnID,
+				ThreadID: thread.ThreadID, TurnID: command.TurnID, MessageID: "message_release_" + testCase.id,
 				FloretHostFactory: floretRuntime.Turn, PersistOpTimeout: time.Second,
 			}, svc.threadsDB)
 			r.setPendingTurnCommand(command.QueueID)

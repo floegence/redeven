@@ -59,7 +59,7 @@ func TestPrepareRunDoesNotPublishDraftBeforeFloretAcceptance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prepared, err := svc.prepareRun(meta, "run_prepare", RunStartRequest{ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini", Input: RunInput{Text: "hello"}}, nil, nil)
+	prepared, err := svc.prepareRun(meta, "run_prepare", RunStartRequest{ThreadID: thread.ThreadID, Model: "openai/gpt-5-mini", Input: RunInput{Text: "hello"}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -146,7 +146,7 @@ func TestPrepareRun_PropagatesInternalReadonlyRunOptions(t *testing.T) {
 		Options: RunOptions{
 			ToolAllowlist: []string{"terminal.exec", "task_complete"},
 		},
-	}, nil, nil)
+	}, nil)
 	if err != nil {
 		t.Fatalf("prepareRun: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestPrepareRun_ContextActionSuggestedWorkingDirDoesNotChangeRunWorkingDir(t
 			},
 		},
 		Options: RunOptions{},
-	}, nil, nil)
+	}, nil)
 	if err != nil {
 		t.Fatalf("prepareRun: %v", err)
 	}

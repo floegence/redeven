@@ -51,6 +51,7 @@ type runOptions struct {
 	ChannelID    string
 	EndpointID   string
 	ThreadID     string
+	TurnID       string
 	UserPublicID string
 	MessageID    string
 
@@ -107,6 +108,7 @@ type run struct {
 	channelID          string
 	endpointID         string
 	threadID           string
+	turnID             string
 	userPublicID       string
 	messageID          string
 	settlementThreadID string
@@ -299,11 +301,12 @@ func newRun(opts runOptions) *run {
 		channelID:                   strings.TrimSpace(opts.ChannelID),
 		endpointID:                  strings.TrimSpace(opts.EndpointID),
 		threadID:                    strings.TrimSpace(opts.ThreadID),
+		turnID:                      strings.TrimSpace(opts.TurnID),
 		userPublicID:                strings.TrimSpace(opts.UserPublicID),
 		messageID:                   strings.TrimSpace(opts.MessageID),
 		settlementThreadID:          strings.TrimSpace(opts.ThreadID),
 		settlementRunID:             runID,
-		settlementTurnID:            strings.TrimSpace(opts.MessageID),
+		settlementTurnID:            strings.TrimSpace(opts.TurnID),
 		uploadsDir:                  strings.TrimSpace(opts.UploadsDir),
 		product:                     opts.ProductCapabilities,
 		floretHostFactory:           opts.FloretHostFactory,
@@ -981,9 +984,9 @@ func (r *run) commitPendingTurnCommandAdmission(verifyCanonicalTurn bool) error 
 	accepted := true
 	var err error
 	if verifyCanonicalTurn {
-		accepted, err = r.host.reconcilePendingTurnCommand(ctx, r.pendingCommandID, r.messageID, r.canonicalAttachmentIDs)
+		accepted, err = r.host.reconcilePendingTurnCommand(ctx, r.pendingCommandID, r.turnID, r.canonicalAttachmentIDs)
 	} else {
-		err = r.host.commitPendingTurnCommandAdmission(ctx, r.pendingCommandID, r.messageID, r.canonicalAttachmentIDs)
+		err = r.host.commitPendingTurnCommandAdmission(ctx, r.pendingCommandID, r.turnID, r.canonicalAttachmentIDs)
 	}
 	cancel()
 	if err != nil {
@@ -996,7 +999,7 @@ func (r *run) commitPendingTurnCommandAdmission(verifyCanonicalTurn bool) error 
 		}
 		timeout := r.persistTimeout()
 		releaseCtx, releaseCancel := context.WithTimeout(context.Background(), timeout)
-		err = r.host.releasePendingTurnCommandAdmission(releaseCtx, r.pendingCommandID, r.messageID, r.id, targetLane)
+		err = r.host.releasePendingTurnCommandAdmission(releaseCtx, r.pendingCommandID, r.turnID, r.id, targetLane)
 		releaseCancel()
 		if err != nil {
 			return err
@@ -2345,6 +2348,7 @@ func (r *run) snapshotAssistantMessageJSONWithStatus(status string) (string, str
 
 	msg := persistedMessage{
 		ID:        r.messageID,
+		TurnID:    r.turnID,
 		Role:      "assistant",
 		Blocks:    blocks,
 		Status:    normalizeSnapshotMessageStatus(status),
@@ -4068,7 +4072,7 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 		EndpointID:       strings.TrimSpace(r.endpointID),
 		ThreadID:         strings.TrimSpace(r.threadID),
 		RunID:            strings.TrimSpace(r.id),
-		TurnID:           strings.TrimSpace(r.messageID),
+		TurnID:           strings.TrimSpace(r.turnID),
 		SettlementOwner:  settlementOwner,
 		SettlementTarget: settlementTarget,
 		Finalize:         terminalHost.Finalize,

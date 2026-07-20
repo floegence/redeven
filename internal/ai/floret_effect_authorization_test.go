@@ -23,7 +23,7 @@ func TestFloretEffectAuthorizationRejectsDeleteIntentBeforeDispatch(t *testing.T
 	dispatched := false
 	err := r.withAuthorizedFloretEffect(context.Background(), flruntime.EffectAuthorizationRequest{
 		EffectAttemptID: "effect_delete_intent", RequestFingerprint: "fingerprint_delete_intent",
-		ThreadID: flruntime.ThreadID(r.threadID), TurnID: flruntime.TurnID(r.messageID), RunID: flruntime.RunID(r.id),
+		ThreadID: flruntime.ThreadID(r.threadID), TurnID: flruntime.TurnID(r.turnID), RunID: flruntime.RunID(r.id),
 		ToolCallID: "call_delete_intent", ToolName: "terminal.exec", ArgumentHash: floretEffectArgumentHash(`{"command":"pwd"}`),
 		Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}, LeaseOwnerID: "lease_delete_intent", LeaseGeneration: 1,
 		HostContext: map[string]string{
@@ -136,7 +136,7 @@ func TestFloretEffectAuthorizationKeepsSubagentWaitInsideLifecycleGate(t *testin
 	go func() {
 		done <- r.withAuthorizedFloretEffect(context.Background(), flruntime.EffectAuthorizationRequest{
 			EffectAttemptID: "effect_subagent_wait", RequestFingerprint: "fingerprint_subagent_wait",
-			ThreadID: flruntime.ThreadID(r.threadID), TurnID: flruntime.TurnID(r.messageID), RunID: flruntime.RunID(r.id),
+			ThreadID: flruntime.ThreadID(r.threadID), TurnID: flruntime.TurnID(r.turnID), RunID: flruntime.RunID(r.id),
 			ToolCallID: "call_subagent_wait", ToolName: "subagents", ArgumentHash: floretEffectArgumentHash(`{"action":"wait"}`),
 			Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}, LeaseOwnerID: "lease_subagent_wait", LeaseGeneration: 1,
 			Resources: []fltools.ResourceRef{
@@ -338,7 +338,7 @@ func TestFloretEffectAuthorizationHoldsLifecycleWriterThroughHandler(t *testing.
 	go func() {
 		done <- r.withAuthorizedFloretEffect(context.Background(), flruntime.EffectAuthorizationRequest{
 			EffectAttemptID: "effect_dispatch_boundary", RequestFingerprint: "fingerprint_dispatch_boundary",
-			ThreadID: flruntime.ThreadID(r.threadID), TurnID: flruntime.TurnID(r.messageID), RunID: flruntime.RunID(r.id),
+			ThreadID: flruntime.ThreadID(r.threadID), TurnID: flruntime.TurnID(r.turnID), RunID: flruntime.RunID(r.id),
 			ToolCallID: "call_dispatch_boundary", ToolName: "terminal.exec", ArgumentHash: floretEffectArgumentHash(rawArgs),
 			Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}, LeaseOwnerID: "lease_dispatch_boundary", LeaseGeneration: 1,
 			HostContext: map[string]string{
@@ -348,7 +348,7 @@ func TestFloretEffectAuthorizationHoldsLifecycleWriterThroughHandler(t *testing.
 			},
 		}, func(flruntime.EffectAuthorizationProof) error {
 			_, _, err := r.effectAuthorizations.snapshotForInvocation(fltools.Invocation[map[string]any]{
-				ThreadID: r.threadID, TurnID: r.messageID, RunID: r.id, CallID: "call_dispatch_boundary", RawArgs: rawArgs,
+				ThreadID: r.threadID, TurnID: r.turnID, RunID: r.id, CallID: "call_dispatch_boundary", RawArgs: rawArgs,
 			})
 			if err != nil {
 				return err
@@ -401,7 +401,7 @@ func TestFloretEffectAuthorizationRejectsCrossThreadAuthorityBeforeDispatch(t *t
 	snapshot := r.currentPermissionSnapshot()
 	err := r.withAuthorizedFloretEffect(context.Background(), flruntime.EffectAuthorizationRequest{
 		EffectAttemptID: "effect_cross_authority", RequestFingerprint: "fingerprint_cross_authority",
-		ThreadID: flruntime.ThreadID(r.threadID), TurnID: flruntime.TurnID(r.messageID), RunID: flruntime.RunID(r.id),
+		ThreadID: flruntime.ThreadID(r.threadID), TurnID: flruntime.TurnID(r.turnID), RunID: flruntime.RunID(r.id),
 		ToolCallID: "call_cross_authority", ToolName: "terminal.exec", ArgumentHash: floretEffectArgumentHash(`{"command":"pwd"}`),
 		Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}, LeaseOwnerID: "lease_cross_authority", LeaseGeneration: 1,
 		HostContext: map[string]string{
@@ -429,7 +429,7 @@ func TestFloretEffectAuthorizationRechecksPolicyAfterApprovalWait(t *testing.T) 
 	go func() {
 		done <- r.withAuthorizedFloretEffect(context.Background(), flruntime.EffectAuthorizationRequest{
 			EffectAttemptID: "effect_approval_recheck", RequestFingerprint: "fingerprint_approval_recheck",
-			ThreadID: flruntime.ThreadID(r.threadID), TurnID: flruntime.TurnID(r.messageID), RunID: flruntime.RunID(r.id),
+			ThreadID: flruntime.ThreadID(r.threadID), TurnID: flruntime.TurnID(r.turnID), RunID: flruntime.RunID(r.id),
 			ToolCallID: "call_approval_recheck", ToolName: "terminal.exec", ArgumentHash: floretEffectArgumentHash(`{"command":"pwd"}`),
 			Permission: fltools.PermissionSpec{Mode: fltools.PermissionAsk}, LeaseOwnerID: "lease_approval_recheck", LeaseGeneration: 1,
 			HostContext: map[string]string{
@@ -463,7 +463,7 @@ func TestFloretEffectAuthorizationProofCarriesExactLeaseAndAuditIdentity(t *test
 	var proof flruntime.EffectAuthorizationProof
 	err := r.withAuthorizedFloretEffect(context.Background(), flruntime.EffectAuthorizationRequest{
 		EffectAttemptID: "effect_proof", RequestFingerprint: "fingerprint_proof",
-		ThreadID: flruntime.ThreadID(r.threadID), TurnID: flruntime.TurnID(r.messageID), RunID: flruntime.RunID(r.id),
+		ThreadID: flruntime.ThreadID(r.threadID), TurnID: flruntime.TurnID(r.turnID), RunID: flruntime.RunID(r.id),
 		ToolCallID: "call_proof", ToolName: "terminal.exec", ArgumentHash: floretEffectArgumentHash(`{"command":"pwd"}`),
 		Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}, LeaseOwnerID: "lease_owner_proof", LeaseGeneration: 7,
 		HostContext: map[string]string{
@@ -479,7 +479,7 @@ func TestFloretEffectAuthorizationProofCarriesExactLeaseAndAuditIdentity(t *test
 		t.Fatal(err)
 	}
 	if proof.EffectAttemptID != "effect_proof" || proof.RequestFingerprint != "fingerprint_proof" ||
-		proof.ThreadID != flruntime.ThreadID(r.threadID) || proof.TurnID != flruntime.TurnID(r.messageID) ||
+		proof.ThreadID != flruntime.ThreadID(r.threadID) || proof.TurnID != flruntime.TurnID(r.turnID) ||
 		proof.RunID != flruntime.RunID(r.id) || proof.ToolCallID != "call_proof" ||
 		proof.LeaseOwnerID != "lease_owner_proof" || proof.LeaseGeneration != 7 ||
 		strings.TrimSpace(proof.PolicyRevision) == "" || strings.TrimSpace(proof.AuditReference) == "" ||

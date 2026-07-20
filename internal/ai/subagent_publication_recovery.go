@@ -155,6 +155,7 @@ func (s *Service) newSubAgentPublicationRecoveryRun(ctx context.Context, operati
 		ChannelID:                 strings.TrimSpace(meta.ChannelID),
 		EndpointID:                operation.EndpointID,
 		ThreadID:                  operation.ParentThreadID,
+		TurnID:                    operation.ParentTurnID,
 		UserPublicID:              strings.TrimSpace(meta.UserPublicID),
 		MessageID:                 operation.ParentTurnID,
 		UploadsDir:                s.uploadsDir,

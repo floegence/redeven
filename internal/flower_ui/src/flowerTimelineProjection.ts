@@ -22,6 +22,22 @@ export type FlowerRenderableMessageBlock =
     key: string;
     block_index: number;
     block: FlowerActivityTimelineBlock;
+  }>
+  | Readonly<{
+    type: 'image';
+    key: string;
+    block_index: number;
+    src: string;
+    alt?: string;
+  }>
+  | Readonly<{
+    type: 'file';
+    key: string;
+    block_index: number;
+    name: string;
+    size: number;
+    mimeType: string;
+    url: string;
   }>;
 
 export type FlowerTimelineEntry =
@@ -94,9 +110,10 @@ export function activityTimelineSignature(timeline: FlowerActivityTimelineBlock)
 }
 
 export function messageBlockSignature(block: NonNullable<FlowerChatMessage['blocks']>[number]): string {
-  return block.type === 'activity-timeline'
-    ? `activity:${activityTimelineSignature(block)}`
-    : `${block.type}:${block.content ?? ''}`;
+  if (block.type === 'activity-timeline') return `activity:${activityTimelineSignature(block)}`;
+  if (block.type === 'image') return `image:${block.src}:${block.alt ?? ''}`;
+  if (block.type === 'file') return `file:${block.name}:${block.size}:${block.mimeType}:${block.url}`;
+  return `${block.type}:${block.content ?? ''}`;
 }
 
 export function flowerMessageSignature(message: FlowerChatMessage): string {
@@ -116,10 +133,13 @@ function activityRenderableKey(threadID: string, messageID: string, block: Flowe
   if (!firstItem) {
     throw new Error('Flower activity block requires at least one item.');
   }
+  if (!block.thread_id || block.thread_id !== threadID || !block.run_id || !block.turn_id) {
+    throw new Error(`Flower activity block ${messageID} requires exact thread, run, and turn identity.`);
+  }
   return `activity:${flowerActivityIdentity({
-    threadID: block.thread_id || threadID,
+    threadID: block.thread_id,
     runID: block.run_id,
-    turnID: block.turn_id || messageID,
+    turnID: block.turn_id,
     itemID: firstItem.item_id,
   })}`;
 }
@@ -129,6 +149,18 @@ function contentBlocksFromMessage(threadID: string, message: FlowerChatMessage):
     if (block.type === 'activity-timeline') {
       if (block.items.length === 0) return [];
       return [{ type: 'activity', key: activityRenderableKey(threadID, message.id, block), block_index: index, block }];
+    }
+    if (block.type === 'image') {
+      return [{
+        type: 'image', key: `${message.id}:block:${index}`, block_index: index,
+        src: block.src, ...(block.alt ? { alt: block.alt } : {}),
+      }];
+    }
+    if (block.type === 'file') {
+      return [{
+        type: 'file', key: `${message.id}:block:${index}`, block_index: index,
+        name: block.name, size: block.size, mimeType: block.mimeType, url: block.url,
+      }];
     }
     const content = trimString(block.content);
     return content ? [{ type: 'content', key: `${message.id}:block:${index}`, block_index: index, block_type: block.type, content }] : [];
@@ -334,7 +366,7 @@ function messageTimelineEntries(
     const blockKeyBefore = `block:${message.id}:${block.block_index}:before`;
     const blockKeyAfter = `block:${message.id}:${block.block_index}:after`;
     addDecorations(timelineAnchorEntries(decorations, blockKeyBefore));
-    if (block.type === 'content') {
+    if (block.type !== 'activity') {
       flushActivity();
       currentBlocks.push(block);
     } else {

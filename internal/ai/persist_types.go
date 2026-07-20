@@ -1,11 +1,11 @@
 package ai
 
-// persistedMessage and block helpers are used for storing chat history in the local threads DB.
-//
-// The JSON shape is aligned with @floegence/floe-webapp-core/chat Message + MessageBlock types (camelCase).
+// persistedMessage and block helpers build transient Flower timeline JSON from
+// Floret snapshots. Redeven does not persist these message projections.
 
 type persistedMessage struct {
 	ID            string                 `json:"id"`
+	TurnID        string                 `json:"turn_id"`
 	Role          string                 `json:"role"`
 	Blocks        []any                  `json:"blocks"`
 	Status        string                 `json:"status"`
@@ -42,14 +42,4 @@ type persistedFileBlock struct {
 	Size     int64  `json:"size"`
 	MimeType string `json:"mimeType"`
 	URL      string `json:"url,omitempty"`
-}
-
-type persistedRequestUserInputResponseBlock struct {
-	Type           string                             `json:"type"` // "request_user_input_response"
-	PromptID       string                             `json:"prompt_id"`
-	ToolID         string                             `json:"tool_id,omitempty"`
-	ReasonCode     string                             `json:"reason_code,omitempty"`
-	Responses      []RequestUserInputResolvedQuestion `json:"responses,omitempty"`
-	PublicSummary  string                             `json:"public_summary,omitempty"`
-	ContainsSecret bool                               `json:"contains_secret,omitempty"`
 }

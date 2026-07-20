@@ -1235,7 +1235,7 @@ describe('main routing', () => {
     expect(unlockSrc).not.toContain('throw new Error(error?.message');
 
     const ensureStart = mainSrc.indexOf('async function ensureRuntimeFlowerRecord()');
-    const ensureEnd = mainSrc.indexOf('type RuntimeFlowerHTTPResponse', ensureStart);
+    const ensureEnd = mainSrc.indexOf('function runtimeFlowerRequestHTTP(', ensureStart);
     expect(ensureStart).toBeGreaterThanOrEqual(0);
     expect(ensureEnd).toBeGreaterThan(ensureStart);
     const ensureSrc = mainSrc.slice(ensureStart, ensureEnd);

@@ -63,13 +63,14 @@ import {
   type EnvWorkbenchSurfaceActivationRequest,
   type OpenTerminalInDirectoryRequest,
 } from './pages/EnvContext';
-import type {
-  FlowerFileOpenRequest,
-  FlowerThreadFocusRequest,
-  FlowerTurnLauncherAnchor,
-  FlowerTurnLauncherIntent,
-  FlowerTurnLauncherSubmitInput,
+import {
+  type FlowerFileOpenRequest,
+  type FlowerThreadFocusRequest,
+  type FlowerTurnLauncherAnchor,
+  type FlowerTurnLauncherIntent,
+  type FlowerTurnLauncherSubmitInput,
 } from '../../../../flower_ui/src';
+import { flowerTurnAdmissionUncertainIdentity } from '../../../../flower_ui/src/flowerTurnAdmission';
 import type { ContextActionExecutionContext } from './contextActions/protocol';
 import { createFlowerLinkedContextNavigation } from './flower/linkedContextNavigation';
 import { buildPluginPanelModel } from './plugins/pluginInventoryProjection';
@@ -1361,6 +1362,7 @@ export function EnvAppShell() {
       throw new Error(message);
     }
 
+    const handoffContext = flowerTurnLauncherHandoff();
     try {
       const { createEnvLocalFlowerSurfaceAdapter } = await import('./flower/envLocalFlowerSurfaceAdapter');
       const adapter = createEnvLocalFlowerSurfaceAdapter({
@@ -1384,14 +1386,13 @@ export function EnvAppShell() {
         openLinkedFilePreview: openFlowerLinkedFilePreview,
         openLinkedDirectoryBrowser: openFlowerLinkedDirectoryBrowser,
       });
-      const bootstrap = await adapter.launchTurn({
+      const receipt = await adapter.launchTurn({
         prompt: trimmedPrompt,
         context_action: input.intent.context_action,
         working_dir: input.intent.suggested_working_dir,
         pending_files: input.intent.pending_attachments,
       });
-      const threadId = trimString(bootstrap.thread.thread_id || bootstrap.thread_id);
-      const handoffContext = flowerTurnLauncherHandoff();
+      const threadId = trimString(receipt.thread_id);
       if (!threadId) {
         throw new Error(i18n.t('flowerChat.router.missingThreadID'));
       }
@@ -1401,6 +1402,16 @@ export function EnvAppShell() {
       closeFlowerTurnLauncher();
       handoffFlowerTurn(handoffContext, threadId);
     } catch (e) {
+      const uncertain = flowerTurnAdmissionUncertainIdentity(e);
+      if (uncertain) {
+        closeFlowerTurnLauncher();
+        if (handoffContext) {
+          handoffFlowerTurn(handoffContext, uncertain.thread_id);
+        } else {
+          focusAIThread(uncertain.thread_id);
+        }
+        return;
+      }
       const msg = e instanceof Error ? e.message : String(e);
       notify.error(i18n.t('shell.notifications.failedToSendToFlowerTitle'), msg || i18n.t('shell.notifications.requestFailed'));
       throw e;

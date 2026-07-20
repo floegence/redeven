@@ -303,7 +303,7 @@ func followupRecordToView(rec threadstore.QueuedTurn, position int) (FollowupIte
 	view := FollowupItemView{
 		FollowupID:      strings.TrimSpace(rec.QueueID),
 		Lane:            strings.TrimSpace(rec.Lane),
-		MessageID:       strings.TrimSpace(rec.TurnID),
+		TurnID:          strings.TrimSpace(rec.TurnID),
 		Text:            strings.TrimSpace(rec.TextContent),
 		ModelID:         strings.TrimSpace(rec.ModelID),
 		PermissionType:  strings.TrimSpace(options.PermissionType),
@@ -323,7 +323,7 @@ func followupRecordToView(rec threadstore.QueuedTurn, position int) (FollowupIte
 
 func queuedTurnRecordToThreadView(rec threadstore.QueuedTurn) (QueuedTurnView, error) {
 	view := QueuedTurnView{
-		MessageID:       strings.TrimSpace(rec.TurnID),
+		TurnID:          strings.TrimSpace(rec.TurnID),
 		Text:            strings.TrimSpace(rec.TextContent),
 		CreatedAtUnixMs: rec.CreatedAtUnixMs,
 	}
@@ -357,7 +357,7 @@ func queuedTurnRecordToRunStartRequest(rec threadstore.QueuedTurn, threadPermiss
 		ThreadID: strings.TrimSpace(rec.ThreadID),
 		Model:    strings.TrimSpace(rec.ModelID),
 		Input: RunInput{
-			MessageID:     strings.TrimSpace(rec.TurnID),
+			TurnID:        strings.TrimSpace(rec.TurnID),
 			Text:          strings.TrimSpace(rec.TextContent),
 			Attachments:   attachments,
 			ContextAction: contextAction,
@@ -408,17 +408,11 @@ func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req
 		persistTO = defaultPersistOpTimeout
 	}
 
-	turnID := strings.TrimSpace(req.Input.MessageID)
-	if turnID != "" && !isSafeClientMessageID(turnID) {
-		turnID = ""
+	turnID, err := normalizeOrCreateTurnID(req.Input.TurnID)
+	if err != nil {
+		return threadstore.QueuedTurn{}, 0, err
 	}
-	if turnID == "" {
-		var err error
-		turnID, err = newMessageID()
-		if err != nil {
-			return threadstore.QueuedTurn{}, 0, err
-		}
-	}
+	req.Input.TurnID = turnID
 	runID, err := NewRunID()
 	if err != nil {
 		return threadstore.QueuedTurn{}, 0, err

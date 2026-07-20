@@ -4,6 +4,7 @@ import type {
 } from '../../shared/settingsIPC';
 import type {
   RuntimeFlowerError,
+  RuntimeFlowerFailureKind,
   RuntimeFlowerRequest,
   RuntimeFlowerRequestResult,
 } from '../../shared/runtimeFlowerIPC';
@@ -14,6 +15,7 @@ import type {
   FlowerPermissionType,
   FlowerRouterDecision,
   FlowerTurnLaunchInput,
+  FlowerTurnLaunchReceipt,
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
   FlowerSurfaceAdapter,
@@ -25,6 +27,11 @@ import type {
   FlowerWorkingDirectoryListInput,
   FlowerWorkingDirectoryPathContext,
 } from '../../../../internal/flower_ui/src/contracts/flowerSurfaceContracts';
+import {
+  createFlowerClientTurnID,
+  flowerTurnAdmissionUncertainIdentity,
+  flowerTurnAdmissionUncertainFailure,
+} from '../../../../internal/flower_ui/src/flowerTurnAdmission';
 import type {
   AgentSettingsResponse,
   AIConfig,
@@ -74,6 +81,12 @@ type ThreadView = Readonly<{
 
 type CreateThreadResponse = Readonly<{
   thread?: ThreadView;
+}>;
+
+type SendTurnResponse = Readonly<{
+  run_id?: string;
+  turn_id?: string;
+  kind?: string;
 }>;
 
 type LoadThreadResponse = Readonly<{
@@ -168,8 +181,20 @@ function mapRuntimeWorkingDirectoryList(raw: RuntimeFSListResponse): readonly Fl
   return (raw.entries ?? []).map(mapRuntimeWorkingDirectoryEntry);
 }
 
-function runtimeFlowerError(error: RuntimeFlowerError): Error & { code?: string; status?: number; retryAfterMs?: number } {
-  const out = new Error(trim(error.message) || 'Flower request failed.') as Error & { code?: string; status?: number; retryAfterMs?: number };
+class RuntimeFlowerResponseError extends Error {
+  code?: string;
+  status?: number;
+  retryAfterMs?: number;
+  readonly failureKind: RuntimeFlowerFailureKind;
+
+  constructor(message: string, failureKind: RuntimeFlowerFailureKind) {
+    super(message);
+    this.failureKind = failureKind;
+  }
+}
+
+function runtimeFlowerError(error: RuntimeFlowerError, failureKind: RuntimeFlowerFailureKind): RuntimeFlowerResponseError {
+  const out = new RuntimeFlowerResponseError(trim(error.message) || 'Flower request failed.', failureKind);
   if (trim(error.code)) out.code = trim(error.code);
   if (typeof error.status === 'number') out.status = error.status;
   if (typeof error.retryAfterMs === 'number') out.retryAfterMs = error.retryAfterMs;
@@ -188,7 +213,7 @@ async function runtimeJSON<T>(
     ...(body === undefined ? {} : { body }),
   });
   if (!result.ok) {
-    throw runtimeFlowerError(result.error);
+    throw runtimeFlowerError(result.error, result.failureKind);
   }
   return result.data as T;
 }
@@ -389,7 +414,7 @@ function mapRuntimeFlowerLiveBootstrap(raw: unknown): FlowerLiveBootstrap {
 export async function launchLocalEnvironmentFlowerTurn(
   bridge: DesktopSettingsBridge,
   input: FlowerTurnLaunchInput,
-): Promise<FlowerLiveBootstrap> {
+): Promise<FlowerTurnLaunchReceipt> {
   const prompt = trim(input.prompt);
   if (!prompt) throw new Error('Enter a message before sending.');
   const snapshot = await loadSettingsSnapshot(bridge);
@@ -422,21 +447,49 @@ export async function launchLocalEnvironmentFlowerTurn(
       url: trim(attachment.url),
     })),
   ].filter((attachment) => !!attachment.url);
-  await runtimeJSON<unknown>(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/turns`, {
-    thread_id: threadID,
-    model: modelID,
-    input: {
-      ...(trim(input.message_id) ? { message_id: trim(input.message_id) } : {}),
-      text: prompt,
-      attachments,
-      ...(contextAction ? { context_action: contextAction } : {}),
-    },
-    options: {
-      permission_type: permissionType,
-      ...(serializeFlowerReasoningSelection(input.reasoning_selection) ? { reasoning_selection: serializeFlowerReasoningSelection(input.reasoning_selection) } : {}),
-    },
-  });
-  return loadRuntimeFlowerThread(bridge, threadID);
+  const proposedTurnID = trim(input.turn_id) || createFlowerClientTurnID();
+  try {
+    const response = await runtimeJSON<SendTurnResponse>(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/turns`, {
+      thread_id: threadID,
+      model: modelID,
+      input: {
+        turn_id: proposedTurnID,
+        text: prompt,
+        attachments,
+        ...(contextAction ? { context_action: contextAction } : {}),
+      },
+      options: {
+        permission_type: permissionType,
+        ...(serializeFlowerReasoningSelection(input.reasoning_selection) ? { reasoning_selection: serializeFlowerReasoningSelection(input.reasoning_selection) } : {}),
+      },
+    });
+    const turnID = trim(response.turn_id);
+    const runID = trim(response.run_id);
+    const kind = trim(response.kind);
+    if (!turnID || !runID || (kind !== 'start' && kind !== 'queued')) {
+      throw flowerTurnAdmissionUncertainFailure(
+        new Error('Flower turn admission returned an invalid receipt.'),
+        threadID,
+        proposedTurnID,
+      );
+    }
+    if (proposedTurnID !== turnID) {
+      throw flowerTurnAdmissionUncertainFailure(
+        new Error('Flower turn admission returned a different turn identity.'),
+        threadID,
+        proposedTurnID,
+      );
+    }
+    return { thread_id: threadID, turn_id: turnID, run_id: runID, kind };
+  } catch (error) {
+    if (error instanceof RuntimeFlowerResponseError && error.failureKind !== 'transport_unknown') {
+      throw error;
+    }
+    if (flowerTurnAdmissionUncertainIdentity(error)) {
+      throw error;
+    }
+    throw flowerTurnAdmissionUncertainFailure(error, threadID, proposedTurnID);
+  }
 }
 
 export function createLocalEnvironmentFlowerSurfaceAdapter(
@@ -551,7 +604,7 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       const promptID = trim(input.prompt_id);
       if (!tid) throw new Error('Missing thread id.');
       if (!promptID) throw new Error('Missing input prompt id.');
-      await runtimeJSON<unknown>(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/input_response`, {
+      const response = await runtimeJSON<SendTurnResponse>(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(tid)}/input_response`, {
         thread_id: tid,
         response: {
           prompt_id: promptID,
@@ -571,6 +624,9 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
           ...(serializeFlowerReasoningSelection(input.reasoning_selection) ? { reasoning_selection: serializeFlowerReasoningSelection(input.reasoning_selection) } : {}),
         },
       });
+      if (!trim(response.turn_id) || !trim(response.run_id) || trim(response.kind) !== 'start') {
+        throw new Error('Flower input response admission returned an invalid receipt.');
+      }
       return loadRuntimeFlowerThread(bridge, tid);
     },
     missingThreadID: 'Missing thread id.',

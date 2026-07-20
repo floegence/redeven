@@ -31,6 +31,7 @@ func TestRunIdleWatchdog_DoesNotCancelWhileToolBusy(t *testing.T) {
 		ChannelID:        "ch_test",
 		EndpointID:       "env_test",
 		ThreadID:         "th_test",
+		TurnID:           "turn_test",
 		MessageID:        "m_test",
 		IdleTimeout:      150 * time.Millisecond,
 	})

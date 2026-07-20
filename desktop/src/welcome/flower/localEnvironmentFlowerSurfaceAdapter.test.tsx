@@ -226,15 +226,8 @@ describe('Local Environment Flower surface adapter', () => {
       if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'default/gpt-4.1', models: [{ id: 'default/gpt-4.1' }] };
       if (request.path === '/_redeven_proxy/api/ai/threads?limit=200') return { threads: [threadView()] };
       if (request.path === '/_redeven_proxy/api/ai/threads') return { thread: threadView({ thread_id: 'thread-new' }) };
-      if (request.path === '/_redeven_proxy/api/ai/threads/thread-new/turns') return { run_id: 'run-1', kind: 'start' };
-      if (request.path === '/_redeven_proxy/api/ai/threads/thread-new/live/bootstrap') {
-        return liveBootstrap({ thread_id: 'thread-new' }, [{
-            id: 'm1',
-            role: 'user',
-            status: 'complete',
-            timestamp: 1,
-            blocks: [{ type: 'text', content: 'hello' }],
-        }]);
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-new/turns') {
+        return { turn_id: 'client_desktop-message', run_id: 'run-1', kind: 'start' };
       }
       throw new Error(`unexpected path: ${request.path}`);
     });
@@ -242,10 +235,14 @@ describe('Local Environment Flower surface adapter', () => {
 
     await adapter.loadSettings();
     await adapter.listThreads();
-    const snapshot = await adapter.launchTurn({ message_id: 'client_desktop-message', prompt: 'hello' });
+    const receipt = await adapter.launchTurn({ turn_id: 'client_desktop-message', prompt: 'hello' });
 
-    expect(snapshot.thread.thread_id).toBe('thread-new');
-    expect(snapshot.thread.messages[0].content).toBe('hello');
+    expect(receipt).toEqual({
+      thread_id: 'thread-new',
+      turn_id: 'client_desktop-message',
+      run_id: 'run-1',
+      kind: 'start',
+    });
     expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
       'GET /_redeven_proxy/api/settings',
       'GET /_redeven_proxy/api/ai/threads?limit=200',
@@ -253,13 +250,108 @@ describe('Local Environment Flower surface adapter', () => {
       'GET /_redeven_proxy/api/ai/models',
       'POST /_redeven_proxy/api/ai/threads',
       'POST /_redeven_proxy/api/ai/threads/thread-new/turns',
-      'GET /_redeven_proxy/api/ai/threads/thread-new/live/bootstrap',
     ]);
     expect(calls.find((call) => call.path === '/_redeven_proxy/api/ai/threads/thread-new/turns')?.body).toMatchObject({
       thread_id: 'thread-new',
       model: 'default/gpt-4.1',
-      input: { message_id: 'client_desktop-message', text: 'hello', attachments: [] },
+      input: { turn_id: 'client_desktop-message', text: 'hello', attachments: [] },
       options: { permission_type: 'approval_required' },
+    });
+  });
+
+  it('rejects a receipt that changes the client-proposed turn identity', async () => {
+    const bridge = bridgeFor((request) => {
+      if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
+      if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'default/gpt-4.1' };
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-existing/turns') {
+        return { turn_id: 'turn-other', run_id: 'run-other', kind: 'start' };
+      }
+      throw new Error(`unexpected path: ${request.path}`);
+    });
+
+    await expect(launchLocalEnvironmentFlowerTurn(bridge, {
+      thread_id: 'thread-existing',
+      turn_id: 'turn-client',
+      prompt: 'send once',
+    })).rejects.toMatchObject({
+      message: 'Flower turn admission returned a different turn identity.',
+      uncertain_admission: { thread_id: 'thread-existing', turn_id: 'turn-client' },
+    });
+  });
+
+  it('restores a definite runtime rejection but preserves uncertain transport and receipt failures', async () => {
+    const requestRuntimeFlower = vi.fn(async (request: RuntimeFlowerRequest) => {
+      if (request.path === '/_redeven_proxy/api/settings') {
+        return { ok: true as const, data: settingsResponse() };
+      }
+      if (request.path === '/_redeven_proxy/api/ai/models') {
+        return { ok: true as const, data: { current_model: 'default/gpt-4.1' } };
+      }
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-existing/turns') {
+        return {
+          ok: false as const,
+          error: { code: 'turn_rejected', message: 'Turn rejected.', status: 409 },
+          failureKind: 'response' as const,
+        };
+      }
+      throw new Error(`unexpected path: ${request.path}`);
+    });
+    const definiteBridge: DesktopSettingsBridge = {
+      save: vi.fn(async () => ({ ok: true as const, snapshot: {} as never })),
+      requestRuntimeFlower,
+      cancel: vi.fn(),
+    };
+    const definiteFailure = await launchLocalEnvironmentFlowerTurn(definiteBridge, {
+      thread_id: 'thread-existing',
+      turn_id: 'turn-definite',
+      prompt: 'send once',
+    }).catch((error: unknown) => error);
+    expect(definiteFailure).toMatchObject({ message: 'Turn rejected.', code: 'turn_rejected', status: 409 });
+    expect(definiteFailure).not.toHaveProperty('uncertain_admission');
+
+    const transportBridge: DesktopSettingsBridge = {
+      save: vi.fn(async () => ({ ok: true as const, snapshot: {} as never })),
+      requestRuntimeFlower: vi.fn(async (request) => {
+        if (request.path === '/_redeven_proxy/api/settings') {
+          return { ok: true as const, data: settingsResponse() };
+        }
+        if (request.path === '/_redeven_proxy/api/ai/models') {
+          return { ok: true as const, data: { current_model: 'default/gpt-4.1' } };
+        }
+        if (request.path === '/_redeven_proxy/api/ai/threads/thread-existing/turns') {
+          return {
+            ok: false as const,
+            error: { code: 'runtime_flower_transport_error', message: 'runtime response lost' },
+            failureKind: 'transport_unknown' as const,
+          };
+        }
+        throw new Error(`unexpected path: ${request.path}`);
+      }),
+      cancel: vi.fn(),
+    };
+    await expect(launchLocalEnvironmentFlowerTurn(transportBridge, {
+      thread_id: 'thread-existing',
+      turn_id: 'turn-transport',
+      prompt: 'send once',
+    })).rejects.toMatchObject({
+      uncertain_admission: { thread_id: 'thread-existing', turn_id: 'turn-transport' },
+    });
+
+    const malformedBridge = bridgeFor((request) => {
+      if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
+      if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'default/gpt-4.1' };
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-existing/turns') {
+        return { turn_id: 'turn-malformed', kind: 'start' };
+      }
+      throw new Error(`unexpected path: ${request.path}`);
+    });
+    await expect(launchLocalEnvironmentFlowerTurn(malformedBridge, {
+      thread_id: 'thread-existing',
+      turn_id: 'turn-malformed',
+      prompt: 'send once',
+    })).rejects.toMatchObject({
+      message: 'Flower turn admission returned an invalid receipt.',
+      uncertain_admission: { thread_id: 'thread-existing', turn_id: 'turn-malformed' },
     });
   });
 
@@ -378,7 +470,9 @@ describe('Local Environment Flower surface adapter', () => {
     const calls: RuntimeFlowerRequest[] = [];
     const bridge = bridgeFor((request) => {
       calls.push(request);
-      if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/input_response') return { run_id: 'run-1', kind: 'started' };
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/input_response') {
+        return { turn_id: 'turn-continue', run_id: 'run-1', kind: 'start' };
+      }
       if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/live/bootstrap') return liveBootstrap();
       throw new Error(`unexpected path: ${request.path}`);
     });
@@ -405,6 +499,29 @@ describe('Local Environment Flower surface adapter', () => {
         },
       },
     });
+  });
+
+  it('rejects an invalid input response admission receipt before reloading bootstrap', async () => {
+    const calls: RuntimeFlowerRequest[] = [];
+    const bridge = bridgeFor((request) => {
+      calls.push(request);
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/input_response') {
+        return { run_id: 'run-1', kind: 'start' };
+      }
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-1/live/bootstrap') return liveBootstrap();
+      throw new Error(`unexpected path: ${request.path}`);
+    });
+    const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+
+    await expect(adapter.submitInput({
+      thread_id: 'thread-1',
+      prompt_id: 'prompt-1',
+      answers: { target: { choice_id: 'staging' } },
+    })).rejects.toThrow('Flower input response admission returned an invalid receipt.');
+
+    expect(calls.map((call) => call.path)).toEqual([
+      '/_redeven_proxy/api/ai/threads/thread-1/input_response',
+    ]);
   });
 
   it('stops threads through the runtime cancel endpoint and reloads live bootstrap', async () => {
@@ -463,6 +580,9 @@ describe('Local Environment Flower surface adapter', () => {
         return {
           ...liveBootstrap({ run_status: 'running', cursor: 9 }, [{
             id: 'assistant-live',
+            thread_id: 'thread-1',
+            turn_id: 'turn-1',
+            run_id: 'run-1',
             role: 'assistant',
             status: 'streaming',
             created_at_ms: 42_000,
@@ -595,6 +715,7 @@ describe('Local Environment Flower surface adapter', () => {
 
   it('launches environment card turns through the shared runtime launch contract', async () => {
     const calls: RuntimeFlowerRequest[] = [];
+    let acceptedTurnID = '';
     const contextAction = {
       schema_version: 2,
       action_id: 'assistant.ask.flower',
@@ -628,8 +749,10 @@ describe('Local Environment Flower surface adapter', () => {
       if (request.path === '/_redeven_proxy/api/settings') return settingsResponse();
       if (request.path === '/_redeven_proxy/api/ai/models') return { current_model: 'default/gpt-4.1' };
       if (request.path === '/_redeven_proxy/api/ai/threads') return { thread: threadView({ thread_id: 'thread-card' }) };
-      if (request.path === '/_redeven_proxy/api/ai/threads/thread-card/turns') return { run_id: 'run-card', kind: 'start' };
-      if (request.path === '/_redeven_proxy/api/ai/threads/thread-card/live/bootstrap') return liveBootstrap({ thread_id: 'thread-card' });
+      if (request.path === '/_redeven_proxy/api/ai/threads/thread-card/turns') {
+        acceptedTurnID = String((request.body as { input?: { turn_id?: string } })?.input?.turn_id ?? '');
+        return { turn_id: acceptedTurnID, run_id: 'run-card', kind: 'start' };
+      }
       throw new Error(`unexpected path: ${request.path}`);
     });
 
@@ -653,6 +776,7 @@ describe('Local Environment Flower surface adapter', () => {
       thread_id: 'thread-card',
       model: 'default/gpt-4.1',
       input: {
+        turn_id: acceptedTurnID,
         text: 'inspect env',
         attachments: [{
           name: 'notes.txt',

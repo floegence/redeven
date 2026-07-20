@@ -1589,6 +1589,14 @@ func newMessageID() (string, error) {
 	return "m_ai_" + base64.RawURLEncoding.EncodeToString(b), nil
 }
 
+func newTurnID() (string, error) {
+	b := make([]byte, 18)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return "turn_" + base64.RawURLEncoding.EncodeToString(b), nil
+}
+
 func newToolID() (string, error) {
 	b := make([]byte, 12)
 	if _, err := rand.Read(b); err != nil {
@@ -1620,6 +1628,7 @@ type preparedRun struct {
 	uploadsDir                   string
 	persistTO                    time.Duration
 	db                           *threadstore.Store
+	turnID                       string
 	messageID                    string
 	r                            *run
 }
@@ -1628,7 +1637,7 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	prepared, err := s.prepareRun(meta, runID, req, w, nil)
+	prepared, err := s.prepareRun(meta, runID, req, w)
 	if err != nil {
 		return err
 	}
@@ -1636,7 +1645,7 @@ func (s *Service) StartRun(ctx context.Context, meta *session.Meta, runID string
 }
 
 func (s *Service) StartRunDetached(meta *session.Meta, runID string, req RunStartRequest) error {
-	prepared, err := s.prepareRun(meta, runID, req, nil, nil)
+	prepared, err := s.prepareRun(meta, runID, req, nil)
 	if err != nil {
 		return err
 	}
@@ -1650,60 +1659,60 @@ func (s *Service) StartRunDetached(meta *session.Meta, runID string, req RunStar
 	return nil
 }
 
-func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta, runID string, req RunStartRequest, sourceFollowupID string) (persistedUserMessage, RunInput, error) {
+func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta, runID string, req RunStartRequest, sourceFollowupID string) (admittedUserTurn, RunInput, error) {
 	if s == nil {
-		return persistedUserMessage{}, req.Input, errors.New("nil service")
+		return admittedUserTurn{}, req.Input, errors.New("nil service")
 	}
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	if err := requireRWX(meta); err != nil {
-		return persistedUserMessage{}, req.Input, err
+		return admittedUserTurn{}, req.Input, err
 	}
 	endpointID := strings.TrimSpace(meta.EndpointID)
 	threadID := strings.TrimSpace(req.ThreadID)
 	if endpointID == "" || threadID == "" {
-		return persistedUserMessage{}, req.Input, errors.New("invalid request")
+		return admittedUserTurn{}, req.Input, errors.New("invalid request")
 	}
 
-	preparedUser, normalizedInput, err := s.prepareUserMessage(ctx, meta, endpointID, threadID, req.Input)
+	preparedUser, normalizedInput, err := s.prepareUserTurn(ctx, meta, endpointID, threadID, req.Input)
 	if err != nil {
-		return persistedUserMessage{}, req.Input, err
+		return admittedUserTurn{}, req.Input, err
 	}
 	req.Input = normalizedInput
-	prepared, err := s.prepareRun(meta, runID, req, nil, nil)
+	prepared, err := s.prepareRun(meta, runID, req, nil)
 	if err != nil {
-		return persistedUserMessage{}, normalizedInput, err
+		return admittedUserTurn{}, normalizedInput, err
 	}
 	commandID, err := NewQueuedTurnID()
 	if err != nil {
 		s.releasePreparedRun(prepared)
-		return persistedUserMessage{}, normalizedInput, err
+		return admittedUserTurn{}, normalizedInput, err
 	}
 	contextActionJSON, marshalErr := marshalQueuedTurnContextAction(normalizedInput.ContextAction)
 	if marshalErr != nil {
 		s.releasePreparedRun(prepared)
-		return persistedUserMessage{}, normalizedInput, marshalErr
+		return admittedUserTurn{}, normalizedInput, marshalErr
 	}
 	attachmentsJSON, marshalErr := marshalQueuedTurnAttachments(normalizedInput.Attachments)
 	if marshalErr != nil {
 		s.releasePreparedRun(prepared)
-		return persistedUserMessage{}, normalizedInput, marshalErr
+		return admittedUserTurn{}, normalizedInput, marshalErr
 	}
 	optionsJSON, marshalErr := marshalQueuedTurnOptions(req.Options)
 	if marshalErr != nil {
 		s.releasePreparedRun(prepared)
-		return persistedUserMessage{}, normalizedInput, marshalErr
+		return admittedUserTurn{}, normalizedInput, marshalErr
 	}
 	sessionMetaJSON, marshalErr := marshalQueuedTurnSessionMeta(meta)
 	if marshalErr != nil {
 		s.releasePreparedRun(prepared)
-		return persistedUserMessage{}, normalizedInput, marshalErr
+		return admittedUserTurn{}, normalizedInput, marshalErr
 	}
 	record := threadstore.QueuedTurn{
 		QueueID: commandID, EndpointID: endpointID, ThreadID: threadID,
 		ChannelID: strings.TrimSpace(meta.ChannelID), Lane: threadstore.FollowupLaneQueued,
-		TurnID: prepared.messageID, RunID: runID, ModelID: strings.TrimSpace(req.Model),
+		TurnID: prepared.turnID, RunID: runID, ModelID: strings.TrimSpace(req.Model),
 		TextContent: strings.TrimSpace(normalizedInput.Text), AttachmentsJSON: attachmentsJSON,
 		ContextActionJSON: contextActionJSON, OptionsJSON: optionsJSON, SessionMetaJSON: sessionMetaJSON,
 		CreatedByUserPublicID: strings.TrimSpace(meta.UserPublicID), CreatedByUserEmail: strings.TrimSpace(meta.UserEmail),
@@ -1715,7 +1724,7 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 		cancel()
 		if replaceErr != nil {
 			s.releasePreparedRun(prepared)
-			return persistedUserMessage{}, normalizedInput, replaceErr
+			return admittedUserTurn{}, normalizedInput, replaceErr
 		}
 		if _, cleanupErr := s.processUploadCleanupCandidates(ctx, replacement.UploadsToDelete); cleanupErr != nil && s.log != nil {
 			s.log.Warn("pending turn replacement physical cleanup deferred", "thread_id", threadID, "source_followup_id", sourceID, "error", cleanupErr)
@@ -1725,16 +1734,16 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 		cancel()
 		if err != nil {
 			s.releasePreparedRun(prepared)
-			return persistedUserMessage{}, normalizedInput, err
+			return admittedUserTurn{}, normalizedInput, err
 		}
 	}
 
 	pctx, cancel = context.WithTimeout(ctx, prepared.persistTO)
-	err = prepared.db.BeginPendingTurnAdmission(pctx, endpointID, threadID, commandID, prepared.messageID, runID)
+	err = prepared.db.BeginPendingTurnAdmission(pctx, endpointID, threadID, commandID, prepared.turnID, runID)
 	cancel()
 	if err != nil {
 		s.releasePreparedRun(prepared)
-		return persistedUserMessage{}, normalizedInput, err
+		return admittedUserTurn{}, normalizedInput, err
 	}
 	prepared.r.setPendingTurnCommand(commandID)
 	prepared.req.Input = normalizedInput
@@ -1747,7 +1756,7 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 			}
 		}
 	}()
-	return persistedUserMessage{TurnID: prepared.messageID, RunID: runID, CreatedAtUnixMs: preparedUser.CreatedAtUnixMs}, normalizedInput, nil
+	return admittedUserTurn{TurnID: prepared.turnID, RunID: runID}, normalizedInput, nil
 }
 
 func (s *Service) releasePreparedRun(prepared *preparedRun) {
@@ -1773,7 +1782,7 @@ func (s *Service) releasePreparedRun(prepared *preparedRun) {
 	}
 }
 
-func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartRequest, w http.ResponseWriter, persisted *persistedUserMessage) (*preparedRun, error) {
+func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartRequest, w http.ResponseWriter) (*preparedRun, error) {
 	if s == nil {
 		return nil, errors.New("nil service")
 	}
@@ -1890,15 +1899,12 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	req.Options.PermissionType = permissionTypeString(threadPermission)
 	uploadsDir := s.uploadsDir
 	db = s.threadsDB
-	messageID := strings.TrimSpace(req.Input.MessageID)
-	if messageID == "" {
-		messageID, err = newMessageID()
-		if err != nil {
-			s.mu.Unlock()
-			return nil, err
-		}
+	turnID, err := normalizeOrCreateTurnID(req.Input.TurnID)
+	if err != nil {
+		s.mu.Unlock()
+		return nil, err
 	}
-	req.Input.MessageID = messageID
+	req.Input.TurnID = turnID
 	finalizingThreadStatePublished := false
 	toolTargetPolicy := s.toolTargetPolicy
 	if toolTargetPolicyForRun != nil {
@@ -1931,12 +1937,13 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		ChannelID:                   channelID,
 		EndpointID:                  endpointID,
 		ThreadID:                    threadID,
+		TurnID:                      turnID,
 		MaxWallTime:                 s.runMaxWallTime,
 		IdleTimeout:                 s.runIdleTimeout,
 		ToolApprovalTimeout:         s.approvalTimeout,
 		StreamWriteTimeout:          s.streamWriteTO,
 		UserPublicID:                strings.TrimSpace(metaRef.UserPublicID),
-		MessageID:                   messageID,
+		MessageID:                   turnID,
 		UploadsDir:                  uploadsDir,
 		ProductCapabilities:         productCapabilities,
 		FloretHostFactory:           floretRuntime.Turn,
@@ -1954,7 +1961,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 				s.broadcastThreadState(endpointID, threadID, runID, string(RunStateFinalizing), "", "")
 				s.broadcastThreadSummary(endpointID, threadID)
 			}
-			s.broadcastStreamEvent(endpointID, threadID, runID, ev)
+			s.broadcastStreamEvent(endpointID, threadID, turnID, runID, ev)
 		},
 		Writer: w,
 	})
@@ -1964,11 +1971,9 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	s.runs[runID] = r
 	s.mu.Unlock()
 
-	if persisted == nil {
-		s.broadcastThreadState(endpointID, threadID, runID, "running", "", "")
-		s.broadcastThreadSummary(endpointID, threadID)
-		r.updateModelIOStatus(FlowerModelIOPhasePreparing, 0)
-	}
+	s.broadcastThreadState(endpointID, threadID, runID, "running", "", "")
+	s.broadcastThreadSummary(endpointID, threadID)
+	r.updateModelIOStatus(FlowerModelIOPhasePreparing, 0)
 
 	return &preparedRun{
 		meta:                         metaRef,
@@ -1985,7 +1990,8 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		uploadsDir:                   uploadsDir,
 		persistTO:                    persistTO,
 		db:                           db,
-		messageID:                    messageID,
+		turnID:                       turnID,
+		messageID:                    turnID,
 		r:                            r,
 	}, nil
 }

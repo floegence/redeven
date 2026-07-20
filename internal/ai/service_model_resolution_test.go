@@ -45,7 +45,7 @@ func TestExecutePreparedRun_DoesNotMutateThreadDefaultForExplicitModel(t *testin
 		Model:    "openai/gpt-4o-mini",
 		Input:    RunInput{Text: "use a one-turn model"},
 		Options:  RunOptions{},
-	}, nil, nil)
+	}, nil)
 	if err != nil {
 		t.Fatalf("prepareRun: %v", err)
 	}
@@ -244,7 +244,7 @@ func TestExecutePreparedRun_UsesDesktopModelSourceReasoningCapability(t *testing
 	prepared, err := svc.prepareRun(meta, "run_desktop_reasoning", RunStartRequest{
 		ThreadID: thread.ThreadID,
 		Input:    RunInput{Text: "use desktop reasoning"},
-	}, nil, nil)
+	}, nil)
 	if err != nil {
 		t.Fatalf("prepareRun: %v", err)
 	}
@@ -327,7 +327,7 @@ func TestExecutePreparedRun_DesktopReasoningPrecedence(t *testing.T) {
 			ThreadID: thread.ThreadID,
 			Input:    RunInput{Text: text},
 			Options:  RunOptions{ReasoningSelection: selection},
-		}, nil, nil)
+		}, nil)
 		if err != nil {
 			t.Fatalf("prepareRun(%s): %v", runID, err)
 		}

@@ -13,6 +13,7 @@ import {
   decision,
   deferred,
   flush,
+  launchReceipt,
   liveBootstrap,
   mutableSettingsAdapter,
   renderSurface,
@@ -181,7 +182,7 @@ describe('FlowerSurface navigation', () => {
   });
 
   it('keeps the remote provider editor visible when Desktop models are also available', async () => {
-    const launchTurn = vi.fn(async () => liveBootstrap(thread()));
+    const launchTurn = vi.fn(async (input: { thread_id?: string; turn_id?: string }) => launchReceipt(input.thread_id ?? 'thread-1', input.turn_id ?? 'turn-desktop-model'));
     const desktopSourceSnapshot: FlowerSettingsSnapshot = {
       ...settingsSnapshot(true),
       model_source: {
@@ -384,7 +385,7 @@ describe('FlowerSurface navigation', () => {
       available_handlers: secondDecision.available_handlers,
       handler_selection: secondDecision.handler_selection,
     }));
-    const launchTurn = vi.fn(async () => liveBootstrap(thread()));
+    const launchTurn = vi.fn(async (input: { thread_id?: string; turn_id?: string }) => launchReceipt(input.thread_id ?? 'thread-1', input.turn_id ?? 'turn-handler'));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       resolveHandler,
@@ -416,18 +417,22 @@ describe('FlowerSurface navigation', () => {
       status: 'running',
       messages: [],
     });
-    const caughtUpThread = thread({
+    let acceptedTurnID = '';
+    const launchTurn = vi.fn(async (input: { turn_id?: string }) => {
+      acceptedTurnID = input.turn_id ?? 'turn-accepted-without-messages';
+      return launchReceipt(acceptedThread.thread_id, acceptedTurnID);
+    });
+    const loadThread = vi.fn(async () => liveBootstrap(thread({
       ...acceptedThread,
       messages: [{
         id: 'm-accepted-user',
+        turn_id: acceptedTurnID,
         role: 'user',
         content: 'follow the accepted thread',
         status: 'complete',
         created_at_ms: 10,
       }],
-    });
-    const launchTurn = vi.fn(async () => liveBootstrap(acceptedThread));
-    const loadThread = vi.fn(async () => liveBootstrap(caughtUpThread));
+    })));
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => []),

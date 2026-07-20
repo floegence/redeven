@@ -460,15 +460,22 @@ func (s *Service) buildFlowerTimelineProjection(ctx context.Context, endpointID 
 	}
 	activeMessageID := activeFlowerCursorMessageID(state)
 	terminalDraftIDs := make([]string, 0)
+	draftMessageIDByTurn := make(map[string]string, len(state.Messages))
 	identityMismatch := false
 	for key, draft := range state.Messages {
 		messageID := strings.TrimSpace(key)
-		ref, ok := canonicalTurns[messageID]
-		if !ok || strings.TrimSpace(draft.MessageID) != messageID || strings.TrimSpace(draft.ThreadID) != threadID ||
-			strings.TrimSpace(draft.TurnID) != messageID || strings.TrimSpace(draft.RunID) == "" || strings.TrimSpace(draft.RunID) != ref.runID {
+		turnID := strings.TrimSpace(draft.TurnID)
+		ref, ok := canonicalTurns[turnID]
+		if !ok || messageID == "" || strings.TrimSpace(draft.MessageID) != messageID || strings.TrimSpace(draft.ThreadID) != threadID ||
+			turnID == "" || strings.TrimSpace(draft.RunID) == "" || strings.TrimSpace(draft.RunID) != ref.runID {
 			identityMismatch = true
 			continue
 		}
+		if existing := draftMessageIDByTurn[turnID]; existing != "" && existing != messageID {
+			identityMismatch = true
+			continue
+		}
+		draftMessageIDByTurn[turnID] = messageID
 		if ref.status == flruntime.TurnStatusCompleted || ref.status == flruntime.TurnStatusFailed || ref.status == flruntime.TurnStatusCancelled {
 			terminalDraftIDs = append(terminalDraftIDs, messageID)
 		}
@@ -480,6 +487,7 @@ func (s *Service) buildFlowerTimelineProjection(ctx context.Context, endpointID 
 		// state as well.
 		s.triggerFlowerLiveTimelineResync(endpointID, threadID, "live_draft_canonical_identity_mismatch")
 		state.Messages = map[string]FlowerLiveMessageDraft{}
+		draftMessageIDByTurn = map[string]string{}
 	}
 	if len(terminalDraftIDs) > 0 {
 		s.mu.Lock()
@@ -490,13 +498,18 @@ func (s *Service) buildFlowerTimelineProjection(ctx context.Context, endpointID 
 		}
 		s.mu.Unlock()
 		for _, messageID := range terminalDraftIDs {
+			turnID := strings.TrimSpace(state.Messages[messageID].TurnID)
 			delete(state.Messages, messageID)
+			if draftMessageIDByTurn[turnID] == messageID {
+				delete(draftMessageIDByTurn, turnID)
+			}
 		}
 	}
 	usedDrafts := make(map[string]struct{}, len(state.Messages))
 	out := make([]FlowerTimelineMessage, 0, len(msgs)+len(state.Messages))
 	appendDraft := func(turnID string) error {
-		draft, ok := state.Messages[turnID]
+		messageID := draftMessageIDByTurn[turnID]
+		draft, ok := state.Messages[messageID]
 		if !ok {
 			return nil
 		}
@@ -505,7 +518,7 @@ func (s *Service) buildFlowerTimelineProjection(ctx context.Context, endpointID 
 			return errors.New("canonical live draft is not renderable")
 		}
 		out = append(out, live)
-		usedDrafts[turnID] = struct{}{}
+		usedDrafts[messageID] = struct{}{}
 		return nil
 	}
 	for _, msg := range msgs {
@@ -514,14 +527,14 @@ func (s *Service) buildFlowerTimelineProjection(ctx context.Context, endpointID 
 		}
 		turnID := strings.TrimSpace(msg.CanonicalTurn)
 		if strings.TrimSpace(msg.MessageID) == turnID {
-			if _, ok := state.Messages[turnID]; ok {
+			if draftMessageIDByTurn[turnID] != "" {
 				if err := appendDraft(turnID); err != nil {
 					return flowerTimelineProjection{}, err
 				}
 				continue
 			}
 		}
-		persisted, ok, err := flowerTimelineMessageFromRaw(msg.MessageID, "", "", msg.CreatedAt, msg.MessageJSON)
+		persisted, ok, err := flowerTimelineMessageFromRaw(threadID, turnID, msg.CanonicalRun, msg.MessageID, msg.MessageJSON)
 		if err != nil {
 			return flowerTimelineProjection{}, err
 		}
@@ -642,7 +655,7 @@ func (s *Service) publishFlowerCanonicalTimelineReplacement(ctx context.Context,
 	return nil
 }
 
-func (s *Service) replaceFlowerLiveDraftWithCanonicalTimeline(ctx context.Context, endpointID string, threadID string, runID string, turnID string, reason string) error {
+func (s *Service) replaceFlowerLiveDraftWithCanonicalTimeline(ctx context.Context, endpointID string, threadID string, runID string, turnID string, messageID string, reason string) error {
 	if s == nil {
 		return errors.New("nil service")
 	}
@@ -650,18 +663,19 @@ func (s *Service) replaceFlowerLiveDraftWithCanonicalTimeline(ctx context.Contex
 	threadID = strings.TrimSpace(threadID)
 	runID = strings.TrimSpace(runID)
 	turnID = strings.TrimSpace(turnID)
+	messageID = strings.TrimSpace(messageID)
 	if endpointID == "" || threadID == "" || runID == "" || turnID == "" {
 		return errors.New("invalid canonical timeline replacement identity")
 	}
 	identityMismatch := false
 	s.mu.Lock()
-	if stream := s.flowerLiveByThread[runThreadKey(endpointID, threadID)]; stream != nil {
-		if draft, ok := stream.State.Messages[turnID]; ok {
+	if stream := s.flowerLiveByThread[runThreadKey(endpointID, threadID)]; stream != nil && messageID != "" {
+		if draft, ok := stream.State.Messages[messageID]; ok {
 			if strings.TrimSpace(draft.ThreadID) != threadID || strings.TrimSpace(draft.TurnID) != turnID ||
-				strings.TrimSpace(draft.RunID) != runID || strings.TrimSpace(draft.MessageID) != turnID {
+				strings.TrimSpace(draft.RunID) != runID || strings.TrimSpace(draft.MessageID) != messageID {
 				identityMismatch = true
 			} else {
-				delete(stream.State.Messages, turnID)
+				delete(stream.State.Messages, messageID)
 			}
 		}
 	}
@@ -684,9 +698,10 @@ func activeFlowerCursorMessageID(state FlowerLiveMaterializedState) string {
 	return ""
 }
 
-func flowerTimelineMessageFromRaw(messageID string, role string, status string, createdAtUnixMs int64, raw json.RawMessage) (FlowerTimelineMessage, bool, error) {
+func flowerTimelineMessageFromRaw(threadID string, canonicalTurnID string, runID string, messageID string, raw json.RawMessage) (FlowerTimelineMessage, bool, error) {
 	var record struct {
 		ID                 string            `json:"id"`
+		TurnID             string            `json:"turn_id"`
 		Role               string            `json:"role"`
 		Status             string            `json:"status"`
 		Timestamp          int64             `json:"timestamp"`
@@ -697,16 +712,47 @@ func flowerTimelineMessageFromRaw(messageID string, role string, status string, 
 	if err := json.Unmarshal(raw, &record); err != nil {
 		return FlowerTimelineMessage{}, false, err
 	}
-	id := firstNonEmptyString(strings.TrimSpace(record.ID), strings.TrimSpace(messageID))
+	canonicalTurnID = strings.TrimSpace(canonicalTurnID)
+	threadID = strings.TrimSpace(threadID)
+	runID = strings.TrimSpace(runID)
+	recordTurnID := strings.TrimSpace(record.TurnID)
+	if threadID == "" || runID == "" || canonicalTurnID == "" || recordTurnID == "" || recordTurnID != canonicalTurnID {
+		return FlowerTimelineMessage{}, false, errors.New("canonical timeline message has invalid turn identity")
+	}
+	id := strings.TrimSpace(record.ID)
+	messageID = strings.TrimSpace(messageID)
 	if id == "" {
-		return FlowerTimelineMessage{}, false, nil
+		return FlowerTimelineMessage{}, false, errors.New("canonical timeline message is missing message identity")
+	}
+	if messageID == "" || id != messageID {
+		return FlowerTimelineMessage{}, false, errors.New("canonical timeline message identity differs from its row")
+	}
+	role := strings.TrimSpace(record.Role)
+	if role != "user" && role != "assistant" && role != "system" {
+		return FlowerTimelineMessage{}, false, errors.New("canonical timeline message has invalid role")
+	}
+	status := strings.TrimSpace(record.Status)
+	switch status {
+	case "streaming", "error", "complete", "canceled":
+	default:
+		return FlowerTimelineMessage{}, false, errors.New("canonical timeline message has invalid status")
+	}
+	if record.Timestamp <= 0 {
+		return FlowerTimelineMessage{}, false, errors.New("canonical timeline message has invalid timestamp")
 	}
 	blocks := make([]any, 0, len(record.Blocks))
-	for _, block := range record.Blocks {
+	for index, block := range record.Blocks {
 		var value any
-		if err := json.Unmarshal(block, &value); err == nil && value != nil {
-			blocks = append(blocks, value)
+		if err := json.Unmarshal(block, &value); err != nil {
+			return FlowerTimelineMessage{}, false, fmt.Errorf("canonical timeline message block %d is invalid: %w", index, err)
 		}
+		if value == nil {
+			return FlowerTimelineMessage{}, false, fmt.Errorf("canonical timeline message block %d is null", index)
+		}
+		if _, ok := value.(map[string]any); !ok {
+			return FlowerTimelineMessage{}, false, fmt.Errorf("canonical timeline message block %d is not an object", index)
+		}
+		blocks = append(blocks, value)
 	}
 	contextAction := record.ContextAction
 	if contextAction == nil {
@@ -714,10 +760,13 @@ func flowerTimelineMessageFromRaw(messageID string, role string, status string, 
 	}
 	return FlowerTimelineMessage{
 		MessageID:     id,
-		Role:          firstNonEmptyString(strings.TrimSpace(record.Role), strings.TrimSpace(role)),
+		ThreadID:      threadID,
+		TurnID:        canonicalTurnID,
+		RunID:         runID,
+		Role:          role,
 		Content:       flowerTimelineTextFromBlocks(blocks),
-		Status:        firstNonEmptyString(strings.TrimSpace(record.Status), strings.TrimSpace(status)),
-		CreatedAtMs:   firstPositiveInt64(record.Timestamp, createdAtUnixMs),
+		Status:        status,
+		CreatedAtMs:   record.Timestamp,
 		Blocks:        blocks,
 		ContextAction: contextAction,
 		Live:          false,
@@ -737,7 +786,17 @@ func flowerTimelineTextFromBlocks(blocks []any) string {
 
 func flowerTimelineMessageFromLiveDraft(draft FlowerLiveMessageDraft, activeMessageID string) (FlowerTimelineMessage, bool) {
 	messageID := strings.TrimSpace(draft.MessageID)
-	if messageID == "" {
+	threadID := strings.TrimSpace(draft.ThreadID)
+	turnID := strings.TrimSpace(draft.TurnID)
+	runID := strings.TrimSpace(draft.RunID)
+	role := strings.TrimSpace(draft.Role)
+	status := strings.TrimSpace(draft.Status)
+	if messageID == "" || threadID == "" || turnID == "" || runID == "" || role != "assistant" {
+		return FlowerTimelineMessage{}, false
+	}
+	switch status {
+	case "streaming", "error", "complete", "canceled":
+	default:
 		return FlowerTimelineMessage{}, false
 	}
 	blocks := make([]any, 0, len(draft.Blocks))
@@ -751,10 +810,12 @@ func flowerTimelineMessageFromLiveDraft(draft FlowerLiveMessageDraft, activeMess
 			contentParts = append(contentParts, text)
 		}
 	}
-	status := firstNonEmptyString(strings.TrimSpace(draft.Status), "streaming")
 	return FlowerTimelineMessage{
 		MessageID:    messageID,
-		Role:         firstNonEmptyString(strings.TrimSpace(draft.Role), "assistant"),
+		ThreadID:     threadID,
+		TurnID:       turnID,
+		RunID:        runID,
+		Role:         role,
 		Content:      strings.Join(contentParts, "\n\n"),
 		Status:       status,
 		CreatedAtMs:  draft.CreatedAtMs,
@@ -1314,7 +1375,7 @@ func (s *Service) flowerLiveEventsFromRealtime(ev RealtimeEvent) []FlowerLiveEve
 			EndpointID: endpointID,
 			ThreadID:   threadID,
 			RunID:      runID,
-			TurnID:     messageIDFromRealtime(ev),
+			TurnID:     strings.TrimSpace(ev.TurnID),
 			TraceID:    runID,
 			AtUnixMs:   at,
 			Kind:       kind,
@@ -1354,7 +1415,7 @@ func (s *Service) flowerLiveEventsFromStreamEvent(ev RealtimeEvent, base func(Fl
 			return nil
 		}
 		return []FlowerLiveEvent{
-			base(FlowerLiveRunStarted, FlowerLiveRunStartedPayload{RunID: strings.TrimSpace(ev.RunID), TurnID: messageID, MessageID: messageID, Status: string(RunStateRunning)}),
+			base(FlowerLiveRunStarted, FlowerLiveRunStartedPayload{RunID: strings.TrimSpace(ev.RunID), TurnID: strings.TrimSpace(ev.TurnID), MessageID: messageID, Status: string(RunStateRunning)}),
 			base(FlowerLiveMessageStarted, FlowerLiveMessageStartedPayload{MessageID: messageID, Role: "assistant", Status: "streaming", CreatedAtMs: ev.AtUnixMs}),
 		}
 	case streamEventBlockStart:
@@ -1563,15 +1624,23 @@ func applyFlowerLiveEventToMaterializedState(state *FlowerLiveMaterializedState,
 		}
 	case FlowerLiveMessageStarted:
 		var payload FlowerLiveMessageStartedPayload
-		if decodeFlowerPayload(event.Payload, &payload) && strings.TrimSpace(payload.MessageID) != "" {
+		if decodeFlowerPayload(event.Payload, &payload) && strings.TrimSpace(payload.MessageID) != "" &&
+			strings.TrimSpace(event.ThreadID) != "" && strings.TrimSpace(event.TurnID) != "" && strings.TrimSpace(event.RunID) != "" &&
+			strings.TrimSpace(payload.Role) == "assistant" && strings.TrimSpace(payload.Status) == "streaming" {
 			id := strings.TrimSpace(payload.MessageID)
-			msg := state.Messages[id]
+			msg, exists := state.Messages[id]
+			if exists && (strings.TrimSpace(msg.ThreadID) != strings.TrimSpace(event.ThreadID) ||
+				strings.TrimSpace(msg.TurnID) != strings.TrimSpace(event.TurnID) ||
+				strings.TrimSpace(msg.RunID) != strings.TrimSpace(event.RunID) ||
+				strings.TrimSpace(msg.MessageID) != id) {
+				return
+			}
 			msg.ThreadID = strings.TrimSpace(event.ThreadID)
 			msg.TurnID = strings.TrimSpace(event.TurnID)
 			msg.RunID = strings.TrimSpace(event.RunID)
 			msg.MessageID = id
-			msg.Role = firstNonEmptyString(strings.TrimSpace(payload.Role), "assistant")
-			msg.Status = firstNonEmptyString(strings.TrimSpace(payload.Status), "streaming")
+			msg.Role = "assistant"
+			msg.Status = "streaming"
 			msg.CreatedAtMs = payload.CreatedAtMs
 			state.Messages[id] = msg
 		}
@@ -2034,36 +2103,22 @@ func ensureFlowerLiveStateMaps(state *FlowerLiveMaterializedState) {
 	}
 }
 
-func ensureFlowerLiveMessage(state *FlowerLiveMaterializedState, messageID string) FlowerLiveMessageDraft {
-	ensureFlowerLiveStateMaps(state)
-	messageID = strings.TrimSpace(messageID)
-	msg := state.Messages[messageID]
-	if msg.MessageID == "" {
-		msg.MessageID = messageID
-		msg.Role = "assistant"
-		msg.Status = "streaming"
-	}
-	return msg
-}
-
 func ensureFlowerLiveMessageForEvent(state *FlowerLiveMaterializedState, event FlowerLiveEvent, messageID string) (FlowerLiveMessageDraft, bool) {
+	if state == nil {
+		return FlowerLiveMessageDraft{}, false
+	}
 	messageID = strings.TrimSpace(messageID)
 	threadID := strings.TrimSpace(event.ThreadID)
 	turnID := strings.TrimSpace(event.TurnID)
 	runID := strings.TrimSpace(event.RunID)
-	if messageID == "" || threadID == "" || turnID == "" || runID == "" || messageID != turnID {
+	if messageID == "" || threadID == "" || turnID == "" || runID == "" {
 		return FlowerLiveMessageDraft{}, false
 	}
-	msg := ensureFlowerLiveMessage(state, messageID)
-	if (strings.TrimSpace(msg.ThreadID) != "" && strings.TrimSpace(msg.ThreadID) != threadID) ||
-		(strings.TrimSpace(msg.TurnID) != "" && strings.TrimSpace(msg.TurnID) != turnID) ||
-		(strings.TrimSpace(msg.RunID) != "" && strings.TrimSpace(msg.RunID) != runID) {
+	msg, ok := state.Messages[messageID]
+	if !ok || strings.TrimSpace(msg.ThreadID) != threadID || strings.TrimSpace(msg.TurnID) != turnID ||
+		strings.TrimSpace(msg.RunID) != runID || strings.TrimSpace(msg.MessageID) != messageID {
 		return FlowerLiveMessageDraft{}, false
 	}
-	msg.ThreadID = threadID
-	msg.TurnID = turnID
-	msg.RunID = runID
-	msg.MessageID = messageID
 	return msg, true
 }
 
@@ -2242,7 +2297,7 @@ func (r *run) controlConfirmationApprovalActionLocked(toolID string, approval *t
 		ActionID:      flowerApprovalActionID(r.id, toolID),
 		Origin:        FlowerApprovalOriginControlConfirm,
 		RunID:         strings.TrimSpace(r.id),
-		TurnID:        strings.TrimSpace(r.messageID),
+		TurnID:        strings.TrimSpace(r.turnID),
 		ToolID:        toolID,
 		ToolName:      toolName,
 		State:         FlowerApprovalStateRequested,
@@ -2409,25 +2464,6 @@ func toolApprovalEffects(toolName string) []string {
 		return []string{"network"}
 	default:
 		return []string{"tool"}
-	}
-}
-
-func messageIDFromRealtime(ev RealtimeEvent) string {
-	switch stream := ev.StreamEvent.(type) {
-	case streamEventMessageStart:
-		return strings.TrimSpace(stream.MessageID)
-	case streamEventBlockStart:
-		return strings.TrimSpace(stream.MessageID)
-	case streamEventBlockDelta:
-		return strings.TrimSpace(stream.MessageID)
-	case streamEventBlockSet:
-		return strings.TrimSpace(stream.MessageID)
-	case streamEventMessageEnd:
-		return strings.TrimSpace(stream.MessageID)
-	case streamEventError:
-		return strings.TrimSpace(stream.MessageID)
-	default:
-		return ""
 	}
 }
 

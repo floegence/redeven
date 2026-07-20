@@ -153,7 +153,7 @@ func (s *Service) loadThreadTimelineMessages(ctx context.Context, endpointID str
 			return nil, fmt.Errorf("Floret turn %q has incomplete canonical identity", turnID)
 		}
 		userCreatedAt := turn.StartedAt.UnixMilli()
-		userRaw, err := canonicalUserTimelineMessage(userEntryID, turn.UserInput, turn.UserAttachments, userCreatedAt)
+		userRaw, err := canonicalUserTimelineMessage(turnID, userEntryID, turn.UserInput, turn.UserAttachments, userCreatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -232,7 +232,12 @@ func canonicalTimelineResyncErrorf(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", ErrCanonicalTimelineResyncRequired, fmt.Sprintf(format, args...))
 }
 
-func canonicalUserTimelineMessage(entryID string, input string, attachments []flruntime.MessageAttachment, createdAt int64) (json.RawMessage, error) {
+func canonicalUserTimelineMessage(turnID string, entryID string, input string, attachments []flruntime.MessageAttachment, createdAt int64) (json.RawMessage, error) {
+	turnID = strings.TrimSpace(turnID)
+	entryID = strings.TrimSpace(entryID)
+	if turnID == "" || entryID == "" {
+		return nil, errors.New("canonical user message has incomplete identity")
+	}
 	blocks := make([]any, 0, len(attachments)+1)
 	for index, attachment := range attachments {
 		uploadID, err := uploadIDFromFloretResourceRef(attachment.ResourceRef)
@@ -256,7 +261,7 @@ func canonicalUserTimelineMessage(entryID string, input string, attachments []fl
 		return nil, errors.New("canonical user message has no content")
 	}
 	message := map[string]any{
-		"id": entryID, "role": "user", "status": "complete", "timestamp": createdAt,
+		"id": entryID, "turn_id": turnID, "role": "user", "status": "complete", "timestamp": createdAt,
 		"blocks": blocks,
 	}
 	raw, err := json.Marshal(message)
@@ -279,7 +284,7 @@ func (s *Service) floretProjectionMessage(endpointID string, threadID string, tu
 	}
 	projectionRun := &run{
 		id: strings.TrimSpace(string(turn.RunID)), endpointID: strings.TrimSpace(endpointID),
-		threadID: strings.TrimSpace(threadID), messageID: strings.TrimSpace(string(turn.TurnID)),
+		threadID: strings.TrimSpace(threadID), turnID: strings.TrimSpace(string(turn.TurnID)), messageID: strings.TrimSpace(string(turn.TurnID)),
 		assistantCreatedAtUnixMs: createdAt,
 	}
 	if err := projectionRun.validateFloretThreadProjection(projection); err != nil {

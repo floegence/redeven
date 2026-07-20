@@ -32,6 +32,7 @@ type SendUserTurnRequest struct {
 
 type SendUserTurnResponse struct {
 	RunID                   string `json:"run_id"`
+	TurnID                  string `json:"turn_id"`
 	Kind                    string `json:"kind"` // "start" | "queued"
 	QueueID                 string `json:"queue_id,omitempty"`
 	QueuePosition           int    `json:"queue_position,omitempty"`
@@ -50,13 +51,12 @@ type CompactThreadContextResponse struct {
 	ErrorCode string `json:"error_code,omitempty"`
 }
 
-type persistedUserMessage struct {
-	TurnID          string
-	RunID           string
-	CreatedAtUnixMs int64
+type admittedUserTurn struct {
+	TurnID string
+	RunID  string
 }
 
-type preparedUserMessage struct {
+type preparedUserTurn struct {
 	TurnID          string
 	CreatedAtUnixMs int64
 	UploadIDs       []string
@@ -137,7 +137,7 @@ func (s *Service) SubmitRequestUserInputResponse(ctx context.Context, meta *sess
 	return actor.SubmitRequestUserInputResponse(ctx, meta, req)
 }
 
-func isSafeClientMessageID(raw string) bool {
+func isSafeClientTurnID(raw string) bool {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return false
@@ -163,9 +163,20 @@ func isSafeClientMessageID(raw string) bool {
 	return true
 }
 
-func (s *Service) prepareUserMessage(ctx context.Context, meta *session.Meta, endpointID string, threadID string, input RunInput) (preparedUserMessage, RunInput, error) {
+func normalizeOrCreateTurnID(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return newTurnID()
+	}
+	if !isSafeClientTurnID(raw) {
+		return "", errors.New("invalid turn_id")
+	}
+	return raw, nil
+}
+
+func (s *Service) prepareUserTurn(ctx context.Context, meta *session.Meta, endpointID string, threadID string, input RunInput) (preparedUserTurn, RunInput, error) {
 	if s == nil {
-		return preparedUserMessage{}, input, errors.New("nil service")
+		return preparedUserTurn{}, input, errors.New("nil service")
 	}
 	if ctx == nil {
 		ctx = context.Background()
@@ -173,26 +184,19 @@ func (s *Service) prepareUserMessage(ctx context.Context, meta *session.Meta, en
 	endpointID = strings.TrimSpace(endpointID)
 	threadID = strings.TrimSpace(threadID)
 	if meta == nil || endpointID == "" || threadID == "" {
-		return preparedUserMessage{}, input, errors.New("invalid request")
+		return preparedUserTurn{}, input, errors.New("invalid request")
 	}
 
-	turnID := strings.TrimSpace(input.MessageID)
-	if turnID != "" && !isSafeClientMessageID(turnID) {
-		turnID = ""
+	turnID, err := normalizeOrCreateTurnID(input.TurnID)
+	if err != nil {
+		return preparedUserTurn{}, input, err
 	}
-	if turnID == "" {
-		id, err := newMessageID()
-		if err != nil {
-			return preparedUserMessage{}, input, err
-		}
-		turnID = id
-	}
-	input.MessageID = turnID
+	input.TurnID = turnID
 	input, _, uploadIDs, err := s.normalizeInputAttachments(ctx, endpointID, input)
 	if err != nil {
-		return preparedUserMessage{}, input, err
+		return preparedUserTurn{}, input, err
 	}
-	return preparedUserMessage{
+	return preparedUserTurn{
 		TurnID: turnID, CreatedAtUnixMs: time.Now().UnixMilli(), UploadIDs: uploadIDs,
 	}, input, nil
 }

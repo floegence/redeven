@@ -1164,8 +1164,11 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).toContain('source_surface:');
     expect(appSrc).toContain("'desktop_welcome_environment_card'");
     expect(appSrc).toContain('launchLocalEnvironmentFlowerTurn(props.runtime.settings');
-    expect(appSrc).toContain('const bootstrap = await launchLocalEnvironmentFlowerTurn(props.runtime.settings');
-    expect(appSrc).toContain('const threadID = trimString(bootstrap.thread.thread_id || bootstrap.thread_id);');
+    expect(appSrc).toContain('const receipt = await launchLocalEnvironmentFlowerTurn(props.runtime.settings');
+    expect(appSrc).toContain('const threadID = trimString(receipt.thread_id);');
+    expect(appSrc).toContain('const uncertain = flowerTurnAdmissionUncertainIdentity(error);');
+    expect(appSrc).toContain('thread_id: uncertain.thread_id,');
+    expect(appSrc).toContain('if (uncertain) {');
     expect(appSrc).toContain('flowerFocusThreadRequestSequence += 1;');
     expect(appSrc).toContain('request_id: `welcome-flower-focus-${flowerFocusThreadRequestSequence}`');
     expect(appSrc).toContain('onFocusThreadRequestConsumed={(requestID) => {');

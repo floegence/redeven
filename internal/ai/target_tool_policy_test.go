@@ -248,7 +248,7 @@ func TestPrepareRunUsesThreadScopedTargetPolicy(t *testing.T) {
 		ThreadID: thread.ThreadID,
 		Input:    RunInput{Text: "check policy"},
 		Options:  RunOptions{},
-	}, nil, nil)
+	}, nil)
 	if err != nil {
 		t.Fatalf("prepareRun: %v", err)
 	}

@@ -280,10 +280,52 @@ func TestServer_AI_Run_UsesModelGatewayAndPersistsAssistantMessage(t *testing.T)
 
 	// Run.
 	{
+		for _, testCase := range []struct {
+			name string
+			body string
+		}{
+			{
+				name: "legacy message identity",
+				body: `{"thread_id":"` + threadID + `","model":"openai/gpt-5-mini","input":{"message_id":"legacy","text":"must fail","attachments":[]},"options":{}}`,
+			},
+			{
+				name: "invalid turn identity",
+				body: `{"thread_id":"` + threadID + `","model":"openai/gpt-5-mini","input":{"turn_id":"invalid turn id","text":"must fail","attachments":[]},"options":{}}`,
+			},
+		} {
+			t.Run(testCase.name, func(t *testing.T) {
+				rr := performServerRequest(
+					srv,
+					http.MethodPost,
+					"/_redeven_proxy/api/ai/threads/"+threadID+"/turns",
+					envOrigin,
+					testCase.body,
+				)
+				if rr.Code != http.StatusBadRequest {
+					t.Fatalf("invalid send status=%d, want=%d body=%s", rr.Code, http.StatusBadRequest, rr.Body.String())
+				}
+				view, err := aiSvc.GetThread(t.Context(), &meta, threadID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if view.QueuedTurnCount != 0 || len(view.QueuedTurns) != 0 || aiSvc.HasActiveThreadForEndpoint(meta.EndpointID, threadID) {
+					t.Fatalf("invalid send changed product admission state: %#v", view)
+				}
+				bootstrap, err := aiSvc.GetFlowerThreadLiveBootstrap(t.Context(), &meta, threadID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if len(bootstrap.TimelineMessages) != 0 {
+					t.Fatalf("invalid send created canonical timeline: %#v", bootstrap.TimelineMessages)
+				}
+			})
+		}
+
+		const turnID = "turn_appserver_receipt"
 		body := map[string]any{
 			"thread_id": threadID,
 			"model":     "openai/gpt-5-mini",
-			"input":     map[string]any{"text": "hi", "attachments": []any{}},
+			"input":     map[string]any{"turn_id": turnID, "text": "hi", "attachments": []any{}},
 			"options":   map[string]any{"permission_type": "approval_required"},
 		}
 		b, _ := json.Marshal(body)
@@ -297,14 +339,15 @@ func TestServer_AI_Run_UsesModelGatewayAndPersistsAssistantMessage(t *testing.T)
 		var resp struct {
 			OK   bool `json:"ok"`
 			Data struct {
-				RunID string `json:"run_id"`
-				Kind  string `json:"kind"`
+				RunID  string `json:"run_id"`
+				TurnID string `json:"turn_id"`
+				Kind   string `json:"kind"`
 			} `json:"data"`
 		}
 		if err := json.Unmarshal(rr.Body.Bytes(), &resp); err != nil {
 			t.Fatalf("unmarshal send turn: %v", err)
 		}
-		if !resp.OK || strings.TrimSpace(resp.Data.RunID) == "" || resp.Data.Kind != "start" {
+		if !resp.OK || strings.TrimSpace(resp.Data.RunID) == "" || resp.Data.TurnID != turnID || resp.Data.Kind != "start" {
 			t.Fatalf("unexpected send turn response: %s", rr.Body.String())
 		}
 	}

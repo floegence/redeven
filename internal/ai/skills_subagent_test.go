@@ -487,6 +487,7 @@ func TestFloretSubagents_DelegateAndWait(t *testing.T) {
 			return "", false, nil
 		},
 		RunID:        "run_parent",
+		TurnID:       "turn_parent",
 		ChannelID:    meta.ChannelID,
 		EndpointID:   meta.EndpointID,
 		ThreadID:     "th_parent",
@@ -1027,6 +1028,7 @@ func TestFloretSubagents_InheritsWebSearchResolver(t *testing.T) {
 			return "", false, nil
 		},
 		RunID:        "run_parent_websearch",
+		TurnID:       "turn_parent_websearch",
 		ChannelID:    meta.ChannelID,
 		EndpointID:   meta.EndpointID,
 		ThreadID:     "th_parent_websearch",

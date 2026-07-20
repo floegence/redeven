@@ -109,8 +109,7 @@ function blockFromLiveBlock(block: FlowerLiveBlock): FlowerChatMessageBlock | nu
 function contentFromBlocks(blocks: readonly FlowerChatMessageBlock[]): string {
   return blocks
     .map((block) => {
-      if (block.type === 'activity-timeline') return '';
-      if (block.type === 'thinking') return '';
+      if (block.type !== 'markdown' && block.type !== 'text') return '';
       return trim(block.content);
     })
     .filter(Boolean)
@@ -340,7 +339,7 @@ function appendBlockDelta(message: FlowerChatMessage, blockIndex: number, delta:
   const blocks = [...(message.blocks ?? [])];
   if (blockIndex < 0 || blockIndex >= blocks.length) return null;
   const current = blocks[blockIndex];
-  if (!current || current.type === 'activity-timeline') return null;
+  if (!current || (current.type !== 'markdown' && current.type !== 'text' && current.type !== 'thinking')) return null;
   blocks[blockIndex] = {
     type: current.type,
     content: `${current.content ?? ''}${delta}`,
@@ -371,15 +370,29 @@ function withSingleActiveAssistantCursor(messages: readonly FlowerChatMessage[],
 
 function upsertStreamingAssistantMessage(
   thread: FlowerThreadSnapshot,
+  threadID: string,
   messageID: string,
+  turnID: string,
+  runID: string,
   createdAtMs: number,
 ): FlowerThreadSnapshot | null {
+  threadID = trim(threadID);
   messageID = trim(messageID);
-  if (!messageID) return null;
+  turnID = trim(turnID);
+  runID = trim(runID);
+  if (!threadID || threadID !== trim(thread.thread_id) || !messageID || !turnID || !runID) return null;
   const current = findMessage(thread, messageID);
+  if (current && (
+    trim(current.thread_id) !== threadID
+    || trim(current.turn_id) !== turnID
+    || trim(current.run_id) !== runID
+  )) return null;
   const nextMessage: FlowerChatMessage = current
     ? {
         ...current,
+        thread_id: threadID,
+        turn_id: turnID,
+        run_id: runID,
         role: 'assistant',
         status: current.status === 'complete' ? current.status : 'streaming',
         created_at_ms: current.created_at_ms || createdAtMs,
@@ -387,6 +400,9 @@ function upsertStreamingAssistantMessage(
       }
     : {
         id: messageID,
+        thread_id: threadID,
+        turn_id: turnID,
+        run_id: runID,
         role: 'assistant',
         content: '',
         status: 'streaming',
@@ -403,11 +419,22 @@ function upsertStreamingAssistantMessage(
 
 function updateMessageStrict(
   thread: FlowerThreadSnapshot,
+  event: FlowerLiveEvent,
   messageID: string,
   update: (message: FlowerChatMessage) => FlowerChatMessage | null,
 ): { thread: FlowerThreadSnapshot; ok: boolean } {
+  const threadID = trim(event.thread_id);
+  const turnID = trim(event.turn_id);
+  const runID = trim(event.run_id);
+  messageID = trim(messageID);
+  if (!threadID || threadID !== trim(thread.thread_id) || !turnID || !runID || !messageID) {
+    return { thread, ok: false };
+  }
   const current = findMessage(thread, messageID);
-  if (!current) return { thread, ok: false };
+  if (!current || trim(current.thread_id) !== threadID || trim(current.turn_id) !== turnID ||
+    trim(current.run_id) !== runID || trim(current.id) !== messageID) {
+    return { thread, ok: false };
+  }
   const updated = update(current);
   if (!updated) return { thread, ok: false };
   return { thread: replaceMessage(thread, updated), ok: true };
@@ -478,7 +505,10 @@ export function applyFlowerLiveEvent(
       {
         const started = upsertStreamingAssistantMessage(
           next,
+          event.thread_id,
           event.payload.message_id,
+          event.turn_id ?? '',
+          event.run_id ?? '',
           Number(event.payload.created_at_ms || event.at_unix_ms || 0),
         );
         if (!started) {
@@ -495,14 +525,14 @@ export function applyFlowerLiveEvent(
           resyncRequired = true;
           break;
         }
-        const result = updateMessageStrict(next, event.payload.message_id, (message) => upsertBlock(message, event.payload.block_index, block));
+        const result = updateMessageStrict(next, event, event.payload.message_id, (message) => upsertBlock(message, event.payload.block_index, block));
         next = result.thread;
         resyncRequired = !result.ok;
       }
       break;
     case 'message.block_delta':
       {
-        const result = updateMessageStrict(next, event.payload.message_id, (message) => appendBlockDelta(message, event.payload.block_index, event.payload.delta));
+        const result = updateMessageStrict(next, event, event.payload.message_id, (message) => appendBlockDelta(message, event.payload.block_index, event.payload.delta));
         next = result.thread;
         resyncRequired = !result.ok;
       }
@@ -520,14 +550,25 @@ export function applyFlowerLiveEvent(
           resyncRequired = true;
           break;
         }
-        const result = updateMessageStrict(next, event.payload.message_id, (message) => upsertBlock(message, event.payload.block_index, block));
+        if (
+          block.type === 'activity-timeline'
+          && (
+            trim(block.thread_id) !== trim(event.thread_id)
+            || trim(block.turn_id) !== trim(event.turn_id)
+            || trim(block.run_id) !== trim(event.run_id)
+          )
+        ) {
+          resyncRequired = true;
+          break;
+        }
+        const result = updateMessageStrict(next, event, event.payload.message_id, (message) => upsertBlock(message, event.payload.block_index, block));
         next = result.thread;
         resyncRequired = !result.ok;
       }
       break;
     case 'message.failed':
       {
-        const result = updateMessageStrict(next, event.payload.message_id, (message) => ({ ...message, status: 'error' }));
+        const result = updateMessageStrict(next, event, event.payload.message_id, (message) => ({ ...message, status: 'error' }));
         next = result.thread;
         resyncRequired = !result.ok;
       }

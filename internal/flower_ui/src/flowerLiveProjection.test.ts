@@ -9,7 +9,7 @@ import type {
   FlowerLiveEvent,
   FlowerThreadSnapshot,
 } from './contracts/flowerSurfaceContracts';
-import { mapFlowerLiveBootstrap, mapFlowerLiveEvents } from './flowerLiveMapper';
+import { mapFlowerLiveBootstrap, mapFlowerLiveEvents, mapFlowerMessage } from './flowerLiveMapper';
 import { applyFlowerLiveEvent, projectFlowerLiveBootstrap } from './flowerLiveReducer';
 
 type FlowerMainToolApprovalAction = Exclude<FlowerApprovalAction, { origin: 'delegated_subagent' }>;
@@ -34,6 +34,9 @@ function readStatus(overrides: Record<string, unknown> = {}) {
 function message(overrides: Partial<FlowerChatMessage> = {}): FlowerChatMessage {
   return {
     id: 'msg-user',
+    thread_id: 'th-live',
+    turn_id: 'turn-user',
+    run_id: 'run-1',
     role: 'user',
     content: 'Hello',
     status: 'complete',
@@ -58,6 +61,9 @@ function activityTimelineBlock(itemID: string, label: string): FlowerActivityTim
   return {
     type: 'activity-timeline',
     schema_version: 1,
+    thread_id: 'th-live',
+    turn_id: 'turn-1',
+    run_id: 'run-1',
     summary: {
       status: 'success',
       severity: 'quiet',
@@ -156,6 +162,9 @@ function rawBootstrapWithTimelineDecoration(decoration: unknown) {
     },
     timeline_messages: [{
       id: 'msg-user',
+      thread_id: 'th-live',
+      turn_id: 'turn-user',
+      run_id: 'run-1',
       role: 'user',
       content: 'Hello',
       status: 'complete',
@@ -176,6 +185,9 @@ function bootstrapWithLiveAssistant(overrides: Partial<FlowerChatMessage> = {}):
   const baseThread = thread();
   const assistant: FlowerChatMessage = {
     id: 'assistant-live',
+    thread_id: 'th-live',
+    turn_id: 'turn-1',
+    run_id: 'run-1',
     role: 'assistant',
     content: '',
     status: 'streaming',
@@ -223,6 +235,158 @@ function applyEvents(initial: FlowerThreadSnapshot, cursor: number, events: read
 }
 
 describe('Flower live projection', () => {
+  it('keeps canonical message and turn identities distinct and rejects a missing turn identity', () => {
+    expect(mapFlowerMessage({
+      id: 'entry-user-1',
+      thread_id: 'th-live',
+      turn_id: 'turn-1',
+      run_id: 'run-1',
+      role: 'user',
+      status: 'complete',
+      created_at_ms: 1000,
+      blocks: [{ type: 'text', content: 'Hello' }],
+    })).toMatchObject({ id: 'entry-user-1', turn_id: 'turn-1' });
+    expect(() => mapFlowerMessage({
+      id: 'entry-user-1',
+      thread_id: 'th-live',
+      run_id: 'run-1',
+      role: 'user',
+      status: 'complete',
+      created_at_ms: 1000,
+      blocks: [{ type: 'text', content: 'Hello' }],
+    })).toThrow(/timeline message entry-user-1 requires turn_id/);
+  });
+
+  it('maps canonical attachment blocks and rejects malformed or mismatched blocks as a unit', () => {
+    const base = {
+      id: 'entry-user-attachments',
+      thread_id: 'th-live',
+      turn_id: 'turn-attachments',
+      run_id: 'run-attachments',
+      role: 'user',
+      status: 'complete',
+      created_at_ms: 1000,
+    };
+    expect(mapFlowerMessage({
+      ...base,
+      blocks: [
+        { type: 'image', src: '/api/uploads/image-1', alt: 'Screenshot' },
+        { type: 'file', name: 'notes.txt', size: 12, mimeType: 'text/plain', url: '/api/uploads/file-1' },
+      ],
+    }).blocks).toEqual([
+      { type: 'image', src: '/api/uploads/image-1', alt: 'Screenshot' },
+      { type: 'file', name: 'notes.txt', size: 12, mimeType: 'text/plain', url: '/api/uploads/file-1' },
+    ]);
+    expect(() => mapFlowerMessage({
+      ...base,
+      blocks: [{ type: 'file', name: 'notes.txt', size: -1, mimeType: 'text/plain', url: '/api/uploads/file-1' }],
+    })).toThrow(/block 0 is invalid/);
+    expect(() => mapFlowerMessage({
+      ...base,
+      blocks: [{ type: 'file', name: 'notes.txt', size: 12, mimeType: 'text/plain', url: 'javascript:alert(1)' }],
+    })).toThrow(/block 0 is invalid/);
+    expect(() => mapFlowerMessage({
+      ...base,
+      role: 'assistant',
+      blocks: [{
+        ...activityTimelineBlock('tool-1', 'Inspect'),
+        turn_id: 'turn-other',
+        run_id: 'run-attachments',
+      }],
+    })).toThrow(/activity block 0 has mismatched identity/);
+  });
+
+  it('rejects an entire canonical message array when any bootstrap or replacement row is invalid', () => {
+    const valid = {
+      id: 'entry-user-1',
+      thread_id: 'th-live',
+      turn_id: 'turn-1',
+      run_id: 'run-1',
+      role: 'user',
+      status: 'complete',
+      created_at_ms: 1000,
+      blocks: [{ type: 'text', content: 'Hello' }],
+    };
+    const invalid = { ...valid, id: 'entry-bad', role: 'unknown' };
+    const rawBootstrap = rawBootstrapWithTimelineDecoration({
+      decoration_id: 'context-compaction:valid',
+      kind: 'context_compaction',
+      anchor: { target_kind: 'message', message_id: 'entry-user-1', edge: 'after' },
+      ordinal: 0,
+      compaction: { operation_id: 'valid', phase: 'complete', status: 'compacted', updated_at_ms: 1000 },
+    });
+    expect(() => mapFlowerLiveBootstrap({
+      ...rawBootstrap,
+      timeline_messages: [valid, invalid],
+    }, mapperOptions())).toThrow(/timeline message entry-bad has invalid role/);
+
+    expect(() => mapFlowerLiveEvents({
+      stream_generation: 1,
+      next_cursor: 1,
+      retained_from_seq: 1,
+      events: [{
+        schema_version: 1,
+        seq: 1,
+        endpoint_id: 'runtime',
+        thread_id: 'th-live',
+        turn_id: 'turn-1',
+        run_id: 'run-1',
+        kind: 'timeline.replaced',
+        at_unix_ms: 2000,
+        payload: { messages: [valid, invalid], stream_generation: 1, snapshot_through_seq: 1 },
+      }],
+    })).toThrow(/timeline message entry-bad has invalid role/);
+  });
+
+  it('binds browser live deltas to exact thread, turn, run, and message identity', () => {
+    const initial = thread({ messages: [message()] });
+    const missingRun = applyFlowerLiveEvent(initial, 0, {
+      ...event(1, 'message.started', {
+        message_id: 'assistant-distinct', role: 'assistant', status: 'streaming', created_at_ms: 2000,
+      }),
+      run_id: undefined,
+    });
+    expect(missingRun.resyncRequired).toBe(true);
+    expect(missingRun.thread.messages).toHaveLength(1);
+
+    const started = applyFlowerLiveEvent(initial, 0, event(1, 'message.started', {
+      message_id: 'assistant-distinct', role: 'assistant', status: 'streaming', created_at_ms: 2000,
+    }));
+    const blockStarted = applyFlowerLiveEvent(started.thread, 1, event(2, 'message.block_started', {
+      message_id: 'assistant-distinct', block_index: 0, block_type: 'markdown',
+    }));
+    const mismatched = applyFlowerLiveEvent(blockStarted.thread, 2, {
+      ...event(3, 'message.block_delta', {
+        message_id: 'assistant-distinct', block_index: 0, delta: 'must not apply',
+      }),
+      turn_id: 'turn-other',
+    });
+    expect(mismatched.resyncRequired).toBe(true);
+    expect(mismatched.thread.messages.find((item) => item.id === 'assistant-distinct')?.content).toBe('');
+
+    const exact = applyFlowerLiveEvent(blockStarted.thread, 2, event(3, 'message.block_delta', {
+      message_id: 'assistant-distinct', block_index: 0, delta: 'applied',
+    }));
+    expect(exact.resyncRequired).toBe(false);
+    expect(exact.thread.messages.find((item) => item.id === 'assistant-distinct')).toMatchObject({
+      thread_id: 'th-live', turn_id: 'turn-1', run_id: 'run-1', content: 'applied',
+    });
+
+    const mismatchedActivity = applyFlowerLiveEvent(exact.thread, 3, event(4, 'message.block_set', {
+      message_id: 'assistant-distinct',
+      block_index: 1,
+      block: {
+        type: 'activity-timeline',
+        block: {
+          ...activityTimelineBlock('tool-mismatch', 'Must not apply'),
+          run_id: 'run-other',
+        },
+      },
+    }));
+    expect(mismatchedActivity.resyncRequired).toBe(true);
+    expect(mismatchedActivity.thread.messages.find((item) => item.id === 'assistant-distinct')?.blocks).toHaveLength(1);
+  });
+
   it('projects model io status from bootstrap and live updates', () => {
     const initial = projectFlowerLiveBootstrap(bootstrap({
       live_state: {
@@ -329,6 +493,9 @@ describe('Flower live projection', () => {
     const projected = projectFlowerLiveBootstrap(bootstrap({
       timeline_messages: [{
         id: 'assistant-live',
+        thread_id: 'th-live',
+        turn_id: 'turn-1',
+        run_id: 'run-1',
         role: 'assistant',
         content: 'alpha\n\nbeta',
         status: 'canceled',
@@ -461,6 +628,9 @@ describe('Flower live projection', () => {
         message(),
         {
           id: 'assistant-live',
+          thread_id: 'th-live',
+          turn_id: 'turn-1',
+          run_id: 'run-1',
           role: 'assistant',
           content: '',
           status: 'streaming',
@@ -614,6 +784,9 @@ describe('Flower live projection', () => {
         message(),
         {
           id: 'assistant-live',
+          thread_id: 'th-live',
+          turn_id: 'turn-1',
+          run_id: 'run-1',
           role: 'assistant',
           content: '',
           status: 'streaming',
@@ -820,6 +993,9 @@ describe('Flower live projection', () => {
         message(),
         {
           id: 'assistant-live',
+          thread_id: 'th-live',
+          turn_id: 'turn-1',
+          run_id: 'run-1',
           role: 'assistant',
           content: '',
           status: 'streaming',
@@ -909,6 +1085,9 @@ describe('Flower live projection', () => {
         message(),
         {
           id: 'assistant-live',
+          thread_id: 'th-live',
+          turn_id: 'turn-1',
+          run_id: 'run-1',
           role: 'assistant',
           content: '',
           status: 'streaming',
@@ -1050,7 +1229,7 @@ describe('Flower live projection', () => {
         last_message_preview: 'queued',
         read_status: readStatus(),
       },
-      messages: [],
+      timeline_messages: [],
       live_state: {
         thread_patch: {},
         runs: {},
@@ -1064,6 +1243,44 @@ describe('Flower live projection', () => {
     const projected = projectFlowerLiveBootstrap(mapped);
 
     expect(projected.queued_turn_count).toBe(1);
+  });
+
+  it('preserves an owned empty queued turn list from full bootstrap', () => {
+    const mapped = mapFlowerLiveBootstrap({
+      ...rawBootstrapWithTimelineDecoration({
+        decoration_id: 'context-compaction:empty-queue',
+        kind: 'context_compaction',
+        anchor: { target_kind: 'message', message_id: 'msg-user', edge: 'after' },
+        ordinal: 0,
+        compaction: { operation_id: 'empty-queue', phase: 'complete', status: 'compacted', updated_at_ms: 1000 },
+      }),
+      thread: {
+        ...rawBootstrapWithTimelineDecoration({}).thread,
+        queued_turn_count: 0,
+        queued_turns: [],
+      },
+    }, mapperOptions());
+
+    expect(mapped.thread.queued_turns).toEqual([]);
+  });
+
+  it('rejects an owned queued turn list when any element is malformed', () => {
+    const raw = rawBootstrapWithTimelineDecoration({
+      decoration_id: 'context-compaction:invalid-queue',
+      kind: 'context_compaction',
+      anchor: { target_kind: 'message', message_id: 'msg-user', edge: 'after' },
+      ordinal: 0,
+      compaction: { operation_id: 'invalid-queue', phase: 'complete', status: 'compacted', updated_at_ms: 1000 },
+    });
+
+    expect(() => mapFlowerLiveBootstrap({
+      ...raw,
+      thread: {
+        ...raw.thread,
+        queued_turn_count: 1,
+        queued_turns: [null],
+      },
+    }, mapperOptions())).toThrow(/queued turn 0 must be an object/);
   });
 
   it('maps queued turn linked context for pending hydration', () => {
@@ -1093,7 +1310,7 @@ describe('Flower live projection', () => {
         run_status: 'running',
         queued_turn_count: 1,
         queued_turns: [{
-          message_id: 'msg-linked-file',
+          turn_id: 'turn-linked-file',
           text: 'Inspect this file',
           created_at_unix_ms: 1_710_000_000_000,
           context_action: contextAction,
@@ -1112,7 +1329,7 @@ describe('Flower live projection', () => {
     }, mapperOptions());
 
     expect(mapped.thread.queued_turns).toEqual([{
-      message_id: 'msg-linked-file',
+      turn_id: 'turn-linked-file',
       prompt: 'Inspect this file',
       created_at_ms: 1_710_000_000_000,
       context_action: contextAction,
@@ -1123,7 +1340,7 @@ describe('Flower live projection', () => {
     const initial = thread({
       queued_turn_count: 1,
       queued_turns: [{
-        message_id: 'msg-linked-file',
+        turn_id: 'turn-linked-file',
         prompt: 'Inspect this file',
         created_at_ms: 1200,
       }],
@@ -1708,6 +1925,9 @@ describe('Flower live projection', () => {
       },
       timeline_messages: [{
         id: 'msg-user',
+        thread_id: 'th-live',
+        turn_id: 'turn-user',
+        run_id: 'run-1',
         role: 'user',
         timestamp: 1000,
         status: 'complete',
@@ -2163,11 +2383,14 @@ describe('Flower live projection', () => {
       },
       timeline_messages: [{
         id: 'msg-context',
+        thread_id: 'th-live',
+        turn_id: 'turn-context',
+        run_id: 'run-context',
         role: 'user',
         timestamp: 1000,
         status: 'complete',
         blocks: [{ type: 'text', content: 'Inspect this env' }],
-        contextAction,
+        context_action: contextAction,
       }],
       live_state: {
         thread_patch: {},
@@ -2254,6 +2477,7 @@ describe('Flower live projection', () => {
       timeline_messages: [
         {
           id: 'msg-user',
+          turn_id: 'turn-live',
           role: 'user',
           content: 'Hello',
           status: 'complete',
@@ -2262,6 +2486,9 @@ describe('Flower live projection', () => {
         },
         {
           id: 'assistant-live',
+          thread_id: 'th-live',
+          turn_id: 'turn-live',
+          run_id: 'run-1',
           role: 'assistant',
           content: 'Inspecting files',
           status: 'streaming',
@@ -2413,6 +2640,9 @@ describe('Flower live projection', () => {
       timeline_messages: [
         {
           id: 'msg-user',
+          thread_id: 'th-live',
+          turn_id: 'turn-whitespace',
+          run_id: 'run-1',
           role: 'user',
           timestamp: 1000,
           status: 'complete',
@@ -2420,6 +2650,9 @@ describe('Flower live projection', () => {
         },
         {
           id: 'assistant-live',
+          thread_id: 'th-live',
+          turn_id: 'turn-1',
+          run_id: 'run-1',
           role: 'assistant',
           timestamp: 2000,
           status: 'streaming',
@@ -2529,6 +2762,9 @@ describe('Flower live projection', () => {
         message(),
         {
           id: 'assistant-live',
+          thread_id: 'th-live',
+          turn_id: 'turn-1',
+          run_id: 'run-1',
           role: 'assistant',
           content: 'already visible',
           status: 'streaming',
@@ -2614,11 +2850,26 @@ describe('Flower live projection', () => {
     expect(projected.cursor).toBe(3);
     expect(projected.thread.messages.map((item) => item.id)).toEqual(['msg-user', 'assistant-started']);
     expect(projected.thread.messages[1]).toMatchObject({
+      turn_id: 'turn-1',
       role: 'assistant',
       status: 'streaming',
       content: 'hello from live',
       active_cursor: true,
     });
+  });
+
+  it('requires message.started to carry the owning TurnID before creating a row', () => {
+    const initial = projectFlowerLiveBootstrap(bootstrap());
+    const messageStarted = event(1, 'message.started', {
+      message_id: 'assistant-without-turn',
+      role: 'assistant',
+      status: 'streaming',
+      created_at_ms: 2100,
+    });
+    const result = applyFlowerLiveEvent(initial, 0, { ...messageStarted, turn_id: undefined });
+
+    expect(result.resyncRequired).toBe(true);
+    expect(result.thread.messages.find((message) => message.id === 'assistant-without-turn')).toBeUndefined();
   });
 
   it('marks stream resync events as requiring bootstrap reload', () => {
@@ -2902,8 +3153,8 @@ describe('Flower live projection', () => {
     expect(result.thread.read_status.snapshot.activity_signature).toBe('sig-2');
   });
 
-  it('drops unsupported persisted message blocks instead of textifying them', () => {
-    const mapped = mapFlowerLiveBootstrap({
+  it('rejects unsupported persisted message blocks instead of partially rendering them', () => {
+    expect(() => mapFlowerLiveBootstrap({
       schema_version: 1,
       endpoint_id: 'runtime',
       thread_id: 'th-live',
@@ -2920,6 +3171,9 @@ describe('Flower live projection', () => {
       },
       timeline_messages: [{
         id: 'assistant-unsupported',
+        thread_id: 'th-live',
+        turn_id: 'turn-unsupported',
+        run_id: 'run-unsupported',
         role: 'assistant',
         timestamp: 1000,
         status: 'complete',
@@ -2942,10 +3196,7 @@ describe('Flower live projection', () => {
       runtimeKind: 'local_environment',
       sourceLabel: 'This host',
       targetLabels: [],
-    });
-
-    expect(mapped.thread.messages[0]?.content).toBe('Visible');
-    expect(mapped.thread.messages[0]?.blocks).toEqual([{ type: 'markdown', content: 'Visible' }]);
+    })).toThrow(/timeline message assistant-unsupported block 1 is invalid/);
   });
 
   it('restores transcript thinking blocks without using them as message content', () => {
@@ -2966,6 +3217,9 @@ describe('Flower live projection', () => {
       },
       timeline_messages: [{
         id: 'assistant-thinking',
+        thread_id: 'th-live',
+        turn_id: 'turn-thinking',
+        run_id: 'run-thinking',
         role: 'assistant',
         timestamp: 1000,
         status: 'complete',
@@ -3027,7 +3281,7 @@ describe('Flower live projection', () => {
         }],
         read_status: readStatus(),
       },
-      messages: [],
+      timeline_messages: [],
       live_state: {
         thread_patch: {},
         runs: {},
@@ -3070,8 +3324,9 @@ describe('Flower live projection', () => {
               can_close: true,
               created_at_ms: 2100,
               updated_at_ms: 2200,
-            }],
-          },
+        }],
+      },
+      timeline_messages: [],
         },
       }],
       next_cursor: 1,
@@ -3095,6 +3350,8 @@ describe('Flower live projection', () => {
         seq: 1,
         endpoint_id: 'runtime',
         thread_id: 'th-live',
+        turn_id: 'turn-1',
+        run_id: 'run-1',
         at_unix_ms: 3000,
         kind: 'message.block_set',
         payload: {
@@ -3103,6 +3360,9 @@ describe('Flower live projection', () => {
           block: {
             type: 'activity-timeline',
             schema_version: 1,
+            thread_id: 'th-live',
+            turn_id: 'turn-1',
+            run_id: 'run-1',
             summary: { status: 'success', severity: 'quiet', needs_attention: false, total_items: 1, counts: { success: 1 } },
             items: [{
               item_id: 'tool-1',
@@ -3127,6 +3387,8 @@ describe('Flower live projection', () => {
         seq: 1,
         endpoint_id: 'runtime',
         thread_id: 'th-live',
+        turn_id: 'turn-1',
+        run_id: 'run-1',
         at_unix_ms: 3000,
         kind: 'message.block_set',
         payload: {
@@ -3135,6 +3397,9 @@ describe('Flower live projection', () => {
           block: {
             type: 'activity-timeline',
             schema_version: 1,
+            thread_id: 'th-live',
+            turn_id: 'turn-1',
+            run_id: 'run-1',
             summary: { status: 'running', severity: 'normal', needs_attention: true, total_items: 1, counts: { running: 1 } },
             items: [{
               item_id: 'tool-1',
@@ -3167,6 +3432,8 @@ describe('Flower live projection', () => {
         seq: 1,
         endpoint_id: 'runtime',
         thread_id: 'th-live',
+        turn_id: 'turn-1',
+        run_id: 'run-1',
         at_unix_ms: 3000,
         kind: 'message.block_set',
         payload: {
@@ -3175,6 +3442,9 @@ describe('Flower live projection', () => {
           block: {
             type: 'activity-timeline',
             schema_version: 1,
+            thread_id: 'th-live',
+            turn_id: 'turn-1',
+            run_id: 'run-1',
             summary: { severity: 'quiet', needs_attention: false, total_items: 0, counts: {} },
             items: [],
           },

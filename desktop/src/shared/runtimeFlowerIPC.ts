@@ -15,6 +15,8 @@ export type RuntimeFlowerError = Readonly<{
   retryAfterMs?: number;
 }>;
 
+export type RuntimeFlowerFailureKind = 'response' | 'transport_unknown' | 'local';
+
 export type RuntimeFlowerRequestResult = Readonly<
   | {
       ok: true;
@@ -23,5 +25,6 @@ export type RuntimeFlowerRequestResult = Readonly<
   | {
       ok: false;
       error: RuntimeFlowerError;
+      failureKind: RuntimeFlowerFailureKind;
     }
 >;

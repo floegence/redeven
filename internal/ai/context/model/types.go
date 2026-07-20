@@ -48,7 +48,6 @@ type AttachmentManifest struct {
 }
 
 type StructuredUserInput struct {
-	ResponseMessageID   string `json:"response_message_id"`
 	PromptID            string `json:"prompt_id"`
 	ToolID              string `json:"tool_id,omitempty"`
 	ReasonCode          string `json:"reason_code,omitempty"`

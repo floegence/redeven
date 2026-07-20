@@ -137,8 +137,8 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 		ThreadID: thread.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input: ai.RunInput{
-			MessageID: "m_appserver_queue_1",
-			Text:      "first queued via app server test",
+			TurnID: "m_appserver_queue_1",
+			Text:   "first queued via app server test",
 		},
 		Options: ai.RunOptions{},
 	})
@@ -149,15 +149,16 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 		ThreadID: thread.ThreadID,
 		Model:    "openai/gpt-5-mini",
 		Input: ai.RunInput{
-			MessageID: "m_appserver_queue_2",
-			Text:      "second queued via app server test",
+			TurnID: "m_appserver_queue_2",
+			Text:   "second queued via app server test",
 		},
 		Options: ai.RunOptions{},
 	})
 	if err != nil {
 		t.Fatalf("SendUserTurn second: %v", err)
 	}
-	if queuedResp1.Kind != "queued" || queuedResp2.Kind != "queued" {
+	if queuedResp1.Kind != "queued" || queuedResp1.TurnID != "m_appserver_queue_1" || strings.TrimSpace(queuedResp1.RunID) == "" ||
+		queuedResp2.Kind != "queued" || queuedResp2.TurnID != "m_appserver_queue_2" || strings.TrimSpace(queuedResp2.RunID) == "" {
 		t.Fatalf("unexpected queued kinds: first=%q second=%q", queuedResp1.Kind, queuedResp2.Kind)
 	}
 	followupID1 := strings.TrimSpace(queuedResp1.QueueID)

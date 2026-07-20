@@ -522,7 +522,7 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 		MaxWallTime:                 runMaxWallTime,
 		IdleTimeout:                 runIdleTimeout,
 		OnStreamEvent: func(ev any) {
-			s.broadcastStreamEvent(endpointID, threadID, runID, ev)
+			s.broadcastStreamEvent(endpointID, threadID, "", runID, ev)
 		},
 	})
 	execCtx, cancelRun := context.WithCancel(ctx)

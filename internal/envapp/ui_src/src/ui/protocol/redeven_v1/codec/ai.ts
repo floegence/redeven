@@ -87,8 +87,8 @@ function fromWireAIFollowupAttachment(raw: wire_ai_followup_attachment): AIFollo
 function fromWireAIFollowupItem(raw: wire_ai_followup_item): AIFollowupItem | null {
   const followupId = String(raw?.followup_id ?? '').trim();
   const lane = String(raw?.lane ?? '').trim().toLowerCase();
-  const messageId = String(raw?.message_id ?? '').trim();
-  if (!followupId || (lane !== 'queued' && lane !== 'draft') || !messageId) {
+  const turnId = String(raw?.turn_id ?? '').trim();
+  if (!followupId || (lane !== 'queued' && lane !== 'draft') || !turnId) {
     return null;
   }
   const attachments = Array.isArray(raw?.attachments)
@@ -97,7 +97,7 @@ function fromWireAIFollowupItem(raw: wire_ai_followup_item): AIFollowupItem | nu
   return {
     followupId,
     lane,
-    messageId,
+    turnId,
     text: String(raw?.text ?? ''),
     modelId: String(raw?.model_id ?? '').trim() || undefined,
     permissionType: normalizePermissionType(raw?.permission_type),
@@ -204,7 +204,7 @@ export function toWireAISendUserTurnRequest(req: AISendUserTurnRequest): wire_ai
     thread_id: String(req.threadId ?? '').trim(),
     model: req.model?.trim() ? req.model.trim() : undefined,
     input: {
-      message_id: req.input?.messageId?.trim() ? String(req.input.messageId).trim() : undefined,
+      turn_id: req.input?.turnId?.trim() ? String(req.input.turnId).trim() : undefined,
       text: String(req.input?.text ?? ''),
       attachments: Array.isArray(req.input?.attachments)
         ? req.input.attachments
@@ -230,6 +230,7 @@ export function toWireAISendUserTurnRequest(req: AISendUserTurnRequest): wire_ai
 export function fromWireAISendUserTurnResponse(resp: wire_ai_send_user_turn_resp): AISendUserTurnResponse {
   return {
     runId: String(resp?.run_id ?? '').trim(),
+    turnId: String(resp?.turn_id ?? '').trim(),
     kind: String(resp?.kind ?? '').trim(),
     queueId: String(resp?.queue_id ?? '').trim() || undefined,
     queuePosition: typeof resp?.queue_position === 'number' ? resp.queue_position : undefined,
@@ -269,7 +270,7 @@ export function toWireAISubmitRequestUserInputResponseRequest(req: AISubmitReque
       answers,
     },
     input: {
-      message_id: req.input?.messageId?.trim() ? String(req.input.messageId).trim() : undefined,
+      turn_id: req.input?.turnId?.trim() ? String(req.input.turnId).trim() : undefined,
       text: String(req.input?.text ?? ''),
       attachments: Array.isArray(req.input?.attachments)
         ? req.input.attachments
@@ -293,6 +294,7 @@ export function toWireAISubmitRequestUserInputResponseRequest(req: AISubmitReque
 export function fromWireAISubmitRequestUserInputResponseResponse(resp: wire_ai_submit_request_user_input_response_resp): AISubmitRequestUserInputResponseResponse {
   return {
     runId: String(resp?.run_id ?? '').trim(),
+    turnId: String(resp?.turn_id ?? '').trim(),
     kind: String(resp?.kind ?? '').trim(),
     consumedWaitingPromptId: String(resp?.consumed_waiting_prompt_id ?? '').trim() || undefined,
   };
@@ -382,6 +384,7 @@ export function fromWireAIEventNotify(payload: wire_ai_event_notify): AIRealtime
     eventType,
     endpointId,
     threadId,
+    turnId: String(payload?.turn_id ?? '').trim() || undefined,
     runId,
     atUnixMs: Number.isFinite(atUnixMs) && atUnixMs > 0 ? atUnixMs : Date.now(),
     streamKind,

@@ -67,7 +67,7 @@ func TestRunToolWriteTodosUsesCanonicalFloretState(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if snapshot.Version != 1 || len(snapshot.Items) != 1 || snapshot.Items[0].Content != "Inspect workspace" || snapshot.UpdatedByTurnID != flruntime.TurnID(r.messageID) || snapshot.UpdatedByRunID != flruntime.RunID(r.id) || snapshot.UpdatedByToolCall != "tool_1" {
+	if snapshot.Version != 1 || len(snapshot.Items) != 1 || snapshot.Items[0].Content != "Inspect workspace" || snapshot.UpdatedByTurnID != flruntime.TurnID(r.turnID) || snapshot.UpdatedByRunID != flruntime.RunID(r.id) || snapshot.UpdatedByToolCall != "tool_1" {
 		t.Fatalf("unexpected canonical todo state: %#v", snapshot)
 	}
 }
@@ -124,7 +124,7 @@ func TestRunToolWriteTodosRejectsControlSignalTodo(t *testing.T) {
 func newTodoTestRun(t *testing.T) (*run, floretTurnHost) {
 	t.Helper()
 	host := &todoTestHost{}
-	r := &run{id: "run_1", threadID: "thread_1", messageID: "turn_1"}
+	r := &run{id: "run_1", threadID: "thread_1", turnID: "turn_1", messageID: "turn_1"}
 	r.setActiveFloretHost(host)
 	return r, host
 }
