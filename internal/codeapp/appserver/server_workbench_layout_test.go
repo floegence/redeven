@@ -573,6 +573,9 @@ func TestServerWorkbenchTerminalSessionAPIs(t *testing.T) {
 	if createData.Session.ID == "" {
 		t.Fatalf("created session id is empty: %#v", createData.Session)
 	}
+	if command := createData.Session.ForegroundCommand; command.Phase != "unknown" || command.DisplayName != "" || command.Revision != 0 || command.UpdatedAtMs != 0 {
+		t.Fatalf("created session foreground command = %#v, want unknown snapshot", command)
+	}
 	if createData.WidgetState.State.Kind != workbenchlayout.WidgetStateKindTerminal || len(createData.WidgetState.State.SessionIDs) != 1 {
 		t.Fatalf("widget_state = %#v, want one terminal session", createData.WidgetState)
 	}

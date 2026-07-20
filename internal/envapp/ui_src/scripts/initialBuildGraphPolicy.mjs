@@ -1,5 +1,6 @@
 const allowedFloetermInitialModules = new Set([
   '@floegence/floeterm-terminal-web/dist/entries/sessions.js',
+  '@floegence/floeterm-terminal-web/dist/sessions/TerminalForegroundCommandMetadata.js',
   '@floegence/floeterm-terminal-web/dist/sessions/TerminalSessionsCoordinator.js',
   '@floegence/floeterm-terminal-web/dist/utils/logger.js',
 ]);
@@ -10,6 +11,8 @@ function isForbiddenInitialModule(moduleId) {
   }
   return moduleId === 'ghostty-web'
     || moduleId.startsWith('ghostty-web/')
+    || moduleId === '@floegence/beamterm-renderer'
+    || moduleId.startsWith('@floegence/beamterm-renderer/')
     || moduleId === '@beamterm/renderer'
     || moduleId.startsWith('@beamterm/renderer/');
 }

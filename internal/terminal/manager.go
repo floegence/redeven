@@ -26,10 +26,11 @@ const (
 	TypeID_TERMINAL_HISTORY        uint32 = 2007
 	TypeID_TERMINAL_CLEAR          uint32 = 2008
 
-	TypeID_TERMINAL_SESSION_DELETE   uint32 = 2009
-	TypeID_TERMINAL_NAME_UPDATE      uint32 = 2010 // notify (agent -> client): session name/working dir changed
-	TypeID_TERMINAL_SESSION_STATS    uint32 = 2011 // history buffer stats (client -> agent)
-	TypeID_TERMINAL_SESSIONS_CHANGED uint32 = 2012 // notify (agent -> client): terminal sessions list changed
+	TypeID_TERMINAL_SESSION_DELETE            uint32 = 2009
+	TypeID_TERMINAL_NAME_UPDATE               uint32 = 2010 // notify (agent -> client): session name/working dir changed
+	TypeID_TERMINAL_SESSION_STATS             uint32 = 2011 // history buffer stats (client -> agent)
+	TypeID_TERMINAL_SESSIONS_CHANGED          uint32 = 2012 // notify (agent -> client): terminal sessions list changed
+	TypeID_TERMINAL_FOREGROUND_COMMAND_UPDATE uint32 = 2013 // notify (agent -> client): shell-reported foreground command changed
 )
 
 const (
@@ -62,12 +63,20 @@ type Manager struct {
 }
 
 type SessionInfo struct {
-	ID             string `json:"id"`
-	Name           string `json:"name"`
-	WorkingDir     string `json:"working_dir"`
-	CreatedAtMs    int64  `json:"created_at_ms"`
-	LastActiveAtMs int64  `json:"last_active_at_ms"`
-	IsActive       bool   `json:"is_active"`
+	ID                string                `json:"id"`
+	Name              string                `json:"name"`
+	WorkingDir        string                `json:"working_dir"`
+	CreatedAtMs       int64                 `json:"created_at_ms"`
+	LastActiveAtMs    int64                 `json:"last_active_at_ms"`
+	IsActive          bool                  `json:"is_active"`
+	ForegroundCommand ForegroundCommandInfo `json:"foreground_command"`
+}
+
+type ForegroundCommandInfo struct {
+	Phase       string `json:"phase"`
+	DisplayName string `json:"display_name"`
+	Revision    uint64 `json:"revision"`
+	UpdatedAtMs int64  `json:"updated_at_ms"`
 }
 
 type slogTerminalLogger struct{ log *slog.Logger }
@@ -457,6 +466,40 @@ func (m *Manager) broadcastNameUpdate(sessionID string, newName string, workingD
 	}
 }
 
+func (m *Manager) broadcastForegroundCommandUpdate(sessionID string, command termgo.TerminalForegroundCommandInfo) {
+	if m == nil || strings.TrimSpace(sessionID) == "" || m.sessionHidden(sessionID) {
+		return
+	}
+
+	var writers []*controlSink
+	m.mu.Lock()
+	if len(m.writers) > 0 {
+		writers = make([]*controlSink, 0, len(m.writers))
+		for _, writer := range m.writers {
+			if writer != nil {
+				writers = append(writers, writer)
+			}
+		}
+	}
+	m.mu.Unlock()
+	if len(writers) == 0 {
+		return
+	}
+
+	payload := terminalForegroundCommandUpdatePayload{
+		SessionID:         sessionID,
+		ForegroundCommand: toForegroundCommandInfo(command),
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	msg := sinkMsg{TypeID: TypeID_TERMINAL_FOREGROUND_COMMAND_UPDATE, Payload: b}
+	for _, writer := range writers {
+		writer.Send(msg)
+	}
+}
+
 func (m *Manager) broadcastSessionsChanged(payload terminalSessionsChangedPayload) {
 	if m == nil || strings.TrimSpace(payload.Reason) == "" {
 		return
@@ -535,6 +578,13 @@ func (h *eventHandler) OnTerminalNameChanged(sessionID string, oldName string, n
 	h.m.broadcastNameUpdate(sessionID, newName, workingDir)
 }
 
+func (h *eventHandler) OnTerminalSessionMetadataChanged(sessionID string, info termgo.TerminalSessionInfo) {
+	if h == nil || h.m == nil {
+		return
+	}
+	h.m.broadcastForegroundCommandUpdate(sessionID, info.ForegroundCommand)
+}
+
 func (h *eventHandler) OnTerminalSessionCreated(session *termgo.Session) {
 	if h == nil || h.m == nil || session == nil {
 		return
@@ -586,33 +636,45 @@ func (h *eventHandler) OnTerminalError(sessionID string, err error) {
 // --- wire types (snake_case JSON) ---
 
 type terminalSessionInfo struct {
-	ID             string `json:"id"`
-	Name           string `json:"name"`
-	WorkingDir     string `json:"working_dir"`
-	CreatedAtMs    int64  `json:"created_at_ms"`
-	LastActiveAtMs int64  `json:"last_active_at_ms"`
-	IsActive       bool   `json:"is_active"`
+	ID                string                `json:"id"`
+	Name              string                `json:"name"`
+	WorkingDir        string                `json:"working_dir"`
+	CreatedAtMs       int64                 `json:"created_at_ms"`
+	LastActiveAtMs    int64                 `json:"last_active_at_ms"`
+	IsActive          bool                  `json:"is_active"`
+	ForegroundCommand ForegroundCommandInfo `json:"foreground_command"`
 }
 
 func toWireSessionInfo(info termgo.TerminalSessionInfo) *terminalSessionInfo {
 	return &terminalSessionInfo{
-		ID:             info.ID,
-		Name:           info.Name,
-		WorkingDir:     info.WorkingDir,
-		CreatedAtMs:    info.CreatedAt,
-		LastActiveAtMs: info.LastActive,
-		IsActive:       info.IsActive,
+		ID:                info.ID,
+		Name:              info.Name,
+		WorkingDir:        info.WorkingDir,
+		CreatedAtMs:       info.CreatedAt,
+		LastActiveAtMs:    info.LastActive,
+		IsActive:          info.IsActive,
+		ForegroundCommand: toForegroundCommandInfo(info.ForegroundCommand),
 	}
 }
 
 func toSessionInfo(info termgo.TerminalSessionInfo) *SessionInfo {
 	return &SessionInfo{
-		ID:             info.ID,
-		Name:           info.Name,
-		WorkingDir:     info.WorkingDir,
-		CreatedAtMs:    info.CreatedAt,
-		LastActiveAtMs: info.LastActive,
-		IsActive:       info.IsActive,
+		ID:                info.ID,
+		Name:              info.Name,
+		WorkingDir:        info.WorkingDir,
+		CreatedAtMs:       info.CreatedAt,
+		LastActiveAtMs:    info.LastActive,
+		IsActive:          info.IsActive,
+		ForegroundCommand: toForegroundCommandInfo(info.ForegroundCommand),
+	}
+}
+
+func toForegroundCommandInfo(info termgo.TerminalForegroundCommandInfo) ForegroundCommandInfo {
+	return ForegroundCommandInfo{
+		Phase:       string(info.Phase),
+		DisplayName: info.DisplayName,
+		Revision:    info.Revision,
+		UpdatedAtMs: info.UpdatedAt,
 	}
 }
 
@@ -635,6 +697,11 @@ type terminalNameUpdatePayload struct {
 	SessionID  string `json:"session_id"`
 	NewName    string `json:"new_name"`
 	WorkingDir string `json:"working_dir"`
+}
+
+type terminalForegroundCommandUpdatePayload struct {
+	SessionID         string                `json:"session_id"`
+	ForegroundCommand ForegroundCommandInfo `json:"foreground_command"`
 }
 
 type terminalSessionsChangedPayload struct {

@@ -1,3 +1,10 @@
+export type wire_terminal_foreground_command_info = {
+  phase: 'unknown' | 'idle' | 'running';
+  display_name: string;
+  revision: number;
+  updated_at_ms: number;
+};
+
 export type wire_terminal_session_info = {
   id: string;
   name: string;
@@ -5,6 +12,7 @@ export type wire_terminal_session_info = {
   created_at_ms: number;
   last_active_at_ms: number;
   is_active: boolean;
+  foreground_command?: wire_terminal_foreground_command_info;
 };
 
 export type wire_terminal_session_create_req = {
@@ -25,6 +33,11 @@ export type wire_terminal_name_update_notify = {
   session_id: string;
   new_name: string;
   working_dir: string;
+};
+
+export type wire_terminal_foreground_command_update_notify = {
+  session_id: string;
+  foreground_command: wire_terminal_foreground_command_info;
 };
 
 export type wire_terminal_history_req = {

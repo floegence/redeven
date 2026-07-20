@@ -88,6 +88,33 @@ func TestRealShellIntegrationEmitsLifecycleMarkersForBashAndZsh(t *testing.T) {
 	}
 }
 
+func TestRealShellIntegrationReportsForegroundProgramAndIdleForBashAndZsh(t *testing.T) {
+	for _, shellPath := range []string{"/bin/bash", "/bin/zsh"} {
+		shellPath := shellPath
+		t.Run(filepath.Base(shellPath), func(t *testing.T) {
+			if _, err := os.Stat(shellPath); err != nil {
+				t.Skipf("shell %q unavailable: %v", shellPath, err)
+			}
+
+			t.Setenv("HOME", newIsolatedShellHome(t))
+			manager, recorder := newShellLifecycleTestManagerWithRecorder(t, t.TempDir(), shellPath)
+			t.Cleanup(manager.Cleanup)
+			session, err := manager.createSession("test", "")
+			if err != nil {
+				t.Fatalf("createSession() error = %v", err)
+			}
+			activateShellTestSession(t, manager, session)
+			time.Sleep(250 * time.Millisecond)
+
+			if err := session.WriteData("sleep 0.5\n"); err != nil {
+				t.Fatalf("WriteData(sleep) error = %v", err)
+			}
+			waitForForegroundCommand(t, recorder, 5*time.Second, session.ID, termgo.ForegroundCommandRunning, "sleep")
+			waitForForegroundCommand(t, recorder, 5*time.Second, session.ID, termgo.ForegroundCommandIdle, "")
+		})
+	}
+}
+
 func TestRealPosixShellFallbackOmitsLifecycleMarkers(t *testing.T) {
 	shellPath := "/bin/sh"
 	if _, err := os.Stat(shellPath); err != nil {
@@ -320,8 +347,9 @@ type shellNameUpdate struct {
 type shellEventRecorder struct {
 	delegate termgo.TerminalEventHandler
 
-	mu          sync.Mutex
-	nameUpdates []shellNameUpdate
+	mu             sync.Mutex
+	nameUpdates    []shellNameUpdate
+	commandUpdates []termgo.TerminalSessionInfo
 }
 
 func (r *shellEventRecorder) OnTerminalData(sessionID string, event termgo.TerminalOutputEvent) {
@@ -361,6 +389,43 @@ func (r *shellEventRecorder) OnTerminalError(sessionID string, err error) {
 	if r.delegate != nil {
 		r.delegate.OnTerminalError(sessionID, err)
 	}
+}
+
+func (r *shellEventRecorder) OnTerminalSessionMetadataChanged(sessionID string, info termgo.TerminalSessionInfo) {
+	r.mu.Lock()
+	r.commandUpdates = append(r.commandUpdates, info)
+	r.mu.Unlock()
+	if delegate, ok := r.delegate.(termgo.TerminalSessionMetadataEventHandler); ok {
+		delegate.OnTerminalSessionMetadataChanged(sessionID, info)
+	}
+}
+
+func waitForForegroundCommand(
+	t *testing.T,
+	recorder *shellEventRecorder,
+	timeout time.Duration,
+	sessionID string,
+	phase termgo.ForegroundCommandPhase,
+	displayName string,
+) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		recorder.mu.Lock()
+		matched := false
+		for _, update := range recorder.commandUpdates {
+			if update.ID == sessionID && update.ForegroundCommand.Phase == phase && update.ForegroundCommand.DisplayName == displayName {
+				matched = true
+				break
+			}
+		}
+		recorder.mu.Unlock()
+		if matched {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("timeout waiting for foreground command session=%q phase=%q displayName=%q", sessionID, phase, displayName)
 }
 
 func waitForNameUpdate(t *testing.T, recorder *shellEventRecorder, timeout time.Duration, sessionID string, newName string, workingDir string) {

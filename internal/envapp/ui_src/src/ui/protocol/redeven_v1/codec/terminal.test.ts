@@ -1,12 +1,88 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  fromWireTerminalForegroundCommandUpdateNotify,
   fromWireTerminalHistoryResponse,
+  fromWireTerminalSessionListResponse,
   fromWireTerminalSessionsChangedNotify,
   toWireTerminalHistoryRequest,
 } from './terminal';
 
 describe('terminal codec', () => {
+  it('decodes foreground command snapshots and defaults missing snapshots to unknown', () => {
+    expect(fromWireTerminalSessionListResponse({
+      sessions: [{
+        id: 'session-1',
+        name: 'repo',
+        working_dir: '/workspace/repo',
+        created_at_ms: 1,
+        last_active_at_ms: 2,
+        is_active: true,
+        foreground_command: {
+          phase: 'running',
+          display_name: 'top',
+          revision: 3,
+          updated_at_ms: 4,
+        },
+      }, {
+        id: 'session-2',
+        name: 'legacy',
+        working_dir: '/',
+        created_at_ms: 1,
+        last_active_at_ms: 2,
+        is_active: false,
+      }],
+    }).sessions.map((session) => session.foregroundCommand)).toEqual([
+      { phase: 'running', displayName: 'top', revision: 3, updatedAtMs: 4 },
+      { phase: 'unknown', displayName: '', revision: 0, updatedAtMs: 0 },
+    ]);
+  });
+
+  it('accepts complete command notifications and rejects malformed high revisions', () => {
+    expect(fromWireTerminalForegroundCommandUpdateNotify({
+      session_id: ' session-1 ',
+      foreground_command: {
+        phase: 'running',
+        display_name: 'top',
+        revision: 8,
+        updated_at_ms: 9,
+      },
+    })).toEqual({
+      sessionId: 'session-1',
+      foregroundCommand: { phase: 'running', displayName: 'top', revision: 8, updatedAtMs: 9 },
+    });
+
+    expect(fromWireTerminalForegroundCommandUpdateNotify({
+      session_id: 'session-1',
+      foreground_command: {
+        phase: 'garbage' as any,
+        display_name: 'unsafe token',
+        revision: 999,
+        updated_at_ms: 10,
+      },
+    })).toBeNull();
+    expect(fromWireTerminalForegroundCommandUpdateNotify({
+      session_id: 'session-1',
+    } as any)).toBeNull();
+    expect(fromWireTerminalForegroundCommandUpdateNotify({
+      session_id: 'session-1',
+      foreground_command: {
+        phase: 'running',
+        revision: 1_000,
+        updated_at_ms: 10,
+      },
+    } as any)).toBeNull();
+    expect(fromWireTerminalForegroundCommandUpdateNotify({
+      session_id: 'session-1',
+      foreground_command: {
+        phase: 'running',
+        display_name: 42,
+        revision: 1_001,
+        updated_at_ms: 10,
+      },
+    } as any)).toBeNull();
+  });
+
   it('encodes terminal history page options', () => {
     expect(toWireTerminalHistoryRequest({
       sessionId: 'session-1',

@@ -222,6 +222,12 @@ function normalizeRuntimeTerminalSessionInfo(session: RuntimeWorkbenchTerminalSe
     createdAtMs: normalizeRuntimeTerminalTimestamp(session.created_at_ms),
     lastActiveAtMs: normalizeRuntimeTerminalTimestamp(session.last_active_at_ms),
     isActive: Boolean(session.is_active),
+    foregroundCommand: {
+      phase: session.foreground_command.phase,
+      displayName: session.foreground_command.display_name,
+      revision: session.foreground_command.revision,
+      updatedAtMs: session.foreground_command.updated_at_ms,
+    },
   };
 }
 

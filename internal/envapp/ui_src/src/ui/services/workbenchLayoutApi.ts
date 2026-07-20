@@ -1,4 +1,5 @@
 import { prepareLocalApiRequestInit } from './localApi';
+import { normalizeTerminalForegroundCommandDisplayName } from '@floegence/floeterm-terminal-web/sessions';
 import {
   normalizeRuntimeWorkbenchLayoutEvent,
   normalizeRuntimeWorkbenchOpenPreviewResponse,
@@ -12,10 +13,39 @@ import {
   type RuntimeWorkbenchLayoutSnapshot,
   type RuntimeWorkbenchTerminalCreateSessionRequest,
   type RuntimeWorkbenchTerminalCreateSessionResponse,
+  type RuntimeWorkbenchTerminalForegroundCommandInfo,
   type RuntimeWorkbenchTerminalWidgetSessionsCloseResponse,
   type RuntimeWorkbenchWidgetState,
   type RuntimeWorkbenchWidgetStatePutRequest,
 } from '../workbench/runtimeWorkbenchLayout';
+
+const UNKNOWN_FOREGROUND_COMMAND: RuntimeWorkbenchTerminalForegroundCommandInfo = Object.freeze({
+  phase: 'unknown',
+  display_name: '',
+  revision: 0,
+  updated_at_ms: 0,
+});
+
+function decodeRuntimeTerminalForegroundCommand(value: unknown): RuntimeWorkbenchTerminalForegroundCommandInfo | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const candidate = value as Record<string, unknown>;
+  const phase = candidate.phase;
+  const displayName = candidate.display_name;
+  const revision = candidate.revision;
+  const updatedAtMs = candidate.updated_at_ms;
+  if (phase !== 'unknown' && phase !== 'idle' && phase !== 'running') return null;
+  if (typeof displayName !== 'string') return null;
+  if (!Number.isSafeInteger(revision) || Number(revision) < 0) return null;
+  if (!Number.isSafeInteger(updatedAtMs) || Number(updatedAtMs) < 0) return null;
+  if (phase !== 'running' && displayName !== '') return null;
+  if (displayName && normalizeTerminalForegroundCommandDisplayName(displayName) !== displayName) return null;
+  return {
+    phase,
+    display_name: phase === 'running' ? displayName : '',
+    revision: Number(revision),
+    updated_at_ms: Number(updatedAtMs),
+  };
+}
 
 export class WorkbenchLayoutConflictError extends Error {
   currentRevision: number;
@@ -148,6 +178,12 @@ export async function createWorkbenchTerminalSession(
   if (!sessionId) {
     throw new Error('Invalid workbench terminal session response');
   }
+  const foregroundCommand = data?.session?.foreground_command == null
+    ? UNKNOWN_FOREGROUND_COMMAND
+    : decodeRuntimeTerminalForegroundCommand(data.session.foreground_command);
+  if (!foregroundCommand) {
+    throw new Error('Invalid workbench terminal session response');
+  }
   return {
     session: {
       id: sessionId,
@@ -156,6 +192,7 @@ export async function createWorkbenchTerminalSession(
       created_at_ms: Number(data?.session?.created_at_ms ?? 0),
       last_active_at_ms: Number(data?.session?.last_active_at_ms ?? 0),
       is_active: Boolean(data?.session?.is_active),
+      foreground_command: { ...foregroundCommand },
     },
     widget_state: widgetState,
   };

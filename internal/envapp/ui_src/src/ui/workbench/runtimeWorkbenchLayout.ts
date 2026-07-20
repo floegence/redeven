@@ -141,6 +141,13 @@ export type RuntimeWorkbenchTerminalCreateSessionRequest = Readonly<{
   working_dir?: string;
 }>;
 
+export type RuntimeWorkbenchTerminalForegroundCommandInfo = Readonly<{
+  phase: 'unknown' | 'idle' | 'running';
+  display_name: string;
+  revision: number;
+  updated_at_ms: number;
+}>;
+
 export type RuntimeWorkbenchTerminalSessionInfo = Readonly<{
   id: string;
   name: string;
@@ -148,6 +155,7 @@ export type RuntimeWorkbenchTerminalSessionInfo = Readonly<{
   created_at_ms: number;
   last_active_at_ms: number;
   is_active: boolean;
+  foreground_command: RuntimeWorkbenchTerminalForegroundCommandInfo;
 }>;
 
 export type RuntimeWorkbenchTerminalCreateSessionResponse = Readonly<{
