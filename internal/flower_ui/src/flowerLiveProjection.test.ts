@@ -113,6 +113,55 @@ function approvalAction(overrides: Partial<FlowerMainToolApprovalAction> = {}): 
   };
 }
 
+function rawControlApprovalAction(overrides: Record<string, unknown> = {}) {
+  return {
+    action_id: 'control-1',
+    origin: 'control_confirm',
+    run_id: 'run-control',
+    tool_id: 'tool-control',
+    tool_name: 'terminal.exec',
+    state: 'requested',
+    status: 'pending',
+    revision: 1,
+    version: 1,
+    surface_epoch: 1,
+    requested_at_unix_ms: 2000,
+    can_approve: true,
+    expected_seq: 5,
+    queue_generation: 0,
+    queue_order: 0,
+    batch_index: 0,
+    batch_size: 1,
+    summary: { label: 'Run command' },
+    ...overrides,
+  };
+}
+
+function rawCanonicalApprovalAction(overrides: Record<string, unknown> = {}) {
+  return {
+    action_id: 'canonical-1',
+    origin: 'main_tool',
+    run_id: 'run-canonical',
+    tool_id: 'tool-canonical',
+    tool_name: 'terminal.exec',
+    state: 'requested',
+    status: 'pending',
+    revision: 2,
+    version: 2,
+    surface_epoch: 3,
+    scope: 'thread:th-live',
+    requested_at_unix_ms: 2000,
+    can_approve: true,
+    expected_seq: 5,
+    queue_generation: 3,
+    queue_order: 1,
+    batch_index: 0,
+    batch_size: 1,
+    summary: { label: 'Run command' },
+    ...overrides,
+  };
+}
+
 function bootstrap(overrides: Partial<FlowerLiveBootstrap> = {}): FlowerLiveBootstrap {
   const baseThread = thread();
   return {
@@ -2270,6 +2319,197 @@ describe('Flower live projection', () => {
       })).toThrow(/approval\.queue_replaced/);
     }
   });
+
+  it('rejects malformed bootstrap approval actions instead of synthesizing authority fields', () => {
+    const malformed = [
+      { origin: undefined },
+      { origin: 'unknown' },
+      { state: undefined },
+      { state: 'running' },
+      { status: undefined },
+      { status: 'complete' },
+      { revision: 0 },
+      { version: 0 },
+      { version: 2 },
+      { surface_epoch: undefined },
+      { requested_at_unix_ms: undefined },
+      { can_approve: 'false' },
+      { can_approve: false },
+      { expected_seq: undefined },
+      { queue_generation: -1 },
+      { queue_generation: 1 },
+      { queue_order: Number.NaN },
+      { queue_order: 1 },
+      { batch_index: -1 },
+      { batch_index: 1, batch_size: 2 },
+      { batch_size: 0 },
+      { summary: {} },
+      { state: 'approved', status: 'resolved', can_approve: false, resolved_at_unix_ms: 2100 },
+    ];
+
+    for (const overrides of malformed) {
+      expect(() => mapFlowerLiveBootstrap({
+        ...rawBootstrapWithTimelineDecoration({
+          decoration_id: 'context-compaction:approval-contract',
+          kind: 'context_compaction',
+          anchor: { target_kind: 'message', message_id: 'msg-user', edge: 'after' },
+          ordinal: 0,
+          compaction: {
+            operation_id: 'approval-contract',
+            phase: 'complete',
+            status: 'compacted',
+            updated_at_ms: 2000,
+          },
+        }),
+        live_state: {
+          thread_patch: {},
+          runs: {},
+          approval_actions: {
+            'control-1': rawControlApprovalAction(overrides),
+          },
+          input_requests: {},
+        },
+      }, mapperOptions())).toThrow(/approval/);
+    }
+  });
+
+  it('rejects invalid bootstrap approval containers and mismatched action identities', () => {
+    const base = rawBootstrapWithTimelineDecoration({
+      decoration_id: 'context-compaction:approval-container',
+      kind: 'context_compaction',
+      anchor: { target_kind: 'message', message_id: 'msg-user', edge: 'after' },
+      ordinal: 0,
+      compaction: {
+        operation_id: 'approval-container',
+        phase: 'complete',
+        status: 'compacted',
+        updated_at_ms: 2000,
+      },
+    });
+    for (const approvalActions of [null, [], 'invalid']) {
+      expect(() => mapFlowerLiveBootstrap({
+        ...base,
+        live_state: { thread_patch: {}, runs: {}, approval_actions: approvalActions, input_requests: {} },
+      }, mapperOptions())).toThrow(/approval_actions must be an object/);
+    }
+    expect(() => mapFlowerLiveBootstrap({
+      ...base,
+      live_state: {
+        thread_patch: {},
+        runs: {},
+        approval_actions: { 'stale-key': rawControlApprovalAction() },
+        input_requests: {},
+      },
+    }, mapperOptions())).toThrow(/mismatched action identity/);
+    expect(() => mapFlowerLiveBootstrap({
+      ...base,
+      live_state: {
+        thread_patch: {},
+        runs: {},
+        approval_actions: {
+          'control-1': rawControlApprovalAction(),
+          'control-2': rawControlApprovalAction(),
+        },
+        input_requests: {},
+      },
+    }, mapperOptions())).toThrow(/mismatched action identity/);
+  });
+
+  it('rejects control confirmation events with inconsistent lifecycle authority', () => {
+    const malformed = [
+      { kind: 'approval.requested' as const, action: rawControlApprovalAction({ can_approve: false }) },
+      { kind: 'approval.requested' as const, action: rawControlApprovalAction({ version: 2 }) },
+      { kind: 'approval.requested' as const, action: rawControlApprovalAction({ expected_seq: undefined }) },
+      { kind: 'approval.resolved' as const, action: rawControlApprovalAction({ state: 'approved', status: 'resolved', can_approve: true, resolved_at_unix_ms: 3900 }) },
+      { kind: 'approval.resolved' as const, action: rawControlApprovalAction({ state: 'approved', status: 'resolved', can_approve: false }) },
+      { kind: 'approval.resolved' as const, action: rawControlApprovalAction({ state: 'approved', status: 'resolved', can_approve: false, resolved_at_unix_ms: 3900, queue_generation: 1 }) },
+    ];
+    for (const item of malformed) {
+      expect(() => mapFlowerLiveEvents({
+        events: [{
+          schema_version: 1,
+          seq: 1,
+          endpoint_id: 'runtime',
+          thread_id: 'th-live',
+          run_id: 'run-control',
+          at_unix_ms: 4000,
+          kind: item.kind,
+          payload: { action: item.action },
+        }],
+        next_cursor: 1,
+        retained_from_seq: 1,
+      })).toThrow(/control confirmation/);
+    }
+  });
+
+  it('requires canonical bootstrap approvals to match one complete approval queue', () => {
+    const base = rawBootstrapWithTimelineDecoration({
+      decoration_id: 'context-compaction:canonical-approval',
+      kind: 'context_compaction',
+      anchor: { target_kind: 'message', message_id: 'msg-user', edge: 'after' },
+      ordinal: 0,
+      compaction: {
+        operation_id: 'canonical-approval',
+        phase: 'complete',
+        status: 'compacted',
+        updated_at_ms: 2000,
+      },
+    });
+    const liveState = {
+      thread_patch: {},
+      runs: {},
+      approval_actions: { 'canonical-1': rawCanonicalApprovalAction() },
+      approval_queue: {
+        generation: 3,
+        revision: 4,
+        current_action_id: 'canonical-1',
+        current_position: 1,
+        total: 1,
+        unresolved_count: 1,
+      },
+      input_requests: {},
+    };
+
+    const mapped = mapFlowerLiveBootstrap({ ...base, live_state: liveState }, mapperOptions());
+    expect(mapped.live_state.approval_actions?.['canonical-1']).toMatchObject({
+      origin: 'main_tool',
+      queue_generation: 3,
+      queue_order: 1,
+    });
+    expect(() => mapFlowerLiveBootstrap({
+      ...base,
+      live_state: { ...liveState, approval_queue: undefined },
+    }, mapperOptions())).toThrow(/canonical approval queue/);
+  });
+
+  it.each(['approval.requested', 'approval.resolved'] as const)(
+    'rejects %s events with missing or unknown approval origin',
+    (kind) => {
+      for (const origin of [undefined, 'unknown']) {
+        expect(() => mapFlowerLiveEvents({
+          events: [{
+            schema_version: 1,
+            seq: 1,
+            endpoint_id: 'runtime',
+            thread_id: 'th-live',
+            run_id: 'run-control',
+            at_unix_ms: 4000,
+            kind,
+            payload: {
+              action: rawControlApprovalAction({
+                origin,
+                ...(kind === 'approval.resolved'
+                  ? { state: 'approved', status: 'resolved', can_approve: false, resolved_at_unix_ms: 3900 }
+                  : {}),
+              }),
+            },
+          }],
+          next_cursor: 1,
+          retained_from_seq: 1,
+        })).toThrow(/approval/);
+      }
+    },
+  );
 
   it('returns a waiting thread to running when the canonical queue becomes empty', () => {
     const initial = thread({

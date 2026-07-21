@@ -409,7 +409,8 @@ func TestFlowerLiveProjectionReplacesCanonicalApprovalQueueAtomically(t *testing
 		ActionID: "control_action", Origin: FlowerApprovalOriginControlConfirm,
 		RunID: "run_root", ToolID: "control_tool", ToolName: "task_complete",
 		State: FlowerApprovalStateRequested, Status: FlowerApprovalStatusPending,
-		Revision: 1, Version: 1, CanApprove: true, Summary: FlowerApprovalSummary{Label: "Complete task"},
+		Revision: 1, Version: 1, SurfaceEpoch: 1, RequestedAtMs: 1000,
+		CanApprove: true, BatchSize: 1, Summary: FlowerApprovalSummary{Label: "Complete task"},
 	}
 	stale := FlowerApprovalAction{
 		ActionID: "stale_action", Origin: FlowerApprovalOriginMainTool,
@@ -432,7 +433,7 @@ func TestFlowerLiveProjectionReplacesCanonicalApprovalQueueAtomically(t *testing
 		RunID: "run_child", TurnID: "turn_child", ToolID: "tool_child", ToolName: "terminal.exec",
 		State: FlowerApprovalStateRequested, Status: FlowerApprovalStatusPending,
 		Revision: 3, Version: 3, SurfaceEpoch: 4, SurfaceRole: FlowerApprovalSurfacePrimaryAction,
-		Scope: "thread:thread_child", QueueGeneration: 4, QueueOrder: 8, CanApprove: true,
+		Scope: "thread:thread_child", RequestedAtMs: 1100, QueueGeneration: 4, QueueOrder: 8, CanApprove: true, BatchSize: 1,
 		Summary: FlowerApprovalSummary{Label: "child command"},
 	}
 	queued := FlowerApprovalAction{
@@ -440,7 +441,7 @@ func TestFlowerLiveProjectionReplacesCanonicalApprovalQueueAtomically(t *testing
 		RunID: "run_root", TurnID: "turn_root", ToolID: "tool_root", ToolName: "file.edit",
 		State: FlowerApprovalStateRequested, Status: FlowerApprovalStatusPending,
 		Revision: 1, Version: 1, SurfaceEpoch: 4, SurfaceRole: FlowerApprovalSurfaceLocator,
-		Scope: "thread:" + threadID, QueueGeneration: 4, QueueOrder: 9, CanApprove: false,
+		Scope: "thread:" + threadID, RequestedAtMs: 1200, QueueGeneration: 4, QueueOrder: 9, CanApprove: false, BatchSize: 1,
 		ReadOnlyReason: "Queued for approval", Summary: FlowerApprovalSummary{Label: "edit file"},
 	}
 	queue := FlowerApprovalQueue{
@@ -493,6 +494,213 @@ func TestFlowerLiveProjectionReplacesCanonicalApprovalQueueAtomically(t *testing
 	}
 	if len(state.ApprovalActions) != 1 || state.ApprovalActions[control.ActionID].ActionID == "" {
 		t.Fatalf("empty canonical queue actions=%#v, want only control confirmation", state.ApprovalActions)
+	}
+}
+
+func TestFlowerLiveProjectionDoesNotInferApprovalOrigin(t *testing.T) {
+	t.Parallel()
+
+	for _, origin := range []FlowerApprovalOrigin{"", "unknown"} {
+		origin := origin
+		t.Run(string(origin), func(t *testing.T) {
+			t.Parallel()
+
+			svc := &Service{flowerLiveByThread: map[string]*flowerLiveThreadStream{}}
+			endpointID := "env_invalid_approval_origin"
+			threadID := "thread_invalid_approval_origin"
+			action := FlowerApprovalAction{
+				ActionID: "control_action", Origin: origin,
+				RunID: "run_root", ToolID: "control_tool", ToolName: "terminal.exec",
+				State: FlowerApprovalStateRequested, Status: FlowerApprovalStatusPending,
+				Revision: 1, Version: 1, SurfaceEpoch: 1, RequestedAtMs: 1000,
+				CanApprove: true, ExpectedSeq: 1, BatchSize: 1, Summary: FlowerApprovalSummary{Label: "Run command"},
+			}
+			requested := svc.appendFlowerLiveEvent(FlowerLiveEvent{
+				EndpointID: endpointID, ThreadID: threadID, RunID: action.RunID,
+				Kind:    FlowerLiveApprovalRequested,
+				Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: action}),
+			})
+			var requestedPayload FlowerLiveApprovalPayload
+			if !decodeFlowerPayload(requested.Payload, &requestedPayload) {
+				t.Fatalf("decode requested payload: %s", string(requested.Payload))
+			}
+			if requestedPayload.Action.Origin != origin {
+				t.Fatalf("requested origin=%q, want unchanged %q", requestedPayload.Action.Origin, origin)
+			}
+
+			svc.mu.Lock()
+			stream := svc.flowerLiveByThread[runThreadKey(endpointID, threadID)]
+			if _, ok := stream.State.ApprovalActions[action.ActionID]; ok {
+				svc.mu.Unlock()
+				t.Fatalf("invalid requested approval was materialized")
+			}
+			valid := action
+			valid.Origin = FlowerApprovalOriginControlConfirm
+			stream.State.ApprovalActions[action.ActionID] = valid
+			svc.mu.Unlock()
+
+			resolved := action
+			resolved.State = FlowerApprovalStateApproved
+			resolved.Status = FlowerApprovalStatusResolved
+			resolved.CanApprove = false
+			resolved.ResolvedAtMs = 2000
+			svc.appendFlowerLiveEvent(FlowerLiveEvent{
+				EndpointID: endpointID, ThreadID: threadID, RunID: action.RunID,
+				Kind:    FlowerLiveApprovalResolved,
+				Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: resolved}),
+			})
+			svc.mu.Lock()
+			_, ok := stream.State.ApprovalActions[action.ActionID]
+			svc.mu.Unlock()
+			if !ok {
+				t.Fatalf("invalid resolved approval changed materialized state")
+			}
+		})
+	}
+}
+
+func TestFlowerLiveProjectionRejectsMalformedControlApprovalLifecycle(t *testing.T) {
+	t.Parallel()
+
+	validPending := FlowerApprovalAction{
+		ActionID: "control_action", Origin: FlowerApprovalOriginControlConfirm,
+		RunID: "run_root", ToolID: "control_tool", ToolName: "terminal.exec",
+		State: FlowerApprovalStateRequested, Status: FlowerApprovalStatusPending,
+		Revision: 1, Version: 1, SurfaceEpoch: 1, RequestedAtMs: 1000,
+		CanApprove: true, ExpectedSeq: 1, BatchSize: 1,
+		Summary: FlowerApprovalSummary{Label: "Run command"},
+	}
+	requestedCases := []struct {
+		name   string
+		mutate func(*FlowerApprovalAction)
+	}{
+		{name: "not_actionable", mutate: func(action *FlowerApprovalAction) { action.CanApprove = false }},
+		{name: "negative_expected_seq", mutate: func(action *FlowerApprovalAction) { action.ExpectedSeq = -1 }},
+		{name: "version_mismatch", mutate: func(action *FlowerApprovalAction) { action.Version++ }},
+		{name: "queue_generation", mutate: func(action *FlowerApprovalAction) { action.QueueGeneration = 1 }},
+		{name: "queue_order", mutate: func(action *FlowerApprovalAction) { action.QueueOrder = 1 }},
+		{name: "batch_index", mutate: func(action *FlowerApprovalAction) { action.BatchIndex = 1; action.BatchSize = 2 }},
+		{name: "batch_size", mutate: func(action *FlowerApprovalAction) { action.BatchSize = 2 }},
+	}
+	for _, testCase := range requestedCases {
+		testCase := testCase
+		t.Run("requested_"+testCase.name, func(t *testing.T) {
+			t.Parallel()
+			action := validPending
+			testCase.mutate(&action)
+			svc := &Service{flowerLiveByThread: map[string]*flowerLiveThreadStream{}}
+			svc.appendFlowerLiveEvent(FlowerLiveEvent{
+				EndpointID: "env_control_invalid", ThreadID: "thread_" + testCase.name, RunID: action.RunID,
+				Kind: FlowerLiveApprovalRequested, Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: action}),
+			})
+			svc.mu.Lock()
+			state := svc.flowerLiveMaterializedStateLocked("env_control_invalid", "thread_"+testCase.name)
+			svc.mu.Unlock()
+			if len(state.ApprovalActions) != 0 {
+				t.Fatalf("malformed requested control approval changed authority: %#v", state.ApprovalActions)
+			}
+		})
+	}
+
+	resolvedCases := []struct {
+		name   string
+		mutate func(*FlowerApprovalAction)
+	}{
+		{name: "still_actionable", mutate: func(action *FlowerApprovalAction) { action.CanApprove = true }},
+		{name: "missing_resolved_at", mutate: func(action *FlowerApprovalAction) { action.ResolvedAtMs = 0 }},
+		{name: "queue_generation", mutate: func(action *FlowerApprovalAction) { action.QueueGeneration = 1 }},
+		{name: "queue_order", mutate: func(action *FlowerApprovalAction) { action.QueueOrder = 1 }},
+		{name: "batch_index", mutate: func(action *FlowerApprovalAction) { action.BatchIndex = 1; action.BatchSize = 2 }},
+		{name: "batch_size", mutate: func(action *FlowerApprovalAction) { action.BatchSize = 2 }},
+	}
+	for _, testCase := range resolvedCases {
+		testCase := testCase
+		t.Run("resolved_"+testCase.name, func(t *testing.T) {
+			t.Parallel()
+			svc := &Service{flowerLiveByThread: map[string]*flowerLiveThreadStream{}}
+			threadID := "thread_resolved_" + testCase.name
+			requested := svc.appendFlowerLiveEvent(FlowerLiveEvent{
+				EndpointID: "env_control_invalid", ThreadID: threadID, RunID: validPending.RunID,
+				Kind: FlowerLiveApprovalRequested, Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: validPending}),
+			})
+			var requestedPayload FlowerLiveApprovalPayload
+			if !decodeFlowerPayload(requested.Payload, &requestedPayload) {
+				t.Fatalf("decode requested payload: %s", string(requested.Payload))
+			}
+			resolved := requestedPayload.Action
+			resolved.State = FlowerApprovalStateApproved
+			resolved.Status = FlowerApprovalStatusResolved
+			resolved.CanApprove = false
+			resolved.ResolvedAtMs = 2000
+			testCase.mutate(&resolved)
+			svc.appendFlowerLiveEvent(FlowerLiveEvent{
+				EndpointID: "env_control_invalid", ThreadID: threadID, RunID: resolved.RunID,
+				Kind: FlowerLiveApprovalResolved, Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: resolved}),
+			})
+			svc.mu.Lock()
+			state := svc.flowerLiveMaterializedStateLocked("env_control_invalid", threadID)
+			svc.mu.Unlock()
+			current := state.ApprovalActions[validPending.ActionID]
+			if current.State != FlowerApprovalStateRequested || current.Status != FlowerApprovalStatusPending || !current.CanApprove {
+				t.Fatalf("malformed resolved control approval changed authority: %#v", current)
+			}
+		})
+	}
+}
+
+func TestFlowerLiveProjectionRejectsMalformedCanonicalApprovalReplacement(t *testing.T) {
+	t.Parallel()
+
+	validAction := FlowerApprovalAction{
+		ActionID: "canonical_action", Origin: FlowerApprovalOriginMainTool,
+		RunID: "run_root", ToolID: "tool_root", ToolName: "terminal.exec",
+		State: FlowerApprovalStateRequested, Status: FlowerApprovalStatusPending,
+		Revision: 2, Version: 2, SurfaceEpoch: 3, Scope: "thread:thread_canonical",
+		RequestedAtMs: 1000, CanApprove: true, QueueGeneration: 3, QueueOrder: 1,
+		BatchSize: 1, Summary: FlowerApprovalSummary{Label: "Run command"},
+	}
+	validQueue := FlowerApprovalQueue{
+		Generation: 3, Revision: 4, CurrentActionID: validAction.ActionID,
+		CurrentPosition: 1, Total: 1, UnresolvedCount: 1,
+	}
+	tests := []struct {
+		name   string
+		mutate func(*FlowerApprovalAction, *FlowerApprovalQueue)
+	}{
+		{name: "missing_version", mutate: func(action *FlowerApprovalAction, _ *FlowerApprovalQueue) { action.Version = 0 }},
+		{name: "negative_expected_seq", mutate: func(action *FlowerApprovalAction, _ *FlowerApprovalQueue) { action.ExpectedSeq = -1 }},
+		{name: "mismatched_counts", mutate: func(_ *FlowerApprovalAction, queue *FlowerApprovalQueue) { queue.Total = 2 }},
+	}
+	for _, tt := range tests {
+		tt := tt
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			action := validAction
+			queue := validQueue
+			tt.mutate(&action, &queue)
+			svc := &Service{flowerLiveByThread: map[string]*flowerLiveThreadStream{}}
+			event := svc.appendFlowerLiveEvent(FlowerLiveEvent{
+				EndpointID: "env_canonical", ThreadID: "thread_canonical", RunID: action.RunID,
+				Kind: FlowerLiveApprovalQueueReplaced,
+				Payload: mustFlowerPayload(FlowerLiveApprovalQueuePayload{
+					Actions: []FlowerApprovalAction{action}, ApprovalQueue: queue,
+				}),
+			})
+			var payload FlowerLiveApprovalQueuePayload
+			if !decodeFlowerPayload(event.Payload, &payload) {
+				t.Fatalf("decode canonical payload: %s", string(event.Payload))
+			}
+			if payload.Actions[0].Version != action.Version {
+				t.Fatalf("canonical version=%d, want unchanged %d", payload.Actions[0].Version, action.Version)
+			}
+			svc.mu.Lock()
+			state := svc.flowerLiveMaterializedStateLocked("env_canonical", "thread_canonical")
+			svc.mu.Unlock()
+			if state.ApprovalQueue != nil || len(state.ApprovalActions) != 0 {
+				t.Fatalf("malformed canonical replacement changed authority: %#v", state)
+			}
+		})
 	}
 }
 

@@ -1685,6 +1685,114 @@ func TestApproveToolRejectsDuplicateAfterDecisionConsumed(t *testing.T) {
 	}
 }
 
+func TestSubmitFlowerControlConfirmationUsesLiveEventAuthority(t *testing.T) {
+	t.Parallel()
+
+	meta := session.Meta{
+		EndpointID: "env_control_submit", UserPublicID: "user_control_submit",
+		CanRead: true, CanWrite: true, CanExecute: true,
+	}
+	svc := newRealtimeTestService(t, 0)
+	threadID := "thread_control_submit"
+	runID := "run_control_submit"
+	turnID := "turn_control_submit"
+	toolID := "tool_control_submit"
+	decision := make(chan bool, 1)
+	r := newRunWithProductStoreForTest(t, runOptions{
+		RunID: runID, EndpointID: meta.EndpointID, ThreadID: threadID, TurnID: turnID,
+		MessageID: "message_control_submit", UserPublicID: meta.UserPublicID, SessionMeta: &meta,
+		OnStreamEvent: func(event any) {
+			svc.broadcastStreamEvent(meta.EndpointID, threadID, turnID, runID, event)
+		},
+	}, svc.threadsDB)
+	r.mu.Lock()
+	r.toolApprovals[toolID] = &toolApprovalRequest{
+		decision: decision, toolName: "terminal.exec", command: "sleep 30", requestedAtMs: time.Now().UnixMilli(),
+	}
+	r.mu.Unlock()
+	svc.mu.Lock()
+	svc.runs[runID] = r
+	svc.activeRunByTh[runThreadKey(meta.EndpointID, threadID)] = runID
+	svc.mu.Unlock()
+
+	r.publishControlConfirmationRequested(toolID)
+	events, err := svc.ListFlowerThreadLiveEvents(context.Background(), &meta, threadID, 0, 10)
+	if err != nil {
+		t.Fatalf("ListFlowerThreadLiveEvents requested: %v", err)
+	}
+	if len(events.Events) != 1 || events.Events[0].Kind != FlowerLiveApprovalRequested {
+		t.Fatalf("requested events=%#v, want one approval.requested", events.Events)
+	}
+	var requested FlowerLiveApprovalPayload
+	if !decodeFlowerPayload(events.Events[0].Payload, &requested) {
+		t.Fatalf("decode requested approval: %s", string(events.Events[0].Payload))
+	}
+	action := requested.Action
+	if action.ExpectedSeq != events.Events[0].Seq || !validFlowerControlApprovalAction(action, FlowerLiveApprovalRequested) {
+		t.Fatalf("requested action=%#v event_seq=%d", action, events.Events[0].Seq)
+	}
+	request := SubmitFlowerApprovalRequest{
+		ThreadID: threadID, Origin: action.Origin, RunID: runID, ActionID: action.ActionID, ToolID: toolID,
+		Approved: true, ExpectedSeq: action.ExpectedSeq, Revision: action.Revision,
+		Version: action.Version, SurfaceEpoch: action.SurfaceEpoch,
+	}
+	staleRequests := []struct {
+		name   string
+		mutate func(*SubmitFlowerApprovalRequest)
+	}{
+		{name: "expected_seq", mutate: func(req *SubmitFlowerApprovalRequest) { req.ExpectedSeq++ }},
+		{name: "version", mutate: func(req *SubmitFlowerApprovalRequest) { req.Version++ }},
+		{name: "surface_epoch", mutate: func(req *SubmitFlowerApprovalRequest) { req.SurfaceEpoch++ }},
+	}
+	for _, testCase := range staleRequests {
+		stale := request
+		testCase.mutate(&stale)
+		if _, submitErr := svc.SubmitFlowerApproval(&meta, stale); !errors.Is(submitErr, ErrApprovalConflict) {
+			t.Fatalf("stale %s error=%v, want approval conflict", testCase.name, submitErr)
+		}
+		select {
+		case got := <-decision:
+			t.Fatalf("stale %s delivered decision %v", testCase.name, got)
+		default:
+		}
+	}
+
+	receipt, err := svc.SubmitFlowerApproval(&meta, request)
+	if err != nil {
+		t.Fatalf("SubmitFlowerApproval with live control action: %v", err)
+	}
+	if receipt == nil || !receipt.OK || receipt.CurrentCursor <= action.ExpectedSeq {
+		t.Fatalf("approval receipt=%#v, want cursor after requested seq %d", receipt, action.ExpectedSeq)
+	}
+	select {
+	case got := <-decision:
+		if !got {
+			t.Fatalf("decision=%v, want approved", got)
+		}
+	default:
+		t.Fatalf("approved decision was not delivered")
+	}
+	resolvedEvents, err := svc.ListFlowerThreadLiveEvents(context.Background(), &meta, threadID, action.ExpectedSeq, 10)
+	if err != nil {
+		t.Fatalf("ListFlowerThreadLiveEvents resolved: %v", err)
+	}
+	if len(resolvedEvents.Events) != 1 || resolvedEvents.Events[0].Seq != receipt.CurrentCursor || resolvedEvents.Events[0].Kind != FlowerLiveApprovalResolved {
+		t.Fatalf("resolved events=%#v receipt=%#v", resolvedEvents.Events, receipt)
+	}
+	var resolved FlowerLiveApprovalPayload
+	if !decodeFlowerPayload(resolvedEvents.Events[0].Payload, &resolved) {
+		t.Fatalf("decode resolved approval: %s", string(resolvedEvents.Events[0].Payload))
+	}
+	if resolved.Action.State != FlowerApprovalStateApproved || resolved.Action.Status != FlowerApprovalStatusResolved ||
+		resolved.Action.CanApprove || resolved.Action.ResolvedAtMs <= 0 || resolved.Action.ExpectedSeq != action.ExpectedSeq ||
+		resolved.Action.Revision != action.Revision || resolved.Action.Version != action.Version || resolved.Action.SurfaceEpoch != action.SurfaceEpoch {
+		t.Fatalf("resolved action=%#v, want resolved form of %#v", resolved.Action, action)
+	}
+	if _, replayErr := svc.SubmitFlowerApproval(&meta, request); !errors.Is(replayErr, ErrApprovalConflict) {
+		t.Fatalf("resolved replay error=%v, want approval conflict", replayErr)
+	}
+}
+
 func TestFlowerLiveThreadSummaryUpdateIncludesThreadPatch(t *testing.T) {
 	t.Parallel()
 
