@@ -12,29 +12,6 @@ import (
 	flruntime "github.com/floegence/floret/runtime"
 )
 
-func floretApprovalArgs(req flruntime.EffectAuthorizationRequest) (map[string]any, error) {
-	args := make(map[string]any)
-	resourcesByKind := make(map[string][]string)
-	for _, resource := range req.Resources {
-		kind := strings.TrimSpace(resource.Kind)
-		value := strings.TrimSpace(resource.Value)
-		if kind == "" || value == "" {
-			return nil, errors.New("Floret effect approval resource is incomplete")
-		}
-		resourcesByKind[kind] = append(resourcesByKind[kind], value)
-		switch kind {
-		case "command":
-			args["command"] = value
-		case "working_directory":
-			args["cwd"] = value
-		}
-	}
-	for kind, values := range resourcesByKind {
-		args["resource."+kind] = append([]string(nil), values...)
-	}
-	return args, nil
-}
-
 func visibilityForToolName(toolName string) ToolVisibilityClass {
 	switch strings.TrimSpace(toolName) {
 	case "read_file", "read_files", "rgrep", "find", "web_fetch", "file.read":
@@ -520,72 +497,4 @@ func (r *run) hasPendingControlConfirmation() bool {
 		}
 	}
 	return false
-}
-
-func approvalCommandForTool(toolName string, args map[string]any) string {
-	if strings.TrimSpace(toolName) != "terminal.exec" {
-		return ""
-	}
-	return strings.TrimSpace(anyToString(args["command"]))
-}
-
-func approvalCwdForTool(toolName string, args map[string]any) string {
-	if strings.TrimSpace(toolName) != "terminal.exec" {
-		return ""
-	}
-	return strings.TrimSpace(firstNonEmptyString(anyToString(args["cwd"]), anyToString(args["workdir"])))
-}
-
-func floretApprovalEffects(req flruntime.EffectAuthorizationRequest) []string {
-	seen := map[string]struct{}{}
-	out := make([]string, 0, len(req.Effects))
-	for _, effect := range req.Effects {
-		value := strings.TrimSpace(string(effect))
-		if value == "" {
-			continue
-		}
-		if _, ok := seen[value]; ok {
-			continue
-		}
-		seen[value] = struct{}{}
-		out = append(out, value)
-	}
-	return out
-}
-
-func floretApprovalFlags(req flruntime.EffectAuthorizationRequest) []string {
-	out := []string{}
-	if req.ReadOnly {
-		out = append(out, "read_only")
-	}
-	if req.Destructive {
-		out = append(out, "destructive")
-	}
-	if req.OpenWorld {
-		out = append(out, "open_world")
-	}
-	return out
-}
-
-func floretApprovalTargets(req flruntime.EffectAuthorizationRequest) []FlowerSafeTarget {
-	seen := map[string]struct{}{}
-	out := make([]FlowerSafeTarget, 0, len(req.Resources))
-	for _, resource := range req.Resources {
-		kind := strings.TrimSpace(resource.Kind)
-		value := strings.TrimSpace(resource.Value)
-		if kind == "" || value == "" {
-			continue
-		}
-		key := kind + "\x00" + value
-		if _, ok := seen[key]; ok {
-			continue
-		}
-		seen[key] = struct{}{}
-		target := FlowerSafeTarget{Kind: kind, Label: value}
-		if kind == "file" {
-			target.URI = "file:" + value
-		}
-		out = append(out, target)
-	}
-	return out
 }

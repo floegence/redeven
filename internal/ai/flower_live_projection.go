@@ -11,7 +11,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/floegence/floret/observation"
 	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
@@ -2059,72 +2058,9 @@ func toolApprovalSummaryEffects(toolName string, approval *toolApprovalRequest) 
 	return toolApprovalEffects(toolName)
 }
 
-func flowerApprovalActionFromActivity(runID string, item observation.ActivityItem) FlowerApprovalAction {
-	toolID := strings.TrimSpace(item.ToolID)
-	toolName := strings.TrimSpace(item.ToolName)
-	if toolName == "" {
-		toolName = "tool"
-	}
-	state := normalizeFlowerApprovalState(item.ApprovalState)
-	if state == "" {
-		state = FlowerApprovalStateRequested
-	}
-	startedAt := item.StartedAtUnixMS
-	if startedAt <= 0 {
-		startedAt = time.Now().UnixMilli()
-	}
-	action := FlowerApprovalAction{
-		ActionID:      flowerApprovalActionID(runID, toolID),
-		Origin:        FlowerApprovalOriginMainTool,
-		RunID:         strings.TrimSpace(runID),
-		ToolID:        toolID,
-		ToolName:      toolName,
-		State:         state,
-		Status:        approvalStatusForState(state),
-		Revision:      1,
-		Version:       1,
-		RequestedAtMs: startedAt,
-		CanApprove:    state == FlowerApprovalStateRequested,
-		Summary: FlowerApprovalSummary{
-			Label:       firstNonEmptyString(strings.TrimSpace(item.Label), toolApprovalLabel(toolName)),
-			Description: strings.TrimSpace(item.Description),
-			Effects:     toolApprovalEffects(toolName),
-		},
-	}
-	if action.Status == FlowerApprovalStatusResolved {
-		action.ResolvedAtMs = item.EndedAtUnixMS
-		action.CanApprove = false
-	}
-	return action
-}
-
 func flowerApprovalActionID(runID string, toolID string) string {
 	sum := sha256.Sum256([]byte(strings.TrimSpace(runID) + "\x00" + strings.TrimSpace(toolID)))
 	return "appr_" + base64.RawURLEncoding.EncodeToString(sum[:18])
-}
-
-func normalizeFlowerApprovalState(raw string) FlowerApprovalState {
-	switch strings.TrimSpace(raw) {
-	case "requested":
-		return FlowerApprovalStateRequested
-	case "approved":
-		return FlowerApprovalStateApproved
-	case "rejected":
-		return FlowerApprovalStateRejected
-	case "timed_out":
-		return FlowerApprovalStateTimedOut
-	case "canceled", "cancelled":
-		return FlowerApprovalStateCanceled
-	default:
-		return ""
-	}
-}
-
-func approvalStatusForState(state FlowerApprovalState) FlowerApprovalStatus {
-	if state == FlowerApprovalStateRequested || state == "" {
-		return FlowerApprovalStatusPending
-	}
-	return FlowerApprovalStatusResolved
 }
 
 func toolApprovalLabel(toolName string) string {

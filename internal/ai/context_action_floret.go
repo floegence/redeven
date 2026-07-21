@@ -55,10 +55,6 @@ func floretContextProjectionForInputWithAuthority(input RunInput, authority *flo
 	return projection, nil
 }
 
-func floretContextActionItems(action *ContextActionEnvelope) ([]flruntime.MessageReference, []flruntime.TurnSupplementalContextItem, error) {
-	return floretContextActionItemsWithAuthority(action, nil)
-}
-
 func floretContextActionItemsWithAuthority(action *ContextActionEnvelope, authority *flowerCanonicalReferenceTargetAuthority) ([]flruntime.MessageReference, []flruntime.TurnSupplementalContextItem, error) {
 	action, err := normalizeAskFlowerContextActionEnvelope(action)
 	if err != nil {
@@ -117,10 +113,6 @@ func floretContextActionItemsWithAuthority(action *ContextActionEnvelope, author
 		return nil, nil, ErrInvalidContextAction
 	}
 	return references, items, nil
-}
-
-func floretFilePathReference(action *ContextActionEnvelope, item ContextActionContextItem, index int) (flruntime.MessageReference, error) {
-	return floretFilePathReferenceWithAuthority(action, item, index, nil)
 }
 
 func floretFilePathReferenceWithAuthority(action *ContextActionEnvelope, item ContextActionContextItem, index int, authority *flowerCanonicalReferenceTargetAuthority) (flruntime.MessageReference, error) {

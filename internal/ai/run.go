@@ -264,7 +264,6 @@ type toolApprovalRequest struct {
 	promoted      chan struct{}
 	promotedOnce  sync.Once
 	toolName      string
-	argsHash      string
 	command       string
 	cwd           string
 	effects       []string
