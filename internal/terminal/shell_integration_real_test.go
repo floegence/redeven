@@ -71,6 +71,59 @@ func TestRealBashIntegrationPreservesDelimitedPromptCommand(t *testing.T) {
 	})
 }
 
+func TestRealBashIntegrationRunsUserPromptCommandOncePerPrompt(t *testing.T) {
+	shellPath := "/bin/bash"
+	if _, err := os.Stat(shellPath); err != nil {
+		t.Skipf("shell %q unavailable: %v", shellPath, err)
+	}
+
+	const userPromptMarker = "__REDEVEN_USER_PROMPT_HOOK__"
+	homeDir := newIsolatedShellHome(t)
+	if err := os.WriteFile(
+		filepath.Join(homeDir, ".bashrc"),
+		[]byte("PROMPT_COMMAND='printf \""+userPromptMarker+"\\n\"; '\n"),
+		0o644,
+	); err != nil {
+		t.Fatalf("write Bash configuration: %v", err)
+	}
+	t.Setenv("HOME", homeDir)
+
+	manager := newShellLifecycleTestManager(t, t.TempDir(), shellPath)
+	t.Cleanup(manager.Cleanup)
+	session, err := manager.createSession("test", "")
+	if err != nil {
+		t.Fatalf("createSession() error = %v", err)
+	}
+	activateShellTestSession(t, manager, session)
+	time.Sleep(250 * time.Millisecond)
+
+	for cycle := 1; cycle <= 2; cycle++ {
+		startSeq := nextHistorySequence(t, session)
+		if err := session.WriteData(":\n"); err != nil {
+			t.Fatalf("WriteData(prompt cycle %d) error = %v", cycle, err)
+		}
+		output := waitForHistoryContains(
+			t,
+			session,
+			startSeq,
+			5*time.Second,
+			shellLifecycleStartMarker,
+			userPromptMarker,
+			"\x1b]633;D;0\x07",
+			shellLifecycleReadyMarker,
+		)
+		if count := strings.Count(output, userPromptMarker); count != 1 {
+			t.Fatalf("prompt cycle %d user PROMPT_COMMAND executions = %d, want 1; output=%q", cycle, count, output)
+		}
+		assertContainsInOrder(t, output, []string{
+			shellLifecycleStartMarker,
+			userPromptMarker,
+			"\x1b]633;D;0\x07",
+			shellLifecycleReadyMarker,
+		})
+	}
+}
+
 func TestRealShellIntegrationEmitsLifecycleMarkersForBashAndZsh(t *testing.T) {
 	for _, shellPath := range []string{"/bin/bash", "/bin/zsh"} {
 		shellPath := shellPath
