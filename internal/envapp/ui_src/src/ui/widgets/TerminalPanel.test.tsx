@@ -5770,6 +5770,69 @@ describe('TerminalPanel', () => {
     expect(host.querySelector('[data-terminal-session-avatar="session-agent"]')?.textContent).toContain('R');
   });
 
+  it('turns a settled agent wave into one unread dot and restores the settled glyph after viewing', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-agent',
+        name: 'Agent',
+        workingDir: '/workspace/repo',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+        foregroundCommand: {
+          phase: 'running', displayName: 'codex', revision: 1, updatedAtMs: 10,
+        },
+        outputActivity: {
+          phase: 'streaming', revision: 1, updatedAtMs: 11,
+        },
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+    await new Promise<void>((resolve) => setTimeout(resolve, 170));
+    await settleTerminalPanel();
+
+    findTerminalTab(host, 'Agent')?.click();
+    await settleTerminalPanelAfterPaint();
+    expect(findTerminalTab(host, 'Agent')?.dataset.terminalSessionActive).toBe('true');
+    expect(terminalCoreInstances).toHaveLength(2);
+    findTerminalTab(host, 'Terminal 1')?.click();
+    await settleTerminalPanelAfterPaint();
+    expect(findTerminalTab(host, 'Terminal 1')?.dataset.terminalSessionActive).toBe('true');
+    terminalCoreInstances[1]?.emitBell();
+    await settleTerminalPanelAfterPaint();
+
+    expect(host.querySelector('[data-terminal-output-state="streaming"]')).not.toBeNull();
+    expect(findTerminalTabStatus(host, 'Agent', 'unread')).not.toBeNull();
+    expect(host.querySelector('[data-terminal-output-attention="unread"]')).toBeNull();
+    expect(host.querySelector('[data-terminal-attention-state="unread"]')).toBeNull();
+
+    publishTerminalOutputActivity('session-agent', {
+      phase: 'settled', revision: 2, updatedAtMs: 20,
+    });
+    await settleTerminalPanel();
+    expect(host.querySelectorAll('[data-terminal-output-attention="unread"]')).toHaveLength(1);
+    expect(host.querySelector('[data-terminal-output-state="settled"]')).toBeNull();
+    expect(host.querySelector('[data-terminal-attention-state="unread"]')).toBeNull();
+
+    findTerminalTab(host, 'Agent')?.click();
+    await settleTerminalPanelAfterPaint();
+    expect(host.querySelector('[data-terminal-output-attention="unread"]')).toBeNull();
+    expect(host.querySelector('[data-terminal-output-state="settled"]')).not.toBeNull();
+    expect(host.querySelector('[data-terminal-agent-identity="codex"] [data-terminal-process-state="running"]')).not.toBeNull();
+  });
+
   it('does not flash a spinner or program title for a command that finishes inside the confirmation window', async () => {
     vi.useFakeTimers();
     terminalSessionsState.sessions = [{
