@@ -1176,44 +1176,6 @@ func (s *Service) stopFinalizingRunID(endpointID string, threadID string) string
 	return strings.TrimSpace(s.stopFinalizingByTh[k])
 }
 
-func (s *Service) clearStopFinalizingRun(thKey string, runID string) bool {
-	if s == nil {
-		return false
-	}
-	thKey = strings.TrimSpace(thKey)
-	runID = strings.TrimSpace(runID)
-	if thKey == "" || runID == "" {
-		return false
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if strings.TrimSpace(s.stopFinalizingByTh[thKey]) != runID {
-		return false
-	}
-	delete(s.stopFinalizingByTh, thKey)
-	return true
-}
-
-func (s *Service) waitForStopFinalization(endpointID string, threadID string, runID string, doneCh <-chan struct{}) {
-	if s == nil || doneCh == nil {
-		return
-	}
-	endpointID = strings.TrimSpace(endpointID)
-	threadID = strings.TrimSpace(threadID)
-	runID = strings.TrimSpace(runID)
-	thKey := runThreadKey(endpointID, threadID)
-	if thKey == "" || runID == "" {
-		return
-	}
-	<-doneCh
-	if !s.clearStopFinalizingRun(thKey, runID) {
-		return
-	}
-	if s.threadMgr != nil {
-		s.threadMgr.Wake(endpointID, threadID)
-	}
-}
-
 func (s *Service) ListModels() (*ModelsResponse, error) {
 	if s == nil {
 		return nil, ErrNotConfigured

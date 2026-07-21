@@ -244,19 +244,6 @@ func newPermissionPolicyBridgeService(t *testing.T) *Service {
 	return svc
 }
 
-func approvalQueueRevisionForTest(svc *Service, endpointID string, threadID string) int64 {
-	if svc == nil {
-		return 0
-	}
-	svc.mu.Lock()
-	defer svc.mu.Unlock()
-	stream := svc.flowerLiveByThread[runThreadKey(endpointID, threadID)]
-	if stream == nil || stream.State.ApprovalQueue == nil {
-		return 0
-	}
-	return stream.State.ApprovalQueue.Revision
-}
-
 func TestPermissionPolicy_SubagentCanonicalQueueConcurrentResolveOneWins(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
