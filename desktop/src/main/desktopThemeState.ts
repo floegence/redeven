@@ -1,13 +1,19 @@
 import type { BrowserWindow } from 'electron';
 
-import { desktopWindowThemeSnapshotForResolvedTheme } from './desktopTheme';
+import { desktopWindowThemeSnapshotForShellTheme } from './desktopTheme';
 import type { DesktopStateStore } from './desktopStateStore';
 import { applyDesktopWindowTheme } from './windowChrome';
 import {
+  DESKTOP_SHELL_THEME_SELECTION_STATE_KEY,
   DESKTOP_THEME_SOURCE_STATE_KEY,
+  isDesktopShellThemePresetForMode,
+  normalizeDesktopShellThemeSelection,
   normalizeDesktopThemeSource,
   sameDesktopThemeSnapshot,
+  type DesktopDarkShellThemePreset,
+  type DesktopLightShellThemePreset,
   type DesktopResolvedTheme,
+  type DesktopShellThemeSelection,
   type DesktopThemeSnapshot,
   type DesktopThemeSource,
 } from '../shared/desktopTheme';
@@ -22,22 +28,27 @@ interface DesktopThemeNativeThemeLike {
 
 function resolveDesktopThemeSnapshot(
   source: DesktopThemeSource,
+  shellThemes: DesktopShellThemeSelection,
   nativeTheme: DesktopThemeNativeThemeLike,
 ): DesktopThemeSnapshot {
   const resolvedTheme: DesktopResolvedTheme = source === 'system'
     ? (nativeTheme.shouldUseDarkColors ? 'dark' : 'light')
     : source;
+  const activeShellTheme = shellThemes[resolvedTheme];
 
   return {
     source,
     resolvedTheme,
-    window: desktopWindowThemeSnapshotForResolvedTheme(resolvedTheme),
+    shellThemes,
+    activeShellTheme,
+    window: desktopWindowThemeSnapshotForShellTheme(activeShellTheme),
   };
 }
 
 export class DesktopThemeState {
   private initialized = false;
   private source: DesktopThemeSource = 'system';
+  private shellThemes: DesktopShellThemeSelection = normalizeDesktopShellThemeSelection(null);
   private snapshot: DesktopThemeSnapshot;
   private readonly windows = new Set<BrowserWindow>();
 
@@ -55,7 +66,7 @@ export class DesktopThemeState {
     private readonly nativeTheme: DesktopThemeNativeThemeLike,
     private readonly platform: NodeJS.Platform = process.platform,
   ) {
-    this.snapshot = resolveDesktopThemeSnapshot('system', this.nativeTheme);
+    this.snapshot = resolveDesktopThemeSnapshot('system', this.shellThemes, this.nativeTheme);
   }
 
   initialize(): DesktopThemeSnapshot {
@@ -65,8 +76,11 @@ export class DesktopThemeState {
 
     this.initialized = true;
     this.source = normalizeDesktopThemeSource(this.store.getRendererItem(DESKTOP_THEME_SOURCE_STATE_KEY), 'system');
+    this.shellThemes = normalizeDesktopShellThemeSelection(
+      this.store.getRendererItem(DESKTOP_SHELL_THEME_SELECTION_STATE_KEY),
+    );
     this.nativeTheme.themeSource = this.source;
-    this.snapshot = resolveDesktopThemeSnapshot(this.source, this.nativeTheme);
+    this.snapshot = resolveDesktopThemeSnapshot(this.source, this.shellThemes, this.nativeTheme);
     this.nativeTheme.on('updated', this.handleNativeThemeUpdated);
     return this.snapshot;
   }
@@ -99,6 +113,36 @@ export class DesktopThemeState {
     return this.snapshot;
   }
 
+  setShellTheme(mode: unknown, presetName: unknown): DesktopThemeSnapshot {
+    this.initialize();
+
+    if ((mode !== 'light' && mode !== 'dark')
+      || !isDesktopShellThemePresetForMode(presetName, mode)) {
+      return this.snapshot;
+    }
+
+    if (this.shellThemes[mode] === presetName) {
+      return this.snapshot;
+    }
+
+    this.shellThemes = mode === 'light'
+      ? {
+          ...this.shellThemes,
+          light: presetName as DesktopLightShellThemePreset,
+        }
+      : {
+          ...this.shellThemes,
+          dark: presetName as DesktopDarkShellThemePreset,
+        };
+    this.store.setRendererItem(
+      DESKTOP_SHELL_THEME_SELECTION_STATE_KEY,
+      JSON.stringify(this.shellThemes),
+    );
+    this.refreshSnapshot();
+    this.broadcastSnapshot();
+    return this.snapshot;
+  }
+
   registerWindow(win: BrowserWindow): void {
     this.initialize();
     this.windows.add(win);
@@ -109,7 +153,7 @@ export class DesktopThemeState {
   }
 
   private refreshSnapshot(): boolean {
-    const next = resolveDesktopThemeSnapshot(this.source, this.nativeTheme);
+    const next = resolveDesktopThemeSnapshot(this.source, this.shellThemes, this.nativeTheme);
     if (sameDesktopThemeSnapshot(this.snapshot, next)) {
       return false;
     }

@@ -50,6 +50,13 @@ describe('desktop persistence architecture', () => {
     expect(appSrc).toContain('adapter: createDesktopThemeStorageAdapter(');
     expect(appSrc).toContain('createUIStorageAdapter(),');
     expect(appSrc).toContain('namespace: persistenceBinding.namespace,');
+    expect(appSrc).toContain("shellPresetStorageKey: 'theme-shell-preset',");
+    expect(appSrc).toContain('shellPresets: builtInShellThemePresets,');
+    expect(appSrc).toContain('defaultShellPreset: BUILT_IN_SHELL_THEME_DEFAULTS,');
+    expect(appSrc).toContain("theme.shellPresetForMode('light')?.name !== next.shellThemes.light");
+    expect(appSrc).toContain('theme.setShellPreset(next.shellThemes.light);');
+    expect(appSrc).toContain("theme.shellPresetForMode('dark')?.name !== next.shellThemes.dark");
+    expect(appSrc).toContain('theme.setShellPreset(next.shellThemes.dark);');
     expect(appSrc).not.toContain('deckStorageKey');
   });
 

@@ -1390,8 +1390,20 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('open={languageSettingsOpen()}');
     expect(appSrc).not.toContain('setLanguageSettingsOpen');
     expect(appSrc).toContain("props.i18n.t('commandPalette.toggleThemeTitle')");
-    expect(appSrc).toContain("i18n().t('shell.useDarkTheme')");
-    expect(appSrc).toContain("i18n().t('shell.useLightTheme')");
+    expect(appSrc).toContain("id: 'redeven.desktop.changeAppearance'");
+    expect(appSrc).toContain('execute: () => props.openThemePicker()');
+    expect(appSrc).toContain('openThemePicker={() => setThemePickerOpenRequest((current) => current + 1)}');
+    expect(appSrc).toContain('const [themePickerOpenRequest, setThemePickerOpenRequest] = createSignal(0);');
+    expect(appSrc).toContain('<DesktopThemePicker');
+    expect(appSrc).toContain('openRequest={themePickerOpenRequest()}');
+    expect(appSrc).toContain('onSourceChange={updateDesktopThemeSource}');
+    expect(appSrc).toContain('onShellThemeChange={updateDesktopShellTheme}');
+    expect(appSrc).toContain('shellPresetStorageKey: DESKTOP_FLOE_SHELL_THEME_STORAGE_KEY');
+    expect(appSrc).toContain('shellPresets: builtInShellThemePresets');
+    expect(appSrc).toContain('defaultShellPreset: BUILT_IN_SHELL_THEME_DEFAULTS');
+    expect(appSrc).not.toContain("i18n().t('shell.useDarkTheme')");
+    expect(appSrc).not.toContain("i18n().t('shell.useLightTheme')");
+    expect(appSrc).not.toContain('toggleDesktopTheme');
     expect(appSrc).not.toContain("title: 'Change Language'");
     expect(appSrc).not.toContain("label={theme.resolvedTheme() === 'light' ? 'Use dark theme' : 'Use light theme'}");
   });
@@ -2313,7 +2325,7 @@ describe('DesktopWelcomeShell', () => {
     expect(appSrc).not.toContain('max-h-[calc(100dvh-1rem)]');
     expect(appSrc).not.toContain('max-h-[calc(100dvh-3rem)]');
     expect(appSrc).not.toContain('100dvh');
-    expect((styles.match(/100dvh/g) ?? []).length).toBe(1);
+    expect((styles.match(/100dvh/g) ?? []).length).toBe(2);
 
     expect((appSrc.match(/<ConfirmDialog\b/g) ?? []).length).toBe(3);
     expect((appSrc.match(/<Dialog\b/g) ?? []).length).toBe(6);

@@ -17,6 +17,11 @@ vi.mock('@floegence/floe-webapp-core', async () => {
   }
 
   return {
+    BUILT_IN_SHELL_THEME_DEFAULTS: {
+      light: 'classic-light',
+      dark: 'classic-dark',
+    },
+    builtInShellThemePresets: [],
     CommandProvider: (props: any) => <>{props.children}</>,
     ComponentRegistryProvider: (props: any) => <>{props.children}</>,
     FileBrowserDragProvider: (props: any) => <>{props.children}</>,
@@ -36,6 +41,8 @@ vi.mock('@floegence/floe-webapp-core', async () => {
     useTheme: () => ({
       theme: () => 'system',
       setTheme: vi.fn(),
+      shellPresetForMode: vi.fn(() => undefined),
+      setShellPreset: vi.fn(),
     }),
   };
 });

@@ -1,4 +1,5 @@
 import {
+  BUILT_IN_SHELL_THEME_DEFAULTS,
   CommandProvider,
   ComponentRegistryProvider,
   FileBrowserDragProvider,
@@ -7,6 +8,7 @@ import {
   NotificationContainer,
   NotificationProvider,
   ThemeProvider,
+  builtInShellThemePresets,
   useTheme,
   WidgetRegistryProvider,
 } from '@floegence/floe-webapp-core';
@@ -59,7 +61,10 @@ function buildFloeConfig(t: I18nHelpers['t']) {
     },
     theme: {
       storageKey: 'theme',
+      shellPresetStorageKey: 'theme-shell-preset',
       defaultTheme: shellTheme?.getSnapshot().source ?? 'system',
+      shellPresets: builtInShellThemePresets,
+      defaultShellPreset: BUILT_IN_SHELL_THEME_DEFAULTS,
     },
     // Users frequently type in Terminal/Editor; command palette should always be available (Cmd/Ctrl+K).
     commands: { ignoreWhenTyping: false },
@@ -99,6 +104,9 @@ function desktopThemeSnapshotKey(snapshot: DesktopThemeSnapshot): string {
   return [
     snapshot.source,
     snapshot.resolvedTheme,
+    snapshot.shellThemes.light,
+    snapshot.shellThemes.dark,
+    snapshot.activeShellTheme,
     snapshot.window.backgroundColor,
     snapshot.window.symbolColor,
   ].join(':');
@@ -173,6 +181,12 @@ function DesktopThemeSync() {
       if (nextThemeSnapshotKey !== lastThemeSnapshotKey) {
         lastThemeSnapshotKey = nextThemeSnapshotKey;
         markThemeSwitching();
+      }
+      if (theme.shellPresetForMode('light')?.name !== next.shellThemes.light) {
+        theme.setShellPreset(next.shellThemes.light);
+      }
+      if (theme.shellPresetForMode('dark')?.name !== next.shellThemes.dark) {
+        theme.setShellPreset(next.shellThemes.dark);
       }
       if (theme.theme() !== next.source) {
         theme.setTheme(next.source);

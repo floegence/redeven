@@ -594,7 +594,20 @@
     "openRedevenDashboard": "Redeven Dashboard 열기",
     "backToEnvironments": "환경으로 돌아가기",
     "useDarkTheme": "다크 테마 사용",
-    "useLightTheme": "라이트 테마 사용"
+    "useLightTheme": "라이트 테마 사용",
+    "themePicker": {
+      "openLabel": "화면 모양", "title": "화면 모양", "closeLabel": "화면 모양 설정 닫기", "modeLabel": "색상 모드",
+      "mode": { "system": "시스템", "light": "라이트", "dark": "다크" },
+      "systemResolvedLight": "현재 시스템에서 라이트 모드를 사용 중입니다",
+      "systemResolvedDark": "현재 시스템에서 다크 모드를 사용 중입니다",
+      "themesLabel": "테마", "changeFailed": "화면 모양을 업데이트하지 못했습니다. 다시 시도하세요.",
+      "presets": {
+        "classic-light": "클래식 라이트", "paper": "페이퍼", "mist": "미스트", "meadow": "메도우", "citrus": "시트러스", "lilac": "라일락",
+        "light-plus": "Light+", "quiet-light": "Quiet Light", "solarized-light": "Solarized Light", "github-light": "GitHub Light", "hc-light": "고대비 라이트",
+        "classic-dark": "클래식 다크", "ink": "잉크", "slate": "슬레이트", "forest": "포레스트", "ember": "엠버", "ocean": "오션",
+        "dark-plus": "Dark+", "monokai": "Monokai", "nord": "Nord", "dracula": "Dracula", "abyss": "어비스"
+      }
+    }
   },
   "commandPalette": {
     "categories": {
@@ -616,8 +629,8 @@
     "closeLauncherDescription": "launcher 창 닫기",
     "changeLanguageTitle": "언어 변경",
     "changeLanguageDescription": "헤더 언어 메뉴를 열어 Redeven Desktop 및 Env App UI 언어를 전환합니다",
-    "toggleThemeTitle": "테마 전환",
-    "toggleThemeDescription": "라이트/다크 테마 전환",
+    "toggleThemeTitle": "화면 모양 변경",
+    "toggleThemeDescription": "Desktop 색상 모드와 테마 선택",
     "openCommandPaletteTitle": "Command Palette 열기",
     "openCommandPaletteDescription": "command palette 열기"
   },

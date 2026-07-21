@@ -594,7 +594,20 @@
     "openRedevenDashboard": "Открыть Redeven Dashboard",
     "backToEnvironments": "Назад к Средам",
     "useDarkTheme": "Использовать темную тему",
-    "useLightTheme": "Использовать светлую тему"
+    "useLightTheme": "Использовать светлую тему",
+    "themePicker": {
+      "openLabel": "Оформление", "title": "Оформление", "closeLabel": "Закрыть настройки оформления", "modeLabel": "Цветовой режим",
+      "mode": { "system": "Системный", "light": "Светлый", "dark": "Тёмный" },
+      "systemResolvedLight": "Сейчас система использует светлый режим",
+      "systemResolvedDark": "Сейчас система использует тёмный режим",
+      "themesLabel": "Темы", "changeFailed": "Не удалось обновить оформление. Повторите попытку.",
+      "presets": {
+        "classic-light": "Классическая светлая", "paper": "Бумага", "mist": "Туман", "meadow": "Луг", "citrus": "Цитрус", "lilac": "Сирень",
+        "light-plus": "Light+", "quiet-light": "Quiet Light", "solarized-light": "Solarized Light", "github-light": "GitHub Light", "hc-light": "Светлая с высокой контрастностью",
+        "classic-dark": "Классическая тёмная", "ink": "Чернила", "slate": "Сланец", "forest": "Лес", "ember": "Жар", "ocean": "Океан",
+        "dark-plus": "Dark+", "monokai": "Monokai", "nord": "Nord", "dracula": "Dracula", "abyss": "Abyss"
+      }
+    }
   },
   "commandPalette": {
     "categories": {
@@ -616,8 +629,8 @@
     "closeLauncherDescription": "Закрыть окно launcher",
     "changeLanguageTitle": "Изменить язык",
     "changeLanguageDescription": "Открыть языковое меню в верхней панели для Redeven Desktop и Env App",
-    "toggleThemeTitle": "Переключить тему",
-    "toggleThemeDescription": "Переключить светлую и темную темы",
+    "toggleThemeTitle": "Изменить оформление",
+    "toggleThemeDescription": "Выбрать цветовой режим и тему Desktop",
     "openCommandPaletteTitle": "Открыть Command Palette",
     "openCommandPaletteDescription": "Открыть command palette"
   },

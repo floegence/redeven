@@ -336,6 +336,7 @@ import {
 } from '../shared/stateIPC';
 import {
   DESKTOP_THEME_GET_SNAPSHOT_CHANNEL,
+  DESKTOP_THEME_SET_SHELL_THEME_CHANNEL,
   DESKTOP_THEME_SET_SOURCE_CHANNEL,
 } from '../shared/desktopThemeIPC';
 import {
@@ -17416,6 +17417,9 @@ if (!app.requestSingleInstanceLock()) {
   });
   ipcMain.on(DESKTOP_THEME_SET_SOURCE_CHANNEL, (event, source) => {
     event.returnValue = desktopThemeState().setSource(source);
+  });
+  ipcMain.on(DESKTOP_THEME_SET_SHELL_THEME_CHANNEL, (event, mode, presetName) => {
+    event.returnValue = desktopThemeState().setShellTheme(mode, presetName);
   });
   ipcMain.on(DESKTOP_LANGUAGE_GET_SNAPSHOT_CHANNEL, (event) => {
     event.returnValue = desktopLanguageState().getSnapshot();

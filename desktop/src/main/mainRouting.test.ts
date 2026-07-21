@@ -109,6 +109,18 @@ describe('main routing', () => {
     expect(handlerSrc).not.toContain('runtimePlacementBridgeByTargetID.get(');
   });
 
+  it('routes validated shell preset updates through the Desktop theme authority', () => {
+    const mainSrc = readMainSource();
+
+    expect(mainSrc).toContain('DESKTOP_THEME_SET_SHELL_THEME_CHANNEL,');
+    expect(mainSrc).toContain(
+      'ipcMain.on(DESKTOP_THEME_SET_SHELL_THEME_CHANNEL, (event, mode, presetName) => {',
+    );
+    expect(mainSrc).toContain(
+      'event.returnValue = desktopThemeState().setShellTheme(mode, presetName);',
+    );
+  });
+
   it('returns structured launcher failures for stale sessions instead of raw exception text', () => {
     const mainSrc = readMainSource();
 

@@ -594,7 +594,20 @@
     "openRedevenDashboard": "Redeven Dashboard öffnen",
     "backToEnvironments": "Zurück zu Umgebungen",
     "useDarkTheme": "Dunkles Theme verwenden",
-    "useLightTheme": "Helles Theme verwenden"
+    "useLightTheme": "Helles Theme verwenden",
+    "themePicker": {
+      "openLabel": "Darstellung", "title": "Darstellung", "closeLabel": "Darstellung schließen", "modeLabel": "Farbmodus",
+      "mode": { "system": "System", "light": "Hell", "dark": "Dunkel" },
+      "systemResolvedLight": "Das System verwendet derzeit den hellen Modus",
+      "systemResolvedDark": "Das System verwendet derzeit den dunklen Modus",
+      "themesLabel": "Themes", "changeFailed": "Die Darstellung konnte nicht aktualisiert werden. Versuchen Sie es erneut.",
+      "presets": {
+        "classic-light": "Klassisch hell", "paper": "Papier", "mist": "Nebel", "meadow": "Wiese", "citrus": "Zitrus", "lilac": "Flieder",
+        "light-plus": "Light+", "quiet-light": "Quiet Light", "solarized-light": "Solarized Light", "github-light": "GitHub Light", "hc-light": "Hell (hoher Kontrast)",
+        "classic-dark": "Klassisch dunkel", "ink": "Tinte", "slate": "Schiefer", "forest": "Wald", "ember": "Glut", "ocean": "Ozean",
+        "dark-plus": "Dark+", "monokai": "Monokai", "nord": "Nord", "dracula": "Dracula", "abyss": "Abgrund"
+      }
+    }
   },
   "commandPalette": {
     "categories": {
@@ -616,8 +629,8 @@
     "closeLauncherDescription": "Launcher-Fenster schließen",
     "changeLanguageTitle": "Sprache ändern",
     "changeLanguageDescription": "Das Sprachmenü in der Kopfzeile für Redeven Desktop und Env App öffnen",
-    "toggleThemeTitle": "Theme wechseln",
-    "toggleThemeDescription": "Zwischen hellem und dunklem Theme wechseln",
+    "toggleThemeTitle": "Darstellung ändern",
+    "toggleThemeDescription": "Farbmodus und Theme für Redeven Desktop auswählen",
     "openCommandPaletteTitle": "Command Palette öffnen",
     "openCommandPaletteDescription": "Command palette öffnen"
   },
