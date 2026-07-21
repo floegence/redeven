@@ -205,7 +205,7 @@ describe('Flower activity running sheen', () => {
     expect(detailWindowRule).toContain('--flower-subagent-window-surface: var(--redeven-chat-surface)');
     expect(detailWindowRule).toContain('--flower-subagent-window-surface-band: var(--redeven-code-chrome)');
     expect(detailWindowRule).toContain('--flower-subagent-window-surface-raised: var(--redeven-chat-surface-raised)');
-    expect(detailWindowRule).toContain('--flower-subagent-window-border: var(--redeven-chat-border)');
+    expect(detailWindowRule).toContain('--flower-subagent-window-border: color-mix(in srgb, var(--redeven-chat-border) 55%, var(--foreground) 45%)');
     expect(detailWindowRule).toContain('border: 1px solid var(--flower-subagent-window-border)');
     expect(detailWindowRule).toContain('border-radius: 6px');
     expect(detailWindowRule).toContain('--flower-subagent-window-border:');

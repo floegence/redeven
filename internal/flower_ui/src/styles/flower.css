@@ -6170,8 +6170,8 @@ html.dark .flower-component-shell {
   --flower-subagent-window-surface-soft: color-mix(in srgb, var(--redeven-chat-surface) 92%, var(--background) 8%);
   --flower-subagent-window-surface-band: var(--redeven-code-chrome);
   --flower-subagent-window-surface-raised: var(--redeven-chat-surface-raised);
-  --flower-subagent-window-border: var(--redeven-chat-border);
-  --flower-subagent-window-border-active: var(--redeven-status-primary-border);
+  --flower-subagent-window-border: color-mix(in srgb, var(--redeven-chat-border) 55%, var(--foreground) 45%);
+  --flower-subagent-window-border-active: color-mix(in srgb, var(--redeven-status-primary-border) 55%, var(--foreground) 45%);
   --flower-subagent-window-border-soft: color-mix(in srgb, var(--redeven-chat-border) 68%, transparent);
   --flower-subagent-window-edge-highlight: color-mix(in srgb, var(--foreground) 14%, transparent);
   --flower-subagent-window-edge-highlight-soft: color-mix(in srgb, var(--foreground) 8%, transparent);

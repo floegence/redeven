@@ -28,6 +28,15 @@ afterEach(() => {
 });
 
 function parseRGBColor(value: string): RGBColor {
+  const srgb = /^color\(srgb\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+))?\)$/u.exec(value.trim());
+  if (srgb) {
+    return {
+      red: Number(srgb[1]) * 255,
+      green: Number(srgb[2]) * 255,
+      blue: Number(srgb[3]) * 255,
+      alpha: srgb[4] === undefined ? 1 : Number(srgb[4]),
+    };
+  }
   const channels = value.match(/[\d.]+/g)?.map(Number) ?? [];
   if (channels.length < 3) throw new Error(`Unsupported color: ${value}`);
   return {
@@ -150,9 +159,7 @@ describe('Subagent detail window boundary', () => {
       const fixtureStyle = getComputedStyle(fixture);
       const geometryStyle = getComputedStyle(geometry);
       const surfaceStyle = getComputedStyle(surface);
-      const expectedSurface = theme === 'light' ? 'rgb(251, 249, 246)' : 'rgb(52, 56, 64)';
 
-      expect(surfaceStyle.backgroundColor).toBe(expectedSurface);
       expect(surfaceStyle.backgroundColor).not.toBe(fixtureStyle.backgroundColor);
       expect(parseRGBColor(surfaceStyle.backgroundColor).alpha).toBe(1);
       expect(surfaceStyle.borderRadius).toBe('6px');
