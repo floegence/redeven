@@ -426,7 +426,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                 </span>
                                 <Show when={commitPresentationBadge()}>
                                   <span aria-hidden="true" class="mx-1.5 text-muted-foreground/25 select-none">—</span>
-                                  <span class="inline-flex items-center gap-1 whitespace-nowrap text-violet-700 dark:text-violet-300 font-medium">
+                                  <span class="inline-flex items-center gap-1 whitespace-nowrap text-[var(--redeven-categorical-6)] font-medium">
                                     {commitPresentationBadge()}
                                   </span>
                                 </Show>

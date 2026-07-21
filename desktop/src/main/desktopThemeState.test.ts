@@ -3,11 +3,15 @@ import { EventEmitter } from 'node:events';
 import { describe, expect, it, vi } from 'vitest';
 
 import { DesktopThemeState } from './desktopThemeState';
+import { desktopSemanticPaletteForShellTheme } from './desktopTheme';
 import {
   DESKTOP_SHELL_THEME_SELECTION_STATE_KEY,
   DESKTOP_THEME_SOURCE_STATE_KEY,
 } from '../shared/desktopTheme';
-import { DESKTOP_THEME_UPDATED_CHANNEL } from '../shared/desktopThemeIPC';
+import {
+  DESKTOP_THEME_UPDATED_CHANNEL,
+  desktopRendererThemeSnapshot,
+} from '../shared/desktopThemeIPC';
 
 class FakeNativeTheme extends EventEmitter {
   shouldUseDarkColors = false;
@@ -70,6 +74,7 @@ describe('DesktopThemeState', () => {
         backgroundColor: '#0e121b',
         symbolColor: '#f9fafb',
       },
+      semantic: desktopSemanticPaletteForShellTheme('classic-dark'),
     });
     expect(store.setRendererItem).not.toHaveBeenCalled();
   });
@@ -91,6 +96,7 @@ describe('DesktopThemeState', () => {
         backgroundColor: '#0b1a17',
         symbolColor: '#edf6f1',
       },
+      semantic: desktopSemanticPaletteForShellTheme('forest'),
     });
   });
 
@@ -110,7 +116,7 @@ describe('DesktopThemeState', () => {
     expect(state.getSnapshot().activeShellTheme).toBe('classic-light');
   });
 
-  it('persists shell selection and broadcasts the full snapshot to every window', () => {
+  it('persists shell selection and broadcasts the renderer-safe snapshot to every window', () => {
     const store = createStore('system');
     const nativeTheme = new FakeNativeTheme();
     const state = new DesktopThemeState(store, nativeTheme, 'linux');
@@ -144,11 +150,11 @@ describe('DesktopThemeState', () => {
     expect(secondWindow.setBackgroundColor).toHaveBeenCalledWith('#eef3f7');
     expect(firstWindow.webContents.send).toHaveBeenCalledWith(
       DESKTOP_THEME_UPDATED_CHANNEL,
-      snapshot,
+      desktopRendererThemeSnapshot(snapshot),
     );
     expect(secondWindow.webContents.send).toHaveBeenCalledWith(
       DESKTOP_THEME_UPDATED_CHANNEL,
-      snapshot,
+      desktopRendererThemeSnapshot(snapshot),
     );
   });
 
@@ -185,7 +191,7 @@ describe('DesktopThemeState', () => {
     expect(win.setBackgroundColor).toHaveBeenCalledWith('#0b1a17');
     expect(win.webContents.send).toHaveBeenCalledWith(
       DESKTOP_THEME_UPDATED_CHANNEL,
-      state.getSnapshot(),
+      desktopRendererThemeSnapshot(state.getSnapshot()),
     );
   });
 
@@ -210,7 +216,32 @@ describe('DesktopThemeState', () => {
     expect(snapshot.shellThemes).toEqual({ version: 1, light: 'mist', dark: 'ember' });
     expect(snapshot.activeShellTheme).toBe('ember');
     expect(win.setBackgroundColor).toHaveBeenCalledWith('#1d1115');
-    expect(win.webContents.send).toHaveBeenCalledWith(DESKTOP_THEME_UPDATED_CHANNEL, snapshot);
+    expect(win.webContents.send).toHaveBeenCalledWith(
+      DESKTOP_THEME_UPDATED_CHANNEL,
+      desktopRendererThemeSnapshot(snapshot),
+    );
+  });
+
+  it('notifies shell document owners with the palette for every changed selection', () => {
+    const store = createStore('light');
+    const onSnapshotChanged = vi.fn();
+    const state = new DesktopThemeState(
+      store,
+      new FakeNativeTheme(),
+      'darwin',
+      onSnapshotChanged,
+    );
+
+    state.setShellTheme('dark', 'forest');
+    expect(onSnapshotChanged).toHaveBeenCalledTimes(1);
+    expect(onSnapshotChanged.mock.calls[0]?.[0].semantic).toEqual(
+      desktopSemanticPaletteForShellTheme('classic-light'),
+    );
+
+    const snapshot = state.setShellTheme('light', 'mist');
+    expect(onSnapshotChanged).toHaveBeenCalledTimes(2);
+    expect(onSnapshotChanged).toHaveBeenCalledWith(snapshot);
+    expect(snapshot.semantic).toEqual(desktopSemanticPaletteForShellTheme('mist'));
   });
 
   it('rejects invalid, cross-mode, and unchanged selections without side effects', () => {

@@ -62,7 +62,7 @@ export function DownloadTaskButton(props: { tooltip?: string | false }) {
       <Show when={badgeLabel()}>
         <span class={`absolute -right-1 -top-1 flex min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-bold leading-4 ${
           failedCount() > 0 && activeCount() === 0
-            ? 'bg-destructive text-white'
+            ? 'bg-destructive text-error-foreground'
             : 'bg-primary text-primary-foreground'
         }`}>
           {badgeLabel()}

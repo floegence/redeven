@@ -5,6 +5,7 @@ import {
   buildBlockedPageHTML,
   isBlockedActionURL,
 } from './blockedPage';
+import { desktopSemanticPaletteForShellTheme } from './desktopTheme';
 
 describe('blockedPage', () => {
   it('renders the non-local-ui blocked explanation', () => {
@@ -31,6 +32,30 @@ describe('blockedPage', () => {
     expect(html).toContain('role="alert"');
     expect(html).toContain('aria-label="Blocked page actions"');
     expect(html).toContain('env(titlebar-area-height, 40px)');
+    expect(html).toContain('data-floe-shell-theme="classic-light"');
+    expect(html).toContain('--bg: hsl(34 24% 94%)');
+  });
+
+  it('renders the selected preset semantic palette instead of fixed page colors', () => {
+    const html = buildBlockedPageHTML({
+      status: 'blocked',
+      code: 'startup_failed',
+      message: 'The Local Environment did not start.',
+    }, 'linux', 'en-US', {
+      resolvedTheme: 'dark',
+      activeShellTheme: 'dracula',
+      semantic: desktopSemanticPaletteForShellTheme('dracula'),
+    });
+
+    expect(html).toContain('data-floe-shell-theme="dracula"');
+    expect(html).toContain('data-theme-palette-version="1"');
+    expect(html).toContain('color-scheme: dark');
+    expect(html).toContain('--bg: #282A36');
+    expect(html).toContain('--panel: #303341');
+    expect(html).toContain('--accent: #BD93F9');
+    expect(html).not.toContain('#201917');
+    expect(html).not.toContain('#f9efe8');
+    expect(html).not.toContain('rgba(24, 19, 17');
   });
 
   it('renders the local-ui-enabled blocked explanation', () => {
@@ -62,7 +87,7 @@ describe('blockedPage', () => {
       },
     }, 'linux', 'zh-CN');
 
-    expect(html).toContain('<html lang="zh-CN">');
+    expect(html).toContain('<html lang="zh-CN"');
     expect(html).toContain('Redeven 已在其他位置启动中');
     expect(html).toContain('跳到主要内容');
     expect(html).toContain('复制诊断信息');

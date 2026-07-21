@@ -460,21 +460,21 @@ export interface GitShortcutOrbButtonProps {
 
 function gitShortcutOrbShellClass(): string {
   return cn(
-    'text-slate-900 dark:text-slate-50',
+    'text-foreground',
     redevenSurfaceRoleClass('control'),
-    'hover:bg-slate-300 dark:hover:bg-slate-600',
+    'hover:bg-muted',
   );
 }
 
 function gitShortcutOrbIconClass(tone: GitShortcutOrbTone): string {
   switch (tone) {
     case 'flower':
-      return 'text-orange-700 dark:text-orange-200';
+      return 'text-[var(--redeven-categorical-4)]';
     case 'terminal':
-      return 'text-sky-700 dark:text-sky-200';
+      return 'text-[var(--redeven-status-info)]';
     case 'files':
     default:
-      return 'text-emerald-700 dark:text-emerald-200';
+      return 'text-[var(--redeven-status-success)]';
   }
 }
 

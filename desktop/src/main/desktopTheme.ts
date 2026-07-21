@@ -1,7 +1,17 @@
 import {
+  builtInShellThemePresets,
+  type FloeThemePreset,
+} from '../shared/floeThemeMetadata';
+
+import {
   DESKTOP_SHELL_THEME_DEFAULTS,
+  DESKTOP_SHELL_THEME_PRESETS,
+  DESKTOP_THEME_SEMANTIC_PALETTE_VERSION,
+  isDesktopCssColor,
+  isDesktopHexColor,
   type DesktopResolvedTheme,
   type DesktopShellThemePreset,
+  type DesktopThemeSemanticPalette,
   type DesktopWindowThemeSnapshot,
 } from '../shared/desktopTheme';
 
@@ -10,158 +20,101 @@ export type DesktopShellThemeCatalogEntry = Readonly<{
   window: DesktopWindowThemeSnapshot;
 }>;
 
-export const desktopShellThemeCatalog = {
-  'classic-light': {
-    mode: 'light',
-    window: { backgroundColor: '#f4f1ed', symbolColor: '#202a37' },
-  },
-  paper: {
-    mode: 'light',
-    window: { backgroundColor: '#f5f1e8', symbolColor: '#243447' },
-  },
-  mist: {
-    mode: 'light',
-    window: { backgroundColor: '#eef3f7', symbolColor: '#1f3442' },
-  },
-  meadow: {
-    mode: 'light',
-    window: { backgroundColor: '#eef4ec', symbolColor: '#20372d' },
-  },
-  citrus: {
-    mode: 'light',
-    window: { backgroundColor: '#fff5e1', symbolColor: '#3f2d1c' },
-  },
-  lilac: {
-    mode: 'light',
-    window: { backgroundColor: '#f5f0fa', symbolColor: '#30253d' },
-  },
-  'light-plus': {
-    mode: 'light',
-    window: { backgroundColor: '#ffffff', symbolColor: '#1f1f1f' },
-  },
-  'quiet-light': {
-    mode: 'light',
-    window: { backgroundColor: '#f5f5f5', symbolColor: '#333333' },
-  },
-  'solarized-light': {
-    mode: 'light',
-    window: { backgroundColor: '#fdf6e3', symbolColor: '#586e75' },
-  },
-  'github-light': {
-    mode: 'light',
-    window: { backgroundColor: '#f6f8fa', symbolColor: '#24292f' },
-  },
-  'hc-light': {
-    mode: 'light',
-    window: { backgroundColor: '#ffffff', symbolColor: '#000000' },
-  },
-  'classic-dark': {
-    mode: 'dark',
-    window: { backgroundColor: '#0e121b', symbolColor: '#f9fafb' },
-  },
-  ink: {
-    mode: 'dark',
-    window: { backgroundColor: '#0b1420', symbolColor: '#eaf2f7' },
-  },
-  slate: {
-    mode: 'dark',
-    window: { backgroundColor: '#171b22', symbolColor: '#eef1f5' },
-  },
-  forest: {
-    mode: 'dark',
-    window: { backgroundColor: '#0b1a17', symbolColor: '#edf6f1' },
-  },
-  ember: {
-    mode: 'dark',
-    window: { backgroundColor: '#1d1115', symbolColor: '#fff1f1' },
-  },
-  ocean: {
-    mode: 'dark',
-    window: { backgroundColor: '#071a25', symbolColor: '#e9f7fc' },
-  },
-  'dark-plus': {
-    mode: 'dark',
-    window: { backgroundColor: '#1e1e1e', symbolColor: '#d4d4d4' },
-  },
-  monokai: {
-    mode: 'dark',
-    window: { backgroundColor: '#272822', symbolColor: '#f8f8f2' },
-  },
-  nord: {
-    mode: 'dark',
-    window: { backgroundColor: '#2e3440', symbolColor: '#eceff4' },
-  },
-  dracula: {
-    mode: 'dark',
-    window: { backgroundColor: '#282a36', symbolColor: '#f8f8f2' },
-  },
-  abyss: {
-    mode: 'dark',
-    window: { backgroundColor: '#000c18', symbolColor: '#ddeeff' },
-  },
-} as const satisfies Readonly<Record<DesktopShellThemePreset, DesktopShellThemeCatalogEntry>>;
+const PUBLISHED_PRESETS = new Map(
+  builtInShellThemePresets.map((preset) => [preset.name, preset]),
+);
 
-export type DesktopThemePalette = Readonly<{
-  nativeWindow: DesktopWindowThemeSnapshot;
-  pageBackground: string;
-  surface: string;
-  surfaceMuted: string;
-  border: string;
-  text: string;
-  muted: string;
-  accent: string;
-  accentText: string;
-  accentSoft: string;
-  success: string;
-  warning: string;
-  danger: string;
-  info: string;
-}>;
+function publishedPreset(name: DesktopShellThemePreset): FloeThemePreset {
+  const preset = PUBLISHED_PRESETS.get(name);
+  if (!preset || (preset.mode !== 'light' && preset.mode !== 'dark')) {
+    throw new Error(`Floe theme preset ${name} is missing or has an invalid mode`);
+  }
+  return preset;
+}
 
-export const desktopLightTheme = {
-  nativeWindow: {
-    backgroundColor: '#f4f1ed',
-    symbolColor: '#202a37',
-  },
-  pageBackground: '#f4f1ed',
-  surface: '#fffdfa',
-  surfaceMuted: '#f1efec',
-  border: '#d8d3cc',
-  text: '#202a37',
-  muted: '#5a687c',
-  accent: '#202a37',
-  accentText: '#fffdfa',
-  accentSoft: '#e4e1dd',
-  success: 'oklch(0.68 0.16 150)',
-  warning: 'oklch(0.78 0.14 80)',
-  danger: 'oklch(0.65 0.2 25)',
-  info: 'oklch(0.65 0.13 250)',
-} as const satisfies DesktopThemePalette;
+function semanticToken(preset: FloeThemePreset, tokenName: string): string {
+  const value = preset.semanticTokens?.[`--${tokenName}`];
+  if (!isDesktopCssColor(value)) {
+    throw new Error(`Floe theme preset ${preset.name} is missing --${tokenName}`);
+  }
+  return value;
+}
 
-export const desktopDarkTheme = {
-  nativeWindow: {
-    backgroundColor: '#0e121b',
-    symbolColor: '#f9fafb',
-  },
-  pageBackground: '#0e121b',
-  surface: '#121721',
-  surfaceMuted: '#1b212d',
-  border: '#252b37',
-  text: '#f9fafb',
-  muted: '#8596ad',
-  accent: '#1f2533',
-  accentText: '#f9fafb',
-  accentSoft: '#1b212d',
-  success: 'oklch(0.72 0.19 150)',
-  warning: 'oklch(0.82 0.16 80)',
-  danger: 'oklch(0.7 0.22 25)',
-  info: 'oklch(0.7 0.15 250)',
-} as const satisfies DesktopThemePalette;
+function nativeHexColor(preset: FloeThemePreset, value: string | undefined, role: string): `#${string}` {
+  if (!isDesktopHexColor(value)) {
+    throw new Error(`Floe theme preset ${preset.name} has a non-HEX ${role} color`);
+  }
+  return value.toLowerCase() as `#${string}`;
+}
 
-export const desktopTheme = desktopLightTheme;
+const classicLightWindow = {
+  backgroundColor: '#f4f1ed',
+  symbolColor: '#202a37',
+} as const satisfies DesktopWindowThemeSnapshot;
 
-export function desktopPaletteForResolvedTheme(resolvedTheme: DesktopResolvedTheme): DesktopThemePalette {
-  return resolvedTheme === 'dark' ? desktopDarkTheme : desktopLightTheme;
+const classicDarkWindow = {
+  backgroundColor: '#0e121b',
+  symbolColor: '#f9fafb',
+} as const satisfies DesktopWindowThemeSnapshot;
+
+function semanticPaletteForPublishedPreset(
+  name: DesktopShellThemePreset,
+): DesktopThemeSemanticPalette {
+  const preset = publishedPreset(name);
+  return {
+    version: DESKTOP_THEME_SEMANTIC_PALETTE_VERSION,
+    background: semanticToken(preset, 'background') as DesktopThemeSemanticPalette['background'],
+    surface: semanticToken(preset, 'card') as DesktopThemeSemanticPalette['surface'],
+    muted: semanticToken(preset, 'muted') as DesktopThemeSemanticPalette['muted'],
+    foreground: semanticToken(preset, 'foreground') as DesktopThemeSemanticPalette['foreground'],
+    mutedForeground: semanticToken(preset, 'muted-foreground') as DesktopThemeSemanticPalette['mutedForeground'],
+    border: semanticToken(preset, 'border') as DesktopThemeSemanticPalette['border'],
+    primary: semanticToken(preset, 'primary') as DesktopThemeSemanticPalette['primary'],
+    primaryForeground: semanticToken(preset, 'primary-foreground') as DesktopThemeSemanticPalette['primaryForeground'],
+    info: semanticToken(preset, 'info') as DesktopThemeSemanticPalette['info'],
+    success: semanticToken(preset, 'success') as DesktopThemeSemanticPalette['success'],
+    warning: semanticToken(preset, 'warning') as DesktopThemeSemanticPalette['warning'],
+    error: semanticToken(preset, 'error') as DesktopThemeSemanticPalette['error'],
+  };
+}
+
+function windowSnapshotForPublishedPreset(name: DesktopShellThemePreset): DesktopWindowThemeSnapshot {
+  const preset = publishedPreset(name);
+  const semantic = semanticPaletteForPublishedPreset(name);
+  return {
+    backgroundColor: name === 'classic-light'
+      ? classicLightWindow.backgroundColor
+      : name === 'classic-dark'
+        ? classicDarkWindow.backgroundColor
+        : nativeHexColor(preset, preset.preview?.background, 'preview background'),
+    symbolColor: name === 'classic-light'
+      ? classicLightWindow.symbolColor
+      : name === 'classic-dark'
+        ? classicDarkWindow.symbolColor
+        : nativeHexColor(preset, semantic.foreground, 'foreground'),
+  };
+}
+
+const allPresetNames = [
+  ...DESKTOP_SHELL_THEME_PRESETS.light,
+  ...DESKTOP_SHELL_THEME_PRESETS.dark,
+] as readonly DesktopShellThemePreset[];
+
+export const desktopShellThemeCatalog = Object.fromEntries(
+  allPresetNames.map((name) => [name, {
+    mode: publishedPreset(name).mode as DesktopResolvedTheme,
+    window: windowSnapshotForPublishedPreset(name),
+  }]),
+) as Readonly<Record<DesktopShellThemePreset, DesktopShellThemeCatalogEntry>>;
+
+export const desktopShellThemeSemanticCatalog = Object.fromEntries(
+  allPresetNames.map((name) => [name, semanticPaletteForPublishedPreset(name)]),
+) as Readonly<Record<DesktopShellThemePreset, DesktopThemeSemanticPalette>>;
+
+export function desktopSemanticPaletteForShellTheme(
+  preset: DesktopShellThemePreset,
+): DesktopThemeSemanticPalette {
+  return desktopShellThemeSemanticCatalog[preset];
 }
 
 export function desktopWindowThemeSnapshotForResolvedTheme(

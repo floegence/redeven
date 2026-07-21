@@ -1,10 +1,11 @@
-import { execFileSync } from 'node:child_process';
-
 import { describe, expect, it } from 'vitest';
 
+import { builtInShellThemePresets } from '../shared/floeThemeMetadata';
+
 import {
-  desktopPaletteForResolvedTheme,
   desktopShellThemeCatalog,
+  desktopShellThemeSemanticCatalog,
+  desktopWindowThemeSnapshotForResolvedTheme,
 } from './desktopTheme';
 import {
   DESKTOP_SHELL_THEME_PRESETS,
@@ -15,38 +16,42 @@ type PublishedShellThemePreset = Readonly<{
   name: string;
   mode: string;
   inheritsBaseTokens: boolean;
+  previewBackground: string;
   background: string;
   foreground: string;
+  surface?: string;
+  muted?: string;
+  mutedForeground?: string;
+  border?: string;
+  primary?: string;
+  primaryForeground?: string;
+  info?: string;
+  success?: string;
+  warning?: string;
+  error?: string;
 }>;
 
 function publishedShellThemePresets(): readonly PublishedShellThemePreset[] {
-  // The Desktop suite resolves Solid for SSR, so load the public browser entry in an isolated DOM.
-  const script = `
-    import { JSDOM } from 'jsdom';
-    const dom = new JSDOM('<!doctype html><html><body></body></html>');
-    Object.defineProperties(globalThis, {
-      window: { configurable: true, value: dom.window },
-      document: { configurable: true, value: dom.window.document },
-      navigator: { configurable: true, value: dom.window.navigator },
-      Node: { configurable: true, value: dom.window.Node },
-      HTMLElement: { configurable: true, value: dom.window.HTMLElement },
-      CustomEvent: { configurable: true, value: dom.window.CustomEvent },
-    });
-    const { builtInShellThemePresets } = await import('@floegence/floe-webapp-core');
-    process.stdout.write(JSON.stringify(builtInShellThemePresets.map((preset) => ({
-      name: preset.name,
-      mode: preset.mode,
-      inheritsBaseTokens: preset.inheritsBaseTokens === true,
-      background: preset.preview?.background,
-      foreground: preset.tokens?.[preset.mode]?.['--foreground']
-        ?? preset.monaco?.[preset.mode]?.colors?.['editor.foreground'],
-    }))));
-  `;
-  return JSON.parse(execFileSync(
-    process.execPath,
-    ['--conditions=browser', '--input-type=module', '--eval', script],
-    { cwd: process.cwd(), encoding: 'utf8' },
-  )) as PublishedShellThemePreset[];
+  return builtInShellThemePresets.map((preset) => ({
+    name: preset.name,
+    mode: preset.mode ?? '',
+    inheritsBaseTokens: preset.inheritsBaseTokens === true,
+    previewBackground: preset.preview?.background ?? '',
+    background: preset.semanticTokens?.['--background'] ?? '',
+    foreground: preset.semanticTokens?.['--foreground']
+      ?? preset.monaco?.[preset.mode === 'light' || preset.mode === 'dark' ? preset.mode : 'light']?.colors?.['editor.foreground']
+      ?? '',
+    surface: preset.semanticTokens?.['--card'],
+    muted: preset.semanticTokens?.['--muted'],
+    mutedForeground: preset.semanticTokens?.['--muted-foreground'],
+    border: preset.semanticTokens?.['--border'],
+    primary: preset.semanticTokens?.['--primary'],
+    primaryForeground: preset.semanticTokens?.['--primary-foreground'],
+    info: preset.semanticTokens?.['--info'],
+    success: preset.semanticTokens?.['--success'],
+    warning: preset.semanticTokens?.['--warning'],
+    error: preset.semanticTokens?.['--error'],
+  }));
 }
 
 type Rgb = readonly [number, number, number];
@@ -97,10 +102,13 @@ describe('desktop shell theme native catalog', () => {
       expect(upstream, presetName).toBeDefined();
       expect(entry.mode, presetName).toBe(upstream?.mode);
       const expectedBackground = upstream?.inheritsBaseTokens
-        ? desktopPaletteForResolvedTheme(entry.mode).nativeWindow.backgroundColor
-        : upstream?.background.toLowerCase();
+        ? desktopWindowThemeSnapshotForResolvedTheme(entry.mode).backgroundColor
+        : upstream?.previewBackground.toLowerCase();
       expect(entry.window.backgroundColor, presetName).toBe(expectedBackground);
-      expect(entry.window.symbolColor, presetName).toBe(upstream?.foreground.toLowerCase());
+      const expectedSymbolColor = upstream?.inheritsBaseTokens
+        ? desktopWindowThemeSnapshotForResolvedTheme(entry.mode).symbolColor
+        : upstream?.foreground.toLowerCase();
+      expect(entry.window.symbolColor, presetName).toBe(expectedSymbolColor);
     }
   });
 
@@ -110,6 +118,28 @@ describe('desktop shell theme native catalog', () => {
         contrastRatio(entry.window.backgroundColor, entry.window.symbolColor),
         presetName,
       ).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it('mirrors every published semantic token used by Desktop documents', () => {
+    const builtInShellThemePresets = publishedShellThemePresets();
+
+    for (const upstream of builtInShellThemePresets) {
+      const semantic = desktopShellThemeSemanticCatalog[upstream.name as DesktopShellThemePreset];
+      expect(semantic, upstream.name).toMatchObject({
+        background: upstream.background,
+        surface: upstream.surface,
+        muted: upstream.muted,
+        foreground: upstream.foreground,
+        mutedForeground: upstream.mutedForeground,
+        border: upstream.border,
+        primary: upstream.primary,
+        primaryForeground: upstream.primaryForeground,
+        info: upstream.info,
+        success: upstream.success,
+        warning: upstream.warning,
+        error: upstream.error,
+      });
     }
   });
 });

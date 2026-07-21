@@ -13,10 +13,10 @@ export interface ConnectionStatusProps {
 export const ConnectionStatus: Component<ConnectionStatusProps> = (props) => {
   const color = () => {
     switch (props.state) {
-      case 'connected': return 'text-green-500';
-      case 'connecting': return 'text-yellow-500';
-      case 'disconnected': return 'text-gray-400';
-      case 'error': return 'text-red-500';
+      case 'connected': return 'text-[var(--redeven-status-success)]';
+      case 'connecting': return 'text-[var(--redeven-status-warning)]';
+      case 'disconnected': return 'text-[var(--redeven-status-neutral)]';
+      case 'error': return 'text-[var(--redeven-status-error)]';
     }
   };
 

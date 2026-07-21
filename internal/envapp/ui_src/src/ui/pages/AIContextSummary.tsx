@@ -190,8 +190,8 @@ export function CompactContextSummary(props: {
     if (!props.usage) return 'bg-muted/50 text-muted-foreground border-border/60 hover:bg-muted hover:text-foreground';
     const percent = usagePercent();
     if (percent >= 90) return 'bg-error/10 text-error border-error/30 hover:bg-error/14';
-    if (percent >= 75) return 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/25 hover:bg-amber-500/14';
-    return 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/25 hover:bg-blue-500/14';
+    if (percent >= 75) return 'bg-[var(--redeven-status-warning-soft)] text-[var(--redeven-status-warning-foreground)] border-[var(--redeven-status-warning-border)] hover:border-[var(--redeven-status-warning)]';
+    return 'bg-[var(--redeven-status-info-soft)] text-[var(--redeven-status-info-foreground)] border-[var(--redeven-status-info-border)] hover:border-[var(--redeven-status-info)]';
   });
   const thresholdLabel = createMemo(() => {
     const usage = props.usage;
@@ -347,7 +347,7 @@ export function CompactContextSummary(props: {
             data-context-summary-popover=""
             class={cn(
               'fixed z-[200] w-[24rem] max-w-[calc(100vw-1rem)] max-sm:w-[calc(100vw-1rem)] rounded-xl overflow-hidden',
-              'border border-border/60 bg-card shadow-xl shadow-black/12 backdrop-blur-xl',
+              'border border-border/60 bg-card shadow-[0_20px_25px_-5px_var(--redeven-shadow-color)] backdrop-blur-xl',
               'chat-tasks-panel chat-tasks-panel-open',
             )}
             style={{
@@ -356,12 +356,15 @@ export function CompactContextSummary(props: {
               visibility: position() ? 'visible' : 'hidden',
             }}
           >
-            <div class="h-[2px] bg-gradient-to-r from-blue-500/60 via-blue-500/30 to-transparent" />
+            <div
+              class="h-[2px]"
+              style={{ background: 'linear-gradient(90deg, var(--redeven-status-info), var(--redeven-status-info-soft), transparent)' }}
+            />
 
             <div class="px-3.5 pt-2.5 pb-2 border-b border-border/50 bg-gradient-to-b from-muted/40 to-transparent">
               <div class="flex items-center justify-between gap-3">
                 <div class="flex items-center gap-2">
-                  <Terminal class="w-3.5 h-3.5 text-blue-500/80" />
+                  <Terminal class="w-3.5 h-3.5 text-[var(--redeven-status-info)]" />
                   <span class="text-[13px] font-semibold text-foreground tracking-tight">{i18n.t('flowerSurface.chat.contextIndicatorLabel')}</span>
                   <span class="text-[10px] font-semibold tabular-nums text-primary bg-primary/10 border border-primary/20 rounded-full px-1.5 py-px leading-none">
                     {usagePercentLabel()}
@@ -448,9 +451,9 @@ export function CompactContextSummary(props: {
                       const stageClass = () => {
                         switch (item.stage) {
                           case 'started':
-                            return 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/25';
+                            return 'bg-[var(--redeven-status-info-soft)] text-[var(--redeven-status-info-foreground)] border-[var(--redeven-status-info-border)]';
                           case 'applied':
-                            return 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border-emerald-500/25';
+                            return 'bg-[var(--redeven-status-success-soft)] text-[var(--redeven-status-success-foreground)] border-[var(--redeven-status-success-border)]';
                           case 'failed':
                             return 'bg-error/10 text-error border-error/25';
                           default:

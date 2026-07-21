@@ -374,8 +374,8 @@ export function FlowerSection() {
                 onClick={() => choosePermissionType(kind)} disabled={!ctx.canInteract()}>
                 <div class="flex items-center justify-between gap-3">
                   <div class="flex items-center gap-2.5">
-                    <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10">
-                      <PermissionTypeIcon kind={kind} class="h-4 w-4 text-blue-500" />
+                    <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-[var(--redeven-status-info-soft)]">
+                      <PermissionTypeIcon kind={kind} class="h-4 w-4 text-[var(--redeven-status-info)]" />
                     </div>
                     <span class="text-sm font-semibold text-foreground">{copy().title}</span>
                   </div>

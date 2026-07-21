@@ -12,10 +12,10 @@ import {
 import {
   DESKTOP_SHELL_THEME_DEFAULTS,
   normalizeDesktopThemeSource,
-  sameDesktopThemeSnapshot,
+  sameDesktopRendererThemeSnapshot,
+  type DesktopRendererThemeSnapshot,
   type DesktopResolvedTheme,
   type DesktopShellThemePreset,
-  type DesktopThemeSnapshot,
   type DesktopThemeSource,
 } from '../shared/desktopTheme';
 import {
@@ -40,13 +40,13 @@ declare global {
 }
 
 export interface DesktopThemeBridge {
-  getSnapshot: () => DesktopThemeSnapshot;
-  setSource: (source: DesktopThemeSource) => DesktopThemeSnapshot;
+  getSnapshot: () => DesktopRendererThemeSnapshot;
+  setSource: (source: DesktopThemeSource) => DesktopRendererThemeSnapshot;
   setShellTheme: (
     mode: DesktopResolvedTheme,
     presetName: DesktopShellThemePreset,
-  ) => DesktopThemeSnapshot;
-  subscribe: (listener: (snapshot: DesktopThemeSnapshot) => void) => () => void;
+  ) => DesktopRendererThemeSnapshot;
+  subscribe: (listener: (snapshot: DesktopRendererThemeSnapshot) => void) => () => void;
 }
 
 export interface DesktopWindowChromeBridge {
@@ -54,12 +54,12 @@ export interface DesktopWindowChromeBridge {
   subscribe: (listener: (snapshot: DesktopWindowChromeSnapshot) => void) => () => void;
 }
 
-const listeners = new Set<(snapshot: DesktopThemeSnapshot) => void>();
+const listeners = new Set<(snapshot: DesktopRendererThemeSnapshot) => void>();
 const windowChromeListeners = new Set<(snapshot: DesktopWindowChromeSnapshot) => void>();
 let currentSnapshot = readDesktopThemeSnapshot();
 let currentWindowChromeSnapshot = readDesktopWindowChromeSnapshot();
 
-function fallbackDesktopThemeSnapshot(): DesktopThemeSnapshot {
+function fallbackDesktopThemeSnapshot(): DesktopRendererThemeSnapshot {
   return {
     source: 'system',
     resolvedTheme: 'light',
@@ -72,7 +72,7 @@ function fallbackDesktopThemeSnapshot(): DesktopThemeSnapshot {
   };
 }
 
-function readDesktopThemeSnapshot(): DesktopThemeSnapshot {
+function readDesktopThemeSnapshot(): DesktopRendererThemeSnapshot {
   const snapshot = normalizeDesktopThemeSnapshot(ipcRenderer.sendSync(DESKTOP_THEME_GET_SNAPSHOT_CHANNEL));
   return snapshot ?? fallbackDesktopThemeSnapshot();
 }
@@ -82,7 +82,7 @@ function readDesktopWindowChromeSnapshot(): DesktopWindowChromeSnapshot {
   return snapshot ?? resolveDesktopWindowChromeSnapshot(process.platform);
 }
 
-function applyDesktopThemeToDocument(snapshot: DesktopThemeSnapshot): void {
+function applyDesktopThemeToDocument(snapshot: DesktopRendererThemeSnapshot): void {
   const root = document.documentElement;
   if (!root) {
     return;
@@ -93,7 +93,7 @@ function applyDesktopThemeToDocument(snapshot: DesktopThemeSnapshot): void {
   root.dataset.floeShellTheme = snapshot.activeShellTheme;
 }
 
-function applyDesktopDocumentFallbackColors(snapshot: DesktopThemeSnapshot): void {
+function applyDesktopDocumentFallbackColors(snapshot: DesktopRendererThemeSnapshot): void {
   const root = document.documentElement;
   if (!root) {
     return;
@@ -134,15 +134,15 @@ function ensureWindowChromeStyle(snapshot: DesktopWindowChromeSnapshot): void {
   style.textContent = buildDesktopWindowChromeStyleText(snapshot);
 }
 
-function syncCurrentDocument(snapshot: DesktopThemeSnapshot, windowChromeSnapshot: DesktopWindowChromeSnapshot): void {
+function syncCurrentDocument(snapshot: DesktopRendererThemeSnapshot, windowChromeSnapshot: DesktopWindowChromeSnapshot): void {
   applyDesktopThemeToDocument(snapshot);
   applyDesktopDocumentFallbackColors(snapshot);
   applyDesktopWindowChromeToDocument(windowChromeSnapshot);
   ensureWindowChromeStyle(windowChromeSnapshot);
 }
 
-function updateDesktopThemeSnapshot(snapshot: DesktopThemeSnapshot): DesktopThemeSnapshot {
-  if (sameDesktopThemeSnapshot(currentSnapshot, snapshot)) {
+function updateDesktopThemeSnapshot(snapshot: DesktopRendererThemeSnapshot): DesktopRendererThemeSnapshot {
+  if (sameDesktopRendererThemeSnapshot(currentSnapshot, snapshot)) {
     return currentSnapshot;
   }
   currentSnapshot = snapshot;
@@ -162,7 +162,7 @@ function updateDesktopWindowChromeSnapshot(snapshot: DesktopWindowChromeSnapshot
   return currentWindowChromeSnapshot;
 }
 
-function setDesktopThemeSource(source: unknown): DesktopThemeSnapshot {
+function setDesktopThemeSource(source: unknown): DesktopRendererThemeSnapshot {
   const nextSource = normalizeDesktopThemeSource(source, currentSnapshot.source);
   const nextSnapshot = normalizeDesktopThemeSnapshot(ipcRenderer.sendSync(DESKTOP_THEME_SET_SOURCE_CHANNEL, nextSource));
   if (!nextSnapshot) {
@@ -174,7 +174,7 @@ function setDesktopThemeSource(source: unknown): DesktopThemeSnapshot {
 function setDesktopShellTheme(
   mode: DesktopResolvedTheme,
   presetName: DesktopShellThemePreset,
-): DesktopThemeSnapshot {
+): DesktopRendererThemeSnapshot {
   const nextSnapshot = normalizeDesktopThemeSnapshot(
     ipcRenderer.sendSync(DESKTOP_THEME_SET_SHELL_THEME_CHANNEL, mode, presetName),
   );

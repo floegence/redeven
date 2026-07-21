@@ -18,6 +18,7 @@ describe('chat responsiveness guardrails', () => {
     const codeBlock = readText('src/ui/chat/blocks/CodeBlock.tsx');
     const codeDiffBlock = readText('src/ui/chat/blocks/CodeDiffBlock.tsx');
     const mermaidBlock = readText('src/ui/chat/blocks/MermaidBlock.tsx');
+    const mermaidAdapter = readText('src/ui/file-markdown/mermaidPlugin.ts');
 
     expect(codeBlock).toContain('deferAfterPaint');
     expect(codeBlock).toContain('highlightCodeToHtmlInWorker');
@@ -28,7 +29,9 @@ describe('chat responsiveness guardrails', () => {
 
     expect(mermaidBlock).toContain('deferAfterPaint');
     expect(mermaidBlock).toContain('requestIdleCallback');
-    expect(mermaidBlock).toContain('mermaidSvgCache');
+    expect(mermaidBlock).toContain('renderMermaidSvg');
+    expect(mermaidAdapter).toContain('mermaidSvgCache');
+    expect(mermaidAdapter).toContain('mermaidCacheKey');
   });
 
   it('keeps Codex responsiveness on the shell-first and bounded-transcript path', () => {

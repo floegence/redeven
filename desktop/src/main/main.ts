@@ -141,6 +141,10 @@ import {
 import type { GatewayServiceDeepProbe } from './gatewayServiceHost';
 import { gatewaySessionArtifactURL } from './gatewaySessionArtifact';
 import { DesktopThemeState } from './desktopThemeState';
+import {
+  buildCodespaceLoadingDocumentURL,
+  type CodespaceLoadingWindowCopy,
+} from './codespaceLoadingDocument';
 import { DesktopLanguageState } from './desktopLanguageState';
 import { loadOrCreateDesktopRuntimeOwnerID } from './desktopRuntimeOwner';
 import { DesktopDiagnosticsRecorder } from './diagnostics';
@@ -338,6 +342,7 @@ import {
   DESKTOP_THEME_GET_SNAPSHOT_CHANNEL,
   DESKTOP_THEME_SET_SHELL_THEME_CHANNEL,
   DESKTOP_THEME_SET_SOURCE_CHANNEL,
+  desktopRendererThemeSnapshot,
 } from '../shared/desktopThemeIPC';
 import {
   DESKTOP_LANGUAGE_GET_SNAPSHOT_CHANNEL,
@@ -590,6 +595,7 @@ type DesktopSessionRecord = {
   root_window: DesktopTrackedWindow;
   child_windows: Map<string, DesktopTrackedWindow>;
   codespace_windows: Map<string, DesktopTrackedWindow>;
+  codespace_loading_documents: Map<string, CodespaceLoadingWindowCopy>;
   session_partition: string;
   diagnostics: DesktopDiagnosticsRecorder;
   runtime_handle: DesktopSessionRuntimeHandle | null;
@@ -2896,7 +2902,12 @@ function desktopStateStore(): DesktopStateStore {
 
 function desktopThemeState(): DesktopThemeState {
   if (!desktopThemeStateCache) {
-    desktopThemeStateCache = new DesktopThemeState(desktopStateStore(), nativeTheme, process.platform);
+    desktopThemeStateCache = new DesktopThemeState(
+      desktopStateStore(),
+      nativeTheme,
+      process.platform,
+      refreshCodespaceLoadingDocuments,
+    );
   }
   desktopThemeStateCache.initialize();
   return desktopThemeStateCache;
@@ -7657,162 +7668,6 @@ function openSessionChildWindow(
   return childWindow.browserWindow;
 }
 
-type CodespaceLoadingWindowCopy = Readonly<{
-  state?: 'loading' | 'error';
-  title?: string;
-  detail?: string;
-}>;
-
-function htmlEscape(value: string): string {
-  return String(value ?? '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
-}
-
-function buildCodespaceLoadingDocumentURL(codeSpaceID: string, copy: CodespaceLoadingWindowCopy = {}): string {
-  const state = copy.state === 'error' ? 'error' : 'loading';
-  const title = htmlEscape(compact(copy.title) || 'Opening Codespace');
-  const detail = htmlEscape(compact(copy.detail) || 'Redeven is preparing the browser editor.');
-  const codeSpaceLabel = htmlEscape(compact(codeSpaceID) || 'codespace');
-  const eyebrow = state === 'error' ? 'Needs attention' : 'Codespaces';
-  const html = `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; connect-src 'none'; script-src 'none'; base-uri 'none'; form-action 'none'; frame-src 'none'; object-src 'none'">
-  <title>${title}</title>
-  <style>
-    :root {
-      color-scheme: light dark;
-      --background: #f7f6f2;
-      --foreground: #191b1f;
-      --muted: rgba(25, 27, 31, 0.55);
-      --quiet: rgba(25, 27, 31, 0.38);
-      --track: rgba(25, 27, 31, 0.13);
-      --primary: #5a6472;
-      --primary-soft: rgba(90, 100, 114, 0.28);
-      --error: #a33a32;
-      --error-soft: rgba(163, 58, 50, 0.18);
-    }
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --background: #111317;
-        --foreground: #f1f1ee;
-        --muted: rgba(241, 241, 238, 0.58);
-        --quiet: rgba(241, 241, 238, 0.38);
-        --track: rgba(241, 241, 238, 0.13);
-        --primary: #d5d0c7;
-        --primary-soft: rgba(213, 208, 199, 0.26);
-        --error: #f0aaa2;
-        --error-soft: rgba(240, 170, 162, 0.2);
-      }
-    }
-    * { box-sizing: border-box; }
-    html {
-      min-height: 100%;
-      background: var(--background);
-    }
-    body {
-      margin: 0;
-      min-height: 100vh;
-      display: grid;
-      place-items: center;
-      padding: clamp(24px, 6vw, 56px);
-      background:
-        radial-gradient(circle at 50% 42%, rgba(255, 255, 255, 0.44), transparent 34rem),
-        var(--background);
-      color: var(--foreground);
-      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      letter-spacing: 0;
-    }
-    .redeven-loading-curtain__panel {
-      width: min(24rem, 100%);
-      display: grid;
-      justify-items: center;
-      gap: 1rem;
-      text-align: center;
-    }
-    .redeven-loading-curtain__eyebrow {
-      color: ${state === 'error' ? 'var(--error)' : 'var(--quiet)'};
-      font-size: 0.6875rem;
-      font-weight: 700;
-      line-height: 1;
-      letter-spacing: 0;
-      text-transform: uppercase;
-    }
-    .redeven-loading-curtain__indicator {
-      width: 10.5rem;
-      height: 3px;
-      border-radius: 999px;
-      background: ${state === 'error' ? 'var(--error-soft)' : 'var(--track)'};
-      overflow: hidden;
-    }
-    .redeven-loading-curtain__indicator::after {
-      content: "";
-      display: block;
-      width: ${state === 'error' ? '100%' : '42%'};
-      height: 100%;
-      border-radius: inherit;
-      background: ${state === 'error'
-    ? 'var(--error)'
-    : 'linear-gradient(90deg, transparent 0%, var(--primary-soft) 42%, var(--primary) 55%, transparent 100%)'};
-      box-shadow: ${state === 'error' ? 'none' : '0 0 10px var(--primary-soft)'};
-      animation: ${state === 'error' ? 'none' : 'redeven-loading-curtain-sweep 1.35s cubic-bezier(0.42, 0, 0.2, 1) infinite'};
-      will-change: transform;
-    }
-    .redeven-loading-curtain__message {
-      max-width: 22rem;
-      margin: 0;
-      color: ${state === 'error' ? 'var(--foreground)' : 'var(--muted)'};
-      font-size: 0.8125rem;
-      line-height: 1.5;
-      font-weight: 480;
-    }
-    .detail {
-      max-width: 24rem;
-      margin: -0.35rem 0 0;
-      color: var(--muted);
-      font-size: 0.75rem;
-      line-height: 1.5;
-      font-weight: 440;
-    }
-    .sr-only {
-      position: absolute;
-      width: 1px;
-      height: 1px;
-      padding: 0;
-      margin: -1px;
-      overflow: hidden;
-      clip: rect(0, 0, 0, 0);
-      white-space: nowrap;
-      border: 0;
-    }
-    @keyframes redeven-loading-curtain-sweep {
-      from { transform: translateX(-120%); }
-      to { transform: translateX(260%); }
-    }
-    @media (prefers-reduced-motion: reduce) {
-      .redeven-loading-curtain__indicator::after { animation-duration: 1ms; }
-    }
-  </style>
-</head>
-<body>
-  <main class="redeven-loading-curtain__panel" role="status" aria-live="polite" aria-busy="${state === 'error' ? 'false' : 'true'}" aria-label="${title}">
-    <div class="redeven-loading-curtain__eyebrow">${eyebrow}</div>
-    <div class="redeven-loading-curtain__indicator" role="progressbar" aria-label="${title}"></div>
-    <p class="redeven-loading-curtain__message">${title}</p>
-    ${state === 'error' ? `<p class="detail">${detail}</p>` : ''}
-    <p class="sr-only">${codeSpaceLabel}</p>
-  </main>
-</body>
-</html>`;
-  return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
-}
-
 function openOrReuseSessionCodespaceWindow(
   sessionKey: DesktopSessionKey,
   codeSpaceID: string,
@@ -7860,6 +7715,7 @@ function openOrReuseSessionCodespaceWindow(
     },
     onClosed: (closedWindow) => {
       sessionRecord.codespace_windows.delete(codeSpaceID);
+      sessionRecord.codespace_loading_documents.delete(codeSpaceID);
       sessionKeyByWebContentsID.delete(closedWindow.webContentsID);
     },
   });
@@ -7874,7 +7730,16 @@ function openSessionCodespaceLoadingWindow(
   codeSpaceID: string,
   copy: CodespaceLoadingWindowCopy = {},
 ): BrowserWindow | null {
-  return openOrReuseSessionCodespaceWindow(sessionKey, codeSpaceID, buildCodespaceLoadingDocumentURL(codeSpaceID, copy));
+  const sessionRecord = sessionsByKey.get(sessionKey);
+  if (!sessionRecord) {
+    return null;
+  }
+  sessionRecord.codespace_loading_documents.set(codeSpaceID, copy);
+  return openOrReuseSessionCodespaceWindow(
+    sessionKey,
+    codeSpaceID,
+    buildCodespaceLoadingDocumentURL(codeSpaceID, desktopThemeState().getSnapshot(), copy),
+  );
 }
 
 function openSessionCodespaceWindow(
@@ -7882,7 +7747,22 @@ function openSessionCodespaceWindow(
   codeSpaceID: string,
   targetURL: string,
 ): BrowserWindow | null {
+  sessionsByKey.get(sessionKey)?.codespace_loading_documents.delete(codeSpaceID);
   return openOrReuseSessionCodespaceWindow(sessionKey, codeSpaceID, targetURL);
+}
+
+function refreshCodespaceLoadingDocuments(): void {
+  const themeSnapshot = desktopThemeState().getSnapshot();
+  for (const sessionRecord of sessionsByKey.values()) {
+    for (const [codeSpaceID, copy] of sessionRecord.codespace_loading_documents) {
+      const browserWindow = liveTrackedBrowserWindow(sessionRecord.codespace_windows.get(codeSpaceID));
+      if (!browserWindow) {
+        sessionRecord.codespace_loading_documents.delete(codeSpaceID);
+        continue;
+      }
+      void browserWindow.loadURL(buildCodespaceLoadingDocumentURL(codeSpaceID, themeSnapshot, copy));
+    }
+  }
 }
 
 function openCodespaceWindowFromShell(
@@ -8352,6 +8232,7 @@ async function createSessionRecord(
     root_window: rootWindow,
     child_windows: new Map(),
     codespace_windows: new Map(),
+    codespace_loading_documents: new Map(),
     session_partition: sessionPartition,
     diagnostics,
     runtime_handle: options.runtimeHandle ?? null,
@@ -8479,6 +8360,7 @@ async function finalizeSessionClosure(
       }
     }
     sessionRecord.codespace_windows.clear();
+    sessionRecord.codespace_loading_documents.clear();
 
     const rootWindow = liveTrackedBrowserWindow(sessionRecord.root_window);
     if (options.closeWindows !== false && rootWindow) {
@@ -17413,13 +17295,15 @@ if (!app.requestSingleInstanceLock()) {
     return sessionRecord?.transport_recovery_session?.requestRecoveryNow() ?? false;
   });
   ipcMain.on(DESKTOP_THEME_GET_SNAPSHOT_CHANNEL, (event) => {
-    event.returnValue = desktopThemeState().getSnapshot();
+    event.returnValue = desktopRendererThemeSnapshot(desktopThemeState().getSnapshot());
   });
   ipcMain.on(DESKTOP_THEME_SET_SOURCE_CHANNEL, (event, source) => {
-    event.returnValue = desktopThemeState().setSource(source);
+    event.returnValue = desktopRendererThemeSnapshot(desktopThemeState().setSource(source));
   });
   ipcMain.on(DESKTOP_THEME_SET_SHELL_THEME_CHANNEL, (event, mode, presetName) => {
-    event.returnValue = desktopThemeState().setShellTheme(mode, presetName);
+    event.returnValue = desktopRendererThemeSnapshot(
+      desktopThemeState().setShellTheme(mode, presetName),
+    );
   });
   ipcMain.on(DESKTOP_LANGUAGE_GET_SNAPSHOT_CHANNEL, (event) => {
     event.returnValue = desktopLanguageState().getSnapshot();

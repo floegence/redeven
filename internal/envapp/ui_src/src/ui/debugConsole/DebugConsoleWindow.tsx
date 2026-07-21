@@ -271,31 +271,31 @@ function traceMatchesQuery(trace: DebugConsoleTrace, query: string): boolean {
 
 function tabButtonClass(active: boolean): string {
   return active
-    ? 'group min-w-[9.75rem] cursor-pointer rounded-md border px-3 py-2.5 text-left shadow-[0_14px_30px_-26px_rgba(15,23,42,0.45)] transition-all'
+    ? 'group min-w-[9.75rem] cursor-pointer rounded-md border px-3 py-2.5 text-left shadow-[0_14px_30px_-26px_var(--redeven-shadow-color)] transition-all'
     : 'group min-w-[9.75rem] cursor-pointer rounded-md border border-border/70 bg-background px-3 py-2.5 text-left transition-all hover:border-border hover:bg-muted/[0.14]';
 }
 
 function listRowClass(active: boolean): string {
   return active
-    ? 'group w-full cursor-pointer border-b border-border/70 bg-background text-left shadow-[inset_0_0_0_1px_rgba(15,23,42,0.06)] transition-colors'
+    ? 'group w-full cursor-pointer border-b border-border/70 bg-background text-left shadow-[inset_0_0_0_1px_var(--redeven-shadow-color)] transition-colors'
     : 'group w-full cursor-pointer border-b border-border/50 bg-background text-left transition-colors hover:bg-muted/[0.12]';
 }
 
 function semanticAccent(tone: SemanticTone): string {
   switch (tone) {
     case 'primary':
-      return 'var(--primary)';
+      return 'var(--redeven-status-primary)';
     case 'success':
-      return 'var(--success)';
+      return 'var(--redeven-status-success)';
     case 'warning':
-      return 'var(--warning)';
+      return 'var(--redeven-status-warning)';
     case 'error':
-      return 'var(--error)';
+      return 'var(--redeven-status-error)';
     case 'info':
-      return 'var(--info)';
+      return 'var(--redeven-status-info)';
     case 'neutral':
     default:
-      return 'var(--muted-foreground)';
+      return 'var(--redeven-status-neutral)';
   }
 }
 
@@ -306,7 +306,7 @@ function semanticSummaryCardStyle(tone: SemanticTone, emphasized = false): JSX.C
   return {
     'border-color': `color-mix(in srgb, ${accent} ${borderMix}, var(--border))`,
     background: `linear-gradient(180deg, color-mix(in srgb, ${accent} ${bgMix}, var(--card)) 0%, var(--card) 100%)`,
-    'box-shadow': `inset 0 1px 0 color-mix(in srgb, ${accent} ${emphasized ? '34%' : '20%'}, transparent), 0 18px 32px -30px rgba(15,23,42,0.35)`,
+    'box-shadow': `inset 0 1px 0 color-mix(in srgb, ${accent} ${emphasized ? '34%' : '20%'}, transparent), 0 18px 32px -30px var(--redeven-shadow-color)`,
   };
 }
 
@@ -317,13 +317,13 @@ function semanticInteractiveStyle(tone: SemanticTone, emphasis: 'soft' | 'strong
   return {
     'border-color': `color-mix(in srgb, ${accent} ${borderMix}, var(--border))`,
     'background-color': `color-mix(in srgb, ${accent} ${bgMix}, var(--card))`,
-    'box-shadow': `inset 3px 0 0 0 ${accent}, 0 16px 28px -28px rgba(15,23,42,0.4)`,
+    'box-shadow': `inset 3px 0 0 0 ${accent}, 0 16px 28px -28px var(--redeven-shadow-color)`,
   };
 }
 
 function dangerTextStyle(): JSX.CSSProperties {
   return {
-    color: 'color-mix(in srgb, var(--error) 82%, rgb(76 5 25))',
+    color: 'var(--redeven-status-error-foreground)',
   };
 }
 
@@ -453,14 +453,14 @@ function StatusDot(props: Readonly<{ tone: 'default' | 'success' | 'warning' | '
   const toneClass = () => {
     switch (props.tone) {
       case 'success':
-        return 'bg-emerald-500';
+        return 'bg-[var(--redeven-status-success)]';
       case 'warning':
-        return 'bg-amber-500';
+        return 'bg-[var(--redeven-status-warning)]';
       case 'danger':
-        return 'bg-red-500';
+        return 'bg-[var(--redeven-status-error)]';
       case 'default':
       default:
-        return 'bg-slate-400';
+        return 'bg-[var(--redeven-status-neutral)]';
     }
   };
 
@@ -780,7 +780,7 @@ export function DebugConsolePanel(props: DebugConsolePanelProps) {
               </div>
 
               <Show when={combinedError()}>
-                <div class="mt-3 rounded-md border px-3 py-2 text-[9px] leading-5 text-amber-900" style={semanticInteractiveStyle('warning', 'strong')}>
+                <div class="mt-3 rounded-md border px-3 py-2 text-[9px] leading-5 text-[var(--redeven-status-warning-foreground)]" style={semanticInteractiveStyle('warning', 'strong')}>
                   {combinedError()}
                 </div>
               </Show>
@@ -1349,7 +1349,7 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
         <button
           type="button"
           class={cn(
-            'fixed bottom-4 right-4 inline-flex cursor-pointer items-center gap-2 rounded-md border border-border/80 bg-background/96 px-3 py-2 text-left shadow-[0_20px_36px_-30px_rgba(15,23,42,0.5)] backdrop-blur transition-colors hover:border-primary/25',
+            'fixed bottom-4 right-4 inline-flex cursor-pointer items-center gap-2 rounded-md border border-border/80 bg-background/96 px-3 py-2 text-left shadow-[0_20px_36px_-30px_var(--redeven-shadow-color)] backdrop-blur transition-colors hover:border-primary/25',
             ENV_APP_FLOATING_LAYER_CLASS.debugConsole,
           )}
           onClick={props.controller.restore}
@@ -1376,7 +1376,7 @@ export function DebugConsoleWindow(props: Readonly<{ controller: DebugConsoleCon
           defaultPosition={{ x: 48, y: 76 }}
           defaultSize={{ width: 1120, height: 720 }}
           minSize={{ width: 760, height: 520 }}
-          class="debug-console-window border-border/80 shadow-[0_38px_92px_-56px_rgba(15,23,42,0.56)]"
+          class="debug-console-window border-border/80 shadow-[0_38px_92px_-56px_var(--redeven-shadow-color)]"
           contentClass="!p-0"
           zIndex={ENV_APP_FLOATING_LAYER.debugConsole}
           footer={<DebugConsoleFooter controller={props.controller} />}

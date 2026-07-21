@@ -1,93 +1,227 @@
 import mermaid from 'mermaid';
 
-let mermaidInitialized = false;
+const MAX_MERMAID_CACHE_SIZE = 64;
+
+let mermaidThemeKey = '';
+let mermaidRenderQueue: Promise<void> = Promise.resolve();
+const mermaidSvgCache = new Map<string, string>();
+
+export interface MermaidThemeContext {
+  key: string;
+  mode: 'dark' | 'light';
+  preset: string;
+  variables: Record<string, string>;
+}
 
 export interface MermaidRunOptions {
   shouldContinue?: () => boolean;
+  theme?: MermaidThemeContext;
 }
 
-export function setupMermaid(theme: 'dark' | 'light'): void {
-  const themeVars = theme === 'dark'
-    ? {
-        primaryColor: '#1f2937',
-        primaryTextColor: '#e5e7eb',
-        primaryBorderColor: '#374151',
-        lineColor: '#6b7280',
-        secondaryColor: '#111827',
-        tertiaryColor: '#0f172a',
-        background: '#0b0d12',
-        mainBkg: '#1f2937',
-        nodeBorder: '#4b5563',
-        clusterBkg: '#1f2937',
-        clusterBorder: '#374151',
-        titleColor: '#f3f4f6',
-        edgeLabelBackground: '#1f2937',
-        actorBorder: '#6b7280',
-        actorBkg: '#1f2937',
-        actorTextColor: '#e5e7eb',
-        signalColor: '#e5e7eb',
-        signalTextColor: '#e5e7eb',
-        labelTextColor: '#d1d5db',
-        loopTextColor: '#d1d5db',
-        noteBorderColor: '#374151',
-        noteBkgColor: '#111827',
-        noteTextColor: '#e5e7eb',
-        activationBorderColor: '#6b7280',
-        activationBkgColor: '#1f2937',
-        sequenceNumberColor: '#0b0d12',
-        sectionBkgColor: '#1f2937',
-      }
-    : {
-        primaryColor: '#f3f4f6',
-        primaryTextColor: '#1f2937',
-        primaryBorderColor: '#d1d5db',
-        lineColor: '#9ca3af',
-        secondaryColor: '#f9fafb',
-        tertiaryColor: '#f3f4f6',
-        background: '#f7f8fb',
-        mainBkg: '#ffffff',
-        nodeBorder: '#d1d5db',
-        clusterBkg: '#f9fafb',
-        clusterBorder: '#e5e7eb',
-        titleColor: '#0f172a',
-        edgeLabelBackground: '#ffffff',
-        actorBorder: '#9ca3af',
-        actorBkg: '#f9fafb',
-        actorTextColor: '#1f2937',
-        signalColor: '#1f2937',
-        signalTextColor: '#1f2937',
-        labelTextColor: '#374151',
-        loopTextColor: '#374151',
-        noteBorderColor: '#d1d5db',
-        noteBkgColor: '#f9fafb',
-        noteTextColor: '#1f2937',
-        activationBorderColor: '#9ca3af',
-        activationBkgColor: '#f3f4f6',
-        sequenceNumberColor: '#f7f8fb',
-        sectionBkgColor: '#f9fafb',
-      };
+export interface MermaidRenderOptions {
+  shouldContinue?: () => boolean;
+}
 
+function readSemanticColor(style: CSSStyleDeclaration, name: string, fallback: string): string {
+  return style.getPropertyValue(name).trim() || fallback;
+}
+
+function resolveMode(root: HTMLElement, forcedMode?: 'dark' | 'light'): 'dark' | 'light' {
+  if (forcedMode) return forcedMode;
+  if (root.classList.contains('dark')) return 'dark';
+  if (root.classList.contains('light')) return 'light';
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+export function resolveMermaidThemeContext(
+  root: HTMLElement = document.documentElement,
+  forcedMode?: 'dark' | 'light',
+  forcedPreset?: string,
+): MermaidThemeContext {
+  const mode = resolveMode(root, forcedMode);
+  const style = getComputedStyle(root);
+  const light = mode === 'light';
+  const background = readSemanticColor(style, '--background', light ? '#ffffff' : '#171b22');
+  const foreground = readSemanticColor(style, '--foreground', light ? '#1f2937' : '#f3f4f6');
+  const card = readSemanticColor(style, '--card', background);
+  const popover = readSemanticColor(style, '--popover', card);
+  const muted = readSemanticColor(style, '--muted', card);
+  const mutedForeground = readSemanticColor(style, '--muted-foreground', foreground);
+  const border = readSemanticColor(style, '--border', mutedForeground);
+  const primary = readSemanticColor(style, '--primary', foreground);
+  const primaryForeground = readSemanticColor(style, '--primary-foreground', background);
+  const accent = readSemanticColor(style, '--accent', muted);
+  const categorical = Array.from({ length: 8 }, (_, index) => (
+    readSemanticColor(style, `--redeven-categorical-graph-${index + 1}`, [
+      primary,
+      readSemanticColor(style, '--info', primary),
+      readSemanticColor(style, '--success', primary),
+      readSemanticColor(style, '--warning', primary),
+      readSemanticColor(style, '--error', primary),
+      accent,
+      mutedForeground,
+      foreground,
+    ][index] ?? primary)
+  ));
+  const preset = String(
+    forcedPreset
+    ?? root.dataset.floeShellTheme
+    ?? root.dataset.theme
+    ?? mode,
+  ).trim() || mode;
+
+  const variables: Record<string, string> = {
+    primaryColor: card,
+    primaryTextColor: foreground,
+    primaryBorderColor: border,
+    lineColor: mutedForeground,
+    secondaryColor: muted,
+    tertiaryColor: accent,
+    background,
+    mainBkg: card,
+    nodeBorder: border,
+    clusterBkg: muted,
+    clusterBorder: border,
+    titleColor: foreground,
+    edgeLabelBackground: popover,
+    actorBorder: border,
+    actorBkg: card,
+    actorTextColor: foreground,
+    signalColor: foreground,
+    signalTextColor: foreground,
+    labelTextColor: foreground,
+    loopTextColor: foreground,
+    noteBorderColor: border,
+    noteBkgColor: muted,
+    noteTextColor: foreground,
+    activationBorderColor: border,
+    activationBkgColor: accent,
+    sequenceNumberColor: primaryForeground,
+    sectionBkgColor: muted,
+  };
+
+  categorical.forEach((color, index) => {
+    variables[`cScale${index}`] = color;
+    variables[`pie${index + 1}`] = color;
+    variables[`git${index}`] = color;
+  });
+
+  return {
+    key: [
+      preset,
+      mode,
+      background,
+      foreground,
+      card,
+      popover,
+      muted,
+      mutedForeground,
+      border,
+      primary,
+      primaryForeground,
+      accent,
+      ...categorical,
+    ].join('|'),
+    mode,
+    preset,
+    variables,
+  };
+}
+
+export function setupMermaid(theme: 'dark' | 'light' | MermaidThemeContext): MermaidThemeContext {
+  return typeof theme === 'string'
+    ? resolveMermaidThemeContext(document.documentElement, theme)
+    : theme;
+}
+
+function initializeMermaid(context: MermaidThemeContext): void {
+  if (mermaidThemeKey === context.key) return;
+
+  // Mermaid configuration is global, so initialization must stay inside the render queue.
   mermaid.initialize({
     startOnLoad: false,
     theme: 'base',
     securityLevel: 'strict',
     fontFamily: 'Inter, system-ui, sans-serif',
-    themeVariables: themeVars,
+    themeVariables: context.variables,
     flowchart: { curve: 'basis', htmlLabels: true },
     sequence: { showSequenceNumbers: false, actorMargin: 50 },
   });
-  mermaidInitialized = true;
+  mermaidThemeKey = context.key;
 }
 
-export async function runMermaid(root: HTMLElement, options: MermaidRunOptions = {}): Promise<void> {
-  if (!mermaidInitialized) return;
+function enqueueMermaidRender<T>(task: () => Promise<T>): Promise<T> {
+  const result = mermaidRenderQueue.then(task);
+  mermaidRenderQueue = result.then(
+    () => undefined,
+    () => undefined,
+  );
+  return result;
+}
 
+function mermaidCacheKey(source: string, theme: MermaidThemeContext): string {
+  return `${theme.key}:${source}`;
+}
+
+function cacheMermaidSvg(key: string, svg: string): void {
+  if (mermaidSvgCache.size >= MAX_MERMAID_CACHE_SIZE) {
+    const firstKey = mermaidSvgCache.keys().next().value;
+    if (firstKey) mermaidSvgCache.delete(firstKey);
+  }
+  mermaidSvgCache.set(key, svg);
+}
+
+type RenderMermaidSvg = {
+  (
+    source: string,
+    id: string,
+    theme: MermaidThemeContext,
+    options: MermaidRenderOptions,
+  ): Promise<string | null>;
+  (
+    source: string,
+    id: string,
+    theme?: MermaidThemeContext,
+  ): Promise<string>;
+};
+
+const renderMermaidSvgImpl = async (
+  source: string,
+  id: string,
+  theme: MermaidThemeContext = resolveMermaidThemeContext(),
+  options: MermaidRenderOptions = {},
+): Promise<string | null> => {
+  const context = setupMermaid(theme);
+  const shouldContinue = options.shouldContinue ?? (() => true);
+  const key = mermaidCacheKey(source, context);
+  if (!shouldContinue()) return null;
+
+  const cached = mermaidSvgCache.get(key);
+  if (cached) return cached;
+
+  return enqueueMermaidRender(async () => {
+    if (!shouldContinue()) return null;
+
+    const queuedCached = mermaidSvgCache.get(key);
+    if (queuedCached) return queuedCached;
+
+    initializeMermaid(context);
+    const { svg } = await mermaid.render(id, source);
+    if (!shouldContinue()) return null;
+
+    cacheMermaidSvg(key, svg);
+    return svg;
+  });
+};
+
+export const renderMermaidSvg = renderMermaidSvgImpl as RenderMermaidSvg;
+
+export async function runMermaid(root: HTMLElement, options: MermaidRunOptions = {}): Promise<void> {
   const shouldContinue = options.shouldContinue ?? (() => true);
   if (!shouldContinue() || !root.isConnected) return;
 
+  const theme = setupMermaid(options.theme ?? resolveMermaidThemeContext());
   const elements = root.querySelectorAll<HTMLElement>('.mermaid');
-
-  // Create off-screen sandbox for proper font metrics
   const sandbox = document.createElement('div');
   sandbox.style.cssText = 'position:fixed;left:-99999px;top:0;width:1200px;';
   sandbox.className = 'file-markdown-body';
@@ -102,13 +236,18 @@ export async function runMermaid(root: HTMLElement, options: MermaidRunOptions =
       try {
         const code = decodeURIComponent(src);
         const id = `mermaid-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-
         const container = document.createElement('div');
         container.id = id;
         sandbox.appendChild(container);
 
-        const { svg } = await mermaid.render(id, code);
-        if (!shouldContinue() || !root.contains(el) || !el.isConnected) return;
+        const svg = await renderMermaidSvg(code, id, theme, {
+          shouldContinue: () => (
+            shouldContinue()
+            && root.contains(el)
+            && el.isConnected
+          ),
+        });
+        if (svg === null || !shouldContinue() || !root.contains(el) || !el.isConnected) return;
 
         el.innerHTML = svg;
         const svgEl = el.querySelector('svg');
@@ -116,7 +255,6 @@ export async function runMermaid(root: HTMLElement, options: MermaidRunOptions =
           svgEl.style.maxWidth = '100%';
           svgEl.style.height = 'auto';
         }
-
         container.remove();
       } catch (err) {
         if (!shouldContinue() || !root.contains(el) || !el.isConnected) return;

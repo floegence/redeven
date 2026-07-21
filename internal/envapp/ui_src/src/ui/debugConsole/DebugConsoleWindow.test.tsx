@@ -271,6 +271,9 @@ describe('DebugConsoleWindow', () => {
     expect(host.textContent).not.toContain('Refresh');
     expect(host.textContent).toContain('Close Console');
     expect(host.textContent).toContain('Static CSS, JS, document loads, and diagnostics self-requests are excluded');
+    const statusDots = host.querySelectorAll<HTMLElement>('span.inline-block.h-2.w-2.rounded-full');
+    expect(statusDots.length).toBeGreaterThan(0);
+    expect(statusDots[0]?.className).toContain('bg-[var(--redeven-status-success)]');
 
     const uiTab = [...host.querySelectorAll('button')].find((candidate) => candidate.textContent?.includes('UI Performance'));
     expect(uiTab).toBeTruthy();
@@ -279,6 +282,19 @@ describe('DebugConsoleWindow', () => {
     await flushSelectionTransaction();
 
     expect(host.textContent).toContain('Renderer probes');
+  });
+
+  it('renders diagnostics errors with the theme warning foreground', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { controller } = createController({ snapshotError: () => 'Diagnostics snapshot failed' });
+
+    render(() => <DebugConsoleWindow controller={controller} />, host);
+
+    const error = [...host.querySelectorAll<HTMLElement>('div')].find((candidate) => candidate.textContent === 'Diagnostics snapshot failed');
+    expect(error).toBeTruthy();
+    expect(error?.className).toContain('text-[var(--redeven-status-warning-foreground)]');
+    expect(error?.style.borderColor).toContain('var(--redeven-status-warning)');
   });
 
   it('renders floating window chrome and diagnostics labels with the active locale', async () => {

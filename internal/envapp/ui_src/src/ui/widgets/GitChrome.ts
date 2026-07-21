@@ -25,7 +25,7 @@ const headerActionButtonBaseClass =
 export function gitToneBadgeClass(tone?: GitChromeTone): string {
   switch (normalizeTone(tone)) {
     case 'info':
-      return `${badgeBaseClass} border-blue-500/25 bg-blue-500/10 text-blue-700 dark:border-sky-500/20 dark:bg-sky-500/[0.08] dark:text-sky-300`;
+      return `${badgeBaseClass} border-[var(--redeven-status-info-border)] bg-[var(--redeven-status-info-soft)] text-[var(--redeven-status-info-foreground)]`;
     case 'brand':
       return `${badgeBaseClass} border-primary/20 bg-primary/[0.08] text-primary`;
     case 'success':
@@ -35,7 +35,7 @@ export function gitToneBadgeClass(tone?: GitChromeTone): string {
     case 'danger':
       return `${badgeBaseClass} border-error/20 bg-error/12 text-error`;
     case 'violet':
-      return `${badgeBaseClass} border-violet-500/20 bg-violet-500/[0.08] text-violet-700 dark:text-violet-300`;
+      return `${badgeBaseClass} border-[color-mix(in_srgb,var(--redeven-categorical-6)_34%,var(--border))] bg-[color-mix(in_srgb,var(--redeven-categorical-6)_12%,transparent)] text-[var(--redeven-categorical-6)]`;
     case 'neutral':
     default:
       return cn(badgeBaseClass, redevenSurfaceRoleClass('controlMuted'), 'text-muted-foreground');
@@ -51,7 +51,7 @@ export function gitToneSurfaceClass(tone?: GitChromeTone): string {
   const base = 'border-l-[3px]';
   switch (normalizeTone(tone)) {
     case 'info':
-      return `${base} border-l-sky-500/60`;
+      return `${base} border-l-[var(--redeven-status-info)]`;
     case 'brand':
       return `${base} border-l-primary/60`;
     case 'success':
@@ -61,7 +61,7 @@ export function gitToneSurfaceClass(tone?: GitChromeTone): string {
     case 'danger':
       return `${base} border-l-error/60`;
     case 'violet':
-      return `${base} border-l-violet-500/60`;
+      return `${base} border-l-[var(--redeven-categorical-6)]`;
     case 'neutral':
     default:
       return `${base} border-l-muted-foreground/25`;
@@ -75,7 +75,7 @@ export function gitToneInsetClass(_tone?: GitChromeTone): string {
 export function gitToneAccentColor(tone?: GitChromeTone): string {
   switch (normalizeTone(tone)) {
     case 'info':
-      return 'text-sky-500';
+      return 'text-[var(--redeven-status-info)]';
     case 'brand':
       return 'text-primary';
     case 'success':
@@ -85,7 +85,7 @@ export function gitToneAccentColor(tone?: GitChromeTone): string {
     case 'danger':
       return 'text-error';
     case 'violet':
-      return 'text-violet-500';
+      return 'text-[var(--redeven-categorical-6)]';
     case 'neutral':
     default:
       return 'text-muted-foreground';
@@ -95,17 +95,17 @@ export function gitToneAccentColor(tone?: GitChromeTone): string {
 export function gitChangePathClass(change: string | undefined): string {
   switch (String(change ?? '').trim()) {
     case 'added':
-      return 'text-emerald-700 dark:text-emerald-300';
+      return 'text-[var(--redeven-status-success-foreground)]';
     case 'conflicted':
     case 'deleted':
-      return 'text-red-700 dark:text-red-300';
+      return 'text-[var(--redeven-status-error-foreground)]';
     case 'renamed':
-      return 'text-violet-700 dark:text-violet-300';
+      return 'text-[var(--redeven-categorical-6)]';
     case 'copied':
       return 'text-primary';
     case 'modified':
     default:
-      return 'text-blue-700 dark:text-sky-300';
+      return 'text-[var(--redeven-status-info-foreground)]';
   }
 }
 

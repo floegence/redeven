@@ -288,10 +288,10 @@ describe('MarkdownBlock', () => {
     expect(chatStyles).toContain('.chat-message-bubble-user .chat-md-blockquote {');
     expect(chatStyles).toContain('.chat-message-bubble-user .chat-md-inline-code {');
     expect(chatStyles).toMatch(
-      /\.chat-message-bubble-user pre\.chat-md-code-block \{[^}]*background-color: color-mix\(in srgb, var\(--primary-foreground\) 92%, var\(--primary\) 8%\);[^}]*color: #1f2937;/
+      /\.chat-message-bubble-user pre\.chat-md-code-block \{[^}]*background-color: color-mix\(in srgb, var\(--primary-foreground\) 92%, var\(--primary\) 8%\);[^}]*color: var\(--primary\);/
     );
     expect(chatStyles).toMatch(
-      /\.chat-message-bubble-user \.chat-md-blockquote \{[^}]*background-color: color-mix\(in srgb, var\(--primary-foreground\) 90%, var\(--primary\) 10%\);[^}]*color: #263041;/
+      /\.chat-message-bubble-user \.chat-md-blockquote \{[^}]*background-color: color-mix\(in srgb, var\(--primary-foreground\) 90%, var\(--primary\) 10%\);[^}]*color: var\(--primary\);/
     );
     expect(chatStyles).not.toMatch(/\.chat-message-bubble-user pre\.chat-md-code-block \{[^}]*#0d1117/);
   });

@@ -36,7 +36,20 @@ function readCodexActivityStream(): string {
   return fs.readFileSync(resolveFromHere('./CodexActivityStream.tsx'), 'utf8');
 }
 
+function readCodexPresentation(): string {
+  return fs.readFileSync(resolveFromHere('./presentation.tsx'), 'utf8');
+}
+
 describe('Codex visual contract', () => {
+  it('uses semantic status colors for thread state dots', () => {
+    const src = readCodexPresentation();
+
+    expect(src).toContain("return 'bg-[var(--redeven-status-warning)]';");
+    expect(src).toContain("return 'bg-[var(--redeven-status-success)]';");
+    expect(src).not.toContain('bg-amber-500');
+    expect(src).not.toContain('bg-emerald-500');
+  });
+
   it('keeps codex.css on semantic flat surfaces without gradients', () => {
     const src = readCodexCss();
 
@@ -183,10 +196,10 @@ describe('Codex visual contract', () => {
     const src = readCodexCss();
 
     expect(src).toMatch(
-      /\.codex-chat-message-bubble-user \.codex-chat-markdown-block pre\.chat-md-code-block \{[\s\S]*background-color: color-mix\(in srgb, var\(--primary-foreground\) 92%, var\(--primary\) 8%\);[\s\S]*color: #1f2937;[\s\S]*\}/
+      /\.codex-chat-message-bubble-user \.codex-chat-markdown-block pre\.chat-md-code-block \{[\s\S]*background-color: color-mix\(in srgb, var\(--primary-foreground\) 92%, var\(--primary\) 8%\);[\s\S]*color: var\(--primary\);[\s\S]*\}/
     );
     expect(src).toMatch(
-      /\.codex-chat-message-bubble-user \.codex-chat-markdown-block \.chat-md-blockquote \{[\s\S]*background: color-mix\(in srgb, var\(--primary-foreground\) 90%, var\(--primary\) 10%\);[\s\S]*color: #263041;[\s\S]*\}/
+      /\.codex-chat-message-bubble-user \.codex-chat-markdown-block \.chat-md-blockquote \{[\s\S]*background: color-mix\(in srgb, var\(--primary-foreground\) 90%, var\(--primary\) 10%\);[\s\S]*color: var\(--primary\);[\s\S]*\}/
     );
     expect(src).not.toMatch(/\.codex-chat-message-bubble-user \.codex-chat-markdown-block pre\.chat-md-code-block \{[\s\S]*#0d1117/);
   });

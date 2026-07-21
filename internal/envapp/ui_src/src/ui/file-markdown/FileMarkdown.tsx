@@ -17,7 +17,11 @@ import {
 } from '@floegence/floe-webapp-core/icons';
 import './FileMarkdown.css';
 import { extractMath, reinjectMath } from './mathPlugin';
-import { setupMermaid, runMermaid } from './mermaidPlugin';
+import {
+  resolveMermaidThemeContext,
+  runMermaid,
+  setupMermaid,
+} from './mermaidPlugin';
 import { extractFrontmatter } from './frontmatterParser';
 import { buildToc, type TocItem } from './tocBuilder';
 import { postProcess } from './postProcess';
@@ -172,14 +176,6 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
 
   const showToc = () => props.showToc !== false;
 
-  function detectMermaidTheme(): 'dark' | 'light' {
-    const html = document.documentElement;
-    if (html.classList.contains('dark')) return 'dark';
-    if (html.classList.contains('light')) return 'light';
-    if (window.matchMedia?.('(prefers-color-scheme: dark)').matches) return 'dark';
-    return 'light';
-  }
-
   const renderedHtml = createMemo<MarkdownRenderResult>(() => {
     try {
       // 0. Resolve relative image paths before parsing
@@ -238,12 +234,12 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
   });
 
   onMount(() => {
-    setupMermaid(detectMermaidTheme());
+    setupMermaid(resolveMermaidThemeContext());
 
     if (typeof MutationObserver === 'function') {
       themeObserver = new MutationObserver((records) => {
-        const shouldRefreshCodeBlocks = records.some((record) => record.type === 'attributes');
-        if (!shouldRefreshCodeBlocks || !containerRef) return;
+        const shouldRefreshThemeAdapters = records.some((record) => record.type === 'attributes');
+        if (!shouldRefreshThemeAdapters || !containerRef) return;
 
         if (themeRefreshRaf !== undefined && typeof window.cancelAnimationFrame === 'function') {
           window.cancelAnimationFrame(themeRefreshRaf);
@@ -251,7 +247,7 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
 
         const refresh = () => {
           themeRefreshRaf = undefined;
-          runPostProcessForVisibleDocument();
+          refreshThemeSensitiveEnhancements();
         };
 
         themeRefreshRaf = typeof window.requestAnimationFrame === 'function'
@@ -260,7 +256,13 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
       });
       themeObserver.observe(document.documentElement, {
         attributes: true,
-        attributeFilter: ['class', 'data-theme', 'data-theme-switching'],
+        attributeFilter: [
+          'class',
+          'data-theme',
+          'data-theme-switching',
+          'data-floe-shell-theme',
+          'data-redeven-theme-switching',
+        ],
       });
     }
   });
@@ -434,6 +436,35 @@ export function FileMarkdown(props: FileMarkdownProps): JSX.Element {
         message: formatMarkdownPreviewError(error),
       });
     }
+  }
+
+  function refreshThemeSensitiveEnhancements(): void {
+    if (disposed || fatalIssue() || !containerRef?.isConnected) return;
+
+    const target = containerRef;
+    const taskSeq = (renderTaskSeq += 1);
+    const theme = resolveMermaidThemeContext();
+    const isCurrentTask = () => (
+      !disposed
+      && taskSeq === renderTaskSeq
+      && target === containerRef
+      && target.isConnected
+    );
+
+    void runMermaid(target, { shouldContinue: isCurrentTask, theme })
+      .catch((error) => {
+        if (!isCurrentTask()) return;
+        console.error('Markdown preview Mermaid theme refresh failed:', error);
+        commitWarningIssue({
+          severity: 'warning',
+          phase: 'mermaid',
+          message: formatMarkdownPreviewError(error),
+        });
+      })
+      .then(() => {
+        if (!isCurrentTask()) return;
+        runPostProcessForVisibleDocument();
+      });
   }
 
   function getTocHeadings(): HTMLElement[] {

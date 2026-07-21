@@ -197,14 +197,14 @@ function StashListItemCard(props: StashListItemCardProps) {
         'flex w-full cursor-pointer items-center gap-2.5 rounded-md px-3 py-2.5 text-left',
         'transition-all duration-150 border-l-[3px]',
         props.active
-          ? 'border-l-sky-500/60 bg-sky-500/[0.06] shadow-sm'
+          ? 'border-l-[var(--redeven-status-info)] bg-[var(--redeven-status-info-soft)] shadow-sm'
           : 'border-l-transparent hover:bg-muted/[0.06]',
       )}
       onClick={props.onClick}
     >
       <span class={cn(
         'shrink-0 text-[11px] font-mono font-semibold tabular-nums tracking-tight',
-        props.active ? 'text-sky-700 dark:text-sky-300' : 'text-muted-foreground/60',
+        props.active ? 'text-[var(--redeven-status-info-foreground)]' : 'text-muted-foreground/60',
       )}>
         {stashDisplayIndex(props.stash.id, props.stashes)}
       </span>

@@ -238,7 +238,8 @@ export function GitWorkbench(props: GitWorkbenchProps) {
                       <Tooltip content="Browse files" placement="top" delay={0}>
                         <button
                           type="button"
-                          class="inline-flex cursor-pointer items-center shrink-0 text-muted-foreground/50 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                          aria-label={i18n.t('git.changes.browseFiles')}
+                          class="inline-flex cursor-pointer items-center shrink-0 text-muted-foreground/50 hover:text-[var(--redeven-status-success)] transition-colors"
                           onClick={() => void props.onBrowseFiles?.(request())}
                         >
                           <Folder class="size-3" />
@@ -249,7 +250,8 @@ export function GitWorkbench(props: GitWorkbenchProps) {
                       <Tooltip content="Open in terminal" placement="top" delay={0}>
                         <button
                           type="button"
-                          class="inline-flex cursor-pointer items-center shrink-0 text-muted-foreground/50 hover:text-sky-600 dark:hover:text-sky-400 transition-colors"
+                          aria-label={i18n.t('git.changes.openInTerminal')}
+                          class="inline-flex cursor-pointer items-center shrink-0 text-muted-foreground/50 hover:text-[var(--redeven-status-info)] transition-colors"
                           onClick={() => props.onOpenInTerminal?.(request())}
                         >
                           <Terminal class="size-3" />

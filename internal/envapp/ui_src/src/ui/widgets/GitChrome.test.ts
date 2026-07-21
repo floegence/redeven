@@ -58,19 +58,18 @@ describe('GitChrome semantic tone helpers', () => {
     expect(gitBranchTone({ current: false, kind: 'remote' } as any)).toBe('violet');
     expect(gitBranchTone({ current: false, kind: 'local' } as any)).toBe('violet');
 
-    expect(gitChangePathClass('modified')).toBe('text-blue-700 dark:text-sky-300');
-    expect(gitChangePathClass('conflicted')).toBe('text-red-700 dark:text-red-300');
-    expect(gitChangePathClass('deleted')).toBe('text-red-700 dark:text-red-300');
-    expect(gitChangePathClass('added')).toBe('text-emerald-700 dark:text-emerald-300');
-    expect(gitChangePathClass('renamed')).toBe('text-violet-700 dark:text-violet-300');
+    expect(gitChangePathClass('modified')).toBe('text-[var(--redeven-status-info-foreground)]');
+    expect(gitChangePathClass('conflicted')).toBe('text-[var(--redeven-status-error-foreground)]');
+    expect(gitChangePathClass('deleted')).toBe('text-[var(--redeven-status-error-foreground)]');
+    expect(gitChangePathClass('added')).toBe('text-[var(--redeven-status-success-foreground)]');
+    expect(gitChangePathClass('renamed')).toBe('text-[var(--redeven-categorical-6)]');
     expect(gitChangePathClass('copied')).toBe('text-primary');
   });
 
   it('keeps git chrome surfaces with tone-specific accent borders on transparent background', () => {
-    expect(gitToneBadgeClass('info')).toContain('border-blue-500/25');
-    expect(gitToneBadgeClass('info')).toContain('bg-blue-500/10');
-    expect(gitToneBadgeClass('info')).toContain('text-blue-700');
-    expect(gitToneBadgeClass('info')).toContain('dark:text-sky-300');
+    expect(gitToneBadgeClass('info')).toContain('border-[var(--redeven-status-info-border)]');
+    expect(gitToneBadgeClass('info')).toContain('bg-[var(--redeven-status-info-soft)]');
+    expect(gitToneBadgeClass('info')).toContain('text-[var(--redeven-status-info-foreground)]');
     expect(gitToneBadgeClass('warning')).toContain('bg-warning/12');
     expect(gitToneBadgeClass('warning')).toContain('text-warning');
     expect(gitToneBadgeClass('warning')).toContain('border-warning/20');
@@ -99,7 +98,7 @@ describe('GitChrome semantic tone helpers', () => {
     expect(gitToneInsetClass('violet')).toContain('border');
     expect(gitToneInsetClass('warning')).toContain('redeven-surface-inset');
 
-    expect(gitToneAccentColor('info')).toBe('text-sky-500');
+    expect(gitToneAccentColor('info')).toBe('text-[var(--redeven-status-info)]');
     expect(gitToneAccentColor('brand')).toBe('text-primary');
     expect(gitToneAccentColor('neutral')).toBe('text-muted-foreground');
   });

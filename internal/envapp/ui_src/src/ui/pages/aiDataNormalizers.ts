@@ -104,13 +104,13 @@ export function todoStatusLabel(status: TodoStatus): string {
 export function todoStatusBadgeClass(status: TodoStatus): string {
   switch (status) {
     case 'in_progress':
-      return 'bg-blue-500/10 text-blue-700 dark:text-blue-300 border-blue-500/25';
+      return 'bg-[var(--redeven-status-info-soft)] text-[var(--redeven-status-info-foreground)] border-[var(--redeven-status-info-border)]';
     case 'completed':
       return 'bg-success/10 text-success border-success/20';
     case 'cancelled':
       return 'bg-muted text-muted-foreground border-border';
     default:
-      return 'bg-amber-500/10 text-amber-700 dark:text-amber-300 border-amber-500/20';
+      return 'bg-[var(--redeven-status-warning-soft)] text-[var(--redeven-status-warning-foreground)] border-[var(--redeven-status-warning-border)]';
   }
 }
 

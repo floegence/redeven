@@ -16,9 +16,16 @@ vi.mock('@floegence/floe-webapp-core', () => ({
   deferAfterPaint: (fn: () => void) => {
     deferredPaintCallbacks.push(fn);
   },
+  useTheme: () => ({
+    resolvedTheme: () => 'dark',
+    shellPresetForMode: () => ({ name: 'midnight' }),
+  }),
 }));
 
 vi.mock('../../utils/shikiHighlight', () => ({
+  encodeCodeHighlightTheme: (theme: string, preset?: string | null) => (
+    preset ? `${theme}::${preset}` : theme
+  ),
   highlightCodeToHtml: (...args: unknown[]) => highlightCodeToHtmlMock(...args),
   resolveCodeHighlightTheme: (resolvedTheme?: string | null) => (resolvedTheme === 'light' ? 'github-light' : 'github-dark'),
 }));
@@ -87,7 +94,7 @@ describe('CodeBlock', () => {
     expect(highlightCodeToHtmlInWorkerMock).toHaveBeenCalledWith(
       LARGE_CODE_FIXTURE,
       'typescript',
-      'github-dark',
+      'github-dark::midnight',
     );
     expect(highlightCodeToHtmlMock).not.toHaveBeenCalled();
     expect(host.querySelector('.worker')).toBeTruthy();

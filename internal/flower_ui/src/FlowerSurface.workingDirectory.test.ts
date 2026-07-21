@@ -49,7 +49,9 @@ describe('Flower working directory chip', () => {
     expect(iconRule).toContain('width: 0.875rem');
     expect(iconRule).toContain('height: 0.875rem');
     expect(iconRule).toContain('flex: 0 0 auto');
-    expect(copiedRule).toContain('#16a34a');
+    expect(copiedRule).toContain('border-color: var(--redeven-status-success-border)');
+    expect(copiedRule).toContain('background: var(--redeven-status-success-soft)');
+    expect(copiedRule).toContain('color: var(--redeven-status-success-foreground)');
     expect(css).toContain(".flower-working-dir-chip[data-copied='true'] .flower-working-dir-chip-icon-idle");
     expect(css).toContain(".flower-working-dir-chip[data-copied='true'] .flower-working-dir-chip-icon-copied");
   });

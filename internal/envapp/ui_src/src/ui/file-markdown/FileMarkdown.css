@@ -1,21 +1,20 @@
 /* FileMarkdown — document-style markdown preview, uses app theme variables */
 
 .file-markdown-body {
-  --fm-code-green-rgb: 46, 160, 67;
-  --fm-code-surface: #f8fcf7;
-  --fm-code-chrome: #f1f7f0;
-  --fm-code-border: rgba(var(--fm-code-green-rgb), 0.14);
-  --fm-code-muted: #66796d;
-  --fm-code-fallback-text: #22362a;
-  --fm-code-accent: #2f7d58;
-  --fm-code-shadow: 0 1px 2px rgba(20, 83, 45, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.72);
-  --fm-code-copy-bg: rgba(250, 254, 249, 0.68);
-  --fm-code-copy-hover-bg: rgba(253, 255, 252, 0.96);
-  --fm-inline-code-bg: rgba(var(--fm-code-green-rgb), 0.105);
-  --fm-inline-code-border: rgba(var(--fm-code-green-rgb), 0.19);
-  --fm-inline-code-highlight: rgba(255, 255, 255, 0.6);
-  --fm-inline-code-ink: #23593d;
-  --fm-inline-code-shadow: 0 1px 1px rgba(20, 83, 45, 0.06), inset 0 1px 0 rgba(255, 255, 255, 0.54);
+  --fm-code-surface: var(--redeven-code-surface, var(--background));
+  --fm-code-chrome: var(--redeven-code-chrome, var(--card));
+  --fm-code-border: var(--redeven-code-border, var(--border));
+  --fm-code-muted: var(--redeven-code-muted, var(--muted-foreground));
+  --fm-code-fallback-text: var(--redeven-code-foreground, var(--foreground));
+  --fm-code-accent: var(--redeven-chat-accent, var(--primary));
+  --fm-code-shadow: var(--redeven-shadow-soft, 0 1px 2px color-mix(in srgb, var(--foreground) 10%, transparent));
+  --fm-code-copy-bg: color-mix(in srgb, var(--redeven-code-chrome, var(--card)) 82%, transparent);
+  --fm-code-copy-hover-bg: color-mix(in srgb, var(--redeven-code-chrome, var(--card)) 92%, var(--foreground) 8%);
+  --fm-inline-code-bg: color-mix(in srgb, var(--primary) 10%, transparent);
+  --fm-inline-code-border: color-mix(in srgb, var(--primary) 22%, var(--border));
+  --fm-inline-code-highlight: color-mix(in srgb, var(--background) 54%, transparent);
+  --fm-inline-code-ink: color-mix(in srgb, var(--primary) 78%, var(--foreground) 22%);
+  --fm-inline-code-shadow: inset 0 1px 0 color-mix(in srgb, var(--background) 52%, transparent);
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   font-size: 15.5px;
   line-height: 1.7;
@@ -25,24 +24,6 @@
   margin: 0 auto;
   padding: 16px 32px 24px;
   word-wrap: break-word;
-}
-
-html.dark .file-markdown-body {
-  --fm-code-green-rgb: 63, 185, 80;
-  --fm-code-surface: #0d1713;
-  --fm-code-chrome: #111c18;
-  --fm-code-border: rgba(var(--fm-code-green-rgb), 0.18);
-  --fm-code-muted: #93b7a3;
-  --fm-code-fallback-text: #d9e6dd;
-  --fm-code-accent: #7ad99d;
-  --fm-code-shadow: 0 1px 2px rgba(0, 0, 0, 0.24), inset 0 1px 0 rgba(255, 255, 255, 0.045);
-  --fm-code-copy-bg: rgba(13, 23, 19, 0.72);
-  --fm-code-copy-hover-bg: rgba(21, 34, 28, 0.96);
-  --fm-inline-code-bg: rgba(var(--fm-code-green-rgb), 0.13);
-  --fm-inline-code-border: rgba(var(--fm-code-green-rgb), 0.24);
-  --fm-inline-code-highlight: rgba(220, 255, 232, 0.06);
-  --fm-inline-code-ink: #c3f2d0;
-  --fm-inline-code-shadow: 0 1px 1px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.055);
 }
 
 /* Headings */
@@ -233,33 +214,33 @@ html.dark .file-markdown-body {
 }
 
 .file-markdown-body blockquote.fm-alert-note {
-  background: color-mix(in srgb, #0969da 8%, transparent);
-  border-color: #0969da;
-  color: #58a6ff;
+  background: var(--redeven-status-info-soft, color-mix(in srgb, var(--info) 8%, transparent));
+  border-color: var(--redeven-status-info, var(--info));
+  color: var(--redeven-status-info-foreground, var(--info));
 }
 
 .file-markdown-body blockquote.fm-alert-tip {
-  background: color-mix(in srgb, #1a7f37 8%, transparent);
-  border-color: #1a7f37;
-  color: #3fb950;
+  background: var(--redeven-status-success-soft, color-mix(in srgb, var(--success) 8%, transparent));
+  border-color: var(--redeven-status-success, var(--success));
+  color: var(--redeven-status-success-foreground, var(--success));
 }
 
 .file-markdown-body blockquote.fm-alert-important {
-  background: color-mix(in srgb, #8250df 8%, transparent);
-  border-color: #8250df;
-  color: #bc8cff;
+  background: var(--redeven-status-primary-soft, color-mix(in srgb, var(--primary) 8%, transparent));
+  border-color: var(--redeven-status-primary, var(--primary));
+  color: var(--redeven-status-primary-foreground, var(--primary));
 }
 
 .file-markdown-body blockquote.fm-alert-warning {
-  background: color-mix(in srgb, #bf8700 8%, transparent);
-  border-color: #bf8700;
-  color: #d29922;
+  background: var(--redeven-status-warning-soft, color-mix(in srgb, var(--warning) 8%, transparent));
+  border-color: var(--redeven-status-warning, var(--warning));
+  color: var(--redeven-status-warning-foreground, var(--warning));
 }
 
 .file-markdown-body blockquote.fm-alert-caution {
-  background: color-mix(in srgb, #cf222e 8%, transparent);
-  border-color: #cf222e;
-  color: #f85149;
+  background: var(--redeven-status-error-soft, color-mix(in srgb, var(--error) 8%, transparent));
+  border-color: var(--redeven-status-error, var(--error));
+  color: var(--redeven-status-error-foreground, var(--error));
 }
 
 .file-markdown-body .fm-alert-heading {
@@ -403,7 +384,7 @@ html.dark .file-markdown-body {
 
 .file-markdown-body .fm-mermaid-error {
   margin: 1em 0;
-  border: 1px solid color-mix(in srgb, var(--error, #cf222e) 20%, transparent);
+  border: 1px solid var(--redeven-status-error-border, color-mix(in srgb, var(--error) 20%, transparent));
   border-radius: 8px;
   overflow: hidden;
 }
@@ -413,8 +394,8 @@ html.dark .file-markdown-body {
   align-items: center;
   gap: 6px;
   padding: 8px 12px;
-  background: color-mix(in srgb, var(--error, #cf222e) 8%, transparent);
-  color: var(--error, #f85149);
+  background: var(--redeven-status-error-soft, color-mix(in srgb, var(--error) 8%, transparent));
+  color: var(--redeven-status-error-foreground, var(--error));
   font-size: 0.85em;
   font-weight: 600;
 }
@@ -463,9 +444,9 @@ html.dark .file-markdown-body {
   width: min(860px, calc(100% - 64px));
   margin: 14px auto 0;
   padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, #bf8700 28%, var(--border));
+  border: 1px solid var(--redeven-status-warning-border, var(--border));
   border-radius: 8px;
-  background: color-mix(in srgb, #bf8700 8%, var(--background));
+  background: color-mix(in srgb, var(--redeven-status-warning, var(--warning)) 8%, var(--background));
   color: var(--foreground);
 }
 
@@ -473,7 +454,7 @@ html.dark .file-markdown-body {
   width: 16px;
   height: 16px;
   margin-top: 2px;
-  color: #bf8700;
+  color: var(--redeven-status-warning-foreground, var(--warning));
 }
 
 .fm-preview-warning-copy {
@@ -506,7 +487,7 @@ html.dark .file-markdown-body {
   gap: 5px;
   min-height: 26px;
   padding: 0 8px;
-  border: 1px solid color-mix(in srgb, #bf8700 22%, var(--border));
+  border: 1px solid var(--redeven-status-warning-border, var(--border));
   border-radius: 6px;
   background: color-mix(in srgb, var(--background) 90%, transparent);
   color: var(--muted-foreground);
@@ -518,13 +499,13 @@ html.dark .file-markdown-body {
 }
 
 .fm-preview-warning-action:hover {
-  border-color: color-mix(in srgb, #bf8700 42%, var(--border));
-  background: color-mix(in srgb, #bf8700 11%, var(--background));
+  border-color: color-mix(in srgb, var(--redeven-status-warning, var(--warning)) 42%, var(--border));
+  background: color-mix(in srgb, var(--redeven-status-warning, var(--warning)) 11%, var(--background));
   color: var(--foreground);
 }
 
 .fm-preview-warning-action:focus-visible {
-  outline: 2px solid color-mix(in srgb, #bf8700 45%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--redeven-status-warning, var(--warning)) 45%, transparent);
   outline-offset: 2px;
 }
 
@@ -542,9 +523,9 @@ html.dark .file-markdown-body {
   display: block;
   margin-top: 8px;
   padding: 8px 10px;
-  border: 1px solid color-mix(in srgb, #bf8700 18%, var(--border));
+  border: 1px solid var(--redeven-status-warning-border, var(--border));
   border-radius: 6px;
-  background: color-mix(in srgb, var(--background) 88%, #bf8700 12%);
+  background: color-mix(in srgb, var(--background) 88%, var(--redeven-status-warning, var(--warning)) 12%);
   color: var(--muted-foreground);
   font-family: 'JetBrains Mono', ui-monospace, monospace;
   font-size: 11px;
@@ -559,8 +540,8 @@ html.dark .file-markdown-body {
 
 /* KaTeX */
 .file-markdown-body .katex-error {
-  color: var(--error, #f85149);
-  background: color-mix(in srgb, var(--error, #cf222e) 8%, transparent);
+  color: var(--redeven-status-error-foreground, var(--error));
+  background: var(--redeven-status-error-soft, color-mix(in srgb, var(--error) 8%, transparent));
   padding: 1px 4px;
   border-radius: 3px;
   font-family: 'JetBrains Mono', ui-monospace, monospace;
@@ -632,7 +613,7 @@ html.dark .file-markdown-body {
   border: 1px solid var(--border);
   border-radius: 8px;
   background: color-mix(in srgb, var(--background) 92%, transparent);
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  box-shadow: var(--redeven-shadow-soft, 0 8px 24px color-mix(in srgb, var(--foreground) 8%, transparent));
   backdrop-filter: blur(10px);
 }
 
@@ -650,7 +631,7 @@ html.dark .file-markdown-body {
 }
 
 html.dark .fm-toolbar-floating {
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.24);
+  box-shadow: var(--redeven-shadow-soft, 0 8px 24px color-mix(in srgb, var(--foreground) 24%, transparent));
 }
 
 html.dark .fm-toolbar-floating-inline {

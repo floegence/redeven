@@ -6,6 +6,7 @@ import { postProcess } from './postProcess';
 const highlightCodeToHtmlMock = vi.hoisted(() => vi.fn());
 
 vi.mock('../utils/shikiHighlight', () => ({
+  encodeCodeHighlightTheme: (theme: string, shellTheme?: string | null) => shellTheme ? `${theme}::${shellTheme}` : theme,
   highlightCodeToHtml: (...args: unknown[]) => highlightCodeToHtmlMock(...args),
   resolveCodeHighlightTheme: (resolvedTheme?: string | null) => (resolvedTheme === 'light' ? 'github-light' : 'github-dark'),
 }));
@@ -179,6 +180,28 @@ describe('file markdown postProcess', () => {
     });
     expect(root.querySelectorAll('.fm-code-lang')).toHaveLength(1);
     expect(root.querySelectorAll('button.fm-code-copy')).toHaveLength(1);
+  });
+
+  it('re-highlights existing code blocks when the shell preset changes within one mode', async () => {
+    highlightCodeToHtmlMock.mockResolvedValue('<pre class="shiki" style="color:#24292f"><code><span class="line">const value = 1;</span></code></pre>');
+    document.documentElement.classList.add('light');
+    document.documentElement.dataset.floeShellTheme = 'paper';
+    const root = createRoot('<pre class="fm-code-block"><code class="fm-code-source language-ts">const value = 1;</code></pre>');
+
+    postProcess(root);
+    await flushAsync();
+    expect(highlightCodeToHtmlMock).toHaveBeenCalledTimes(1);
+
+    document.documentElement.dataset.floeShellTheme = 'mist';
+    postProcess(root);
+    await flushAsync();
+
+    expect(highlightCodeToHtmlMock).toHaveBeenCalledTimes(2);
+    expect(highlightCodeToHtmlMock).toHaveBeenLastCalledWith({
+      code: 'const value = 1;',
+      language: 'ts',
+      theme: 'github-light',
+    });
   });
 
   it('does not add duplicate controls when postProcess runs again', () => {

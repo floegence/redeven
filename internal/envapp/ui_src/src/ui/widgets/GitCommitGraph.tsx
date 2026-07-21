@@ -32,25 +32,25 @@ const NODE_CENTER_Y = ROW_TOP_PADDING + SUBJECT_ROW_HEIGHT / 2;
 const CONNECTOR_OVERSCAN = 0.75;
 
 const LANE_STROKE_COLORS = [
-  'color-mix(in srgb, var(--primary) 78%, transparent)',
-  'color-mix(in srgb, rgb(139 92 246) 78%, transparent)',
-  'color-mix(in srgb, rgb(14 165 233) 82%, transparent)',
-  'color-mix(in srgb, var(--success) 80%, transparent)',
-  'color-mix(in srgb, var(--warning) 85%, transparent)',
-  'color-mix(in srgb, rgb(217 70 239) 78%, transparent)',
-  'color-mix(in srgb, rgb(6 182 212) 82%, transparent)',
-  'color-mix(in srgb, rgb(244 63 94) 78%, transparent)',
+  'color-mix(in srgb, var(--redeven-categorical-1) 78%, transparent)',
+  'color-mix(in srgb, var(--redeven-categorical-2) 78%, transparent)',
+  'color-mix(in srgb, var(--redeven-categorical-3) 82%, transparent)',
+  'color-mix(in srgb, var(--redeven-categorical-4) 80%, transparent)',
+  'color-mix(in srgb, var(--redeven-categorical-5) 85%, transparent)',
+  'color-mix(in srgb, var(--redeven-categorical-6) 78%, transparent)',
+  'color-mix(in srgb, var(--redeven-categorical-7) 82%, transparent)',
+  'color-mix(in srgb, var(--redeven-categorical-8) 78%, transparent)',
 ];
 
 const LANE_FILL_COLORS = [
-  'var(--primary)',
-  'rgb(139 92 246)',
-  'rgb(14 165 233)',
-  'var(--success)',
-  'var(--warning)',
-  'rgb(217 70 239)',
-  'rgb(6 182 212)',
-  'rgb(244 63 94)',
+  'var(--redeven-categorical-1)',
+  'var(--redeven-categorical-2)',
+  'var(--redeven-categorical-3)',
+  'var(--redeven-categorical-4)',
+  'var(--redeven-categorical-5)',
+  'var(--redeven-categorical-6)',
+  'var(--redeven-categorical-7)',
+  'var(--redeven-categorical-8)',
 ];
 
 function laneX(index: number): number {
@@ -121,7 +121,7 @@ function laneByHash(lanes: CommitGraphLane[], hash: string): CommitGraphLane | u
 export function buildCommitGraphRows(commits: GitCommitSummary[]): CommitGraphRow[] {
   const rows: CommitGraphRow[] = [];
   let frontier: CommitGraphLane[] = [];
-  let nextColorIndex = 0;
+  let nextColorIndex = 1;
   const allocateColor = () => {
     const value = nextColorIndex;
     nextColorIndex += 1;
@@ -313,7 +313,7 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
                       <Show when={Boolean(mergeLabel())}>
                         <>
                           <span aria-hidden="true">·</span>
-                          <span class={selected() ? 'text-sidebar-accent-foreground/86' : 'text-violet-700 dark:text-violet-300'}>{mergeLabel()}</span>
+                          <span class={selected() ? 'text-sidebar-accent-foreground/86' : 'text-[var(--redeven-categorical-6)]'}>{mergeLabel()}</span>
                         </>
                       </Show>
                       <Show when={selected()}>

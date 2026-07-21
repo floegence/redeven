@@ -14,6 +14,12 @@ const actualBuildToc = vi.hoisted(() => ({
 }));
 
 vi.mock('./mermaidPlugin', () => ({
+  resolveMermaidThemeContext: vi.fn(() => ({
+    key: 'midnight|dark',
+    mode: 'dark',
+    preset: 'midnight',
+    variables: {},
+  })),
   setupMermaid: vi.fn(),
   runMermaid: (...args: unknown[]) => runMermaidMock(...args),
 }));
@@ -105,6 +111,8 @@ describe('FileMarkdown', () => {
     document.documentElement.removeAttribute('class');
     document.documentElement.removeAttribute('data-theme');
     document.documentElement.removeAttribute('data-theme-switching');
+    document.documentElement.removeAttribute('data-floe-shell-theme');
+    document.documentElement.removeAttribute('data-redeven-theme-switching');
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
     vi.clearAllMocks();
@@ -133,7 +141,7 @@ describe('FileMarkdown', () => {
     }
   });
 
-  it('re-processes existing code blocks when the app theme changes', async () => {
+  it('re-renders diagrams and code blocks when the app theme preset changes', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -147,11 +155,16 @@ describe('FileMarkdown', () => {
     try {
       await flushAsync();
       expect(postProcessMock).toHaveBeenCalledTimes(1);
+      expect(runMermaidMock).toHaveBeenCalledTimes(1);
 
-      document.documentElement.classList.add('dark');
+      document.documentElement.dataset.floeShellTheme = 'midnight';
       await flushAsync();
 
       expect(postProcessMock).toHaveBeenCalledTimes(2);
+      expect(runMermaidMock).toHaveBeenCalledTimes(2);
+      expect(runMermaidMock.mock.calls[1]?.[1]).toMatchObject({
+        theme: expect.objectContaining({ preset: 'midnight' }),
+      });
     } finally {
       dispose();
     }

@@ -14,6 +14,10 @@ vi.mock('@floegence/floe-webapp-core', () => ({
   deferAfterPaint: (fn: () => void) => {
     deferredPaintCallbacks.push(fn);
   },
+  useTheme: () => ({
+    resolvedTheme: () => 'dark',
+    shellPresetForMode: () => ({ name: 'midnight' }),
+  }),
 }));
 
 vi.mock('mermaid', () => ({
@@ -92,7 +96,7 @@ describe('MermaidBlock', () => {
     document.body.appendChild(secondHost);
 
     render(() => <MermaidBlock content={LARGE_MERMAID_FIXTURE} />, secondHost);
-    await flushAsync();
+    await flushAfterPaint();
 
     expect(mermaidRenderMock).toHaveBeenCalledTimes(1);
     expect(secondHost.querySelector('[data-testid="mermaid-diagram"]')).toBeTruthy();

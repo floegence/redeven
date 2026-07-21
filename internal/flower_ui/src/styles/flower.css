@@ -23,13 +23,13 @@
 
 .dark .flower-component-shell,
 html.dark .flower-component-shell {
-  --flower-thread-rail-surface: color-mix(in srgb, var(--flower-thread-rail-base) 84%, black 16%);
-  --flower-thread-rail-border: color-mix(in srgb, var(--redeven-surface-panel-border, var(--border)) 76%, black 24%);
+  --flower-thread-rail-surface: color-mix(in srgb, var(--flower-thread-rail-base) 84%, var(--redeven-surface-shadow-source) 16%);
+  --flower-thread-rail-border: color-mix(in srgb, var(--redeven-surface-panel-border, var(--border)) 76%, var(--redeven-surface-shadow-source) 24%);
   --flower-thread-rail-foreground: color-mix(in srgb, var(--foreground) 88%, var(--flower-thread-rail-surface) 12%);
   --flower-thread-rail-muted: color-mix(in srgb, var(--flower-thread-rail-foreground) 62%, var(--flower-thread-rail-surface) 38%);
   --flower-thread-rail-subtle: color-mix(in srgb, var(--flower-thread-rail-foreground) 44%, var(--flower-thread-rail-surface) 56%);
-  --flower-thread-rail-control: color-mix(in srgb, var(--flower-thread-rail-surface) 88%, white 5%);
-  --flower-thread-rail-control-border: color-mix(in srgb, var(--flower-thread-rail-border) 84%, white 8%);
+  --flower-thread-rail-control: color-mix(in srgb, var(--flower-thread-rail-surface) 88%, var(--redeven-surface-highlight-source) 5%);
+  --flower-thread-rail-control-border: color-mix(in srgb, var(--flower-thread-rail-border) 84%, var(--redeven-surface-highlight-source) 8%);
   --flower-thread-rail-accent: color-mix(in srgb, var(--primary) 12%, var(--flower-thread-rail-control));
   --flower-thread-rail-accent-strong: color-mix(in srgb, var(--primary) 12%, var(--flower-thread-rail-control));
 }
@@ -97,12 +97,12 @@ html.dark .flower-component-shell {
   background:
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--flower-thread-rail-control) 94%, white 6%),
+      color-mix(in srgb, var(--flower-thread-rail-control) 94%, var(--redeven-surface-highlight-source) 6%),
       color-mix(in srgb, var(--flower-thread-rail-control) 96%, var(--flower-thread-rail-surface) 4%)
     );
   padding: 0.1875rem;
   box-shadow:
-    0 1px 0 color-mix(in srgb, white 46%, transparent) inset,
+    0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 46%, transparent) inset,
     0 12px 26px -24px color-mix(in srgb, var(--flower-thread-rail-foreground) 60%, transparent);
 }
 
@@ -130,7 +130,7 @@ html.dark .flower-component-shell {
 .flower-sidebar-leading-action:focus-visible {
   background: color-mix(in srgb, var(--flower-thread-rail-foreground) 7%, transparent);
   color: var(--flower-thread-rail-foreground);
-  box-shadow: 0 1px 0 color-mix(in srgb, white 40%, transparent) inset;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 40%, transparent) inset;
   outline: none;
   transform: translateY(-0.5px);
 }
@@ -165,7 +165,7 @@ html.dark .flower-component-shell {
 .flower-new-chat-button:focus-visible {
   background: color-mix(in srgb, var(--primary) 13%, transparent);
   box-shadow:
-    0 1px 0 color-mix(in srgb, white 42%, transparent) inset,
+    0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 42%, transparent) inset,
     0 10px 22px -20px color-mix(in srgb, var(--primary) 62%, transparent);
   filter: saturate(1.08);
   outline: none;
@@ -309,9 +309,9 @@ html.dark .flower-component-shell {
 }
 
 .flower-working-dir-chip[data-copied='true'] {
-  border-color: color-mix(in srgb, #16a34a 38%, var(--border) 62%);
-  background: color-mix(in srgb, #16a34a 8%, transparent);
-  color: color-mix(in srgb, #16a34a 74%, var(--foreground) 26%);
+  border-color: var(--redeven-status-success-border);
+  background: var(--redeven-status-success-soft);
+  color: var(--redeven-status-success-foreground);
 }
 
 .flower-working-dir-chip-icon {
@@ -397,7 +397,7 @@ html.dark .flower-component-shell {
   height: 1rem;
   border-radius: 9999px;
   background: color-mix(in srgb, var(--primary) 86%, var(--foreground) 14%);
-  color: var(--primary-foreground, white);
+  color: var(--primary-foreground, var(--redeven-surface-highlight-source));
   padding: 0 0.25rem;
   font-size: 0.625rem;
   font-variant-numeric: tabular-nums;
@@ -419,7 +419,7 @@ html.dark .flower-component-shell {
   inset: -0.1875rem;
   pointer-events: none;
   border: 1.5px solid color-mix(in srgb, var(--primary) 22%, transparent);
-  border-top-color: color-mix(in srgb, var(--primary) 88%, white 12%);
+  border-top-color: color-mix(in srgb, var(--primary) 88%, var(--redeven-surface-highlight-source) 12%);
   border-right-color: color-mix(in srgb, var(--primary) 58%, transparent);
   border-radius: inherit;
   animation: flower-subagent-badge-ring-spin 920ms linear infinite;
@@ -551,9 +551,9 @@ html.dark .flower-component-shell {
   padding: 0.35rem;
   transform: translateX(var(--flower-composer-more-panel-shift-x, 0px));
   box-shadow:
-    0 18px 44px -26px color-mix(in srgb, black 54%, transparent),
+    0 18px 44px -26px color-mix(in srgb, var(--redeven-surface-shadow-source) 54%, transparent),
     0 8px 20px -16px color-mix(in srgb, var(--foreground) 36%, transparent),
-    0 1px 0 color-mix(in srgb, white 32%, transparent) inset;
+    0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 32%, transparent) inset;
 }
 
 .flower-composer-more-row {
@@ -619,8 +619,8 @@ html.dark .flower-component-shell {
   background: color-mix(in srgb, var(--flower-chat-surface-elevated) 92%, transparent);
   padding: 0.35rem;
   box-shadow:
-    0 24px 46px -34px color-mix(in srgb, black 48%, transparent),
-    0 2px 0 color-mix(in srgb, white 42%, transparent) inset;
+    0 24px 46px -34px color-mix(in srgb, var(--redeven-surface-shadow-source) 48%, transparent),
+    0 2px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 42%, transparent) inset;
   backdrop-filter: blur(18px);
 }
 
@@ -657,7 +657,7 @@ html.dark .flower-component-shell {
 .flower-composer-command-item:focus-visible {
   border-color: color-mix(in srgb, var(--primary) 36%, var(--flower-chat-surface-border) 64%);
   background: color-mix(in srgb, var(--primary) 9%, var(--flower-chat-surface) 91%);
-  box-shadow: 0 1px 0 color-mix(in srgb, white 46%, transparent) inset;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 46%, transparent) inset;
   outline: none;
   transform: translateY(-0.5px);
 }
@@ -704,7 +704,7 @@ html.dark .flower-component-shell {
   color: color-mix(in srgb, var(--foreground) 78%, var(--primary) 22%);
   outline: none;
   box-shadow:
-    0 1px 0 color-mix(in srgb, white 44%, transparent) inset,
+    0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 44%, transparent) inset,
     0 0 0 1px color-mix(in srgb, var(--flower-chat-surface-border) 58%, transparent);
 }
 
@@ -714,7 +714,7 @@ html.dark .flower-component-shell {
   inset: 0.24rem;
   border-radius: inherit;
   background: color-mix(in srgb, var(--flower-chat-surface-elevated) 94%, transparent);
-  box-shadow: 0 1px 0 color-mix(in srgb, white 46%, transparent) inset;
+  box-shadow: 0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 46%, transparent) inset;
 }
 
 .flower-composer-context-percent {
@@ -732,8 +732,8 @@ html.dark .flower-component-shell {
 }
 
 .flower-composer-context-indicator[data-context-pressure='warning'] .flower-composer-context-progress {
-  --flower-composer-context-ring: color-mix(in srgb, var(--warning, #f59e0b) 82%, var(--foreground) 18%);
-  color: color-mix(in srgb, var(--warning, #f59e0b) 72%, var(--foreground) 28%);
+  --flower-composer-context-ring: color-mix(in srgb, var(--redeven-status-warning) 82%, var(--foreground) 18%);
+  color: var(--redeven-status-warning-foreground);
 }
 
 .flower-composer-context-indicator[data-context-pressure='danger'] .flower-composer-context-progress {
@@ -748,7 +748,7 @@ html.dark .flower-component-shell {
 
 .flower-composer-context-progress:focus-visible {
   box-shadow:
-    0 1px 0 color-mix(in srgb, white 44%, transparent) inset,
+    0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 44%, transparent) inset,
     0 0 0 1px color-mix(in srgb, var(--flower-chat-surface-border) 58%, transparent),
     0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
 }
@@ -767,8 +767,8 @@ html.dark .flower-component-shell {
   padding: 0.55rem 0.65rem;
   color: var(--popover-foreground, var(--foreground));
   box-shadow:
-    0 20px 42px -28px color-mix(in srgb, black 72%, transparent),
-    0 1px 0 color-mix(in srgb, white 34%, transparent) inset;
+    0 20px 42px -28px color-mix(in srgb, var(--redeven-surface-shadow-source) 72%, transparent),
+    0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 34%, transparent) inset;
   visibility: hidden;
   opacity: 0;
   transform: translateY(0.2rem);
@@ -906,17 +906,17 @@ html.dark .flower-component-shell {
 }
 
 .flower-permission-trigger[data-permission-type='full_access'] {
-  border-color: color-mix(in srgb, #ff8a3d 54%, var(--border) 46%);
-  background: color-mix(in srgb, #ff8a3d 12%, transparent);
-  color: color-mix(in srgb, #ff8a3d 84%, var(--foreground) 16%);
+  border-color: var(--redeven-status-warning-border);
+  background: var(--redeven-status-warning-soft);
+  color: var(--redeven-status-warning-foreground);
 }
 
 .flower-permission-trigger[data-permission-type='full_access']:hover,
 .flower-permission-trigger[data-permission-type='full_access']:focus-visible,
 .flower-permission-trigger[data-permission-type='full_access'][aria-expanded='true'] {
-  border-color: color-mix(in srgb, #ff8a3d 70%, var(--border) 30%);
-  background: color-mix(in srgb, #ff8a3d 18%, transparent);
-  color: color-mix(in srgb, #ff8a3d 90%, var(--foreground) 10%);
+  border-color: var(--redeven-status-warning);
+  background: color-mix(in srgb, var(--redeven-status-warning) 18%, transparent);
+  color: var(--redeven-status-warning-foreground);
 }
 
 .flower-permission-icon {
@@ -975,7 +975,7 @@ html.dark .flower-component-shell {
   background: color-mix(in srgb, var(--popover, var(--background)) 96%, transparent);
   padding: 0.25rem;
   box-shadow:
-    0 18px 44px -26px color-mix(in srgb, black 54%, transparent),
+    0 18px 44px -26px color-mix(in srgb, var(--redeven-surface-shadow-source) 54%, transparent),
     0 8px 20px -16px color-mix(in srgb, var(--foreground) 36%, transparent);
 }
 
@@ -1229,7 +1229,7 @@ html.dark .flower-component-shell {
   padding: 0.25rem;
   transform: translateX(var(--flower-model-menu-shift-x, 0px));
   box-shadow:
-    0 18px 44px -26px color-mix(in srgb, black 54%, transparent),
+    0 18px 44px -26px color-mix(in srgb, var(--redeven-surface-shadow-source) 54%, transparent),
     0 8px 20px -16px color-mix(in srgb, var(--foreground) 36%, transparent);
 }
 
@@ -1349,7 +1349,7 @@ html.dark .flower-component-shell {
   width: 0.8125rem;
   height: 0.8125rem;
   flex: 0 0 auto;
-  color: var(--flower-subagents-warning, #a56a00);
+  color: var(--flower-subagents-warning, var(--redeven-status-warning));
 }
 
 .flower-model-source-status-message {
@@ -1410,7 +1410,7 @@ html.dark .flower-component-shell {
   width: 0.75rem;
   height: 0.75rem;
   flex: 0 0 auto;
-  color: var(--flower-subagents-warning, #a56a00);
+  color: var(--flower-subagents-warning, var(--redeven-status-warning));
 }
 
 .flower-reasoning-control {
@@ -1546,7 +1546,7 @@ html.dark .flower-component-shell {
   background: color-mix(in srgb, var(--popover, var(--background)) 96%, transparent);
   box-shadow:
     0 1rem 2rem color-mix(in srgb, var(--foreground) 13%, transparent),
-    0 0 0 1px color-mix(in srgb, white 28%, transparent) inset;
+    0 0 0 1px color-mix(in srgb, var(--redeven-surface-highlight-source) 28%, transparent) inset;
   padding: 0.25rem;
 }
 
@@ -1702,9 +1702,9 @@ html.dark .flower-component-shell {
   grid-template-columns: 1.5rem minmax(0, 1fr) auto;
   align-items: start;
   gap: 0.5rem;
-  border: 1px solid color-mix(in srgb, var(--warning, #f59e0b) 24%, transparent);
+  border: 1px solid var(--redeven-status-warning-border);
   border-radius: 0.625rem;
-  background: color-mix(in srgb, var(--warning, #f59e0b) 7%, transparent);
+  background: var(--redeven-status-warning-soft);
   padding: 0.5rem;
 }
 
@@ -1715,8 +1715,8 @@ html.dark .flower-component-shell {
   align-items: center;
   justify-content: center;
   border-radius: 0.4375rem;
-  background: color-mix(in srgb, var(--warning, #f59e0b) 14%, transparent);
-  color: var(--warning, #f59e0b);
+  background: var(--redeven-status-warning-soft);
+  color: var(--redeven-status-warning);
 }
 
 .flower-handler-error-copy {
@@ -1724,7 +1724,7 @@ html.dark .flower-component-shell {
 }
 
 .flower-handler-error-title {
-  color: color-mix(in srgb, var(--foreground) 86%, var(--warning, #f59e0b) 14%);
+  color: color-mix(in srgb, var(--foreground) 86%, var(--redeven-status-warning) 14%);
   font-size: 0.75rem;
   font-weight: 750;
   line-height: 1.3;
@@ -2217,33 +2217,33 @@ html.dark .flower-component-shell {
 }
 
 .flower-chat-context-chip[data-tone="directory"] {
-  border-color: color-mix(in srgb, #d97706 20%, transparent);
-  background: color-mix(in srgb, #d97706 8%, transparent);
+  border-color: color-mix(in srgb, var(--redeven-categorical-1) 20%, transparent);
+  background: color-mix(in srgb, var(--redeven-categorical-1) 8%, transparent);
 }
 
 .flower-chat-context-chip[data-tone="terminal"] {
-  border-color: color-mix(in srgb, #059669 20%, transparent);
-  background: color-mix(in srgb, #059669 8%, transparent);
+  border-color: color-mix(in srgb, var(--redeven-categorical-2) 20%, transparent);
+  background: color-mix(in srgb, var(--redeven-categorical-2) 8%, transparent);
 }
 
 .flower-chat-context-chip[data-tone="process"] {
-  border-color: color-mix(in srgb, #0891b2 20%, transparent);
-  background: color-mix(in srgb, #0891b2 8%, transparent);
+  border-color: color-mix(in srgb, var(--redeven-categorical-3) 20%, transparent);
+  background: color-mix(in srgb, var(--redeven-categorical-3) 8%, transparent);
 }
 
 .flower-chat-context-chip[data-tone="snapshot"] {
-  border-color: color-mix(in srgb, #7c3aed 20%, transparent);
-  background: color-mix(in srgb, #7c3aed 8%, transparent);
+  border-color: color-mix(in srgb, var(--redeven-categorical-4) 20%, transparent);
+  background: color-mix(in srgb, var(--redeven-categorical-4) 8%, transparent);
 }
 
 .flower-chat-context-chip[data-tone="environment"] {
-  border-color: color-mix(in srgb, #0d9488 20%, transparent);
-  background: color-mix(in srgb, #0d9488 8%, transparent);
+  border-color: color-mix(in srgb, var(--redeven-categorical-5) 20%, transparent);
+  background: color-mix(in srgb, var(--redeven-categorical-5) 8%, transparent);
 }
 
 .flower-chat-context-chip[data-tone="attachment"] {
-  border-color: color-mix(in srgb, #0284c7 20%, transparent);
-  background: color-mix(in srgb, #0284c7 8%, transparent);
+  border-color: color-mix(in srgb, var(--redeven-categorical-6) 20%, transparent);
+  background: color-mix(in srgb, var(--redeven-categorical-6) 8%, transparent);
 }
 
 .flower-chat-context-chip-icon {
@@ -2475,8 +2475,8 @@ html.dark .flower-component-shell {
   background: color-mix(in srgb, var(--flower-chat-surface-elevated) 88%, transparent);
   padding: 0.35rem 0.65rem;
   box-shadow:
-    0 1px 0 color-mix(in srgb, white 46%, transparent) inset,
-    0 16px 24px -22px color-mix(in srgb, black 40%, transparent);
+    0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 46%, transparent) inset,
+    0 16px 24px -22px color-mix(in srgb, var(--redeven-surface-shadow-source) 40%, transparent);
   overflow: visible;
   white-space: nowrap;
 }
@@ -2596,8 +2596,8 @@ html.dark .flower-component-shell {
   border-radius: 0.5rem;
   background: color-mix(in srgb, var(--flower-chat-surface-elevated) 94%, var(--background) 6%);
   box-shadow:
-    0 1px 0 color-mix(in srgb, white 42%, transparent) inset,
-    0 18px 38px -24px color-mix(in srgb, black 54%, transparent);
+    0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 42%, transparent) inset,
+    0 18px 38px -24px color-mix(in srgb, var(--redeven-surface-shadow-source) 54%, transparent);
   color: color-mix(in srgb, var(--foreground) 78%, var(--muted-foreground) 22%);
   font-size: 0.72rem;
   font-weight: 600;
@@ -2688,14 +2688,14 @@ html.dark .flower-component-shell {
   background:
     linear-gradient(
       180deg,
-      color-mix(in srgb, var(--flower-chat-surface-elevated) 94%, white 6%),
+      color-mix(in srgb, var(--flower-chat-surface-elevated) 94%, var(--redeven-surface-highlight-source) 6%),
       color-mix(in srgb, var(--flower-chat-surface-elevated) 90%, var(--background) 10%)
     );
   color: color-mix(in srgb, var(--foreground) 72%, var(--muted-foreground) 28%);
   pointer-events: auto;
   box-shadow:
-    0 1px 0 color-mix(in srgb, white 54%, transparent) inset,
-    0 14px 28px -22px color-mix(in srgb, black 58%, transparent),
+    0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 54%, transparent) inset,
+    0 14px 28px -22px color-mix(in srgb, var(--redeven-surface-shadow-source) 58%, transparent),
     0 5px 14px -12px color-mix(in srgb, var(--foreground) 38%, transparent);
   animation: flower-scroll-to-latest-pop 130ms ease-out;
   transition:
@@ -2717,8 +2717,8 @@ html.dark .flower-component-shell {
     );
   color: color-mix(in srgb, var(--primary) 62%, var(--foreground) 38%);
   box-shadow:
-    0 1px 0 color-mix(in srgb, white 58%, transparent) inset,
-    0 16px 30px -22px color-mix(in srgb, black 60%, transparent),
+    0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 58%, transparent) inset,
+    0 16px 30px -22px color-mix(in srgb, var(--redeven-surface-shadow-source) 60%, transparent),
     0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent);
   outline: none;
   transform: translateY(-1px);
@@ -2900,7 +2900,7 @@ html.dark .flower-component-shell {
     90deg,
     transparent 0%,
     color-mix(in srgb, var(--primary) 54%, var(--foreground) 18%) 42%,
-    color-mix(in srgb, var(--primary) 78%, white 18%) 55%,
+    color-mix(in srgb, var(--primary) 78%, var(--redeven-surface-highlight-source) 18%) 55%,
     transparent 100%
   );
   box-shadow: 0 0 10px color-mix(in srgb, var(--primary) 28%, transparent);
@@ -2979,7 +2979,7 @@ html.dark .flower-component-shell {
     90deg,
     transparent 0%,
     color-mix(in srgb, var(--primary) 48%, var(--foreground) 18%) 42%,
-    color-mix(in srgb, var(--primary) 76%, white 16%) 54%,
+    color-mix(in srgb, var(--primary) 76%, var(--redeven-surface-highlight-source) 16%) 54%,
     transparent 100%
   );
   box-shadow: 0 0 12px color-mix(in srgb, var(--primary) 24%, transparent);
@@ -3047,7 +3047,7 @@ html.dark .flower-component-shell {
 .flower-turn-launcher-message-surface {
   border: 1px solid var(--flower-turn-launcher-message-border);
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--flower-turn-launcher-message) 96%, white 4%), var(--flower-turn-launcher-message));
+    linear-gradient(180deg, color-mix(in srgb, var(--flower-turn-launcher-message) 96%, var(--redeven-surface-highlight-source) 4%), var(--flower-turn-launcher-message));
 }
 
 .flower-turn-launcher-dock {
@@ -3483,8 +3483,8 @@ html.dark .flower-component-shell {
 }
 
 .flower-approval-copy-btn[data-copied='true'] {
-  color: #16a34a;
-  border-color: color-mix(in srgb, #16a34a 40%, var(--flower-chat-surface-border));
+  color: var(--redeven-status-success-foreground);
+  border-color: var(--redeven-status-success-border);
 }
 
 .flower-approval-targets {
@@ -3577,8 +3577,8 @@ html.dark .flower-component-shell {
 }
 
 .flower-approval-chip-warning {
-  border-color: color-mix(in srgb, var(--warning, #f59e0b) 24%, var(--flower-chat-surface-border));
-  color: color-mix(in srgb, var(--warning, #f59e0b) 78%, var(--foreground) 22%);
+  border-color: var(--redeven-status-warning-border);
+  color: var(--redeven-status-warning-foreground);
 }
 
 .flower-approval-chip-code {
@@ -3614,7 +3614,7 @@ html.dark .flower-component-shell {
 }
 
 .flower-approval-chip-copy[data-copied='true'] {
-  color: color-mix(in srgb, #16a34a 82%, var(--foreground) 18%);
+  color: var(--redeven-status-success-foreground);
 }
 
 .flower-approval-command-text {
@@ -3623,11 +3623,11 @@ html.dark .flower-component-shell {
   min-width: 0;
   overflow: auto;
   margin: 0;
-  border: 1px solid color-mix(in srgb, #334155 54%, var(--flower-chat-surface-border) 46%);
+  border: 1px solid var(--redeven-code-border);
   border-radius: 0.375rem;
-  background: color-mix(in srgb, #0f172a 88%, var(--flower-chat-surface) 12%);
-  box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 8%, transparent);
-  color: #dbeafe;
+  background: var(--redeven-code-surface);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--redeven-code-foreground) 8%, transparent);
+  color: var(--redeven-code-foreground);
   padding: 0.625rem 0.75rem;
   font-family: var(--flower-approval-command-font);
   font-size: 0.75rem;
@@ -3647,32 +3647,32 @@ html.dark .flower-component-shell {
 }
 
 .flower-approval-command-token-command {
-  color: #bfdbfe;
+  color: var(--redeven-code-token-command);
   font-weight: 680;
 }
 
 .flower-approval-command-token-flag {
-  color: #fde68a;
+  color: var(--redeven-code-token-flag);
 }
 
 .flower-approval-command-token-string {
-  color: #bbf7d0;
+  color: var(--redeven-code-token-string);
 }
 
 .flower-approval-command-token-url {
-  color: #93c5fd;
+  color: var(--redeven-code-token-path);
   text-decoration: underline;
-  text-decoration-color: color-mix(in srgb, #93c5fd 42%, transparent);
+  text-decoration-color: color-mix(in srgb, var(--redeven-code-token-path) 42%, transparent);
   text-underline-offset: 0.16em;
 }
 
 .flower-approval-command-token-operator {
-  color: #fca5a5;
+  color: var(--redeven-code-token-operator);
   font-weight: 680;
 }
 
 .flower-approval-command-token-variable {
-  color: #c4b5fd;
+  color: var(--redeven-code-token-variable);
 }
 
 .flower-approval-actions {
@@ -3693,12 +3693,12 @@ html.dark .flower-component-shell {
 }
 
 .flower-activity-inline {
-  --flower-activity-tool-row-foreground: #8f99a6;
-  --flower-activity-tool-row-foreground-strong: #566475;
-  --flower-activity-tool-row-foreground-complete: #9ba5b1;
-  --flower-activity-tool-row-soft: rgba(126, 138, 153, 0.11);
-  --flower-activity-tool-row-ok: #4c9a72;
-  --flower-activity-tool-row-error: color-mix(in srgb, #f97316 78%, var(--foreground) 22%);
+  --flower-activity-tool-row-foreground: var(--redeven-chat-muted);
+  --flower-activity-tool-row-foreground-strong: color-mix(in srgb, var(--redeven-chat-text) 72%, var(--redeven-chat-muted) 28%);
+  --flower-activity-tool-row-foreground-complete: color-mix(in srgb, var(--redeven-chat-muted) 84%, var(--redeven-chat-text) 16%);
+  --flower-activity-tool-row-soft: color-mix(in srgb, var(--redeven-chat-muted) 11%, transparent);
+  --flower-activity-tool-row-ok: var(--redeven-status-success-foreground);
+  --flower-activity-tool-row-error: var(--redeven-status-error-foreground);
   display: grid;
   width: 100%;
   min-width: 0;
@@ -3782,11 +3782,11 @@ html.dark .flower-component-shell {
     linear-gradient(
       100deg,
       transparent 0%,
-      rgba(145, 155, 168, 0) 16%,
-      rgba(145, 155, 168, 0.12) 38%,
-      rgba(255, 255, 255, 0.72) 50%,
-      rgba(145, 155, 168, 0.12) 62%,
-      rgba(145, 155, 168, 0) 84%,
+      color-mix(in srgb, var(--redeven-chat-muted) 0%, transparent) 16%,
+      color-mix(in srgb, var(--redeven-chat-muted) 12%, transparent) 38%,
+      color-mix(in srgb, var(--redeven-chat-text) 72%, transparent) 50%,
+      color-mix(in srgb, var(--redeven-chat-muted) 12%, transparent) 62%,
+      color-mix(in srgb, var(--redeven-chat-muted) 0%, transparent) 84%,
       transparent 100%
     );
   opacity: 0.64;
@@ -3809,11 +3809,11 @@ html.dark .flower-component-shell {
     linear-gradient(
       100deg,
       transparent 0%,
-      rgba(145, 155, 168, 0) 16%,
-      rgba(145, 155, 168, 0.12) 38%,
-      rgba(255, 255, 255, 0.72) 50%,
-      rgba(145, 155, 168, 0.12) 62%,
-      rgba(145, 155, 168, 0) 84%,
+      color-mix(in srgb, var(--redeven-chat-muted) 0%, transparent) 16%,
+      color-mix(in srgb, var(--redeven-chat-muted) 12%, transparent) 38%,
+      color-mix(in srgb, var(--redeven-chat-text) 72%, transparent) 50%,
+      color-mix(in srgb, var(--redeven-chat-muted) 12%, transparent) 62%,
+      color-mix(in srgb, var(--redeven-chat-muted) 0%, transparent) 84%,
       transparent 100%
     );
   opacity: 0.64;
@@ -3859,7 +3859,7 @@ html.dark .flower-component-shell {
 }
 
 .flower-activity-inline-row-pending .flower-activity-inline-icon {
-  color: color-mix(in srgb, var(--warning, #f59e0b) 74%, var(--foreground) 26%);
+  color: var(--redeven-status-warning-foreground);
 }
 
 .flower-activity-inline-row-success .flower-activity-inline-icon {
@@ -3937,7 +3937,7 @@ html.dark .flower-component-shell {
 
 .flower-activity-inline-row-running .flower-activity-inline-title {
   font-weight: 600;
-  text-shadow: 0 0 0.65rem rgba(86, 100, 117, 0.12);
+  text-shadow: 0 0 0.65rem color-mix(in srgb, var(--redeven-chat-muted) 12%, transparent);
 }
 
 .flower-activity-inline-row-running .flower-activity-inline-button {
@@ -3961,7 +3961,7 @@ html.dark .flower-component-shell {
 }
 
 .flower-activity-inline-status-pending {
-  color: color-mix(in srgb, var(--warning, #f59e0b) 74%, var(--foreground) 26%);
+  color: var(--redeven-status-warning-foreground);
 }
 
 .flower-activity-inline-chevron {
@@ -4267,11 +4267,11 @@ html.dark .flower-component-shell {
   display: grid;
   min-width: 0;
   overflow: hidden;
-  border: 1px solid #2f3742;
+  border: 1px solid var(--redeven-chat-border);
   border-radius: 0.375rem;
-  background: #0d1117;
-  color: #d9e3ed;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 0.18);
+  background: var(--redeven-chat-output);
+  color: var(--redeven-chat-text);
+  box-shadow: 0 1px 2px var(--redeven-shadow-color);
 }
 
 
@@ -4280,20 +4280,20 @@ html.dark .flower-component-shell {
   min-width: 0;
   align-items: center;
   gap: 0.4375rem;
-  border-bottom: 1px solid #26313d;
-  background: #151b23;
+  border-bottom: 1px solid var(--redeven-chat-border);
+  background: var(--redeven-code-chrome);
   padding: 0.5rem 0.625rem;
 }
 
 .flower-activity-terminal-status {
   display: inline-flex;
   flex: 0 0 auto;
-  color: #8b949e;
+  color: var(--redeven-chat-muted);
 }
 
 .flower-activity-terminal-prompt {
   flex: 0 0 auto;
-  color: #58a6ff;
+  color: var(--redeven-chat-accent);
   font-family: var(--flower-activity-terminal-font);
   font-size: 0.6875rem;
   font-weight: 800;
@@ -4303,7 +4303,7 @@ html.dark .flower-component-shell {
   min-width: 0;
   flex: 1 1 auto;
   overflow: hidden;
-  color: #e6edf3;
+  color: var(--redeven-code-foreground);
   font-family: var(--flower-activity-terminal-font);
   font-size: 0.6875rem;
   line-height: 1.45;
@@ -4321,25 +4321,25 @@ html.dark .flower-component-shell {
 }
 
 .flower-activity-terminal-command-token-command {
-  color: #7ee787;
+  color: var(--redeven-code-token-command);
   font-weight: 700;
 }
 
 .flower-activity-terminal-command-token-flag {
-  color: #79c0ff;
+  color: var(--redeven-code-token-flag);
 }
 
 .flower-activity-terminal-command-token-string,
 .flower-activity-terminal-command-token-url {
-  color: #a5d6ff;
+  color: var(--redeven-code-token-string);
 }
 
 .flower-activity-terminal-command-token-operator {
-  color: #ff9b97;
+  color: var(--redeven-code-token-operator);
 }
 
 .flower-activity-terminal-command-token-variable {
-  color: #d2a8ff;
+  color: var(--redeven-code-token-variable);
 }
 
 .flower-activity-terminal-actions {
@@ -4360,7 +4360,7 @@ html.dark .flower-component-shell {
   border: 1px solid transparent;
   border-radius: 0.375rem;
   background: transparent;
-  color: #8b949e;
+  color: var(--redeven-chat-muted);
   cursor: pointer;
   padding: 0;
   transition: background 140ms ease, border-color 140ms ease, color 140ms ease;
@@ -4369,27 +4369,27 @@ html.dark .flower-component-shell {
 .flower-activity-terminal-action-button:hover,
 .flower-activity-terminal-action-button:focus-visible,
 .flower-activity-terminal-action-button-active {
-  border-color: color-mix(in srgb, #58a6ff 38%, transparent);
-  background: color-mix(in srgb, #58a6ff 12%, transparent);
-  color: #c9d1d9;
+  border-color: var(--redeven-status-info-border);
+  background: var(--redeven-status-info-soft);
+  color: var(--redeven-code-foreground);
   outline: none;
 }
 
 .flower-activity-terminal-action-button-copied {
-  border-color: color-mix(in srgb, #3fb950 42%, transparent);
-  background: color-mix(in srgb, #3fb950 14%, transparent);
-  color: #7ee787;
+  border-color: var(--redeven-status-success-border);
+  background: var(--redeven-status-success-soft);
+  color: var(--redeven-status-success-foreground);
 }
 
 .flower-activity-terminal-command-panel {
-  border-bottom: 1px solid #26313d;
-  background: #10161f;
+  border-bottom: 1px solid var(--redeven-chat-border);
+  background: var(--redeven-code-surface);
   padding: 0.625rem;
 }
 
 .flower-activity-terminal-command-full {
   margin: 0;
-  color: #e6edf3;
+  color: var(--redeven-code-foreground);
   font-family: var(--flower-activity-terminal-font);
   font-size: 0.71875rem;
   line-height: 1.55;
@@ -4412,10 +4412,10 @@ html.dark .flower-component-shell {
   min-height: 1.25rem;
   align-items: center;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, #8b949e 28%, transparent);
+  border: 1px solid color-mix(in srgb, var(--redeven-chat-muted) 28%, transparent);
   border-radius: 999px;
-  background: color-mix(in srgb, #8b949e 10%, transparent);
-  color: #8b949e;
+  background: color-mix(in srgb, var(--redeven-chat-muted) 10%, transparent);
+  color: var(--redeven-chat-muted);
   font-size: 0.625rem;
   font-weight: 750;
   line-height: 1;
@@ -4430,8 +4430,8 @@ html.dark .flower-component-shell {
   max-height: 6.640625rem;
   min-width: 0;
   overflow: auto;
-  background: #0d1117;
-  color: #c9d1d9;
+  background: var(--redeven-chat-output);
+  color: var(--redeven-code-foreground);
   font-family: var(--flower-activity-terminal-font);
   font-size: 0.71875rem;
   line-height: 1.5;
@@ -4445,7 +4445,7 @@ html.dark .flower-component-shell {
 }
 
 .flower-activity-terminal-output-muted {
-  color: #8b949e;
+  color: var(--redeven-chat-muted);
 }
 
 .flower-activity-web-panel,
@@ -4621,7 +4621,7 @@ html.dark .flower-component-shell {
 }
 
 .flower-activity-todo-item-completed .flower-activity-todo-marker {
-  color: color-mix(in srgb, #10b981 70%, var(--foreground) 30%);
+  color: var(--redeven-status-success-foreground);
 }
 
 .flower-activity-todo-item-cancelled .flower-activity-todo-marker {
@@ -4681,9 +4681,9 @@ html.dark .flower-component-shell {
 }
 
 .flower-activity-todo-badge-completed {
-  border-color: color-mix(in srgb, #10b981 26%, var(--border));
-  color: color-mix(in srgb, #10b981 68%, var(--foreground) 32%);
-  background: color-mix(in srgb, #10b981 10%, transparent);
+  border-color: var(--redeven-status-success-border);
+  color: var(--redeven-status-success-foreground);
+  background: var(--redeven-status-success-soft);
 }
 
 .flower-activity-todo-badge-cancelled {
@@ -4738,7 +4738,7 @@ html.dark .flower-component-shell {
 }
 
 .flower-activity-file-truncated {
-  color: color-mix(in srgb, var(--warning, #f59e0b) 76%, var(--foreground) 24%);
+  color: var(--redeven-status-warning-foreground);
 }
 
 .flower-activity-file-actions {
@@ -4845,12 +4845,12 @@ html.dark .flower-component-shell {
 
 .flower-activity-file-diff-line-del {
   background: color-mix(in srgb, var(--destructive) 13%, transparent);
-  color: color-mix(in srgb, #f87171 70%, var(--foreground) 30%);
+  color: var(--redeven-status-error-foreground);
 }
 
 .flower-activity-file-diff-line-add {
-  background: color-mix(in srgb, #10b981 13%, transparent);
-  color: color-mix(in srgb, #34d399 70%, var(--foreground) 30%);
+  background: var(--redeven-status-success-soft);
+  color: var(--redeven-status-success-foreground);
 }
 
 .flower-activity-file-diff-line-meta {
@@ -4871,7 +4871,7 @@ html.dark .flower-component-shell {
 }
 
 .flower-activity-file-stat-add {
-  color: color-mix(in srgb, #10b981 82%, var(--foreground) 18%);
+  color: var(--redeven-status-success-foreground);
 }
 
 .flower-activity-file-stat-del {
@@ -4884,11 +4884,11 @@ html.dark .flower-component-shell {
   min-width: 0;
   flex-direction: column;
   gap: 0.75rem;
-  border: 1px solid color-mix(in srgb, var(--warning, #f59e0b) 28%, var(--flower-chat-surface-border));
+  border: 1px solid var(--redeven-status-warning-border);
   border-radius: 0.5rem;
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--warning, #f59e0b) 8%, var(--flower-chat-surface-elevated)), color-mix(in srgb, var(--flower-chat-surface-elevated) 72%, transparent));
-  box-shadow: 0 14px 30px -28px color-mix(in srgb, var(--warning, #f59e0b) 56%, transparent);
+    linear-gradient(180deg, color-mix(in srgb, var(--redeven-status-warning) 8%, var(--flower-chat-surface-elevated)), color-mix(in srgb, var(--flower-chat-surface-elevated) 72%, transparent));
+  box-shadow: 0 14px 30px -28px color-mix(in srgb, var(--redeven-status-warning) 56%, transparent);
   padding: 0.75rem;
 }
 
@@ -4907,8 +4907,8 @@ html.dark .flower-component-shell {
   align-items: center;
   justify-content: center;
   border-radius: 0.5rem;
-  background: color-mix(in srgb, var(--warning, #f59e0b) 14%, transparent);
-  color: color-mix(in srgb, var(--warning, #f59e0b) 78%, var(--foreground) 22%);
+  background: var(--redeven-status-warning-soft);
+  color: var(--redeven-status-warning-foreground);
 }
 
 .flower-input-request-copy {
@@ -4916,7 +4916,7 @@ html.dark .flower-component-shell {
 }
 
 .flower-input-request-title {
-  color: color-mix(in srgb, var(--foreground) 88%, var(--warning, #f59e0b) 12%);
+  color: color-mix(in srgb, var(--foreground) 88%, var(--redeven-status-warning) 12%);
   font-size: 0.875rem;
   font-weight: 780;
   line-height: 1.35;
@@ -5238,7 +5238,7 @@ html.dark .flower-component-shell {
   background: linear-gradient(
     100deg,
     transparent 0%,
-    color-mix(in srgb, white 22%, transparent) 44%,
+    color-mix(in srgb, var(--redeven-surface-highlight-source) 22%, transparent) 44%,
     color-mix(in srgb, var(--primary) 12%, transparent) 52%,
     transparent 68%
   );
@@ -5391,8 +5391,8 @@ html.dark .flower-component-shell {
   background: var(--flower-chat-surface-elevated, var(--card));
   color: var(--foreground);
   box-shadow:
-    0 20px 42px -26px color-mix(in srgb, black 52%, transparent),
-    0 8px 22px -18px color-mix(in srgb, black 44%, transparent);
+    0 20px 42px -26px color-mix(in srgb, var(--redeven-surface-shadow-source) 52%, transparent),
+    0 8px 22px -18px color-mix(in srgb, var(--redeven-surface-shadow-source) 44%, transparent);
 }
 
 .flower-thread-menu-item {
@@ -5439,7 +5439,7 @@ html.dark .flower-component-shell {
   align-items: center;
   justify-content: center;
   padding: 1rem;
-  background: color-mix(in srgb, black 28%, transparent);
+  background: color-mix(in srgb, var(--redeven-surface-shadow-source) 28%, transparent);
 }
 
 .flower-rename-dialog {
@@ -5448,7 +5448,7 @@ html.dark .flower-component-shell {
   border-radius: 0.5rem;
   padding: 1rem;
   background: var(--flower-chat-surface-elevated, var(--card));
-  box-shadow: 0 24px 52px -34px color-mix(in srgb, black 58%, transparent);
+  box-shadow: 0 24px 52px -34px color-mix(in srgb, var(--redeven-surface-shadow-source) 58%, transparent);
 }
 
 .flower-rename-dialog h2 {
@@ -5479,12 +5479,12 @@ html.dark .flower-component-shell {
 }
 
 .flower-rename-input[aria-invalid="true"] {
-  border-color: color-mix(in srgb, var(--error, #ef4444) 48%, var(--border));
+  border-color: var(--redeven-status-error-border);
 }
 
 .flower-rename-error {
   margin: 0.625rem 0 0;
-  color: color-mix(in srgb, var(--error, #ef4444) 86%, var(--foreground));
+  color: var(--redeven-status-error-foreground);
   font-size: 0.75rem;
 }
 
@@ -5526,7 +5526,7 @@ html.dark .flower-component-shell {
   border-color: color-mix(in srgb, var(--redeven-stroke-overlay, var(--border)) 72%, transparent);
   background: color-mix(in srgb, var(--flower-chat-surface-elevated) 88%, transparent);
   box-shadow:
-    0 12px 28px -20px color-mix(in srgb, black 38%, transparent),
+    0 12px 28px -20px color-mix(in srgb, var(--redeven-surface-shadow-source) 38%, transparent),
     0 2px 10px -8px color-mix(in srgb, var(--foreground) 28%, transparent);
   backdrop-filter: blur(14px);
 }
@@ -5573,7 +5573,7 @@ html.dark .flower-component-shell {
   border-color: color-mix(in srgb, var(--primary) 48%, transparent);
   box-shadow:
     0 0 0 3px color-mix(in srgb, var(--primary) 22%, transparent),
-    0 12px 28px -20px color-mix(in srgb, black 38%, transparent),
+    0 12px 28px -20px color-mix(in srgb, var(--redeven-surface-shadow-source) 38%, transparent),
     0 2px 10px -8px color-mix(in srgb, var(--foreground) 28%, transparent);
   transition: border-color 200ms ease, box-shadow 200ms ease;
 }
@@ -5792,10 +5792,10 @@ html.dark .flower-component-shell {
   --flower-subagents-panel-soft: var(--redeven-surface-panel-soft, var(--card));
   --flower-subagents-panel-elevated: var(--redeven-surface-panel-elevated, var(--card));
   --flower-subagents-border: var(--redeven-surface-panel-border, var(--border));
-  --flower-subagents-active: #6faaa3;
-  --flower-subagents-success: #58a36d;
-  --flower-subagents-warning: #c69a52;
-  --flower-subagents-danger: #d06f68;
+  --flower-subagents-active: var(--redeven-categorical-2);
+  --flower-subagents-success: var(--redeven-status-success);
+  --flower-subagents-warning: var(--redeven-status-warning);
+  --flower-subagents-danger: var(--redeven-status-error);
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr);
   width: clamp(22rem, 28vw, 25rem);
@@ -5810,8 +5810,8 @@ html.dark .flower-component-shell {
   -webkit-backdrop-filter: blur(16px) saturate(115%);
   box-shadow:
     0 0 0 1px color-mix(in srgb, var(--foreground) 4%, transparent) inset,
-    0 10px 24px -12px color-mix(in srgb, black 34%, transparent),
-    0 24px 56px -24px color-mix(in srgb, black 48%, transparent);
+    0 10px 24px -12px color-mix(in srgb, var(--redeven-surface-shadow-source) 34%, transparent),
+    0 24px 56px -24px color-mix(in srgb, var(--redeven-surface-shadow-source) 48%, transparent);
   transform-origin: top right;
   animation: flower-subagents-dropdown-enter 120ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
 }
@@ -6149,8 +6149,8 @@ html.dark .flower-component-shell {
 }
 
 [data-floe-geometry-surface='floating-window']:has(> .flower-subagent-detail-window) {
-  --flower-subagent-window-shadow-key: rgb(32 42 55 / 24%);
-  --flower-subagent-window-shadow-ambient: rgb(32 42 55 / 12%);
+  --flower-subagent-window-shadow-key: color-mix(in srgb, var(--redeven-shadow-color) 72%, transparent);
+  --flower-subagent-window-shadow-ambient: color-mix(in srgb, var(--redeven-shadow-color) 42%, transparent);
   border-radius: 6px;
   box-shadow:
     0 4px 14px -4px var(--flower-subagent-window-shadow-key),
@@ -6161,44 +6161,28 @@ html.dark .flower-component-shell {
 [data-floe-geometry-surface='floating-window']:has(
   > .flower-subagent-detail-window[data-floe-floating-window-state='active']
 ) {
-  --flower-subagent-window-shadow-key: rgb(32 42 55 / 30%);
-  --flower-subagent-window-shadow-ambient: rgb(32 42 55 / 16%);
-}
-
-.dark [data-floe-geometry-surface='floating-window']:has(> .flower-subagent-detail-window),
-html.dark [data-floe-geometry-surface='floating-window']:has(> .flower-subagent-detail-window) {
-  --flower-subagent-window-shadow-key: rgb(0 0 0 / 68%);
-  --flower-subagent-window-shadow-ambient: rgb(0 0 0 / 42%);
-}
-
-.dark [data-floe-geometry-surface='floating-window']:has(
-  > .flower-subagent-detail-window[data-floe-floating-window-state='active']
-),
-html.dark [data-floe-geometry-surface='floating-window']:has(
-  > .flower-subagent-detail-window[data-floe-floating-window-state='active']
-) {
-  --flower-subagent-window-shadow-key: rgb(0 0 0 / 76%);
-  --flower-subagent-window-shadow-ambient: rgb(0 0 0 / 48%);
+  --flower-subagent-window-shadow-key: color-mix(in srgb, var(--redeven-shadow-color) 86%, transparent);
+  --flower-subagent-window-shadow-ambient: color-mix(in srgb, var(--redeven-shadow-color) 54%, transparent);
 }
 
 .flower-subagent-detail-window {
-  --flower-subagent-window-surface: #fbf9f6;
-  --flower-subagent-window-surface-soft: #f5f2ee;
-  --flower-subagent-window-surface-band: #f7f4f1;
-  --flower-subagent-window-surface-raised: #fffdfa;
-  --flower-subagent-window-border: #8c857d;
-  --flower-subagent-window-border-active: #7f7871;
-  --flower-subagent-window-border-soft: #d3cdc6;
-  --flower-subagent-window-edge-highlight: rgb(255 255 255 / 90%);
-  --flower-subagent-window-edge-highlight-soft: rgb(255 255 255 / 58%);
-  --flower-subagent-window-edge-shade: rgb(32 42 55 / 18%);
-  --flower-subagent-window-edge-shade-soft: rgb(32 42 55 / 10%);
-  --flower-subagent-window-text: color-mix(in srgb, var(--foreground) 94%, white 6%);
+  --flower-subagent-window-surface: var(--redeven-chat-surface);
+  --flower-subagent-window-surface-soft: color-mix(in srgb, var(--redeven-chat-surface) 92%, var(--background) 8%);
+  --flower-subagent-window-surface-band: var(--redeven-code-chrome);
+  --flower-subagent-window-surface-raised: var(--redeven-chat-surface-raised);
+  --flower-subagent-window-border: var(--redeven-chat-border);
+  --flower-subagent-window-border-active: var(--redeven-status-primary-border);
+  --flower-subagent-window-border-soft: color-mix(in srgb, var(--redeven-chat-border) 68%, transparent);
+  --flower-subagent-window-edge-highlight: color-mix(in srgb, var(--foreground) 14%, transparent);
+  --flower-subagent-window-edge-highlight-soft: color-mix(in srgb, var(--foreground) 8%, transparent);
+  --flower-subagent-window-edge-shade: color-mix(in srgb, var(--redeven-shadow-color) 42%, transparent);
+  --flower-subagent-window-edge-shade-soft: color-mix(in srgb, var(--redeven-shadow-color) 24%, transparent);
+  --flower-subagent-window-text: var(--redeven-chat-text);
   --flower-subagent-window-muted: color-mix(in srgb, var(--muted-foreground) 88%, var(--foreground) 12%);
-  --flower-subagent-window-accent: #789d98;
-  --flower-subagent-window-success: #65a479;
-  --flower-subagent-window-warning: #c59a58;
-  --flower-subagent-window-danger: #cc746d;
+  --flower-subagent-window-accent: var(--redeven-categorical-2);
+  --flower-subagent-window-success: var(--redeven-status-success);
+  --flower-subagent-window-warning: var(--redeven-status-warning);
+  --flower-subagent-window-danger: var(--redeven-status-error);
   border: 1px solid var(--flower-subagent-window-border);
   border-radius: 6px;
   background: var(--flower-subagent-window-surface);
@@ -6208,21 +6192,6 @@ html.dark [data-floe-geometry-surface='floating-window']:has(
     1px 0 0 var(--flower-subagent-window-edge-highlight-soft) inset,
     0 -1px 0 var(--flower-subagent-window-edge-shade) inset,
     -1px 0 0 var(--flower-subagent-window-edge-shade-soft) inset;
-}
-
-.dark .flower-subagent-detail-window,
-html.dark .flower-subagent-detail-window {
-  --flower-subagent-window-surface: #343840;
-  --flower-subagent-window-surface-soft: #30343c;
-  --flower-subagent-window-surface-band: #393e47;
-  --flower-subagent-window-surface-raised: #40454f;
-  --flower-subagent-window-border: #757e8a;
-  --flower-subagent-window-border-active: #89929e;
-  --flower-subagent-window-border-soft: #4c535f;
-  --flower-subagent-window-edge-highlight: rgb(255 255 255 / 9%);
-  --flower-subagent-window-edge-highlight-soft: rgb(255 255 255 / 5%);
-  --flower-subagent-window-edge-shade: rgb(0 0 0 / 34%);
-  --flower-subagent-window-edge-shade-soft: rgb(0 0 0 / 20%);
 }
 
 .flower-subagent-detail-window[data-floe-floating-window-state='active'] {
@@ -7168,7 +7137,7 @@ html.dark .flower-subagent-detail-window {
 }
 
 .flower-settings-dot-pill-active::before {
-  background: var(--success, #16a34a);
+  background: var(--redeven-status-success);
 }
 
 .flower-settings-policy-section {
@@ -7224,8 +7193,8 @@ html.dark .flower-subagent-detail-window {
   align-items: center;
   justify-content: center;
   border-radius: 0.5rem;
-  background: color-mix(in srgb, var(--info, #2563eb) 12%, transparent);
-  color: var(--info, #2563eb);
+  background: var(--redeven-status-info-soft);
+  color: var(--redeven-status-info);
 }
 
 .flower-settings-policy-card-label {
@@ -7239,8 +7208,8 @@ html.dark .flower-subagent-detail-window {
 .flower-settings-policy-card-badge {
   flex: 0 0 auto;
   border-radius: 9999px;
-  background: color-mix(in srgb, var(--success, #16a34a) 12%, transparent);
-  color: var(--success, #16a34a);
+  background: var(--redeven-status-success-soft);
+  color: var(--redeven-status-success-foreground);
   padding: 0.125rem 0.5rem;
   font-size: 0.625rem;
   font-weight: 600;
@@ -7263,7 +7232,7 @@ html.dark .flower-subagent-detail-window {
 }
 
 .flower-settings-state-pill-active {
-  color: var(--success, #16a34a);
+  color: var(--redeven-status-success-foreground);
 }
 
 .flower-settings-grid {
@@ -7469,8 +7438,8 @@ html.dark .flower-subagent-detail-window {
   align-items: flex-start;
   gap: 0.625rem;
   margin-top: 1rem;
-  border-left: 0.1875rem solid color-mix(in srgb, var(--warning, #f59e0b) 68%, var(--foreground) 5%);
-  background: color-mix(in srgb, var(--warning, #f59e0b) 8%, transparent);
+  border-left: 0.1875rem solid var(--redeven-status-warning-border);
+  background: var(--redeven-status-warning-soft);
   padding: 0.75rem 0.875rem;
 }
 
@@ -7536,8 +7505,8 @@ html.dark .flower-subagent-detail-window {
   inset: 4%;
   pointer-events: none;
   background:
-    radial-gradient(72% 72% at 50% 50%, rgb(249 178 104 / 0.76) 0%, rgb(251 191 122 / 0.6) 34%, rgb(253 224 171 / 0.36) 60%, transparent 84%),
-    radial-gradient(44% 44% at 50% 50%, rgb(245 158 11 / 0.56) 0%, rgb(251 191 36 / 0.28) 52%, transparent 76%);
+    radial-gradient(72% 72% at 50% 50%, color-mix(in srgb, var(--redeven-status-warning) 76%, transparent) 0%, color-mix(in srgb, var(--redeven-status-warning) 60%, transparent) 34%, color-mix(in srgb, var(--redeven-status-warning) 36%, transparent) 60%, transparent 84%),
+    radial-gradient(44% 44% at 50% 50%, color-mix(in srgb, var(--primary) 56%, transparent) 0%, color-mix(in srgb, var(--primary) 28%, transparent) 52%, transparent 76%);
   filter: blur(5px);
   opacity: 1;
   transform: translateZ(0);
@@ -7843,7 +7812,7 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
 }
 
 [data-flower-thread-action-required='true'] .flower-thread-status-dot {
-  background: var(--warning, #f59e0b);
+  background: var(--redeven-status-warning);
 }
 
 

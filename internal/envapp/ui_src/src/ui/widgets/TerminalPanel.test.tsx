@@ -6,7 +6,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { LOCAL_INTERACTION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
 import { TerminalLiveErrorCode, TerminalLiveServerError } from '@floegence/floeterm-terminal-web/live';
 
-import { TerminalPanel, resolvePendingTerminalSessions } from './TerminalPanel';
+import {
+  TerminalPanel,
+  resolvePendingTerminalSessions,
+  resolveSystemTerminalThemeColors,
+} from './TerminalPanel';
 import { shouldPublishTerminalOutputCoverage } from './TerminalSessionRuntime';
 import { REDEVEN_WORKBENCH_TEXT_SELECTION_SURFACE_ATTR } from '../workbench/surface/workbenchTextSelectionSurface';
 import {
@@ -131,6 +135,11 @@ function setViewActivationActive(active: boolean) {
 
 const themeState = vi.hoisted(() => ({
   resolvedTheme: 'dark' as 'light' | 'dark',
+  shellPreset: {
+    name: 'classic-dark',
+    tokens: undefined as Partial<Record<'light' | 'dark', Record<string, string>>> | undefined,
+  },
+  bumpPreset: null as (() => void) | null,
 }));
 
 const terminalPrefsState = vi.hoisted(() => ({
@@ -177,6 +186,22 @@ const terminalSelectionState = vi.hoisted(() => ({
 const terminalConfigState = vi.hoisted(() => ({
   values: [] as any[],
 }));
+
+const getThemeColorsSpy = vi.hoisted(() => vi.fn((themeName: string) => (
+  themeName === 'light'
+    ? {
+        background: '#f8fafc',
+        foreground: '#172033',
+        selectionBackground: '#bfd7ff',
+        selectionForeground: '#172033',
+      }
+    : {
+        background: '#111111',
+        foreground: '#eeeeee',
+        selectionBackground: '#365f91',
+        selectionForeground: '#eeeeee',
+      }
+)));
 
 const terminalBufferLinesState = vi.hoisted(() => ({
   lines: new Map<number, string>(),
@@ -476,9 +501,17 @@ vi.mock('@floegence/floe-webapp-core', () => ({
       debouncedSave: vi.fn(),
     },
   }),
-  useTheme: () => ({
-    resolvedTheme: () => themeState.resolvedTheme,
-  }),
+  useTheme: () => {
+    const [presetVersion, setPresetVersion] = createSignal(0);
+    themeState.bumpPreset = () => setPresetVersion((value) => value + 1);
+    return {
+      resolvedTheme: () => themeState.resolvedTheme,
+      shellPresetForMode: () => {
+        presetVersion();
+        return themeState.shellPreset;
+      },
+    };
+  },
   useViewActivation: () => {
     if (viewActivationState.missing) {
       throw new Error('ViewActivationContext not found. Wrap your view with <ViewActivationProvider />.');
@@ -1413,7 +1446,7 @@ vi.mock('@floegence/floeterm-terminal-web', async () => {
     createTerminalOutputPipeline: vi.fn(createMockOutputPipeline),
     createPagedTerminalOutputCoordinator: vi.fn(createMockPagedOutputCoordinator),
     getDefaultTerminalConfig: vi.fn((_theme: string, overrides?: any) => overrides ?? {}),
-    getThemeColors: vi.fn(() => ({ background: '#111111', foreground: '#eeeeee' })),
+    getThemeColors: getThemeColorsSpy,
   };
 });
 
@@ -1864,6 +1897,8 @@ describe('TerminalPanel', () => {
     resetTerminalRecoveryDiagnosticsForTests();
     terminalPrefsState.userTheme = 'system';
     themeState.resolvedTheme = 'dark';
+    themeState.shellPreset = { name: 'classic-dark', tokens: undefined };
+    themeState.bumpPreset = null;
     terminalPrefsState.fontSize = 12;
     terminalPrefsState.fontFamilyId = 'iosevka';
     terminalPrefsState.mobileInputMode = 'floe';
@@ -1899,6 +1934,7 @@ describe('TerminalPanel', () => {
     terminalEnvPermissionsState.canExecute = true;
     terminalSelectionState.text = '';
     terminalConfigState.values = [];
+    getThemeColorsSpy.mockClear();
     terminalBufferLinesState.lines = new Map();
     terminalCoreInstances.splice(0, terminalCoreInstances.length);
     terminalWriteCompletionState.deferHistory = false;
@@ -2133,7 +2169,13 @@ describe('TerminalPanel', () => {
 
     searchAction?.click();
     await Promise.resolve();
-    expect(host.querySelector('input[placeholder="Search..."]')).toBeTruthy();
+    const searchInput = host.querySelector('input[placeholder="Search..."]') as HTMLInputElement | null;
+    expect(searchInput).toBeTruthy();
+    expect(searchInput?.className).toContain('bg-[var(--redeven-terminal-search-input)]');
+    expect(searchInput?.className).toContain('focus:ring-[var(--redeven-terminal-search-accent)]');
+    const terminalContent = host.querySelector('[data-testid="terminal-content"]') as HTMLElement | null;
+    expect(terminalContent?.style.getPropertyValue('--redeven-terminal-search-background')).toContain('#111111');
+    expect(terminalContent?.style.getPropertyValue('--redeven-terminal-search-accent')).toBe('#365f91');
 
     settingsAction?.click();
     await Promise.resolve();
@@ -4318,6 +4360,169 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     expect(findTerminalWorkIndicator(darkHost)?.dataset.terminalWorkTheme).toBe('dark');
+  });
+
+  it('lets system terminal themes follow the app while preserving their selection palette', async () => {
+    themeState.resolvedTheme = 'light';
+    themeState.shellPreset = { name: 'classic-light', tokens: undefined };
+    terminalPrefsState.userTheme = 'system';
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    expect(getThemeColorsSpy).toHaveBeenCalledWith('light');
+    expect(terminalCoreInstances[0]?.setTheme).toHaveBeenCalledWith(expect.objectContaining({
+      selectionBackground: '#bfd7ff',
+      selectionForeground: '#172033',
+    }));
+  });
+
+  it('applies the active mode token map from a non-classic Floe preset', async () => {
+    themeState.resolvedTheme = 'dark';
+    themeState.shellPreset = {
+      name: 'dracula',
+      tokens: {
+        dark: {
+          '--terminal-background': '#191a21',
+          '--terminal-foreground': '#f8f8f2',
+          '--selection-bg': '#52566d',
+          '--selection-fg': '#ffffff',
+        },
+      },
+    };
+    terminalPrefsState.userTheme = 'system';
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    expect(terminalCoreInstances[0]?.setTheme).toHaveBeenCalledWith(expect.objectContaining({
+      background: '#191a21',
+      foreground: '#f8f8f2',
+      cursor: '#f8f8f2',
+      cursorAccent: '#191a21',
+      selectionBackground: '#52566d',
+      selectionForeground: '#ffffff',
+    }));
+  });
+
+  it('lets system terminal colors follow preset changes within the same app mode', () => {
+    const baseColors = getThemeColorsSpy('light');
+    const paperTheme = resolveSystemTerminalThemeColors(baseColors, {
+        '--terminal-background': '#f6f2e8',
+        '--terminal-foreground': '#28303d',
+        '--selection-bg': '#c7d8f5',
+        '--selection-fg': '#182233',
+    });
+    const mistTheme = resolveSystemTerminalThemeColors(baseColors, {
+        '--terminal-background': '#e8eef3',
+        '--terminal-foreground': '#1f3442',
+        '--selection-bg': '#b8d8e6',
+        '--selection-fg': '#102832',
+    });
+    expect(paperTheme).toEqual(expect.objectContaining({
+      background: '#f6f2e8',
+      foreground: '#28303d',
+      cursor: '#28303d',
+      cursorAccent: '#f6f2e8',
+      selectionBackground: '#c7d8f5',
+      selectionForeground: '#182233',
+    }));
+    expect(mistTheme).toEqual(expect.objectContaining({
+      background: '#e8eef3',
+      foreground: '#1f3442',
+      cursor: '#1f3442',
+      cursorAccent: '#e8eef3',
+      selectionBackground: '#b8d8e6',
+      selectionForeground: '#102832',
+    }));
+    expect(mistTheme).not.toEqual(paperTheme);
+  });
+
+  it('reapplies the rendered terminal theme when a same-mode Floe preset changes', async () => {
+    themeState.resolvedTheme = 'light';
+    themeState.shellPreset = {
+      name: 'paper',
+      tokens: {
+        light: {
+          '--terminal-background': '#f6f2e8',
+          '--terminal-foreground': '#28303d',
+          '--selection-bg': '#c7d8f5',
+          '--selection-fg': '#182233',
+        },
+      },
+    };
+    terminalPrefsState.userTheme = 'system';
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+    const core = terminalCoreInstances[0];
+    expect(core?.setTheme).toHaveBeenLastCalledWith(expect.objectContaining({
+      background: '#f6f2e8',
+      foreground: '#28303d',
+    }));
+    core?.setTheme.mockClear();
+
+    themeState.shellPreset = {
+      name: 'mist',
+      tokens: {
+        light: {
+          '--terminal-background': '#e8eef3',
+          '--terminal-foreground': '#1f3442',
+          '--selection-bg': '#b8d8e6',
+          '--selection-fg': '#102832',
+        },
+      },
+    };
+    themeState.bumpPreset?.();
+    await settleTerminalPanel();
+
+    expect(core?.setTheme).toHaveBeenCalledWith(expect.objectContaining({
+      background: '#e8eef3',
+      foreground: '#1f3442',
+      selectionBackground: '#b8d8e6',
+      selectionForeground: '#102832',
+    }));
+  });
+
+  it('does not reapply an explicit terminal theme when the app preset changes', async () => {
+    themeState.resolvedTheme = 'light';
+    themeState.shellPreset = { name: 'paper', tokens: undefined };
+    terminalPrefsState.userTheme = 'dark';
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+    const core = terminalCoreInstances[0];
+    core?.setTheme.mockClear();
+
+    themeState.shellPreset = { name: 'mist', tokens: undefined };
+    themeState.bumpPreset?.();
+    await settleTerminalPanel();
+
+    expect(core?.setTheme).not.toHaveBeenCalled();
+  });
+
+  it('keeps an explicit terminal theme independent from the app theme', async () => {
+    themeState.resolvedTheme = 'light';
+    terminalPrefsState.userTheme = 'dark';
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    expect(getThemeColorsSpy).toHaveBeenCalledWith('dark');
+    expect(terminalCoreInstances[0]?.setTheme).toHaveBeenCalledWith(expect.objectContaining({
+      selectionBackground: '#365f91',
+      selectionForeground: '#eeeeee',
+    }));
   });
 
   it('keeps the terminal work indicator idle in the activity panel even when a command is running', async () => {
