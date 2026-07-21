@@ -594,7 +594,20 @@
     "openRedevenDashboard": "Redeven Dashboard を開く",
     "backToEnvironments": "環境に戻る",
     "useDarkTheme": "ダークテーマを使用",
-    "useLightTheme": "ライトテーマを使用"
+    "useLightTheme": "ライトテーマを使用",
+    "themePicker": {
+      "openLabel": "外観", "title": "外観", "closeLabel": "外観設定を閉じる", "modeLabel": "カラーモード",
+      "mode": { "system": "システム", "light": "ライト", "dark": "ダーク" },
+      "systemResolvedLight": "現在、システムはライトモードを使用しています",
+      "systemResolvedDark": "現在、システムはダークモードを使用しています",
+      "themesLabel": "テーマ", "changeFailed": "外観を更新できませんでした。もう一度お試しください。",
+      "presets": {
+        "classic-light": "クラシック ライト", "paper": "ペーパー", "mist": "ミスト", "meadow": "メドウ", "citrus": "シトラス", "lilac": "ライラック",
+        "light-plus": "Light+", "quiet-light": "Quiet Light", "solarized-light": "Solarized Light", "github-light": "GitHub Light", "hc-light": "ハイコントラスト ライト",
+        "classic-dark": "クラシック ダーク", "ink": "インク", "slate": "スレート", "forest": "フォレスト", "ember": "エンバー", "ocean": "オーシャン",
+        "dark-plus": "Dark+", "monokai": "Monokai", "nord": "Nord", "dracula": "Dracula", "abyss": "アビス"
+      }
+    }
   },
   "commandPalette": {
     "categories": {
@@ -616,8 +629,8 @@
     "closeLauncherDescription": "launcher ウィンドウを閉じます",
     "changeLanguageTitle": "言語を変更",
     "changeLanguageDescription": "ヘッダーの言語メニューを開き、Redeven Desktop と Env App の UI 言語を切り替えます",
-    "toggleThemeTitle": "テーマを切り替え",
-    "toggleThemeDescription": "ライトテーマとダークテーマを切り替えます",
+    "toggleThemeTitle": "外観を変更",
+    "toggleThemeDescription": "Desktop のカラーモードとテーマを選択します",
     "openCommandPaletteTitle": "Command Palette を開く",
     "openCommandPaletteDescription": "command palette を開きます"
   },

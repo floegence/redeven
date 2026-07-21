@@ -594,7 +594,20 @@
     "openRedevenDashboard": "Abrir Redeven Dashboard",
     "backToEnvironments": "Voltar para Ambientes",
     "useDarkTheme": "Usar tema escuro",
-    "useLightTheme": "Usar tema claro"
+    "useLightTheme": "Usar tema claro",
+    "themePicker": {
+      "openLabel": "Aparência", "title": "Aparência", "closeLabel": "Fechar o painel de aparência", "modeLabel": "Modo de cor",
+      "mode": { "system": "Sistema", "light": "Claro", "dark": "Escuro" },
+      "systemResolvedLight": "O sistema está usando o modo claro",
+      "systemResolvedDark": "O sistema está usando o modo escuro",
+      "themesLabel": "Temas", "changeFailed": "Não foi possível atualizar a aparência. Tente novamente.",
+      "presets": {
+        "classic-light": "Clássico claro", "paper": "Papel", "mist": "Névoa", "meadow": "Prado", "citrus": "Cítrico", "lilac": "Lilás",
+        "light-plus": "Claro+", "quiet-light": "Suave Claro", "solarized-light": "Solar Claro", "github-light": "GitHub Light", "hc-light": "Alto Contraste Claro",
+        "classic-dark": "Clássico escuro", "ink": "Tinta", "slate": "Ardósia", "forest": "Floresta", "ember": "Brasa", "ocean": "Oceano",
+        "dark-plus": "Escuro+", "monokai": "Monokai", "nord": "Nord", "dracula": "Dracula", "abyss": "Abyss"
+      }
+    }
   },
   "commandPalette": {
     "categories": {
@@ -616,8 +629,8 @@
     "closeLauncherDescription": "Fechar a janela launcher",
     "changeLanguageTitle": "Alterar idioma",
     "changeLanguageDescription": "Abrir o menu de idioma do cabeçalho para Redeven Desktop e Env App",
-    "toggleThemeTitle": "Alternar tema",
-    "toggleThemeDescription": "Alternar entre tema claro e escuro",
+    "toggleThemeTitle": "Alterar aparência",
+    "toggleThemeDescription": "Escolher o modo de cor e o tema do Desktop",
     "openCommandPaletteTitle": "Abrir Command Palette",
     "openCommandPaletteDescription": "Abrir a command palette"
   },

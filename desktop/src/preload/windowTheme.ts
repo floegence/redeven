@@ -4,13 +4,17 @@ import { contextBridge, ipcRenderer } from 'electron';
 
 import {
   DESKTOP_THEME_GET_SNAPSHOT_CHANNEL,
+  DESKTOP_THEME_SET_SHELL_THEME_CHANNEL,
   DESKTOP_THEME_SET_SOURCE_CHANNEL,
   DESKTOP_THEME_UPDATED_CHANNEL,
   normalizeDesktopThemeSnapshot,
 } from '../shared/desktopThemeIPC';
 import {
+  DESKTOP_SHELL_THEME_DEFAULTS,
   normalizeDesktopThemeSource,
   sameDesktopThemeSnapshot,
+  type DesktopResolvedTheme,
+  type DesktopShellThemePreset,
   type DesktopThemeSnapshot,
   type DesktopThemeSource,
 } from '../shared/desktopTheme';
@@ -38,6 +42,10 @@ declare global {
 export interface DesktopThemeBridge {
   getSnapshot: () => DesktopThemeSnapshot;
   setSource: (source: DesktopThemeSource) => DesktopThemeSnapshot;
+  setShellTheme: (
+    mode: DesktopResolvedTheme,
+    presetName: DesktopShellThemePreset,
+  ) => DesktopThemeSnapshot;
   subscribe: (listener: (snapshot: DesktopThemeSnapshot) => void) => () => void;
 }
 
@@ -55,6 +63,8 @@ function fallbackDesktopThemeSnapshot(): DesktopThemeSnapshot {
   return {
     source: 'system',
     resolvedTheme: 'light',
+    shellThemes: { ...DESKTOP_SHELL_THEME_DEFAULTS },
+    activeShellTheme: DESKTOP_SHELL_THEME_DEFAULTS.light,
     window: {
       backgroundColor: '#f4f1ed',
       symbolColor: '#202a37',
@@ -80,6 +90,7 @@ function applyDesktopThemeToDocument(snapshot: DesktopThemeSnapshot): void {
   root.classList.remove('light', 'dark');
   root.classList.add(snapshot.resolvedTheme);
   root.style.colorScheme = snapshot.resolvedTheme;
+  root.dataset.floeShellTheme = snapshot.activeShellTheme;
 }
 
 function applyDesktopDocumentFallbackColors(snapshot: DesktopThemeSnapshot): void {
@@ -160,6 +171,19 @@ function setDesktopThemeSource(source: unknown): DesktopThemeSnapshot {
   return updateDesktopThemeSnapshot(nextSnapshot);
 }
 
+function setDesktopShellTheme(
+  mode: DesktopResolvedTheme,
+  presetName: DesktopShellThemePreset,
+): DesktopThemeSnapshot {
+  const nextSnapshot = normalizeDesktopThemeSnapshot(
+    ipcRenderer.sendSync(DESKTOP_THEME_SET_SHELL_THEME_CHANNEL, mode, presetName),
+  );
+  if (!nextSnapshot) {
+    return currentSnapshot;
+  }
+  return updateDesktopThemeSnapshot(nextSnapshot);
+}
+
 function installDesktopThemeEventBridge(): void {
   ipcRenderer.on(DESKTOP_THEME_UPDATED_CHANNEL, (_event, payload) => {
     const snapshot = normalizeDesktopThemeSnapshot(payload);
@@ -192,6 +216,7 @@ export function bootstrapDesktopThemeBridge(): void {
   const bridge: DesktopThemeBridge = {
     getSnapshot: () => currentSnapshot,
     setSource: (source) => setDesktopThemeSource(source),
+    setShellTheme: (mode, presetName) => setDesktopShellTheme(mode, presetName),
     subscribe: (listener) => {
       if (typeof listener !== 'function') {
         return () => undefined;

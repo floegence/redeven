@@ -594,7 +594,24 @@
     "openRedevenDashboard": "開啟 Redeven Dashboard",
     "backToEnvironments": "返回環境",
     "useDarkTheme": "使用深色主題",
-    "useLightTheme": "使用淺色主題"
+    "useLightTheme": "使用淺色主題",
+    "themePicker": {
+      "openLabel": "外觀",
+      "title": "外觀",
+      "closeLabel": "關閉外觀設定",
+      "modeLabel": "色彩模式",
+      "mode": { "system": "跟隨系統", "light": "淺色", "dark": "深色" },
+      "systemResolvedLight": "系統目前使用淺色模式",
+      "systemResolvedDark": "系統目前使用深色模式",
+      "themesLabel": "主題",
+      "changeFailed": "無法更新外觀，請再試一次。",
+      "presets": {
+        "classic-light": "經典淺色", "paper": "紙張", "mist": "薄霧", "meadow": "草地", "citrus": "柑橘", "lilac": "丁香",
+        "light-plus": "Light+", "quiet-light": "靜謐淺色", "solarized-light": "Solarized 淺色", "github-light": "GitHub 淺色", "hc-light": "高對比淺色",
+        "classic-dark": "經典深色", "ink": "墨色", "slate": "石板", "forest": "森林", "ember": "餘燼", "ocean": "深海",
+        "dark-plus": "Dark+", "monokai": "Monokai", "nord": "Nord", "dracula": "Dracula", "abyss": "深淵"
+      }
+    }
   },
   "commandPalette": {
     "categories": {
@@ -616,8 +633,8 @@
     "closeLauncherDescription": "關閉 launcher 視窗",
     "changeLanguageTitle": "變更語言",
     "changeLanguageDescription": "開啟頂部列語言選單，切換 Redeven Desktop 和 Env App 的 UI 語言",
-    "toggleThemeTitle": "切換主題",
-    "toggleThemeDescription": "在淺色和深色主題之間切換",
+    "toggleThemeTitle": "變更外觀",
+    "toggleThemeDescription": "選擇 Desktop 的色彩模式與主題",
     "openCommandPaletteTitle": "開啟 Command Palette",
     "openCommandPaletteDescription": "開啟 command palette"
   },

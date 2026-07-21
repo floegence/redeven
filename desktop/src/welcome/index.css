@@ -22,27 +22,27 @@
   --redeven-control-plane-grid-column-size: 35rem;
   --redeven-control-plane-card-max-width: 44rem;
   --redeven-provider-shelf-metric-min-size: 10.75rem;
-  --redeven-welcome-window-bg: #f7f4f1;
-  --redeven-welcome-page-bg: #f4f1ed;
-  --redeven-welcome-panel-bg: #f1efec;
-  --redeven-welcome-rail-bg: #eeece9;
-  --redeven-welcome-rail-border: #dad6d1;
-  --redeven-welcome-rail-selected: #e4e1dd;
-  --redeven-welcome-text: #202a37;
-  --redeven-welcome-muted: #6b788a;
-  --redeven-welcome-icon: #7f8fa5;
-  --redeven-welcome-icon-strong: #2f3d4f;
-  --redeven-welcome-accent: #3b82f6;
-  --redeven-welcome-amber: #f59e0b;
-  --redeven-welcome-card: #fffdfa;
-  --redeven-welcome-card-border: #d8d3cc;
+  --redeven-welcome-window-bg: var(--background);
+  --redeven-welcome-page-bg: var(--background);
+  --redeven-welcome-panel-bg: var(--card);
+  --redeven-welcome-rail-bg: var(--sidebar);
+  --redeven-welcome-rail-border: var(--sidebar-border, var(--border));
+  --redeven-welcome-rail-selected: var(--sidebar-accent, var(--muted));
+  --redeven-welcome-text: var(--foreground);
+  --redeven-welcome-muted: var(--muted-foreground);
+  --redeven-welcome-icon: var(--muted-foreground);
+  --redeven-welcome-icon-strong: var(--foreground);
+  --redeven-welcome-accent: var(--primary);
+  --redeven-welcome-amber: var(--warning);
+  --redeven-welcome-card: var(--card);
+  --redeven-welcome-card-border: var(--border);
   --redeven-welcome-tile: color-mix(in srgb, var(--redeven-welcome-panel-bg) 76%, var(--redeven-welcome-card) 24%);
   --redeven-welcome-card-shadow:
-    0 1px 2px rgba(31, 41, 55, 0.05),
-    0 18px 45px rgba(31, 41, 55, 0.10);
+    0 1px 2px color-mix(in srgb, var(--foreground) 5%, transparent),
+    0 18px 45px color-mix(in srgb, var(--foreground) 10%, transparent);
   --redeven-welcome-soft-shadow:
-    0 1px 2px rgba(31, 41, 55, 0.04),
-    0 12px 30px rgba(31, 41, 55, 0.07);
+    0 1px 2px color-mix(in srgb, var(--foreground) 4%, transparent),
+    0 12px 30px color-mix(in srgb, var(--foreground) 7%, transparent);
 }
 
 html,
@@ -153,33 +153,331 @@ html:not(.dark) .redeven-welcome-surface {
   white-space: nowrap;
 }
 
-/*
- * Dark mode: strengthen structural borders inside our managed surfaces.
- *
- * The floe-webapp dark tokens place `--card` (10% lightness) and `--border`
- * (18% lightness) uncomfortably close together. Once Tailwind dilutes borders
- * with `/70` alpha, the structural seams of cards, dialogs, and status strips
- * become nearly invisible against the card-colored dialog body.
- *
- * Override `--border` and `--input` within both the welcome surface and any
- * modal dialog (rendered via Portal to document.body, so the descendant
- * selector on `.redeven-welcome-surface` alone is not enough). This lifts every
- * downstream `var(--border)` consumer — Tailwind `border-border`, custom CSS,
- * and the Dialog component itself — to a visible contrast level.
- */
-.dark .redeven-welcome-surface,
-.dark [role='dialog'][aria-modal='true'] {
-  --border: hsl(220 15% 26%);
-  --input: hsl(220 18% 22%);
-
-  /* Interior tiles inside a dialog sit on --card. Give them a slightly
-     different background so they read as distinct surfaces. */
-  --redeven-tile: hsl(222 28% 12%);
+/* Desktop appearance picker */
+.redeven-theme-picker {
+  z-index: 235;
+  width: min(36rem, calc(100vw - 1rem));
+  max-height: min(44rem, calc(100dvh - var(--redeven-desktop-titlebar-height) - 1.5rem));
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--border) 86%, var(--foreground) 14%);
+  border-radius: 0.5rem;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow:
+    0 14px 40px -22px color-mix(in srgb, var(--foreground) 42%, transparent),
+    0 24px 50px -28px color-mix(in srgb, var(--foreground) 28%, transparent);
 }
 
-/* Light mode tile value — slightly warmer than card for a soft inset feel. */
-:root {
-  --redeven-tile: hsl(36 12% 94%);
+.redeven-theme-picker__panel {
+  position: relative;
+  display: flex;
+  min-height: 0;
+  max-height: inherit;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.redeven-theme-picker__header,
+.redeven-theme-picker__themes-header {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.redeven-theme-picker__header {
+  padding: 0.75rem 3rem 0.625rem 0.875rem;
+}
+
+.redeven-theme-picker__title {
+  min-width: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1.25rem;
+}
+
+.redeven-theme-picker__close {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.625rem;
+  z-index: 1;
+  display: inline-flex;
+  width: 1.75rem;
+  height: 1.75rem;
+  flex: 0 0 auto;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 0.375rem;
+  background: transparent;
+  color: var(--muted-foreground);
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.redeven-theme-picker__close:hover {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.redeven-theme-picker__close:focus-visible,
+.redeven-theme-picker__mode:focus-visible,
+.redeven-theme-picker__theme:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+
+.redeven-theme-picker__mode-section {
+  border-block: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
+  padding: 0.625rem 0.875rem;
+}
+
+.redeven-theme-picker__section-label {
+  min-width: 0;
+  color: var(--foreground);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 1rem;
+}
+
+.redeven-theme-picker__mode-group {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.25rem;
+  margin-top: 0.5rem;
+  border-radius: 0.375rem;
+  background: color-mix(in srgb, var(--muted) 76%, transparent);
+  padding: 0.25rem;
+}
+
+.redeven-theme-picker__mode {
+  min-width: 0;
+  min-height: 2rem;
+  cursor: pointer;
+  border: 1px solid transparent;
+  border-radius: 0.25rem;
+  background: transparent;
+  color: var(--muted-foreground);
+  padding: 0.375rem 0.5rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1rem;
+  overflow-wrap: anywhere;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.redeven-theme-picker__mode:hover {
+  color: var(--foreground);
+}
+
+.redeven-theme-picker__mode[aria-checked='true'] {
+  border-color: color-mix(in srgb, var(--border) 78%, var(--foreground) 22%);
+  background: var(--card);
+  color: var(--card-foreground);
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--foreground) 8%, transparent);
+}
+
+.redeven-theme-picker__system-status {
+  margin: 0.5rem 0 0;
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  letter-spacing: 0;
+  line-height: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.redeven-theme-picker__themes-header {
+  padding: 0.625rem 0.875rem 0.5rem;
+}
+
+.redeven-theme-picker__theme-count {
+  flex: 0 0 auto;
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  font-variant-numeric: tabular-nums;
+  line-height: 1rem;
+}
+
+.redeven-theme-picker__theme-scroll {
+  min-height: 0;
+  flex: 1 1 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 0.125rem 0.75rem 0.75rem;
+  scrollbar-gutter: stable;
+}
+
+.redeven-theme-picker__theme-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.redeven-theme-picker__theme {
+  display: flex;
+  min-width: 0;
+  cursor: pointer;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  background: var(--card);
+  color: var(--card-foreground);
+  padding: 0;
+  text-align: left;
+  transition: border-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.redeven-theme-picker__theme:hover {
+  border-color: color-mix(in srgb, var(--primary) 56%, var(--border));
+  transform: translateY(-1px);
+}
+
+.redeven-theme-picker__theme[aria-checked='true'] {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 48%, transparent);
+}
+
+.redeven-theme-picker__preview {
+  display: grid;
+  aspect-ratio: 16 / 5;
+  grid-template-columns: 18% minmax(0, 1fr);
+  overflow: hidden;
+  border-bottom: 1px solid;
+}
+
+.redeven-theme-picker__preview-sidebar {
+  border-right: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+}
+
+.redeven-theme-picker__preview-content {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.35rem;
+  padding: 0.55rem 0.625rem 0.45rem;
+}
+
+.redeven-theme-picker__preview-surface {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 0.35rem;
+  border: 1px solid;
+  border-radius: 0.1875rem;
+  padding: 0.35rem;
+}
+
+.redeven-theme-picker__preview-surface > span:first-child {
+  width: 42%;
+  height: 0.45rem;
+  border-radius: 0.125rem;
+}
+
+.redeven-theme-picker__preview-surface > span:last-child {
+  width: 28%;
+  height: 0.3rem;
+  border-radius: 0.125rem;
+}
+
+.redeven-theme-picker__preview-spectrum {
+  display: grid;
+  height: 0.3rem;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  overflow: hidden;
+  border-radius: 0.125rem;
+}
+
+.redeven-theme-picker__theme-footer {
+  display: grid;
+  min-height: 2.5rem;
+  grid-template-columns: minmax(0, 1fr) 1.25rem;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.625rem;
+}
+
+.redeven-theme-picker__theme-name {
+  min-width: 0;
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.redeven-theme-picker__check {
+  display: inline-flex;
+  width: 1.25rem;
+  height: 1.25rem;
+  visibility: hidden;
+  align-items: center;
+  justify-content: center;
+  border-radius: 9999px;
+  background: var(--primary);
+  color: var(--primary-foreground);
+}
+
+.redeven-theme-picker__theme[aria-checked='true'] .redeven-theme-picker__check {
+  visibility: visible;
+}
+
+.redeven-theme-picker__error {
+  border-top: 1px solid color-mix(in srgb, var(--error) 24%, var(--border));
+  background: color-mix(in srgb, var(--error) 8%, var(--popover));
+  color: color-mix(in srgb, var(--error) 82%, var(--foreground));
+  padding: 0.625rem 0.875rem;
+  font-size: 0.75rem;
+  letter-spacing: 0;
+  line-height: 1.125rem;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 34rem) {
+  .redeven-theme-picker__theme-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .redeven-theme-picker__preview {
+    aspect-ratio: 18 / 5;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .redeven-theme-picker__close,
+  .redeven-theme-picker__mode,
+  .redeven-theme-picker__theme {
+    transition: none;
+  }
+
+  .redeven-theme-picker__theme:hover {
+    transform: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .redeven-theme-picker,
+  .redeven-theme-picker__mode[aria-checked='true'],
+  .redeven-theme-picker__theme,
+  .redeven-theme-picker__theme[aria-checked='true'] {
+    border-color: CanvasText;
+  }
+
+  .redeven-theme-picker__theme[aria-checked='true'] {
+    outline: 2px solid Highlight;
+    outline-offset: -3px;
+  }
+
+  .redeven-theme-picker__check {
+    background: Highlight;
+    color: HighlightText;
+  }
 }
 
 /*

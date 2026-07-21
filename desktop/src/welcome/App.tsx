@@ -2,7 +2,14 @@ import { For, Index, Show, createEffect, createMemo, createSignal, createUniqueI
 import { Portal } from 'solid-js/web';
 import { Motion, Presence } from 'solid-motionone';
 import qrcode from 'qrcode-generator';
-import { cn, FloeProvider, useCommand, useTheme } from '@floegence/floe-webapp-core';
+import {
+  BUILT_IN_SHELL_THEME_DEFAULTS,
+  builtInShellThemePresets,
+  cn,
+  FloeProvider,
+  useCommand,
+  useTheme,
+} from '@floegence/floe-webapp-core';
 import {
   AlertCircle,
   AlertTriangle,
@@ -14,8 +21,8 @@ import {
   ExternalLink,
   Globe,
   Lock,
-  Moon,
   Package,
+  Highlighter,
   Pin,
   Play,
   Plus,
@@ -27,7 +34,6 @@ import {
   Shield,
   ShieldCheck,
   Stop,
-  Sun,
   Trash,
   X,
 } from '@floegence/floe-webapp-core/icons';
@@ -240,11 +246,14 @@ import {
   createDesktopThemeStorageAdapter,
   desktopStateStorageBridge,
   desktopThemeBridge,
-  toggleDesktopTheme,
 } from './desktopTheme';
 import { desktopLanguageBridge } from './desktopLanguage';
 import { DesktopTooltip } from './DesktopTooltip';
 import { DesktopLauncherShell } from './DesktopLauncherShell';
+import {
+  DesktopThemePicker,
+  type DesktopThemePickerSnapshot,
+} from './DesktopThemePicker';
 import { desktopControlPlaneKey, suggestControlPlaneDisplayLabel } from '../shared/controlPlaneProvider';
 import {
   DESKTOP_ACTION_TOAST_LIMIT,
@@ -577,6 +586,7 @@ type LauncherActionErrorTarget = 'connect' | 'settings' | 'dialog' | 'control_pl
 
 const DESKTOP_FLOE_STORAGE_NAMESPACE = 'redeven-desktop-shell';
 const DESKTOP_FLOE_THEME_STORAGE_KEY = 'theme';
+const DESKTOP_FLOE_SHELL_THEME_STORAGE_KEY = `${DESKTOP_FLOE_THEME_STORAGE_KEY}-shell-preset`;
 const ACTION_TOAST_TTL_MS = 4_000;
 const GATEWAY_TERMINAL_PROGRESS_VISIBLE_MS = ACTION_TOAST_TTL_MS;
 const GUIDANCE_SUCCESS_DISMISS_MS = 720;
@@ -634,7 +644,10 @@ function buildDesktopFloeConfig(i18n: DesktopI18n) {
     },
     theme: {
       storageKey: DESKTOP_FLOE_THEME_STORAGE_KEY,
+      shellPresetStorageKey: DESKTOP_FLOE_SHELL_THEME_STORAGE_KEY,
       defaultTheme: themeBridge?.getSnapshot().source ?? 'system',
+      shellPresets: builtInShellThemePresets,
+      defaultShellPreset: BUILT_IN_SHELL_THEME_DEFAULTS,
     },
     commands: {
       ignoreWhenTyping: false,
@@ -2664,10 +2677,9 @@ function DesktopCommandRegistrar(props: Readonly<{
   ) => Promise<boolean>;
   closeLauncherOrQuit: () => Promise<void>;
   openLanguageSettings: () => void;
+  openThemePicker: () => void;
 }>): null {
   const cmd = useCommand();
-  const theme = useTheme();
-  const shellTheme = desktopThemeBridge();
 
   createEffect(() => {
     const snapshot = props.snapshot();
@@ -2730,12 +2742,12 @@ function DesktopCommandRegistrar(props: Readonly<{
         execute: () => props.openLanguageSettings(),
       },
       {
-        id: 'redeven.desktop.toggleTheme',
+        id: 'redeven.desktop.changeAppearance',
         title: props.i18n.t('commandPalette.toggleThemeTitle'),
         description: props.i18n.t('commandPalette.toggleThemeDescription'),
         category: props.i18n.t('commandPalette.categories.general'),
-        icon: theme.resolvedTheme() === 'light' ? Moon : Sun,
-        execute: () => toggleDesktopTheme(theme.resolvedTheme(), shellTheme, () => theme.toggleTheme()),
+        icon: Highlighter,
+        execute: () => props.openThemePicker(),
       },
       {
         id: 'redeven.desktop.openCommandPalette',
@@ -2777,6 +2789,18 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     shellLanguage?.getSnapshot() ?? FALLBACK_DESKTOP_LANGUAGE_SNAPSHOT,
   );
   const [languagePickerOpenRequest, setLanguagePickerOpenRequest] = createSignal(0);
+  const fallbackThemePickerSnapshot = (): DesktopThemePickerSnapshot => ({
+    source: theme.theme(),
+    resolvedTheme: theme.resolvedTheme(),
+    shellThemes: {
+      light: theme.shellPresetForMode('light')?.name ?? BUILT_IN_SHELL_THEME_DEFAULTS.light,
+      dark: theme.shellPresetForMode('dark')?.name ?? BUILT_IN_SHELL_THEME_DEFAULTS.dark,
+    },
+  });
+  const [themeSnapshot, setThemeSnapshot] = createSignal<DesktopThemePickerSnapshot>(
+    shellTheme?.getSnapshot() ?? fallbackThemePickerSnapshot(),
+  );
+  const [themePickerOpenRequest, setThemePickerOpenRequest] = createSignal(0);
   const [actionToasts, setActionToasts] = createSignal<readonly DesktopActionToast[]>([]);
   const [liveActionProgress, setLiveActionProgress] = createSignal<readonly DesktopLauncherActionProgress[]>([]);
   const [retainedGatewayFailures, setRetainedGatewayFailures] = createSignal<readonly DesktopLauncherActionProgress[]>([]);
@@ -3102,7 +3126,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   });
 
   if (shellTheme) {
-    const applyShellTheme = (next: Readonly<{ source: 'system' | 'light' | 'dark' }>) => {
+    const applyShellTheme = (next: ReturnType<typeof shellTheme.getSnapshot>) => {
+      setThemeSnapshot(next);
+      for (const mode of ['light', 'dark'] as const) {
+        if (theme.shellPresetForMode(mode)?.name !== next.shellThemes[mode]) {
+          theme.setShellPreset(next.shellThemes[mode]);
+        }
+      }
       if (theme.theme() !== next.source) {
         theme.setTheme(next.source);
       }
@@ -3110,7 +3140,38 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
     applyShellTheme(shellTheme.getSnapshot());
     const unsubscribe = shellTheme.subscribe(applyShellTheme);
     onCleanup(unsubscribe);
+  } else {
+    createEffect(() => {
+      setThemeSnapshot(fallbackThemePickerSnapshot());
+    });
   }
+
+  const updateDesktopThemeSource = (source: DesktopThemePickerSnapshot['source']): DesktopThemePickerSnapshot => {
+    if (shellTheme) {
+      const next = shellTheme.setSource(source);
+      setThemeSnapshot(next);
+      return next;
+    }
+    theme.setTheme(source);
+    const next = fallbackThemePickerSnapshot();
+    setThemeSnapshot(next);
+    return next;
+  };
+
+  const updateDesktopShellTheme = (
+    mode: DesktopThemePickerSnapshot['resolvedTheme'],
+    presetName: string,
+  ): DesktopThemePickerSnapshot => {
+    if (shellTheme) {
+      const next = shellTheme.setShellTheme(mode, presetName);
+      setThemeSnapshot(next);
+      return next;
+    }
+    theme.setShellPreset(presetName);
+    const next = fallbackThemePickerSnapshot();
+    setThemeSnapshot(next);
+    return next;
+  };
 
   if (shellLanguage) {
     const applyShellLanguage = (next: RedevenLanguageSnapshot) => {
@@ -6067,6 +6128,7 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
         openEnvironment={openEnvironment}
         closeLauncherOrQuit={closeLauncherOrQuit}
         openLanguageSettings={openLanguageSettings}
+        openThemePicker={() => setThemePickerOpenRequest((current) => current + 1)}
       />
       <DesktopLauncherShell
         mainContentId="redeven-desktop-main"
@@ -6113,12 +6175,13 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
               i18n={i18n()}
               onPreferenceChange={updateDesktopLanguagePreference}
             />
-            <TopBarIconButton
-              label={theme.resolvedTheme() === 'light' ? i18n().t('shell.useDarkTheme') : i18n().t('shell.useLightTheme')}
-              onClick={() => toggleDesktopTheme(theme.resolvedTheme(), shellTheme, () => theme.toggleTheme())}
-            >
-              {theme.resolvedTheme() === 'light' ? <Moon class="h-4 w-4" /> : <Sun class="h-4 w-4" />}
-            </TopBarIconButton>
+            <DesktopThemePicker
+              openRequest={themePickerOpenRequest()}
+              snapshot={themeSnapshot()}
+              i18n={i18n()}
+              onSourceChange={updateDesktopThemeSource}
+              onShellThemeChange={updateDesktopShellTheme}
+            />
           </div>
         )}
         bottomBarLeading={(

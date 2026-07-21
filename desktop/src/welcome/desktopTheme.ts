@@ -2,10 +2,19 @@ import type { FloeStorageAdapter } from '@floegence/floe-webapp-core';
 
 type DesktopThemeSource = 'system' | 'light' | 'dark';
 type DesktopResolvedTheme = 'light' | 'dark';
+type DesktopShellThemeMode = 'light' | 'dark';
+
+type DesktopShellThemeSelection = Readonly<{
+  version: 1;
+  light: string;
+  dark: string;
+}>;
 
 type DesktopThemeSnapshot = Readonly<{
   source: DesktopThemeSource;
   resolvedTheme: DesktopResolvedTheme;
+  shellThemes: DesktopShellThemeSelection;
+  activeShellTheme: string;
   window: Readonly<{
     backgroundColor: string;
     symbolColor: string;
@@ -15,6 +24,7 @@ type DesktopThemeSnapshot = Readonly<{
 type DesktopThemeBridge = Readonly<{
   getSnapshot: () => DesktopThemeSnapshot;
   setSource: (source: DesktopThemeSource) => DesktopThemeSnapshot;
+  setShellTheme: (mode: DesktopShellThemeMode, presetName: string) => DesktopThemeSnapshot;
   subscribe: (listener: (snapshot: DesktopThemeSnapshot) => void) => () => void;
 }>;
 
@@ -39,11 +49,38 @@ function parseStoredThemeSource(value: string | null): DesktopThemeSource | '' {
     return '';
   }
   try {
-    const parsed = normalizeDesktopThemeSource(JSON.parse(value));
-    return parsed;
+    const raw = JSON.parse(value);
+    const parsed = normalizeDesktopThemeSource(raw);
+    return typeof raw === 'string' && raw.trim() === parsed ? parsed : '';
   } catch {
     const parsed = normalizeDesktopThemeSource(value);
     return value.trim() === parsed ? parsed : '';
+  }
+}
+
+function parseStoredShellThemes(value: string | null): DesktopShellThemeSelection | null {
+  if (value === null) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(value) as Partial<DesktopShellThemeSelection> | null;
+    if (
+      !parsed
+      || parsed.version !== 1
+      || typeof parsed.light !== 'string'
+      || !parsed.light.trim()
+      || typeof parsed.dark !== 'string'
+      || !parsed.dark.trim()
+    ) {
+      return null;
+    }
+    return {
+      version: 1,
+      light: parsed.light.trim(),
+      dark: parsed.dark.trim(),
+    };
+  } catch {
+    return null;
   }
 }
 
@@ -53,6 +90,7 @@ export function desktopThemeBridge(): DesktopThemeBridge | null {
     !candidate
     || typeof candidate.getSnapshot !== 'function'
     || typeof candidate.setSource !== 'function'
+    || typeof candidate.setShellTheme !== 'function'
     || typeof candidate.subscribe !== 'function'
   ) {
     return null;
@@ -84,10 +122,14 @@ export function createDesktopThemeStorageAdapter(
   }
 
   const persistedThemeKey = `${namespace}-${themeStorageKey}`;
+  const persistedShellThemeKey = `${persistedThemeKey}-shell-preset`;
   return {
     getItem: (key) => {
       if (key === persistedThemeKey) {
         return JSON.stringify(bridge.getSnapshot().source);
+      }
+      if (key === persistedShellThemeKey) {
+        return JSON.stringify(bridge.getSnapshot().shellThemes);
       }
       return base.getItem(key);
     },
@@ -99,6 +141,19 @@ export function createDesktopThemeStorageAdapter(
         }
         return;
       }
+      if (key === persistedShellThemeKey) {
+        const selection = parseStoredShellThemes(value);
+        if (selection) {
+          const current = bridge.getSnapshot().shellThemes;
+          if (selection.light !== current.light) {
+            bridge.setShellTheme('light', selection.light);
+          }
+          if (selection.dark !== current.dark) {
+            bridge.setShellTheme('dark', selection.dark);
+          }
+        }
+        return;
+      }
       base.setItem(key, value);
     },
     removeItem: (key) => {
@@ -106,11 +161,17 @@ export function createDesktopThemeStorageAdapter(
         bridge.setSource('system');
         return;
       }
+      if (key === persistedShellThemeKey) {
+        bridge.setShellTheme('light', 'classic-light');
+        bridge.setShellTheme('dark', 'classic-dark');
+        return;
+      }
       base.removeItem(key);
     },
     keys: () => {
       const keys = new Set(base.keys?.() ?? []);
       keys.add(persistedThemeKey);
+      keys.add(persistedShellThemeKey);
       return Array.from(keys.keys()).sort((left, right) => left.localeCompare(right));
     },
   };
