@@ -743,9 +743,9 @@ func TestFloretSubagents_DoNotProjectChildThreadForFlowerNavigation(t *testing.T
 	if threadRecord != nil {
 		t.Fatalf("child thread projected into Redeven threadstore: %#v", threadRecord)
 	}
-	childMeta, err := svc.threadsDB.GetFlowerThreadMetadata(context.Background(), meta.EndpointID, id)
+	childMeta, err := svc.threadsDB.GetFlowerThreadRouting(context.Background(), meta.EndpointID, id)
 	if err != nil {
-		t.Fatalf("GetFlowerThreadMetadata child: %v", err)
+		t.Fatalf("GetFlowerThreadRouting child: %v", err)
 	}
 	if childMeta != nil {
 		t.Fatalf("child thread metadata should not be created: %#v", childMeta)
@@ -832,9 +832,9 @@ func TestFloretSubagents_ActivityRefreshDoesNotMutateProductThread(t *testing.T)
 	if existing == nil || existing.ModelID != "openai/gpt-5-mini" {
 		t.Fatalf("existing product thread was overwritten: %#v", existing)
 	}
-	meta, err := db.GetFlowerThreadMetadata(context.Background(), endpointID, "th_existing_product")
+	meta, err := db.GetFlowerThreadRouting(context.Background(), endpointID, "th_existing_product")
 	if err != nil {
-		t.Fatalf("GetFlowerThreadMetadata: %v", err)
+		t.Fatalf("GetFlowerThreadRouting: %v", err)
 	}
 	if meta != nil {
 		t.Fatalf("collision must not create subagent metadata: %#v", meta)
@@ -1568,8 +1568,12 @@ func (h *fakeCloseAllFloretHost) ListThreadDetailEvents(context.Context, flrunti
 	return flruntime.ThreadDetailEvents{}, nil
 }
 
-func (h *fakeCloseAllFloretHost) ListPendingApprovals(context.Context, flruntime.ListPendingApprovalsRequest) (flruntime.PendingApprovals, error) {
-	return flruntime.PendingApprovals{}, nil
+func (h *fakeCloseAllFloretHost) ReadApprovalQueue(_ context.Context, req flruntime.ReadApprovalQueueRequest) (flruntime.ApprovalQueue, error) {
+	return flruntime.ApprovalQueue{RootThreadID: req.ThreadID, GeneratedAt: time.Now()}, nil
+}
+
+func (h *fakeCloseAllFloretHost) ResolveApproval(context.Context, flruntime.ResolveApprovalRequest) (flruntime.ResolveApprovalResult, error) {
+	return flruntime.ResolveApprovalResult{}, errors.New("unexpected approval resolution")
 }
 
 func (h *fakeCloseAllFloretHost) ReadTurnProjection(context.Context, flruntime.ReadTurnProjectionRequest) (flruntime.ThreadTurnProjection, error) {

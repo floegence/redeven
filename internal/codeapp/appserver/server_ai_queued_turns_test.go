@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"testing/fstest"
 	"time"
@@ -23,17 +24,25 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	stateDir := t.TempDir()
+	providerStarted := make(chan struct{}, 4)
+	providerDone := make(chan struct{}, 4)
 
 	providerServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		select {
-		case <-r.Context().Done():
-			return
-		case <-time.After(30 * time.Second):
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
 		}
-		w.Header().Set("Content-Type", "application/json")
-		_, _ = w.Write([]byte(`{"error":{"message":"forced stop for followups test"}}`))
+		providerStarted <- struct{}{}
+		<-r.Context().Done()
+		providerDone <- struct{}{}
 	}))
-	defer providerServer.Close()
+	var providerClosed atomic.Bool
+	t.Cleanup(func() {
+		if providerClosed.CompareAndSwap(false, true) {
+			providerServer.Close()
+		}
+	})
 
 	cfg := &config.AIConfig{
 		CurrentModelID: "openai/gpt-5-mini",
@@ -81,9 +90,12 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ai.NewService: %v", err)
 	}
+	var aiServiceClosed atomic.Bool
 	t.Cleanup(func() {
-		_ = aiSvc.CancelThread(&meta, threadIDForCleanup)
-		_ = aiSvc.Close()
+		if aiServiceClosed.CompareAndSwap(false, true) {
+			_ = aiSvc.CancelThread(&meta, threadIDForCleanup)
+			_ = aiSvc.Close()
+		}
 	})
 
 	dist := fstest.MapFS{
@@ -131,6 +143,26 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 	}
 	if !aiSvc.HasActiveThreadForEndpoint(meta.EndpointID, thread.ThreadID) {
 		t.Fatalf("active run did not start in time")
+	}
+	deadline = time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		view, viewErr := aiSvc.GetThread(ctx, &meta, thread.ThreadID)
+		if viewErr == nil && view != nil && strings.TrimSpace(view.ActiveRunID) == "run_appserver_active" {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	view, err := aiSvc.GetThread(ctx, &meta, thread.ThreadID)
+	if err != nil {
+		t.Fatalf("GetThread before queued turns: %v", err)
+	}
+	if view == nil || strings.TrimSpace(view.ActiveRunID) != "run_appserver_active" {
+		t.Fatalf("canonical Floret turn did not start in time: %#v", view)
+	}
+	select {
+	case <-providerStarted:
+	case <-time.After(2 * time.Second):
+		t.Fatal("provider stream did not start in time")
 	}
 
 	queuedResp1, err := aiSvc.SendUserTurn(ctx, &meta, ai.SendUserTurnRequest{
@@ -340,6 +372,7 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 	}
 
 	{
+		cancelStartedAt := time.Now()
 		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/threads/"+thread.ThreadID+"/cancel", nil)
 		req.Header.Set("Origin", envOrigin)
 		rr := httptest.NewRecorder()
@@ -366,6 +399,14 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 		}
 		if got := resp.Data.RecoveredFollowups[0]; got.FollowupID != followupID2 || got.Lane != "draft" || got.Text != "edited queued text" {
 			t.Fatalf("unexpected recovered followup: %+v", got)
+		}
+		if elapsed := time.Since(cancelStartedAt); elapsed > 2*time.Second {
+			t.Fatalf("cancel request elapsed=%s, want no more than 2s", elapsed)
+		}
+		select {
+		case <-providerDone:
+		case <-time.After(2 * time.Second):
+			t.Fatal("provider stream did not close after cancel")
 		}
 	}
 
@@ -394,6 +435,21 @@ func TestServer_AI_FollowupsEndpoints(t *testing.T) {
 		if len(resp.Data.Queued) != 0 || len(resp.Data.Drafts) != 1 || resp.Data.Drafts[0].FollowupID != followupID2 {
 			t.Fatalf("unexpected followups after cancel: %s", rr.Body.String())
 		}
+	}
+
+	serviceCloseStartedAt := time.Now()
+	if err := aiSvc.Close(); err != nil {
+		t.Fatalf("ai service close: %v", err)
+	}
+	aiServiceClosed.Store(true)
+	if elapsed := time.Since(serviceCloseStartedAt); elapsed > 2*time.Second {
+		t.Fatalf("ai service close elapsed=%s, want no more than 2s", elapsed)
+	}
+	serverCloseStartedAt := time.Now()
+	providerServer.Close()
+	providerClosed.Store(true)
+	if elapsed := time.Since(serverCloseStartedAt); elapsed > 2*time.Second {
+		t.Fatalf("provider server close elapsed=%s, want no more than 2s", elapsed)
 	}
 }
 

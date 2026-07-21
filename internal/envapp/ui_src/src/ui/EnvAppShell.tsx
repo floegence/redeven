@@ -1284,6 +1284,7 @@ export function EnvAppShell() {
   };
 
   const {
+    openCanonicalReferenceTarget: openFlowerCanonicalReferenceTarget,
     openLinkedFilePreview: openFlowerLinkedFilePreview,
     openLinkedDirectoryBrowser: openFlowerLinkedDirectoryBrowser,
   } = createFlowerLinkedContextNavigation({
@@ -1383,6 +1384,7 @@ export function EnvAppShell() {
         uploadAttachment: uploadLocalApiFile,
         openFileBrowser: openFlowerFileBrowser,
         openFilePreview: openFlowerFilePreview,
+        openCanonicalReferenceTarget: openFlowerCanonicalReferenceTarget,
         openLinkedFilePreview: openFlowerLinkedFilePreview,
         openLinkedDirectoryBrowser: openFlowerLinkedDirectoryBrowser,
       });
@@ -3602,6 +3604,7 @@ export function EnvAppShell() {
         openFilePreview,
         openFlowerFileBrowser,
         openFlowerFilePreview,
+        openFlowerCanonicalReferenceTarget,
         openFlowerLinkedFilePreview,
         openFlowerLinkedDirectoryBrowser,
         consumeOpenTerminalInDirectoryRequest,

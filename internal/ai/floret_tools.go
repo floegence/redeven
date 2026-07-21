@@ -278,7 +278,6 @@ func floretRunContextForIDs(ctx context.Context, base *run, rawRunID string, raw
 	settlementOwnerResolver := base.settlementOwnerResolver
 	base.mu.Unlock()
 	child.setPendingToolSettlementOwnerResolver(settlementOwnerResolver)
-	child.allowDelegatedApproval = true
 	child.bindSubagentParentAuthority(base)
 	child.currentModelID = base.currentModelID
 	return child, nil

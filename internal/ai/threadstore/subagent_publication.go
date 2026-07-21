@@ -216,25 +216,42 @@ func (s *Store) FailSubAgentPublication(ctx context.Context, publicationID strin
 	if operation.ChildSnapshotID != childSnapshotID || operation.ChildThreadID != childThreadID || operation.ChildRunID != childRunID {
 		return false, errors.New("SubAgent publication failure identity mismatch")
 	}
-	if operation.State == SubAgentPublicationFailed {
-		return true, tx.Commit()
-	}
-	if operation.State != SubAgentPublicationPending {
-		return false, errors.New("SubAgent publication cannot fail after commit")
-	}
 	record, err := loadChildPermissionSnapshotTx(ctx, tx, childSnapshotID)
 	if err != nil {
 		return false, err
 	}
 	if record.EndpointID != operation.EndpointID || record.ParentThreadID != operation.ParentThreadID ||
 		record.ParentRunID != operation.ParentRunID || record.SpawnToolCallID != operation.SpawnToolCallID ||
-		record.ChildThreadID != childThreadID || record.ChildRunID != childRunID || record.State != "provisional" {
+		record.ChildThreadID != childThreadID || record.ChildRunID != childRunID {
 		return false, errors.New("SubAgent publication failure permission audit mismatch")
+	}
+	if operation.State == SubAgentPublicationFailed {
+		if record.State != "aborted" {
+			return false, errors.New("failed SubAgent publication permission audit is not aborted")
+		}
+		return true, tx.Commit()
+	}
+	if operation.State != SubAgentPublicationPending {
+		return false, errors.New("SubAgent publication cannot fail after commit")
+	}
+	if record.State != "provisional" {
+		return false, errors.New("SubAgent publication failure permission audit is not provisional")
 	}
 	if err := requireThreadWritableTx(ctx, tx, operation.EndpointID, operation.ParentThreadID); err != nil {
 		return false, err
 	}
 	res, err := tx.ExecContext(ctx, `
+	UPDATE ai_child_permission_snapshots
+	SET state = 'aborted'
+	WHERE child_snapshot_id = ? AND state = 'provisional'
+`, childSnapshotID)
+	if err != nil {
+		return false, err
+	}
+	if changed, _ := res.RowsAffected(); changed != 1 {
+		return false, errors.New("SubAgent publication permission audit changed during failure recording")
+	}
+	res, err = tx.ExecContext(ctx, `
 UPDATE ai_subagent_publication_operations
 SET state = ?, request_json = '', session_meta_json = '', model_id = '', reasoning_selection_json = '', failed_at_unix_ms = ?
 WHERE publication_id = ? AND state = ?

@@ -217,9 +217,9 @@ func TestQueuedTurnContextActionPersistsThroughStoreRoundTrip(t *testing.T) {
 	if got := startReq.Input.ContextAction.ExecutionContext.SourceEnvPublicID; got != "env_a" {
 		t.Fatalf("restored source_env_public_id = %q, want env_a", got)
 	}
-	projection, err := floretSupplementalContextForInput(startReq.Input)
+	projection, err := floretContextProjectionForInput(startReq.Input)
 	if err != nil {
-		t.Fatalf("floretSupplementalContextForInput: %v", err)
+		t.Fatalf("floretContextProjectionForInput: %v", err)
 	}
 	if len(projection.Items) != 1 {
 		t.Fatalf("supplemental context items=%#v, want queued file path only", projection.Items)
@@ -412,9 +412,6 @@ func TestNormalizeAskFlowerContextActionRejectsNonStandardActions(t *testing.T) 
 
 			if action, err := normalizeAskFlowerContextActionEnvelope(&tt.action); err == nil || action != nil {
 				t.Fatalf("normalizeAskFlowerContextActionEnvelope()=(%#v, %v), want invalid nil", action, err)
-			}
-			if got := contextActionRunEventPayload(&tt.action); got != nil {
-				t.Fatalf("contextActionRunEventPayload()=%#v, want nil", got)
 			}
 		})
 	}

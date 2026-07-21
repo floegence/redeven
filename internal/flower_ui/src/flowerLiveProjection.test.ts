@@ -7,6 +7,7 @@ import type {
   FlowerChatMessage,
   FlowerLiveBootstrap,
   FlowerLiveEvent,
+  FlowerLiveThreadPatch,
   FlowerThreadSnapshot,
 } from './contracts/flowerSurfaceContracts';
 import { mapFlowerLiveBootstrap, mapFlowerLiveEvents, mapFlowerMessage } from './flowerLiveMapper';
@@ -89,6 +90,7 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
     messages: [message()],
     read_status: readStatus(),
     ...overrides,
+    title_status: overrides.title_status ?? 'ready',
   };
 }
 
@@ -153,6 +155,7 @@ function rawBootstrapWithTimelineDecoration(decoration: unknown) {
     thread: {
       thread_id: 'th-live',
       title: 'Live thread',
+      title_status: 'ready',
       model_id: 'openai/gpt-5.2',
       working_dir: '/workspace',
       created_at_unix_ms: 1000,
@@ -255,6 +258,37 @@ describe('Flower live projection', () => {
       created_at_ms: 1000,
       blocks: [{ type: 'text', content: 'Hello' }],
     })).toThrow(/timeline message entry-user-1 requires turn_id/);
+  });
+
+  it('rejects host-only fields and path text in canonical reference DTOs', () => {
+    const base = {
+      id: 'entry-user-reference',
+      thread_id: 'th-live',
+      turn_id: 'turn-reference',
+      run_id: 'run-reference',
+      role: 'user',
+      status: 'complete',
+      created_at_ms: 1000,
+      blocks: [],
+    };
+    expect(mapFlowerMessage({
+      ...base,
+      references: [
+        { reference_id: 'context:0', kind: 'file', label: 'main.ts' },
+        { reference_id: 'context:1', kind: 'text', label: 'Quote', text: 'visible excerpt', truncated: true },
+      ],
+    }).references).toEqual([
+      { reference_id: 'context:0', kind: 'file', label: 'main.ts' },
+      { reference_id: 'context:1', kind: 'text', label: 'Quote', text: 'visible excerpt', truncated: true },
+    ]);
+    for (const reference of [
+      { reference_id: 'context:0', kind: 'file', label: 'main.ts', text: '' },
+      { reference_id: 'context:0', kind: 'file', label: 'main.ts', path: '/workspace/main.ts' },
+      { reference_id: 'context:0', kind: 'file', label: 'main.ts', resource_ref: 'sentinel-locator' },
+      { reference_id: 'context:0', kind: 'directory', label: 'src', target: { target_id: 'local' } },
+    ]) {
+      expect(() => mapFlowerMessage({ ...base, references: [reference] })).toThrow(/reference/);
+    }
   });
 
   it('maps canonical attachment blocks and rejects malformed or mismatched blocks as a unit', () => {
@@ -529,6 +563,7 @@ describe('Flower live projection', () => {
       thread: {
         thread_id: 'th-live',
         title: 'Live thread',
+        title_status: 'ready',
         model_id: 'openai/gpt-5.2',
         working_dir: '/workspace',
         created_at_unix_ms: 1000,
@@ -1225,6 +1260,7 @@ describe('Flower live projection', () => {
       thread: {
         thread_id: 'th-live',
         title: 'Queued thread',
+        title_status: 'ready',
         model_id: 'openai/gpt-5.2',
         working_dir: '/workspace',
         created_at_unix_ms: 1000,
@@ -1346,6 +1382,7 @@ describe('Flower live projection', () => {
       thread: {
         thread_id: 'th-live',
         title: 'Queued thread',
+        title_status: 'ready',
         model_id: 'openai/gpt-5.2',
         working_dir: '/workspace',
         created_at_unix_ms: 1000,
@@ -1962,6 +1999,7 @@ describe('Flower live projection', () => {
       thread: {
         thread_id: 'th-live',
         title: 'Live thread',
+        title_status: 'ready',
         model_id: 'openai/gpt-5.2',
         working_dir: '/workspace',
         created_at_unix_ms: 1000,
@@ -2065,19 +2103,20 @@ describe('Flower live projection', () => {
     expect(result.thread.read_status.snapshot.activity_signature).toBe('sig-20');
   });
 
-  it('keeps delegated approval delivery states and fail-closes missing surface roles', () => {
-    const initial = thread({
-      status: 'running',
-      permission_type: 'approval_required',
+  it('atomically replaces canonical approvals and preserves independent control confirmations', () => {
+    const control = approvalAction({
+      action_id: 'control-1',
+      origin: 'control_confirm',
+      run_id: 'run-control',
+      tool_id: 'tool-control',
+      queue_order: 0,
     });
-    const delegatedRef = {
-      parent_thread_id: 'th-live',
-      parent_run_id: 'run-parent',
-      child_thread_id: 'child-thread-1',
-      child_run_id: 'child-run-1',
-      child_tool_call_id: 'tool-child-1',
-      approval_id: 'approval-child-1',
-    };
+    const initial = thread({
+      status: 'waiting_approval',
+      permission_type: 'approval_required',
+      approval_actions: [control, approvalAction({ action_id: 'stale-main' })],
+      approval_queue: { generation: 1, revision: 1, current_action_id: 'stale-main', current_position: 1, total: 1, unresolved_count: 1 },
+    });
     const mapped = mapFlowerLiveEvents({
       events: [{
         schema_version: 1,
@@ -2086,129 +2125,56 @@ describe('Flower live projection', () => {
         thread_id: 'th-live',
         run_id: 'run-parent',
         at_unix_ms: 4000,
-        kind: 'approval.requested',
+        kind: 'approval.queue_replaced',
         payload: {
-	          action: {
-	            action_id: 'dappr-1',
-	            origin: 'delegated_subagent',
-	            tool_name: 'terminal.exec',
-            state: 'approved',
-            status: 'resolved',
-            revision: 1,
-            version: 2,
-            requested_at_unix_ms: 3000,
-            resolved_at_unix_ms: 3500,
-            can_approve: true,
-            delivery_state: 'delivery_delivered',
-            child_execution_state: 'pending',
-            delegated_ref: delegatedRef,
-            summary: { label: 'Run command' },
-          },
-        },
-      }, {
-        schema_version: 1,
-        seq: 2,
-        endpoint_id: 'runtime',
-        thread_id: 'th-live',
-        run_id: 'run-parent',
-        at_unix_ms: 4100,
-        kind: 'thread.patched',
-        payload: {
-          patch: {
-            permission_type: 'readonly',
-          },
-        },
-      }, {
-        schema_version: 1,
-        seq: 3,
-        endpoint_id: 'runtime',
-        thread_id: 'th-live',
-        run_id: 'run-parent',
-        at_unix_ms: 4200,
-        kind: 'approval.resolved',
-        payload: {
-	          action: {
-	            action_id: 'dappr-2',
-	            origin: 'delegated_subagent',
-	            tool_name: 'terminal.exec',
-            state: 'unavailable',
-            status: 'unavailable',
-            revision: 1,
-            version: 2,
-            requested_at_unix_ms: 3000,
-            can_approve: false,
-            delivery_state: 'delivery_unavailable',
-            read_only_reason: 'Runtime restarted.',
-            delegated_ref: {
-              ...delegatedRef,
-              child_tool_call_id: 'tool-child-2',
-              approval_id: 'approval-child-2',
-            },
-            summary: { label: 'Run command' },
-          },
-        },
-      }],
-      next_cursor: 3,
-      retained_from_seq: 1,
-    });
-    const applied = applyEvents(initial, 0, mapped.events);
-
-    expect(applied.thread.permission_type).toBe('readonly');
-    expect(applied.thread.approval_actions?.map((action) => action.action_id)).toEqual(['dappr-1', 'dappr-2']);
-    expect(applied.thread.approval_actions?.[0]).toMatchObject({
-      action_id: 'dappr-1',
-      surface_role: 'mirror',
-      delivery_state: 'delivery_delivered',
-      can_approve: true,
-    });
-    expect(applied.thread.approval_actions?.[1]).toMatchObject({
-      action_id: 'dappr-2',
-      surface_role: 'mirror',
-      status: 'unavailable',
-      delivery_state: 'delivery_unavailable',
-      can_approve: false,
-      read_only_reason: 'Runtime restarted.',
-    });
-  });
-
-  it('keeps delegated approvals that are keyed only by delegated ref', () => {
-    const initial = thread({
-      status: 'running',
-      permission_type: 'approval_required',
-    });
-    const delegatedRef = {
-      parent_thread_id: 'th-live',
-      parent_run_id: 'run-parent',
-      child_thread_id: 'child-thread-1',
-      child_run_id: 'child-run-1',
-      child_tool_call_id: 'tool-child-1',
-      approval_id: 'approval-child-1',
-    };
-    const mapped = mapFlowerLiveEvents({
-      events: [{
-        schema_version: 1,
-        seq: 1,
-        endpoint_id: 'runtime',
-        thread_id: 'th-live',
-        at_unix_ms: 4000,
-        kind: 'approval.requested',
-        payload: {
-          action: {
-            action_id: 'dappr-ref-only',
+          actions: [{
+            action_id: 'delegated-1',
             origin: 'delegated_subagent',
+            run_id: 'run-child',
+            tool_id: 'tool-child',
             tool_name: 'terminal.exec',
+            state: 'requested',
+            status: 'pending',
+            revision: 2,
+            version: 2,
+            surface_epoch: 2,
+            scope: 'thread:child-thread',
+            queue_generation: 2,
+            queue_order: 1,
+            batch_index: 0,
+            batch_size: 1,
+            expected_seq: 1,
+            requested_at_unix_ms: 3000,
+            can_approve: true,
+            summary: { label: 'Run command' },
+          }, {
+            action_id: 'main-1',
+            origin: 'main_tool',
+            run_id: 'run-parent',
+            tool_id: 'tool-main',
+            tool_name: 'file.write',
             state: 'requested',
             status: 'pending',
             revision: 1,
             version: 1,
-            surface_epoch: 1,
-            surface_role: 'primary_action',
-            requested_at_unix_ms: 3000,
-            can_approve: true,
-            delivery_state: 'waiting_decision',
-            child_execution_state: 'pending',
-            delegated_ref: delegatedRef,
-            summary: { label: 'Run command' },
+            surface_epoch: 2,
+            scope: 'thread:th-live',
+            queue_generation: 2,
+            queue_order: 2,
+            batch_index: 0,
+            batch_size: 1,
+            expected_seq: 1,
+            requested_at_unix_ms: 3100,
+            can_approve: false,
+            summary: { label: 'Write file' },
+          }],
+          approval_queue: {
+            generation: 2,
+            revision: 3,
+            current_action_id: 'delegated-1',
+            current_position: 1,
+            total: 2,
+            unresolved_count: 2,
           },
         },
       }],
@@ -2218,83 +2184,106 @@ describe('Flower live projection', () => {
 
     const applied = applyEvents(initial, 0, mapped.events);
 
-    expect(applied.thread.approval_actions?.map((action) => action.action_id)).toEqual(['dappr-ref-only']);
-    expect(applied.thread.approval_actions?.[0]).toMatchObject({
+    expect(applied.thread.approval_actions?.map((action) => action.action_id)).toEqual([
+      'control-1',
+      'delegated-1',
+      'main-1',
+    ]);
+    expect(applied.thread.approval_actions?.[1]).toMatchObject({
       origin: 'delegated_subagent',
-      delegated_ref: delegatedRef,
-      surface_role: 'primary_action',
-      can_approve: true,
+      run_id: 'run-child',
+      tool_id: 'tool-child',
+      scope: 'thread:child-thread',
     });
-    expect(applied.thread.approval_actions?.[0].run_id).toBeUndefined();
-    expect(applied.thread.approval_actions?.[0].tool_id).toBeUndefined();
+    expect(applied.thread.approval_actions?.some((action) => action.action_id === 'stale-main')).toBe(false);
+    expect(applied.thread.approval_queue).toMatchObject({ generation: 2, revision: 3 });
+
+    const stale = applyFlowerLiveEvent(applied.thread, applied.cursor, event(2, 'approval.queue_replaced', {
+      actions: [approvalAction({ action_id: 'regressed' })],
+      approval_queue: { generation: 2, revision: 2, current_action_id: 'regressed', current_position: 1, total: 1, unresolved_count: 1 },
+    }));
+    expect(stale.thread).toBe(applied.thread);
+
+    const cleared = applyFlowerLiveEvent(stale.thread, stale.cursor, event(3, 'approval.queue_replaced', {
+      actions: [],
+      approval_queue: { generation: 2, revision: 4, current_position: 0, total: 0, unresolved_count: 0 },
+    }));
+    expect(cleared.thread.approval_actions?.map((action) => action.action_id)).toEqual(['control-1']);
+    expect(cleared.thread.status).toBe('waiting_approval');
   });
 
-  it('keeps one primary delegated approval surface and promotes the next pending record', () => {
-    const delegatedRef = {
-      parent_thread_id: 'th-live',
-      parent_run_id: 'run-parent',
-      child_thread_id: 'child-thread-1',
-      child_run_id: 'child-run-1',
-      child_tool_call_id: 'tool-child-1',
-      approval_id: 'approval-child-1',
-    };
-    const action = (actionID: string, requestedAtMs: number, childThreadKey: string) => ({
-      action_id: actionID,
-      origin: 'delegated_subagent' as const,
+  it('rejects malformed canonical approval replacements as a unit', () => {
+    const action = {
+      action_id: 'delegated-1',
+      origin: 'delegated_subagent',
+      run_id: 'run-child',
+      tool_id: 'tool-child',
       tool_name: 'terminal.exec',
-      state: 'requested' as const,
-      status: 'pending' as const,
+      state: 'requested',
+      status: 'pending',
       revision: 1,
       version: 1,
-      surface_epoch: 1,
-      surface_role: 'primary_action' as const,
-      primary_wait_anchor: 'thread:th-live',
-      queue_generation: 1,
-      queue_order: actionID === 'dappr-second' ? 1 : 2,
-      requested_at_ms: requestedAtMs,
+      surface_epoch: 3,
+      scope: 'thread:child-thread',
+      queue_generation: 3,
+      queue_order: 1,
+      batch_index: 0,
+      batch_size: 1,
+      requested_at_unix_ms: 3000,
       can_approve: true,
-      delivery_state: 'waiting_decision' as const,
-      child_execution_state: 'pending' as const,
-      delegated_ref: {
-        ...delegatedRef,
-        child_thread_id: `thread-${childThreadKey}`,
-        child_run_id: `run-${childThreadKey}`,
-        child_tool_call_id: `tool-${childThreadKey}`,
-        approval_id: `approval-${childThreadKey}`,
-      },
+      expected_seq: 1,
       summary: { label: 'Run command' },
+    };
+    const queue = {
+      generation: 3,
+      revision: 4,
+      current_action_id: 'delegated-1',
+      current_position: 1,
+      total: 1,
+      unresolved_count: 1,
+    };
+    const malformed = [
+      { actions: [{ ...action, origin: '' }], approval_queue: queue },
+      { actions: [{ ...action, scope: 'child-thread' }], approval_queue: queue },
+      { actions: [{ ...action, queue_generation: 2, surface_epoch: 2 }], approval_queue: queue },
+      { actions: [{ ...action, can_approve: 'yes' }], approval_queue: queue },
+      { actions: [action], approval_queue: { ...queue, generation: Number.NaN } },
+      { actions: [action], approval_queue: { ...queue, current_action_id: 'missing' } },
+      { actions: [action], approval_queue: { ...queue, total: 2 } },
+      { actions: [action, { ...action }], approval_queue: { ...queue, total: 2, unresolved_count: 2 } },
+    ];
+
+    for (const payload of malformed) {
+      expect(() => mapFlowerLiveEvents({
+        events: [{
+          schema_version: 1,
+          seq: 1,
+          endpoint_id: 'runtime',
+          thread_id: 'th-live',
+          run_id: 'run-parent',
+          at_unix_ms: 4000,
+          kind: 'approval.queue_replaced',
+          payload,
+        }],
+        next_cursor: 1,
+        retained_from_seq: 1,
+      })).toThrow(/approval\.queue_replaced/);
+    }
+  });
+
+  it('returns a waiting thread to running when the canonical queue becomes empty', () => {
+    const initial = thread({
+      status: 'waiting_approval',
+      approval_actions: [approvalAction()],
+      approval_queue: { generation: 1, revision: 1, current_action_id: 'appr-1', current_position: 1, total: 1, unresolved_count: 1 },
     });
-    const initial = thread({ status: 'running', permission_type: 'approval_required' });
-    const first = action('dappr-first', 1000, 'first');
-    const second = action('dappr-second', 2000, 'second');
+    const applied = applyFlowerLiveEvent(initial, 0, event(1, 'approval.queue_replaced', {
+      actions: [],
+      approval_queue: { generation: 1, revision: 2, current_position: 0, total: 0, unresolved_count: 0 },
+    }));
 
-    const applied = applyEvents(initial, 0, [
-      event(1, 'approval.requested', { action: second, approval_queue: { generation: 1, revision: 1, current_action_id: 'dappr-second', current_position: 1, total: 1, unresolved_count: 1 } }),
-      event(2, 'approval.requested', { action: { ...first, surface_role: 'locator', can_approve: false }, approval_queue: { generation: 1, revision: 2, current_action_id: 'dappr-second', current_position: 1, total: 2, unresolved_count: 2 } }),
-    ]);
-
-    expect(applied.thread.approval_actions?.map((item) => [item.action_id, item.surface_role, item.primary_wait_anchor])).toEqual([
-      ['dappr-second', 'primary_action', 'thread:th-live'],
-      ['dappr-first', 'locator', 'thread:th-live'],
-    ]);
-
-    const afterResolve = applyEvents(applied.thread, applied.cursor, [
-      event(3, 'approval.resolved', {
-        action: {
-          ...second,
-          state: 'rejected',
-          status: 'resolved',
-          can_approve: false,
-          delivery_state: 'delivery_delivered',
-        },
-        approval_queue: { generation: 1, revision: 3, current_action_id: 'dappr-first', current_position: 2, total: 2, unresolved_count: 1 },
-      }),
-    ]);
-
-    expect(afterResolve.thread.approval_actions?.find((item) => item.action_id === 'dappr-first')).toMatchObject({
-      surface_role: 'primary_action',
-      can_approve: true,
-    });
+    expect(applied.thread.approval_actions).toEqual([]);
+    expect(applied.thread.status).toBe('running');
   });
 
   it('applies normalized reasoning fields from thread patches', () => {
@@ -2396,7 +2385,7 @@ describe('Flower live projection', () => {
     }
   });
 
-  it('maps persisted user message context actions into transcript messages', () => {
+  it('maps ordered canonical user references in bootstrap and ignores admitted context actions', () => {
     const contextAction = {
       schema_version: 2,
       action_id: 'assistant.ask.flower',
@@ -2420,6 +2409,7 @@ describe('Flower live projection', () => {
       thread: {
         thread_id: 'th-live',
         title: 'Live thread',
+        title_status: 'ready',
         model_id: 'openai/gpt-5.2',
         working_dir: '/workspace',
         created_at_unix_ms: 1000,
@@ -2436,6 +2426,10 @@ describe('Flower live projection', () => {
         status: 'complete',
         blocks: [{ type: 'text', content: 'Inspect this env' }],
         context_action: contextAction,
+        references: [
+          { reference_id: 'ref-text', kind: 'text', label: 'Quoted selection', text: '选中的内容', truncated: true },
+          { reference_id: 'ref-file', kind: 'file', label: 'index.ts' },
+        ],
       }],
       live_state: {
         thread_patch: {},
@@ -2452,11 +2446,131 @@ describe('Flower live projection', () => {
       targetLabels: [],
     });
 
-    expect(mapped.timeline_messages[0]?.context_action).toEqual(contextAction);
-    expect(mapped.thread.messages[0]?.context_action).toEqual(contextAction);
+    expect(mapped.timeline_messages[0]?.references).toEqual([
+      { reference_id: 'ref-text', kind: 'text', label: 'Quoted selection', text: '选中的内容', truncated: true },
+      { reference_id: 'ref-file', kind: 'file', label: 'index.ts' },
+    ]);
+    expect(mapped.thread.messages[0]?.references).toEqual(mapped.timeline_messages[0]?.references);
+    expect(mapped.timeline_messages[0]).not.toHaveProperty('context_action');
+    expect(mapped.thread.messages[0]).not.toHaveProperty('context_action');
   });
 
-  it('maps structured thread ownership metadata from bootstrap and live patches', () => {
+  it('projects canonical title status without using the message preview as a title fallback', () => {
+    const mapped = mapFlowerLiveBootstrap({
+      schema_version: 1,
+      endpoint_id: 'runtime',
+      thread_id: 'th-title',
+      cursor: 1,
+      retained_from_seq: 1,
+      thread: {
+        thread_id: 'th-title',
+        title: '',
+        title_status: 'failed',
+        last_message_preview: 'user message must remain a preview',
+        model_id: 'openai/gpt-5.2',
+        working_dir: '/workspace',
+        created_at_unix_ms: 1000,
+        updated_at_unix_ms: 1000,
+        run_status: 'idle',
+      },
+      timeline_messages: [],
+      live_state: { thread_patch: {}, runs: {}, approval_actions: {}, input_requests: {} },
+      read_status: readStatus(),
+      generated_at_ms: 3000,
+    }, {
+      runtimeID: 'runtime',
+      runtimeKind: 'env_local',
+      sourceLabel: 'Local',
+      targetLabels: [],
+    });
+    expect(mapped.thread.title).toBe('');
+    expect(mapped.thread.title_status).toBe('failed');
+
+    const patched = applyFlowerLiveEvent(mapped.thread, 1, {
+      schema_version: 1,
+      seq: 2,
+      endpoint_id: 'runtime',
+      thread_id: 'th-title',
+      at_unix_ms: 4000,
+      kind: 'thread.patched',
+      payload: { patch: { title: '', title_status: 'pending' } },
+    });
+    expect(patched.thread.title).toBe('');
+    expect(patched.thread.title_status).toBe('pending');
+  });
+
+  it.each([undefined, '', 'unknown'])('rejects missing or invalid canonical title status %s', (titleStatus) => {
+    expect(() => mapFlowerLiveBootstrap({
+      schema_version: 1,
+      endpoint_id: 'runtime',
+      thread_id: 'th-title-contract',
+      cursor: 1,
+      retained_from_seq: 1,
+      thread: {
+        thread_id: 'th-title-contract',
+        title: '',
+        ...(titleStatus !== undefined ? { title_status: titleStatus } : {}),
+        model_id: 'openai/gpt-5.2',
+        working_dir: '/workspace',
+        created_at_unix_ms: 1000,
+        updated_at_unix_ms: 1000,
+        run_status: 'idle',
+      },
+      timeline_messages: [],
+      live_state: { thread_patch: {}, runs: {}, approval_actions: {}, input_requests: {} },
+      read_status: readStatus(),
+      generated_at_ms: 3000,
+    }, {
+      runtimeID: 'runtime',
+      runtimeKind: 'env_local',
+      sourceLabel: 'Local',
+      targetLabels: [],
+    })).toThrow(/title_status/);
+  });
+
+  it('maps canonical references from live timeline replacement', () => {
+    const mapped = mapFlowerLiveEvents({
+      events: [{
+        schema_version: 1,
+        seq: 2,
+        endpoint_id: 'runtime',
+        thread_id: 'th-live',
+        run_id: 'run-1',
+        turn_id: 'turn-user',
+        at_unix_ms: 4000,
+        kind: 'timeline.replaced',
+        payload: {
+          messages: [{
+            id: 'msg-reference-only',
+            thread_id: 'th-live',
+            turn_id: 'turn-user',
+            run_id: 'run-1',
+            role: 'user',
+            timestamp: 1000,
+            status: 'complete',
+            blocks: [],
+            references: [
+              { reference_id: 'ref-terminal', kind: 'terminal', label: 'Terminal output', text: 'PASS' },
+              { reference_id: 'ref-process', kind: 'process', label: 'node (4242)' },
+            ],
+          }],
+          stream_generation: 1,
+          snapshot_through_seq: 2,
+        },
+      }],
+      next_cursor: 2,
+      retained_from_seq: 1,
+    });
+
+    expect(mapped.events[0]?.kind).toBe('timeline.replaced');
+    if (mapped.events[0]?.kind !== 'timeline.replaced') throw new Error('expected timeline replacement');
+    expect(mapped.events[0].payload.messages[0]?.references?.map((reference) => reference.reference_id)).toEqual([
+      'ref-terminal',
+      'ref-process',
+    ]);
+  });
+
+  it('ignores legacy Redeven thread ownership shadow fields', () => {
     const mapped = mapFlowerLiveBootstrap(bootstrap({
       thread: {
         ...thread(),
@@ -2474,9 +2588,9 @@ describe('Flower live projection', () => {
       targetLabels: [],
     });
 
-    expect(mapped.thread.owner_kind).toBe('product_detail');
-    expect(mapped.thread.owner_id).toBe('redeven');
-    expect(mapped.thread.parent_thread_id).toBe('parent-thread');
+    expect(mapped.thread).not.toHaveProperty('owner_kind');
+    expect(mapped.thread).not.toHaveProperty('owner_id');
+    expect(mapped.thread).not.toHaveProperty('parent_thread_id');
 
     const patched = applyFlowerLiveEvent(mapped.thread, mapped.cursor, event(2, 'thread.patched', {
       patch: {
@@ -2484,11 +2598,12 @@ describe('Flower live projection', () => {
         owner_id: 'redeven',
         parent_thread_id: 'parent-thread-2',
         read_only_reason: 'Updated localized copy.',
-      },
+      } as unknown as FlowerLiveThreadPatch,
     }));
 
-    expect(patched.thread.owner_kind).toBe('product_detail');
-    expect(patched.thread.parent_thread_id).toBe('parent-thread-2');
+    expect(patched.thread).not.toHaveProperty('owner_kind');
+    expect(patched.thread).not.toHaveProperty('owner_id');
+    expect(patched.thread).not.toHaveProperty('parent_thread_id');
     expect(patched.thread.read_only_reason).toBe('Updated localized copy.');
   });
 
@@ -2584,6 +2699,7 @@ describe('Flower live projection', () => {
       thread: {
         thread_id: 'th-live',
         title: 'Live thread',
+        title_status: 'ready',
         model_id: 'openai/gpt-5.2',
         working_dir: '/workspace',
         created_at_unix_ms: 1000,
@@ -2676,6 +2792,7 @@ describe('Flower live projection', () => {
       thread: {
         thread_id: 'th-live',
         title: 'Live thread',
+        title_status: 'ready',
         model_id: 'openai/gpt-5.2',
         working_dir: '/workspace',
         created_at_unix_ms: 1000,
@@ -3208,6 +3325,7 @@ describe('Flower live projection', () => {
       thread: {
         thread_id: 'th-live',
         title: 'Live thread',
+        title_status: 'ready',
         model_id: 'openai/gpt-5.2',
         working_dir: '/workspace',
         created_at_unix_ms: 1000,
@@ -3254,6 +3372,7 @@ describe('Flower live projection', () => {
       thread: {
         thread_id: 'th-live',
         title: 'Live thread',
+        title_status: 'ready',
         model_id: 'openai/gpt-5.2',
         working_dir: '/workspace',
         created_at_unix_ms: 1000,
@@ -3306,6 +3425,7 @@ describe('Flower live projection', () => {
       thread: {
         thread_id: 'th-live',
         title: 'Live thread',
+        title_status: 'ready',
         model_id: 'openai/gpt-5.2',
         working_dir: '/workspace',
         created_at_unix_ms: 1000,

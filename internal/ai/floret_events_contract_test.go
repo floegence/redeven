@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -52,6 +53,7 @@ func TestValidateFloretRuntimeEventAcceptsCanonicalTitleLifecycleIdentity(t *tes
 	r.expectFloretRuntimeEventIdentity("run-1", "thread-1", "turn-1", true)
 	titleEvent := flruntime.Event{
 		Type:     observation.EventTypeThreadTitleUpdated,
+		RunID:    "run-1",
 		ThreadID: "thread-1",
 		TurnID:   "turn-1",
 		Message:  "Canonical title",
@@ -72,9 +74,23 @@ func TestValidateFloretRuntimeEventAcceptsCanonicalTitleLifecycleIdentity(t *tes
 	}
 
 	manualTitleEvent := titleEvent
+	manualTitleEvent.RunID = ""
 	manualTitleEvent.TurnID = ""
 	if err := r.validateFloretRuntimeEvent(manualTitleEvent); err != nil {
 		t.Fatalf("validate thread-scoped manual title event: %v", err)
+	}
+
+	pendingTitleEvent := titleEvent
+	pendingTitleEvent.Type = observation.EventTypeThreadTitlePending
+	pendingTitleEvent.Message = ""
+	if err := r.validateFloretRuntimeEvent(pendingTitleEvent); err != nil {
+		t.Fatalf("validate canonical pending title event: %v", err)
+	}
+
+	partialIdentity := titleEvent
+	partialIdentity.RunID = ""
+	if err := r.validateFloretRuntimeEvent(partialIdentity); err == nil {
+		t.Fatal("title event with partial execution identity was accepted")
 	}
 }
 
@@ -149,6 +165,121 @@ func TestFloretEventSinkStartsLiveDraftAfterCanonicalIdentityValidation(t *testi
 	}
 	if rejected.floretContractError() == nil {
 		t.Fatal("mismatched event did not abort Floret contract processing")
+	}
+}
+
+func TestFloretEventSinkPublishesCanonicalEmptyApprovalQueueAfterDetach(t *testing.T) {
+	t.Parallel()
+
+	host := &recordingFloretHost{approvalQueue: flruntime.ApprovalQueue{
+		RootThreadID: "thread-detached-approval",
+		Generation:   2,
+		Revision:     4,
+		Items:        []flruntime.ApprovalRecord{},
+		GeneratedAt:  time.Now(),
+	}}
+	var events []any
+	var stateBroadcasts, summaryBroadcasts int
+	r := newRun(runOptions{
+		RunID:     "run-detached-approval",
+		ThreadID:  "thread-detached-approval",
+		TurnID:    "turn-detached-approval",
+		MessageID: "turn-detached-approval",
+		HostCapabilities: runHostCapabilities{
+			authorityThreadID: "thread-detached-approval",
+			broadcastThreadState: func(string, string, string, string) {
+				stateBroadcasts++
+			},
+			broadcastThreadSummary: func() error {
+				summaryBroadcasts++
+				return nil
+			},
+		},
+		OnStreamEvent: func(event any) { events = append(events, event) },
+	})
+	r.setActiveFloretHost(host)
+	r.expectFloretRuntimeEventIdentity(r.id, r.threadID, r.turnID, true)
+	r.markDetached()
+
+	floretEventSink{run: r}.EmitEvent(flruntime.Event{
+		Type:     observation.EventTypeToolApprovalCanceled,
+		RunID:    flruntime.RunID(r.id),
+		ThreadID: flruntime.ThreadID(r.threadID),
+		TurnID:   flruntime.TurnID(r.turnID),
+		ToolID:   "tool-canceled",
+		ToolName: "terminal.exec",
+	})
+
+	if len(events) != 1 {
+		t.Fatalf("detached approval events=%#v, want one canonical queue replacement", events)
+	}
+	queueEvent, ok := events[0].(streamEventApprovalQueue)
+	if !ok || len(queueEvent.Actions) != 0 || queueEvent.ApprovalQueue.Generation != 2 || queueEvent.ApprovalQueue.Revision != 4 {
+		t.Fatalf("detached approval event=%T %#v", events[0], events[0])
+	}
+	r.sendStreamEvent(streamEventBlockDelta{Type: "text-delta", MessageID: r.messageID, BlockIndex: 0, Delta: "must stay hidden"})
+	if len(events) != 1 {
+		t.Fatalf("detached non-authoritative presentation leaked: %#v", events)
+	}
+	if stateBroadcasts != 0 || summaryBroadcasts != 0 {
+		t.Fatalf("detached queue replacement broadcast state=%d summary=%d", stateBroadcasts, summaryBroadcasts)
+	}
+}
+
+func TestApprovalThreadStateAggregatesCanonicalQueueAndControlConfirmation(t *testing.T) {
+	t.Parallel()
+
+	var statuses []string
+	r := newRun(runOptions{
+		EndpointID: "env-approval-state",
+		RunID:      "run-approval-state",
+		ThreadID:   "thread-approval-state",
+		HostCapabilities: runHostCapabilities{
+			broadcastThreadState: func(_ string, status string, _ string, _ string) {
+				statuses = append(statuses, status)
+			},
+			broadcastThreadSummary: func() error { return nil },
+		},
+	})
+	r.mu.Lock()
+	r.toolApprovals["control-1"] = &toolApprovalRequest{decision: make(chan bool, 1)}
+	r.mu.Unlock()
+
+	r.publishThreadApprovalStateForCanonicalQueue(nil)
+	r.mu.Lock()
+	r.toolApprovals["control-1"].resolved = true
+	r.mu.Unlock()
+	r.publishThreadApprovalStateForCanonicalQueue([]FlowerApprovalAction{{ActionID: "canonical-1"}})
+	r.publishThreadApprovalStateForCanonicalQueue(nil)
+	r.markDetached()
+	r.publishThreadApprovalStateForCanonicalQueue([]FlowerApprovalAction{{ActionID: "canonical-detached"}})
+
+	want := []string{string(RunStateWaitingApproval), string(RunStateWaitingApproval), string(RunStateRunning)}
+	if !reflect.DeepEqual(statuses, want) {
+		t.Fatalf("approval state broadcasts=%#v, want %#v", statuses, want)
+	}
+
+	var raced *run
+	var racedStatuses []string
+	raced = newRun(runOptions{
+		EndpointID: "env-approval-race",
+		RunID:      "run-approval-race",
+		ThreadID:   "thread-approval-race",
+		HostCapabilities: runHostCapabilities{
+			broadcastThreadState: func(_ string, status string, _ string, _ string) {
+				racedStatuses = append(racedStatuses, status)
+				if status == string(RunStateRunning) {
+					raced.mu.Lock()
+					raced.toolApprovals["control-race"] = &toolApprovalRequest{decision: make(chan bool, 1)}
+					raced.mu.Unlock()
+				}
+			},
+			broadcastThreadSummary: func() error { return nil },
+		},
+	})
+	raced.publishThreadApprovalStateForCanonicalQueue(nil)
+	if wantRace := []string{string(RunStateRunning), string(RunStateWaitingApproval)}; !reflect.DeepEqual(racedStatuses, wantRace) {
+		t.Fatalf("raced approval state broadcasts=%#v, want %#v", racedStatuses, wantRace)
 	}
 }
 

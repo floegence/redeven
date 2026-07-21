@@ -21,6 +21,21 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	if r == nil {
 		return errors.New("nil run")
 	}
+	// A run canceled before RunTurn admission never owns canonical Floret
+	// authority, but Stop still needs a one-way proof that this execution path
+	// has finished attempting to acquire it. Once RunTurn starts, only its exact
+	// validated terminal result may publish a successful authority release.
+	authorityReleasePublished := false
+	defer func() {
+		if authorityReleasePublished {
+			return
+		}
+		if r.floretRunTurnStarted.Load() {
+			r.floretAuthorityBarrier.release(errors.New("Floret RunTurn exited without an exact terminal authority proof"))
+			return
+		}
+		r.floretAuthorityBarrier.release(nil)
+	}()
 	providerType := strings.ToLower(strings.TrimSpace(providerCfg.Type))
 	_, modelName, ok := strings.Cut(strings.TrimSpace(req.Model), "/")
 	if !ok {
@@ -127,7 +142,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		},
 		r.webSearchMode,
 		withFloretAttachmentResolver(r.resolveFloretMessageAttachment, req.ModelCapability.SupportsImageInput, req.ModelCapability.SupportsFileInput),
-		withFloretBeforeRequest(r.floretContractError),
+		withFloretRequestAdmission(r.admitFloretProviderRequest),
 	)
 	completionPolicy := flruntime.TurnCompletionNaturalStop
 	controlSpec, err := newFloretControlSpec(r, sharedState, initialSurface.ControlTools, taskComplexity)
@@ -147,11 +162,11 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	if err != nil {
 		return r.failRun("Failed to initialize Floret model identity", err)
 	}
-	supplementalContext, err := floretSupplementalContextForInput(req.Input)
+	contextProjection, err := floretContextProjectionForInputWithAuthority(req.Input, r.canonicalReferenceAuthority)
 	if err != nil {
 		return r.failRun("Failed to prepare linked context", err)
 	}
-	turnInput, err := r.floretTurnInput(ctx, req.Input)
+	turnInput, err := r.floretTurnInput(ctx, req.Input, contextProjection.References)
 	if err != nil {
 		return r.failRun("Failed to prepare message attachments", err)
 	}
@@ -186,15 +201,13 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	threadID := flruntime.ThreadID(strings.TrimSpace(r.threadID))
 	r.expectFloretRuntimeEventIdentity(r.id, r.threadID, r.turnID, true)
 	r.emitLifecyclePhase("executing", map[string]any{"engine": "floret"})
-	if payload := floretContextActionInjectedEventPayload(req.Input.ContextAction, supplementalContext); payload != nil {
-		r.recordRunDiagnostic("flower.context_action.injected", RealtimeStreamKindLifecycle, payload)
-	}
+	r.floretRunTurnStarted.Store(true)
 	result, err := turnHost.RunTurn(ctx, flruntime.RunTurnRequest{
 		RunID:               flruntime.RunID(strings.TrimSpace(r.id)),
 		ThreadID:            threadID,
 		TurnID:              flruntime.TurnID(strings.TrimSpace(r.turnID)),
 		Input:               turnInput,
-		SupplementalContext: supplementalContext.Items,
+		SupplementalContext: contextProjection.Items,
 		Labels:              labels,
 		Completion:          completionPolicy,
 		Signals:             controlSpec,
@@ -207,11 +220,20 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		Reasoning:         req.Options.ReasoningSelection,
 		ManualCompactions: r,
 	})
+	authorityErr := validateFloretAuthorityRelease(r, result)
+	r.floretAuthorityBarrier.release(authorityErr)
+	authorityReleasePublished = true
 	if contractErr := r.floretContractError(); contractErr != nil {
 		if r.isDetached() {
 			return nil
 		}
 		return r.failRunWithCode(runErrorCodeFloretEngineFailed, "", contractErr)
+	}
+	if authorityErr != nil && result.Status == "" {
+		if r.isDetached() {
+			return nil
+		}
+		return r.failRunWithCode(runErrorCodeFloretEngineFailed, "", authorityErr)
 	}
 	projectionUnavailable := false
 	if result.Status != "" {
@@ -275,9 +297,8 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	if err != nil {
 		switch result.Status {
 		case flruntime.TurnStatusFailed:
-			// The returned error is the execution outcome. Result.Error is a
-			// diagnostic projection of that error and must not replace it.
-			result.Error = err.Error()
+			// Floret's typed canonical failure remains authoritative. The returned
+			// error may wrap the same failure but must not replace its stable code.
 		case flruntime.TurnStatusCancelled:
 			// Cancellation keeps its product lifecycle projection below.
 		default:
@@ -310,6 +331,24 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		r.recordRuntimeTurnUsage(flowerUsageFromFloret(result.Metrics.ProviderUsage), 0)
 	}
 	return r.projectFloretResult(ctx, result, req)
+}
+
+func validateFloretAuthorityRelease(r *run, result flruntime.TurnResult) error {
+	if r == nil {
+		return errors.New("Floret authority release run is unavailable")
+	}
+	if err := result.Validate(); err != nil {
+		return fmt.Errorf("Floret authority release result is invalid: %w", err)
+	}
+	if strings.TrimSpace(string(result.ThreadID)) != strings.TrimSpace(r.threadID) ||
+		strings.TrimSpace(string(result.TurnID)) != strings.TrimSpace(r.turnID) ||
+		strings.TrimSpace(string(result.RunID)) != strings.TrimSpace(r.id) {
+		return errors.New("Floret authority release identity does not match exact run")
+	}
+	if !result.Status.IsTerminal() {
+		return fmt.Errorf("Floret authority release status %q is not terminal", result.Status)
+	}
+	return nil
 }
 
 func (r *run) floretParentTerminalSubagentCloseReason(ctx context.Context, result flruntime.TurnResult, runErr error) string {
@@ -442,10 +481,7 @@ func (r *run) projectFloretResult(ctx context.Context, result flruntime.TurnResu
 	case flruntime.TurnStatusCancelled:
 		return r.projectFloretCancelledResult(ctx, step)
 	case flruntime.TurnStatusFailed:
-		resultErr := errors.New(strings.TrimSpace(result.Error))
-		if strings.TrimSpace(result.Error) == "" {
-			resultErr = errors.New("floret host turn failed")
-		}
+		resultErr := errors.New(floretTurnFailureMessage(result))
 		if finishReason := floretFailureFinishReason(result); finishReason != "" {
 			r.persistFloretHostTurnResult(step, result, finishReason)
 			return r.failReplyFinish(step, finishReason, floretFailureFinalizationReason(finishReason), floretFailureMessage(finishReason))
@@ -537,10 +573,19 @@ func floretFailureFinishReason(result flruntime.TurnResult) string {
 	if classifyReplyFinish(finishReason) == replyFinishClassBlocked {
 		return finishReason
 	}
-	if strings.Contains(strings.ToLower(result.Error), "content filtered") {
+	if strings.Contains(strings.ToLower(floretTurnFailureMessage(result)), "content filtered") {
 		return "content_filter"
 	}
 	return ""
+}
+
+func floretTurnFailureMessage(result flruntime.TurnResult) string {
+	if result.Failure != nil {
+		if message := strings.TrimSpace(result.Failure.Message); message != "" {
+			return message
+		}
+	}
+	return "floret host turn failed"
 }
 
 func floretFailureFinalizationReason(finishReason string) string {

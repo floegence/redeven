@@ -4,6 +4,7 @@ import { fetchLocalApiJSON } from '../services/localApi';
 import type { AgentSettingsResponse, AIConfig, AIModelProfile } from '../pages/settings/types';
 import type {
   FlowerApprovalDecisionReceipt,
+  FlowerCanonicalReferenceOpenRequest,
   FlowerProvider,
   FlowerProviderDraft,
   FlowerProviderModel,
@@ -19,6 +20,7 @@ import type {
   FlowerThreadReadStatus,
   FlowerLiveBootstrap,
 } from '../../../../../flower_ui/src/contracts/flowerSurfaceContracts';
+import type { FlowerCanonicalReferenceNavigationTarget } from './linkedContextNavigation';
 import { requireAskFlowerContextActionEnvelope } from '../contextActions/protocol';
 import { mapFlowerLiveBootstrap } from '../../../../../flower_ui/src/flowerLiveMapper';
 import { createRuntimeFlowerSurfaceAdapter } from '../../../../../flower_ui/src/runtimeFlowerSurfaceAdapter';
@@ -42,6 +44,7 @@ type EnvLocalFlowerSurfaceAdapterOptions = Readonly<{
   uploadAttachment?: (file: File) => Promise<string>;
   openFileBrowser?: FlowerSurfaceAdapter['openFileBrowser'];
   openFilePreview?: FlowerSurfaceAdapter['openFilePreview'];
+  openCanonicalReferenceTarget?: (target: FlowerCanonicalReferenceNavigationTarget) => Promise<void>;
   openLinkedFilePreview?: FlowerSurfaceAdapter['openLinkedFilePreview'];
   openLinkedDirectoryBrowser?: FlowerSurfaceAdapter['openLinkedDirectoryBrowser'];
   modelSourceRecovery?: FlowerModelSourceRecovery;
@@ -98,6 +101,23 @@ type FlowerSecretPatch = Readonly<{ provider_id: string; api_key: string | null 
 
 function trim(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+function parseCanonicalReferenceOpenTarget(raw: unknown): FlowerCanonicalReferenceNavigationTarget {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error('Flower canonical reference open target is invalid.');
+  }
+  const target = raw as Record<string, unknown>;
+  const kind = trim(target.kind);
+  const path = trim(target.path);
+  if ((kind !== 'file' && kind !== 'directory') || !path || (target.label !== undefined && typeof target.label !== 'string')) {
+    throw new Error('Flower canonical reference open target is invalid.');
+  }
+  return {
+    kind,
+    label: trim(target.label),
+    path,
+  };
 }
 
 function adapterCopy(options: EnvLocalFlowerSurfaceAdapterOptions): EnvLocalFlowerSurfaceAdapterCopy {
@@ -430,10 +450,32 @@ function profileContainsModel(snapshot: FlowerSettingsSnapshot, modelID: string)
 
 export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfaceAdapterOptions): FlowerSurfaceAdapter {
   const copy = adapterCopy(options);
+  const openCanonicalReferenceTarget = options.openCanonicalReferenceTarget;
   const loadThread = async (threadID: string) => mapEnvFlowerLiveBootstrap(
     await fetchLocalApiJSON<unknown>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(trim(threadID))}/live/bootstrap`, { method: 'GET' }),
     options,
   );
+  const openCanonicalReference = openCanonicalReferenceTarget
+    ? async (request: FlowerCanonicalReferenceOpenRequest): Promise<void> => {
+        const threadID = trim(request.thread_id);
+        const turnID = trim(request.turn_id);
+        const referenceID = trim(request.reference_id);
+        if (!threadID) throw new Error(copy.missingThreadID);
+        if (!turnID) throw new Error('Missing Flower turn id.');
+        if (!referenceID) throw new Error('Missing Flower reference id.');
+        const target = parseCanonicalReferenceOpenTarget(await fetchLocalApiJSON<unknown>(
+          `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/reference-open-target`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              turn_id: turnID,
+              reference_id: referenceID,
+            }),
+          },
+        ));
+        await openCanonicalReferenceTarget(target);
+      }
+    : undefined;
 
   return createRuntimeFlowerSurfaceAdapter({
     runtime: {
@@ -681,6 +723,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
     failedToCreateThread: copy.failedToCreateChat,
     ...(options.openFileBrowser ? { openFileBrowser: options.openFileBrowser } : {}),
     ...(options.openFilePreview ? { openFilePreview: options.openFilePreview } : {}),
+    ...(openCanonicalReference ? { openCanonicalReference } : {}),
     ...(options.openLinkedFilePreview ? { openLinkedFilePreview: options.openLinkedFilePreview } : {}),
     ...(options.openLinkedDirectoryBrowser ? { openLinkedDirectoryBrowser: options.openLinkedDirectoryBrowser } : {}),
     ...(options.modelSourceRecovery ? { modelSourceRecovery: options.modelSourceRecovery } : {}),

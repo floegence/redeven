@@ -24,6 +24,7 @@ export const flowerSurfaceEnUS = {
     reasoningLabel: 'Reasoning',
     noModelSelected: 'No model selected',
     linkedContextLabel: 'Linked context',
+		truncatedLabel: 'Truncated',
     permissionSelectorLabel: 'Thread permission',
     permissionSelectorSaving: 'Saving permission...',
     permissionSelectorErrorTitle: 'Flower could not save permission.',

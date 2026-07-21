@@ -2,12 +2,8 @@ package ai
 
 import (
 	"encoding/json"
-	"errors"
-	"reflect"
 	"strings"
 	"testing"
-
-	"github.com/floegence/redeven/internal/session"
 )
 
 func assertFlowerApprovalReceiptCursor(t *testing.T, svc *Service, endpointID string, threadID string, actionID string, resp *SubmitFlowerApprovalResponse) {
@@ -25,12 +21,17 @@ func assertFlowerApprovalReceiptCursor(t *testing.T, svc *Service, endpointID st
 		if event.Seq != resp.CurrentCursor {
 			continue
 		}
-		if event.Kind != FlowerLiveApprovalResolved {
-			t.Fatalf("receipt cursor event kind=%q, want %q", event.Kind, FlowerLiveApprovalResolved)
+		if event.Kind != FlowerLiveApprovalQueueReplaced {
+			t.Fatalf("receipt cursor event kind=%q, want %q", event.Kind, FlowerLiveApprovalQueueReplaced)
 		}
-		var payload FlowerLiveApprovalPayload
-		if !decodeFlowerPayload(event.Payload, &payload) || payload.Action.ActionID != actionID {
-			t.Fatalf("receipt cursor payload=%s, want action %q", string(event.Payload), actionID)
+		var payload FlowerLiveApprovalQueuePayload
+		if !decodeFlowerPayload(event.Payload, &payload) {
+			t.Fatalf("receipt cursor payload=%s, want canonical queue replacement", string(event.Payload))
+		}
+		for _, action := range payload.Actions {
+			if action.ActionID == actionID {
+				t.Fatalf("resolved action %q remains in canonical queue replacement", actionID)
+			}
 		}
 		return
 	}
@@ -56,6 +57,47 @@ func TestFlowerTimelineMessageFromRawExtractsJSONBlockContent(t *testing.T) {
 	}
 	if got := strings.TrimSpace(msg.Content); got != "visible answer" {
 		t.Fatalf("Content=%q, want visible answer", got)
+	}
+}
+
+func TestFlowerTimelineMessageFromRawPreservesSafeCanonicalReferences(t *testing.T) {
+	t.Parallel()
+
+	msg, ok, err := flowerTimelineMessageFromRaw("thread_reference", "turn_reference", "run_reference", "entry_reference", json.RawMessage(`{
+		"id":"entry_reference",
+		"turn_id":"turn_reference",
+		"role":"user",
+		"status":"complete",
+		"timestamp":123,
+		"blocks":[],
+		"references":[
+			{"reference_id":"context:0","kind":"file","label":"main.ts"},
+			{"reference_id":"context:1","kind":"text","label":"Quote","text":"visible excerpt","truncated":true}
+		]
+	}`))
+	if err != nil {
+		t.Fatalf("flowerTimelineMessageFromRaw: %v", err)
+	}
+	if !ok || len(msg.References) != 2 || msg.References[0].Text != "" || msg.References[1].Text != "visible excerpt" || !msg.References[1].Truncated {
+		t.Fatalf("message=%#v, want reference-only canonical user message", msg)
+	}
+}
+
+func TestFlowerTimelineMessageFromRawRejectsHostReferenceFields(t *testing.T) {
+	t.Parallel()
+
+	for _, field := range []string{"text", "path", "resource_ref", "target"} {
+		t.Run(field, func(t *testing.T) {
+			t.Parallel()
+			value := `"sentinel"`
+			if field == "target" {
+				value = `{"target_id":"local"}`
+			}
+			raw := json.RawMessage(`{"id":"entry_reference","turn_id":"turn_reference","role":"user","status":"complete","timestamp":123,"blocks":[],"references":[{"reference_id":"context:0","kind":"file","label":"main.ts","` + field + `":` + value + `}]}`)
+			if _, ok, err := flowerTimelineMessageFromRaw("thread_reference", "turn_reference", "run_reference", "entry_reference", raw); err == nil || ok {
+				t.Fatalf("forbidden %s field was accepted: err=%v ok=%v", field, err, ok)
+			}
+		})
 	}
 }
 
@@ -357,359 +399,130 @@ func TestFlowerLiveThreadPatchSerializesExplicitEmptySubagents(t *testing.T) {
 	}
 }
 
-func TestFlowerLiveProjectionKeepsResolvedDelegatedAuditActions(t *testing.T) {
-	delegated := FlowerApprovalAction{
-		ActionID:     "dappr_delivered",
-		Origin:       FlowerApprovalOriginDelegatedSubagent,
-		ToolName:     "terminal.exec",
-		State:        FlowerApprovalStateApproved,
-		Status:       FlowerApprovalStatusResolved,
-		Version:      2,
-		SurfaceEpoch: 1,
-		CanApprove:   false,
-		DelegatedRef: &DelegatedApprovalRef{
-			ParentThreadID:  "thread_parent",
-			ParentRunID:     "run_parent",
-			ChildThreadID:   "thread_child",
-			ChildRunID:      "run_child",
-			ChildToolCallID: "tool_child",
-			ApprovalID:      "approval_child",
-		},
-		DeliveryState: FlowerApprovalDeliveryDelivered,
-		Summary:       FlowerApprovalSummary{Label: "Shell"},
-	}
-	main := FlowerApprovalAction{
-		ActionID:     "appr_main",
-		Origin:       FlowerApprovalOriginMainTool,
-		RunID:        "run_main",
-		ToolID:       "tool_main",
-		ToolName:     "terminal.exec",
-		State:        FlowerApprovalStateApproved,
-		Status:       FlowerApprovalStatusResolved,
-		Version:      2,
-		SurfaceEpoch: 1,
-		CanApprove:   false,
-		Summary:      FlowerApprovalSummary{Label: "Shell"},
-	}
-	state := FlowerLiveMaterializedState{
-		Runs:            map[string]FlowerLiveRunState{},
-		Messages:        map[string]FlowerLiveMessageDraft{},
-		ApprovalActions: map[string]FlowerApprovalAction{delegated.ActionID: delegated, main.ActionID: main},
-		InputRequests:   map[string]RequestUserInputPrompt{},
-	}
-	approvals := map[string]FlowerApprovalState{}
-	applyFlowerLiveEventToMaterializedState(&state, approvals, FlowerLiveEvent{
-		Kind:    FlowerLiveApprovalResolved,
-		Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: delegated}),
-	})
-	applyFlowerLiveEventToMaterializedState(&state, approvals, FlowerLiveEvent{
-		Kind:    FlowerLiveApprovalResolved,
-		Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: main}),
-	})
-
-	if got, ok := state.ApprovalActions[delegated.ActionID]; !ok || got.Status != FlowerApprovalStatusResolved || got.DeliveryState != FlowerApprovalDeliveryDelivered || got.CanApprove {
-		t.Fatalf("delegated resolved audit action=%#v, want retained resolved non-actionable", got)
-	}
-	if _, ok := state.ApprovalActions[main.ActionID]; ok {
-		t.Fatalf("main resolved approval should be removed from live pending/audit actions: %#v", state.ApprovalActions[main.ActionID])
-	}
-}
-
-func TestFlowerLiveProjectionKeepsSinglePrimaryDelegatedApprovalSurface(t *testing.T) {
-	first := FlowerApprovalAction{
-		ActionID:      "dappr_first",
-		Origin:        FlowerApprovalOriginDelegatedSubagent,
-		ToolName:      "terminal.exec",
-		State:         FlowerApprovalStateRequested,
-		Status:        FlowerApprovalStatusPending,
-		Version:       1,
-		SurfaceEpoch:  1,
-		RequestedAtMs: 100,
-		CanApprove:    true,
-		DelegatedRef: &DelegatedApprovalRef{
-			ParentThreadID:  "thread_parent",
-			ParentRunID:     "run_parent",
-			ChildThreadID:   "thread_child_first",
-			ChildRunID:      "run_child_first",
-			ChildToolCallID: "tool_child_first",
-			ApprovalID:      "approval_child_first",
-		},
-		DeliveryState:       FlowerApprovalDeliveryWaiting,
-		ChildExecutionState: FlowerApprovalChildExecutionPending,
-		Summary:             FlowerApprovalSummary{Label: "Shell"},
-	}
-	second := first
-	second.ActionID = "dappr_second"
-	second.RequestedAtMs = 200
-	second.DelegatedRef = &DelegatedApprovalRef{
-		ParentThreadID:  "thread_parent",
-		ParentRunID:     "run_parent",
-		ChildThreadID:   "thread_child_second",
-		ChildRunID:      "run_child_second",
-		ChildToolCallID: "tool_child_second",
-		ApprovalID:      "approval_child_second",
-	}
-	state := FlowerLiveMaterializedState{
-		Runs:            map[string]FlowerLiveRunState{},
-		Messages:        map[string]FlowerLiveMessageDraft{},
-		ApprovalActions: map[string]FlowerApprovalAction{},
-		InputRequests:   map[string]RequestUserInputPrompt{},
-	}
-	approvals := map[string]FlowerApprovalState{}
-	applyFlowerLiveEventToMaterializedState(&state, approvals, FlowerLiveEvent{
-		Seq:     10,
-		Kind:    FlowerLiveApprovalRequested,
-		Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: second}),
-	})
-	applyFlowerLiveEventToMaterializedState(&state, approvals, FlowerLiveEvent{
-		Seq:     11,
-		Kind:    FlowerLiveApprovalRequested,
-		Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: first}),
-	})
-	if got := state.ApprovalActions[second.ActionID]; got.SurfaceRole != FlowerApprovalSurfacePrimaryAction || got.PrimaryWaitAnchor != "thread:thread_parent" {
-		t.Fatalf("first registered surface=%q anchor=%q, want primary thread anchor", got.SurfaceRole, got.PrimaryWaitAnchor)
-	}
-	if got := state.ApprovalActions[first.ActionID]; got.SurfaceRole != FlowerApprovalSurfaceLocator || got.PrimaryWaitAnchor != "thread:thread_parent" || got.CanApprove {
-		t.Fatalf("later registered action=%#v, want read-only locator", got)
-	}
-
-	second.State = FlowerApprovalStateRejected
-	second.Status = FlowerApprovalStatusResolved
-	second.CanApprove = false
-	second.DeliveryState = FlowerApprovalDeliveryDelivered
-	applyFlowerLiveEventToMaterializedState(&state, approvals, FlowerLiveEvent{
-		Seq:     12,
-		Kind:    FlowerLiveApprovalResolved,
-		Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: second}),
-	})
-	if got := state.ApprovalActions[first.ActionID]; got.SurfaceRole != FlowerApprovalSurfacePrimaryAction || !got.CanApprove {
-		t.Fatalf("next action after first registered resolved=%#v, want promoted primary", got)
-	}
-}
-
-func TestFlowerApprovalQueueSerializesDecisionsWithoutSerializingHandlers(t *testing.T) {
+func TestFlowerLiveProjectionReplacesCanonicalApprovalQueueAtomically(t *testing.T) {
 	t.Parallel()
-	meta := &session.Meta{EndpointID: "env_queue", UserPublicID: "user_queue", CanRead: true, CanWrite: true, CanExecute: true}
-	svc := &Service{
-		flowerLiveByThread: map[string]*flowerLiveThreadStream{},
-		runs:               map[string]*run{},
-	}
-	r := newRun(runOptions{HostCapabilities: bindTestRunHostCapabilities(t, svc, meta.EndpointID, "thread_queue"), RunID: "run_queue", EndpointID: meta.EndpointID, ThreadID: "thread_queue", UserPublicID: meta.UserPublicID, MessageID: "msg_queue"})
-	svc.runs[r.id] = r
-	firstDecision := make(chan bool, 1)
-	secondDecision := make(chan bool, 1)
-	r.toolApprovals["tool_first"] = &toolApprovalRequest{decision: firstDecision, promoted: make(chan struct{}), toolName: "task_complete", requestedAtMs: 1}
-	r.toolApprovals["tool_second"] = &toolApprovalRequest{decision: secondDecision, promoted: make(chan struct{}), toolName: "task_complete", requestedAtMs: 2}
-	for _, toolID := range []string{"tool_first", "tool_second"} {
-		action := r.controlConfirmationApprovalActionLocked(toolID, r.toolApprovals[toolID])
-		svc.appendFlowerLiveEvent(FlowerLiveEvent{EndpointID: meta.EndpointID, ThreadID: r.threadID, RunID: r.id, TurnID: r.turnID, Kind: FlowerLiveApprovalRequested, Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: action})})
-	}
 
-	current := func(actionID string) (FlowerApprovalAction, FlowerApprovalQueue) {
-		svc.mu.Lock()
-		defer svc.mu.Unlock()
-		stream := svc.flowerLiveByThread[runThreadKey(meta.EndpointID, r.threadID)]
-		return stream.State.ApprovalActions[actionID], *stream.State.ApprovalQueue
+	svc := &Service{flowerLiveByThread: map[string]*flowerLiveThreadStream{}}
+	endpointID := "env_canonical_queue"
+	threadID := "thread_canonical_queue"
+	control := FlowerApprovalAction{
+		ActionID: "control_action", Origin: FlowerApprovalOriginControlConfirm,
+		RunID: "run_root", ToolID: "control_tool", ToolName: "task_complete",
+		State: FlowerApprovalStateRequested, Status: FlowerApprovalStatusPending,
+		Revision: 1, Version: 1, CanApprove: true, Summary: FlowerApprovalSummary{Label: "Complete task"},
 	}
-	firstID := flowerApprovalActionID(r.id, "tool_first")
-	secondID := flowerApprovalActionID(r.id, "tool_second")
-	first, queue := current(firstID)
-	if queue.CurrentActionID != firstID || queue.UnresolvedCount != 2 || !first.CanApprove || first.ExpiresAtMs <= 0 {
-		t.Fatalf("initial queue=%#v first=%#v", queue, first)
+	stale := FlowerApprovalAction{
+		ActionID: "stale_action", Origin: FlowerApprovalOriginMainTool,
+		RunID: "run_stale", ToolID: "tool_stale", ToolName: "terminal.exec",
+		State: FlowerApprovalStateRequested, Status: FlowerApprovalStatusPending,
+		Revision: 1, Version: 1, CanApprove: true, Summary: FlowerApprovalSummary{Label: "stale"},
 	}
-	second, _ := current(secondID)
-	if second.CanApprove || second.SurfaceRole != FlowerApprovalSurfaceLocator || second.ExpiresAtMs != 0 {
-		t.Fatalf("queued second action=%#v", second)
-	}
-	for name, mutate := range map[string]func(*SubmitFlowerApprovalRequest){
-		"stale_generation": func(req *SubmitFlowerApprovalRequest) { req.QueueGeneration++ },
-		"stale_revision":   func(req *SubmitFlowerApprovalRequest) { req.QueueRevision++ },
-		"stale_version":    func(req *SubmitFlowerApprovalRequest) { req.Version++ },
-		"stale_epoch":      func(req *SubmitFlowerApprovalRequest) { req.SurfaceEpoch++ },
-	} {
-		req := SubmitFlowerApprovalRequest{
-			ThreadID: r.threadID, Origin: FlowerApprovalOriginControlConfirm, RunID: r.id, ActionID: firstID, ToolID: "tool_first",
-			Approved: true, ExpectedSeq: first.ExpectedSeq, Revision: first.Revision, Version: first.Version, SurfaceEpoch: first.SurfaceEpoch,
-			QueueGeneration: queue.Generation, QueueRevision: queue.Revision,
-		}
-		mutate(&req)
-		if _, err := svc.SubmitFlowerApproval(meta, req); !errors.Is(err, ErrApprovalConflict) {
-			t.Fatalf("%s submit error=%v, want ErrApprovalConflict", name, err)
-		}
-		select {
-		case decision := <-firstDecision:
-			t.Fatalf("%s released handler with decision=%v", name, decision)
-		default:
-		}
-	}
-	if _, err := svc.SubmitFlowerApproval(meta, SubmitFlowerApprovalRequest{
-		ThreadID: r.threadID, Origin: FlowerApprovalOriginControlConfirm, RunID: r.id, ActionID: secondID, ToolID: "tool_second",
-		Approved: true, ExpectedSeq: second.ExpectedSeq, Revision: second.Revision, Version: second.Version, SurfaceEpoch: second.SurfaceEpoch,
-		QueueGeneration: queue.Generation, QueueRevision: queue.Revision,
-	}); !errors.Is(err, ErrApprovalConflict) {
-		t.Fatalf("non-head submit error=%v, want ErrApprovalConflict", err)
-	}
-	firstReceipt, err := svc.SubmitFlowerApproval(meta, SubmitFlowerApprovalRequest{
-		ThreadID: r.threadID, Origin: FlowerApprovalOriginControlConfirm, RunID: r.id, ActionID: firstID, ToolID: "tool_first",
-		Approved: true, ExpectedSeq: first.ExpectedSeq, Revision: first.Revision, Version: first.Version, SurfaceEpoch: first.SurfaceEpoch,
-		QueueGeneration: queue.Generation, QueueRevision: queue.Revision,
-	})
-	if err != nil {
-		t.Fatalf("approve head: %v", err)
-	}
-	assertFlowerApprovalReceiptCursor(t, svc, meta.EndpointID, r.threadID, firstID, firstReceipt)
-	select {
-	case approved := <-firstDecision:
-		if !approved {
-			t.Fatal("first decision was rejected")
-		}
-	default:
-		t.Fatal("first waiter was not released immediately")
-	}
-	select {
-	case <-secondDecision:
-		t.Fatal("second waiter released before its decision")
-	default:
-	}
-	second, queue = current(secondID)
-	if queue.CurrentActionID != secondID || queue.UnresolvedCount != 1 || !second.CanApprove || second.ExpiresAtMs <= 0 {
-		t.Fatalf("promoted queue=%#v second=%#v", queue, second)
-	}
-	if _, err := svc.SubmitFlowerApproval(meta, SubmitFlowerApprovalRequest{
-		ThreadID: r.threadID, Origin: FlowerApprovalOriginControlConfirm, RunID: r.id, ActionID: secondID, ToolID: "tool_second",
-		Approved: false, ExpectedSeq: second.ExpectedSeq, Revision: second.Revision, Version: second.Version, SurfaceEpoch: second.SurfaceEpoch,
-		QueueGeneration: queue.Generation, QueueRevision: queue.Revision,
-	}); err != nil {
-		t.Fatalf("reject promoted head: %v", err)
-	}
-	if approved := <-secondDecision; approved {
-		t.Fatal("second decision was approved")
-	}
-	_, queue = current(secondID)
-	if queue.UnresolvedCount != 0 || queue.CurrentActionID != "" {
-		t.Fatalf("settled queue=%#v", queue)
-	}
-}
-
-func TestFlowerApprovalQueueRejectsTimedOutCardWithoutTouchingPromotedAction(t *testing.T) {
-	t.Parallel()
-	meta := &session.Meta{EndpointID: "env_queue_timeout", UserPublicID: "user_queue_timeout", CanRead: true, CanWrite: true, CanExecute: true}
-	svc := &Service{
-		flowerLiveByThread: map[string]*flowerLiveThreadStream{},
-		runs:               map[string]*run{},
-	}
-	r := newRun(runOptions{HostCapabilities: bindTestRunHostCapabilities(t, svc, meta.EndpointID, "thread_queue_timeout"), RunID: "run_queue_timeout", EndpointID: meta.EndpointID, ThreadID: "thread_queue_timeout", UserPublicID: meta.UserPublicID, MessageID: "msg_queue_timeout"})
-	svc.runs[r.id] = r
-	firstDecision := make(chan bool, 1)
-	secondDecision := make(chan bool, 1)
-	r.toolApprovals["tool_first"] = &toolApprovalRequest{decision: firstDecision, promoted: make(chan struct{}), toolName: "task_complete", requestedAtMs: 1}
-	r.toolApprovals["tool_second"] = &toolApprovalRequest{decision: secondDecision, promoted: make(chan struct{}), toolName: "task_complete", requestedAtMs: 2}
-	for _, toolID := range []string{"tool_first", "tool_second"} {
-		action := r.controlConfirmationApprovalActionLocked(toolID, r.toolApprovals[toolID])
-		svc.appendFlowerLiveEvent(FlowerLiveEvent{EndpointID: meta.EndpointID, ThreadID: r.threadID, RunID: r.id, TurnID: r.turnID, Kind: FlowerLiveApprovalRequested, Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: action})})
-	}
-
-	current := func(actionID string) (FlowerApprovalAction, FlowerApprovalQueue) {
-		svc.mu.Lock()
-		defer svc.mu.Unlock()
-		stream := svc.flowerLiveByThread[runThreadKey(meta.EndpointID, r.threadID)]
-		return stream.State.ApprovalActions[actionID], *stream.State.ApprovalQueue
-	}
-	firstID := flowerApprovalActionID(r.id, "tool_first")
-	secondID := flowerApprovalActionID(r.id, "tool_second")
-	first, staleQueue := current(firstID)
-	timedOut := first
-	timedOut.State = FlowerApprovalStateTimedOut
-	timedOut.Status = FlowerApprovalStatusResolved
-	timedOut.CanApprove = false
-	timedOut.ResolvedAtMs = 10
 	svc.appendFlowerLiveEvent(FlowerLiveEvent{
-		EndpointID: meta.EndpointID,
-		ThreadID:   r.threadID,
-		RunID:      r.id,
-		TurnID:     r.turnID,
-		Kind:       FlowerLiveApprovalResolved,
-		Payload:    mustFlowerPayload(FlowerLiveApprovalPayload{Action: timedOut}),
+		EndpointID: endpointID, ThreadID: threadID, RunID: control.RunID,
+		Kind:    FlowerLiveApprovalRequested,
+		Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: control}),
 	})
-
-	secondBefore, promotedQueue := current(secondID)
-	if promotedQueue.CurrentActionID != secondID || promotedQueue.UnresolvedCount != 1 || !secondBefore.CanApprove {
-		t.Fatalf("promoted queue=%#v second=%#v", promotedQueue, secondBefore)
-	}
-	_, err := svc.SubmitFlowerApproval(meta, SubmitFlowerApprovalRequest{
-		ThreadID: r.threadID, Origin: FlowerApprovalOriginControlConfirm, RunID: r.id, ActionID: firstID, ToolID: "tool_first",
-		Approved: true, ExpectedSeq: first.ExpectedSeq, Revision: first.Revision, Version: first.Version, SurfaceEpoch: first.SurfaceEpoch,
-		QueueGeneration: staleQueue.Generation, QueueRevision: staleQueue.Revision,
-	})
-	if !errors.Is(err, ErrApprovalConflict) {
-		t.Fatalf("stale timed-out submit error=%v, want ErrApprovalConflict", err)
-	}
-	secondAfter, queueAfter := current(secondID)
-	if !reflect.DeepEqual(secondAfter, secondBefore) || !reflect.DeepEqual(queueAfter, promotedQueue) {
-		t.Fatalf("stale submit changed promoted action: before=%#v/%#v after=%#v/%#v", secondBefore, promotedQueue, secondAfter, queueAfter)
-	}
-	select {
-	case decision := <-firstDecision:
-		t.Fatalf("stale timed-out submit released first waiter with decision=%v", decision)
-	default:
-	}
-	select {
-	case decision := <-secondDecision:
-		t.Fatalf("stale timed-out submit released promoted waiter with decision=%v", decision)
-	default:
-	}
-}
-
-func TestCancelThreadApprovalQueueResolvesEveryPendingActionWithoutRevisionDrift(t *testing.T) {
-	t.Parallel()
-	endpointID := "env_cancel_queue"
-	threadID := "thread_cancel_queue"
-	svc := &Service{
-		flowerLiveByThread: map[string]*flowerLiveThreadStream{},
-		delegatedApprovals: map[string]*delegatedApprovalHandle{},
-	}
-	for index, actionID := range []string{"action_first", "action_second"} {
-		svc.appendFlowerLiveEvent(FlowerLiveEvent{
-			EndpointID: endpointID,
-			ThreadID:   threadID,
-			RunID:      "run_cancel_queue",
-			Kind:       FlowerLiveApprovalRequested,
-			Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: FlowerApprovalAction{
-				ActionID: actionID, Origin: FlowerApprovalOriginControlConfirm, RunID: "run_cancel_queue", ToolID: actionID, ToolName: "task_complete",
-				State: FlowerApprovalStateRequested, Status: FlowerApprovalStatusPending, Revision: 1, Version: 1, SurfaceEpoch: 1,
-				RequestedAtMs: int64(index + 1), CanApprove: true, BatchIndex: index, BatchSize: 2,
-			}}),
-		})
-	}
 	svc.mu.Lock()
 	stream := svc.flowerLiveByThread[runThreadKey(endpointID, threadID)]
-	beforeRevision := stream.State.ApprovalQueue.Revision
-	svc.cancelThreadApprovalQueueLocked(endpointID, threadID, "run canceled")
-	queue := *stream.State.ApprovalQueue
-	events := append([]FlowerLiveEvent(nil), stream.Events...)
+	stream.State.ApprovalActions[stale.ActionID] = stale
 	svc.mu.Unlock()
 
-	if queue.CurrentActionID != "" || queue.CurrentPosition != 0 || queue.UnresolvedCount != 0 {
-		t.Fatalf("canceled queue=%#v, want empty", queue)
+	delegated := FlowerApprovalAction{
+		ActionID: "child_action", Origin: FlowerApprovalOriginDelegatedSubagent,
+		RunID: "run_child", TurnID: "turn_child", ToolID: "tool_child", ToolName: "terminal.exec",
+		State: FlowerApprovalStateRequested, Status: FlowerApprovalStatusPending,
+		Revision: 3, Version: 3, SurfaceEpoch: 4, SurfaceRole: FlowerApprovalSurfacePrimaryAction,
+		Scope: "thread:thread_child", QueueGeneration: 4, QueueOrder: 8, CanApprove: true,
+		Summary: FlowerApprovalSummary{Label: "child command"},
 	}
-	if queue.Revision != beforeRevision+2 {
-		t.Fatalf("queue revision=%d, want %d", queue.Revision, beforeRevision+2)
+	queued := FlowerApprovalAction{
+		ActionID: "root_action", Origin: FlowerApprovalOriginMainTool,
+		RunID: "run_root", TurnID: "turn_root", ToolID: "tool_root", ToolName: "file.edit",
+		State: FlowerApprovalStateRequested, Status: FlowerApprovalStatusPending,
+		Revision: 1, Version: 1, SurfaceEpoch: 4, SurfaceRole: FlowerApprovalSurfaceLocator,
+		Scope: "thread:" + threadID, QueueGeneration: 4, QueueOrder: 9, CanApprove: false,
+		ReadOnlyReason: "Queued for approval", Summary: FlowerApprovalSummary{Label: "edit file"},
 	}
-	resolved := 0
-	for _, event := range events {
-		if event.Kind != FlowerLiveApprovalResolved {
-			continue
-		}
-		resolved++
-		var payload FlowerLiveApprovalPayload
-		if !decodeFlowerPayload(event.Payload, &payload) || payload.Action.State != FlowerApprovalStateCanceled {
-			t.Fatalf("cancel event payload=%s", event.Payload)
-		}
-		if payload.ApprovalQueue == nil || payload.ApprovalQueue.Revision > queue.Revision {
-			t.Fatalf("cancel event queue=%#v final=%#v", payload.ApprovalQueue, queue)
+	queue := FlowerApprovalQueue{
+		Generation: 4, Revision: 9, CurrentActionID: delegated.ActionID,
+		CurrentPosition: 1, Total: 2, UnresolvedCount: 2,
+	}
+	replaced := svc.appendFlowerLiveEvent(FlowerLiveEvent{
+		EndpointID: endpointID, ThreadID: threadID, RunID: "run_root",
+		Kind: FlowerLiveApprovalQueueReplaced,
+		Payload: mustFlowerPayload(FlowerLiveApprovalQueuePayload{
+			Actions: []FlowerApprovalAction{delegated, queued}, ApprovalQueue: queue,
+		}),
+	})
+
+	svc.mu.Lock()
+	state := cloneFlowerLiveMaterializedState(stream.State)
+	svc.mu.Unlock()
+	if state.ApprovalQueue == nil || *state.ApprovalQueue != queue {
+		t.Fatalf("approval queue=%#v, want %#v", state.ApprovalQueue, queue)
+	}
+	if _, ok := state.ApprovalActions[stale.ActionID]; ok {
+		t.Fatalf("stale canonical action survived replacement")
+	}
+	if _, ok := state.ApprovalActions[control.ActionID]; !ok {
+		t.Fatalf("Redeven control confirmation was removed by Floret queue replacement")
+	}
+	for _, actionID := range []string{delegated.ActionID, queued.ActionID} {
+		action, ok := state.ApprovalActions[actionID]
+		if !ok || action.ExpectedSeq != replaced.Seq {
+			t.Fatalf("canonical action %q=%#v, want replacement seq %d", actionID, action, replaced.Seq)
 		}
 	}
-	if resolved != 2 {
-		t.Fatalf("resolved cancel events=%d, want 2", resolved)
+
+	emptyQueue := FlowerApprovalQueue{Generation: 4, Revision: 10}
+	cleared := svc.appendFlowerLiveEvent(FlowerLiveEvent{
+		EndpointID: endpointID, ThreadID: threadID, RunID: "run_root",
+		Kind: FlowerLiveApprovalQueueReplaced,
+		Payload: mustFlowerPayload(FlowerLiveApprovalQueuePayload{
+			Actions: []FlowerApprovalAction{}, ApprovalQueue: emptyQueue,
+		}),
+	})
+	if cleared.Seq <= replaced.Seq {
+		t.Fatalf("empty replacement seq=%d, want after %d", cleared.Seq, replaced.Seq)
+	}
+	svc.mu.Lock()
+	state = cloneFlowerLiveMaterializedState(stream.State)
+	svc.mu.Unlock()
+	if state.ApprovalQueue == nil || state.ApprovalQueue.UnresolvedCount != 0 || state.ApprovalQueue.Revision != emptyQueue.Revision {
+		t.Fatalf("empty canonical queue was not projected: %#v", state.ApprovalQueue)
+	}
+	if len(state.ApprovalActions) != 1 || state.ApprovalActions[control.ActionID].ActionID == "" {
+		t.Fatalf("empty canonical queue actions=%#v, want only control confirmation", state.ApprovalActions)
+	}
+}
+
+func TestFlowerLiveProjectionRejectsRegressedCanonicalApprovalQueue(t *testing.T) {
+	t.Parallel()
+
+	current := FlowerApprovalQueue{Generation: 3, Revision: 8, CurrentActionID: "current", CurrentPosition: 1, Total: 1, UnresolvedCount: 1}
+	currentAction := FlowerApprovalAction{
+		ActionID: "current", Origin: FlowerApprovalOriginMainTool, RunID: "run", ToolID: "tool",
+		ToolName: "terminal.exec", State: FlowerApprovalStateRequested, Status: FlowerApprovalStatusPending,
+		Revision: 2, Version: 2, QueueGeneration: 3, QueueOrder: 4, CanApprove: true,
+		Summary: FlowerApprovalSummary{Label: "current"},
+	}
+	state := FlowerLiveMaterializedState{
+		Runs: map[string]FlowerLiveRunState{}, Messages: map[string]FlowerLiveMessageDraft{},
+		ApprovalActions:     map[string]FlowerApprovalAction{currentAction.ActionID: currentAction},
+		ApprovalActionsSeen: true, ApprovalQueue: &current,
+		InputRequests: map[string]RequestUserInputPrompt{},
+	}
+	regressed := FlowerApprovalQueue{Generation: 3, Revision: 7}
+	applyFlowerLiveEventToMaterializedState(&state, map[string]FlowerApprovalState{}, FlowerLiveEvent{
+		Kind: FlowerLiveApprovalQueueReplaced,
+		Payload: mustFlowerPayload(FlowerLiveApprovalQueuePayload{
+			Actions: []FlowerApprovalAction{}, ApprovalQueue: regressed,
+		}),
+	})
+	if state.ApprovalQueue == nil || *state.ApprovalQueue != current {
+		t.Fatalf("regressed queue replaced current authority: %#v", state.ApprovalQueue)
+	}
+	if state.ApprovalActions[currentAction.ActionID].ActionID == "" {
+		t.Fatalf("regressed queue removed current canonical action")
 	}
 }

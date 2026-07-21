@@ -9,6 +9,7 @@ import type {
 } from '../../../../../flower_ui/src';
 import type { EnvironmentDetail, LocalRuntimeInfo } from '../services/controlplaneApi';
 import type { FilePreviewOpenOptions } from '../widgets/FilePreviewContext';
+import type { FlowerCanonicalReferenceNavigationTarget } from '../flower/linkedContextNavigation';
 import type {
   EnvFileBrowserSurfacePayload,
   EnvOpenSurfaceOptions,
@@ -145,6 +146,7 @@ export type EnvContextValue = {
   ) => Promise<void>;
   openFlowerFileBrowser: (request: FlowerFileOpenRequest) => Promise<void>;
   openFlowerFilePreview: (request: FlowerFileOpenRequest) => Promise<void>;
+  openFlowerCanonicalReferenceTarget?: (target: FlowerCanonicalReferenceNavigationTarget) => Promise<void>;
   openFlowerLinkedFilePreview: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
   openFlowerLinkedDirectoryBrowser: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
   consumeOpenTerminalInDirectoryRequest: (requestId: string) => void;

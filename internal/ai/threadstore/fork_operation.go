@@ -11,7 +11,7 @@ import (
 	"strings"
 )
 
-const ForkSnapshotSchemaVersion = 2
+const ForkSnapshotSchemaVersion = 3
 
 type ForkOperationStatus string
 
@@ -54,12 +54,12 @@ type CommitForkOperationRequest struct {
 	UpdatedAtUnixMs int64
 }
 
-type forkSnapshotV2 struct {
-	SchemaVersion  int                     `json:"schema_version"`
-	Request        forkSnapshotRequest     `json:"request"`
-	SourceThread   ThreadSettings          `json:"source_thread"`
-	UploadRefs     []forkSnapshotUploadRef `json:"upload_refs"`
-	FlowerMetadata *FlowerThreadMetadata   `json:"flower_metadata,omitempty"`
+type forkSnapshot struct {
+	SchemaVersion int                     `json:"schema_version"`
+	Request       forkSnapshotRequest     `json:"request"`
+	SourceThread  ThreadSettings          `json:"source_thread"`
+	UploadRefs    []forkSnapshotUploadRef `json:"upload_refs"`
+	FlowerRouting *FlowerThreadRouting    `json:"flower_routing,omitempty"`
 }
 
 type forkSnapshotRequest struct {
@@ -138,7 +138,7 @@ LIMIT 1
 	if destinationCount != 0 {
 		return nil, ErrForkDestinationConflict
 	}
-	snapshot, err := captureForkSnapshotV2(ctx, tx, req)
+	snapshot, err := captureForkSnapshot(ctx, tx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +213,7 @@ func (s *Store) CommitForkOperation(ctx context.Context, req CommitForkOperation
 	if err != nil {
 		return nil, err
 	}
-	if err := materializeForkSnapshotV2(ctx, tx, snapshot); err != nil {
+	if err := materializeForkSnapshot(ctx, tx, snapshot); err != nil {
 		return nil, err
 	}
 	result, err := tx.ExecContext(ctx, `
@@ -380,7 +380,7 @@ func forkRequestFingerprint(req ForkThreadRequest) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func forkSnapshotFingerprint(snapshot forkSnapshotV2) (string, error) {
+func forkSnapshotFingerprint(snapshot forkSnapshot) (string, error) {
 	body, err := json.Marshal(snapshot)
 	if err != nil {
 		return "", err
@@ -389,12 +389,12 @@ func forkSnapshotFingerprint(snapshot forkSnapshotV2) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-func captureForkSnapshotV2(ctx context.Context, tx *sql.Tx, req ForkThreadRequest) (forkSnapshotV2, error) {
+func captureForkSnapshot(ctx context.Context, tx *sql.Tx, req ForkThreadRequest) (forkSnapshot, error) {
 	var source ThreadSettings
 	if err := scanThreadRow(tx.QueryRowContext(ctx, fmt.Sprintf(`SELECT %s FROM ai_thread_settings WHERE endpoint_id = ? AND thread_id = ?`, threadSelectColumnsSQL), req.EndpointID, req.SourceThreadID), &source); err != nil {
-		return forkSnapshotV2{}, err
+		return forkSnapshot{}, err
 	}
-	snapshot := forkSnapshotV2{SchemaVersion: ForkSnapshotSchemaVersion, Request: forkSnapshotRequest{
+	snapshot := forkSnapshot{SchemaVersion: ForkSnapshotSchemaVersion, Request: forkSnapshotRequest{
 		EndpointID: req.EndpointID, SourceThreadID: req.SourceThreadID, DestinationThreadID: req.DestinationThreadID,
 		Title: req.Title, CreatedByUserPublicID: req.CreatedByUserPublicID, CreatedByUserEmail: req.CreatedByUserEmail, CreatedAtUnixMs: req.CreatedAtUnixMs,
 	}, SourceThread: source}
@@ -405,42 +405,40 @@ WHERE endpoint_id = ? AND thread_id = ? AND ref_kind = ? AND ref_id = ?
 ORDER BY id ASC
 `, req.EndpointID, req.SourceThreadID, UploadRefKindThread, req.SourceThreadID)
 	if err != nil {
-		return forkSnapshotV2{}, err
+		return forkSnapshot{}, err
 	}
 	for rows.Next() {
 		var ref forkSnapshotUploadRef
 		if err := rows.Scan(&ref.UploadID, &ref.RefKind, &ref.RefID, &ref.CreatedAtUnixMs); err != nil {
 			_ = rows.Close()
-			return forkSnapshotV2{}, err
+			return forkSnapshot{}, err
 		}
 		snapshot.UploadRefs = append(snapshot.UploadRefs, ref)
 	}
 	if err := rows.Close(); err != nil {
-		return forkSnapshotV2{}, err
+		return forkSnapshot{}, err
 	}
-	var metadata FlowerThreadMetadata
+	var routing FlowerThreadRouting
 	err = tx.QueryRowContext(ctx, `
-SELECT endpoint_id, thread_id, owner_kind, owner_id, parent_thread_id, parent_run_id,
-       context_json, action_json, updated_at_unix_ms, home_runtime_id, home_runtime_kind,
+SELECT endpoint_id, thread_id, updated_at_unix_ms, home_runtime_id, home_runtime_kind,
        origin_env_public_id, primary_target_id, active_target_ids_json
-FROM ai_flower_thread_metadata
+FROM ai_flower_thread_routing
 WHERE endpoint_id = ? AND thread_id = ?
 `, req.EndpointID, req.SourceThreadID).Scan(
-		&metadata.EndpointID, &metadata.ThreadID, &metadata.OwnerKind, &metadata.OwnerID,
-		&metadata.ParentThreadID, &metadata.ParentRunID, &metadata.ContextJSON, &metadata.ActionJSON,
-		&metadata.UpdatedAtUnixMs, &metadata.HomeRuntimeID, &metadata.HomeRuntimeKind,
-		&metadata.OriginEnvPublicID, &metadata.PrimaryTargetID, &metadata.ActiveTargetIDsJSON,
+		&routing.EndpointID, &routing.ThreadID, &routing.UpdatedAtUnixMs,
+		&routing.HomeRuntimeID, &routing.HomeRuntimeKind, &routing.OriginEnvPublicID,
+		&routing.PrimaryTargetID, &routing.ActiveTargetIDsJSON,
 	)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return forkSnapshotV2{}, err
+		return forkSnapshot{}, err
 	}
 	if err == nil {
-		snapshot.FlowerMetadata = &metadata
+		snapshot.FlowerRouting = &routing
 	}
 	return snapshot, nil
 }
 
-func validateForkSnapshot(operation *ForkOperation, snapshot forkSnapshotV2) error {
+func validateForkSnapshot(operation *ForkOperation, snapshot forkSnapshot) error {
 	if operation == nil || snapshot.SchemaVersion != ForkSnapshotSchemaVersion || snapshot.Request.EndpointID != operation.EndpointID || snapshot.Request.SourceThreadID != operation.SourceThreadID || snapshot.Request.DestinationThreadID != operation.DestinationThreadID || snapshot.SourceThread.EndpointID != operation.EndpointID || snapshot.SourceThread.ThreadID != operation.SourceThreadID {
 		return errors.New("fork snapshot identity mismatch")
 	}
@@ -470,24 +468,24 @@ func validateForkSnapshot(operation *ForkOperation, snapshot forkSnapshotV2) err
 	return nil
 }
 
-func decodeForkSnapshot(operation *ForkOperation) (forkSnapshotV2, error) {
+func decodeForkSnapshot(operation *ForkOperation) (forkSnapshot, error) {
 	if operation == nil {
-		return forkSnapshotV2{}, errors.New("missing fork operation")
+		return forkSnapshot{}, errors.New("missing fork operation")
 	}
 	if operation.SnapshotSchemaVersion != ForkSnapshotSchemaVersion {
-		return forkSnapshotV2{}, fmt.Errorf("unsupported fork snapshot schema %d", operation.SnapshotSchemaVersion)
+		return forkSnapshot{}, fmt.Errorf("unsupported fork snapshot schema %d", operation.SnapshotSchemaVersion)
 	}
-	var snapshot forkSnapshotV2
+	var snapshot forkSnapshot
 	if err := decodeStrictJSON(operation.SnapshotJSON, &snapshot); err != nil {
-		return forkSnapshotV2{}, fmt.Errorf("decode fork operation snapshot: %w", err)
+		return forkSnapshot{}, fmt.Errorf("decode fork operation snapshot: %w", err)
 	}
 	if err := validateForkSnapshot(operation, snapshot); err != nil {
-		return forkSnapshotV2{}, err
+		return forkSnapshot{}, err
 	}
 	return snapshot, nil
 }
 
-func materializeForkSnapshotV2(ctx context.Context, tx *sql.Tx, snapshot forkSnapshotV2) error {
+func materializeForkSnapshot(ctx context.Context, tx *sql.Tx, snapshot forkSnapshot) error {
 	req := ForkThreadRequest{
 		EndpointID: snapshot.Request.EndpointID, SourceThreadID: snapshot.Request.SourceThreadID,
 		DestinationThreadID: snapshot.Request.DestinationThreadID, Title: snapshot.Request.Title,
@@ -505,13 +503,11 @@ func materializeForkSnapshotV2(ctx context.Context, tx *sql.Tx, snapshot forkSna
 			return err
 		}
 	}
-	if snapshot.FlowerMetadata != nil {
-		metadata := *snapshot.FlowerMetadata
-		metadata.ThreadID = req.DestinationThreadID
-		metadata.ParentThreadID = req.SourceThreadID
-		metadata.ParentRunID = ""
-		metadata.UpdatedAtUnixMs = req.CreatedAtUnixMs
-		if err := upsertFlowerThreadMetadataExec(ctx, tx, metadata); err != nil {
+	if snapshot.FlowerRouting != nil {
+		routing := *snapshot.FlowerRouting
+		routing.ThreadID = req.DestinationThreadID
+		routing.UpdatedAtUnixMs = req.CreatedAtUnixMs
+		if err := upsertFlowerThreadRoutingExec(ctx, tx, routing); err != nil {
 			return err
 		}
 	}

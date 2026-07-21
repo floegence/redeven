@@ -18,32 +18,49 @@ type LinkedContextNavigationOptions = Readonly<{
   notifyInvalidDirectoryPath: () => void;
 }>;
 
+export type FlowerCanonicalReferenceNavigationTarget = Readonly<{
+  kind: 'file' | 'directory';
+  label: string;
+  path: string;
+}>;
+
 export function createFlowerLinkedContextNavigation(options: LinkedContextNavigationOptions): Readonly<{
+  openCanonicalReferenceTarget: (target: FlowerCanonicalReferenceNavigationTarget) => Promise<void>;
   openLinkedFilePreview: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
   openLinkedDirectoryBrowser: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
 }> {
+  const openFilePath = async (rawPath: string): Promise<void> => {
+    const path = normalizeAbsolutePath(rawPath);
+    if (!path) {
+      options.notifyInvalidFilePath();
+      return;
+    }
+    await options.openFilePreview(fileItemFromPath(path), {
+      focus: true,
+      reusePolicy: 'same_file_or_create',
+    });
+  };
+  const openDirectoryPath = async (rawPath: string, title?: string): Promise<void> => {
+    const path = normalizeAbsolutePath(rawPath);
+    if (!path) {
+      options.notifyInvalidDirectoryPath();
+      return;
+    }
+    await options.openFileBrowserAtPath(path, {
+      title: String(title ?? '').trim() || basenameFromAbsolutePath(path),
+      openStrategy: 'focus_latest_or_create',
+    });
+  };
+
   return {
-    openLinkedFilePreview: async (request) => {
-      const path = normalizeAbsolutePath(request.path);
-      if (!path) {
-        options.notifyInvalidFilePath();
+    openCanonicalReferenceTarget: async (target) => {
+      if (target.kind === 'file') {
+        await openFilePath(target.path);
         return;
       }
-      await options.openFilePreview(fileItemFromPath(path), {
-        focus: true,
-        reusePolicy: 'same_file_or_create',
-      });
+      await openDirectoryPath(target.path, target.label);
     },
-    openLinkedDirectoryBrowser: async (request) => {
-      const path = normalizeAbsolutePath(request.path);
-      if (!path) {
-        options.notifyInvalidDirectoryPath();
-        return;
-      }
-      await options.openFileBrowserAtPath(path, {
-        title: basenameFromAbsolutePath(path),
-        openStrategy: 'focus_latest_or_create',
-      });
-    },
+    openLinkedFilePreview: async (request) => openFilePath(request.path),
+    openLinkedDirectoryBrowser: async (request) => openDirectoryPath(request.path),
   };
 }

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	flruntime "github.com/floegence/floret/runtime"
@@ -56,6 +57,127 @@ func TestThreadTimelineUsesCanonicalFloretOrdinalOrder(t *testing.T) {
 	last := decodeTimelineMessageForTest(t, response.Messages[len(response.Messages)-2])
 	if last.Role != "user" || last.Content != "user 3" {
 		t.Fatalf("latest user message is not last canonical turn: %#v", last)
+	}
+}
+
+func TestCanonicalUserTimelineMessagePublishesSafeReferenceDTO(t *testing.T) {
+	raw, err := canonicalUserTimelineMessage("turn_reference", "entry_reference", "", nil, []flruntime.MessageReference{
+		{
+			ReferenceID: "context:0",
+			Kind:        flruntime.MessageReferenceFile,
+			Label:       "main.ts",
+			Text:        "/workspace/src/main.ts",
+			ResourceRef: "redeven-context:v1:opaque-secret-locator",
+		},
+	}, 1783677600000)
+	if err != nil {
+		t.Fatalf("canonicalUserTimelineMessage: %v", err)
+	}
+	if strings.Contains(string(raw), "opaque-secret-locator") || strings.Contains(string(raw), "resource_ref") || strings.Contains(string(raw), "/workspace/src/main.ts") {
+		t.Fatalf("public timeline leaked host-only reference data: %s", raw)
+	}
+	var message struct {
+		Blocks     []any                          `json:"blocks"`
+		References []publicFloretMessageReference `json:"references"`
+	}
+	if err := json.Unmarshal(raw, &message); err != nil {
+		t.Fatal(err)
+	}
+	if len(message.Blocks) != 0 || len(message.References) != 1 {
+		t.Fatalf("message=%#v, want reference-only canonical user message", message)
+	}
+	if got := message.References[0]; got.ReferenceID != "context:0" || got.Kind != "file" || got.Label != "main.ts" || got.Text != "" {
+		t.Fatalf("public reference=%#v", got)
+	}
+}
+
+func TestCanonicalReferencesRoundTripThroughTimelineBootstrapAndReplacement(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	svc := newTestService(t, nil)
+	meta := timelineTestMeta("env_reference_round_trip")
+	thread, err := svc.CreateThread(ctx, meta, "reference round trip", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := newTestFloretHostFromService(t, svc, thread.ThreadID, "canonical response")
+	const sentinelPath = "/private/workspace/secret/main.ts"
+	const sentinelLocator = "redeven-context:v1:sentinel-host-locator"
+	if _, err := host.RunTurn(ctx, flruntime.RunTurnRequest{
+		ThreadID: flruntime.ThreadID(thread.ThreadID),
+		TurnID:   "turn_reference_round_trip",
+		RunID:    "run_reference_round_trip",
+		Input: flruntime.TurnInput{References: []flruntime.MessageReference{
+			{ReferenceID: "context:0", Kind: flruntime.MessageReferenceFile, Label: "main.ts", Text: sentinelPath, ResourceRef: sentinelLocator},
+			{ReferenceID: "context:1", Kind: flruntime.MessageReferenceText, Label: "Quote", Text: "visible excerpt", Truncated: true},
+		}},
+		SupplementalContext: []flruntime.TurnSupplementalContextItem{
+			{Kind: contextActionKindFilePath, Title: "Linked file path", Metadata: map[string]string{"path": sentinelPath}, Sensitive: true},
+			{Kind: contextActionKindText, Title: "Quote", Text: "visible excerpt", Truncated: true},
+		},
+	}); err != nil {
+		t.Fatalf("RunTurn: %v", err)
+	}
+
+	timeline, err := svc.buildFlowerTimelineMessages(ctx, meta.EndpointID, thread.ThreadID, FlowerLiveMaterializedState{})
+	if err != nil {
+		t.Fatalf("buildFlowerTimelineMessages: %v", err)
+	}
+	if len(timeline) != 2 || timeline[0].Role != "user" || len(timeline[0].References) != 2 || timeline[0].References[0].Text != "" || timeline[0].References[1].Text != "visible excerpt" {
+		t.Fatalf("timeline=%#v, want safe reference-only user message", timeline)
+	}
+	bootstrap, err := svc.GetFlowerThreadLiveBootstrap(ctx, meta, thread.ThreadID)
+	if err != nil {
+		t.Fatalf("GetFlowerThreadLiveBootstrap: %v", err)
+	}
+	if len(bootstrap.TimelineMessages) != 2 || len(bootstrap.TimelineMessages[0].References) != 2 {
+		t.Fatalf("bootstrap timeline=%#v", bootstrap.TimelineMessages)
+	}
+	if err := svc.publishFlowerCanonicalTimelineReplacement(ctx, meta.EndpointID, thread.ThreadID, "run_reference_round_trip", "turn_reference_round_trip", "reference_round_trip"); err != nil {
+		t.Fatalf("publishFlowerCanonicalTimelineReplacement: %v", err)
+	}
+	events, err := svc.ListFlowerThreadLiveEvents(ctx, meta, thread.ThreadID, 0, 100)
+	if err != nil {
+		t.Fatalf("ListFlowerThreadLiveEvents: %v", err)
+	}
+	encoded, err := json.Marshal(struct {
+		Bootstrap *FlowerLiveBootstrapResponse `json:"bootstrap"`
+		Events    *FlowerLiveEventsResponse    `json:"events"`
+	}{Bootstrap: bootstrap, Events: events})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, forbidden := range []string{sentinelPath, sentinelLocator, "resource_ref", "context_action"} {
+		if strings.Contains(string(encoded), forbidden) {
+			t.Fatalf("browser projection leaked %q: %s", forbidden, encoded)
+		}
+	}
+	if !strings.Contains(string(encoded), `"reference_id":"context:0"`) || !strings.Contains(string(encoded), `"text":"visible excerpt"`) {
+		t.Fatalf("browser projection lost canonical references: %s", encoded)
+	}
+}
+
+func TestPublicFloretMessageReferencesKeepsBoundedVisibleTextKinds(t *testing.T) {
+	t.Parallel()
+
+	references, err := publicFloretMessageReferences([]flruntime.MessageReference{
+		{ReferenceID: "context:0", Kind: flruntime.MessageReferenceText, Label: "Quote", Text: "quoted text"},
+		{ReferenceID: "context:1", Kind: flruntime.MessageReferenceTerminal, Label: "Terminal", Text: "go test ./..."},
+		{ReferenceID: "context:2", Kind: flruntime.MessageReferenceProcess, Label: "Process", Text: "PID 42"},
+		{ReferenceID: "context:3", Kind: flruntime.MessageReferenceDirectory, Label: "src", Text: "/workspace/src", ResourceRef: "redeven-context:v1:directory"},
+	})
+	if err != nil {
+		t.Fatalf("publicFloretMessageReferences: %v", err)
+	}
+	if len(references) != 4 {
+		t.Fatalf("references=%#v, want 4", references)
+	}
+	if references[0].Text != "quoted text" || references[1].Text != "go test ./..." || references[2].Text != "PID 42" {
+		t.Fatalf("visible reference text was not preserved: %#v", references)
+	}
+	if references[3].Text != "" {
+		t.Fatalf("directory path leaked through public projection: %#v", references[3])
 	}
 }
 

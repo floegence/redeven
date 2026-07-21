@@ -28,9 +28,11 @@ Transcript linked-context actions distinguish host navigation from self-containe
 
 Flower thread working directory is a Redeven product thread attribute decided at creation time. `FlowerSurfaceAdapter` exposes optional working-directory picker reads for path context and directory entries; Env App implements them through the existing runtime FS RPC, while Desktop Welcome implements them through the fixed runtime FS Local API bridge. In New chat, `FlowerSurface` keeps a local `workingDirDraft`, displays only the basename in the header chip, opens the shared `DirectoryPicker` when the chip is clicked, and sends `working_dir` only when creating a new thread. Existing threads display their immutable `thread.working_dir` basename with the full path in title/ARIA text; clicking that chip copies the full path and never opens a picker or patches the thread.
 
-Env App implements `stopThread` with the existing AI RPC stop endpoint and then reloads the thread bootstrap. Desktop implements the same adapter method through the runtime Flower HTTP bridge, which allows `POST /_redeven_proxy/api/ai/threads/:id/cancel` and reloads `/live/bootstrap`. The app server thread cancel route preserves RWX permission checks and audit events while calling `StopThread`, so queued followups are recovered to drafts before the active run is canceled.
+Env App implements `stopThread` with the existing AI RPC stop endpoint and then reloads the thread bootstrap. Desktop implements the same adapter method through the runtime Flower HTTP bridge, which allows `POST /_redeven_proxy/api/ai/threads/:id/cancel` and reloads `/live/bootstrap`. The app server thread cancel route preserves RWX permission checks and audit events while calling `StopThread`. An active run is canceled and canonically finalized first; queued followups are recovered to drafts only after that terminal boundary, before the endpoint returns success.
 
-Stop cancellation is UI-responsive but engine-admission guarded. When Redeven detaches an active run for Stop, it removes the active-run mapping so the UI can leave the running state, then keeps an in-memory per-thread stop-finalizing guard until the detached run's `doneCh` closes after terminal cleanup and Floret turn finalization. New user input during that window is accepted as a queued followup, but queued drain and direct detached-run start paths must not start another Floret turn until the guard clears. A Redeven-requested cancel or timeout that returns from Floret as a context cancellation is projected as canceled or timed out, not as `floret_engine_failed`.
+Stop cancellation is canonical-terminal and engine-admission guarded. One caller-scoped budget, capped at two seconds, covers exact-run cancellation, finalization wait, both canonical reads, lifecycle-gate acquisition, SubAgent closure, and queued-followup recovery; a shorter caller deadline bounds every foreground wait, including the lifecycle gate. Before taking the exclusive thread lifecycle lock, the actor resolves the exact locally owned active run, requests its cancellation, terminates every PTY owned by that run, and waits for each process-tree reap, output drain, and process-bound Floret settlement. The detached finalizer continues under the Service lifecycle context after a caller timeout, but only a later explicit Stop may observe and return its result. The caller waits for run completion and the public Floret thread overview; success requires the same thread and run identities and a canonical terminal latest turn. Only then may Stop take the lifecycle lock, close remaining SubAgents, recover queued followups to drafts, and return `OK=true`. A deadline or canceled caller returns an explicit pending result; missing local execution ownership, changed identity, or a nonterminal or mismatched canonical snapshot returns unavailable. Redeven never substitutes an active-run map, terminal snapshot, audit row, broadcast, or threadstore record for the Floret terminal fact.
+
+When cancellation detaches an active run, Redeven removes the active-run mapping and keeps an in-memory per-thread stop-finalizing guard until the detached run's `doneCh` closes after terminal cleanup, the exact Floret authority barrier releases, and the matching canonical terminal snapshot is verified. Concurrent Stop calls share that one in-flight finalization instead of starting duplicate canonical reads. Final cleanup uses compare-and-delete ownership: an old finalizer may remove only its exact run and guard, never a replacement mapping. A stale active-run id is cleared only when a public Floret read proves the thread idle and the mapping is still unchanged; canonical busy state is preserved as unavailable. New user input during finalization is accepted as a queued followup, but queued drain and direct detached-run start paths must not start another Floret turn until the guard clears. Stop does not broadcast a synthetic canceled state when cancellation is merely requested. A Redeven-requested cancel or timeout that returns from Floret as a context cancellation is projected as canceled or timed out, not as `floret_engine_failed`.
 
 Environment cards can expose placement-shaped targets such as local container, SSH, provider, or Gateway targets. These identifiers are routing context for Redeven, not permission to infer Docker, SSH, systemd, or Gateway control commands. Flower must interpret environment lifecycle requests through the `redeven-environment` system skill and the `redeven env ... --json` surface so unsupported target kinds return structured product plans instead of lower-level command guesses. For arbitrary OS diagnostics on a selected target, the same skill routes Flower to `redeven targets exec --target <target> --command <agent-selected command> --json`, where Redeven owns target resolution and execution provenance.
 
@@ -46,32 +48,35 @@ A persisted file path is display and navigation metadata, not a filesystem read 
 
 # Evidence
 
-- `redeven:internal/flower_ui/src/contracts/flowerSurfaceContracts.ts:739` - `FlowerSurfaceAdapter` exposes `stopThread` alongside `launchTurn`.
+- `redeven:internal/flower_ui/src/contracts/flowerSurfaceContracts.ts:1213` - `FlowerSurfaceAdapter` exposes `stopThread` alongside `launchTurn`.
 - `redeven:internal/flower_ui/src/FlowerTurnLauncherWindow.tsx:38` - The shared launcher submit payload contains the prompt and the captured launcher intent.
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx:1188` - `FlowerSurface` stops the selected thread through the shared adapter before applying the returned bootstrap.
-- `redeven:desktop/src/welcome/App.tsx:9689` - Environment card Ask Flower controls open the floating launcher instead of navigating directly.
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:884` - Env App captures the launcher handoff context when opening the launcher.
-- `redeven:desktop/src/welcome/environmentFlowerContext.ts:108` - Desktop Welcome builds environment-card context with the shared Ask Flower context action contract.
-- `redeven:internal/ai/context_action.go:133` - Runtime validates Ask Flower context actions before accepting the product turn.
-- `redeven:internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.ts:428` - Env App `stopThread` calls the AI RPC stop endpoint and reloads the thread.
-- `redeven:desktop/src/welcome/flower/localEnvironmentFlowerSurfaceAdapter.tsx:421` - Desktop `stopThread` posts to the runtime thread cancel endpoint and reloads live bootstrap.
-- `redeven:desktop/src/main/main.ts:7457` - Desktop runtime Flower allowlist accepts the thread cancel path.
-- `redeven:internal/codeapp/appserver/server.go:4013` - The app server thread cancel route calls `StopThread` while preserving permission and audit handling.
+- `redeven:internal/flower_ui/src/FlowerSurface.tsx:3459` - `FlowerSurface` stops the selected thread through the shared adapter before applying the returned bootstrap.
+- `redeven:desktop/src/welcome/App.tsx:5983` - Environment card Ask Flower controls open the floating launcher instead of navigating directly.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:1106` - Env App captures the launcher handoff context when opening the launcher.
+- `redeven:desktop/src/welcome/environmentFlowerContext.ts:109` - Desktop Welcome builds environment-card context with the shared Ask Flower context action contract.
+- `redeven:internal/ai/context_action.go:185` - Runtime validates Ask Flower context actions before accepting the product turn.
+- `redeven:internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.ts:677` - Env App `stopThread` calls the AI RPC stop endpoint and reloads the thread.
+- `redeven:desktop/src/welcome/flower/localEnvironmentFlowerSurfaceAdapter.tsx:582` - Desktop `stopThread` posts to the runtime thread cancel endpoint and reloads live bootstrap.
+- `redeven:desktop/src/main/main.ts:8810` - Desktop runtime Flower allowlist accepts the thread cancel path.
+- `redeven:internal/codeapp/appserver/server.go:4681` - The app server thread cancel route calls `StopThread` while preserving permission and audit handling.
 - `redeven:internal/flower_ui/src/filePicker/path.ts:13` - Shared Flower UI path helpers derive the basename used by the header chip.
 - `redeven:internal/flower_ui/src/filePicker/createDirectoryPickerDataSource.ts:31` - Shared Flower UI directory-picker data source converts picker paths through the configured home path.
-- `redeven:internal/ai/threads.go:380` - Creating a thread falls back to `agentHomeDir` when no working directory is supplied.
+- `redeven:internal/ai/threads.go:498` - Creating a thread falls back to `agentHomeDir` when no working directory is supplied.
 - `redeven:go.mod:9` - Redeven consumes the published Floret module that owns provider-visible turn ledger closure.
-- `redeven:internal/ai/service.go:1043` - Stop finalization waits on the detached run's done channel before clearing admission.
-- `redeven:internal/ai/thread_actor.go:459` - Queued followup drain waits while stop finalization is pending.
-- `redeven:internal/ai/floret_runtime.go:249` - Redeven-requested cancel or timeout avoids the generic Floret engine failure path.
+- `redeven:internal/ai/stop_thread.go:313` - Stop finalization waits for terminal cleanup, authority release, run completion, and the canonical terminal snapshot before clearing admission.
+- `redeven:internal/ai/stop_thread.go:224` - Stop cancels only the exact locally owned run and starts one shared finalization attempt.
+- `redeven:internal/ai/stop_thread.go:155` - Stop validates the matching public Floret terminal snapshot before success.
+- `redeven:internal/ai/run_terminal_cleanup.go:17` - Stop and hosted-turn cleanup share exact-run PTY termination and settlement waiting.
+- `redeven:internal/ai/thread_actor.go:621` - Queued followup drain waits while stop finalization is pending.
+- `redeven:internal/ai/floret_runtime.go:288` - Redeven-requested cancel or timeout avoids the generic Floret engine failure path.
 - `redeven:internal/envapp/ui_src/src/ui/utils/filePreviewAskFlower.ts:12` - File preview Ask Flower intents accept preview selection input but only emit file-path context.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:4133` - Terminal Ask Flower keeps short selections inline and turns long selections into metadata-only context.
-- `redeven:internal/ai/floret_attachments.go:42` - Backend turn input creates opaque canonical attachments and validates queued resources.
-- `redeven:internal/ai/floret_provider.go:335` - Provider projection emits real image/file content parts.
-- `redeven:internal/flower_ui/src/contextActionWire.ts:280` - Shared context-action parsing exposes strict-input and persisted-display modes.
-- `redeven:internal/flower_ui/src/flowerTimelineProjection.ts:443` - Server queued commands project as non-message timeline entries keyed by exact TurnID.
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx:3410` - Admission receipt handling is separated from canonical refresh and draft restoration.
-- `redeven:internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.ts:579` - Env App returns the strict admission receipt without loading bootstrap.
-- `redeven:desktop/src/welcome/flower/localEnvironmentFlowerSurfaceAdapter.tsx:396` - Desktop validates the accepted turn identity and returns the same receipt contract.
-- `redeven:internal/flower_ui/src/chat/FlowerChatContextPreview.tsx:58` - The local linked-context floating preview accepts only self-contained text and process snapshot actions.
-- `redeven:internal/envapp/ui_src/src/ui/flower/linkedContextNavigation.ts:26` - Env App normalizes linked file paths and delegates them to the existing layout-aware live preview controller.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/TerminalPanel.tsx:3419` - Terminal Ask Flower keeps short selections inline and turns long selections into metadata-only context.
+- `redeven:internal/ai/floret_attachments.go:84` - Backend turn input creates opaque canonical attachments and validates queued resources before admission.
+- `redeven:internal/ai/floret_provider.go:365` - Provider projection emits real image/file content parts.
+- `redeven:internal/flower_ui/src/contextActionWire.ts:238` - Shared context-action parsing accepts one strict schema-v2 path and rejects the whole damaged action.
+- `redeven:internal/flower_ui/src/flowerTimelineProjection.ts:438` - Server queued commands project as non-message timeline entries keyed by exact TurnID.
+- `redeven:internal/flower_ui/src/FlowerSurface.tsx:3397` - Admission receipt handling is separated from canonical refresh and draft restoration.
+- `redeven:internal/envapp/ui_src/src/ui/flower/envLocalFlowerSurfaceAdapter.ts:582` - Env App returns the strict admission receipt without loading bootstrap.
+- `redeven:desktop/src/welcome/flower/localEnvironmentFlowerSurfaceAdapter.tsx:414` - Desktop validates the accepted turn identity and returns the same receipt contract.
+- `redeven:internal/flower_ui/src/chat/FlowerChatContextPreview.tsx:65` - The local linked-context floating preview accepts only self-contained text and process snapshot actions.
+- `redeven:internal/envapp/ui_src/src/ui/flower/linkedContextNavigation.ts:27` - Env App normalizes linked file paths and delegates them to the existing layout-aware live preview controller.

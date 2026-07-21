@@ -11,7 +11,7 @@ import (
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore_product_v2"
-	threadstoreCurrentSchemaVersion = 3
+	threadstoreCurrentSchemaVersion = 4
 )
 
 // CurrentSchemaVersion returns the product-only threadstore schema version.
@@ -28,12 +28,21 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 		Initialize:     createThreadstoreSchema,
 		Migrations: []sqliteutil.Migration{
 			{FromVersion: 2, ToVersion: 3, Apply: migrateProductV2ToV3},
+			{FromVersion: 3, ToVersion: 4, Apply: migrateProductV3ToV4},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
 }
 
 func createThreadstoreSchema(tx *sql.Tx) error {
+	return createThreadstoreSchemaWithFlowerTables(tx, createFlowerThreadRoutingTableTx)
+}
+
+func createThreadstoreSchemaV3(tx *sql.Tx) error {
+	return createThreadstoreSchemaWithFlowerTables(tx, createLegacyFlowerTablesV3Tx)
+}
+
+func createThreadstoreSchemaWithFlowerTables(tx *sql.Tx, createFlowerTables func(*sql.Tx) error) error {
 	if _, err := tx.Exec(`
 CREATE TABLE ai_thread_settings (
   thread_id TEXT PRIMARY KEY,
@@ -61,7 +70,7 @@ CREATE INDEX idx_ai_thread_settings_endpoint_pinned_created ON ai_thread_setting
 		createPendingTurnCommandsTableTx,
 		createProviderCapabilitiesTableTx,
 		createUploadTablesTx,
-		createFlowerTransferHandoffTablesTx,
+		createFlowerTables,
 		createPermissionSnapshotTablesV3Tx,
 		createSubAgentPublicationOperationsTableTx,
 		createThreadCreateOperationsTableTx,
@@ -115,7 +124,7 @@ CREATE INDEX idx_ai_threads_endpoint_pinned_created ON ai_threads(endpoint_id, p
 		createPendingTurnCommandsTableTx,
 		createProviderCapabilitiesTableTx,
 		createUploadTablesTx,
-		createFlowerTransferHandoffTablesTx,
+		createLegacyFlowerTablesV3Tx,
 		createPermissionSnapshotTablesV2Tx,
 		createFork,
 		createThreadDeleteOperationsTableTx,
@@ -208,7 +217,26 @@ CREATE INDEX idx_ai_upload_refs_upload ON ai_upload_refs(endpoint_id, upload_id)
 	return err
 }
 
-func createFlowerTransferHandoffTablesTx(tx *sql.Tx) error {
+func createFlowerThreadRoutingTableTx(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+CREATE TABLE ai_flower_thread_routing (
+  endpoint_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  home_runtime_id TEXT NOT NULL DEFAULT '',
+  home_runtime_kind TEXT NOT NULL DEFAULT '',
+  origin_env_public_id TEXT NOT NULL DEFAULT '',
+  primary_target_id TEXT NOT NULL DEFAULT '',
+  active_target_ids_json TEXT NOT NULL DEFAULT '[]',
+  PRIMARY KEY(endpoint_id, thread_id)
+);
+`)
+	return err
+}
+
+// createLegacyFlowerTablesV3Tx defines the historical v2/v3 schema used only
+// to verify and migrate existing product databases.
+func createLegacyFlowerTablesV3Tx(tx *sql.Tx) error {
 	_, err := tx.Exec(`
 CREATE TABLE ai_flower_thread_metadata (
   endpoint_id TEXT NOT NULL,
@@ -566,6 +594,8 @@ func expectedProductSchemaContract(version int) ([]canonicalSchemaObject, error)
 	switch version {
 	case 2:
 		build = createThreadstoreSchemaV2
+	case 3:
+		build = createThreadstoreSchemaV3
 	case threadstoreCurrentSchemaVersion:
 		build = createThreadstoreSchema
 	default:

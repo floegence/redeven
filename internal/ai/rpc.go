@@ -346,13 +346,16 @@ func toAIRPCError(err error) *rpc.Error {
 	switch {
 	case errors.Is(err, ErrNotConfigured):
 		return &rpc.Error{Code: 503, Message: "ai not configured"}
+	case errors.Is(err, ErrThreadStopUnavailable):
+		return &rpc.Error{Code: 503, Message: msg}
 	case errors.Is(err, ErrThreadBusy),
 		errors.Is(err, ErrRunChanged),
 		errors.Is(err, ErrWaitingPromptChanged),
 		errors.Is(err, ErrFollowupsRevisionChanged),
 		errors.Is(err, ErrCompactAlreadyPending),
 		errors.Is(err, ErrNoCompactableContext),
-		errors.Is(err, ErrCanonicalTimelineResyncRequired):
+		errors.Is(err, ErrCanonicalTimelineResyncRequired),
+		errors.Is(err, ErrThreadStopPending):
 		return &rpc.Error{Code: 409, Message: msg}
 	}
 

@@ -59,7 +59,7 @@ type Options struct {
 
 	ToolTargetPolicy       ToolTargetPolicy
 	TargetToolExecutor     TargetToolExecutor
-	ToolTargetPolicyForRun func(meta *session.Meta, thread threadstore.ThreadSettings, flowerMeta *threadstore.FlowerThreadMetadata) ToolTargetPolicy
+	ToolTargetPolicyForRun func(meta *session.Meta, thread threadstore.ThreadSettings, routing *threadstore.FlowerThreadRouting) ToolTargetPolicy
 
 	// PersistOpTimeout is the per-operation timeout for threadstore persistence
 	// (SQLite reads/writes). It must NOT be tied to a run's overall lifetime, since
@@ -121,7 +121,7 @@ type Service struct {
 
 	toolTargetPolicy       ToolTargetPolicy
 	targetToolExecutor     TargetToolExecutor
-	toolTargetPolicyForRun func(meta *session.Meta, thread threadstore.ThreadSettings, flowerMeta *threadstore.FlowerThreadMetadata) ToolTargetPolicy
+	toolTargetPolicyForRun func(meta *session.Meta, thread threadstore.ThreadSettings, routing *threadstore.FlowerThreadRouting) ToolTargetPolicy
 
 	mu                      sync.Mutex
 	activeRunByTh           map[string]string // <endpoint_id>:<thread_id> -> run_id
@@ -143,18 +143,17 @@ type Service struct {
 	flowerLiveByThread   map[string]*flowerLiveThreadStream
 	flowerLiveGeneration int64
 
-	delegatedApprovals map[string]*delegatedApprovalHandle
-
 	uploadsDir string
 	threadsDB  *threadstore.Store
 
-	closeFloret        func() error
-	floretReads        *floretReadCapabilities
-	floretRuntime      *floretRuntimeCapabilityIssuer
-	threadCreateFloret *threadCreateFloretCoordinator
-	threadTitleFloret  *threadTitleFloretCoordinator
-	threadForkFloret   *threadForkFloretCoordinator
-	threadDeleteFloret *threadDeleteFloretCoordinator
+	closeFloret         func() error
+	floretReads         *floretReadCapabilities
+	floretRuntime       *floretRuntimeCapabilityIssuer
+	pendingToolRecovery floretPendingToolRecoveryCoordinator
+	threadCreateFloret  *threadCreateFloretCoordinator
+	threadTitleFloret   *threadTitleFloretCoordinator
+	threadForkFloret    *threadForkFloretCoordinator
+	threadDeleteFloret  *threadDeleteFloretCoordinator
 
 	capabilityResolver *contextadapter.Resolver
 	skillManager       *skillManager
@@ -170,6 +169,8 @@ type Service struct {
 	recoveryErr            error
 	recoveryStopCh         chan struct{}
 	recoveryWG             sync.WaitGroup
+	lifecycleCtx           context.Context
+	lifecycleCancel        context.CancelFunc
 }
 
 var flowerLiveGenerationSeed atomic.Int64
@@ -332,6 +333,7 @@ func NewService(opts Options) (*Service, error) {
 	contextRepo := contextstore.NewRepository(ts)
 	capabilityResolver := contextadapter.NewResolver(contextRepo)
 
+	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	svc := &Service{
 		log:                          logger,
 		stateDir:                     strings.TrimSpace(opts.StateDir),
@@ -362,7 +364,6 @@ func NewService(opts Options) (*Service, error) {
 		realtimeThreadBySRV:          make(map[*rpc.Server]string),
 		flowerLiveByThread:           make(map[string]*flowerLiveThreadStream),
 		flowerLiveGeneration:         newFlowerLiveGeneration(),
-		delegatedApprovals:           make(map[string]*delegatedApprovalHandle),
 		suppressQueuedDrainByTh:      make(map[string]bool),
 		uploadsDir:                   uploadsDir,
 		threadsDB:                    ts,
@@ -372,6 +373,7 @@ func NewService(opts Options) (*Service, error) {
 			subagent: floretBootstrap.newSubagentRead,
 		},
 		floretRuntime:          &floretRuntimeCapabilityIssuer{bind: floretBootstrap.bindThreadRuntime},
+		pendingToolRecovery:    floretBootstrap.pendingToolRecovery,
 		threadCreateFloret:     &threadCreateFloretCoordinator{authority: floretBootstrap.threadCreate},
 		threadTitleFloret:      &threadTitleFloretCoordinator{authority: floretBootstrap.threadTitle},
 		threadForkFloret:       &threadForkFloretCoordinator{authority: floretBootstrap.threadFork},
@@ -382,6 +384,8 @@ func NewService(opts Options) (*Service, error) {
 		maintenanceStopCh:      make(chan struct{}),
 		maintenanceDoneCh:      make(chan struct{}),
 		recoveryStopCh:         make(chan struct{}),
+		lifecycleCtx:           lifecycleCtx,
+		lifecycleCancel:        lifecycleCancel,
 	}
 	svc.terminalProcesses = newTerminalProcessManager()
 	if svc.skillManager != nil {
@@ -585,10 +589,10 @@ func (s *Service) Close() error {
 	s.realtimeByThread = make(map[string]map[*rpc.Server]struct{})
 	s.realtimeThreadBySRV = make(map[*rpc.Server]string)
 	s.flowerLiveByThread = make(map[string]*flowerLiveThreadStream)
-	s.delegatedApprovals = make(map[string]*delegatedApprovalHandle)
 	maintenanceStopCh := s.maintenanceStopCh
 	maintenanceDoneCh := s.maintenanceDoneCh
 	recoveryStopCh := s.recoveryStopCh
+	lifecycleCancel := s.lifecycleCancel
 	s.maintenanceStopCh = nil
 	s.maintenanceDoneCh = nil
 	s.recoveryStopCh = nil
@@ -611,6 +615,9 @@ func (s *Service) Close() error {
 		}
 	}
 	s.mu.Unlock()
+	if lifecycleCancel != nil {
+		lifecycleCancel()
+	}
 
 	waitTO := s.persistOpTO
 	if waitTO <= 0 {
@@ -824,7 +831,7 @@ func (s *Service) ToolTargetPolicy() ToolTargetPolicy {
 	return normalizeToolTargetPolicy(s.toolTargetPolicy)
 }
 
-func (s *Service) UpsertFlowerThreadMetadata(ctx context.Context, rec threadstore.FlowerThreadMetadata) error {
+func (s *Service) UpsertFlowerThreadRouting(ctx context.Context, rec threadstore.FlowerThreadRouting) error {
 	if s == nil {
 		return errors.New("nil service")
 	}
@@ -843,10 +850,10 @@ func (s *Service) UpsertFlowerThreadMetadata(ctx context.Context, rec threadstor
 	}
 	pctx, cancel := context.WithTimeout(ctx, persistTO)
 	defer cancel()
-	return db.UpsertFlowerThreadMetadata(pctx, rec)
+	return db.UpsertFlowerThreadRouting(pctx, rec)
 }
 
-func (s *Service) GetFlowerThreadMetadata(ctx context.Context, endpointID string, threadID string) (*threadstore.FlowerThreadMetadata, error) {
+func (s *Service) GetFlowerThreadRouting(ctx context.Context, endpointID string, threadID string) (*threadstore.FlowerThreadRouting, error) {
 	if s == nil {
 		return nil, errors.New("nil service")
 	}
@@ -865,7 +872,7 @@ func (s *Service) GetFlowerThreadMetadata(ctx context.Context, endpointID string
 	}
 	pctx, cancel := context.WithTimeout(ctx, persistTO)
 	defer cancel()
-	return db.GetFlowerThreadMetadata(pctx, endpointID, threadID)
+	return db.GetFlowerThreadRouting(pctx, endpointID, threadID)
 }
 
 func (s *Service) RuntimeStatus(ctx context.Context) *AIRuntimeStatus {
@@ -1768,7 +1775,6 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 		return admittedUserTurn{}, normalizedInput, err
 	}
 	prepared.r.setPendingTurnCommand(commandID)
-	prepared.req.Input = normalizedInput
 	s.broadcastThreadState(endpointID, threadID, runID, string(RunStateRunning), "", "")
 	s.broadcastThreadSummary(endpointID, threadID)
 	go func() {
@@ -1850,6 +1856,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	s.mu.Lock()
 	db := s.threadsDB
 	toolTargetPolicyForRun := s.toolTargetPolicyForRun
+	baseToolTargetPolicy := s.toolTargetPolicy
 	s.mu.Unlock()
 	if db == nil {
 		return nil, errors.New("threads store not ready")
@@ -1883,12 +1890,28 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	if err != nil {
 		return nil, err
 	}
-	var flowerMeta *threadstore.FlowerThreadMetadata
+	var routing *threadstore.FlowerThreadRouting
 	pctx, cancelPersist = context.WithTimeout(context.Background(), persistTO)
-	flowerMeta, err = db.GetFlowerThreadMetadata(pctx, endpointID, threadID)
+	routing, err = db.GetFlowerThreadRouting(pctx, endpointID, threadID)
 	cancelPersist()
 	if err != nil {
 		return nil, err
+	}
+	toolTargetPolicy := normalizeToolTargetPolicy(baseToolTargetPolicy)
+	if toolTargetPolicyForRun != nil {
+		toolTargetPolicy = normalizeToolTargetPolicy(toolTargetPolicyForRun(metaRef, *th, routing))
+	}
+	var canonicalReferenceAuthority *flowerCanonicalReferenceTargetAuthority
+	if req.Input.ContextAction != nil {
+		resolvedAuthority, authorityErr := resolveFlowerCanonicalReferenceTargetAuthority(endpointID, toolTargetPolicy, routing)
+		if authorityErr != nil {
+			return nil, authorityErr
+		}
+		canonicalReferenceAuthority = &resolvedAuthority
+		if err := authorizeFlowerContextActionTarget(req.Input.ContextAction, resolvedAuthority); err != nil {
+			return nil, err
+		}
+		req.Input.ContextAction = canonicalizeFlowerContextActionTarget(req.Input.ContextAction, resolvedAuthority)
 	}
 
 	runWorkingDir, err := threadWorkingDir(th)
@@ -1909,6 +1932,28 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	if thKey == "" {
 		s.mu.Unlock()
 		return nil, errors.New("invalid request")
+	}
+	if existing := strings.TrimSpace(s.activeRunByTh[thKey]); existing != "" {
+		if s.runs[existing] == nil {
+			s.mu.Unlock()
+			reconcileCtx, reconcileCancel := context.WithTimeout(context.Background(), persistTO)
+			_, reconcileErr := s.reconcileStaleActiveRun(reconcileCtx, endpointID, threadID, existing)
+			reconcileCancel()
+			if reconcileErr != nil {
+				return nil, reconcileErr
+			}
+			s.mu.Lock()
+			existing = strings.TrimSpace(s.activeRunByTh[thKey])
+			if existing == "" {
+				// The stale mapping was removed after canonical non-busy proof.
+			} else {
+				s.mu.Unlock()
+				return nil, ErrThreadBusy
+			}
+		} else {
+			s.mu.Unlock()
+			return nil, ErrThreadBusy
+		}
 	}
 	if existing := strings.TrimSpace(s.activeRunByTh[thKey]); existing != "" {
 		s.mu.Unlock()
@@ -1934,10 +1979,6 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 	}
 	req.Input.TurnID = turnID
 	finalizingThreadStatePublished := false
-	toolTargetPolicy := s.toolTargetPolicy
-	if toolTargetPolicyForRun != nil {
-		toolTargetPolicy = normalizeToolTargetPolicy(toolTargetPolicyForRun(metaRef, *th, flowerMeta))
-	}
 	runHost, err := s.bindRunHostCapabilities(endpointID, threadID)
 	if err != nil {
 		s.mu.Unlock()
@@ -1982,6 +2023,7 @@ func (s *Service) prepareRun(meta *session.Meta, runID string, req RunStartReque
 		ToolAllowlist:               append([]string(nil), req.Options.ToolAllowlist...),
 		NoUserInteraction:           req.Options.NoUserInteraction,
 		ToolTargetPolicy:            toolTargetPolicy,
+		CanonicalReferenceAuthority: canonicalReferenceAuthority,
 		TargetToolExecutor:          s.targetToolExecutor,
 		OnStreamEvent: func(ev any) {
 			if !finalizingThreadStatePublished && isFinalizingLifecycleStreamEvent(ev) {
@@ -2073,8 +2115,11 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 	defer func() {
 		r.reconcilePendingTurnCommand()
 		s.mu.Lock()
-		delete(s.runs, runID)
-		if strings.TrimSpace(s.activeRunByTh[thKey]) == runID {
+		stopping := strings.TrimSpace(s.stopFinalizingByTh[thKey]) == runID
+		if !stopping {
+			delete(s.runs, runID)
+		}
+		if !stopping && strings.TrimSpace(s.activeRunByTh[thKey]) == runID {
 			delete(s.activeRunByTh, thKey)
 		}
 		s.mu.Unlock()
@@ -2131,10 +2176,6 @@ func (s *Service) executePreparedRun(ctx context.Context, prepared *preparedRun)
 		"omitted":        reasoning.Effective.IsZero(),
 		"disabled":       reasoning.Effective.Level == config.AIReasoningLevelOff,
 	})
-	if payload := contextActionRunEventPayload(req.Input.ContextAction); payload != nil {
-		r.recordRunDiagnostic("flower.context_action.received", RealtimeStreamKindLifecycle, payload)
-	}
-
 	select {
 	case <-ctx.Done():
 		switch strings.TrimSpace(r.getCancelReason()) {
@@ -2474,67 +2515,39 @@ func (s *Service) CancelRun(meta *session.Meta, runID string) error {
 	if endpointID == "" || runID == "" {
 		return errors.New("invalid request")
 	}
-
-	var r *run
 	threadID := ""
-	finalizingThreadID := ""
-	var finalizingDoneCh <-chan struct{}
-
 	s.mu.Lock()
-	r = s.runs[runID]
-	// Cancel is best-effort and idempotent. Do not leak run existence cross-session.
-	if r != nil && strings.TrimSpace(r.endpointID) != endpointID {
-		s.mu.Unlock()
+	if r := s.runs[runID]; r != nil {
+		if strings.TrimSpace(r.endpointID) != endpointID {
+			s.mu.Unlock()
+			return nil
+		}
+		threadID = strings.TrimSpace(r.threadID)
+	}
+	prefix := endpointID + ":"
+	if threadID == "" {
+		for key, candidate := range s.activeRunByTh {
+			if strings.TrimSpace(candidate) == runID && strings.HasPrefix(key, prefix) {
+				threadID = strings.TrimPrefix(key, prefix)
+				break
+			}
+		}
+	}
+	if threadID == "" {
+		for key, candidate := range s.stopFinalizingByTh {
+			if strings.TrimSpace(candidate) == runID && strings.HasPrefix(key, prefix) {
+				threadID = strings.TrimPrefix(key, prefix)
+				break
+			}
+		}
+	}
+	s.mu.Unlock()
+	if threadID == "" {
 		return nil
 	}
-	if r != nil {
-		threadID = strings.TrimSpace(r.threadID)
-		r.markDetached()
-		s.cancelThreadApprovalQueueLocked(endpointID, threadID, "run canceled")
-		finalizingThreadID = threadID
-		finalizingDoneCh = r.doneCh
+	_, err := s.stopThreadWithExpectedRunID(context.Background(), meta, threadID, runID)
+	if errors.Is(err, errStopRunNotActive) || errors.Is(err, ErrThreadStopPending) {
+		return nil
 	}
-	// Detach any stale active mappings so the thread can be managed even if the run is stuck.
-	for k, rid := range s.activeRunByTh {
-		if strings.TrimSpace(rid) != runID {
-			continue
-		}
-		delete(s.activeRunByTh, k)
-		if threadID == "" && strings.HasPrefix(k, endpointID+":") {
-			threadID = strings.TrimSpace(strings.TrimPrefix(k, endpointID+":"))
-		}
-		if finalizingThreadID == "" && strings.HasPrefix(k, endpointID+":") {
-			finalizingThreadID = strings.TrimSpace(strings.TrimPrefix(k, endpointID+":"))
-		}
-	}
-	finalizingKey := runThreadKey(endpointID, finalizingThreadID)
-	if r != nil && finalizingKey != "" {
-		if s.stopFinalizingByTh == nil {
-			s.stopFinalizingByTh = make(map[string]string)
-		}
-		s.stopFinalizingByTh[finalizingKey] = runID
-	}
-	db := s.threadsDB
-	persistTO := s.persistOpTO
-	s.mu.Unlock()
-	if finalizingKey != "" && finalizingDoneCh != nil {
-		go s.waitForStopFinalization(endpointID, finalizingThreadID, runID, finalizingDoneCh)
-	}
-	if r != nil {
-		r.requestCancel("canceled")
-	}
-	if threadID != "" {
-		if err := s.closeThreadSubagents(context.Background(), endpointID, threadID, persistTO); err != nil {
-			return err
-		}
-	}
-
-	if db != nil && threadID != "" {
-		s.broadcastThreadState(endpointID, threadID, runID, "canceled", "", "")
-		s.broadcastThreadSummary(endpointID, threadID)
-		if s.threadMgr != nil {
-			s.threadMgr.Wake(endpointID, threadID)
-		}
-	}
-	return nil
+	return err
 }

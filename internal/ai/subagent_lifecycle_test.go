@@ -192,7 +192,9 @@ type recordingFloretHost struct {
 	deleteThreadIDs    []flruntime.ThreadID
 	closeSubagentReqs  []flruntime.CloseSubAgentRequest
 	closeResult        *flruntime.SubAgentSnapshot
-	pendingApprovals   []flruntime.PendingApproval
+	approvalQueue      flruntime.ApprovalQueue
+	resolveApproval    func(flruntime.ResolveApprovalRequest) (flruntime.ResolveApprovalResult, error)
+	resolveApprovalReq []flruntime.ResolveApprovalRequest
 }
 
 func bindRecordingSubagentRead(svc *Service, parentThreadID string, host floretSubagentReadHost) {
@@ -275,14 +277,26 @@ func (h *recordingFloretHost) ListThreadDetailEvents(context.Context, flruntime.
 	return flruntime.ThreadDetailEvents{}, nil
 }
 
-func (h *recordingFloretHost) ListPendingApprovals(_ context.Context, req flruntime.ListPendingApprovalsRequest) (flruntime.PendingApprovals, error) {
+func (h *recordingFloretHost) ReadApprovalQueue(_ context.Context, req flruntime.ReadApprovalQueueRequest) (flruntime.ApprovalQueue, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return flruntime.PendingApprovals{
-		ThreadID:    req.ThreadID,
-		Approvals:   append([]flruntime.PendingApproval(nil), h.pendingApprovals...),
-		GeneratedAt: time.Now(),
-	}, nil
+	queue := h.approvalQueue
+	if queue.RootThreadID == "" {
+		queue = flruntime.ApprovalQueue{RootThreadID: req.ThreadID, GeneratedAt: time.Now()}
+	}
+	queue.Items = append([]flruntime.ApprovalRecord(nil), queue.Items...)
+	return queue, nil
+}
+
+func (h *recordingFloretHost) ResolveApproval(_ context.Context, req flruntime.ResolveApprovalRequest) (flruntime.ResolveApprovalResult, error) {
+	h.mu.Lock()
+	h.resolveApprovalReq = append(h.resolveApprovalReq, req)
+	resolve := h.resolveApproval
+	h.mu.Unlock()
+	if resolve == nil {
+		return flruntime.ResolveApprovalResult{}, errors.New("unexpected approval resolution")
+	}
+	return resolve(req)
 }
 
 func (h *recordingFloretHost) ReadTurnProjection(_ context.Context, req flruntime.ReadTurnProjectionRequest) (flruntime.ThreadTurnProjection, error) {
@@ -830,7 +844,6 @@ func TestFloretSubagentsSpawnPersistsAndLabelsDistinctChildRunID(t *testing.T) {
 	svc := &Service{
 		threadsDB:          store,
 		flowerLiveByThread: map[string]*flowerLiveThreadStream{},
-		delegatedApprovals: map[string]*delegatedApprovalHandle{},
 		persistOpTO:        time.Second,
 	}
 	parent := newPermissionPolicyTestRun(t, t.TempDir(), FlowerPermissionApprovalRequired, "subagent_spawn_identity")
@@ -954,7 +967,6 @@ func TestSubagentSpawnFailureIsNotEligibleForRecoveryReplay(t *testing.T) {
 	svc := &Service{
 		threadsDB:          store,
 		flowerLiveByThread: map[string]*flowerLiveThreadStream{},
-		delegatedApprovals: map[string]*delegatedApprovalHandle{},
 		persistOpTO:        time.Second,
 	}
 	parent := newPermissionPolicyTestRun(t, t.TempDir(), FlowerPermissionApprovalRequired, "subagent_spawn_failure")
@@ -1001,15 +1013,15 @@ func TestSubagentSpawnFailureIsNotEligibleForRecoveryReplay(t *testing.T) {
 	} else if ok {
 		t.Fatalf("unexpected finalized child permission snapshot after host failure: %#v", rec)
 	}
-	provisional, ok, err := store.GetChildPermissionSnapshotBySpawnToolCall(context.Background(), parent.endpointID, spawnToolCallID)
+	aborted, ok, err := store.GetChildPermissionSnapshotBySpawnToolCall(context.Background(), parent.endpointID, spawnToolCallID)
 	if err != nil {
 		t.Fatalf("GetChildPermissionSnapshotBySpawnToolCall: %v", err)
 	}
 	if !ok {
-		t.Fatalf("missing provisional child permission snapshot for %s", spawnToolCallID)
+		t.Fatalf("missing aborted child permission snapshot for %s", spawnToolCallID)
 	}
-	if provisional.State != "provisional" {
-		t.Fatalf("child snapshot state=%q, want provisional", provisional.State)
+	if aborted.State != "aborted" || aborted.FinalizedAtUnixMs != 0 {
+		t.Fatalf("child snapshot=%#v, want aborted and never finalized", aborted)
 	}
 	host.mu.Lock()
 	request := host.spawnRequests[0]
@@ -1173,9 +1185,9 @@ func TestDeleteThreadClosesRuntimeWithoutChildThreadstoreProjection(t *testing.T
 	if childAfterDelete != nil {
 		t.Fatalf("child threadstore row exists: %#v", childAfterDelete)
 	}
-	childMetaAfterDelete, err := svc.threadsDB.GetFlowerThreadMetadata(ctx, meta.EndpointID, childID)
+	childMetaAfterDelete, err := svc.threadsDB.GetFlowerThreadRouting(ctx, meta.EndpointID, childID)
 	if err != nil {
-		t.Fatalf("GetFlowerThreadMetadata child after delete: %v", err)
+		t.Fatalf("GetFlowerThreadRouting child after delete: %v", err)
 	}
 	if childMetaAfterDelete != nil {
 		t.Fatalf("child thread metadata exists: %#v", childMetaAfterDelete)
@@ -1643,9 +1655,9 @@ func TestServiceGetFlowerSubagentDetailRequestsRawMessageContent(t *testing.T) {
 	if childRecord != nil {
 		t.Fatalf("detail lookup created child threadstore row: %#v", childRecord)
 	}
-	childMeta, err := svc.threadsDB.GetFlowerThreadMetadata(ctx, meta.EndpointID, "child-detail")
+	childMeta, err := svc.threadsDB.GetFlowerThreadRouting(ctx, meta.EndpointID, "child-detail")
 	if err != nil {
-		t.Fatalf("GetFlowerThreadMetadata child detail: %v", err)
+		t.Fatalf("GetFlowerThreadRouting child detail: %v", err)
 	}
 	if childMeta != nil {
 		t.Fatalf("detail lookup created child thread metadata: %#v", childMeta)
@@ -1926,9 +1938,9 @@ func TestServiceGetFlowerSubagentDetailUsesParentScopedReadHostWithoutCachedRunt
 	if childRecord != nil {
 		t.Fatalf("detail lookup created child threadstore row: %#v", childRecord)
 	}
-	childMeta, err := svc.threadsDB.GetFlowerThreadMetadata(ctx, meta.EndpointID, childID)
+	childMeta, err := svc.threadsDB.GetFlowerThreadRouting(ctx, meta.EndpointID, childID)
 	if err != nil {
-		t.Fatalf("GetFlowerThreadMetadata child detail: %v", err)
+		t.Fatalf("GetFlowerThreadRouting child detail: %v", err)
 	}
 	if childMeta != nil {
 		t.Fatalf("detail lookup created child thread metadata: %#v", childMeta)

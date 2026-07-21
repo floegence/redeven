@@ -1,6 +1,7 @@
 package threadstore
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -9,6 +10,84 @@ import (
 
 	"github.com/floegence/redeven/internal/ai/permissionsnapshot"
 )
+
+func migrateProductV3ToV4(tx *sql.Tx) error {
+	if err := verifyProductSchemaVersion(tx, 3); err != nil {
+		return fmt.Errorf("verify product threadstore v3: %w", err)
+	}
+	if _, err := tx.Exec(`
+CREATE TABLE ai_flower_thread_routing (
+  endpoint_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  updated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  home_runtime_id TEXT NOT NULL DEFAULT '',
+  home_runtime_kind TEXT NOT NULL DEFAULT '',
+  origin_env_public_id TEXT NOT NULL DEFAULT '',
+  primary_target_id TEXT NOT NULL DEFAULT '',
+  active_target_ids_json TEXT NOT NULL DEFAULT '[]',
+  PRIMARY KEY(endpoint_id, thread_id)
+);
+`); err != nil {
+		return err
+	}
+	rows, err := tx.Query(`
+SELECT endpoint_id, thread_id, updated_at_unix_ms, home_runtime_id, home_runtime_kind,
+       origin_env_public_id, primary_target_id, active_target_ids_json
+FROM ai_flower_thread_metadata
+ORDER BY endpoint_id, thread_id
+`)
+	if err != nil {
+		return err
+	}
+	var routes []FlowerThreadRouting
+	for rows.Next() {
+		var route FlowerThreadRouting
+		if err := rows.Scan(
+			&route.EndpointID,
+			&route.ThreadID,
+			&route.UpdatedAtUnixMs,
+			&route.HomeRuntimeID,
+			&route.HomeRuntimeKind,
+			&route.OriginEnvPublicID,
+			&route.PrimaryTargetID,
+			&route.ActiveTargetIDsJSON,
+		); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		originalUpdatedAt := route.UpdatedAtUnixMs
+		route, err = normalizeFlowerThreadRouting(route)
+		if err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("migrate product thread routing %q: %w", route.ThreadID, err)
+		}
+		if originalUpdatedAt <= 0 {
+			route.UpdatedAtUnixMs = 0
+		}
+		if hasFlowerThreadRouting(route) {
+			routes = append(routes, route)
+		}
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, route := range routes {
+		if err := upsertFlowerThreadRoutingExec(context.Background(), tx, route); err != nil {
+			return err
+		}
+	}
+	if err := migrateProductV3ForkOperationSnapshots(tx); err != nil {
+		return err
+	}
+	_, err = tx.Exec(`
+DROP INDEX idx_ai_flower_thread_metadata_owner;
+DROP INDEX idx_ai_flower_thread_metadata_parent;
+DROP TABLE ai_flower_thread_metadata;
+DROP TABLE ai_flower_transfers;
+DROP TABLE ai_flower_handoffs;
+`)
+	return err
+}
 
 func migrateProductV2ToV3(tx *sql.Tx) error {
 	if err := verifyProductSchemaVersion(tx, 2); err != nil {
@@ -285,7 +364,49 @@ type productV2ForkSnapshot struct {
 	Request        forkSnapshotRequest     `json:"request"`
 	SourceThread   productV2Thread         `json:"source_thread"`
 	UploadRefs     []forkSnapshotUploadRef `json:"upload_refs"`
-	FlowerMetadata *FlowerThreadMetadata   `json:"flower_metadata,omitempty"`
+	FlowerMetadata *legacyFlowerMetadata   `json:"flower_metadata,omitempty"`
+}
+
+const legacyForkSnapshotSchemaVersion = 2
+
+type legacyFlowerMetadata struct {
+	EndpointID          string `json:"endpoint_id"`
+	ThreadID            string `json:"thread_id"`
+	OwnerKind           string `json:"owner_kind"`
+	OwnerID             string `json:"owner_id"`
+	ParentThreadID      string `json:"parent_thread_id"`
+	ParentRunID         string `json:"parent_run_id"`
+	ContextJSON         string `json:"context_json"`
+	ActionJSON          string `json:"action_json"`
+	UpdatedAtUnixMs     int64  `json:"updated_at_unix_ms"`
+	HomeRuntimeID       string `json:"home_runtime_id"`
+	HomeRuntimeKind     string `json:"home_runtime_kind"`
+	OriginEnvPublicID   string `json:"origin_env_public_id"`
+	PrimaryTargetID     string `json:"primary_target_id"`
+	ActiveTargetIDsJSON string `json:"active_target_ids_json"`
+}
+
+func flowerRoutingFromLegacyMetadata(metadata *legacyFlowerMetadata) (*FlowerThreadRouting, error) {
+	if metadata == nil {
+		return nil, nil
+	}
+	routing, err := normalizeFlowerThreadRouting(FlowerThreadRouting{
+		EndpointID:          metadata.EndpointID,
+		ThreadID:            metadata.ThreadID,
+		UpdatedAtUnixMs:     metadata.UpdatedAtUnixMs,
+		HomeRuntimeID:       metadata.HomeRuntimeID,
+		HomeRuntimeKind:     metadata.HomeRuntimeKind,
+		OriginEnvPublicID:   metadata.OriginEnvPublicID,
+		PrimaryTargetID:     metadata.PrimaryTargetID,
+		ActiveTargetIDsJSON: metadata.ActiveTargetIDsJSON,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if !hasFlowerThreadRouting(routing) {
+		return nil, nil
+	}
+	return &routing, nil
 }
 
 type productV2Thread struct {
@@ -358,7 +479,7 @@ func processProductV2ForkOperationSnapshots(tx *sql.Tx, apply bool) error {
 			}
 			return fmt.Errorf("fork operation %q has empty product v2 snapshot in state %q", item.operationID, item.status)
 		}
-		if item.snapshotSchemaVersion != ForkSnapshotSchemaVersion {
+		if item.snapshotSchemaVersion != legacyForkSnapshotSchemaVersion {
 			return fmt.Errorf("fork operation %q has unsupported snapshot schema %d", item.operationID, item.snapshotSchemaVersion)
 		}
 		var legacy productV2ForkSnapshot
@@ -386,8 +507,12 @@ func processProductV2ForkOperationSnapshots(tx *sql.Tx, apply bool) error {
 			}
 			legacy.Request.Title = ""
 		}
-		snapshot := forkSnapshotV2{
-			SchemaVersion: legacy.SchemaVersion,
+		routing, err := flowerRoutingFromLegacyMetadata(legacy.FlowerMetadata)
+		if err != nil {
+			return fmt.Errorf("migrate fork operation %q routing: %w", item.operationID, err)
+		}
+		snapshot := forkSnapshot{
+			SchemaVersion: ForkSnapshotSchemaVersion,
 			Request:       legacy.Request,
 			SourceThread: ThreadSettings{
 				ThreadID: legacy.SourceThread.ThreadID, EndpointID: legacy.SourceThread.EndpointID,
@@ -400,7 +525,7 @@ func processProductV2ForkOperationSnapshots(tx *sql.Tx, apply bool) error {
 				SettingsCreatedAtUnixMs: legacy.SourceThread.CreatedAtUnixMs,
 				SettingsUpdatedAtUnixMs: legacy.SourceThread.UpdatedAtUnixMs,
 			},
-			FlowerMetadata: legacy.FlowerMetadata,
+			FlowerRouting: routing,
 		}
 		seenUploads := map[string]struct{}{}
 		for _, ref := range legacy.UploadRefs {
@@ -428,7 +553,7 @@ func processProductV2ForkOperationSnapshots(tx *sql.Tx, apply bool) error {
 		operation := &ForkOperation{
 			OperationID: item.operationID, EndpointID: item.endpointID, SourceThreadID: item.sourceThreadID,
 			DestinationThreadID: item.destinationThreadID, RequestFingerprint: item.requestFingerprint,
-			SnapshotSchemaVersion: item.snapshotSchemaVersion,
+			SnapshotSchemaVersion: ForkSnapshotSchemaVersion,
 		}
 		fingerprint, err = forkSnapshotFingerprint(snapshot)
 		if err != nil {
@@ -443,9 +568,112 @@ func processProductV2ForkOperationSnapshots(tx *sql.Tx, apply bool) error {
 			return err
 		}
 		if apply {
-			if _, err := tx.Exec(`UPDATE ai_thread_fork_operations SET snapshot_json = ?, snapshot_fingerprint = ? WHERE operation_id = ?`, string(payload), fingerprint, item.operationID); err != nil {
+			if _, err := tx.Exec(`UPDATE ai_thread_fork_operations SET snapshot_schema_version = ?, snapshot_json = ?, snapshot_fingerprint = ? WHERE operation_id = ?`, ForkSnapshotSchemaVersion, string(payload), fingerprint, item.operationID); err != nil {
 				return err
 			}
+		}
+	}
+	return nil
+}
+
+type productV3ForkSnapshot struct {
+	SchemaVersion  int                     `json:"schema_version"`
+	Request        forkSnapshotRequest     `json:"request"`
+	SourceThread   ThreadSettings          `json:"source_thread"`
+	UploadRefs     []forkSnapshotUploadRef `json:"upload_refs"`
+	FlowerMetadata *legacyFlowerMetadata   `json:"flower_metadata,omitempty"`
+}
+
+func migrateProductV3ForkOperationSnapshots(tx *sql.Tx) error {
+	rows, err := tx.Query(`
+SELECT operation_id, endpoint_id, source_thread_id, destination_thread_id,
+       request_fingerprint, status, snapshot_schema_version, snapshot_json
+FROM ai_thread_fork_operations
+ORDER BY operation_id ASC
+`)
+	if err != nil {
+		return err
+	}
+	type row struct {
+		operationID, endpointID, sourceThreadID, destinationThreadID string
+		requestFingerprint, status, snapshotJSON                     string
+		snapshotSchemaVersion                                        int
+	}
+	var items []row
+	for rows.Next() {
+		var item row
+		if err := rows.Scan(
+			&item.operationID,
+			&item.endpointID,
+			&item.sourceThreadID,
+			&item.destinationThreadID,
+			&item.requestFingerprint,
+			&item.status,
+			&item.snapshotSchemaVersion,
+			&item.snapshotJSON,
+		); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		items = append(items, item)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, item := range items {
+		if strings.TrimSpace(item.snapshotJSON) == "" {
+			if item.status == string(ForkOperationCommitted) {
+				continue
+			}
+			return fmt.Errorf("fork operation %q has empty product v3 snapshot in state %q", item.operationID, item.status)
+		}
+		switch item.snapshotSchemaVersion {
+		case ForkSnapshotSchemaVersion:
+			continue
+		case legacyForkSnapshotSchemaVersion:
+		default:
+			return fmt.Errorf("fork operation %q has unsupported snapshot schema %d", item.operationID, item.snapshotSchemaVersion)
+		}
+		var legacy productV3ForkSnapshot
+		if err := decodeStrictJSON(item.snapshotJSON, &legacy); err != nil {
+			return fmt.Errorf("decode product v3 fork operation %q: %w", item.operationID, err)
+		}
+		if legacy.SchemaVersion != legacyForkSnapshotSchemaVersion {
+			return fmt.Errorf("fork operation %q snapshot body has unsupported schema %d", item.operationID, legacy.SchemaVersion)
+		}
+		routing, err := flowerRoutingFromLegacyMetadata(legacy.FlowerMetadata)
+		if err != nil {
+			return fmt.Errorf("migrate fork operation %q routing: %w", item.operationID, err)
+		}
+		snapshot := forkSnapshot{
+			SchemaVersion: ForkSnapshotSchemaVersion,
+			Request:       legacy.Request,
+			SourceThread:  legacy.SourceThread,
+			UploadRefs:    legacy.UploadRefs,
+			FlowerRouting: routing,
+		}
+		fingerprint, err := forkSnapshotFingerprint(snapshot)
+		if err != nil {
+			return err
+		}
+		operation := &ForkOperation{
+			OperationID: item.operationID, EndpointID: item.endpointID, SourceThreadID: item.sourceThreadID,
+			DestinationThreadID: item.destinationThreadID, RequestFingerprint: item.requestFingerprint,
+			SnapshotSchemaVersion: ForkSnapshotSchemaVersion, SnapshotFingerprint: fingerprint,
+		}
+		if err := validateForkSnapshot(operation, snapshot); err != nil {
+			return fmt.Errorf("validate migrated product v3 fork operation %q: %w", item.operationID, err)
+		}
+		payload, err := json.Marshal(snapshot)
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec(`
+UPDATE ai_thread_fork_operations
+SET snapshot_schema_version = ?, snapshot_json = ?, snapshot_fingerprint = ?
+WHERE operation_id = ?
+`, ForkSnapshotSchemaVersion, string(payload), fingerprint, item.operationID); err != nil {
+			return err
 		}
 	}
 	return nil

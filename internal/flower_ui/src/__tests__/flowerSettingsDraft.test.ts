@@ -24,6 +24,7 @@ describe('Flower thread list projection', () => {
     const thread: FlowerThreadSnapshot = {
       thread_id: 'thread-1',
       title: 'Transfer plan',
+      title_status: 'ready',
       model_id: 'primary/gpt-4.1',
       working_dir: '/workspace/redeven',
       pinned_at_ms: 123,

@@ -123,10 +123,10 @@ func TestStoreThreadDeleteIntentFreezesThreadScopedWrites(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateFollowupWithUploadRefs: %v", err)
 	}
-	if err := store.UpsertFlowerThreadMetadata(ctx, FlowerThreadMetadata{
-		EndpointID: endpointID, ThreadID: threadID, OwnerKind: "user", OwnerID: "owner_before_delete",
+	if err := store.UpsertFlowerThreadRouting(ctx, FlowerThreadRouting{
+		EndpointID: endpointID, ThreadID: threadID, PrimaryTargetID: "target_before_delete",
 	}); err != nil {
-		t.Fatalf("UpsertFlowerThreadMetadata: %v", err)
+		t.Fatalf("UpsertFlowerThreadRouting: %v", err)
 	}
 	beforeChildJSON, beforeChildHash, beforeChildRegistry, beforeChildSchema, beforeChildPresentation := permissionSnapshotPayloadForTest(t, "child_snapshot_before_delete", permissionsnapshot.PermissionApprovalRequired)
 	if err := store.InsertChildPermissionSnapshotProvisional(ctx, ChildPermissionSnapshotRecord{
@@ -211,9 +211,9 @@ func TestStoreThreadDeleteIntentFreezesThreadScopedWrites(t *testing.T) {
 			})
 			return err
 		}},
-		{name: "flower metadata", run: func() error {
-			return store.UpsertFlowerThreadMetadata(ctx, FlowerThreadMetadata{
-				EndpointID: endpointID, ThreadID: threadID, OwnerKind: "user", OwnerID: "owner_after_delete",
+		{name: "flower routing", run: func() error {
+			return store.UpsertFlowerThreadRouting(ctx, FlowerThreadRouting{
+				EndpointID: endpointID, ThreadID: threadID, PrimaryTargetID: "target_after_delete",
 			})
 		}},
 		{name: "permission snapshot", run: func() error {
@@ -236,22 +236,6 @@ func TestStoreThreadDeleteIntentFreezesThreadScopedWrites(t *testing.T) {
 			_, err := store.FinalizeChildPermissionSnapshot(ctx, endpointID, "child_snapshot_before_delete", destinationID, "child_run_before_delete", 400)
 			return err
 		}},
-		{name: "flower transfer", run: func() error {
-			_, err := store.InsertFlowerTransfer(ctx, FlowerTransferRecord{
-				TransferID: "transfer_after_delete", EndpointID: endpointID, SourceThreadID: threadID,
-				DestinationThreadID: destinationID, IdempotencyKey: "transfer_key_after_delete",
-				ApprovalHash: "approval_hash", PlanJSON: `{"kind":"transfer"}`,
-			})
-			return err
-		}},
-		{name: "flower handoff", run: func() error {
-			_, err := store.InsertFlowerHandoff(ctx, FlowerHandoffRecord{
-				HandoffID: "handoff_after_delete", EndpointID: endpointID, SourceThreadID: threadID,
-				DestinationThreadID: destinationID, IdempotencyKey: "handoff_key_after_delete",
-				EnvelopeHash: "envelope_hash", EnvelopeJSON: `{"kind":"handoff"}`,
-			})
-			return err
-		}},
 	}
 	for _, check := range checks {
 		t.Run(check.name, func(t *testing.T) {
@@ -269,9 +253,9 @@ func TestStoreThreadDeleteIntentFreezesThreadScopedWrites(t *testing.T) {
 	if err != nil || queuedUpload == nil {
 		t.Fatalf("queued upload ownership=%#v err=%v", queuedUpload, err)
 	}
-	metadata, err := store.GetFlowerThreadMetadata(ctx, endpointID, threadID)
-	if err != nil || metadata == nil || metadata.OwnerID != "owner_before_delete" {
-		t.Fatalf("flower metadata=%#v err=%v", metadata, err)
+	routing, err := store.GetFlowerThreadRouting(ctx, endpointID, threadID)
+	if err != nil || routing == nil || routing.PrimaryTargetID != "target_before_delete" {
+		t.Fatalf("flower routing=%#v err=%v", routing, err)
 	}
 }
 

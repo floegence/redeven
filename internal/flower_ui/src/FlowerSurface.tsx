@@ -8,7 +8,7 @@ import { Button, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 import { writeTextToClipboard } from './clipboard';
 import { FlowerChatContextChips } from './chat/FlowerChatContextChips';
 import { FlowerChatContextPreview } from './chat/FlowerChatContextPreview';
-import { parseChatContextAction } from './chat/flowerChatContextModel';
+import { parseChatContextAction, parseChatMessageReferences } from './chat/flowerChatContextModel';
 import {
   createFlowerClientTurnID,
   flowerTurnAdmissionUncertainIdentity,
@@ -183,7 +183,7 @@ type FlowerLiveTimeoutDetail = Readonly<{
   sequence: number;
 }>;
 const SELECTED_THREAD_LIVE_EVENTS_TIMEOUT_MS = 15000;
-const APPROVAL_DECISION_FALLBACK_RELOAD_MS = 1500;
+const APPROVAL_DECISION_RESYNC_MS = 1500;
 const FLOWER_LIVE_EVENTS_TIMEOUT_EVENT = 'redeven:flower-live-events-timeout';
 class LiveEventRequestTimeoutError extends Error {
   constructor() {
@@ -524,20 +524,6 @@ function flowerApprovalRequest(
 ): FlowerSubmitApprovalRequest {
   const queueGeneration = thread.approval_queue?.generation ?? action.queue_generation ?? 0;
   const queueRevision = thread.approval_queue?.revision ?? 0;
-  if (action.origin === 'delegated_subagent') {
-    return {
-      thread_id: thread.thread_id,
-      origin: 'delegated_subagent',
-      action_id: action.action_id,
-      approved,
-      ...(action.version ? { version: action.version } : {}),
-      ...(action.surface_epoch ? { surface_epoch: action.surface_epoch } : {}),
-      queue_generation: queueGeneration,
-      queue_revision: queueRevision,
-      idempotency_key: `${action.action_id}:${approved ? 'approve' : 'reject'}:${action.version}:${action.surface_epoch ?? 0}`,
-      delegated_ref: action.delegated_ref,
-    };
-  }
   return {
     thread_id: thread.thread_id,
     origin: action.origin,
@@ -546,11 +532,12 @@ function flowerApprovalRequest(
     tool_id: action.tool_id,
     approved,
     ...(action.expected_seq ? { expected_seq: action.expected_seq } : {}),
-    ...(action.revision ? { revision: action.revision } : {}),
+    revision: action.revision,
     ...(action.version ? { version: action.version } : {}),
     ...(action.surface_epoch ? { surface_epoch: action.surface_epoch } : {}),
     queue_generation: queueGeneration,
     queue_revision: queueRevision,
+    idempotency_key: `${action.action_id}:${approved ? 'approve' : 'reject'}:${action.revision}:${queueGeneration}:${queueRevision}`,
   };
 }
 
@@ -562,7 +549,6 @@ function retryableApprovalAction(
   const pending = (thread.approval_actions ?? []).filter((action) => action.status === 'pending' && action.state === 'requested');
   const action = pending.find((candidate) => candidate.action_id === actionID) ?? null;
   if (!action || !action.can_approve) return null;
-  if (action.origin === 'delegated_subagent' && action.delivery_state && action.delivery_state !== 'waiting_decision') return null;
   const currentActionID = trimString(thread.approval_queue?.current_action_id);
   if (currentActionID) return currentActionID === actionID ? action : null;
   const primary = action.surface_role === 'primary_action'
@@ -904,7 +890,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let threadSelectionContentTimer: number | undefined;
   let backgroundThreadsRefreshInFlight = false;
   let composerFocusToken = 0;
-  let approvalDecisionFallbackTimer: number | undefined;
+  let approvalDecisionResyncTimer: number | undefined;
   let approvalHandoffStyleFrame = 0;
   let approvalHandoffStyleSettleFrame = 0;
   const [composerFocusRevision, setComposerFocusRevision] = createSignal(0);
@@ -1026,6 +1012,27 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     requestAnimationFrame: requestTranscriptAnimationFrame,
     cancelAnimationFrame: cancelTranscriptAnimationFrame,
   });
+  const clearSubagentDetailTail = () => {
+    if (subagentDetailTailTimer !== undefined) {
+      window.clearTimeout(subagentDetailTailTimer);
+      subagentDetailTailTimer = undefined;
+    }
+    subagentDetailTailInFlight = null;
+    setSubagentDetailTailLoading(false);
+    setSubagentDetailTailError('');
+    subagentDetailScroll.dispose();
+    subagentDetailScroll.markNearBottom();
+  };
+  const closeSubagentOverlays = () => {
+    setSubagentDropdownOpen(false);
+    setActiveSubagentID('');
+    setSubagentDetail(null);
+    setSubagentDetailError('');
+    setSubagentDetailLoading(false);
+    setSubagentDetailLoadingMore(false);
+    clearSubagentDetailTail();
+    setSubagentDetailOpenedRevision((revision) => revision + 1);
+  };
   const selectedThreadTailPreparing = createMemo(() => {
     const pending = selectedThreadTailReveal();
     return Boolean(pending && pending.threadID === selectedThreadID());
@@ -1121,15 +1128,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       || trimString(thread.error?.message) !== '';
   });
   const selectedApprovalActions = createMemo(() => (
-    selectedThread()?.approval_actions?.filter((action) => (
-      action.status === 'pending' && action.state === 'requested'
-      || action.origin === 'delegated_subagent' && action.delivery_state === 'delivery_pending'
-      || action.origin === 'delegated_subagent' && action.delivery_state === 'delivery_delivered'
-      || action.origin === 'delegated_subagent' && action.delivery_state === 'delivery_failed'
-      || action.origin === 'delegated_subagent' && action.delivery_state === 'delivery_ack_unknown'
-      || action.origin === 'delegated_subagent' && action.delivery_state === 'delivery_unavailable'
-      || action.origin === 'delegated_subagent' && action.status === 'unavailable'
-    )) ?? []
+    selectedThread()?.approval_actions?.filter((action) => action.status === 'pending' && action.state === 'requested') ?? []
   ));
   const approvalActionIsDelegated = (action: FlowerApprovalAction): boolean => action.origin === 'delegated_subagent';
   const approvalActionIsPrimarySurface = (action: FlowerApprovalAction): boolean => (
@@ -1141,7 +1140,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     && approvalActionIsPrimarySurface(action)
     && action.status === 'pending'
     && action.state === 'requested'
-    && (!approvalActionIsDelegated(action) || !action.delivery_state || action.delivery_state === 'waiting_decision')
   );
   const selectedComposerApprovalAction = createMemo(() => flowerComposerApprovalAction(selectedThread()));
   const selectedApprovalDecisionHandoff = createMemo(() => {
@@ -1172,10 +1170,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       && trimString(action.action_id) !== composerActionID
     ));
   });
-  const clearApprovalDecisionFallbackTimer = () => {
-    if (approvalDecisionFallbackTimer !== undefined) {
-      window.clearTimeout(approvalDecisionFallbackTimer);
-      approvalDecisionFallbackTimer = undefined;
+  const clearApprovalDecisionResyncTimer = () => {
+    if (approvalDecisionResyncTimer !== undefined) {
+      window.clearTimeout(approvalDecisionResyncTimer);
+      approvalDecisionResyncTimer = undefined;
     }
   };
   const clearApprovalHandoffStyleSchedule = () => {
@@ -1211,7 +1209,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const cancelApprovalDecisionHandoff = (actionID: string) => {
     const current = untrack(approvalDecisionHandoff);
     if (!current || current.actionID !== actionID) return;
-    clearApprovalDecisionFallbackTimer();
+    clearApprovalDecisionResyncTimer();
     batch(() => {
       setApprovalDecisionHandoff(null);
       clearApprovalSubmittingAction(actionID);
@@ -1220,7 +1218,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const settleApprovalDecisionHandoff = (threadID: string, actionID: string) => {
     const current = untrack(approvalDecisionHandoff);
     if (!current || current.threadID !== threadID || current.actionID !== actionID) return;
-    clearApprovalDecisionFallbackTimer();
+    clearApprovalDecisionResyncTimer();
     clearApprovalHandoffStyleSchedule();
     batch(() => {
       setApprovalDecisionHandoff(null);
@@ -1246,19 +1244,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!targetReached) return;
     settleApprovalDecisionHandoff(thread.thread_id, handoff.actionID);
   };
-  const scheduleApprovalDecisionFallbackReload = (threadID: string, actionID: string) => {
-    clearApprovalDecisionFallbackTimer();
-    approvalDecisionFallbackTimer = window.setTimeout(() => {
-      approvalDecisionFallbackTimer = undefined;
+  const scheduleApprovalDecisionResync = (threadID: string, actionID: string) => {
+    clearApprovalDecisionResyncTimer();
+    approvalDecisionResyncTimer = window.setTimeout(() => {
+      approvalDecisionResyncTimer = undefined;
       const current = untrack(approvalDecisionHandoff);
       if (!current || current.threadID !== threadID || current.actionID !== actionID) return;
-      setApprovalDecisionHandoff({ ...current, phase: 'fallback_reload' });
       void reloadSelectedThread(threadID, threadLoadSequence, 'user_action').catch((error) => {
         if (selectedThreadDetailMatches(threadID)) {
           notifyComposerError(getErrorMessage(error));
         }
       });
-    }, APPROVAL_DECISION_FALLBACK_RELOAD_MS);
+    }, APPROVAL_DECISION_RESYNC_MS);
   };
   const registerApprovalDecisionReceipt = (
     threadID: string,
@@ -1268,7 +1265,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const current = untrack(approvalDecisionHandoff);
     if (!current || current.threadID !== threadID || current.actionID !== actionID) return;
     const targetCursor = liveCursorValue(currentCursor);
-    clearApprovalDecisionFallbackTimer();
+    clearApprovalDecisionResyncTimer();
     setApprovalDecisionHandoff({ ...current, phase: 'awaiting_projection', targetCursor });
     const thread = threads().find((candidate) => candidate.thread_id === threadID);
     if (thread) {
@@ -1279,7 +1276,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       );
     }
     if (untrack(approvalDecisionHandoff)?.actionID === actionID) {
-      scheduleApprovalDecisionFallbackReload(threadID, actionID);
+      scheduleApprovalDecisionResync(threadID, actionID);
     }
   };
   createEffect(on(
@@ -1287,7 +1284,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     (threadID) => {
       const handoff = untrack(approvalDecisionHandoff);
       if (!handoff || handoff.threadID === threadID) return;
-      clearApprovalDecisionFallbackTimer();
+      clearApprovalDecisionResyncTimer();
       clearApprovalHandoffStyleSchedule();
       batch(() => {
         setApprovalDecisionHandoff(null);
@@ -1297,7 +1294,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     },
   ));
   onCleanup(() => {
-    clearApprovalDecisionFallbackTimer();
+    clearApprovalDecisionResyncTimer();
     clearApprovalHandoffStyleSchedule();
   });
   const pendingContextCompactionVisible = (thread: FlowerThreadSnapshot | null, pending: PendingContextCompactionDecoration | null): boolean => {
@@ -1927,9 +1924,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       t.model_id ?? '',
       t.target_labels?.join('\x1e') ?? '',
       t.working_dir ?? '',
-      t.owner_kind ?? '',
-      t.owner_id ?? '',
-      t.parent_thread_id ?? '',
       t.read_only_reason ?? '',
       stableLiveSidebar ? 'live' : String(visibleThread.read_status.is_unread),
       stableLiveSidebar ? 'live' : flowerThreadReadSnapshotKey(t.read_status.snapshot),
@@ -1946,9 +1940,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     t.model_id,
     t.target_labels.join('\x1e'),
     t.working_dir,
-    t.owner_kind ?? '',
-    t.owner_id ?? '',
-    t.parent_thread_id ?? '',
     t.read_only_reason ?? '',
     SIDEBAR_STABLE_LIVE_STATUSES.has(t.status) ? 'live' : String(t.read_status.is_unread),
     SIDEBAR_STABLE_LIVE_STATUSES.has(t.status) ? 'live' : flowerThreadReadSnapshotKey(t.read_status.snapshot),
@@ -3208,29 +3199,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setSidePanel('chat');
   };
 
-  const clearSubagentDetailTail = () => {
-    if (subagentDetailTailTimer !== undefined) {
-      window.clearTimeout(subagentDetailTailTimer);
-      subagentDetailTailTimer = undefined;
-    }
-    subagentDetailTailInFlight = null;
-    setSubagentDetailTailLoading(false);
-    setSubagentDetailTailError('');
-    subagentDetailScroll.dispose();
-    subagentDetailScroll.markNearBottom();
-  };
-
-  const closeSubagentOverlays = () => {
-    setSubagentDropdownOpen(false);
-    setActiveSubagentID('');
-    setSubagentDetail(null);
-    setSubagentDetailError('');
-    setSubagentDetailLoading(false);
-    setSubagentDetailLoadingMore(false);
-    clearSubagentDetailTail();
-    setSubagentDetailOpenedRevision((revision) => revision + 1);
-  };
-
   const openSettings = () => {
     closeSubagentOverlays();
     setSidePanel('settings');
@@ -3880,16 +3848,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const queuedSource = selectedTimelineEntries().find((entry) => (
       entry.type === 'queued_turn' && `queued:${entry.turn.turn_id}` === preview.message_id
     ));
-    const sourceContextAction = sourceEntry?.type === 'message'
-      ? sourceEntry.message.context_action
-      : queuedSource?.type === 'queued_turn' ? queuedSource.turn.context_action : undefined;
-    if (!sourceContextAction) {
-      setContextSnapshotPreview(null);
-      return;
-    }
-    const display = parseChatContextAction(sourceContextAction);
+    const display = sourceEntry?.type === 'message'
+      ? parseChatMessageReferences(sourceEntry.message.references)
+      : queuedSource?.type === 'queued_turn'
+        ? parseChatContextAction(queuedSource.turn.context_action)
+        : null;
     const currentAction = display?.chips.find((chip) => (
-      chip.action?.context_index === preview.action.context_index
+      chip.action
+      && 'context_index' in chip.action
+      && chip.action.context_index === preview.action.context_index
       && chip.action.type === preview.action.type
     ))?.action;
     if (!currentAction || JSON.stringify(currentAction) !== JSON.stringify(preview.action)) {
@@ -4585,7 +4552,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       const threadID = trimString(thread.thread_id);
       if (!threadID) return;
-      clearApprovalDecisionFallbackTimer();
+      clearApprovalDecisionResyncTimer();
       clearApprovalHandoffStyleSchedule();
       setApprovalHandoffStyleThreadID('');
       setApprovalDecisionHandoff({
@@ -4638,10 +4605,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
 
       let refreshed: FlowerThreadSnapshot | null = null;
-      const currentHandoff = untrack(approvalDecisionHandoff);
-      if (currentHandoff?.actionID === action.action_id) {
-        setApprovalDecisionHandoff({ ...currentHandoff, phase: 'fallback_reload' });
-      }
       try {
         refreshed = await reloadCanonicalThread();
       } catch (reloadError) {
@@ -4874,7 +4837,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const descriptionID = `flower-approval-description-${action.action_id}`;
     const statusID = `flower-approval-status-${action.action_id}`;
     const actionLabel = action.summary.label || action.tool_name || copy().chat.toolApprovalRequired;
-    const subtaskLabel = action.delegated_ref?.child_thread_id ? copy().chat.toolApprovalSubtaskSuffix(action.delegated_ref.child_thread_id) : '';
+    const scopedThreadID = action.origin === 'delegated_subagent' && action.scope?.startsWith('thread:')
+      ? action.scope.slice('thread:'.length)
+      : '';
+    const subtaskLabel = scopedThreadID ? copy().chat.toolApprovalSubtaskSuffix(scopedThreadID) : '';
     const commandText = trimString(action.summary.command);
     const descriptionText = action.summary.description || action.read_only_reason || '';
     const hasDescription = Boolean(descriptionText);
@@ -4882,31 +4848,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const visibleFlags = approvalVisibleFlags(action);
     const commandCopyKey = `approval:${action.action_id}:command`;
     const commandCopied = () => copiedApprovalAction() === commandCopyKey;
-    const delegatedStatusCopy = () => copy().chat.delegatedApprovalStatus;
-    const statusCopy = (() => {
-      if (action.status === 'unavailable' || action.state === 'unavailable' || action.delivery_state === 'delivery_unavailable') {
-        return action.read_only_reason || delegatedStatusCopy().unavailable;
-      }
-      if (action.delivery_state === 'delivery_pending') {
-        return delegatedStatusCopy().pending;
-      }
-      if (action.delivery_state === 'delivery_delivered') {
-        return delegatedStatusCopy().delivered;
-      }
-      if (action.delivery_state === 'delivery_failed' || action.delivery_state === 'delivery_ack_unknown') {
-        return delegatedStatusCopy().failed;
-      }
-      if (!canDecide && !approvalActionIsPrimarySurface(action)) {
-        return delegatedStatusCopy().handledInCurrentThread;
-      }
-      return '';
-    })();
+    const statusCopy = !canDecide ? action.read_only_reason || copy().chat.toolApprovalUnavailable : '';
     const describedBy = [hasDescription ? descriptionID : '', statusCopy ? statusID : ''].filter(Boolean).join(' ');
     const unavailableCopy = (() => {
-      if (!approvalActionIsPrimarySurface(action)) return delegatedStatusCopy().handledInCurrentThread;
-      if (action.delivery_state === 'delivery_pending') return delegatedStatusCopy().deliveryInProgress;
-      if (action.delivery_state === 'delivery_delivered') return delegatedStatusCopy().deliveryDelivered;
-      if (action.delivery_state === 'delivery_failed' || action.delivery_state === 'delivery_ack_unknown') return delegatedStatusCopy().deliveryNeedsReview;
       return action.read_only_reason || copy().chat.toolApprovalUnavailable;
     })();
     const approvalIntroText = (() => {
@@ -6180,8 +6124,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     ));
     const failed = createMemo(() => message().status === 'error');
     const hasRenderableBlock = createMemo(() => entry().blocks.length > 0);
+    const contextDisplay = createMemo(() => {
+      const msg = message();
+      if (msg.role !== 'user') return null;
+      return parseChatMessageReferences(msg.references);
+    });
     const visible = createMemo(() => {
       if (hasRenderableBlock()) return true;
+      if (contextDisplay()) return true;
       if (activeCursor()) return true;
       if (!failed()) return false;
       return !selectedThreadRunErrorMessage();
@@ -6204,14 +6154,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const copyText = createMemo(() => messageCopyText(message(), blocks()));
     const messageTime = createMemo(() => formatMessageTime(message().created_at_ms));
     const assistantCopyBlockKey = createMemo(() => message().role === 'assistant' ? lastCopyableContentBlockKey(blocks()) : '');
-    const contextDisplay = createMemo(() => {
-      const msg = message();
-      if (msg.role !== 'user') return null;
-      return parseChatContextAction(msg.context_action);
-    });
     const canActivateContextChip = (chip: FlowerChatContextChip): boolean => {
       const action = chip.action;
       if (!action) return false;
+      if (action.type === 'open_canonical_reference') {
+        return contextDisplay()?.authority === 'canonical_references'
+          && Boolean(props.adapter.openCanonicalReference)
+          && Boolean(trimString(selectedThreadID()))
+          && Boolean(trimString(message().turn_id));
+      }
       if (action.type === 'open_linked_file_preview') return Boolean(props.adapter.openLinkedFilePreview);
       if (action.type === 'open_linked_directory_browser') return Boolean(props.adapter.openLinkedDirectoryBrowser);
       return true;
@@ -6231,6 +6182,24 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
 
       setContextSnapshotPreview(null);
+      if (action.type === 'open_canonical_reference') {
+        if (display.authority !== 'canonical_references') return;
+        const threadID = trimString(selectedThreadID());
+        const turnID = trimString(message().turn_id);
+        const referenceID = trimString(action.reference_id);
+        if (!threadID || !turnID || !referenceID) return;
+        try {
+          await props.adapter.openCanonicalReference?.({
+            thread_id: threadID,
+            turn_id: turnID,
+            reference_id: referenceID,
+          });
+        } catch (error) {
+          notifyThreadActionError(getErrorMessage(error));
+        }
+        return;
+      }
+      if (display.authority !== 'queued_context_action') return;
       const request = {
         path: action.path,
         thread_id: selectedThreadID() || undefined,
@@ -6239,6 +6208,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         source_surface: display.surface,
         target: display.target,
       };
+      if (!request.source_surface || !request.target) return;
       try {
         if (action.type === 'open_linked_file_preview') {
           await props.adapter.openLinkedFilePreview?.(request);
@@ -6299,8 +6269,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 </For>
                 <FlowerChatContextChips
                   contextDisplay={contextDisplay()!}
+                  linkedContextLabel={copy().chat.linkedContextLabel}
+							truncatedLabel={copy().chat.truncatedLabel}
                   canActivateChip={canActivateContextChip}
-                  onChipClick={(chip) => { void activateContextChip(chip); }}
+							onChipClick={activateContextChip}
                 />
               </div>
               <Show when={copyText() || messageTime()}>
@@ -6325,6 +6297,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const canActivateContextChip = (chip: FlowerChatContextChip): boolean => {
       const action = chip.action;
       if (!action) return false;
+      if (action.type === 'open_canonical_reference') return false;
       if (action.type === 'open_linked_file_preview') return Boolean(props.adapter.openLinkedFilePreview);
       if (action.type === 'open_linked_directory_browser') return Boolean(props.adapter.openLinkedDirectoryBrowser);
       return true;
@@ -6344,6 +6317,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return;
       }
       setContextSnapshotPreview(null);
+      if (action.type === 'open_canonical_reference') return;
+      if (display.authority !== 'queued_context_action') return;
       const request = {
         path: action.path,
         thread_id: selectedThreadID() || undefined,
@@ -6412,8 +6387,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 </For>
                 <FlowerChatContextChips
                   contextDisplay={display()}
+                  linkedContextLabel={copy().chat.linkedContextLabel}
+							truncatedLabel={copy().chat.truncatedLabel}
                   canActivateChip={canActivateContextChip}
-                  onChipClick={(chip) => { void activateContextChip(chip); }}
+							onChipClick={activateContextChip}
                 />
               </div>
             )}
@@ -7177,6 +7154,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       <FlowerChatContextPreview
         preview={contextSnapshotPreview()}
         open={contextSnapshotPreview() !== null}
+				truncatedLabel={copy().chat.truncatedLabel}
         zIndex={FLOWER_SURFACE_LAYER.contextPreview}
         onClose={() => setContextSnapshotPreview(null)}
       />
@@ -7448,8 +7426,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           );
                           const actionLabel = () => approvalAction.summary.label || approvalAction.tool_name || copy().chat.toolApprovalRequired;
                           const subtaskLabel = () => {
-                            const ref = approvalAction.delegated_ref;
-                            return ref?.child_thread_id ? copy().chat.toolApprovalSubtaskSuffix(ref.child_thread_id) : '';
+                            const scope = approvalAction.origin === 'delegated_subagent' ? trimString(approvalAction.scope) : '';
+                            return scope.startsWith('thread:') ? copy().chat.toolApprovalSubtaskSuffix(scope.slice('thread:'.length)) : '';
                           };
                           return (
                             <div class="flower-composer-approval-actions">

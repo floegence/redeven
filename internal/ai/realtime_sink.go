@@ -282,6 +282,8 @@ func classifyStreamKind(streamEvent any) RealtimeStreamKind {
 		return RealtimeStreamKindLifecycle
 	case streamEventApprovalAction:
 		return RealtimeStreamKindTool
+	case streamEventApprovalQueue:
+		return RealtimeStreamKindTool
 	case streamEventBlockStart:
 		switch strings.TrimSpace(strings.ToLower(ev.BlockType)) {
 		case activityTimelineBlockType:
@@ -476,6 +478,7 @@ func (s *Service) threadSummaryRealtimeEvent(endpointID string, threadID string)
 		RunErrorCode:        runErrorCode,
 		RunError:            runError,
 		Title:               strings.TrimSpace(snapshot.Title),
+		TitleStatus:         strings.TrimSpace(snapshot.TitleStatus),
 		ModelID:             strings.TrimSpace(th.ModelID),
 		UpdatedAtUnixMs:     snapshot.UpdatedAt.UnixMilli(),
 		LastMessagePreview:  lastMessagePreview,

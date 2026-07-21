@@ -387,31 +387,3 @@ func normalizeContextActionItems(items []ContextActionContextItem) []ContextActi
 	}
 	return out
 }
-
-func contextActionRunEventPayload(action *ContextActionEnvelope) map[string]any {
-	var err error
-	action, err = normalizeAskFlowerContextActionEnvelope(action)
-	if err != nil || action == nil {
-		return nil
-	}
-	payload := map[string]any{
-		"schema_version":            action.SchemaVersion,
-		"action_id":                 action.ActionID,
-		"provider":                  action.Provider,
-		"target_id":                 action.Target.TargetID,
-		"locality":                  action.Target.Locality,
-		"source_surface":            action.Source.Surface,
-		"source_surface_id":         action.Source.SurfaceID,
-		"context_item_count":        len(action.Context),
-		"suggested_working_dir_abs": action.SuggestedWorkingDir,
-	}
-	if action.ExecutionContext != nil {
-		payload["execution_context"] = map[string]any{
-			"current_target_id":    action.ExecutionContext.CurrentTargetID,
-			"source_env_public_id": action.ExecutionContext.SourceEnvPublicID,
-			"runtime_hint":         action.ExecutionContext.RuntimeHint,
-			"session_source":       action.ExecutionContext.SessionSource,
-		}
-	}
-	return payload
-}

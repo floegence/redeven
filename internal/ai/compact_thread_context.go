@@ -575,7 +575,7 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 		TurnBudgets{},
 		"",
 		withFloretAttachmentResolver(r.resolveFloretMessageAttachment, modelCapability.SupportsImageInput, modelCapability.SupportsFileInput),
-		withFloretBeforeRequest(r.floretContractError),
+		withFloretRequestAdmission(r.admitFloretProviderRequest),
 	)
 	labels := flruntime.RunLabels{
 		Correlation: map[string]string{"thread_id": threadID, "message_id": messageID},

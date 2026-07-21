@@ -71,16 +71,17 @@ type runOptions struct {
 	OnStreamEvent func(any)
 	Writer        http.ResponseWriter
 
-	SubagentDepth         int
-	AllowSubagentDelegate bool
-	ToolAllowlist         []string
-	NoUserInteraction     bool
-	WebSearchToolEnabled  bool
-	WebSearchMode         string
-	SkillManager          *skillManager
-	SubagentRuntime       subagentRuntime
-	ToolTargetPolicy      ToolTargetPolicy
-	TargetToolExecutor    TargetToolExecutor
+	SubagentDepth               int
+	AllowSubagentDelegate       bool
+	ToolAllowlist               []string
+	NoUserInteraction           bool
+	WebSearchToolEnabled        bool
+	WebSearchMode               string
+	SkillManager                *skillManager
+	SubagentRuntime             subagentRuntime
+	ToolTargetPolicy            ToolTargetPolicy
+	CanonicalReferenceAuthority *flowerCanonicalReferenceTargetAuthority
+	TargetToolExecutor          TargetToolExecutor
 
 	WebFetchHTTPClient *http.Client
 	WebFetchResolver   webFetchResolver
@@ -115,12 +116,14 @@ type run struct {
 	settlementRunID    string
 	settlementTurnID   string
 
-	maxWallTime    time.Duration
-	idleTimeout    time.Duration
-	toolApprovalTO time.Duration
-	activityCh     chan struct{}
-	doneCh         chan struct{}
-	doneOnce       sync.Once
+	maxWallTime             time.Duration
+	idleTimeout             time.Duration
+	toolApprovalTO          time.Duration
+	activityCh              chan struct{}
+	doneCh                  chan struct{}
+	doneOnce                sync.Once
+	muStopFinalization      sync.Mutex
+	stopFinalizationAttempt *stopFinalizationAttempt
 
 	muCancel                    sync.Mutex
 	cancelReason                string // "canceled"|"timed_out"|""
@@ -128,9 +131,16 @@ type run struct {
 	runErrorCode                string
 	cancelRequested             bool
 	cancelFn                    context.CancelFunc
+	muExecution                 sync.Mutex
+	executionClosed             bool
+	executionContext            context.Context
+	executionCancel             context.CancelCauseFunc
+	nextExecutionAdmissionID    uint64
+	executionAdmissions         map[uint64]context.CancelCauseFunc
 	detached                    atomic.Bool // hard-canceled: stop emitting realtime events and skip thread state updates
 	awaitFloretAdmission        atomic.Bool
 	floretAdmitted              atomic.Bool
+	floretRunTurnStarted        atomic.Bool
 	floretPresentationReady     atomic.Bool
 	admissionOnce               sync.Once
 	admissionCh                 chan userTurnAdmissionOutcome
@@ -153,6 +163,7 @@ type run struct {
 	toolApprovals           map[string]*toolApprovalRequest
 	floretHost              floretActiveRunHost
 	settlementOwnerResolver func() floretPendingToolSettler
+	floretAuthorityBarrier  *floretAuthorityBarrier
 
 	muLifecycle         sync.Mutex
 	lastLifecyclePhase  string
@@ -204,16 +215,16 @@ type run struct {
 	collectedWebSources     map[string]SourceRef // url -> source
 	collectedWebSourceOrder []string
 
-	subagentDepth           int
-	allowSubagentDelegate   bool
-	toolAllowlist           map[string]struct{}
-	noUserInteraction       bool
-	allowDelegatedApproval  bool
-	subagentParentAuthority *subagentParentAuthority
-	permissionSnapshot      PermissionSnapshot
-	dynamicSurfaceConfig    runToolSurfaceConfig
-	toolTargetPolicy        ToolTargetPolicy
-	targetToolExecutor      TargetToolExecutor
+	subagentDepth               int
+	allowSubagentDelegate       bool
+	toolAllowlist               map[string]struct{}
+	noUserInteraction           bool
+	subagentParentAuthority     *subagentParentAuthority
+	permissionSnapshot          PermissionSnapshot
+	dynamicSurfaceConfig        runToolSurfaceConfig
+	toolTargetPolicy            ToolTargetPolicy
+	canonicalReferenceAuthority *flowerCanonicalReferenceTargetAuthority
+	targetToolExecutor          TargetToolExecutor
 
 	skillManager    *skillManager
 	subagentRuntime subagentRuntime
@@ -221,6 +232,8 @@ type run struct {
 	webFetchHTTPClient *http.Client
 	webFetchResolver   webFetchResolver
 }
+
+var ErrRunExecutionClosed = errors.New("run execution is closed")
 
 type assistantAnswerState struct {
 	CanonicalMarkdown string
@@ -324,6 +337,8 @@ func newRun(opts runOptions) *run {
 		idleTimeout:                 opts.IdleTimeout,
 		toolApprovalTO:              opts.ToolApprovalTimeout,
 		doneCh:                      make(chan struct{}),
+		floretAuthorityBarrier:      newFloretAuthorityBarrier(),
+		executionAdmissions:         make(map[uint64]context.CancelCauseFunc),
 		admissionCh:                 make(chan userTurnAdmissionOutcome, 1),
 		lifecycleMinEmitGap:         600 * time.Millisecond,
 		collectedWebSources:         make(map[string]SourceRef),
@@ -336,6 +351,7 @@ func newRun(opts runOptions) *run {
 		contextCompactionAnchors:    make(map[string]FlowerTimelineAnchor),
 		subagentDepth:               opts.SubagentDepth,
 		toolTargetPolicy:            normalizeToolTargetPolicy(opts.ToolTargetPolicy),
+		canonicalReferenceAuthority: cloneFlowerCanonicalReferenceTargetAuthority(opts.CanonicalReferenceAuthority),
 		targetToolExecutor:          opts.TargetToolExecutor,
 		skillManager:                opts.SkillManager,
 		noUserInteraction:           opts.NoUserInteraction,
@@ -433,9 +449,6 @@ func (r *run) isWaitingApproval() bool {
 	if r == nil {
 		return false
 	}
-	if r.host.hasPendingApprovals != nil && r.host.hasPendingApprovals() {
-		return true
-	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, approval := range r.toolApprovals {
@@ -518,6 +531,98 @@ func (r *run) requestCancel(reason string) {
 			cancelFn()
 		}
 	}()
+}
+
+func (r *run) closeExecution() {
+	if r == nil {
+		return
+	}
+	r.muExecution.Lock()
+	if r.executionClosed {
+		r.muExecution.Unlock()
+		return
+	}
+	r.executionClosed = true
+	cancel := r.executionCancel
+	admissionCancels := make([]context.CancelCauseFunc, 0, len(r.executionAdmissions))
+	for id, admissionCancel := range r.executionAdmissions {
+		admissionCancels = append(admissionCancels, admissionCancel)
+		delete(r.executionAdmissions, id)
+	}
+	r.muExecution.Unlock()
+	if cancel != nil {
+		cancel(ErrRunExecutionClosed)
+	}
+	for _, admissionCancel := range admissionCancels {
+		admissionCancel(ErrRunExecutionClosed)
+	}
+}
+
+func (r *run) requireExecutionOpen() error {
+	if r == nil {
+		return ErrRunExecutionClosed
+	}
+	r.muExecution.Lock()
+	closed := r.executionClosed
+	r.muExecution.Unlock()
+	if closed {
+		return ErrRunExecutionClosed
+	}
+	return nil
+}
+
+func (r *run) beginExecutionAdmission(ctx context.Context) (context.Context, func(), error) {
+	if r == nil {
+		return nil, nil, ErrRunExecutionClosed
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+	r.muExecution.Lock()
+	if r.executionClosed {
+		r.muExecution.Unlock()
+		return nil, nil, ErrRunExecutionClosed
+	}
+	if r.executionContext == nil {
+		r.executionContext, r.executionCancel = context.WithCancelCause(context.Background())
+	}
+	executionContext := r.executionContext
+	admittedContext, cancel := context.WithCancelCause(executionContext)
+	if r.executionAdmissions == nil {
+		r.executionAdmissions = make(map[uint64]context.CancelCauseFunc)
+	}
+	r.nextExecutionAdmissionID++
+	admissionID := r.nextExecutionAdmissionID
+	r.executionAdmissions[admissionID] = cancel
+	r.muExecution.Unlock()
+	stopCallerCancellation := context.AfterFunc(ctx, func() {
+		cause := context.Cause(ctx)
+		if cause == nil {
+			cause = ctx.Err()
+		}
+		cancel(cause)
+	})
+	var releaseOnce sync.Once
+	release := func() {
+		releaseOnce.Do(func() {
+			stopCallerCancellation()
+			r.muExecution.Lock()
+			delete(r.executionAdmissions, admissionID)
+			r.muExecution.Unlock()
+			cancel(context.Canceled)
+		})
+	}
+	return admittedContext, release, nil
+}
+
+func (r *run) admitFloretProviderRequest(ctx context.Context) (context.Context, func(), error) {
+	if err := r.floretContractError(); err != nil {
+		return nil, nil, err
+	}
+	return r.beginExecutionAdmission(ctx)
 }
 
 func (r *run) getCancelReason() string {
@@ -765,6 +870,12 @@ func (r *run) sendStreamEvent(ev any) {
 
 	r.touchActivity()
 	if !r.acceptsPresentationUpdates() {
+		// A detached run still owns the Floret event sink until cancellation
+		// settles. Canonical queue replacements must reach the thread live
+		// materializer so canceled approvals cannot remain visible.
+		if _, ok := ev.(streamEventApprovalQueue); ok && r.isDetached() && r.onStreamEvent != nil {
+			r.onStreamEvent(ev)
+		}
 		return
 	}
 	if r.onStreamEvent != nil {
@@ -2113,7 +2224,7 @@ func (r *run) handleToolCall(ctx context.Context, toolID string, toolName string
 	if toolName == "" {
 		return nil, errors.New("missing tool_name")
 	}
-	if r.isDetached() {
+	if r.isDetached() || r.requireExecutionOpen() != nil {
 		return &toolCallOutcome{
 			Success:  false,
 			ToolName: toolName,
@@ -4095,9 +4206,9 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 	if terminalHost == nil {
 		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "terminal process manager unavailable", Retryable: true}
 	}
-	settlementOwner := r.pendingToolSettlementOwner()
-	if settlementOwner == nil {
-		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "terminal process settlement owner unavailable", Retryable: false}
+	settlementOwner, err := r.pendingToolSettlementOwner(ctx)
+	if err != nil {
+		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeUnknown, Message: "terminal process settlement owner unavailable: " + err.Error(), Retryable: false}
 	}
 	processID, err := newTerminalProcessID()
 	if err != nil {
@@ -4121,23 +4232,31 @@ func (r *run) handleTerminalExecProcessTool(ctx context.Context, meta *session.M
 	endBusy := r.beginBusy()
 	defer endBusy()
 
-	proc, err := terminalHost.Start(terminalProcessStartRequest{
-		ProcessID:        processID,
-		EndpointID:       strings.TrimSpace(r.endpointID),
-		ThreadID:         strings.TrimSpace(r.threadID),
-		RunID:            strings.TrimSpace(r.id),
-		TurnID:           strings.TrimSpace(r.turnID),
-		SettlementOwner:  settlementOwner,
-		SettlementTarget: settlementTarget,
-		Finalize:         terminalHost.Finalize,
-		ToolID:           strings.TrimSpace(toolID),
-		ToolName:         "terminal.exec",
-		Command:          parsed.Command,
-		Stdin:            parsed.Stdin,
-		CwdAbs:           cwdAbs,
-		Shell:            shell,
-		Env:              prependRedevenBinToEnv(processenv.Current()),
-	})
+	startRequest := terminalProcessStartRequest{
+		ProcessID:             processID,
+		EndpointID:            strings.TrimSpace(r.endpointID),
+		ThreadID:              strings.TrimSpace(r.threadID),
+		RunID:                 strings.TrimSpace(r.id),
+		TurnID:                strings.TrimSpace(r.turnID),
+		ActiveSettlementOwner: settlementOwner,
+		SettlementTarget:      settlementTarget,
+		Finalize:              terminalHost.Finalize,
+		ToolID:                strings.TrimSpace(toolID),
+		ToolName:              "terminal.exec",
+		Command:               parsed.Command,
+		Stdin:                 parsed.Stdin,
+		CwdAbs:                cwdAbs,
+		Shell:                 shell,
+		Env:                   prependRedevenBinToEnv(processenv.Current()),
+		AuthorityBarrier:      r.floretAuthorityBarrier,
+	}
+	r.muExecution.Lock()
+	if r.executionClosed {
+		r.muExecution.Unlock()
+		return outcome, &aitools.ToolError{Code: aitools.ErrorCodeCanceled, Message: "Run was canceled", Retryable: false}
+	}
+	proc, err := terminalHost.Start(startRequest)
+	r.muExecution.Unlock()
 	if err != nil {
 		return outcome, aitools.ClassifyError(aitools.Invocation{ToolName: "terminal.exec", Args: args, WorkingDir: r.workingDir, AgentHomeDir: r.agentHomeDir}, err)
 	}
@@ -4241,7 +4360,7 @@ func (r *run) toolTerminalTerminate(ctx context.Context, processID string) (any,
 	if err != nil {
 		return nil, err
 	}
-	snapshot, err := proc.Terminate(ctx)
+	snapshot, err := proc.TerminateForActiveTurn(ctx)
 	if err != nil {
 		return terminalProcessResultPayload(snapshot), err
 	}

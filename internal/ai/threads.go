@@ -54,18 +54,7 @@ func threadWorkingDir(th *threadstore.ThreadSettings) (string, error) {
 	return workingDir, nil
 }
 
-func applyFlowerThreadMetadataView(view *ThreadView, meta *threadstore.FlowerThreadMetadata) {
-	if view == nil {
-		return
-	}
-	if meta != nil {
-		view.OwnerKind = strings.TrimSpace(strings.ToLower(meta.OwnerKind))
-		view.OwnerID = strings.TrimSpace(meta.OwnerID)
-		view.ParentThreadID = strings.TrimSpace(meta.ParentThreadID)
-	}
-}
-
-func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.ThreadSettings, flowerMeta *threadstore.FlowerThreadMetadata, queuedTurnCount int, snapshot flruntime.ThreadSnapshot, latest *flruntime.ThreadTurnSnapshot) (ThreadView, error) {
+func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.ThreadSettings, queuedTurnCount int, snapshot flruntime.ThreadSnapshot, latest *flruntime.ThreadTurnSnapshot) (ThreadView, error) {
 	if th == nil {
 		return ThreadView{}, errors.New("thread settings are missing")
 	}
@@ -104,6 +93,7 @@ func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.Thre
 	view := ThreadView{
 		ThreadID:            strings.TrimSpace(th.ThreadID),
 		Title:               strings.TrimSpace(snapshot.Title),
+		TitleStatus:         strings.TrimSpace(snapshot.TitleStatus),
 		ModelID:             strings.TrimSpace(th.ModelID),
 		PermissionType:      permissionTypeString(permissionType),
 		WorkingDir:          workingDir,
@@ -128,7 +118,6 @@ func (s *Service) threadViewFromRecord(ctx context.Context, th *threadstore.Thre
 			WaitingPromptID:     waitingPromptID(waitingPrompt),
 		},
 	}
-	applyFlowerThreadMetadataView(&view, flowerMeta)
 	return view, nil
 }
 
@@ -204,8 +193,8 @@ func threadViewRunState(snapshot flruntime.ThreadSnapshot, latest *flruntime.Thr
 		return string(RunStateSuccess), "", "", nil
 	case flruntime.ThreadStatusFailed:
 		failure := ""
-		if latest != nil {
-			failure = strings.TrimSpace(latest.Failure)
+		if latest != nil && latest.Failure != nil {
+			failure = strings.TrimSpace(latest.Failure.Message)
 		}
 		return string(RunStateFailed), "floret_turn_failed", failure, nil
 	case flruntime.ThreadStatusCancelled:
@@ -333,10 +322,6 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 	if th == nil {
 		return nil, nil
 	}
-	flowerMeta, err := db.GetFlowerThreadMetadata(ctx, endpointID, threadID)
-	if err != nil {
-		return nil, err
-	}
 	queuedTurnCount, err := db.CountFollowupsByLane(ctx, endpointID, threadID, threadstore.FollowupLaneQueued)
 	if err != nil {
 		return nil, err
@@ -346,7 +331,7 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 	if err != nil {
 		return nil, fmt.Errorf("read canonical Floret thread %s: %w", threadID, err)
 	}
-	view, err := s.threadViewFromRecord(ctx, th, flowerMeta, queuedTurnCount, snapshot, latest)
+	view, err := s.threadViewFromRecord(ctx, th, queuedTurnCount, snapshot, latest)
 	if err != nil {
 		return nil, err
 	}
@@ -399,17 +384,9 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 	if err != nil {
 		return nil, err
 	}
-	flowerMetaByThread := make(map[string]*threadstore.FlowerThreadMetadata, len(threadIDs))
 	canonicalByThread := make(map[string]flruntime.ThreadSnapshot, len(threadIDs))
 	latestByThread := make(map[string]*flruntime.ThreadTurnSnapshot, len(threadIDs))
 	for _, threadID := range threadIDs {
-		meta, err := db.GetFlowerThreadMetadata(ctx, endpointID, threadID)
-		if err != nil {
-			return nil, err
-		}
-		if meta != nil {
-			flowerMetaByThread[threadID] = meta
-		}
 		snapshot, latest, err := s.readCanonicalThreadState(ctx, threadID)
 		if err != nil {
 			return nil, fmt.Errorf("read canonical Floret thread %s: %w", threadID, err)
@@ -420,7 +397,7 @@ func (s *Service) ListThreads(ctx context.Context, meta *session.Meta, limit int
 	out := &ListThreadsResponse{Threads: make([]ThreadView, 0, len(list)), NextCursor: strings.TrimSpace(next)}
 	for _, t := range list {
 		threadID := strings.TrimSpace(t.ThreadID)
-		view, err := s.threadViewFromRecord(ctx, &t, flowerMetaByThread[threadID], queuedTurnCounts[threadID], canonicalByThread[threadID], latestByThread[threadID])
+		view, err := s.threadViewFromRecord(ctx, &t, queuedTurnCounts[threadID], canonicalByThread[threadID], latestByThread[threadID])
 		if err != nil {
 			return nil, fmt.Errorf("build thread %s view: %w", threadID, err)
 		}
@@ -558,7 +535,7 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 	if err != nil {
 		return nil, err
 	}
-	view, err := s.threadViewFromRecord(ctx, &t, nil, 0, snapshot, latest)
+	view, err := s.threadViewFromRecord(ctx, &t, 0, snapshot, latest)
 	if err != nil {
 		return nil, err
 	}
@@ -994,27 +971,8 @@ func (s *Service) CancelThread(meta *session.Meta, threadID string) error {
 		return errors.New("invalid request")
 	}
 
-	s.mu.Lock()
-	runID := strings.TrimSpace(s.activeRunByTh[runThreadKey(endpointID, threadID)])
-	db := s.threadsDB
-	persistTO := s.persistOpTO
-	s.mu.Unlock()
-	if db == nil {
-		return errors.New("threads store not ready")
-	}
-	if runID != "" {
-		return s.CancelRun(meta, runID)
-	}
-	if s.idleThreadCompactionRequestID(endpointID, threadID) != "" {
-		_, err := s.StopThread(context.Background(), meta, threadID)
-		return err
-	}
-
-	if err := s.closeThreadSubagents(context.Background(), endpointID, threadID, persistTO); err != nil {
-		return err
-	}
-	s.broadcastThreadSummary(endpointID, threadID)
-	return nil
+	_, err := s.StopThread(context.Background(), meta, threadID)
+	return err
 }
 
 func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID string, force bool) (ThreadDeleteResult, error) {

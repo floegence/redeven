@@ -125,7 +125,7 @@ func validateTerminalProcessAccess(meta *session.Meta, runID string, snapshot te
 	return nil
 }
 
-func (s *Service) finalizeTerminalProcess(owner floretPendingToolSettler, target flruntime.PendingToolSettlementTarget, snapshot terminalProcessSnapshot) error {
+func (s *Service) finalizeTerminalProcess(ctx context.Context, owner floretPendingToolSettler, target flruntime.PendingToolSettlementTarget, snapshot terminalProcessSnapshot) error {
 	if s == nil {
 		return errors.New("terminal process service unavailable")
 	}
@@ -159,7 +159,10 @@ func (s *Service) finalizeTerminalProcess(owner floretPendingToolSettler, target
 	if err != nil {
 		return err
 	}
-	settleCtx, settleCancel := context.WithTimeout(context.Background(), s.persistTimeout())
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	settleCtx, settleCancel := context.WithTimeout(ctx, s.persistTimeout())
 	settled, err := owner.SettlePendingTool(settleCtx, settlementReq)
 	settleCancel()
 	if err != nil {
@@ -174,7 +177,7 @@ func (s *Service) finalizeTerminalProcess(owner floretPendingToolSettler, target
 		}
 		return fmt.Errorf("invalid Floret pending tool settlement projection outcome: %w", err)
 	}
-	if err := s.applyFloretPendingToolSettlementProjection(context.Background(), snapshot.EndpointID, snapshot.ThreadID, snapshot.RunID, snapshot.TurnID, settled); err != nil {
+	if err := s.applyFloretPendingToolSettlementProjection(ctx, snapshot.EndpointID, snapshot.ThreadID, snapshot.RunID, snapshot.TurnID, settled); err != nil {
 		if s.log != nil {
 			s.log.Warn("ai: apply terminal settlement projection failed", "run_id", snapshot.RunID, "tool_id", snapshot.ToolID, "error", err)
 		}

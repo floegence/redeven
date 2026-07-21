@@ -194,10 +194,11 @@ check_floret_capability_bootstrap_boundary() {
   if matches=$(rg -n --pcre2 \
     --glob '*.go' \
     --glob '!**/*_test.go' \
+    --glob '!internal/ai/floret_bootstrap.go' \
     'NewPendingToolRecoveryHostBinder|PendingToolRecoveryHost' \
     internal 2>/dev/null); then
     printf '%s\n' "$matches"
-    fail "Redeven has no durable host process state to justify Floret pending-tool recovery authority."
+    fail "Floret pending-tool recovery minting must stay inside the composition root."
   fi
 
   if matches=$(rg -n --pcre2 \

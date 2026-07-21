@@ -45,6 +45,7 @@ const (
 	FlowerLiveMessageFailed            FlowerLiveKind = "message.failed"
 	FlowerLiveApprovalRequested        FlowerLiveKind = "approval.requested"
 	FlowerLiveApprovalResolved         FlowerLiveKind = "approval.resolved"
+	FlowerLiveApprovalQueueReplaced    FlowerLiveKind = "approval.queue_replaced"
 	FlowerLiveInputRequested           FlowerLiveKind = "input.requested"
 	FlowerLiveInputResolved            FlowerLiveKind = "input.resolved"
 	FlowerLiveModelIOUpdated           FlowerLiveKind = "model_io.updated"
@@ -104,6 +105,7 @@ type FlowerLiveRunStatusChangedPayload struct {
 type FlowerLiveThreadPatch struct {
 	ThreadID               string                        `json:"thread_id,omitempty"`
 	Title                  string                        `json:"title,omitempty"`
+	TitleStatus            string                        `json:"title_status,omitempty"`
 	ModelID                string                        `json:"model_id,omitempty"`
 	PermissionType         string                        `json:"permission_type,omitempty"`
 	WorkingDir             string                        `json:"working_dir,omitempty"`
@@ -128,12 +130,14 @@ type FlowerLiveThreadPatch struct {
 	ReadStatus             *FlowerThreadReadView         `json:"read_status,omitempty"`
 	Subagents              []FlowerSubagentSummary       `json:"subagents,omitempty"`
 	SubagentsSet           bool                          `json:"-"`
+	TitleSet               bool                          `json:"-"`
 }
 
 func (p FlowerLiveThreadPatch) MarshalJSON() ([]byte, error) {
 	type patchJSON struct {
 		ThreadID            string                        `json:"thread_id,omitempty"`
 		Title               string                        `json:"title,omitempty"`
+		TitleStatus         string                        `json:"title_status,omitempty"`
 		ModelID             string                        `json:"model_id,omitempty"`
 		PermissionType      string                        `json:"permission_type,omitempty"`
 		WorkingDir          string                        `json:"working_dir,omitempty"`
@@ -158,6 +162,7 @@ func (p FlowerLiveThreadPatch) MarshalJSON() ([]byte, error) {
 	out := patchJSON{
 		ThreadID:            p.ThreadID,
 		Title:               p.Title,
+		TitleStatus:         p.TitleStatus,
 		ModelID:             p.ModelID,
 		PermissionType:      p.PermissionType,
 		WorkingDir:          p.WorkingDir,
@@ -182,7 +187,8 @@ func (p FlowerLiveThreadPatch) MarshalJSON() ([]byte, error) {
 	needsRecordPatch := (p.ReasoningSelectionSet && p.ReasoningSelection == nil) ||
 		(p.ReasoningCapabilitySet && p.ReasoningCapability == nil) ||
 		p.QueuedTurnsSet ||
-		p.SubagentsSet
+		p.SubagentsSet ||
+		p.TitleSet
 	if !needsRecordPatch {
 		return json.Marshal(out)
 	}
@@ -222,6 +228,13 @@ func (p FlowerLiveThreadPatch) MarshalJSON() ([]byte, error) {
 		}
 		record["subagents"] = subagentsData
 	}
+	if p.TitleSet {
+		titleData, err := json.Marshal(p.Title)
+		if err != nil {
+			return nil, err
+		}
+		record["title"] = titleData
+	}
 	return json.Marshal(record)
 }
 
@@ -233,6 +246,7 @@ func (p *FlowerLiveThreadPatch) UnmarshalJSON(data []byte) error {
 	var raw struct {
 		ThreadID            string                  `json:"thread_id,omitempty"`
 		Title               string                  `json:"title,omitempty"`
+		TitleStatus         string                  `json:"title_status,omitempty"`
 		ModelID             string                  `json:"model_id,omitempty"`
 		PermissionType      string                  `json:"permission_type,omitempty"`
 		WorkingDir          string                  `json:"working_dir,omitempty"`
@@ -260,6 +274,7 @@ func (p *FlowerLiveThreadPatch) UnmarshalJSON(data []byte) error {
 	*p = FlowerLiveThreadPatch{
 		ThreadID:            raw.ThreadID,
 		Title:               raw.Title,
+		TitleStatus:         raw.TitleStatus,
 		ModelID:             raw.ModelID,
 		PermissionType:      raw.PermissionType,
 		WorkingDir:          raw.WorkingDir,
@@ -290,6 +305,9 @@ func (p *FlowerLiveThreadPatch) UnmarshalJSON(data []byte) error {
 		if p.Subagents == nil {
 			p.Subagents = []FlowerSubagentSummary{}
 		}
+	}
+	if _, ok := fields["title"]; ok {
+		p.TitleSet = true
 	}
 	if raw.ReasoningSelection != nil {
 		p.ReasoningSelectionSet = true
@@ -385,69 +403,32 @@ const (
 	FlowerApprovalSurfaceMirror        FlowerApprovalSurfaceRole = "mirror"
 )
 
-type FlowerApprovalDeliveryState string
-
-const (
-	FlowerApprovalDeliveryWaiting     FlowerApprovalDeliveryState = "waiting_decision"
-	FlowerApprovalDeliveryPending     FlowerApprovalDeliveryState = "delivery_pending"
-	FlowerApprovalDeliveryDelivered   FlowerApprovalDeliveryState = "delivery_delivered"
-	FlowerApprovalDeliveryFailed      FlowerApprovalDeliveryState = "delivery_failed"
-	FlowerApprovalDeliveryAckUnknown  FlowerApprovalDeliveryState = "delivery_ack_unknown"
-	FlowerApprovalDeliveryUnavailable FlowerApprovalDeliveryState = "delivery_unavailable"
-)
-
-type FlowerApprovalChildExecutionState string
-
-const (
-	FlowerApprovalChildExecutionUnknown   FlowerApprovalChildExecutionState = "unknown"
-	FlowerApprovalChildExecutionPending   FlowerApprovalChildExecutionState = "pending"
-	FlowerApprovalChildExecutionRunning   FlowerApprovalChildExecutionState = "running"
-	FlowerApprovalChildExecutionSucceeded FlowerApprovalChildExecutionState = "succeeded"
-	FlowerApprovalChildExecutionFailed    FlowerApprovalChildExecutionState = "failed"
-	FlowerApprovalChildExecutionCanceled  FlowerApprovalChildExecutionState = "canceled"
-)
-
-type DelegatedApprovalRef struct {
-	ParentThreadID  string `json:"parent_thread_id"`
-	ParentRunID     string `json:"parent_run_id"`
-	ParentTurnID    string `json:"parent_turn_id,omitempty"`
-	ChildThreadID   string `json:"child_thread_id"`
-	ChildRunID      string `json:"child_run_id"`
-	ChildTurnID     string `json:"child_turn_id,omitempty"`
-	ChildToolCallID string `json:"child_tool_call_id"`
-	ApprovalID      string `json:"approval_id"`
-}
-
 type FlowerApprovalAction struct {
-	ActionID            string                            `json:"action_id"`
-	Origin              FlowerApprovalOrigin              `json:"origin"`
-	RunID               string                            `json:"run_id,omitempty"`
-	TurnID              string                            `json:"turn_id,omitempty"`
-	StepID              string                            `json:"step_id,omitempty"`
-	ToolID              string                            `json:"tool_id,omitempty"`
-	ToolName            string                            `json:"tool_name"`
-	State               FlowerApprovalState               `json:"state"`
-	Status              FlowerApprovalStatus              `json:"status"`
-	Revision            int64                             `json:"revision"`
-	Version             int64                             `json:"version"`
-	SurfaceEpoch        int64                             `json:"surface_epoch,omitempty"`
-	SurfaceRole         FlowerApprovalSurfaceRole         `json:"surface_role,omitempty"`
-	Scope               string                            `json:"scope,omitempty"`
-	RequestedAtMs       int64                             `json:"requested_at_unix_ms"`
-	ResolvedAtMs        int64                             `json:"resolved_at_unix_ms,omitempty"`
-	ExpiresAtMs         int64                             `json:"expires_at_unix_ms,omitempty"`
-	CanApprove          bool                              `json:"can_approve"`
-	ExpectedSeq         int64                             `json:"expected_seq,omitempty"`
-	ReadOnlyReason      string                            `json:"read_only_reason,omitempty"`
-	DelegatedRef        *DelegatedApprovalRef             `json:"delegated_ref,omitempty"`
-	DeliveryState       FlowerApprovalDeliveryState       `json:"delivery_state,omitempty"`
-	ChildExecutionState FlowerApprovalChildExecutionState `json:"child_execution_state,omitempty"`
-	PrimaryWaitAnchor   string                            `json:"primary_wait_anchor,omitempty"`
-	QueueGeneration     int64                             `json:"queue_generation"`
-	QueueOrder          int64                             `json:"queue_order"`
-	BatchIndex          int                               `json:"batch_index"`
-	BatchSize           int                               `json:"batch_size"`
-	Summary             FlowerApprovalSummary             `json:"summary"`
+	ActionID        string                    `json:"action_id"`
+	Origin          FlowerApprovalOrigin      `json:"origin"`
+	RunID           string                    `json:"run_id,omitempty"`
+	TurnID          string                    `json:"turn_id,omitempty"`
+	StepID          string                    `json:"step_id,omitempty"`
+	ToolID          string                    `json:"tool_id,omitempty"`
+	ToolName        string                    `json:"tool_name"`
+	State           FlowerApprovalState       `json:"state"`
+	Status          FlowerApprovalStatus      `json:"status"`
+	Revision        int64                     `json:"revision"`
+	Version         int64                     `json:"version"`
+	SurfaceEpoch    int64                     `json:"surface_epoch,omitempty"`
+	SurfaceRole     FlowerApprovalSurfaceRole `json:"surface_role,omitempty"`
+	Scope           string                    `json:"scope,omitempty"`
+	RequestedAtMs   int64                     `json:"requested_at_unix_ms"`
+	ResolvedAtMs    int64                     `json:"resolved_at_unix_ms,omitempty"`
+	ExpiresAtMs     int64                     `json:"expires_at_unix_ms,omitempty"`
+	CanApprove      bool                      `json:"can_approve"`
+	ExpectedSeq     int64                     `json:"expected_seq,omitempty"`
+	ReadOnlyReason  string                    `json:"read_only_reason,omitempty"`
+	QueueGeneration int64                     `json:"queue_generation"`
+	QueueOrder      int64                     `json:"queue_order"`
+	BatchIndex      int                       `json:"batch_index"`
+	BatchSize       int                       `json:"batch_size"`
+	Summary         FlowerApprovalSummary     `json:"summary"`
 }
 
 type FlowerApprovalQueue struct {
@@ -478,6 +459,11 @@ type FlowerSafeTarget struct {
 type FlowerLiveApprovalPayload struct {
 	Action        FlowerApprovalAction `json:"action"`
 	ApprovalQueue *FlowerApprovalQueue `json:"approval_queue,omitempty"`
+}
+
+type FlowerLiveApprovalQueuePayload struct {
+	Actions       []FlowerApprovalAction `json:"actions"`
+	ApprovalQueue FlowerApprovalQueue    `json:"approval_queue"`
 }
 
 type FlowerLiveInputRequestedPayload struct {
@@ -666,18 +652,26 @@ func (decoration *FlowerTimelineDecoration) UnmarshalJSON(data []byte) error {
 }
 
 type FlowerTimelineMessage struct {
-	MessageID     string `json:"id"`
-	ThreadID      string `json:"thread_id"`
-	TurnID        string `json:"turn_id"`
-	RunID         string `json:"run_id"`
-	Role          string `json:"role"`
-	Content       string `json:"content"`
-	Status        string `json:"status"`
-	CreatedAtMs   int64  `json:"created_at_ms"`
-	Blocks        []any  `json:"blocks,omitempty"`
-	ContextAction any    `json:"context_action,omitempty"`
-	Live          bool   `json:"live"`
-	ActiveCursor  bool   `json:"active_cursor"`
+	MessageID    string                   `json:"id"`
+	ThreadID     string                   `json:"thread_id"`
+	TurnID       string                   `json:"turn_id"`
+	RunID        string                   `json:"run_id"`
+	Role         string                   `json:"role"`
+	Content      string                   `json:"content"`
+	Status       string                   `json:"status"`
+	CreatedAtMs  int64                    `json:"created_at_ms"`
+	Blocks       []any                    `json:"blocks,omitempty"`
+	References   []FlowerMessageReference `json:"references,omitempty"`
+	Live         bool                     `json:"live"`
+	ActiveCursor bool                     `json:"active_cursor"`
+}
+
+type FlowerMessageReference struct {
+	ReferenceID string `json:"reference_id"`
+	Kind        string `json:"kind"`
+	Label       string `json:"label"`
+	Text        string `json:"text,omitempty"`
+	Truncated   bool   `json:"truncated,omitempty"`
 }
 
 type FlowerLiveTimelineReplacedPayload struct {
@@ -824,20 +818,19 @@ type FlowerLiveEventsResponse struct {
 }
 
 type SubmitFlowerApprovalRequest struct {
-	ThreadID        string                `json:"thread_id"`
-	Origin          FlowerApprovalOrigin  `json:"origin,omitempty"`
-	RunID           string                `json:"run_id"`
-	ActionID        string                `json:"action_id"`
-	ToolID          string                `json:"tool_id"`
-	Approved        bool                  `json:"approved"`
-	ExpectedSeq     int64                 `json:"expected_seq"`
-	Revision        int64                 `json:"revision"`
-	Version         int64                 `json:"version,omitempty"`
-	SurfaceEpoch    int64                 `json:"surface_epoch,omitempty"`
-	QueueGeneration int64                 `json:"queue_generation"`
-	QueueRevision   int64                 `json:"queue_revision"`
-	IdempotencyKey  string                `json:"idempotency_key,omitempty"`
-	DelegatedRef    *DelegatedApprovalRef `json:"delegated_ref,omitempty"`
+	ThreadID        string               `json:"thread_id"`
+	Origin          FlowerApprovalOrigin `json:"origin"`
+	RunID           string               `json:"run_id"`
+	ActionID        string               `json:"action_id"`
+	ToolID          string               `json:"tool_id"`
+	Approved        bool                 `json:"approved"`
+	ExpectedSeq     int64                `json:"expected_seq"`
+	Revision        int64                `json:"revision"`
+	Version         int64                `json:"version,omitempty"`
+	SurfaceEpoch    int64                `json:"surface_epoch,omitempty"`
+	QueueGeneration int64                `json:"queue_generation"`
+	QueueRevision   int64                `json:"queue_revision"`
+	IdempotencyKey  string               `json:"idempotency_key,omitempty"`
 }
 
 type SubmitFlowerApprovalResponse struct {

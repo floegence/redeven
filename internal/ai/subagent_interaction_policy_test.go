@@ -214,9 +214,8 @@ func TestResolveRunCapabilityContract_SubagentAutonomousNoUserInteraction(t *tes
 		{Name: "terminal.exec"},
 	}
 	r := &run{
-		noUserInteraction:      true,
-		allowDelegatedApproval: true,
-		subagentDepth:          1,
+		noUserInteraction: true,
+		subagentDepth:     1,
 	}
 	contract := resolveRunCapabilityContract(r, tools, testSignalDefs("task_complete"), false)
 	if contract.PromptProfile != runPromptProfileSubagentAutonomous {

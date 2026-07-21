@@ -27,7 +27,7 @@ type threadManager struct {
 
 type threadLifecycleGate struct {
 	mu              sync.Mutex
-	cond            *sync.Cond
+	changed         chan struct{}
 	readers         int
 	writer          bool
 	waitingWriters  int
@@ -48,28 +48,45 @@ type threadEffectGateRequest struct {
 }
 
 func newThreadLifecycleGate() *threadLifecycleGate {
-	gate := &threadLifecycleGate{joinChildren: make(map[string]int)}
-	gate.cond = sync.NewCond(&gate.mu)
-	return gate
+	return &threadLifecycleGate{changed: make(chan struct{}), joinChildren: make(map[string]int)}
 }
 
-func (g *threadLifecycleGate) lock(shared bool, request threadEffectGateRequest) {
-	g.mu.Lock()
-	if shared {
-		for g.writer || (g.waitingWriters > 0 && !g.canJoinActiveCohort(request)) {
-			g.cond.Wait()
-		}
-		g.readers++
-		g.addJoinScope(request.join)
-	} else {
-		g.waitingWriters++
-		for g.writer || g.readers > 0 {
-			g.cond.Wait()
-		}
-		g.waitingWriters--
-		g.writer = true
+func (g *threadLifecycleGate) lock(ctx context.Context, shared bool, request threadEffectGateRequest) error {
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	g.mu.Unlock()
+	g.mu.Lock()
+	if !shared {
+		g.waitingWriters++
+	}
+	for {
+		canAcquire := !g.writer && (shared && (g.waitingWriters == 0 || g.canJoinActiveCohort(request)) || !shared && g.readers == 0)
+		if canAcquire {
+			if shared {
+				g.readers++
+				g.addJoinScope(request.join)
+			} else {
+				g.waitingWriters--
+				g.writer = true
+			}
+			g.mu.Unlock()
+			return nil
+		}
+		changed := g.changed
+		g.mu.Unlock()
+		select {
+		case <-ctx.Done():
+			g.mu.Lock()
+			if !shared {
+				g.waitingWriters--
+				g.notifyLocked()
+			}
+			g.mu.Unlock()
+			return ctx.Err()
+		case <-changed:
+			g.mu.Lock()
+		}
+	}
 }
 
 func (g *threadLifecycleGate) unlock(shared bool, request threadEffectGateRequest) {
@@ -80,8 +97,13 @@ func (g *threadLifecycleGate) unlock(shared bool, request threadEffectGateReques
 	} else {
 		g.writer = false
 	}
-	g.cond.Broadcast()
+	g.notifyLocked()
 	g.mu.Unlock()
+}
+
+func (g *threadLifecycleGate) notifyLocked() {
+	close(g.changed)
+	g.changed = make(chan struct{})
 }
 
 func (g *threadLifecycleGate) canJoinActiveCohort(request threadEffectGateRequest) bool {
@@ -121,7 +143,11 @@ func newThreadManager(svc *Service) *threadManager {
 }
 
 func (m *threadManager) lockThreadLifecycle(endpointID string, threadID string) (func(), error) {
-	return m.lockThreadGate(endpointID, threadID, false, threadEffectGateRequest{})
+	return m.lockThreadLifecycleContext(context.Background(), endpointID, threadID)
+}
+
+func (m *threadManager) lockThreadLifecycleContext(ctx context.Context, endpointID string, threadID string) (func(), error) {
+	return m.lockThreadGate(ctx, endpointID, threadID, false, threadEffectGateRequest{})
 }
 
 // lockThreadEffect shares one authority gate across concurrent effects while
@@ -143,14 +169,14 @@ func (m *threadManager) lockThreadEffect(endpointID string, authorityThreadID st
 			return nil, errors.New("invalid thread effect child scope")
 		}
 	}
-	return m.lockThreadGate(endpointID, authorityThreadID, true, threadEffectGateRequest{
+	return m.lockThreadGate(context.Background(), endpointID, authorityThreadID, true, threadEffectGateRequest{
 		authorityThreadID: authorityThreadID,
 		executionThreadID: executionThreadID,
 		join:              join,
 	})
 }
 
-func (m *threadManager) lockThreadGate(endpointID string, threadID string, shared bool, request threadEffectGateRequest) (func(), error) {
+func (m *threadManager) lockThreadGate(ctx context.Context, endpointID string, threadID string, shared bool, request threadEffectGateRequest) (func(), error) {
 	if m == nil {
 		return nil, errors.New("thread manager not ready")
 	}
@@ -171,7 +197,15 @@ func (m *threadManager) lockThreadGate(endpointID string, threadID string, share
 	gate.refs++
 	m.mu.Unlock()
 
-	gate.lock(shared, request)
+	if err := gate.lock(ctx, shared, request); err != nil {
+		m.mu.Lock()
+		gate.refs--
+		if gate.refs == 0 && m.lifecycleGates[key] == gate {
+			delete(m.lifecycleGates, key)
+		}
+		m.mu.Unlock()
+		return nil, err
+	}
 	var once sync.Once
 	return func() {
 		once.Do(func() {
@@ -671,7 +705,7 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 			err:                err,
 		}
 	}
-	if _, _, err := a.mgr.svc.startUserTurnDetached(ctx, meta, runID, startReq, rec.QueueID); err != nil {
+	if _, _, err := a.mgr.svc.prepareUserTurn(ctx, meta, endpointID, threadID, startReq.Input); err != nil {
 		return &queuedTurnStartError{
 			endpointID:         endpointID,
 			threadID:           threadID,
@@ -682,6 +716,19 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 			err:                err,
 		}
 	}
+	go func() {
+		if _, _, err := a.mgr.svc.startUserTurnDetached(ctx, meta, runID, startReq, rec.QueueID); err != nil && a.mgr.svc.log != nil {
+			a.mgr.svc.log.Warn("failed to start queued turn", queuedTurnStartLogAttrs(&queuedTurnStartError{
+				endpointID:         endpointID,
+				threadID:           threadID,
+				queueID:            rec.QueueID,
+				turnID:             rec.TurnID,
+				runID:              runID,
+				requireSourceQueue: true,
+				err:                err,
+			}, endpointID, threadID)...)
+		}
+	}()
 	return nil
 }
 

@@ -31,7 +31,7 @@ func TestFloretEffectAuthorizationRejectsDeleteIntentBeforeDispatch(t *testing.T
 			floretToolHostContextPermissionEpochKey:      permissionSurfaceEpoch(snapshot),
 			floretToolHostContextAuthorityThreadIDKey:    r.threadID,
 		},
-	}, func(flruntime.EffectAuthorizationProof) error {
+	}, func(context.Context, flruntime.EffectAuthorizationProof) error {
 		dispatched = true
 		return nil
 	})
@@ -40,6 +40,33 @@ func TestFloretEffectAuthorizationRejectsDeleteIntentBeforeDispatch(t *testing.T
 	}
 	if dispatched {
 		t.Fatal("effect dispatched after durable delete intent")
+	}
+}
+
+func TestFloretEffectAuthorizationRejectsDispatchAfterRunExecutionCloses(t *testing.T) {
+	r := newPermissionPolicyTestRun(t, t.TempDir(), FlowerPermissionFullAccess, "effect_stop_gate")
+	snapshot := r.currentPermissionSnapshot()
+	r.closeExecution()
+	dispatched := false
+	err := r.withAuthorizedFloretEffect(context.Background(), flruntime.EffectAuthorizationRequest{
+		EffectAttemptID: "effect_stop_gate", RequestFingerprint: "fingerprint_stop_gate",
+		ThreadID: flruntime.ThreadID(r.threadID), TurnID: flruntime.TurnID(r.turnID), RunID: flruntime.RunID(r.id),
+		ToolCallID: "call_stop_gate", ToolName: "terminal.exec", ArgumentHash: floretEffectArgumentHash(`{"command":"pwd"}`),
+		Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}, LeaseOwnerID: "lease_stop_gate", LeaseGeneration: 1,
+		HostContext: map[string]string{
+			floretToolHostContextPermissionSnapshotIDKey: snapshot.SnapshotID,
+			floretToolHostContextPermissionEpochKey:      permissionSurfaceEpoch(snapshot),
+			floretToolHostContextAuthorityThreadIDKey:    r.threadID,
+		},
+	}, func(context.Context, flruntime.EffectAuthorizationProof) error {
+		dispatched = true
+		return nil
+	})
+	if !errors.Is(err, ErrRunExecutionClosed) {
+		t.Fatalf("authorization error=%v, want %v", err, ErrRunExecutionClosed)
+	}
+	if dispatched {
+		t.Fatal("effect dispatched after run execution closed")
 	}
 }
 
@@ -148,7 +175,7 @@ func TestFloretEffectAuthorizationKeepsSubagentWaitInsideLifecycleGate(t *testin
 				floretToolHostContextPermissionEpochKey:      permissionSurfaceEpoch(snapshot),
 				floretToolHostContextAuthorityThreadIDKey:    r.threadID,
 			},
-		}, func(flruntime.EffectAuthorizationProof) error {
+		}, func(context.Context, flruntime.EffectAuthorizationProof) error {
 			close(dispatched)
 			<-finish
 			return nil
@@ -346,7 +373,7 @@ func TestFloretEffectAuthorizationHoldsLifecycleWriterThroughHandler(t *testing.
 				floretToolHostContextPermissionEpochKey:      permissionSurfaceEpoch(snapshot),
 				floretToolHostContextAuthorityThreadIDKey:    r.threadID,
 			},
-		}, func(flruntime.EffectAuthorizationProof) error {
+		}, func(context.Context, flruntime.EffectAuthorizationProof) error {
 			_, _, err := r.effectAuthorizations.snapshotForInvocation(fltools.Invocation[map[string]any]{
 				ThreadID: r.threadID, TurnID: r.turnID, RunID: r.id, CallID: "call_dispatch_boundary", RawArgs: rawArgs,
 			})
@@ -409,7 +436,7 @@ func TestFloretEffectAuthorizationRejectsCrossThreadAuthorityBeforeDispatch(t *t
 			floretToolHostContextPermissionEpochKey:      permissionSurfaceEpoch(snapshot),
 			floretToolHostContextAuthorityThreadIDKey:    "other_thread",
 		},
-	}, func(flruntime.EffectAuthorizationProof) error {
+	}, func(context.Context, flruntime.EffectAuthorizationProof) error {
 		dispatched = true
 		return nil
 	})
@@ -421,39 +448,64 @@ func TestFloretEffectAuthorizationRejectsCrossThreadAuthorityBeforeDispatch(t *t
 	}
 }
 
-func TestFloretEffectAuthorizationRechecksPolicyAfterApprovalWait(t *testing.T) {
-	r := newPermissionPolicyTestRun(t, t.TempDir(), FlowerPermissionApprovalRequired, "effect_approval_recheck")
+func TestFloretEffectAuthorizationDoesNotWaitForSecondProductApproval(t *testing.T) {
+	r := newPermissionPolicyTestRun(t, t.TempDir(), FlowerPermissionApprovalRequired, "effect_durable_approval")
 	snapshot := r.currentPermissionSnapshot()
 	dispatched := false
-	done := make(chan error, 1)
-	go func() {
-		done <- r.withAuthorizedFloretEffect(context.Background(), flruntime.EffectAuthorizationRequest{
-			EffectAttemptID: "effect_approval_recheck", RequestFingerprint: "fingerprint_approval_recheck",
-			ThreadID: flruntime.ThreadID(r.threadID), TurnID: flruntime.TurnID(r.turnID), RunID: flruntime.RunID(r.id),
-			ToolCallID: "call_approval_recheck", ToolName: "terminal.exec", ArgumentHash: floretEffectArgumentHash(`{"command":"pwd"}`),
-			Permission: fltools.PermissionSpec{Mode: fltools.PermissionAsk}, LeaseOwnerID: "lease_approval_recheck", LeaseGeneration: 1,
-			HostContext: map[string]string{
-				floretToolHostContextPermissionSnapshotIDKey: snapshot.SnapshotID,
-				floretToolHostContextPermissionEpochKey:      permissionSurfaceEpoch(snapshot),
-				floretToolHostContextAuthorityThreadIDKey:    r.threadID,
-			},
-		}, func(flruntime.EffectAuthorizationProof) error {
-			dispatched = true
-			return nil
-		})
-	}()
-	waitApprovalRequested(t, r, "call_approval_recheck")
+	err := r.withAuthorizedFloretEffect(context.Background(), flruntime.EffectAuthorizationRequest{
+		EffectAttemptID: "effect_durable_approval", RequestFingerprint: "fingerprint_durable_approval",
+		ThreadID: flruntime.ThreadID(r.threadID), TurnID: flruntime.TurnID(r.turnID), RunID: flruntime.RunID(r.id),
+		ToolCallID: "call_durable_approval", ToolName: "terminal.exec", ArgumentHash: floretEffectArgumentHash(`{"command":"pwd"}`),
+		Permission: fltools.PermissionSpec{Mode: fltools.PermissionAsk}, LeaseOwnerID: "lease_durable_approval", LeaseGeneration: 1,
+		HostContext: map[string]string{
+			floretToolHostContextPermissionSnapshotIDKey: snapshot.SnapshotID,
+			floretToolHostContextPermissionEpochKey:      permissionSurfaceEpoch(snapshot),
+			floretToolHostContextAuthorityThreadIDKey:    r.threadID,
+		},
+	}, func(context.Context, flruntime.EffectAuthorizationProof) error {
+		dispatched = true
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("authorization after durable Floret approval: %v", err)
+	}
+	if !dispatched {
+		t.Fatal("effect was not dispatched after Floret durable approval")
+	}
+	r.mu.Lock()
+	pendingProductApprovals := len(r.toolApprovals)
+	r.mu.Unlock()
+	if pendingProductApprovals != 0 {
+		t.Fatalf("effect gate registered %d second product approvals", pendingProductApprovals)
+	}
+}
+
+func TestFloretEffectAuthorizationRejectsCurrentPolicyDowngradeAfterDurableApproval(t *testing.T) {
+	r := newPermissionPolicyTestRun(t, t.TempDir(), FlowerPermissionApprovalRequired, "effect_policy_downgrade")
+	snapshot := r.currentPermissionSnapshot()
 	if err := runThreadStoreForTest(t, r).UpdateThreadPermissionType(context.Background(), r.endpointID, r.threadID, config.AIPermissionReadonly); err != nil {
 		t.Fatal(err)
 	}
-	if err := r.approveTool("call_approval_recheck", true); err != nil {
-		t.Fatal(err)
-	}
-	if err := <-done; err == nil || !strings.Contains(strings.ToLower(err.Error()), "snapshot is stale") {
-		t.Fatalf("authorization error=%v, want stale policy after approval wait", err)
+	dispatched := false
+	err := r.withAuthorizedFloretEffect(context.Background(), flruntime.EffectAuthorizationRequest{
+		EffectAttemptID: "effect_policy_downgrade", RequestFingerprint: "fingerprint_policy_downgrade",
+		ThreadID: flruntime.ThreadID(r.threadID), TurnID: flruntime.TurnID(r.turnID), RunID: flruntime.RunID(r.id),
+		ToolCallID: "call_policy_downgrade", ToolName: "terminal.exec", ArgumentHash: floretEffectArgumentHash(`{"command":"pwd"}`),
+		Permission: fltools.PermissionSpec{Mode: fltools.PermissionAsk}, LeaseOwnerID: "lease_policy_downgrade", LeaseGeneration: 1,
+		HostContext: map[string]string{
+			floretToolHostContextPermissionSnapshotIDKey: snapshot.SnapshotID,
+			floretToolHostContextPermissionEpochKey:      permissionSurfaceEpoch(snapshot),
+			floretToolHostContextAuthorityThreadIDKey:    r.threadID,
+		},
+	}, func(context.Context, flruntime.EffectAuthorizationProof) error {
+		dispatched = true
+		return nil
+	})
+	if err == nil || !strings.Contains(strings.ToLower(err.Error()), "permission denied") {
+		t.Fatalf("authorization error=%v, want current policy denial", err)
 	}
 	if dispatched {
-		t.Fatal("effect dispatched after policy changed during approval")
+		t.Fatal("effect dispatched after current product policy downgrade")
 	}
 }
 
@@ -471,7 +523,7 @@ func TestFloretEffectAuthorizationProofCarriesExactLeaseAndAuditIdentity(t *test
 			floretToolHostContextPermissionEpochKey:      permissionSurfaceEpoch(snapshot),
 			floretToolHostContextAuthorityThreadIDKey:    r.threadID,
 		},
-	}, func(got flruntime.EffectAuthorizationProof) error {
+	}, func(_ context.Context, got flruntime.EffectAuthorizationProof) error {
 		proof = got
 		return nil
 	})

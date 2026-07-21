@@ -131,7 +131,13 @@ export function flowerMessageSignature(message: FlowerChatMessage): string {
     message.status,
     String(message.created_at_ms),
     message.blocks?.map(messageBlockSignature).join('\x1d') ?? '',
-    message.context_action ? JSON.stringify(message.context_action) : '',
+    message.references?.map((reference) => [
+      reference.reference_id,
+      reference.kind,
+      reference.label,
+      'text' in reference ? reference.text ?? '' : '',
+      reference.truncated ? 'truncated' : '',
+    ].join('\x1c')).join('\x1d') ?? '',
   ].join('\x1e');
 }
 
@@ -344,7 +350,7 @@ function messageSegmentEntry(
   segmentIndex: number,
   totalSegments: number,
 ): Extract<FlowerTimelineEntry, { type: 'message' }> | null {
-  if (blocks.length === 0 && message.status !== 'error' && message.active_cursor !== true) return null;
+  if (blocks.length === 0 && !message.references?.length && message.status !== 'error' && message.active_cursor !== true) return null;
   const activity = blocks.find((block): block is Extract<FlowerRenderableMessageBlock, { type: 'activity' }> => block.type === 'activity');
   return {
     type: 'message',
@@ -378,7 +384,7 @@ function messageTimelineEntries(
   };
   const flushMessageSegment = () => {
     flushActivity();
-    if (currentBlocks.length > 0 || message.status === 'error' || message.active_cursor === true) {
+    if (currentBlocks.length > 0 || message.references?.length || message.status === 'error' || message.active_cursor === true) {
       rawEntries.push(currentBlocks);
       currentBlocks = [];
     }

@@ -1,5 +1,6 @@
 import type {
   FlowerApprovalAction,
+  FlowerApprovalQueue,
   FlowerActivityAttentionReason,
   FlowerActivityApprovalState,
   FlowerActivityChip,
@@ -13,7 +14,6 @@ import type {
   FlowerActivityTimelineBlock,
   FlowerChatMessage,
   FlowerInputRequest,
-  FlowerDelegatedApprovalRef,
   FlowerLiveBootstrap,
   FlowerLiveBlock,
   FlowerLiveEvent,
@@ -30,6 +30,7 @@ import type {
   FlowerLiveRunStartedPayload,
   FlowerLiveRunStatusChangedPayload,
   FlowerLiveApprovalPayload,
+  FlowerLiveApprovalQueuePayload,
   FlowerLiveInputRequestedPayload,
   FlowerLiveInputResolvedPayload,
   FlowerLiveModelIOUpdatedPayload,
@@ -45,6 +46,7 @@ import type {
   FlowerThreadReadStatus,
   FlowerThreadSnapshot,
   FlowerThreadStatus,
+  FlowerTitleStatus,
   FlowerPermissionType,
   FlowerSubagentSummary,
 } from './contracts/flowerSurfaceContracts';
@@ -102,6 +104,15 @@ function normalizePermissionType(value: unknown): FlowerPermissionType | undefin
   const raw = trim(value).toLowerCase();
   if (raw === 'readonly' || raw === 'approval_required' || raw === 'full_access') return raw;
   return undefined;
+}
+
+function titleStatus(raw: unknown): FlowerTitleStatus {
+  switch (trim(raw).toLowerCase()) {
+    case 'ready': return 'ready';
+    case 'failed': return 'failed';
+    case 'pending': return 'pending';
+    default: throw new Error('Flower contract error: title_status must be pending, ready, or failed.');
+  }
 }
 
 function positiveInteger(raw: unknown): number | undefined {
@@ -915,6 +926,61 @@ function mapMessageStatus(raw: unknown): FlowerChatMessage['status'] {
   throw new Error('Flower contract error: timeline message has invalid status.');
 }
 
+function mapMessageReferences(raw: unknown, messageID: string): FlowerChatMessage['references'] {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw)) {
+    throw new Error(`Flower contract error: timeline message ${messageID} references must be an array.`);
+  }
+  const seen = new Set<string>();
+  return raw.map((value, index) => {
+    const reference = recordValue(value);
+    if (!reference) {
+      throw new Error(`Flower contract error: timeline message ${messageID} reference ${index} must be an object.`);
+    }
+    const allowedFields = new Set(['reference_id', 'kind', 'label', 'text', 'truncated']);
+    for (const field of Object.keys(reference)) {
+      if (!allowedFields.has(field)) {
+        throw new Error(`Flower contract error: timeline message ${messageID} reference ${index} contains forbidden field ${field}.`);
+      }
+    }
+    const referenceID = trim(reference.reference_id);
+    const kind = trim(reference.kind) as NonNullable<FlowerChatMessage['references']>[number]['kind'];
+    const label = trim(reference.label);
+    if (!referenceID || !label || !['text', 'file', 'directory', 'terminal', 'process'].includes(kind)) {
+      throw new Error(`Flower contract error: timeline message ${messageID} reference ${index} is invalid.`);
+    }
+    if (seen.has(referenceID)) {
+      throw new Error(`Flower contract error: timeline message ${messageID} reference ${referenceID} is duplicated.`);
+    }
+    if (reference.text !== undefined && typeof reference.text !== 'string') {
+      throw new Error(`Flower contract error: timeline message ${messageID} reference ${referenceID} text must be a string.`);
+    }
+    if (reference.truncated !== undefined && typeof reference.truncated !== 'boolean') {
+      throw new Error(`Flower contract error: timeline message ${messageID} reference ${referenceID} truncated must be a boolean.`);
+    }
+    const fileLike = kind === 'file' || kind === 'directory';
+    if (fileLike && Object.prototype.hasOwnProperty.call(reference, 'text')) {
+      throw new Error(`Flower contract error: timeline message ${messageID} reference ${referenceID} must not carry host path text.`);
+    }
+    seen.add(referenceID);
+    const text = !fileLike && typeof reference.text === 'string' && reference.text.length > 0 ? reference.text : undefined;
+    return fileLike
+      ? {
+          reference_id: referenceID,
+          kind,
+          label,
+          ...(reference.truncated === true ? { truncated: true } : {}),
+        }
+      : {
+          reference_id: referenceID,
+          kind,
+          label,
+          ...(text !== undefined ? { text } : {}),
+          ...(reference.truncated === true ? { truncated: true } : {}),
+        };
+  });
+}
+
 export function mapFlowerMessage(raw: unknown): FlowerChatMessage {
   const message = recordValue(raw);
   if (!message) throw new Error('Flower contract error: timeline message must be an object.');
@@ -945,7 +1011,10 @@ export function mapFlowerMessage(raw: unknown): FlowerChatMessage {
     }
     return mapped;
   });
-  const contextAction = recordValue(message.context_action);
+  if (message.references !== undefined && role !== 'user') {
+    throw new Error(`Flower contract error: timeline message ${id} references require the user role.`);
+  }
+  const references = mapMessageReferences(message.references, id);
   const blockContent = blocks.map(messageBlockPreviewText).filter(Boolean).join('\n\n');
   const content = blockContent || trim(message.content);
   return {
@@ -958,7 +1027,7 @@ export function mapFlowerMessage(raw: unknown): FlowerChatMessage {
     status: mapMessageStatus(message.status),
     created_at_ms: unixMs(message.timestamp ?? message.created_at_ms ?? message.created_at_unix_ms, 'message.timestamp'),
     ...(blocks.length > 0 ? { blocks } : {}),
-    ...(contextAction ? { context_action: contextAction } : {}),
+    ...(references && references.length > 0 ? { references } : {}),
     ...(message.live !== undefined ? { live: Boolean(message.live) } : {}),
     ...(message.active_cursor !== undefined ? { active_cursor: Boolean(message.active_cursor) } : {}),
   };
@@ -1008,25 +1077,11 @@ function mapApprovalAction(raw: unknown): FlowerApprovalAction | null {
   const runID = trim(record.run_id);
   const toolID = trim(record.tool_id);
   const summary = recordValue(record.summary) ?? {};
-  const delegatedRefRecord = recordValue(record.delegated_ref);
   const rawSurfaceRole = trim(record.surface_role);
   const surfaceRole = rawSurfaceRole === 'primary_action' || rawSurfaceRole === 'locator' || rawSurfaceRole === 'mirror'
     ? rawSurfaceRole as NonNullable<FlowerApprovalAction['surface_role']>
-    : origin === 'delegated_subagent' ? 'mirror' : undefined;
-  const delegatedRef = delegatedRefRecord ? {
-    parent_thread_id: trim(delegatedRefRecord.parent_thread_id),
-    parent_run_id: trim(delegatedRefRecord.parent_run_id),
-    ...(trim(delegatedRefRecord.parent_turn_id) ? { parent_turn_id: trim(delegatedRefRecord.parent_turn_id) } : {}),
-    child_thread_id: trim(delegatedRefRecord.child_thread_id),
-    child_run_id: trim(delegatedRefRecord.child_run_id),
-    ...(trim(delegatedRefRecord.child_turn_id) ? { child_turn_id: trim(delegatedRefRecord.child_turn_id) } : {}),
-    child_tool_call_id: trim(delegatedRefRecord.child_tool_call_id),
-    approval_id: trim(delegatedRefRecord.approval_id),
-  } : null;
-  const validDelegatedRef = delegatedRef && delegatedRef.parent_thread_id && delegatedRef.parent_run_id && delegatedRef.child_thread_id && delegatedRef.child_run_id && delegatedRef.child_tool_call_id && delegatedRef.approval_id
-    ? delegatedRef
-    : null;
-  if (origin === 'main_tool' && (!runID || !toolID)) return null;
+    : undefined;
+  if (!runID || !toolID) return null;
   const toolName = trim(record.tool_name) || 'tool';
   const base = {
     action_id: actionID,
@@ -1046,9 +1101,6 @@ function mapApprovalAction(raw: unknown): FlowerApprovalAction | null {
     can_approve: Boolean(record.can_approve),
     ...(positiveInteger(record.expected_seq) ? { expected_seq: positiveInteger(record.expected_seq) } : {}),
     ...(trim(record.read_only_reason) ? { read_only_reason: trim(record.read_only_reason) } : {}),
-    ...(trim(record.delivery_state) ? { delivery_state: trim(record.delivery_state) as FlowerApprovalAction['delivery_state'] } : {}),
-    ...(trim(record.child_execution_state) ? { child_execution_state: trim(record.child_execution_state) as FlowerApprovalAction['child_execution_state'] } : {}),
-    ...(trim(record.primary_wait_anchor) ? { primary_wait_anchor: trim(record.primary_wait_anchor) } : {}),
     queue_generation: Math.max(0, Math.floor(Number(record.queue_generation ?? 0))),
     queue_order: Math.max(0, Math.floor(Number(record.queue_order ?? 0))),
     batch_index: Math.max(0, Math.floor(Number(record.batch_index ?? 0))),
@@ -1073,12 +1125,11 @@ function mapApprovalAction(raw: unknown): FlowerApprovalAction | null {
     },
   };
   if (origin === 'delegated_subagent') {
-    if (!validDelegatedRef) return null;
-    const delegatedRef: FlowerDelegatedApprovalRef = validDelegatedRef;
     return {
       ...base,
       origin: 'delegated_subagent',
-      delegated_ref: delegatedRef,
+      run_id: runID,
+      tool_id: toolID,
     };
   }
   return {
@@ -1103,6 +1154,121 @@ function mapApprovalQueue(raw: unknown): FlowerLiveMaterializedState['approval_q
   };
 }
 
+function canonicalPositiveInteger(raw: unknown, field: string): number {
+  if (typeof raw !== 'number' || !Number.isSafeInteger(raw) || raw <= 0) {
+    throw new Error(`Flower contract error: ${field} must be a positive integer.`);
+  }
+  return raw;
+}
+
+function mapCanonicalApprovalAction(raw: unknown, index: number): FlowerApprovalAction {
+  const record = recordValue(raw);
+  if (!record) {
+    throw new Error(`Flower contract error: approval.queue_replaced action ${index} must be an object.`);
+  }
+  const origin = trim(record.origin);
+  if (origin !== 'main_tool' && origin !== 'delegated_subagent') {
+    throw new Error(`Flower contract error: approval.queue_replaced action ${index} has invalid origin.`);
+  }
+  if (!trim(record.action_id) || !trim(record.run_id) || !trim(record.tool_id) || !trim(record.tool_name)) {
+    throw new Error(`Flower contract error: approval.queue_replaced action ${index} has incomplete identity.`);
+  }
+  if (trim(record.state) !== 'requested' || trim(record.status) !== 'pending') {
+    throw new Error(`Flower contract error: approval.queue_replaced action ${index} is not pending.`);
+  }
+  const revision = canonicalPositiveInteger(record.revision, `approval.queue_replaced action ${index} revision`);
+  const version = canonicalPositiveInteger(record.version, `approval.queue_replaced action ${index} version`);
+  const surfaceEpoch = canonicalPositiveInteger(record.surface_epoch, `approval.queue_replaced action ${index} surface_epoch`);
+  const queueGeneration = canonicalPositiveInteger(record.queue_generation, `approval.queue_replaced action ${index} queue_generation`);
+  const queueOrder = canonicalPositiveInteger(record.queue_order, `approval.queue_replaced action ${index} queue_order`);
+  const batchIndex = nonNegativeInteger(record.batch_index, `approval.queue_replaced action ${index} batch_index`);
+  const batchSize = canonicalPositiveInteger(record.batch_size, `approval.queue_replaced action ${index} batch_size`);
+  canonicalPositiveInteger(record.expected_seq, `approval.queue_replaced action ${index} expected_seq`);
+  canonicalPositiveInteger(record.requested_at_unix_ms, `approval.queue_replaced action ${index} requested_at_unix_ms`);
+  if (version !== revision || surfaceEpoch !== queueGeneration || batchIndex >= batchSize || typeof record.can_approve !== 'boolean') {
+    throw new Error(`Flower contract error: approval.queue_replaced action ${index} counters are inconsistent.`);
+  }
+  const scope = trim(record.scope);
+  if (!scope.startsWith('thread:') || !trim(scope.slice('thread:'.length))) {
+    throw new Error(`Flower contract error: approval.queue_replaced action ${index} has invalid thread scope.`);
+  }
+  const summary = recordValue(record.summary);
+  if (!summary || !trim(summary.label)) {
+    throw new Error(`Flower contract error: approval.queue_replaced action ${index} requires a summary label.`);
+  }
+  const action = mapApprovalAction(raw);
+  if (!action || action.origin !== origin || action.queue_order !== queueOrder || action.queue_generation !== queueGeneration) {
+    throw new Error(`Flower contract error: approval.queue_replaced action ${index} is invalid.`);
+  }
+  return action;
+}
+
+function mapCanonicalApprovalQueue(raw: unknown): FlowerApprovalQueue {
+  const record = recordValue(raw);
+  if (!record) {
+    throw new Error('Flower contract error: approval.queue_replaced requires an approval queue object.');
+  }
+  const generation = nonNegativeInteger(record.generation, 'approval.queue_replaced queue generation');
+  const revision = nonNegativeInteger(record.revision, 'approval.queue_replaced queue revision');
+  const currentPosition = nonNegativeInteger(record.current_position, 'approval.queue_replaced queue current_position');
+  const total = nonNegativeInteger(record.total, 'approval.queue_replaced queue total');
+  const unresolvedCount = nonNegativeInteger(record.unresolved_count, 'approval.queue_replaced queue unresolved_count');
+  if (record.current_action_id !== undefined && typeof record.current_action_id !== 'string') {
+    throw new Error('Flower contract error: approval.queue_replaced queue current_action_id must be a string.');
+  }
+  const currentActionID = trim(record.current_action_id);
+  return {
+    generation,
+    revision,
+    ...(currentActionID ? { current_action_id: currentActionID } : {}),
+    current_position: currentPosition,
+    total,
+    unresolved_count: unresolvedCount,
+  };
+}
+
+function validateCanonicalApprovalReplacement(actions: readonly FlowerApprovalAction[], queue: FlowerApprovalQueue): void {
+  if (queue.total !== actions.length || queue.unresolved_count !== actions.length) {
+    throw new Error('Flower contract error: approval.queue_replaced queue counts do not match actions.');
+  }
+  if (actions.length === 0) {
+    if (queue.current_action_id || queue.current_position !== 0) {
+      throw new Error('Flower contract error: empty approval.queue_replaced queue has a current action.');
+    }
+    return;
+  }
+  if (queue.generation <= 0 || queue.revision <= 0 || queue.current_position !== 1 || !queue.current_action_id) {
+    throw new Error('Flower contract error: approval.queue_replaced queue authority is incomplete.');
+  }
+  const actionIDs = new Set<string>();
+  const queueOrders = new Set<number>();
+  let actionableCount = 0;
+  for (const action of actions) {
+    if (actionIDs.has(action.action_id) || queueOrders.has(action.queue_order ?? 0)) {
+      throw new Error('Flower contract error: approval.queue_replaced actions have duplicate identity or order.');
+    }
+    actionIDs.add(action.action_id);
+    queueOrders.add(action.queue_order ?? 0);
+    if (action.queue_generation !== queue.generation || action.surface_epoch !== queue.generation) {
+      throw new Error('Flower contract error: approval.queue_replaced action generation does not match queue.');
+    }
+    if (action.can_approve) {
+      actionableCount += 1;
+      if (action.action_id !== queue.current_action_id) {
+        throw new Error('Flower contract error: approval.queue_replaced non-current action is actionable.');
+      }
+    }
+  }
+  if (actions[0]?.action_id !== queue.current_action_id || actionableCount > 1) {
+    throw new Error('Flower contract error: approval.queue_replaced current action is inconsistent.');
+  }
+  for (let index = 1; index < actions.length; index += 1) {
+    if ((actions[index - 1]?.queue_order ?? 0) >= (actions[index]?.queue_order ?? 0)) {
+      throw new Error('Flower contract error: approval.queue_replaced actions are not canonically ordered.');
+    }
+  }
+}
+
 function mapThreadPatch(raw: unknown): FlowerLiveThreadPatch | null {
   const record = recordValue(raw);
   if (!record) return null;
@@ -1117,7 +1283,8 @@ function mapThreadPatch(raw: unknown): FlowerLiveThreadPatch | null {
   const subagents = mapFlowerSubagents(patch.subagents, 'thread.patch.subagents');
   return {
     ...(trim(patch.thread_id) ? { thread_id: trim(patch.thread_id) } : {}),
-    ...(trim(patch.title) ? { title: trim(patch.title) } : {}),
+    ...(hasOwn(patch, 'title') ? { title: trim(patch.title) } : {}),
+    ...(hasOwn(patch, 'title_status') ? { title_status: titleStatus(patch.title_status) } : {}),
     ...(trim(patch.model_id) ? { model_id: trim(patch.model_id) } : {}),
     ...(normalizePermissionType(patch.permission_type) ? { permission_type: normalizePermissionType(patch.permission_type) } : {}),
     ...(trim(patch.working_dir) ? { working_dir: trim(patch.working_dir) } : {}),
@@ -1137,9 +1304,6 @@ function mapThreadPatch(raw: unknown): FlowerLiveThreadPatch | null {
     ...(reasoningSelection !== undefined ? { reasoning_selection: reasoningSelection } : {}),
     ...(reasoningCapability !== undefined ? { reasoning_capability: reasoningCapability } : {}),
     ...(trim(patch.read_only_reason) ? { read_only_reason: trim(patch.read_only_reason) } : {}),
-    ...(trim(patch.owner_kind) ? { owner_kind: trim(patch.owner_kind).toLowerCase() } : {}),
-    ...(trim(patch.owner_id) ? { owner_id: trim(patch.owner_id) } : {}),
-    ...(trim(patch.parent_thread_id) ? { parent_thread_id: trim(patch.parent_thread_id) } : {}),
     ...(subagents !== undefined ? { subagents } : {}),
     ...(readStatus ? { read_status: readStatus } : {}),
   };
@@ -1213,7 +1377,8 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
   const approvalQueue = mapApprovalQueue(record.approval_queue);
   return {
     thread_id: threadID,
-    title: trim(record.title) || trim(record.last_message_preview) || 'Ask Flower',
+    title: trim(record.title),
+    title_status: titleStatus(record.title_status),
     model_id: trim(record.model_id),
     working_dir: trim(record.working_dir),
     ...(Number(record.pinned_at_unix_ms ?? 0) > 0 ? { pinned_at_ms: Math.floor(Number(record.pinned_at_unix_ms)) } : {}),
@@ -1230,9 +1395,6 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
     source_label: options.sourceLabel,
     target_labels: options.targetLabels,
     ...(trim(record.read_only_reason) ? { read_only_reason: trim(record.read_only_reason) } : {}),
-    ...(trim(record.owner_kind) ? { owner_kind: trim(record.owner_kind).toLowerCase() } : {}),
-    ...(trim(record.owner_id) ? { owner_id: trim(record.owner_id) } : {}),
-    ...(trim(record.parent_thread_id) ? { parent_thread_id: trim(record.parent_thread_id) } : {}),
     messages,
     ...(normalizeFlowerReasoningSelection(record.reasoning_selection) ? { reasoning_selection: normalizeFlowerReasoningSelection(record.reasoning_selection) } : {}),
     ...(normalizeFlowerReasoningCapability(record.reasoning_capability) ? { reasoning_capability: normalizeFlowerReasoningCapability(record.reasoning_capability) } : {}),
@@ -1306,6 +1468,15 @@ function mapLiveEventPayload(kind: string, payload: unknown): unknown {
         action: mapApprovalAction(record.action) ?? undefined,
         ...(mapApprovalQueue(record.approval_queue) ? { approval_queue: mapApprovalQueue(record.approval_queue) } : {}),
       } as FlowerLiveApprovalPayload;
+    case 'approval.queue_replaced': {
+      if (!Array.isArray(record.actions)) {
+        throw new Error('Flower contract error: approval.queue_replaced requires actions.');
+      }
+      const approvalQueue = mapCanonicalApprovalQueue(record.approval_queue);
+      const actions = record.actions.map(mapCanonicalApprovalAction);
+      validateCanonicalApprovalReplacement(actions, approvalQueue);
+      return { actions, approval_queue: approvalQueue } as FlowerLiveApprovalQueuePayload;
+    }
     case 'input.requested':
       return { request: mapInputRequest(record.request) ?? undefined } as FlowerLiveInputRequestedPayload;
     case 'input.resolved':
@@ -1366,6 +1537,7 @@ const liveKinds = new Set<FlowerLiveKind>([
   'message.failed',
   'approval.requested',
   'approval.resolved',
+  'approval.queue_replaced',
   'input.requested',
   'input.resolved',
   'model_io.updated',
