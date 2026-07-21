@@ -5,6 +5,10 @@
     "moduleResolution": "Node",
     "outDir": "dist",
     "rootDir": "src",
+    "baseUrl": ".",
+    "paths": {
+      "@floegence/floe-webapp-core/themes": ["node_modules/@floegence/floe-webapp-core/dist/themes.d.ts"]
+    },
     "lib": ["ES2022"],
     "strict": true,
     "skipLibCheck": true,

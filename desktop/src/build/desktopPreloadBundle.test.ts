@@ -8,6 +8,10 @@ import { buildDesktopPreloads } from './desktopPreloadBundle';
 
 const tempDirs: string[] = [];
 
+function bundledRequireSpecifiers(output: string): string[] {
+  return Array.from(output.matchAll(/\brequire\((['"])([^'"]+)\1\)/g), (match) => match[2] ?? '');
+}
+
 afterEach(async () => {
   while (tempDirs.length > 0) {
     const tempDir = tempDirs.pop();
@@ -37,7 +41,10 @@ describe('buildDesktopPreloads', () => {
     expect(utilityOutput).toContain('redevenDesktopLanguage');
     expect(utilityOutput).not.toContain('redevenDesktopAskFlowerHandoff');
     expect(utilityOutput).not.toContain('redevenDesktopSessionContext');
+    expect(utilityOutput).not.toContain('node:module');
+    expect(utilityOutput).not.toContain('createRequire');
     expect(utilityOutput).not.toMatch(/require\((['"])\.\//);
+    expect([...new Set(bundledRequireSpecifiers(utilityOutput))]).toEqual(['electron']);
 
     expect(sessionOutput).toContain('redevenDesktopEmbeddedDragRegions');
     expect(sessionOutput).toContain('redevenDesktopSessionContext');
@@ -50,6 +57,9 @@ describe('buildDesktopPreloads', () => {
     expect(sessionOutput).not.toContain('redevenDesktopAskFlowerHandoff');
     expect(sessionOutput).not.toContain('redevenDesktopLauncher');
     expect(sessionOutput).not.toContain('redevenDesktopSettings');
+    expect(sessionOutput).not.toContain('node:module');
+    expect(sessionOutput).not.toContain('createRequire');
     expect(sessionOutput).not.toMatch(/require\((['"])\.\//);
+    expect([...new Set(bundledRequireSpecifiers(sessionOutput))]).toEqual(['electron']);
   });
 });
