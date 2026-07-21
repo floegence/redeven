@@ -501,9 +501,9 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | bl | 4.1.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/bl/v/4.1.0 |  |
 | bluebird | 3.7.2 | MIT | Env App UI | https://www.npmjs.com/package/bluebird/v/3.7.2 |  |
 | boolean | 3.2.0 | MIT | Desktop shell | https://www.npmjs.com/package/boolean/v/3.2.0 |  |
-| brace-expansion | 1.1.13 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/brace-expansion/v/1.1.13 |  |
-| brace-expansion | 2.0.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/brace-expansion/v/2.0.3 |  |
-| brace-expansion | 5.0.6 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/brace-expansion/v/5.0.6 |  |
+| brace-expansion | 1.1.16 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/brace-expansion/v/1.1.16 |  |
+| brace-expansion | 2.1.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/brace-expansion/v/2.1.2 |  |
+| brace-expansion | 5.0.7 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/brace-expansion/v/5.0.7 |  |
 | browserslist | 4.28.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/browserslist/v/4.28.2 |  |
 | buffer-crc32 | 0.2.13 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/buffer-crc32/v/0.2.13 |  |
 | buffer-from | 1.1.2 | MIT | Desktop shell | https://www.npmjs.com/package/buffer-from/v/1.1.2 |  |
@@ -764,7 +764,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | jiti | 2.6.1 | MIT | Desktop shell | https://www.npmjs.com/package/jiti/v/2.6.1 |  |
 | jiti | 2.7.0 | MIT | Env App UI | https://www.npmjs.com/package/jiti/v/2.7.0 |  |
 | js-tokens | 4.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/js-tokens/v/4.0.0 |  |
-| js-yaml | 4.2.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/js-yaml/v/4.2.0 |  |
+| js-yaml | 4.3.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/js-yaml/v/4.3.0 |  |
 | jsdom | 26.1.0 | MIT | Env App UI | https://www.npmjs.com/package/jsdom/v/26.1.0 |  |
 | jsdom | 29.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/jsdom/v/29.0.1 |  |
 | jsesc | 3.1.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/jsesc/v/3.1.0 |  |
@@ -1027,7 +1027,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | tapable | 2.3.2 | MIT | Desktop shell | https://www.npmjs.com/package/tapable/v/2.3.2 |  |
 | tapable | 2.3.3 | MIT | Env App UI | https://www.npmjs.com/package/tapable/v/2.3.3 |  |
 | tar-stream | 2.2.0 | MIT | Env App UI | https://www.npmjs.com/package/tar-stream/v/2.2.0 |  |
-| tar | 7.5.16 | BlueOak-1.0.0 | Desktop shell | https://www.npmjs.com/package/tar/v/7.5.16 |  |
+| tar | 7.5.20 | BlueOak-1.0.0 | Desktop shell | https://www.npmjs.com/package/tar/v/7.5.20 |  |
 | temp-file | 3.4.0 | MIT | Desktop shell | https://www.npmjs.com/package/temp-file/v/3.4.0 |  |
 | temp | 0.9.4 | MIT | Desktop shell | https://www.npmjs.com/package/temp/v/0.9.4 |  |
 | tiny-async-pool | 1.3.0 | MIT | Desktop shell | https://www.npmjs.com/package/tiny-async-pool/v/1.3.0 |  |
