@@ -890,6 +890,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let threadSelectionContentTimer: number | undefined;
   let backgroundThreadsRefreshInFlight = false;
   let composerFocusToken = 0;
+  let composerFocusOwner: Element | null = null;
   let approvalDecisionResyncTimer: number | undefined;
   let approvalHandoffStyleFrame = 0;
   let approvalHandoffStyleSettleFrame = 0;
@@ -1803,14 +1804,24 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       focusPermissionMenuItem(FLOWER_PERMISSION_TYPES.length - 1);
     }
   };
-  const requestComposerFocus = () => {
+  const requestComposerFocus = (focusOwner = typeof document === 'undefined' ? null : document.activeElement) => {
+    composerFocusOwner = focusOwner;
     setComposerFocusRevision((revision) => revision + 1);
   };
   const scheduleComposerFocus = () => {
     if (typeof queueMicrotask === 'undefined') return;
     const token = ++composerFocusToken;
+    const focusOwnerAtRequest = composerFocusOwner;
     queueMicrotask(() => {
       if (token !== composerFocusToken) return;
+      if (typeof document !== 'undefined') {
+        const activeElement = document.activeElement;
+        const focusStillOwned = activeElement == null
+          || activeElement === document.body
+          || activeElement === focusOwnerAtRequest
+          || activeElement === composerRef;
+        if (!focusStillOwned) return;
+      }
       composerRef?.focus();
     });
   };
@@ -2739,6 +2750,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const loadAndSelectThread = async (threadID: string) => {
     const tid = trimString(threadID);
     if (!tid) return;
+    const focusOwner = typeof document === 'undefined' ? null : document.activeElement;
     cancelDeferredThreadSelection();
     closeSubagentOverlays();
     const sequence = ++threadLoadSequence;
@@ -2761,7 +2773,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       persistThreadRead(tid, existing.read_status.snapshot, sequence);
     }
     if (detailWarm) {
-      requestComposerFocus();
+      requestComposerFocus(focusOwner);
       return;
     }
     setLoadingThreadID(tid);
@@ -2784,7 +2796,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       } else {
         scrollSelectedThreadToLatestAfterLayout(thread.thread_id, sequence);
       }
-      requestComposerFocus();
+      requestComposerFocus(focusOwner);
     } catch (error) {
       if (sequence !== threadLoadSequence || selectedThreadID() !== tid) {
         if (loadingThreadID() === tid) setLoadingThreadID('');
@@ -4497,6 +4509,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       notifyComposerError(chatCopyValue('inputRequestAnswerRequired', 'Answer every question before continuing.'));
       return;
     }
+    const focusOwner = typeof document === 'undefined' ? null : document.activeElement;
     setInputSubmitting(true);
     try {
       const reasoningSelection = serializeFlowerReasoningSelection(
@@ -4521,7 +4534,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         reasoningOverride: undefined,
       }));
       if (selectionCurrent) {
-        requestComposerFocus();
+        requestComposerFocus(focusOwner);
         await refreshSelectedThread(nextThread.thread_id);
       }
     } catch (error) {
@@ -6258,21 +6271,28 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           >
             <div class="flower-message-block-stack flower-message-block-stack-user">
               <div class="flower-message-bubble flower-message-bubble-framed flower-message-bubble-user flower-chat-context-unified-bubble">
-                <For each={blocks()}>
-                  {(block) => (
-                    block.type === 'content'
-                      ? <span class="flower-message-plain-text">{block.content}</span>
-                      : block.type === 'image' || block.type === 'file'
-                        ? messageAttachmentBlock(() => block)
+                <For each={blockKeys()}>
+                  {(blockKey) => {
+                    const block = createMemo(() => blocksByKey().get(blockKey) ?? null);
+                    const content = createMemo(() => block()?.type === 'content' ? block() as Extract<FlowerRenderableMessageBlock, { type: 'content' }> : null);
+                    const attachment = createMemo(() => (
+                      block()?.type === 'image' || block()?.type === 'file'
+                        ? block() as Extract<FlowerRenderableMessageBlock, { type: 'image' | 'file' }>
                         : null
-                  )}
+                    ));
+                    return (
+                      <Show when={content()} fallback={<Show when={attachment()}>{(value) => messageAttachmentBlock(value)}</Show>}>
+                        {(value) => <span class="flower-message-plain-text">{value().content}</span>}
+                      </Show>
+                    );
+                  }}
                 </For>
                 <FlowerChatContextChips
                   contextDisplay={contextDisplay()!}
                   linkedContextLabel={copy().chat.linkedContextLabel}
-							truncatedLabel={copy().chat.truncatedLabel}
+                  truncatedLabel={copy().chat.truncatedLabel}
                   canActivateChip={canActivateContextChip}
-							onChipClick={activateContextChip}
+                  onChipClick={activateContextChip}
                 />
               </div>
               <Show when={copyText() || messageTime()}>
@@ -6293,6 +6313,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const queuedTurnEntry = (entry: Accessor<Extract<FlowerTimelineEntry, { type: 'queued_turn' }>>) => {
     const turn = createMemo<FlowerQueuedTurn>(() => entry().turn);
     const blocks = createMemo(() => entry().blocks);
+    const blockKeys = createMemo(() => blocks().map((block) => block.key));
+    const blocksByKey = createMemo(() => new Map(blocks().map((block) => [block.key, block] as const)));
     const contextDisplay = createMemo(() => parseChatContextAction(turn().context_action));
     const canActivateContextChip = (chip: FlowerChatContextChip): boolean => {
       const action = chip.action;
@@ -6372,25 +6394,39 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         <div class="flower-message-block-stack flower-message-block-stack-user">
           <Show
             when={contextDisplay()}
-            fallback={<For each={blocks()}>{(block) => queuedBlock(() => block)}</For>}
+            fallback={(
+              <For each={blockKeys()}>
+                {(blockKey) => {
+                  const block = createMemo(() => blocksByKey().get(blockKey) ?? null);
+                  return <Show when={block()}>{(value) => queuedBlock(value)}</Show>;
+                }}
+              </For>
+            )}
           >
             {(display) => (
               <div class="flower-message-bubble flower-message-bubble-framed flower-message-bubble-user flower-chat-context-unified-bubble flower-queued-turn-bubble">
-                <For each={blocks()}>
-                  {(block) => (
-                    block.type === 'content'
-                      ? <span class="flower-message-plain-text">{block.content}</span>
-                      : block.type === 'image' || block.type === 'file'
-                        ? messageAttachmentBlock(() => block)
+                <For each={blockKeys()}>
+                  {(blockKey) => {
+                    const block = createMemo(() => blocksByKey().get(blockKey) ?? null);
+                    const content = createMemo(() => block()?.type === 'content' ? block() as Extract<FlowerRenderableMessageBlock, { type: 'content' }> : null);
+                    const attachment = createMemo(() => (
+                      block()?.type === 'image' || block()?.type === 'file'
+                        ? block() as Extract<FlowerRenderableMessageBlock, { type: 'image' | 'file' }>
                         : null
-                  )}
+                    ));
+                    return (
+                      <Show when={content()} fallback={<Show when={attachment()}>{(value) => messageAttachmentBlock(value)}</Show>}>
+                        {(value) => <span class="flower-message-plain-text">{value().content}</span>}
+                      </Show>
+                    );
+                  }}
                 </For>
                 <FlowerChatContextChips
                   contextDisplay={display()}
                   linkedContextLabel={copy().chat.linkedContextLabel}
-							truncatedLabel={copy().chat.truncatedLabel}
+                  truncatedLabel={copy().chat.truncatedLabel}
                   canActivateChip={canActivateContextChip}
-							onChipClick={activateContextChip}
+                  onChipClick={activateContextChip}
                 />
               </div>
             )}

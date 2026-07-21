@@ -21,7 +21,7 @@ describe('Flower canonical reference presentation', () => {
   it('keeps uploaded attachments and linked references in the unified user bubble', () => {
     const source = fs.readFileSync(surfacePath, 'utf8');
     const unifiedBubble = source.indexOf('flower-chat-context-unified-bubble');
-    const attachment = source.indexOf('messageAttachmentBlock(() => block)', unifiedBubble);
+    const attachment = source.indexOf('messageAttachmentBlock(value)', unifiedBubble);
     const references = source.indexOf('<FlowerChatContextChips', unifiedBubble);
 
     expect(unifiedBubble).toBeGreaterThanOrEqual(0);
