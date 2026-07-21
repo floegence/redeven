@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -117,7 +118,39 @@ describe('Flower linked context chips', () => {
 		expect(chips[1]?.tagName).toBe('BUTTON');
 		expect(chips[0]?.getAttribute('aria-label')).toBe('Quoted selection, quoted text, Truncated');
 		expect(chips[0]?.querySelector('.flower-chat-context-chip-truncated')?.textContent).toBe('Truncated');
-  });
+	});
+
+	it('preserves the focused canonical reference node across equivalent snapshot refreshes', async () => {
+		const firstDisplay = parseChatMessageReferences([
+			{ reference_id: 'context:file', kind: 'file', label: 'main.ts' },
+		]);
+		if (!firstDisplay) throw new Error('Expected canonical reference display.');
+		const [display, setDisplay] = createSignal(firstDisplay);
+		const host = document.createElement('div');
+		document.body.appendChild(host);
+		disposers.push(render(() => (
+			<FlowerChatContextChips
+				contextDisplay={display()}
+				linkedContextLabel="Linked references"
+				truncatedLabel="Truncated"
+				onChipClick={vi.fn()}
+			/>
+		), host));
+
+		const focusedChip = host.querySelector('button') as HTMLButtonElement;
+		focusedChip.focus();
+		const refreshedDisplay = parseChatMessageReferences([
+			{ reference_id: 'context:file', kind: 'file', label: 'renamed-main.ts' },
+		]);
+		if (!refreshedDisplay) throw new Error('Expected refreshed canonical reference display.');
+		setDisplay(refreshedDisplay);
+		await Promise.resolve();
+
+		const refreshedChip = host.querySelector('button') as HTMLButtonElement;
+		expect(refreshedChip).toBe(focusedChip);
+		expect(document.activeElement).toBe(focusedChip);
+		expect(refreshedChip.textContent).toContain('renamed-main.ts');
+	});
 
 	it('prevents duplicate activation while pending and restores focus after completion', async () => {
 		const display = parseChatMessageReferences([
