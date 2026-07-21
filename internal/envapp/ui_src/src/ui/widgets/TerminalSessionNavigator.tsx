@@ -149,14 +149,28 @@ function TerminalAgentIdentity(props: {
   );
 }
 
-function TerminalOutputStatusGlyph(props: { state: Exclude<TerminalSessionOutputState, 'none'> }) {
+function TerminalOutputStatusGlyph(props: {
+  state: Exclude<TerminalSessionOutputState, 'none'>;
+  unread: boolean;
+}) {
   return (
     <Show
       when={props.state === 'streaming'}
       fallback={(
-        <svg class="h-4 w-4" viewBox="0 0 16 16" fill="none" data-terminal-output-state="settled" aria-hidden="true">
-          <path d="M2.25 8h11.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
-        </svg>
+        <Show
+          when={props.unread}
+          fallback={(
+            <svg class="h-4 w-4" viewBox="0 0 16 16" fill="none" data-terminal-output-state="settled" aria-hidden="true">
+              <path d="M2.25 8h11.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+            </svg>
+          )}
+        >
+          <span
+            class="h-2 w-2 rounded-full bg-info shadow-[0_0_0_3px_color-mix(in_srgb,var(--info)_16%,transparent)] forced-colors:border forced-colors:border-current"
+            data-terminal-output-attention="unread"
+            aria-hidden="true"
+          />
+        </Show>
       )}
     >
       <svg class="h-4 w-4" viewBox="0 0 16 16" fill="currentColor" data-terminal-output-state="streaming" aria-hidden="true">
@@ -170,11 +184,12 @@ function TerminalOutputStatusGlyph(props: { state: Exclude<TerminalSessionOutput
 
 function terminalOutputTooltip(
   state: Exclude<TerminalSessionOutputState, 'none'>,
+  unread: boolean,
   t: ReturnType<typeof useI18n>['t'],
 ): string {
-  return state === 'streaming'
-    ? t('terminal.outputStreaming')
-    : `${t('terminal.outputSettled')}. ${t('terminal.outputSettledDescription')}`;
+  if (state === 'streaming') return t('terminal.outputStreaming');
+  if (unread) return `${t('terminal.unreadOutputDescription')} ${t('terminal.outputSettledDescription')}`;
+  return `${t('terminal.outputSettled')}. ${t('terminal.outputSettledDescription')}`;
 }
 
 export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
@@ -316,7 +331,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                       ].filter(Boolean).join(' '));
                       return (
                         <div
-                          class={`group relative rounded-md border px-2.5 py-2 pr-9 text-xs transition-colors duration-75 ${sidebarActive()
+                          class={`group relative rounded-md border px-2.5 py-2 pr-16 text-xs transition-colors duration-75 ${sidebarActive()
                             ? 'border-border/20 bg-sidebar-accent text-sidebar-accent-foreground shadow-[0_1px_3px_rgba(0,0,0,0.06)]'
                             : 'border-transparent text-sidebar-foreground/80 hover:border-border/15 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground'}`}
                           onContextMenu={(event) => props.onOpenContextMenu(event, item())}
@@ -384,14 +399,18 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                                   {item().title}
                                 </span>
                                 <span class="flex h-7 w-2 shrink-0 items-center justify-center" data-terminal-attention-slot={sessionId} aria-hidden="true">
-                                  <Show when={item().attentionState === 'unread'}>
+                                  <Show when={item().attentionState === 'unread' && item().outputState === 'none'}>
                                     <span class="h-1.5 w-1.5 rounded-full bg-primary forced-colors:border forced-colors:border-current" data-terminal-attention-state="unread" data-terminal-tab-status="unread" />
                                   </Show>
                                 </span>
                                 <span class="pointer-events-auto flex h-7 w-7 shrink-0 items-center justify-center" data-terminal-output-slot={sessionId}>
                                   <Show when={item().outputState !== 'none'}>
                                     <Tooltip
-                                      content={terminalOutputTooltip(item().outputState as Exclude<TerminalSessionOutputState, 'none'>, i18n.t)}
+                                      content={terminalOutputTooltip(
+                                        item().outputState as Exclude<TerminalSessionOutputState, 'none'>,
+                                        item().attentionState === 'unread',
+                                        i18n.t,
+                                      )}
                                       placement="top"
                                       delay={0}
                                       clickToToggle
@@ -399,20 +418,24 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                                       <button
                                         type="button"
                                         class="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-primary transition-colors duration-75 hover:bg-primary/10 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring forced-colors:border forced-colors:border-current"
-                                        aria-label={terminalOutputTooltip(item().outputState as Exclude<TerminalSessionOutputState, 'none'>, i18n.t)}
+                                        aria-label={terminalOutputTooltip(
+                                          item().outputState as Exclude<TerminalSessionOutputState, 'none'>,
+                                          item().attentionState === 'unread',
+                                          i18n.t,
+                                        )}
                                         data-terminal-output-trigger={sessionId}
                                       >
-                                        <TerminalOutputStatusGlyph state={item().outputState as Exclude<TerminalSessionOutputState, 'none'>} />
+                                        <TerminalOutputStatusGlyph
+                                          state={item().outputState as Exclude<TerminalSessionOutputState, 'none'>}
+                                          unread={item().attentionState === 'unread'}
+                                        />
                                       </button>
                                     </Tooltip>
                                   </Show>
                                 </span>
-                                <Show when={!props.mobile}>
-                                  <span class="shrink-0 rounded border border-sidebar-border/80 bg-sidebar/35 px-1 py-[1px] text-[9px] leading-none text-muted-foreground/80">{index() + 1}</span>
-                                </Show>
                               </span>
                               <Show when={item().fullPath}>
-                                <span class="mt-0.5 flex h-6 min-w-0 max-w-full items-center gap-1.5">
+                                <span class="mt-0.5 flex h-6 min-w-0 max-w-full items-center">
                                   <span
                                     class="pointer-events-none min-w-0 flex-1 cursor-pointer truncate text-[11px] leading-6 text-muted-foreground/75"
                                     title={item().fullPath}
@@ -421,58 +444,93 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                                   >
                                     {item().fullPath}
                                   </span>
-                                  <button
-                                    type="button"
-                                    class={`pointer-events-auto flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center rounded text-muted-foreground/70 transition-colors duration-75 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring ${props.copiedPathSessionId === sessionId
-                                      ? 'bg-primary/10 text-primary'
-                                      : 'hover:bg-sidebar-accent hover:text-sidebar-foreground'}`}
-                                    title={props.copiedPathSessionId === sessionId ? i18n.t('terminal.pathCopied') : i18n.t('terminal.copyPath')}
-                                    aria-label={`${props.copiedPathSessionId === sessionId ? i18n.t('terminal.pathCopied') : i18n.t('terminal.copyPath')}: ${item().fullPath}`}
-                                    data-testid={`terminal-session-path-copy-${sessionId}`}
-                                    onClick={(event) => {
-                                      event.stopPropagation();
-                                      props.onCopyPath(item());
-                                    }}
-                                  >
-                                    <Show when={props.copiedPathSessionId === sessionId} fallback={<Copy class="h-3 w-3" />}>
-                                      <Check class="h-3 w-3" />
-                                    </Show>
-                                  </button>
                                 </span>
                               </Show>
                             </span>
                           </div>
-                          <div class="pointer-events-none absolute right-1.5 top-1.5 z-20 flex w-5 flex-col items-center gap-1 group-hover:pointer-events-auto focus-within:pointer-events-auto">
-                            <Show when={item().closable}>
-                              <button
-                                type="button"
-                                class="pointer-events-auto flex h-5 w-5 cursor-pointer items-center justify-center rounded text-[11px] text-muted-foreground/70 opacity-0 transition-opacity duration-75 hover:bg-error/10 hover:text-error focus:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-hover:opacity-100"
-                                data-testid={`close-session-${sessionId}`}
-                                aria-label={`${i18n.t('terminal.deleteSession')} ${item().title}`}
-                                title={i18n.t('terminal.deleteSession')}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  props.onCloseSession(sessionId);
-                                }}
-                              >
-                                <X class="h-3 w-3" />
-                              </button>
-                            </Show>
-                            <Show when={item().canBrowsePath}>
-                              <button
-                                type="button"
-                                class="pointer-events-auto flex h-5 w-5 cursor-pointer items-center justify-center rounded text-muted-foreground/70 opacity-0 transition-opacity duration-75 hover:bg-sidebar-accent hover:text-sidebar-foreground focus:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-hover:opacity-100"
-                                data-testid={`terminal-session-files-${sessionId}`}
-                                aria-label={`${i18n.t('terminal.files')}: ${item().fullPath}`}
-                                title={`${i18n.t('terminal.files')}: ${item().fullPath}`}
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  props.onOpenFiles(item());
-                                }}
-                              >
-                                <ExternalLink class="h-3 w-3" />
-                              </button>
-                            </Show>
+                          <div
+                            class="pointer-events-none absolute right-1.5 top-1.5 z-20 grid grid-cols-[20px_20px] grid-rows-[20px_20px] gap-1"
+                            data-terminal-session-actions={sessionId}
+                          >
+                            <span
+                              class="col-start-1 row-start-1 flex h-5 w-5 items-center justify-center"
+                              data-terminal-session-action-cell="index"
+                              aria-hidden="true"
+                            >
+                              <Show when={!props.mobile && index() < 9}>
+                                <span class="flex h-5 w-5 items-center justify-center rounded border border-sidebar-border/80 bg-sidebar/35 text-[9px] font-medium leading-none tabular-nums text-muted-foreground/80">
+                                  {index() + 1}
+                                </span>
+                              </Show>
+                            </span>
+                            <span
+                              class="col-start-2 row-start-1 flex h-5 w-5 items-center justify-center"
+                              data-terminal-session-action-cell="close"
+                            >
+                              <Show when={item().closable}>
+                                <button
+                                  type="button"
+                                  class={`flex h-5 w-5 cursor-pointer items-center justify-center rounded text-[11px] text-muted-foreground/70 transition-[opacity,color,background-color] duration-75 hover:bg-error/10 hover:text-error focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-focus-within:pointer-events-auto group-focus-within:opacity-100 ${props.mobile
+                                    ? 'pointer-events-auto opacity-100'
+                                    : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100'}`}
+                                  data-testid={`close-session-${sessionId}`}
+                                  aria-label={`${i18n.t('terminal.deleteSession')} ${item().title}`}
+                                  title={i18n.t('terminal.deleteSession')}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    props.onCloseSession(sessionId);
+                                  }}
+                                >
+                                  <X class="h-3 w-3" />
+                                </button>
+                              </Show>
+                            </span>
+                            <span
+                              class="col-start-1 row-start-2 flex h-5 w-5 items-center justify-center"
+                              data-terminal-session-action-cell="copy"
+                            >
+                              <Show when={item().fullPath}>
+                                <button
+                                  type="button"
+                                  class={`pointer-events-auto flex h-5 w-5 cursor-pointer items-center justify-center rounded text-muted-foreground/70 transition-colors duration-75 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring ${props.copiedPathSessionId === sessionId
+                                    ? 'bg-primary/10 text-primary'
+                                    : 'hover:bg-sidebar-accent hover:text-sidebar-foreground'}`}
+                                  title={props.copiedPathSessionId === sessionId ? i18n.t('terminal.pathCopied') : i18n.t('terminal.copyPath')}
+                                  aria-label={`${props.copiedPathSessionId === sessionId ? i18n.t('terminal.pathCopied') : i18n.t('terminal.copyPath')}: ${item().fullPath}`}
+                                  data-testid={`terminal-session-path-copy-${sessionId}`}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    props.onCopyPath(item());
+                                  }}
+                                >
+                                  <Show when={props.copiedPathSessionId === sessionId} fallback={<Copy class="h-3 w-3" />}>
+                                    <Check class="h-3 w-3" />
+                                  </Show>
+                                </button>
+                              </Show>
+                            </span>
+                            <span
+                              class="col-start-2 row-start-2 flex h-5 w-5 items-center justify-center"
+                              data-terminal-session-action-cell="files"
+                            >
+                              <Show when={item().canBrowsePath}>
+                                <button
+                                  type="button"
+                                  class={`flex h-5 w-5 cursor-pointer items-center justify-center rounded text-muted-foreground/70 transition-[opacity,color,background-color] duration-75 hover:bg-sidebar-accent hover:text-sidebar-foreground focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring group-focus-within:pointer-events-auto group-focus-within:opacity-100 ${props.mobile
+                                    ? 'pointer-events-auto opacity-100'
+                                    : 'pointer-events-none opacity-0 group-hover:pointer-events-auto group-hover:opacity-100'}`}
+                                  data-testid={`terminal-session-files-${sessionId}`}
+                                  aria-label={`${i18n.t('terminal.files')}: ${item().fullPath}`}
+                                  title={`${i18n.t('terminal.files')}: ${item().fullPath}`}
+                                  onClick={(event) => {
+                                    event.stopPropagation();
+                                    props.onOpenFiles(item());
+                                  }}
+                                >
+                                  <ExternalLink class="h-3 w-3" />
+                                </button>
+                              </Show>
+                            </span>
                           </div>
                         </div>
                       );

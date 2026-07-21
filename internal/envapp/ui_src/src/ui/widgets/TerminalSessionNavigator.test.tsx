@@ -76,13 +76,14 @@ function navigationItem(overrides: Partial<TerminalSessionNavigationItem> = {}):
 }
 
 describe('TerminalSessionNavigator agent status presentation', () => {
-  it('renders brand identity, process, output, and unread signals at the same time', () => {
+  it('keeps the streaming wave primary while unread output accumulates', () => {
     const { host } = renderNavigator(navigationItem());
 
     expect(host.querySelector('[data-terminal-agent-identity="codex"]')).not.toBeNull();
     expect(host.querySelector('[data-terminal-process-state="running"]')).not.toBeNull();
     expect(host.querySelector('[data-terminal-output-state="streaming"]')).not.toBeNull();
-    expect(host.querySelector('[data-terminal-attention-state="unread"]')).not.toBeNull();
+    expect(host.querySelector('[data-terminal-output-attention="unread"]')).toBeNull();
+    expect(host.querySelector('[data-terminal-attention-state="unread"]')).toBeNull();
     expect(host.querySelector('[data-terminal-session-avatar="agent-session"]')?.className).toContain('h-9 w-9');
     expect(host.querySelector('[data-terminal-output-trigger="agent-session"]')?.className).toContain('h-7 w-7');
     const rowButton = host.querySelector<HTMLButtonElement>('button[data-terminal-session-id="agent-session"]')!;
@@ -94,11 +95,23 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(rowButton.hasAttribute('aria-busy')).toBe(false);
   });
 
-  it('uses a static flat line for settled output without claiming success', () => {
+  it('uses a blue unread dot for settled agent output without duplicating the title marker', () => {
     const { host } = renderNavigator(navigationItem({ outputState: 'settled' }));
+    const trigger = host.querySelector<HTMLButtonElement>('[data-terminal-output-trigger="agent-session"]');
+    const unreadDot = host.querySelector<HTMLElement>('[data-terminal-output-attention="unread"]');
+
+    expect(unreadDot).not.toBeNull();
+    expect(unreadDot?.className).toContain('h-2 w-2 rounded-full bg-info');
+    expect(host.querySelector('[data-terminal-attention-state="unread"]')).toBeNull();
+    expect(trigger?.getAttribute('aria-label')).toContain('Unread terminal output');
+  });
+
+  it('uses a static flat line for read settled output without claiming success', () => {
+    const { host } = renderNavigator(navigationItem({ outputState: 'settled', attentionState: 'none' }));
     const trigger = host.querySelector<HTMLButtonElement>('[data-terminal-output-trigger="agent-session"]');
 
     expect(host.querySelector('[data-terminal-output-state="settled"]')).not.toBeNull();
+    expect(host.querySelector('[data-terminal-output-attention="unread"]')).toBeNull();
     expect(trigger?.getAttribute('aria-label')).toContain('stable');
     expect(trigger?.querySelector('svg')?.className).not.toContain('animate-spin');
     expect(trigger?.textContent?.toLowerCase()).not.toContain('complete');
@@ -139,5 +152,35 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(host.querySelector('[data-terminal-agent-identity]')).toBeNull();
     expect(host.querySelector('[data-terminal-session-avatar="agent-session"]')?.textContent).toContain('R');
     expect(host.querySelector('[data-terminal-output-state]')).toBeNull();
+  });
+
+  it('keeps ordinary session unread attention in the title slot', () => {
+    const { host } = renderNavigator(navigationItem({
+      title: 'top',
+      agentIdentity: null,
+      outputState: 'none',
+    }));
+
+    expect(host.querySelector('[data-terminal-attention-state="unread"]')).not.toBeNull();
+    expect(host.querySelector('[data-terminal-output-attention="unread"]')).toBeNull();
+  });
+
+  it('reserves four explicit trailing action cells even when actions are unavailable', () => {
+    const { host } = renderNavigator(navigationItem({
+      fullPath: '',
+      canBrowsePath: false,
+      closable: false,
+    }));
+    const grid = host.querySelector('[data-terminal-session-actions="agent-session"]');
+    const cells = Array.from(grid?.querySelectorAll('[data-terminal-session-action-cell]') ?? []);
+
+    expect(cells.map((cell) => cell.getAttribute('data-terminal-session-action-cell'))).toEqual([
+      'index',
+      'close',
+      'copy',
+      'files',
+    ]);
+    expect(grid?.className).toContain('grid-cols-[20px_20px]');
+    expect(grid?.className).toContain('grid-rows-[20px_20px]');
   });
 });

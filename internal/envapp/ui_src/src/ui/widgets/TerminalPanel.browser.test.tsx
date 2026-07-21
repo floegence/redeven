@@ -127,6 +127,7 @@ const terminalCoreState = vi.hoisted(() => ({
     write: ReturnType<typeof vi.fn>;
     setFixedDimensions: ReturnType<typeof vi.fn>;
     config: any;
+    emitBell: () => void;
   }>,
 }));
 
@@ -409,6 +410,7 @@ vi.mock('@floegence/floeterm-terminal-web', async () => {
     clearSearch = vi.fn();
     findNext = vi.fn();
     findPrevious = vi.fn();
+    emitBell = () => this.handlers?.onBell?.();
     clear = vi.fn();
     captureRestorableSnapshot = vi.fn((options?: { coveredThroughSequence?: number }) => ({
       version: 1 as const,
@@ -910,6 +912,11 @@ describe('TerminalPanel browser activity integration', () => {
     await settleTerminalPanel();
 
     expect(host.querySelectorAll('button[data-terminal-session-id]')).toHaveLength(100);
+    const shortcutCells = host.querySelectorAll<HTMLElement>('[data-terminal-session-action-cell="index"]');
+    expect(shortcutCells).toHaveLength(100);
+    expect(shortcutCells[8]?.textContent?.trim()).toBe('9');
+    expect(shortcutCells[9]?.textContent?.trim()).toBe('');
+    expect(shortcutCells[99]?.textContent?.trim()).toBe('');
     expect(terminalCoreState.instances).toHaveLength(0);
     expect(transportMocks.attach).not.toHaveBeenCalled();
     expect(transportMocks.resize).not.toHaveBeenCalled();
@@ -1416,6 +1423,102 @@ describe('TerminalPanel browser activity integration', () => {
     expect(new URL(claudeIcon.src).pathname).toBe('/_redeven_proxy/env/agent-cli-icons/claude.svg');
   });
 
+  it('keeps the four trailing controls aligned in a fixed two-by-two grid beside long paths', async () => {
+    terminalSessionsState.sessions = terminalSessionsState.sessions.map((session) => (
+      session.id === 'session-2'
+        ? { ...session, workingDir: `/workspace/${'deeply-nested-directory/'.repeat(8)}redeven` }
+        : session
+    ));
+    const host = document.createElement('div');
+    host.style.width = '420px';
+    host.style.height = '640px';
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    const grid = host.querySelector<HTMLElement>('[data-terminal-session-actions="session-2"]')!;
+    const cell = (name: string) => grid.querySelector<HTMLElement>(`[data-terminal-session-action-cell="${name}"]`)!.getBoundingClientRect();
+    const indexRect = cell('index');
+    const closeRect = cell('close');
+    const copyRect = cell('copy');
+    const filesRect = cell('files');
+    const pathRect = host.querySelector<HTMLElement>('[data-terminal-session-path="session-2"]')!.getBoundingClientRect();
+
+    expect([indexRect.width, indexRect.height]).toEqual([20, 20]);
+    expect([closeRect.width, closeRect.height]).toEqual([20, 20]);
+    expect([copyRect.width, copyRect.height]).toEqual([20, 20]);
+    expect([filesRect.width, filesRect.height]).toEqual([20, 20]);
+    expect(Math.abs(indexRect.left - copyRect.left)).toBeLessThanOrEqual(1);
+    expect(Math.abs(closeRect.left - filesRect.left)).toBeLessThanOrEqual(1);
+    expect(Math.abs(indexRect.top - closeRect.top)).toBeLessThanOrEqual(1);
+    expect(Math.abs(copyRect.top - filesRect.top)).toBeLessThanOrEqual(1);
+    expect(indexRect.right).toBeLessThanOrEqual(closeRect.left);
+    expect(indexRect.bottom).toBeLessThanOrEqual(copyRect.top);
+    expect(pathRect.right).toBeLessThanOrEqual(grid.getBoundingClientRect().left - 4);
+    const closeButton = host.querySelector<HTMLElement>('[data-testid="close-session-session-2"]')!;
+    const filesButton = host.querySelector<HTMLElement>('[data-testid="terminal-session-files-session-2"]')!;
+    expect(getComputedStyle(closeButton).opacity).toBe('0');
+    expect(getComputedStyle(closeButton).pointerEvents).toBe('none');
+    closeButton.focus();
+    expect(document.activeElement).toBe(closeButton);
+    expect(closeButton.matches(':focus')).toBe(true);
+    await new Promise<void>((resolve) => setTimeout(resolve, 100));
+    expect(getComputedStyle(closeButton).opacity).toBe('1');
+    expect(getComputedStyle(closeButton).pointerEvents).toBe('auto');
+    filesButton.focus();
+    expect(getComputedStyle(filesButton).opacity).toBe('1');
+    expect(getComputedStyle(filesButton).pointerEvents).toBe('auto');
+  });
+
+  it('paints settled unread agent output as a stable blue dot until the session is viewed', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    await page.elementLocator(findTerminalTab(host, 'Terminal 2')!).click();
+    await vi.waitFor(() => expect(terminalCoreState.instances).toHaveLength(2));
+    await page.elementLocator(findTerminalTab(host, 'Terminal 1')!).click();
+    await settleTerminalPanel();
+
+    publishTerminalForegroundCommand('session-2', {
+      phase: 'running', displayName: 'codex', revision: 1, updatedAtMs: 10,
+    });
+    publishTerminalOutputActivity('session-2', {
+      phase: 'streaming', revision: 1, updatedAtMs: 11,
+    });
+    await new Promise<void>((resolve) => setTimeout(resolve, 170));
+    await settleTerminalPanel();
+
+    const slot = host.querySelector<HTMLElement>('[data-terminal-output-slot="session-2"]')!;
+    const slotBefore = slot.getBoundingClientRect();
+    const spinner = host.querySelector('[data-terminal-agent-identity="codex"] [data-terminal-process-state="running"]');
+    terminalCoreState.instances[1]?.emitBell();
+    publishTerminalOutputActivity('session-2', {
+      phase: 'settled', revision: 2, updatedAtMs: 20,
+    });
+    await settleTerminalPanel();
+
+    const dot = host.querySelector<HTMLElement>('[data-terminal-output-attention="unread"]')!;
+    const dotRect = dot.getBoundingClientRect();
+    const dotStyle = getComputedStyle(dot);
+    const slotUnread = slot.getBoundingClientRect();
+    expect([dotRect.width, dotRect.height]).toEqual([8, 8]);
+    expect(parseFloat(dotStyle.borderRadius)).toBeGreaterThanOrEqual(4);
+    expect(dotStyle.backgroundColor).toBe('rgb(59, 130, 246)');
+    expect([slotUnread.width, slotUnread.height]).toEqual([slotBefore.width, slotBefore.height]);
+    expect(host.querySelector('[data-terminal-agent-identity="codex"] [data-terminal-process-state="running"]')).toBe(spinner);
+    expect(host.querySelector('[data-terminal-attention-state="unread"]')).toBeNull();
+
+    await page.elementLocator(findTerminalTab(host, 'Terminal 2')!).click();
+    await settleTerminalPanel();
+    const slotRead = slot.getBoundingClientRect();
+    expect(host.querySelector('[data-terminal-output-attention="unread"]')).toBeNull();
+    expect(host.querySelector('[data-terminal-output-state="settled"]')).not.toBeNull();
+    expect([slotRead.width, slotRead.height]).toEqual([slotBefore.width, slotBefore.height]);
+    expect(host.querySelector('[data-terminal-agent-identity="codex"] [data-terminal-process-state="running"]')).toBe(spinner);
+  });
+
   it('uses thesvg light and dark variants without filtering the official mark', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -1453,6 +1556,12 @@ describe('TerminalPanel browser activity integration', () => {
       document.body.appendChild(host);
       render(() => <TerminalPanel variant="workbench" />, host);
       await settleTerminalPanel();
+
+      await page.elementLocator(findTerminalTab(host, 'Terminal 2')!).click();
+      await vi.waitFor(() => expect(terminalCoreState.instances).toHaveLength(2));
+      await page.elementLocator(findTerminalTab(host, 'Terminal 1')!).click();
+      await settleTerminalPanel();
+
       publishTerminalForegroundCommand('session-2', {
         phase: 'running', displayName: 'codex', revision: 1, updatedAtMs: 10,
       });
@@ -1471,6 +1580,20 @@ describe('TerminalPanel browser activity integration', () => {
       expect(getComputedStyle(spinner).animationName).toBe('none');
       expect(getComputedStyle(trigger).borderTopStyle).toBe('solid');
       expect(outputBar.getBoundingClientRect().height).toBeGreaterThan(0);
+
+      terminalCoreState.instances[1]?.emitBell();
+      publishTerminalOutputActivity('session-2', {
+        phase: 'settled', revision: 2, updatedAtMs: 20,
+      });
+      await settleTerminalPanel();
+
+      const unreadDot = host.querySelector<HTMLElement>('[data-terminal-output-attention="unread"]')!;
+      const unreadDotRect = unreadDot.getBoundingClientRect();
+      const unreadDotStyle = getComputedStyle(unreadDot);
+      expect([unreadDotRect.width, unreadDotRect.height]).toEqual([8, 8]);
+      expect(unreadDotStyle.borderTopStyle).toBe('solid');
+      expect(unreadDotStyle.animationName).toBe('none');
+      expect(host.querySelector('[data-terminal-agent-identity="codex"] [data-terminal-process-state="running"] svg')).toBe(spinner);
     } finally {
       await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' });
     }
@@ -1654,6 +1777,10 @@ describe('TerminalPanel browser activity integration', () => {
         const titleRect = host.querySelector<HTMLElement>('[data-terminal-session-title="session-2"]')?.getBoundingClientRect();
         const attentionRect = host.querySelector<HTMLElement>('[data-terminal-attention-slot="session-2"]')?.getBoundingClientRect();
         expect((titleRect?.right ?? Number.POSITIVE_INFINITY) <= (attentionRect?.left ?? 0) + 1).toBe(true);
+        const closeButton = host.querySelector<HTMLElement>('[data-testid="close-session-session-2"]');
+        const filesButton = host.querySelector<HTMLElement>('[data-testid="terminal-session-files-session-2"]');
+        expect(closeButton ? getComputedStyle(closeButton).opacity : null).toBe('1');
+        expect(filesButton ? getComputedStyle(filesButton).opacity : null).toBe('1');
       }
 
       expect(host.querySelector('[data-terminal-agent-identity="codex"]')).not.toBeNull();
