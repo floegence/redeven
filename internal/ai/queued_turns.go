@@ -86,12 +86,17 @@ func (s *Service) readCanonicalThreadTurnIDs(ctx context.Context, threadID strin
 	if err != nil {
 		return nil, err
 	}
-	afterOrdinal := int64(0)
 	turnIDs := make(map[string]struct{})
+	var beforeCursor *flruntime.ThreadTurnsBeforeCursor
 	for {
-		page, err := host.ListThreadTurns(ctx, flruntime.ListThreadTurnsRequest{
-			ThreadID: flruntime.ThreadID(threadID), AfterOrdinal: afterOrdinal, Limit: 200,
-		})
+		req := flruntime.ListThreadTurnsRequest{ThreadID: flruntime.ThreadID(threadID)}
+		if beforeCursor == nil {
+			req.Tail = 200
+		} else {
+			req.BeforeCursor = beforeCursor
+			req.Limit = 200
+		}
+		page, err := host.ListThreadTurns(ctx, req)
 		if err != nil {
 			return nil, err
 		}
@@ -105,14 +110,13 @@ func (s *Service) readCanonicalThreadTurnIDs(ctx context.Context, threadID strin
 		if !page.HasMore {
 			break
 		}
-		if len(page.Turns) == 0 {
+		if len(page.Turns) == 0 || page.BeforeCursor == nil || strings.TrimSpace(page.BeforeCursor.EntryID) == "" {
 			return nil, errors.New("Floret turn pagination stopped before completion")
 		}
-		next := page.Turns[len(page.Turns)-1].Ordinal
-		if next <= afterOrdinal {
+		if beforeCursor != nil && page.BeforeCursor.EntryID == beforeCursor.EntryID {
 			return nil, errors.New("Floret turn pagination did not advance")
 		}
-		afterOrdinal = next
+		beforeCursor = page.BeforeCursor
 	}
 	return turnIDs, nil
 }

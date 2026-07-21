@@ -89,25 +89,6 @@ export type ContextActionEnvelope = Readonly<{
   suggested_working_dir_abs?: string;
 }>;
 
-export type PersistedContextActionItem =
-  | ContextActionContextItem
-  | Readonly<{
-      kind: 'file_selection';
-      path: string;
-      selection: string;
-      selection_chars: number;
-    }>
-  | Readonly<{
-      kind: 'unsupported';
-      original_kind: string;
-    }>;
-
-export type PersistedContextActionEnvelope = Omit<ContextActionEnvelope, 'context'> & Readonly<{
-  context: readonly PersistedContextActionItem[];
-}>;
-
-export type AskFlowerContextActionParseMode = 'strict-input' | 'persisted-display';
-
 const ASK_FLOWER_LOCALITIES: readonly ContextActionLocality[] = [
   'auto',
   'current_runtime',
@@ -142,7 +123,6 @@ const ASK_FLOWER_SESSION_SOURCES: readonly NonNullable<ContextActionExecutionCon
 
 const KNOWN_CONTEXT_KINDS = new Set([
   'file_path',
-  'file_selection',
   'terminal_selection',
   'process_snapshot',
   'text_snapshot',
@@ -180,62 +160,40 @@ function validCharacterCount(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 0;
 }
 
-function normalizeSelectionItem(
-  record: Record<string, unknown>,
-  mode: AskFlowerContextActionParseMode,
-): Readonly<{ selection: string; selection_chars: number }> | null {
-  const selectionMissing = record.selection === undefined;
-  if (!selectionMissing && typeof record.selection !== 'string') return null;
-  if (mode === 'strict-input' && selectionMissing) return null;
-  const selection = typeof record.selection === 'string' ? record.selection : '';
-  if (record.selection_chars === undefined) {
-    if (mode === 'strict-input' || selection !== '') return null;
-    return { selection, selection_chars: 0 };
-  }
+function parseSelectionItem(record: Record<string, unknown>): Readonly<{ selection: string; selection_chars: number }> | null {
+  if (typeof record.selection !== 'string') return null;
+  const selection = record.selection;
   if (!validCharacterCount(record.selection_chars)) return null;
   if (selection !== '' && record.selection_chars !== Array.from(selection.trim()).length) return null;
   return { selection, selection_chars: record.selection_chars };
 }
 
-function parseContextItem(
-  value: unknown,
-  mode: AskFlowerContextActionParseMode,
-): PersistedContextActionItem | null {
-  if (!isRecord(value)) {
-    return mode === 'persisted-display' ? { kind: 'unsupported', original_kind: 'unknown' } : null;
-  }
+function parseContextItem(value: unknown): ContextActionContextItem | null {
+  if (!isRecord(value)) return null;
   const kind = typeof value.kind === 'string' ? value.kind : '';
   switch (kind) {
     case 'file_path': {
       if (!validPath(value.path)) return null;
-      if (mode === 'strict-input' && typeof value.is_directory !== 'boolean') return null;
-      if (value.is_directory !== undefined && typeof value.is_directory !== 'boolean') return null;
+      if (typeof value.is_directory !== 'boolean') return null;
       const rootLabel = optionalString(value, 'root_label');
       if (rootLabel === null || (rootLabel !== undefined && /[\r\n]/.test(rootLabel))) return null;
       return {
         kind,
         path: value.path,
-        is_directory: value.is_directory === true,
+        is_directory: value.is_directory,
         ...(rootLabel !== undefined ? { root_label: rootLabel } : {}),
       };
     }
-    case 'file_selection': {
-      if (mode === 'strict-input' || !validPath(value.path)) return null;
-      const selection = normalizeSelectionItem(value, mode);
-      return selection ? { kind, path: value.path, ...selection } : null;
-    }
     case 'terminal_selection': {
       if (!validSingleLineString(value.working_dir)) return null;
-      const selection = normalizeSelectionItem(value, mode);
+      const selection = parseSelectionItem(value);
       return selection ? { kind, working_dir: value.working_dir.trim(), ...selection } : null;
     }
     case 'process_snapshot': {
       if (typeof value.pid !== 'number' || !Number.isInteger(value.pid) || value.pid <= 0) return null;
       if (!validSingleLineString(value.name) || !validSingleLineString(value.username)) return null;
-      const cpuPercent = value.cpu_percent === undefined && mode === 'persisted-display' ? 0 : value.cpu_percent;
-      const memoryBytes = value.memory_bytes === undefined && mode === 'persisted-display' ? 0 : value.memory_bytes;
-      if (typeof cpuPercent !== 'number' || !Number.isFinite(cpuPercent) || cpuPercent < 0) return null;
-      if (typeof memoryBytes !== 'number' || !Number.isFinite(memoryBytes) || memoryBytes < 0) return null;
+      if (typeof value.cpu_percent !== 'number' || !Number.isFinite(value.cpu_percent) || value.cpu_percent < 0) return null;
+      if (typeof value.memory_bytes !== 'number' || !Number.isFinite(value.memory_bytes) || value.memory_bytes < 0) return null;
       if (!validSingleLineString(value.platform)) return null;
       if (typeof value.captured_at_ms !== 'number' || !Number.isFinite(value.captured_at_ms) || value.captured_at_ms <= 0) return null;
       return {
@@ -243,8 +201,8 @@ function parseContextItem(
         pid: value.pid,
         name: value.name.trim(),
         username: value.username.trim(),
-        cpu_percent: cpuPercent,
-        memory_bytes: memoryBytes,
+        cpu_percent: value.cpu_percent,
+        memory_bytes: value.memory_bytes,
         platform: value.platform.trim(),
         captured_at_ms: value.captured_at_ms,
       };
@@ -253,23 +211,19 @@ function parseContextItem(
       if (!validSingleLineString(value.title)) return null;
       const detail = optionalString(value, 'detail');
       if (detail === null || (detail !== undefined && /[\r\n]/.test(detail))) return null;
-      if (mode === 'strict-input' && !validNonEmptyString(value.content)) return null;
-      if (value.content !== undefined && typeof value.content !== 'string') return null;
+      if (!validNonEmptyString(value.content)) return null;
       return {
         kind,
         title: value.title.trim(),
-        content: typeof value.content === 'string' ? value.content : '',
+        content: value.content,
         ...(detail !== undefined ? { detail } : {}),
       };
     }
-    default:
-      return mode === 'persisted-display'
-        ? { kind: 'unsupported', original_kind: kind || 'unknown' }
-        : null;
+    default: return null;
   }
 }
 
-function surfaceAllowsKind(surface: ContextActionSurface, kind: string, mode: AskFlowerContextActionParseMode): boolean {
+function surfaceAllowsKind(surface: ContextActionSurface, kind: string): boolean {
   switch (surface) {
     case 'terminal': return kind === 'terminal_selection';
     case 'monitoring': return kind === 'process_snapshot';
@@ -277,14 +231,11 @@ function surfaceAllowsKind(surface: ContextActionSurface, kind: string, mode: As
     case 'desktop_welcome_environment_card': return kind === 'text_snapshot';
     case 'file_browser':
     case 'file_preview':
-    case 'editor_preview': return kind === 'file_path' || (mode === 'persisted-display' && kind === 'file_selection');
+    case 'editor_preview': return kind === 'file_path';
   }
 }
 
-export function parseAskFlowerContextActionEnvelope(
-  value: unknown,
-  mode: AskFlowerContextActionParseMode,
-): ContextActionEnvelope | PersistedContextActionEnvelope | null {
+export function parseAskFlowerContextActionEnvelope(value: unknown): ContextActionEnvelope | null {
   if (!isRecord(value)) return null;
   if (value.schema_version !== CONTEXT_ACTION_SCHEMA_VERSION || value.action_id !== 'assistant.ask.flower' || value.provider !== 'flower') return null;
   if (!isRecord(value.target) || !validNonEmptyString(value.target.target_id) || !isStringMember(value.target.locality, ASK_FLOWER_LOCALITIES)) return null;
@@ -306,16 +257,12 @@ export function parseAskFlowerContextActionEnvelope(
   }
   if (!Array.isArray(value.context) || value.context.length === 0) return null;
 
-  const context: PersistedContextActionItem[] = [];
+  const context: ContextActionContextItem[] = [];
   for (const rawItem of value.context) {
     const rawKind = isRecord(rawItem) && typeof rawItem.kind === 'string' ? rawItem.kind : '';
-    if (KNOWN_CONTEXT_KINDS.has(rawKind) && !surfaceAllowsKind(value.source.surface, rawKind, mode)) return null;
-    const item = parseContextItem(rawItem, mode);
-    if (!item) {
-      if (mode === 'strict-input') return null;
-      context.push({ kind: 'unsupported', original_kind: rawKind || 'unknown' });
-      continue;
-    }
+    if (!KNOWN_CONTEXT_KINDS.has(rawKind) || !surfaceAllowsKind(value.source.surface, rawKind)) return null;
+    const item = parseContextItem(rawItem);
+    if (!item) return null;
     context.push(item);
   }
 
@@ -351,13 +298,13 @@ export function parseAskFlowerContextActionEnvelope(
 }
 
 export function isAskFlowerContextActionEnvelope(value: unknown): value is ContextActionEnvelope {
-  return parseAskFlowerContextActionEnvelope(value, 'strict-input') !== null;
+  return parseAskFlowerContextActionEnvelope(value) !== null;
 }
 
 export function requireAskFlowerContextActionEnvelope(value: unknown): ContextActionEnvelope | undefined {
   if (value === undefined || value === null) return undefined;
-  const parsed = parseAskFlowerContextActionEnvelope(value, 'strict-input');
-  if (parsed) return parsed as ContextActionEnvelope;
+  const parsed = parseAskFlowerContextActionEnvelope(value);
+  if (parsed) return parsed;
   throw new Error('Invalid Flower context action.');
 }
 

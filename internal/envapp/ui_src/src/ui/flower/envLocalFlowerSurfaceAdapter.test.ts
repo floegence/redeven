@@ -47,6 +47,7 @@ function liveBootstrap(threadID: string, status = 'canceled') {
   const thread = {
     thread_id: threadID,
     title: 'Stopped thread',
+    title_status: 'ready',
     model_id: 'default/gpt-4.1',
     run_status: status,
     permission_type: 'approval_required' as FlowerPermissionType,
@@ -1345,7 +1346,77 @@ describe('Env local Flower surface adapter', () => {
     );
   });
 
-  it('exposes linked-context host capabilities without changing activity file actions', async () => {
+  it('resolves canonical references by exact identity before invoking host navigation', async () => {
+    const openCanonicalReferenceTarget = vi.fn(async () => undefined);
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url !== '/_redeven_proxy/api/ai/threads/thread%2Fcanonical/reference-open-target' || init?.method !== 'POST') {
+        throw new Error(`unexpected fetch: ${url}`);
+      }
+      const body = JSON.parse(String(init.body ?? '')) as Record<string, unknown>;
+      return jsonResponse(body.reference_id === 'ref-directory'
+        ? { kind: 'directory', label: 'Source files', path: '/workspace/src' }
+        : { kind: 'file', label: 'main.ts', path: '/workspace/src/main.ts' });
+    });
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: { ai: {} } as any,
+      openCanonicalReferenceTarget,
+    });
+
+    await adapter.openCanonicalReference?.({
+      thread_id: ' thread/canonical ',
+      turn_id: ' turn-canonical ',
+      reference_id: ' ref-file ',
+    });
+    await adapter.openCanonicalReference?.({
+      thread_id: 'thread/canonical',
+      turn_id: 'turn-canonical',
+      reference_id: 'ref-directory',
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(1,
+      '/_redeven_proxy/api/ai/threads/thread%2Fcanonical/reference-open-target',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ turn_id: 'turn-canonical', reference_id: 'ref-file' }),
+      }),
+    );
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      turn_id: 'turn-canonical',
+      reference_id: 'ref-file',
+    });
+    expect(openCanonicalReferenceTarget).toHaveBeenNthCalledWith(1, {
+      kind: 'file',
+      label: 'main.ts',
+      path: '/workspace/src/main.ts',
+    });
+    expect(openCanonicalReferenceTarget).toHaveBeenNthCalledWith(2, {
+      kind: 'directory',
+      label: 'Source files',
+      path: '/workspace/src',
+    });
+  });
+
+  it('rejects malformed canonical open targets without invoking host navigation', async () => {
+    const openCanonicalReferenceTarget = vi.fn(async () => undefined);
+    fetchMock.mockResolvedValue(jsonResponse({ kind: 'file', label: 'main.ts', path: '' }));
+    const adapter = createEnvLocalFlowerSurfaceAdapter({
+      envPublicID: 'env_a',
+      envLabel: 'Demo Env',
+      rpc: { ai: {} } as any,
+      openCanonicalReferenceTarget,
+    });
+
+    await expect(adapter.openCanonicalReference?.({
+      thread_id: 'thread-canonical',
+      turn_id: 'turn-canonical',
+      reference_id: 'ref-file',
+    })).rejects.toThrow('Flower canonical reference open target is invalid.');
+    expect(openCanonicalReferenceTarget).not.toHaveBeenCalled();
+  });
+
+  it('exposes queued linked-context host capabilities without changing activity file actions', async () => {
     const openFilePreview = vi.fn(async () => undefined);
     const openFileBrowser = vi.fn(async () => undefined);
     const openLinkedFilePreview = vi.fn(async () => undefined);

@@ -114,6 +114,13 @@ func TestSubAgentPublicationStoreMarksFailedSpawnTerminal(t *testing.T) {
 		failed.RequestJSON != "" || failed.SessionMetaJSON != "" || failed.ModelID != "" || failed.ReasoningSelectionJSON != "" {
 		t.Fatalf("failed publication retained replay state: %#v", failed)
 	}
+	aborted, ok, err := store.GetChildPermissionSnapshotBySpawnToolCall(ctx, operation.EndpointID, operation.SpawnToolCallID)
+	if err != nil || !ok {
+		t.Fatalf("GetChildPermissionSnapshotBySpawnToolCall aborted=%#v ok=%v err=%v", aborted, ok, err)
+	}
+	if aborted.State != "aborted" || aborted.FinalizedAtUnixMs != 0 {
+		t.Fatalf("failed publication permission audit=%#v, want aborted and never finalized", aborted)
+	}
 	if pending, err := store.ListPendingSubAgentPublications(ctx, 10); err != nil || len(pending) != 0 {
 		t.Fatalf("pending publications=%#v err=%v, want none", pending, err)
 	}

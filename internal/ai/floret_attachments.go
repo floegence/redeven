@@ -81,8 +81,8 @@ func immutableUploadIdentityFromFloretResourceRef(resourceRef string) (string, s
 	return uploadID, digest, nil
 }
 
-func (r *run) floretTurnInput(ctx context.Context, input RunInput) (flruntime.TurnInput, error) {
-	out := flruntime.TurnInput{Text: strings.TrimSpace(input.Text)}
+func (r *run) floretTurnInput(ctx context.Context, input RunInput, references []flruntime.MessageReference) (flruntime.TurnInput, error) {
+	out := flruntime.TurnInput{Text: strings.TrimSpace(input.Text), References: append([]flruntime.MessageReference(nil), references...)}
 	uploadIDs := make([]string, 0, len(input.Attachments))
 	if r != nil {
 		r.muPendingCommand.Lock()

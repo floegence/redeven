@@ -1208,8 +1208,11 @@ func aiThreadActionHTTPStatus(err error) int {
 		errors.Is(err, ai.ErrWaitingPromptChanged),
 		errors.Is(err, ai.ErrFollowupsRevisionChanged),
 		errors.Is(err, ai.ErrCompactAlreadyPending),
-		errors.Is(err, ai.ErrNoCompactableContext):
+		errors.Is(err, ai.ErrNoCompactableContext),
+		errors.Is(err, ai.ErrThreadStopPending):
 		return http.StatusConflict
+	case errors.Is(err, ai.ErrThreadStopUnavailable):
+		return http.StatusServiceUnavailable
 	}
 	msg := strings.ToLower(strings.TrimSpace(err.Error()))
 	if strings.Contains(msg, "thread not found") || strings.Contains(msg, "run not found") {
@@ -1219,6 +1222,21 @@ func aiThreadActionHTTPStatus(err error) int {
 		return http.StatusForbidden
 	}
 	return http.StatusBadRequest
+}
+
+func aiCanonicalReferenceOpenHTTPError(err error) (int, string) {
+	switch {
+	case errors.Is(err, ai.ErrFlowerCanonicalReferenceInvalid):
+		return http.StatusBadRequest, ai.FlowerCanonicalReferenceInvalidErrorCode
+	case errors.Is(err, ai.ErrFlowerCanonicalReferenceNotFound):
+		return http.StatusNotFound, ai.FlowerCanonicalReferenceNotFoundErrorCode
+	case errors.Is(err, ai.ErrFlowerCanonicalReferenceDenied):
+		return http.StatusForbidden, ai.FlowerCanonicalReferenceDeniedErrorCode
+	case errors.Is(err, ai.ErrFlowerCanonicalReferenceType):
+		return http.StatusConflict, ai.FlowerCanonicalReferenceTypeErrorCode
+	default:
+		return http.StatusServiceUnavailable, ai.FlowerCanonicalReferenceUnavailableErrorCode
+	}
 }
 
 type aiProviderBundleSecretSnapshot struct {
@@ -4559,6 +4577,40 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: resp})
 			return
 
+		case action == "reference-open-target" && r.Method == http.MethodPost && len(parts) == 2:
+			meta, ok := g.requirePermission(w, r, requiredPermissionRead)
+			if !ok {
+				return
+			}
+			if g.ai == nil {
+				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: ai.ErrFlowerCanonicalReferenceUnavailable.Error(), ErrorCode: ai.FlowerCanonicalReferenceUnavailableErrorCode})
+				return
+			}
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			var body ai.FlowerCanonicalReferenceOpenRequest
+			if err := dec.Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json", ErrorCode: ai.FlowerCanonicalReferenceInvalidErrorCode})
+				return
+			}
+			if err := dec.Decode(&struct{}{}); err != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json", ErrorCode: ai.FlowerCanonicalReferenceInvalidErrorCode})
+				return
+			}
+			body.ThreadID = threadID
+			target, err := g.ai.ResolveFlowerCanonicalReferenceOpenTarget(r.Context(), meta, body)
+			if err != nil {
+				status, code := aiCanonicalReferenceOpenHTTPError(err)
+				writeJSON(w, status, apiResp{OK: false, Error: err.Error(), ErrorCode: code})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: struct {
+				Kind  string `json:"kind"`
+				Label string `json:"label"`
+				Path  string `json:"path"`
+			}{Kind: target.Kind, Label: target.Label, Path: target.Path}})
+			return
+
 		case action == "file-action-open-target" && r.Method == http.MethodPost && len(parts) == 2:
 			meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 			if !ok {
@@ -4638,7 +4690,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			resp, err := g.ai.StopThread(r.Context(), meta, threadID)
 			if err != nil {
 				g.appendAudit(meta, "ai_thread_cancel", "failure", map[string]any{"thread_id": threadID}, err)
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
 				return
 			}
 			g.appendAudit(meta, "ai_thread_cancel", "success", map[string]any{"thread_id": threadID}, nil)

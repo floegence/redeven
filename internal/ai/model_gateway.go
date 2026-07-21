@@ -253,6 +253,7 @@ func (p *openAIProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest
 	}
 
 	stream := p.client.Responses.NewStreaming(ctx, params)
+	defer func() { _ = stream.Close() }()
 	var textBuf strings.Builder
 	var completed oresponses.Response
 	gotCompleted := false
@@ -596,6 +597,7 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 	}
 
 	stream := p.client.Chat.Completions.NewStreaming(ctx, params)
+	defer func() { _ = stream.Close() }()
 	var textBuf strings.Builder
 	result := ModelGatewayResult{
 		FinishReason:    "unknown",
@@ -808,6 +810,7 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 	}
 
 	stream := p.client.Chat.Completions.NewStreaming(ctx, params)
+	defer func() { _ = stream.Close() }()
 	var textBuf strings.Builder
 	var reasoningBuf strings.Builder
 	result := ModelGatewayResult{
@@ -1739,6 +1742,7 @@ func (p *anthropicProvider) StreamTurn(ctx context.Context, req ModelGatewayRequ
 	}
 
 	stream := p.client.Messages.NewStreaming(ctx, params)
+	defer func() { _ = stream.Close() }()
 	msg := anthropic.Message{}
 	var textBuf strings.Builder
 
@@ -3069,9 +3073,7 @@ func (r *run) waitForTaskCompleteConfirm(ctx context.Context, resultText string)
 		requestedAtMs: time.Now().UnixMilli(),
 	}
 	r.mu.Unlock()
-	if r.host.hasPendingApprovals == nil {
-		r.promoteToolApproval(toolID)
-	}
+	r.promoteToolApproval(toolID)
 	r.publishControlConfirmationRequested(toolID)
 	defer func() {
 		r.mu.Lock()

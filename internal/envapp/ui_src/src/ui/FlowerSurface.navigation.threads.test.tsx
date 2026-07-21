@@ -851,7 +851,7 @@ describe('FlowerSurface navigation threads', () => {
     expect(focusController.focusThreadRequest()).toBeNull();
   });
 
-  it('shows linked context metadata for context action user messages', async () => {
+  it('shows canonical text references for admitted user messages', async () => {
     const contextThread = thread({
       thread_id: 'thread-context',
       title: 'Environment context',
@@ -862,7 +862,12 @@ describe('FlowerSurface navigation threads', () => {
         status: 'complete',
         created_at_ms: 1_000,
         blocks: [{ type: 'text', content: 'Inspect this environment' }],
-        context_action: askFlowerContextAction(),
+        references: [{
+          reference_id: 'context:environment',
+          kind: 'text',
+          label: 'Local Environment',
+          text: 'Environment: Local Environment\nState: Local · Ready',
+        }],
       }],
     });
     const runtime = renderSurfaceWithAdapter({
@@ -880,8 +885,9 @@ describe('FlowerSurface navigation threads', () => {
     expect(chip.textContent).toContain('Local · Ready');
 
     const container = runtime.querySelector('.flower-chat-context-chips') as HTMLElement;
-    expect(container.getAttribute('data-flower-context-surface')).toBe('desktop_welcome_environment_card');
-    expect(container.getAttribute('data-flower-context-target')).toBe('local:local');
+    expect(container.getAttribute('data-flower-context-authority')).toBe('canonical_references');
+    expect(container.getAttribute('data-flower-context-surface')).toBeNull();
+    expect(container.getAttribute('data-flower-context-target')).toBeNull();
 
     chip.click();
     await waitFor(() => Boolean(runtime.querySelector('.flower-chat-context-preview-window')));
@@ -912,7 +918,7 @@ describe('FlowerSurface navigation threads', () => {
           },
           { type: 'markdown', content: 'Inspect these files.' },
         ],
-        context_action: askFlowerContextAction(),
+        references: [{ reference_id: 'context:files', kind: 'text', label: 'Linked files', text: 'Inspect these files.' }],
       }],
     });
     const runtime = renderSurfaceWithAdapter({
@@ -979,31 +985,28 @@ describe('FlowerSurface navigation threads', () => {
     expect(runtime.querySelector('[data-flower-message-id]')).toBeNull();
   });
 
-  it('restores a historical file reference in a canceled thread when is_directory was omitted', async () => {
-    const openLinkedFilePreview = vi.fn(async () => undefined);
+  it('opens a canonical file reference in a canceled thread without exposing its path', async () => {
+    const openCanonicalReference = vi.fn(async () => undefined);
     const contextThread = thread({
       thread_id: 'thread-canceled-file-context',
       title: 'Canceled file review',
       status: 'canceled',
       messages: [{
         id: 'message-canceled-file-context',
+        turn_id: 'turn-canceled-file-context',
         role: 'user',
         content: 'Inspect this file',
         status: 'complete',
         created_at_ms: 1_000,
         blocks: [{ type: 'text', content: 'Inspect this file' }],
-        context_action: askFlowerContextAction({
-          target: { target_id: 'current', locality: 'auto' },
-          source: { surface: 'file_browser' },
-          context: [{ kind: 'file_path', path: '/workspace/src/index.ts' }],
-        }),
+        references: [{ reference_id: 'context:file', kind: 'file', label: 'index.ts' }],
       }],
     });
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [contextThread]),
       loadThread: vi.fn(async () => liveBootstrap(contextThread)),
-      openLinkedFilePreview,
+      openCanonicalReference,
     });
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-canceled-file-context"] button')));
@@ -1013,38 +1016,32 @@ describe('FlowerSurface navigation threads', () => {
     const chip = runtime.querySelector('[data-flower-chat-context-chip="true"]') as HTMLElement;
     expect(chip.tagName).toBe('BUTTON');
     expect(chip.textContent).toContain('index.ts');
-    expect(chip.textContent).toContain('/workspace/src/index.ts');
-    expect(runtime.querySelector('.flower-chat-context-chips')?.getAttribute('data-flower-context-surface')).toBe('file_browser');
+    expect(chip.textContent).not.toContain('/workspace/src/index.ts');
+    expect(runtime.querySelector('.flower-chat-context-chips')?.getAttribute('data-flower-context-authority')).toBe('canonical_references');
 
     chip.click();
-    await waitFor(() => openLinkedFilePreview.mock.calls.length === 1);
-    expect(openLinkedFilePreview).toHaveBeenCalledWith({
-      path: '/workspace/src/index.ts',
+    await waitFor(() => openCanonicalReference.mock.calls.length === 1);
+    expect(openCanonicalReference).toHaveBeenCalledWith({
       thread_id: 'thread-canceled-file-context',
-      message_id: 'message-canceled-file-context',
-      context_index: 0,
-      source_surface: 'file_browser',
-      target: 'current',
+      turn_id: 'turn-canceled-file-context',
+      reference_id: 'context:file',
     });
     expect(runtime.querySelector('.flower-chat-context-preview-window')).toBeNull();
     expect(runtime.textContent).not.toContain('Open this file in the editor to preview its contents.');
   });
 
-  it('keeps linked files noninteractive when the host does not expose preview capabilities', async () => {
+  it('keeps canonical files noninteractive when the host does not expose reference navigation', async () => {
     const contextThread = thread({
       thread_id: 'thread-desktop-file-context',
       title: 'Desktop file context',
       messages: [{
         id: 'message-desktop-file-context',
+        turn_id: 'turn-desktop-file-context',
         role: 'user',
         content: 'Inspect this file',
         status: 'complete',
         created_at_ms: 1_000,
-        context_action: askFlowerContextAction({
-          target: { target_id: 'current', locality: 'auto' },
-          source: { surface: 'file_preview' },
-          context: [{ kind: 'file_path', path: '/workspace/index.ts', is_directory: false }],
-        }),
+        references: [{ reference_id: 'context:file', kind: 'file', label: 'index.ts' }],
       }],
     });
     const runtime = renderSurfaceWithAdapter({
@@ -1063,71 +1060,62 @@ describe('FlowerSurface navigation threads', () => {
     expect(runtime.querySelector('.flower-chat-context-preview-window')).toBeNull();
   });
 
-  it('routes linked directories to the host browser capability', async () => {
-    const openLinkedDirectoryBrowser = vi.fn(async () => undefined);
+  it('routes canonical directories by exact identity', async () => {
+    const openCanonicalReference = vi.fn(async () => undefined);
     const contextThread = thread({
       thread_id: 'thread-directory-context',
       title: 'Directory context',
       messages: [{
         id: 'message-directory-context',
+        turn_id: 'turn-directory-context',
         role: 'user',
         content: 'Inspect this directory',
         status: 'complete',
         created_at_ms: 1_000,
-        context_action: askFlowerContextAction({
-          target: { target_id: 'current', locality: 'auto' },
-          source: { surface: 'file_browser' },
-          context: [{ kind: 'file_path', path: '/workspace/src', is_directory: true }],
-        }),
+        references: [{ reference_id: 'context:directory', kind: 'directory', label: 'src' }],
       }],
     });
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [contextThread]),
       loadThread: vi.fn(async () => liveBootstrap(contextThread)),
-      openLinkedDirectoryBrowser,
+      openCanonicalReference,
     });
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-directory-context"] button')));
     (runtime.querySelector('[data-thread-id="thread-directory-context"] button') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-chat-context-chip="true"]')));
     (runtime.querySelector('[data-flower-chat-context-chip="true"]') as HTMLButtonElement).click();
-    await waitFor(() => openLinkedDirectoryBrowser.mock.calls.length === 1);
+    await waitFor(() => openCanonicalReference.mock.calls.length === 1);
 
-    expect(openLinkedDirectoryBrowser).toHaveBeenCalledWith({
-      path: '/workspace/src',
+    expect(openCanonicalReference).toHaveBeenCalledWith({
       thread_id: 'thread-directory-context',
-      message_id: 'message-directory-context',
-      context_index: 0,
-      source_surface: 'file_browser',
-      target: 'current',
+      turn_id: 'turn-directory-context',
+      reference_id: 'context:directory',
     });
     expect(runtime.querySelector('.flower-chat-context-preview-window')).toBeNull();
   });
 
-  it('reports linked file host failures without opening a fallback preview', async () => {
+  it('reports canonical reference failures without opening a fallback preview', async () => {
     const notificationCount = flowerSurfaceNotifications().length;
     const contextThread = thread({
       thread_id: 'thread-file-context-error',
       title: 'File context error',
       messages: [{
         id: 'message-file-context-error',
+        turn_id: 'turn-file-context-error',
         role: 'user',
         content: 'Inspect this file',
         status: 'complete',
         created_at_ms: 1_000,
-        context_action: askFlowerContextAction({
-          target: { target_id: 'current', locality: 'auto' },
-          source: { surface: 'file_preview' },
-          context: [{ kind: 'file_path', path: '/workspace/missing.ts', is_directory: false }],
-        }),
+        references: [{ reference_id: 'context:missing-file', kind: 'file', label: 'missing.ts' }],
       }],
     });
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [contextThread]),
       loadThread: vi.fn(async () => liveBootstrap(contextThread)),
-      openLinkedFilePreview: vi.fn(async () => { throw new Error('Preview failed.'); }),
+      openCanonicalReference: vi.fn(async () => { throw new Error('Preview failed.'); }),
     });
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-file-context-error"] button')));
@@ -1140,40 +1128,39 @@ describe('FlowerSurface navigation threads', () => {
     expect(runtime.querySelector('.flower-chat-context-preview-window')).toBeNull();
   });
 
-  it('preserves opaque canonical message IDs for linked context navigation', async () => {
-    const openLinkedFilePreview = vi.fn(async () => undefined);
+  it('uses opaque canonical turn IDs instead of message IDs for reference navigation', async () => {
+    const openCanonicalReference = vi.fn(async () => undefined);
     const contextThread = thread({
       thread_id: 'thread-prefixed-message-context',
       title: 'Prefixed message context',
       messages: [{
         id: 'entry:canonical-message',
+        turn_id: 'turn:canonical-reference',
         role: 'user',
         content: 'Inspect this file',
         status: 'complete',
         created_at_ms: 1_000,
-        context_action: askFlowerContextAction({
-          target: { target_id: 'current', locality: 'auto' },
-          source: { surface: 'file_preview' },
-          context: [{ kind: 'file_path', path: '/workspace/index.ts', is_directory: false }],
-        }),
+        references: [{ reference_id: 'reference:canonical-file', kind: 'file', label: 'index.ts' }],
       }],
     });
     const runtime = renderSurfaceWithAdapter({
       ...adapter(true),
       listThreads: vi.fn(async () => [contextThread]),
       loadThread: vi.fn(async () => liveBootstrap(contextThread)),
-      openLinkedFilePreview,
+      openCanonicalReference,
     });
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-prefixed-message-context"] button')));
     (runtime.querySelector('[data-thread-id="thread-prefixed-message-context"] button') as HTMLButtonElement).click();
     await waitFor(() => Boolean(runtime.querySelector('[data-flower-chat-context-chip="true"]')));
     (runtime.querySelector('[data-flower-chat-context-chip="true"]') as HTMLButtonElement).click();
-    await waitFor(() => openLinkedFilePreview.mock.calls.length === 1);
+    await waitFor(() => openCanonicalReference.mock.calls.length === 1);
 
-    expect(openLinkedFilePreview).toHaveBeenCalledWith(expect.objectContaining({
-      message_id: 'entry:canonical-message',
-    }));
+    expect(openCanonicalReference).toHaveBeenCalledWith({
+      thread_id: 'thread-prefixed-message-context',
+      turn_id: 'turn:canonical-reference',
+      reference_id: 'reference:canonical-file',
+    });
   });
 
   it('closes snapshot preview when timeline replacement removes its source message', async () => {
@@ -1183,11 +1170,17 @@ describe('FlowerSurface navigation threads', () => {
       status: 'running',
       messages: [{
         id: 'message-context-preview-old',
+        turn_id: 'turn-context-preview-old',
         role: 'user',
         content: 'Inspect this environment',
         status: 'complete',
         created_at_ms: 1_000,
-        context_action: askFlowerContextAction(),
+        references: [{
+          reference_id: 'context:environment',
+          kind: 'text',
+          label: 'Local Environment',
+          text: 'Environment: Local Environment',
+        }],
       }],
     });
     let replacementReady = false;
@@ -1273,15 +1266,15 @@ describe('FlowerSurface navigation threads', () => {
   it.each([
     ['invalid context item shape', askFlowerContextAction({ context: ['legacy'] })],
     ['invalid context title type', askFlowerContextAction({ context: [{ kind: 'text_snapshot', title: 1 }] })],
-  ])('shows a safe unsupported chip for a damaged persisted item: %s', async (_caseName, contextAction) => {
+  ])('rejects the complete queued context action when an item is damaged: %s', async (_caseName, contextAction) => {
     const contextThread = thread({
       thread_id: 'thread-context-unsupported',
       title: 'Unsupported environment context',
-      messages: [{
-        id: 'message-with-unsupported-context',
-        role: 'user',
-        content: 'Inspect this environment',
-        status: 'complete',
+      messages: [],
+      queued_turn_count: 1,
+      queued_turns: [{
+        turn_id: 'turn-with-unsupported-context',
+        prompt: 'Inspect this environment',
         created_at_ms: 1_000,
         context_action: contextAction,
       }],
@@ -1294,12 +1287,10 @@ describe('FlowerSurface navigation threads', () => {
 
     await waitFor(() => Boolean(runtime.querySelector('[data-thread-id="thread-context-unsupported"] button')));
     (runtime.querySelector('[data-thread-id="thread-context-unsupported"] button') as HTMLButtonElement).click();
-    await waitFor(() => Boolean(runtime.querySelector('[data-flower-chat-context-chip="true"]')));
+    await waitFor(() => runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id') === 'thread-context-unsupported');
+    await flush();
 
-    const chip = runtime.querySelector('[data-flower-chat-context-chip="true"]') as HTMLElement;
-    expect(chip.tagName).toBe('DIV');
-    expect(chip.textContent).toContain('Unsupported linked context');
-    expect(chip.getAttribute('data-flower-chat-context-interactive')).toBe('false');
+    expect(runtime.querySelector('[data-flower-chat-context-chip="true"]')).toBeNull();
   });
 
   it('keeps the left thread list ordered by creation time when a selected thread refreshes', async () => {

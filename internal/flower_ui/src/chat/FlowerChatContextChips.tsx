@@ -5,7 +5,9 @@ import type { FlowerChatContextChip, FlowerChatContextDisplay } from '../contrac
 
 type FlowerChatContextChipsProps = Readonly<{
   contextDisplay: FlowerChatContextDisplay;
-  onChipClick: (chip: FlowerChatContextChip) => void;
+  linkedContextLabel: string;
+	truncatedLabel: string;
+	onChipClick: (chip: FlowerChatContextChip) => void | Promise<void>;
   canActivateChip?: (chip: FlowerChatContextChip) => boolean;
 }>;
 
@@ -24,16 +26,35 @@ export const FlowerChatContextChips: Component<FlowerChatContextChipsProps> = (p
   return (
     <div
       class="flower-chat-context-chips"
-      data-flower-context-surface={props.contextDisplay.surface}
-      data-flower-context-target={props.contextDisplay.target}
+      data-flower-context-authority={props.contextDisplay.authority}
+      data-flower-context-surface={props.contextDisplay.authority === 'queued_context_action' ? props.contextDisplay.surface : undefined}
+      data-flower-context-target={props.contextDisplay.authority === 'queued_context_action' ? props.contextDisplay.target : undefined}
     >
-      <div class="flower-chat-context-chips-divider"><span class="flower-chat-context-chips-divider-label">Linked context</span></div>
+      <div class="flower-chat-context-chips-divider"><span class="flower-chat-context-chips-divider-label">{props.linkedContextLabel}</span></div>
       <div class="flower-chat-context-chips-grid">
         <For each={props.contextDisplay.chips}>
           {(chip) => {
             const Icon = chipIcon(chip.tone);
             const interactive = () => chip.action !== null && (props.canActivateChip?.(chip) ?? true);
-            const accessibleLabel = () => chip.detail ? `${chip.label}, ${chip.detail}` : chip.label;
+						const accessibleLabel = () => [chip.label, chip.detail, chip.truncated ? props.truncatedLabel : ''].filter(Boolean).join(', ');
+						let button: HTMLButtonElement | undefined;
+						let pending = false;
+						const setPending = (next: boolean) => {
+							pending = next;
+							if (!button) return;
+							button.disabled = next;
+							if (next) button.setAttribute('aria-busy', 'true');
+							else button.removeAttribute('aria-busy');
+						};
+						const activate = () => {
+							if (pending) return;
+							setPending(true);
+							const settle = () => {
+								setPending(false);
+								button?.focus();
+							};
+							Promise.resolve(props.onChipClick(chip)).then(settle, settle);
+						};
             const content = (
               <>
                 <span class="flower-chat-context-chip-icon">
@@ -41,7 +62,12 @@ export const FlowerChatContextChips: Component<FlowerChatContextChipsProps> = (p
                 </span>
                 <span class="flower-chat-context-chip-text">
                   <span class="flower-chat-context-chip-label">{chip.label}</span>
-                  <span class="flower-chat-context-chip-detail">{chip.detail}</span>
+                  <span class="flower-chat-context-chip-detail">
+                    {chip.detail}
+                    <Show when={chip.truncated}>
+										<span class="flower-chat-context-chip-truncated">{props.truncatedLabel}</span>
+                    </Show>
+                  </span>
                 </span>
               </>
             );
@@ -62,13 +88,14 @@ export const FlowerChatContextChips: Component<FlowerChatContextChipsProps> = (p
                 )}
               >
                 <button
+					ref={button}
                   type="button"
                   class="flower-chat-context-chip"
                   data-flower-chat-context-chip="true"
                   data-flower-chat-context-interactive="true"
                   data-tone={chip.tone}
                   aria-label={accessibleLabel()}
-                  onClick={() => props.onChipClick(chip)}
+					onClick={() => { void activate(); }}
                 >
                   {content}
                 </button>

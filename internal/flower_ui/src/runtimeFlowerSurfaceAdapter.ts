@@ -1,5 +1,6 @@
 import type {
   FlowerApprovalDecisionReceipt,
+  FlowerCanonicalReferenceOpenRequest,
   FlowerCompactThreadContextInput,
   FlowerFileOpenRequest,
   FlowerLinkedContextPathOpenRequest,
@@ -78,7 +79,7 @@ type RuntimeApprovalSubmitBase = Readonly<{
   action_id: string;
   approved: boolean;
   expected_seq?: number;
-  revision?: number;
+  revision: number;
   version?: number;
   surface_epoch?: number;
   queue_generation: number;
@@ -86,19 +87,11 @@ type RuntimeApprovalSubmitBase = Readonly<{
   idempotency_key?: string;
 }>;
 
-type RuntimeApprovalSubmitInput =
-  | (RuntimeApprovalSubmitBase & Readonly<{
-      origin?: 'main_tool' | 'control_confirm';
-      run_id: string;
-      tool_id: string;
-      delegated_ref?: never;
-    }>)
-  | (RuntimeApprovalSubmitBase & Readonly<{
-      origin: 'delegated_subagent';
-      delegated_ref: NonNullable<FlowerSubmitApprovalRequest['delegated_ref']>;
-      run_id?: never;
-      tool_id?: never;
-    }>);
+type RuntimeApprovalSubmitInput = RuntimeApprovalSubmitBase & Readonly<{
+  origin: FlowerSubmitApprovalRequest['origin'];
+  run_id: string;
+  tool_id: string;
+}>;
 
 export type FlowerRuntimeTransport = Readonly<{
   listThreads(): Promise<ListThreadsResponse>;
@@ -129,6 +122,7 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   listWorkingDirectoryEntries?: (input: FlowerWorkingDirectoryListInput) => Promise<readonly FlowerWorkingDirectoryEntry[]>;
   openFileBrowser?: (request: FlowerFileOpenRequest) => Promise<void>;
   openFilePreview?: (request: FlowerFileOpenRequest) => Promise<void>;
+  openCanonicalReference?: (request: FlowerCanonicalReferenceOpenRequest) => Promise<void>;
   openLinkedFilePreview?: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
   openLinkedDirectoryBrowser?: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
   modelSourceRecovery?: FlowerModelSourceRecovery;
@@ -281,29 +275,35 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     submitApproval: async (input: FlowerSubmitApprovalRequest) => {
       const tid = trim(input.thread_id);
       if (!tid) throw new Error(missingThreadIDMessage(options));
+      const origin = trim(input.origin) as FlowerSubmitApprovalRequest['origin'];
+      if (origin !== 'main_tool' && origin !== 'delegated_subagent' && origin !== 'control_confirm') {
+        throw new Error('Invalid approval origin.');
+      }
+      const revision = Number(input.revision);
+      if (!Number.isSafeInteger(revision) || revision <= 0) {
+        throw new Error('Invalid approval revision.');
+      }
+      const queueGeneration = Number(input.queue_generation);
+      const queueRevision = Number(input.queue_revision);
+      if (!Number.isSafeInteger(queueGeneration) || queueGeneration <= 0 ||
+        !Number.isSafeInteger(queueRevision) || queueRevision <= 0) {
+        throw new Error('Invalid approval queue authority.');
+      }
       const common = {
         thread_id: tid,
-        ...(input.origin ? { origin: input.origin } : {}),
+        origin,
         action_id: trim(input.action_id),
         approved: Boolean(input.approved),
         expected_seq: Math.max(0, Math.floor(Number(input.expected_seq ?? 0))) || undefined,
-        revision: Math.max(0, Math.floor(Number(input.revision ?? 0))) || undefined,
+        revision,
         version: Math.max(0, Math.floor(Number(input.version ?? 0))) || undefined,
         surface_epoch: Math.max(0, Math.floor(Number(input.surface_epoch ?? 0))) || undefined,
-        queue_generation: Math.max(0, Math.floor(Number(input.queue_generation ?? 0))),
-        queue_revision: Math.max(0, Math.floor(Number(input.queue_revision ?? 0))),
+        queue_generation: queueGeneration,
+        queue_revision: queueRevision,
         ...(input.idempotency_key ? { idempotency_key: trim(input.idempotency_key) } : {}),
       };
-      if (input.origin === 'delegated_subagent') {
-        return options.transport.submitApproval({
-          ...common,
-          origin: 'delegated_subagent',
-          delegated_ref: input.delegated_ref,
-        });
-      }
       return options.transport.submitApproval({
         ...common,
-        origin: input.origin,
         run_id: trim(input.run_id),
         tool_id: trim(input.tool_id),
       });
@@ -327,6 +327,7 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
     ...(options.listWorkingDirectoryEntries ? { listWorkingDirectoryEntries: options.listWorkingDirectoryEntries } : {}),
     ...(options.openFileBrowser ? { openFileBrowser: options.openFileBrowser } : {}),
     ...(options.openFilePreview ? { openFilePreview: options.openFilePreview } : {}),
+    ...(options.openCanonicalReference ? { openCanonicalReference: options.openCanonicalReference } : {}),
     ...(options.openLinkedFilePreview ? { openLinkedFilePreview: options.openLinkedFilePreview } : {}),
     ...(options.openLinkedDirectoryBrowser ? { openLinkedDirectoryBrowser: options.openLinkedDirectoryBrowser } : {}),
     ...(options.modelSourceRecovery ? { modelSourceRecovery: options.modelSourceRecovery } : {}),

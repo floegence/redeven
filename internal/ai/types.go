@@ -141,6 +141,7 @@ func NewModelsResponse(runtime *AIRuntimeStatus) *ModelsResponse {
 type ThreadView struct {
 	ThreadID            string                       `json:"thread_id"`
 	Title               string                       `json:"title"`
+	TitleStatus         string                       `json:"title_status"`
 	ModelID             string                       `json:"model_id"`
 	PermissionType      string                       `json:"permission_type"`
 	WorkingDir          string                       `json:"working_dir"`
@@ -148,9 +149,6 @@ type ThreadView struct {
 	QueuedTurns         []QueuedTurnView             `json:"queued_turns"`
 	RunStatus           string                       `json:"run_status"`
 	ReadOnlyReason      string                       `json:"read_only_reason,omitempty"`
-	OwnerKind           string                       `json:"owner_kind,omitempty"`
-	OwnerID             string                       `json:"owner_id,omitempty"`
-	ParentThreadID      string                       `json:"parent_thread_id,omitempty"`
 	RunUpdatedAtUnixMs  int64                        `json:"run_updated_at_unix_ms"`
 	RunErrorCode        string                       `json:"run_error_code,omitempty"`
 	RunError            string                       `json:"run_error,omitempty"`
@@ -567,8 +565,15 @@ type streamEventModelIOStatus struct {
 }
 
 type streamEventApprovalAction struct {
-	Type   string               `json:"type"`
-	Action FlowerApprovalAction `json:"action"`
+	Type          string               `json:"type"`
+	Action        FlowerApprovalAction `json:"action"`
+	ApprovalQueue *FlowerApprovalQueue `json:"approvalQueue,omitempty"`
+}
+
+type streamEventApprovalQueue struct {
+	Type          string                 `json:"type"`
+	Actions       []FlowerApprovalAction `json:"actions"`
+	ApprovalQueue FlowerApprovalQueue    `json:"approvalQueue"`
 }
 
 // RealtimeEventType defines the high-level AI event category sent over Flowersec RPC notify.
@@ -621,6 +626,7 @@ type RealtimeEvent struct {
 
 	// Thread summary events (EventType=thread_summary).
 	Title               string                       `json:"title,omitempty"`
+	TitleStatus         string                       `json:"title_status,omitempty"`
 	ModelID             string                       `json:"model_id,omitempty"`
 	UpdatedAtUnixMs     int64                        `json:"updated_at_unix_ms,omitempty"`
 	LastMessagePreview  string                       `json:"last_message_preview,omitempty"`

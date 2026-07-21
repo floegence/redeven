@@ -11,7 +11,8 @@ import (
 // floretBootstrapResult exists only while NewService assembles responsibility-
 // specific capabilities. Service must not retain this aggregate.
 type floretBootstrapResult struct {
-	close func() error
+	close               func() error
+	pendingToolRecovery floretPendingToolRecoveryCoordinator
 
 	newThreadRead   floretThreadReadHostFactory
 	newThreadCreate floretThreadCreateHostFactory
@@ -32,6 +33,54 @@ type floretStartupRecoveryCapabilities struct {
 	root          floretRootTurnRecoveryBinder
 	subagent      floretSubagentTurnRecoveryBinder
 	listSubagents floretSubagentReadHostFactory
+}
+
+type boundFloretPendingToolRecoveryCoordinator struct {
+	binder *flruntime.PendingToolRecoveryHostBinder
+}
+
+func newFloretPendingToolRecoveryCoordinator(bootstrap *flruntime.HostBootstrap) (floretPendingToolRecoveryCoordinator, error) {
+	binder, err := flruntime.NewPendingToolRecoveryHostBinder(bootstrap)
+	if err != nil {
+		return nil, err
+	}
+	return &boundFloretPendingToolRecoveryCoordinator{binder: binder}, nil
+}
+
+func (c *boundFloretPendingToolRecoveryCoordinator) Settle(
+	ctx context.Context,
+	executionThreadID string,
+	authorityThreadID string,
+	settle func(context.Context, floretPendingToolSettler) error,
+) error {
+	if c == nil || c.binder == nil {
+		return errors.New("Floret pending tool recovery coordinator is unavailable")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	executionThreadID = strings.TrimSpace(executionThreadID)
+	authorityThreadID = strings.TrimSpace(authorityThreadID)
+	if executionThreadID == "" || authorityThreadID == "" {
+		return errors.New("Floret pending tool recovery identity is incomplete")
+	}
+	if settle == nil {
+		return errors.New("Floret pending tool recovery settlement is unavailable")
+	}
+	var owner floretPendingToolSettler
+	var err error
+	if executionThreadID == authorityThreadID {
+		owner, err = c.binder.NewThreadHost(ctx, flruntime.ThreadID(executionThreadID), nil)
+	} else {
+		owner, err = c.binder.NewSubAgentHost(ctx, flruntime.ThreadID(authorityThreadID), nil)
+	}
+	if err != nil {
+		return err
+	}
+	if owner == nil {
+		return errors.New("Floret pending tool recovery owner is unavailable")
+	}
+	return settle(ctx, owner)
 }
 
 type floretThreadRuntimeBinder func(flruntime.ThreadID) (floretThreadRuntimeCapabilities, error)
@@ -162,8 +211,11 @@ func (h floretSubagentReadHostAdapter) ReadSubAgentDetail(ctx context.Context, r
 func (h floretTurnHostAdapter) RunTurn(ctx context.Context, req flruntime.RunTurnRequest) (flruntime.TurnResult, error) {
 	return h.host.RunTurn(ctx, req)
 }
-func (h floretTurnHostAdapter) ListPendingApprovals(ctx context.Context, req flruntime.ListPendingApprovalsRequest) (flruntime.PendingApprovals, error) {
-	return h.host.ListPendingApprovals(ctx, req)
+func (h floretTurnHostAdapter) ReadApprovalQueue(ctx context.Context, req flruntime.ReadApprovalQueueRequest) (flruntime.ApprovalQueue, error) {
+	return h.host.ReadApprovalQueue(ctx, req)
+}
+func (h floretTurnHostAdapter) ResolveApproval(ctx context.Context, req flruntime.ResolveApprovalRequest) (flruntime.ResolveApprovalResult, error) {
+	return h.host.ResolveApproval(ctx, req)
 }
 func (h floretTurnHostAdapter) SettlePendingTool(ctx context.Context, req flruntime.PendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {
 	return h.host.SettlePendingTool(ctx, req)
@@ -215,16 +267,17 @@ func configureFloretRuntime(store *flruntime.Store) (*floretBootstrapResult, flo
 		return nil, floretStartupRecoveryCapabilities{}, errors.New("floret store is required")
 	}
 	var (
-		threadReadBinder   *flruntime.ThreadReadHostBinder
-		threadCreateBinder *flruntime.ThreadCreateHostBinder
-		threadTitleBinder  *flruntime.ThreadTitleHostBinder
-		threadForkBinder   *flruntime.ThreadForkHostBinder
-		threadDeleteBinder *flruntime.ThreadDeleteHostBinder
-		turnBinder         *flruntime.TurnExecutionHostBinder
-		compactionBinder   *flruntime.ThreadCompactionHostBinder
-		subagentBinder     *flruntime.SubAgentHostBinder
-		subagentReadBinder *flruntime.SubAgentReadHostBinder
-		recoveryBinder     *flruntime.InterruptedTurnRecoveryHostBinder
+		threadReadBinder       *flruntime.ThreadReadHostBinder
+		threadCreateBinder     *flruntime.ThreadCreateHostBinder
+		threadTitleBinder      *flruntime.ThreadTitleHostBinder
+		threadForkBinder       *flruntime.ThreadForkHostBinder
+		threadDeleteBinder     *flruntime.ThreadDeleteHostBinder
+		turnBinder             *flruntime.TurnExecutionHostBinder
+		compactionBinder       *flruntime.ThreadCompactionHostBinder
+		subagentBinder         *flruntime.SubAgentHostBinder
+		subagentReadBinder     *flruntime.SubAgentReadHostBinder
+		pendingToolCoordinator floretPendingToolRecoveryCoordinator
+		recoveryBinder         *flruntime.InterruptedTurnRecoveryHostBinder
 	)
 	err := flruntime.ConfigureHostCapabilities(store, func(bootstrap *flruntime.HostBootstrap) error {
 		var err error
@@ -255,6 +308,9 @@ func configureFloretRuntime(store *flruntime.Store) (*floretBootstrapResult, flo
 		if subagentReadBinder, err = flruntime.NewSubAgentReadHostBinder(bootstrap); err != nil {
 			return err
 		}
+		if pendingToolCoordinator, err = newFloretPendingToolRecoveryCoordinator(bootstrap); err != nil {
+			return err
+		}
 		if recoveryBinder, err = flruntime.NewInterruptedTurnRecoveryHostBinder(bootstrap); err != nil {
 			return err
 		}
@@ -264,7 +320,8 @@ func configureFloretRuntime(store *flruntime.Store) (*floretBootstrapResult, flo
 		return nil, floretStartupRecoveryCapabilities{}, err
 	}
 	result := &floretBootstrapResult{
-		close: store.Close,
+		close:               store.Close,
+		pendingToolRecovery: pendingToolCoordinator,
 		newThreadRead: func(ctx context.Context, threadID flruntime.ThreadID) (floretThreadReadHost, error) {
 			host, err := threadReadBinder.NewHost(ctx, threadID)
 			if err != nil {

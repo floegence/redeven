@@ -268,7 +268,10 @@ func runTerminalExecForPathTest(t *testing.T, r *run, toolID string, args map[st
 		t.Fatalf("handleToolCall: %v", err)
 	}
 	if outcome == nil || !outcome.Success {
-		t.Fatalf("outcome=%#v, want success", outcome)
+		if outcome != nil {
+			t.Fatalf("outcome=%#v tool_error=%#v, want success", outcome, outcome.ToolError)
+		}
+		t.Fatal("missing terminal outcome")
 	}
 	m, ok := outcome.Result.(map[string]any)
 	if !ok {

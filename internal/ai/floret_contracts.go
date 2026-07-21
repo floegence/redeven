@@ -73,8 +73,9 @@ type floretTurnHost interface {
 	floretActiveRunHost
 }
 
-type floretPendingApprovalLister interface {
-	ListPendingApprovals(context.Context, flruntime.ListPendingApprovalsRequest) (flruntime.PendingApprovals, error)
+type floretApprovalAuthority interface {
+	ReadApprovalQueue(context.Context, flruntime.ReadApprovalQueueRequest) (flruntime.ApprovalQueue, error)
+	ResolveApproval(context.Context, flruntime.ResolveApprovalRequest) (flruntime.ResolveApprovalResult, error)
 }
 
 type floretPendingToolSettler interface {
@@ -82,7 +83,7 @@ type floretPendingToolSettler interface {
 }
 
 type floretActiveRunHost interface {
-	floretPendingApprovalLister
+	floretApprovalAuthority
 	floretPendingToolSettler
 	ReadThreadAgentTodos(context.Context, flruntime.ThreadID) (flruntime.ThreadAgentTodoState, error)
 	UpdateThreadAgentTodos(context.Context, flruntime.UpdateThreadAgentTodosRequest) (flruntime.ThreadAgentTodoState, error)

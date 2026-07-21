@@ -16,7 +16,7 @@ timestamp: 2026-07-18T00:00:00Z
 
 The `subagents` tool supports `spawn`, `send_input`, `wait`, `list`, `inspect`, `close`, and `close_all`. Spawn accepts one canonical shape: `task_name`, `task_description`, `agent_type`, `message`, and optional `context_mode`. `title` and `objective` are rejected; Redeven does not derive a task name from description, message, objective, role, or agent type. `mission_only` maps to no inherited path and `full_history` maps to the Floret full-path fork mode.
 
-Redeven calls published Floret v0.19.1 `SpawnSubAgent`, `SendSubAgentInput`, `WaitSubAgents`, `ListSubAgents`, `ReadSubAgentDetail`, and `CloseSubAgent`. `close_all` is a Redeven tool action that enumerates canonical children and closes each exact child through the active parent-bound `SubAgentHost`; there is no bulk maintenance API or recovery fallback. Child `ThreadID` is used in model results, Flower `thread.subagents`, activity routing, detail URLs, and delegated approval ownership. There is no public or persisted `subagent_id` alias. Floret issues interactive and read capabilities bound to one canonical parent; root thread reads reject child journals, and the unified `ThreadDetailEvent` contract remains the only detail DTO. Redeven maps those canonical facts without a duplicate SubAgent event shape or missing-parent substitute.
+Redeven calls published Floret v0.22.0 `SpawnSubAgent`, `SendSubAgentInput`, `WaitSubAgents`, `ListSubAgents`, `ReadSubAgentDetail`, and `CloseSubAgent`. `close_all` is a Redeven tool action that enumerates canonical children and closes each exact child through the active parent-bound `SubAgentHost`; there is no bulk maintenance API or recovery fallback. Child `ThreadID` is used in model results, Flower `thread.subagents`, activity routing, detail URLs, and Floret approval identity. There is no public or persisted `subagent_id` alias. Floret issues interactive and read capabilities bound to one canonical parent; root thread reads reject child journals, and the unified `ThreadDetailEvent` contract remains the only detail DTO. Redeven maps those canonical facts without a duplicate SubAgent event shape or missing-parent substitute.
 
 Spawn derives the Floret `PublicationID`, child `ThreadID`, and product child-run audit identity deterministically from the exact parent thread, parent turn, and spawning tool call. `send_input` derives `InputRequestID` from the parent thread, canonical child thread, and input tool call. Retrying the same admitted tool operation therefore reuses the same Floret idempotency identity; a different parent, turn, child, or tool call cannot collide.
 
@@ -34,13 +34,14 @@ Task names are required labels, not storage identities. Redeven must not accept 
 
 # Evidence
 
-- `redeven:internal/ai/builtin_tool_handlers.go:407` - The tool schema exposes one strict spawn shape.
-- `redeven:internal/ai/run_extensions.go:153` - Spawn validation rejects title/objective aliases and requires canonical fields.
-- `redeven:internal/ai/subagents_floret.go:894` - Redeven maps strict spawn input to the Floret public request.
-- `redeven:internal/ai/subagents_floret.go:2114` - Spawn and input identities are deterministic and scoped to exact parent, child, turn, and tool-call authority.
-- `redeven:internal/ai/permission_snapshot.go:94` - Child permission snapshots are append-only audit with explicit identities.
-- `redeven:internal/ai/threadstore/subagent_publication.go:1` - Pending publication intent and permission audit prepare/finalize atomically, then payload is cleared.
-- `redeven:internal/ai/subagent_publication_recovery.go:1` - Startup rebuilds only the exact pending request and reuses Floret publication idempotency.
-- `redeven:internal/ai/run_host_capabilities.go:104` - Child execution receives exact terminal resource authority and no further derivation capability.
-- `redeven:internal/ai/types.go:172` - Public child summaries use `thread_id` without a second Agent id.
-- `redeven:internal/flower_ui/src/contracts/flowerSurfaceContracts.ts:486` - Flower SubAgent contracts use canonical child thread identity.
+- `redeven:internal/ai/builtin_tool_handlers.go:409` - The tool schema exposes one strict spawn shape.
+- `redeven:internal/ai/run_extensions.go:154` - Spawn validation rejects title/objective aliases and requires canonical fields.
+- `redeven:internal/ai/subagents_floret.go:1052` - Redeven maps strict spawn input to the Floret public request.
+- `redeven:internal/ai/subagents_floret.go:2363` - Spawn identities are deterministic and scoped to exact parent, turn, and tool-call authority.
+- `redeven:internal/ai/subagents_floret.go:2375` - Child input request identities are deterministic and scoped to the exact child authority.
+- `redeven:internal/ai/threadstore/permission_snapshot.go:179` - Child permission snapshots are append-only audit records with explicit identities.
+- `redeven:internal/ai/threadstore/subagent_publication.go:40` - Pending publication intent and permission audit prepare/finalize atomically, then payload is cleared.
+- `redeven:internal/ai/subagent_publication_recovery.go:53` - Startup rebuilds only the exact pending request and reuses Floret publication idempotency.
+- `redeven:internal/ai/run_host_capabilities.go:82` - Child execution receives exact terminal resource authority and no further derivation capability.
+- `redeven:internal/ai/types.go:173` - Public child summaries use `thread_id` without a second Agent id.
+- `redeven:internal/flower_ui/src/contracts/flowerSurfaceContracts.ts:511` - Flower SubAgent contracts use canonical child thread identity.

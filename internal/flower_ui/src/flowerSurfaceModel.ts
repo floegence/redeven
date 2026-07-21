@@ -20,6 +20,7 @@ export function projectFlowerThreadListItem(thread: FlowerThreadSnapshot): Flowe
   return {
     thread_id: thread.thread_id,
     title: thread.title,
+    title_status: thread.title_status,
     model_id: thread.model_id,
     working_dir: thread.working_dir,
     pinned: Number(thread.pinned_at_ms ?? 0) > 0,
@@ -31,9 +32,6 @@ export function projectFlowerThreadListItem(thread: FlowerThreadSnapshot): Flowe
     source_label: thread.source_label,
     target_labels: thread.target_labels,
     ...(trimString(thread.read_only_reason) ? { read_only_reason: trimString(thread.read_only_reason) } : {}),
-    ...(trimString(thread.owner_kind) ? { owner_kind: trimString(thread.owner_kind).toLowerCase() } : {}),
-    ...(trimString(thread.owner_id) ? { owner_id: trimString(thread.owner_id) } : {}),
-    ...(trimString(thread.parent_thread_id) ? { parent_thread_id: trimString(thread.parent_thread_id) } : {}),
     read_status: thread.read_status,
   };
 }

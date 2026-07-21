@@ -104,17 +104,20 @@ func (r *run) dispatchFloretEffect(ctx context.Context, req flruntime.EffectAuth
 		return flruntime.EffectDispatchResult{}, errors.New("Floret effect authorization is unavailable")
 	}
 	var result flruntime.EffectDispatchResult
-	err := r.withAuthorizedFloretEffect(ctx, req, func(proof flruntime.EffectAuthorizationProof) error {
+	err := r.withAuthorizedFloretEffect(ctx, req, func(executionCtx context.Context, proof flruntime.EffectAuthorizationProof) error {
 		var dispatchErr error
-		result, dispatchErr = effect(proof)
+		result, dispatchErr = effect(executionCtx, proof)
 		return dispatchErr
 	})
 	return result, err
 }
 
-func (r *run) withAuthorizedFloretEffect(ctx context.Context, req flruntime.EffectAuthorizationRequest, dispatch func(flruntime.EffectAuthorizationProof) error) error {
+func (r *run) withAuthorizedFloretEffect(ctx context.Context, req flruntime.EffectAuthorizationRequest, dispatch func(context.Context, flruntime.EffectAuthorizationProof) error) error {
 	if r == nil || dispatch == nil {
 		return errors.New("Floret effect authorization is unavailable")
+	}
+	if err := r.requireExecutionOpen(); err != nil {
+		return err
 	}
 	if err := validateFloretEffectAuthorizationRequest(req); err != nil {
 		return err
@@ -130,73 +133,80 @@ func (r *run) withAuthorizedFloretEffect(ctx context.Context, req flruntime.Effe
 	if authorityThreadID == "" {
 		return errors.New("Floret effect permission authority is missing")
 	}
-	approvedRevision := ""
-	approvalID := ""
-	for {
-		unlock, err := r.lockFloretEffectAuthority(authorityThreadID, req)
-		if err != nil {
-			return err
-		}
-		currentSnapshot, err := policyRun.refreshFloretEffectPermissionSnapshot(ctx, authorityThreadID, req)
-		if err != nil {
-			unlock()
-			return err
-		}
-		currentPolicy, ok := currentSnapshot.ToolPolicies[strings.TrimSpace(req.ToolName)]
-		if !ok || floretPermissionMode(currentPolicy.ApprovalDecision) != req.Permission.Mode {
-			unlock()
-			return errors.New("Floret effect authorization snapshot is stale")
-		}
-		decision, err := floretEffectPolicyDecision(policyRun, currentSnapshot, req.ToolName)
-		if err != nil {
-			unlock()
-			return err
-		}
-		policyRevision := floretEffectPolicyRevision(authorityThreadID, currentSnapshot)
-		if decision == ApprovalDecisionDeny {
-			unlock()
-			return errors.New("permission denied: tool unavailable for current permission policy")
-		}
-		if decision == ApprovalDecisionAsk && approvedRevision != policyRevision {
-			unlock()
-			approved, requestedApprovalID, approvalErr := r.waitForCurrentFloretEffectApproval(ctx, policyRun, req)
-			if approvalErr != nil {
-				return approvalErr
-			}
-			if !approved {
-				return errors.New("permission denied: rejected by user")
-			}
-			approvedRevision = policyRevision
-			approvalID = requestedApprovalID
-			continue
-		}
-		releaseAuthorization, err := r.effectAuthorizations.authorize(req, currentSnapshot)
-		if err != nil {
-			unlock()
-			return err
-		}
-		proof := flruntime.EffectAuthorizationProof{
-			EffectAttemptID: req.EffectAttemptID, RequestFingerprint: req.RequestFingerprint,
-			ThreadID: req.ThreadID, TurnID: req.TurnID, RunID: req.RunID, ToolCallID: req.ToolCallID,
-			LeaseOwnerID: req.LeaseOwnerID, LeaseGeneration: req.LeaseGeneration,
-			PolicyRevision: policyRevision, ApprovalID: approvalID,
-			AuditReference: "permission_snapshot:" + strings.TrimSpace(currentSnapshot.SnapshotID) + "/effect:" + strings.TrimSpace(req.EffectAttemptID),
-			AuditHash:      floretEffectAuditHash(req, currentSnapshot, policyRevision, approvalID), AuthorizedAt: time.Now(),
-		}
-		// Read-only SubAgent inspection has no product or canonical mutation.
-		// Wait is intentionally excluded: Floret may admit pending child input
-		// while waiting, so it must remain inside the lifecycle authority gate.
-		if passiveSubagentEffectRequest(req) {
-			unlock()
-			dispatchErr := dispatch(proof)
-			releaseAuthorization()
-			return dispatchErr
-		}
-		dispatchErr := dispatch(proof)
+	unlock, err := r.lockFloretEffectAuthority(authorityThreadID, req)
+	if err != nil {
+		return err
+	}
+	if err := r.requireExecutionOpen(); err != nil {
+		unlock()
+		return err
+	}
+	currentSnapshot, err := policyRun.refreshFloretEffectPermissionSnapshot(ctx, authorityThreadID, req)
+	if err != nil {
+		unlock()
+		return err
+	}
+	decision, err := floretEffectPolicyDecision(policyRun, currentSnapshot, req.ToolName)
+	if err != nil {
+		unlock()
+		return err
+	}
+	if decision == ApprovalDecisionDeny {
+		unlock()
+		return errors.New("permission denied: tool unavailable for current permission policy")
+	}
+	// Floret calls this gate only after its canonical approval decision is
+	// durable. Redeven therefore rechecks current product policy here but never
+	// creates or waits for a second user decision. If policy tightened from
+	// allow to ask after admission, the invocation has no matching Floret
+	// approval and must be rejected as stale.
+	if decision == ApprovalDecisionAsk && req.Permission.Mode != fltools.PermissionAsk {
+		unlock()
+		return errors.New("Floret effect authorization snapshot is stale")
+	}
+	policyRevision := floretEffectPolicyRevision(authorityThreadID, currentSnapshot)
+	releaseAuthorization, err := r.effectAuthorizations.authorize(req, currentSnapshot)
+	if err != nil {
+		unlock()
+		return err
+	}
+	executionContext, releaseExecution, err := r.beginExecutionAdmission(ctx)
+	if err != nil {
 		releaseAuthorization()
 		unlock()
+		return err
+	}
+	defer releaseExecution()
+	proof := flruntime.EffectAuthorizationProof{
+		EffectAttemptID: req.EffectAttemptID, RequestFingerprint: req.RequestFingerprint,
+		ThreadID: req.ThreadID, TurnID: req.TurnID, RunID: req.RunID, ToolCallID: req.ToolCallID,
+		LeaseOwnerID: req.LeaseOwnerID, LeaseGeneration: req.LeaseGeneration,
+		PolicyRevision: policyRevision,
+		AuditReference: "permission_snapshot:" + strings.TrimSpace(currentSnapshot.SnapshotID) + "/effect:" + strings.TrimSpace(req.EffectAttemptID),
+		AuditHash:      floretEffectAuditHash(req, currentSnapshot, policyRevision, ""), AuthorizedAt: time.Now(),
+	}
+	// Read-only SubAgent inspection has no product or canonical mutation.
+	// Wait is intentionally excluded: Floret may admit pending child input
+	// while waiting, so it must remain inside the lifecycle authority gate.
+	if passiveSubagentEffectRequest(req) {
+		unlock()
+		if err := context.Cause(executionContext); err != nil {
+			releaseAuthorization()
+			return err
+		}
+		dispatchErr := dispatch(executionContext, proof)
+		releaseAuthorization()
 		return dispatchErr
 	}
+	if err := context.Cause(executionContext); err != nil {
+		releaseAuthorization()
+		unlock()
+		return err
+	}
+	dispatchErr := dispatch(executionContext, proof)
+	releaseAuthorization()
+	unlock()
+	return dispatchErr
 }
 
 func passiveSubagentEffectRequest(req flruntime.EffectAuthorizationRequest) bool {
@@ -346,9 +356,6 @@ func floretEffectPolicyDecision(policyRun *run, snapshot PermissionSnapshot, too
 	}
 	policy, ok := snapshot.ToolPolicies[strings.TrimSpace(toolName)]
 	if !ok || !stringSliceContains(snapshot.FloretToolNames, toolName) {
-		return ApprovalDecisionDeny, nil
-	}
-	if policy.ApprovalDecision == ApprovalDecisionAsk && policyRun != nil && policyRun.subagentDepth > 0 && !policyRun.allowDelegatedApproval {
 		return ApprovalDecisionDeny, nil
 	}
 	return policy.ApprovalDecision, nil

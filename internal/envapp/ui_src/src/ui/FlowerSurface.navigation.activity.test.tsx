@@ -2074,6 +2074,8 @@ describe('FlowerSurface navigation activity', () => {
     const delegatedAction = {
       action_id: 'dappr-terminal',
       origin: 'delegated_subagent' as const,
+      run_id: 'run-child-review',
+      tool_id: 'tool-child-shell',
       tool_name: 'terminal.exec',
       state: 'requested' as const,
       status: 'pending' as const,
@@ -2083,21 +2085,10 @@ describe('FlowerSurface navigation activity', () => {
       surface_role: 'primary_action' as const,
       queue_generation: 1,
       queue_order: 1,
-      scope: 'thread_delegated_wait',
+      scope: 'thread:thread-child-review',
       requested_at_ms: 7_250,
       can_approve: true,
       expected_seq: 18,
-      delegated_ref: {
-        parent_thread_id: 'thread-delegated-approval',
-        parent_run_id: 'run-parent-delegated',
-        parent_turn_id: 'm-delegated-approval',
-        child_thread_id: 'thread-child-review',
-        child_run_id: 'run-child-review',
-        child_tool_call_id: 'tool-child-shell',
-        approval_id: 'approval-child-shell',
-      },
-      delivery_state: 'waiting_decision' as const,
-      child_execution_state: 'pending' as const,
       summary: {
         label: 'Subtask command',
         description: 'Subtask Review API contract requests approval.',
@@ -2193,13 +2184,14 @@ describe('FlowerSurface navigation activity', () => {
     expect(submitApproval).toHaveBeenCalledWith(expect.objectContaining({
       thread_id: 'thread-delegated-approval',
       origin: 'delegated_subagent',
+      run_id: 'run-child-review',
       action_id: 'dappr-terminal',
+      tool_id: 'tool-child-shell',
       version: 3,
       surface_epoch: 7,
       queue_generation: 1,
       queue_revision: 1,
-      idempotency_key: 'dappr-terminal:approve:3:7',
-      delegated_ref: delegatedAction.delegated_ref,
+      idempotency_key: 'dappr-terminal:approve:1:1:1',
     }));
   });
 
@@ -2433,7 +2425,7 @@ describe('FlowerSurface navigation activity', () => {
     expect(runtime.querySelector('[data-flower-approval-action-id="appr-event-second"]')).not.toBeNull();
   });
 
-  it('keeps the submitted approval disabled when fallback reload cannot confirm the decision', async () => {
+  it('keeps the submitted approval disabled when canonical resync cannot confirm the decision', async () => {
     const action = {
       action_id: 'appr-fallback-failure',
       origin: 'main_tool' as const,
@@ -2484,7 +2476,7 @@ describe('FlowerSurface navigation activity', () => {
     expect(runtime.querySelector('[data-flower-approval-action-id="appr-fallback-failure"]')).not.toBeNull();
     expect(runtime.querySelector('.flower-composer textarea')).toBeNull();
     expect(Array.from(runtime.querySelectorAll<HTMLButtonElement>('.flower-composer-approval-decision')).every((button) => button.disabled)).toBe(true);
-    expect(runtime.querySelector('.flower-composer')?.getAttribute('data-flower-approval-handoff-phase')).toBe('fallback_reload');
+    expect(runtime.querySelector('.flower-composer')?.getAttribute('data-flower-approval-handoff-phase')).toBe('awaiting_projection');
   });
 
   it('shows the backend-selected composer approval and focuses each promoted card', async () => {

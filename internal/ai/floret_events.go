@@ -21,6 +21,7 @@ const (
 	floretEventToolApprovalRejected  = observation.EventTypeToolApprovalRejected
 	floretEventToolApprovalTimedOut  = observation.EventTypeToolApprovalTimedOut
 	floretEventToolApprovalCanceled  = observation.EventTypeToolApprovalCanceled
+	floretEventThreadTitlePending    = observation.EventTypeThreadTitlePending
 	floretEventThreadTitleUpdated    = observation.EventTypeThreadTitleUpdated
 	floretEventThreadTitleFailed     = observation.EventTypeThreadTitleFailed
 )
@@ -51,8 +52,17 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 			r.completeUserTurnAdmission(nil)
 		}
 	}
-	if ev.Type == floretEventThreadTitleUpdated && r.host.broadcastThreadSummary != nil {
+	if (ev.Type == floretEventThreadTitlePending || ev.Type == floretEventThreadTitleUpdated || ev.Type == floretEventThreadTitleFailed) && r.host.broadcastThreadSummary != nil {
 		_ = r.host.broadcastThreadSummary()
+	}
+	approvalLifecycle := ev.Type == floretEventToolApprovalRequested || ev.Type == floretEventToolApprovalApproved ||
+		ev.Type == floretEventToolApprovalRejected || ev.Type == floretEventToolApprovalTimedOut ||
+		ev.Type == floretEventToolApprovalCanceled
+	if approvalLifecycle {
+		if err := r.syncFloretApprovalQueue(context.Background()); err != nil {
+			r.rejectFloretContract("approval_queue", err)
+			return
+		}
 	}
 	// The validated canonical user entry is the admission boundary for live
 	// assistant state. A draft created after it can be rendered against the
@@ -101,12 +111,6 @@ func (s floretEventSink) EmitEvent(ev flruntime.Event) {
 	case floretEventRunEnd:
 		r.clearModelIOStatus()
 	case floretEventToolApprovalRequested, floretEventToolApprovalApproved, floretEventToolApprovalRejected, floretEventToolApprovalTimedOut, floretEventToolApprovalCanceled:
-		if ev.Type != floretEventToolApprovalRequested {
-			if err := r.syncPendingFloretApprovals(context.Background(), string(ev.Type)); err != nil {
-				r.rejectFloretContract("pending_approvals", err)
-				return
-			}
-		}
 		r.recordRunDiagnostic("floret."+string(ev.Type), RealtimeStreamKindLifecycle, map[string]any{
 			"tool_id":   strings.TrimSpace(ev.ToolID),
 			"tool_name": strings.TrimSpace(ev.ToolName),
@@ -151,9 +155,11 @@ func (r *run) validateFloretRuntimeEvent(ev flruntime.Event) error {
 		if eventThreadID != identity.threadID {
 			return errors.New("Floret event thread or turn identity mismatch")
 		}
-		isTitleEvent := ev.Type == floretEventThreadTitleUpdated || ev.Type == floretEventThreadTitleFailed
+		isTitleEvent := ev.Type == floretEventThreadTitlePending || ev.Type == floretEventThreadTitleUpdated || ev.Type == floretEventThreadTitleFailed
 		if isTitleEvent {
-			if eventRunID != "" || (eventTurnID != "" && eventTurnID != identity.turnID) {
+			threadScoped := eventRunID == "" && eventTurnID == ""
+			runScoped := eventRunID == identity.runID && eventTurnID == identity.turnID
+			if !threadScoped && !runScoped {
 				return errors.New("Floret title event identity mismatch")
 			}
 		} else if eventTurnID != identity.turnID {

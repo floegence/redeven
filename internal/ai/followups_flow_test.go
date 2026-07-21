@@ -120,40 +120,24 @@ func TestService_StopThread_RecoversQueuedFollowupsToDraftsAndClearsQueue(t *tes
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	activeRunID := "run_stop_thread_recovery"
-	thKey := runThreadKey(meta.EndpointID, th.ThreadID)
-	if thKey == "" {
-		t.Fatalf("invalid thread key")
-	}
-
-	svc.mu.Lock()
-	svc.activeRunByTh[thKey] = activeRunID
-	svc.runs[activeRunID] = &run{
-		id:         activeRunID,
-		channelID:  meta.ChannelID,
-		endpointID: meta.EndpointID,
-		threadID:   th.ThreadID,
-		doneCh:     make(chan struct{}),
-	}
-	svc.mu.Unlock()
-
-	queuedResp, err := svc.SendUserTurn(ctx, meta, SendUserTurnRequest{
-		ThreadID: th.ThreadID,
-		Model:    "openai/gpt-5-mini",
-		Input: RunInput{
-			TurnID: "m_stop_recover_1",
-			Text:   "recover this after stop",
-		},
-		Options: RunOptions{},
+	queuedFollowup, _, _, err := svc.threadsDB.CreateFollowup(ctx, threadstore.QueuedTurn{
+		QueueID:               "followup_stop_recover_1",
+		ThreadID:              th.ThreadID,
+		EndpointID:            meta.EndpointID,
+		ChannelID:             meta.ChannelID,
+		Lane:                  threadstore.FollowupLaneQueued,
+		TurnID:                "m_stop_recover_1",
+		RunID:                 "run_stop_recover_1",
+		ModelID:               "openai/gpt-5-mini",
+		TextContent:           "recover this after stop",
+		AttachmentsJSON:       "[]",
+		OptionsJSON:           "{}",
+		SessionMetaJSON:       "{}",
+		CreatedByUserPublicID: meta.UserPublicID,
+		CreatedByUserEmail:    meta.UserEmail,
 	})
 	if err != nil {
-		t.Fatalf("SendUserTurn: %v", err)
-	}
-	if queuedResp.Kind != "queued" {
-		t.Fatalf("queuedResp.Kind=%q, want queued", queuedResp.Kind)
-	}
-	if queuedResp.TurnID != "m_stop_recover_1" || strings.TrimSpace(queuedResp.RunID) == "" {
-		t.Fatalf("queued receipt=%#v, want exact turn and allocated run", queuedResp)
+		t.Fatalf("CreateFollowup: %v", err)
 	}
 
 	stopCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
@@ -168,8 +152,8 @@ func TestService_StopThread_RecoversQueuedFollowupsToDraftsAndClearsQueue(t *tes
 	if len(stopResp.RecoveredFollowups) != 1 {
 		t.Fatalf("len(RecoveredFollowups)=%d, want 1", len(stopResp.RecoveredFollowups))
 	}
-	if got := strings.TrimSpace(stopResp.RecoveredFollowups[0].FollowupID); got != strings.TrimSpace(queuedResp.QueueID) {
-		t.Fatalf("RecoveredFollowups[0].FollowupID=%q, want %q", got, queuedResp.QueueID)
+	if got := strings.TrimSpace(stopResp.RecoveredFollowups[0].FollowupID); got != strings.TrimSpace(queuedFollowup.QueueID) {
+		t.Fatalf("RecoveredFollowups[0].FollowupID=%q, want %q", got, queuedFollowup.QueueID)
 	}
 	if got := strings.TrimSpace(stopResp.RecoveredFollowups[0].Lane); got != threadstore.FollowupLaneDraft {
 		t.Fatalf("RecoveredFollowups[0].Lane=%q, want %q", got, threadstore.FollowupLaneDraft)
@@ -192,17 +176,6 @@ func TestService_StopThread_RecoversQueuedFollowupsToDraftsAndClearsQueue(t *tes
 	}
 	if drafts[0].TurnID == "" || drafts[0].RunID == "" || drafts[0].TextContent != "recover this after stop" {
 		t.Fatalf("unexpected recovered draft: %#v", drafts[0])
-	}
-
-	svc.mu.Lock()
-	remainingActive := strings.TrimSpace(svc.activeRunByTh[thKey])
-	remainingRun := svc.runs[activeRunID]
-	svc.mu.Unlock()
-	if remainingActive != "" {
-		t.Fatalf("activeRunByTh[%q]=%q, want empty", thKey, remainingActive)
-	}
-	if remainingRun != nil && !remainingRun.isDetached() {
-		t.Fatalf("remaining run should be detached after StopThread")
 	}
 }
 

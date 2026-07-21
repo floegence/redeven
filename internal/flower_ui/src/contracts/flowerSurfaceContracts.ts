@@ -149,6 +149,10 @@ export type FlowerChatMessageRole = 'user' | 'assistant' | 'system';
 
 export type FlowerChatMessageStatus = 'sending' | 'streaming' | 'error' | 'complete' | 'canceled';
 
+export type FlowerMessageReference =
+  | Readonly<{ reference_id: string; kind: 'file' | 'directory'; label: string; truncated?: boolean }>
+  | Readonly<{ reference_id: string; kind: 'text' | 'terminal' | 'process'; label: string; text?: string; truncated?: boolean }>;
+
 export type FlowerChatMessage = Readonly<{
   id: string;
   // Canonical root-thread messages always carry turn_id. Synthetic local and
@@ -161,6 +165,8 @@ export type FlowerChatMessage = Readonly<{
   status: FlowerChatMessageStatus;
   created_at_ms: number;
   blocks?: readonly FlowerChatMessageBlock[];
+  references?: readonly FlowerMessageReference[];
+  /** Test and legacy input shape only; admitted messages are projected from references. */
   context_action?: unknown;
   live?: boolean;
   active_cursor?: boolean;
@@ -175,6 +181,8 @@ export type FlowerThreadStatus =
   | 'success'
   | 'canceled'
   | 'read_only';
+
+export type FlowerTitleStatus = 'pending' | 'ready' | 'failed';
 
 export type FlowerThreadError = Readonly<{
   message: string;
@@ -467,6 +475,7 @@ export type FlowerQueuedTurn = Readonly<{
 export type FlowerThreadSnapshot = Readonly<{
   thread_id: string;
   title: string;
+  title_status: FlowerTitleStatus;
   model_id: string;
   working_dir: string;
   pinned_at_ms?: number;
@@ -483,8 +492,6 @@ export type FlowerThreadSnapshot = Readonly<{
   source_label: string;
   target_labels: readonly string[];
   read_only_reason?: string;
-  owner_kind?: string;
-  owner_id?: string;
   parent_thread_id?: string;
   messages: readonly FlowerChatMessage[];
   model_io_status?: FlowerModelIOStatus | null;
@@ -625,17 +632,6 @@ export type FlowerApprovalQueue = Readonly<{
   unresolved_count: number;
 }>;
 
-export type FlowerDelegatedApprovalRef = Readonly<{
-  parent_thread_id: string;
-  parent_run_id: string;
-  parent_turn_id?: string;
-  child_thread_id: string;
-  child_run_id: string;
-  child_turn_id?: string;
-  child_tool_call_id: string;
-  approval_id: string;
-}>;
-
 type FlowerApprovalActionBase = Readonly<{
   action_id: string;
   turn_id?: string;
@@ -653,10 +649,6 @@ type FlowerApprovalActionBase = Readonly<{
   can_approve: boolean;
   expected_seq?: number;
   read_only_reason?: string;
-  delegated_ref?: FlowerDelegatedApprovalRef;
-  delivery_state?: 'waiting_decision' | 'delivery_pending' | 'delivery_delivered' | 'delivery_failed' | 'delivery_ack_unknown' | 'delivery_unavailable';
-  child_execution_state?: 'unknown' | 'pending' | 'running' | 'succeeded' | 'failed' | 'canceled';
-  primary_wait_anchor?: string;
   queue_generation?: number;
   queue_order?: number;
   batch_index?: number;
@@ -676,14 +668,12 @@ export type FlowerMainToolApprovalAction = FlowerApprovalActionBase & Readonly<{
   origin: 'main_tool' | 'control_confirm';
   run_id: string;
   tool_id: string;
-  delegated_ref?: never;
 }>;
 
 export type FlowerDelegatedSubagentApprovalAction = FlowerApprovalActionBase & Readonly<{
   origin: 'delegated_subagent';
-  delegated_ref: FlowerDelegatedApprovalRef;
-  run_id?: never;
-  tool_id?: never;
+  run_id: string;
+  tool_id: string;
 }>;
 
 export type FlowerApprovalAction = FlowerMainToolApprovalAction | FlowerDelegatedSubagentApprovalAction;
@@ -699,6 +689,7 @@ export type FlowerLiveKind =
   | 'message.failed'
   | 'approval.requested'
   | 'approval.resolved'
+  | 'approval.queue_replaced'
   | 'input.requested'
   | 'input.resolved'
   | 'model_io.updated'
@@ -725,6 +716,7 @@ export type FlowerLiveRunState = Readonly<{
 export type FlowerLiveThreadPatch = Readonly<{
   thread_id?: string;
   title?: string;
+  title_status?: FlowerTitleStatus;
   model_id?: string;
   permission_type?: FlowerPermissionType;
   working_dir?: string;
@@ -744,9 +736,6 @@ export type FlowerLiveThreadPatch = Readonly<{
   reasoning_selection?: FlowerReasoningSelection | null;
   reasoning_capability?: FlowerReasoningCapability | null;
   read_only_reason?: string;
-  owner_kind?: string;
-  owner_id?: string;
-  parent_thread_id?: string;
   subagents?: readonly FlowerSubagentSummary[];
   read_status?: FlowerThreadReadStatus;
 }>;
@@ -810,6 +799,11 @@ export type FlowerLiveMessageFailedPayload = Readonly<{
 export type FlowerLiveApprovalPayload = Readonly<{
   action: FlowerApprovalAction;
   approval_queue?: FlowerApprovalQueue;
+}>;
+
+export type FlowerLiveApprovalQueuePayload = Readonly<{
+  actions: readonly FlowerApprovalAction[];
+  approval_queue: FlowerApprovalQueue;
 }>;
 
 export type FlowerLiveInputRequestedPayload = Readonly<{
@@ -880,6 +874,7 @@ export type FlowerLiveEventPayloadByKind = Readonly<{
   'message.failed': FlowerLiveMessageFailedPayload;
   'approval.requested': FlowerLiveApprovalPayload;
   'approval.resolved': FlowerLiveApprovalPayload;
+  'approval.queue_replaced': FlowerLiveApprovalQueuePayload;
   'input.requested': FlowerLiveInputRequestedPayload;
   'input.resolved': FlowerLiveInputResolvedPayload;
   'model_io.updated': FlowerLiveModelIOUpdatedPayload;
@@ -916,7 +911,7 @@ type FlowerSubmitApprovalRequestBase = Readonly<{
   action_id: string;
   approved: boolean;
   expected_seq?: number;
-  revision?: number;
+  revision: number;
   version?: number;
   surface_epoch?: number;
   queue_generation: number;
@@ -924,19 +919,11 @@ type FlowerSubmitApprovalRequestBase = Readonly<{
   idempotency_key?: string;
 }>;
 
-export type FlowerSubmitApprovalRequest =
-  | (FlowerSubmitApprovalRequestBase & Readonly<{
-      origin?: 'main_tool' | 'control_confirm';
-      run_id: string;
-      tool_id: string;
-      delegated_ref?: never;
-    }>)
-  | (FlowerSubmitApprovalRequestBase & Readonly<{
-      origin: 'delegated_subagent';
-      delegated_ref: FlowerDelegatedApprovalRef;
-      run_id?: never;
-      tool_id?: never;
-    }>);
+export type FlowerSubmitApprovalRequest = FlowerSubmitApprovalRequestBase & Readonly<{
+  origin: FlowerApprovalOrigin;
+  run_id: string;
+  tool_id: string;
+}>;
 
 export type FlowerApprovalDecisionReceipt = Readonly<{
   ok: boolean;
@@ -946,6 +933,7 @@ export type FlowerApprovalDecisionReceipt = Readonly<{
 export type FlowerThreadListItem = Readonly<{
   thread_id: string;
   title: string;
+  title_status: FlowerTitleStatus;
   model_id: string;
   working_dir: string;
   pinned: boolean;
@@ -957,9 +945,6 @@ export type FlowerThreadListItem = Readonly<{
   source_label: string;
   target_labels: readonly string[];
   read_only_reason?: string;
-  owner_kind?: string;
-  owner_id?: string;
-  parent_thread_id?: string;
   read_status: FlowerThreadReadStatus;
 }>;
 
@@ -1155,6 +1140,12 @@ export type FlowerLinkedContextPathOpenRequest = Readonly<{
   target: string;
 }>;
 
+export type FlowerCanonicalReferenceOpenRequest = Readonly<{
+  thread_id: string;
+  turn_id: string;
+  reference_id: string;
+}>;
+
 export type FlowerTerminalProcessReadRequest = Readonly<{
   run_id: string;
   process_id: string;
@@ -1247,6 +1238,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   listWorkingDirectoryEntries?: (input: FlowerWorkingDirectoryListInput) => Promise<readonly FlowerWorkingDirectoryEntry[]>;
   openFileBrowser?: (request: FlowerFileOpenRequest) => Promise<void>;
   openFilePreview?: (request: FlowerFileOpenRequest) => Promise<void>;
+  openCanonicalReference?: (request: FlowerCanonicalReferenceOpenRequest) => Promise<void>;
   openLinkedFilePreview?: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
   openLinkedDirectoryBrowser?: (request: FlowerLinkedContextPathOpenRequest) => Promise<void>;
   modelSourceRecovery?: FlowerModelSourceRecovery;

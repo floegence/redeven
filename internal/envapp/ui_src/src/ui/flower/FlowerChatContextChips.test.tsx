@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { FlowerChatContextChips } from '../../../../../flower_ui/src/chat/FlowerChatContextChips';
 import { parseChatContextAction } from '../../../../../flower_ui/src/chat/flowerChatContextModel';
+import { parseChatMessageReferences } from '../../../../../flower_ui/src/chat/flowerChatContextModel';
 
 const disposers: Array<() => void> = [];
 
@@ -19,7 +20,13 @@ function renderContext(action: unknown, canActivateChip?: Parameters<typeof Flow
   const host = document.createElement('div');
   document.body.appendChild(host);
   disposers.push(render(() => (
-    <FlowerChatContextChips contextDisplay={display} onChipClick={vi.fn()} canActivateChip={canActivateChip} />
+    <FlowerChatContextChips
+      contextDisplay={display}
+      linkedContextLabel="Linked context"
+			truncatedLabel="Truncated"
+      onChipClick={vi.fn()}
+      canActivateChip={canActivateChip}
+    />
   ), host));
   return host;
 }
@@ -39,30 +46,18 @@ const baseAction = {
 };
 
 describe('Flower linked context chips', () => {
-  it('renders metadata-only terminal context as a noninteractive note', () => {
-    const host = renderContext(baseAction);
-    const chip = host.querySelector('[data-flower-chat-context-chip="true"]');
-
-    expect(chip?.tagName).toBe('DIV');
-    expect(chip?.getAttribute('data-flower-chat-context-interactive')).toBe('false');
-    expect(chip?.textContent).toContain('/workspace');
-    expect(chip?.textContent).toContain('12,000 characters');
-    expect(chip?.textContent).toContain('content not included');
-    expect(host.querySelector('button')).toBeNull();
+  it('rejects terminal context without canonical selection content', () => {
+    expect(parseChatContextAction(baseAction)).toBeNull();
   });
 
-  it('renders unsupported context as a noninteractive note', () => {
-    const host = renderContext({
+  it('rejects the complete action when it contains an unsupported context item', () => {
+    const action = {
       ...baseAction,
       source: { surface: 'file_browser' },
       context: [{ kind: 'future_context', raw_payload: 'hidden' }],
-    });
-    const chip = host.querySelector('[data-flower-chat-context-chip="true"]');
+    };
 
-    expect(chip?.tagName).toBe('DIV');
-    expect(chip?.textContent).toContain('Unsupported linked context');
-    expect(chip?.textContent).toContain('future_context');
-    expect(chip?.textContent).not.toContain('hidden');
+    expect(parseChatContextAction(action)).toBeNull();
   });
 
   it('renders file and directory capabilities independently', () => {
@@ -95,4 +90,69 @@ describe('Flower linked context chips', () => {
     expect(host.querySelector('[data-flower-chat-context-chip="true"]')?.tagName).toBe('DIV');
     expect(host.querySelector('button')).toBeNull();
   });
+
+  it('renders Floret canonical references in order without a queued-context authority', () => {
+    const display = parseChatMessageReferences([
+      { reference_id: 'context:0', kind: 'text', label: 'Quoted selection', text: 'quoted text', truncated: true },
+      { reference_id: 'context:1', kind: 'directory', label: 'src', truncated: false },
+    ]);
+    if (!display) throw new Error('Expected canonical reference display.');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    disposers.push(render(() => (
+      <FlowerChatContextChips
+        contextDisplay={display}
+        linkedContextLabel="Linked references"
+			truncatedLabel="Truncated"
+        onChipClick={vi.fn()}
+      />
+    ), host));
+
+    const chips = host.querySelectorAll('[data-flower-chat-context-chip="true"]');
+    expect(host.querySelector('[data-flower-context-authority]')?.getAttribute('data-flower-context-authority')).toBe('canonical_references');
+    expect(host.textContent).toContain('Linked references');
+    expect(chips[0]?.textContent).toContain('Quoted selection');
+    expect(chips[0]?.tagName).toBe('BUTTON');
+    expect(chips[1]?.textContent).toContain('src');
+		expect(chips[1]?.tagName).toBe('BUTTON');
+		expect(chips[0]?.getAttribute('aria-label')).toBe('Quoted selection, quoted text, Truncated');
+		expect(chips[0]?.querySelector('.flower-chat-context-chip-truncated')?.textContent).toBe('Truncated');
+  });
+
+	it('prevents duplicate activation while pending and restores focus after completion', async () => {
+		const display = parseChatMessageReferences([
+			{ reference_id: 'context:file', kind: 'file', label: 'main.ts' },
+		]);
+		if (!display) throw new Error('Expected canonical reference display.');
+		let finish!: () => void;
+		const pending = new Promise<void>((resolve) => { finish = resolve; });
+		const onChipClick = vi.fn(() => pending);
+		const host = document.createElement('div');
+		document.body.appendChild(host);
+		disposers.push(render(() => (
+			<FlowerChatContextChips
+				contextDisplay={display}
+				linkedContextLabel="Linked references"
+				truncatedLabel="Truncated"
+				onChipClick={onChipClick}
+			/>
+		), host));
+
+		const chip = host.querySelector('button') as HTMLButtonElement;
+		chip.focus();
+		chip.click();
+		chip.click();
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		expect(onChipClick).toHaveBeenCalledTimes(1);
+		const pendingChip = host.querySelector('button') as HTMLButtonElement;
+		expect(pendingChip.disabled).toBe(true);
+		expect(pendingChip.getAttribute('aria-busy')).toBe('true');
+
+		finish();
+		await pending;
+		await new Promise((resolve) => setTimeout(resolve, 0));
+		const settledChip = host.querySelector('button') as HTMLButtonElement;
+		expect(settledChip.disabled).toBe(false);
+		expect(document.activeElement).toBe(settledChip);
+	});
 });

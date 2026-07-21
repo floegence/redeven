@@ -48,6 +48,7 @@ const thread = (overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
     read_state: { last_seen_activity_revision: 1, last_read_message_at_unix_ms: 1, last_seen_activity_signature: 'test' },
   },
   ...overrides,
+  title_status: overrides.title_status ?? 'ready',
 });
 
 describe('approval decision handoff projection', () => {

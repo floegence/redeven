@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"sync"
 	"testing"
@@ -19,8 +20,12 @@ func (h *todoTestHost) RunTurn(context.Context, flruntime.RunTurnRequest) (flrun
 	return flruntime.TurnResult{}, nil
 }
 
-func (h *todoTestHost) ListPendingApprovals(context.Context, flruntime.ListPendingApprovalsRequest) (flruntime.PendingApprovals, error) {
-	return flruntime.PendingApprovals{}, nil
+func (h *todoTestHost) ReadApprovalQueue(_ context.Context, req flruntime.ReadApprovalQueueRequest) (flruntime.ApprovalQueue, error) {
+	return flruntime.ApprovalQueue{RootThreadID: req.ThreadID, GeneratedAt: time.Now()}, nil
+}
+
+func (h *todoTestHost) ResolveApproval(context.Context, flruntime.ResolveApprovalRequest) (flruntime.ResolveApprovalResult, error) {
+	return flruntime.ResolveApprovalResult{}, errors.New("unexpected approval resolution")
 }
 
 func (h *todoTestHost) SettlePendingTool(context.Context, flruntime.PendingToolSettlementRequest) (flruntime.PendingToolSettlementResult, error) {

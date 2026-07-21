@@ -153,7 +153,7 @@ func (s *Service) loadThreadTimelineMessages(ctx context.Context, endpointID str
 			return nil, fmt.Errorf("Floret turn %q has incomplete canonical identity", turnID)
 		}
 		userCreatedAt := turn.StartedAt.UnixMilli()
-		userRaw, err := canonicalUserTimelineMessage(turnID, userEntryID, turn.UserInput, turn.UserAttachments, userCreatedAt)
+		userRaw, err := canonicalUserTimelineMessage(turnID, userEntryID, turn.UserInput, turn.UserAttachments, turn.UserReferences, userCreatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -191,48 +191,74 @@ func (s *Service) loadThreadTimelineMessages(ctx context.Context, endpointID str
 func listAllFloretThreadTurns(ctx context.Context, host interface {
 	ListThreadTurns(context.Context, flruntime.ListThreadTurnsRequest) (flruntime.ThreadTurnsPage, error)
 }, threadID string) ([]flruntime.ThreadTurnSnapshot, error) {
-	afterOrdinal := int64(0)
-	throughOrdinal := int64(-1)
+	newerThroughOrdinal := int64(-1)
+	newerOldestTurnOrdinal := int64(-1)
 	out := make([]flruntime.ThreadTurnSnapshot, 0)
+	var before *flruntime.ThreadTurnsBeforeCursor
 	for {
-		page, err := host.ListThreadTurns(ctx, flruntime.ListThreadTurnsRequest{
-			ThreadID: flruntime.ThreadID(threadID), AfterOrdinal: afterOrdinal, Limit: 200,
-		})
+		request := flruntime.ListThreadTurnsRequest{ThreadID: flruntime.ThreadID(threadID)}
+		if before == nil {
+			request.Tail = 200
+		} else {
+			request.BeforeCursor = before
+			request.Limit = 200
+		}
+		page, err := host.ListThreadTurns(ctx, request)
 		if err != nil {
 			return nil, err
 		}
 		if strings.TrimSpace(string(page.ThreadID)) != strings.TrimSpace(threadID) {
 			return nil, canonicalTimelineResyncErrorf("turn page thread identity differs from the requested thread")
 		}
-		if throughOrdinal < 0 {
-			throughOrdinal = page.ThroughOrdinal
-		} else if page.ThroughOrdinal != throughOrdinal {
-			return nil, canonicalTimelineResyncErrorf("turn page ordinal changed from %d to %d during pagination", throughOrdinal, page.ThroughOrdinal)
+		if page.ThroughOrdinal < 0 {
+			return nil, canonicalTimelineResyncErrorf("turn page through ordinal is negative")
 		}
-		for _, turn := range page.Turns {
-			if turn.Ordinal <= afterOrdinal {
-				return nil, canonicalTimelineResyncErrorf("turn ordinal %d does not advance after %d", turn.Ordinal, afterOrdinal)
+		if before != nil && len(page.Turns) == 0 {
+			return nil, canonicalTimelineResyncErrorf("historical turn page is empty after a page reported more turns")
+		}
+		if before != nil && (page.ThroughOrdinal >= newerThroughOrdinal || page.ThroughOrdinal >= newerOldestTurnOrdinal) {
+			return nil, canonicalTimelineResyncErrorf(
+				"historical turn page through ordinal %d does not precede newer page boundary %d and oldest turn %d",
+				page.ThroughOrdinal,
+				newerThroughOrdinal,
+				newerOldestTurnOrdinal,
+			)
+		}
+		for index, turn := range page.Turns {
+			if turn.Ordinal <= 0 || turn.Ordinal > page.ThroughOrdinal {
+				return nil, canonicalTimelineResyncErrorf("turn ordinal %d is outside page boundary %d", turn.Ordinal, page.ThroughOrdinal)
 			}
-			if len(out) > 0 && turn.Ordinal <= out[len(out)-1].Ordinal {
+			if index > 0 && turn.Ordinal <= page.Turns[index-1].Ordinal {
 				return nil, canonicalTimelineResyncErrorf("turn ordinals are not strictly increasing")
 			}
-			out = append(out, turn)
 		}
+		out = append(append(make([]flruntime.ThreadTurnSnapshot, 0, len(page.Turns)+len(out)), page.Turns...), out...)
 		if !page.HasMore {
-			return out, nil
+			break
 		}
-		if len(page.Turns) == 0 || page.Turns[len(page.Turns)-1].Ordinal <= afterOrdinal {
+		if len(page.Turns) == 0 || page.BeforeCursor == nil || strings.TrimSpace(page.BeforeCursor.EntryID) == "" {
 			return nil, errors.New("Floret turn pagination did not advance")
 		}
-		afterOrdinal = page.Turns[len(page.Turns)-1].Ordinal
+		if before != nil && page.BeforeCursor.EntryID == before.EntryID {
+			return nil, errors.New("Floret turn pagination cursor did not advance")
+		}
+		newerThroughOrdinal = page.ThroughOrdinal
+		newerOldestTurnOrdinal = page.Turns[0].Ordinal
+		before = page.BeforeCursor
 	}
+	for index, turn := range out {
+		if index > 0 && turn.Ordinal <= out[index-1].Ordinal {
+			return nil, canonicalTimelineResyncErrorf("turn ordinals are not strictly increasing")
+		}
+	}
+	return out, nil
 }
 
 func canonicalTimelineResyncErrorf(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", ErrCanonicalTimelineResyncRequired, fmt.Sprintf(format, args...))
 }
 
-func canonicalUserTimelineMessage(turnID string, entryID string, input string, attachments []flruntime.MessageAttachment, createdAt int64) (json.RawMessage, error) {
+func canonicalUserTimelineMessage(turnID string, entryID string, input string, attachments []flruntime.MessageAttachment, references []flruntime.MessageReference, createdAt int64) (json.RawMessage, error) {
 	turnID = strings.TrimSpace(turnID)
 	entryID = strings.TrimSpace(entryID)
 	if turnID == "" || entryID == "" {
@@ -257,15 +283,49 @@ func canonicalUserTimelineMessage(turnID string, entryID string, input string, a
 	if input = strings.TrimSpace(input); input != "" {
 		blocks = append(blocks, persistedMarkdownBlock{Type: "markdown", Content: input})
 	}
-	if len(blocks) == 0 {
+	publicReferences, err := publicFloretMessageReferences(references)
+	if err != nil {
+		return nil, err
+	}
+	if len(blocks) == 0 && len(publicReferences) == 0 {
 		return nil, errors.New("canonical user message has no content")
 	}
 	message := map[string]any{
 		"id": entryID, "turn_id": turnID, "role": "user", "status": "complete", "timestamp": createdAt,
 		"blocks": blocks,
 	}
+	if len(publicReferences) > 0 {
+		message["references"] = publicReferences
+	}
 	raw, err := json.Marshal(message)
 	return json.RawMessage(raw), err
+}
+
+type publicFloretMessageReference = FlowerMessageReference
+
+func publicFloretMessageReferences(references []flruntime.MessageReference) ([]publicFloretMessageReference, error) {
+	if len(references) == 0 {
+		return nil, nil
+	}
+	out := make([]publicFloretMessageReference, 0, len(references))
+	for index, reference := range references {
+		if err := reference.Validate(); err != nil {
+			return nil, fmt.Errorf("canonical user reference %d: %w", index, err)
+		}
+		text := reference.Text
+		switch reference.Kind {
+		case flruntime.MessageReferenceFile, flruntime.MessageReferenceDirectory:
+			text = ""
+		}
+		out = append(out, publicFloretMessageReference{
+			ReferenceID: reference.ReferenceID,
+			Kind:        string(reference.Kind),
+			Label:       reference.Label,
+			Text:        text,
+			Truncated:   reference.Truncated,
+		})
+	}
+	return out, nil
 }
 
 func (s *Service) floretProjectionMessage(endpointID string, threadID string, turn flruntime.ThreadTurnSnapshot) (json.RawMessage, FlowerTurnProjectionUnavailableReason, error) {

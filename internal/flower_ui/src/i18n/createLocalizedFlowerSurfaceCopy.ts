@@ -36,6 +36,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       reasoningLabel: t(i18n, k('chat.reasoningLabel')),
       noModelSelected: t(i18n, k('chat.noModelSelected')),
       linkedContextLabel: t(i18n, k('chat.linkedContextLabel')),
+			truncatedLabel: t(i18n, 'activityChrome.truncated'),
       permissionSelectorLabel: t(i18n, k('chat.permissionSelectorLabel')),
       permissionSelectorSaving: t(i18n, k('chat.permissionSelectorSaving')),
       permissionSelectorErrorTitle: t(i18n, k('chat.permissionSelectorErrorTitle')),

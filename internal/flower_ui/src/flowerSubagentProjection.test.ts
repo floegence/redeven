@@ -43,6 +43,7 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
     messages: [],
     subagents: [],
     ...overrides,
+    title_status: overrides.title_status ?? 'ready',
   };
 }
 

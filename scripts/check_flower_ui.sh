@@ -30,6 +30,7 @@ main() {
       src/ui/FlowerSurface.desktopModelSource.e2e.test.tsx \
       src/ui/FlowerSurface.navigation.threads.test.tsx \
       src/ui/FlowerSurface.navigation.structuredInput.test.tsx \
+      src/ui/FlowerSurface.canonicalReferences.test.tsx \
       src/ui/flower/FlowerChatContextChips.test.tsx \
       src/ui/flower/FlowerTurnProjectionUnavailable.test.tsx \
       src/ui/flower/activityDisclosure.test.ts \
@@ -50,6 +51,7 @@ main() {
       internal/flower_ui/src/flowerThreadListRefresh.test.ts \
       internal/flower_ui/src/flowerPendingTurns.test.ts \
       internal/flower_ui/src/flowerTerminalOutput.test.ts \
+      internal/flower_ui/src/FlowerSurface.references.test.ts \
       internal/flower_ui/src/runtimeFlowerSurfaceAdapter.test.ts \
       internal/flower_ui/src/filePicker/directoryPickerTree.test.ts \
       internal/flower_ui/src/filePicker/createDirectoryPickerDataSource.test.ts \
@@ -69,6 +71,7 @@ main() {
     ui_pkg_log ""
     ui_pkg_log "Flower UI: Chromium interaction contracts..."
     ui_pkg_run_pnpm run test:browser -- \
+      src/ui/FlowerSurface.canonicalReferences.browser.test.tsx \
       src/ui/FlowerSurface.approvalRefresh.browser.test.tsx \
       src/ui/FlowerSurface.activityDisclosure.browser.test.tsx \
       src/ui/FlowerSurface.setupGuide.browser.test.tsx \

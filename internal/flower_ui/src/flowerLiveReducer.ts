@@ -58,32 +58,7 @@ function mergeMessages(messages: readonly FlowerChatMessage[], message: FlowerCh
 }
 
 function visibleApprovalAction(action: FlowerApprovalAction): boolean {
-  if (action.status === 'pending' && action.state === 'requested') return true;
-  if (action.origin !== 'delegated_subagent') return false;
-  return action.delivery_state === 'delivery_pending'
-    || action.delivery_state === 'delivery_delivered'
-    || action.delivery_state === 'delivery_failed'
-    || action.delivery_state === 'delivery_ack_unknown'
-    || action.delivery_state === 'delivery_unavailable'
-    || action.status === 'unavailable';
-}
-
-function applyApprovalQueueProjection(
-  actions: readonly FlowerApprovalAction[],
-  queue: FlowerApprovalQueue | null | undefined,
-): readonly FlowerApprovalAction[] {
-  const currentActionID = trim(queue?.current_action_id);
-  if (!currentActionID) return actions;
-  return actions.map((action) => {
-    if (action.status !== 'pending' || action.state !== 'requested') return action;
-    const current = action.action_id === currentActionID;
-    return {
-      ...action,
-      surface_role: current ? 'primary_action' : 'locator',
-      can_approve: current,
-      ...(current && action.read_only_reason === 'Queued for approval' ? { read_only_reason: undefined } : {}),
-    };
-  });
+  return action.status === 'pending' && action.state === 'requested';
 }
 
 function pendingApprovalActions(actions: readonly FlowerApprovalAction[] | undefined): readonly FlowerApprovalAction[] {
@@ -121,7 +96,8 @@ function applyThreadPatch(thread: FlowerThreadSnapshot, patch: FlowerLiveThreadP
   return {
     ...thread,
     ...(trim(patch.thread_id) ? { thread_id: trim(patch.thread_id) } : {}),
-    ...(trim(patch.title) ? { title: trim(patch.title) } : {}),
+    ...(patch.title !== undefined ? { title: trim(patch.title) } : {}),
+    ...(patch.title_status !== undefined ? { title_status: patch.title_status } : {}),
     ...(trim(patch.model_id) ? { model_id: trim(patch.model_id) } : {}),
     ...(trim(patch.working_dir) ? { working_dir: trim(patch.working_dir) } : {}),
     ...(Number(patch.pinned_at_ms ?? 0) > 0 ? { pinned_at_ms: Number(patch.pinned_at_ms) } : {}),
@@ -135,9 +111,6 @@ function applyThreadPatch(thread: FlowerThreadSnapshot, patch: FlowerLiveThreadP
     ...(patch.reasoning_capability !== undefined ? { reasoning_capability: patch.reasoning_capability ?? undefined } : {}),
     ...(patch.read_status ? { read_status: patch.read_status } : {}),
     ...(trim(patch.read_only_reason) ? { read_only_reason: trim(patch.read_only_reason) } : {}),
-    ...(trim(patch.owner_kind) ? { owner_kind: trim(patch.owner_kind).toLowerCase() } : {}),
-    ...(trim(patch.owner_id) ? { owner_id: trim(patch.owner_id) } : {}),
-    ...(trim(patch.parent_thread_id) ? { parent_thread_id: trim(patch.parent_thread_id) } : {}),
     ...(patch.subagents !== undefined ? { subagents: [...patch.subagents] } : {}),
     ...(patch.waiting_prompt !== undefined ? { input_request: patch.waiting_prompt ?? null } : {}),
     ...(trim(patch.run_error) ? { error: { message: trim(patch.run_error), ...(trim(patch.run_error_code) ? { code: trim(patch.run_error_code) } : {}) } } : {}),
@@ -447,8 +420,7 @@ function withApprovalAction(thread: FlowerThreadSnapshot, action: FlowerApproval
   if (visibleApprovalAction(action)) {
     next.push(action);
   }
-  const approvalActions = applyApprovalQueueProjection(next, approvalQueue)
-    .filter(visibleApprovalAction)
+  const approvalActions = next.filter(visibleApprovalAction)
     .sort((left, right) => Number(left.queue_order ?? 0) - Number(right.queue_order ?? 0));
   const updated = {
     ...thread,
@@ -457,6 +429,38 @@ function withApprovalAction(thread: FlowerThreadSnapshot, action: FlowerApproval
     status: action.status === 'pending' ? 'waiting_approval' : thread.status,
   };
   return action.status === 'pending' ? clearModelIOForRun(updated, action.run_id) : updated;
+}
+
+function withCanonicalApprovalQueue(
+  thread: FlowerThreadSnapshot,
+  actions: readonly FlowerApprovalAction[],
+  approvalQueue: FlowerApprovalQueue,
+): FlowerThreadSnapshot {
+  const currentQueue = thread.approval_queue;
+  if (currentQueue && (
+    approvalQueue.generation < currentQueue.generation ||
+    approvalQueue.generation === currentQueue.generation && approvalQueue.revision < currentQueue.revision
+  )) {
+    return thread;
+  }
+  const controls = (thread.approval_actions ?? []).filter((action) => action.origin === 'control_confirm' && visibleApprovalAction(action));
+  const canonical = actions.filter((action) => action.origin !== 'control_confirm' && visibleApprovalAction(action));
+  const approvalActions = [...controls, ...canonical]
+    .sort((left, right) => Number(left.queue_order ?? 0) - Number(right.queue_order ?? 0));
+  let next: FlowerThreadSnapshot = {
+    ...thread,
+    approval_actions: approvalActions,
+    approval_queue: approvalQueue,
+  };
+  if (approvalActions.length > 0) {
+    next = { ...next, status: 'waiting_approval' };
+    for (const action of canonical) {
+      next = clearModelIOForRun(next, action.run_id);
+    }
+  } else if (thread.status === 'waiting_approval') {
+    next = { ...next, status: 'running' };
+  }
+  return next;
 }
 
 export function applyFlowerLiveEvent(
@@ -579,6 +583,9 @@ export function applyFlowerLiveEvent(
       if (event.payload.action) {
         next = withApprovalAction(next, event.payload.action, event.payload.approval_queue);
       }
+      break;
+    case 'approval.queue_replaced':
+      next = withCanonicalApprovalQueue(next, event.payload.actions, event.payload.approval_queue);
       break;
     case 'input.requested':
       if (event.payload.request) {

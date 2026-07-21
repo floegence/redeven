@@ -91,7 +91,7 @@ func floretToolRegistryParentRunOptions(r *run, suffix string) fltools.DispatchO
 }
 
 func floretToolRegistryTestEffectDispatcher(r *run) fltools.EffectDispatcher {
-	return func(ctx context.Context, req fltools.EffectDispatchRequest, invoke func() fltools.Result) fltools.Result {
+	return func(ctx context.Context, req fltools.EffectDispatchRequest, invoke func(context.Context) fltools.Result) fltools.Result {
 		if r == nil || r.effectAuthorizations == nil {
 			return fltools.Result{CallID: req.CallID, Name: req.Name, IsError: true, DispatchErr: errors.New("test effect authorization unavailable")}
 		}
@@ -106,8 +106,8 @@ func floretToolRegistryTestEffectDispatcher(r *run) fltools.EffectDispatcher {
 			Labels: req.Labels, HostContext: req.HostContext, Resources: req.Resources, Effects: req.Effects,
 			Permission: req.Permission, ReadOnly: req.ReadOnly, Destructive: req.Destructive, OpenWorld: req.OpenWorld,
 			LeaseOwnerID: "test_lease:" + strings.TrimSpace(req.RunID), LeaseGeneration: 1, ObservedHeartbeat: 1,
-		}, func(flruntime.EffectAuthorizationProof) error {
-			result = invoke()
+		}, func(executionCtx context.Context, _ flruntime.EffectAuthorizationProof) error {
+			result = invoke(executionCtx)
 			return result.DispatchErr
 		})
 		if err != nil {
@@ -1850,7 +1850,7 @@ func TestFloretToolRegistryUsesExplicitChildHostIdentityForSubagentTools(t *test
 	}
 	childProcesses[0].mu.Lock()
 	target := childProcesses[0].settlementTarget
-	boundOwner := childProcesses[0].settlementOwner
+	boundOwner := childProcesses[0].activeSettlementOwner
 	childProcesses[0].mu.Unlock()
 	if target.ThreadID != "thread_child" || target.RunID != "floret_exec_child_identity" || target.TurnID != "turn_child" || target.ToolCallID != "call_child_pwd" {
 		t.Fatalf("child settlement target=%#v", target)
@@ -1860,7 +1860,7 @@ func TestFloretToolRegistryUsesExplicitChildHostIdentityForSubagentTools(t *test
 	}
 }
 
-func TestFloretToolRegistryDeniesNoUserInteractionApprovalWithoutDelegation(t *testing.T) {
+func TestFloretToolRegistryDoesNotCreateRedevenApprovalForSubagentEffect(t *testing.T) {
 	t.Parallel()
 
 	store, err := threadstore.Open(filepath.Join(t.TempDir(), "threads.sqlite"))
@@ -1897,7 +1897,6 @@ func TestFloretToolRegistryDeniesNoUserInteractionApprovalWithoutDelegation(t *t
 	child.settlementThreadID = "thread_worker"
 	child.settlementRunID = "floret_exec_worker_no_grant"
 	child.settlementTurnID = "turn_worker"
-	child.allowDelegatedApproval = false
 	toolDef := ToolDef{
 		Name: "file.write",
 		InputSchema: json.RawMessage(
@@ -1937,8 +1936,13 @@ func TestFloretToolRegistryDeniesNoUserInteractionApprovalWithoutDelegation(t *t
 		},
 		EffectDispatcher: floretToolRegistryTestEffectDispatcher(child),
 	})
-	if !result.IsError || !strings.Contains(strings.ToLower(floretToolResultErrorText(result)), "permission denied") {
-		t.Fatalf("result=%#v error=%q, want no-user-interaction approval denial", result, floretToolResultErrorText(result))
+	if result.IsError {
+		t.Fatalf("result=%#v error=%q, want post-Floret effect dispatch to use the canonical decision", result, floretToolResultErrorText(result))
+	}
+	child.mu.Lock()
+	defer child.mu.Unlock()
+	if len(child.toolApprovals) != 0 {
+		t.Fatalf("Redeven created an approval shadow for a Floret-authorized effect: %#v", child.toolApprovals)
 	}
 }
 
@@ -2053,7 +2057,7 @@ func TestFloretToolApprovalRejectsMissingPermissionSnapshot(t *testing.T) {
 		ToolName: "terminal.exec", ArgumentHash: floretEffectArgumentHash(`{"command":"pwd"}`),
 		Permission: fltools.PermissionSpec{Mode: fltools.PermissionAllow}, LeaseOwnerID: "lease_missing_snapshot", LeaseGeneration: 1,
 		HostContext: map[string]string{floretToolHostContextAuthorityThreadIDKey: r.threadID},
-	}, func(flruntime.EffectAuthorizationProof) (flruntime.EffectDispatchResult, error) {
+	}, func(context.Context, flruntime.EffectAuthorizationProof) (flruntime.EffectDispatchResult, error) {
 		t.Fatal("effect handler must not run without a permission snapshot")
 		return flruntime.EffectDispatchResult{}, nil
 	})

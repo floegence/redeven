@@ -51,6 +51,45 @@ VALUES(1, 'ai_threadstore_product_v2', 2, 2);
 	return db
 }
 
+func createProductV3DatabaseForTest(t *testing.T, path string) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`
+CREATE TABLE __redeven_db_meta (
+  singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+  db_kind TEXT NOT NULL,
+  created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  last_migrated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  last_migrated_from_version INTEGER NOT NULL DEFAULT 0,
+  last_migrated_to_version INTEGER NOT NULL DEFAULT 0
+);
+INSERT INTO __redeven_db_meta(singleton, db_kind, last_migrated_from_version, last_migrated_to_version)
+VALUES(1, 'ai_threadstore_product_v2', 3, 3);
+`); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if err := createThreadstoreSchemaV3(tx); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`PRAGMA user_version=3`); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	return db
+}
+
 func TestFreshThreadstoreCreatesCurrentSchemaDirectly(t *testing.T) {
 	t.Parallel()
 
@@ -67,13 +106,136 @@ func TestFreshThreadstoreCreatesCurrentSchemaDirectly(t *testing.T) {
 	if version != threadstoreCurrentSchemaVersion {
 		t.Fatalf("user_version=%d, want %d", version, threadstoreCurrentSchemaVersion)
 	}
-	for _, table := range []string{"ai_threads", "product_v2_ai_threads", "product_v2_ai_upload_refs", "product_v2_ai_child_permission_snapshots"} {
+	for _, table := range []string{
+		"ai_threads",
+		"product_v2_ai_threads",
+		"product_v2_ai_upload_refs",
+		"product_v2_ai_child_permission_snapshots",
+		"ai_flower_transfers",
+		"ai_flower_handoffs",
+	} {
 		if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = ?`, table) != 0 {
 			t.Fatalf("fresh schema retained legacy table %q", table)
 		}
 	}
 	if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM pragma_table_info('ai_child_permission_snapshots') WHERE name = 'subagent_id'`) != 0 {
 		t.Fatal("fresh schema retained subagent_id")
+	}
+}
+
+func TestThreadstoreV3MigrationKeepsOnlyProductRouting(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "threads.sqlite")
+	raw := createProductV3DatabaseForTest(t, path)
+	if _, err := raw.Exec(`
+INSERT INTO ai_thread_settings(thread_id, endpoint_id, permission_type, settings_created_at_unix_ms, settings_updated_at_unix_ms)
+VALUES
+  ('thread_routed', 'env_route', 'approval_required', 1, 1),
+  ('thread_shadow_only', 'env_route', 'approval_required', 1, 1);
+INSERT INTO ai_flower_thread_metadata(
+  endpoint_id, thread_id, owner_kind, owner_id, parent_thread_id, parent_run_id,
+  context_json, action_json, updated_at_unix_ms, home_runtime_id, home_runtime_kind,
+  origin_env_public_id, primary_target_id, active_target_ids_json
+) VALUES
+  ('env_route', 'thread_routed', 'handoff', 'handoff_1', 'parent', 'run_parent',
+   '{"agent":"shadow"}', '{"action":"shadow"}', 10, 'runtime_1', 'local_environment',
+   'env_public', 'target_primary', '["target_primary","target_secondary"]'),
+  ('env_route', 'thread_shadow_only', 'subagent', 'child_owner', 'parent', 'run_parent',
+   '{"agent":"shadow"}', '{"action":"shadow"}', 11, '', '', '', '', '[]');
+`); err != nil {
+		t.Fatal(err)
+	}
+	forkRequest := ForkThreadRequest{
+		OperationID: "fork_v3_routing", EndpointID: "env_route", SourceThreadID: "thread_routed",
+		DestinationThreadID: "thread_routed_fork", CreatedAtUnixMs: 12,
+	}
+	requestFingerprint, err := forkRequestFingerprint(forkRequest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacySnapshot := productV3ForkSnapshot{
+		SchemaVersion: legacyForkSnapshotSchemaVersion,
+		Request: forkSnapshotRequest{
+			EndpointID: "env_route", SourceThreadID: "thread_routed", DestinationThreadID: "thread_routed_fork",
+			CreatedAtUnixMs: 12,
+		},
+		SourceThread: ThreadSettings{
+			ThreadID: "thread_routed", EndpointID: "env_route", PermissionType: "approval_required",
+			SettingsCreatedAtUnixMs: 1, SettingsUpdatedAtUnixMs: 1,
+		},
+		FlowerMetadata: &legacyFlowerMetadata{
+			EndpointID: "env_route", ThreadID: "thread_routed", OwnerKind: "handoff", OwnerID: "owner_shadow",
+			ParentThreadID: "parent_shadow", ParentRunID: "run_shadow", ContextJSON: `{"shadow":true}`,
+			ActionJSON: `{"shadow":true}`, UpdatedAtUnixMs: 10, HomeRuntimeID: "runtime_1",
+			HomeRuntimeKind: "local_environment", OriginEnvPublicID: "env_public",
+			PrimaryTargetID: "target_primary", ActiveTargetIDsJSON: `["target_primary","target_secondary"]`,
+		},
+	}
+	legacyPayload, err := json.Marshal(legacySnapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := raw.Exec(`
+INSERT INTO ai_thread_fork_operations(
+  operation_id, endpoint_id, source_thread_id, destination_thread_id,
+  request_fingerprint, status, snapshot_schema_version, snapshot_json,
+  snapshot_fingerprint, created_at_unix_ms, updated_at_unix_ms
+) VALUES(?, ?, ?, ?, ?, 'pending', ?, ?, 'legacy_fingerprint', ?, ?)
+`, forkRequest.OperationID, forkRequest.EndpointID, forkRequest.SourceThreadID, forkRequest.DestinationThreadID,
+		requestFingerprint, legacyForkSnapshotSchemaVersion, string(legacyPayload), forkRequest.CreatedAtUnixMs, forkRequest.CreatedAtUnixMs); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = 'ai_flower_thread_metadata'`) != 0 {
+		t.Fatal("migration retained the Agent metadata table")
+	}
+	for _, table := range []string{"ai_flower_transfers", "ai_flower_handoffs"} {
+		if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM sqlite_master WHERE type = 'table' AND name = ?`, table) != 0 {
+			t.Fatalf("migration retained dead Flower capability table %q", table)
+		}
+	}
+	for _, column := range []string{"owner_kind", "owner_id", "parent_thread_id", "parent_run_id", "context_json", "action_json"} {
+		if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM pragma_table_info('ai_flower_thread_routing') WHERE name = ?`, column) != 0 {
+			t.Fatalf("routing table retained Agent shadow column %q", column)
+		}
+	}
+	routing, err := store.GetFlowerThreadRouting(context.Background(), "env_route", "thread_routed")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if routing == nil || routing.HomeRuntimeID != "runtime_1" || routing.PrimaryTargetID != "target_primary" || routing.ActiveTargetIDsJSON != `["target_primary","target_secondary"]` {
+		t.Fatalf("migrated routing=%#v", routing)
+	}
+	shadowOnly, err := store.GetFlowerThreadRouting(context.Background(), "env_route", "thread_shadow_only")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if shadowOnly != nil {
+		t.Fatalf("shadow-only row survived migration: %#v", shadowOnly)
+	}
+	operation, err := store.GetForkOperation(context.Background(), forkRequest.OperationID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if operation.SnapshotSchemaVersion != ForkSnapshotSchemaVersion || strings.Contains(operation.SnapshotJSON, "flower_metadata") || strings.Contains(operation.SnapshotJSON, "owner_shadow") || strings.Contains(operation.SnapshotJSON, "parent_shadow") {
+		t.Fatalf("legacy fork snapshot was not reduced to product routing: %#v", operation)
+	}
+	if _, err := store.CommitForkOperation(context.Background(), CommitForkOperationRequest{OperationID: forkRequest.OperationID, UpdatedAtUnixMs: 20}); err != nil {
+		t.Fatal(err)
+	}
+	forkRouting, err := store.GetFlowerThreadRouting(context.Background(), "env_route", "thread_routed_fork")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if forkRouting == nil || forkRouting.PrimaryTargetID != "target_primary" || forkRouting.HomeRuntimeID != "runtime_1" {
+		t.Fatalf("migrated fork routing=%#v", forkRouting)
 	}
 }
 
@@ -230,7 +392,7 @@ func TestThreadstoreMigratesPendingV2ForkSnapshotToHostSettingsContract(t *testi
 	path := filepath.Join(t.TempDir(), "threads.sqlite")
 	raw := createProductV2DatabaseForTest(t, path)
 	legacySnapshot := productV2ForkSnapshot{
-		SchemaVersion: ForkSnapshotSchemaVersion,
+		SchemaVersion: legacyForkSnapshotSchemaVersion,
 		Request: forkSnapshotRequest{
 			EndpointID: "env_fork_migration", SourceThreadID: "source_fork_migration",
 			DestinationThreadID: "destination_fork_migration", Title: "Canonical source title",
@@ -299,7 +461,7 @@ INSERT INTO ai_thread_fork_operations(
 ) VALUES(?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)
 `,
 		"fork_migration", "env_fork_migration", "source_fork_migration", "destination_fork_migration",
-		requestFingerprint, ForkSnapshotSchemaVersion, string(legacyJSON), 200, 200,
+		requestFingerprint, legacyForkSnapshotSchemaVersion, string(legacyJSON), 200, 200,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -311,7 +473,7 @@ INSERT INTO ai_thread_fork_operations(
 ) VALUES(?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?)
 `,
 		"fork_migration_explicit", "env_fork_migration", "source_fork_migration", "destination_fork_migration_explicit",
-		explicitRequestFingerprint, ForkSnapshotSchemaVersion, string(explicitJSON), 200, 200,
+		explicitRequestFingerprint, legacyForkSnapshotSchemaVersion, string(explicitJSON), 200, 200,
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -640,7 +802,7 @@ PRAGMA user_version=40;
 	}
 	_ = db.Close()
 	_, err = Open(path)
-	if err == nil || !strings.Contains(err.Error(), "only") || !strings.Contains(err.Error(), "v2 and v3") {
+	if err == nil || !strings.Contains(err.Error(), "only") || !strings.Contains(err.Error(), "v2, v3, and v4") {
 		t.Fatalf("Open error=%v", err)
 	}
 	db, err = sql.Open("sqlite", path)

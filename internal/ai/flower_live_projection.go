@@ -8,7 +8,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -21,17 +20,15 @@ import (
 const flowerLiveEventBufferLimit = 5000
 
 type flowerLiveThreadStream struct {
-	NextSeq           int64
-	NextApprovalOrder int64
-	Events            []FlowerLiveEvent
-	State             FlowerLiveMaterializedState
-	ApprovalIndex     map[string]FlowerApprovalState
+	NextSeq       int64
+	Events        []FlowerLiveEvent
+	State         FlowerLiveMaterializedState
+	ApprovalIndex map[string]FlowerApprovalState
 }
 
 func newFlowerLiveThreadStream() *flowerLiveThreadStream {
 	return &flowerLiveThreadStream{
-		NextSeq:           1,
-		NextApprovalOrder: 1,
+		NextSeq: 1,
 		State: FlowerLiveMaterializedState{
 			Messages:            map[string]FlowerLiveMessageDraft{},
 			Runs:                map[string]FlowerLiveRunState{},
@@ -49,104 +46,6 @@ func cloneFlowerApprovalQueue(in *FlowerApprovalQueue) *FlowerApprovalQueue {
 	}
 	out := *in
 	return &out
-}
-
-func (s *Service) threadHasPendingApprovals(endpointID string, threadID string) bool {
-	if s == nil {
-		return false
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	stream := s.flowerLiveByThread[runThreadKey(strings.TrimSpace(endpointID), strings.TrimSpace(threadID))]
-	return stream != nil && stream.State.ApprovalQueue != nil && stream.State.ApprovalQueue.UnresolvedCount > 0
-}
-
-func (s *Service) promoteCurrentApprovalWaiterLocked(queue *FlowerApprovalQueue, actions map[string]FlowerApprovalAction) {
-	if s == nil || queue == nil || strings.TrimSpace(queue.CurrentActionID) == "" {
-		return
-	}
-	action := actions[strings.TrimSpace(queue.CurrentActionID)]
-	if action.ActionID == "" {
-		return
-	}
-	if action.Origin == FlowerApprovalOriginDelegatedSubagent {
-		if handle := s.delegatedApprovals[action.ActionID]; handle != nil {
-			handle.promote()
-		}
-		return
-	}
-	if r := s.runs[strings.TrimSpace(action.RunID)]; r != nil {
-		r.promoteToolApproval(action.ToolID)
-	}
-}
-
-func (s *Service) validateApprovalQueueSubmissionLocked(endpointID string, threadID string, actionID string, generation int64, revision int64) error {
-	stream := s.flowerLiveByThread[runThreadKey(strings.TrimSpace(endpointID), strings.TrimSpace(threadID))]
-	if stream == nil || stream.State.ApprovalQueue == nil {
-		return approvalConflict("approval queue is no longer available")
-	}
-	queue := stream.State.ApprovalQueue
-	if generation <= 0 || revision <= 0 || queue.Generation != generation || queue.Revision != revision {
-		return approvalConflict("approval queue changed")
-	}
-	if strings.TrimSpace(queue.CurrentActionID) != strings.TrimSpace(actionID) {
-		return approvalConflict("approval action is not the current queue item")
-	}
-	return nil
-}
-
-func (s *Service) cancelThreadApprovalQueueLocked(endpointID string, threadID string, reason string) []FlowerApprovalAction {
-	stream := s.flowerLiveByThread[runThreadKey(strings.TrimSpace(endpointID), strings.TrimSpace(threadID))]
-	if stream == nil || stream.State.ApprovalQueue == nil || stream.State.ApprovalQueue.UnresolvedCount == 0 {
-		return nil
-	}
-	now := time.Now().UnixMilli()
-	delegated := make([]FlowerApprovalAction, 0)
-	actionIDs := make([]string, 0, stream.State.ApprovalQueue.UnresolvedCount)
-	for actionID, action := range stream.State.ApprovalActions {
-		if action.Status == FlowerApprovalStatusPending && action.State == FlowerApprovalStateRequested {
-			actionIDs = append(actionIDs, actionID)
-		}
-	}
-	sort.Slice(actionIDs, func(i, j int) bool {
-		return stream.State.ApprovalActions[actionIDs[i]].QueueOrder < stream.State.ApprovalActions[actionIDs[j]].QueueOrder
-	})
-	for _, actionID := range actionIDs {
-		action := stream.State.ApprovalActions[actionID]
-		if action.Origin == FlowerApprovalOriginDelegatedSubagent {
-			if handle := s.delegatedApprovals[actionID]; handle != nil {
-				handle.cancel()
-				delete(s.delegatedApprovals, actionID)
-			}
-			action.DeliveryState = FlowerApprovalDeliveryUnavailable
-			action.Version++
-		}
-		action.State = FlowerApprovalStateCanceled
-		action.Status = FlowerApprovalStatusResolved
-		action.CanApprove = false
-		action.ResolvedAtMs = now
-		action.ReadOnlyReason = strings.TrimSpace(reason)
-		if action.Origin == FlowerApprovalOriginDelegatedSubagent {
-			delegated = append(delegated, action)
-		}
-		event := FlowerLiveEvent{
-			SchemaVersion: FlowerLiveSchemaVersion,
-			EndpointID:    endpointID,
-			ThreadID:      threadID,
-			RunID:         action.RunID,
-			TurnID:        action.TurnID,
-			AtUnixMs:      now,
-			Kind:          FlowerLiveApprovalResolved,
-			Payload:       mustFlowerPayload(FlowerLiveApprovalPayload{Action: action}),
-		}
-		event = appendFlowerLiveEventLocked(stream, event)
-		applyFlowerLiveEventToMaterializedState(&stream.State, stream.ApprovalIndex, event)
-	}
-	stream.State.ApprovalQueue.CurrentActionID = ""
-	stream.State.ApprovalQueue.CurrentPosition = 0
-	stream.State.ApprovalQueue.UnresolvedCount = 0
-	normalizeFlowerApprovalQueueActions(&stream.State)
-	return delegated
 }
 
 func (s *Service) GetFlowerThreadLiveBootstrap(ctx context.Context, meta *session.Meta, threadID string) (*FlowerLiveBootstrapResponse, error) {
@@ -195,8 +94,6 @@ func (s *Service) GetFlowerThreadLiveBootstrap(ctx context.Context, meta *sessio
 		return nil, err
 	}
 	state = mergeFlowerLiveCanonicalContextState(state, canonicalContextState)
-	normalizeFlowerApprovalQueueActions(&state)
-
 	timeline, err := s.buildFlowerTimelineProjection(ctx, endpointID, threadID, state)
 	if err != nil {
 		return nil, err
@@ -223,22 +120,6 @@ func (s *Service) GetFlowerThreadLiveBootstrap(ctx context.Context, meta *sessio
 		LiveState:        state,
 		GeneratedAtMs:    time.Now().UnixMilli(),
 	}, nil
-}
-
-func visibleResolvedDelegatedApprovalAction(action FlowerApprovalAction) bool {
-	if action.Origin != FlowerApprovalOriginDelegatedSubagent {
-		return false
-	}
-	switch action.DeliveryState {
-	case FlowerApprovalDeliveryPending,
-		FlowerApprovalDeliveryDelivered,
-		FlowerApprovalDeliveryFailed,
-		FlowerApprovalDeliveryAckUnknown,
-		FlowerApprovalDeliveryUnavailable:
-		return true
-	default:
-		return false
-	}
 }
 
 func (s *Service) ListFlowerThreadLiveEvents(ctx context.Context, meta *session.Meta, threadID string, afterSeq int64, limit int) (*FlowerLiveEventsResponse, error) {
@@ -700,14 +581,13 @@ func activeFlowerCursorMessageID(state FlowerLiveMaterializedState) string {
 
 func flowerTimelineMessageFromRaw(threadID string, canonicalTurnID string, runID string, messageID string, raw json.RawMessage) (FlowerTimelineMessage, bool, error) {
 	var record struct {
-		ID                 string            `json:"id"`
-		TurnID             string            `json:"turn_id"`
-		Role               string            `json:"role"`
-		Status             string            `json:"status"`
-		Timestamp          int64             `json:"timestamp"`
-		Blocks             []json.RawMessage `json:"blocks"`
-		ContextAction      any               `json:"contextAction"`
-		ContextActionSnake any               `json:"context_action"`
+		ID         string            `json:"id"`
+		TurnID     string            `json:"turn_id"`
+		Role       string            `json:"role"`
+		Status     string            `json:"status"`
+		Timestamp  int64             `json:"timestamp"`
+		Blocks     []json.RawMessage `json:"blocks"`
+		References json.RawMessage   `json:"references"`
 	}
 	if err := json.Unmarshal(raw, &record); err != nil {
 		return FlowerTimelineMessage{}, false, err
@@ -740,6 +620,10 @@ func flowerTimelineMessageFromRaw(threadID string, canonicalTurnID string, runID
 	if record.Timestamp <= 0 {
 		return FlowerTimelineMessage{}, false, errors.New("canonical timeline message has invalid timestamp")
 	}
+	references, err := decodeFlowerTimelineMessageReferences(record.References, role)
+	if err != nil {
+		return FlowerTimelineMessage{}, false, err
+	}
 	blocks := make([]any, 0, len(record.Blocks))
 	for index, block := range record.Blocks {
 		var value any
@@ -754,24 +638,73 @@ func flowerTimelineMessageFromRaw(threadID string, canonicalTurnID string, runID
 		}
 		blocks = append(blocks, value)
 	}
-	contextAction := record.ContextAction
-	if contextAction == nil {
-		contextAction = record.ContextActionSnake
-	}
 	return FlowerTimelineMessage{
-		MessageID:     id,
-		ThreadID:      threadID,
-		TurnID:        canonicalTurnID,
-		RunID:         runID,
-		Role:          role,
-		Content:       flowerTimelineTextFromBlocks(blocks),
-		Status:        status,
-		CreatedAtMs:   record.Timestamp,
-		Blocks:        blocks,
-		ContextAction: contextAction,
-		Live:          false,
-		ActiveCursor:  false,
+		MessageID:    id,
+		ThreadID:     threadID,
+		TurnID:       canonicalTurnID,
+		RunID:        runID,
+		Role:         role,
+		Content:      flowerTimelineTextFromBlocks(blocks),
+		Status:       status,
+		CreatedAtMs:  record.Timestamp,
+		Blocks:       blocks,
+		References:   references,
+		Live:         false,
+		ActiveCursor: false,
 	}, true, nil
+}
+
+func decodeFlowerTimelineMessageReferences(raw json.RawMessage, role string) ([]FlowerMessageReference, error) {
+	if len(raw) == 0 || string(raw) == "null" {
+		return nil, nil
+	}
+	if role != "user" {
+		return nil, errors.New("canonical timeline message references require the user role")
+	}
+	var items []json.RawMessage
+	if err := json.Unmarshal(raw, &items); err != nil {
+		return nil, errors.New("canonical timeline message references must be an array")
+	}
+	out := make([]FlowerMessageReference, 0, len(items))
+	seen := make(map[string]struct{}, len(items))
+	for index, item := range items {
+		var fields map[string]json.RawMessage
+		if err := json.Unmarshal(item, &fields); err != nil || fields == nil {
+			return nil, fmt.Errorf("canonical timeline message reference %d must be an object", index)
+		}
+		for field := range fields {
+			switch field {
+			case "reference_id", "kind", "label", "text", "truncated":
+			default:
+				return nil, fmt.Errorf("canonical timeline message reference %d contains forbidden field %q", index, field)
+			}
+		}
+		var reference FlowerMessageReference
+		if err := json.Unmarshal(item, &reference); err != nil {
+			return nil, fmt.Errorf("canonical timeline message reference %d is invalid: %w", index, err)
+		}
+		reference.ReferenceID = strings.TrimSpace(reference.ReferenceID)
+		reference.Kind = strings.TrimSpace(reference.Kind)
+		reference.Label = strings.TrimSpace(reference.Label)
+		if reference.ReferenceID == "" || reference.Label == "" {
+			return nil, fmt.Errorf("canonical timeline message reference %d has incomplete identity", index)
+		}
+		if _, exists := seen[reference.ReferenceID]; exists {
+			return nil, fmt.Errorf("canonical timeline message reference %q is duplicated", reference.ReferenceID)
+		}
+		switch reference.Kind {
+		case string(flruntime.MessageReferenceFile), string(flruntime.MessageReferenceDirectory):
+			if _, textPresent := fields["text"]; textPresent {
+				return nil, fmt.Errorf("canonical timeline message reference %q exposes host-only path text", reference.ReferenceID)
+			}
+		case string(flruntime.MessageReferenceText), string(flruntime.MessageReferenceTerminal), string(flruntime.MessageReferenceProcess):
+		default:
+			return nil, fmt.Errorf("canonical timeline message reference %q has invalid kind", reference.ReferenceID)
+		}
+		seen[reference.ReferenceID] = struct{}{}
+		out = append(out, reference)
+	}
+	return out, nil
 }
 
 func flowerTimelineTextFromBlocks(blocks []any) string {
@@ -876,99 +809,126 @@ func (s *Service) SubmitFlowerApproval(meta *session.Meta, req SubmitFlowerAppro
 	actionID := strings.TrimSpace(req.ActionID)
 	threadID := strings.TrimSpace(req.ThreadID)
 	endpointID := strings.TrimSpace(meta.EndpointID)
-	if endpointID == "" || runID == "" || toolID == "" || actionID == "" || threadID == "" || req.ExpectedSeq <= 0 || req.Revision <= 0 || req.Version <= 0 || req.SurfaceEpoch <= 0 {
-		if req.Origin == FlowerApprovalOriginDelegatedSubagent || req.DelegatedRef != nil {
-			return s.submitDelegatedFlowerApproval(meta, req)
-		}
+	if endpointID == "" || runID == "" || toolID == "" || actionID == "" || threadID == "" {
 		return nil, errors.New("invalid request")
 	}
 
 	s.mu.Lock()
-	r := s.runs[runID]
-	cursor := s.flowerLiveCursorLocked(endpointID, threadID)
-	queueErr := s.validateApprovalQueueSubmissionLocked(endpointID, threadID, actionID, req.QueueGeneration, req.QueueRevision)
-	var liveAction FlowerApprovalAction
-	if stream := s.flowerLiveByThread[runThreadKey(endpointID, threadID)]; stream != nil && stream.State.ApprovalActions != nil {
-		liveAction = stream.State.ApprovalActions[actionID]
-	}
+	requestedRun := s.runs[runID]
+	authorityRun := s.runs[strings.TrimSpace(s.activeRunByTh[runThreadKey(endpointID, threadID)])]
 	s.mu.Unlock()
-	if queueErr != nil {
-		return nil, queueErr
+	if req.Origin == FlowerApprovalOriginControlConfirm {
+		if !flowerApprovalRunOwnedBySession(requestedRun, endpointID, threadID, meta.UserPublicID) {
+			return nil, errors.New("run not found")
+		}
+		liveAction, ok := requestedRun.snapshotControlConfirmationApproval(toolID)
+		if !ok {
+			return nil, approvalConflict("approval is no longer pending")
+		}
+		return s.submitControlConfirmationApproval(requestedRun, endpointID, threadID, runID, toolID, actionID, liveAction, req)
 	}
-	if req.Origin == FlowerApprovalOriginDelegatedSubagent || liveAction.Origin == FlowerApprovalOriginDelegatedSubagent || req.DelegatedRef != nil {
-		return s.submitDelegatedFlowerApproval(meta, req)
+	if req.Origin != FlowerApprovalOriginMainTool && req.Origin != FlowerApprovalOriginDelegatedSubagent {
+		return nil, errors.New("invalid approval origin")
 	}
-	if r == nil || strings.TrimSpace(r.endpointID) != endpointID || strings.TrimSpace(r.threadID) != threadID || r.isDetached() {
+	if !flowerApprovalRunOwnedBySession(authorityRun, endpointID, threadID, meta.UserPublicID) {
 		return nil, errors.New("run not found")
 	}
-	if strings.TrimSpace(r.userPublicID) != strings.TrimSpace(meta.UserPublicID) {
-		return nil, errors.New("run not found")
+	if req.QueueGeneration <= 0 || req.QueueRevision <= 0 || req.Revision <= 0 {
+		return nil, errors.New("invalid request")
 	}
-	if req.ExpectedSeq > cursor {
-		return nil, approvalConflict("approval cursor changed")
+	decisionID := strings.TrimSpace(req.IdempotencyKey)
+	if decisionID == "" {
+		return nil, errors.New("approval idempotency key is required")
 	}
-	if liveAction.Origin == FlowerApprovalOriginControlConfirm || req.Origin == FlowerApprovalOriginControlConfirm {
-		return s.submitControlConfirmationApproval(r, endpointID, threadID, runID, toolID, actionID, liveAction, req)
-	}
-
-	pending, ok, err := r.pendingFloretApproval(context.Background(), toolID)
+	queue, pending, ok, err := authorityRun.currentFloretApproval(context.Background(), actionID, runID, toolID)
 	if err != nil {
 		return nil, err
 	}
 	if !ok {
 		return nil, approvalConflict("approval is no longer pending")
 	}
-	approval, err := r.flowerApprovalActionFromFloretPending(pending)
+	approval, err := authorityRun.flowerApprovalActionFromFloretRecord(pending, queue)
 	if err != nil {
 		return nil, err
 	}
 	if approval.ActionID != actionID {
 		return nil, approvalConflict("approval action changed")
 	}
-	if liveAction.ActionID == "" || liveAction.RunID != runID || liveAction.ToolID != toolID {
+	if approval.RunID != runID || approval.ToolID != toolID || approval.Origin != req.Origin {
 		return nil, approvalConflict("approval action changed")
 	}
-	if liveAction.Status != FlowerApprovalStatusPending || liveAction.State != FlowerApprovalStateRequested {
-		return nil, approvalConflict("approval is no longer pending")
-	}
-	if !liveAction.CanApprove {
-		return nil, approvalConflict(firstNonEmptyString(liveAction.ReadOnlyReason, "approval is not available"))
-	}
-	if liveAction.Revision != req.Revision || liveAction.ExpectedSeq != req.ExpectedSeq {
+	if approval.Revision != req.Revision {
 		return nil, approvalConflict("approval revision changed")
 	}
-	if liveAction.Version != req.Version || liveAction.SurfaceEpoch != req.SurfaceEpoch {
-		return nil, approvalConflict("approval version changed")
-	}
-	if approval.Revision != liveAction.Revision || approval.SurfaceEpoch != liveAction.SurfaceEpoch {
+	if queue.Generation != req.QueueGeneration || queue.Revision != req.QueueRevision {
 		return nil, approvalConflict("approval runtime state changed")
 	}
 	if !approval.CanApprove {
 		return nil, approvalConflict(firstNonEmptyString(approval.ReadOnlyReason, "approval is not available"))
 	}
-	if err := r.approveTool(toolID, req.Approved); err != nil {
+	decision := flruntime.ApprovalDecisionReject
+	if req.Approved {
+		decision = flruntime.ApprovalDecisionApprove
+	}
+	result, err := authorityRun.activeFloretHost().ResolveApproval(context.Background(), flruntime.ResolveApprovalRequest{
+		DecisionID: decisionID, ExpectedRootThreadID: queue.RootThreadID,
+		ExpectedGeneration: queue.Generation, ExpectedRevision: queue.Revision,
+		ExpectedCurrent: flruntime.ApprovalIdentity{
+			ApprovalID: pending.ApprovalID, ThreadID: pending.ThreadID, TurnID: pending.TurnID, RunID: pending.RunID,
+			ToolCallID: pending.ToolCallID, EffectAttemptID: pending.EffectAttemptID,
+		},
+		ExpectedApprovalRevision: pending.Revision,
+		Decision:                 decision,
+	})
+	if err != nil {
 		return nil, normalizeApprovalDecisionError(err, "approval decision was already resolved")
 	}
-
-	state := FlowerApprovalStateRejected
-	if req.Approved {
-		state = FlowerApprovalStateApproved
+	if err := result.Validate(); err != nil {
+		return nil, fmt.Errorf("invalid Floret approval resolution: %w", err)
 	}
-	approval = liveAction
-	approval.State = state
-	approval.Status = FlowerApprovalStatusResolved
-	approval.CanApprove = false
-	approval.ResolvedAtMs = time.Now().UnixMilli()
-	resolved := s.appendFlowerLiveEvent(FlowerLiveEvent{
+	resolved, err := s.publishFloretApprovalResult(endpointID, threadID, authorityRun, result)
+	if err != nil {
+		return nil, err
+	}
+	return &SubmitFlowerApprovalResponse{OK: true, CurrentCursor: resolved}, nil
+}
+
+func flowerApprovalRunOwnedBySession(r *run, endpointID string, threadID string, userPublicID string) bool {
+	return r != nil && strings.TrimSpace(r.endpointID) == strings.TrimSpace(endpointID) &&
+		strings.TrimSpace(r.threadID) == strings.TrimSpace(threadID) && !r.isDetached() &&
+		strings.TrimSpace(r.userPublicID) == strings.TrimSpace(userPublicID)
+}
+
+func (s *Service) publishFloretApprovalResult(endpointID string, threadID string, r *run, result flruntime.ResolveApprovalResult) (int64, error) {
+	if s == nil || r == nil {
+		return 0, errors.New("approval projection is unavailable")
+	}
+	if err := result.Validate(); err != nil {
+		return 0, fmt.Errorf("invalid Floret approval resolution: %w", err)
+	}
+	actions, err := r.flowerApprovalActionsFromFloretQueue(result.Queue)
+	if err != nil {
+		return 0, err
+	}
+	queue, err := flowerApprovalQueueFromFloret(result.Queue, actions)
+	if err != nil {
+		return 0, err
+	}
+	event := s.appendFlowerLiveEvent(FlowerLiveEvent{
 		EndpointID: endpointID,
 		ThreadID:   threadID,
-		RunID:      runID,
-		TurnID:     approval.TurnID,
-		Kind:       FlowerLiveApprovalResolved,
-		Payload:    mustFlowerPayload(FlowerLiveApprovalPayload{Action: approval}),
+		RunID:      strings.TrimSpace(r.id),
+		TurnID:     strings.TrimSpace(r.turnID),
+		Kind:       FlowerLiveApprovalQueueReplaced,
+		Payload: mustFlowerPayload(FlowerLiveApprovalQueuePayload{
+			Actions:       actions,
+			ApprovalQueue: *queue,
+		}),
 	})
-	r.publishRunningAfterApprovalIfNoPending(approval.ActionID)
-	return &SubmitFlowerApprovalResponse{OK: true, CurrentCursor: resolved.Seq}, nil
+	if !r.isDetached() {
+		r.publishThreadApprovalStateForCanonicalQueue(actions)
+	}
+	return event.Seq, nil
 }
 
 func (s *Service) submitControlConfirmationApproval(r *run, endpointID string, threadID string, runID string, toolID string, actionID string, liveAction FlowerApprovalAction, req SubmitFlowerApprovalRequest) (*SubmitFlowerApprovalResponse, error) {
@@ -1013,7 +973,11 @@ func (s *Service) submitControlConfirmationApproval(r *run, endpointID string, t
 		Kind:       FlowerLiveApprovalResolved,
 		Payload:    mustFlowerPayload(FlowerLiveApprovalPayload{Action: approval}),
 	})
-	r.publishRunningAfterApprovalIfNoPending(approval.ActionID)
+	if r.activeFloretHost() == nil {
+		r.publishThreadApprovalStateForCanonicalQueue(nil)
+	} else if err := r.syncFloretApprovalQueue(context.Background()); err != nil {
+		return nil, fmt.Errorf("refresh Floret approval queue after control confirmation: %w", err)
+	}
 	return &SubmitFlowerApprovalResponse{OK: true, CurrentCursor: resolved.Seq}, nil
 }
 
@@ -1100,17 +1064,9 @@ func (s *Service) appendFlowerLiveEvent(event FlowerLiveEvent) FlowerLiveEvent {
 		stream = newFlowerLiveThreadStream()
 		s.flowerLiveByThread[threadKey] = stream
 	}
-	event = s.flowerApprovalEventWithCurrentDeadlineLocked(stream, event)
 	event = appendFlowerLiveEventLocked(stream, event)
 	applyFlowerLiveEventToMaterializedState(&stream.State, stream.ApprovalIndex, event)
-	normalizeFlowerApprovalQueueActions(&stream.State)
-	if promoted, ok := s.flowerCurrentApprovalDeadlineEventLocked(stream, event); ok {
-		promoted = appendFlowerLiveEventLocked(stream, promoted)
-		applyFlowerLiveEventToMaterializedState(&stream.State, stream.ApprovalIndex, promoted)
-		normalizeFlowerApprovalQueueActions(&stream.State)
-	}
-	s.promoteCurrentApprovalWaiterLocked(stream.State.ApprovalQueue, stream.State.ApprovalActions)
-	if (event.Kind == FlowerLiveApprovalRequested || event.Kind == FlowerLiveApprovalResolved) && s.log != nil && stream.State.ApprovalQueue != nil {
+	if event.Kind == FlowerLiveApprovalQueueReplaced && s.log != nil && stream.State.ApprovalQueue != nil {
 		queue := stream.State.ApprovalQueue
 		s.log.Debug("flower approval queue", "endpoint_id", event.EndpointID, "thread_id", event.ThreadID, "generation", queue.Generation, "revision", queue.Revision, "current_action_id", queue.CurrentActionID, "position", queue.CurrentPosition, "total", queue.Total, "unresolved", queue.UnresolvedCount)
 	}
@@ -1118,66 +1074,9 @@ func (s *Service) appendFlowerLiveEvent(event FlowerLiveEvent) FlowerLiveEvent {
 	return event
 }
 
-func (s *Service) flowerApprovalEventWithCurrentDeadlineLocked(stream *flowerLiveThreadStream, event FlowerLiveEvent) FlowerLiveEvent {
-	if s == nil || stream == nil || event.Kind != FlowerLiveApprovalRequested {
-		return event
-	}
-	var payload FlowerLiveApprovalPayload
-	if !decodeFlowerPayload(event.Payload, &payload) || payload.Action.Status != FlowerApprovalStatusPending ||
-		payload.Action.State != FlowerApprovalStateRequested || payload.Action.ExpiresAtMs > 0 {
-		return event
-	}
-	actionID := strings.TrimSpace(payload.Action.ActionID)
-	queue := stream.State.ApprovalQueue
-	isCurrent := queue == nil || queue.UnresolvedCount == 0 || strings.TrimSpace(queue.CurrentActionID) == "" ||
-		strings.TrimSpace(queue.CurrentActionID) == actionID
-	if actionID == "" || !isCurrent {
-		return event
-	}
-	timeout := s.approvalTimeout
-	if timeout <= 0 {
-		timeout = defaultToolApprovalTO
-	}
-	payload.Action.ExpiresAtMs = time.Now().Add(timeout).UnixMilli()
-	event.Payload = mustFlowerPayload(payload)
-	return event
-}
-
-func (s *Service) flowerCurrentApprovalDeadlineEventLocked(stream *flowerLiveThreadStream, cause FlowerLiveEvent) (FlowerLiveEvent, bool) {
-	if s == nil || stream == nil || cause.Kind != FlowerLiveApprovalResolved || stream.State.ApprovalQueue == nil {
-		return FlowerLiveEvent{}, false
-	}
-	actionID := strings.TrimSpace(stream.State.ApprovalQueue.CurrentActionID)
-	action := stream.State.ApprovalActions[actionID]
-	if actionID == "" || action.ActionID == "" || action.ExpiresAtMs > 0 {
-		return FlowerLiveEvent{}, false
-	}
-	timeout := s.approvalTimeout
-	if timeout <= 0 {
-		timeout = defaultToolApprovalTO
-	}
-	action.ExpiresAtMs = time.Now().Add(timeout).UnixMilli()
-	return FlowerLiveEvent{
-		SchemaVersion: FlowerLiveSchemaVersion,
-		EndpointID:    cause.EndpointID,
-		ThreadID:      cause.ThreadID,
-		RunID:         action.RunID,
-		TurnID:        action.TurnID,
-		TraceID:       cause.TraceID,
-		Step:          action.StepID,
-		AtUnixMs:      time.Now().UnixMilli(),
-		Kind:          FlowerLiveApprovalRequested,
-		Payload: mustFlowerPayload(FlowerLiveApprovalPayload{
-			Action:        action,
-			ApprovalQueue: cloneFlowerApprovalQueue(stream.State.ApprovalQueue),
-		}),
-	}, true
-}
-
 func appendFlowerLiveEventLocked(stream *flowerLiveThreadStream, event FlowerLiveEvent) FlowerLiveEvent {
 	event.Seq = stream.NextSeq
 	stream.NextSeq++
-	event = normalizeFlowerApprovalQueueEventLocked(stream, event)
 	event = flowerLiveEventWithAssignedSeqPayload(stream, event)
 	event.Payload = cloneRawMessage(event.Payload)
 	stream.Events = append(stream.Events, cloneFlowerLiveEvent(event))
@@ -1186,100 +1085,6 @@ func appendFlowerLiveEventLocked(stream *flowerLiveThreadStream, event FlowerLiv
 		stream.Events = stream.Events[:flowerLiveEventBufferLimit]
 	}
 	return event
-}
-
-func normalizeFlowerApprovalQueueEventLocked(stream *flowerLiveThreadStream, event FlowerLiveEvent) FlowerLiveEvent {
-	if stream == nil || (event.Kind != FlowerLiveApprovalRequested && event.Kind != FlowerLiveApprovalResolved) {
-		return event
-	}
-	var payload FlowerLiveApprovalPayload
-	if !decodeFlowerPayload(event.Payload, &payload) || strings.TrimSpace(payload.Action.ActionID) == "" {
-		return event
-	}
-	action := payload.Action
-	actionID := strings.TrimSpace(action.ActionID)
-	queue := cloneFlowerApprovalQueue(stream.State.ApprovalQueue)
-	if queue == nil {
-		queue = &FlowerApprovalQueue{}
-	}
-	current, exists := stream.State.ApprovalActions[actionID]
-	if event.Kind == FlowerLiveApprovalRequested && action.Status == FlowerApprovalStatusPending && action.State == FlowerApprovalStateRequested {
-		if exists && current.QueueGeneration > 0 && current.QueueOrder > 0 {
-			action.QueueGeneration = current.QueueGeneration
-			action.QueueOrder = current.QueueOrder
-		} else {
-			if queue.UnresolvedCount == 0 {
-				queue.Generation++
-				if queue.Generation <= 0 {
-					queue.Generation = 1
-				}
-				queue.Revision = 0
-				queue.CurrentActionID = ""
-				queue.CurrentPosition = 0
-				queue.Total = 0
-			}
-			if stream.NextApprovalOrder <= 0 {
-				stream.NextApprovalOrder = 1
-			}
-			action.QueueGeneration = queue.Generation
-			action.QueueOrder = stream.NextApprovalOrder
-			stream.NextApprovalOrder++
-			queue.Revision++
-			queue.Total++
-			queue.UnresolvedCount++
-			if strings.TrimSpace(queue.CurrentActionID) == "" {
-				queue.CurrentActionID = actionID
-			}
-		}
-	} else if event.Kind == FlowerLiveApprovalResolved {
-		if exists {
-			action.QueueGeneration = current.QueueGeneration
-			action.QueueOrder = current.QueueOrder
-			action.BatchIndex = current.BatchIndex
-			action.BatchSize = current.BatchSize
-		}
-		if queue.UnresolvedCount > 0 && exists && current.Status == FlowerApprovalStatusPending {
-			queue.Revision++
-			queue.UnresolvedCount--
-		}
-		queue.CurrentActionID = nextFlowerApprovalQueueActionID(stream.State.ApprovalActions, actionID, queue.Generation)
-		if queue.UnresolvedCount <= 0 || queue.CurrentActionID == "" {
-			queue.UnresolvedCount = 0
-			queue.CurrentActionID = ""
-			queue.CurrentPosition = 0
-		} else {
-			queue.CurrentPosition = queue.Total - queue.UnresolvedCount + 1
-		}
-	}
-	if queue.UnresolvedCount > 0 && queue.CurrentPosition <= 0 {
-		queue.CurrentPosition = queue.Total - queue.UnresolvedCount + 1
-	}
-	action.SurfaceRole = FlowerApprovalSurfaceLocator
-	action.CanApprove = false
-	if event.Kind == FlowerLiveApprovalRequested && actionID == queue.CurrentActionID {
-		action.SurfaceRole = FlowerApprovalSurfacePrimaryAction
-		action.CanApprove = true
-		action.ReadOnlyReason = ""
-	}
-	payload.Action = action
-	payload.ApprovalQueue = cloneFlowerApprovalQueue(queue)
-	event.Payload = mustFlowerPayload(payload)
-	return event
-}
-
-func nextFlowerApprovalQueueActionID(actions map[string]FlowerApprovalAction, excludeID string, generation int64) string {
-	var next FlowerApprovalAction
-	for _, action := range actions {
-		if strings.TrimSpace(action.ActionID) == strings.TrimSpace(excludeID) ||
-			action.Status != FlowerApprovalStatusPending || action.State != FlowerApprovalStateRequested ||
-			action.QueueGeneration != generation || action.QueueOrder <= 0 {
-			continue
-		}
-		if next.QueueOrder == 0 || action.QueueOrder < next.QueueOrder {
-			next = action
-		}
-	}
-	return strings.TrimSpace(next.ActionID)
 }
 
 func flowerLiveEventWithAssignedSeqPayload(stream *flowerLiveThreadStream, event FlowerLiveEvent) FlowerLiveEvent {
@@ -1294,6 +1099,24 @@ func flowerLiveEventWithAssignedSeqPayload(stream *flowerLiveThreadStream, event
 		payload.TimelineDecoration = normalizeFlowerTimelineDecorationForEvent(stream, payload.Compaction, payload.TimelineDecoration)
 		if !validFlowerTimelineDecoration(payload.TimelineDecoration) {
 			return event
+		}
+		event.Payload = mustFlowerPayload(payload)
+		return event
+	}
+	if event.Kind == FlowerLiveApprovalQueueReplaced {
+		var payload FlowerLiveApprovalQueuePayload
+		if !decodeFlowerPayload(event.Payload, &payload) {
+			return event
+		}
+		for index := range payload.Actions {
+			action := payload.Actions[index]
+			if action.ExpectedSeq <= 0 {
+				action.ExpectedSeq = event.Seq
+			}
+			if action.Version <= 0 {
+				action.Version = action.Revision
+			}
+			payload.Actions[index] = action
 		}
 		event.Payload = mustFlowerPayload(payload)
 		return event
@@ -1450,15 +1273,11 @@ func (s *Service) flowerLiveEventsFromStreamEvent(ev RealtimeEvent, base func(Fl
 			}
 			block = safe
 		}
-		events := []FlowerLiveEvent{base(FlowerLiveMessageBlockSet, FlowerLiveMessageBlockSetPayload{
+		return []FlowerLiveEvent{base(FlowerLiveMessageBlockSet, FlowerLiveMessageBlockSetPayload{
 			MessageID:  messageID,
 			BlockIndex: stream.BlockIndex,
 			Block:      block,
 		})}
-		if isActivityTimelineBlockValue(block) {
-			events = append(events, s.flowerLiveApprovalEventsFromActivity(ev, block, base)...)
-		}
-		return events
 	case streamEventError:
 		if strings.TrimSpace(stream.MessageID) == "" {
 			return nil
@@ -1493,50 +1312,15 @@ func (s *Service) flowerLiveEventsFromStreamEvent(ev RealtimeEvent, base func(Fl
 		if stream.Action.Status == FlowerApprovalStatusPending && stream.Action.State == FlowerApprovalStateRequested {
 			kind = FlowerLiveApprovalRequested
 		}
-		return []FlowerLiveEvent{base(kind, FlowerLiveApprovalPayload{Action: stream.Action})}
+		return []FlowerLiveEvent{base(kind, FlowerLiveApprovalPayload{Action: stream.Action, ApprovalQueue: cloneFlowerApprovalQueue(stream.ApprovalQueue)})}
+	case streamEventApprovalQueue:
+		return []FlowerLiveEvent{base(FlowerLiveApprovalQueueReplaced, FlowerLiveApprovalQueuePayload{
+			Actions:       append([]FlowerApprovalAction(nil), stream.Actions...),
+			ApprovalQueue: stream.ApprovalQueue,
+		})}
 	default:
 		return nil
 	}
-}
-
-func (s *Service) flowerLiveApprovalEventsFromActivity(ev RealtimeEvent, block any, base func(FlowerLiveKind, any) FlowerLiveEvent) []FlowerLiveEvent {
-	timeline, ok := activityTimelineFromAny(block)
-	if !ok || len(timeline.Items) == 0 {
-		return nil
-	}
-	runID := strings.TrimSpace(ev.RunID)
-	if runID == "" {
-		runID = strings.TrimSpace(timeline.RunID)
-	}
-	if runID == "" {
-		return nil
-	}
-
-	out := make([]FlowerLiveEvent, 0)
-	for _, item := range timeline.Items {
-		if !item.RequiresApproval || strings.TrimSpace(item.ToolID) == "" {
-			continue
-		}
-		action := flowerApprovalActionFromActivity(runID, item)
-		action.ExpectedSeq = s.flowerLiveApprovalExpectedSeq(ev.EndpointID, ev.ThreadID, action.ActionID)
-		state := normalizeFlowerApprovalState(item.ApprovalState)
-		if state == "" {
-			state = action.State
-		}
-		action.State = state
-		action.Status = approvalStatusForState(state)
-		if action.Status == FlowerApprovalStatusResolved {
-			action.CanApprove = false
-			if action.ResolvedAtMs <= 0 {
-				action.ResolvedAtMs = ev.AtUnixMs
-			}
-		}
-		if action.Status != FlowerApprovalStatusResolved && action.Status != FlowerApprovalStatusUnavailable {
-			continue
-		}
-		out = append(out, base(FlowerLiveApprovalResolved, FlowerLiveApprovalPayload{Action: action}))
-	}
-	return out
 }
 
 func applyFlowerLiveEventToMaterializedState(state *FlowerLiveMaterializedState, approvals map[string]FlowerApprovalState, event FlowerLiveEvent) {
@@ -1684,15 +1468,42 @@ func applyFlowerLiveEventToMaterializedState(state *FlowerLiveMaterializedState,
 			msg.Status = "error"
 			state.Messages[msg.MessageID] = msg
 		}
+	case FlowerLiveApprovalQueueReplaced:
+		var payload FlowerLiveApprovalQueuePayload
+		if !decodeFlowerPayload(event.Payload, &payload) {
+			return
+		}
+		if current := state.ApprovalQueue; current != nil &&
+			(payload.ApprovalQueue.Generation < current.Generation ||
+				payload.ApprovalQueue.Generation == current.Generation && payload.ApprovalQueue.Revision < current.Revision) {
+			return
+		}
+		actions := make(map[string]FlowerApprovalAction, len(payload.Actions)+len(state.ApprovalActions))
+		for actionID, action := range state.ApprovalActions {
+			if action.Origin == FlowerApprovalOriginControlConfirm {
+				actions[actionID] = action
+			}
+		}
+		for _, action := range payload.Actions {
+			actionID := strings.TrimSpace(action.ActionID)
+			if actionID == "" || action.Origin == FlowerApprovalOriginControlConfirm ||
+				action.Status != FlowerApprovalStatusPending || action.State != FlowerApprovalStateRequested {
+				continue
+			}
+			actions[actionID] = action
+			clearFlowerModelIOForRun(state, action.RunID)
+			markFlowerLiveRunWaitingApproval(state, action.RunID)
+			if approvals != nil {
+				approvals[actionID] = action.State
+			}
+		}
+		state.ApprovalActionsSeen = true
+		state.ApprovalActions = actions
+		state.ApprovalQueue = cloneFlowerApprovalQueue(&payload.ApprovalQueue)
 	case FlowerLiveApprovalRequested, FlowerLiveApprovalResolved:
 		var payload FlowerLiveApprovalPayload
 		if decodeFlowerPayload(event.Payload, &payload) && strings.TrimSpace(payload.Action.ActionID) != "" {
 			state.ApprovalActionsSeen = true
-			if payload.ApprovalQueue != nil {
-				state.ApprovalQueue = cloneFlowerApprovalQueue(payload.ApprovalQueue)
-			} else {
-				state.ApprovalQueue = nil
-			}
 			if event.Kind == FlowerLiveApprovalRequested {
 				clearFlowerModelIOForRun(state, payload.Action.RunID)
 			}
@@ -1721,7 +1532,6 @@ func applyFlowerLiveEventToMaterializedState(state *FlowerLiveMaterializedState,
 						action.QueueOrder = firstPositiveInt64(current.QueueOrder, action.QueueOrder)
 						state.ApprovalActions[action.ActionID] = action
 					}
-					normalizeFlowerApprovalQueueActions(state)
 					return
 				}
 				approvals[action.ActionID] = action.State
@@ -1732,19 +1542,10 @@ func applyFlowerLiveEventToMaterializedState(state *FlowerLiveMaterializedState,
 					(action.State == FlowerApprovalStateApproved || action.State == FlowerApprovalStateRejected) {
 					markFlowerLiveRunActiveAfterApproval(state, action.RunID, action.ActionID)
 				}
-				if visibleResolvedDelegatedApprovalAction(action) {
-					state.ApprovalActions[action.ActionID] = action
-					if approvals != nil {
-						approvals[action.ActionID] = action.State
-					}
-					normalizeFlowerApprovalQueueActions(state)
-					return
-				}
 				delete(state.ApprovalActions, action.ActionID)
 				if approvals != nil {
 					approvals[action.ActionID] = action.State
 				}
-				normalizeFlowerApprovalQueueActions(state)
 				return
 			}
 			if action.Status == FlowerApprovalStatusUnavailable {
@@ -1754,7 +1555,6 @@ func applyFlowerLiveEventToMaterializedState(state *FlowerLiveMaterializedState,
 			if event.Kind == FlowerLiveApprovalRequested && action.Status == FlowerApprovalStatusPending {
 				markFlowerLiveRunWaitingApproval(state, action.RunID)
 			}
-			normalizeFlowerApprovalQueueActions(state)
 		}
 	case FlowerLiveInputRequested:
 		var payload FlowerLiveInputRequestedPayload
@@ -1991,103 +1791,6 @@ func normalizeFlowerModelIOPhase(raw string) FlowerModelIOPhase {
 	}
 }
 
-func (s *Service) flowerLiveApprovalExpectedSeq(endpointID string, threadID string, actionID string) int64 {
-	if s == nil {
-		return 0
-	}
-	threadKey := runThreadKey(strings.TrimSpace(endpointID), strings.TrimSpace(threadID))
-	actionID = strings.TrimSpace(actionID)
-	if threadKey == "" || actionID == "" {
-		return 0
-	}
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	stream := s.flowerLiveByThread[threadKey]
-	if stream == nil || stream.State.ApprovalActions == nil {
-		return 0
-	}
-	action := stream.State.ApprovalActions[actionID]
-	return action.ExpectedSeq
-}
-
-func normalizeFlowerApprovalQueueActions(state *FlowerLiveMaterializedState) {
-	if state == nil || len(state.ApprovalActions) == 0 {
-		return
-	}
-	queue := state.ApprovalQueue
-	if queue == nil {
-		type candidate struct {
-			actionID string
-			order    int64
-		}
-		candidates := make([]candidate, 0, len(state.ApprovalActions))
-		for actionID, action := range state.ApprovalActions {
-			if action.Status != FlowerApprovalStatusPending || action.State != FlowerApprovalStateRequested {
-				continue
-			}
-			order := firstPositiveInt64(action.QueueOrder, action.ExpectedSeq, action.RequestedAtMs)
-			candidates = append(candidates, candidate{actionID: actionID, order: order})
-		}
-		sort.SliceStable(candidates, func(i, j int) bool {
-			if candidates[i].order != candidates[j].order {
-				return candidates[i].order < candidates[j].order
-			}
-			return candidates[i].actionID < candidates[j].actionID
-		})
-		if len(candidates) > 0 {
-			queue = &FlowerApprovalQueue{
-				Generation:      1,
-				Revision:        int64(len(candidates)),
-				CurrentActionID: candidates[0].actionID,
-				CurrentPosition: 1,
-				Total:           len(candidates),
-				UnresolvedCount: len(candidates),
-			}
-			for index, candidate := range candidates {
-				action := state.ApprovalActions[candidate.actionID]
-				action.QueueGeneration = queue.Generation
-				action.QueueOrder = int64(index + 1)
-				state.ApprovalActions[candidate.actionID] = action
-			}
-			state.ApprovalQueue = queue
-		}
-	}
-	primaryID := ""
-	if queue != nil {
-		primaryID = strings.TrimSpace(queue.CurrentActionID)
-	}
-	for actionID, action := range state.ApprovalActions {
-		if action.Status != FlowerApprovalStatusPending || action.State != FlowerApprovalStateRequested {
-			continue
-		}
-		if strings.TrimSpace(action.PrimaryWaitAnchor) == "" {
-			action.PrimaryWaitAnchor = flowerDelegatedApprovalPrimaryWaitAnchor(action)
-		}
-		if actionID == primaryID {
-			action.SurfaceRole = FlowerApprovalSurfacePrimaryAction
-			action.CanApprove = true
-			if action.ReadOnlyReason == "Queued for approval" {
-				action.ReadOnlyReason = ""
-			}
-		} else {
-			action.SurfaceRole = FlowerApprovalSurfaceLocator
-			action.CanApprove = false
-			action.ReadOnlyReason = "Queued for approval"
-		}
-		state.ApprovalActions[actionID] = action
-	}
-}
-
-func flowerDelegatedApprovalPrimaryWaitAnchor(action FlowerApprovalAction) string {
-	if action.DelegatedRef != nil && strings.TrimSpace(action.DelegatedRef.ParentThreadID) != "" {
-		return "thread:" + strings.TrimSpace(action.DelegatedRef.ParentThreadID)
-	}
-	if strings.TrimSpace(action.Scope) != "" {
-		return strings.TrimSpace(action.Scope)
-	}
-	return "thread"
-}
-
 func ensureFlowerLiveStateMaps(state *FlowerLiveMaterializedState) {
 	if state.Messages == nil {
 		state.Messages = map[string]FlowerLiveMessageDraft{}
@@ -2150,6 +1853,7 @@ func flowerLiveThreadPatchFromSummary(ev RealtimeEvent) FlowerLiveThreadPatch {
 	patch := FlowerLiveThreadPatch{
 		ThreadID:               strings.TrimSpace(ev.ThreadID),
 		Title:                  strings.TrimSpace(ev.Title),
+		TitleStatus:            strings.TrimSpace(ev.TitleStatus),
 		ModelID:                strings.TrimSpace(ev.ModelID),
 		PermissionType:         strings.TrimSpace(ev.PermissionType),
 		QueuedTurnCount:        &queued,
@@ -2165,6 +1869,7 @@ func flowerLiveThreadPatchFromSummary(ev RealtimeEvent) FlowerLiveThreadPatch {
 		LastMessagePreview:     strings.TrimSpace(ev.LastMessagePreview),
 		ReasoningSelectionSet:  true,
 		ReasoningCapabilitySet: true,
+		TitleSet:               true,
 	}
 	if !reasoningSelection.IsZero() {
 		patch.ReasoningSelection = &reasoningSelection
@@ -2181,6 +1886,13 @@ func mergeFlowerLiveThreadPatch(current FlowerLiveThreadPatch, patch FlowerLiveT
 	}
 	if strings.TrimSpace(patch.Title) != "" {
 		current.Title = strings.TrimSpace(patch.Title)
+	}
+	if patch.TitleSet {
+		current.TitleSet = true
+		current.Title = strings.TrimSpace(patch.Title)
+	}
+	if strings.TrimSpace(patch.TitleStatus) != "" {
+		current.TitleStatus = strings.TrimSpace(patch.TitleStatus)
 	}
 	if strings.TrimSpace(patch.ModelID) != "" {
 		current.ModelID = strings.TrimSpace(patch.ModelID)

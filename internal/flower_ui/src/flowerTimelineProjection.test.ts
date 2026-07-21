@@ -68,10 +68,36 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
       },
     },
     ...overrides,
+    title_status: overrides.title_status ?? 'ready',
   };
 }
 
 describe('buildFlowerTimelineEntries', () => {
+  it('keeps a canonical reference-only user message visible', () => {
+    const entries = buildFlowerTimelineEntries(thread({
+      messages: [{
+        id: 'entry-user-reference-only',
+        turn_id: 'turn-reference-only',
+        role: 'user',
+        content: '',
+        status: 'complete',
+        created_at_ms: 20,
+        references: [{
+          reference_id: 'ref-text',
+          kind: 'text',
+          label: 'Quoted selection',
+          text: 'Only the linked reference is visible.',
+        }],
+      }],
+    }));
+
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.type).toBe('message');
+    if (entries[0]?.type !== 'message') throw new Error('expected canonical message entry');
+    expect(entries[0].blocks).toEqual([]);
+    expect(entries[0].message.references?.[0]?.reference_id).toBe('ref-text');
+  });
+
   it('projects server queued turns as non-message entries with attachments and linked context', () => {
     const contextAction = {
       schema_version: 2,

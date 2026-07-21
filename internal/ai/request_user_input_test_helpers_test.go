@@ -99,4 +99,21 @@ func seedWaitingUserPrompt(t *testing.T, svc *Service, ctx context.Context, _ *s
 	if result.Status != flruntime.TurnStatusWaiting {
 		t.Fatalf("seeded turn status = %q, want waiting", result.Status)
 	}
+	readHost, err := svc.openFloretThreadReadHost(ctx, threadID)
+	if err != nil {
+		t.Fatalf("open seeded Floret waiting turn reader: %v", err)
+	}
+	page, err := readHost.ListThreadTurns(ctx, flruntime.ListThreadTurnsRequest{
+		ThreadID: flruntime.ThreadID(threadID),
+		Tail:     1,
+	})
+	if err != nil {
+		t.Fatalf("read seeded Floret waiting turn: %v", err)
+	}
+	if len(page.Turns) != 1 || page.Turns[0].Status != flruntime.TurnStatusWaiting {
+		t.Fatalf("seeded Floret waiting turn = %#v, want one waiting turn", page.Turns)
+	}
+	if _, err := readHost.ReadThreadOverview(ctx, flruntime.ThreadID(threadID)); err != nil {
+		t.Fatalf("read seeded Floret waiting overview: %v", err)
+	}
 }

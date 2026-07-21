@@ -54,6 +54,7 @@ export function EnvAIPage() {
     },
     openFileBrowser: env.openFlowerFileBrowser,
     openFilePreview: env.openFlowerFilePreview,
+    openCanonicalReferenceTarget: env.openFlowerCanonicalReferenceTarget,
     openLinkedFilePreview: env.openFlowerLinkedFilePreview,
     openLinkedDirectoryBrowser: env.openFlowerLinkedDirectoryBrowser,
     modelSourceRecovery: {

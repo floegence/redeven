@@ -40,10 +40,33 @@ func installTestFloretCapabilities(svc *Service, bootstrap *floretBootstrapResul
 	svc.closeFloret = bootstrap.close
 	svc.floretReads = &floretReadCapabilities{thread: bootstrap.newThreadRead, subagent: bootstrap.newSubagentRead}
 	svc.floretRuntime = &floretRuntimeCapabilityIssuer{bind: bootstrap.bindThreadRuntime}
+	svc.pendingToolRecovery = bootstrap.pendingToolRecovery
 	svc.threadCreateFloret = &threadCreateFloretCoordinator{authority: bootstrap.threadCreate}
 	svc.threadTitleFloret = &threadTitleFloretCoordinator{authority: bootstrap.threadTitle}
 	svc.threadForkFloret = &threadForkFloretCoordinator{authority: bootstrap.threadFork}
 	svc.threadDeleteFloret = &threadDeleteFloretCoordinator{authority: bootstrap.threadDelete}
+}
+
+type testPendingToolRecoveryCoordinator struct {
+	owner floretPendingToolSettler
+}
+
+type panicFloretTurnHost struct {
+	*recordingFloretHost
+}
+
+func (*panicFloretTurnHost) RunTurn(context.Context, flruntime.RunTurnRequest) (flruntime.TurnResult, error) {
+	panic("deterministic RunTurn panic")
+}
+
+func (c testPendingToolRecoveryCoordinator) Settle(ctx context.Context, _ string, _ string, settle func(context.Context, floretPendingToolSettler) error) error {
+	if c.owner == nil {
+		return errors.New("test pending tool recovery owner is unavailable")
+	}
+	if settle == nil {
+		return errors.New("test pending tool recovery settlement is unavailable")
+	}
+	return settle(ctx, c.owner)
 }
 
 func createCanonicalFloretThreadForTest(t *testing.T, svc *Service, threadID string, createIntentID string) flruntime.ThreadSummary {
@@ -76,8 +99,8 @@ func (f testFloretThreadDeleteAuthorityFunc) DeleteThread(ctx context.Context, t
 
 type allowFloretEffectGateForTest struct{}
 
-func (allowFloretEffectGateForTest) Dispatch(_ context.Context, req flruntime.EffectAuthorizationRequest, effect flruntime.AuthorizedEffect) (flruntime.EffectDispatchResult, error) {
-	return effect(flruntime.EffectAuthorizationProof{
+func (allowFloretEffectGateForTest) Dispatch(ctx context.Context, req flruntime.EffectAuthorizationRequest, effect flruntime.AuthorizedEffect) (flruntime.EffectDispatchResult, error) {
+	return effect(ctx, flruntime.EffectAuthorizationProof{
 		EffectAttemptID: req.EffectAttemptID, RequestFingerprint: req.RequestFingerprint,
 		ThreadID: req.ThreadID, TurnID: req.TurnID, RunID: req.RunID, ToolCallID: req.ToolCallID,
 		LeaseOwnerID: req.LeaseOwnerID, LeaseGeneration: req.LeaseGeneration,
@@ -256,7 +279,7 @@ func newFloretRuntimeTestRun(t *testing.T, opts runOptions, providedStores ...*t
 	svc := &Service{
 		threadsDB: productStore, persistOpTO: time.Second,
 		terminalProcesses: newTerminalProcessManager(), flowerLiveByThread: make(map[string]*flowerLiveThreadStream),
-		subagentRuntimes: make(map[string]*floretSubagentRuntime), delegatedApprovals: make(map[string]*delegatedApprovalHandle),
+		subagentRuntimes: make(map[string]*floretSubagentRuntime),
 	}
 	installTestFloretCapabilities(svc, bootstrap)
 	svc.threadMgr = newThreadManager(svc)
@@ -335,8 +358,8 @@ func bindTestRunHostCapabilities(t *testing.T, svc *Service, endpointID string, 
 	if svc.subagentRuntimes == nil {
 		svc.subagentRuntimes = make(map[string]*floretSubagentRuntime)
 	}
-	if svc.delegatedApprovals == nil {
-		svc.delegatedApprovals = make(map[string]*delegatedApprovalHandle)
+	if svc.pendingToolRecovery == nil {
+		svc.pendingToolRecovery = testPendingToolRecoveryCoordinator{owner: &terminalProcessTestOwner{}}
 	}
 	if svc.threadMgr == nil {
 		svc.threadMgr = newThreadManager(svc)
@@ -354,6 +377,9 @@ func (failingTurnProvider) StreamTurn(context.Context, ModelGatewayRequest, func
 }
 
 func (p *concurrentTerminalBatchProvider) StreamTurn(_ context.Context, req ModelGatewayRequest, _ func(StreamEvent)) (ModelGatewayResult, error) {
+	if isFloretThreadTitleRequest(req) {
+		return ModelGatewayResult{FinishReason: "stop", Text: "Concurrent terminal checks"}, nil
+	}
 	p.mu.Lock()
 	p.calls++
 	call := p.calls
@@ -482,6 +508,48 @@ func TestRunFloretHostedTurnExecutesSameResponseTerminalCallsConcurrently(t *tes
 			t.Fatalf("missing barrier %s: %v", name, err)
 		}
 	}
+}
+
+func TestRunFloretHostedTurnPublishesFailClosedAuthorityProofOnPanic(t *testing.T) {
+	workspace := t.TempDir()
+	svc := &Service{terminalProcesses: newTerminalProcessManager()}
+	t.Cleanup(func() { _ = svc.terminalProcesses.Close(context.Background()) })
+	r := newFloretRuntimeTestRun(t, runOptions{
+		Log:              slog.New(slog.NewTextHandler(io.Discard, nil)),
+		StateDir:         t.TempDir(),
+		AgentHomeDir:     workspace,
+		WorkingDir:       workspace,
+		Shell:            "/bin/bash",
+		HostCapabilities: bindTestRunHostCapabilities(t, svc, "env_panic_authority", "thread_panic_authority"),
+		AIConfig:         &config.AIConfig{},
+		FloretHostFactory: func(context.Context, flruntime.TurnExecutionHostOptions) (floretTurnHost, error) {
+			return &panicFloretTurnHost{recordingFloretHost: &recordingFloretHost{}}, nil
+		},
+		SessionMeta: &session.Meta{EndpointID: "env_panic_authority", CanRead: true, CanWrite: true, CanExecute: true},
+		RunID:       "run_panic_authority",
+		EndpointID:  "env_panic_authority",
+		ThreadID:    "thread_panic_authority",
+		TurnID:      "turn_panic_authority",
+		MessageID:   "turn_panic_authority",
+	})
+
+	defer func() {
+		if recovered := recover(); recovered == nil {
+			t.Fatal("RunTurn panic was not propagated")
+		}
+		waitCtx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		err := r.floretAuthorityBarrier.waitContext(waitCtx)
+		if err == nil || !strings.Contains(err.Error(), "without an exact terminal authority proof") {
+			t.Fatalf("authority barrier error=%v, want fail-closed proof error", err)
+		}
+	}()
+
+	_ = r.runFloretHostedTurn(t.Context(), RunRequest{
+		Model:   "compat/gpt-5-mini",
+		Input:   RunInput{Text: "panic after RunTurn starts"},
+		Options: RunOptions{PermissionType: config.AIPermissionFullAccess},
+	}, config.AIProvider{ID: "compat", Type: "openai_compatible", BaseURL: "https://example.test/v1"}, "sk-test", "fail closed authority", failingTurnProvider{})
 }
 
 func TestRunFloretHostedTurnTerminatesPendingCommandWithoutCompensation(t *testing.T) {
@@ -659,10 +727,12 @@ func (p *capturingTurnProvider) StreamTurn(_ context.Context, req ModelGatewayRe
 func (p *capturingTurnProvider) firstRequest() ModelGatewayRequest {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if len(p.requests) == 0 {
-		return ModelGatewayRequest{}
+	for _, request := range p.requests {
+		if !isFloretThreadTitleRequest(request) {
+			return request
+		}
 	}
-	return p.requests[0]
+	return ModelGatewayRequest{}
 }
 
 func (p *capturingTurnProvider) requestCount() int {
@@ -703,7 +773,10 @@ type permissionCorruptingToolCallProvider struct {
 	calls      int
 }
 
-func (p *permissionCorruptingToolCallProvider) StreamTurn(ctx context.Context, _ ModelGatewayRequest, _ func(StreamEvent)) (ModelGatewayResult, error) {
+func (p *permissionCorruptingToolCallProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest, _ func(StreamEvent)) (ModelGatewayResult, error) {
+	if isFloretThreadTitleRequest(req) {
+		return ModelGatewayResult{FinishReason: "stop", Text: "Invalid permission refresh"}, nil
+	}
 	p.mu.Lock()
 	p.calls++
 	callIndex := p.calls
@@ -730,6 +803,9 @@ func (p *permissionCorruptingToolCallProvider) requestCount() int {
 }
 
 func (p *permissionDowngradeToolCallProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest, _ func(StreamEvent)) (ModelGatewayResult, error) {
+	if isFloretThreadTitleRequest(req) {
+		return ModelGatewayResult{FinishReason: "stop", Text: "Permission downgrade"}, nil
+	}
 	p.mu.Lock()
 	p.calls++
 	callIndex := p.calls

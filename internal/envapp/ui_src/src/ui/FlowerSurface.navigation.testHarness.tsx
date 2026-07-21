@@ -314,6 +314,7 @@ export function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThr
       },
     ],
     ...overrides,
+    title_status: overrides.title_status ?? 'ready',
   };
 }
 

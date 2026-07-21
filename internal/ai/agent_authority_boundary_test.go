@@ -41,8 +41,6 @@ func TestFloretRunCapabilityShapesAreExact(t *testing.T) {
 	}
 	assertExactCapabilityFields("runHostCapabilities", runHostCapabilities{}, []fieldContract{
 		field("authorityThreadID", ""),
-		field("hasPendingApprovals", (func() bool)(nil)),
-		field("pendingLiveToolApprovals", (func(string) []FlowerApprovalAction)(nil)),
 		field("broadcastThreadState", (func(string, string, string, string))(nil)),
 		field("broadcastThreadSummary", (func() error)(nil)),
 		field("replaceLiveDraftWithCanonicalTimeline", (func(context.Context, string, string, string, string) error)(nil)),
@@ -52,8 +50,6 @@ func TestFloretRunCapabilityShapesAreExact(t *testing.T) {
 		field("releasePendingTurnCommandAdmission", (func(context.Context, string, string, string, string) error)(nil)),
 		field("lockEffectAuthority", (func(threadEffectJoin) (func(), error))(nil)),
 		field("resolveRunModel", (func(context.Context, *config.AIConfig, string, string, *run) (resolvedRunModel, error))(nil)),
-		field("registerDelegatedApproval", (func(*run, *run, flruntime.EffectAuthorizationRequest) (*delegatedApprovalHandle, bool, error))(nil)),
-		field("markDelegatedApprovalUnavailable", (func(string, string))(nil)),
 		field("subagentRuntime", (func() *floretSubagentRuntime)(nil)),
 		field("publishSubagentsPatch", (func(context.Context))(nil)),
 		interfaceField("terminal", (*runTerminalHost)(nil)),
@@ -102,7 +98,7 @@ func TestFloretRunCapabilityShapesAreExact(t *testing.T) {
 		"Start":           reflect.TypeOf((func(terminalProcessStartRequest) (*terminalProcess, error))(nil)),
 		"Get":             reflect.TypeOf((func(string) (*terminalProcess, error))(nil)),
 		"ProcessesForRun": reflect.TypeOf((func(string) []*terminalProcess)(nil)),
-		"Finalize":        reflect.TypeOf((func(floretPendingToolSettler, flruntime.PendingToolSettlementTarget, terminalProcessSnapshot) error)(nil)),
+		"Finalize":        reflect.TypeOf((func(context.Context, floretPendingToolSettler, flruntime.PendingToolSettlementTarget, terminalProcessSnapshot) error)(nil)),
 	})
 	assertExactMethods("subagentRuntime", reflect.TypeOf((*subagentRuntime)(nil)).Elem(), map[string]reflect.Type{
 		"manage":    reflect.TypeOf((func(context.Context, string, map[string]any) (map[string]any, error))(nil)),
@@ -293,7 +289,11 @@ func TestSubagentExecutionCannotDeriveSiblingOrRootResourceAuthority(t *testing.
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = store.Close() })
-	svc := &Service{terminalProcesses: manager, threadsDB: store}
+	svc := &Service{
+		terminalProcesses:   manager,
+		threadsDB:           store,
+		pendingToolRecovery: testPendingToolRecoveryCoordinator{owner: &terminalProcessTestOwner{}},
+	}
 	svc.threadMgr = newThreadManager(svc)
 	t.Cleanup(svc.threadMgr.Close)
 
@@ -306,11 +306,10 @@ func TestSubagentExecutionCannotDeriveSiblingOrRootResourceAuthority(t *testing.
 	if child.subagentRuntime != nil || child.publishSubagentsPatch != nil {
 		t.Fatal("child execution retained parent SubAgent lifecycle or sibling resource capability")
 	}
-	if child.hasPendingApprovals != nil || child.pendingLiveToolApprovals != nil || child.broadcastThreadState != nil ||
-		child.broadcastThreadSummary != nil || child.replaceLiveDraftWithCanonicalTimeline != nil ||
+	if child.broadcastThreadState != nil || child.broadcastThreadSummary != nil || child.replaceLiveDraftWithCanonicalTimeline != nil ||
 		child.lastVisibleTimelineAnchor != nil || child.reconcilePendingTurnCommand != nil ||
 		child.commitPendingTurnCommandAdmission != nil || child.releasePendingTurnCommandAdmission != nil ||
-		child.resolveRunModel != nil || child.registerDelegatedApproval != nil || child.markDelegatedApprovalUnavailable != nil {
+		child.resolveRunModel != nil {
 		t.Fatal("child execution retained root presentation, admission, model, or approval coordination capability")
 	}
 	if child.authorityThreadID != "root_authority" || child.lockEffectAuthority == nil {

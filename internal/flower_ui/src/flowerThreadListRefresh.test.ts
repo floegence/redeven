@@ -92,6 +92,7 @@ function thread(overrides: Partial<FlowerThreadSnapshot> = {}): FlowerThreadSnap
     messages: [],
     read_status: readStatus(),
     ...overrides,
+    title_status: overrides.title_status ?? 'ready',
   };
 }
 

@@ -210,6 +210,7 @@ func TestPrepareRunUsesThreadScopedTargetPolicy(t *testing.T) {
 	t.Parallel()
 
 	executor := &recordingTargetToolExecutor{}
+	var observedRouting *threadstore.FlowerThreadRouting
 	svc, err := NewService(Options{
 		Logger:           slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{})),
 		StateDir:         t.TempDir(),
@@ -221,7 +222,11 @@ func TestPrepareRunUsesThreadScopedTargetPolicy(t *testing.T) {
 			Mode: ToolTargetModeExplicitTarget,
 		},
 		TargetToolExecutor: executor,
-		ToolTargetPolicyForRun: func(_ *session.Meta, thread threadstore.ThreadSettings, _ *threadstore.FlowerThreadMetadata) ToolTargetPolicy {
+		ToolTargetPolicyForRun: func(_ *session.Meta, thread threadstore.ThreadSettings, routing *threadstore.FlowerThreadRouting) ToolTargetPolicy {
+			if routing != nil {
+				copy := *routing
+				observedRouting = &copy
+			}
 			return ToolTargetPolicy{
 				Mode:            ToolTargetModeExplicitTarget,
 				DefaultTargetID: "provider:https%3A%2F%2Fredeven.test:env:" + thread.ThreadID,
@@ -244,6 +249,12 @@ func TestPrepareRunUsesThreadScopedTargetPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
+	if err := svc.UpsertFlowerThreadRouting(context.Background(), threadstore.FlowerThreadRouting{
+		EndpointID: meta.EndpointID, ThreadID: thread.ThreadID, HomeRuntimeID: "runtime_target_policy",
+		HomeRuntimeKind: "local_environment", PrimaryTargetID: "target_product_route",
+	}); err != nil {
+		t.Fatalf("UpsertFlowerThreadRouting: %v", err)
+	}
 	prepared, err := svc.prepareRun(meta, "run_target_policy", RunStartRequest{
 		ThreadID: thread.ThreadID,
 		Input:    RunInput{Text: "check policy"},
@@ -251,6 +262,9 @@ func TestPrepareRunUsesThreadScopedTargetPolicy(t *testing.T) {
 	}, nil)
 	if err != nil {
 		t.Fatalf("prepareRun: %v", err)
+	}
+	if observedRouting == nil || observedRouting.PrimaryTargetID != "target_product_route" || observedRouting.HomeRuntimeID != "runtime_target_policy" {
+		t.Fatalf("target policy received routing=%#v", observedRouting)
 	}
 	if got := prepared.r.toolTargetPolicy.DefaultTargetID; got != "provider:https%3A%2F%2Fredeven.test:env:"+thread.ThreadID {
 		t.Fatalf("run default target id=%q", got)

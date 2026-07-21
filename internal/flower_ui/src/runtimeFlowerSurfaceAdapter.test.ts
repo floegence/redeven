@@ -357,6 +357,7 @@ describe('runtime Flower surface adapter read state', () => {
       thread: {
         thread_id: 'thread_permission',
         title: 'Permission thread',
+        title_status: 'ready',
         run_status: 'running',
         model_id: 'default/gpt-5',
         permission_type: 'full_access',
@@ -392,13 +393,13 @@ describe('runtime Flower surface adapter read state', () => {
 
     const receipt = await adapter.submitApproval({
       thread_id: ' thread_1 ',
-      origin: 'main_tool',
+      origin: ' main_tool ' as 'main_tool',
       run_id: ' run_1 ',
       action_id: ' action_1 ',
       tool_id: ' tool_1 ',
       approved: true,
       expected_seq: 12.9,
-      revision: 2.1,
+      revision: 2,
       queue_generation: 4,
       queue_revision: 5,
     });
@@ -420,46 +421,62 @@ describe('runtime Flower surface adapter read state', () => {
     expect(receipt).toEqual({ ok: true, current_cursor: 13 });
   });
 
-  it('submits delegated approvals without requiring run or tool identity', async () => {
+  it('submits delegated approvals with canonical run and tool identity', async () => {
     const submitApproval = vi.fn(async () => ({ ok: true, current_cursor: 14 }));
     const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ submitApproval }));
-    const delegatedRef = {
-      parent_thread_id: 'thread_1',
-      parent_run_id: 'run_parent',
-      child_thread_id: 'thread_child',
-      child_run_id: 'run_child',
-      child_tool_call_id: 'tool_child',
-      approval_id: 'approval_child',
-    };
 
     const receipt = await adapter.submitApproval({
       thread_id: ' thread_1 ',
       origin: 'delegated_subagent',
       action_id: ' action_delegated ',
+      run_id: ' run_child ',
+      tool_id: ' tool_child ',
       approved: false,
+      revision: 3,
       version: 3,
       surface_epoch: 5,
       queue_generation: 6,
       queue_revision: 7,
       idempotency_key: ' idem-1 ',
-      delegated_ref: delegatedRef,
     });
 
     expect(submitApproval).toHaveBeenCalledWith({
       thread_id: 'thread_1',
       origin: 'delegated_subagent',
       action_id: 'action_delegated',
+      run_id: 'run_child',
+      tool_id: 'tool_child',
       approved: false,
       expected_seq: undefined,
-      revision: undefined,
+      revision: 3,
       version: 3,
       surface_epoch: 5,
       queue_generation: 6,
       queue_revision: 7,
       idempotency_key: 'idem-1',
-      delegated_ref: delegatedRef,
     });
     expect(receipt).toEqual({ ok: true, current_cursor: 14 });
+  });
+
+  it('rejects missing approval authority before transport', async () => {
+    const submitApproval = vi.fn(async () => ({ ok: true, current_cursor: 14 }));
+    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ submitApproval }));
+    const base = {
+      thread_id: 'thread_1',
+      origin: 'main_tool' as const,
+      action_id: 'action_1',
+      run_id: 'run_1',
+      tool_id: 'tool_1',
+      approved: true,
+      revision: 1,
+      queue_generation: 1,
+      queue_revision: 1,
+    };
+
+    await expect(adapter.submitApproval({ ...base, origin: '' as 'main_tool' })).rejects.toThrow(/origin/i);
+    await expect(adapter.submitApproval({ ...base, revision: 0 })).rejects.toThrow(/revision/i);
+    await expect(adapter.submitApproval({ ...base, queue_revision: 1.5 })).rejects.toThrow(/queue/i);
+    expect(submitApproval).not.toHaveBeenCalled();
   });
 
   it('passes working directory picker requests through adapter options', async () => {

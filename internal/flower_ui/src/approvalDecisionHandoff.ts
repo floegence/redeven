@@ -1,6 +1,6 @@
 import type { FlowerApprovalAction, FlowerThreadSnapshot } from './contracts/flowerSurfaceContracts';
 
-export type ApprovalDecisionHandoffPhase = 'submitting' | 'awaiting_projection' | 'fallback_reload';
+export type ApprovalDecisionHandoffPhase = 'submitting' | 'awaiting_projection';
 
 export type ApprovalDecisionHandoff = Readonly<{
   threadID: string;
@@ -43,9 +43,6 @@ export function flowerComposerApprovalAction(thread: FlowerThreadSnapshot | null
   const primary = action.surface_role === 'primary_action'
     || (!action.surface_role && !thread.approval_queue && pending.length === 1);
   if (!primary) return null;
-  if (action.origin === 'delegated_subagent' && action.delivery_state && action.delivery_state !== 'waiting_decision') {
-    return null;
-  }
   return action;
 }
 

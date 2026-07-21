@@ -453,7 +453,7 @@ func (s *floretSubagentRuntime) newHostLocked(ctx context.Context, parent *run, 
 		parent.webSearchMode,
 		withDisabledFloretCoreControlTools(childContract.HiddenControlTools...),
 		withFloretRequestAttachmentResolver(s.resolveSubagentMessageAttachment, modelCapability.SupportsImageInput, modelCapability.SupportsFileInput),
-		withFloretBeforeRequest(childRun.floretContractError),
+		withFloretRequestAdmission(childRun.admitFloretProviderRequest),
 	)
 	if parent.floretSubagentHostFactory == nil {
 		return nil, errors.New("floret subagent host factory not ready")
@@ -675,11 +675,9 @@ func providerWebSearchConfigKey(in *config.AIProviderWebSearch) map[string]strin
 }
 
 type subagentParentAuthority struct {
-	threadID                string
-	approvalTimeout         time.Duration
-	currentPermission       func(context.Context) (FlowerPermissionType, error)
-	registerApproval        func(*run, flruntime.EffectAuthorizationRequest) (*delegatedApprovalHandle, bool, error)
-	markApprovalUnavailable func(string, string)
+	threadID          string
+	approvalTimeout   time.Duration
+	currentPermission func(context.Context) (FlowerPermissionType, error)
 }
 
 func (r *run) bindSubagentParentAuthority(parent *run) {
@@ -691,12 +689,6 @@ func (r *run) bindSubagentParentAuthority(parent *run) {
 		approvalTimeout:   parent.toolApprovalTO,
 		currentPermission: parent.currentThreadPermissionType,
 	}
-	if parent.host.registerDelegatedApproval != nil {
-		authority.registerApproval = func(child *run, req flruntime.EffectAuthorizationRequest) (*delegatedApprovalHandle, bool, error) {
-			return parent.host.registerDelegatedApproval(parent, child, req)
-		}
-	}
-	authority.markApprovalUnavailable = parent.host.markDelegatedApprovalUnavailable
 	r.subagentParentAuthority = authority
 }
 
@@ -755,7 +747,6 @@ func (r *run) newSubagentRun(host runHostCapabilities, product runProductCapabil
 	child.subagentDepth = r.subagentDepth + 1
 	child.allowSubagentDelegate = false
 	child.noUserInteraction = true
-	child.allowDelegatedApproval = true
 	child.bindSubagentParentAuthority(r)
 	parentSnapshot := r.currentPermissionSnapshot()
 	if len(parentSnapshot.VisibleToolNames) > 0 {
@@ -1016,7 +1007,7 @@ func resolveSubagentCapabilityContract(parent *run, tools []ToolDef, forkMode fl
 		HiddenControlTools:    hidden,
 		HiddenToolSet:         subagentHiddenToolSet(hidden),
 		AllowSpawnSubagents:   false,
-		AllowUserApproval:     parent != nil && parent.subagentDepth > 0 && parent.allowDelegatedApproval,
+		AllowUserApproval:     parent != nil,
 		AllowUserInput:        false,
 		ForkMode:              forkMode,
 		FinalHandoffBudget:    1800,

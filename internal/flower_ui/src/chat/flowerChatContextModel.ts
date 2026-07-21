@@ -1,13 +1,77 @@
 import type { FlowerChatContextChip, FlowerChatContextDisplay, FlowerChatContextTone } from '../contracts/flowerChatContextTypes';
+import type { FlowerMessageReference } from '../contracts/flowerSurfaceContracts';
 import {
   parseAskFlowerContextActionEnvelope,
-  type PersistedContextActionItem,
+  type ContextActionContextItem,
 } from '../contextActionWire';
 import { basenameFromPath, compact, formatBytes, processLabel, processSnapshotText } from './contextItemUtils';
 
+const REFERENCE_DETAIL_CODE_POINTS = 96;
+
+function referenceTone(kind: FlowerMessageReference['kind']): FlowerChatContextTone {
+  switch (kind) {
+    case 'text': return 'selection';
+    case 'file': return 'file';
+    case 'directory': return 'directory';
+    case 'terminal': return 'terminal';
+    case 'process': return 'process';
+  }
+}
+
+function referenceTextPreview(text: string): string {
+  const compacted = compact(text);
+  const codePoints = Array.from(compacted);
+  return codePoints.length <= REFERENCE_DETAIL_CODE_POINTS
+    ? compacted
+    : `${codePoints.slice(0, REFERENCE_DETAIL_CODE_POINTS).join('')}...`;
+}
+
+function buildCanonicalReferenceChip(
+  reference: FlowerMessageReference,
+  index: number,
+): FlowerChatContextChip {
+  const visibleText = 'text' in reference ? reference.text : undefined;
+  const preview = visibleText
+    ? referenceTextPreview(visibleText)
+    : '';
+  return {
+    id: reference.reference_id,
+    kind: reference.kind,
+    tone: referenceTone(reference.kind),
+    label: reference.label,
+    detail: preview,
+    truncated: reference.truncated,
+    action: reference.kind === 'file' || reference.kind === 'directory'
+      ? {
+          type: 'open_canonical_reference',
+          reference_id: reference.reference_id,
+        }
+      : visibleText
+        ? {
+          type: 'open_text_preview',
+          title: reference.label,
+          subtitle: '',
+          body: visibleText,
+          context_index: index,
+          truncated: reference.truncated,
+        }
+        : null,
+  };
+}
+
+export function parseChatMessageReferences(
+  references: readonly FlowerMessageReference[] | undefined,
+): FlowerChatContextDisplay | null {
+  if (!references || references.length === 0) return null;
+  return {
+    authority: 'canonical_references',
+    chips: references.map((reference, index) => buildCanonicalReferenceChip(reference, index)),
+  };
+}
+
 // -- per-kind chip builders --
 
-function buildFilePathChip(item: Extract<PersistedContextActionItem, { kind: 'file_path' }>, index: number): FlowerChatContextChip {
+function buildFilePathChip(item: Extract<ContextActionContextItem, { kind: 'file_path' }>, index: number): FlowerChatContextChip {
   const label = basenameFromPath(item.path, 'file');
   const tone: FlowerChatContextTone = item.is_directory ? 'directory' : 'file';
   return {
@@ -22,26 +86,7 @@ function buildFilePathChip(item: Extract<PersistedContextActionItem, { kind: 'fi
   };
 }
 
-function buildFileSelectionChip(item: Extract<PersistedContextActionItem, { kind: 'file_selection' }>, index: number): FlowerChatContextChip {
-  const label = basenameFromPath(item.path, 'file');
-  return {
-    id: `ctx-${index}-selection`,
-    kind: 'file_selection',
-    tone: 'selection',
-    label: 'Selected content',
-    detail: label,
-    action: {
-      type: 'open_text_preview',
-      title: 'Selected content',
-      subtitle: label,
-      body: item.selection,
-      context_index: index,
-      source_path: item.path,
-    },
-  };
-}
-
-function buildTerminalSelectionChip(item: Extract<PersistedContextActionItem, { kind: 'terminal_selection' }>, index: number): FlowerChatContextChip {
+function buildTerminalSelectionChip(item: Extract<ContextActionContextItem, { kind: 'terminal_selection' }>, index: number): FlowerChatContextChip {
   const selection = compact(item.selection);
   const workingDir = compact(item.working_dir) || 'Terminal';
   const metadataOnly = !selection && item.selection_chars > 0;
@@ -66,18 +111,7 @@ function buildTerminalSelectionChip(item: Extract<PersistedContextActionItem, { 
   };
 }
 
-function buildUnsupportedChip(item: Extract<PersistedContextActionItem, { kind: 'unsupported' }>, index: number): FlowerChatContextChip {
-  return {
-    id: `ctx-${index}-unsupported`,
-    kind: item.original_kind,
-    tone: 'snapshot',
-    label: 'Unsupported linked context',
-    detail: item.original_kind,
-    action: null,
-  };
-}
-
-function buildProcessSnapshotChip(item: Extract<PersistedContextActionItem, { kind: 'process_snapshot' }>, index: number): FlowerChatContextChip {
+function buildProcessSnapshotChip(item: Extract<ContextActionContextItem, { kind: 'process_snapshot' }>, index: number): FlowerChatContextChip {
   const subtitle = `${compact(item.username) || 'system'} · ${Number(item.cpu_percent ?? 0).toFixed(1)}% CPU · ${formatBytes(Number(item.memory_bytes ?? 0))}`;
   return {
     id: `ctx-${index}-process`,
@@ -96,7 +130,7 @@ function buildProcessSnapshotChip(item: Extract<PersistedContextActionItem, { ki
   };
 }
 
-function buildTextSnapshotChip(item: Extract<PersistedContextActionItem, { kind: 'text_snapshot' }>, index: number): FlowerChatContextChip {
+function buildTextSnapshotChip(item: Extract<ContextActionContextItem, { kind: 'text_snapshot' }>, index: number): FlowerChatContextChip {
   const label = compact(item.title) || 'Snapshot';
   const detail = compact(item.detail) || '';
   return {
@@ -115,54 +149,31 @@ function buildTextSnapshotChip(item: Extract<PersistedContextActionItem, { kind:
   };
 }
 
-function buildChip(item: PersistedContextActionItem, index: number): FlowerChatContextChip {
+function buildChip(item: ContextActionContextItem, index: number): FlowerChatContextChip {
   switch (item.kind) {
     case 'file_path': return buildFilePathChip(item, index);
-    case 'file_selection': return buildFileSelectionChip(item, index);
     case 'terminal_selection': return buildTerminalSelectionChip(item, index);
     case 'process_snapshot': return buildProcessSnapshotChip(item, index);
     case 'text_snapshot': return buildTextSnapshotChip(item, index);
-    case 'unsupported': return buildUnsupportedChip(item, index);
   }
-}
-
-// -- extensibility: runtime builder registration --
-
-type ContextChipBuilderFn = (item: Record<string, unknown>, index: number) => FlowerChatContextChip | null;
-
-const customBuilders = new Map<string, ContextChipBuilderFn>();
-
-export function registerChatContextChipBuilder(kind: string, builder: ContextChipBuilderFn): void {
-  customBuilders.set(kind, builder);
 }
 
 // -- main parse function --
 
 export function parseChatContextAction(rawAction: unknown): FlowerChatContextDisplay | null {
   try {
-    const action = parseAskFlowerContextActionEnvelope(rawAction, 'persisted-display');
+    const action = parseAskFlowerContextActionEnvelope(rawAction);
     if (!action) return null;
-
-    const chips: FlowerChatContextChip[] = [];
-    for (let i = 0; i < action.context.length; i++) {
-      const item = action.context[i]!;
-      if (item.kind !== 'unsupported') {
-        chips.push(buildChip(item, i));
-        continue;
-      }
-      const rawItem = Array.isArray((rawAction as { context?: unknown }).context)
-        ? (rawAction as { context: unknown[] }).context[i]
-        : null;
-      const customBuilder = customBuilders.get(item.original_kind);
-      const customChip = customBuilder && rawItem && typeof rawItem === 'object' && !Array.isArray(rawItem)
-        ? customBuilder(rawItem as Record<string, unknown>, i)
-        : null;
-      chips.push(customChip ?? buildUnsupportedChip(item, i));
-    }
+    const chips = action.context.map((item, index) => buildChip(item, index));
 
     if (chips.length === 0) return null;
 
-    return { surface: action.source.surface, target: action.target.target_id, chips };
+    return {
+      authority: 'queued_context_action',
+      surface: action.source.surface,
+      target: action.target.target_id,
+      chips,
+    };
   } catch {
     return null;
   }

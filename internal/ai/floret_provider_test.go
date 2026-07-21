@@ -42,6 +42,42 @@ func (p *rejectedContinuationFlowerProvider) StreamTurn(_ context.Context, req M
 	return ModelGatewayResult{}, errors.New("invalid previous_response_id")
 }
 
+func TestFloretProviderAdapterRejectsRequestAfterRunExecutionCloses(t *testing.T) {
+	recorder := &recordingFlowerProvider{}
+	r := &run{}
+	r.closeExecution()
+	adapter := newFloretProviderAdapter(
+		recorder,
+		"openai_compatible",
+		"gpt-5-mini",
+		ProviderControls{},
+		TurnBudgets{},
+		"",
+		withFloretRequestAdmission(r.beginExecutionAdmission),
+	)
+	stream, err := adapter.StreamModel(context.Background(), flruntime.ModelRequest{
+		ThreadID:      "thread_stopped",
+		PromptScopeID: "thread_stopped",
+		Model:         "gpt-5-mini",
+		Messages:      []flruntime.ModelMessage{{Role: flruntime.ModelMessageRoleUser, Text: "continue"}},
+	})
+	if err != nil {
+		t.Fatalf("StreamModel: %v", err)
+	}
+	var streamErr error
+	for event := range stream {
+		if event.Type == flruntime.ModelEventError {
+			streamErr = event.Err
+		}
+	}
+	if !errors.Is(streamErr, ErrRunExecutionClosed) {
+		t.Fatalf("provider stream error=%v, want %v", streamErr, ErrRunExecutionClosed)
+	}
+	if recorder.req.Model != "" {
+		t.Fatalf("provider received request after execution closed: %#v", recorder.req)
+	}
+}
+
 func TestFloretProviderAdapter_ReasoningSelectionControlsProviderRequest(t *testing.T) {
 	t.Parallel()
 

@@ -1,30 +1,49 @@
 ---
 type: AI Tool Contract
 title: AI tool approval runtime
-description: Pending approval projection, queue ordering, conflict validation, and decision reconciliation.
+description: Canonical Floret approval authority, Flower projection, conflict validation, and decision reconciliation.
 tags: [ai, tools, approvals, flower]
 timestamp: 2026-07-18T00:00:00Z
 ---
 # Summary
 
-Floret owns pending tool-approval lifecycle, while Redeven maps the product-neutral snapshot into one thread-scoped Flower queue and applies product labels, policy, and delegated identity. Only the queue head is actionable; decisions validate queue generation, revision, event sequence, ownership, and current Floret pending state. Resolution returns a live cursor, reconciles against authoritative events, and treats stale or promoted actions as conflicts rather than replaying obsolete user intent.
+Floret is the only real-time authority for ordinary and delegated tool approvals. Redeven reads the root Floret approval queue, maps its records into Flower presentation DTOs, and publishes complete `approval.queue_replaced` snapshots without persisting, ordering, promoting, timing out, or reconstructing a second approval lifecycle. Decisions are compare-and-set operations against the current Floret queue and record identity. An explicit empty replacement clears stale UI state, including after cancellation. Redeven-owned `control_confirm` actions remain a separate product confirmation mechanism and do not participate in the Floret queue.
 
 # Contract
 
-## Mechanism
+## Canonical queue
 
-Floret v0.19.1 validates pending approval collections and individual items before Redeven maps them, so missing identity, lifecycle, batch, timestamp, or argument-hash fields are contract errors rather than values Redeven may synthesize.
+Floret v0.22.0 validates queue and record identity, lifecycle state, batch position, timestamps, resources, effects, and argument hashes. Redeven calls root-scoped `ReadApprovalQueue`; it never queries Floret's store directly and never copies approval records into the Redeven database. Invalid or mismatched Floret data is a contract error, not input for synthesis or repair.
 
-Current ordinary tool approvals come from Floret's product-neutral pending approval read model. Redeven calls `ListPendingApprovals` on the active Floret host, maps each generic pending approval to a Flower `FlowerApprovalAction` using `ToolPresentationSpec`, generic effects/resources/labels/host context, permission policy, delegated approval metadata, and Floret's zero-based `batch_index` plus `batch_size`, and then publishes that product projection through Flower live state. A thread-owned queue combines main tools, delegated child tools, and control confirmations. New actions receive immutable monotonic queue order; new main actions observed in one pending snapshot are first ordered by run, step, batch index, and action id, while later asynchronous or delegated actions append in registration order. Only the queue head is `primary_action` and user-decidable; every sibling remains a read-only locator. Approving the head releases that one waiter immediately and promotes the next action while the approved handler may still be running. Rejecting or timing out one action resolves only that action. The decision timeout begins on promotion, not while queued. Stop or cancellation closes every unresolved waiter, records canceled state, and clears the queue. The thread summary status is an effective product projection: `waiting_user` has first priority, an unresolved approval queue projects `waiting_approval`, and only then do active run or persisted terminal states apply. Lightweight thread list summaries do not carry approval actions or queue details, and their omission is never an authoritative clear of selected-thread live approval state. Pending approval summaries derive their user-visible labels from the same Redeven tool presentation projection used for Floret invocation activity; Floret carries that sanitized activity presentation through approval lifecycle observations, so a requested approval is rendered as the same tool activity item with `requires_approval`, `approval_state=requested`, and `status=waiting`, not as a second approval row or a UI-layer pending approval backfill. `requires_approval` records that the invocation participated in the approval lifecycle; once Floret resolves the approval, approved pending/running/success tool rows keep that history without becoming a locked current approval row in Flower. Activity timeline rows remain audit and locator material and expose no competing Allow or Deny buttons. Submitting an ordinary approval validates queue generation/revision, head identity, expected event sequence, action revision/version, surface epoch, user/thread/run ownership, and the current Floret pending snapshot before calling Redeven's approver channel. Every successful ordinary, control-confirmation, or delegated decision returns the cursor of its persisted `approval.resolved` live event through the existing `current_cursor` response field. The shared Flower surface enters loading synchronously before transport, then uses that receipt cursor plus the current stream generation to wait for an authoritative promoted action, explicit empty queue, or terminal thread. A newer generation is treated as resync and judged from its snapshot rather than compared to the old cursor. If live projection does not reconcile within 1500 ms, the surface performs one canonical fallback reload; missing approval fields preserve the frozen card, while explicit empty approval actions, a null/zero queue, or terminal state settle it. Any stale, duplicate, already-resolved, timed-out, unavailable, or non-head decision is returned as HTTP 409 with the stable `AI_APPROVAL_CONFLICT` error code. The shared Flower surface reloads canonical state on that conflict and retries at most once only when the same action id is still current and actionable with refreshed CAS fields; if another action has been promoted or the old action has resolved, the stale decision is discarded without user-facing send-failure feedback. The task-complete confirmation surface is a Redeven `control_confirm` product confirmation for a Floret control signal, but it shares the same product queue arbitration.
+Redeven maps each visible Floret record to a `FlowerApprovalAction`. Main and delegated actions both use the record's canonical run and tool-call identity. Delegated presentation derives its child label from the Floret `scope=thread:<child-thread-id>` value; there is no Redeven delegated-reference, delivery-state, or child-execution-state shadow. Product labels and safe summaries may be derived for display, but the underlying identity, order, current item, generation, revision, and actionability remain Floret-owned.
+
+Every canonical read or resolution result is emitted as one `approval.queue_replaced` event containing the entire mapped action list and queue version. The materializer replaces all Floret-owned actions atomically, preserves independent `control_confirm` actions, and rejects lower generation or revision snapshots. An empty Floret queue is still emitted as an explicit replacement with `actions=[]`; omission is not a clear. Bootstrap follows the same sampled-versus-unsampled distinction.
+
+Floret approval lifecycle events trigger a fresh canonical queue read. Cancellation is allowed to publish only this authoritative replacement after the owning run is detached; all other detached presentation events remain suppressed. This permits Floret's canceled empty queue to remove stale buttons without introducing a synthetic Redeven cancellation path.
+
+## Decisions
+
+Ordinary and delegated approval submission resolves the active root run, reads the current Floret queue, and verifies root ownership, current record identity, action/run/tool/origin identity, queue generation and revision, and approval revision. Redeven then calls Floret `ResolveApproval` with the exact current identity and publishes the returned complete queue. It does not consult a local live card, Activity row, transcript, or database record as decision authority.
+
+A successful resolution returns the cursor of the replacement event. Stale, duplicate, already resolved, unavailable, or non-current decisions use HTTP 409 with `AI_APPROVAL_CONFLICT`. The Flower surface freezes the submitted action while awaiting projection, performs an explicit canonical resync after 1500 ms or on conflict, and retries at most once only if the same action remains the current actionable Floret record with refreshed compare-and-set fields. A promoted action, explicit empty queue, or terminal thread settles the handoff.
+
+`control_confirm` is a Redeven product confirmation for a control signal. It retains its own in-memory run-scoped decision and live-event validation and is preserved alongside Floret actions in presentation, but it is not inserted into, ordered by, or resolved through the Floret approval queue.
+
+## Presentation
+
+The thread summary projects `waiting_approval` when the canonical queue contains visible pending actions and returns to the applicable running or terminal state when it becomes empty. Lightweight thread summaries may omit approval details; omission never clears selected-thread state.
+
+Activity timeline approval markers are historical tool execution presentation only. They cannot create, resolve, promote, or restore an approval action and expose no competing decision controls. The current Floret queue is the sole source for actionable buttons.
 
 # Boundaries
 
-Approval activity is historical presentation unless the current Floret pending snapshot still contains the matching action. Redeven must not persist a second approval lifecycle or derive actionable state from transcript or Activity rows.
+Floret owns ordinary and delegated approval state, ordering, timeout, cancellation, decision idempotency, and resolution. Redeven owns product policy revalidation, safe presentation mapping, live transport, conflict envelopes, and UI interaction. Redeven must not persist a second approval lifecycle, derive actionable state from historical rows, access Floret-managed storage, or add fallback logic that guesses missing queue state.
 
 # Evidence
 
-- `redeven:internal/ai/tools/registry.go:86` - Builtin tool definitions declare mutation, approval, and presentation specs.
-- `redeven:internal/ai/floret_approval.go:14` - Redeven product policy is returned through the Floret tool approver.
-- `redeven:internal/ai/flower_live_projection.go:83` - Thread approval submissions validate queue generation, revision, and current head before releasing a waiter.
-- `redeven:internal/ai/approval_conflict.go:9` - Approval state races use the stable `AI_APPROVAL_CONFLICT` contract.
-- `redeven:internal/codeapp/appserver/server.go:1183` - Appserver maps approval conflicts to the flat HTTP 409 error envelope.
+- `redeven:internal/ai/floret_approval.go:146` - Reads and maps the canonical root queue and emits complete replacements.
+- `redeven:internal/ai/flower_live_projection.go:800` - Submits identity-checked Floret decisions and materializes atomic replacements.
+- `redeven:internal/ai/floret_events.go:58` - Resynchronizes the canonical queue from Floret lifecycle events, including detached cancellation.
+- `redeven:internal/flower_ui/src/flowerLiveReducer.ts:434` - Applies version-monotonic replacements while preserving product confirmations.
+- `redeven:internal/flower_ui/src/FlowerSurface.tsx:4536` - Coordinates frozen decision handoff, resync, conflict handling, and bounded retry.
+- `redeven:internal/codeapp/appserver/server.go:1167` - Maps approval conflicts to the flat HTTP 409 error envelope.

@@ -155,10 +155,10 @@ func validateChildPermissionSnapshotRecord(rec ChildPermissionSnapshotRecord) er
 		rec.CreatedAtUnixMs <= 0 {
 		return errors.New("invalid child permission snapshot")
 	}
-	if rec.State != "provisional" && rec.State != "finalized" {
+	if rec.State != "provisional" && rec.State != "finalized" && rec.State != "aborted" {
 		return errors.New("invalid child permission snapshot state")
 	}
-	if (rec.State == "provisional" && rec.FinalizedAtUnixMs != 0) || (rec.State == "finalized" && rec.FinalizedAtUnixMs <= 0) {
+	if ((rec.State == "provisional" || rec.State == "aborted") && rec.FinalizedAtUnixMs != 0) || (rec.State == "finalized" && rec.FinalizedAtUnixMs <= 0) {
 		return errors.New("invalid child permission snapshot finalization")
 	}
 	if rec.ChildRunID == "" || rec.ChildRunID == rec.ChildThreadID || (rec.ParentRunID != "" && rec.ChildRunID == rec.ParentRunID) {

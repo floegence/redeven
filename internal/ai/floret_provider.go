@@ -27,7 +27,7 @@ type floretProviderAdapter struct {
 	requestAttachmentResolver func(context.Context, flruntime.ModelRequest, flruntime.MessageAttachment) (ContentPart, error)
 	supportsImageInput        bool
 	supportsFileInput         bool
-	beforeRequest             func() error
+	admitRequest              func(context.Context) (context.Context, func(), error)
 }
 
 type floretProviderAdapterOption func(*floretProviderAdapter)
@@ -89,10 +89,10 @@ func withFloretRequestAttachmentResolver(resolver func(context.Context, flruntim
 	}
 }
 
-func withFloretBeforeRequest(check func() error) floretProviderAdapterOption {
+func withFloretRequestAdmission(admit func(context.Context) (context.Context, func(), error)) floretProviderAdapterOption {
 	return func(adapter *floretProviderAdapter) {
 		if adapter != nil {
-			adapter.beforeRequest = check
+			adapter.admitRequest = admit
 		}
 	}
 }
@@ -110,6 +110,16 @@ func (p *floretProviderAdapter) StreamModel(ctx context.Context, req flruntime.M
 			sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventError, Err: err, Reason: err.Error()})
 			return
 		}
+		requestContext := ctx
+		releaseRequest := func() {}
+		if p.admitRequest != nil {
+			requestContext, releaseRequest, err = p.admitRequest(ctx)
+			if err != nil {
+				sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventError, Err: err, Reason: err.Error()})
+				return
+			}
+		}
+		defer releaseRequest()
 		var streamedText strings.Builder
 		var streamedReasoning strings.Builder
 		onEvent := func(ev StreamEvent) {
@@ -143,7 +153,7 @@ func (p *floretProviderAdapter) StreamModel(ctx context.Context, req flruntime.M
 				}
 			}
 		}
-		result, err := p.base.StreamTurn(ctx, turnReq, onEvent)
+		result, err := p.base.StreamTurn(requestContext, turnReq, onEvent)
 		if err != nil {
 			sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventError, Err: err, Reason: err.Error()})
 			return
@@ -222,11 +232,6 @@ func flowerSourcesToFloret(in []SourceRef) []flruntime.SourceRef {
 }
 
 func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flruntime.ModelRequest) (ModelGatewayRequest, error) {
-	if p.beforeRequest != nil {
-		if err := p.beforeRequest(); err != nil {
-			return ModelGatewayRequest{}, err
-		}
-	}
 	controls := p.controls
 	previous := cloneFloretModelState(req.PreviousState)
 	previousResponseID, err := p.previousResponseID(previous)

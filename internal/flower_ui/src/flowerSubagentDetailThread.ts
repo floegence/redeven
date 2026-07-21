@@ -334,6 +334,7 @@ export function projectSubagentDetailThread(detail: FlowerSubagentDetail | null)
   const thread: FlowerThreadSnapshot = {
     thread_id: threadID,
     title,
+    title_status: 'ready',
     model_id: '',
     working_dir: '',
     created_at_ms: Math.max(0, Math.floor(Number(summary.created_at_ms ?? updatedAt))),

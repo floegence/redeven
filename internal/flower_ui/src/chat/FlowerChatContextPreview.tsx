@@ -7,6 +7,7 @@ import type { FlowerChatContextSnapshotAction, FlowerChatContextSnapshotPreview 
 type FlowerChatContextPreviewProps = Readonly<{
   preview: FlowerChatContextSnapshotPreview | null;
   open: boolean;
+	truncatedLabel: string;
   zIndex?: number;
   onClose: () => void;
 }>;
@@ -31,7 +32,7 @@ function resolveSizing(viewport: { width: number; height: number }) {
   return { compact, margin, defaultSize: { width: defaultWidth, height: defaultHeight }, minSize: { width: minWidth, height: minHeight } };
 }
 
-const TextPreviewPanel: Component<{ action: Extract<FlowerChatContextSnapshotAction, { type: 'open_text_preview' }> }> = (props) => {
+const TextPreviewPanel: Component<{ action: Extract<FlowerChatContextSnapshotAction, { type: 'open_text_preview' }>; truncatedLabel: string }> = (props) => {
   return (
     <div class="flower-chat-context-preview-body">
       <div class="flower-chat-context-preview-title">{props.action.title}</div>
@@ -39,11 +40,14 @@ const TextPreviewPanel: Component<{ action: Extract<FlowerChatContextSnapshotAct
         <div class="flower-chat-context-preview-subtitle">{props.action.subtitle}</div>
       </Show>
       <pre class="flower-chat-context-preview-content">{props.action.body}</pre>
+      <Show when={props.action.truncated}>
+		<span class="flower-chat-context-preview-truncated" role="note">{props.truncatedLabel}</span>
+      </Show>
     </div>
   );
 };
 
-const ProcessPreviewPanel: Component<{ action: Extract<FlowerChatContextSnapshotAction, { type: 'open_process_preview' }> }> = (props) => {
+const ProcessPreviewPanel: Component<{ action: Extract<FlowerChatContextSnapshotAction, { type: 'open_process_preview' }>; truncatedLabel: string }> = (props) => {
   return (
     <div class="flower-chat-context-preview-body">
       <div class="flower-chat-context-preview-title">{props.action.title}</div>
@@ -51,16 +55,19 @@ const ProcessPreviewPanel: Component<{ action: Extract<FlowerChatContextSnapshot
         <div class="flower-chat-context-preview-subtitle">{props.action.subtitle}</div>
       </Show>
       <pre class="flower-chat-context-preview-content">{props.action.body}</pre>
+      <Show when={props.action.truncated}>
+		<span class="flower-chat-context-preview-truncated" role="note">{props.truncatedLabel}</span>
+      </Show>
     </div>
   );
 };
 
-const PreviewPanel: Component<{ action: FlowerChatContextSnapshotAction }> = (props) => {
+const PreviewPanel: Component<{ action: FlowerChatContextSnapshotAction; truncatedLabel: string }> = (props) => {
   switch (props.action.type) {
     case 'open_text_preview':
-      return <TextPreviewPanel action={props.action} />;
+		return <TextPreviewPanel action={props.action} truncatedLabel={props.truncatedLabel} />;
     case 'open_process_preview':
-      return <ProcessPreviewPanel action={props.action} />;
+		return <ProcessPreviewPanel action={props.action} truncatedLabel={props.truncatedLabel} />;
   }
 };
 
@@ -86,7 +93,7 @@ export const FlowerChatContextPreview: Component<FlowerChatContextPreviewProps> 
         zIndex={props.zIndex ?? 162}
       >
         <div class="flower-chat-context-preview-surface">
-          <PreviewPanel action={preview()!.action} />
+			<PreviewPanel action={preview()!.action} truncatedLabel={props.truncatedLabel} />
         </div>
       </FloatingWindow>
     </Show>

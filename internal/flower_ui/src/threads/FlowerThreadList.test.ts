@@ -35,6 +35,7 @@ function thread(overrides: Partial<FlowerThreadListItem> = {}): FlowerThreadList
     target_labels: [],
     read_status: readStatus(false),
     ...overrides,
+    title_status: overrides.title_status ?? 'ready',
   };
 }
 

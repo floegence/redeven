@@ -17,6 +17,13 @@ func TestForkOperationCopiesOnlyProductMetadataAndReplays(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if err := store.UpsertFlowerThreadRouting(ctx, FlowerThreadRouting{
+		EndpointID: "env", ThreadID: "source", HomeRuntimeID: "runtime_1",
+		HomeRuntimeKind: "local_environment", PrimaryTargetID: "target_primary",
+		ActiveTargetIDsJSON: `["target_primary"]`, UpdatedAtUnixMs: 1,
+	}); err != nil {
+		t.Fatal(err)
+	}
 	request := ForkThreadRequest{
 		OperationID: "fork_1", EndpointID: "env", SourceThreadID: "source", DestinationThreadID: "destination",
 		Title: "Forked", CreatedByUserPublicID: "user_1", CreatedByUserEmail: "user@example.com", CreatedAtUnixMs: 2,
@@ -28,12 +35,24 @@ func TestForkOperationCopiesOnlyProductMetadataAndReplays(t *testing.T) {
 	if prepared.Status != ForkOperationPending || prepared.SnapshotSchemaVersion != ForkSnapshotSchemaVersion || prepared.SnapshotJSON == "" || prepared.RequestedTitle != "Forked" {
 		t.Fatalf("unexpected prepared operation: %#v", prepared)
 	}
+	for _, forbidden := range []string{"flower_metadata", "owner_kind", "parent_thread_id", "context_json", "action_json"} {
+		if strings.Contains(prepared.SnapshotJSON, forbidden) {
+			t.Fatalf("fork snapshot retained Agent shadow field %q: %s", forbidden, prepared.SnapshotJSON)
+		}
+	}
 	forked, err := store.CommitForkOperation(ctx, CommitForkOperationRequest{OperationID: "fork_1", UpdatedAtUnixMs: 3})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if forked.ThreadID != "destination" || forked.ModelID != "openai/gpt-5" || forked.PermissionType != "approval_required" {
 		t.Fatalf("unexpected forked metadata: %#v", forked)
+	}
+	routing, err := store.GetFlowerThreadRouting(ctx, "env", "destination")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if routing == nil || routing.HomeRuntimeID != "runtime_1" || routing.PrimaryTargetID != "target_primary" || routing.UpdatedAtUnixMs != 2 {
+		t.Fatalf("unexpected forked routing: %#v", routing)
 	}
 	replayed, err := store.CommitForkOperation(ctx, CommitForkOperationRequest{OperationID: "fork_1", UpdatedAtUnixMs: 4})
 	if err != nil {

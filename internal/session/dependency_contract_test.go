@@ -402,7 +402,7 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 
 	const (
 		floretModule  = "github.com/floegence/floret"
-		floretVersion = "v0.19.1"
+		floretVersion = "v0.22.0"
 	)
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
@@ -477,10 +477,10 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 	expectedMarkers := map[string][]string{
 		filepath.Join("okf", "ai", "flower-context-action-records.md"): {
 			"RunTurnRequest.SupplementalContext",
-			"metadata-only",
-			"structured Floret attachments",
-			"flower.context_action.injected",
-			"v0.19.1",
+			"TurnInput.References",
+			"MessageReference",
+			"raw `ResourceRef` never reaches the browser",
+			"v0.22.0",
 		},
 		filepath.Join("okf", "ui", "flower-turn-launcher.md"): {
 			"file_path",
@@ -501,12 +501,12 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 		},
 		filepath.Join("okf", "ai", "flower-thread-fork-coordination.md"): {
 			"ai_thread_fork_operations",
-			"snapshot schema v2",
+			"snapshot schema v3",
 			"ForkOperationID",
 			"complete immutable snapshot",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
-			"Floret v0.19.1",
+			"Floret v0.22.0",
 			"single persistent source of truth",
 			"provider-owned thread titles",
 			"public contracts",
@@ -625,6 +625,7 @@ func TestFloretCapabilitiesAreMintedOnlyDuringBootstrap(t *testing.T) {
 		"flruntime." + "NewThreadCompactionHostBinder",
 		"flruntime." + "NewSubAgentHostBinder",
 		"flruntime." + "NewSubAgentReadHostBinder",
+		"flruntime." + "NewPendingToolRecoveryHostBinder",
 		"flruntime." + "NewInterruptedTurnRecoveryHostBinder",
 		"flruntime." + "NewThreadReadHostBinder",
 		"flruntime." + "NewThreadCreateHostBinder",
@@ -654,8 +655,15 @@ func TestFloretActiveSettlementHasNoRecoveryFallback(t *testing.T) {
 			t.Fatalf("floret_bootstrap.go must derive active settlement capability with %q", required)
 		}
 	}
-	if strings.Contains(bootstrap, "NewPendingToolRecoveryHostBinder") || strings.Contains(bootstrap, "PendingToolRecoveryHost") {
-		t.Fatal("floret_bootstrap.go must not mint recovery settlement authority without an explicit recovery coordinator")
+	if !strings.Contains(bootstrap, "newFloretPendingToolRecoveryCoordinator") {
+		t.Fatal("floret_bootstrap.go must construct recovery settlement only through the explicit coordinator")
+	}
+	recoverySource := readRepoFile(t, root, filepath.Join("internal", "ai", "floret_pending_tool_recovery.go"))
+	if strings.Contains(recoverySource, "PendingToolRecoveryHostBinder") || strings.Contains(recoverySource, "github.com/floegence/floret/runtime") {
+		t.Fatal("Floret recovery interface must not retain concrete runtime capability types")
+	}
+	if !strings.Contains(bootstrap, "NewPendingToolRecoveryHostBinder") || !strings.Contains(bootstrap, "boundFloretPendingToolRecoveryCoordinator") {
+		t.Fatal("Floret recovery binder must be minted and encapsulated inside the composition root")
 	}
 	runHost := readRepoFile(t, root, filepath.Join("internal", "ai", "run_host_capabilities.go"))
 	if strings.Contains(runSource, "*Service") || strings.Contains(runSource, "service *Service") || strings.Contains(runHost, "floretBootstrapResult") {
@@ -672,6 +680,22 @@ func TestFloretActiveSettlementHasNoRecoveryFallback(t *testing.T) {
 	}
 	if strings.Contains(runHost, "forSubagentExecution") || strings.Contains(runHost, "childHost := host") {
 		t.Fatal("child execution must not copy the root capability bundle")
+	}
+	for _, forbidden := range []string{"floretPendingToolRecoveryFactory", ".Bind(", "RecoverySettlementOwner"} {
+		if strings.Contains(runHost, forbidden) {
+			t.Fatalf("active run host must not retain a recovery settlement issuer, found %q", forbidden)
+		}
+	}
+	terminalProcess := readRepoFile(t, root, filepath.Join("internal", "ai", "terminal_process.go"))
+	for _, forbidden := range []string{"floretPendingToolRecoveryFactory", "RecoverySettlementOwner"} {
+		if strings.Contains(terminalProcess, forbidden) {
+			t.Fatalf("terminal process must not retain a recovery settlement issuer, found %q", forbidden)
+		}
+	}
+	for _, required := range []string{"RecoveryCoordinator", "RecoveryAuthorityThreadID", "terminal process authority barrier is required"} {
+		if !strings.Contains(terminalProcess, required) {
+			t.Fatalf("terminal process is missing post-terminal recovery contract %q", required)
+		}
 	}
 	if !strings.Contains(serviceSource, "func (s *Service) bindSubagentExecutionForParent") ||
 		!strings.Contains(serviceSource, "s.bindExactRunExecutionCapabilities(parent.endpointID, childThreadID, parent.threadID)") ||

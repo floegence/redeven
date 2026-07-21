@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import { describe, expect, it } from 'vitest';
 
 import { parseAskFlowerContextActionEnvelope } from '../contextActionWire';
-import { parseChatContextAction } from './flowerChatContextModel';
+import { parseChatContextAction, parseChatMessageReferences } from './flowerChatContextModel';
 
 type WireFixture = Readonly<{
   name: string;
@@ -27,37 +27,63 @@ const baseAction = {
 };
 
 describe('Flower chat linked context parser', () => {
-  it.each(fixtures)('parses shared wire fixture $name', (fixture) => {
-    const parsed = parseAskFlowerContextActionEnvelope(fixture.action, 'persisted-display');
-    const display = parseChatContextAction(fixture.action);
+  it('projects ordered canonical references without accepting host ResourceRef fields', () => {
+    const longUnicode = '引用内容'.repeat(80);
+    const display = parseChatMessageReferences([
+      { reference_id: 'ref-text', kind: 'text', label: 'Quoted selection', text: longUnicode, truncated: true },
+      { reference_id: 'ref-file', kind: 'file', label: 'src/index.ts' },
+      { reference_id: 'ref-dir', kind: 'directory', label: 'src' },
+      { reference_id: 'ref-terminal', kind: 'terminal', label: 'Terminal output', text: 'pnpm test\nPASS' },
+      { reference_id: 'ref-process', kind: 'process', label: 'vite (4242)' },
+    ]);
 
-    expect(parsed).not.toBeNull();
-    expect(display?.chips).toHaveLength(1);
-    expect(display?.chips[0]).toMatchObject({
-      kind: fixture.expect_kind,
-      label: fixture.expect_label,
+    expect(display?.authority).toBe('canonical_references');
+    expect(display?.chips.map((chip) => chip.kind)).toEqual(['text', 'file', 'directory', 'terminal', 'process']);
+    expect(display?.chips.map((chip) => chip.id)).toEqual([
+      'ref-text',
+      'ref-file',
+      'ref-dir',
+      'ref-terminal',
+      'ref-process',
+    ]);
+    expect(Array.from(display?.chips[0]?.detail ?? '')).toHaveLength(99);
+    expect(display?.chips[0]?.action).toMatchObject({
+      type: 'open_text_preview',
+      body: longUnicode,
+      context_index: 0,
     });
-    expect(parseAskFlowerContextActionEnvelope(fixture.action, 'strict-input') !== null).toBe(
-      fixture.name.startsWith('canonical_'),
-    );
+    expect(display?.chips[0]).toMatchObject({ truncated: true });
+    expect(display?.chips[0]?.action).toMatchObject({ truncated: true });
+		expect(display?.chips[1]?.action).toEqual({
+			type: 'open_canonical_reference',
+			reference_id: 'ref-file',
+		});
+		expect(display?.chips[2]?.action).toEqual({
+			type: 'open_canonical_reference',
+			reference_id: 'ref-dir',
+		});
+    expect(display?.chips[4]).toMatchObject({ detail: '', action: null });
+    expect(JSON.stringify(display)).not.toContain('resource_ref');
   });
 
-  it('keeps historical file selections display-only', () => {
-    const action = {
-      ...baseAction,
-      context: [{
-        kind: 'file_selection',
-        path: '/workspace/index.ts',
-        selection: 'const answer = 42;',
-        selection_chars: 18,
-      }],
-    };
+  it('returns no canonical reference display for an empty list', () => {
+    expect(parseChatMessageReferences([])).toBeNull();
+  });
 
-    expect(parseAskFlowerContextActionEnvelope(action, 'strict-input')).toBeNull();
-    expect(parseChatContextAction(action)?.chips[0]).toMatchObject({
-      kind: 'file_selection',
-      label: 'Selected content',
-    });
+  it.each(fixtures)('parses shared wire fixture $name', (fixture) => {
+    const parsed = parseAskFlowerContextActionEnvelope(fixture.action);
+    const display = parseChatContextAction(fixture.action);
+    const canonical = fixture.name.startsWith('canonical_');
+    expect(parsed !== null).toBe(canonical);
+    expect(display !== null).toBe(canonical);
+    if (canonical) {
+      expect(display?.chips).toHaveLength(1);
+      expect(display?.authority).toBe('queued_context_action');
+      expect(display?.chips[0]).toMatchObject({
+        kind: fixture.expect_kind,
+        label: fixture.expect_label,
+      });
+    }
   });
 
   it('builds indexed host actions for mixed file and directory context', () => {
@@ -82,21 +108,18 @@ describe('Flower chat linked context parser', () => {
     });
   });
 
-  it('recovers historical empty text content only for display', () => {
+  it('rejects queued text context without canonical content', () => {
     const action = {
       ...baseAction,
       source: { surface: 'git_browser' },
       context: [{ kind: 'text_snapshot', title: 'Git changes' }],
     };
 
-    expect(parseAskFlowerContextActionEnvelope(action, 'strict-input')).toBeNull();
-    expect(parseChatContextAction(action)?.chips[0]).toMatchObject({
-      kind: 'text_snapshot',
-      label: 'Git changes',
-    });
+    expect(parseAskFlowerContextActionEnvelope(action)).toBeNull();
+    expect(parseChatContextAction(action)).toBeNull();
   });
 
-  it('shows a damaged individual item as unsupported without exposing its payload', () => {
+  it('rejects the complete queued context action when any item is damaged', () => {
     const action = {
       ...baseAction,
       context: [
@@ -105,15 +128,7 @@ describe('Flower chat linked context parser', () => {
       ],
     };
 
-    const display = parseChatContextAction(action);
-    expect(display?.chips).toHaveLength(2);
-    expect(display?.chips[1]).toEqual(expect.objectContaining({
-      kind: 'file_path',
-      label: 'Unsupported linked context',
-      detail: 'file_path',
-      action: null,
-    }));
-    expect(JSON.stringify(display?.chips[1])).not.toContain('do not display');
+    expect(parseChatContextAction(action)).toBeNull();
   });
 
   it('rejects wrong envelope identity and known surface-kind mismatches', () => {

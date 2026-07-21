@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	flconfig "github.com/floegence/floret/config"
 	flruntime "github.com/floegence/floret/runtime"
 	fltools "github.com/floegence/floret/tools"
 	"github.com/floegence/redeven/internal/ai/threadstore"
@@ -21,6 +22,23 @@ import (
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
+
+type canonicalChildApprovalGateway struct{}
+
+func (canonicalChildApprovalGateway) StreamModel(_ context.Context, req flruntime.ModelRequest) (<-chan flruntime.ModelEvent, error) {
+	events := make(chan flruntime.ModelEvent, 3)
+	if req.Step == 1 {
+		events <- flruntime.ModelEvent{Type: flruntime.ModelEventToolCalls, ToolCalls: []fltools.ToolCall{{
+			ID: "child-write", Name: "write_note", Args: `{"path":"notes.md"}`,
+		}}}
+		events <- flruntime.ModelEvent{Type: flruntime.ModelEventDone, Reason: "tool_calls"}
+	} else {
+		events <- flruntime.ModelEvent{Type: flruntime.ModelEventDelta, Text: "done"}
+		events <- flruntime.ModelEvent{Type: flruntime.ModelEventDone, Reason: "stop"}
+	}
+	close(events)
+	return events, nil
+}
 
 func newPermissionPolicyTestRun(t *testing.T, workspace string, permissionType FlowerPermissionType, messageID string) *run {
 	t.Helper()
@@ -153,7 +171,6 @@ func configurePermissionPolicyDelegatedChild(t *testing.T, parent *run, child *r
 	}
 	if child != nil {
 		child.noUserInteraction = true
-		child.allowDelegatedApproval = true
 		child.bindSubagentParentAuthority(parent)
 		child.subagentDepth = 1
 		child.threadID = childThreadID
@@ -218,7 +235,6 @@ func newPermissionPolicyBridgeService(t *testing.T) *Service {
 	t.Cleanup(func() { _ = manager.Close(context.Background()) })
 	svc := &Service{
 		flowerLiveByThread: map[string]*flowerLiveThreadStream{},
-		delegatedApprovals: map[string]*delegatedApprovalHandle{},
 		threadsDB:          store,
 		persistOpTO:        time.Second,
 		terminalProcesses:  manager,
@@ -226,6 +242,130 @@ func newPermissionPolicyBridgeService(t *testing.T) *Service {
 	svc.threadMgr = newThreadManager(svc)
 	t.Cleanup(svc.threadMgr.Close)
 	return svc
+}
+
+func approvalQueueRevisionForTest(svc *Service, endpointID string, threadID string) int64 {
+	if svc == nil {
+		return 0
+	}
+	svc.mu.Lock()
+	defer svc.mu.Unlock()
+	stream := svc.flowerLiveByThread[runThreadKey(endpointID, threadID)]
+	if stream == nil || stream.State.ApprovalQueue == nil {
+		return 0
+	}
+	return stream.State.ApprovalQueue.Revision
+}
+
+func TestPermissionPolicy_SubagentCanonicalQueueConcurrentResolveOneWins(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	store := flruntime.NewMemoryStore()
+	t.Cleanup(func() { _ = store.Close() })
+	adapter := testFloretBootstrap(t, store)
+	create, err := adapter.newThreadCreate("permission-root", "create-permission-root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := create.CreateThread(ctx, flruntime.CreateThreadRequest{ThreadID: "permission-root", CreateIntentID: "create-permission-root"}); err != nil {
+		t.Fatal(err)
+	}
+	runtimeCaps, err := adapter.bindThreadRuntime("permission-root")
+	if err != nil {
+		t.Fatal(err)
+	}
+	toolsRegistry := fltools.NewRegistry()
+	if err := toolsRegistry.Register(fltools.Define[map[string]any](
+		fltools.Definition{
+			Name: "write_note", InputSchema: fltools.StrictObject(map[string]any{"path": fltools.String("path")}, []string{"path"}),
+			Effects: []fltools.Effect{fltools.EffectWrite}, Permission: fltools.PermissionSpec{Mode: fltools.PermissionAsk},
+		}, nil,
+		func(inv fltools.Invocation[map[string]any]) ([]fltools.ResourceRef, error) {
+			return []fltools.ResourceRef{{Kind: "file", Value: strings.TrimSpace(anyToString(inv.Args["path"]))}}, nil
+		},
+		func(context.Context, fltools.Invocation[map[string]any]) (fltools.Result, error) {
+			return fltools.Result{Text: "written"}, nil
+		},
+	)); err != nil {
+		t.Fatal(err)
+	}
+	childHost, err := runtimeCaps.SubAgent(ctx, flruntime.SubAgentHostOptions{
+		Config:       flconfig.Config{ContextPolicy: flconfig.ContextPolicy{ContextWindowTokens: flconfig.DefaultContextWindowTokens}},
+		ModelGateway: canonicalChildApprovalGateway{}, ModelGatewayIdentity: flruntime.ModelGatewayIdentity{Provider: "fake", Model: "fake-model", StateCompatibilityKey: "permission-test"},
+		Tools: toolsRegistry, EffectAuthorizationGate: allowFloretEffectGateForTest{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rootHost, err := runtimeCaps.Turn(ctx, flruntime.TurnExecutionHostOptions{Config: flconfig.Config{Provider: flconfig.ProviderFake, Model: "fake-model"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := childHost.SpawnSubAgent(ctx, flruntime.SpawnSubAgentRequest{
+		PublicationID: "permission-publication", ParentThreadID: "permission-root", ThreadID: "permission-child",
+		TaskName: "permission worker", Message: "write a note", ForkMode: flruntime.SubAgentForkNone,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	type waitOutcome struct {
+		result flruntime.WaitSubAgentsResult
+		err    error
+	}
+	waitDone := make(chan waitOutcome, 1)
+	go func() {
+		result, waitErr := childHost.WaitSubAgents(ctx, flruntime.WaitSubAgentsRequest{
+			ParentThreadID: "permission-root", ChildThreadIDs: []flruntime.ThreadID{"permission-child"}, Timeout: 3 * time.Second,
+		})
+		waitDone <- waitOutcome{result: result, err: waitErr}
+	}()
+	var queue flruntime.ApprovalQueue
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		queue, err = rootHost.ReadApprovalQueue(ctx, flruntime.ReadApprovalQueueRequest{ThreadID: "permission-root"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(queue.Items) == 1 {
+			break
+		}
+		if time.Now().After(deadline) {
+			children, listErr := childHost.ListSubAgents(ctx, "permission-root")
+			t.Fatalf("timed out waiting for canonical child approval: queue=%#v children=%#v list_err=%v", queue, children, listErr)
+		}
+		time.Sleep(time.Millisecond)
+	}
+	pending := queue.Items[0]
+	if pending.ThreadID != "permission-child" || pending.ParentThreadID != "permission-root" || pending.RunID == "permission-child" {
+		t.Fatalf("canonical child approval identity=%#v", pending)
+	}
+	resolve := func(decisionID string) error {
+		_, err := rootHost.ResolveApproval(ctx, flruntime.ResolveApprovalRequest{
+			DecisionID: decisionID, ExpectedRootThreadID: queue.RootThreadID, ExpectedGeneration: queue.Generation, ExpectedRevision: queue.Revision,
+			ExpectedCurrent:          flruntime.ApprovalIdentity{ApprovalID: pending.ApprovalID, ThreadID: pending.ThreadID, TurnID: pending.TurnID, RunID: pending.RunID, ToolCallID: pending.ToolCallID, EffectAttemptID: pending.EffectAttemptID},
+			ExpectedApprovalRevision: pending.Revision, Decision: flruntime.ApprovalDecisionApprove,
+		})
+		return err
+	}
+	errCh := make(chan error, 2)
+	go func() { errCh <- resolve("decision-child-a") }()
+	go func() { errCh <- resolve("decision-child-b") }()
+	var successes, conflicts int
+	for i := 0; i < 2; i++ {
+		if err := <-errCh; err == nil {
+			successes++
+		} else if errors.Is(err, flruntime.ErrStaleAuthority) {
+			conflicts++
+		} else {
+			t.Fatalf("unexpected canonical approval resolve error: %v", err)
+		}
+	}
+	if successes != 1 || conflicts != 1 {
+		t.Fatalf("canonical concurrent resolution successes=%d conflicts=%d, want 1/1", successes, conflicts)
+	}
+	waited := <-waitDone
+	if waited.err != nil || waited.result.TimedOut {
+		t.Fatalf("canonical child did not settle after approval: waited=%#v err=%v", waited.result, waited.err)
+	}
 }
 
 func TestPermissionPolicy_ParentInvocationRejectsMismatchedFloretRunID(t *testing.T) {
@@ -254,220 +394,6 @@ func TestPermissionPolicy_ParentInvocationRejectsMismatchedFloretRunID(t *testin
 	}
 }
 
-func TestPermissionPolicy_DelegatedApprovalRefUsesExplicitChildRunID(t *testing.T) {
-	t.Parallel()
-
-	parent := &run{threadID: "thread_parent", id: "run_parent", turnID: "turn_parent", messageID: "msg_parent"}
-	child := &run{threadID: "thread_child", id: "thread_child", turnID: "turn_child", messageID: "msg_child"}
-	ref := delegatedApprovalRef(parent, child, flruntime.EffectAuthorizationRequest{
-		ToolCallID:      "tool_call_child",
-		EffectAttemptID: "approval_child",
-		HostContext: map[string]string{
-			subagentToolHostContextChildThreadIDKey: "thread_child",
-			subagentToolHostContextChildRunIDKey:    "run_child_actual",
-		},
-	})
-	if ref.ChildRunID != "run_child_actual" {
-		t.Fatalf("child_run_id=%q, want explicit child run id", ref.ChildRunID)
-	}
-	if ref.ParentTurnID != parent.turnID || ref.ChildTurnID != child.turnID {
-		t.Fatalf("delegated turn lineage=%#v, want exact parent/child TurnID", ref)
-	}
-
-	ref = delegatedApprovalRef(parent, child, flruntime.EffectAuthorizationRequest{
-		ToolCallID:      "tool_call_fallback",
-		EffectAttemptID: "approval_fallback",
-		HostContext: map[string]string{
-			subagentToolHostContextChildThreadIDKey: "thread_child",
-		},
-	})
-	if ref.ChildRunID != "" || validDelegatedApprovalRef(ref) {
-		t.Fatalf("fallback child_run_id=%q valid=%v, want missing run id to fail closed", ref.ChildRunID, validDelegatedApprovalRef(ref))
-	}
-
-	ref = delegatedApprovalRef(parent, child, flruntime.EffectAuthorizationRequest{
-		ToolCallID:      "tool_call_thread_alias",
-		EffectAttemptID: "approval_thread_alias",
-		HostContext: map[string]string{
-			subagentToolHostContextChildThreadIDKey: "thread_child",
-			subagentToolHostContextChildRunIDKey:    "thread_child",
-		},
-	})
-	if ref.ChildRunID != "" || validDelegatedApprovalRef(ref) {
-		t.Fatalf("thread alias child_run_id=%q valid=%v, want explicit thread alias to fail closed", ref.ChildRunID, validDelegatedApprovalRef(ref))
-	}
-
-	ref = delegatedApprovalRef(parent, child, flruntime.EffectAuthorizationRequest{
-		ToolCallID:      "tool_call_parent_alias",
-		EffectAttemptID: "approval_parent_alias",
-		HostContext: map[string]string{
-			subagentToolHostContextChildThreadIDKey: "thread_child",
-			subagentToolHostContextChildRunIDKey:    "run_parent",
-		},
-	})
-	if ref.ChildRunID != "" || validDelegatedApprovalRef(ref) {
-		t.Fatalf("parent alias child_run_id=%q valid=%v, want explicit parent run alias to fail closed", ref.ChildRunID, validDelegatedApprovalRef(ref))
-	}
-}
-
-func TestPermissionPolicy_DelegatedApprovalRejectsParentRunAliasChildRunID(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	svc := newPermissionPolicyBridgeService(t)
-	parent := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_parent_alias")
-	child := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_child_alias")
-	bindPermissionPolicyRunsToService(t, svc, parent, child)
-	child.noUserInteraction = true
-	child.allowDelegatedApproval = true
-	child.bindSubagentParentAuthority(parent)
-	child.subagentDepth = 1
-	child.threadID = "child_thread_alias"
-
-	_, _, err := svc.registerDelegatedApproval(parent, child, flruntime.EffectAuthorizationRequest{
-		ToolCallID:      "tool_child_alias",
-		EffectAttemptID: "approval_child_alias",
-		ToolName:        "terminal.exec",
-		ArgumentHash:    "args-alias",
-		Resources:       []fltools.ResourceRef{{Kind: "command", Value: "pwd"}},
-		HostContext: map[string]string{
-			subagentToolHostContextChildThreadIDKey: "child_thread_alias",
-			subagentToolHostContextChildRunIDKey:    parent.id,
-		},
-	})
-	if err == nil || !strings.Contains(err.Error(), "missing identity") {
-		t.Fatalf("register delegated approval error=%v, want missing identity", err)
-	}
-}
-
-func TestPermissionPolicy_DelegatedApprovalRejectsMissingExactChildSnapshot(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	svc := newPermissionPolicyBridgeService(t)
-	parent := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_parent_snapshot_mismatch")
-	childThreadID := "child_thread_snapshot_mismatch"
-	insertPermissionPolicyChildSnapshot(t, parent, childThreadID, "terminal.exec")
-	child := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_child_snapshot_mismatch")
-	bindPermissionPolicyRunsToService(t, svc, parent, child)
-	child.noUserInteraction = true
-	child.allowDelegatedApproval = true
-	child.bindSubagentParentAuthority(parent)
-	child.subagentDepth = 1
-	child.threadID = childThreadID
-	child.id = "child_run_wrong_snapshot_mismatch"
-
-	_, _, err := svc.registerDelegatedApproval(parent, child, flruntime.EffectAuthorizationRequest{
-		ToolCallID:      "tool_child_snapshot_mismatch",
-		EffectAttemptID: "approval_child_snapshot_mismatch",
-		ToolName:        "terminal.exec",
-		ArgumentHash:    "args-snapshot-mismatch",
-		Resources:       []fltools.ResourceRef{{Kind: "command", Value: "pwd"}},
-		HostContext: map[string]string{
-			subagentToolHostContextChildThreadIDKey: childThreadID,
-			subagentToolHostContextChildRunIDKey:    child.id,
-		},
-	})
-	if err == nil || !strings.Contains(err.Error(), "snapshot missing") {
-		t.Fatalf("register delegated approval error=%v, want exact snapshot missing", err)
-	}
-}
-
-func TestPermissionPolicy_DelegatedApprovalActionOmitsMainApprovalIDs(t *testing.T) {
-	t.Parallel()
-
-	parent := &run{threadID: "thread_parent", id: "run_parent", turnID: "turn_parent", messageID: "msg_parent"}
-	child := &run{threadID: "thread_child", id: "run_child", turnID: "turn_child", messageID: "msg_child"}
-	ref := delegatedApprovalRef(parent, child, flruntime.EffectAuthorizationRequest{
-		ToolCallID:      "tool_call_child",
-		EffectAttemptID: "approval_child",
-		ToolName:        "terminal.exec",
-		HostContext: map[string]string{
-			subagentToolHostContextChildThreadIDKey: "thread_child",
-			subagentToolHostContextChildRunIDKey:    "run_child",
-		},
-	})
-	action, err := delegatedApprovalAction(parent, child, flruntime.EffectAuthorizationRequest{
-		ToolCallID:      "tool_call_child",
-		EffectAttemptID: "approval_child",
-		ToolName:        "terminal.exec",
-		Resources:       []fltools.ResourceRef{{Kind: "command", Value: "pwd"}},
-	}, ref, "dappr_contract", 100, 200)
-	if err != nil {
-		t.Fatal(err)
-	}
-	payload := mustFlowerPayload(action)
-	var decoded map[string]any
-	if err := json.Unmarshal(payload, &decoded); err != nil {
-		t.Fatalf("delegated approval action payload invalid: %v", err)
-	}
-	if _, ok := decoded["run_id"]; ok {
-		t.Fatalf("delegated approval payload includes run_id: %s", payload)
-	}
-	if _, ok := decoded["tool_id"]; ok {
-		t.Fatalf("delegated approval payload includes tool_id: %s", payload)
-	}
-	if decoded["turn_id"] != "turn_parent" {
-		t.Fatalf("delegated approval turn_id=%v, want parent TurnID", decoded["turn_id"])
-	}
-	refPayload, ok := decoded["delegated_ref"].(map[string]any)
-	if !ok {
-		t.Fatalf("delegated approval payload missing delegated_ref: %#v", decoded)
-	}
-	if refPayload["parent_run_id"] != "run_parent" || refPayload["child_tool_call_id"] != "tool_call_child" {
-		t.Fatalf("delegated ref payload=%#v, want parent run and child tool call identity", refPayload)
-	}
-}
-
-func waitDelegatedApprovalRequested(t *testing.T, svc *Service, endpointID string, threadID string) FlowerApprovalAction {
-	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		svc.mu.Lock()
-		stream := svc.flowerLiveByThread[runThreadKey(endpointID, threadID)]
-		if stream != nil {
-			for _, action := range stream.State.ApprovalActions {
-				if action.Origin == FlowerApprovalOriginDelegatedSubagent && action.Status == FlowerApprovalStatusPending {
-					svc.mu.Unlock()
-					return action
-				}
-			}
-		}
-		svc.mu.Unlock()
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatalf("delegated approval request was not raised")
-	return FlowerApprovalAction{}
-}
-
-func approvalQueueRevisionForTest(svc *Service, endpointID string, threadID string) int64 {
-	if svc == nil {
-		return 0
-	}
-	svc.mu.Lock()
-	defer svc.mu.Unlock()
-	stream := svc.flowerLiveByThread[runThreadKey(endpointID, threadID)]
-	if stream == nil || stream.State.ApprovalQueue == nil {
-		return 0
-	}
-	return stream.State.ApprovalQueue.Revision
-}
-
-func waitApprovalRequested(t *testing.T, r *run, toolID string) {
-	t.Helper()
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		r.mu.Lock()
-		_, pending := r.toolApprovals[toolID]
-		r.mu.Unlock()
-		if pending {
-			return
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatalf("tool approval request was not raised for %s", toolID)
-}
-
 func assertNoApprovalWait(t *testing.T, r *run, toolID string) {
 	t.Helper()
 	r.mu.Lock()
@@ -478,54 +404,22 @@ func assertNoApprovalWait(t *testing.T, r *run, toolID string) {
 	}
 }
 
-func runTerminalToolCall(t *testing.T, r *run, toolID string, args map[string]any, approve bool, expectApproval bool) *toolCallOutcome {
+func runTerminalToolCall(t *testing.T, r *run, toolID string, args map[string]any) *toolCallOutcome {
 	t.Helper()
-	return runBuiltinToolCall(t, r, toolID, "terminal.exec", args, approve, expectApproval)
+	return runBuiltinToolCall(t, r, toolID, "terminal.exec", args)
 }
 
-func runBuiltinToolCall(t *testing.T, r *run, toolID string, toolName string, args map[string]any, approve bool, expectApproval bool) *toolCallOutcome {
+func runBuiltinToolCall(t *testing.T, r *run, toolID string, toolName string, args map[string]any) *toolCallOutcome {
 	t.Helper()
-	type result struct {
-		outcome *toolCallOutcome
-		err     error
+	outcome, err := r.runBuiltInToolThroughFloret(context.Background(), toolID, toolName, args)
+	if err != nil {
+		t.Fatalf("%s tool call returned error: %v", toolName, err)
 	}
-
-	done := make(chan result, 1)
-	go func() {
-		outcome, err := r.runBuiltInToolThroughFloret(context.Background(), toolID, toolName, args)
-		done <- result{outcome: outcome, err: err}
-	}()
-
-	if expectApproval {
-		waitApprovalRequested(t, r, toolID)
-		if err := r.approveTool(toolID, approve); err != nil {
-			t.Fatalf("approveTool: %v", err)
-		}
+	if outcome == nil {
+		t.Fatal("missing tool call outcome")
 	}
-
-	select {
-	case res := <-done:
-		if res.err != nil {
-			t.Fatalf("%s tool call returned error: %v", toolName, res.err)
-		}
-		if res.outcome == nil {
-			t.Fatalf("missing tool call outcome")
-		}
-		assertNoApprovalWait(t, r, toolID)
-		return res.outcome
-	case <-time.After(3 * time.Second):
-		if !expectApproval {
-			r.mu.Lock()
-			_, pending := r.toolApprovals[toolID]
-			r.mu.Unlock()
-			if pending {
-				_ = r.approveTool(toolID, false)
-				t.Fatalf("unexpected approval request for %s", toolID)
-			}
-		}
-		t.Fatalf("timed out waiting for tool result")
-		return nil
-	}
+	assertNoApprovalWait(t, r, toolID)
+	return outcome
 }
 
 func (r *run) runTerminalExecThroughFloret(ctx context.Context, toolID string, args map[string]any) (*toolCallOutcome, error) {
@@ -637,7 +531,7 @@ func TestPermissionPolicy_ReadonlyDeniesTerminalExec(t *testing.T) {
 
 	outcome := runTerminalToolCall(t, r, "tool_readonly_terminal", map[string]any{
 		"command": "printf 'readonly denied' > note.txt",
-	}, false, false)
+	})
 
 	if outcome.Success {
 		t.Fatalf("terminal.exec must be denied in readonly permission")
@@ -661,7 +555,7 @@ func TestPermissionPolicy_ExecuteOnlyCannotLaunchTerminalProcess(t *testing.T) {
 
 	outcome := runTerminalToolCall(t, r, "tool_execute_only_terminal", map[string]any{
 		"command": "printf 'must not run' > execute-only.txt",
-	}, false, false)
+	})
 
 	if outcome.Success {
 		t.Fatalf("terminal.exec must be denied without write permission")
@@ -1067,7 +961,7 @@ func TestPermissionPolicy_SubagentsRuntimeActionsDoNotRequestApproval(t *testing
 	}
 }
 
-func TestPermissionPolicy_SubagentsValidationFailureDoesNotCreateDelegatedApprovalLedger(t *testing.T) {
+func TestPermissionPolicy_SubagentsValidationFailureDoesNotReachEffectDispatch(t *testing.T) {
 	t.Parallel()
 
 	workspace := t.TempDir()
@@ -1085,15 +979,9 @@ func TestPermissionPolicy_SubagentsValidationFailureDoesNotCreateDelegatedApprov
 	if outcome == nil || outcome.Success {
 		t.Fatalf("invalid subagents call outcome=%+v, want tool error", outcome)
 	}
-	svc.mu.Lock()
-	hasDelegatedApproval := len(svc.delegatedApprovals) != 0
-	svc.mu.Unlock()
-	if hasDelegatedApproval {
-		t.Fatal("subagents validation failure created a delegated approval")
-	}
 }
 
-func TestPermissionPolicy_ApprovalRequiredAsksForEveryTerminalExec(t *testing.T) {
+func TestPermissionPolicy_ApprovalRequiredTerminalExecUsesCanonicalFloretDecision(t *testing.T) {
 	t.Parallel()
 
 	workspace := t.TempDir()
@@ -1105,14 +993,14 @@ func TestPermissionPolicy_ApprovalRequiredAsksForEveryTerminalExec(t *testing.T)
 
 	outcome := runTerminalToolCall(t, r, "tool_approval_readonly_shell", map[string]any{
 		"command": `find . -type f | egrep "note.txt" | head -n 20`,
-	}, true, true)
+	})
 	if !outcome.Success {
 		t.Fatalf("approved readonly-looking shell should run, err=%+v", outcome.ToolError)
 	}
 
 	outcome = runTerminalToolCall(t, r, "tool_approval_mutating_shell", map[string]any{
 		"command": "printf 'approved' > note.txt",
-	}, true, true)
+	})
 	if !outcome.Success {
 		t.Fatalf("approved mutating shell should run, err=%+v", outcome.ToolError)
 	}
@@ -1125,7 +1013,7 @@ func TestPermissionPolicy_ApprovalRequiredAsksForEveryTerminalExec(t *testing.T)
 	}
 }
 
-func TestPermissionPolicy_ApprovalRequiredAsksForMutatingTools(t *testing.T) {
+func TestPermissionPolicy_ApprovalRequiredMutationsUseCanonicalFloretDecision(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
@@ -1133,29 +1021,23 @@ func TestPermissionPolicy_ApprovalRequiredAsksForMutatingTools(t *testing.T) {
 		toolName    string
 		seed        map[string]string
 		args        map[string]any
-		rejectArgs  map[string]any
 		wantPath    string
 		wantContent string
-		rejectPath  string
 	}{
 		{
 			name:        "file_write",
 			toolName:    "file.write",
 			args:        map[string]any{"file_path": "written.txt", "content": "approved write"},
-			rejectArgs:  map[string]any{"file_path": "blocked-write.txt", "content": "blocked"},
 			wantPath:    "written.txt",
 			wantContent: "approved write",
-			rejectPath:  "blocked-write.txt",
 		},
 		{
 			name:        "file_edit",
 			toolName:    "file.edit",
 			seed:        map[string]string{"edit.txt": "before"},
 			args:        map[string]any{"file_path": "edit.txt", "old_string": "before", "new_string": "after"},
-			rejectArgs:  map[string]any{"file_path": "edit.txt", "old_string": "after", "new_string": "blocked"},
 			wantPath:    "edit.txt",
 			wantContent: "after",
-			rejectPath:  "edit.txt",
 		},
 		{
 			name:     "apply_patch",
@@ -1166,15 +1048,8 @@ func TestPermissionPolicy_ApprovalRequiredAsksForMutatingTools(t *testing.T) {
 				"+approved patch",
 				"*** End Patch",
 			}, "\n")},
-			rejectArgs: map[string]any{"patch": strings.Join([]string{
-				"*** Begin Patch",
-				"*** Add File: blocked-patch.txt",
-				"+blocked",
-				"*** End Patch",
-			}, "\n")},
 			wantPath:    "patched.txt",
 			wantContent: "approved patch\n",
-			rejectPath:  "blocked-patch.txt",
 		},
 	}
 
@@ -1191,7 +1066,7 @@ func TestPermissionPolicy_ApprovalRequiredAsksForMutatingTools(t *testing.T) {
 			}
 			r := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_approval_mutation_"+tc.name)
 
-			outcome := runBuiltinToolCall(t, r, "tool_approval_"+tc.name, tc.toolName, tc.args, true, true)
+			outcome := runBuiltinToolCall(t, r, "tool_approval_"+tc.name, tc.toolName, tc.args)
 			if !outcome.Success {
 				t.Fatalf("approved %s should run, err=%+v", tc.toolName, outcome.ToolError)
 			}
@@ -1202,36 +1077,7 @@ func TestPermissionPolicy_ApprovalRequiredAsksForMutatingTools(t *testing.T) {
 			if string(got) != tc.wantContent {
 				t.Fatalf("%s content=%q, want %q", tc.wantPath, string(got), tc.wantContent)
 			}
-
-			outcome = runBuiltinToolCall(t, r, "tool_approval_"+tc.name+"_reject", tc.toolName, tc.rejectArgs, false, true)
-			if outcome.Success {
-				t.Fatalf("rejected %s must not succeed", tc.toolName)
-			}
-			if tc.rejectPath != "" && tc.rejectPath != tc.wantPath {
-				if _, statErr := os.Stat(filepath.Join(workspace, tc.rejectPath)); !os.IsNotExist(statErr) {
-					t.Fatalf("%s should not exist after reject, statErr=%v", tc.rejectPath, statErr)
-				}
-			}
 		})
-	}
-}
-
-func TestPermissionPolicy_ApprovalRequiredRejectPreventsExecution(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	target := filepath.Join(workspace, "note.txt")
-	r := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_approval_reject")
-
-	outcome := runTerminalToolCall(t, r, "tool_approval_reject", map[string]any{
-		"command": "printf 'blocked' > note.txt",
-	}, false, true)
-
-	if outcome.Success {
-		t.Fatalf("rejected terminal.exec must not succeed")
-	}
-	if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
-		t.Fatalf("target file should not be created after reject, statErr=%v", statErr)
 	}
 }
 
@@ -1260,547 +1106,7 @@ func TestPermissionPolicy_SnapshotGuardBlocksDirectAskToolExecution(t *testing.T
 	}
 }
 
-func TestPermissionPolicy_SubagentApprovalDelegatesToParentRun(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	target := filepath.Join(workspace, "delegated.txt")
-	svc := newPermissionPolicyBridgeService(t)
-	parent := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_parent")
-	child := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_child")
-	bindPermissionPolicyRunsToService(t, svc, parent, child)
-	configurePermissionPolicyDelegatedChild(t, parent, child, "child_thread_delegated")
-
-	type result struct {
-		outcome *toolCallOutcome
-		err     error
-	}
-	done := make(chan result, 1)
-	go func() {
-		outcome, err := child.runTerminalExecThroughFloret(context.Background(), "tool_child_shell", map[string]any{
-			"command": "printf 'delegated' > delegated.txt",
-		})
-		done <- result{outcome: outcome, err: err}
-	}()
-
-	action := waitDelegatedApprovalRequested(t, svc, parent.endpointID, parent.threadID)
-	if action.RunID != "" || action.ToolID != "" {
-		t.Fatalf("delegated action carried main approval ids: run_id=%q tool_id=%q", action.RunID, action.ToolID)
-	}
-	if action.DelegatedRef == nil || action.DelegatedRef.ChildThreadID != child.threadID || action.DelegatedRef.ChildToolCallID != "tool_child_shell" {
-		t.Fatalf("delegated action mismatch: %#v", action)
-	}
-	if action.DelegatedRef.ChildRunID != child.id || action.DelegatedRef.ChildRunID == child.threadID {
-		t.Fatalf("delegated child_run_id=%q, want distinct child run %q", action.DelegatedRef.ChildRunID, child.id)
-	}
-	assertNoApprovalWait(t, parent, "tool_child_shell")
-	assertNoApprovalWait(t, child, "tool_child_shell")
-	approveReq := SubmitFlowerApprovalRequest{
-		ThreadID:        parent.threadID,
-		Origin:          FlowerApprovalOriginDelegatedSubagent,
-		ActionID:        action.ActionID,
-		Approved:        true,
-		ExpectedSeq:     action.ExpectedSeq,
-		Revision:        action.Revision,
-		Version:         action.Version,
-		SurfaceEpoch:    action.SurfaceEpoch,
-		QueueGeneration: action.QueueGeneration,
-		QueueRevision:   approvalQueueRevisionForTest(svc, parent.endpointID, parent.threadID),
-		IdempotencyKey:  "idem-delegated-approve",
-		DelegatedRef:    action.DelegatedRef,
-	}
-	approvalReceipt, err := svc.SubmitFlowerApproval(parent.sessionMeta, approveReq)
-	if err != nil {
-		t.Fatalf("SubmitFlowerApproval delegated approve: %v", err)
-	}
-	assertFlowerApprovalReceiptCursor(t, svc, parent.endpointID, parent.threadID, action.ActionID, approvalReceipt)
-	select {
-	case res := <-done:
-		if res.err != nil {
-			t.Fatalf("child terminal tool returned error: %v", res.err)
-		}
-		if res.outcome == nil || !res.outcome.Success {
-			t.Fatalf("child terminal outcome=%+v tool_error=%+v, want success", res.outcome, res.outcome.ToolError)
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatalf("timed out waiting for delegated approval result")
-	}
-	got, err := os.ReadFile(target)
-	if err != nil {
-		t.Fatalf("read target: %v", err)
-	}
-	if string(got) != "delegated" {
-		t.Fatalf("file content=%q, want delegated", string(got))
-	}
-}
-
-func TestPermissionPolicy_SubagentDelegatedSubmitRequiresParentOwner(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	target := filepath.Join(workspace, "delegated-owner.txt")
-	svc := newPermissionPolicyBridgeService(t)
-	parent := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_parent_owner")
-	child := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_child_owner")
-	bindPermissionPolicyRunsToService(t, svc, parent, child)
-	configurePermissionPolicyDelegatedChild(t, parent, child, "child_thread_owner")
-
-	type result struct {
-		outcome *toolCallOutcome
-		err     error
-	}
-	done := make(chan result, 1)
-	go func() {
-		outcome, err := child.runTerminalExecThroughFloret(context.Background(), "tool_child_owner", map[string]any{
-			"command": "printf 'owner-approved' > delegated-owner.txt",
-		})
-		done <- result{outcome: outcome, err: err}
-	}()
-
-	action := waitDelegatedApprovalRequested(t, svc, parent.endpointID, parent.threadID)
-	approveReq := SubmitFlowerApprovalRequest{
-		ThreadID:        parent.threadID,
-		Origin:          FlowerApprovalOriginDelegatedSubagent,
-		ActionID:        action.ActionID,
-		Approved:        true,
-		ExpectedSeq:     action.ExpectedSeq,
-		Revision:        action.Revision,
-		Version:         action.Version,
-		SurfaceEpoch:    action.SurfaceEpoch,
-		QueueGeneration: action.QueueGeneration,
-		QueueRevision:   approvalQueueRevisionForTest(svc, parent.endpointID, parent.threadID),
-		IdempotencyKey:  "idem-delegated-owner-intruder",
-		DelegatedRef:    action.DelegatedRef,
-	}
-	intruderMeta := *parent.sessionMeta
-	intruderMeta.UserPublicID = "user_intruder"
-	if _, err := svc.SubmitFlowerApproval(&intruderMeta, approveReq); err == nil || !strings.Contains(err.Error(), "run not found") {
-		t.Fatalf("intruder delegated approval error=%v, want run not found", err)
-	}
-	if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
-		t.Fatalf("target should not exist after intruder submit, statErr=%v", statErr)
-	}
-	select {
-	case res := <-done:
-		t.Fatalf("child completed after intruder submit: outcome=%+v err=%v", res.outcome, res.err)
-	case <-time.After(150 * time.Millisecond):
-	}
-
-	cleanup := approveReq
-	cleanup.Approved = false
-	cleanup.IdempotencyKey = "idem-delegated-owner-cleanup"
-	if _, err := svc.SubmitFlowerApproval(parent.sessionMeta, cleanup); err != nil {
-		t.Fatalf("owner cleanup reject: %v", err)
-	}
-	select {
-	case res := <-done:
-		if res.err != nil {
-			t.Fatalf("child terminal tool returned error: %v", res.err)
-		}
-		if res.outcome == nil || res.outcome.Success {
-			t.Fatalf("child terminal outcome=%+v, want rejected after owner cleanup", res.outcome)
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatalf("timed out waiting for delegated owner cleanup")
-	}
-}
-
-func TestPermissionPolicy_SubagentDelegatedConcurrentSubmitOnlyOneWins(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	target := filepath.Join(workspace, "delegated-race.txt")
-	svc := newPermissionPolicyBridgeService(t)
-	parent := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_parent_race")
-	child := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_child_race")
-	bindPermissionPolicyRunsToService(t, svc, parent, child)
-	configurePermissionPolicyDelegatedChild(t, parent, child, "child_thread_race")
-
-	type result struct {
-		outcome *toolCallOutcome
-		err     error
-	}
-	done := make(chan result, 1)
-	go func() {
-		outcome, err := child.runTerminalExecThroughFloret(context.Background(), "tool_child_race", map[string]any{
-			"command": "printf 'race-approved' > delegated-race.txt",
-		})
-		done <- result{outcome: outcome, err: err}
-	}()
-
-	action := waitDelegatedApprovalRequested(t, svc, parent.endpointID, parent.threadID)
-	base := SubmitFlowerApprovalRequest{
-		ThreadID:        parent.threadID,
-		Origin:          FlowerApprovalOriginDelegatedSubagent,
-		ActionID:        action.ActionID,
-		ExpectedSeq:     action.ExpectedSeq,
-		Revision:        action.Revision,
-		Version:         action.Version,
-		SurfaceEpoch:    action.SurfaceEpoch,
-		QueueGeneration: action.QueueGeneration,
-		QueueRevision:   approvalQueueRevisionForTest(svc, parent.endpointID, parent.threadID),
-		DelegatedRef:    action.DelegatedRef,
-	}
-	approveReq := base
-	approveReq.Approved = true
-	approveReq.IdempotencyKey = "idem-delegated-race-approve"
-	rejectReq := base
-	rejectReq.Approved = false
-	rejectReq.IdempotencyKey = "idem-delegated-race-reject"
-
-	errCh := make(chan error, 2)
-	go func() {
-		_, err := svc.SubmitFlowerApproval(parent.sessionMeta, approveReq)
-		errCh <- err
-	}()
-	go func() {
-		_, err := svc.SubmitFlowerApproval(parent.sessionMeta, rejectReq)
-		errCh <- err
-	}()
-
-	var successCount, errorCount int
-	for i := 0; i < 2; i++ {
-		if err := <-errCh; err != nil {
-			errorCount++
-		} else {
-			successCount++
-		}
-	}
-	if successCount != 1 || errorCount != 1 {
-		t.Fatalf("concurrent delegated submit success=%d error=%d, want one winner and one stale loser", successCount, errorCount)
-	}
-
-	select {
-	case res := <-done:
-		if res.err != nil {
-			t.Fatalf("child terminal tool returned error: %v", res.err)
-		}
-		if res.outcome == nil {
-			t.Fatalf("missing child outcome")
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatalf("timed out waiting for delegated race result")
-	}
-	if got, err := os.ReadFile(target); err == nil && string(got) != "race-approved" {
-		t.Fatalf("file content=%q, want race-approved when approval won", string(got))
-	} else if err != nil && !os.IsNotExist(err) {
-		t.Fatalf("inspect race target: %v", err)
-	}
-}
-
-func TestPermissionPolicy_SubagentDelegatedStaleVersionAndSurfaceEpochDoNotDeliver(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	target := filepath.Join(workspace, "delegated-stale.txt")
-	svc := newPermissionPolicyBridgeService(t)
-	parent := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_parent_stale")
-	child := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_child_stale")
-	bindPermissionPolicyRunsToService(t, svc, parent, child)
-	configurePermissionPolicyDelegatedChild(t, parent, child, "child_thread_stale")
-
-	type result struct {
-		outcome *toolCallOutcome
-		err     error
-	}
-	done := make(chan result, 1)
-	go func() {
-		outcome, err := child.runTerminalExecThroughFloret(context.Background(), "tool_child_stale", map[string]any{
-			"command": "printf 'stale-delivered' > delegated-stale.txt",
-		})
-		done <- result{outcome: outcome, err: err}
-	}()
-
-	action := waitDelegatedApprovalRequested(t, svc, parent.endpointID, parent.threadID)
-	base := SubmitFlowerApprovalRequest{
-		ThreadID:        parent.threadID,
-		Origin:          FlowerApprovalOriginDelegatedSubagent,
-		ActionID:        action.ActionID,
-		Approved:        true,
-		Version:         action.Version,
-		SurfaceEpoch:    action.SurfaceEpoch,
-		QueueGeneration: action.QueueGeneration,
-		QueueRevision:   approvalQueueRevisionForTest(svc, parent.endpointID, parent.threadID),
-		IdempotencyKey:  "idem-delegated-stale",
-		DelegatedRef:    action.DelegatedRef,
-	}
-	staleVersion := base
-	staleVersion.Version++
-	if _, err := svc.SubmitFlowerApproval(parent.sessionMeta, staleVersion); !errors.Is(err, ErrApprovalConflict) {
-		t.Fatalf("stale version submit error=%v, want ErrApprovalConflict", err)
-	}
-	staleSurface := base
-	staleSurface.SurfaceEpoch++
-	if _, err := svc.SubmitFlowerApproval(parent.sessionMeta, staleSurface); !errors.Is(err, ErrApprovalConflict) {
-		t.Fatalf("stale surface submit error=%v, want ErrApprovalConflict", err)
-	}
-	if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
-		t.Fatalf("target should not exist after stale decisions, statErr=%v", statErr)
-	}
-
-	reject := base
-	reject.Approved = false
-	reject.IdempotencyKey = "idem-delegated-stale-cleanup"
-	if _, err := svc.SubmitFlowerApproval(parent.sessionMeta, reject); err != nil {
-		t.Fatalf("cleanup reject: %v", err)
-	}
-	select {
-	case res := <-done:
-		if res.err != nil {
-			t.Fatalf("child terminal tool returned error: %v", res.err)
-		}
-		if res.outcome == nil || res.outcome.Success {
-			t.Fatalf("child terminal outcome=%+v, want rejected after cleanup", res.outcome)
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatalf("timed out waiting for delegated stale cleanup")
-	}
-}
-
-func TestPermissionPolicy_SubagentDelegatedIdempotencyConflictDoesNotRedeliver(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	target := filepath.Join(workspace, "delegated-idem.txt")
-	svc := newPermissionPolicyBridgeService(t)
-	parent := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_parent_idem")
-	child := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_child_idem")
-	bindPermissionPolicyRunsToService(t, svc, parent, child)
-	configurePermissionPolicyDelegatedChild(t, parent, child, "child_thread_idem")
-
-	type result struct {
-		outcome *toolCallOutcome
-		err     error
-	}
-	done := make(chan result, 1)
-	go func() {
-		outcome, err := child.runTerminalExecThroughFloret(context.Background(), "tool_child_idem", map[string]any{
-			"command": "printf 'idem-approved' > delegated-idem.txt",
-		})
-		done <- result{outcome: outcome, err: err}
-	}()
-
-	action := waitDelegatedApprovalRequested(t, svc, parent.endpointID, parent.threadID)
-	approveReq := SubmitFlowerApprovalRequest{
-		ThreadID:        parent.threadID,
-		Origin:          FlowerApprovalOriginDelegatedSubagent,
-		ActionID:        action.ActionID,
-		Approved:        true,
-		Version:         action.Version,
-		SurfaceEpoch:    action.SurfaceEpoch,
-		QueueGeneration: action.QueueGeneration,
-		QueueRevision:   approvalQueueRevisionForTest(svc, parent.endpointID, parent.threadID),
-		IdempotencyKey:  "idem-delegated-conflict",
-		DelegatedRef:    action.DelegatedRef,
-	}
-	if _, err := svc.SubmitFlowerApproval(parent.sessionMeta, approveReq); err != nil {
-		t.Fatalf("approve delegated: %v", err)
-	}
-	select {
-	case res := <-done:
-		if res.err != nil {
-			t.Fatalf("child terminal tool returned error: %v", res.err)
-		}
-		if res.outcome == nil || !res.outcome.Success {
-			t.Fatalf("child terminal outcome=%+v, want success", res.outcome)
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatalf("timed out waiting for delegated idempotency approval")
-	}
-	conflicting := approveReq
-	conflicting.Approved = false
-	if _, err := svc.SubmitFlowerApproval(parent.sessionMeta, conflicting); !errors.Is(err, ErrApprovalConflict) {
-		t.Fatalf("conflicting delegated replay error=%v, want ErrApprovalConflict", err)
-	}
-	got, err := os.ReadFile(target)
-	if err != nil {
-		t.Fatalf("read target: %v", err)
-	}
-	if string(got) != "idem-approved" {
-		t.Fatalf("file content=%q, want idem-approved", string(got))
-	}
-}
-
-func TestPermissionPolicy_SubagentDelegatedRepeatedAskReusesRecordAndLiveAction(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	svc := newPermissionPolicyBridgeService(t)
-	parent := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_parent_repeat")
-	child := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_child_repeat")
-	bindPermissionPolicyRunsToService(t, svc, parent, child)
-	configurePermissionPolicyDelegatedChild(t, parent, child, "child_thread_repeat")
-	req := flruntime.EffectAuthorizationRequest{
-		ToolCallID:      "tool_child_repeat",
-		EffectAttemptID: "approval_child_repeat",
-		ToolName:        "terminal.exec",
-		ArgumentHash:    "args-repeat",
-		Resources:       []fltools.ResourceRef{{Kind: "command", Value: "pwd"}},
-		HostContext: map[string]string{
-			subagentToolHostContextChildThreadIDKey: "child_thread_repeat",
-			subagentToolHostContextChildRunIDKey:    child.id,
-		},
-	}
-
-	handle, created, err := svc.registerDelegatedApproval(parent, child, req)
-	if err != nil {
-		t.Fatalf("register delegated approval: %v", err)
-	}
-	if handle == nil || !created {
-		t.Fatalf("first register handle=%v created=%v, want new handle", handle, created)
-	}
-	handle2, created2, err := svc.registerDelegatedApproval(parent, child, req)
-	if err != nil {
-		t.Fatalf("register repeated delegated approval: %v", err)
-	}
-	if handle2 != handle || created2 {
-		t.Fatalf("repeated ask handle=%p created=%v, want existing %p and created=false", handle2, created2, handle)
-	}
-	actionID := handle.action.ActionID
-	svc.mu.Lock()
-	stream := svc.flowerLiveByThread[runThreadKey(parent.endpointID, parent.threadID)]
-	liveCount := 0
-	if stream != nil {
-		for _, action := range stream.State.ApprovalActions {
-			if action.ActionID == actionID {
-				liveCount++
-			}
-		}
-	}
-	svc.mu.Unlock()
-	if liveCount != 1 {
-		t.Fatalf("live actions for %s=%d, want 1", actionID, liveCount)
-	}
-	if err := handle.resolve(false); err != nil {
-		t.Fatalf("resolve cleanup: %v", err)
-	}
-}
-
-func TestPermissionPolicy_SubagentDelegatedSubmitRequiresMatchingRef(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	svc := newPermissionPolicyBridgeService(t)
-	parent := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_parent_ref")
-	child := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_child_ref")
-	bindPermissionPolicyRunsToService(t, svc, parent, child)
-	configurePermissionPolicyDelegatedChild(t, parent, child, "child_thread_ref")
-
-	type result struct {
-		outcome *toolCallOutcome
-		err     error
-	}
-	done := make(chan result, 1)
-	go func() {
-		outcome, err := child.runTerminalExecThroughFloret(context.Background(), "tool_child_ref", map[string]any{
-			"command": "printf 'ref-checked' > delegated-ref.txt",
-		})
-		done <- result{outcome: outcome, err: err}
-	}()
-
-	action := waitDelegatedApprovalRequested(t, svc, parent.endpointID, parent.threadID)
-	base := SubmitFlowerApprovalRequest{
-		ThreadID:        parent.threadID,
-		Origin:          FlowerApprovalOriginDelegatedSubagent,
-		ActionID:        action.ActionID,
-		Approved:        true,
-		ExpectedSeq:     action.ExpectedSeq,
-		Revision:        action.Revision,
-		Version:         action.Version,
-		SurfaceEpoch:    action.SurfaceEpoch,
-		QueueGeneration: action.QueueGeneration,
-		QueueRevision:   approvalQueueRevisionForTest(svc, parent.endpointID, parent.threadID),
-		IdempotencyKey:  "idem-delegated-ref",
-	}
-	if _, err := svc.SubmitFlowerApproval(parent.sessionMeta, base); err == nil || !strings.Contains(err.Error(), "ref is required") {
-		t.Fatalf("missing delegated ref error=%v, want ref required", err)
-	}
-	mismatched := *action.DelegatedRef
-	mismatched.ApprovalID += "_other"
-	base.DelegatedRef = &mismatched
-	if _, err := svc.SubmitFlowerApproval(parent.sessionMeta, base); err == nil || !strings.Contains(err.Error(), "ref mismatch") {
-		t.Fatalf("mismatched delegated ref error=%v, want ref mismatch", err)
-	}
-
-	base.Approved = false
-	base.DelegatedRef = action.DelegatedRef
-	base.IdempotencyKey = "idem-delegated-ref-reject"
-	if _, err := svc.SubmitFlowerApproval(parent.sessionMeta, base); err != nil {
-		t.Fatalf("SubmitFlowerApproval delegated cleanup reject: %v", err)
-	}
-	select {
-	case res := <-done:
-		if res.err != nil {
-			t.Fatalf("child terminal tool returned error: %v", res.err)
-		}
-		if res.outcome == nil || res.outcome.Success {
-			t.Fatalf("child terminal outcome=%+v, want rejected after cleanup decision", res.outcome)
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatalf("timed out waiting for delegated ref cleanup")
-	}
-}
-
-func TestPermissionPolicy_SubagentDelegatedRejectPreventsExecution(t *testing.T) {
-	t.Parallel()
-
-	workspace := t.TempDir()
-	target := filepath.Join(workspace, "delegated-reject.txt")
-	svc := newPermissionPolicyBridgeService(t)
-	parent := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_parent_reject")
-	child := newPermissionPolicyTestRun(t, workspace, FlowerPermissionApprovalRequired, "msg_child_reject")
-	bindPermissionPolicyRunsToService(t, svc, parent, child)
-	configurePermissionPolicyDelegatedChild(t, parent, child, "child_thread_reject")
-
-	type result struct {
-		outcome *toolCallOutcome
-		err     error
-	}
-	done := make(chan result, 1)
-	go func() {
-		outcome, err := child.runTerminalExecThroughFloret(context.Background(), "tool_child_reject", map[string]any{
-			"command": "printf 'blocked' > delegated-reject.txt",
-		})
-		done <- result{outcome: outcome, err: err}
-	}()
-
-	action := waitDelegatedApprovalRequested(t, svc, parent.endpointID, parent.threadID)
-	if action.DelegatedRef == nil || action.DelegatedRef.ChildToolCallID != "tool_child_reject" {
-		t.Fatalf("delegated action ref=%#v, want child tool call tool_child_reject", action.DelegatedRef)
-	}
-	if _, err := svc.SubmitFlowerApproval(parent.sessionMeta, SubmitFlowerApprovalRequest{
-		ThreadID:        parent.threadID,
-		Origin:          FlowerApprovalOriginDelegatedSubagent,
-		ActionID:        action.ActionID,
-		Approved:        false,
-		ExpectedSeq:     action.ExpectedSeq,
-		Revision:        action.Revision,
-		Version:         action.Version,
-		SurfaceEpoch:    action.SurfaceEpoch,
-		QueueGeneration: action.QueueGeneration,
-		QueueRevision:   approvalQueueRevisionForTest(svc, parent.endpointID, parent.threadID),
-		IdempotencyKey:  "idem-delegated-reject",
-		DelegatedRef:    action.DelegatedRef,
-	}); err != nil {
-		t.Fatalf("SubmitFlowerApproval delegated reject: %v", err)
-	}
-	select {
-	case res := <-done:
-		if res.err != nil {
-			t.Fatalf("child terminal tool returned error: %v", res.err)
-		}
-		if res.outcome == nil || res.outcome.Success {
-			t.Fatalf("child terminal outcome=%+v, want rejected", res.outcome)
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatalf("timed out waiting for delegated reject result")
-	}
-	if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
-		t.Fatalf("target file should not be created after delegated reject, statErr=%v", statErr)
-	}
-}
-
-func TestPermissionPolicy_SubagentPermissionDowngradeRejectsStaleAllowThenRequiresApproval(t *testing.T) {
+func TestPermissionPolicy_SubagentPermissionDowngradeRejectsStaleAllow(t *testing.T) {
 	t.Parallel()
 
 	workspace := t.TempDir()
@@ -1837,38 +1143,6 @@ func TestPermissionPolicy_SubagentPermissionDowngradeRejectsStaleAllowThenRequir
 		t.Fatalf("current child snapshot persisted=%v err=%v", ok, err)
 	}
 
-	type result struct {
-		outcome *toolCallOutcome
-		err     error
-	}
-	done := make(chan result, 1)
-	go func() {
-		outcome, err := child.runTerminalExecThroughFloret(context.Background(), "tool_child_after_downgrade", map[string]any{
-			"command": "printf 'blocked' > downgraded-child.txt",
-		})
-		done <- result{outcome: outcome, err: err}
-	}()
-	action := waitDelegatedApprovalRequested(t, svc, parent.endpointID, parent.threadID)
-	if action.DelegatedRef == nil || action.DelegatedRef.ChildToolCallID != "tool_child_after_downgrade" {
-		t.Fatalf("delegated action ref=%#v", action.DelegatedRef)
-	}
-	if _, err := svc.SubmitFlowerApproval(parent.sessionMeta, SubmitFlowerApprovalRequest{
-		ThreadID: parent.threadID, Origin: FlowerApprovalOriginDelegatedSubagent, ActionID: action.ActionID,
-		Approved: false, ExpectedSeq: action.ExpectedSeq, Revision: action.Revision, Version: action.Version,
-		SurfaceEpoch: action.SurfaceEpoch, QueueGeneration: action.QueueGeneration,
-		QueueRevision:  approvalQueueRevisionForTest(svc, parent.endpointID, parent.threadID),
-		IdempotencyKey: "idem-child-downgrade-reject", DelegatedRef: action.DelegatedRef,
-	}); err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case res := <-done:
-		if res.err != nil || res.outcome == nil || res.outcome.Success {
-			t.Fatalf("downgraded child result=%+v err=%v, want rejected", res.outcome, res.err)
-		}
-	case <-time.After(3 * time.Second):
-		t.Fatal("timed out waiting for downgraded child rejection")
-	}
 	if _, statErr := os.Stat(target); !os.IsNotExist(statErr) {
 		t.Fatalf("downgraded child tool created file, statErr=%v", statErr)
 	}
@@ -1883,7 +1157,7 @@ func TestPermissionPolicy_FullAccessAllowsTerminalExecWithoutApproval(t *testing
 
 	outcome := runTerminalToolCall(t, r, "tool_full_access", map[string]any{
 		"command": "printf 'full access' > note.txt",
-	}, true, false)
+	})
 
 	if !outcome.Success {
 		t.Fatalf("full_access terminal.exec should run without approval, err=%+v", outcome.ToolError)
@@ -1949,7 +1223,7 @@ func TestPermissionPolicy_FullAccessAllowsMutatingToolsWithoutApproval(t *testin
 				}
 			}
 			r := newPermissionPolicyTestRun(t, workspace, FlowerPermissionFullAccess, "msg_full_mutation_"+tc.name)
-			outcome := runBuiltinToolCall(t, r, "tool_full_"+tc.name, tc.toolName, tc.args, true, false)
+			outcome := runBuiltinToolCall(t, r, "tool_full_"+tc.name, tc.toolName, tc.args)
 			if !outcome.Success {
 				t.Fatalf("full_access %s should run without approval, err=%+v", tc.toolName, outcome.ToolError)
 			}

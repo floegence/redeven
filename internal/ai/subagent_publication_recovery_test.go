@@ -138,14 +138,16 @@ func TestSubAgentPublicationRecoveryRebuildsPersistedRunConfiguration(t *testing
 		resolveProviderKey: func(providerID string) (string, bool, error) {
 			return "sk-test", strings.TrimSpace(providerID) == "provider", nil
 		},
+		pendingToolRecovery: testPendingToolRecoveryCoordinator{owner: &terminalProcessTestOwner{}},
 		floretRuntime: &floretRuntimeCapabilityIssuer{bind: func(threadID flruntime.ThreadID) (floretThreadRuntimeCapabilities, error) {
-			if strings.TrimSpace(string(threadID)) != parentThreadID {
-				return floretThreadRuntimeCapabilities{}, fmt.Errorf("unexpected thread %q", threadID)
+			capabilities := floretThreadRuntimeCapabilities{}
+			if strings.TrimSpace(string(threadID)) == parentThreadID {
+				capabilities.SubAgent = func(_ context.Context, options flruntime.SubAgentHostOptions) (floretSubagentHost, error) {
+					recoveredOptions = options
+					return recoveredHost, nil
+				}
 			}
-			return floretThreadRuntimeCapabilities{SubAgent: func(_ context.Context, options flruntime.SubAgentHostOptions) (floretSubagentHost, error) {
-				recoveredOptions = options
-				return recoveredHost, nil
-			}}, nil
+			return capabilities, nil
 		}},
 	}
 	svc.threadMgr = newThreadManager(svc)

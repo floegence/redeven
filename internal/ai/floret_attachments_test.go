@@ -92,7 +92,7 @@ func TestFloretTurnInputAllowsAttachmentOnlyAndRejectsInvalidResources(t *testin
 
 	input, err := r.floretTurnInput(context.Background(), RunInput{Attachments: []RunAttachmentIn{{
 		Name: "ignored transport name", MimeType: "application/octet-stream", URL: "/_redeven_proxy/api/ai/uploads/upl_only",
-	}}})
+	}}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,10 +103,10 @@ func TestFloretTurnInputAllowsAttachmentOnlyAndRejectsInvalidResources(t *testin
 	if attachment.ResourceRef != "redeven-upload:upl_only" || attachment.Name != "only.txt" || attachment.MIMEType != "text/plain" || attachment.SizeBytes != 4 {
 		t.Fatalf("canonical attachment=%#v", attachment)
 	}
-	if _, err := r.floretTurnInput(context.Background(), RunInput{}); err == nil {
+	if _, err := r.floretTurnInput(context.Background(), RunInput{}, nil); err == nil {
 		t.Fatal("empty text and attachment list was accepted")
 	}
-	if _, err := r.floretTurnInput(context.Background(), RunInput{Attachments: []RunAttachmentIn{{URL: "/_redeven_proxy/api/ai/uploads/upl_missing"}}}); err == nil || !strings.Contains(err.Error(), "load attachment") {
+	if _, err := r.floretTurnInput(context.Background(), RunInput{Attachments: []RunAttachmentIn{{URL: "/_redeven_proxy/api/ai/uploads/upl_missing"}}}, nil); err == nil || !strings.Contains(err.Error(), "load attachment") {
 		t.Fatalf("missing attachment error=%v", err)
 	}
 	insertFloretAttachmentUpload(t, store, uploadsDir, threadstore.UploadRecord{
@@ -115,7 +115,7 @@ func TestFloretTurnInputAllowsAttachmentOnlyAndRejectsInvalidResources(t *testin
 	if err := store.BindUploadsToRef(context.Background(), r.endpointID, r.threadID, threadstore.UploadRefKindQueuedTurn, commandID, []string{"upl_large"}, time.Now().UnixMilli()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := r.floretTurnInput(context.Background(), RunInput{Attachments: []RunAttachmentIn{{URL: "/_redeven_proxy/api/ai/uploads/upl_large"}}}); err == nil || !strings.Contains(err.Error(), "size limit") {
+	if _, err := r.floretTurnInput(context.Background(), RunInput{Attachments: []RunAttachmentIn{{URL: "/_redeven_proxy/api/ai/uploads/upl_large"}}}, nil); err == nil || !strings.Contains(err.Error(), "size limit") {
 		t.Fatalf("oversized attachment error=%v", err)
 	}
 }
