@@ -22,7 +22,11 @@ const rpcState = vi.hoisted(() => ({
   onSessionsChanged: vi.fn(),
   lifecycleHandler: null as ((event: any) => void) | null,
   onForegroundCommandUpdate: vi.fn(),
+  foregroundSubscriptionAvailable: true,
   commandHandler: null as ((event: any) => void) | null,
+  onOutputActivityUpdate: vi.fn(),
+  outputSubscriptionAvailable: true,
+  outputActivityHandler: null as ((event: any) => void) | null,
 }));
 
 class FakeCoordinator {
@@ -101,7 +105,8 @@ vi.mock('../protocol/redeven_v1', () => ({
   useRedevenRpc: () => ({ terminal: {
     listSessions: rpcState.list,
     onSessionsChanged: rpcState.onSessionsChanged,
-    onForegroundCommandUpdate: rpcState.onForegroundCommandUpdate,
+    onForegroundCommandUpdate: rpcState.foregroundSubscriptionAvailable ? rpcState.onForegroundCommandUpdate : undefined,
+    onOutputActivityUpdate: rpcState.outputSubscriptionAvailable ? rpcState.onOutputActivityUpdate : undefined,
     createSession: vi.fn(),
     deleteSession: vi.fn(),
   } }),
@@ -148,6 +153,7 @@ describe('TerminalSessionCatalogProvider', () => {
     envState.setValue = setEnvValue;
     envState.id = envId;
     envState.setId = setEnvId;
+    rpcState.sessions = [{ id: 's1', name: 'Terminal 1', workingDir: '/', createdAtMs: 1, lastActiveAtMs: 2, isActive: true }];
     rpcState.list.mockReset();
     rpcState.list.mockResolvedValue({ sessions: rpcState.sessions });
     rpcState.onSessionsChanged.mockReset();
@@ -156,9 +162,16 @@ describe('TerminalSessionCatalogProvider', () => {
       return () => { rpcState.lifecycleHandler = null; };
     });
     rpcState.onForegroundCommandUpdate.mockReset();
+    rpcState.foregroundSubscriptionAvailable = true;
     rpcState.onForegroundCommandUpdate.mockImplementation((handler: (event: any) => void) => {
       rpcState.commandHandler = handler;
       return () => { rpcState.commandHandler = null; };
+    });
+    rpcState.onOutputActivityUpdate.mockReset();
+    rpcState.outputSubscriptionAvailable = true;
+    rpcState.onOutputActivityUpdate.mockImplementation((handler: (event: any) => void) => {
+      rpcState.outputActivityHandler = handler;
+      return () => { rpcState.outputActivityHandler = null; };
     });
     coordinatorState.current = null;
   });
@@ -179,6 +192,29 @@ describe('TerminalSessionCatalogProvider', () => {
     expect(latest.sessions().map((session: any) => session.id)).toEqual(['s1']);
     expect(rpcState.list).toHaveBeenCalledTimes(1);
     dispose();
+  });
+
+  it('falls back to authoritative refresh when optional metadata subscriptions are unavailable', async () => {
+    rpcState.foregroundSubscriptionAvailable = false;
+    rpcState.outputSubscriptionAvailable = false;
+    let latest: any = null;
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+
+    await vi.waitFor(() => expect(latest?.hydrated()).toBe(true));
+    expect(latest.sessions()).toHaveLength(1);
+    expect(rpcState.onForegroundCommandUpdate).not.toHaveBeenCalled();
+    expect(rpcState.onOutputActivityUpdate).not.toHaveBeenCalled();
+
+    rpcState.sessions = [{ ...rpcState.sessions[0], name: 'Refreshed terminal' }];
+    rpcState.list.mockImplementation(async () => ({ sessions: rpcState.sessions }));
+    await latest.refresh();
+    expect(latest.sessions()[0]?.name).toBe('Refreshed terminal');
   });
 
   it('clears immediately when process permission is revoked and preserves stale data across disconnect', async () => {
@@ -297,6 +333,231 @@ describe('TerminalSessionCatalogProvider', () => {
     expect(latest.sessions()[0]?.foregroundCommand).toEqual({
       phase: 'running', displayName: 'sleep', revision: 3, updatedAtMs: 30,
     });
+    dispose();
+  });
+
+  it('applies only newer output activity revisions for a hydrated session', async () => {
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(latest?.hydrated()).toBe(true));
+
+    rpcState.outputActivityHandler?.({
+      sessionId: 's1',
+      outputActivity: { phase: 'streaming', revision: 3, updatedAtMs: 30 },
+    });
+    rpcState.outputActivityHandler?.({
+      sessionId: 's1',
+      outputActivity: { phase: 'settled', revision: 2, updatedAtMs: 20 },
+    });
+
+    await vi.waitFor(() => expect(latest.sessions()[0]?.outputActivity).toEqual({
+      phase: 'streaming', revision: 3, updatedAtMs: 30,
+    }));
+    dispose();
+  });
+
+  it('retains an early output activity notification across a stale initial snapshot', async () => {
+    let resolveList!: (value: any) => void;
+    rpcState.list.mockImplementationOnce(() => new Promise((resolve) => { resolveList = resolve; }));
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(rpcState.onOutputActivityUpdate).toHaveBeenCalled());
+
+    rpcState.outputActivityHandler?.({
+      sessionId: 's1',
+      outputActivity: { phase: 'streaming', revision: 3, updatedAtMs: 30 },
+    });
+    resolveList({ sessions: [{
+      ...rpcState.sessions[0],
+      outputActivity: { phase: 'settled', revision: 2, updatedAtMs: 20 },
+    }] });
+
+    await vi.waitFor(() => expect(latest?.hydrated()).toBe(true));
+    expect(latest.sessions()[0]?.outputActivity).toEqual({
+      phase: 'streaming', revision: 3, updatedAtMs: 30,
+    });
+    dispose();
+  });
+
+  it('converges missed output activity updates through an authoritative refresh', async () => {
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(latest?.hydrated()).toBe(true));
+
+    rpcState.list.mockResolvedValueOnce({ sessions: [{
+      ...rpcState.sessions[0],
+      outputActivity: { phase: 'settled', revision: 7, updatedAtMs: 70 },
+    }] });
+    await latest.refresh();
+
+    expect(latest.sessions()[0]?.outputActivity).toEqual({
+      phase: 'settled', revision: 7, updatedAtMs: 70,
+    });
+    dispose();
+  });
+
+  it('does not let an older refresh response overwrite a newer output activity notification', async () => {
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(latest?.hydrated()).toBe(true));
+
+    rpcState.outputActivityHandler?.({
+      sessionId: 's1',
+      outputActivity: { phase: 'streaming', revision: 8, updatedAtMs: 80 },
+    });
+    rpcState.list.mockResolvedValueOnce({ sessions: [{
+      ...rpcState.sessions[0],
+      outputActivity: { phase: 'settled', revision: 7, updatedAtMs: 70 },
+    }] });
+    await latest.refresh();
+
+    expect(latest.sessions()[0]?.outputActivity).toEqual({
+      phase: 'streaming', revision: 8, updatedAtMs: 80,
+    });
+    expect(coordinatorState.current?.getSnapshot()[0]?.outputActivity).toEqual({
+      phase: 'streaming', revision: 8, updatedAtMs: 80,
+    });
+    dispose();
+  });
+
+  it('drops output activity pending state on delete and disconnect', async () => {
+    let resolveList!: (value: any) => void;
+    rpcState.list.mockImplementationOnce(() => new Promise((resolve) => { resolveList = resolve; }));
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(rpcState.onOutputActivityUpdate).toHaveBeenCalled());
+
+    rpcState.outputActivityHandler?.({
+      sessionId: 's1',
+      outputActivity: { phase: 'streaming', revision: 8, updatedAtMs: 80 },
+    });
+    rpcState.lifecycleHandler?.({ reason: 'deleted', sessionId: 's1' });
+    resolveList({ sessions: [{
+      ...rpcState.sessions[0],
+      outputActivity: { phase: 'settled', revision: 7, updatedAtMs: 70 },
+    }] });
+    await vi.waitFor(() => expect(latest?.hydrated()).toBe(true));
+    expect(latest.sessions()).toHaveLength(0);
+
+    protocolState.setStatus('connecting');
+    protocolState.setClient(null);
+    await vi.waitFor(() => expect(rpcState.outputActivityHandler).toBeNull());
+    dispose();
+  });
+
+  it('reconciles output activity truth when the bounded early-notification buffer overflows', async () => {
+    const sessionCount = 513;
+    const staleSessions = Array.from({ length: sessionCount }, (_, index) => ({
+      id: `output-session-${index}`,
+      name: `Terminal ${index}`,
+      workingDir: '/',
+      createdAtMs: index + 1,
+      lastActiveAtMs: index + 1,
+      isActive: index === 0,
+      outputActivity: { phase: 'unknown', revision: 2, updatedAtMs: 20 },
+    }));
+    const authoritativeSessions = staleSessions.map((session, index) => index === 0 ? {
+      ...session,
+      outputActivity: { phase: 'streaming', revision: 3, updatedAtMs: 30 },
+    } : session);
+    let resolveInitialList!: (value: any) => void;
+    let resolveReconcile!: (value: any) => void;
+    rpcState.list
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveInitialList = resolve; }))
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveReconcile = resolve; }));
+
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(rpcState.onOutputActivityUpdate).toHaveBeenCalled());
+
+    for (let index = 0; index < sessionCount; index += 1) {
+      rpcState.outputActivityHandler?.({
+        sessionId: `output-session-${index}`,
+        outputActivity: { phase: 'streaming', revision: 3, updatedAtMs: 30 },
+      });
+    }
+    resolveInitialList({ sessions: staleSessions });
+
+    await vi.waitFor(() => expect(rpcState.list).toHaveBeenCalledTimes(2));
+    resolveReconcile({ sessions: authoritativeSessions });
+    await vi.waitFor(() => expect(latest?.sessions()[0]?.outputActivity).toEqual({
+      phase: 'streaming', revision: 3, updatedAtMs: 30,
+    }));
+    dispose();
+  });
+
+  it('retries overflow reconciliation after a transient authoritative refresh failure', async () => {
+    const sessionCount = 513;
+    const staleSessions = Array.from({ length: sessionCount }, (_, index) => ({
+      id: `retry-output-session-${index}`,
+      name: `Terminal ${index}`,
+      workingDir: '/',
+      createdAtMs: index + 1,
+      lastActiveAtMs: index + 1,
+      isActive: index === 0,
+      outputActivity: { phase: 'unknown', revision: 2, updatedAtMs: 20 },
+    }));
+    const authoritativeSessions = staleSessions.map((session, index) => index === 0 ? {
+      ...session,
+      outputActivity: { phase: 'streaming', revision: 3, updatedAtMs: 30 },
+    } : session);
+    let resolveInitialList!: (value: any) => void;
+    rpcState.list
+      .mockImplementationOnce(() => new Promise((resolve) => { resolveInitialList = resolve; }))
+      .mockRejectedValueOnce(new Error('temporary catalog failure'))
+      .mockResolvedValueOnce({ sessions: authoritativeSessions });
+
+    let latest: any = null;
+    const host = document.createElement('div');
+    const dispose = render(() => (
+      <TerminalSessionCatalogProvider>
+        <Consumer onValue={(value) => { latest = value; }} />
+      </TerminalSessionCatalogProvider>
+    ), host);
+    await vi.waitFor(() => expect(rpcState.onOutputActivityUpdate).toHaveBeenCalled());
+
+    for (let index = 0; index < sessionCount; index += 1) {
+      rpcState.outputActivityHandler?.({
+        sessionId: `retry-output-session-${index}`,
+        outputActivity: { phase: 'streaming', revision: 3, updatedAtMs: 30 },
+      });
+    }
+    resolveInitialList({ sessions: staleSessions });
+
+    await vi.waitFor(() => expect(rpcState.list).toHaveBeenCalledTimes(3));
+    await vi.waitFor(() => expect(latest?.sessions()[0]?.outputActivity).toEqual({
+      phase: 'streaming', revision: 3, updatedAtMs: 30,
+    }));
     dispose();
   });
 

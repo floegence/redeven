@@ -4,9 +4,16 @@ import { Button, Input } from '@floegence/floe-webapp-core/ui';
 import { Check, Copy, ExternalLink, Plus, Refresh, Search, Terminal, X } from '@floegence/floe-webapp-core/icons';
 
 import { useI18n } from '../i18n';
+import { Tooltip } from '../primitives/Tooltip';
 import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
+import {
+  TERMINAL_AGENT_CLI_PRESENTATIONS,
+  type TerminalSessionOutputState,
+} from './terminalAgentSessionPresentation';
+import type { TerminalAgentCliIdentity } from '@floegence/floeterm-terminal-web/sessions';
 
-export type TerminalSessionNavigationStatus = 'none' | 'running' | 'unread' | 'creating' | 'failed';
+export type TerminalSessionProcessState = 'none' | 'running' | 'creating' | 'failed';
+export type TerminalSessionAttentionState = 'none' | 'unread';
 
 export type TerminalSessionNavigationItem = Readonly<{
   id: string;
@@ -19,7 +26,10 @@ export type TerminalSessionNavigationItem = Readonly<{
     foreground: string;
   }>;
   fullPath: string;
-  status: TerminalSessionNavigationStatus;
+  processState: TerminalSessionProcessState;
+  outputState: TerminalSessionOutputState;
+  attentionState: TerminalSessionAttentionState;
+  agentIdentity: TerminalAgentCliIdentity | null;
   canBrowsePath: boolean;
   canClear: boolean;
   canDuplicate: boolean;
@@ -54,12 +64,13 @@ export type TerminalSessionNavigatorProps = Readonly<{
   onOpenFiles: (item: TerminalSessionNavigationItem) => void;
 }>;
 
-function TerminalSidebarStatusBadge(props: { status: TerminalSessionNavigationStatus }) {
+function TerminalSidebarProcessBadge(props: { state: TerminalSessionProcessState }) {
   return (
     <>
-      <Show when={props.status === 'running'}>
+      <Show when={props.state === 'running'}>
         <span
           class="absolute -bottom-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full border-2 border-sidebar bg-sidebar text-sidebar-foreground shadow-sm"
+          data-terminal-process-state="running"
           data-terminal-tab-status="running"
           aria-hidden="true"
         >
@@ -69,29 +80,101 @@ function TerminalSidebarStatusBadge(props: { status: TerminalSessionNavigationSt
           </svg>
         </span>
       </Show>
-      <Show when={props.status === 'unread'}>
-        <span class="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-sidebar bg-primary/75 shadow-sm" data-terminal-tab-status="unread" aria-hidden="true" />
-      </Show>
-      <Show when={props.status === 'creating'}>
+      <Show when={props.state === 'creating'}>
         <span
           class="absolute -bottom-1 -right-1 inline-flex h-4 w-4 items-center justify-center rounded-full border-2 border-sidebar bg-sidebar text-muted-foreground shadow-sm"
+          data-terminal-process-state="creating"
           data-terminal-tab-status="creating"
           aria-hidden="true"
         >
-          <svg class="h-2.5 w-2.5 animate-spin" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+          <svg class="h-2.5 w-2.5 animate-spin motion-reduce:animate-none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
             <circle cx="12" cy="12" r="8" class="opacity-20" stroke="currentColor" stroke-width="3" />
             <path d="M20 12a8 8 0 0 0-8-8" class="opacity-100" stroke="currentColor" stroke-width="3" stroke-linecap="round" />
           </svg>
         </span>
       </Show>
-      <Show when={props.status === 'failed'}>
-        <span class="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-sidebar bg-error shadow-sm" data-terminal-tab-status="failed" aria-hidden="true" />
+      <Show when={props.state === 'failed'}>
+        <span class="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-sidebar bg-error shadow-sm" data-terminal-process-state="failed" data-terminal-tab-status="failed" aria-hidden="true" />
       </Show>
-      <Show when={props.status === 'none'}>
-        <span class="hidden" data-terminal-tab-status="none" aria-hidden="true" />
+      <Show when={props.state === 'none'}>
+        <span class="hidden" data-terminal-process-state="none" aria-hidden="true" />
       </Show>
     </>
   );
+}
+
+function TerminalAgentIdentity(props: {
+  identity: TerminalAgentCliIdentity;
+  sessionId: string;
+}) {
+  const presentation = createMemo(() => TERMINAL_AGENT_CLI_PRESENTATIONS[props.identity]);
+  const themeAdaptiveImage = createMemo(() => Boolean(presentation().lightIconPath && presentation().darkIconPath));
+  return (
+    <span
+      class={`relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[7px] border border-sidebar-border/70 text-sidebar-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] ${presentation().render === 'mask' || themeAdaptiveImage()
+        ? 'bg-sidebar/65'
+        : 'bg-[#f7f7f5]'}`}
+      data-terminal-session-avatar={props.sessionId}
+      data-terminal-agent-identity={props.identity}
+      aria-hidden="true"
+    >
+      <Show
+        when={presentation().render === 'mask'}
+        fallback={(
+          <Show
+            when={themeAdaptiveImage()}
+            fallback={<img class="h-5 w-5 object-contain" src={presentation().iconPath} alt="" draggable={false} />}
+          >
+            <img class="h-5 w-5 object-contain dark:hidden" src={presentation().lightIconPath} alt="" draggable={false} />
+            <img class="hidden h-5 w-5 object-contain dark:block" src={presentation().darkIconPath} alt="" draggable={false} />
+          </Show>
+        )}
+      >
+        <span
+          class="h-5 w-5 bg-current"
+          style={{
+            'mask-image': `url(${presentation().iconPath})`,
+            '-webkit-mask-image': `url(${presentation().iconPath})`,
+            'mask-position': 'center',
+            '-webkit-mask-position': 'center',
+            'mask-repeat': 'no-repeat',
+            '-webkit-mask-repeat': 'no-repeat',
+            'mask-size': 'contain',
+            '-webkit-mask-size': 'contain',
+          }}
+        />
+      </Show>
+      <TerminalSidebarProcessBadge state="running" />
+    </span>
+  );
+}
+
+function TerminalOutputStatusGlyph(props: { state: Exclude<TerminalSessionOutputState, 'none'> }) {
+  return (
+    <Show
+      when={props.state === 'streaming'}
+      fallback={(
+        <svg class="h-4 w-4" viewBox="0 0 16 16" fill="none" data-terminal-output-state="settled" aria-hidden="true">
+          <path d="M2.25 8h11.5" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" />
+        </svg>
+      )}
+    >
+      <svg class="h-4 w-4" viewBox="0 0 16 16" fill="currentColor" data-terminal-output-state="streaming" aria-hidden="true">
+        <rect class="redeven-terminal-output-wave-bar" x="2" y="5" width="2" height="6" rx="1" />
+        <rect class="redeven-terminal-output-wave-bar" x="7" y="2.5" width="2" height="11" rx="1" />
+        <rect class="redeven-terminal-output-wave-bar" x="12" y="4" width="2" height="8" rx="1" />
+      </svg>
+    </Show>
+  );
+}
+
+function terminalOutputTooltip(
+  state: Exclude<TerminalSessionOutputState, 'none'>,
+  t: ReturnType<typeof useI18n>['t'],
+): string {
+  return state === 'streaming'
+    ? t('terminal.outputStreaming')
+    : `${t('terminal.outputSettled')}. ${t('terminal.outputSettledDescription')}`;
 }
 
 export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
@@ -120,7 +203,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
           ariaLabel={i18n.t('terminal.title')}
           class={`redeven-terminal-session-sidebar ${props.mobile
             ? props.drawerOpen
-              ? 'absolute inset-y-0 left-0 z-40 !w-[min(88vw,320px)] shadow-2xl'
+              ? 'absolute inset-y-0 left-0 z-40 !h-full !max-h-full !min-h-0 !w-[min(88vw,320px)] overflow-hidden shadow-2xl'
               : 'hidden'
             : ''}`}
         >
@@ -221,6 +304,16 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                       const item = createMemo(() => props.itemById.get(sessionId)!);
                       const sidebarActive = () => props.sidebarActiveSessionId === sessionId;
                       const committedActive = () => props.activeSessionId === sessionId;
+                      const agentPresentation = createMemo(() => item().agentIdentity
+                        ? TERMINAL_AGENT_CLI_PRESENTATIONS[item().agentIdentity!]
+                        : null);
+                      const statusDescription = createMemo(() => [
+                        agentPresentation() ? i18n.t('terminal.agentCliDescription', { name: agentPresentation()!.label }) : '',
+                        item().processState === 'running' ? i18n.t('terminal.processRunningDescription') : '',
+                        item().outputState === 'streaming' ? `${i18n.t('terminal.outputStreaming')}.` : '',
+                        item().outputState === 'settled' ? i18n.t('terminal.outputSettledDescription') : '',
+                        item().attentionState === 'unread' ? i18n.t('terminal.unreadOutputDescription') : '',
+                      ].filter(Boolean).join(' '));
                       return (
                         <div
                           class={`group relative rounded-md border px-2.5 py-2 pr-9 text-xs transition-colors duration-75 ${sidebarActive()
@@ -234,7 +327,8 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                             data-terminal-session-id={sessionId}
                             data-terminal-session-active={sidebarActive() ? 'true' : 'false'}
                             data-terminal-session-index={index() + 1}
-                            aria-label={`${item().label}: ${item().title}${item().fullPath ? ` ${item().fullPath}` : ''}`}
+                            aria-label={`${item().label}: ${item().title}${agentPresentation() ? `, ${agentPresentation()!.label}` : ''}${item().fullPath ? ` ${item().fullPath}` : ''}`}
+                            aria-describedby={statusDescription() ? `terminal-session-status-${sessionId}` : undefined}
                             aria-current={committedActive() ? 'page' : undefined}
                             title={item().fullPath || item().title}
                             onPointerDown={(event) => props.onPreviewSession(event, sessionId)}
@@ -244,34 +338,78 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                             onKeyDown={(event) => props.onOpenKeyboardMenu(event, item())}
                           >
                             <span class="sr-only">{item().label}</span>
-                            <span class="sr-only" data-terminal-tab-status={item().status}>{item().status}</span>
+                            <Show when={item().processState !== 'none'}>
+                              <span class="sr-only" data-terminal-tab-status={item().processState} />
+                            </Show>
+                            <Show when={item().attentionState === 'unread'}>
+                              <span class="sr-only" data-terminal-tab-status="unread" />
+                            </Show>
+                            <Show when={item().processState === 'none' && item().attentionState === 'none'}>
+                              <span class="sr-only" data-terminal-tab-status="none" />
+                            </Show>
+                            <Show when={statusDescription()}>
+                              <span class="sr-only" id={`terminal-session-status-${sessionId}`}>{statusDescription()}</span>
+                            </Show>
                           </button>
                           <Show when={sidebarActive()}>
                             <span class="absolute left-0 top-2 bottom-2 z-10 w-[2px] rounded-full bg-primary" aria-hidden="true" />
                           </Show>
                           <div class="relative z-10 flex min-w-0 items-start gap-2.5 pointer-events-none">
-                            <span
-                              class="relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-[13px] font-semibold uppercase leading-none shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]"
-                              style={{
-                                background: item().avatarTone.background,
-                                'border-color': item().avatarTone.border,
-                                color: item().avatarTone.foreground,
-                              }}
-                              data-terminal-session-avatar={sessionId}
-                              aria-hidden="true"
-                            >
-                              {item().avatarInitial}
-                              <TerminalSidebarStatusBadge status={item().status} />
-                            </span>
-                            <span class="min-w-0 flex-1 text-left">
-                              <span class="flex min-w-0 items-center gap-1.5">
+                            <Show
+                              when={item().agentIdentity}
+                              fallback={(
                                 <span
-                                  class="truncate text-sm font-semibold leading-5"
+                                  class="relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-[13px] font-semibold uppercase leading-none shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]"
+                                  style={{
+                                    background: item().avatarTone.background,
+                                    'border-color': item().avatarTone.border,
+                                    color: item().avatarTone.foreground,
+                                  }}
+                                  data-terminal-session-avatar={sessionId}
+                                  aria-hidden="true"
+                                >
+                                  {item().avatarInitial}
+                                  <TerminalSidebarProcessBadge state={item().processState} />
+                                </span>
+                              )}
+                            >
+                              {(identity) => <TerminalAgentIdentity identity={identity()} sessionId={sessionId} />}
+                            </Show>
+                            <span class="min-w-0 flex-1 text-left">
+                              <span class="flex min-w-0 items-center gap-1">
+                                <span
+                                  class="min-w-0 flex-1 truncate text-sm font-semibold leading-5"
                                   data-terminal-session-title={sessionId}
                                 >
                                   {item().title}
                                 </span>
-                                <span class="shrink-0 rounded border border-sidebar-border/80 bg-sidebar/35 px-1 py-[1px] text-[9px] leading-none text-muted-foreground/80">{index() + 1}</span>
+                                <span class="flex h-7 w-2 shrink-0 items-center justify-center" data-terminal-attention-slot={sessionId} aria-hidden="true">
+                                  <Show when={item().attentionState === 'unread'}>
+                                    <span class="h-1.5 w-1.5 rounded-full bg-primary forced-colors:border forced-colors:border-current" data-terminal-attention-state="unread" data-terminal-tab-status="unread" />
+                                  </Show>
+                                </span>
+                                <span class="pointer-events-auto flex h-7 w-7 shrink-0 items-center justify-center" data-terminal-output-slot={sessionId}>
+                                  <Show when={item().outputState !== 'none'}>
+                                    <Tooltip
+                                      content={terminalOutputTooltip(item().outputState as Exclude<TerminalSessionOutputState, 'none'>, i18n.t)}
+                                      placement="top"
+                                      delay={0}
+                                      clickToToggle
+                                    >
+                                      <button
+                                        type="button"
+                                        class="flex h-7 w-7 cursor-pointer items-center justify-center rounded text-primary transition-colors duration-75 hover:bg-primary/10 focus:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring forced-colors:border forced-colors:border-current"
+                                        aria-label={terminalOutputTooltip(item().outputState as Exclude<TerminalSessionOutputState, 'none'>, i18n.t)}
+                                        data-terminal-output-trigger={sessionId}
+                                      >
+                                        <TerminalOutputStatusGlyph state={item().outputState as Exclude<TerminalSessionOutputState, 'none'>} />
+                                      </button>
+                                    </Tooltip>
+                                  </Show>
+                                </span>
+                                <Show when={!props.mobile}>
+                                  <span class="shrink-0 rounded border border-sidebar-border/80 bg-sidebar/35 px-1 py-[1px] text-[9px] leading-none text-muted-foreground/80">{index() + 1}</span>
+                                </Show>
                               </span>
                               <Show when={item().fullPath}>
                                 <span class="mt-0.5 flex h-6 min-w-0 max-w-full items-center gap-1.5">

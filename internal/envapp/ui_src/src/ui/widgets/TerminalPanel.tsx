@@ -18,6 +18,7 @@ import {
   getThemeColors,
   type Logger,
   type TerminalAppearance,
+  type TerminalOutputActivityInfo,
   type TerminalSessionInfo,
   type TerminalThemeName,
   type TerminalTouchScrollRuntime,
@@ -96,9 +97,11 @@ import {
 } from './TerminalSessionRuntime';
 import {
   TerminalSessionNavigator,
+  type TerminalSessionAttentionState,
   type TerminalSessionNavigationItem,
-  type TerminalSessionNavigationStatus,
+  type TerminalSessionProcessState,
 } from './TerminalSessionNavigator';
+import { deriveTerminalAgentSessionPresentation } from './terminalAgentSessionPresentation';
 import { TerminalSearchOverlay } from './TerminalSearchOverlay';
 
 type pending_terminal_session_status = 'creating' | 'failed';
@@ -404,11 +407,13 @@ function buildTerminalSidebarAvatarTone(seed: string): terminal_session_avatar_t
   return TERMINAL_SIDEBAR_AVATAR_TONES[index] ?? TERMINAL_SIDEBAR_AVATAR_TONES[0];
 }
 
-function resolveTerminalSidebarStatus(
-  foregroundRunning: boolean,
+function resolveTerminalSidebarProcessState(foregroundRunning: boolean): TerminalSessionProcessState {
+  return foregroundRunning ? 'running' : 'none';
+}
+
+function resolveTerminalSidebarAttentionState(
   visualState: TerminalTabVisualState | undefined,
-): TerminalSessionNavigationStatus {
-  if (foregroundRunning) return 'running';
+): TerminalSessionAttentionState {
   return visualState === 'unread' ? 'unread' : 'none';
 }
 
@@ -439,6 +444,24 @@ function normalizeTerminalSessionTimestamp(value: unknown): number {
   return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : 0;
 }
 
+const UNKNOWN_TERMINAL_OUTPUT_ACTIVITY: TerminalOutputActivityInfo = Object.freeze({
+  phase: 'unknown',
+  revision: 0,
+  updatedAtMs: 0,
+});
+
+function normalizeTerminalOutputActivity(
+  value: TerminalSessionInfo['outputActivity'] | null | undefined,
+): TerminalOutputActivityInfo {
+  if (!value || typeof value !== 'object') return UNKNOWN_TERMINAL_OUTPUT_ACTIVITY;
+  if (value.phase !== 'unknown' && value.phase !== 'streaming' && value.phase !== 'settled') {
+    return UNKNOWN_TERMINAL_OUTPUT_ACTIVITY;
+  }
+  if (!Number.isSafeInteger(value.revision) || value.revision < 0) return UNKNOWN_TERMINAL_OUTPUT_ACTIVITY;
+  if (!Number.isSafeInteger(value.updatedAtMs) || value.updatedAtMs < 0) return UNKNOWN_TERMINAL_OUTPUT_ACTIVITY;
+  return value;
+}
+
 function normalizeTerminalSessionInfo(value: TerminalSessionInfo): TerminalSessionInfo | null {
   const id = String(value?.id ?? '').trim();
   if (!id) return null;
@@ -450,7 +473,19 @@ function normalizeTerminalSessionInfo(value: TerminalSessionInfo): TerminalSessi
     lastActiveAtMs: normalizeTerminalSessionTimestamp(value?.lastActiveAtMs),
     isActive: Boolean(value?.isActive),
     foregroundCommand: normalizeTerminalForegroundCommand(value?.foregroundCommand),
+    outputActivity: normalizeTerminalOutputActivity(value?.outputActivity),
   };
+}
+
+function sameTerminalOutputActivity(
+  left: TerminalSessionInfo['outputActivity'],
+  right: TerminalSessionInfo['outputActivity'],
+): boolean {
+  const normalizedLeft = normalizeTerminalOutputActivity(left);
+  const normalizedRight = normalizeTerminalOutputActivity(right);
+  return normalizedLeft.phase === normalizedRight.phase
+    && normalizedLeft.revision === normalizedRight.revision
+    && normalizedLeft.updatedAtMs === normalizedRight.updatedAtMs;
 }
 
 function sameTerminalForegroundCommand(
@@ -475,7 +510,8 @@ function sameTerminalSessionInfo(a: TerminalSessionInfo | null | undefined, b: T
     && a.createdAtMs === b.createdAtMs
     && a.lastActiveAtMs === b.lastActiveAtMs
     && a.isActive === b.isActive
-    && sameTerminalForegroundCommand(a.foregroundCommand, b.foregroundCommand),
+    && sameTerminalForegroundCommand(a.foregroundCommand, b.foregroundCommand)
+    && sameTerminalOutputActivity(a.outputActivity, b.outputActivity),
   );
 }
 
@@ -2868,6 +2904,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       const directoryTitle = buildTerminalSidebarDirectoryTitle(fullPath, fallbackLabel);
       const foregroundPresentation = foregroundPresentations.get(s.id);
       const title = foregroundPresentation?.displayName || directoryTitle;
+      const agentPresentation = deriveTerminalAgentSessionPresentation(
+        foregroundPresentation?.displayName ?? '',
+        s.outputActivity?.phase,
+      );
       return {
         id: s.id,
         label: fallbackLabel,
@@ -2875,7 +2915,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         avatarInitial: buildTerminalSidebarAvatarInitial(directoryTitle),
         avatarTone: buildTerminalSidebarAvatarTone(`${s.id}:${fullPath}:${directoryTitle}`),
         fullPath,
-        status: resolveTerminalSidebarStatus(Boolean(foregroundPresentation), tabStates[s.id]),
+        processState: resolveTerminalSidebarProcessState(Boolean(foregroundPresentation)),
+        outputState: agentPresentation.outputState,
+        attentionState: resolveTerminalSidebarAttentionState(tabStates[s.id]),
+        agentIdentity: agentPresentation.identity,
         canBrowsePath: Boolean(fullPath) && canOpenPath,
         canClear: true,
         canDuplicate: Boolean(fullPath),
@@ -2893,7 +2936,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         avatarInitial: buildTerminalSidebarAvatarInitial(title),
         avatarTone: buildTerminalSidebarAvatarTone(`${session.id}:${fullPath}:${title}`),
         fullPath,
-        status: session.status,
+        processState: session.status,
+        outputState: 'none' as const,
+        attentionState: 'none' as const,
+        agentIdentity: null,
         canBrowsePath: Boolean(fullPath) && canOpenPath,
         canClear: false,
         canDuplicate: false,

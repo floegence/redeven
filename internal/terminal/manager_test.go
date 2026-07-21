@@ -869,6 +869,177 @@ func TestForegroundCommandUpdateReachesEveryAuthorizedControlClient(t *testing.T
 	}
 }
 
+func TestForegroundCommandUpdatePayloadRemainsForegroundOnly(t *testing.T) {
+	payload, err := json.Marshal(terminalForegroundCommandUpdatePayload{
+		SessionID: "session-1",
+		ForegroundCommand: ForegroundCommandInfo{
+			Phase:       "running",
+			DisplayName: "top",
+			Revision:    3,
+			UpdatedAtMs: 42,
+		},
+	})
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	if strings.Contains(string(payload), "output_activity") {
+		t.Fatalf("foreground command Type ID 2013 payload changed semantics: %s", payload)
+	}
+}
+
+func TestOutputActivityEventReachesEveryAuthorizedControlClient(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+
+	type clientHarness struct {
+		serverConn net.Conn
+		clientConn net.Conn
+		client     *rpc.Client
+		detach     func()
+		updates    chan terminalOutputActivityUpdatePayload
+	}
+	newHarness := func() *clientHarness {
+		serverConn, clientConn := net.Pipe()
+		router := rpc.NewRouter()
+		server := rpc.NewServer(serverConn, router)
+		client := rpc.NewClient(clientConn)
+		updates := make(chan terminalOutputActivityUpdatePayload, 1)
+		client.OnNotify(TypeID_TERMINAL_OUTPUT_ACTIVITY_UPDATE, func(payload json.RawMessage) {
+			var update terminalOutputActivityUpdatePayload
+			if json.Unmarshal(payload, &update) == nil {
+				updates <- update
+			}
+		})
+		detach := m.RegisterWithAccessGate(
+			router,
+			&session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
+			server,
+			nil,
+		)
+		return &clientHarness{
+			serverConn: serverConn,
+			clientConn: clientConn,
+			client:     client,
+			detach:     detach,
+			updates:    updates,
+		}
+	}
+	clients := []*clientHarness{newHarness(), newHarness()}
+	for _, harness := range clients {
+		harness := harness
+		t.Cleanup(func() {
+			harness.detach()
+			_ = harness.client.Close()
+			_ = harness.serverConn.Close()
+			_ = harness.clientConn.Close()
+		})
+	}
+
+	handler := &eventHandler{m: m}
+	handler.OnTerminalOutputActivityChanged("shared-session", termgo.TerminalOutputActivityInfo{
+		Phase:     termgo.OutputActivityStreaming,
+		Revision:  4,
+		UpdatedAt: 73,
+	})
+	for index, harness := range clients {
+		select {
+		case update := <-harness.updates:
+			if update.SessionID != "shared-session" {
+				t.Fatalf("client %d session = %q, want shared-session", index, update.SessionID)
+			}
+			if update.OutputActivity.Phase != "streaming" || update.OutputActivity.Revision != 4 || update.OutputActivity.UpdatedAtMs != 73 {
+				t.Fatalf("client %d output activity = %#v", index, update.OutputActivity)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("client %d did not receive terminal output activity update", index)
+		}
+	}
+}
+
+func TestOutputActivityEventDoesNotReuseForegroundCommandNotify(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+
+	serverConn, clientConn := net.Pipe()
+	router := rpc.NewRouter()
+	server := rpc.NewServer(serverConn, router)
+	client := rpc.NewClient(clientConn)
+	t.Cleanup(func() {
+		_ = client.Close()
+		_ = serverConn.Close()
+		_ = clientConn.Close()
+	})
+
+	foregroundUpdates := make(chan json.RawMessage, 1)
+	client.OnNotify(TypeID_TERMINAL_FOREGROUND_COMMAND_UPDATE, func(payload json.RawMessage) {
+		foregroundUpdates <- payload
+	})
+	detach := m.RegisterWithAccessGate(
+		router,
+		&session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
+		server,
+		nil,
+	)
+	t.Cleanup(detach)
+
+	(&eventHandler{m: m}).OnTerminalOutputActivityChanged("session-1", termgo.TerminalOutputActivityInfo{
+		Phase:     termgo.OutputActivitySettled,
+		Revision:  5,
+		UpdatedAt: 81,
+	})
+
+	select {
+	case payload := <-foregroundUpdates:
+		t.Fatalf("output activity unexpectedly emitted on foreground command Type ID: %s", payload)
+	case <-time.After(100 * time.Millisecond):
+	}
+}
+
+func TestOutputActivityUpdateNormalizesMalformedUpstreamPhase(t *testing.T) {
+	m := newQuietTestManager(t, t.TempDir())
+	t.Cleanup(m.Cleanup)
+
+	serverConn, clientConn := net.Pipe()
+	router := rpc.NewRouter()
+	server := rpc.NewServer(serverConn, router)
+	client := rpc.NewClient(clientConn)
+	t.Cleanup(func() {
+		_ = client.Close()
+		_ = serverConn.Close()
+		_ = clientConn.Close()
+	})
+
+	updates := make(chan terminalOutputActivityUpdatePayload, 1)
+	client.OnNotify(TypeID_TERMINAL_OUTPUT_ACTIVITY_UPDATE, func(payload json.RawMessage) {
+		var update terminalOutputActivityUpdatePayload
+		if json.Unmarshal(payload, &update) == nil {
+			updates <- update
+		}
+	})
+	detach := m.RegisterWithAccessGate(
+		router,
+		&session.Meta{CanRead: true, CanWrite: true, CanExecute: true},
+		server,
+		nil,
+	)
+	t.Cleanup(detach)
+
+	(&eventHandler{m: m}).OnTerminalOutputActivityChanged("session-1", termgo.TerminalOutputActivityInfo{
+		Phase:     termgo.TerminalOutputActivityPhase("corrupt"),
+		Revision:  6,
+		UpdatedAt: 89,
+	})
+
+	select {
+	case update := <-updates:
+		if update.OutputActivity.Phase != "unknown" || update.OutputActivity.Revision != 6 || update.OutputActivity.UpdatedAtMs != 89 {
+			t.Fatalf("output activity = %#v, want normalized unknown", update.OutputActivity)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("did not receive normalized terminal output activity update")
+	}
+}
+
 func TestWireSessionInfoIncludesForegroundCommandSnapshot(t *testing.T) {
 	wire := toWireSessionInfo(termgo.TerminalSessionInfo{
 		ID:         "session-1",
@@ -884,6 +1055,74 @@ func TestWireSessionInfoIncludesForegroundCommandSnapshot(t *testing.T) {
 
 	if wire.ForegroundCommand.Phase != "running" || wire.ForegroundCommand.DisplayName != "top" || wire.ForegroundCommand.Revision != 7 || wire.ForegroundCommand.UpdatedAtMs != 99 {
 		t.Fatalf("foreground command = %#v", wire.ForegroundCommand)
+	}
+}
+
+func TestWireSessionInfoIncludesOptionalOutputActivitySnapshot(t *testing.T) {
+	wire := toWireSessionInfo(termgo.TerminalSessionInfo{
+		ID: "session-1",
+		OutputActivity: termgo.TerminalOutputActivityInfo{
+			Phase:     termgo.OutputActivitySettled,
+			Revision:  7,
+			UpdatedAt: 99,
+		},
+	})
+
+	if wire.OutputActivity == nil {
+		t.Fatal("output activity snapshot is nil")
+	}
+	if wire.OutputActivity.Phase != "settled" || wire.OutputActivity.Revision != 7 || wire.OutputActivity.UpdatedAtMs != 99 {
+		t.Fatalf("output activity = %#v", wire.OutputActivity)
+	}
+
+	payload, err := json.Marshal(wire)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	if !strings.Contains(string(payload), `"output_activity":{"phase":"settled","revision":7,"updated_at_ms":99}`) {
+		t.Fatalf("wire payload = %s", payload)
+	}
+}
+
+func TestWireSessionInfoOutputActivitySupportsMixedVersions(t *testing.T) {
+	wire := toWireSessionInfo(termgo.TerminalSessionInfo{ID: "session-1"})
+	payload, err := json.Marshal(wire)
+	if err != nil {
+		t.Fatalf("Marshal() error = %v", err)
+	}
+	if strings.Contains(string(payload), "output_activity") {
+		t.Fatalf("zero-value output activity must remain optional, payload = %s", payload)
+	}
+
+	var oldRuntimeSnapshot terminalSessionInfo
+	if err := json.Unmarshal([]byte(`{"id":"legacy-session","foreground_command":{"phase":"running"}}`), &oldRuntimeSnapshot); err != nil {
+		t.Fatalf("Unmarshal(old runtime snapshot) error = %v", err)
+	}
+	if oldRuntimeSnapshot.OutputActivity != nil {
+		t.Fatalf("missing output_activity decoded as %#v, want nil/unknown fallback", oldRuntimeSnapshot.OutputActivity)
+	}
+
+	var zeroActivitySnapshot terminalSessionInfo
+	if err := json.Unmarshal([]byte(`{"id":"mixed-session","output_activity":{}}`), &zeroActivitySnapshot); err != nil {
+		t.Fatalf("Unmarshal(zero activity snapshot) error = %v", err)
+	}
+	if zeroActivitySnapshot.OutputActivity == nil {
+		t.Fatal("present zero-value output_activity unexpectedly decoded as nil")
+	}
+	if zeroActivitySnapshot.OutputActivity.Phase != "" || zeroActivitySnapshot.OutputActivity.Revision != 0 || zeroActivitySnapshot.OutputActivity.UpdatedAtMs != 0 {
+		t.Fatalf("zero-value output_activity = %#v, want wire-safe zero value", zeroActivitySnapshot.OutputActivity)
+	}
+
+	malformed := toWireSessionInfo(termgo.TerminalSessionInfo{
+		ID: "malformed-session",
+		OutputActivity: termgo.TerminalOutputActivityInfo{
+			Phase:     termgo.TerminalOutputActivityPhase("corrupt"),
+			Revision:  9,
+			UpdatedAt: 101,
+		},
+	})
+	if malformed.OutputActivity == nil || malformed.OutputActivity.Phase != "unknown" || malformed.OutputActivity.Revision != 9 || malformed.OutputActivity.UpdatedAtMs != 101 {
+		t.Fatalf("malformed output_activity = %#v, want normalized unknown snapshot", malformed.OutputActivity)
 	}
 }
 

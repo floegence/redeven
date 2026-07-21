@@ -11,6 +11,7 @@ export interface TooltipProps {
   placement?: AnchoredOverlayPlacement;
   delay?: number;
   class?: string;
+  clickToToggle?: boolean;
 }
 
 function tooltipArrowClass(placement: AnchoredOverlayPlacement): string {
@@ -50,6 +51,10 @@ export function Tooltip(props: TooltipProps) {
   let frame = 0;
   let anchorRef: HTMLSpanElement | undefined;
   let tooltipRef: HTMLDivElement | undefined;
+  let hovered = false;
+  let focused = false;
+  let pinned = false;
+  let dismissed = false;
 
   const clearTimeoutHandle = () => {
     if (!timeout) return;
@@ -127,6 +132,13 @@ export function Tooltip(props: TooltipProps) {
     window.addEventListener('resize', handleViewportChange);
     window.visualViewport?.addEventListener('resize', handleViewportChange);
     window.visualViewport?.addEventListener('scroll', handleViewportChange);
+    const handleOutsidePointerDown = (event: PointerEvent) => {
+      if (!props.clickToToggle || anchorRef?.contains(event.target as Node)) return;
+      pinned = false;
+      dismissed = true;
+      hide();
+    };
+    document.addEventListener('pointerdown', handleOutsidePointerDown, true);
 
     const anchorEl = anchorRef;
     const tooltipEl = tooltipRef;
@@ -144,6 +156,7 @@ export function Tooltip(props: TooltipProps) {
       window.removeEventListener('resize', handleViewportChange);
       window.visualViewport?.removeEventListener('resize', handleViewportChange);
       window.visualViewport?.removeEventListener('scroll', handleViewportChange);
+      document.removeEventListener('pointerdown', handleOutsidePointerDown, true);
       clearFrameHandle();
     });
   });
@@ -164,12 +177,45 @@ export function Tooltip(props: TooltipProps) {
       ref={anchorRef}
       data-redeven-tooltip-anchor=""
       class="relative inline-block max-w-full"
-      onMouseEnter={show}
-      onMouseLeave={hide}
-      onFocusIn={show}
+      onMouseEnter={() => {
+        hovered = true;
+        dismissed = false;
+        show();
+      }}
+      onMouseLeave={() => {
+        hovered = false;
+        if (!focused && !pinned) hide();
+      }}
+      onClick={() => {
+        if (!props.clickToToggle) return;
+        if (pinned) {
+          pinned = false;
+          dismissed = true;
+          hide();
+        } else {
+          pinned = true;
+          dismissed = false;
+          show();
+        }
+      }}
+      onKeyDown={(event) => {
+        if (!props.clickToToggle || event.key !== 'Escape' || !visible()) return;
+        event.preventDefault();
+        event.stopPropagation();
+        pinned = false;
+        dismissed = true;
+        hide();
+      }}
+      onFocusIn={() => {
+        focused = true;
+        if (!dismissed) show();
+      }}
       onFocusOut={(event) => {
         if (event.currentTarget.contains(event.relatedTarget as Node)) return;
-        hide();
+        focused = false;
+        pinned = false;
+        dismissed = false;
+        if (!hovered) hide();
       }}
     >
       {props.children}

@@ -228,6 +228,11 @@ function normalizeRuntimeTerminalSessionInfo(session: RuntimeWorkbenchTerminalSe
       revision: session.foreground_command.revision,
       updatedAtMs: session.foreground_command.updated_at_ms,
     },
+    outputActivity: {
+      phase: session.output_activity?.phase ?? 'unknown',
+      revision: session.output_activity?.revision ?? 0,
+      updatedAtMs: session.output_activity?.updated_at_ms ?? 0,
+    },
   };
 }
 

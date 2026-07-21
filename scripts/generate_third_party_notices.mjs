@@ -3,11 +3,18 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { verifyBundledIconIntegrity } from './terminal_agent_icon_integrity.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptDir, '..');
 const outputPath = path.join(repoRoot, 'THIRD_PARTY_NOTICES.md');
 const checkOnly = process.argv.includes('--check');
+const terminalAgentIconManifestPath = path.join(repoRoot, 'assets/terminal_agent_icons.json');
+const terminalAgentIconRoot = path.join(repoRoot, 'internal/envapp/ui_src/public/agent-cli-icons');
+const expectedTerminalAgentIconIdentities = [
+  'codex', 'claude', 'opencode', 'kimi', 'gemini', 'qwen', 'copilot', 'cline',
+  'roo', 'vibe', 'cursor', 'junie', 'kiro', 'openhands', 'trae', 'kilo',
+];
 
 const npmLicenseOverrides = new Map([
   ['@floegence/floe-webapp-boot', { license: 'MIT', note: 'License inherited from floegence/floe-webapp root LICENSE.' }],
@@ -58,6 +65,121 @@ const packageLockSources = [
 
 function readJSON(filePath) {
   return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+}
+
+function collectTerminalAgentIconAssets() {
+  const manifest = readJSON(terminalAgentIconManifestPath);
+  if (manifest.schema_version !== 1) throw new Error('terminal agent icon manifest schema_version must be 1');
+  const source = manifest.source;
+  if (!source || source.repository !== 'https://github.com/GLINCKER/thesvg') {
+    throw new Error('terminal agent icons must use the approved GLINCKER/thesvg source');
+  }
+  if (!/^[0-9a-f]{40}$/u.test(String(source.revision ?? ''))) {
+    throw new Error('terminal agent icon source revision must be a pinned Git commit');
+  }
+  if (source.license !== 'MIT') throw new Error('terminal agent icon source license must be MIT');
+  const licensePath = path.resolve(repoRoot, String(source.license_file ?? ''));
+  if (!licensePath.startsWith(`${repoRoot}${path.sep}`) || !fs.statSync(licensePath).isFile()) {
+    throw new Error('terminal agent icon license file is missing or outside the repository');
+  }
+
+  const assets = Array.isArray(manifest.assets) ? manifest.assets : [];
+  const identities = assets.map((asset) => String(asset?.identity ?? ''));
+  if (JSON.stringify(identities) !== JSON.stringify(expectedTerminalAgentIconIdentities)) {
+    throw new Error(`terminal agent icon identities must exactly match the approved registry: ${expectedTerminalAgentIconIdentities.join(', ')}`);
+  }
+
+  const seenFiles = new Set();
+  const rows = assets.map((asset) => {
+    const file = String(asset.file ?? '');
+    const sourcePath = String(asset.source_path ?? '');
+    if (!/^[a-z-]+\.svg$/u.test(file)) {
+      throw new Error(`terminal agent icon filename is invalid or duplicated: ${file}`);
+    }
+    if (!/^public\/icons\/[a-z0-9-]+\/[a-z0-9-]+\.svg$/u.test(sourcePath)) {
+      throw new Error(`terminal agent icon source path is invalid: ${sourcePath}`);
+    }
+    if (asset.render !== 'image' && asset.render !== 'mask') {
+      throw new Error(`terminal agent icon render mode is invalid: ${asset.render}`);
+    }
+    const bundledFiles = [{
+      file,
+      sourcePath,
+      sha256: asset.sha256,
+      upstreamSha256: asset.upstream_sha256,
+      modified: asset.modified,
+    }];
+    const hasLightVariant = asset.light_file != null
+      || asset.light_source_path != null
+      || asset.light_sha256 != null
+      || asset.light_upstream_sha256 != null
+      || asset.light_modified != null;
+    const hasDarkVariant = asset.dark_file != null
+      || asset.dark_source_path != null
+      || asset.dark_sha256 != null
+      || asset.dark_upstream_sha256 != null
+      || asset.dark_modified != null;
+    if (hasLightVariant !== hasDarkVariant) {
+      throw new Error(`terminal agent icon theme variants must be supplied as a light/dark pair: ${file}`);
+    }
+    if (hasLightVariant) {
+      bundledFiles.push(
+        {
+          file: String(asset.light_file),
+          sourcePath: String(asset.light_source_path),
+          sha256: asset.light_sha256,
+          upstreamSha256: asset.light_upstream_sha256,
+          modified: asset.light_modified,
+        },
+        {
+          file: String(asset.dark_file),
+          sourcePath: String(asset.dark_source_path),
+          sha256: asset.dark_sha256,
+          upstreamSha256: asset.dark_upstream_sha256,
+          modified: asset.dark_modified,
+        },
+      );
+    }
+    for (const variant of bundledFiles) {
+      if (!/^[a-z-]+\.svg$/u.test(variant.file) || seenFiles.has(variant.file)) {
+        throw new Error(`terminal agent icon variant filename is invalid or duplicated: ${variant.file}`);
+      }
+      if (!/^public\/icons\/[a-z0-9-]+\/[a-z0-9-]+\.svg$/u.test(variant.sourcePath)) {
+        throw new Error(`terminal agent icon variant source path is invalid: ${variant.sourcePath}`);
+      }
+      const bundledPath = path.join(terminalAgentIconRoot, variant.file);
+      if (!fs.existsSync(bundledPath)) throw new Error(`terminal agent icon is missing: ${variant.file}`);
+      verifyBundledIconIntegrity({
+        filePath: bundledPath,
+        bundledSha256: variant.sha256,
+        upstreamSha256: variant.upstreamSha256,
+        modified: variant.modified,
+      });
+      seenFiles.add(variant.file);
+    }
+    return {
+      label: String(asset.label ?? ''),
+      license: source.license,
+      source: bundledFiles.map((variant) => {
+        const variantName = path.basename(variant.sourcePath, '.svg');
+        const url = `${source.repository}/blob/${source.revision}/${variant.sourcePath}`;
+        return `[${variantName}](${url})`;
+      }).join('<br>'),
+      file: bundledFiles.map((variant) => `\`internal/envapp/ui_src/public/agent-cli-icons/${variant.file}\``).join('<br>'),
+      modified: asset.modified === false ? 'No' : 'Trailing newline only',
+    };
+  });
+
+  const bundledFiles = fs.readdirSync(terminalAgentIconRoot).filter((file) => file.endsWith('.svg')).sort();
+  const declaredFiles = [...seenFiles].sort();
+  if (JSON.stringify(bundledFiles) !== JSON.stringify(declaredFiles)) {
+    throw new Error('bundled terminal agent SVG files must exactly match the audited manifest');
+  }
+
+  return {
+    rows,
+    licenseText: fs.readFileSync(licensePath, 'utf8').trim(),
+  };
 }
 
 function normalizeLicense(value) {
@@ -263,7 +385,18 @@ function policyViolations(entries) {
   return violations;
 }
 
-function renderNotices(goEntries, npmEntries) {
+function renderTerminalAgentIconTable(rows) {
+  const lines = [
+    '| Brand asset | License | Pinned source | Bundled file | Modification |',
+    '| --- | --- | --- | --- | --- |',
+  ];
+  for (const row of rows) {
+    lines.push(`| ${row.label} | ${row.license} | ${row.source} | ${row.file} | ${row.modified} |`);
+  }
+  return lines.join('\n');
+}
+
+function renderNotices(goEntries, npmEntries, terminalAgentIcons) {
   return `# Third-Party Notices
 
 Generated by \`scripts/generate_third_party_notices.mjs\`.
@@ -280,6 +413,18 @@ ${renderTable(goEntries)}
 
 ${renderTable(npmEntries)}
 
+## Bundled Agent CLI Brand Assets
+
+The following icons are redistributed from a pinned revision of [GLINCKER/thesvg](https://github.com/GLINCKER/thesvg). Product names and marks remain the property of their respective owners. These assets are used only to identify the corresponding Agent CLI process in the terminal session list.
+
+${renderTerminalAgentIconTable(terminalAgentIcons.rows)}
+
+### thesvg MIT License
+
+\`\`\`text
+${terminalAgentIcons.licenseText}
+\`\`\`
+
 ## Desktop Runtime Notices
 
 Redeven Desktop packages Electron and Chromium runtime components. Desktop release artifacts include Electron's \`LICENSE\` and \`LICENSES.chromium.html\` files under \`licenses/electron/\` in addition to this notice file.
@@ -292,6 +437,7 @@ The generator fails on missing licenses and on licenses that are not acceptable 
 
 const goEntries = collectGoEntries();
 const npmEntries = collectNpmEntries();
+const terminalAgentIcons = collectTerminalAgentIconAssets();
 const allEntries = [...goEntries, ...npmEntries];
 const violations = policyViolations(allEntries);
 if (violations.length > 0) {
@@ -300,7 +446,7 @@ if (violations.length > 0) {
   process.exit(1);
 }
 
-const nextContent = renderNotices(goEntries, npmEntries);
+const nextContent = renderNotices(goEntries, npmEntries, terminalAgentIcons);
 if (checkOnly) {
   const current = fs.existsSync(outputPath) ? fs.readFileSync(outputPath, 'utf8') : '';
   if (current !== nextContent) {

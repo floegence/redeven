@@ -272,6 +272,47 @@
   }
 }
 
+.redeven-terminal-output-wave-bar {
+  animation: redeven-terminal-output-wave 1.1s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.redeven-terminal-output-wave-bar:nth-child(2) {
+  animation-delay: -0.72s;
+}
+
+.redeven-terminal-output-wave-bar:nth-child(3) {
+  animation-delay: -0.38s;
+}
+
+@keyframes redeven-terminal-output-wave {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scaleY(0.62);
+  }
+
+  50% {
+    opacity: 1;
+    transform: scaleY(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .redeven-terminal-output-wave-bar {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (forced-colors: active) {
+  .redeven-terminal-output-wave-bar {
+    fill: currentColor;
+  }
+}
+
 :root:not(.dark),
 .light {
   /* Keep the Env App light surface contract on the document scope so body portals inherit it too. */

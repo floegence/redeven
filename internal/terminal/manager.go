@@ -31,6 +31,7 @@ const (
 	TypeID_TERMINAL_SESSION_STATS             uint32 = 2011 // history buffer stats (client -> agent)
 	TypeID_TERMINAL_SESSIONS_CHANGED          uint32 = 2012 // notify (agent -> client): terminal sessions list changed
 	TypeID_TERMINAL_FOREGROUND_COMMAND_UPDATE uint32 = 2013 // notify (agent -> client): shell-reported foreground command changed
+	TypeID_TERMINAL_OUTPUT_ACTIVITY_UPDATE    uint32 = 2014 // notify (agent -> client): foreground command output activity changed
 )
 
 const (
@@ -70,11 +71,18 @@ type SessionInfo struct {
 	LastActiveAtMs    int64                 `json:"last_active_at_ms"`
 	IsActive          bool                  `json:"is_active"`
 	ForegroundCommand ForegroundCommandInfo `json:"foreground_command"`
+	OutputActivity    *OutputActivityInfo   `json:"output_activity,omitempty"`
 }
 
 type ForegroundCommandInfo struct {
 	Phase       string `json:"phase"`
 	DisplayName string `json:"display_name"`
+	Revision    uint64 `json:"revision"`
+	UpdatedAtMs int64  `json:"updated_at_ms"`
+}
+
+type OutputActivityInfo struct {
+	Phase       string `json:"phase"`
 	Revision    uint64 `json:"revision"`
 	UpdatedAtMs int64  `json:"updated_at_ms"`
 }
@@ -500,6 +508,40 @@ func (m *Manager) broadcastForegroundCommandUpdate(sessionID string, command ter
 	}
 }
 
+func (m *Manager) broadcastOutputActivityUpdate(sessionID string, activity termgo.TerminalOutputActivityInfo) {
+	if m == nil || strings.TrimSpace(sessionID) == "" || m.sessionHidden(sessionID) {
+		return
+	}
+
+	var writers []*controlSink
+	m.mu.Lock()
+	if len(m.writers) > 0 {
+		writers = make([]*controlSink, 0, len(m.writers))
+		for _, writer := range m.writers {
+			if writer != nil {
+				writers = append(writers, writer)
+			}
+		}
+	}
+	m.mu.Unlock()
+	if len(writers) == 0 {
+		return
+	}
+
+	payload := terminalOutputActivityUpdatePayload{
+		SessionID:      sessionID,
+		OutputActivity: toOutputActivityInfo(activity),
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+	msg := sinkMsg{TypeID: TypeID_TERMINAL_OUTPUT_ACTIVITY_UPDATE, Payload: b}
+	for _, writer := range writers {
+		writer.Send(msg)
+	}
+}
+
 func (m *Manager) broadcastSessionsChanged(payload terminalSessionsChangedPayload) {
 	if m == nil || strings.TrimSpace(payload.Reason) == "" {
 		return
@@ -563,6 +605,12 @@ func (m *Manager) createSession(name string, workingDir string) (*termgo.Session
 
 type eventHandler struct{ m *Manager }
 
+var (
+	_ termgo.TerminalEventHandler                = (*eventHandler)(nil)
+	_ termgo.TerminalSessionMetadataEventHandler = (*eventHandler)(nil)
+	_ termgo.TerminalOutputActivityEventHandler  = (*eventHandler)(nil)
+)
+
 func (h *eventHandler) OnTerminalData(_ string, _ termgo.TerminalOutputEvent) {
 	if h == nil || h.m == nil {
 		return
@@ -583,6 +631,13 @@ func (h *eventHandler) OnTerminalSessionMetadataChanged(sessionID string, info t
 		return
 	}
 	h.m.broadcastForegroundCommandUpdate(sessionID, info.ForegroundCommand)
+}
+
+func (h *eventHandler) OnTerminalOutputActivityChanged(sessionID string, info termgo.TerminalOutputActivityInfo) {
+	if h == nil || h.m == nil {
+		return
+	}
+	h.m.broadcastOutputActivityUpdate(sessionID, info)
 }
 
 func (h *eventHandler) OnTerminalSessionCreated(session *termgo.Session) {
@@ -643,6 +698,7 @@ type terminalSessionInfo struct {
 	LastActiveAtMs    int64                 `json:"last_active_at_ms"`
 	IsActive          bool                  `json:"is_active"`
 	ForegroundCommand ForegroundCommandInfo `json:"foreground_command"`
+	OutputActivity    *OutputActivityInfo   `json:"output_activity,omitempty"`
 }
 
 func toWireSessionInfo(info termgo.TerminalSessionInfo) *terminalSessionInfo {
@@ -654,6 +710,7 @@ func toWireSessionInfo(info termgo.TerminalSessionInfo) *terminalSessionInfo {
 		LastActiveAtMs:    info.LastActive,
 		IsActive:          info.IsActive,
 		ForegroundCommand: toForegroundCommandInfo(info.ForegroundCommand),
+		OutputActivity:    toOptionalOutputActivityInfo(info.OutputActivity),
 	}
 }
 
@@ -666,6 +723,7 @@ func toSessionInfo(info termgo.TerminalSessionInfo) *SessionInfo {
 		LastActiveAtMs:    info.LastActive,
 		IsActive:          info.IsActive,
 		ForegroundCommand: toForegroundCommandInfo(info.ForegroundCommand),
+		OutputActivity:    toOptionalOutputActivityInfo(info.OutputActivity),
 	}
 }
 
@@ -673,6 +731,28 @@ func toForegroundCommandInfo(info termgo.TerminalForegroundCommandInfo) Foregrou
 	return ForegroundCommandInfo{
 		Phase:       string(info.Phase),
 		DisplayName: info.DisplayName,
+		Revision:    info.Revision,
+		UpdatedAtMs: info.UpdatedAt,
+	}
+}
+
+func toOptionalOutputActivityInfo(info termgo.TerminalOutputActivityInfo) *OutputActivityInfo {
+	if info.Phase == "" && info.Revision == 0 && info.UpdatedAt == 0 {
+		return nil
+	}
+	activity := toOutputActivityInfo(info)
+	return &activity
+}
+
+func toOutputActivityInfo(info termgo.TerminalOutputActivityInfo) OutputActivityInfo {
+	phase := string(info.Phase)
+	switch info.Phase {
+	case termgo.OutputActivityUnknown, termgo.OutputActivityStreaming, termgo.OutputActivitySettled:
+	default:
+		phase = string(termgo.OutputActivityUnknown)
+	}
+	return OutputActivityInfo{
+		Phase:       phase,
 		Revision:    info.Revision,
 		UpdatedAtMs: info.UpdatedAt,
 	}
@@ -702,6 +782,11 @@ type terminalNameUpdatePayload struct {
 type terminalForegroundCommandUpdatePayload struct {
 	SessionID         string                `json:"session_id"`
 	ForegroundCommand ForegroundCommandInfo `json:"foreground_command"`
+}
+
+type terminalOutputActivityUpdatePayload struct {
+	SessionID      string             `json:"session_id"`
+	OutputActivity OutputActivityInfo `json:"output_activity"`
 }
 
 type terminalSessionsChangedPayload struct {

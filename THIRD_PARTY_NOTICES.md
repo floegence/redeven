@@ -39,7 +39,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | github.com/dustin/go-humanize | v1.0.1 | MIT | Runtime | https://pkg.go.dev/github.com/dustin/go-humanize@v1.0.1 | Detected from LICENSE. |
 | github.com/ebitengine/purego | v0.9.1 | Apache-2.0 | Runtime | https://pkg.go.dev/github.com/ebitengine/purego@v0.9.1 | Detected from LICENSE. |
 | github.com/felixge/httpsnoop | v1.0.4 | MIT | Runtime | https://pkg.go.dev/github.com/felixge/httpsnoop@v1.0.4 | Detected from LICENSE.txt. |
-| github.com/floegence/floeterm/terminal-go | v0.6.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.6.1 | Floegence first-party dependency. |
+| github.com/floegence/floeterm/terminal-go | v0.6.2 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floeterm/terminal-go@v0.6.2 | Floegence first-party dependency. |
 | github.com/floegence/floret | v0.19.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/floret@v0.19.1 | Detected from LICENSE. |
 | github.com/floegence/flowersec/flowersec-go | v0.27.0 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/flowersec/flowersec-go@v0.27.0 | Floegence first-party dependency. |
 | github.com/floegence/redevplugin | v0.1.1 | MIT | Runtime | https://pkg.go.dev/github.com/floegence/redevplugin@v0.1.1 | Floegence first-party dependency. |
@@ -223,7 +223,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @floegence/floe-webapp-boot | 0.38.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.38.0 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floe-webapp-core | 0.38.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.38.0 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floe-webapp-protocol | 0.38.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.38.0 | License inherited from floegence/floe-webapp root LICENSE. |
-| @floegence/floeterm-terminal-web | 0.6.7 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.6.7 |  |
+| @floegence/floeterm-terminal-web | 0.7.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.7.0 |  |
 | @floegence/flowersec-core | 0.27.0 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/0.27.0 |  |
 | @floegence/redevplugin-ui | 0.1.5 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/0.1.5 | License inherited from floegence/redevplugin root LICENSE. |
 | @fontsource-variable/inter | 5.2.8 | OFL-1.1 | Desktop shell | https://www.npmjs.com/package/%40fontsource-variable%2Finter/v/5.2.8 |  |
@@ -1118,6 +1118,55 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | yocto-queue | 0.1.0 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/yocto-queue/v/0.1.0 |  |
 | zip-stream | 4.1.1 | MIT | Env App UI | https://www.npmjs.com/package/zip-stream/v/4.1.1 |  |
 | zwitch | 2.0.4 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/zwitch/v/2.0.4 |  |
+
+## Bundled Agent CLI Brand Assets
+
+The following icons are redistributed from a pinned revision of [GLINCKER/thesvg](https://github.com/GLINCKER/thesvg). Product names and marks remain the property of their respective owners. These assets are used only to identify the corresponding Agent CLI process in the terminal session list.
+
+| Brand asset | License | Pinned source | Bundled file | Modification |
+| --- | --- | --- | --- | --- |
+| Codex | MIT | [default](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/codex-openai/default.svg) | `internal/envapp/ui_src/public/agent-cli-icons/codex.svg` | Trailing newline only |
+| Claude Code | MIT | [color](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/claude-code/color.svg) | `internal/envapp/ui_src/public/agent-cli-icons/claude.svg` | Trailing newline only |
+| OpenCode | MIT | [default](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/opencode/default.svg) | `internal/envapp/ui_src/public/agent-cli-icons/opencode.svg` | Trailing newline only |
+| Kimi Code | MIT | [default](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/kimi/default.svg) | `internal/envapp/ui_src/public/agent-cli-icons/kimi.svg` | Trailing newline only |
+| Gemini CLI | MIT | [default](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/gemini-cli/default.svg) | `internal/envapp/ui_src/public/agent-cli-icons/gemini.svg` | No |
+| Qwen Code | MIT | [mono-lobe](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/qwen/mono-lobe.svg) | `internal/envapp/ui_src/public/agent-cli-icons/qwen.svg` | Trailing newline only |
+| GitHub Copilot CLI | MIT | [default](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/github-copilot/default.svg)<br>[light](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/github-copilot/light.svg)<br>[dark](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/github-copilot/dark.svg) | `internal/envapp/ui_src/public/agent-cli-icons/copilot.svg`<br>`internal/envapp/ui_src/public/agent-cli-icons/copilot-light.svg`<br>`internal/envapp/ui_src/public/agent-cli-icons/copilot-dark.svg` | Trailing newline only |
+| Cline | MIT | [mono](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/cline/mono.svg) | `internal/envapp/ui_src/public/agent-cli-icons/cline.svg` | Trailing newline only |
+| Roo Code | MIT | [mono](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/roocode/mono.svg) | `internal/envapp/ui_src/public/agent-cli-icons/roo.svg` | Trailing newline only |
+| Mistral Vibe | MIT | [color](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/mistral/color.svg) | `internal/envapp/ui_src/public/agent-cli-icons/vibe.svg` | Trailing newline only |
+| Cursor Agent | MIT | [default](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/cursor/default.svg)<br>[light](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/cursor/light.svg)<br>[dark](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/cursor/dark.svg) | `internal/envapp/ui_src/public/agent-cli-icons/cursor.svg`<br>`internal/envapp/ui_src/public/agent-cli-icons/cursor-light.svg`<br>`internal/envapp/ui_src/public/agent-cli-icons/cursor-dark.svg` | Trailing newline only |
+| Junie CLI | MIT | [color](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/junie/color.svg) | `internal/envapp/ui_src/public/agent-cli-icons/junie.svg` | Trailing newline only |
+| Kiro CLI | MIT | [default](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/kiro/default.svg) | `internal/envapp/ui_src/public/agent-cli-icons/kiro.svg` | No |
+| OpenHands | MIT | [mono](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/openhands/mono.svg) | `internal/envapp/ui_src/public/agent-cli-icons/openhands.svg` | Trailing newline only |
+| TRAE Agent | MIT | [color](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/trae/color.svg) | `internal/envapp/ui_src/public/agent-cli-icons/trae.svg` | Trailing newline only |
+| Kilo Code | MIT | [default](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/kilo-code/default.svg)<br>[light](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/kilo-code/light.svg)<br>[dark](https://github.com/GLINCKER/thesvg/blob/8731f4b62fea303b022e4aa0125783aeb42c3ea5/public/icons/kilo-code/dark.svg) | `internal/envapp/ui_src/public/agent-cli-icons/kilo.svg`<br>`internal/envapp/ui_src/public/agent-cli-icons/kilo-light.svg`<br>`internal/envapp/ui_src/public/agent-cli-icons/kilo-dark.svg` | Trailing newline only |
+
+### thesvg MIT License
+
+```text
+MIT License
+
+Copyright (c) 2025 thesvg.org
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
 
 ## Desktop Runtime Notices
 

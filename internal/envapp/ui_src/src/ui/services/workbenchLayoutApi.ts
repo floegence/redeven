@@ -14,6 +14,7 @@ import {
   type RuntimeWorkbenchTerminalCreateSessionRequest,
   type RuntimeWorkbenchTerminalCreateSessionResponse,
   type RuntimeWorkbenchTerminalForegroundCommandInfo,
+  type RuntimeWorkbenchTerminalOutputActivityInfo,
   type RuntimeWorkbenchTerminalWidgetSessionsCloseResponse,
   type RuntimeWorkbenchWidgetState,
   type RuntimeWorkbenchWidgetStatePutRequest,
@@ -22,6 +23,12 @@ import {
 const UNKNOWN_FOREGROUND_COMMAND: RuntimeWorkbenchTerminalForegroundCommandInfo = Object.freeze({
   phase: 'unknown',
   display_name: '',
+  revision: 0,
+  updated_at_ms: 0,
+});
+
+const UNKNOWN_OUTPUT_ACTIVITY: RuntimeWorkbenchTerminalOutputActivityInfo = Object.freeze({
+  phase: 'unknown',
   revision: 0,
   updated_at_ms: 0,
 });
@@ -42,6 +49,22 @@ function decodeRuntimeTerminalForegroundCommand(value: unknown): RuntimeWorkbenc
   return {
     phase,
     display_name: phase === 'running' ? displayName : '',
+    revision: Number(revision),
+    updated_at_ms: Number(updatedAtMs),
+  };
+}
+
+function decodeRuntimeTerminalOutputActivity(value: unknown): RuntimeWorkbenchTerminalOutputActivityInfo | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const candidate = value as Record<string, unknown>;
+  const phase = candidate.phase;
+  const revision = candidate.revision;
+  const updatedAtMs = candidate.updated_at_ms;
+  if (phase !== 'unknown' && phase !== 'streaming' && phase !== 'settled') return null;
+  if (!Number.isSafeInteger(revision) || Number(revision) < 0) return null;
+  if (!Number.isSafeInteger(updatedAtMs) || Number(updatedAtMs) < 0) return null;
+  return {
+    phase,
     revision: Number(revision),
     updated_at_ms: Number(updatedAtMs),
   };
@@ -184,6 +207,9 @@ export async function createWorkbenchTerminalSession(
   if (!foregroundCommand) {
     throw new Error('Invalid workbench terminal session response');
   }
+  const outputActivity = data?.session?.output_activity == null
+    ? UNKNOWN_OUTPUT_ACTIVITY
+    : decodeRuntimeTerminalOutputActivity(data.session.output_activity) ?? UNKNOWN_OUTPUT_ACTIVITY;
   return {
     session: {
       id: sessionId,
@@ -193,6 +219,7 @@ export async function createWorkbenchTerminalSession(
       last_active_at_ms: Number(data?.session?.last_active_at_ms ?? 0),
       is_active: Boolean(data?.session?.is_active),
       foreground_command: { ...foregroundCommand },
+      output_activity: { ...outputActivity },
     },
     widget_state: widgetState,
   };

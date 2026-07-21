@@ -148,6 +148,12 @@ export type RuntimeWorkbenchTerminalForegroundCommandInfo = Readonly<{
   updated_at_ms: number;
 }>;
 
+export type RuntimeWorkbenchTerminalOutputActivityInfo = Readonly<{
+  phase: 'unknown' | 'streaming' | 'settled';
+  revision: number;
+  updated_at_ms: number;
+}>;
+
 export type RuntimeWorkbenchTerminalSessionInfo = Readonly<{
   id: string;
   name: string;
@@ -156,6 +162,7 @@ export type RuntimeWorkbenchTerminalSessionInfo = Readonly<{
   last_active_at_ms: number;
   is_active: boolean;
   foreground_command: RuntimeWorkbenchTerminalForegroundCommandInfo;
+  output_activity?: RuntimeWorkbenchTerminalOutputActivityInfo;
 }>;
 
 export type RuntimeWorkbenchTerminalCreateSessionResponse = Readonly<{
