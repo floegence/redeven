@@ -1117,6 +1117,7 @@ func TestServer_EnvAppDistCacheHeadersScope(t *testing.T) {
 		"env/index.html":                  {Data: []byte("<html>env</html>")},
 		"env/favicon.svg":                 {Data: []byte("<svg>icon</svg>")},
 		"env/logo.png":                    {Data: []byte("png")},
+		"env/agent-cli-icons/codex.svg":   {Data: []byte("<svg>codex</svg>")},
 		"env/assets/index-DXRlscZd.js":    {Data: []byte("console.log('env');")},
 		"env/assets/index-DXRlscZd.js.gz": {Data: []byte("compressed")},
 		"env/assets/index.js":             {Data: []byte("console.log('unhashed');")},
@@ -1161,6 +1162,7 @@ func TestServer_EnvAppDistCacheHeadersScope(t *testing.T) {
 	assertCacheForOrigin("/_redeven_proxy/inject.js", "https://env-123.example.com", http.StatusNotFound, "no-store")
 	assertCache("/_redeven_proxy/env/favicon.svg", http.StatusOK, "no-store")
 	assertCache("/_redeven_proxy/env/logo.png", http.StatusOK, "no-store")
+	assertCache("/_redeven_proxy/env/agent-cli-icons/codex.svg", http.StatusOK, "no-store")
 	assertCache("/_redeven_proxy/api/spaces", http.StatusBadRequest, "no-store")
 	assertCache("/_redeven_proxy/env/assets/index.js", http.StatusOK, "no-store")
 	assertCache("/_redeven_proxy/env/assets/index-DXRlscZd.js?v=1", http.StatusOK, "no-store")
@@ -1176,6 +1178,14 @@ func TestServer_EnvAppDistCacheHeadersScope(t *testing.T) {
 	}
 	if got := rr.Header().Get("Cache-Control"); got != "no-store" {
 		t.Fatalf("cs origin asset Cache-Control = %q, want no-store", got)
+	}
+
+	agentIconResponse := request(http.MethodGet, "/_redeven_proxy/env/agent-cli-icons/codex.svg", "https://env-123.example.com")
+	if got := agentIconResponse.Header().Get("Content-Type"); got != "image/svg+xml" {
+		t.Fatalf("agent icon Content-Type = %q, want image/svg+xml", got)
+	}
+	if got := agentIconResponse.Body.String(); got != "<svg>codex</svg>" {
+		t.Fatalf("agent icon body = %q, want original SVG", got)
 	}
 }
 

@@ -1390,7 +1390,9 @@ describe('TerminalPanel browser activity integration', () => {
     const slot = host.querySelector<HTMLElement>('[data-terminal-output-slot="session-2"]');
     const spinner = identity?.querySelector('[data-terminal-process-state="running"]');
     expect(identity).not.toBeNull();
-    expect(getComputedStyle(identity!.querySelector<HTMLElement>('.bg-current')!).webkitMaskImage).toContain('/agent-cli-icons/codex.svg');
+    const identityStyle = getComputedStyle(identity!);
+    expect(parseFloat(identityStyle.borderRadius)).toBeGreaterThanOrEqual(identity!.getBoundingClientRect().width / 2);
+    expect(getComputedStyle(identity!.querySelector<HTMLElement>('.bg-current')!).webkitMaskImage).toContain('/_redeven_proxy/env/agent-cli-icons/codex.svg');
     expect(host.querySelector('[data-terminal-output-state="streaming"]')).not.toBeNull();
     expect(spinner).not.toBeNull();
     const before = slot!.getBoundingClientRect();
@@ -1403,6 +1405,15 @@ describe('TerminalPanel browser activity integration', () => {
     expect(host.querySelector('[data-terminal-output-state="settled"]')).not.toBeNull();
     expect(identity?.querySelector('[data-terminal-process-state="running"]')).toBe(spinner);
     expect([after.width, after.height]).toEqual([before.width, before.height]);
+
+    publishTerminalForegroundCommand('session-2', {
+      phase: 'running', displayName: 'claude', revision: 2, updatedAtMs: 30,
+    });
+    await new Promise<void>((resolve) => setTimeout(resolve, 170));
+    await settleTerminalPanel();
+    const claudeIdentity = host.querySelector<HTMLElement>('[data-terminal-agent-identity="claude"]')!;
+    const claudeIcon = claudeIdentity.querySelector<HTMLImageElement>('img')!;
+    expect(new URL(claudeIcon.src).pathname).toBe('/_redeven_proxy/env/agent-cli-icons/claude.svg');
   });
 
   it('uses thesvg light and dark variants without filtering the official mark', async () => {

@@ -111,7 +111,7 @@ function TerminalAgentIdentity(props: {
   const themeAdaptiveImage = createMemo(() => Boolean(presentation().lightIconPath && presentation().darkIconPath));
   return (
     <span
-      class={`relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-[7px] border border-sidebar-border/70 text-sidebar-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] ${presentation().render === 'mask' || themeAdaptiveImage()
+      class={`relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-sidebar-border/70 text-sidebar-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] ${presentation().render === 'mask' || themeAdaptiveImage()
         ? 'bg-sidebar/65'
         : 'bg-[#f7f7f5]'}`}
       data-terminal-session-avatar={props.sessionId}
