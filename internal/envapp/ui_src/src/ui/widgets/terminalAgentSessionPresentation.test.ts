@@ -27,9 +27,13 @@ describe('terminal agent session presentation', () => {
     ]);
 
     for (const presentation of Object.values(TERMINAL_AGENT_CLI_PRESENTATIONS)) {
-      expect(presentation.iconPath).toMatch(/^\/agent-cli-icons\/[a-z-]+\.svg$/);
+      expect(presentation.iconPath).toMatch(/^\/_redeven_proxy\/env\/agent-cli-icons\/[a-z-]+\.svg$/);
       expect(presentation.label.length).toBeGreaterThan(0);
       expect(Boolean(presentation.lightIconPath)).toBe(Boolean(presentation.darkIconPath));
+      if (presentation.lightIconPath && presentation.darkIconPath) {
+        expect(presentation.lightIconPath).toMatch(/^\/_redeven_proxy\/env\/agent-cli-icons\/[a-z-]+\.svg$/);
+        expect(presentation.darkIconPath).toMatch(/^\/_redeven_proxy\/env\/agent-cli-icons\/[a-z-]+\.svg$/);
+      }
     }
   });
 

@@ -8,6 +8,7 @@ import {
   REDEVEN_ENVAPP_ENABLE_PLUGIN_UI_ENV,
   resolveEnvAppPluginUIEnabled,
 } from './src/build/envAppBuildFeatures';
+import { REDEVEN_ENV_APP_BASE_PATH } from './src/build/envAppBasePath';
 
 function normalizeBuildModuleId(moduleId: string): string {
   const normalized = moduleId.split('?')[0]!.replaceAll('\\', '/').replace(/^\0/u, 'virtual:');
@@ -73,7 +74,7 @@ export default defineConfig({
     ],
   },
   // The Env App is served under /_redeven_proxy/env/ by the runtime.
-  base: '/_redeven_proxy/env/',
+  base: REDEVEN_ENV_APP_BASE_PATH,
   build: {
     target: 'esnext',
     outDir: path.resolve(__dirname, '../ui/dist/env'),

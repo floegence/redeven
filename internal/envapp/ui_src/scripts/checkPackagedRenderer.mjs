@@ -7,7 +7,9 @@ import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(scriptDir, '../../../..');
 const distDir = path.resolve(scriptDir, '../../ui/dist/env');
+const terminalAgentIconManifestPath = path.join(repoRoot, 'assets/terminal_agent_icons.json');
 const entryPath = '/_redeven_proxy/env/';
 const assetPrefix = `${entryPath}assets/`;
 const hashedAssetPattern = /-[A-Za-z0-9_-]{8,}\.(?:css|js|wasm)$/;
@@ -43,6 +45,20 @@ function contentType(filePath) {
     case '.woff2': return 'font/woff2';
     default: return 'application/octet-stream';
   }
+}
+
+async function readExpectedTerminalAgentIconFiles() {
+  const manifest = JSON.parse(await readFile(terminalAgentIconManifestPath, 'utf8'));
+  if (manifest.schema_version !== 1 || !Array.isArray(manifest.assets)) {
+    throw new Error('terminal Agent CLI icon manifest is invalid');
+  }
+  const files = manifest.assets.flatMap((asset) => [asset.file, asset.light_file, asset.dark_file]
+    .filter((file) => file != null)
+    .map((file) => String(file)));
+  if (files.some((file) => !/^[a-z-]+\.svg$/u.test(file)) || new Set(files).size !== files.length) {
+    throw new Error('terminal Agent CLI icon manifest contains invalid or duplicate files');
+  }
+  return files.sort();
 }
 
 function jsonResponse(response, value) {
@@ -139,6 +155,16 @@ async function main() {
   const wasmFile = (await readdir(path.join(distDir, 'assets'))).find((entry) => entry.endsWith('.wasm'));
   if (!wasmFile || !hashedAssetPattern.test(wasmFile)) {
     throw new Error('built Env App dist does not contain a content-hashed WASM renderer');
+  }
+  const expectedTerminalAgentIconFiles = await readExpectedTerminalAgentIconFiles();
+  const terminalAgentIconFiles = (await readdir(path.join(distDir, 'agent-cli-icons')))
+    .filter((entry) => entry.endsWith('.svg'))
+    .sort();
+  if (JSON.stringify(terminalAgentIconFiles) !== JSON.stringify(expectedTerminalAgentIconFiles)) {
+    throw new Error(`built Env App terminal Agent CLI icons do not match the audited manifest: ${JSON.stringify({
+      expected: expectedTerminalAgentIconFiles,
+      actual: terminalAgentIconFiles,
+    })}`);
   }
 
   const server = await createBuiltDistServer();
@@ -247,6 +273,40 @@ async function main() {
       throw new Error(`WASM renderer load failed: ${JSON.stringify(wasmResult)}`);
     }
 
+    const terminalAgentIconResults = await page.evaluate(async ({ iconFiles, iconPrefix }) => Promise.all(
+      iconFiles.map(async (file) => {
+        const response = await fetch(`${iconPrefix}${file}`);
+        const blob = await response.blob();
+        const objectURL = URL.createObjectURL(blob);
+        const image = new globalThis.Image();
+        image.src = objectURL;
+        try {
+          await image.decode();
+          return {
+            file,
+            status: response.status,
+            contentType: response.headers.get('content-type'),
+            width: image.naturalWidth,
+            height: image.naturalHeight,
+          };
+        } finally {
+          URL.revokeObjectURL(objectURL);
+        }
+      }),
+    ), {
+      iconFiles: terminalAgentIconFiles,
+      iconPrefix: `${entryPath}agent-cli-icons/`,
+    });
+    const invalidTerminalAgentIcons = terminalAgentIconResults.filter((result) => (
+      result.status !== 200
+      || result.contentType !== 'image/svg+xml'
+      || result.width <= 0
+      || result.height <= 0
+    ));
+    if (invalidTerminalAgentIcons.length > 0) {
+      throw new Error(`terminal Agent CLI icon load failed: ${JSON.stringify(invalidTerminalAgentIcons)}`);
+    }
+
     const loadedKinds = {
       css: Array.from(loadedAssets.keys()).filter((value) => value.endsWith('.css')),
       js: Array.from(loadedAssets.keys()).filter((value) => value.endsWith('.js')),
@@ -280,6 +340,10 @@ async function main() {
         js: loadedKinds.js.map((value) => path.basename(value)),
         wasm: loadedKinds.wasm.map((value) => path.basename(value)),
         wasm_bytes: wasmResult.byteLength,
+        terminal_agent_icons: {
+          count: terminalAgentIconResults.length,
+          files: terminalAgentIconResults.map((result) => result.file),
+        },
       },
       console_problem_count: 0,
       page_error_count: 0,
