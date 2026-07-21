@@ -76,6 +76,7 @@ function threadView(overrides: Record<string, unknown> = {}) {
   return {
     thread_id: 'thread-1',
     title: 'Conversation',
+    title_status: 'ready',
     model_id: 'default/gpt-4.1',
     run_status: 'idle',
     working_dir: '/workspace/redeven',
@@ -185,6 +186,7 @@ describe('Local Environment Flower surface adapter', () => {
 
     expect(mapped).toMatchObject({
       thread_id: 'thread-1',
+      title_status: 'ready',
       home_runtime_id: 'env:local-environment',
       home_runtime_kind: 'local_environment',
       source_label: 'Local Environment',
@@ -686,6 +688,7 @@ describe('Local Environment Flower surface adapter', () => {
 
     await adapter.submitApproval({
       thread_id: 'thread-1',
+      origin: 'main_tool',
       run_id: 'run-1',
       action_id: 'appr-1',
       tool_id: 'tool-1',
@@ -701,6 +704,7 @@ describe('Local Environment Flower surface adapter', () => {
       path: '/_redeven_proxy/api/ai/threads/thread-1/approvals',
       body: {
         thread_id: 'thread-1',
+        origin: 'main_tool',
         run_id: 'run-1',
         action_id: 'appr-1',
         tool_id: 'tool-1',

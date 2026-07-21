@@ -1067,61 +1067,145 @@ function mapFlowerQueuedTurns(raw: unknown): FlowerThreadSnapshot['queued_turns'
   return turns;
 }
 
-function mapApprovalAction(raw: unknown): FlowerApprovalAction | null {
+const approvalOrigins = new Set(['main_tool', 'delegated_subagent', 'control_confirm']);
+const approvalStates = new Set<FlowerApprovalAction['state']>(['requested', 'approved', 'rejected', 'timed_out', 'canceled', 'unavailable']);
+const approvalStatuses = new Set<FlowerApprovalAction['status']>(['pending', 'resolved', 'unavailable']);
+
+function requiredApprovalString(raw: unknown, field: string): string {
+  if (typeof raw !== 'string' || !raw.trim()) {
+    throw new Error(`Flower contract error: ${field} must be a non-empty string.`);
+  }
+  return raw.trim();
+}
+
+function optionalApprovalString(raw: unknown, field: string): string | undefined {
+  if (raw === undefined) return undefined;
+  if (typeof raw !== 'string') {
+    throw new Error(`Flower contract error: ${field} must be a string.`);
+  }
+  return raw.trim() || undefined;
+}
+
+function optionalApprovalPositiveInteger(raw: unknown, field: string): number | undefined {
+  return raw === undefined ? undefined : canonicalPositiveInteger(raw, field);
+}
+
+function approvalStringList(raw: unknown, field: string): readonly string[] | undefined {
+  if (raw === undefined) return undefined;
+  if (!Array.isArray(raw)) {
+    throw new Error(`Flower contract error: ${field} must be an array.`);
+  }
+  return raw.map((value, index) => requiredApprovalString(value, `${field}[${index}]`));
+}
+
+function mapApprovalAction(raw: unknown, contract: string): FlowerApprovalAction {
   const record = recordValue(raw);
-  if (!record) return null;
-  const actionID = trim(record.action_id);
-  if (!actionID) return null;
-  const rawOrigin = trim(record.origin);
-  const origin = rawOrigin === 'delegated_subagent' || rawOrigin === 'control_confirm' ? rawOrigin : 'main_tool';
-  const runID = trim(record.run_id);
-  const toolID = trim(record.tool_id);
-  const summary = recordValue(record.summary) ?? {};
-  const rawSurfaceRole = trim(record.surface_role);
-  const surfaceRole = rawSurfaceRole === 'primary_action' || rawSurfaceRole === 'locator' || rawSurfaceRole === 'mirror'
-    ? rawSurfaceRole as NonNullable<FlowerApprovalAction['surface_role']>
-    : undefined;
-  if (!runID || !toolID) return null;
-  const toolName = trim(record.tool_name) || 'tool';
+  if (!record) {
+    throw new Error(`Flower contract error: ${contract} must be an object.`);
+  }
+  const actionID = requiredApprovalString(record.action_id, `${contract}.action_id`);
+  const origin = requiredApprovalString(record.origin, `${contract}.origin`);
+  if (!approvalOrigins.has(origin)) {
+    throw new Error(`Flower contract error: ${contract}.origin is unsupported.`);
+  }
+  const runID = requiredApprovalString(record.run_id, `${contract}.run_id`);
+  const toolID = requiredApprovalString(record.tool_id, `${contract}.tool_id`);
+  const toolName = requiredApprovalString(record.tool_name, `${contract}.tool_name`);
+  const state = requiredApprovalString(record.state, `${contract}.state`) as FlowerApprovalAction['state'];
+  const status = requiredApprovalString(record.status, `${contract}.status`) as FlowerApprovalAction['status'];
+  if (!approvalStates.has(state) || !approvalStatuses.has(status)) {
+    throw new Error(`Flower contract error: ${contract} has unsupported state or status.`);
+  }
+  if (
+    (state === 'requested' && status !== 'pending')
+    || (state === 'unavailable' && status !== 'unavailable')
+    || (state !== 'requested' && state !== 'unavailable' && status !== 'resolved')
+  ) {
+    throw new Error(`Flower contract error: ${contract} has inconsistent state and status.`);
+  }
+  const revision = canonicalPositiveInteger(record.revision, `${contract}.revision`);
+  const version = canonicalPositiveInteger(record.version, `${contract}.version`);
+  const requestedAt = canonicalPositiveInteger(record.requested_at_unix_ms, `${contract}.requested_at_unix_ms`);
+  if (typeof record.can_approve !== 'boolean') {
+    throw new Error(`Flower contract error: ${contract}.can_approve must be a boolean.`);
+  }
+  const queueGeneration = nonNegativeInteger(record.queue_generation, `${contract}.queue_generation`);
+  const queueOrder = nonNegativeInteger(record.queue_order, `${contract}.queue_order`);
+  const batchIndex = nonNegativeInteger(record.batch_index, `${contract}.batch_index`);
+  const batchSize = canonicalPositiveInteger(record.batch_size, `${contract}.batch_size`);
+  if (batchIndex >= batchSize) {
+    throw new Error(`Flower contract error: ${contract} has inconsistent batch counters.`);
+  }
+  const turnID = optionalApprovalString(record.turn_id, `${contract}.turn_id`);
+  const surfaceEpoch = optionalApprovalPositiveInteger(record.surface_epoch, `${contract}.surface_epoch`);
+  const rawSurfaceRole = optionalApprovalString(record.surface_role, `${contract}.surface_role`);
+  if (rawSurfaceRole !== undefined && rawSurfaceRole !== 'primary_action' && rawSurfaceRole !== 'locator' && rawSurfaceRole !== 'mirror') {
+    throw new Error(`Flower contract error: ${contract}.surface_role is unsupported.`);
+  }
+  const surfaceRole = rawSurfaceRole as NonNullable<FlowerApprovalAction['surface_role']> | undefined;
+  const scope = optionalApprovalString(record.scope, `${contract}.scope`);
+  const resolvedAt = optionalApprovalPositiveInteger(record.resolved_at_unix_ms, `${contract}.resolved_at_unix_ms`);
+  const expiresAt = optionalApprovalPositiveInteger(record.expires_at_unix_ms, `${contract}.expires_at_unix_ms`);
+  const expectedSeq = optionalApprovalPositiveInteger(record.expected_seq, `${contract}.expected_seq`);
+  const readOnlyReason = optionalApprovalString(record.read_only_reason, `${contract}.read_only_reason`);
+  const summary = recordValue(record.summary);
+  if (!summary) {
+    throw new Error(`Flower contract error: ${contract}.summary must be an object.`);
+  }
+  const summaryLabel = requiredApprovalString(summary.label, `${contract}.summary.label`);
+  const effects = approvalStringList(summary.effects, `${contract}.summary.effects`);
+  const flags = approvalStringList(summary.flags, `${contract}.summary.flags`);
+  const targets = (() => {
+    if (summary.targets === undefined) return undefined;
+    if (!Array.isArray(summary.targets)) {
+      throw new Error(`Flower contract error: ${contract}.summary.targets must be an array.`);
+    }
+    return summary.targets.map((targetValue, index) => {
+      const target = recordValue(targetValue);
+      if (!target) {
+        throw new Error(`Flower contract error: ${contract}.summary.targets[${index}] must be an object.`);
+      }
+      const uri = optionalApprovalString(target.uri, `${contract}.summary.targets[${index}].uri`);
+      return {
+        kind: requiredApprovalString(target.kind, `${contract}.summary.targets[${index}].kind`),
+        label: requiredApprovalString(target.label, `${contract}.summary.targets[${index}].label`),
+        ...(uri ? { uri } : {}),
+      };
+    });
+  })();
+  const description = optionalApprovalString(summary.description, `${contract}.summary.description`);
+  const command = optionalApprovalString(summary.command, `${contract}.summary.command`);
+  const cwd = optionalApprovalString(summary.cwd, `${contract}.summary.cwd`);
   const base = {
     action_id: actionID,
     origin,
-    ...(trim(record.turn_id) ? { turn_id: trim(record.turn_id) } : {}),
+    ...(turnID ? { turn_id: turnID } : {}),
     tool_name: toolName,
-    state: trim(record.state) as FlowerApprovalAction['state'] || 'requested',
-    status: trim(record.status) as FlowerApprovalAction['status'] || 'pending',
-    revision: Math.max(0, Math.floor(Number(record.revision ?? 0))),
-    version: positiveInteger(record.version) ?? Math.max(1, Math.floor(Number(record.revision ?? 1))),
-    ...(positiveInteger(record.surface_epoch) ? { surface_epoch: positiveInteger(record.surface_epoch) } : {}),
+    state,
+    status,
+    revision,
+    version,
+    ...(surfaceEpoch ? { surface_epoch: surfaceEpoch } : {}),
     ...(surfaceRole ? { surface_role: surfaceRole } : {}),
-    ...(trim(record.scope) ? { scope: trim(record.scope) } : {}),
-    requested_at_ms: Math.max(0, Math.floor(Number(record.requested_at_unix_ms ?? 0))),
-    ...(positiveInteger(record.resolved_at_unix_ms) ? { resolved_at_ms: positiveInteger(record.resolved_at_unix_ms) } : {}),
-    ...(positiveInteger(record.expires_at_unix_ms) ? { expires_at_ms: positiveInteger(record.expires_at_unix_ms) } : {}),
-    can_approve: Boolean(record.can_approve),
-    ...(positiveInteger(record.expected_seq) ? { expected_seq: positiveInteger(record.expected_seq) } : {}),
-    ...(trim(record.read_only_reason) ? { read_only_reason: trim(record.read_only_reason) } : {}),
-    queue_generation: Math.max(0, Math.floor(Number(record.queue_generation ?? 0))),
-    queue_order: Math.max(0, Math.floor(Number(record.queue_order ?? 0))),
-    batch_index: Math.max(0, Math.floor(Number(record.batch_index ?? 0))),
-    batch_size: Math.max(1, Math.floor(Number(record.batch_size ?? 1))),
+    ...(scope ? { scope } : {}),
+    requested_at_ms: requestedAt,
+    ...(resolvedAt ? { resolved_at_ms: resolvedAt } : {}),
+    ...(expiresAt ? { expires_at_ms: expiresAt } : {}),
+    can_approve: record.can_approve,
+    ...(expectedSeq ? { expected_seq: expectedSeq } : {}),
+    ...(readOnlyReason ? { read_only_reason: readOnlyReason } : {}),
+    queue_generation: queueGeneration,
+    queue_order: queueOrder,
+    batch_index: batchIndex,
+    batch_size: batchSize,
     summary: {
-      label: trim(summary.label) || toolName || 'Tool approval',
-      ...(trim(summary.description) ? { description: trim(summary.description) } : {}),
-      ...(trim(summary.command) ? { command: trim(summary.command) } : {}),
-      ...(trim(summary.cwd) ? { cwd: trim(summary.cwd) } : {}),
-      ...(Array.isArray(summary.effects) ? { effects: summary.effects.map(trim).filter(Boolean) } : {}),
-      ...(Array.isArray(summary.flags) ? { flags: summary.flags.map(trim).filter(Boolean) } : {}),
-      ...(Array.isArray(summary.targets) ? {
-        targets: summary.targets.map((targetValue) => {
-          const target = recordValue(targetValue) ?? {};
-          return {
-            kind: trim(target.kind),
-            label: trim(target.label),
-            ...(trim(target.uri) ? { uri: trim(target.uri) } : {}),
-          };
-        }).filter((target) => target.kind && target.label),
-      } : {}),
+      label: summaryLabel,
+      ...(description ? { description } : {}),
+      ...(command ? { command } : {}),
+      ...(cwd ? { cwd } : {}),
+      ...(effects ? { effects } : {}),
+      ...(flags ? { flags } : {}),
+      ...(targets ? { targets } : {}),
     },
   };
   if (origin === 'delegated_subagent') {
@@ -1134,24 +1218,44 @@ function mapApprovalAction(raw: unknown): FlowerApprovalAction | null {
   }
   return {
     ...base,
-    origin: origin === 'control_confirm' ? 'control_confirm' : 'main_tool',
+    origin: origin as 'main_tool' | 'control_confirm',
     run_id: runID,
     tool_id: toolID,
   };
 }
 
+function mapControlApprovalAction(raw: unknown, contract: string, lifecycle: 'pending' | 'resolved'): FlowerApprovalAction {
+  const action = mapApprovalAction(raw, contract);
+  if (action.origin !== 'control_confirm') {
+    throw new Error(`Flower contract error: ${contract} must have control_confirm origin.`);
+  }
+  if (
+    action.version !== action.revision
+    || !action.surface_epoch
+    || !action.expected_seq
+    || action.queue_generation !== 0
+    || action.queue_order !== 0
+    || action.batch_index !== 0
+    || action.batch_size !== 1
+  ) {
+    throw new Error(`Flower contract error: ${contract} has invalid control confirmation authority counters.`);
+  }
+  if (lifecycle === 'pending') {
+    if (action.state !== 'requested' || action.status !== 'pending' || !action.can_approve || action.resolved_at_ms !== undefined) {
+      throw new Error(`Flower contract error: ${contract} is not an actionable pending control confirmation.`);
+    }
+    return action;
+  }
+  if (action.status === 'pending' || action.state === 'requested' || action.can_approve || !action.resolved_at_ms) {
+    throw new Error(`Flower contract error: ${contract} is not a resolved control confirmation.`);
+  }
+  return action;
+}
+
 function mapApprovalQueue(raw: unknown): FlowerLiveMaterializedState['approval_queue'] {
   if (raw === null) return null;
-  const record = recordValue(raw);
-  if (!record) return undefined;
-  return {
-    generation: Math.max(0, Math.floor(Number(record.generation ?? 0))),
-    revision: Math.max(0, Math.floor(Number(record.revision ?? 0))),
-    ...(trim(record.current_action_id) ? { current_action_id: trim(record.current_action_id) } : {}),
-    current_position: Math.max(0, Math.floor(Number(record.current_position ?? 0))),
-    total: Math.max(0, Math.floor(Number(record.total ?? 0))),
-    unresolved_count: Math.max(0, Math.floor(Number(record.unresolved_count ?? 0))),
-  };
+  if (raw === undefined) return undefined;
+  return mapCanonicalApprovalQueue(raw, 'approval queue');
 }
 
 function canonicalPositiveInteger(raw: unknown, field: string): number {
@@ -1161,60 +1265,60 @@ function canonicalPositiveInteger(raw: unknown, field: string): number {
   return raw;
 }
 
-function mapCanonicalApprovalAction(raw: unknown, index: number): FlowerApprovalAction {
+function mapCanonicalApprovalAction(raw: unknown, index: number, contract = 'approval.queue_replaced'): FlowerApprovalAction {
   const record = recordValue(raw);
   if (!record) {
-    throw new Error(`Flower contract error: approval.queue_replaced action ${index} must be an object.`);
+    throw new Error(`Flower contract error: ${contract} action ${index} must be an object.`);
   }
   const origin = trim(record.origin);
   if (origin !== 'main_tool' && origin !== 'delegated_subagent') {
-    throw new Error(`Flower contract error: approval.queue_replaced action ${index} has invalid origin.`);
+    throw new Error(`Flower contract error: ${contract} action ${index} has invalid origin.`);
   }
   if (!trim(record.action_id) || !trim(record.run_id) || !trim(record.tool_id) || !trim(record.tool_name)) {
-    throw new Error(`Flower contract error: approval.queue_replaced action ${index} has incomplete identity.`);
+    throw new Error(`Flower contract error: ${contract} action ${index} has incomplete identity.`);
   }
   if (trim(record.state) !== 'requested' || trim(record.status) !== 'pending') {
-    throw new Error(`Flower contract error: approval.queue_replaced action ${index} is not pending.`);
+    throw new Error(`Flower contract error: ${contract} action ${index} is not pending.`);
   }
-  const revision = canonicalPositiveInteger(record.revision, `approval.queue_replaced action ${index} revision`);
-  const version = canonicalPositiveInteger(record.version, `approval.queue_replaced action ${index} version`);
-  const surfaceEpoch = canonicalPositiveInteger(record.surface_epoch, `approval.queue_replaced action ${index} surface_epoch`);
-  const queueGeneration = canonicalPositiveInteger(record.queue_generation, `approval.queue_replaced action ${index} queue_generation`);
-  const queueOrder = canonicalPositiveInteger(record.queue_order, `approval.queue_replaced action ${index} queue_order`);
-  const batchIndex = nonNegativeInteger(record.batch_index, `approval.queue_replaced action ${index} batch_index`);
-  const batchSize = canonicalPositiveInteger(record.batch_size, `approval.queue_replaced action ${index} batch_size`);
-  canonicalPositiveInteger(record.expected_seq, `approval.queue_replaced action ${index} expected_seq`);
-  canonicalPositiveInteger(record.requested_at_unix_ms, `approval.queue_replaced action ${index} requested_at_unix_ms`);
+  const revision = canonicalPositiveInteger(record.revision, `${contract} action ${index} revision`);
+  const version = canonicalPositiveInteger(record.version, `${contract} action ${index} version`);
+  const surfaceEpoch = canonicalPositiveInteger(record.surface_epoch, `${contract} action ${index} surface_epoch`);
+  const queueGeneration = canonicalPositiveInteger(record.queue_generation, `${contract} action ${index} queue_generation`);
+  const queueOrder = canonicalPositiveInteger(record.queue_order, `${contract} action ${index} queue_order`);
+  const batchIndex = nonNegativeInteger(record.batch_index, `${contract} action ${index} batch_index`);
+  const batchSize = canonicalPositiveInteger(record.batch_size, `${contract} action ${index} batch_size`);
+  canonicalPositiveInteger(record.expected_seq, `${contract} action ${index} expected_seq`);
+  canonicalPositiveInteger(record.requested_at_unix_ms, `${contract} action ${index} requested_at_unix_ms`);
   if (version !== revision || surfaceEpoch !== queueGeneration || batchIndex >= batchSize || typeof record.can_approve !== 'boolean') {
-    throw new Error(`Flower contract error: approval.queue_replaced action ${index} counters are inconsistent.`);
+    throw new Error(`Flower contract error: ${contract} action ${index} counters are inconsistent.`);
   }
   const scope = trim(record.scope);
   if (!scope.startsWith('thread:') || !trim(scope.slice('thread:'.length))) {
-    throw new Error(`Flower contract error: approval.queue_replaced action ${index} has invalid thread scope.`);
+    throw new Error(`Flower contract error: ${contract} action ${index} has invalid thread scope.`);
   }
   const summary = recordValue(record.summary);
   if (!summary || !trim(summary.label)) {
-    throw new Error(`Flower contract error: approval.queue_replaced action ${index} requires a summary label.`);
+    throw new Error(`Flower contract error: ${contract} action ${index} requires a summary label.`);
   }
-  const action = mapApprovalAction(raw);
-  if (!action || action.origin !== origin || action.queue_order !== queueOrder || action.queue_generation !== queueGeneration) {
-    throw new Error(`Flower contract error: approval.queue_replaced action ${index} is invalid.`);
+  const action = mapApprovalAction(raw, `${contract} action ${index}`);
+  if (action.origin !== origin || action.queue_order !== queueOrder || action.queue_generation !== queueGeneration) {
+    throw new Error(`Flower contract error: ${contract} action ${index} is invalid.`);
   }
   return action;
 }
 
-function mapCanonicalApprovalQueue(raw: unknown): FlowerApprovalQueue {
+function mapCanonicalApprovalQueue(raw: unknown, contract = 'approval.queue_replaced'): FlowerApprovalQueue {
   const record = recordValue(raw);
   if (!record) {
-    throw new Error('Flower contract error: approval.queue_replaced requires an approval queue object.');
+    throw new Error(`Flower contract error: ${contract} requires an approval queue object.`);
   }
-  const generation = nonNegativeInteger(record.generation, 'approval.queue_replaced queue generation');
-  const revision = nonNegativeInteger(record.revision, 'approval.queue_replaced queue revision');
-  const currentPosition = nonNegativeInteger(record.current_position, 'approval.queue_replaced queue current_position');
-  const total = nonNegativeInteger(record.total, 'approval.queue_replaced queue total');
-  const unresolvedCount = nonNegativeInteger(record.unresolved_count, 'approval.queue_replaced queue unresolved_count');
+  const generation = nonNegativeInteger(record.generation, `${contract} generation`);
+  const revision = nonNegativeInteger(record.revision, `${contract} revision`);
+  const currentPosition = nonNegativeInteger(record.current_position, `${contract} current_position`);
+  const total = nonNegativeInteger(record.total, `${contract} total`);
+  const unresolvedCount = nonNegativeInteger(record.unresolved_count, `${contract} unresolved_count`);
   if (record.current_action_id !== undefined && typeof record.current_action_id !== 'string') {
-    throw new Error('Flower contract error: approval.queue_replaced queue current_action_id must be a string.');
+    throw new Error(`Flower contract error: ${contract} current_action_id must be a string.`);
   }
   const currentActionID = trim(record.current_action_id);
   return {
@@ -1227,44 +1331,44 @@ function mapCanonicalApprovalQueue(raw: unknown): FlowerApprovalQueue {
   };
 }
 
-function validateCanonicalApprovalReplacement(actions: readonly FlowerApprovalAction[], queue: FlowerApprovalQueue): void {
+function validateCanonicalApprovalReplacement(actions: readonly FlowerApprovalAction[], queue: FlowerApprovalQueue, contract = 'approval.queue_replaced'): void {
   if (queue.total !== actions.length || queue.unresolved_count !== actions.length) {
-    throw new Error('Flower contract error: approval.queue_replaced queue counts do not match actions.');
+    throw new Error(`Flower contract error: ${contract} counts do not match actions.`);
   }
   if (actions.length === 0) {
     if (queue.current_action_id || queue.current_position !== 0) {
-      throw new Error('Flower contract error: empty approval.queue_replaced queue has a current action.');
+      throw new Error(`Flower contract error: empty ${contract} has a current action.`);
     }
     return;
   }
   if (queue.generation <= 0 || queue.revision <= 0 || queue.current_position !== 1 || !queue.current_action_id) {
-    throw new Error('Flower contract error: approval.queue_replaced queue authority is incomplete.');
+    throw new Error(`Flower contract error: ${contract} authority is incomplete.`);
   }
   const actionIDs = new Set<string>();
   const queueOrders = new Set<number>();
   let actionableCount = 0;
   for (const action of actions) {
     if (actionIDs.has(action.action_id) || queueOrders.has(action.queue_order ?? 0)) {
-      throw new Error('Flower contract error: approval.queue_replaced actions have duplicate identity or order.');
+      throw new Error(`Flower contract error: ${contract} actions have duplicate identity or order.`);
     }
     actionIDs.add(action.action_id);
     queueOrders.add(action.queue_order ?? 0);
     if (action.queue_generation !== queue.generation || action.surface_epoch !== queue.generation) {
-      throw new Error('Flower contract error: approval.queue_replaced action generation does not match queue.');
+      throw new Error(`Flower contract error: ${contract} action generation does not match queue.`);
     }
     if (action.can_approve) {
       actionableCount += 1;
       if (action.action_id !== queue.current_action_id) {
-        throw new Error('Flower contract error: approval.queue_replaced non-current action is actionable.');
+        throw new Error(`Flower contract error: ${contract} non-current action is actionable.`);
       }
     }
   }
   if (actions[0]?.action_id !== queue.current_action_id || actionableCount > 1) {
-    throw new Error('Flower contract error: approval.queue_replaced current action is inconsistent.');
+    throw new Error(`Flower contract error: ${contract} current action is inconsistent.`);
   }
   for (let index = 1; index < actions.length; index += 1) {
     if ((actions[index - 1]?.queue_order ?? 0) >= (actions[index]?.queue_order ?? 0)) {
-      throw new Error('Flower contract error: approval.queue_replaced actions are not canonically ordered.');
+      throw new Error(`Flower contract error: ${contract} actions are not canonically ordered.`);
     }
   }
 }
@@ -1327,12 +1431,46 @@ function mapLiveState(raw: unknown): FlowerLiveMaterializedState {
       ...(trim(run.error) ? { error: trim(run.error) } : {}),
     };
   }
-  const approvalsRecord = record.approval_actions === undefined ? undefined : (recordValue(record.approval_actions) ?? {});
-  if (approvalsRecord !== undefined) {
-    for (const [actionID, value] of Object.entries(approvalsRecord)) {
-      const action = mapApprovalAction({ action_id: actionID, ...(recordValue(value) ?? {}) });
-      if (action) approvals[actionID] = action;
+  const approvalsRecord = (() => {
+    if (record.approval_actions === undefined) return undefined;
+    const value = plainRecordValue(record.approval_actions);
+    if (!value) {
+      throw new Error('Flower contract error: live_state.approval_actions must be an object.');
     }
+    return value;
+  })();
+  const approvalQueue = mapApprovalQueue(record.approval_queue);
+  const canonicalActions: FlowerApprovalAction[] = [];
+  if (approvalsRecord !== undefined) {
+    const controlActions: FlowerApprovalAction[] = [];
+    const canonicalInputs: unknown[] = [];
+    for (const [actionID, value] of Object.entries(approvalsRecord)) {
+      const input = plainRecordValue(value);
+      if (!input) {
+        throw new Error(`Flower contract error: live_state.approval_actions.${actionID} must be an object.`);
+      }
+      const embeddedActionID = requiredApprovalString(input.action_id, `live_state.approval_actions.${actionID}.action_id`);
+      if (actionID !== embeddedActionID) {
+        throw new Error(`Flower contract error: live_state.approval_actions.${actionID} has mismatched action identity.`);
+      }
+      if (trim(input.origin) === 'control_confirm') {
+        controlActions.push(mapControlApprovalAction(input, `live_state.approval_actions.${actionID}`, 'pending'));
+      } else {
+        canonicalInputs.push(input);
+      }
+    }
+    canonicalActions.push(...canonicalInputs
+      .map((input, index) => mapCanonicalApprovalAction(input, index, 'live_state.approval_actions'))
+      .sort((left, right) => (left.queue_order ?? 0) - (right.queue_order ?? 0)));
+    if (canonicalActions.length > 0 && (approvalQueue === undefined || approvalQueue === null)) {
+      throw new Error('Flower contract error: live_state.approval_actions requires a canonical approval queue.');
+    }
+    for (const action of [...controlActions, ...canonicalActions]) {
+      approvals[action.action_id] = action;
+    }
+  }
+  if (approvalQueue) {
+    validateCanonicalApprovalReplacement(canonicalActions, approvalQueue, 'live_state.approval_actions');
   }
   const inputsRecord = recordValue(record.input_requests) ?? {};
   for (const [promptID, value] of Object.entries(inputsRecord)) {
@@ -1343,7 +1481,6 @@ function mapLiveState(raw: unknown): FlowerLiveMaterializedState {
   const contextUsage = record.context_usage === null ? null : mapContextUsage(record.context_usage);
   const contextCompactions = mapContextCompactionsSnapshot(record.context_compactions);
   const timelineDecorations = mapTimelineDecorationsSnapshot(record.timeline_decorations);
-  const approvalQueue = mapApprovalQueue(record.approval_queue);
 
   return {
     thread_patch: mapThreadPatch(record.thread_patch) ?? {},
@@ -1463,17 +1600,20 @@ function mapLiveEventPayload(kind: string, payload: unknown): unknown {
         error: trim(record.error),
       } as FlowerLiveMessageFailedPayload;
     case 'approval.requested':
-    case 'approval.resolved':
+    case 'approval.resolved': {
+      const action = mapControlApprovalAction(record.action, kind, kind === 'approval.requested' ? 'pending' : 'resolved');
+      const approvalQueue = mapApprovalQueue(record.approval_queue);
       return {
-        action: mapApprovalAction(record.action) ?? undefined,
-        ...(mapApprovalQueue(record.approval_queue) ? { approval_queue: mapApprovalQueue(record.approval_queue) } : {}),
+        action,
+        ...(approvalQueue ? { approval_queue: approvalQueue } : {}),
       } as FlowerLiveApprovalPayload;
+    }
     case 'approval.queue_replaced': {
       if (!Array.isArray(record.actions)) {
         throw new Error('Flower contract error: approval.queue_replaced requires actions.');
       }
       const approvalQueue = mapCanonicalApprovalQueue(record.approval_queue);
-      const actions = record.actions.map(mapCanonicalApprovalAction);
+      const actions = record.actions.map((action, index) => mapCanonicalApprovalAction(action, index));
       validateCanonicalApprovalReplacement(actions, approvalQueue);
       return { actions, approval_queue: approvalQueue } as FlowerLiveApprovalQueuePayload;
     }
