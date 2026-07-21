@@ -1,5 +1,8 @@
 import type { ProtocolContract, RpcHelpers } from '@floegence/floe-webapp-protocol';
-import { captureDebugConsoleProtocolCall } from '../../services/debugConsoleCapture';
+import {
+  captureDebugConsoleProtocolCall,
+  publishDebugConsoleStructuredEvent,
+} from '../../services/debugConsoleCapture';
 import { redevenV1TypeIds } from './typeIds';
 import type {
   AICompactThreadContextRequest,
@@ -87,7 +90,7 @@ import type {
 } from './sdk/monitor';
 import type { SessionsListActiveResponse } from './sdk/sessions';
 import type { SysPingResponse, SysRestartResponse, SysUpgradeRequest, SysUpgradeResponse } from './sdk/sys';
-import type { TerminalClearRequest, TerminalClearResponse, TerminalForegroundCommandUpdateEvent, TerminalHistoryRequest, TerminalHistoryResponse, TerminalNameUpdateEvent, TerminalSessionCreateRequest, TerminalSessionCreateResponse, TerminalSessionDeleteRequest, TerminalSessionDeleteResponse, TerminalSessionInfo, TerminalSessionStatsRequest, TerminalSessionStatsResponse, TerminalSessionsChangedEvent } from './sdk/terminal';
+import type { TerminalClearRequest, TerminalClearResponse, TerminalForegroundCommandUpdateEvent, TerminalHistoryRequest, TerminalHistoryResponse, TerminalNameUpdateEvent, TerminalOutputActivityUpdateEvent, TerminalSessionCreateRequest, TerminalSessionCreateResponse, TerminalSessionDeleteRequest, TerminalSessionDeleteResponse, TerminalSessionInfo, TerminalSessionStatsRequest, TerminalSessionStatsResponse, TerminalSessionsChangedEvent } from './sdk/terminal';
 import {
   fromWireAIEventNotify,
   fromWireAICompactThreadContextResponse,
@@ -174,7 +177,7 @@ import {
 } from './codec/monitor';
 import { fromWireSessionsListActiveResponse } from './codec/sessions';
 import { fromWireSysPingResponse, fromWireSysRestartResponse, fromWireSysUpgradeResponse, toWireSysRestartRequest, toWireSysUpgradeRequest } from './codec/sys';
-import { fromWireTerminalForegroundCommandUpdateNotify, fromWireTerminalNameUpdateNotify, fromWireTerminalSessionCreateResponse, fromWireTerminalSessionDeleteResponse, fromWireTerminalSessionListResponse, fromWireTerminalSessionStatsResponse, fromWireTerminalHistoryResponse, toWireTerminalSessionCreateRequest, toWireTerminalSessionDeleteRequest, toWireTerminalSessionStatsRequest, toWireTerminalHistoryRequest, toWireTerminalClearRequest, fromWireTerminalClearResponse, fromWireTerminalSessionsChangedNotify } from './codec/terminal';
+import { fromWireTerminalForegroundCommandUpdateNotify, fromWireTerminalNameUpdateNotify, fromWireTerminalOutputActivityUpdateNotify, fromWireTerminalSessionCreateResponse, fromWireTerminalSessionDeleteResponse, fromWireTerminalSessionListResponse, fromWireTerminalSessionStatsResponse, fromWireTerminalHistoryResponse, toWireTerminalSessionCreateRequest, toWireTerminalSessionDeleteRequest, toWireTerminalSessionStatsRequest, toWireTerminalHistoryRequest, toWireTerminalClearRequest, fromWireTerminalClearResponse, fromWireTerminalSessionsChangedNotify } from './codec/terminal';
 import type { wire_access_resume_req, wire_access_resume_resp, wire_access_status_resp } from './wire/access';
 import type {
   wire_ai_event_notify,
@@ -261,7 +264,7 @@ import type {
 } from './wire/monitor';
 import type { wire_sessions_list_active_resp } from './wire/sessions';
 import type { wire_sys_ping_resp, wire_sys_restart_req, wire_sys_restart_resp, wire_sys_upgrade_req, wire_sys_upgrade_resp } from './wire/sys';
-import type { wire_terminal_clear_req, wire_terminal_clear_resp, wire_terminal_foreground_command_update_notify, wire_terminal_history_req, wire_terminal_history_resp, wire_terminal_name_update_notify, wire_terminal_session_create_req, wire_terminal_session_create_resp, wire_terminal_session_delete_req, wire_terminal_session_delete_resp, wire_terminal_session_list_resp, wire_terminal_session_stats_req, wire_terminal_session_stats_resp, wire_terminal_sessions_changed_notify } from './wire/terminal';
+import type { wire_terminal_clear_req, wire_terminal_clear_resp, wire_terminal_foreground_command_update_notify, wire_terminal_history_req, wire_terminal_history_resp, wire_terminal_name_update_notify, wire_terminal_output_activity_update_notify, wire_terminal_session_create_req, wire_terminal_session_create_resp, wire_terminal_session_delete_req, wire_terminal_session_delete_resp, wire_terminal_session_list_resp, wire_terminal_session_stats_req, wire_terminal_session_stats_resp, wire_terminal_sessions_changed_notify } from './wire/terminal';
 
 export type RedevenV1Rpc = {
   fs: {
@@ -314,6 +317,7 @@ export type RedevenV1Rpc = {
     getSessionStats: (req: TerminalSessionStatsRequest) => Promise<TerminalSessionStatsResponse>;
     onNameUpdate: (handler: (event: TerminalNameUpdateEvent) => void) => () => void;
     onForegroundCommandUpdate: (handler: (event: TerminalForegroundCommandUpdateEvent) => void) => () => void;
+    onOutputActivityUpdate: (handler: (event: TerminalOutputActivityUpdateEvent) => void) => () => void;
     onSessionsChanged: (handler: (event: TerminalSessionsChangedEvent) => void) => () => void;
   };
   ai: {
@@ -581,6 +585,26 @@ export function createRedevenV1Rpc(helpers: RpcHelpers): RedevenV1Rpc {
         onNotify<wire_terminal_foreground_command_update_notify>(redevenV1TypeIds.terminal.foregroundCommandUpdate, (payload) => {
           const ev = fromWireTerminalForegroundCommandUpdateNotify(payload);
           if (ev) handler(ev);
+        }),
+      onOutputActivityUpdate: (handler) =>
+        onNotify<wire_terminal_output_activity_update_notify>(redevenV1TypeIds.terminal.outputActivityUpdate, (payload) => {
+          const ev = fromWireTerminalOutputActivityUpdateNotify(payload);
+          if (ev) {
+            handler(ev);
+            return;
+          }
+          publishDebugConsoleStructuredEvent({
+            created_at: new Date().toISOString(),
+            source: 'ui',
+            scope: 'terminal_catalog',
+            kind: 'notify_rejected',
+            message: 'Rejected malformed terminal output activity notification',
+            detail: {
+              type_id: redevenV1TypeIds.terminal.outputActivityUpdate,
+              error_code: 'malformed_output_activity_notify',
+              delivered: false,
+            },
+          });
         }),
       onSessionsChanged: (handler) =>
         onNotify<wire_terminal_sessions_changed_notify>(redevenV1TypeIds.terminal.sessionsChanged, (payload) => {

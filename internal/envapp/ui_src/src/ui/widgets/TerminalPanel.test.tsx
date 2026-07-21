@@ -335,6 +335,11 @@ const terminalSessionsState = vi.hoisted(() => ({
       revision: number;
       updatedAtMs: number;
     };
+    outputActivity?: {
+      phase: 'unknown' | 'streaming' | 'settled';
+      revision: number;
+      updatedAtMs: number;
+    };
   }>,
   subscribers: [] as Array<(value: Array<{
     id: string;
@@ -346,6 +351,11 @@ const terminalSessionsState = vi.hoisted(() => ({
     foregroundCommand?: {
       phase: 'unknown' | 'idle' | 'running';
       displayName: string;
+      revision: number;
+      updatedAtMs: number;
+    };
+    outputActivity?: {
+      phase: 'unknown' | 'streaming' | 'settled';
       revision: number;
       updatedAtMs: number;
     };
@@ -1718,6 +1728,20 @@ function publishTerminalForegroundCommand(
 ) {
   terminalSessionsState.sessions = terminalSessionsState.sessions.map((session) => (
     session.id === sessionId ? { ...session, foregroundCommand } : session
+  ));
+  publishTerminalSessions();
+}
+
+function publishTerminalOutputActivity(
+  sessionId: string,
+  outputActivity: {
+    phase: 'unknown' | 'streaming' | 'settled';
+    revision: number;
+    updatedAtMs: number;
+  },
+) {
+  terminalSessionsState.sessions = terminalSessionsState.sessions.map((session) => (
+    session.id === sessionId ? { ...session, outputActivity } : session
   ));
   publishTerminalSessions();
 }
@@ -5688,6 +5712,62 @@ describe('TerminalPanel', () => {
     expect(findTerminalTabStatus(host, 'Terminal 2', 'running')).toBeNull();
     expect(Array.from(host.querySelectorAll('[data-terminal-session-title="session-2"]')).map((element) => element.textContent)).toEqual(['repo', 'repo']);
     expect(titleChanges).toHaveBeenLastCalledWith('Terminal · repo');
+  });
+
+  it('projects agent identity and output activity independently from the running process spinner', async () => {
+    terminalSessionsState.sessions = [
+      {
+        id: 'session-1',
+        name: 'Terminal 1',
+        workingDir: '/workspace',
+        createdAtMs: 1,
+        isActive: true,
+        lastActiveAtMs: 10,
+      },
+      {
+        id: 'session-agent',
+        name: 'Agent',
+        workingDir: '/workspace/repo',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+        foregroundCommand: {
+          phase: 'running', displayName: 'codex', revision: 1, updatedAtMs: 10,
+        },
+        outputActivity: {
+          phase: 'streaming', revision: 1, updatedAtMs: 11,
+        },
+      },
+    ];
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+    await vi.waitFor(() => expect(host.querySelector('[data-terminal-agent-identity="codex"]')).not.toBeNull());
+
+    const spinner = host.querySelector('[data-terminal-agent-identity="codex"] [data-terminal-process-state="running"]');
+    expect(spinner).not.toBeNull();
+    expect(host.querySelector('[data-terminal-output-state="streaming"]')).not.toBeNull();
+
+    publishTerminalOutputActivity('session-agent', {
+      phase: 'settled', revision: 2, updatedAtMs: 20,
+    });
+    await settleTerminalPanel();
+    expect(host.querySelector('[data-terminal-output-state="streaming"]')).toBeNull();
+    expect(host.querySelector('[data-terminal-output-state="settled"]')).not.toBeNull();
+    expect(host.querySelector('[data-terminal-agent-identity="codex"] [data-terminal-process-state="running"]')).toBe(spinner);
+
+    publishTerminalForegroundCommand('session-agent', {
+      phase: 'idle', displayName: '', revision: 2, updatedAtMs: 30,
+    });
+    publishTerminalOutputActivity('session-agent', {
+      phase: 'unknown', revision: 3, updatedAtMs: 30,
+    });
+    await settleTerminalPanel();
+    expect(host.querySelector('[data-terminal-agent-identity="codex"]')).toBeNull();
+    expect(host.querySelector('[data-terminal-output-state]')).toBeNull();
+    expect(host.querySelector('[data-terminal-session-avatar="session-agent"]')?.textContent).toContain('R');
   });
 
   it('does not flash a spinner or program title for a command that finishes inside the confirmation window', async () => {

@@ -51,6 +51,7 @@ export const redevenV1TypeIds = {
     sessionStats: 2011,
     sessionsChanged: 2012,
     foregroundCommandUpdate: 2013,
+    outputActivityUpdate: 2014,
   },
   monitor: {
     sysMonitor: 3001,

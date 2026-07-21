@@ -1,6 +1,7 @@
 import { createContext, createEffect, createSignal, onCleanup, untrack, useContext, type Accessor, type ParentProps } from 'solid-js';
 import type {
   TerminalForegroundCommandInfo,
+  TerminalOutputActivityInfo,
   TerminalSessionInfo,
   TerminalSessionsCoordinator,
 } from '@floegence/floeterm-terminal-web/sessions';
@@ -48,6 +49,7 @@ export type TerminalSessionCatalogValue = Readonly<{
     lastActiveAtMs?: number;
     isActive?: boolean;
     foregroundCommand?: TerminalForegroundCommandInfo;
+    outputActivity?: TerminalOutputActivityInfo;
   }) => void;
   clearForPermissionDenied: () => void;
   requestPreparedHistory: (sessionId: string) => Promise<PreparedPagedTerminalHistory | null>;
@@ -102,6 +104,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
   let activeCoordinator: TerminalSessionsCoordinator | null = null;
   let unsubscribeCoordinator: (() => void) | null = null;
   let unsubscribeForegroundCommand: (() => void) | null = null;
+  let unsubscribeOutputActivity: (() => void) | null = null;
   let preloadCancel: (() => void) | null = null;
   let lifecycleRevision = 0;
   let refreshRequestSequence = 0;
@@ -114,10 +117,26 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
   const activeSurfaceIds = new Set<string>();
   const removedSessionIds = new Set<string>();
   const pendingForegroundCommands = new Map<string, TerminalForegroundCommandInfo>();
-  const pendingForegroundCommandLimit = 512;
-  let pendingForegroundCommandOverflowRevision = 0;
-  let pendingForegroundCommandReconcile: Promise<void> | null = null;
-  let schedulePendingForegroundCommandReconcile = () => undefined;
+  const pendingOutputActivities = new Map<string, TerminalOutputActivityInfo>();
+  const latestOutputActivities = new Map<string, TerminalOutputActivityInfo>();
+  const pendingMetadataLimit = 512;
+  let pendingMetadataOverflowRevision = 0;
+  let pendingMetadataReconcile: Promise<void> | null = null;
+  let pendingMetadataRetryTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+  let pendingMetadataRetryDelayMs = 50;
+  let schedulePendingMetadataReconcile = () => undefined;
+
+  const schedulePendingMetadataReconcileRetry = () => {
+    if (pendingMetadataRetryTimer != null || providerDisposed) return;
+    const scheduledLifecycleRevision = lifecycleRevision;
+    const delayMs = pendingMetadataRetryDelayMs;
+    pendingMetadataRetryDelayMs = Math.min(pendingMetadataRetryDelayMs * 2, 2_000);
+    pendingMetadataRetryTimer = globalThis.setTimeout(() => {
+      pendingMetadataRetryTimer = null;
+      if (providerDisposed || scheduledLifecycleRevision !== lifecycleRevision) return;
+      schedulePendingMetadataReconcile();
+    }, delayMs);
+  };
 
   const retainPendingForegroundCommand = (
     sessionId: string,
@@ -127,12 +146,12 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     if (existing && existing.revision >= foregroundCommand.revision) return;
     pendingForegroundCommands.delete(sessionId);
     pendingForegroundCommands.set(sessionId, foregroundCommand);
-    while (pendingForegroundCommands.size > pendingForegroundCommandLimit) {
+    while (pendingForegroundCommands.size > pendingMetadataLimit) {
       const oldest = pendingForegroundCommands.keys().next().value;
       if (typeof oldest !== 'string') break;
       pendingForegroundCommands.delete(oldest);
-      pendingForegroundCommandOverflowRevision += 1;
-      schedulePendingForegroundCommandReconcile();
+      pendingMetadataOverflowRevision += 1;
+      schedulePendingMetadataReconcile();
     }
   };
 
@@ -150,21 +169,104 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     return true;
   };
 
-  const flushPendingForegroundCommands = (current: TerminalSessionsCoordinator) => {
-    const visibleIds = new Set(current.getSnapshot().map((session) => session.id));
+  const retainPendingOutputActivity = (
+    sessionId: string,
+    outputActivity: TerminalOutputActivityInfo,
+  ) => {
+    const existing = pendingOutputActivities.get(sessionId);
+    if (existing && existing.revision >= outputActivity.revision) return;
+    pendingOutputActivities.delete(sessionId);
+    pendingOutputActivities.set(sessionId, outputActivity);
+    while (pendingOutputActivities.size > pendingMetadataLimit) {
+      const oldest = pendingOutputActivities.keys().next().value;
+      if (typeof oldest !== 'string') break;
+      const evicted = pendingOutputActivities.get(oldest);
+      pendingOutputActivities.delete(oldest);
+      if (latestOutputActivities.get(oldest)?.revision === evicted?.revision) {
+        latestOutputActivities.delete(oldest);
+      }
+      pendingMetadataOverflowRevision += 1;
+      schedulePendingMetadataReconcile();
+    }
+  };
+
+  const applyOutputActivity = (
+    sessionId: string,
+    outputActivity: TerminalOutputActivityInfo,
+  ): boolean => {
+    const current = activeCoordinator;
+    const existingSession = current?.getSnapshot().find((session) => session.id === sessionId);
+    const latest = latestOutputActivities.get(sessionId);
+    if (latest && latest.revision >= outputActivity.revision) return false;
+    const snapshotActivity = existingSession?.outputActivity;
+    if (snapshotActivity && snapshotActivity.revision >= outputActivity.revision) {
+      latestOutputActivities.set(sessionId, snapshotActivity);
+      pendingOutputActivities.delete(sessionId);
+      return false;
+    }
+    latestOutputActivities.set(sessionId, outputActivity);
+    if (!current || !existingSession) {
+      retainPendingOutputActivity(sessionId, outputActivity);
+      return false;
+    }
+    pendingOutputActivities.delete(sessionId);
+    if ((existingSession.outputActivity?.revision ?? -1) >= outputActivity.revision) return false;
+    current.updateSessionMeta(sessionId, { outputActivity });
+    return true;
+  };
+
+  const flushPendingMetadata = (current: TerminalSessionsCoordinator) => {
+    const snapshotById = new Map(current.getSnapshot().map((session) => [session.id, session]));
     for (const [sessionId, foregroundCommand] of pendingForegroundCommands) {
-      if (!visibleIds.has(sessionId)) continue;
+      if (!snapshotById.has(sessionId)) continue;
       pendingForegroundCommands.delete(sessionId);
       current.updateSessionMeta(sessionId, { foregroundCommand });
+    }
+    for (const [sessionId, outputActivity] of pendingOutputActivities) {
+      const existing = snapshotById.get(sessionId);
+      if (!existing) continue;
+      pendingOutputActivities.delete(sessionId);
+      if ((existing.outputActivity?.revision ?? -1) >= outputActivity.revision) {
+        if (existing.outputActivity) latestOutputActivities.set(sessionId, existing.outputActivity);
+        continue;
+      }
+      current.updateSessionMeta(sessionId, { outputActivity });
+    }
+  };
+
+  const convergeOutputActivities = (current: TerminalSessionsCoordinator) => {
+    for (const session of current.getSnapshot()) {
+      const latest = latestOutputActivities.get(session.id);
+      const snapshotActivity = session.outputActivity;
+      if (latest && latest.revision > (snapshotActivity?.revision ?? -1)) {
+        current.updateSessionMeta(session.id, { outputActivity: latest });
+      } else if (snapshotActivity) {
+        latestOutputActivities.set(session.id, snapshotActivity);
+      }
     }
   };
 
   const applySnapshot = (next: TerminalSessionInfo[], authoritative = false) => {
     const authoritativeIds = new Set(next.map((session) => session.id));
-    const visible = next.filter((session) => !removedSessionIds.has(session.id));
+    const visible = next
+      .filter((session) => !removedSessionIds.has(session.id))
+      .map((session) => {
+        const latest = latestOutputActivities.get(session.id);
+        const snapshotActivity = session.outputActivity;
+        if (latest && latest.revision > (snapshotActivity?.revision ?? -1)) {
+          return { ...session, outputActivity: latest };
+        }
+        if (snapshotActivity) latestOutputActivities.set(session.id, snapshotActivity);
+        return session;
+      });
     if (authoritative) {
       for (const removedId of [...removedSessionIds]) {
         if (!authoritativeIds.has(removedId)) removedSessionIds.delete(removedId);
+      }
+      for (const sessionId of latestOutputActivities.keys()) {
+        if (!authoritativeIds.has(sessionId) && !pendingOutputActivities.has(sessionId)) {
+          latestOutputActivities.delete(sessionId);
+        }
       }
     }
     const frozen = Object.freeze([...visible]);
@@ -193,8 +295,17 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     unsubscribeCoordinator = null;
     unsubscribeForegroundCommand?.();
     unsubscribeForegroundCommand = null;
+    unsubscribeOutputActivity?.();
+    unsubscribeOutputActivity = null;
     pendingForegroundCommands.clear();
-    pendingForegroundCommandReconcile = null;
+    pendingOutputActivities.clear();
+    latestOutputActivities.clear();
+    pendingMetadataReconcile = null;
+    if (pendingMetadataRetryTimer != null) {
+      globalThis.clearTimeout(pendingMetadataRetryTimer);
+      pendingMetadataRetryTimer = null;
+    }
+    pendingMetadataRetryDelayMs = 50;
     activeCoordinator?.dispose();
     activeCoordinator = null;
     activeClient = null;
@@ -267,11 +378,21 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
       if (!coordinatorHydrated && snapshot.length === 0) return;
       applySnapshot(snapshot);
     });
-    unsubscribeForegroundCommand = rpc.terminal.onForegroundCommandUpdate((event) => {
-      const sessionId = String(event.sessionId ?? '').trim();
-      if (!sessionId || removedSessionIds.has(sessionId)) return;
-      applyForegroundCommand(sessionId, event.foregroundCommand);
-    });
+    const terminalRpc = (rpc as { terminal?: Partial<(typeof rpc)['terminal']> }).terminal;
+    if (terminalRpc && typeof terminalRpc.onForegroundCommandUpdate === 'function') {
+      unsubscribeForegroundCommand = terminalRpc.onForegroundCommandUpdate((event) => {
+        const sessionId = String(event.sessionId ?? '').trim();
+        if (!sessionId || removedSessionIds.has(sessionId)) return;
+        applyForegroundCommand(sessionId, event.foregroundCommand);
+      });
+    }
+    if (terminalRpc && typeof terminalRpc.onOutputActivityUpdate === 'function') {
+      unsubscribeOutputActivity = terminalRpc.onOutputActivityUpdate((event) => {
+        const sessionId = String(event.sessionId ?? '').trim();
+        if (!sessionId || removedSessionIds.has(sessionId)) return;
+        applyOutputActivity(sessionId, event.outputActivity);
+      });
+    }
     setConnectionEpoch((value) => value + 1);
     return next;
   };
@@ -296,7 +417,8 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
         || requestSequence !== refreshRequestSequence
         || current !== activeCoordinator
       ) return;
-      flushPendingForegroundCommands(current);
+      convergeOutputActivities(current);
+      flushPendingMetadata(current);
       coordinatorHydrated = true;
       applySnapshot(current.getSnapshot(), true);
       setHydrated(true);
@@ -334,17 +456,18 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     }
   };
 
-  schedulePendingForegroundCommandReconcile = () => {
-    if (pendingForegroundCommandReconcile || providerDisposed) return;
+  schedulePendingMetadataReconcile = () => {
+    if (pendingMetadataReconcile || providerDisposed) return;
     const scheduledLifecycleRevision = lifecycleRevision;
     let reconciledOverflowRevision = -1;
+    let retryAfterFailure = false;
     const reconcile = (async () => {
       while (
         !providerDisposed
         && scheduledLifecycleRevision === lifecycleRevision
-        && reconciledOverflowRevision !== pendingForegroundCommandOverflowRevision
+        && reconciledOverflowRevision !== pendingMetadataOverflowRevision
       ) {
-        reconciledOverflowRevision = pendingForegroundCommandOverflowRevision;
+        const targetOverflowRevision = pendingMetadataOverflowRevision;
         const joinedExistingRefresh = loading();
         try {
           await refresh();
@@ -352,23 +475,31 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
             await refresh();
           }
         } catch {
+          retryAfterFailure = true;
           return;
         }
+        reconciledOverflowRevision = targetOverflowRevision;
+        pendingMetadataRetryDelayMs = 50;
       }
     })();
     let trackedReconcile: Promise<void>;
     trackedReconcile = reconcile.finally(() => {
-      if (pendingForegroundCommandReconcile === trackedReconcile) {
-        pendingForegroundCommandReconcile = null;
+      if (pendingMetadataReconcile === trackedReconcile) {
+        pendingMetadataReconcile = null;
         if (
           !providerDisposed
-          && reconciledOverflowRevision !== pendingForegroundCommandOverflowRevision
+          && scheduledLifecycleRevision === lifecycleRevision
+          && reconciledOverflowRevision !== pendingMetadataOverflowRevision
         ) {
-          schedulePendingForegroundCommandReconcile();
+          if (retryAfterFailure) {
+            schedulePendingMetadataReconcileRetry();
+          } else {
+            schedulePendingMetadataReconcile();
+          }
         }
       }
     });
-    pendingForegroundCommandReconcile = trackedReconcile;
+    pendingMetadataReconcile = trackedReconcile;
   };
 
   const getCoordinator = (): TerminalSessionsCoordinator | null => {
@@ -384,7 +515,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     const current = getCoordinator();
     if (current) {
       current.upsertSession(session);
-      flushPendingForegroundCommands(current);
+      flushPendingMetadata(current);
       return;
     }
     applySnapshot([...sessions().filter((candidate) => candidate.id !== session.id), session]);
@@ -395,6 +526,8 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     if (normalized) {
       removedSessionIds.add(normalized);
       pendingForegroundCommands.delete(normalized);
+      pendingOutputActivities.delete(normalized);
+      latestOutputActivities.delete(normalized);
       historyWarmup?.invalidate(normalized, 'removed');
       const current = getCoordinator();
       if (current) current.removeSession(normalized);
@@ -408,6 +541,7 @@ export function TerminalSessionCatalogProvider(props: ParentProps) {
     lastActiveAtMs?: number;
     isActive?: boolean;
     foregroundCommand?: TerminalForegroundCommandInfo;
+    outputActivity?: TerminalOutputActivityInfo;
   }) => {
     const normalized = String(sessionId ?? '').trim();
     if (!normalized) return;

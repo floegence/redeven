@@ -1,7 +1,9 @@
+import '../../index.css';
+
 import { For, Show, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { page } from 'vitest/browser';
+import { commands, page, userEvent } from 'vitest/browser';
 import { TerminalLiveErrorCode, TerminalLiveServerError } from '@floegence/floeterm-terminal-web/live';
 
 import { EnvTerminalPage } from '../pages/EnvTerminalPage';
@@ -20,6 +22,13 @@ const browserProtocolState = vi.hoisted(() => ({
   client: { id: 'protocol-client-1' } as object | null,
   setClient: null as ((client: object | null) => void) | null,
 }));
+
+const mediaCommands = commands as unknown as Readonly<{
+  emulateMediaPreferences: (preferences: Readonly<{
+    forcedColors?: null | 'active' | 'none';
+    reducedMotion?: null | 'reduce' | 'no-preference';
+  }>) => Promise<void>;
+}>;
 
 function nearestRankP95(values: readonly number[]): number {
   const sorted = [...values].sort((left, right) => left - right);
@@ -152,6 +161,11 @@ const terminalSessionsState = vi.hoisted(() => ({
       revision: number;
       updatedAtMs: number;
     };
+    outputActivity?: {
+      phase: 'unknown' | 'streaming' | 'settled';
+      revision: number;
+      updatedAtMs: number;
+    };
   }>,
   subscribers: [] as Array<(value: Array<{
     id: string;
@@ -163,6 +177,11 @@ const terminalSessionsState = vi.hoisted(() => ({
     foregroundCommand?: {
       phase: 'unknown' | 'idle' | 'running';
       displayName: string;
+      revision: number;
+      updatedAtMs: number;
+    };
+    outputActivity?: {
+      phase: 'unknown' | 'streaming' | 'settled';
       revision: number;
       updatedAtMs: number;
     };
@@ -589,6 +608,20 @@ function publishTerminalForegroundCommand(
 ) {
   terminalSessionsState.sessions = terminalSessionsState.sessions.map((session) => (
     session.id === sessionId ? { ...session, foregroundCommand } : session
+  ));
+  for (const subscriber of terminalSessionsState.subscribers) subscriber(terminalSessionsState.sessions);
+}
+
+function publishTerminalOutputActivity(
+  sessionId: string,
+  outputActivity: {
+    phase: 'unknown' | 'streaming' | 'settled';
+    revision: number;
+    updatedAtMs: number;
+  },
+) {
+  terminalSessionsState.sessions = terminalSessionsState.sessions.map((session) => (
+    session.id === sessionId ? { ...session, outputActivity } : session
   ));
   for (const subscriber of terminalSessionsState.subscribers) subscriber(terminalSessionsState.sessions);
 }
@@ -1338,6 +1371,157 @@ describe('TerminalPanel browser activity integration', () => {
     expect(host.querySelector('[data-terminal-session-title="session-2"]')?.textContent).toBe('repo');
   });
 
+  it('renders audited agent identity and switches output glyphs without resizing the status slot', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    publishTerminalForegroundCommand('session-2', {
+      phase: 'running', displayName: 'codex', revision: 1, updatedAtMs: 10,
+    });
+    publishTerminalOutputActivity('session-2', {
+      phase: 'streaming', revision: 1, updatedAtMs: 11,
+    });
+    await new Promise<void>((resolve) => setTimeout(resolve, 170));
+    await settleTerminalPanel();
+
+    const identity = host.querySelector<HTMLElement>('[data-terminal-agent-identity="codex"]');
+    const slot = host.querySelector<HTMLElement>('[data-terminal-output-slot="session-2"]');
+    const spinner = identity?.querySelector('[data-terminal-process-state="running"]');
+    expect(identity).not.toBeNull();
+    expect(getComputedStyle(identity!.querySelector<HTMLElement>('.bg-current')!).webkitMaskImage).toContain('/agent-cli-icons/codex.svg');
+    expect(host.querySelector('[data-terminal-output-state="streaming"]')).not.toBeNull();
+    expect(spinner).not.toBeNull();
+    const before = slot!.getBoundingClientRect();
+
+    publishTerminalOutputActivity('session-2', {
+      phase: 'settled', revision: 2, updatedAtMs: 20,
+    });
+    await settleTerminalPanel();
+    const after = slot!.getBoundingClientRect();
+    expect(host.querySelector('[data-terminal-output-state="settled"]')).not.toBeNull();
+    expect(identity?.querySelector('[data-terminal-process-state="running"]')).toBe(spinner);
+    expect([after.width, after.height]).toEqual([before.width, before.height]);
+  });
+
+  it('uses thesvg light and dark variants without filtering the official mark', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    publishTerminalForegroundCommand('session-2', {
+      phase: 'running', displayName: 'cursor-agent', revision: 1, updatedAtMs: 10,
+    });
+    await new Promise<void>((resolve) => setTimeout(resolve, 170));
+    await settleTerminalPanel();
+
+    const identity = host.querySelector<HTMLElement>('[data-terminal-agent-identity="cursor"]')!;
+    const lightIcon = identity.querySelector<HTMLImageElement>('img[src$="cursor-light.svg"]')!;
+    const darkIcon = identity.querySelector<HTMLImageElement>('img[src$="cursor-dark.svg"]')!;
+    expect(getComputedStyle(lightIcon).display).not.toBe('none');
+    expect(getComputedStyle(darkIcon).display).toBe('none');
+    expect(lightIcon.style.filter).toBe('');
+    expect(darkIcon.style.filter).toBe('');
+
+    document.documentElement.classList.add('dark');
+    try {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+      expect(getComputedStyle(lightIcon).display).toBe('none');
+      expect(getComputedStyle(darkIcon).display).not.toBe('none');
+    } finally {
+      document.documentElement.classList.remove('dark');
+    }
+  });
+
+  it('keeps output and process shapes distinct with reduced motion and forced colors', async () => {
+    await mediaCommands.emulateMediaPreferences({ reducedMotion: 'reduce', forcedColors: 'active' });
+    try {
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      render(() => <TerminalPanel variant="workbench" />, host);
+      await settleTerminalPanel();
+      publishTerminalForegroundCommand('session-2', {
+        phase: 'running', displayName: 'codex', revision: 1, updatedAtMs: 10,
+      });
+      publishTerminalOutputActivity('session-2', {
+        phase: 'streaming', revision: 1, updatedAtMs: 11,
+      });
+      await new Promise<void>((resolve) => setTimeout(resolve, 170));
+      await settleTerminalPanel();
+
+      const outputBar = host.querySelector<SVGRectElement>('.redeven-terminal-output-wave-bar')!;
+      const spinner = host.querySelector<SVGElement>('[data-terminal-agent-identity="codex"] [data-terminal-process-state="running"] svg')!;
+      const trigger = host.querySelector<HTMLElement>('[data-terminal-output-trigger="session-2"]')!;
+      expect(window.matchMedia('(prefers-reduced-motion: reduce)').matches).toBe(true);
+      expect(window.matchMedia('(forced-colors: active)').matches).toBe(true);
+      expect(getComputedStyle(outputBar).animationName).toBe('none');
+      expect(getComputedStyle(spinner).animationName).toBe('none');
+      expect(getComputedStyle(trigger).borderTopStyle).toBe('solid');
+      expect(outputBar.getBoundingClientRect().height).toBeGreaterThan(0);
+    } finally {
+      await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference', forcedColors: 'none' });
+    }
+  });
+
+  it('keeps session selection quiet while output help supports focus, Escape, and click toggle', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const outside = document.createElement('button');
+    outside.type = 'button';
+    document.body.appendChild(outside);
+    const dispose = render(() => <TerminalPanel variant="workbench" />, host);
+
+    try {
+      await settleTerminalPanel();
+      publishTerminalForegroundCommand('session-2', {
+        phase: 'running', displayName: 'codex', revision: 1, updatedAtMs: 10,
+      });
+      publishTerminalOutputActivity('session-2', {
+        phase: 'streaming', revision: 1, updatedAtMs: 11,
+      });
+      await new Promise<void>((resolve) => setTimeout(resolve, 170));
+      await settleTerminalPanel();
+
+      const row = host.querySelector<HTMLButtonElement>('button[data-terminal-session-id="session-2"]')!;
+      await page.elementLocator(row).click();
+      expect(document.body.querySelector('[role="tooltip"]')).toBeNull();
+
+      const trigger = host.querySelector<HTMLButtonElement>('[data-terminal-output-trigger="session-2"]')!;
+      trigger.focus();
+      await settleTerminalPanel();
+      expect(document.body.querySelector('[role="tooltip"]')?.textContent).toContain('producing');
+
+      await userEvent.keyboard('{Escape}');
+      expect(document.body.querySelector('[role="tooltip"]')?.getAttribute('aria-hidden')).toBe('true');
+      await new Promise<void>((resolve) => setTimeout(resolve, 100));
+      expect(document.body.querySelector('[role="tooltip"]')).toBeNull();
+
+      await page.elementLocator(trigger).click();
+      expect(document.body.querySelector('[role="tooltip"]')?.textContent).toContain('producing');
+      await page.elementLocator(trigger).click();
+      expect(document.body.querySelector('[role="tooltip"]')?.getAttribute('aria-hidden')).toBe('true');
+      await new Promise<void>((resolve) => setTimeout(resolve, 100));
+      expect(document.body.querySelector('[role="tooltip"]')).toBeNull();
+
+      await page.elementLocator(trigger).click();
+      expect(document.body.querySelector('[role="tooltip"]')?.textContent).toContain('producing');
+      outside.dispatchEvent(new PointerEvent('pointerdown', {
+        bubbles: true,
+        isPrimary: true,
+        pointerType: 'touch',
+      }));
+      expect(document.body.querySelector('[role="tooltip"]')?.getAttribute('aria-hidden')).toBe('true');
+      expect(row.dataset.terminalSessionActive).toBe('true');
+      await new Promise<void>((resolve) => setTimeout(resolve, 100));
+      expect(document.body.querySelector('[role="tooltip"]')).toBeNull();
+    } finally {
+      dispose();
+      outside.remove();
+    }
+  });
+
   it('keeps session switching responsive while a background session is receiving heavy live output', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -1424,6 +1608,14 @@ describe('TerminalPanel browser activity integration', () => {
       document.body.appendChild(host);
       const dispose = render(() => <TerminalPanel variant="workbench" />, host);
       await settleTerminalPanel();
+      publishTerminalForegroundCommand('session-2', {
+        phase: 'running', displayName: 'codex', revision: 20 + width, updatedAtMs: 20 + width,
+      });
+      publishTerminalOutputActivity('session-2', {
+        phase: 'streaming', revision: 20 + width, updatedAtMs: 21 + width,
+      });
+      await new Promise<void>((resolve) => setTimeout(resolve, 170));
+      await settleTerminalPanel();
 
       const hostRect = host.getBoundingClientRect();
       const contentRect = host.querySelector<HTMLElement>('[data-testid="terminal-content"]')?.getBoundingClientRect();
@@ -1437,8 +1629,24 @@ describe('TerminalPanel browser activity integration', () => {
         const drawerRect = drawer?.getBoundingClientRect();
         expect(drawerRect?.left ?? -1).toBeGreaterThanOrEqual(hostRect.left - 1);
         expect((drawerRect?.right ?? Number.POSITIVE_INFINITY) <= hostRect.right + 1).toBe(true);
-        expect((drawerRect?.bottom ?? Number.POSITIVE_INFINITY) <= hostRect.bottom + 1).toBe(true);
+        expect(
+          drawerRect?.bottom ?? Number.POSITIVE_INFINITY,
+          `drawer must fit host: drawer=${JSON.stringify(drawerRect?.toJSON())} host=${JSON.stringify(hostRect.toJSON())} class=${drawer?.className} style=${JSON.stringify(drawer ? {
+            height: getComputedStyle(drawer).height,
+            minHeight: getComputedStyle(drawer).minHeight,
+            maxHeight: getComputedStyle(drawer).maxHeight,
+            position: getComputedStyle(drawer).position,
+            top: getComputedStyle(drawer).top,
+            bottom: getComputedStyle(drawer).bottom,
+          } : {})}`,
+        ).toBeLessThanOrEqual(hostRect.bottom + 1);
+        const titleRect = host.querySelector<HTMLElement>('[data-terminal-session-title="session-2"]')?.getBoundingClientRect();
+        const attentionRect = host.querySelector<HTMLElement>('[data-terminal-attention-slot="session-2"]')?.getBoundingClientRect();
+        expect((titleRect?.right ?? Number.POSITIVE_INFINITY) <= (attentionRect?.left ?? 0) + 1).toBe(true);
       }
+
+      expect(host.querySelector('[data-terminal-agent-identity="codex"]')).not.toBeNull();
+      expect(host.querySelector('[data-terminal-output-state="streaming"]')).not.toBeNull();
 
       const screenshot = await page.screenshot({ save: false });
       expect(screenshot.length).toBeGreaterThan(1_000);

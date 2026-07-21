@@ -8,7 +8,7 @@ vi.mock('./localApi', () => ({
 
 import { createWorkbenchTerminalSession } from './workbenchLayoutApi';
 
-function terminalCreatePayload(foregroundCommand?: unknown) {
+function terminalCreatePayload(foregroundCommand?: unknown, outputActivity?: unknown) {
   return {
     data: {
       session: {
@@ -19,6 +19,7 @@ function terminalCreatePayload(foregroundCommand?: unknown) {
         last_active_at_ms: 2,
         is_active: true,
         ...(foregroundCommand === undefined ? {} : { foreground_command: foregroundCommand }),
+        ...(outputActivity === undefined ? {} : { output_activity: outputActivity }),
       },
       widget_state: {
         widget_id: 'widget-terminal-1',
@@ -58,6 +59,35 @@ describe('createWorkbenchTerminalSession', () => {
           revision: 3,
           updated_at_ms: 4,
         },
+      },
+    });
+  });
+
+  it('preserves output activity and uses unknown for mixed-version responses', async () => {
+    stubResponse(terminalCreatePayload({
+      phase: 'running', display_name: 'codex', revision: 3, updated_at_ms: 4,
+    }, {
+      phase: 'streaming', revision: 7, updated_at_ms: 8,
+    }));
+    await expect(createWorkbenchTerminalSession('widget-terminal-1', {})).resolves.toMatchObject({
+      session: {
+        output_activity: { phase: 'streaming', revision: 7, updated_at_ms: 8 },
+      },
+    });
+
+    stubResponse(terminalCreatePayload());
+    await expect(createWorkbenchTerminalSession('widget-terminal-1', {})).resolves.toMatchObject({
+      session: {
+        output_activity: { phase: 'unknown', revision: 0, updated_at_ms: 0 },
+      },
+    });
+
+    stubResponse(terminalCreatePayload(undefined, {
+      phase: 'done', revision: 999, updated_at_ms: 9,
+    }));
+    await expect(createWorkbenchTerminalSession('widget-terminal-1', {})).resolves.toMatchObject({
+      session: {
+        output_activity: { phase: 'unknown', revision: 0, updated_at_ms: 0 },
       },
     });
   });
