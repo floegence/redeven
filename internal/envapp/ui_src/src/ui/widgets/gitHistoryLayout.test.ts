@@ -142,7 +142,7 @@ describe('browser workspace layout wiring', () => {
     expect(shellSrc).toContain('mobileBackdrop={false}');
     expect(shellSrc).toContain("isMobile() && 'absolute inset-y-0 left-0 z-30 shadow-xl max-w-[80vw]'");
     expect(shellSrc).toContain('isMobile() ? MOBILE_SIDEBAR_WIDTH : props.width');
-    expect(shellSrc).toContain('bg-black/30');
+    expect(shellSrc).toContain('bg-[var(--redeven-overlay-scrim)]');
     expect(shellSrc).toContain("aria-label={i18n.t('uiCopy.shell.closeSidebar')}");
 
     expect(navSrc).toContain('role="tablist"');

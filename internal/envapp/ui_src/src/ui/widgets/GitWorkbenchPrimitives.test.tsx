@@ -3,13 +3,41 @@
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { GitInlineLoadingStatus, GitMetaPill, GitPagedTableFooter, GitPanelFrame, GitStatePane, GitTableFrame } from './GitWorkbenchPrimitives';
+import { GitInlineLoadingStatus, GitMetaPill, GitPagedTableFooter, GitPanelFrame, GitShortcutOrbButton, GitStatePane, GitTableFrame } from './GitWorkbenchPrimitives';
 
 afterEach(() => {
   document.body.innerHTML = '';
 });
 
 describe('GitWorkbenchPrimitives shared panel frames', () => {
+  it('maps shortcut orbs to theme-owned categorical and status colors', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const TestIcon = (props: { class?: string }) => <span data-testid="shortcut-icon" class={props.class} />;
+
+    const dispose = render(() => (
+      <>
+        <GitShortcutOrbButton label="Ask Flower" tone="flower" icon={TestIcon} />
+        <GitShortcutOrbButton label="Open terminal" tone="terminal" icon={TestIcon} />
+        <GitShortcutOrbButton label="Browse files" tone="files" icon={TestIcon} />
+      </>
+    ), host);
+
+    try {
+      const buttons = host.querySelectorAll<HTMLButtonElement>('[data-git-shortcut-orb]');
+      expect(buttons).toHaveLength(3);
+      const shell = buttons[0]?.querySelector('span');
+      expect(shell?.className).toContain('text-foreground');
+      expect(shell?.className).toContain('hover:bg-muted');
+      const icons = host.querySelectorAll<HTMLElement>('[data-testid="shortcut-icon"]');
+      expect(icons[0]?.className).toContain('text-[var(--redeven-categorical-4)]');
+      expect(icons[1]?.className).toContain('text-[var(--redeven-status-info)]');
+      expect(icons[2]?.className).toContain('text-[var(--redeven-status-success)]');
+    } finally {
+      dispose();
+    }
+  });
+
   it('renders GitPanelFrame with quiet git-specific panel geometry', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

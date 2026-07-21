@@ -173,7 +173,7 @@ export function DesktopPopover(props: DesktopPopoverProps) {
           ariaLabel={props.popoverAriaLabel}
           interactive
           class={cn(
-            'z-[225] max-w-[min(21rem,calc(100vw-1rem))] rounded-md border border-border/80 bg-popover text-popover-foreground shadow-[0_14px_40px_-22px_rgba(0,0,0,0.55),0_24px_50px_-28px_rgba(0,0,0,0.28)]',
+            'redeven-desktop-overlay-surface z-[225] max-w-[min(21rem,calc(100vw-1rem))] rounded-md border border-border/80 bg-popover text-popover-foreground',
             props.class,
           )}
           onOverlayRef={(element) => {

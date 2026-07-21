@@ -150,7 +150,7 @@ export function WindowModal(props: WindowModalProps) {
             tabIndex={-1}
             data-floating-presence={modalPresence.state()}
             class={cn(
-              'relative z-[1] flex max-h-full w-[min(32rem,calc(100%-1rem))] max-w-full flex-col overflow-hidden rounded-md border border-border/80 bg-background shadow-[0_28px_72px_-44px_rgba(15,23,42,0.58)] outline-none',
+              'relative z-[1] flex max-h-full w-[min(32rem,calc(100%-1rem))] max-w-full flex-col overflow-hidden rounded-md border border-border/80 bg-background shadow-[0_28px_72px_-44px_var(--redeven-shadow-color)] outline-none',
               'floe-floating-presence floe-floating-dialog-panel',
               props.class,
             )}

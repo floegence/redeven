@@ -310,6 +310,8 @@ describe("GitHistoryBrowser interactions", () => {
       expect(host.textContent).toContain(
         "Compared with first parent so the changed-file list and diff view stay aligned.",
       );
+      const mergeBadge = Array.from(host.querySelectorAll('span')).find((node) => node.textContent?.trim() === 'Merge Commit');
+      expect(mergeBadge?.className).toContain('text-[var(--redeven-categorical-6)]');
       const fileButton = Array.from(host.querySelectorAll("button")).find(
         (node) => node.textContent?.includes("src/app.ts"),
       );

@@ -1,6 +1,9 @@
 import type { BrowserWindow } from 'electron';
 
-import { desktopWindowThemeSnapshotForShellTheme } from './desktopTheme';
+import {
+  desktopSemanticPaletteForShellTheme,
+  desktopWindowThemeSnapshotForShellTheme,
+} from './desktopTheme';
 import type { DesktopStateStore } from './desktopStateStore';
 import { applyDesktopWindowTheme } from './windowChrome';
 import {
@@ -17,7 +20,10 @@ import {
   type DesktopThemeSnapshot,
   type DesktopThemeSource,
 } from '../shared/desktopTheme';
-import { DESKTOP_THEME_UPDATED_CHANNEL } from '../shared/desktopThemeIPC';
+import {
+  DESKTOP_THEME_UPDATED_CHANNEL,
+  desktopRendererThemeSnapshot,
+} from '../shared/desktopThemeIPC';
 
 interface DesktopThemeNativeThemeLike {
   shouldUseDarkColors: boolean;
@@ -42,6 +48,7 @@ function resolveDesktopThemeSnapshot(
     shellThemes,
     activeShellTheme,
     window: desktopWindowThemeSnapshotForShellTheme(activeShellTheme),
+    semantic: desktopSemanticPaletteForShellTheme(activeShellTheme),
   };
 }
 
@@ -65,6 +72,7 @@ export class DesktopThemeState {
     private readonly store: Pick<DesktopStateStore, 'getRendererItem' | 'setRendererItem'>,
     private readonly nativeTheme: DesktopThemeNativeThemeLike,
     private readonly platform: NodeJS.Platform = process.platform,
+    private readonly onSnapshotChanged?: (snapshot: DesktopThemeSnapshot) => void,
   ) {
     this.snapshot = resolveDesktopThemeSnapshot('system', this.shellThemes, this.nativeTheme);
   }
@@ -166,7 +174,10 @@ export class DesktopThemeState {
       return;
     }
     applyDesktopWindowTheme(win, this.snapshot.window, this.platform);
-    win.webContents.send(DESKTOP_THEME_UPDATED_CHANNEL, this.snapshot);
+    win.webContents.send(
+      DESKTOP_THEME_UPDATED_CHANNEL,
+      desktopRendererThemeSnapshot(this.snapshot),
+    );
   }
 
   private broadcastSnapshot(): void {
@@ -177,5 +188,6 @@ export class DesktopThemeState {
       }
       this.applySnapshotToWindow(win);
     }
+    this.onSnapshotChanged?.(this.snapshot);
   }
 }

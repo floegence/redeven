@@ -1881,6 +1881,11 @@ describe("GitBranchesPanel interactions", () => {
       expect(openInTerminalButton?.textContent).toBe("");
       expect(browseFilesButton?.textContent).toBe("");
 
+      const statusBrowseButton = Array.from(host.querySelectorAll('button')).find((button) => button.className.includes('hover:text-[var(--redeven-status-success)]'));
+      const statusTerminalButton = Array.from(host.querySelectorAll('button')).find((button) => button.className.includes('hover:text-[var(--redeven-status-info)]'));
+      expect(statusBrowseButton?.className).toContain('hover:text-[var(--redeven-status-success)]');
+      expect(statusTerminalButton?.className).toContain('hover:text-[var(--redeven-status-info)]');
+
       askFlowerButton!.dispatchEvent(
         new MouseEvent("click", { bubbles: true }),
       );

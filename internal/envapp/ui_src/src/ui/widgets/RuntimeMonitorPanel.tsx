@@ -512,11 +512,11 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
   };
 
   const cpuSeries = () => [
-    { name: i18n.t('runtimeMonitor.cpuUsage'), data: [], color: 'var(--redeven-runtime-monitor-chart-accent)' },
+    { name: i18n.t('runtimeMonitor.cpuUsage'), data: [], color: 'var(--redeven-runtime-monitor-cpu-line)' },
   ];
   const networkSeries = () => [
-    { name: i18n.t('runtimeMonitor.download'), data: [], color: 'var(--redeven-runtime-monitor-chart-accent)' },
-    { name: i18n.t('runtimeMonitor.upload'), data: [], color: 'var(--chart-2)' },
+    { name: i18n.t('runtimeMonitor.download'), data: [], color: 'var(--redeven-runtime-monitor-download-line)' },
+    { name: i18n.t('runtimeMonitor.upload'), data: [], color: 'var(--redeven-runtime-monitor-upload-line)' },
   ];
 
   const formatPercent = (value: number) => `${Number(value ?? 0).toFixed(2).replace(/\.?0+$/, '')}%`;

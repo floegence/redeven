@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { normalizeDesktopThemeSnapshot } from './desktopThemeIPC';
+import {
+  desktopRendererThemeSnapshot,
+  normalizeDesktopThemeSnapshot,
+} from './desktopThemeIPC';
 
 function darkSnapshot() {
   return {
@@ -16,7 +19,7 @@ function darkSnapshot() {
       backgroundColor: '#0b1a17',
       symbolColor: '#edf6f1',
     },
-  };
+  } as const;
 }
 
 describe('normalizeDesktopThemeSnapshot', () => {
@@ -32,6 +35,35 @@ describe('normalizeDesktopThemeSnapshot', () => {
         symbolColor: '#edf6f1',
       },
     })).toBeNull();
+  });
+
+  it('keeps the main-process semantic projection out of renderer IPC', () => {
+    expect(normalizeDesktopThemeSnapshot({
+      ...darkSnapshot(),
+      semantic: {
+        version: 1,
+        background: '#0B1A17',
+      },
+    })).toBeNull();
+
+    expect(desktopRendererThemeSnapshot({
+      ...darkSnapshot(),
+      semantic: {
+        version: 1,
+        background: '#0B1A17',
+        surface: '#132621',
+        muted: '#1C342D',
+        foreground: '#EDF6F1',
+        mutedForeground: '#A7BDB3',
+        border: '#2A453C',
+        primary: '#71D0B1',
+        primaryForeground: '#0B1A17',
+        info: '#79B8FF',
+        success: '#72D39C',
+        warning: '#F0C36A',
+        error: '#FF8A82',
+      },
+    })).toEqual(darkSnapshot());
   });
 
   it('rejects source, resolved mode, and active preset inconsistencies', () => {

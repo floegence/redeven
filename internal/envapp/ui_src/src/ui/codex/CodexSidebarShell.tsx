@@ -112,8 +112,8 @@ function ThreadCard(props: {
       data-codex-surface="thread-card"
       class={`group relative w-full cursor-pointer rounded-lg border ${
         props.active
-          ? 'border-border/20 bg-sidebar-accent text-sidebar-foreground shadow-[0_1px_3px_rgba(0,0,0,0.06)]'
-          : 'border-transparent text-sidebar-foreground/80 transition-colors duration-150 hover:border-border/15 hover:bg-sidebar-accent/60 hover:shadow-[0_1px_2px_rgba(0,0,0,0.04)]'
+          ? 'border-border/20 bg-sidebar-accent text-sidebar-foreground shadow-[0_1px_3px_color-mix(in_srgb,var(--foreground)_6%,transparent)]'
+          : 'border-transparent text-sidebar-foreground/80 transition-colors duration-150 hover:border-border/15 hover:bg-sidebar-accent/60 hover:shadow-[0_1px_2px_color-mix(in_srgb,var(--foreground)_4%,transparent)]'
       }`}
     >
       <Show when={props.active}>

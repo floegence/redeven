@@ -5291,7 +5291,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       />
       {/* Duplicate Loading Overlay */}
       <Show when={duplicateLoading()}>
-        <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+        <div class="fixed inset-0 z-50 flex items-center justify-center bg-[var(--redeven-overlay-scrim)]">
           <div class="bg-background border border-border rounded-lg shadow-lg px-4 py-3 text-sm">
             {i18n.t('files.duplicating')}
           </div>

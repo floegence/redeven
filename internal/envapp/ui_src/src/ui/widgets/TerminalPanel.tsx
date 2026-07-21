@@ -128,6 +128,44 @@ export type TerminalPanelGeometryPreferences = TerminalGeometryPreferences & Rea
   onFontFamilyChange: (id: string) => void;
 }>;
 
+type ShellTerminalTokenName =
+  | '--terminal-background'
+  | '--terminal-foreground'
+  | '--selection-bg'
+  | '--selection-fg';
+
+function readShellTerminalToken(
+  tokenName: ShellTerminalTokenName,
+  presetTokens?: Readonly<Record<string, string>>,
+): string | undefined {
+  const presetValue = presetTokens?.[tokenName]?.trim();
+  if (presetValue) return presetValue;
+  if (typeof document === 'undefined') return undefined;
+  const computedValue = getComputedStyle(document.documentElement).getPropertyValue(tokenName).trim();
+  return computedValue || undefined;
+}
+
+export function resolveSystemTerminalThemeColors(
+  baseColors: Readonly<Record<string, string>>,
+  presetTokens?: Readonly<Record<string, string>>,
+): Record<string, string> {
+  const background = readShellTerminalToken('--terminal-background', presetTokens) ?? baseColors.background;
+  const foreground = readShellTerminalToken('--terminal-foreground', presetTokens) ?? baseColors.foreground;
+  const selectionBackground = readShellTerminalToken('--selection-bg', presetTokens)
+    ?? baseColors.selectionBackground
+    ?? baseColors.selection;
+  const selectionForeground = readShellTerminalToken('--selection-fg', presetTokens)
+    ?? baseColors.selectionForeground;
+
+  return {
+    ...baseColors,
+    ...(background ? { background, cursorAccent: background } : {}),
+    ...(foreground ? { foreground, cursor: foreground } : {}),
+    ...(selectionBackground ? { selectionBackground } : {}),
+    ...(selectionForeground ? { selectionForeground } : {}),
+  };
+}
+
 export interface TerminalPanelProps {
   variant?: TerminalPanelVariant;
   openSessionRequest?: {
@@ -244,8 +282,6 @@ function formatBytes(bytes: number): string {
 const HISTORY_STATS_POLL_MS = 10_000;
 const MAX_INLINE_TERMINAL_SELECTION_CHARS = 10_000;
 
-const TERMINAL_SELECTION_BACKGROUND = 'rgba(255, 234, 0, 0.72)';
-const TERMINAL_SELECTION_FOREGROUND = '#000000';
 const TERMINAL_INPUT_SELECTOR = 'textarea[aria-label="Terminal input"], textarea';
 const MOBILE_TERMINAL_TOUCH_SCROLL_LINE_HEIGHT_FALLBACK_PX = 20;
 const MOBILE_TERMINAL_TOUCH_SCROLL_MIN_LINE_HEIGHT_PX = 12;
@@ -367,34 +403,34 @@ function buildTerminalSidebarAvatarInitial(title: string): string {
 
 const TERMINAL_SIDEBAR_AVATAR_TONES: readonly terminal_session_avatar_tone[] = [
   {
-    background: 'color-mix(in srgb, var(--primary) 22%, var(--sidebar) 78%)',
-    border: 'color-mix(in srgb, var(--primary) 42%, var(--sidebar-border) 58%)',
-    foreground: 'color-mix(in srgb, var(--primary) 72%, var(--sidebar-foreground) 28%)',
+    background: 'color-mix(in srgb, var(--redeven-categorical-1) 22%, var(--sidebar) 78%)',
+    border: 'color-mix(in srgb, var(--redeven-categorical-1) 42%, var(--sidebar-border) 58%)',
+    foreground: 'color-mix(in srgb, var(--redeven-categorical-1) 72%, var(--sidebar-foreground) 28%)',
   },
   {
-    background: 'color-mix(in srgb, #0891b2 24%, var(--sidebar) 76%)',
-    border: 'color-mix(in srgb, #0891b2 48%, var(--sidebar-border) 52%)',
-    foreground: 'color-mix(in srgb, #67e8f9 58%, var(--sidebar-foreground) 42%)',
+    background: 'color-mix(in srgb, var(--redeven-categorical-2) 24%, var(--sidebar) 76%)',
+    border: 'color-mix(in srgb, var(--redeven-categorical-2) 48%, var(--sidebar-border) 52%)',
+    foreground: 'color-mix(in srgb, var(--redeven-categorical-2) 68%, var(--sidebar-foreground) 32%)',
   },
   {
-    background: 'color-mix(in srgb, #d97706 24%, var(--sidebar) 76%)',
-    border: 'color-mix(in srgb, #d97706 46%, var(--sidebar-border) 54%)',
-    foreground: 'color-mix(in srgb, #fbbf24 62%, var(--sidebar-foreground) 38%)',
+    background: 'color-mix(in srgb, var(--redeven-categorical-3) 24%, var(--sidebar) 76%)',
+    border: 'color-mix(in srgb, var(--redeven-categorical-3) 46%, var(--sidebar-border) 54%)',
+    foreground: 'color-mix(in srgb, var(--redeven-categorical-3) 68%, var(--sidebar-foreground) 32%)',
   },
   {
-    background: 'color-mix(in srgb, #db2777 23%, var(--sidebar) 77%)',
-    border: 'color-mix(in srgb, #db2777 46%, var(--sidebar-border) 54%)',
-    foreground: 'color-mix(in srgb, #f9a8d4 62%, var(--sidebar-foreground) 38%)',
+    background: 'color-mix(in srgb, var(--redeven-categorical-4) 23%, var(--sidebar) 77%)',
+    border: 'color-mix(in srgb, var(--redeven-categorical-4) 46%, var(--sidebar-border) 54%)',
+    foreground: 'color-mix(in srgb, var(--redeven-categorical-4) 68%, var(--sidebar-foreground) 32%)',
   },
   {
-    background: 'color-mix(in srgb, #16a34a 23%, var(--sidebar) 77%)',
-    border: 'color-mix(in srgb, #16a34a 44%, var(--sidebar-border) 56%)',
-    foreground: 'color-mix(in srgb, #86efac 60%, var(--sidebar-foreground) 40%)',
+    background: 'color-mix(in srgb, var(--redeven-categorical-5) 23%, var(--sidebar) 77%)',
+    border: 'color-mix(in srgb, var(--redeven-categorical-5) 44%, var(--sidebar-border) 56%)',
+    foreground: 'color-mix(in srgb, var(--redeven-categorical-5) 68%, var(--sidebar-foreground) 32%)',
   },
   {
-    background: 'color-mix(in srgb, #7c3aed 24%, var(--sidebar) 76%)',
-    border: 'color-mix(in srgb, #7c3aed 46%, var(--sidebar-border) 54%)',
-    foreground: 'color-mix(in srgb, #c4b5fd 62%, var(--sidebar-foreground) 38%)',
+    background: 'color-mix(in srgb, var(--redeven-categorical-6) 24%, var(--sidebar) 76%)',
+    border: 'color-mix(in srgb, var(--redeven-categorical-6) 46%, var(--sidebar-border) 54%)',
+    foreground: 'color-mix(in srgb, var(--redeven-categorical-6) 68%, var(--sidebar-foreground) 32%)',
   },
 ] as const;
 
@@ -1090,13 +1126,15 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   });
 
   const terminalThemeColors = createMemo<Record<string, string>>(() => {
-    // Unify and slightly brighten selection colors to keep readability consistent across themes.
-    return {
-      ...getThemeColors(terminalThemeName()),
-      selectionBackground: TERMINAL_SELECTION_BACKGROUND,
-      selectionForeground: TERMINAL_SELECTION_FOREGROUND,
-      selection: TERMINAL_SELECTION_BACKGROUND,
-    } as Record<string, string>;
+    const colors = getThemeColors(terminalThemeName()) as Record<string, string>;
+    if (userTheme() !== 'system') return colors;
+
+    const resolvedTheme = theme.resolvedTheme();
+    const preset = theme.shellPresetForMode(resolvedTheme);
+    return resolveSystemTerminalThemeColors(
+      colors,
+      preset?.tokens?.[resolvedTheme] as Readonly<Record<string, string>> | undefined,
+    );
   });
   const terminalThemeBackground = createMemo(() => terminalThemeColors().background ?? '#1e1e1e');
   const terminalThemeForeground = createMemo(() => terminalThemeColors().foreground ?? '#c9d1d9');
@@ -1106,6 +1144,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const terminalLoadingVars = createMemo(() => ({
     '--redeven-terminal-loading-background': terminalThemeBackground(),
     '--redeven-terminal-loading-foreground': terminalThemeForeground(),
+    '--redeven-terminal-search-background': `color-mix(in srgb, ${terminalThemeBackground()} 94%, ${terminalThemeForeground()} 6%)`,
+    '--redeven-terminal-search-input': `color-mix(in srgb, ${terminalThemeBackground()} 86%, ${terminalThemeForeground()} 14%)`,
+    '--redeven-terminal-search-border': `color-mix(in srgb, ${terminalThemeForeground()} 24%, transparent)`,
+    '--redeven-terminal-search-foreground': terminalThemeForeground(),
+    '--redeven-terminal-search-muted': terminalThemeMutedForeground(),
+    '--redeven-terminal-search-hover': `color-mix(in srgb, ${terminalThemeForeground()} 12%, transparent)`,
+    '--redeven-terminal-search-accent': terminalThemeColors().selectionBackground ?? terminalThemeColors().selection ?? terminalThemeForeground(),
   }));
 
   const [allSessions, setAllSessions] = createSignal<TerminalSessionInfo[]>([]);

@@ -1038,11 +1038,10 @@ describe('GitChangesPanel interactions', () => {
       expect(browseFilesButton?.className).toContain('h-7');
       expect(askFlowerButton?.className).not.toContain('hover:-translate-y-0.5');
       expect(askFlowerShell?.className).toContain('redeven-surface-control');
-      expect(askFlowerShell?.className).toContain('text-slate-900');
-      expect(askFlowerShell?.className).toContain('dark:text-slate-50');
+      expect(askFlowerShell?.className).toContain('text-foreground');
       expect(askFlowerShell?.className).not.toContain('backdrop-blur');
       expect(askFlowerShell?.className).not.toContain('bg-gradient');
-      expect(askFlowerIcon?.className.baseVal ?? '').toContain('text-orange-700');
+      expect(askFlowerIcon?.className.baseVal ?? '').toContain('text-[var(--redeven-categorical-4)]');
       expect(askFlowerButton?.textContent).toBe('');
       expect(openInTerminalButton?.textContent).toBe('');
       expect(browseFilesButton?.textContent).toBe('');

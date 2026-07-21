@@ -8084,7 +8084,7 @@ function EndpointsPopover(props: Readonly<{
           ariaModal={false}
           ariaLabel={props.i18n.t('environmentCenter.environmentEndpoints')}
           interactive
-          class="z-[225] rounded-md border border-border/80 bg-popover text-popover-foreground shadow-[0_14px_40px_-22px_rgba(0,0,0,0.55),0_24px_50px_-28px_rgba(0,0,0,0.28)]"
+          class="redeven-desktop-overlay-surface z-[225] rounded-md border border-border/80 bg-popover text-popover-foreground"
           onOverlayRef={(element) => {
             popoverRef = element;
           }}

@@ -170,22 +170,22 @@ function actionIcon(action: FlowerTurnLauncherContextAction) {
 
 function entryButtonClass(entry: FlowerTurnLauncherContextChip): string {
   if (entry.tone === 'environment') {
-    return 'border-teal-500/20 bg-teal-500/10 text-teal-700 hover:border-teal-500/35 hover:bg-teal-500/16 dark:text-teal-200';
+    return 'border-[color-mix(in_srgb,var(--redeven-categorical-7)_24%,var(--border))] bg-[color-mix(in_srgb,var(--redeven-categorical-7)_10%,transparent)] text-[var(--redeven-categorical-7)] hover:border-[var(--redeven-categorical-7)] hover:bg-[color-mix(in_srgb,var(--redeven-categorical-7)_16%,transparent)]';
   }
   if (entry.tone === 'process') {
-    return 'border-cyan-500/20 bg-cyan-500/10 text-cyan-700 hover:border-cyan-500/35 hover:bg-cyan-500/16 dark:text-cyan-200';
+    return 'border-[color-mix(in_srgb,var(--redeven-categorical-8)_24%,var(--border))] bg-[color-mix(in_srgb,var(--redeven-categorical-8)_10%,transparent)] text-[var(--redeven-categorical-8)] hover:border-[var(--redeven-categorical-8)] hover:bg-[color-mix(in_srgb,var(--redeven-categorical-8)_16%,transparent)]';
   }
   if (entry.tone === 'selection' || entry.tone === 'terminal') {
-    return 'border-emerald-500/20 bg-emerald-500/10 text-emerald-700 hover:border-emerald-500/35 hover:bg-emerald-500/16 dark:text-emerald-200';
+    return 'border-[var(--redeven-status-success-border)] bg-[var(--redeven-status-success-soft)] text-[var(--redeven-status-success-foreground)] hover:border-[var(--redeven-status-success)] hover:bg-[color-mix(in_srgb,var(--redeven-status-success)_16%,transparent)]';
   }
   if (entry.tone === 'snapshot') {
-    return 'border-violet-500/20 bg-violet-500/10 text-violet-700 hover:border-violet-500/35 hover:bg-violet-500/16 dark:text-violet-200';
+    return 'border-[color-mix(in_srgb,var(--redeven-categorical-6)_24%,var(--border))] bg-[color-mix(in_srgb,var(--redeven-categorical-6)_10%,transparent)] text-[var(--redeven-categorical-6)] hover:border-[var(--redeven-categorical-6)] hover:bg-[color-mix(in_srgb,var(--redeven-categorical-6)_16%,transparent)]';
   }
   if (entry.tone === 'attachment') {
-    return 'border-sky-500/20 bg-sky-500/10 text-sky-700 hover:border-sky-500/35 hover:bg-sky-500/16 dark:text-sky-200';
+    return 'border-[var(--redeven-status-info-border)] bg-[var(--redeven-status-info-soft)] text-[var(--redeven-status-info-foreground)] hover:border-[var(--redeven-status-info)] hover:bg-[color-mix(in_srgb,var(--redeven-status-info)_16%,transparent)]';
   }
   if (entry.tone === 'directory') {
-    return 'border-amber-500/20 bg-amber-500/10 text-amber-700 hover:border-amber-500/35 hover:bg-amber-500/16 dark:text-amber-200';
+    return 'border-[var(--redeven-status-warning-border)] bg-[var(--redeven-status-warning-soft)] text-[var(--redeven-status-warning-foreground)] hover:border-[var(--redeven-status-warning)] hover:bg-[color-mix(in_srgb,var(--redeven-status-warning)_16%,transparent)]';
   }
   return 'border-primary/20 bg-primary/10 text-primary hover:border-primary/35 hover:bg-primary/16';
 }
@@ -199,8 +199,8 @@ function secondaryActionLabel(action: FlowerTurnLauncherContextAction): string {
 
 const FlowerLauncherAvatar: Component = () => (
   <div data-testid="flower-turn-launcher-avatar" class="flower-turn-launcher-avatar relative flex size-8 shrink-0 items-center justify-center">
-    <div class="absolute inset-0 rounded-full bg-primary/8 shadow-[inset_0_1px_0_rgba(255,255,255,0.55)] dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]" />
-    <div class="relative flex size-8 items-center justify-center rounded-full border border-primary/18 bg-gradient-to-br from-primary/15 to-amber-500/10 shadow-[0_10px_20px_-16px_rgba(37,99,235,0.42)]">
+    <div class="absolute inset-0 rounded-full bg-primary/8 shadow-[inset_0_1px_0_color-mix(in_srgb,var(--background)_55%,transparent)]" />
+    <div class="relative flex size-8 items-center justify-center rounded-full border border-primary/18 bg-gradient-to-br from-primary/15 to-[var(--redeven-status-warning-soft)] shadow-[0_10px_20px_-16px_color-mix(in_srgb,var(--primary)_42%,transparent)]">
       <FlowerIcon class="h-5 w-5 text-primary" />
     </div>
   </div>
@@ -311,7 +311,7 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
           minSize={windowSizing().minSize}
           maxSize={windowSizing().maxSize}
           zIndex={props.zIndex}
-          class={cn('flower-turn-launcher-window border-border/65 shadow-[0_28px_72px_-42px_rgba(15,23,42,0.38)]', props.windowClass)}
+          class={cn('flower-turn-launcher-window border-border/65 shadow-[0_28px_72px_-42px_color-mix(in_srgb,var(--foreground)_38%,transparent)]', props.windowClass)}
           footer={(
             <div class={cn('flower-turn-launcher-footer flex w-full min-w-0 items-center gap-1.5 overflow-hidden', props.footerClass)}>
               <div class="flex min-w-0 flex-1 items-center text-[10px] text-muted-foreground sm:text-[11px]">
@@ -351,7 +351,7 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
                 <div class="flower-turn-launcher-message-row chat-message-item items-start">
                   <FlowerLauncherAvatar />
                   <div class="chat-message-content-wrapper max-w-[min(100%,37rem)] gap-1">
-                    <div class="flower-turn-launcher-message-surface min-w-0 rounded-[1.05rem] rounded-tl-md px-2.5 py-2 shadow-[0_14px_28px_-28px_rgba(15,23,42,0.34)] backdrop-blur sm:px-3 sm:py-2.5">
+                    <div class="flower-turn-launcher-message-surface min-w-0 rounded-[1.05rem] rounded-tl-md px-2.5 py-2 shadow-[0_14px_28px_-28px_color-mix(in_srgb,var(--foreground)_34%,transparent)] backdrop-blur sm:px-3 sm:py-2.5">
                       <div class="text-sm leading-5 text-foreground/95">{projected()?.question}</div>
 
                       <Show when={(projected()?.context_entries.length ?? 0) > 0}>
@@ -412,7 +412,7 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
                         <div class="mt-1.5 space-y-1">
                           <For each={(intent.notes ?? []).map(compact).filter(Boolean)}>
                             {(note) => (
-                              <div class="rounded-[0.95rem] border border-sky-500/15 bg-sky-500/8 px-2.5 py-1.5 text-[11px] leading-5 text-muted-foreground">
+                              <div class="rounded-[0.95rem] border border-[var(--redeven-status-info-border)] bg-[var(--redeven-status-info-soft)] px-2.5 py-1.5 text-[11px] leading-5 text-muted-foreground">
                                 {note}
                               </div>
                             )}
@@ -425,7 +425,7 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
               </div>
             </div>
 
-            <div data-testid="flower-turn-launcher-dock" class="flower-turn-launcher-dock shrink-0 border-t border-border/65 bg-background/96 shadow-[0_-14px_30px_-30px_rgba(15,23,42,0.32)] backdrop-blur">
+            <div data-testid="flower-turn-launcher-dock" class="flower-turn-launcher-dock shrink-0 border-t border-border/65 bg-background/96 shadow-[0_-14px_30px_-30px_color-mix(in_srgb,var(--foreground)_32%,transparent)] backdrop-blur">
               <div class="mx-auto w-full max-w-[40rem]">
                 <div class="flower-turn-launcher-input flower-chat-input">
                   <div class="chat-input-body flower-chat-input-body flower-turn-launcher-input-body">

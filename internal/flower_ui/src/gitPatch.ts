@@ -122,8 +122,8 @@ export function formatGitPatchLineNumber(value: number | null): string {
 
 export function gitPatchPreviewLineClass(line: string): string {
   if (!line) return 'text-foreground';
-  if (line.startsWith('+') && !line.startsWith('+++')) return 'text-emerald-700 dark:text-emerald-300';
-  if (line.startsWith('-') && !line.startsWith('---')) return 'text-red-700 dark:text-red-300';
+  if (line.startsWith('+') && !line.startsWith('+++')) return 'text-[var(--redeven-status-success-foreground)]';
+  if (line.startsWith('-') && !line.startsWith('---')) return 'text-[var(--redeven-status-error-foreground)]';
   if (line.startsWith('@@') || line.startsWith('diff --git ') || line.startsWith('--- ') || line.startsWith('+++ ')) {
     return 'text-muted-foreground/85';
   }
@@ -133,9 +133,9 @@ export function gitPatchPreviewLineClass(line: string): string {
 export function gitPatchRenderedLineClass(line: GitPatchRenderedLine): string {
   switch (line.kind) {
     case 'add':
-      return 'border-l-[2px] border-l-emerald-600/45 bg-emerald-500/12 dark:border-l-success/60 dark:bg-success/10';
+      return 'border-l-[2px] border-l-[var(--redeven-status-success)] bg-[var(--redeven-status-success-soft)]';
     case 'del':
-      return 'border-l-[2px] border-l-red-600/45 bg-red-500/12 dark:border-l-error/60 dark:bg-error/10';
+      return 'border-l-[2px] border-l-[var(--redeven-status-error)] bg-[var(--redeven-status-error-soft)]';
     case 'meta':
       return 'border-l-[2px] border-l-muted-foreground/30 bg-muted/55';
     case 'context':

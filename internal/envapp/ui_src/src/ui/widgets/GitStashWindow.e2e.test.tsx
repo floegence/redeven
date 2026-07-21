@@ -180,8 +180,8 @@ describe('GitStashWindow', () => {
       expect(host.textContent).toContain('Apply & Remove');
       expect(host.textContent).toContain('Delete');
       const selectedStashButton = Array.from(host.querySelectorAll('button')).find((node) => node.textContent?.includes('WIP linked worktree')) as HTMLButtonElement | undefined;
-      expect(selectedStashButton?.className).toContain('border-l-sky-500/60');
-      expect(selectedStashButton?.className).toContain('bg-sky-500/[0.06]');
+      expect(selectedStashButton?.className).toContain('border-l-[var(--redeven-status-info)]');
+      expect(selectedStashButton?.className).toContain('bg-[var(--redeven-status-info-soft)]');
       const actionRow = host.querySelector('[data-git-stash-actions]') as HTMLDivElement | null;
       expect(actionRow).toBeTruthy();
       expect(actionRow?.className).toContain('flex');

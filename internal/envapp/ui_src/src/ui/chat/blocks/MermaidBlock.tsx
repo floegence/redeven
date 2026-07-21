@@ -2,17 +2,17 @@
 
 import { createEffect, createSignal, onCleanup, Show } from 'solid-js';
 import type { Component } from 'solid-js';
-import { cn, deferAfterPaint } from '@floegence/floe-webapp-core';
+import { cn, deferAfterPaint, useTheme } from '@floegence/floe-webapp-core';
 
 import { isLargeMermaidDiagram } from '../responsiveness';
 import { useI18n } from '../../i18n';
+import { renderMermaidSvg, resolveMermaidThemeContext } from '../../file-markdown/mermaidPlugin';
 
 export interface MermaidBlockProps {
   content: string;
   class?: string;
 }
 
-type MermaidModule = Awaited<typeof import('mermaid')>['default'];
 type IdleCallbackHandle = number;
 type IdleDeadlineLike = Readonly<{
   didTimeout: boolean;
@@ -26,51 +26,8 @@ type IdleWindow = Window & {
   cancelIdleCallback?: (handle: IdleCallbackHandle) => void;
 };
 
-const MAX_MERMAID_CACHE_SIZE = 64;
-
 // Incremental counter for unique mermaid render IDs
 let mermaidIdCounter = 0;
-
-// Lazy-loaded mermaid instance
-let mermaidPromise: Promise<MermaidModule | null> | null = null;
-let mermaidInitialized = false;
-const mermaidSvgCache = new Map<string, string>();
-
-function cacheMermaidSvg(content: string, svg: string): void {
-  if (mermaidSvgCache.size >= MAX_MERMAID_CACHE_SIZE) {
-    const firstKey = mermaidSvgCache.keys().next().value;
-    if (firstKey) {
-      mermaidSvgCache.delete(firstKey);
-    }
-  }
-
-  mermaidSvgCache.set(content, svg);
-}
-
-function getMermaid(): Promise<MermaidModule | null> {
-  if (mermaidPromise) return mermaidPromise;
-
-  mermaidPromise = import('mermaid')
-    .then((mod) => {
-      const mermaid = mod.default;
-      if (!mermaidInitialized) {
-        mermaid.initialize({
-          startOnLoad: false,
-          theme: 'dark',
-          securityLevel: 'strict',
-        });
-        mermaidInitialized = true;
-      }
-      return mermaid;
-    })
-    .catch((err) => {
-      console.error('Failed to load mermaid:', err);
-      mermaidPromise = null;
-      return null;
-    });
-
-  return mermaidPromise;
-}
 
 function scheduleMermaidRender(task: () => void, preferIdle: boolean): () => void {
   if (typeof window === 'undefined') {
@@ -106,6 +63,7 @@ function scheduleMermaidRender(task: () => void, preferIdle: boolean): () => voi
  */
 export const MermaidBlock: Component<MermaidBlockProps> = (props) => {
   const i18n = useI18n();
+  const theme = useTheme();
   const [svg, setSvg] = createSignal<string>('');
   const [loading, setLoading] = createSignal(true);
   const [error, setError] = createSignal<string>('');
@@ -113,20 +71,15 @@ export const MermaidBlock: Component<MermaidBlockProps> = (props) => {
 
   createEffect(() => {
     const content = props.content;
+    const resolvedTheme = theme.resolvedTheme();
+    const shellTheme = theme.shellPresetForMode(resolvedTheme)?.name ?? resolvedTheme;
+    const mermaidTheme = resolveMermaidThemeContext(document.documentElement, resolvedTheme, shellTheme);
     const seq = (renderRequestSeq += 1);
     let disposed = false;
     let cancelScheduledRender = () => {};
 
     if (!content) {
       setSvg('');
-      setError('');
-      setLoading(false);
-      return;
-    }
-
-    const cachedSvg = mermaidSvgCache.get(content);
-    if (cachedSvg) {
-      setSvg(cachedSvg);
       setError('');
       setLoading(false);
       return;
@@ -142,20 +95,11 @@ export const MermaidBlock: Component<MermaidBlockProps> = (props) => {
       cancelScheduledRender = scheduleMermaidRender(() => {
         if (disposed || seq !== renderRequestSeq) return;
 
-        void getMermaid().then(async (mermaid) => {
-          if (disposed || seq !== renderRequestSeq) return;
-
-          if (!mermaid) {
-            setError('Failed to load mermaid library');
-            setLoading(false);
-            return;
-          }
-
+        void (async () => {
           try {
             const id = `mermaid-${++mermaidIdCounter}`;
-            const { svg: renderedSvg } = await mermaid.render(id, content);
+            const renderedSvg = await renderMermaidSvg(content, id, mermaidTheme);
             if (disposed || seq !== renderRequestSeq) return;
-            cacheMermaidSvg(content, renderedSvg);
             setSvg(renderedSvg);
             setError('');
           } catch (renderError) {
@@ -168,7 +112,7 @@ export const MermaidBlock: Component<MermaidBlockProps> = (props) => {
               setLoading(false);
             }
           }
-        });
+        })();
       }, isLargeMermaidDiagram(content));
     });
 

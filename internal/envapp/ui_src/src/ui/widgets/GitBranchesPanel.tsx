@@ -1626,7 +1626,7 @@ function BranchSelect(props: {
             props.class,
           )}
         >
-          <GitBranch class="h-4 w-4 shrink-0 text-violet-500" />
+          <GitBranch class="h-4 w-4 shrink-0 text-[var(--redeven-categorical-6)]" />
           <span class="min-w-0 flex-1 truncate text-left">
             {selected() ? optionLabel(selected()!) : i18n.t('uiCopy.git.selectBranch')}
           </span>
@@ -3348,7 +3348,8 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                               <Tooltip content={i18n.t('git.changes.browseFiles')} placement="top" delay={0}>
                               <button
                                 type="button"
-                                class="inline-flex cursor-pointer items-center shrink-0 text-muted-foreground/50 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+                                aria-label={i18n.t('git.changes.browseFiles')}
+                                class="inline-flex cursor-pointer items-center shrink-0 text-muted-foreground/50 hover:text-[var(--redeven-status-success)] transition-colors"
                                 onClick={() => {
                                   const req = buildGitDirectoryShortcutRequest({
                                     rootPath: String(selectedBranch()?.worktreePath ?? ''),
@@ -3364,7 +3365,8 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                               <Tooltip content={i18n.t('git.changes.openInTerminal')} placement="top" delay={0}>
                               <button
                                 type="button"
-                                class="inline-flex cursor-pointer items-center shrink-0 text-muted-foreground/50 hover:text-sky-600 dark:hover:text-sky-400 transition-colors"
+                                aria-label={i18n.t('git.changes.openInTerminal')}
+                                class="inline-flex cursor-pointer items-center shrink-0 text-muted-foreground/50 hover:text-[var(--redeven-status-info)] transition-colors"
                                 onClick={() => {
                                   const req = buildGitDirectoryShortcutRequest({
                                     rootPath: String(selectedBranch()?.worktreePath ?? ''),

@@ -1,6 +1,7 @@
 /// <reference lib="webworker" />
 
 import type { ShikiWorkerRequest, ShikiWorkerResponse } from '../types';
+import { decodeCodeHighlightTheme } from '../../utils/shikiHighlight';
 
 type CodeHighlighter = Awaited<ReturnType<(typeof import('shiki'))['createHighlighter']>>;
 
@@ -94,7 +95,7 @@ addEventListener('message', async (event: MessageEvent<ShikiWorkerRequest>) => {
       id,
       html: highlighter.codeToHtml(code, {
         lang: resolvedLanguage,
-        theme,
+        theme: decodeCodeHighlightTheme(theme),
       }),
     } satisfies ShikiWorkerResponse);
   } catch (error) {

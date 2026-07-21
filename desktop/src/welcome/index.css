@@ -43,6 +43,13 @@
   --redeven-welcome-soft-shadow:
     0 1px 2px color-mix(in srgb, var(--foreground) 4%, transparent),
     0 12px 30px color-mix(in srgb, var(--foreground) 7%, transparent);
+  --redeven-welcome-overlay-shadow:
+    0 14px 40px -22px color-mix(in srgb, var(--foreground) 42%, transparent),
+    0 24px 50px -28px color-mix(in srgb, var(--foreground) 28%, transparent);
+}
+
+.redeven-desktop-overlay-surface {
+  box-shadow: var(--redeven-welcome-overlay-shadow);
 }
 
 html,
@@ -614,7 +621,7 @@ html:not(.dark) .redeven-welcome-surface {
 }
 
 html:not(.dark) .redeven-environment-card {
-  border-color: color-mix(in srgb, var(--redeven-welcome-card-border) 88%, white 12%);
+  border-color: color-mix(in srgb, var(--redeven-welcome-card-border) 88%, var(--redeven-surface-highlight-source) 12%);
   border-radius: 0.5rem;
   background: var(--redeven-welcome-card);
   box-shadow:
@@ -664,7 +671,7 @@ html:not(.dark) .redeven-environment-card--featured {
   border-color: color-mix(in srgb, var(--primary) 30%, var(--redeven-welcome-card-border));
   background: color-mix(in srgb, var(--primary) 5%, var(--redeven-welcome-card));
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, white 58%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 58%, transparent),
     0 12px 30px -26px color-mix(in srgb, var(--primary) 30%, transparent);
 }
 
@@ -681,7 +688,7 @@ html:not(.dark) .redeven-environment-card--open {
   border-color: color-mix(in srgb, var(--success) 34%, var(--redeven-welcome-card-border));
   background: color-mix(in srgb, var(--success) 6%, var(--redeven-welcome-card));
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, white 50%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 50%, transparent),
     0 1px 4px color-mix(in srgb, var(--success) 8%, transparent);
 }
 
@@ -1172,8 +1179,8 @@ html:not(.dark) .redeven-endpoint-qr-panel {
   background: #fff;
   padding: 0.35rem;
   box-shadow:
-    0 0 0 1px rgb(15 23 42 / 0.08),
-    0 12px 30px -24px rgb(15 23 42 / 0.55);
+    0 0 0 1px color-mix(in srgb, var(--foreground) 8%, transparent),
+    0 12px 30px -24px color-mix(in srgb, var(--foreground) 55%, transparent);
 }
 
 .redeven-endpoint-qr-image {
@@ -1446,7 +1453,7 @@ html:not(.dark) .redeven-header-separator {
   border: 1px solid color-mix(in srgb, var(--border) 78%, transparent);
   border-radius: 0.5rem;
   background:
-    linear-gradient(180deg, color-mix(in srgb, var(--card) 94%, white 6%), var(--card));
+    linear-gradient(180deg, color-mix(in srgb, var(--card) 94%, var(--redeven-surface-highlight-source) 6%), var(--card));
   box-shadow:
     0 14px 34px -18px color-mix(in srgb, var(--foreground) 28%, transparent),
     0 8px 22px -18px color-mix(in srgb, var(--foreground) 18%, transparent);
@@ -1473,12 +1480,12 @@ html:not(.dark) .redeven-header-separator {
 
 .redeven-desktop-toast[data-tone='success'] .redeven-desktop-toast__icon {
   background: color-mix(in srgb, var(--success) 10%, transparent);
-  color: color-mix(in srgb, var(--success) 82%, white 18%);
+  color: color-mix(in srgb, var(--success) 62%, var(--foreground) 38%);
 }
 
 .redeven-desktop-toast[data-tone='info'] .redeven-desktop-toast__icon {
   background: color-mix(in srgb, var(--info) 10%, transparent);
-  color: color-mix(in srgb, var(--info) 84%, white 16%);
+  color: color-mix(in srgb, var(--info) 62%, var(--foreground) 38%);
 }
 
 .redeven-desktop-toast__title {
@@ -1589,19 +1596,19 @@ html:not(.dark) .redeven-header-separator {
 .redeven-environment-inline-notice[data-tone='info'] {
   border-color: color-mix(in srgb, var(--info) 24%, transparent);
   background: color-mix(in srgb, var(--info) 7%, transparent);
-  color: color-mix(in srgb, var(--info) 84%, white 16%);
+  color: color-mix(in srgb, var(--info) 62%, var(--foreground) 38%);
 }
 
 .redeven-environment-inline-notice[data-tone='warning'] {
   border-color: color-mix(in srgb, var(--warning) 26%, transparent);
   background: color-mix(in srgb, var(--warning) 8%, transparent);
-  color: color-mix(in srgb, var(--warning) 88%, white 12%);
+  color: color-mix(in srgb, var(--warning) 62%, var(--foreground) 38%);
 }
 
 .redeven-environment-inline-notice[data-tone='error'] {
   border-color: color-mix(in srgb, var(--error) 22%, transparent);
   background: color-mix(in srgb, var(--error) 7%, transparent);
-  color: color-mix(in srgb, var(--error) 84%, white 16%);
+  color: color-mix(in srgb, var(--error) 62%, var(--foreground) 38%);
 }
 
 .redeven-environment-inline-notice__dismiss {
@@ -2076,9 +2083,9 @@ html:not(.dark) .redeven-header-separator {
 
 .redeven-split-action-trigger--attention {
   cursor: pointer;
-  border-left: 2px solid color-mix(in srgb, #dc2626 68%, transparent);
-  background: color-mix(in srgb, #dc2626 10%, var(--card));
-  color: light-dark(#b91c1c, #fca5a5);
+  border-left: 2px solid color-mix(in srgb, var(--error) 68%, transparent);
+  background: color-mix(in srgb, var(--error) 10%, var(--card));
+  color: color-mix(in srgb, var(--error) 78%, var(--foreground));
 }
 
 .redeven-split-action:has(.redeven-split-action-toggle)
@@ -2160,13 +2167,13 @@ html:not(.dark) .redeven-header-separator {
 
 /* semantic tone colors driven by data-tone attribute */
 .redeven-split-menu-item[data-tone="danger"] {
-  color: light-dark(#dc2626, #f87171);
+  color: color-mix(in srgb, var(--error) 78%, var(--foreground));
 }
 .redeven-split-menu-item[data-tone="primary"] {
-  color: light-dark(#2563eb, #60a5fa);
+  color: color-mix(in srgb, var(--primary) 78%, var(--foreground));
 }
 .redeven-split-menu-item[data-tone="accent"] {
-  color: light-dark(#7c3aed, #a78bfa);
+  color: color-mix(in srgb, var(--warning) 78%, var(--foreground));
 }
 
 .redeven-split-menu-item {
@@ -2243,7 +2250,7 @@ html:not(.dark) .redeven-header-separator {
   border: 1px solid var(--redeven-action-popover-border);
   background: var(--popover);
   box-shadow:
-    inset 0 1px 0 color-mix(in srgb, white 7%, transparent),
+    inset 0 1px 0 color-mix(in srgb, var(--redeven-surface-highlight-source) 7%, transparent),
     0 2px 8px -2px color-mix(in srgb, var(--foreground) 12%, transparent),
     0 10px 24px -8px color-mix(in srgb, var(--foreground) 16%, transparent),
     0 22px 48px -18px color-mix(in srgb, var(--foreground) 16%, transparent);
@@ -2351,22 +2358,22 @@ html:not(.dark) .redeven-header-separator {
 
 .redeven-action-popover__status-icon[data-tone='warning'] {
   background: color-mix(in srgb, var(--warning) 12%, transparent);
-  color: color-mix(in srgb, var(--warning) 84%, white 16%);
+  color: color-mix(in srgb, var(--warning) 62%, var(--foreground) 38%);
 }
 
 .redeven-action-popover__status-icon[data-tone='info'] {
   background: color-mix(in srgb, var(--primary) 12%, transparent);
-  color: color-mix(in srgb, var(--primary) 84%, white 16%);
+  color: color-mix(in srgb, var(--primary) 62%, var(--foreground) 38%);
 }
 
 .redeven-action-popover__status-icon[data-tone='success'] {
   background: color-mix(in srgb, var(--success) 12%, transparent);
-  color: color-mix(in srgb, var(--success) 84%, white 16%);
+  color: color-mix(in srgb, var(--success) 62%, var(--foreground) 38%);
 }
 
 .redeven-action-popover__status-icon[data-tone='error'] {
   background: color-mix(in srgb, var(--error) 12%, transparent);
-  color: color-mix(in srgb, var(--error) 84%, white 16%);
+  color: color-mix(in srgb, var(--error) 62%, var(--foreground) 38%);
 }
 
 .redeven-action-popover__status-icon[data-tone='neutral'] {
@@ -2676,7 +2683,7 @@ html:not(.dark) .redeven-header-separator {
   font-weight: 700;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: color-mix(in srgb, var(--primary) 82%, white 18%);
+  color: color-mix(in srgb, var(--primary) 62%, var(--foreground) 38%);
   transition:
     border-color 200ms ease,
     background-color 200ms ease,
@@ -2686,14 +2693,14 @@ html:not(.dark) .redeven-header-separator {
 .redeven-environment-progress__status[data-phase='succeeded'] {
   border-color: color-mix(in srgb, var(--success) 22%, transparent);
   background: color-mix(in srgb, var(--success) 6%, transparent);
-  color: color-mix(in srgb, var(--success) 82%, white 18%);
+  color: color-mix(in srgb, var(--success) 62%, var(--foreground) 38%);
 }
 
 .redeven-environment-progress__status[data-phase='failed'],
 .redeven-environment-progress__status[data-phase='canceled'] {
   border-color: color-mix(in srgb, var(--error) 22%, transparent);
   background: color-mix(in srgb, var(--error) 6%, transparent);
-  color: color-mix(in srgb, var(--error) 82%, white 18%);
+  color: color-mix(in srgb, var(--error) 62%, var(--foreground) 38%);
 }
 
 /* ── Step indicator ── */
@@ -2749,13 +2756,13 @@ html:not(.dark) .redeven-header-separator {
 }
 
 .redeven-environment-progress__step-dot[data-state='done'] {
-  background: color-mix(in srgb, var(--success) 72%, white 28%);
+  background: color-mix(in srgb, var(--success) 72%, var(--redeven-surface-highlight-source) 28%);
   border: 1.5px solid color-mix(in srgb, var(--success) 60%, transparent);
   box-shadow: 0 0 0 0.18rem color-mix(in srgb, var(--success) 10%, transparent);
 }
 
 .redeven-environment-progress__step-dot[data-state='active'] {
-  background: color-mix(in srgb, var(--primary) 72%, white 28%);
+  background: color-mix(in srgb, var(--primary) 72%, var(--redeven-surface-highlight-source) 28%);
   border: 1.5px solid color-mix(in srgb, var(--primary) 56%, transparent);
   box-shadow: 0 0 0 0.22rem color-mix(in srgb, var(--primary) 14%, transparent);
   animation: redeven-step-pulse 2.2s ease-in-out infinite;
@@ -2767,7 +2774,7 @@ html:not(.dark) .redeven-header-separator {
 }
 
 .redeven-environment-progress__step-dot[data-state='error'] {
-  background: color-mix(in srgb, var(--error) 72%, white 28%);
+  background: color-mix(in srgb, var(--error) 72%, var(--redeven-surface-highlight-source) 28%);
   border: 1.5px solid color-mix(in srgb, var(--error) 56%, transparent);
 }
 
@@ -2838,7 +2845,7 @@ html:not(.dark) .redeven-header-separator {
   height: 100%;
   min-width: 0.28rem;
   border-radius: inherit;
-  background: linear-gradient(90deg, color-mix(in srgb, var(--primary) 76%, white 24%), color-mix(in srgb, var(--success) 58%, var(--primary)));
+  background: linear-gradient(90deg, color-mix(in srgb, var(--primary) 76%, var(--redeven-surface-highlight-source) 24%), color-mix(in srgb, var(--success) 58%, var(--primary)));
   transition: width 250ms ease;
 }
 
@@ -2846,7 +2853,7 @@ html:not(.dark) .redeven-header-separator {
   background: linear-gradient(
     90deg,
     color-mix(in srgb, var(--primary) 28%, transparent),
-    color-mix(in srgb, var(--primary) 76%, white 24%),
+    color-mix(in srgb, var(--primary) 76%, var(--redeven-surface-highlight-source) 24%),
     color-mix(in srgb, var(--primary) 28%, transparent)
   );
   background-size: 180% 100%;
@@ -2905,7 +2912,7 @@ html:not(.dark) .redeven-header-separator {
 html:not(.dark) .redeven-launcher-head,
 html:not(.dark) .redeven-toolbar-strip,
 html:not(.dark) .redeven-settings-hero {
-  border: 1px solid color-mix(in srgb, var(--redeven-welcome-card-border) 86%, white 14%);
+  border: 1px solid color-mix(in srgb, var(--redeven-welcome-card-border) 86%, var(--redeven-surface-highlight-source) 14%);
   border-radius: 0.5rem;
   background: color-mix(in srgb, var(--redeven-welcome-window-bg) 82%, var(--redeven-welcome-card) 18%);
   box-shadow: var(--redeven-welcome-soft-shadow);
@@ -2916,7 +2923,7 @@ html:not(.dark) .redeven-settings-hero {
 }
 
 html:not(.dark) .redeven-provider-shelf {
-  border-color: color-mix(in srgb, var(--redeven-welcome-card-border) 88%, white 12%);
+  border-color: color-mix(in srgb, var(--redeven-welcome-card-border) 88%, var(--redeven-surface-highlight-source) 12%);
   border-radius: 0.5rem;
   background: var(--redeven-welcome-card);
   box-shadow:

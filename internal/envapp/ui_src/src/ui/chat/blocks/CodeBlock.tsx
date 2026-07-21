@@ -2,8 +2,8 @@
 
 import { createEffect, createSignal, onCleanup, Show } from 'solid-js';
 import type { Component } from 'solid-js';
-import { cn, deferAfterPaint } from '@floegence/floe-webapp-core';
-import { highlightCodeToHtml, resolveCodeHighlightTheme } from '../../utils/shikiHighlight';
+import { cn, deferAfterPaint, useTheme } from '@floegence/floe-webapp-core';
+import { encodeCodeHighlightTheme, highlightCodeToHtml, resolveCodeHighlightTheme } from '../../utils/shikiHighlight';
 import { isLargeCodeBlock } from '../responsiveness';
 import { hasShikiWorkerSupport, highlightCodeToHtmlInWorker } from '../workers/shikiWorkerClient';
 import { useI18n } from '../../i18n';
@@ -16,12 +16,10 @@ export interface CodeBlockProps {
   streaming?: boolean;
 }
 
-const CHAT_CODE_THEME = resolveCodeHighlightTheme('dark');
-
-async function renderHighlightedCode(code: string, language: string): Promise<string> {
+async function renderHighlightedCode(code: string, language: string, theme: string, requestTheme: string): Promise<string> {
   if (isLargeCodeBlock(code) && hasShikiWorkerSupport()) {
     try {
-      const workerHtml = await highlightCodeToHtmlInWorker(code, language, CHAT_CODE_THEME);
+      const workerHtml = await highlightCodeToHtmlInWorker(code, language, requestTheme);
       if (workerHtml) {
         return workerHtml;
       }
@@ -34,7 +32,7 @@ async function renderHighlightedCode(code: string, language: string): Promise<st
     (await highlightCodeToHtml({
       code,
       language,
-      theme: CHAT_CODE_THEME,
+      theme: theme as ReturnType<typeof resolveCodeHighlightTheme>,
     })) ?? ''
   );
 }
@@ -74,6 +72,7 @@ const CheckIcon = () => (
 
 export const CodeBlock: Component<CodeBlockProps> = (props) => {
   const i18n = useI18n();
+  const theme = useTheme();
   const [highlightedHtml, setHighlightedHtml] = createSignal('');
   const [copied, setCopied] = createSignal(false);
   let highlightRequestSeq = 0;
@@ -81,6 +80,10 @@ export const CodeBlock: Component<CodeBlockProps> = (props) => {
   createEffect(() => {
     const code = props.content;
     const language = props.language;
+    const resolvedTheme = theme.resolvedTheme();
+    const shellTheme = theme.shellPresetForMode(resolvedTheme)?.name ?? resolvedTheme;
+    const codeTheme = resolveCodeHighlightTheme(resolvedTheme);
+    const requestTheme = encodeCodeHighlightTheme(codeTheme, shellTheme);
     const seq = (highlightRequestSeq += 1);
     let disposed = false;
 
@@ -95,7 +98,7 @@ export const CodeBlock: Component<CodeBlockProps> = (props) => {
     deferAfterPaint(() => {
       if (disposed || seq !== highlightRequestSeq) return;
 
-      void renderHighlightedCode(code, language).then((html) => {
+      void renderHighlightedCode(code, language, codeTheme, requestTheme).then((html) => {
         if (disposed || seq !== highlightRequestSeq) return;
         setHighlightedHtml(html);
       });

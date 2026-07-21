@@ -117,8 +117,9 @@ describe('main routing', () => {
       'ipcMain.on(DESKTOP_THEME_SET_SHELL_THEME_CHANNEL, (event, mode, presetName) => {',
     );
     expect(mainSrc).toContain(
-      'event.returnValue = desktopThemeState().setShellTheme(mode, presetName);',
+      'event.returnValue = desktopRendererThemeSnapshot(',
     );
+    expect(mainSrc).toContain('desktopThemeState().setShellTheme(mode, presetName),');
   });
 
   it('returns structured launcher failures for stale sessions instead of raw exception text', () => {
@@ -163,8 +164,10 @@ describe('main routing', () => {
     expect(helperEnd).toBeGreaterThan(helperStart);
     const helperSrc = mainSrc.slice(helperStart, helperEnd);
     expect(helperSrc).toContain('function openSessionCodespaceLoadingWindow(');
-    expect(helperSrc).toContain('return openOrReuseSessionCodespaceWindow(sessionKey, codeSpaceID, buildCodespaceLoadingDocumentURL(codeSpaceID, copy));');
+    expect(helperSrc).toContain('sessionRecord.codespace_loading_documents.set(codeSpaceID, copy);');
+    expect(helperSrc).toContain('buildCodespaceLoadingDocumentURL(codeSpaceID, desktopThemeState().getSnapshot(), copy)');
     expect(helperSrc).toContain('function openSessionCodespaceWindow(');
+    expect(helperSrc).toContain('codespace_loading_documents.delete(codeSpaceID)');
     expect(helperSrc).toContain('return openOrReuseSessionCodespaceWindow(sessionKey, codeSpaceID, targetURL);');
     expect(helperSrc).toContain("role: 'codespace_child'");
     expect(helperSrc).toContain("chrome: 'native'");
@@ -175,12 +178,8 @@ describe('main routing', () => {
 
   it('keeps the codespace loading document local, scriptless, and bridge-free', () => {
     const mainSrc = readMainSource();
-    const helperStart = mainSrc.indexOf('function buildCodespaceLoadingDocumentURL(');
-    const helperEnd = mainSrc.indexOf('function openOrReuseSessionCodespaceWindow(', helperStart);
-
-    expect(helperStart).toBeGreaterThanOrEqual(0);
-    expect(helperEnd).toBeGreaterThan(helperStart);
-    const helperSrc = mainSrc.slice(helperStart, helperEnd);
+    const helperSrc = readMainModuleSource('codespaceLoadingDocument.ts');
+    expect(mainSrc).toContain("from './codespaceLoadingDocument';");
     expect(helperSrc).toContain('data:text/html;charset=utf-8');
     expect(helperSrc).toContain('Content-Security-Policy');
     expect(helperSrc).toContain("default-src 'none'");
@@ -193,6 +192,20 @@ describe('main routing', () => {
     expect(helperSrc).not.toContain('<script');
     expect(helperSrc).not.toContain('redevenDesktopShell');
     expect(helperSrc).not.toContain('preload');
+  });
+
+  it('refreshes only tracked codespace loading documents after a theme change', () => {
+    const mainSrc = readMainSource();
+    const helperStart = mainSrc.indexOf('function refreshCodespaceLoadingDocuments(');
+    const helperEnd = mainSrc.indexOf('function openCodespaceWindowFromShell(', helperStart);
+
+    expect(helperStart).toBeGreaterThanOrEqual(0);
+    expect(helperEnd).toBeGreaterThan(helperStart);
+    const helperSrc = mainSrc.slice(helperStart, helperEnd);
+    expect(mainSrc).toContain('refreshCodespaceLoadingDocuments,');
+    expect(helperSrc).toContain('for (const [codeSpaceID, copy] of sessionRecord.codespace_loading_documents)');
+    expect(helperSrc).toContain('buildCodespaceLoadingDocumentURL(codeSpaceID, themeSnapshot, copy)');
+    expect(helperSrc).not.toContain('for (const [codeSpaceID, codespaceWindow] of sessionRecord.codespace_windows)');
   });
 
   it('validates shell codespace-window requests against sender session and codespace URL scope', () => {

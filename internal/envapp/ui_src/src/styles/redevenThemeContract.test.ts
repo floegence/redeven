@@ -51,7 +51,11 @@ describe('Redeven Env App surface theme contract', () => {
   it('defines the light demo palette, root surface family, and paired stroke tokens', () => {
     const src = readRedevenCss();
 
-    expect(src).toContain(':root:not(.dark),\n.light {');
+    expect(src).toContain(":root[data-floe-shell-theme='classic-light'],");
+    expect(src).toContain(":root:not([data-floe-shell-theme]):not(.dark),");
+    expect(src).toContain(":root[data-floe-shell-theme='classic-dark'],");
+    expect(src).toContain(":root:not([data-floe-shell-theme]).dark {");
+    expect(src).not.toContain(':root:not(.dark),\n.light {');
     expect(src).toContain('--background: #f4f1ed;');
     expect(src).toContain('--foreground: #202a37;');
     expect(src).toContain('--primary: #202a37;');
@@ -71,7 +75,7 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--sidebar-border: #dad6d1;');
     expect(src).toContain('--info: #3b82f6;');
     expect(src).toContain('--warning: #f59e0b;');
-    expect(src).toContain('--redeven-runtime-monitor-chart-accent: oklch(0.6 0.16 163);');
+    expect(src).toContain('--redeven-runtime-monitor-cpu-line: var(--redeven-categorical-graph-1);');
     expect(src).toContain('--redeven-surface-main: #f4f1ed;');
     expect(src).toContain('--redeven-surface-panel: #f7f4f1;');
     expect(src).toContain('--redeven-surface-panel-soft: #f1efec;');
@@ -79,7 +83,7 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('--redeven-surface-overlay: var(--redeven-surface-panel-elevated);');
     expect(src).toContain('--redeven-surface-control: color-mix(in srgb, var(--redeven-surface-panel) 58%, var(--redeven-surface-panel-elevated) 42%);');
     expect(src).toContain('--redeven-surface-control-muted: #f1efec;');
-    expect(src).toContain('--redeven-surface-panel-border: color-mix(in srgb, var(--border) 82%, white 18%);');
+    expect(src).toContain('--redeven-surface-panel-border: color-mix(in srgb, var(--border) 82%, var(--redeven-surface-highlight-source) 18%);');
     expect(src).toContain('--redeven-stroke-panel: var(--redeven-surface-panel-border);');
     expect(src).toContain('--redeven-stroke-panel-strong: color-mix(in srgb, var(--redeven-stroke-panel) 72%, var(--foreground) 28%);');
     expect(src).toContain('--redeven-stroke-overlay: color-mix(in srgb, var(--redeven-stroke-panel) 82%, var(--foreground) 18%);');
@@ -100,7 +104,7 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).not.toContain(':root {\n  /* Keep the Env App light surface contract on the document scope so body portals inherit it too. */\n  --background:');
 
     expect(src).toContain('--redeven-surface-panel: rgb(41, 44, 51);');
-    expect(src).toContain('--redeven-runtime-monitor-chart-accent: oklch(0.78 0.17 164);');
+    expect(src).toContain('--redeven-runtime-monitor-upload-line: var(--redeven-categorical-graph-5);');
     expect(src).toContain('--redeven-surface-main: var(--redeven-surface-panel);');
     expect(src).toContain('--redeven-surface-panel-soft: #353942;');
     expect(src).toContain('--redeven-surface-panel-elevated: #40454f;');
@@ -254,6 +258,33 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src.match(/rgb\(41, 44, 51\)/g)?.length ?? 0).toBe(1);
   });
 
+  it('owns shared product colors through semantic aliases and keeps chat shells theme-aware', () => {
+    const src = readRedevenCss();
+
+    for (const token of [
+      '--redeven-shadow-color:',
+      '--redeven-status-info:',
+      '--redeven-status-success:',
+      '--redeven-status-warning:',
+      '--redeven-status-error:',
+      '--redeven-code-surface:',
+      '--redeven-code-chrome:',
+      '--redeven-code-token-command:',
+      '--redeven-chat-surface:',
+      '--redeven-chat-border:',
+      '--redeven-categorical-8:',
+    ]) {
+      expect(src).toContain(token);
+    }
+
+    const chatShellStart = src.indexOf('/* Shell block: command highlighting + collapsed output interaction. */');
+    const chatShellEnd = src.indexOf('.chat-structured-receipt {', chatShellStart);
+    const chatShell = src.slice(chatShellStart, chatShellEnd);
+    expect(chatShell).toContain('var(--redeven-chat-surface-raised)');
+    expect(chatShell).toContain('var(--redeven-code-token-command)');
+    expect(chatShell).not.toMatch(/#(?:0d1117|0f141b|161b22|2d333b|30363d|58a6ff|3fb950|f85149|e6edf3|8b949e)\b/i);
+  });
+
   it('removes the Flower glow only for the dark-mode activity icon and chat avatar variants', () => {
     const src = readRedevenCss();
 
@@ -317,7 +348,7 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain('.redeven-loading-curtain__indicator {');
     expect(src).toContain('height: 3px;');
     expect(src).toContain('.redeven-loading-curtain__indicator-bar {');
-    expect(src).toContain('color-mix(in srgb, var(--primary) 78%, white 18%)');
+    expect(src).toContain('color-mix(in srgb, var(--primary) 78%, var(--redeven-surface-highlight-source) 18%)');
     expect(src).toContain('animation: redeven-loading-curtain-sweep 1.35s cubic-bezier(0.42, 0, 0.2, 1) infinite;');
     expect(src).toContain('@keyframes redeven-loading-curtain-sweep {');
     expect(src).toContain('.redeven-loading-curtain__message {');
@@ -390,16 +421,16 @@ describe('Redeven Env App surface theme contract', () => {
     expect(src).toContain("--redeven-terminal-work-indicator-size: 3.5px;");
     expect(src).toContain('inset: calc(-1 * var(--redeven-terminal-work-indicator-outset));');
     expect(src).toContain('--redeven-terminal-work-indicator-outset: calc(var(--redeven-terminal-work-indicator-size) * 0.28);');
-    expect(src).toContain('--redeven-terminal-work-sky: #47a7ff;');
-    expect(src).toContain('--redeven-terminal-work-emerald: #35f28c;');
-    expect(src).toContain('--redeven-terminal-work-aqua: #38ffe2;');
-    expect(src).toContain('--redeven-terminal-work-bright: #dcfff7;');
-    expect(src).toContain('--redeven-terminal-work-running-line: #7bdc5f;');
+    expect(src).toContain('--redeven-terminal-work-sky: var(--redeven-status-info);');
+    expect(src).toContain('--redeven-terminal-work-emerald: var(--redeven-status-success);');
+    expect(src).toContain('--redeven-terminal-work-aqua: var(--redeven-categorical-7);');
+    expect(src).toContain('--redeven-terminal-work-bright: var(--foreground);');
+    expect(src).toContain('--redeven-terminal-work-running-line: var(--redeven-status-success);');
     expect(src).toContain(".redeven-terminal-work-indicator[data-terminal-work-theme='light'] {");
-    expect(src).toContain('--redeven-terminal-work-sky: #1a73e8;');
-    expect(src).toContain('--redeven-terminal-work-mint: #7eadff;');
-    expect(src).toContain('--redeven-terminal-work-bright: #d2e3fc;');
-    expect(src).toContain('--redeven-terminal-work-running-line: #00e000;');
+    expect(src).toContain('--redeven-terminal-work-sky: var(--redeven-status-info);');
+    expect(src).toContain('--redeven-terminal-work-mint: var(--redeven-categorical-8);');
+    expect(src).toContain('--redeven-terminal-work-bright: var(--foreground);');
+    expect(src).toContain('--redeven-terminal-work-running-line: var(--redeven-status-success);');
     expect(src).toContain('--redeven-terminal-work-running-opacity-low: 0.84;');
     expect(src).toContain(".redeven-terminal-work-indicator[data-terminal-work-state='active'] {");
     expect(src).toContain(".redeven-terminal-work-indicator[data-terminal-work-state='running'] {");

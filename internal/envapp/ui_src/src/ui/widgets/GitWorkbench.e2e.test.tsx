@@ -83,6 +83,8 @@ describe('GitWorkbench interactions', () => {
                 onRefresh={() => {
                   refreshCount += 1;
                 }}
+                onBrowseFiles={() => {}}
+                onOpenInTerminal={() => {}}
                 onFetch={() => {
                   fetchCount += 1;
                 }}
@@ -111,6 +113,8 @@ describe('GitWorkbench interactions', () => {
       expect(refreshButton?.className).toContain('bg-background/72');
       expect(refreshButton?.className).not.toContain('redeven-surface-control--muted');
       expect(refreshButton?.className).not.toContain('border-input');
+      expect(Array.from(host.querySelectorAll('button')).find((button) => button.className.includes('hover:text-[var(--redeven-status-success)]'))).toBeTruthy();
+      expect(Array.from(host.querySelectorAll('button')).find((button) => button.className.includes('hover:text-[var(--redeven-status-info)]'))).toBeTruthy();
       expect(refreshButton?.className).not.toContain(' border ');
       expect(refreshButton?.className).not.toContain('border-input');
       fetchButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));

@@ -510,7 +510,7 @@ function CodespaceCard(props: {
       class={cn(
         "border transition-all duration-200",
         isRunning()
-          ? "border-emerald-500/30 bg-emerald-500/[0.02] hover:border-emerald-500/50"
+          ? "border-[var(--redeven-status-success-border)] bg-[var(--redeven-status-success-soft)] hover:border-[var(--redeven-status-success)]"
           : cn(redevenSurfaceRoleClass("panelInteractive"), "opacity-75 hover:opacity-100"),
         props.contextMenuOpen ? "ring-1 ring-primary/40" : undefined,
       )}
@@ -923,7 +923,7 @@ function BrowserEditorReadinessInlineStatus(props: {
           "inline-flex h-8 items-center gap-1.5 rounded-md border px-2 text-xs font-medium transition-colors",
           "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
           props.error
-            ? "border-amber-500/30 bg-amber-500/[0.06] text-amber-700 hover:bg-amber-500/[0.1] dark:text-amber-300"
+            ? "border-[var(--redeven-status-warning-border)] bg-[var(--redeven-status-warning-soft)] text-[var(--redeven-status-warning-foreground)] hover:border-[var(--redeven-status-warning)]"
             : "border-border bg-background/70 text-muted-foreground",
         )}
         onClick={() => {

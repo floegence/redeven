@@ -111,9 +111,9 @@ function TerminalAgentIdentity(props: {
   const themeAdaptiveImage = createMemo(() => Boolean(presentation().lightIconPath && presentation().darkIconPath));
   return (
     <span
-      class={`relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-sidebar-border/70 text-sidebar-foreground shadow-[inset_0_1px_0_rgba(255,255,255,0.18)] ${presentation().render === 'mask' || themeAdaptiveImage()
+      class={`relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-sidebar-border/70 text-sidebar-foreground shadow-[inset_0_1px_0_color-mix(in_srgb,var(--background)_18%,transparent)] ${presentation().render === 'mask' || themeAdaptiveImage()
         ? 'bg-sidebar/65'
-        : 'bg-[#f7f7f5]'}`}
+        : 'bg-[var(--redeven-surface-control)]'}`}
       data-terminal-session-avatar={props.sessionId}
       data-terminal-agent-identity={props.identity}
       aria-hidden="true"
@@ -201,7 +201,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
       <Show when={props.mobile && props.drawerOpen}>
         <button
           type="button"
-          class="absolute inset-0 z-30 cursor-default bg-black/45"
+          class="absolute inset-0 z-30 cursor-default bg-[var(--redeven-overlay-scrim)]"
           aria-label={i18n.t('terminal.closeSessions')}
           data-testid="terminal-session-drawer-backdrop"
           onClick={props.onCloseDrawer}
@@ -332,7 +332,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                       return (
                         <div
                           class={`group relative rounded-md border px-2.5 py-2 pr-16 text-xs transition-colors duration-75 ${sidebarActive()
-                            ? 'border-border/20 bg-sidebar-accent text-sidebar-accent-foreground shadow-[0_1px_3px_rgba(0,0,0,0.06)]'
+                            ? 'border-border/20 bg-sidebar-accent text-sidebar-accent-foreground shadow-[0_1px_3px_color-mix(in_srgb,var(--foreground)_6%,transparent)]'
                             : 'border-transparent text-sidebar-foreground/80 hover:border-border/15 hover:bg-sidebar-accent/70 hover:text-sidebar-accent-foreground'}`}
                           onContextMenu={(event) => props.onOpenContextMenu(event, item())}
                         >
@@ -374,7 +374,7 @@ export function TerminalSessionNavigator(props: TerminalSessionNavigatorProps) {
                               when={item().agentIdentity}
                               fallback={(
                                 <span
-                                  class="relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-[13px] font-semibold uppercase leading-none shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]"
+                                  class="relative mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full border text-[13px] font-semibold uppercase leading-none shadow-[inset_0_1px_0_color-mix(in_srgb,var(--background)_18%,transparent)]"
                                   style={{
                                     background: item().avatarTone.background,
                                     'border-color': item().avatarTone.border,

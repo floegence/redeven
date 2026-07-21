@@ -1,6 +1,7 @@
 import {
   isDesktopShellThemeSelection,
   normalizeDesktopHexColor,
+  type DesktopRendererThemeSnapshot,
   type DesktopThemeSnapshot,
 } from './desktopTheme';
 
@@ -13,13 +14,25 @@ function compact(value: unknown): string {
   return String(value ?? '').trim();
 }
 
-export function normalizeDesktopThemeSnapshot(value: unknown): DesktopThemeSnapshot | null {
+export function desktopRendererThemeSnapshot(
+  snapshot: DesktopThemeSnapshot,
+): DesktopRendererThemeSnapshot {
+  return {
+    source: snapshot.source,
+    resolvedTheme: snapshot.resolvedTheme,
+    shellThemes: snapshot.shellThemes,
+    activeShellTheme: snapshot.activeShellTheme,
+    window: snapshot.window,
+  };
+}
+
+export function normalizeDesktopThemeSnapshot(value: unknown): DesktopRendererThemeSnapshot | null {
   if (!value || typeof value !== 'object') {
     return null;
   }
 
-  const candidate = value as Partial<DesktopThemeSnapshot> & {
-    window?: Partial<DesktopThemeSnapshot['window']>;
+  const candidate = value as Partial<DesktopRendererThemeSnapshot> & {
+    window?: Partial<DesktopRendererThemeSnapshot['window']>;
   };
   const source = compact(candidate.source);
   const resolvedTheme = compact(candidate.resolvedTheme);
@@ -28,7 +41,8 @@ export function normalizeDesktopThemeSnapshot(value: unknown): DesktopThemeSnaps
   const backgroundColor = normalizeDesktopHexColor(candidate.window?.backgroundColor);
   const symbolColor = normalizeDesktopHexColor(candidate.window?.symbolColor);
   if (
-    (source !== 'system' && source !== 'light' && source !== 'dark')
+    Object.prototype.hasOwnProperty.call(candidate, 'semantic')
+    || (source !== 'system' && source !== 'light' && source !== 'dark')
     || (resolvedTheme !== 'light' && resolvedTheme !== 'dark')
     || (source !== 'system' && source !== resolvedTheme)
     || !isDesktopShellThemeSelection(shellThemes)

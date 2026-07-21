@@ -260,14 +260,18 @@ describe('FlowerTurnLauncherWindow', () => {
     expect(scrollRegion?.getAttribute(REDEVEN_WORKBENCH_WHEEL_INTERACTIVE_ATTR)).toBe('true');
     expect(scrollRegion?.getAttribute(REDEVEN_WORKBENCH_WHEEL_ROLE_ATTR)).toBe(REDEVEN_WORKBENCH_WHEEL_ROLE_LOCAL_SCROLL_VIEWPORT);
     expect(composerDock).toBeTruthy();
+    expect(composerDock?.className).toContain('color-mix(in_srgb,var(--foreground)_32%,transparent)');
     expect(textarea && composerDock?.contains(textarea)).toBe(true);
     expect(textarea && scrollRegion?.contains(textarea)).toBe(false);
     expect(assistantAvatar).toBeTruthy();
     expect(assistantAvatar?.className).toContain('size-8');
+    expect(assistantAvatar?.firstElementChild?.className).toContain('color-mix(in_srgb,var(--background)_55%,transparent)');
+    expect(assistantAvatar?.lastElementChild?.className).toContain('var(--redeven-status-warning-soft)');
     expect(assistantRow).toBeTruthy();
     expect(assistantRow?.className).not.toContain('gap-2');
     expect(assistantSurface).toBeTruthy();
     expect(assistantSurface?.className).not.toContain('border-border/65');
+    expect(assistantSurface?.className).toContain('color-mix(in_srgb,var(--foreground)_34%,transparent)');
   });
 
   it('renders the user composer as a flat bottom dock instead of a bordered chat card', () => {

@@ -29,6 +29,7 @@ describe('buildCommitGraphRows', () => {
 
     expect(rows).toHaveLength(6);
     expect(rows[0]?.afterLanes.map((lane) => lane.hash)).toEqual(['main001', 'feat001']);
+    expect(rows[0]?.afterLanes.map((lane) => lane.colorIndex)).toEqual([0, 1]);
     expect(rows[1]?.beforeLanes.map((lane) => lane.hash)).toEqual(['main001', 'feat001']);
     expect(rows[2]?.beforeLanes.map((lane) => lane.hash)).toEqual(['main000', 'feat001']);
     expect(rows[2]?.lane).toBe(1);
@@ -40,6 +41,33 @@ describe('buildCommitGraphRows', () => {
 });
 
 describe('GitCommitGraph layout', () => {
+  it('uses the theme categorical palette for distinct merge lanes', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const dispose = render(() => GitCommitGraph({
+      commits: [
+        commit('merge000', ['main001', 'feat001'], 'Merge branch'),
+        commit('main001', ['root000'], 'Main work'),
+        commit('feat001', ['root000'], 'Feature work'),
+        commit('root000', [], 'Root'),
+      ],
+    }), host);
+
+    try {
+      const strokes = Array.from(host.querySelectorAll('[data-commit-graph-segment] path')).map((path) => path.getAttribute('stroke'));
+      expect(strokes.some((stroke) => stroke?.includes('var(--redeven-categorical-1)'))).toBe(true);
+      expect(strokes.some((stroke) => stroke?.includes('var(--redeven-categorical-2)'))).toBe(true);
+      const fills = Array.from(host.querySelectorAll('[data-commit-graph-segment] circle:not([data-commit-graph-node])')).map((node) => node.getAttribute('fill'));
+      expect(fills).toContain('var(--redeven-categorical-1)');
+      expect(fills).toContain('var(--redeven-categorical-2)');
+      const mergeLabel = Array.from(host.querySelectorAll('span')).find((node) => node.textContent === 'Merge x2');
+      expect(mergeLabel?.className).toContain('text-[var(--redeven-categorical-6)]');
+    } finally {
+      dispose();
+    }
+  });
+
   it('keeps static rails separate from per-row graph segments', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

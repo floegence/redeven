@@ -8,6 +8,12 @@ import { FilePreviewContext } from './FilePreviewContext';
 import { MarkdownPreviewPane } from './MarkdownPreviewPane';
 
 vi.mock('../file-markdown/mermaidPlugin', () => ({
+  resolveMermaidThemeContext: vi.fn(() => ({
+    key: 'classic-light|light',
+    mode: 'light',
+    preset: 'classic-light',
+    variables: {},
+  })),
   setupMermaid: vi.fn(),
   runMermaid: vi.fn().mockResolvedValue(undefined),
 }));

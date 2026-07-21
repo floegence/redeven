@@ -44,7 +44,7 @@ const BlockSkeleton: Component = () => (
     style={{
       height: '48px',
       'border-radius': '6px',
-      'background': 'var(--chat-skeleton-bg, rgba(128,128,128,0.15))',
+      'background': 'var(--chat-skeleton-bg, var(--muted))',
       animation: 'chat-skeleton-pulse 1.5s ease-in-out infinite',
     }}
   />

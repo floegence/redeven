@@ -283,7 +283,7 @@ function PortForwardCard(props: {
       class={cn(
         'border transition-all duration-200',
         isHealthy()
-          ? 'border-emerald-500/30 bg-emerald-500/[0.02] hover:border-emerald-500/50'
+          ? 'border-[var(--redeven-status-success-border)] bg-[var(--redeven-status-success-soft)] hover:border-[var(--redeven-status-success)]'
           : props.forward.health?.status === 'unreachable'
             ? 'border-destructive/30 bg-destructive/[0.02] hover:border-destructive/50'
             : redevenSurfaceRoleClass('panelInteractive')

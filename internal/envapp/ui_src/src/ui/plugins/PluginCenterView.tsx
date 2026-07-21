@@ -532,9 +532,9 @@ function statusLabel(item: PluginInventoryItem, i18n: I18nHelpers): string {
 }
 
 function statusPillClass(item: PluginInventoryItem): string {
-  if (item.lifecycleState === 'enabled') return 'rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-700';
-  if (item.lifecycleState === 'needs_attention') return 'rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-semibold text-amber-700';
-  if (item.lifecycleState === 'update_available') return 'rounded-full bg-sky-500/10 px-2 py-0.5 text-[10px] font-semibold text-sky-700';
+  if (item.lifecycleState === 'enabled') return 'rounded-full bg-[var(--redeven-status-success-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--redeven-status-success-foreground)]';
+  if (item.lifecycleState === 'needs_attention') return 'rounded-full bg-[var(--redeven-status-warning-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--redeven-status-warning-foreground)]';
+  if (item.lifecycleState === 'update_available') return 'rounded-full bg-[var(--redeven-status-info-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--redeven-status-info-foreground)]';
   return 'rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground';
 }
 

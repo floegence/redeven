@@ -40,7 +40,7 @@ export function BrowserWorkspaceShell(props: BrowserWorkspaceShellProps) {
           and the sidebar (z-30). */}
       <Show when={isMobile() && props.open}>
         <div
-          class="absolute inset-0 z-20 bg-black/30"
+          class="absolute inset-0 z-20 bg-[var(--redeven-overlay-scrim)]"
           onClick={() => props.onClose?.()}
         />
       </Show>

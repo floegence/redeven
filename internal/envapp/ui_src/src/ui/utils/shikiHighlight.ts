@@ -2,6 +2,8 @@
 
 export type CodeHighlightTheme = 'github-dark' | 'github-light';
 
+const THEME_REQUEST_SEPARATOR = '::';
+
 type CodeHighlighter = Awaited<ReturnType<(typeof import('shiki'))['createHighlighter']>>;
 
 const SHIKI_THEMES: CodeHighlightTheme[] = ['github-dark', 'github-light'];
@@ -38,6 +40,20 @@ let highlighterPromise: Promise<CodeHighlighter | null> | null = null;
 
 export function resolveCodeHighlightTheme(resolvedTheme?: string | null): CodeHighlightTheme {
   return resolvedTheme === 'light' ? 'github-light' : 'github-dark';
+}
+
+/**
+ * Keeps the active Floe preset in the worker cache identity while retaining
+ * the two syntax families currently supplied by the published Shiki bundle.
+ */
+export function encodeCodeHighlightTheme(theme: CodeHighlightTheme, shellTheme?: string | null): string {
+  const preset = String(shellTheme ?? '').trim();
+  return preset ? `${theme}${THEME_REQUEST_SEPARATOR}${preset}` : theme;
+}
+
+export function decodeCodeHighlightTheme(value: string): CodeHighlightTheme {
+  const family = String(value ?? '').split(THEME_REQUEST_SEPARATOR, 1)[0];
+  return family === 'github-light' ? 'github-light' : 'github-dark';
 }
 
 export function normalizeCodeLanguage(language?: string | null): string | undefined {

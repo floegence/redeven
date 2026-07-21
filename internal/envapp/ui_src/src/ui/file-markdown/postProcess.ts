@@ -1,4 +1,5 @@
 import {
+  encodeCodeHighlightTheme,
   highlightCodeToHtml,
   resolveCodeHighlightTheme,
   type CodeHighlightTheme,
@@ -17,9 +18,14 @@ interface FileMarkdownCodeBlockMeta {
 }
 
 interface FileMarkdownCodeBlockState extends FileMarkdownCodeBlockMeta {
-  highlightedTheme?: CodeHighlightTheme;
-  pendingTheme?: CodeHighlightTheme;
+  highlightedThemeKey?: string;
+  pendingThemeKey?: string;
   requestSeq: number;
+}
+
+interface FileMarkdownCodeTheme {
+  theme: CodeHighlightTheme;
+  key: string;
 }
 
 const LANGUAGE_LABELS: Readonly<Record<string, string>> = {
@@ -87,23 +93,33 @@ function relativeLuminance({ r, g, b }: RgbColor): number {
   return (0.2126 * linearR) + (0.7152 * linearG) + (0.0722 * linearB);
 }
 
-function resolveFileMarkdownCodeTheme(pre: HTMLPreElement): CodeHighlightTheme {
+function resolveFileMarkdownCodeTheme(pre: HTMLPreElement): FileMarkdownCodeTheme {
+  const shellTheme = document.documentElement.dataset.floeShellTheme;
   const styles = window.getComputedStyle(pre);
   const surfaceColor = parseCssColor(styles.getPropertyValue('--fm-code-surface')) ?? parseCssColor(styles.backgroundColor);
   if (surfaceColor) {
-    return resolveCodeHighlightTheme(relativeLuminance(surfaceColor) < 0.45 ? 'dark' : 'light');
+    const theme = resolveCodeHighlightTheme(relativeLuminance(surfaceColor) < 0.45 ? 'dark' : 'light');
+    return { theme, key: encodeCodeHighlightTheme(theme, shellTheme) };
   }
 
   const colorScheme = `${styles.colorScheme} ${window.getComputedStyle(document.documentElement).colorScheme}`;
   if (/\bdark\b/i.test(colorScheme) && !/\blight\b/i.test(colorScheme)) {
-    return resolveCodeHighlightTheme('dark');
+    const theme = resolveCodeHighlightTheme('dark');
+    return { theme, key: encodeCodeHighlightTheme(theme, shellTheme) };
   }
 
   const html = document.documentElement;
-  if (html.classList.contains('dark')) return resolveCodeHighlightTheme('dark');
-  if (html.classList.contains('light')) return resolveCodeHighlightTheme('light');
+  if (html.classList.contains('dark')) {
+    const theme = resolveCodeHighlightTheme('dark');
+    return { theme, key: encodeCodeHighlightTheme(theme, shellTheme) };
+  }
+  if (html.classList.contains('light')) {
+    const theme = resolveCodeHighlightTheme('light');
+    return { theme, key: encodeCodeHighlightTheme(theme, shellTheme) };
+  }
   const prefersDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches === true;
-  return resolveCodeHighlightTheme(prefersDark ? 'dark' : 'light');
+  const theme = resolveCodeHighlightTheme(prefersDark ? 'dark' : 'light');
+  return { theme, key: encodeCodeHighlightTheme(theme, shellTheme) };
 }
 
 function extractCodeBlockMeta(code: HTMLElement): FileMarkdownCodeBlockMeta {
@@ -135,7 +151,7 @@ function restorePlainCode(pre: HTMLPreElement, code: HTMLElement, state: FileMar
   code.textContent = state.copyText;
   pre.classList.remove('fm-code-block-shiki');
   pre.style.removeProperty('--fm-code-base-color');
-  state.highlightedTheme = undefined;
+  state.highlightedThemeKey = undefined;
 }
 
 function applyShikiHtml(pre: HTMLPreElement, code: HTMLElement, html: string): boolean {
@@ -165,17 +181,17 @@ function applyShikiHtml(pre: HTMLPreElement, code: HTMLElement, html: string): b
 async function highlightCodeBlock(pre: HTMLPreElement, code: HTMLElement, state: FileMarkdownCodeBlockState): Promise<void> {
   if (PLAIN_TEXT_LANGUAGES.has(state.language) || !state.copyText.trim()) return;
 
-  const theme = resolveFileMarkdownCodeTheme(pre);
-  if (state.highlightedTheme === theme) {
-    if (state.pendingTheme && state.pendingTheme !== theme) {
+  const { theme, key: themeKey } = resolveFileMarkdownCodeTheme(pre);
+  if (state.highlightedThemeKey === themeKey) {
+    if (state.pendingThemeKey && state.pendingThemeKey !== themeKey) {
       state.requestSeq += 1;
-      state.pendingTheme = undefined;
+      state.pendingThemeKey = undefined;
     }
     return;
   }
-  if (state.pendingTheme === theme) return;
+  if (state.pendingThemeKey === themeKey) return;
 
-  state.pendingTheme = theme;
+  state.pendingThemeKey = themeKey;
   const requestSeq = (state.requestSeq += 1);
 
   try {
@@ -192,7 +208,7 @@ async function highlightCodeBlock(pre: HTMLPreElement, code: HTMLElement, state:
       return;
     }
     if (applyShikiHtml(pre, code, html)) {
-      state.highlightedTheme = theme;
+      state.highlightedThemeKey = themeKey;
     } else {
       restorePlainCode(pre, code, state);
     }
@@ -201,8 +217,8 @@ async function highlightCodeBlock(pre: HTMLPreElement, code: HTMLElement, state:
       restorePlainCode(pre, code, state);
     }
   } finally {
-    if (requestSeq === state.requestSeq && state.pendingTheme === theme) {
-      state.pendingTheme = undefined;
+    if (requestSeq === state.requestSeq && state.pendingThemeKey === themeKey) {
+      state.pendingThemeKey = undefined;
     }
   }
 }

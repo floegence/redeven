@@ -233,10 +233,10 @@ export function threadStatusDotClass(status: string | null | undefined): string 
     return 'bg-primary';
   }
   if (normalized.includes('approval') || normalized.includes('waiting') || normalized.includes('input')) {
-    return 'bg-amber-500';
+    return 'bg-[var(--redeven-status-warning)]';
   }
   if (normalized === 'completed' || normalized === 'success') {
-    return 'bg-emerald-500';
+    return 'bg-[var(--redeven-status-success)]';
   }
   if (normalized.includes('error') || normalized.includes('fail') || normalized.includes('decline')) {
     return 'bg-error';

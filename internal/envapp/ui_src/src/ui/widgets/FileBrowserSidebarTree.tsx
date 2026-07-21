@@ -439,7 +439,7 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
                       <div
                         data-filesystem-root-write-toggle={root.id}
                         class={cn(
-                          'grid h-5 shrink-0 grid-cols-2 overflow-hidden rounded-md border border-border/60 bg-muted/60 p-0.5 text-[8px] font-semibold leading-4 shadow-inner shadow-black/10',
+                          'grid h-5 shrink-0 grid-cols-2 overflow-hidden rounded-md border border-border/60 bg-muted/60 p-0.5 text-[8px] font-semibold leading-4 shadow-inner shadow-[color:var(--redeven-shadow-color)]',
                           saving() && 'opacity-70',
                         )}
                         aria-label={i18n.t('files.rootAccessGroup', { label: root.label, mode: root.permissions.write ? i18n.t('files.readWriteAccess') : i18n.t('files.readOnlyAccess') })}
@@ -451,7 +451,7 @@ export function FileBrowserSidebarTree(props: FileBrowserSidebarTreeProps) {
                           class={cn(
                             'h-4 min-w-[1.45rem] rounded px-1 text-[8px] font-semibold leading-4 transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-sidebar-ring focus-visible:ring-inset',
                             !root.permissions.write && !saving()
-                              ? 'bg-foreground text-background shadow-sm shadow-black/20'
+                              ? 'bg-foreground text-background shadow-sm shadow-[color:var(--redeven-shadow-color)]'
                               : 'cursor-pointer text-muted-foreground/65 hover:bg-background/80 hover:text-foreground',
                             saving() && 'cursor-default',
                           )}

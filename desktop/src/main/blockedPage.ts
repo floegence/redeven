@@ -1,8 +1,9 @@
 import { formatBlockedLaunchDiagnostics, type LaunchBlockedReport } from './launchReport';
-import { desktopTheme } from './desktopTheme';
+import { desktopSemanticPaletteForShellTheme } from './desktopTheme';
 import { desktopWindowTitleBarInsetCSSValue } from '../shared/windowChromePlatform';
 import { createDesktopI18n, type DesktopI18n } from '../shared/i18n/desktopI18n';
 import type { RedevenLocale } from '../shared/i18n/localeMeta';
+import type { DesktopThemeSnapshot } from '../shared/desktopTheme';
 
 const BLOCKED_ACTION_ORIGIN = 'https://redeven-desktop.invalid';
 
@@ -115,6 +116,7 @@ export function buildBlockedPageHTML(
   report: LaunchBlockedReport,
   platform: NodeJS.Platform = process.platform,
   locale: RedevenLocale = 'en-US',
+  theme?: Pick<DesktopThemeSnapshot, 'resolvedTheme' | 'activeShellTheme' | 'semantic'>,
 ): string {
   const i18n = createDesktopI18n(locale);
   const headline = blockedHeadline(report, i18n);
@@ -128,24 +130,30 @@ export function buildBlockedPageHTML(
     ? escapedDetail(i18n, 'blockedPage.defaultStateDirectory', report.diagnostics.state_dir)
     : escapeHTML(i18n.t('blockedPage.attachFailedDetail'));
   const titleBarInset = desktopWindowTitleBarInsetCSSValue(platform);
+  const resolvedTheme = theme?.resolvedTheme ?? 'light';
+  const activeShellTheme = theme?.activeShellTheme ?? 'classic-light';
+  const palette = theme?.semantic ?? desktopSemanticPaletteForShellTheme('classic-light');
 
   return `<!doctype html>
-<html lang="${escapeHTML(locale)}">
+<html lang="${escapeHTML(locale)}" data-floe-shell-theme="${activeShellTheme}" data-theme-palette-version="${palette.version}">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <title>${escapeHTML(i18n.t('desktop.title'))}</title>
     <style>
       :root {
-        color-scheme: light;
-        --bg: ${desktopTheme.pageBackground};
-        --panel: ${desktopTheme.surface};
-        --panel-muted: ${desktopTheme.surfaceMuted};
-        --text: ${desktopTheme.text};
-        --muted: ${desktopTheme.muted};
-        --border: ${desktopTheme.border};
-        --accent: ${desktopTheme.accent};
-        --accent-text: ${desktopTheme.accentText};
+        color-scheme: ${resolvedTheme};
+        --bg: ${palette.background};
+        --panel: ${palette.surface};
+        --panel-muted: ${palette.muted};
+        --text: ${palette.foreground};
+        --muted: ${palette.mutedForeground};
+        --border: ${palette.border};
+        --accent: ${palette.primary};
+        --accent-text: ${palette.primaryForeground};
+        --shadow: color-mix(in srgb, var(--text) 10%, transparent);
+        --code-bg: color-mix(in srgb, var(--bg) 84%, var(--text) 16%);
+        --code-text: var(--text);
       }
       * { box-sizing: border-box; }
       html { scroll-behavior: smooth; }
@@ -173,7 +181,7 @@ export function buildBlockedPageHTML(
       }
       .skip-link:focus-visible {
         transform: translateY(0);
-        outline: 2px solid color-mix(in srgb, var(--accent) 35%, white);
+        outline: 2px solid color-mix(in srgb, var(--accent) 66%, var(--accent-text));
         outline-offset: 3px;
       }
       main {
@@ -181,7 +189,7 @@ export function buildBlockedPageHTML(
         border: 1px solid var(--border);
         border-radius: 24px;
         background: var(--panel);
-        box-shadow: 0 18px 48px rgba(24, 19, 17, 0.08);
+        box-shadow: 0 18px 48px var(--shadow);
         padding: 32px;
       }
       .eyebrow {
@@ -232,7 +240,7 @@ export function buildBlockedPageHTML(
       }
       .button:focus-visible,
       summary:focus-visible {
-        outline: 2px solid color-mix(in srgb, var(--accent) 40%, white);
+        outline: 2px solid color-mix(in srgb, var(--accent) 66%, var(--accent-text));
         outline-offset: 2px;
       }
       .button.primary {
@@ -253,8 +261,8 @@ export function buildBlockedPageHTML(
         margin: 14px 0 0;
         padding: 16px;
         border-radius: 14px;
-        background: #201917;
-        color: #f9efe8;
+        background: var(--code-bg);
+        color: var(--code-text);
         overflow: auto;
         font-size: 12px;
         line-height: 1.6;
@@ -311,6 +319,7 @@ export function blockedPageDataURL(
   report: LaunchBlockedReport,
   platform: NodeJS.Platform = process.platform,
   locale: RedevenLocale = 'en-US',
+  theme?: Pick<DesktopThemeSnapshot, 'resolvedTheme' | 'activeShellTheme' | 'semantic'>,
 ): string {
-  return `data:text/html;charset=utf-8,${encodeURIComponent(buildBlockedPageHTML(report, platform, locale))}`;
+  return `data:text/html;charset=utf-8,${encodeURIComponent(buildBlockedPageHTML(report, platform, locale, theme))}`;
 }

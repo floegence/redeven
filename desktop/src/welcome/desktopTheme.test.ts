@@ -15,12 +15,28 @@ const shellThemes = {
 
 function snapshot(source: 'system' | 'light' | 'dark' = 'system') {
   const resolvedTheme = source === 'dark' ? 'dark' as const : 'light' as const;
+  const dark = resolvedTheme === 'dark';
   return {
     source,
     resolvedTheme,
     shellThemes,
     activeShellTheme: shellThemes[resolvedTheme],
     window: { backgroundColor: '#ffffff' as const, symbolColor: '#000000' as const },
+    semantic: {
+      version: 1 as const,
+      background: dark ? '#0E121B' as const : '#F4F1ED' as const,
+      surface: dark ? '#121721' as const : '#FFFDFA' as const,
+      muted: dark ? '#1B212D' as const : '#F1EFEC' as const,
+      foreground: dark ? '#F9FAFB' as const : '#202A37' as const,
+      mutedForeground: dark ? '#8596AD' as const : '#5A687C' as const,
+      border: dark ? '#252B37' as const : '#D8D3CC' as const,
+      primary: dark ? '#F9FAFB' as const : '#202A37' as const,
+      primaryForeground: dark ? '#0E121B' as const : '#FFFDFA' as const,
+      info: dark ? '#79B8FF' as const : '#245B9B' as const,
+      success: dark ? '#72D39C' as const : '#287A4B' as const,
+      warning: dark ? '#F0C36A' as const : '#835800' as const,
+      error: dark ? '#FF8A82' as const : '#B42318' as const,
+    },
   };
 }
 

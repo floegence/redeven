@@ -1,6 +1,6 @@
 import type { BrowserWindow, BrowserWindowConstructorOptions } from 'electron';
 
-import { desktopTheme } from './desktopTheme';
+import { desktopWindowThemeSnapshotForResolvedTheme } from './desktopTheme';
 import type { DesktopWindowThemeSnapshot } from '../shared/desktopTheme';
 import {
   resolveDesktopWindowChromeConfig,
@@ -10,10 +10,7 @@ import {
 import { DESKTOP_WINDOW_CHROME_UPDATED_CHANNEL } from '../shared/windowChromeIPC';
 
 export function defaultDesktopWindowThemeSnapshot(): DesktopWindowThemeSnapshot {
-  return {
-    backgroundColor: desktopTheme.nativeWindow.backgroundColor,
-    symbolColor: desktopTheme.nativeWindow.symbolColor,
-  };
+  return desktopWindowThemeSnapshotForResolvedTheme('light');
 }
 
 export function buildDesktopWindowChromeOptions(

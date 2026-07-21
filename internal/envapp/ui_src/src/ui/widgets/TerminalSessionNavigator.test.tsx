@@ -85,8 +85,10 @@ describe('TerminalSessionNavigator agent status presentation', () => {
     expect(host.querySelector('[data-terminal-output-attention="unread"]')).toBeNull();
     expect(host.querySelector('[data-terminal-attention-state="unread"]')).toBeNull();
     expect(host.querySelector('[data-terminal-session-avatar="agent-session"]')?.className).toContain('h-9 w-9');
+    expect(host.querySelector('[data-terminal-session-avatar="agent-session"]')?.className).not.toContain('rgba(');
     expect(host.querySelector('[data-terminal-output-trigger="agent-session"]')?.className).toContain('h-7 w-7');
     const rowButton = host.querySelector<HTMLButtonElement>('button[data-terminal-session-id="agent-session"]')!;
+    expect(rowButton.parentElement?.className).toContain('color-mix(in_srgb,var(--foreground)_6%,transparent)');
     const descriptionId = rowButton.getAttribute('aria-describedby');
     expect(descriptionId).toBe('terminal-session-status-agent-session');
     expect(host.querySelector(`#${descriptionId}`)?.textContent).toContain('foreground process is running');
@@ -151,6 +153,7 @@ describe('TerminalSessionNavigator agent status presentation', () => {
 
     expect(host.querySelector('[data-terminal-agent-identity]')).toBeNull();
     expect(host.querySelector('[data-terminal-session-avatar="agent-session"]')?.textContent).toContain('R');
+    expect(host.querySelector('[data-terminal-session-avatar="agent-session"]')?.className).toContain('color-mix(in_srgb,var(--background)_18%,transparent)');
     expect(host.querySelector('[data-terminal-output-state]')).toBeNull();
   });
 

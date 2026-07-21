@@ -140,7 +140,7 @@ function statusLabel(item: PluginInventoryItem, i18n: I18nHelpers): string {
 }
 
 function statusClass(item: PluginInventoryItem): string {
-  if (item.lifecycleState === 'enabled') return 'text-emerald-600';
-  if (item.lifecycleState === 'needs_attention') return 'text-amber-600';
+  if (item.lifecycleState === 'enabled') return 'text-[var(--redeven-status-success-foreground)]';
+  if (item.lifecycleState === 'needs_attention') return 'text-[var(--redeven-status-warning-foreground)]';
   return 'text-muted-foreground';
 }

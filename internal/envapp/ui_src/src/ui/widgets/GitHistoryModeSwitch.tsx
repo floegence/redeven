@@ -54,7 +54,7 @@ export function GitHistoryModeSwitch(props: GitHistoryModeSwitchProps) {
       aria-label={i18n.t('uiCopy.git.browserMode')}
       data-browser-mode-switch=""
       data-mode={props.mode}
-      class={cn('browser-mode-switch inline-grid w-full grid-cols-2 items-center rounded-md border p-0.5 shadow-[0_1px_0_rgba(0,0,0,0.03)_inset]', redevenSurfaceRoleClass('segmented'), props.class)}
+      class={cn('browser-mode-switch inline-grid w-full grid-cols-2 items-center rounded-md border p-0.5 shadow-[inset_0_1px_0_color-mix(in_srgb,var(--foreground)_3%,transparent)]', redevenSurfaceRoleClass('segmented'), props.class)}
     >
       <span class="browser-mode-switch__thumb" aria-hidden="true" />
       <button

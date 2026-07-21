@@ -78,7 +78,7 @@ export const FlowerChatContextPreview: Component<FlowerChatContextPreviewProps> 
           if (!next) props.onClose();
         }}
         title={preview()!.title}
-        class={cn('flower-chat-context-preview-window', 'shadow-[0_28px_72px_-42px_rgba(15,23,42,0.38)]')}
+        class={cn('flower-chat-context-preview-window', 'shadow-[0_28px_72px_-42px_var(--redeven-shadow-color)]')}
         defaultSize={sizing().defaultSize}
         minSize={sizing().minSize}
         resizable
