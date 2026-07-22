@@ -1,23 +1,21 @@
 ---
 type: Architecture Contract
 title: Plugin platform integration
-description: Redeven mounts ReDevPlugin v0.5.1 as a host library and adds only session, release, runtime, placement, and business adapters.
+description: Redeven mounts ReDevPlugin v0.6.5 as a host library and adds only session, release, runtime-build, placement, and business adapters.
 tags: [architecture, plugins, local-ui, redevplugin]
 timestamp: 2026-07-19T00:00:00Z
 ---
 # Summary
 
-Redeven integrates ReDevPlugin `v0.5.1` through one Go
+Redeven integrates ReDevPlugin `v0.6.5` through one Go
 Host, one canonical HTTP namespace, one Env App `PluginPlatformClient`, one
-shared surface scope, and the released Rust ProcessManager. Redeven retains
+shared surface scope, and the released Rust ProcessManager over a verified
+Redeven-built Linux runtime. Redeven retains
 product policy and business adapters; ReDevPlugin retains platform state and
 protocol ownership. Unproven session, release, capability, runtime, or surface
-identity denies the operation. The integration is staged but not
-releasable: v0.5.1's browser catalog GET cannot satisfy its required Origin
-contract, session-scope revoke does not terminate every execution and handle,
-Workbench lacks an iframe interaction ownership contract, and its ad-hoc-signed
-Darwin runtime cannot retain the pinned artifact hash through the required
-Redeven Developer ID signing and notarization chain.
+identity denies the operation. Activity placement and Linux worker execution
+are releasable. Darwin omits worker execution, and Workbench placement remains
+disabled until a host-neutral iframe interaction-ownership contract exists.
 
 # Contract
 
@@ -55,6 +53,12 @@ resources bind the owner environment; user resources bind environment plus
 user. Short-lived surfaces, operations, streams, handles, confirmations, and
 tokens bind the full active audience. Redeven does not use short-lived audience
 hashes as registry or plugin-data keys.
+
+Session close uses the released durable four-hash coordinator. Redeven persists
+the opaque close identity and proof before teardown, commits authenticated
+session removal only after the platform acknowledges the complete drain, and
+reconciles retained fences on restart. It never guesses an owner or maintains a
+parallel task registry.
 
 ## Official release and capability
 
@@ -98,9 +102,12 @@ the new suite at the activation root and restart executes the newly committed
 activation path, so upgrades neither nest suites nor restart the old generation.
 This lets the installer switch an immutable Redeven/runtime pair atomically
 without mixing generations. The runtime module binds the current closed target,
-ReDevPlugin `0.5.1`, Rust IPC v4, the current WASM ABI, the exact target hash,
-persistent lease replay storage, and the released default limits. Missing,
-non-canonical, wrong-target, or wrong-hash runtimes fail startup.
+ReDevPlugin `0.6.5`, the released Rust IPC and WASM ABI, the exact product-build
+descriptor, persistent lease replay storage, and the released default limits.
+The Linux binary is built with Rust 1.88.0 from the attested package set and
+travels with SBOM, provenance, notices, and signature evidence. Missing,
+non-canonical, wrong-target, unsigned, or wrong-hash runtimes fail startup.
+Darwin constructs no runtime module and must contain none of those files.
 
 Runtime storage, connectivity, asset, handle-grant, quota, heartbeat, and
 diagnostic paths remain ReDevPlugin services. Redeven does not launch an
@@ -110,7 +117,7 @@ alternate process, add hostcalls, or inspect IPC frames.
 
 Env App owns one authenticated same-origin fetch adapter, one
 `PluginPlatformClient`, one shared `PluginSurfaceScope`, and one serial
-placement coordinator. Catalog and lifecycle calls use generated v0.5.1 DTOs.
+placement coordinator. Catalog and lifecycle calls use generated v0.6.5 DTOs.
 Every mutation carries the current management revision; outcome-unknown errors
 tear down affected surfaces and refresh inventory without automatic retry. The
 Plugin Center mutation lane remains occupied until that local invalidation has
@@ -123,22 +130,21 @@ or surface instance is never moved or reused. A Shell-owned abort-aware FIFO
 queue serializes confirmation intents and rejects queued work when its surface
 or scope is retired.
 
-Four upstream gaps block release. Activity catalog uses GET, which carries no
-Origin in a same-origin browser, while v0.5.1 validates Origin on every route.
-Workbench lacks a host-neutral cross-iframe interaction callback. Session-scope
-revoke removes surfaces but does not fence operations, streams, confirmations,
-or surface-less handles. The Darwin runtime is linker/ad-hoc signed; Electron's
-Developer ID signing must change those bytes, but the runtime manager and
-formal marker correctly require the original release hash. Formal upstream
-contracts and signed artifacts must fix all four;
-Redeven may not add an alternate route/bridge, forge Origin, relax the guard,
-or compensate with a local task registry. Session deletion must await complete
-four-hash teardown.
+Browser-facing reads use released POST query routes, so exact Origin, CSRF,
+closed route action, and query-effect authorization remain enforceable in a
+same-origin browser. Session deletion awaits the complete released four-hash
+teardown. Redeven does not add an alternate route or bridge, forge Origin,
+relax the guard, or compensate with a local task registry.
+
+Workbench still lacks a host-neutral cross-iframe interaction callback. Redeven
+must not claim that placement, add an overlay, or toggle iframe pointer events.
+Activity remains the supported official placement until the upstream contract
+is released and conformance-tested.
 
 # Boundaries
 
 The canonical ownership rules are in [ReDevPlugin host integration boundary](redevplugin-boundary.md).
-This concept owns only the concrete Redeven v0.5.1 integration shape.
+This concept owns only the concrete Redeven v0.6.5 integration shape.
 
 Manifest surfaces remain `view|command|background` with semantic intent. No
 Activity, Workbench, widget, settings, navigation, or product-layout fields are

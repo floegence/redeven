@@ -22,7 +22,7 @@ function createClientHarness() {
   };
 }
 
-describe('v0.5.1 plugin lifecycle client integration', () => {
+describe('v0.6.5 plugin lifecycle client integration', () => {
   it('loads inventory exclusively through the platform catalog client', async () => {
     const { lifecycle, mocks } = createClientHarness();
 

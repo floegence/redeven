@@ -21,7 +21,6 @@ import (
 	"github.com/floegence/redevplugin/pkg/observability"
 	"github.com/floegence/redevplugin/pkg/registry"
 	"github.com/floegence/redevplugin/pkg/sessionctx"
-	"github.com/floegence/redevplugin/pkg/trust"
 	"github.com/floegence/redevplugin/pkg/websecurity"
 )
 
@@ -78,8 +77,8 @@ func TestSessionAdapterDerivesIdentityAndPermissionsFromAuthenticatedSession(t *
 		},
 		{
 			Session: sessionContext,
-			Action:  host.ManagementActionRevokeSurfaceScope,
-			Target:  host.AuthorizationTarget{Kind: host.ResourceSurface, Collection: true},
+			Action:  host.ManagementActionRevokeSessionScope,
+			Target:  host.AuthorizationTarget{Kind: host.ResourceSessionScope, Collection: true},
 		},
 	} {
 		if err := adapter.Authorize(context.Background(), request); err != nil {
@@ -372,11 +371,12 @@ func TestPackageTrustVerifierUsesV5Provenance(t *testing.T) {
 		t.Fatalf("unclassified trust = %s, want %s", unclassified.TrustState, registry.TrustUntrusted)
 	}
 
-	_, err = verifier.VerifyPackageTrust(context.Background(), host.PackageTrustVerificationRequest{
-		SourcePolicySnapshot: &host.SourcePolicySnapshot{RequireSignature: true},
-	})
-	if !errors.Is(err, trust.ErrSignatureRequired) {
-		t.Fatalf("signed release trust error = %v, want ErrSignatureRequired", err)
+	incompleteRelease, err := verifier.VerifyPackageTrust(context.Background(), host.PackageTrustVerificationRequest{Action: host.PackageTrustActionInstall})
+	if err != nil {
+		t.Fatalf("incomplete release trust error = %v", err)
+	}
+	if incompleteRelease.TrustState != registry.TrustUntrusted {
+		t.Fatalf("incomplete release trust = %s, want %s", incompleteRelease.TrustState, registry.TrustUntrusted)
 	}
 }
 
@@ -399,7 +399,9 @@ func TestNewCreatesDurableReDevPluginState(t *testing.T) {
 		"apps/redevplugin/db/registry.sqlite",
 		"apps/redevplugin/db/operations.sqlite",
 		"apps/redevplugin/db/observability.sqlite",
-		"apps/redevplugin/db/runtime_lease_replays.sqlite",
+		"apps/redevplugin/db/session_scopes.sqlite",
+		"apps/redevplugin/trust/release-trust.sqlite",
+		"apps/redevplugin/trust/trusted-time/ed25519-private.key",
 		"apps/redevplugin/assets",
 		"apps/redevplugin/storage",
 	} {

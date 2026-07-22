@@ -34,6 +34,10 @@ RUNTIME_BASENAMES = (
     "redevplugin-runtime",
     ".redevplugin-release-artifacts-verified.json",
     "REDEVPLUGIN_THIRD_PARTY_NOTICES.md",
+    "REDEVPLUGIN_RUNTIME.spdx.json",
+    "redevplugin-runtime.provenance.json",
+    "redevplugin-runtime.sig",
+    "redevplugin-runtime.pem",
 )
 RUNTIME_ROOT = "opt/Redeven Desktop/resources/bin"
 ELECTRON_SANDBOX_PATH = "opt/Redeven Desktop/chrome-sandbox"

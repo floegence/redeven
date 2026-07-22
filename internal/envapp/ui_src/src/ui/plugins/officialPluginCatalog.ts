@@ -12,7 +12,7 @@ export const OFFICIAL_PLUGIN_CATALOG_SEED: readonly OfficialPluginCatalogItem[] 
     latestVersion: '2.0.0',
     stableVersion: '2.0.0',
     minRedevenVersion: '0.9.0',
-    minReDevPluginVersion: '0.5.1',
+    minReDevPluginVersion: '0.6.5',
     rolloutState: 'stable',
     defaultSurfaceID: 'containers.dashboard',
     iconFallback: 'containers',

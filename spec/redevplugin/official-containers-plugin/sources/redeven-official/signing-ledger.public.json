@@ -1,0 +1,7 @@
+{
+  "schema_version": "redevplugin.ed25519_signing_key.v1",
+  "algorithm": "ed25519",
+  "key_id": "redeven-official-ledger-2026",
+  "public_key": "/G0dwbL1ypk3pfdCq3B00Z2Ce7jdFJMSizh4It8M2sw=",
+  "created_at": "2026-07-22T12:22:42Z"
+}

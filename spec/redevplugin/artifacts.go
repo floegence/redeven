@@ -11,29 +11,38 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"io/fs"
 	"path"
 	"strings"
 
 	"github.com/floegence/redevplugin/pkg/capabilitycontract"
 	"github.com/floegence/redevplugin/pkg/host"
 	"github.com/floegence/redevplugin/pkg/pluginpkg"
+	"github.com/floegence/redevplugin/pkg/releasecontract"
 )
 
 const (
 	containersCapabilityRoot = "official-containers-capability"
 	containersPluginRoot     = "official-containers-plugin"
 
-	officialSourceID            = "redeven-official"
-	officialPublisherID         = "com.redeven.official"
-	officialContainersPluginID  = "com.redeven.official.containers"
-	officialContainersVersion   = "2.0.0"
-	officialSigningKeyID        = "redeven-official-v1"
-	officialReleaseMetadataRef  = "plugins/com.redeven.official/com.redeven.official.containers/2.0.0/release.json"
-	officialPackageArtifactRef  = "plugins/com.redeven.official/com.redeven.official.containers/2.0.0/plugin.redevplugin"
-	officialReleaseSignatureRef = "plugins/com.redeven.official/com.redeven.official.containers/2.0.0/release.json.sig"
-	officialPackageSignatureRef = "plugins/com.redeven.official/com.redeven.official.containers/2.0.0/plugin.sigbundle"
-	officialRevocationsRef      = "sources/redeven-official/revocations.json"
-	officialRevocationsSigRef   = "sources/redeven-official/revocations.json.sig"
+	officialSourceID             = "redeven-official"
+	officialPublisherID          = "com.redeven.official"
+	officialContainersPluginID   = "com.redeven.official.containers"
+	officialContainersVersion    = "2.0.0"
+	officialChannel              = "stable"
+	officialSigningKeyID         = "redeven-official-signing-2026"
+	officialReleaseMetadataRef   = "plugins/com.redeven.official/com.redeven.official.containers/2.0.0/release.json"
+	officialPackageArtifactRef   = "plugins/com.redeven.official/com.redeven.official.containers/2.0.0/plugin.redevplugin"
+	officialReleaseSignatureRef  = "plugins/com.redeven.official/com.redeven.official.containers/2.0.0/release.json.sig"
+	officialPackageSignatureRef  = "plugins/com.redeven.official/com.redeven.official.containers/2.0.0/plugin.sigbundle"
+	officialRootRef              = "sources/redeven-official/root/current.json"
+	officialPolicyPointerRef     = "sources/redeven-official/stable/policy/current.json"
+	officialPolicyRef            = "sources/redeven-official/stable/policy/1.json"
+	officialRevocationPointerRef = "sources/redeven-official/stable/revocation/current.json"
+	officialRevocationRef        = "sources/redeven-official/stable/revocation/1.json"
+	officialRootPublicKeyRef     = "sources/redeven-official/root.public.json"
+	officialLedgerPublicKeyRef   = "sources/redeven-official/signing-ledger.public.json"
+	officialLedgerRoot           = "sources/redeven-official/signing-ledger"
 )
 
 // artifactFS contains only public, signed ReDevPlugin artifacts. Private
@@ -50,20 +59,9 @@ type signingPublicKey struct {
 	CreatedAt     string `json:"created_at"`
 }
 
-type signedReleaseMetadata struct {
-	SchemaVersion            string                        `json:"schema_version"`
-	SourceID                 string                        `json:"source_id"`
-	ReleaseMetadataRef       string                        `json:"release_metadata_ref"`
-	PublisherID              string                        `json:"publisher_id"`
-	PluginID                 string                        `json:"plugin_id"`
-	Version                  string                        `json:"version"`
-	DistributionRef          host.PackageDistributionRef   `json:"distribution_ref"`
-	Hashes                   host.PackageHashSet           `json:"hashes"`
-	ReleaseMetadataSignature host.ReleaseMetadataSignature `json:"release_metadata_signature"`
-	PackageSignature         host.PackageReleaseSignature  `json:"package_signature"`
-	Compatibility            host.ReleaseCompatibility     `json:"compatibility"`
-	HostRequirements         []host.HostRequirement        `json:"host_requirements"`
-	ReleaseEvidence          host.ReleaseEvidence          `json:"release_evidence"`
+type ReleaseTrustPublicKey struct {
+	KeyID     string
+	PublicKey ed25519.PublicKey
 }
 
 // ContainersPluginRelease is the immutable, closed official release set that
@@ -75,9 +73,12 @@ type ContainersPluginRelease struct {
 	PackageArtifactSHA256    string
 	ReleaseMetadataBytes     []byte
 	ReleaseMetadataSignature []byte
-	RevocationMetadata       host.SourceRevocationMetadata
+	RevocationMetadata       releasecontract.RevocationV2
 	RevocationMetadataBytes  []byte
-	RevocationSignature      []byte
+	ReleaseTrustDocuments    map[string][]byte
+	SigningLedgerArtifacts   map[string][]byte
+	RootTrustAnchor          ReleaseTrustPublicKey
+	SigningLedgerAnchor      ReleaseTrustPublicKey
 }
 
 func ContainersCapabilityBundle() (capabilitycontract.Bundle, capabilitycontract.TrustedKey, error) {
@@ -105,14 +106,14 @@ func ContainersCapabilityBundle() (capabilitycontract.Bundle, capabilitycontract
 		files[ref] = content
 	}
 
-	publicBytes, err := officialPublicKey(pin.SignatureKeyID)
+	public, err := readSigningPublicKey("redeven-official-v1.public.json", pin.SignatureKeyID)
 	if err != nil {
 		return capabilitycontract.Bundle{}, capabilitycontract.TrustedKey{}, err
 	}
 	return capabilitycontract.Bundle{Pin: pin, Files: files}, capabilitycontract.TrustedKey{
 		PublisherID:     pin.PublisherID,
 		KeyID:           pin.SignatureKeyID,
-		PublicKey:       publicBytes,
+		PublicKey:       public.PublicKey,
 		PolicyEpoch:     pin.SignaturePolicyEpoch,
 		RevocationEpoch: pin.SignatureRevocationEpoch,
 	}, nil
@@ -123,7 +124,7 @@ func OfficialContainersPluginRelease() (ContainersPluginRelease, error) {
 	if err := readStrictJSON(containersPluginRoot+"/release-ref.json", &ref); err != nil {
 		return ContainersPluginRelease{}, err
 	}
-	if ref.SourceID != officialSourceID || ref.PublisherID != officialPublisherID ||
+	if ref.SourceID != officialSourceID || ref.Channel != officialChannel || ref.PublisherID != officialPublisherID ||
 		ref.PluginID != officialContainersPluginID || ref.Version != officialContainersVersion ||
 		ref.ReleaseMetadataRef != officialReleaseMetadataRef {
 		return ContainersPluginRelease{}, errors.New("official Containers release ref identity is invalid")
@@ -145,17 +146,8 @@ func OfficialContainersPluginRelease() (ContainersPluginRelease, error) {
 	if err != nil {
 		return ContainersPluginRelease{}, err
 	}
-	revocationBytes, err := readPluginReleaseFile(officialRevocationsRef)
+	release, err := releasecontract.DecodeReleaseMetadata(releaseBytes)
 	if err != nil {
-		return ContainersPluginRelease{}, err
-	}
-	revocationSignature, err := readPluginReleaseFile(officialRevocationsSigRef)
-	if err != nil {
-		return ContainersPluginRelease{}, err
-	}
-
-	var release signedReleaseMetadata
-	if err := decodeStrictJSON(releaseBytes, &release); err != nil {
 		return ContainersPluginRelease{}, err
 	}
 	if err := validateOfficialReleaseMetadata(ref, release); err != nil {
@@ -180,24 +172,50 @@ func OfficialContainersPluginRelease() (ContainersPluginRelease, error) {
 		return ContainersPluginRelease{}, errors.New("official Containers package signature bundle is invalid")
 	}
 
-	var revocations host.SourceRevocationMetadata
-	if err := decodeStrictJSON(revocationBytes, &revocations); err != nil {
-		return ContainersPluginRelease{}, err
-	}
-	if revocations.SchemaVersion != "redevplugin.source_revocations.v1" || revocations.SourceID != officialSourceID ||
-		revocations.HighestSeenEpoch != "1" || revocations.ExpiresAt == "" {
-		return ContainersPluginRelease{}, errors.New("official source revocation metadata is invalid")
-	}
-
-	publicKey, err := officialPublicKey(officialSigningKeyID)
+	documents, err := readReleaseTrustDocuments()
 	if err != nil {
 		return ContainersPluginRelease{}, err
 	}
-	if len(releaseSignature) != ed25519.SignatureSize || !ed25519.Verify(publicKey, releaseBytes, releaseSignature) {
+	revocationBytes := documents[officialRevocationRef]
+	revocations, err := releasecontract.DecodeRevocation(revocationBytes)
+	if err != nil {
+		return ContainersPluginRelease{}, err
+	}
+	if revocations.SchemaVersion != releasecontract.RevocationSchemaVersion || revocations.SourceID != officialSourceID ||
+		revocations.Epoch != "1" || revocations.ExpiresAt == "" {
+		return ContainersPluginRelease{}, errors.New("official source revocation metadata is invalid")
+	}
+
+	public, err := readSigningPublicKey("redeven-official-v1.public.json", officialSigningKeyID)
+	if err != nil {
+		return ContainersPluginRelease{}, err
+	}
+	verifier := releasecontract.Ed25519PublicKeyVerifier{public.KeyID: public.PublicKey}
+	if len(releaseSignature) != ed25519.SignatureSize || releasecontract.VerifyReleaseMetadata(ref.Channel, release, releaseSignature, verifier) != nil {
 		return ContainersPluginRelease{}, errors.New("official Containers release metadata signature is invalid")
 	}
-	if len(revocationSignature) != ed25519.SignatureSize || !ed25519.Verify(publicKey, revocationBytes, revocationSignature) {
-		return ContainersPluginRelease{}, errors.New("official source revocation signature is invalid")
+	if pkg.PackageSignature == nil || pkg.PackageSignature.KeyID != officialSigningKeyID || pkg.PackageSignature.Signature == "" {
+		return ContainersPluginRelease{}, errors.New("official Containers package signature identity is invalid")
+	}
+
+	root, err := releasecontract.DecodeRootDelegation(documents[officialRootRef])
+	if err != nil {
+		return ContainersPluginRelease{}, err
+	}
+	rootAnchor, err := readSigningPublicKey(path.Join(containersPluginRoot, officialRootPublicKeyRef), root.KeyID)
+	if err != nil || releasecontract.VerifyRootDelegation(root, releasecontract.Ed25519PublicKeyVerifier{rootAnchor.KeyID: rootAnchor.PublicKey}) != nil {
+		return ContainersPluginRelease{}, errors.New("official release root delegation is invalid")
+	}
+	ledgerArtifacts, err := readSigningLedgerArtifacts()
+	if err != nil {
+		return ContainersPluginRelease{}, err
+	}
+	ledgerAnchor, err := readSigningPublicKey(path.Join(containersPluginRoot, officialLedgerPublicKeyRef), "")
+	if err != nil {
+		return ContainersPluginRelease{}, err
+	}
+	if err := verifySigningLedgerCheckpoint(ledgerArtifacts, ledgerAnchor); err != nil {
+		return ContainersPluginRelease{}, err
 	}
 
 	artifactSum := sha256.Sum256(packageBytes)
@@ -209,17 +227,20 @@ func OfficialContainersPluginRelease() (ContainersPluginRelease, error) {
 		ReleaseMetadataSignature: releaseSignature,
 		RevocationMetadata:       revocations,
 		RevocationMetadataBytes:  revocationBytes,
-		RevocationSignature:      revocationSignature,
+		ReleaseTrustDocuments:    documents,
+		SigningLedgerArtifacts:   ledgerArtifacts,
+		RootTrustAnchor:          rootAnchor,
+		SigningLedgerAnchor:      ledgerAnchor,
 	}, nil
 }
 
-func validateOfficialReleaseMetadata(ref host.PluginReleaseRef, release signedReleaseMetadata) error {
-	if release.SchemaVersion != "redevplugin.release_metadata.v5" || release.SourceID != ref.SourceID ||
+func validateOfficialReleaseMetadata(ref host.PluginReleaseRef, release releasecontract.ReleaseMetadataV5) error {
+	if release.SchemaVersion != releasecontract.ReleaseMetadataSchemaVersion || release.SourceID != ref.SourceID ||
 		release.ReleaseMetadataRef != ref.ReleaseMetadataRef || release.PublisherID != ref.PublisherID ||
 		release.PluginID != ref.PluginID || release.Version != ref.Version {
 		return errors.New("official Containers release metadata identity is invalid")
 	}
-	if release.DistributionRef.Distribution != host.PackageDistributionHostArtifactRef ||
+	if release.DistributionRef.Distribution != string(host.PackageDistributionHostArtifactRef) ||
 		release.DistributionRef.ArtifactRef != officialPackageArtifactRef ||
 		!equalHash(release.Hashes.PackageSHA256, ref.ExpectedHashes.PackageSHA256) ||
 		!equalHash(release.Hashes.ManifestSHA256, ref.ExpectedHashes.ManifestSHA256) ||
@@ -236,7 +257,7 @@ func validateOfficialReleaseMetadata(ref host.PluginReleaseRef, release signedRe
 		release.PackageSignature.SourcePolicyEpoch != "1" || release.PackageSignature.RevocationEpoch != "1" {
 		return errors.New("official Containers package signature metadata is invalid")
 	}
-	if release.Compatibility.MinReDevPluginVersion != "0.5.1" || release.Compatibility.MinRuntimeVersion != "0.5.1" ||
+	if release.Compatibility.MinReDevPluginVersion != "0.6.5" || release.Compatibility.MinRuntimeVersion != "0.6.5" ||
 		release.Compatibility.UIProtocolVersion != "plugin-ui-v5" || len(release.HostRequirements) != 1 ||
 		release.HostRequirements[0].HostID != "redeven" || len(release.HostRequirements[0].RequiredCapabilityContracts) != 1 {
 		return errors.New("official Containers release compatibility or host requirement is invalid")
@@ -246,7 +267,8 @@ func validateOfficialReleaseMetadata(ref host.PluginReleaseRef, release signedRe
 		return err
 	}
 	required := release.HostRequirements[0].RequiredCapabilityContracts[0]
-	if required.CapabilityID != "redeven.capability.container_resources" || required.CapabilityVersion != "1.0.0" || required.Contract != bundle.Pin {
+	if required.CapabilityID != "redeven.capability.container_resources" || required.CapabilityVersion != "1.0.0" ||
+		!capabilityPinMatches(required.Contract, bundle.Pin) {
 		return errors.New("official Containers release capability requirement is invalid")
 	}
 	return nil
@@ -256,19 +278,82 @@ func readPluginReleaseFile(ref string) ([]byte, error) {
 	return artifactFS.ReadFile(path.Join(containersPluginRoot, ref))
 }
 
-func officialPublicKey(expectedKeyID string) (ed25519.PublicKey, error) {
+func readSigningPublicKey(name, expectedKeyID string) (ReleaseTrustPublicKey, error) {
 	var public signingPublicKey
-	if err := readStrictJSON("redeven-official-v1.public.json", &public); err != nil {
-		return nil, err
+	if err := readStrictJSON(name, &public); err != nil {
+		return ReleaseTrustPublicKey{}, err
 	}
-	if public.SchemaVersion != "redevplugin.ed25519_signing_key.v1" || public.Algorithm != "ed25519" || public.KeyID != expectedKeyID {
-		return nil, errors.New("official signing key identity is invalid")
+	if public.SchemaVersion != "redevplugin.ed25519_signing_key.v1" || public.Algorithm != "ed25519" ||
+		(expectedKeyID != "" && public.KeyID != expectedKeyID) {
+		return ReleaseTrustPublicKey{}, errors.New("official signing key identity is invalid")
 	}
 	publicBytes, err := base64.StdEncoding.DecodeString(public.PublicKey)
 	if err != nil || len(publicBytes) != ed25519.PublicKeySize {
-		return nil, errors.New("official signing public key is invalid")
+		return ReleaseTrustPublicKey{}, errors.New("official signing public key is invalid")
 	}
-	return ed25519.PublicKey(publicBytes), nil
+	return ReleaseTrustPublicKey{KeyID: public.KeyID, PublicKey: ed25519.PublicKey(publicBytes)}, nil
+}
+
+func readReleaseTrustDocuments() (map[string][]byte, error) {
+	refs := []string{officialRootRef, officialPolicyPointerRef, officialPolicyRef, officialRevocationPointerRef, officialRevocationRef}
+	documents := make(map[string][]byte, len(refs))
+	for _, ref := range refs {
+		value, err := readPluginReleaseFile(ref)
+		if err != nil {
+			return nil, err
+		}
+		documents[ref] = value
+	}
+	return documents, nil
+}
+
+func readSigningLedgerArtifacts() (map[string][]byte, error) {
+	root := path.Join(containersPluginRoot, officialLedgerRoot)
+	artifacts := map[string][]byte{}
+	err := fs.WalkDir(artifactFS, root, func(name string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil || entry.IsDir() {
+			return walkErr
+		}
+		value, err := artifactFS.ReadFile(name)
+		if err != nil {
+			return err
+		}
+		artifacts[strings.TrimPrefix(name, containersPluginRoot+"/")] = value
+		return nil
+	})
+	if err != nil || len(artifacts) == 0 {
+		return nil, errors.New("official signing ledger artifact set is empty or unreadable")
+	}
+	return artifacts, nil
+}
+
+func verifySigningLedgerCheckpoint(artifacts map[string][]byte, anchor ReleaseTrustPublicKey) error {
+	prefix := officialLedgerRoot + "/checkpoints/"
+	var checkpointBytes []byte
+	for ref, value := range artifacts {
+		if strings.HasPrefix(ref, prefix) && strings.HasSuffix(ref, ".json") {
+			if checkpointBytes != nil {
+				return errors.New("official signing ledger contains multiple checkpoints")
+			}
+			checkpointBytes = value
+		}
+	}
+	checkpoint, err := releasecontract.DecodeSigningLedgerCheckpoint(checkpointBytes)
+	if err != nil || checkpoint.KeyID != anchor.KeyID ||
+		releasecontract.VerifySigningLedgerCheckpoint(checkpoint, releasecontract.Ed25519PublicKeyVerifier{anchor.KeyID: anchor.PublicKey}) != nil {
+		return errors.New("official signing ledger checkpoint is invalid")
+	}
+	return nil
+}
+
+func capabilityPinMatches(ref releasecontract.HostCapabilityContractRef, pin capabilitycontract.Pin) bool {
+	return ref.PublisherID == pin.PublisherID && ref.ContractID == pin.ContractID && ref.ContractVersion == pin.ContractVersion &&
+		ref.ArtifactRef == pin.ArtifactRef && ref.ArtifactSHA256 == pin.ArtifactSHA256 && ref.ManifestRef == pin.ManifestRef &&
+		ref.ManifestSHA256 == pin.ManifestSHA256 && ref.SignatureRef == pin.SignatureRef && ref.SignatureSHA256 == pin.SignatureSHA256 &&
+		ref.SignatureKeyID == pin.SignatureKeyID && ref.SignaturePolicyEpoch == pin.SignaturePolicyEpoch &&
+		ref.SignatureRevocationEpoch == pin.SignatureRevocationEpoch && ref.CompatibilityRef == pin.CompatibilityRef &&
+		ref.CompatibilitySHA256 == pin.CompatibilitySHA256 && ref.GeneratedClientRef == pin.GeneratedClientRef &&
+		ref.GeneratedClientSHA256 == pin.GeneratedClientSHA256 && ref.NoticesRef == pin.NoticesRef && ref.NoticesSHA256 == pin.NoticesSHA256
 }
 
 func matchesSHA256(content []byte, expected string) bool {

@@ -14,8 +14,8 @@ import (
 const (
 	officialPublisherID            = "com.redeven.official"
 	officialContainersPluginID     = "com.redeven.official.containers"
-	officialSigningKeyID           = "redeven-official-v1"
-	officialSigningPublicKeyBase64 = "gJwszyaXEoNuddOuVEbxFdL0EHdJ2CPElKBXJsk9KCY="
+	officialSigningKeyID           = "redeven-official-signing-2026"
+	officialSigningPublicKeyBase64 = "fop/x8cYBXzGfLjddDHkxXtB5J/ae1Z7BFauznrGufA="
 )
 
 // strictPackageTrustVerifier delegates the complete local-import and release
@@ -27,14 +27,6 @@ type strictPackageTrustVerifier struct {
 
 func (v strictPackageTrustVerifier) VerifyPackageTrust(ctx context.Context, req host.PackageTrustVerificationRequest) (host.PackageTrustVerificationResult, error) {
 	return v.verifier.VerifyPackageTrust(ctx, req)
-}
-
-func (v strictPackageTrustVerifier) VerifyReleaseMetadata(ctx context.Context, req host.ReleaseMetadataVerificationRequest) (host.ReleaseMetadataVerificationResult, error) {
-	return v.verifier.VerifyReleaseMetadata(ctx, req)
-}
-
-func (v strictPackageTrustVerifier) VerifySourceRevocationEvidence(ctx context.Context, req host.SourceRevocationEvidenceVerificationRequest) (host.SourceRevocationEvidenceVerificationResult, error) {
-	return v.verifier.VerifySourceRevocationEvidence(ctx, req)
 }
 
 type officialSigningKeyring struct {

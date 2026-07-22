@@ -43,11 +43,11 @@ func (a *sessionAdapter) ValidateCSRF(r *http.Request, session sessionctx.Contex
 	return a.webSecurity.ValidateCSRF(r, session, policy)
 }
 
-func (a *sessionAdapter) AuthorizeRoute(r *http.Request, session sessionctx.Context, action websecurity.RouteAction) error {
+func (a *sessionAdapter) AuthorizeRoute(r *http.Request, session sessionctx.Context, action websecurity.RouteAction, effect websecurity.RouteEffect) error {
 	if a == nil {
 		return host.ErrActionDenied
 	}
-	return a.webSecurity.AuthorizeRoute(r, session, action)
+	return a.webSecurity.AuthorizeRoute(r, session, action, effect)
 }
 
 func (g webSecurityGuard) Authenticate(r *http.Request) (sessionctx.Context, error) {
@@ -93,8 +93,8 @@ func (g webSecurityGuard) ValidateCSRF(r *http.Request, session sessionctx.Conte
 	return nil
 }
 
-func (g webSecurityGuard) AuthorizeRoute(_ *http.Request, session sessionctx.Context, action websecurity.RouteAction) error {
-	if !action.Valid() || !session.Valid() {
+func (g webSecurityGuard) AuthorizeRoute(_ *http.Request, session sessionctx.Context, action websecurity.RouteAction, effect websecurity.RouteEffect) error {
+	if !action.Valid() || !effect.Valid() || !session.Valid() {
 		return host.ErrActionDenied
 	}
 	resolved, ok := g.sessions.Get(session)

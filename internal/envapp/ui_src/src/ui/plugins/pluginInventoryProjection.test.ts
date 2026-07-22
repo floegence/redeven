@@ -33,7 +33,7 @@ function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPlugi
       },
       verified_signature: {
         algorithm: 'ed25519',
-        key_id: 'redeven-official-v1',
+        key_id: 'redeven-official-signing-2026',
       },
     },
     enable_state: 'enabled',
@@ -51,7 +51,7 @@ function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPlugi
         display_name: officialContainers.displayName,
         version: officialContainers.stableVersion,
         api_version: 'plugin-v1',
-        min_runtime_version: '0.5.1',
+        min_runtime_version: '0.6.5',
         ui_protocol_version: 'plugin-ui-v5',
       },
       surfaces: [
@@ -72,7 +72,7 @@ function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPlugi
   };
 }
 
-describe('v0.5.1 plugin inventory projection', () => {
+describe('v0.6.5 plugin inventory projection', () => {
   it('keeps Plugin Center as the first panel tile', () => {
     const projection = projectPluginInventory({
       officialCatalog: [officialContainers],

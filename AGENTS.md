@@ -300,15 +300,17 @@ Rules:
 - Never reference local sibling checkouts through package manifests, lockfiles, build aliases, source imports, or Go workspace wiring.
 - Forbidden local wiring includes `file:`, `link:`, `workspace:`, `portal:`, relative paths, absolute paths, and equivalent local indirection.
 - For ReDevPlugin specifically, a usable dependency update means the matching
-  Go module, npm packages, signed Rust runtime artifact, generated contracts,
-  compatibility manifest, and contract hashes have all been released together.
+  Go module, npm packages, Rust source crates, package publication evidence,
+  generated contracts, compatibility manifest, and contract hashes have all
+  been released together. Redeven builds and signs the product runtime binary
+  from those exact source crates with its fixed toolchain.
   A local `../redevplugin` worktree, branch, copied schema, or draft package is
   not a valid Redeven integration source.
-- The released `compatibility.json` contracts array and
-  `release-manifest.json` file set are the authoritative closed artifact
-  inventory. Upgrade verification must match their exact versions, hashes,
-  source commit, npm integrity, runtime targets, Worker SDK archive, checksums,
-  signatures, signing bundles, and notices. A partial hand-maintained contract
+- The released package-set contract and attested
+  `platform-package-publication-v1.json` are the authoritative closed package
+  inventory. Upgrade verification must match their exact Go sums, npm
+  integrity and provenance subjects, Rust registry checksums, source commit,
+  contract-set hash, and workflow identity. A partial hand-maintained package
   list is not sufficient release evidence.
 - Required flow for reusable upstream capability work:
   - implement upstream first in the source repository;
@@ -323,7 +325,7 @@ Rules:
 `redevplugin` is the reusable plugin platform. It is an independently released
 library/runtime repository, not a Redeven source directory, submodule, or
 implementation detail. It owns the shared plugin runtime implementation and
-publishes versioned Go, TypeScript, Rust runtime, and machine-contract artifacts
+publishes versioned Go, TypeScript, Rust source crate, and machine-contract artifacts
 for host products to consume.
 
 This section is Redeven's side of the cross-repository contract. Any change that
@@ -341,7 +343,8 @@ artifacts only:
 - Go module versions for the embeddable Host library and DTOs;
 - npm package versions for the plugin surface host, bridge SDK, generated client,
   and shared UI helpers;
-- signed `redevplugin-runtime` release artifacts for each supported platform;
+- Rust source crate versions and registry checksums for `redevplugin-runtime`
+  and its exact support-crate set;
 - released OpenAPI, manifest, token/ticket, Rust IPC, WASM ABI, and classifier
   contract hashes.
 
@@ -358,8 +361,11 @@ The intended dependency shape is library consumption, not source sharing:
   registry/lifecycle APIs, DTOs, adapter interfaces, and mountable HTTP handlers.
 - Redeven imports released ReDevPlugin npm packages for plugin surface hosting,
   bridge SDKs, generated clients, and host-neutral UI helpers.
-- Redeven bundles a released, signed `redevplugin-runtime` binary selected by
-  release metadata for the current platform and channel.
+- Redeven builds `redevplugin-runtime` from the exact released Rust source crate
+  set with Rust 1.88.0, then owns the binary, SBOM, provenance, signature,
+  platform support, and product packaging. Runtime execution support is limited
+  to `linux/amd64` and `linux/arm64`; Darwin product packages must omit the
+  ReDevPlugin runtime and must not claim worker execution support.
 - Redeven references released ReDevPlugin schemas, generated contracts, and
   compatibility hashes. It must not edit, fork, or hand-copy those contracts.
 - Redeven contributes product policy and concrete adapters around those
@@ -425,9 +431,10 @@ code:
   register adapters, but registry state, lifecycle handlers, permission and
   confirmation enforcement, broker contracts, operation/stream envelopes,
   token/ticket issuance, and stable platform errors stay in ReDevPlugin.
-- Backend execution code comes from the released Rust `redevplugin-runtime` plus
-  the ReDevPlugin runtime manager/supervisor. Redeven may select and bundle the
-  signed artifact, but it must not create a separate runtime process model,
+- Backend execution code comes from the released Rust `redevplugin-runtime`
+  source crates plus the ReDevPlugin runtime manager/supervisor. Redeven may
+  build, verify, sign, and bundle the product binary, but it must not create a
+  separate runtime process model,
   alternate WASM executor, custom IPC protocol, or host-local hot path for plugin
   storage/network calls.
 - Redeven business code begins at adapter registration. Concrete capabilities
@@ -439,8 +446,8 @@ code:
 The intended Redeven code shape is a narrow integration layer:
 
 - one or more host packages that configure released ReDevPlugin libraries,
-  mount released HTTP handlers, select released runtime artifacts, and register
-  Redeven business adapters;
+  mount released HTTP handlers, admit the verified product-built runtime, and
+  register Redeven business adapters;
 - product UI that places ReDevPlugin surfaces into Env App, Activity Bar,
   Workbench, Settings, Desktop, or CLI flows without replacing the sandboxed
   ReDevPlugin surface lifecycle;
@@ -488,9 +495,11 @@ Redeven owns only product integration and business adapters:
   artifact resolution into `redevplugin` adapter interfaces;
 - integrating plugin surfaces into Env App, Activity Bar, Workbench, Settings,
   Desktop packaging, installer packaging, and runtime startup diagnostics;
-- selecting the released `redevplugin-runtime` artifact for the current Redeven
-  release and wiring the ReDevPlugin runtime manager into Redeven process
-  startup/shutdown without replacing its IPC, lease, quota, or revocation logic;
+- pinning the released ReDevPlugin package set, building the Linux runtime from
+  its exact Rust source crates with the fixed product toolchain, emitting SBOM,
+  provenance, and signatures, and wiring the ReDevPlugin runtime manager into
+  Redeven process startup/shutdown without replacing its IPC, lease, quota, or
+  revocation logic;
 - registering Redeven-owned business capabilities through
   `redevplugin.CapabilityAdapter` or the released equivalent interface;
 - wiring Flower/Floret tools to the `redevplugin` lifecycle APIs without
@@ -508,7 +517,7 @@ Before adding any Redeven plugin-related package, classify it in review:
 
 - Host adapter: allowed in Redeven. It maps Redeven sessions, local policy,
   filesystem roots, audit/diagnostic sinks, vault access, product UI placement,
-  runtime artifact selection, or a concrete business resource into a released
+  product runtime admission, or a concrete business resource into a released
   ReDevPlugin interface.
 - Product wrapper: allowed in Redeven. It exposes a Redeven CLI, Env App,
   Desktop, Activity Bar, Workbench, Settings, or Flower/Floret flow over released
@@ -536,7 +545,8 @@ that change belongs in Redeven over an already released ReDevPlugin contract.
 Redeven must treat ReDevPlugin as an upstream library/runtime dependency, not as
 a co-developed source folder. Integration work may happen in parallel worktrees,
 but committed Redeven code must only reference released ReDevPlugin module/npm
-versions, released runtime artifacts, and published contract hashes. Do not
+versions, released Rust source crates, package publication evidence, and
+published contract hashes. Do not
 land Redeven code that depends on a local ReDevPlugin checkout, an unreleased
 feature branch, or a copied contract draft.
 
@@ -547,7 +557,7 @@ Use this responsibility matrix as the default decision rule:
 | Package and trust | Package layout, canonical hashes, signing rules, manifest validation, trust state contracts, compatibility manifests | Which registries or local sources Redeven allows, local policy caps, review UX, and product audit presentation |
 | Lifecycle | Install, enable, open, disable, uninstall, update, downgrade, export/import, diagnostics, and data-retention APIs | Env App placement, Desktop commands, Activity Bar/Workbench/Settings entry points, and who may invoke the actions |
 | UI runtime | Sandboxed iframe bootstrap, asset ticket/session protocol, bridge SDK, opaque-origin-safe source/port-bound MessageChannel messaging, settings and intent contracts | Native shell chrome, Workbench layout, Settings placement, startup diagnostics, route mounting, and Redeven product copy |
-| Backend runtime | Rust `redevplugin-runtime`, runtime manager/supervisor, WASM actor/job model, IPC, leases, quotas, revocation, hostcall contracts, stream envelopes | Selecting and packaging the released runtime artifact, wiring lifecycle hooks into Redeven startup/shutdown, and surfacing diagnostics |
+| Backend runtime | Rust `redevplugin-runtime` source crates, runtime manager/supervisor, WASM actor/job model, IPC, leases, quotas, revocation, hostcall contracts, stream envelopes | Fixed package coordinates and toolchain, verified Linux source build, product binary/SBOM/provenance/signature, lifecycle wiring, and diagnostics presentation |
 | Storage, network, and secrets | Host-neutral broker contracts, request contexts, target classifiers, quotas, secret reference contracts, and stable errors | State-root selection, vault integration, environment/network policy, proxy settings, and user-facing grant UX |
 | Business capabilities | Generic capability adapter interface, permission hooks, operation/stream envelope, and audit DTOs | Docker/Podman, files, shells, cloud services, database access, local product APIs, and other Redeven domain adapters |
 | Plugin generation | Templates, validators, package builder, replay harness, generated SDK clients, and example fixtures | Flower prompt orchestration, user intent collection, environment selection, review/approval UX, and generated-plugin install flow |
@@ -572,8 +582,9 @@ Redeven's integration layer must keep the ReDevPlugin platform state opaque:
   diagnostics sink, and secret-vault adapter, but must not directly edit
   ReDevPlugin registry tables, package staging state, token/ticket rows, storage
   namespaces, runtime leases, or revoke epochs.
-- Redeven may configure and launch the released `redevplugin-runtime` through
-  the released ReDevPlugin runtime manager and surface its diagnostics, but must
+- Redeven may build the runtime from exact released crates, then configure and
+  launch that product-owned binary through the released ReDevPlugin runtime
+  manager and surface its diagnostics, but must
   not fork the Rust IPC protocol, implement an alternate supervisor, inject
   custom hostcalls, run plugin WASM modules in a Redeven-owned execution path, or
   bypass runtime lease/quota/revocation checks.
@@ -626,14 +637,16 @@ storage/network/runtime access outside ReDevPlugin brokers.
 
 Upgrading ReDevPlugin in Redeven is a dependency change, not a source sync. The
 same feature must update the relevant Go module version, npm package version,
-released runtime artifact reference, compatibility manifest or contract hashes,
-and local verification scripts together. A Redeven change that depends on
+Rust source crate coordinates and registry checksums, product runtime build
+evidence, compatibility manifest or contract hashes, and local verification
+scripts together. A Redeven change that depends on
 unreleased ReDevPlugin behavior is not ready for integration.
 
 The minimum ReDevPlugin upgrade review in Redeven must answer all of these:
 
-- Which released Go module, npm package, runtime artifact, schema/contract hash,
-  and compatibility manifest versions are being consumed?
+- Which released Go module, npm packages, Rust source crates, package
+  publication, schema/contract hash, and compatibility manifest versions are
+  being consumed?
 - Which Redeven adapters are newly registered or changed, and which released
   ReDevPlugin interface do they implement?
 - Which product surfaces are added or changed, and how do they still use the

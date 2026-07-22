@@ -48,90 +48,68 @@ Go tests that import their embed packages.
 
 ## ReDevPlugin dependency gate
 
-Redeven consumes only formal ReDevPlugin `v0.5.1` artifacts. The boundary guard
-rejects local sibling paths, Go workspaces/replacements, npm links, copied
-contracts, copied runtimes, and a second platform-core package tree.
+Redeven consumes only the coordinated ReDevPlugin `v0.6.5` package set. The
+boundary guard rejects local sibling paths, Go workspaces/replacements, npm
+links, copied contracts or runtimes, Rust path overrides, and a second
+platform-core package tree.
 
-The release verifier requires exactly 27 upstream assets and validates:
+The upstream GitHub Release contains exactly one
+`platform-package-publication-v1.json` asset. The verifier binds it to the tag,
+source commit, release workflow, and GitHub attestation, then independently
+reads back:
 
-- release-manifest v4, compatibility-manifest v6, and exactly 28 contracts;
-- fixed source commit, checksum-set hash, compatibility hash, contract registry
-  hash, npm tarball/integrity, and Worker SDK;
-- all four runtime tarballs, target/hash/manifest, safe archive shape, and notices;
-- A2 report/screenshots and release stress evidence;
-- the exact keyless release workflow identity and all signatures/bundles.
+- the Go module h1 and go.mod h1 from the public proxy and SumDB;
+- both npm package integrities and provenance subject SHA-512 values;
+- all six crates.io archive checksums and exact Cargo VCS source identities;
+- the package-set contract version, closed coordinate ordering, and contract-set
+  hash.
 
-Deterministic marker `redeven.redevplugin_artifact_verification.v4` binds hashes
-and sizes for the complete verified set. Marker v3, missing/symlink/unbounded
-payloads, and target mismatches are rejected. The downstream consumption gate
-also pins the complete approved v0.5.1 marker profile; a structurally valid or
-self-consistent marker for another release cannot authorize a payload.
+Partial publication, an extra GitHub Release asset, an unrecognized workflow,
+local package source, mutable source identity, or any registry mismatch fails
+before runtime construction.
 
-The staging command has no production repository, version, source-directory,
-or signature-skip override. It always downloads `floegence/redevplugin v0.5.1`,
-verifies the closed asset set, selects the exact GOOS/GOARCH target, and stages
-runtime, notices, and marker. Archive validation and extraction share one
-`O_NOFOLLOW` file descriptor, bind compressed size and SHA-256, cap entries,
-expanded file bytes, and the complete tar stream, and reject traversal,
-non-canonical paths, links, devices, sparse/PAX metadata, privileged modes,
-duplicate paths, multiple roots, and unexpected inventory. Verified staging is
-published with an atomic no-replace directory operation; an existing or unsafe
-destination is rejected.
+For Linux only, staging installs Rust 1.88.0 and the exact published
+`redevplugin-runtime` version with its packaged lockfile. Metadata is read from
+that published runtime crate itself, not from a synthetic binary dependency,
+and must resolve the exact six ReDevPlugin crates from crates.io. Redeven emits
+the binary, SPDX SBOM, complete resolved-package provenance, notices, and a
+signature/certificate. Release builds use Sigstore keyless identity bound to the
+exact Redeven tag workflow; local development builds use a fresh ephemeral
+Ed25519 key and are rejected by `--require-release`.
 
-Release matrix jobs always include the verified runtime, notices, and marker in
-each Redeven runtime tarball and package artifact. Desktop assembly validates
-the Redeven and Gateway archive filenames, exact flat inventories, Go binary
-targets, formal ReDevPlugin target, and complete bundle in a private sibling
-directory before atomically replacing `.bundle/<target>`. Electron packages
-the runtime, notice, and marker beside `redeven`; `afterPack` checks the app
-staging directory, and each native builder then inspects its final DEB, RPM, or
-read-only mounted DMG and writes a receipt bound to installer bytes, target,
-runtime, notice, and marker hashes. Linux inspection first snapshots the package
-through one no-follow descriptor, then parses the DEB tar or RPM newc stream
-without invoking a filesystem extractor. It rejects non-canonical or duplicate
-paths, file/directory prefix conflicts, GNU/PAX/sparse metadata, links, devices,
-unexpected privileged modes, hard links, non-canonical trailers, non-zero or
-unbounded trailing data, excessive entry counts, and more than 2 GiB of declared
-payload. Selected executables must be root-owned mode `0755`; the marker and
-notices must be root-owned mode `0644`. The parser materializes only those five
-exact runtime files and requires EOF under the same interpretation used for the
-closed inventory.
+The deterministic `redeven.redevplugin_runtime_build.v1` marker embeds the
+verified upstream publication and binds every product-built file, target, Rust
+toolchain, Redeven source commit, workflow, and signature identity. The
+consumption gate rechecks file descriptors, ELF machine identity, evidence
+profile, and signature. Linux runtime archives contain exactly the Redeven
+binary, runtime, six evidence files, license, and product notices. Darwin
+archives contain only Redeven, license, and product notices; any runtime or
+runtime-evidence file is forbidden.
 
-The release collector accepts exactly four package artifact directories and
-four Desktop artifact directories. It proves the closed set of four Redeven
-tarballs, four Gateway tarballs, two DEBs, two RPMs, two DMGs, six installer
-receipts, byte-identical shared metadata, and one byte-identical marker before
-publishing named assets. Each source is opened once with `O_NOFOLLOW`; the same
-descriptor is hashed and copied into private same-filesystem staging, checked
-for inode or metadata changes, fsynced, and linked into the destination without
-replacement. A failed publication removes every partial output.
+Desktop assembly validates Redeven and Gateway archive names, exact flat
+inventories, Go targets, and the target-specific runtime policy before replacing
+`.bundle/<target>`. Linux Electron packages include the complete runtime evidence
+beside `redeven`; Darwin packages include none. Native builders inspect final
+DEB, RPM, or read-only DMG bytes and write v2 receipts. Linux package parsers use
+bounded no-follow snapshots and reject non-canonical paths, duplicate entries,
+links, devices, privileged modes, sparse/PAX metadata, malformed trailers,
+trailing data, and oversized payloads. Darwin receipts carry explicit null
+runtime evidence.
 
-The final job signs and publishes `safe_extract_tar.py`. It refuses an existing
-release, creates a draft, uploads without clobber, downloads the draft assets,
-compares the exact name, size, and SHA-256 set, and only then makes the release
-public. The standalone marker asset has a non-hidden release name because
-GitHub normalizes leading-dot asset names; the runtime archives retain the
-canonical hidden marker path. The public installer binds Cosign to the exact
-selected tag, verifies the extractor through those signed checksums, extracts
-exactly the six runtime archive files, publishes them as one content-addressed
-versioned suite, prepares pinned ripgrep and retention, and only then atomically
-replaces the `redeven` activation symlink. The existing activation must be an
-executable pre-suite migration file or the exact closed relative suite link;
-unknown links and inventory entries fail closed. Retention keeps the active and
-new suite during the commit, yielding current plus previous after activation.
-No fallible companion installation runs after activation. Unsupported
-architectures and a failed binary check are fatal. Read-only jobs receive only
-read permissions; only the final release job receives `contents: write` and
-OIDC. Go compilation and npm packaging do not receive `GH_TOKEN`.
+The release collector accepts exactly four package and four Desktop artifact
+directories, four Redeven archives, four Gateway archives, two DEBs, two RPMs,
+two DMGs, six target-bound receipts, and byte-identical shared metadata. Each
+source is opened once with `O_NOFOLLOW`, hashed and copied through the same
+descriptor, checked for inode or metadata changes, fsynced, and linked without
+replacement. A failed collection removes partial outputs.
 
-This exact proof exposes a Darwin release blocker rather than weakening it.
-ReDevPlugin v0.5.1's Darwin runtime is linker/ad-hoc signed without a Developer
-ID team. Electron signs nested Mach-O executables for notarization, which changes
-the runtime bytes and invalidates the formal marker/runtime-manager SHA-256.
-Redeven must not ignore the runtime during signing, accept the changed hash, or
-rewrite upstream evidence. A formal ReDevPlugin release must provide a Darwin
-signing/identity contract and artifact compatible with host notarization before
-the macOS Desktop jobs can pass.
+The final job runs the consumption gate in release-only mode, signs checksums,
+publishes `safe_extract_tar.py`, verifies the complete draft asset set by name,
+size, and SHA-256, then makes the release public. The installer binds Cosign to
+the selected tag, extracts the target-specific closed archive, publishes one
+content-addressed suite, prepares retention, and only then changes the activation
+symlink. Unknown activation links, unsupported architectures, missing Linux
+runtime evidence, or any Darwin runtime payload are fatal.
 
 ## Plugin integration gate
 
@@ -156,16 +134,13 @@ the panel, observes the Plugin Center tile, and accepts only the canonical
 ReDevPlugin catalog request envelope. It also verifies content-hashed JS/CSS/WASM,
 non-blank root output, and zero console, page, request, or HTTP failures.
 
-That fixture is not browser-to-Go origin evidence. Activity remains blocked:
-its GET omits Origin while the guard denies missing Origin. A formal upstream
-contract and real-browser test are required; local exceptions are prohibited.
+Browser-facing reads use the released POST query contract and retain exact
+Origin, CSRF, action, and query-effect authorization. Session disconnect uses
+the released durable four-hash fence and drain; Redeven awaits exact teardown
+acknowledgement before deleting identity and reconciles retained fences on
+restart.
 
-Session disconnect also remains blocked. One four-hash revoke must fence new
-work and cancel surfaces, tokens, handles, confirmations, operations, and
-streams without affecting a sibling channel. Redeven must await it before
-deleting identity; local scans or timers do not satisfy the gate.
-
-Workbench plugin interaction is not declared passing: v0.5.1 lacks the required
+Workbench plugin interaction is not declared passing: v0.6.5 lacks the required
 host-neutral iframe interaction ownership contract. A Redeven release must not
 hide that gap behind an overlay or input patch. Workbench enablement requires a
 new formal ReDevPlugin release and corresponding focused/browser evidence.
@@ -195,9 +170,9 @@ not become a fallback, shim, or local artifact path.
 - `redeven:.githooks/pre-push:1` - Binds full validation to the exact main push.
 - `redeven:scripts/check_final_integration.sh:1` - Defines the complete local integration gate.
 - `redeven:scripts/check_plugin_integration.sh:1` - Defines focused ReDevPlugin integration coverage.
-- `redeven:scripts/check_redevplugin_release_artifacts.sh:1` - Verifies the closed formal upstream asset set.
-- `redeven:scripts/check_redevplugin_consumption_gate.sh:1` - Binds payloads to marker v4 and exact target.
-- `redeven:scripts/stage_redevplugin_release_artifacts.sh:1` - Performs fixed formal staging.
+- `redeven:scripts/check_redevplugin_release_artifacts.sh:1` - Verifies the exact-one upstream publication and registry readbacks.
+- `redeven:scripts/check_redevplugin_consumption_gate.sh:1` - Verifies the product runtime marker, evidence, target, and signature.
+- `redeven:scripts/stage_redevplugin_release_artifacts.sh:1` - Builds and signs the Linux runtime from the exact published crate graph.
 - `redeven:scripts/safe_extract_tar.py:1` - Enforces bounded, typed, inode-bound archive extraction and atomic directory publication.
 - `redeven:scripts/build_desktop_bundled_runtime.sh:1` - Stages the formal runtime into Desktop bundles.
 - `redeven:scripts/check_desktop_redevplugin_package.sh:1` - Verifies final native installer contents and writes target-bound receipts.
