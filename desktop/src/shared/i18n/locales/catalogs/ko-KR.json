@@ -23,6 +23,7 @@
       "modelLabel": "모델",
       "reasoningLabel": "추론",
       "noModelSelected": "선택한 모델 없음",
+      "truncatedLabel": "잘림",
       "permissionSelectorLabel": "스레드 권한",
       "permissionSelectorSaving": "권한 저장 중...",
       "permissionSelectorErrorTitle": "Flower가 권한을 저장하지 못했습니다.",

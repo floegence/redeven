@@ -23,6 +23,7 @@
       "modelLabel": "Modèle",
       "reasoningLabel": "Raisonnement",
       "noModelSelected": "Aucun modèle sélectionné",
+      "truncatedLabel": "Tronqué",
       "permissionSelectorLabel": "Autorisation du fil",
       "permissionSelectorSaving": "Enregistrement de l’autorisation...",
       "permissionSelectorErrorTitle": "Flower n’a pas pu enregistrer l’autorisation.",

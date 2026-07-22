@@ -23,6 +23,7 @@
       "modelLabel": "Modell",
       "reasoningLabel": "Reasoning",
       "noModelSelected": "Kein Modell ausgewählt",
+      "truncatedLabel": "Gekürzt",
       "permissionSelectorLabel": "Thread-Berechtigung",
       "permissionSelectorSaving": "Berechtigung wird gespeichert...",
       "permissionSelectorErrorTitle": "Flower konnte die Berechtigung nicht speichern.",

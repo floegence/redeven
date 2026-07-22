@@ -23,6 +23,7 @@
       "modelLabel": "モデル",
       "reasoningLabel": "推論",
       "noModelSelected": "モデルが選択されていません",
+      "truncatedLabel": "切り詰め済み",
       "permissionSelectorLabel": "スレッド権限",
       "permissionSelectorSaving": "権限を保存中...",
       "permissionSelectorErrorTitle": "Flower は権限を保存できませんでした。",
