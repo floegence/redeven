@@ -8,6 +8,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 
 ## Architecture
 
+- [Database schema migration ownership](architecture/database-schema-migrations.md) - Automatically migrate Redeven product stores while Floret and ReDevPlugin schemas remain upstream-owned.
 - [Runtime startup presentation](architecture/runtime-startup-presentation.md) - Structured startup events, renderer modes, and Desktop readiness reports.
 - [Local UI surface](architecture/local-ui-surface.md) - Browser entrypoints, access gate, direct sessions, and Env App proxying.
 - [Runtime Service snapshot](architecture/runtime-service-snapshot.md) - Desktop/runtime compatibility, open readiness, capabilities, and bindings.

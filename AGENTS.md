@@ -285,6 +285,41 @@ Rules:
 - Do not work around an `IMPORTANT:` constraint with hidden fallback behavior, alternate entry points, or silent compatibility paths.
 - When adding a new `IMPORTANT:` comment, keep it concise, explain the invariant rather than the implementation detail, and add focused test coverage or another enforceable guard whenever possible.
 
+## Database Schema Migration Contract
+
+- Redeven-owned persistent database schemas must migrate automatically during
+  application startup, before the service that uses them accepts requests. An
+  upgrade must not require users to delete state, run a manual SQL command, or
+  recreate a database to make the new binary usable.
+- Every Redeven-owned schema change must bump its explicit schema version and
+  append a contiguous forward migration for every supported older version.
+  Fresh databases may initialize directly at the current schema, but that
+  current-schema initializer must not replace the upgrade path for existing
+  databases.
+- Migration steps, schema-version updates, metadata updates, and final schema
+  verification must commit atomically. A failed migration or verification must
+  roll back, leave the last supported database intact, stop startup for the
+  affected service, and return an actionable error. Do not silently reset,
+  delete, rename aside, partially repair, or replace an incompatible database.
+- A database whose schema kind is wrong, whose exact historical shape is not a
+  supported migration input, or whose version is newer than the running binary
+  supports must fail closed without being claimed as the current schema.
+- Migration tests must cover a fresh database, every supported upgrade edge,
+  preservation of user-owned records, rollback on failure, rejection of schema
+  drift, and rejection of future versions. Removing an older migration requires
+  an explicit minimum-supported-version decision and matching release/OKF
+  updates; age alone is not a reason to remove it.
+- Schema ownership follows repository ownership. Redeven migrates only
+  Redeven-owned product databases. Floret owns and migrates its own database
+  schemas through the published Floret runtime APIs; Redeven must not inspect,
+  patch, duplicate, or run SQL migrations against Floret-owned tables or files.
+  ReDevPlugin-owned stores follow the same upstream-owned rule and remain opaque
+  behind released ReDevPlugin APIs.
+- Cross-owner migration may use only public upstream maintenance APIs and must
+  preserve each system's authority boundary. Redeven product tables may retain
+  opaque upstream identifiers and product-owned coordination state, but must
+  not turn a migration into a shadow copy of Floret or ReDevPlugin state.
+
 ## Published Dependency Policy
 
 - `redeven` is a downstream consumer of `floeterm`, `floe-webapp`, `flowersec`, and `redevplugin`.
