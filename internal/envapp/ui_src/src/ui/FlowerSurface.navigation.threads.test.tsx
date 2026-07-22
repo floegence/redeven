@@ -1341,56 +1341,70 @@ describe('FlowerSurface navigation threads', () => {
   });
 
   it('clears the unread sidebar dot immediately when a thread is selected', async () => {
-    const unreadThread = thread({
-      thread_id: 'thread-unread',
-      title: 'Unread thread',
-      status: 'success',
-      read_status: readStatus(true, 3, 'success'),
-    });
-    const readResponse = deferred<FlowerThreadReadStatus>();
-    const loadResponse = deferred<FlowerLiveBootstrap>();
-    const markThreadRead = vi.fn((_threadID: string, _snapshot) => readResponse.promise);
-    const loadedThread = {
-      ...unreadThread,
-      read_status: readStatus(false, 3, 'success'),
-      messages: [
-        ...unreadThread.messages,
-        {
-          id: 'm-unread-assistant',
-          role: 'assistant' as const,
-          content: 'Fresh result.',
-          status: 'complete' as const,
-          created_at_ms: 3,
-        },
-      ],
-    };
-    const loadThread = vi.fn(() => loadResponse.promise);
-    const runtime = renderSurfaceWithAdapter({
-      ...adapter(true),
-      listThreads: vi.fn(async () => [unreadThread]),
-      loadThread,
-      markThreadRead,
-    });
+    const frames = mockAnimationFrames();
+    try {
+      const unreadThread = thread({
+        thread_id: 'thread-unread',
+        title: 'Unread thread',
+        status: 'success',
+        read_status: readStatus(true, 3, 'success'),
+      });
+      const readResponse = deferred<FlowerThreadReadStatus>();
+      const loadResponse = deferred<FlowerLiveBootstrap>();
+      const markThreadRead = vi.fn((_threadID: string, _snapshot) => readResponse.promise);
+      const loadedThread = {
+        ...unreadThread,
+        messages: [
+          ...unreadThread.messages,
+          {
+            id: 'm-unread-assistant',
+            role: 'assistant' as const,
+            content: 'Fresh result.',
+            status: 'complete' as const,
+            created_at_ms: 3,
+          },
+        ],
+      };
+      const loadThread = vi.fn(() => loadResponse.promise);
+      const runtime = renderSurfaceWithAdapter({
+        ...adapter(true),
+        listThreads: vi.fn(async () => [unreadThread]),
+        loadThread,
+        markThreadRead,
+      });
 
-    await waitFor(() => runtime.querySelector('[data-thread-id="thread-unread"]')?.getAttribute('data-flower-thread-unread-dot') === 'true');
-    expect(runtime.querySelector('[data-thread-id="thread-unread"] .flower-thread-status-dot')).toBeTruthy();
-    expect(runtime.querySelector('[data-thread-id="thread-unread"] button')?.getAttribute('aria-label')).toContain(', Unread');
-    expect(runtime.querySelector('[data-thread-id="thread-unread"] .flower-thread-indicator')?.getAttribute('title')).toContain('Unread');
+      await waitFor(() => runtime.querySelector('[data-thread-id="thread-unread"]')?.getAttribute('data-flower-thread-unread-dot') === 'true');
+      expect(runtime.querySelector('[data-thread-id="thread-unread"] .flower-thread-status-dot')).toBeTruthy();
+      expect(runtime.querySelector('[data-thread-id="thread-unread"] button')?.getAttribute('aria-label')).toContain(', Unread');
+      expect(runtime.querySelector('[data-thread-id="thread-unread"] .flower-thread-indicator')?.getAttribute('title')).toContain('Unread');
 
-    (runtime.querySelector('[data-thread-id="thread-unread"] button') as HTMLButtonElement).click();
-    await waitFor(() => runtime.querySelector('[data-thread-id="thread-unread"]')?.getAttribute('data-flower-thread-unread-dot') === 'false');
-    expect(runtime.querySelector('[data-thread-id="thread-unread"] button')?.getAttribute('aria-label')).not.toContain(', Unread');
-    expect(runtime.querySelector('[data-thread-id="thread-unread"] .flower-thread-indicator')?.getAttribute('title')).not.toContain('Unread');
-    await waitFor(() => markThreadRead.mock.calls.length > 0);
-    expect(loadThread).toHaveBeenCalledWith('thread-unread');
+      (runtime.querySelector('[data-thread-id="thread-unread"] button') as HTMLButtonElement).click();
+      await waitFor(() => runtime.querySelector('[data-thread-id="thread-unread"]')?.getAttribute('data-flower-thread-unread-dot') === 'false');
+      expect(runtime.querySelector('[data-thread-id="thread-unread"] button')?.getAttribute('aria-label')).not.toContain(', Unread');
+      expect(runtime.querySelector('[data-thread-id="thread-unread"] .flower-thread-indicator')?.getAttribute('title')).not.toContain('Unread');
+      expect(markThreadRead).not.toHaveBeenCalled();
 
-    expect(markThreadRead.mock.calls[0]?.[0]).toBe('thread-unread');
-    expect(markThreadRead.mock.calls[0]?.[1]).toMatchObject(unreadThread.read_status.snapshot);
+      frames.runAll();
+      await flush();
+      await waitFor(() => loadThread.mock.calls.length > 0);
+      expect(loadThread).toHaveBeenCalledWith('thread-unread');
 
-    loadResponse.resolve(liveBootstrap(loadedThread));
-    readResponse.resolve(markedReadStatus(unreadThread.read_status.snapshot));
-    await waitFor(() => runtime.textContent?.includes('Fresh result.') ?? false);
-    expect(runtime.textContent).toContain('Fresh result.');
+      loadResponse.resolve(liveBootstrap(loadedThread));
+      await waitFor(() => runtime.textContent?.includes('Fresh result.') ?? false);
+      expect(markThreadRead).not.toHaveBeenCalled();
+      expect(frames.pendingCount()).toBeGreaterThan(0);
+
+      frames.runAll();
+      await flush();
+      await waitFor(() => markThreadRead.mock.calls.length > 0);
+      expect(markThreadRead.mock.calls[0]?.[0]).toBe('thread-unread');
+      expect(markThreadRead.mock.calls[0]?.[1]).toMatchObject(unreadThread.read_status.snapshot);
+
+      readResponse.resolve(markedReadStatus(unreadThread.read_status.snapshot));
+      expect(runtime.textContent).toContain('Fresh result.');
+    } finally {
+      frames.restore();
+    }
   });
 
   it('keeps the running wave indicator stable across selected thread detail refreshes', async () => {
