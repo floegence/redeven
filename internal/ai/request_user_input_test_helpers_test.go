@@ -82,9 +82,10 @@ func seedWaitingUserPrompt(t *testing.T, svc *Service, ctx context.Context, _ *s
 		t.Fatal(err)
 	}
 	host, err := threadRuntime.Turn(ctx, flruntime.TurnExecutionHostOptions{
-		Config:               redevenFloretAdapterConfig("", floretModelContextPolicy(128000, 4096), config.AIReasoningSelection{}),
-		ModelGateway:         testAskUserGateway{toolID: prompt.ToolID, args: string(args)},
-		ModelGatewayIdentity: flruntime.ModelGatewayIdentity{Provider: "test", Model: "ask-user-test", StateCompatibilityKey: "test:ask-user-test"},
+		Config:                   redevenFloretAdapterConfig("", floretModelContextPolicy(128000, 4096), config.AIReasoningSelection{}),
+		ModelGateway:             testAskUserGateway{toolID: prompt.ToolID, args: string(args)},
+		ModelGatewayCapabilities: floretModelGatewayCapabilities(config.AIReasoningCapability{}),
+		ModelGatewayIdentity:     flruntime.ModelGatewayIdentity{Provider: "test", Model: "ask-user-test", StateCompatibilityKey: "test:ask-user-test"},
 	})
 	if err != nil {
 		t.Fatal(err)

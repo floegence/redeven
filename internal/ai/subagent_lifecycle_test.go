@@ -591,10 +591,11 @@ func seedTestFloretSubagentTree(t *testing.T, ctx context.Context, svc *Service,
 	}
 	gateway := &blockingFloretModelGateway{started: make(chan struct{}), release: make(chan struct{})}
 	turnHost, err := runtimeCaps.Turn(ctx, flruntime.TurnExecutionHostOptions{
-		Config:                  redevenFloretAdapterConfig("", floretModelContextPolicy(128000, 4096), config.AIReasoningSelection{}),
-		ModelGateway:            gateway,
-		ModelGatewayIdentity:    flruntime.ModelGatewayIdentity{Provider: "test", Model: "blocking-parent", StateCompatibilityKey: "test:blocking-parent"},
-		EffectAuthorizationGate: allowFloretEffectGateForTest{},
+		Config:                   redevenFloretAdapterConfig("", floretModelContextPolicy(128000, 4096), config.AIReasoningSelection{}),
+		ModelGateway:             gateway,
+		ModelGatewayCapabilities: floretModelGatewayCapabilities(config.AIReasoningCapability{}),
+		ModelGatewayIdentity:     flruntime.ModelGatewayIdentity{Provider: "test", Model: "blocking-parent", StateCompatibilityKey: "test:blocking-parent"},
+		EffectAuthorizationGate:  allowFloretEffectGateForTest{},
 	})
 	if err != nil {
 		t.Fatalf("open parent turn host: %v", err)

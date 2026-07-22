@@ -239,9 +239,9 @@ func (p *floretProviderAdapter) turnRequest(ctx context.Context, req flruntime.M
 		return ModelGatewayRequest{}, err
 	}
 	controls.PreviousResponseID = previousResponseID
-	if reasoning := config.NormalizeAIReasoningSelection(req.Reasoning); !reasoning.IsZero() {
-		controls.ReasoningSelection = reasoning
-	}
+	// Floret request-level reasoning is authoritative, including an explicit
+	// zero selection used by short requests such as automatic titles.
+	controls.ReasoningSelection = config.NormalizeAIReasoningSelection(req.Reasoning)
 
 	resolver := p.attachmentResolver
 	if p.requestAttachmentResolver != nil {

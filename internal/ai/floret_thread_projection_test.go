@@ -357,11 +357,12 @@ func TestFloretHostPublishesRunningToolProjectionToFlowerLiveEvents(t *testing.T
 				ContextWindowTokens: flconfig.DefaultContextWindowTokens,
 			},
 		},
-		ModelGateway:            gateway,
-		ModelGatewayIdentity:    flruntime.ModelGatewayIdentity{Provider: "fake", Model: "fake-model", StateCompatibilityKey: "fake-model:test"},
-		Tools:                   registry,
-		EffectAuthorizationGate: allowFloretEffectGateForTest{},
-		Sink:                    capture,
+		ModelGateway:             gateway,
+		ModelGatewayCapabilities: floretModelGatewayCapabilities(config.AIReasoningCapability{}),
+		ModelGatewayIdentity:     flruntime.ModelGatewayIdentity{Provider: "fake", Model: "fake-model", StateCompatibilityKey: "fake-model:test"},
+		Tools:                    registry,
+		EffectAuthorizationGate:  allowFloretEffectGateForTest{},
+		Sink:                     capture,
 	})
 	if err != nil {
 		t.Fatalf("NewHost: %v", err)

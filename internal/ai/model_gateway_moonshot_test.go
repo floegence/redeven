@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"github.com/floegence/redeven/internal/config"
 )
 
 func TestMoonshotProvider_StreamTurn_TextResponse(t *testing.T) {
@@ -713,7 +715,8 @@ func TestMoonshotProvider_StreamTurn_ToolCallHistoryKeepsReasoningContent(t *tes
 	}
 
 	firstResult, err := provider.StreamTurn(context.Background(), ModelGatewayRequest{
-		Model: "kimi-k2.6",
+		Model:            "kimi-k2.6",
+		ProviderControls: ProviderControls{ReasoningCapability: config.AIReasoningCapabilityForModel("moonshot", "kimi-k2.6")},
 		Messages: []Message{
 			{Role: "user", Content: []ContentPart{{Type: "text", Text: "check load"}}},
 		},
@@ -750,8 +753,9 @@ func TestMoonshotProvider_StreamTurn_ToolCallHistoryKeepsReasoningContent(t *tes
 	history = append(history, Message{Role: "user", Content: []ContentPart{{Type: "text", Text: "continue"}}})
 
 	secondResult, err := provider.StreamTurn(context.Background(), ModelGatewayRequest{
-		Model:    "kimi-k2.6",
-		Messages: history,
+		Model:            "kimi-k2.6",
+		Messages:         history,
+		ProviderControls: ProviderControls{ReasoningCapability: config.AIReasoningCapabilityForModel("moonshot", "kimi-k2.6")},
 	}, nil)
 	if err != nil {
 		t.Fatalf("second StreamTurn: %v", err)

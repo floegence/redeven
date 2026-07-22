@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log/slog"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	contextmodel "github.com/floegence/redeven/internal/ai/context/model"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 )
@@ -22,6 +24,12 @@ type parallelCanonicalTitleProvider struct {
 
 func (p *parallelCanonicalTitleProvider) StreamTurn(ctx context.Context, req ModelGatewayRequest, _ func(StreamEvent)) (ModelGatewayResult, error) {
 	if isFloretThreadTitleRequest(req) {
+		if req.Budgets.MaxOutputToken != 64 {
+			return ModelGatewayResult{}, fmt.Errorf("title max output tokens=%d, want 64", req.Budgets.MaxOutputToken)
+		}
+		if req.ProviderControls.ReasoningSelection.Level != config.AIReasoningLevelOff {
+			return ModelGatewayResult{}, fmt.Errorf("title reasoning=%+v, want off", req.ProviderControls.ReasoningSelection)
+		}
 		return ModelGatewayResult{FinishReason: "stop", Text: "修复终端停止故障"}, nil
 	}
 	p.mainOnce.Do(func() { close(p.mainStarted) })
@@ -62,10 +70,22 @@ func TestRunFloretHostedTurnPublishesCanonicalChineseTitleWhileMainProviderRuns(
 	done := make(chan error, 1)
 	go func() {
 		done <- r.runFloretHostedTurn(context.Background(), RunRequest{
-			Model:   "compat/gpt-5-mini",
-			Input:   RunInput{Text: "请修复终端停止故障并验证状态"},
-			Options: RunOptions{PermissionType: config.AIPermissionFullAccess},
-		}, config.AIProvider{ID: "compat", Type: "openai_compatible", BaseURL: "https://example.test/v1"}, "sk-test", "修复终端停止故障", provider)
+			Model: "provider-instance-42/deepseek-v4",
+			ModelCapability: contextmodel.ModelCapability{
+				ProviderID:    "provider-instance-42",
+				ProviderType:  "openai_compatible",
+				ModelName:     "deepseek-v4",
+				WireModelName: "deepseek-v4",
+				ReasoningCapability: config.AIReasoningCapability{
+					Kind: "effort", SupportedLevels: []string{"high"}, DefaultLevel: "high", DisableSupported: true,
+				},
+			},
+			Input: RunInput{Text: "请修复终端停止故障并验证状态"},
+			Options: RunOptions{
+				PermissionType:     config.AIPermissionFullAccess,
+				ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelHigh},
+			},
+		}, config.AIProvider{ID: "provider-instance-42", Type: "openai_compatible", BaseURL: "https://example.test/v1"}, "sk-test", "修复终端停止故障", provider)
 	}()
 	select {
 	case <-provider.mainStarted:

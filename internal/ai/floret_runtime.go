@@ -176,14 +176,15 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	}
 	flProvider.attachmentResolver = r.floretAttachmentResolver(frozenAttachments)
 	host, err := r.floretHostFactory(ctx, flruntime.TurnExecutionHostOptions{
-		Config:                  floretCfg,
-		ModelGateway:            flProvider,
-		ModelGatewayIdentity:    gatewayIdentity,
-		Tools:                   initialSurface.FloretTools,
-		EffectAuthorizationGate: floretEffectAuthorizationGateForRun(r),
-		Sink:                    floretEventSink{run: r},
-		ToolSurfaceProvider:     toolSurfaceProvider,
-		ThreadTitleMode:         flruntime.ThreadTitleModeProvider,
+		Config:                   floretCfg,
+		ModelGateway:             flProvider,
+		ModelGatewayIdentity:     gatewayIdentity,
+		ModelGatewayCapabilities: floretModelGatewayCapabilities(req.ModelCapability.ReasoningCapability),
+		Tools:                    initialSurface.FloretTools,
+		EffectAuthorizationGate:  floretEffectAuthorizationGateForRun(r),
+		Sink:                     floretEventSink{run: r},
+		ToolSurfaceProvider:      toolSurfaceProvider,
+		ThreadTitleMode:          flruntime.ThreadTitleModeProvider,
 		LoopLimits: flruntime.LoopLimits{
 			NoProgressLimit:    2,
 			DuplicateToolLimit: 3,

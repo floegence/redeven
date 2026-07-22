@@ -594,10 +594,11 @@ func (s *Service) runIdleThreadCompaction(ctx context.Context, meta *session.Met
 		return err
 	}
 	host, err := r.floretCompactionHostFactory(execCtx, flruntime.ThreadCompactionHostOptions{
-		Config:               flconfig.Config{SystemPrompt: systemPrompt, ContextPolicy: floretModelContextPolicy(contextWindow, 0), Reasoning: reasoning},
-		ModelGateway:         flProvider,
-		ModelGatewayIdentity: gatewayIdentity,
-		Sink:                 floretEventSink{run: r},
+		Config:                   flconfig.Config{SystemPrompt: systemPrompt, ContextPolicy: floretModelContextPolicy(contextWindow, 0), Reasoning: reasoning},
+		ModelGateway:             flProvider,
+		ModelGatewayIdentity:     gatewayIdentity,
+		ModelGatewayCapabilities: floretModelGatewayCapabilities(modelCapability.ReasoningCapability),
+		Sink:                     floretEventSink{run: r},
 		LoopLimits: flruntime.LoopLimits{
 			NoProgressLimit:    2,
 			DuplicateToolLimit: 3,

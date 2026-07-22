@@ -13,13 +13,15 @@ Floret is the only real-time authority for ordinary and delegated tool approvals
 
 ## Canonical queue
 
-Floret v0.22.0 validates queue and record identity, lifecycle state, batch position, timestamps, resources, effects, and argument hashes. Redeven calls root-scoped `ReadApprovalQueue`; it never queries Floret's store directly and never copies approval records into the Redeven database. Invalid or mismatched Floret data is a contract error, not input for synthesis or repair.
+Floret v0.23.0 validates queue and record identity, lifecycle state, batch position, timestamps, resources, effects, and argument hashes. Redeven calls root-scoped `ReadApprovalQueue`; it never queries Floret's store directly and never copies approval records into the Redeven database. Invalid or mismatched Floret data is a contract error, not input for synthesis or repair.
 
 Redeven maps each visible Floret record to a `FlowerApprovalAction`. Main and delegated actions both use the record's canonical run and tool-call identity. Delegated presentation derives its child label from the Floret `scope=thread:<child-thread-id>` value; there is no Redeven delegated-reference, delivery-state, or child-execution-state shadow. Product labels and safe summaries may be derived for display, but the underlying identity, order, current item, generation, revision, and actionability remain Floret-owned.
 
 Every canonical read or resolution result is emitted as one `approval.queue_replaced` event containing the entire mapped action list and queue version. The materializer replaces all Floret-owned actions atomically, preserves independent `control_confirm` actions, and rejects lower generation or revision snapshots. An empty Floret queue is still emitted as an explicit replacement with `actions=[]`; omission is not a clear. Bootstrap follows the same sampled-versus-unsampled distinction.
 
 Floret approval lifecycle events trigger a fresh canonical queue read. Cancellation is allowed to publish only this authoritative replacement after the owning run is detached; all other detached presentation events remain suppressed. This permits Floret's canceled empty queue to remove stale buttons without introducing a synthetic Redeven cancellation path.
+
+The queue head is projected with `surface_role=primary_action`; every later record is projected as `surface_role=locator`. Canonical replacement validation requires exactly one primary action when the queue is non-empty and rejects missing, mirrored, duplicated, or identity-mismatched roles. Flower therefore mounts approval controls only from the current canonical primary action and never promotes an Activity timeline row into an approval component.
 
 ## Decisions
 
