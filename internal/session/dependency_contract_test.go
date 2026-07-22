@@ -187,33 +187,33 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 	root := repoRootForTest(t)
 	expectedPackages := map[string][]string{
 		"desktop/package.json": {
-			"\"@floegence/floe-webapp-core\": \"^0.39.2\"",
+			"\"@floegence/floe-webapp-core\": \"^0.39.3\"",
 		},
 		"desktop/package-lock.json": {
-			"floe-webapp-core-0.39.2.tgz",
+			"floe-webapp-core-0.39.3.tgz",
 		},
 		"desktop/pnpm-lock.yaml": {
-			"@floegence/floe-webapp-core@0.39.2",
+			"@floegence/floe-webapp-core@0.39.3",
 		},
 		"internal/envapp/ui_src/package.json": {
-			"\"@floegence/floe-webapp-boot\": \"^0.39.2\"",
-			"\"@floegence/floe-webapp-core\": \"^0.39.2\"",
-			"\"@floegence/floe-webapp-protocol\": \"^0.39.2\"",
+			"\"@floegence/floe-webapp-boot\": \"^0.39.3\"",
+			"\"@floegence/floe-webapp-core\": \"^0.39.3\"",
+			"\"@floegence/floe-webapp-protocol\": \"^0.39.3\"",
 			"\"@floegence/floeterm-terminal-web\": \"0.8.0\"",
 			"\"@floegence/flowersec-core\": \"^0.27.0\"",
 		},
 		"internal/envapp/ui_src/package-lock.json": {
-			"floe-webapp-boot-0.39.2.tgz",
-			"floe-webapp-core-0.39.2.tgz",
-			"floe-webapp-protocol-0.39.2.tgz",
+			"floe-webapp-boot-0.39.3.tgz",
+			"floe-webapp-core-0.39.3.tgz",
+			"floe-webapp-protocol-0.39.3.tgz",
 			"floeterm-terminal-web-0.8.0.tgz",
 			"beamterm-renderer-1.0.1.tgz",
 			"flowersec-core-0.27.0.tgz",
 		},
 		"internal/envapp/ui_src/pnpm-lock.yaml": {
-			"@floegence/floe-webapp-boot@0.39.2",
-			"@floegence/floe-webapp-core@0.39.2",
-			"@floegence/floe-webapp-protocol@0.39.2",
+			"@floegence/floe-webapp-boot@0.39.3",
+			"@floegence/floe-webapp-core@0.39.3",
+			"@floegence/floe-webapp-protocol@0.39.3",
 			"@floegence/floeterm-terminal-web@0.8.0",
 			"@floegence/beamterm-renderer@1.0.1",
 			"@floegence/flowersec-core@0.27.0",
@@ -225,9 +225,9 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 			"flowersec-core-0.27.0.tgz",
 		},
 		"THIRD_PARTY_NOTICES.md": {
-			"@floegence/floe-webapp-boot | 0.39.2",
-			"@floegence/floe-webapp-core | 0.39.2",
-			"@floegence/floe-webapp-protocol | 0.39.2",
+			"@floegence/floe-webapp-boot | 0.39.3",
+			"@floegence/floe-webapp-core | 0.39.3",
+			"@floegence/floe-webapp-protocol | 0.39.3",
 			"@floegence/floeterm-terminal-web | 0.8.0",
 			"@floegence/beamterm-renderer | 1.0.1",
 			"@floegence/flowersec-core | 0.27.0",
@@ -240,7 +240,7 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 		"okf/architecture/env-app-upstream-web-dependencies.md": {
 			"terminal-web v0.8.0",
 			"beamterm-renderer` v1.0.1",
-			"Floe Webapp v0.39.2",
+			"Floe Webapp v0.39.3",
 			"Flowersec Core v0.27.0",
 		},
 	}
@@ -258,6 +258,19 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 			t.Fatalf("%s must not retain previous @floegence/floe-webapp 0.36.74 release", file)
 		}
 		for _, previousMarker := range []string{
+			"\"@floegence/floe-webapp-boot\": \"^0.39.2\"",
+			"\"@floegence/floe-webapp-core\": \"^0.39.2\"",
+			"\"@floegence/floe-webapp-protocol\": \"^0.39.2\"",
+			"@floegence/floe-webapp-boot@0.39.2",
+			"@floegence/floe-webapp-core@0.39.2",
+			"@floegence/floe-webapp-protocol@0.39.2",
+			"floe-webapp-boot-0.39.2.tgz",
+			"floe-webapp-core-0.39.2.tgz",
+			"floe-webapp-protocol-0.39.2.tgz",
+			"@floegence/floe-webapp-boot | 0.39.2",
+			"@floegence/floe-webapp-core | 0.39.2",
+			"@floegence/floe-webapp-protocol | 0.39.2",
+			"Floe Webapp v0.39.2",
 			"@floegence/floe-webapp-boot@0.39.0",
 			"@floegence/floe-webapp-core@0.39.0",
 			"@floegence/floe-webapp-protocol@0.39.0",
