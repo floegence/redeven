@@ -81,6 +81,7 @@ jobs:
           bash -n scripts/check_redevplugin_release_artifacts.sh
           bash -n scripts/check_redevplugin_consumption_gate.sh
           bash -n scripts/check_desktop_redevplugin_package.sh
+          bash -n scripts/link_redevplugin_runtime_static_pie.sh
           bash -n scripts/stage_redevplugin_release_artifacts.sh
           bash -n scripts/check_plugin_integration.sh
           bash -n scripts/check_flower_live_protocol.sh

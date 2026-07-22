@@ -69,13 +69,14 @@ local package source, mutable source identity, or any registry mismatch fails
 before runtime construction.
 
 For Linux only, staging installs Rust 1.88.0 and the exact published
-`redevplugin-runtime` version with its packaged lockfile. Metadata is read from
-that published runtime crate itself, not from a synthetic binary dependency,
-and must resolve the exact six ReDevPlugin crates from crates.io. Redeven emits
-the binary, SPDX SBOM, complete resolved-package provenance, notices, and a
-signature/certificate. Release builds use Sigstore keyless identity bound to the
-exact Redeven tag workflow; local development builds use a fresh ephemeral
-Ed25519 key and are rejected by `--require-release`.
+`redevplugin-runtime` version with its packaged lockfile. Metadata comes from
+that crate and must resolve the exact six ReDevPlugin crates from crates.io.
+The fixed product toolchain links a static PIE with no ELF interpreter or
+dynamic dependencies, matching the released Host admission profile. Redeven
+emits the binary, SPDX SBOM, resolved-package provenance, notices, and a
+signature/certificate. Release builds use Sigstore keyless identity bound to
+the exact Redeven tag workflow; local builds use a fresh ephemeral Ed25519 key
+and are rejected by `--require-release`.
 
 The deterministic `redeven.redevplugin_runtime_build.v1` marker embeds the
 verified upstream publication and binds every product-built file, target, Rust
@@ -173,6 +174,7 @@ not become a fallback, shim, or local artifact path.
 - `redeven:scripts/check_redevplugin_release_artifacts.sh:1` - Verifies the exact-one upstream publication and registry readbacks.
 - `redeven:scripts/check_redevplugin_consumption_gate.sh:1` - Verifies the product runtime marker, evidence, target, and signature.
 - `redeven:scripts/stage_redevplugin_release_artifacts.sh:1` - Builds and signs the Linux runtime from the exact published crate graph.
+- `redeven:scripts/link_redevplugin_runtime_static_pie.sh:1` - Enforces the closed static PIE linker profile required by runtime admission.
 - `redeven:scripts/safe_extract_tar.py:1` - Enforces bounded, typed, inode-bound archive extraction and atomic directory publication.
 - `redeven:scripts/build_desktop_bundled_runtime.sh:1` - Stages the formal runtime into Desktop bundles.
 - `redeven:scripts/check_desktop_redevplugin_package.sh:1` - Verifies final native installer contents and writes target-bound receipts.

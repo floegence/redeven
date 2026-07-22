@@ -481,9 +481,37 @@ export function verifyELF(pathname, target) {
       || bytes[4] !== 2 || bytes[5] !== 1) {
     fail('runtime binary is not a 64-bit little-endian ELF executable');
   }
+  if (bytes.readUInt16LE(16) !== 3) fail('runtime ELF is not position-independent');
   const machine = bytes.readUInt16LE(18);
   const expected = target === 'linux/amd64' ? 62 : 183;
   if (machine !== expected) fail(`runtime ELF machine ${machine} does not match ${target}`);
+
+  const programOffset = Number(bytes.readBigUInt64LE(32));
+  const programEntrySize = bytes.readUInt16LE(54);
+  const programCount = bytes.readUInt16LE(56);
+  if (!Number.isSafeInteger(programOffset)
+      || (programCount > 0 && (programEntrySize < 56 || programOffset < 64
+        || programOffset + programEntrySize * programCount > bytes.length))) {
+    fail('runtime ELF program headers are invalid');
+  }
+  for (let index = 0; index < programCount; index += 1) {
+    const header = programOffset + index * programEntrySize;
+    const type = bytes.readUInt32LE(header);
+    if (type === 3) fail('runtime ELF interpreter is forbidden');
+    if (type !== 2) continue;
+
+    const dynamicOffset = Number(bytes.readBigUInt64LE(header + 8));
+    const dynamicSize = Number(bytes.readBigUInt64LE(header + 32));
+    if (!Number.isSafeInteger(dynamicOffset) || !Number.isSafeInteger(dynamicSize)
+        || dynamicSize % 16 !== 0 || dynamicOffset < 0 || dynamicOffset + dynamicSize > bytes.length) {
+      fail('runtime ELF dynamic segment is invalid');
+    }
+    for (let offset = dynamicOffset; offset < dynamicOffset + dynamicSize; offset += 16) {
+      const tag = bytes.readBigInt64LE(offset);
+      if (tag === 0n) break;
+      if (tag === 1n) fail('runtime ELF dynamic dependencies are forbidden');
+    }
+  }
 }
 
 export function descriptor(pathname, name = path.basename(pathname)) {
