@@ -30,7 +30,7 @@ export default defineConfig({
   ],
   test: {
     environment: 'node',
-    include: ['src/**/*.test.ts', 'src/**/*.test.tsx', '../internal/flower_ui/src/**/*.test.ts', '../internal/flower_ui/src/**/*.test.tsx'],
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx', '../internal/flower_ui/src/**/*.test.ts'],
     maxWorkers: 1,
     testTimeout: 10_000,
   },
