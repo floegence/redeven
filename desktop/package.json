@@ -80,7 +80,7 @@
     "vitest": "^4.1.8"
   },
   "dependencies": {
-    "@floegence/floe-webapp-core": "^0.39.2",
+    "@floegence/floe-webapp-core": "^0.39.3",
     "qrcode-generator": "^2.0.4"
   }
 }
