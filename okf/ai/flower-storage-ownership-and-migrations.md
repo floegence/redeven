@@ -34,6 +34,11 @@ Fresh stores are initialized directly with the declared schema v4 shape. An exis
 
 # Boundaries
 
+The repository-wide automatic migration and database ownership contract is
+defined by [Database schema migration ownership](../architecture/database-schema-migrations.md).
+This concept defines the Flower-specific cross-owner exception and does not
+grant Redeven authority over Floret's database schema.
+
 Redeven migration code may call only public Floret maintenance APIs and may retain only host settings, resources, queue state, routing/read state, audit, and operation intent. It must not query Floret SQLite, infer canonical data from old Redeven rows, or keep legacy aliases and compatibility parsers after conversion to v4.
 
 # Evidence

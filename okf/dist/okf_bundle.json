@@ -7,12 +7,28 @@
     "frontmatter": {
       "okf_version": "0.2"
     },
-    "body": "# Redeven OKF Bundle\n\nThis top-level OKF corpus is the maintained repository knowledge surface for the current Redeven implementation. It is authored from current source code, generated contracts, and release automation rather than from removed product documents.\n\n## Architecture\n\n- [Runtime startup presentation](architecture/runtime-startup-presentation.md) - Structured startup events, renderer modes, and Desktop readiness reports.\n- [Local UI surface](architecture/local-ui-surface.md) - Browser entrypoints, access gate, direct sessions, and Env App proxying.\n- [Runtime Service snapshot](architecture/runtime-service-snapshot.md) - Desktop/runtime compatibility, open readiness, capabilities, and bindings.\n- [Runtime session permission gates](architecture/runtime-session-permission-gates.md) - Runtime validation and local permission clamping before sessions open.\n- [Runtime transport dependencies](architecture/runtime-transport-dependencies.md) - Flowersec and Floeterm dependency boundaries.\n- [Env App upstream web dependencies](architecture/env-app-upstream-web-dependencies.md) - Published web package contracts consumed by Env App.\n- [ReDevPlugin host integration boundary](architecture/redevplugin-boundary.md) - Published plugin-platform dependency and Redeven adapter ownership.\n- [Plugin platform integration](architecture/plugin-platform-integration.md) - Local UI, AppServer, released ReDevPlugin Host mounting, product adapters, and Flower orchestration boundaries.\n- [Container resources capability](architecture/container-resources-capability.md) - Redeven-owned Docker and Podman business capability contract for plugin adapter registration.\n\n## Security\n\n- [Local UI network exposure](security/local-ui-network-exposure.md) - Fixed-port plaintext exposure admission, exact authority checks, acknowledgement, and warning preferences.\n- [Permission policy and filesystem scope](security/permission-policy-and-filesystem-scope.md) - Local caps and directory-level file access policy.\n- [Plugin platform integration security](security/plugin-platform-integration-security.md) - Session, route, permission, and capability boundaries for ReDevPlugin adapters.\n\n## Desktop\n\n- [Desktop shell theme state](desktop/desktop-shell-theme-state.md) - Global source, per-mode Floe presets, renderer synchronization, and native window colors.\n- [Desktop runtime bridge](desktop/desktop-runtime-bridge.md) - Desktop-managed Local UI launches, runtime-control, and startup probing.\n- [Desktop runtime readiness](desktop/desktop-runtime-readiness.md) - Validate startup handoff, access admission, lifecycle readiness, and window-open gates.\n- [Desktop transport recovery](desktop/desktop-transport-recovery.md) - Preserve bridge identity, recovery generations, and terminal session disposal.\n- [Desktop SSH runtime operations](desktop/desktop-ssh-runtime-operations.md) - Coordinate shared SSH transports, operation generations, host discovery, and process inventory.\n- [Desktop session and model source](desktop/desktop-session-model-source.md) - Project session routes, opaque Desktop models, Flower attach, and lifecycle invalidation.\n- [Desktop runtime process lifecycle](desktop/desktop-runtime-process-lifecycle.md) - Scoped inventory, historical process reconciliation, package activation ordering, and lifecycle success conditions.\n\n## Gateway\n\n- [Gateway service](gateway/gateway-service.md) - Standalone Gateway binary, managed service lifecycle, and Desktop bridge.\n\n## Code\n\n- [Browser Editor runtime](code/browser-editor-runtime.md) - Code App app server, codespace proxying, and managed Browser Editor setup.\n\n## UI\n\n- [UI presentation transactions](ui/ui-presentation-transactions.md) - Visual intent, after-paint content commits, post-paint effects, keep-alive continuity, and performance budgets.\n- [Workbench interaction contracts](ui/workbench-interaction-contracts.md) - Wheel, text selection, and action-surface ownership contracts.\n- [Workbench input ownership](ui/workbench-input-ownership.md) - Distinguish canvas, local-scroll, pointer, text, and terminal input ownership.\n- [Workbench terminal interaction](ui/workbench-terminal-interaction.md) - Preserve attachment, input-plane, focus, retained-history, and performance ownership.\n- [Workbench surface lifecycle](ui/workbench-surface-lifecycle.md) - Preserve selection, recovery, lazy widgets, and shared floating-surface ownership.\n- [Plugin surfaces](ui/plugin-surfaces.md) - Redeven placement rules for sandboxed ReDevPlugin surfaces in product chrome.\n- [Flower turn launcher](ui/flower-turn-launcher.md) - Contextual first-turn Ask Flower launchers and host handoff responsibilities.\n- [Flower Activity companion](ui/flower-activity-companion.md) - Present one stable Activity Flower surface as a dedicated page, fixed work-detail overlay, or centered bottom-bar presence while preserving canonical authority and Workbench isolation.\n- [Flower live timeline](ui/flower-live-timeline.md) - Canonical live thread timeline projection, replacement events, and cursor ownership.\n- [Flower timeline ordering](ui/flower-timeline-ordering.md) - Consume canonical turn pages, projections, decorations, cursors, and replacement events.\n- [Flower model and navigation presentation](ui/flower-model-navigation.md) - Keep model-source controls, notifications, and staged thread selection explicit.\n- [Flower terminal activity presentation](ui/flower-terminal-activity.md) - Preserve canonical terminal activity, disclosure, animation, and scrolling state.\n- [Flower approval and context state](ui/flower-approval-context.md) - Project approval queues, compaction, context usage, and read acknowledgement.\n- [Flower subagent detail presentation](ui/flower-subagent-detail.md) - Render parent-owned membership and read-only child execution detail.\n\n## AI\n\n- [AI tool runtime](ai/ai-tool-runtime.md) - Builtin tool registry, permission checks, and activity projection.\n- [Flower storage ownership and migrations](ai/flower-storage-ownership-and-migrations.md) - Apply host-only schema v3 and strict product v2-to-v3 migration boundaries.\n- [AI tool permissions and dispatch](ai/tool-permission-runtime.md) - Apply tool registration, scheduling, permission, approval, readonly, and target-routing contracts.\n- [AI tool approval runtime](ai/tool-approval-runtime.md) - Reconcile pending approval queues, conflicts, decisions, and authoritative live state.\n- [AI terminal tool runtime](ai/terminal-tool-runtime.md) - Manage PTY handles, incremental output, termination, and Floret settlement.\n- [AI model and context runtime](ai/model-context-runtime.md) - Separate model-source ownership, provider mapping, token limits, context, and compaction.\n- [Floret thread runtime integration](ai/floret-thread-runtime.md) - Read canonical overviews, titles, structured attachments, and admitted lifecycle through published Floret APIs.\n- [Flower subagent runtime](ai/subagent-runtime.md) - Use Floret-owned child threads, strict spawn input, delegated permission audit, membership, and detail.\n- [Flower thread fork coordination](ai/flower-thread-fork-coordination.md) - Fork canonical Agent state first, then materialize fixed host settings and thread resource ownership.\n- [Flower thread deletion coordination](ai/flower-thread-deletion-coordination.md) - Persist delete intent, remove canonical Floret state first, then host data and physical resources.\n- [Flower plugin generation](ai/flower-plugin-generation.md) - Generated plugin flows through Floret approval and ReDevPlugin lifecycle APIs.\n- [Flower context action records](ai/flower-context-action-records.md) - Ask Flower launcher context validation, persistence, and UI badge projection.\n- [Redeven environment operations](ai/redeven-env-operations.md) - Product boundary for Flower and automation environment lifecycle requests.\n- [OKF bundle lifecycle](ai/okf-bundle-lifecycle.md) - OKF source validation, deterministic artifacts, and runtime embedding.\n- [OKF tool suite](ai/okf-search-tool.md) - Read-only repository knowledge access through index browsing, short search, and concept opening.\n\n## Protocol\n\n- [Gateway v1 protocol](protocol/gateway-v1-protocol.md) - OpenAPI source contract for Gateway HTTP JSON endpoints, auth, envelopes, and Desktop behavior boundaries.\n- [RCPP v2 provider API](protocol/rcpp-v2-provider-api.md) - Provider discovery, Desktop auth, environment catalog, health, open-session, and bootstrap.\n\n## Release\n\n- [CI and release gates](release/ci-and-release-gates.md) - Local/CI checks and release artifact contracts.\n- [OKF release assets](release/okf-release-assets.md) - Public release verification files for the embedded OKF bundle.",
+    "body": "# Redeven OKF Bundle\n\nThis top-level OKF corpus is the maintained repository knowledge surface for the current Redeven implementation. It is authored from current source code, generated contracts, and release automation rather than from removed product documents.\n\n## Architecture\n\n- [Database schema migration ownership](architecture/database-schema-migrations.md) - Automatically migrate Redeven product stores while Floret and ReDevPlugin schemas remain upstream-owned.\n- [Runtime startup presentation](architecture/runtime-startup-presentation.md) - Structured startup events, renderer modes, and Desktop readiness reports.\n- [Local UI surface](architecture/local-ui-surface.md) - Browser entrypoints, access gate, direct sessions, and Env App proxying.\n- [Runtime Service snapshot](architecture/runtime-service-snapshot.md) - Desktop/runtime compatibility, open readiness, capabilities, and bindings.\n- [Runtime session permission gates](architecture/runtime-session-permission-gates.md) - Runtime validation and local permission clamping before sessions open.\n- [Runtime transport dependencies](architecture/runtime-transport-dependencies.md) - Flowersec and Floeterm dependency boundaries.\n- [Env App upstream web dependencies](architecture/env-app-upstream-web-dependencies.md) - Published web package contracts consumed by Env App.\n- [ReDevPlugin host integration boundary](architecture/redevplugin-boundary.md) - Published plugin-platform dependency and Redeven adapter ownership.\n- [Plugin platform integration](architecture/plugin-platform-integration.md) - Local UI, AppServer, released ReDevPlugin Host mounting, product adapters, and Flower orchestration boundaries.\n- [Container resources capability](architecture/container-resources-capability.md) - Redeven-owned Docker and Podman business capability contract for plugin adapter registration.\n\n## Security\n\n- [Local UI network exposure](security/local-ui-network-exposure.md) - Fixed-port plaintext exposure admission, exact authority checks, acknowledgement, and warning preferences.\n- [Permission policy and filesystem scope](security/permission-policy-and-filesystem-scope.md) - Local caps and directory-level file access policy.\n- [Plugin platform integration security](security/plugin-platform-integration-security.md) - Session, route, permission, and capability boundaries for ReDevPlugin adapters.\n\n## Desktop\n\n- [Desktop shell theme state](desktop/desktop-shell-theme-state.md) - Global source, per-mode Floe presets, renderer synchronization, and native window colors.\n- [Desktop runtime bridge](desktop/desktop-runtime-bridge.md) - Desktop-managed Local UI launches, runtime-control, and startup probing.\n- [Desktop runtime readiness](desktop/desktop-runtime-readiness.md) - Validate startup handoff, access admission, lifecycle readiness, and window-open gates.\n- [Desktop transport recovery](desktop/desktop-transport-recovery.md) - Preserve bridge identity, recovery generations, and terminal session disposal.\n- [Desktop SSH runtime operations](desktop/desktop-ssh-runtime-operations.md) - Coordinate shared SSH transports, operation generations, host discovery, and process inventory.\n- [Desktop session and model source](desktop/desktop-session-model-source.md) - Project session routes, opaque Desktop models, Flower attach, and lifecycle invalidation.\n- [Desktop runtime process lifecycle](desktop/desktop-runtime-process-lifecycle.md) - Scoped inventory, historical process reconciliation, package activation ordering, and lifecycle success conditions.\n\n## Gateway\n\n- [Gateway service](gateway/gateway-service.md) - Standalone Gateway binary, managed service lifecycle, and Desktop bridge.\n\n## Code\n\n- [Browser Editor runtime](code/browser-editor-runtime.md) - Code App app server, codespace proxying, and managed Browser Editor setup.\n\n## UI\n\n- [UI presentation transactions](ui/ui-presentation-transactions.md) - Visual intent, after-paint content commits, post-paint effects, keep-alive continuity, and performance budgets.\n- [Workbench interaction contracts](ui/workbench-interaction-contracts.md) - Wheel, text selection, and action-surface ownership contracts.\n- [Workbench input ownership](ui/workbench-input-ownership.md) - Distinguish canvas, local-scroll, pointer, text, and terminal input ownership.\n- [Workbench terminal interaction](ui/workbench-terminal-interaction.md) - Preserve attachment, input-plane, focus, retained-history, and performance ownership.\n- [Workbench surface lifecycle](ui/workbench-surface-lifecycle.md) - Preserve selection, recovery, lazy widgets, and shared floating-surface ownership.\n- [Plugin surfaces](ui/plugin-surfaces.md) - Redeven placement rules for sandboxed ReDevPlugin surfaces in product chrome.\n- [Flower turn launcher](ui/flower-turn-launcher.md) - Contextual first-turn Ask Flower launchers and host handoff responsibilities.\n- [Flower Activity companion](ui/flower-activity-companion.md) - Present one stable Activity Flower surface as a dedicated page, fixed work-detail overlay, or centered bottom-bar presence while preserving canonical authority and Workbench isolation.\n- [Flower live timeline](ui/flower-live-timeline.md) - Canonical live thread timeline projection, replacement events, and cursor ownership.\n- [Flower timeline ordering](ui/flower-timeline-ordering.md) - Consume canonical turn pages, projections, decorations, cursors, and replacement events.\n- [Flower model and navigation presentation](ui/flower-model-navigation.md) - Keep model-source controls, notifications, and staged thread selection explicit.\n- [Flower terminal activity presentation](ui/flower-terminal-activity.md) - Preserve canonical terminal activity, disclosure, animation, and scrolling state.\n- [Flower approval and context state](ui/flower-approval-context.md) - Project approval queues, compaction, context usage, and read acknowledgement.\n- [Flower subagent detail presentation](ui/flower-subagent-detail.md) - Render parent-owned membership and read-only child execution detail.\n\n## AI\n\n- [AI tool runtime](ai/ai-tool-runtime.md) - Builtin tool registry, permission checks, and activity projection.\n- [Flower storage ownership and migrations](ai/flower-storage-ownership-and-migrations.md) - Apply host-only schema v3 and strict product v2-to-v3 migration boundaries.\n- [AI tool permissions and dispatch](ai/tool-permission-runtime.md) - Apply tool registration, scheduling, permission, approval, readonly, and target-routing contracts.\n- [AI tool approval runtime](ai/tool-approval-runtime.md) - Reconcile pending approval queues, conflicts, decisions, and authoritative live state.\n- [AI terminal tool runtime](ai/terminal-tool-runtime.md) - Manage PTY handles, incremental output, termination, and Floret settlement.\n- [AI model and context runtime](ai/model-context-runtime.md) - Separate model-source ownership, provider mapping, token limits, context, and compaction.\n- [Floret thread runtime integration](ai/floret-thread-runtime.md) - Read canonical overviews, titles, structured attachments, and admitted lifecycle through published Floret APIs.\n- [Flower subagent runtime](ai/subagent-runtime.md) - Use Floret-owned child threads, strict spawn input, delegated permission audit, membership, and detail.\n- [Flower thread fork coordination](ai/flower-thread-fork-coordination.md) - Fork canonical Agent state first, then materialize fixed host settings and thread resource ownership.\n- [Flower thread deletion coordination](ai/flower-thread-deletion-coordination.md) - Persist delete intent, remove canonical Floret state first, then host data and physical resources.\n- [Flower plugin generation](ai/flower-plugin-generation.md) - Generated plugin flows through Floret approval and ReDevPlugin lifecycle APIs.\n- [Flower context action records](ai/flower-context-action-records.md) - Ask Flower launcher context validation, persistence, and UI badge projection.\n- [Redeven environment operations](ai/redeven-env-operations.md) - Product boundary for Flower and automation environment lifecycle requests.\n- [OKF bundle lifecycle](ai/okf-bundle-lifecycle.md) - OKF source validation, deterministic artifacts, and runtime embedding.\n- [OKF tool suite](ai/okf-search-tool.md) - Read-only repository knowledge access through index browsing, short search, and concept opening.\n\n## Protocol\n\n- [Gateway v1 protocol](protocol/gateway-v1-protocol.md) - OpenAPI source contract for Gateway HTTP JSON endpoints, auth, envelopes, and Desktop behavior boundaries.\n- [RCPP v2 provider API](protocol/rcpp-v2-provider-api.md) - Provider discovery, Desktop auth, environment catalog, health, open-session, and bootstrap.\n\n## Release\n\n- [CI and release gates](release/ci-and-release-gates.md) - Local/CI checks and release artifact contracts.\n- [OKF release assets](release/okf-release-assets.md) - Public release verification files for the embedded OKF bundle.",
     "sections": [
       {
         "title": "Architecture",
         "slug": "architecture",
         "entries": [
+          {
+            "concept_id": "architecture.database-schema-migrations",
+            "path": "architecture/database-schema-migrations.md",
+            "type": "Architecture Contract",
+            "title": "Database schema migration ownership",
+            "description": "Redeven automatically migrates product databases at startup while upstream-owned stores remain opaque.",
+            "tags": [
+              "architecture",
+              "migrations",
+              "sqlite",
+              "storage",
+              "upgrades"
+            ],
+            "summary": "- Authority: each repository migrates the schemas it owns; Redeven owns product databases, while Floret and ReDevPlugin own their internal stores.\n- Outcome: a Redeven upgrade opens every product SQLite store through the versioned migration engine before dependent services accept requests.\n- Invariants: supported forward migrations are contiguous, atomic, verified, and preserve product data; future, drifted, wrong-kind, and unsupported schemas fail closed.\n- Failure boundary: migration failure stops the affected startup path with the previous supported database intact; no reset, replacement database, or direct upstream SQL is allowed.",
+            "section_count": 2
+          },
           {
             "concept_id": "architecture.runtime-startup-presentation",
             "path": "architecture/runtime-startup-presentation.md",
@@ -977,6 +993,12 @@
         "title": "Container resources capability"
       },
       {
+        "label": "Database schema migration ownership",
+        "path": "architecture/database-schema-migrations.md",
+        "concept_id": "architecture.database-schema-migrations",
+        "title": "Database schema migration ownership"
+      },
+      {
         "label": "Env App upstream web dependencies",
         "path": "architecture/env-app-upstream-web-dependencies.md",
         "concept_id": "architecture.env-app-upstream-web-dependencies",
@@ -1758,7 +1780,7 @@
         "title": "Flower storage ownership and migrations",
         "type": "Storage Contract"
       },
-      "body_length": 8215,
+      "body_length": 8519,
       "summary": "- Authority: Floret owns admitted Agent state; Redeven owns host settings, unadmitted work, upload storage, routing/read state, security audit, and cross-store operation intent.\n- Outcome: threadstore schema v4 uses `ai_thread_settings` plus product-only `ai_flower_thread_routing` and contains no title, transcript, turn, run, projection, approval, todo, context, provider-state, or SubAgent hierarchy copy.\n- Invariants: migration accepts only verified product schemas v2, v3, and v4; Floret title migration for v2 runs before the Redeven SQL migration transaction.\n- Failure boundary: title conflicts, unsupported kind/version, schema drift, invalid records, and failed Floret calls stop startup without repair, backup, reset, or substitute database creation.",
       "sections": [
         {
@@ -1772,8 +1794,8 @@
           "id": "boundaries",
           "title": "Boundaries",
           "level": 1,
-          "body": "Redeven migration code may call only public Floret maintenance APIs and may retain only host settings, resources, queue state, routing/read state, audit, and operation intent. It must not query Floret SQLite, infer canonical data from old Redeven rows, or keep legacy aliases and compatibility parsers after conversion to v4.",
-          "char_count": 325
+          "body": "The repository-wide automatic migration and database ownership contract is\ndefined by [Database schema migration ownership](../architecture/database-schema-migrations.md).\nThis concept defines the Flower-specific cross-owner exception and does not\ngrant Redeven authority over Floret's database schema.\n\nRedeven migration code may call only public Floret maintenance APIs and may retain only host settings, resources, queue state, routing/read state, audit, and operation intent. It must not query Floret SQLite, infer canonical data from old Redeven rows, or keep legacy aliases and compatibility parsers after conversion to v4.",
+          "char_count": 629
         }
       ],
       "evidence": [
@@ -1851,6 +1873,14 @@
         }
       ],
       "snippet": "- Authority: Floret owns admitted Agent state; Redeven owns host settings, unadmitted work, upload storage, routing/read state, security audit, and cross-store operation intent. - Outcome: threadstore schema v4 uses `ai_thread_settings` plu",
+      "links": [
+        {
+          "label": "Database schema migration ownership",
+          "path": "architecture/database-schema-migrations.md",
+          "concept_id": "architecture.database-schema-migrations",
+          "title": "Database schema migration ownership"
+        }
+      ],
       "backlinks": [
         {
           "label": "Redeven OKF Bundle",
@@ -3196,6 +3226,116 @@
       ],
       "snippet": "Redeven owns Docker and Podman access as a business adapter; ReDevPlugin owns the plugin identity, permission, confirmation, operation, stream, quota, revocation, and audit lifecycle around every call. The active capability is",
       "backlinks": [
+        {
+          "label": "Redeven OKF Bundle",
+          "path": "index.md",
+          "title": "Redeven OKF Bundle"
+        }
+      ]
+    },
+    {
+      "path": "architecture/database-schema-migrations.md",
+      "concept_id": "architecture.database-schema-migrations",
+      "type": "Architecture Contract",
+      "title": "Database schema migration ownership",
+      "description": "Redeven automatically migrates product databases at startup while upstream-owned stores remain opaque.",
+      "tags": [
+        "architecture",
+        "migrations",
+        "sqlite",
+        "storage",
+        "upgrades"
+      ],
+      "timestamp": "2026-07-22T00:00:00Z",
+      "frontmatter": {
+        "description": "Redeven automatically migrates product databases at startup while upstream-owned stores remain opaque.",
+        "tags": [
+          "architecture",
+          "migrations",
+          "sqlite",
+          "storage",
+          "upgrades"
+        ],
+        "timestamp": "2026-07-22T00:00:00Z",
+        "title": "Database schema migration ownership",
+        "type": "Architecture Contract"
+      },
+      "body_length": 4960,
+      "summary": "- Authority: each repository migrates the schemas it owns; Redeven owns product databases, while Floret and ReDevPlugin own their internal stores.\n- Outcome: a Redeven upgrade opens every product SQLite store through the versioned migration engine before dependent services accept requests.\n- Invariants: supported forward migrations are contiguous, atomic, verified, and preserve product data; future, drifted, wrong-kind, and unsupported schemas fail closed.\n- Failure boundary: migration failure stops the affected startup path with the previous supported database intact; no reset, replacement database, or direct upstream SQL is allowed.",
+      "sections": [
+        {
+          "id": "contract",
+          "title": "Contract",
+          "level": 1,
+          "body": "## Redeven-owned schemas\n\nRedeven product SQLite stores declare a stable database kind, current version,\nsupported minimum version, ordered migration steps, and final schema verifier.\nOpening a store serializes migration access, reads the durable version and kind,\napplies each required step, updates version metadata, verifies the exact final\nshape, and commits once. Fresh stores initialize at the current schema; an\nexisting supported store advances automatically during application startup\nbefore the service is returned to callers.\n\nThe current startup composition opens the Code App registry, port-forward\nregistry, thread read state, AI product threadstore, Notes, Workbench layout,\nand release-trust state through this contract. Their individual migration tests\nremain responsible for historical shape validation and preservation of their\ndomain records. The shared engine rejects incomplete migration chains,\nunsupported old versions, future versions, malformed metadata, wrong database\nkinds, and unversioned non-empty databases. Migration and verification errors\nroll back the transaction; startup must surface the error instead of deleting,\nrenaming aside, repairing heuristically, or replacing the database.\n\nEvery schema change must add the next explicit version step and tests for the\nnew upgrade edge, rollback, drift, future-version rejection, and user-data\npreservation. The repository-level SQLite opening inventory makes any new\nphysical database entrypoint an explicit ownership review: production\nRedeven-owned stores use the shared migration engine, while the two reviewed\ndirect openings are limited to threadstore migration preflight and in-memory\ncanonical-schema verification.\n\n## Upstream-owned schemas\n\nFloret owns Agent journal storage and its schema lifecycle. Redeven supplies a\npath only to the published `flruntime.OpenSQLiteStore` entrypoint in the AI\ncomposition root; it does not query, patch, version, or migrate Floret tables.\nRedeven migrations may call public Floret maintenance APIs only when moving a\nRedeven-owned field across the ownership boundary, and must complete their\nproduct preflight before making such an upstream effect.\n\nReDevPlugin similarly owns the schemas behind its released registry and host\nmodules. Redeven may choose the product state root and open released module\nAPIs, but it does not inspect or migrate ReDevPlugin tables. Opaque upstream\nidentifiers may appear in Redeven coordination records; upstream content and\nlifecycle state must not be copied into product tables as a migration shortcut.",
+          "char_count": 2563
+        },
+        {
+          "id": "boundaries",
+          "title": "Boundaries",
+          "level": 1,
+          "body": "Automatic migration is not permission to accept arbitrary historical shapes.\nOnly explicitly versioned and exactly verified inputs are supported. Dropping a\nmigration requires a deliberate minimum-supported-version decision reflected\nin release compatibility and this OKF corpus.\n\nCross-database atomicity is not assumed. A migration that must call a public\nupstream maintenance API requires a read-only product preflight and idempotent\nupstream semantics before the local schema transaction begins. Redeven never\nopens an upstream database directly to manufacture a cross-store transaction.",
+          "char_count": 591
+        }
+      ],
+      "evidence": [
+        {
+          "id": "redeven:internal/persistence/sqliteutil/engine.go:117:opens redeven sqlite stores and runs the validated migration transaction.",
+          "source": "redeven:internal/persistence/sqliteutil/engine.go",
+          "line": 117,
+          "description": "Opens Redeven SQLite stores and runs the validated migration transaction."
+        },
+        {
+          "id": "redeven:internal/persistence/sqliteutil/engine_test.go:13:covers fresh initialization, atomic rollback, unsupported versions, kind checks, malformed metadata, and concurrent opens.",
+          "source": "redeven:internal/persistence/sqliteutil/engine_test.go",
+          "line": 13,
+          "description": "Covers fresh initialization, atomic rollback, unsupported versions, kind checks, malformed metadata, and concurrent opens."
+        },
+        {
+          "id": "redeven:internal/persistence/sqliteutil/repository_contract_test.go:14:locks the reviewed redeven, direct, and floret sqlite opening inventories.",
+          "source": "redeven:internal/persistence/sqliteutil/repository_contract_test.go",
+          "line": 14,
+          "description": "Locks the reviewed Redeven, direct, and Floret SQLite opening inventories."
+        },
+        {
+          "id": "redeven:internal/codeapp/codeapp.go:156:opens product stores during service composition before returning the code app service.",
+          "source": "redeven:internal/codeapp/codeapp.go",
+          "line": 156,
+          "description": "Opens product stores during service composition before returning the Code App service."
+        },
+        {
+          "id": "redeven:internal/ai/threadstore/store.go:43:preflights and automatically migrates the redeven-owned ai product database.",
+          "source": "redeven:internal/ai/threadstore/store.go",
+          "line": 43,
+          "description": "Preflights and automatically migrates the Redeven-owned AI product database."
+        },
+        {
+          "id": "redeven:internal/ai/floret_bootstrap.go:432:opens the floret-owned store only through the published runtime api.",
+          "source": "redeven:internal/ai/floret_bootstrap.go",
+          "line": 432,
+          "description": "Opens the Floret-owned store only through the published runtime API."
+        },
+        {
+          "id": "redeven:scripts/check_floret_dependency_boundary.sh:118:rejects redeven access to floret-owned storage schemas and raw sql.",
+          "source": "redeven:scripts/check_floret_dependency_boundary.sh",
+          "line": 118,
+          "description": "Rejects Redeven access to Floret-owned storage schemas and raw SQL."
+        },
+        {
+          "id": "redeven:okf/ai/flower-storage-ownership-and-migrations.md:1:defines the specialized cross-owner flower product migration.",
+          "source": "redeven:okf/ai/flower-storage-ownership-and-migrations.md",
+          "line": 1,
+          "description": "Defines the specialized cross-owner Flower product migration."
+        }
+      ],
+      "snippet": "- Authority: each repository migrates the schemas it owns; Redeven owns product databases, while Floret and ReDevPlugin own their internal stores. - Outcome: a Redeven upgrade opens every product SQLite store through the versioned migration",
+      "backlinks": [
+        {
+          "label": "Flower storage ownership and migrations",
+          "path": "ai/flower-storage-ownership-and-migrations.md",
+          "concept_id": "ai.flower-storage-ownership-and-migrations",
+          "title": "Flower storage ownership and migrations"
+        },
         {
           "label": "Redeven OKF Bundle",
           "path": "index.md",
@@ -8071,5 +8211,5 @@
       ]
     }
   ],
-  "source_sha256": "c772e43ef9dedfc42a3cdbae6760db152e4903ee2b1efbde66a88340b8889013"
+  "source_sha256": "e73f4921e550d769fe62e2edbe8f7bc3b6bb530cd91685381e5e7d09ab094a6e"
 }
