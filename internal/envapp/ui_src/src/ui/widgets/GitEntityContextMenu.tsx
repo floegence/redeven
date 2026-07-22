@@ -1,7 +1,11 @@
 import { Show, createEffect, createSignal, onCleanup, type JSX } from 'solid-js';
 
 import { useI18n } from '../i18n';
-import { FloatingContextMenu, type FloatingContextMenuItem } from './FloatingContextMenu';
+import {
+  FLOATING_CONTEXT_MENU_WIDTH_PX,
+  FloatingContextMenu,
+  type FloatingContextMenuItem,
+} from './FloatingContextMenu';
 
 export const GIT_CONTEXT_ACTION_GROUPS = [
   'assistant',
@@ -164,12 +168,10 @@ export function GitEntityContextMenu<TTarget>(props: GitEntityContextMenuProps<T
           ariaLabel={i18n.t('git.common.action')}
           focusAnchor={menu.restoreFocusTo}
           boundarySize={menu.boundarySize}
-          width={280}
-          estimatedActionHeight={44}
+          width={FLOATING_CONTEXT_MENU_WIDTH_PX}
           focusDisabledItems
           restoreFocusOnEscape
           restoreFocusOnTab
-          roomy
           items={composeGitContextMenuItems(props.items(menu.target)).map((item) => (
             item.kind === 'action'
               ? {
