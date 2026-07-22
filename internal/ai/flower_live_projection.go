@@ -152,6 +152,9 @@ func (s *Service) ListFlowerThreadLiveEvents(ctx context.Context, meta *session.
 	s.mu.Lock()
 	stream := s.flowerLiveByThread[threadKey]
 	streamGeneration := s.flowerLiveStreamGenerationValue()
+	if _, retired := s.flowerLiveRetired[threadKey]; retired {
+		stream = nil
+	}
 	if stream == nil {
 		s.mu.Unlock()
 		if afterSeq > 0 {
@@ -172,10 +175,17 @@ func (s *Service) ListFlowerThreadLiveEvents(ctx context.Context, meta *session.
 		return &FlowerLiveEventsResponse{StreamGeneration: streamGeneration, Events: []FlowerLiveEvent{event}, NextCursor: afterSeq, RetainedFromSeq: retainedFromSeq}, nil
 	}
 
-	events := make([]FlowerLiveEvent, 0, limit)
-	for _, event := range stream.Events {
+	events := []FlowerLiveEvent{}
+	for index, event := range stream.Events {
 		if event.Seq <= afterSeq {
 			continue
+		}
+		if len(events) == 0 {
+			capacity := len(stream.Events) - index
+			if capacity > limit {
+				capacity = limit
+			}
+			events = make([]FlowerLiveEvent, 0, capacity)
 		}
 		events = append(events, cloneFlowerLiveEvent(event))
 		if len(events) >= limit {
@@ -924,7 +934,7 @@ func (s *Service) publishFloretApprovalResult(endpointID string, threadID string
 	if err != nil {
 		return 0, err
 	}
-	event := s.appendFlowerLiveEvent(FlowerLiveEvent{
+	cursor, err := s.appendFlowerLiveEventCursor(FlowerLiveEvent{
 		EndpointID: endpointID,
 		ThreadID:   threadID,
 		RunID:      strings.TrimSpace(r.id),
@@ -935,10 +945,13 @@ func (s *Service) publishFloretApprovalResult(endpointID string, threadID string
 			ApprovalQueue: *queue,
 		}),
 	})
+	if err != nil {
+		return 0, err
+	}
 	if !r.isDetached() {
 		r.publishThreadApprovalStateForCanonicalQueue(actions)
 	}
-	return event.Seq, nil
+	return cursor, nil
 }
 
 func (s *Service) submitControlConfirmationApproval(r *run, endpointID string, threadID string, runID string, toolID string, actionID string, liveAction FlowerApprovalAction, req SubmitFlowerApprovalRequest) (*SubmitFlowerApprovalResponse, error) {
@@ -975,7 +988,7 @@ func (s *Service) submitControlConfirmationApproval(r *run, endpointID string, t
 	approval.Status = FlowerApprovalStatusResolved
 	approval.CanApprove = false
 	approval.ResolvedAtMs = time.Now().UnixMilli()
-	resolved := s.appendFlowerLiveEvent(FlowerLiveEvent{
+	cursor, err := s.appendFlowerLiveEventCursor(FlowerLiveEvent{
 		EndpointID: endpointID,
 		ThreadID:   threadID,
 		RunID:      runID,
@@ -983,12 +996,15 @@ func (s *Service) submitControlConfirmationApproval(r *run, endpointID string, t
 		Kind:       FlowerLiveApprovalResolved,
 		Payload:    mustFlowerPayload(FlowerLiveApprovalPayload{Action: approval}),
 	})
+	if err != nil {
+		return nil, err
+	}
 	if r.activeFloretHost() == nil {
 		r.publishThreadApprovalStateForCanonicalQueue(nil)
 	} else if err := r.syncFloretApprovalQueue(context.Background()); err != nil {
 		return nil, fmt.Errorf("refresh Floret approval queue after control confirmation: %w", err)
 	}
-	return &SubmitFlowerApprovalResponse{OK: true, CurrentCursor: resolved.Seq}, nil
+	return &SubmitFlowerApprovalResponse{OK: true, CurrentCursor: cursor}, nil
 }
 
 func (s *Service) flowerLiveCursorLocked(endpointID string, threadID string) int64 {
@@ -1047,14 +1063,14 @@ func emptyFlowerLiveMaterializedState() FlowerLiveMaterializedState {
 	}
 }
 
-func (s *Service) appendFlowerLiveEvent(event FlowerLiveEvent) FlowerLiveEvent {
+func (s *Service) appendFlowerLiveEvent(event FlowerLiveEvent) (FlowerLiveEvent, bool) {
 	if s == nil {
-		return event
+		return event, false
 	}
 	event.EndpointID = strings.TrimSpace(event.EndpointID)
 	event.ThreadID = strings.TrimSpace(event.ThreadID)
 	if event.EndpointID == "" || event.ThreadID == "" || event.Kind == "" {
-		return event
+		return event, false
 	}
 	if event.AtUnixMs <= 0 {
 		event.AtUnixMs = time.Now().UnixMilli()
@@ -1062,10 +1078,14 @@ func (s *Service) appendFlowerLiveEvent(event FlowerLiveEvent) FlowerLiveEvent {
 	event.SchemaVersion = FlowerLiveSchemaVersion
 	threadKey := runThreadKey(event.EndpointID, event.ThreadID)
 	if threadKey == "" {
-		return event
+		return event, false
 	}
 
 	s.mu.Lock()
+	if _, retired := s.flowerLiveRetired[threadKey]; retired {
+		s.mu.Unlock()
+		return event, false
+	}
 	if s.flowerLiveByThread == nil {
 		s.flowerLiveByThread = map[string]*flowerLiveThreadStream{}
 	}
@@ -1081,7 +1101,36 @@ func (s *Service) appendFlowerLiveEvent(event FlowerLiveEvent) FlowerLiveEvent {
 		s.log.Debug("flower approval queue", "endpoint_id", event.EndpointID, "thread_id", event.ThreadID, "generation", queue.Generation, "revision", queue.Revision, "current_action_id", queue.CurrentActionID, "position", queue.CurrentPosition, "total", queue.Total, "unresolved", queue.UnresolvedCount)
 	}
 	s.mu.Unlock()
-	return event
+	return event, true
+}
+
+func (s *Service) appendFlowerLiveEventCursor(event FlowerLiveEvent) (int64, error) {
+	appended, accepted := s.appendFlowerLiveEvent(event)
+	if !accepted || appended.Seq <= 0 {
+		return 0, approvalConflict("thread live state is no longer available")
+	}
+	return appended.Seq, nil
+}
+
+func (s *Service) retireFlowerLiveThread(endpointID string, threadID string) {
+	if s == nil {
+		return
+	}
+	threadKey := runThreadKey(endpointID, threadID)
+	if threadKey == "" {
+		return
+	}
+	s.mu.Lock()
+	s.retireFlowerLiveThreadLocked(threadKey)
+	s.mu.Unlock()
+}
+
+func (s *Service) retireFlowerLiveThreadLocked(threadKey string) {
+	if s.flowerLiveRetired == nil {
+		s.flowerLiveRetired = make(map[string]struct{})
+	}
+	s.flowerLiveRetired[threadKey] = struct{}{}
+	delete(s.flowerLiveByThread, threadKey)
 }
 
 func appendFlowerLiveEventLocked(stream *flowerLiveThreadStream, event FlowerLiveEvent) FlowerLiveEvent {

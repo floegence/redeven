@@ -1088,13 +1088,13 @@ func TestFlowerLiveResyncSignalDoesNotConsumeEventSequence(t *testing.T) {
 		t.Fatalf("CreateThread: %v", err)
 	}
 
-	first := svc.appendFlowerLiveEvent(FlowerLiveEvent{
+	first, _ := svc.appendFlowerLiveEvent(FlowerLiveEvent{
 		EndpointID: meta.EndpointID,
 		ThreadID:   th.ThreadID,
 		Kind:       FlowerLiveThreadPatched,
 		Payload:    mustFlowerPayload(FlowerLiveThreadPatchedPayload{Patch: FlowerLiveThreadPatch{ThreadID: th.ThreadID, Title: "first"}}),
 	})
-	second := svc.appendFlowerLiveEvent(FlowerLiveEvent{
+	second, _ := svc.appendFlowerLiveEvent(FlowerLiveEvent{
 		EndpointID: meta.EndpointID,
 		ThreadID:   th.ThreadID,
 		Kind:       FlowerLiveThreadPatched,
@@ -1132,7 +1132,7 @@ func TestFlowerLiveResyncSignalDoesNotConsumeEventSequence(t *testing.T) {
 		t.Fatalf("resync consumed seq: next before=%d after=%d", nextSeqBeforeResync, nextSeqAfterResync)
 	}
 
-	third := svc.appendFlowerLiveEvent(FlowerLiveEvent{
+	third, _ := svc.appendFlowerLiveEvent(FlowerLiveEvent{
 		EndpointID: meta.EndpointID,
 		ThreadID:   th.ThreadID,
 		Kind:       FlowerLiveThreadPatched,

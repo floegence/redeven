@@ -163,18 +163,44 @@ func (g *Server) buildAIFlowerLiveEventsView(
 	if g == nil || g.ai == nil {
 		return resp, nil
 	}
-	thread, err := g.ai.GetThread(ctx, meta, threadID)
+	return decorateAIFlowerLiveEventsReadStatus(resp, func() (ai.FlowerThreadReadView, error) {
+		thread, err := g.ai.GetThread(ctx, meta, threadID)
+		if err != nil {
+			return ai.FlowerThreadReadView{}, err
+		}
+		if thread == nil {
+			return ai.FlowerThreadReadView{}, errors.New("thread not found")
+		}
+		records, err := g.ensureFlowerReadRecords(ctx, meta, []ai.ThreadView{*thread})
+		if err != nil {
+			return ai.FlowerThreadReadView{}, err
+		}
+		readStatus := flowerReadStatusView(flowerSnapshotFromThread(*thread), records[strings.TrimSpace(thread.ThreadID)])
+		return flowerAIReadStatusView(readStatus), nil
+	})
+}
+
+func decorateAIFlowerLiveEventsReadStatus(
+	resp *ai.FlowerLiveEventsResponse,
+	loadReadStatus func() (ai.FlowerThreadReadView, error),
+) (*ai.FlowerLiveEventsResponse, error) {
+	if resp == nil {
+		return nil, nil
+	}
+	needsReadStatus := false
+	for _, event := range resp.Events {
+		if event.Kind == ai.FlowerLiveThreadPatched {
+			needsReadStatus = true
+			break
+		}
+	}
+	if !needsReadStatus {
+		return resp, nil
+	}
+	readStatus, err := loadReadStatus()
 	if err != nil {
 		return nil, err
 	}
-	if thread == nil {
-		return nil, errors.New("thread not found")
-	}
-	records, err := g.ensureFlowerReadRecords(ctx, meta, []ai.ThreadView{*thread})
-	if err != nil {
-		return nil, err
-	}
-	readStatus := flowerAIReadStatusView(flowerReadStatusView(flowerSnapshotFromThread(*thread), records[strings.TrimSpace(thread.ThreadID)]))
 	out := *resp
 	out.Events = make([]ai.FlowerLiveEvent, len(resp.Events))
 	for i, event := range resp.Events {

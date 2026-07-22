@@ -3055,6 +3055,27 @@ func TestServer_AIThreadLiveEventsIncludeReadStatus(t *testing.T) {
 		t.Fatalf("New: %v", err)
 	}
 	origin := envOriginWithChannel(channelID)
+	emptyLive := performServerRequest(
+		srv,
+		http.MethodGet,
+		"/_redeven_proxy/api/ai/threads/missing_live_events_thread/live/events?after_seq=0&limit=10",
+		origin,
+		"",
+	)
+	if emptyLive.Code != http.StatusOK {
+		t.Fatalf("empty live events status=%d body=%s", emptyLive.Code, emptyLive.Body.String())
+	}
+	var emptyLiveResponse struct {
+		Data struct {
+			Events []json.RawMessage `json:"events"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(emptyLive.Body.Bytes(), &emptyLiveResponse); err != nil {
+		t.Fatalf("unmarshal empty live events response: %v", err)
+	}
+	if emptyLiveResponse.Data.Events == nil || len(emptyLiveResponse.Data.Events) != 0 {
+		t.Fatalf("empty live events=%#v, want non-nil empty array", emptyLiveResponse.Data.Events)
+	}
 	initialDetail := performServerRequest(srv, http.MethodGet, "/_redeven_proxy/api/ai/threads/"+url.PathEscape(thread.ThreadID), origin, "")
 	if initialDetail.Code != http.StatusOK {
 		t.Fatalf("initial detail status=%d body=%s", initialDetail.Code, initialDetail.Body.String())

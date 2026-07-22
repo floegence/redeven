@@ -233,11 +233,12 @@ func TestNewServiceReplaysPendingThreadDeleteOperationsFromEveryCrashBoundary(t 
 		confirmReadState         bool
 		confirmFiles             bool
 		wantReadStateDeleteCount int
+		wantLiveRetired          bool
 	}{
-		{name: "after_intent_persisted", wantReadStateDeleteCount: 1},
-		{name: "after_floret_confirmation", confirmFloret: true, wantReadStateDeleteCount: 1},
-		{name: "after_product_data_commit", confirmFloret: true, commitProductData: true, wantReadStateDeleteCount: 1},
-		{name: "after_read_state_cleanup", confirmFloret: true, commitProductData: true, confirmReadState: true},
+		{name: "after_intent_persisted", wantReadStateDeleteCount: 1, wantLiveRetired: true},
+		{name: "after_floret_confirmation", confirmFloret: true, wantReadStateDeleteCount: 1, wantLiveRetired: true},
+		{name: "after_product_data_commit", confirmFloret: true, commitProductData: true, wantReadStateDeleteCount: 1, wantLiveRetired: true},
+		{name: "after_read_state_cleanup", confirmFloret: true, commitProductData: true, confirmReadState: true, wantLiveRetired: true},
 		{name: "after_physical_file_cleanup", confirmFloret: true, commitProductData: true, confirmReadState: true, confirmFiles: true},
 	} {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -290,6 +291,14 @@ func TestNewServiceReplaysPendingThreadDeleteOperationsFromEveryCrashBoundary(t 
 			}
 			if cleaner.deleteCount() != testCase.wantReadStateDeleteCount {
 				t.Fatalf("read-state delete count=%d, want %d", cleaner.deleteCount(), testCase.wantReadStateDeleteCount)
+			}
+			threadKey := runThreadKey(meta.EndpointID, thread.ThreadID)
+			restarted.mu.Lock()
+			_, liveRetired := restarted.flowerLiveRetired[threadKey]
+			_, liveStreamExists := restarted.flowerLiveByThread[threadKey]
+			restarted.mu.Unlock()
+			if liveRetired != testCase.wantLiveRetired || liveStreamExists {
+				t.Fatalf("live retirement after restart retired/stream=%v/%v, want %v/false", liveRetired, liveStreamExists, testCase.wantLiveRetired)
 			}
 			if _, err := restarted.openFloretThreadReadHost(context.Background(), thread.ThreadID); !errors.Is(err, flruntime.ErrThreadDeleted) {
 				t.Fatalf("canonical thread after replay error=%v, want %v", err, flruntime.ErrThreadDeleted)

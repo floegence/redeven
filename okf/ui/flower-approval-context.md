@@ -3,7 +3,7 @@ type: UI Contract
 title: Flower approval and context state
 description: Approval queue, compaction, context usage, read acknowledgement, and conflict handling.
 tags: [ai, flower, approvals, context]
-timestamp: 2026-07-18T00:00:00Z
+timestamp: 2026-07-22T00:00:00Z
 ---
 # Summary
 
@@ -21,6 +21,8 @@ Flower `/compact` is a composer command, not a chat message. Running threads for
 
 Thread read state is a user-scoped product acknowledgement over a canonical Floret activity snapshot. `ThreadView.FlowerActivity` derives its revision and signature from Floret `ThroughOrdinal`, latest canonical message time, and waiting signal identity at read time; those values are not stored in `ai_thread_settings`. The read-state store persists only the user's acknowledgement. Floret context telemetry does not advance this product acknowledgement.
 
+Live-event read-state decoration is demand driven. An events response reads the canonical Floret thread and the user's acknowledgement only when it contains at least one `thread.patched` event, and it performs those reads once for the response before copy-on-write decoration of every decodable patch. Empty responses, resync events, and other presentation events pass through without a canonical thread or read-state reload. This changes only the read timing: Redeven must not infer an activity snapshot from a delta, lifecycle event, timestamp, run status, or retained presentation payload.
+
 Mark-read requests echo a snapshot previously delivered by the server. Future snapshots are rejected, current-revision signature, waiting-prompt, or last-message mismatches remain protocol errors, and stale snapshots are accepted without pretending they covered newer activity; the response still returns the current authoritative `read_status`. The shared Flower adapter returns that `read_status` directly instead of reloading the bootstrap. A selected running thread that completes while the user keeps it selected is therefore marked read from the final snapshot by the Flower surface, while background completions remain unread until selected.
 
 # Boundaries
@@ -28,6 +30,8 @@ Mark-read requests echo a snapshot previously delivered by the server. Future sn
 Flower does not derive current ordinary or delegated tool approvals from activity rows, transcript rows, audit records, local live cards, or empty assistant block projections. Redeven maps only the root Floret `ReadApprovalQueue` snapshot to Flower actions and replaces all Floret-owned actions atomically; it never orders, promotes, times out, resolves, or retains a missing record locally. Activity rows render historical Floret tool presentation and expose no competing decision controls. A Floret activity with `approval_state=requested` remains audit history unless the same canonical record is present in the current queue. `requires_approval=true` without `approval_state=requested` and `status=waiting` records historical approval participation and is not a UI lock. The UI does not recover a queue from those markers, retain a disappeared action, or use a delayed reload result as substitute authority.
 
 Flower does not infer read snapshots from run status, timestamps, message previews, context telemetry, or local activity tables. It applies `read_status` delivered by bootstrap/list/patch payloads and only persists read state for the currently selected thread. Selected-thread read sync updates local `read_status` from the `/read` response; if the response is still unread, Flower only queues another persistence attempt when the returned snapshot key differs and the thread remains selected.
+
+The live event buffer is Redeven-owned presentation state, not a canonical thread cache. A returned response owns a detached event slice and detached mutable payloads where required; AppServer may share an unchanged payload only within that request. It must not expose the Service's retained mutable backing storage or cache a Floret thread snapshot to avoid authoritative reads.
 
 Flower does not parse provider request metadata, database rows, or transcript text to estimate context pressure. It renders context usage and compaction only from typed live/bootstrap fields projected by Redeven from structured Floret observations. The composer last-known context indicator can reuse a previous `context_usage` value, but it must label that freshness explicitly and must not synthesize a replacement ratio while waiting for the current run's Floret observation. Flower slash commands are local composer actions; `/compact` does not enter the transcript and does not cancel or replace a running agent turn.
 
@@ -40,3 +44,5 @@ Flower does not parse provider request metadata, database rows, or transcript te
 - `redeven:internal/flower_ui/src/chat/flowerContextPresentation.ts:94` - The composer context indicator labels last-known usage through explicit presentation copy.
 - `redeven:internal/ai/flower_live_types.go:406` - Approval actions carry typed ordering, batch, generation, revision, and current-position fields.
 - `redeven:internal/ai/flower_live_types.go:434` - Approval queue snapshots carry typed generation, revision, and current-position fields.
+- `redeven:internal/codeapp/appserver/thread_read_state.go:154` - Live-event read-state decoration loads canonical state only for responses containing thread patches.
+- `redeven:internal/codeapp/appserver/thread_read_state_live_test.go:16` - Focused allocation and loader-count tests enforce the non-patch fast path and copy-on-write patch behavior.

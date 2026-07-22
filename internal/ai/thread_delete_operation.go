@@ -132,6 +132,7 @@ func (s *Service) replayThreadDeleteOperation(ctx context.Context, operation thr
 		}
 		return failed, ErrThreadDeleteOperationFailed
 	}
+	s.retireFlowerLiveThread(operation.EndpointID, operation.ThreadID)
 	if operation.FloretDeletedAtUnixMs <= 0 {
 		if s.threadDeleteFloret == nil {
 			return s.keepThreadDeletePending(ctx, operation, "floret_host_open_failed", errors.New("Floret delete coordinator authority is unavailable"))

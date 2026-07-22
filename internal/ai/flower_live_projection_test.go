@@ -448,7 +448,7 @@ func TestFlowerLiveProjectionReplacesCanonicalApprovalQueueAtomically(t *testing
 		Generation: 4, Revision: 9, CurrentActionID: delegated.ActionID,
 		CurrentPosition: 1, Total: 2, UnresolvedCount: 2,
 	}
-	replaced := svc.appendFlowerLiveEvent(FlowerLiveEvent{
+	replaced, _ := svc.appendFlowerLiveEvent(FlowerLiveEvent{
 		EndpointID: endpointID, ThreadID: threadID, RunID: "run_root",
 		Kind: FlowerLiveApprovalQueueReplaced,
 		Payload: mustFlowerPayload(FlowerLiveApprovalQueuePayload{
@@ -476,7 +476,7 @@ func TestFlowerLiveProjectionReplacesCanonicalApprovalQueueAtomically(t *testing
 	}
 
 	emptyQueue := FlowerApprovalQueue{Generation: 4, Revision: 10}
-	cleared := svc.appendFlowerLiveEvent(FlowerLiveEvent{
+	cleared, _ := svc.appendFlowerLiveEvent(FlowerLiveEvent{
 		EndpointID: endpointID, ThreadID: threadID, RunID: "run_root",
 		Kind: FlowerLiveApprovalQueueReplaced,
 		Payload: mustFlowerPayload(FlowerLiveApprovalQueuePayload{
@@ -515,7 +515,7 @@ func TestFlowerLiveProjectionDoesNotInferApprovalOrigin(t *testing.T) {
 				Revision: 1, Version: 1, SurfaceEpoch: 1, RequestedAtMs: 1000,
 				CanApprove: true, ExpectedSeq: 1, BatchSize: 1, Summary: FlowerApprovalSummary{Label: "Run command"},
 			}
-			requested := svc.appendFlowerLiveEvent(FlowerLiveEvent{
+			requested, _ := svc.appendFlowerLiveEvent(FlowerLiveEvent{
 				EndpointID: endpointID, ThreadID: threadID, RunID: action.RunID,
 				Kind:    FlowerLiveApprovalRequested,
 				Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: action}),
@@ -619,7 +619,7 @@ func TestFlowerLiveProjectionRejectsMalformedControlApprovalLifecycle(t *testing
 			t.Parallel()
 			svc := &Service{flowerLiveByThread: map[string]*flowerLiveThreadStream{}}
 			threadID := "thread_resolved_" + testCase.name
-			requested := svc.appendFlowerLiveEvent(FlowerLiveEvent{
+			requested, _ := svc.appendFlowerLiveEvent(FlowerLiveEvent{
 				EndpointID: "env_control_invalid", ThreadID: threadID, RunID: validPending.RunID,
 				Kind: FlowerLiveApprovalRequested, Payload: mustFlowerPayload(FlowerLiveApprovalPayload{Action: validPending}),
 			})
@@ -687,7 +687,7 @@ func TestFlowerLiveProjectionRejectsMalformedCanonicalApprovalReplacement(t *tes
 			queue := validQueue
 			tt.mutate(&action, &queue)
 			svc := &Service{flowerLiveByThread: map[string]*flowerLiveThreadStream{}}
-			event := svc.appendFlowerLiveEvent(FlowerLiveEvent{
+			event, _ := svc.appendFlowerLiveEvent(FlowerLiveEvent{
 				EndpointID: "env_canonical", ThreadID: "thread_canonical", RunID: action.RunID,
 				Kind: FlowerLiveApprovalQueueReplaced,
 				Payload: mustFlowerPayload(FlowerLiveApprovalQueuePayload{
