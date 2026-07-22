@@ -141,6 +141,7 @@ type Service struct {
 	realtimeByThread     map[string]map[*rpc.Server]struct{} // <endpoint_id>:<thread_id> -> set(stream)
 	realtimeThreadBySRV  map[*rpc.Server]string
 	flowerLiveByThread   map[string]*flowerLiveThreadStream
+	flowerLiveRetired    map[string]struct{}
 	flowerLiveGeneration int64
 
 	uploadsDir string
@@ -363,6 +364,7 @@ func NewService(opts Options) (*Service, error) {
 		realtimeByThread:             make(map[string]map[*rpc.Server]struct{}),
 		realtimeThreadBySRV:          make(map[*rpc.Server]string),
 		flowerLiveByThread:           make(map[string]*flowerLiveThreadStream),
+		flowerLiveRetired:            make(map[string]struct{}),
 		flowerLiveGeneration:         newFlowerLiveGeneration(),
 		suppressQueuedDrainByTh:      make(map[string]bool),
 		uploadsDir:                   uploadsDir,
@@ -589,6 +591,7 @@ func (s *Service) Close() error {
 	s.realtimeByThread = make(map[string]map[*rpc.Server]struct{})
 	s.realtimeThreadBySRV = make(map[*rpc.Server]string)
 	s.flowerLiveByThread = make(map[string]*flowerLiveThreadStream)
+	s.flowerLiveRetired = make(map[string]struct{})
 	maintenanceStopCh := s.maintenanceStopCh
 	maintenanceDoneCh := s.maintenanceDoneCh
 	recoveryStopCh := s.recoveryStopCh
