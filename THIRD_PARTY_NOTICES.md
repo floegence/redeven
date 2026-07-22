@@ -222,7 +222,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @floegence/beamterm-renderer | 1.0.1 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fbeamterm-renderer/v/1.0.1 |  |
 | @floegence/floe-webapp-boot | 0.39.3 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.39.3 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floe-webapp-core | 0.39.3 | MIT | Desktop shell | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.39.3 | License inherited from floegence/floe-webapp root LICENSE. |
-| @floegence/floe-webapp-core | 0.39.4 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.39.4 | License inherited from floegence/floe-webapp root LICENSE. |
+| @floegence/floe-webapp-core | 0.39.5 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.39.5 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floe-webapp-protocol | 0.39.3 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.39.3 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floeterm-terminal-web | 0.8.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.8.0 | Built-in theme attribution and license texts are reproduced below from the verified 0.8.0 package. |
 | @floegence/flowersec-core | 0.27.0 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/0.27.0 |  |

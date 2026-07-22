@@ -1,6 +1,11 @@
 import { For, createUniqueId, onCleanup, onMount, type Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { SurfaceFloatingLayer, type MenuDismissReason } from '@floegence/floe-webapp-core/ui';
+import {
+  SurfaceFloatingLayer,
+  focusMenuItem,
+  handleMenuKeyboardNavigation,
+  type MenuDismissReason,
+} from '@floegence/floe-webapp-core/ui';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 
 export const FLOATING_CONTEXT_MENU_WIDTH_PX = 180;
@@ -60,21 +65,6 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
   let menuEl: HTMLDivElement | null = null;
   const disabledDescriptionPrefix = createUniqueId();
 
-  const actionElements = (): HTMLButtonElement[] => (
-    menuEl
-      ? Array.from(menuEl.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).filter(
-          (element) => props.focusDisabledItems
-            || (!element.disabled && element.getAttribute('aria-disabled') !== 'true'),
-        )
-      : []
-  );
-
-  const focusAt = (index: number) => {
-    const actions = actionElements();
-    if (actions.length === 0) return;
-    actions[(index + actions.length) % actions.length]?.focus();
-  };
-
   const dismiss = (reason: MenuDismissReason) => {
     const focusAnchor = props.focusAnchor;
     const restoreFocus = reason === 'tab'
@@ -86,49 +76,10 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
     }
   };
 
-  const handleKeyDown = (event: KeyboardEvent) => {
-    const actions = actionElements();
-    const activeIndex = actions.indexOf(document.activeElement as HTMLButtonElement);
-
-    switch (event.key) {
-      case 'ArrowDown':
-        event.preventDefault();
-        focusAt(activeIndex < 0 ? 0 : activeIndex + 1);
-        return;
-      case 'ArrowUp':
-        event.preventDefault();
-        focusAt(activeIndex < 0 ? actions.length - 1 : activeIndex - 1);
-        return;
-      case 'Home':
-        event.preventDefault();
-        focusAt(0);
-        return;
-      case 'End':
-        event.preventDefault();
-        focusAt(actions.length - 1);
-        return;
-      case 'Enter':
-      case ' ':
-        if (activeIndex < 0) return;
-        event.preventDefault();
-        actions[activeIndex]?.click();
-        return;
-      case 'Escape':
-        event.preventDefault();
-        event.stopPropagation();
-        dismiss('escape');
-        return;
-      case 'Tab':
-        if (props.restoreFocusOnTab) event.preventDefault();
-        dismiss(event.shiftKey ? 'shift-tab' : 'tab');
-        return;
-      default:
-        return;
-    }
-  };
-
   onMount(() => {
-    const frame = requestAnimationFrame(() => focusAt(0));
+    const frame = requestAnimationFrame(() => focusMenuItem(menuEl, 'first', {
+      includeAriaDisabledItems: props.focusDisabledItems,
+    }));
     onCleanup(() => cancelAnimationFrame(frame));
   });
 
@@ -170,7 +121,14 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
         redevenSurfaceRoleClass('overlay'),
       )}
       onContextMenu={(event) => event.preventDefault()}
-      onKeyDown={handleKeyDown}
+      onKeyDown={(event) => {
+        handleMenuKeyboardNavigation(event, {
+          includeAriaDisabledItems: props.focusDisabledItems,
+          onActivate: (item) => item.click(),
+          onDismiss: dismiss,
+          preventDefaultOnTab: props.restoreFocusOnTab,
+        });
+      }}
     >
       <For each={props.items}>
         {(item, index) => {
