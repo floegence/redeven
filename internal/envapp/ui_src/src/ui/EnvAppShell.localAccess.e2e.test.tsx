@@ -2167,6 +2167,45 @@ describe('EnvAppShell local access gate', () => {
     }
   });
 
+  it('mounts the Activity Flower quick entry only after password unlock', async () => {
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: true, unlocked: false });
+    refreshLocalRuntimeMock.mockResolvedValue({
+      mode: 'local',
+      env_public_id: 'env_local',
+      direct_ws_url: 'ws://localhost/_redeven_direct/ws',
+      access_status: { password_required: true, unlocked: true },
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+
+      expect(host.textContent).toContain('Unlock local runtime');
+      expect(host.querySelector('[data-activity-flower-bottom-bar]')).toBeNull();
+      expect(host.querySelector('[data-activity-flower-quick-entry]')).toBeNull();
+      expect(host.querySelector('[data-activity-flower-mobile-quick-entry]')).toBeNull();
+
+      const input = host.querySelector('input[type="password"]') as HTMLInputElement;
+      input.value = 'secret';
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+      host.querySelector('form')?.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+
+      await flushAsync();
+      await flushAsync();
+
+      expect(host.textContent).not.toContain('Unlock local runtime');
+      expect(host.querySelector('[data-activity-flower-bottom-bar]')).toBeTruthy();
+      expect(host.querySelector('[data-activity-flower-quick-entry]')).toBeTruthy();
+    } finally {
+      dispose();
+    }
+  });
+
   it('labels the password field, links helper/error text, and restores focus after unlock failures', async () => {
     unlockLocalAccessMock.mockRejectedValueOnce(new Error('Wrong password.'));
 

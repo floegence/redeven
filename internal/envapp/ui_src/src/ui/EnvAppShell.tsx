@@ -3786,6 +3786,7 @@ export function EnvAppShell() {
         ref={activityFlowerBottomBarAnchorRef}
         class="flower-activity-quick-entry"
         classList={{ 'flower-activity-quick-entry-active': activityFlowerExpanded() }}
+        data-activity-flower-quick-entry
       >
         <FlowerNavigationIcon
           class={`flower-activity-quick-entry-icon h-3.5 w-3.5 shrink-0 ${
@@ -3855,7 +3856,7 @@ export function EnvAppShell() {
       sidebarMode="auto"
       slotClassNames={{
         sidebar: layout.sidebarVisibilityMotion() === 'instant' ? 'transition-none' : undefined,
-        bottomBarHeight: 'flower-activity-bottom-bar-height',
+        bottomBarHeight: canUseFlower() ? 'flower-activity-bottom-bar-height' : undefined,
       }}
       resolveSidebarVisibilityMotion={({ currentActiveId, nextActiveId, isMobile }) => (
         resolveEnvSidebarVisibilityMotion({
@@ -3873,10 +3874,11 @@ export function EnvAppShell() {
       activityItems={activityItems()}
       activityBottomItems={activityBottomItems()}
       topBarActions={<HeaderActions />}
-      bottomBarItems={
+      bottomBarItems={canUseFlower() ? (
         <div
           class="flower-activity-bottom-grid"
           style={`--flower-visual-viewport-bottom-offset:${activityFlowerVisualViewportBottomOffset()}px`}
+          data-activity-flower-bottom-bar
         >
           <div class="flower-activity-bottom-side flower-activity-bottom-side-start">
             <div class="flower-activity-env-identity">
@@ -3928,7 +3930,7 @@ export function EnvAppShell() {
             </BottomBarItem>
           </div>
         </div>
-      }
+      ) : undefined}
     >
       <div class="h-full min-h-0 overflow-hidden flex flex-col">
         <div
@@ -4026,7 +4028,7 @@ export function EnvAppShell() {
           ]}
         />
       </div>
-      <Show when={layout.isMobile() && viewMode() === 'activity'}>
+      <Show when={layout.isMobile() && viewMode() === 'activity' && canUseFlower()}>
         <div
           class="flower-activity-mobile-quick-entry-rail"
           classList={{ 'flower-activity-mobile-quick-entry-rail-ready': Boolean(activityFlowerMobileRailStyle().width) }}
