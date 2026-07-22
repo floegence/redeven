@@ -385,7 +385,7 @@ func TestNewCreatesDurableReDevPluginState(t *testing.T) {
 	integration, err := New(context.Background(), Options{
 		StateDir:         stateDir,
 		PermissionPolicy: testPermissionPolicy(t, "execute_read"),
-		RuntimePath:      filepath.Join(stateDir, "redevplugin-runtime"),
+		RuntimePath:      testRuntimePath(t, stateDir),
 		Containers:       mustContainersAdapter(t, &capabilityEngineClient{}),
 		ResolveSessionMeta: func(string) (*session.Meta, bool) {
 			return nil, false
