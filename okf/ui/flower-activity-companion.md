@@ -10,7 +10,7 @@ quality_exception: Cross-surface UI contract spanning Activity shell placement, 
 
 Activity exposes Flower as one background-capable companion rather than a second page. The bottom bar is the desktop ambient entry; the Activity Bar is the mobile and explicit entry. The companion expands in normal document flow into docked or maximized presentation, and the same `FlowerSurface` instance owns the selected thread, composer drafts, live projection, approvals, and settings. Workbench keeps its existing Flower widget, coordinate system, floating launcher, focus request, and canvas input ownership.
 
-The companion consumes canonical thread summaries and detail from Floret through the existing Redeven Flower adapter. It does not copy transcripts, reconstruct events, add a protocol, or persist Flower lifecycle state. Redeven owns only product placement, ephemeral launcher drafts, local height preference, read-status acknowledgement calls, and host navigation. Floret remains authoritative for admitted threads, turns, runs, messages, activity, approvals, todos, input requests, and lifecycle state.
+The companion consumes an adapter-provided merged projection: Floret remains authoritative for admitted threads, turns, runs, messages, activity, approvals, todos, input requests, and lifecycle state, while Redeven owns product thread settings, queued follow-up commands, and user-scoped `read_status`. The adapter composes those sources into the summary/detail contract consumed by Flower. The companion does not copy transcripts, reconstruct events, add a protocol, or persist Floret lifecycle state; Redeven owns only the product placement, ephemeral launcher drafts, local height preference, read-status calls, and host navigation described here.
 
 If the adapter or exact canonical bootstrap fails, the companion projects an unavailable/error boundary, keeps live consumption and read acknowledgement disabled, and never replays a local transcript. Re-entry to `engaged` requires a successful exact bootstrap and after-paint presentation before live/read behavior resumes; Workbench remains on its independent existing recovery path.
 
@@ -30,13 +30,13 @@ Activity contextual Ask Flower uses the shared launcher submit and context-actio
 
 ## Presence and read acknowledgement
 
-Bottom-bar presence is a pure projection with this priority: attention, unread failure, running, queued, unread canceled, unread completed, unavailable, idle. Each thread contributes to at most one category. It uses canonical summaries and the existing Redeven `read_status`; it does not infer completion from a transport event or local timer.
+Bottom-bar presence is a pure projection with this priority: attention, unread failure, running, queued, unread canceled, unread completed, unavailable, idle. Each thread contributes to at most one category. It uses the adapter's merged canonical summaries, including Redeven's user-scoped `read_status`; it does not infer completion from a transport event or local timer. Read-state ownership and validation remain defined by [Flower approval and context](flower-approval-context.md).
 
 Every Activity-companion `markThreadRead` call passes one final gate. The gate requires Activity foreground, document visibility, engaged companion, no inline launcher, current chat panel, exact selected detail, a matching after-paint content-presented token, no bootstrap/loading/error state, and the current selection sequence. Collapsed, background, Workbench foreground for the companion, staging, hidden transcripts, and launcher presentation cannot acknowledge read. Background polling refreshes summaries, including a selected running thread, but consumes selected live events only after the companion re-enters engaged state and reloads the exact canonical bootstrap.
 
 ## Ownership boundary
 
-Floret and the existing Flower adapter own thread list/detail snapshots, turn/run/message/activity projection, approval and input decisions, todo state, lifecycle transitions, live cursors, and canonical read snapshots. Redeven owns only `read_status` mutation calls already exposed by the adapter, Activity placement, ephemeral UI presence, focus request routing, local drafts, and visual state. The Activity companion must not add a transcript cache, event reducer, thread database, lifecycle endpoint, or alternate admission path.
+Floret owns the canonical turn/run/message/activity, approval, input, todo, and lifecycle projection. Redeven owns product thread settings, queued follow-up commands, and user-scoped read acknowledgement state; the existing adapter composes these with Floret snapshots into the Flower contract. The Activity companion owns only placement, ephemeral UI presence, focus request routing, local drafts, and visual state, and must not add a transcript cache, event reducer, thread database, lifecycle endpoint, or alternate admission path.
 
 # Boundaries
 
@@ -46,11 +46,9 @@ The companion must not auto-expand for a completed, failed, approval, or input s
 
 # Evidence
 
-- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx` - Activity companion shell, legacy `ai` migration, Activity-specific focus requests, bottom-bar trigger, inline launcher placement, and Workbench-only floating launcher rendering.
-- `redeven:internal/envapp/ui_src/src/ui/pages/EnvAIPage.tsx` - Thin host adapter that selects `full` or `companion` presentation without changing the shared adapter contract.
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx` - Companion presentation, after-paint content gate, summary/live polling split, read acknowledgement gate, and controlled thread switcher.
-- `redeven:internal/flower_ui/src/flowerCompanionPresence.ts` - Pure priority projection for ambient status.
-- `redeven:internal/flower_ui/src/threads/FlowerThreadSwitcher.tsx` - Controlled search, grouping, keyboard navigation, and new-conversation presentation.
-- `redeven:internal/flower_ui/src/FlowerTurnLauncherWindow.tsx` - Shared floating and inline first-turn launcher controller.
-- `redeven:internal/envapp/ui_src/src/ui/widgets/FlowerTurnLauncherWindow.tsx` - Env App context preview adapter reused by both placements.
-- `redeven:internal/flower_ui/src/contracts/flowerSurfaceContracts.ts` - Existing adapter and canonical snapshot contracts consumed by both hosts.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.tsx:3697` - Activity's single normal-flow companion shell and `:3758` - explicit presence ownership passed independently of maximized visual presentation.
+- `redeven:internal/flower_ui/src/FlowerSurface.tsx:2720` - exact read-acknowledgement gate and `:3340` - canonical summary refresh ownership independent of `full`/`companion` layout.
+- `redeven:internal/flower_ui/src/flowerCompanionPresence.ts:52` - pure priority projection that consumes canonical summary fields without local lifecycle state.
+- `redeven:internal/flower_ui/src/FlowerSurface.visibility.test.tsx:375` - summary-only canonical queue projection, `:400` - maximized Activity discovery, and `:466` - bootstrap-failure recovery gate.
+- `redeven:internal/envapp/ui_src/src/ui/EnvAppShell.desktopFloatingSurfaces.e2e.test.tsx:687` - one Activity instance across collapsed/docked/maximized states and `:793` - Activity launcher handoff isolation from Workbench.
+- `redeven:internal/flower_ui/src/threads/FlowerThreadSwitcher.tsx:83` - controlled compact conversation projection; canonical selection remains owned by `FlowerSurface`.
