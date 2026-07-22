@@ -53,6 +53,12 @@ function priorityCountKey(thread: FlowerCompanionThreadListItem): CountKey | nul
   return null;
 }
 
+function canonicalThreadTitle(thread: FlowerCompanionThreadListItem): string | undefined {
+  if (thread.title_status !== 'ready') return undefined;
+  const title = thread.title.trim();
+  return title || undefined;
+}
+
 export function projectFlowerCompanionPresence(
   threads: readonly FlowerCompanionThreadListItem[],
   available: boolean,
@@ -72,10 +78,14 @@ export function projectFlowerCompanionPresence(
   }
 
   const priority = PRIORITIES.find(({ count }) => counts[count] > 0);
-  const priorityThread = priority
-    ? threads.find((thread) => priorityCountKey(thread) === priority.count)
-    : undefined;
-  const priorityThreadTitle = String(priorityThread?.title ?? '').trim();
+  let priorityThreadTitle: string | undefined;
+  if (priority) {
+    for (const thread of threads) {
+      if (priorityCountKey(thread) !== priority.count) continue;
+      priorityThreadTitle = canonicalThreadTitle(thread);
+      if (priorityThreadTitle) break;
+    }
+  }
   return {
     priority_status: priority?.status ?? (available ? 'idle' : 'unavailable'),
     priority_count: priority ? counts[priority.count] : available ? 0 : 1,

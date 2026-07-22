@@ -26,8 +26,8 @@ main() {
     ui_pkg_run_pnpm exec vitest run --environment=node --maxWorkers=2 --testTimeout=10000 \
       src/ui/EnvAppShell.desktopFloatingSurfaces.e2e.test.tsx \
       src/ui/EnvAppShell.localAccess.e2e.test.tsx \
-      src/ui/FlowerSurface.composerHandoff.test.tsx \
       src/ui/i18n/i18n.test.ts \
+      src/ui/activityFlowerSummary.test.ts \
       src/ui/FlowerSurface.navigation.context.test.tsx \
       src/ui/FlowerSurface.navigation.activity.test.tsx \
       src/ui/FlowerSurface.navigation.launchSend.test.tsx \
@@ -53,6 +53,7 @@ main() {
       internal/flower_ui/src/flowerSubagentDetailThread.test.ts \
       internal/flower_ui/src/flowerSubagentProjection.test.ts \
       internal/flower_ui/src/flowerThreadListRefresh.test.ts \
+      internal/flower_ui/src/flowerCompanionPresence.test.ts \
       internal/flower_ui/src/flowerPendingTurns.test.ts \
       internal/flower_ui/src/flowerTerminalOutput.test.ts \
       internal/flower_ui/src/FlowerSurface.references.test.ts \

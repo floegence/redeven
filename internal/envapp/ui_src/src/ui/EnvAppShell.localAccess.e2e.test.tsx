@@ -328,6 +328,22 @@ vi.mock('@floegence/floe-webapp-core/app', () => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/layout', () => ({
+  BottomBarCompanion: (props: any) => {
+    createEffect(() => props.onPhaseChange?.(props.open ? 'expanded' : 'collapsed'));
+    return (
+      <Show when={props.retained}>
+        <div
+          id={props.id}
+          data-companion-phase={props.open ? 'expanded' : 'collapsed'}
+          data-companion-visibility={props.visible ? 'visible' : 'hidden'}
+          aria-hidden={props.visible ? undefined : 'true'}
+          inert={!props.visible}
+        >
+          <div ref={(element) => props.contentHostRef?.(element)} />
+        </div>
+      </Show>
+    );
+  },
   BottomBarItem: (props: any) => <button type="button" class={props.class} onClick={props.onClick}>{props.children}</button>,
   DisplayModePageShell: (props: any) => (
     <div data-testid="display-mode-page-shell" data-title={props.title ?? ''}>
@@ -779,6 +795,9 @@ vi.mock('./pages/EnvAIPage', () => ({
     engaged?: boolean;
     transcriptVisible?: boolean;
     companionPresenceOwner?: boolean;
+    companionOpen?: boolean;
+    companionRegionID?: string;
+    onCompanionOpenRequest?: () => void;
   }) => {
     const env = useContext(EnvContextMock as any) as {
       openSettings?: (section?: string, options?: { origin?: { kind: 'flower'; returnSurfaceId: string } }) => void;
@@ -795,7 +814,15 @@ vi.mock('./pages/EnvAIPage', () => ({
         data-engaged={String(Boolean(props.engaged))}
         data-transcript-visible={String(Boolean(props.transcriptVisible))}
         data-presence-owner={String(Boolean(props.companionPresenceOwner))}
+        data-companion-open={String(Boolean(props.companionOpen))}
       >
+        <textarea
+          data-testid="activity-flower-composer"
+          aria-label="Ask Flower"
+          aria-controls={props.companionRegionID}
+          onFocus={() => props.onCompanionOpenRequest?.()}
+          onInput={() => props.onCompanionOpenRequest?.()}
+        />
         <button
           type="button"
           data-testid="mock-open-flower-settings"
@@ -1320,7 +1347,7 @@ describe('EnvAppShell environment entry affordances', () => {
         (host.querySelector(`[data-activity-id="${target}"]`) as HTMLButtonElement | null)?.click();
         if (target === 'ai') {
           await flushUntil(() => (
-            host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation') === 'full_page'
+            host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation') === 'full_page'
           ));
           expect(sidebarActiveTabValue).toBe('ai');
         } else {
@@ -1386,7 +1413,7 @@ describe('EnvAppShell environment entry affordances', () => {
 
       (host.querySelector('[data-activity-id="ai"]') as HTMLButtonElement | null)?.click();
       await flushUntil(() => (
-        host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation') === 'full_page'
+        host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation') === 'full_page'
       ));
       expect(sidebarActiveTabValue).toBe('ai');
 
@@ -1401,7 +1428,7 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushAsync();
 
       expect(sidebarActiveTabValue).toBe('terminal');
-      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('collapsed');
+      expect(host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation')).toBe('collapsed');
       expect((host.querySelector('[data-testid="mock-env-context-state"]') as HTMLElement | null)?.dataset.settingsOrigin).toBe('');
 
       (host.querySelector('[data-activity-id="settings"]') as HTMLButtonElement | null)?.click();
@@ -2283,7 +2310,7 @@ describe('EnvAppShell local access gate', () => {
     }
   });
 
-  it('mounts the Activity Flower quick entry only after password unlock', async () => {
+  it('mounts the Activity Flower companion and its real composer only after password unlock', async () => {
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
     getLocalAccessStatusMock.mockResolvedValue({ password_required: true, unlocked: false });
     refreshLocalRuntimeMock.mockResolvedValue({
@@ -2303,8 +2330,11 @@ describe('EnvAppShell local access gate', () => {
 
       expect(host.textContent).toContain('Unlock local runtime');
       expect(host.querySelector('[data-activity-flower-bottom-bar]')).toBeNull();
-      expect(host.querySelector('[data-activity-flower-quick-entry]')).toBeNull();
-      expect(host.querySelector('[data-activity-flower-mobile-quick-entry]')).toBeNull();
+      expect(host.querySelector('[data-activity-flower-companion-anchor]')).toBeNull();
+      expect(host.querySelector('#redeven-activity-flower-companion')).toBeNull();
+      expect(host.querySelector('#redeven-activity-flower-product')).toBeNull();
+      expect(host.querySelector('[data-testid="activity-flower-composer"]')).toBeNull();
+      expect(activitySurfaceLifecycleState.flowerMounts).toBe(0);
 
       const input = host.querySelector('input[type="password"]') as HTMLInputElement;
       input.value = 'secret';
@@ -2316,7 +2346,27 @@ describe('EnvAppShell local access gate', () => {
 
       expect(host.textContent).not.toContain('Unlock local runtime');
       expect(host.querySelector('[data-activity-flower-bottom-bar]')).toBeTruthy();
-      expect(host.querySelector('[data-activity-flower-quick-entry]')).toBeTruthy();
+      expect(host.querySelector('[data-activity-flower-companion-anchor]')).toBeTruthy();
+      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-companion-visibility')).toBe('visible');
+      expect(host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation')).toBe('collapsed');
+      const flowerSurface = host.querySelector('[data-testid="ai-page"]');
+      const flowerComposer = host.querySelector('[data-testid="activity-flower-composer"]');
+      expect(flowerSurface).toBeTruthy();
+      expect(flowerComposer).toBeTruthy();
+      expect(host.querySelectorAll('[data-testid="ai-page"]')).toHaveLength(1);
+      expect(host.querySelectorAll('[data-testid="activity-flower-composer"]')).toHaveLength(1);
+      expect(activitySurfaceLifecycleState.flowerMounts).toBe(1);
+
+      (host.querySelector('[data-activity-id="ai"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => (
+        host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation') === 'full_page'
+      ));
+
+      expect(host.querySelector('[data-testid="ai-page"]')).toBe(flowerSurface);
+      expect(host.querySelector('[data-testid="activity-flower-composer"]')).toBe(flowerComposer);
+      expect(host.querySelectorAll('[data-testid="ai-page"]')).toHaveLength(1);
+      expect(host.querySelectorAll('[data-testid="activity-flower-composer"]')).toHaveLength(1);
+      expect(activitySurfaceLifecycleState.flowerMounts).toBe(1);
     } finally {
       dispose();
     }
@@ -2603,8 +2653,9 @@ describe('EnvAppShell local access gate', () => {
       const companion = host.querySelector('#redeven-activity-flower-companion') as HTMLElement;
       const flowerSurface = host.querySelector('[data-testid="ai-page"]') as HTMLElement;
       const companionInert = () => Boolean((companion as HTMLElement & { inert?: boolean }).inert);
-      expect(companion.getAttribute('aria-hidden')).toBeNull();
-      expect(companionInert()).toBe(false);
+      expect(companion.getAttribute('data-companion-visibility')).toBe('hidden');
+      expect(companion.getAttribute('aria-hidden')).toBe('true');
+      expect(companionInert()).toBe(true);
       expect(flowerSurface.dataset.engaged).toBe('true');
       expect(flowerSurface.dataset.transcriptVisible).toBe('true');
       expect(flowerSurface.dataset.presenceOwner).toBe('true');

@@ -675,10 +675,10 @@ describe('Env App i18n dictionaries', () => {
     expect(ruRU.tn('chatActivity.todoItems', 5)).toBe('5 элементов');
 
     const esES = createI18nHelpers('es-ES');
-    expect(esES.tn('shell.flowerCompanion.status.attention', 1)).toBe('Requiere tu intervención · 1');
-    expect(esES.tn('shell.flowerCompanion.status.attention', 2)).toBe('Requieren tu intervención · 2');
-    expect(esES.tn('shell.flowerCompanion.status.completed', 1)).toBe('Completada · 1');
-    expect(esES.tn('shell.flowerCompanion.status.completed', 2)).toBe('Completadas · 2');
+    expect(esES.tn('shell.flowerCompanion.summary.withoutTitle.needsAttention', 1)).toBe('Una tarea requiere tu atención');
+    expect(esES.tn('shell.flowerCompanion.summary.withoutTitle.needsAttention', 2)).toBe('2 tareas requieren tu atención');
+    expect(esES.tn('shell.flowerCompanion.summary.withoutTitle.ready', 1)).toBe('Hay un resultado listo');
+    expect(esES.tn('shell.flowerCompanion.summary.withoutTitle.ready', 2)).toBe('Hay 2 resultados listos');
     expect(ruRU.tn('chatActivity.fileCount', 1)).toBe('1 файл');
     expect(ruRU.tn('chatActivity.fileCount', 2)).toBe('2 файла');
     expect(ruRU.tn('chatActivity.fileCount', 5)).toBe('5 файлов');

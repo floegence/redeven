@@ -1,6 +1,7 @@
 @import 'tailwindcss';
 @import '@floegence/floe-webapp-core/tailwind';
 @import './styles/redeven.css';
+@import './ui/activity-flower-shell.css';
 
 @source './**/*.{ts,tsx,html}';
 @source '../../../flower_ui/src/**/*.{ts,tsx,html}';

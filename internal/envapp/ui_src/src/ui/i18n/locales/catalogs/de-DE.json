@@ -354,22 +354,37 @@
     },
     "flowerCompanion": {
       "openAria": "Flower-Begleitbereich. {status}",
-      "quickEntryLabel": "Schnelle Frage an Flower",
-      "quickEntryPlaceholder": "Flower fragen...",
-      "maximize": "Flower maximieren",
-      "restoreDocked": "Flower angedockt anzeigen",
       "collapse": "Flower einklappen",
-      "resize": "Höhe des Flower-Begleitbereichs ändern",
       "newContextConversation": "Neue Unterhaltung mit ausgewähltem Kontext",
-      "status": {
-        "attention": { "one": "Eingabe erforderlich · {count}", "other": "Eingabe erforderlich · {count}" },
-        "failed": { "one": "Fehlgeschlagen · {count}", "other": "Fehlgeschlagen · {count}" },
-        "running": { "one": "In Arbeit · {count}", "other": "In Arbeit · {count}" },
-        "queued": { "one": "In Warteschlange · {count}", "other": "In Warteschlange · {count}" },
-        "canceled": { "one": "Abgebrochen · {count}", "other": "Abgebrochen · {count}" },
-        "completed": { "one": "Abgeschlossen · {count}", "other": "Abgeschlossen · {count}" },
-        "unavailable": "Nicht verfügbar",
-        "idle": "Bereit"
+      "summary": {
+        "lead": {
+          "needsAttention": "Benötigt Ihre Aufmerksamkeit",
+          "needsReview": "Muss geprüft werden",
+          "workingOn": "In Arbeit",
+          "waitingToStart": "Wartet auf den Start",
+          "stopped": "Gestoppt",
+          "ready": "Bereit"
+        },
+        "withTitle": "{lead}: {title}",
+        "withTitleAndMore": {
+          "one": "{lead}: {title} und 1 weitere Aufgabe",
+          "other": "{lead}: {title} und {count} weitere Aufgaben"
+        },
+        "withoutTitle": {
+          "needsAttention": { "one": "Eine Aufgabe erfordert Ihre Aufmerksamkeit", "other": "{count} Aufgaben erfordern Ihre Aufmerksamkeit" },
+          "needsReview": { "one": "Eine Aufgabe muss geprüft werden", "other": "{count} Aufgaben müssen geprüft werden" },
+          "working": { "one": "Flower bearbeitet eine Aufgabe", "other": "Flower bearbeitet {count} Aufgaben" },
+          "queued": { "one": "Eine Aufgabe wartet auf den Start", "other": "{count} Aufgaben warten auf den Start" },
+          "stopped": { "one": "Eine Aufgabe wurde gestoppt", "other": "{count} Aufgaben wurden gestoppt" },
+          "ready": { "one": "Ein Ergebnis ist bereit", "other": "{count} Ergebnisse sind bereit" }
+        },
+        "secondaryWorking": {
+          "one": "Flower bearbeitet außerdem eine weitere Aufgabe",
+          "other": "Flower bearbeitet außerdem {count} weitere Aufgaben"
+        },
+        "readyToAsk": "Bereit für eine Frage an Flower",
+        "unavailable": "Flower ist nicht verfügbar",
+        "openPendingAction": "Flower öffnen, um fortzufahren"
       },
       "threadSwitcher": {
         "label": "Flower-Unterhaltung wechseln",

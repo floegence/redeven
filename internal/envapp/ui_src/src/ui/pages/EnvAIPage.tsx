@@ -4,7 +4,7 @@ import { useNotification } from '@floegence/floe-webapp-core';
 import { FlowerSurface } from '../../../../../flower_ui/src';
 import type {
   FlowerCompanionPresenceProjection,
-  FlowerComposerHandoffRequest,
+  FlowerCompanionPriorityStatus,
   FlowerSurfaceNotification,
   FlowerThreadFocusRequest,
   FlowerThreadSwitcherCopy,
@@ -40,12 +40,20 @@ export type EnvAIPageProps = Readonly<{
   engaged?: boolean;
   transcriptVisible?: boolean;
   companionPresenceOwner?: boolean;
+  companionOpen?: boolean;
+  companionRegionID?: string;
+  companionSummary?: Readonly<{
+    visualText: string;
+    accessibleText: string;
+    priorityStatus: FlowerCompanionPriorityStatus;
+    running: boolean;
+  }>;
+  companionActionLabel?: string;
   focusRequestScope?: 'workbench' | 'activity';
   focusThreadRequest?: FlowerThreadFocusRequest | null;
   focusComposerRequest?: number;
-  composerHandoffRequest?: FlowerComposerHandoffRequest | null;
   onFocusThreadRequestConsumed?: (requestID: string) => void;
-  onComposerHandoffConsumed?: (requestID: string) => void;
+  onCompanionOpenRequest?: () => void;
   companionCopy?: Omit<FlowerThreadSwitcherCopy, 'threadList'>;
   headerTrailingActions?: JSX.Element;
   onPresenceChange?: (presence: FlowerCompanionPresenceProjection) => void;
@@ -151,16 +159,19 @@ export function EnvAIPage(props: EnvAIPageProps = {}) {
       engaged={props.engaged}
       transcriptVisible={props.transcriptVisible}
       companionPresenceOwner={props.companionPresenceOwner}
+      companionOpen={props.companionOpen}
+      companionRegionID={props.companionRegionID}
+      companionSummary={props.companionSummary}
+      companionActionLabel={props.companionActionLabel}
       companionCopy={companionCopy()}
       headerTrailingActions={props.headerTrailingActions}
       onPresenceChange={props.onPresenceChange}
       focusThreadRequest={props.focusRequestScope === 'activity' ? props.focusThreadRequest : env.aiThreadFocusRequest()}
       focusComposerRequest={props.focusComposerRequest}
-      composerHandoffRequest={props.composerHandoffRequest}
       onFocusThreadRequestConsumed={props.focusRequestScope === 'activity'
         ? props.onFocusThreadRequestConsumed
         : env.consumeAIThreadFocusRequest}
-      onComposerHandoffConsumed={props.onComposerHandoffConsumed}
+      onCompanionOpenRequest={props.onCompanionOpenRequest}
       onThreadSelectionEvent={createUIPresentationEventRecorder({
         surface: 'flower',
         source: (event) => event.metadata?.source ?? 'thread-list',

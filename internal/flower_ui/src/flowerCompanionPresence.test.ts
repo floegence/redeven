@@ -63,6 +63,32 @@ describe('projectFlowerCompanionPresence', () => {
     });
   });
 
+  it('assigns a thread only to its highest-priority semantic group', () => {
+    expect(projectFlowerCompanionPresence([
+      thread({
+        thread_id: 'attention-with-queue',
+        status: 'waiting_approval',
+        queued_turn_count: 3,
+        read_status: readStatus(true),
+      }),
+      thread({
+        thread_id: 'running-with-queue',
+        status: 'running',
+        queued_turn_count: 2,
+      }),
+    ], true)).toEqual({
+      priority_status: 'attention',
+      priority_count: 1,
+      priority_thread_title: 'Thread',
+      attention_count: 1,
+      unread_failed_count: 0,
+      running_count: 1,
+      queued_count: 0,
+      unread_canceled_count: 0,
+      unread_completed_count: 0,
+    });
+  });
+
   it('projects the first canonical thread title for the highest-priority live status', () => {
     expect(projectFlowerCompanionPresence([
       thread({ thread_id: 'running-primary', title: 'Refine the Flower companion', status: 'running' }),
@@ -71,6 +97,41 @@ describe('projectFlowerCompanionPresence', () => {
       priority_status: 'running',
       priority_count: 2,
       priority_thread_title: 'Refine the Flower companion',
+    });
+  });
+
+  it.each([
+    ['pending', 'Pending title'],
+    ['failed', 'Failed title'],
+    ['unset', 'Unset title'],
+    ['ready', '   '],
+  ] as const)('omits a non-canonical %s thread title', (titleStatus, title) => {
+    expect(projectFlowerCompanionPresence([
+      thread({ title, title_status: titleStatus, status: 'running' }),
+    ], true)).toEqual({
+      priority_status: 'running',
+      priority_count: 1,
+      attention_count: 0,
+      unread_failed_count: 0,
+      running_count: 1,
+      queued_count: 0,
+      unread_canceled_count: 0,
+      unread_completed_count: 0,
+    });
+  });
+
+  it('selects the first canonical title from the complete highest-priority group', () => {
+    expect(projectFlowerCompanionPresence([
+      thread({ thread_id: 'running-pending', title: 'Pending title', title_status: 'pending', status: 'running' }),
+      thread({ thread_id: 'running-empty', title: '   ', title_status: 'ready', status: 'running' }),
+      thread({ thread_id: 'running-canonical', title: '  Review responsive behavior  ', status: 'running' }),
+      thread({ thread_id: 'queued-canonical', title: 'Queued lower priority', queued_turn_count: 1 }),
+    ], true)).toMatchObject({
+      priority_status: 'running',
+      priority_count: 3,
+      priority_thread_title: 'Review responsive behavior',
+      running_count: 3,
+      queued_count: 1,
     });
   });
 

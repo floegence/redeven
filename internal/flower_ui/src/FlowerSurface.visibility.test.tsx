@@ -282,6 +282,50 @@ afterEach(() => {
 });
 
 describe('FlowerSurface companion visibility lifecycle', () => {
+  it('keeps the ordinary composer textarea mounted while the companion expands and collapses', async () => {
+    const idleThread = thread({ status: 'idle', read_status: readStatus(false) });
+    const harness = createAdapterHarness({
+      listThreads: vi.fn(async () => [idleThread]),
+      loadThread: vi.fn(async () => bootstrap(idleThread)),
+    });
+    const [open, setOpen] = createSignal(false);
+    dispose = render(() => (
+      <FlowerSurface
+        adapter={harness.adapter}
+        notify={() => undefined}
+        presentation="companion"
+        companionOpen={open()}
+        companionRegionID="test-flower-companion"
+        companionSummary={{
+          visualText: 'Working on · Refine the companion',
+          accessibleText: 'Working on · Refine the companion',
+          priorityStatus: 'running',
+          running: true,
+        }}
+        engaged={open()}
+        transcriptVisible={open()}
+        onCompanionOpenRequest={() => setOpen(true)}
+        focusThreadRequest={{ request_id: 'focus-idle', thread_id: idleThread.thread_id }}
+      />
+    ), host);
+
+    await waitUntil(() => Boolean(host.querySelector('textarea')), 'composer textarea did not render');
+    const textarea = host.querySelector('textarea') as HTMLTextAreaElement;
+    const surface = host.querySelector('[data-flower-companion-open]') as HTMLElement;
+    expect(surface.dataset.flowerCompanionOpen).toBe('false');
+    expect(host.querySelector('.flower-companion-collapsed-summary')?.textContent).toContain('Refine the companion');
+
+    textarea.dispatchEvent(new InputEvent('input', { bubbles: true, data: 'a', inputType: 'insertText' }));
+    await flushAsync();
+    expect(surface.dataset.flowerCompanionOpen).toBe('true');
+    expect(host.querySelector('textarea')).toBe(textarea);
+
+    setOpen(false);
+    await flushAsync();
+    expect(surface.dataset.flowerCompanionOpen).toBe('false');
+    expect(host.querySelector('textarea')).toBe(textarea);
+  });
+
   it('does not mark an unread thread as read while the companion is collapsed', async () => {
     const harness = createAdapterHarness();
     renderSurface(harness.adapter);
