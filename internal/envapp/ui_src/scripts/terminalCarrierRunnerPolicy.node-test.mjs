@@ -10,6 +10,7 @@ const releaseSource = await readFile(new URL('../../../../.github/workflows/rele
 
 test('keeps the supported terminal carriers explicit in CI and release gates', () => {
   assert.match(carrierSource, /chromium\.launch\(\{\s*headless: false,/u);
+  assert.match(carrierSource, /installReDevPluginRuntimeFixture\(tempDir\)/u);
 
   const carrierCommands = ciSource.match(/^\s*run: .*test:terminal-carrier.*$/gmu) ?? [];
   assert.equal(carrierCommands.length, 2);
