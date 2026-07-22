@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { Show, createContext, useContext } from 'solid-js';
+import { Show, createContext, createEffect, createSignal, useContext } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flowerTurnAdmissionUncertainFailure } from '../../../../flower_ui/src/flowerTurnAdmission';
@@ -8,6 +8,7 @@ import { flowerTurnAdmissionUncertainFailure } from '../../../../flower_ui/src/f
 const EnvContextMock = createContext({} as any);
 const FilePreviewContextMock = createContext({} as any);
 const FileBrowserSurfaceContextMock = createContext({} as any);
+let floeRegistryComponents = (): any[] => [];
 
 const filePreviewOpenPreviewMock = vi.fn(async () => undefined);
 const filePreviewClosePreviewMock = vi.fn();
@@ -38,9 +39,11 @@ let protocolStatus: 'connected' | 'disconnected' | 'connecting' | 'error' = 'dis
 let protocolClient: unknown = null;
 let desktopViewMode: 'activity' | 'workbench' = 'activity';
 let desktopSidebarActiveTab = 'terminal';
+const [desktopSidebarRevision, setDesktopSidebarRevision] = createSignal(0);
 let layoutIsMobile = false;
 let envAIPageMountSequence = 0;
 const uiStorageItems = new Map<string, string>();
+const activityFlowerComposerHandoffObservations: Array<{ requestID: string; text: string }> = [];
 
 function testFlowerTurnIntent(sourceSurface: string) {
   return {
@@ -81,6 +84,7 @@ const connectMock = vi.fn(async () => {
 });
 const setSidebarActiveTabMock = vi.fn((tab: string) => {
   desktopSidebarActiveTab = tab;
+  setDesktopSidebarRevision((revision) => revision + 1);
 });
 
 vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
@@ -90,7 +94,10 @@ vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
   useCommand: () => ({ open: vi.fn(), registerAll: () => () => {}, getKeybindDisplay: (keybind: string) => keybind }),
   useLayout: () => ({
     isMobile: () => layoutIsMobile,
-    sidebarActiveTab: () => desktopSidebarActiveTab,
+    sidebarActiveTab: () => {
+      desktopSidebarRevision();
+      return desktopSidebarActiveTab;
+    },
     setSidebarActiveTab: setSidebarActiveTabMock,
     setSidebarCollapsed: vi.fn(),
   }),
@@ -112,11 +119,14 @@ vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
 }));
 
 vi.mock('@floegence/floe-webapp-core/app', () => ({
-  ActivityAppsMain: () => {
+  ActivityAppsMain: (props: any) => {
     const env = useContext(EnvContextMock);
     const filePreview = useContext(FilePreviewContextMock);
     return (
       <div>
+        {props.activeId?.() === 'ai'
+          ? floeRegistryComponents().find((component: any) => component.id === 'ai')?.component?.()
+          : null}
         <button
           type="button"
           data-testid="activity-open-flower-launcher"
@@ -154,7 +164,10 @@ vi.mock('@floegence/floe-webapp-core/app', () => ({
       </div>
     );
   },
-  FloeRegistryRuntime: (props: any) => <>{props.children}</>,
+  FloeRegistryRuntime: (props: any) => {
+    floeRegistryComponents = () => props.components;
+    return <>{props.children}</>;
+  },
 }));
 
 vi.mock('@floegence/floe-webapp-core/layout', async (importOriginal) => ({
@@ -385,6 +398,13 @@ vi.mock('./workbench/EnvWorkbenchPage', () => ({
         >
           Ask Flower
         </button>
+        <button
+          type="button"
+          data-testid="workbench-switch-activity"
+          onClick={() => env.setViewMode('activity', { surfaceId: 'terminal', focusSurface: false, requestWorkbenchOverview: false })}
+        >
+          Switch Activity
+        </button>
         <div data-testid="workbench-preview-activation">
           {env.workbenchFilePreviewActivation?.()?.item?.path ?? ''}
         </div>
@@ -428,6 +448,13 @@ vi.mock('./pages/EnvAIPage', () => ({
   EnvAIPage: (props: any) => {
     const mountID = `activity-flower-${++envAIPageMountSequence}`;
     const env = useContext(EnvContextMock);
+    let lastComposerHandoffRequestID = '';
+    createEffect(() => {
+      const request = props.composerHandoffRequest;
+      if (!request?.request_id || request.request_id === lastComposerHandoffRequestID) return;
+      lastComposerHandoffRequestID = request.request_id;
+      activityFlowerComposerHandoffObservations.push({ requestID: request.request_id, text: request.text });
+    });
     return (
       <div
         data-testid="env-ai-page"
@@ -441,6 +468,7 @@ vi.mock('./pages/EnvAIPage', () => ({
         <div data-testid="env-ai-focus-request">{env.aiThreadFocusRequest?.()?.request_id ?? ''}</div>
         <div data-testid="activity-flower-focused-thread">{props.focusThreadRequest?.thread_id ?? ''}</div>
         <div data-testid="activity-flower-focus-request">{props.focusThreadRequest?.request_id ?? ''}</div>
+        <div data-testid="activity-flower-composer-handoff">{props.composerHandoffRequest?.text ?? ''}</div>
         <div data-testid="activity-flower-header-actions">{props.headerTrailingActions}</div>
       </div>
     );
@@ -467,6 +495,9 @@ vi.mock('./widgets/FlowerTurnLauncherWindow', () => ({
           onClick={() => void props.onSubmit({ prompt: 'inspect from launcher', intent: props.intent })}
         >
           Send
+        </button>
+        <button type="button" data-testid="flower-turn-launcher-cancel" onClick={() => props.onClose()}>
+          Cancel
         </button>
       </div>
     </Show>
@@ -571,19 +602,56 @@ async function flushAsync(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
+function testDOMRect(left: number, top: number, width: number, height: number): DOMRect {
+  return {
+    x: left,
+    y: top,
+    left,
+    top,
+    right: left + width,
+    bottom: top + height,
+    width,
+    height,
+    toJSON: () => ({ left, top, width, height }),
+  } as DOMRect;
+}
+
+let getBoundingClientRectMock: { mockRestore: () => void } | null = null;
+let requestAnimationFrameMock: { mockRestore: () => void } | null = null;
+
 afterEach(() => {
+  getBoundingClientRectMock?.mockRestore();
+  getBoundingClientRectMock = null;
+  requestAnimationFrameMock?.mockRestore();
+  requestAnimationFrameMock = null;
   document.body.innerHTML = '';
 });
 
 beforeEach(() => {
+  requestAnimationFrameMock = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+    callback(0);
+    return 1;
+  });
+  getBoundingClientRectMock = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+    if (this.matches('.flower-activity-quick-entry')) {
+      return testDOMRect(240, 720, 544, 32);
+    }
+    if (this.matches('[data-activity-flower-full-page-host]')) {
+      return testDOMRect(64, 48, 896, 672);
+    }
+    return testDOMRect(0, 0, 0, 0);
+  });
   vi.clearAllMocks();
   debugConsoleEnabled = false;
   protocolStatus = 'disconnected';
   protocolClient = null;
   desktopViewMode = 'activity';
   desktopSidebarActiveTab = 'terminal';
+  setDesktopSidebarRevision((revision) => revision + 1);
   layoutIsMobile = false;
   envAIPageMountSequence = 0;
+  floeRegistryComponents = () => [];
+  activityFlowerComposerHandoffObservations.length = 0;
   uiStorageItems.clear();
   flowerLaunchTurnMock.mockReset();
   flowerLaunchTurnMock.mockResolvedValue({
@@ -684,7 +752,7 @@ describe('EnvAppShell desktop floating surfaces', () => {
     }
   });
 
-  it('keeps one Activity Flower instance across collapsed, docked, and maximized presentations', async () => {
+  it('keeps one Activity Flower instance across collapsed, expanded, and full-page placements', async () => {
     desktopViewMode = 'activity';
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -698,46 +766,52 @@ describe('EnvAppShell desktop floating surfaces', () => {
 
       const companion = host.querySelector('#redeven-activity-flower-companion') as HTMLElement;
       const flowerSurface = host.querySelector('[data-testid="env-ai-page"]') as HTMLElement;
-      const bottomBarTrigger = host.querySelector('button[aria-controls="redeven-activity-flower-companion"]') as HTMLButtonElement;
+      const bottomBarInput = host.querySelector('input[aria-controls="redeven-activity-flower-companion"]') as HTMLInputElement;
 
       expect(companion?.dataset.presentation).toBe('collapsed');
       expect(companion?.getAttribute('aria-hidden')).toBe('true');
       expect(flowerSurface?.dataset.presentation).toBe('companion');
       expect(flowerSurface?.dataset.engaged).toBe('false');
+      expect(flowerSurface?.dataset.transcriptVisible).toBe('false');
       expect(host.querySelectorAll('[data-testid="env-ai-page"]')).toHaveLength(1);
       expect(envAIPageMountSequence).toBe(1);
 
-      bottomBarTrigger.click();
+      bottomBarInput.click();
       await flushAsync();
 
-      expect(companion.dataset.presentation).toBe('docked');
+      expect(companion.dataset.presentation).toBe('expanded');
       expect(host.querySelector('[data-testid="env-ai-page"]')).toBe(flowerSurface);
       expect(flowerSurface.dataset.presentation).toBe('companion');
       expect(flowerSurface.dataset.engaged).toBe('true');
+      expect(flowerSurface.dataset.transcriptVisible).toBe('true');
+      expect(bottomBarInput.getAttribute('aria-expanded')).toBe('true');
 
-      (host.querySelector('button[aria-label="Maximize Flower"]') as HTMLButtonElement).click();
-      await flushAsync();
-
-      expect(companion.dataset.presentation).toBe('maximized');
-      expect(host.querySelector('[data-testid="env-ai-page"]')).toBe(flowerSurface);
-      expect(flowerSurface.dataset.presentation).toBe('full');
-      expect(envAIPageMountSequence).toBe(1);
-
-      (host.querySelector('button[aria-label="Restore docked Flower"]') as HTMLButtonElement).click();
-      await flushAsync();
-      bottomBarTrigger.click();
+      (host.querySelector('[data-testid="activity-flower-header-actions"] button') as HTMLButtonElement).click();
       await flushAsync();
 
       expect(companion.dataset.presentation).toBe('collapsed');
       expect(host.querySelector('[data-testid="env-ai-page"]')).toBe(flowerSurface);
       expect(flowerSurface.dataset.engaged).toBe('false');
+      expect(bottomBarInput.getAttribute('aria-expanded')).toBe('false');
+      expect(envAIPageMountSequence).toBe(1);
+
+      (host.querySelector('[data-activity-id="ai"]') as HTMLButtonElement).click();
+      await flushAsync();
+
+      expect(desktopSidebarActiveTab).toBe('ai');
+      expect(host.querySelector('[data-activity-flower-full-page-host]')?.getBoundingClientRect().width).toBe(896);
+      expect(companion.dataset.presentation).toBe('full_page');
+      expect(host.querySelector('[data-testid="env-ai-page"]')).toBe(flowerSurface);
+      expect(flowerSurface.dataset.presentation).toBe('full');
+      expect(flowerSurface.dataset.engaged).toBe('true');
+      expect(flowerSurface.dataset.transcriptVisible).toBe('true');
       expect(envAIPageMountSequence).toBe(1);
     } finally {
       dispose();
     }
   });
 
-  it('migrates a persisted Activity ai surface to the normal Activity surface and opens the companion', async () => {
+  it('restores a persisted Activity ai surface as the dedicated Flower page', async () => {
     desktopViewMode = 'activity';
     uiStorageItems.set('redeven_envapp_active_tab', 'ai');
     const host = document.createElement('div');
@@ -751,18 +825,18 @@ describe('EnvAppShell desktop floating surfaces', () => {
       await flushAsync();
       await flushAsync();
 
-      expect(desktopSidebarActiveTab).toBe('terminal');
-      expect(uiStorageItems.get('redeven_envapp_active_tab')).toBe('terminal');
-      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('docked');
+      expect(desktopSidebarActiveTab).toBe('ai');
+      expect(uiStorageItems.get('redeven_envapp_active_tab')).toBe('ai');
+      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('full_page');
       expect(host.querySelectorAll('[data-testid="env-ai-page"]')).toHaveLength(1);
-      expect(setSidebarActiveTabMock).not.toHaveBeenCalledWith('ai', expect.anything());
+      expect(setSidebarActiveTabMock).toHaveBeenCalledWith('ai', expect.anything());
     } finally {
       dispose();
     }
   });
 
-  it('opens the Activity companion maximized from the Flower activity item on mobile', async () => {
-    desktopViewMode = 'workbench';
+  it('opens the dedicated Flower page from the Activity Bar on mobile', async () => {
+    desktopViewMode = 'activity';
     layoutIsMobile = true;
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -776,12 +850,13 @@ describe('EnvAppShell desktop floating surfaces', () => {
 
       const flowerSurface = host.querySelector('[data-testid="env-ai-page"]');
       expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('collapsed');
-      expect(host.querySelector('button[aria-controls="redeven-activity-flower-companion"]')).toBeNull();
+      expect(host.querySelector('input[aria-controls="redeven-activity-flower-companion"]')).not.toBeNull();
 
-      (host.querySelector('[data-activity-id="flower-companion"]') as HTMLButtonElement).click();
+      (host.querySelector('[data-activity-id="ai"]') as HTMLButtonElement).click();
       await flushAsync();
 
-      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('maximized');
+      expect(desktopSidebarActiveTab).toBe('ai');
+      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('full_page');
       expect(host.querySelector('[data-testid="env-ai-page"]')).toBe(flowerSurface);
       expect(host.querySelector('[data-testid="env-ai-page"]')?.getAttribute('data-presentation')).toBe('full');
       expect(envAIPageMountSequence).toBe(1);
@@ -790,7 +865,137 @@ describe('EnvAppShell desktop floating surfaces', () => {
     }
   });
 
-  it('launches an activity Flower turn once and hands off inline without touching Workbench focus', async () => {
+  it('restores an expanded launcher origin after a mode switch while ordinary mode switches collapse Flower', async () => {
+    desktopViewMode = 'activity';
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushAsync();
+
+      const quickInput = host.querySelector('input[aria-controls="redeven-activity-flower-companion"]') as HTMLInputElement;
+      quickInput.click();
+      await flushAsync();
+      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('expanded');
+
+      (host.querySelector('[data-testid="activity-switch-workbench"]') as HTMLButtonElement).click();
+      await flushAsync();
+      await flushAsync();
+      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('collapsed');
+
+      (host.querySelector('[data-testid="workbench-switch-activity"]') as HTMLButtonElement).click();
+      await flushAsync();
+      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('collapsed');
+
+      quickInput.click();
+      await flushAsync();
+      (host.querySelector('[data-testid="activity-open-flower-launcher"]') as HTMLButtonElement).click();
+      await flushAsync();
+      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('aria-hidden')).toBe('true');
+
+      (host.querySelector('[data-testid="activity-switch-workbench"]') as HTMLButtonElement).click();
+      await flushAsync();
+      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('expanded');
+
+      (host.querySelector('[data-testid="flower-turn-launcher-cancel"]') as HTMLButtonElement).click();
+      await flushAsync();
+      expect(host.querySelector('[data-testid="flower-turn-launcher"]')).toBeNull();
+      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('expanded');
+
+      (host.querySelector('[data-testid="workbench-switch-activity"]') as HTMLButtonElement).click();
+      await flushAsync();
+      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('expanded');
+      expect(host.querySelector('[data-testid="env-ai-page"]')?.getAttribute('data-engaged')).toBe('true');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('coalesces quick input to the latest handoff before the expanded frame becomes visible', async () => {
+    desktopViewMode = 'activity';
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushAsync();
+
+      const queuedFrames: FrameRequestCallback[] = [];
+      vi.mocked(window.requestAnimationFrame).mockImplementation((callback) => {
+        queuedFrames.push(callback);
+        return queuedFrames.length;
+      });
+      const quickInput = host.querySelector('input[aria-controls="redeven-activity-flower-companion"]') as HTMLInputElement;
+
+      quickInput.value = 'inspect the workspace';
+      quickInput.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText' }));
+      quickInput.value = 'inspect the workspace and summarize risks';
+      quickInput.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText' }));
+
+      expect(activityFlowerComposerHandoffObservations).toHaveLength(0);
+      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('expanded');
+      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('aria-hidden')).toBe('true');
+
+      while (queuedFrames.length > 0) {
+        const pending = queuedFrames.splice(0);
+        pending.forEach((callback) => callback(0));
+      }
+      await Promise.resolve();
+
+      expect(activityFlowerComposerHandoffObservations).toEqual([{
+        requestID: expect.any(String),
+        text: 'inspect the workspace and summarize risks',
+      }]);
+      expect(host.querySelector('[data-testid="activity-flower-composer-handoff"]')?.textContent)
+        .toBe('inspect the workspace and summarize risks');
+      expect(quickInput.readOnly).toBe(true);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('does not duplicate an IME handoff when compositionend is followed by the final input event', async () => {
+    desktopViewMode = 'activity';
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushAsync();
+
+      const quickInput = host.querySelector('input[aria-controls="redeven-activity-flower-companion"]') as HTMLInputElement;
+      quickInput.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, data: '分析' }));
+      quickInput.value = '分析当前工作区';
+      quickInput.dispatchEvent(new InputEvent('input', { bubbles: true, data: '分析当前工作区', isComposing: true }));
+
+      expect(activityFlowerComposerHandoffObservations).toHaveLength(0);
+      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('collapsed');
+
+      quickInput.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '分析当前工作区' }));
+      quickInput.dispatchEvent(new InputEvent('input', { bubbles: true, data: '分析当前工作区', isComposing: false }));
+      await flushAsync();
+
+      expect(activityFlowerComposerHandoffObservations).toEqual([{
+        requestID: expect.any(String),
+        text: '分析当前工作区',
+      }]);
+      expect(host.querySelector('[data-testid="activity-flower-composer-handoff"]')?.textContent).toBe('分析当前工作区');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('launches an Activity Flower turn in a window and expands the overlay without changing the active surface', async () => {
     desktopViewMode = 'activity';
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -805,7 +1010,9 @@ describe('EnvAppShell desktop floating surfaces', () => {
       (host.querySelector('[data-testid="activity-open-flower-launcher"]') as HTMLButtonElement).click();
       await flushAsync();
 
-      expect(host.querySelector('[data-testid="flower-turn-launcher"]')?.getAttribute('data-placement')).toBe('panel');
+      const flowerSurface = host.querySelector('[data-testid="env-ai-page"]');
+      expect(host.querySelector('[data-testid="flower-turn-launcher"]')?.getAttribute('data-placement')).toBe('window');
+      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('aria-hidden')).toBe('true');
       (host.querySelector('[data-testid="flower-turn-launcher-send"]') as HTMLButtonElement).click();
       await flushAsync();
 
@@ -825,13 +1032,52 @@ describe('EnvAppShell desktop floating surfaces', () => {
         }),
       }));
       expect(host.querySelector('[data-testid="flower-turn-launcher"]')).toBeNull();
-      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('docked');
+      expect(desktopSidebarActiveTab).toBe('terminal');
+      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('expanded');
+      expect(host.querySelector('[data-testid="env-ai-page"]')).toBe(flowerSurface);
       expect(host.querySelector('[data-testid="activity-flower-focused-thread"]')?.textContent).toBe('thread-launched');
       expect(host.querySelector('[data-testid="activity-flower-focus-request"]')?.textContent).toMatch(/^env-activity-flower-focus-/);
       expect(host.querySelector('[data-testid="env-ai-focused-thread"]')?.textContent).toBe('');
       expect(host.querySelector('[data-testid="workbench-flower-activation"]')?.textContent).toBe('|||||');
       expect(setSidebarActiveTabMock).not.toHaveBeenCalledWith('ai', expect.anything());
       expect(windowOpenMock).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps the dedicated Flower page active after an Ask Flower handoff from that page', async () => {
+    desktopViewMode = 'activity';
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushAsync();
+
+      (host.querySelector('[data-activity-id="ai"]') as HTMLButtonElement).click();
+      await flushAsync();
+      const flowerSurface = host.querySelector('[data-testid="env-ai-page"]');
+
+      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('full_page');
+      (host.querySelector('[data-testid="activity-open-flower-launcher"]') as HTMLButtonElement).click();
+      await flushAsync();
+
+      expect(host.querySelector('[data-testid="flower-turn-launcher"]')?.getAttribute('data-placement')).toBe('window');
+      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('aria-hidden')).toBe('true');
+      (host.querySelector('[data-testid="flower-turn-launcher-send"]') as HTMLButtonElement).click();
+      await flushAsync();
+
+      expect(flowerLaunchTurnMock).toHaveBeenCalledTimes(1);
+      expect(host.querySelector('[data-testid="flower-turn-launcher"]')).toBeNull();
+      expect(desktopSidebarActiveTab).toBe('ai');
+      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('full_page');
+      expect(host.querySelector('[data-testid="env-ai-page"]')).toBe(flowerSurface);
+      expect(host.querySelector('[data-testid="activity-flower-focused-thread"]')?.textContent).toBe('thread-launched');
+      expect(envAIPageMountSequence).toBe(1);
     } finally {
       dispose();
     }
@@ -861,6 +1107,7 @@ describe('EnvAppShell desktop floating surfaces', () => {
 
       expect(flowerLaunchTurnMock).toHaveBeenCalledTimes(1);
       expect(host.querySelector('[data-testid="flower-turn-launcher"]')).toBeNull();
+      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('expanded');
       expect(host.querySelector('[data-testid="activity-flower-focused-thread"]')?.textContent).toBe('thread-uncertain-launcher');
       expect(host.querySelector('[data-testid="env-ai-focused-thread"]')?.textContent).toBe('');
       expect(setSidebarActiveTabMock).not.toHaveBeenCalledWith('ai', expect.anything());
@@ -869,7 +1116,7 @@ describe('EnvAppShell desktop floating surfaces', () => {
     }
   });
 
-  it('keeps an Activity inline launcher handoff scoped to Activity after switching modes', async () => {
+  it('keeps an Activity window launcher handoff scoped to Activity after switching modes', async () => {
     desktopViewMode = 'activity';
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -883,6 +1130,7 @@ describe('EnvAppShell desktop floating surfaces', () => {
 
       (host.querySelector('[data-testid="activity-open-flower-launcher"]') as HTMLButtonElement).click();
       await flushAsync();
+      expect(host.querySelector('[data-testid="flower-turn-launcher"]')?.getAttribute('data-placement')).toBe('window');
 
       (host.querySelector('[data-testid="activity-switch-workbench"]') as HTMLButtonElement).click();
       await flushAsync();
@@ -891,6 +1139,7 @@ describe('EnvAppShell desktop floating surfaces', () => {
       await flushAsync();
 
       expect(flowerLaunchTurnMock).toHaveBeenCalledTimes(1);
+      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('expanded');
       expect(host.querySelector('[data-testid="activity-flower-focused-thread"]')?.textContent).toBe('thread-launched');
       expect(host.querySelector('[data-testid="env-ai-focused-thread"]')?.textContent).toBe('');
       expect(host.querySelector('[data-testid="workbench-flower-activation"]')?.textContent).toBe('|||||');

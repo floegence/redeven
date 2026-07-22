@@ -683,6 +683,8 @@ export const enUS = defineDictionary({
     },
     flowerCompanion: {
       openAria: 'Flower companion. {status}',
+      quickEntryLabel: 'Ask Flower quick entry',
+      quickEntryPlaceholder: 'Ask Flower...',
       maximize: 'Maximize Flower',
       restoreDocked: 'Restore docked Flower',
       collapse: 'Collapse Flower',

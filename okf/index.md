@@ -51,7 +51,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Workbench surface lifecycle](ui/workbench-surface-lifecycle.md) - Preserve selection, recovery, lazy widgets, and shared floating-surface ownership.
 - [Plugin surfaces](ui/plugin-surfaces.md) - Redeven placement rules for sandboxed ReDevPlugin surfaces in product chrome.
 - [Flower turn launcher](ui/flower-turn-launcher.md) - Contextual first-turn Ask Flower launchers and host handoff responsibilities.
-- [Flower Activity companion](ui/flower-activity-companion.md) - Place one low-profile Flower companion in Activity while preserving canonical thread/read authority and Workbench isolation.
+- [Flower Activity companion](ui/flower-activity-companion.md) - Present one stable Activity Flower surface as a dedicated page, fixed work-detail overlay, or centered bottom-bar presence while preserving canonical authority and Workbench isolation.
 - [Flower live timeline](ui/flower-live-timeline.md) - Canonical live thread timeline projection, replacement events, and cursor ownership.
 - [Flower timeline ordering](ui/flower-timeline-ordering.md) - Consume canonical turn pages, projections, decorations, cursors, and replacement events.
 - [Flower model and navigation presentation](ui/flower-model-navigation.md) - Keep model-source controls, notifications, and staged thread selection explicit.

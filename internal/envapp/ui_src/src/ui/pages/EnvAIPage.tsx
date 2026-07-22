@@ -4,6 +4,7 @@ import { useNotification } from '@floegence/floe-webapp-core';
 import { FlowerSurface } from '../../../../../flower_ui/src';
 import type {
   FlowerCompanionPresenceProjection,
+  FlowerComposerHandoffRequest,
   FlowerSurfaceNotification,
   FlowerThreadFocusRequest,
   FlowerThreadSwitcherCopy,
@@ -42,7 +43,9 @@ export type EnvAIPageProps = Readonly<{
   focusRequestScope?: 'workbench' | 'activity';
   focusThreadRequest?: FlowerThreadFocusRequest | null;
   focusComposerRequest?: number;
+  composerHandoffRequest?: FlowerComposerHandoffRequest | null;
   onFocusThreadRequestConsumed?: (requestID: string) => void;
+  onComposerHandoffConsumed?: (requestID: string) => void;
   companionCopy?: Omit<FlowerThreadSwitcherCopy, 'threadList'>;
   headerTrailingActions?: JSX.Element;
   onPresenceChange?: (presence: FlowerCompanionPresenceProjection) => void;
@@ -153,9 +156,11 @@ export function EnvAIPage(props: EnvAIPageProps = {}) {
       onPresenceChange={props.onPresenceChange}
       focusThreadRequest={props.focusRequestScope === 'activity' ? props.focusThreadRequest : env.aiThreadFocusRequest()}
       focusComposerRequest={props.focusComposerRequest}
+      composerHandoffRequest={props.composerHandoffRequest}
       onFocusThreadRequestConsumed={props.focusRequestScope === 'activity'
         ? props.onFocusThreadRequestConsumed
         : env.consumeAIThreadFocusRequest}
+      onComposerHandoffConsumed={props.onComposerHandoffConsumed}
       onThreadSelectionEvent={createUIPresentationEventRecorder({
         surface: 'flower',
         source: (event) => event.metadata?.source ?? 'thread-list',
