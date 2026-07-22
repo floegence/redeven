@@ -354,6 +354,8 @@
     },
     "flowerCompanion": {
       "openAria": "Flower コンパニオン。{status}",
+      "quickEntryLabel": "Flower へのクイック質問",
+      "quickEntryPlaceholder": "Flower に質問...",
       "maximize": "Flower を最大化",
       "restoreDocked": "Flower をドッキング表示に戻す",
       "collapse": "Flower を折りたたむ",

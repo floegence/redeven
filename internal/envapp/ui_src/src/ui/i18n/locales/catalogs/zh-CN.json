@@ -354,6 +354,8 @@
     },
     "flowerCompanion": {
       "openAria": "Flower 伴随工作区。{status}",
+      "quickEntryLabel": "快速询问 Flower",
+      "quickEntryPlaceholder": "询问 Flower...",
       "maximize": "最大化 Flower",
       "restoreDocked": "恢复 Flower 停靠视图",
       "collapse": "收起 Flower",

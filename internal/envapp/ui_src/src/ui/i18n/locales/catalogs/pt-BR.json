@@ -354,6 +354,8 @@
     },
     "flowerCompanion": {
       "openAria": "Painel do Flower. {status}",
+      "quickEntryLabel": "Pergunta rápida ao Flower",
+      "quickEntryPlaceholder": "Pergunte ao Flower...",
       "maximize": "Maximizar o Flower",
       "restoreDocked": "Restaurar o Flower acoplado",
       "collapse": "Recolher o Flower",

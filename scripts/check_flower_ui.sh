@@ -24,6 +24,10 @@ main() {
     ui_pkg_log ""
     ui_pkg_log "Flower UI: Env App interaction contracts..."
     ui_pkg_run_pnpm exec vitest run --environment=node --maxWorkers=2 --testTimeout=10000 \
+      src/ui/EnvAppShell.desktopFloatingSurfaces.e2e.test.tsx \
+      src/ui/EnvAppShell.localAccess.e2e.test.tsx \
+      src/ui/FlowerSurface.composerHandoff.test.tsx \
+      src/ui/i18n/i18n.test.ts \
       src/ui/FlowerSurface.navigation.context.test.tsx \
       src/ui/FlowerSurface.navigation.activity.test.tsx \
       src/ui/FlowerSurface.navigation.launchSend.test.tsx \
@@ -71,6 +75,7 @@ main() {
     ui_pkg_log ""
     ui_pkg_log "Flower UI: Chromium interaction contracts..."
     ui_pkg_run_pnpm run test:browser -- \
+      src/ui/EnvAppShell.flowerCompanion.browser.test.tsx \
       src/ui/FlowerSurface.canonicalReferences.browser.test.tsx \
       src/ui/FlowerSurface.approvalRefresh.browser.test.tsx \
       src/ui/FlowerSurface.activityDisclosure.browser.test.tsx \

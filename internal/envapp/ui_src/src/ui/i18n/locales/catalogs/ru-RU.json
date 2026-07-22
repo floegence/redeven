@@ -354,6 +354,8 @@
     },
     "flowerCompanion": {
       "openAria": "Панель Flower. {status}",
+      "quickEntryLabel": "Быстро спросить Flower",
+      "quickEntryPlaceholder": "Спросить Flower...",
       "maximize": "Развернуть Flower",
       "restoreDocked": "Вернуть Flower в закреплённую панель",
       "collapse": "Свернуть Flower",

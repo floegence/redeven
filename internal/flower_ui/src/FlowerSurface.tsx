@@ -688,6 +688,15 @@ export type FlowerThreadFocusRequest = Readonly<{
   thread_id: string;
 }>;
 
+export type FlowerComposerHandoffRequest = Readonly<{
+  request_id: string;
+  text: string;
+  selection_start: number;
+  selection_end: number;
+  is_composing: false;
+  source: 'activity_bottom_bar';
+}>;
+
 export type FlowerSurfaceNotification = Readonly<{
   tone: 'info' | 'success' | 'warning' | 'error';
   title?: string;
@@ -701,6 +710,7 @@ export type FlowerSurfaceProps = Readonly<{
   warmup?: FlowerSurfaceWarmupState | null;
   focusThreadRequest?: FlowerThreadFocusRequest | null;
   focusComposerRequest?: number;
+  composerHandoffRequest?: FlowerComposerHandoffRequest | null;
   settingsFocusRequest?: number;
   sidebarLeadingAction?: JSX.Element;
   presentation?: 'full' | 'companion';
@@ -711,6 +721,7 @@ export type FlowerSurfaceProps = Readonly<{
   headerTrailingActions?: JSX.Element;
   onPresenceChange?: (presence: FlowerCompanionPresenceProjection) => void;
   onFocusThreadRequestConsumed?: (requestID: string) => void;
+  onComposerHandoffConsumed?: (requestID: string) => void;
   onThreadSelectionEvent?: (event: UIFirstSelectionEvent<string, { source: 'thread-list' }>) => void;
   class?: string;
 }>;
@@ -884,6 +895,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let threadsRefreshSequence = 0;
   let startedFocusThreadRequestID = '';
   let startedFocusComposerRequest = 0;
+  let startedComposerHandoffRequestID = '';
+  let pendingComposerHandoffSelection: Readonly<{
+    requestID: string;
+    start: number;
+    end: number;
+  }> | null = null;
   let composerRef: HTMLTextAreaElement | HTMLInputElement | undefined;
   let composerApprovalCardRef: HTMLElement | undefined;
   let previousComposerApprovalActionID = '';
@@ -1901,7 +1918,18 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           || activeElement === composerRef;
         if (!focusStillOwned) return;
       }
-      composerRef?.focus();
+      if (!composerRef?.isConnected) return;
+      composerRef.focus();
+      if (typeof document !== 'undefined' && document.activeElement !== composerRef) return;
+      const pendingSelection = pendingComposerHandoffSelection;
+      if (!pendingSelection) return;
+      const maxSelection = composerRef.value.length;
+      composerRef.setSelectionRange(
+        Math.min(maxSelection, Math.max(0, pendingSelection.start)),
+        Math.min(maxSelection, Math.max(0, pendingSelection.end)),
+      );
+      pendingComposerHandoffSelection = null;
+      props.onComposerHandoffConsumed?.(pendingSelection.requestID);
     });
   };
   onCleanup(() => {
@@ -3963,6 +3991,35 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const request = Math.max(0, Math.floor(Number(props.focusComposerRequest ?? 0)));
     if (!request || request === startedFocusComposerRequest) return;
     startedFocusComposerRequest = request;
+    requestComposerFocus();
+  });
+
+  createEffect(() => {
+    const request = props.composerHandoffRequest;
+    const requestID = trimString(request?.request_id);
+    if (!request || !requestID || requestID === startedComposerHandoffRequestID) return;
+    const quickText = request.text;
+    if (!trimString(quickText)) return;
+    if (!surfaceEngaged() || !transcriptVisible()) return;
+
+    startedComposerHandoffRequestID = requestID;
+    startCompose();
+    let insertedStart = 0;
+    updateComposerSessionDraft(PENDING_NEW_THREAD_ID, (draft) => {
+      const separator = draft.chatDraft ? '\n\n' : '';
+      insertedStart = draft.chatDraft.length + separator.length;
+      return {
+        ...draft,
+        chatDraft: `${draft.chatDraft}${separator}${quickText}`,
+      };
+    });
+    const requestedSelectionStart = Math.min(quickText.length, Math.max(0, Math.floor(request.selection_start)));
+    const requestedSelectionEnd = Math.min(quickText.length, Math.max(requestedSelectionStart, Math.floor(request.selection_end)));
+    pendingComposerHandoffSelection = {
+      requestID,
+      start: insertedStart + requestedSelectionStart,
+      end: insertedStart + requestedSelectionEnd,
+    };
     requestComposerFocus();
   });
 
@@ -7581,6 +7638,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           <textarea
                             ref={(el) => {
                               composerRef = el;
+                              if (pendingComposerHandoffSelection) scheduleComposerFocus();
                             }}
                             class="w-full text-sm leading-6 text-foreground placeholder:text-muted-foreground"
                             placeholder={composerPlaceholder()}
@@ -7603,6 +7661,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                         <input
                           ref={(el) => {
                             composerRef = el;
+                            if (pendingComposerHandoffSelection) scheduleComposerFocus();
                           }}
                           type="password"
                           class="w-full text-sm leading-6 text-foreground placeholder:text-muted-foreground"

@@ -354,6 +354,8 @@
     },
     "flowerCompanion": {
       "openAria": "Flower-Begleitbereich. {status}",
+      "quickEntryLabel": "Schnelle Frage an Flower",
+      "quickEntryPlaceholder": "Flower fragen...",
       "maximize": "Flower maximieren",
       "restoreDocked": "Flower angedockt anzeigen",
       "collapse": "Flower einklappen",

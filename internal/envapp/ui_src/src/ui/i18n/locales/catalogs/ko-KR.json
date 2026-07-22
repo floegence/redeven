@@ -354,6 +354,8 @@
     },
     "flowerCompanion": {
       "openAria": "Flower 보조 작업 영역. {status}",
+      "quickEntryLabel": "Flower 빠른 질문 입력",
+      "quickEntryPlaceholder": "Flower에게 질문...",
       "maximize": "Flower 최대화",
       "restoreDocked": "Flower 도킹 보기로 복원",
       "collapse": "Flower 접기",

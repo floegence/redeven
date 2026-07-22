@@ -354,6 +354,8 @@
     },
     "flowerCompanion": {
       "openAria": "Volet Flower. {status}",
+      "quickEntryLabel": "Question rapide à Flower",
+      "quickEntryPlaceholder": "Demander à Flower...",
       "maximize": "Agrandir Flower",
       "restoreDocked": "Rétablir Flower dans le volet",
       "collapse": "Réduire Flower",

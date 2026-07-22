@@ -354,6 +354,8 @@
     },
     "flowerCompanion": {
       "openAria": "Flower 對話面板。{status}",
+      "quickEntryLabel": "快速詢問 Flower",
+      "quickEntryPlaceholder": "詢問 Flower...",
       "maximize": "最大化 Flower",
       "restoreDocked": "將 Flower 還原為停駐模式",
       "collapse": "收合 Flower",
