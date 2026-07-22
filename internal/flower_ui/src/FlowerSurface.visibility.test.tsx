@@ -242,6 +242,8 @@ function renderSurface(
   initialEngaged = false,
   initialTranscriptVisible = false,
   onPresenceChange?: (presence: FlowerCompanionPresenceProjection) => void,
+  presentation: 'full' | 'companion' = 'companion',
+  companionPresenceOwner = presentation === 'companion',
 ) {
   const [engaged, setEngaged] = createSignal(initialEngaged);
   const [transcriptVisible, setTranscriptVisible] = createSignal(initialTranscriptVisible);
@@ -249,9 +251,10 @@ function renderSurface(
     <FlowerSurface
       adapter={adapter}
       notify={() => undefined}
-      presentation="companion"
+      presentation={presentation}
       engaged={engaged()}
       transcriptVisible={transcriptVisible()}
+      companionPresenceOwner={companionPresenceOwner}
       focusThreadRequest={{ request_id: 'focus-test', thread_id: 'thread-running' }}
       onPresenceChange={onPresenceChange}
     />
@@ -367,6 +370,62 @@ describe('FlowerSurface companion visibility lifecycle', () => {
     expect(presences.at(-1)?.running_count).toBe(2);
     expect(harness.listThreadLiveEvents).not.toHaveBeenCalled();
     expect(harness.markThreadRead).not.toHaveBeenCalled();
+  });
+
+  it('projects a canonical summary-only queued count into companion presence', async () => {
+    const queuedSummary = thread({
+      status: 'idle',
+      queued_turn_count: 2,
+      queued_turns: undefined,
+    });
+    const presences: FlowerCompanionPresenceProjection[] = [];
+    const harness = createAdapterHarness({
+      listThreads: vi.fn(async () => [queuedSummary]),
+      loadThread: vi.fn(async () => bootstrap(queuedSummary)),
+    });
+    renderSurface(harness.adapter, false, false, (presence) => presences.push(presence));
+
+    await waitUntil(
+      () => presences.some((presence) => presence.priority_status === 'queued' && presence.queued_count === 1),
+      'summary-only queued count was not projected into companion presence',
+    );
+
+    expect(presences.at(-1)).toMatchObject({
+      priority_status: 'queued',
+      priority_count: 1,
+      queued_count: 1,
+    });
+  });
+
+  it('keeps discovering external work while the Activity companion is maximized', async () => {
+    const selected = thread({ status: 'idle', read_status: readStatus(false) });
+    const external = thread({
+      thread_id: 'thread-external-maximized',
+      title: 'Started while maximized',
+      updated_at_ms: 4_000,
+    });
+    const listThreads = vi.fn<FlowerSurfaceAdapter['listThreads']>(async () => [selected, external]);
+    const presences: FlowerCompanionPresenceProjection[] = [];
+    const harness = createAdapterHarness({
+      listThreads,
+      loadThread: vi.fn(async () => bootstrap(selected)),
+    });
+    renderSurface(
+      harness.adapter,
+      true,
+      true,
+      (presence) => presences.push(presence),
+      'full',
+      true,
+    );
+
+    await waitUntil(() => listThreads.mock.calls.length >= 1, 'maximized companion did not refresh summaries');
+    await waitUntil(
+      () => presences.some((presence) => presence.running_count === 1),
+      'maximized companion did not discover externally started work',
+    );
+
+    expect(presences.at(-1)?.running_count).toBe(1);
   });
 
   it('requires foreground visibility, loaded detail, and an after-paint token before marking read', async () => {

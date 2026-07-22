@@ -706,6 +706,7 @@ export type FlowerSurfaceProps = Readonly<{
   presentation?: 'full' | 'companion';
   engaged?: boolean;
   transcriptVisible?: boolean;
+  companionPresenceOwner?: boolean;
   companionCopy?: FlowerThreadSwitcherCopy;
   headerTrailingActions?: JSX.Element;
   onPresenceChange?: (presence: FlowerCompanionPresenceProjection) => void;
@@ -716,6 +717,7 @@ export type FlowerSurfaceProps = Readonly<{
 
 export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const presentation = () => props.presentation ?? 'full';
+  const companionPresenceOwner = () => props.companionPresenceOwner ?? presentation() === 'companion';
   const surfaceEngaged = () => props.engaged ?? true;
   const transcriptVisible = () => props.transcriptVisible ?? true;
   const foregroundEngagementRequested = () => surfaceEngaged() && transcriptVisible() && documentVisible();
@@ -2059,7 +2061,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setSidebarListItems(items);
   });
   const companionThreadItems = createMemo<readonly FlowerCompanionThreadListItem[]>(() => {
-    const queuedByThread = new Map(threads().map((thread) => [thread.thread_id, thread.queued_turns?.length ?? 0] as const));
+    const queuedByThread = new Map(threads().map((thread) => [
+      thread.thread_id,
+      thread.queued_turn_count ?? thread.queued_turns?.length ?? 0,
+    ] as const));
     return sidebarListItems().map((item) => ({
       ...item,
       queued_turn_count: queuedByThread.get(item.thread_id) ?? 0,
@@ -3332,8 +3337,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
 
   createEffect(() => {
-    const companionSummaryOwner = presentation() === 'companion';
-    const hasBackgroundActiveThread = companionSummaryOwner
+    const ownsCompanionPresence = companionPresenceOwner();
+    const hasBackgroundActiveThread = ownsCompanionPresence
       ? false
       : (() => {
           const selectedID = selectedThreadID();
@@ -3344,14 +3349,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               thread.status === 'running'
               || thread.status === 'waiting_approval'
               || thread.status === 'waiting_user'
-              || (thread.queued_turns?.length ?? 0) > 0
+              || Number(thread.queued_turn_count ?? thread.queued_turns?.length ?? 0) > 0
             )
           ));
         })();
     // Companion presence owns a canonical summary refresh even while its local
     // cache is quiet. Otherwise work started from another surface cannot be
     // discovered until the companion is opened manually.
-    if (!companionSummaryOwner && !hasBackgroundActiveThread) return;
+    if (!ownsCompanionPresence && !hasBackgroundActiveThread) return;
     const tick = () => {
       if (backgroundThreadsRefreshInFlight) return;
       backgroundThreadsRefreshInFlight = true;
@@ -3360,7 +3365,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       });
     };
     const timer = window.setInterval(tick, 1800);
-    if (!companionSummaryOwner) tick();
+    tick();
     onCleanup(() => {
       window.clearInterval(timer);
       backgroundThreadsRefreshInFlight = false;
