@@ -1,8 +1,13 @@
-import { createMemo } from 'solid-js';
+import { createMemo, type JSX } from 'solid-js';
 import { useNotification } from '@floegence/floe-webapp-core';
 
 import { FlowerSurface } from '../../../../../flower_ui/src';
-import type { FlowerSurfaceNotification } from '../../../../../flower_ui/src';
+import type {
+  FlowerCompanionPresenceProjection,
+  FlowerSurfaceNotification,
+  FlowerThreadFocusRequest,
+  FlowerThreadSwitcherCopy,
+} from '../../../../../flower_ui/src';
 import {
   createLocalizedFlowerSurfaceCopy,
   type FlowerSurfaceTranslator,
@@ -15,6 +20,7 @@ import { readDesktopSessionContextSnapshot } from '../services/desktopSessionCon
 import { openConnectionCenter, openFlowerSettings } from '../services/desktopShellBridge';
 import '../flower-feature.css';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
+import type { EnvSurfaceId } from '../envViewMode';
 
 function trim(value: unknown): string {
   return String(value ?? '').trim();
@@ -28,11 +34,32 @@ function createEnvFlowerSurfaceCopy(i18n: I18nHelpers, locale: string) {
   return createLocalizedFlowerSurfaceCopy(translator);
 }
 
-export function EnvAIPage() {
+export type EnvAIPageProps = Readonly<{
+  presentation?: 'full' | 'companion';
+  engaged?: boolean;
+  transcriptVisible?: boolean;
+  focusRequestScope?: 'workbench' | 'activity';
+  focusThreadRequest?: FlowerThreadFocusRequest | null;
+  focusComposerRequest?: number;
+  onFocusThreadRequestConsumed?: (requestID: string) => void;
+  companionCopy?: Omit<FlowerThreadSwitcherCopy, 'threadList'>;
+  headerTrailingActions?: JSX.Element;
+  onPresenceChange?: (presence: FlowerCompanionPresenceProjection) => void;
+  settingsReturnSurfaceId?: EnvSurfaceId;
+  class?: string;
+}>;
+
+export function EnvAIPage(props: EnvAIPageProps = {}) {
   const env = useEnvContext();
   const rpc = useRedevenRpc();
   const i18n = useI18n();
   const notification = useNotification();
+  const surfaceCopy = createMemo(() => createEnvFlowerSurfaceCopy(i18n, i18n.locale()));
+  const companionCopy = createMemo<FlowerThreadSwitcherCopy | undefined>(() => (
+    props.companionCopy
+      ? { ...props.companionCopy, threadList: surfaceCopy().threadList }
+      : undefined
+  ));
   const adapter = createMemo(() => createEnvLocalFlowerSurfaceAdapter({
     envPublicID: trim(env.env_id()),
     envLabel: trim(env.env()?.name) || trim(env.env_id()) || i18n.t('flower.currentEnvironmentFallback'),
@@ -86,7 +113,7 @@ export function EnvAIPage() {
       runtimeSettings: {
         label: i18n.t('settings.runtimeTitle'),
         run: async () => {
-          env.openSettings('agent', { origin: { kind: 'flower', returnSurfaceId: 'ai' } });
+          env.openSettings('agent', { origin: { kind: 'flower', returnSurfaceId: props.settingsReturnSurfaceId ?? 'ai' } });
         },
       },
       connectionCenter: {
@@ -115,14 +142,23 @@ export function EnvAIPage() {
           notification.error(title, notice.message);
         }
       }}
-      copy={createEnvFlowerSurfaceCopy(i18n, i18n.locale())}
-      focusThreadRequest={env.aiThreadFocusRequest()}
-      onFocusThreadRequestConsumed={env.consumeAIThreadFocusRequest}
+      copy={surfaceCopy()}
+      presentation={props.presentation}
+      engaged={props.engaged}
+      transcriptVisible={props.transcriptVisible}
+      companionCopy={companionCopy()}
+      headerTrailingActions={props.headerTrailingActions}
+      onPresenceChange={props.onPresenceChange}
+      focusThreadRequest={props.focusRequestScope === 'activity' ? props.focusThreadRequest : env.aiThreadFocusRequest()}
+      focusComposerRequest={props.focusComposerRequest}
+      onFocusThreadRequestConsumed={props.focusRequestScope === 'activity'
+        ? props.onFocusThreadRequestConsumed
+        : env.consumeAIThreadFocusRequest}
       onThreadSelectionEvent={createUIPresentationEventRecorder({
         surface: 'flower',
         source: (event) => event.metadata?.source ?? 'thread-list',
       })}
-      class="h-full min-h-0"
+      class={`h-full min-h-0 ${props.class ?? ''}`}
     />
   );
 }

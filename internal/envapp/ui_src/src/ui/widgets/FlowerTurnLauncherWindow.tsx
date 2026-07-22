@@ -2,6 +2,7 @@ import { Show, createSignal, onCleanup } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import {
+  FlowerTurnLauncherPanel as SharedFlowerTurnLauncherPanel,
   FlowerTurnLauncherWindow as SharedFlowerTurnLauncherWindow,
   type FlowerTurnLauncherSubmitInput,
 } from '../../../../../flower_ui/src/FlowerTurnLauncherWindow';
@@ -106,6 +107,10 @@ type FlowerTurnLauncherWindowProps = Readonly<{
   open: boolean;
   intent: FlowerTurnLauncherIntent | null;
   anchor?: { x: number; y: number } | null;
+  placement?: 'window' | 'panel';
+  draft?: string;
+  onDraftChange?: (draft: string) => void;
+  autoFocus?: boolean;
   onClose: () => void;
   onSubmit: (input: FlowerTurnLauncherSubmitInput) => Promise<void>;
 }>;
@@ -598,18 +603,40 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
 
   return (
     <>
-      <SharedFlowerTurnLauncherWindow
-        open={props.open}
-        intent={props.intent}
-        anchor={props.anchor}
-        copy={createFlowerTurnLauncherCopy(i18n)}
-        onClose={props.onClose}
-        onSubmit={props.onSubmit}
-        onContextAction={executeContextAction}
-        zIndex={FLOWER_TURN_LAUNCHER_Z_INDEX}
-        windowClass="flower-turn-launcher-window"
-        localScrollProps={REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
-      />
+      <Show
+        when={props.placement === 'panel'}
+        fallback={(
+          <SharedFlowerTurnLauncherWindow
+            open={props.open}
+            intent={props.intent}
+            anchor={props.anchor}
+            copy={createFlowerTurnLauncherCopy(i18n)}
+            draft={props.draft}
+            onDraftChange={props.onDraftChange}
+            autoFocus={props.autoFocus}
+            onClose={props.onClose}
+            onSubmit={props.onSubmit}
+            onContextAction={executeContextAction}
+            zIndex={FLOWER_TURN_LAUNCHER_Z_INDEX}
+            windowClass="flower-turn-launcher-window"
+            localScrollProps={REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
+          />
+        )}
+      >
+        <SharedFlowerTurnLauncherPanel
+          open={props.open}
+          intent={props.intent}
+          copy={createFlowerTurnLauncherCopy(i18n)}
+          draft={props.draft}
+          onDraftChange={props.onDraftChange}
+          autoFocus={props.autoFocus}
+          onClose={props.onClose}
+          onSubmit={props.onSubmit}
+          onContextAction={executeContextAction}
+          localScrollProps={REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
+          contentClass="flower-activity-inline-launcher"
+        />
+      </Show>
 
       <PreviewWindow
         open={!!contextBrowser()}

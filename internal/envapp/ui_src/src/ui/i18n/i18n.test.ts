@@ -673,6 +673,12 @@ describe('Env App i18n dictionaries', () => {
     expect(ruRU.tn('chatActivity.todoItems', 1)).toBe('1 элемент');
     expect(ruRU.tn('chatActivity.todoItems', 2)).toBe('2 элемента');
     expect(ruRU.tn('chatActivity.todoItems', 5)).toBe('5 элементов');
+
+    const esES = createI18nHelpers('es-ES');
+    expect(esES.tn('shell.flowerCompanion.status.attention', 1)).toBe('Requiere tu intervención · 1');
+    expect(esES.tn('shell.flowerCompanion.status.attention', 2)).toBe('Requieren tu intervención · 2');
+    expect(esES.tn('shell.flowerCompanion.status.completed', 1)).toBe('Completada · 1');
+    expect(esES.tn('shell.flowerCompanion.status.completed', 2)).toBe('Completadas · 2');
     expect(ruRU.tn('chatActivity.fileCount', 1)).toBe('1 файл');
     expect(ruRU.tn('chatActivity.fileCount', 2)).toBe('2 файла');
     expect(ruRU.tn('chatActivity.fileCount', 5)).toBe('5 файлов');

@@ -12,6 +12,8 @@ import {
   Grid3x3,
   Highlighter,
   LayoutDashboard,
+  Maximize,
+  Minus,
   Refresh,
   Search,
   Settings,
@@ -64,6 +66,7 @@ import {
 } from './pages/EnvContext';
 import {
   type FlowerFileOpenRequest,
+  type FlowerCompanionPresenceProjection,
   type FlowerThreadFocusRequest,
   type FlowerTurnLauncherAnchor,
   type FlowerTurnLauncherIntent,
@@ -192,8 +195,25 @@ type EnvActivitySelectionMetadata = Readonly<{
   mobileSidebarOpen?: boolean;
 }>;
 
+type ActivityFlowerPresentation = 'collapsed' | 'docked' | 'maximized';
+
+const EMPTY_FLOWER_COMPANION_PRESENCE: FlowerCompanionPresenceProjection = {
+  priority_status: 'idle',
+  priority_count: 0,
+  attention_count: 0,
+  unread_failed_count: 0,
+  running_count: 0,
+  queued_count: 0,
+  unread_canceled_count: 0,
+  unread_completed_count: 0,
+};
+
 const ACTIVE_SURFACE_STORAGE_KEY = 'redeven_envapp_active_tab';
 const DESKTOP_VIEW_MODE_STORAGE_KEY = 'redeven_envapp_desktop_view_mode';
+const ACTIVITY_FLOWER_HEIGHT_STORAGE_KEY = 'redeven_envapp_activity_flower_height';
+const ACTIVITY_FLOWER_DEFAULT_HEIGHT = 320;
+const ACTIVITY_FLOWER_MIN_HEIGHT = 240;
+const ACTIVITY_FLOWER_MAX_HEIGHT = 560;
 const ACCESS_RESUME_TIMEOUT_MS = 15_000;
 const WORKBENCH_HANDOFF_ANCHOR_MAX_AGE_MS = 1_500;
 const NOTES_OVERLAY_KEYBIND = 'mod+.';
@@ -233,6 +253,7 @@ const PluginSurfaceFrame = lazy(() => import('./plugins/PluginSurfaceFrame').the
 const DebugConsoleWindow = lazy(() => import('./debugConsole/DebugConsoleWindow').then((module) => ({ default: module.DebugConsoleWindow })));
 const AuditLogDialog = lazy(() => import('./widgets/AuditLogDialog').then((module) => ({ default: module.AuditLogDialog })));
 const FlowerTurnLauncherWindow = lazy(() => import('./widgets/FlowerTurnLauncherWindow').then((module) => ({ default: module.FlowerTurnLauncherWindow })));
+const FlowerTurnLauncherInlinePanel = lazy(() => import('./widgets/FlowerTurnLauncherWindow').then((module) => ({ default: module.FlowerTurnLauncherWindow })));
 const FilePreviewHost = lazy(() => import('./widgets/FilePreviewHost').then((module) => ({ default: module.FilePreviewHost })));
 const FileBrowserSurfaceHost = lazy(() => import('./widgets/FileBrowserSurfaceHost').then((module) => ({ default: module.FileBrowserSurfaceHost })));
 const EnvWorkbenchPage = lazy(() => import('./workbench/EnvWorkbenchPage').then((module) => ({ default: module.EnvWorkbenchPage })));
@@ -791,6 +812,7 @@ export function EnvAppShell() {
   const canUseCodex = createMemo(() => env.state === 'ready' && hasRWXPermissions(env()));
 
   const [pendingAutoOpenAI, setPendingAutoOpenAI] = createSignal(false);
+  const [pendingAutoOpenActivityFlower, setPendingAutoOpenActivityFlower] = createSignal(false);
   const [pendingAutoOpenCodex, setPendingAutoOpenCodex] = createSignal(false);
   const [desktopViewMode, setDesktopViewMode] = createSignal<EnvViewMode>('workbench');
   const viewMode = createMemo<EnvViewMode>(() => (layout.isMobile() ? 'activity' : desktopViewMode()));
@@ -803,6 +825,32 @@ export function EnvAppShell() {
   const [workbenchFilePreviewActivationSeq, setWorkbenchFilePreviewActivationSeq] = createSignal(0);
   const [workbenchFilePreviewActivation, setWorkbenchFilePreviewActivation] = createSignal<EnvWorkbenchFilePreviewActivationRequest | null>(null);
   const [filesMobileSidebarOpen, setFilesMobileSidebarOpen] = createSignal(false);
+  const persistedActivityFlowerHeight = Number(readUIStorageItem(ACTIVITY_FLOWER_HEIGHT_STORAGE_KEY));
+  const [activityFlowerPresentation, setActivityFlowerPresentation] = createSignal<ActivityFlowerPresentation>('collapsed');
+  const [activityFlowerHeight, setActivityFlowerHeight] = createSignal(
+    Number.isFinite(persistedActivityFlowerHeight)
+      ? Math.min(ACTIVITY_FLOWER_MAX_HEIGHT, Math.max(ACTIVITY_FLOWER_MIN_HEIGHT, persistedActivityFlowerHeight))
+      : ACTIVITY_FLOWER_DEFAULT_HEIGHT,
+  );
+  const [activityFlowerViewportHeight, setActivityFlowerViewportHeight] = createSignal(
+    typeof window === 'undefined' ? 800 : window.innerHeight,
+  );
+  const [activityFlowerPresence, setActivityFlowerPresence] = createSignal<FlowerCompanionPresenceProjection>(EMPTY_FLOWER_COMPANION_PRESENCE);
+  const [activityFlowerComposerFocusRequest, setActivityFlowerComposerFocusRequest] = createSignal(0);
+  const [flowerTurnLauncherDrafts, setFlowerTurnLauncherDrafts] = createSignal<Record<string, string>>({});
+  let activityFlowerBottomBarTriggerRef: HTMLButtonElement | undefined;
+  let activityFlowerPanelRef: HTMLDivElement | undefined;
+  let activityFlowerRestoreFocusRef: HTMLElement | null = null;
+  onMount(() => {
+    const syncActivityFlowerViewport = () => setActivityFlowerViewportHeight(window.visualViewport?.height ?? window.innerHeight);
+    syncActivityFlowerViewport();
+    window.addEventListener('resize', syncActivityFlowerViewport);
+    window.visualViewport?.addEventListener('resize', syncActivityFlowerViewport);
+    onCleanup(() => {
+      window.removeEventListener('resize', syncActivityFlowerViewport);
+      window.visualViewport?.removeEventListener('resize', syncActivityFlowerViewport);
+    });
+  });
   const toggleFilesMobileSidebar = () => setFilesMobileSidebarOpen((open) => !open);
   let initialActivitySurface: EnvSurfaceId | null = null;
 
@@ -854,7 +902,9 @@ export function EnvAppShell() {
   const [languageMenuOpenSeq, setLanguageMenuOpenSeq] = createSignal(0);
   const [themeMenuOpenSeq, setThemeMenuOpenSeq] = createSignal(0);
   const [aiThreadFocusRequest, setAIThreadFocusRequest] = createSignal<FlowerThreadFocusRequest | null>(null);
+  const [activityFlowerFocusRequest, setActivityFlowerFocusRequest] = createSignal<FlowerThreadFocusRequest | null>(null);
   let aiThreadFocusRequestSequence = 0;
+  let activityFlowerFocusRequestSequence = 0;
   let lastWorkbenchPointerAnchor: (EnvWorkbenchHandoffAnchor & { observedAtMs: number }) | null = null;
 
   const recordWorkbenchPointerAnchor = (event: MouseEvent | PointerEvent) => {
@@ -1116,13 +1166,126 @@ export function EnvAppShell() {
     ));
   };
 
+  const focusActivityFlowerThread = (threadId: string) => {
+    const tid = trimString(threadId);
+    if (!tid) return;
+    activityFlowerFocusRequestSequence += 1;
+    setActivityFlowerFocusRequest({
+      request_id: `env-activity-flower-focus-${activityFlowerFocusRequestSequence}`,
+      thread_id: tid,
+    });
+  };
+
+  const consumeActivityFlowerFocusRequest = (requestId: string) => {
+    const normalizedRequestId = trimString(requestId);
+    if (!normalizedRequestId) return;
+    setActivityFlowerFocusRequest((current) => (
+      current?.request_id === normalizedRequestId ? null : current
+    ));
+  };
+
+  const activityFlowerDockedMaxHeight = () => {
+    const availableHeight = Math.max(0, activityFlowerViewportHeight() - 68);
+    return Math.min(
+      ACTIVITY_FLOWER_MAX_HEIGHT,
+      Math.floor(availableHeight * 0.52),
+      availableHeight - 220,
+    );
+  };
+
+  const clampedActivityFlowerHeight = () => Math.min(
+    Math.max(ACTIVITY_FLOWER_MIN_HEIGHT, activityFlowerDockedMaxHeight()),
+    Math.max(ACTIVITY_FLOWER_MIN_HEIGHT, activityFlowerHeight()),
+  );
+
+  const openActivityFlowerCompanion = (options: Readonly<{ focusComposer?: boolean; maximize?: boolean }> = {}) => {
+    if (!canUseFlower()) return;
+    if (activityFlowerPresentation() === 'collapsed' && typeof document !== 'undefined') {
+      activityFlowerRestoreFocusRef = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    }
+    const nextPresentation: ActivityFlowerPresentation = layout.isMobile()
+      || options.maximize
+      || activityFlowerDockedMaxHeight() < ACTIVITY_FLOWER_MIN_HEIGHT
+      ? 'maximized'
+      : activityFlowerPresentation() === 'collapsed'
+        ? 'docked'
+        : activityFlowerPresentation();
+    setActivityFlowerPresentation(nextPresentation);
+    if (options.focusComposer) {
+      setActivityFlowerComposerFocusRequest((request) => request + 1);
+    }
+  };
+
+  const collapseActivityFlowerCompanion = (restoreFocus = true) => {
+    setActivityFlowerPresentation('collapsed');
+    if (restoreFocus) {
+      queueMicrotask(() => {
+        const target = layout.isMobile() ? activityFlowerRestoreFocusRef : activityFlowerBottomBarTriggerRef;
+        target?.focus();
+      });
+    }
+  };
+
+  const toggleActivityFlowerFromBottomBar = () => {
+    if (activityFlowerPresentation() === 'collapsed') {
+      openActivityFlowerCompanion();
+      return;
+    }
+    collapseActivityFlowerCompanion(false);
+  };
+
+  const toggleActivityFlowerMaximized = () => {
+    setActivityFlowerPresentation((current) => (
+      current === 'maximized' && activityFlowerDockedMaxHeight() >= ACTIVITY_FLOWER_MIN_HEIGHT
+        ? 'docked'
+        : 'maximized'
+    ));
+  };
+
+  const startActivityFlowerResize = (event: PointerEvent) => {
+    if (activityFlowerPresentation() !== 'docked') return;
+    event.preventDefault();
+    const startY = event.clientY;
+    const startHeight = clampedActivityFlowerHeight();
+    const move = (moveEvent: PointerEvent) => {
+      const maxHeight = Math.max(ACTIVITY_FLOWER_MIN_HEIGHT, activityFlowerDockedMaxHeight());
+      setActivityFlowerHeight(Math.min(maxHeight, Math.max(ACTIVITY_FLOWER_MIN_HEIGHT, startHeight + startY - moveEvent.clientY)));
+    };
+    const finish = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', finish);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', finish);
+    window.addEventListener('pointercancel', finish);
+  };
+
+  const nudgeActivityFlowerHeight = (delta: number) => {
+    const maxHeight = Math.max(ACTIVITY_FLOWER_MIN_HEIGHT, activityFlowerDockedMaxHeight());
+    setActivityFlowerHeight((height) => Math.min(maxHeight, Math.max(ACTIVITY_FLOWER_MIN_HEIGHT, height + delta)));
+  };
+
+  createEffect(() => {
+    writeUIStorageItem(ACTIVITY_FLOWER_HEIGHT_STORAGE_KEY, String(Math.round(activityFlowerHeight())));
+  });
+
   const openFlowerTurnLauncher = (intent: FlowerTurnLauncherIntent, anchor?: FlowerTurnLauncherAnchor) => {
     if (!canUseFlower()) {
       notify.error(i18n.t('shell.notifications.permissionDeniedTitle'), i18n.t('shell.notifications.rwxPermissionRequired'));
       return;
     }
     const capturedMode = viewMode();
-    setFlowerTurnLauncherIntent(withFlowerTurnExecutionContext(intent));
+    const contextualIntent = withFlowerTurnExecutionContext(intent);
+    const intentID = trimString(contextualIntent.id);
+    if (capturedMode === 'activity' && intentID) {
+      setFlowerTurnLauncherDrafts((current) => (
+        Object.prototype.hasOwnProperty.call(current, intentID)
+          ? current
+          : { ...current, [intentID]: trimString(contextualIntent.initial_prompt) }
+      ));
+    }
+    setFlowerTurnLauncherIntent(contextualIntent);
     setFlowerTurnLauncherAnchor(anchor ?? null);
     setFlowerTurnLauncherHandoff({
       mode: capturedMode,
@@ -1130,6 +1293,9 @@ export function EnvAppShell() {
       ...(capturedMode === 'workbench' ? { workbenchAnchor: resolveWorkbenchHandoffAnchor() } : {}),
     });
     setFlowerTurnLauncherOpen(true);
+    if (capturedMode === 'activity') {
+      openActivityFlowerCompanion({ maximize: layout.isMobile() });
+    }
   };
 
   const openTerminalInDirectory = (
@@ -1318,19 +1484,33 @@ export function EnvAppShell() {
     setFlowerTurnLauncherHandoff(null);
   };
 
+  const clearFlowerTurnLauncherDraft = (intentID: string) => {
+    const id = trimString(intentID);
+    if (!id) return;
+    setFlowerTurnLauncherDrafts((current) => {
+      if (!Object.prototype.hasOwnProperty.call(current, id)) return current;
+      const next = { ...current };
+      delete next[id];
+      return next;
+    });
+  };
+
   const handoffFlowerTurn = (context: EnvFlowerTurnHandoffContext, threadId: string) => {
     const tid = trimString(threadId);
     if (!tid) {
       throw new Error(i18n.t('flowerChat.router.missingThreadID'));
     }
-    focusAIThread(tid);
     const target = context;
 
     if (target.mode === 'activity' || layout.isMobile()) {
-      setViewMode('activity', { surfaceId: 'ai', focusSurface: true });
-      openSurface('ai', { reason: 'handoff_ask_flower', focus: true, ensureVisible: true });
+      const returnSurface = target.activeSurface === 'ai' ? lastActivitySurface() : target.activeSurface;
+      setViewMode('activity', { surfaceId: returnSurface, focusSurface: false });
+      focusActivityFlowerThread(tid);
+      openActivityFlowerCompanion({ maximize: layout.isMobile() });
       return;
     }
+
+    focusAIThread(tid);
 
     if (viewMode() !== 'workbench') {
       setViewMode('workbench', { surfaceId: 'ai', focusSurface: false, requestWorkbenchOverview: false });
@@ -1414,11 +1594,13 @@ export function EnvAppShell() {
       if (!handoffContext) {
         throw new Error(i18n.t('shell.notifications.failedToSendToFlowerTitle'));
       }
+      clearFlowerTurnLauncherDraft(input.intent.id);
       closeFlowerTurnLauncher();
       handoffFlowerTurn(handoffContext, threadId);
     } catch (e) {
       const uncertain = flowerTurnAdmissionUncertainIdentity(e);
       if (uncertain) {
+        clearFlowerTurnLauncherDraft(input.intent.id);
         closeFlowerTurnLauncher();
         if (handoffContext) {
           handoffFlowerTurn(handoffContext, uncertain.thread_id);
@@ -1827,6 +2009,78 @@ export function EnvAppShell() {
 
   const recoverySnapshot = reconnectController.snapshot;
   const recoveryVisible = createMemo(() => recoverySnapshot().state !== 'idle');
+  const activityFlowerInlineLauncherVisible = createMemo(() => (
+    flowerTurnLauncherOpen() && flowerTurnLauncherHandoff()?.mode === 'activity'
+  ));
+  const activityFlowerExpanded = createMemo(() => activityFlowerPresentation() !== 'collapsed');
+  const activityFlowerEngaged = createMemo(() => (
+    viewMode() === 'activity'
+    && activityFlowerExpanded()
+    && !activityFlowerInlineLauncherVisible()
+    && !accessGateVisible()
+    && !recoveryVisible()
+  ));
+  const activityFlowerStatusLabel = createMemo(() => {
+    const presence = activityFlowerPresence();
+    switch (presence.priority_status) {
+      case 'attention':
+        return i18n.tn('shell.flowerCompanion.status.attention', presence.priority_count);
+      case 'failed':
+        return i18n.tn('shell.flowerCompanion.status.failed', presence.priority_count);
+      case 'running':
+        return i18n.tn('shell.flowerCompanion.status.running', presence.priority_count);
+      case 'queued':
+        return i18n.tn('shell.flowerCompanion.status.queued', presence.priority_count);
+      case 'canceled':
+        return i18n.tn('shell.flowerCompanion.status.canceled', presence.priority_count);
+      case 'completed':
+        return i18n.tn('shell.flowerCompanion.status.completed', presence.priority_count);
+      case 'unavailable':
+        return i18n.t('shell.flowerCompanion.status.unavailable');
+      default:
+        return i18n.t('shell.flowerCompanion.status.idle');
+    }
+  });
+  const activityFlowerCompanionCopy = () => ({
+    label: i18n.t('shell.flowerCompanion.threadSwitcher.label'),
+    searchPlaceholder: i18n.t('shell.flowerCompanion.threadSwitcher.searchPlaceholder'),
+    newConversation: i18n.t('shell.flowerCompanion.threadSwitcher.newConversation'),
+    empty: i18n.t('shell.flowerCompanion.threadSwitcher.empty'),
+    queued: i18n.t('shell.flowerCompanion.threadSwitcher.queued'),
+    groups: {
+      attention: i18n.t('shell.flowerCompanion.threadSwitcher.groups.attention'),
+      working: i18n.t('shell.flowerCompanion.threadSwitcher.groups.working'),
+      pinned: i18n.t('shell.flowerCompanion.threadSwitcher.groups.pinned'),
+      recent: i18n.t('shell.flowerCompanion.threadSwitcher.groups.recent'),
+    },
+  });
+
+  createEffect(() => {
+    if (activityFlowerPresentation() !== 'docked') return;
+    if (activityFlowerDockedMaxHeight() >= ACTIVITY_FLOWER_MIN_HEIGHT) return;
+    setActivityFlowerPresentation('maximized');
+  });
+
+  createEffect(() => {
+    if (!activityFlowerExpanded() || viewMode() !== 'activity') return;
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
+      const focused = document.activeElement;
+      if (!activityFlowerInlineLauncherVisible() && (!focused || !activityFlowerPanelRef?.contains(focused))) return;
+      event.preventDefault();
+      if (activityFlowerInlineLauncherVisible()) {
+        closeFlowerTurnLauncher();
+        return;
+      }
+      if (activityFlowerPresentation() === 'maximized' && !layout.isMobile()) {
+        toggleActivityFlowerMaximized();
+        return;
+      }
+      collapseActivityFlowerCompanion();
+    };
+    window.addEventListener('keydown', handleEscape);
+    onCleanup(() => window.removeEventListener('keydown', handleEscape));
+  });
   const status = createMemo(() => {
     if (accessGatePhase() === 'unlock_required') return 'disconnected';
     if (accessGatePhase() === 'checking' || accessGatePhase() === 'resuming' || accessGatePhase() === 'resume_blocked') {
@@ -2198,13 +2452,18 @@ export function EnvAppShell() {
         setEnvId(getEnvPublicIDFromSession());
       }
 
-      let preferredSurface = readPersistedActiveSurface();
       const preferredDesktopViewMode = readPersistedDesktopViewMode() ?? 'workbench';
+      let preferredSurface = readPersistedActiveSurface();
       if (rt && preferredSurface === 'ports') preferredSurface = 'codespaces';
       if (preferredSurface === 'ai') {
-        // Defer opening Flower until access state is loaded.
+        // Activity migrates the legacy Flower page to the inline companion;
+        // Workbench retains the existing Flower widget restoration path.
         preferredSurface = null;
-        setPendingAutoOpenAI(true);
+        if (layout.isMobile() || preferredDesktopViewMode === 'activity') {
+          setPendingAutoOpenActivityFlower(true);
+        } else {
+          setPendingAutoOpenAI(true);
+        }
       }
       if (preferredSurface === 'codex') {
         // Defer opening Codex until permissions are loaded (and only if RWX is granted).
@@ -2318,7 +2577,6 @@ export function EnvAppShell() {
       { id: 'codespaces', name: i18n.t('shell.nav.codespaces'), icon: Code, component: EnvCodespacesPage, sidebar: { order: 4, fullScreen: true } },
       { id: 'ports', name: i18n.t('shell.nav.webServices'), icon: Globe, component: EnvPortForwardsPage, sidebar: { order: 5, fullScreen: true } },
     ];
-    list.push({ id: 'ai', name: i18n.t('shell.nav.flower'), icon: FlowerNavigationIcon, component: EnvAIPage, sidebar: { order: 6, fullScreen: false, renderIn: 'main' } });
     list.push({
       id: 'codex',
       name: i18n.t('shell.nav.codex'),
@@ -2473,7 +2731,11 @@ export function EnvAppShell() {
     setLastRequestedSurface(targetSurface);
 
     if (requestedMode === 'activity') {
-      activateActivitySurface(targetSurface, { persist: false });
+      const activitySurface = targetSurface === 'ai'
+        ? (lastActivitySurface() === 'ai' ? ENV_DEFAULT_SURFACE_ID : lastActivitySurface())
+        : targetSurface;
+      activateActivitySurface(activitySurface, { persist: false });
+      if (targetSurface === 'ai') openActivityFlowerCompanion();
       return;
     }
     if (
@@ -2505,10 +2767,13 @@ export function EnvAppShell() {
       void preloadTerminalFeatureResources({ reason: 'intent' }).catch(() => undefined);
     }
     const targetSurface = resolveOpenSurfaceTarget(surfaceId, options);
-    setLastRequestedSurface(targetSurface);
 
     if (viewMode() === 'workbench') {
       activateWorkbenchSurface(targetSurface, options);
+      return;
+    }
+    if (targetSurface === 'ai') {
+      openActivityFlowerCompanion({ focusComposer: options?.focus === true });
       return;
     }
     activateActivitySurface(targetSurface);
@@ -2527,6 +2792,12 @@ export function EnvAppShell() {
   });
 
   createEffect(() => {
+    if (!persistReady() || !pendingAutoOpenActivityFlower() || !canUseFlower()) return;
+    setPendingAutoOpenActivityFlower(false);
+    openActivityFlowerCompanion({ maximize: layout.isMobile() });
+  });
+
+  createEffect(() => {
     if (!persistReady() || !pendingAutoOpenCodex()) return;
     if (env.state === 'ready' && !canUseCodex()) {
       setPendingAutoOpenCodex(false);
@@ -2540,8 +2811,8 @@ export function EnvAppShell() {
 
   createEffect(() => {
     if (layout.sidebarActiveTab() !== 'ai') return;
-    if (canUseFlower()) return;
     activateActivitySurface(ENV_DEFAULT_SURFACE_ID, { persist: false });
+    if (canUseFlower()) openActivityFlowerCompanion({ maximize: layout.isMobile() });
   });
 
   createEffect(() => {
@@ -2607,10 +2878,11 @@ export function EnvAppShell() {
     }
     if (canUseFlower()) {
       items.push({
-        id: 'ai',
+        id: 'flower-companion',
         icon: FlowerNavigationIcon,
         label: i18n.t('shell.nav.flower'),
-        collapseBehavior: 'toggle',
+        collapseBehavior: 'preserve',
+        onClick: () => openActivityFlowerCompanion({ maximize: layout.isMobile() }),
       });
     }
     if (canUseCodex()) {
@@ -3385,12 +3657,148 @@ export function EnvAppShell() {
     recordActivitySelectionEvent(event);
   };
 
+  const activityFlowerHeaderActions = () => (
+    <>
+      <Tooltip
+        content={activityFlowerPresentation() === 'maximized'
+          ? i18n.t('shell.flowerCompanion.restoreDocked')
+          : i18n.t('shell.flowerCompanion.maximize')}
+        placement="top"
+        delay={0}
+      >
+        <button
+          type="button"
+          class="flower-activity-companion-icon-button"
+          aria-label={activityFlowerPresentation() === 'maximized'
+            ? i18n.t('shell.flowerCompanion.restoreDocked')
+            : i18n.t('shell.flowerCompanion.maximize')}
+          aria-pressed={activityFlowerPresentation() === 'maximized'}
+          onClick={toggleActivityFlowerMaximized}
+        >
+          {activityFlowerPresentation() === 'maximized'
+            ? <Minus class="h-4 w-4" />
+            : <Maximize class="h-4 w-4" />}
+        </button>
+      </Tooltip>
+      <Tooltip content={i18n.t('shell.flowerCompanion.collapse')} placement="top" delay={0}>
+        <button
+          type="button"
+          class="flower-activity-companion-icon-button"
+          aria-label={i18n.t('shell.flowerCompanion.collapse')}
+          onClick={() => collapseActivityFlowerCompanion()}
+        >
+          <X class="h-4 w-4" />
+        </button>
+      </Tooltip>
+    </>
+  );
+
+  const renderActivityFlowerCompanion = () => (
+    <Show when={canUseFlower()}>
+      <div
+        ref={activityFlowerPanelRef}
+        id="redeven-activity-flower-companion"
+        class="flower-activity-companion-shell"
+        classList={{
+          'flower-activity-companion-collapsed': activityFlowerPresentation() === 'collapsed',
+          'flower-activity-companion-docked': activityFlowerPresentation() === 'docked',
+          'flower-activity-companion-maximized': activityFlowerPresentation() === 'maximized',
+        }}
+        data-presentation={activityFlowerPresentation()}
+        role="region"
+        aria-label={i18n.t('shell.nav.flower')}
+        aria-hidden={activityFlowerPresentation() === 'collapsed' ? 'true' : undefined}
+        inert={activityFlowerPresentation() === 'collapsed'}
+        style={{
+          height: activityFlowerPresentation() === 'collapsed'
+            ? '0px'
+            : activityFlowerPresentation() === 'maximized'
+              ? '100%'
+              : `${clampedActivityFlowerHeight()}px`,
+        }}
+      >
+        <Show when={activityFlowerPresentation() === 'docked'}>
+          <button
+            type="button"
+            class="flower-activity-companion-resizer"
+            role="separator"
+            aria-label={i18n.t('shell.flowerCompanion.resize')}
+            aria-orientation="horizontal"
+            aria-valuemin={ACTIVITY_FLOWER_MIN_HEIGHT}
+            aria-valuemax={Math.max(ACTIVITY_FLOWER_MIN_HEIGHT, activityFlowerDockedMaxHeight())}
+            aria-valuenow={Math.round(clampedActivityFlowerHeight())}
+            onPointerDown={startActivityFlowerResize}
+            onKeyDown={(event) => {
+              if (event.key === 'ArrowUp') {
+                event.preventDefault();
+                nudgeActivityFlowerHeight(16);
+              } else if (event.key === 'ArrowDown') {
+                event.preventDefault();
+                nudgeActivityFlowerHeight(-16);
+              } else if (event.key === 'Home') {
+                event.preventDefault();
+                setActivityFlowerHeight(ACTIVITY_FLOWER_MIN_HEIGHT);
+              } else if (event.key === 'End') {
+                event.preventDefault();
+                setActivityFlowerHeight(Math.max(ACTIVITY_FLOWER_MIN_HEIGHT, activityFlowerDockedMaxHeight()));
+              } else if (event.key === 'Escape') {
+                event.preventDefault();
+                collapseActivityFlowerCompanion();
+              }
+            }}
+          />
+        </Show>
+        <div class="flower-activity-companion-content">
+          <div classList={{ hidden: activityFlowerInlineLauncherVisible() }} class="h-full min-h-0">
+            <EnvAIPage
+              presentation={activityFlowerPresentation() === 'maximized' ? 'full' : 'companion'}
+              engaged={activityFlowerEngaged()}
+              transcriptVisible={activityFlowerEngaged()}
+              focusRequestScope="activity"
+              focusThreadRequest={activityFlowerFocusRequest()}
+              focusComposerRequest={activityFlowerComposerFocusRequest()}
+              onFocusThreadRequestConsumed={consumeActivityFlowerFocusRequest}
+              companionCopy={activityFlowerCompanionCopy()}
+              headerTrailingActions={activityFlowerHeaderActions()}
+              onPresenceChange={setActivityFlowerPresence}
+              settingsReturnSurfaceId={lastActivitySurface() === 'ai' ? ENV_DEFAULT_SURFACE_ID : lastActivitySurface()}
+            />
+          </div>
+          <Show when={activityFlowerInlineLauncherVisible()}>
+            <div class="flower-activity-inline-launcher-shell">
+              <div class="flower-activity-inline-launcher-header">
+                <div class="min-w-0 truncate text-xs font-semibold">{i18n.t('shell.flowerCompanion.newContextConversation')}</div>
+                <div class="flex shrink-0 items-center gap-1">{activityFlowerHeaderActions()}</div>
+              </div>
+              <div class="min-h-0 flex-1">
+                <FlowerTurnLauncherInlinePanel
+                  open
+                  placement="panel"
+                  intent={flowerTurnLauncherIntent()}
+                  draft={flowerTurnLauncherDrafts()[trimString(flowerTurnLauncherIntent()?.id)] ?? ''}
+                  onDraftChange={(draft) => {
+                    const intentID = trimString(flowerTurnLauncherIntent()?.id);
+                    if (!intentID) return;
+                    setFlowerTurnLauncherDrafts((current) => ({ ...current, [intentID]: draft }));
+                  }}
+                  autoFocus
+                  onClose={closeFlowerTurnLauncher}
+                  onSubmit={submitFlowerTurnLauncher}
+                />
+              </div>
+            </div>
+          </Show>
+        </div>
+      </div>
+    </Show>
+  );
+
   const renderActivityShell = () => (
     <Shell
       class="!h-full"
       activitySelectionMode="ui-first"
       onActivitySelectionEvent={handleActivitySelectionEvent}
-      sidebarMode={layout.sidebarActiveTab() !== 'ai' ? 'auto' : 'hidden'}
+      sidebarMode="auto"
       slotClassNames={{
         sidebar: layout.sidebarVisibilityMotion() === 'instant' ? 'transition-none' : undefined,
         bottomBarHeight: 'h-7',
@@ -3448,6 +3856,24 @@ export function EnvAppShell() {
           <div class="flex-1" />
           {/* Status + Actions */}
           <div class="flex items-center gap-0.5">
+            <Show when={!layout.isMobile()}>
+              <Tooltip content={`${i18n.t('shell.nav.flower')} · ${activityFlowerStatusLabel()}`} placement="top" delay={0}>
+                <button
+                  ref={activityFlowerBottomBarTriggerRef}
+                  type="button"
+                  class="flower-activity-bottom-trigger"
+                  classList={{ 'flower-activity-bottom-trigger-active': activityFlowerExpanded() }}
+                  aria-label={i18n.t('shell.flowerCompanion.openAria', { status: activityFlowerStatusLabel() })}
+                  aria-controls="redeven-activity-flower-companion"
+                  aria-expanded={activityFlowerExpanded()}
+                  onClick={toggleActivityFlowerFromBottomBar}
+                >
+                  <FlowerNavigationIcon class="h-3.5 w-3.5 shrink-0" />
+                  <span class="truncate">{i18n.t('shell.nav.flower')}</span>
+                  <span class="truncate text-muted-foreground" aria-live="polite">· {activityFlowerStatusLabel()}</span>
+                </button>
+              </Tooltip>
+            </Show>
             <StatusIndicator status={status()} label={statusLabel()} />
             <Tooltip content={canViewAudit() ? i18n.t('shell.status.auditLog') : i18n.t('shell.status.adminRequired')} placement="top" delay={0}>
               <BottomBarItem
@@ -3468,7 +3894,11 @@ export function EnvAppShell() {
       }
     >
       <div class="h-full min-h-0 overflow-hidden flex flex-col">
-        <div ref={setActivityNotesViewportAnchor} class="flex-1 min-h-0 overflow-hidden relative">
+        <div
+          ref={setActivityNotesViewportAnchor}
+          class="flex-1 min-h-0 overflow-hidden relative"
+          classList={{ hidden: activityFlowerPresentation() === 'maximized' }}
+        >
           <div
             class={`h-full min-h-0 ${recoveryVisible() ? 'pointer-events-none' : ''}`}
             inert={recoveryVisible()}
@@ -3489,6 +3919,7 @@ export function EnvAppShell() {
             />
           </Show>
         </div>
+        {renderActivityFlowerCompanion()}
       </div>
 
       <Show when={auditOpen()}>
@@ -3633,7 +4064,7 @@ export function EnvAppShell() {
                   <Show when={viewMode() !== 'workbench' && filePreviewHostRequested()}>
                     <FilePreviewHost />
                   </Show>
-                  <Show when={flowerTurnLauncherOpen()}>
+                  <Show when={flowerTurnLauncherOpen() && flowerTurnLauncherHandoff()?.mode === 'workbench'}>
                     <FlowerTurnLauncherWindow
                       open
                       intent={flowerTurnLauncherIntent()}

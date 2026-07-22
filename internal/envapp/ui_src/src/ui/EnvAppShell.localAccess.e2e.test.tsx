@@ -651,16 +651,18 @@ vi.mock('./pages/EnvFileBrowserPage', () => ({
 vi.mock('./pages/EnvCodespacesPage', () => ({ EnvCodespacesPage: () => <div>activity main</div> }));
 vi.mock('./pages/EnvPortForwardsPage', () => ({ EnvPortForwardsPage: () => <div>activity main</div> }));
 vi.mock('./pages/EnvAIPage', () => ({
-  EnvAIPage: () => {
+  EnvAIPage: (props: { settingsReturnSurfaceId?: string }) => {
     const env = useContext(EnvContextMock as any) as {
-      openSettings?: (section?: string, options?: { origin?: { kind: 'flower'; returnSurfaceId: 'ai' } }) => void;
+      openSettings?: (section?: string, options?: { origin?: { kind: 'flower'; returnSurfaceId: string } }) => void;
     } | undefined;
     return (
       <div data-testid="ai-page">
         <button
           type="button"
           data-testid="mock-open-flower-settings"
-          onClick={() => env?.openSettings?.('ai', { origin: { kind: 'flower', returnSurfaceId: 'ai' } })}
+          onClick={() => env?.openSettings?.('ai', {
+            origin: { kind: 'flower', returnSurfaceId: props.settingsReturnSurfaceId ?? 'terminal' },
+          })}
         >
           Open Flower Settings
         </button>
@@ -1145,7 +1147,7 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   });
 
-  it('keeps visited Activity surfaces mounted across Files, Terminal, Monitor, Flower, and Codex navigation', async () => {
+  it('keeps visited Activity surfaces mounted while Flower opens as a companion', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
@@ -1185,9 +1187,16 @@ describe('EnvAppShell environment entry affordances', () => {
       (host.querySelector('[data-testid="mock-file-select"]') as HTMLButtonElement).click();
       scrollViewport.scrollTop = 176;
 
-      for (const target of ['terminal', 'monitor', 'ai', 'codex']) {
+      for (const target of ['terminal', 'monitor', 'flower-companion', 'codex']) {
         (host.querySelector(`[data-activity-id="${target}"]`) as HTMLButtonElement | null)?.click();
-        await flushUntil(() => sidebarActiveTabValue === target);
+        if (target === 'flower-companion') {
+          await flushUntil(() => (
+            host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation') === 'docked'
+          ));
+          expect(sidebarActiveTabValue).toBe('files');
+        } else {
+          await flushUntil(() => sidebarActiveTabValue === target);
+        }
 
         if (target === 'terminal') {
           expect(terminalFeaturePreloadMocks.preloadTerminalFeatureResources).toHaveBeenCalledWith({ reason: 'intent' });
@@ -1246,7 +1255,13 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushAsync();
       await flushAsync();
 
-      (host.querySelector('[data-testid="mock-context-open-flower-settings"]') as HTMLButtonElement | null)?.click();
+      (host.querySelector('[data-activity-id="flower-companion"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => (
+        host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation') === 'docked'
+      ));
+      expect(sidebarActiveTabValue).toBe('terminal');
+
+      (host.querySelector('[data-testid="mock-open-flower-settings"]') as HTMLButtonElement | null)?.click();
       await flushAsync();
 
       const flowerContextState = host.querySelector('[data-testid="mock-env-context-state"]') as HTMLElement | null;
@@ -1256,7 +1271,8 @@ describe('EnvAppShell environment entry affordances', () => {
       (host.querySelector('[data-testid="mock-context-return-from-settings"]') as HTMLButtonElement | null)?.click();
       await flushAsync();
 
-      expect(sidebarActiveTabValue).toBe('ai');
+      expect(sidebarActiveTabValue).toBe('terminal');
+      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('docked');
       expect((host.querySelector('[data-testid="mock-env-context-state"]') as HTMLElement | null)?.dataset.settingsOrigin).toBe('');
 
       (host.querySelector('[data-activity-id="settings"]') as HTMLButtonElement | null)?.click();

@@ -36,7 +36,7 @@ export type EnvSettingsSection =
 export type EnvSettingsOrigin =
   | {
       kind: 'flower';
-      returnSurfaceId: Extract<EnvSurfaceId, 'ai'>;
+      returnSurfaceId: EnvSurfaceId;
     }
   | null;
 

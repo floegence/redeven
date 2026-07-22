@@ -106,6 +106,7 @@ import { FlowerSoftAuraIcon } from './icons/FlowerSoftAuraIcon';
 import { FlowerSettingsSurface } from './settings/FlowerSettingsSurface';
 import { FlowerShellCommandHighlight } from './shellCommandHighlight';
 import { FlowerThreadList, type FlowerThreadMenuAction } from './threads/FlowerThreadList';
+import { FlowerThreadSwitcher, type FlowerThreadSwitcherCopy } from './threads/FlowerThreadSwitcher';
 import { SubagentDetailWindow } from './SubagentDetailWindow';
 import { applyFlowerLiveEvent, projectFlowerLiveBootstrap } from './flowerLiveReducer';
 import { flowerThreadReadSnapshotKey, mergeFlowerThreadListRefresh, sameThreadSnapshot } from './flowerThreadListRefresh';
@@ -117,6 +118,11 @@ import {
   type ApprovalDecisionHandoff,
 } from './approvalDecisionHandoff';
 import { FlowerWorkingDirPickerDialog } from './filePicker/FlowerWorkingDirPickerDialog';
+import {
+  projectFlowerCompanionPresence,
+  type FlowerCompanionPresenceProjection,
+  type FlowerCompanionThreadListItem,
+} from './flowerCompanionPresence';
 import { createDirectoryPickerDataSource } from './filePicker/createDirectoryPickerDataSource';
 import { toPickerTreeAbsolutePath, toPickerTreePath } from './filePicker/directoryPickerTree';
 import { basenameFromAbsolutePath, normalizeAbsolutePath } from './filePicker/path';
@@ -694,14 +700,26 @@ export type FlowerSurfaceProps = Readonly<{
   copy?: FlowerSurfaceCopy;
   warmup?: FlowerSurfaceWarmupState | null;
   focusThreadRequest?: FlowerThreadFocusRequest | null;
+  focusComposerRequest?: number;
   settingsFocusRequest?: number;
   sidebarLeadingAction?: JSX.Element;
+  presentation?: 'full' | 'companion';
+  engaged?: boolean;
+  transcriptVisible?: boolean;
+  companionCopy?: FlowerThreadSwitcherCopy;
+  headerTrailingActions?: JSX.Element;
+  onPresenceChange?: (presence: FlowerCompanionPresenceProjection) => void;
   onFocusThreadRequestConsumed?: (requestID: string) => void;
   onThreadSelectionEvent?: (event: UIFirstSelectionEvent<string, { source: 'thread-list' }>) => void;
   class?: string;
 }>;
 
 export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
+  const presentation = () => props.presentation ?? 'full';
+  const surfaceEngaged = () => props.engaged ?? true;
+  const transcriptVisible = () => props.transcriptVisible ?? true;
+  const foregroundEngagementRequested = () => surfaceEngaged() && transcriptVisible() && documentVisible();
+  const effectiveEngagement = () => foregroundEngagementRequested() && engagementBootstrapReady();
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY;
   const subagentsCopy = (): FlowerSubagentsCopy => copy().subagents ?? DEFAULT_FLOWER_SURFACE_COPY.subagents!;
   const notify = (notification: FlowerSurfaceNotification) => {
@@ -827,6 +845,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [selectedThreadTailReveal, setSelectedThreadTailReveal] = createSignal<SelectedThreadTailReveal | null>(null);
   const [threadRailWidth, setThreadRailWidth] = createSignal(THREAD_RAIL_WIDTH_DEFAULT);
   const [threadRailResizing, setThreadRailResizing] = createSignal(false);
+  const [threadSwitcherOpen, setThreadSwitcherOpen] = createSignal(false);
+  const [threadSwitcherQuery, setThreadSwitcherQuery] = createSignal('');
+  const [presentedSelection, setPresentedSelection] = createSignal<Readonly<{ threadID: string; sequence: number }> | null>(null);
+  const [documentVisible, setDocumentVisible] = createSignal(
+    typeof document === 'undefined' || document.visibilityState !== 'hidden',
+  );
+  const [engagementBootstrapReady, setEngagementBootstrapReady] = createSignal(foregroundEngagementRequested());
   const [openActivityRuns, setOpenActivityRuns] = createSignal<Record<string, boolean>>({});
   const [activityClockNow, setActivityClockNow] = createSignal(Date.now());
   const [approvalSubmitting, setApprovalSubmitting] = createSignal<Record<string, FlowerApprovalSubmittingState>>({});
@@ -852,9 +877,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [subagentDetailTailRevision, setSubagentDetailTailRevision] = createSignal(0);
   const [subagentDetailOpenedRevision, setSubagentDetailOpenedRevision] = createSignal(0);
   let threadLoadSequence = 0;
+  let engagementBootstrapSequence = 0;
   let threadLocalMutationRevision = 0;
   let threadsRefreshSequence = 0;
   let startedFocusThreadRequestID = '';
+  let startedFocusComposerRequest = 0;
   let composerRef: HTMLTextAreaElement | HTMLInputElement | undefined;
   let composerApprovalCardRef: HTMLElement | undefined;
   let previousComposerApprovalActionID = '';
@@ -873,6 +900,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let renameDialogRef: HTMLDivElement | undefined;
   let renameInputRef: HTMLInputElement | undefined;
   let renameRestoreRef: HTMLElement | undefined;
+  let threadSwitcherTriggerRef: HTMLButtonElement | undefined;
+  let threadSwitcherRef: HTMLDivElement | undefined;
   let subagentDetailTailTimer: number | undefined;
   let subagentDetailTailInFlight: FlowerSubagentDetailTailRequest | null = null;
   let selectedThreadTailRevealFrame = 0;
@@ -908,6 +937,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let activityClockTimer: number | undefined;
   let composerMorePanelPositionFrame = 0;
   let modelMenuPositionFrame = 0;
+  let presentedSelectionFrame = 0;
+  let presentedSelectionTimer: number | undefined;
 
   const reducedMotionPreferred = (): boolean => (
     typeof window !== 'undefined'
@@ -917,6 +948,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   onMount(() => {
     activityClockTimer = window.setInterval(() => setActivityClockNow(Date.now()), 1000);
+    const handleVisibilityChange = () => setDocumentVisible(document.visibilityState !== 'hidden');
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    onCleanup(() => document.removeEventListener('visibilitychange', handleVisibilityChange));
   });
 
   onCleanup(() => {
@@ -992,6 +1026,32 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
     window.clearTimeout(handle);
   };
+  const cancelPresentedSelectionSchedule = () => {
+    if (presentedSelectionFrame) {
+      cancelTranscriptAnimationFrame(presentedSelectionFrame);
+      presentedSelectionFrame = 0;
+    }
+    if (presentedSelectionTimer !== undefined) {
+      window.clearTimeout(presentedSelectionTimer);
+      presentedSelectionTimer = undefined;
+    }
+  };
+  const schedulePresentedSelection = (threadID: string, sequence: number) => {
+    const tid = trimString(threadID);
+    cancelPresentedSelectionSchedule();
+    setPresentedSelection(null);
+    if (!tid || !effectiveEngagement() || sidePanel() !== 'chat') return;
+    presentedSelectionFrame = requestTranscriptAnimationFrame(() => {
+      presentedSelectionFrame = 0;
+      presentedSelectionTimer = window.setTimeout(() => {
+        presentedSelectionTimer = undefined;
+        if (!effectiveEngagement() || sidePanel() !== 'chat') return;
+        if (sequence !== threadLoadSequence || selectedThreadID() !== tid || selectedThreadDetailID() !== tid) return;
+        if (loadingThreadID() === tid || threadLoadError()) return;
+        setPresentedSelection({ threadID: tid, sequence });
+      }, 0);
+    });
+  };
   const cancelDeferredThreadSelection = () => {
     deferredThreadSelectionToken += 1;
     if (deferredThreadSelectionFrame) {
@@ -1003,6 +1063,23 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       deferredThreadSelectionTimer = undefined;
     }
   };
+  createEffect(on(
+    () => [
+      selectedThreadID(),
+      selectedThreadDetailID(),
+      loadingThreadID(),
+      threadLoadError(),
+      sidePanel(),
+      effectiveEngagement(),
+    ] as const,
+    ([threadID, detailID, loadingID, error, , engaged]) => {
+      cancelPresentedSelectionSchedule();
+      setPresentedSelection(null);
+      if (!engaged || !threadID || detailID !== threadID || loadingID === threadID || error) return;
+      schedulePresentedSelection(threadID, threadLoadSequence);
+    },
+    { defer: false },
+  ));
   const transcriptScroll = createFlowerScrollTailController({
     reducedMotionPreferred,
     requestAnimationFrame: requestTranscriptAnimationFrame,
@@ -1981,6 +2058,37 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     lastSidebarListSignature = signature;
     setSidebarListItems(items);
   });
+  const companionThreadItems = createMemo<readonly FlowerCompanionThreadListItem[]>(() => {
+    const queuedByThread = new Map(threads().map((thread) => [thread.thread_id, thread.queued_turns?.length ?? 0] as const));
+    return sidebarListItems().map((item) => ({
+      ...item,
+      queued_turn_count: queuedByThread.get(item.thread_id) ?? 0,
+    }));
+  });
+  let lastCompanionPresenceSignature = '';
+  createEffect(() => {
+    const presence = projectFlowerCompanionPresence(companionThreadItems(), !loadError());
+    const signature = JSON.stringify(presence);
+    if (signature === lastCompanionPresenceSignature) return;
+    lastCompanionPresenceSignature = signature;
+    props.onPresenceChange?.(presence);
+  });
+
+  const closeThreadSwitcher = (restoreFocus = false) => {
+    setThreadSwitcherOpen(false);
+    setThreadSwitcherQuery('');
+    if (restoreFocus) queueMicrotask(() => threadSwitcherTriggerRef?.focus());
+  };
+  createEffect(() => {
+    if (!threadSwitcherOpen()) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target || threadSwitcherRef?.contains(target) || threadSwitcherTriggerRef?.contains(target)) return;
+      closeThreadSwitcher(false);
+    };
+    window.addEventListener('pointerdown', handlePointerDown, true);
+    onCleanup(() => window.removeEventListener('pointerdown', handlePointerDown, true));
+  });
 
   createEffect(() => {
     const dropdownOpen = subagentDropdownOpen();
@@ -2604,9 +2712,27 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     }
   };
 
+  const readAcknowledgementEligible = (threadID: string, sequence: number): boolean => {
+    const tid = trimString(threadID);
+    const presented = presentedSelection();
+    return Boolean(
+      tid
+      && effectiveEngagement()
+      && sidePanel() === 'chat'
+      && sequence === threadLoadSequence
+      && selectedThreadID() === tid
+      && selectedThreadDetailID() === tid
+      && loadingThreadID() !== tid
+      && !loadError()
+      && !threadLoadError()
+      && presented?.threadID === tid
+      && presented.sequence === sequence,
+    );
+  };
+
   const persistThreadRead = (threadID: string, snapshot: FlowerThreadActivitySnapshot, sequence: number) => {
     const tid = trimString(threadID);
-    if (!tid) return;
+    if (!tid || !readAcknowledgementEligible(tid, sequence)) return;
     markThreadReadLocally(tid, snapshot);
     const submittedSnapshotKey = flowerThreadReadSnapshotKey(snapshot);
     if (persistingReadThreadIDs.has(tid)) {
@@ -2638,10 +2764,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         const pendingSnapshot = pendingReadPersistenceSnapshots.get(tid);
         pendingReadPersistenceSnapshots.delete(tid);
         if (!pendingSnapshot) return;
-        if (sequence !== threadLoadSequence || selectedThreadID() !== tid) return;
+        if (!readAcknowledgementEligible(tid, sequence)) return;
         persistThreadRead(tid, pendingSnapshot, sequence);
       });
   };
+
+  createEffect(() => {
+    const thread = selectedThread();
+    const sequence = threadLoadSequence;
+    if (!thread?.read_status.is_unread || !readAcknowledgementEligible(thread.thread_id, sequence)) return;
+    persistThreadRead(thread.thread_id, thread.read_status.snapshot, sequence);
+  });
 
   const writeClipboardText = async (value: string, label: string) => {
     const text = trimString(value);
@@ -2754,6 +2887,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     cancelDeferredThreadSelection();
     closeSubagentOverlays();
     const sequence = ++threadLoadSequence;
+    cancelPresentedSelectionSchedule();
+    setPresentedSelection(null);
     const existing = threads().find((thread) => thread.thread_id === tid) ?? null;
     const detailAvailable = Boolean(existing && (loadedThreadIDs.has(tid) || threadHasLoadedDetail(existing)));
     const detailWarm = Boolean(existing && loadedThreadIDs.has(tid));
@@ -2907,7 +3042,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         return current;
       });
       if (
-        selectedID
+        effectiveEngagement()
+        && selectedID
         && previousSelected
         && selectedSummary
         && mergedSelected
@@ -2971,6 +3107,50 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     });
   });
 
+  createEffect(on(
+    foregroundEngagementRequested,
+    (engaged, previouslyEngaged) => {
+      if (!engaged) {
+        engagementBootstrapSequence += 1;
+        setEngagementBootstrapReady(false);
+        cancelPresentedSelectionSchedule();
+        setPresentedSelection(null);
+        return;
+      }
+      if (previouslyEngaged) return;
+      const threadID = trimString(selectedThreadID());
+      if (!threadID) {
+        setEngagementBootstrapReady(true);
+        return;
+      }
+      const sequence = threadLoadSequence;
+      const bootstrapSequence = ++engagementBootstrapSequence;
+      setEngagementBootstrapReady(false);
+      cancelPresentedSelectionSchedule();
+      setPresentedSelection(null);
+      untrack(() => {
+        void reloadSelectedThread(threadID, sequence, 'background_refresh')
+          .then(() => {
+            if (
+              bootstrapSequence !== engagementBootstrapSequence
+              || !foregroundEngagementRequested()
+              || sequence !== threadLoadSequence
+              || selectedThreadID() !== threadID
+              || !!loadError()
+              || !!threadLoadError()
+            ) return;
+            setEngagementBootstrapReady(true);
+            schedulePresentedSelection(threadID, sequence);
+          }, (error) => {
+            if (sequence === threadLoadSequence && selectedThreadID() === threadID) {
+              setThreadLoadError(getErrorMessage(error));
+            }
+          });
+      });
+    },
+    { defer: true },
+  ));
+
   createEffect(() => {
     if (composerFocusRevision() <= 0) return;
     scheduleComposerFocus();
@@ -2988,14 +3168,23 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     let streamGeneration = liveStreamGenerationValue(liveStreamGenerations.get(tid));
     try {
       let keepGoing = true;
-      while (keepGoing && sequence === threadLoadSequence && selectedThreadID() === tid) {
+      while (
+        keepGoing
+        && sequence === threadLoadSequence
+        && selectedThreadID() === tid
+        && effectiveEngagement()
+      ) {
         keepGoing = false;
         const requestedCursor = cursor;
         const response = await withTimeout(
           props.adapter.listThreadLiveEvents(tid, cursor, 100),
           SELECTED_THREAD_LIVE_EVENTS_TIMEOUT_MS,
         );
-        if (sequence !== threadLoadSequence || selectedThreadID() !== tid) {
+        if (
+          sequence !== threadLoadSequence
+          || selectedThreadID() !== tid
+          || !effectiveEngagement()
+        ) {
           return;
         }
         const responseGeneration = liveStreamGenerationValue(response.stream_generation);
@@ -3063,7 +3252,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               } else {
                 await yieldLiveEventRenderFrame();
               }
-              if (sequence !== threadLoadSequence || selectedThreadID() !== tid) {
+              if (
+                sequence !== threadLoadSequence
+                || selectedThreadID() !== tid
+                || !effectiveEngagement()
+              ) {
                 return;
               }
             }
@@ -3106,6 +3299,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   createEffect(() => {
     const threadID = selectedThreadID();
+    if (!effectiveEngagement()) return;
     if (selectedThreadDetailPending()) return;
     const status = selectedThreadLiveStatus();
     const hasPendingContextCompaction = pendingContextCompactionVisibleForSelectedThread();
@@ -3138,12 +3332,26 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
 
   createEffect(() => {
-    const selectedID = selectedThreadID();
-    const hasBackgroundActiveThread = threads().some((thread) => (
-      thread.thread_id !== selectedID
-      && (thread.status === 'running' || thread.status === 'waiting_approval' || thread.status === 'waiting_user')
-    ));
-    if (!hasBackgroundActiveThread) return;
+    const companionSummaryOwner = presentation() === 'companion';
+    const hasBackgroundActiveThread = companionSummaryOwner
+      ? false
+      : (() => {
+          const selectedID = selectedThreadID();
+          const selectedLiveEngaged = effectiveEngagement();
+          return threads().some((thread) => (
+            (!selectedLiveEngaged || thread.thread_id !== selectedID)
+            && (
+              thread.status === 'running'
+              || thread.status === 'waiting_approval'
+              || thread.status === 'waiting_user'
+              || (thread.queued_turns?.length ?? 0) > 0
+            )
+          ));
+        })();
+    // Companion presence owns a canonical summary refresh even while its local
+    // cache is quiet. Otherwise work started from another surface cannot be
+    // discovered until the companion is opened manually.
+    if (!companionSummaryOwner && !hasBackgroundActiveThread) return;
     const tick = () => {
       if (backgroundThreadsRefreshInFlight) return;
       backgroundThreadsRefreshInFlight = true;
@@ -3152,7 +3360,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       });
     };
     const timer = window.setInterval(tick, 1800);
-    tick();
+    if (!companionSummaryOwner) tick();
     onCleanup(() => {
       window.clearInterval(timer);
       backgroundThreadsRefreshInFlight = false;
@@ -3732,6 +3940,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     cancelDeferredThreadSelection();
     cancelThreadSelectionTransaction();
     threadLoadSequence += 1;
+    cancelPresentedSelectionSchedule();
+    setPresentedSelection(null);
     transcriptScroll.startFollowing();
     cancelSelectedThreadTailReveal();
     closeSubagentOverlays();
@@ -3743,6 +3953,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     void resolveHandlerDecision();
     returnToChat();
   };
+
+  createEffect(() => {
+    const request = Math.max(0, Math.floor(Number(props.focusComposerRequest ?? 0)));
+    if (!request || request === startedFocusComposerRequest) return;
+    startedFocusComposerRequest = request;
+    requestComposerFocus();
+  });
 
   const startThreadRailResize = (event: PointerEvent) => {
     event.preventDefault();
@@ -3818,6 +4035,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   onCleanup(() => {
     cancelDeferredThreadSelection();
     cancelThreadSelectionTransaction();
+    cancelPresentedSelectionSchedule();
     clearSelectedThreadTailRevealSchedule();
     transcriptScroll.dispose();
     subagentDetailScroll.dispose();
@@ -7138,17 +7356,76 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     </div>
   );
 
+  const companionHeaderIdentity = () => (
+    <div class="flower-companion-thread-switcher-anchor" ref={threadSwitcherRef}>
+      <button
+        ref={threadSwitcherTriggerRef}
+        type="button"
+        class="flower-companion-thread-trigger"
+        aria-label={props.companionCopy?.label}
+        aria-haspopup="listbox"
+        aria-expanded={threadSwitcherOpen()}
+        onClick={() => setThreadSwitcherOpen((open) => !open)}
+      >
+        <FlowerIcon class="h-4 w-4 shrink-0 text-primary" />
+        <span class="truncate">{selectedThread()?.title || copy().chat.titleFallback}</span>
+        <ChevronDown class="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+      </button>
+      <Show when={threadSwitcherOpen() && props.companionCopy}>
+        {(switcherCopy) => (
+          <div class="flower-companion-thread-switcher-popover">
+            <FlowerThreadSwitcher
+              items={companionThreadItems()}
+              activeThreadID={selectedThreadID()}
+              query={threadSwitcherQuery()}
+              copy={switcherCopy()}
+              onQueryChange={setThreadSwitcherQuery}
+              onNewConversation={() => {
+                closeThreadSwitcher(false);
+                startCompose();
+              }}
+              onSelect={(threadID) => {
+                closeThreadSwitcher(false);
+                selectThread(threadID);
+              }}
+              onEscape={() => closeThreadSwitcher(true)}
+            />
+          </div>
+        )}
+      </Show>
+    </div>
+  );
+
   const chatPanel = () => (
     <div class="flower-chat-shell flower-chat-shell">
       <div class="flower-chat-header flower-chat-header border-b border-border/80 backdrop-blur-md">
         <div class="flower-chat-header-row">
-          <div class="flex min-w-0 items-center gap-3">
-            <FlowerIcon class="h-5 w-5 text-primary" />
-            <div class="flower-chat-header-identity min-w-0">
-              <div class="flower-chat-header-title truncate">{selectedThread()?.title || copy().chat.titleFallback}</div>
-            </div>
-          </div>
+          <Show
+            when={presentation() === 'companion'}
+            fallback={(
+              <div class="flex min-w-0 items-center gap-3">
+                <FlowerIcon class="h-5 w-5 text-primary" />
+                <div class="flower-chat-header-identity min-w-0">
+                  <div class="flower-chat-header-title truncate">{selectedThread()?.title || copy().chat.titleFallback}</div>
+                </div>
+              </div>
+            )}
+          >
+            {companionHeaderIdentity()}
+          </Show>
           <div class="flower-chat-header-actions">
+            <Show when={presentation() === 'companion'}>
+              <button
+                type="button"
+                class="flower-header-icon-button"
+                aria-label={copy().chat.newChat}
+                title={copy().chat.newChat}
+                disabled={surfaceWarmupActive()}
+                onClick={startCompose}
+              >
+                <Plus class="h-4 w-4" />
+              </button>
+            </Show>
             <div class="flower-subagents-anchor">
               <button
                 ref={subagentTriggerRef}
@@ -7183,6 +7460,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             >
               <Settings class="h-4 w-4" />
             </button>
+            {props.headerTrailingActions}
           </div>
         </div>
       </div>
@@ -7507,7 +7785,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   return (
     <main
       id="redeven-flower-surface"
-      class={cn('flower-component-shell flower-surface', threadRailResizing() && 'flower-component-shell-resizing', props.class)}
+      class={cn(
+        'flower-component-shell flower-surface',
+        presentation() === 'companion' && 'flower-surface-companion',
+        threadRailResizing() && 'flower-component-shell-resizing',
+        props.class,
+      )}
+      data-flower-presentation={presentation()}
+      data-flower-engaged={surfaceEngaged() ? 'true' : 'false'}
+      data-flower-transcript-visible={transcriptVisible() ? 'true' : 'false'}
       data-flower-selected-thread-id={selectedThreadID()}
       data-flower-selected-thread-status={selectedThread()?.status ?? 'idle'}
       data-flower-selected-thread-loading={selectedThreadLoading() ? 'true' : 'false'}
