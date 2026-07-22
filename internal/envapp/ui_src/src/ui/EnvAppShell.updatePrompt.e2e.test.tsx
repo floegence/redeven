@@ -57,11 +57,18 @@ vi.mock('@floegence/floe-webapp-core', async (importOriginal) => ({
   }),
   useNotification: () => notificationMocks,
   useTheme: () => ({
+    theme: () => 'system',
     resolvedTheme: () => 'dark',
+    setTheme: vi.fn(),
     toggleTheme: vi.fn(),
     themePresets: () => [],
     themePreset: () => undefined,
     setThemePreset: vi.fn(),
+    shellPresets: () => [],
+    shellPreset: () => undefined,
+    shellPresetForMode: () => undefined,
+    setShellPreset: vi.fn(),
+    selectShellTheme: vi.fn(),
   }),
 }));
 
@@ -161,6 +168,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     Files: Icon,
     Globe: Icon,
     Grid3x3: Icon,
+    Highlighter: Icon,
     LayoutDashboard: Icon,
     MoreVertical: Icon,
     Moon: Icon,
@@ -169,6 +177,8 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     Settings: Icon,
     Sun: Icon,
     Terminal: Icon,
+    Check: Icon,
+    X: Icon,
   };
 });
 

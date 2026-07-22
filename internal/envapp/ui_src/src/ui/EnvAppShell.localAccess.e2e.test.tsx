@@ -105,6 +105,8 @@ function MockDisplayModeSurface(props: Readonly<{ testId: string }>) {
 
 vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(' '),
+  getShellThemePresetsForMode: () => [],
+  resolveThemeTokenOverrides: () => ({}),
   createUIFirstSelection: (options: any) => {
     const [visual, setVisual] = createSignal(options.committed());
     const [pending, setPending] = createSignal(false);
@@ -167,11 +169,18 @@ vi.mock('@floegence/floe-webapp-core', () => ({
   },
   useNotification: () => ({ error: vi.fn(), success: vi.fn(), info: vi.fn() }),
   useTheme: () => ({
+    theme: () => 'system',
     resolvedTheme: () => 'dark',
+    setTheme: vi.fn(),
     toggleTheme: vi.fn(),
     themePresets: () => [],
     themePreset: () => undefined,
     setThemePreset: vi.fn(),
+    shellPresets: () => [],
+    shellPreset: () => undefined,
+    shellPresetForMode: () => undefined,
+    setShellPreset: vi.fn(),
+    selectShellTheme: vi.fn(),
   }),
 }));
 
@@ -354,10 +363,15 @@ vi.mock('@floegence/floe-webapp-core/layout', () => ({
   StatusIndicator: (props: any) => <div>{props.label ?? props.status}</div>,
   TopBarIconButton: (props: any) => (
     <button
+      ref={props.ref}
       type="button"
       class={props.class}
       onClick={props.onClick}
       aria-label={props.label}
+      aria-haspopup={props['aria-haspopup']}
+      aria-expanded={props['aria-expanded']}
+      aria-controls={props['aria-controls']}
+      data-envapp-theme-trigger={props['data-envapp-theme-trigger']}
       data-tooltip={props.tooltip === false ? undefined : String(props.tooltip ?? props.label)}
     >
       {props.children}
@@ -518,6 +532,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     Files: Icon,
     Globe: Icon,
     Grid3x3: Icon,
+    Highlighter: Icon,
     LayoutDashboard: Icon,
     Loader2: Icon,
     MoreVertical: Icon,
@@ -1737,13 +1752,17 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushAsync();
 
       const notesButton = host.querySelector('button[aria-label="Notes overlay"]');
-      const toggleThemeButton = host.querySelector('button[aria-label="Toggle theme"]');
+      const appearanceButton = host.querySelector('button[data-envapp-theme-trigger="topbar"]') as HTMLButtonElement | null;
 
       expect(notesButton).toBeTruthy();
       expect(notesButton?.getAttribute('data-tooltip')).toBe('Notes overlay (⌘.)');
       expect(host.querySelector('button[aria-label="Command palette"]')).toBeNull();
-      expect(toggleThemeButton).toBeTruthy();
-      expect(toggleThemeButton?.getAttribute('data-tooltip')).toBe('Toggle theme');
+      expect(appearanceButton?.getAttribute('aria-label')).toBe('Appearance');
+      expect(appearanceButton?.getAttribute('data-tooltip')).toBe('Appearance');
+
+      appearanceButton?.click();
+      await flushAsync();
+      expect(host.querySelector('[data-envapp-theme-menu="topbar"]')).toBeTruthy();
     } finally {
       dispose();
     }
@@ -1786,7 +1805,7 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushAsync();
 
       const notesButton = host.querySelector('button[aria-label="Notes overlay"]') as HTMLButtonElement | null;
-      const toggleThemeButton = host.querySelector('button[aria-label="Toggle theme"]');
+      const appearanceButton = host.querySelector('button[data-envapp-theme-trigger="topbar"]');
       expect(host.querySelector('button[aria-label="Command palette"]')).toBeNull();
       expect(notesButton).toBeTruthy();
       expect(notesButton?.getAttribute('data-tooltip')).toBeNull();
@@ -1796,8 +1815,8 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushAsync();
       expect(notesOverlayState.lastProps?.open).toBe(true);
 
-      expect(toggleThemeButton).toBeTruthy();
-      expect(toggleThemeButton?.getAttribute('data-tooltip')).toBeNull();
+      expect(appearanceButton?.getAttribute('aria-label')).toBe('Appearance');
+      expect(appearanceButton?.getAttribute('data-tooltip')).toBeNull();
     } finally {
       dispose();
     }

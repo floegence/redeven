@@ -23,6 +23,7 @@
       "modelLabel": "Modelo",
       "reasoningLabel": "Razonamiento",
       "noModelSelected": "Ningún modelo seleccionado",
+      "truncatedLabel": "Truncado",
       "permissionSelectorLabel": "Permiso del hilo",
       "permissionSelectorSaving": "Guardando permiso...",
       "permissionSelectorErrorTitle": "Flower no pudo guardar el permiso.",

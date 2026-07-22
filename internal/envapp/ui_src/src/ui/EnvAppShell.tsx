@@ -10,13 +10,12 @@ import {
   Files,
   Globe,
   Grid3x3,
+  Highlighter,
   LayoutDashboard,
-  Moon,
   Refresh,
   Search,
   Settings,
   Shield,
-  Sun,
   Terminal,
   X,
 } from '@floegence/floe-webapp-core/icons';
@@ -96,6 +95,7 @@ import {
 import { ConnectionRecoveryView } from './reconnect/ConnectionRecoveryView';
 import { createDebugConsoleController } from './debugConsole/createDebugConsoleController';
 import { TopBarBrandButton } from './TopBarBrandButton';
+import { EnvAppThemePicker } from './EnvAppThemePicker';
 import { Tooltip } from './primitives/Tooltip';
 import { NotesOverlay } from './notes/NotesOverlay';
 import { resolveNotesOverlayViewportHosts } from './notes/notesOverlayShellViewport';
@@ -156,7 +156,7 @@ import {
   type LocalAccessStatus,
   type LocalRuntimeInfo,
 } from './services/controlplaneApi';
-import { desktopThemeBridge, toggleDesktopTheme } from './services/desktopTheme';
+import { desktopThemeBridge } from './services/desktopTheme';
 import {
   notifyDesktopSessionAppReady,
   readDesktopSessionContextSnapshot,
@@ -477,9 +477,21 @@ export function EnvAppShell() {
     onCleanup(unsubscribe);
   });
   const shellTheme = desktopThemeBridge();
-  const toggleThemeWithRenderBoundary = () => {
+  const setThemeSourceWithRenderBoundary = (source: 'system' | 'light' | 'dark') => {
     requestWorkbenchRenderTransaction('theme');
-    toggleDesktopTheme(theme.resolvedTheme(), shellTheme, () => theme.toggleTheme());
+    if (shellTheme) {
+      return shellTheme.setSource(source).source === source;
+    }
+    theme.setTheme(source);
+    return theme.theme() === source;
+  };
+  const setShellThemeWithRenderBoundary = (mode: 'light' | 'dark', presetName: string) => {
+    requestWorkbenchRenderTransaction('theme');
+    if (shellTheme) {
+      return shellTheme.setShellTheme(mode, presetName).shellThemes[mode] === presetName;
+    }
+    theme.setShellPreset(presetName);
+    return theme.shellPresetForMode(mode)?.name === presetName;
   };
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
@@ -840,6 +852,7 @@ export function EnvAppShell() {
   const [pluginCenterSelectedPluginID, setPluginCenterSelectedPluginID] = createSignal<string | undefined>();
   const [activePluginSurface, setActivePluginSurface] = createSignal<PluginOpenSurfaceResult | null>(null);
   const [languageMenuOpenSeq, setLanguageMenuOpenSeq] = createSignal(0);
+  const [themeMenuOpenSeq, setThemeMenuOpenSeq] = createSignal(0);
   const [aiThreadFocusRequest, setAIThreadFocusRequest] = createSignal<FlowerThreadFocusRequest | null>(null);
   let aiThreadFocusRequestSequence = 0;
   let lastWorkbenchPointerAnchor: (EnvWorkbenchHandoffAnchor & { observedAtMs: number }) | null = null;
@@ -2942,21 +2955,12 @@ export function EnvAppShell() {
       },
       {
         id: 'redeven.env.toggleTheme',
-        title: i18n.t('shell.commandPalette.toggleThemeTitle'),
-        description: i18n.t('shell.commandPalette.toggleThemeDescription'),
+        title: i18n.t('shell.themePicker.openLabel'),
+        description: i18n.t('shell.themePicker.commandDescription'),
         category: i18n.t('shell.commandPalette.categories.view'),
         keybind: 'mod+shift+l',
-        icon: () => (theme.resolvedTheme() === 'light' ? <Moon class="w-4 h-4" /> : <Sun class="w-4 h-4" />),
-        execute: () => {
-          toggleThemeWithRenderBoundary();
-          const nextTheme = theme.resolvedTheme() === 'light'
-            ? i18n.t('shell.notifications.darkTheme')
-            : i18n.t('shell.notifications.lightTheme');
-          notify.info(
-            i18n.t('shell.notifications.themeChangedTitle'),
-            i18n.t('shell.notifications.switchedToTheme', { theme: nextTheme }),
-          );
-        },
+        icon: Highlighter,
+        execute: () => setThemeMenuOpenSeq((value) => value + 1),
       },
       {
         id: 'redeven.env.savePreviewFile',
@@ -3257,13 +3261,12 @@ export function EnvAppShell() {
           notify={notify}
         />
       </Show>
-      <TopBarIconButton
-        label={i18n.t('shell.topbar.toggleTheme')}
-        tooltip={topBarTooltip(i18n.t('shell.topbar.toggleTheme'))}
-        onClick={toggleThemeWithRenderBoundary}
-      >
-        {theme.resolvedTheme() === 'light' ? <Moon class="w-4 h-4" /> : <Sun class="w-4 h-4" />}
-      </TopBarIconButton>
+      <EnvAppThemePicker
+        openRequestSeq={themeMenuOpenSeq}
+        tooltip={topBarTooltip(i18n.t('shell.themePicker.openLabel'))}
+        onSourceChange={setThemeSourceWithRenderBoundary}
+        onShellThemeChange={setShellThemeWithRenderBoundary}
+      />
     </div>
   );
 

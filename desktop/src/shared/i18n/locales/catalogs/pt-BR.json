@@ -23,6 +23,7 @@
       "modelLabel": "Modelo",
       "reasoningLabel": "Raciocínio",
       "noModelSelected": "Nenhum modelo selecionado",
+      "truncatedLabel": "Truncado",
       "permissionSelectorLabel": "Permissão de thread",
       "permissionSelectorSaving": "Salvando permissão...",
       "permissionSelectorErrorTitle": "O Flower não pôde salvar a permissão.",

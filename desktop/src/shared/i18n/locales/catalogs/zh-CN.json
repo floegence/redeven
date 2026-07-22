@@ -23,6 +23,7 @@
       "modelLabel": "模型",
       "reasoningLabel": "推理等级",
       "noModelSelected": "未选择型号",
+      "truncatedLabel": "已截断",
       "permissionSelectorLabel": "线程权限",
       "permissionSelectorSaving": "正在保存权限...",
       "permissionSelectorErrorTitle": "Flower 未能保存权限。",

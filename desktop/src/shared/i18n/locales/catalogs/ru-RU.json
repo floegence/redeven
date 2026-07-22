@@ -23,6 +23,7 @@
       "modelLabel": "Модель",
       "reasoningLabel": "Рассуждение",
       "noModelSelected": "Model не выбран",
+      "truncatedLabel": "Усечено",
       "permissionSelectorLabel": "Разрешение потока",
       "permissionSelectorSaving": "Сохранение разрешения...",
       "permissionSelectorErrorTitle": "Flower не удалось сохранить разрешение.",
@@ -603,9 +604,9 @@
       "themesLabel": "Темы", "changeFailed": "Не удалось обновить оформление. Повторите попытку.",
       "presets": {
         "classic-light": "Классическая светлая", "paper": "Бумага", "mist": "Туман", "meadow": "Луг", "citrus": "Цитрус", "lilac": "Сирень",
-        "light-plus": "Light+", "quiet-light": "Quiet Light", "solarized-light": "Solarized Light", "github-light": "GitHub Light", "hc-light": "Светлая с высокой контрастностью",
+        "light-plus": "Светлая+", "quiet-light": "Тихая светлая", "solarized-light": "Солнечная светлая", "github-light": "GitHub Light", "hc-light": "Светлая высококонтрастная",
         "classic-dark": "Классическая тёмная", "ink": "Чернила", "slate": "Сланец", "forest": "Лес", "ember": "Жар", "ocean": "Океан",
-        "dark-plus": "Dark+", "monokai": "Monokai", "nord": "Nord", "dracula": "Dracula", "abyss": "Abyss"
+        "dark-plus": "Темная+", "monokai": "Monokai", "nord": "Nord", "dracula": "Dracula", "abyss": "Хаос"
       }
     }
   },
