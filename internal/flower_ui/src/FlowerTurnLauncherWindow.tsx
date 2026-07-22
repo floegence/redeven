@@ -1,5 +1,5 @@
 import type { Component } from 'solid-js';
-import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from 'solid-js';
+import { For, Show, createContext, createEffect, createMemo, createSignal, onCleanup, onMount, untrack, useContext } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Activity, AlertTriangle, ArrowUp, FileText, Folder, Paperclip, Terminal } from '@floegence/floe-webapp-core/icons';
 import { Button, FloatingWindow } from '@floegence/floe-webapp-core/ui';
@@ -40,19 +40,25 @@ export type FlowerTurnLauncherSubmitInput = Readonly<{
   intent: FlowerTurnLauncherIntent;
 }>;
 
-export type FlowerTurnLauncherWindowProps = Readonly<{
+export type FlowerTurnLauncherPanelProps = Readonly<{
   open: boolean;
   intent: FlowerTurnLauncherIntent | null;
-  anchor?: FlowerTurnLauncherAnchor | null;
   copy?: FlowerTurnLauncherWindowCopyInput;
-  zIndex?: number;
-  windowClass?: string;
   contentClass?: string;
   footerClass?: string;
   localScrollProps?: Record<string, unknown>;
+  autoFocus?: boolean;
+  draft?: string;
+  onDraftChange?: (draft: string) => void;
   onClose: () => void;
   onSubmit: (input: FlowerTurnLauncherSubmitInput) => Promise<void>;
   onContextAction?: (action: FlowerTurnLauncherContextAction, entry: FlowerTurnLauncherContextChip) => void | Promise<void>;
+}>;
+
+export type FlowerTurnLauncherWindowProps = FlowerTurnLauncherPanelProps & Readonly<{
+  anchor?: FlowerTurnLauncherAnchor | null;
+  zIndex?: number;
+  windowClass?: string;
 }>;
 
 type ViewportSize = Readonly<{
@@ -206,29 +212,23 @@ const FlowerLauncherAvatar: Component = () => (
   </div>
 );
 
-export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
-  const [userPrompt, setUserPrompt] = createSignal('');
+function createFlowerTurnLauncherPanelController(
+  props: FlowerTurnLauncherPanelProps,
+  footerPlacement: 'panel' | 'window' = 'panel',
+) {
+  const [internalUserPrompt, setInternalUserPrompt] = createSignal('');
   const [validationError, setValidationError] = createSignal('');
   const [launchError, setLaunchError] = createSignal('');
   const [isComposing, setIsComposing] = createSignal(false);
   const [sending, setSending] = createSignal(false);
-  const [viewport, setViewport] = createSignal(currentViewportSize());
   let textareaEl: HTMLTextAreaElement | undefined;
 
-  onMount(() => {
-    const syncViewport = () => setViewport(currentViewportSize());
-    syncViewport();
-    window.addEventListener('resize', syncViewport);
-    window.addEventListener('orientationchange', syncViewport);
-    onCleanup(() => {
-      window.removeEventListener('resize', syncViewport);
-      window.removeEventListener('orientationchange', syncViewport);
-    });
-  });
-
-  const windowSizing = createMemo(() => resolveWindowSizing(viewport()));
-  const position = createMemo(() => toWindowPosition(props.anchor ?? null, windowSizing()));
   const projected = createMemo(() => (props.intent ? buildFlowerTurnLauncherCopy(props.intent, props.copy) : null));
+  const userPrompt = () => props.draft ?? internalUserPrompt();
+  const setUserPrompt = (value: string) => {
+    setInternalUserPrompt(value);
+    props.onDraftChange?.(value);
+  };
   const canSubmit = createMemo(() => !sending() && compact(userPrompt()).length > 0);
   const suggestedWorkingDir = createMemo(() => compact(props.intent?.suggested_working_dir));
 
@@ -237,7 +237,8 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
     setLaunchError('');
     setIsComposing(false);
     setSending(false);
-    setUserPrompt(compact(intent?.initial_prompt));
+    setInternalUserPrompt(untrack(() => props.draft) ?? compact(intent?.initial_prompt));
+    if (props.autoFocus === false) return;
     requestAnimationFrame(() => {
       textareaEl?.focus();
       const el = textareaEl;
@@ -254,17 +255,6 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
   createEffect(() => {
     if (!props.open) return;
     resetLauncherState(props.intent);
-  });
-
-  createEffect(() => {
-    if (!props.open) return;
-    const onPointerDown = (event: PointerEvent) => {
-      if (sending()) return;
-      if (isPointerInsideLauncher(event)) return;
-      props.onClose();
-    };
-    window.addEventListener('pointerdown', onPointerDown, true);
-    onCleanup(() => window.removeEventListener('pointerdown', onPointerDown, true));
   });
 
   const submit = async () => {
@@ -296,52 +286,97 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
     void props.onContextAction?.(action, entry);
   };
 
+  return {
+    footerPlacement,
+    userPrompt,
+    setUserPrompt,
+    validationError,
+    setValidationError,
+    launchError,
+    setLaunchError,
+    isComposing,
+    setIsComposing,
+    sending,
+    projected,
+    canSubmit,
+    suggestedWorkingDir,
+    setTextareaEl: (element: HTMLTextAreaElement) => {
+      textareaEl = element;
+    },
+    textareaValue: () => textareaEl?.value ?? userPrompt(),
+    submit,
+    runContextAction,
+  };
+}
+
+type FlowerTurnLauncherPanelController = ReturnType<typeof createFlowerTurnLauncherPanelController>;
+const FlowerTurnLauncherPanelControllerContext = createContext<FlowerTurnLauncherPanelController>();
+
+type FlowerTurnLauncherFooterProps = Readonly<{
+  copy?: FlowerTurnLauncherWindowCopyInput;
+  footerClass?: string;
+  controller: FlowerTurnLauncherPanelController;
+  onClose: () => void;
+}>;
+
+function FlowerTurnLauncherFooter(props: FlowerTurnLauncherFooterProps) {
+  return (
+    <div class={cn('flower-turn-launcher-footer flex w-full min-w-0 items-center gap-1.5 overflow-hidden', props.footerClass)}>
+      <div class="flex min-w-0 flex-1 items-center text-[10px] text-muted-foreground sm:text-[11px]">
+        <span class="inline-flex min-w-0 flex-1 items-center gap-1 rounded-full border border-border/60 bg-muted/28 px-2 py-0.5">
+          <Folder class="size-3 shrink-0" />
+          <span class="shrink-0 font-medium text-foreground/80">{copyValue(props.copy, 'working_dir_label')}</span>
+          <span
+            class="min-w-0 truncate font-mono text-[10px] sm:text-[11px]"
+            title={props.controller.suggestedWorkingDir() || copyValue(props.copy, 'working_directory_unavailable')}
+          >
+            {props.controller.suggestedWorkingDir()
+              ? truncateFlowerTurnLauncherPath(props.controller.suggestedWorkingDir())
+              : copyValue(props.copy, 'working_directory_unavailable')}
+          </span>
+        </span>
+      </div>
+      <span class="hidden shrink-0 text-[11px] text-muted-foreground sm:inline">
+        {props.controller.sending() ? copyValue(props.copy, 'sending') : copyValue(props.copy, 'ready')}
+      </span>
+      <Button
+        variant="ghost"
+        size="sm"
+        class={`h-7 shrink-0 rounded-md px-2.5 text-[11px] font-medium sm:h-8 ${props.controller.sending() ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+        onClick={props.onClose}
+        disabled={props.controller.sending()}
+      >
+        {copyValue(props.copy, 'close')}
+      </Button>
+    </div>
+  );
+}
+
+export function FlowerTurnLauncherPanel(props: FlowerTurnLauncherPanelProps) {
+  const controller = useContext(FlowerTurnLauncherPanelControllerContext)
+    ?? createFlowerTurnLauncherPanelController(props);
+  const {
+    userPrompt,
+    setUserPrompt,
+    validationError,
+    setValidationError,
+    launchError,
+    setLaunchError,
+    isComposing,
+    setIsComposing,
+    sending,
+    projected,
+    canSubmit,
+    setTextareaEl,
+    textareaValue,
+    submit,
+    runContextAction,
+  } = controller;
+
   return (
     <Show when={props.open ? props.intent : null} keyed>
       {(intent) => (
-        <FloatingWindow
-          open
-          onOpenChange={(next) => {
-            if (sending()) return;
-            if (!next) props.onClose();
-          }}
-          title={copyValue(props.copy, 'window_title')}
-          defaultPosition={position()}
-          defaultSize={windowSizing().defaultSize}
-          minSize={windowSizing().minSize}
-          maxSize={windowSizing().maxSize}
-          zIndex={props.zIndex}
-          class={cn('flower-turn-launcher-window border-border/65 shadow-[0_28px_72px_-42px_color-mix(in_srgb,var(--foreground)_38%,transparent)]', props.windowClass)}
-          footer={(
-            <div class={cn('flower-turn-launcher-footer flex w-full min-w-0 items-center gap-1.5 overflow-hidden', props.footerClass)}>
-              <div class="flex min-w-0 flex-1 items-center text-[10px] text-muted-foreground sm:text-[11px]">
-                <span class="inline-flex min-w-0 flex-1 items-center gap-1 rounded-full border border-border/60 bg-muted/28 px-2 py-0.5">
-                  <Folder class="size-3 shrink-0" />
-                  <span class="shrink-0 font-medium text-foreground/80">{copyValue(props.copy, 'working_dir_label')}</span>
-                  <span
-                    class="min-w-0 truncate font-mono text-[10px] sm:text-[11px]"
-                    title={suggestedWorkingDir() || copyValue(props.copy, 'working_directory_unavailable')}
-                  >
-                    {suggestedWorkingDir() ? truncateFlowerTurnLauncherPath(suggestedWorkingDir()) : copyValue(props.copy, 'working_directory_unavailable')}
-                  </span>
-                </span>
-              </div>
-              <span class="hidden shrink-0 text-[11px] text-muted-foreground sm:inline">
-                {sending() ? copyValue(props.copy, 'sending') : copyValue(props.copy, 'ready')}
-              </span>
-              <Button
-                variant="ghost"
-                size="sm"
-                class={`h-7 shrink-0 rounded-md px-2.5 text-[11px] font-medium sm:h-8 ${sending() ? 'cursor-not-allowed' : 'cursor-pointer'}`}
-                onClick={props.onClose}
-                disabled={sending()}
-              >
-                {copyValue(props.copy, 'close')}
-              </Button>
-            </div>
-          )}
-        >
-          <div class={cn('flower-turn-launcher-surface flex h-full min-h-0 flex-col overflow-hidden bg-background', props.contentClass)}>
+        <div class={cn('flower-turn-launcher-surface flex h-full min-h-0 flex-col overflow-hidden bg-background', props.contentClass)}>
             <div
               {...(props.localScrollProps ?? {})}
               data-testid="flower-turn-launcher-scroll-region"
@@ -445,7 +480,7 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
 
                         <div data-testid="flower-turn-launcher-editor-shell" class="flower-turn-launcher-editor-shell">
                           <textarea
-                            ref={textareaEl}
+                            ref={setTextareaEl}
                             id={`flower-turn-launcher-prompt-${intent.id}`}
                             class="chat-input-textarea flower-chat-input-textarea flower-turn-launcher-textarea focus:!outline-none focus-visible:!outline-none focus-visible:!shadow-none"
                             value={userPrompt()}
@@ -458,11 +493,11 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
                             }}
                             onCompositionStart={() => setIsComposing(true)}
                             onCompositionUpdate={() => {
-                              setUserPrompt(textareaEl?.value ?? userPrompt());
+                              setUserPrompt(textareaValue());
                             }}
                             onCompositionEnd={() => {
                               setIsComposing(false);
-                              setUserPrompt(textareaEl?.value ?? userPrompt());
+                              setUserPrompt(textareaValue());
                             }}
                             onKeyDown={(event) => {
                               if (shouldSubmitOnEnterKeydown(event, isComposing())) {
@@ -505,9 +540,92 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
                 </div>
               </div>
             </div>
-          </div>
-        </FloatingWindow>
+
+            <Show when={controller.footerPlacement === 'panel'}>
+              <div class="shrink-0 border-t border-border p-3">
+                <FlowerTurnLauncherFooter
+                  copy={props.copy}
+                  footerClass={props.footerClass}
+                  controller={controller}
+                  onClose={props.onClose}
+                />
+              </div>
+            </Show>
+        </div>
       )}
+    </Show>
+  );
+}
+
+export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
+  const [viewport, setViewport] = createSignal(currentViewportSize());
+  const controller = createFlowerTurnLauncherPanelController(props, 'window');
+
+  onMount(() => {
+    const syncViewport = () => setViewport(currentViewportSize());
+    syncViewport();
+    window.addEventListener('resize', syncViewport);
+    window.addEventListener('orientationchange', syncViewport);
+    onCleanup(() => {
+      window.removeEventListener('resize', syncViewport);
+      window.removeEventListener('orientationchange', syncViewport);
+    });
+  });
+
+  const windowSizing = createMemo(() => resolveWindowSizing(viewport()));
+  const position = createMemo(() => toWindowPosition(props.anchor ?? null, windowSizing()));
+
+  createEffect(() => {
+    if (!props.open) return;
+    const onPointerDown = (event: PointerEvent) => {
+      if (controller.sending()) return;
+      if (isPointerInsideLauncher(event)) return;
+      props.onClose();
+    };
+    window.addEventListener('pointerdown', onPointerDown, true);
+    onCleanup(() => window.removeEventListener('pointerdown', onPointerDown, true));
+  });
+
+  return (
+    <Show when={props.open ? props.intent : null}>
+      <FloatingWindow
+        open
+        onOpenChange={(next) => {
+          if (controller.sending()) return;
+          if (!next) props.onClose();
+        }}
+        title={copyValue(props.copy, 'window_title')}
+        defaultPosition={position()}
+        defaultSize={windowSizing().defaultSize}
+        minSize={windowSizing().minSize}
+        maxSize={windowSizing().maxSize}
+        zIndex={props.zIndex}
+        class={cn('flower-turn-launcher-window border-border/65 shadow-[0_28px_72px_-42px_color-mix(in_srgb,var(--foreground)_38%,transparent)]', props.windowClass)}
+        footer={(
+          <FlowerTurnLauncherFooter
+            copy={props.copy}
+            footerClass={props.footerClass}
+            controller={controller}
+            onClose={props.onClose}
+          />
+        )}
+      >
+        <FlowerTurnLauncherPanelControllerContext.Provider value={controller}>
+          <FlowerTurnLauncherPanel
+            open={props.open}
+            intent={props.intent}
+            copy={props.copy}
+            contentClass={props.contentClass}
+            localScrollProps={props.localScrollProps}
+            autoFocus={props.autoFocus}
+            draft={props.draft}
+            onDraftChange={props.onDraftChange}
+            onClose={props.onClose}
+            onSubmit={props.onSubmit}
+            onContextAction={props.onContextAction}
+          />
+        </FlowerTurnLauncherPanelControllerContext.Provider>
+      </FloatingWindow>
     </Show>
   );
 }

@@ -352,6 +352,37 @@
       "envTypeProvider": "Provider",
       "envTypeRemote": "Remoto"
     },
+    "flowerCompanion": {
+      "openAria": "Panel complementario de Flower. {status}",
+      "maximize": "Maximizar el panel de Flower",
+      "restoreDocked": "Restaurar la vista acoplada de Flower",
+      "collapse": "Contraer el panel de Flower",
+      "resize": "Cambiar la altura del panel de Flower",
+      "newContextConversation": "Nueva conversación con el contexto seleccionado",
+      "status": {
+        "attention": { "one": "Requiere tu intervención · {count}", "other": "Requieren tu intervención · {count}" },
+        "failed": { "one": "Fallida · {count}", "other": "Fallidas · {count}" },
+        "running": { "one": "En curso · {count}", "other": "En curso · {count}" },
+        "queued": { "one": "En cola · {count}", "other": "En cola · {count}" },
+        "canceled": { "one": "Cancelada · {count}", "other": "Canceladas · {count}" },
+        "completed": { "one": "Completada · {count}", "other": "Completadas · {count}" },
+        "unavailable": "No disponible",
+        "idle": "Listo"
+      },
+      "threadSwitcher": {
+        "label": "Cambiar de conversación en Flower",
+        "searchPlaceholder": "Buscar conversaciones...",
+        "newConversation": "Nueva conversación",
+        "empty": "No se encontraron conversaciones",
+        "queued": "En cola",
+        "groups": {
+          "attention": "Atención requerida",
+          "working": "En curso",
+          "pinned": "Fijadas",
+          "recent": "Recientes"
+        }
+      }
+    },
     "commandPalette": {
       "categories": {
         "navigation": "Navegación",

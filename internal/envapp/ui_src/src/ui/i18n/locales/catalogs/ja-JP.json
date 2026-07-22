@@ -352,6 +352,37 @@
       "envTypeProvider": "Provider",
       "envTypeRemote": "リモート"
     },
+    "flowerCompanion": {
+      "openAria": "Flower コンパニオン。{status}",
+      "maximize": "Flower を最大化",
+      "restoreDocked": "Flower をドッキング表示に戻す",
+      "collapse": "Flower を折りたたむ",
+      "resize": "Flower コンパニオンの高さを変更",
+      "newContextConversation": "選択したコンテキストで新しい会話を開始",
+      "status": {
+        "attention": { "one": "対応が必要 · {count}", "other": "対応が必要 · {count}" },
+        "failed": { "one": "失敗 · {count}", "other": "失敗 · {count}" },
+        "running": { "one": "作業中 · {count}", "other": "作業中 · {count}" },
+        "queued": { "one": "キュー済み · {count}", "other": "キュー済み · {count}" },
+        "canceled": { "one": "キャンセル済み · {count}", "other": "キャンセル済み · {count}" },
+        "completed": { "one": "完了 · {count}", "other": "完了 · {count}" },
+        "unavailable": "利用不可",
+        "idle": "準備完了"
+      },
+      "threadSwitcher": {
+        "label": "Flower の会話を切り替え",
+        "searchPlaceholder": "会話を検索...",
+        "newConversation": "新しい会話",
+        "empty": "一致する会話はありません",
+        "queued": "キュー済み",
+        "groups": {
+          "attention": "対応が必要",
+          "working": "作業中",
+          "pinned": "固定済み",
+          "recent": "最近の会話"
+        }
+      }
+    },
     "commandPalette": {
       "categories": {
         "navigation": "ナビゲーション",

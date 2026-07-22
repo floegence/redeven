@@ -681,6 +681,37 @@ export const enUS = defineDictionary({
       envTypeProvider: 'Provider',
       envTypeRemote: 'Remote',
     },
+    flowerCompanion: {
+      openAria: 'Flower companion. {status}',
+      maximize: 'Maximize Flower',
+      restoreDocked: 'Restore docked Flower',
+      collapse: 'Collapse Flower',
+      resize: 'Resize Flower companion',
+      newContextConversation: 'New conversation with selected context',
+      status: {
+        attention: { one: 'Needs input · {count}', other: 'Needs input · {count}' },
+        failed: { one: 'Failed · {count}', other: 'Failed · {count}' },
+        running: { one: 'Working · {count}', other: 'Working · {count}' },
+        queued: { one: 'Queued · {count}', other: 'Queued · {count}' },
+        canceled: { one: 'Canceled · {count}', other: 'Canceled · {count}' },
+        completed: { one: 'Completed · {count}', other: 'Completed · {count}' },
+        unavailable: 'Unavailable',
+        idle: 'Ready',
+      },
+      threadSwitcher: {
+        label: 'Switch Flower conversation',
+        searchPlaceholder: 'Search conversations...',
+        newConversation: 'New conversation',
+        empty: 'No matching conversations',
+        queued: 'Queued',
+        groups: {
+          attention: 'Needs attention',
+          working: 'Working',
+          pinned: 'Pinned',
+          recent: 'Recent',
+        },
+      },
+    },
     commandPalette: {
       categories: {
         navigation: 'Navigation',

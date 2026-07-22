@@ -352,6 +352,37 @@
       "envTypeProvider": "Provider",
       "envTypeRemote": "Entfernt"
     },
+    "flowerCompanion": {
+      "openAria": "Flower-Begleitbereich. {status}",
+      "maximize": "Flower maximieren",
+      "restoreDocked": "Flower angedockt anzeigen",
+      "collapse": "Flower einklappen",
+      "resize": "Höhe des Flower-Begleitbereichs ändern",
+      "newContextConversation": "Neue Unterhaltung mit ausgewähltem Kontext",
+      "status": {
+        "attention": { "one": "Eingabe erforderlich · {count}", "other": "Eingabe erforderlich · {count}" },
+        "failed": { "one": "Fehlgeschlagen · {count}", "other": "Fehlgeschlagen · {count}" },
+        "running": { "one": "In Arbeit · {count}", "other": "In Arbeit · {count}" },
+        "queued": { "one": "In Warteschlange · {count}", "other": "In Warteschlange · {count}" },
+        "canceled": { "one": "Abgebrochen · {count}", "other": "Abgebrochen · {count}" },
+        "completed": { "one": "Abgeschlossen · {count}", "other": "Abgeschlossen · {count}" },
+        "unavailable": "Nicht verfügbar",
+        "idle": "Bereit"
+      },
+      "threadSwitcher": {
+        "label": "Flower-Unterhaltung wechseln",
+        "searchPlaceholder": "Unterhaltungen suchen...",
+        "newConversation": "Neue Unterhaltung",
+        "empty": "Keine passenden Unterhaltungen",
+        "queued": "In Warteschlange",
+        "groups": {
+          "attention": "Aktion erforderlich",
+          "working": "In Arbeit",
+          "pinned": "Angeheftet",
+          "recent": "Zuletzt"
+        }
+      }
+    },
     "commandPalette": {
       "categories": {
         "navigation": "Navigation",

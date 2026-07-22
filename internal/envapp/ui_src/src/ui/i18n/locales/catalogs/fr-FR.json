@@ -352,6 +352,37 @@
       "envTypeProvider": "Provider",
       "envTypeRemote": "Distant"
     },
+    "flowerCompanion": {
+      "openAria": "Volet Flower. {status}",
+      "maximize": "Agrandir Flower",
+      "restoreDocked": "Rétablir Flower dans le volet",
+      "collapse": "Réduire Flower",
+      "resize": "Redimensionner le volet Flower",
+      "newContextConversation": "Nouvelle conversation avec le contexte sélectionné",
+      "status": {
+        "attention": { "one": "Action requise · {count}", "other": "Actions requises · {count}" },
+        "failed": { "one": "Échec · {count}", "other": "Échecs · {count}" },
+        "running": { "one": "En cours · {count}", "other": "En cours · {count}" },
+        "queued": { "one": "En attente · {count}", "other": "En attente · {count}" },
+        "canceled": { "one": "Annulée · {count}", "other": "Annulées · {count}" },
+        "completed": { "one": "Terminée · {count}", "other": "Terminées · {count}" },
+        "unavailable": "Indisponible",
+        "idle": "Prêt"
+      },
+      "threadSwitcher": {
+        "label": "Changer de conversation Flower",
+        "searchPlaceholder": "Rechercher des conversations...",
+        "newConversation": "Nouvelle conversation",
+        "empty": "Aucune conversation correspondante",
+        "queued": "En attente",
+        "groups": {
+          "attention": "Action requise",
+          "working": "En cours",
+          "pinned": "Épinglées",
+          "recent": "Récentes"
+        }
+      }
+    },
     "commandPalette": {
       "categories": {
         "navigation": "Environnement",

@@ -352,6 +352,37 @@
       "envTypeProvider": "Provider",
       "envTypeRemote": "Удалённая"
     },
+    "flowerCompanion": {
+      "openAria": "Панель Flower. {status}",
+      "maximize": "Развернуть Flower",
+      "restoreDocked": "Вернуть Flower в закреплённую панель",
+      "collapse": "Свернуть Flower",
+      "resize": "Изменить высоту панели Flower",
+      "newContextConversation": "Новый диалог с выбранным контекстом",
+      "status": {
+        "attention": { "one": "Ожидает ответа · {count}", "few": "Ожидают ответа · {count}", "many": "Ожидают ответа · {count}", "other": "Ожидают ответа · {count}" },
+        "failed": { "one": "Ошибка · {count}", "few": "Ошибки · {count}", "many": "Ошибок · {count}", "other": "Ошибки · {count}" },
+        "running": { "one": "В работе · {count}", "few": "В работе · {count}", "many": "В работе · {count}", "other": "В работе · {count}" },
+        "queued": { "one": "В очереди · {count}", "few": "В очереди · {count}", "many": "В очереди · {count}", "other": "В очереди · {count}" },
+        "canceled": { "one": "Отменён · {count}", "few": "Отменены · {count}", "many": "Отменены · {count}", "other": "Отменены · {count}" },
+        "completed": { "one": "Завершён · {count}", "few": "Завершены · {count}", "many": "Завершены · {count}", "other": "Завершены · {count}" },
+        "unavailable": "Недоступно",
+        "idle": "Готово"
+      },
+      "threadSwitcher": {
+        "label": "Переключить диалог Flower",
+        "searchPlaceholder": "Поиск диалогов...",
+        "newConversation": "Новый диалог",
+        "empty": "Подходящих диалогов нет",
+        "queued": "В очереди",
+        "groups": {
+          "attention": "Требуется действие",
+          "working": "В работе",
+          "pinned": "Закреплённые",
+          "recent": "Недавние"
+        }
+      }
+    },
     "commandPalette": {
       "categories": {
         "navigation": "Навигация",
@@ -881,14 +912,14 @@
       "snapshotDetailFallback": "Снимок",
       "queuedAttachment": "Вложение в очереди",
       "browseFolderTarget": "Просмотреть папку {target}",
-      "openLiveFilePreviewForTarget": "Открыть live-предпросмотр файла {target}",
-      "previewSelectedContentFromTarget": "Предпросмотреть выбранное содержимое из {target}",
-      "previewMonitoringSnapshotForPid": "Предпросмотреть снимок мониторинга для PID {pid}",
-      "previewTarget": "Предпросмотреть {target}",
-      "previewSelectedTerminalOutput": "Предпросмотреть выбранный вывод терминала",
+      "openLiveFilePreviewForTarget": "Открыть предпросмотр файла {target} в реальном времени",
+      "previewSelectedContentFromTarget": "Открыть предпросмотр выбранного содержимого из {target}",
+      "previewMonitoringSnapshotForPid": "Открыть предпросмотр снимка мониторинга для PID {pid}",
+      "previewTarget": "Открыть предпросмотр: {target}",
+      "previewSelectedTerminalOutput": "Открыть предпросмотр выбранного вывода терминала",
       "attachmentSnapshotTitle": "Снимок {target}",
-      "previewAttachmentTarget": "Предпросмотреть вложение {target}",
-      "previewAttachedSnapshotForTarget": "Предпросмотреть вложенный снимок для {target}"
+      "previewAttachmentTarget": "Открыть предпросмотр вложения {target}",
+      "previewAttachedSnapshotForTarget": "Открыть предпросмотр вложенного снимка для {target}"
     },
     "prompt": {
       "environmentPlaceholder": "Попросите Flower проверить, объяснить или изменить эту среду",
@@ -897,10 +928,10 @@
       "selectionQuestion": "Что вы хотите понять, изменить или проверить?",
       "terminalOutputPlaceholder": "Спросите о выводе, запросите команду или опишите следующий шаг",
       "terminalQuestion": "Что мне проверить или сделать дальше?",
-      "terminalContextPlaceholder": "Спросите об этом terminal контексте, запросите команду или опишите следующий шаг",
+      "terminalContextPlaceholder": "Спросите об этом контексте терминала, запросите команду или опишите следующий шаг",
       "processPlaceholder": "Спросите, почему этот процесс занят, ожидаемо ли это или что делать дальше",
       "inspectExplainQuestion": "Что мне проверить или объяснить?",
-      "gitPlaceholder": "Спросите об этом Git контексте, запросите изменение или опишите, что нужно",
+      "gitPlaceholder": "Спросите об этом контексте Git, запросите изменение или опишите, что нужно",
       "gitQuestion": "Что Flower должен проверить или с чем помочь?",
       "contextPlaceholder": "Спросите об этом контексте, запросите изменение или опишите, что нужно",
       "filePlaceholder": "Спросите об этом файле, запросите изменение или опишите, что нужно",
@@ -918,15 +949,15 @@
       "defaultQuestion": "Над чем вы хотите работать?"
     },
     "preview": {
-      "imageSnapshotNotice": "Снимки изображений отправляются в Flower, но inline-рендеринг изображения остается в live-предпросмотре файла.",
-      "pdfSnapshotNotice": "PDF-снимки отправляются в Flower, но inline-рендеринг PDF остается в live-предпросмотре файла.",
-      "documentSnapshotNotice": "Снимки документов отправляются в Flower, но inline-рендеринг документа остается в live-предпросмотре файла.",
-      "spreadsheetSnapshotNotice": "Снимки таблиц отправляются в Flower, но inline-рендеринг таблицы остается в live-предпросмотре файла.",
-      "genericSnapshotNotice": "Этот снимок отправляется в Flower, но inline-предпросмотр доступен только для текстового содержимого.",
-      "attachmentRendererFailed": "Рендерер предпросмотра вложения не смог открыть этот снимок. Вы все еще можете отправить его в Flower или использовать live-предпросмотр файла.",
-      "attachmentPreviewFailedShort": "Не удалось предпросмотреть вложенный снимок. Вы все еще можете отправить его в Flower.",
-      "attachmentPreviewFailed": "Не удалось предпросмотреть вложенный снимок. Вы все еще можете отправить его в Flower или использовать live-предпросмотр файла.",
-      "openLiveFilePreviewHelper": "Откройте live-предпросмотр файла, чтобы проверить исходный файл.",
+      "imageSnapshotNotice": "Снимки изображений отправляются в Flower, но встроенное отображение изображения доступно только в предпросмотре файла в реальном времени.",
+      "pdfSnapshotNotice": "PDF-снимки отправляются в Flower, но встроенное отображение PDF доступно только в предпросмотре файла в реальном времени.",
+      "documentSnapshotNotice": "Снимки документов отправляются в Flower, но встроенное отображение документа доступно только в предпросмотре файла в реальном времени.",
+      "spreadsheetSnapshotNotice": "Снимки таблиц отправляются в Flower, но встроенное отображение таблицы доступно только в предпросмотре файла в реальном времени.",
+      "genericSnapshotNotice": "Этот снимок отправляется в Flower, но встроенный предпросмотр доступен только для текстового содержимого.",
+      "attachmentRendererFailed": "Средству предпросмотра вложений не удалось открыть этот снимок. Его по-прежнему можно отправить в Flower или открыть предпросмотр файла в реальном времени.",
+      "attachmentPreviewFailedShort": "Не удалось открыть предпросмотр вложенного снимка. Вы всё еще можете отправить его в Flower.",
+      "attachmentPreviewFailed": "Не удалось открыть предпросмотр вложенного снимка. Его по-прежнему можно отправить в Flower или открыть предпросмотр файла в реальном времени.",
+      "openLiveFilePreviewHelper": "Откройте предпросмотр файла в реальном времени, чтобы проверить исходный файл.",
       "loadingPreview": "Загрузка предпросмотра...",
       "showingPartialContent": "Показана часть содержимого (обрезано).",
       "showingFirstContentPart": "Показана первая часть содержимого.",
@@ -939,8 +970,8 @@
       "showingFirstContextPart": "Показана первая часть этого контекста.",
       "showingFirstProcessSnapshotPart": "Показана первая часть снимка процесса.",
       "showingAttachedSnapshot": "Показан вложенный снимок, который получит Flower.",
-      "queuedWithMessage": "Добавлено в очередь с вашим сообщением Ask Flower.",
-      "openLiveFilePreviewAction": "Открыть live-предпросмотр файла"
+      "queuedWithMessage": "Добавлено в очередь вместе с сообщением для Flower.",
+      "openLiveFilePreviewAction": "Открыть предпросмотр файла в реальном времени"
     }
   },
   "runtimeMonitor": {

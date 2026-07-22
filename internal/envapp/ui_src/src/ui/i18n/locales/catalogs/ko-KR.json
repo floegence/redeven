@@ -352,6 +352,37 @@
       "envTypeProvider": "Provider",
       "envTypeRemote": "원격"
     },
+    "flowerCompanion": {
+      "openAria": "Flower 보조 작업 영역. {status}",
+      "maximize": "Flower 최대화",
+      "restoreDocked": "Flower 도킹 보기로 복원",
+      "collapse": "Flower 접기",
+      "resize": "Flower 보조 작업 영역 높이 조절",
+      "newContextConversation": "선택한 컨텍스트로 새 대화",
+      "status": {
+        "attention": { "one": "확인 필요 · {count}", "other": "확인 필요 · {count}" },
+        "failed": { "one": "실패 · {count}", "other": "실패 · {count}" },
+        "running": { "one": "작업 중 · {count}", "other": "작업 중 · {count}" },
+        "queued": { "one": "대기 중 · {count}", "other": "대기 중 · {count}" },
+        "canceled": { "one": "취소됨 · {count}", "other": "취소됨 · {count}" },
+        "completed": { "one": "완료됨 · {count}", "other": "완료됨 · {count}" },
+        "unavailable": "사용할 수 없음",
+        "idle": "준비됨"
+      },
+      "threadSwitcher": {
+        "label": "Flower 대화 전환",
+        "searchPlaceholder": "대화 검색...",
+        "newConversation": "새 대화",
+        "empty": "일치하는 대화가 없습니다",
+        "queued": "대기 중",
+        "groups": {
+          "attention": "확인 필요",
+          "working": "작업 중",
+          "pinned": "고정됨",
+          "recent": "최근"
+        }
+      }
+    },
     "commandPalette": {
       "categories": {
         "navigation": "탐색",

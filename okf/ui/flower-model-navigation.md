@@ -25,6 +25,8 @@ Thread navigation separates visual, requested, and displayed ownership. A user c
 
 Flower does not treat the global current model as an implicit existing-thread launch override. The current model is the default for the next newly created thread only. After a thread exists, its `model_id` and `reasoning_selection` are the displayed defaults; composer model changes write through to `current_model_id` only as a future new-thread default and never as a reverse sync into existing threads.
 
+The Activity companion reuses this model and selection contract; its placement, presence, read gate, and Activity/Workbench focus isolation are defined in [Flower Activity companion](flower-activity-companion.md). The header switcher is only a product-specific compact presentation; it does not create a second selected-thread owner or change the requested, committed, and content-presented ordering.
+
 # Evidence
 
 - `redeven:internal/flower_ui/src/FlowerSurface.tsx:128` - Flower recognizes `model_io.updated` as a model-status presentation boundary.

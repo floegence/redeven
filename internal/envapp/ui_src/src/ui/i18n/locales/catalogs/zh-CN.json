@@ -352,6 +352,37 @@
       "envTypeProvider": "Provider",
       "envTypeRemote": "远程"
     },
+    "flowerCompanion": {
+      "openAria": "Flower 伴随工作区。{status}",
+      "maximize": "最大化 Flower",
+      "restoreDocked": "恢复 Flower 停靠视图",
+      "collapse": "收起 Flower",
+      "resize": "调整 Flower 伴随工作区高度",
+      "newContextConversation": "使用所选上下文新建对话",
+      "status": {
+        "attention": { "one": "需要处理 · {count}", "other": "需要处理 · {count}" },
+        "failed": { "one": "失败 · {count}", "other": "失败 · {count}" },
+        "running": { "one": "正在工作 · {count}", "other": "正在工作 · {count}" },
+        "queued": { "one": "已排队 · {count}", "other": "已排队 · {count}" },
+        "canceled": { "one": "已取消 · {count}", "other": "已取消 · {count}" },
+        "completed": { "one": "已完成 · {count}", "other": "已完成 · {count}" },
+        "unavailable": "不可用",
+        "idle": "就绪"
+      },
+      "threadSwitcher": {
+        "label": "切换 Flower 对话",
+        "searchPlaceholder": "搜索对话...",
+        "newConversation": "新建对话",
+        "empty": "没有匹配的对话",
+        "queued": "已排队",
+        "groups": {
+          "attention": "需要处理",
+          "working": "正在工作",
+          "pinned": "已置顶",
+          "recent": "最近"
+        }
+      }
+    },
     "commandPalette": {
       "categories": {
         "navigation": "导航",
