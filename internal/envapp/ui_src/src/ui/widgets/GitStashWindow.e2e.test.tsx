@@ -87,6 +87,40 @@ async function revealTooltipForButton(button: HTMLButtonElement | undefined): Pr
   return Array.from(document.body.querySelectorAll('[role="tooltip"]')).at(-1) as HTMLElement | null;
 }
 
+function findContextMenuItem(label: string, key: string): HTMLButtonElement | undefined {
+  return Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')).find((item) => {
+    const text = item.textContent?.trim() ?? '';
+    return text === label || text === key || text.includes(label) || text.includes(key);
+  });
+}
+
+async function openMouseContextMenu(element: Element | null): Promise<void> {
+  expect(element).toBeTruthy();
+  element!.dispatchEvent(new MouseEvent('contextmenu', {
+    bubbles: true,
+    clientX: 32,
+    clientY: 48,
+  }));
+  await flush();
+}
+
+async function openKeyboardContextMenu(element: HTMLElement | null, shiftF10 = false): Promise<void> {
+  expect(element).toBeTruthy();
+  element!.focus();
+  element!.dispatchEvent(new KeyboardEvent('keydown', {
+    bubbles: true,
+    key: shiftF10 ? 'F10' : 'ContextMenu',
+    shiftKey: shiftF10,
+  }));
+  await flush();
+}
+
+async function closeContextMenu(): Promise<void> {
+  const menuItem = document.body.querySelector<HTMLElement>('[role="menuitem"]');
+  menuItem?.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, key: 'Escape' }));
+  await flush();
+}
+
 beforeEach(() => {
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
@@ -110,6 +144,189 @@ afterEach(() => {
 });
 
 describe('GitStashWindow', () => {
+  it('exposes stable, path-aware context actions for stash entries, details, and files', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const originalStash = {
+      id: 'stash-1',
+      ref: 'stash@{0}',
+      message: 'WIP context menu',
+      branchName: 'feature/context-menu',
+      createdAtUnixMs: 1,
+    };
+    const files = [{
+      changeType: 'renamed',
+      path: 'src/old.ts',
+      oldPath: 'src/old.ts',
+      newPath: 'src/new.ts',
+      displayPath: 'src/new.ts',
+    }, {
+      changeType: 'deleted',
+      path: 'src/deleted.ts',
+      displayPath: 'src/deleted.ts',
+    }, {
+      changeType: 'modified',
+      path: '../outside.ts',
+      displayPath: '../outside.ts',
+    }];
+    const onRequestApply = vi.fn();
+    const onRequestDrop = vi.fn();
+    const onAskFlower = vi.fn();
+    const onOpenInTerminal = vi.fn();
+    const onBrowseFiles = vi.fn();
+    const onPreviewCurrentFile = vi.fn();
+    const onCopyText = vi.fn();
+    let setStashes!: (value: typeof originalStash[]) => void;
+    let setSelectedStashId!: (value: string) => void;
+
+    const dispose = render(() => {
+      const [stashes, updateStashes] = createSignal([originalStash]);
+      const [selectedStashId, updateSelectedStashId] = createSignal('stash-1');
+      setStashes = updateStashes;
+      setSelectedStashId = updateSelectedStashId;
+      return (
+        <LayoutProvider>
+          <NotificationProvider>
+            <GitStashWindow
+              open
+              onOpenChange={() => {}}
+              tab="stashes"
+              onTabChange={() => {}}
+              repoRootPath="/workspace/repo"
+              source="changes"
+              repoSummary={{
+                repoRootPath: '/workspace/repo',
+                stashCount: 1,
+                workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+              }}
+              stashes={stashes()}
+              selectedStashId={selectedStashId()}
+              onSelectStash={updateSelectedStashId}
+              stashDetail={{ ...originalStash, files }}
+              onRequestApply={onRequestApply}
+              onRequestDrop={onRequestDrop}
+              onAskFlower={onAskFlower}
+              onOpenInTerminal={onOpenInTerminal}
+              onBrowseFiles={onBrowseFiles}
+              onPreviewCurrentFile={onPreviewCurrentFile}
+              onCopyText={onCopyText}
+            />
+          </NotificationProvider>
+        </LayoutProvider>
+      );
+    }, host);
+
+    try {
+      const stashEntry = () => host.querySelector('[data-git-stash-id="stash-1"]');
+      await openMouseContextMenu(stashEntry());
+      expect(findContextMenuItem('Ask Flower', 'git.contextMenu.askFlower')).toBeTruthy();
+      expect(findContextMenuItem('Open Terminal', 'git.contextMenu.openTerminal')).toBeTruthy();
+      expect(findContextMenuItem('Browse Files', 'git.contextMenu.browseFiles')).toBeTruthy();
+      expect(findContextMenuItem('Apply Stash', 'git.contextMenu.applyStash')).toBeTruthy();
+      expect(findContextMenuItem('Apply and Remove Stash', 'git.contextMenu.applyAndRemoveStash')).toBeTruthy();
+      expect(findContextMenuItem('Delete Stash', 'git.contextMenu.deleteStash')).toBeTruthy();
+
+      setStashes([{ ...originalStash, ref: 'stash@{1}' }]);
+      findContextMenuItem('Copy Stash Reference', 'git.contextMenu.copyStashRef')!.click();
+      await flush();
+      expect(onCopyText).toHaveBeenLastCalledWith('stash@{0}');
+
+      setStashes([originalStash]);
+      await flush();
+      await openMouseContextMenu(stashEntry());
+      setStashes([{ ...originalStash, id: 'stash-replaced' }]);
+      findContextMenuItem('Apply Stash', 'git.contextMenu.applyStash')!.click();
+      await flush();
+      expect(onRequestApply).toHaveBeenLastCalledWith('stash-1', false);
+
+      setStashes([originalStash]);
+      await flush();
+      const detailHeader = host.querySelector<HTMLElement>('[data-git-stash-detail-header]');
+      await openKeyboardContextMenu(detailHeader);
+      expect(document.activeElement).toBe(findContextMenuItem('Ask Flower', 'git.contextMenu.askFlower'));
+      findContextMenuItem('Ask Flower', 'git.contextMenu.askFlower')!.click();
+      await flush();
+      expect(onAskFlower).toHaveBeenLastCalledWith(expect.objectContaining({
+        kind: 'stash',
+        repoRootPath: '/workspace/repo',
+        stash: expect.objectContaining({ id: 'stash-1' }),
+        files: expect.arrayContaining([expect.objectContaining({ path: 'src/old.ts' })]),
+      }));
+
+      const renamedRow = host.querySelector<HTMLElement>('[data-git-stash-file="src/old.ts"]');
+      await openKeyboardContextMenu(renamedRow, true);
+      findContextMenuItem('Preview Current File', 'git.contextMenu.previewCurrentFile')!.click();
+      await flush();
+      expect(onPreviewCurrentFile).toHaveBeenLastCalledWith({
+        absolutePath: '/workspace/repo/src/new.ts',
+        parentDirectoryPath: '/workspace/repo/src',
+        relativePath: 'src/new.ts',
+        canPreviewCurrentFile: true,
+      });
+
+      await openMouseContextMenu(renamedRow);
+      findContextMenuItem('Open Terminal', 'git.contextMenu.openTerminal')!.click();
+      await flush();
+      expect(onOpenInTerminal).toHaveBeenLastCalledWith(expect.objectContaining({ path: '/workspace/repo/src' }));
+
+      await openMouseContextMenu(renamedRow);
+      findContextMenuItem('Browse Files', 'git.contextMenu.browseFiles')!.click();
+      await flush();
+      expect(onBrowseFiles).toHaveBeenLastCalledWith(expect.objectContaining({ path: '/workspace/repo/src' }));
+
+      await openMouseContextMenu(renamedRow);
+      findContextMenuItem('Ask Flower', 'git.contextMenu.askFlower')!.click();
+      await flush();
+      expect(onAskFlower).toHaveBeenLastCalledWith(expect.objectContaining({
+        kind: 'stash_file',
+        stash: expect.objectContaining({ id: 'stash-1' }),
+        file: expect.objectContaining({ newPath: 'src/new.ts' }),
+      }));
+
+      await openMouseContextMenu(renamedRow);
+      findContextMenuItem('Copy Absolute Path', 'git.contextMenu.copyAbsolutePath')!.click();
+      await flush();
+      expect(onCopyText).toHaveBeenLastCalledWith('/workspace/repo/src/new.ts');
+
+      await openMouseContextMenu(renamedRow);
+      findContextMenuItem('Copy Relative Path', 'git.contextMenu.copyRelativePath')!.click();
+      await flush();
+      expect(onCopyText).toHaveBeenLastCalledWith('src/new.ts');
+
+      await openMouseContextMenu(renamedRow);
+      setSelectedStashId('stash-2');
+      findContextMenuItem('View Diff', 'git.contextMenu.viewDiff')!.click();
+      await flush();
+      expect(gitDiffDialogRenderStore.snapshots.at(-1)).toMatchObject({
+        open: true,
+        itemPath: 'src/old.ts',
+        sourceKind: 'stash',
+        stashId: 'stash-1',
+      });
+
+      const deletedRow = host.querySelector<HTMLElement>('[data-git-stash-file="src/deleted.ts"]');
+      await openMouseContextMenu(deletedRow);
+      expect(findContextMenuItem('Preview Current File', 'git.contextMenu.previewCurrentFile')).toBeUndefined();
+      await closeContextMenu();
+
+      const inaccessibleRow = host.querySelector<HTMLElement>('[data-git-stash-file="../outside.ts"]');
+      await openMouseContextMenu(inaccessibleRow);
+      const disabledPreview = findContextMenuItem('Preview Current File', 'git.contextMenu.previewCurrentFile');
+      expect(disabledPreview?.getAttribute('aria-disabled')).toBe('true');
+      expect(disabledPreview?.getAttribute('title')).toMatch(/unavailable|git\.contextMenu\.previewCurrentFileUnavailable/i);
+      expect(findContextMenuItem('Open Terminal', 'git.contextMenu.openTerminal')?.getAttribute('aria-disabled')).toBe('true');
+      expect(findContextMenuItem('Browse Files', 'git.contextMenu.browseFiles')?.getAttribute('aria-disabled')).toBe('true');
+
+      await closeContextMenu();
+      await openMouseContextMenu(stashEntry());
+      findContextMenuItem('Delete Stash', 'git.contextMenu.deleteStash')!.click();
+      await flush();
+      expect(onRequestDrop).toHaveBeenLastCalledWith('stash-1');
+    } finally {
+      dispose();
+    }
+  });
+
   it('switches from save mode to the stash list and exposes stash actions', async () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

@@ -2,7 +2,7 @@ import { For, Show, createEffect, onCleanup } from 'solid-js';
 import { Dynamic } from 'solid-js/web';
 import { cn } from '@floegence/floe-webapp-core';
 import { Button } from '@floegence/floe-webapp-core/ui';
-import { AlertTriangle, CheckCircle, FileText, GitBranch } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, CheckCircle, Copy, FileText, Folder, GitBranch, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import type {
   GitBranchSummary,
   GitCommitSummary,
@@ -15,11 +15,13 @@ import {
   branchDisplayName,
   branchIdentity,
   describeGitHead,
+  resolveGitBranchWorktreePath,
   summarizeWorkspaceCount,
   workspaceViewSectionCount,
   type GitWorkspaceViewPageState,
   type GitWorkspaceViewSection,
   type GitWorkbenchSubview,
+  type GitDetachedSwitchTarget,
 } from '../utils/gitWorkbench';
 import {
   localizedBranchContextSummary,
@@ -41,6 +43,13 @@ import { GitCommitGraph } from './GitCommitGraph';
 import { GIT_WORKBENCH_SCROLL_REGION_PROPS } from './gitWorkbenchScrollRegion';
 import { useI18n } from '../i18n';
 import { GitMetaPill, GitSection, GitStatePane, GitSubtleNote } from './GitWorkbenchPrimitives';
+import { FlowerIcon } from '../icons/FlowerIcon';
+import {
+  buildGitDirectoryShortcutRequest,
+  type GitAskFlowerRequest,
+  type GitDirectoryShortcutRequest,
+} from '../utils/gitBrowserShortcuts';
+import { GitEntityContextMenu, createGitEntityContextMenuController, type GitContextMenuActionItem } from './GitEntityContextMenu';
 
 export interface GitWorkbenchSidebarProps {
   subview: GitWorkbenchSubview;
@@ -61,6 +70,15 @@ export interface GitWorkbenchSidebarProps {
   branchesError?: string;
   selectedBranchKey?: string;
   onSelectBranch?: (branch: GitBranchSummary) => void;
+  onCheckoutBranch?: (branch: GitBranchSummary) => void;
+  onMergeBranch?: (branch: GitBranchSummary) => void;
+  onDeleteBranch?: (branch: GitBranchSummary) => void;
+  onAskFlower?: (request: Extract<GitAskFlowerRequest, { kind: 'branch' | 'commit' }>) => void;
+  onOpenInTerminal?: (request: GitDirectoryShortcutRequest) => void;
+  onBrowseFiles?: (request: GitDirectoryShortcutRequest) => void | Promise<void>;
+  onSwitchDetached?: (target: GitDetachedSwitchTarget) => void;
+  switchDetachedBusy?: boolean;
+  onCopyText?: (value: string) => void;
   commits?: GitCommitSummary[];
   listLoading?: boolean;
   listLoadingMore?: boolean;
@@ -190,6 +208,10 @@ function selectorDescription(view: GitWorkbenchSubview, i18n: ReturnType<typeof 
 
 export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
   const i18n = useI18n();
+  type BranchContextTarget = Readonly<{ branch: GitBranchSummary; repoRootPath: string }>;
+  const branchContextMenu = createGitEntityContextMenuController<BranchContextTarget>({
+    snapshotTarget: (target) => ({ repoRootPath: target.repoRootPath, branch: { ...target.branch } }),
+  });
   const closeAfterPick = () => props.onClose?.();
   const activeSubview = () => normalizeSubview(props.subview);
   const headDisplay = () => localizedGitHeadDisplay(describeGitHead(props.repoSummary), i18n);
@@ -205,6 +227,101 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
   let scheduledBranchScrollTask: (() => void) | null = null;
   let previousBranchesRef: GitListBranchesResponse | null | undefined;
   let pendingSelectionScrollAnchor: BranchSelectionScrollAnchor | null = null;
+  const repoRootPath = () => String(props.repoSummary?.repoRootPath ?? '').trim();
+
+  const branchContextMenuItems = (target: BranchContextTarget): GitContextMenuActionItem[] => {
+    const { branch } = target;
+    const items: GitContextMenuActionItem[] = [];
+    const branchName = branchDisplayName(branch);
+    const liveRootPath = resolveGitBranchWorktreePath(branch, target.repoRootPath);
+    const directoryRequest = buildGitDirectoryShortcutRequest({
+      rootPath: liveRootPath,
+      preferredName: branchName,
+    });
+    const isLocal = String(branch.kind ?? '').trim().toLowerCase() === 'local';
+    const worktreeDisabledReason = directoryRequest
+      ? undefined
+      : !target.repoRootPath
+        ? i18n.t('git.notifications.repositoryPathUnavailable')
+        : branch.kind === 'remote'
+          ? i18n.t('git.branches.checkoutRemoteFirst')
+          : !branch.current && !branch.worktreePath
+            ? i18n.t('git.branches.openBranchInWorktreeFirst')
+            : i18n.t('git.branches.worktreeUnavailable');
+    if (props.onAskFlower && target.repoRootPath) {
+      items.push({
+        id: 'ask-flower', kind: 'action', group: 'assistant', rank: 10,
+        label: i18n.t('git.contextMenu.askFlower'), icon: FlowerIcon,
+        onSelect: () => props.onAskFlower?.({ kind: 'branch', repoRootPath: target.repoRootPath, branch }),
+      });
+    }
+    if (props.onOpenInTerminal) {
+      items.push({
+        id: 'open-terminal', kind: 'action', group: 'navigate', rank: 10,
+        label: i18n.t('git.contextMenu.openTerminal'), icon: Terminal,
+        disabledReason: worktreeDisabledReason,
+        onSelect: () => {
+          if (directoryRequest) props.onOpenInTerminal?.(directoryRequest);
+        },
+      });
+    }
+    if (props.onBrowseFiles) {
+      items.push({
+        id: 'browse-files', kind: 'action', group: 'navigate', rank: 20,
+        label: i18n.t('git.contextMenu.browseFiles'), icon: Folder,
+        disabledReason: worktreeDisabledReason,
+        onSelect: () => {
+          if (directoryRequest) void props.onBrowseFiles?.(directoryRequest);
+        },
+      });
+    }
+    if (!branch.current && props.onCheckoutBranch) {
+      items.push({
+        id: 'checkout-branch', kind: 'action', group: 'modify', rank: 10,
+        label: i18n.t('git.contextMenu.checkoutBranch'), icon: GitBranch,
+        disabled: Boolean(branch.worktreePath),
+        disabledReason: branch.worktreePath ? i18n.t('git.overview.linkedWorktree') : undefined,
+        onSelect: () => props.onCheckoutBranch?.(branch),
+      });
+    }
+    if (!branch.current && props.onMergeBranch) {
+      items.push({
+        id: 'merge-branch', kind: 'action', group: 'modify', rank: 20,
+        label: i18n.t('git.contextMenu.mergeBranch'), icon: GitBranch,
+        onSelect: () => props.onMergeBranch?.(branch),
+      });
+    }
+    if (isLocal && !branch.current && props.onDeleteBranch) {
+      items.push({
+        id: 'delete-branch', kind: 'action', group: 'destructive', rank: 10,
+        label: i18n.t('git.contextMenu.deleteBranch'), icon: Trash, destructive: true,
+        onSelect: () => props.onDeleteBranch?.(branch),
+      });
+    }
+    if (props.onCopyText) {
+      items.push({
+        id: 'copy-branch-name', kind: 'action', group: 'clipboard', rank: 10,
+        label: i18n.t('git.contextMenu.copyBranchName'), icon: Copy,
+        onSelect: () => props.onCopyText?.(branchName),
+      });
+      if (directoryRequest) {
+        items.push({
+          id: 'copy-worktree-path', kind: 'action', group: 'clipboard', rank: 20,
+          label: i18n.t('git.contextMenu.copyWorktreePath'), icon: Copy,
+          onSelect: () => props.onCopyText?.(directoryRequest.path),
+        });
+      }
+    }
+    return items;
+  };
+  const openBranchContextMenu = (event: MouseEvent, branch: GitBranchSummary) => {
+    const target = { branch, repoRootPath: repoRootPath() };
+    if (branchContextMenuItems(target).length > 0) branchContextMenu.openFromContextMenu(event, target);
+  };
+  const openBranchKeyboardMenu = (event: KeyboardEvent, branch: GitBranchSummary) => {
+    const target = { branch, repoRootPath: repoRootPath() };
+    if (branchContextMenuItems(target).length > 0) branchContextMenu.openFromKeyboard(event, target);
+  };
 
   const registerBranchButton = (branch: GitBranchSummary, element: HTMLButtonElement) => {
     const key = branchIdentity(branch);
@@ -495,6 +612,8 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                         props.onSelectBranch?.(branch);
                                         closeAfterPick();
                                       }}
+                                      onContextMenu={(event) => openBranchContextMenu(event, branch)}
+                                      onKeyDown={(event) => openBranchKeyboardMenu(event, branch)}
                                     >
                                       <div class="grid min-h-5 grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
                                         <span class="flex min-w-0 flex-1 items-center gap-1.5 truncate">
@@ -531,6 +650,8 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                                         props.onSelectBranch?.(branch);
                                         closeAfterPick();
                                       }}
+                                      onContextMenu={(event) => openBranchContextMenu(event, branch)}
+                                      onKeyDown={(event) => openBranchKeyboardMenu(event, branch)}
                                     >
                                       <div class="flex items-center gap-1.5 truncate">
                                         <GitBranch class="h-3.5 w-3.5 shrink-0" />
@@ -562,6 +683,14 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
                               props.onSelectCommit?.(hash);
                               closeAfterPick();
                             }}
+                            repoRootPath={repoRootPath()}
+                            onAskFlower={props.onAskFlower}
+                            onOpenInTerminal={props.onOpenInTerminal}
+                            onBrowseFiles={props.onBrowseFiles}
+                            onSwitchDetached={props.onSwitchDetached}
+                            switchDetachedBusy={props.switchDetachedBusy}
+                            alreadyDetachedCommitHash={props.repoSummary?.detached ? props.repoSummary?.headCommit : undefined}
+                            onCopyText={props.onCopyText}
                           />
                         </Show>
                       </Show>
@@ -581,6 +710,7 @@ export function GitWorkbenchSidebar(props: GitWorkbenchSidebarProps) {
           </Show>
         </div>
       </div>
+      <GitEntityContextMenu controller={branchContextMenu} items={branchContextMenuItems} />
     </div>
   );
 }

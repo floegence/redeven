@@ -20,7 +20,7 @@ import { GitWorkbench } from './GitWorkbench';
 import { GitInlineLoadingStatus, GitSubtleNote } from './GitWorkbenchPrimitives';
 import type { GitDeleteBranchDialogConfirmOptions, GitDeleteBranchDialogState } from './GitDeleteBranchDialog';
 import type { GitMergeBranchDialogConfirmOptions, GitMergeBranchDialogState } from './GitMergeBranchDialog';
-import type { GitAskFlowerRequest, GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
+import type { GitAskFlowerRequest, GitDirectoryShortcutRequest, GitFileShortcutTarget } from '../utils/gitBrowserShortcuts';
 import { useI18n } from '../i18n';
 
 export interface GitWorkspaceProps {
@@ -58,11 +58,16 @@ export interface GitWorkspaceProps {
   onDiscardWorkspaceItem?: (item: GitWorkspaceChange) => void;
   onNavigateWorkspaceDirectory?: (directoryPath: string) => void;
   onBulkWorkspaceAction?: (section: GitWorkspaceViewSection) => void;
-  onDiscardWorkspaceSection?: (section: GitWorkspaceViewSection) => void;
+  onDiscardWorkspaceSection?: (
+    section: GitWorkspaceViewSection,
+    scope?: { directoryPath?: string; count?: number },
+  ) => void;
   onOpenStash?: (request: GitStashWindowRequest) => void;
   onAskFlower?: (request: GitAskFlowerRequest) => void;
   onOpenInTerminal?: (request: GitDirectoryShortcutRequest) => void;
   onBrowseFiles?: (request: GitDirectoryShortcutRequest) => void | Promise<void>;
+  onPreviewCurrentFile?: (target: GitFileShortcutTarget) => void;
+  onCopyText?: (value: string) => void;
   busyWorkspaceKey?: string;
   busyWorkspaceAction?: 'stage' | 'unstage' | 'discard' | '';
   branches?: GitListBranchesResponse | null;
@@ -191,6 +196,15 @@ export function GitWorkspace(props: GitWorkspaceProps) {
               branchesError={props.branchesError}
               selectedBranchKey={props.selectedBranchKey}
               onSelectBranch={props.onSelectBranch}
+              onCheckoutBranch={props.onCheckoutBranch}
+              onMergeBranch={props.onMergeBranch}
+              onDeleteBranch={props.onDeleteBranch}
+              onAskFlower={props.onAskFlower}
+              onOpenInTerminal={props.onOpenInTerminal}
+              onBrowseFiles={props.onBrowseFiles}
+              onSwitchDetached={props.onSwitchDetached}
+              switchDetachedBusy={props.switchDetachedBusy}
+              onCopyText={props.onCopyText}
               commits={props.commits}
               listLoading={props.listLoading}
               listLoadingMore={props.listLoadingMore}
@@ -291,6 +305,8 @@ export function GitWorkspace(props: GitWorkspaceProps) {
               onAskFlower={props.onAskFlower}
               onOpenInTerminal={props.onOpenInTerminal}
               onBrowseFiles={props.onBrowseFiles}
+              onPreviewCurrentFile={props.onPreviewCurrentFile}
+              onCopyText={props.onCopyText}
               fetchBusy={props.fetchBusy}
               pullBusy={props.pullBusy}
               pushBusy={props.pushBusy}

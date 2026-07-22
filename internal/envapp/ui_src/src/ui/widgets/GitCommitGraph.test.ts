@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { render } from 'solid-js/web';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { GitCommitSummary } from '../protocol/redeven_v1';
 import { GitCommitGraph, buildCommitGraphRows } from './GitCommitGraph';
 
@@ -41,6 +41,65 @@ describe('buildCommitGraphRows', () => {
 });
 
 describe('GitCommitGraph layout', () => {
+  it('exposes stable commit actions from the row context menu', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const selectedCommit = vi.fn();
+    const askFlower = vi.fn();
+    const openTerminal = vi.fn();
+    const browseFiles = vi.fn();
+    const switchDetached = vi.fn();
+    const copyText = vi.fn();
+    const targetCommit = commit('commit-context-hash', ['parent'], 'Context target');
+
+    const dispose = render(() => GitCommitGraph({
+      commits: [targetCommit],
+      repoRootPath: '/workspace/repo',
+      onSelect: selectedCommit,
+      onAskFlower: askFlower,
+      onOpenInTerminal: openTerminal,
+      onBrowseFiles: browseFiles,
+      onSwitchDetached: switchDetached,
+      onCopyText: copyText,
+    }), host);
+    const row = host.querySelector<HTMLButtonElement>('[data-commit-graph-row]')!;
+    const openMenu = async () => {
+      row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 40, clientY: 60 }));
+      await Promise.resolve();
+      return Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+    };
+
+    try {
+      let actions = await openMenu();
+      expect(actions).toHaveLength(6);
+      actions.find((item) => item.textContent?.includes('Ask Flower'))!.click();
+      expect(askFlower).toHaveBeenCalledWith(expect.objectContaining({ kind: 'commit', commit: expect.objectContaining({ hash: 'commit-context-hash' }), files: [] }));
+
+      actions = await openMenu();
+      actions.find((item) => item.textContent?.includes('View Commit Details'))!.click();
+      expect(selectedCommit).toHaveBeenCalledWith('commit-context-hash');
+
+      actions = await openMenu();
+      actions.find((item) => item.textContent?.includes('Open Terminal'))!.click();
+      expect(openTerminal).toHaveBeenCalledWith({ path: '/workspace/repo' });
+
+      actions = await openMenu();
+      actions.find((item) => item.textContent?.includes('Browse Files'))!.click();
+      expect(browseFiles).toHaveBeenCalledWith({ path: '/workspace/repo' });
+
+      actions = await openMenu();
+      actions.find((item) => item.textContent?.includes('Switch Detached'))!.click();
+      expect(switchDetached).toHaveBeenCalledWith({ commitHash: 'commit-context-hash', shortHash: targetCommit.shortHash, source: 'graph' });
+
+      actions = await openMenu();
+      targetCommit.hash = 'mutated-after-open';
+      actions.find((item) => item.textContent?.includes('Copy Commit Hash'))!.click();
+      expect(copyText).toHaveBeenCalledWith('commit-context-hash');
+    } finally {
+      dispose();
+    }
+  });
+
   it('uses the theme categorical palette for distinct merge lanes', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);

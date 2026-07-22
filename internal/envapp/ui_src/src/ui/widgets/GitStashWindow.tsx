@@ -5,7 +5,10 @@ import {
   Check,
   CheckCircle,
   Clock,
+  Copy,
+  Eye,
   FileText,
+  Folder,
   Files,
   GitBranch,
   Layers,
@@ -13,6 +16,7 @@ import {
   Minus,
   Refresh,
   Save,
+  Terminal,
   Trash,
 } from '@floegence/floe-webapp-core/icons';
 import { Button, SegmentedControl } from '@floegence/floe-webapp-core/ui';
@@ -60,6 +64,19 @@ import {
 } from './GitWorkbenchPrimitives';
 import { PreviewWindow } from './PreviewWindow';
 import { ENV_APP_FLOATING_LAYER } from '../utils/envAppLayers';
+import { FlowerIcon } from '../icons/FlowerIcon';
+import {
+  buildGitDirectoryShortcutRequest,
+  buildGitFileShortcutTarget,
+  type GitAskFlowerRequest,
+  type GitDirectoryShortcutRequest,
+  type GitFileShortcutTarget,
+} from '../utils/gitBrowserShortcuts';
+import {
+  GitEntityContextMenu,
+  createGitEntityContextMenuController,
+  type GitContextMenuActionItem,
+} from './GitEntityContextMenu';
 
 export type { GitStashReviewState } from '../utils/gitStashReview';
 
@@ -103,11 +120,31 @@ export interface GitStashWindowProps {
   onKeepIndexChange?: (value: boolean) => void;
   onSave?: () => void;
   onRefreshStashes?: () => void;
-  onRequestApply?: (removeAfterApply: boolean) => void;
-  onRequestDrop?: () => void;
+  onRequestApply?: (stashId: string, removeAfterApply: boolean) => void;
+  onRequestDrop?: (stashId: string) => void;
+  onAskFlower?: (request: Extract<GitAskFlowerRequest, { kind: 'stash' | 'stash_file' }>) => void;
+  onOpenInTerminal?: (request: GitDirectoryShortcutRequest) => void;
+  onBrowseFiles?: (request: GitDirectoryShortcutRequest) => void | Promise<void>;
+  onPreviewCurrentFile?: (target: GitFileShortcutTarget) => void;
+  onCopyText?: (value: string) => void;
   onConfirmReview?: () => void;
   onCancelReview?: () => void;
 }
+
+type GitStashContextMenuTarget =
+  | Readonly<{
+      kind: 'stash';
+      repoRootPath: string;
+      stash: GitStashSummary;
+      files?: GitSeededCommitFileSummary[];
+      displayRef: string;
+    }>
+  | Readonly<{
+      kind: 'file';
+      repoRootPath: string;
+      stash: GitStashSummary;
+      file: GitSeededCommitFileSummary;
+    }>;
 
 // -- helpers --
 
@@ -186,6 +223,8 @@ interface StashListItemCardProps {
   stashes: GitStashSummary[];
   active: boolean;
   onClick: () => void;
+  onContextMenu: (event: MouseEvent) => void;
+  onKeyDown: (event: KeyboardEvent) => void;
 }
 
 function StashListItemCard(props: StashListItemCardProps) {
@@ -193,6 +232,7 @@ function StashListItemCard(props: StashListItemCardProps) {
   return (
     <button
       type="button"
+      data-git-stash-id={props.stash.id}
       class={cn(
         'flex w-full cursor-pointer items-center gap-2.5 rounded-md px-3 py-2.5 text-left',
         'transition-all duration-150 border-l-[3px]',
@@ -201,6 +241,8 @@ function StashListItemCard(props: StashListItemCardProps) {
           : 'border-l-transparent hover:bg-muted/[0.06]',
       )}
       onClick={props.onClick}
+      onContextMenu={props.onContextMenu}
+      onKeyDown={props.onKeyDown}
     >
       <span class={cn(
         'shrink-0 text-[11px] font-mono font-semibold tabular-nums tracking-tight',
@@ -236,11 +278,23 @@ function StashListItemCard(props: StashListItemCardProps) {
   );
 }
 
-function StashDetailHeader(props: { stash: GitSeededStashDetail; stashes: GitStashSummary[] }) {
+function StashDetailHeader(props: {
+  stash: GitSeededStashDetail;
+  stashes: GitStashSummary[];
+  onContextMenu: (event: MouseEvent) => void;
+  onKeyDown: (event: KeyboardEvent) => void;
+}) {
   const i18n = useI18n();
   const stats = createMemo(() => computeStashStats(props.stash.files));
   return (
-    <div class="space-y-4">
+    <div
+      data-git-stash-detail-header
+      class="space-y-4 rounded-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70"
+      tabIndex={0}
+      aria-label={`${String(props.stash.ref ?? '').trim()} ${props.stash.message || i18n.t('uiCopy.git.unnamedStash')}`.trim()}
+      onContextMenu={props.onContextMenu}
+      onKeyDown={props.onKeyDown}
+    >
       <div>
         <div class="flex items-baseline gap-2">
           <span class="text-[11px] font-mono font-semibold tracking-tight text-muted-foreground/60">
@@ -300,6 +354,21 @@ export function GitStashWindow(props: GitStashWindowProps) {
   const [diffDialogStashId, setDiffDialogStashId] = createSignal('');
   const [floatingSurfaceEl, setFloatingSurfaceEl] = createSignal<HTMLElement | null>(null);
   const [leftPanelWidth, setLeftPanelWidth] = createSignal(304); // px, default ~19rem
+  const contextMenu = createGitEntityContextMenuController<GitStashContextMenuTarget>({
+    snapshotTarget: (target) => (
+      target.kind === 'file'
+        ? {
+            ...target,
+            stash: { ...target.stash },
+            file: { ...target.file },
+          }
+        : {
+            ...target,
+            stash: { ...target.stash },
+            files: target.files?.map((file) => ({ ...file })),
+          }
+    ),
+  });
 
   // -- resize handle --
   let resizing = false;
@@ -380,6 +449,12 @@ export function GitStashWindow(props: GitStashWindowProps) {
     return !props.dropBusy;
   });
   const actionsDisabled = createMemo(() => Boolean(props.reviewLoading || props.applyBusy || props.dropBusy));
+  const actionsDisabledReason = createMemo(() => {
+    if (props.reviewLoading) return i18n.t('common.status.loading');
+    if (props.applyBusy) return i18n.t('uiCopy.git.applying');
+    if (props.dropBusy) return i18n.t('uiCopy.git.deleting');
+    return undefined;
+  });
   const isMobile = createMemo(() => layout.isMobile());
   const stashTabOptions = createMemo(() => [
     { value: 'save', label: 'Save Changes' },
@@ -394,15 +469,221 @@ export function GitStashWindow(props: GitStashWindowProps) {
     setDiffDialogItem(null);
     setDiffDialogStashId('');
   };
-  const openDiffDialog = (file: GitSeededCommitFileSummary) => {
+  const openDiffDialog = (file: GitSeededCommitFileSummary, stashId = String(selectedStash()?.id ?? '').trim()) => {
     setDiffDialogItem(file);
-    setDiffDialogStashId(String(selectedStash()?.id ?? '').trim());
+    setDiffDialogStashId(stashId);
     setDiffDialogOpen(true);
+  };
+
+  const stashTarget = (
+    stash: GitStashSummary,
+    files?: GitSeededCommitFileSummary[],
+  ): GitStashContextMenuTarget => ({
+    kind: 'stash',
+    repoRootPath: repoPath(),
+    stash,
+    files,
+    displayRef: String(stash.ref ?? '').trim() || stashDisplayIndex(stash.id, props.stashes),
+  });
+
+  const fileTarget = (
+    stash: GitStashSummary,
+    file: GitSeededCommitFileSummary,
+  ): GitStashContextMenuTarget => ({
+    kind: 'file',
+    repoRootPath: repoPath(),
+    stash,
+    file,
+  });
+
+  const contextMenuItems = (target: GitStashContextMenuTarget): GitContextMenuActionItem[] => {
+    const items: GitContextMenuActionItem[] = [];
+    const repositoryRequest = buildGitDirectoryShortcutRequest({ rootPath: target.repoRootPath });
+    const repositoryUnavailable = repositoryRequest ? '' : i18n.t('git.notifications.repositoryPathUnavailable');
+    const currentFile = target.kind === 'file'
+      ? buildGitFileShortcutTarget({ rootPath: target.repoRootPath, item: target.file })
+      : null;
+    const directoryRequest = target.kind === 'file'
+      ? currentFile
+        ? buildGitDirectoryShortcutRequest({
+            rootPath: target.repoRootPath,
+            directoryPath: currentFile.relativePath.split('/').slice(0, -1).join('/'),
+          })
+        : null
+      : repositoryRequest;
+    const directoryUnavailable = directoryRequest
+      ? undefined
+      : repositoryUnavailable || i18n.t('git.contextMenu.previewCurrentFileUnavailable');
+    const addItem = (item: Omit<GitContextMenuActionItem, 'kind'>) => {
+      items.push({ ...item, kind: 'action' });
+    };
+
+    if (props.onAskFlower) {
+      addItem({
+        id: 'ask-flower',
+        group: 'assistant',
+        rank: 10,
+        label: i18n.t('git.contextMenu.askFlower'),
+        icon: FlowerIcon,
+        disabledReason: repositoryUnavailable || undefined,
+        onSelect: () => {
+          if (target.kind === 'file') {
+            props.onAskFlower?.({
+              kind: 'stash_file',
+              repoRootPath: target.repoRootPath,
+              stash: target.stash,
+              file: target.file,
+            });
+            return;
+          }
+          props.onAskFlower?.({
+            kind: 'stash',
+            repoRootPath: target.repoRootPath,
+            stash: target.stash,
+            files: target.files,
+          });
+        },
+      });
+    }
+
+    if (target.kind === 'file') {
+      const deleted = String(target.file.changeType ?? '').trim().toLowerCase() === 'deleted';
+      addItem({
+        id: 'view-diff',
+        group: 'inspect',
+        rank: 10,
+        label: i18n.t('git.contextMenu.viewDiff'),
+        icon: FileText,
+        onSelect: () => openDiffDialog(target.file, target.stash.id),
+      });
+      if (!deleted && props.onPreviewCurrentFile) {
+        addItem({
+          id: 'preview-current-file',
+          group: 'inspect',
+          rank: 20,
+          label: i18n.t('git.contextMenu.previewCurrentFile'),
+          icon: Eye,
+          disabledReason: currentFile?.canPreviewCurrentFile
+            ? undefined
+            : i18n.t('git.contextMenu.previewCurrentFileUnavailable'),
+          onSelect: () => {
+            if (currentFile?.canPreviewCurrentFile) props.onPreviewCurrentFile?.(currentFile);
+          },
+        });
+      }
+      if (props.onCopyText) {
+        if (currentFile?.absolutePath) {
+          addItem({
+            id: 'copy-absolute-path',
+            group: 'clipboard',
+            rank: 10,
+            label: i18n.t('git.contextMenu.copyAbsolutePath'),
+            icon: Copy,
+            onSelect: () => props.onCopyText?.(currentFile.absolutePath),
+          });
+        }
+        if (currentFile?.relativePath) {
+          addItem({
+            id: 'copy-relative-path',
+            group: 'clipboard',
+            rank: 20,
+            label: i18n.t('git.contextMenu.copyRelativePath'),
+            icon: Copy,
+            onSelect: () => props.onCopyText?.(currentFile.relativePath),
+          });
+        }
+      }
+    }
+
+    if (props.onOpenInTerminal) {
+      addItem({
+        id: 'open-terminal',
+        group: 'navigate',
+        rank: 10,
+        label: i18n.t('git.contextMenu.openTerminal'),
+        icon: Terminal,
+        disabledReason: directoryUnavailable,
+        onSelect: () => {
+          if (directoryRequest) props.onOpenInTerminal?.(directoryRequest);
+        },
+      });
+    }
+    if (props.onBrowseFiles) {
+      addItem({
+        id: 'browse-files',
+        group: 'navigate',
+        rank: 20,
+        label: i18n.t('git.contextMenu.browseFiles'),
+        icon: Folder,
+        disabledReason: directoryUnavailable,
+        onSelect: () => {
+          if (directoryRequest) void props.onBrowseFiles?.(directoryRequest);
+        },
+      });
+    }
+
+    if (target.kind === 'stash') {
+      if (props.onRequestApply) {
+        addItem({
+          id: 'apply-stash',
+          group: 'modify',
+          rank: 10,
+          label: i18n.t('git.contextMenu.applyStash'),
+          icon: CheckCircle,
+          disabled: actionsDisabled(),
+          disabledReason: actionsDisabledReason(),
+          onSelect: () => props.onRequestApply?.(target.stash.id, false),
+        });
+        addItem({
+          id: 'apply-and-remove-stash',
+          group: 'modify',
+          rank: 20,
+          label: i18n.t('git.contextMenu.applyAndRemoveStash'),
+          icon: Check,
+          disabled: actionsDisabled(),
+          disabledReason: actionsDisabledReason(),
+          onSelect: () => props.onRequestApply?.(target.stash.id, true),
+        });
+      }
+      if (props.onCopyText && target.displayRef) {
+        addItem({
+          id: 'copy-stash-ref',
+          group: 'clipboard',
+          rank: 10,
+          label: i18n.t('git.contextMenu.copyStashRef'),
+          icon: Copy,
+          onSelect: () => props.onCopyText?.(target.displayRef),
+        });
+      }
+      if (props.onRequestDrop) {
+        addItem({
+          id: 'delete-stash',
+          group: 'destructive',
+          rank: 10,
+          label: i18n.t('git.contextMenu.deleteStash'),
+          icon: Trash,
+          destructive: true,
+          disabled: actionsDisabled(),
+          disabledReason: actionsDisabledReason(),
+          onSelect: () => props.onRequestDrop?.(target.stash.id),
+        });
+      }
+    }
+
+    return items;
+  };
+
+  const openContextMenu = (event: MouseEvent, target: GitStashContextMenuTarget) => {
+    if (contextMenuItems(target).length > 0) contextMenu.openFromContextMenu(event, target);
+  };
+  const openKeyboardMenu = (event: KeyboardEvent, target: GitStashContextMenuTarget) => {
+    if (contextMenuItems(target).length > 0) contextMenu.openFromKeyboard(event, target);
   };
 
   createEffect(on(() => [props.open, props.tab] as const, ([open, tab]) => {
     if (open && tab === 'stashes') return;
     closeDiffDialog();
+    if (contextMenu.state()) contextMenu.close();
   }));
 
   createEffect(on(() => selectedStash()?.id ?? '', (stashId) => {
@@ -415,6 +696,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
   createEffect(() => {
     const item = diffDialogItem();
     if (!item) return;
+    if (diffDialogStashId() !== String(props.stashDetail?.id ?? '').trim()) return;
     if (detailFiles().some((file) => gitDiffEntryIdentity(file) === gitDiffEntryIdentity(item))) return;
     closeDiffDialog();
   });
@@ -485,6 +767,8 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                     stashes={props.stashes}
                                     active={active()}
                                     onClick={() => props.onSelectStash?.(stash.id)}
+                                    onContextMenu={(event) => openContextMenu(event, stashTarget(stash))}
+                                    onKeyDown={(event) => openKeyboardMenu(event, stashTarget(stash))}
                                   />
                                 );
                               }}
@@ -521,7 +805,12 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                         </div>
                                       </Show>
                                       <div class="flex flex-col gap-4">
-                                        <StashDetailHeader stash={detail} stashes={props.stashes} />
+                                        <StashDetailHeader
+                                          stash={detail}
+                                          stashes={props.stashes}
+                                          onContextMenu={(event) => openContextMenu(event, stashTarget(detail, detail.files))}
+                                          onKeyDown={(event) => openKeyboardMenu(event, stashTarget(detail, detail.files))}
+                                        />
                                         {/* Changed files */}
                                         <div>
                                           <div class="flex items-center gap-2 mb-1.5">
@@ -552,9 +841,13 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                                   const secondaryPath = changeSecondaryPath(file);
                                                   return (
                                                     <tr
+                                                      data-git-stash-file={file.path}
                                                       aria-selected={active()}
-                                                      class={`${gitChangedFilesRowClass(active())} cursor-pointer`}
+                                                      class={`${gitChangedFilesRowClass(active())} cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70`}
                                                       onClick={() => openDiffDialog(file)}
+                                                      tabIndex={0}
+                                                      onContextMenu={(event) => openContextMenu(event, fileTarget(detail, file))}
+                                                      onKeyDown={(event) => openKeyboardMenu(event, fileTarget(detail, file))}
                                                     >
                                                       <td class={GIT_CHANGED_FILES_CELL_CLASS}>
                                                         <div class="min-w-0">
@@ -606,12 +899,12 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                 <div data-git-stash-actions class="flex flex-wrap items-center gap-2">
                                   <div class="inline-flex flex-wrap items-center gap-2">
                                     <StashActionButton mobile={isMobile()} tooltip={i18n.t('gitStash.applyTooltip')} disabled={actionsDisabled()}>
-                                      <Button size="sm" variant="default" class="rounded-md" icon={CheckCircle} disabled={actionsDisabled()} onClick={() => props.onRequestApply?.(false)}>
+                                      <Button size="sm" variant="default" class="rounded-md" icon={CheckCircle} disabled={actionsDisabled()} onClick={() => props.onRequestApply?.(props.stashDetail!.id, false)}>
                                         {props.applyBusy && props.review?.kind === 'apply' && !props.review?.removeAfterApply ? i18n.t('uiCopy.git.applying') : i18n.t('uiCopy.git.apply')}
                                       </Button>
                                     </StashActionButton>
                                     <StashActionButton mobile={isMobile()} tooltip={i18n.t('gitStash.applyRemoveTooltip')} disabled={actionsDisabled()}>
-                                      <Button size="sm" variant="outline" class={cn('rounded-md', redevenSurfaceRoleClass('control'))} disabled={actionsDisabled()} onClick={() => props.onRequestApply?.(true)}>
+                                      <Button size="sm" variant="outline" class={cn('rounded-md', redevenSurfaceRoleClass('control'))} disabled={actionsDisabled()} onClick={() => props.onRequestApply?.(props.stashDetail!.id, true)}>
                                         {props.applyBusy && props.review?.kind === 'apply' && props.review?.removeAfterApply ? i18n.t('uiCopy.git.applying') : i18n.t('uiCopy.git.applyAndRemove')}
                                       </Button>
                                     </StashActionButton>
@@ -624,7 +917,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
                                   />
 
                                   <StashActionButton mobile={isMobile()} tooltip={i18n.t('gitStash.deleteTooltip')} disabled={actionsDisabled()}>
-                                    <Button size="sm" variant="ghost" class="rounded-md text-destructive hover:text-destructive" icon={Trash} disabled={actionsDisabled()} onClick={() => props.onRequestDrop?.()}>
+                                    <Button size="sm" variant="ghost" class="rounded-md text-destructive hover:text-destructive" icon={Trash} disabled={actionsDisabled()} onClick={() => props.onRequestDrop?.(props.stashDetail!.id)}>
                                       {props.dropBusy ? i18n.t('uiCopy.git.deleting') : i18n.t('common.actions.delete')}
                                     </Button>
                                   </StashActionButton>
@@ -756,6 +1049,7 @@ export function GitStashWindow(props: GitStashWindowProps) {
           errorFormatter={(error) => buildStashPatchErrorState(error, i18n)}
           desktopWindowZIndex={STASH_DIFF_DIALOG_Z_INDEX}
         />
+        <GitEntityContextMenu controller={contextMenu} items={contextMenuItems} />
       </PreviewWindow>
 
       <GitStashDeleteConfirmDialog

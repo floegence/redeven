@@ -1,6 +1,6 @@
 import { Show } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { Folder, History, Refresh, Terminal } from '@floegence/floe-webapp-core/icons';
+import { Copy, Folder, History, Refresh, Terminal } from '@floegence/floe-webapp-core/icons';
 import { Button } from '@floegence/floe-webapp-core/ui';
 import type {
   GitBranchSummary,
@@ -40,11 +40,13 @@ import { GitLabelBlock, GitMetaPill, GitPrimaryTitle } from './GitWorkbenchPrimi
 import { GitDeleteBranchDialog, type GitDeleteBranchDialogConfirmOptions, type GitDeleteBranchDialogState } from './GitDeleteBranchDialog';
 import { GitMergeBranchDialog, type GitMergeBranchDialogConfirmOptions, type GitMergeBranchDialogState } from './GitMergeBranchDialog';
 import { buildTabElementId, buildTabPanelElementId } from '../utils/tabNavigation';
-import { buildGitDirectoryShortcutRequest, type GitAskFlowerRequest, type GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
+import { buildGitDirectoryShortcutRequest, type GitAskFlowerRequest, type GitDirectoryShortcutRequest, type GitFileShortcutTarget } from '../utils/gitBrowserShortcuts';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { Tooltip } from '../primitives/Tooltip';
 import { UIFirstKeepAlivePanel } from '../primitives/UIFirstKeepAlivePanel';
 import { useI18n } from '../i18n';
+import { FlowerIcon } from '../icons/FlowerIcon';
+import { GitEntityContextMenu, createGitEntityContextMenuController, type GitContextMenuActionItem } from './GitEntityContextMenu';
 
 export interface GitWorkbenchProps {
   repoInfo?: GitResolveRepoResponse | null;
@@ -119,13 +121,18 @@ export interface GitWorkbenchProps {
   onDiscardSelected?: (item: GitWorkspaceChange) => void;
   onNavigateWorkspaceDirectory?: (directoryPath: string) => void;
   onBulkAction?: (section: GitWorkspaceViewSection) => void;
-  onDiscardAll?: (section: GitWorkspaceViewSection) => void;
+  onDiscardAll?: (
+    section: GitWorkspaceViewSection,
+    scope?: { directoryPath?: string; count?: number },
+  ) => void;
   onLoadMoreWorkspaceSection?: (section: GitWorkspaceViewSection) => void;
   onOpenCommitDialog?: () => void;
   onOpenStash?: (request: GitStashWindowRequest) => void;
   onAskFlower?: (request: GitAskFlowerRequest) => void;
   onOpenInTerminal?: (request: GitDirectoryShortcutRequest) => void;
   onBrowseFiles?: (request: GitDirectoryShortcutRequest) => void | Promise<void>;
+  onPreviewCurrentFile?: (target: GitFileShortcutTarget) => void;
+  onCopyText?: (value: string) => void;
   fetchBusy?: boolean;
   pullBusy?: boolean;
   pushBusy?: boolean;
@@ -195,6 +202,73 @@ export function GitWorkbench(props: GitWorkbenchProps) {
     if (props.deletePreview?.requiresWorktreeRemoval) return true;
     return String(branch.worktreePath ?? '').trim() !== '';
   };
+  type RepositoryContextTarget = Readonly<{
+    repoRootPath: string;
+    worktreePath?: string;
+    headRef?: string;
+    headCommit?: string;
+    summary?: GitRepoSummaryResponse;
+  }>;
+  const repositoryContextMenu = createGitEntityContextMenuController<RepositoryContextTarget>({
+    snapshotTarget: (target) => ({
+      ...target,
+      summary: target.summary ? { ...target.summary, workspaceSummary: target.summary.workspaceSummary ? { ...target.summary.workspaceSummary } : target.summary.workspaceSummary } : undefined,
+    }),
+  });
+  const repositoryContextTarget = (): RepositoryContextTarget | null => {
+    const root = String(props.repoSummary?.repoRootPath || props.repoInfo?.repoRootPath || '').trim();
+    if (!root) return null;
+    return {
+      repoRootPath: root,
+      worktreePath: String(props.repoSummary?.worktreePath || '').trim() || undefined,
+      headRef: String(props.repoSummary?.headRef || props.repoInfo?.headRef || '').trim() || undefined,
+      headCommit: String(props.repoSummary?.headCommit || props.repoInfo?.headCommit || '').trim() || undefined,
+      summary: props.repoSummary ?? undefined,
+    };
+  };
+  const repositoryContextMenuItems = (target: RepositoryContextTarget): GitContextMenuActionItem[] => {
+    const rootRequest = buildGitDirectoryShortcutRequest({ rootPath: target.repoRootPath });
+    const items: GitContextMenuActionItem[] = [];
+    if (props.onAskFlower) {
+      items.push({
+        id: 'ask-flower', kind: 'action', group: 'assistant', rank: 10,
+        label: i18n.t('git.contextMenu.askFlower'), icon: FlowerIcon,
+        onSelect: () => props.onAskFlower?.({ kind: 'repository', ...target }),
+      });
+    }
+    if (props.onOpenStash) {
+      items.push({
+        id: 'open-stashes', kind: 'action', group: 'inspect', rank: 10,
+        label: i18n.t('git.common.stashes'), icon: History,
+        onSelect: () => props.onOpenStash?.({ tab: 'stashes', repoRootPath: target.repoRootPath, source: 'header' }),
+      });
+    }
+    if (props.onOpenInTerminal) {
+      items.push({
+        id: 'open-terminal', kind: 'action', group: 'navigate', rank: 10,
+        label: i18n.t('git.contextMenu.openTerminal'), icon: Terminal,
+        disabled: !rootRequest,
+        disabledReason: rootRequest ? undefined : i18n.t('git.notifications.repositoryPathUnavailable'),
+        onSelect: () => { if (rootRequest) props.onOpenInTerminal?.(rootRequest); },
+      });
+    }
+    if (props.onBrowseFiles) {
+      items.push({
+        id: 'browse-files', kind: 'action', group: 'navigate', rank: 20,
+        label: i18n.t('git.contextMenu.browseFiles'), icon: Folder,
+        disabled: !rootRequest,
+        disabledReason: rootRequest ? undefined : i18n.t('git.notifications.repositoryPathUnavailable'),
+        onSelect: () => { if (rootRequest) void props.onBrowseFiles?.(rootRequest); },
+      });
+    }
+    if (props.onCopyText) {
+      items.push(
+        { id: 'copy-repository-path', kind: 'action', group: 'clipboard', rank: 10, label: i18n.t('git.contextMenu.copyAbsolutePath'), icon: Copy, onSelect: () => void props.onCopyText?.(target.repoRootPath) },
+        ...(target.headCommit ? [{ id: 'copy-head-commit', kind: 'action' as const, group: 'clipboard' as const, rank: 20, label: i18n.t('git.contextMenu.copyCommitHash'), icon: Copy, onSelect: () => void props.onCopyText?.(target.headCommit!) }] : []),
+      );
+    }
+    return items;
+  };
 
   return (
     <div class={cn('relative flex h-full min-h-0 flex-col', redevenSurfaceRoleClass('main'), props.class)}>
@@ -221,7 +295,19 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               </>
             }
           >
-            <div class="flex flex-wrap items-center gap-2.5">
+                <div
+                  class="flex flex-wrap items-center gap-2.5"
+                  tabIndex={0}
+                  data-git-repository-context-target="header"
+                  onContextMenu={(event) => {
+                    const target = repositoryContextTarget();
+                    if (target) repositoryContextMenu.openFromContextMenu(event, target);
+                  }}
+                  onKeyDown={(event) => {
+                    const target = repositoryContextTarget();
+                    if (target) repositoryContextMenu.openFromKeyboard(event, target);
+                  }}
+                >
               <GitPrimaryTitle class="min-w-0 max-w-full truncate">
                 {repoLabel()}
               </GitPrimaryTitle>
@@ -358,6 +444,8 @@ export function GitWorkbench(props: GitWorkbenchProps) {
         </div>
       </div>
 
+      <GitEntityContextMenu controller={repositoryContextMenu} items={repositoryContextMenuItems} />
+
       <div class="relative flex-1 min-h-0 overflow-hidden">
         <UIFirstKeepAlivePanel active={activeSubview() === 'changes'} class="absolute inset-0" testId="git-main-subview-changes" render={() => (
           <div
@@ -395,6 +483,8 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               onAskFlower={(request) => props.onAskFlower?.(request)}
               onOpenInTerminal={props.onOpenInTerminal}
               onBrowseFiles={props.onBrowseFiles}
+              onPreviewCurrentFile={props.onPreviewCurrentFile}
+              onCopyText={props.onCopyText}
             />
           </div>
         )} />
@@ -460,6 +550,8 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               onAskFlower={(request) => props.onAskFlower?.(request)}
               onOpenInTerminal={props.onOpenInTerminal}
               onBrowseFiles={props.onBrowseFiles}
+              onPreviewCurrentFile={props.onPreviewCurrentFile}
+              onCopyText={props.onCopyText}
               renderReviewDialogs={false}
             />
           </div>
@@ -483,6 +575,10 @@ export function GitWorkbench(props: GitWorkbenchProps) {
               switchDetachedBusy={props.switchDetachedBusy}
               onSwitchDetached={props.onSwitchDetached}
               onAskFlower={(request) => props.onAskFlower?.(request)}
+              onOpenInTerminal={props.onOpenInTerminal}
+              onBrowseFiles={props.onBrowseFiles}
+              onPreviewCurrentFile={props.onPreviewCurrentFile}
+              onCopyText={props.onCopyText}
             />
           </div>
         )} />

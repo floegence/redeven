@@ -4034,6 +4034,528 @@ describe("GitBranchesPanel interactions", () => {
     }
   });
 
+  it("opens stable branch and status-item context actions", async () => {
+    mockListWorkspacePage.mockResolvedValueOnce({
+      repoRootPath: "/workspace/repo",
+      section: "changes",
+      summary: {
+        stagedCount: 0,
+        unstagedCount: 1,
+        untrackedCount: 0,
+        conflictedCount: 0,
+      },
+      totalCount: 1,
+      offset: 0,
+      nextOffset: 1,
+      hasMore: false,
+      items: [{
+        section: "unstaged",
+        changeType: "modified",
+        path: "src/app.ts",
+        displayPath: "src/app.ts",
+      }],
+    });
+    const onAskFlower = vi.fn();
+    const onPreviewCurrentFile = vi.fn();
+    const onCopyText = vi.fn();
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const branch: GitBranchSummary = {
+      name: "main",
+      fullName: "refs/heads/main",
+      kind: "local",
+      current: true,
+    };
+    const dispose = render(
+      () => (
+        <LayoutProvider>
+          <NotificationProvider>
+            <ProtocolProvider contract={redevenV1Contract}>
+              <div class="h-[640px]">
+                <GitBranchesPanel
+                  repoRootPath="/workspace/repo"
+                  repoSummary={{
+                    repoRootPath: "/workspace/repo",
+                    headRef: "main",
+                    headCommit: "1111111111111111",
+                    workspaceSummary: {
+                      stagedCount: 0,
+                      unstagedCount: 1,
+                      untrackedCount: 0,
+                      conflictedCount: 0,
+                    },
+                  }}
+                  selectedBranch={branch}
+                  branchDetailState={{ kind: "ready", branch }}
+                  selectedBranchSubview="status"
+                  onAskFlower={onAskFlower}
+                  onPreviewCurrentFile={onPreviewCurrentFile}
+                  onCopyText={onCopyText}
+                />
+              </div>
+            </ProtocolProvider>
+          </NotificationProvider>
+        </LayoutProvider>
+      ),
+      host,
+    );
+
+    try {
+      await flush();
+      const statusRow = Array.from(host.querySelectorAll("tbody tr")).find((row) =>
+        row.textContent?.includes("src/app.ts"),
+      ) as HTMLTableRowElement | undefined;
+      expect(statusRow).toBeTruthy();
+      statusRow!.dispatchEvent(new MouseEvent("contextmenu", {
+        bubbles: true,
+        cancelable: true,
+        clientX: 80,
+        clientY: 90,
+      }));
+      await flush();
+      const askFlower = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((item) =>
+        item.textContent?.includes("Ask Flower"),
+      ) as HTMLButtonElement | undefined;
+      expect(askFlower).toBeTruthy();
+      askFlower!.click();
+      expect(onAskFlower).toHaveBeenCalledWith(expect.objectContaining({
+        kind: "branch_status_item",
+        repoRootPath: "/workspace/repo",
+        item: expect.objectContaining({ path: "src/app.ts" }),
+      }));
+
+      statusRow!.focus();
+      statusRow!.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "F10",
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      }));
+      await flush();
+      const preview = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((item) =>
+        item.textContent?.includes("Preview Current File"),
+      ) as HTMLButtonElement | undefined;
+      expect(preview).toBeTruthy();
+      preview!.click();
+      expect(onPreviewCurrentFile).toHaveBeenCalledWith(expect.objectContaining({
+        absolutePath: "/workspace/repo/src/app.ts",
+        relativePath: "src/app.ts",
+      }));
+
+      const branchTarget = host.querySelector('[data-git-branch-header-layout] > div[tabindex="0"]') as HTMLElement | null;
+      expect(branchTarget).toBeTruthy();
+      branchTarget!.dispatchEvent(new MouseEvent("contextmenu", {
+        bubbles: true,
+        cancelable: true,
+        clientX: 40,
+        clientY: 40,
+      }));
+      await flush();
+      const copyBranch = Array.from(document.body.querySelectorAll('[role="menuitem"]')).find((item) =>
+        item.textContent?.includes("Copy Branch Name"),
+      ) as HTMLButtonElement | undefined;
+      expect(copyBranch).toBeTruthy();
+      copyBranch!.click();
+      expect(onCopyText).toHaveBeenCalledWith("main");
+    } finally {
+      dispose();
+    }
+  });
+
+  it("keeps unlinked branch header navigation unavailable without inventing a worktree", async () => {
+    const branch: GitBranchSummary = {
+      name: "origin/feature/unlinked",
+      fullName: "refs/remotes/origin/feature/unlinked",
+      kind: "remote",
+    };
+    const onOpenInTerminal = vi.fn();
+    const onBrowseFiles = vi.fn();
+    const onCopyText = vi.fn();
+    const onCheckoutBranch = vi.fn();
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo"
+                repoSummary={{ repoRootPath: "/workspace/repo", headRef: "main", headCommit: "11111111", workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 } }}
+                selectedBranch={branch}
+                branchDetailState={{ kind: "ready", branch }}
+                selectedBranchSubview="history"
+                onOpenInTerminal={onOpenInTerminal}
+                onBrowseFiles={onBrowseFiles}
+                onCopyText={onCopyText}
+                onCheckoutBranch={onCheckoutBranch}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      const branchTarget = host.querySelector('[data-git-branch-header-layout] > div[tabindex="0"]') as HTMLElement | null;
+      expect(branchTarget).toBeTruthy();
+      branchTarget!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await flush();
+      const actions = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+      const terminal = actions.find((item) => item.textContent?.includes('Open Terminal'));
+      const files = actions.find((item) => item.textContent?.includes('Browse Files'));
+      const checkout = actions.find((item) => item.textContent?.includes('Checkout Branch'));
+      expect(terminal?.getAttribute('aria-disabled')).toBe('true');
+      expect(files?.getAttribute('aria-disabled')).toBe('true');
+      expect(terminal?.title).toBe('Check out this branch locally first.');
+      expect(files?.title).toBe('Check out this branch locally first.');
+      expect(actions.some((item) => item.textContent?.includes('Copy Worktree Path'))).toBe(false);
+      expect(checkout?.getAttribute('aria-disabled')).not.toBe('true');
+      checkout!.click();
+      expect(onCheckoutBranch).toHaveBeenCalledWith(expect.objectContaining({
+        fullName: 'refs/remotes/origin/feature/unlinked',
+      }));
+      terminal!.click();
+      files!.click();
+      expect(onOpenInTerminal).not.toHaveBeenCalled();
+      expect(onBrowseFiles).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it("opens branch-status scope actions for the captured directory and branch", async () => {
+    mockListWorkspacePage.mockResolvedValueOnce({
+      repoRootPath: "/workspace/repo-linked",
+      section: "changes",
+      summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+      totalCount: 1,
+      offset: 0,
+      nextOffset: 1,
+      hasMore: false,
+      items: [{ section: "unstaged", changeType: "modified", path: "src/app.ts" }],
+    });
+    const branch: GitBranchSummary = {
+      name: "feature/linked",
+      fullName: "refs/heads/feature/linked",
+      kind: "local",
+      worktreePath: "/workspace/repo-linked",
+    };
+    const onAskFlower = vi.fn();
+    const onOpenInTerminal = vi.fn();
+    const onBrowseFiles = vi.fn();
+    const onOpenStash = vi.fn();
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo"
+                repoSummary={{ repoRootPath: "/workspace/repo", headRef: "main", headCommit: "11111111", workspaceSummary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 } }}
+                selectedBranch={branch}
+                branchDetailState={{ kind: "ready", branch }}
+                selectedBranchSubview="status"
+                onAskFlower={onAskFlower}
+                onOpenInTerminal={onOpenInTerminal}
+                onBrowseFiles={onBrowseFiles}
+                onOpenStash={onOpenStash}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      const scope = host.querySelector('#git-branch-subview-panel-status') as HTMLElement | null;
+      expect(scope).toBeTruthy();
+      const openScopeMenu = async () => {
+        scope!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+        await flush();
+        return Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+      };
+      let actions = await openScopeMenu();
+      actions.find((item) => item.textContent?.includes('Ask Flower'))!.click();
+      expect(onAskFlower).toHaveBeenCalledWith(expect.objectContaining({
+        kind: 'branch_status',
+        repoRootPath: '/workspace/repo',
+        worktreePath: '/workspace/repo-linked',
+        branch: expect.objectContaining({ name: 'feature/linked' }),
+        items: [expect.objectContaining({ path: 'src/app.ts' })],
+      }));
+      actions = await openScopeMenu();
+      actions.find((item) => item.textContent?.includes('Open Terminal'))!.click();
+      expect(onOpenInTerminal).toHaveBeenCalledWith({ path: '/workspace/repo-linked', preferredName: 'repo-linked' });
+      actions = await openScopeMenu();
+      actions.find((item) => item.textContent?.includes('Browse Files'))!.click();
+      expect(onBrowseFiles).toHaveBeenCalledWith({ path: '/workspace/repo-linked', preferredName: 'repo-linked' });
+      actions = await openScopeMenu();
+      actions.find((item) => item.textContent?.includes('Stash'))!.click();
+      expect(onOpenStash).toHaveBeenCalledWith({ tab: 'save', repoRootPath: '/workspace/repo-linked', source: 'branch_status' });
+    } finally {
+      dispose();
+    }
+  });
+
+  it("keeps linked branch-status directory actions bound to canonical and live roots", async () => {
+    const directoryItem = {
+      section: "changes" as const,
+      entryKind: "directory" as const,
+      path: "internal",
+      displayPath: "internal",
+      directoryPath: "internal",
+      descendantFileCount: 4,
+      containsUnstaged: true,
+    };
+    mockListWorkspacePage.mockResolvedValueOnce({
+      repoRootPath: "/workspace/repo-linked",
+      section: "changes",
+      directoryPath: "",
+      breadcrumbs: [{ label: "repo-linked", path: "" }],
+      summary: { stagedCount: 0, unstagedCount: 4, untrackedCount: 0, conflictedCount: 0 },
+      scopeFileCount: 4,
+      totalCount: 1,
+      offset: 0,
+      nextOffset: 1,
+      hasMore: false,
+      items: [directoryItem],
+    });
+    const branch: GitBranchSummary = {
+      name: "feature/linked",
+      fullName: "refs/heads/feature/linked",
+      kind: "local",
+      worktreePath: "/workspace/repo-linked",
+    };
+    const onAskFlower = vi.fn();
+    const onOpenInTerminal = vi.fn();
+    const onBrowseFiles = vi.fn();
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo"
+                repoSummary={{ repoRootPath: "/workspace/repo", headRef: "main", headCommit: "11111111", workspaceSummary: { stagedCount: 0, unstagedCount: 4, untrackedCount: 0, conflictedCount: 0 } }}
+                selectedBranch={branch}
+                branchDetailState={{ kind: "ready", branch }}
+                selectedBranchSubview="status"
+                onAskFlower={onAskFlower}
+                onOpenInTerminal={onOpenInTerminal}
+                onBrowseFiles={onBrowseFiles}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      const row = Array.from(host.querySelectorAll<HTMLTableRowElement>('tbody tr'))
+        .find((candidate) => candidate.textContent?.includes('internal'));
+      expect(row).toBeTruthy();
+      const openMenu = async () => {
+        row!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+        await flush();
+        return Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+      };
+
+      let actions = await openMenu();
+      directoryItem.directoryPath = 'mutated-after-open';
+      actions.find((item) => item.textContent?.includes('Ask Flower'))!.click();
+      expect(onAskFlower).toHaveBeenCalledWith({
+        kind: 'branch_status_item',
+        repoRootPath: '/workspace/repo',
+        worktreePath: '/workspace/repo-linked',
+        branch,
+        section: 'changes',
+        item: expect.objectContaining({ directoryPath: 'internal' }),
+      });
+
+      directoryItem.directoryPath = 'internal';
+      actions = await openMenu();
+      directoryItem.directoryPath = 'mutated-after-open';
+      actions.find((item) => item.textContent?.includes('Open Terminal'))!.click();
+      expect(onOpenInTerminal).toHaveBeenCalledWith({ path: '/workspace/repo-linked/internal', preferredName: 'internal' });
+
+      directoryItem.directoryPath = 'internal';
+      actions = await openMenu();
+      directoryItem.directoryPath = 'mutated-after-open';
+      actions.find((item) => item.textContent?.includes('Browse Files'))!.click();
+      expect(onBrowseFiles).toHaveBeenCalledWith({ path: '/workspace/repo-linked/internal', preferredName: 'internal' });
+
+      directoryItem.directoryPath = 'internal';
+      actions = await openMenu();
+      directoryItem.directoryPath = 'mutated-after-open';
+      actions.find((item) => item.textContent?.includes('Open Directory'))!.click();
+      await flush();
+      expect(mockListWorkspacePage).toHaveBeenLastCalledWith({
+        repoRootPath: '/workspace/repo-linked',
+        section: 'changes',
+        directoryPath: 'internal',
+        offset: 0,
+        limit: 200,
+      });
+    } finally {
+      dispose();
+    }
+  });
+
+  it("keeps compare refs and rename paths stable across context-menu actions", async () => {
+    const compareResponse = {
+      repoRootPath: "/workspace/repo",
+      baseRef: "main",
+      targetRef: "feature/demo",
+      commits: [],
+      files: [
+        { changeType: "renamed", oldPath: "src/old.ts", newPath: "src/new.ts" },
+        { changeType: "deleted", path: "src/deleted.ts" },
+      ],
+    };
+    mockGetBranchCompare.mockResolvedValue(compareResponse);
+    const branch: GitBranchSummary = { name: "feature/demo", fullName: "refs/heads/feature/demo", kind: "local", current: true };
+    const onAskFlower = vi.fn();
+    const onPreviewCurrentFile = vi.fn();
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo"
+                repoSummary={{ repoRootPath: "/workspace/repo", headRef: "feature/demo", headCommit: "22222222", workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 } }}
+                branches={{ repoRootPath: "/workspace/repo", currentRef: "feature/demo", local: [branch, { name: "main", fullName: "refs/heads/main", kind: "local" }], remote: [] }}
+                selectedBranch={branch}
+                branchDetailState={{ kind: "ready", branch }}
+                selectedBranchSubview="status"
+                onAskFlower={onAskFlower}
+                onPreviewCurrentFile={onPreviewCurrentFile}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      const compare = host.querySelector('button[aria-label="Compare"]') as HTMLButtonElement | null;
+      compare!.click();
+      await flush();
+      const renamedRow = Array.from(document.body.querySelectorAll('tbody tr')).find((row) => row.textContent?.includes('src/new.ts')) as HTMLTableRowElement | undefined;
+      expect(renamedRow).toBeTruthy();
+      renamedRow!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await flush();
+      compareResponse.baseRef = 'mutated-base';
+      compareResponse.targetRef = 'mutated-target';
+      let actions = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+      actions.find((item) => item.textContent?.includes('Ask Flower'))!.click();
+      expect(onAskFlower).toHaveBeenCalledWith(expect.objectContaining({
+        kind: 'compare_file',
+        baseRef: 'main',
+        targetRef: 'feature/demo',
+        file: expect.objectContaining({ newPath: 'src/new.ts' }),
+      }));
+
+      renamedRow!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await flush();
+      actions = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+      actions.find((item) => item.textContent?.includes('Preview Current File'))!.click();
+      expect(onPreviewCurrentFile).toHaveBeenCalledWith(expect.objectContaining({
+        absolutePath: '/workspace/repo/src/new.ts',
+        relativePath: 'src/new.ts',
+      }));
+
+      const deletedRow = Array.from(document.body.querySelectorAll('tbody tr')).find((row) => row.textContent?.includes('src/deleted.ts')) as HTMLTableRowElement | undefined;
+      deletedRow!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await flush();
+      expect(Array.from(document.body.querySelectorAll('[role="menuitem"]')).some((item) => item.textContent?.includes('Preview Current File'))).toBe(false);
+    } finally {
+      dispose();
+    }
+  });
+
+  it("keeps branch-history commit and file context bound to the opened commit", async () => {
+    const commit = { hash: '2222222222222222', shortHash: '22222222', parents: ['11111111'], subject: 'Stable history' };
+    mockGetCommitDetail.mockResolvedValueOnce({
+      repoRootPath: '/workspace/repo-linked',
+      commit,
+      files: [
+        { changeType: 'renamed', oldPath: 'src/old.ts', newPath: 'src/new.ts' },
+        { changeType: 'deleted', path: 'src/deleted.ts' },
+      ],
+    });
+    const branch: GitBranchSummary = { name: 'feature/demo', fullName: 'refs/heads/feature/demo', kind: 'local', worktreePath: '/workspace/repo-linked' };
+    const onAskFlower = vi.fn();
+    const onPreviewCurrentFile = vi.fn();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitBranchesPanel
+                repoRootPath="/workspace/repo"
+                repoSummary={{ repoRootPath: '/workspace/repo', headRef: 'main', headCommit: '11111111', workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 } }}
+                selectedBranch={branch}
+                branchDetailState={{ kind: 'ready', branch }}
+                selectedBranchSubview="history"
+                selectedCommitHash={commit.hash}
+                commits={[commit]}
+                onAskFlower={onAskFlower}
+                onPreviewCurrentFile={onPreviewCurrentFile}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      const commitRow = host.querySelector('.git-branch-history-row') as HTMLTableRowElement | null;
+      commitRow!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await flush();
+      commit.subject = 'Mutated subject';
+      let actions = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+      actions.find((item) => item.textContent?.includes('Ask Flower'))!.click();
+      expect(onAskFlower).toHaveBeenCalledWith(expect.objectContaining({
+        kind: 'commit',
+        repoRootPath: '/workspace/repo-linked',
+        branchName: 'feature/demo',
+        commit: expect.objectContaining({ subject: 'Stable history' }),
+        files: [expect.objectContaining({ newPath: 'src/new.ts' }), expect.objectContaining({ path: 'src/deleted.ts' })],
+      }));
+
+      const renamedRow = Array.from(host.querySelectorAll('tr[tabindex="0"]')).find((row) => row.textContent?.includes('src/new.ts')) as HTMLTableRowElement | undefined;
+      expect(renamedRow).toBeTruthy();
+      renamedRow!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await flush();
+      actions = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+      actions.find((item) => item.textContent?.includes('Preview Current File'))!.click();
+      expect(onPreviewCurrentFile).toHaveBeenCalledWith(expect.objectContaining({ absolutePath: '/workspace/repo-linked/src/new.ts' }));
+
+      const deletedRow = Array.from(host.querySelectorAll('tr[tabindex="0"]')).find((row) => row.textContent?.includes('src/deleted.ts')) as HTMLTableRowElement | undefined;
+      expect(deletedRow).toBeTruthy();
+      deletedRow!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await flush();
+      expect(Array.from(document.body.querySelectorAll('[role="menuitem"]')).some((item) => item.textContent?.includes('Preview Current File'))).toBe(false);
+    } finally {
+      dispose();
+    }
+  });
+
   it("uses the branch empty-state copy before a branch is selected", () => {
     const host = document.createElement("div");
     document.body.appendChild(host);

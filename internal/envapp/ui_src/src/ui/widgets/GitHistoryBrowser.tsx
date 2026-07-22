@@ -7,7 +7,7 @@ import {
   onCleanup,
 } from "solid-js";
 import { cn } from "@floegence/floe-webapp-core";
-import { Calendar, FileText, Hash, User } from "@floegence/floe-webapp-core/icons";
+import { Calendar, Copy, Eye, FileText, Folder, Hash, Terminal, User } from "@floegence/floe-webapp-core/icons";
 import { Button } from "@floegence/floe-webapp-core/ui";
 import { useProtocol } from "@floegence/floe-webapp-protocol";
 import {
@@ -31,7 +31,12 @@ import {
   localizedGitCommitDiffPresentationDetail,
   localizedGitHeadDisplay,
 } from '../utils/localizedGitWorkbench';
-import type { GitAskFlowerRequest } from "../utils/gitBrowserShortcuts";
+import {
+  buildGitFileShortcutTarget,
+  type GitAskFlowerRequest,
+  type GitDirectoryShortcutRequest,
+  type GitFileShortcutTarget,
+} from "../utils/gitBrowserShortcuts";
 import { redevenSurfaceRoleClass } from "../utils/redevenSurfaceRoles";
 import { gitChangePathClass } from "./GitChrome";
 import { GitDiffDialog } from "./GitDiffDialog";
@@ -61,6 +66,7 @@ import {
 } from "./gitBranchHeaderLayout";
 import { GIT_WORKBENCH_SCROLL_REGION_PROPS } from "./gitWorkbenchScrollRegion";
 import { useI18n } from "../i18n";
+import { GitEntityContextMenu, createGitEntityContextMenuController, type GitContextMenuActionItem } from './GitEntityContextMenu';
 
 const COMMIT_BODY_PREVIEW_LINES = 2;
 const COMMIT_BODY_PREVIEW_CHARS = 160;
@@ -76,6 +82,10 @@ export interface GitHistoryBrowserProps {
   onAskFlower?: (
     request: Extract<GitAskFlowerRequest, { kind: "commit" }>,
   ) => void;
+  onOpenInTerminal?: (request: GitDirectoryShortcutRequest) => void;
+  onBrowseFiles?: (request: GitDirectoryShortcutRequest) => void | Promise<void>;
+  onPreviewCurrentFile?: (target: GitFileShortcutTarget) => void;
+  onCopyText?: (value: string) => void;
   class?: string;
 }
 
@@ -106,6 +116,8 @@ interface CommitFilesCompactListProps {
   items: GitCommitFileSummary[];
   selectedKey?: string;
   onOpenDiff?: (file: GitCommitFileSummary) => void;
+  onContextMenu?: (event: MouseEvent, file: GitCommitFileSummary) => void;
+  onKeyDown?: (event: KeyboardEvent, file: GitCommitFileSummary) => void;
 }
 
 function CommitFilesCompactList(props: CommitFilesCompactListProps) {
@@ -131,6 +143,8 @@ function CommitFilesCompactList(props: CommitFilesCompactListProps) {
                 active() && "git-browser-selection-row",
               )}
               onClick={() => props.onOpenDiff?.(file)}
+              onContextMenu={(event) => props.onContextMenu?.(event, file)}
+              onKeyDown={(event) => props.onKeyDown?.(event, file)}
             >
               <div class="flex min-w-0 items-start justify-between gap-2">
                 <div class="min-w-0">
@@ -165,6 +179,32 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
   const protocol = useProtocol();
   const rpc = useRedevenRpc();
   const outlineControlClass = redevenSurfaceRoleClass("control");
+  type CommitContextTarget = Readonly<{
+    repoRootPath: string;
+    commit: GitCommitDetail;
+    files: GitCommitFileSummary[];
+  }>;
+  const commitContextMenu = createGitEntityContextMenuController<CommitContextTarget>({
+    snapshotTarget: (target) => ({
+      repoRootPath: target.repoRootPath,
+      commit: { ...target.commit, parents: [...target.commit.parents] },
+      files: target.files.map((file) => ({ ...file })),
+    }),
+  });
+  type FileContextTarget = Readonly<{
+    repoRootPath: string;
+    commit: GitCommitDetail;
+    file: GitCommitFileSummary;
+    shortcut: GitFileShortcutTarget | null;
+  }>;
+  const fileContextMenu = createGitEntityContextMenuController<FileContextTarget>({
+    snapshotTarget: (target) => ({
+      repoRootPath: target.repoRootPath,
+      commit: { ...target.commit, parents: [...target.commit.parents] },
+      file: { ...target.file },
+      shortcut: target.shortcut ? { ...target.shortcut } : null,
+    }),
+  });
 
   const [commitDetail, setCommitDetail] = createSignal<GitCommitDetail | null>(
     null,
@@ -231,6 +271,76 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
       "max-w-3xl space-y-1.5 pt-0.5",
       commitOverviewLayout() === "inline" ? "pl-4" : "pl-0",
     );
+  const openDiff = (file: GitCommitFileSummary, hash = commitHash()) => {
+    setDiffDialogCommitHash(hash);
+    setDiffDialogItem(file);
+    setDiffDialogOpen(true);
+  };
+  const commitContextMenuItems = (target: CommitContextTarget): GitContextMenuActionItem[] => {
+    const commit = target.commit;
+    const items: GitContextMenuActionItem[] = [];
+    if (props.onAskFlower && target.repoRootPath) {
+      items.push({
+        id: 'ask-flower', kind: 'action', group: 'assistant', rank: 10,
+        label: i18n.t('git.contextMenu.askFlower'), icon: FlowerIcon,
+        onSelect: () => props.onAskFlower?.({ kind: 'commit', repoRootPath: target.repoRootPath, location: 'graph', commit, files: target.files }),
+      });
+    }
+    if (props.onOpenInTerminal && target.repoRootPath) {
+      items.push({ id: 'open-terminal', kind: 'action', group: 'navigate', rank: 10, label: i18n.t('git.contextMenu.openTerminal'), icon: Terminal, onSelect: () => props.onOpenInTerminal?.({ path: target.repoRootPath }) });
+    }
+    if (props.onBrowseFiles && target.repoRootPath) {
+      items.push({ id: 'browse-files', kind: 'action', group: 'navigate', rank: 20, label: i18n.t('git.contextMenu.browseFiles'), icon: Folder, onSelect: () => void props.onBrowseFiles?.({ path: target.repoRootPath }) });
+    }
+    if (props.onSwitchDetached) {
+      const alreadyDetached = headDisplay().detached && currentHeadCommit() === commit.hash;
+      items.push({ id: 'switch-detached', kind: 'action', group: 'modify', rank: 10, label: i18n.t('git.contextMenu.switchDetached'), icon: Hash, disabled: Boolean(props.switchDetachedBusy) || alreadyDetached, disabledReason: props.switchDetachedBusy ? i18n.t('uiCopy.git.switching') : alreadyDetached ? i18n.t('uiCopy.git.alreadyDetachedHere') : undefined, onSelect: () => props.onSwitchDetached?.({ commitHash: commit.hash, shortHash: commit.shortHash, source: 'graph' }) });
+    }
+    if (props.onCopyText) {
+      items.push({ id: 'copy-commit-hash', kind: 'action', group: 'clipboard', rank: 10, label: i18n.t('git.contextMenu.copyCommitHash'), icon: Copy, onSelect: () => props.onCopyText?.(commit.hash) });
+    }
+    return items;
+  };
+  const fileContextMenuItems = (target: FileContextTarget): GitContextMenuActionItem[] => {
+    const items: GitContextMenuActionItem[] = [];
+    if (props.onAskFlower && target.repoRootPath) {
+      items.push({ id: 'ask-flower', kind: 'action', group: 'assistant', rank: 10, label: i18n.t('git.contextMenu.askFlower'), icon: FlowerIcon, onSelect: () => props.onAskFlower?.({ kind: 'commit', repoRootPath: target.repoRootPath, location: 'graph', commit: target.commit, files: [target.file] }) });
+    }
+    items.push({ id: 'view-diff', kind: 'action', group: 'inspect', rank: 10, label: i18n.t('git.contextMenu.viewDiff'), icon: FileText, onSelect: () => openDiff(target.file, target.commit.hash) });
+    if (
+      props.onPreviewCurrentFile
+      && target.shortcut
+      && String(target.file.changeType ?? '').toLowerCase() !== 'deleted'
+    ) {
+      items.push({ id: 'preview-current-file', kind: 'action', group: 'inspect', rank: 20, label: i18n.t('git.contextMenu.previewCurrentFile'), icon: Eye, disabledReason: target.shortcut.canPreviewCurrentFile ? undefined : i18n.t('git.contextMenu.previewCurrentFileUnavailable'), onSelect: () => props.onPreviewCurrentFile?.(target.shortcut!) });
+    }
+    if (target.shortcut && props.onOpenInTerminal) {
+      items.push({ id: 'open-parent-terminal', kind: 'action', group: 'navigate', rank: 10, label: i18n.t('git.contextMenu.openTerminal'), icon: Terminal, onSelect: () => props.onOpenInTerminal?.({ path: target.shortcut!.parentDirectoryPath }) });
+    }
+    if (target.shortcut && props.onBrowseFiles) {
+      items.push({ id: 'browse-parent-files', kind: 'action', group: 'navigate', rank: 20, label: i18n.t('git.contextMenu.browseFiles'), icon: Folder, onSelect: () => void props.onBrowseFiles?.({ path: target.shortcut!.parentDirectoryPath }) });
+    }
+    if (target.shortcut && props.onCopyText) {
+      items.push(
+        { id: 'copy-absolute-path', kind: 'action', group: 'clipboard', rank: 10, label: i18n.t('git.contextMenu.copyAbsolutePath'), icon: Copy, onSelect: () => props.onCopyText?.(target.shortcut!.absolutePath) },
+        { id: 'copy-relative-path', kind: 'action', group: 'clipboard', rank: 20, label: i18n.t('git.contextMenu.copyRelativePath'), icon: Copy, onSelect: () => props.onCopyText?.(target.shortcut!.relativePath) },
+      );
+    }
+    return items;
+  };
+  const buildFileContextTarget = (file: GitCommitFileSummary): FileContextTarget | null => {
+    const commit = commitDetail();
+    if (!commit) return null;
+    return { repoRootPath: repoRootPath(), commit, file, shortcut: buildGitFileShortcutTarget({ rootPath: repoRootPath(), item: file }) };
+  };
+  const openFileContextMenu = (event: MouseEvent, file: GitCommitFileSummary) => {
+    const target = buildFileContextTarget(file);
+    if (target && fileContextMenuItems(target).length > 0) fileContextMenu.openFromContextMenu(event, target);
+  };
+  const openFileKeyboardMenu = (event: KeyboardEvent, file: GitCommitFileSummary) => {
+    const target = buildFileContextTarget(file);
+    if (target && fileContextMenuItems(target).length > 0) fileContextMenu.openFromKeyboard(event, target);
+  };
 
   const resetDetailState = () => {
     setCommitDetail(null);
@@ -398,8 +508,17 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                           <div class="space-y-3">
                             <div
                               ref={setCommitOverviewElement}
+                              tabIndex={0}
                               data-git-commit-overview-layout={commitOverviewLayout()}
                               class="space-y-3"
+                              onContextMenu={(event) => {
+                                const target = { repoRootPath: repoRootPath(), commit: detail, files: commitFiles() };
+                                if (commitContextMenuItems(target).length > 0) commitContextMenu.openFromContextMenu(event, target);
+                              }}
+                              onKeyDown={(event) => {
+                                const target = { repoRootPath: repoRootPath(), commit: detail, files: commitFiles() };
+                                if (commitContextMenuItems(target).length > 0) commitContextMenu.openFromKeyboard(event, target);
+                              }}
                             >
                               <div class="text-[15px] font-bold leading-6 tracking-tight text-foreground max-w-3xl break-words">
                                 {detail.subject || i18n.t('uiCopy.git.noSubject')}
@@ -612,6 +731,7 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                         <tr
                                           aria-selected={active()}
                                           class={gitChangedFilesRowClass(active())}
+                                          onContextMenu={(event) => openFileContextMenu(event, file)}
                                         >
                                           <td class={GIT_CHANGED_FILES_CELL_CLASS}>
                                             <div class="min-w-0">
@@ -620,12 +740,9 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                                 class={`block max-w-full cursor-pointer truncate text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(file.changeType)}`}
                                                 title={changeSecondaryPath(file)}
                                                 onClick={() => {
-                                                  setDiffDialogCommitHash(
-                                                    commitHash(),
-                                                  );
-                                                  setDiffDialogItem(file);
-                                                  setDiffDialogOpen(true);
+                                                  openDiff(file);
                                                 }}
+                                                onKeyDown={(event) => openFileKeyboardMenu(event, file)}
                                               >
                                                 {changeSecondaryPath(file)}
                                               </button>
@@ -671,10 +788,10 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
                                     diffDialogItem(),
                                   )}
                                   onOpenDiff={(file) => {
-                                    setDiffDialogCommitHash(commitHash());
-                                    setDiffDialogItem(file);
-                                    setDiffDialogOpen(true);
+                                    openDiff(file);
                                   }}
+                                  onContextMenu={openFileContextMenu}
+                                  onKeyDown={openFileKeyboardMenu}
                                 />
                               </Show>
                             </GitTableFrame>
@@ -688,6 +805,9 @@ export function GitHistoryBrowser(props: GitHistoryBrowserProps) {
               </Show>
             </Show>
       </Show>
+
+      <GitEntityContextMenu controller={commitContextMenu} items={commitContextMenuItems} />
+      <GitEntityContextMenu controller={fileContextMenu} items={fileContextMenuItems} />
 
       <GitDiffDialog
         open={diffDialogOpen()}

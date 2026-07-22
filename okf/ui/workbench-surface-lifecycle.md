@@ -27,6 +27,8 @@ Activity Flower placement is outside this lifecycle; [Flower Activity companion]
 
 Projected Workbench surfaces must delegate pointer-anchored overlays to the shared surface floating layer. Menus opened from right-click, menu buttons, or keyboard anchors should pass client or anchor coordinates to `SurfaceFloatingLayer`, which owns surface-local projection, clamping, z-index, and local interaction markers. Context menus, dropdowns, popovers, hover cards, tooltips, autocomplete panels, command palettes, color pickers, date pickers, and equivalent floating UI must not treat Workbench as ordinary document flow. Their panel content may own role, focus, keyboard navigation, item layout, and visual styling, but must not own `position: fixed`, inline viewport `left` / `top`, `window.innerWidth` / `window.innerHeight` clamping, body portals, or component-local viewport-to-surface coordinate conversion inside a transformed projected surface.
 
+Git entity menus use this shared projection for workspace sections and rows, branches, branch status entries, graph and history commits, compare files, and stashes. Mouse right-click and `ContextMenu` or `Shift+F10` open the same menu; the first action receives focus, Arrow keys plus Home and End navigate, Enter or Space activates, and Escape or Tab closes and restores focus to the trigger. Disabled actions remain focusable with `aria-disabled` and a reason. The controller snapshots the entity and repository or worktree root at open time so selection changes, refreshes, or later navigation cannot retarget an already-open action. Dangerous branch, stash, and discard actions still enter their existing review or confirmation owner rather than calling mutation RPCs from the menu.
+
 # Boundaries
 
 Lazy loading is a module-delivery boundary only. It must not pre-mount inactive Workbench features, eagerly initialize Flower or Codex providers, or weaken existing permission, state restoration, input ownership, and error recovery contracts.
@@ -47,3 +49,5 @@ Connection recovery must not be implemented independently inside Workbench widge
 - `redeven:desktop/src/main/runtimePlacementBridgeObservation.ts:25` - Desktop health observation preserves the exact bridge during recovery and typed probe failure.
 - `redeven:desktop/src/main/main.ts:3495` - Welcome consumes structured recovery observations without replacing or retiring the Env App transport.
 - `redeven:internal/flower_ui/src/styles/flower.css:5153` - The thread context menu panel keeps visual styling without owning fixed positioning.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/FloatingContextMenu.tsx:49` - The shared Git menu panel owns menu focus and keyboard interaction while delegating placement to the surface layer.
+- `redeven:internal/envapp/ui_src/src/ui/widgets/GitEntityContextMenu.tsx:56` - Git menu controllers snapshot targets, close on outside interaction, scroll, or blur, and restore trigger focus for keyboard dismissal.
