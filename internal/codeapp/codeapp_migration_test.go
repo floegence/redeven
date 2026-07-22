@@ -16,6 +16,7 @@ import (
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/terminal"
 	"github.com/floegence/redeven/internal/testutil/legacydb"
+	"github.com/floegence/redeven/internal/testutil/redevpluginruntime"
 	"github.com/floegence/redeven/internal/threadreadstate"
 	"github.com/floegence/redeven/internal/workbenchlayout"
 
@@ -257,6 +258,15 @@ func TestNewPrunesStaleWorkbenchTerminalSessions(t *testing.T) {
 
 	term := terminal.NewManager("/bin/sh", stateDir, nil)
 	t.Cleanup(term.Cleanup)
+	cleanupRuntime, err := redevpluginruntime.InstallAt(stateDir)
+	if err != nil {
+		t.Fatalf("install ReDevPlugin runtime fixture: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := cleanupRuntime(); err != nil {
+			t.Errorf("cleanup ReDevPlugin runtime fixture: %v", err)
+		}
+	})
 
 	svc, err := New(context.Background(), Options{
 		Logger:                 slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError})),
