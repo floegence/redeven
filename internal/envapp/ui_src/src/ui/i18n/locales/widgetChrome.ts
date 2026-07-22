@@ -604,6 +604,8 @@ export const enUSWidgetChrome = defineDictionary({
       description: 'Customize the default theme, font, and mobile input behavior for terminal sessions.',
       close: 'Close',
       selected: 'Selected',
+      themeApplied: 'Theme applied',
+      themeApplyFailed: 'Theme could not be applied',
       tapToUse: 'Tap to use',
       mobileInputTitle: 'Mobile input',
       mobileInputDescription: 'Choose one default input mode for every mobile terminal session.',

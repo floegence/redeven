@@ -2304,6 +2304,8 @@
       "description": "自定义终端会话的默认主题、字体和移动输入行为。",
       "close": "关闭",
       "selected": "已选择",
+      "themeApplied": "主题已应用",
+      "themeApplyFailed": "无法应用主题",
       "tapToUse": "点击使用",
       "mobileInputTitle": "移动输入",
       "mobileInputDescription": "为每个移动端终端会话选择一个默认输入模式。",

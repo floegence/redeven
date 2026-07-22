@@ -24,7 +24,7 @@
     "@floegence/floe-webapp-boot": "^0.39.2",
     "@floegence/floe-webapp-core": "^0.39.2",
     "@floegence/floe-webapp-protocol": "^0.39.2",
-    "@floegence/floeterm-terminal-web": "0.7.0",
+    "@floegence/floeterm-terminal-web": "0.8.0",
     "@floegence/flowersec-core": "^0.27.0",
     "@floegence/redevplugin-ui": "0.1.5",
     "@fontsource/iosevka": "^5.2.5",
@@ -100,8 +100,8 @@
     "@types/node": "^20.0.0",
     "@typescript-eslint/eslint-plugin": "^8.57.0",
     "@typescript-eslint/parser": "^8.57.0",
-    "@vitest/browser": "^4.1.8",
-    "@vitest/browser-playwright": "4.1.8",
+    "@vitest/browser": "4.1.10",
+    "@vitest/browser-playwright": "4.1.10",
     "eslint": "^9.39.4",
     "eslint-plugin-solid": "^0.14.5",
     "globals": "^17.4.0",
@@ -115,6 +115,6 @@
     "vite": "^8.0.16",
     "vite-plugin-solid": "^2.11.12",
     "vite-plugin-wasm": "^3.6.0",
-    "vitest": "^4.1.8"
+    "vitest": "4.1.10"
   }
 }

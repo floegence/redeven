@@ -4,6 +4,7 @@ import { For, Show, createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { commands, page, userEvent } from 'vitest/browser';
+import { getThemeColors } from '@floegence/floeterm-terminal-web';
 import { TerminalLiveErrorCode, TerminalLiveServerError } from '@floegence/floeterm-terminal-web/live';
 
 import { EnvTerminalPage } from '../pages/EnvTerminalPage';
@@ -59,6 +60,10 @@ const terminalPrefsState = vi.hoisted(() => ({
   fontFamilyId: 'iosevka',
   mobileInputMode: 'floe' as 'floe' | 'system',
   workIndicatorEnabled: true,
+}));
+
+const appThemeState = vi.hoisted(() => ({
+  resolvedTheme: 'dark' as 'dark' | 'light',
 }));
 
 const rpcFsMocks = vi.hoisted(() => ({
@@ -224,7 +229,8 @@ vi.mock('@floegence/floe-webapp-core', async () => {
       },
     }),
     useTheme: () => ({
-      resolvedTheme: () => 'dark',
+      resolvedTheme: () => appThemeState.resolvedTheme,
+      shellPresetForMode: () => undefined,
     }),
     useViewActivation: () => ({
       active: () => true,
@@ -442,7 +448,6 @@ vi.mock('@floegence/floeterm-terminal-web', async () => {
     ...actual,
     TerminalCore: MockTerminalCore,
     getDefaultTerminalConfig: vi.fn((_theme: string, overrides?: any) => overrides ?? {}),
-    getThemeColors: vi.fn(() => ({ background: '#111111', foreground: '#eeeeee' })),
   };
 });
 
@@ -487,25 +492,25 @@ vi.mock('../services/terminalSessions', () => ({
   refreshRedevenTerminalSessionsCoordinator: vi.fn(),
 }));
 
-vi.mock('../services/terminalPreferences', () => ({
-  ensureTerminalPreferencesInitialized: vi.fn(),
-  TERMINAL_MIN_FONT_SIZE: 10,
-  TERMINAL_MAX_FONT_SIZE: 20,
-  DEFAULT_TERMINAL_THEME: 'dark',
-  DEFAULT_TERMINAL_FONT_FAMILY_ID: 'monaco',
-  useTerminalPreferences: () => ({
-    userTheme: () => terminalPrefsState.userTheme,
-    fontSize: () => terminalPrefsState.fontSize,
-    fontFamilyId: () => terminalPrefsState.fontFamilyId,
-    mobileInputMode: () => terminalPrefsState.mobileInputMode,
-    workIndicatorEnabled: () => terminalPrefsState.workIndicatorEnabled,
-    setUserTheme: vi.fn(),
-    setFontSize: vi.fn(),
-    setFontFamily: vi.fn(),
-    setMobileInputMode: vi.fn(),
-    setWorkIndicatorEnabled: vi.fn(),
-  }),
-}));
+vi.mock('../services/terminalPreferences', async () => {
+  const actual = await vi.importActual<typeof import('../services/terminalPreferences')>('../services/terminalPreferences');
+  return {
+    ...actual,
+    ensureTerminalPreferencesInitialized: vi.fn(),
+    useTerminalPreferences: () => ({
+      userTheme: () => terminalPrefsState.userTheme,
+      fontSize: () => terminalPrefsState.fontSize,
+      fontFamilyId: () => terminalPrefsState.fontFamilyId,
+      mobileInputMode: () => terminalPrefsState.mobileInputMode,
+      workIndicatorEnabled: () => terminalPrefsState.workIndicatorEnabled,
+      setUserTheme: vi.fn(),
+      setFontSize: vi.fn(),
+      setFontFamily: vi.fn(),
+      setMobileInputMode: vi.fn(),
+      setWorkIndicatorEnabled: vi.fn(),
+    }),
+  };
+});
 
 vi.mock('../pages/EnvContext', () => ({
   useEnvContext: () => ({
@@ -685,6 +690,7 @@ beforeEach(() => {
   terminalPrefsState.fontFamilyId = 'iosevka';
   terminalPrefsState.mobileInputMode = 'floe';
   terminalPrefsState.workIndicatorEnabled = true;
+  appThemeState.resolvedTheme = 'dark';
   terminalEventSourceState.dataHandlers = new Map();
   terminalEventSourceState.nameHandlers = new Map();
   terminalEventSourceState.geometryHandlers = new Map();
@@ -735,6 +741,51 @@ afterEach(() => {
 });
 
 describe('TerminalPanel browser activity integration', () => {
+  it('passes explicit released theme palettes to TerminalCore independently of the app appearance', async () => {
+    terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    terminalPrefsState.userTheme = 'signalSafeDark';
+    appThemeState.resolvedTheme = 'dark';
+    const darkHost = document.createElement('div');
+    document.body.appendChild(darkHost);
+    const disposeDark = render(() => <TerminalPanel variant="panel" />, darkHost);
+    await vi.waitFor(() => expect(terminalCoreState.instances).toHaveLength(1));
+    expect(terminalCoreState.instances[0]?.config.theme).toEqual(getThemeColors('signalSafeDark'));
+
+    disposeDark();
+    darkHost.remove();
+    terminalCoreState.instances = [];
+    appThemeState.resolvedTheme = 'light';
+    const lightHost = document.createElement('div');
+    document.body.appendChild(lightHost);
+    const disposeLight = render(() => <TerminalPanel variant="panel" />, lightHost);
+    await vi.waitFor(() => expect(terminalCoreState.instances).toHaveLength(1));
+    expect(terminalCoreState.instances[0]?.config.theme).toEqual(getThemeColors('signalSafeDark'));
+
+    disposeLight();
+  });
+
+  it('uses a light catalog palette exactly and keeps an unknown stored id untouched while rendering Dark', async () => {
+    terminalSessionsState.sessions = [terminalSessionsState.sessions[0]!];
+    terminalPrefsState.userTheme = 'studioPaper';
+    const lightHost = document.createElement('div');
+    document.body.appendChild(lightHost);
+    const disposeLight = render(() => <TerminalPanel variant="panel" />, lightHost);
+    await vi.waitFor(() => expect(terminalCoreState.instances).toHaveLength(1));
+    expect(terminalCoreState.instances[0]?.config.theme).toEqual(getThemeColors('studioPaper'));
+    disposeLight();
+    lightHost.remove();
+
+    terminalCoreState.instances = [];
+    terminalPrefsState.userTheme = 'futureThemeFromNewerClient';
+    const unknownHost = document.createElement('div');
+    document.body.appendChild(unknownHost);
+    const disposeUnknown = render(() => <TerminalPanel variant="panel" />, unknownHost);
+    await vi.waitFor(() => expect(terminalCoreState.instances).toHaveLength(1));
+    expect(terminalCoreState.instances[0]?.config.theme).toEqual(getThemeColors('dark'));
+    expect(terminalPrefsState.userTheme).toBe('futureThemeFromNewerClient');
+    disposeUnknown();
+  });
+
   it('presents the real eager catalog sidebar within the preloaded Activity interaction budget', async () => {
     const durations: number[] = [];
 

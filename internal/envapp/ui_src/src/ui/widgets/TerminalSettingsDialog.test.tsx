@@ -2,6 +2,7 @@
 
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { TERMINAL_THEME_DEFINITIONS } from '@floegence/floeterm-terminal-web';
 
 import { TerminalSettingsDialog } from './TerminalSettingsDialog';
 
@@ -68,9 +69,9 @@ afterEach(() => {
 });
 
 describe('TerminalSettingsDialog', () => {
-  it('renders the desktop layout and forwards terminal preference changes', () => {
+  it('renders the desktop layout and forwards terminal preference changes', async () => {
     const onOpenChange = vi.fn();
-    const onThemeChange = vi.fn();
+    const onThemeChange = vi.fn().mockReturnValue(true);
     const onFontSizeChange = vi.fn();
     const onFontFamilyChange = vi.fn();
     const onMobileInputModeChange = vi.fn();
@@ -86,6 +87,7 @@ describe('TerminalSettingsDialog', () => {
         fontSize={12}
         fontFamilyId="iosevka"
         mobileInputMode="floe"
+        systemAppearance="light"
         workIndicatorEnabled
         minFontSize={10}
         maxFontSize={20}
@@ -103,10 +105,32 @@ describe('TerminalSettingsDialog', () => {
     expect(dialog?.className).toContain('w-[min(30rem,92vw)]');
     expect(host.textContent).toContain('Terminal settings');
     expect(host.textContent).toContain('System Theme');
+    expect(host.textContent).toContain('Signal Safe Dark');
+    expect(host.textContent).toContain('Studio Paper');
     expect(host.textContent).toContain('JetBrains Mono');
     expect(host.textContent).toContain('Activity border');
 
-    Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Dark'))?.click();
+    const themeRadios = Array.from(host.querySelectorAll<HTMLInputElement>('input[name="terminal-theme"]'));
+    expect(themeRadios).toHaveLength(TERMINAL_THEME_DEFINITIONS.length + 1);
+    expect(new Set(themeRadios.map((input) => input.value)).size).toBe(21);
+    expect(themeRadios.find((input) => input.value === 'system')?.checked).toBe(true);
+    expect(themeRadios.find((input) => input.value === 'system')?.dataset.floeAutofocus).toBe('true');
+    expect(host.querySelector('[data-theme-appearance-group="dark"]')?.textContent).toContain('Dark');
+    expect(host.querySelector('[data-theme-appearance-group="light"]')?.textContent).toContain('Light');
+    expect(host.querySelector('[data-theme-appearance-group="dark"]')?.getAttribute('role')).toBe('group');
+    expect(host.querySelector('[data-theme-appearance-group="dark"]')?.getAttribute('aria-labelledby')).toBe('terminal-theme-dark-group-label');
+
+    const studioPaperInput = themeRadios.find((input) => input.value === 'studioPaper')!;
+    const studioPaperPreview = studioPaperInput.closest('label')?.querySelector('[aria-hidden="true"]') as HTMLElement | null;
+    expect(studioPaperPreview?.style.backgroundColor).toBe('rgb(247, 248, 250)');
+    expect(studioPaperPreview?.querySelectorAll('[data-theme-preview-ansi="normal"] > span')).toHaveLength(8);
+    expect(studioPaperPreview?.querySelectorAll('[data-theme-preview-ansi="bright"] > span')).toHaveLength(8);
+    expect(studioPaperPreview?.querySelectorAll('[data-theme-preview-role]')).toHaveLength(4);
+    const systemPreview = themeRadios.find((input) => input.value === 'system')
+      ?.closest('label')?.querySelector('[aria-hidden="true"]') as HTMLElement | null;
+    expect(systemPreview?.style.backgroundColor).toBe('rgb(255, 255, 255)');
+
+    themeRadios.find((input) => input.value === 'dark')?.click();
     Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('JetBrains Mono'))?.click();
     const activityBorderInput = host.querySelector('input[aria-label="Shown"]') as HTMLInputElement | null;
     activityBorderInput!.checked = false;
@@ -117,11 +141,74 @@ describe('TerminalSettingsDialog', () => {
     Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Close'))?.click();
 
     expect(onThemeChange).toHaveBeenCalledWith('dark');
+    expect(host.querySelector('[aria-live="polite"]')?.textContent).toContain('Dark: Theme applied');
     expect(onFontFamilyChange).toHaveBeenCalledWith('jetbrains');
     expect(onFontSizeChange).toHaveBeenCalledWith(15);
     expect(onMobileInputModeChange).not.toHaveBeenCalled();
     expect(onWorkIndicatorEnabledChange).toHaveBeenCalledWith(false);
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('falls back to a checked dark radio without writing an unknown persisted theme', () => {
+    const onThemeChange = vi.fn().mockReturnValue(true);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <TerminalSettingsDialog
+        open
+        userTheme="futureTheme"
+        fontSize={12}
+        fontFamilyId="iosevka"
+        mobileInputMode="floe"
+        workIndicatorEnabled={false}
+        minFontSize={10}
+        maxFontSize={20}
+        onOpenChange={() => undefined}
+        onThemeChange={onThemeChange}
+        onFontSizeChange={() => undefined}
+        onFontFamilyChange={() => undefined}
+        onMobileInputModeChange={() => undefined}
+        onWorkIndicatorEnabledChange={() => undefined}
+      />
+    ), host);
+
+    const dark = host.querySelector<HTMLInputElement>('input[name="terminal-theme"][value="dark"]');
+    expect(dark?.checked).toBe(true);
+    expect(onThemeChange).not.toHaveBeenCalled();
+  });
+
+  it('keeps the previous checked theme and announces a synchronous application failure', () => {
+    const onThemeChange = vi.fn().mockReturnValue(false);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <TerminalSettingsDialog
+        open
+        userTheme="dark"
+        fontSize={12}
+        fontFamilyId="iosevka"
+        mobileInputMode="floe"
+        workIndicatorEnabled={false}
+        minFontSize={10}
+        maxFontSize={20}
+        onOpenChange={() => undefined}
+        onThemeChange={onThemeChange}
+        onFontSizeChange={() => undefined}
+        onFontFamilyChange={() => undefined}
+        onMobileInputModeChange={() => undefined}
+        onWorkIndicatorEnabledChange={() => undefined}
+      />
+    ), host);
+
+    const studioPaper = host.querySelector<HTMLInputElement>('input[value="studioPaper"]')!;
+    studioPaper.click();
+
+    expect(onThemeChange).toHaveBeenCalledWith('studioPaper');
+    expect(host.querySelector<HTMLInputElement>('input[value="dark"]')?.checked).toBe(true);
+    expect(studioPaper.checked).toBe(false);
+    expect(host.querySelector('[aria-live="polite"]')?.textContent).toContain('Studio Paper: Theme could not be applied');
   });
 
   it('uses the mobile dialog layout and exposes mutually exclusive mobile input mode controls', () => {
@@ -143,7 +230,7 @@ describe('TerminalSettingsDialog', () => {
         minFontSize={10}
         maxFontSize={20}
         onOpenChange={() => undefined}
-        onThemeChange={() => undefined}
+        onThemeChange={() => true}
         onFontSizeChange={() => undefined}
         onFontFamilyChange={() => undefined}
         onMobileInputModeChange={onMobileInputModeChange}

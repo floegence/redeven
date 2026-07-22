@@ -223,7 +223,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @floegence/floe-webapp-boot | 0.39.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-boot/v/0.39.2 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floe-webapp-core | 0.39.2 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-core/v/0.39.2 | License inherited from floegence/floe-webapp root LICENSE. |
 | @floegence/floe-webapp-protocol | 0.39.2 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloe-webapp-protocol/v/0.39.2 | License inherited from floegence/floe-webapp root LICENSE. |
-| @floegence/floeterm-terminal-web | 0.7.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.7.0 |  |
+| @floegence/floeterm-terminal-web | 0.8.0 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Ffloeterm-terminal-web/v/0.8.0 | Built-in theme attribution and license texts are reproduced below from the verified 0.8.0 package. |
 | @floegence/flowersec-core | 0.27.0 | MIT | Code App UI, Env App UI | https://www.npmjs.com/package/%40floegence%2Fflowersec-core/v/0.27.0 |  |
 | @floegence/redevplugin-ui | 0.1.5 | MIT | Env App UI | https://www.npmjs.com/package/%40floegence%2Fredevplugin-ui/v/0.1.5 | License inherited from floegence/redevplugin root LICENSE. |
 | @fontsource-variable/inter | 5.2.8 | OFL-1.1 | Desktop shell | https://www.npmjs.com/package/%40fontsource-variable%2Finter/v/5.2.8 |  |
@@ -454,15 +454,22 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | @typescript-eslint/visitor-keys | 8.57.1 | MIT | Desktop shell | https://www.npmjs.com/package/%40typescript-eslint%2Fvisitor-keys/v/8.57.1 |  |
 | @ungap/structured-clone | 1.3.0 | ISC | Desktop shell, Env App UI | https://www.npmjs.com/package/%40ungap%2Fstructured-clone/v/1.3.0 |  |
 | @upsetjs/venn.js | 2.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/%40upsetjs%2Fvenn.js/v/2.0.0 |  |
-| @vitest/browser-playwright | 4.1.8 | MIT | Env App UI | https://www.npmjs.com/package/%40vitest%2Fbrowser-playwright/v/4.1.8 |  |
-| @vitest/browser | 4.1.8 | MIT | Env App UI | https://www.npmjs.com/package/%40vitest%2Fbrowser/v/4.1.8 |  |
-| @vitest/expect | 4.1.8 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40vitest%2Fexpect/v/4.1.8 |  |
-| @vitest/mocker | 4.1.8 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40vitest%2Fmocker/v/4.1.8 |  |
-| @vitest/pretty-format | 4.1.8 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40vitest%2Fpretty-format/v/4.1.8 |  |
-| @vitest/runner | 4.1.8 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40vitest%2Frunner/v/4.1.8 |  |
-| @vitest/snapshot | 4.1.8 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40vitest%2Fsnapshot/v/4.1.8 |  |
-| @vitest/spy | 4.1.8 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40vitest%2Fspy/v/4.1.8 |  |
-| @vitest/utils | 4.1.8 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/%40vitest%2Futils/v/4.1.8 |  |
+| @vitest/browser-playwright | 4.1.10 | MIT | Env App UI | https://www.npmjs.com/package/%40vitest%2Fbrowser-playwright/v/4.1.10 |  |
+| @vitest/browser | 4.1.10 | MIT | Env App UI | https://www.npmjs.com/package/%40vitest%2Fbrowser/v/4.1.10 |  |
+| @vitest/expect | 4.1.10 | MIT | Env App UI | https://www.npmjs.com/package/%40vitest%2Fexpect/v/4.1.10 |  |
+| @vitest/expect | 4.1.8 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40vitest%2Fexpect/v/4.1.8 |  |
+| @vitest/mocker | 4.1.10 | MIT | Env App UI | https://www.npmjs.com/package/%40vitest%2Fmocker/v/4.1.10 |  |
+| @vitest/mocker | 4.1.8 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40vitest%2Fmocker/v/4.1.8 |  |
+| @vitest/pretty-format | 4.1.10 | MIT | Env App UI | https://www.npmjs.com/package/%40vitest%2Fpretty-format/v/4.1.10 |  |
+| @vitest/pretty-format | 4.1.8 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40vitest%2Fpretty-format/v/4.1.8 |  |
+| @vitest/runner | 4.1.10 | MIT | Env App UI | https://www.npmjs.com/package/%40vitest%2Frunner/v/4.1.10 |  |
+| @vitest/runner | 4.1.8 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40vitest%2Frunner/v/4.1.8 |  |
+| @vitest/snapshot | 4.1.10 | MIT | Env App UI | https://www.npmjs.com/package/%40vitest%2Fsnapshot/v/4.1.10 |  |
+| @vitest/snapshot | 4.1.8 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40vitest%2Fsnapshot/v/4.1.8 |  |
+| @vitest/spy | 4.1.10 | MIT | Env App UI | https://www.npmjs.com/package/%40vitest%2Fspy/v/4.1.10 |  |
+| @vitest/spy | 4.1.8 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40vitest%2Fspy/v/4.1.8 |  |
+| @vitest/utils | 4.1.10 | MIT | Env App UI | https://www.npmjs.com/package/%40vitest%2Futils/v/4.1.10 |  |
+| @vitest/utils | 4.1.8 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/%40vitest%2Futils/v/4.1.8 |  |
 | @xmldom/xmldom | 0.8.13 | MIT | Desktop shell | https://www.npmjs.com/package/%40xmldom%2Fxmldom/v/0.8.13 |  |
 | 7zip-bin | 5.2.0 | MIT | Desktop shell | https://www.npmjs.com/package/7zip-bin/v/5.2.0 |  |
 | abbrev | 3.0.1 | ISC | Desktop shell | https://www.npmjs.com/package/abbrev/v/3.0.1 |  |
@@ -1086,7 +1093,8 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | vite | 7.3.5 | MIT | Code App UI | https://www.npmjs.com/package/vite/v/7.3.5 |  |
 | vite | 8.0.16 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/vite/v/8.0.16 |  |
 | vitefu | 1.1.3 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/vitefu/v/1.1.3 |  |
-| vitest | 4.1.8 | MIT | Code App UI, Desktop shell, Env App UI | https://www.npmjs.com/package/vitest/v/4.1.8 |  |
+| vitest | 4.1.10 | MIT | Env App UI | https://www.npmjs.com/package/vitest/v/4.1.10 |  |
+| vitest | 4.1.8 | MIT | Code App UI, Desktop shell | https://www.npmjs.com/package/vitest/v/4.1.8 |  |
 | w3c-xmlserializer | 5.0.0 | MIT | Desktop shell, Env App UI | https://www.npmjs.com/package/w3c-xmlserializer/v/5.0.0 |  |
 | wcwidth | 1.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/wcwidth/v/1.0.1 |  |
 | webidl-conversions | 7.0.0 | BSD-2-Clause | Env App UI | https://www.npmjs.com/package/webidl-conversions/v/7.0.0 |  |
@@ -1166,6 +1174,277 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+```
+
+## Floeterm Built-in Theme Notices
+
+Redeven embeds the built-in terminal theme catalog from `@floegence/floeterm-terminal-web@0.8.0`. The following attribution and license texts are reproduced in Redeven's distributed root notice from the installed registry package. Notice generation verifies the upstream provenance, quality evidence, notice, and license artifacts against these fixed SHA-256 values before emitting this section:
+
+- `2b6b2d07297ace181564890b79e2c488e67f4747512b8adad08b4bd3ea8dfc06`
+- `e9fdd068550001f555f1bb52ca475b68bc56a12c00da25f9ec28fe03dbdb9005`
+- `8e4e3c5e72cd42271cacc3cb33e9ead2283778ffdcdfbbae042927aa98689d36`
+- `87623a10d8677d19b0894c61f5defd80281495a2740cb8c289891261fddda30f`
+- `c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4`
+
+# Floeterm built-in theme provenance
+
+New themes introduced in Floeterm 0.8.0 are original Floeterm palettes released
+under this package's MIT license. Public theme repositories were used for
+interaction and color-system research; their color tables were not copied into
+the new original themes. The exact per-theme records live in `THEME_PROVENANCE.json`.
+
+## Solarized Dark
+
+- Source: `altercation/solarized` commit `62f656a02f93c5190a8753159e34b385588d5ff3`
+- Copyright: Copyright (c) 2011 Ethan Schoonover
+- License: MIT, reproduced in `third_party_licenses/solarized-MIT.txt`
+- Modification: existing Floeterm ANSI mapping retained; `cursorAccent` was added equal to the background.
+
+## Tokyo Night
+
+- Source: `folke/tokyonight.nvim` commit `cdc07ac78467a233fd62c493de29a17e0cf2b2b6`
+- Copyright: Folke Lemaitre and Tokyo Night contributors
+- License: Apache-2.0, reproduced in `third_party_licenses/tokyonight-Apache-2.0.txt`
+- The fixed source tree contains no NOTICE file.
+- Modification: existing Floeterm palette retained.
+
+## Monokai legacy risk
+
+The `monokai` ID, label, and palette predate Floeterm 0.8.0. The exact original
+palette source and upstream naming authorization could not be reconstructed
+reliably. Floeterm retains the existing values for persisted preference and API
+compatibility, does not claim an official Monokai release, and adds no new
+third-party palette material. A future legal review may change the display label
+while preserving the persisted ID.
+
+### Solarized MIT License
+
+```text
+Copyright (c) 2011 Ethan Schoonover
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+### Tokyo Night Apache-2.0 License
+
+```text
+Apache License
+                           Version 2.0, January 2004
+                        http://www.apache.org/licenses/
+
+   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION
+
+   1. Definitions.
+
+      "License" shall mean the terms and conditions for use, reproduction,
+      and distribution as defined by Sections 1 through 9 of this document.
+
+      "Licensor" shall mean the copyright owner or entity authorized by
+      the copyright owner that is granting the License.
+
+      "Legal Entity" shall mean the union of the acting entity and all
+      other entities that control, are controlled by, or are under common
+      control with that entity. For the purposes of this definition,
+      "control" means (i) the power, direct or indirect, to cause the
+      direction or management of such entity, whether by contract or
+      otherwise, or (ii) ownership of fifty percent (50%) or more of the
+      outstanding shares, or (iii) beneficial ownership of such entity.
+
+      "You" (or "Your") shall mean an individual or Legal Entity
+      exercising permissions granted by this License.
+
+      "Source" form shall mean the preferred form for making modifications,
+      including but not limited to software source code, documentation
+      source, and configuration files.
+
+      "Object" form shall mean any form resulting from mechanical
+      transformation or translation of a Source form, including but
+      not limited to compiled object code, generated documentation,
+      and conversions to other media types.
+
+      "Work" shall mean the work of authorship, whether in Source or
+      Object form, made available under the License, as indicated by a
+      copyright notice that is included in or attached to the work
+      (an example is provided in the Appendix below).
+
+      "Derivative Works" shall mean any work, whether in Source or Object
+      form, that is based on (or derived from) the Work and for which the
+      editorial revisions, annotations, elaborations, or other modifications
+      represent, as a whole, an original work of authorship. For the purposes
+      of this License, Derivative Works shall not include works that remain
+      separable from, or merely link (or bind by name) to the interfaces of,
+      the Work and Derivative Works thereof.
+
+      "Contribution" shall mean any work of authorship, including
+      the original version of the Work and any modifications or additions
+      to that Work or Derivative Works thereof, that is intentionally
+      submitted to Licensor for inclusion in the Work by the copyright owner
+      or by an individual or Legal Entity authorized to submit on behalf of
+      the copyright owner. For the purposes of this definition, "submitted"
+      means any form of electronic, verbal, or written communication sent
+      to the Licensor or its representatives, including but not limited to
+      communication on electronic mailing lists, source code control systems,
+      and issue tracking systems that are managed by, or on behalf of, the
+      Licensor for the purpose of discussing and improving the Work, but
+      excluding communication that is conspicuously marked or otherwise
+      designated in writing by the copyright owner as "Not a Contribution."
+
+      "Contributor" shall mean Licensor and any individual or Legal Entity
+      on behalf of whom a Contribution has been received by Licensor and
+      subsequently incorporated within the Work.
+
+   2. Grant of Copyright License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      copyright license to reproduce, prepare Derivative Works of,
+      publicly display, publicly perform, sublicense, and distribute the
+      Work and such Derivative Works in Source or Object form.
+
+   3. Grant of Patent License. Subject to the terms and conditions of
+      this License, each Contributor hereby grants to You a perpetual,
+      worldwide, non-exclusive, no-charge, royalty-free, irrevocable
+      (except as stated in this section) patent license to make, have made,
+      use, offer to sell, sell, import, and otherwise transfer the Work,
+      where such license applies only to those patent claims licensable
+      by such Contributor that are necessarily infringed by their
+      Contribution(s) alone or by combination of their Contribution(s)
+      with the Work to which such Contribution(s) was submitted. If You
+      institute patent litigation against any entity (including a
+      cross-claim or counterclaim in a lawsuit) alleging that the Work
+      or a Contribution incorporated within the Work constitutes direct
+      or contributory patent infringement, then any patent licenses
+      granted to You under this License for that Work shall terminate
+      as of the date such litigation is filed.
+
+   4. Redistribution. You may reproduce and distribute copies of the
+      Work or Derivative Works thereof in any medium, with or without
+      modifications, and in Source or Object form, provided that You
+      meet the following conditions:
+
+      (a) You must give any other recipients of the Work or
+          Derivative Works a copy of this License; and
+
+      (b) You must cause any modified files to carry prominent notices
+          stating that You changed the files; and
+
+      (c) You must retain, in the Source form of any Derivative Works
+          that You distribute, all copyright, patent, trademark, and
+          attribution notices from the Source form of the Work,
+          excluding those notices that do not pertain to any part of
+          the Derivative Works; and
+
+      (d) If the Work includes a "NOTICE" text file as part of its
+          distribution, then any Derivative Works that You distribute must
+          include a readable copy of the attribution notices contained
+          within such NOTICE file, excluding those notices that do not
+          pertain to any part of the Derivative Works, in at least one
+          of the following places: within a NOTICE text file distributed
+          as part of the Derivative Works; within the Source form or
+          documentation, if provided along with the Derivative Works; or,
+          within a display generated by the Derivative Works, if and
+          wherever such third-party notices normally appear. The contents
+          of the NOTICE file are for informational purposes only and
+          do not modify the License. You may add Your own attribution
+          notices within Derivative Works that You distribute, alongside
+          or as an addendum to the NOTICE text from the Work, provided
+          that such additional attribution notices cannot be construed
+          as modifying the License.
+
+      You may add Your own copyright statement to Your modifications and
+      may provide additional or different license terms and conditions
+      for use, reproduction, or distribution of Your modifications, or
+      for any such Derivative Works as a whole, provided Your use,
+      reproduction, and distribution of the Work otherwise complies with
+      the conditions stated in this License.
+
+   5. Submission of Contributions. Unless You explicitly state otherwise,
+      any Contribution intentionally submitted for inclusion in the Work
+      by You to the Licensor shall be under the terms and conditions of
+      this License, without any additional terms or conditions.
+      Notwithstanding the above, nothing herein shall supersede or modify
+      the terms of any separate license agreement you may have executed
+      with Licensor regarding such Contributions.
+
+   6. Trademarks. This License does not grant permission to use the trade
+      names, trademarks, service marks, or product names of the Licensor,
+      except as required for reasonable and customary use in describing the
+      origin of the Work and reproducing the content of the NOTICE file.
+
+   7. Disclaimer of Warranty. Unless required by applicable law or
+      agreed to in writing, Licensor provides the Work (and each
+      Contributor provides its Contributions) on an "AS IS" BASIS,
+      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+      implied, including, without limitation, any warranties or conditions
+      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A
+      PARTICULAR PURPOSE. You are solely responsible for determining the
+      appropriateness of using or redistributing the Work and assume any
+      risks associated with Your exercise of permissions under this License.
+
+   8. Limitation of Liability. In no event and under no legal theory,
+      whether in tort (including negligence), contract, or otherwise,
+      unless required by applicable law (such as deliberate and grossly
+      negligent acts) or agreed to in writing, shall any Contributor be
+      liable to You for damages, including any direct, indirect, special,
+      incidental, or consequential damages of any character arising as a
+      result of this License or out of the use or inability to use the
+      Work (including but not limited to damages for loss of goodwill,
+      work stoppage, computer failure or malfunction, or any and all
+      other commercial damages or losses), even if such Contributor
+      has been advised of the possibility of such damages.
+
+   9. Accepting Warranty or Additional Liability. While redistributing
+      the Work or Derivative Works thereof, You may choose to offer,
+      and charge a fee for, acceptance of support, warranty, indemnity,
+      or other liability obligations and/or rights consistent with this
+      License. However, in accepting such obligations, You may act only
+      on Your own behalf and on Your sole responsibility, not on behalf
+      of any other Contributor, and only if You agree to indemnify,
+      defend, and hold each Contributor harmless for any liability
+      incurred by, or claims asserted against, such Contributor by reason
+      of your accepting any such warranty or additional liability.
+
+   END OF TERMS AND CONDITIONS
+
+   APPENDIX: How to apply the Apache License to your work.
+
+      To apply the Apache License to your work, attach the following
+      boilerplate notice, with the fields enclosed by brackets "[]"
+      replaced with your own identifying information. (Don't include
+      the brackets!)  The text should be enclosed in the appropriate
+      comment syntax for the file format. We also recommend that a
+      file or class name and description of purpose be included on the
+      same "printed page" as the copyright notice for easier
+      identification within third-party archives.
+
+   Copyright [yyyy] [name of copyright owner]
+
+   Licensed under the Apache License, Version 2.0 (the "License");
+   you may not use this file except in compliance with the License.
+   You may obtain a copy of the License at
+
+       http://www.apache.org/licenses/LICENSE-2.0
+
+   Unless required by applicable law or agreed to in writing, software
+   distributed under the License is distributed on an "AS IS" BASIS,
+   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+   See the License for the specific language governing permissions and
+   limitations under the License.
 ```
 
 ## Desktop Runtime Notices

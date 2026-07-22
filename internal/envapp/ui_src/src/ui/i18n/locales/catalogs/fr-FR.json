@@ -2304,6 +2304,8 @@
       "description": "Personnalisez le thème, la police et le comportement de saisie mobile par défaut pour les sessions de terminal.",
       "close": "Fermer",
       "selected": "Sélectionné",
+      "themeApplied": "Thème appliqué",
+      "themeApplyFailed": "Impossible d’appliquer le thème",
       "tapToUse": "Appuyez pour utiliser",
       "mobileInputTitle": "Saisie mobile",
       "mobileInputDescription": "Choisissez un mode de saisie par défaut pour chaque session de terminal mobile.",

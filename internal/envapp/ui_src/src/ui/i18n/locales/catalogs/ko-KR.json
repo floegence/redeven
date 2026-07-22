@@ -2304,6 +2304,8 @@
       "description": "터미널 세션에 대한 기본 테마, 글꼴 및 모바일 입력 동작을 사용자 정의합니다.",
       "close": "닫기",
       "selected": "선택됨 닫기",
+      "themeApplied": "테마가 적용되었습니다",
+      "themeApplyFailed": "테마를 적용하지 못했습니다",
       "tapToUse": "탭하여 사용",
       "mobileInputTitle": "모바일 입력을 사용하려면 탭하세요.",
       "mobileInputDescription": "모든 모바일 단말기 세션에 대해 하나의 기본 입력 모드를 선택하세요.",

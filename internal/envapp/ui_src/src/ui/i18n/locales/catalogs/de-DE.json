@@ -2304,6 +2304,8 @@
       "description": "Passen Sie das Standarddesign, die Schriftart und das mobile Eingabeverhalten für Terminalsitzungen an.",
       "close": "Schließen",
       "selected": "Ausgewählt",
+      "themeApplied": "Thema angewendet",
+      "themeApplyFailed": "Thema konnte nicht angewendet werden",
       "tapToUse": "Tippen, um",
       "mobileInputTitle": "Mobile Eingabe zu verwenden",
       "mobileInputDescription": "Wählen Sie einen Standardeingabemodus für jede mobile Terminalsitzung.",

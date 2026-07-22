@@ -2304,6 +2304,8 @@
       "description": "Personalize o tema padrão, a fonte e o comportamento de entrada móvel para sessões de terminal.",
       "close": "Fechar",
       "selected": "Selecionado",
+      "themeApplied": "Tema aplicado",
+      "themeApplyFailed": "Não foi possível aplicar o tema",
       "tapToUse": "Toque para usar",
       "mobileInputTitle": "Entrada móvel",
       "mobileInputDescription": "Escolha um modo de entrada padrão para cada sessão de terminal móvel.",
