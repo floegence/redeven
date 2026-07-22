@@ -557,7 +557,8 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 		return ModelGatewayResult{}, errors.New("missing model")
 	}
 
-	messages := buildOpenAIChatMessages(req.Messages)
+	capability := req.ProviderControls.ReasoningCapability.Normalize()
+	messages := buildOpenAIChatMessagesWithCapability(req.Messages, capability)
 	if len(messages) == 0 {
 		messages = append(messages, openai.UserMessage("Continue."))
 	}
@@ -599,6 +600,7 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 	stream := p.client.Chat.Completions.NewStreaming(ctx, params)
 	defer func() { _ = stream.Close() }()
 	var textBuf strings.Builder
+	var reasoningBuf strings.Builder
 	result := ModelGatewayResult{
 		FinishReason:    "unknown",
 		RawProviderDiag: map[string]any{},
@@ -698,6 +700,10 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 				result.FinishReason = finish
 			}
 			delta := choice.Delta
+			if reasoning := extractResponseReasoningDelta(delta.RawJSON(), capability); reasoning != "" {
+				reasoningBuf.WriteString(reasoning)
+				emitProviderEvent(onEvent, StreamEvent{Type: StreamEventThinkingDelta, Text: reasoning})
+			}
 			if delta.Content != "" {
 				textBuf.WriteString(delta.Content)
 				emitProviderEvent(onEvent, StreamEvent{Type: StreamEventTextDelta, Text: delta.Content})
@@ -737,13 +743,14 @@ func (p *openAIProvider) streamChatTurn(ctx context.Context, req ModelGatewayReq
 		result.ToolCalls = append(result.ToolCalls, ToolCall{ID: ensureCallID(pc), Name: canonicalProviderToolName(pc.Name, aliasToReal), Args: cloneAnyMap(pc.Args)})
 	}
 	result.Text = strings.TrimSpace(textBuf.String())
+	result.Reasoning = reasoningBuf.String()
 	if len(result.ToolCalls) > 0 {
 		result.FinishReason = "tool_calls"
 	}
 	if result.FinishReason == "unknown" && result.Text != "" {
 		result.FinishReason = "stop"
 	}
-	if result.Text == "" && len(result.ToolCalls) == 0 {
+	if result.Text == "" && result.Reasoning == "" && len(result.ToolCalls) == 0 {
 		return ModelGatewayResult{}, errors.New("missing streamed response")
 	}
 	emitProviderEvent(onEvent, StreamEvent{Type: StreamEventUsage, Usage: &PartialUsage{
@@ -768,7 +775,7 @@ func (p *moonshotProvider) StreamTurn(ctx context.Context, req ModelGatewayReque
 		return ModelGatewayResult{}, errors.New("missing model")
 	}
 
-	messages := buildOpenAIChatMessages(req.Messages)
+	messages := buildOpenAIChatMessagesWithCapability(req.Messages, req.ProviderControls.ReasoningCapability)
 	if len(messages) == 0 {
 		messages = append(messages, openai.UserMessage("Continue."))
 	}
@@ -1013,7 +1020,7 @@ func (p *moonshotProvider) Turn(ctx context.Context, req ModelGatewayRequest) (M
 		return ModelGatewayResult{}, errors.New("missing model")
 	}
 
-	messages := buildOpenAIChatMessages(req.Messages)
+	messages := buildOpenAIChatMessagesWithCapability(req.Messages, req.ProviderControls.ReasoningCapability)
 	if len(messages) == 0 {
 		messages = append(messages, openai.UserMessage("Continue."))
 	}
@@ -1306,6 +1313,12 @@ func openAIResponsesToolOverride(v map[string]any) oresponses.ToolUnionParam {
 }
 
 func buildOpenAIChatMessages(messages []Message) []openai.ChatCompletionMessageParamUnion {
+	return buildOpenAIChatMessagesWithCapability(messages, config.AIReasoningCapability{})
+}
+
+func buildOpenAIChatMessagesWithCapability(messages []Message, capability config.AIReasoningCapability) []openai.ChatCompletionMessageParamUnion {
+	capability = capability.Normalize()
+	replayReasoning := reasoningCapabilityContains(capability.HistoryReplayRequirements, "reasoning_content")
 	out := make([]openai.ChatCompletionMessageParamUnion, 0, len(messages)+2)
 	for _, msg := range messages {
 		role := strings.ToLower(strings.TrimSpace(msg.Role))
@@ -1402,18 +1415,26 @@ func buildOpenAIChatMessages(messages []Message) []openai.ChatCompletionMessageP
 			}
 			content := strings.TrimSpace(textBuf.String())
 			if len(toolCalls) == 0 {
-				if content != "" {
-					out = append(out, openai.AssistantMessage(content))
+				if content == "" && (!replayReasoning || reasoningBuf.Len() == 0) {
+					continue
 				}
+				assistant := openai.ChatCompletionAssistantMessageParam{}
+				if content != "" {
+					assistant.Content = openai.ChatCompletionAssistantMessageParamContentUnion{OfString: openai.String(content)}
+				}
+				if replayReasoning && reasoningBuf.Len() > 0 {
+					assistant.SetExtraFields(map[string]any{"reasoning_content": reasoningBuf.String()})
+				}
+				out = append(out, openai.ChatCompletionMessageParamUnion{OfAssistant: &assistant})
 				continue
 			}
 			assistant := openai.ChatCompletionAssistantMessageParam{ToolCalls: toolCalls}
 			if content != "" {
 				assistant.Content = openai.ChatCompletionAssistantMessageParamContentUnion{OfString: openai.String(content)}
 			}
-			assistant.SetExtraFields(map[string]any{
-				"reasoning_content": strings.TrimSpace(reasoningBuf.String()),
-			})
+			if replayReasoning && reasoningBuf.Len() > 0 {
+				assistant.SetExtraFields(map[string]any{"reasoning_content": reasoningBuf.String()})
+			}
 			out = append(out, openai.ChatCompletionMessageParamUnion{OfAssistant: &assistant})
 		default:
 			contentParts := make([]openai.ChatCompletionContentPartUnionParam, 0, len(msg.Content))
@@ -1447,6 +1468,54 @@ func buildOpenAIChatMessages(messages []Message) []openai.ChatCompletionMessageP
 		}
 	}
 	return out
+}
+
+func reasoningCapabilityContains(values []string, want string) bool {
+	for _, value := range values {
+		if strings.EqualFold(strings.TrimSpace(value), want) {
+			return true
+		}
+	}
+	return false
+}
+
+func extractResponseReasoningDelta(raw string, capability config.AIReasoningCapability) string {
+	capability = capability.Normalize()
+	if capability.IsZero() || len(capability.ResponseReasoningFields) == 0 {
+		return ""
+	}
+	decoded := map[string]any{}
+	if err := json.Unmarshal([]byte(raw), &decoded); err != nil {
+		return ""
+	}
+	for _, field := range capability.ResponseReasoningFields {
+		if value, ok := decoded[strings.TrimSpace(field)]; ok {
+			if text := extractReasoningValue(value); text != "" {
+				return text
+			}
+		}
+	}
+	return ""
+}
+
+func extractReasoningValue(value any) string {
+	switch value := value.(type) {
+	case string:
+		return value
+	case []any:
+		var out strings.Builder
+		for _, item := range value {
+			out.WriteString(extractReasoningValue(item))
+		}
+		return out.String()
+	case map[string]any:
+		for _, key := range []string{"text", "content", "reasoning_content", "reasoning"} {
+			if text := extractReasoningValue(value[key]); text != "" {
+				return text
+			}
+		}
+	}
+	return ""
 }
 
 func extractMoonshotChatReasoningDelta(delta openai.ChatCompletionChunkChoiceDelta) string {

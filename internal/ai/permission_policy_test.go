@@ -278,7 +278,7 @@ func TestPermissionPolicy_SubagentCanonicalQueueConcurrentResolveOneWins(t *test
 	}
 	childHost, err := runtimeCaps.SubAgent(ctx, flruntime.SubAgentHostOptions{
 		Config:       flconfig.Config{ContextPolicy: flconfig.ContextPolicy{ContextWindowTokens: flconfig.DefaultContextWindowTokens}},
-		ModelGateway: canonicalChildApprovalGateway{}, ModelGatewayIdentity: flruntime.ModelGatewayIdentity{Provider: "fake", Model: "fake-model", StateCompatibilityKey: "permission-test"},
+		ModelGateway: canonicalChildApprovalGateway{}, ModelGatewayCapabilities: floretModelGatewayCapabilities(config.AIReasoningCapability{}), ModelGatewayIdentity: flruntime.ModelGatewayIdentity{Provider: "fake", Model: "fake-model", StateCompatibilityKey: "permission-test"},
 		Tools: toolsRegistry, EffectAuthorizationGate: allowFloretEffectGateForTest{},
 	})
 	if err != nil {

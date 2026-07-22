@@ -128,6 +128,32 @@ func TestFloretProviderAdapter_ReasoningSelectionControlsProviderRequest(t *test
 	}
 }
 
+func TestFloretProviderAdapter_ZeroRequestReasoningDoesNotInheritMainTurn(t *testing.T) {
+	t.Parallel()
+
+	recorder := &recordingFlowerProvider{}
+	adapter := newFloretProviderAdapter(
+		recorder,
+		"openai_compatible",
+		"dynamic-model",
+		ProviderControls{ReasoningSelection: config.AIReasoningSelection{Level: config.AIReasoningLevelHigh}},
+		TurnBudgets{},
+		"",
+	)
+	stream, err := adapter.StreamModel(context.Background(), flruntime.ModelRequest{
+		ThreadID: "thread", PromptScopeID: "thread", Model: "dynamic-model",
+		Messages: []flruntime.ModelMessage{{Role: flruntime.ModelMessageRoleUser, Text: "short request"}},
+	})
+	if err != nil {
+		t.Fatalf("StreamModel: %v", err)
+	}
+	for range stream {
+	}
+	if got := recorder.req.ProviderControls.ReasoningSelection; !got.IsZero() {
+		t.Fatalf("ReasoningSelection=%+v, want authoritative zero", got)
+	}
+}
+
 type reasoningFlowerProvider struct {
 	streamReasoning string
 	resultReasoning string
