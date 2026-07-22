@@ -1,5 +1,3 @@
-export type ActivityFlowerPlacement = 'collapsed' | 'expanded' | 'full_page';
-
 type FlowerFrameRect = Readonly<{
   left: number;
   top: number;
@@ -22,20 +20,10 @@ export type ActivityFlowerViewport = Readonly<{
 
 export type ActivityFlowerFrame = FlowerFrameRect;
 
-export function resolveActivityFlowerFrame(input: Readonly<{
-  placement: ActivityFlowerPlacement;
+export function resolveActivityFlowerOverlayFrame(input: Readonly<{
   viewport: ActivityFlowerViewport;
   anchor?: FlowerFrameRect | null;
-  fullPageHost?: FlowerFrameRect | null;
 }>): ActivityFlowerFrame | null {
-  if (input.placement === 'collapsed') return null;
-
-  if (input.placement === 'full_page') {
-    const host = input.fullPageHost;
-    if (!host || host.width <= 0 || host.height <= 0) return null;
-    return { left: host.left, top: host.top, width: host.width, height: host.height };
-  }
-
   const anchor = input.anchor;
   if (!anchor || anchor.width <= 0) return null;
   const inset = 12;

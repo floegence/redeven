@@ -188,7 +188,7 @@ import {
   type EnvWorkbenchHandoffAnchor,
 } from './envViewMode';
 import { LanguagePreferenceMenu, useI18n } from './i18n';
-import { activityFlowerFrameStyle as serializeActivityFlowerFrameStyle, resolveActivityFlowerFrame } from './activityFlowerFrame';
+import { activityFlowerFrameStyle as serializeActivityFlowerFrameStyle, resolveActivityFlowerOverlayFrame } from './activityFlowerFrame';
 
 type EnvActivitySelectionMetadata = Readonly<{
   source: 'activity-bar' | 'mobile-tab-bar';
@@ -202,8 +202,10 @@ const FLOWER_RELATED_SURFACE_SELECTOR = [
   '.flower-thread-switcher-popover',
   '.flower-turn-launcher-window',
   '.flower-turn-launcher-related-surface',
-  '[role="dialog"]',
-  '[role="menu"]',
+  '.flower-chat-context-preview-window',
+  '.flower-subagent-detail-window',
+  '.flower-working-dir-picker',
+  '.flower-provider-dialog',
   '[data-flower-floating-layer]',
 ].join(', ');
 
@@ -836,8 +838,9 @@ export function EnvAppShell() {
   const [activityFlowerQuickDraft, setActivityFlowerQuickDraft] = createSignal('');
   const [activityFlowerOverlayHost, setActivityFlowerOverlayHost] = createSignal<HTMLElement | null>(null);
   const [activityFlowerFullPageHost, setActivityFlowerFullPageHost] = createSignal<HTMLElement | null>(null);
+  const [activityFlowerMountContainer, setActivityFlowerMountContainer] = createSignal<HTMLDivElement | null>(null);
   const [activityFlowerFrameStyle, setActivityFlowerFrameStyle] = createSignal<Record<string, string>>({});
-  const [activityFlowerFramedPlacement, setActivityFlowerFramedPlacement] = createSignal<'expanded' | 'full_page' | null>(null);
+  const [activityFlowerOverlayFramed, setActivityFlowerOverlayFramed] = createSignal(false);
   const [activityFlowerMobileRailStyle, setActivityFlowerMobileRailStyle] = createSignal<Record<string, string>>({});
   const [activityFlowerMountRequested, setActivityFlowerMountRequested] = createSignal(false);
   const [activityFlowerVisualViewportBottomOffset, setActivityFlowerVisualViewportBottomOffset] = createSignal(0);
@@ -1185,6 +1188,11 @@ export function EnvAppShell() {
       ? 'full_page'
       : activityFlowerPresentation()
   ));
+  const activityFlowerMountHost = createMemo<HTMLElement | null>(() => (
+    activityFlowerPlacement() === 'full_page' && activityFlowerFullPageHost()?.isConnected
+      ? activityFlowerFullPageHost()
+      : activityFlowerOverlayHost()
+  ));
 
   const syncActivityFlowerFrame = () => {
     if (typeof window === 'undefined') return;
@@ -1238,21 +1246,21 @@ export function EnvAppShell() {
     } else {
       setActivityFlowerMobileRailStyle({});
     }
-    const frame = resolveActivityFlowerFrame({
-      placement,
+    if (placement !== 'expanded') {
+      setActivityFlowerOverlayFramed(false);
+      return;
+    }
+    const frame = resolveActivityFlowerOverlayFrame({
       viewport,
       anchor: activityFlowerBottomBarAnchorRef?.isConnected
         ? activityFlowerBottomBarAnchorRef.getBoundingClientRect()
         : null,
-      fullPageHost: activityFlowerFullPageHost()?.isConnected
-        ? activityFlowerFullPageHost()!.getBoundingClientRect()
-        : null,
     });
-    if (frame && placement !== 'collapsed') {
+    if (frame) {
       setActivityFlowerFrameStyle(serializeActivityFlowerFrameStyle(frame));
-      setActivityFlowerFramedPlacement(placement);
+      setActivityFlowerOverlayFramed(true);
     } else {
-      setActivityFlowerFramedPlacement(null);
+      setActivityFlowerOverlayFramed(false);
     }
   };
 
@@ -2047,10 +2055,23 @@ export function EnvAppShell() {
     flowerTurnLauncherOpen() && flowerTurnLauncherHandoff()?.mode === 'activity'
   ));
   const activityFlowerExpanded = createMemo(() => activityFlowerPlacement() !== 'collapsed');
+  const activityFlowerResidentInFullPageHost = createMemo(() => {
+    const host = activityFlowerFullPageHost();
+    const mountContainer = activityFlowerMountContainer();
+    return Boolean(
+      host?.isConnected
+      && mountContainer?.parentElement === host
+      && activityFlowerPanelRef?.isConnected
+      && activityFlowerPanelRef
+      && mountContainer.contains(activityFlowerPanelRef),
+    );
+  });
   const activityFlowerSurfaceVisible = createMemo(() => (
     viewMode() === 'activity'
     && activityFlowerExpanded()
-    && activityFlowerFramedPlacement() === activityFlowerPlacement()
+    && (activityFlowerPlacement() === 'full_page'
+      ? activityFlowerResidentInFullPageHost()
+      : activityFlowerOverlayFramed())
     && !activityFlowerLauncherVisible()
     && !accessGateVisible()
     && !recoveryVisible()
@@ -2089,6 +2110,17 @@ export function EnvAppShell() {
         return i18n.t('shell.flowerCompanion.status.idle');
     }
   });
+  const activityFlowerPresenceSummary = createMemo(() => {
+    const presence = activityFlowerPresence();
+    if (presence.priority_status === 'idle' || presence.priority_status === 'unavailable') return '';
+    const title = trimString(presence.priority_thread_title);
+    return title ? `${activityFlowerStatusLabel()} · ${title}` : activityFlowerStatusLabel();
+  });
+  const activityFlowerCollapsedPresenceVisible = createMemo(() => (
+    activityFlowerPlacement() === 'collapsed'
+    && !trimString(activityFlowerQuickDraft())
+    && Boolean(activityFlowerPresenceSummary())
+  ));
   const activityFlowerCompanionCopy = () => ({
     label: i18n.t('shell.flowerCompanion.threadSwitcher.label'),
     searchPlaceholder: i18n.t('shell.flowerCompanion.threadSwitcher.searchPlaceholder'),
@@ -2121,7 +2153,6 @@ export function EnvAppShell() {
     if (activityFlowerPlacement() !== 'expanded' || activityFlowerLauncherVisible()) return;
     const handleOutsidePointer = (event: PointerEvent) => {
       if (event.defaultPrevented) return;
-      if (activityFlowerPanelRef?.querySelector('[data-flower-turn-submitting="true"]')) return;
       const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
       if (path.includes(activityFlowerPanelRef as EventTarget) || path.includes(activityFlowerBottomBarAnchorRef as EventTarget)) return;
       const target = event.target;
@@ -2131,8 +2162,8 @@ export function EnvAppShell() {
       }
       collapseActivityFlowerCompanion(false);
     };
-    window.addEventListener('pointerdown', handleOutsidePointer);
-    onCleanup(() => window.removeEventListener('pointerdown', handleOutsidePointer));
+    window.addEventListener('pointerdown', handleOutsidePointer, true);
+    onCleanup(() => window.removeEventListener('pointerdown', handleOutsidePointer, true));
   });
 
   let activityFlowerWasVisible = false;
@@ -2637,11 +2668,27 @@ export function EnvAppShell() {
       { id: 'ports', name: i18n.t('shell.nav.webServices'), icon: Globe, component: EnvPortForwardsPage, sidebar: { order: 5, fullScreen: true } },
     ];
     if (canUseFlower()) {
+      const ActivityFlowerFullPageHost = () => {
+        let host: HTMLDivElement | undefined;
+        onMount(() => {
+          if (host) setActivityFlowerFullPageHost(host);
+        });
+        onCleanup(() => {
+          setActivityFlowerFullPageHost((current) => (current === host ? null : current));
+        });
+        return (
+          <div
+            ref={host}
+            class="relative h-full min-h-0 w-full"
+            data-activity-flower-full-page-host
+          />
+        );
+      };
       list.push({
         id: 'ai',
         name: i18n.t('shell.nav.flower'),
         icon: FlowerNavigationIcon,
-        component: () => <div ref={setActivityFlowerFullPageHost} class="h-full min-h-0 w-full" data-activity-flower-full-page-host />,
+        component: ActivityFlowerFullPageHost,
         sidebar: { order: 6, fullScreen: true },
       });
     }
@@ -3732,44 +3779,42 @@ export function EnvAppShell() {
   );
 
   const renderActivityFlowerCompanion = () => (
-    <Show when={activityFlowerMountRequested() && activityFlowerOverlayHost()} keyed>
-      {(host) => (
-        <Portal mount={host}>
-          <div
-            ref={activityFlowerPanelRef}
-            id="redeven-activity-flower-companion"
-            class="flower-activity-companion-shell"
-            classList={{
-              'flower-activity-companion-collapsed': !activityFlowerSurfaceVisible(),
-              'flower-activity-companion-expanded': activityFlowerPlacement() === 'expanded',
-              'flower-activity-companion-full-page': activityFlowerPlacement() === 'full_page',
-            }}
-            data-presentation={activityFlowerPlacement()}
-            role="region"
-            aria-label={i18n.t('shell.nav.flower')}
-            aria-hidden={!activityFlowerSurfaceVisible() ? 'true' : undefined}
-            inert={!activityFlowerSurfaceVisible()}
-            style={activityFlowerFrameStyle()}
-          >
-            <EnvAIPage
-              presentation={activityFlowerPlacement() === 'full_page' ? 'full' : 'companion'}
-              engaged={activityFlowerEngaged()}
-              transcriptVisible={activityFlowerEngaged()}
-              companionPresenceOwner={!accessGateVisible()}
-              focusRequestScope="activity"
-              focusThreadRequest={activityFlowerSurfaceVisible() ? activityFlowerFocusRequest() : null}
-              focusComposerRequest={activityFlowerSurfaceVisible() ? activityFlowerComposerFocusRequest() : 0}
-              composerHandoffRequest={activityFlowerSurfaceVisible() ? activityFlowerComposerHandoffRequest() : null}
-              onFocusThreadRequestConsumed={consumeActivityFlowerFocusRequest}
-              onComposerHandoffConsumed={consumeActivityFlowerComposerHandoff}
-              companionCopy={activityFlowerCompanionCopy()}
-              headerTrailingActions={activityFlowerHeaderActions()}
-              onPresenceChange={setActivityFlowerPresence}
-              settingsReturnSurfaceId={lastActivitySurface() === 'ai' ? ENV_DEFAULT_SURFACE_ID : lastActivitySurface()}
-            />
-          </div>
-        </Portal>
-      )}
+    <Show when={activityFlowerMountRequested() && activityFlowerOverlayHost()}>
+      <Portal mount={activityFlowerMountHost() ?? undefined} ref={setActivityFlowerMountContainer}>
+        <div
+          ref={activityFlowerPanelRef}
+          id="redeven-activity-flower-companion"
+          class="flower-activity-companion-shell"
+          classList={{
+            'flower-activity-companion-collapsed': !activityFlowerSurfaceVisible(),
+            'flower-activity-companion-expanded': activityFlowerPlacement() === 'expanded',
+            'flower-activity-companion-full-page': activityFlowerPlacement() === 'full_page',
+          }}
+          data-presentation={activityFlowerPlacement()}
+          role="region"
+          aria-label={i18n.t('shell.nav.flower')}
+          aria-hidden={!activityFlowerSurfaceVisible() ? 'true' : undefined}
+          inert={!activityFlowerSurfaceVisible()}
+          style={activityFlowerPlacement() === 'expanded' ? activityFlowerFrameStyle() : {}}
+        >
+          <EnvAIPage
+            presentation={activityFlowerPlacement() === 'full_page' ? 'full' : 'companion'}
+            engaged={activityFlowerEngaged()}
+            transcriptVisible={activityFlowerEngaged()}
+            companionPresenceOwner={!accessGateVisible()}
+            focusRequestScope="activity"
+            focusThreadRequest={activityFlowerSurfaceVisible() ? activityFlowerFocusRequest() : null}
+            focusComposerRequest={activityFlowerSurfaceVisible() ? activityFlowerComposerFocusRequest() : 0}
+            composerHandoffRequest={activityFlowerSurfaceVisible() ? activityFlowerComposerHandoffRequest() : null}
+            onFocusThreadRequestConsumed={consumeActivityFlowerFocusRequest}
+            onComposerHandoffConsumed={consumeActivityFlowerComposerHandoff}
+            companionCopy={activityFlowerCompanionCopy()}
+            headerTrailingActions={activityFlowerHeaderActions()}
+            onPresenceChange={setActivityFlowerPresence}
+            settingsReturnSurfaceId={lastActivitySurface() === 'ai' ? ENV_DEFAULT_SURFACE_ID : lastActivitySurface()}
+          />
+        </div>
+      </Portal>
     </Show>
   );
 
@@ -3781,7 +3826,7 @@ export function EnvAppShell() {
   };
 
   const renderActivityFlowerQuickEntry = () => (
-    <Tooltip content={`${i18n.t('shell.nav.flower')} · ${activityFlowerStatusLabel()}`} placement="top" delay={0}>
+    <Tooltip content={`${i18n.t('shell.nav.flower')} · ${activityFlowerPresenceSummary() || activityFlowerStatusLabel()}`} placement="top" delay={0}>
       <div
         ref={activityFlowerBottomBarAnchorRef}
         class="flower-activity-quick-entry"
@@ -3790,60 +3835,78 @@ export function EnvAppShell() {
       >
         <FlowerNavigationIcon
           class={`flower-activity-quick-entry-icon h-3.5 w-3.5 shrink-0 ${
-            activityFlowerPresence().priority_status === 'running' ? 'flower-activity-quick-entry-icon-running' : ''
+            activityFlowerPresence().running_count > 0 ? 'flower-activity-quick-entry-icon-running' : ''
           }`}
         />
         <span
           class={`flower-activity-quick-entry-status flower-activity-quick-entry-status-${activityFlowerPresence().priority_status}`}
           aria-hidden="true"
         />
-        <input
-          ref={activityFlowerQuickInputRef}
-          type="text"
-          inputmode="text"
-          autocomplete="off"
-          class="flower-activity-quick-entry-input"
-          value={activityFlowerQuickDraft()}
-          readOnly={Boolean(activityFlowerComposerHandoffRequest())}
-          aria-busy={activityFlowerComposerHandoffRequest() ? 'true' : undefined}
-          placeholder={i18n.t('shell.flowerCompanion.quickEntryPlaceholder')}
-          aria-label={i18n.t('shell.flowerCompanion.quickEntryLabel')}
-          aria-description={activityFlowerStatusLabel()}
-          aria-controls="redeven-activity-flower-companion"
-          aria-expanded={activityFlowerExpanded()}
-          onClick={() => {
-            if (!trimString(activityFlowerQuickDraft())) focusActivityFlowerComposer();
-          }}
-          onInput={(event) => {
-            const value = event.currentTarget.value;
-            if (!event.isComposing && activityFlowerCompositionCommit && value === activityFlowerCompositionCommit) {
+        <div class="flower-activity-quick-entry-content">
+          <input
+            ref={activityFlowerQuickInputRef}
+            type="text"
+            inputmode="text"
+            autocomplete="off"
+            class="flower-activity-quick-entry-input"
+            value={activityFlowerQuickDraft()}
+            readOnly={Boolean(activityFlowerComposerHandoffRequest())}
+            aria-busy={activityFlowerComposerHandoffRequest() ? 'true' : undefined}
+            placeholder={activityFlowerCollapsedPresenceVisible() ? '' : i18n.t('shell.flowerCompanion.quickEntryPlaceholder')}
+            aria-label={i18n.t('shell.flowerCompanion.quickEntryLabel')}
+            aria-description={activityFlowerPresenceSummary() || activityFlowerStatusLabel()}
+            aria-controls="redeven-activity-flower-companion"
+            aria-expanded={activityFlowerExpanded()}
+            onClick={() => {
+              if (!trimString(activityFlowerQuickDraft())) focusActivityFlowerComposer();
+            }}
+            onInput={(event) => {
+              const value = event.currentTarget.value;
+              if (!event.isComposing && activityFlowerCompositionCommit && value === activityFlowerCompositionCommit) {
+                activityFlowerCompositionCommit = '';
+                return;
+              }
+              if (!event.isComposing) activityFlowerCompositionCommit = '';
+              setActivityFlowerQuickDraft(value);
+              if (!event.isComposing && trimString(value)) openActivityFlowerCompanion();
+            }}
+            onCompositionStart={() => {
+              setActivityFlowerComposing(true);
               activityFlowerCompositionCommit = '';
-              return;
-            }
-            if (!event.isComposing) activityFlowerCompositionCommit = '';
-            setActivityFlowerQuickDraft(value);
-            if (!event.isComposing && trimString(value)) openActivityFlowerCompanion();
-          }}
-          onCompositionStart={() => {
-            setActivityFlowerComposing(true);
-            activityFlowerCompositionCommit = '';
-          }}
-          onCompositionEnd={(event) => {
-            setActivityFlowerComposing(false);
-            const value = event.currentTarget.value;
-            activityFlowerCompositionCommit = value;
-            setActivityFlowerQuickDraft(value);
-            if (trimString(value)) openActivityFlowerCompanion();
-          }}
-          onKeyDown={(event) => {
-            if (event.key !== 'Enter' || event.isComposing || event.keyCode === 229) return;
-            if (!trimString(event.currentTarget.value)) {
-              event.preventDefault();
-              focusActivityFlowerComposer();
-            }
-          }}
-        />
-        <span class="sr-only" aria-live="polite">{activityFlowerStatusLabel()}</span>
+            }}
+            onCompositionEnd={(event) => {
+              setActivityFlowerComposing(false);
+              const value = event.currentTarget.value;
+              activityFlowerCompositionCommit = value;
+              setActivityFlowerQuickDraft(value);
+              if (trimString(value)) openActivityFlowerCompanion();
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== 'Enter' || event.isComposing || event.keyCode === 229) return;
+              if (!trimString(event.currentTarget.value)) {
+                event.preventDefault();
+                focusActivityFlowerComposer();
+              }
+            }}
+          />
+          <Show when={activityFlowerCollapsedPresenceVisible()}>
+            <span
+              class="flower-activity-quick-entry-presence-summary"
+              data-activity-flower-presence-summary
+              aria-hidden="true"
+            >
+              {activityFlowerPresenceSummary()}
+            </span>
+          </Show>
+        </div>
+        <span
+          class="sr-only"
+          data-activity-flower-presence-announcement
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {activityFlowerPresenceSummary() || activityFlowerStatusLabel()}
+        </span>
       </div>
     </Tooltip>
   );

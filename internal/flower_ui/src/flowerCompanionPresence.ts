@@ -17,6 +17,7 @@ export type FlowerCompanionPriorityStatus =
 export type FlowerCompanionPresenceProjection = Readonly<{
   priority_status: FlowerCompanionPriorityStatus;
   priority_count: number;
+  priority_thread_title?: string;
   attention_count: number;
   unread_failed_count: number;
   running_count: number;
@@ -25,7 +26,10 @@ export type FlowerCompanionPresenceProjection = Readonly<{
   unread_completed_count: number;
 }>;
 
-type CountKey = Exclude<keyof FlowerCompanionPresenceProjection, 'priority_status' | 'priority_count'>;
+type CountKey = Exclude<
+  keyof FlowerCompanionPresenceProjection,
+  'priority_status' | 'priority_count' | 'priority_thread_title'
+>;
 
 const PRIORITIES: readonly Readonly<{
   status: Exclude<FlowerCompanionPriorityStatus, 'unavailable' | 'idle'>;
@@ -68,9 +72,14 @@ export function projectFlowerCompanionPresence(
   }
 
   const priority = PRIORITIES.find(({ count }) => counts[count] > 0);
+  const priorityThread = priority
+    ? threads.find((thread) => priorityCountKey(thread) === priority.count)
+    : undefined;
+  const priorityThreadTitle = String(priorityThread?.title ?? '').trim();
   return {
     priority_status: priority?.status ?? (available ? 'idle' : 'unavailable'),
     priority_count: priority ? counts[priority.count] : available ? 0 : 1,
+    ...(priorityThreadTitle ? { priority_thread_title: priorityThreadTitle } : {}),
     ...counts,
   };
 }

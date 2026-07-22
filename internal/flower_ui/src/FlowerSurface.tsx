@@ -6917,6 +6917,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         position={subagentDropdownPosition()}
         estimatedSize={SUBAGENT_DROPDOWN_ESTIMATED_SIZE}
         class="flower-subagents-dropdown-layer"
+        data-flower-floating-layer="true"
       >
         <div
           ref={subagentDropdownRef}
@@ -8019,6 +8020,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         homePath={workingDirectoryHomePath()}
         homeLabel={copy().chat.workingDirPickerHomeLabel}
         title={copy().chat.workingDirPickerTitle}
+        class="flower-working-dir-picker"
         confirmText={copy().chat.workingDirPickerConfirm}
         onExpand={workingDirectoryPicker.expandPath}
         ensurePath={workingDirectoryPicker.ensurePath}

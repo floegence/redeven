@@ -162,6 +162,19 @@ vi.mock('@floegence/floe-webapp-core/app', () => ({
           Open Debug Console
         </button>
         <button type="button" data-testid="outside-flower">Outside Flower</button>
+        <div role="menu" data-testid="outside-menu">
+          <button type="button">Unrelated menu action</button>
+        </div>
+        <div role="dialog" data-testid="outside-dialog">
+          <button type="button">Unrelated dialog action</button>
+        </div>
+        <button
+          type="button"
+          data-testid="outside-flower-stop-propagation"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          Outside Flower with stopped propagation
+        </button>
       </div>
     );
   },
@@ -483,6 +496,7 @@ vi.mock('./pages/EnvAIPage', () => ({
       props.onPresenceChange?.({
         priority_status: 'running',
         priority_count: 1,
+        priority_thread_title: 'Refine the Flower companion with a deliberately long live task title',
         attention_count: 0,
         unread_failed_count: 0,
         running_count: 1,
@@ -528,6 +542,20 @@ vi.mock('./pages/EnvAIPage', () => ({
             style={{ position: 'fixed', top: '80px', left: '8px', 'z-index': 90 }}
           >
             Related surface
+          </button>
+          <button
+            type="button"
+            class="flower-chat-context-preview-window"
+            data-testid="activity-flower-context-preview"
+          >
+            Flower context preview
+          </button>
+          <button
+            type="button"
+            class="flower-provider-dialog"
+            data-testid="activity-flower-provider-dialog"
+          >
+            Flower provider dialog
           </button>
         </Portal>
       </div>
@@ -1100,14 +1128,38 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(document.querySelector('[data-testid="env-ai-page"]')).toBe(flowerSurface);
     expect(flowerSurface.dataset.mountId).toBe(mountID);
     expect(flowerSurface.dataset.presentation).toBe('full');
+    expect(fullPageHost.contains(fixture.panel)).toBe(true);
     expect(panelRect.left).toBeCloseTo(hostRect.left, 0);
     expect(panelRect.top).toBeCloseTo(hostRect.top, 0);
     expect(panelRect.width).toBeCloseTo(hostRect.width, 0);
     expect(panelRect.height).toBeCloseTo(hostRect.height, 0);
     expect(envAIPageMountSequence).toBe(1);
+
+    const activityBarTerminal = document.querySelector('[data-floe-shell-slot="activity-bar"] button[aria-label="Terminal"]');
+    if (!(activityBarTerminal instanceof HTMLButtonElement)) throw new Error('Activity Bar terminal entry did not render.');
+    await userEvent.click(activityBarTerminal);
+    await flushAsync();
+
+    expect(fullPageHost.isConnected).toBe(false);
+    expect(fullPageHost.contains(fixture.panel)).toBe(false);
+    expect(fixture.panel.isConnected).toBe(true);
+    expect(fixture.panel.dataset.presentation).toBe('collapsed');
+    expect(fixture.panel.getAttribute('aria-hidden')).toBe('true');
+    expect(document.querySelector('[data-testid="env-ai-page"]')).toBe(flowerSurface);
+
+    await userEvent.click(activityBarFlower);
+    await flushAsync();
+
+    const replacementFullPageHost = document.querySelector('[data-activity-flower-full-page-host]');
+    if (!(replacementFullPageHost instanceof HTMLElement)) throw new Error('Replacement Flower full-page host did not render.');
+    expect(replacementFullPageHost).not.toBe(fullPageHost);
+    expect(replacementFullPageHost.contains(fixture.panel)).toBe(true);
+    expect(fixture.panel.getAttribute('aria-hidden')).toBeNull();
+    expect(document.querySelector('[data-testid="env-ai-page"]')).toBe(flowerSurface);
+    expect(envAIPageMountSequence).toBe(1);
   });
 
-  it('moves focus out before hiding on outside pointer and ignores related layers or in-panel submission', async () => {
+  it('moves focus out before hiding on outside pointer while preserving related layers and in-panel gestures', async () => {
     await page.viewport(1280, 800);
     const fixture = await mountShell();
     await userEvent.click(fixture.input);
@@ -1115,9 +1167,17 @@ describe('EnvAppShell Activity Flower browser integration', () => {
 
     const submit = document.querySelector('[data-testid="activity-flower-submit"]');
     const related = document.querySelector('[data-testid="activity-flower-related-surface"]');
+    const contextPreview = document.querySelector('[data-testid="activity-flower-context-preview"]');
+    const providerDialog = document.querySelector('[data-testid="activity-flower-provider-dialog"]');
     const outside = document.querySelector('[data-testid="outside-flower"]');
+    const outsideMenuAction = document.querySelector('[data-testid="outside-menu"] button');
+    const outsideDialogAction = document.querySelector('[data-testid="outside-dialog"] button');
+    const stoppedOutside = document.querySelector('[data-testid="outside-flower-stop-propagation"]');
     if (!(submit instanceof HTMLButtonElement) || !(related instanceof HTMLButtonElement)
-      || !(outside instanceof HTMLButtonElement)) {
+      || !(contextPreview instanceof HTMLButtonElement)
+      || !(providerDialog instanceof HTMLButtonElement)
+      || !(outside instanceof HTMLButtonElement) || !(outsideMenuAction instanceof HTMLButtonElement)
+      || !(outsideDialogAction instanceof HTMLButtonElement) || !(stoppedOutside instanceof HTMLButtonElement)) {
       throw new Error('Flower pointer test controls did not render.');
     }
 
@@ -1125,13 +1185,45 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     await flushAsync();
     expect(fixture.panel.dataset.presentation).toBe('expanded');
 
+    await userEvent.click(contextPreview);
+    await flushAsync();
+    expect(fixture.panel.dataset.presentation).toBe('expanded');
+
+    await userEvent.click(providerDialog);
+    await flushAsync();
+    expect(fixture.panel.dataset.presentation).toBe('expanded');
+
     submit.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, composed: true }));
     expect(activityFlowerSubmitting).toBe(true);
     expect(fixture.panel.dataset.presentation).toBe('expanded');
     outside.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, composed: true }));
-    expect(fixture.panel.dataset.presentation).toBe('expanded');
+    expect(fixture.panel.dataset.presentation).toBe('collapsed');
     submit.dispatchEvent(new PointerEvent('pointerup', { bubbles: true, composed: true }));
     submit.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }));
+    await flushAsync();
+    expect(fixture.panel.dataset.presentation).toBe('collapsed');
+
+    await userEvent.click(fixture.input);
+    await flushAsync();
+    expect(fixture.panel.dataset.presentation).toBe('expanded');
+
+    await userEvent.click(outsideMenuAction);
+    await flushAsync();
+    expect(fixture.panel.dataset.presentation).toBe('collapsed');
+
+    await userEvent.click(fixture.input);
+    await flushAsync();
+    await userEvent.click(outsideDialogAction);
+    await flushAsync();
+    expect(fixture.panel.dataset.presentation).toBe('collapsed');
+
+    await userEvent.click(fixture.input);
+    await flushAsync();
+    await userEvent.click(stoppedOutside);
+    await flushAsync();
+    expect(fixture.panel.dataset.presentation).toBe('collapsed');
+
+    await userEvent.click(fixture.input);
     await flushAsync();
     expect(fixture.panel.dataset.presentation).toBe('expanded');
 
@@ -1247,18 +1339,31 @@ describe('EnvAppShell Activity Flower browser integration', () => {
   });
 
   it('keeps a visible running status while reduced motion disables the playful rotation', async () => {
-    await page.viewport(1280, 800);
+    await page.viewport(390, 844);
     await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference' });
-    await mountShell();
+    await mountProductionMobileShell();
 
     const icon = document.querySelector('.flower-activity-quick-entry-icon-running');
     const status = document.querySelector('.flower-activity-quick-entry-status-running');
-    if (!(icon instanceof HTMLElement) || !(status instanceof HTMLElement)) {
+    const summary = document.querySelector('[data-activity-flower-presence-summary]');
+    if (!(icon instanceof HTMLElement) || !(status instanceof HTMLElement) || !(summary instanceof HTMLElement)) {
       throw new Error('Running Flower status did not render.');
     }
+    expect(summary.textContent).toContain('Working · 1');
+    expect(summary.textContent).toContain('Refine the Flower companion');
+    expect(summary.scrollWidth).toBeGreaterThan(summary.clientWidth);
+    expect(getComputedStyle(summary).whiteSpace).toBe('nowrap');
+    expect(getComputedStyle(summary).textOverflow).toBe('ellipsis');
+    expect(getComputedStyle(summary).overflow).toBe('hidden');
     expect(getComputedStyle(icon).animationName).toContain('flower-activity-running-spin');
     expect(elementRect(status).width).toBeGreaterThan(0);
     expect(getComputedStyle(status).opacity).not.toBe('0');
+    const announcement = document.querySelector('[data-activity-flower-presence-announcement]');
+    if (!(announcement instanceof HTMLElement)) throw new Error('Flower presence announcement did not render.');
+    expect(announcement.textContent).toContain('Working · 1');
+    expect(announcement.textContent).toContain('Refine the Flower companion');
+    expect(announcement.getAttribute('aria-live')).toBe('polite');
+    expect(announcement.getAttribute('aria-atomic')).toBe('true');
 
     await mediaCommands.emulateMediaPreferences({ reducedMotion: 'reduce' });
     await settleFrames(2);
