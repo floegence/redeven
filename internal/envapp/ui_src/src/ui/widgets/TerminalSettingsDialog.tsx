@@ -14,6 +14,7 @@ import {
   type TerminalMobileInputMode,
 } from '../services/terminalPreferences';
 import { useI18n, type I18nHelpers } from '../i18n';
+import { REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS } from '../workbench/surface/workbenchWheelInteractive';
 
 type TerminalThemeOptionId = 'system' | TerminalThemeName;
 
@@ -319,7 +320,7 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
       description={i18n.t('terminal.settings.description')}
       class={cn(
         'flex flex-col overflow-hidden rounded-md p-0',
-        '[&>div:nth-child(2)]:min-h-0 [&>div:nth-child(2)]:flex [&>div:nth-child(2)]:flex-1 [&>div:nth-child(2)]:flex-col [&>div:nth-child(2)]:gap-5 [&>div:nth-child(2)]:overflow-y-auto [&>div:nth-child(2)]:overscroll-contain',
+        '[&>div:nth-child(2)]:min-h-0 [&>div:nth-child(2)]:flex [&>div:nth-child(2)]:flex-1 [&>div:nth-child(2)]:flex-col [&>div:nth-child(2)]:overflow-hidden [&>div:nth-child(2)]:p-0',
         isMobile()
           ? 'h-[calc(100dvh-0.5rem)] w-[calc(100vw-0.5rem)] max-h-none max-w-none'
           : 'w-[min(30rem,92vw)]'
@@ -330,8 +331,12 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
         </Button>
       }
     >
-      <Show when={isMobile()}>
-        <section class="space-y-3">
+      <div
+        {...REDEVEN_WORKBENCH_LOCAL_SCROLL_VIEWPORT_PROPS}
+        class="min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 space-y-5"
+      >
+        <Show when={isMobile()}>
+          <section class="space-y-3">
           <SectionTitle
             title={i18n.t('terminal.settings.mobileInputTitle')}
             description={i18n.t('terminal.settings.mobileInputDescription')}
@@ -359,10 +364,10 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
               onClick={() => props.onMobileInputModeChange('system')}
             />
           </div>
-        </section>
-      </Show>
+          </section>
+        </Show>
 
-      <section class="space-y-3">
+        <section class="space-y-3">
         <SectionTitle
           title={i18n.t('terminal.settings.themeTitle')}
           description={i18n.t('terminal.settings.themeDescription')}
@@ -416,9 +421,9 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
           </For>
         </div>
         <div class="sr-only" aria-live="polite">{themeAnnouncement()}</div>
-      </section>
+        </section>
 
-      <section class="space-y-3">
+        <section class="space-y-3">
         <SectionTitle
           title={i18n.t('terminal.settings.activityBorderTitle')}
           description={i18n.t('terminal.settings.activityBorderDescription')}
@@ -439,9 +444,9 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
             />
           </div>
         </div>
-      </section>
+        </section>
 
-      <section class="space-y-3">
+        <section class="space-y-3">
         <SectionTitle
           title={i18n.t('terminal.settings.fontTitle')}
           description={props.fontScope === 'shared-workbench'
@@ -482,7 +487,8 @@ export function TerminalSettingsDialog(props: TerminalSettingsDialogProps) {
             />
           </div>
         </div>
-      </section>
+        </section>
+      </div>
     </Dialog>
   );
 }
