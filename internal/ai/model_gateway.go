@@ -1312,10 +1312,6 @@ func openAIResponsesToolOverride(v map[string]any) oresponses.ToolUnionParam {
 	return param.Override[oresponses.ToolUnionParam](json.RawMessage(b))
 }
 
-func buildOpenAIChatMessages(messages []Message) []openai.ChatCompletionMessageParamUnion {
-	return buildOpenAIChatMessagesWithCapability(messages, config.AIReasoningCapability{})
-}
-
 func buildOpenAIChatMessagesWithCapability(messages []Message, capability config.AIReasoningCapability) []openai.ChatCompletionMessageParamUnion {
 	capability = capability.Normalize()
 	replayReasoning := reasoningCapabilityContains(capability.HistoryReplayRequirements, "reasoning_content")
