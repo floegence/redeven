@@ -156,7 +156,7 @@ export function FlowerProviderDialog(props: FlowerProviderDialogProps) {
       open={props.open}
       onOpenChange={props.onOpenChange}
       title={props.mode === 'create' ? copy().addTitle : copy().editTitle}
-      class="w-[min(72rem,96vw)] max-w-[96vw]"
+      class="flower-provider-dialog w-[min(72rem,96vw)] max-w-[96vw]"
       footer={(
         <div class="flex items-center justify-end gap-2">
           <Button size="sm" variant="outline" onClick={() => props.onOpenChange(false)}>

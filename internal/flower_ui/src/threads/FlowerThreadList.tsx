@@ -288,6 +288,7 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
       position={{ x: props.x, y: props.y }}
       estimatedSize={THREAD_CONTEXT_MENU_ESTIMATED_SIZE}
       class="flower-thread-context-menu-layer"
+      data-flower-floating-layer="true"
     >
       <div
         ref={menuRef}
