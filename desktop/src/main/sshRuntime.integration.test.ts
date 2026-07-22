@@ -5,7 +5,8 @@ import path from 'node:path';
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('./sshReleaseTrust', () => ({
+vi.mock('./sshReleaseTrust', async (importOriginal) => ({
+  ...await importOriginal<typeof import('./sshReleaseTrust')>(),
   verifyDesktopSSHReleaseManifestSignature: vi.fn(),
 }));
 
