@@ -79,6 +79,7 @@ function createFixture(root) {
   const certificate = path.join(root, runtimeCertificateName);
   const elf = Buffer.alloc(64);
   Buffer.from([0x7f, 0x45, 0x4c, 0x46, 2, 1]).copy(elf);
+  elf.writeUInt16LE(3, 16);
   elf.writeUInt16LE(62, 18);
   writeFileSync(runtime, elf, { mode: 0o755 });
   writeFileSync(sbom, '{}\n');
