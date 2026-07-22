@@ -27,11 +27,14 @@ const (
 	ubuntuImage         = "ubuntu:24.04"
 	containerStateRoot  = "/root/.redeven-e2e"
 	containerRedeven    = "/usr/local/bin/redeven"
+	containerPlugin     = "/usr/local/bin/redevplugin-runtime"
 	managedRedeven      = containerStateRoot + "/runtime/managed/bin/redeven"
+	managedPlugin       = containerStateRoot + "/runtime/managed/bin/redevplugin-runtime"
 	managedRuntimeStamp = containerStateRoot + "/runtime/managed/managed-runtime.stamp"
 	stagedUpgrade       = "/tmp/redeven-upgraded"
 	runtimeLockPath     = containerStateRoot + "/local-environment/agent.lock"
 	containerHelper     = "/tmp/redeven-e2e-client"
+	pluginRuntimeEnv    = "REDEVEN_DOCKER_E2E_REDEVPLUGIN_RUNTIME"
 	targetVersion       = "v9.9.9-e2e"
 	desktopOwnerID      = "redeven-docker-e2e-desktop-owner"
 	networkTestPort     = "23998"
@@ -130,6 +133,7 @@ type fixture struct {
 	tempRoot      string
 	containerName string
 	goarch        string
+	pluginRuntime string
 }
 
 func TestDockerUbuntuDesktopRuntimeLifecycle(t *testing.T) {
@@ -313,11 +317,27 @@ func newFixture(t *testing.T) *fixture {
 	if err != nil {
 		t.Fatalf("resolve repo root: %v", err)
 	}
+	pluginRuntime := strings.TrimSpace(os.Getenv(pluginRuntimeEnv))
+	if pluginRuntime == "" {
+		t.Fatalf("%s is required; run scripts/check_docker_runtime_e2e.sh", pluginRuntimeEnv)
+	}
+	pluginRuntime, err = filepath.Abs(pluginRuntime)
+	if err != nil {
+		t.Fatalf("resolve ReDevPlugin runtime path: %v", err)
+	}
+	info, err := os.Stat(pluginRuntime)
+	if err != nil {
+		t.Fatalf("stat ReDevPlugin runtime: %v", err)
+	}
+	if !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
+		t.Fatalf("ReDevPlugin runtime is not an executable regular file: %s", pluginRuntime)
+	}
 	return &fixture{
 		t:             t,
 		repoRoot:      repoRoot,
 		tempRoot:      t.TempDir(),
 		containerName: fmt.Sprintf("redeven-e2e-%d", time.Now().UnixNano()),
+		pluginRuntime: pluginRuntime,
 	}
 }
 
@@ -384,6 +404,9 @@ func (f *fixture) buildBinaries(ctx context.Context) {
 	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", redevenOut, f.containerName+":"+containerRedeven); err != nil {
 		f.t.Fatalf("copy redeven: %v", err)
 	}
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", f.pluginRuntime, f.containerName+":"+containerPlugin); err != nil {
+		f.t.Fatalf("copy ReDevPlugin runtime: %v", err)
+	}
 	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", helperOut, f.containerName+":"+containerHelper); err != nil {
 		f.t.Fatalf("copy helper: %v", err)
 	}
@@ -391,10 +414,14 @@ func (f *fixture) buildBinaries(ctx context.Context) {
 	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", redevenOut, f.containerName+":"+managedRedeven); err != nil {
 		f.t.Fatalf("copy managed redeven: %v", err)
 	}
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", f.pluginRuntime, f.containerName+":"+managedPlugin); err != nil {
+		f.t.Fatalf("copy managed ReDevPlugin runtime: %v", err)
+	}
 	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", upgradedRedevenOut, f.containerName+":"+stagedUpgrade); err != nil {
 		f.t.Fatalf("copy upgraded redeven: %v", err)
 	}
-	f.dockerExec(ctx, nil, "chmod", "0755", containerRedeven, managedRedeven, stagedUpgrade, containerHelper)
+	f.dockerExec(ctx, nil, "chown", "0:0", containerPlugin, managedPlugin)
+	f.dockerExec(ctx, nil, "chmod", "0755", containerRedeven, containerPlugin, managedRedeven, managedPlugin, stagedUpgrade, containerHelper)
 }
 
 func (f *fixture) assertNetworkExposureStartFailures(ctx context.Context, passwordPath string) {
@@ -514,7 +541,15 @@ func (f *fixture) assertInventoryRequiresConfirmedTakeover(ctx context.Context) 
 			f.t.Fatalf("copy isolation runtime to %s: %v", path, err)
 		}
 	}
-	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "exec", "-i", isolationContainer, "chmod", "0755", containerRedeven, managedRedeven); err != nil {
+	for _, path := range []string{containerPlugin, managedPlugin} {
+		if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "cp", f.pluginRuntime, isolationContainer+":"+path); err != nil {
+			f.t.Fatalf("copy isolation ReDevPlugin runtime to %s: %v", path, err)
+		}
+	}
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "exec", "-i", isolationContainer, "chown", "0:0", containerPlugin, managedPlugin); err != nil {
+		f.t.Fatalf("set isolation ReDevPlugin runtime ownership: %v", err)
+	}
+	if _, err := f.runHost(ctx, f.repoRoot, nil, "docker", "exec", "-i", isolationContainer, "chmod", "0755", containerRedeven, containerPlugin, managedRedeven, managedPlugin); err != nil {
 		f.t.Fatalf("prepare isolation runtime: %v", err)
 	}
 	if _, err := f.runHost(ctx, f.repoRoot, nil,
@@ -557,7 +592,18 @@ func (f *fixture) assertInventoryRequiresConfirmedTakeover(ctx context.Context) 
 		f.t.Fatalf("runtime inventory did not require confirmed takeover: %#v", inventory)
 	}
 	f.dockerExec(ctx, nil, "rm", "-f", runtimeLockPath)
-	inventory = f.runtimeInventory(ctx)
+	leaseRemovalDeadline := time.Now().Add(20 * time.Second)
+	for time.Now().Before(leaseRemovalDeadline) {
+		inventory = f.runtimeInventory(ctx)
+		if inventory.Summary.ConfirmedTakeover == 1 && inventory.Summary.Blocked == 0 && len(inventory.Instances) == 1 {
+			break
+		}
+		time.Sleep(250 * time.Millisecond)
+	}
+	if inventory.Summary.ConfirmedTakeover != 1 || inventory.Summary.Blocked != 0 || len(inventory.Instances) != 1 {
+		f.dumpContainerDiagnostics(ctx)
+		f.t.Fatalf("ownerless runtime inventory did not stabilize after lease removal: %#v", inventory)
+	}
 	instance := inventory.Instances[0]
 	if inventory.Summary.ConfirmedTakeover != 1 || instance.IdentityStatus != runtimemanagement.RuntimeProcessIdentityVerified ||
 		instance.OwnerStatus != runtimemanagement.RuntimeProcessOwnerMissing || instance.LayoutStatus != runtimemanagement.RuntimeProcessLayoutCurrent ||

@@ -73,11 +73,12 @@ epochs, or plugin data directly.
 
 On Linux, the official runtime path is exactly the `redevplugin-runtime` sibling
 of the Redeven executable. Redeven builds it with Rust 1.88.0 from the exact
-published crate and locked dependency graph, then emits an SPDX SBOM,
-provenance, notices, and a product signature. The released ProcessManager owns
-launch, health, heartbeats, shutdown, leases, hostcalls, and restart semantics.
-Darwin packages omit the runtime and worker execution entirely. No target may
-search `PATH`, candidate directories, or alternate filenames.
+published crate and locked dependency graph as a static PIE with no ELF
+interpreter or dynamic dependencies, then emits an SPDX SBOM, provenance,
+notices, and a product signature. The released ProcessManager owns launch,
+health, heartbeats, shutdown, leases, hostcalls, and restart semantics. Darwin
+packages omit the runtime and worker execution entirely. No target may search
+`PATH`, candidate directories, or alternate filenames.
 
 Official Containers is a signed ReDevPlugin package over the
 `redeven.capability.container_resources` adapter. Root delegation, channel
@@ -124,3 +125,4 @@ outcome is unknown.
 - `redeven:scripts/check_redevplugin_dependency_boundary.sh:1` - Rejects local wiring and platform duplication.
 - `redeven:scripts/check_redevplugin_release_artifacts.sh:1` - Verifies the exact formal package publication and registry readbacks.
 - `redeven:scripts/stage_redevplugin_release_artifacts.sh:1` - Builds and signs the Linux runtime from exact published source crates.
+- `redeven:scripts/link_redevplugin_runtime_static_pie.sh:1` - Produces the closed static PIE profile admitted by the released Host.

@@ -72,7 +72,7 @@ case "$target" in
   *) die "unsupported ReDevPlugin runtime target: $target" ;;
 esac
 
-for command in cargo gh go jq node rustc rustup; do require_command "$command"; done
+for command in cargo gh go jq node readelf rustc rustup; do require_command "$command"; done
 if [[ "$profile" == "release" ]]; then
   require_command cosign
   [[ "${GITHUB_REPOSITORY:-}" == "floegence/redeven" ]] || die "release build requires the floegence/redeven workflow identity"
@@ -120,7 +120,9 @@ rustc_version=$(rustup run "$RUST_TOOLCHAIN" rustc --version)
 
 export CARGO_HOME="$tmpdir/cargo-home"
 install_root="$tmpdir/runtime-install"
-rustup run "$RUST_TOOLCHAIN" cargo install \
+rustflags_key="CARGO_TARGET_$(printf '%s' "$rust_target" | tr '[:lower:]-' '[:upper:]_')_RUSTFLAGS"
+env "$rustflags_key=-C target-feature=+crt-static -C relocation-model=pic -C linker=$SCRIPT_DIR/link_redevplugin_runtime_static_pie.sh" \
+  rustup run "$RUST_TOOLCHAIN" cargo install \
   --locked \
   --root "$install_root" \
   --target "$rust_target" \
@@ -142,6 +144,12 @@ rustup run "$RUST_TOOLCHAIN" cargo metadata \
 runtime="$tmpdir/redevplugin-runtime"
 install -m 0755 "$install_root/bin/redevplugin-runtime" "$runtime"
 node "$SCRIPT_DIR/redevplugin_release_contract.mjs" verify-elf "$runtime" "$target"
+if readelf -lW "$runtime" | grep -q '[[:space:]]INTERP[[:space:]]'; then
+  die "ReDevPlugin runtime ELF interpreter is forbidden"
+fi
+if readelf -dW "$runtime" | grep -q '[[:space:]]NEEDED[[:space:]]'; then
+  die "ReDevPlugin runtime dynamic dependencies are forbidden"
+fi
 
 provenance="$tmpdir/$RUNTIME_PROVENANCE"
 sbom="$tmpdir/$RUNTIME_SBOM"
