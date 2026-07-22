@@ -1206,6 +1206,7 @@ func validFlowerCanonicalApprovalReplacement(payload FlowerLiveApprovalQueuePayl
 	actionIDs := make(map[string]struct{}, len(payload.Actions))
 	queueOrders := make(map[int64]struct{}, len(payload.Actions))
 	actionableCount := 0
+	primaryCount := 0
 	for index, action := range payload.Actions {
 		actionID := strings.TrimSpace(action.ActionID)
 		if (action.Origin != FlowerApprovalOriginMainTool && action.Origin != FlowerApprovalOriginDelegatedSubagent) ||
@@ -1237,8 +1238,16 @@ func validFlowerCanonicalApprovalReplacement(payload FlowerLiveApprovalQueuePayl
 				return false
 			}
 		}
+		if actionID == queue.CurrentActionID {
+			if action.SurfaceRole != FlowerApprovalSurfacePrimaryAction {
+				return false
+			}
+			primaryCount++
+		} else if action.SurfaceRole != FlowerApprovalSurfaceLocator {
+			return false
+		}
 	}
-	return payload.Actions[0].ActionID == queue.CurrentActionID && actionableCount <= 1
+	return payload.Actions[0].ActionID == queue.CurrentActionID && actionableCount <= 1 && primaryCount == 1
 }
 
 func normalizeFlowerTimelineDecorationForEvent(stream *flowerLiveThreadStream, compaction FlowerContextCompaction, decoration FlowerTimelineDecoration) FlowerTimelineDecoration {
@@ -1405,7 +1414,7 @@ func (s *Service) flowerLiveEventsFromStreamEvent(ev RealtimeEvent, base func(Fl
 		return []FlowerLiveEvent{base(kind, FlowerLiveApprovalPayload{Action: stream.Action, ApprovalQueue: cloneFlowerApprovalQueue(stream.ApprovalQueue)})}
 	case streamEventApprovalQueue:
 		return []FlowerLiveEvent{base(FlowerLiveApprovalQueueReplaced, FlowerLiveApprovalQueuePayload{
-			Actions:       append([]FlowerApprovalAction(nil), stream.Actions...),
+			Actions:       append([]FlowerApprovalAction{}, stream.Actions...),
 			ApprovalQueue: stream.ApprovalQueue,
 		})}
 	default:

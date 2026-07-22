@@ -655,7 +655,7 @@ func TestFlowerLiveProjectionRejectsMalformedCanonicalApprovalReplacement(t *tes
 		ActionID: "canonical_action", Origin: FlowerApprovalOriginMainTool,
 		RunID: "run_root", ToolID: "tool_root", ToolName: "terminal.exec",
 		State: FlowerApprovalStateRequested, Status: FlowerApprovalStatusPending,
-		Revision: 2, Version: 2, SurfaceEpoch: 3, Scope: "thread:thread_canonical",
+		Revision: 2, Version: 2, SurfaceEpoch: 3, SurfaceRole: FlowerApprovalSurfacePrimaryAction, Scope: "thread:thread_canonical",
 		RequestedAtMs: 1000, CanApprove: true, QueueGeneration: 3, QueueOrder: 1,
 		BatchSize: 1, Summary: FlowerApprovalSummary{Label: "Run command"},
 	}
@@ -670,6 +670,13 @@ func TestFlowerLiveProjectionRejectsMalformedCanonicalApprovalReplacement(t *tes
 		{name: "missing_version", mutate: func(action *FlowerApprovalAction, _ *FlowerApprovalQueue) { action.Version = 0 }},
 		{name: "negative_expected_seq", mutate: func(action *FlowerApprovalAction, _ *FlowerApprovalQueue) { action.ExpectedSeq = -1 }},
 		{name: "mismatched_counts", mutate: func(_ *FlowerApprovalAction, queue *FlowerApprovalQueue) { queue.Total = 2 }},
+		{name: "missing_surface_role", mutate: func(action *FlowerApprovalAction, _ *FlowerApprovalQueue) { action.SurfaceRole = "" }},
+		{name: "mirror_surface_role", mutate: func(action *FlowerApprovalAction, _ *FlowerApprovalQueue) {
+			action.SurfaceRole = FlowerApprovalSurfaceMirror
+		}},
+		{name: "current_is_locator", mutate: func(action *FlowerApprovalAction, _ *FlowerApprovalQueue) {
+			action.SurfaceRole = FlowerApprovalSurfaceLocator
+		}},
 	}
 	for _, tt := range tests {
 		tt := tt

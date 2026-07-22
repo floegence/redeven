@@ -1421,8 +1421,10 @@ func TestFlowerLiveCanonicalApprovalQueueSupportsIdentityCheckedResolution(t *te
 		t.Fatalf("ListFlowerThreadLiveEvents after approval submit: %v", err)
 	}
 	var resolvedPayload FlowerLiveApprovalQueuePayload
+	var resolvedPayloadJSON string
 	for _, event := range resolved.Events {
 		if event.Kind == FlowerLiveApprovalQueueReplaced {
+			resolvedPayloadJSON = string(event.Payload)
 			if !decodeFlowerPayload(event.Payload, &resolvedPayload) {
 				t.Fatalf("failed to decode resolved payload: %s", string(event.Payload))
 			}
@@ -1431,6 +1433,9 @@ func TestFlowerLiveCanonicalApprovalQueueSupportsIdentityCheckedResolution(t *te
 	}
 	if resolvedPayload.ApprovalQueue.Revision != queue.Revision+1 || len(resolvedPayload.Actions) != 0 {
 		t.Fatalf("resolved canonical queue=%#v actions=%#v", resolvedPayload.ApprovalQueue, resolvedPayload.Actions)
+	}
+	if !strings.Contains(resolvedPayloadJSON, `"actions":[]`) || strings.Contains(resolvedPayloadJSON, `"actions":null`) {
+		t.Fatalf("resolved canonical queue must encode an explicit empty actions array: %s", resolvedPayloadJSON)
 	}
 	svc.mu.Lock()
 	state := svc.flowerLiveMaterializedStateLocked(meta.EndpointID, th.ThreadID)

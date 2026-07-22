@@ -12,6 +12,7 @@ import type {
 } from './contracts/flowerSurfaceContracts';
 import { mapFlowerLiveBootstrap, mapFlowerLiveEvents, mapFlowerMessage } from './flowerLiveMapper';
 import { applyFlowerLiveEvent, projectFlowerLiveBootstrap } from './flowerLiveReducer';
+import { flowerComposerApprovalAction } from './approvalDecisionHandoff';
 
 type FlowerMainToolApprovalAction = Exclude<FlowerApprovalAction, { origin: 'delegated_subagent' }>;
 
@@ -149,6 +150,7 @@ function rawCanonicalApprovalAction(overrides: Record<string, unknown> = {}) {
     revision: 2,
     version: 2,
     surface_epoch: 3,
+    surface_role: 'primary_action',
     scope: 'thread:th-live',
     requested_at_unix_ms: 2000,
     can_approve: true,
@@ -2187,6 +2189,7 @@ describe('Flower live projection', () => {
             revision: 2,
             version: 2,
             surface_epoch: 2,
+            surface_role: 'primary_action',
             scope: 'thread:child-thread',
             queue_generation: 2,
             queue_order: 1,
@@ -2207,6 +2210,7 @@ describe('Flower live projection', () => {
             revision: 1,
             version: 1,
             surface_epoch: 2,
+            surface_role: 'locator',
             scope: 'thread:th-live',
             queue_generation: 2,
             queue_order: 2,
@@ -2246,6 +2250,7 @@ describe('Flower live projection', () => {
     });
     expect(applied.thread.approval_actions?.some((action) => action.action_id === 'stale-main')).toBe(false);
     expect(applied.thread.approval_queue).toMatchObject({ generation: 2, revision: 3 });
+    expect(flowerComposerApprovalAction(applied.thread)?.action_id).toBe('delegated-1');
 
     const stale = applyFlowerLiveEvent(applied.thread, applied.cursor, event(2, 'approval.queue_replaced', {
       actions: [approvalAction({ action_id: 'regressed' })],
@@ -2273,6 +2278,7 @@ describe('Flower live projection', () => {
       revision: 1,
       version: 1,
       surface_epoch: 3,
+      surface_role: 'primary_action',
       scope: 'thread:child-thread',
       queue_generation: 3,
       queue_order: 1,
@@ -2292,6 +2298,9 @@ describe('Flower live projection', () => {
       unresolved_count: 1,
     };
     const malformed = [
+      { actions: [{ ...action, surface_role: undefined }], approval_queue: queue },
+      { actions: [{ ...action, surface_role: 'locator' }], approval_queue: queue },
+      { actions: [{ ...action, surface_role: 'mirror' }], approval_queue: queue },
       { actions: [{ ...action, origin: '' }], approval_queue: queue },
       { actions: [{ ...action, scope: 'child-thread' }], approval_queue: queue },
       { actions: [{ ...action, queue_generation: 2, surface_epoch: 2 }], approval_queue: queue },
