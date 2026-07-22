@@ -201,6 +201,16 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       {props.children}
     </button>
   ),
+  ConfirmDialog: (props: any) => (
+    <Show when={props.open}>
+      <section role="alertdialog" aria-label={props.title}>
+        <h2>{props.title}</h2>
+        {props.children}
+        <button type="button" onClick={() => props.onOpenChange?.(false)}>Cancel</button>
+        <button type="button" onClick={() => props.onConfirm?.()}>Confirm</button>
+      </section>
+    </Show>
+  ),
   createFloatingPresence: (options: { open: () => boolean }) => ({
     mounted: () => Boolean(options.open()),
     exiting: () => false,
@@ -643,6 +653,7 @@ vi.mock('./services/desktopShellBridge', () => ({
 vi.mock('./services/localApi', () => ({
   fetchLocalApiJSON: vi.fn(),
   getEnvAppAccessStatus: getEnvAppAccessStatusMock,
+  prepareLocalApiRequestInit: vi.fn(async (init: RequestInit) => init),
   uploadLocalApiFile: vi.fn(),
   unlockEnvAppAccess: vi.fn(async () => ({ unlocked: true, resume_token: 'resume123' })),
 }));
