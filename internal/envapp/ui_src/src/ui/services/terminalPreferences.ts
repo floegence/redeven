@@ -1,6 +1,11 @@
 import { createSignal } from 'solid-js';
 import type { PersistApi } from '@floegence/floe-webapp-core';
 import {
+  isTerminalThemeName,
+  normalizeTerminalThemeName,
+  type TerminalThemeName,
+} from '@floegence/floeterm-terminal-web';
+import {
   DEFAULT_TERMINAL_FONT_FAMILY_ID,
   DEFAULT_TERMINAL_FONT_SIZE,
   TERMINAL_MAX_FONT_SIZE,
@@ -19,7 +24,8 @@ export const TERMINAL_MOBILE_INPUT_MODE_PERSIST_KEY = 'terminal:mobile_input_mod
 export const TERMINAL_WORK_INDICATOR_ENABLED_PERSIST_KEY = 'terminal:work_indicator_enabled';
 
 export type TerminalMobileInputMode = 'floe' | 'system';
-export const DEFAULT_TERMINAL_THEME = 'dark';
+export type TerminalUserTheme = 'system' | TerminalThemeName;
+export const DEFAULT_TERMINAL_THEME: TerminalThemeName = 'dark';
 export {
   DEFAULT_TERMINAL_FONT_FAMILY_ID,
   DEFAULT_TERMINAL_FONT_SIZE,
@@ -34,6 +40,11 @@ let persistRef: PersistApi | null = null;
 
 const normalizeTerminalMobileInputMode = (value: unknown): TerminalMobileInputMode => {
   return String(value ?? '').trim() === 'system' ? 'system' : 'floe';
+};
+
+export const resolveTerminalUserTheme = (value: unknown): TerminalUserTheme => {
+  const normalized = String(value ?? '').trim();
+  return normalized === 'system' ? 'system' : normalizeTerminalThemeName(normalized);
 };
 
 const normalizeTerminalWorkIndicatorEnabled = (value: unknown): boolean => {
@@ -79,7 +90,10 @@ export function ensureTerminalPreferencesInitialized(persist: PersistApi) {
 
 export function useTerminalPreferences() {
   const setUserTheme = (value: string) => {
-    const next = (value ?? '').trim() || DEFAULT_TERMINAL_THEME;
+    const normalized = (value ?? '').trim();
+    const next: TerminalUserTheme = normalized === 'system' || isTerminalThemeName(normalized)
+      ? normalized
+      : DEFAULT_TERMINAL_THEME;
     setTerminalUserTheme(next);
     persistRef?.debouncedSave(TERMINAL_THEME_PERSIST_KEY, next);
   };

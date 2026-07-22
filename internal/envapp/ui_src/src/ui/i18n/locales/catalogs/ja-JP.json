@@ -2304,6 +2304,8 @@
       "description": "ターミナル セッションのデフォルトのテーマ、フォント、モバイル入力動作をカスタマイズします。",
       "close": "閉じる",
       "selected": "選択済み",
+      "themeApplied": "テーマを適用しました",
+      "themeApplyFailed": "テーマを適用できませんでした",
       "tapToUse": "タップして使用します",
       "mobileInputTitle": "モバイル入力",
       "mobileInputDescription": "モバイル端末セッションごとに 1 つのデフォルト入力モードを選択します。",

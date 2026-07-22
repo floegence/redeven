@@ -47,4 +47,39 @@ describe('terminalPreferences defaults', () => {
     expect(prefs.workIndicatorEnabled()).toBe(false);
     expect(debouncedSave).toHaveBeenCalledWith(TERMINAL_WORK_INDICATOR_ENABLED_PERSIST_KEY, false);
   });
+
+  it('keeps an unknown persisted theme while resolving a safe in-memory fallback', async () => {
+    vi.resetModules();
+    const {
+      DEFAULT_TERMINAL_THEME,
+      TERMINAL_THEME_PERSIST_KEY,
+      ensureTerminalPreferencesInitialized,
+      resolveTerminalUserTheme,
+      useTerminalPreferences,
+    } = await import('./terminalPreferences');
+
+    const debouncedSave = vi.fn();
+    const persist = {
+      key(key: string): string {
+        return key;
+      },
+      load<T>(key: string, fallback: T): T {
+        return (key === TERMINAL_THEME_PERSIST_KEY ? 'futureTheme' : fallback) as T;
+      },
+      save: vi.fn(),
+      debouncedSave,
+      remove: vi.fn(),
+      clearAll: vi.fn(),
+    };
+
+    ensureTerminalPreferencesInitialized(persist);
+    const prefs = useTerminalPreferences();
+    expect(prefs.userTheme()).toBe('futureTheme');
+    expect(resolveTerminalUserTheme(prefs.userTheme())).toBe(DEFAULT_TERMINAL_THEME);
+    expect(debouncedSave).not.toHaveBeenCalled();
+
+    prefs.setUserTheme('signalSafeDark');
+    expect(prefs.userTheme()).toBe('signalSafeDark');
+    expect(debouncedSave).toHaveBeenCalledWith(TERMINAL_THEME_PERSIST_KEY, 'signalSafeDark');
+  });
 });

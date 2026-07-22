@@ -1527,13 +1527,12 @@ vi.mock('../services/terminalSessions', () => ({
   getRedevenTerminalSessionsCoordinator: () => sessionsCoordinatorMocks,
 }));
 
-vi.mock('../services/terminalPreferences', () => ({
-  ensureTerminalPreferencesInitialized: vi.fn(),
-  TERMINAL_MIN_FONT_SIZE: 10,
-  TERMINAL_MAX_FONT_SIZE: 20,
-  DEFAULT_TERMINAL_THEME: 'dark',
-  DEFAULT_TERMINAL_FONT_FAMILY_ID: 'monaco',
-  useTerminalPreferences: () => ({
+vi.mock('../services/terminalPreferences', async () => {
+  const actual = await vi.importActual<typeof import('../services/terminalPreferences')>('../services/terminalPreferences');
+  return {
+    ...actual,
+    ensureTerminalPreferencesInitialized: vi.fn(),
+    useTerminalPreferences: () => ({
     userTheme: () => terminalPrefsState.userTheme,
     fontSize: () => terminalPrefsState.fontSize,
     fontFamilyId: () => terminalPrefsState.fontFamilyId,
@@ -1554,8 +1553,9 @@ vi.mock('../services/terminalPreferences', () => ({
     setWorkIndicatorEnabled: (value: boolean) => {
       terminalPrefsState.workIndicatorEnabled = value;
     },
-  }),
-}));
+    }),
+  };
+});
 
 vi.mock('../pages/EnvContext', () => {
   const envAccessor = Object.assign(

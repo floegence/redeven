@@ -8,6 +8,24 @@
   contain: paint;
 }
 
+@media (forced-colors: active) {
+  .redeven-terminal-theme-option {
+    border-color: CanvasText;
+    background: Canvas;
+  }
+
+  input[type='radio']:checked + .redeven-terminal-theme-option {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .redeven-terminal-theme-option {
+    transition: none;
+  }
+}
+
 .redeven-workbench-page[data-redeven-workbench-layout-interacting='true'] .workbench-widget {
   transition:
     opacity 120ms ease-out,

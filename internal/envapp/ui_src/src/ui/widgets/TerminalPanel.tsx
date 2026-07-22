@@ -16,6 +16,7 @@ import { useRedevenRpc } from '../protocol/redeven_v1';
 import {
   TerminalCore,
   getThemeColors,
+  isTerminalThemeName,
   type Logger,
   type TerminalAppearance,
   type TerminalOutputActivityInfo,
@@ -31,6 +32,7 @@ import { disposeRedevenTerminalSessionsCoordinator, getRedevenTerminalSessionsCo
 import { useTerminalSessionCatalog } from '../services/terminalSessionCatalog';
 import {
   ensureTerminalPreferencesInitialized,
+  resolveTerminalUserTheme,
   TERMINAL_MAX_FONT_SIZE,
   TERMINAL_MIN_FONT_SIZE,
   type TerminalMobileInputMode,
@@ -1114,11 +1116,11 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   };
 
   const terminalThemeName = createMemo<TerminalThemeName>(() => {
-    const selected = userTheme();
+    const selected = resolveTerminalUserTheme(userTheme());
     if (selected === 'system') {
       return theme.resolvedTheme() === 'light' ? 'light' : 'dark';
     }
-    return selected as TerminalThemeName;
+    return selected;
   });
 
   const terminalWorkIndicatorTheme = createMemo(() => {
@@ -1758,8 +1760,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     }
   };
 
-  const handleThemeChange = (value: string) => {
+  const handleThemeChange = (value: string): boolean => {
+    if (value !== 'system' && !isTerminalThemeName(value)) return false;
     terminalPrefs.setUserTheme(value);
+    return true;
   };
 
   let prevSessionsSnapshot: TerminalSessionInfo[] = [];
@@ -4142,6 +4146,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
               fontSize={fontSize()}
               fontFamilyId={fontFamilyId()}
               mobileInputMode={mobileInputMode()}
+              systemAppearance={theme.resolvedTheme()}
               workIndicatorEnabled={workIndicatorEnabled()}
               fontScope={sharedGeometryPreferences() ? 'shared-workbench' : 'local'}
               minFontSize={TERMINAL_MIN_FONT_SIZE}

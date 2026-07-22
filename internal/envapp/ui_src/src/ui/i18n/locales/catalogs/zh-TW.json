@@ -2304,6 +2304,8 @@
       "description": "自訂終端會話的預設主題、字體和行動輸入行為。",
       "close": "關閉",
       "selected": "已選擇",
+      "themeApplied": "主題已套用",
+      "themeApplyFailed": "無法套用主題",
       "tapToUse": "點選使用",
       "mobileInputTitle": "行動輸入",
       "mobileInputDescription": "為每個行動終端機會話選擇一個預設輸入模式。",

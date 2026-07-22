@@ -61,6 +61,10 @@ const EXCEPTIONS: readonly Exception[] = [
   { file: 'src/ui/widgets/RemoteFileBrowser.tsx', kind: 'expression', text: 'new-folder', reason: 'Literal default folder-name value, not interface copy.' },
   { file: 'src/ui/widgets/RemoteFileBrowser.tsx', kind: 'expression', text: 'README.md', reason: 'Literal default file-name value, not interface copy.' },
   { file: 'src/ui/widgets/RuntimeMonitorPanel.tsx', kind: 'text', text: 'CPU', reason: 'Standard processor acronym.' },
+  { file: 'src/ui/widgets/TerminalSettingsDialog.tsx', kind: 'text', text: '~/redeven', reason: 'Literal filesystem prompt path inside the terminal color preview.' },
+  { file: 'src/ui/widgets/TerminalSettingsDialog.tsx', kind: 'text', text: '&gt;', reason: 'Literal terminal prompt symbol inside the terminal color preview.' },
+  { file: 'src/ui/widgets/TerminalSettingsDialog.tsx', kind: 'text', text: 'pnpm dev', reason: 'Literal package-manager command inside the terminal color preview.' },
+  { file: 'src/ui/widgets/TerminalSettingsDialog.tsx', kind: 'text', text: '200 12ms', reason: 'Literal HTTP status and latency sample inside the terminal color preview.' },
   { file: 'src/ui/workbench/redevenWorkbenchWidgets.tsx', kind: 'text', text: 'HTTP', reason: 'Standard protocol acronym.' },
 ];
 
