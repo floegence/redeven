@@ -2748,8 +2748,8 @@ describe('Flower live projection', () => {
     expect(patched.thread.title_status).toBe('pending');
   });
 
-  it.each([undefined, '', 'unknown'])('rejects missing or invalid canonical title status %s', (titleStatus) => {
-    expect(() => mapFlowerLiveBootstrap({
+  it.each([undefined, ''])('projects the canonical pre-title state %s as unset', (titleStatus) => {
+    const mapped = mapFlowerLiveBootstrap({
       schema_version: 1,
       endpoint_id: 'runtime',
       thread_id: 'th-title-contract',
@@ -2759,6 +2759,40 @@ describe('Flower live projection', () => {
         thread_id: 'th-title-contract',
         title: '',
         ...(titleStatus !== undefined ? { title_status: titleStatus } : {}),
+        model_id: 'openai/gpt-5.2',
+        working_dir: '/workspace',
+        created_at_unix_ms: 1000,
+        updated_at_unix_ms: 1000,
+        run_status: 'idle',
+      },
+      timeline_messages: [],
+      live_state: { thread_patch: {}, runs: {}, approval_actions: {}, input_requests: {} },
+      read_status: readStatus(),
+      generated_at_ms: 3000,
+    }, {
+      runtimeID: 'runtime',
+      runtimeKind: 'env_local',
+      sourceLabel: 'Local',
+      targetLabels: [],
+    });
+    expect(mapped.thread.title_status).toBe('unset');
+  });
+
+  it.each([
+    { title: '', titleStatus: 'unknown' },
+    { title: '', titleStatus: 'ready-ish' },
+    { title: 'Canonical title', titleStatus: '' },
+  ])('rejects invalid canonical title state $titleStatus for title $title', ({ title, titleStatus }) => {
+    expect(() => mapFlowerLiveBootstrap({
+      schema_version: 1,
+      endpoint_id: 'runtime',
+      thread_id: 'th-title-contract',
+      cursor: 1,
+      retained_from_seq: 1,
+      thread: {
+        thread_id: 'th-title-contract',
+        title,
+        title_status: titleStatus,
         model_id: 'openai/gpt-5.2',
         working_dir: '/workspace',
         created_at_unix_ms: 1000,

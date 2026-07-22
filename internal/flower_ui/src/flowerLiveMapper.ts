@@ -106,13 +106,16 @@ function normalizePermissionType(value: unknown): FlowerPermissionType | undefin
   return undefined;
 }
 
-function titleStatus(raw: unknown): FlowerTitleStatus {
+function titleStatus(raw: unknown, title: unknown): FlowerTitleStatus {
   switch (trim(raw).toLowerCase()) {
+    case '':
+      if (!trim(title)) return 'unset';
+      break;
     case 'ready': return 'ready';
     case 'failed': return 'failed';
     case 'pending': return 'pending';
-    default: throw new Error('Flower contract error: title_status must be pending, ready, or failed.');
   }
+  throw new Error(`Flower contract error: title_status must be empty, pending, ready, or failed; received ${trim(raw) || '<empty>'}.`);
 }
 
 function positiveInteger(raw: unknown): number | undefined {
@@ -1400,7 +1403,7 @@ function mapThreadPatch(raw: unknown): FlowerLiveThreadPatch | null {
   return {
     ...(trim(patch.thread_id) ? { thread_id: trim(patch.thread_id) } : {}),
     ...(hasOwn(patch, 'title') ? { title: trim(patch.title) } : {}),
-    ...(hasOwn(patch, 'title_status') ? { title_status: titleStatus(patch.title_status) } : {}),
+    ...(hasOwn(patch, 'title_status') ? { title_status: titleStatus(patch.title_status, patch.title) } : {}),
     ...(trim(patch.model_id) ? { model_id: trim(patch.model_id) } : {}),
     ...(normalizePermissionType(patch.permission_type) ? { permission_type: normalizePermissionType(patch.permission_type) } : {}),
     ...(trim(patch.working_dir) ? { working_dir: trim(patch.working_dir) } : {}),
@@ -1527,7 +1530,7 @@ export function mapFlowerThread(raw: unknown, messages: readonly FlowerChatMessa
   return {
     thread_id: threadID,
     title: trim(record.title),
-    title_status: titleStatus(record.title_status),
+    title_status: titleStatus(record.title_status, record.title),
     model_id: trim(record.model_id),
     working_dir: trim(record.working_dir),
     ...(Number(record.pinned_at_unix_ms ?? 0) > 0 ? { pinned_at_ms: Math.floor(Number(record.pinned_at_unix_ms)) } : {}),

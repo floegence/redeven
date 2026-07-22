@@ -182,7 +182,7 @@ export type FlowerThreadStatus =
   | 'canceled'
   | 'read_only';
 
-export type FlowerTitleStatus = 'pending' | 'ready' | 'failed';
+export type FlowerTitleStatus = 'unset' | 'pending' | 'ready' | 'failed';
 
 export type FlowerThreadError = Readonly<{
   message: string;
