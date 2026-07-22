@@ -634,7 +634,7 @@ This inventory is intentionally broad: it includes Go modules used by the runtim
 | dmg-builder | 26.8.1 | MIT | Desktop shell | https://www.npmjs.com/package/dmg-builder/v/26.8.1 |  |
 | dmg-license | 1.0.11 | MIT | Desktop shell | https://www.npmjs.com/package/dmg-license/v/1.0.11 |  |
 | docx-preview | 0.3.7 | Apache-2.0 | Env App UI | https://www.npmjs.com/package/docx-preview/v/0.3.7 |  |
-| dompurify | 3.4.11 | (MPL-2.0 OR Apache-2.0) | Desktop shell, Env App UI | https://www.npmjs.com/package/dompurify/v/3.4.11 |  |
+| dompurify | 3.4.12 | (MPL-2.0 OR Apache-2.0) | Desktop shell, Env App UI | https://www.npmjs.com/package/dompurify/v/3.4.12 |  |
 | dotenv-expand | 11.0.7 | BSD-2-Clause | Desktop shell | https://www.npmjs.com/package/dotenv-expand/v/11.0.7 |  |
 | dotenv | 16.6.1 | BSD-2-Clause | Desktop shell | https://www.npmjs.com/package/dotenv/v/16.6.1 |  |
 | dunder-proto | 1.0.1 | MIT | Desktop shell | https://www.npmjs.com/package/dunder-proto/v/1.0.1 |  |
