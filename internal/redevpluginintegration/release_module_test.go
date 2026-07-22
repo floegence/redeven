@@ -148,7 +148,7 @@ func TestOfficialContainersReleaseInstallsThroughHTTP(t *testing.T) {
 	integration, err := New(context.Background(), Options{
 		StateDir:         stateDir,
 		PermissionPolicy: testPermissionPolicy(t, "execute_read_write"),
-		RuntimePath:      filepath.Join(stateDir, "redevplugin-runtime"),
+		RuntimePath:      testRuntimePath(t, stateDir),
 		Containers:       mustContainersAdapter(t, &capabilityEngineClient{}),
 		ResolveSessionMeta: func(channelID string) (*session.Meta, bool) {
 			if channelID != "ch_release" {
