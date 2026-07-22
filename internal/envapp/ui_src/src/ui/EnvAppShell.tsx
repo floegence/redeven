@@ -3754,6 +3754,7 @@ export function EnvAppShell() {
               presentation={activityFlowerPresentation() === 'maximized' ? 'full' : 'companion'}
               engaged={activityFlowerEngaged()}
               transcriptVisible={activityFlowerEngaged()}
+              companionPresenceOwner
               focusRequestScope="activity"
               focusThreadRequest={activityFlowerFocusRequest()}
               focusComposerRequest={activityFlowerComposerFocusRequest()}

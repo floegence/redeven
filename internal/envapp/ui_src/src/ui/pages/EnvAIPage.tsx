@@ -38,6 +38,7 @@ export type EnvAIPageProps = Readonly<{
   presentation?: 'full' | 'companion';
   engaged?: boolean;
   transcriptVisible?: boolean;
+  companionPresenceOwner?: boolean;
   focusRequestScope?: 'workbench' | 'activity';
   focusThreadRequest?: FlowerThreadFocusRequest | null;
   focusComposerRequest?: number;
@@ -146,6 +147,7 @@ export function EnvAIPage(props: EnvAIPageProps = {}) {
       presentation={props.presentation}
       engaged={props.engaged}
       transcriptVisible={props.transcriptVisible}
+      companionPresenceOwner={props.companionPresenceOwner}
       companionCopy={companionCopy()}
       headerTrailingActions={props.headerTrailingActions}
       onPresenceChange={props.onPresenceChange}
