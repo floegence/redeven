@@ -1,8 +1,13 @@
 import { For, Show, createMemo } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
+import { Copy, FileText, Folder, History, Terminal } from '@floegence/floe-webapp-core/icons';
 import type { GitCommitSummary } from '../protocol/redeven_v1';
+import { FlowerIcon } from '../icons/FlowerIcon';
+import type { GitAskFlowerRequest, GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { useI18n } from '../i18n';
+import { GitEntityContextMenu, createGitEntityContextMenuController, type GitContextMenuActionItem } from './GitEntityContextMenu';
+import type { GitDetachedSwitchTarget } from '../utils/gitWorkbench';
 
 export type CommitGraphLane = {
   hash: string;
@@ -190,11 +195,26 @@ export interface GitCommitGraphProps {
   commits: GitCommitSummary[];
   selectedCommitHash?: string;
   onSelect?: (hash: string) => void;
+  repoRootPath?: string;
+  onAskFlower?: (request: Extract<GitAskFlowerRequest, { kind: 'commit' }>) => void;
+  onOpenInTerminal?: (request: GitDirectoryShortcutRequest) => void;
+  onBrowseFiles?: (request: GitDirectoryShortcutRequest) => void | Promise<void>;
+  onSwitchDetached?: (target: GitDetachedSwitchTarget) => void;
+  switchDetachedBusy?: boolean;
+  alreadyDetachedCommitHash?: string;
+  onCopyText?: (value: string) => void;
   class?: string;
 }
 
 export function GitCommitGraph(props: GitCommitGraphProps) {
   const i18n = useI18n();
+  type CommitContextTarget = Readonly<{ commit: GitCommitSummary; repoRootPath: string }>;
+  const contextMenu = createGitEntityContextMenuController<CommitContextTarget>({
+    snapshotTarget: (target) => ({
+      repoRootPath: target.repoRootPath,
+      commit: { ...target.commit, parents: [...target.commit.parents] },
+    }),
+  });
   const rows = createMemo(() => buildCommitGraphRows(props.commits ?? []));
   const rowCount = createMemo(() => rows().length);
   const columns = createMemo(() => rows()[0]?.columns ?? 1);
@@ -215,6 +235,68 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
     'padding-bottom': `${ROW_BOTTOM_PADDING}px`,
     'grid-template-rows': `${SUBJECT_ROW_HEIGHT}px ${META_ROW_HEIGHT}px`,
     gap: `${ROW_GAP}px`,
+  };
+  const repoRootPath = () => String(props.repoRootPath ?? '').trim();
+  const contextMenuItems = (target: CommitContextTarget): GitContextMenuActionItem[] => {
+    const { commit } = target;
+    const items: GitContextMenuActionItem[] = [];
+    if (props.onAskFlower && target.repoRootPath) {
+      items.push({
+        id: 'ask-flower', kind: 'action', group: 'assistant', rank: 10,
+        label: i18n.t('git.contextMenu.askFlower'), icon: FlowerIcon,
+        onSelect: () => props.onAskFlower?.({ kind: 'commit', repoRootPath: target.repoRootPath, location: 'graph', commit, files: [] }),
+      });
+    }
+    if (props.onSelect) {
+      items.push({
+        id: 'view-commit-details', kind: 'action', group: 'inspect', rank: 10,
+        label: i18n.t('git.contextMenu.viewCommitDetails'), icon: FileText,
+        onSelect: () => props.onSelect?.(commit.hash),
+      });
+    }
+    if (props.onOpenInTerminal && target.repoRootPath) {
+      items.push({
+        id: 'open-terminal', kind: 'action', group: 'navigate', rank: 10,
+        label: i18n.t('git.contextMenu.openTerminal'), icon: Terminal,
+        onSelect: () => props.onOpenInTerminal?.({ path: target.repoRootPath }),
+      });
+    }
+    if (props.onBrowseFiles && target.repoRootPath) {
+      items.push({
+        id: 'browse-files', kind: 'action', group: 'navigate', rank: 20,
+        label: i18n.t('git.contextMenu.browseFiles'), icon: Folder,
+        onSelect: () => void props.onBrowseFiles?.({ path: target.repoRootPath }),
+      });
+    }
+    if (props.onSwitchDetached) {
+      items.push({
+        id: 'switch-detached', kind: 'action', group: 'modify', rank: 10,
+        label: i18n.t('git.contextMenu.switchDetached'), icon: History,
+        disabled: Boolean(props.switchDetachedBusy) || target.commit.hash === props.alreadyDetachedCommitHash,
+        disabledReason: props.switchDetachedBusy
+          ? i18n.t('uiCopy.git.switching')
+          : target.commit.hash === props.alreadyDetachedCommitHash
+            ? i18n.t('uiCopy.git.alreadyDetachedHere')
+            : undefined,
+        onSelect: () => props.onSwitchDetached?.({ commitHash: commit.hash, shortHash: commit.shortHash, source: 'graph' }),
+      });
+    }
+    if (props.onCopyText) {
+      items.push({
+        id: 'copy-commit-hash', kind: 'action', group: 'clipboard', rank: 10,
+        label: i18n.t('git.contextMenu.copyCommitHash'), icon: Copy,
+        onSelect: () => props.onCopyText?.(commit.hash),
+      });
+    }
+    return items;
+  };
+  const openContextMenu = (event: MouseEvent, commit: GitCommitSummary) => {
+    const target = { commit, repoRootPath: repoRootPath() };
+    if (contextMenuItems(target).length > 0) contextMenu.openFromContextMenu(event, target);
+  };
+  const openKeyboardContextMenu = (event: KeyboardEvent, commit: GitCommitSummary) => {
+    const target = { commit, repoRootPath: repoRootPath() };
+    if (contextMenuItems(target).length > 0) contextMenu.openFromKeyboard(event, target);
   };
 
   return (
@@ -260,6 +342,8 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
                     selected() ? 'text-sidebar-accent-foreground' : 'text-foreground',
                   )}
                   onClick={() => props.onSelect?.(row.commit.hash)}
+                  onContextMenu={(event) => openContextMenu(event, row.commit)}
+                  onKeyDown={(event) => openKeyboardContextMenu(event, row.commit)}
                 >
                   <div style={graphCellStyle} class="relative z-20" aria-hidden="true">
                     {/* Keep dynamic graph drawing inside the row box so it cannot drift from row layout. */}
@@ -330,6 +414,7 @@ export function GitCommitGraph(props: GitCommitGraphProps) {
           </For>
         </div>
       </div>
+      <GitEntityContextMenu controller={contextMenu} items={contextMenuItems} />
     </div>
   );
 }

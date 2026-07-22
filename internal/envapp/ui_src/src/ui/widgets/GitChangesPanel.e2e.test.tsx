@@ -6,7 +6,7 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { redevenV1Contract } from '../protocol/redeven_v1';
-import { GitChangesPanel } from './GitChangesPanel';
+import { GitChangesPanel, type GitChangesPanelProps } from './GitChangesPanel';
 
 const resizeObserverState = {
   observers: [] as Array<{
@@ -66,6 +66,45 @@ async function clickDropdownMenuItem(trigger: HTMLButtonElement | null | undefin
 
   const menuItem = Array.from(document.body.querySelectorAll('[role="menu"] button'))
     .find((node) => node.textContent?.trim() === label) as HTMLButtonElement | undefined;
+  expect(menuItem).toBeTruthy();
+  menuItem!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+  await flush();
+}
+
+function renderChangesPanel(host: HTMLElement, props: GitChangesPanelProps) {
+  return render(() => (
+    <LayoutProvider>
+      <NotificationProvider>
+        <ProtocolProvider contract={redevenV1Contract}>
+          <div class="h-[620px]">
+            <GitChangesPanel {...props} />
+          </div>
+        </ProtocolProvider>
+      </NotificationProvider>
+    </LayoutProvider>
+  ), host);
+}
+
+function openContextMenu(target: Element, options: MouseEventInit = {}) {
+  const event = new MouseEvent('contextmenu', {
+    bubbles: true,
+    cancelable: true,
+    clientX: 48,
+    clientY: 72,
+    ...options,
+  });
+  target.dispatchEvent(event);
+  return event;
+}
+
+function findContextMenuItem(...labels: string[]): HTMLButtonElement | undefined {
+  return Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+    .find((node) => labels.some((label) => (node.textContent?.trim() ?? '').startsWith(label)));
+}
+
+async function selectContextMenuItem(...labels: string[]) {
+  await flush();
+  const menuItem = findContextMenuItem(...labels);
   expect(menuItem).toBeTruthy();
   menuItem!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
   await flush();
@@ -137,6 +176,327 @@ function findGitTitleDot(container: ParentNode, label: string): HTMLSpanElement 
 }
 
 describe('GitChangesPanel interactions', () => {
+  it('opens file actions without bubbling and preserves the right-click target snapshot', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onAskFlower = vi.fn();
+    const bubbledContextMenu = vi.fn();
+    host.addEventListener('contextmenu', bubbledContextMenu);
+    const item = {
+      section: 'unstaged' as const,
+      changeType: 'modified',
+      path: 'src/original.ts',
+      displayPath: 'src/original.ts',
+      additions: 3,
+      deletions: 1,
+    };
+
+    const dispose = renderChangesPanel(host, {
+      repoSummary: {
+        repoRootPath: '/workspace/repo',
+        headRef: 'main',
+        workspaceSummary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+      },
+      workspace: {
+        repoRootPath: '/workspace/repo',
+        summary: { stagedCount: 0, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+        staged: [],
+        unstaged: [item],
+        untracked: [],
+        conflicted: [],
+      },
+      selectedSection: 'changes',
+      onAskFlower,
+    });
+
+    try {
+      const row = host.querySelector('tr[data-git-changes-context-target="item"]');
+      expect(row).toBeTruthy();
+      const event = openContextMenu(row!);
+      expect(event.defaultPrevented).toBe(true);
+      expect(bubbledContextMenu).not.toHaveBeenCalled();
+
+      item.path = 'src/mutated.ts';
+      item.displayPath = 'src/mutated.ts';
+      await selectContextMenuItem('Ask Flower', 'git.contextMenu.askFlower');
+
+      expect(onAskFlower).toHaveBeenCalledWith({
+        kind: 'workspace_item',
+        repoRootPath: '/workspace/repo',
+        headRef: 'main',
+        section: 'changes',
+        item: {
+          section: 'unstaged',
+          changeType: 'modified',
+          path: 'src/original.ts',
+          displayPath: 'src/original.ts',
+          additions: 3,
+          deletions: 1,
+        },
+      });
+
+      row!.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'F10',
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      }));
+      await flush();
+      expect(findContextMenuItem('Ask Flower', 'git.contextMenu.askFlower')).toBeTruthy();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('uses renamed paths for preview and copy while hiding deleted-file preview', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onPreviewCurrentFile = vi.fn();
+    const onCopyText = vi.fn();
+    const onOpenInTerminal = vi.fn();
+    const renamedItem = {
+      section: 'unstaged' as const,
+      changeType: 'renamed',
+      path: 'src/old.ts',
+      oldPath: 'src/old.ts',
+      newPath: 'src/new.ts',
+      displayPath: 'src/old.ts -> src/new.ts',
+    };
+    const deletedItem = {
+      section: 'unstaged' as const,
+      changeType: 'deleted',
+      path: 'src/deleted.ts',
+      displayPath: 'src/deleted.ts',
+    };
+
+    const dispose = renderChangesPanel(host, {
+      repoSummary: {
+        repoRootPath: '/workspace/repo',
+        worktreePath: '/workspace/repo-worktree',
+        workspaceSummary: { stagedCount: 0, unstagedCount: 2, untrackedCount: 0, conflictedCount: 0 },
+      },
+      workspace: {
+        repoRootPath: '/workspace/repo',
+        summary: { stagedCount: 0, unstagedCount: 2, untrackedCount: 0, conflictedCount: 0 },
+        staged: [],
+        unstaged: [renamedItem, deletedItem],
+        untracked: [],
+        conflicted: [],
+      },
+      selectedSection: 'changes',
+      onPreviewCurrentFile,
+      onCopyText,
+      onOpenInTerminal,
+    });
+
+    try {
+      const rows = host.querySelectorAll('tr[data-git-changes-context-target="item"]');
+      expect(rows).toHaveLength(2);
+
+      openContextMenu(rows[0]!);
+      await selectContextMenuItem('Preview Current File', 'git.contextMenu.previewCurrentFile');
+      expect(onPreviewCurrentFile).toHaveBeenCalledWith({
+        absolutePath: '/workspace/repo-worktree/src/new.ts',
+        parentDirectoryPath: '/workspace/repo-worktree/src',
+        relativePath: 'src/new.ts',
+        canPreviewCurrentFile: true,
+      });
+
+      openContextMenu(rows[0]!);
+      await selectContextMenuItem('Copy Relative Path', 'git.contextMenu.copyRelativePath');
+      expect(onCopyText).toHaveBeenCalledWith('src/new.ts');
+
+      openContextMenu(rows[0]!);
+      await selectContextMenuItem('Open Terminal', 'git.contextMenu.openTerminal');
+      expect(onOpenInTerminal).toHaveBeenCalledWith({
+        path: '/workspace/repo-worktree/src',
+        preferredName: 'src',
+      });
+
+      openContextMenu(rows[1]!);
+      await flush();
+      const deletedPreview = findContextMenuItem('Preview Current File', 'git.contextMenu.previewCurrentFile');
+      expect(deletedPreview).toBeUndefined();
+      expect(onPreviewCurrentFile).toHaveBeenCalledTimes(1);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('routes directory context actions through existing scoped callbacks', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onNavigateDirectory = vi.fn();
+    const onStageSelected = vi.fn();
+    const onDiscardSelected = vi.fn();
+    const directoryItem = {
+      section: 'unstaged' as const,
+      entryKind: 'directory' as const,
+      changeType: 'modified',
+      path: 'src/ui',
+      displayPath: 'src/ui',
+      directoryPath: 'src/ui',
+      descendantFileCount: 4,
+      containsUnstaged: true,
+    };
+
+    const dispose = renderChangesPanel(host, {
+      workspace: {
+        repoRootPath: '/workspace/repo',
+        summary: { stagedCount: 0, unstagedCount: 4, untrackedCount: 0, conflictedCount: 0 },
+        staged: [],
+        unstaged: [directoryItem],
+        untracked: [],
+        conflicted: [],
+      },
+      selectedSection: 'changes',
+      onNavigateDirectory,
+      onStageSelected,
+      onDiscardSelected,
+    });
+
+    try {
+      const row = host.querySelector('tr[data-git-changes-context-target="item"]');
+      expect(row).toBeTruthy();
+
+      openContextMenu(row!);
+      await selectContextMenuItem('Open Directory', 'git.contextMenu.openDirectory');
+      expect(onNavigateDirectory).toHaveBeenCalledWith('src/ui');
+
+      openContextMenu(row!);
+      await selectContextMenuItem('Stage', 'git.contextMenu.stage');
+      expect(onStageSelected).toHaveBeenCalledWith(directoryItem);
+
+      openContextMenu(row!);
+      await selectContextMenuItem('Discard', 'git.contextMenu.discard');
+      const confirmButton = Array.from(document.body.querySelectorAll('button'))
+        .find((node) => node.textContent?.trim() === 'Discard Folder');
+      expect(confirmButton).toBeTruthy();
+      confirmButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      expect(onDiscardSelected).toHaveBeenCalledWith(directoryItem);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('opens current-scope actions from blank space and the keyboard with exact directory payloads', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const onAskFlower = vi.fn();
+    const onOpenInTerminal = vi.fn();
+    const onBrowseFiles = vi.fn();
+    const onBulkAction = vi.fn();
+    const onOpenCommitDialog = vi.fn();
+    const onOpenStash = vi.fn();
+    const item = {
+      section: 'unstaged' as const,
+      changeType: 'modified',
+      path: 'src/ui/panel.ts',
+      displayPath: 'src/ui/panel.ts',
+    };
+    const stagedItem = {
+      section: 'staged' as const,
+      changeType: 'modified',
+      path: 'src/staged.ts',
+      displayPath: 'src/staged.ts',
+    };
+
+    const dispose = renderChangesPanel(host, {
+      repoSummary: {
+        repoRootPath: '/workspace/repo',
+        worktreePath: '/workspace/repo-worktree',
+        headRef: 'feature/menu',
+        workspaceSummary: { stagedCount: 1, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+      },
+      workspace: {
+        repoRootPath: '/workspace/repo',
+        summary: { stagedCount: 1, unstagedCount: 1, untrackedCount: 0, conflictedCount: 0 },
+        staged: [stagedItem],
+        unstaged: [item],
+        untracked: [],
+        conflicted: [],
+      },
+      workspacePages: {
+        changes: {
+          items: [item],
+          totalCount: 1,
+          scopeFileCount: 1,
+          nextOffset: 1,
+          hasMore: false,
+          loading: false,
+          error: '',
+          initialized: true,
+          directoryPath: 'src/ui',
+          breadcrumbs: [],
+        },
+      },
+      selectedSection: 'changes',
+      onAskFlower,
+      onOpenInTerminal,
+      onBrowseFiles,
+      onBulkAction,
+      onOpenCommitDialog,
+      onOpenStash,
+    });
+
+    try {
+      const sectionTarget = host.querySelector('[data-git-changes-context-target="section"]') as HTMLElement | null;
+      expect(sectionTarget).toBeTruthy();
+
+      openContextMenu(sectionTarget!);
+      await selectContextMenuItem('Open Terminal', 'git.contextMenu.openTerminal');
+      expect(onOpenInTerminal).toHaveBeenCalledWith({
+        path: '/workspace/repo-worktree/src/ui',
+        preferredName: 'ui',
+      });
+
+      sectionTarget!.focus();
+      sectionTarget!.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'ContextMenu',
+        bubbles: true,
+        cancelable: true,
+      }));
+      await selectContextMenuItem('Ask Flower', 'git.contextMenu.askFlower');
+      expect(onAskFlower).toHaveBeenCalledWith({
+        kind: 'workspace_section',
+        repoRootPath: '/workspace/repo',
+        headRef: 'feature/menu',
+        section: 'changes',
+        items: [item],
+      });
+
+      sectionTarget!.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'F10',
+        shiftKey: true,
+        bubbles: true,
+        cancelable: true,
+      }));
+      await selectContextMenuItem('Browse Files', 'git.contextMenu.browseFiles');
+      expect(onBrowseFiles).toHaveBeenCalledWith({
+        path: '/workspace/repo-worktree/src/ui',
+        preferredName: 'ui',
+      });
+
+      openContextMenu(sectionTarget!);
+      await selectContextMenuItem('Stage', 'git.contextMenu.stage');
+      expect(onBulkAction).toHaveBeenCalledWith('changes');
+
+      openContextMenu(sectionTarget!);
+      await selectContextMenuItem('Commit', 'git.changes.commitAction');
+      expect(onOpenCommitDialog).toHaveBeenCalledTimes(1);
+
+      openContextMenu(sectionTarget!);
+      await selectContextMenuItem('Stash', 'git.changes.stashAction');
+      expect(onOpenStash).toHaveBeenCalledWith({
+        tab: 'save',
+        repoRootPath: '/workspace/repo',
+        source: 'changes',
+      });
+    } finally {
+      dispose();
+    }
+  });
+
   it('renders only the selected section as a compact file table', () => {
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -797,7 +1157,7 @@ describe('GitChangesPanel interactions', () => {
       expect(confirmButton).toBeTruthy();
       confirmButton!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
-      expect(onDiscardAll).toHaveBeenCalledWith('changes');
+      expect(onDiscardAll).toHaveBeenCalledWith('changes', { directoryPath: '', count: 2 });
     } finally {
       dispose();
     }

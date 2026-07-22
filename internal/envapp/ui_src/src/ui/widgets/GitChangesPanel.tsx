@@ -1,5 +1,5 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
-import { AlertTriangle, CheckCircle, FileText, Folder, MoreHorizontal, Plus, Search, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
+import { AlertTriangle, CheckCircle, Copy, Eye, FileText, Folder, Minus, MoreHorizontal, Package, Plus, Search, Terminal, Trash } from '@floegence/floe-webapp-core/icons';
 import { FileItemIcon } from '@floegence/floe-webapp-core/file-browser';
 import { Button, ConfirmDialog, Dropdown, SegmentedControl, type DropdownItem } from '@floegence/floe-webapp-core/ui';
 import { FlowerIcon } from '../icons/FlowerIcon';
@@ -42,8 +42,10 @@ import {
 } from './GitWorkbenchPrimitives';
 import {
   buildGitDirectoryShortcutRequest,
+  buildGitFileShortcutTarget,
   type GitAskFlowerRequest,
   type GitDirectoryShortcutRequest,
+  type GitFileShortcutTarget,
 } from '../utils/gitBrowserShortcuts';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 import { GitVirtualTable } from './GitVirtualTable';
@@ -56,6 +58,11 @@ import {
 } from './gitChangesHeaderLayout';
 import { useI18n, type I18nHelpers } from '../i18n';
 import { extNoDot } from './FileBrowserShared';
+import {
+  GitEntityContextMenu,
+  createGitEntityContextMenuController,
+  type GitContextMenuActionItem,
+} from './GitEntityContextMenu';
 
 export interface GitChangesPanelProps {
   repoSummary?: GitRepoSummaryResponse | null;
@@ -78,13 +85,18 @@ export interface GitChangesPanelProps {
   onDiscardSelected?: (item: GitSeededWorkspaceChange) => void;
   onNavigateDirectory?: (directoryPath: string) => void;
   onBulkAction?: (section: GitWorkspaceViewSection) => void;
-  onDiscardAll?: (section: GitWorkspaceViewSection) => void;
+  onDiscardAll?: (
+    section: GitWorkspaceViewSection,
+    scope?: { directoryPath?: string; count?: number },
+  ) => void;
   onLoadMoreWorkspaceSection?: (section: GitWorkspaceViewSection) => void;
   onOpenCommitDialog?: () => void;
   onOpenStash?: (request: GitStashWindowRequest) => void;
-  onAskFlower?: (request: Extract<GitAskFlowerRequest, { kind: 'workspace_section' }>) => void;
+  onAskFlower?: (request: Extract<GitAskFlowerRequest, { kind: 'workspace_section' | 'workspace_item' }>) => void;
   onOpenInTerminal?: (request: GitDirectoryShortcutRequest) => void;
   onBrowseFiles?: (request: GitDirectoryShortcutRequest) => void | Promise<void>;
+  onPreviewCurrentFile?: (target: GitFileShortcutTarget) => void;
+  onCopyText?: (value: string) => void;
 }
 
 function workspaceChangeFileName(item: GitSeededWorkspaceChange): string {
@@ -176,6 +188,8 @@ interface WorkspaceTableProps {
   onOpenDirectory?: (directoryPath: string) => void;
   onAction?: (item: GitSeededWorkspaceChange) => void;
   onDiscard?: (item: GitSeededWorkspaceChange) => void;
+  onOpenContextMenu?: (event: MouseEvent, item: GitSeededWorkspaceChange) => void;
+  onOpenContextMenuFromKeyboard?: (event: KeyboardEvent, item: GitSeededWorkspaceChange) => void;
   onLoadMore?: () => void;
   busyWorkspaceKey?: string;
   busyWorkspaceAction?: 'stage' | 'unstage' | 'discard' | '';
@@ -257,6 +271,8 @@ function WorkspaceTable(props: WorkspaceTableProps) {
               <tr
                 aria-selected={active()}
                 class={`${gitChangedFilesRowClass(active())} cursor-pointer`}
+                tabIndex={0}
+                data-git-changes-context-target="item"
                 onClick={() => {
                   if (isGitWorkspaceDirectoryEntry(item)) {
                     const directoryPath = workspaceDirectoryPath(item);
@@ -264,6 +280,15 @@ function WorkspaceTable(props: WorkspaceTableProps) {
                     return;
                   }
                   props.onSelectItem?.(item);
+                }}
+                on:contextmenu={(event) => {
+                  event.stopPropagation();
+                  props.onOpenContextMenu?.(event, item);
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
+                  event.stopPropagation();
+                  props.onOpenContextMenuFromKeyboard?.(event, item);
                 }}
               >
                 <td class={GIT_CHANGED_FILES_CELL_CLASS}>
@@ -396,8 +421,40 @@ function WorkspaceTable(props: WorkspaceTableProps) {
 const EMPTY_WORKSPACE_PAGE_STATE = createEmptyWorkspaceViewPageState();
 type WorkspaceDiscardTarget =
   | { kind: 'item'; item: GitSeededWorkspaceChange }
-  | { kind: 'section'; section: GitWorkspaceViewSection }
+  | {
+      kind: 'section';
+      section: GitWorkspaceViewSection;
+      directoryPath: string;
+      count: number;
+    }
   | null;
+
+type GitChangesContextMenuTarget =
+  | Readonly<{
+      kind: 'section';
+      repoRootPath: string;
+      effectiveRootPath: string;
+      headRef?: string;
+      section: GitWorkspaceViewSection;
+      directoryPath: string;
+      count: number;
+      items: GitSeededWorkspaceChange[];
+    }>
+  | Readonly<{
+      kind: 'item';
+      repoRootPath: string;
+      effectiveRootPath: string;
+      headRef?: string;
+      section: GitWorkspaceViewSection;
+      directoryPath: string;
+      item: GitSeededWorkspaceChange;
+    }>;
+
+function parentGitPath(relativePath: string): string {
+  const normalized = String(relativePath ?? '').trim().replace(/\\/g, '/').replace(/\/+$/, '');
+  const separatorIndex = normalized.lastIndexOf('/');
+  return separatorIndex < 0 ? '' : normalized.slice(0, separatorIndex);
+}
 
 export function GitChangesPanel(props: GitChangesPanelProps) {
   const i18n = useI18n();
@@ -408,6 +465,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const [headerElement, setHeaderElement] = createSignal<HTMLDivElement>();
   const [headerWidth, setHeaderWidth] = createSignal(0);
   const [filterQuery, setFilterQuery] = createSignal('');
+  const contextMenu = createGitEntityContextMenuController<GitChangesContextMenuTarget>();
 
   const selectedSection = () => props.selectedSection ?? pickDefaultWorkspaceViewSection(props.workspace);
   const summary = () => props.workspace?.summary ?? props.repoSummary?.workspaceSummary ?? null;
@@ -481,9 +539,10 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const activeDirectoryPath = () => selectedSection() === 'changes' ? String(selectedPageState().directoryPath ?? '').trim() : '';
   const activeBreadcrumbs = () => selectedSection() === 'changes' ? selectedPageState().breadcrumbs ?? [] : [];
   const repoRootPath = () => String(props.workspace?.repoRootPath ?? props.repoSummary?.repoRootPath ?? '').trim();
+  const effectiveRootPath = () => String(props.repoSummary?.worktreePath ?? repoRootPath()).trim();
   const repoShortcutRequest = (directoryPath = activeDirectoryPath()): GitDirectoryShortcutRequest | null => (
     buildGitDirectoryShortcutRequest({
-      rootPath: repoRootPath(),
+      rootPath: effectiveRootPath(),
       directoryPath,
     })
   );
@@ -597,7 +656,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   const discardTitle = () => {
     const target = discardTarget();
     if (target?.kind === 'section') {
-      return activeDirectoryPath() ? i18n.t('git.changes.discardFolderChanges') : i18n.t('git.changes.discardPendingTitle');
+      return target.directoryPath ? i18n.t('git.changes.discardFolderChanges') : i18n.t('git.changes.discardPendingTitle');
     }
     if (target?.kind === 'item' && isGitWorkspaceDirectoryEntry(target.item)) {
       return i18n.t('git.changes.discardFolderChanges');
@@ -606,7 +665,7 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
   };
   const discardConfirmText = () => {
     const target = discardTarget();
-    if (target?.kind === 'section') return activeDirectoryPath() ? i18n.t('git.changes.discardFolderConfirm') : i18n.t('git.changes.discardAllConfirm');
+    if (target?.kind === 'section') return target.directoryPath ? i18n.t('git.changes.discardFolderConfirm') : i18n.t('git.changes.discardAllConfirm');
     if (target?.kind === 'item' && isGitWorkspaceDirectoryEntry(target.item)) return i18n.t('git.changes.discardFolderConfirm');
     return i18n.t('git.changes.discardConfirm');
   };
@@ -614,16 +673,16 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
     const target = discardTarget();
     if (!target) return '';
     if (target.kind === 'section') {
-      if (activeDirectoryPath()) {
+      if (target.directoryPath) {
         return i18n.t('git.changes.discardDirectoryDescription', {
-          count: visibleCount(),
-          unit: i18n.tn('git.common.fileCount', visibleCount()),
-          path: activeDirectoryPath(),
+          count: target.count,
+          unit: i18n.tn('git.common.fileCount', target.count),
+          path: target.directoryPath,
         });
       }
       return i18n.t('git.changes.discardAllDescription', {
-        count: visibleCount(),
-        unit: i18n.tn('git.common.fileCount', visibleCount()),
+        count: target.count,
+        unit: i18n.tn('git.common.fileCount', target.count),
       });
     }
     if (isGitWorkspaceDirectoryEntry(target.item)) {
@@ -638,6 +697,279 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
       return i18n.t('git.changes.discardUntrackedFileDescription', { path: itemPath(target.item) });
     }
     return i18n.t('git.changes.discardFileDescription', { path: itemPath(target.item) });
+  };
+
+  const openWorkspaceDiff = (item: GitSeededWorkspaceChange) => {
+    setDiffDialogItem(item);
+    props.onSelectItem?.(item);
+    setDiffDialogOpen(true);
+  };
+
+  const sectionContextTarget = (): GitChangesContextMenuTarget => ({
+    kind: 'section',
+    repoRootPath: repoRootPath(),
+    effectiveRootPath: effectiveRootPath(),
+    headRef: props.repoSummary?.headRef,
+    section: selectedSection(),
+    directoryPath: activeDirectoryPath(),
+    count: visibleCount(),
+    items: visibleItems().map((item) => ({ ...item })),
+  });
+
+  const itemContextTarget = (item: GitSeededWorkspaceChange): GitChangesContextMenuTarget => ({
+    kind: 'item',
+    repoRootPath: repoRootPath(),
+    effectiveRootPath: effectiveRootPath(),
+    headRef: props.repoSummary?.headRef,
+    section: selectedSection(),
+    directoryPath: activeDirectoryPath(),
+    item: { ...item },
+  });
+
+  const itemFileTarget = (target: GitChangesContextMenuTarget): GitFileShortcutTarget | null => (
+    target.kind === 'item' && !isGitWorkspaceDirectoryEntry(target.item)
+      ? buildGitFileShortcutTarget({ rootPath: target.effectiveRootPath, item: target.item })
+      : null
+  );
+
+  const targetDirectoryPath = (target: GitChangesContextMenuTarget): string => {
+    if (target.kind === 'section') return target.directoryPath;
+    if (isGitWorkspaceDirectoryEntry(target.item)) return workspaceDirectoryPath(target.item);
+    const fileTarget = itemFileTarget(target);
+    return fileTarget ? parentGitPath(fileTarget.relativePath) : '';
+  };
+
+  const targetDirectoryRequest = (target: GitChangesContextMenuTarget): GitDirectoryShortcutRequest | null => (
+    buildGitDirectoryShortcutRequest({
+      rootPath: target.effectiveRootPath,
+      directoryPath: targetDirectoryPath(target),
+    })
+  );
+
+  const contextMenuActions = (target: GitChangesContextMenuTarget): GitContextMenuActionItem[] => {
+    const actions: GitContextMenuActionItem[] = [];
+    const directoryRequest = targetDirectoryRequest(target);
+    const fileTarget = itemFileTarget(target);
+    const item = target.kind === 'item' ? target.item : null;
+    const itemStaged = item?.section === 'staged';
+    const actionBusy = target.kind === 'item'
+      ? props.busyWorkspaceKey === workspaceEntryKey(target.item) && Boolean(props.busyWorkspaceAction)
+      : props.busyWorkspaceKey === workspaceViewSectionActionKey(target.section, target.directoryPath) && Boolean(props.busyWorkspaceAction);
+    const addAction = (
+      action: Omit<GitContextMenuActionItem, 'kind'>,
+    ) => actions.push({ ...action, kind: 'action' });
+
+    if (props.onAskFlower && target.repoRootPath) {
+      addAction({
+        id: 'ask-flower',
+        group: 'assistant',
+        rank: 10,
+        label: i18n.t('git.contextMenu.askFlower'),
+        icon: FlowerIcon,
+        onSelect: () => {
+          if (target.kind === 'section') {
+            props.onAskFlower?.({
+              kind: 'workspace_section',
+              repoRootPath: target.repoRootPath,
+              headRef: target.headRef,
+              section: target.section,
+              items: target.items,
+            });
+            return;
+          }
+          props.onAskFlower?.({
+            kind: 'workspace_item',
+            repoRootPath: target.repoRootPath,
+            headRef: target.headRef,
+            section: target.section,
+            item: target.item,
+          });
+        },
+      });
+    }
+
+    if (item && isGitWorkspaceDirectoryEntry(item) && props.onNavigateDirectory) {
+      addAction({
+        id: 'open-directory',
+        group: 'inspect',
+        rank: 10,
+        label: i18n.t('git.contextMenu.openDirectory'),
+        icon: Folder,
+        onSelect: () => props.onNavigateDirectory?.(workspaceDirectoryPath(item)),
+      });
+    }
+    if (item && !isGitWorkspaceDirectoryEntry(item)) {
+      addAction({
+        id: 'view-diff',
+        group: 'inspect',
+        rank: 10,
+        label: i18n.t('git.contextMenu.viewDiff'),
+        icon: FileText,
+        onSelect: () => openWorkspaceDiff(item),
+      });
+    }
+    if (
+      item
+      && !isGitWorkspaceDirectoryEntry(item)
+      && String(item.changeType ?? '').toLowerCase() !== 'deleted'
+      && fileTarget
+      && props.onPreviewCurrentFile
+    ) {
+      addAction({
+        id: 'preview-current-file',
+        group: 'inspect',
+        rank: 20,
+        label: i18n.t('git.contextMenu.previewCurrentFile'),
+        icon: Eye,
+        disabledReason: fileTarget.canPreviewCurrentFile
+          ? undefined
+          : i18n.t('git.contextMenu.previewCurrentFileUnavailable'),
+        onSelect: () => props.onPreviewCurrentFile?.(fileTarget),
+      });
+    }
+
+    if (directoryRequest && props.onOpenInTerminal) {
+      addAction({
+        id: 'open-in-terminal',
+        group: 'navigate',
+        rank: 10,
+        label: i18n.t('git.contextMenu.openTerminal'),
+        icon: Terminal,
+        onSelect: () => props.onOpenInTerminal?.(directoryRequest),
+      });
+    }
+    if (directoryRequest && props.onBrowseFiles) {
+      addAction({
+        id: 'browse-files',
+        group: 'navigate',
+        rank: 20,
+        label: i18n.t('git.contextMenu.browseFiles'),
+        icon: Folder,
+        onSelect: () => void props.onBrowseFiles?.(directoryRequest),
+      });
+    }
+
+    if (target.kind === 'section' && props.onBulkAction) {
+      addAction({
+        id: target.section === 'staged' ? 'unstage' : 'stage',
+        group: 'modify',
+        rank: 10,
+        label: i18n.t(target.section === 'staged' ? 'git.contextMenu.unstage' : 'git.contextMenu.stage'),
+        icon: target.section === 'staged' ? Minus : Plus,
+        disabled: actionBusy,
+        disabledReason: actionBusy ? i18n.t('common.status.loading') : undefined,
+        onSelect: () => props.onBulkAction?.(target.section),
+      });
+    }
+    if (item && ((itemStaged && props.onUnstageSelected) || (!itemStaged && props.onStageSelected))) {
+      addAction({
+        id: itemStaged ? 'unstage' : 'stage',
+        group: 'modify',
+        rank: 10,
+        label: i18n.t(itemStaged ? 'git.contextMenu.unstage' : 'git.contextMenu.stage'),
+        icon: itemStaged ? Minus : Plus,
+        disabled: actionBusy,
+        disabledReason: actionBusy ? i18n.t('common.status.loading') : undefined,
+        onSelect: () => {
+          if (itemStaged) props.onUnstageSelected?.(item);
+          else props.onStageSelected?.(item);
+        },
+      });
+    }
+
+    if (target.kind === 'section' && props.onOpenCommitDialog) {
+      addAction({
+        id: 'commit',
+        group: 'modify',
+        rank: 20,
+        label: i18n.t('git.changes.commitAction'),
+        icon: CheckCircle,
+        disabled: stagedCount() === 0,
+        disabledReason: stagedCount() === 0 ? i18n.t('git.branches.nothingStaged') : undefined,
+        onSelect: () => {
+          props.onOpenCommitDialog?.();
+          setCommitDialogOpen(true);
+        },
+      });
+    }
+    if (target.kind === 'section' && props.onOpenStash) {
+      addAction({
+        id: 'stash',
+        group: 'modify',
+        rank: 30,
+        label: i18n.t('git.changes.stashAction'),
+        icon: Package,
+        disabled: !target.repoRootPath,
+        disabledReason: target.repoRootPath ? undefined : i18n.t('git.notifications.repositoryPathUnavailable'),
+        onSelect: () => {
+          if (!target.repoRootPath) return;
+          props.onOpenStash?.({
+            tab: 'save',
+            repoRootPath: target.repoRootPath,
+            source: 'changes',
+          });
+        },
+      });
+    }
+
+    if (props.onCopyText) {
+      const absolutePath = fileTarget?.absolutePath ?? directoryRequest?.path ?? '';
+      const relativePath = fileTarget?.relativePath ?? targetDirectoryPath(target);
+      if (absolutePath) {
+        addAction({
+          id: 'copy-absolute-path',
+          group: 'clipboard',
+          rank: 10,
+          label: i18n.t('git.contextMenu.copyAbsolutePath'),
+          icon: Copy,
+          onSelect: () => props.onCopyText?.(absolutePath),
+        });
+      }
+      if (relativePath) {
+        addAction({
+          id: 'copy-relative-path',
+          group: 'clipboard',
+          rank: 20,
+          label: i18n.t('git.contextMenu.copyRelativePath'),
+          icon: Copy,
+          onSelect: () => props.onCopyText?.(relativePath),
+        });
+      }
+    }
+
+    if (target.kind === 'section' && target.section === 'changes' && props.onDiscardAll) {
+      addAction({
+        id: 'discard',
+        group: 'destructive',
+        rank: 10,
+        label: i18n.t('git.contextMenu.discard'),
+        icon: Trash,
+        destructive: true,
+        disabled: actionBusy,
+        disabledReason: actionBusy ? i18n.t('common.status.loading') : undefined,
+        onSelect: () => setDiscardTarget({
+          kind: 'section',
+          section: target.section,
+          directoryPath: target.directoryPath,
+          count: target.count,
+        }),
+      });
+    }
+    if (item && isDiscardableWorkspaceItem(item) && props.onDiscardSelected) {
+      addAction({
+        id: 'discard',
+        group: 'destructive',
+        rank: 10,
+        label: i18n.t('git.contextMenu.discard'),
+        icon: Trash,
+        destructive: true,
+        disabled: actionBusy,
+        disabledReason: actionBusy ? i18n.t('common.status.loading') : undefined,
+        onSelect: () => setDiscardTarget({ kind: 'item', item }),
+      });
+    }
+
+    return actions;
   };
 
   const runHeaderAction = (actionId: GitChangesHeaderActionId) => {
@@ -660,7 +992,12 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
         return;
       }
       case 'discard':
-        setDiscardTarget({ kind: 'section', section: selectedSection() });
+        setDiscardTarget({
+          kind: 'section',
+          section: selectedSection(),
+          directoryPath: activeDirectoryPath(),
+          count: visibleCount(),
+        });
         return;
       case 'terminal': {
         const request = repoShortcutRequest();
@@ -882,7 +1219,16 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
           </div>
 
           {/* Content area — table fills edge-to-edge, no card wrapping */}
-          <div class="min-h-0 flex-1">
+          <div
+            class="min-h-0 flex-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+            tabIndex={0}
+            data-git-changes-context-target="section"
+            on:contextmenu={(event) => contextMenu.openFromContextMenu(event, sectionContextTarget())}
+            onKeyDown={(event) => {
+              if (event.target !== event.currentTarget) return;
+              contextMenu.openFromKeyboard(event, sectionContextTarget());
+            }}
+          >
             <WorkspaceTable
               section={selectedSection()}
               items={filteredItems()}
@@ -896,17 +1242,15 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
               filtered={filterActive()}
               filteredCount={filteredCount()}
               onSelectItem={props.onSelectItem}
-              onOpenDiff={(item) => {
-                setDiffDialogItem(item);
-                props.onSelectItem?.(item);
-                setDiffDialogOpen(true);
-              }}
+              onOpenDiff={openWorkspaceDiff}
               onOpenDirectory={(directoryPath) => props.onNavigateDirectory?.(directoryPath)}
               onAction={(item) => {
                 if (item.section === 'staged') props.onUnstageSelected?.(item);
                 else props.onStageSelected?.(item);
               }}
               onDiscard={(item) => setDiscardTarget({ kind: 'item', item })}
+              onOpenContextMenu={(event, item) => contextMenu.openFromContextMenu(event, itemContextTarget(item))}
+              onOpenContextMenuFromKeyboard={(event, item) => contextMenu.openFromKeyboard(event, itemContextTarget(item))}
               onLoadMore={() => props.onLoadMoreWorkspaceSection?.(selectedSection())}
               busyWorkspaceKey={props.busyWorkspaceKey}
               busyWorkspaceAction={props.busyWorkspaceAction}
@@ -917,6 +1261,11 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
         );
       })()}
         </Show>
+
+      <GitEntityContextMenu
+        controller={contextMenu}
+        items={contextMenuActions}
+      />
 
       <GitCommitDialog
         open={commitDialogOpen()}
@@ -961,7 +1310,12 @@ export function GitChangesPanel(props: GitChangesPanelProps) {
         onConfirm={() => {
           const target = discardTarget();
           if (!target) return;
-          if (target.kind === 'section') props.onDiscardAll?.(target.section);
+          if (target.kind === 'section') {
+            props.onDiscardAll?.(target.section, {
+              directoryPath: target.directoryPath,
+              count: target.count,
+            });
+          }
           else props.onDiscardSelected?.(target.item);
           setDiscardTarget(null);
         }}

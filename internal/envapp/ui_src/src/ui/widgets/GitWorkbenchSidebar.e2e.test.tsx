@@ -327,6 +327,132 @@ describe('GitWorkbenchSidebar interactions', () => {
     }
   });
 
+  it('routes local branch context actions through the captured branch target', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const branch = {
+      name: 'feature/context',
+      fullName: 'refs/heads/feature/context',
+      kind: 'local' as const,
+      subject: 'Context branch',
+      worktreePath: '/workspace/context-worktree',
+    };
+    const askFlower = vi.fn();
+    const checkout = vi.fn();
+    const merge = vi.fn();
+    const deleteBranch = vi.fn();
+    const openTerminal = vi.fn();
+    const browseFiles = vi.fn();
+    const copyText = vi.fn();
+
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="relative h-[520px]">
+          <GitWorkbenchSidebar
+            subview="branches"
+            repoAvailable
+            repoSummary={{
+              repoRootPath: '/workspace/repo',
+              headRef: 'main',
+              headCommit: 'abc1234',
+              workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+            }}
+            branches={{ repoRootPath: '/workspace/repo', local: [branch], remote: [] }}
+            onAskFlower={askFlower}
+            onCheckoutBranch={checkout}
+            onMergeBranch={merge}
+            onDeleteBranch={deleteBranch}
+            onOpenInTerminal={openTerminal}
+            onBrowseFiles={browseFiles}
+            onCopyText={copyText}
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+    const branchButton = host.querySelector<HTMLButtonElement>('[data-git-sidebar-branch-key]')!;
+    const openMenu = async () => {
+      branchButton.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await flushMicrotasks();
+      return Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+    };
+
+    try {
+      let actions = await openMenu();
+      expect(actions).toHaveLength(8);
+      actions.find((action) => action.textContent?.includes('Ask Flower'))!.click();
+      expect(askFlower).toHaveBeenCalledWith(expect.objectContaining({ kind: 'branch', repoRootPath: '/workspace/repo', branch: expect.objectContaining({ name: 'feature/context' }) }));
+
+      actions = await openMenu();
+      actions.find((action) => action.textContent?.includes('Open Terminal'))!.click();
+      expect(openTerminal).toHaveBeenCalledWith({ path: '/workspace/context-worktree', preferredName: 'feature/context' });
+
+      actions = await openMenu();
+      const checkoutAction = actions.find((action) => action.textContent?.includes('Checkout Branch'))!;
+      expect(checkoutAction.getAttribute('aria-disabled')).toBe('true');
+      expect(checkoutAction.title).toBe('Linked worktree');
+      checkoutAction.click();
+      expect(checkout).not.toHaveBeenCalled();
+
+      actions = await openMenu();
+      branch.name = 'mutated-after-open';
+      actions.find((action) => action.textContent?.includes('Copy Branch Name'))!.click();
+      expect(copyText).toHaveBeenCalledWith('feature/context');
+      expect(deleteBranch).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('explains that an unlinked local branch needs a worktree before navigation', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const branch = {
+      name: 'feature/unlinked',
+      fullName: 'refs/heads/feature/unlinked',
+      kind: 'local' as const,
+    };
+    const openTerminal = vi.fn();
+    const browseFiles = vi.fn();
+    const dispose = render(() => (
+      <LayoutProvider>
+        <div class="relative h-[520px]">
+          <GitWorkbenchSidebar
+            subview="branches"
+            repoAvailable
+            repoSummary={{
+              repoRootPath: '/workspace/repo',
+              headRef: 'main',
+              headCommit: 'abc1234',
+              workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 },
+            }}
+            branches={{ repoRootPath: '/workspace/repo', local: [branch], remote: [] }}
+            onOpenInTerminal={openTerminal}
+            onBrowseFiles={browseFiles}
+          />
+        </div>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const branchButton = host.querySelector<HTMLButtonElement>('[data-git-sidebar-branch-key]');
+      branchButton!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await flushMicrotasks();
+      const actions = Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+      const terminal = actions.find((action) => action.textContent?.includes('Open Terminal'));
+      const files = actions.find((action) => action.textContent?.includes('Browse Files'));
+      expect(terminal?.getAttribute('aria-disabled')).toBe('true');
+      expect(files?.getAttribute('aria-disabled')).toBe('true');
+      expect(terminal?.title).toBe('Open this branch in a worktree first.');
+      expect(files?.title).toBe('Open this branch in a worktree first.');
+      terminal!.click();
+      files!.click();
+      expect(openTerminal).not.toHaveBeenCalled();
+      expect(browseFiles).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
   it('does not move the branch list just because the selected branch key changed', async () => {
     const targetBranchKey = 'refs/heads/feature/24';
     const featureBranches = Array.from({ length: 32 }, (_, index) => {

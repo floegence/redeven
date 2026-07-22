@@ -18,6 +18,8 @@ import {
   CheckCircle,
   ChevronDown,
   ChevronRight,
+  Copy,
+  Eye,
   FileText,
   Folder,
   History,
@@ -93,8 +95,10 @@ import {
 } from "../utils/redevenSurfaceRoles";
 import {
   buildGitDirectoryShortcutRequest,
+  buildGitFileShortcutTarget,
   type GitAskFlowerRequest,
   type GitDirectoryShortcutRequest,
+  type GitFileShortcutTarget,
 } from "../utils/gitBrowserShortcuts";
 import {
   gitChangeLabel,
@@ -151,6 +155,11 @@ import {
   resolveGitBranchHeaderLayout,
 } from "./gitBranchHeaderLayout";
 import { useI18n } from "../i18n";
+import {
+  GitEntityContextMenu,
+  createGitEntityContextMenuController,
+  type GitContextMenuActionItem,
+} from "./GitEntityContextMenu";
 
 const BRANCH_STATUS_PAGE_SIZE = 200;
 const BRANCH_STATUS_TABLE_COLUMN_KEYS = [
@@ -217,15 +226,31 @@ export interface GitBranchesPanelProps {
     branch: GitBranchSummary,
     options: GitDeleteBranchDialogConfirmOptions,
   ) => void;
-  onAskFlower?: (
-    request: Extract<GitAskFlowerRequest, { kind: "branch_status" | "commit" }>,
-  ) => void;
+  onAskFlower?: (request: GitAskFlowerRequest) => void;
   onOpenInTerminal?: (request: GitDirectoryShortcutRequest) => void;
   onBrowseFiles?: (
     request: GitDirectoryShortcutRequest,
   ) => void | Promise<void>;
+  onPreviewCurrentFile?: (target: GitFileShortcutTarget) => void;
+  onCopyText?: (value: string) => void | Promise<void>;
   renderReviewDialogs?: boolean;
 }
+
+type BranchStatusScopeContextTarget = Readonly<{
+  repoRootPath: string;
+  liveRootPath: string;
+  branch: GitBranchSummary;
+  section: GitWorkspaceViewSection;
+  directoryPath: string;
+  items: GitWorkspaceChange[];
+}>;
+
+type BranchHeaderContextTarget = Readonly<{
+  branch: GitBranchSummary;
+  repoRootPath: string;
+  liveRootPath: string;
+  repoDetached: boolean;
+}>;
 
 function formatAbsoluteTime(ms?: number): string {
   if (!ms || !Number.isFinite(ms)) return "—";
@@ -437,15 +462,194 @@ function trimTerminalSentencePeriod(value: string): string {
   return text.endsWith(".") ? text.slice(0, -1) : text;
 }
 
+type BranchFileContext = Readonly<
+  | {
+      kind: 'compare';
+      repoRootPath: string;
+      liveRootPath: string;
+      baseRef: string;
+      targetRef: string;
+    }
+  | {
+      kind: 'commit';
+      repoRootPath: string;
+      liveRootPath: string;
+      branchName?: string;
+      commit: GitCommitSummary;
+    }
+>;
+
+type BranchFileContextMenuTarget = Readonly<{
+  file: GitCommitFileSummary;
+  context: BranchFileContext;
+}>;
+
 interface BranchCompareFilesTableProps {
   surface?: "framed" | "inline";
   items: GitCommitFileSummary[];
   selectedKey?: string;
-  onOpenDiff?: (item: GitCommitFileSummary) => void;
+  context: BranchFileContext;
+  onOpenDiff?: (item: GitCommitFileSummary, context: BranchFileContext) => void;
+  onAskFlower?: GitBranchesPanelProps["onAskFlower"];
+  onOpenInTerminal?: GitBranchesPanelProps["onOpenInTerminal"];
+  onBrowseFiles?: GitBranchesPanelProps["onBrowseFiles"];
+  onPreviewCurrentFile?: GitBranchesPanelProps["onPreviewCurrentFile"];
+  onCopyText?: GitBranchesPanelProps["onCopyText"];
 }
 
 function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
   const i18n = useI18n();
+  const contextMenu = createGitEntityContextMenuController<BranchFileContextMenuTarget>({
+    snapshotTarget: (target) => ({
+      file: { ...target.file },
+      context: target.context.kind === 'compare'
+        ? { ...target.context }
+        : {
+            ...target.context,
+            commit: { ...target.context.commit, parents: [...target.context.commit.parents] },
+          },
+    }),
+  });
+  const contextTarget = (item: GitCommitFileSummary): BranchFileContextMenuTarget => ({
+    file: item,
+    context: props.context,
+  });
+  const fileTarget = (target: BranchFileContextMenuTarget) =>
+    buildGitFileShortcutTarget({
+      rootPath: target.context.liveRootPath,
+      item: target.file,
+    });
+  const contextMenuItems = (menuTarget: BranchFileContextMenuTarget): GitContextMenuActionItem[] => {
+    const item = menuTarget.file;
+    const context = menuTarget.context;
+    const shortcut = fileTarget(menuTarget);
+    const directoryRequest = shortcut
+      ? buildGitDirectoryShortcutRequest({ rootPath: shortcut.parentDirectoryPath })
+      : null;
+    const actions: GitContextMenuActionItem[] = [];
+    if (props.onAskFlower) {
+      actions.push({
+        id: "ask-flower",
+        kind: "action",
+        group: "assistant",
+        rank: 10,
+        label: i18n.t("git.contextMenu.askFlower"),
+        icon: FlowerIcon,
+        onSelect: () => {
+          if (context.kind === 'compare') {
+            props.onAskFlower?.({
+              kind: 'compare_file',
+              repoRootPath: context.repoRootPath,
+              baseRef: context.baseRef,
+              targetRef: context.targetRef,
+              file: item,
+            });
+            return;
+          }
+          props.onAskFlower?.({
+            kind: 'commit',
+            repoRootPath: context.repoRootPath,
+            location: 'branch_history',
+            branchName: context.branchName,
+            commit: context.commit,
+            files: [item],
+          });
+        },
+      });
+    }
+    if (props.onOpenDiff) {
+      actions.push({
+        id: "view-diff",
+        kind: "action",
+        group: "inspect",
+        rank: 10,
+        label: i18n.t("git.contextMenu.viewDiff"),
+        icon: ArrowRightLeft,
+        onSelect: () => props.onOpenDiff?.(item, context),
+      });
+    }
+    if (
+      props.onPreviewCurrentFile
+      && String(item.changeType ?? "").toLowerCase() !== "deleted"
+    ) {
+      actions.push({
+        id: "preview-current-file",
+        kind: "action",
+        group: "inspect",
+        rank: 20,
+        label: i18n.t("git.contextMenu.previewCurrentFile"),
+        icon: Eye,
+        disabled: !shortcut?.canPreviewCurrentFile,
+        disabledReason: !shortcut?.canPreviewCurrentFile
+          ? i18n.t("git.contextMenu.previewCurrentFileUnavailable")
+          : undefined,
+        onSelect: () => {
+          if (shortcut?.canPreviewCurrentFile) props.onPreviewCurrentFile?.(shortcut);
+        },
+      });
+    }
+    if (props.onOpenInTerminal) {
+      actions.push({
+        id: "open-terminal",
+        kind: "action",
+        group: "navigate",
+        rank: 10,
+        label: i18n.t("git.contextMenu.openTerminal"),
+        icon: Terminal,
+        disabled: !directoryRequest,
+        disabledReason: !directoryRequest ? i18n.t("git.notifications.repositoryPathUnavailable") : undefined,
+        onSelect: () => {
+          if (directoryRequest) props.onOpenInTerminal?.(directoryRequest);
+        },
+      });
+    }
+    if (props.onBrowseFiles) {
+      actions.push({
+        id: "browse-files",
+        kind: "action",
+        group: "navigate",
+        rank: 20,
+        label: i18n.t("git.contextMenu.browseFiles"),
+        icon: Folder,
+        disabled: !directoryRequest,
+        disabledReason: !directoryRequest ? i18n.t("git.notifications.repositoryPathUnavailable") : undefined,
+        onSelect: () => {
+          if (directoryRequest) void props.onBrowseFiles?.(directoryRequest);
+        },
+      });
+    }
+    if (props.onCopyText) {
+      actions.push(
+        {
+          id: "copy-absolute-path",
+          kind: "action",
+          group: "clipboard",
+          rank: 10,
+          label: i18n.t("git.contextMenu.copyAbsolutePath"),
+          icon: Copy,
+          disabled: !shortcut,
+          disabledReason: !shortcut ? i18n.t("git.notifications.repositoryPathUnavailable") : undefined,
+          onSelect: () => {
+            if (shortcut) void props.onCopyText?.(shortcut.absolutePath);
+          },
+        },
+        {
+          id: "copy-relative-path",
+          kind: "action",
+          group: "clipboard",
+          rank: 20,
+          label: i18n.t("git.contextMenu.copyRelativePath"),
+          icon: Copy,
+          disabled: !shortcut,
+          disabledReason: !shortcut ? i18n.t("git.notifications.repositoryPathUnavailable") : undefined,
+          onSelect: () => {
+            if (shortcut) void props.onCopyText?.(shortcut.relativePath);
+          },
+        },
+      );
+    }
+    return actions;
+  };
   const content = () => (
       <Show
         when={props.items.length > 0}
@@ -480,6 +684,16 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
               <tr
                 aria-selected={active()}
                 class={gitChangedFilesRowClass(active())}
+                tabIndex={0}
+                onContextMenu={(event) => {
+                  event.stopPropagation();
+                  contextMenu.openFromContextMenu(event, contextTarget(item));
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
+                  event.stopPropagation();
+                  contextMenu.openFromKeyboard(event, contextTarget(item));
+                }}
               >
                 <td class={GIT_CHANGED_FILES_CELL_CLASS}>
                   <div class="min-w-0">
@@ -487,7 +701,7 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
                       type="button"
                       class={`block max-w-full cursor-pointer truncate text-left text-[11px] font-medium underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 ${gitChangePathClass(item.changeType)}`}
                       title={changeSecondaryPath(item)}
-                      onClick={() => props.onOpenDiff?.(item)}
+                      onClick={() => props.onOpenDiff?.(item, props.context)}
                     >
                       {compareFilePath(item, i18n.t('filePreview.unknownPath'))}
                     </button>
@@ -516,7 +730,7 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
                 </td>
                 <td class={gitChangedFilesStickyCellClass(active())}>
                   <GitChangedFilesActionButton
-                    onClick={() => props.onOpenDiff?.(item)}
+                    onClick={() => props.onOpenDiff?.(item, props.context)}
                   >
                     {i18n.t('files.menuViewDiff')}
                   </GitChangedFilesActionButton>
@@ -529,20 +743,29 @@ function BranchCompareFilesTable(props: BranchCompareFilesTableProps) {
   );
 
   return props.surface === "inline" ? (
-    <div
-      class="git-branch-history-files flex min-h-0 flex-1 flex-col"
-      data-git-branch-commit-files-surface="inline"
-    >
-      {content()}
-    </div>
+    <>
+      <div
+        class="git-branch-history-files flex min-h-0 flex-1 flex-col"
+        data-git-branch-commit-files-surface="inline"
+      >
+        {content()}
+      </div>
+      <GitEntityContextMenu controller={contextMenu} items={contextMenuItems} />
+    </>
   ) : (
-    <GitTableFrame class="flex min-h-0 flex-1 flex-col">
-      {content()}
-    </GitTableFrame>
+    <>
+      <GitTableFrame class="flex min-h-0 flex-1 flex-col">
+        {content()}
+      </GitTableFrame>
+      <GitEntityContextMenu controller={contextMenu} items={contextMenuItems} />
+    </>
   );
 }
 
 interface BranchStatusTableProps {
+  canonicalRepoRootPath: string;
+  repoRootPath: string;
+  branch: GitBranchSummary;
   section: GitWorkspaceViewSection;
   items: GitWorkspaceChange[];
   totalCount: number;
@@ -551,10 +774,23 @@ interface BranchStatusTableProps {
   hasMore?: boolean;
   loadingMore?: boolean;
   selectedKey?: string;
-  onOpenDiff?: (item: GitWorkspaceChange) => void;
+  onOpenDiff?: (item: GitWorkspaceChange, context: BranchStatusItemContextMenuTarget) => void;
   onOpenDirectory?: (directoryPath: string) => void;
   onLoadMore?: () => void;
+  onAskFlower?: GitBranchesPanelProps["onAskFlower"];
+  onOpenInTerminal?: GitBranchesPanelProps["onOpenInTerminal"];
+  onBrowseFiles?: GitBranchesPanelProps["onBrowseFiles"];
+  onPreviewCurrentFile?: GitBranchesPanelProps["onPreviewCurrentFile"];
+  onCopyText?: GitBranchesPanelProps["onCopyText"];
 }
+
+type BranchStatusItemContextMenuTarget = Readonly<{
+  item: GitWorkspaceChange;
+  repoRootPath: string;
+  liveRootPath: string;
+  branch: GitBranchSummary;
+  section: GitWorkspaceViewSection;
+}>;
 
 function BranchStatusEmptyState(props: {
   section: GitWorkspaceViewSection;
@@ -668,6 +904,166 @@ function BranchStatusUnavailableTable(props: {
 
 function BranchStatusTable(props: BranchStatusTableProps) {
   const i18n = useI18n();
+  const contextMenu = createGitEntityContextMenuController<BranchStatusItemContextMenuTarget>({
+    snapshotTarget: (target) => ({
+      ...target,
+      item: { ...target.item },
+      branch: { ...target.branch },
+    }),
+  });
+  const menuTarget = (item: GitWorkspaceChange): BranchStatusItemContextMenuTarget => ({
+    item,
+    repoRootPath: props.canonicalRepoRootPath,
+    liveRootPath: props.repoRootPath,
+    branch: props.branch,
+    section: props.section,
+  });
+  const shortcutTarget = (target: BranchStatusItemContextMenuTarget) =>
+    buildGitFileShortcutTarget({ rootPath: target.liveRootPath, item: target.item });
+  const directoryRequest = (target: BranchStatusItemContextMenuTarget) => {
+    if (isGitWorkspaceDirectoryEntry(target.item)) {
+      return buildGitDirectoryShortcutRequest({
+        rootPath: target.liveRootPath,
+        directoryPath: workspaceDirectoryPath(target.item),
+      });
+    }
+    const shortcut = shortcutTarget(target);
+    return shortcut
+      ? buildGitDirectoryShortcutRequest({ rootPath: shortcut.parentDirectoryPath })
+      : null;
+  };
+  const contextMenuItems = (context: BranchStatusItemContextMenuTarget): GitContextMenuActionItem[] => {
+    const item = context.item;
+    const directory = isGitWorkspaceDirectoryEntry(item);
+    const target = shortcutTarget(context);
+    const browseRequest = directoryRequest(context);
+    const actions: GitContextMenuActionItem[] = [];
+    if (props.onAskFlower) {
+      actions.push({
+        id: "ask-flower",
+        kind: "action",
+        group: "assistant",
+        rank: 10,
+        label: i18n.t("git.contextMenu.askFlower"),
+        icon: FlowerIcon,
+        onSelect: () => props.onAskFlower?.({
+          kind: "branch_status_item",
+          repoRootPath: context.repoRootPath,
+          worktreePath: context.liveRootPath,
+          branch: context.branch,
+          section: context.section,
+          item,
+        }),
+      });
+    }
+    if (directory && props.onOpenDirectory) {
+      actions.push({
+        id: "open-directory",
+        kind: "action",
+        group: "inspect",
+        rank: 10,
+        label: i18n.t("git.contextMenu.openDirectory"),
+        icon: Folder,
+        onSelect: () => {
+          const path = workspaceDirectoryPath(item);
+          if (path) props.onOpenDirectory?.(path);
+        },
+      });
+    }
+    if (!directory && props.onOpenDiff) {
+      actions.push({
+        id: "view-diff",
+        kind: "action",
+        group: "inspect",
+        rank: 10,
+        label: i18n.t("git.contextMenu.viewDiff"),
+        icon: ArrowRightLeft,
+        onSelect: () => props.onOpenDiff?.(item, context),
+      });
+    }
+    if (
+      !directory
+      && props.onPreviewCurrentFile
+      && String(item.changeType ?? "").toLowerCase() !== "deleted"
+    ) {
+      actions.push({
+        id: "preview-current-file",
+        kind: "action",
+        group: "inspect",
+        rank: 20,
+        label: i18n.t("git.contextMenu.previewCurrentFile"),
+        icon: Eye,
+        disabled: !target?.canPreviewCurrentFile,
+        disabledReason: !target?.canPreviewCurrentFile
+          ? i18n.t("git.contextMenu.previewCurrentFileUnavailable")
+          : undefined,
+        onSelect: () => {
+          if (target?.canPreviewCurrentFile) props.onPreviewCurrentFile?.(target);
+        },
+      });
+    }
+    if (props.onOpenInTerminal) {
+      actions.push({
+        id: "open-terminal",
+        kind: "action",
+        group: "navigate",
+        rank: 10,
+        label: i18n.t("git.contextMenu.openTerminal"),
+        icon: Terminal,
+        disabled: !browseRequest,
+        disabledReason: !browseRequest ? i18n.t("git.notifications.repositoryPathUnavailable") : undefined,
+        onSelect: () => {
+          if (browseRequest) props.onOpenInTerminal?.(browseRequest);
+        },
+      });
+    }
+    if (props.onBrowseFiles) {
+      actions.push({
+        id: "browse-files",
+        kind: "action",
+        group: "navigate",
+        rank: 20,
+        label: i18n.t("git.contextMenu.browseFiles"),
+        icon: Folder,
+        disabled: !browseRequest,
+        disabledReason: !browseRequest ? i18n.t("git.notifications.repositoryPathUnavailable") : undefined,
+        onSelect: () => {
+          if (browseRequest) void props.onBrowseFiles?.(browseRequest);
+        },
+      });
+    }
+    if (props.onCopyText) {
+      actions.push(
+        {
+          id: "copy-absolute-path",
+          kind: "action",
+          group: "clipboard",
+          rank: 10,
+          label: i18n.t("git.contextMenu.copyAbsolutePath"),
+          icon: Copy,
+          disabled: !target,
+          disabledReason: !target ? i18n.t("git.notifications.repositoryPathUnavailable") : undefined,
+          onSelect: () => {
+            if (target) void props.onCopyText?.(target.absolutePath);
+          },
+        },
+        {
+          id: "copy-relative-path",
+          kind: "action",
+          group: "clipboard",
+          rank: 20,
+          label: i18n.t("git.contextMenu.copyRelativePath"),
+          icon: Copy,
+          disabled: !target,
+          disabledReason: !target ? i18n.t("git.notifications.repositoryPathUnavailable") : undefined,
+          onSelect: () => {
+            if (target) void props.onCopyText?.(target.relativePath);
+          },
+        },
+      );
+    }
+    return actions;
+  };
   const footerSummary = () => {
     const totalRows = Math.max(0, Number(props.totalCount ?? 0));
     const scopedFiles = Math.max(
@@ -724,6 +1120,16 @@ function BranchStatusTable(props: BranchStatusTableProps) {
               <tr
                 aria-selected={active()}
                 class={`${gitChangedFilesRowClass(active())} cursor-pointer`}
+                tabIndex={0}
+                onContextMenu={(event) => {
+                  event.stopPropagation();
+                  contextMenu.openFromContextMenu(event, menuTarget(item));
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== 'ContextMenu' && !(event.shiftKey && event.key === 'F10')) return;
+                  event.stopPropagation();
+                  contextMenu.openFromKeyboard(event, menuTarget(item));
+                }}
                 onClick={() => {
                   if (isGitWorkspaceDirectoryEntry(item)) {
                     const nextDirectoryPath = workspaceDirectoryPath(item);
@@ -732,7 +1138,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
                     }
                     return;
                   }
-                  props.onOpenDiff?.(item);
+                  props.onOpenDiff?.(item, menuTarget(item));
                 }}
               >
                 <td class={GIT_CHANGED_FILES_CELL_CLASS}>
@@ -754,7 +1160,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
                           }
                           return;
                         }
-                        props.onOpenDiff?.(item);
+                        props.onOpenDiff?.(item, menuTarget(item));
                       }}
                     >
                       <Show
@@ -849,7 +1255,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
                         }
                         return;
                       }
-                      props.onOpenDiff?.(item);
+                      props.onOpenDiff?.(item, menuTarget(item));
                     }}
                   >
                     {isGitWorkspaceDirectoryEntry(item)
@@ -873,6 +1279,7 @@ function BranchStatusTable(props: BranchStatusTableProps) {
           />
         </Show>
       </Show>
+      <GitEntityContextMenu controller={contextMenu} items={contextMenuItems} />
     </GitTableFrame>
   );
 }
@@ -1015,7 +1422,11 @@ interface BranchHistoryCommitDetailsProps {
   alreadyDetachedHere?: boolean;
   onAskFlower?: GitBranchesPanelProps["onAskFlower"];
   onSwitchDetached?: GitBranchesPanelProps["onSwitchDetached"];
-  onOpenDiff?: (item: GitCommitFileSummary) => void;
+  onOpenDiff?: (item: GitCommitFileSummary, commitHash: string) => void;
+  onOpenInTerminal?: GitBranchesPanelProps["onOpenInTerminal"];
+  onBrowseFiles?: GitBranchesPanelProps["onBrowseFiles"];
+  onPreviewCurrentFile?: GitBranchesPanelProps["onPreviewCurrentFile"];
+  onCopyText?: GitBranchesPanelProps["onCopyText"];
 }
 
 function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
@@ -1166,7 +1577,22 @@ function BranchHistoryCommitDetails(props: BranchHistoryCommitDetailsProps) {
                 surface="inline"
                 items={props.files}
                 selectedKey={props.selectedDiffKey}
-                onOpenDiff={props.onOpenDiff}
+                context={{
+                  kind: 'commit',
+                  repoRootPath: props.repoRootPath,
+                  liveRootPath: props.repoRootPath,
+                  branchName: props.branchName,
+                  commit: props.commit,
+                }}
+                onOpenDiff={(item, context) => props.onOpenDiff?.(
+                  item,
+                  context.kind === 'commit' ? context.commit.hash : props.commit.hash,
+                )}
+                onAskFlower={props.onAskFlower}
+                onOpenInTerminal={props.onOpenInTerminal}
+                onBrowseFiles={props.onBrowseFiles}
+                onPreviewCurrentFile={props.onPreviewCurrentFile}
+                onCopyText={props.onCopyText}
               />
             </div>
           </Show>
@@ -1194,6 +1620,10 @@ function HistoryList(
     | "onLoadMore"
     | "onAskFlower"
     | "onSwitchDetached"
+    | "onOpenInTerminal"
+    | "onBrowseFiles"
+    | "onPreviewCurrentFile"
+    | "onCopyText"
   > & {
     active?: boolean;
   },
@@ -1209,6 +1639,23 @@ function HistoryList(
     createSignal<GitCommitFileSummary | null>(null);
   const [diffDialogCommitHash, setDiffDialogCommitHash] = createSignal("");
   const requestedCommitDetailKeys = new Set<string>();
+  type BranchHistoryCommitContextTarget = Readonly<{
+    commit: GitCommitSummary;
+    files: GitCommitFileSummary[];
+    repoRootPath: string;
+    branchName?: string;
+    alreadyDetached: boolean;
+  }>;
+  const commitContextMenu = createGitEntityContextMenuController<BranchHistoryCommitContextTarget>({
+    snapshotTarget: (target) => ({
+      ...target,
+      commit: {
+        ...target.commit,
+        parents: Array.isArray(target.commit.parents) ? [...target.commit.parents] : target.commit.parents,
+      },
+      files: target.files.map((file) => ({ ...file })),
+    }),
+  });
 
   const expandedCommitHash = createMemo(() =>
     String(props.selectedCommitHash ?? "").trim(),
@@ -1242,6 +1689,104 @@ function HistoryList(
 
   const toggleCommit = (hash: string) => {
     props.onSelectCommit?.(expandedCommitHash() === hash ? "" : hash);
+  };
+  const commitContextMenuItems = (target: BranchHistoryCommitContextTarget): GitContextMenuActionItem[] => {
+    const commit = target.commit;
+    const rootRequest = buildGitDirectoryShortcutRequest({ rootPath: target.repoRootPath });
+    const actions: GitContextMenuActionItem[] = [];
+    if (props.onAskFlower) {
+      actions.push({
+        id: "ask-flower",
+        kind: "action",
+        group: "assistant",
+        rank: 10,
+        label: i18n.t("git.contextMenu.askFlower"),
+        icon: FlowerIcon,
+        onSelect: () => props.onAskFlower?.({
+          kind: "commit",
+          repoRootPath: target.repoRootPath,
+          location: "branch_history",
+          branchName: target.branchName,
+          commit,
+          files: target.files,
+        }),
+      });
+    }
+    actions.push({
+      id: "view-commit-details",
+      kind: "action",
+      group: "inspect",
+      rank: 10,
+      label: i18n.t("git.contextMenu.viewCommitDetails"),
+      icon: FileText,
+      onSelect: () => {
+        props.onSelectCommit?.(commit.hash);
+      },
+    });
+    if (props.onOpenInTerminal) {
+      actions.push({
+        id: "open-terminal",
+        kind: "action",
+        group: "navigate",
+        rank: 10,
+        label: i18n.t("git.contextMenu.openTerminal"),
+        icon: Terminal,
+        disabled: !rootRequest,
+        disabledReason: !rootRequest ? i18n.t("git.notifications.repositoryPathUnavailable") : undefined,
+        onSelect: () => {
+          if (rootRequest) props.onOpenInTerminal?.(rootRequest);
+        },
+      });
+    }
+    if (props.onBrowseFiles) {
+      actions.push({
+        id: "browse-files",
+        kind: "action",
+        group: "navigate",
+        rank: 20,
+        label: i18n.t("git.contextMenu.browseFiles"),
+        icon: Folder,
+        disabled: !rootRequest,
+        disabledReason: !rootRequest ? i18n.t("git.notifications.repositoryPathUnavailable") : undefined,
+        onSelect: () => {
+          if (rootRequest) void props.onBrowseFiles?.(rootRequest);
+        },
+      });
+    }
+    if (props.onSwitchDetached) {
+      actions.push({
+        id: "switch-detached",
+        kind: "action",
+        group: "modify",
+        rank: 10,
+        label: i18n.t("git.contextMenu.switchDetached"),
+        icon: History,
+        disabled: Boolean(props.switchDetachedBusy) || target.alreadyDetached,
+        disabledReason: props.switchDetachedBusy
+          ? i18n.t('uiCopy.git.switching')
+          : target.alreadyDetached
+            ? i18n.t("uiCopy.git.alreadyDetachedHere")
+            : undefined,
+        onSelect: () => props.onSwitchDetached?.({
+          commitHash: commit.hash,
+          shortHash: commit.shortHash || shortGitHash(commit.hash),
+          source: "branch_history",
+          branchName: target.branchName,
+        }),
+      });
+    }
+    if (props.onCopyText) {
+      actions.push({
+        id: "copy-commit-hash",
+        kind: "action",
+        group: "clipboard",
+        rank: 10,
+        label: i18n.t("git.contextMenu.copyCommitHash"),
+        icon: Copy,
+        onSelect: () => void props.onCopyText?.(commit.hash),
+      });
+    }
+    return actions;
   };
 
   createEffect(() => {
@@ -1404,6 +1949,15 @@ function HistoryList(
                                 const alreadyDetachedHere = () =>
                                   headDisplay().detached &&
                                   currentHeadCommit() === commit.hash;
+                                const commitMenuTarget = (): BranchHistoryCommitContextTarget => ({
+                                  commit,
+                                  files: files(),
+                                  repoRootPath: repoRootPath(),
+                                  branchName: props.selectedBranch
+                                    ? branchDisplayName(props.selectedBranch)
+                                    : undefined,
+                                  alreadyDetached: alreadyDetachedHere(),
+                                });
                                 return (
                                   <>
                                     <tr
@@ -1415,6 +1969,9 @@ function HistoryList(
                                           : "hover:bg-muted/25",
                                       )}
                                       data-expanded={expanded() ? "true" : "false"}
+                                      tabIndex={0}
+                                      onContextMenu={(event) => commitContextMenu.openFromContextMenu(event, commitMenuTarget())}
+                                      onKeyDown={(event) => commitContextMenu.openFromKeyboard(event, commitMenuTarget())}
                                       onClick={() => toggleCommit(commit.hash)}
                                     >
                                       <td class="px-3 py-2.5 align-top">
@@ -1520,11 +2077,13 @@ function HistoryList(
                                           props.onSwitchDetached
                                         }
                                         onAskFlower={props.onAskFlower}
-                                        onOpenDiff={(item) => {
+                                        onOpenInTerminal={props.onOpenInTerminal}
+                                        onBrowseFiles={props.onBrowseFiles}
+                                        onPreviewCurrentFile={props.onPreviewCurrentFile}
+                                        onCopyText={props.onCopyText}
+                                        onOpenDiff={(item, commitHash) => {
                                           setDiffDialogItem(item);
-                                          setDiffDialogCommitHash(
-                                            commit.hash,
-                                          );
+                                          setDiffDialogCommitHash(commitHash);
                                           setDiffDialogOpen(true);
                                         }}
                                       />
@@ -1588,6 +2147,7 @@ function HistoryList(
         }
         emptyMessage={i18n.t('uiCopy.git.selectChangedFile')}
       />
+      <GitEntityContextMenu controller={commitContextMenu} items={commitContextMenuItems} />
     </>
   );
 }
@@ -1647,6 +2207,11 @@ interface BranchCompareDialogProps {
   branches?: GitListBranchesResponse | null;
   selectedBranch?: GitBranchSummary | null;
   onClose: () => void;
+  onAskFlower?: GitBranchesPanelProps["onAskFlower"];
+  onOpenInTerminal?: GitBranchesPanelProps["onOpenInTerminal"];
+  onBrowseFiles?: GitBranchesPanelProps["onBrowseFiles"];
+  onPreviewCurrentFile?: GitBranchesPanelProps["onPreviewCurrentFile"];
+  onCopyText?: GitBranchesPanelProps["onCopyText"];
 }
 
 function BranchCompareDialog(props: BranchCompareDialogProps) {
@@ -1663,6 +2228,7 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
   const [diffDialogOpen, setDiffDialogOpen] = createSignal(false);
   const [diffDialogItem, setDiffDialogItem] =
     createSignal<GitCommitFileSummary | null>(null);
+  const [diffDialogSource, setDiffDialogSource] = createSignal<Extract<BranchFileContext, { kind: 'compare' }> | null>(null);
 
   let compareReqSeq = 0;
 
@@ -1690,6 +2256,7 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
       setLoading(false);
       setError("");
       setCompare(null);
+      setDiffDialogSource(null);
       return;
     }
 
@@ -1825,10 +2392,24 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
                           <BranchCompareFilesTable
                             items={compareFiles()}
                             selectedKey={selectedKey()}
-                            onOpenDiff={(item) => {
+                            context={{
+                              kind: 'compare',
+                              repoRootPath: String(compareAccessor().repoRootPath ?? props.repoRootPath ?? '').trim(),
+                              liveRootPath: String(compareAccessor().repoRootPath ?? props.repoRootPath ?? '').trim(),
+                              baseRef: compareAccessor().baseRef,
+                              targetRef: compareAccessor().targetRef,
+                            }}
+                            onOpenDiff={(item, context) => {
+                              if (context.kind !== 'compare') return;
                               setDiffDialogItem(item);
+                              setDiffDialogSource({ ...context });
                               setDiffDialogOpen(true);
                             }}
+                            onAskFlower={props.onAskFlower}
+                            onOpenInTerminal={props.onOpenInTerminal}
+                            onBrowseFiles={props.onBrowseFiles}
+                            onPreviewCurrentFile={props.onPreviewCurrentFile}
+                            onCopyText={props.onCopyText}
                           />
                         </div>
                       </div>
@@ -1845,18 +2426,19 @@ function BranchCompareDialog(props: BranchCompareDialogProps) {
         open={diffDialogOpen()}
         onOpenChange={(open) => {
           setDiffDialogOpen(open);
-          if (!open) setDiffDialogItem(null);
+          if (!open) {
+            setDiffDialogItem(null);
+            setDiffDialogSource(null);
+          }
         }}
         item={diffDialogItem()}
         source={
-          diffDialogItem() && compare()
+          diffDialogItem() && diffDialogSource()
             ? {
                 kind: "compare",
-                repoRootPath: String(
-                  compare()?.repoRootPath ?? props.repoRootPath ?? "",
-                ).trim(),
-                baseRef: String(compare()?.baseRef ?? targetRef()).trim(),
-                targetRef: String(compare()?.targetRef ?? sourceRef()).trim(),
+                repoRootPath: diffDialogSource()!.repoRootPath,
+                baseRef: diffDialogSource()!.baseRef,
+                targetRef: diffDialogSource()!.targetRef,
               }
             : null
         }
@@ -1894,7 +2476,19 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
   const [diffDialogOpen, setDiffDialogOpen] = createSignal(false);
   const [diffDialogItem, setDiffDialogItem] =
     createSignal<GitWorkspaceChange | null>(null);
+  const [diffDialogRepoRootPath, setDiffDialogRepoRootPath] = createSignal('');
   const [compareDialogOpen, setCompareDialogOpen] = createSignal(false);
+  const [compareDialogBranch, setCompareDialogBranch] = createSignal<GitBranchSummary | null>(null);
+  const branchContextMenu = createGitEntityContextMenuController<BranchHeaderContextTarget>({
+    snapshotTarget: (target) => ({ ...target, branch: { ...target.branch } }),
+  });
+  const statusScopeContextMenu = createGitEntityContextMenuController<BranchStatusScopeContextTarget>({
+    snapshotTarget: (target) => ({
+      ...target,
+      branch: { ...target.branch },
+      items: target.items.map((item) => ({ ...item })),
+    }),
+  });
 
   let statusReqSeqBySection: Record<GitWorkspaceViewSection, number> = {
     changes: 0,
@@ -2164,6 +2758,11 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
     if (branchDirectoryRequest()) return "";
     return branchWorkspaceDisabledReason() || i18n.t('git.notifications.repositoryPathUnavailable');
   };
+  const openCompareDialog = (branch: GitBranchSummary | null | undefined) => {
+    if (!branch) return;
+    setCompareDialogBranch({ ...branch });
+    setCompareDialogOpen(true);
+  };
   const branchSummary = createMemo<BranchSummaryPresentation>(() => {
     const text = localizedBranchContextSummary(selectedBranch(), i18n);
     return {
@@ -2292,7 +2891,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
           disabled: !interactiveBranch(),
           disabledReason: branchVerificationDisabledReason(),
           busy: branchIsVerifying(),
-          onPress: () => setCompareDialogOpen(true),
+          onPress: () => openCompareDialog(interactiveBranch()),
         },
       ];
 
@@ -2462,6 +3061,218 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
       default:
         return secondaryActionButtonClass;
     }
+  };
+  const branchContextMenuTarget = (branch: GitBranchSummary): BranchHeaderContextTarget => {
+    const repoRootPath = activeRepoRootPath();
+    return {
+      branch,
+      repoRootPath,
+      liveRootPath: resolveGitBranchWorktreePath(branch, repoRootPath),
+      repoDetached: Boolean(props.repoSummary?.detached),
+    };
+  };
+  const branchContextMenuItems = (target: BranchHeaderContextTarget): GitContextMenuActionItem[] => {
+    const branch = target.branch;
+    const directoryRequest = buildGitDirectoryShortcutRequest({ rootPath: target.liveRootPath });
+    const worktreeDisabledReason = directoryRequest
+      ? undefined
+      : !target.repoRootPath
+        ? i18n.t('git.notifications.repositoryPathUnavailable')
+        : branch.kind === 'remote'
+          ? i18n.t('git.branches.checkoutRemoteFirst')
+          : !branch.current && !branch.worktreePath
+            ? i18n.t('git.branches.openBranchInWorktreeFirst')
+            : i18n.t('git.branches.worktreeUnavailable');
+    const actions: GitContextMenuActionItem[] = [];
+    if (props.onAskFlower) {
+      actions.push({
+        id: "ask-flower",
+        kind: "action",
+        group: "assistant",
+        rank: 10,
+        label: i18n.t("git.contextMenu.askFlower"),
+        icon: FlowerIcon,
+        onSelect: () => props.onAskFlower?.({
+          kind: "branch",
+          repoRootPath: target.repoRootPath,
+          branch,
+        }),
+      });
+    }
+    if (props.onOpenInTerminal) {
+      actions.push({
+        id: "open-terminal",
+        kind: "action",
+        group: "navigate",
+        rank: 10,
+        label: i18n.t("git.contextMenu.openTerminal"),
+        icon: Terminal,
+        disabled: !directoryRequest,
+        disabledReason: worktreeDisabledReason,
+        onSelect: () => {
+          if (directoryRequest) props.onOpenInTerminal?.(directoryRequest);
+        },
+      });
+    }
+    if (props.onBrowseFiles) {
+      actions.push({
+        id: "browse-files",
+        kind: "action",
+        group: "navigate",
+        rank: 20,
+        label: i18n.t("git.contextMenu.browseFiles"),
+        icon: Folder,
+        disabled: !directoryRequest,
+        disabledReason: worktreeDisabledReason,
+        onSelect: () => {
+          if (directoryRequest) void props.onBrowseFiles?.(directoryRequest);
+        },
+      });
+    }
+    if (props.onCheckoutBranch && (branch.kind === "local" || branch.kind === "remote")) {
+      actions.push({
+        id: "checkout-branch",
+        kind: "action",
+        group: "modify",
+        rank: 10,
+        label: i18n.t("git.contextMenu.checkoutBranch"),
+        icon: GitBranch,
+        disabled: Boolean(props.checkoutBusy) || Boolean(branch.current) || Boolean(branch.worktreePath),
+        disabledReason: props.checkoutBusy
+          ? i18n.t('gitPresentation.checkingOut')
+          : branch.current
+            ? i18n.t('uiCopy.git.current')
+            : branch.worktreePath
+              ? i18n.t('git.overview.linkedWorktree')
+              : undefined,
+        onSelect: () => props.onCheckoutBranch?.(branch),
+      });
+    }
+    if (props.onMergeBranch && (branch.kind === "local" || branch.kind === "remote")) {
+      actions.push({
+        id: "merge-branch",
+        kind: "action",
+        group: "modify",
+        rank: 20,
+        label: i18n.t("git.contextMenu.mergeBranch"),
+        icon: ArrowRightLeft,
+        disabled: Boolean(props.mergeBusy) || target.repoDetached || Boolean(branch.current),
+        disabledReason: props.mergeBusy
+          ? i18n.t('git.branches.merging')
+          : target.repoDetached
+            ? i18n.t('uiCopy.git.detachedReadOnly')
+            : branch.current
+              ? i18n.t('uiCopy.git.current')
+              : undefined,
+        onSelect: () => props.onMergeBranch?.(branch),
+      });
+    }
+    if (props.onCopyText) {
+      actions.push({
+        id: "copy-branch-name",
+        kind: "action",
+        group: "clipboard",
+        rank: 10,
+        label: i18n.t("git.contextMenu.copyBranchName"),
+        icon: Copy,
+        onSelect: () => void props.onCopyText?.(branchDisplayName(branch)),
+      });
+      if (target.liveRootPath) {
+        actions.push({
+          id: "copy-worktree-path",
+          kind: "action",
+          group: "clipboard",
+          rank: 20,
+          label: i18n.t("git.contextMenu.copyWorktreePath"),
+          icon: Copy,
+          onSelect: () => void props.onCopyText?.(target.liveRootPath),
+        });
+      }
+    }
+    if (props.onDeleteBranch && branch.kind === "local") {
+      actions.push({
+        id: "delete-branch",
+        kind: "action",
+        group: "destructive",
+        rank: 10,
+        label: i18n.t("git.contextMenu.deleteBranch"),
+        icon: Trash,
+        disabled: Boolean(props.deleteBusy) || Boolean(branch.current),
+        disabledReason: props.deleteBusy
+          ? i18n.t('uiCopy.git.deleting')
+          : branch.current
+            ? i18n.t('uiCopy.git.current')
+            : undefined,
+        onSelect: () => props.onDeleteBranch?.(branch),
+      });
+    }
+    return actions;
+  };
+  const statusScopeContextTarget = (): BranchStatusScopeContextTarget | null => {
+    const branch = interactiveBranch();
+    const repoRootPath = activeRepoRootPath();
+    const liveRootPath = statusRepoRootPath();
+    if (!branch || !repoRootPath || !liveRootPath) return null;
+    return {
+      repoRootPath,
+      liveRootPath,
+      branch: { ...branch },
+      section: selectedStatusSection(),
+      directoryPath: activeStatusDirectoryPath(),
+      items: visibleStatusItems().map((item) => ({ ...item })),
+    };
+  };
+  const statusScopeContextMenuItems = (target: BranchStatusScopeContextTarget): GitContextMenuActionItem[] => {
+    const directoryRequest = buildGitDirectoryShortcutRequest({
+      rootPath: target.liveRootPath,
+      directoryPath: target.directoryPath,
+    });
+    const items: GitContextMenuActionItem[] = [];
+    if (props.onAskFlower) {
+      items.push({
+        id: 'ask-flower', kind: 'action', group: 'assistant', rank: 10,
+        label: i18n.t('git.contextMenu.askFlower'), icon: FlowerIcon,
+        onSelect: () => props.onAskFlower?.({
+          kind: 'branch_status',
+          repoRootPath: target.repoRootPath,
+          worktreePath: target.liveRootPath,
+          branch: target.branch,
+          section: target.section,
+          items: target.items,
+        }),
+      });
+    }
+    if (props.onOpenInTerminal) {
+      items.push({
+        id: 'open-terminal', kind: 'action', group: 'navigate', rank: 10,
+        label: i18n.t('git.contextMenu.openTerminal'), icon: Terminal,
+        disabled: !directoryRequest,
+        disabledReason: directoryRequest ? undefined : i18n.t('git.notifications.repositoryPathUnavailable'),
+        onSelect: () => { if (directoryRequest) props.onOpenInTerminal?.(directoryRequest); },
+      });
+    }
+    if (props.onBrowseFiles) {
+      items.push({
+        id: 'browse-files', kind: 'action', group: 'navigate', rank: 20,
+        label: i18n.t('git.contextMenu.browseFiles'), icon: Folder,
+        disabled: !directoryRequest,
+        disabledReason: directoryRequest ? undefined : i18n.t('git.notifications.repositoryPathUnavailable'),
+        onSelect: () => { if (directoryRequest) void props.onBrowseFiles?.(directoryRequest); },
+      });
+    }
+    items.push({
+      id: 'compare-branch', kind: 'action', group: 'modify', rank: 10,
+      label: i18n.t('git.branches.compareAction'), icon: ArrowRightLeft,
+      onSelect: () => openCompareDialog(target.branch),
+    });
+    if (props.onOpenStash) {
+      items.push({
+        id: 'stash', kind: 'action', group: 'modify', rank: 20,
+        label: i18n.t('git.changes.stashAction'), icon: Package,
+        onSelect: () => props.onOpenStash?.({ tab: 'save', repoRootPath: target.liveRootPath, source: 'branch_status' }),
+      });
+    }
+    return items;
   };
   const renderBranchPrimaryAction = (
     action: BranchPrimaryActionPresentation,
@@ -3042,6 +3853,15 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         aria-hidden={!active()}
         hidden={!active()}
         tabIndex={active() ? 0 : -1}
+        onContextMenu={(event) => {
+          const target = statusScopeContextTarget();
+          if (target) statusScopeContextMenu.openFromContextMenu(event, target);
+        }}
+        onKeyDown={(event) => {
+          if (event.target !== event.currentTarget) return;
+          const target = statusScopeContextTarget();
+          if (target) statusScopeContextMenu.openFromKeyboard(event, target);
+        }}
       >
         <div class="flex min-h-0 flex-1 flex-col px-2.5 py-2">
           <div class="flex min-h-0 flex-1 flex-col gap-2">
@@ -3132,6 +3952,9 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                 fallback={renderBranchStatusContentFallback()}
               >
                 <BranchStatusTable
+                  canonicalRepoRootPath={activeRepoRootPath()}
+                  repoRootPath={statusRepoRootPath()}
+                  branch={interactiveBranch() as GitBranchSummary}
                   section={selectedStatusSection()}
                   items={visibleStatusItems()}
                   totalCount={visibleStatusTotalRows()}
@@ -3140,11 +3963,17 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                   hasMore={visibleStatusPageState().hasMore}
                   loadingMore={visibleStatusLoadingMore()}
                   selectedKey={visibleStatusKey()}
-                  onOpenDiff={(item) => {
+                  onOpenDiff={(item, context) => {
                     setDiffDialogItem(item);
+                    setDiffDialogRepoRootPath(context.liveRootPath);
                     setDiffDialogOpen(true);
                   }}
                   onOpenDirectory={navigateStatusDirectory}
+                  onAskFlower={props.onAskFlower}
+                  onOpenInTerminal={props.onOpenInTerminal}
+                  onBrowseFiles={props.onBrowseFiles}
+                  onPreviewCurrentFile={props.onPreviewCurrentFile}
+                  onCopyText={props.onCopyText}
                   onLoadMore={() => {
                     void loadMoreStatusSection(selectedStatusSection());
                   }}
@@ -3203,7 +4032,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         >
           <HistoryList
             active={active()}
-            repoRootPath={activeRepoRootPath()}
+            repoRootPath={statusRepoRootPath() || activeRepoRootPath()}
             repoSummary={props.repoSummary}
             selectedBranch={interactiveBranch()}
             commits={props.commits}
@@ -3218,6 +4047,10 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
             onLoadMore={props.onLoadMore}
             onSwitchDetached={props.onSwitchDetached}
             onAskFlower={props.onAskFlower}
+            onOpenInTerminal={props.onOpenInTerminal}
+            onBrowseFiles={props.onBrowseFiles}
+            onPreviewCurrentFile={props.onPreviewCurrentFile}
+            onCopyText={props.onCopyText}
           />
         </Show>
       </div>
@@ -3265,6 +4098,17 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                 data-git-branch-header-layout={branchHeaderLayout()}
               >
                 {/* Branch identity card */}
+                <div
+                  tabIndex={0}
+                  onContextMenu={(event) => {
+                    const branch = selectedBranch();
+                    if (branch) branchContextMenu.openFromContextMenu(event, branchContextMenuTarget(branch));
+                  }}
+                  onKeyDown={(event) => {
+                    const branch = selectedBranch();
+                    if (branch) branchContextMenu.openFromKeyboard(event, branchContextMenuTarget(branch));
+                  }}
+                >
                 <GitPanelFrame>
                   <div class="flex items-start justify-between gap-3">
                     <div class="flex min-w-0 items-center gap-2.5">
@@ -3383,6 +4227,7 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
                     </div>
                   </Show>
                 </GitPanelFrame>
+                </div>
 
                 {/* Tab bar with icons */}
                 <div
@@ -3501,22 +4346,33 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         open={compareDialogOpen()}
         repoRootPath={activeRepoRootPath()}
         branches={props.branches}
-        selectedBranch={interactiveBranch()}
-        onClose={() => setCompareDialogOpen(false)}
+        selectedBranch={compareDialogBranch() ?? interactiveBranch()}
+        onClose={() => {
+          setCompareDialogOpen(false);
+          setCompareDialogBranch(null);
+        }}
+        onAskFlower={props.onAskFlower}
+        onOpenInTerminal={props.onOpenInTerminal}
+        onBrowseFiles={props.onBrowseFiles}
+        onPreviewCurrentFile={props.onPreviewCurrentFile}
+        onCopyText={props.onCopyText}
       />
 
       <GitDiffDialog
         open={diffDialogOpen()}
         onOpenChange={(open) => {
           setDiffDialogOpen(open);
-          if (!open) setDiffDialogItem(null);
+          if (!open) {
+            setDiffDialogItem(null);
+            setDiffDialogRepoRootPath('');
+          }
         }}
         item={diffDialogItem()}
         source={
           diffDialogItem()
             ? {
                 kind: "workspace",
-                repoRootPath: statusRepoRootPath(),
+                repoRootPath: diffDialogRepoRootPath(),
                 workspaceSection: String(
                   diffDialogItem()?.section ?? "",
                 ).trim(),
@@ -3531,6 +4387,8 @@ export function GitBranchesPanel(props: GitBranchesPanelProps) {
         }
         emptyMessage={i18n.t('uiCopy.git.selectBranchStatusFile')}
       />
+      <GitEntityContextMenu controller={branchContextMenu} items={branchContextMenuItems} />
+      <GitEntityContextMenu controller={statusScopeContextMenu} items={statusScopeContextMenuItems} />
 
       <Show when={shouldRenderReviewDialogs()}>
         <GitMergeBranchDialog

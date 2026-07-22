@@ -52,9 +52,16 @@ import {
 } from '../utils/fileBrowserClipboard';
 import { REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS } from '../workbench/surface/workbenchActionSurface';
 import { buildFilePathFlowerTurnLauncherIntent } from '../utils/filePathAskFlower';
-import { buildGitFlowerTurnLauncherIntent, type GitAskFlowerRequest, type GitDirectoryShortcutRequest } from '../utils/gitBrowserShortcuts';
+import {
+  buildGitFlowerTurnLauncherIntent,
+  type GitAskFlowerRequest,
+  type GitDirectoryShortcutRequest,
+  type GitFileShortcutTarget,
+} from '../utils/gitBrowserShortcuts';
 import { canOpenDirectoryPathInTerminal, openDirectoryInTerminal } from '../utils/openDirectoryInTerminal';
 import { canLaunchProcess } from '../utils/permission';
+import { writeTextToClipboard } from '../utils/clipboard';
+import { fileItemFromPath } from '../utils/filePreviewItem';
 import { useFilePreviewContext } from './FilePreviewContext';
 import { InputDialog } from './InputDialog';
 import { type GitHistoryMode } from './GitHistoryModeSwitch';
@@ -774,6 +781,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   let stashListReqSeq = 0;
   let stashDetailReqSeq = 0;
   let stashReviewReqSeq = 0;
+  let gitAskFlowerReqSeq = 0;
   let lastGitCommitContextKey = '';
   let lastGitRepoKey = '';
   let lastFilesGitDecorationRepoKey = '';
@@ -1953,14 +1961,18 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     });
   };
 
-  const handleBulkDiscardWorkspaceSection = (section: GitWorkspaceViewSection) => {
+  const handleBulkDiscardWorkspaceSection = (
+    section: GitWorkspaceViewSection,
+    scope: { directoryPath?: string; count?: number } = {},
+  ) => {
     if (section !== 'changes') return;
-    const count = activeChangesPageCount();
+    const directoryPath = String(scope.directoryPath ?? activeChangesDirectoryPath()).trim();
+    const count = Math.max(0, Number(scope.count ?? activeChangesPageCount()));
     if (count <= 0) return;
     setSelectedGitWorkspaceSection(section);
     void handleDiscardWorkspaceSelection({
-      directoryPath: activeChangesDirectoryPath(),
-      key: workspaceViewSectionActionKey(section, activeChangesDirectoryPath()),
+      directoryPath,
+      key: workspaceViewSectionActionKey(section, directoryPath),
       count,
     });
   };
@@ -2281,6 +2293,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   const handleStashWindowOpenChange = (open: boolean) => {
     setStashWindowOpen(open);
     if (!open) {
+      gitAskFlowerReqSeq += 1;
       clearStashReview({ cancelInFlight: true });
     }
   };
@@ -2321,10 +2334,11 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     );
   };
 
-  const handleRequestApplyStash = async (removeAfterApply: boolean) => {
+  const handleRequestApplyStash = async (stashIdValue: string, removeAfterApply: boolean) => {
     const repoRootPath = activeStashRepoRootPath();
-    const stashId = String(selectedStashId() ?? '').trim();
+    const stashId = String(stashIdValue ?? '').trim();
     if (!repoRootPath || !stashId || !protocol.client()) return;
+    setSelectedStashId(stashId);
     const seq = ++stashReviewReqSeq;
     setStashReviewLoading(true);
     setStashReviewError('');
@@ -2358,6 +2372,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     const repoRootPath = resolveStashRepoRootPath(options.repoRootPath);
     const stashId = String(options.id ?? selectedStashId() ?? '').trim();
     if (!repoRootPath || !stashId || !protocol.client()) return;
+    setSelectedStashId(stashId);
     const seq = ++stashReviewReqSeq;
     setStashReviewLoading(true);
     setStashReviewError('');
@@ -3325,10 +3340,12 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
     if (mode === 'git' && !canEnterGitHistory()) {
       return;
     }
+    gitAskFlowerReqSeq += 1;
     pageModeSelection.request(mode);
   };
 
   const handleGitSubviewChange = (view: GitWorkbenchSubview) => {
+    gitAskFlowerReqSeq += 1;
     gitSubviewSelection.request(normalizeGitSubview(view));
   };
 
@@ -3429,6 +3446,7 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
 
   createEffect(() => {
     const id = envId();
+    gitAskFlowerReqSeq += 1;
     const restored = untrack(() => ({
       nextPath: id ? readPersistedLastPath(id) : '',
       nextShowHidden: id ? readPersistedShowHidden(id) : false,
@@ -4413,12 +4431,51 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
   };
 
   const handleGitAskFlower = (request: GitAskFlowerRequest) => {
-    const result = buildGitFlowerTurnLauncherIntent(request);
-    if (!result.intent) {
-      notification.error(i18n.t('git.notifications.askFlowerUnavailableTitle'), result.error ?? i18n.t('git.notifications.failedToBuildGitContext'));
-      return;
-    }
-    dispatchFlowerTurnLauncherIntent(result.intent);
+    void (async () => {
+      const seq = ++gitAskFlowerReqSeq;
+      let resolvedRequest = request;
+
+      try {
+        if (request.kind === 'commit' && request.files.length === 0) {
+          const resp = await rpc.git.getCommitDetail({
+            repoRootPath: request.repoRootPath,
+            commit: request.commit.hash,
+          });
+          if (seq !== gitAskFlowerReqSeq) return;
+          resolvedRequest = {
+            ...request,
+            commit: resp.commit ?? request.commit,
+            files: Array.isArray(resp.files) ? resp.files : [],
+          };
+        } else if (request.kind === 'stash' && !request.files) {
+          const resp = await rpc.git.getStashDetail({
+            repoRootPath: request.repoRootPath,
+            id: request.stash.id,
+          });
+          if (seq !== gitAskFlowerReqSeq) return;
+          resolvedRequest = {
+            ...request,
+            stash: resp.stash ?? request.stash,
+            files: Array.isArray(resp.stash?.files) ? resp.stash.files : [],
+          };
+        }
+      } catch (error) {
+        if (seq !== gitAskFlowerReqSeq) return;
+        notification.error(
+          i18n.t('git.notifications.askFlowerUnavailableTitle'),
+          error instanceof Error ? error.message : String(error ?? i18n.t('git.notifications.failedToBuildGitContext')),
+        );
+        return;
+      }
+
+      if (seq !== gitAskFlowerReqSeq) return;
+      const result = buildGitFlowerTurnLauncherIntent(resolvedRequest);
+      if (!result.intent) {
+        notification.error(i18n.t('git.notifications.askFlowerUnavailableTitle'), result.error ?? i18n.t('git.notifications.failedToBuildGitContext'));
+        return;
+      }
+      dispatchFlowerTurnLauncherIntent(result.intent);
+    })();
   };
 
   const handleGitOpenInTerminal = (request: GitDirectoryShortcutRequest) => {
@@ -4445,6 +4502,28 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
       title: request.title,
       openStrategy: ctx.viewMode() === 'workbench' ? 'create_new' : undefined,
     });
+  };
+
+  const handleGitPreviewCurrentFile = (target: GitFileShortcutTarget) => {
+    if (!target.canPreviewCurrentFile) return;
+    void filePreview.openPreview(fileItemFromPath(target.absolutePath));
+  };
+
+  const handleGitCopyText = (value: string) => {
+    void (async () => {
+      try {
+        await writeTextToClipboard(value);
+        notification.success(
+          i18n.t('git.contextMenu.copiedTitle'),
+          i18n.t('git.contextMenu.copiedValue', { value }),
+        );
+      } catch (error) {
+        notification.error(
+          i18n.t('git.contextMenu.copyFailedTitle'),
+          error instanceof Error ? error.message : String(error ?? i18n.t('git.contextMenu.copyFailedMessage')),
+        );
+      }
+    })();
   };
 
   const askFlowerFromFileBrowser = async (items: FileItem[]) => {
@@ -5089,6 +5168,8 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
                       onAskFlower={handleGitAskFlower}
                       onOpenInTerminal={canLaunchProcess(ctx.env()?.permissions) ? handleGitOpenInTerminal : undefined}
                       onBrowseFiles={handleGitBrowseFiles}
+                      onPreviewCurrentFile={handleGitPreviewCurrentFile}
+                      onCopyText={handleGitCopyText}
                       busyWorkspaceKey={gitMutationKey()}
                       busyWorkspaceAction={busyWorkspaceAction()}
                       branches={gitBranches()}
@@ -5221,12 +5302,17 @@ export function RemoteFileBrowser(props: RemoteFileBrowserProps = {}) {
             reloadDetail: true,
           });
         }}
-        onRequestApply={(removeAfterApply) => {
-          void handleRequestApplyStash(removeAfterApply);
+        onRequestApply={(stashId, removeAfterApply) => {
+          void handleRequestApplyStash(stashId, removeAfterApply);
         }}
-        onRequestDrop={() => {
-          void handleRequestDropStash();
+        onRequestDrop={(stashId) => {
+          void handleRequestDropStash({ id: stashId });
         }}
+        onAskFlower={handleGitAskFlower}
+        onOpenInTerminal={canLaunchProcess(ctx.env()?.permissions) ? handleGitOpenInTerminal : undefined}
+        onBrowseFiles={handleGitBrowseFiles}
+        onPreviewCurrentFile={handleGitPreviewCurrentFile}
+        onCopyText={handleGitCopyText}
         onConfirmReview={() => {
           void handleConfirmStashReview();
         }}

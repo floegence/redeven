@@ -949,4 +949,155 @@ describe("GitHistoryBrowser interactions", () => {
       dispose();
     }
   });
+
+  it("offers commit-file handoffs from a stable history context target", async () => {
+    const file = {
+      changeType: "modified",
+      path: "src/context.ts",
+      displayPath: "src/context.ts",
+      additions: 2,
+      deletions: 1,
+    };
+    mockGetCommitDetail.mockResolvedValueOnce({
+      repoRootPath: "/workspace/repo",
+      commit: {
+        hash: "context1234567890",
+        shortHash: "context1",
+        parents: ["parent123"],
+        subject: "Context actions",
+      },
+      files: [file],
+    });
+    const askFlower = vi.fn();
+    const openTerminal = vi.fn();
+    const browseFiles = vi.fn();
+    const previewCurrentFile = vi.fn();
+    const copyText = vi.fn();
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+
+    const dispose = render(
+      () => (
+        <LayoutProvider>
+          <NotificationProvider>
+            <div class="h-[640px]">
+              <GitHistoryBrowser
+                repoInfo={{ available: true, repoRootPath: "/workspace/repo", headRef: "main", headCommit: "context1234567890" }}
+                currentPath="/workspace/repo/src"
+                selectedCommitHash="context1234567890"
+                onAskFlower={askFlower}
+                onOpenInTerminal={openTerminal}
+                onBrowseFiles={browseFiles}
+                onPreviewCurrentFile={previewCurrentFile}
+                onCopyText={copyText}
+              />
+            </div>
+          </NotificationProvider>
+        </LayoutProvider>
+      ),
+      host,
+    );
+
+    try {
+      await flush();
+      const fileButton = Array.from(host.querySelectorAll<HTMLButtonElement>('button'))
+        .find((button) => button.textContent?.includes('src/context.ts'))!;
+      const openMenu = async () => {
+        fileButton.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+        await flush();
+        return Array.from(document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+      };
+
+      let actions = await openMenu();
+      expect(actions).toHaveLength(7);
+      actions.find((action) => action.textContent?.includes('Ask Flower'))!.click();
+      expect(askFlower).toHaveBeenCalledWith(expect.objectContaining({ kind: 'commit', files: [expect.objectContaining({ path: 'src/context.ts' })] }));
+
+      actions = await openMenu();
+      actions.find((action) => action.textContent?.includes('Preview Current File'))!.click();
+      expect(previewCurrentFile).toHaveBeenCalledWith({
+        absolutePath: '/workspace/repo/src/context.ts',
+        parentDirectoryPath: '/workspace/repo/src',
+        relativePath: 'src/context.ts',
+        canPreviewCurrentFile: true,
+      });
+
+      actions = await openMenu();
+      actions.find((action) => action.textContent?.includes('Open Terminal'))!.click();
+      expect(openTerminal).toHaveBeenCalledWith({ path: '/workspace/repo/src' });
+
+      actions = await openMenu();
+      file.path = 'src/mutated.ts';
+      actions.find((action) => action.textContent?.includes('Copy Absolute Path'))!.click();
+      expect(copyText).toHaveBeenCalledWith('/workspace/repo/src/context.ts');
+    } finally {
+      dispose();
+    }
+  });
+
+  it("opens the commit overview menu with stable detail and disabled detach reason", async () => {
+    const detail = {
+      hash: 'overview1234567890',
+      shortHash: 'overview',
+      parents: ['parent123'],
+      subject: 'Stable overview',
+      body: 'Overview body',
+    };
+    mockGetCommitDetail.mockResolvedValueOnce({
+      repoRootPath: '/workspace/repo',
+      commit: detail,
+      files: [{ changeType: 'modified', path: 'src/overview.ts' }],
+    });
+    const onAskFlower = vi.fn();
+    const onCopyText = vi.fn();
+    const onSwitchDetached = vi.fn();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <div class="h-[640px]">
+            <GitHistoryBrowser
+              repoInfo={{ available: true, repoRootPath: '/workspace/repo', headRef: 'main', headCommit: detail.hash }}
+              repoSummary={{ repoRootPath: '/workspace/repo', detached: true, headCommit: detail.hash, workspaceSummary: { stagedCount: 0, unstagedCount: 0, untrackedCount: 0, conflictedCount: 0 } }}
+              currentPath="/workspace/repo"
+              selectedCommitHash={detail.hash}
+              onAskFlower={onAskFlower}
+              onCopyText={onCopyText}
+              onSwitchDetached={onSwitchDetached}
+            />
+          </div>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      const overview = host.querySelector('[data-git-commit-overview-layout]') as HTMLElement | null;
+      overview!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await flush();
+      detail.subject = 'Mutated overview';
+      let actions = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+      actions.find((item) => item.textContent?.includes('Ask Flower'))!.click();
+      expect(onAskFlower).toHaveBeenCalledWith(expect.objectContaining({
+        kind: 'commit',
+        commit: expect.objectContaining({ subject: 'Stable overview' }),
+        files: [expect.objectContaining({ path: 'src/overview.ts' })],
+      }));
+
+      overview!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+      await flush();
+      actions = Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+      const detach = actions.find((item) => item.textContent?.includes('Switch Detached'))!;
+      expect(detach.getAttribute('aria-disabled')).toBe('true');
+      expect(detach.title).toContain('Already detached');
+      detach.click();
+      expect(onSwitchDetached).not.toHaveBeenCalled();
+
+      actions.find((item) => item.textContent?.includes('Copy Commit Hash'))!.click();
+      expect(onCopyText).toHaveBeenCalledWith('overview1234567890');
+    } finally {
+      dispose();
+    }
+  });
 });

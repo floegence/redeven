@@ -343,4 +343,80 @@ describe('GitWorkbench interactions', () => {
       dispose();
     }
   });
+
+  it('opens repository actions from the identity header with a stable repository snapshot', async () => {
+    const onAskFlower = vi.fn();
+    const onOpenInTerminal = vi.fn();
+    const onBrowseFiles = vi.fn();
+    const onCopyText = vi.fn();
+    const onOpenStash = vi.fn();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <LayoutProvider>
+        <NotificationProvider>
+          <ProtocolProvider contract={redevenV1Contract}>
+            <div class="h-[640px]">
+              <GitWorkbench
+                currentPath="/workspace/repo/src"
+                subview="changes"
+                repoInfo={{ available: true, repoRootPath: '/workspace/repo', headRef: 'main', headCommit: 'abc1234' }}
+                repoSummary={{
+                  repoRootPath: '/workspace/repo',
+                  headRef: 'main',
+                  headCommit: 'abc1234',
+                  stashCount: 2,
+                  workspaceSummary: { stagedCount: 1, unstagedCount: 2, untrackedCount: 0, conflictedCount: 0 },
+                }}
+                onAskFlower={onAskFlower}
+                onOpenInTerminal={onOpenInTerminal}
+                onBrowseFiles={onBrowseFiles}
+                onCopyText={onCopyText}
+                onOpenStash={onOpenStash}
+              />
+            </div>
+          </ProtocolProvider>
+        </NotificationProvider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      const target = host.querySelector('[data-git-repository-context-target="header"]') as HTMLElement | null;
+      expect(target).toBeTruthy();
+      const openMenu = async () => {
+        target!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+        await Promise.resolve();
+        await Promise.resolve();
+        return Array.from(document.body.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+      };
+
+      let actions = await openMenu();
+      actions.find((item) => item.textContent?.includes('Ask Flower'))!.click();
+      expect(onAskFlower).toHaveBeenCalledWith(expect.objectContaining({
+        kind: 'repository',
+        repoRootPath: '/workspace/repo',
+        headRef: 'main',
+        headCommit: 'abc1234',
+        summary: expect.objectContaining({ stashCount: 2 }),
+      }));
+
+      actions = await openMenu();
+      actions.find((item) => item.textContent?.includes('Open Terminal'))!.click();
+      expect(onOpenInTerminal).toHaveBeenCalledWith({ path: '/workspace/repo', preferredName: 'repo' });
+
+      actions = await openMenu();
+      actions.find((item) => item.textContent?.includes('Browse Files'))!.click();
+      expect(onBrowseFiles).toHaveBeenCalledWith({ path: '/workspace/repo', preferredName: 'repo' });
+
+      actions = await openMenu();
+      actions.find((item) => item.textContent?.includes('Stashes'))!.click();
+      expect(onOpenStash).toHaveBeenCalledWith({ tab: 'stashes', repoRootPath: '/workspace/repo', source: 'header' });
+
+      actions = await openMenu();
+      actions.find((item) => item.textContent?.includes('Copy Absolute Path'))!.click();
+      expect(onCopyText).toHaveBeenCalledWith('/workspace/repo');
+    } finally {
+      dispose();
+    }
+  });
 });

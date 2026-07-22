@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EnvContext, type EnvContextValue } from '../pages/EnvContext';
 import type { EnvViewMode } from '../envViewMode';
 import { RemoteFileBrowser } from './RemoteFileBrowser';
+import type { GitAskFlowerRequest } from '../utils/gitBrowserShortcuts';
 
 const widgetStateStore = vi.hoisted(() => ({
   values: {} as Record<string, Record<string, unknown>>,
@@ -176,7 +177,9 @@ const gitStashWindowRenderStore = vi.hoisted(() => ({
     reviewError?: string;
   }>,
   onRefreshStashes: undefined as (() => void) | undefined,
-  onRequestDrop: undefined as (() => void) | undefined,
+  onRequestDrop: undefined as ((stashId: string) => void) | undefined,
+  onRequestApply: undefined as ((stashId: string, removeAfterApply: boolean) => void) | undefined,
+  onAskFlower: undefined as ((request: GitAskFlowerRequest) => void) | undefined,
   onConfirmReview: undefined as (() => void) | undefined,
 }));
 
@@ -248,6 +251,7 @@ const mockRpc = vi.hoisted(() => ({
     listBranches: vi.fn(),
     getBranchCompare: vi.fn(),
     listCommits: vi.fn(),
+    getCommitDetail: vi.fn(),
     listStashes: vi.fn(),
     getStashDetail: vi.fn(),
     getDiffContent: vi.fn(),
@@ -579,6 +583,7 @@ vi.mock('./FileBrowserWorkspace', () => ({
         <button type="button" onFocus={() => props.onPreviewGitMode?.()}>mock-preview-git</button>
         <button
           type="button"
+          data-testid="mock-stash-ask-flower"
           onClick={() => props.onDragMove?.([copyNameTarget], props.currentPath)}
         >
           mock-drag-move-file
@@ -823,17 +828,13 @@ vi.mock('./GitWorkspace', () => ({
     onRefresh?: () => void;
     onRefreshSelectedBranch?: () => void;
     onSelectCurrentBranch?: () => void;
-    onAskFlower?: (request: {
-      kind: 'workspace_section';
-      repoRootPath: string;
-      headRef?: string;
-      section: 'changes' | 'staged' | 'unstaged' | 'untracked' | 'conflicted';
-      items: Array<{ section: 'staged' | 'unstaged' | 'untracked' | 'conflicted'; changeType: string; path: string; displayPath: string }>;
-    }) => void;
+    onAskFlower?: (request: GitAskFlowerRequest) => void;
     onOpenStash?: (request?: { tab?: 'save' | 'stashes'; repoRootPath?: string; source?: 'header' | 'changes' | 'branch_status' | 'merge_blocker' }) => void;
     onDiscardWorkspaceSection?: (section: 'changes' | 'staged' | 'conflicted') => void;
     onOpenInTerminal?: (request: { path: string; preferredName?: string }) => void;
     onBrowseFiles?: (request: { path: string; preferredName?: string; title?: string }) => void | Promise<void>;
+    onPreviewCurrentFile?: (target: { absolutePath: string; parentDirectoryPath: string; relativePath: string; canPreviewCurrentFile: boolean }) => void;
+    onCopyText?: (value: string) => void | Promise<void>;
     onConfirmMergeBranch?: (
       branch: { name?: string; fullName?: string; kind?: string },
       options: { planFingerprint?: string },
@@ -912,25 +913,44 @@ vi.mock('./GitWorkspace', () => ({
           </button>
         ) : null}
         {props.onAskFlower ? (
-          <button
-            type="button"
-            onClick={() => props.onAskFlower?.({
-              kind: 'workspace_section',
-              repoRootPath: '/workspace/repo',
-              headRef: 'main',
-              section: 'changes',
-              items: [
-                {
-                  section: 'unstaged',
-                  changeType: 'modified',
-                  path: 'src/app.ts',
-                  displayPath: 'src/app.ts',
+          <>
+            <button
+              type="button"
+              onClick={() => props.onAskFlower?.({
+                kind: 'workspace_section',
+                repoRootPath: '/workspace/repo',
+                headRef: 'main',
+                section: 'changes',
+                items: [
+                  {
+                    section: 'unstaged',
+                    changeType: 'modified',
+                    path: 'src/app.ts',
+                    displayPath: 'src/app.ts',
+                  },
+                ],
+              })}
+            >
+              mock-git-ask-flower
+            </button>
+            <button
+              type="button"
+              onClick={() => props.onAskFlower?.({
+                kind: 'commit',
+                repoRootPath: '/workspace/repo',
+                location: 'graph',
+                commit: {
+                  hash: 'abc1234',
+                  shortHash: 'abc1234',
+                  parents: [],
+                  subject: 'Initial commit',
                 },
-              ],
-            })}
-          >
-            mock-git-ask-flower
-          </button>
+                files: [],
+              })}
+            >
+              mock-git-ask-commit
+            </button>
+          </>
         ) : null}
         {props.onOpenInTerminal ? (
           <button
@@ -954,6 +974,20 @@ vi.mock('./GitWorkspace', () => ({
           >
             mock-git-browse-files
           </button>
+        ) : null}
+        {props.onPreviewCurrentFile ? (
+          <button
+            type="button"
+            onClick={() => props.onPreviewCurrentFile?.({
+              absolutePath: '/workspace/repo/src/app.ts',
+              parentDirectoryPath: '/workspace/repo/src',
+              relativePath: 'src/app.ts',
+              canPreviewCurrentFile: true,
+            })}
+          >mock-git-preview-current-file</button>
+        ) : null}
+        {props.onCopyText ? (
+          <button type="button" onClick={() => props.onCopyText?.('/workspace/repo/src/app.ts')}>mock-git-copy-path</button>
         ) : null}
         <button
           type="button"
@@ -1089,9 +1123,11 @@ vi.mock('./GitStashWindow', () => ({
     reviewError?: string;
     reviewLoading?: boolean;
     onRefreshStashes?: () => void;
+    onAskFlower?: (request: GitAskFlowerRequest) => void;
     onSelectStash?: (id: string) => void;
     onOpenChange?: (open: boolean) => void;
-    onRequestDrop?: () => void;
+    onRequestDrop?: (stashId: string) => void;
+    onRequestApply?: (stashId: string, removeAfterApply: boolean) => void;
     onConfirmReview?: () => void;
   }) => {
     createEffect(() => {
@@ -1107,10 +1143,13 @@ vi.mock('./GitStashWindow', () => ({
       });
       gitStashWindowRenderStore.onRefreshStashes = props.onRefreshStashes;
       gitStashWindowRenderStore.onRequestDrop = props.onRequestDrop;
+      gitStashWindowRenderStore.onRequestApply = props.onRequestApply;
+      gitStashWindowRenderStore.onAskFlower = props.onAskFlower;
       gitStashWindowRenderStore.onConfirmReview = props.onConfirmReview;
     });
 
-    return props.open ? (
+    return (
+      <Show when={props.open}>
       <div data-testid="git-stash-window">
         <div>stash-tab:{props.tab ?? 'save'}</div>
         <div>stash-count:{props.stashes.length}</div>
@@ -1122,12 +1161,23 @@ vi.mock('./GitStashWindow', () => ({
         <div>stash-review-loading:{props.reviewLoading ? 'yes' : 'no'}</div>
         <div>stash-review-error:{props.reviewError ?? ''}</div>
         <button type="button" onClick={() => props.onRefreshStashes?.()}>mock-stash-refresh</button>
+        <button
+          type="button"
+          onClick={() => {
+            const stash = props.stashes[0];
+            if (!stash) return;
+            props.onAskFlower?.({ kind: 'stash', repoRootPath: '/workspace/repo', stash });
+          }}
+        >mock-stash-ask-flower</button>
         <button type="button" onClick={() => props.onSelectStash?.(props.stashes[0]?.id ?? '')}>mock-stash-select-first</button>
-        <button type="button" onClick={() => props.onRequestDrop?.()}>mock-stash-delete</button>
+        <button type="button" onClick={() => props.onRequestApply?.(props.stashes[0]?.id ?? '', false)}>mock-stash-apply</button>
+        <button type="button" onClick={() => props.onRequestApply?.(props.stashes[0]?.id ?? '', true)}>mock-stash-apply-remove</button>
+        <button type="button" onClick={() => props.onRequestDrop?.(props.stashes[0]?.id ?? '')}>mock-stash-delete</button>
         <button type="button" onClick={() => props.onConfirmReview?.()}>mock-stash-confirm-review</button>
-        <button type="button" onClick={() => props.onOpenChange?.(false)}>mock-stash-close</button>
+        <button type="button" data-testid="mock-stash-close" onClick={() => props.onOpenChange?.(false)}>mock-stash-close</button>
       </div>
-    ) : null;
+      </Show>
+    );
   },
 }));
 
@@ -1252,6 +1302,8 @@ beforeEach(() => {
   gitStashWindowRenderStore.snapshots = [];
   gitStashWindowRenderStore.onRefreshStashes = undefined;
   gitStashWindowRenderStore.onRequestDrop = undefined;
+  gitStashWindowRenderStore.onRequestApply = undefined;
+  gitStashWindowRenderStore.onAskFlower = undefined;
   gitStashWindowRenderStore.onConfirmReview = undefined;
   gitDiffDialogRenderStore.snapshots = [];
   workspaceLifecycleStore.filesMounts = 0;
@@ -1376,6 +1428,21 @@ beforeEach(() => {
     commits: [{ hash: 'abc1234', shortHash: 'abc1234', parents: [], subject: 'Initial commit' }],
     hasMore: false,
     nextOffset: 0,
+  });
+  mockRpc.git.getCommitDetail.mockResolvedValue({
+    repoRootPath: '/workspace/repo',
+    commit: {
+      hash: 'abc1234',
+      shortHash: 'abc1234',
+      parents: [],
+      subject: 'Initial commit',
+      body: 'Initial commit body',
+    },
+    files: [{
+      changeType: 'modified',
+      path: 'src/app.ts',
+      displayPath: 'src/app.ts',
+    }],
   });
   mockRpc.git.listStashes.mockResolvedValue({
     repoRootPath: '/workspace/repo',
@@ -3584,7 +3651,7 @@ describe('RemoteFileBrowser persistence', () => {
 
       expect(gitStashWindowRenderStore.snapshots.some((item) => item.open && item.tab === 'stashes')).toBe(true);
       expect(gitStashWindowRenderStore.onRequestDrop).toBeTruthy();
-      gitStashWindowRenderStore.onRequestDrop?.();
+      gitStashWindowRenderStore.onRequestDrop?.('stash-1');
       await flush();
       await flush();
 
@@ -3660,7 +3727,7 @@ describe('RemoteFileBrowser persistence', () => {
 
       expect(gitStashWindowRenderStore.snapshots.some((item) => item.open && item.tab === 'stashes')).toBe(true);
       expect(gitStashWindowRenderStore.onRequestDrop).toBeTruthy();
-      gitStashWindowRenderStore.onRequestDrop?.();
+      gitStashWindowRenderStore.onRequestDrop?.('stash-1');
       await flush();
       await flush();
       expect(gitStashWindowRenderStore.snapshots.some((item) => item.open && item.reviewKind === 'drop')).toBe(true);
@@ -3732,6 +3799,207 @@ describe('RemoteFileBrowser persistence', () => {
         homePath: '/workspace',
         title: 'Repo',
       });
+    } finally {
+      dispose();
+    }
+  });
+
+  it('enriches commit Ask Flower requests with the stable commit detail', async () => {
+    const detail = {
+      repoRootPath: '/workspace/repo',
+      commit: {
+        hash: 'abc1234',
+        shortHash: 'abc1234',
+        parents: [],
+        subject: 'Detailed commit',
+        body: 'Detailed body',
+      },
+      files: [{ changeType: 'modified', path: 'src/detail.ts' }],
+    };
+    mockRpc.git.getCommitDetail.mockResolvedValueOnce(detail);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      envActionSpies.openFlowerTurnLauncher.mockClear();
+      const button = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-git-ask-commit') as HTMLButtonElement | undefined;
+      expect(button).toBeTruthy();
+      button!.click();
+      await flush();
+      expect(mockRpc.git.getCommitDetail).toHaveBeenCalledWith({ repoRootPath: '/workspace/repo', commit: 'abc1234' });
+      expect(envActionSpies.openFlowerTurnLauncher).toHaveBeenCalledTimes(1);
+      expect(envActionSpies.openFlowerTurnLauncher.mock.calls[0]?.[0]?.context_items?.[0]?.content).toContain('src/detail.ts');
+      expect(envActionSpies.openFlowerTurnLauncher.mock.calls[0]?.[0]?.context_items?.[0]?.content).toContain('Detailed body');
+    } finally {
+      dispose();
+    }
+  });
+
+  it('cancels stale commit Ask Flower detail requests when Git mode changes', async () => {
+    const pending = deferred<{ repoRootPath: string; commit: { hash: string; shortHash: string; parents: string[]; subject: string }; files: Array<{ changeType: string; path: string }> }>();
+    mockRpc.git.getCommitDetail.mockReturnValueOnce(pending.promise);
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      envActionSpies.openFlowerTurnLauncher.mockClear();
+      const ask = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-git-ask-commit') as HTMLButtonElement | undefined;
+      const files = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-to-files') as HTMLButtonElement | undefined;
+      expect(ask).toBeTruthy();
+      expect(files).toBeTruthy();
+      ask!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      files!.click();
+      await flush();
+      pending.resolve({
+        repoRootPath: '/workspace/repo',
+        commit: { hash: 'abc1234', shortHash: 'abc1234', parents: [], subject: 'Late detail' },
+        files: [{ changeType: 'modified', path: 'src/late.ts' }],
+      });
+      await flush();
+      expect(envActionSpies.openFlowerTurnLauncher).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('reports commit Ask Flower detail failures without launching Flower', async () => {
+    mockRpc.git.getCommitDetail.mockRejectedValueOnce(new Error('commit detail unavailable'));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      envActionSpies.openFlowerTurnLauncher.mockClear();
+      notificationStore.error = [];
+      const ask = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-git-ask-commit') as HTMLButtonElement | undefined;
+      ask!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      expect(envActionSpies.openFlowerTurnLauncher).not.toHaveBeenCalled();
+      expect(notificationStore.error.some((item) => item.message === 'commit detail unavailable')).toBe(true);
+    } finally {
+      dispose();
+    }
+  });
+
+  it('enriches stash Ask Flower requests and cancels them when the stash window closes', async () => {
+    widgetStateStore.values['widget-1'] = {
+      ...(widgetStateStore.values['widget-1'] ?? {}),
+      pageModeByEnv: { 'env-1': 'git' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      const open = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-open-stash') as HTMLButtonElement | undefined;
+      open!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      await flush();
+      expect(gitStashWindowRenderStore.snapshots.some((item) => item.open)).toBe(true);
+      envActionSpies.openFlowerTurnLauncher.mockClear();
+      mockRpc.git.getStashDetail.mockResolvedValueOnce({
+        repoRootPath: '/workspace/repo',
+        stash: {
+          id: 'stash-1',
+          ref: 'stash@{0}',
+          message: 'Enriched stash',
+          files: [{ changeType: 'renamed', oldPath: 'src/old.ts', newPath: 'src/new.ts' }],
+        },
+      });
+      expect(gitStashWindowRenderStore.onAskFlower).toBeTruthy();
+      gitStashWindowRenderStore.onAskFlower?.({
+        kind: 'stash',
+        repoRootPath: '/workspace/repo',
+        stash: { id: 'stash-1', ref: 'stash@{0}' },
+      });
+      await flush();
+      expect(envActionSpies.openFlowerTurnLauncher).toHaveBeenCalledTimes(1);
+      expect(envActionSpies.openFlowerTurnLauncher.mock.calls[0]?.[0]?.context_items?.[0]?.content).toContain('src/new.ts');
+
+      const pending = deferred<{ repoRootPath: string; stash: { id: string; ref: string; files: Array<{ changeType: string; path: string }> } }>();
+      mockRpc.git.getStashDetail.mockReturnValueOnce(pending.promise);
+      envActionSpies.openFlowerTurnLauncher.mockClear();
+      gitStashWindowRenderStore.onAskFlower?.({
+        kind: 'stash',
+        repoRootPath: '/workspace/repo',
+        stash: { id: 'stash-1', ref: 'stash@{0}' },
+      });
+      await flush();
+      const close = document.querySelector<HTMLButtonElement>('[data-testid="mock-stash-close"]') ?? undefined;
+      expect(close).toBeTruthy();
+      close!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      pending.resolve({
+        repoRootPath: '/workspace/repo',
+        stash: { id: 'stash-1', ref: 'stash@{0}', files: [{ changeType: 'modified', path: 'src/late.ts' }] },
+      });
+      await flush();
+      expect(envActionSpies.openFlowerTurnLauncher).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  });
+
+  it('keeps stash apply and drop review callbacks bound to the stable stash id', async () => {
+    widgetStateStore.values['widget-1'] = {
+      ...(widgetStateStore.values['widget-1'] ?? {}),
+      pageModeByEnv: { 'env-1': 'git' },
+      gitSubviewByEnv: { 'env-1': 'changes' },
+    };
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <LayoutProvider>
+        <EnvContext.Provider value={createEnvContext()}>
+          <RemoteFileBrowser widgetId="widget-1" />
+        </EnvContext.Provider>
+      </LayoutProvider>
+    ), host);
+
+    try {
+      await flush();
+      const open = Array.from(host.querySelectorAll('button')).find((node) => node.textContent === 'mock-open-stash') as HTMLButtonElement | undefined;
+      expect(open).toBeTruthy();
+      open!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      await flush();
+      expect(gitStashWindowRenderStore.onRequestApply).toBeTruthy();
+      gitStashWindowRenderStore.onRequestApply?.('stash-1', false);
+      await flush();
+      expect(mockRpc.git.previewApplyStash).toHaveBeenCalledWith({ repoRootPath: '/workspace/repo', id: 'stash-1', removeAfterApply: false });
+      gitStashWindowRenderStore.onRequestDrop?.('stash-1');
+      await flush();
+      expect(mockRpc.git.previewDropStash).toHaveBeenCalledWith({ repoRootPath: '/workspace/repo', id: 'stash-1' });
     } finally {
       dispose();
     }
