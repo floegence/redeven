@@ -1,6 +1,11 @@
-import { For, type Component } from 'solid-js';
+import { For, onCleanup, onMount, type Component } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
+import {
+  SurfaceFloatingLayer,
+  focusMenuItem,
+  handleMenuKeyboardNavigation,
+  type MenuDismissReason,
+} from '@floegence/floe-webapp-core/ui';
 import { redevenDividerRoleClass, redevenSurfaceRoleClass } from '../utils/redevenSurfaceRoles';
 
 export const FLOATING_CONTEXT_MENU_WIDTH_PX = 180;
@@ -29,8 +34,11 @@ export type FloatingContextMenuItem = FloatingContextMenuActionItem | FloatingCo
 export interface FloatingContextMenuProps {
   x: number;
   y: number;
+  ariaLabel: string;
+  focusAnchor?: HTMLElement | null;
   items: readonly FloatingContextMenuItem[];
   menuRef?: (el: HTMLDivElement) => void;
+  onDismiss: (reason: MenuDismissReason) => void;
 }
 
 function isActionItem(item: FloatingContextMenuItem): item is FloatingContextMenuActionItem {
@@ -43,47 +51,70 @@ export function estimateFloatingContextMenuHeight(actionCount: number, separator
     + Math.max(0, separatorCount) * FLOATING_CONTEXT_MENU_SEPARATOR_HEIGHT_PX;
 }
 
-export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) => (
-  <SurfaceFloatingLayer
-    layerRef={props.menuRef}
-    position={{ x: props.x, y: props.y }}
-    estimatedSize={{
-      width: FLOATING_CONTEXT_MENU_WIDTH_PX,
-      height: estimateFloatingContextMenuHeight(
-        props.items.filter((item) => item.kind === 'action').length,
-        props.items.filter((item) => item.kind === 'separator').length,
-      ),
-    }}
-    role="menu"
-    class={cn(
-      'min-w-[180px] py-1 border rounded-lg shadow-lg animate-in fade-in zoom-in-95 duration-100',
-      redevenSurfaceRoleClass('overlay'),
-    )}
-    onContextMenu={(event) => event.preventDefault()}
-  >
-    <For each={props.items}>
-      {(item) => {
-        if (!isActionItem(item)) {
-          return <div role="separator" aria-orientation="horizontal" class={cn('my-1 border-t', redevenDividerRoleClass('strong'))} />;
-        }
+export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) => {
+  let menuEl: HTMLDivElement | null = null;
 
-        const Icon = item.icon;
-        const itemClass = item.destructive
-          ? 'w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 text-destructive hover:bg-destructive/10 hover:text-destructive focus-visible:bg-destructive/10 focus-visible:text-destructive'
-          : 'w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground';
-        return (
-          <button
-            type="button"
-            role="menuitem"
-            class={itemClass}
-            onClick={item.onSelect}
-            disabled={item.disabled}
-          >
-            <Icon class="w-3.5 h-3.5 opacity-60" />
-            <span class="flex-1 text-left">{item.label}</span>
-          </button>
-        );
+  onMount(() => {
+    const frame = requestAnimationFrame(() => focusMenuItem(menuEl, 'first'));
+    onCleanup(() => cancelAnimationFrame(frame));
+  });
+
+  return (
+    <SurfaceFloatingLayer
+      layerRef={(el) => {
+        menuEl = el;
+        props.menuRef?.(el);
       }}
-    </For>
-  </SurfaceFloatingLayer>
-);
+      position={{ x: props.x, y: props.y }}
+      estimatedSize={{
+        width: FLOATING_CONTEXT_MENU_WIDTH_PX,
+        height: estimateFloatingContextMenuHeight(
+          props.items.filter((item) => item.kind === 'action').length,
+          props.items.filter((item) => item.kind === 'separator').length,
+        ),
+      }}
+      role="menu"
+      aria-label={props.ariaLabel}
+      class={cn(
+        'min-w-[180px] py-1 border rounded-lg shadow-lg animate-in fade-in zoom-in-95 duration-100',
+        redevenSurfaceRoleClass('overlay'),
+      )}
+      onContextMenu={(event) => event.preventDefault()}
+      onKeyDown={(event) => {
+        handleMenuKeyboardNavigation(event, {
+          onDismiss: (reason) => {
+            props.onDismiss(reason);
+            if ((reason === 'tab' || reason === 'shift-tab') && props.focusAnchor?.isConnected) {
+              props.focusAnchor.focus({ preventScroll: true });
+            }
+          },
+        });
+      }}
+    >
+      <For each={props.items}>
+        {(item) => {
+          if (!isActionItem(item)) {
+            return <div role="separator" aria-orientation="horizontal" class={cn('my-1 border-t', redevenDividerRoleClass('strong'))} />;
+          }
+
+          const Icon = item.icon;
+          const itemClass = item.destructive
+            ? 'w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 text-destructive hover:bg-destructive/10 hover:text-destructive focus-visible:bg-destructive/10 focus-visible:text-destructive'
+            : 'w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground';
+          return (
+            <button
+              type="button"
+              role="menuitem"
+              class={itemClass}
+              onClick={item.onSelect}
+              disabled={item.disabled}
+            >
+              <Icon class="w-3.5 h-3.5 opacity-60" />
+              <span class="flex-1 text-left">{item.label}</span>
+            </button>
+          );
+        }}
+      </For>
+    </SurfaceFloatingLayer>
+  );
+};

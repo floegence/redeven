@@ -813,7 +813,9 @@ export function RuntimeMonitorPanel(props: RuntimeMonitorPanelProps) {
             <FloatingContextMenu
               x={menu.x}
               y={menu.y}
+              ariaLabel={i18n.t('runtimeMonitor.topProcesses')}
               items={buildProcessContextMenuItems(menu)}
+              onDismiss={() => setProcessContextMenu(null)}
               menuRef={(el) => {
                 processContextMenuEl = el;
               }}

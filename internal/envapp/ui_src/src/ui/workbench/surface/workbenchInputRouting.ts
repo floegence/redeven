@@ -96,13 +96,6 @@ export function findRedevenTerminalWheelSurface(target: EventTarget | null): HTM
   return surface instanceof HTMLElement ? surface : null;
 }
 
-export function redevenTerminalWheelSurfaceHasFocus(surface: HTMLElement | null): boolean {
-  if (!surface || typeof document === 'undefined') return false;
-
-  const active = document.activeElement;
-  return active instanceof Element && surface.contains(active);
-}
-
 function isWorkbenchWidgetRootWheelMarker(
   element: Element,
   selectedWidgetId: string | null | undefined,
@@ -257,11 +250,6 @@ export function resolveWorkbenchWheelRouting(args: {
   if (widgetRoot) {
     const ownerWidgetId = readWorkbenchWidgetId(widgetRoot);
     if (ownerWidgetId !== null && ownerWidgetId === args.selectedWidgetId) {
-      const terminalSurface = findRedevenTerminalWheelSurface(args.target);
-      if (terminalSurface && !redevenTerminalWheelSurfaceHasFocus(terminalSurface)) {
-        return { kind: 'ignore', reason: REDEVEN_SELECTED_WIDGET_BOUNDARY_WHEEL_REASON };
-      }
-
       return createSelectedWidgetWheelRoutingDecision({
         target: args.target,
         selectedWidgetId: args.selectedWidgetId,

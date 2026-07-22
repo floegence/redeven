@@ -211,6 +211,11 @@ describe('workbenchInputRouting', () => {
       disablePanZoom: false,
       selectedWidgetId: 'widget-terminal-1',
     })).toEqual({ kind: 'canvas_zoom' });
+    expect(resolveWorkbenchWheelRouting({
+      target: wheelRegion,
+      disablePanZoom: true,
+      selectedWidgetId: 'widget-terminal-1',
+    })).toEqual({ kind: 'ignore', reason: 'pan_zoom_disabled' });
   });
 
   it('does not treat the selected widget root marker as a real local wheel viewport', () => {
@@ -393,7 +398,7 @@ describe('workbenchInputRouting', () => {
     })).toBeNull();
   });
 
-  it('suppresses selected terminal wheels while terminal focus is elsewhere', () => {
+  it('keeps selected terminal wheels local while terminal focus is elsewhere', () => {
     const widget = document.createElement('article');
     widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
     widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-terminal-1');
@@ -409,10 +414,32 @@ describe('workbenchInputRouting', () => {
       target: terminalSurface,
       disablePanZoom: false,
       selectedWidgetId: 'widget-terminal-1',
+    })).toEqual({ kind: 'local_surface', reason: 'wheel_interactive' });
+    expect(resolveWorkbenchWheelRouting({
+      target: terminalSurface,
+      disablePanZoom: true,
+      selectedWidgetId: 'widget-terminal-1',
+    })).toEqual({ kind: 'local_surface', reason: 'wheel_interactive' });
+  });
+
+  it('keeps selected deferred terminal surfaces without a local marker inside the widget boundary', () => {
+    const widget = document.createElement('article');
+    widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
+    widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-terminal-1');
+    const terminalSurface = document.createElement('div');
+    terminalSurface.className = 'redeven-terminal-surface';
+    terminalSurface.setAttribute('data-terminal-deferred-surface', 'true');
+    widget.appendChild(terminalSurface);
+    document.body.appendChild(widget);
+
+    expect(resolveWorkbenchWheelRouting({
+      target: terminalSurface,
+      disablePanZoom: false,
+      selectedWidgetId: 'widget-terminal-1',
     })).toEqual({ kind: 'ignore', reason: 'selected_widget_boundary' });
   });
 
-  it('keeps selected terminal wheels local only while focus is inside the terminal surface', () => {
+  it('keeps selected terminal wheels local while focus is inside the terminal surface', () => {
     const widget = document.createElement('article');
     widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ROOT_ATTR, 'true');
     widget.setAttribute(REDEVEN_WORKBENCH_WIDGET_ID_ATTR, 'widget-terminal-1');

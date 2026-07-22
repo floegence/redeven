@@ -9,6 +9,7 @@ import { TerminalLiveErrorCode, TerminalLiveServerError } from '@floegence/floet
 
 import { EnvTerminalPage } from '../pages/EnvTerminalPage';
 import { TerminalSessionCatalogContext } from '../services/terminalSessionCatalog';
+import { FloatingContextMenu } from './FloatingContextMenu';
 import { TerminalPanel } from './TerminalPanel';
 
 const layoutState = vi.hoisted(() => ({
@@ -1778,6 +1779,201 @@ describe('TerminalPanel browser activity integration', () => {
     expect(transportMocks.attach).not.toHaveBeenCalled();
     expect(transportMocks.historyPage).not.toHaveBeenCalled();
   }, 10_000);
+
+  it('handles macOS terminal search and session shortcuts from the real terminal textarea', async () => {
+    const originalUserAgent = navigator.userAgent;
+    Object.defineProperty(navigator, 'userAgent', {
+      configurable: true,
+      value: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15',
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => <TerminalPanel variant="workbench" />, host);
+
+    try {
+      await settleTerminalPanel();
+      const terminalInput = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Terminal input"]');
+      expect(terminalInput).toBeTruthy();
+
+      const searchEvent = new KeyboardEvent('keydown', {
+        key: 'f',
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      terminalInput!.dispatchEvent(searchEvent);
+      await settleTerminalPanel();
+
+      const searchInput = host.querySelector<HTMLInputElement>('input[placeholder="Search..."]');
+      expect(searchEvent.defaultPrevented).toBe(true);
+      expect(searchInput).toBeTruthy();
+      expect(document.activeElement).toBe(searchInput);
+
+      const sessionEvent = new KeyboardEvent('keydown', {
+        key: '2',
+        metaKey: true,
+        bubbles: true,
+        cancelable: true,
+      });
+      terminalInput!.dispatchEvent(sessionEvent);
+      await settleTerminalPanel();
+
+      expect(sessionEvent.defaultPrevented).toBe(true);
+      expect(findTerminalTab(host, 'Terminal 2')?.dataset.terminalSessionActive).toBe('true');
+    } finally {
+      dispose();
+      host.remove();
+      Object.defineProperty(navigator, 'userAgent', {
+        configurable: true,
+        value: originalUserAgent,
+      });
+    }
+  });
+
+  it('executes terminal context-menu actions with wrapped keyboard navigation', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => <TerminalPanel variant="workbench" />, host);
+
+    try {
+      await settleTerminalPanel();
+      const terminalInput = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Terminal input"]');
+      expect(terminalInput).toBeTruthy();
+
+      terminalInput!.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'ContextMenu',
+        bubbles: true,
+        cancelable: true,
+      }));
+      await settleTerminalPanel();
+      expect(document.body.querySelector('[role="menu"]')?.getAttribute('aria-label')).toBe('Terminal');
+      expect(document.activeElement?.textContent?.trim()).toBe('Ask Flower');
+
+      await userEvent.keyboard('{ArrowUp}');
+      expect(document.activeElement?.textContent?.trim()).toBe('Clear terminal content');
+      await userEvent.keyboard('{Enter}');
+      await vi.waitFor(() => {
+        expect(transportMocks.clear).toHaveBeenCalledWith('session-1');
+      });
+      expect(document.body.querySelector('[role="menu"]')).toBeNull();
+
+      const currentInput = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Terminal input"]');
+      currentInput!.dispatchEvent(new KeyboardEvent('keydown', {
+        key: 'ContextMenu',
+        bubbles: true,
+        cancelable: true,
+      }));
+      await settleTerminalPanel();
+      expect(document.activeElement?.textContent?.trim()).toBe('Ask Flower');
+      await userEvent.keyboard(' ');
+      await vi.waitFor(() => {
+        expect(document.body.querySelector('[role="menu"]')).toBeNull();
+      });
+    } finally {
+      dispose();
+      host.remove();
+    }
+  });
+
+  it('preserves browser focus order when a floating context menu closes on Tab', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    let setMenuOpen = (_open: boolean) => undefined;
+    let menuTrigger: HTMLButtonElement | undefined;
+    const TestIcon = () => <span />;
+    const dispose = render(() => {
+      const [menuOpen, setOpen] = createSignal(true);
+      setMenuOpen = setOpen;
+      return (
+        <div data-floe-dialog-surface-host="true">
+          <button type="button" data-testid="focus-before-menu">Before menu</button>
+          <button ref={menuTrigger} type="button" data-testid="menu-trigger">Menu trigger</button>
+          <Show when={menuOpen()}>
+            <FloatingContextMenu
+              x={20}
+              y={20}
+              ariaLabel="Test actions"
+              focusAnchor={menuTrigger}
+              items={[{
+                id: 'test-action',
+                kind: 'action',
+                label: 'Test action',
+                icon: TestIcon,
+                onSelect: () => undefined,
+              }]}
+              onDismiss={() => setOpen(false)}
+            />
+          </Show>
+          <button type="button" data-testid="focus-after-menu">After menu</button>
+        </div>
+      );
+    }, host);
+
+    try {
+      await settleTerminalPanel();
+      expect(document.activeElement?.textContent?.trim()).toBe('Test action');
+      await userEvent.tab();
+      expect(document.body.querySelector('[role="menu"]')).toBeNull();
+      expect(document.activeElement).toBe(host.querySelector('[data-testid="focus-after-menu"]'));
+
+      setMenuOpen(true);
+      await settleTerminalPanel();
+      expect(document.activeElement?.textContent?.trim()).toBe('Test action');
+      await userEvent.tab({ shift: true });
+      expect(document.body.querySelector('[role="menu"]')).toBeNull();
+      expect(document.activeElement).toBe(host.querySelector('[data-testid="focus-before-menu"]'));
+    } finally {
+      dispose();
+      host.remove();
+    }
+  });
+
+  it('uses the focusable session row as the mouse context-menu Tab anchor', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => <TerminalPanel variant="workbench" />, host);
+
+    try {
+      await settleTerminalPanel();
+      const row = findTerminalTab(host, 'Terminal 1') as HTMLButtonElement | undefined;
+      const rowContainer = row?.parentElement;
+      expect(row).toBeTruthy();
+      expect(rowContainer).toBeTruthy();
+      const focusableElements = Array.from(host.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ));
+      const rowIndex = focusableElements.indexOf(row!);
+      const beforeRow = focusableElements[rowIndex - 1];
+      const afterRow = focusableElements[rowIndex + 1];
+      expect(beforeRow).toBeTruthy();
+      expect(afterRow).toBeTruthy();
+
+      const openMouseMenu = async () => {
+        rowContainer!.dispatchEvent(new MouseEvent('contextmenu', {
+          bubbles: true,
+          cancelable: true,
+          clientX: 48,
+          clientY: 64,
+        }));
+        await settleTerminalPanel();
+        expect(document.activeElement?.textContent?.trim()).toBe('Ask Flower');
+      };
+
+      await openMouseMenu();
+      await userEvent.tab();
+      expect(document.body.querySelector('[role="menu"]')).toBeNull();
+      expect(document.activeElement).toBe(afterRow);
+
+      await openMouseMenu();
+      await userEvent.tab({ shift: true });
+      expect(document.body.querySelector('[role="menu"]')).toBeNull();
+      expect(document.activeElement).toBe(beforeRow);
+      expect(document.activeElement).not.toBe(row);
+    } finally {
+      dispose();
+      host.remove();
+    }
+  });
 
   it('keeps the mobile drawer and search surface inside 320x568, 390x844, desktop, and transformed hosts', async () => {
     const renderResponsivePanel = async (width: number, height: number, transformed = false) => {

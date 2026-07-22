@@ -1682,7 +1682,9 @@ export function EnvCodespacesPage() {
           <FloatingContextMenu
             x={menu.x}
             y={menu.y}
+            ariaLabel={i18n.t("codespaces.title")}
             items={buildCodespaceContextMenuItems(menu.space)}
+            onDismiss={() => setCodespaceContextMenu(null)}
             menuRef={(el) => {
               codespaceContextMenuEl = el;
             }}
