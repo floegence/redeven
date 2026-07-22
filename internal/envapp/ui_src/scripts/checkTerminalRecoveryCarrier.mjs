@@ -16,6 +16,7 @@ import {
   terminalCarrierExpectedRetainedBytes,
   terminalCarrierSampleMarkerName,
 } from './terminalCarrierThreshold.mjs';
+import { installReDevPluginRuntimeFixture } from './redevpluginRuntimeFixture.mjs';
 import { classifyTerminalCarrierConsoleMessage } from './terminalCarrierRunnerPolicy.mjs';
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
@@ -313,6 +314,7 @@ async function startRuntime(tempDir) {
   await runCommand('go', ['build', '-o', binaryPath, './cmd/redeven'], {
     env: { ...process.env, GOWORK: 'off' },
   });
+  await installReDevPluginRuntimeFixture(tempDir);
   const homeDir = path.join(tempDir, 'home');
   const stateRoot = path.join(tempDir, 'state');
   const startupReportPath = path.join(tempDir, 'startup.json');
