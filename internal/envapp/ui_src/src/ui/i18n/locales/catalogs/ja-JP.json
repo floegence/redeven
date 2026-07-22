@@ -354,22 +354,37 @@
     },
     "flowerCompanion": {
       "openAria": "Flower コンパニオン。{status}",
-      "quickEntryLabel": "Flower へのクイック質問",
-      "quickEntryPlaceholder": "Flower に質問...",
-      "maximize": "Flower を最大化",
-      "restoreDocked": "Flower をドッキング表示に戻す",
       "collapse": "Flower を折りたたむ",
-      "resize": "Flower コンパニオンの高さを変更",
       "newContextConversation": "選択したコンテキストで新しい会話を開始",
-      "status": {
-        "attention": { "one": "対応が必要 · {count}", "other": "対応が必要 · {count}" },
-        "failed": { "one": "失敗 · {count}", "other": "失敗 · {count}" },
-        "running": { "one": "作業中 · {count}", "other": "作業中 · {count}" },
-        "queued": { "one": "キュー済み · {count}", "other": "キュー済み · {count}" },
-        "canceled": { "one": "キャンセル済み · {count}", "other": "キャンセル済み · {count}" },
-        "completed": { "one": "完了 · {count}", "other": "完了 · {count}" },
-        "unavailable": "利用不可",
-        "idle": "準備完了"
+      "summary": {
+        "lead": {
+          "needsAttention": "対応が必要",
+          "needsReview": "確認が必要",
+          "workingOn": "作業中",
+          "waitingToStart": "開始待ち",
+          "stopped": "停止",
+          "ready": "確認可能"
+        },
+        "withTitle": "{lead}: {title}",
+        "withTitleAndMore": {
+          "one": "{lead}: {title}、ほか1件",
+          "other": "{lead}: {title}、ほか{count}件"
+        },
+        "withoutTitle": {
+          "needsAttention": { "one": "対応が必要なタスクが1件あります", "other": "対応が必要なタスクが{count}件あります" },
+          "needsReview": { "one": "確認が必要なタスクが1件あります", "other": "確認が必要なタスクが{count}件あります" },
+          "working": { "one": "Flower が1件のタスクを処理しています", "other": "Flower が{count}件のタスクを処理しています" },
+          "queued": { "one": "1件のタスクが開始を待っています", "other": "{count}件のタスクが開始を待っています" },
+          "stopped": { "one": "1件のタスクが停止しました", "other": "{count}件のタスクが停止しました" },
+          "ready": { "one": "1件の結果を確認できます", "other": "{count}件の結果を確認できます" }
+        },
+        "secondaryWorking": {
+          "one": "Flower がほかに1件のタスクを処理しています",
+          "other": "Flower がほかに{count}件のタスクを処理しています"
+        },
+        "readyToAsk": "Flower に質問できます",
+        "unavailable": "Flower は現在利用できません",
+        "openPendingAction": "Flower を開いて続ける"
       },
       "threadSwitcher": {
         "label": "Flower の会話を切り替え",

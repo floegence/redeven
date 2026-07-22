@@ -43,7 +43,6 @@ const [desktopSidebarRevision, setDesktopSidebarRevision] = createSignal(0);
 let layoutIsMobile = false;
 let envAIPageMountSequence = 0;
 const uiStorageItems = new Map<string, string>();
-const activityFlowerComposerHandoffObservations: Array<{ requestID: string; text: string }> = [];
 
 function testFlowerTurnIntent(sourceSurface: string) {
   return {
@@ -172,6 +171,22 @@ vi.mock('@floegence/floe-webapp-core/app', () => ({
 
 vi.mock('@floegence/floe-webapp-core/layout', async (importOriginal) => ({
   ...await importOriginal<typeof import('@floegence/floe-webapp-core/layout')>(),
+  BottomBarCompanion: (props: any) => {
+    createEffect(() => props.onPhaseChange?.(props.open ? 'expanded' : 'collapsed'));
+    return (
+      <Show when={props.retained}>
+        <div
+          id={props.id}
+          data-companion-phase={props.open ? 'expanded' : 'collapsed'}
+          data-companion-visibility={props.visible ? 'visible' : 'hidden'}
+          aria-hidden={props.visible ? undefined : 'true'}
+          inert={!props.visible}
+        >
+          <div ref={(element) => props.contentHostRef?.(element)} />
+        </div>
+      </Show>
+    );
+  },
   BottomBarItem: (props: any) => <div>{props.children}</div>,
   DisplayModePageShell: (props: any) => <div data-testid="display-mode-page-shell">{props.children}</div>,
   DisplayModeSwitcher: () => <div data-testid="display-mode-switcher" />,
@@ -458,18 +473,13 @@ vi.mock('./pages/EnvAIPage', () => ({
   EnvAIPage: (props: any) => {
     const mountID = `activity-flower-${++envAIPageMountSequence}`;
     const env = useContext(EnvContextMock);
-    let lastComposerHandoffRequestID = '';
-    createEffect(() => {
-      const request = props.composerHandoffRequest;
-      if (!request?.request_id || request.request_id === lastComposerHandoffRequestID) return;
-      lastComposerHandoffRequestID = request.request_id;
-      activityFlowerComposerHandoffObservations.push({ requestID: request.request_id, text: request.text });
-    });
+    const [composerText, setComposerText] = createSignal('');
     return (
       <div
         data-testid="env-ai-page"
         data-mount-id={mountID}
         data-presentation={props.presentation}
+        data-companion-open={String(Boolean(props.companionOpen))}
         data-engaged={String(Boolean(props.engaged))}
         data-transcript-visible={String(Boolean(props.transcriptVisible))}
         data-focus-request-scope={props.focusRequestScope}
@@ -478,8 +488,19 @@ vi.mock('./pages/EnvAIPage', () => ({
         <div data-testid="env-ai-focus-request">{env.aiThreadFocusRequest?.()?.request_id ?? ''}</div>
         <div data-testid="activity-flower-focused-thread">{props.focusThreadRequest?.thread_id ?? ''}</div>
         <div data-testid="activity-flower-focus-request">{props.focusThreadRequest?.request_id ?? ''}</div>
-        <div data-testid="activity-flower-composer-handoff">{props.composerHandoffRequest?.text ?? ''}</div>
         <div data-testid="activity-flower-header-actions">{props.headerTrailingActions}</div>
+        <textarea
+          data-testid="activity-flower-composer"
+          aria-label="Ask Flower"
+          aria-controls={props.companionRegionID}
+          aria-expanded={Boolean(props.companionOpen)}
+          value={composerText()}
+          onFocus={() => props.onCompanionOpenRequest?.()}
+          onInput={(event) => {
+            setComposerText(event.currentTarget.value);
+            if (!event.isComposing) props.onCompanionOpenRequest?.();
+          }}
+        />
       </div>
     );
   },
@@ -643,7 +664,7 @@ beforeEach(() => {
     return 1;
   });
   getBoundingClientRectMock = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
-    if (this.matches('.flower-activity-quick-entry')) {
+    if (this.matches('.flower-activity-companion-anchor')) {
       return testDOMRect(240, 720, 544, 32);
     }
     if (this.matches('[data-activity-flower-full-page-host]')) {
@@ -661,7 +682,6 @@ beforeEach(() => {
   layoutIsMobile = false;
   envAIPageMountSequence = 0;
   floeRegistryComponents = () => [];
-  activityFlowerComposerHandoffObservations.length = 0;
   uiStorageItems.clear();
   flowerLaunchTurnMock.mockReset();
   flowerLaunchTurnMock.mockResolvedValue({
@@ -775,34 +795,39 @@ describe('EnvAppShell desktop floating surfaces', () => {
       await flushAsync();
 
       const companion = host.querySelector('#redeven-activity-flower-companion') as HTMLElement;
+      const productRoot = host.querySelector('#redeven-activity-flower-product') as HTMLElement;
       const flowerSurface = host.querySelector('[data-testid="env-ai-page"]') as HTMLElement;
-      const bottomBarInput = host.querySelector('input[aria-controls="redeven-activity-flower-companion"]') as HTMLInputElement;
+      const composer = host.querySelector('[data-testid="activity-flower-composer"]') as HTMLTextAreaElement;
 
-      expect(companion?.dataset.presentation).toBe('collapsed');
-      expect(companion?.getAttribute('aria-hidden')).toBe('true');
+      expect(companion?.dataset.companionPhase).toBe('collapsed');
+      expect(companion?.dataset.companionVisibility).toBe('visible');
+      expect(productRoot?.dataset.presentation).toBe('collapsed');
       expect(flowerSurface?.dataset.presentation).toBe('companion');
+      expect(flowerSurface?.dataset.companionOpen).toBe('false');
       expect(flowerSurface?.dataset.engaged).toBe('false');
       expect(flowerSurface?.dataset.transcriptVisible).toBe('false');
       expect(host.querySelectorAll('[data-testid="env-ai-page"]')).toHaveLength(1);
       expect(envAIPageMountSequence).toBe(1);
 
-      bottomBarInput.click();
+      composer.focus();
       await flushAsync();
 
-      expect(companion.dataset.presentation).toBe('expanded');
+      expect(companion.dataset.companionPhase).toBe('expanded');
+      expect(productRoot.dataset.presentation).toBe('expanded');
       expect(host.querySelector('[data-testid="env-ai-page"]')).toBe(flowerSurface);
       expect(flowerSurface.dataset.presentation).toBe('companion');
       expect(flowerSurface.dataset.engaged).toBe('true');
       expect(flowerSurface.dataset.transcriptVisible).toBe('true');
-      expect(bottomBarInput.getAttribute('aria-expanded')).toBe('true');
+      expect(composer.getAttribute('aria-expanded')).toBe('true');
 
       (host.querySelector('[data-testid="activity-flower-header-actions"] button') as HTMLButtonElement).click();
       await flushAsync();
 
-      expect(companion.dataset.presentation).toBe('collapsed');
+      expect(companion.dataset.companionPhase).toBe('collapsed');
+      expect(productRoot.dataset.presentation).toBe('collapsed');
       expect(host.querySelector('[data-testid="env-ai-page"]')).toBe(flowerSurface);
       expect(flowerSurface.dataset.engaged).toBe('false');
-      expect(bottomBarInput.getAttribute('aria-expanded')).toBe('false');
+      expect(composer.getAttribute('aria-expanded')).toBe('false');
       expect(envAIPageMountSequence).toBe(1);
 
       (host.querySelector('[data-activity-id="ai"]') as HTMLButtonElement).click();
@@ -810,8 +835,10 @@ describe('EnvAppShell desktop floating surfaces', () => {
 
       expect(desktopSidebarActiveTab).toBe('ai');
       expect(host.querySelector('[data-activity-flower-full-page-host]')?.getBoundingClientRect().width).toBe(896);
-      expect(companion.dataset.presentation).toBe('full_page');
+      expect(productRoot.dataset.presentation).toBe('full_page');
+      expect(companion.dataset.companionVisibility).toBe('hidden');
       expect(host.querySelector('[data-testid="env-ai-page"]')).toBe(flowerSurface);
+      expect(host.querySelector('[data-testid="activity-flower-composer"]')).toBe(composer);
       expect(flowerSurface.dataset.presentation).toBe('full');
       expect(flowerSurface.dataset.engaged).toBe('true');
       expect(flowerSurface.dataset.transcriptVisible).toBe('true');
@@ -837,7 +864,7 @@ describe('EnvAppShell desktop floating surfaces', () => {
 
       expect(desktopSidebarActiveTab).toBe('ai');
       expect(uiStorageItems.get('redeven_envapp_active_tab')).toBe('ai');
-      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('full_page');
+      expect(host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation')).toBe('full_page');
       expect(host.querySelectorAll('[data-testid="env-ai-page"]')).toHaveLength(1);
       expect(setSidebarActiveTabMock).toHaveBeenCalledWith('ai', expect.anything());
     } finally {
@@ -859,14 +886,14 @@ describe('EnvAppShell desktop floating surfaces', () => {
       await flushAsync();
 
       const flowerSurface = host.querySelector('[data-testid="env-ai-page"]');
-      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('collapsed');
-      expect(host.querySelector('input[aria-controls="redeven-activity-flower-companion"]')).not.toBeNull();
+      expect(host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation')).toBe('collapsed');
+      expect(host.querySelector('[data-testid="activity-flower-composer"]')).not.toBeNull();
 
       (host.querySelector('[data-activity-id="ai"]') as HTMLButtonElement).click();
       await flushAsync();
 
       expect(desktopSidebarActiveTab).toBe('ai');
-      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('full_page');
+      expect(host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation')).toBe('full_page');
       expect(host.querySelector('[data-testid="env-ai-page"]')).toBe(flowerSurface);
       expect(host.querySelector('[data-testid="env-ai-page"]')?.getAttribute('data-presentation')).toBe('full');
       expect(envAIPageMountSequence).toBe(1);
@@ -887,21 +914,21 @@ describe('EnvAppShell desktop floating surfaces', () => {
       await flushAsync();
       await flushAsync();
 
-      const quickInput = host.querySelector('input[aria-controls="redeven-activity-flower-companion"]') as HTMLInputElement;
-      quickInput.click();
+      const quickInput = host.querySelector('[data-testid="activity-flower-composer"]') as HTMLTextAreaElement;
+      quickInput.focus();
       await flushAsync();
-      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('expanded');
+      expect(host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation')).toBe('expanded');
 
       (host.querySelector('[data-testid="activity-switch-workbench"]') as HTMLButtonElement).click();
       await flushAsync();
       await flushAsync();
-      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('collapsed');
+      expect(host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation')).toBe('collapsed');
 
       (host.querySelector('[data-testid="workbench-switch-activity"]') as HTMLButtonElement).click();
       await flushAsync();
-      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('collapsed');
+      expect(host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation')).toBe('collapsed');
 
-      quickInput.click();
+      quickInput.focus();
       await flushAsync();
       (host.querySelector('[data-testid="activity-open-flower-launcher"]') as HTMLButtonElement).click();
       await flushAsync();
@@ -909,23 +936,23 @@ describe('EnvAppShell desktop floating surfaces', () => {
 
       (host.querySelector('[data-testid="activity-switch-workbench"]') as HTMLButtonElement).click();
       await flushAsync();
-      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('expanded');
+      expect(host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation')).toBe('expanded');
 
       (host.querySelector('[data-testid="flower-turn-launcher-cancel"]') as HTMLButtonElement).click();
       await flushAsync();
       expect(host.querySelector('[data-testid="flower-turn-launcher"]')).toBeNull();
-      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('expanded');
+      expect(host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation')).toBe('expanded');
 
       (host.querySelector('[data-testid="workbench-switch-activity"]') as HTMLButtonElement).click();
       await flushAsync();
-      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('expanded');
+      expect(host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation')).toBe('expanded');
       expect(host.querySelector('[data-testid="env-ai-page"]')?.getAttribute('data-engaged')).toBe('true');
     } finally {
       dispose();
     }
   });
 
-  it('coalesces quick input to the latest handoff before the expanded frame becomes visible', async () => {
+  it('keeps the Flower textarea and its draft intact while the companion expands', async () => {
     desktopViewMode = 'activity';
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -937,41 +964,22 @@ describe('EnvAppShell desktop floating surfaces', () => {
       await flushAsync();
       await flushAsync();
 
-      const queuedFrames: FrameRequestCallback[] = [];
-      vi.mocked(window.requestAnimationFrame).mockImplementation((callback) => {
-        queuedFrames.push(callback);
-        return queuedFrames.length;
-      });
-      const quickInput = host.querySelector('input[aria-controls="redeven-activity-flower-companion"]') as HTMLInputElement;
+      const composer = host.querySelector('[data-testid="activity-flower-composer"]') as HTMLTextAreaElement;
 
-      quickInput.value = 'inspect the workspace';
-      quickInput.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText' }));
-      quickInput.value = 'inspect the workspace and summarize risks';
-      quickInput.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText' }));
+      composer.value = 'inspect the workspace and summarize risks';
+      composer.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText' }));
+      await flushAsync();
 
-      expect(activityFlowerComposerHandoffObservations).toHaveLength(0);
-      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('expanded');
-      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('aria-hidden')).toBe('true');
-
-      while (queuedFrames.length > 0) {
-        const pending = queuedFrames.splice(0);
-        pending.forEach((callback) => callback(0));
-      }
-      await Promise.resolve();
-
-      expect(activityFlowerComposerHandoffObservations).toEqual([{
-        requestID: expect.any(String),
-        text: 'inspect the workspace and summarize risks',
-      }]);
-      expect(host.querySelector('[data-testid="activity-flower-composer-handoff"]')?.textContent)
-        .toBe('inspect the workspace and summarize risks');
-      expect(quickInput.readOnly).toBe(true);
+      expect(host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation')).toBe('expanded');
+      expect(host.querySelector('[data-testid="activity-flower-composer"]')).toBe(composer);
+      expect(composer.value).toBe('inspect the workspace and summarize risks');
+      expect(composer.readOnly).toBe(false);
     } finally {
       dispose();
     }
   });
 
-  it('does not duplicate an IME handoff when compositionend is followed by the final input event', async () => {
+  it('keeps IME composition in the same Flower textarea and opens after the committed input', async () => {
     desktopViewMode = 'activity';
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -983,23 +991,20 @@ describe('EnvAppShell desktop floating surfaces', () => {
       await flushAsync();
       await flushAsync();
 
-      const quickInput = host.querySelector('input[aria-controls="redeven-activity-flower-companion"]') as HTMLInputElement;
-      quickInput.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, data: '分析' }));
-      quickInput.value = '分析当前工作区';
-      quickInput.dispatchEvent(new InputEvent('input', { bubbles: true, data: '分析当前工作区', isComposing: true }));
+      const composer = host.querySelector('[data-testid="activity-flower-composer"]') as HTMLTextAreaElement;
+      composer.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true, data: '分析' }));
+      composer.value = '分析当前工作区';
+      composer.dispatchEvent(new InputEvent('input', { bubbles: true, data: '分析当前工作区', isComposing: true }));
 
-      expect(activityFlowerComposerHandoffObservations).toHaveLength(0);
-      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('collapsed');
+      expect(host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation')).toBe('collapsed');
 
-      quickInput.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '分析当前工作区' }));
-      quickInput.dispatchEvent(new InputEvent('input', { bubbles: true, data: '分析当前工作区', isComposing: false }));
+      composer.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '分析当前工作区' }));
+      composer.dispatchEvent(new InputEvent('input', { bubbles: true, data: '分析当前工作区', isComposing: false }));
       await flushAsync();
 
-      expect(activityFlowerComposerHandoffObservations).toEqual([{
-        requestID: expect.any(String),
-        text: '分析当前工作区',
-      }]);
-      expect(host.querySelector('[data-testid="activity-flower-composer-handoff"]')?.textContent).toBe('分析当前工作区');
+      expect(host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation')).toBe('expanded');
+      expect(host.querySelector('[data-testid="activity-flower-composer"]')).toBe(composer);
+      expect(composer.value).toBe('分析当前工作区');
     } finally {
       dispose();
     }
@@ -1043,7 +1048,7 @@ describe('EnvAppShell desktop floating surfaces', () => {
       }));
       expect(host.querySelector('[data-testid="flower-turn-launcher"]')).toBeNull();
       expect(desktopSidebarActiveTab).toBe('terminal');
-      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('expanded');
+      expect(host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation')).toBe('expanded');
       expect(host.querySelector('[data-testid="env-ai-page"]')).toBe(flowerSurface);
       expect(host.querySelector('[data-testid="activity-flower-focused-thread"]')?.textContent).toBe('thread-launched');
       expect(host.querySelector('[data-testid="activity-flower-focus-request"]')?.textContent).toMatch(/^env-activity-flower-focus-/);
@@ -1072,7 +1077,7 @@ describe('EnvAppShell desktop floating surfaces', () => {
       await flushAsync();
       const flowerSurface = host.querySelector('[data-testid="env-ai-page"]');
 
-      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('full_page');
+      expect(host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation')).toBe('full_page');
       (host.querySelector('[data-testid="activity-open-flower-launcher"]') as HTMLButtonElement).click();
       await flushAsync();
 
@@ -1084,7 +1089,7 @@ describe('EnvAppShell desktop floating surfaces', () => {
       expect(flowerLaunchTurnMock).toHaveBeenCalledTimes(1);
       expect(host.querySelector('[data-testid="flower-turn-launcher"]')).toBeNull();
       expect(desktopSidebarActiveTab).toBe('ai');
-      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('full_page');
+      expect(host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation')).toBe('full_page');
       expect(host.querySelector('[data-testid="env-ai-page"]')).toBe(flowerSurface);
       expect(host.querySelector('[data-testid="activity-flower-focused-thread"]')?.textContent).toBe('thread-launched');
       expect(envAIPageMountSequence).toBe(1);
@@ -1117,7 +1122,7 @@ describe('EnvAppShell desktop floating surfaces', () => {
 
       expect(flowerLaunchTurnMock).toHaveBeenCalledTimes(1);
       expect(host.querySelector('[data-testid="flower-turn-launcher"]')).toBeNull();
-      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('expanded');
+      expect(host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation')).toBe('expanded');
       expect(host.querySelector('[data-testid="activity-flower-focused-thread"]')?.textContent).toBe('thread-uncertain-launcher');
       expect(host.querySelector('[data-testid="env-ai-focused-thread"]')?.textContent).toBe('');
       expect(setSidebarActiveTabMock).not.toHaveBeenCalledWith('ai', expect.anything());
@@ -1149,7 +1154,7 @@ describe('EnvAppShell desktop floating surfaces', () => {
       await flushAsync();
 
       expect(flowerLaunchTurnMock).toHaveBeenCalledTimes(1);
-      expect(host.querySelector('#redeven-activity-flower-companion')?.getAttribute('data-presentation')).toBe('expanded');
+      expect(host.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation')).toBe('expanded');
       expect(host.querySelector('[data-testid="activity-flower-focused-thread"]')?.textContent).toBe('thread-launched');
       expect(host.querySelector('[data-testid="env-ai-focused-thread"]')?.textContent).toBe('');
       expect(host.querySelector('[data-testid="workbench-flower-activation"]')?.textContent).toBe('|||||');

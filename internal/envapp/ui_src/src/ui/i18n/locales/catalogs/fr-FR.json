@@ -354,22 +354,37 @@
     },
     "flowerCompanion": {
       "openAria": "Volet Flower. {status}",
-      "quickEntryLabel": "Question rapide à Flower",
-      "quickEntryPlaceholder": "Demander à Flower...",
-      "maximize": "Agrandir Flower",
-      "restoreDocked": "Rétablir Flower dans le volet",
       "collapse": "Réduire Flower",
-      "resize": "Redimensionner le volet Flower",
       "newContextConversation": "Nouvelle conversation avec le contexte sélectionné",
-      "status": {
-        "attention": { "one": "Action requise · {count}", "other": "Actions requises · {count}" },
-        "failed": { "one": "Échec · {count}", "other": "Échecs · {count}" },
-        "running": { "one": "En cours · {count}", "other": "En cours · {count}" },
-        "queued": { "one": "En attente · {count}", "other": "En attente · {count}" },
-        "canceled": { "one": "Annulée · {count}", "other": "Annulées · {count}" },
-        "completed": { "one": "Terminée · {count}", "other": "Terminées · {count}" },
-        "unavailable": "Indisponible",
-        "idle": "Prêt"
+      "summary": {
+        "lead": {
+          "needsAttention": "Nécessite votre attention",
+          "needsReview": "À vérifier",
+          "workingOn": "En cours",
+          "waitingToStart": "En attente de démarrage",
+          "stopped": "Arrêtée",
+          "ready": "Prête"
+        },
+        "withTitle": "{lead} : {title}",
+        "withTitleAndMore": {
+          "one": "{lead} : {title} et 1 autre tâche",
+          "other": "{lead} : {title} et {count} autres tâches"
+        },
+        "withoutTitle": {
+          "needsAttention": { "one": "Une tâche nécessite votre attention", "other": "{count} tâches nécessitent votre attention" },
+          "needsReview": { "one": "Une tâche est à vérifier", "other": "{count} tâches sont à vérifier" },
+          "working": { "one": "Flower travaille sur une tâche", "other": "Flower travaille sur {count} tâches" },
+          "queued": { "one": "Une tâche attend de démarrer", "other": "{count} tâches attendent de démarrer" },
+          "stopped": { "one": "Une tâche a été arrêtée", "other": "{count} tâches ont été arrêtées" },
+          "ready": { "one": "Un résultat est prêt", "other": "{count} résultats sont prêts" }
+        },
+        "secondaryWorking": {
+          "one": "Flower travaille également sur une autre tâche",
+          "other": "Flower travaille également sur {count} autres tâches"
+        },
+        "readyToAsk": "Prêt à poser une question à Flower",
+        "unavailable": "Flower est indisponible",
+        "openPendingAction": "Ouvrir Flower pour continuer"
       },
       "threadSwitcher": {
         "label": "Changer de conversation Flower",

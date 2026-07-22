@@ -354,22 +354,37 @@
     },
     "flowerCompanion": {
       "openAria": "Flower 伴随工作区。{status}",
-      "quickEntryLabel": "快速询问 Flower",
-      "quickEntryPlaceholder": "询问 Flower...",
-      "maximize": "最大化 Flower",
-      "restoreDocked": "恢复 Flower 停靠视图",
       "collapse": "收起 Flower",
-      "resize": "调整 Flower 伴随工作区高度",
       "newContextConversation": "使用所选上下文新建对话",
-      "status": {
-        "attention": { "one": "需要处理 · {count}", "other": "需要处理 · {count}" },
-        "failed": { "one": "失败 · {count}", "other": "失败 · {count}" },
-        "running": { "one": "正在工作 · {count}", "other": "正在工作 · {count}" },
-        "queued": { "one": "已排队 · {count}", "other": "已排队 · {count}" },
-        "canceled": { "one": "已取消 · {count}", "other": "已取消 · {count}" },
-        "completed": { "one": "已完成 · {count}", "other": "已完成 · {count}" },
-        "unavailable": "不可用",
-        "idle": "就绪"
+      "summary": {
+        "lead": {
+          "needsAttention": "需要你处理",
+          "needsReview": "需要你查看",
+          "workingOn": "正在处理",
+          "waitingToStart": "等待开始",
+          "stopped": "已停止",
+          "ready": "已就绪"
+        },
+        "withTitle": "{lead}：{title}",
+        "withTitleAndMore": {
+          "one": "{lead}：{title}，另有 1 项",
+          "other": "{lead}：{title}，另有 {count} 项"
+        },
+        "withoutTitle": {
+          "needsAttention": { "one": "有 1 项任务需要你处理", "other": "有 {count} 项任务需要你处理" },
+          "needsReview": { "one": "有 1 项任务需要你查看", "other": "有 {count} 项任务需要你查看" },
+          "working": { "one": "Flower 正在处理 1 项任务", "other": "Flower 正在处理 {count} 项任务" },
+          "queued": { "one": "有 1 项任务等待开始", "other": "有 {count} 项任务等待开始" },
+          "stopped": { "one": "有 1 项任务已停止", "other": "有 {count} 项任务已停止" },
+          "ready": { "one": "有 1 项结果已就绪", "other": "有 {count} 项结果已就绪" }
+        },
+        "secondaryWorking": {
+          "one": "Flower 还在处理另外 1 项任务",
+          "other": "Flower 还在处理另外 {count} 项任务"
+        },
+        "readyToAsk": "可以向 Flower 提问",
+        "unavailable": "Flower 暂不可用",
+        "openPendingAction": "打开 Flower 继续处理"
       },
       "threadSwitcher": {
         "label": "切换 Flower 对话",

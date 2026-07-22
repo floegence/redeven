@@ -354,22 +354,37 @@
     },
     "flowerCompanion": {
       "openAria": "Panel complementario de Flower. {status}",
-      "quickEntryLabel": "Pregunta rápida a Flower",
-      "quickEntryPlaceholder": "Preguntar a Flower...",
-      "maximize": "Maximizar el panel de Flower",
-      "restoreDocked": "Restaurar la vista acoplada de Flower",
       "collapse": "Contraer el panel de Flower",
-      "resize": "Cambiar la altura del panel de Flower",
       "newContextConversation": "Nueva conversación con el contexto seleccionado",
-      "status": {
-        "attention": { "one": "Requiere tu intervención · {count}", "other": "Requieren tu intervención · {count}" },
-        "failed": { "one": "Fallida · {count}", "other": "Fallidas · {count}" },
-        "running": { "one": "En curso · {count}", "other": "En curso · {count}" },
-        "queued": { "one": "En cola · {count}", "other": "En cola · {count}" },
-        "canceled": { "one": "Cancelada · {count}", "other": "Canceladas · {count}" },
-        "completed": { "one": "Completada · {count}", "other": "Completadas · {count}" },
-        "unavailable": "No disponible",
-        "idle": "Listo"
+      "summary": {
+        "lead": {
+          "needsAttention": "Requiere tu atención",
+          "needsReview": "Pendiente de revisión",
+          "workingOn": "En curso",
+          "waitingToStart": "Esperando para empezar",
+          "stopped": "Detenida",
+          "ready": "Lista"
+        },
+        "withTitle": "{lead}: {title}",
+        "withTitleAndMore": {
+          "one": "{lead}: {title} y 1 tarea más",
+          "other": "{lead}: {title} y {count} tareas más"
+        },
+        "withoutTitle": {
+          "needsAttention": { "one": "Una tarea requiere tu atención", "other": "{count} tareas requieren tu atención" },
+          "needsReview": { "one": "Una tarea está pendiente de revisión", "other": "{count} tareas están pendientes de revisión" },
+          "working": { "one": "Flower está trabajando en una tarea", "other": "Flower está trabajando en {count} tareas" },
+          "queued": { "one": "Una tarea está esperando para empezar", "other": "{count} tareas están esperando para empezar" },
+          "stopped": { "one": "Una tarea se ha detenido", "other": "{count} tareas se han detenido" },
+          "ready": { "one": "Hay un resultado listo", "other": "Hay {count} resultados listos" }
+        },
+        "secondaryWorking": {
+          "one": "Flower también está trabajando en otra tarea",
+          "other": "Flower también está trabajando en otras {count} tareas"
+        },
+        "readyToAsk": "Listo para preguntar a Flower",
+        "unavailable": "Flower no está disponible",
+        "openPendingAction": "Abrir Flower para continuar"
       },
       "threadSwitcher": {
         "label": "Cambiar de conversación en Flower",

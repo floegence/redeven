@@ -120,6 +120,7 @@ import {
 import { FlowerWorkingDirPickerDialog } from './filePicker/FlowerWorkingDirPickerDialog';
 import {
   projectFlowerCompanionPresence,
+  type FlowerCompanionPriorityStatus,
   type FlowerCompanionPresenceProjection,
   type FlowerCompanionThreadListItem,
 } from './flowerCompanionPresence';
@@ -688,15 +689,6 @@ export type FlowerThreadFocusRequest = Readonly<{
   thread_id: string;
 }>;
 
-export type FlowerComposerHandoffRequest = Readonly<{
-  request_id: string;
-  text: string;
-  selection_start: number;
-  selection_end: number;
-  is_composing: false;
-  source: 'activity_bottom_bar';
-}>;
-
 export type FlowerSurfaceNotification = Readonly<{
   tone: 'info' | 'success' | 'warning' | 'error';
   title?: string;
@@ -710,24 +702,33 @@ export type FlowerSurfaceProps = Readonly<{
   warmup?: FlowerSurfaceWarmupState | null;
   focusThreadRequest?: FlowerThreadFocusRequest | null;
   focusComposerRequest?: number;
-  composerHandoffRequest?: FlowerComposerHandoffRequest | null;
   settingsFocusRequest?: number;
   sidebarLeadingAction?: JSX.Element;
   presentation?: 'full' | 'companion';
   engaged?: boolean;
   transcriptVisible?: boolean;
   companionPresenceOwner?: boolean;
+  companionOpen?: boolean;
+  companionRegionID?: string;
+  companionSummary?: Readonly<{
+    visualText: string;
+    accessibleText: string;
+    priorityStatus: FlowerCompanionPriorityStatus;
+    running: boolean;
+  }>;
+  companionActionLabel?: string;
   companionCopy?: FlowerThreadSwitcherCopy;
   headerTrailingActions?: JSX.Element;
   onPresenceChange?: (presence: FlowerCompanionPresenceProjection) => void;
   onFocusThreadRequestConsumed?: (requestID: string) => void;
-  onComposerHandoffConsumed?: (requestID: string) => void;
+  onCompanionOpenRequest?: () => void;
   onThreadSelectionEvent?: (event: UIFirstSelectionEvent<string, { source: 'thread-list' }>) => void;
   class?: string;
 }>;
 
 export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const presentation = () => props.presentation ?? 'full';
+  const companionCollapsed = () => presentation() === 'companion' && !(props.companionOpen ?? true);
   const companionPresenceOwner = () => props.companionPresenceOwner ?? presentation() === 'companion';
   const surfaceEngaged = () => props.engaged ?? true;
   const transcriptVisible = () => props.transcriptVisible ?? true;
@@ -895,13 +896,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let threadsRefreshSequence = 0;
   let startedFocusThreadRequestID = '';
   let startedFocusComposerRequest = 0;
-  let startedComposerHandoffRequestID = '';
-  let pendingComposerHandoffSelection: Readonly<{
-    requestID: string;
-    start: number;
-    end: number;
-  }> | null = null;
   let composerRef: HTMLTextAreaElement | HTMLInputElement | undefined;
+  const [composerFocused, setComposerFocused] = createSignal(false);
   let composerApprovalCardRef: HTMLElement | undefined;
   let previousComposerApprovalActionID = '';
   const [modelMenuOpen, setModelMenuOpen] = createSignal(false);
@@ -1921,15 +1917,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (!composerRef?.isConnected) return;
       composerRef.focus();
       if (typeof document !== 'undefined' && document.activeElement !== composerRef) return;
-      const pendingSelection = pendingComposerHandoffSelection;
-      if (!pendingSelection) return;
-      const maxSelection = composerRef.value.length;
-      composerRef.setSelectionRange(
-        Math.min(maxSelection, Math.max(0, pendingSelection.start)),
-        Math.min(maxSelection, Math.max(0, pendingSelection.end)),
-      );
-      pendingComposerHandoffSelection = null;
-      props.onComposerHandoffConsumed?.(pendingSelection.requestID);
     });
   };
   onCleanup(() => {
@@ -3994,35 +3981,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     requestComposerFocus();
   });
 
-  createEffect(() => {
-    const request = props.composerHandoffRequest;
-    const requestID = trimString(request?.request_id);
-    if (!request || !requestID || requestID === startedComposerHandoffRequestID) return;
-    const quickText = request.text;
-    if (!trimString(quickText)) return;
-    if (!surfaceEngaged() || !transcriptVisible()) return;
-
-    startedComposerHandoffRequestID = requestID;
-    startCompose();
-    let insertedStart = 0;
-    updateComposerSessionDraft(PENDING_NEW_THREAD_ID, (draft) => {
-      const separator = draft.chatDraft ? '\n\n' : '';
-      insertedStart = draft.chatDraft.length + separator.length;
-      return {
-        ...draft,
-        chatDraft: `${draft.chatDraft}${separator}${quickText}`,
-      };
-    });
-    const requestedSelectionStart = Math.min(quickText.length, Math.max(0, Math.floor(request.selection_start)));
-    const requestedSelectionEnd = Math.min(quickText.length, Math.max(requestedSelectionStart, Math.floor(request.selection_end)));
-    pendingComposerHandoffSelection = {
-      requestID,
-      start: insertedStart + requestedSelectionStart,
-      end: insertedStart + requestedSelectionEnd,
-    };
-    requestComposerFocus();
-  });
-
   const startThreadRailResize = (event: PointerEvent) => {
     event.preventDefault();
     setThreadRailResizing(true);
@@ -4690,12 +4648,27 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return questions.find((question) => question.id === activeID) ?? questions[0] ?? null;
   });
   const activeInputQuestionIsSecret = createMemo(() => !!selectedInputRequest() && !!activeInputQuestion()?.is_secret);
+  const companionActionVisible = createMemo(() => (
+    companionCollapsed()
+    && (activeInputQuestionIsSecret() || Boolean(selectedComposerApprovalDisplayAction()))
+  ));
 
   const composerTextValue = createMemo(() => {
     if (!selectedInputRequest()) return currentComposerSessionDraft().chatDraft;
     const question = activeInputQuestion();
     return question ? questionDraft(question.id).text ?? '' : '';
   });
+  const companionSummaryVisible = createMemo(() => (
+    companionCollapsed()
+    && !companionActionVisible()
+    && !composerFocused()
+    && !isComposing()
+    && !trimString(composerTextValue())
+    && Boolean(trimString(props.companionSummary?.visualText))
+  ));
+  const companionDescriptionID = createMemo(() => (
+    props.companionRegionID ? `${props.companionRegionID}-status` : undefined
+  ));
 
   const composerPlaceholder = createMemo(() => {
     if (selectedThreadDetailPending()) return copy().chat.threadLoading;
@@ -7461,7 +7434,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const chatPanel = () => (
     <div class="flower-chat-shell flower-chat-shell">
-      <div class="flower-chat-header flower-chat-header border-b border-border/80 backdrop-blur-md">
+      <div
+        class="flower-chat-header flower-chat-header border-b border-border/80 backdrop-blur-md"
+        aria-hidden={companionCollapsed() ? 'true' : undefined}
+        inert={companionCollapsed()}
+      >
         <div class="flower-chat-header-row">
           <Show
             when={presentation() === 'companion'}
@@ -7539,6 +7516,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         <div
           ref={(node) => { transcriptScroll.bind(node); }}
           class="flower-chat-transcript flower-chat-transcript"
+          aria-hidden={companionCollapsed() ? 'true' : undefined}
+          inert={companionCollapsed()}
           data-flower-tail-preparing={selectedThreadTailPreparing() ? 'true' : undefined}
           aria-busy={selectedThreadTailPreparing() ? 'true' : undefined}
           onScroll={updateTranscriptNearBottom}
@@ -7627,6 +7606,61 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 data-flower-approval-handoff={selectedComposerApprovalHandoffActive() ? 'true' : undefined}
                 data-flower-approval-handoff-phase={selectedComposerApprovalHandoffActive() ? selectedComposerApprovalHandoffPhase() : undefined}
               >
+                <Show when={companionCollapsed()}>
+                  <span
+                    class={cn(
+                      'flower-companion-collapsed-icon',
+                      props.companionSummary?.running && 'flower-companion-collapsed-icon-running',
+                    )}
+                    aria-hidden="true"
+                  >
+                    <FlowerIcon />
+                  </span>
+                  <span
+                    class={cn(
+                      'flower-companion-collapsed-status',
+                      `flower-companion-collapsed-status-${props.companionSummary?.priorityStatus ?? 'idle'}`,
+                    )}
+                    aria-hidden="true"
+                  />
+                </Show>
+                <Show when={companionActionVisible()}>
+                  <button
+                    type="button"
+                    class="flower-companion-collapsed-action"
+                    aria-controls={props.companionRegionID}
+                    onClick={() => props.onCompanionOpenRequest?.()}
+                  >
+                    <span class="truncate">
+                      {props.companionActionLabel || props.companionSummary?.visualText}
+                    </span>
+                  </button>
+                </Show>
+                <Show when={companionSummaryVisible()}>
+                  <span
+                    class="flower-companion-collapsed-summary"
+                    title={props.companionSummary?.accessibleText}
+                    aria-hidden="true"
+                  >
+                    {props.companionSummary?.visualText}
+                  </span>
+                </Show>
+                <Show when={companionCollapsed() && companionDescriptionID()}>
+                  <span
+                    id={companionDescriptionID()}
+                    class="flower-visually-hidden"
+                    role="status"
+                    aria-live="polite"
+                    aria-atomic="true"
+                  >
+                    {props.companionSummary?.accessibleText}
+                  </span>
+                </Show>
+                <div
+                  class="flower-composer-content"
+                  aria-hidden={companionActionVisible() ? 'true' : undefined}
+                  inert={companionActionVisible()}
+                >
                 <Show
                   when={trimString(selectedComposerApprovalDisplayAction()?.action_id)}
                   keyed
@@ -7639,18 +7673,34 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                           <textarea
                             ref={(el) => {
                               composerRef = el;
-                              if (pendingComposerHandoffSelection) scheduleComposerFocus();
                             }}
                             class="w-full text-sm leading-6 text-foreground placeholder:text-muted-foreground"
                             placeholder={composerPlaceholder()}
                             value={composerTextValue()}
                             disabled={composerTextareaDisabled()}
+                            aria-label={presentation() === 'companion' ? copy().chat.placeholder : undefined}
                             aria-haspopup="listbox"
                             aria-expanded={composerCommandMenuVisible() ? 'true' : undefined}
-                            aria-controls={composerCommandMenuVisible() ? FLOWER_COMPOSER_COMMAND_MENU_ID : undefined}
+                            aria-controls={composerCommandMenuVisible()
+                              ? FLOWER_COMPOSER_COMMAND_MENU_ID
+                              : companionCollapsed()
+                                ? props.companionRegionID
+                                : undefined}
                             aria-activedescendant={composerCommandMenuVisible() ? FLOWER_COMPOSER_COMPACT_COMMAND_OPTION_ID : undefined}
-                            onInput={(event) => updateComposerText(event.currentTarget.value)}
-                            onCompositionStart={() => setIsComposing(true)}
+                            aria-describedby={companionCollapsed() ? companionDescriptionID() : undefined}
+                            onFocus={() => {
+                              setComposerFocused(true);
+                              if (companionCollapsed()) props.onCompanionOpenRequest?.();
+                            }}
+                            onBlur={() => setComposerFocused(false)}
+                            onInput={(event) => {
+                              if (companionCollapsed()) props.onCompanionOpenRequest?.();
+                              updateComposerText(event.currentTarget.value);
+                            }}
+                            onCompositionStart={() => {
+                              setIsComposing(true);
+                              if (companionCollapsed()) props.onCompanionOpenRequest?.();
+                            }}
                             onCompositionEnd={(event) => {
                               setIsComposing(false);
                               updateComposerText(event.currentTarget.value);
@@ -7662,7 +7712,6 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                         <input
                           ref={(el) => {
                             composerRef = el;
-                            if (pendingComposerHandoffSelection) scheduleComposerFocus();
                           }}
                           type="password"
                           class="w-full text-sm leading-6 text-foreground placeholder:text-muted-foreground"
@@ -7839,6 +7888,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     </div>
                   </Show>
                 </div>
+                </div>
               </div>
             </div>
           </div>
@@ -7853,10 +7903,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       class={cn(
         'flower-component-shell flower-surface',
         presentation() === 'companion' && 'flower-surface-companion',
+        companionCollapsed() && 'flower-surface-companion-collapsed',
         threadRailResizing() && 'flower-component-shell-resizing',
         props.class,
       )}
       data-flower-presentation={presentation()}
+      data-flower-companion-open={presentation() === 'companion' ? (!companionCollapsed() ? 'true' : 'false') : undefined}
       data-flower-engaged={surfaceEngaged() ? 'true' : 'false'}
       data-flower-transcript-visible={transcriptVisible() ? 'true' : 'false'}
       data-flower-selected-thread-id={selectedThreadID()}

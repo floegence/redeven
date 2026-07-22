@@ -354,22 +354,71 @@
     },
     "flowerCompanion": {
       "openAria": "Панель Flower. {status}",
-      "quickEntryLabel": "Быстро спросить Flower",
-      "quickEntryPlaceholder": "Спросить Flower...",
-      "maximize": "Развернуть Flower",
-      "restoreDocked": "Вернуть Flower в закреплённую панель",
       "collapse": "Свернуть Flower",
-      "resize": "Изменить высоту панели Flower",
       "newContextConversation": "Новый диалог с выбранным контекстом",
-      "status": {
-        "attention": { "one": "Ожидает ответа · {count}", "few": "Ожидают ответа · {count}", "many": "Ожидают ответа · {count}", "other": "Ожидают ответа · {count}" },
-        "failed": { "one": "Ошибка · {count}", "few": "Ошибки · {count}", "many": "Ошибок · {count}", "other": "Ошибки · {count}" },
-        "running": { "one": "В работе · {count}", "few": "В работе · {count}", "many": "В работе · {count}", "other": "В работе · {count}" },
-        "queued": { "one": "В очереди · {count}", "few": "В очереди · {count}", "many": "В очереди · {count}", "other": "В очереди · {count}" },
-        "canceled": { "one": "Отменён · {count}", "few": "Отменены · {count}", "many": "Отменены · {count}", "other": "Отменены · {count}" },
-        "completed": { "one": "Завершён · {count}", "few": "Завершены · {count}", "many": "Завершены · {count}", "other": "Завершены · {count}" },
-        "unavailable": "Недоступно",
-        "idle": "Готово"
+      "summary": {
+        "lead": {
+          "needsAttention": "Требует вашего внимания",
+          "needsReview": "Требует проверки",
+          "workingOn": "В работе",
+          "waitingToStart": "Ожидает запуска",
+          "stopped": "Остановлено",
+          "ready": "Готово"
+        },
+        "withTitle": "{lead}: {title}",
+        "withTitleAndMore": {
+          "one": "{lead}: {title} и ещё 1 задача",
+          "few": "{lead}: {title} и ещё {count} задачи",
+          "many": "{lead}: {title} и ещё {count} задач",
+          "other": "{lead}: {title} и ещё {count} задачи"
+        },
+        "withoutTitle": {
+          "needsAttention": {
+            "one": "Одна задача требует вашего внимания",
+            "few": "{count} задачи требуют вашего внимания",
+            "many": "{count} задач требуют вашего внимания",
+            "other": "{count} задачи требуют вашего внимания"
+          },
+          "needsReview": {
+            "one": "Одна задача требует проверки",
+            "few": "{count} задачи требуют проверки",
+            "many": "{count} задач требуют проверки",
+            "other": "{count} задачи требуют проверки"
+          },
+          "working": {
+            "one": "Flower работает над одной задачей",
+            "few": "Flower работает над {count} задачами",
+            "many": "Flower работает над {count} задачами",
+            "other": "Flower работает над {count} задачами"
+          },
+          "queued": {
+            "one": "Одна задача ожидает запуска",
+            "few": "{count} задачи ожидают запуска",
+            "many": "{count} задач ожидают запуска",
+            "other": "{count} задачи ожидают запуска"
+          },
+          "stopped": {
+            "one": "Одна задача остановлена",
+            "few": "{count} задачи остановлены",
+            "many": "{count} задач остановлены",
+            "other": "{count} задачи остановлены"
+          },
+          "ready": {
+            "one": "Один результат готов",
+            "few": "{count} результата готовы",
+            "many": "{count} результатов готовы",
+            "other": "{count} результата готовы"
+          }
+        },
+        "secondaryWorking": {
+          "one": "Flower также работает над ещё одной задачей",
+          "few": "Flower также работает над ещё {count} задачами",
+          "many": "Flower также работает над ещё {count} задачами",
+          "other": "Flower также работает над ещё {count} задачами"
+        },
+        "readyToAsk": "Можно задать вопрос Flower",
+        "unavailable": "Flower недоступен",
+        "openPendingAction": "Открыть Flower и продолжить"
       },
       "threadSwitcher": {
         "label": "Переключить диалог Flower",

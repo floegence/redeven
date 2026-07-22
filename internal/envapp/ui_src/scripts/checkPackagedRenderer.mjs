@@ -59,13 +59,13 @@ function jsonResponse(response, value) {
   response.end(JSON.stringify(value));
 }
 
-async function createBuiltDistServer() {
+async function createBuiltDistServer({ accessReady = false } = {}) {
   let baseURL = '';
   const server = createServer(async (request, response) => {
     try {
       const requestURL = new URL(request.url ?? '/', baseURL || 'http://127.0.0.1');
       if (requestURL.pathname === '/api/local/access/status') {
-        jsonResponse(response, { password_required: true, unlocked: false });
+        jsonResponse(response, { password_required: !accessReady, unlocked: accessReady });
         return;
       }
       if (requestURL.pathname === '/api/local/runtime') {
@@ -77,7 +77,48 @@ async function createBuiltDistServer() {
         });
         return;
       }
-      if (requestURL.pathname === '/_redevplugin/api/plugins/catalog') {
+      if (accessReady && requestURL.pathname === '/api/local/environment') {
+        jsonResponse(response, {
+          public_id: 'env_built_dist_shell',
+          name: 'Built dist shell',
+          namespace_public_id: 'ns_built_dist_shell',
+          status: 'online',
+          lifecycle_status: 'running',
+          permissions: {
+            can_read: true,
+            can_write: true,
+            can_execute: true,
+            can_admin: true,
+            is_owner: true,
+          },
+        });
+        return;
+      }
+      if (accessReady && requestURL.pathname === '/api/local/direct/connect_artifact') {
+        jsonResponse(response, {
+          transport: 'direct',
+          direct_info: {
+            ws_url: baseURL.replace(/^http/, 'ws') + '_redeven_direct/ws',
+            channel_id: 'built-dist-shell',
+            e2ee_psk_b64u: 'built-dist-shell',
+            channel_init_expire_at_unix_s: 4_102_444_800,
+            default_suite: 1,
+          },
+        });
+        return;
+      }
+      if (accessReady && requestURL.pathname === '/_redeven_proxy/api/ai/threads') {
+        jsonResponse(response, { threads: [] });
+        return;
+      }
+      if (accessReady && (
+        requestURL.pathname.startsWith('/api/')
+        || requestURL.pathname.startsWith('/_redeven_proxy/api/')
+      )) {
+        jsonResponse(response, {});
+        return;
+      }
+      if (requestURL.pathname === '/_redevplugin/api/plugins/catalog/query') {
         jsonResponse(response, { ok: true, data: { plugins: [] } });
         return;
       }
@@ -126,6 +167,147 @@ async function createBuiltDistServer() {
     baseURL,
     close: () => new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve()))),
   };
+}
+
+async function verifyBuiltFlowerLifecycle(browser) {
+  const server = await createBuiltDistServer({ accessReady: true });
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  await page.addInitScript(() => {
+    globalThis.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+  });
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+
+  try {
+    const entryURL = new URL(entryPath.slice(1), server.baseURL).toString();
+    await page.goto(entryURL, { waitUntil: 'load', timeout: 30_000 });
+
+    const companion = page.locator('#redeven-activity-flower-companion');
+    const product = page.locator('#redeven-activity-flower-product');
+    const surface = page.locator('#redeven-flower-surface');
+    const composer = page.locator('.flower-composer textarea');
+    await surface.waitFor({ state: 'attached', timeout: 15_000 });
+    await composer.waitFor({ state: 'attached', timeout: 15_000 });
+
+    for (const [name, locator] of Object.entries({ companion, product, surface, composer })) {
+      const count = await locator.count();
+      if (count !== 1) throw new Error(`built Flower ${name} count = ${count}, expected 1`);
+    }
+
+    const collapsedBox = await companion.boundingBox();
+    if (!collapsedBox || collapsedBox.width <= 0 || collapsedBox.height <= 0) {
+      throw new Error(`built Flower collapsed companion has invalid geometry: ${JSON.stringify(collapsedBox)}`);
+    }
+    await page.evaluate(() => {
+      globalThis.__redevenBuiltFlowerIdentity = {
+        surface: globalThis.document.querySelector('#redeven-flower-surface'),
+        composer: globalThis.document.querySelector('.flower-composer textarea'),
+      };
+    });
+
+    await companion.click();
+    await page.waitForFunction(() => (
+      globalThis.document
+        .querySelector('#redeven-activity-flower-product')
+        ?.getAttribute('data-presentation') === 'expanded'
+    ));
+    await page.waitForFunction(() => (
+      globalThis.document
+        .querySelector('#redeven-activity-flower-companion')
+        ?.getAttribute('data-companion-phase') === 'expanded'
+    ));
+    const expandedCompanionBox = await companion.boundingBox();
+    const expandedComposerBox = await page.locator('.flower-composer').boundingBox();
+    const expandedTextareaBox = await composer.boundingBox();
+    if (!expandedCompanionBox || !expandedComposerBox || !expandedTextareaBox) {
+      throw new Error(`built Flower expanded companion is missing geometry: ${JSON.stringify({
+        companion: expandedCompanionBox,
+        composer: expandedComposerBox,
+        textarea: expandedTextareaBox,
+      })}`);
+    }
+    const expandedBottom = expandedCompanionBox.y + expandedCompanionBox.height;
+    const composerBottom = expandedComposerBox.y + expandedComposerBox.height;
+    const textareaBottom = expandedTextareaBox.y + expandedTextareaBox.height;
+    if (
+      expandedComposerBox.width <= 0
+      || expandedComposerBox.height <= 0
+      || expandedTextareaBox.width <= 0
+      || expandedTextareaBox.height <= 0
+      || expandedComposerBox.y < expandedCompanionBox.y
+      || expandedTextareaBox.y < expandedCompanionBox.y
+      || composerBottom > expandedBottom + 1
+      || textareaBottom > expandedBottom + 1
+    ) {
+      throw new Error(`built Flower composer is outside the expanded companion: ${JSON.stringify({
+        companion: expandedCompanionBox,
+        composer: expandedComposerBox,
+        textarea: expandedTextareaBox,
+      })}`);
+    }
+
+    const flowerEntry = page.getByRole('button', { name: 'Flower', exact: true });
+    await flowerEntry.click();
+    await page.waitForFunction(() => (
+      globalThis.document
+        .querySelector('#redeven-activity-flower-product')
+        ?.getAttribute('data-presentation') === 'full_page'
+    ));
+
+    const fullPageHost = page.locator('[data-activity-flower-full-page-host]');
+    const fullPageBox = await fullPageHost.boundingBox();
+    const fullPageProductBox = await product.boundingBox();
+    const fullPageSurfaceBox = await surface.boundingBox();
+    const fullPageIdentity = await page.evaluate(() => ({
+      sameSurface: globalThis.__redevenBuiltFlowerIdentity?.surface === globalThis.document.querySelector('#redeven-flower-surface'),
+      sameComposer: globalThis.__redevenBuiltFlowerIdentity?.composer === globalThis.document.querySelector('.flower-composer textarea'),
+      presentation: globalThis.document.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-presentation'),
+    }));
+    if (!fullPageBox || fullPageBox.width <= 0 || fullPageBox.height <= 0) {
+      throw new Error(`built Flower full-page host has invalid geometry: ${JSON.stringify(fullPageBox)}`);
+    }
+    if (!fullPageProductBox || fullPageProductBox.width <= 0 || fullPageProductBox.height <= 0) {
+      throw new Error(`built Flower full-page product has invalid geometry: ${JSON.stringify(fullPageProductBox)}`);
+    }
+    if (!fullPageSurfaceBox || fullPageSurfaceBox.width <= 0 || fullPageSurfaceBox.height <= 0) {
+      throw new Error(`built Flower full-page surface has invalid geometry: ${JSON.stringify(fullPageSurfaceBox)}`);
+    }
+    if (!fullPageIdentity.sameSurface || !fullPageIdentity.sameComposer || fullPageIdentity.presentation !== 'full') {
+      throw new Error(`built Flower did not preserve its full-page identity: ${JSON.stringify(fullPageIdentity)}`);
+    }
+
+    await page.getByRole('button', { name: 'Terminal', exact: true }).click();
+    await page.getByRole('button', { name: 'Flower', exact: true }).click();
+    await page.waitForFunction(() => (
+      globalThis.document.querySelector('#redeven-activity-flower-product')?.getAttribute('data-presentation') === 'full_page'
+    ));
+    const restoredIdentity = await page.evaluate(() => ({
+      sameSurface: globalThis.__redevenBuiltFlowerIdentity?.surface === globalThis.document.querySelector('#redeven-flower-surface'),
+      sameComposer: globalThis.__redevenBuiltFlowerIdentity?.composer === globalThis.document.querySelector('.flower-composer textarea'),
+      surfaceCount: globalThis.document.querySelectorAll('#redeven-flower-surface').length,
+      composerCount: globalThis.document.querySelectorAll('.flower-composer textarea').length,
+    }));
+    if (!restoredIdentity.sameSurface || !restoredIdentity.sameComposer
+      || restoredIdentity.surfaceCount !== 1 || restoredIdentity.composerCount !== 1) {
+      throw new Error(`built Flower did not preserve one restored instance: ${JSON.stringify(restoredIdentity)}`);
+    }
+    if (pageErrors.length > 0) throw new Error(`built Flower page errors: ${JSON.stringify(pageErrors)}`);
+
+    return {
+      companion_count: 1,
+      surface_count: restoredIdentity.surfaceCount,
+      composer_count: restoredIdentity.composerCount,
+      collapsed_width: collapsedBox.width,
+      collapsed_height: collapsedBox.height,
+      expanded_composer_bottom_gap: expandedBottom - composerBottom,
+      full_page_width: fullPageSurfaceBox.width,
+      full_page_height: fullPageSurfaceBox.height,
+      identity_preserved: true,
+    };
+  } finally {
+    await page.close();
+    await server.close();
+  }
 }
 
 async function main() {
@@ -215,6 +397,17 @@ async function main() {
       throw new Error(`built Env App root is blank: ${JSON.stringify(rootSnapshot)}`);
     }
 
+    const lockedFlowerSurfaceCount = await page.locator([
+      '[data-activity-flower-companion-anchor]',
+      '#redeven-activity-flower-companion',
+      '#redeven-activity-flower-product',
+      '#redeven-flower-surface',
+      '.flower-composer textarea',
+    ].join(',')).count();
+    if (lockedFlowerSurfaceCount !== 0) {
+      throw new Error(`locked built Env App Flower surface count = ${lockedFlowerSurfaceCount}, expected 0`);
+    }
+
     const pluginEntry = page.getByRole('button', { name: 'Plugins', exact: true });
     const pluginEntryCount = await pluginEntry.count();
     if (pluginEntryCount !== 1) {
@@ -222,8 +415,25 @@ async function main() {
     }
     await pluginEntry.click();
     const pluginCenterTile = page.locator('[data-plugin-panel-tile="plugin-center"]');
-    await pluginCenterTile.waitFor({ state: 'visible', timeout: 10_000 });
+    try {
+      await pluginCenterTile.waitFor({ state: 'visible', timeout: 10_000 });
+    } catch (error) {
+      const bodyText = (await page.locator('body').innerText()).slice(0, 2_000);
+      throw new Error(`built Plugin panel did not become visible: ${JSON.stringify({
+        pluginRequests,
+        pageErrors,
+        consoleProblems,
+        bodyText,
+      })}`, { cause: error });
+    }
     const pluginPanelTileCount = await pluginCenterTile.count();
+    const expectedPluginRequests = [{ method: 'POST', path: '/_redevplugin/api/plugins/catalog/query' }];
+    if (JSON.stringify(pluginRequests) !== JSON.stringify(expectedPluginRequests)) {
+      throw new Error(`built Plugin request contract mismatch: ${JSON.stringify({
+        expected: expectedPluginRequests,
+        actual: pluginRequests,
+      })}`);
+    }
 
     const overlayCount = await page.locator([
       'vite-error-overlay',
@@ -293,6 +503,8 @@ async function main() {
     if (requestFailures.length > 0) throw new Error(`renderer request failures: ${JSON.stringify(requestFailures)}`);
     if (badResponses.length > 0) throw new Error(`renderer HTTP failures: ${JSON.stringify(badResponses)}`);
 
+    const flowerLifecycle = await verifyBuiltFlowerLifecycle(browser);
+
     report = {
       schema_version: 1,
       entry_path: entryPath,
@@ -317,6 +529,7 @@ async function main() {
       console_problem_count: 0,
       page_error_count: 0,
       request_failure_count: 0,
+      flower_lifecycle: flowerLifecycle,
       status: 'passed',
     };
   } finally {

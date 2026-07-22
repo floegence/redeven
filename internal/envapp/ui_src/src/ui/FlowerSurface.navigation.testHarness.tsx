@@ -5,7 +5,6 @@ import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
 
 import {
   FlowerSurface,
-  type FlowerComposerHandoffRequest,
   type FlowerSurfaceNotification,
   type FlowerThreadFocusRequest,
 } from '../../../../flower_ui/src';
@@ -849,46 +848,6 @@ export function renderSurfaceWithFocusController(
     runtime,
     focusThreadRequest,
     setFocusThreadRequest,
-    consumedRequests: () => consumed,
-  };
-}
-
-export function renderSurfaceWithComposerHandoffController(
-  surfaceAdapter: FlowerSurfaceAdapter,
-  initialRequest: FlowerComposerHandoffRequest | null = null,
-): Readonly<{
-  runtime: HTMLDivElement;
-  setComposerHandoffRequest: (request: FlowerComposerHandoffRequest | null) => void;
-  setEngaged: (engaged: boolean) => void;
-  setTranscriptVisible: (visible: boolean) => void;
-  consumedRequests: () => readonly string[];
-}> {
-  const runtime = document.createElement('div');
-  document.body.appendChild(runtime);
-  const [composerHandoffRequest, setComposerHandoffRequest] = createSignal<FlowerComposerHandoffRequest | null>(initialRequest);
-  const [engaged, setEngaged] = createSignal(true);
-  const [transcriptVisible, setTranscriptVisible] = createSignal(true);
-  const consumed: string[] = [];
-  disposers.push(render(() => (
-    <FlowerSurface
-      adapter={surfaceAdapter}
-      notify={(notification) => {
-        notifications.push(notification);
-      }}
-      presentation="companion"
-      engaged={engaged()}
-      transcriptVisible={transcriptVisible()}
-      composerHandoffRequest={composerHandoffRequest()}
-      onComposerHandoffConsumed={(requestID) => {
-        consumed.push(requestID);
-      }}
-    />
-  ), runtime));
-  return {
-    runtime,
-    setComposerHandoffRequest,
-    setEngaged,
-    setTranscriptVisible,
     consumedRequests: () => consumed,
   };
 }
