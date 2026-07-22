@@ -197,14 +197,14 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 		},
 		"internal/envapp/ui_src/package.json": {
 			"\"@floegence/floe-webapp-boot\": \"^0.39.3\"",
-			"\"@floegence/floe-webapp-core\": \"^0.39.4\"",
+			"\"@floegence/floe-webapp-core\": \"^0.39.5\"",
 			"\"@floegence/floe-webapp-protocol\": \"^0.39.3\"",
 			"\"@floegence/floeterm-terminal-web\": \"0.8.0\"",
 			"\"@floegence/flowersec-core\": \"^0.27.0\"",
 		},
 		"internal/envapp/ui_src/package-lock.json": {
 			"floe-webapp-boot-0.39.3.tgz",
-			"floe-webapp-core-0.39.4.tgz",
+			"floe-webapp-core-0.39.5.tgz",
 			"floe-webapp-protocol-0.39.3.tgz",
 			"floeterm-terminal-web-0.8.0.tgz",
 			"beamterm-renderer-1.0.1.tgz",
@@ -212,7 +212,7 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 		},
 		"internal/envapp/ui_src/pnpm-lock.yaml": {
 			"@floegence/floe-webapp-boot@0.39.3",
-			"@floegence/floe-webapp-core@0.39.4",
+			"@floegence/floe-webapp-core@0.39.5",
 			"@floegence/floe-webapp-protocol@0.39.3",
 			"@floegence/floeterm-terminal-web@0.8.0",
 			"@floegence/beamterm-renderer@1.0.1",
@@ -227,7 +227,7 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 		"THIRD_PARTY_NOTICES.md": {
 			"@floegence/floe-webapp-boot | 0.39.3",
 			"@floegence/floe-webapp-core | 0.39.3",
-			"@floegence/floe-webapp-core | 0.39.4",
+			"@floegence/floe-webapp-core | 0.39.5",
 			"@floegence/floe-webapp-protocol | 0.39.3",
 			"@floegence/floeterm-terminal-web | 0.8.0",
 			"@floegence/beamterm-renderer | 1.0.1",
@@ -241,7 +241,7 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 		"okf/architecture/env-app-upstream-web-dependencies.md": {
 			"terminal-web v0.8.0",
 			"beamterm-renderer` v1.0.1",
-			"Floe Webapp Core v0.39.4",
+			"Floe Webapp Core v0.39.5",
 			"Flowersec Core v0.27.0",
 		},
 	}
@@ -272,6 +272,11 @@ func TestFloeWebappDependenciesUsePublishedSecurityRelease(t *testing.T) {
 			"@floegence/floe-webapp-core | 0.39.2",
 			"@floegence/floe-webapp-protocol | 0.39.2",
 			"Floe Webapp v0.39.2",
+			"\"@floegence/floe-webapp-core\": \"^0.39.4\"",
+			"@floegence/floe-webapp-core@0.39.4",
+			"floe-webapp-core-0.39.4.tgz",
+			"@floegence/floe-webapp-core | 0.39.4",
+			"Floe Webapp Core v0.39.4",
 			"@floegence/floe-webapp-boot@0.39.0",
 			"@floegence/floe-webapp-core@0.39.0",
 			"@floegence/floe-webapp-protocol@0.39.0",

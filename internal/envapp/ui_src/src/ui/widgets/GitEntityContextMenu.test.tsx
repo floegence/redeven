@@ -16,7 +16,8 @@ vi.mock('@floegence/floe-webapp-core', () => ({
   cn: (...parts: Array<string | false | null | undefined>) => parts.filter(Boolean).join(' '),
 }));
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
+vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(),
   SurfaceFloatingLayer: (props: any) => {
     const { children, layerRef, position, class: className, ...rest } = props;
     return (
