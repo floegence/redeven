@@ -479,7 +479,7 @@
               "read-state",
               "ui"
             ],
-            "summary": "Activity exposes Flower as one background-capable companion rather than a second page. The bottom bar is the desktop ambient entry; the Activity Bar is the mobile and explicit entry. The companion expands in normal document flow into docked or maximized presentation, and the same `FlowerSurface` instance owns the selected thread, composer drafts, live projection, approvals, and settings. Workbench keeps its existing Flower widget, coordinate system, floating launcher, focus request, and canvas input ownership.\n\nThe companion consumes an adapter-provided merged projection: Floret remains authoritative for admitted threads, turns, runs, messages, activity, approvals, todos, input requests, and lifecycle state, while Redeven owns product thread settings, queued follow-up commands, and user-scoped `read_status`. The adapter composes those sources into the summary/detail contract consumed by Flower. The companion does not copy transcripts, reconstruct events, add a protocol, or persist Floret lifecycle state; Redeven owns only the product placement, ephemeral launcher drafts, local height preference, read-status calls, and host navigation described here.\n\nIf the adapter or exact canonical bootstrap fails, the companion projects an unavailable/error boundary, keeps live consumption and read acknowledgement disabled, and never replays a local transcript. Re-entry to `engaged` requires a successful exact bootstrap and after-paint presentation before live/read behavior resumes; Workbench remains on its independent existing recovery path.",
+            "summary": "Activity owns one normal-flow Flower companion whose docked and maximized modes preserve the same `FlowerSurface`; Workbench retains its independent widget and input ownership. The companion consumes the adapter's merged projection: Floret owns admitted lifecycle/runtime state, while Redeven owns product settings, queued follow-ups, user-scoped `read_status`, placement, and ephemeral UI state. It must not copy transcripts, reconstruct events, persist Floret state, or add an alternate protocol. Bootstrap failure disables live/read behavior; recovery requires an exact canonical bootstrap plus after-paint content presentation.",
             "section_count": 2
           },
           {
@@ -6210,8 +6210,8 @@
         "title": "Flower Activity companion",
         "type": "UI Contract"
       },
-      "body_length": 7358,
-      "summary": "Activity exposes Flower as one background-capable companion rather than a second page. The bottom bar is the desktop ambient entry; the Activity Bar is the mobile and explicit entry. The companion expands in normal document flow into docked or maximized presentation, and the same `FlowerSurface` instance owns the selected thread, composer drafts, live projection, approvals, and settings. Workbench keeps its existing Flower widget, coordinate system, floating launcher, focus request, and canvas input ownership.\n\nThe companion consumes an adapter-provided merged projection: Floret remains authoritative for admitted threads, turns, runs, messages, activity, approvals, todos, input requests, and lifecycle state, while Redeven owns product thread settings, queued follow-up commands, and user-scoped `read_status`. The adapter composes those sources into the summary/detail contract consumed by Flower. The companion does not copy transcripts, reconstruct events, add a protocol, or persist Floret lifecycle state; Redeven owns only the product placement, ephemeral launcher drafts, local height preference, read-status calls, and host navigation described here.\n\nIf the adapter or exact canonical bootstrap fails, the companion projects an unavailable/error boundary, keeps live consumption and read acknowledgement disabled, and never replays a local transcript. Re-entry to `engaged` requires a successful exact bootstrap and after-paint presentation before live/read behavior resumes; Workbench remains on its independent existing recovery path.",
+      "body_length": 6435,
+      "summary": "Activity owns one normal-flow Flower companion whose docked and maximized modes preserve the same `FlowerSurface`; Workbench retains its independent widget and input ownership. The companion consumes the adapter's merged projection: Floret owns admitted lifecycle/runtime state, while Redeven owns product settings, queued follow-ups, user-scoped `read_status`, placement, and ephemeral UI state. It must not copy transcripts, reconstruct events, persist Floret state, or add an alternate protocol. Bootstrap failure disables live/read behavior; recovery requires an exact canonical bootstrap plus after-paint content presentation.",
       "sections": [
         {
           "id": "contract",
@@ -6266,7 +6266,7 @@
           "description": "controlled compact conversation projection; canonical selection remains owned by `FlowerSurface`."
         }
       ],
-      "snippet": "Activity exposes Flower as one background-capable companion rather than a second page. The bottom bar is the desktop ambient entry; the Activity Bar is the mobile and explicit entry. The companion expands in normal document flow into docked",
+      "snippet": "Activity owns one normal-flow Flower companion whose docked and maximized modes preserve the same `FlowerSurface`; Workbench retains its independent widget and input ownership. The companion consumes the adapter's merged projection: Floret ",
       "links": [
         {
           "label": "Flower approval and context",
@@ -8063,5 +8063,5 @@
       ]
     }
   ],
-  "source_sha256": "0e400c77ea6a7e62c249f926640877a6e6c605cffb6d341aa13a7eb152e1947f"
+  "source_sha256": "4706fab50e63922b8acb5341156cb016a4811f7672a04e765b97d20185dba1c7"
 }

@@ -8,11 +8,7 @@ quality_exception: Cross-surface UI contract spanning Activity shell placement, 
 ---
 # Summary
 
-Activity exposes Flower as one background-capable companion rather than a second page. The bottom bar is the desktop ambient entry; the Activity Bar is the mobile and explicit entry. The companion expands in normal document flow into docked or maximized presentation, and the same `FlowerSurface` instance owns the selected thread, composer drafts, live projection, approvals, and settings. Workbench keeps its existing Flower widget, coordinate system, floating launcher, focus request, and canvas input ownership.
-
-The companion consumes an adapter-provided merged projection: Floret remains authoritative for admitted threads, turns, runs, messages, activity, approvals, todos, input requests, and lifecycle state, while Redeven owns product thread settings, queued follow-up commands, and user-scoped `read_status`. The adapter composes those sources into the summary/detail contract consumed by Flower. The companion does not copy transcripts, reconstruct events, add a protocol, or persist Floret lifecycle state; Redeven owns only the product placement, ephemeral launcher drafts, local height preference, read-status calls, and host navigation described here.
-
-If the adapter or exact canonical bootstrap fails, the companion projects an unavailable/error boundary, keeps live consumption and read acknowledgement disabled, and never replays a local transcript. Re-entry to `engaged` requires a successful exact bootstrap and after-paint presentation before live/read behavior resumes; Workbench remains on its independent existing recovery path.
+Activity owns one normal-flow Flower companion whose docked and maximized modes preserve the same `FlowerSurface`; Workbench retains its independent widget and input ownership. The companion consumes the adapter's merged projection: Floret owns admitted lifecycle/runtime state, while Redeven owns product settings, queued follow-ups, user-scoped `read_status`, placement, and ephemeral UI state. It must not copy transcripts, reconstruct events, persist Floret state, or add an alternate protocol. Bootstrap failure disables live/read behavior; recovery requires an exact canonical bootstrap plus after-paint content presentation.
 
 # Contract
 
