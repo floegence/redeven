@@ -1304,6 +1304,9 @@ function mapCanonicalApprovalAction(raw: unknown, index: number, contract = 'app
   if (action.origin !== origin || action.queue_order !== queueOrder || action.queue_generation !== queueGeneration) {
     throw new Error(`Flower contract error: ${contract} action ${index} is invalid.`);
   }
+  if (!action.surface_role) {
+    throw new Error(`Flower contract error: ${contract} action ${index} requires surface_role.`);
+  }
   return action;
 }
 
@@ -1347,6 +1350,7 @@ function validateCanonicalApprovalReplacement(actions: readonly FlowerApprovalAc
   const actionIDs = new Set<string>();
   const queueOrders = new Set<number>();
   let actionableCount = 0;
+  let primaryCount = 0;
   for (const action of actions) {
     if (actionIDs.has(action.action_id) || queueOrders.has(action.queue_order ?? 0)) {
       throw new Error(`Flower contract error: ${contract} actions have duplicate identity or order.`);
@@ -1362,8 +1366,16 @@ function validateCanonicalApprovalReplacement(actions: readonly FlowerApprovalAc
         throw new Error(`Flower contract error: ${contract} non-current action is actionable.`);
       }
     }
+    if (action.action_id === queue.current_action_id) {
+      if (action.surface_role !== 'primary_action') {
+        throw new Error(`Flower contract error: ${contract} current action must be primary_action.`);
+      }
+      primaryCount += 1;
+    } else if (action.surface_role !== 'locator') {
+      throw new Error(`Flower contract error: ${contract} non-current actions must be locators.`);
+    }
   }
-  if (actions[0]?.action_id !== queue.current_action_id || actionableCount > 1) {
+  if (actions[0]?.action_id !== queue.current_action_id || actionableCount > 1 || primaryCount !== 1) {
     throw new Error(`Flower contract error: ${contract} current action is inconsistent.`);
   }
   for (let index = 1; index < actions.length; index += 1) {

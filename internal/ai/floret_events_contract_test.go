@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 
@@ -217,12 +218,40 @@ func TestFloretEventSinkPublishesCanonicalEmptyApprovalQueueAfterDetach(t *testi
 	if !ok || len(queueEvent.Actions) != 0 || queueEvent.ApprovalQueue.Generation != 2 || queueEvent.ApprovalQueue.Revision != 4 {
 		t.Fatalf("detached approval event=%T %#v", events[0], events[0])
 	}
+	if queueEvent.Actions == nil {
+		t.Fatal("detached approval event actions must be an explicit empty slice")
+	}
 	r.sendStreamEvent(streamEventBlockDelta{Type: "text-delta", MessageID: r.messageID, BlockIndex: 0, Delta: "must stay hidden"})
 	if len(events) != 1 {
 		t.Fatalf("detached non-authoritative presentation leaked: %#v", events)
 	}
 	if stateBroadcasts != 0 || summaryBroadcasts != 0 {
 		t.Fatalf("detached queue replacement broadcast state=%d summary=%d", stateBroadcasts, summaryBroadcasts)
+	}
+}
+
+func TestFlowerLiveStreamProjectionEncodesCanonicalEmptyApprovalQueueAsArray(t *testing.T) {
+	t.Parallel()
+
+	events := (&Service{}).flowerLiveEventsFromStreamEvent(RealtimeEvent{
+		EventType: RealtimeEventTypeStream,
+		StreamEvent: streamEventApprovalQueue{
+			Type:    "approval-queue",
+			Actions: []FlowerApprovalAction{},
+			ApprovalQueue: FlowerApprovalQueue{
+				Generation: 2,
+				Revision:   4,
+			},
+		},
+	}, func(kind FlowerLiveKind, payload any) FlowerLiveEvent {
+		return FlowerLiveEvent{Kind: kind, Payload: mustFlowerPayload(payload)}
+	})
+	if len(events) != 1 || events[0].Kind != FlowerLiveApprovalQueueReplaced {
+		t.Fatalf("live events=%#v, want one canonical queue replacement", events)
+	}
+	raw := string(events[0].Payload)
+	if !strings.Contains(raw, `"actions":[]`) || strings.Contains(raw, `"actions":null`) {
+		t.Fatalf("canonical empty stream replacement must encode actions as an array: %s", raw)
 	}
 }
 

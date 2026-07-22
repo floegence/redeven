@@ -172,7 +172,7 @@ func (r *run) flowerApprovalActionsFromFloretQueue(queue flruntime.ApprovalQueue
 		return nil, errors.New("Floret approval queue root identity mismatch")
 	}
 	if len(queue.Items) == 0 {
-		return nil, nil
+		return []FlowerApprovalAction{}, nil
 	}
 	out := make([]FlowerApprovalAction, 0, len(queue.Items))
 	for _, approval := range queue.Items {
@@ -265,6 +265,10 @@ func (r *run) flowerApprovalActionFromFloretRecord(approval flruntime.ApprovalRe
 	cwd := floretApprovalRecordCwd(approval)
 	targets := floretApprovalRecordTargets(approval)
 	canApprove := approval.ApprovalID == queue.CurrentApprovalID && approval.State == "requested"
+	surfaceRole := FlowerApprovalSurfaceLocator
+	if approval.ApprovalID == queue.CurrentApprovalID {
+		surfaceRole = FlowerApprovalSurfacePrimaryAction
+	}
 	if !canApprove && approval.State == "requested" {
 		readOnlyReason = "Queued for approval"
 	}
@@ -281,6 +285,7 @@ func (r *run) flowerApprovalActionFromFloretRecord(approval flruntime.ApprovalRe
 		Revision:        revision,
 		Version:         revision,
 		SurfaceEpoch:    queue.Generation,
+		SurfaceRole:     surfaceRole,
 		Scope:           "thread:" + strings.TrimSpace(string(approval.ThreadID)),
 		QueueGeneration: queue.Generation,
 		QueueOrder:      approval.QueueSequence,
