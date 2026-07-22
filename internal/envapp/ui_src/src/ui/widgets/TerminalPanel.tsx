@@ -317,6 +317,7 @@ type terminal_sidebar_context_menu = Readonly<{
   x: number;
   y: number;
   item: TerminalSessionNavigationItem;
+  triggerElement: HTMLElement | null;
 }> | null;
 
 type terminal_panel_created_session = {
@@ -869,6 +870,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     homePath?: string;
     selection: terminal_selection_snapshot;
     showBrowseFiles: boolean;
+    triggerElement: HTMLElement | null;
   } | null>(null);
   let terminalAskMenuEl: HTMLDivElement | null = null;
   const [terminalSidebarMenu, setTerminalSidebarMenu] = createSignal<terminal_sidebar_context_menu>(null);
@@ -1032,9 +1034,15 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       handleTerminalContextMenuCapture(event);
     };
 
+    const onKeyDownCapture = (event: KeyboardEvent) => {
+      handleTerminalContextMenuKeyDownCapture(event);
+    };
+
     host.addEventListener('contextmenu', onContextMenuCapture, true);
+    host.addEventListener('keydown', onKeyDownCapture, true);
     onCleanup(() => {
       host.removeEventListener('contextmenu', onContextMenuCapture, true);
+      host.removeEventListener('keydown', onKeyDownCapture, true);
     });
   });
 
@@ -2153,12 +2161,42 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     }
   };
 
+  type TerminalFocusRestoreIntent = Readonly<{
+    sessionId: string;
+    anchor: Element | null;
+    triggerElement: HTMLElement | null;
+  }>;
+
+  const captureTerminalFocusRestoreIntent = (
+    sessionId: string,
+    triggerElement: HTMLElement | null = null,
+  ): TerminalFocusRestoreIntent => ({
+    sessionId,
+    anchor: typeof document === 'undefined' ? null : document.activeElement,
+    triggerElement,
+  });
+
+  const focusOwnerMatchesRestoreIntent = (intent: TerminalFocusRestoreIntent) => {
+    if (typeof document === 'undefined') return true;
+    const owner = document.activeElement;
+    if (owner === null || owner === document.body) return true;
+    if (owner === intent.anchor || intent.anchor?.contains(owner)) return true;
+    if (owner === intent.triggerElement || intent.triggerElement?.contains(owner)) return true;
+    return Boolean(surfaceRegistry.get(intent.sessionId)?.contains(owner));
+  };
+
+  const restoreTerminalSessionFocus = (intent: TerminalFocusRestoreIntent) => {
+    requestAnimationFrame(() => {
+      if (!terminalFocusOwner() || !shouldRestoreTerminalFocus()) return;
+      if (activeSessionId() !== intent.sessionId || !focusOwnerMatchesRestoreIntent(intent)) return;
+      actionsRegistry.get(intent.sessionId)?.focusIfInteractive();
+    });
+  };
+
   const restoreActiveTerminalFocus = () => {
     if (!shouldRestoreTerminalFocus()) return;
-    requestAnimationFrame(() => {
-      const sid = activeSessionId();
-      if (sid) actionsRegistry.get(sid)?.focusIfInteractive();
-    });
+    const sid = activeSessionId();
+    if (sid) restoreTerminalSessionFocus(captureTerminalFocusRestoreIntent(sid));
   };
 
   const commitSidebarSessionSelection = (sessionId: string) => {
@@ -2657,7 +2695,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const [clearingSessionId, setClearingSessionId] = createSignal<string | null>(null);
 
-  const clearSession = async (sessionId: string) => {
+  const clearSession = async (
+    sessionId: string,
+    options?: { focusRestoreIntent?: TerminalFocusRestoreIntent },
+  ) => {
     const sid = String(sessionId ?? '').trim();
     if (!sid || clearingSessionId()) return;
     setClearingSessionId(sid);
@@ -2667,18 +2708,36 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       terminalCatalog?.invalidateHistory(sid, 'clear');
       await transport.clear(sid);
       const actions = actionsRegistry.get(sid);
-      if (actions && !await actions.resetAfterClear()) return;
+      if (actions && !await actions.resetAfterClear()) {
+        throw new Error(i18n.t('terminal.clearFailedMessage'));
+      }
       await transport.sendInput(sid, '\r', connId);
+      notify.success(
+        i18n.t('terminal.clearSucceededTitle'),
+        i18n.t('terminal.clearSucceededMessage'),
+      );
+      if (options?.focusRestoreIntent) {
+        restoreTerminalSessionFocus(options.focusRestoreIntent);
+      }
     } catch (e) {
-      if (handleExecuteDenied(e)) return;
-      setError(e instanceof Error ? e.message : String(e));
+      const message = e instanceof Error ? e.message : String(e);
+      if (!handleExecuteDenied(e)) {
+        setError(message);
+      }
+      notify.error(
+        i18n.t('terminal.clearFailedTitle'),
+        message || i18n.t('terminal.clearFailedMessage'),
+      );
     } finally {
       setClearingSessionId((current) => current === sid ? null : current);
     }
   };
 
   const clearActive = async () => {
-    await clearSession(activeSessionId() ?? '');
+    const sessionId = activeSessionId() ?? '';
+    await clearSession(sessionId, {
+      focusRestoreIntent: captureTerminalFocusRestoreIntent(sessionId),
+    });
   };
 
   const [refreshing, setRefreshing] = createSignal(false);
@@ -3305,7 +3364,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return items;
   });
 
-  const isTerminalSurfaceContextMenuEvent = (event: MouseEvent): boolean => {
+  const isTerminalSurfaceContextMenuEvent = (event: Event): boolean => {
     const path = typeof event.composedPath === 'function' ? event.composedPath() : [];
     const host = terminalContextMenuHostEl();
     for (const node of path) {
@@ -3322,12 +3381,29 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     return false;
   };
 
-  const openTerminalAskMenu = (event: MouseEvent) => {
+  const resolveTerminalSurfaceContext = (target: EventTarget | null) => {
+    const element = target instanceof Element ? target : null;
+    if (!element) return null;
+    for (const [sessionId, surface] of surfaceRegistry.entries()) {
+      if (surface === element || surface.contains(element)) {
+        return { sessionId, surface };
+      }
+    }
+    return null;
+  };
+
+  const openTerminalAskMenuAt = (context: {
+    x: number;
+    y: number;
+    sessionId: string;
+    triggerElement: HTMLElement | null;
+  }) => {
     if (!connected()) return;
 
+    const requestedSessionId = String(context.sessionId ?? '').trim();
     const currentActiveId = String(activeSessionId() ?? '').trim();
-    const activeSession = currentActiveId
-      ? sessions().find((item) => item.id === currentActiveId) ?? null
+    const activeSession = requestedSessionId
+      ? sessions().find((item) => item.id === requestedSessionId) ?? null
       : null;
     const resolvedSession = activeSession ?? sessions()[0] ?? null;
     if (!resolvedSession) return;
@@ -3340,21 +3416,36 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     const selection = buildTerminalSelectionSnapshot(resolvedSession.id, core);
     const showBrowseFiles = Boolean(workingDir) && canBrowseFiles();
 
-    event.preventDefault();
-    event.stopPropagation();
-
     if (!currentActiveId) {
       setActiveSessionId(resolvedSession.id);
     }
 
     setTerminalSidebarMenu(null);
     setTerminalAskMenu({
-      x: event.clientX,
-      y: event.clientY,
+      x: context.x,
+      y: context.y,
       workingDir,
       homePath,
       selection,
       showBrowseFiles,
+      triggerElement: context.triggerElement,
+    });
+  };
+
+  const openTerminalAskMenu = (event: MouseEvent) => {
+    const surfaceContext = resolveTerminalSurfaceContext(event.target);
+    const sessionId = surfaceContext?.sessionId ?? String(activeSessionId() ?? '').trim();
+    if (!sessionId) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    openTerminalAskMenuAt({
+      x: event.clientX,
+      y: event.clientY,
+      sessionId,
+      triggerElement: surfaceContext
+        ? resolveTerminalInputElement(surfaceContext.surface)
+        : null,
     });
   };
 
@@ -3362,6 +3453,32 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     if (!connected()) return;
     if (!isTerminalSurfaceContextMenuEvent(event)) return;
     openTerminalAskMenu(event);
+  }
+
+  function handleTerminalContextMenuKeyDownCapture(event: KeyboardEvent) {
+    if (event.isComposing) return;
+    const contextMenuKey = event.key === 'ContextMenu'
+      && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey;
+    const shiftF10 = event.key === 'F10'
+      && event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey;
+    if (!contextMenuKey && !shiftF10) return;
+    if (!isTerminalSurfaceContextMenuEvent(event)) return;
+
+    const surfaceContext = resolveTerminalSurfaceContext(event.target);
+    if (!surfaceContext) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.repeat) return;
+
+    const triggerElement = event.target instanceof HTMLElement ? event.target : null;
+    const rect = triggerElement?.getBoundingClientRect();
+    openTerminalAskMenuAt({
+      x: rect ? rect.left + Math.min(rect.width - 8, 48) : 0,
+      y: rect ? rect.top + Math.min(rect.height - 8, 32) : 0,
+      sessionId: surfaceContext.sessionId,
+      triggerElement,
+    });
   }
 
   const executeTerminalCopyCommand = async (context: { source: 'shortcut' | 'context_menu'; sessionId: string }): Promise<boolean> => {
@@ -3387,12 +3504,29 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const handleCopyTerminalSelection = () => {
     const menu = terminalAskMenu();
+    const focusRestoreIntent = menu
+      ? captureTerminalFocusRestoreIntent(menu.selection.sessionId, menu.triggerElement)
+      : null;
     setTerminalAskMenu(null);
     if (!menu) return;
     void executeTerminalCopyCommand({
       source: 'context_menu',
       sessionId: menu.selection.sessionId,
-    }).catch(notifyTerminalCopyFailure);
+    }).catch(notifyTerminalCopyFailure).finally(() => {
+      if (focusRestoreIntent) restoreTerminalSessionFocus(focusRestoreIntent);
+    });
+  };
+
+  const handleClearTerminalContent = () => {
+    const menu = terminalAskMenu();
+    const focusRestoreIntent = menu
+      ? captureTerminalFocusRestoreIntent(menu.selection.sessionId, menu.triggerElement)
+      : null;
+    setTerminalAskMenu(null);
+    if (!menu) return;
+    void clearSession(menu.selection.sessionId, {
+      ...(focusRestoreIntent ? { focusRestoreIntent } : {}),
+    });
   };
 
   const handleBrowseFilesFromTerminal = () => {
@@ -3445,8 +3579,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
   const clearSidebarItemSession = (item: TerminalSessionNavigationItem) => {
     if (!item.canClear) return;
+    const menu = terminalSidebarMenu();
+    const focusRestoreIntent = captureTerminalFocusRestoreIntent(
+      item.id,
+      menu?.triggerElement ?? null,
+    );
     setTerminalSidebarMenu(null);
-    void clearSession(item.id);
+    void clearSession(item.id, { focusRestoreIntent });
   };
 
   const askFlowerFromSidebarItem = (item: TerminalSessionNavigationItem, anchor: { x: number; y: number }) => {
@@ -3568,6 +3707,14 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       onSelect: handleCopyTerminalSelection,
       disabled: !menu.selection.hasSelection,
     });
+    items.push({
+      id: 'clear-terminal-content',
+      kind: 'action',
+      label: i18n.t('terminal.clearTerminalContent'),
+      icon: Trash,
+      onSelect: handleClearTerminalContent,
+      disabled: clearingSessionId() !== null,
+    });
 
     return items;
   };
@@ -3575,6 +3722,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const buildTerminalSidebarMenuItems = (menu: NonNullable<ReturnType<typeof terminalSidebarMenu>>): FloatingContextMenuItem[] => {
     const item = menu.item;
     return [
+      {
+        id: 'sidebar-ask-flower',
+        kind: 'action',
+        label: i18n.t('terminal.askFlower'),
+        icon: FlowerContextMenuIcon,
+        onSelect: () => askFlowerFromSidebarItem(item, { x: menu.x, y: menu.y }),
+      },
       {
         id: 'sidebar-files',
         kind: 'action',
@@ -3599,15 +3753,8 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
         kind: 'action',
         label: i18n.t('terminal.clearTerminalContent'),
         icon: Trash,
-        disabled: !item.canClear,
+        disabled: !item.canClear || clearingSessionId() !== null,
         onSelect: () => clearSidebarItemSession(item),
-      },
-      {
-        id: 'sidebar-ask-flower',
-        kind: 'action',
-        label: i18n.t('terminal.askFlower'),
-        icon: FlowerContextMenuIcon,
-        onSelect: () => askFlowerFromSidebarItem(item, { x: menu.x, y: menu.y }),
       },
       {
         id: 'sidebar-danger-separator',
@@ -3631,11 +3778,17 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
   const openTerminalSidebarMenu = (event: MouseEvent, item: TerminalSessionNavigationItem) => {
     event.preventDefault();
     event.stopPropagation();
+    const currentTarget = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+    const triggerElement = currentTarget
+      ? Array.from(currentTarget.querySelectorAll<HTMLButtonElement>('button[data-terminal-session-id]'))
+          .find((button) => button.dataset.terminalSessionId === item.id) ?? null
+      : null;
     setTerminalAskMenu(null);
     setTerminalSidebarMenu({
       x: event.clientX,
       y: event.clientY,
       item,
+      triggerElement,
     });
   };
 
@@ -3651,7 +3804,26 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       x: rect ? rect.left + Math.min(rect.width - 16, 64) : 0,
       y: rect ? rect.top + Math.min(rect.height - 8, 44) : 0,
       item,
+      triggerElement: target,
     });
+  };
+
+  const dismissTerminalAskMenu = (reason: 'escape' | 'tab' | 'shift-tab') => {
+    const menu = terminalAskMenu();
+    const focusRestoreIntent = menu
+      ? captureTerminalFocusRestoreIntent(menu.selection.sessionId, menu.triggerElement)
+      : null;
+    setTerminalAskMenu(null);
+    if (reason === 'escape' && focusRestoreIntent) {
+      restoreTerminalSessionFocus(focusRestoreIntent);
+    }
+  };
+
+  const dismissTerminalSidebarMenu = (reason: 'escape' | 'tab' | 'shift-tab') => {
+    const menu = terminalSidebarMenu();
+    setTerminalSidebarMenu(null);
+    if (reason !== 'escape' || !menu?.triggerElement?.isConnected) return;
+    requestAnimationFrame(() => menu.triggerElement?.focus({ preventScroll: true }));
   };
 
   const bindSearchCore = (core: TerminalCore | null) => {
@@ -3769,11 +3941,12 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     onCleanup(() => window.removeEventListener('popstate', closeDrawerFromHistory));
   });
 
-  const handleRootKeyDown: (e: KeyboardEvent) => void = (e) => {
+  const handleRootShortcutKeyDown: (e: KeyboardEvent) => void = (e) => {
+    if (e.isComposing) return;
     if (matchesPlainPrimaryModShortcut(e, 'f')) {
-      // Common terminal shortcut: intercept browser find.
       e.preventDefault();
-      openSearch();
+      e.stopPropagation();
+      if (!e.repeat) openSearch();
       return;
     }
 
@@ -3782,11 +3955,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       const target = sessionListItems()[shortcutTabIndex] ?? null;
       if (target) {
         e.preventDefault();
-        requestSessionSelection(target.id, true);
+        e.stopPropagation();
+        if (!e.repeat) requestSessionSelection(target.id, true);
       }
-      return;
     }
+  };
 
+  const handleRootKeyDown: (e: KeyboardEvent) => void = (e) => {
     if (e.key === 'Escape' && searchOpen()) {
       e.preventDefault();
       closeSearch();
@@ -3807,6 +3982,13 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       else goNextMatch();
     }
   };
+
+  createEffect(() => {
+    const root = rootEl;
+    if (!root) return;
+    root.addEventListener('keydown', handleRootShortcutKeyDown, true);
+    onCleanup(() => root.removeEventListener('keydown', handleRootShortcutKeyDown, true));
+  });
 
   const handleMoreSelect = (id: string) => {
     if (id === 'search') {
@@ -4268,7 +4450,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
           <FloatingContextMenu
             x={menu.x}
             y={menu.y}
+            ariaLabel={i18n.t('terminal.title')}
+            focusAnchor={menu.triggerElement}
             items={buildTerminalAskMenuItems(menu)}
+            onDismiss={dismissTerminalAskMenu}
             menuRef={(el) => {
               terminalAskMenuEl = el;
             }}
@@ -4281,7 +4466,10 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
           <FloatingContextMenu
             x={menu.x}
             y={menu.y}
+            ariaLabel={i18n.t('terminal.sessions')}
+            focusAnchor={menu.triggerElement}
             items={buildTerminalSidebarMenuItems(menu)}
+            onDismiss={dismissTerminalSidebarMenu}
             menuRef={(el) => {
               terminalSidebarMenuEl = el;
             }}

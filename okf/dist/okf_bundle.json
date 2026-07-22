@@ -431,7 +431,7 @@
               "ui",
               "workbench"
             ],
-            "summary": "Workbench keeps widget identity and state stable while visual selection, committed activation, lazy feature loading, and connection recovery follow explicit presentation ownership. Recovery is mounted above the canvas and makes retained content inert instead of creating per-widget reconnect state. Pointer-anchored overlays use the shared surface layer, and lazy module delivery cannot replace permission, keep-alive, or lifecycle contracts.",
+            "summary": "Workbench keeps widget identity and state stable while visual selection, input routing, committed activation, lazy feature loading, and connection recovery follow explicit presentation ownership. A selected Terminal's declared local scroll viewport owns pointer wheel input without requiring terminal DOM focus, while unselected widgets remain under Canvas ownership. Recovery is mounted above the canvas and makes retained content inert instead of creating per-widget reconnect state. Pointer-anchored overlays use the shared surface layer, and lazy module delivery cannot replace permission, keep-alive, or lifecycle contracts.",
             "section_count": 2
           },
           {
@@ -7831,7 +7831,7 @@
         "ui",
         "workbench"
       ],
-      "timestamp": "2026-07-18T00:00:00Z",
+      "timestamp": "2026-07-22T00:00:00Z",
       "frontmatter": {
         "description": "Selection presentation, recovery ownership, lazy widgets, and shared floating surfaces.",
         "tags": [
@@ -7840,19 +7840,19 @@
           "ui",
           "workbench"
         ],
-        "timestamp": "2026-07-18T00:00:00Z",
+        "timestamp": "2026-07-22T00:00:00Z",
         "title": "Workbench surface lifecycle",
         "type": "UI Contract"
       },
-      "body_length": 7216,
-      "summary": "Workbench keeps widget identity and state stable while visual selection, committed activation, lazy feature loading, and connection recovery follow explicit presentation ownership. Recovery is mounted above the canvas and makes retained content inert instead of creating per-widget reconnect state. Pointer-anchored overlays use the shared surface layer, and lazy module delivery cannot replace permission, keep-alive, or lifecycle contracts.",
+      "body_length": 8191,
+      "summary": "Workbench keeps widget identity and state stable while visual selection, input routing, committed activation, lazy feature loading, and connection recovery follow explicit presentation ownership. A selected Terminal's declared local scroll viewport owns pointer wheel input without requiring terminal DOM focus, while unselected widgets remain under Canvas ownership. Recovery is mounted above the canvas and makes retained content inert instead of creating per-widget reconnect state. Pointer-anchored overlays use the shared surface layer, and lazy module delivery cannot replace permission, keep-alive, or lifecycle contracts.",
       "sections": [
         {
           "id": "contract",
           "title": "Contract",
           "level": 1,
-          "body": "## Mechanism\n\nWorkbench widget selection follows the same presentation ordering without changing canvas ownership. The selected boundary and pointer ownership update immediately; committed activation, z-order persistence, viewport reveal or centering, fit, focus, and geometry measurement occur after the intent paint. Activity and Workbench page roots also remain mounted after first visit. Switching page mode changes visibility and activation sequence after paint, then restores Workbench geometry and focus; it does not rebuild the Workbench page or destroy the Activity Shell.\n\nShell preset changes may repaint widget boundaries, retained feature bodies, and floating surfaces, but they do not change input ownership. The selected widget remains the canvas wheel guard, declared reading surfaces retain browser text selection and copy, unselected widgets do not capture wheel input, and projected overlays continue through `SurfaceFloatingLayer`. Theme-derived colors must not be implemented by replacing or remounting those owners.\n\nUnexpected connection recovery is owned above the Workbench canvas. `ConnectionRecoveryView` fills the Workbench content root while the mounted canvas remains the same KeepAlive instance underneath. During recovery the canvas container is `inert`, pointer-disabled, and hidden from assistive technology, so selected widgets, terminals, floating layers, keyboard handlers, and canvas gestures cannot act on stale Runtime state. The recovery view is ordinary shell content rather than a projected widget, nested card, or Workbench floating layer. When the shared recovery snapshot returns to idle after its success hold, the existing viewport, widget selection, canvas state, and mounted feature bodies resume without reconstruction.\n\nA Desktop transport snapshot in `ready` phase must still belong to the exact registered bridge session whose stable loopback proxy remains alive. Desktop health consumers are read-only observers: they may expose `recovering` while the bridge is reconnecting or `unavailable` after a typed Local UI probe failure, but neither result may retire the bridge or strand the retained shell on a stale `ready` record. Only the bridge session may advance recovery phases or close automatically. When that same session returns to `ready`, Env App resumes protocol and secure-session recovery through the original loopback URL and mounted Workbench tree; terminal bridge failure keeps the tree inert until explicit Open creates a new Desktop session.\n\nWorkbench widget definitions may lazy-load their feature body, including Terminal, Files, Monitor, Codespaces, Ports, Flower, and Codex. The widget identity, persisted instance state, selected state, activation sequence, permission fallback, and viewport policy exist outside the feature module and must be forwarded unchanged when the chunk resolves. Lazy resolution may delay the first body mount, but it must not create a second widget instance, reset persisted state, bypass RWX permission notices, or convert activation into an implicit viewport-centering request. Tests that inspect lazy widget bodies wait for module resolution before asserting the live component contract.\n\nActivity Flower placement is outside this lifecycle; [Flower Activity companion](flower-activity-companion.md) owns the companion state and focus-isolation contract. Workbench's product-specific invariant is that mode switching alone never creates or focuses its existing Flower Widget; only explicit Workbench activation or handoff may do so.\n\nProjected Workbench surfaces must delegate pointer-anchored overlays to the shared surface floating layer. Menus opened from right-click, menu buttons, or keyboard anchors should pass client or anchor coordinates to `SurfaceFloatingLayer`, which owns surface-local projection, clamping, z-index, and local interaction markers. Context menus, dropdowns, popovers, hover cards, tooltips, autocomplete panels, command palettes, color pickers, date pickers, and equivalent floating UI must not treat Workbench as ordinary document flow. Their panel content may own role, focus, keyboard navigation, item layout, and visual styling, but must not own `position: fixed`, inline viewport `left` / `top`, `window.innerWidth` / `window.innerHeight` clamping, body portals, or component-local viewport-to-surface coordinate conversion inside a transformed projected surface.",
-          "char_count": 4403
+          "body": "## Mechanism\n\nWorkbench widget selection follows the same presentation ordering without changing canvas ownership. The selected boundary and pointer ownership update immediately; committed activation, z-order persistence, viewport reveal or centering, fit, focus, and geometry measurement occur after the intent paint. Activity and Workbench page roots also remain mounted after first visit. Switching page mode changes visibility and activation sequence after paint, then restores Workbench geometry and focus; it does not rebuild the Workbench page or destroy the Activity Shell.\n\nShell preset changes may repaint widget boundaries, retained feature bodies, and floating surfaces, but they do not change input ownership. The selected widget remains the canvas wheel guard, declared reading surfaces retain browser text selection and copy, unselected widgets do not capture wheel input, and projected overlays continue through `SurfaceFloatingLayer`. When the pointer wheel path belongs to a selected Terminal's real local-scroll marker, that Terminal owns scrollback input even if its textarea does not currently hold DOM focus and even while Canvas movement is locked; routing the wheel must not move focus, change the active session, or grant an unselected or placeholder Terminal local ownership. Theme-derived colors must not be implemented by replacing or remounting those owners.\n\nUnexpected connection recovery is owned above the Workbench canvas. `ConnectionRecoveryView` fills the Workbench content root while the mounted canvas remains the same KeepAlive instance underneath. During recovery the canvas container is `inert`, pointer-disabled, and hidden from assistive technology, so selected widgets, terminals, floating layers, keyboard handlers, and canvas gestures cannot act on stale Runtime state. The recovery view is ordinary shell content rather than a projected widget, nested card, or Workbench floating layer. When the shared recovery snapshot returns to idle after its success hold, the existing viewport, widget selection, canvas state, and mounted feature bodies resume without reconstruction.\n\nA Desktop transport snapshot in `ready` phase must still belong to the exact registered bridge session whose stable loopback proxy remains alive. Desktop health consumers are read-only observers: they may expose `recovering` while the bridge is reconnecting or `unavailable` after a typed Local UI probe failure, but neither result may retire the bridge or strand the retained shell on a stale `ready` record. Only the bridge session may advance recovery phases or close automatically. When that same session returns to `ready`, Env App resumes protocol and secure-session recovery through the original loopback URL and mounted Workbench tree; terminal bridge failure keeps the tree inert until explicit Open creates a new Desktop session.\n\nWorkbench widget definitions may lazy-load their feature body, including Terminal, Files, Monitor, Codespaces, Ports, Flower, and Codex. The widget identity, persisted instance state, selected state, activation sequence, permission fallback, and viewport policy exist outside the feature module and must be forwarded unchanged when the chunk resolves. Lazy resolution may delay the first body mount, but it must not create a second widget instance, reset persisted state, bypass RWX permission notices, or convert activation into an implicit viewport-centering request. Tests that inspect lazy widget bodies wait for module resolution before asserting the live component contract.\n\nActivity Flower placement is outside this lifecycle; [Flower Activity companion](flower-activity-companion.md) owns the companion state and focus-isolation contract. Workbench's product-specific invariant is that mode switching alone never creates or focuses its existing Flower Widget; only explicit Workbench activation or handoff may do so.\n\nProjected Workbench surfaces must delegate pointer-anchored overlays to the shared surface floating layer. Menus opened from right-click, menu buttons, or keyboard anchors should pass client or anchor coordinates to `SurfaceFloatingLayer`, which owns surface-local projection, clamping, z-index, and local interaction markers. Context menus, dropdowns, popovers, hover cards, tooltips, autocomplete panels, command palettes, color pickers, date pickers, and equivalent floating UI must not treat Workbench as ordinary document flow. Their panel content may own role, focus, keyboard navigation, item layout, and visual styling, but must not own `position: fixed`, inline viewport `left` / `top`, `window.innerWidth` / `window.innerHeight` clamping, body portals, or component-local viewport-to-surface coordinate conversion inside a transformed projected surface.",
+          "char_count": 4753
         },
         {
           "id": "boundaries",
@@ -7868,6 +7868,18 @@
           "source": "redeven:internal/envapp/ui_src/src/ui/workbench/EnvWorkbenchPage.test.tsx",
           "line": 2806,
           "description": "Tests cover reusing a singleton widget without implicit ensureWidget centering when focus is disabled."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchInputRouting.ts:241:selected terminal wheel routing delegates only an explicit local-scroll marker to the widget without a dom-focus gate.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/workbench/surface/workbenchInputRouting.ts",
+          "line": 241,
+          "description": "Selected Terminal wheel routing delegates only an explicit local-scroll marker to the widget without a DOM-focus gate."
+        },
+        {
+          "id": "redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.interaction.test.tsx:650:surface interaction tests cover selected terminal wheel ownership outside terminal focus and while canvas is locked.",
+          "source": "redeven:internal/envapp/ui_src/src/ui/workbench/surface/RedevenWorkbenchSurface.interaction.test.tsx",
+          "line": 650,
+          "description": "Surface interaction tests cover selected Terminal wheel ownership outside terminal focus and while Canvas is locked."
         },
         {
           "id": "redeven:internal/flower_ui/src/threads/FlowerThreadList.tsx:287:flower thread context menus render through the shared surface floating layer.",
@@ -7924,7 +7936,7 @@
           "description": "The thread context menu panel keeps visual styling without owning fixed positioning."
         }
       ],
-      "snippet": "Workbench keeps widget identity and state stable while visual selection, committed activation, lazy feature loading, and connection recovery follow explicit presentation ownership. Recovery is mounted above the canvas and makes retained con",
+      "snippet": "Workbench keeps widget identity and state stable while visual selection, input routing, committed activation, lazy feature loading, and connection recovery follow explicit presentation ownership. A selected Terminal's declared local scroll ",
       "links": [
         {
           "label": "Flower Activity companion",
@@ -8063,5 +8075,5 @@
       ]
     }
   ],
-  "source_sha256": "4706fab50e63922b8acb5341156cb016a4811f7672a04e765b97d20185dba1c7"
+  "source_sha256": "7f14d6998c811d11c7e13fd7b6b8bb5700abc71585c0b6e8e26c2281b6577158"
 }

@@ -583,7 +583,8 @@ vi.mock('@floegence/floe-webapp-core/loading', () => ({
   ),
 }));
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
+vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(),
   createFloatingPresence: (options: { open: () => boolean }) => ({
     mounted: () => Boolean(options.open()),
     exiting: () => false,
@@ -2596,14 +2597,20 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     const firstMenu = await openSidebarContextMenu(host, 'Terminal 2');
-    expect(Array.from(firstMenu.querySelectorAll('button')).map((button) => button.textContent?.trim())).toEqual([
+    await settleTerminalPanelAfterPaint();
+    expect(firstMenu.getAttribute('aria-label')).toBe('Sessions');
+    expect(Array.from(firstMenu.children).map((element) => (
+      element.getAttribute('role') === 'separator' ? 'separator' : element.textContent?.trim()
+    ))).toEqual([
+      'Ask Flower',
       'Files',
       'Duplicate session',
       'Clear terminal content',
-      'Ask Flower',
+      'separator',
       'Delete session',
     ]);
     expect(firstMenu.querySelectorAll('[role="separator"]')).toHaveLength(1);
+    expect(document.activeElement?.textContent?.trim()).toBe('Ask Flower');
 
     findContextMenuButton(firstMenu, 'Files')?.click();
     await settleTerminalPanel();
@@ -2615,6 +2622,7 @@ describe('TerminalPanel', () => {
     });
     expect(findTerminalTab(host, 'Terminal 1')?.dataset.terminalSessionActive).toBe('true');
 
+    focusSpy.mockClear();
     const clearMenu = await openSidebarContextMenu(host, 'Terminal 2');
     findContextMenuButton(clearMenu, 'Clear terminal content')?.click();
     await waitForTerminalPanelCondition(() => {
@@ -2624,6 +2632,7 @@ describe('TerminalPanel', () => {
     expect(transportMocks.clear).toHaveBeenCalledWith('session-2');
     expect(transportMocks.sendInput).toHaveBeenCalledWith('session-2', '\r', 'conn-1');
     expect(findTerminalTab(host, 'Terminal 1')?.dataset.terminalSessionActive).toBe('true');
+    expect(focusSpy).not.toHaveBeenCalled();
 
     const askMenu = await openSidebarContextMenu(host, 'Terminal 2');
     findContextMenuButton(askMenu, 'Ask Flower')?.click();
@@ -2658,6 +2667,88 @@ describe('TerminalPanel', () => {
     await settleTerminalPanelAfterPaint();
 
     expect(sessionsCoordinatorMocks.deleteSession).toHaveBeenCalledWith('session-2');
+  });
+
+  it('opens the complete sidebar menu with Shift+F10 and restores its row on Escape', async () => {
+    terminalEnvPermissionsState.canRead = false;
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    const row = findTerminalTab(host, 'Terminal 1') as HTMLButtonElement | undefined;
+    expect(row).toBeTruthy();
+    row?.focus();
+    const openEvent = dispatchTerminalKeydown(row!, { key: 'F10', shiftKey: true });
+    await settleTerminalPanelAfterPaint();
+
+    const menu = host.querySelector('[role="menu"]') as HTMLDivElement | null;
+    expect(openEvent.defaultPrevented).toBe(true);
+    expect(menu).toBeTruthy();
+    expect(Array.from(menu!.children).map((element) => (
+      element.getAttribute('role') === 'separator' ? 'separator' : element.textContent?.trim()
+    ))).toEqual([
+      'Ask Flower',
+      'Files',
+      'Duplicate session',
+      'Clear terminal content',
+      'separator',
+      'Delete session',
+    ]);
+    expect(findContextMenuButton(menu!, 'Files')?.disabled).toBe(true);
+    expect(document.activeElement?.textContent?.trim()).toBe('Ask Flower');
+
+    const escapeEvent = dispatchTerminalKeydown(document.activeElement!, { key: 'Escape' });
+    await settleTerminalPanelAfterPaint();
+    expect(escapeEvent.defaultPrevented).toBe(true);
+    expect(host.querySelector('[role="menu"]')).toBeNull();
+    expect(document.activeElement).toBe(row);
+
+    const contextMenuEvent = dispatchTerminalKeydown(row!, { key: 'ContextMenu' });
+    await settleTerminalPanelAfterPaint();
+    const reopenedMenu = host.querySelector('[role="menu"]') as HTMLDivElement | null;
+    expect(contextMenuEvent.defaultPrevented).toBe(true);
+    expect(reopenedMenu).toBeTruthy();
+    expect(document.activeElement?.textContent?.trim()).toBe('Ask Flower');
+
+    dispatchTerminalKeydown(document.activeElement!, { key: 'ArrowDown' });
+    expect(document.activeElement?.textContent?.trim()).toBe('Duplicate session');
+    dispatchTerminalKeydown(document.activeElement!, { key: 'End' });
+    expect(document.activeElement?.textContent?.trim()).toBe('Delete session');
+    dispatchTerminalKeydown(document.activeElement!, { key: 'Home' });
+    expect(document.activeElement?.textContent?.trim()).toBe('Ask Flower');
+
+    const tabEvent = dispatchTerminalKeydown(document.activeElement!, { key: 'Tab' });
+    await settleTerminalPanel();
+    expect(tabEvent.defaultPrevented).toBe(false);
+    expect(host.querySelector('[role="menu"]')).toBeNull();
+
+    row?.focus();
+    dispatchTerminalKeydown(row!, { key: 'ContextMenu' });
+    await settleTerminalPanelAfterPaint();
+    focusSpy.mockClear();
+    const shiftTabEvent = dispatchTerminalKeydown(document.activeElement!, { key: 'Tab', shiftKey: true });
+    await settleTerminalPanel();
+    expect(shiftTabEvent.defaultPrevented).toBe(false);
+    expect(host.querySelector('[role="menu"]')).toBeNull();
+    expect(focusSpy).not.toHaveBeenCalled();
+  });
+
+  it('restores the active terminal after clearing it from the sidebar menu', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanelAfterPaint();
+    focusSpy.mockClear();
+
+    const menu = await openSidebarContextMenu(host, 'Terminal 1');
+    findContextMenuButton(menu, 'Clear terminal content')?.click();
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.sendInput).toHaveBeenCalledWith('session-1', '\r', 'conn-1');
+      expect(focusSpy).toHaveBeenCalled();
+    });
   });
 
   it('duplicates a terminal session from the sidebar context menu using the target path', async () => {
@@ -6962,12 +7053,40 @@ describe('TerminalPanel', () => {
     clearButton?.click();
     expect(transportMocks.clear).toHaveBeenCalledTimes(1);
 
+    const sidebarMenu = await openSidebarContextMenu(host, 'Terminal 1');
+    const sidebarClear = findContextMenuButton(sidebarMenu, 'Clear terminal content');
+    expect(sidebarClear?.disabled).toBe(true);
+    sidebarClear?.click();
+    expect(transportMocks.clear).toHaveBeenCalledTimes(1);
+
+    document.body.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true }));
+    await settleTerminalPanel();
+    const terminalSurface = host.querySelector('.redeven-terminal-surface');
+    terminalSurface?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 24,
+      clientY: 32,
+    }));
+    await settleTerminalPanel();
+    const contentMenu = host.querySelector('[role="menu"]') as HTMLDivElement | null;
+    const contentClear = contentMenu
+      ? findContextMenuButton(contentMenu, 'Clear terminal content')
+      : undefined;
+    expect(contentClear?.disabled).toBe(true);
+    contentClear?.click();
+    expect(transportMocks.clear).toHaveBeenCalledTimes(1);
+
     resolveClear();
     await waitForTerminalPanelCondition(() => {
       expect(clearButton?.dataset.terminalClearState).toBe('idle');
       expect(clearButton?.getAttribute('aria-busy')).toBe('false');
       expect(clearButton?.disabled).toBe(false);
     });
+    expect(notificationMocks.success).toHaveBeenCalledWith(
+      'Terminal cleared',
+      'The terminal content was cleared.',
+    );
   });
 
   it('keeps clear failures blocking and retryable without sending a prompt probe', async () => {
@@ -6987,7 +7106,48 @@ describe('TerminalPanel', () => {
 
     expect(host.textContent).not.toContain('sensitive attach failure');
     expect(transportMocks.sendInput).not.toHaveBeenCalledWith('session-1', '\r', 'conn-1');
+    expect(notificationMocks.error).toHaveBeenCalledWith(
+      'Could not clear terminal',
+      'The terminal content could not be cleared. Try again.',
+    );
     expect(host.querySelector<HTMLButtonElement>('button[aria-label="Retry"]')).toBeTruthy();
+  });
+
+  it('does not restore terminal focus after clear when ownership moves or Floe Keyboard is active', async () => {
+    let resolveClear!: () => void;
+    transportMocks.clear.mockImplementationOnce(() => new Promise<void>((resolve) => {
+      resolveClear = resolve;
+    }));
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const outside = document.createElement('button');
+    document.body.appendChild(outside);
+    const [selected, setSelected] = createSignal(true);
+
+    render(() => (
+      <TerminalPanel variant="workbench" workbenchSelected={selected()} />
+    ), host);
+    await settleTerminalPanelAfterPaint();
+    focusSpy.mockClear();
+
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-clear-active-session"]')?.click();
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.clear).toHaveBeenCalledTimes(1);
+    });
+    setSelected(false);
+    outside.focus();
+    resolveClear();
+    await settleTerminalPanelAfterPaint();
+    expect(focusSpy).not.toHaveBeenCalled();
+    expect(document.activeElement).toBe(outside);
+
+    layoutState.mobile = true;
+    terminalPrefsState.mobileInputMode = 'floe';
+    setSelected(true);
+    focusSpy.mockClear();
+    host.querySelector<HTMLButtonElement>('[data-testid="terminal-clear-active-session"]')?.click();
+    await settleTerminalPanelAfterPaint();
+    expect(focusSpy).not.toHaveBeenCalled();
   });
 
   it('cancels remaining activity catchup history batches after clearing the terminal', async () => {
@@ -7926,6 +8086,94 @@ describe('TerminalPanel', () => {
     expect(terminalCoreInstances[0]?.copySelection).toHaveBeenCalledWith('command');
   });
 
+  it('opens the terminal content menu from textarea keyboard gestures and clears its captured session', async () => {
+    terminalSessionsState.sessions = [
+      terminalSessionsState.sessions[0]!,
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace/repo',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+    ];
+    const [group, setGroup] = createSignal({
+      sessionIds: ['session-1', 'session-2'],
+      activeSessionId: 'session-1' as string | null,
+    });
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="workbench" sessionGroupState={group()} />, host);
+    await settleTerminalPanelAfterPaint();
+
+    const textarea = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Terminal input"]');
+    expect(textarea).toBeTruthy();
+    const terminalTargetListener = vi.fn((event: KeyboardEvent) => event.stopPropagation());
+    textarea!.addEventListener('keydown', terminalTargetListener);
+
+    const contextMenuEvent = dispatchTerminalKeydown(textarea!, { key: 'ContextMenu' });
+    await settleTerminalPanelAfterPaint();
+    expect(contextMenuEvent.defaultPrevented).toBe(true);
+    expect(terminalTargetListener).not.toHaveBeenCalled();
+    expect(document.activeElement?.textContent?.trim()).toBe('Ask Flower');
+    expect(host.querySelector('[role="menu"]')?.getAttribute('aria-label')).toBe('Terminal');
+
+    focusSpy.mockClear();
+    dispatchTerminalKeydown(document.activeElement!, { key: 'Escape' });
+    await settleTerminalPanelAfterPaint();
+    expect(host.querySelector('[role="menu"]')).toBeNull();
+    expect(focusSpy).toHaveBeenCalledTimes(1);
+
+    const shiftF10Event = dispatchTerminalKeydown(textarea!, { key: 'F10', shiftKey: true });
+    await settleTerminalPanelAfterPaint();
+    expect(shiftF10Event.defaultPrevented).toBe(true);
+    expect(terminalTargetListener).not.toHaveBeenCalled();
+    const menu = host.querySelector('[role="menu"]') as HTMLDivElement | null;
+    expect(menu).toBeTruthy();
+    expect(document.activeElement?.textContent?.trim()).toBe('Ask Flower');
+
+    setGroup({ sessionIds: ['session-1', 'session-2'], activeSessionId: 'session-2' });
+    await settleTerminalPanelAfterPaint();
+    findContextMenuButton(menu!, 'Clear terminal content')?.click();
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.sendInput).toHaveBeenCalledWith('session-1', '\r', 'conn-1');
+    });
+
+    expect(transportMocks.clear).toHaveBeenCalledWith('session-1');
+    expect(transportMocks.clear).not.toHaveBeenCalledWith('session-2');
+    expect(transportMocks.sendInput).not.toHaveBeenCalledWith('session-2', '\r', 'conn-1');
+    expect(notificationMocks.success).toHaveBeenCalledWith(
+      'Terminal cleared',
+      'The terminal content was cleared.',
+    );
+
+    const plainF10 = dispatchTerminalKeydown(textarea!, { key: 'F10' });
+    const modifiedContextMenu = dispatchTerminalKeydown(textarea!, { key: 'ContextMenu', altKey: true });
+    expect(plainF10.defaultPrevented).toBe(false);
+    expect(modifiedContextMenu.defaultPrevented).toBe(false);
+  });
+
+  it('restores the active terminal after clearing from the terminal content menu', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanelAfterPaint();
+
+    const textarea = host.querySelector<HTMLTextAreaElement>('textarea[aria-label="Terminal input"]');
+    expect(textarea).toBeTruthy();
+    dispatchTerminalKeydown(textarea!, { key: 'ContextMenu' });
+    await settleTerminalPanelAfterPaint();
+    focusSpy.mockClear();
+
+    const menu = host.querySelector('[role="menu"]') as HTMLDivElement | null;
+    findContextMenuButton(menu!, 'Clear terminal content')?.click();
+    await waitForTerminalPanelCondition(() => {
+      expect(transportMocks.sendInput).toHaveBeenCalledWith('session-1', '\r', 'conn-1');
+      expect(focusSpy).toHaveBeenCalled();
+    });
+  });
+
   it('keeps the workbench terminal context menu inside the local surface host', async () => {
     terminalSelectionState.text = 'pwd';
 
@@ -7987,6 +8235,7 @@ describe('TerminalPanel', () => {
       'Ask Flower',
       'Browse files',
       'Copy selection',
+      'Clear terminal content',
     ]);
     expect(menu?.querySelectorAll('[role="separator"]')).toHaveLength(1);
 
@@ -8109,6 +8358,7 @@ describe('TerminalPanel', () => {
       'Ask Flower',
       'Browse files',
       'Copy selection',
+      'Clear terminal content',
     ]);
 
     const browseButton = menuButtons.find((button) => button.textContent?.includes('Browse files'));
@@ -8150,6 +8400,7 @@ describe('TerminalPanel', () => {
     expect(menuButtons.map((button) => button.textContent?.trim())).toEqual([
       'Ask Flower',
       'Copy selection',
+      'Clear terminal content',
     ]);
     expect(menu?.querySelectorAll('[role="separator"]')).toHaveLength(1);
 
@@ -8167,10 +8418,14 @@ describe('TerminalPanel', () => {
     render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
-    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
-    expect(terminalSurface).toBeTruthy();
+    const terminalInput = host.querySelector('textarea[aria-label="Terminal input"]') as HTMLTextAreaElement | null;
+    expect(terminalInput).toBeTruthy();
+    const terminalTargetListener = vi.fn((event: KeyboardEvent) => event.stopPropagation());
+    const ancestorBubbleListener = vi.fn();
+    terminalInput!.addEventListener('keydown', terminalTargetListener);
+    host.addEventListener('keydown', ancestorBubbleListener);
 
-    const ctrlEvent = dispatchTerminalKeydown(terminalSurface!, {
+    const ctrlEvent = dispatchTerminalKeydown(terminalInput!, {
       ctrlKey: true,
       key: 'f',
     });
@@ -8178,8 +8433,11 @@ describe('TerminalPanel', () => {
 
     expect(ctrlEvent.defaultPrevented).toBe(false);
     expect(host.querySelector('input[placeholder="Search..."]')).toBeNull();
+    expect(terminalTargetListener).toHaveBeenCalledTimes(1);
+    terminalTargetListener.mockClear();
+    ancestorBubbleListener.mockClear();
 
-    const cmdEvent = dispatchTerminalKeydown(terminalSurface!, {
+    const cmdEvent = dispatchTerminalKeydown(terminalInput!, {
       metaKey: true,
       key: 'f',
     });
@@ -8188,6 +8446,29 @@ describe('TerminalPanel', () => {
     expect(cmdEvent.defaultPrevented).toBe(true);
     const searchInput = host.querySelector('input[placeholder="Search..."]') as HTMLInputElement | null;
     expect(searchInput).toBeTruthy();
+    expect(terminalTargetListener).not.toHaveBeenCalled();
+    expect(ancestorBubbleListener).not.toHaveBeenCalled();
+
+    searchInput!.value = 'retained query';
+    searchInput!.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    const repeatEvent = dispatchTerminalKeydown(terminalInput!, {
+      metaKey: true,
+      key: 'f',
+      repeat: true,
+    });
+    await settleTerminalPanelAfterPaint();
+    expect(repeatEvent.defaultPrevented).toBe(true);
+    expect(searchInput!.value).toBe('retained query');
+    expect(terminalTargetListener).not.toHaveBeenCalled();
+    expect(ancestorBubbleListener).not.toHaveBeenCalled();
+
+    const doublePrimaryEvent = dispatchTerminalKeydown(terminalInput!, {
+      metaKey: true,
+      ctrlKey: true,
+      key: 'f',
+    });
+    expect(doublePrimaryEvent.defaultPrevented).toBe(false);
+    expect(terminalTargetListener).toHaveBeenCalledTimes(1);
   });
 
   it('opens terminal search with Ctrl+F off macOS without stealing Cmd+F', async () => {
@@ -8200,10 +8481,14 @@ describe('TerminalPanel', () => {
     render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
-    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
-    expect(terminalSurface).toBeTruthy();
+    const terminalInput = host.querySelector('textarea[aria-label="Terminal input"]') as HTMLTextAreaElement | null;
+    expect(terminalInput).toBeTruthy();
+    const terminalTargetListener = vi.fn((event: KeyboardEvent) => event.stopPropagation());
+    const ancestorBubbleListener = vi.fn();
+    terminalInput!.addEventListener('keydown', terminalTargetListener);
+    host.addEventListener('keydown', ancestorBubbleListener);
 
-    const cmdEvent = dispatchTerminalKeydown(terminalSurface!, {
+    const cmdEvent = dispatchTerminalKeydown(terminalInput!, {
       metaKey: true,
       key: 'f',
     });
@@ -8211,8 +8496,11 @@ describe('TerminalPanel', () => {
 
     expect(cmdEvent.defaultPrevented).toBe(false);
     expect(host.querySelector('input[placeholder="Search..."]')).toBeNull();
+    expect(terminalTargetListener).toHaveBeenCalledTimes(1);
+    terminalTargetListener.mockClear();
+    ancestorBubbleListener.mockClear();
 
-    const ctrlEvent = dispatchTerminalKeydown(terminalSurface!, {
+    const ctrlEvent = dispatchTerminalKeydown(terminalInput!, {
       ctrlKey: true,
       key: 'f',
     });
@@ -8221,6 +8509,8 @@ describe('TerminalPanel', () => {
     expect(ctrlEvent.defaultPrevented).toBe(true);
     const searchInput = host.querySelector('input[placeholder="Search..."]') as HTMLInputElement | null;
     expect(searchInput).toBeTruthy();
+    expect(terminalTargetListener).not.toHaveBeenCalled();
+    expect(ancestorBubbleListener).not.toHaveBeenCalled();
   });
 
   it('renders terminal sessions in a floe sidebar instead of tabs', async () => {
@@ -8267,11 +8557,15 @@ describe('TerminalPanel', () => {
     render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
-    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
-    expect(terminalSurface).toBeTruthy();
+    const terminalInput = host.querySelector('textarea[aria-label="Terminal input"]') as HTMLTextAreaElement | null;
+    expect(terminalInput).toBeTruthy();
+    const terminalTargetListener = vi.fn((keyboardEvent: KeyboardEvent) => keyboardEvent.stopPropagation());
+    const ancestorBubbleListener = vi.fn();
+    terminalInput!.addEventListener('keydown', terminalTargetListener);
+    host.addEventListener('keydown', ancestorBubbleListener);
     expect(host.querySelector('[data-testid="terminal-status-bar"]')?.textContent).toContain('Session: session-1');
 
-    const event = dispatchTerminalKeydown(terminalSurface!, {
+    const event = dispatchTerminalKeydown(terminalInput!, {
       ctrlKey: true,
       key: '2',
     });
@@ -8283,6 +8577,8 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     expect(event.defaultPrevented).toBe(true);
+    expect(terminalTargetListener).not.toHaveBeenCalled();
+    expect(ancestorBubbleListener).not.toHaveBeenCalled();
     expect(findTerminalTab(host, 'Terminal 2')?.dataset.terminalSessionActive).toBe('true');
     expect(host.querySelector('[data-testid="terminal-status-bar"]')?.textContent).toContain('Session: session-2');
     expect(host.querySelector('[data-terminal-deferred-surface="true"]')).toBeNull();
@@ -8293,6 +8589,15 @@ describe('TerminalPanel', () => {
 
     expect(host.querySelector('[data-terminal-deferred-surface="true"]')).toBeNull();
     expect(terminalCoreInstances).toHaveLength(2);
+
+    const repeatEvent = dispatchTerminalKeydown(terminalInput!, {
+      ctrlKey: true,
+      key: '2',
+      repeat: true,
+    });
+    expect(repeatEvent.defaultPrevented).toBe(true);
+    expect(terminalTargetListener).not.toHaveBeenCalled();
+    expect(ancestorBubbleListener).not.toHaveBeenCalled();
   });
 
   it('keeps rapid terminal digit shortcuts visually on the final tab without mounting skipped tabs', async () => {
@@ -8414,10 +8719,14 @@ describe('TerminalPanel', () => {
     render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
-    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
-    expect(terminalSurface).toBeTruthy();
+    const terminalInput = host.querySelector('textarea[aria-label="Terminal input"]') as HTMLTextAreaElement | null;
+    expect(terminalInput).toBeTruthy();
+    const terminalTargetListener = vi.fn((event: KeyboardEvent) => event.stopPropagation());
+    const ancestorBubbleListener = vi.fn();
+    terminalInput!.addEventListener('keydown', terminalTargetListener);
+    host.addEventListener('keydown', ancestorBubbleListener);
 
-    const event = dispatchTerminalKeydown(terminalSurface!, {
+    const event = dispatchTerminalKeydown(terminalInput!, {
       ctrlKey: true,
       key: '9',
     });
@@ -8425,6 +8734,8 @@ describe('TerminalPanel', () => {
 
     expect(event.defaultPrevented).toBe(false);
     expect(host.querySelector('[data-testid="terminal-status-bar"]')?.textContent).toContain('Session: session-1');
+    expect(terminalTargetListener).toHaveBeenCalledTimes(1);
+    expect(ancestorBubbleListener).not.toHaveBeenCalled();
   });
 
   it('does not steal shifted primary digit shortcuts from shell navigation commands', async () => {
@@ -8453,10 +8764,14 @@ describe('TerminalPanel', () => {
     render(() => <TerminalPanel variant="workbench" />, host);
     await settleTerminalPanel();
 
-    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
-    expect(terminalSurface).toBeTruthy();
+    const terminalInput = host.querySelector('textarea[aria-label="Terminal input"]') as HTMLTextAreaElement | null;
+    expect(terminalInput).toBeTruthy();
+    const terminalTargetListener = vi.fn((keyboardEvent: KeyboardEvent) => keyboardEvent.stopPropagation());
+    const ancestorBubbleListener = vi.fn();
+    terminalInput!.addEventListener('keydown', terminalTargetListener);
+    host.addEventListener('keydown', ancestorBubbleListener);
 
-    const event = dispatchTerminalKeydown(terminalSurface!, {
+    const event = dispatchTerminalKeydown(terminalInput!, {
       ctrlKey: true,
       shiftKey: true,
       key: '1',
@@ -8465,6 +8780,45 @@ describe('TerminalPanel', () => {
 
     expect(event.defaultPrevented).toBe(false);
     expect(host.querySelector('[data-testid="terminal-status-bar"]')?.textContent).toContain('Session: session-1');
+    expect(terminalTargetListener).toHaveBeenCalledTimes(1);
+    expect(ancestorBubbleListener).not.toHaveBeenCalled();
+  });
+
+  it('preserves modified, composing, and wrong-platform digit shortcuts from a real terminal input', async () => {
+    setNavigatorUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15');
+    terminalSessionsState.sessions = [
+      terminalSessionsState.sessions[0]!,
+      {
+        id: 'session-2',
+        name: 'Terminal 2',
+        workingDir: '/workspace/repo',
+        createdAtMs: 2,
+        isActive: false,
+        lastActiveAtMs: 5,
+      },
+    ];
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    const terminalInput = host.querySelector('textarea[aria-label="Terminal input"]') as HTMLTextAreaElement | null;
+    expect(terminalInput).toBeTruthy();
+    const terminalTargetListener = vi.fn((event: KeyboardEvent) => event.stopPropagation());
+    terminalInput!.addEventListener('keydown', terminalTargetListener);
+
+    const events = [
+      dispatchTerminalKeydown(terminalInput!, { metaKey: true, altKey: true, key: '2' }),
+      dispatchTerminalKeydown(terminalInput!, { metaKey: true, ctrlKey: true, key: '2' }),
+      dispatchTerminalKeydown(terminalInput!, { metaKey: true, shiftKey: true, key: '2' }),
+      dispatchTerminalKeydown(terminalInput!, { metaKey: true, key: '2', isComposing: true }),
+      dispatchTerminalKeydown(terminalInput!, { ctrlKey: true, key: '2' }),
+      dispatchTerminalKeydown(terminalInput!, { metaKey: true, key: '9' }),
+    ];
+
+    expect(events.every((event) => !event.defaultPrevented)).toBe(true);
+    expect(terminalTargetListener).toHaveBeenCalledTimes(events.length);
+    expect(findActiveTerminalTab(host)?.textContent).toContain('Terminal 1');
   });
 
   it('keeps controlled workbench tab visuals instant while parent group state catches up', async () => {
@@ -8550,15 +8904,18 @@ describe('TerminalPanel', () => {
     expect(findActiveTerminalTab(panelA!)?.textContent).toContain('Terminal 1');
     expect(findActiveTerminalTab(panelB!)?.textContent).toContain('Terminal 3');
 
-    const terminalSurface = panelA?.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
-    expect(terminalSurface).toBeTruthy();
+    const terminalInput = panelA?.querySelector('textarea[aria-label="Terminal input"]') as HTMLTextAreaElement | null;
+    expect(terminalInput).toBeTruthy();
+    const terminalTargetListener = vi.fn((event: KeyboardEvent) => event.stopPropagation());
+    terminalInput!.addEventListener('keydown', terminalTargetListener);
 
-    const event = dispatchTerminalKeydown(terminalSurface!, {
+    const event = dispatchTerminalKeydown(terminalInput!, {
       ctrlKey: true,
       key: '2',
     });
 
     expect(event.defaultPrevented).toBe(true);
+    expect(terminalTargetListener).not.toHaveBeenCalled();
     expect(groupStateSpy).not.toHaveBeenCalled();
     expect(findActiveTerminalTab(panelA!)?.textContent).toContain('Terminal 2');
     expect(findActiveTerminalTab(panelB!)?.textContent).toContain('Terminal 3');
