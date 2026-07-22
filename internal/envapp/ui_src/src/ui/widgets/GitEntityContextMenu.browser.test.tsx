@@ -13,6 +13,7 @@ import {
   createGitEntityContextMenuController,
   type GitContextMenuActionItem,
 } from './GitEntityContextMenu';
+import { FLOATING_CONTEXT_MENU_WIDTH_PX } from './FloatingContextMenu';
 import { PreviewWindow } from './PreviewWindow';
 
 const renderDisposers: Array<() => void> = [];
@@ -191,9 +192,17 @@ describe('GitEntityContextMenu browser behavior', () => {
     expect(menuRect.top).toBeGreaterThanOrEqual(surfaceRect.top - 1);
     expect(menuRect.right).toBeLessThanOrEqual(surfaceRect.right + 1);
     expect(menuRect.bottom).toBeLessThanOrEqual(surfaceRect.bottom + 2);
-    expect(menu!.scrollHeight).toBeGreaterThan(menu!.clientHeight);
 
     const menuItems = Array.from(menu!.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'));
+    expect(menu!.classList.contains('min-w-[180px]')).toBe(true);
+    expect(menuRect.width).toBeGreaterThanOrEqual(FLOATING_CONTEXT_MENU_WIDTH_PX - 2);
+    expect(menuRect.width).toBeLessThanOrEqual(FLOATING_CONTEXT_MENU_WIDTH_PX + 2);
+    expect(menu!.scrollWidth).toBeLessThanOrEqual(menu!.clientWidth);
+    expect(menuItems[0]!.classList.contains('items-center')).toBe(true);
+    expect(menuItems[0]!.classList.contains('py-1.5')).toBe(true);
+    expect(menuItems[0]!.classList.contains('min-h-9')).toBe(false);
+    expect(menuItems[0]!.getBoundingClientRect().height).toBeLessThanOrEqual(32);
+    expect(menu!.scrollHeight).toBeLessThanOrEqual(menu!.clientHeight);
     expect(document.activeElement).toBe(menuItems[0]);
     menuItems[0]!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
     expect(document.activeElement).toBe(menuItems[1]);
@@ -293,7 +302,7 @@ describe('GitEntityContextMenu browser behavior', () => {
     expect(menuRect.top).toBeGreaterThanOrEqual(boundaryRect.top - 1);
     expect(menuRect.right).toBeLessThanOrEqual(boundaryRect.right + 1);
     expect(menuRect.bottom).toBeLessThanOrEqual(boundaryRect.bottom + 1);
-    expect(menu!.scrollHeight).toBeGreaterThan(menu!.clientHeight);
+    expect(menu!.scrollHeight).toBeLessThanOrEqual(menu!.clientHeight);
 
     const firstAction = menu!.querySelector<HTMLButtonElement>('[role="menuitem"]')!;
     firstAction.dispatchEvent(new KeyboardEvent('keydown', {

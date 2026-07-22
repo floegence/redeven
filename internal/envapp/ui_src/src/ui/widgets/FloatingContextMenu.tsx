@@ -41,11 +41,9 @@ export interface FloatingContextMenuProps {
   focusAnchor?: HTMLElement | null;
   boundarySize?: Readonly<{ width: number; height: number }>;
   width?: number;
-  estimatedActionHeight?: number;
   focusDisabledItems?: boolean;
   restoreFocusOnEscape?: boolean;
   restoreFocusOnTab?: boolean;
-  roomy?: boolean;
   items: readonly FloatingContextMenuItem[];
   menuRef?: (el: HTMLDivElement) => void;
   onDismiss: (reason: MenuDismissReason) => void;
@@ -94,7 +92,7 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
         width: props.width ?? FLOATING_CONTEXT_MENU_WIDTH_PX,
         height: FLOATING_CONTEXT_MENU_VERTICAL_PADDING_PX
           + Math.max(1, props.items.filter((item) => item.kind === 'action').length)
-            * (props.estimatedActionHeight ?? FLOATING_CONTEXT_MENU_ACTION_HEIGHT_PX)
+            * FLOATING_CONTEXT_MENU_ACTION_HEIGHT_PX
           + props.items.filter((item) => item.kind === 'separator').length
             * FLOATING_CONTEXT_MENU_SEPARATOR_HEIGHT_PX,
       }}
@@ -142,13 +140,9 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
           const disabledDescriptionID = item.disabledReason
             ? `${disabledDescriptionPrefix}-disabled-${index()}`
             : undefined;
-          const itemClass = props.roomy
-            ? item.destructive
-              ? 'w-full min-h-9 flex items-start gap-2 px-3 py-2 text-xs cursor-pointer transition-colors duration-75 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:opacity-40 text-destructive hover:bg-destructive/10 hover:text-destructive focus-visible:bg-destructive/10 focus-visible:text-destructive'
-              : 'w-full min-h-9 flex items-start gap-2 px-3 py-2 text-xs cursor-pointer transition-colors duration-75 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:opacity-40 hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground'
-            : item.destructive
-              ? 'w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:opacity-40 text-destructive hover:bg-destructive/10 hover:text-destructive focus-visible:bg-destructive/10 focus-visible:text-destructive'
-              : 'w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:opacity-40 hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground';
+          const itemClass = item.destructive
+            ? 'w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:opacity-40 text-destructive hover:bg-destructive/10 hover:text-destructive focus-visible:bg-destructive/10 focus-visible:text-destructive'
+            : 'w-full flex items-center gap-2 px-3 py-1.5 text-xs cursor-pointer transition-colors duration-75 focus:outline-none disabled:cursor-not-allowed disabled:opacity-40 aria-disabled:cursor-not-allowed aria-disabled:opacity-40 hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground';
           return (
             <button
               type="button"
@@ -157,13 +151,13 @@ export const FloatingContextMenu: Component<FloatingContextMenuProps> = (props) 
               disabled={itemDisabled && !focusableDisabled}
               aria-disabled={focusableDisabled ? 'true' : undefined}
               aria-describedby={disabledDescriptionID}
-              title={item.disabledReason}
+              title={item.disabledReason || (props.width ? item.label : undefined)}
               onClick={() => {
                 if (!itemDisabled) item.onSelect();
               }}
             >
-              <Icon class={props.roomy ? 'mt-0.5 w-3.5 h-3.5 shrink-0 opacity-60' : 'w-3.5 h-3.5 opacity-60'} />
-              <span class={props.roomy ? 'min-w-0 flex-1 whitespace-normal break-words text-left leading-4' : 'flex-1 text-left'}>{item.label}</span>
+              <Icon class="w-3.5 h-3.5 opacity-60" />
+              <span class={props.width ? 'min-w-0 flex-1 truncate text-left' : 'flex-1 text-left'}>{item.label}</span>
               {item.disabledReason ? (
                 <span id={disabledDescriptionID} class="sr-only">{item.disabledReason}</span>
               ) : null}

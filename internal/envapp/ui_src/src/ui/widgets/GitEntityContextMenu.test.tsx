@@ -111,7 +111,6 @@ describe('FloatingContextMenu keyboard contract', () => {
         y={24}
         ariaLabel="Git actions"
         focusDisabledItems
-        roomy
         items={items}
         onDismiss={() => undefined}
       />
