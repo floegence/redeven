@@ -9,8 +9,9 @@ Usage:
   ./scripts/check_desktop_redevplugin_package.sh --package <file> --runtime-target <goos/arch> --write-receipt <file>
 
 Inspects a native Redeven Desktop installer on its builder platform, verifies
-the embedded Redeven, Gateway, and ReDevPlugin runtime target identities, and
-writes a receipt bound to the exact installer bytes.
+the Redeven and Gateway target identities, verifies the product-built
+ReDevPlugin runtime on Linux or its required absence on Darwin, and writes a
+receipt bound to the exact installer bytes.
 USAGE
 }
 
@@ -129,10 +130,9 @@ assert_go_binary_target() {
 publish_receipt() {
   local package_path="$1"
   local package_name="$2"
-  local runtime_path="$3"
-  local marker_path="$4"
-  local notices_path="$5"
-  local receipt_path="$6"
+  local runtime_dir="$3"
+  local receipt_path="$4"
+  local has_runtime="$5"
   local receipt_dir receipt_name temporary
 
   receipt_dir=$(dirname -- "$receipt_path")
@@ -146,32 +146,41 @@ publish_receipt() {
     PACKAGE_SHA256=$(hash_file "$package_path") \
     PACKAGE_SIZE=$(wc -c <"$package_path" | tr -d ' ') \
     RUNTIME_TARGET="$RUNTIME_TARGET" \
-    RUNTIME_SHA256=$(hash_file "$runtime_path") \
-    RUNTIME_SIZE=$(wc -c <"$runtime_path" | tr -d ' ') \
-    MARKER_SHA256=$(hash_file "$marker_path") \
-    NOTICES_SHA256=$(hash_file "$notices_path") \
+    RUNTIME_DIR="$runtime_dir" \
+    HAS_RUNTIME="$has_runtime" \
     RECEIPT_OUT="$temporary" \
     node <<'NODE'
-const { writeFileSync } = require("node:fs");
+const { createHash } = require("node:crypto");
+const { readFileSync, statSync, writeFileSync } = require("node:fs");
+const { join } = require("node:path");
 const integer = (name) => {
   const value = Number(process.env[name]);
   if (!Number.isSafeInteger(value) || value <= 0) throw new Error(`${name} must be a positive safe integer`);
   return value;
 };
+const descriptor = (name) => {
+  const path = join(process.env.RUNTIME_DIR, name);
+  const bytes = readFileSync(path);
+  return { sha256: createHash("sha256").update(bytes).digest("hex"), size: statSync(path).size };
+};
+const hasRuntime = process.env.HAS_RUNTIME === "1";
 writeFileSync(process.env.RECEIPT_OUT, `${JSON.stringify({
-  schema_version: "redeven.desktop_redevplugin_package_verification.v1",
+  schema_version: "redeven.desktop_redevplugin_package_verification.v2",
   package: {
     name: process.env.PACKAGE_NAME,
     sha256: process.env.PACKAGE_SHA256,
     size: integer("PACKAGE_SIZE"),
   },
   runtime_target: process.env.RUNTIME_TARGET,
-  redevplugin_runtime: {
-    sha256: process.env.RUNTIME_SHA256,
-    size: integer("RUNTIME_SIZE"),
-  },
-  marker_sha256: process.env.MARKER_SHA256,
-  notices_sha256: process.env.NOTICES_SHA256,
+  redevplugin_runtime: hasRuntime ? descriptor("redevplugin-runtime") : null,
+  redevplugin_evidence: hasRuntime ? {
+    marker: descriptor(".redevplugin-release-artifacts-verified.json"),
+    notices: descriptor("REDEVPLUGIN_THIRD_PARTY_NOTICES.md"),
+    sbom: descriptor("REDEVPLUGIN_RUNTIME.spdx.json"),
+    provenance: descriptor("redevplugin-runtime.provenance.json"),
+    signature: descriptor("redevplugin-runtime.sig"),
+    certificate: descriptor("redevplugin-runtime.pem"),
+  } : null,
 }, null, 2)}\n`);
 NODE
   chmod 0644 "$temporary"
@@ -248,12 +257,9 @@ case "$PACKAGE_PATH" in
 esac
 
 [[ -d "$runtime_dir" && ! -L "$runtime_dir" ]] || die "installer is missing the exact runtime directory"
-runtime_path="$runtime_dir/redevplugin-runtime"
 redeven_path="$runtime_dir/redeven"
 gateway_path="$runtime_dir/redeven-gateway"
-marker_path="$runtime_dir/.redevplugin-release-artifacts-verified.json"
-notices_path="$runtime_dir/REDEVPLUGIN_THIRD_PARTY_NOTICES.md"
-for required in "$redeven_path" "$gateway_path" "$marker_path" "$notices_path"; do
+for required in "$redeven_path" "$gateway_path"; do
   [[ -f "$required" && ! -L "$required" ]] || die "installer is missing a required regular runtime file: $(basename -- "$required")"
 done
 
@@ -261,8 +267,29 @@ goos=${RUNTIME_TARGET%/*}
 goarch=${RUNTIME_TARGET#*/}
 assert_go_binary_target "$redeven_path" "$goos" "$goarch" "Redeven runtime"
 assert_go_binary_target "$gateway_path" "$goos" "$goarch" "Redeven Gateway"
-"$SCRIPT_DIR/check_redevplugin_consumption_gate.sh" \
-  --scan-root "$runtime_dir" \
-  --runtime-target "$RUNTIME_TARGET"
-publish_receipt "$PACKAGE_PATH" "$package_name" "$runtime_path" "$marker_path" "$notices_path" "$RECEIPT_PATH"
-echo "[INFO] Desktop installer ReDevPlugin runtime verified: $PACKAGE_PATH"
+if [[ "$goos" == "linux" ]]; then
+  for required_name in \
+    redevplugin-runtime \
+    .redevplugin-release-artifacts-verified.json \
+    REDEVPLUGIN_THIRD_PARTY_NOTICES.md \
+    REDEVPLUGIN_RUNTIME.spdx.json \
+    redevplugin-runtime.provenance.json \
+    redevplugin-runtime.sig \
+    redevplugin-runtime.pem; do
+    required="$runtime_dir/$required_name"
+    [[ -f "$required" && ! -L "$required" ]] || die "installer is missing a required ReDevPlugin file: $required_name"
+  done
+  "$SCRIPT_DIR/check_redevplugin_consumption_gate.sh" \
+    --scan-root "$runtime_dir" \
+    --runtime-target "$RUNTIME_TARGET" \
+    --require-release
+  publish_receipt "$PACKAGE_PATH" "$package_name" "$runtime_dir" "$RECEIPT_PATH" 1
+  echo "[INFO] Desktop installer ReDevPlugin runtime verified: $PACKAGE_PATH"
+else
+  "$SCRIPT_DIR/check_redevplugin_consumption_gate.sh" \
+    --scan-root "$runtime_dir" \
+    --runtime-target "$RUNTIME_TARGET" \
+    --require-release
+  publish_receipt "$PACKAGE_PATH" "$package_name" "$runtime_dir" "$RECEIPT_PATH" 0
+  echo "[INFO] Desktop installer correctly omits ReDevPlugin runtime: $PACKAGE_PATH"
+fi

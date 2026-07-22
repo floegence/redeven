@@ -1,13 +1,14 @@
 {
   "source_id": "redeven-official",
+  "channel": "stable",
   "release_metadata_ref": "plugins/com.redeven.official/com.redeven.official.containers/2.0.0/release.json",
-  "release_metadata_sha256": "752b084c8bf805631fa96c3cb2c6e0372675e64bc468f11e812bdb0a6facc0a2",
+  "release_metadata_sha256": "d010f94b1435a74159c037af1a6e4cc32e3f96a7fd3660acca1cc9f074e7ce9a",
   "publisher_id": "com.redeven.official",
   "plugin_id": "com.redeven.official.containers",
   "version": "2.0.0",
   "expected_hashes": {
-    "package_sha256": "sha256:8ecf6c0d206ee557c5528e2192b2594b5d097912b83028d43ff1336532b06d13",
-    "manifest_sha256": "sha256:f96534ca709165d0e30f6e7713a57ec0754f84f84ccadc2edc000f19dde7cc3d",
-    "entries_sha256": "sha256:8a0048517719d934e52406dc6e9964d9ca165728d3e530d2c4df16f619bf17fa"
+    "package_sha256": "sha256:2609ee8ecf0d993f3e4b0456fb5d28160849566a49ede1c78ca15e6cb5384926",
+    "manifest_sha256": "sha256:431cc3c9a005a38d86c6947e2bf2501be02870361ac285bedf4157cecc6a6ef2",
+    "entries_sha256": "sha256:fa6efbcef0e2065f52a609acd1c4ca4b3e15e308975738260088c1066a6c4b34"
   }
 }

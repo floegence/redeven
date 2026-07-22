@@ -36,7 +36,7 @@ export function createRedevenPluginPlatform(options: Readonly<{
   return {
     client,
     close() {
-      closePromise ??= client.revokeSurfaceScope().then(() => undefined);
+      closePromise ??= client.revokeSessionScope().then(() => undefined);
       return closePromise;
     },
   };

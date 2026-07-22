@@ -8,10 +8,10 @@ timestamp: 2026-07-19T00:00:00Z
 # Summary
 
 Plugin UI is a released ReDevPlugin sandbox surface inside Redeven chrome.
-Plugin Panel and Plugin Center are present in production builds, but the
-feature is not releasable on v0.5.1. Activity's catalog GET cannot satisfy the
-required browser Origin contract, and Workbench lacks a cross-iframe
-interaction ownership contract. Redeven owns navigation and placement;
+Plugin Panel, Plugin Center, and Activity placement use the releasable v0.6.5
+POST query and durable session-scope contracts. Workbench remains unavailable
+because it lacks a cross-iframe interaction ownership contract. Redeven owns
+navigation and placement;
 ReDevPlugin owns iframe bootstrap, first commit, bridge, lifecycle, RPC,
 confirmation tokens, streams, and surface revocation.
 
@@ -85,17 +85,13 @@ unknown outcome invalidates the shared scope; Redeven then performs local-only
 slot disposal and clears placement state. A failed local quiesce cannot block a
 security mutation. Shell disposal cancels pending reads and confirmations and
 revokes the shared scope. Read-authorized sessions may dispose the surfaces they
-could open. Full disconnected-session teardown is
-not declared complete because v0.5.1 does not cancel every exact-scope
-execution, stream, confirmation, and handle grant. Redeven must not hide that
-upstream gap behind best-effort local cleanup.
+could open. Disconnected-session teardown uses the released durable four-hash
+fence and drain, and authenticated session removal waits for exact completion.
 
-The generated catalog call is currently a GET. A real same-origin browser GET
-does not carry Origin, so v0.5.1's mandatory `ValidateOrigin` denies the first
-inventory request. Built-renderer mocks prove packaging only, not this HTTP
-contract. Activity cannot be declared accepted until a formal upstream release
-provides a browser-executable request with explicit origin and CSRF semantics.
-Redeven must not add an alternate endpoint, forge Origin, or relax the guard.
+Generated browser reads are POST queries. Same-origin requests therefore carry
+the exact Origin required by the released guard while preserving CSRF, route
+action, and query-effect authorization. Redeven does not add an alternate
+endpoint, forge Origin, or relax the guard.
 
 ## Confirmation UX
 
@@ -116,7 +112,7 @@ display secret params.
 Workbench wrapper markers alone cannot route events that occur inside an opaque
 iframe. Unselected-widget canvas wheel, selected-widget local wheel, iframe text
 selection, actions, and click activation cannot all be correct without a
-source/port-bound SDK interaction callback. ReDevPlugin `v0.5.1` has no such
+source/port-bound SDK interaction callback. ReDevPlugin `v0.6.5` has no such
 public callback.
 
 Redeven therefore rejects Workbench plugin placement. It must not use an
@@ -143,7 +139,7 @@ tokens, serve plugin assets, or call business adapters directly.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginPlatform.ts:1` - Implements canonical transport and serialized slot coordination.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginSurfaceFrame.tsx:1` - Mounts only an SDK slot and projects lifecycle visibility.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginConfirmationQueue.tsx:1` - Implements abort-aware FIFO confirmation UX.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1` - Uses generated v0.5.1 lifecycle DTOs and signed release refs.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1` - Uses generated v0.6.5 lifecycle DTOs and signed release refs.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.ts:1` - Matches exact official identity and management revision.
 - `redeven:internal/envapp/ui_src/scripts/checkPackagedRenderer.mjs:1` - Requires Plugin discovery in the built renderer.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginPlatform.test.ts:1` - Covers canonical fetch and close-before-open ordering.

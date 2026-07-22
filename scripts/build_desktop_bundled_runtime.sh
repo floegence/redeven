@@ -114,6 +114,13 @@ assert_go_binary_target() {
 bundle_from_tarball() {
   local tarball_path="$1"
   local bundle_dir="$2"
+  local goos="$3"
+  local allow_args=(
+    --allow-file redeven
+    --allow-file LICENSE
+    --allow-file THIRD_PARTY_NOTICES.md
+  )
+  local max_files=3
 
   if [ ! -f "$tarball_path" ]; then
     ui_pkg_die "desktop bundle tarball not found: $tarball_path"
@@ -125,32 +132,46 @@ bundle_from_tarball() {
   ui_pkg_log "Preparing desktop bundled runtime from release tarball..."
   ui_pkg_log "TARBALL: $tarball_path"
 
+  if [[ "$goos" == "linux" ]]; then
+    allow_args+=(
+      --allow-file redevplugin-runtime
+      --allow-file REDEVPLUGIN_THIRD_PARTY_NOTICES.md
+      --allow-file REDEVPLUGIN_RUNTIME.spdx.json
+      --allow-file redevplugin-runtime.provenance.json
+      --allow-file redevplugin-runtime.sig
+      --allow-file redevplugin-runtime.pem
+      --allow-file .redevplugin-release-artifacts-verified.json
+    )
+    max_files=10
+  fi
   "$SCRIPT_DIR/safe_extract_tar.py" \
     --archive "$tarball_path" \
     --dest "$bundle_dir" \
-    --allow-file redeven \
-    --allow-file redevplugin-runtime \
-    --allow-file REDEVPLUGIN_THIRD_PARTY_NOTICES.md \
-    --allow-file .redevplugin-release-artifacts-verified.json \
-    --allow-file LICENSE \
-    --allow-file THIRD_PARTY_NOTICES.md \
-    --max-files 6 \
+    "${allow_args[@]}" \
+    --max-files "$max_files" \
     --max-total-bytes 268435456
 }
 
 assert_bundle_inventory() {
   local bundle_dir="$1"
   local from_archive="$2"
-  BUNDLE_DIR="$bundle_dir" FROM_ARCHIVE="$from_archive" node <<'NODE'
+  local goos="$3"
+  BUNDLE_DIR="$bundle_dir" FROM_ARCHIVE="$from_archive" BUNDLE_GOOS="$goos" node <<'NODE'
 const { lstatSync, readdirSync } = require("node:fs");
 const { join } = require("node:path");
 const expected = [
-  ".redevplugin-release-artifacts-verified.json",
-  "REDEVPLUGIN_THIRD_PARTY_NOTICES.md",
   "redeven",
   "redeven-gateway",
-  "redevplugin-runtime",
 ];
+if (process.env.BUNDLE_GOOS === "linux") expected.push(
+  ".redevplugin-release-artifacts-verified.json",
+  "REDEVPLUGIN_RUNTIME.spdx.json",
+  "REDEVPLUGIN_THIRD_PARTY_NOTICES.md",
+  "redevplugin-runtime",
+  "redevplugin-runtime.pem",
+  "redevplugin-runtime.provenance.json",
+  "redevplugin-runtime.sig",
+);
 if (process.env.FROM_ARCHIVE === "1") expected.push("LICENSE", "THIRD_PARTY_NOTICES.md");
 expected.sort();
 const actual = readdirSync(process.env.BUNDLE_DIR).sort();
@@ -215,7 +236,7 @@ stage_redevplugin_runtime() {
   local tmpdir
 
   tmpdir="$(mktemp -d)"
-  ui_pkg_log "Staging verified ReDevPlugin v0.5.1 runtime for desktop bundle..."
+  ui_pkg_log "Building the verified ReDevPlugin runtime from published source crates..."
   if ! "$SCRIPT_DIR/stage_redevplugin_release_artifacts.sh" \
     --dest-dir "$tmpdir/redevplugin-release" \
     --redeven-goos "$goos" \
@@ -303,13 +324,15 @@ main() {
     from_archive=1
     assert_tarball_target "$tarball_path" "$goos" "$goarch" "Redeven runtime archive"
     assert_tarball_target "$gateway_tarball_path" "$goos" "$goarch" "Redeven Gateway archive"
-    bundle_from_tarball "$tarball_path" "$working_bundle"
+    bundle_from_tarball "$tarball_path" "$working_bundle" "$goos"
     bundle_gateway_from_tarball "$gateway_tarball_path" "$working_bundle"
   else
     from_archive=0
     mkdir -p "$working_bundle"
     bundle_from_source "$goos" "$goarch" "$working_bundle_path" "$working_gateway_path"
-    stage_redevplugin_runtime "$working_bundle" "$goos" "$goarch"
+    if [[ "$goos" == "linux" ]]; then
+      stage_redevplugin_runtime "$working_bundle" "$goos" "$goarch"
+    fi
   fi
 
   if [ ! -f "$working_bundle_path" ]; then
@@ -319,7 +342,7 @@ main() {
     ui_pkg_die "desktop bundled Gateway not found after preparation: $working_gateway_path"
   fi
 
-  assert_bundle_inventory "$working_bundle" "$from_archive"
+  assert_bundle_inventory "$working_bundle" "$from_archive" "$goos"
   assert_go_binary_target "$working_bundle_path" "$goos" "$goarch" "Redeven runtime"
   assert_go_binary_target "$working_gateway_path" "$goos" "$goarch" "Redeven Gateway"
   "$SCRIPT_DIR/check_redevplugin_consumption_gate.sh" \

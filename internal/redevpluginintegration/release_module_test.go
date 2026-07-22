@@ -9,43 +9,31 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionhop"
 	redevpluginartifacts "github.com/floegence/redeven/spec/redevplugin"
 	"github.com/floegence/redevplugin/pkg/host"
+	"github.com/floegence/redevplugin/pkg/pluginpkg"
 	"github.com/floegence/redevplugin/pkg/registry"
+	"github.com/floegence/redevplugin/pkg/releasecontract"
+	"github.com/floegence/redevplugin/pkg/releasetrust"
 )
 
 func TestOfficialReleaseModuleIsCompleteAndClosed(t *testing.T) {
-	verifier, err := newPackageTrustVerifier()
+	module, ref, closeTrust, err := newOfficialReleaseModule(filepath.Join(t.TempDir(), "trust"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	module, ref, err := newOfficialReleaseModule(verifier)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if module.ReleaseMetadataVerifier == nil || module.RevocationVerifier == nil || module.ReleaseSourcePolicy == nil ||
-		module.ReleaseArtifactResolver == nil || module.HostRequirements == nil || module.CapabilityContractArtifacts == nil || module.CapabilityContractKeys == nil {
+	t.Cleanup(func() { _ = closeTrust() })
+	if module.Trust == nil || module.ReleaseArtifactResolver == nil || module.HostRequirements == nil || module.CapabilityContractArtifacts == nil {
 		t.Fatalf("release module is incomplete: %#v", module)
 	}
 
-	now := time.Date(2026, time.July, 19, 12, 0, 0, 0, time.UTC)
-	provider := module.ReleaseSourcePolicy.(*officialReleaseProvider)
-	policy, err := provider.ResolveReleaseSourcePolicy(context.Background(), host.ReleaseSourcePolicyRequest{
-		Action: host.PackageTrustActionInstall, ReleaseRef: ref, Now: now,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if policy.SourceType != host.PackageSourceHostArtifact || policy.SourceClass != host.PackageSourceClassOfficial ||
-		policy.AssessedAt != now.Format(time.RFC3339) || policy.RevocationEvidence == nil || policy.RevocationEvidence.VerifiedAt != now.Format(time.RFC3339) {
-		t.Fatalf("official source policy = %#v", policy)
-	}
+	provider := module.ReleaseArtifactResolver.(*officialReleaseProvider)
+	policy := provider.sourcePolicy
 	artifact, err := provider.ResolveReleaseArtifact(context.Background(), host.ReleaseArtifactResolveRequest{
-		Action: host.PackageTrustActionInstall, ReleaseRef: ref, SourcePolicySnapshot: policy,
+		Action: host.PackageTrustActionInstall, ReleaseRef: ref, SourcePolicy: policy,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -56,8 +44,8 @@ func TestOfficialReleaseModuleIsCompleteAndClosed(t *testing.T) {
 
 	tampered := ref
 	tampered.ReleaseMetadataSHA256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
-	if _, err := provider.ResolveReleaseSourcePolicy(context.Background(), host.ReleaseSourcePolicyRequest{
-		Action: host.PackageTrustActionInstall, ReleaseRef: tampered, Now: now,
+	if _, err := provider.ResolveReleaseArtifact(context.Background(), host.ReleaseArtifactResolveRequest{
+		Action: host.PackageTrustActionInstall, ReleaseRef: tampered, SourcePolicy: policy,
 	}); !errors.Is(err, host.ErrReleaseRefVerificationFailed) {
 		t.Fatalf("tampered release error = %v", err)
 	}
@@ -66,16 +54,18 @@ func TestOfficialReleaseModuleIsCompleteAndClosed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	key, err := provider.ResolveCapabilityContractKey(context.Background(), host.CapabilityContractKeyRequest{
-		SourceID: officialReleaseSourceID, PublisherID: officialPublisherID, KeyID: officialSigningKeyID, SourcePolicySnapshot: policy,
+	resolved, err := provider.ResolveCapabilityContract(context.Background(), host.CapabilityContractResolveRequest{
+		SourceID: officialReleaseSourceID, PluginPublisherID: officialPublisherID, Pin: bundle.Pin, SourcePolicy: policy,
 	})
-	if err != nil || len(key) != 32 {
-		t.Fatalf("capability key size = %d, err=%v", len(key), err)
+	if err != nil || resolved.Artifacts == nil {
+		t.Fatalf("embedded capability artifact resolution error = %v", err)
 	}
-	if _, err := provider.ResolveCapabilityContract(context.Background(), host.CapabilityContractResolveRequest{
-		SourceID: officialReleaseSourceID, PluginPublisherID: officialPublisherID, Pin: bundle.Pin, SourcePolicySnapshot: policy,
-	}); !errors.Is(err, errCapabilityArtifactProvenanceUnavailable) {
-		t.Fatalf("embedded capability cache-miss error = %v", err)
+	file, err := resolved.Artifacts.OpenCapabilityContractArtifact(context.Background(), bundle.Pin.ArtifactRef)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if file.Size <= 0 || len(file.FetchChain) != 0 {
+		t.Fatalf("embedded capability artifact evidence = %#v", file)
 	}
 }
 
@@ -84,10 +74,10 @@ func TestOfficialReleaseProviderReturnsOwnedArtifactBytes(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	policy := provider.sourcePolicy(time.Date(2026, time.July, 19, 12, 0, 0, 0, time.UTC))
+	policy := provider.sourcePolicy
 	resolve := func() host.ResolvedPackageArtifact {
 		artifact, err := provider.ResolveReleaseArtifact(context.Background(), host.ReleaseArtifactResolveRequest{
-			Action: host.PackageTrustActionInstall, ReleaseRef: provider.release.Ref, SourcePolicySnapshot: policy,
+			Action: host.PackageTrustActionInstall, ReleaseRef: provider.release.Ref, SourcePolicy: policy,
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -100,6 +90,56 @@ func TestOfficialReleaseProviderReturnsOwnedArtifactBytes(t *testing.T) {
 	second := resolve()
 	if bytes.Equal(first.ReleaseMetadataBytes, second.ReleaseMetadataBytes) || bytes.Equal(first.ReleaseMetadataSignature, second.ReleaseMetadataSignature) {
 		t.Fatal("release artifact resolves share mutable byte slices")
+	}
+}
+
+func TestOfficialReleaseTrustChainVerifies(t *testing.T) {
+	module, ref, closeTrust, err := newOfficialReleaseModule(filepath.Join(t.TempDir(), "trust"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = closeTrust() })
+	prepared, err := module.Trust.PrepareRelease(context.Background(), releasetrust.ReleaseIdentity{
+		SourceID:              ref.SourceID,
+		Channel:               ref.Channel,
+		ReleaseMetadataRef:    ref.ReleaseMetadataRef,
+		ReleaseMetadataSHA256: ref.ReleaseMetadataSHA256,
+		PublisherID:           ref.PublisherID,
+		PluginID:              ref.PluginID,
+		Version:               ref.Version,
+	})
+	if err != nil {
+		t.Fatalf("prepare official release trust: %v", err)
+	}
+	provider := module.ReleaseArtifactResolver.(*officialReleaseProvider)
+	artifact, err := provider.ResolveReleaseArtifact(context.Background(), host.ReleaseArtifactResolveRequest{
+		Action: host.PackageTrustActionInstall, ReleaseRef: ref, SourcePolicy: prepared.SourcePolicy(),
+	})
+	if err != nil {
+		t.Fatalf("resolve official release artifact: %v", err)
+	}
+	verifiedMetadata, err := module.Trust.VerifyReleaseMetadata(
+		context.Background(), prepared, artifact.ReleaseMetadataBytes, artifact.ReleaseMetadataSignature,
+	)
+	if err != nil {
+		t.Fatalf("verify official release metadata: %v", err)
+	}
+	pkg, err := pluginpkg.Read(context.Background(), artifact.Reader, artifact.Size, pluginpkg.DefaultReadLimits())
+	if err != nil {
+		t.Fatalf("read official package: %v", err)
+	}
+	if pkg.PackageSignature == nil {
+		t.Fatal("official package signature is missing")
+	}
+	if _, err := module.Trust.VerifyPackage(context.Background(), verifiedMetadata, releasecontract.PackageSignatureV1(*pkg.PackageSignature)); err != nil {
+		t.Fatalf("verify official package: %v", err)
+	}
+	bundle, _, err := redevpluginartifacts.ContainersCapabilityBundle()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := module.Trust.VerifyCapabilityContract(verifiedMetadata, bundle, bundle.Pin); err != nil {
+		t.Fatalf("verify official capability contract: %v", err)
 	}
 }
 
@@ -168,7 +208,7 @@ func TestOfficialContainersReleaseInstallsThroughHTTP(t *testing.T) {
 	if installed.PluginID != officialContainersPluginID || installed.Version != officialContainersVersion || installed.TrustState != registry.TrustVerified {
 		t.Fatalf("installed plugin = %#v", installed)
 	}
-	if installed.Metadata["source.type"] != string(host.PackageSourceHostArtifact) ||
+	if installed.Metadata["source.type"] != "host_artifact" ||
 		installed.Metadata["release.metadata_signature_key_id"] != officialSigningKeyID ||
 		installed.Metadata["release.package_signature_key_id"] != officialSigningKeyID {
 		t.Fatalf("installed release metadata = %#v", installed.Metadata)

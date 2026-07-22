@@ -12,7 +12,7 @@ the plugin identity, permission, confirmation, operation, stream, quota,
 revocation, and audit lifecycle around every call. The active capability is
 `redeven.capability.container_resources@1.0.0`, described by the signed
 `redeven.container_resources.v2@2.0.0` host-capability contract and consumed
-through ReDevPlugin v0.5.1. Requests never enter a Redeven-local manifest,
+through ReDevPlugin v0.6.5. Requests never enter a Redeven-local manifest,
 token, operation, stream, or runtime protocol.
 
 # Contract

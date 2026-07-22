@@ -37,6 +37,10 @@ function writeRuntimeSuite(directory, label, omit = '') {
     ['redeven', `#!/bin/sh\n[ "$1" = version ]\n# ${label}\n`],
     ['redevplugin-runtime', `#!/bin/sh\nexit 0\n# ${label}\n`],
     ['REDEVPLUGIN_THIRD_PARTY_NOTICES.md', `plugin notices ${label}\n`],
+    ['REDEVPLUGIN_RUNTIME.spdx.json', `{"label":"${label}","kind":"sbom"}\n`],
+    ['redevplugin-runtime.provenance.json', `{"label":"${label}","kind":"provenance"}\n`],
+    ['redevplugin-runtime.sig', `signature ${label}\n`],
+    ['redevplugin-runtime.pem', `certificate ${label}\n`],
     ['.redevplugin-release-artifacts-verified.json', `{"label":"${label}"}\n`],
     ['LICENSE', `license ${label}\n`],
     ['THIRD_PARTY_NOTICES.md', `redeven notices ${label}\n`],
@@ -114,6 +118,10 @@ test('atomically activates and verifies the complete versioned ReDevPlugin runti
       'redeven',
       'redevplugin-runtime',
       'REDEVPLUGIN_THIRD_PARTY_NOTICES.md',
+      'REDEVPLUGIN_RUNTIME.spdx.json',
+      'redevplugin-runtime.provenance.json',
+      'redevplugin-runtime.sig',
+      'redevplugin-runtime.pem',
       '.redevplugin-release-artifacts-verified.json',
       'REDEVEN_LICENSE',
       'REDEVEN_THIRD_PARTY_NOTICES.md',
@@ -159,6 +167,36 @@ test('keeps the prior runtime suite active when a replacement is incomplete', ()
     assert.notEqual(rejected.status, 0);
     assert.equal(readlinkSync(path.join(install, 'redeven')), `.redeven-runtime-suites/${firstHash}/redeven`);
     assert.match(readFileSync(path.join(install, 'redeven'), 'utf8'), /first/u);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('atomically activates a Darwin suite only when ReDevPlugin runtime evidence is absent', () => {
+  const root = mkdtempSync(path.join(tmpdir(), 'redeven-installer-contract-'));
+  try {
+    const extracted = path.join(root, 'extracted');
+    const install = path.join(root, 'install');
+    mkdirSync(extracted);
+    mkdirSync(install);
+    writeFileSync(path.join(extracted, 'redeven'), '#!/bin/sh\n[ "$1" = version ]\n');
+    chmodSync(path.join(extracted, 'redeven'), 0o755);
+    writeFileSync(path.join(extracted, 'LICENSE'), 'license\n');
+    writeFileSync(path.join(extracted, 'THIRD_PARTY_NOTICES.md'), 'notices\n');
+    const hash = 'c'.repeat(64);
+    const result = runInstallerLibrary(root, [
+      'REDEVPLUGIN_RUNTIME_REQUIRED=0',
+      `INSTALL_DIR='${install}'`,
+      `REDEVEN_INSTALL_DIR='${install}'`,
+      `SAFE_EXTRACTOR_PATH='${path.join(repositoryRoot, 'scripts', 'safe_extract_tar.py')}'`,
+      `ARCHIVE_SHA256='${hash}'`,
+      `publish_runtime_suite '${extracted}'`,
+      'activate_runtime_suite',
+      'verify_installed_runtime_suite',
+    ].join('\n'));
+    assert.equal(result.status, 0, result.stderr);
+    const suite = path.join(install, '.redeven-runtime-suites', hash);
+    assert.deepEqual(readdirSync(suite).sort(), ['REDEVEN_LICENSE', 'REDEVEN_THIRD_PARTY_NOTICES.md', 'redeven']);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

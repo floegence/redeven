@@ -71,9 +71,17 @@ function loadReleaseArtifactHelpers() {
 
 const bundledRuntimeBinary = resolveBundledRuntimeBinary();
 const bundledGatewayBinary = resolveBundledGatewayBinary();
-const bundledReDevPluginRuntimeBinary = bundledBinaryCandidate('redevplugin-runtime');
-const bundledReDevPluginNotices = bundledBinaryCandidate('REDEVPLUGIN_THIRD_PARTY_NOTICES.md');
-const bundledReDevPluginMarker = bundledBinaryCandidate('.redevplugin-release-artifacts-verified.json');
+const bundledReDevPluginResources = resolveTargetGoos() === 'linux'
+  ? [
+      'redevplugin-runtime',
+      'REDEVPLUGIN_THIRD_PARTY_NOTICES.md',
+      'REDEVPLUGIN_RUNTIME.spdx.json',
+      'redevplugin-runtime.provenance.json',
+      'redevplugin-runtime.sig',
+      'redevplugin-runtime.pem',
+      '.redevplugin-release-artifacts-verified.json',
+    ].map((name) => ({ from: bundledBinaryCandidate(name), to: `bin/${name}` }))
+  : [];
 const { normalizeLinuxDesktopArtifactPaths } = loadReleaseArtifactHelpers();
 
 export default {
@@ -122,18 +130,7 @@ export default {
       from: bundledGatewayBinary,
       to: 'bin/redeven-gateway',
     },
-    {
-      from: bundledReDevPluginRuntimeBinary,
-      to: 'bin/redevplugin-runtime',
-    },
-    {
-      from: bundledReDevPluginNotices,
-      to: 'bin/REDEVPLUGIN_THIRD_PARTY_NOTICES.md',
-    },
-    {
-      from: bundledReDevPluginMarker,
-      to: 'bin/.redevplugin-release-artifacts-verified.json',
-    },
+    ...bundledReDevPluginResources,
     {
       from: path.join(repoRoot, 'LICENSE'),
       to: 'licenses/LICENSE',

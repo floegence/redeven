@@ -36,13 +36,13 @@ worker ownership follows ReDevPlugin `user` or `environment` resource scope.
 Short-lived surfaces, handles, confirmations, operations, streams, and token
 audiences bind all four active hashes. Unknown legacy ownership is not guessed.
 
-Binding is not yet equivalent to complete teardown in v0.5.1. Its surface-scope
-revoke does not atomically fence or cancel every exact-scope operation, stream,
-confirmation, and surface-less handle grant. A disconnected session can
-therefore retain short-lived authority or asynchronous work. This blocks
-release until ReDevPlugin supplies indexed four-hash teardown and Redeven can
-await it before removing the authenticated session. A Redeven-local task map,
-timer, or guessed owner sweep is prohibited.
+Session removal is a durable four-hash teardown. Redeven first persists the
+opaque close operation and proof, then the released coordinator fences new work,
+drains surfaces, tokens, handles, confirmations, operations, streams, runtime
+leases, and shards, and finally validates the exact closed identity. Redeven
+removes authenticated session state only after that acknowledgement and
+reconciles retained fences before reopening runtime authority after restart. A
+Redeven-local task map, timer, or guessed owner sweep is prohibited.
 
 ## HTTP and direct authorization
 
@@ -62,14 +62,12 @@ The released handler then invokes four explicit steps:
 4. `AuthorizeRoute` accepts only a valid closed `RouteAction` permitted by the
    cached session.
 
-This closed policy exposes a v0.5.1 browser contract mismatch. The generated
-catalog method is a same-origin GET, and Chromium does not send Origin for that
-request. JavaScript cannot set the forbidden Origin header. Therefore Activity
-inventory fails closed even with a valid CSRF proof. Redeven must not accept
-Referer or Fetch Metadata as an undocumented substitute, inject Origin, or
-exempt catalog locally. A new formal ReDevPlugin contract and release must
-define a browser-executable request whose origin policy remains explicit and
-conformance-tested.
+Browser-facing reads use released POST query requests. Chromium therefore sends
+the same-origin Origin required by the guard, while CSRF, closed route action,
+and query-effect authorization remain mandatory. Query cancellation is safely
+retryable and carries no mutation outcome. Redeven must not accept Referer or
+Fetch Metadata as an undocumented substitute, inject Origin, or exempt a query
+locally.
 
 The Host `AuthorizationAdapter` separately checks action, canonical resource,
 owner context, and permissions for direct Go calls. An absent or typed-nil Host,
@@ -83,11 +81,13 @@ write methods. Shared runtime start, stop, and refresh remain admin-only.
 ## Release and runtime trust
 
 Official install/update is release-ref based. Redeven's release module accepts
-only the exact official source, publisher, plugin, version, key, signed release
-metadata, package hashes, signed revocation metadata, host requirement, and
-capability contract pin. Unsigned input, browser-supplied trust state, arbitrary
-package bytes, downgrade, unknown publisher, expired revocation evidence, and
-invented fetch provenance are denied.
+only the exact official root delegation, channel policy and pointer, revocation
+and pointer, signing-ledger checkpoint/evidence/proofs/receipts, publisher,
+plugin, version, signed release metadata, package hashes, host requirement, and
+capability contract pin. Committed and pending trust state, monotonic counters,
+and locally signed append-only trusted time are durable. Unsigned input,
+browser-supplied trust state, arbitrary package bytes, rollback, unknown
+publisher, expired evidence, and invented fetch provenance are denied.
 
 The runtime path and current target are closed. Runtime descriptors bind version,
 target, Rust IPC version, WASM ABI, and exact artifact SHA-256. Handle grants
@@ -96,12 +96,12 @@ hashes, method, handle, resource scope, policy revision, management revision,
 and revoke epoch. Storage/network scope from a plugin cannot replace the
 lease-derived scope.
 
-Darwin code signing cannot become a downstream exception to that identity.
-The current upstream runtime is linker/ad-hoc signed, while Redeven Desktop must
-Developer-ID sign nested executables before notarization. Re-signing changes the
-pinned bytes; skipping signing leaves an unproven nested executable. Both paths
-fail closed until an upstream release defines and ships the compatible signed
-artifact contract.
+Redeven builds runtime bytes only for `linux/amd64` and `linux/arm64` from the
+exact attested Rust source crate set with Rust 1.88.0. Product provenance, SPDX
+SBOM, notices, signature, certificate identity, target, and binary digest travel
+together and are revalidated inside archives and Desktop packages. Darwin
+packages must omit the runtime and every runtime-evidence file; absence is the
+closed product policy, not a signature exception.
 
 ## Business adapter and observability boundary
 

@@ -18,12 +18,11 @@ import test from 'node:test';
 import { collect } from './collect_release_artifacts.mjs';
 
 const targets = [
-  { goos: 'linux', goarch: 'amd64', desktopOS: 'linux', desktopArch: 'x64', extensions: ['deb', 'rpm'], runtimeSHA256: '4f9ccbe61463fa7dc0053086dca128743b493b74f5b4535994d6dbccde55aef4', runtimeSize: 5910232 },
-  { goos: 'linux', goarch: 'arm64', desktopOS: 'linux', desktopArch: 'arm64', extensions: ['deb', 'rpm'], runtimeSHA256: '95cd87a998d8ae5c6ea3451551e72c69b8f5e27040b1016fcd39333e2b251b45', runtimeSize: 5859144 },
-  { goos: 'darwin', goarch: 'amd64', desktopOS: 'mac', desktopArch: 'x64', extensions: ['dmg'], runtimeSHA256: 'eca4f841c60a3e2cb4e76c51567ed7d1cab60a16396db6cbdbaf3d1cc9559841', runtimeSize: 5260056 },
-  { goos: 'darwin', goarch: 'arm64', desktopOS: 'mac', desktopArch: 'arm64', extensions: ['dmg'], runtimeSHA256: 'fea17883ff27e943eeebc8bf9a68bd3d8c535b95d278fb18da0c3ec3d165dcca', runtimeSize: 5055296 },
+  { goos: 'linux', goarch: 'amd64', desktopOS: 'linux', desktopArch: 'x64', extensions: ['deb', 'rpm'] },
+  { goos: 'linux', goarch: 'arm64', desktopOS: 'linux', desktopArch: 'arm64', extensions: ['deb', 'rpm'] },
+  { goos: 'darwin', goarch: 'amd64', desktopOS: 'mac', desktopArch: 'x64', extensions: ['dmg'] },
+  { goos: 'darwin', goarch: 'arm64', desktopOS: 'mac', desktopArch: 'arm64', extensions: ['dmg'] },
 ];
-const noticesSHA256 = '46753d2c64302bb211fe01865301d140d7d6cb996c5604ba4318fa0b905db530';
 
 function sha256(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
@@ -43,13 +42,15 @@ function packageDescriptor(file) {
   };
 }
 
+function evidenceDescriptor(label) {
+  const bytes = Buffer.from(`${label}\n`);
+  return { sha256: sha256(bytes), size: bytes.length };
+}
+
 function createFixture(root) {
   const downloads = path.join(root, 'downloads');
   mkdirSync(downloads, { recursive: true });
-  const markerBytes = Buffer.from('self-test marker\n');
-  const markerSHA256 = sha256(markerBytes);
   const sharedFiles = new Map([
-    ['.redevplugin-release-artifacts-verified.json', markerBytes],
     ['LICENSE', Buffer.from('license\n')],
     ['THIRD_PARTY_NOTICES.md', Buffer.from('notices\n')],
     ['okf_bundle.manifest.json', Buffer.from('{}\n')],
@@ -68,16 +69,21 @@ function createFixture(root) {
     for (const extension of target.extensions) {
       const installerName = `Redeven-Desktop-1.2.3-${target.desktopOS}-${target.desktopArch}.${extension}`;
       const installerPath = write(desktopDirectory, installerName, Buffer.from(`installer ${installerName}\n`));
+      const hasRuntime = target.goos === 'linux';
+      const targetLabel = `${target.goos}/${target.goarch}`;
       write(desktopDirectory, `${installerName}.redevplugin-verification.json`, `${JSON.stringify({
-        schema_version: 'redeven.desktop_redevplugin_package_verification.v1',
+        schema_version: 'redeven.desktop_redevplugin_package_verification.v2',
         package: packageDescriptor(installerPath),
-        runtime_target: `${target.goos}/${target.goarch}`,
-        redevplugin_runtime: {
-          sha256: target.runtimeSHA256,
-          size: target.runtimeSize,
-        },
-        marker_sha256: markerSHA256,
-        notices_sha256: noticesSHA256,
+        runtime_target: targetLabel,
+        redevplugin_runtime: hasRuntime ? evidenceDescriptor(`runtime ${targetLabel}`) : null,
+        redevplugin_evidence: hasRuntime ? {
+          marker: evidenceDescriptor(`marker ${targetLabel}`),
+          notices: evidenceDescriptor(`notices ${targetLabel}`),
+          sbom: evidenceDescriptor(`sbom ${targetLabel}`),
+          provenance: evidenceDescriptor(`provenance ${targetLabel}`),
+          signature: evidenceDescriptor(`signature ${targetLabel}`),
+          certificate: evidenceDescriptor(`certificate ${targetLabel}`),
+        } : null,
       }, null, 2)}\n`);
     }
   }
@@ -95,7 +101,7 @@ test('collects only the closed four-target release inventory', () => {
     assert.equal(outputs.filter((name) => name.startsWith('redeven-gateway_')).length, 4);
     assert.equal(outputs.filter((name) => /\.(?:deb|rpm|dmg)$/u.test(name)).length, 6);
     assert.equal(outputs.filter((name) => name.endsWith('.redevplugin-verification.json')).length, 6);
-    assert.equal(outputs.length, 25);
+    assert.equal(outputs.length, 24);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

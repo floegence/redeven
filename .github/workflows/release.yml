@@ -67,19 +67,26 @@ jobs:
   build:
     name: Build ${{ matrix.goos }}-${{ matrix.goarch }}
     needs: renderer-e2e
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
         include:
           - goos: linux
             goarch: amd64
+            runner: ubuntu-24.04
           - goos: linux
             goarch: arm64
+            runner: ubuntu-24.04-arm
           - goos: darwin
             goarch: amd64
+            runner: ubuntu-24.04
           - goos: darwin
             goarch: arm64
+            runner: ubuntu-24.04
 
     steps:
       - name: Checkout
@@ -144,7 +151,7 @@ jobs:
             -o dist/redeven-gateway \
             ./cmd/redeven-gateway
 
-      - name: Stage signed ReDevPlugin runtime and package archives
+      - name: Build signed ReDevPlugin runtime and package archives
         env:
           GH_TOKEN: ${{ github.token }}
           GOOS: ${{ matrix.goos }}
@@ -152,26 +159,43 @@ jobs:
         run: |
           set -euo pipefail
 
-          ./scripts/stage_redevplugin_release_artifacts.sh \
-            --dest-dir "dist/redevplugin-release" \
-            --redeven-goos "$GOOS" \
-            --redeven-goarch "$GOARCH" \
-            --runtime-out "dist/redevplugin-runtime"
-
           redeven_entries=(
             redeven
-            redevplugin-runtime
-            REDEVPLUGIN_THIRD_PARTY_NOTICES.md
-            .redevplugin-release-artifacts-verified.json
             LICENSE
             THIRD_PARTY_NOTICES.md
           )
+          if [[ "$GOOS" == "linux" ]]; then
+            ./scripts/stage_redevplugin_release_artifacts.sh \
+              --dest-dir "dist/redevplugin-release" \
+              --redeven-goos "$GOOS" \
+              --redeven-goarch "$GOARCH" \
+              --runtime-out "dist/redevplugin-runtime" \
+              --profile release
+            redeven_entries+=(
+              redevplugin-runtime
+              REDEVPLUGIN_THIRD_PARTY_NOTICES.md
+              REDEVPLUGIN_RUNTIME.spdx.json
+              redevplugin-runtime.provenance.json
+              redevplugin-runtime.sig
+              redevplugin-runtime.pem
+              .redevplugin-release-artifacts-verified.json
+            )
+          fi
           (
             cd dist
             tar -czf "redeven_${GOOS}_${GOARCH}.tar.gz" "${redeven_entries[@]}"
           )
           tar -C dist -czf "dist/redeven-gateway_${GOOS}_${GOARCH}.tar.gz" redeven-gateway LICENSE THIRD_PARTY_NOTICES.md
-          rm -f dist/redeven dist/redeven-gateway dist/redevplugin-runtime dist/REDEVPLUGIN_THIRD_PARTY_NOTICES.md
+          rm -f \
+            dist/redeven \
+            dist/redeven-gateway \
+            dist/redevplugin-runtime \
+            dist/REDEVPLUGIN_THIRD_PARTY_NOTICES.md \
+            dist/REDEVPLUGIN_RUNTIME.spdx.json \
+            dist/redevplugin-runtime.provenance.json \
+            dist/redevplugin-runtime.sig \
+            dist/redevplugin-runtime.pem \
+            dist/.redevplugin-release-artifacts-verified.json
 
           upload_dir="dist/package-${GOOS}-${GOARCH}"
           mkdir -p "$upload_dir"
@@ -181,7 +205,6 @@ jobs:
           cp dist/okf_bundle.sha256 "$upload_dir/"
           cp dist/LICENSE "$upload_dir/"
           cp dist/THIRD_PARTY_NOTICES.md "$upload_dir/"
-          cp dist/.redevplugin-release-artifacts-verified.json "$upload_dir/"
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v6
@@ -425,14 +448,16 @@ jobs:
             --tag "${GITHUB_REF_NAME}"
           cp scripts/safe_extract_tar.py dist/safe_extract_tar.py
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
       - name: Validate ReDevPlugin consumption gate
-        run: ./scripts/check_redevplugin_consumption_gate.sh --scan-root dist
+        run: ./scripts/check_redevplugin_consumption_gate.sh --scan-root dist --require-release
 
       - name: Generate checksums
         run: |
           set -euo pipefail
           cd dist
-          cp .redevplugin-release-artifacts-verified.json redevplugin-release-artifacts-verified.json
           sha256sum \
             redeven_*.tar.gz \
             redeven-gateway_*.tar.gz \
@@ -440,15 +465,11 @@ jobs:
             Redeven-Desktop-*.rpm \
             Redeven-Desktop-*.dmg \
             Redeven-Desktop-*.redevplugin-verification.json \
-            redevplugin-release-artifacts-verified.json \
             safe_extract_tar.py \
             LICENSE \
             THIRD_PARTY_NOTICES.md \
             okf_bundle.manifest.json \
             okf_bundle.sha256 > SHA256SUMS
-
-      - name: Install cosign
-        uses: sigstore/cosign-installer@v3
 
       - name: Sign checksums with keyless OIDC
         run: |
@@ -518,7 +539,6 @@ jobs:
             dist/SHA256SUMS
             dist/SHA256SUMS.sig
             dist/SHA256SUMS.pem
-            dist/redevplugin-release-artifacts-verified.json
             dist/safe_extract_tar.py
             dist/LICENSE
             dist/THIRD_PARTY_NOTICES.md

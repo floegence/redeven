@@ -25,15 +25,13 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const targetDefinitions = Object.freeze([
-  Object.freeze({ goos: 'linux', goarch: 'amd64', desktopOS: 'linux', desktopArch: 'x64', extensions: ['deb', 'rpm'], runtimeSHA256: '4f9ccbe61463fa7dc0053086dca128743b493b74f5b4535994d6dbccde55aef4', runtimeSize: 5910232 }),
-  Object.freeze({ goos: 'linux', goarch: 'arm64', desktopOS: 'linux', desktopArch: 'arm64', extensions: ['deb', 'rpm'], runtimeSHA256: '95cd87a998d8ae5c6ea3451551e72c69b8f5e27040b1016fcd39333e2b251b45', runtimeSize: 5859144 }),
-  Object.freeze({ goos: 'darwin', goarch: 'amd64', desktopOS: 'mac', desktopArch: 'x64', extensions: ['dmg'], runtimeSHA256: 'eca4f841c60a3e2cb4e76c51567ed7d1cab60a16396db6cbdbaf3d1cc9559841', runtimeSize: 5260056 }),
-  Object.freeze({ goos: 'darwin', goarch: 'arm64', desktopOS: 'mac', desktopArch: 'arm64', extensions: ['dmg'], runtimeSHA256: 'fea17883ff27e943eeebc8bf9a68bd3d8c535b95d278fb18da0c3ec3d165dcca', runtimeSize: 5055296 }),
+  Object.freeze({ goos: 'linux', goarch: 'amd64', desktopOS: 'linux', desktopArch: 'x64', extensions: ['deb', 'rpm'] }),
+  Object.freeze({ goos: 'linux', goarch: 'arm64', desktopOS: 'linux', desktopArch: 'arm64', extensions: ['deb', 'rpm'] }),
+  Object.freeze({ goos: 'darwin', goarch: 'amd64', desktopOS: 'mac', desktopArch: 'x64', extensions: ['dmg'] }),
+  Object.freeze({ goos: 'darwin', goarch: 'arm64', desktopOS: 'mac', desktopArch: 'arm64', extensions: ['dmg'] }),
 ]);
 const markerName = '.redevplugin-release-artifacts-verified.json';
-const noticesSHA256 = '46753d2c64302bb211fe01865301d140d7d6cb996c5604ba4318fa0b905db530';
 const packageSharedFiles = Object.freeze([
-  markerName,
   'LICENSE',
   'THIRD_PARTY_NOTICES.md',
   'okf_bundle.manifest.json',
@@ -71,19 +69,25 @@ function requireClosedDirectory(directory, expectedNames, label) {
   for (const name of actual) requireRegularFile(path.join(directory, name), `${label}/${name}`);
 }
 
-function validateReceipt(receiptSource, receiptStagedPath, expectedPackage, target, markerSHA256) {
+function validateReceipt(receiptSource, receiptStagedPath, expectedPackage, target) {
   const receipt = readJSON(receiptStagedPath, receiptSource);
-  assertExactKeys(receipt, ['schema_version', 'package', 'runtime_target', 'redevplugin_runtime', 'marker_sha256', 'notices_sha256'], receiptSource);
-  if (receipt.schema_version !== 'redeven.desktop_redevplugin_package_verification.v1') fail(`${receiptSource}: schema_version mismatch`);
+  assertExactKeys(receipt, ['schema_version', 'package', 'runtime_target', 'redevplugin_runtime', 'redevplugin_evidence'], receiptSource);
+  if (receipt.schema_version !== 'redeven.desktop_redevplugin_package_verification.v2') fail(`${receiptSource}: schema_version mismatch`);
   assertExactKeys(receipt.package, ['name', 'sha256', 'size'], `${receiptSource}: package`);
   if (JSON.stringify(receipt.package) !== JSON.stringify(expectedPackage)) fail(`${receiptSource}: installer descriptor mismatch`);
   if (receipt.runtime_target !== `${target.goos}/${target.goarch}`) fail(`${receiptSource}: runtime_target mismatch`);
-  assertExactKeys(receipt.redevplugin_runtime, ['sha256', 'size'], `${receiptSource}: redevplugin_runtime`);
-  if (receipt.redevplugin_runtime.sha256 !== target.runtimeSHA256 || receipt.redevplugin_runtime.size !== target.runtimeSize) {
-    fail(`${receiptSource}: ReDevPlugin runtime descriptor mismatch`);
+  if (target.goos === 'darwin') {
+    if (receipt.redevplugin_runtime !== null || receipt.redevplugin_evidence !== null) {
+      fail(`${receiptSource}: Darwin receipt must omit ReDevPlugin runtime evidence`);
+    }
+    return { runtime: null, evidence: null };
   }
-  if (receipt.marker_sha256 !== markerSHA256) fail(`${receiptSource}: marker hash mismatch`);
-  if (receipt.notices_sha256 !== noticesSHA256) fail(`${receiptSource}: notices hash mismatch`);
+  validateDigestDescriptor(receipt.redevplugin_runtime, `${receiptSource}: redevplugin_runtime`);
+  assertExactKeys(receipt.redevplugin_evidence, ['marker', 'notices', 'sbom', 'provenance', 'signature', 'certificate'], `${receiptSource}: redevplugin_evidence`);
+  for (const [name, descriptor] of Object.entries(receipt.redevplugin_evidence)) {
+    validateDigestDescriptor(descriptor, `${receiptSource}: redevplugin_evidence.${name}`);
+  }
+  return { runtime: receipt.redevplugin_runtime, evidence: receipt.redevplugin_evidence };
 }
 
 function collect(downloadsDir, destDir, tag, testHooks = undefined) {
@@ -103,8 +107,8 @@ function collect(downloadsDir, destDir, tag, testHooks = undefined) {
   }
 
   const version = tag.slice(1);
-  let canonicalMarker = null;
   const canonicalSharedFiles = new Map();
+  const targetReceiptProfiles = new Map();
   const outputs = new Map();
   const sourceInventories = [];
   const stagingDirectory = mkdtempSync(path.join(destDir, '.release-collector-stage-'));
@@ -121,15 +125,7 @@ function collect(downloadsDir, destDir, tag, testHooks = undefined) {
       requireClosedDirectory(packageDirectory, packageNames, packageLabel);
       sourceInventories.push([packageDirectory, packageNames, packageLabel]);
 
-      const marker = stage(path.join(packageDirectory, markerName));
-      if (canonicalMarker === null) {
-        canonicalMarker = marker;
-        addOutput(outputs, markerName, marker);
-      } else {
-        assertStagedBytesEqual(canonicalMarker, marker, 'target package markers are not byte-identical');
-        unlinkSync(marker.stagedPath);
-      }
-      for (const name of packageSharedFiles.filter((value) => value !== markerName)) {
+      for (const name of packageSharedFiles) {
         const shared = stage(path.join(packageDirectory, name));
         if (!canonicalSharedFiles.has(name)) {
           canonicalSharedFiles.set(name, shared);
@@ -154,7 +150,13 @@ function collect(downloadsDir, destDir, tag, testHooks = undefined) {
         const receiptName = `${installerName}.redevplugin-verification.json`;
         const receiptSource = path.join(desktopDirectory, receiptName);
         const receipt = stage(receiptSource);
-        validateReceipt(receiptSource, receipt.stagedPath, installer.descriptor, target, marker.descriptor.sha256);
+        const profile = validateReceipt(receiptSource, receipt.stagedPath, installer.descriptor, target);
+        const targetName = `${target.goos}/${target.goarch}`;
+        if (!targetReceiptProfiles.has(targetName)) {
+          targetReceiptProfiles.set(targetName, profile);
+        } else if (JSON.stringify(targetReceiptProfiles.get(targetName)) !== JSON.stringify(profile)) {
+          fail(`${receiptSource}: target installers do not contain byte-identical ReDevPlugin evidence`);
+        }
         addOutput(outputs, installerName, installer);
         addOutput(outputs, receiptName, receipt);
       }
@@ -345,7 +347,7 @@ function requireManagedOutputInventory(directory, expectedNames, phase) {
 }
 
 function isManagedReleaseOutput(name) {
-  return packageSharedFiles.includes(name) || /^redeven_(?:darwin|linux)_(?:amd64|arm64)\.tar\.gz$/u.test(name) ||
+  return name === markerName || packageSharedFiles.includes(name) || /^redeven_(?:darwin|linux)_(?:amd64|arm64)\.tar\.gz$/u.test(name) ||
     /^redeven-gateway_(?:darwin|linux)_(?:amd64|arm64)\.tar\.gz$/u.test(name) ||
     /^Redeven-Desktop-.+\.(?:deb|rpm|dmg)(?:\.redevplugin-verification\.json)?$/u.test(name);
 }
@@ -365,6 +367,13 @@ function assertExactKeys(value, expectedKeys, label) {
   const actual = Object.keys(value).sort(compareStrings);
   const expected = [...expectedKeys].sort(compareStrings);
   if (JSON.stringify(actual) !== JSON.stringify(expected)) fail(`${label} fields mismatch`);
+}
+
+function validateDigestDescriptor(value, label) {
+  assertExactKeys(value, ['sha256', 'size'], label);
+  if (!/^[0-9a-f]{64}$/u.test(value.sha256) || !Number.isSafeInteger(value.size) || value.size < 1 || value.size > 512 * 1024 * 1024) {
+    fail(`${label} is invalid`);
+  }
 }
 
 function requireDirectory(directory, label) {

@@ -23,9 +23,9 @@ import (
 	"github.com/floegence/redevplugin/pkg/plugindata"
 	"github.com/floegence/redevplugin/pkg/pluginpkg"
 	"github.com/floegence/redevplugin/pkg/registry"
-	"github.com/floegence/redevplugin/pkg/runtimeclient"
 	"github.com/floegence/redevplugin/pkg/secrets"
 	"github.com/floegence/redevplugin/pkg/security"
+	"github.com/floegence/redevplugin/pkg/sessionscope"
 	"github.com/floegence/redevplugin/pkg/stream"
 )
 
@@ -74,10 +74,6 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 	if err != nil {
 		return nil, err
 	}
-	releaseModule, _, err := newOfficialReleaseModule(packageTrustVerifier)
-	if err != nil {
-		return nil, err
-	}
 
 	root := filepath.Join(stateAbs, "apps", "redevplugin")
 	if err := os.MkdirAll(root, 0o700); err != nil {
@@ -90,12 +86,35 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 
 	var closers []func() error
 	closeOnError := func() { _ = closeAll(closers) }
-
-	registryStore, err := registry.NewSQLiteStore(ctx, filepath.Join(dbRoot, "registry.sqlite"))
+	releaseModule, _, closeReleaseTrust, err := newOfficialReleaseModule(filepath.Join(root, "trust"))
 	if err != nil {
 		return nil, err
 	}
+	closers = append(closers, closeReleaseTrust)
+
+	registryStore, err := registry.NewSQLiteStore(ctx, filepath.Join(dbRoot, "registry.sqlite"))
+	if err != nil {
+		closeOnError()
+		return nil, err
+	}
 	closers = append(closers, registryStore.Close)
+
+	sessionScopeStore, err := sessionscope.NewSQLiteStore(ctx, filepath.Join(dbRoot, "session_scopes.sqlite"), sessionscope.StoreOptions{})
+	if err != nil {
+		closeOnError()
+		return nil, err
+	}
+	closers = append(closers, sessionScopeStore.Close)
+	sessionScopes, err := sessionscope.NewCoordinator(sessionScopeStore)
+	if err != nil {
+		closeOnError()
+		return nil, err
+	}
+	sessionLifecycle, err := newSessionLifecycleAdapter(filepath.Join(dbRoot, "closed_sessions.json"))
+	if err != nil {
+		closeOnError()
+		return nil, err
+	}
 
 	installStages, err := installstage.NewSQLiteStore(ctx, filepath.Join(dbRoot, "install_stage.sqlite"))
 	if err != nil {
@@ -140,13 +159,6 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 	}
 	closers = append(closers, secretStore.Close)
 
-	runtimeLeaseReplays, err := runtimeclient.NewSQLiteRuntimeLeaseReplayStore(ctx, filepath.Join(dbRoot, "runtime_lease_replays.sqlite"))
-	if err != nil {
-		closeOnError()
-		return nil, err
-	}
-	closers = append(closers, runtimeLeaseReplays.Close)
-
 	assetStore, err := pluginpkg.NewFileAssetStore(filepath.Join(root, "assets"))
 	if err != nil {
 		closeOnError()
@@ -176,15 +188,9 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 	surfaceTokens := bridge.NewSurfaceTokenService(nil, bridge.SurfaceTokenOptions{})
 	connectivityBroker := connectivity.NewMemoryBroker()
 	networkExecutor := connectivity.NewExecutor(connectivity.ExecutorOptions{})
-	runtimeModule, err := newOfficialRuntimeModule(runtimeModuleDependencies{
-		Path:             opts.RuntimePath,
-		Diagnostics:      observability,
-		Assets:           assetStore,
-		SurfaceTokens:    surfaceTokens,
-		PluginData:       pluginData,
-		Connectivity:     connectivityBroker,
-		NetworkExecutor:  networkExecutor,
-		LeaseReplayStore: runtimeLeaseReplays,
+	runtimeModule, err := newOfficialRuntimeModule(ctx, runtimeModuleDependencies{
+		Path:          opts.RuntimePath,
+		ExecutionRoot: filepath.Join(root, "runtime-exec"),
 	})
 	if err != nil {
 		_ = capabilityAdapter.Close()
@@ -210,6 +216,8 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 			Operations:           operationStore,
 			ConfirmationIntents:  confirmationIntents,
 			Streams:              streamStore,
+			SessionLifecycle:     sessionLifecycle,
+			SessionScopes:        sessionScopes,
 		},
 		Release: releaseModule,
 		Runtime: runtimeModule,
@@ -221,6 +229,10 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		Capability: &host.CapabilityModule{Registry: capabilities},
 	})
 	if err != nil {
+		var configErr *host.HostConfigError
+		if runtimeModule != nil && errors.As(err, &configErr) && configErr.RuntimeModuleDisposition() == host.RuntimeModuleCallerOwned {
+			_, _ = runtimeModule.Close(context.Background())
+		}
 		_ = pluginData.Close()
 		_ = assetStore.Close()
 		closeOnError()

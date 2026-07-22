@@ -1,7 +1,7 @@
 {
   "schema_version": "redevplugin.ed25519_signing_key.v1",
   "algorithm": "ed25519",
-  "key_id": "redeven-official-v1",
-  "public_key": "gJwszyaXEoNuddOuVEbxFdL0EHdJ2CPElKBXJsk9KCY=",
-  "created_at": "2026-07-19T09:09:14Z"
+  "key_id": "redeven-official-signing-2026",
+  "public_key": "RGjugRIHiqdfe7znHV+/pDY0kJ6Np2S6gmLR22poWPE=",
+  "created_at": "2026-07-22T12:22:42Z"
 }
