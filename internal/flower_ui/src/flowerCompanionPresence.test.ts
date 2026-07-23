@@ -43,7 +43,7 @@ function thread(overrides: Partial<FlowerCompanionThreadListItem> = {}): FlowerC
 }
 
 describe('projectFlowerCompanionPresence', () => {
-  it('counts each thread in its highest-priority category without parsing content', () => {
+  it('counts each thread in its active-first category without parsing content', () => {
     const presence = projectFlowerCompanionPresence([
       thread({ thread_id: 'attention', status: 'waiting_approval', queued_turn_count: 2 }),
       thread({ thread_id: 'failed', status: 'failed', read_status: readStatus(true) }),
@@ -55,19 +55,19 @@ describe('projectFlowerCompanionPresence', () => {
     ], true);
 
     expect(presence).toEqual({
-      priority_status: 'attention',
+      priority_status: 'running',
       priority_count: 1,
       priority_thread_title: 'Thread',
-      attention_count: 1,
+      attention_count: 0,
       unread_failed_count: 1,
       running_count: 1,
-      queued_count: 1,
+      queued_count: 2,
       unread_canceled_count: 1,
       unread_completed_count: 1,
     });
   });
 
-  it('assigns a thread only to its highest-priority semantic group', () => {
+  it('assigns a thread only to its highest-priority active group', () => {
     expect(projectFlowerCompanionPresence([
       thread({
         thread_id: 'attention-with-queue',
@@ -81,13 +81,13 @@ describe('projectFlowerCompanionPresence', () => {
         queued_turn_count: 2,
       }),
     ], true)).toEqual({
-      priority_status: 'attention',
+      priority_status: 'running',
       priority_count: 1,
       priority_thread_title: 'Thread',
-      attention_count: 1,
+      attention_count: 0,
       unread_failed_count: 0,
       running_count: 1,
-      queued_count: 0,
+      queued_count: 1,
       unread_canceled_count: 0,
       unread_completed_count: 0,
     });
@@ -172,27 +172,46 @@ describe('projectFlowerCompanionPresence', () => {
     expect(selectFlowerCompanionPriorityThread(threads)?.thread_id).toBe('running-canonical');
   });
 
-  it('selects attention instead of subscribing to lower-priority running work', () => {
+  it('selects running work instead of letting attention hide live progress', () => {
     expect(selectFlowerCompanionPriorityThread([
       thread({ thread_id: 'running', status: 'running' }),
       thread({ thread_id: 'approval', status: 'waiting_approval' }),
-    ])?.thread_id).toBe('approval');
+    ])?.thread_id).toBe('running');
   });
 
-  it('follows attention, failed, running, queued, canceled, and completed priority order', () => {
+  it('follows running, queued, attention, failed, canceled, and completed priority order', () => {
     const candidates = [
-      thread({ thread_id: 'attention', status: 'waiting_user' }),
-      thread({ thread_id: 'failed', status: 'failed', read_status: readStatus(true) }),
       thread({ thread_id: 'running', status: 'running' }),
       thread({ thread_id: 'queued', queued_turn_count: 1 }),
+      thread({ thread_id: 'attention', status: 'waiting_user' }),
+      thread({ thread_id: 'failed', status: 'failed', read_status: readStatus(true) }),
       thread({ thread_id: 'canceled', status: 'canceled', read_status: readStatus(true) }),
       thread({ thread_id: 'completed', status: 'success', read_status: readStatus(true) }),
     ];
-    const expected = ['attention', 'failed', 'running', 'queued', 'canceled', 'completed'] as const;
+    const expected = ['running', 'queued', 'attention', 'failed', 'canceled', 'completed'] as const;
 
     for (let index = 0; index < candidates.length; index += 1) {
       expect(projectFlowerCompanionPresence(candidates.slice(index), true).priority_status).toBe(expected[index]);
     }
+  });
+
+  it.each([
+    ['failed', 'failed'],
+    ['waiting', 'waiting_user'],
+  ] as const)('keeps queued work active when a %s thread also has historical status', (_label, status) => {
+    expect(projectFlowerCompanionPresence([
+      thread({
+        status,
+        queued_turn_count: 1,
+        read_status: readStatus(true),
+      }),
+    ], true)).toMatchObject({
+      priority_status: 'queued',
+      priority_count: 1,
+      attention_count: 0,
+      unread_failed_count: 0,
+      queued_count: 1,
+    });
   });
 
   it('uses unavailable only when no higher-priority canonical summary remains', () => {

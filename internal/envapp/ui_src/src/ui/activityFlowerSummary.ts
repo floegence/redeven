@@ -4,13 +4,13 @@ import type {
   FlowerCompanionPriorityStatus,
 } from '../../../../flower_ui/src';
 
-type SemanticStatus = Exclude<FlowerCompanionPriorityStatus, 'idle' | 'unavailable'>;
+type ActiveStatus = Extract<FlowerCompanionPriorityStatus, 'running' | 'queued'>;
 
 export type ActivityFlowerSummaryCopy = Readonly<{
-  lead: Readonly<Record<SemanticStatus, string>>;
+  lead: Readonly<Record<ActiveStatus, string>>;
   withTitle: (lead: string, title: string) => string;
   withTitleAndMore: (lead: string, title: string, count: number) => string;
-  withoutTitle: (status: SemanticStatus, count: number) => string;
+  withoutTitle: (status: ActiveStatus, count: number) => string;
   secondaryWorking: (count: number) => string;
   readyToAsk: string;
   unavailable: string;
@@ -19,6 +19,7 @@ export type ActivityFlowerSummaryCopy = Readonly<{
 export type ActivityFlowerSummary = Readonly<{
   visualText: string;
   accessibleText: string;
+  presentationStatus: FlowerCompanionPriorityStatus;
   progressKind?: FlowerCompanionProgressKind;
 }>;
 
@@ -27,10 +28,13 @@ export function presentActivityFlowerSummary(
   copy: ActivityFlowerSummaryCopy,
 ): ActivityFlowerSummary {
   if (presence.priority_status === 'idle') {
-    return { visualText: '', accessibleText: copy.readyToAsk };
+    return { visualText: '', accessibleText: copy.readyToAsk, presentationStatus: 'idle' };
   }
   if (presence.priority_status === 'unavailable') {
-    return { visualText: '', accessibleText: copy.unavailable };
+    return { visualText: '', accessibleText: copy.unavailable, presentationStatus: 'unavailable' };
+  }
+  if (presence.priority_status !== 'running' && presence.priority_status !== 'queued') {
+    return { visualText: '', accessibleText: copy.readyToAsk, presentationStatus: 'idle' };
   }
 
   const status = presence.priority_status;
@@ -55,6 +59,7 @@ export function presentActivityFlowerSummary(
 
   return {
     visualText,
+    presentationStatus: status,
     ...(status === 'running' && progress
       ? { progressKind: presence.priority_thread_progress_kind ?? 'status' }
       : {}),
