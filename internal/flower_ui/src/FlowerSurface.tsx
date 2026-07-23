@@ -65,6 +65,7 @@ import type {
 } from './contracts/flowerSurfaceContracts';
 import { projectFlowerThreadListItem, trimString } from './flowerSurfaceModel';
 import { projectFlowerCompanionLiveTail, type FlowerCompanionProgressKind } from './flowerCompanionLiveTail';
+import { FlowerCompanionTailMotionController } from './flowerCompanionTailMotion';
 import {
   buildFlowerTimelineEntries,
   type FlowerRenderableMessageBlock,
@@ -123,6 +124,7 @@ import {
   projectFlowerCompanionPresence,
   selectFlowerCompanionPriorityThread,
   type FlowerCompanionPriorityStatus,
+  type FlowerCompanionTerminalTransition,
   type FlowerCompanionPresenceProjection,
   type FlowerCompanionThreadListItem,
 } from './flowerCompanionPresence';
@@ -717,6 +719,8 @@ export type FlowerSurfaceProps = Readonly<{
     accessibleText: string;
     priorityStatus: FlowerCompanionPriorityStatus;
     progressKind?: FlowerCompanionProgressKind;
+    progressIdentity?: string;
+    ephemeralKind?: 'completion';
     running: boolean;
   }>;
   companionActionLabel?: string;
@@ -728,6 +732,58 @@ export type FlowerSurfaceProps = Readonly<{
   onThreadSelectionEvent?: (event: UIFirstSelectionEvent<string, { source: 'thread-list' }>) => void;
   class?: string;
 }>;
+
+const FlowerCompanionLiveTailText: Component<Readonly<{
+  text: string;
+  identity: string;
+}>> = (props) => {
+  let viewportRef: HTMLSpanElement | undefined;
+  let valueRef: HTMLSpanElement | undefined;
+  let controller: FlowerCompanionTailMotionController | null = null;
+
+  createEffect(() => {
+    const projection = { text: props.text, identity: props.identity };
+    controller?.update(projection);
+  });
+
+  onMount(() => {
+    if (!viewportRef || !valueRef) return;
+    const media = window.matchMedia('(prefers-reduced-motion: reduce)');
+    controller = new FlowerCompanionTailMotionController({
+      viewport: viewportRef,
+      value: valueRef,
+    });
+    controller.update({ text: props.text, identity: props.identity });
+    const resizeObserver = typeof ResizeObserver === 'undefined'
+      ? null
+      : new ResizeObserver(() => controller?.resize());
+    resizeObserver?.observe(viewportRef);
+    const onMotionChange = () => controller?.reducedMotionChanged();
+    const onVisibilityChange = () => controller?.suspend();
+    media.addEventListener('change', onMotionChange);
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    onCleanup(() => {
+      resizeObserver?.disconnect();
+      media.removeEventListener('change', onMotionChange);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      controller?.dispose();
+      controller = null;
+    });
+  });
+
+  return (
+    <>
+      <span class="flower-companion-collapsed-tail-prefix" aria-hidden="true">&hellip;</span>
+      <span
+        ref={viewportRef}
+        class="flower-companion-collapsed-tail-viewport"
+        aria-hidden="true"
+      >
+        <span ref={valueRef} class="flower-companion-collapsed-tail-value" />
+      </span>
+    </>
+  );
+};
 
 export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const presentation = () => props.presentation ?? 'full';
@@ -2080,9 +2136,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
   let companionLiveSequence = 0;
   const [companionLiveThread, setCompanionLiveThread] = createSignal<FlowerThreadSnapshot | null>(null);
+  const [companionLiveRunGeneration, setCompanionLiveRunGeneration] = createSignal(0);
+  const [companionTerminalTransition, setCompanionTerminalTransition] = createSignal<FlowerCompanionTerminalTransition>();
   const [companionTerminalOverrides, setCompanionTerminalOverrides] = createSignal<ReadonlyMap<string, Readonly<{
     thread: FlowerThreadSnapshot;
     runID: string;
+    runGeneration: number;
   }>>>(new Map());
   const companionBaseThreadItems = createMemo<readonly FlowerCompanionThreadListItem[]>(() => {
     const threadStateByID = new Map(threads().map((thread) => [thread.thread_id, thread] as const));
@@ -2092,26 +2151,39 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return {
         ...item,
         queued_turn_count: thread?.queued_turn_count ?? thread?.queued_turns?.length ?? 0,
-        ...(liveTail ? { progress_text: liveTail.text, progress_kind: liveTail.kind } : {}),
+        ...(thread?.active_run_id ? { active_run_id: thread.active_run_id } : {}),
+        ...(liveTail ? {
+          progress_text: liveTail.text,
+          progress_kind: liveTail.kind,
+          progress_identity: liveTail.identity,
+        } : {}),
       };
     });
   });
   const overlayCompanionThreadItem = (
     item: FlowerCompanionThreadListItem,
     thread: FlowerThreadSnapshot,
+    runGeneration?: number,
   ): FlowerCompanionThreadListItem => {
     const liveTail = projectFlowerCompanionLiveTail(thread, modelStatusLabel);
     const liveItem = projectFlowerThreadListItem(threadWithLocalReadVisibility(thread));
     const {
       progress_text: _staleProgressText,
       progress_kind: _staleProgressKind,
+      progress_identity: _staleProgressIdentity,
       ...baseItem
     } = item;
     return {
       ...baseItem,
       ...liveItem,
       queued_turn_count: thread.queued_turn_count ?? thread.queued_turns?.length ?? 0,
-      ...(liveTail ? { progress_text: liveTail.text, progress_kind: liveTail.kind } : {}),
+      ...(thread.active_run_id ? { active_run_id: thread.active_run_id } : {}),
+      ...(runGeneration !== undefined ? { run_generation: runGeneration } : {}),
+      ...(liveTail ? {
+        progress_text: liveTail.text,
+        progress_kind: liveTail.kind,
+        progress_identity: liveTail.identity,
+      } : {}),
     };
   };
   const companionPriorityThreadItems = createMemo<readonly FlowerCompanionThreadListItem[]>(() => {
@@ -2119,7 +2191,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (overrides.size === 0) return companionBaseThreadItems();
     return companionBaseThreadItems().map((item) => {
       const override = overrides.get(item.thread_id);
-      return override ? overlayCompanionThreadItem(item, override.thread) : item;
+      return override ? overlayCompanionThreadItem(item, override.thread, override.runGeneration) : item;
     });
   });
   const companionLiveThreadID = createMemo(() => {
@@ -2132,14 +2204,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (!liveThread) return companionPriorityThreadItems();
     return companionPriorityThreadItems().map((item) => {
       if (item.thread_id !== liveThread.thread_id) return item;
-      return overlayCompanionThreadItem(item, liveThread);
+      return overlayCompanionThreadItem(item, liveThread, companionLiveRunGeneration());
     });
   });
   createEffect(() => {
     const baseThreads = new Map(threads().map((thread) => [thread.thread_id, thread] as const));
     const current = companionTerminalOverrides();
     if (current.size === 0) return;
-    let next: Map<string, Readonly<{ thread: FlowerThreadSnapshot; runID: string }>> | null = null;
+    let next: Map<string, Readonly<{ thread: FlowerThreadSnapshot; runID: string; runGeneration: number }>> | null = null;
     for (const [threadID, override] of current) {
       const baseThread = baseThreads.get(threadID);
       const baseStillTrailsOverride = baseThread?.status === 'running'
@@ -2152,7 +2224,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
   let lastCompanionPresenceSignature = '';
   createEffect(() => {
-    const presence = projectFlowerCompanionPresence(companionThreadItems(), !loadError());
+    const presence = projectFlowerCompanionPresence(
+      companionThreadItems(),
+      !loadError(),
+      companionTerminalTransition(),
+    );
     const signature = JSON.stringify(presence);
     if (signature === lastCompanionPresenceSignature) return;
     lastCompanionPresenceSignature = signature;
@@ -3426,6 +3502,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const sequence = ++companionLiveSequence;
       setCompanionLiveThread(null);
       if (!threadID) return;
+      setCompanionLiveRunGeneration(sequence);
 
       let disposed = false;
       let requestInFlight = false;
@@ -3443,11 +3520,28 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       const publishProjection = () => {
         if (!projectedThread) return;
         if (projectedThread.status !== 'running' && trackedRunID) {
+          const outcome = projectedThread.status === 'success'
+            ? 'completed'
+            : projectedThread.status === 'canceled'
+              ? 'canceled'
+              : 'failed';
+          setCompanionTerminalTransition({
+            thread_id: threadID,
+            run_id: trackedRunID,
+            run_generation: sequence,
+            outcome,
+          });
           setCompanionTerminalOverrides((current) => {
             const next = new Map(current);
-            next.set(threadID, { thread: projectedThread!, runID: trackedRunID });
+            next.set(threadID, {
+              thread: projectedThread!,
+              runID: trackedRunID,
+              runGeneration: sequence,
+            });
             return next;
           });
+        } else if (projectedThread.status === 'running') {
+          setCompanionTerminalTransition(undefined);
         }
         setCompanionLiveThread(projectedThread);
       };
@@ -4865,9 +4959,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     props.companionRegionID ? `${props.companionRegionID}-status` : undefined
   ));
   const companionSummaryAnnounces = createMemo(() => (
-    (props.companionSummary?.priorityStatus === 'running' || props.companionSummary?.priorityStatus === 'queued')
-    && props.companionSummary?.progressKind !== 'tool'
-    && props.companionSummary?.progressKind !== 'output'
+    props.companionSummary?.ephemeralKind === 'completion'
+    || (
+      (props.companionSummary?.priorityStatus === 'running' || props.companionSummary?.priorityStatus === 'queued')
+      && props.companionSummary?.progressKind !== 'tool'
+      && props.companionSummary?.progressKind !== 'output'
+    )
   ));
 
   const composerPlaceholder = createMemo(() => {
@@ -7861,7 +7958,12 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 <Show when={companionSummaryVisible()}>
                   <button
                     type="button"
-                    class="flower-companion-collapsed-summary"
+                    class={cn(
+                      'flower-companion-collapsed-summary',
+                      props.companionSummary?.ephemeralKind === 'completion'
+                        && 'flower-companion-collapsed-summary-completion',
+                    )}
+                    data-flower-companion-ephemeral-kind={props.companionSummary?.ephemeralKind}
                     title={props.companionSummary?.accessibleText}
                     aria-label={props.companionSummary?.accessibleText}
                     aria-controls={props.companionRegionID}
@@ -7872,6 +7974,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       class={cn(
                         'flower-companion-collapsed-icon',
                         props.companionSummary?.running && 'flower-companion-collapsed-icon-running',
+                        props.companionSummary?.ephemeralKind === 'completion'
+                          && 'flower-companion-collapsed-icon-completion',
                       )}
                       aria-hidden="true"
                     >
@@ -7892,12 +7996,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                         when={props.companionSummary?.progressKind === 'output'}
                         fallback={props.companionSummary?.visualText}
                       >
-                        <span class="flower-companion-collapsed-tail-prefix" aria-hidden="true">&hellip;</span>
-                        <span class="flower-companion-collapsed-tail-viewport">
-                          <span class="flower-companion-collapsed-tail-value">
-                            {props.companionSummary?.visualText}
-                          </span>
-                        </span>
+                        <FlowerCompanionLiveTailText
+                          text={props.companionSummary?.visualText ?? ''}
+                          identity={props.companionSummary?.progressIdentity ?? ''}
+                        />
                       </Show>
                     </span>
                   </button>

@@ -135,6 +135,33 @@ describe('projectFlowerCompanionPresence', () => {
     });
   });
 
+  it('carries live stream and terminal transition identity independently of historical priority', () => {
+    const terminal = {
+      thread_id: 'running-ready',
+      run_id: 'run-live',
+      run_generation: 12,
+      outcome: 'completed' as const,
+    };
+    expect(projectFlowerCompanionPresence([
+      thread({
+        thread_id: 'running-ready',
+        status: 'running',
+        active_run_id: 'run-live',
+        run_generation: 12,
+        progress_text: 'Newest output',
+        progress_kind: 'output',
+        progress_identity: 'thread\u001frun\u001fmessage\u001fblock',
+      }),
+      thread({ thread_id: 'old-failure', status: 'failed', read_status: readStatus(true) }),
+    ], true, terminal)).toMatchObject({
+      priority_thread_id: 'running-ready',
+      priority_run_id: 'run-live',
+      priority_run_generation: 12,
+      priority_thread_progress_identity: 'thread\u001frun\u001fmessage\u001fblock',
+      terminal_transition: terminal,
+    });
+  });
+
   it.each([
     ['pending', 'Pending title'],
     ['failed', 'Failed title'],

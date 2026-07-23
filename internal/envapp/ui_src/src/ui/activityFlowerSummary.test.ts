@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import type { FlowerCompanionPresenceProjection } from '../../../../flower_ui/src';
-import { presentActivityFlowerSummary, type ActivityFlowerSummaryCopy } from './activityFlowerSummary';
+import {
+  presentActivityFlowerCompletion,
+  presentActivityFlowerSummary,
+  type ActivityFlowerSummaryCopy,
+} from './activityFlowerSummary';
 
 const copy: ActivityFlowerSummaryCopy = {
   lead: {
@@ -31,6 +35,16 @@ function presence(overrides: Partial<FlowerCompanionPresenceProjection>): Flower
 }
 
 describe('presentActivityFlowerSummary', () => {
+  it('presents a completion transition as an explicit ephemeral state', () => {
+    expect(presentActivityFlowerCompletion('Completed', 'Refine the companion', copy)).toEqual({
+      visualText: 'Completed / Refine the companion',
+      accessibleText: 'Completed / Refine the companion',
+      presentationStatus: 'completed',
+      ephemeralKind: 'completion',
+    });
+    expect(presentActivityFlowerCompletion('Completed', undefined, copy).visualText).toBe('Completed');
+  });
+
   it('counts only additional items in a titled priority group', () => {
     expect(presentActivityFlowerSummary(presence({
       priority_status: 'running',
@@ -79,11 +93,13 @@ describe('presentActivityFlowerSummary', () => {
       priority_count: 1,
       priority_thread_progress: 'The newest response fragment',
       priority_thread_progress_kind: 'output',
+      priority_thread_progress_identity: 'thread\u001frun\u001fmessage\u001fblock:1',
       running_count: 1,
     }), copy)).toMatchObject({
       visualText: 'The newest response fragment',
       presentationStatus: 'running',
       progressKind: 'output',
+      progressIdentity: 'thread\u001frun\u001fmessage\u001fblock:1',
     });
     expect(presentActivityFlowerSummary(presence({
       priority_status: 'running',

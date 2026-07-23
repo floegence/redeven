@@ -777,6 +777,9 @@ describe('FlowerSurface companion visibility lifecycle', () => {
       priority_thread_title: 'Canonical external work',
       priority_thread_progress: 'The latest Flower output stays visible.',
       priority_thread_progress_kind: 'output',
+      priority_thread_progress_identity: `${externalSummary.thread_id}\u001frun-live\u001fassistant-live\u001fblock:1`,
+      priority_thread_id: externalSummary.thread_id,
+      priority_run_id: 'run-live',
     });
     expect(listThreadLiveEvents.mock.calls
       .filter(([threadID]) => threadID === externalSummary.thread_id)
@@ -801,6 +804,11 @@ describe('FlowerSurface companion visibility lifecycle', () => {
       () => presences.some((presence) => presence.priority_status === 'completed'),
       'terminal live status did not replace stale running progress',
     );
+    expect(presences.some((presence) => (
+      presence.terminal_transition?.thread_id === externalSummary.thread_id
+      && presence.terminal_transition.run_id === 'run-live'
+      && presence.terminal_transition.outcome === 'completed'
+    ))).toBe(true);
     await new Promise((resolve) => window.setTimeout(resolve, 400));
     expect(externalLiveCall).toBe(3);
     expect(harness.markThreadRead).not.toHaveBeenCalled();

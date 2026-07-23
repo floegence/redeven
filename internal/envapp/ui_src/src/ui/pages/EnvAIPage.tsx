@@ -48,6 +48,8 @@ export type EnvAIPageProps = Readonly<{
     accessibleText: string;
     priorityStatus: FlowerCompanionPriorityStatus;
     progressKind?: FlowerCompanionProgressKind;
+    progressIdentity?: string;
+    ephemeralKind?: 'completion';
     running: boolean;
   }>;
   companionActionLabel?: string;

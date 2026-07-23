@@ -21,6 +21,8 @@ export type ActivityFlowerSummary = Readonly<{
   accessibleText: string;
   presentationStatus: FlowerCompanionPriorityStatus;
   progressKind?: FlowerCompanionProgressKind;
+  progressIdentity?: string;
+  ephemeralKind?: 'completion';
 }>;
 
 export function presentActivityFlowerSummary(
@@ -61,10 +63,33 @@ export function presentActivityFlowerSummary(
     visualText,
     presentationStatus: status,
     ...(status === 'running' && progress
-      ? { progressKind: presence.priority_thread_progress_kind ?? 'status' }
+      ? {
+          progressKind: presence.priority_thread_progress_kind ?? 'status',
+          ...(presence.priority_thread_progress_identity
+            ? { progressIdentity: presence.priority_thread_progress_identity }
+            : {}),
+        }
       : {}),
     accessibleText: backgroundRunningCount > 0
       ? `${visualText}. ${copy.secondaryWorking(backgroundRunningCount)}`
       : visualText,
+  };
+}
+
+export function presentActivityFlowerCompletion(
+  completed: string,
+  title: string | undefined,
+  copy: Pick<ActivityFlowerSummaryCopy, 'withTitle'>,
+): ActivityFlowerSummary {
+  const canonicalCompleted = completed.trim();
+  const canonicalTitle = String(title ?? '').trim();
+  const visualText = canonicalTitle
+    ? copy.withTitle(canonicalCompleted, canonicalTitle)
+    : canonicalCompleted;
+  return {
+    visualText,
+    accessibleText: visualText,
+    presentationStatus: 'completed',
+    ephemeralKind: 'completion',
   };
 }

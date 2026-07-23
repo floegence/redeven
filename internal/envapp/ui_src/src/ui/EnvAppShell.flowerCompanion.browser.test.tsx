@@ -44,6 +44,7 @@ let desktopViewMode: 'activity' | 'workbench' = 'activity';
 let envAIPageMountSequence = 0;
 let activityFlowerSubmitting = false;
 let activityFlowerPresence: any;
+let publishActivityFlowerPresence: (presence: any) => void = () => undefined;
 const uiStorageItems = new Map<string, string>();
 
 function runningActivityFlowerPresence() {
@@ -53,6 +54,10 @@ function runningActivityFlowerPresence() {
     priority_thread_title: 'Refine the Flower companion with a deliberately long live task title',
     priority_thread_progress: 'The newest Flower response remains visible while all earlier words move out to the left edge',
     priority_thread_progress_kind: 'output',
+    priority_thread_progress_identity: 'thread-live\u001frun-live\u001fassistant-live\u001fblock:0',
+    priority_thread_id: 'thread-live',
+    priority_run_id: 'run-live',
+    priority_run_generation: 1,
     attention_count: 0,
     unread_failed_count: 0,
     running_count: 1,
@@ -511,8 +516,10 @@ vi.mock('./pages/EnvAIPage', () => ({
     const env = useContext(EnvContextMock);
     const [submitting, setSubmitting] = createSignal(false);
     const [composerText, setComposerText] = createSignal('');
+    const [presence, setPresence] = createSignal(activityFlowerPresence);
+    publishActivityFlowerPresence = setPresence;
     createEffect(() => {
-      props.onPresenceChange?.(activityFlowerPresence);
+      props.onPresenceChange?.(presence());
     });
     return (
       <div
@@ -542,7 +549,11 @@ vi.mock('./pages/EnvAIPage', () => ({
           >
             <button
               type="button"
-              class="flower-companion-collapsed-summary"
+              classList={{
+                'flower-companion-collapsed-summary': true,
+                'flower-companion-collapsed-summary-completion': props.companionSummary?.ephemeralKind === 'completion',
+              }}
+              data-flower-companion-ephemeral-kind={props.companionSummary?.ephemeralKind}
               data-testid="activity-flower-presence-summary"
               title={props.companionSummary?.accessibleText}
               aria-label={props.companionSummary?.accessibleText}
@@ -550,34 +561,45 @@ vi.mock('./pages/EnvAIPage', () => ({
               aria-expanded="false"
               onClick={() => props.onCompanionOpenRequest?.()}
             >
-              <span classList={{ 'flower-companion-collapsed-icon-running': Boolean(props.companionSummary?.running) }} />
+              <span classList={{
+                'flower-companion-collapsed-icon-running': Boolean(props.companionSummary?.running),
+                'flower-companion-collapsed-icon-completion': props.companionSummary?.ephemeralKind === 'completion',
+              }} />
               <span
                 class="flower-companion-collapsed-summary-text"
                 data-flower-companion-progress-kind={props.companionSummary?.progressKind}
               >
-                <span class="flower-companion-collapsed-tail-prefix" aria-hidden="true">&hellip;</span>
-                <span class="flower-companion-collapsed-tail-viewport">
-                  <span class="flower-companion-collapsed-tail-value">{props.companionSummary?.visualText}</span>
-                </span>
+                <Show
+                  when={props.companionSummary?.progressKind === 'output'}
+                  fallback={props.companionSummary?.visualText}
+                >
+                  <span class="flower-companion-collapsed-tail-prefix" aria-hidden="true">&hellip;</span>
+                  <span class="flower-companion-collapsed-tail-viewport" aria-hidden="true">
+                    <span class="flower-companion-collapsed-tail-value">{props.companionSummary?.visualText}</span>
+                  </span>
+                </Show>
               </span>
             </button>
           </Show>
           <span
             data-testid="activity-flower-presence-announcement"
             role={(
-              props.companionSummary?.priorityStatus === 'running'
+              props.companionSummary?.ephemeralKind === 'completion'
+              || props.companionSummary?.priorityStatus === 'running'
               || props.companionSummary?.priorityStatus === 'queued'
             ) && props.companionSummary?.progressKind !== 'tool' && props.companionSummary?.progressKind !== 'output'
               ? 'status'
               : undefined}
             aria-live={(
-              props.companionSummary?.priorityStatus === 'running'
+              props.companionSummary?.ephemeralKind === 'completion'
+              || props.companionSummary?.priorityStatus === 'running'
               || props.companionSummary?.priorityStatus === 'queued'
             ) && props.companionSummary?.progressKind !== 'tool' && props.companionSummary?.progressKind !== 'output'
               ? 'polite'
               : undefined}
             aria-atomic={(
-              props.companionSummary?.priorityStatus === 'running'
+              props.companionSummary?.ephemeralKind === 'completion'
+              || props.companionSummary?.priorityStatus === 'running'
               || props.companionSummary?.priorityStatus === 'queued'
             ) && props.companionSummary?.progressKind !== 'tool' && props.companionSummary?.progressKind !== 'output'
               ? 'true'
@@ -922,6 +944,7 @@ beforeEach(() => {
   envAIPageMountSequence = 0;
   floeRegistryComponents = () => [];
   activityFlowerSubmitting = false;
+  publishActivityFlowerPresence = () => undefined;
   activityFlowerPresence = runningActivityFlowerPresence();
   uiStorageItems.clear();
   flowerLaunchTurnMock.mockReset();
@@ -1471,8 +1494,8 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(getComputedStyle(summaryText).textOverflow).toBe('clip');
     expect(getComputedStyle(summaryText).overflow).toBe('hidden');
     expect(tailValue.scrollWidth).toBeGreaterThan(tailViewport.clientWidth);
-    expect(elementRect(tailValue).right).toBeCloseTo(elementRect(tailViewport).right, 0);
-    expect(elementRect(tailValue).left).toBeLessThan(elementRect(tailViewport).left);
+    expect(getComputedStyle(tailValue).position).toBe('static');
+    expect(getComputedStyle(tailValue).width).not.toBe('auto');
     expect(getComputedStyle(icon).animationName).toContain('flower-companion-running-turn');
     expect(elementRect(status).width).toBeGreaterThan(0);
     expect(getComputedStyle(status).opacity).not.toBe('0');
@@ -1524,6 +1547,105 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     expect(document.body.textContent).not.toContain('One task needs review');
     expect(document.body.textContent).not.toContain('One task needs your attention');
     expect(document.querySelector('[title*="Needs review"], [aria-label*="Needs review"]')).toBeNull();
+  });
+
+  it('acknowledges a just-completed run once, then restores the ordinary composer', async () => {
+    await page.viewport(390, 844);
+    await mountProductionMobileShell();
+    publishActivityFlowerPresence({
+      priority_status: 'attention',
+      priority_count: 1,
+      priority_thread_title: 'Historical attention',
+      attention_count: 1,
+      unread_failed_count: 1,
+      running_count: 0,
+      queued_count: 0,
+      unread_canceled_count: 0,
+      unread_completed_count: 1,
+      terminal_transition: {
+        thread_id: 'thread-live',
+        run_id: 'run-live',
+        run_generation: 1,
+        outcome: 'completed',
+      },
+    });
+    await flushAsync();
+
+    const completed = document.querySelector('[data-flower-companion-ephemeral-kind="completion"]');
+    const announcement = document.querySelector('[data-testid="activity-flower-presence-announcement"]');
+    if (!(completed instanceof HTMLButtonElement) || !(announcement instanceof HTMLElement)) {
+      throw new Error('Flower completion acknowledgement did not render.');
+    }
+    expect(completed.textContent).toContain('Completed');
+    expect(completed.textContent).toContain('Refine the Flower companion');
+    expect(completed.querySelector('.flower-companion-collapsed-icon-running')).toBeNull();
+    expect(completed.querySelector('.flower-companion-collapsed-icon-completion')).not.toBeNull();
+    expect(getComputedStyle(completed).animationName).toContain('flower-companion-completion-wash');
+    expect(announcement.getAttribute('role')).toBe('status');
+    expect(announcement.getAttribute('aria-live')).toBe('polite');
+    expect(announcement.getAttribute('aria-atomic')).toBe('true');
+
+    await new Promise((resolve) => window.setTimeout(resolve, 3_900));
+    await flushAsync();
+    expect(document.querySelector('[data-flower-companion-ephemeral-kind="completion"]')).toBeNull();
+    expect(document.querySelector('[data-testid="activity-flower-composer"]')).not.toBeNull();
+    expect(announcement.hasAttribute('aria-live')).toBe(false);
+  });
+
+  it('does not re-arm completion from late presence while expanded or on the full Flower page', async () => {
+    await page.viewport(1280, 800);
+    const fixture = await mountShell();
+    const completedPresence = (threadID: string, runID: string, generation: number) => ({
+      priority_status: 'idle',
+      priority_count: 0,
+      attention_count: 0,
+      unread_failed_count: 0,
+      running_count: 0,
+      queued_count: 0,
+      unread_canceled_count: 0,
+      unread_completed_count: 1,
+      terminal_transition: {
+        thread_id: threadID,
+        run_id: runID,
+        run_generation: generation,
+        outcome: 'completed',
+      },
+    });
+    const runningPresence = (threadID: string, runID: string, generation: number) => ({
+      ...runningActivityFlowerPresence(),
+      priority_thread_id: threadID,
+      priority_run_id: runID,
+      priority_run_generation: generation,
+    });
+
+    publishActivityFlowerPresence(completedPresence('thread-live', 'run-live', 1));
+    await flushAsync();
+    const completion = document.querySelector('[data-flower-companion-ephemeral-kind="completion"]');
+    if (!(completion instanceof HTMLButtonElement)) throw new Error('Initial completion did not render.');
+    await userEvent.click(completion);
+    await flushAsync();
+    expect(fixture.product.dataset.presentation).toBe('expanded');
+
+    publishActivityFlowerPresence(runningPresence('thread-expanded', 'run-expanded', 2));
+    publishActivityFlowerPresence(completedPresence('thread-expanded', 'run-expanded', 2));
+    const close = document.querySelector('[data-testid="activity-flower-header-actions"] button');
+    if (!(close instanceof HTMLButtonElement)) throw new Error('Flower companion close control did not render.');
+    await userEvent.click(close);
+    await flushAsync();
+    expect(document.querySelector('[data-flower-companion-ephemeral-kind="completion"]')).toBeNull();
+
+    const activityBarFlower = document.querySelector('[data-floe-shell-slot="activity-bar"] button[aria-label="Flower"]');
+    if (!(activityBarFlower instanceof HTMLButtonElement)) throw new Error('Activity Bar Flower entry did not render.');
+    await userEvent.click(activityBarFlower);
+    await flushAsync();
+    publishActivityFlowerPresence(runningPresence('thread-full', 'run-full', 3));
+    publishActivityFlowerPresence(completedPresence('thread-full', 'run-full', 3));
+    const activityBarTerminal = document.querySelector('[data-floe-shell-slot="activity-bar"] button[aria-label="Terminal"]');
+    if (!(activityBarTerminal instanceof HTMLButtonElement)) throw new Error('Activity Bar terminal entry did not render.');
+    await userEvent.click(activityBarTerminal);
+    await flushAsync();
+    expect(fixture.product.dataset.presentation).toBe('collapsed');
+    expect(document.querySelector('[data-flower-companion-ephemeral-kind="completion"]')).toBeNull();
   });
 
 });

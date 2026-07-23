@@ -27,6 +27,7 @@ main() {
       src/ui/EnvAppShell.desktopFloatingSurfaces.e2e.test.tsx \
       src/ui/EnvAppShell.localAccess.e2e.test.tsx \
       src/ui/i18n/i18n.test.ts \
+      src/ui/activityFlowerCompletionNotice.test.ts \
       src/ui/activityFlowerSummary.test.ts \
       src/ui/FlowerSurface.emptyStatePresentation.test.tsx \
       src/ui/FlowerSurface.navigation.context.test.tsx \
@@ -56,6 +57,7 @@ main() {
       internal/flower_ui/src/flowerThreadListRefresh.test.ts \
       internal/flower_ui/src/flowerCompanionPresence.test.ts \
       internal/flower_ui/src/flowerCompanionLiveTail.test.ts \
+      internal/flower_ui/src/flowerCompanionTailMotion.test.ts \
       internal/flower_ui/src/flowerPendingTurns.test.ts \
       internal/flower_ui/src/flowerTerminalOutput.test.ts \
       internal/flower_ui/src/FlowerSurface.references.test.ts \
@@ -79,6 +81,7 @@ main() {
     ui_pkg_log "Flower UI: Chromium interaction contracts..."
     ui_pkg_run_pnpm run test:browser -- \
       src/ui/EnvAppShell.flowerCompanion.browser.test.tsx \
+      src/ui/flowerCompanionTailMotion.browser.test.tsx \
       src/ui/FlowerSurface.canonicalReferences.browser.test.tsx \
       src/ui/FlowerSurface.approvalRefresh.browser.test.tsx \
       src/ui/FlowerSurface.activityDisclosure.browser.test.tsx \
