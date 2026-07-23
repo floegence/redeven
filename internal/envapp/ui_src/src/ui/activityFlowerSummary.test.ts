@@ -55,6 +55,31 @@ describe('presentActivityFlowerSummary', () => {
     }), copy).visualText).toBe('Working on / Run checks / +2');
   });
 
+  it('uses the live model phase as the running lead', () => {
+    expect(presentActivityFlowerSummary(presence({
+      priority_status: 'running',
+      priority_count: 1,
+      priority_thread_title: 'Refine the companion',
+      priority_thread_progress: 'Streaming response...',
+      running_count: 1,
+    }), copy)).toEqual({
+      visualText: 'Streaming response... / Refine the companion',
+      accessibleText: 'Streaming response... / Refine the companion',
+    });
+  });
+
+  it('shows live progress while the running thread title is still pending', () => {
+    expect(presentActivityFlowerSummary(presence({
+      priority_status: 'running',
+      priority_count: 1,
+      priority_thread_progress: 'Preparing model request...',
+      running_count: 1,
+    }), copy)).toEqual({
+      visualText: 'Preparing model request...',
+      accessibleText: 'Preparing model request...',
+    });
+  });
+
   it('uses a complete sentence when the canonical group has no ready title', () => {
     expect(presentActivityFlowerSummary(presence({
       priority_status: 'queued',

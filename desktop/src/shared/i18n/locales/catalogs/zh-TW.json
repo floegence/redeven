@@ -38,6 +38,7 @@
       "compactFinishInputRequest": "請先完成目前輸入請求再壓縮上下文。",
       "compactNeedsConversation": "目前還沒有可壓縮的上下文。",
       "commandMenuLabel": "Flower 指令",
+      "composerMoreLabel": "更多輸入選項",
       "commandCompactContext": "壓縮目前上下文",
       "pendingSending": "傳送中",
       "pendingQueued": "已排入佇列",

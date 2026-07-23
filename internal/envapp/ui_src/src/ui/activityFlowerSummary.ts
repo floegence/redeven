@@ -34,11 +34,17 @@ export function presentActivityFlowerSummary(
   const status = presence.priority_status;
   const count = Math.max(1, Math.floor(presence.priority_count));
   const title = String(presence.priority_thread_title ?? '').trim();
+  const progress = status === 'running'
+    ? String(presence.priority_thread_progress ?? '').trim()
+    : '';
+  const lead = progress || copy.lead[status];
   const visualText = title
     ? count > 1
-      ? copy.withTitleAndMore(copy.lead[status], title, count - 1)
-      : copy.withTitle(copy.lead[status], title)
-    : copy.withoutTitle(status, count);
+      ? copy.withTitleAndMore(lead, title, count - 1)
+      : copy.withTitle(lead, title)
+    : progress && count === 1
+      ? progress
+      : copy.withoutTitle(status, count);
   const backgroundRunningCount = status === 'running'
     ? 0
     : Math.max(0, Math.floor(presence.running_count));

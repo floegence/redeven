@@ -38,6 +38,7 @@
       "compactFinishInputRequest": "Termine la demande de saisie en cours avant de compresser le contexte.",
       "compactNeedsConversation": "Il n’y a pas encore de contexte à compresser.",
       "commandMenuLabel": "Commandes Flower",
+      "composerMoreLabel": "Plus d’options de saisie",
       "commandCompactContext": "Compresser le contexte actuel",
       "pendingSending": "Envoi en cours",
       "pendingQueued": "En file d’attente",

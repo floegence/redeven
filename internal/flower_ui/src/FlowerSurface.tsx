@@ -2076,14 +2076,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     setSidebarListItems(items);
   });
   const companionThreadItems = createMemo<readonly FlowerCompanionThreadListItem[]>(() => {
-    const queuedByThread = new Map(threads().map((thread) => [
-      thread.thread_id,
-      thread.queued_turn_count ?? thread.queued_turns?.length ?? 0,
-    ] as const));
-    return sidebarListItems().map((item) => ({
-      ...item,
-      queued_turn_count: queuedByThread.get(item.thread_id) ?? 0,
-    }));
+    const threadStateByID = new Map(threads().map((thread) => [thread.thread_id, thread] as const));
+    return sidebarListItems().map((item) => {
+      const thread = threadStateByID.get(item.thread_id);
+      const modelIOStatus = thread?.model_io_status;
+      return {
+        ...item,
+        queued_turn_count: thread?.queued_turn_count ?? thread?.queued_turns?.length ?? 0,
+        ...(modelIOStatus ? { progress_text: modelStatusLabel(modelIOStatus.phase) } : {}),
+      };
+    });
   });
   let lastCompanionPresenceSignature = '';
   createEffect(() => {
@@ -2410,6 +2412,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     return null;
   });
   const needsSetup = createMemo(() => !!snapshot() && !anyModelReady());
+  const companionCompactComposer = createMemo(() => (
+    presentation() === 'companion'
+    && !companionCollapsed()
+    && !needsSetup()
+    && !selectedInputRequest()
+    && !selectedThreadReadOnly()
+    && !selectedComposerApprovalDisplayAction()
+    && !handlerNotice()
+    && !selectedThreadDetailPending()
+    && !surfaceWarmupActive()
+  ));
 
   const composerControlIDs = createMemo<readonly FlowerComposerControlID[]>(() => {
     if (needsSetup()) return [];
@@ -2434,6 +2447,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const composerOverflowControlIDs = createMemo<readonly FlowerComposerControlID[]>(() => {
     const ids = composerControlIDs();
+    if (companionCompactComposer()) return ids;
     const availableWidth = composerControlLayout().availableWidth;
     if (ids.length === 0 || availableWidth <= 0) return [];
     if (composerControlWidth(ids, false) <= availableWidth) return [];
@@ -4495,7 +4509,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     transcriptLayoutRevision();
     measureTranscriptNearBottomAfterLayout();
   });
-  const modelStatusLabel = (phase: FlowerModelIOPhase): string => {
+  function modelStatusLabel(phase: FlowerModelIOPhase): string {
     const modelStatus = copy().chat.modelStatus;
     const fallback = DEFAULT_FLOWER_SURFACE_COPY.chat.modelStatus;
     const labels: Record<FlowerModelIOPhase, string> = {
@@ -4506,7 +4520,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       finalizing: trimString(modelStatus.finalizing) || fallback.finalizing,
     };
     return labels[phase];
-  };
+  }
   const selectedModelStatusLabel = createMemo(() => {
     const status = selectedModelIOStatus();
     return status ? modelStatusLabel(status.phase) : '';
@@ -7323,7 +7337,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         class="flower-composer-more-panel"
         style={{ '--flower-composer-more-panel-shift-x': `${composerMorePanelShiftX()}px` } as JSX.CSSProperties}
         role="dialog"
-        aria-label="More composer controls"
+        aria-label={copy().chat.composerMoreLabel}
         data-flower-composer-more-panel="true"
       >
         <For each={composerOverflowControlIDs()}>
@@ -7334,6 +7348,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
             </div>
           )}
         </For>
+        <Show when={companionCompactComposer() && selectedContextUsage()}>
+          {(contextUsage) => (
+            <div class="flower-composer-more-row" data-flower-composer-more-item="context">
+              <span class="flower-composer-more-label">{copy().chat.contextIndicator.label}</span>
+              <span class="flower-composer-more-control">
+                <FlowerComposerContextIndicator
+                  usage={contextUsage().usage}
+                  freshness={contextUsage().freshness}
+                  copy={copy()}
+                />
+              </span>
+            </div>
+          )}
+        </Show>
       </div>
     </Show>
   );
@@ -7345,8 +7373,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           ref={composerMoreButtonRef}
           type="button"
           class="flower-composer-more-button"
-          aria-label="More composer controls"
-          title="More"
+          aria-label={copy().chat.composerMoreLabel}
+          title={copy().chat.composerMoreLabel}
           aria-haspopup="dialog"
           aria-expanded={composerMoreOpen()}
           onClick={() => setComposerMoreOpen((open) => !open)}
@@ -7605,8 +7633,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 data-flower-turn-submitting={chatRunning() ? 'true' : undefined}
                 data-flower-approval-handoff={selectedComposerApprovalHandoffActive() ? 'true' : undefined}
                 data-flower-approval-handoff-phase={selectedComposerApprovalHandoffActive() ? selectedComposerApprovalHandoffPhase() : undefined}
+                data-flower-companion-compact={companionCompactComposer() ? 'true' : undefined}
               >
-                <Show when={companionCollapsed()}>
+                <Show when={companionCollapsed() && !companionSummaryVisible()}>
                   <span
                     class={cn(
                       'flower-companion-collapsed-icon',
@@ -7637,13 +7666,35 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   </button>
                 </Show>
                 <Show when={companionSummaryVisible()}>
-                  <span
+                  <button
+                    type="button"
                     class="flower-companion-collapsed-summary"
                     title={props.companionSummary?.accessibleText}
-                    aria-hidden="true"
+                    aria-label={props.companionSummary?.accessibleText}
+                    aria-controls={props.companionRegionID}
+                    aria-expanded="false"
+                    onClick={() => props.onCompanionOpenRequest?.()}
                   >
-                    {props.companionSummary?.visualText}
-                  </span>
+                    <span
+                      class={cn(
+                        'flower-companion-collapsed-icon',
+                        props.companionSummary?.running && 'flower-companion-collapsed-icon-running',
+                      )}
+                      aria-hidden="true"
+                    >
+                      <FlowerIcon />
+                    </span>
+                    <span
+                      class={cn(
+                        'flower-companion-collapsed-status',
+                        `flower-companion-collapsed-status-${props.companionSummary?.priorityStatus ?? 'idle'}`,
+                      )}
+                      aria-hidden="true"
+                    />
+                    <span class="flower-companion-collapsed-summary-text">
+                      {props.companionSummary?.visualText}
+                    </span>
+                  </button>
                 </Show>
                 <Show when={companionCollapsed() && companionDescriptionID()}>
                   <span
@@ -7658,8 +7709,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 </Show>
                 <div
                   class="flower-composer-content"
-                  aria-hidden={companionActionVisible() ? 'true' : undefined}
-                  inert={companionActionVisible()}
+                  aria-hidden={companionActionVisible() || companionSummaryVisible() ? 'true' : undefined}
+                  inert={companionActionVisible() || companionSummaryVisible()}
                 >
                 <Show
                   when={trimString(selectedComposerApprovalDisplayAction()?.action_id)}
@@ -7798,7 +7849,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       </Show>
                     </div>
                     <div class="flower-composer-actions">
-                      <Show when={selectedContextUsage()}>
+                      <Show when={!companionCompactComposer() && selectedContextUsage()}>
                         {(contextUsage) => (
                           <FlowerComposerContextIndicator
                             usage={contextUsage().usage}
