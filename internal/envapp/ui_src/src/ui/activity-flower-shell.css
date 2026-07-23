@@ -56,14 +56,37 @@
   );
 }
 
+html.dark .flower-activity-companion {
+  --flower-companion-surface: color-mix(
+    in srgb,
+    var(--redeven-surface-main) 72%,
+    var(--redeven-surface-shadow-source) 28%
+  );
+  --flower-companion-surface-soft: color-mix(
+    in srgb,
+    var(--redeven-surface-panel-soft) 30%,
+    var(--flower-companion-surface) 70%
+  );
+  --flower-companion-surface-elevated: color-mix(
+    in srgb,
+    var(--redeven-surface-panel-elevated) 28%,
+    var(--flower-companion-surface) 72%
+  );
+  --flower-companion-border: color-mix(
+    in srgb,
+    var(--redeven-surface-panel-border) 76%,
+    transparent
+  );
+}
+
 .flower-activity-companion.floe-bottom-bar-companion[data-companion-phase='expanding'],
 .flower-activity-companion.floe-bottom-bar-companion[data-companion-phase='expanded'],
 .flower-activity-companion.floe-bottom-bar-companion[data-companion-phase='collapsing'] {
   border-color: var(--flower-companion-border);
   background: var(--flower-companion-surface);
   box-shadow:
-    0 24px 48px -28px color-mix(in srgb, var(--redeven-surface-shadow-source) 56%, transparent),
-    0 4px 12px -7px color-mix(in srgb, var(--redeven-surface-shadow-source) 38%, transparent);
+    0 22px 44px -26px color-mix(in srgb, var(--redeven-surface-shadow-source) 48%, transparent),
+    0 4px 12px -7px color-mix(in srgb, var(--redeven-surface-shadow-source) 30%, transparent);
 }
 
 .flower-activity-companion:is(
@@ -128,6 +151,25 @@
   box-shadow:
     0 0 0 2px color-mix(in srgb, var(--ring) 72%, var(--flower-companion-surface-elevated) 28%),
     0 2px 8px -4px color-mix(in srgb, var(--redeven-surface-shadow-source) 36%, transparent);
+}
+
+html.dark .flower-activity-companion:is(
+  [data-companion-phase='expanding'],
+  [data-companion-phase='expanded'],
+  [data-companion-phase='collapsing']
+) .flower-empty-state .redeven-flower-soft-aura-lg .redeven-flower-soft-aura-glow {
+  animation: none;
+  filter: blur(7px);
+  opacity: 0.28;
+}
+
+html.dark .flower-activity-companion:is(
+  [data-companion-phase='expanding'],
+  [data-companion-phase='expanded'],
+  [data-companion-phase='collapsing']
+) .flower-empty-state .redeven-flower-icon-breathe {
+  animation: none;
+  transform: none;
 }
 
 .flower-activity-companion-icon-button {
