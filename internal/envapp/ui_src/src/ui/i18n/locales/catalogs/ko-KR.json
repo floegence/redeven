@@ -4107,7 +4107,49 @@
       "closeSurface": "플러그인 화면 닫기",
       "openingSurface": "플러그인 화면 여는 중...",
       "iframeUnavailable": "플러그인 iframe 창을 사용할 수 없습니다.",
-      "surfaceFailed": "플러그인 표면에 오류가 발생했습니다."
+      "surfaceFailed": "플러그인 표면에 오류가 발생했습니다.",
+      "surfaceCleanupFailed": "플러그인 콘텐츠는 닫혔지만 서버 측 정리가 완료되었는지 확인할 수 없습니다. 이 창을 열어 두거나 플러그인 세션을 종료하여 복구하세요.",
+      "endPluginSession": "플러그인 세션 종료",
+      "endPluginSessionTitle": "플러그인 세션 전체를 종료하시겠습니까?",
+      "endPluginSessionDescription": "모든 플러그인 창이 닫히고 현재 인증 세션에서는 플러그인을 다시 열 수 없게 됩니다.",
+      "closingSurface": "플러그인 화면을 닫는 중...",
+      "activityWindowTitle": "{plugin} - {surface}",
+      "surfaceIframeTitle": "{plugin} - {surface} 플러그인 콘텐츠",
+      "containersDashboardSurface": "대시보드",
+      "permissionsTitle": "컨테이너 권한",
+      "permissionsDescription": "이 플러그인이 요청할 수 있는 컨테이너 작업을 선택하세요. 민감한 작업은 여전히 플랫폼의 확인을 거쳐야 합니다.",
+      "permissionsAdminRequired": "이러한 권한은 환경 관리자만 변경할 수 있습니다.",
+      "policyConfigured": "정책 설정됨",
+      "requiredToOpen": "열려면 필요",
+      "managedByPolicy": "정책으로 관리됨",
+      "permissionToggleLabel": "{permission} 권한 변경",
+      "permissionConfirmationTitle": "권한 변경 확인",
+      "confirmGrantPermission": "Containers에 {permission} 권한을 부여하시겠습니까?",
+      "confirmRevokePermission": "Containers의 {permission} 권한을 회수하시겠습니까? 이 권한을 사용하는 열린 화면이 닫힙니다.",
+      "permissionGrantImpact": "이 권한은 현재 환경 정책 및 플러그인 보안 정책의 제한을 계속 받습니다.",
+      "permissionRevokeImpact": "권한을 회수하면 플러그인 인가 리비전이 무효화되고 영향을 받는 플러그인 화면이 닫힙니다.",
+      "grantPermission": "부여",
+      "revokePermission": "회수",
+      "permissionGranted": "부여됨",
+      "permissionNotGranted": "부여되지 않음",
+      "permission": {
+        "read": {
+          "label": "컨테이너 보기",
+          "description": "엔진 상태, 컨테이너 세부 정보, 로그 및 작업 실행 전 점검 정보를 읽습니다."
+        },
+        "execute": {
+          "label": "컨테이너 제어",
+          "description": "필요한 확인을 거친 후 컨테이너를 시작, 중지 및 재시작합니다."
+        },
+        "delete": {
+          "label": "컨테이너 삭제",
+          "description": "컨테이너를 제거합니다. 선택적으로 부여할 수 있는 파괴적 권한입니다."
+        },
+        "images_write": {
+          "label": "컨테이너 이미지 쓰기",
+          "description": "선택한 엔진으로 컨테이너 이미지를 가져옵니다."
+        }
+      }
     },
     "pluginRuntime": {
       "sandboxOriginUnavailable": "이 Env App 호스트에서는 플러그인 샌드박스 주소를 사용할 수 없습니다.",

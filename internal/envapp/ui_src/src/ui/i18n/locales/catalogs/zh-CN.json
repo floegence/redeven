@@ -4107,7 +4107,49 @@
       "closeSurface": "关闭插件界面",
       "openingSurface": "正在打开插件界面...",
       "iframeUnavailable": "插件 iframe 窗口不可用。",
-      "surfaceFailed": "插件界面加载失败。"
+      "surfaceFailed": "插件界面加载失败。",
+      "surfaceCleanupFailed": "插件内容已关闭，但无法确认服务端清理是否完成。请保持此窗口打开，或结束插件会话以恢复正常使用。",
+      "endPluginSession": "结束插件会话",
+      "endPluginSessionTitle": "结束整个插件会话？",
+      "endPluginSessionDescription": "此操作会关闭所有插件窗口；在当前认证会话结束前，任何插件都无法再次打开。",
+      "closingSurface": "正在关闭插件界面...",
+      "activityWindowTitle": "{plugin} - {surface}",
+      "surfaceIframeTitle": "{plugin} - {surface} 插件内容",
+      "containersDashboardSurface": "概览",
+      "permissionsTitle": "容器权限",
+      "permissionsDescription": "选择此插件可以请求的容器操作。敏感操作仍需经过平台确认。",
+      "permissionsAdminRequired": "需要由环境管理员更改这些权限。",
+      "policyConfigured": "已配置策略",
+      "requiredToOpen": "打开时必需",
+      "managedByPolicy": "由策略管理",
+      "permissionToggleLabel": "更改“{permission}”权限",
+      "permissionConfirmationTitle": "确认权限更改",
+      "confirmGrantPermission": "向 Containers 授予“{permission}”权限？",
+      "confirmRevokePermission": "撤销 Containers 的“{permission}”权限？正在使用此权限的插件界面将会关闭。",
+      "permissionGrantImpact": "此权限仍受当前环境策略和插件安全策略的限制。",
+      "permissionRevokeImpact": "撤销权限会使当前插件授权版本失效，并关闭受影响的插件界面。",
+      "grantPermission": "授予",
+      "revokePermission": "撤销",
+      "permissionGranted": "已授予",
+      "permissionNotGranted": "未授予",
+      "permission": {
+        "read": {
+          "label": "查看容器",
+          "description": "读取引擎状态、容器详情与日志，以及操作预检信息。"
+        },
+        "execute": {
+          "label": "操作容器",
+          "description": "在完成必要确认后启动、停止和重启容器。"
+        },
+        "delete": {
+          "label": "删除容器",
+          "description": "移除容器。这是一项用于破坏性操作的可选权限。"
+        },
+        "images_write": {
+          "label": "写入镜像",
+          "description": "将容器镜像拉取到所选引擎。"
+        }
+      }
     },
     "pluginRuntime": {
       "sandboxOriginUnavailable": "当前 Env App 主机无法提供插件沙箱地址。",

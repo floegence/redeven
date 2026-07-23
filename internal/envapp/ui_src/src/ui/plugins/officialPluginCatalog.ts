@@ -15,7 +15,35 @@ export const OFFICIAL_PLUGIN_CATALOG_SEED: readonly OfficialPluginCatalogItem[] 
     minReDevPluginVersion: '0.6.5',
     rolloutState: 'stable',
     defaultSurfaceID: 'containers.dashboard',
+    defaultSurfaceDisplayNameKey: 'uiCopy.plugin.containersDashboardSurface',
     iconFallback: 'containers',
+    permissions: [
+      {
+        permissionID: 'containers.read',
+        group: 'read',
+        requiredToOpen: true,
+        methods: ['containers.status', 'containers.list', 'containers.inspect', 'containers.start.preflight', 'containers.logs.tail'],
+        requiredToOpenMethods: ['containers.status', 'containers.list'],
+      },
+      {
+        permissionID: 'containers.execute',
+        group: 'execute',
+        requiredToOpen: false,
+        methods: ['containers.start', 'containers.stop', 'containers.restart'],
+      },
+      {
+        permissionID: 'containers.delete',
+        group: 'delete',
+        requiredToOpen: false,
+        methods: ['containers.remove'],
+      },
+      {
+        permissionID: 'containers.images.write',
+        group: 'images_write',
+        requiredToOpen: false,
+        methods: ['images.pull'],
+      },
+    ],
     distribution: {
       releaseRef: OFFICIAL_CONTAINERS_RELEASE_REF,
     },

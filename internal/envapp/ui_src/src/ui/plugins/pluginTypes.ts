@@ -14,6 +14,7 @@ export type PluginTrustBadge =
 
 export type PluginAttentionReason =
   | 'permission_required'
+  | 'policy_restricted'
   | 'runtime_missing'
   | 'update_required'
   | 'disabled'
@@ -25,6 +26,14 @@ export type PluginAttentionReason =
 
 export type OfficialPluginDistribution = {
   releaseRef: PluginReleaseRef;
+};
+
+export type OfficialPluginPermission = {
+  permissionID: string;
+  group: 'read' | 'execute' | 'delete' | 'images_write';
+  requiredToOpen: boolean;
+  methods: readonly string[];
+  requiredToOpenMethods?: readonly string[];
 };
 
 export type OfficialPluginCatalogItem = {
@@ -40,14 +49,37 @@ export type OfficialPluginCatalogItem = {
   minReDevPluginVersion: string;
   rolloutState: 'stable' | 'staged' | 'disabled' | 'revoked';
   defaultSurfaceID: string;
+  defaultSurfaceDisplayNameKey?: 'uiCopy.plugin.containersDashboardSurface';
   iconFallback: 'containers' | 'database' | 'github' | 'generic';
+  permissions?: readonly OfficialPluginPermission[];
   distribution: OfficialPluginDistribution;
+};
+
+export type PluginPermissionState = OfficialPluginPermission & {
+  granted: boolean;
+  deniedByGrant: boolean;
+  blockedByPolicy: boolean;
+  grantBlockedByPolicy: boolean;
+  blockedToOpen: boolean;
+};
+
+export type PluginAuthorizationInventory = {
+  grants: readonly PluginPermissionGrant[];
+  policy?: PluginSecurityPolicy;
+  permissions: readonly PluginPermissionState[];
+  revisions: {
+    policyRevision: number;
+    managementRevision: number;
+    revokeEpoch: number;
+  };
 };
 
 export type PluginSurfaceLaunchTarget = {
   pluginID: string;
   pluginInstanceID: string;
   surfaceID: string;
+  displayName?: string;
+  surfaceDisplayNameKey?: 'uiCopy.plugin.containersDashboardSurface';
   expectedManagementRevision: number;
   preferredPlacement: 'activity' | 'workbench';
 };
@@ -62,12 +94,14 @@ export type PluginInventoryItem = {
   publisher: string;
   version?: string;
   managementRevision?: number;
+  canDisable?: boolean;
   lifecycleState: PluginLifecycleState;
   trustBadge: PluginTrustBadge;
   pinned: boolean;
   lastOpenedAt?: string;
   defaultLaunchTarget?: PluginSurfaceLaunchTarget;
   attentionReason?: PluginAttentionReason;
+  authorization?: PluginAuthorizationInventory;
   officialCatalog?: OfficialPluginCatalogItem;
 };
 
@@ -108,7 +142,23 @@ export type PluginManagementCommand =
   | { type: 'enable'; pluginInstanceID: string; expectedManagementRevision: number }
   | { type: 'disable'; pluginInstanceID: string; expectedManagementRevision: number }
   | { type: 'uninstall'; pluginInstanceID: string; expectedManagementRevision: number; dataRetention: 'keep_data' | 'delete_data' }
-  | { type: 'update'; pluginID: string; pluginInstanceID: string; expectedManagementRevision: number; targetVersion: string };
+  | { type: 'update'; pluginID: string; pluginInstanceID: string; expectedManagementRevision: number; targetVersion: string }
+  | {
+      type: 'grant_permission';
+      pluginInstanceID: string;
+      permissionID: string;
+      expectedPolicyRevision: number;
+      expectedManagementRevision: number;
+      expectedRevokeEpoch: number;
+    }
+  | {
+      type: 'revoke_permission';
+      pluginInstanceID: string;
+      permissionID: string;
+      expectedPolicyRevision: number;
+      expectedManagementRevision: number;
+      expectedRevokeEpoch: number;
+    };
 
 export type PluginOpenSurfaceCommand = {
   type: 'open_surface';
@@ -126,6 +176,8 @@ export type ReDevPluginRecord = PluginRecord;
 export type ReDevPluginCatalogResult = PluginCatalogResult;
 import type {
   PluginCatalogResult,
+  PluginPermissionGrant,
   PluginRecord,
   PluginReleaseRef,
+  PluginSecurityPolicy,
 } from '@floegence/redevplugin-ui';

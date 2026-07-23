@@ -2186,6 +2186,17 @@ html.dark .git-changes-table-skeleton__row > span {
   overflow: hidden;
 }
 
+@media (max-width: 767px) {
+  [data-floe-geometry-surface="floating-window"][data-redeven-plugin-activity-window="true"] {
+    inset: 0.25rem !important;
+    width: calc(100vw - 0.5rem) !important;
+    height: calc(100dvh - 0.5rem) !important;
+    max-width: none !important;
+    max-height: none !important;
+    transform: none !important;
+  }
+}
+
 .redeven-env-shell-stage .display-mode-page-shell {
   position: absolute;
   inset: 0;

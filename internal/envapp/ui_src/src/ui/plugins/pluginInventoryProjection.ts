@@ -4,6 +4,7 @@ import validSemVer from 'semver/functions/valid.js';
 import { officialPluginCatalog } from './officialPluginCatalog';
 import type {
   OfficialPluginCatalogItem,
+  PluginAuthorizationInventory,
   PluginCenterModel,
   PluginCenterTab,
   PluginInventoryItem,
@@ -12,10 +13,13 @@ import type {
   PluginPanelTile,
   ReDevPluginRecord,
 } from './pluginTypes';
+import type { PluginPermissionGrant, PluginSecurityPolicy } from '@floegence/redevplugin-ui';
 
 export function projectPluginInventory(input: {
   officialCatalog?: readonly OfficialPluginCatalogItem[];
   installedPlugins: readonly ReDevPluginRecord[];
+  permissionGrants?: readonly PluginPermissionGrant[];
+  securityPolicies?: readonly PluginSecurityPolicy[];
 }): PluginInventoryProjection {
   const catalog = [...(input.officialCatalog ?? officialPluginCatalog())];
   const installedByIdentity = new Map(input.installedPlugins.map((record) => [pluginIdentityKey(
@@ -24,6 +28,8 @@ export function projectPluginInventory(input: {
     record.plugin_instance_id,
   ), record]));
   const items: PluginInventoryItem[] = [];
+  const grantsByPlugin = groupByPluginInstance(input.permissionGrants ?? []);
+  const policyByPlugin = new Map((input.securityPolicies ?? []).map((policy) => [policy.plugin_instance_id, policy]));
 
   for (const catalogItem of catalog) {
     const installed = installedByIdentity.get(pluginIdentityKey(
@@ -31,7 +37,12 @@ export function projectPluginInventory(input: {
       catalogItem.pluginID,
       catalogItem.pluginInstanceID,
     ));
-    items.push(projectCatalogItem(catalogItem, installed));
+    items.push(projectCatalogItem(
+      catalogItem,
+      installed,
+      installed ? grantsByPlugin.get(installed.plugin_instance_id) ?? [] : [],
+      installed ? policyByPlugin.get(installed.plugin_instance_id) : undefined,
+    ));
   }
 
   return { items: items.sort(compareInventoryItems) };
@@ -60,7 +71,12 @@ export function buildPluginCenterModel(projection: PluginInventoryProjection, ac
   return { activeTab, installed, discover, updates };
 }
 
-function projectCatalogItem(catalogItem: OfficialPluginCatalogItem, installed?: ReDevPluginRecord): PluginInventoryItem {
+function projectCatalogItem(
+  catalogItem: OfficialPluginCatalogItem,
+  installed?: ReDevPluginRecord,
+  grants: readonly PluginPermissionGrant[] = [],
+  policy?: PluginSecurityPolicy,
+): PluginInventoryItem {
   if (!installed) {
     return {
       pluginID: catalogItem.pluginID,
@@ -76,8 +92,9 @@ function projectCatalogItem(catalogItem: OfficialPluginCatalogItem, installed?: 
     };
   }
 
-  const lifecycleState = installedLifecycleState(installed, catalogItem);
-  const attentionReason = installedAttentionReason(installed, catalogItem, lifecycleState);
+  const authorization = projectAuthorization(catalogItem, installed, grants, policy);
+  const lifecycleState = installedLifecycleState(installed, catalogItem, authorization);
+  const attentionReason = installedAttentionReason(installed, catalogItem, lifecycleState, authorization);
   return {
     pluginID: catalogItem.pluginID,
     pluginInstanceID: installed.plugin_instance_id,
@@ -87,6 +104,7 @@ function projectCatalogItem(catalogItem: OfficialPluginCatalogItem, installed?: 
     publisher: catalogItem.publisher,
     version: installed.version,
     managementRevision: installed.management_revision,
+    canDisable: installed.enable_state === 'enabled',
     lifecycleState,
     trustBadge: installedTrustBadge(installed, catalogItem),
     pinned: installed.metadata?.pinned === 'true',
@@ -96,11 +114,14 @@ function projectCatalogItem(catalogItem: OfficialPluginCatalogItem, installed?: 
           pluginID: installed.plugin_id,
           pluginInstanceID: installed.plugin_instance_id,
           surfaceID: catalogItem.defaultSurfaceID,
+          displayName: manifestDisplayName(installed) || catalogItem.displayName,
+          surfaceDisplayNameKey: catalogItem.defaultSurfaceDisplayNameKey,
           expectedManagementRevision: installed.management_revision,
           preferredPlacement: 'activity',
         }
       : undefined,
     attentionReason,
+    authorization,
     officialCatalog: catalogItem,
   };
 }
@@ -109,11 +130,18 @@ function pluginIdentityKey(publisherID: string, pluginID: string, pluginInstance
   return `${publisherID}\u0000${pluginID}\u0000${pluginInstanceID}`;
 }
 
-function installedLifecycleState(installed: ReDevPluginRecord, catalogItem: OfficialPluginCatalogItem): PluginInventoryItem['lifecycleState'] {
+function installedLifecycleState(
+  installed: ReDevPluginRecord,
+  catalogItem: OfficialPluginCatalogItem,
+  authorization?: PluginAuthorizationInventory,
+): PluginInventoryItem['lifecycleState'] {
   if (catalogItem.rolloutState === 'revoked' || catalogItem.rolloutState === 'disabled') return 'needs_attention';
   if (!isRunnableInstalledTrust(installed.trust_state)) return 'needs_attention';
   if (installed.enable_state !== 'enabled') return 'disabled';
   if (compareVersion(installed.version, catalogItem.stableVersion) < 0) return 'update_available';
+  if (authorization?.permissions.some((permission) => (
+    permission.requiredToOpen && (!permission.granted || permission.deniedByGrant || permission.blockedToOpen)
+  ))) return 'needs_attention';
   return 'enabled';
 }
 
@@ -129,13 +157,71 @@ function installedAttentionReason(
   installed: ReDevPluginRecord,
   catalogItem: OfficialPluginCatalogItem,
   lifecycleState: PluginInventoryItem['lifecycleState'],
+  authorization?: PluginAuthorizationInventory,
 ): PluginInventoryItem['attentionReason'] | undefined {
   const catalogReason = catalogAttentionReason(catalogItem);
   if (catalogReason) return catalogReason;
   if (!isRunnableInstalledTrust(installed.trust_state)) return 'trust_unavailable';
+  if (authorization?.permissions.some((permission) => permission.requiredToOpen && permission.blockedToOpen)) {
+    return 'policy_restricted';
+  }
+  if (authorization?.permissions.some((permission) => (
+    permission.requiredToOpen && (!permission.granted || permission.deniedByGrant)
+  ))) return 'permission_required';
   if (lifecycleState === 'disabled') return 'disabled';
   if (lifecycleState === 'update_available') return 'update_required';
   return undefined;
+}
+
+function projectAuthorization(
+  catalogItem: OfficialPluginCatalogItem,
+  installed: ReDevPluginRecord,
+  grants: readonly PluginPermissionGrant[],
+  policy?: PluginSecurityPolicy,
+): PluginAuthorizationInventory | undefined {
+  const metadata = catalogItem.permissions ?? [];
+  if (metadata.length === 0) return undefined;
+  const activeByPermission = new Map(grants.map((grant) => [grant.permission_id, grant]));
+  const policyCapsPermissions = Boolean(policy && policy.allowed_permissions.length > 0);
+  const deniedMethods = new Set(policy?.denied_methods ?? []);
+  return {
+    grants,
+    policy,
+    permissions: metadata.map((permission) => {
+      const grant = activeByPermission.get(permission.permissionID);
+      const blockedByPermissionAllowlist = Boolean(
+        policy && policyCapsPermissions && !policy.allowed_permissions.includes(permission.permissionID),
+      );
+      const blockedMethods = permission.methods.filter((method) => deniedMethods.has(method));
+      const blockedOpeningMethods = (permission.requiredToOpenMethods ?? [])
+        .filter((method) => deniedMethods.has(method));
+      return {
+        ...permission,
+        granted: grant?.effect === 'grant',
+        deniedByGrant: grant?.effect === 'deny',
+        blockedByPolicy: blockedByPermissionAllowlist || blockedMethods.length > 0,
+        grantBlockedByPolicy: blockedByPermissionAllowlist,
+        blockedToOpen: blockedByPermissionAllowlist || blockedOpeningMethods.length > 0,
+      };
+    }),
+    revisions: {
+      policyRevision: policy?.policy_revision ?? installed.policy_revision,
+      managementRevision: policy?.management_revision ?? installed.management_revision,
+      revokeEpoch: policy?.revoke_epoch ?? installed.revoke_epoch,
+    },
+  };
+}
+
+function groupByPluginInstance(
+  grants: readonly PluginPermissionGrant[],
+): Map<string, PluginPermissionGrant[]> {
+  const grouped = new Map<string, PluginPermissionGrant[]>();
+  for (const grant of grants) {
+    const current = grouped.get(grant.plugin_instance_id);
+    if (current) current.push(grant);
+    else grouped.set(grant.plugin_instance_id, [grant]);
+  }
+  return grouped;
 }
 
 function isRunnableInstalledTrust(trustState: string): boolean {

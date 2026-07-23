@@ -4107,7 +4107,49 @@
       "closeSurface": "Fermer l’interface du plugin",
       "openingSurface": "Ouverture de l’interface du plugin...",
       "iframeUnavailable": "La fenêtre iframe du plugin est indisponible.",
-      "surfaceFailed": "Échec du chargement de l’interface du plugin."
+      "surfaceFailed": "Échec du chargement de l’interface du plugin.",
+      "surfaceCleanupFailed": "Le contenu du plugin est fermé, mais le nettoyage côté serveur n’a pas pu être confirmé. Laissez cette fenêtre ouverte ou mettez fin à la session des plugins pour rétablir le fonctionnement.",
+      "endPluginSession": "Mettre fin à la session des plugins",
+      "endPluginSessionTitle": "Mettre fin à la session de tous les plugins ?",
+      "endPluginSessionDescription": "Cette action ferme toutes les fenêtres de plugins et empêche leur réouverture dans la session authentifiée actuelle.",
+      "closingSurface": "Fermeture de l’interface du plugin...",
+      "activityWindowTitle": "{plugin} - {surface}",
+      "surfaceIframeTitle": "{plugin} - contenu du plugin pour {surface}",
+      "containersDashboardSurface": "Tableau de bord",
+      "permissionsTitle": "Autorisations liées aux conteneurs",
+      "permissionsDescription": "Choisissez les opérations sur les conteneurs que ce plugin peut demander. Les opérations sensibles nécessitent toujours une confirmation de la plateforme.",
+      "permissionsAdminRequired": "Un administrateur de l’environnement doit modifier ces autorisations.",
+      "policyConfigured": "Stratégie configurée",
+      "requiredToOpen": "Requise pour l’ouverture",
+      "managedByPolicy": "Gérée par une stratégie",
+      "permissionToggleLabel": "Modifier l’autorisation « {permission} »",
+      "permissionConfirmationTitle": "Confirmer la modification de l’autorisation",
+      "confirmGrantPermission": "Accorder l’autorisation « {permission} » à Containers ?",
+      "confirmRevokePermission": "Révoquer l’autorisation « {permission} » de Containers ? Les interfaces ouvertes qui l’utilisent seront fermées.",
+      "permissionGrantImpact": "L’autorisation reste limitée par les stratégies actuelles de l’environnement et les stratégies de sécurité du plugin.",
+      "permissionRevokeImpact": "La révocation invalide la révision de l’autorisation du plugin et ferme les interfaces de plugin concernées.",
+      "grantPermission": "Accorder",
+      "revokePermission": "Révoquer",
+      "permissionGranted": "Accordée",
+      "permissionNotGranted": "Non accordée",
+      "permission": {
+        "read": {
+          "label": "Afficher les conteneurs",
+          "description": "Consulter l’état du moteur, les détails et journaux des conteneurs, ainsi que les informations de vérification préalable des opérations."
+        },
+        "execute": {
+          "label": "Gérer les conteneurs",
+          "description": "Démarrer, arrêter et redémarrer les conteneurs après les confirmations requises."
+        },
+        "delete": {
+          "label": "Supprimer des conteneurs",
+          "description": "Supprimer des conteneurs. Cette autorisation facultative permet une action destructive."
+        },
+        "images_write": {
+          "label": "Importer des images",
+          "description": "Récupérer des images de conteneur dans le moteur sélectionné."
+        }
+      }
     },
     "pluginRuntime": {
       "sandboxOriginUnavailable": "Aucune adresse de bac à sable de plug-in n’est disponible pour cet hôte Env App.",

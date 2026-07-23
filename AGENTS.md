@@ -439,12 +439,21 @@ The current released platform contract also fixes the host-integration shape:
   `PluginSurfaceSlot` instances. Redeven must not construct a surface host,
   bootstrap document, iframe, bridge token, or asset session itself.
 - Activity and Workbench are Redeven placement choices, not manifest surface
-  kinds. ReDevPlugin manifests remain host-neutral, and Redeven places the
-  SDK-owned surface element inside either ordinary Activity content or a
-  Workbench local-interaction surface. Manifest surface kinds remain the closed
+  kinds. ReDevPlugin manifests remain host-neutral. Activity places each
+  SDK-owned surface in a stable Shell-root floating window; responsive desktop
+  and mobile chrome must not remount or reuse its slot. Workbench placement uses
+  the standard projected widget surface only after a released, source/port-bound
+  interaction-ownership callback can drive Redeven's local-interaction policy.
+  Manifest surface kinds remain the closed
   `view|command|background` set with `primary|secondary|utility` roles; do not
   add Activity, Workbench, widget, settings-placement, or other Redeven layout
   fields.
+- Activity may keep multiple plugin windows open. Each window owns one fresh
+  `PluginSurfaceSlot`; the Shell owns the only multi-slot registry, target
+  uniqueness, activation stack, and layout persistence. On mobile, only the
+  active full-screen window may remain visible to pointer, keyboard, and
+  accessibility input, while hidden windows retain their stable DOM and receive
+  the released `hidden` lifecycle.
 - Moving a plugin surface between Activity and Workbench must await closure of
   the old slot and open a fresh slot lease and iframe. Redeven must not move,
   adopt, or reuse an existing iframe or `surface_instance_id`.
@@ -459,6 +468,17 @@ The current released platform contract also fixes the host-integration shape:
   disposal must close every affected slot through the shared
   `PluginSurfaceScope`. Do not add compatibility shims, fallback surface paths,
   or best-effort local teardown that leaves platform state active.
+- If an exact surface close has an unknown outcome and the consumed release has
+  no single-surface reconciliation API, Redeven must keep an error shell and
+  must not reopen or silently discard the target. A user-confirmed recovery may
+  revoke the entire authenticated plugin session, close every plugin window,
+  and permanently retire that client/scope; it must not pretend that local
+  iframe disposal proved server revocation.
+- Redeven may maintain product copy and risk grouping for exact official-plugin
+  permissions, but grant, deny, policy, revision, and effective enforcement stay
+  in ReDevPlugin. Generic permission discovery must come from a released
+  Host-verified capability-contract projection and must not parse manifest
+  claims, runtime files, or copied contracts in Redeven.
 
 The front-end and back-end platform implementation must arrive in Redeven as
 released ReDevPlugin library/runtime artifacts, not as Redeven-local platform

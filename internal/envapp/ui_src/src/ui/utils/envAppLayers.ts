@@ -1,6 +1,8 @@
 export const ENV_APP_FLOATING_LAYER = {
   fileBrowserSurface: 144,
   debugConsole: 145,
+  pluginWindow: 151,
+  pluginWindowCeiling: 159,
   previewWindow: 150,
   floatingWindowModal: 160,
   flowerTurnLauncher: 160,

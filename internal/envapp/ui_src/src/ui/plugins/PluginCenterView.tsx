@@ -1,6 +1,7 @@
 import { For, Show, createEffect, createMemo, createSignal, onCleanup, type JSX } from 'solid-js';
 import { cn, createUIFirstSelection } from '@floegence/floe-webapp-core';
-import { CheckCircle, Download, Grid3x3, RefreshIcon, Search, Settings, Trash, X } from '@floegence/floe-webapp-core/icons';
+import { CheckCircle, Download, Grid3x3, RefreshIcon, Search, Settings, Shield, Trash, X } from '@floegence/floe-webapp-core/icons';
+import { Dialog } from '@floegence/floe-webapp-core/ui';
 
 import { buildPluginCenterModel } from './pluginInventoryProjection';
 import { useI18n, type I18nHelpers } from '../i18n';
@@ -133,7 +134,13 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       <Show when={errorMessage()}>
         <div class="border-b border-destructive/25 bg-destructive/10 px-4 py-2 text-sm text-destructive">{errorMessage()}</div>
       </Show>
-      <div data-plugin-center-shell class="flex min-h-0 flex-1 flex-col lg:flex-row">
+      <div
+        id="plugin-center-panel"
+        role="tabpanel"
+        aria-labelledby={`plugin-center-tab-${activeTab()}`}
+        data-plugin-center-shell
+        class="flex min-h-0 flex-1 flex-col lg:flex-row"
+      >
         <div class="flex min-h-0 w-full flex-col border-b lg:w-[min(430px,42vw)] lg:border-b-0 lg:border-r">
           <div data-plugin-center-list class="min-h-0 flex-1 overflow-y-auto">
             <Show when={loading()}>
@@ -245,7 +252,7 @@ export function PluginCenterShell(props: {
             </Show>
           </div>
         </div>
-        <div class="mt-3 flex flex-wrap gap-1">
+        <div class="mt-3 flex flex-wrap gap-1" role="tablist" aria-label={i18n.t('uiCopy.plugin.centerTitle')}>
           <TabButton id="discover" active={props.activeTab} onSelect={props.onTabSelect} label={i18n.t('uiCopy.plugin.discoverCount', { count: props.discoverCount })} />
           <TabButton id="installed" active={props.activeTab} onSelect={props.onTabSelect} label={i18n.t('uiCopy.plugin.installedCount', { count: props.installedCount })} />
           <TabButton id="updates" active={props.activeTab} onSelect={props.onTabSelect} label={i18n.t('uiCopy.plugin.updatesCount', { count: props.updatesCount })} />
@@ -294,6 +301,13 @@ export function PluginCenterDetails(props: {
               <DetailStat label={i18n.t('uiCopy.plugin.minimumReDevPlugin')} value={item().officialCatalog?.minReDevPluginVersion ?? '-'} />
               <DetailStat label={i18n.t('uiCopy.plugin.trust')} value={trustLabel(item(), i18n)} />
             </div>
+
+            <PluginPermissionInventory
+              item={item()}
+              canManage={props.canManage}
+              commandPending={props.commandPending}
+              onCommand={props.onCommand}
+            />
 
             <div>
               <h3 class="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{i18n.t('uiCopy.plugin.lifecycle')}</h3>
@@ -345,6 +359,170 @@ export function PluginCenterDetails(props: {
   );
 }
 
+function PluginPermissionInventory(props: {
+  item: PluginInventoryItem;
+  canManage: boolean;
+  commandPending: boolean;
+  onCommand: (command: PluginLifecycleCommand) => void;
+}): JSX.Element {
+  const i18n = useI18n();
+  const [confirmation, setConfirmation] = createSignal<{ permissionID: string; grant: boolean } | null>(null);
+  const authorization = () => props.item.authorization;
+
+  const submit = (permissionID: string, grant: boolean) => {
+    const inventory = authorization();
+    const pluginInstanceID = props.item.pluginInstanceID;
+    if (!inventory || !pluginInstanceID) return;
+    const revisions = inventory.revisions;
+    props.onCommand({
+      type: grant ? 'grant_permission' : 'revoke_permission',
+      pluginInstanceID,
+      permissionID,
+      expectedPolicyRevision: revisions.policyRevision,
+      expectedManagementRevision: revisions.managementRevision,
+      expectedRevokeEpoch: revisions.revokeEpoch,
+    });
+    setConfirmation(null);
+  };
+
+  return (
+    <Show when={authorization()}>
+      {(inventory) => (
+        <section data-plugin-permissions>
+          <div class="flex items-start justify-between gap-3 border-b pb-2">
+            <div>
+              <h3 class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                <Shield class="h-3.5 w-3.5" />
+                {i18n.t('uiCopy.plugin.permissionsTitle')}
+              </h3>
+              <p class="mt-1 text-xs leading-5 text-muted-foreground">
+                {props.canManage
+                  ? i18n.t('uiCopy.plugin.permissionsDescription')
+                  : i18n.t('uiCopy.plugin.permissionsAdminRequired')}
+              </p>
+            </div>
+            <Show when={inventory().policy}>
+              <span class="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                {i18n.t('uiCopy.plugin.policyConfigured')}
+              </span>
+            </Show>
+          </div>
+          <div class="divide-y">
+            <For each={inventory().permissions}>
+              {(permission) => {
+                const effective = () => permission.granted && !permission.deniedByGrant && !permission.grantBlockedByPolicy;
+                const granted = () => permission.granted && !permission.deniedByGrant;
+                const disabled = () => props.commandPending || (permission.grantBlockedByPolicy && !permission.granted);
+                return (
+                  <div class="py-3" data-plugin-permission={permission.permissionID}>
+                    <div class="flex items-start justify-between gap-4">
+                      <div class="min-w-0">
+                        <div class="flex flex-wrap items-center gap-2">
+                          <span class="text-sm font-medium">{permissionLabel(permission.group, i18n)}</span>
+                          <Show when={permission.requiredToOpen}>
+                            <span class="rounded-full bg-[var(--redeven-status-warning-soft)] px-2 py-0.5 text-[10px] font-semibold text-[var(--redeven-status-warning-foreground)]">
+                              {i18n.t('uiCopy.plugin.requiredToOpen')}
+                            </span>
+                          </Show>
+                          <Show when={permission.blockedByPolicy}>
+                            <span class="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground">
+                              {i18n.t('uiCopy.plugin.managedByPolicy')}
+                            </span>
+                          </Show>
+                        </div>
+                        <p class="mt-1 text-xs leading-5 text-muted-foreground">{permissionDescription(permission.group, i18n)}</p>
+                        <code class="mt-1 block text-[11px] text-muted-foreground">{permission.permissionID}</code>
+                      </div>
+                      <Show
+                        when={props.canManage}
+                        fallback={<span class="shrink-0 text-xs font-medium text-muted-foreground">{effective() ? i18n.t('uiCopy.plugin.permissionGranted') : i18n.t('uiCopy.plugin.permissionNotGranted')}</span>}
+                      >
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={granted()}
+                          data-state={granted() ? 'checked' : 'unchecked'}
+                          disabled={disabled()}
+                          aria-label={i18n.t('uiCopy.plugin.permissionToggleLabel', { permission: permissionLabel(permission.group, i18n) })}
+                          class={cn(
+                            'relative mt-0.5 inline-flex h-6 w-10 shrink-0 cursor-pointer items-center rounded-full border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
+                            granted() ? 'border-primary bg-primary' : 'bg-muted',
+                          )}
+                          onClick={() => {
+                            setConfirmation({ permissionID: permission.permissionID, grant: !granted() });
+                          }}
+                        >
+                          <span
+                            aria-hidden="true"
+                            class={cn(
+                              'absolute left-1 h-4 w-4 rounded-full bg-background shadow transition-transform',
+                              granted() && 'translate-x-4',
+                            )}
+                          />
+                        </button>
+                      </Show>
+                    </div>
+                  </div>
+                );
+              }}
+            </For>
+          </div>
+          <Show when={confirmation()}>
+            {(pending) => {
+              const permission = () => inventory().permissions.find((item) => item.permissionID === pending().permissionID);
+              const permissionName = () => permission() ? permissionLabel(permission()!.group, i18n) : pending().permissionID;
+              return (
+                <Dialog
+                  open
+                  onOpenChange={(open) => { if (!open) setConfirmation(null); }}
+                  title={i18n.t('uiCopy.plugin.permissionConfirmationTitle')}
+                  description={pending().grant
+                    ? i18n.t('uiCopy.plugin.confirmGrantPermission', { permission: permissionName() })
+                    : i18n.t('uiCopy.plugin.confirmRevokePermission', { permission: permissionName() })}
+                  footer={(
+                    <div class="flex w-full justify-end gap-2">
+                      <button type="button" class="cursor-pointer rounded-md border px-3 py-1.5 text-sm hover:bg-muted" onClick={() => setConfirmation(null)}>
+                        {i18n.t('common.actions.cancel')}
+                      </button>
+                      <button type="button" class="cursor-pointer rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90" onClick={() => submit(pending().permissionID, pending().grant)}>
+                        {pending().grant ? i18n.t('uiCopy.plugin.grantPermission') : i18n.t('uiCopy.plugin.revokePermission')}
+                      </button>
+                    </div>
+                  )}
+                >
+                  <div class="text-sm text-muted-foreground">
+                    {pending().grant
+                      ? i18n.t('uiCopy.plugin.permissionGrantImpact')
+                      : i18n.t('uiCopy.plugin.permissionRevokeImpact')}
+                  </div>
+                </Dialog>
+              );
+            }}
+          </Show>
+        </section>
+      )}
+    </Show>
+  );
+}
+
+function permissionLabel(group: 'read' | 'execute' | 'delete' | 'images_write', i18n: I18nHelpers): string {
+  switch (group) {
+    case 'read': return i18n.t('uiCopy.plugin.permission.read.label');
+    case 'execute': return i18n.t('uiCopy.plugin.permission.execute.label');
+    case 'delete': return i18n.t('uiCopy.plugin.permission.delete.label');
+    case 'images_write': return i18n.t('uiCopy.plugin.permission.images_write.label');
+  }
+}
+
+function permissionDescription(group: 'read' | 'execute' | 'delete' | 'images_write', i18n: I18nHelpers): string {
+  switch (group) {
+    case 'read': return i18n.t('uiCopy.plugin.permission.read.description');
+    case 'execute': return i18n.t('uiCopy.plugin.permission.execute.description');
+    case 'delete': return i18n.t('uiCopy.plugin.permission.delete.description');
+    case 'images_write': return i18n.t('uiCopy.plugin.permission.images_write.description');
+  }
+}
+
 function TabButton(props: {
   id: PluginCenterTab;
   active: PluginCenterTab;
@@ -352,14 +530,37 @@ function TabButton(props: {
   onSelect: (tab: PluginCenterTab) => void;
 }) {
   const isActive = () => props.id === props.active;
+  const selectAdjacentTab = (event: KeyboardEvent) => {
+    const tabs: readonly PluginCenterTab[] = ['discover', 'installed', 'updates'];
+    const current = tabs.indexOf(props.id);
+    const next = event.key === 'Home'
+      ? tabs[0]
+      : event.key === 'End'
+        ? tabs[tabs.length - 1]
+        : event.key === 'ArrowLeft'
+          ? tabs[(current + tabs.length - 1) % tabs.length]
+          : event.key === 'ArrowRight'
+            ? tabs[(current + 1) % tabs.length]
+            : undefined;
+    if (!next) return;
+    event.preventDefault();
+    props.onSelect(next);
+    queueMicrotask(() => document.getElementById(`plugin-center-tab-${next}`)?.focus());
+  };
   return (
     <button
+      id={`plugin-center-tab-${props.id}`}
       type="button"
+      role="tab"
+      aria-selected={isActive()}
+      aria-controls="plugin-center-panel"
+      tabIndex={isActive() ? 0 : -1}
       class={cn(
         'cursor-pointer rounded-md px-3 py-1.5 text-xs font-medium transition',
         isActive() ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-muted hover:text-foreground',
       )}
       onClick={() => props.onSelect(props.id)}
+      onKeyDown={selectAdjacentTab}
     >
       {props.label}
     </button>
@@ -429,7 +630,7 @@ function PluginActions(props: {
           {i18n.t('uiCopy.plugin.enable')}
         </button>
       </Show>
-      <Show when={item().pluginInstanceID && item().lifecycleState === 'enabled'}>
+      <Show when={item().pluginInstanceID && item().canDisable}>
         <button
           type="button"
           data-plugin-action="disable"

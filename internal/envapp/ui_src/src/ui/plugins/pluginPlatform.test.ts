@@ -1,17 +1,20 @@
 // @vitest-environment jsdom
 
-import type {
-  PluginOpenSurfaceInSlotOptions,
-  PluginOpenSurfaceRequest,
+import {
   PluginPlatformClient,
-  PluginSurfaceHost,
-  PluginSurfaceSlot,
+  PluginPlatformRequestError,
+  type PluginSessionScopeRevokeResult,
+  type PluginOpenSurfaceInSlotOptions,
+  type PluginOpenSurfaceRequest,
+  type PluginSurfaceHost,
+  type PluginSurfaceSlot,
 } from '@floegence/redevplugin-ui';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
   createAuthenticatedReDevPluginFetch,
   createPluginSurfacePlacementCoordinator,
+  createRedevenPluginPlatform,
   redevPluginAPIPath,
   redevPluginCSRFHeader,
   redevPluginCSRFProof,
@@ -70,7 +73,7 @@ function createClient(
 }
 
 describe('createPluginSurfacePlacementCoordinator', () => {
-  it('closes and disposes the previous slot before opening a fresh surface instance', async () => {
+  it('keeps independent slots alive until each placement retires', async () => {
     const order: string[] = [];
     const firstSlot = createSlot(order, 'first');
     const secondSlot = createSlot(order, 'second');
@@ -85,10 +88,16 @@ describe('createPluginSurfacePlacementCoordinator', () => {
 
     expect(order).toEqual([
       'open:containers.dashboard',
-      'first:close',
-      'first:dispose',
       'open:containers.details',
     ]);
+    await coordinator.release(firstSlot);
+    expect(order).toEqual([
+      'open:containers.dashboard',
+      'open:containers.details',
+      'first:close',
+      'first:dispose',
+    ]);
+    expect(secondSlot.close).not.toHaveBeenCalled();
     expect(vi.mocked(client.openSurfaceInSlot).mock.results).toHaveLength(2);
   });
 
@@ -111,26 +120,109 @@ describe('createPluginSurfacePlacementCoordinator', () => {
     expect(observedSignal?.aborted).toBe(true);
     await expect(opening).rejects.toThrow('aborted');
     await released;
-    expect(order).toEqual(['opening:dispose']);
+    expect(order).toEqual(['opening:close', 'opening:dispose']);
   });
 
-  it('retires the active slot exactly once during close and coordinator disposal', async () => {
+  it('retires every registered slot exactly once during closeAll and coordinator disposal', async () => {
     const order: string[] = [];
-    const slot = createSlot(order, 'active');
+    const firstSlot = createSlot(order, 'first');
+    const secondSlot = createSlot(order, 'second');
     const client = createClient(async () => createHost('surface_active', order));
     const coordinator = createPluginSurfacePlacementCoordinator(client);
 
-    coordinator.setVisible(slot, true);
-    await coordinator.open(slot, request);
-    await coordinator.closeActive();
+    coordinator.setVisible(firstSlot, true);
+    coordinator.setVisible(secondSlot, true);
+    await coordinator.open(firstSlot, request);
+    await coordinator.open(secondSlot, { ...request, surface_id: 'containers.details' });
+    await coordinator.closeAll();
     await coordinator.dispose();
-    await coordinator.release(slot);
+    await coordinator.release(firstSlot);
+    await coordinator.release(secondSlot);
 
     expect(order).toEqual([
       'lifecycle:visible',
+      'lifecycle:visible',
       'lifecycle:hidden',
-      'active:close',
-      'active:dispose',
+      'first:close',
+      'lifecycle:hidden',
+      'second:close',
+      'first:dispose',
+      'second:dispose',
+    ]);
+  });
+
+  it.each(['closeAll', 'dispose'] as const)(
+    'waits for every local retirement before %s reports a sibling failure',
+    async (operation) => {
+      const order: string[] = [];
+      const fastFailure = new Error('first revoke failed');
+      const firstSlot = createSlot(order, 'first');
+      const secondSlot = createSlot(order, 'second');
+      vi.mocked(firstSlot.close).mockRejectedValue(fastFailure);
+      let releaseSlowRetirement: (() => void) | undefined;
+      const slowRetirement = new Promise<void>((resolve) => {
+        releaseSlowRetirement = resolve;
+      });
+      vi.mocked(secondSlot.close).mockImplementation(async () => {
+        order.push('second:close');
+        await slowRetirement;
+        return undefined;
+      });
+      const coordinator = createPluginSurfacePlacementCoordinator(
+        createClient(async () => createHost('surface', order)),
+      );
+
+      await coordinator.open(firstSlot, request);
+      await coordinator.open(secondSlot, { ...request, surface_id: 'containers.details' });
+
+      let completed = false;
+      let observedFailure: unknown;
+      const retirement = coordinator[operation]().then(
+        () => { completed = true; },
+        (error: unknown) => {
+          completed = true;
+          observedFailure = error;
+        },
+      );
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(completed).toBe(false);
+      expect(secondSlot.dispose).not.toHaveBeenCalled();
+
+      releaseSlowRetirement?.();
+      await retirement;
+
+      expect(observedFailure).toBe(fastFailure);
+      expect(firstSlot.dispose).toHaveBeenCalledTimes(1);
+      expect(secondSlot.dispose).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('invalidates only the slots owned by the affected plugin instance', async () => {
+    const order: string[] = [];
+    const firstSlot = createSlot(order, 'first');
+    const secondSlot = createSlot(order, 'second');
+    const coordinator = createPluginSurfacePlacementCoordinator(createClient(async () => createHost('surface', order)));
+
+    await coordinator.open(firstSlot, request);
+    await coordinator.open(secondSlot, { ...request, plugin_instance_id: 'plugin_other' });
+    await coordinator.invalidatePlugin(request.plugin_instance_id);
+
+    expect(order).toEqual(['lifecycle:hidden', 'lifecycle:hidden', 'first:dispose']);
+    expect(firstSlot.close).not.toHaveBeenCalled();
+    expect(secondSlot.dispose).not.toHaveBeenCalled();
+
+    coordinator.setVisible(secondSlot, true);
+    await coordinator.release(secondSlot);
+    expect(order).toEqual([
+      'lifecycle:hidden',
+      'lifecycle:hidden',
+      'first:dispose',
+      'lifecycle:visible',
+      'lifecycle:hidden',
+      'second:close',
+      'second:dispose',
     ]);
   });
 
@@ -171,7 +263,7 @@ describe('createPluginSurfacePlacementCoordinator', () => {
 
     coordinator.setVisible(slot, true);
     await coordinator.open(slot, request);
-    await expect(coordinator.closeActive()).rejects.toThrow('hidden delivery failed');
+    await expect(coordinator.release(slot)).rejects.toThrow('hidden delivery failed');
 
     expect(order).toEqual([
       'lifecycle:visible',
@@ -187,7 +279,7 @@ describe('createPluginSurfacePlacementCoordinator', () => {
     const coordinator = createPluginSurfacePlacementCoordinator(createClient(async () => createHost('surface_error', order)));
 
     await coordinator.open(slot, request);
-    await expect(coordinator.closeActive()).rejects.toThrow('server revoke failed');
+    await expect(coordinator.release(slot)).rejects.toThrow('server revoke failed');
     await expect(coordinator.release(slot)).rejects.toThrow('server revoke failed');
 
     expect(slot.close).toHaveBeenCalledTimes(1);
@@ -200,7 +292,7 @@ describe('createPluginSurfacePlacementCoordinator', () => {
     const coordinator = createPluginSurfacePlacementCoordinator(createClient(async () => createHost('surface_mutation', order)));
 
     await coordinator.open(slot, request);
-    await coordinator.disposeActive();
+    await coordinator.invalidatePlugin(request.plugin_instance_id);
     await coordinator.release(slot);
 
     expect(order).toEqual(['lifecycle:hidden', 'mutation:dispose']);
@@ -234,5 +326,25 @@ describe('createAuthenticatedReDevPluginFetch', () => {
     await expect(platformFetch('/api/plugins/catalog', { method: 'GET', headers: {} }))
       .rejects.toThrow('canonical same-origin platform API');
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('createRedevenPluginPlatform', () => {
+  it('allows authoritative session teardown to retry after a confirmed not-committed failure', async () => {
+    const failure = new PluginPlatformRequestError(
+      'PLUGIN_INVALID_REQUEST',
+      'session teardown was not committed',
+      {},
+      'not_committed',
+    );
+    const revoke = vi.spyOn(PluginPlatformClient.prototype, 'revokeSessionScope')
+      .mockRejectedValueOnce(failure)
+      .mockResolvedValueOnce({} as PluginSessionScopeRevokeResult);
+    const platform = createRedevenPluginPlatform();
+
+    await expect(platform.close()).rejects.toBe(failure);
+    await expect(platform.close()).resolves.toBeUndefined();
+    await expect(platform.close()).resolves.toBeUndefined();
+    expect(revoke).toHaveBeenCalledTimes(2);
   });
 });

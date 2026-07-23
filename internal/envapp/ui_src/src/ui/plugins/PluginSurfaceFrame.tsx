@@ -2,7 +2,6 @@ import {
   PluginSurfaceSlot,
   type PluginSurfaceHost,
 } from '@floegence/redevplugin-ui';
-import { X } from '@floegence/floe-webapp-core/icons';
 import { Show, createEffect, createSignal, onCleanup, onMount, type JSX } from 'solid-js';
 
 import { useI18n } from '../i18n';
@@ -10,18 +9,18 @@ import type { PluginConfirmationOwner, PluginConfirmationQueue } from './PluginC
 import type { PluginSurfacePlacementCoordinator } from './pluginPlatform';
 import type { PluginSurfaceLaunchTarget } from './pluginTypes';
 
-export type PluginSurfaceFrameProps = {
+export type PluginSurfaceBodyProps = {
   coordinator: PluginSurfacePlacementCoordinator;
   confirmationQueue: PluginConfirmationQueue;
   target: PluginSurfaceLaunchTarget;
   visible: boolean;
-  onClose: () => Promise<void> | void;
+  registerClose?: (close: (() => Promise<boolean>) | null) => void;
   onRetirementError: (error: unknown) => void;
 };
 
 type SurfaceLoadState = 'opening' | 'ready' | 'closing' | 'error';
 
-export function PluginSurfaceFrame(props: PluginSurfaceFrameProps): JSX.Element {
+export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
   const i18n = useI18n();
   let stage!: HTMLDivElement;
   let slot: PluginSurfaceSlot | undefined;
@@ -68,7 +67,12 @@ export function PluginSurfaceFrame(props: PluginSurfaceFrameProps): JSX.Element 
       },
     }).then((openedHost) => {
       if (!mounted) return;
-      openedHost.element.title = `${props.target.pluginID} ${props.target.surfaceID}`;
+      openedHost.element.title = i18n.t('uiCopy.plugin.surfaceIframeTitle', {
+        plugin: props.target.displayName ?? props.target.pluginID,
+        surface: props.target.surfaceDisplayNameKey
+          ? i18n.t(props.target.surfaceDisplayNameKey)
+          : props.target.surfaceID,
+      });
       openedHost.element.dataset.pluginSurfaceIframe = '';
       setHost(openedHost);
       setLoadState('ready');
@@ -80,6 +84,7 @@ export function PluginSurfaceFrame(props: PluginSurfaceFrameProps): JSX.Element 
 
     onCleanup(() => {
       mounted = false;
+      props.registerClose?.(null);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       props.confirmationQueue.cancelOwner(confirmationOwner);
       void props.coordinator.release(ownedSlot).catch(props.onRetirementError);
@@ -93,18 +98,21 @@ export function PluginSurfaceFrame(props: PluginSurfaceFrameProps): JSX.Element 
   });
 
   const closeSurface = async () => {
-    if (!slot || loadState() === 'closing') return;
+    if (!slot || loadState() === 'closing') return false;
     setLoadState('closing');
     setErrorMessage('');
     props.confirmationQueue.cancelOwner(confirmationOwner);
     try {
       await props.coordinator.release(slot);
-      await props.onClose();
+      return true;
     } catch (error) {
       setLoadState('error');
       setErrorMessage(error instanceof Error ? error.message : i18n.t('uiCopy.plugin.surfaceFailed'));
+      return false;
     }
   };
+
+  onMount(() => props.registerClose?.(closeSurface));
 
   return (
     <section
@@ -115,41 +123,31 @@ export function PluginSurfaceFrame(props: PluginSurfaceFrameProps): JSX.Element 
       data-surface-instance-id={host()?.surfaceInstanceId}
       class="flex h-full min-h-0 flex-col bg-background text-foreground"
     >
-      <header class="flex min-h-12 items-center justify-between gap-3 border-b px-4">
-        <div class="min-w-0">
-          <h2 class="truncate text-sm font-semibold leading-tight">{i18n.t('uiCopy.plugin.surfaceTitle')}</h2>
-          <p class="truncate text-[11px] text-muted-foreground">{props.target.pluginID} · {props.target.surfaceID}</p>
-        </div>
-        <button
-          type="button"
-          aria-label={i18n.t('uiCopy.plugin.closeSurface')}
-          class="inline-flex h-8 w-8 cursor-pointer items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={loadState() === 'closing'}
-          onClick={() => void closeSurface()}
-        >
-          <X class="h-4 w-4" />
-        </button>
-      </header>
-
       <Show when={errorMessage()}>
-        <div class="border-b border-destructive/25 bg-destructive/10 px-4 py-2 text-xs text-destructive" data-plugin-surface-error>
+        <div role="alert" class="border-b border-destructive/25 bg-destructive/10 px-4 py-2 text-xs text-destructive" data-plugin-surface-error>
           {errorMessage()}
         </div>
       </Show>
 
       <div class="relative min-h-0 flex-1 bg-muted/20">
         <Show when={loadState() === 'opening'}>
-          <div class="absolute inset-0 z-10 flex items-center justify-center bg-background/85 text-sm text-muted-foreground">
+          <div role="status" aria-live="polite" class="absolute inset-0 z-10 flex items-center justify-center bg-background/85 text-sm text-muted-foreground">
             {i18n.t('uiCopy.plugin.openingSurface')}
           </div>
         </Show>
         <Show when={loadState() === 'closing'}>
-          <div class="absolute inset-0 z-10 flex items-center justify-center bg-background/85 text-sm text-muted-foreground">
-            {i18n.t('common.status.loading')}
+          <div role="status" aria-live="polite" class="absolute inset-0 z-10 flex items-center justify-center bg-background/85 text-sm text-muted-foreground">
+            {i18n.t('uiCopy.plugin.closingSurface')}
           </div>
         </Show>
-        <div ref={stage} data-plugin-surface-stage class="h-full min-h-0 w-full bg-background" />
+        <div
+          ref={stage}
+          data-plugin-surface-stage
+          class="h-full min-h-0 w-full bg-background [&>iframe]:block [&>iframe]:h-full [&>iframe]:w-full [&>iframe]:border-0"
+        />
       </div>
     </section>
   );
 }
+
+export { PluginSurfaceBody as PluginSurfaceFrame };
