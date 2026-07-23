@@ -43,7 +43,24 @@ let protocolClient: unknown = null;
 let desktopViewMode: 'activity' | 'workbench' = 'activity';
 let envAIPageMountSequence = 0;
 let activityFlowerSubmitting = false;
+let activityFlowerPresence: any;
 const uiStorageItems = new Map<string, string>();
+
+function runningActivityFlowerPresence() {
+  return {
+    priority_status: 'running',
+    priority_count: 1,
+    priority_thread_title: 'Refine the Flower companion with a deliberately long live task title',
+    priority_thread_progress: 'The newest Flower response remains visible while all earlier words move out to the left edge',
+    priority_thread_progress_kind: 'output',
+    attention_count: 0,
+    unread_failed_count: 0,
+    running_count: 1,
+    queued_count: 0,
+    unread_canceled_count: 0,
+    unread_completed_count: 0,
+  };
+}
 
 const mediaCommands = commands as unknown as Readonly<{
   emulateMediaPreferences: (preferences: Readonly<{
@@ -495,19 +512,7 @@ vi.mock('./pages/EnvAIPage', () => ({
     const [submitting, setSubmitting] = createSignal(false);
     const [composerText, setComposerText] = createSignal('');
     createEffect(() => {
-      props.onPresenceChange?.({
-        priority_status: 'running',
-        priority_count: 1,
-        priority_thread_title: 'Refine the Flower companion with a deliberately long live task title',
-        priority_thread_progress: 'The newest Flower response remains visible while all earlier words move out to the left edge',
-        priority_thread_progress_kind: 'output',
-        attention_count: 0,
-        unread_failed_count: 0,
-        running_count: 1,
-        queued_count: 0,
-        unread_canceled_count: 0,
-        unread_completed_count: 0,
-      });
+      props.onPresenceChange?.(activityFlowerPresence);
     });
     return (
       <div
@@ -525,28 +530,59 @@ vi.mock('./pages/EnvAIPage', () => ({
         <div data-testid="activity-flower-focus-request">{props.focusThreadRequest?.request_id ?? ''}</div>
         <div data-testid="activity-flower-header-actions">{props.headerTrailingActions}</div>
         <Show when={!props.companionOpen}>
-          <button
-            type="button"
-            class="flower-companion-collapsed-summary"
-            data-testid="activity-flower-presence-summary"
-            title={props.companionSummary?.accessibleText}
-            aria-label={props.companionSummary?.accessibleText}
-            aria-controls={props.companionRegionID}
-            aria-expanded="false"
-            onClick={() => props.onCompanionOpenRequest?.()}
+          <Show
+            when={Boolean(String(props.companionSummary?.visualText ?? '').trim())}
+            fallback={(
+              <span
+                data-testid="activity-flower-idle-status"
+                class={`flower-companion-collapsed-status-${props.companionSummary?.priorityStatus ?? 'idle'}`}
+                aria-hidden="true"
+              />
+            )}
           >
-            <span classList={{ 'flower-companion-collapsed-icon-running': Boolean(props.companionSummary?.running) }} />
-            <span
-              class="flower-companion-collapsed-summary-text"
-              data-flower-companion-progress-kind={props.companionSummary?.progressKind}
+            <button
+              type="button"
+              class="flower-companion-collapsed-summary"
+              data-testid="activity-flower-presence-summary"
+              title={props.companionSummary?.accessibleText}
+              aria-label={props.companionSummary?.accessibleText}
+              aria-controls={props.companionRegionID}
+              aria-expanded="false"
+              onClick={() => props.onCompanionOpenRequest?.()}
             >
-              <span class="flower-companion-collapsed-tail-prefix" aria-hidden="true">&hellip;</span>
-              <span class="flower-companion-collapsed-tail-viewport">
-                <span class="flower-companion-collapsed-tail-value">{props.companionSummary?.visualText}</span>
+              <span classList={{ 'flower-companion-collapsed-icon-running': Boolean(props.companionSummary?.running) }} />
+              <span
+                class="flower-companion-collapsed-summary-text"
+                data-flower-companion-progress-kind={props.companionSummary?.progressKind}
+              >
+                <span class="flower-companion-collapsed-tail-prefix" aria-hidden="true">&hellip;</span>
+                <span class="flower-companion-collapsed-tail-viewport">
+                  <span class="flower-companion-collapsed-tail-value">{props.companionSummary?.visualText}</span>
+                </span>
               </span>
-            </span>
-          </button>
-          <span data-testid="activity-flower-presence-announcement">
+            </button>
+          </Show>
+          <span
+            data-testid="activity-flower-presence-announcement"
+            role={(
+              props.companionSummary?.priorityStatus === 'running'
+              || props.companionSummary?.priorityStatus === 'queued'
+            ) && props.companionSummary?.progressKind !== 'tool' && props.companionSummary?.progressKind !== 'output'
+              ? 'status'
+              : undefined}
+            aria-live={(
+              props.companionSummary?.priorityStatus === 'running'
+              || props.companionSummary?.priorityStatus === 'queued'
+            ) && props.companionSummary?.progressKind !== 'tool' && props.companionSummary?.progressKind !== 'output'
+              ? 'polite'
+              : undefined}
+            aria-atomic={(
+              props.companionSummary?.priorityStatus === 'running'
+              || props.companionSummary?.priorityStatus === 'queued'
+            ) && props.companionSummary?.progressKind !== 'tool' && props.companionSummary?.progressKind !== 'output'
+              ? 'true'
+              : undefined}
+          >
             {props.companionSummary?.accessibleText}
           </span>
         </Show>
@@ -886,6 +922,7 @@ beforeEach(() => {
   envAIPageMountSequence = 0;
   floeRegistryComponents = () => [];
   activityFlowerSubmitting = false;
+  activityFlowerPresence = runningActivityFlowerPresence();
   uiStorageItems.clear();
   flowerLaunchTurnMock.mockReset();
   flowerLaunchTurnMock.mockResolvedValue({
@@ -1412,6 +1449,10 @@ describe('EnvAppShell Activity Flower browser integration', () => {
   it('keeps a visible running status while reduced motion disables the playful rotation', async () => {
     await page.viewport(390, 844);
     await mediaCommands.emulateMediaPreferences({ reducedMotion: 'no-preference' });
+    activityFlowerPresence = {
+      ...runningActivityFlowerPresence(),
+      unread_failed_count: 1,
+    };
     await mountProductionMobileShell();
 
     const icon = document.querySelector('.flower-companion-collapsed-icon-running');
@@ -1446,6 +1487,43 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     await settleFrames(2);
     expect(getComputedStyle(icon).animationName).toBe('none');
     expect(elementRect(status).width).toBeGreaterThan(0);
+  });
+
+  it.each([
+    { priorityStatus: 'attention', countKey: 'attention_count' },
+    { priorityStatus: 'failed', countKey: 'unread_failed_count' },
+    { priorityStatus: 'canceled', countKey: 'unread_canceled_count' },
+    { priorityStatus: 'completed', countKey: 'unread_completed_count' },
+  ])('keeps $priorityStatus-only history out of the collapsed Bottom Bar', async ({ priorityStatus, countKey }) => {
+    await page.viewport(390, 844);
+    activityFlowerPresence = {
+      priority_status: priorityStatus,
+      priority_count: 1,
+      priority_thread_title: 'Historical Flower work',
+      attention_count: 0,
+      unread_failed_count: 0,
+      running_count: 0,
+      queued_count: 0,
+      unread_canceled_count: 0,
+      unread_completed_count: 0,
+      [countKey]: 1,
+    };
+    await mountProductionMobileShell();
+    await flushAsync();
+
+    expect(document.querySelector('[data-testid="activity-flower-presence-summary"]')).toBeNull();
+    expect(document.querySelector('[data-testid="activity-flower-composer"]')).not.toBeNull();
+    const idleStatus = document.querySelector('[data-testid="activity-flower-idle-status"]');
+    expect(idleStatus?.classList.contains('flower-companion-collapsed-status-idle')).toBe(true);
+    expect(idleStatus?.className).not.toContain(priorityStatus);
+    const announcement = document.querySelector('[data-testid="activity-flower-presence-announcement"]');
+    expect(announcement?.textContent).toBe('Ready to ask Flower');
+    expect(announcement?.hasAttribute('role')).toBe(false);
+    expect(announcement?.hasAttribute('aria-live')).toBe(false);
+    expect(announcement?.hasAttribute('aria-atomic')).toBe(false);
+    expect(document.body.textContent).not.toContain('One task needs review');
+    expect(document.body.textContent).not.toContain('One task needs your attention');
+    expect(document.querySelector('[title*="Needs review"], [aria-label*="Needs review"]')).toBeNull();
   });
 
 });

@@ -406,6 +406,154 @@ describe('FlowerSurface companion visibility lifecycle', () => {
     expect(host.querySelector('textarea')).toBe(textarea);
   });
 
+  it('lets a collapsed approval action own accessibility without a contradictory summary announcement', async () => {
+    const approvalAction = {
+      action_id: 'approval-collapsed',
+      origin: 'main_tool' as const,
+      run_id: 'run-approval',
+      tool_id: 'tool-approval',
+      tool_name: 'terminal.exec',
+      state: 'requested' as const,
+      status: 'pending' as const,
+      revision: 1,
+      version: 1,
+      surface_epoch: 1,
+      surface_role: 'primary_action' as const,
+      requested_at_ms: 2_000,
+      can_approve: true,
+      expected_seq: 1,
+      queue_generation: 1,
+      queue_order: 1,
+      batch_index: 0,
+      batch_size: 1,
+      summary: {
+        label: 'terminal.exec',
+        description: 'Review this command before it runs.',
+        command: 'pnpm test',
+        effects: ['shell'],
+      },
+    };
+    const approvalThread = thread({
+      thread_id: 'thread-approval',
+      status: 'waiting_approval',
+      approval_actions: [approvalAction],
+      approval_queue: {
+        generation: 1,
+        revision: 1,
+        current_action_id: approvalAction.action_id,
+        current_position: 1,
+        total: 1,
+        unresolved_count: 1,
+      },
+    });
+    const approvalBootstrap = bootstrap(approvalThread);
+    const harness = createAdapterHarness({
+      listThreads: vi.fn(async () => [approvalThread]),
+      loadThread: vi.fn(async () => ({
+        ...approvalBootstrap,
+        live_state: {
+          ...approvalBootstrap.live_state,
+          approval_actions: { [approvalAction.action_id]: approvalAction },
+        },
+      })),
+    });
+    dispose = render(() => (
+      <FlowerSurface
+        adapter={harness.adapter}
+        notify={() => undefined}
+        presentation="companion"
+        companionOpen={false}
+        companionRegionID="test-flower-companion"
+        companionSummary={{
+          visualText: '',
+          accessibleText: 'Ready to ask Flower',
+          priorityStatus: 'idle',
+          running: false,
+        }}
+        companionActionLabel="Open Flower to continue"
+        engaged={false}
+        transcriptVisible={false}
+        focusThreadRequest={{ request_id: 'focus-approval', thread_id: approvalThread.thread_id }}
+      />
+    ), host);
+
+    await waitUntil(
+      () => Boolean(host.querySelector('.flower-companion-collapsed-action')),
+      'collapsed approval action did not render',
+    );
+    const action = host.querySelector('.flower-companion-collapsed-action') as HTMLButtonElement;
+    expect(action.textContent).toContain('Open Flower to continue');
+    expect(action.getAttribute('aria-controls')).toBe('test-flower-companion');
+    expect(host.querySelector('#test-flower-companion-status')).toBeNull();
+    expect(host.textContent).not.toContain('Ready to ask Flower');
+  });
+
+  it('lets a collapsed secret-input action own accessibility without a contradictory summary announcement', async () => {
+    const secretInputRequest = {
+      prompt_id: 'prompt-secret',
+      message_id: 'message-secret',
+      tool_id: 'tool-secret',
+      tool_name: 'request_user_input',
+      reason_code: 'secret_required',
+      public_summary: 'Provide the deployment token before Flower continues.',
+      contains_secret: true,
+      questions: [{
+        id: 'deployment_token',
+        header: 'Deployment token',
+        question: 'Paste the deployment token.',
+        is_secret: true,
+        response_mode: 'write' as const,
+        write_placeholder: 'Deployment token',
+      }],
+    };
+    const secretThread = thread({
+      thread_id: 'thread-secret',
+      status: 'waiting_user',
+      input_request: secretInputRequest,
+    });
+    const secretBootstrap = bootstrap(secretThread);
+    const harness = createAdapterHarness({
+      listThreads: vi.fn(async () => [secretThread]),
+      loadThread: vi.fn(async () => ({
+        ...secretBootstrap,
+        live_state: {
+          ...secretBootstrap.live_state,
+          input_requests: { [secretInputRequest.prompt_id]: secretInputRequest },
+        },
+      })),
+    });
+    dispose = render(() => (
+      <FlowerSurface
+        adapter={harness.adapter}
+        notify={() => undefined}
+        presentation="companion"
+        companionOpen={false}
+        companionRegionID="test-flower-companion"
+        companionSummary={{
+          visualText: '',
+          accessibleText: 'Ready to ask Flower',
+          priorityStatus: 'idle',
+          running: false,
+        }}
+        companionActionLabel="Open Flower to continue"
+        engaged={false}
+        transcriptVisible={false}
+        focusThreadRequest={{ request_id: 'focus-secret', thread_id: secretThread.thread_id }}
+      />
+    ), host);
+
+    await waitUntil(
+      () => Boolean(host.querySelector('.flower-companion-collapsed-action')),
+      'collapsed secret-input action did not render',
+    );
+    const actions = host.querySelectorAll('.flower-companion-collapsed-action');
+    expect(actions).toHaveLength(1);
+    expect(actions[0]?.textContent).toContain('Open Flower to continue');
+    expect(actions[0]?.getAttribute('aria-controls')).toBe('test-flower-companion');
+    expect(host.querySelector('#test-flower-companion-status')).toBeNull();
+    expect(host.textContent).not.toContain('Ready to ask Flower');
+  });
+
   it('does not compact the dedicated full-page composer', async () => {
     const idleThread = thread({ status: 'idle', read_status: readStatus(false) });
     const harness = createAdapterHarness({

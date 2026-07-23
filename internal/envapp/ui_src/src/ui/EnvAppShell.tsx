@@ -2150,12 +2150,8 @@ export function EnvAppShell() {
   ));
   const activityFlowerSummaryCopy = createMemo<ActivityFlowerSummaryCopy>(() => ({
     lead: {
-      attention: i18n.t('shell.flowerCompanion.summary.lead.needsAttention'),
-      failed: i18n.t('shell.flowerCompanion.summary.lead.needsReview'),
       running: i18n.t('shell.flowerCompanion.summary.lead.workingOn'),
       queued: i18n.t('shell.flowerCompanion.summary.lead.waitingToStart'),
-      canceled: i18n.t('shell.flowerCompanion.summary.lead.stopped'),
-      completed: i18n.t('shell.flowerCompanion.summary.lead.ready'),
     },
     withTitle: (lead, title) => i18n.t('shell.flowerCompanion.summary.withTitle', { lead, title }),
     withTitleAndMore: (lead, title, count) => i18n.tn(
@@ -2165,12 +2161,8 @@ export function EnvAppShell() {
     ),
     withoutTitle: (status, count) => {
       switch (status) {
-        case 'attention': return i18n.tn('shell.flowerCompanion.summary.withoutTitle.needsAttention', count);
-        case 'failed': return i18n.tn('shell.flowerCompanion.summary.withoutTitle.needsReview', count);
         case 'running': return i18n.tn('shell.flowerCompanion.summary.withoutTitle.working', count);
         case 'queued': return i18n.tn('shell.flowerCompanion.summary.withoutTitle.queued', count);
-        case 'canceled': return i18n.tn('shell.flowerCompanion.summary.withoutTitle.stopped', count);
-        case 'completed': return i18n.tn('shell.flowerCompanion.summary.withoutTitle.ready', count);
       }
     },
     secondaryWorking: (count) => i18n.tn('shell.flowerCompanion.summary.secondaryWorking', count),
@@ -3876,9 +3868,9 @@ export function EnvAppShell() {
               companionSummary={{
                 visualText: activityFlowerPresenceSummary(),
                 accessibleText: activityFlowerSummary().accessibleText,
-                priorityStatus: activityFlowerPresence().priority_status,
+                priorityStatus: activityFlowerSummary().presentationStatus,
                 progressKind: activityFlowerSummary().progressKind,
-                running: activityFlowerPresence().running_count > 0,
+                running: activityFlowerSummary().presentationStatus === 'running',
               }}
               companionActionLabel={i18n.t('shell.flowerCompanion.summary.openPendingAction')}
               focusRequestScope="activity"

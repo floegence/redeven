@@ -4864,6 +4864,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const companionDescriptionID = createMemo(() => (
     props.companionRegionID ? `${props.companionRegionID}-status` : undefined
   ));
+  const companionSummaryAnnounces = createMemo(() => (
+    (props.companionSummary?.priorityStatus === 'running' || props.companionSummary?.priorityStatus === 'queued')
+    && props.companionSummary?.progressKind !== 'tool'
+    && props.companionSummary?.progressKind !== 'output'
+  ));
 
   const composerPlaceholder = createMemo(() => {
     if (selectedThreadDetailPending()) return copy().chat.threadLoading;
@@ -7890,13 +7895,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                     </span>
                   </button>
                 </Show>
-                <Show when={companionCollapsed() && companionDescriptionID()}>
+                <Show when={companionCollapsed() && !companionActionVisible() && companionDescriptionID()}>
                   <span
                     id={companionDescriptionID()}
                     class="flower-visually-hidden"
-                    role={props.companionSummary?.progressKind === 'tool' || props.companionSummary?.progressKind === 'output' ? undefined : 'status'}
-                    aria-live={props.companionSummary?.progressKind === 'tool' || props.companionSummary?.progressKind === 'output' ? undefined : 'polite'}
-                    aria-atomic={props.companionSummary?.progressKind === 'tool' || props.companionSummary?.progressKind === 'output' ? undefined : 'true'}
+                    role={companionSummaryAnnounces() ? 'status' : undefined}
+                    aria-live={companionSummaryAnnounces() ? 'polite' : undefined}
+                    aria-atomic={companionSummaryAnnounces() ? 'true' : undefined}
                   >
                     {props.companionSummary?.accessibleText}
                   </span>
