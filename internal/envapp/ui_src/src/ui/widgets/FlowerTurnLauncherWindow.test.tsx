@@ -60,8 +60,11 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
         class={props.class}
       >
         <div>{props.title}</div>
+        <button data-testid="floating-window-close" onClick={() => props.onOpenChange?.(false)}>Window close</button>
         <div>{props.children}</div>
-        <div>{props.footer}</div>
+        <Show when={props.footer}>
+          <div data-testid="floating-window-footer">{props.footer}</div>
+        </Show>
       </div>
     ) : null
   ),
@@ -232,7 +235,29 @@ describe('FlowerTurnLauncherWindow', () => {
 
     expect(floatingWindow?.getAttribute('data-z-index')).toBe('160');
     expect(floatingWindow?.getAttribute('data-default-width')).toBe('560');
-    expect(floatingWindow?.getAttribute('data-default-height')).toBe('640');
+    expect(floatingWindow?.getAttribute('data-default-height')).toBe('592');
+    expect(host.querySelector('[data-testid="floating-window-footer"]')).toBeNull();
+    expect(host.querySelector('.flower-turn-launcher-footer')).toBeNull();
+  });
+
+  it('retains the context footer only in panel placement', () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => (
+      <FlowerTurnLauncherWindow
+        open
+        placement="panel"
+        intent={{ ...baseIntent, suggested_working_dir: '/Users/demo/project' }}
+        onClose={() => undefined}
+        onSubmit={async () => undefined}
+      />
+    ), host);
+
+    expect(host.querySelector('[data-testid="floating-window"]')).toBeNull();
+    expect(host.querySelector('.flower-turn-launcher-footer')).not.toBeNull();
+    expect(host.textContent).toContain('Working dir');
+    expect(host.textContent).toContain('/Users/demo/project');
   });
 
   it('keeps the Flower message in the scroll region and docks the user composer at the bottom', () => {
@@ -327,7 +352,7 @@ describe('FlowerTurnLauncherWindow', () => {
     });
 
     expect(host.textContent).toContain('询问 Flower');
-    expect(host.textContent).toContain('工作目录');
+    expect(host.textContent).not.toContain('工作目录');
     expect(host.textContent).toContain('关联上下文');
     expect(host.textContent).toContain('你');
     expect(host.textContent).toContain('回复 Flower');
@@ -412,7 +437,7 @@ describe('FlowerTurnLauncherWindow', () => {
     const textarea = composePrompt(host, 'Inspect this project');
     const sendButton = host.querySelector('[data-testid="flower-turn-launcher-inline-send"]') as HTMLButtonElement;
     const contextButton = host.querySelector('.flower-turn-launcher-message-surface button') as HTMLButtonElement;
-    const closeButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent === 'Close');
+    const closeButton = host.querySelector('[data-testid="floating-window-close"]') as HTMLButtonElement;
 
     sendButton.click();
 
@@ -423,12 +448,11 @@ describe('FlowerTurnLauncherWindow', () => {
     expect(sendButton.querySelector('[data-testid="button-loading-indicator"]')).toBeTruthy();
     expect(textarea.disabled).toBe(true);
     expect(contextButton.disabled).toBe(true);
-    expect(closeButton?.disabled).toBe(true);
 
     sendButton.click();
     textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
     contextButton.click();
-    closeButton?.click();
+    closeButton.click();
 
     expect(onSubmit).toHaveBeenCalledTimes(1);
     expect(onClose).not.toHaveBeenCalled();
@@ -440,6 +464,9 @@ describe('FlowerTurnLauncherWindow', () => {
     expect(sendButton.getAttribute('aria-busy')).toBe('false');
     expect(sendButton.querySelector('[data-testid="arrow-up-icon"]')).toBeTruthy();
     expect(textarea.disabled).toBe(false);
+
+    closeButton.click();
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 
   it('shows immediate loading after Enter submits the prompt', async () => {

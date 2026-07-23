@@ -22,13 +22,13 @@ const WINDOW_VIEWPORT_MARGIN_DESKTOP = 12;
 const WINDOW_VIEWPORT_MARGIN_MOBILE = 8;
 const WINDOW_ANCHOR_OFFSET = 8;
 const WINDOW_DEFAULT_WIDTH_DESKTOP = 560;
-const WINDOW_DEFAULT_HEIGHT_DESKTOP = 640;
+const WINDOW_DEFAULT_HEIGHT_DESKTOP = 592;
 const WINDOW_DEFAULT_WIDTH_COMPACT = 420;
-const WINDOW_DEFAULT_HEIGHT_COMPACT = 560;
+const WINDOW_DEFAULT_HEIGHT_COMPACT = 512;
 const WINDOW_MIN_WIDTH_DESKTOP = 400;
-const WINDOW_MIN_HEIGHT_DESKTOP = 500;
+const WINDOW_MIN_HEIGHT_DESKTOP = 452;
 const WINDOW_MIN_WIDTH_COMPACT = 300;
-const WINDOW_MIN_HEIGHT_COMPACT = 420;
+const WINDOW_MIN_HEIGHT_COMPACT = 372;
 
 export type FlowerTurnLauncherAnchor = Readonly<{
   x: number;
@@ -601,14 +601,6 @@ export function FlowerTurnLauncherWindow(props: FlowerTurnLauncherWindowProps) {
         maxSize={windowSizing().maxSize}
         zIndex={props.zIndex}
         class={cn('flower-turn-launcher-window border-border/65 shadow-[0_28px_72px_-42px_color-mix(in_srgb,var(--foreground)_38%,transparent)]', props.windowClass)}
-        footer={(
-          <FlowerTurnLauncherFooter
-            copy={props.copy}
-            footerClass={props.footerClass}
-            controller={controller}
-            onClose={props.onClose}
-          />
-        )}
       >
         <FlowerTurnLauncherPanelControllerContext.Provider value={controller}>
           <FlowerTurnLauncherPanel
