@@ -32,6 +32,8 @@ Collapsed presentation hides and disengages the header, transcript, thread rail,
 
 Expanded companion presentation keeps an ordinary chat composer to one stable row. The textarea occupies the flexible track; a More button immediately precedes Send. Working directory, permission, model and reasoning, and context usage are available from the upward-opening More panel instead of creating a second footer row. Setup, model-source recovery, handler failure, detail loading, read-only, approval, and user-input composers retain their complete specialized layout. The dedicated Flower page keeps the standard full composer.
 
+An empty expanded companion keeps the Flower identity, concise description, and composer guidance, but does not mount starter task suggestions. The bounded detail surface prioritizes transcript and composer space and does not reserve blank placeholders for the omitted controls. The dedicated Flower page retains the complete starter suggestion grid and its prompt-to-composer actions.
+
 Opening animates one shell upward from the anchor while preserving its bottom edge, width, border, background, and clipping boundary. Closing keeps valid geometry through every transition frame. It never clears fixed coordinates during exit, never flashes at the viewport origin, and never changes Activity body height. Reduced motion applies the same final state without geometry or glyph animation.
 
 ## Contextual Ask Flower

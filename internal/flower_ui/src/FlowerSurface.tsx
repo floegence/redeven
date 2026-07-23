@@ -7751,7 +7751,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   ? threadLoadingState()
                   : warmupCanReplaceTranscript()
                     ? warmupPanel()
-                  : <FlowerEmptyState copy={copy().emptyState} disabled={!readyForChat()} onSuggestionClick={(prompt) => updateCurrentComposerSessionDraft((draft) => ({ ...draft, chatDraft: prompt }))} />}
+                  : (
+                      <FlowerEmptyState
+                        copy={copy().emptyState}
+                        disabled={!readyForChat()}
+                        showSuggestions={presentation() !== 'companion'}
+                        onSuggestionClick={(prompt) => updateCurrentComposerSessionDraft((draft) => ({ ...draft, chatDraft: prompt }))}
+                      />
+                    )}
             >
               <For each={visibleTimelineEntryKeys()}>
                 {(entryKey) => {
