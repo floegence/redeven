@@ -199,7 +199,16 @@ import {
   type EnvWorkbenchHandoffAnchor,
 } from './envViewMode';
 import { LanguagePreferenceMenu, useI18n } from './i18n';
-import { presentActivityFlowerSummary, type ActivityFlowerSummaryCopy } from './activityFlowerSummary';
+import {
+  presentActivityFlowerCompletion,
+  presentActivityFlowerSummary,
+  type ActivityFlowerSummaryCopy,
+} from './activityFlowerSummary';
+import {
+  ActivityFlowerCompletionNoticeController,
+  activityFlowerCompletionUpdatesAllowed,
+  type ActivityFlowerCompletionNotice,
+} from './activityFlowerCompletionNotice';
 
 type EnvActivitySelectionMetadata = Readonly<{
   source: 'activity-bar' | 'mobile-tab-bar';
@@ -876,6 +885,11 @@ export function EnvAppShell() {
   const [filesMobileSidebarOpen, setFilesMobileSidebarOpen] = createSignal(false);
   const [activityFlowerPresentation, setActivityFlowerPresentation] = createSignal<ActivityFlowerPresentation>('collapsed');
   const [activityFlowerPresence, setActivityFlowerPresence] = createSignal<FlowerCompanionPresenceProjection>(EMPTY_FLOWER_COMPANION_PRESENCE);
+  const [activityFlowerCompletionNotice, setActivityFlowerCompletionNotice] = createSignal<ActivityFlowerCompletionNotice | null>(null);
+  const activityFlowerCompletionController = new ActivityFlowerCompletionNoticeController({
+    onChange: setActivityFlowerCompletionNotice,
+  });
+  onCleanup(() => activityFlowerCompletionController.dispose());
   const [activityFlowerComposerFocusRequest, setActivityFlowerComposerFocusRequest] = createSignal(0);
   const [activityFlowerOverlayHost, setActivityFlowerOverlayHost] = createSignal<HTMLElement | null>(null);
   const [activityFlowerCompanionContentHost, setActivityFlowerCompanionContentHost] = createSignal<HTMLElement | null>(null);
@@ -1369,6 +1383,7 @@ export function EnvAppShell() {
 
   const openActivityFlowerCompanion = (options: Readonly<{ focusComposer?: boolean }> = {}) => {
     if (!canUseFlower()) return;
+    activityFlowerCompletionController.clear();
     if (activityFlowerPlacement() !== 'full_page') setActivityFlowerPresentation('expanded');
     if (options.focusComposer) {
       setActivityFlowerComposerFocusRequest((request) => request + 1);
@@ -2173,7 +2188,29 @@ export function EnvAppShell() {
     activityFlowerPresence(),
     activityFlowerSummaryCopy(),
   ));
-  const activityFlowerPresenceSummary = createMemo(() => activityFlowerSummary().visualText);
+  const activityFlowerPresentedSummary = createMemo(() => {
+    const notice = activityFlowerCompletionNotice();
+    return notice
+      ? presentActivityFlowerCompletion(
+          i18n.t('chatActivity.todoStatus.completed'),
+          notice.title,
+          activityFlowerSummaryCopy(),
+        )
+      : activityFlowerSummary();
+  });
+  createEffect(() => {
+    if (!activityFlowerCompletionUpdatesAllowed(accessGateVisible(), activityFlowerPlacement())) {
+      activityFlowerCompletionController.clear();
+    }
+  });
+  const handleActivityFlowerPresenceChange = (presence: FlowerCompanionPresenceProjection) => {
+    setActivityFlowerPresence(presence);
+    if (!activityFlowerCompletionUpdatesAllowed(accessGateVisible(), activityFlowerPlacement())) {
+      activityFlowerCompletionController.clear();
+      return;
+    }
+    activityFlowerCompletionController.update(presence);
+  };
   const activityFlowerCompanionCopy = () => ({
     label: i18n.t('shell.flowerCompanion.threadSwitcher.label'),
     searchPlaceholder: i18n.t('shell.flowerCompanion.threadSwitcher.searchPlaceholder'),
@@ -3866,11 +3903,13 @@ export function EnvAppShell() {
               companionOpen={activityFlowerPlacement() === 'full_page' || activityFlowerCompanionDetailVisible()}
               companionRegionID="redeven-activity-flower-companion"
               companionSummary={{
-                visualText: activityFlowerPresenceSummary(),
-                accessibleText: activityFlowerSummary().accessibleText,
-                priorityStatus: activityFlowerSummary().presentationStatus,
-                progressKind: activityFlowerSummary().progressKind,
-                running: activityFlowerSummary().presentationStatus === 'running',
+                visualText: activityFlowerPresentedSummary().visualText,
+                accessibleText: activityFlowerPresentedSummary().accessibleText,
+                priorityStatus: activityFlowerPresentedSummary().presentationStatus,
+                progressKind: activityFlowerPresentedSummary().progressKind,
+                progressIdentity: activityFlowerPresentedSummary().progressIdentity,
+                ephemeralKind: activityFlowerPresentedSummary().ephemeralKind,
+                running: activityFlowerPresentedSummary().presentationStatus === 'running',
               }}
               companionActionLabel={i18n.t('shell.flowerCompanion.summary.openPendingAction')}
               focusRequestScope="activity"
@@ -3880,7 +3919,7 @@ export function EnvAppShell() {
               onCompanionOpenRequest={() => openActivityFlowerCompanion()}
               companionCopy={activityFlowerCompanionCopy()}
               headerTrailingActions={activityFlowerHeaderActions()}
-              onPresenceChange={setActivityFlowerPresence}
+              onPresenceChange={handleActivityFlowerPresenceChange}
               settingsReturnSurfaceId={lastActivitySurface() === 'ai' ? ENV_DEFAULT_SURFACE_ID : lastActivitySurface()}
             />
           </div>

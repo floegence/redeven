@@ -143,12 +143,11 @@ describe('Flower model status indicator', () => {
     expect(summaryTextRule).toContain('white-space: nowrap');
     expect(liveSummaryTextRule).toContain('display: flex');
     expect(liveSummaryTextRule).toContain('text-overflow: clip');
-    expect(tailViewportRule).toContain('position: relative');
-    expect(tailViewportRule).toContain('overflow: hidden');
-    expect(tailValueRule).toContain('position: absolute');
-    expect(tailValueRule).toContain('right: 0');
+    expect(tailViewportRule).toContain('overflow-x: hidden');
+    expect(tailViewportRule).toContain('scrollbar-width: none');
+    expect(tailValueRule).toContain('display: block');
     expect(tailValueRule).toContain('width: max-content');
-    expect(tailValueRule).toContain('min-width: 100%');
+    expect(tailValueRule).not.toContain('position: absolute');
   });
 
   it('renders compaction dividers as accessible timeline separators', () => {

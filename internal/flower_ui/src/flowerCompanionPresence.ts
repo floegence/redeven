@@ -3,8 +3,18 @@ import type { FlowerCompanionProgressKind } from './flowerCompanionLiveTail';
 
 export type FlowerCompanionThreadListItem = FlowerThreadListItem & Readonly<{
   queued_turn_count?: number;
+  active_run_id?: string;
+  run_generation?: number;
   progress_text?: string;
   progress_kind?: FlowerCompanionProgressKind;
+  progress_identity?: string;
+}>;
+
+export type FlowerCompanionTerminalTransition = Readonly<{
+  thread_id: string;
+  run_id: string;
+  run_generation: number;
+  outcome: 'completed' | 'failed' | 'canceled';
 }>;
 
 export type FlowerCompanionPriorityStatus =
@@ -23,6 +33,11 @@ export type FlowerCompanionPresenceProjection = Readonly<{
   priority_thread_title?: string;
   priority_thread_progress?: string;
   priority_thread_progress_kind?: FlowerCompanionProgressKind;
+  priority_thread_progress_identity?: string;
+  priority_thread_id?: string;
+  priority_run_id?: string;
+  priority_run_generation?: number;
+  terminal_transition?: FlowerCompanionTerminalTransition;
   attention_count: number;
   unread_failed_count: number;
   running_count: number;
@@ -34,6 +49,7 @@ export type FlowerCompanionPresenceProjection = Readonly<{
 type CountKey = Exclude<
   keyof FlowerCompanionPresenceProjection,
   'priority_status' | 'priority_count' | 'priority_thread_title' | 'priority_thread_progress' | 'priority_thread_progress_kind'
+  | 'priority_thread_progress_identity' | 'priority_thread_id' | 'priority_run_id' | 'priority_run_generation' | 'terminal_transition'
 >;
 
 const PRIORITIES: readonly Readonly<{
@@ -78,6 +94,7 @@ export function selectFlowerCompanionPriorityThread(
 export function projectFlowerCompanionPresence(
   threads: readonly FlowerCompanionThreadListItem[],
   available: boolean,
+  terminalTransition?: FlowerCompanionTerminalTransition,
 ): FlowerCompanionPresenceProjection {
   const counts: Record<CountKey, number> = {
     attention_count: 0,
@@ -102,12 +119,25 @@ export function projectFlowerCompanionPresence(
   const priorityThreadProgressKind = priorityThreadProgress
     ? priorityThread?.progress_kind ?? 'status'
     : undefined;
+  const priorityThreadProgressIdentity = priorityThreadProgress
+    ? priorityThread?.progress_identity
+    : undefined;
+  const priorityRunID = priority?.status === 'running' ? priorityThread?.active_run_id?.trim() || undefined : undefined;
+  const priorityThreadID = priorityRunID ? priorityThread?.thread_id : undefined;
+  const priorityRunGeneration = priority?.status === 'running' && Number.isFinite(priorityThread?.run_generation)
+    ? priorityThread?.run_generation
+    : undefined;
   return {
     priority_status: priority?.status ?? (available ? 'idle' : 'unavailable'),
     priority_count: priority ? counts[priority.count] : available ? 0 : 1,
     ...(priorityThreadTitle ? { priority_thread_title: priorityThreadTitle } : {}),
     ...(priorityThreadProgress ? { priority_thread_progress: priorityThreadProgress } : {}),
     ...(priorityThreadProgressKind ? { priority_thread_progress_kind: priorityThreadProgressKind } : {}),
+    ...(priorityThreadProgressIdentity ? { priority_thread_progress_identity: priorityThreadProgressIdentity } : {}),
+    ...(priorityThreadID ? { priority_thread_id: priorityThreadID } : {}),
+    ...(priorityRunID ? { priority_run_id: priorityRunID } : {}),
+    ...(priorityRunGeneration !== undefined ? { priority_run_generation: priorityRunGeneration } : {}),
+    ...(terminalTransition ? { terminal_transition: terminalTransition } : {}),
     ...counts,
   };
 }

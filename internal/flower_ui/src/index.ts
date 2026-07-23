@@ -9,6 +9,7 @@ export type * from './contracts/flowerChatContextTypes';
 export type * from './contracts/flowerSurfaceContracts';
 export * from './flowerCompanionPresence';
 export * from './flowerCompanionLiveTail';
+export * from './flowerCompanionTailMotion';
 export * from './flowerTurnAdmission';
 export * from './flowerTurnLauncherCopy';
 export * from './icons/FlowerIcon';

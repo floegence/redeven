@@ -12,6 +12,7 @@ export type FlowerCompanionProgressKind = 'status' | 'tool' | 'output';
 export type FlowerCompanionLiveTail = Readonly<{
   kind: FlowerCompanionProgressKind;
   text: string;
+  identity: string;
 }>;
 
 type ModelStatusLabel = (phase: FlowerModelIOPhase) => string;
@@ -37,13 +38,22 @@ function belongsToActiveRun(message: FlowerChatMessage, activeRunID: string): bo
   return messageRunID !== '' && messageRunID === activeRunID;
 }
 
-function latestToolLabel(block: FlowerActivityTimelineBlock): string {
+function latestToolLabel(block: FlowerActivityTimelineBlock): Readonly<{ itemID: string; text: string }> | null {
   for (let index = block.items.length - 1; index >= 0; index -= 1) {
     const item = block.items[index];
     const label = singleLineHead(presentFlowerActivityItem(item, block.file_actions).label);
-    if (label) return label;
+    if (label) return { itemID: item.item_id, text: label };
   }
-  return '';
+  return null;
+}
+
+function liveTailIdentity(
+  threadID: string,
+  runID: string,
+  messageID: string,
+  blockIdentity: string,
+): string {
+  return [threadID, runID, messageID, blockIdentity].join('\x1f');
 }
 
 function activeRunTail(thread: FlowerThreadSnapshot): FlowerCompanionLiveTail | null {
@@ -60,16 +70,28 @@ function activeRunTail(thread: FlowerThreadSnapshot): FlowerCompanionLiveTail | 
       if (block.type === 'thinking') return null;
       if (block.type === 'markdown' || block.type === 'text') {
         const text = singleLineTail(block.content);
-        return text ? { kind: 'output', text } : null;
+        return text ? {
+          kind: 'output',
+          text,
+          identity: liveTailIdentity(thread.thread_id, activeRunID, message.id, `block:${blockIndex}`),
+        } : null;
       }
       if (block.type === 'activity-timeline') {
-        const text = latestToolLabel(block);
-        return text ? { kind: 'tool', text } : null;
+        const tool = latestToolLabel(block);
+        return tool ? {
+          kind: 'tool',
+          text: tool.text,
+          identity: liveTailIdentity(thread.thread_id, activeRunID, message.id, `block:${blockIndex}:item:${tool.itemID}`),
+        } : null;
       }
     }
 
     const text = singleLineTail(message.content);
-    return text ? { kind: 'output', text } : null;
+    return text ? {
+      kind: 'output',
+      text,
+      identity: liveTailIdentity(thread.thread_id, activeRunID, message.id, 'content'),
+    } : null;
   }
   return null;
 }
@@ -90,12 +112,20 @@ export function projectFlowerCompanionLiveTail(
     || modelStatus.phase === 'waiting_response'
     || modelStatus.phase === 'retrying'
   )) {
-    return { kind: 'status', text: modelStatusLabel(modelStatus.phase) };
+    return {
+      kind: 'status',
+      text: modelStatusLabel(modelStatus.phase),
+      identity: liveTailIdentity(thread.thread_id, activeRunID, 'model-status', modelStatus.phase),
+    };
   }
 
   const tail = activeRunTail(thread);
   if (tail) return tail;
 
   const fallbackPhase = modelStatus?.phase ?? 'waiting_response';
-  return { kind: 'status', text: modelStatusLabel(fallbackPhase) };
+  return {
+    kind: 'status',
+    text: modelStatusLabel(fallbackPhase),
+    identity: liveTailIdentity(thread.thread_id, activeRunID, 'model-status', fallbackPhase),
+  };
 }
