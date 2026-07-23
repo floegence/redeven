@@ -259,6 +259,7 @@ export type FlowerSurfaceCopy = Readonly<{
     compactFinishInputRequest: string;
     compactNeedsConversation: string;
     commandMenuLabel: string;
+    composerMoreLabel: string;
     commandCompactContext: string;
     pendingSending: string;
     pendingQueued: string;
@@ -426,6 +427,7 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     compactFinishInputRequest: 'Finish the current input request before compacting context.',
     compactNeedsConversation: 'There is no context to compact yet.',
     commandMenuLabel: 'Flower commands',
+    composerMoreLabel: 'More input options',
     commandCompactContext: 'Compact current context',
     pendingSending: 'Sending',
     pendingQueued: 'Queued',

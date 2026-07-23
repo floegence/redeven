@@ -3635,6 +3635,7 @@
       "compactFinishInputRequest": "컨텍스트를 압축하기 전에 현재 입력 요청을 완료하세요.",
       "compactNeedsConversation": "아직 압축할 컨텍스트가 없습니다.",
       "commandMenuLabel": "Flower 명령",
+      "composerMoreLabel": "추가 입력 옵션",
       "commandCompactContext": "현재 컨텍스트 압축",
       "pendingSending": "보내는 중",
       "pendingQueued": "대기열에 추가됨",

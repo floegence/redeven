@@ -122,6 +122,23 @@ describe('Flower model status indicator', () => {
     expect(modelMenuRule).toContain('transform: translateX(var(--flower-model-menu-shift-x, 0px))');
   });
 
+  it('keeps the expanded companion composer to one stable row', () => {
+    const css = flowerStyles();
+    const contentRule = cssRule(css, ".flower-composer[data-flower-companion-compact='true'] .flower-composer-content");
+    const textareaRule = cssRule(css, ".flower-composer[data-flower-companion-compact='true'] textarea");
+    const summaryRule = cssRule(css, '.flower-companion-collapsed-summary');
+    const summaryTextRule = cssRule(css, '.flower-companion-collapsed-summary-text');
+
+    expect(contentRule).toContain('grid-template-columns: minmax(0, 1fr) auto');
+    expect(textareaRule).toContain('min-height: 2.25rem');
+    expect(textareaRule).toContain('height: 2.25rem');
+    expect(textareaRule).toContain('white-space: nowrap');
+    expect(summaryRule).toContain('display: flex');
+    expect(summaryRule).not.toContain('position: absolute');
+    expect(summaryTextRule).toContain('text-overflow: ellipsis');
+    expect(summaryTextRule).toContain('white-space: nowrap');
+  });
+
   it('renders compaction dividers as accessible timeline separators', () => {
     const css = flowerStyles();
     const dividerRule = cssRule(css, '.flower-compaction-divider');

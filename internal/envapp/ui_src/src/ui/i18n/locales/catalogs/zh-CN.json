@@ -3635,6 +3635,7 @@
       "compactFinishInputRequest": "请先完成当前输入请求再压缩上下文。",
       "compactNeedsConversation": "当前还没有可压缩的上下文。",
       "commandMenuLabel": "Flower 命令",
+      "composerMoreLabel": "更多输入选项",
       "commandCompactContext": "压缩当前上下文",
       "pendingSending": "发送中",
       "pendingQueued": "已排队",

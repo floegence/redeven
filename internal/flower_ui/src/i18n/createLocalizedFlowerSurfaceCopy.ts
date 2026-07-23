@@ -51,6 +51,7 @@ export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator):
       compactFinishInputRequest: t(i18n, k('chat.compactFinishInputRequest')),
       compactNeedsConversation: t(i18n, k('chat.compactNeedsConversation')),
       commandMenuLabel: t(i18n, k('chat.commandMenuLabel')),
+      composerMoreLabel: t(i18n, k('chat.composerMoreLabel')),
       commandCompactContext: t(i18n, k('chat.commandCompactContext')),
       pendingSending: t(i18n, k('chat.pendingSending')),
       pendingQueued: t(i18n, k('chat.pendingQueued')),

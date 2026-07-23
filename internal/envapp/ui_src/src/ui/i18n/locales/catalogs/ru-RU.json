@@ -3763,6 +3763,7 @@
       "compactFinishInputRequest": "Завершите текущий запрос ввода перед сжатием контекста.",
       "compactNeedsConversation": "Пока нет контекста для сжатия.",
       "commandMenuLabel": "Команды Flower",
+      "composerMoreLabel": "Дополнительные параметры ввода",
       "commandCompactContext": "Сжать текущий контекст",
       "pendingSending": "Отправка",
       "pendingQueued": "В очереди",

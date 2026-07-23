@@ -499,6 +499,7 @@ vi.mock('./pages/EnvAIPage', () => ({
         priority_status: 'running',
         priority_count: 1,
         priority_thread_title: 'Refine the Flower companion with a deliberately long live task title',
+        priority_thread_progress: 'Thinking...',
         attention_count: 0,
         unread_failed_count: 0,
         running_count: 1,
@@ -523,14 +524,19 @@ vi.mock('./pages/EnvAIPage', () => ({
         <div data-testid="activity-flower-focus-request">{props.focusThreadRequest?.request_id ?? ''}</div>
         <div data-testid="activity-flower-header-actions">{props.headerTrailingActions}</div>
         <Show when={!props.companionOpen}>
-          <div
+          <button
+            type="button"
             class="flower-companion-collapsed-summary"
             data-testid="activity-flower-presence-summary"
             title={props.companionSummary?.accessibleText}
+            aria-label={props.companionSummary?.accessibleText}
+            aria-controls={props.companionRegionID}
+            aria-expanded="false"
+            onClick={() => props.onCompanionOpenRequest?.()}
           >
             <span classList={{ 'flower-companion-collapsed-icon-running': Boolean(props.companionSummary?.running) }} />
-            <span>{props.companionSummary?.visualText}</span>
-          </div>
+            <span class="flower-companion-collapsed-summary-text">{props.companionSummary?.visualText}</span>
+          </button>
           <span aria-live="polite" aria-atomic="true" data-testid="activity-flower-presence-announcement">
             {props.companionSummary?.accessibleText}
           </span>
@@ -1402,21 +1408,22 @@ describe('EnvAppShell Activity Flower browser integration', () => {
     const icon = document.querySelector('.flower-companion-collapsed-icon-running');
     const status = document.querySelector('.flower-companion-collapsed-summary');
     const summary = document.querySelector('[data-testid="activity-flower-presence-summary"]');
-    if (!(icon instanceof HTMLElement) || !(status instanceof HTMLElement) || !(summary instanceof HTMLElement)) {
+    const summaryText = summary?.querySelector('.flower-companion-collapsed-summary-text');
+    if (!(icon instanceof HTMLElement) || !(status instanceof HTMLElement) || !(summary instanceof HTMLElement) || !(summaryText instanceof HTMLElement)) {
       throw new Error('Running Flower status did not render.');
     }
-    expect(summary.textContent).toContain('Working on:');
+    expect(summary.textContent).toContain('Thinking...');
     expect(summary.textContent).toContain('Refine the Flower companion');
-    expect(summary.scrollWidth).toBeGreaterThan(summary.clientWidth);
-    expect(getComputedStyle(summary).whiteSpace).toBe('nowrap');
-    expect(getComputedStyle(summary).textOverflow).toBe('ellipsis');
-    expect(getComputedStyle(summary).overflow).toBe('hidden');
+    expect(summaryText.scrollWidth).toBeGreaterThan(summaryText.clientWidth);
+    expect(getComputedStyle(summaryText).whiteSpace).toBe('nowrap');
+    expect(getComputedStyle(summaryText).textOverflow).toBe('ellipsis');
+    expect(getComputedStyle(summaryText).overflow).toBe('hidden');
     expect(getComputedStyle(icon).animationName).toContain('flower-companion-running-turn');
     expect(elementRect(status).width).toBeGreaterThan(0);
     expect(getComputedStyle(status).opacity).not.toBe('0');
     const announcement = document.querySelector('[data-testid="activity-flower-presence-announcement"]');
     if (!(announcement instanceof HTMLElement)) throw new Error('Flower presence announcement did not render.');
-    expect(announcement.textContent).toContain('Working on:');
+    expect(announcement.textContent).toContain('Thinking...');
     expect(announcement.textContent).toContain('Refine the Flower companion');
     expect(announcement.getAttribute('aria-live')).toBe('polite');
     expect(announcement.getAttribute('aria-atomic')).toBe('true');

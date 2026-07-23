@@ -91,12 +91,39 @@ describe('projectFlowerCompanionPresence', () => {
 
   it('projects the first canonical thread title for the highest-priority live status', () => {
     expect(projectFlowerCompanionPresence([
-      thread({ thread_id: 'running-primary', title: 'Refine the Flower companion', status: 'running' }),
+      thread({
+        thread_id: 'running-primary',
+        title: 'Refine the Flower companion',
+        status: 'running',
+        progress_text: 'Streaming response...',
+      }),
       thread({ thread_id: 'running-secondary', title: 'Review responsive behavior', status: 'running' }),
     ], true)).toMatchObject({
       priority_status: 'running',
       priority_count: 2,
       priority_thread_title: 'Refine the Flower companion',
+      priority_thread_progress: 'Streaming response...',
+    });
+  });
+
+  it('keeps progress aligned with the canonical priority thread', () => {
+    expect(projectFlowerCompanionPresence([
+      thread({
+        thread_id: 'running-pending',
+        title: 'Pending title',
+        title_status: 'pending',
+        status: 'running',
+        progress_text: 'Preparing...',
+      }),
+      thread({
+        thread_id: 'running-ready',
+        title: 'Verify responsive behavior',
+        status: 'running',
+        progress_text: 'Running tools...',
+      }),
+    ], true)).toMatchObject({
+      priority_thread_title: 'Verify responsive behavior',
+      priority_thread_progress: 'Running tools...',
     });
   });
 

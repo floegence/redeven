@@ -138,8 +138,20 @@ function bootstrap(snapshot = thread()): FlowerLiveBootstrap {
 function settings(): FlowerSettingsSnapshot {
   return {
     defaults: { permission_type: 'approval_required' },
-    model_profile: null,
-    provider_secrets: [],
+    model_profile: {
+      schema_version: 1,
+      current_model_id: 'default/model',
+      providers: [{
+        id: 'default',
+        type: 'openai',
+        models: [{ model_name: 'model', context_window: 100_000, input_modalities: ['text'] }],
+      }],
+    },
+    provider_secrets: [{
+      provider_id: 'default',
+      provider_api_key_configured: true,
+      web_search_api_key_configured: false,
+    }],
   };
 }
 
@@ -149,7 +161,15 @@ function routerDecision(): FlowerRouterDecision {
     decision_revision: 1,
     route: 'flower',
     reason_code: 'test',
-    selected_handler: null,
+    selected_handler: {
+      handler_id: 'runtime-test',
+      handler_kind: 'env_local',
+      display_name: 'Runtime',
+      carrier_kind: 'runtime',
+      state: 'online',
+      selection_source: 'router_default',
+      supports_thread_kinds: ['chat'],
+    },
     available_handlers: [],
     unavailable_handlers: [],
     handler_selection: {
@@ -283,7 +303,21 @@ afterEach(() => {
 
 describe('FlowerSurface companion visibility lifecycle', () => {
   it('keeps the ordinary composer textarea mounted while the companion expands and collapses', async () => {
-    const idleThread = thread({ status: 'idle', read_status: readStatus(false) });
+    const idleThread = thread({
+      status: 'idle',
+      read_status: readStatus(false),
+      context_usage: {
+        run_id: '',
+        phase: 'provider_usage',
+        input_tokens: 12_000,
+        context_window_tokens: 100_000,
+        threshold_tokens: 80_000,
+        used_ratio: 0.12,
+        threshold_ratio: 0.8,
+        pressure_status: 'stable',
+        updated_at_ms: 2_000,
+      },
+    });
     const harness = createAdapterHarness({
       listThreads: vi.fn(async () => [idleThread]),
       loadThread: vi.fn(async () => bootstrap(idleThread)),
@@ -313,17 +347,55 @@ describe('FlowerSurface companion visibility lifecycle', () => {
     const textarea = host.querySelector('textarea') as HTMLTextAreaElement;
     const surface = host.querySelector('[data-flower-companion-open]') as HTMLElement;
     expect(surface.dataset.flowerCompanionOpen).toBe('false');
-    expect(host.querySelector('.flower-companion-collapsed-summary')?.textContent).toContain('Refine the companion');
+    const summary = host.querySelector('.flower-companion-collapsed-summary') as HTMLButtonElement;
+    const composerContent = host.querySelector('.flower-composer-content') as HTMLElement;
+    expect(summary.tagName).toBe('BUTTON');
+    expect(summary.textContent).toContain('Refine the companion');
+    expect(summary.getAttribute('aria-controls')).toBe('test-flower-companion');
+    expect(summary.getAttribute('aria-expanded')).toBe('false');
+    expect((composerContent as HTMLElement & { inert: boolean }).inert).toBe(true);
+    expect(composerContent.getAttribute('aria-hidden')).toBe('true');
 
-    textarea.dispatchEvent(new InputEvent('input', { bubbles: true, data: 'a', inputType: 'insertText' }));
+    summary.click();
     await flushAsync();
     expect(surface.dataset.flowerCompanionOpen).toBe('true');
     expect(host.querySelector('textarea')).toBe(textarea);
+    expect((composerContent as HTMLElement & { inert: boolean }).inert).toBe(false);
+
+    const composer = host.querySelector('.flower-composer') as HTMLElement;
+    await waitUntil(
+      () => composer.dataset.flowerCompanionCompact === 'true',
+      'expanded companion did not enter compact composer mode',
+    );
+    expect(composer.dataset.flowerCompanionCompact).toBe('true');
+    expect(host.querySelectorAll('[data-flower-composer-inline-item]')).toHaveLength(0);
+    const more = host.querySelector('.flower-composer-more-button') as HTMLButtonElement;
+    expect(more).not.toBeNull();
+    more.click();
+    await flushAsync();
+    expect(host.querySelector('[data-flower-composer-more-item="working_dir"]')).not.toBeNull();
+    expect(host.querySelector('[data-flower-composer-more-item="permission"]')).not.toBeNull();
+    expect(host.querySelector('[data-flower-composer-more-item="model_reasoning"]')).not.toBeNull();
+    expect(host.querySelector('[data-flower-composer-more-item="context"]')).not.toBeNull();
 
     setOpen(false);
     await flushAsync();
     expect(surface.dataset.flowerCompanionOpen).toBe('false');
     expect(host.querySelector('textarea')).toBe(textarea);
+  });
+
+  it('does not compact the dedicated full-page composer', async () => {
+    const idleThread = thread({ status: 'idle', read_status: readStatus(false) });
+    const harness = createAdapterHarness({
+      listThreads: vi.fn(async () => [idleThread]),
+      loadThread: vi.fn(async () => bootstrap(idleThread)),
+    });
+    renderSurface(harness.adapter, true, true, undefined, 'full');
+
+    await waitUntil(() => Boolean(host.querySelector('.flower-composer')), 'full-page composer did not render');
+    await flushAsync();
+
+    expect((host.querySelector('.flower-composer') as HTMLElement).dataset.flowerCompanionCompact).toBeUndefined();
   });
 
   it('does not mark an unread thread as read while the companion is collapsed', async () => {
@@ -414,6 +486,50 @@ describe('FlowerSurface companion visibility lifecycle', () => {
     expect(presences.at(-1)?.running_count).toBe(2);
     expect(harness.listThreadLiveEvents).not.toHaveBeenCalled();
     expect(harness.markThreadRead).not.toHaveBeenCalled();
+  });
+
+  it('projects localized model progress for canonical running work', async () => {
+    const preparingThread = thread({
+      model_io_status: {
+        run_id: 'run-progress',
+        phase: 'preparing',
+        step_index: 1,
+        updated_at_ms: 2_000,
+      },
+    });
+    const streamingThread = thread({
+      ...preparingThread,
+      updated_at_ms: 3_000,
+      model_io_status: {
+        run_id: 'run-progress',
+        phase: 'streaming',
+        step_index: 2,
+        updated_at_ms: 3_000,
+      },
+    });
+    let listCall = 0;
+    const presences: FlowerCompanionPresenceProjection[] = [];
+    const harness = createAdapterHarness({
+      listThreads: vi.fn(async () => [listCall++ === 0 ? preparingThread : streamingThread]),
+      loadThread: vi.fn(async () => bootstrap(preparingThread)),
+    });
+    renderSurface(harness.adapter, false, false, (presence) => presences.push(presence));
+
+    await waitUntil(
+      () => presences.some((presence) => presence.priority_thread_progress === 'Preparing model request...'),
+      'preparing model progress did not reach companion presence',
+    );
+    await waitUntil(
+      () => presences.some((presence) => presence.priority_thread_progress === 'Thinking...'),
+      'collapsed background refresh did not project streaming progress',
+      2_500,
+    );
+
+    expect(presences.at(-1)).toMatchObject({
+      priority_status: 'running',
+      priority_thread_title: 'Running task',
+      priority_thread_progress: 'Thinking...',
+    });
   });
 
   it('projects a canonical summary-only queued count into companion presence', async () => {

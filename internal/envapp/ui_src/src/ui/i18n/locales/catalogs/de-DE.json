@@ -3635,6 +3635,7 @@
       "compactFinishInputRequest": "Schließe die aktuelle Eingabeanforderung ab, bevor du den Kontext komprimierst.",
       "compactNeedsConversation": "Es gibt noch keinen Kontext zum Komprimieren.",
       "commandMenuLabel": "Flower-Befehle",
+      "composerMoreLabel": "Weitere Eingabeoptionen",
       "commandCompactContext": "Aktuellen Kontext komprimieren",
       "pendingSending": "Wird gesendet",
       "pendingQueued": "In Warteschlange",

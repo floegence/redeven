@@ -3635,6 +3635,7 @@
       "compactFinishInputRequest": "コンテキストを圧縮する前に現在の入力リクエストを完了してください。",
       "compactNeedsConversation": "まだ圧縮できるコンテキストがありません。",
       "commandMenuLabel": "Flower コマンド",
+      "composerMoreLabel": "その他の入力オプション",
       "commandCompactContext": "現在のコンテキストを圧縮",
       "pendingSending": "送信中",
       "pendingQueued": "キュー済み",

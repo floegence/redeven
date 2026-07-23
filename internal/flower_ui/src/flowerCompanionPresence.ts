@@ -2,6 +2,7 @@ import type { FlowerThreadListItem } from './contracts/flowerSurfaceContracts';
 
 export type FlowerCompanionThreadListItem = FlowerThreadListItem & Readonly<{
   queued_turn_count?: number;
+  progress_text?: string;
 }>;
 
 export type FlowerCompanionPriorityStatus =
@@ -18,6 +19,7 @@ export type FlowerCompanionPresenceProjection = Readonly<{
   priority_status: FlowerCompanionPriorityStatus;
   priority_count: number;
   priority_thread_title?: string;
+  priority_thread_progress?: string;
   attention_count: number;
   unread_failed_count: number;
   running_count: number;
@@ -28,7 +30,7 @@ export type FlowerCompanionPresenceProjection = Readonly<{
 
 type CountKey = Exclude<
   keyof FlowerCompanionPresenceProjection,
-  'priority_status' | 'priority_count' | 'priority_thread_title'
+  'priority_status' | 'priority_count' | 'priority_thread_title' | 'priority_thread_progress'
 >;
 
 const PRIORITIES: readonly Readonly<{
@@ -78,18 +80,27 @@ export function projectFlowerCompanionPresence(
   }
 
   const priority = PRIORITIES.find(({ count }) => counts[count] > 0);
+  let priorityThread: FlowerCompanionThreadListItem | undefined;
   let priorityThreadTitle: string | undefined;
   if (priority) {
     for (const thread of threads) {
       if (priorityCountKey(thread) !== priority.count) continue;
-      priorityThreadTitle = canonicalThreadTitle(thread);
-      if (priorityThreadTitle) break;
+      priorityThread ??= thread;
+      const title = canonicalThreadTitle(thread);
+      if (!title) continue;
+      priorityThread = thread;
+      priorityThreadTitle = title;
+      break;
     }
   }
+  const priorityThreadProgress = priority?.status === 'running'
+    ? priorityThread?.progress_text?.trim() || undefined
+    : undefined;
   return {
     priority_status: priority?.status ?? (available ? 'idle' : 'unavailable'),
     priority_count: priority ? counts[priority.count] : available ? 0 : 1,
     ...(priorityThreadTitle ? { priority_thread_title: priorityThreadTitle } : {}),
+    ...(priorityThreadProgress ? { priority_thread_progress: priorityThreadProgress } : {}),
     ...counts,
   };
 }

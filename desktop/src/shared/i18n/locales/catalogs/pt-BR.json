@@ -38,6 +38,7 @@
       "compactFinishInputRequest": "Conclua a solicitação de entrada atual antes de comprimir o contexto.",
       "compactNeedsConversation": "Ainda não há contexto para comprimir.",
       "commandMenuLabel": "Comandos do Flower",
+      "composerMoreLabel": "Mais opções de entrada",
       "commandCompactContext": "Comprimir contexto atual",
       "pendingSending": "Enviando",
       "pendingQueued": "Na fila",
