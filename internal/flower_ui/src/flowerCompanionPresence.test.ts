@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
 import type { FlowerThreadListItem, FlowerThreadReadStatus } from './contracts/flowerSurfaceContracts';
-import { projectFlowerCompanionPresence, type FlowerCompanionThreadListItem } from './flowerCompanionPresence';
+import {
+  projectFlowerCompanionPresence,
+  selectFlowerCompanionPriorityThread,
+  type FlowerCompanionThreadListItem,
+} from './flowerCompanionPresence';
 
 function readStatus(isUnread = false): FlowerThreadReadStatus {
   return {
@@ -96,6 +100,7 @@ describe('projectFlowerCompanionPresence', () => {
         title: 'Refine the Flower companion',
         status: 'running',
         progress_text: 'Streaming response...',
+        progress_kind: 'output',
       }),
       thread({ thread_id: 'running-secondary', title: 'Review responsive behavior', status: 'running' }),
     ], true)).toMatchObject({
@@ -103,6 +108,7 @@ describe('projectFlowerCompanionPresence', () => {
       priority_count: 2,
       priority_thread_title: 'Refine the Flower companion',
       priority_thread_progress: 'Streaming response...',
+      priority_thread_progress_kind: 'output',
     });
   });
 
@@ -120,10 +126,12 @@ describe('projectFlowerCompanionPresence', () => {
         title: 'Verify responsive behavior',
         status: 'running',
         progress_text: 'Running tools...',
+        progress_kind: 'tool',
       }),
     ], true)).toMatchObject({
       priority_thread_title: 'Verify responsive behavior',
       priority_thread_progress: 'Running tools...',
+      priority_thread_progress_kind: 'tool',
     });
   });
 
@@ -148,18 +156,27 @@ describe('projectFlowerCompanionPresence', () => {
   });
 
   it('selects the first canonical title from the complete highest-priority group', () => {
-    expect(projectFlowerCompanionPresence([
+    const threads = [
       thread({ thread_id: 'running-pending', title: 'Pending title', title_status: 'pending', status: 'running' }),
       thread({ thread_id: 'running-empty', title: '   ', title_status: 'ready', status: 'running' }),
       thread({ thread_id: 'running-canonical', title: '  Review responsive behavior  ', status: 'running' }),
       thread({ thread_id: 'queued-canonical', title: 'Queued lower priority', queued_turn_count: 1 }),
-    ], true)).toMatchObject({
+    ];
+    expect(projectFlowerCompanionPresence(threads, true)).toMatchObject({
       priority_status: 'running',
       priority_count: 3,
       priority_thread_title: 'Review responsive behavior',
       running_count: 3,
       queued_count: 1,
     });
+    expect(selectFlowerCompanionPriorityThread(threads)?.thread_id).toBe('running-canonical');
+  });
+
+  it('selects attention instead of subscribing to lower-priority running work', () => {
+    expect(selectFlowerCompanionPriorityThread([
+      thread({ thread_id: 'running', status: 'running' }),
+      thread({ thread_id: 'approval', status: 'waiting_approval' }),
+    ])?.thread_id).toBe('approval');
   });
 
   it('follows attention, failed, running, queued, canceled, and completed priority order', () => {

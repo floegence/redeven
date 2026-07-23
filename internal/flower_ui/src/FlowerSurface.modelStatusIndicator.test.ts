@@ -128,6 +128,9 @@ describe('Flower model status indicator', () => {
     const textareaRule = cssRule(css, ".flower-composer[data-flower-companion-compact='true'] textarea");
     const summaryRule = cssRule(css, '.flower-companion-collapsed-summary');
     const summaryTextRule = cssRule(css, '.flower-companion-collapsed-summary-text');
+    const liveSummaryTextRule = cssRule(css, ".flower-companion-collapsed-summary-text[data-flower-companion-progress-kind='output']");
+    const tailViewportRule = cssRule(css, '.flower-companion-collapsed-tail-viewport');
+    const tailValueRule = cssRule(css, '.flower-companion-collapsed-tail-value');
 
     expect(contentRule).toContain('grid-template-columns: minmax(0, 1fr) auto');
     expect(textareaRule).toContain('min-height: 2.25rem');
@@ -135,8 +138,17 @@ describe('Flower model status indicator', () => {
     expect(textareaRule).toContain('white-space: nowrap');
     expect(summaryRule).toContain('display: flex');
     expect(summaryRule).not.toContain('position: absolute');
+    expect(summaryTextRule).toContain('flex: 1 1 auto');
     expect(summaryTextRule).toContain('text-overflow: ellipsis');
     expect(summaryTextRule).toContain('white-space: nowrap');
+    expect(liveSummaryTextRule).toContain('display: flex');
+    expect(liveSummaryTextRule).toContain('text-overflow: clip');
+    expect(tailViewportRule).toContain('position: relative');
+    expect(tailViewportRule).toContain('overflow: hidden');
+    expect(tailValueRule).toContain('position: absolute');
+    expect(tailValueRule).toContain('right: 0');
+    expect(tailValueRule).toContain('width: max-content');
+    expect(tailValueRule).toContain('min-width: 100%');
   });
 
   it('renders compaction dividers as accessible timeline separators', () => {

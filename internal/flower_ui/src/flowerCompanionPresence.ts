@@ -1,8 +1,10 @@
 import type { FlowerThreadListItem } from './contracts/flowerSurfaceContracts';
+import type { FlowerCompanionProgressKind } from './flowerCompanionLiveTail';
 
 export type FlowerCompanionThreadListItem = FlowerThreadListItem & Readonly<{
   queued_turn_count?: number;
   progress_text?: string;
+  progress_kind?: FlowerCompanionProgressKind;
 }>;
 
 export type FlowerCompanionPriorityStatus =
@@ -20,6 +22,7 @@ export type FlowerCompanionPresenceProjection = Readonly<{
   priority_count: number;
   priority_thread_title?: string;
   priority_thread_progress?: string;
+  priority_thread_progress_kind?: FlowerCompanionProgressKind;
   attention_count: number;
   unread_failed_count: number;
   running_count: number;
@@ -30,7 +33,7 @@ export type FlowerCompanionPresenceProjection = Readonly<{
 
 type CountKey = Exclude<
   keyof FlowerCompanionPresenceProjection,
-  'priority_status' | 'priority_count' | 'priority_thread_title' | 'priority_thread_progress'
+  'priority_status' | 'priority_count' | 'priority_thread_title' | 'priority_thread_progress' | 'priority_thread_progress_kind'
 >;
 
 const PRIORITIES: readonly Readonly<{
@@ -61,6 +64,17 @@ function canonicalThreadTitle(thread: FlowerCompanionThreadListItem): string | u
   return title || undefined;
 }
 
+export function selectFlowerCompanionPriorityThread(
+  threads: readonly FlowerCompanionThreadListItem[],
+): FlowerCompanionThreadListItem | undefined {
+  for (const { count } of PRIORITIES) {
+    const matching = threads.filter((thread) => priorityCountKey(thread) === count);
+    if (matching.length === 0) continue;
+    return matching.find((thread) => canonicalThreadTitle(thread) !== undefined) ?? matching[0];
+  }
+  return undefined;
+}
+
 export function projectFlowerCompanionPresence(
   threads: readonly FlowerCompanionThreadListItem[],
   available: boolean,
@@ -80,27 +94,20 @@ export function projectFlowerCompanionPresence(
   }
 
   const priority = PRIORITIES.find(({ count }) => counts[count] > 0);
-  let priorityThread: FlowerCompanionThreadListItem | undefined;
-  let priorityThreadTitle: string | undefined;
-  if (priority) {
-    for (const thread of threads) {
-      if (priorityCountKey(thread) !== priority.count) continue;
-      priorityThread ??= thread;
-      const title = canonicalThreadTitle(thread);
-      if (!title) continue;
-      priorityThread = thread;
-      priorityThreadTitle = title;
-      break;
-    }
-  }
+  const priorityThread = selectFlowerCompanionPriorityThread(threads);
+  const priorityThreadTitle = priorityThread ? canonicalThreadTitle(priorityThread) : undefined;
   const priorityThreadProgress = priority?.status === 'running'
     ? priorityThread?.progress_text?.trim() || undefined
+    : undefined;
+  const priorityThreadProgressKind = priorityThreadProgress
+    ? priorityThread?.progress_kind ?? 'status'
     : undefined;
   return {
     priority_status: priority?.status ?? (available ? 'idle' : 'unavailable'),
     priority_count: priority ? counts[priority.count] : available ? 0 : 1,
     ...(priorityThreadTitle ? { priority_thread_title: priorityThreadTitle } : {}),
     ...(priorityThreadProgress ? { priority_thread_progress: priorityThreadProgress } : {}),
+    ...(priorityThreadProgressKind ? { priority_thread_progress_kind: priorityThreadProgressKind } : {}),
     ...counts,
   };
 }
