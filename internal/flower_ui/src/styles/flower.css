@@ -7854,6 +7854,14 @@ html.dark .flower-component-shell {
   color: color-mix(in srgb, var(--muted-foreground) 60%, transparent);
 }
 
+.flower-empty-state[data-flower-empty-suggestions='hidden'] .flower-empty-hero {
+  margin-bottom: 0;
+}
+
+.flower-empty-state[data-flower-empty-suggestions='hidden'] .flower-empty-hint {
+  margin-top: 0.875rem;
+}
+
 .redeven-flower-soft-aura {
   position: relative;
   display: inline-flex;

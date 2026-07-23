@@ -68,6 +68,7 @@ main() {
       internal/flower_ui/src/chat/markdown/streamingMarkdownModel.test.ts \
       internal/flower_ui/src/FlowerSurface.activityRunningSheen.test.ts \
       internal/flower_ui/src/FlowerSurface.approvalCommand.test.ts \
+      internal/flower_ui/src/FlowerSurface.visibility.test.tsx \
       internal/flower_ui/src/FlowerSurface.workingDirectory.test.ts \
       internal/flower_ui/src/FlowerSurface.modelStatusIndicator.test.ts \
       internal/flower_ui/src/FlowerSurface.markdownRendering.test.ts \
