@@ -14,6 +14,8 @@ vi.mock('./filePicker/FlowerWorkingDirPickerDialog', () => ({
 
 import type {
   FlowerLiveBootstrap,
+  FlowerLiveEvent,
+  FlowerLiveEventsResponse,
   FlowerRouterDecision,
   FlowerSettingsSnapshot,
   FlowerSurfaceAdapter,
@@ -133,6 +135,25 @@ function bootstrap(snapshot = thread()): FlowerLiveBootstrap {
     read_status: snapshot.read_status,
     generated_at_ms: 3_000,
   };
+}
+
+function liveEvent<K extends FlowerLiveEvent['kind']>(
+  threadID: string,
+  seq: number,
+  kind: K,
+  payload: FlowerLiveEvent<K>['payload'],
+): FlowerLiveEvent<K> {
+  return {
+    schema_version: 1,
+    seq,
+    endpoint_id: 'runtime-test',
+    thread_id: threadID,
+    run_id: 'run-live',
+    turn_id: 'turn-live',
+    at_unix_ms: 3_000 + seq,
+    kind,
+    payload,
+  } as FlowerLiveEvent<K>;
 }
 
 function settings(): FlowerSettingsSnapshot {
@@ -272,6 +293,7 @@ function renderSurface(
       adapter={adapter}
       notify={() => undefined}
       presentation={presentation}
+      companionOpen={engaged()}
       engaged={engaged()}
       transcriptVisible={transcriptVisible()}
       companionPresenceOwner={companionPresenceOwner}
@@ -398,7 +420,7 @@ describe('FlowerSurface companion visibility lifecycle', () => {
     expect((host.querySelector('.flower-composer') as HTMLElement).dataset.flowerCompanionCompact).toBeUndefined();
   });
 
-  it('does not mark an unread thread as read while the companion is collapsed', async () => {
+  it('consumes collapsed live progress without marking an unread thread as read', async () => {
     const harness = createAdapterHarness();
     renderSurface(harness.adapter);
 
@@ -407,7 +429,8 @@ describe('FlowerSurface companion visibility lifecycle', () => {
     await presentNextFrame();
 
     expect(harness.markThreadRead).not.toHaveBeenCalled();
-    expect(harness.listThreadLiveEvents).not.toHaveBeenCalled();
+    await waitUntil(() => harness.listThreadLiveEvents.mock.calls.length > 0, 'collapsed live subscription did not start');
+    expect(harness.markThreadRead).not.toHaveBeenCalled();
   });
 
   it('bootstraps on engagement before consuming live events or acknowledging read state', async () => {
@@ -440,6 +463,9 @@ describe('FlowerSurface companion visibility lifecycle', () => {
     const harness = createAdapterHarness({ loadThread, listThreadLiveEvents, markThreadRead });
     const controls = renderSurface(harness.adapter);
     await waitUntil(() => loadThread.mock.calls.length === 1, 'initial focused thread did not bootstrap');
+    await waitUntil(() => listThreadLiveEvents.mock.calls.length > 0, 'collapsed live subscription did not start');
+    listThreadLiveEvents.mockClear();
+    order.length = 0;
 
     controls.setEngaged(true);
     controls.setTranscriptVisible(true);
@@ -484,52 +510,368 @@ describe('FlowerSurface companion visibility lifecycle', () => {
 
     expect(listThreads.mock.calls.length).toBeGreaterThanOrEqual(1);
     expect(presences.at(-1)?.running_count).toBe(2);
-    expect(harness.listThreadLiveEvents).not.toHaveBeenCalled();
+    expect(harness.listThreadLiveEvents).toHaveBeenCalled();
     expect(harness.markThreadRead).not.toHaveBeenCalled();
   });
 
-  it('projects localized model progress for canonical running work', async () => {
-    const preparingThread = thread({
-      model_io_status: {
-        run_id: 'run-progress',
-        phase: 'preparing',
-        step_index: 1,
-        updated_at_ms: 2_000,
-      },
+  it('streams waiting, tool, and output progress for the canonical collapsed priority thread', async () => {
+    const selectedSummary = thread({
+      title: 'Pending selected title',
+      title_status: 'pending',
+      status: 'idle',
+      read_status: readStatus(false),
+      messages: [],
     });
-    const streamingThread = thread({
-      ...preparingThread,
-      updated_at_ms: 3_000,
-      model_io_status: {
-        run_id: 'run-progress',
-        phase: 'streaming',
-        step_index: 2,
-        updated_at_ms: 3_000,
-      },
+    const externalSummary = thread({
+      thread_id: 'thread-external-live',
+      title: 'Canonical external work',
+      active_run_id: 'run-live',
+      messages: [],
     });
-    let listCall = 0;
+    const externalBootstrap: FlowerLiveBootstrap = {
+      ...bootstrap(externalSummary),
+      live_state: {
+        thread_patch: {},
+        runs: { 'run-live': { run_id: 'run-live', status: 'running', message_id: 'assistant-live' } },
+        model_io: { run_id: 'run-live', phase: 'waiting_response', updated_at_ms: 3_000 },
+        approval_actions: {},
+        input_requests: {},
+      },
+    };
+    const toolPage = deferred<FlowerLiveEventsResponse>();
+    const outputPage = deferred<FlowerLiveEventsResponse>();
+    const terminalPage = deferred<FlowerLiveEventsResponse>();
+    let externalLiveCall = 0;
+    const listThreadLiveEvents = vi.fn<FlowerSurfaceAdapter['listThreadLiveEvents']>(async (threadID) => {
+      if (threadID !== externalSummary.thread_id) {
+        return { stream_generation: 1, events: [], next_cursor: 0, retained_from_seq: 1 };
+      }
+      externalLiveCall += 1;
+      if (externalLiveCall === 1) return toolPage.promise;
+      if (externalLiveCall === 2) return outputPage.promise;
+      if (externalLiveCall === 3) return terminalPage.promise;
+      return { stream_generation: 1, events: [], next_cursor: 4, retained_from_seq: 1 };
+    });
     const presences: FlowerCompanionPresenceProjection[] = [];
     const harness = createAdapterHarness({
-      listThreads: vi.fn(async () => [listCall++ === 0 ? preparingThread : streamingThread]),
-      loadThread: vi.fn(async () => bootstrap(preparingThread)),
+      listThreads: vi.fn(async () => [selectedSummary, externalSummary]),
+      loadThread: vi.fn(async (threadID) => threadID === externalSummary.thread_id
+        ? externalBootstrap
+        : bootstrap(selectedSummary)),
+      listThreadLiveEvents,
     });
     renderSurface(harness.adapter, false, false, (presence) => presences.push(presence));
 
     await waitUntil(
-      () => presences.some((presence) => presence.priority_thread_progress === 'Preparing model request...'),
-      'preparing model progress did not reach companion presence',
+      () => presences.some((presence) => presence.priority_thread_progress === 'Waiting for model response...'),
+      'waiting progress did not reach companion presence',
     );
+    toolPage.resolve({
+      stream_generation: 1,
+      events: [
+        liveEvent(externalSummary.thread_id, 1, 'model_io.updated', {
+          status: { run_id: 'run-live', phase: 'streaming', updated_at_ms: 3_001 },
+        }),
+        liveEvent(externalSummary.thread_id, 2, 'message.started', {
+          message_id: 'assistant-live', role: 'assistant', status: 'streaming', created_at_ms: 3_002,
+        }),
+        liveEvent(externalSummary.thread_id, 3, 'message.block_set', {
+          message_id: 'assistant-live',
+          block_index: 0,
+          block: {
+            type: 'activity-timeline',
+            block: {
+              type: 'activity-timeline',
+              schema_version: 1,
+              thread_id: externalSummary.thread_id,
+              turn_id: 'turn-live',
+              run_id: 'run-live',
+              summary: { status: 'running', severity: 'normal', needs_attention: false, total_items: 1, counts: { running: 1 } },
+              items: [{
+                item_id: 'tool-live',
+                tool_name: 'terminal.exec',
+                kind: 'tool',
+                status: 'running',
+                severity: 'normal',
+                needs_attention: false,
+                requires_approval: false,
+                label: 'Inspecting the Flower layout',
+              }],
+            },
+          },
+        }),
+      ],
+      next_cursor: 3,
+      retained_from_seq: 1,
+    });
     await waitUntil(
-      () => presences.some((presence) => presence.priority_thread_progress === 'Thinking...'),
-      'collapsed background refresh did not project streaming progress',
-      2_500,
+      () => presences.some((presence) => presence.priority_thread_progress === 'Inspecting the Flower layout'),
+      'tool progress did not reach companion presence',
+    );
+    await waitUntil(() => externalLiveCall >= 2, 'output live page was not requested');
+    outputPage.resolve({
+      stream_generation: 1,
+      events: [liveEvent(externalSummary.thread_id, 4, 'message.block_set', {
+        message_id: 'assistant-live',
+        block_index: 1,
+        block: { type: 'markdown', content: 'The latest Flower output stays visible.' },
+      })],
+      next_cursor: 4,
+      retained_from_seq: 1,
+    });
+    await waitUntil(
+      () => presences.some((presence) => presence.priority_thread_progress === 'The latest Flower output stays visible.'),
+      'output progress did not reach companion presence',
     );
 
     expect(presences.at(-1)).toMatchObject({
       priority_status: 'running',
-      priority_thread_title: 'Running task',
-      priority_thread_progress: 'Thinking...',
+      priority_thread_title: 'Canonical external work',
+      priority_thread_progress: 'The latest Flower output stays visible.',
+      priority_thread_progress_kind: 'output',
     });
+    expect(listThreadLiveEvents.mock.calls
+      .filter(([threadID]) => threadID === externalSummary.thread_id)
+      .slice(0, 2)
+      .map(([threadID, cursor]) => [threadID, cursor])).toEqual([
+      [externalSummary.thread_id, 0],
+      [externalSummary.thread_id, 3],
+    ]);
+    expect(harness.markThreadRead).not.toHaveBeenCalled();
+
+    await waitUntil(() => externalLiveCall >= 3, 'terminal live page was not requested');
+    terminalPage.resolve({
+      stream_generation: 1,
+      events: [liveEvent(externalSummary.thread_id, 5, 'run.status_changed', {
+        run_id: 'run-live',
+        status: 'success',
+      })],
+      next_cursor: 5,
+      retained_from_seq: 1,
+    });
+    await waitUntil(
+      () => presences.some((presence) => presence.priority_status === 'completed'),
+      'terminal live status did not replace stale running progress',
+    );
+    await new Promise((resolve) => window.setTimeout(resolve, 400));
+    expect(externalLiveCall).toBe(3);
+    expect(harness.markThreadRead).not.toHaveBeenCalled();
+  });
+
+  it('ignores a late live response after the canonical priority thread changes', async () => {
+    const threadA = thread({ active_run_id: 'run-live' });
+    const threadB = thread({
+      thread_id: 'thread-priority-b',
+      title: 'New priority work',
+      active_run_id: 'run-live',
+    });
+    const idleA = { ...threadA, status: 'idle' as const, active_run_id: undefined };
+    const bootstrapWithWaiting = (snapshot: FlowerThreadSnapshot): FlowerLiveBootstrap => ({
+      ...bootstrap(snapshot),
+      live_state: {
+        thread_patch: {},
+        runs: { 'run-live': { run_id: 'run-live', status: 'running', message_id: 'assistant-live' } },
+        model_io: { run_id: 'run-live', phase: 'waiting_response', updated_at_ms: 3_000 },
+        approval_actions: {},
+        input_requests: {},
+      },
+    });
+    const lateA = deferred<FlowerLiveEventsResponse>();
+    let showThreadB = false;
+    const listThreads = vi.fn<FlowerSurfaceAdapter['listThreads']>(async () => (
+      showThreadB ? [idleA, threadB] : [threadA]
+    ));
+    const listThreadLiveEvents = vi.fn<FlowerSurfaceAdapter['listThreadLiveEvents']>(async (threadID, cursor) => {
+      if (threadID === threadA.thread_id && cursor === 0) return lateA.promise;
+      return { stream_generation: 1, events: [], next_cursor: cursor, retained_from_seq: 1 };
+    });
+    const presences: FlowerCompanionPresenceProjection[] = [];
+    const harness = createAdapterHarness({
+      listThreads,
+      loadThread: vi.fn(async (threadID) => bootstrapWithWaiting(threadID === threadB.thread_id ? threadB : threadA)),
+      listThreadLiveEvents,
+    });
+    renderSurface(harness.adapter, false, false, (presence) => presences.push(presence));
+
+    await waitUntil(
+      () => listThreadLiveEvents.mock.calls.some(([threadID]) => threadID === threadA.thread_id),
+      'first priority live request did not start',
+    );
+    const listCallsBeforeSwitch = listThreads.mock.calls.length;
+    showThreadB = true;
+    await waitUntil(() => listThreads.mock.calls.length > listCallsBeforeSwitch, 'summary refresh did not switch priority', 2_500);
+    await waitUntil(
+      () => presences.some((presence) => presence.priority_thread_title === 'New priority work'),
+      'new priority thread did not reach presence',
+    );
+
+    lateA.resolve({
+      stream_generation: 1,
+      events: [liveEvent(threadA.thread_id, 1, 'model_io.updated', {
+        status: { run_id: 'run-live', phase: 'retrying', updated_at_ms: 4_000 },
+      })],
+      next_cursor: 1,
+      retained_from_seq: 1,
+    });
+    await flushAsync();
+    await new Promise((resolve) => window.setTimeout(resolve, 25));
+
+    expect(presences.at(-1)?.priority_thread_title).toBe('New priority work');
+    expect(presences.at(-1)?.priority_thread_progress).not.toBe('Retrying model request...');
+    expect(harness.markThreadRead).not.toHaveBeenCalled();
+  });
+
+  it('moves directly to the next running thread when live terminal state leads stale summaries', async () => {
+    const threadA = thread({
+      title: 'First running task',
+      active_run_id: 'run-live',
+    });
+    const threadB = thread({
+      thread_id: 'thread-running-b',
+      title: 'Second running task',
+      active_run_id: 'run-b',
+    });
+    const terminalA = deferred<FlowerLiveEventsResponse>();
+    let threadBLiveCalls = 0;
+    const listThreads = vi.fn<FlowerSurfaceAdapter['listThreads']>(async () => [threadA, threadB]);
+    const loadThread = vi.fn<FlowerSurfaceAdapter['loadThread']>(async (threadID) => {
+      const snapshot = threadID === threadB.thread_id ? threadB : threadA;
+      const runID = snapshot.active_run_id ?? '';
+      return {
+        ...bootstrap(snapshot),
+        live_state: {
+          thread_patch: {},
+          runs: { [runID]: { run_id: runID, status: 'running', message_id: `assistant-${runID}` } },
+          model_io: { run_id: runID, phase: 'waiting_response', updated_at_ms: 3_000 },
+          approval_actions: {},
+          input_requests: {},
+        },
+      };
+    });
+    const listThreadLiveEvents = vi.fn<FlowerSurfaceAdapter['listThreadLiveEvents']>(async (threadID, cursor) => {
+      if (threadID === threadA.thread_id) return terminalA.promise;
+      if (threadID === threadB.thread_id) threadBLiveCalls += 1;
+      return { stream_generation: 1, events: [], next_cursor: cursor, retained_from_seq: 1 };
+    });
+    const presences: FlowerCompanionPresenceProjection[] = [];
+    const harness = createAdapterHarness({ listThreads, loadThread, listThreadLiveEvents });
+    renderSurface(harness.adapter, false, false, (presence) => presences.push(presence));
+
+    await waitUntil(
+      () => listThreadLiveEvents.mock.calls.some(([threadID]) => threadID === threadA.thread_id),
+      'first running thread did not start live consumption',
+    );
+    const summaryCallsBeforeTerminal = listThreads.mock.calls.length;
+    terminalA.resolve({
+      stream_generation: 1,
+      events: [liveEvent(threadA.thread_id, 1, 'run.status_changed', {
+        run_id: 'run-live',
+        status: 'success',
+      })],
+      next_cursor: 1,
+      retained_from_seq: 1,
+    });
+
+    await waitUntil(() => threadBLiveCalls > 0, 'next running thread did not take over live consumption');
+    await waitUntil(
+      () => presences.some((presence) => presence.priority_thread_title === 'Second running task'),
+      'next running thread did not replace terminal priority presence',
+    );
+
+    expect(listThreads).toHaveBeenCalledTimes(summaryCallsBeforeTerminal);
+    expect(presences.at(-1)).toMatchObject({
+      priority_status: 'running',
+      priority_thread_title: 'Second running task',
+      priority_thread_progress: 'Waiting for model response...',
+    });
+    expect(harness.markThreadRead).not.toHaveBeenCalled();
+  });
+
+  it('moves to the next running thread when bootstrap is already terminal', async () => {
+    const threadA = thread({
+      thread_id: 'thread-bootstrap-a',
+      title: 'Stale running summary',
+      active_run_id: 'run-live',
+    });
+    const threadB = thread({
+      thread_id: 'thread-bootstrap-b',
+      title: 'Bootstrap successor',
+      active_run_id: 'run-b',
+    });
+    const terminalA = {
+      ...threadA,
+      status: 'success' as const,
+      active_run_id: undefined,
+    };
+    const selected = thread({ status: 'idle', read_status: readStatus(false) });
+    let threadALiveCalls = 0;
+    let threadBLiveCalls = 0;
+    const listThreads = vi.fn<FlowerSurfaceAdapter['listThreads']>(async () => [threadA, threadB, selected]);
+    const loadThread = vi.fn<FlowerSurfaceAdapter['loadThread']>(async (threadID) => {
+      if (threadID === threadA.thread_id) return bootstrap(terminalA);
+      if (threadID === threadB.thread_id) return {
+        ...bootstrap(threadB),
+        live_state: {
+          thread_patch: {},
+          runs: { 'run-b': { run_id: 'run-b', status: 'running', message_id: 'assistant-b' } },
+          model_io: { run_id: 'run-b', phase: 'waiting_response', updated_at_ms: 3_000 },
+          approval_actions: {},
+          input_requests: {},
+        },
+      };
+      return bootstrap(selected);
+    });
+    const listThreadLiveEvents = vi.fn<FlowerSurfaceAdapter['listThreadLiveEvents']>(async (threadID, cursor) => {
+      if (threadID === threadA.thread_id) threadALiveCalls += 1;
+      if (threadID === threadB.thread_id) threadBLiveCalls += 1;
+      return { stream_generation: 1, events: [], next_cursor: cursor, retained_from_seq: 1 };
+    });
+    const presences: FlowerCompanionPresenceProjection[] = [];
+    const harness = createAdapterHarness({ listThreads, loadThread, listThreadLiveEvents });
+    renderSurface(harness.adapter, false, false, (presence) => presences.push(presence));
+
+    await waitUntil(
+      () => loadThread.mock.calls.some(([threadID]) => threadID === threadA.thread_id),
+      'terminal bootstrap did not load',
+    );
+    const summaryCallsBeforeHandoff = listThreads.mock.calls.length;
+    await waitUntil(() => threadBLiveCalls > 0, 'bootstrap successor did not take over live consumption');
+    await waitUntil(
+      () => presences.some((presence) => presence.priority_thread_title === 'Bootstrap successor'),
+      'bootstrap successor did not replace stale running presence',
+    );
+
+    expect(threadALiveCalls).toBe(0);
+    expect(listThreads).toHaveBeenCalledTimes(summaryCallsBeforeHandoff);
+    expect(presences.at(-1)).toMatchObject({
+      priority_status: 'running',
+      priority_thread_title: 'Bootstrap successor',
+      priority_thread_progress: 'Waiting for model response...',
+    });
+    expect(harness.markThreadRead).not.toHaveBeenCalled();
+  });
+
+  it('pauses collapsed live requests while hidden and safely resumes when visible', async () => {
+    const running = thread({ active_run_id: 'run-live' });
+    const harness = createAdapterHarness({
+      listThreads: vi.fn(async () => [running]),
+      loadThread: vi.fn(async () => bootstrap(running)),
+    });
+    renderSurface(harness.adapter);
+
+    await waitUntil(() => harness.listThreadLiveEvents.mock.calls.length > 0, 'collapsed live request did not start');
+    setDocumentVisible(false);
+    await flushAsync();
+    const hiddenCallCount = harness.listThreadLiveEvents.mock.calls.length;
+    await new Promise((resolve) => window.setTimeout(resolve, 450));
+    expect(harness.listThreadLiveEvents).toHaveBeenCalledTimes(hiddenCallCount);
+
+    setDocumentVisible(true);
+    await waitUntil(
+      () => harness.listThreadLiveEvents.mock.calls.length > hiddenCallCount,
+      'collapsed live subscription did not resume',
+    );
+    expect(harness.markThreadRead).not.toHaveBeenCalled();
   });
 
   it('projects a canonical summary-only queued count into companion presence', async () => {
@@ -632,6 +974,8 @@ describe('FlowerSurface companion visibility lifecycle', () => {
     const controls = renderSurface(harness.adapter, false, false);
 
     await waitUntil(() => loadThread.mock.calls.length === 1, 'initial focused thread did not bootstrap');
+    await waitUntil(() => harness.listThreadLiveEvents.mock.calls.length > 0, 'collapsed live subscription did not start');
+    harness.listThreadLiveEvents.mockClear();
     controls.setEngaged(true);
     controls.setTranscriptVisible(true);
     await waitUntil(() => loadThread.mock.calls.length === 2, 'engagement bootstrap did not start');

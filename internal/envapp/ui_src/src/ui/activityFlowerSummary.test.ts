@@ -61,10 +61,12 @@ describe('presentActivityFlowerSummary', () => {
       priority_count: 1,
       priority_thread_title: 'Refine the companion',
       priority_thread_progress: 'Streaming response...',
+      priority_thread_progress_kind: 'status',
       running_count: 1,
     }), copy)).toEqual({
-      visualText: 'Streaming response... / Refine the companion',
-      accessibleText: 'Streaming response... / Refine the companion',
+      visualText: 'Streaming response...',
+      accessibleText: 'Streaming response...',
+      progressKind: 'status',
     });
   });
 
@@ -77,6 +79,31 @@ describe('presentActivityFlowerSummary', () => {
     }), copy)).toEqual({
       visualText: 'Preparing model request...',
       accessibleText: 'Preparing model request...',
+      progressKind: 'status',
+    });
+  });
+
+  it('marks latest output and tool summaries for the left-clipped live tail treatment', () => {
+    expect(presentActivityFlowerSummary(presence({
+      priority_status: 'running',
+      priority_count: 1,
+      priority_thread_progress: 'The newest response fragment',
+      priority_thread_progress_kind: 'output',
+      running_count: 1,
+    }), copy)).toMatchObject({
+      visualText: 'The newest response fragment',
+      progressKind: 'output',
+    });
+    expect(presentActivityFlowerSummary(presence({
+      priority_status: 'running',
+      priority_count: 3,
+      priority_thread_progress: 'pnpm test --filter flower',
+      priority_thread_progress_kind: 'tool',
+      running_count: 3,
+    }), copy)).toMatchObject({
+      visualText: 'pnpm test --filter flower',
+      progressKind: 'tool',
+      accessibleText: 'pnpm test --filter flower. also working 2',
     });
   });
 

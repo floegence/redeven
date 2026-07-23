@@ -140,6 +140,36 @@ function adapterOptions(
 }
 
 describe('runtime Flower surface adapter read state', () => {
+  it('keeps thread-list summaries transcript-free even when preview fields are present', async () => {
+    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({
+      listThreads: vi.fn(async () => ({
+        threads: [{
+          thread_id: 'thread_summary',
+          title: 'Running summary',
+          title_status: 'ready',
+          model_id: 'default/gpt-5',
+          permission_type: 'approval_required',
+          working_dir: '/workspace',
+          queued_turn_count: 0,
+          run_status: 'running',
+          active_run_id: 'run_live',
+          created_at_unix_ms: 1_000,
+          updated_at_unix_ms: 2_000,
+          last_message_at_unix_ms: 2_000,
+          last_message_preview: 'This preview must not become a transcript message.',
+          model_io_status: { run_id: 'run_live', phase: 'streaming', updated_at_ms: 2_000 },
+          read_status: readStatus(),
+        }],
+      })),
+    }));
+
+    const [summary] = await adapter.listThreads();
+
+    expect(summary.messages).toEqual([]);
+    expect(summary.model_io_status).toBeUndefined();
+    expect(summary.active_run_id).toBe('run_live');
+  });
+
   it('preserves linked-context host capabilities independently from activity file actions', async () => {
     const openLinkedFilePreview = vi.fn(async () => undefined);
     const openLinkedDirectoryBrowser = vi.fn(async () => undefined);

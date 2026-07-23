@@ -4,6 +4,7 @@ import { useNotification } from '@floegence/floe-webapp-core';
 import { FlowerSurface } from '../../../../../flower_ui/src';
 import type {
   FlowerCompanionPresenceProjection,
+  FlowerCompanionProgressKind,
   FlowerCompanionPriorityStatus,
   FlowerSurfaceNotification,
   FlowerThreadFocusRequest,
@@ -46,6 +47,7 @@ export type EnvAIPageProps = Readonly<{
     visualText: string;
     accessibleText: string;
     priorityStatus: FlowerCompanionPriorityStatus;
+    progressKind?: FlowerCompanionProgressKind;
     running: boolean;
   }>;
   companionActionLabel?: string;

@@ -3877,6 +3877,7 @@ export function EnvAppShell() {
                 visualText: activityFlowerPresenceSummary(),
                 accessibleText: activityFlowerSummary().accessibleText,
                 priorityStatus: activityFlowerPresence().priority_status,
+                progressKind: activityFlowerSummary().progressKind,
                 running: activityFlowerPresence().running_count > 0,
               }}
               companionActionLabel={i18n.t('shell.flowerCompanion.summary.openPendingAction')}

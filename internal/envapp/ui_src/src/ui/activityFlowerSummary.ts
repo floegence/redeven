@@ -1,5 +1,6 @@
 import type {
   FlowerCompanionPresenceProjection,
+  FlowerCompanionProgressKind,
   FlowerCompanionPriorityStatus,
 } from '../../../../flower_ui/src';
 
@@ -18,6 +19,7 @@ export type ActivityFlowerSummaryCopy = Readonly<{
 export type ActivityFlowerSummary = Readonly<{
   visualText: string;
   accessibleText: string;
+  progressKind?: FlowerCompanionProgressKind;
 }>;
 
 export function presentActivityFlowerSummary(
@@ -38,7 +40,9 @@ export function presentActivityFlowerSummary(
     ? String(presence.priority_thread_progress ?? '').trim()
     : '';
   const lead = progress || copy.lead[status];
-  const visualText = title
+  const visualText = status === 'running' && progress
+    ? progress
+    : title
     ? count > 1
       ? copy.withTitleAndMore(lead, title, count - 1)
       : copy.withTitle(lead, title)
@@ -46,11 +50,14 @@ export function presentActivityFlowerSummary(
       ? progress
       : copy.withoutTitle(status, count);
   const backgroundRunningCount = status === 'running'
-    ? 0
+    ? Math.max(0, count - 1)
     : Math.max(0, Math.floor(presence.running_count));
 
   return {
     visualText,
+    ...(status === 'running' && progress
+      ? { progressKind: presence.priority_thread_progress_kind ?? 'status' }
+      : {}),
     accessibleText: backgroundRunningCount > 0
       ? `${visualText}. ${copy.secondaryWorking(backgroundRunningCount)}`
       : visualText,

@@ -64,6 +64,7 @@ import type {
   FlowerWorkingDirectoryPathContext,
 } from './contracts/flowerSurfaceContracts';
 import { projectFlowerThreadListItem, trimString } from './flowerSurfaceModel';
+import { projectFlowerCompanionLiveTail, type FlowerCompanionProgressKind } from './flowerCompanionLiveTail';
 import {
   buildFlowerTimelineEntries,
   type FlowerRenderableMessageBlock,
@@ -120,6 +121,7 @@ import {
 import { FlowerWorkingDirPickerDialog } from './filePicker/FlowerWorkingDirPickerDialog';
 import {
   projectFlowerCompanionPresence,
+  selectFlowerCompanionPriorityThread,
   type FlowerCompanionPriorityStatus,
   type FlowerCompanionPresenceProjection,
   type FlowerCompanionThreadListItem,
@@ -714,6 +716,7 @@ export type FlowerSurfaceProps = Readonly<{
     visualText: string;
     accessibleText: string;
     priorityStatus: FlowerCompanionPriorityStatus;
+    progressKind?: FlowerCompanionProgressKind;
     running: boolean;
   }>;
   companionActionLabel?: string;
@@ -2075,17 +2078,77 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     lastSidebarListSignature = signature;
     setSidebarListItems(items);
   });
-  const companionThreadItems = createMemo<readonly FlowerCompanionThreadListItem[]>(() => {
+  let companionLiveSequence = 0;
+  const [companionLiveThread, setCompanionLiveThread] = createSignal<FlowerThreadSnapshot | null>(null);
+  const [companionTerminalOverrides, setCompanionTerminalOverrides] = createSignal<ReadonlyMap<string, Readonly<{
+    thread: FlowerThreadSnapshot;
+    runID: string;
+  }>>>(new Map());
+  const companionBaseThreadItems = createMemo<readonly FlowerCompanionThreadListItem[]>(() => {
     const threadStateByID = new Map(threads().map((thread) => [thread.thread_id, thread] as const));
     return sidebarListItems().map((item) => {
       const thread = threadStateByID.get(item.thread_id);
-      const modelIOStatus = thread?.model_io_status;
+      const liveTail = thread ? projectFlowerCompanionLiveTail(thread, modelStatusLabel) : null;
       return {
         ...item,
         queued_turn_count: thread?.queued_turn_count ?? thread?.queued_turns?.length ?? 0,
-        ...(modelIOStatus ? { progress_text: modelStatusLabel(modelIOStatus.phase) } : {}),
+        ...(liveTail ? { progress_text: liveTail.text, progress_kind: liveTail.kind } : {}),
       };
     });
+  });
+  const overlayCompanionThreadItem = (
+    item: FlowerCompanionThreadListItem,
+    thread: FlowerThreadSnapshot,
+  ): FlowerCompanionThreadListItem => {
+    const liveTail = projectFlowerCompanionLiveTail(thread, modelStatusLabel);
+    const liveItem = projectFlowerThreadListItem(threadWithLocalReadVisibility(thread));
+    const {
+      progress_text: _staleProgressText,
+      progress_kind: _staleProgressKind,
+      ...baseItem
+    } = item;
+    return {
+      ...baseItem,
+      ...liveItem,
+      queued_turn_count: thread.queued_turn_count ?? thread.queued_turns?.length ?? 0,
+      ...(liveTail ? { progress_text: liveTail.text, progress_kind: liveTail.kind } : {}),
+    };
+  };
+  const companionPriorityThreadItems = createMemo<readonly FlowerCompanionThreadListItem[]>(() => {
+    const overrides = companionTerminalOverrides();
+    if (overrides.size === 0) return companionBaseThreadItems();
+    return companionBaseThreadItems().map((item) => {
+      const override = overrides.get(item.thread_id);
+      return override ? overlayCompanionThreadItem(item, override.thread) : item;
+    });
+  });
+  const companionLiveThreadID = createMemo(() => {
+    if (!companionPresenceOwner() || !companionCollapsed() || !documentVisible()) return '';
+    const priorityThread = selectFlowerCompanionPriorityThread(companionPriorityThreadItems());
+    return priorityThread?.status === 'running' ? priorityThread.thread_id : '';
+  });
+  const companionThreadItems = createMemo<readonly FlowerCompanionThreadListItem[]>(() => {
+    const liveThread = companionLiveThread();
+    if (!liveThread) return companionPriorityThreadItems();
+    return companionPriorityThreadItems().map((item) => {
+      if (item.thread_id !== liveThread.thread_id) return item;
+      return overlayCompanionThreadItem(item, liveThread);
+    });
+  });
+  createEffect(() => {
+    const baseThreads = new Map(threads().map((thread) => [thread.thread_id, thread] as const));
+    const current = companionTerminalOverrides();
+    if (current.size === 0) return;
+    let next: Map<string, Readonly<{ thread: FlowerThreadSnapshot; runID: string }>> | null = null;
+    for (const [threadID, override] of current) {
+      const baseThread = baseThreads.get(threadID);
+      const baseStillTrailsOverride = baseThread?.status === 'running'
+        && trimString(baseThread.active_run_id) === override.runID;
+      if (baseStillTrailsOverride) continue;
+      next ??= new Map(current);
+      next.delete(threadID);
+    }
+    if (next) setCompanionTerminalOverrides(next);
   });
   let lastCompanionPresenceSignature = '';
   createEffect(() => {
@@ -3356,6 +3419,124 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       window.clearInterval(timer);
     });
   });
+
+  createEffect(on(
+    companionLiveThreadID,
+    (threadID) => {
+      const sequence = ++companionLiveSequence;
+      setCompanionLiveThread(null);
+      if (!threadID) return;
+
+      let disposed = false;
+      let requestInFlight = false;
+      let cursor = 0;
+      let streamGeneration = 1;
+      const cachedThread = threads().find((thread) => thread.thread_id === threadID) ?? null;
+      let projectedThread = loadedThreadIDs.has(threadID) ? cachedThread : null;
+      let trackedRunID = trimString(cachedThread?.active_run_id);
+
+      const stillCurrent = () => (
+        !disposed
+        && sequence === companionLiveSequence
+        && companionLiveThreadID() === threadID
+      );
+      const publishProjection = () => {
+        if (!projectedThread) return;
+        if (projectedThread.status !== 'running' && trackedRunID) {
+          setCompanionTerminalOverrides((current) => {
+            const next = new Map(current);
+            next.set(threadID, { thread: projectedThread!, runID: trackedRunID });
+            return next;
+          });
+        }
+        setCompanionLiveThread(projectedThread);
+      };
+      if (projectedThread) {
+        cursor = liveCursorValue(liveCursors.get(threadID));
+        streamGeneration = liveStreamGenerationValue(liveStreamGenerations.get(threadID));
+        publishProjection();
+      }
+      const applyBootstrap = async () => {
+        const live = await props.adapter.loadThread(threadID);
+        if (!stillCurrent()) return false;
+        projectedThread = projectFlowerLiveBootstrap(live);
+        trackedRunID = trimString(projectedThread.active_run_id) || trackedRunID;
+        cursor = liveCursorValue(live.cursor);
+        streamGeneration = liveStreamGenerationValue(live.stream_generation);
+        publishProjection();
+        return true;
+      };
+      const poll = async () => {
+        if (requestInFlight || !stillCurrent() || (projectedThread != null && projectedThread.status !== 'running')) return;
+        requestInFlight = true;
+        try {
+          if (!projectedThread && !await applyBootstrap()) return;
+          if (projectedThread?.status !== 'running') return;
+          let hasMore = true;
+          while (hasMore && projectedThread && stillCurrent()) {
+            const requestedCursor = cursor;
+            const response = await withTimeout(
+              props.adapter.listThreadLiveEvents(threadID, cursor, 100),
+              SELECTED_THREAD_LIVE_EVENTS_TIMEOUT_MS,
+            );
+            if (!stillCurrent()) return;
+            const responseGeneration = liveStreamGenerationValue(response.stream_generation);
+            const retainedGap = response.retained_from_seq > 0
+              && requestedCursor > 0
+              && requestedCursor < response.retained_from_seq;
+            if (retainedGap) {
+              projectedThread = null;
+              if (!await applyBootstrap()) return;
+              hasMore = false;
+              continue;
+            }
+            if (responseGeneration > streamGeneration && requestedCursor > 0) {
+              projectedThread = null;
+              if (!await applyBootstrap()) return;
+              hasMore = false;
+              continue;
+            }
+            if (responseGeneration < streamGeneration) return;
+            streamGeneration = responseGeneration;
+            let resyncRequired = false;
+            for (const event of response.events) {
+              if (event.thread_id !== threadID) continue;
+              const result = applyFlowerLiveEvent(projectedThread, cursor, event);
+              cursor = result.cursor;
+              projectedThread = result.thread;
+              trackedRunID = trimString(projectedThread.active_run_id) || trackedRunID;
+              resyncRequired ||= result.resyncRequired;
+            }
+            cursor = Math.max(cursor, liveCursorValue(response.next_cursor));
+            if (resyncRequired) {
+              projectedThread = null;
+              if (!await applyBootstrap()) return;
+              hasMore = false;
+              continue;
+            }
+            publishProjection();
+            hasMore = response.has_more === true && projectedThread.status === 'running';
+          }
+        } catch {
+          // The canonical summary poll remains the recovery path for a transient companion-only failure.
+        } finally {
+          requestInFlight = false;
+        }
+      };
+
+      const timer = window.setInterval(() => void poll(), 350);
+      void poll();
+      onCleanup(() => {
+        disposed = true;
+        window.clearInterval(timer);
+        if (sequence === companionLiveSequence) {
+          companionLiveSequence += 1;
+          setCompanionLiveThread(null);
+        }
+      });
+    },
+    { defer: true },
+  ));
 
   createEffect(() => {
     const pending = pendingContextCompactionForSelectedThread();
@@ -7691,8 +7872,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       )}
                       aria-hidden="true"
                     />
-                    <span class="flower-companion-collapsed-summary-text">
-                      {props.companionSummary?.visualText}
+                    <span
+                      class="flower-companion-collapsed-summary-text"
+                      data-flower-companion-progress-kind={props.companionSummary?.progressKind}
+                    >
+                      <Show
+                        when={props.companionSummary?.progressKind === 'output'}
+                        fallback={props.companionSummary?.visualText}
+                      >
+                        <span class="flower-companion-collapsed-tail-prefix" aria-hidden="true">&hellip;</span>
+                        <span class="flower-companion-collapsed-tail-viewport">
+                          <span class="flower-companion-collapsed-tail-value">
+                            {props.companionSummary?.visualText}
+                          </span>
+                        </span>
+                      </Show>
                     </span>
                   </button>
                 </Show>
@@ -7700,9 +7894,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   <span
                     id={companionDescriptionID()}
                     class="flower-visually-hidden"
-                    role="status"
-                    aria-live="polite"
-                    aria-atomic="true"
+                    role={props.companionSummary?.progressKind === 'tool' || props.companionSummary?.progressKind === 'output' ? undefined : 'status'}
+                    aria-live={props.companionSummary?.progressKind === 'tool' || props.companionSummary?.progressKind === 'output' ? undefined : 'polite'}
+                    aria-atomic={props.companionSummary?.progressKind === 'tool' || props.companionSummary?.progressKind === 'output' ? undefined : 'true'}
                   >
                     {props.companionSummary?.accessibleText}
                   </span>

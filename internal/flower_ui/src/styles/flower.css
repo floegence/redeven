@@ -191,10 +191,52 @@
 }
 
 .flower-companion-collapsed-summary-text {
+  display: block;
+  flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.flower-companion-collapsed-summary-text[data-flower-companion-progress-kind='output'] {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  text-overflow: clip;
+}
+
+.flower-companion-collapsed-tail-prefix {
+  flex: 0 0 auto;
+  margin-right: 0.18rem;
+  color: color-mix(in srgb, var(--muted-foreground) 72%, transparent);
+}
+
+.flower-companion-collapsed-tail-viewport {
+  position: relative;
+  min-width: 0;
+  height: 1rem;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+
+.flower-companion-collapsed-tail-value {
+  position: absolute;
+  inset-block: 0;
+  right: 0;
+  width: max-content;
+  min-width: 100%;
+  overflow: visible;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.flower-companion-collapsed-summary-text[data-flower-companion-progress-kind='output'] {
+  color: color-mix(in srgb, var(--foreground) 90%, var(--muted-foreground));
+}
+
+.flower-companion-collapsed-summary-text[data-flower-companion-progress-kind='tool'] {
+  color: color-mix(in srgb, var(--foreground) 78%, var(--muted-foreground));
 }
 
 .flower-composer[data-flower-companion-compact='true'] {

@@ -54,6 +54,7 @@ main() {
       internal/flower_ui/src/flowerSubagentProjection.test.ts \
       internal/flower_ui/src/flowerThreadListRefresh.test.ts \
       internal/flower_ui/src/flowerCompanionPresence.test.ts \
+      internal/flower_ui/src/flowerCompanionLiveTail.test.ts \
       internal/flower_ui/src/flowerPendingTurns.test.ts \
       internal/flower_ui/src/flowerTerminalOutput.test.ts \
       internal/flower_ui/src/FlowerSurface.references.test.ts \
