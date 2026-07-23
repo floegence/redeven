@@ -775,6 +775,11 @@ const mountFlowerSurface = (
   props: Readonly<{
     focusThreadRequest?: FlowerThreadFocusRequest | null;
     settingsFocusRequest?: number;
+    presentation?: 'full' | 'companion';
+    companionOpen?: boolean;
+    engaged?: boolean;
+    transcriptVisible?: boolean;
+    companionPresenceOwner?: boolean;
     onFocusThreadRequestConsumed?: (requestID: string) => void;
     onThreadSelectionEvent?: (event: UIFirstSelectionEvent<string, { source: 'thread-list' }>) => void;
   }> = {},
@@ -789,6 +794,11 @@ const mountFlowerSurface = (
       }}
       focusThreadRequest={props.focusThreadRequest}
       settingsFocusRequest={props.settingsFocusRequest}
+      presentation={props.presentation}
+      companionOpen={props.companionOpen}
+      engaged={props.engaged}
+      transcriptVisible={props.transcriptVisible}
+      companionPresenceOwner={props.companionPresenceOwner}
       onFocusThreadRequestConsumed={props.onFocusThreadRequestConsumed}
       onThreadSelectionEvent={props.onThreadSelectionEvent}
     />
@@ -809,6 +819,11 @@ export function renderSurfaceWithAdapterProps(
   props: Readonly<{
     focusThreadRequest?: FlowerThreadFocusRequest | null;
     settingsFocusRequest?: number;
+    presentation?: 'full' | 'companion';
+    companionOpen?: boolean;
+    engaged?: boolean;
+    transcriptVisible?: boolean;
+    companionPresenceOwner?: boolean;
     onFocusThreadRequestConsumed?: (requestID: string) => void;
     onThreadSelectionEvent?: (event: UIFirstSelectionEvent<string, { source: 'thread-list' }>) => void;
   }>,
