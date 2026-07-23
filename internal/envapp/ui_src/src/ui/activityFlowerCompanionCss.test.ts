@@ -45,7 +45,23 @@ describe('Flower bottom companion visual contract', () => {
     expectDrawerPhases(frameRule);
     expect(frameRule.body).toContain('background: var(--flower-companion-surface);');
     expect(frameRule.body.match(/var\(--redeven-surface-shadow-source\)/gu)).toHaveLength(2);
+    expect(frameRule.body).toContain('var(--redeven-surface-shadow-source) 48%');
+    expect(frameRule.body).toContain('var(--redeven-surface-shadow-source) 30%');
     expect(frameRule.body).not.toContain('var(--foreground)');
+  });
+
+  it('deepens only dark companions while preserving the light surface mix', () => {
+    const rules = companionRules(readCompanionCss());
+    const baseRule = findRule(rules, '.flower-activity-companion');
+    const darkRule = findRule(rules, 'html.dark .flower-activity-companion');
+
+    expect(baseRule.body).toContain('var(--redeven-surface-main) 95%');
+    expect(baseRule.body).toContain('var(--redeven-surface-shadow-source) 5%');
+    expect(darkRule.body).toContain('var(--redeven-surface-main) 72%');
+    expect(darkRule.body).toContain('var(--redeven-surface-shadow-source) 28%');
+    expect(darkRule.body).toContain('var(--redeven-surface-panel-soft) 30%');
+    expect(darkRule.body).toContain('var(--redeven-surface-panel-elevated) 28%');
+    expect(darkRule.body).toContain('var(--redeven-surface-panel-border) 76%');
   });
 
   it('scopes every drawer child treatment to non-collapsed phases', () => {
@@ -74,5 +90,21 @@ describe('Flower bottom companion visual contract', () => {
     expect(focusRule.body).toContain('0 0 0 2px color-mix(in srgb, var(--ring) 72%');
     expect(focusRule.body).toContain('var(--redeven-surface-shadow-source)');
     expect(focusRule.body).not.toContain('var(--foreground)');
+  });
+
+  it('softens the empty-state aura only inside active dark drawers', () => {
+    const rules = companionRules(readCompanionCss());
+    const auraRule = findRule(rules, '.redeven-flower-soft-aura-glow');
+    const breatheRule = findRule(rules, '.redeven-flower-icon-breathe');
+
+    expect(auraRule.selectors).toContain('html.dark .flower-activity-companion:is(');
+    expectDrawerPhases(auraRule);
+    expect(auraRule.body).toContain('animation: none;');
+    expect(auraRule.body).toContain('filter: blur(7px);');
+    expect(auraRule.body).toContain('opacity: 0.28;');
+    expect(breatheRule.selectors).toContain('html.dark .flower-activity-companion:is(');
+    expectDrawerPhases(breatheRule);
+    expect(breatheRule.body).toContain('animation: none;');
+    expect(breatheRule.body).toContain('transform: none;');
   });
 });
