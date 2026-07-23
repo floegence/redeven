@@ -3,7 +3,7 @@ type: UI Contract
 title: Workbench terminal interaction
 description: Terminal attachment, input-plane ownership, focus, retained history, and performance validation.
 tags: [ui, workbench, terminal, performance]
-timestamp: 2026-07-20T00:00:00Z
+timestamp: 2026-07-23T00:00:00Z
 ---
 # Summary
 
@@ -21,7 +21,7 @@ Input and resize use the same binary stream. Input bytes are forwarded exactly o
 
 ## Product lifecycle and performance
 
-The Env catalog stays renderer-free and does not statically import the live client, codec, renderer, or Terminal feature chunk. Dormant sessions remain metadata-only. Active-session history warmup may prepare bounded renderer-neutral pages, but it never attaches, resizes, subscribes, starts a PTY, or allocates a Core. Activity and Workbench share catalog state while each mounted runtime owns its Core, live stream, output coordinator, fixed geometry application, focus lifecycle, and working-set snapshot.
+The Env catalog stays renderer-free and does not statically import the live client, codec, renderer, or Terminal feature chunk. Dormant sessions remain metadata-only. Active-session history warmup may prepare bounded renderer-neutral pages, but it never attaches, resizes, subscribes, starts a PTY, or allocates a Core. A user opening a session row's context menu is an explicit interaction: the owning `TerminalPanel` may promote that exact session into its mounted working set so the [Flower turn launcher](flower-turn-launcher.md) can capture the requested screen without switching the selected session. Ordinary list rendering and background warmup do not promote sessions. Activity and Workbench share catalog state while each mounted runtime owns its Core, live stream, output coordinator, fixed geometry application, focus lifecycle, and working-set snapshot.
 
 Foreground-command presentation also comes from the shared catalog rather than renderer output. Floeterm reports a safe shell-command phase and program basename through snapshots and Type ID 2013 notifications. Each `TerminalPanel` uses one scheduler for all visible sessions and confirms `running` for 140 ms before showing a spinner or program title; `idle` and `unknown` clear presentation immediately. The remote timestamp is diagnostic metadata and never drives the local delay. Shell `B` markers, ordinary output, retained history, pending live output, and Redeven activity markers remain output/work signals only. Unread state and the Workbench activity border therefore stay independent from command truth.
 

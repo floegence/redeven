@@ -282,7 +282,7 @@ function formatBytes(bytes: number): string {
 }
 
 const HISTORY_STATS_POLL_MS = 10_000;
-const MAX_INLINE_TERMINAL_SELECTION_CHARS = 10_000;
+const MAX_INLINE_TERMINAL_CONTEXT_CHARS = 10_000;
 
 const TERMINAL_INPUT_SELECTOR = 'textarea[aria-label="Terminal input"], textarea';
 const MOBILE_TERMINAL_TOUCH_SCROLL_LINE_HEIGHT_FALLBACK_PX = 20;
@@ -335,9 +335,10 @@ function waitForTerminalUiPaint(): Promise<void> {
   return new Promise((resolve) => deferAfterPaint(resolve));
 }
 
-type terminal_selection_snapshot = {
+type terminal_context_snapshot = {
   sessionId: string;
   selectionText: string;
+  screenText: string;
   hasSelection: boolean;
 };
 
@@ -354,7 +355,31 @@ function readTerminalSelectionText(core: TerminalCore | null): string {
   }
 }
 
-function buildTerminalSelectionSnapshot(sessionId: string, core: TerminalCore | null): terminal_selection_snapshot {
+function readTerminalScreenText(core: TerminalCore | null): string {
+  if (!core) return '';
+
+  try {
+    const terminalInfo = core.getTerminalInfo();
+    const rowCount = Math.max(0, Math.floor(Number(terminalInfo?.rows ?? 0)));
+    const bufferLength = Math.max(0, Math.floor(Number(terminalInfo?.bufferLength ?? 0)));
+    if (rowCount <= 0 || bufferLength <= 0) return '';
+
+    const lines: string[] = [];
+    const startRow = Math.max(0, bufferLength - rowCount);
+    for (let row = startRow; row < bufferLength; row += 1) {
+      lines.push(core.readBufferLine(row, { trimRight: true }));
+    }
+
+    const text = lines.join('\n').trim();
+    const characters = Array.from(text);
+    if (characters.length <= MAX_INLINE_TERMINAL_CONTEXT_CHARS) return text;
+    return `...${characters.slice(-(MAX_INLINE_TERMINAL_CONTEXT_CHARS - 3)).join('')}`;
+  } catch {
+    return '';
+  }
+}
+
+function buildTerminalContextSnapshot(sessionId: string, core: TerminalCore | null): terminal_context_snapshot {
   const normalizedSessionId = String(sessionId ?? '').trim();
   const rawSelectionText = readTerminalSelectionText(core);
   const hasSelection = (() => {
@@ -368,6 +393,7 @@ function buildTerminalSelectionSnapshot(sessionId: string, core: TerminalCore | 
   return {
     sessionId: normalizedSessionId,
     selectionText: normalizedSelectionText,
+    screenText: hasSelection ? '' : readTerminalScreenText(core),
     hasSelection,
   };
 }
@@ -868,7 +894,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     y: number;
     workingDir: string;
     homePath?: string;
-    selection: terminal_selection_snapshot;
+    selection: terminal_context_snapshot;
     showBrowseFiles: boolean;
     triggerElement: HTMLElement | null;
   } | null>(null);
@@ -3413,7 +3439,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       || '';
     const homePath = normalizeAskFlowerAbsolutePath(agentHomePathAbs()) || undefined;
     const core = coreRegistry.get(resolvedSession.id) ?? getActiveCore();
-    const selection = buildTerminalSelectionSnapshot(resolvedSession.id, core);
+    const selection = buildTerminalContextSnapshot(resolvedSession.id, core);
     const showBrowseFiles = Boolean(workingDir) && canBrowseFiles();
 
     if (!currentActiveId) {
@@ -3596,11 +3622,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       x: anchor.x,
       y: anchor.y,
       workingDir,
-      selection: {
-        sessionId: item.id,
-        selectionText: '',
-        hasSelection: false,
-      },
+      selection: buildTerminalContextSnapshot(item.id, coreRegistry.get(item.id) ?? null),
     });
   };
 
@@ -3608,19 +3630,21 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
     x: number;
     y: number;
     workingDir: string;
-    selection: terminal_selection_snapshot;
+    selection: terminal_context_snapshot;
   }) => {
     const workingDir = normalizeAskFlowerAbsolutePath(context.workingDir) || normalizeAskFlowerAbsolutePath(agentHomePathAbs()) || '';
     if (!workingDir) return;
 
-    const selection = context.selection.selectionText;
+    const selection = context.selection.hasSelection
+      ? context.selection.selectionText
+      : context.selection.screenText;
     const trimmedSelection = selection.trim();
     const selectionChars = Array.from(trimmedSelection).length;
     const notes: string[] = [];
     let contextItems: EnvFlowerTurnLauncherContextItem[] = [];
 
     if (trimmedSelection) {
-      if (selectionChars > MAX_INLINE_TERMINAL_SELECTION_CHARS) {
+      if (selectionChars > MAX_INLINE_TERMINAL_CONTEXT_CHARS) {
         notes.push(i18n.t('terminal.largeSelectionMetadataOnly'));
         contextItems = [
           {
@@ -3783,6 +3807,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
       ? Array.from(currentTarget.querySelectorAll<HTMLButtonElement>('button[data-terminal-session-id]'))
           .find((button) => button.dataset.terminalSessionId === item.id) ?? null
       : null;
+    markSessionMounted(item.id);
     setTerminalAskMenu(null);
     setTerminalSidebarMenu({
       x: event.clientX,
@@ -3799,6 +3824,7 @@ function TerminalPanelInner(props: TerminalPanelInnerProps = {}) {
 
     const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
     const rect = target?.getBoundingClientRect();
+    markSessionMounted(item.id);
     setTerminalAskMenu(null);
     setTerminalSidebarMenu({
       x: rect ? rect.left + Math.min(rect.width - 16, 64) : 0,

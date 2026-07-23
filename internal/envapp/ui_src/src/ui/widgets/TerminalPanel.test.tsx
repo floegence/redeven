@@ -869,6 +869,14 @@ vi.mock('@floegence/floeterm-terminal-web', async () => {
     setTheme = vi.fn();
     forceResize = forceResizeSpy;
     getDimensions = vi.fn(() => ({ cols: 80, rows: 24 }));
+    getTerminalInfo = vi.fn(() => ({
+      cols: 80,
+      rows: 24,
+      bufferLength: Math.max(
+        24,
+        ...Array.from(terminalBufferLinesState.lines.keys(), (row) => row + 1),
+      ),
+    }));
     setPresentationScale = vi.fn();
     setFixedDimensions = vi.fn();
     setAppearance = vi.fn((appearance: {
@@ -2589,6 +2597,8 @@ describe('TerminalPanel', () => {
         lastActiveAtMs: 20,
       },
     ];
+    terminalBufferLinesState.lines.set(24, '$ pnpm test');
+    terminalBufferLinesState.lines.set(25, 'Tests: 42 passed');
 
     const host = document.createElement('div');
     document.body.appendChild(host);
@@ -2598,6 +2608,7 @@ describe('TerminalPanel', () => {
 
     const firstMenu = await openSidebarContextMenu(host, 'Terminal 2');
     await settleTerminalPanelAfterPaint();
+    expect(terminalCoreInstances).toHaveLength(2);
     expect(firstMenu.getAttribute('aria-label')).toBe('Sessions');
     expect(Array.from(firstMenu.children).map((element) => (
       element.getAttribute('role') === 'separator' ? 'separator' : element.textContent?.trim()
@@ -2639,6 +2650,8 @@ describe('TerminalPanel', () => {
     await settleTerminalPanel();
 
     expect(openFlowerTurnLauncherSpy).toHaveBeenCalledTimes(1);
+    expect(terminalCoreInstances.at(-1)?.readBufferLine).toHaveBeenCalled();
+    expect(terminalCoreInstances[0]?.readBufferLine).not.toHaveBeenCalled();
     expect(openFlowerTurnLauncherSpy.mock.calls[0]?.[0]).toMatchObject({
       source_surface: 'terminal',
       suggested_working_dir: '/workspace/beta',
@@ -2646,20 +2659,20 @@ describe('TerminalPanel', () => {
         {
           kind: 'terminal_selection',
           working_dir: '/workspace/beta',
-          selection: '',
-          selection_chars: 0,
+          selection: '$ pnpm test\nTests: 42 passed',
+          selection_chars: Array.from('$ pnpm test\nTests: 42 passed').length,
         },
       ],
-      context_action: {
+      context_action: expect.objectContaining({
         context: [
           {
             kind: 'terminal_selection',
             working_dir: '/workspace/beta',
-            selection: '',
-            selection_chars: 0,
+            selection: '$ pnpm test\nTests: 42 passed',
+            selection_chars: Array.from('$ pnpm test\nTests: 42 passed').length,
           },
         ],
-      },
+      }),
     });
 
     const deleteMenu = await openSidebarContextMenu(host, 'Terminal 2');
@@ -8252,6 +8265,7 @@ describe('TerminalPanel', () => {
 
   it('opens Ask Flower with short terminal selection text from the terminal context menu', async () => {
     terminalSelectionState.text = '  go test \u{1F9EA}\n';
+    terminalBufferLinesState.lines.set(24, 'screen text must not replace the explicit selection');
     const host = document.createElement('div');
     document.body.appendChild(host);
 
@@ -8287,6 +8301,57 @@ describe('TerminalPanel', () => {
       ],
       pending_attachments: [],
     }), expect.anything());
+  });
+
+  it('opens Ask Flower with the latest terminal screen when no text is selected', async () => {
+    terminalBufferLinesState.lines.set(0, 'old scrollback must not be attached');
+    terminalBufferLinesState.lines.set(24, '$ go test ./...');
+    terminalBufferLinesState.lines.set(25, 'ok  github.com/floegence/redeven');
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+
+    render(() => <TerminalPanel variant="workbench" />, host);
+    await settleTerminalPanel();
+
+    const terminalSurface = host.querySelector('.redeven-terminal-surface') as HTMLDivElement | null;
+    expect(terminalSurface).toBeTruthy();
+
+    terminalSurface?.dispatchEvent(new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: 24,
+      clientY: 32,
+    }));
+    await settleTerminalPanel();
+
+    const askButton = Array.from(host.querySelectorAll('button')).find((button) => button.textContent?.includes('Ask Flower')) as HTMLButtonElement | undefined;
+    askButton?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    await settleTerminalPanel();
+
+    const screenText = '$ go test ./...\nok  github.com/floegence/redeven';
+    expect(openFlowerTurnLauncherSpy).toHaveBeenCalledWith(expect.objectContaining({
+      source_surface: 'terminal',
+      context_items: [
+        {
+          kind: 'terminal_selection',
+          working_dir: '/workspace',
+          selection: screenText,
+          selection_chars: Array.from(screenText).length,
+        },
+      ],
+      context_action: expect.objectContaining({
+        context: [
+          {
+            kind: 'terminal_selection',
+            working_dir: '/workspace',
+            selection: screenText,
+            selection_chars: Array.from(screenText).length,
+          },
+        ],
+      }),
+      notes: [],
+    }), expect.anything());
+    expect(JSON.stringify(openFlowerTurnLauncherSpy.mock.calls[0]?.[0])).not.toContain('old scrollback must not be attached');
   });
 
   it('opens Ask Flower with metadata-only context for large terminal selections', async () => {
