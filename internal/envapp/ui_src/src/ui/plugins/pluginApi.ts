@@ -22,15 +22,24 @@ export function createPluginLifecycleAPI(
     return result.plugins;
   };
 
-  const loadInventoryProjection = async (options: PluginRequestOptions = {}): Promise<PluginInventoryProjection> => projectPluginInventory({
-    officialCatalog: catalog,
-    installedPlugins: await listInstalledPlugins(options),
-  });
+  const loadInventoryProjection = async (options: PluginRequestOptions = {}): Promise<PluginInventoryProjection> => {
+    const [installedPlugins, permissions, securityPolicies] = await Promise.all([
+      listInstalledPlugins(options),
+      client.listPermissions({ active_only: true }, options),
+      client.listSecurityPolicies(options),
+    ]);
+    return projectPluginInventory({
+      officialCatalog: catalog,
+      installedPlugins,
+      permissionGrants: permissions.permissions,
+      securityPolicies: securityPolicies.security_policies,
+    });
+  };
 
   const execute = async (
     command: PluginManagementCommand,
     options: PluginRequestOptions = {},
-  ): Promise<ReDevPluginRecord> => {
+  ) => {
     switch (command.type) {
       case 'install': {
         const official = requireOfficialPlugin(officialByPluginID, command.pluginID);
@@ -67,6 +76,23 @@ export function createPluginLifecycleAPI(
           release_ref: official.distribution.releaseRef,
         }, options);
       }
+      case 'grant_permission':
+        return client.grantPermission({
+          plugin_instance_id: command.pluginInstanceID,
+          permission_id: command.permissionID,
+          expected_policy_revision: command.expectedPolicyRevision,
+          expected_management_revision: command.expectedManagementRevision,
+          expected_revoke_epoch: command.expectedRevokeEpoch,
+        }, options);
+      case 'revoke_permission':
+        return client.revokePermission({
+          plugin_instance_id: command.pluginInstanceID,
+          permission_id: command.permissionID,
+          expected_policy_revision: command.expectedPolicyRevision,
+          expected_management_revision: command.expectedManagementRevision,
+          expected_revoke_epoch: command.expectedRevokeEpoch,
+          reason: 'user_revoked',
+        }, options);
       default:
         return assertNever(command);
     }

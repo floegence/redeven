@@ -4107,7 +4107,49 @@
       "closeSurface": "プラグイン画面を閉じる",
       "openingSurface": "プラグイン画面を開いています...",
       "iframeUnavailable": "プラグイン iframe ウィンドウは使用できません。",
-      "surfaceFailed": "プラグイン サーフェスが失敗しました。"
+      "surfaceFailed": "プラグイン サーフェスが失敗しました。",
+      "surfaceCleanupFailed": "プラグインのコンテンツは閉じられましたが、サーバー側のクリーンアップを確認できませんでした。このウィンドウを開いたままにするか、プラグインセッションを終了して復旧してください。",
+      "endPluginSession": "プラグインセッションを終了",
+      "endPluginSessionTitle": "プラグインセッション全体を終了しますか？",
+      "endPluginSessionDescription": "すべてのプラグインウィンドウを閉じ、現在の認証済みセッション中はプラグインを再度開けなくなります。",
+      "closingSurface": "プラグイン画面を閉じています...",
+      "activityWindowTitle": "{plugin} - {surface}",
+      "surfaceIframeTitle": "{plugin} - {surface} のプラグインコンテンツ",
+      "containersDashboardSurface": "ダッシュボード",
+      "permissionsTitle": "コンテナの権限",
+      "permissionsDescription": "このプラグインが要求できるコンテナ操作を選択します。影響の大きい操作には、引き続きプラットフォームでの確認が必要です。",
+      "permissionsAdminRequired": "これらの権限は環境管理者が変更する必要があります。",
+      "policyConfigured": "ポリシー設定済み",
+      "requiredToOpen": "開くために必要",
+      "managedByPolicy": "ポリシーによる管理",
+      "permissionToggleLabel": "「{permission}」権限を変更",
+      "permissionConfirmationTitle": "権限の変更を確認",
+      "confirmGrantPermission": "Containers に「{permission}」権限を付与しますか？",
+      "confirmRevokePermission": "Containers から「{permission}」権限を取り消しますか？この権限を使用しているプラグイン画面は閉じられます。",
+      "permissionGrantImpact": "この権限は、現在の環境ポリシーとプラグインのセキュリティポリシーによって引き続き制限されます。",
+      "permissionRevokeImpact": "権限を取り消すとプラグインの認可リビジョンが無効になり、影響を受けるプラグイン画面が閉じます。",
+      "grantPermission": "付与する",
+      "revokePermission": "取り消す",
+      "permissionGranted": "付与済み",
+      "permissionNotGranted": "未付与",
+      "permission": {
+        "read": {
+          "label": "コンテナを表示",
+          "description": "エンジンの状態、コンテナの詳細とログ、操作の事前確認情報を読み取ります。"
+        },
+        "execute": {
+          "label": "コンテナを操作",
+          "description": "必要な確認後にコンテナを起動、停止、再起動します。"
+        },
+        "delete": {
+          "label": "コンテナを削除",
+          "description": "コンテナを削除します。これは破壊的な操作を許可する任意の権限です。"
+        },
+        "images_write": {
+          "label": "イメージを書き込む",
+          "description": "選択したエンジンにコンテナイメージをプルします。"
+        }
+      }
     },
     "pluginRuntime": {
       "sandboxOriginUnavailable": "この Env App ホストではプラグインのサンドボックスアドレスを利用できません。",

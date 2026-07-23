@@ -3,6 +3,7 @@
 import { For, Show, createContext, createEffect, createSignal, onCleanup, onMount, useContext, type JSX } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { PluginPlatformRequestError } from '@floegence/redevplugin-ui';
 import { OFFICIAL_CONTAINERS_RELEASE_REF } from './plugins/officialContainersRelease.generated';
 import type { PluginInventoryProjection } from './plugins/pluginTypes';
 import { NETWORK_EXPOSURE_WARNING_PREFERENCE_STORAGE_KEY } from './security/networkExposureWarningPreference';
@@ -70,6 +71,9 @@ const pluginLifecycleMocks = vi.hoisted(() => {
 const pluginSurfaceFrameState = vi.hoisted(() => ({
   lastProps: null as any,
 }));
+const pluginPanelState = vi.hoisted(() => ({
+  lastProps: null as any,
+}));
 const pluginCenterViewState = vi.hoisted(() => ({
   lastProps: null as any,
 }));
@@ -81,8 +85,8 @@ const pluginPlatformMocks = vi.hoisted(() => {
     setVisible: vi.fn(),
     fail: vi.fn(async () => undefined),
     release: vi.fn(async () => undefined),
-    closeActive: vi.fn(async () => undefined),
-    disposeActive: vi.fn(async () => undefined),
+    invalidatePlugin: vi.fn(async () => undefined),
+    closeAll: vi.fn(async () => undefined),
     dispose: vi.fn(async () => undefined),
   };
   const state = {
@@ -612,9 +616,29 @@ vi.mock('./plugins/PluginSurfaceFrame', () => ({
     );
   },
 }));
+vi.mock('./plugins/ActivityPluginSurfaceWindow', () => ({
+  ActivityPluginSurfaceWindow: (props: any) => {
+    pluginSurfaceFrameState.lastProps = props;
+    return (
+      <section
+        data-plugin-surface-host
+        data-plugin-id={props.target?.pluginID ?? ''}
+        data-plugin-instance-id={props.target?.pluginInstanceID ?? ''}
+        data-surface-id={props.target?.surfaceID ?? ''}
+        data-placement={props.target?.preferredPlacement ?? ''}
+        data-management-revision={String(props.target?.expectedManagementRevision ?? '')}
+        data-visible={String(Boolean(props.visible))}
+      >
+        <button type="button" aria-label="Close Plugin Surface" onClick={() => props.onClosed?.(props.instanceID)}>Close</button>
+        <iframe data-plugin-surface-iframe />
+      </section>
+    );
+  },
+}));
 vi.mock('./plugins/PluginPanel', () => ({
-  PluginPanel: (props: any) => (
-    <Show when={props.open}>
+  PluginPanel: (props: any) => {
+    pluginPanelState.lastProps = props;
+    return <Show when={props.open}>
       <div>
         {props.model?.tiles?.map((tile: any) => {
           const tileID = tile.kind === 'open_center' ? tile.id : tile.item?.pluginID;
@@ -622,6 +646,7 @@ vi.mock('./plugins/PluginPanel', () => ({
             <button
               type="button"
               data-plugin-panel-tile={tileID}
+              data-plugin-panel-action={tile.action ?? tile.kind}
               onClick={() => {
                 if (tile.kind === 'open_center') {
                   props.onOpenCenter?.();
@@ -638,8 +663,8 @@ vi.mock('./plugins/PluginPanel', () => ({
           );
         })}
       </div>
-    </Show>
-  ),
+    </Show>;
+  },
 }));
 vi.mock('./plugins/PluginCenterView', () => ({
   PluginCenterView: (props: any) => {
@@ -1094,6 +1119,7 @@ beforeEach(() => {
   pluginLifecycleMocks.execute.mockReset();
   pluginLifecycleMocks.execute.mockImplementation(async (_command: any) => ({}));
   pluginSurfaceFrameState.lastProps = null;
+  pluginPanelState.lastProps = null;
   pluginCenterViewState.lastProps = null;
   pluginPlatformMocks.createRedevenPluginPlatform.mockClear();
   pluginPlatformMocks.createPluginSurfacePlacementCoordinator.mockClear();
@@ -1102,8 +1128,8 @@ beforeEach(() => {
   pluginPlatformMocks.coordinator.setVisible.mockClear();
   pluginPlatformMocks.coordinator.fail.mockClear();
   pluginPlatformMocks.coordinator.release.mockClear();
-  pluginPlatformMocks.coordinator.closeActive.mockClear();
-  pluginPlatformMocks.coordinator.disposeActive.mockClear();
+  pluginPlatformMocks.coordinator.invalidatePlugin.mockClear();
+  pluginPlatformMocks.coordinator.closeAll.mockClear();
   pluginPlatformMocks.state.onMutationOutcomeUnknown = undefined;
   pluginPlatformMocks.coordinator.dispose.mockClear();
   terminalFeaturePreloadMocks.preloadTerminalFeatureResources.mockClear();
@@ -1544,7 +1570,7 @@ describe('EnvAppShell environment entry affordances', () => {
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
     const unknownOutcome = new Error('plugin mutation outcome is unknown');
     let finishDisposal!: () => void;
-    pluginPlatformMocks.coordinator.disposeActive.mockImplementationOnce(() => new Promise<undefined>((resolve) => {
+    pluginPlatformMocks.coordinator.closeAll.mockImplementationOnce(() => new Promise<undefined>((resolve) => {
       finishDisposal = () => resolve(undefined);
     }));
     pluginLifecycleMocks.execute.mockImplementationOnce(async () => {
@@ -1573,11 +1599,58 @@ describe('EnvAppShell environment entry affordances', () => {
       }, new AbortController().signal));
       void command.then(() => { settled = true; }, () => { settled = true; });
       await flushAsync();
-      expect(pluginPlatformMocks.coordinator.disposeActive).toHaveBeenCalledTimes(1);
+      expect(pluginPlatformMocks.coordinator.closeAll).toHaveBeenCalledTimes(1);
       expect(settled).toBe(false);
 
       finishDisposal();
       await expect(command).rejects.toBe(unknownOutcome);
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('removes a plugin window when a lifecycle mutation reports a committed error', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const committedError = new PluginPlatformRequestError(
+      'PLUGIN_INVALID_REQUEST',
+      'mutation committed but response handling failed',
+      {},
+      'committed',
+    );
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushAsync();
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="com.redeven.official.containers"]')));
+      await pluginPanelState.lastProps.onOpenPluginSurface(officialContainersProjection('enabled').items[0].defaultLaunchTarget);
+      await flushUntil(() => Boolean(document.querySelector('[data-plugin-surface-host]')));
+
+      pluginLifecycleMocks.execute.mockRejectedValueOnce(committedError);
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="plugin-center"]')));
+      (host.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand));
+      const inventoryRequestsBeforeCommand = pluginLifecycleMocks.loadInventoryProjection.mock.calls.length;
+
+      const command = pluginCenterViewState.lastProps.onCommand({
+        type: 'disable',
+        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
+        expectedManagementRevision: 11,
+      }, new AbortController().signal);
+
+      await expect(command).rejects.toBe(committedError);
+      expect(pluginPlatformMocks.coordinator.invalidatePlugin).toHaveBeenCalledWith(officialContainersCatalog.pluginInstanceID);
+      expect(document.querySelector('[data-plugin-surface-host]')).toBeNull();
+      expect(pluginLifecycleMocks.loadInventoryProjection.mock.calls.length).toBeGreaterThan(inventoryRequestsBeforeCommand);
     } finally {
       dispose();
     }
@@ -1639,7 +1712,6 @@ describe('EnvAppShell environment entry affordances', () => {
 
       (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
       await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="com.redeven.official.containers"]')));
-
       (host.querySelector('[data-plugin-panel-tile="com.redeven.official.containers"]') as HTMLButtonElement | null)?.click();
       await flushUntil(() => Boolean(host.querySelector('[data-plugin-center-view]')));
       await flushUntil(() => Boolean(host.querySelector('[data-plugin-center-item="com.redeven.official.containers"]')));
@@ -1655,7 +1727,7 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
-  it('opens enabled plugin panel tiles in the sandboxed plugin surface activity', async () => {
+  it('opens enabled plugin panel tiles in a root-level Activity floating window', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
@@ -1673,17 +1745,16 @@ describe('EnvAppShell environment entry affordances', () => {
 
       (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
       await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="com.redeven.official.containers"]')));
-
-      (host.querySelector('[data-plugin-panel-tile="com.redeven.official.containers"]') as HTMLButtonElement | null)?.click();
-      await flushUntil(() => Boolean(host.querySelector('[data-plugin-surface-host]')));
+      await pluginPanelState.lastProps.onOpenPluginSurface(officialContainersProjection('enabled').items[0].defaultLaunchTarget);
+      await flushUntil(() => Boolean(document.querySelector('[data-plugin-surface-host]')));
       await flushUntil(() => (
-        host.querySelector('[data-plugin-surface-host]')?.getAttribute('data-plugin-id') === 'com.redeven.official.containers'
+        document.querySelector('[data-plugin-surface-host]')?.getAttribute('data-plugin-id') === 'com.redeven.official.containers'
       ));
 
-      const surfaceHost = host.querySelector('[data-plugin-surface-host]');
+      const surfaceHost = document.querySelector('[data-plugin-surface-host]');
       const main = host.querySelector('[data-floe-shell-slot="main"]');
       expect(surfaceHost).toBeTruthy();
-      expect(main?.contains(surfaceHost)).toBe(true);
+      expect(main?.contains(surfaceHost)).toBe(false);
       expect(surfaceHost).toMatchObject({
         dataset: expect.objectContaining({
           pluginId: officialContainersCatalog.pluginID,
@@ -1706,8 +1777,8 @@ describe('EnvAppShell environment entry affordances', () => {
         setVisible: expect.any(Function),
         fail: expect.any(Function),
         release: expect.any(Function),
-        closeActive: expect.any(Function),
-        disposeActive: expect.any(Function),
+        invalidatePlugin: expect.any(Function),
+        closeAll: expect.any(Function),
       });
       expect(pluginSurfaceFrameState.lastProps?.confirmationQueue).toMatchObject({
         createHandler: expect.any(Function),
@@ -1718,14 +1789,53 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(host.querySelector('[data-plugin-center-view]')).toBeNull();
       expect(host.querySelector('[data-testid="settings-page"]')).toBeNull();
       expect(settingsPageState.focusSection).not.toBe('plugins');
-      expect(sidebarActiveTabValue).toBe('plugin-surface');
+      expect(sidebarActiveTabValue).toBe('terminal');
 
       (host.querySelector('[aria-label="Close Plugin Surface"]') as HTMLButtonElement | null)?.click();
-      await flushUntil(() => sidebarActiveTabValue === 'terminal');
       await flushUntil(() => !host.querySelector('[data-plugin-surface-host]'));
       expect(host.querySelector('[data-plugin-surface-host]')).toBeNull();
-      expect(pluginPlatformMocks.coordinator.closeActive).toHaveBeenCalled();
       expect(sidebarActiveTabValue).toBe('terminal');
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('removes the mobile Shell background from interaction while a plugin modal is open', async () => {
+    layoutIsMobile = true;
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="com.redeven.official.containers"]')));
+      await pluginPanelState.lastProps.onOpenPluginSurface(officialContainersProjection('enabled').items[0].defaultLaunchTarget);
+      await flushUntil(() => Boolean(document.querySelector('[data-plugin-surface-host]')));
+
+      const background = host.querySelector('[data-env-shell-background]') as HTMLElement;
+      const flowerRail = host.querySelector('[data-activity-flower-mobile-companion]') as HTMLElement;
+      const flowerOverlay = host.querySelector('[data-activity-flower-overlay-host]') as HTMLElement;
+      expect(background.inert).toBe(true);
+      expect(background.getAttribute('aria-hidden')).toBe('true');
+      expect(flowerRail.inert).toBe(true);
+      expect(flowerRail.getAttribute('aria-hidden')).toBe('true');
+      expect(flowerOverlay.inert).toBe(true);
+      expect(flowerOverlay.getAttribute('aria-hidden')).toBe('true');
+
+      (document.querySelector('[aria-label="Close Plugin Surface"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => !document.querySelector('[data-plugin-surface-host]'));
+      expect(background.inert).toBe(false);
+      expect(background.hasAttribute('aria-hidden')).toBe(false);
+      expect(flowerRail.inert).toBe(false);
+      expect(flowerRail.hasAttribute('aria-hidden')).toBe(false);
+      expect(flowerOverlay.inert).toBe(false);
+      expect(flowerOverlay.hasAttribute('aria-hidden')).toBe(false);
     } finally {
       dispose();
     }

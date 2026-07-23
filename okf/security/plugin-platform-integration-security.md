@@ -3,7 +3,7 @@ type: Security Contract
 title: Plugin platform integration security
 description: Redeven derives ReDevPlugin identity from authenticated sessions and fail-closed signed release, route, runtime, and capability adapters.
 tags: [security, plugins, permissions, local-ui]
-timestamp: 2026-07-19T00:00:00Z
+timestamp: 2026-07-23T00:00:00Z
 ---
 # Summary
 
@@ -84,6 +84,29 @@ early action gate; the resolved method effect is then clamped by
 `EvaluateLocalPolicy`. This avoids inventing an execute requirement for read or
 write methods. Shared runtime start, stop, and refresh remain admin-only.
 
+## Permission management projection
+
+Plugin Center reads active grants and explicit plugin security policies through
+released ReDevPlugin APIs. It never writes registry tables, invents a default
+grant for an official plugin, or treats official identity as permission.
+Containers therefore remains unable to invoke its adapter until an
+administrator explicitly grants `containers.read`; the UI identifies that state
+before opening instead of misreporting it as a Docker connection failure.
+
+Grant/revoke requests carry the exact current policy revision, management
+revision, and revoke epoch. A CAS conflict or other failure causes inventory,
+grants, and policy to be fetched again and requires a new user confirmation.
+The client does not blindly retry. The active grant, permission allowlist cap,
+and denied methods are separate facts: policy can narrow a grant, and a stale
+grant remains revocable even when policy blocks its use.
+
+Official catalog permission descriptions are product UX only. They may explain
+the exact signed Containers permissions and which methods are needed for the
+initial screen, but ReDevPlugin remains the grant, policy, revision, token
+invalidation, and method-enforcement authority. Third-party requirements must
+come from a released Host-verified capability-contract projection, not a
+manifest claim or Redeven contract parser.
+
 ## Release and runtime trust
 
 Official install/update is release-ref based. Redeven's release module accepts
@@ -150,3 +173,5 @@ tokens, weaken route policy, edit opaque state, or replace released brokers.
 - `redeven:internal/redevpluginintegration/containers_capability.go:1` - Adapts authorized capability invocations to domain behavior.
 - `redeven:internal/codeapp/appserver/server_test.go:810` - Covers canonical route reservation and origin delegation.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginPlatform.ts:1` - Restricts UI transport to the canonical same-origin namespace and attaches CSRF proof.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1` - Reads grants and policies and submits revision-fenced permission mutations through the released client.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.ts:1` - Keeps grants, allowlist caps, denied methods, and required-to-open methods distinct.

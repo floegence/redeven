@@ -6,7 +6,7 @@ import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { PluginConfirmationQueue } from './PluginConfirmationQueue';
-import { PluginSurfaceFrame } from './PluginSurfaceFrame';
+import { PluginSurfaceBody } from './PluginSurfaceFrame';
 import type { PluginSurfacePlacementCoordinator } from './pluginPlatform';
 import type { PluginSurfaceLaunchTarget } from './pluginTypes';
 
@@ -69,8 +69,8 @@ function createCoordinator(host: PluginSurfaceHost): PluginSurfacePlacementCoord
     }),
     fail: vi.fn(async () => undefined),
     release: vi.fn(async () => undefined),
-    closeActive: vi.fn(async () => undefined),
-    disposeActive: vi.fn(async () => undefined),
+    invalidatePlugin: vi.fn(async () => undefined),
+    closeAll: vi.fn(async () => undefined),
     dispose: vi.fn(async () => undefined),
   };
 }
@@ -80,7 +80,7 @@ async function flushAsync(): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-describe('PluginSurfaceFrame', () => {
+describe('PluginSurfaceBody', () => {
   it('opens through the shared placement coordinator and waits for the SDK first-commit boundary', async () => {
     const mount = document.createElement('div');
     document.body.append(mount);
@@ -93,12 +93,11 @@ describe('PluginSurfaceFrame', () => {
     const confirmationQueue = createConfirmationQueue();
 
     dispose = render(() => (
-      <PluginSurfaceFrame
+      <PluginSurfaceBody
         coordinator={coordinator}
         confirmationQueue={confirmationQueue}
         target={target}
         visible
-        onClose={vi.fn()}
         onRetirementError={vi.fn()}
       />
     ), mount);
@@ -127,8 +126,9 @@ describe('PluginSurfaceFrame', () => {
     await flushAsync();
 
     expect(mount.textContent).not.toContain('Opening plugin surface');
-    expect(host.element.title).toBe(`${target.pluginID} ${target.surfaceID}`);
+    expect(host.element.title).toBe(`${target.pluginID} - ${target.surfaceID} plugin content`);
     expect(host.element.dataset.pluginSurfaceIframe).toBe('');
+    expect(mount.querySelector('[data-plugin-surface-stage]')?.className).toContain('[&>iframe]:h-full');
     expect(host.sendLifecycle).toHaveBeenCalledWith({ type: 'visible' });
     expect(mount.querySelector('[data-plugin-surface-host]')?.getAttribute('data-surface-instance-id')).toBe('surface_instance_1');
   });
@@ -142,12 +142,11 @@ describe('PluginSurfaceFrame', () => {
     const [visible, setVisible] = createSignal(false);
 
     dispose = render(() => (
-      <PluginSurfaceFrame
+      <PluginSurfaceBody
         coordinator={coordinator}
         confirmationQueue={confirmationQueue}
         target={target}
         visible={visible()}
-        onClose={vi.fn()}
         onRetirementError={vi.fn()}
       />
     ), mount);
@@ -159,41 +158,86 @@ describe('PluginSurfaceFrame', () => {
     expect(coordinator.setVisible).toHaveBeenLastCalledWith(expect.anything(), true);
   });
 
-  it('closes and disposes the slot before removing the Activity placement', async () => {
+  it('registers retirement while the SDK slot is still opening', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const coordinator = createCoordinator(createHost());
+    vi.mocked(coordinator.open).mockImplementation(() => new Promise(() => undefined));
+    const closeRegistration: { current: (() => Promise<boolean>) | null } = { current: null };
+
+    dispose = render(() => (
+      <PluginSurfaceBody
+        coordinator={coordinator}
+        confirmationQueue={createConfirmationQueue()}
+        target={target}
+        visible
+        registerClose={(close) => { closeRegistration.current = close; }}
+        onRetirementError={vi.fn()}
+      />
+    ), mount);
+    await Promise.resolve();
+
+    expect(closeRegistration.current).not.toBeNull();
+    await expect(closeRegistration.current?.()).resolves.toBe(true);
+    expect(coordinator.release).toHaveBeenCalledOnce();
+  });
+
+  it('registers a close handler that waits for slot retirement before approving removal', async () => {
     const mount = document.createElement('div');
     document.body.append(mount);
     const host = createHost();
     const coordinator = createCoordinator(host);
     const confirmationQueue = createConfirmationQueue();
-    const onClose = vi.fn(async () => undefined);
+    const closeRegistration: { current: (() => Promise<boolean>) | null } = { current: null };
     let resolveRelease!: () => void;
     vi.mocked(coordinator.release).mockImplementation(() => new Promise<void>((resolve) => {
       resolveRelease = resolve;
     }));
 
     dispose = render(() => (
-      <PluginSurfaceFrame
+      <PluginSurfaceBody
         coordinator={coordinator}
         confirmationQueue={confirmationQueue}
         target={target}
         visible
-        onClose={onClose}
+        registerClose={(close) => { closeRegistration.current = close; }}
         onRetirementError={vi.fn()}
       />
     ), mount);
     await flushAsync();
 
-    (mount.querySelector('button') as HTMLButtonElement).click();
+    const closing = closeRegistration.current?.();
     await Promise.resolve();
     expect(mount.textContent).not.toContain('Opening plugin surface');
-    expect(mount.textContent).toContain('Loading');
+    expect(mount.textContent).toContain('Closing plugin surface');
     expect(confirmationQueue.cancelOwner).toHaveBeenCalledTimes(1);
     expect(coordinator.release).toHaveBeenCalledTimes(1);
-    expect(onClose).not.toHaveBeenCalled();
 
     resolveRelease();
+    await expect(closing).resolves.toBe(true);
+  });
+
+  it('keeps the placement open and exposes the retirement error when close fails', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const coordinator = createCoordinator(createHost());
+    vi.mocked(coordinator.release).mockRejectedValue(new Error('server revoke failed'));
+    const closeRegistration: { current: (() => Promise<boolean>) | null } = { current: null };
+
+    dispose = render(() => (
+      <PluginSurfaceBody
+        coordinator={coordinator}
+        confirmationQueue={createConfirmationQueue()}
+        target={target}
+        visible
+        registerClose={(close) => { closeRegistration.current = close; }}
+        onRetirementError={vi.fn()}
+      />
+    ), mount);
     await flushAsync();
-    expect(onClose).toHaveBeenCalledTimes(1);
+
+    await expect(closeRegistration.current?.()).resolves.toBe(false);
+    expect(mount.querySelector('[role="alert"]')?.textContent).toContain('server revoke failed');
   });
 
   it('cancels pending confirmations and releases the owned slot on unmount', async () => {
@@ -207,12 +251,11 @@ describe('PluginSurfaceFrame', () => {
     vi.mocked(coordinator.release).mockRejectedValue(retirementError);
 
     dispose = render(() => (
-      <PluginSurfaceFrame
+      <PluginSurfaceBody
         coordinator={coordinator}
         confirmationQueue={confirmationQueue}
         target={target}
         visible
-        onClose={vi.fn()}
         onRetirementError={onRetirementError}
       />
     ), mount);
@@ -236,12 +279,11 @@ describe('PluginSurfaceFrame', () => {
     const confirmationQueue = createConfirmationQueue();
 
     dispose = render(() => (
-      <PluginSurfaceFrame
+      <PluginSurfaceBody
         coordinator={coordinator}
         confirmationQueue={confirmationQueue}
         target={target}
         visible
-        onClose={vi.fn()}
         onRetirementError={vi.fn()}
       />
     ), mount);

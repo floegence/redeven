@@ -4107,7 +4107,49 @@
       "closeSurface": "Fechar a interface do plugin",
       "openingSurface": "Abrindo a interface do plugin...",
       "iframeUnavailable": "A janela iframe do plug-in não está disponível.",
-      "surfaceFailed": "A superfície do plug-in falhou."
+      "surfaceFailed": "A superfície do plug-in falhou.",
+      "surfaceCleanupFailed": "O conteúdo do plugin foi fechado, mas não foi possível confirmar a liberação dos recursos no servidor. Mantenha esta janela aberta ou encerre a sessão de plugins para restaurar o funcionamento.",
+      "endPluginSession": "Encerrar sessão de plugins",
+      "endPluginSessionTitle": "Encerrar a sessão inteira de plugins?",
+      "endPluginSessionDescription": "Esta ação fecha todas as janelas de plugins e impede que eles sejam reabertos na sessão autenticada atual.",
+      "closingSurface": "Fechando a interface do plugin...",
+      "activityWindowTitle": "{plugin} - {surface}",
+      "surfaceIframeTitle": "{plugin} - conteúdo do plugin: {surface}",
+      "containersDashboardSurface": "Painel",
+      "permissionsTitle": "Permissões de contêineres",
+      "permissionsDescription": "Escolha quais operações de contêiner este plugin pode solicitar. Operações sensíveis ainda exigem confirmação da plataforma.",
+      "permissionsAdminRequired": "Um administrador do ambiente deve alterar essas permissões.",
+      "policyConfigured": "Política configurada",
+      "requiredToOpen": "Necessária para abrir",
+      "managedByPolicy": "Gerenciada por política",
+      "permissionToggleLabel": "Alterar permissão: {permission}",
+      "permissionConfirmationTitle": "Confirmar alteração de permissão",
+      "confirmGrantPermission": "Conceder ao Containers a permissão {permission}?",
+      "confirmRevokePermission": "Revogar do Containers a permissão {permission}? As interfaces de plugin abertas que usam essa permissão serão fechadas.",
+      "permissionGrantImpact": "A permissão continuará sujeita às políticas atuais do ambiente e às políticas de segurança do plugin.",
+      "permissionRevokeImpact": "A revogação invalida a versão vigente da autorização do plugin e fecha as interfaces de plugin afetadas.",
+      "grantPermission": "Conceder",
+      "revokePermission": "Revogar",
+      "permissionGranted": "Concedida",
+      "permissionNotGranted": "Não concedida",
+      "permission": {
+        "read": {
+          "label": "Ver contêineres",
+          "description": "Consultar o status do mecanismo, os detalhes e os logs dos contêineres e as informações de verificação prévia das operações."
+        },
+        "execute": {
+          "label": "Operar contêineres",
+          "description": "Iniciar, parar e reiniciar contêineres após as confirmações exigidas."
+        },
+        "delete": {
+          "label": "Excluir contêineres",
+          "description": "Remover contêineres. Esta é uma permissão opcional e destrutiva."
+        },
+        "images_write": {
+          "label": "Gravar imagens",
+          "description": "Baixar imagens de contêiner para o mecanismo selecionado."
+        }
+      }
     },
     "pluginRuntime": {
       "sandboxOriginUnavailable": "Nenhum endereço de isolamento de plugin está disponível para este host do Env App.",

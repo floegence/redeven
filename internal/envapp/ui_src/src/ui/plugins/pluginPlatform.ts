@@ -3,6 +3,7 @@ import {
   PluginSurfaceSlot,
   createPluginSurfaceScope,
   createReDevPluginSurfaceTransport,
+  pluginMutationOutcome,
   type FetchLike,
   type PluginOpenSurfaceInSlotOptions,
   type PluginOpenSurfaceRequest,
@@ -33,10 +34,17 @@ export function createRedevenPluginPlatform(options: Readonly<{
     onMutationOutcomeUnknown: options.onMutationOutcomeUnknown,
   });
   let closePromise: Promise<void> | undefined;
+  let closed = false;
   return {
     client,
     close() {
-      closePromise ??= client.revokeSessionScope().then(() => undefined);
+      if (closed) return Promise.resolve();
+      closePromise ??= client.revokeSessionScope().then(() => {
+        closed = true;
+      }).catch((error: unknown) => {
+        if (pluginMutationOutcome(error) === 'not_committed') closePromise = undefined;
+        throw error;
+      });
       return closePromise;
     },
   };
@@ -51,13 +59,14 @@ export type PluginSurfacePlacementCoordinator = Readonly<{
   setVisible: (slot: PluginSurfaceSlot, visible: boolean) => void;
   fail: (slot: PluginSurfaceSlot, error: Error) => Promise<void>;
   release: (slot: PluginSurfaceSlot) => Promise<void>;
-  closeActive: () => Promise<void>;
-  disposeActive: () => Promise<void>;
+  invalidatePlugin: (pluginInstanceID: string) => Promise<void>;
+  closeAll: () => Promise<void>;
   dispose: () => Promise<void>;
 }>;
 
-type ActivePluginSurfaceSlot = {
+type RegisteredPluginSurfaceSlot = {
   slot: PluginSurfaceSlot;
+  pluginInstanceID: string;
   opening: AbortController;
   host?: PluginSurfaceHost;
   publishedVisible?: boolean;
@@ -68,27 +77,27 @@ type ActivePluginSurfaceSlot = {
 export function createPluginSurfacePlacementCoordinator(
   client: PluginPlatformClient,
 ): PluginSurfacePlacementCoordinator {
-  let active: ActivePluginSurfaceSlot | undefined;
-  let tail = Promise.resolve();
+  const entries = new Map<PluginSurfaceSlot, RegisteredPluginSurfaceSlot>();
   let disposed = false;
   const cancelledSlots = new WeakSet<PluginSurfaceSlot>();
   const retirementBySlot = new WeakMap<PluginSurfaceSlot, Promise<void>>();
   const requestedVisibility = new WeakMap<PluginSurfaceSlot, boolean>();
 
-  const enqueue = <T>(operation: () => Promise<T>): Promise<T> => {
-    const result = tail.then(operation);
-    tail = result.then(() => undefined, () => undefined);
-    return result;
+  const awaitAll = async (operations: readonly Promise<void>[], failureMessage: string): Promise<void> => {
+    const outcomes = await Promise.allSettled(operations);
+    const failures = outcomes.flatMap((outcome) => outcome.status === 'rejected' ? [outcome.reason] : []);
+    if (failures.length === 1) throw failures[0];
+    if (failures.length > 1) throw new AggregateError(failures, failureMessage);
   };
 
-  const publishVisibility = (entry: ActivePluginSurfaceSlot, visible: boolean) => {
+  const publishVisibility = (entry: RegisteredPluginSurfaceSlot, visible: boolean) => {
     requestedVisibility.set(entry.slot, visible);
     if (entry.status !== 'ready' || !entry.host || entry.publishedVisible === visible) return;
     entry.host.sendLifecycle({ type: visible ? 'visible' : 'hidden' });
     entry.publishedVisible = visible;
   };
 
-  const retire = (entry: ActivePluginSurfaceSlot): Promise<void> => {
+  const retire = (entry: RegisteredPluginSurfaceSlot): Promise<void> => {
     const existing = retirementBySlot.get(entry.slot);
     if (existing) return existing;
     const retirement = (async () => {
@@ -116,7 +125,9 @@ export function createPluginSurfacePlacementCoordinator(
       if (failures.length > 1) {
         throw new AggregateError(failures, 'Plugin surface slot retirement failed');
       }
-    })();
+    })().finally(() => {
+      if (entries.get(entry.slot) === entry) entries.delete(entry.slot);
+    });
     retirementBySlot.set(entry.slot, retirement);
     return retirement;
   };
@@ -129,104 +140,92 @@ export function createPluginSurfacePlacementCoordinator(
     return retirement;
   };
 
-  const closeActive = (): Promise<void> => {
-    active?.opening.abort('plugin surface placement closed');
-    return enqueue(async () => {
-      const current = active;
-      active = undefined;
-      if (current) await retire(current);
+  const invalidateEntries = async (matching: readonly RegisteredPluginSurfaceSlot[]): Promise<void> => {
+    const retirements = matching.map(async (entry) => {
+      entry.opening.abort('plugin surface invalidated by platform mutation');
+      if (entries.get(entry.slot) === entry) entries.delete(entry.slot);
+      await disposeInactiveSlot(entry.slot);
     });
-  };
-
-  const disposeActive = (): Promise<void> => {
-    active?.opening.abort('plugin surface invalidated by platform mutation');
-    return enqueue(async () => {
-      const current = active;
-      active = undefined;
-      if (current) await disposeInactiveSlot(current.slot);
-    });
+    await awaitAll(retirements, 'Plugin surface invalidation failed');
   };
 
   return Object.freeze({
-    open(slot, request, options = {}) {
-      return enqueue(async () => {
-        if (disposed) {
-          await disposeInactiveSlot(slot);
-          throw new Error('Plugin surface placement coordinator is disposed');
-        }
-        if (cancelledSlots.has(slot)) {
-          await disposeInactiveSlot(slot);
-          throw new Error('Plugin surface slot was released before opening');
-        }
-        const previous = active;
-        active = undefined;
-        if (previous) await retire(previous);
+    async open(slot, request, options = {}) {
+      if (disposed) {
+        await disposeInactiveSlot(slot);
+        throw new Error('Plugin surface placement coordinator is disposed');
+      }
+      if (cancelledSlots.has(slot)) {
+        await disposeInactiveSlot(slot);
+        throw new Error('Plugin surface slot was released before opening');
+      }
+      if (entries.has(slot)) throw new Error('Plugin surface slot is already registered');
 
-        const entry: ActivePluginSurfaceSlot = {
-          slot,
-          opening: new AbortController(),
-          status: 'opening',
-        };
-        active = entry;
-        try {
-          const host = await client.openSurfaceInSlot(slot, request, {
-            ...options,
-            signal: entry.opening.signal,
-          });
-          entry.host = host;
-          if (entry.status === 'failed') {
-            throw entry.failure ?? new Error('Plugin surface terminated while opening');
-          }
-          entry.status = 'ready';
-          publishVisibility(entry, requestedVisibility.get(slot) ?? false);
-          return host;
-        } catch (error) {
-          if (active === entry) active = undefined;
-          await disposeInactiveSlot(slot);
-          throw error;
+      const entry: RegisteredPluginSurfaceSlot = {
+        slot,
+        pluginInstanceID: request.plugin_instance_id,
+        opening: new AbortController(),
+        status: 'opening',
+      };
+      entries.set(slot, entry);
+      try {
+        const host = await client.openSurfaceInSlot(slot, request, {
+          ...options,
+          signal: entry.opening.signal,
+        });
+        entry.host = host;
+        if (entry.status === 'failed') {
+          throw entry.failure ?? new Error('Plugin surface terminated while opening');
         }
-      });
+        if (entry.status === 'retiring' || entries.get(slot) !== entry) {
+          throw new Error('Plugin surface slot was released while opening');
+        }
+        entry.status = 'ready';
+        publishVisibility(entry, requestedVisibility.get(slot) ?? false);
+        return host;
+      } catch (error) {
+        if (entries.get(slot) === entry) entries.delete(slot);
+        await disposeInactiveSlot(slot);
+        throw error;
+      }
     },
     setVisible(slot, visible) {
       requestedVisibility.set(slot, visible);
-      if (active?.slot === slot) publishVisibility(active, visible);
+      const entry = entries.get(slot);
+      if (entry) publishVisibility(entry, visible);
     },
     fail(slot, error) {
-      const current = active?.slot === slot ? active : undefined;
+      const current = entries.get(slot);
       if (current && current.status !== 'retiring') {
         current.status = 'failed';
         current.failure = error;
         current.opening.abort('plugin surface terminated');
       }
-      return enqueue(async () => {
-        if (active === current) active = undefined;
-        if (current) {
-          await retire(current);
-          return;
-        }
-        await disposeInactiveSlot(slot);
-      });
+      if (current) return retire(current);
+      return disposeInactiveSlot(slot);
     },
     release(slot) {
       cancelledSlots.add(slot);
-      if (active?.slot === slot) {
-        active.opening.abort('plugin surface owner released');
-      }
-      return enqueue(async () => {
-        if (active?.slot === slot) {
-          const current = active;
-          active = undefined;
-          await retire(current);
-          return;
-        }
-        await disposeInactiveSlot(slot);
-      });
+      const current = entries.get(slot);
+      current?.opening.abort('plugin surface owner released');
+      if (current) return retire(current);
+      return disposeInactiveSlot(slot);
     },
-    closeActive,
-    disposeActive,
+    invalidatePlugin(pluginInstanceID) {
+      return invalidateEntries([...entries.values()].filter((entry) => entry.pluginInstanceID === pluginInstanceID));
+    },
+    closeAll() {
+      return awaitAll(
+        [...entries.values()].map((entry) => retire(entry)),
+        'Plugin surface closure failed',
+      );
+    },
     dispose() {
       disposed = true;
-      return closeActive();
+      return awaitAll(
+        [...entries.values()].map((entry) => retire(entry)),
+        'Plugin surface disposal failed',
+      );
     },
   });
 }

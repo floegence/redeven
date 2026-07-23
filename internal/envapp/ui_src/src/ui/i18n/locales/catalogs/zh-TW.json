@@ -4107,7 +4107,49 @@
       "closeSurface": "關閉外掛程式介面",
       "openingSurface": "正在開啟外掛程式介面...",
       "iframeUnavailable": "外掛程式 iframe 視窗無法使用。",
-      "surfaceFailed": "外掛程式介面載入失敗。"
+      "surfaceFailed": "外掛程式介面載入失敗。",
+      "surfaceCleanupFailed": "外掛程式內容已關閉，但無法確認伺服器端是否已完成清理。請保持此視窗開啟，或結束外掛程式工作階段以恢復正常運作。",
+      "endPluginSession": "結束外掛程式工作階段",
+      "endPluginSessionTitle": "結束整個外掛程式工作階段？",
+      "endPluginSessionDescription": "此操作會關閉所有外掛程式視窗；在目前已驗證身分的工作階段中，外掛程式將無法再次開啟。",
+      "closingSurface": "正在關閉外掛程式介面...",
+      "activityWindowTitle": "{plugin} - {surface}",
+      "surfaceIframeTitle": "{plugin} - {surface} 外掛程式內容",
+      "containersDashboardSurface": "總覽",
+      "permissionsTitle": "容器權限",
+      "permissionsDescription": "選擇此外掛程式可要求的容器操作。敏感操作仍需經過平台確認。",
+      "permissionsAdminRequired": "需要由環境管理員變更這些權限。",
+      "policyConfigured": "已設定原則",
+      "requiredToOpen": "開啟時必須授予",
+      "managedByPolicy": "由原則管理",
+      "permissionToggleLabel": "變更「{permission}」權限",
+      "permissionConfirmationTitle": "確認權限變更",
+      "confirmGrantPermission": "授予 Containers「{permission}」權限？",
+      "confirmRevokePermission": "撤銷 Containers 的「{permission}」權限？正在使用此權限的外掛程式介面將會關閉。",
+      "permissionGrantImpact": "此權限仍受目前環境原則和外掛程式安全性原則限制。",
+      "permissionRevokeImpact": "撤銷權限會使目前的外掛程式授權版本失效，並關閉受影響的外掛程式介面。",
+      "grantPermission": "授予",
+      "revokePermission": "撤銷",
+      "permissionGranted": "已授予",
+      "permissionNotGranted": "未授予",
+      "permission": {
+        "read": {
+          "label": "檢視容器",
+          "description": "讀取引擎狀態、容器詳細資料與日誌，以及操作前檢查資訊。"
+        },
+        "execute": {
+          "label": "操作容器",
+          "description": "完成必要確認後啟動、停止和重新啟動容器。"
+        },
+        "delete": {
+          "label": "刪除容器",
+          "description": "移除容器。這是選用的破壞性操作權限。"
+        },
+        "images_write": {
+          "label": "寫入映像檔",
+          "description": "將容器映像檔提取至所選引擎。"
+        }
+      }
     },
     "pluginRuntime": {
       "sandboxOriginUnavailable": "目前 Env App 主機無法提供外掛程式沙箱位址。",

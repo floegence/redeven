@@ -57,7 +57,72 @@ const projection: PluginInventoryProjection = {
   items: [containersPlugin, databasePlugin],
 };
 
+function containersPermissionProjection(granted = false): PluginInventoryProjection {
+  return {
+    items: [{
+      ...containersPlugin,
+      pluginInstanceID: 'plugininst_containers',
+      version: '2.0.0',
+      managementRevision: 7,
+      canDisable: true,
+      lifecycleState: granted ? 'enabled' : 'needs_attention',
+      attentionReason: granted ? undefined : 'permission_required',
+      authorization: {
+        grants: [],
+        permissions: [{
+          permissionID: 'containers.read',
+          group: 'read',
+          requiredToOpen: true,
+          methods: ['containers.status'],
+          requiredToOpenMethods: ['containers.status'],
+          granted,
+          deniedByGrant: false,
+          blockedByPolicy: false,
+          grantBlockedByPolicy: false,
+          blockedToOpen: !granted,
+        }],
+        revisions: {
+          policyRevision: 3,
+          managementRevision: 7,
+          revokeEpoch: 2,
+        },
+      },
+    }],
+  };
+}
+
+function findDocumentButton(label: string): HTMLButtonElement {
+  const button = [...document.querySelectorAll<HTMLButtonElement>('button')]
+    .find((candidate) => candidate.textContent?.trim() === label);
+  if (!button) throw new Error(`Button not found: ${label}`);
+  return button;
+}
+
 describe('PluginCenterView', () => {
+  it('exposes the active Plugin Center view with tab semantics', () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={{ items: [containersPlugin] }}
+        loading={false}
+        canManagePlugins
+        canOpenPluginSurfaces
+        onRefresh={() => undefined}
+        onCommand={() => undefined}
+      />
+    ), mount);
+
+    const discover = mount.querySelector('[role="tab"][aria-selected="true"]');
+    const panel = mount.querySelector('[role="tabpanel"]');
+    expect(discover?.id).toBe('plugin-center-tab-discover');
+    expect(panel?.getAttribute('aria-labelledby')).toBe(discover?.id);
+    expect(discover?.getAttribute('aria-controls')).toBe(panel?.id);
+
+    (discover as HTMLButtonElement).dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', bubbles: true }));
+    expect(mount.querySelector('[role="tab"][aria-selected="true"]')?.id).toBe('plugin-center-tab-installed');
+  });
+
   it('renders a dedicated management shell outside Settings with local search', () => {
     const mount = document.createElement('div');
     document.body.append(mount);
@@ -163,6 +228,7 @@ describe('PluginCenterView', () => {
           pluginInstanceID: 'plugininst_containers',
           version: '2.0.0',
           managementRevision: 7,
+          canDisable: true,
           lifecycleState: 'enabled',
           defaultLaunchTarget: {
             pluginID: 'com.redeven.official.containers',
@@ -192,6 +258,111 @@ describe('PluginCenterView', () => {
     expect((mount.querySelector('[data-plugin-action="open"]') as HTMLButtonElement).disabled).toBe(true);
     expect((mount.querySelector('[data-plugin-action="disable"]') as HTMLButtonElement).disabled).toBe(true);
     expect((mount.querySelector('[data-plugin-action="uninstall"]') as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('keeps Disable available for an enabled plugin that needs permission attention', () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const installedProjection: PluginInventoryProjection = {
+      items: [{
+        ...containersPlugin,
+        pluginInstanceID: 'plugininst_containers',
+        managementRevision: 7,
+        canDisable: true,
+        lifecycleState: 'needs_attention',
+        attentionReason: 'permission_required',
+      }],
+    };
+
+    dispose = render(() => (
+      <PluginCenterView
+        projection={installedProjection}
+        loading={false}
+        error={null}
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    expect((mount.querySelector('[data-plugin-action="disable"]') as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it('keeps permission switches model-driven across cancellation and confirmed grant', async () => {
+    const onCommand = vi.fn();
+    const mount = document.createElement('div');
+    document.body.append(mount);
+
+    dispose = render(() => (
+      <PluginCenterView
+        projection={containersPermissionProjection()}
+        loading={false}
+        error={null}
+        selectedPluginID="com.redeven.official.containers"
+        onCommand={onCommand}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    const permissionSwitch = mount.querySelector('[data-plugin-permission="containers.read"] [role="switch"]') as HTMLButtonElement;
+    expect(permissionSwitch.getAttribute('aria-checked')).toBe('false');
+
+    permissionSwitch.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(permissionSwitch.getAttribute('aria-checked')).toBe('false');
+    findDocumentButton('Cancel').click();
+    await Promise.resolve();
+    expect(permissionSwitch.getAttribute('aria-checked')).toBe('false');
+    expect(onCommand).not.toHaveBeenCalled();
+
+    permissionSwitch.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    findDocumentButton('Grant').click();
+    await Promise.resolve();
+
+    expect(onCommand).toHaveBeenCalledWith({
+      type: 'grant_permission',
+      pluginInstanceID: 'plugininst_containers',
+      permissionID: 'containers.read',
+      expectedPolicyRevision: 3,
+      expectedManagementRevision: 7,
+      expectedRevokeEpoch: 2,
+    }, expect.any(AbortSignal));
+    expect(permissionSwitch.getAttribute('aria-checked')).toBe('false');
+  });
+
+  it('keeps the projected permission state unchanged when a confirmed mutation fails', async () => {
+    const onCommand = vi.fn(async () => {
+      throw new Error('permission update failed');
+    });
+    const mount = document.createElement('div');
+    document.body.append(mount);
+
+    dispose = render(() => (
+      <PluginCenterView
+        projection={containersPermissionProjection()}
+        loading={false}
+        error={null}
+        selectedPluginID="com.redeven.official.containers"
+        onCommand={onCommand}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    const permissionSwitch = mount.querySelector('[data-plugin-permission="containers.read"] [role="switch"]') as HTMLButtonElement;
+    permissionSwitch.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    findDocumentButton('Grant').click();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(permissionSwitch.getAttribute('aria-checked')).toBe('false');
+    expect(mount.textContent).toContain('permission update failed');
   });
 
   it('allows enabled official plugin surfaces to open through the sandbox host', () => {

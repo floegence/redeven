@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Plugin platform integration
 description: Redeven mounts ReDevPlugin v0.6.7 as a host library and adds only session, release, runtime-build, placement, and business adapters.
 tags: [architecture, plugins, local-ui, redevplugin]
-timestamp: 2026-07-19T00:00:00Z
+timestamp: 2026-07-23T00:00:00Z
 ---
 # Summary
 
@@ -13,8 +13,9 @@ shared surface scope, and the released Rust ProcessManager over a verified
 Redeven-built Linux runtime. Redeven retains
 product policy and business adapters; ReDevPlugin retains platform state and
 protocol ownership. Unproven session, release, capability, runtime, or surface
-identity denies the operation. Activity placement and Linux worker execution
-are releasable. Darwin omits worker execution, and Workbench placement remains
+identity denies the operation. Shell-root multi-window Activity placement and
+Linux worker execution are releasable. Darwin omits worker execution, and
+Workbench placement remains
 disabled until a host-neutral iframe interaction-ownership contract exists.
 
 # Contract
@@ -125,7 +126,7 @@ alternate process, add hostcalls, or inspect IPC frames.
 ## Env App integration
 
 Env App owns one authenticated same-origin fetch adapter, one
-`PluginPlatformClient`, one shared `PluginSurfaceScope`, and one serial
+`PluginPlatformClient`, one shared `PluginSurfaceScope`, and one multi-slot
 placement coordinator. Catalog and lifecycle calls use generated v0.6.7 DTOs.
 Every mutation carries the current management revision; outcome-unknown errors
 tear down affected surfaces and refresh inventory without automatic retry. The
@@ -133,11 +134,25 @@ Plugin Center mutation lane remains occupied until that local invalidation has
 settled, so another command cannot race the cleanup.
 
 The SDK-owned iframe is opened only through `openSurfaceInSlot`. The returned
-Promise is the authoritative handshake and first-commit boundary. Placement
-changes close and dispose the old slot before a new slot can open, so an iframe
-or surface instance is never moved or reused. A Shell-owned abort-aware FIFO
-queue serializes confirmation intents and rejects queued work when its surface
-or scope is retired.
+Promise is the authoritative handshake and first-commit boundary. Each Activity
+floating window owns a stable stage and fresh slot; the Shell independently
+tracks multiple windows and deduplicates an exact plugin-instance, surface, and
+placement target. Responsive chrome does not remount, move, or reuse an iframe
+or surface instance. A Shell-owned abort-aware FIFO queue serializes
+confirmation intents and rejects queued work when its surface or scope is
+retired.
+
+Plugin Center joins active grants and explicit security policies to the exact
+installed record. Admin grant/revoke uses policy, management, and revoke
+revision fences; non-admin sessions are read-only. A permission allowlist cap
+and a method deny remain distinct from the active grant. Conflict or mutation
+failure refreshes all three sources and requires a new confirmation instead of
+retrying stale state.
+
+An uncertain slot close keeps a local error shell and never revives its iframe.
+Because v0.6.7 lacks exact single-surface reconciliation, the only B1 recovery
+is a second-confirmed authenticated session-scope revoke that closes every
+plugin window and permanently retires the current client/scope.
 
 Browser-facing reads use released POST query routes, so exact Origin, CSRF,
 closed route action, and query-effect authorization remain enforceable in a

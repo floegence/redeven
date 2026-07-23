@@ -4107,7 +4107,49 @@
       "closeSurface": "Plugin-Oberfläche schließen",
       "openingSurface": "Plugin-Oberfläche wird geöffnet...",
       "iframeUnavailable": "Plugin-Iframe-Fenster ist nicht verfügbar.",
-      "surfaceFailed": "Plugin-Oberfläche fehlgeschlagen."
+      "surfaceFailed": "Plugin-Oberfläche fehlgeschlagen.",
+      "surfaceCleanupFailed": "Der Plugin-Inhalt wurde geschlossen, aber die serverseitige Bereinigung konnte nicht bestätigt werden. Lassen Sie dieses Fenster geöffnet oder beenden Sie zur Wiederherstellung die Plugin-Sitzung.",
+      "endPluginSession": "Plugin-Sitzung beenden",
+      "endPluginSessionTitle": "Die gesamte Plugin-Sitzung beenden?",
+      "endPluginSessionDescription": "Dadurch werden alle Plugin-Fenster geschlossen und Plugins können in der aktuellen authentifizierten Sitzung nicht erneut geöffnet werden.",
+      "closingSurface": "Plugin-Oberfläche wird geschlossen...",
+      "activityWindowTitle": "{plugin} - {surface}",
+      "surfaceIframeTitle": "{plugin} - Plugin-Inhalt für {surface}",
+      "containersDashboardSurface": "Dashboard",
+      "permissionsTitle": "Container-Berechtigungen",
+      "permissionsDescription": "Wählen Sie aus, welche Container-Vorgänge dieses Plugin anfordern darf. Für sensible Vorgänge ist weiterhin eine Bestätigung durch die Plattform erforderlich.",
+      "permissionsAdminRequired": "Ein Umgebungsadministrator muss diese Berechtigungen ändern.",
+      "policyConfigured": "Richtlinie konfiguriert",
+      "requiredToOpen": "Zum Öffnen erforderlich",
+      "managedByPolicy": "Durch Richtlinie verwaltet",
+      "permissionToggleLabel": "Berechtigung „{permission}“ ändern",
+      "permissionConfirmationTitle": "Berechtigungsänderung bestätigen",
+      "confirmGrantPermission": "Containers die Berechtigung „{permission}“ erteilen?",
+      "confirmRevokePermission": "Containers die Berechtigung „{permission}“ entziehen? Geöffnete Oberflächen, die sie verwenden, werden geschlossen.",
+      "permissionGrantImpact": "Die Berechtigung bleibt durch die aktuellen Umgebungs- und Plugin-Sicherheitsrichtlinien eingeschränkt.",
+      "permissionRevokeImpact": "Durch den Entzug wird die Autorisierungsrevision des Plugins ungültig und betroffene Plugin-Oberflächen werden geschlossen.",
+      "grantPermission": "Erteilen",
+      "revokePermission": "Entziehen",
+      "permissionGranted": "Erteilt",
+      "permissionNotGranted": "Nicht erteilt",
+      "permission": {
+        "read": {
+          "label": "Container anzeigen",
+          "description": "Engine-Status, Container-Details, Protokolle und Informationen zur Vorabprüfung von Vorgängen lesen."
+        },
+        "execute": {
+          "label": "Container steuern",
+          "description": "Container nach den erforderlichen Bestätigungen starten, stoppen und neu starten."
+        },
+        "delete": {
+          "label": "Container löschen",
+          "description": "Container entfernen. Dies ist eine optionale Berechtigung für destruktive Vorgänge."
+        },
+        "images_write": {
+          "label": "Container-Images abrufen",
+          "description": "Container-Images für die ausgewählte Engine abrufen."
+        }
+      }
     },
     "pluginRuntime": {
       "sandboxOriginUnavailable": "Für diesen Env App-Host ist keine Plugin-Sandbox-Adresse verfügbar.",

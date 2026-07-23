@@ -10,11 +10,15 @@ const officialContainers = OFFICIAL_PLUGIN_CATALOG_SEED[0];
 function createClientHarness() {
   const mocks = {
     catalog: vi.fn(async () => ({ plugins: [] })),
+    listPermissions: vi.fn(async () => ({ permissions: [] })),
+    listSecurityPolicies: vi.fn(async () => ({ security_policies: [] })),
     installReleaseRef: vi.fn(async () => ({})),
     updateReleaseRef: vi.fn(async () => ({})),
     enablePlugin: vi.fn(async () => ({})),
     disablePlugin: vi.fn(async () => ({})),
     uninstallPlugin: vi.fn(async () => ({})),
+    grantPermission: vi.fn(async () => ({})),
+    revokePermission: vi.fn(async () => ({})),
   };
   return {
     mocks,
@@ -29,6 +33,23 @@ describe('v0.6.7 plugin lifecycle client integration', () => {
     await expect(lifecycle.listInstalledPlugins()).resolves.toEqual([]);
     expect(mocks.catalog).toHaveBeenCalledOnce();
     expect(mocks.catalog).toHaveBeenCalledWith({});
+  });
+
+  it('loads catalog, active grants, and security policies concurrently into one projection', async () => {
+    const { lifecycle, mocks } = createClientHarness();
+    let releaseCatalog!: () => void;
+    mocks.catalog.mockImplementation(() => new Promise((resolve) => {
+      releaseCatalog = () => resolve({ plugins: [] });
+    }));
+
+    const loading = lifecycle.loadInventoryProjection();
+    await Promise.resolve();
+
+    expect(mocks.catalog).toHaveBeenCalledWith({});
+    expect(mocks.listPermissions).toHaveBeenCalledWith({ active_only: true }, {});
+    expect(mocks.listSecurityPolicies).toHaveBeenCalledWith({});
+    releaseCatalog();
+    await expect(loading).resolves.toMatchObject({ items: expect.any(Array) });
   });
 
   it('installs the generated signed release under the fixed official identity', async () => {
@@ -115,6 +136,44 @@ describe('v0.6.7 plugin lifecycle client integration', () => {
       plugin_instance_id: officialContainers.pluginInstanceID,
       expected_management_revision: 6,
       delete_data: true,
+    }, {});
+  });
+
+  it('binds grant and revoke mutations to the exact authorization revisions', async () => {
+    const { lifecycle, mocks } = createClientHarness();
+    const revisions = {
+      expectedPolicyRevision: 11,
+      expectedManagementRevision: 17,
+      expectedRevokeEpoch: 4,
+    };
+
+    await lifecycle.execute({
+      type: 'grant_permission',
+      pluginInstanceID: officialContainers.pluginInstanceID,
+      permissionID: 'containers.read',
+      ...revisions,
+    });
+    await lifecycle.execute({
+      type: 'revoke_permission',
+      pluginInstanceID: officialContainers.pluginInstanceID,
+      permissionID: 'containers.execute',
+      ...revisions,
+    });
+
+    expect(mocks.grantPermission).toHaveBeenCalledWith({
+      plugin_instance_id: officialContainers.pluginInstanceID,
+      permission_id: 'containers.read',
+      expected_policy_revision: 11,
+      expected_management_revision: 17,
+      expected_revoke_epoch: 4,
+    }, {});
+    expect(mocks.revokePermission).toHaveBeenCalledWith({
+      plugin_instance_id: officialContainers.pluginInstanceID,
+      permission_id: 'containers.execute',
+      expected_policy_revision: 11,
+      expected_management_revision: 17,
+      expected_revoke_epoch: 4,
+      reason: 'user_revoked',
     }, {});
   });
 });
