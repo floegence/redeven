@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionhop"
@@ -20,8 +21,12 @@ import (
 	"github.com/floegence/redevplugin/pkg/releasetrust"
 )
 
+func officialReleaseFixtureTime() time.Time {
+	return time.Date(2026, time.July, 23, 10, 0, 0, 0, time.UTC)
+}
+
 func TestOfficialReleaseModuleIsCompleteAndClosed(t *testing.T) {
-	module, ref, closeTrust, err := newOfficialReleaseModule(filepath.Join(t.TempDir(), "trust"))
+	module, ref, closeTrust, err := newOfficialReleaseModuleWithClock(filepath.Join(t.TempDir(), "trust"), officialReleaseFixtureTime)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +99,7 @@ func TestOfficialReleaseProviderReturnsOwnedArtifactBytes(t *testing.T) {
 }
 
 func TestOfficialReleaseTrustChainVerifies(t *testing.T) {
-	module, ref, closeTrust, err := newOfficialReleaseModule(filepath.Join(t.TempDir(), "trust"))
+	module, ref, closeTrust, err := newOfficialReleaseModuleWithClock(filepath.Join(t.TempDir(), "trust"), officialReleaseFixtureTime)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -150,6 +155,7 @@ func TestOfficialContainersReleaseInstallsThroughHTTP(t *testing.T) {
 		PermissionPolicy: testPermissionPolicy(t, "execute_read_write"),
 		RuntimePath:      testRuntimePath(t, stateDir),
 		Containers:       mustContainersAdapter(t, &capabilityEngineClient{}),
+		releaseTrustNow:  officialReleaseFixtureTime,
 		ResolveSessionMeta: func(channelID string) (*session.Meta, bool) {
 			if channelID != "ch_release" {
 				return nil, false

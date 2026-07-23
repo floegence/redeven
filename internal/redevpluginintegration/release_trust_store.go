@@ -231,11 +231,15 @@ type localTrustedTimeAdapter struct {
 	mu         sync.Mutex
 	store      *releaseTrustStore
 	privateKey ed25519.PrivateKey
+	now        func() time.Time
 }
 
-func newLocalTrustedTimeAdapter(store *releaseTrustStore, stateDir string) (*localTrustedTimeAdapter, error) {
+func newLocalTrustedTimeAdapter(store *releaseTrustStore, stateDir string, now func() time.Time) (*localTrustedTimeAdapter, error) {
 	if store == nil || store.db == nil {
 		return nil, errors.New("release trust store is required")
+	}
+	if now == nil {
+		return nil, errors.New("trusted time clock is required")
 	}
 	if err := os.MkdirAll(stateDir, 0o700); err != nil {
 		return nil, err
@@ -247,7 +251,7 @@ func newLocalTrustedTimeAdapter(store *releaseTrustStore, stateDir string) (*loc
 	if err != nil {
 		return nil, err
 	}
-	return &localTrustedTimeAdapter{store: store, privateKey: key}, nil
+	return &localTrustedTimeAdapter{store: store, privateKey: key, now: now}, nil
 }
 
 func loadOrCreateTrustedTimeKey(filename string) (ed25519.PrivateKey, error) {
@@ -315,7 +319,7 @@ func (adapter *localTrustedTimeAdapter) Observe(ctx context.Context, request rel
 	if err != nil {
 		return releasetrust.TrustedTimeObservation{}, err
 	}
-	integrated := time.Now().UTC().Truncate(time.Second)
+	integrated := adapter.now().UTC().Truncate(time.Second)
 	if !integrated.After(minimum) {
 		integrated = minimum.Add(time.Nanosecond)
 	}
