@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	redevpluginartifacts "github.com/floegence/redeven/spec/redevplugin"
 	"github.com/floegence/redevplugin/pkg/capabilitycontract"
@@ -32,11 +33,15 @@ type officialReleaseProvider struct {
 }
 
 func newOfficialReleaseModule(stateDir string) (*host.ReleaseModule, host.PluginReleaseRef, func() error, error) {
+	return newOfficialReleaseModuleWithClock(stateDir, time.Now)
+}
+
+func newOfficialReleaseModuleWithClock(stateDir string, now func() time.Time) (*host.ReleaseModule, host.PluginReleaseRef, func() error, error) {
 	provider, err := newOfficialReleaseProvider()
 	if err != nil {
 		return nil, host.PluginReleaseRef{}, nil, err
 	}
-	trust, store, err := newOfficialReleaseTrust(stateDir, provider.release)
+	trust, store, err := newOfficialReleaseTrust(stateDir, provider.release, now)
 	if err != nil {
 		return nil, host.PluginReleaseRef{}, nil, err
 	}
@@ -69,7 +74,7 @@ func newOfficialReleaseProvider() (*officialReleaseProvider, error) {
 	return &officialReleaseProvider{release: release, capability: bundle, sourcePolicy: policy, artifactFiles: files}, nil
 }
 
-func newOfficialReleaseTrust(stateDir string, release redevpluginartifacts.ContainersPluginRelease) (*releasetrust.ServiceSet, *releaseTrustStore, error) {
+func newOfficialReleaseTrust(stateDir string, release redevpluginartifacts.ContainersPluginRelease, now func() time.Time) (*releasetrust.ServiceSet, *releaseTrustStore, error) {
 	configuration, err := releasetrust.NewSourceConfiguration(officialReleaseSourceID, []string{officialReleaseChannel})
 	if err != nil {
 		return nil, nil, err
@@ -86,7 +91,7 @@ func newOfficialReleaseTrust(stateDir string, release redevpluginartifacts.Conta
 		_ = store.Close()
 		return nil, nil, err
 	}
-	trustedTime, err := newLocalTrustedTimeAdapter(store, filepath.Join(stateDir, "trusted-time"))
+	trustedTime, err := newLocalTrustedTimeAdapter(store, filepath.Join(stateDir, "trusted-time"), now)
 	if err != nil {
 		return closeOnError(err)
 	}

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/floegence/redeven/internal/auditlog"
 	"github.com/floegence/redeven/internal/capabilities/containers"
@@ -38,6 +39,7 @@ type Options struct {
 	Audit              *auditlog.Store
 	Diagnostics        *diagnostics.Store
 	Containers         *containers.Adapter
+	releaseTrustNow    func() time.Time
 }
 
 type Integration struct {
@@ -92,7 +94,13 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 
 	var closers []func() error
 	closeOnError := func() { _ = closeAll(closers) }
-	releaseModule, _, closeReleaseTrust, err := newOfficialReleaseModule(filepath.Join(root, "trust"))
+	newReleaseModule := newOfficialReleaseModule
+	if opts.releaseTrustNow != nil {
+		newReleaseModule = func(stateDir string) (*host.ReleaseModule, host.PluginReleaseRef, func() error, error) {
+			return newOfficialReleaseModuleWithClock(stateDir, opts.releaseTrustNow)
+		}
+	}
+	releaseModule, _, closeReleaseTrust, err := newReleaseModule(filepath.Join(root, "trust"))
 	if err != nil {
 		return nil, err
 	}
