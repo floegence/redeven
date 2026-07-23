@@ -48,7 +48,7 @@ Go tests that import their embed packages.
 
 ## ReDevPlugin dependency gate
 
-Redeven consumes only the coordinated ReDevPlugin `v0.6.5` package set. The
+Redeven consumes only the coordinated ReDevPlugin `v0.6.7` package set. The
 boundary guard rejects local sibling paths, Go workspaces/replacements, npm
 links, copied contracts or runtimes, Rust path overrides, and a second
 platform-core package tree.
@@ -141,7 +141,7 @@ the released durable four-hash fence and drain; Redeven awaits exact teardown
 acknowledgement before deleting identity and reconciles retained fences on
 restart.
 
-Workbench plugin interaction is not declared passing: v0.6.5 lacks the required
+Workbench plugin interaction is not declared passing: v0.6.7 lacks the required
 host-neutral iframe interaction ownership contract. A Redeven release must not
 hide that gap behind an overlay or input patch. Workbench enablement requires a
 new formal ReDevPlugin release and corresponding focused/browser evidence.

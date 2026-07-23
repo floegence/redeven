@@ -19,6 +19,7 @@ import (
 	"github.com/floegence/redevplugin/pkg/host"
 	"github.com/floegence/redevplugin/pkg/manifest"
 	"github.com/floegence/redevplugin/pkg/observability"
+	"github.com/floegence/redevplugin/pkg/ownerscope"
 	"github.com/floegence/redevplugin/pkg/registry"
 	"github.com/floegence/redevplugin/pkg/sessionctx"
 	"github.com/floegence/redevplugin/pkg/websecurity"
@@ -382,32 +383,159 @@ func TestPackageTrustVerifierUsesV5Provenance(t *testing.T) {
 
 func TestNewCreatesDurableReDevPluginState(t *testing.T) {
 	stateDir := t.TempDir()
-	integration, err := New(context.Background(), Options{
-		StateDir:         stateDir,
-		PermissionPolicy: testPermissionPolicy(t, "execute_read"),
-		RuntimePath:      testRuntimePath(t, stateDir),
-		Containers:       mustContainersAdapter(t, &capabilityEngineClient{}),
-		ResolveSessionMeta: func(string) (*session.Meta, bool) {
-			return nil, false
-		},
-	})
+	integration, err := New(context.Background(), ownerScopeTestOptions(t, stateDir))
 	if err != nil {
 		t.Fatalf("New() error = %v", err)
 	}
-	t.Cleanup(func() { _ = integration.Close() })
+	if err := integration.Close(); err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(stateDir, "apps", "redevplugin")
+	generation, err := ownerscope.PrepareOwnerScopeGeneration(context.Background(), root)
+	if err != nil {
+		t.Fatalf("PrepareOwnerScopeGeneration() error = %v", err)
+	}
+	if generation.Status.State != ownerscope.StateFreshCommitted || generation.Status.FreshGenerationID == "" || !generation.Status.QuarantineID.IsZero() {
+		t.Fatalf("fresh generation status = %#v", generation.Status)
+	}
 	for _, rel := range []string{
-		"apps/redevplugin/db/registry.sqlite",
-		"apps/redevplugin/db/operations.sqlite",
-		"apps/redevplugin/db/observability.sqlite",
-		"apps/redevplugin/db/session_scopes.sqlite",
-		"apps/redevplugin/trust/release-trust.sqlite",
-		"apps/redevplugin/trust/trusted-time/ed25519-private.key",
-		"apps/redevplugin/assets",
-		"apps/redevplugin/storage",
+		"db/registry.sqlite",
+		"db/operations.sqlite",
+		"db/observability.sqlite",
+		"db/session_scopes.sqlite",
+		"trust/release-trust.sqlite",
+		"trust/trusted-time/ed25519-private.key",
+		"assets",
+		"storage",
 	} {
-		if _, err := os.Stat(filepath.Join(stateDir, rel)); err != nil {
+		if _, err := os.Stat(filepath.Join(generation.Path, rel)); err != nil {
 			t.Fatalf("expected durable state %s: %v", rel, err)
 		}
+	}
+	if _, err := os.Stat(filepath.Join(root, "db")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("fresh install created legacy root state: %v", err)
+	}
+}
+
+func TestNewAutomaticallyMigratesV065OwnerScopeState(t *testing.T) {
+	ctx := context.Background()
+	stateDir := t.TempDir()
+	root := filepath.Join(stateDir, "apps", "redevplugin")
+	if err := os.MkdirAll(filepath.Join(root, "db"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	legacyRegistry, err := registry.NewSQLiteStore(ctx, filepath.Join(root, "db", "registry.sqlite"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := legacyRegistry.Close(); err != nil {
+		t.Fatal(err)
+	}
+	legacyMarker := filepath.Join("storage", "legacy-owner-unknown")
+	if err := os.MkdirAll(filepath.Join(root, "storage"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, legacyMarker), []byte("legacy"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	integration, err := New(ctx, ownerScopeTestOptions(t, stateDir))
+	if err != nil {
+		t.Fatalf("New() migration error = %v", err)
+	}
+	if err := integration.Close(); err != nil {
+		t.Fatal(err)
+	}
+	generation, err := ownerscope.PrepareOwnerScopeGeneration(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if generation.Status.State != ownerscope.StateFreshCommitted || generation.Status.QuarantineID.IsZero() {
+		t.Fatalf("migrated generation status = %#v", generation.Status)
+	}
+	quarantineRoot := filepath.Join(root, ".redevplugin-quarantine", generation.Status.QuarantineID.String())
+	if raw, err := os.ReadFile(filepath.Join(quarantineRoot, legacyMarker)); err != nil || string(raw) != "legacy" {
+		t.Fatalf("quarantined legacy marker = %q, %v", raw, err)
+	}
+	if _, err := os.Stat(filepath.Join(quarantineRoot, "db", "registry.sqlite")); err != nil {
+		t.Fatalf("quarantined legacy registry: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(generation.Path, "db", "registry.sqlite")); err != nil {
+		t.Fatalf("active generation registry: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "db")); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("legacy db remained active: %v", err)
+	}
+
+	activeMarker := filepath.Join(generation.Path, "storage", "created-after-migration")
+	if err := os.WriteFile(activeMarker, []byte("active"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	restarted, err := New(ctx, ownerScopeTestOptions(t, stateDir))
+	if err != nil {
+		t.Fatalf("New() restart error = %v", err)
+	}
+	if err := restarted.Close(); err != nil {
+		t.Fatal(err)
+	}
+	reopened, err := ownerscope.PrepareOwnerScopeGeneration(ctx, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reopened.Path != generation.Path || reopened.Status.FreshGenerationID != generation.Status.FreshGenerationID || reopened.Status.QuarantineID != generation.Status.QuarantineID {
+		t.Fatalf("reopened generation = %#v, want %#v", reopened, generation)
+	}
+	if raw, err := os.ReadFile(activeMarker); err != nil || string(raw) != "active" {
+		t.Fatalf("active generation data after restart = %q, %v", raw, err)
+	}
+	if raw, err := os.ReadFile(filepath.Join(quarantineRoot, legacyMarker)); err != nil || string(raw) != "legacy" {
+		t.Fatalf("quarantine after restart = %q, %v", raw, err)
+	}
+}
+
+func TestNewRejectsUnknownOrCorruptOwnerScopeStateWithoutMutation(t *testing.T) {
+	for _, test := range []struct {
+		name    string
+		relPath string
+		content string
+		wantErr error
+	}{
+		{name: "unknown layout", relPath: "db/unknown.sqlite", content: "unknown", wantErr: ownerscope.ErrOwnerScopeMigrationRequired},
+		{name: "corrupt journal", relPath: ownerscope.MigrationJournalName, content: "{", wantErr: ownerscope.ErrOwnerScopeJournalCorrupt},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			stateDir := t.TempDir()
+			root := filepath.Join(stateDir, "apps", "redevplugin")
+			path := filepath.Join(root, filepath.FromSlash(test.relPath))
+			if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(path, []byte(test.content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if integration, err := New(context.Background(), ownerScopeTestOptions(t, stateDir)); integration != nil || !errors.Is(err, test.wantErr) {
+				t.Fatalf("New() = %#v, %v, want %v", integration, err, test.wantErr)
+			}
+			if raw, err := os.ReadFile(path); err != nil || string(raw) != test.content {
+				t.Fatalf("rejected owner-scope state changed = %q, %v", raw, err)
+			}
+			if test.relPath != ownerscope.MigrationJournalName {
+				if _, err := os.Stat(filepath.Join(root, ownerscope.MigrationJournalName)); !errors.Is(err, os.ErrNotExist) {
+					t.Fatalf("rejected state wrote a migration journal: %v", err)
+				}
+			}
+		})
+	}
+}
+
+func ownerScopeTestOptions(t *testing.T, stateDir string) Options {
+	t.Helper()
+	return Options{
+		StateDir:           stateDir,
+		PermissionPolicy:   testPermissionPolicy(t, "execute_read"),
+		RuntimePath:        testRuntimePath(t, stateDir),
+		Containers:         mustContainersAdapter(t, &capabilityEngineClient{}),
+		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
 	}
 }
 

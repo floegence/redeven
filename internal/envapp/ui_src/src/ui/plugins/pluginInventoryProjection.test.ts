@@ -72,7 +72,7 @@ function installedRecord(overrides: Partial<ReDevPluginRecord> = {}): ReDevPlugi
   };
 }
 
-describe('v0.6.5 plugin inventory projection', () => {
+describe('v0.6.7 plugin inventory projection', () => {
   it('keeps Plugin Center as the first panel tile', () => {
     const projection = projectPluginInventory({
       officialCatalog: [officialContainers],

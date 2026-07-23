@@ -8,7 +8,7 @@ timestamp: 2026-07-19T00:00:00Z
 # Summary
 
 Plugin UI is a released ReDevPlugin sandbox surface inside Redeven chrome.
-Plugin Panel, Plugin Center, and Activity placement use the releasable v0.6.5
+Plugin Panel, Plugin Center, and Activity placement use the releasable v0.6.7
 POST query and durable session-scope contracts. Workbench remains unavailable
 because it lacks a cross-iframe interaction ownership contract. Redeven owns
 navigation and placement;
@@ -112,7 +112,7 @@ display secret params.
 Workbench wrapper markers alone cannot route events that occur inside an opaque
 iframe. Unselected-widget canvas wheel, selected-widget local wheel, iframe text
 selection, actions, and click activation cannot all be correct without a
-source/port-bound SDK interaction callback. ReDevPlugin `v0.6.5` has no such
+source/port-bound SDK interaction callback. ReDevPlugin `v0.6.7` has no such
 public callback.
 
 Redeven therefore rejects Workbench plugin placement. It must not use an
@@ -139,7 +139,7 @@ tokens, serve plugin assets, or call business adapters directly.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginPlatform.ts:1` - Implements canonical transport and serialized slot coordination.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginSurfaceFrame.tsx:1` - Mounts only an SDK slot and projects lifecycle visibility.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/PluginConfirmationQueue.tsx:1` - Implements abort-aware FIFO confirmation UX.
-- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1` - Uses generated v0.6.5 lifecycle DTOs and signed release refs.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1` - Uses generated v0.6.7 lifecycle DTOs and signed release refs.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.ts:1` - Matches exact official identity and management revision.
 - `redeven:internal/envapp/ui_src/scripts/checkPackagedRenderer.mjs:1` - Requires Plugin discovery in the built renderer.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginPlatform.test.ts:1` - Covers canonical fetch and close-before-open ordering.

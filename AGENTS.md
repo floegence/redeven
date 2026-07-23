@@ -411,9 +411,17 @@ The current released platform contract also fixes the host-integration shape:
 - Redeven derives ReDevPlugin resource ownership only from an authenticated
   session adapter. Persistent plugin resources use the released `user` or
   `environment` resource scope; request JSON, plugin IPC, and business adapters
-  must never supply or override owner hashes. Persisted state whose owner cannot
-  be determined without guessing must fail with
-  `owner_scope_migration_required`.
+  must never supply or override owner hashes. Before opening any
+  ReDevPlugin-owned durable store, Redeven must invoke the released automatic
+  owner-scope migration API on the product-selected ReDevPlugin state root and
+  use only the committed generation it returns. Recognized supported legacy
+  state whose owner cannot be proven is atomically retained in quarantine while
+  startup creates a fresh owner-scoped generation; restart must reuse that
+  generation and preserve data created after migration. Redeven must never
+  delete the quarantine automatically. Unknown, corrupt, ambiguous, tampered,
+  or future state must fail closed without mutation. This lifecycle applies
+  only to ReDevPlugin-owned state and must not inspect or migrate Floret-owned
+  schemas.
 - Short-lived surfaces, operations, streams, handles, confirmations, and token
   audiences bind the exact `owner_session_hash`, `owner_user_hash`,
   `owner_env_hash`, and `session_channel_id_hash` derived from the active

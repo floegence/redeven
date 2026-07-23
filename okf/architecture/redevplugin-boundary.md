@@ -41,12 +41,12 @@ supervisor, IPC implementation, or WASM executor.
 
 ## Published dependency set
 
-The current integration consumes the coordinated ReDevPlugin `v0.6.5` release:
+The current integration consumes the coordinated ReDevPlugin `v0.6.7` release:
 
-- `github.com/floegence/redevplugin v0.6.5`;
-- `@floegence/redevplugin-contracts@0.6.5` and
-  `@floegence/redevplugin-ui@0.6.5`;
-- six `0.6.5` Rust source crates ending in `redevplugin-runtime`;
+- `github.com/floegence/redevplugin v0.6.7`;
+- `@floegence/redevplugin-contracts@0.6.7` and
+  `@floegence/redevplugin-ui@0.6.7`;
+- six `0.6.7` Rust source crates ending in `redevplugin-runtime`;
 - contract-registry v2, platform-package-set v1, contract hashes, and the
   attested platform-package-publication v1 registry readback.
 
@@ -91,7 +91,7 @@ and operation/stream delegation.
 ## Missing-contract rule
 
 Opaque iframe input does not cross into the parent Workbench document.
-ReDevPlugin `v0.6.5` exposes no host-neutral interaction ownership callback for
+ReDevPlugin `v0.6.7` exposes no host-neutral interaction ownership callback for
 activation or host-owned wheel routing. Redeven therefore must not claim
 Workbench plugin placement, add an overlay, toggle iframe pointer events, or
 copy a second bridge. Workbench placement remains rejected until ReDevPlugin
@@ -113,6 +113,14 @@ Uncertain artifact provenance, owner scope, release identity, contract version,
 runtime target, or capability pin fails closed. Redeven does not guess an owner,
 invent network provenance, downgrade a contract, or retry a mutation whose
 outcome is unknown.
+
+Redeven prepares the released owner-scope generation before opening any
+ReDevPlugin database, trust store, asset store, plugin data, or runtime execution
+root. A recognized `v0.6.5` legacy layout is moved atomically into retained
+quarantine and replaced with a fresh owner-scoped generation. Restart reuses the
+committed generation and never deletes quarantine. Unknown, corrupt, ambiguous,
+tampered, or future state remains unchanged and blocks startup. This migration
+does not inspect or alter Floret-owned state.
 
 # Evidence
 
