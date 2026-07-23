@@ -1,13 +1,13 @@
 ---
 type: Architecture Contract
 title: Plugin platform integration
-description: Redeven mounts ReDevPlugin v0.6.5 as a host library and adds only session, release, runtime-build, placement, and business adapters.
+description: Redeven mounts ReDevPlugin v0.6.7 as a host library and adds only session, release, runtime-build, placement, and business adapters.
 tags: [architecture, plugins, local-ui, redevplugin]
 timestamp: 2026-07-19T00:00:00Z
 ---
 # Summary
 
-Redeven integrates ReDevPlugin `v0.6.5` through one Go
+Redeven integrates ReDevPlugin `v0.6.7` through one Go
 Host, one canonical HTTP namespace, one Env App `PluginPlatformClient`, one
 shared surface scope, and the released Rust ProcessManager over a verified
 Redeven-built Linux runtime. Redeven retains
@@ -53,6 +53,15 @@ resources bind the owner environment; user resources bind environment plus
 user. Short-lived surfaces, operations, streams, handles, confirmations, and
 tokens bind the full active audience. Redeven does not use short-lived audience
 hashes as registry or plugin-data keys.
+
+Before Host construction opens durable platform state, Redeven calls the
+released owner-scope migration on `apps/redevplugin` and uses only its committed
+active generation for databases, trust, assets, storage, and runtime execution.
+Recognized `v0.6.5` state with unprovable ownership is retained in atomic
+quarantine while a fresh owner-scoped generation is committed. Restart reuses
+the same generation and preserves new data; it never removes quarantine.
+Unknown, corrupt, ambiguous, tampered, or future state fails closed without
+mutation. Floret-owned schemas are outside this lifecycle.
 
 Session close uses the released durable four-hash coordinator. Redeven persists
 the opaque close identity and proof before teardown, commits authenticated
@@ -102,7 +111,7 @@ the new suite at the activation root and restart executes the newly committed
 activation path, so upgrades neither nest suites nor restart the old generation.
 This lets the installer switch an immutable Redeven/runtime pair atomically
 without mixing generations. The runtime module binds the current closed target,
-ReDevPlugin `0.6.5`, the released Rust IPC and WASM ABI, the exact product-build
+ReDevPlugin `0.6.7`, the released Rust IPC and WASM ABI, the exact product-build
 descriptor, persistent lease replay storage, and the released default limits.
 The Linux binary is built with Rust 1.88.0 from the attested package set and
 travels with SBOM, provenance, notices, and signature evidence. Missing,
@@ -117,7 +126,7 @@ alternate process, add hostcalls, or inspect IPC frames.
 
 Env App owns one authenticated same-origin fetch adapter, one
 `PluginPlatformClient`, one shared `PluginSurfaceScope`, and one serial
-placement coordinator. Catalog and lifecycle calls use generated v0.6.5 DTOs.
+placement coordinator. Catalog and lifecycle calls use generated v0.6.7 DTOs.
 Every mutation carries the current management revision; outcome-unknown errors
 tear down affected surfaces and refresh inventory without automatic retry. The
 Plugin Center mutation lane remains occupied until that local invalidation has
@@ -144,7 +153,7 @@ is released and conformance-tested.
 # Boundaries
 
 The canonical ownership rules are in [ReDevPlugin host integration boundary](redevplugin-boundary.md).
-This concept owns only the concrete Redeven v0.6.5 integration shape.
+This concept owns only the concrete Redeven v0.6.7 integration shape.
 
 Manifest surfaces remain `view|command|background` with semantic intent. No
 Activity, Workbench, widget, settings, navigation, or product-layout fields are

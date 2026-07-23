@@ -35,6 +35,12 @@ Persistent registry, policy, permission, settings, data, secret, connector, and
 worker ownership follows ReDevPlugin `user` or `environment` resource scope.
 Short-lived surfaces, handles, confirmations, operations, streams, and token
 audiences bind all four active hashes. Unknown legacy ownership is not guessed.
+Before those stores open, the released owner-scope migration atomically retains
+recognized `v0.6.5` state in quarantine and commits a fresh scoped generation.
+Restart reuses the committed generation and preserves new data; quarantine is
+never automatically deleted. Unknown, corrupt, ambiguous, tampered, or future
+state blocks startup without mutation. The migration is confined to
+ReDevPlugin-owned state and never inspects Floret-owned schemas.
 
 Session removal is a durable four-hash teardown. Redeven first persists the
 opaque close operation and proof, then the released coordinator fences new work,
