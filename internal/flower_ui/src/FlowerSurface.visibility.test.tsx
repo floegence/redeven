@@ -324,45 +324,6 @@ afterEach(() => {
 });
 
 describe('FlowerSurface companion visibility lifecycle', () => {
-  it('omits starter suggestions from the expanded companion empty state', async () => {
-    const idleThread = thread({ status: 'idle', read_status: readStatus(false) });
-    const harness = createAdapterHarness({
-      listThreads: vi.fn(async () => [idleThread]),
-      loadThread: vi.fn(async () => bootstrap(idleThread)),
-    });
-    renderSurface(harness.adapter, true, true);
-
-    await waitUntil(() => Boolean(host.querySelector('.flower-empty-state')), 'companion empty state did not render');
-
-    const emptyState = host.querySelector('.flower-empty-state') as HTMLElement;
-    expect(emptyState.dataset.flowerEmptySuggestions).toBe('hidden');
-    expect(emptyState.querySelector('.flower-empty-hero')).not.toBeNull();
-    expect(emptyState.querySelector('.flower-empty-hint')).not.toBeNull();
-    expect(emptyState.querySelector('.flower-empty-suggestions')).toBeNull();
-  });
-
-  it('keeps actionable starter suggestions on the dedicated Flower page', async () => {
-    const idleThread = thread({ status: 'idle', read_status: readStatus(false) });
-    const harness = createAdapterHarness({
-      listThreads: vi.fn(async () => [idleThread]),
-      loadThread: vi.fn(async () => bootstrap(idleThread)),
-    });
-    renderSurface(harness.adapter, true, true, undefined, 'full');
-
-    await waitUntil(() => Boolean(host.querySelector('.flower-empty-state')), 'full-page empty state did not render');
-
-    const emptyState = host.querySelector('.flower-empty-state') as HTMLElement;
-    const suggestionButtons = emptyState.querySelectorAll<HTMLButtonElement>('.flower-empty-suggestions button');
-    expect(emptyState.dataset.flowerEmptySuggestions).toBe('visible');
-    expect(suggestionButtons).toHaveLength(4);
-
-    suggestionButtons[0]?.click();
-    await flushAsync();
-
-    expect((host.querySelector('textarea') as HTMLTextAreaElement).value)
-      .toBe('Review the selected workspace and tell me the highest-value next step.');
-  });
-
   it('keeps the ordinary composer textarea mounted while the companion expands and collapses', async () => {
     const idleThread = thread({
       status: 'idle',

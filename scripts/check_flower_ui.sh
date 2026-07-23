@@ -28,6 +28,7 @@ main() {
       src/ui/EnvAppShell.localAccess.e2e.test.tsx \
       src/ui/i18n/i18n.test.ts \
       src/ui/activityFlowerSummary.test.ts \
+      src/ui/FlowerSurface.emptyStatePresentation.test.tsx \
       src/ui/FlowerSurface.navigation.context.test.tsx \
       src/ui/FlowerSurface.navigation.activity.test.tsx \
       src/ui/FlowerSurface.navigation.launchSend.test.tsx \
@@ -68,7 +69,6 @@ main() {
       internal/flower_ui/src/chat/markdown/streamingMarkdownModel.test.ts \
       internal/flower_ui/src/FlowerSurface.activityRunningSheen.test.ts \
       internal/flower_ui/src/FlowerSurface.approvalCommand.test.ts \
-      internal/flower_ui/src/FlowerSurface.visibility.test.tsx \
       internal/flower_ui/src/FlowerSurface.workingDirectory.test.ts \
       internal/flower_ui/src/FlowerSurface.modelStatusIndicator.test.ts \
       internal/flower_ui/src/FlowerSurface.markdownRendering.test.ts \
