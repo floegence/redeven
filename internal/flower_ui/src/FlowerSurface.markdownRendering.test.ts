@@ -60,7 +60,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).not.toContain("case 'running':\n        return <Terminal");
   });
 
-  it('renders context usage in the composer actions and model status in the bottom dock outside timeline entries', () => {
+  it('renders context usage in standard actions and compact companion More outside timeline entries', () => {
     const src = surfaceSource();
     const timelineListIndex = src.indexOf('<For each={visibleTimelineEntryKeys()}>');
     const headerIndex = src.indexOf('flower-chat-header flower-chat-header');
@@ -71,7 +71,8 @@ describe('FlowerSurface markdown rendering boundary', () => {
     const composerAnchorIndex = src.indexOf('flower-composer-anchor', statusLaneIndex);
     const composerIndex = src.indexOf('flower-composer flower-chat-input-floating');
     const composerActionsIndex = src.indexOf('flower-composer-actions');
-    const contextIndicatorIndex = src.indexOf('<FlowerComposerContextIndicator');
+    const compactContextIndicatorIndex = src.indexOf('<FlowerComposerContextIndicator');
+    const contextIndicatorIndex = src.indexOf('<FlowerComposerContextIndicator', compactContextIndicatorIndex + 1);
     const submitIndex = src.indexOf('flower-composer-submit');
 
     expect(headerIndex).toBeGreaterThanOrEqual(0);
@@ -84,6 +85,7 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(commandMenuIndex).toBeLessThan(composerIndex);
     expect(composerIndex).toBeGreaterThan(composerAnchorIndex);
     expect(composerActionsIndex).toBeGreaterThan(composerIndex);
+    expect(compactContextIndicatorIndex).toBeGreaterThanOrEqual(0);
     expect(contextIndicatorIndex).toBeGreaterThan(composerActionsIndex);
     expect(submitIndex).toBeGreaterThan(contextIndicatorIndex);
     expect(src).toContain('const selectedModelIOStatus = createMemo<FlowerModelIOStatus | null>(() => selectedThread()?.model_io_status ?? null)');
@@ -91,7 +93,8 @@ describe('FlowerSurface markdown rendering boundary', () => {
     expect(src).toContain('<Show when={selectedThreadHasModelStatus()}>');
     expect(src).toContain('const selectedModelStatusIndicator = () => modelStatusIndicator(selectedModelIOStatus(), selectedModelStatusLabel())');
     expect(src).toContain('{selectedModelStatusIndicator()}');
-    expect(src).toContain('<Show when={selectedContextUsage()}>');
+    expect(src).toContain('data-flower-composer-more-item="context"');
+    expect(src).toContain('<Show when={!companionCompactComposer() && selectedContextUsage()}>');
     expect(src).toContain('usage={contextUsage().usage}');
     expect(src).toContain('freshness={contextUsage().freshness}');
     expect(src).toContain('copy().chat.modelStatus');
