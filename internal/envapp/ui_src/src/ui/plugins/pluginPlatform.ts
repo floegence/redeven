@@ -8,6 +8,7 @@ import {
   type PluginOpenSurfaceInSlotOptions,
   type PluginOpenSurfaceRequest,
   type PluginSurfaceHost,
+  type PluginSurfaceInteractionEvent,
 } from '@floegence/redevplugin-ui';
 
 import { prepareLocalApiRequestInit } from '../services/localApi';
@@ -19,6 +20,12 @@ export const redevPluginAPIPath = '/_redevplugin/api/plugins';
 export type RedevenPluginPlatform = Readonly<{
   client: PluginPlatformClient;
   close: () => Promise<void>;
+}>;
+
+export type { PluginSurfaceInteractionEvent };
+
+type RedevenPluginOpenSurfaceOptions = Omit<PluginOpenSurfaceInSlotOptions, 'signal'> & Readonly<{
+  onInteraction?: (event: PluginSurfaceInteractionEvent) => void;
 }>;
 
 export function createRedevenPluginPlatform(options: Readonly<{
@@ -54,7 +61,7 @@ export type PluginSurfacePlacementCoordinator = Readonly<{
   open: (
     slot: PluginSurfaceSlot,
     request: PluginOpenSurfaceRequest,
-    options?: Omit<PluginOpenSurfaceInSlotOptions, 'signal'>,
+    options?: RedevenPluginOpenSurfaceOptions,
   ) => Promise<PluginSurfaceHost>;
   setVisible: (slot: PluginSurfaceSlot, visible: boolean) => void;
   fail: (slot: PluginSurfaceSlot, error: Error) => Promise<void>;

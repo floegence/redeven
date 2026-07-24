@@ -19,6 +19,7 @@ import { canLaunchProcess } from '../utils/permission';
 import { envWidgetTypeForSurface, type EnvWorkbenchHandoffAnchor } from '../envViewMode';
 import { useI18n } from '../i18n';
 import { useEnvContext } from '../pages/EnvContext';
+import type { PluginSurfaceLaunchTarget } from '../plugins/pluginTypes';
 import { isDesktopStateStorageAvailable, readUIStorageJSON, writeUIStorageJSON } from '../services/uiStorage';
 import { useTerminalSessionCatalog } from '../services/terminalSessionCatalog';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
@@ -58,6 +59,11 @@ import {
   EnvWorkbenchInstancesContext,
   type EnvWorkbenchInstancesContextValue,
 } from './EnvWorkbenchInstancesContext';
+import {
+  WorkbenchPluginSurfaceContext,
+  type WorkbenchPluginSurfaceContextValue,
+  type WorkbenchPluginSurfaceController,
+} from './WorkbenchPluginSurfaceContext';
 import {
   buildWorkbenchFileBrowserTitle,
   buildWorkbenchFilePreviewTitle,
@@ -691,7 +697,12 @@ function waitForAbortOrTimeout(signal: AbortSignal, timeoutMs: number): Promise<
   });
 }
 
-export function EnvWorkbenchPage() {
+export type EnvWorkbenchPageProps = Readonly<{
+  pluginSurfaceHost?: WorkbenchPluginSurfaceContextValue;
+  registerPluginSurfaceController?: (controller: WorkbenchPluginSurfaceController | null) => void;
+}>;
+
+export function EnvWorkbenchPage(props: EnvWorkbenchPageProps = {}) {
   const env = useEnvContext();
   const protocol = useProtocol();
   const terminalCatalog = useTerminalSessionCatalog();
@@ -735,6 +746,8 @@ export function EnvWorkbenchPage() {
   const [previewOpenRequests, setPreviewOpenRequests] = createSignal<Record<string, WorkbenchOpenFilePreviewRequest>>({});
   const [focusHistory, setFocusHistory] = createSignal<string[]>([]);
   const [widgetRemoveGuards, setWidgetRemoveGuards] = createSignal<Record<string, () => boolean>>({});
+  const pluginSurfaceCloseByWidgetID = new Map<string, () => Promise<boolean>>();
+  const closingPluginWidgetIDs = new Set<string>();
   const [localOwnerHandoffActive, setLocalOwnerHandoffActive] = createSignal(false);
   const [surfaceHost, setSurfaceHost] = createSignal<HTMLDivElement>();
   const [workbenchHudMount, setWorkbenchHudMount] = createSignal<HTMLDivElement | null>(null);
@@ -1280,7 +1293,11 @@ export function EnvWorkbenchPage() {
       }
       return item;
     };
-    const localizedContextItems = context.items.map(localizeWorkbenchMenuItem);
+    const localizedContextItems = context.items.flatMap((item) => (
+      workbenchWidgetTypeFromMenuID(item.id, 'add') === 'redeven.plugin'
+        ? []
+        : [localizeWorkbenchMenuItem(item)]
+    ));
     const disabled = workbenchState().locked || context.widgets.length <= 0;
     const tidyItem: WorkbenchContextMenuItem = {
       id: 'redeven-tidy-by-type',
@@ -1361,6 +1378,7 @@ export function EnvWorkbenchPage() {
     widgetType: string,
     desiredState: RuntimeWorkbenchWidgetStateData,
     retry = true,
+    force = false,
   ): Promise<RuntimeWorkbenchWidgetState | null> => {
     const normalizedWidgetId = compact(widgetId);
     const normalizedWidgetType = compact(widgetType);
@@ -1368,7 +1386,7 @@ export function EnvWorkbenchPage() {
       return null;
     }
     const current = runtimeWidgetStateById()[normalizedWidgetId];
-    if (current && runtimeWorkbenchWidgetStateDataEqual(current.state, desiredState)) {
+    if (!force && current && runtimeWorkbenchWidgetStateDataEqual(current.state, desiredState)) {
       return current;
     }
     try {
@@ -1387,7 +1405,7 @@ export function EnvWorkbenchPage() {
         if (latest && runtimeWorkbenchWidgetStateDataEqual(latest.state, desiredState)) {
           return latest;
         }
-        return putSharedWidgetState(normalizedWidgetId, normalizedWidgetType, desiredState, false);
+        return putSharedWidgetState(normalizedWidgetId, normalizedWidgetType, desiredState, false, force);
       }
       console.warn('Failed to persist workbench widget state:', error);
       return null;
@@ -2130,6 +2148,185 @@ export function EnvWorkbenchPage() {
     }
   };
 
+  createEffect(() => {
+    for (const state of runtimeSnapshot().widget_states) {
+      if (state.widget_type !== 'redeven.plugin' || state.state.kind !== 'plugin') continue;
+      updateWidgetTitle(state.widget_id, state.state.display_name || state.state.plugin_id);
+    }
+  });
+
+  const pluginStateMatchesTarget = (
+    state: RuntimeWorkbenchWidgetState,
+    target: Pick<PluginSurfaceLaunchTarget, 'pluginInstanceID' | 'surfaceID'>,
+  ) => state.widget_type === 'redeven.plugin'
+    && state.state.kind === 'plugin'
+    && state.state.plugin_instance_id === target.pluginInstanceID
+    && state.state.surface_id === target.surfaceID;
+
+  const waitForRuntimePluginWidget = async (widgetId: string): Promise<void> => {
+    const deadline = Date.now() + 5_000;
+    while (Date.now() < deadline) {
+      if (runtimeSnapshot().widgets.some((widget) => (
+        widget.widget_id === widgetId && widget.widget_type === 'redeven.plugin'
+      ))) {
+        return;
+      }
+      await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 20));
+    }
+    throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
+  };
+
+  const openPluginWorkbenchSurface = async (target: PluginSurfaceLaunchTarget): Promise<void> => {
+    const api = surfaceApi();
+    if (!api || !runtimeLayoutReady()) {
+      throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
+    }
+
+    const currentState = runtimeSnapshot().widget_states.find((state) => pluginStateMatchesTarget(state, target));
+    let widget = currentState ? api.findWidgetById(currentState.widget_id) : null;
+    const created = !widget;
+    if (!widget) {
+      widget = api.createWidget('redeven.plugin', { centerViewport: false });
+    }
+    if (!widget) {
+      throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
+    }
+
+    const widgetID = widget.id;
+    const title = target.displayName ?? target.pluginID;
+    updateWidgetTitle(widgetID, title);
+    api.focusWidget(widget, { centerViewport: created });
+    try {
+      if (created) await waitForRuntimePluginWidget(widgetID);
+      if (
+        currentState?.state.kind === 'plugin'
+        && (
+          currentState.state.plugin_id !== target.pluginID
+          || currentState.state.expected_management_revision !== target.expectedManagementRevision
+        )
+      ) {
+        const close = pluginSurfaceCloseByWidgetID.get(widgetID);
+        if (close && !(await close())) throw new Error(i18n.t('uiCopy.plugin.surfaceCleanupFailed'));
+        pluginSurfaceCloseByWidgetID.delete(widgetID);
+      }
+      const persisted = await putSharedWidgetState(widgetID, 'redeven.plugin', {
+        kind: 'plugin',
+        plugin_instance_id: target.pluginInstanceID,
+        plugin_id: target.pluginID,
+        surface_id: target.surfaceID,
+        display_name: target.displayName ?? target.pluginID,
+        expected_management_revision: target.expectedManagementRevision,
+      }, true, created);
+      if (!persisted) throw new Error(i18n.t('uiCopy.plugin.surfaceFailed'));
+    } catch (error) {
+      if (created) removeWidget(widgetID);
+      throw error;
+    }
+  };
+
+  const closePluginWorkbenchSurface = async (
+    target: Pick<PluginSurfaceLaunchTarget, 'pluginInstanceID' | 'surfaceID'>,
+  ): Promise<void> => {
+    const matching = runtimeSnapshot().widget_states.filter((state) => pluginStateMatchesTarget(state, target));
+    for (const state of matching) {
+      const close = pluginSurfaceCloseByWidgetID.get(state.widget_id);
+      if (close && !(await close())) {
+        throw new Error(i18n.t('uiCopy.plugin.surfaceCleanupFailed'));
+      }
+      pluginSurfaceCloseByWidgetID.delete(state.widget_id);
+      removeWidget(state.widget_id);
+    }
+  };
+
+  const closePluginWorkbenchSurfaces = async (pluginInstanceID: string): Promise<void> => {
+    const matching = runtimeSnapshot().widget_states.filter((state) => (
+      state.widget_type === 'redeven.plugin'
+      && state.state.kind === 'plugin'
+      && state.state.plugin_instance_id === pluginInstanceID
+    ));
+    for (const state of matching) {
+      const close = pluginSurfaceCloseByWidgetID.get(state.widget_id);
+      if (close && !(await close())) {
+        throw new Error(i18n.t('uiCopy.plugin.surfaceCleanupFailed'));
+      }
+      pluginSurfaceCloseByWidgetID.delete(state.widget_id);
+      removeWidget(state.widget_id);
+    }
+  };
+
+  const closeAllPluginWorkbenchSurfaces = async (): Promise<void> => {
+    const instanceIDs = Array.from(new Set(runtimeSnapshot().widget_states.flatMap((state) => (
+      state.widget_type === 'redeven.plugin' && state.state.kind === 'plugin'
+        ? [state.state.plugin_instance_id]
+        : []
+    ))));
+    for (const pluginInstanceID of instanceIDs) {
+      await closePluginWorkbenchSurfaces(pluginInstanceID);
+    }
+  };
+
+  let pluginControllerTail = Promise.resolve();
+  const serializePluginControllerOperation = (operation: () => Promise<void>): Promise<void> => {
+    const next = pluginControllerTail.then(operation, operation);
+    pluginControllerTail = next.catch(() => undefined);
+    return next;
+  };
+  const pluginSurfaceController: WorkbenchPluginSurfaceController = {
+    open: (target) => serializePluginControllerOperation(() => openPluginWorkbenchSurface(target)),
+    close: (target) => serializePluginControllerOperation(() => closePluginWorkbenchSurface(target)),
+    closePlugin: (pluginInstanceID) => serializePluginControllerOperation(() => closePluginWorkbenchSurfaces(pluginInstanceID)),
+    closeAll: () => serializePluginControllerOperation(closeAllPluginWorkbenchSurfaces),
+    listPluginTargets: (pluginInstanceID) => runtimeSnapshot().widget_states.flatMap((state) => (
+      state.widget_type === 'redeven.plugin'
+      && state.state.kind === 'plugin'
+      && state.state.plugin_instance_id === pluginInstanceID
+        ? [{
+          pluginID: state.state.plugin_id,
+          pluginInstanceID: state.state.plugin_instance_id,
+          surfaceID: state.state.surface_id,
+          displayName: state.state.display_name,
+          expectedManagementRevision: state.state.expected_management_revision,
+          preferredPlacement: 'workbench' as const,
+        }]
+        : []
+    )),
+  };
+  const reconcilingPluginWidgetIDs = new Set<string>();
+  createEffect(() => {
+    const resolver = props.pluginSurfaceHost?.resolveTarget;
+    if (!resolver) return;
+    for (const state of runtimeSnapshot().widget_states) {
+      if (state.widget_type !== 'redeven.plugin' || state.state.kind !== 'plugin') continue;
+      const target = resolver({
+        pluginID: state.state.plugin_id,
+        pluginInstanceID: state.state.plugin_instance_id,
+        surfaceID: state.state.surface_id,
+        displayName: state.state.display_name,
+        expectedManagementRevision: state.state.expected_management_revision,
+        preferredPlacement: 'workbench',
+      });
+      if (
+        !target
+        || (
+          target.expectedManagementRevision === state.state.expected_management_revision
+          && (target.displayName ?? target.pluginID) === state.state.display_name
+        )
+        || reconcilingPluginWidgetIDs.has(state.widget_id)
+      ) {
+        continue;
+      }
+      reconcilingPluginWidgetIDs.add(state.widget_id);
+      void pluginSurfaceController.open(target)
+        .catch(props.pluginSurfaceHost.onRetirementError)
+        .finally(() => reconcilingPluginWidgetIDs.delete(state.widget_id));
+    }
+  });
+  createEffect(() => {
+    if (!props.registerPluginSurfaceController) return;
+    props.registerPluginSurfaceController(pluginSurfaceController);
+    onCleanup(() => props.registerPluginSurfaceController?.(null));
+  });
+
   const markTerminalWidgetClosing = (widgetId: string) => {
     const normalizedWidgetId = compact(widgetId);
     if (!normalizedWidgetId) {
@@ -2189,6 +2386,37 @@ export function EnvWorkbenchPage() {
       return;
     }
     const widget = workbenchState().widgets.find((entry) => entry.id === normalizedWidgetId);
+    if (widget?.type === 'redeven.plugin') {
+      if (closingPluginWidgetIDs.has(normalizedWidgetId)) return;
+      closingPluginWidgetIDs.add(normalizedWidgetId);
+      const host = surfaceHost();
+      const widgetElement = host?.querySelector(
+        `[data-redeven-workbench-widget-id="${escapeWorkbenchWidgetIdSelectorValue(normalizedWidgetId)}"]`,
+      );
+      if (widgetElement instanceof HTMLElement) {
+        widgetElement.setAttribute('data-redeven-workbench-widget-closing', 'true');
+        widgetElement.style.pointerEvents = 'none';
+      }
+      const releaseInteraction = beginLayoutInteractionHandle('widget_close');
+      void serializePluginControllerOperation(async () => {
+        try {
+          const close = pluginSurfaceCloseByWidgetID.get(normalizedWidgetId);
+          if (close && !(await close())) return;
+          pluginSurfaceCloseByWidgetID.delete(normalizedWidgetId);
+          removeWidget(normalizedWidgetId, { ownVisualInteraction: false });
+        } catch (error) {
+          props.pluginSurfaceHost?.onRetirementError(error);
+        } finally {
+          closingPluginWidgetIDs.delete(normalizedWidgetId);
+          if (widgetElement instanceof HTMLElement && widgetElement.isConnected) {
+            widgetElement.removeAttribute('data-redeven-workbench-widget-closing');
+            widgetElement.style.pointerEvents = '';
+          }
+          releaseInteraction();
+        }
+      });
+      return;
+    }
     if (widget?.type === 'redeven.terminal') {
       scheduleWorkbenchTerminalWidgetSessionClose(normalizedWidgetId);
     }
@@ -2644,6 +2872,18 @@ export function EnvWorkbenchPage() {
         return next;
       });
     },
+    pluginSurfaceState: (widgetId) => {
+      const state = runtimeWidgetStateById()[compact(widgetId)];
+      return state?.widget_type === 'redeven.plugin' && state.state.kind === 'plugin'
+        ? state.state
+        : null;
+    },
+    registerPluginSurfaceClose: (widgetId, close) => {
+      const normalizedWidgetID = compact(widgetId);
+      if (!normalizedWidgetID) return;
+      if (close) pluginSurfaceCloseByWidgetID.set(normalizedWidgetID, close);
+      else pluginSurfaceCloseByWidgetID.delete(normalizedWidgetID);
+    },
     removeWidget,
     requestWidgetRemoval,
     updateWidgetTitle,
@@ -2669,8 +2909,9 @@ export function EnvWorkbenchPage() {
   });
 
   return (
-    <EnvWorkbenchInstancesContext.Provider value={workbenchInstancesContextValue}>
-      <div
+    <WorkbenchPluginSurfaceContext.Provider value={props.pluginSurfaceHost}>
+      <EnvWorkbenchInstancesContext.Provider value={workbenchInstancesContextValue}>
+        <div
         class={`redeven-workbench-page relative h-full min-h-0 overflow-hidden${layoutInteractionVisualActive() ? ' is-layout-interacting' : ''}`}
         data-testid="redeven-workbench-page"
         data-redeven-workbench-layout-interacting={layoutInteractionVisualActive() ? 'true' : 'false'}
@@ -2708,7 +2949,8 @@ export function EnvWorkbenchPage() {
           visible={workbenchCurtainVisible()}
           stage={workbenchCurtainStage()}
         />
-      </div>
-    </EnvWorkbenchInstancesContext.Provider>
+        </div>
+      </EnvWorkbenchInstancesContext.Provider>
+    </WorkbenchPluginSurfaceContext.Provider>
   );
 }

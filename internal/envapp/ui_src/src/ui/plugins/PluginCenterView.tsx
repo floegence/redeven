@@ -6,23 +6,30 @@ import { Dialog } from '@floegence/floe-webapp-core/ui';
 import { buildPluginCenterModel } from './pluginInventoryProjection';
 import { useI18n, type I18nHelpers } from '../i18n';
 import type {
+  ExternalPluginCommitResult,
+  ExternalPluginInspection,
+  ExternalPluginInspectionRequest,
   PluginCenterTab,
   PluginInventoryItem,
   PluginInventoryProjection,
   PluginLifecycleCommand,
 } from './pluginTypes';
 import { createUIPresentationEventRecorder } from '../services/uiPresentationTransactions';
+import { ExternalPluginInstallDialog } from './ExternalPluginInstallDialog';
 
 export type PluginCenterViewProps = {
   projection: PluginInventoryProjection;
   loading: boolean;
   error?: unknown;
-  selectedPluginID?: string;
+  selectedInventoryKey?: string;
+  focusRequest?: number;
   canManagePlugins: boolean;
   canOpenPluginSurfaces: boolean;
   onClose?: () => void;
   onRefresh: () => Promise<unknown> | unknown;
   onCommand: (command: PluginLifecycleCommand, signal: AbortSignal) => Promise<unknown> | unknown;
+  onInspectExternal?: (request: ExternalPluginInspectionRequest, signal: AbortSignal) => Promise<ExternalPluginInspection>;
+  onCommitExternal?: (inspection: ExternalPluginInspection, signal: AbortSignal) => Promise<ExternalPluginCommitResult>;
 };
 
 export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
@@ -30,10 +37,12 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const [activeTab, setActiveTab] = createSignal<PluginCenterTab>(initialTabForProjection(props.projection));
   const [initialTabResolved, setInitialTabResolved] = createSignal(Boolean(props.projection));
   const [query, setQuery] = createSignal('');
-  const [selectedPluginID, setSelectedPluginID] = createSignal<string | undefined>(props.selectedPluginID);
+  const [selectedInventoryKey, setSelectedInventoryKey] = createSignal<string | undefined>();
   const [commandError, setCommandError] = createSignal<string | null>(null);
   const [commandPending, setCommandPending] = createSignal(false);
   const [uninstallChoiceFor, setUninstallChoiceFor] = createSignal<string | null>(null);
+  const [externalDialogOpen, setExternalDialogOpen] = createSignal(false);
+  const [externalUpdateItem, setExternalUpdateItem] = createSignal<PluginInventoryItem | undefined>();
   let commandController: AbortController | undefined;
 
   onCleanup(() => commandController?.abort('Plugin Center disposed'));
@@ -68,11 +77,11 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   });
 
   createEffect(() => {
-    const requestedID = props.selectedPluginID;
-    if (!requestedID) return;
-    setSelectedPluginID(requestedID);
-    const requestedItem = allItems().find((item) => item.pluginID === requestedID);
+    const requestedKey = props.selectedInventoryKey;
+    if (!requestedKey) return;
+    const requestedItem = allItems().find((item) => item.inventoryKey === requestedKey);
     if (requestedItem) {
+      setSelectedInventoryKey(requestedItem.inventoryKey);
       tabSelection.commitNow(tabForItem(requestedItem));
     }
   });
@@ -88,18 +97,23 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
 
   createEffect(() => {
     const items = visibleItems();
-    const currentID = selectedPluginID();
-    if (currentID && items.some((item) => item.pluginID === currentID)) {
+    const currentKey = selectedInventoryKey();
+    if (currentKey && items.some((item) => item.inventoryKey === currentKey)) {
       return;
     }
-    setSelectedPluginID(items[0]?.pluginID);
+    setSelectedInventoryKey(items[0]?.inventoryKey);
   });
 
   const selectedItem = createMemo(() => (
-    visibleItems().find((item) => item.pluginID === selectedPluginID()) ??
-    allItems().find((item) => item.pluginID === selectedPluginID()) ??
+    visibleItems().find((item) => item.inventoryKey === selectedInventoryKey()) ??
+    allItems().find((item) => item.inventoryKey === selectedInventoryKey()) ??
     visibleItems()[0]
   ));
+
+  const openExternalDialog = (item?: PluginInventoryItem) => {
+    setExternalUpdateItem(item);
+    setExternalDialogOpen(true);
+  };
 
   const runCommand = async (command: PluginLifecycleCommand) => {
     if (commandPending()) return;
@@ -129,6 +143,9 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
       onQueryInput={setQuery}
       onRefresh={() => void props.onRefresh()}
       onTabSelect={tabSelection.request}
+      canManage={canManage()}
+      focusRequest={props.focusRequest}
+      onInstallExternal={() => openExternalDialog()}
       onClose={props.onClose}
     >
       <Show when={errorMessage()}>
@@ -150,18 +167,18 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
               {(item) => (
                 <button
                   type="button"
-                  data-plugin-center-item={item.pluginID}
+                  data-plugin-center-item={item.inventoryKey}
                   class={cn(
                     'flex w-full cursor-pointer items-start gap-3 border-b px-4 py-3 text-left transition hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                    selectedItem()?.pluginID === item.pluginID ? 'bg-primary/10 shadow-[inset_3px_0_0_hsl(var(--primary))]' : 'bg-background',
+                    selectedItem()?.inventoryKey === item.inventoryKey ? 'bg-primary/10 shadow-[inset_3px_0_0_hsl(var(--primary))]' : 'bg-background',
                   )}
-                  onClick={() => setSelectedPluginID(item.pluginID)}
+                  onClick={() => setSelectedInventoryKey(item.inventoryKey)}
                 >
                   <PluginIcon item={item} class="mt-0.5" />
                   <span class="min-w-0 flex-1">
                     <span class="flex min-w-0 items-center gap-2">
                       <span class="truncate text-sm font-semibold text-foreground">{item.displayName}</span>
-                      <span class="shrink-0 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">{i18n.t('uiCopy.plugin.official')}</span>
+                      <TrustBadge item={item} />
                     </span>
                     <span class="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{item.description}</span>
                     <span class="mt-2 flex flex-wrap items-center gap-2 text-[11px]">
@@ -187,8 +204,28 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
           uninstallChoiceFor={uninstallChoiceFor()}
           onCommand={(command) => void runCommand(command)}
           onAskUninstall={setUninstallChoiceFor}
+          onExternalUpdate={openExternalDialog}
         />
       </div>
+      <ExternalPluginInstallDialog
+        open={externalDialogOpen()}
+        updateItem={externalUpdateItem()}
+        onOpenChange={(open) => {
+          setExternalDialogOpen(open);
+          if (!open) setExternalUpdateItem(undefined);
+        }}
+        onInspect={props.onInspectExternal ?? (async () => {
+          throw new Error(i18n.t('uiCopy.plugin.external.inspectFailed'));
+        })}
+        onCommit={props.onCommitExternal ?? (async () => {
+          throw new Error(i18n.t('uiCopy.plugin.external.commitFailed'));
+        })}
+        onCommitted={async (result) => {
+          await props.onRefresh();
+          setSelectedInventoryKey(`instance:${result.plugin.plugin_instance_id}`);
+          tabSelection.commitNow('installed');
+        }}
+      />
     </PluginCenterShell>
   );
 }
@@ -203,23 +240,44 @@ export function PluginCenterShell(props: {
   onQueryInput: (query: string) => void;
   onRefresh: () => void;
   onTabSelect: (tab: PluginCenterTab) => void;
+  canManage: boolean;
+  focusRequest?: number;
+  onInstallExternal: () => void;
   onClose?: () => void;
   children: JSX.Element;
 }): JSX.Element {
   const i18n = useI18n();
+  let rootRef: HTMLElement | undefined;
+  let handledFocusRequest = 0;
+  createEffect(() => {
+    const request = props.focusRequest ?? 0;
+    if (request <= handledFocusRequest) return;
+    handledFocusRequest = request;
+    queueMicrotask(() => rootRef?.focus({ preventScroll: true }));
+  });
   return (
-    <section data-plugin-center-view class="flex h-full min-h-0 flex-col bg-background text-foreground">
+    <section ref={rootRef} data-plugin-center-view tabIndex={-1} class="flex h-full min-h-0 flex-col bg-background text-foreground">
       <div class="shrink-0 border-b bg-background/95 px-4 py-3">
         <div class="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
           <div class="min-w-0">
             <div class="flex items-center gap-2">
               <h1 class="truncate text-lg font-semibold tracking-tight">{i18n.t('uiCopy.plugin.centerTitle')}</h1>
-              <span class="rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-primary">{i18n.t('uiCopy.plugin.officialOnly')}</span>
+              <span class="rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-primary">{i18n.t('uiCopy.plugin.openSources')}</span>
             </div>
             <p class="mt-1 text-sm text-muted-foreground">{i18n.t('uiCopy.plugin.catalogDescription')}</p>
           </div>
-          <div class="flex shrink-0 items-center gap-2">
-            <label class="relative block w-[min(320px,52vw)]">
+          <div class="flex w-full min-w-0 flex-wrap items-center gap-2 lg:w-auto lg:max-w-[min(760px,65vw)] lg:justify-end">
+            <button
+              type="button"
+              data-plugin-center-install-external
+              class="inline-flex h-8 min-w-0 max-w-full cursor-pointer items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition hover:bg-muted disabled:cursor-not-allowed disabled:opacity-50"
+              disabled={!props.canManage || props.loading}
+              onClick={props.onInstallExternal}
+            >
+              <Download class="h-3.5 w-3.5" />
+              <span class="truncate">{i18n.t('uiCopy.plugin.installFromSource')}</span>
+            </button>
+            <label class="relative order-first block w-full min-w-0 sm:order-none sm:min-w-48 sm:flex-1 lg:w-[min(320px,52vw)] lg:flex-none">
               <Search class="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
               <input
                 data-plugin-center-search
@@ -271,6 +329,7 @@ export function PluginCenterDetails(props: {
   uninstallChoiceFor: string | null;
   onCommand: (command: PluginLifecycleCommand) => void;
   onAskUninstall: (pluginInstanceID: string) => void;
+  onExternalUpdate: (item: PluginInventoryItem) => void;
 }): JSX.Element {
   const i18n = useI18n();
   return (
@@ -286,7 +345,7 @@ export function PluginCenterDetails(props: {
               <div class="min-w-0">
                 <div class="flex flex-wrap items-center gap-2">
                   <h2 class="truncate text-xl font-semibold tracking-tight">{item().displayName}</h2>
-                  <span class="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-semibold text-primary">{i18n.t('uiCopy.plugin.official')}</span>
+                  <TrustBadge item={item()} />
                   <span class={statusPillClass(item())}>{statusLabel(item(), i18n)}</span>
                 </div>
                 <p class="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">{item().description}</p>
@@ -319,6 +378,7 @@ export function PluginCenterDetails(props: {
                   commandPending={props.commandPending}
                   onCommand={props.onCommand}
                   onAskUninstall={props.onAskUninstall}
+                  onExternalUpdate={props.onExternalUpdate}
                 />
               </div>
               <Show when={props.uninstallChoiceFor === item().pluginInstanceID}>
@@ -393,11 +453,11 @@ function PluginPermissionInventory(props: {
             <div>
               <h3 class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 <Shield class="h-3.5 w-3.5" />
-                {i18n.t('uiCopy.plugin.permissionsTitle')}
+                {i18n.t('uiCopy.plugin.permissionsTitle', { plugin: props.item.displayName })}
               </h3>
               <p class="mt-1 text-xs leading-5 text-muted-foreground">
                 {props.canManage
-                  ? i18n.t('uiCopy.plugin.permissionsDescription')
+                  ? i18n.t('uiCopy.plugin.permissionsDescription', { plugin: props.item.displayName })
                   : i18n.t('uiCopy.plugin.permissionsAdminRequired')}
               </p>
             </div>
@@ -413,6 +473,9 @@ function PluginPermissionInventory(props: {
                 const effective = () => permission.granted && !permission.deniedByGrant && !permission.grantBlockedByPolicy;
                 const granted = () => permission.granted && !permission.deniedByGrant;
                 const disabled = () => props.commandPending || (permission.grantBlockedByPolicy && !permission.granted);
+                const permissionName = () => permission.group === 'other'
+                  ? permission.permissionID
+                  : permissionLabel(permission.group, i18n);
                 return (
                   <div class="py-3" data-plugin-permission={permission.permissionID}>
                     <div class="flex items-start justify-between gap-4">
@@ -443,7 +506,7 @@ function PluginPermissionInventory(props: {
                           aria-checked={granted()}
                           data-state={granted() ? 'checked' : 'unchecked'}
                           disabled={disabled()}
-                          aria-label={i18n.t('uiCopy.plugin.permissionToggleLabel', { permission: permissionLabel(permission.group, i18n) })}
+                          aria-label={i18n.t('uiCopy.plugin.permissionToggleLabel', { permission: permissionName() })}
                           class={cn(
                             'relative mt-0.5 inline-flex h-6 w-10 shrink-0 cursor-pointer items-center rounded-full border transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
                             granted() ? 'border-primary bg-primary' : 'bg-muted',
@@ -470,15 +533,20 @@ function PluginPermissionInventory(props: {
           <Show when={confirmation()}>
             {(pending) => {
               const permission = () => inventory().permissions.find((item) => item.permissionID === pending().permissionID);
-              const permissionName = () => permission() ? permissionLabel(permission()!.group, i18n) : pending().permissionID;
+              const permissionName = () => {
+                const current = permission();
+                return !current || current.group === 'other'
+                  ? pending().permissionID
+                  : permissionLabel(current.group, i18n);
+              };
               return (
                 <Dialog
                   open
                   onOpenChange={(open) => { if (!open) setConfirmation(null); }}
                   title={i18n.t('uiCopy.plugin.permissionConfirmationTitle')}
                   description={pending().grant
-                    ? i18n.t('uiCopy.plugin.confirmGrantPermission', { permission: permissionName() })
-                    : i18n.t('uiCopy.plugin.confirmRevokePermission', { permission: permissionName() })}
+                    ? i18n.t('uiCopy.plugin.confirmGrantPermission', { permission: permissionName(), plugin: props.item.displayName })
+                    : i18n.t('uiCopy.plugin.confirmRevokePermission', { permission: permissionName(), plugin: props.item.displayName })}
                   footer={(
                     <div class="flex w-full justify-end gap-2">
                       <button type="button" class="cursor-pointer rounded-md border px-3 py-1.5 text-sm hover:bg-muted" onClick={() => setConfirmation(null)}>
@@ -505,21 +573,23 @@ function PluginPermissionInventory(props: {
   );
 }
 
-function permissionLabel(group: 'read' | 'execute' | 'delete' | 'images_write', i18n: I18nHelpers): string {
+function permissionLabel(group: 'read' | 'execute' | 'delete' | 'images_write' | 'other', i18n: I18nHelpers): string {
   switch (group) {
     case 'read': return i18n.t('uiCopy.plugin.permission.read.label');
     case 'execute': return i18n.t('uiCopy.plugin.permission.execute.label');
     case 'delete': return i18n.t('uiCopy.plugin.permission.delete.label');
     case 'images_write': return i18n.t('uiCopy.plugin.permission.images_write.label');
+    case 'other': return i18n.t('uiCopy.plugin.permission.other.label');
   }
 }
 
-function permissionDescription(group: 'read' | 'execute' | 'delete' | 'images_write', i18n: I18nHelpers): string {
+function permissionDescription(group: 'read' | 'execute' | 'delete' | 'images_write' | 'other', i18n: I18nHelpers): string {
   switch (group) {
     case 'read': return i18n.t('uiCopy.plugin.permission.read.description');
     case 'execute': return i18n.t('uiCopy.plugin.permission.execute.description');
     case 'delete': return i18n.t('uiCopy.plugin.permission.delete.description');
     case 'images_write': return i18n.t('uiCopy.plugin.permission.images_write.description');
+    case 'other': return i18n.t('uiCopy.plugin.permission.other.description');
   }
 }
 
@@ -574,9 +644,11 @@ function PluginActions(props: {
   commandPending: boolean;
   onCommand: (command: PluginLifecycleCommand) => void;
   onAskUninstall: (pluginInstanceID: string) => void;
+  onExternalUpdate: (item: PluginInventoryItem) => void;
 }) {
   const i18n = useI18n();
   const disabledManagement = () => !props.canManage || props.commandPending;
+  const disabledOpen = () => props.commandPending || !props.canOpenSurfaces;
   const item = () => props.item;
   return (
     <>
@@ -597,7 +669,7 @@ function PluginActions(props: {
           type="button"
           data-plugin-action="open"
           class="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={disabledManagement() || !props.canOpenSurfaces}
+          disabled={disabledOpen()}
           onClick={() => {
             const target = item().defaultLaunchTarget!;
             props.onCommand({
@@ -611,7 +683,27 @@ function PluginActions(props: {
           }}
         >
           <CheckCircle class="h-3.5 w-3.5" />
-          {i18n.t('common.actions.open')}
+          {i18n.t('uiCopy.plugin.openInActivity')}
+        </button>
+        <button
+          type="button"
+          data-plugin-action="open-workbench"
+          class="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={disabledOpen()}
+          onClick={() => {
+            const target = item().defaultLaunchTarget!;
+            props.onCommand({
+              type: 'open_surface',
+              pluginID: target.pluginID,
+              pluginInstanceID: target.pluginInstanceID,
+              surfaceID: target.surfaceID,
+              expectedManagementRevision: target.expectedManagementRevision,
+              placement: 'workbench',
+            });
+          }}
+        >
+          <Grid3x3 class="h-3.5 w-3.5" />
+          {i18n.t('uiCopy.plugin.openInWorkbench')}
         </button>
       </Show>
       <Show when={canEnablePlugin(item())}>
@@ -646,7 +738,7 @@ function PluginActions(props: {
           {i18n.t('uiCopy.plugin.disable')}
         </button>
       </Show>
-      <Show when={item().lifecycleState === 'update_available' && item().pluginInstanceID}>
+      <Show when={item().lifecycleState === 'update_available' && item().pluginInstanceID && item().officialCatalog}>
         <button
           type="button"
           data-plugin-action="update"
@@ -662,6 +754,18 @@ function PluginActions(props: {
         >
           <RefreshIcon class="h-3.5 w-3.5" />
           {i18n.t('uiCopy.plugin.update')}
+        </button>
+      </Show>
+      <Show when={item().pluginInstanceID && item().externalPackage}>
+        <button
+          type="button"
+          data-plugin-action="update-external"
+          class="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
+          disabled={disabledManagement()}
+          onClick={() => props.onExternalUpdate(item())}
+        >
+          <RefreshIcon class="h-3.5 w-3.5" />
+          {i18n.t('uiCopy.plugin.checkForUpdate')}
         </button>
       </Show>
       <Show when={item().pluginInstanceID}>
@@ -763,10 +867,32 @@ function statusPillClass(item: PluginInventoryItem): string {
   return 'rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground';
 }
 
+function TrustBadge(props: { item: PluginInventoryItem }): JSX.Element {
+  const i18n = useI18n();
+  return (
+    <span class={cn(
+      'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold',
+      props.item.trustBadge === 'official' || props.item.trustBadge === 'verified'
+        ? 'bg-primary/10 text-primary'
+        : props.item.trustBadge === 'blocked' || props.item.trustBadge === 'revoked'
+          ? 'bg-destructive/10 text-destructive'
+          : 'bg-[var(--redeven-status-warning-soft)] text-[var(--redeven-status-warning-foreground)]',
+    )}>
+      {trustLabel(props.item, i18n)}
+    </span>
+  );
+}
+
 function trustLabel(item: PluginInventoryItem, i18n: I18nHelpers): string {
   switch (item.trustBadge) {
     case 'official':
       return i18n.t('uiCopy.plugin.official');
+    case 'verified':
+      return i18n.t('uiCopy.plugin.verified');
+    case 'unsigned':
+      return i18n.t('uiCopy.plugin.unsigned');
+    case 'community':
+      return i18n.t('uiCopy.plugin.community');
     case 'revoked':
       return i18n.t('uiCopy.plugin.revoked');
     case 'blocked':

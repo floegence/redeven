@@ -10,7 +10,7 @@ import type {
   WorkbenchOpenFilePreviewRequest,
   WorkbenchOpenTerminalRequest,
 } from './workbenchInstanceState';
-import type { RuntimeWorkbenchPreviewItem } from './runtimeWorkbenchLayout';
+import type { RuntimeWorkbenchPluginWidgetState, RuntimeWorkbenchPreviewItem } from './runtimeWorkbenchLayout';
 
 export type EnvWorkbenchInstancesContextValue = Readonly<{
   latestWidgetIdByType: Accessor<Partial<Record<WorkbenchWidgetType, string>>>;
@@ -48,6 +48,8 @@ export type EnvWorkbenchInstancesContextValue = Readonly<{
   dispatchPreviewOpenRequest: (request: WorkbenchOpenFilePreviewRequest) => void;
   consumePreviewOpenRequest: (requestId: string) => void;
   registerWidgetRemoveGuard: (widgetId: string, guard: (() => boolean) | null) => void;
+  pluginSurfaceState: (widgetId: string) => RuntimeWorkbenchPluginWidgetState | null;
+  registerPluginSurfaceClose: (widgetId: string, close: (() => Promise<boolean>) | null) => void;
   removeWidget: (widgetId: string) => void;
   requestWidgetRemoval: (widgetId: string) => void;
   updateWidgetTitle: (widgetId: string, title: string) => void;

@@ -8,6 +8,7 @@ import (
 
 	"github.com/floegence/redevplugin/pkg/host"
 	"github.com/floegence/redevplugin/pkg/pluginpkg"
+	"github.com/floegence/redevplugin/pkg/registry"
 	"github.com/floegence/redevplugin/pkg/trust"
 )
 
@@ -25,8 +26,22 @@ type strictPackageTrustVerifier struct {
 	verifier trust.Ed25519Verifier
 }
 
+var (
+	_ host.PackageTrustVerifier                      = strictPackageTrustVerifier{}
+	_ host.ExternalPackageSignatureAssessor          = strictPackageTrustVerifier{}
+	_ host.ExternalPackageSignatureFreshnessAssessor = strictPackageTrustVerifier{}
+)
+
 func (v strictPackageTrustVerifier) VerifyPackageTrust(ctx context.Context, req host.PackageTrustVerificationRequest) (host.PackageTrustVerificationResult, error) {
 	return v.verifier.VerifyPackageTrust(ctx, req)
+}
+
+func (v strictPackageTrustVerifier) AssessExternalPackageSignature(ctx context.Context, req host.ExternalPackageSignatureAssessmentRequest) (registry.SignatureAssessment, error) {
+	return v.verifier.AssessExternalPackageSignature(ctx, req)
+}
+
+func (v strictPackageTrustVerifier) AssessExternalPackageSignatureFreshness(ctx context.Context, req host.ExternalPackageSignatureFreshnessRequest) (registry.SignatureAssessment, error) {
+	return v.verifier.AssessExternalPackageSignatureFreshness(ctx, req)
 }
 
 type officialSigningKeyring struct {

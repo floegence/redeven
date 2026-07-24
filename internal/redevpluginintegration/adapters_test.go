@@ -16,10 +16,12 @@ import (
 	"github.com/floegence/redeven/internal/diagnostics"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionhop"
+	"github.com/floegence/redevplugin/pkg/externalsource"
 	"github.com/floegence/redevplugin/pkg/host"
 	"github.com/floegence/redevplugin/pkg/manifest"
 	"github.com/floegence/redevplugin/pkg/observability"
 	"github.com/floegence/redevplugin/pkg/ownerscope"
+	"github.com/floegence/redevplugin/pkg/pluginpkg"
 	"github.com/floegence/redevplugin/pkg/registry"
 	"github.com/floegence/redevplugin/pkg/sessionctx"
 	"github.com/floegence/redevplugin/pkg/websecurity"
@@ -163,6 +165,32 @@ func TestSharedRuntimeManagementRequiresAdmin(t *testing.T) {
 		}
 		if !permissionsAllowAction(sessionPermissions{admin: true}, action) {
 			t.Fatalf("%s denied admin shared runtime control", action)
+		}
+	}
+}
+
+func TestExternalPackageAdmissionUsesExplicitPermissionTiers(t *testing.T) {
+	for _, action := range []host.ManagementAction{
+		host.ManagementActionInspectExternalPackage,
+		host.ManagementActionCommitExternalPackage,
+	} {
+		if permissionsAllowAction(sessionPermissions{read: true}, action) {
+			t.Fatalf("%s accepted read-only external package mutation", action)
+		}
+		if !permissionsAllowAction(sessionPermissions{admin: true}, action) {
+			t.Fatalf("%s denied admin external package mutation", action)
+		}
+	}
+	for _, action := range []host.ManagementAction{
+		host.ManagementActionQueryExternalPackageCommit,
+		host.ManagementActionListPermissionGrants,
+		host.ManagementActionGetPermissionRequirements,
+	} {
+		if permissionsAllowAction(sessionPermissions{}, action) {
+			t.Fatalf("%s accepted without read permission", action)
+		}
+		if !permissionsAllowAction(sessionPermissions{read: true}, action) {
+			t.Fatalf("%s denied read-only query", action)
 		}
 	}
 }
@@ -379,6 +407,16 @@ func TestPackageTrustVerifierUsesV5Provenance(t *testing.T) {
 	if incompleteRelease.TrustState != registry.TrustUntrusted {
 		t.Fatalf("incomplete release trust = %s, want %s", incompleteRelease.TrustState, registry.TrustUntrusted)
 	}
+
+	assessment, err := verifier.AssessExternalPackageSignature(context.Background(), host.ExternalPackageSignatureAssessmentRequest{
+		Package: pluginpkg.Package{},
+	})
+	if err != nil {
+		t.Fatalf("unsigned external package assessment error = %v", err)
+	}
+	if assessment.Status != registry.SignatureAbsent {
+		t.Fatalf("unsigned external package assessment = %s, want %s", assessment.Status, registry.SignatureAbsent)
+	}
 }
 
 func TestNewCreatesDurableReDevPluginState(t *testing.T) {
@@ -405,6 +443,7 @@ func TestNewCreatesDurableReDevPluginState(t *testing.T) {
 		"db/session_scopes.sqlite",
 		"trust/release-trust.sqlite",
 		"trust/trusted-time/ed25519-private.key",
+		"external-package-stage",
 		"assets",
 		"storage",
 	} {
@@ -417,6 +456,36 @@ func TestNewCreatesDurableReDevPluginState(t *testing.T) {
 	}
 }
 
+func TestNewClosesExternalStageWhenReleaseModuleFails(t *testing.T) {
+	stateDir := t.TempDir()
+	wantErr := errors.New("release module failed")
+	closeCalls := 0
+	var closedStage *externalsource.StageStore
+	opts := ownerScopeTestOptions(t, stateDir)
+	opts.newReleaseModule = func(string) (*host.ReleaseModule, host.PluginReleaseRef, func() error, error) {
+		return nil, host.PluginReleaseRef{}, nil, wantErr
+	}
+	opts.closeExternalStage = func(stage *externalsource.StageStore) error {
+		closeCalls++
+		closedStage = stage
+		return stage.Close()
+	}
+
+	integration, err := New(context.Background(), opts)
+	if integration != nil || !errors.Is(err, wantErr) {
+		t.Fatalf("New() = %#v, %v, want nil, %v", integration, err, wantErr)
+	}
+	if closeCalls != 1 {
+		t.Fatalf("external stage close calls = %d, want 1", closeCalls)
+	}
+	if closedStage == nil {
+		t.Fatal("external stage closer did not receive the opened store")
+	}
+	if _, err := closedStage.StageUpload(context.Background(), "owner_test", strings.NewReader("x"), 1); err == nil {
+		t.Fatal("external stage accepted an upload after release module failure")
+	}
+}
+
 func TestNewAutomaticallyMigratesV065OwnerScopeState(t *testing.T) {
 	ctx := context.Background()
 	stateDir := t.TempDir()
@@ -424,11 +493,8 @@ func TestNewAutomaticallyMigratesV065OwnerScopeState(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "db"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	legacyRegistry, err := registry.NewSQLiteStore(ctx, filepath.Join(root, "db", "registry.sqlite"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := legacyRegistry.Close(); err != nil {
+	legacyDatabaseMarker := filepath.Join("db", "closed_sessions.json")
+	if err := os.WriteFile(filepath.Join(root, legacyDatabaseMarker), []byte(`{"sessions":[]}`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	legacyMarker := filepath.Join("storage", "legacy-owner-unknown")
@@ -457,8 +523,8 @@ func TestNewAutomaticallyMigratesV065OwnerScopeState(t *testing.T) {
 	if raw, err := os.ReadFile(filepath.Join(quarantineRoot, legacyMarker)); err != nil || string(raw) != "legacy" {
 		t.Fatalf("quarantined legacy marker = %q, %v", raw, err)
 	}
-	if _, err := os.Stat(filepath.Join(quarantineRoot, "db", "registry.sqlite")); err != nil {
-		t.Fatalf("quarantined legacy registry: %v", err)
+	if _, err := os.Stat(filepath.Join(quarantineRoot, legacyDatabaseMarker)); err != nil {
+		t.Fatalf("quarantined legacy database marker: %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(generation.Path, "db", "registry.sqlite")); err != nil {
 		t.Fatalf("active generation registry: %v", err)

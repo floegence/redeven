@@ -1,6 +1,7 @@
 package workbenchlayout
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,10 +18,12 @@ const (
 	WidgetTypeFiles    = "redeven.files"
 	WidgetTypeTerminal = "redeven.terminal"
 	WidgetTypePreview  = "redeven.preview"
+	WidgetTypePlugin   = "redeven.plugin"
 
 	WidgetStateKindFiles    = "files"
 	WidgetStateKindTerminal = "terminal"
 	WidgetStateKindPreview  = "preview"
+	WidgetStateKindPlugin   = "plugin"
 
 	OpenPreviewStrategySameFileOrCreate    = "same_file_or_create"
 	OpenPreviewStrategyFocusLatestOrCreate = "focus_latest_or_create"
@@ -143,13 +146,39 @@ type WidgetState struct {
 }
 
 type WidgetStateData struct {
-	Kind         string       `json:"kind"`
-	CurrentPath  string       `json:"current_path,omitempty"`
-	RootID       string       `json:"root_id,omitempty"`
-	SessionIDs   []string     `json:"session_ids,omitempty"`
-	FontSize     *int         `json:"font_size,omitempty"`
-	FontFamilyID string       `json:"font_family_id,omitempty"`
-	Item         *PreviewItem `json:"item,omitempty"`
+	Kind                       string       `json:"kind"`
+	CurrentPath                string       `json:"current_path,omitempty"`
+	RootID                     string       `json:"root_id,omitempty"`
+	SessionIDs                 []string     `json:"session_ids,omitempty"`
+	FontSize                   *int         `json:"font_size,omitempty"`
+	FontFamilyID               string       `json:"font_family_id,omitempty"`
+	Item                       *PreviewItem `json:"item,omitempty"`
+	PluginInstanceID           string       `json:"plugin_instance_id,omitempty"`
+	PluginID                   string       `json:"plugin_id,omitempty"`
+	SurfaceID                  string       `json:"surface_id,omitempty"`
+	DisplayName                string       `json:"display_name,omitempty"`
+	ExpectedManagementRevision int64        `json:"expected_management_revision,omitempty"`
+	presentJSONFields          map[string]struct{}
+}
+
+func (d *WidgetStateData) UnmarshalJSON(data []byte) error {
+	type wire WidgetStateData
+	var decoded wire
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&decoded); err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	*d = WidgetStateData(decoded)
+	d.presentJSONFields = make(map[string]struct{}, len(fields))
+	for field := range fields {
+		d.presentJSONFields[field] = struct{}{}
+	}
+	return nil
 }
 
 type PreviewItem struct {
@@ -634,6 +663,8 @@ func widgetStateKindForType(widgetType string) (string, bool) {
 		return WidgetStateKindTerminal, true
 	case WidgetTypePreview:
 		return WidgetStateKindPreview, true
+	case WidgetTypePlugin:
+		return WidgetStateKindPlugin, true
 	default:
 		return "", false
 	}
@@ -650,12 +681,18 @@ func normalizeWidgetStateData(widgetType string, state WidgetStateData) (WidgetS
 
 	switch kind {
 	case WidgetStateKindFiles:
+		if err := rejectUnexpectedWidgetStateFields(state, "kind", "current_path", "root_id"); err != nil {
+			return WidgetStateData{}, err
+		}
 		path := normalizeAbsolutePath(state.CurrentPath)
 		if path == "" {
 			return WidgetStateData{}, &ValidationError{Message: "state.current_path is required"}
 		}
 		return WidgetStateData{Kind: kind, CurrentPath: path, RootID: normalizeRootID(state.RootID)}, nil
 	case WidgetStateKindTerminal:
+		if err := rejectUnexpectedWidgetStateFields(state, "kind", "session_ids", "font_size", "font_family_id"); err != nil {
+			return WidgetStateData{}, err
+		}
 		return WidgetStateData{
 			Kind:         kind,
 			SessionIDs:   normalizeSessionIDs(state.SessionIDs),
@@ -663,14 +700,86 @@ func normalizeWidgetStateData(widgetType string, state WidgetStateData) (WidgetS
 			FontFamilyID: normalizeTerminalFontFamilyID(state.FontFamilyID),
 		}, nil
 	case WidgetStateKindPreview:
+		if err := rejectUnexpectedWidgetStateFields(state, "kind", "item"); err != nil {
+			return WidgetStateData{}, err
+		}
 		item, err := normalizePreviewItem(state.Item)
 		if err != nil {
 			return WidgetStateData{}, err
 		}
 		return WidgetStateData{Kind: kind, Item: item}, nil
+	case WidgetStateKindPlugin:
+		if err := rejectUnexpectedWidgetStateFields(
+			state,
+			"kind",
+			"plugin_instance_id",
+			"plugin_id",
+			"surface_id",
+			"display_name",
+			"expected_management_revision",
+		); err != nil {
+			return WidgetStateData{}, err
+		}
+		if state.CurrentPath != "" || state.RootID != "" || len(state.SessionIDs) > 0 || state.FontSize != nil || state.FontFamilyID != "" || state.Item != nil {
+			return WidgetStateData{}, &ValidationError{Message: "state contains fields that are not allowed for plugin state"}
+		}
+		pluginInstanceID, err := normalizePluginStateIdentifier(state.PluginInstanceID, "plugin_instance_id", 256)
+		if err != nil {
+			return WidgetStateData{}, err
+		}
+		pluginID, err := normalizePluginStateIdentifier(state.PluginID, "plugin_id", 256)
+		if err != nil {
+			return WidgetStateData{}, err
+		}
+		surfaceID, err := normalizePluginStateIdentifier(state.SurfaceID, "surface_id", 256)
+		if err != nil {
+			return WidgetStateData{}, err
+		}
+		displayName := strings.TrimSpace(state.DisplayName)
+		if displayName == "" || len(displayName) > 512 {
+			return WidgetStateData{}, &ValidationError{Message: "state.display_name is required and must not exceed 512 bytes"}
+		}
+		if state.ExpectedManagementRevision <= 0 || state.ExpectedManagementRevision > 9_007_199_254_740_991 {
+			return WidgetStateData{}, &ValidationError{Message: "state.expected_management_revision must be a positive JavaScript-safe integer"}
+		}
+		return WidgetStateData{
+			Kind:                       kind,
+			PluginInstanceID:           pluginInstanceID,
+			PluginID:                   pluginID,
+			SurfaceID:                  surfaceID,
+			DisplayName:                displayName,
+			ExpectedManagementRevision: state.ExpectedManagementRevision,
+		}, nil
 	default:
 		return WidgetStateData{}, &ValidationError{Message: "unsupported widget state kind"}
 	}
+}
+
+func rejectUnexpectedWidgetStateFields(state WidgetStateData, allowed ...string) error {
+	if len(state.presentJSONFields) == 0 {
+		return nil
+	}
+	allowedSet := make(map[string]struct{}, len(allowed))
+	for _, field := range allowed {
+		allowedSet[field] = struct{}{}
+	}
+	for field := range state.presentJSONFields {
+		if _, ok := allowedSet[field]; !ok {
+			return &ValidationError{Message: fmt.Sprintf("state.%s is not allowed for state.kind %q", field, strings.TrimSpace(state.Kind))}
+		}
+	}
+	return nil
+}
+
+func normalizePluginStateIdentifier(value string, fieldName string, maxLength int) (string, error) {
+	identifier := strings.TrimSpace(value)
+	if identifier == "" {
+		return "", &ValidationError{Message: fmt.Sprintf("state.%s is required", fieldName)}
+	}
+	if len(identifier) > maxLength {
+		return "", &ValidationError{Message: fmt.Sprintf("state.%s is too long", fieldName)}
+	}
+	return identifier, nil
 }
 
 func normalizeAbsolutePath(value string) string {

@@ -112,7 +112,17 @@ export type RuntimeWorkbenchOpenPreviewRequest = Readonly<{
 export type RuntimeWorkbenchWidgetStateData =
   | Readonly<{ kind: 'files'; current_path: string; root_id?: string }>
   | Readonly<{ kind: 'terminal'; session_ids: string[]; font_size?: number; font_family_id?: string }>
-  | Readonly<{ kind: 'preview'; item: RuntimeWorkbenchPreviewItem | null }>;
+  | Readonly<{ kind: 'preview'; item: RuntimeWorkbenchPreviewItem | null }>
+  | RuntimeWorkbenchPluginWidgetState;
+
+export type RuntimeWorkbenchPluginWidgetState = Readonly<{
+  kind: 'plugin';
+  plugin_instance_id: string;
+  plugin_id: string;
+  surface_id: string;
+  display_name: string;
+  expected_management_revision: number;
+}>;
 
 export type RuntimeWorkbenchWidgetState = Readonly<{
   widget_id: string;
@@ -373,6 +383,44 @@ function normalizeRuntimeWorkbenchWidgetStateData(
   }
   if (widgetType === 'redeven.preview' && (!kind || kind === 'preview')) {
     return { kind: 'preview', item: normalizePreviewItem(value.item) };
+  }
+  if (widgetType === 'redeven.plugin' && kind === 'plugin') {
+    const allowedFields = new Set([
+      'kind',
+      'plugin_instance_id',
+      'plugin_id',
+      'surface_id',
+      'display_name',
+      'expected_management_revision',
+    ]);
+    if (Object.keys(value).some((field) => !allowedFields.has(field))) return null;
+    const pluginInstanceID = compact(value.plugin_instance_id);
+    const pluginID = compact(value.plugin_id);
+    const surfaceID = compact(value.surface_id);
+    const displayName = compact(value.display_name);
+    const expectedManagementRevision = finiteNumber(value.expected_management_revision, 0);
+    if (
+      !pluginInstanceID
+      || pluginInstanceID.length > 256
+      || !pluginID
+      || pluginID.length > 256
+      || !surfaceID
+      || surfaceID.length > 256
+      || !displayName
+      || displayName.length > 512
+      || expectedManagementRevision <= 0
+      || !Number.isSafeInteger(expectedManagementRevision)
+    ) {
+      return null;
+    }
+    return {
+      kind: 'plugin',
+      plugin_instance_id: pluginInstanceID,
+      plugin_id: pluginID,
+      surface_id: surfaceID,
+      display_name: displayName,
+      expected_management_revision: expectedManagementRevision,
+    };
   }
   return null;
 }
@@ -848,6 +896,13 @@ export function runtimeWorkbenchWidgetStateDataEqual(
       && leftItem.path === rightItem.path
       && leftItem.name === rightItem.name
       && leftItem.size === rightItem.size;
+  }
+  if (left.kind === 'plugin' && right.kind === 'plugin') {
+    return left.plugin_instance_id === right.plugin_instance_id
+      && left.plugin_id === right.plugin_id
+      && left.surface_id === right.surface_id
+      && left.display_name === right.display_name
+      && left.expected_management_revision === right.expected_management_revision;
   }
   return false;
 }

@@ -21,6 +21,8 @@ export type ActivityPluginSurfaceWindowProps = {
   focusRequest: number;
   onActivate: (instanceID: string) => void;
   onClosed: (instanceID: string) => void;
+  serializeClose?: (close: () => Promise<void>) => Promise<void>;
+  registerRequestClose?: (instanceID: string, close: (() => Promise<void>) | null) => void;
   onEndPluginSession: () => Promise<boolean>;
   onRetirementError: (error: unknown) => void;
 };
@@ -44,6 +46,7 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
   const [endingSession, setEndingSession] = createSignal(false);
   const [surface, setSurface] = createSignal<HTMLElement | null>(null);
   let closeBody: (() => Promise<boolean>) | null = null;
+  let recoveryButton: HTMLButtonElement | undefined;
   const restoreFocus = typeof document !== 'undefined' && document.activeElement instanceof HTMLElement
     ? document.activeElement
     : null;
@@ -56,7 +59,7 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
   });
   const windowVisible = () => props.visible && (!layout.isMobile() || props.active);
 
-  const requestClose = async () => {
+  const retire = async () => {
     if (closing()) return;
     if (!closeBody) return;
     setClosing(true);
@@ -70,6 +73,9 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
       setClosing(false);
     }
   };
+  const requestClose = () => props.serializeClose ? props.serializeClose(retire) : retire();
+
+  props.registerRequestClose?.(props.instanceID, retire);
 
   const bindSurface = (next: HTMLElement | null) => {
     const previous = surface();
@@ -154,6 +160,11 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
     windowSurface.tabIndex = -1;
   });
 
+  createEffect(() => {
+    if (!closeFailed() || !props.active) return;
+    queueMicrotask(() => recoveryButton?.focus());
+  });
+
   let handledFocusRequest = 0;
   createEffect(() => {
     const windowSurface = surface();
@@ -171,6 +182,7 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
   });
 
   onCleanup(() => {
+    props.registerRequestClose?.(props.instanceID, null);
     bindSurface(null);
     if (props.active && restoreFocus?.isConnected) restoreFocus.focus();
   });
@@ -200,17 +212,30 @@ export function ActivityPluginSurfaceWindow(props: ActivityPluginSurfaceWindowPr
         coordinator={props.coordinator}
         confirmationQueue={props.confirmationQueue}
         target={props.target}
-        visible={windowVisible()}
+        visible={windowVisible() && !closeFailed()}
         registerClose={(close) => { closeBody = close; }}
+        onInteraction={(event) => {
+          if (event.kind === 'activation' || event.kind === 'focus' || event.kind === 'action') {
+            props.onActivate(props.instanceID);
+          }
+        }}
         onRetirementError={props.onRetirementError}
       />
       <Show when={closeFailed()}>
-        <div class="absolute inset-0 z-20 flex items-center justify-center bg-background p-6" data-plugin-surface-recovery>
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby={`plugin-surface-recovery-title-${props.instanceID}`}
+          aria-describedby={`plugin-surface-recovery-description-${props.instanceID}`}
+          class="absolute inset-0 z-20 flex items-center justify-center bg-background p-6"
+          data-plugin-surface-recovery
+        >
           <div class="max-w-md text-center">
             <AlertTriangle class="mx-auto h-6 w-6 text-destructive" />
-            <h2 class="mt-3 text-sm font-semibold">{i18n.t('uiCopy.plugin.needsAttention')}</h2>
-            <p class="mt-2 text-sm leading-6 text-muted-foreground">{i18n.t('uiCopy.plugin.surfaceCleanupFailed')}</p>
+            <h2 id={`plugin-surface-recovery-title-${props.instanceID}`} class="mt-3 text-sm font-semibold">{i18n.t('uiCopy.plugin.needsAttention')}</h2>
+            <p id={`plugin-surface-recovery-description-${props.instanceID}`} class="mt-2 text-sm leading-6 text-muted-foreground">{i18n.t('uiCopy.plugin.surfaceCleanupFailed')}</p>
             <button
+              ref={recoveryButton}
               type="button"
               class="mt-4 inline-flex cursor-pointer items-center gap-2 rounded-md bg-destructive px-3 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90"
               onClick={() => setEndSessionConfirmationOpen(true)}

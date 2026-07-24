@@ -11,6 +11,7 @@ import type { PluginSurfaceLaunchTarget } from './pluginTypes';
 
 const harness = vi.hoisted(() => ({
   closeBody: vi.fn<() => Promise<boolean>>(),
+  onInteraction: undefined as ((event: { kind: string }) => void) | undefined,
 }));
 
 vi.mock('@floegence/floe-webapp-core', () => ({
@@ -66,8 +67,10 @@ vi.mock('./PluginSurfaceFrame', () => ({
   PluginSurfaceBody: (props: {
     registerClose?: (close: (() => Promise<boolean>) | null) => void;
     visible: boolean;
+    onInteraction?: (event: { kind: string }) => void;
   }) => {
     props.registerClose?.(harness.closeBody);
+    harness.onInteraction = props.onInteraction;
     return <div data-plugin-surface-stage data-body-visible={String(props.visible)}><iframe title="Plugin content" /></div>;
   },
 }));
@@ -87,6 +90,7 @@ let dispose: (() => void) | undefined;
 beforeEach(() => {
   harness.closeBody.mockReset();
   harness.closeBody.mockResolvedValue(true);
+  harness.onInteraction = undefined;
 });
 
 afterEach(() => {
@@ -160,6 +164,34 @@ describe('ActivityPluginSurfaceWindow', () => {
     expect(props.onClosed).toHaveBeenCalledWith('activity_plugin_surface_1');
   });
 
+  it('routes user close through the Shell placement serializer', async () => {
+    const serializeClose = vi.fn(async (close: () => Promise<void>) => close());
+    const { mount, props } = mountWindow({ serializeClose });
+
+    (mount.querySelector('[data-window-close]') as HTMLButtonElement).click();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(serializeClose).toHaveBeenCalledOnce();
+    expect(harness.closeBody).toHaveBeenCalledOnce();
+    expect(props.onClosed).toHaveBeenCalledWith('activity_plugin_surface_1');
+  });
+
+  it('registers an awaitable close handoff for placement changes', async () => {
+    const registerRequestClose = vi.fn();
+    const { props } = mountWindow({ registerRequestClose });
+    const close = registerRequestClose.mock.calls[0]?.[1] as (() => Promise<void>) | undefined;
+    expect(close).toEqual(expect.any(Function));
+
+    await close?.();
+    expect(harness.closeBody).toHaveBeenCalledOnce();
+    expect(props.onClosed).toHaveBeenCalledWith('activity_plugin_surface_1');
+
+    dispose?.();
+    dispose = undefined;
+    expect(registerRequestClose).toHaveBeenLastCalledWith('activity_plugin_surface_1', null);
+  });
+
   it('uses focus guards without intercepting Tab events targeted at the cross-origin iframe boundary', () => {
     const { mount } = mountWindow();
     const iframe = mount.querySelector('iframe') as HTMLIFrameElement;
@@ -206,6 +238,18 @@ describe('ActivityPluginSurfaceWindow', () => {
     expect(document.activeElement).toBe(external);
   });
 
+  it('raises the window for iframe activation, focus, and action interactions', () => {
+    const { props } = mountWindow();
+
+    harness.onInteraction?.({ kind: 'activation' });
+    harness.onInteraction?.({ kind: 'focus' });
+    harness.onInteraction?.({ kind: 'action' });
+    harness.onInteraction?.({ kind: 'selection' });
+
+    expect(props.onActivate).toHaveBeenCalledTimes(3);
+    expect(props.onActivate).toHaveBeenNthCalledWith(1, 'activity_plugin_surface_1');
+  });
+
   it('retains a cleanup error shell and requires confirmation before ending the plugin session', async () => {
     harness.closeBody.mockResolvedValue(false);
     const { mount, props } = mountWindow();
@@ -214,9 +258,15 @@ describe('ActivityPluginSurfaceWindow', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(props.onClosed).not.toHaveBeenCalled();
-    expect(mount.querySelector('[data-plugin-surface-recovery]')).not.toBeNull();
+    const recovery = mount.querySelector('[data-plugin-surface-recovery]') as HTMLElement;
+    expect(recovery.getAttribute('role')).toBe('alertdialog');
+    expect(recovery.getAttribute('aria-modal')).toBe('true');
+    expect(recovery.getAttribute('aria-labelledby')).toBe('plugin-surface-recovery-title-activity_plugin_surface_1');
+    expect(mount.querySelector('[data-plugin-surface-stage]')?.getAttribute('data-body-visible')).toBe('false');
 
     const recoveryButton = mount.querySelector('[data-plugin-surface-recovery] button') as HTMLButtonElement;
+    await Promise.resolve();
+    expect(document.activeElement).toBe(recoveryButton);
     recoveryButton.click();
     await Promise.resolve();
     await new Promise((resolve) => setTimeout(resolve, 0));

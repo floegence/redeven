@@ -158,6 +158,38 @@ describe('PluginSurfaceBody', () => {
     expect(coordinator.setVisible).toHaveBeenLastCalledWith(expect.anything(), true);
   });
 
+  it('updates the existing iframe title when display metadata changes', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const host = createHost();
+    const coordinator = createCoordinator(host);
+    const confirmationQueue = createConfirmationQueue();
+    const [currentTarget, setCurrentTarget] = createSignal<PluginSurfaceLaunchTarget>({
+      ...target,
+      displayName: 'Containers',
+    });
+
+    dispose = render(() => (
+      <PluginSurfaceBody
+        coordinator={coordinator}
+        confirmationQueue={confirmationQueue}
+        target={currentTarget()}
+        visible
+        onRetirementError={vi.fn()}
+      />
+    ), mount);
+    await flushAsync();
+    const iframe = host.element;
+    expect(iframe.title).toBe('Containers - containers.dashboard plugin content');
+
+    setCurrentTarget((current) => ({ ...current, displayName: 'Containers renamed' }));
+    await flushAsync();
+
+    expect(host.element).toBe(iframe);
+    expect(iframe.title).toBe('Containers renamed - containers.dashboard plugin content');
+    expect(coordinator.open).toHaveBeenCalledOnce();
+  });
+
   it('registers retirement while the SDK slot is still opening', async () => {
     const mount = document.createElement('div');
     document.body.append(mount);
@@ -269,6 +301,36 @@ describe('PluginSurfaceBody', () => {
     expect(confirmationQueue.cancelOwner).toHaveBeenCalledTimes(1);
     expect(coordinator.release).toHaveBeenCalledTimes(1);
     expect(onRetirementError).toHaveBeenCalledWith(retirementError);
+  });
+
+  it('joins concurrent close requests onto one slot retirement', async () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const host = createHost();
+    const coordinator = createCoordinator(host);
+    let resolveRelease!: () => void;
+    vi.mocked(coordinator.release).mockImplementation(() => new Promise<void>((resolve) => {
+      resolveRelease = resolve;
+    }));
+    const closeRegistration: { current: (() => Promise<boolean>) | null } = { current: null };
+
+    dispose = render(() => (
+      <PluginSurfaceBody
+        coordinator={coordinator}
+        confirmationQueue={createConfirmationQueue()}
+        target={target}
+        visible
+        registerClose={(close) => { closeRegistration.current = close; }}
+        onRetirementError={vi.fn()}
+      />
+    ), mount);
+    await flushAsync();
+
+    const first = closeRegistration.current!();
+    const second = closeRegistration.current!();
+    expect(coordinator.release).toHaveBeenCalledTimes(1);
+    resolveRelease();
+    await expect(Promise.all([first, second])).resolves.toEqual([true, true]);
   });
 
   it('serializes terminal SDK errors through coordinator retirement', async () => {

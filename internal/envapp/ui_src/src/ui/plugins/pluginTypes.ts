@@ -8,6 +8,9 @@ export type PluginLifecycleState =
 
 export type PluginTrustBadge =
   | 'official'
+  | 'verified'
+  | 'unsigned'
+  | 'community'
   | 'revoked'
   | 'unavailable'
   | 'blocked';
@@ -30,7 +33,7 @@ export type OfficialPluginDistribution = {
 
 export type OfficialPluginPermission = {
   permissionID: string;
-  group: 'read' | 'execute' | 'delete' | 'images_write';
+  group: 'read' | 'execute' | 'delete' | 'images_write' | 'other';
   requiredToOpen: boolean;
   methods: readonly string[];
   requiredToOpenMethods?: readonly string[];
@@ -51,6 +54,7 @@ export type OfficialPluginCatalogItem = {
   defaultSurfaceID: string;
   defaultSurfaceDisplayNameKey?: 'uiCopy.plugin.containersDashboardSurface';
   iconFallback: 'containers' | 'database' | 'github' | 'generic';
+  trustedSigningKeyIDs: readonly string[];
   permissions?: readonly OfficialPluginPermission[];
   distribution: OfficialPluginDistribution;
 };
@@ -85,6 +89,7 @@ export type PluginSurfaceLaunchTarget = {
 };
 
 export type PluginInventoryItem = {
+  inventoryKey: string;
   pluginID: string;
   pluginInstanceID?: string;
   displayName: string;
@@ -103,6 +108,13 @@ export type PluginInventoryItem = {
   attentionReason?: PluginAttentionReason;
   authorization?: PluginAuthorizationInventory;
   officialCatalog?: OfficialPluginCatalogItem;
+  externalPackage?: {
+    signatureAssessment: PluginExternalPackageSignatureAssessment;
+    sourceProvenance: PluginExternalPackageSourceProvenance;
+    executionApproval: PluginExternalPackageExecutionApproval;
+    updateEligibility: PluginExternalPackageUpdateEligibility;
+    securitySummary: PluginExternalPackageSecuritySummary;
+  };
 };
 
 export type PluginInventoryProjection = {
@@ -134,8 +146,28 @@ export type PluginCenterModel = {
   installed: PluginInventoryItem[];
   discover: PluginInventoryItem[];
   updates: PluginInventoryItem[];
-  selectedPluginID?: string;
+  selectedInventoryKey?: string;
 };
+
+export type ExternalPluginSourceKind = 'package_url' | 'github_repository' | 'package_upload';
+
+export type ExternalPluginInspectionRequest =
+  | {
+      sourceKind: 'package_url';
+      url: string;
+      intent: PluginUploadedExternalPackageIntent;
+    }
+  | {
+      sourceKind: 'github_repository';
+      url: string;
+      tag?: string;
+      intent: PluginUploadedExternalPackageIntent;
+    }
+  | {
+      sourceKind: 'package_upload';
+      file: File;
+      intent: PluginUploadedExternalPackageIntent;
+    };
 
 export type PluginManagementCommand =
   | { type: 'install'; pluginID: string; source: 'official_catalog' }
@@ -174,10 +206,21 @@ export type PluginLifecycleCommand = PluginManagementCommand | PluginOpenSurface
 export type ReDevPluginRecord = PluginRecord;
 
 export type ReDevPluginCatalogResult = PluginCatalogResult;
+
+export type ExternalPluginInspection = PluginExternalPackageInspection;
+export type ExternalPluginCommitResult = Extract<PluginExternalPackageCommitResult, { status: 'committed' }>;
+export type PluginExternalPackageSignatureAssessment = ExternalPluginInspection['signature_assessment'];
+export type PluginExternalPackageSourceProvenance = ExternalPluginInspection['source_provenance'];
+export type PluginExternalPackageExecutionApproval = ExternalPluginInspection['execution_approval'];
+export type PluginExternalPackageUpdateEligibility = ExternalPluginInspection['update_eligibility'];
+export type PluginExternalPackageSecuritySummary = ExternalPluginInspection['security_summary'];
 import type {
   PluginCatalogResult,
+  PluginExternalPackageCommitResult,
+  PluginExternalPackageInspection,
   PluginPermissionGrant,
   PluginRecord,
   PluginReleaseRef,
   PluginSecurityPolicy,
+  PluginUploadedExternalPackageIntent,
 } from '@floegence/redevplugin-ui';

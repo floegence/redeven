@@ -9,9 +9,10 @@ import {
 import type { ReDevPluginRecord } from './pluginTypes';
 
 const officialContainers = OFFICIAL_PLUGIN_CATALOG_SEED[0];
-const packageHash = 'sha256:8ecf6c0d206ee557c5528e2192b2594b5d097912b83028d43ff1336532b06d13';
-const manifestHash = 'sha256:f96534ca709165d0e30f6e7713a57ec0754f84f84ccadc2edc000f19dde7cc3d';
-const entriesHash = 'sha256:8a0048517719d934e52406dc6e9964d9ca165728d3e530d2c4df16f619bf17fa';
+const packageHash = officialContainers.distribution.releaseRef.expected_hashes.package_sha256;
+const manifestHash = officialContainers.distribution.releaseRef.expected_hashes.manifest_sha256;
+const entriesHash = officialContainers.distribution.releaseRef.expected_hashes.entries_sha256;
+const otherPackageHash = 'sha256:8ecf6c0d206ee557c5528e2192b2594b5d097912b83028d43ff1336532b06d13';
 const readGrant = {
   plugin_instance_id: officialContainers.pluginInstanceID,
   permission_id: 'containers.read',
@@ -114,6 +115,123 @@ describe('v0.6.7 plugin inventory projection', () => {
     });
   });
 
+  it.each([
+    {
+      label: 'unsigned execution approval',
+      overrides: {
+        trust_state: 'unsigned_local' as const,
+        trust_assessment: {
+          trust_state: 'unsigned_local' as const,
+          verified_hashes: {
+            package_sha256: packageHash,
+            manifest_sha256: manifestHash,
+            entries_sha256: entriesHash,
+          },
+        },
+        signature_assessment: {
+          state: 'absent' as const,
+          reason_codes: ['signature_absent'],
+          assessed_hashes: {
+            package_sha256: packageHash,
+            manifest_sha256: manifestHash,
+            entries_sha256: entriesHash,
+          },
+          assessed_at: '2026-07-24T10:00:00Z',
+        },
+        execution_approval: {
+          state: 'user_approved' as const,
+          reason_codes: [],
+          assessed_at: '2026-07-24T10:00:00Z',
+          approved_at: '2026-07-24T10:01:00Z',
+        },
+      },
+    },
+    {
+      label: 'package hash mismatch',
+      overrides: {
+        active_fingerprint: otherPackageHash,
+        package_hash: otherPackageHash,
+        trust_assessment: {
+          trust_state: 'verified' as const,
+          verified_hashes: {
+            package_sha256: otherPackageHash,
+            manifest_sha256: manifestHash,
+            entries_sha256: entriesHash,
+          },
+          verified_signature: {
+            algorithm: 'ed25519',
+            key_id: 'redeven-official-signing-2026',
+          },
+        },
+      },
+    },
+    {
+      label: 'version mismatch',
+      overrides: {
+        version: '1.9.0',
+        source_provenance: {
+          kind: 'package_url' as const,
+          source_origin: 'https://plugins.example.com',
+          source_path: '/containers-1.9.0.redevplugin',
+          redirect_chain: [],
+          package_sha256: packageHash,
+          resolved_at: '2026-07-24T10:00:00Z',
+        },
+        manifest: {
+          ...installedRecord().manifest,
+          plugin: {
+            ...installedRecord().manifest.plugin,
+            version: '1.9.0',
+          },
+        },
+      },
+    },
+    {
+      label: 'legacy version signed by a non-official key',
+      overrides: {
+        version: '1.9.0',
+        trust_assessment: {
+          trust_state: 'verified' as const,
+          verified_hashes: {
+            package_sha256: packageHash,
+            manifest_sha256: manifestHash,
+            entries_sha256: entriesHash,
+          },
+          verified_signature: {
+            algorithm: 'ed25519' as const,
+            key_id: 'community-signing-key',
+          },
+        },
+        manifest: {
+          ...installedRecord().manifest,
+          plugin: {
+            ...installedRecord().manifest.plugin,
+            version: '1.9.0',
+          },
+        },
+      },
+    },
+  ])('does not let a same-identity $label inherit official catalog presentation', ({ overrides }) => {
+    const projection = projectPluginInventory({
+      officialCatalog: [officialContainers],
+      installedPlugins: [installedRecord(overrides)],
+    });
+
+    expect(projection.items).toHaveLength(2);
+    const catalogItem = projection.items.find((item) => item.inventoryKey.startsWith('catalog:'));
+    const externalItem = projection.items.find((item) => item.inventoryKey.startsWith('instance:'));
+    expect(catalogItem).toMatchObject({
+      displayName: officialContainers.displayName,
+      trustBadge: 'official',
+      lifecycleState: 'not_installed',
+    });
+    expect(externalItem).toMatchObject({
+      inventoryKey: `instance:${officialContainers.pluginInstanceID}`,
+      pluginInstanceID: officialContainers.pluginInstanceID,
+    });
+    expect(externalItem).not.toHaveProperty('officialCatalog');
+  });
+
   it('does not join records with a mismatched publisher or plugin instance', () => {
     const projection = projectPluginInventory({
       officialCatalog: [officialContainers],
@@ -123,16 +241,27 @@ describe('v0.6.7 plugin inventory projection', () => {
       ],
     });
 
-    expect(projection.items).toHaveLength(1);
-    expect(projection.items[0]).toMatchObject({
+    expect(projection.items).toHaveLength(3);
+    const catalogItem = projection.items.find((item) => item.inventoryKey.startsWith('catalog:'));
+    expect(catalogItem).toMatchObject({
       pluginID: officialContainers.pluginID,
       lifecycleState: 'not_installed',
     });
-    expect(projection.items[0]).not.toHaveProperty('pluginInstanceID');
-    expect(projection.items[0]).not.toHaveProperty('defaultLaunchTarget');
+    expect(catalogItem).not.toHaveProperty('pluginInstanceID');
+    expect(catalogItem).not.toHaveProperty('defaultLaunchTarget');
+    expect(projection.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        inventoryKey: `instance:${officialContainers.pluginInstanceID}`,
+        publisher: officialContainers.publisher,
+      }),
+      expect.objectContaining({
+        inventoryKey: 'instance:plugini_different_instance',
+        pluginID: officialContainers.pluginID,
+      }),
+    ]));
   });
 
-  it('keeps non-official installed records out of the official-only inventory', () => {
+  it('keeps installed records that are not matched by the official catalog in the inventory union', () => {
     const projection = projectPluginInventory({
       officialCatalog: [officialContainers],
       installedPlugins: [installedRecord({
@@ -142,12 +271,120 @@ describe('v0.6.7 plugin inventory projection', () => {
       })],
     });
 
-    expect(projection.items).toHaveLength(1);
-    expect(projection.items[0]).toMatchObject({
-      pluginID: officialContainers.pluginID,
-      lifecycleState: 'not_installed',
-    });
+    expect(projection.items).toHaveLength(2);
+    expect(projection.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        inventoryKey: expect.stringMatching(/^catalog:/),
+        pluginID: officialContainers.pluginID,
+        lifecycleState: 'not_installed',
+      }),
+      expect.objectContaining({
+        inventoryKey: 'instance:plugini_local',
+        pluginID: 'com.example.local.plugin',
+        pluginInstanceID: 'plugini_local',
+      }),
+    ]));
   });
+
+  it('keeps multiple installed instances with the same plugin id independently addressable', () => {
+    const projection = projectPluginInventory({
+      officialCatalog: [],
+      installedPlugins: [
+        installedRecord({
+          publisher_id: 'com.example.publisher',
+          plugin_id: 'com.example.toolbox',
+          plugin_instance_id: 'plugini_toolbox_alpha',
+        }),
+        installedRecord({
+          publisher_id: 'com.example.publisher',
+          plugin_id: 'com.example.toolbox',
+          plugin_instance_id: 'plugini_toolbox_beta',
+        }),
+      ],
+    });
+
+    expect(projection.items.map((item) => item.pluginID)).toEqual([
+      'com.example.toolbox',
+      'com.example.toolbox',
+    ]);
+    expect(new Set(projection.items.map((item) => item.inventoryKey))).toEqual(new Set([
+      'instance:plugini_toolbox_alpha',
+      'instance:plugini_toolbox_beta',
+    ]));
+  });
+
+  it.each([
+    ['verified', 'automatic_eligible', 'policy_approved', 'verified'],
+    ['absent', 'manual_only', 'user_approved', 'unsigned'],
+    ['unknown_signer', 'manual_only', 'user_approved', 'community'],
+    ['unavailable', 'manual_only', 'user_approved', 'unavailable'],
+    ['invalid', 'manual_only', 'policy_blocked', 'blocked'],
+    ['revoked', 'manual_only', 'policy_blocked', 'revoked'],
+  ] as const)(
+    'projects %s external trust, approval, provenance, and update eligibility',
+    (signatureState, updateState, approvalState, trustBadge) => {
+      const external = installedRecord({
+        publisher_id: 'com.example.publisher',
+        plugin_id: 'com.example.toolbox',
+        plugin_instance_id: `plugini_${signatureState}`,
+        signature_assessment: {
+          state: signatureState,
+          reason_codes: [],
+          assessed_hashes: {
+            package_sha256: packageHash,
+            manifest_sha256: manifestHash,
+            entries_sha256: entriesHash,
+          },
+          assessed_at: '2026-07-24T10:00:00Z',
+        },
+        source_provenance: {
+          kind: 'package_url',
+          source_origin: 'https://plugins.example.com',
+          source_path: '/toolbox.redevplugin',
+          redirect_chain: [],
+          package_sha256: packageHash,
+          resolved_at: '2026-07-24T10:00:00Z',
+        },
+        execution_approval: {
+          state: approvalState,
+          reason_codes: [],
+          assessed_at: '2026-07-24T10:00:00Z',
+        },
+        update_eligibility: {
+          state: updateState,
+          reason_codes: [],
+          assessed_at: '2026-07-24T10:00:00Z',
+        },
+        security_summary: {
+          summary_sha256: 'sha256:9b30eca232030072294fcabdc98df492609672c92d2d04a545d5790119d1822b',
+          permissions: [],
+          methods: [],
+          capability_contracts: [],
+          workers: [],
+          network: [],
+          storage: [],
+          secret_refs: [],
+          core_actions: [],
+          intents: [],
+          surfaces: [],
+        },
+      });
+
+      const projection = projectPluginInventory({ officialCatalog: [], installedPlugins: [external] });
+
+      expect(projection.items[0]).toMatchObject({
+        inventoryKey: `instance:plugini_${signatureState}`,
+        trustBadge,
+        externalPackage: {
+          signatureAssessment: { state: signatureState },
+          sourceProvenance: { kind: 'package_url', package_sha256: packageHash },
+          executionApproval: { state: approvalState },
+          updateEligibility: { state: updateState },
+          securitySummary: { permissions: [], methods: [] },
+        },
+      });
+    },
+  );
 
   it('routes only enabled verified records with a revision-bound launch target', () => {
     const enabledProjection = projectPluginInventory({
@@ -347,13 +584,16 @@ describe('v0.6.7 plugin inventory projection', () => {
       })],
     });
 
-    expect(projection.items[0]).toMatchObject({
+    const installedItem = projection.items.find((item) => item.inventoryKey.startsWith('instance:'));
+    expect(installedItem).toMatchObject({
       lifecycleState: 'needs_attention',
       trustBadge: 'unavailable',
       attentionReason: 'trust_unavailable',
       defaultLaunchTarget: undefined,
     });
-    expect(buildPluginPanelModel(projection, undefined, { canOpenSurfaces: true }).tiles[1]).toMatchObject({
+    const installedTile = buildPluginPanelModel(projection, undefined, { canOpenSurfaces: true }).tiles
+      .find((tile) => tile.kind === 'plugin' && tile.item.inventoryKey.startsWith('instance:'));
+    expect(installedTile).toMatchObject({
       kind: 'plugin',
       action: 'open_details',
     });
