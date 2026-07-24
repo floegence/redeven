@@ -12,7 +12,7 @@ timestamp: 2026-07-24T00:00:00Z
 - Invariants: physical paths never leave the service, user ownership comes only from the authenticated session, and a product claim never substitutes for an exact Floret membership read.
 - Failure boundary: owner mismatch, unsupported media, quota exhaustion, missing canonical membership, metadata drift, digest drift, or missing bytes fails closed without weakening another reference.
 
-# Resource Contract
+# Contract
 
 Redeven threadstore schema v6 stores generated attachment identity, an owner scope, a server-only relative storage name, sanitized display metadata, exact byte size, SHA-256, optional strict UTF-8 code-point and logical-line counts, source, state, idempotency identity, and retention claims. New uploads use the stable `(endpoint_id, owner_user_hash)` scope derived from the authenticated user. Channel and session identities are request credentials, not durable resource owners. Migration retains provable legacy thread resources under the closed `legacy_thread` scope and quarantines unowned staged legacy rows; it never guesses a user owner. A legacy resource is readable only through its closed parser and exact canonical membership. Its first successful read hashes the bytes and atomically seals that digest; every later read rejects same-size or other byte drift.
 
@@ -28,11 +28,11 @@ Quota checks occur in the same SQLite write transaction as the state change. Sta
 
 Every direct, queued, follow-up, replacement, RPC, and service admission path rechecks the exact draft revision, owner, attachment state, count, aggregate 25 MiB limit, model-scoped route, capability revision, and canonical upload metadata in the claiming transaction. Inline text over 50,000 Unicode code points is rejected with the stable `long_text_attachment_required` code even when a client bypasses the composer. A prepared long-text claim is accepted only when its staged bytes, SHA-256, UTF-8 byte count, code-point count, and CRLF-aware line count are freshly derived from and exactly match the frozen draft text. New-thread preflight performs these checks before binding a target, writing settings, or creating Floret intent, so rejection leaves no partial thread.
 
-# Provider Contract
+## Provider Preparation
 
 Redeven derives one model-scoped capability snapshot from the selected provider route and model modalities. The revision binds the exact MIME route matrix and product limits. A native image or file route is advertised only when the provider adapter can render and conservatively estimate that complete request. Strict UTF-8 text may instead use the bounded `attachment.read` host tool. Binary, image, and PDF content never use the text fallback.
 
-Floret v0.26.0 receives only canonical descriptors and owns their durable association, replay, fork, retry, SubAgent, and prompt-cache identity. Redeven opens and hashes bytes after Floret selects the exact request and before provider dispatch through the prepared-request contract. The prepared request freezes the fully rendered provider payload, estimate, and fingerprint, is consumed at most once, and is closed on every non-stream path. Historical reads repeat canonical membership and byte-integrity checks rather than trusting admission-time state.
+Floret v0.27.1 receives only canonical descriptors and owns their durable association, replay, fork, retry, SubAgent, and prompt-cache identity. Redeven opens and hashes bytes after Floret selects the exact request and before provider dispatch through the prepared-request contract. The prepared request freezes the fully rendered provider payload, estimate, and fingerprint, is consumed at most once, and is closed on every non-stream path. Historical reads repeat canonical membership and byte-integrity checks rather than trusting admission-time state.
 
 # Boundaries
 
