@@ -3,7 +3,7 @@ type: Release Contract
 title: CI and release gates
 description: Redeven binds published dependencies, generated assets, UI behavior, release payloads, tests, and OKF to the exact main tip being pushed.
 tags: [release, ci, quality, okf]
-timestamp: 2026-07-19T00:00:00Z
+timestamp: 2026-07-24T00:00:00Z
 ---
 # Summary
 
@@ -48,7 +48,7 @@ Go tests that import their embed packages.
 
 ## ReDevPlugin dependency gate
 
-Redeven consumes only the coordinated ReDevPlugin `v0.6.7` package set. The
+Redeven consumes only the coordinated ReDevPlugin `v0.6.10` package set. The
 boundary guard rejects local sibling paths, Go workspaces/replacements, npm
 links, copied contracts or runtimes, Rust path overrides, and a second
 platform-core package tree.
@@ -120,13 +120,22 @@ The focused plugin gate covers:
   explicit origin/CSRF/action policy, and stable observability;
 - signed official release-ref install/update and exact publisher/plugin/instance
   identity;
+- public HTTPS URL, GitHub Release, and local `.redevplugin` inspect-confirm-
+  commit admission, strict source provenance, signature assessment, disabled
+  zero-grant commit state, bounded query-only reconciliation, and no mutation
+  replay after an unknown or in-progress outcome;
 - runtime path/target/hash, ProcessManager health, persistent lease replay, and
   Host storage/network/stream services;
 - the signed Containers capability, operation/cancellation/stream behavior, and
   domain-only container package boundary;
 - canonical AppServer route reservation/delegation and Local UI access checks;
 - generated UI lifecycle DTOs, management revisions, production Plugin entry,
-  FIFO confirmation, and close-before-open slot lifecycle;
+  generic permission requirements, exact inventory-key selection, full external
+  security and source-provenance review, exact generic permission ids, FIFO
+  confirmation, and close-before-placement lifecycle;
+- Shell-root multi-window Activity chrome, standard `redeven.plugin` Workbench
+  persistence, released interaction ownership, exact-surface close
+  reconciliation, and cross-placement serialization;
 - static absence of legacy proxy/bootstrap/base64 package and copied platform
   paths.
 
@@ -141,10 +150,11 @@ the released durable four-hash fence and drain; Redeven awaits exact teardown
 acknowledgement before deleting identity and reconciles retained fences on
 restart.
 
-Workbench plugin interaction is not declared passing: v0.6.7 lacks the required
-host-neutral iframe interaction ownership contract. A Redeven release must not
-hide that gap behind an overlay or input patch. Workbench enablement requires a
-new formal ReDevPlugin release and corresponding focused/browser evidence.
+Workbench plugin interaction is releasable only through the `v0.6.10`
+source/port-bound interaction ownership and exact-surface close contracts. The
+gate rejects overlays, pointer-event switching, copied interaction DTOs, a
+second bridge, session-wide close fallback, placement persistence before close,
+or local disposal presented as server revocation.
 
 ## Other published boundaries
 

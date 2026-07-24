@@ -3,7 +3,7 @@ type: AI Product Contract
 title: Flower plugin generation
 description: Flower-generated plugins are Redeven product orchestration through Floret and released ReDevPlugin lifecycle APIs.
 tags: [ai, flower, plugins, floret]
-timestamp: 2026-07-02T00:00:00Z
+timestamp: 2026-07-24T00:00:00Z
 ---
 # Summary
 
@@ -20,8 +20,9 @@ tool dispatch and approval lifecycle that Flower must use.
 
 A Flower-generated plugin flow is a sequence of approved product actions over
 released ReDevPlugin APIs. Flower may draft source and manifest content, call
-released scaffold, validate, package, install, enable, open, diagnostics,
-export/import, update, or uninstall APIs, and show the user review states. The
+released scaffold, validate, package, inspect, commit, install, enable, open,
+diagnostics, export/import, update, or uninstall APIs, and show the user review
+states. The
 actual package validity, trust model, lifecycle state, sandbox bootstrap,
 permissions, storage/network/runtime access, and operation details remain
 ReDevPlugin facts.
@@ -47,9 +48,10 @@ instead of hidden behind a Redeven-local helper.
 # Boundaries
 
 Flower must not write plugin registry rows, mint bridge tokens, place plugin UI
-assets directly under Env App routes, bypass package signatures or trust
-policy, grant storage/network/runtime access outside ReDevPlugin brokers, or
-call a business adapter before ReDevPlugin has built the request context.
+assets directly under Env App routes, bypass package inspection, signature
+assessment, explicit confirmation, or trust policy, grant storage/network/
+runtime access outside ReDevPlugin brokers, or call a business adapter before
+ReDevPlugin has built the request context.
 
 Flower must not create a Redeven-only manifest format, permissive validator,
 package builder, WASM ABI, asset-ticket scheme, runtime supervisor, storage

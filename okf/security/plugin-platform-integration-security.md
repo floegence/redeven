@@ -1,17 +1,19 @@
 ---
 type: Security Contract
 title: Plugin platform integration security
-description: Redeven derives ReDevPlugin identity from authenticated sessions and fail-closed signed release, route, runtime, and capability adapters.
+description: Redeven derives ReDevPlugin identity from authenticated sessions and keeps package source, signature, execution, update, route, runtime, and capability authority distinct.
 tags: [security, plugins, permissions, local-ui]
-timestamp: 2026-07-23T00:00:00Z
+timestamp: 2026-07-24T00:00:00Z
 ---
 # Summary
 
-Redeven supplies authenticated host facts to ReDevPlugin; it does not accept
-plugin ownership, authority, or trust from browser payloads. Every HTTP route
-passes explicit authentication, origin, CSRF, and closed-action authorization.
-Direct Host calls pass the same owner/action/resource policy. Signed release,
-runtime, secret, storage, network, and capability scope mismatches fail closed.
+Redeven supplies authenticated host facts and source policy to ReDevPlugin; it
+does not accept plugin ownership, authority, provenance, or trust from browser
+payloads. Every HTTP route passes explicit authentication, origin, CSRF, and
+closed-action authorization, and direct Host calls pass the same owner/action/
+resource policy. External package source, signature, execution approval, update
+eligibility, and permission are independent facts. Integrity failures, invalid
+runtime identity, and capability scope mismatches fail closed.
 
 # Contract
 
@@ -31,32 +33,19 @@ keyed by owner-session hash and accepts a hit only when all four hashes match.
 JSON, query, plugin IPC, release metadata, and capability arguments cannot
 override any owner field.
 
-Persistent registry, policy, permission, settings, data, secret, connector, and
-worker ownership follows ReDevPlugin `user` or `environment` resource scope.
-Short-lived surfaces, handles, confirmations, operations, streams, and token
-audiences bind all four active hashes. Unknown legacy ownership is not guessed.
-Before those stores open, the released owner-scope migration atomically retains
-recognized `v0.6.5` state in quarantine and commits a fresh scoped generation.
-Restart reuses the committed generation and preserves new data; quarantine is
-never automatically deleted. Unknown, corrupt, ambiguous, tampered, or future
-state blocks startup without mutation. The migration is confined to
-ReDevPlugin-owned state and never inspects Floret-owned schemas.
-
-Session removal is a durable four-hash teardown. Redeven first persists the
-opaque close operation and proof, then the released coordinator fences new work,
-drains surfaces, tokens, handles, confirmations, operations, streams, runtime
-leases, and shards, and finally validates the exact closed identity. Redeven
-removes authenticated session state only after that acknowledgement and
-reconciles retained fences before reopening runtime authority after restart. A
-Redeven-local task map, timer, or guessed owner sweep is prohibited.
+Persistent state follows ReDevPlugin `user` or `environment` scope; short-lived
+authority binds all four hashes. The released migration supplies the only active
+owner-scoped generation and retains recognized unprovable legacy state in
+quarantine. Unknown or invalid state blocks startup without mutation. Session
+removal uses the released durable four-hash fence and drain, and Redeven removes
+authentication only after exact acknowledgement. Guessed owner sweeps and local
+teardown registries are prohibited.
 
 ## HTTP and direct authorization
 
-The canonical route is `/_redevplugin/api/plugins`. AppServer delegates it only
-from an Env App or Local UI Env route after local access checks. It attaches the
-authenticated channel id and a validated same-origin value in server-only
-request context. Codespace, port-forward, plugin, unknown, null-origin, and
-missing-origin callers are not delegated.
+The canonical route is `/_redevplugin/api/plugins`. AppServer delegates only an
+access-checked Env route and attaches authenticated channel and same-origin facts
+in server-only context. Other roles and null or missing origins are rejected.
 
 The released handler then invokes four explicit steps:
 
@@ -68,21 +57,14 @@ The released handler then invokes four explicit steps:
 4. `AuthorizeRoute` accepts only a valid closed `RouteAction` permitted by the
    cached session.
 
-Browser-facing reads use released POST query requests. Chromium therefore sends
-the same-origin Origin required by the guard, while CSRF, closed route action,
-and query-effect authorization remain mandatory. Query cancellation is safely
-retryable and carries no mutation outcome. Redeven must not accept Referer or
-Fetch Metadata as an undocumented substitute, inject Origin, or exempt a query
-locally.
+Browser reads use released POST queries and retain Origin, CSRF, route-action,
+and query-effect authorization. Redeven does not substitute Referer or Fetch
+Metadata, inject Origin, or exempt queries.
 
-The Host `AuthorizationAdapter` separately checks action, canonical resource,
-owner context, and permissions for direct Go calls. An absent or typed-nil Host,
-guard, authorization adapter, or container engine client fails construction
-before persistent state is opened. Method, confirmation, intent, and owned
-operation-cancel actions admit any authenticated data-plane permission at the
-early action gate; the resolved method effect is then clamped by
-`EvaluateLocalPolicy`. This avoids inventing an execute requirement for read or
-write methods. Shared runtime start, stop, and refresh remain admin-only.
+Direct Host authorization checks the same action, resource, owner, and
+permission. Missing or typed-nil security dependencies fail construction.
+Method effect is resolved before local policy clamps it, while shared runtime
+management remains admin-only.
 
 ## Permission management projection
 
@@ -107,7 +89,17 @@ invalidation, and method-enforcement authority. Third-party requirements must
 come from a released Host-verified capability-contract projection, not a
 manifest claim or Redeven contract parser.
 
-## Release and runtime trust
+The requirements response is bound to the exact plugin instance, active
+fingerprint, version, management revision, capability contract identity, and
+contract hash. Product inventory and navigation use exact `inventoryKey` so a
+catalog entry and installed external instances with the same plugin id cannot
+select or mutate one another. Official catalog copy additionally requires
+verified trust. The current version requires exact signed catalog release hashes;
+a historical version requires an explicit catalog-trusted official signing key,
+no external provenance, and registry hashes equal to Host-verified hashes.
+Matching ids alone are not official identity.
+
+## Package admission and trust
 
 Official install/update is release-ref based. Redeven's release module accepts
 only the exact official root delegation, channel policy and pointer, revocation
@@ -118,35 +110,51 @@ and locally signed append-only trusted time are durable. Unsigned input,
 browser-supplied trust state, arbitrary package bytes, rollback, unknown
 publisher, expired evidence, and invented fetch provenance are denied.
 
-The runtime path and current target are closed. Runtime descriptors bind version,
-target, Rust IPC version, WASM ABI, and exact artifact SHA-256. Handle grants
-bind plugin instance, active fingerprint, runtime generation/shard, all owner
-hashes, method, handle, resource scope, policy revision, management revision,
-and revoke epoch. Storage/network scope from a plugin cannot replace the
-lease-derived scope.
+The external-package path is separate from official release admission. A
+validated public HTTPS package URL or GitHub Release is retrieved through the
+released bounded fetcher and resolver; a local `.redevplugin` upload crosses the
+same package validator and stage. Public HTTPS retrieval validates every DNS
+result and redirect hop, pins the validated connection target while retaining
+TLS hostname verification, strips cross-origin credentials, and bounds the
+identity-encoded response before parsing. The browser cannot assert redirect
+history, final origin, digest, or GitHub release identity.
 
-Redeven builds runtime bytes only for `linux/amd64` and `linux/arm64` from the
-exact attested Rust source crate set with Rust 1.88.0. Product provenance, SPDX
-SBOM, notices, signature, certificate identity, target, and binary digest travel
-together and are revalidated inside archives and Desktop packages. Darwin
-packages must omit the runtime and every runtime-evidence file; absence is the
-closed product policy, not a signature exception.
+Inspection freezes staged bytes and produces owner-bound source provenance,
+signature assessment, execution approval, update eligibility, complete security
+summary and hash, and a confirmation digest. The product shows those facts,
+including permissions, capability methods, workers, network, storage, secret
+references, core actions, intents, surfaces, and update changes, before commit.
+Commit reopens and re-verifies the exact artifact and requires the matching
+inspection id and confirmation digest. Query reconciles only the exact commit.
+An unknown or in-progress mutation outcome marks the inspection query-only in
+the product client. Timeout, cancellation, or a temporary query failure retains
+that state; only a committed or failed terminal result clears it.
+
+An absent, unknown-signer, or temporarily unavailable signature is not an
+integrity failure, but it is also not trust. An administrator may explicitly
+confirm installation; the result is disabled, has zero grants, and is eligible
+only for manual update. Invalid and revoked signatures block commit and
+execution. Verified, current signing evidence may raise trust and automatic
+update eligibility, but signature status never grants permissions. Redeven does
+not add a new official key, signing ledger, or authorization workflow; the
+existing official release-ref verification remains unchanged.
+
+## Runtime trust
+
+Runtime descriptors bind version, target, IPC, WASM ABI, and artifact hash.
+Handle grants also bind plugin fingerprint, runtime generation, owner audience,
+method, resource scope, policy/management revisions, and revoke epoch. Linux
+runtime evidence is rebuilt and verified from the attested source set; Darwin
+must omit runtime bytes and evidence.
 
 ## Business adapter and observability boundary
 
 Containers is invoked only after ReDevPlugin resolves lifecycle, permission,
-confirmation, token/lease, quota, revocation, and audit context. Container
-identity is `(engine, container_id)` for lookup, confirmation, operation, and
-stream behavior. Redeven product code cannot call the adapter as a substitute
-for the platform authorization chain. CLI stdout is bounded before parsing;
-overflow terminates the command process group and returns a stable failure.
-CLI failures never parse localized stderr to guess resource identity. A typed
-engine adapter may report an exact not-found target; the CLI adapter maps only
-the deterministic logs operation class and otherwise returns a generic stable
-failure. Stderr and argv are never copied into adapter errors. Operation and
-stream terminal writes use an independent finite
-deadline, so integration close cannot wait forever on a canceled request's
-terminal sink. A truncated payload is never accepted as success.
+confirmation, lease, quota, revocation, and audit context. Product code cannot
+bypass that chain. Container identity includes engine; CLI output is bounded
+before parsing, overflow terminates the process group, and public errors omit
+argv, stderr, raw output, secrets, and paths. Terminal sink writes use a finite
+independent deadline and truncated output is never accepted as success.
 
 Audit, diagnostics, and public errors record stable component, operation,
 failure code, correlation/request identity, and mutation outcome. Raw adapter
@@ -169,9 +177,12 @@ tokens, weaken route policy, edit opaque state, or replace released brokers.
 - `redeven:internal/redevpluginintegration/security_adapter.go:1` - Implements the four-step web security contract.
 - `redeven:internal/redevpluginintegration/adapters_test.go:1` - Covers origin, CSRF, session, and action denial.
 - `redeven:internal/redevpluginintegration/release_module.go:1` - Enforces official source, signature, revocation, and capability pins.
+- `redeven:internal/redevpluginintegration/integration.go:260` - Registers the released staged external-package source and assessment module.
+- `redeven:internal/redevpluginintegration/external_package_test.go:24` - Proves unsigned upload inspection and explicit commit produce a disabled installed record.
 - `redeven:internal/redevpluginintegration/runtime_module.go:1` - Binds runtime target, hash, IPC, ABI, leases, and Host services.
 - `redeven:internal/redevpluginintegration/containers_capability.go:1` - Adapts authorized capability invocations to domain behavior.
 - `redeven:internal/codeapp/appserver/server_test.go:810` - Covers canonical route reservation and origin delegation.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginPlatform.ts:1` - Restricts UI transport to the canonical same-origin namespace and attaches CSRF proof.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1` - Reads grants and policies and submits revision-fenced permission mutations through the released client.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.ts:1` - Keeps grants, allowlist caps, denied methods, and required-to-open methods distinct.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/ExternalPluginInstallDialog.tsx:1` - Presents immutable source, trust, security, and confirmation evidence before commit.
