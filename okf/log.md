@@ -1,5 +1,10 @@
 # Redeven OKF Update Log
 
+## 2026-07-24
+* **Feature**: Added Flower conversation deletion to Env App and Desktop through one confirmed destructive menu action, durable receipt handling, and a non-persistent stale-response retirement fence.
+* **Fix**: Serialized every delete replay through the thread lifecycle gate, treated missing Floret authority as terminal, excluded durable intent from product reads, and made failed delete integrity block every startup.
+* **Dependency**: Upgraded to published Floret v0.24.0 after removal of its obsolete single-thread deletion primitive.
+
 ## 2026-07-20
 * **Dependency**: Upgraded to published Floret v0.19.1 so a complete canonical user entry is publicly readable before its admission event and every provider, assistant, or tool event follows that boundary.
 * **Fix**: Made `kind=start` wait for canonical admission and `timeline.replaced`, removed Flower synthetic pending user messages, and projected Redeven-owned unadmitted commands only as server-rebuildable `queued_turn` entries keyed by exact TurnID.
