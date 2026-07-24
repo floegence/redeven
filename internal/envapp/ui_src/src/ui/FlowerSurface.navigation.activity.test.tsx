@@ -2605,6 +2605,31 @@ describe('FlowerSurface navigation activity', () => {
     expect((document.activeElement as HTMLElement | null)?.tagName).toBe('SECTION');
   });
 
+  it('does not recursively refresh unchanged background thread summaries', async () => {
+    const backgroundThread = thread({
+      thread_id: 'thread-background-refresh-stability',
+      title: 'Background refresh stability',
+      status: 'running',
+      messages: [],
+    });
+    const listThreads = vi.fn(async () => {
+      if (listThreads.mock.calls.length >= 3) {
+        throw new Error('recursive background refresh');
+      }
+      return [backgroundThread];
+    });
+
+    renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads,
+    });
+
+    await waitFor(() => listThreads.mock.calls.length >= 2);
+    await flushMicrotasks();
+
+    expect(listThreads).toHaveBeenCalledTimes(2);
+  });
+
   it('keeps the selected approval card mounted across stale list refreshes', async () => {
     const approvals = Array.from({ length: 10 }, (_, index) => ({
       action_id: `appr-refresh-${index + 1}`,
