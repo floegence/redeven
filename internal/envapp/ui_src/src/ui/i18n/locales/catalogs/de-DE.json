@@ -4061,7 +4061,7 @@
   },
   "uiCopy": {
     "plugin": {
-      "loadingOfficial": "Offizielle Plugins werden geladen...",
+      "loadingOfficial": "Plugins werden geladen...",
       "official": "Offiziell",
       "verified": "Verifiziert",
       "unsigned": "Nicht signiert",
@@ -4154,7 +4154,7 @@
           "description": "Container entfernen. Dies ist eine optionale Berechtigung für destruktive Vorgänge."
         },
         "images_write": {
-          "label": "Images schreiben",
+          "label": "Container-Images laden",
           "description": "Container-Images in die ausgewählte Engine laden."
         },
         "other": {
@@ -4182,7 +4182,7 @@
         "confirmInstall": "Plugin installieren",
         "confirmUpdate": "Plugin aktualisieren",
         "committing": "Installation wird abgeschlossen...",
-        "commitFailed": "Das Plugin konnte nicht installiert werden. Prüfen Sie das Paket vor einem erneuten Versuch noch einmal.",
+        "commitFailed": "Das Plugin konnte nicht installiert werden. Prüfen Sie das Paket vor dem nächsten Versuch erneut.",
         "refreshFailed": "Die Installation wurde abgeschlossen, aber die Plugin-Liste konnte nicht aktualisiert werden. Aktualisieren Sie das Plugin Center, um den neuesten Stand zu laden.",
         "complete": "{plugin} wurde installiert und bleibt deaktiviert, bis Sie es aktivieren.",
         "permissions": "Berechtigungen",
