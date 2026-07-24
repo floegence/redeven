@@ -171,6 +171,36 @@ func TestServiceDeleteThreadPersistsPendingOperationAndReplaysTransientFailure(t
 	}
 }
 
+func TestServiceDeleteThreadAcceptsIntentWhenStepConfirmationIsInterrupted(t *testing.T) {
+	host := &recordingThreadDeleteHost{}
+	cleaner := &recordingFlowerReadStateCleaner{}
+	service := newThreadDeleteTestService(t, t.TempDir(), nil, cleaner)
+	defer func() { _ = service.Close() }()
+	meta := &session.Meta{EndpointID: "env_delete_confirmation_interrupted", UserPublicID: "user_1", CanRead: true, CanWrite: true, CanExecute: true}
+	thread, err := service.CreateThread(context.Background(), meta, "confirmation interrupted", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	deleteCtx, cancelDelete := context.WithCancel(context.Background())
+	service.threadDeleteFloret = &threadDeleteFloretCoordinator{authority: testFloretThreadDeleteAuthorityFunc(func(ctx context.Context, threadID flruntime.ThreadID) error {
+		err := host.DeleteThread(ctx, threadID)
+		cancelDelete()
+		return err
+	})}
+	result, err := service.DeleteThread(deleteCtx, meta, thread.ThreadID, false)
+	if err != nil || result.Status != ThreadDeleteStatusPending || !result.IntentPersisted {
+		t.Fatalf("DeleteThread result=%+v err=%v", result, err)
+	}
+	operation, err := service.threadsDB.GetThreadDeleteOperation(context.Background(), meta.EndpointID, thread.ThreadID)
+	if err != nil || operation == nil || operation.Status != threadstore.ThreadDeleteOperationPending || operation.FloretDeletedAtUnixMs != 0 {
+		t.Fatalf("operation=%+v err=%v", operation, err)
+	}
+	if host.deleteCount() != 1 || cleaner.deleteCount() != 0 {
+		t.Fatalf("cleanup counts Floret=%d read-state=%d, want 1/0", host.deleteCount(), cleaner.deleteCount())
+	}
+}
+
 func TestClassifyFloretThreadDeleteError(t *testing.T) {
 	t.Parallel()
 	terminal := []error{

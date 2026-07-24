@@ -1100,9 +1100,18 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 	if runtime := s.removeThreadSubagentRuntime(thKey); runtime != nil {
 		runtime.release()
 	}
-	operation, replayErr := s.advanceThreadDeleteOperation(ctx, operation.OperationID, operation.EndpointID, operation.ThreadID)
+	advanced, replayErr := s.advanceThreadDeleteOperation(ctx, operation.OperationID, operation.EndpointID, operation.ThreadID)
+	if strings.TrimSpace(advanced.Status) != "" {
+		operation = advanced
+	}
 	if operation.ProductDataDeletedAtUnixMs > 0 {
 		s.scheduleThreadstoreCompaction("thread_delete")
+	}
+	if replayErr != nil && !errors.Is(replayErr, ErrThreadDeleteOperationFailed) {
+		if s.log != nil {
+			s.log.Warn("ai: accepted durable thread delete intent while advancement remains pending", "operation_id", operation.OperationID, "endpoint_id", operation.EndpointID, "thread_id", operation.ThreadID, "error", replayErr)
+		}
+		return threadDeleteResult(operation), nil
 	}
 	return threadDeleteResult(operation), replayErr
 }
