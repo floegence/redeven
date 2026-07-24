@@ -100,9 +100,12 @@ func buildFloretStartupRecoveryTargets(ctx context.Context, db interface {
 	return targets, nil
 }
 
-func (s *Service) startFloretStartupRecovery(targets []floretStartupRecoveryTarget) error {
+func (s *Service) startFloretStartupRecovery(startupCtx context.Context, targets []floretStartupRecoveryTarget) error {
 	if s == nil {
 		return errors.New("Floret startup recovery coordinator is unavailable")
+	}
+	if startupCtx == nil || s.lifecycleCtx == nil {
+		return errors.New("Floret startup recovery context is unavailable")
 	}
 	targets = append([]floretStartupRecoveryTarget(nil), targets...)
 	for _, target := range targets {
@@ -110,7 +113,7 @@ func (s *Service) startFloretStartupRecovery(targets []floretStartupRecoveryTarg
 			return errors.New("Floret startup recovery target is invalid")
 		}
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), s.persistTimeout())
+	ctx, cancel := context.WithTimeout(startupCtx, s.persistTimeout())
 	result, err := recoverInterruptedFloretTurns(ctx, targets)
 	if err != nil {
 		cancel()
@@ -139,7 +142,7 @@ func (s *Service) startFloretStartupRecovery(targets []floretStartupRecoveryTarg
 		for {
 			select {
 			case <-ticker.C:
-				ctx, cancel := context.WithTimeout(context.Background(), s.persistTimeout())
+				ctx, cancel := context.WithTimeout(s.lifecycleCtx, s.persistTimeout())
 				result, err := recoverInterruptedFloretTurns(ctx, targets)
 				if err != nil {
 					cancel()

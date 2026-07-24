@@ -425,8 +425,10 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 	t.Parallel()
 
 	const (
-		floretModule  = "github.com/floegence/floret"
-		floretVersion = "v0.26.0"
+		floretModule   = "github.com/floegence/floret"
+		floretVersion  = "v0.27.1"
+		floretSum      = "h1:r3NCKl/ooxKBw2fWYgRe6nf3VGmUi2wJt0V1W0zluvY="
+		floretGoModSum = "h1:u2oNhsSB8OppYPHo/cTmXITL+3pxv7ckjYDiq3SjoCg="
 	)
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
@@ -448,26 +450,31 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 	}
 	assertNoLocalGoModuleReference(t, "go.mod", goMod, floretModule, "floret")
 
-	wantSumVersions := map[string]bool{
-		floretVersion:             false,
-		floretVersion + "/go.mod": false,
+	wantSumVersions := map[string]string{
+		floretVersion:             floretSum,
+		floretVersion + "/go.mod": floretGoModSum,
 	}
+	foundSumVersions := make(map[string]bool, len(wantSumVersions))
 	scanner := bufio.NewScanner(strings.NewReader(goSum))
 	for scanner.Scan() {
 		fields := strings.Fields(scanner.Text())
 		if len(fields) < 2 || fields[0] != floretModule {
 			continue
 		}
-		if _, ok := wantSumVersions[fields[1]]; !ok {
+		wantSum, ok := wantSumVersions[fields[1]]
+		if !ok {
 			t.Fatalf("go.sum contains unexpected Floret version %q", fields[1])
 		}
-		wantSumVersions[fields[1]] = true
+		if len(fields) != 3 || fields[2] != wantSum {
+			t.Fatalf("go.sum checksum for %s=%v, want %s", fields[1], fields[2:], wantSum)
+		}
+		foundSumVersions[fields[1]] = true
 	}
 	if err := scanner.Err(); err != nil {
 		t.Fatalf("scan go.sum: %v", err)
 	}
-	for version, found := range wantSumVersions {
-		if !found {
+	for version := range wantSumVersions {
+		if !foundSumVersions[version] {
 			t.Fatalf("go.sum is missing Floret checksum for %s", version)
 		}
 	}
@@ -504,7 +511,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"TurnInput.References",
 			"MessageReference",
 			"raw `ResourceRef` never reaches the browser",
-			"v0.26.0",
+			"v0.27.1",
 		},
 		filepath.Join("okf", "ui", "flower-turn-launcher.md"): {
 			"file_path",
@@ -530,8 +537,8 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"complete immutable snapshot",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
-			"Floret v0.26.0",
-			"floret-v0-26-0-external-adoption",
+			"Floret v0.27.1",
+			"floret-v0-27-1-maintenance-adoption",
 			"single persistent source of truth",
 			"provider-owned thread titles",
 			"public contracts",
@@ -644,9 +651,15 @@ func TestFloretCapabilitiesAreMintedOnlyDuringBootstrap(t *testing.T) {
 			t.Fatalf("service.go must not mint Floret runtime capabilities directly, found %q", marker)
 		}
 	}
+	maintenance := readRepoFile(t, root, filepath.Join("internal", "ai", "floret_store_maintenance.go"))
+	if !strings.Contains(maintenance, "flruntime."+"OpenSQLiteStore") {
+		t.Fatal("floret_store_maintenance.go must own the public Floret Store open operation")
+	}
 	bootstrap := readRepoFile(t, root, filepath.Join("internal", "ai", "floret_bootstrap.go"))
+	if strings.Contains(bootstrap, "flruntime."+"OpenSQLiteStore") {
+		t.Fatal("floret_bootstrap.go must obtain the Store through the maintenance adapter")
+	}
 	for _, marker := range []string{
-		"flruntime." + "OpenSQLiteStore",
 		"flruntime." + "ConfigureHostCapabilities",
 		"flruntime." + "NewTurnExecutionHostBinder",
 		"flruntime." + "NewThreadCompactionHostBinder",

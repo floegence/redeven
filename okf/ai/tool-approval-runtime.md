@@ -13,7 +13,7 @@ Floret is the only real-time authority for ordinary and delegated tool approvals
 
 ## Canonical queue
 
-Floret v0.26.0 validates queue and record identity, lifecycle state, batch position, timestamps, resources, effects, and argument hashes. Redeven calls root-scoped `ReadApprovalQueue`; it never queries Floret's store directly and never copies approval records into the Redeven database. Invalid or mismatched Floret data is a contract error, not input for synthesis or repair.
+Floret v0.27.1 validates queue and record identity, lifecycle state, batch position, timestamps, resources, effects, and argument hashes. Redeven calls root-scoped `ReadApprovalQueue`; it never queries Floret's store directly and never copies approval records into the Redeven database. Invalid or mismatched Floret data is a contract error, not input for synthesis or repair.
 
 Redeven maps each visible Floret record to a `FlowerApprovalAction`. Main and delegated actions both use the record's canonical run and tool-call identity. Delegated presentation derives its child label from the Floret `scope=thread:<child-thread-id>` value; there is no Redeven delegated-reference, delivery-state, or child-execution-state shadow. Product labels and safe summaries may be derived for display, but the underlying identity, order, current item, generation, revision, and actionability remain Floret-owned.
 

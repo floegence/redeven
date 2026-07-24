@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
@@ -53,6 +54,27 @@ func (h *scriptedInterruptedTurnRecoveryHost) RecoverInterruptedTurn(context.Con
 
 type startupRecoverySubagentReadHost struct {
 	snapshots []flruntime.SubAgentSnapshot
+}
+
+type lifecycleBoundStartupRecoveryHost struct {
+	mu                 sync.Mutex
+	calls              int
+	backgroundStarted  chan struct{}
+	backgroundCanceled chan struct{}
+}
+
+func (h *lifecycleBoundStartupRecoveryHost) RecoverInterruptedTurn(ctx context.Context) (flruntime.RecoverInterruptedTurnResult, error) {
+	h.mu.Lock()
+	h.calls++
+	call := h.calls
+	h.mu.Unlock()
+	if call == 1 {
+		return flruntime.RecoverInterruptedTurnResult{}, flruntime.ErrThreadBusy
+	}
+	close(h.backgroundStarted)
+	<-ctx.Done()
+	close(h.backgroundCanceled)
+	return flruntime.RecoverInterruptedTurnResult{}, ctx.Err()
 }
 
 func (h startupRecoverySubagentReadHost) ListSubAgents(context.Context, flruntime.ThreadID) ([]flruntime.SubAgentSnapshot, error) {
@@ -121,6 +143,48 @@ func TestFloretStartupRecoveryRetriesBusyExactLeaseWithoutRuntimeFallback(t *tes
 	}
 	if bindCalls != 1 || factory.calls != 2 {
 		t.Fatalf("bind calls=%d factory NewHost calls=%d, want 1 and 2", bindCalls, factory.calls)
+	}
+}
+
+func TestFloretStartupRecoveryCloseCancelsLifecycleBoundBackgroundAttempt(t *testing.T) {
+	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
+	host := &lifecycleBoundStartupRecoveryHost{
+		backgroundStarted:  make(chan struct{}),
+		backgroundCanceled: make(chan struct{}),
+	}
+	factory := &scriptedInterruptedTurnRecoveryFactory{host: host}
+	svc := &Service{
+		persistOpTO:     5 * time.Second,
+		recoveryStopCh:  make(chan struct{}),
+		lifecycleCtx:    lifecycleCtx,
+		lifecycleCancel: lifecycleCancel,
+	}
+	if err := svc.startFloretStartupRecovery(context.Background(), []floretStartupRecoveryTarget{{
+		description: "lifecycle-bound root",
+		factory:     factory,
+	}}); err != nil {
+		t.Fatalf("start recovery: %v", err)
+	}
+
+	select {
+	case <-host.backgroundStarted:
+	case <-time.After(2 * floretStartupRecoveryRetryInterval):
+		t.Fatal("background recovery attempt did not start")
+	}
+	closed := make(chan error, 1)
+	go func() { closed <- svc.Close() }()
+	select {
+	case err := <-closed:
+		if err != nil {
+			t.Fatalf("close service: %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("service close did not stop background recovery")
+	}
+	select {
+	case <-host.backgroundCanceled:
+	default:
+		t.Fatal("background recovery did not observe lifecycle cancellation")
 	}
 }
 

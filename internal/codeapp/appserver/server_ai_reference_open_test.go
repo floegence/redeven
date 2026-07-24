@@ -270,7 +270,7 @@ func referenceOpenTargetLocatorForTest(t *testing.T, endpointID string, targetID
 
 func seedFloretReferenceOpenTurn(t *testing.T, stateDir string, threadID string, turnID string, references []flruntime.MessageReference) {
 	t.Helper()
-	store, err := flruntime.OpenSQLiteStore(filepath.Join(stateDir, "ai", "floret_threads.sqlite"))
+	store, err := openTestFloretStore(t, filepath.Join(stateDir, "ai", "floret_threads.sqlite"))
 	if err != nil {
 		t.Fatal(err)
 	}

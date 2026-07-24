@@ -184,12 +184,29 @@ check_floret_capability_bootstrap_boundary() {
 			*_test.go|internal/ai/floret_bootstrap.go)
 				continue
 				;;
+			internal/ai/floret_store_maintenance.go)
+				if matches=$(rg -n --pcre2 "${alias}\\.(ConfigureHostCapabilities|New(Thread(Read|Create|Title|Fork|Delete)HostBinder|TurnExecutionHostBinder|ThreadCompactionHostBinder|SubAgentHostBinder|SubAgentReadHostBinder|InterruptedTurnRecoveryHostBinder|PendingToolRecoveryHostBinder))|\\b${alias}\\.HostBootstrap\\b" "$file" 2>/dev/null); then
+					printf '%s\n' "$matches"
+					fail "Floret capability construction must not enter the Store maintenance adapter."
+				fi
+				continue
+				;;
 		esac
 		if matches=$(rg -n --pcre2 "${alias}\\.(OpenSQLiteStore|ConfigureHostCapabilities|New(Thread(Read|Create|Title|Fork|Delete)HostBinder|TurnExecutionHostBinder|ThreadCompactionHostBinder|SubAgentHostBinder|SubAgentReadHostBinder|InterruptedTurnRecoveryHostBinder|PendingToolRecoveryHostBinder))|\\b${alias}\\.(Store|HostBootstrap)\\b|\\*${alias}\\.(TurnExecutionHost|ThreadCompactionHost|SubAgentHost|Thread(Read|Create|Title|Fork|Delete)Host|SubAgentReadHost|InterruptedTurnRecoveryHost|PendingToolRecoveryHost|Thread(Read|Create|Title|Fork|Delete)HostBinder|TurnExecutionHostBinder|ThreadCompactionHostBinder|SubAgentHostBinder|SubAgentReadHostBinder|InterruptedTurnRecoveryHostBinder|PendingToolRecoveryHostBinder)" "$file" 2>/dev/null); then
 			printf '%s\n' "$matches"
 			fail "Raw Floret runtime tokens, concrete hosts, and capability constructors must stay in floret_bootstrap.go."
 		fi
 	done < <(rg -l --glob '*.go' '"github\.com/floegence/floret/runtime"' internal 2>/dev/null)
+
+	if matches=$(rg -n --pcre2 \
+		--glob '*.go' \
+		--glob '!**/*_test.go' \
+		--glob '!internal/ai/floret_store_maintenance.go' \
+		'InspectSQLiteStore|VerifySQLiteStore|MigrateSQLiteStore|OpenSQLiteStore|SQLiteStore(Inspection|Verification|MigrationRequest|MigrationResult|MaintenanceError|OpenRequest)' \
+		internal 2>/dev/null); then
+		printf '%s\n' "$matches"
+		fail "Raw Floret Store maintenance contracts must stay inside the public maintenance adapter."
+	fi
 
   if matches=$(rg -n --pcre2 \
     --glob '*.go' \
