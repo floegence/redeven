@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	flruntime "github.com/floegence/floret/runtime"
 	"github.com/floegence/redeven/internal/ai/threadstore"
@@ -21,6 +22,32 @@ type recordingThreadDeleteHost struct {
 	mu        sync.Mutex
 	deleteErr error
 	deleted   []string
+}
+
+type blockingThreadDeleteHost struct {
+	mu      sync.Mutex
+	count   int
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (h *blockingThreadDeleteHost) DeleteThread(ctx context.Context, _ flruntime.ThreadID) error {
+	h.mu.Lock()
+	h.count++
+	h.mu.Unlock()
+	h.entered <- struct{}{}
+	select {
+	case <-h.release:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (h *blockingThreadDeleteHost) deleteCount() int {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return h.count
 }
 
 func (h *recordingThreadDeleteHost) DeleteThread(_ context.Context, threadID flruntime.ThreadID) error {
@@ -113,6 +140,15 @@ func TestServiceDeleteThreadPersistsPendingOperationAndReplaysTransientFailure(t
 	if err != nil || operation == nil || operation.RetryCount != 1 {
 		t.Fatalf("operation=%+v err=%v", operation, err)
 	}
+	canonicalReadCount := 0
+	service.floretReads.thread = func(context.Context, flruntime.ThreadID) (floretThreadReadHost, error) {
+		canonicalReadCount++
+		return nil, errors.New("canonical read must not run for a retired thread")
+	}
+	view, err := service.GetThread(context.Background(), meta, thread.ThreadID)
+	if err != nil || view != nil || canonicalReadCount != 0 {
+		t.Fatalf("retired detail view=%#v reads=%d err=%v", view, canonicalReadCount, err)
+	}
 
 	host.setDeleteError(nil)
 	if _, err := service.replayPendingThreadDeletes(context.Background(), 10); err != nil {
@@ -124,6 +160,141 @@ func TestServiceDeleteThreadPersistsPendingOperationAndReplaysTransientFailure(t
 	}
 	if cleaner.deleteCount() != 1 {
 		t.Fatalf("read-state delete count=%d, want 1", cleaner.deleteCount())
+	}
+}
+
+func TestClassifyFloretThreadDeleteError(t *testing.T) {
+	t.Parallel()
+	terminal := []error{
+		flruntime.ErrThreadNotFound,
+		flruntime.ErrThreadDeleted,
+		flruntime.ErrSubAgentParentRequired,
+		flruntime.ErrAuthorityCorrupt,
+		flruntime.ErrUnsupportedStoreCapability,
+		flruntime.ErrRequestConflict,
+		flruntime.ErrJournalInvariant,
+		flruntime.ErrThreadAuthorityInvariant,
+	}
+	for _, err := range terminal {
+		if code, ok := classifyFloretThreadDeleteError(fmt.Errorf("wrapped: %w", err)); !ok || code == "" {
+			t.Fatalf("terminal error %v classified as code=%q terminal=%v", err, code, ok)
+		}
+	}
+	retryable := []error{
+		flruntime.ErrThreadBusy,
+		&flruntime.AuthorityBusyError{Kind: flruntime.AuthorityBusyAuthority},
+		flruntime.ErrSubAgentClosing,
+		flruntime.ErrStaleAuthority,
+		flruntime.ErrStoreClosed,
+		context.Canceled,
+		context.DeadlineExceeded,
+		&flruntime.CommittedCleanupError{ThreadID: "thread", Err: errors.New("cleanup")},
+		errors.New("transient transport failure"),
+	}
+	for _, err := range retryable {
+		if code, ok := classifyFloretThreadDeleteError(err); ok || code != "" {
+			t.Fatalf("retryable error %v classified as code=%q terminal=%v", err, code, ok)
+		}
+	}
+}
+
+func TestServiceDeleteThreadMarksMissingCanonicalThreadTerminal(t *testing.T) {
+	host := &recordingThreadDeleteHost{deleteErr: flruntime.ErrThreadNotFound}
+	cleaner := &recordingFlowerReadStateCleaner{}
+	service := newThreadDeleteTestService(t, t.TempDir(), host, cleaner)
+	defer func() { _ = service.Close() }()
+	meta := &session.Meta{EndpointID: "env_delete_missing_canonical", UserPublicID: "user_1", CanRead: true, CanWrite: true, CanExecute: true}
+	thread, err := service.CreateThread(context.Background(), meta, "missing canonical", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	denied := &session.Meta{EndpointID: meta.EndpointID, UserPublicID: "user_2", CanRead: true}
+	if _, err := service.DeleteThread(context.Background(), denied, thread.ThreadID, false); err == nil || host.deleteCount() != 0 {
+		t.Fatalf("permission failure err=%v Floret calls=%d", err, host.deleteCount())
+	}
+	result, err := service.DeleteThread(context.Background(), meta, thread.ThreadID, false)
+	if !errors.Is(err, ErrThreadDeleteOperationFailed) || result.Status != ThreadDeleteStatusFailed || !result.IntentPersisted {
+		t.Fatalf("result=%+v err=%v", result, err)
+	}
+	operation, err := service.threadsDB.GetThreadDeleteOperation(context.Background(), meta.EndpointID, thread.ThreadID)
+	if err != nil || operation == nil || operation.ErrorCode != threadDeleteErrorFloretNotFound || operation.FloretDeletedAtUnixMs != 0 || operation.ProductDataDeletedAtUnixMs != 0 {
+		t.Fatalf("operation=%+v err=%v", operation, err)
+	}
+	settings, err := service.threadsDB.GetThreadSettings(context.Background(), meta.EndpointID, thread.ThreadID)
+	if err != nil || settings == nil || cleaner.deleteCount() != 0 {
+		t.Fatalf("settings=%+v read-state deletes=%d err=%v", settings, cleaner.deleteCount(), err)
+	}
+	canonicalReadCount := 0
+	service.floretReads.thread = func(context.Context, flruntime.ThreadID) (floretThreadReadHost, error) {
+		canonicalReadCount++
+		return nil, errors.New("canonical read must not run for a failed delete intent")
+	}
+	view, err := service.GetThread(context.Background(), meta, thread.ThreadID)
+	if err != nil || view != nil || canonicalReadCount != 0 {
+		t.Fatalf("failed retired detail view=%#v reads=%d err=%v", view, canonicalReadCount, err)
+	}
+}
+
+func TestThreadDeleteAdvancementAcceptsExactFloretTombstoneReplay(t *testing.T) {
+	service := newThreadDeleteTestService(t, t.TempDir(), nil, &recordingFlowerReadStateCleaner{})
+	defer func() { _ = service.Close() }()
+	meta := &session.Meta{EndpointID: "env_delete_tombstone_replay", UserPublicID: "user_1", CanRead: true, CanWrite: true, CanExecute: true}
+	thread, err := service.CreateThread(context.Background(), meta, "tombstone replay", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	operation, err := service.threadsDB.PrepareThreadDeleteOperation(context.Background(), meta.EndpointID, thread.ThreadID, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deleteCanonicalFloretThreadForTest(t, service, thread.ThreadID)
+	advanced, err := service.advanceThreadDeleteOperation(context.Background(), operation.OperationID, operation.EndpointID, operation.ThreadID)
+	if err != nil || advanced.Status != threadstore.ThreadDeleteOperationCommitted || advanced.FloretDeletedAtUnixMs <= 0 {
+		t.Fatalf("advanced=%+v err=%v", advanced, err)
+	}
+}
+
+func TestThreadDeleteAdvancementSerializesExplicitAndPeriodicReplay(t *testing.T) {
+	cleaner := &recordingFlowerReadStateCleaner{}
+	service := newThreadDeleteTestService(t, t.TempDir(), nil, cleaner)
+	defer func() { _ = service.Close() }()
+	host := &blockingThreadDeleteHost{entered: make(chan struct{}, 2), release: make(chan struct{})}
+	service.threadDeleteFloret = &threadDeleteFloretCoordinator{authority: testFloretThreadDeleteAuthorityFunc(host.DeleteThread)}
+	meta := &session.Meta{EndpointID: "env_delete_serial", UserPublicID: "user_1", CanRead: true, CanWrite: true, CanExecute: true}
+	thread, err := service.CreateThread(context.Background(), meta, "serialized delete", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	type deleteOutcome struct {
+		result ThreadDeleteResult
+		err    error
+	}
+	deleteDone := make(chan deleteOutcome, 1)
+	go func() {
+		result, err := service.DeleteThread(context.Background(), meta, thread.ThreadID, false)
+		deleteDone <- deleteOutcome{result: result, err: err}
+	}()
+	<-host.entered
+	replayDone := make(chan error, 1)
+	go func() {
+		_, err := service.replayPendingThreadDeletes(context.Background(), 10)
+		replayDone <- err
+	}()
+	select {
+	case <-host.entered:
+		t.Fatal("periodic replay entered Floret while explicit delete held the lifecycle gate")
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(host.release)
+	outcome := <-deleteDone
+	if outcome.err != nil || outcome.result.Status != ThreadDeleteStatusCommitted {
+		t.Fatalf("explicit delete result=%+v err=%v", outcome.result, outcome.err)
+	}
+	if err := <-replayDone; err != nil {
+		t.Fatalf("periodic replay: %v", err)
+	}
+	if host.deleteCount() != 1 || cleaner.deleteCount() != 1 {
+		t.Fatalf("external cleanup counts Floret=%d read-state=%d, want 1/1", host.deleteCount(), cleaner.deleteCount())
 	}
 }
 
@@ -140,6 +311,7 @@ func TestStartupDeleteRecoveryProcessesEveryBatchBeforeTurnRecovery(t *testing.T
 			return host.DeleteThread(ctx, threadID)
 		})},
 	}
+	service.threadMgr = newThreadManager(service)
 	const total = threadDeleteReplayBatchSize + 25
 	for index := 0; index < total; index++ {
 		threadID := fmt.Sprintf("thread_startup_delete_%03d", index)
@@ -178,6 +350,7 @@ func TestStartupDeleteRecoveryFailsClosedBeforeProductDataRemoval(t *testing.T) 
 			return host.DeleteThread(ctx, threadID)
 		})},
 	}
+	service.threadMgr = newThreadManager(service)
 	if err := store.CreateThreadSettings(context.Background(), threadstore.ThreadSettings{
 		EndpointID: "env_startup_block", ThreadID: "thread_startup_block", PermissionType: "approval_required",
 	}); err != nil {
@@ -340,6 +513,10 @@ func TestNewServiceMarksCorruptThreadDeleteSnapshotFailed(t *testing.T) {
 	_, err = NewService(Options{StateDir: stateDir, AgentHomeDir: filepath.Join(stateDir, "home")})
 	if err == nil || !strings.Contains(err.Error(), "recover pending thread deletes") {
 		t.Fatalf("NewService error=%v, want strict delete recovery failure", err)
+	}
+	_, err = NewService(Options{StateDir: stateDir, AgentHomeDir: filepath.Join(stateDir, "home")})
+	if err == nil || !errors.Is(err, ErrThreadDeleteOperationFailed) {
+		t.Fatalf("second NewService error=%v, want persistent terminal delete failure", err)
 	}
 	store, err := threadstore.Open(filepath.Join(stateDir, "ai", "threads.sqlite"))
 	if err != nil {

@@ -253,9 +253,10 @@ func TestReplayInvalidThreadDeleteSnapshotDoesNotRetireFlowerLive(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	operation.SnapshotValid = false
-	operation.SnapshotErrorCode = "invalid_snapshot_json"
-	if _, err := service.replayThreadDeleteOperation(context.Background(), operation); !errors.Is(err, ErrThreadDeleteOperationFailed) {
+	if _, err := service.threadsDB.MarkThreadDeleteFailed(context.Background(), operation.OperationID, "invalid_snapshot_json", "invalid snapshot"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.advanceThreadDeleteOperation(context.Background(), operation.OperationID, operation.EndpointID, operation.ThreadID); !errors.Is(err, ErrThreadDeleteOperationFailed) {
 		t.Fatalf("replay invalid snapshot error=%v", err)
 	}
 	threadKey := runThreadKey(meta.EndpointID, thread.ThreadID)

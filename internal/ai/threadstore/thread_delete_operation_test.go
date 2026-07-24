@@ -90,6 +90,46 @@ func TestStorePrepareThreadDeleteOperationPersistsReplaySnapshotAndRetiresThread
 	}
 }
 
+func TestListThreadSettingsExcludesDeleteIntentsBeforePagination(t *testing.T) {
+	t.Parallel()
+	store := openStoreForTest(t)
+	ctx := context.Background()
+	const endpointID = "env_delete_visibility"
+	for index, threadID := range []string{"thread_old", "thread_deleted", "thread_new"} {
+		if err := store.CreateThreadSettings(ctx, ThreadSettings{
+			EndpointID: endpointID, ThreadID: threadID, PermissionType: "approval_required",
+			SettingsCreatedAtUnixMs: int64((index + 1) * 100),
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := store.CreateThreadSettings(ctx, ThreadSettings{
+		EndpointID: "env_other", ThreadID: "thread_other", PermissionType: "approval_required", SettingsCreatedAtUnixMs: 200,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.PrepareThreadDeleteOperation(ctx, endpointID, "thread_deleted", false); err != nil {
+		t.Fatal(err)
+	}
+
+	first, next, err := store.ListThreadSettings(ctx, endpointID, 1, ThreadsCursor{})
+	if err != nil || len(first) != 1 || first[0].ThreadID != "thread_new" || next == "" {
+		t.Fatalf("first page=%+v next=%q err=%v", first, next, err)
+	}
+	cursor, ok := DecodeCursor(next)
+	if !ok {
+		t.Fatalf("invalid cursor %q", next)
+	}
+	second, next, err := store.ListThreadSettings(ctx, endpointID, 1, cursor)
+	if err != nil || len(second) != 1 || second[0].ThreadID != "thread_old" || next != "" {
+		t.Fatalf("second page=%+v next=%q err=%v", second, next, err)
+	}
+	other, _, err := store.ListThreadSettings(ctx, "env_other", 10, ThreadsCursor{})
+	if err != nil || len(other) != 1 || other[0].ThreadID != "thread_other" {
+		t.Fatalf("other endpoint=%+v err=%v", other, err)
+	}
+}
+
 func TestStoreThreadDeleteIntentFreezesThreadScopedWrites(t *testing.T) {
 	t.Parallel()
 

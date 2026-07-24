@@ -344,6 +344,19 @@ func (s *Store) ListPendingThreadDeleteOperationsAfter(ctx context.Context, afte
 	return out, nil
 }
 
+func (s *Store) FirstFailedThreadDeleteOperation(ctx context.Context) (*ThreadDeleteOperation, error) {
+	if s == nil || s.db == nil {
+		return nil, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return scanThreadDeleteOperation(s.db.QueryRowContext(ctx, threadDeleteOperationSelectSQL+`
+WHERE status = ?
+ORDER BY updated_at_unix_ms ASC, operation_id ASC
+LIMIT 1`, ThreadDeleteOperationFailed))
+}
+
 func (s *Store) ConfirmThreadDeleteFilesCleaned(ctx context.Context, operationID string) (ThreadDeleteOperation, error) {
 	return s.confirmThreadDeleteStep(ctx, operationID, "files_cleaned_at_unix_ms")
 }
@@ -413,6 +426,40 @@ func (s *Store) RecordThreadDeleteRetry(ctx context.Context, operationID string,
 
 func (s *Store) MarkThreadDeleteFailed(ctx context.Context, operationID string, errorCode string, errorMessage string) (ThreadDeleteOperation, error) {
 	return s.recordThreadDeleteError(ctx, operationID, ThreadDeleteOperationFailed, false, errorCode, errorMessage)
+}
+
+func (s *Store) MarkThreadDeleteIntegrityFailed(ctx context.Context, operationID string, errorCode string, errorMessage string) (ThreadDeleteOperation, error) {
+	if s == nil || s.db == nil {
+		return ThreadDeleteOperation{}, errors.New("store not initialized")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	operationID = strings.TrimSpace(operationID)
+	errorCode = strings.TrimSpace(errorCode)
+	errorMessage = strings.TrimSpace(errorMessage)
+	if operationID == "" || errorCode == "" {
+		return ThreadDeleteOperation{}, errors.New("invalid thread delete integrity failure")
+	}
+	if len(errorMessage) > 600 {
+		errorMessage = truncateRunes(errorMessage, 600)
+	}
+	now := time.Now().UnixMilli()
+	if _, err := s.db.ExecContext(ctx, `
+UPDATE ai_thread_delete_operations
+SET status = ?, error_code = ?, error_message = ?, updated_at_unix_ms = ?
+WHERE operation_id = ?
+`, ThreadDeleteOperationFailed, errorCode, errorMessage, now, operationID); err != nil {
+		return ThreadDeleteOperation{}, err
+	}
+	operation, err := scanThreadDeleteOperation(s.db.QueryRowContext(ctx, threadDeleteOperationSelectSQL+` WHERE operation_id = ?`, operationID))
+	if err != nil {
+		return ThreadDeleteOperation{}, err
+	}
+	if operation == nil {
+		return ThreadDeleteOperation{}, sql.ErrNoRows
+	}
+	return *operation, nil
 }
 
 func (s *Store) recordThreadDeleteError(ctx context.Context, operationID string, status string, incrementRetry bool, errorCode string, errorMessage string) (ThreadDeleteOperation, error) {

@@ -276,6 +276,12 @@ SELECT
 %s
 FROM ai_thread_settings
 WHERE endpoint_id = ?
+  AND NOT EXISTS (
+    SELECT 1
+    FROM ai_thread_delete_operations AS delete_operation
+    WHERE delete_operation.endpoint_id = ai_thread_settings.endpoint_id
+      AND delete_operation.thread_id = ai_thread_settings.thread_id
+  )
 `, threadSelectColumnsSQL)
 	if cursor.SettingsCreatedAtUnixMs > 0 && strings.TrimSpace(cursor.ThreadID) != "" {
 		cursorPinned := nonNegativeInt64(cursor.PinnedAtUnixMs)

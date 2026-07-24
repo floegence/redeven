@@ -966,6 +966,19 @@ type apiResp struct {
 	Data         interface{} `json:"data,omitempty"`
 }
 
+func parseThreadDeleteForceQuery(rawQuery string) (bool, error) {
+	switch rawQuery {
+	case "":
+		return false, nil
+	case "force=true":
+		return true, nil
+	case "force=false":
+		return false, nil
+	default:
+		return false, errors.New("invalid thread delete query")
+	}
+}
+
 type settingsView struct {
 	ConfigPath string `json:"config_path"`
 
@@ -4623,11 +4636,10 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
 				return
 			}
-			force := false
-			if raw := strings.TrimSpace(r.URL.Query().Get("force")); raw != "" {
-				if raw == "1" || strings.EqualFold(raw, "true") {
-					force = true
-				}
+			force, err := parseThreadDeleteForceQuery(r.URL.RawQuery)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error(), ErrorCode: "invalid_thread_delete_query"})
+				return
 			}
 			result, err := g.ai.DeleteThread(r.Context(), meta, threadID, force)
 			if err != nil {
@@ -4647,7 +4659,11 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 					responseData = result
 				}
 				g.appendAudit(meta, "ai_thread_delete", "failure", auditFields, err)
-				writeJSON(w, status, apiResp{OK: false, Error: err.Error(), Data: responseData})
+				errorCode := ""
+				if errors.Is(err, ai.ErrThreadDeleteOperationFailed) {
+					errorCode = "AI_THREAD_DELETE_OPERATION_FAILED"
+				}
+				writeJSON(w, status, apiResp{OK: false, Error: err.Error(), ErrorCode: errorCode, Data: responseData})
 				return
 			}
 			status := http.StatusInternalServerError
@@ -4659,7 +4675,9 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			case ai.ThreadDeleteStatusFailed:
 			}
 			auditOutcome := "success"
-			if status >= http.StatusInternalServerError {
+			if status == http.StatusAccepted {
+				auditOutcome = "accepted"
+			} else if status >= http.StatusInternalServerError {
 				auditOutcome = "failure"
 			}
 			g.appendAudit(meta, "ai_thread_delete", auditOutcome, map[string]any{"thread_id": threadID, "operation_id": result.OperationID, "status": result.Status}, nil)
