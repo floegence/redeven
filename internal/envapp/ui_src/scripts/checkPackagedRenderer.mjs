@@ -122,6 +122,14 @@ async function createBuiltDistServer({ accessReady = false } = {}) {
         jsonResponse(response, { ok: true, data: { plugins: [] } });
         return;
       }
+      if (requestURL.pathname === '/_redevplugin/api/plugins/permissions/query') {
+        jsonResponse(response, { ok: true, data: { permissions: [] } });
+        return;
+      }
+      if (requestURL.pathname === '/_redevplugin/api/plugins/security-policies/query') {
+        jsonResponse(response, { ok: true, data: { security_policies: [] } });
+        return;
+      }
 
       if (!requestURL.pathname.startsWith(entryPath)) {
         response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' });
@@ -427,7 +435,11 @@ async function main() {
       })}`, { cause: error });
     }
     const pluginPanelTileCount = await pluginCenterTile.count();
-    const expectedPluginRequests = [{ method: 'POST', path: '/_redevplugin/api/plugins/catalog/query' }];
+    const expectedPluginRequests = [
+      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query' },
+      { method: 'POST', path: '/_redevplugin/api/plugins/permissions/query' },
+      { method: 'POST', path: '/_redevplugin/api/plugins/security-policies/query' },
+    ];
     if (JSON.stringify(pluginRequests) !== JSON.stringify(expectedPluginRequests)) {
       throw new Error(`built Plugin request contract mismatch: ${JSON.stringify({
         expected: expectedPluginRequests,
