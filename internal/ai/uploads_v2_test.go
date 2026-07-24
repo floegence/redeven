@@ -301,6 +301,7 @@ func TestOpenLiveUploadRequiresFreshExactCanonicalMembershipAndThreadClaim(t *te
 func TestOpenLiveUploadValidatesLegacyThreadArtifactAgainstCanonicalDigest(t *testing.T) {
 	t.Parallel()
 	svc := newTestService(t, nil)
+	stopTestServiceMaintenance(t, svc)
 	owner, _ := NewUploadOwner("env_legacy_live", "user_owner", "channel_owner")
 	body := []byte("legacy artifact")
 	digest := sha256.Sum256(body)
@@ -384,6 +385,7 @@ func TestOpenLiveUploadValidatesLegacyThreadArtifactAgainstCanonicalDigest(t *te
 func TestOpenLiveUploadRejectsInvalidLegacyTextWithoutPartialSeal(t *testing.T) {
 	t.Parallel()
 	svc := newTestService(t, nil)
+	stopTestServiceMaintenance(t, svc)
 	owner, _ := NewUploadOwner("env_legacy_invalid_text", "user_owner", "channel_owner")
 	body := []byte{0xff, 0xfe, 'x'}
 	const uploadID = "upl_iiiiiiiiiiiiiiiiiiiiiiii"

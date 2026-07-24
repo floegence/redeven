@@ -142,11 +142,11 @@ func (p *floretProviderAdapter) PrepareModelRequest(ctx context.Context, req flr
 	}
 	payload, err := json.Marshal(turnReq)
 	if err != nil {
-		return nil, fmt.Errorf("marshal prepared model gateway request: %w", err)
+		return nil, fmt.Errorf("marshal prepared model request: %w", err)
 	}
 	var frozen ModelGatewayRequest
 	if err := json.Unmarshal(payload, &frozen); err != nil {
-		return nil, fmt.Errorf("freeze prepared model gateway request: %w", err)
+		return nil, fmt.Errorf("freeze prepared model request: %w", err)
 	}
 	estimate, err := conservativeRenderedGatewayRequestEstimate(payload, frozen)
 	if err != nil {
@@ -160,7 +160,7 @@ func (p *floretProviderAdapter) PrepareModelRequest(ctx context.Context, req flr
 
 func conservativeRenderedGatewayRequestEstimate(payload []byte, req ModelGatewayRequest) (flruntime.ModelRequestTokenEstimate, error) {
 	if len(payload) == 0 {
-		return flruntime.ModelRequestTokenEstimate{}, errors.New("prepared model gateway request payload is empty")
+		return flruntime.ModelRequestTokenEstimate{}, errors.New("prepared model request payload is empty")
 	}
 	messages, err := json.Marshal(req.Messages)
 	if err != nil {

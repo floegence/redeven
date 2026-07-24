@@ -119,8 +119,8 @@ func TestNewRejectsUnsupportedThreadstoreVersionWithoutMutation(t *testing.T) {
 		}
 		t.Fatal("New accepted unsupported threadstore version 15")
 	}
-	if !strings.Contains(err.Error(), "15") || !strings.Contains(err.Error(), "v2, v3, and v4") {
-		t.Fatalf("New error=%v, want actual version and supported v2/v3/v4 contract", err)
+	if !strings.Contains(err.Error(), "15") || !strings.Contains(err.Error(), "schemas v2 through v6") {
+		t.Fatalf("New error=%v, want actual version and supported v2-through-v6 contract", err)
 	}
 
 	raw, err := sql.Open("sqlite", dbPath)
