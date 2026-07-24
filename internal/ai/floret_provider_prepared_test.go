@@ -104,7 +104,7 @@ func TestFloretProviderPreparedRequestFreezesCompleteRenderedPayload(t *testing.
 	gateway.mu.Lock()
 	defer gateway.mu.Unlock()
 	if len(gateway.requests) != 1 {
-		t.Fatalf("gateway requests = %d, want 1", len(gateway.requests))
+		t.Fatalf("rendered model requests = %d, want 1", len(gateway.requests))
 	}
 }
 
