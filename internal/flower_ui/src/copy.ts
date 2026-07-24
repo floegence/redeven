@@ -30,7 +30,15 @@ export type FlowerThreadListCopy = Readonly<{
   untitled: string;
   working: string;
   unread: string;
-  deleteLabel: (title: string) => string;
+  deleteMenuAction: string;
+  deleteDialogTitle: string;
+  deleteDialogDescription: (title: string) => string;
+  deleteDialogActiveDescription: string;
+  deleteDialogWorkspaceDescription: string;
+  deleteConfirm: string;
+  deleteCommittedNotification: string;
+  deletePendingNotification: string;
+  deleteFailedNotification: string;
   contextMenuLabel: (title: string) => string;
   copyThreadID: string;
   copyWorkingDirectory: string;
@@ -576,7 +584,15 @@ export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
     untitled: 'Untitled chat',
     working: 'Working',
     unread: 'Unread',
-    deleteLabel: (title) => `Delete ${title}`,
+    deleteMenuAction: 'Delete conversation',
+    deleteDialogTitle: 'Delete conversation?',
+    deleteDialogDescription: (title) => `Permanently delete "${title}" and its conversation history? This cannot be undone.`,
+    deleteDialogActiveDescription: 'Any active or waiting tasks and their SubAgents will be stopped.',
+    deleteDialogWorkspaceDescription: "Ordinary files in this conversation's workspace are not affected.",
+    deleteConfirm: 'Delete',
+    deleteCommittedNotification: 'Conversation deleted.',
+    deletePendingNotification: 'Deletion was accepted and will continue in the background. The conversation has been removed from this view.',
+    deleteFailedNotification: 'This conversation has been retired and cannot be used, but deletion is incomplete. Repair the Local Environment data, then restart Redeven.',
     contextMenuLabel: (title) => `Actions for ${title}`,
     copyThreadID: 'Copy thread id',
     copyWorkingDirectory: 'Copy working directory',

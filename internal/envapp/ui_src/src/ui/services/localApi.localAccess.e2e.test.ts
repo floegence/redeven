@@ -29,11 +29,12 @@ function errorResponseWithRetry(message: string, status: number, retryAfterMs: n
   });
 }
 
-function flatAppserverErrorResponse(message: string, status: number, code: string): Response {
+function flatAppserverErrorResponse(message: string, status: number, code: string, data?: unknown): Response {
   return new Response(JSON.stringify({
     ok: false,
     error: message,
     error_code: code,
+    ...(data === undefined ? {} : { data }),
   }), {
     status,
     headers: { 'Content-Type': 'application/json' },
@@ -203,6 +204,31 @@ describe('localApi access credentials', () => {
       message: 'confirmation required',
       status: 403,
       code: 'PLUGIN_CONFIRMATION_REQUIRED',
+    });
+  });
+
+  it('preserves structured appserver error data without interpreting it', async () => {
+    vi.doMock('./controlplaneApi', () => ({
+      getLocalRuntime: vi.fn(async () => null),
+    }));
+    const receipt = {
+      operation_id: 'delete_operation_1',
+      status: 'failed',
+      intent_persisted: true,
+    };
+    const fetchMock = vi.fn(async () => flatAppserverErrorResponse(
+      'thread delete failed',
+      500,
+      'AI_THREAD_DELETE_OPERATION_FAILED',
+      receipt,
+    ));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const mod = await import('./localApi');
+    await expect(mod.fetchLocalApiJSON('/api/test/error-data', { method: 'DELETE' })).rejects.toMatchObject({
+      name: 'LocalApiError',
+      code: 'AI_THREAD_DELETE_OPERATION_FAILED',
+      data: receipt,
     });
   });
 

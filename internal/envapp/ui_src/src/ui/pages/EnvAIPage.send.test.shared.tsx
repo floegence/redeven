@@ -356,7 +356,6 @@ vi.mock('../i18n', async () => {
     'flowerChat.sidebar.contextMenu.threadIdLabel': 'Mock thread ID',
     'flowerChat.sidebar.contextMenu.unpin': 'Mock unpin conversation',
     'flowerChat.sidebar.contextMenu.workingDirectoryLabel': 'Mock working directory',
-    'flowerChat.sidebar.delete.aria': 'Delete chat {title}',
     'flowerChat.sidebar.description': 'Mock stable conversation order',
     'flowerChat.sidebar.groups.older': 'Mock older',
     'flowerChat.sidebar.groups.thisWeek': 'Mock this week',

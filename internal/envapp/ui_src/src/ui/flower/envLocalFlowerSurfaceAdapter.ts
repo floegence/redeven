@@ -1,6 +1,6 @@
 import type { RedevenV1Rpc } from '../protocol/redeven_v1';
 import { ProtocolNotConnectedError, RpcError } from '@floegence/floe-webapp-protocol';
-import { fetchLocalApiJSON } from '../services/localApi';
+import { fetchLocalApiJSON, LocalApiError } from '../services/localApi';
 import type { AgentSettingsResponse, AIConfig, AIModelProfile } from '../pages/settings/types';
 import type {
   FlowerApprovalDecisionReceipt,
@@ -23,7 +23,10 @@ import type {
 import type { FlowerCanonicalReferenceNavigationTarget } from './linkedContextNavigation';
 import { requireAskFlowerContextActionEnvelope } from '../contextActions/protocol';
 import { mapFlowerLiveBootstrap } from '../../../../../flower_ui/src/flowerLiveMapper';
-import { createRuntimeFlowerSurfaceAdapter } from '../../../../../flower_ui/src/runtimeFlowerSurfaceAdapter';
+import {
+  createRuntimeFlowerSurfaceAdapter,
+  FLOWER_THREAD_DELETE_OPERATION_FAILED_CODE,
+} from '../../../../../flower_ui/src/runtimeFlowerSurfaceAdapter';
 import {
   createFlowerClientTurnID,
   flowerTurnAdmissionUncertainIdentity,
@@ -516,6 +519,18 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         method: 'POST',
         body: JSON.stringify({}),
       }),
+      deleteThread: async (threadID) => {
+        try {
+          return await fetchLocalApiJSON<unknown>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}?force=true`, {
+            method: 'DELETE',
+          });
+        } catch (error) {
+          if (error instanceof LocalApiError && error.code === FLOWER_THREAD_DELETE_OPERATION_FAILED_CODE) {
+            return error.data;
+          }
+          throw error;
+        }
+      },
       submitApproval: (body) => fetchLocalApiJSON<FlowerApprovalDecisionReceipt>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(body.thread_id)}/approvals`, {
         method: 'POST',
         body: JSON.stringify(body),

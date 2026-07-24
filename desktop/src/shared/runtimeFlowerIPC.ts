@@ -13,6 +13,7 @@ export type RuntimeFlowerError = Readonly<{
   message: string;
   status?: number;
   retryAfterMs?: number;
+  data?: unknown;
 }>;
 
 export type RuntimeFlowerFailureKind = 'response' | 'transport_unknown' | 'local';

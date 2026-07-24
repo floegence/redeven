@@ -546,6 +546,65 @@ describe('Local Environment Flower surface adapter', () => {
     expect(calls[0].body).toEqual({});
   });
 
+  it('deletes threads through the force-only runtime endpoint', async () => {
+    const calls: RuntimeFlowerRequest[] = [];
+    const bridge = bridgeFor((request) => {
+      calls.push(request);
+      return {
+        operation_id: 'delete_operation_1',
+        status: 'committed',
+        intent_persisted: true,
+      };
+    });
+    const adapter = createLocalEnvironmentFlowerSurfaceAdapter(bridge);
+
+    await expect(adapter.deleteThread?.('thread /1')).resolves.toEqual({ status: 'committed' });
+    expect(calls).toEqual([{
+      method: 'DELETE',
+      path: '/_redeven_proxy/api/ai/threads/thread%20%2F1?force=true',
+    }]);
+  });
+
+  it('accepts only response-scoped terminal delete receipts with the fixed machine error', async () => {
+    const validReceipt = {
+      operation_id: 'delete_operation_1',
+      status: 'failed',
+      intent_persisted: true,
+    };
+    const bridgeForFailure = (code: string, data: unknown, failureKind: 'response' | 'local' = 'response'): DesktopSettingsBridge => ({
+      save: vi.fn(async () => ({ ok: true as const, snapshot: {} as never })),
+      requestRuntimeFlower: vi.fn(async () => ({
+        ok: false as const,
+        error: { code, message: 'Thread delete failed.', status: 500, data },
+        failureKind,
+      })),
+      cancel: vi.fn(),
+    });
+
+    await expect(createLocalEnvironmentFlowerSurfaceAdapter(
+      bridgeForFailure('AI_THREAD_DELETE_OPERATION_FAILED', validReceipt),
+    ).deleteThread?.('thread-1')).resolves.toEqual({ status: 'failed' });
+
+    await expect(createLocalEnvironmentFlowerSurfaceAdapter(
+      bridgeForFailure('AI_THREAD_DELETE_OPERATION_FAILED', { ...validReceipt, operation_id: '' }),
+    ).deleteThread?.('thread-1')).rejects.toThrow('Flower thread delete returned an invalid receipt.');
+
+    await expect(createLocalEnvironmentFlowerSurfaceAdapter(
+      bridgeForFailure('AI_THREAD_DELETE_OPERATION_FAILED', undefined),
+    ).deleteThread?.('thread-1')).rejects.toThrow('Flower thread delete returned an invalid receipt.');
+
+    await expect(createLocalEnvironmentFlowerSurfaceAdapter(
+      bridgeForFailure('UNKNOWN_DELETE_ERROR', validReceipt),
+    ).deleteThread?.('thread-1')).rejects.toMatchObject({ code: 'UNKNOWN_DELETE_ERROR', data: validReceipt });
+
+    await expect(createLocalEnvironmentFlowerSurfaceAdapter(
+      bridgeForFailure('AI_THREAD_DELETE_OPERATION_FAILED', validReceipt, 'local'),
+    ).deleteThread?.('thread-1')).rejects.toMatchObject({
+      code: 'AI_THREAD_DELETE_OPERATION_FAILED',
+      failureKind: 'local',
+    });
+  });
+
   it('compacts threads through the runtime compact endpoint and reloads live bootstrap', async () => {
     const calls: RuntimeFlowerRequest[] = [];
     const bridge = bridgeFor((request) => {

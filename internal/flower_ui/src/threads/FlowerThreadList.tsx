@@ -1,7 +1,7 @@
 import type { Component, JSX } from 'solid-js';
 import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
-import { Copy, Folder, GitBranch, MoreHorizontal, Pencil, Pin, Refresh, Search, X } from '@floegence/floe-webapp-core/icons';
+import { Copy, Folder, GitBranch, MoreHorizontal, Pencil, Pin, Refresh, Search, Trash } from '@floegence/floe-webapp-core/icons';
 import { Input, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 
 import type { FlowerThreadListCopy, FlowerThreadTimeGroup } from '../copy';
@@ -11,10 +11,10 @@ import { filterFlowerThreadItems, flowerThreadIndicator, groupFlowerThreadItems,
 import { canForkThreadItem, canPinThreadItem, canRenameThreadItem } from './threadListActions';
 
 type TimeGroup = FlowerThreadTimeGroup;
-export type FlowerThreadMenuAction = 'copy_thread_id' | 'fork' | 'copy_workdir' | 'pin' | 'rename';
+export type FlowerThreadMenuAction = 'copy_thread_id' | 'fork' | 'copy_workdir' | 'pin' | 'rename' | 'delete';
 export type { FlowerThreadGroup };
 
-const THREAD_CONTEXT_MENU_ESTIMATED_SIZE = { width: 212, height: 232 } as const;
+const THREAD_CONTEXT_MENU_ESTIMATED_SIZE = { width: 212, height: 276 } as const;
 
 type FlowerThreadRenderGroup = Readonly<{
   key: string;
@@ -49,10 +49,8 @@ export type FlowerThreadCardProps = Readonly<{
   item: FlowerThreadListItem;
   active: boolean;
   copy?: FlowerThreadListCopy;
-  canDelete?: boolean;
   busy?: boolean;
   onSelect: () => void;
-  onDelete?: () => void;
   onContextMenu?: (event: MouseEvent, item: FlowerThreadListItem) => void;
   onKeyboardMenu?: (event: KeyboardEvent, item: FlowerThreadListItem) => void;
   onRename?: (item: FlowerThreadListItem) => void;
@@ -90,7 +88,7 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
     >
       <button
         type="button"
-        class="flex w-full cursor-pointer items-start gap-2 px-2.5 py-2 pr-11 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-inset"
+        class="flower-thread-card-select-button flex w-full cursor-pointer items-start gap-2 px-2.5 py-2 pr-11 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-inset"
         aria-label={ariaLabel()}
         aria-current={props.active ? 'true' : undefined}
         onClick={props.onSelect}
@@ -121,25 +119,9 @@ export const FlowerThreadCard: Component<FlowerThreadCardProps> = (props) => {
         </div>
       </button>
       <div class="pointer-events-none absolute right-2.5 top-2 flex h-5 min-w-7 items-center justify-end">
-        <Show
-          when={props.canDelete && props.onDelete}
-          fallback={<span class="flower-thread-card-time select-none text-[10px] transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0" aria-hidden="true">{fmtFlowerShortTime(props.item.created_at_ms, copy())}</span>}
-        >
-          <span class="flower-thread-card-time select-none text-[10px] transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0" aria-hidden="true">
-            {fmtFlowerShortTime(props.item.created_at_ms, copy())}
-          </span>
-          <button
-            type="button"
-            class="pointer-events-auto absolute inset-0 flex cursor-pointer items-center justify-center rounded text-muted-foreground/60 opacity-0 transition-all duration-150 hover:bg-error/10 hover:text-error focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 group-hover:opacity-100 group-focus-within:opacity-100"
-            aria-label={copy().deleteLabel(title())}
-            onClick={(event) => {
-              event.stopPropagation();
-              props.onDelete?.();
-            }}
-          >
-            <X class="h-3.5 w-3.5" />
-          </button>
-        </Show>
+        <span class="flower-thread-card-time select-none text-[10px] transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0" aria-hidden="true">
+          {fmtFlowerShortTime(props.item.created_at_ms, copy())}
+        </span>
       </div>
       <Show when={props.onPin && itemCanPin()}>
         <button
@@ -274,7 +256,8 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
     <button
       type="button"
       role="menuitem"
-      class="flower-thread-menu-item"
+      class={cn('flower-thread-menu-item', kind === 'delete' && 'flower-thread-menu-item-destructive')}
+      data-destructive={kind === 'delete' ? 'true' : undefined}
       disabled={disabled || props.actionsBusy}
       aria-busy={props.busyAction === kind ? 'true' : undefined}
       onClick={() => action(kind)}
@@ -303,6 +286,8 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
         <div class="flower-thread-menu-separator" />
         {itemButton('pin', props.item.pinned ? props.copy.unpin : props.copy.pin, <Pin class={cn('h-3.5 w-3.5', props.item.pinned && 'text-primary')} />, !props.canPin || !canPinThreadItem(props.item))}
         {itemButton('rename', props.copy.rename, <Pencil class="h-3.5 w-3.5" />, !props.canRename || !canRenameThreadItem(props.item))}
+        <div class="flower-thread-menu-separator" />
+        {itemButton('delete', props.copy.deleteMenuAction, <Trash class="h-3.5 w-3.5" />)}
       </div>
     </SurfaceFloatingLayer>
   );
@@ -318,7 +303,6 @@ export type FlowerThreadListProps = Readonly<{
   onQueryChange: (query: string) => void;
   onSelect: (threadID: string) => void;
   onRefresh: () => void;
-  onDelete?: (threadID: string) => void;
   onMenuAction?: (action: FlowerThreadMenuAction, thread: FlowerThreadListItem, restore?: HTMLElement) => void;
   canFork?: boolean;
   canRename?: boolean;
@@ -447,10 +431,8 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
                                 item={item()}
                                 active={props.activeThreadID === threadID}
                                 copy={copy()}
-                                canDelete={!!props.onDelete}
                                 busy={props.busyThreadID === threadID}
                                 onSelect={() => props.onSelect(threadID)}
-                                onDelete={props.onDelete ? () => props.onDelete?.(threadID) : undefined}
                                 onContextMenu={openMenu}
                                 onKeyboardMenu={openMenu}
                                 onRename={props.onMenuAction && canRenameThreadItem(item()) ? (value) => props.onMenuAction?.('rename', value) : undefined}

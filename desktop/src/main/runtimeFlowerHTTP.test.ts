@@ -2,7 +2,7 @@ import http from 'node:http';
 
 import { describe, expect, it } from 'vitest';
 
-import { readRuntimeFlowerHTTPResponse } from './runtimeFlowerHTTP';
+import { readRuntimeFlowerHTTPResponse, runtimeFlowerDeleteQuery } from './runtimeFlowerHTTP';
 
 function listen(server: http.Server): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -64,5 +64,24 @@ describe('readRuntimeFlowerHTTPResponse', () => {
     } finally {
       await close(server);
     }
+  });
+});
+
+describe('runtimeFlowerDeleteQuery', () => {
+  it('accepts only the exact force=true query', () => {
+    expect(runtimeFlowerDeleteQuery(new URL('http://runtime.test/thread?force=true'))).toBe(true);
+  });
+
+  it.each([
+    '',
+    '?force=false',
+    '?force=1',
+    '?force=True',
+    '?force=true&force=true',
+    '?force=true&extra=1',
+    '?extra=1&force=true',
+    '?force=%74rue',
+  ])('rejects non-canonical delete query %s', (query) => {
+    expect(runtimeFlowerDeleteQuery(new URL(`http://runtime.test/thread${query}`))).toBe(false);
   });
 });

@@ -212,6 +212,35 @@ describe('runtime Flower surface adapter read state', () => {
     expect(snapshot.model_profile?.current_model_id).toBe('default/gpt-5.4');
   });
 
+  it.each([
+    ['pending', 'pending'],
+    ['committed', 'committed'],
+    ['failed', 'failed'],
+  ] as const)('validates and hides the %s delete receipt identity', async (status, expectedStatus) => {
+    const deleteThread = vi.fn(async () => ({
+      operation_id: 'delete_operation_1',
+      status,
+      intent_persisted: true,
+    }));
+    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({ deleteThread }));
+
+    await expect(adapter.deleteThread?.(' thread_1 ')).resolves.toEqual({ status: expectedStatus });
+    expect(deleteThread).toHaveBeenCalledWith('thread_1');
+  });
+
+  it.each([
+    null,
+    { operation_id: '', status: 'pending', intent_persisted: true },
+    { operation_id: 'delete_operation_1', status: 'unknown', intent_persisted: true },
+    { operation_id: 'delete_operation_1', status: 'committed', intent_persisted: false },
+  ])('rejects malformed delete receipts without inferring durable intent', async (receipt) => {
+    const adapter = createRuntimeFlowerSurfaceAdapter(adapterOptions({
+      deleteThread: vi.fn(async () => receipt),
+    }));
+
+    await expect(adapter.deleteThread?.('thread_1')).rejects.toThrow('Flower thread delete returned an invalid receipt.');
+  });
+
   it('returns read_status from markThreadRead without reloading the thread', async () => {
     const status = readStatus();
     const markThreadRead = vi.fn(async () => ({ read_status: status }));

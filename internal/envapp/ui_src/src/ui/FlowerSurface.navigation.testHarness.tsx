@@ -164,6 +164,20 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
       <div role="dialog">{props.children}</div>
     </Show>
   ),
+  ConfirmDialog: (props: any) => (
+    <Show when={props.open}>
+      <div role="alertdialog" aria-label={props.title}>
+        <h2>{props.title}</h2>
+        <div>{props.children}</div>
+        <button type="button" disabled={props.loading} onClick={() => props.onOpenChange?.(false)}>
+          {props.cancelText ?? 'Cancel'}
+        </button>
+        <button type="button" disabled={props.loading} onClick={props.onConfirm}>
+          {props.confirmText}
+        </button>
+      </div>
+    </Show>
+  ),
   DirectoryPicker: (props: any) => {
     const [selectedPath, setSelectedPath] = createSignal(props.initialPath ?? '/');
     return (

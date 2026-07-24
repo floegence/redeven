@@ -3,7 +3,7 @@ import { For, Show, batch, createEffect, createMemo, createSignal, on, onCleanup
 import { cn } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
 import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, GitBranch, GripVertical, MoreHorizontal, Plus, Refresh, Settings, Shield, Terminal, XCircle } from '@floegence/floe-webapp-core/icons';
-import { Button, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
+import { Button, ConfirmDialog, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 
 import { writeTextToClipboard } from './clipboard';
 import { FlowerChatContextChips } from './chat/FlowerChatContextChips';
@@ -914,6 +914,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [renameDraft, setRenameDraft] = createSignal('');
   const [renameError, setRenameError] = createSignal('');
   const [renameSaving, setRenameSaving] = createSignal(false);
+  const [deleteTarget, setDeleteTarget] = createSignal<Readonly<{ item: FlowerThreadListItem; restore?: HTMLElement }> | null>(null);
+  const [deleteSubmitting, setDeleteSubmitting] = createSignal(false);
+  const [deleteError, setDeleteError] = createSignal('');
   const [loadingThreadID, setLoadingThreadID] = createSignal('');
   const [selectedThreadTailReveal, setSelectedThreadTailReveal] = createSignal<SelectedThreadTailReveal | null>(null);
   const [threadRailWidth, setThreadRailWidth] = createSignal(THREAD_RAIL_WIDTH_DEFAULT);
@@ -1006,6 +1009,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const pendingReadPersistenceSnapshots = new Map<string, FlowerThreadActivitySnapshot>();
   const liveCursors = new Map<string, number>();
   const liveStreamGenerations = new Map<string, number>();
+  const retiredThreadIDs = new Set<string>();
   let copiedMessageResetTimer: number | undefined;
   let copiedApprovalResetTimer: number | undefined;
   let activityClockTimer: number | undefined;
@@ -1713,7 +1717,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const applyThreadPermissionLocally = (threadID: string, permissionType: FlowerPermissionType) => {
     const tid = trimString(threadID);
-    if (!tid) return;
+    if (!tid || retiredThreadIDs.has(tid)) return;
     setThreads((current) => {
       let changed = false;
       const next = current.map((thread) => {
@@ -1732,7 +1736,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const applyThreadModelLocally = (threadID: string, modelID: string) => {
     const tid = trimString(threadID);
     const mid = trimString(modelID);
-    if (!tid || !mid) return;
+    if (!tid || !mid || retiredThreadIDs.has(tid)) return;
     setThreads((current) => {
       let changed = false;
       const next = current.map((thread) => {
@@ -1763,7 +1767,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const applyThreadReasoningLocally = (threadID: string, selection: FlowerReasoningSelection | undefined) => {
     const tid = trimString(threadID);
-    if (!tid) return;
+    if (!tid || retiredThreadIDs.has(tid)) return;
     setThreads((current) => {
       let changed = false;
       const next = current.map((thread) => {
@@ -2069,7 +2073,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   });
   const applyThreadReadStatus = (threadID: string, readStatus: FlowerThreadReadStatus) => {
     const tid = trimString(threadID);
-    if (!tid) return;
+    if (!tid || retiredThreadIDs.has(tid)) return;
     setThreads((items) => items.map((thread) => (
       thread.thread_id === tid ? threadWithReadStatus(thread, readStatus) : thread
     )));
@@ -2799,6 +2803,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const upsertThread = (thread: FlowerThreadSnapshot) => {
+    if (retiredThreadIDs.has(trimString(thread.thread_id))) return;
     setThreads((current) => {
       const existingIndex = current.findIndex((item) => item.thread_id === thread.thread_id);
       if (existingIndex < 0) {
@@ -2816,6 +2821,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const applyLiveBootstrap = (live: FlowerLiveBootstrap, reason: LiveBootstrapApplyReason = 'background_refresh'): FlowerThreadSnapshot => {
     const thread = projectFlowerLiveBootstrap(live);
+    if (retiredThreadIDs.has(trimString(thread.thread_id))) {
+      return threads().find((item) => item.thread_id === thread.thread_id) ?? thread;
+    }
     if (!liveBootstrapIsCurrent(live, reason)) {
       return threads().find((item) => item.thread_id === thread.thread_id) ?? thread;
     }
@@ -2839,9 +2847,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     reason: LiveBootstrapApplyReason = 'background_refresh',
   ): Promise<FlowerThreadSnapshot | null> => {
     const tid = trimString(threadID);
-    if (!tid) return null;
+    if (!tid || retiredThreadIDs.has(tid)) return null;
     const live = await props.adapter.loadThread(tid);
-    if (sequence !== threadLoadSequence || selectedThreadID() !== tid) {
+    if (retiredThreadIDs.has(tid) || sequence !== threadLoadSequence || selectedThreadID() !== tid) {
       const projected = projectFlowerLiveBootstrap(live);
       return threads().find((item) => item.thread_id === tid) ?? projected;
     }
@@ -2976,6 +2984,19 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     renameRestoreRef = undefined;
   };
 
+  const openDeleteDialog = (item: FlowerThreadListItem, restore?: HTMLElement) => {
+    setDeleteTarget({ item, restore });
+    setDeleteError('');
+  };
+
+  const closeDeleteDialog = () => {
+    if (deleteSubmitting()) return;
+    const restore = deleteTarget()?.restore;
+    setDeleteTarget(null);
+    setDeleteError('');
+    restoreThreadMenuFocus(restore);
+  };
+
   const submitRename = async () => {
     const threadID = renameThreadID();
     if (!threadID || !props.adapter.renameThread || renameUnchanged()) return;
@@ -3014,7 +3035,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       restoreThreadMenuFocus(restore);
       return;
     }
-    const shouldRestoreFocus = action !== 'rename';
+    const shouldRestoreFocus = action !== 'rename' && action !== 'delete';
     try {
       switch (action) {
         case 'copy_thread_id':
@@ -3026,6 +3047,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         case 'rename':
           if (!props.adapter.renameThread) return;
           openRenameDialog(item.thread_id, item.title, restore);
+          return;
+        case 'delete':
+          if (!props.adapter.deleteThread) return;
+          openDeleteDialog(item, restore);
           return;
         case 'pin':
           if (!props.adapter.setThreadPinned) return;
@@ -3055,7 +3080,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const loadAndSelectThread = async (threadID: string) => {
     const tid = trimString(threadID);
-    if (!tid) return;
+    if (!tid || retiredThreadIDs.has(tid)) return;
     const focusOwner = typeof document === 'undefined' ? null : document.activeElement;
     cancelDeferredThreadSelection();
     closeSubagentOverlays();
@@ -3172,7 +3197,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const startedMutationRevision = threadLocalMutationRevision;
     setThreadsRefreshing(true);
     try {
-      const next = await props.adapter.listThreads();
+      const next = (await props.adapter.listThreads()).filter((thread) => !retiredThreadIDs.has(trimString(thread.thread_id)));
       if (refreshSequence !== threadsRefreshSequence) {
         return false;
       }
@@ -3195,11 +3220,15 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       let mergedThreads: readonly FlowerThreadSnapshot[] = [];
       setThreads((current) => {
-        mergedThreads = mergeFlowerThreadListRefresh(current, next, {
-          selectedThreadID: pendingSelectedMissing ? '' : selectedID,
-          preserveMissingCurrentThreads: startedMutationRevision !== threadLocalMutationRevision && !pendingSelectedMissing,
-          sameThreadSnapshot,
-        });
+        mergedThreads = mergeFlowerThreadListRefresh(
+          current.filter((thread) => !retiredThreadIDs.has(trimString(thread.thread_id))),
+          next,
+          {
+            selectedThreadID: pendingSelectedMissing ? '' : selectedID,
+            preserveMissingCurrentThreads: startedMutationRevision !== threadLocalMutationRevision && !pendingSelectedMissing,
+            sameThreadSnapshot,
+          },
+        ).filter((thread) => !retiredThreadIDs.has(trimString(thread.thread_id)));
         return mergedThreads;
       });
       const mergedSelected = mergedThreads.find((thread) => thread.thread_id === selectedID) ?? null;
@@ -3331,7 +3360,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const applySelectedThreadLiveEvents = async (threadID: string, sequence: number) => {
     const tid = trimString(threadID);
-    if (!tid) return;
+    if (!tid || retiredThreadIDs.has(tid)) return;
     const existingRequest = selectedThreadLiveRequests.get(tid);
     if (existingRequest && existingRequest.sequence === sequence) return;
     const token = selectedThreadLiveUpdateToken + 1;
@@ -3346,6 +3375,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         && sequence === threadLoadSequence
         && selectedThreadID() === tid
         && effectiveEngagement()
+        && !retiredThreadIDs.has(tid)
       ) {
         keepGoing = false;
         const requestedCursor = cursor;
@@ -3357,6 +3387,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           sequence !== threadLoadSequence
           || selectedThreadID() !== tid
           || !effectiveEngagement()
+          || retiredThreadIDs.has(tid)
         ) {
           return;
         }
@@ -3429,6 +3460,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 sequence !== threadLoadSequence
                 || selectedThreadID() !== tid
                 || !effectiveEngagement()
+                || retiredThreadIDs.has(tid)
               ) {
                 return;
               }
@@ -3516,6 +3548,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         !disposed
         && sequence === companionLiveSequence
         && companionLiveThreadID() === threadID
+        && !retiredThreadIDs.has(threadID)
       );
       const publishProjection = () => {
         if (!projectedThread) return;
@@ -4261,6 +4294,92 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     requestComposerFocus();
     void resolveHandlerDecision();
     returnToChat();
+  };
+
+  const retireThreadLocally = (threadID: string) => {
+    const tid = trimString(threadID);
+    if (!tid || retiredThreadIDs.has(tid)) return;
+
+    const retiringSelected = selectedThreadID() === tid
+      || selectedThreadDetailID() === tid
+      || sidebarActiveThreadID() === tid;
+    const retiringCompanion = companionLiveThreadID() === tid
+      || companionLiveThread()?.thread_id === tid;
+    retiredThreadIDs.add(tid);
+    threadsRefreshSequence += 1;
+    threadLocalMutationRevision += 1;
+    if (retiringSelected) engagementBootstrapSequence += 1;
+    if (retiringCompanion) companionLiveSequence += 1;
+
+    loadedThreadIDs.delete(tid);
+    selectedThreadLiveRequests.delete(tid);
+    locallyReadSnapshots.delete(tid);
+    persistingReadThreadIDs.delete(tid);
+    pendingReadPersistenceSnapshots.delete(tid);
+    liveCursors.delete(tid);
+    liveStreamGenerations.delete(tid);
+
+    setThreads((current) => current.filter((thread) => thread.thread_id !== tid));
+    setComposerSessionDrafts((current) => {
+      if (!(tid in current)) return current;
+      const next = { ...current };
+      delete next[tid];
+      return next;
+    });
+    setCompanionTerminalOverrides((current) => {
+      if (!current.has(tid)) return current;
+      const next = new Map(current);
+      next.delete(tid);
+      return next;
+    });
+    setCompanionLiveThread((current) => current?.thread_id === tid ? null : current);
+    setCompanionTerminalTransition((current) => current?.thread_id === tid ? undefined : current);
+    setPendingContextCompaction((current) => current?.thread_id === tid ? null : current);
+    setPendingPermissionPatch((current) => current?.threadID === tid ? null : current);
+    setPendingModelPatch((current) => current?.threadID === tid ? null : current);
+    setLoadingThreadID((current) => current === tid ? '' : current);
+
+    if (retiringSelected) {
+      startCompose();
+    }
+    void refreshThreads();
+  };
+
+  const submitDeleteThread = async () => {
+    const target = deleteTarget();
+    if (!target || deleteSubmitting() || !props.adapter.deleteThread) return;
+    const threadID = trimString(target.item.thread_id);
+    if (!threadID) return;
+
+    setDeleteSubmitting(true);
+    setDeleteError('');
+    setThreadActionBusy({ threadID, action: 'delete' });
+    try {
+      const outcome = await props.adapter.deleteThread(threadID);
+      retireThreadLocally(threadID);
+      setDeleteTarget(null);
+      if (outcome.status === 'committed') {
+        notifySuccess(copy().threadList.deleteCommittedNotification);
+      } else if (outcome.status === 'pending') {
+        notify({ tone: 'info', message: copy().threadList.deletePendingNotification });
+      } else {
+        notifyThreadActionError(copy().threadList.deleteFailedNotification);
+      }
+    } catch (error) {
+      setDeleteError(getErrorMessage(error));
+    } finally {
+      setDeleteSubmitting(false);
+      setThreadActionBusy(null);
+    }
+  };
+
+  const deleteTargetTitle = () => trimString(deleteTarget()?.item.title) || copy().threadList.untitled;
+  const deleteTargetHasActiveWork = () => {
+    const item = deleteTarget()?.item;
+    if (!item) return false;
+    return item.status === 'running'
+      || item.status === 'waiting_user'
+      || item.status === 'waiting_approval';
   };
 
   createEffect(() => {
@@ -8311,6 +8430,31 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           onMenuAction={(action, item, restore) => void handleThreadMenuAction(action, item, restore)}
         />
       </aside>
+      <ConfirmDialog
+        open={deleteTarget() !== null}
+        onOpenChange={(open) => {
+          if (!open) closeDeleteDialog();
+        }}
+        title={copy().threadList.deleteDialogTitle}
+        confirmText={copy().threadList.deleteConfirm}
+        variant="destructive"
+        loading={deleteSubmitting()}
+        onConfirm={() => void submitDeleteThread()}
+      >
+        <div class="flower-thread-delete-copy">
+          <p>{copy().threadList.deleteDialogDescription(deleteTargetTitle())}</p>
+          <p
+            class="flower-thread-delete-active-warning"
+            data-active={deleteTargetHasActiveWork() ? 'true' : 'false'}
+          >
+            {copy().threadList.deleteDialogActiveDescription}
+          </p>
+          <p class="flower-thread-delete-workspace-note">{copy().threadList.deleteDialogWorkspaceDescription}</p>
+          <Show when={deleteError()}>
+            {(message) => <p class="flower-thread-delete-error" role="alert">{message()}</p>}
+          </Show>
+        </div>
+      </ConfirmDialog>
       <Show when={renameThreadID()}>
         <div class="flower-rename-backdrop" role="presentation" onMouseDown={closeRenameDialog}>
           <div

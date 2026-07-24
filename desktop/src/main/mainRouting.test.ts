@@ -1179,6 +1179,10 @@ describe('main routing', () => {
     expect(routeSrc).toContain("{ path: '/_redeven_proxy/api/ai/default_permission', methods: ['PUT'] }");
     expect(routeSrc).toContain("{ path: '/_redeven_proxy/api/ai/current_model', methods: ['PUT'] }");
     expect(routeSrc).toContain("'/_redeven_proxy/api/ai/models'");
+    expect(mainSrc).toContain('runtimeFlowerDeleteQuery,');
+    expect(routeSrc).toContain("methods: ['GET', 'PATCH']");
+    expect(routeSrc).toContain("methods: ['DELETE'], allowsQuery: runtimeFlowerDeleteQuery");
+    expect(routeSrc).not.toContain("methods: ['GET', 'PATCH', 'DELETE']");
     expect(routeSrc).not.toContain("'/_redeven_proxy/api/ai/runs'");
     expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/live\\/bootstrap$/u");
     expect(routeSrc).toContain("/^\\/_redeven_proxy\\/api\\/ai\\/threads\\/[^/]+\\/live\\/events$/u");
@@ -1249,6 +1253,7 @@ describe('main routing', () => {
     expect(errorSrc).toContain('runtimeFlowerRetryAfterMs(error.retry_after_ms)');
     expect(errorSrc).toContain('runtimeFlowerRetryAfterMs(record.retry_after_ms)');
     expect(errorSrc).toContain("compact(record.error_code) || 'runtime_flower_request_failed'");
+    expect(errorSrc).toContain('record.data');
 
     const unlockStart = mainSrc.indexOf('async function unlockRuntimeFlowerAccess(');
     const unlockEnd = mainSrc.indexOf('async function runtimeFlowerAccessHeaders(', unlockStart);
