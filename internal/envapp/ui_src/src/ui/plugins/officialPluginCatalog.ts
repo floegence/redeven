@@ -1,8 +1,9 @@
 import type { OfficialPluginCatalogItem } from './pluginTypes';
 import { OFFICIAL_CONTAINERS_RELEASE_REF } from './officialContainersRelease.generated';
+import officialContainersDistribution from './officialContainersDistribution.json';
 
 export const OFFICIAL_CONTAINERS_PACKAGE_URL =
-  'https://raw.githubusercontent.com/floegence/redeven/c40d4ade758b465dbe70f693e504cda79fa9e702/spec/redevplugin/catalog-containers-plugin/2.0.0/plugin.redevplugin';
+  `https://raw.githubusercontent.com/${officialContainersDistribution.repository}/${officialContainersDistribution.commit}/${officialContainersDistribution.artifact_path.join('/')}`;
 
 export const OFFICIAL_PLUGIN_CATALOG_SEED: readonly OfficialPluginCatalogItem[] = Object.freeze([
   {

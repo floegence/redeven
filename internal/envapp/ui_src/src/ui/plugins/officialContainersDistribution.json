@@ -1,0 +1,12 @@
+{
+  "repository": "floegence/redeven",
+  "commit": "c40d4ade758b465dbe70f693e504cda79fa9e702",
+  "artifact_path": [
+    "spec",
+    "redevplugin",
+    "catalog-containers-plugin",
+    "2.0.0",
+    "plugin.redevplugin"
+  ],
+  "artifact_sha256": "77986bc4b193ee1e5c60e596fb0c06ac7f9571cc78ea5d15abd646ab21176441"
+}

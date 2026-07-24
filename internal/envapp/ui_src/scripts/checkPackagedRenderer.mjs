@@ -13,8 +13,11 @@ const terminalAgentIconManifestPath = path.join(repoRoot, 'assets/terminal_agent
 const entryPath = '/_redeven_proxy/env/';
 const assetPrefix = `${entryPath}assets/`;
 const hashedAssetPattern = /-[A-Za-z0-9_-]{8,}\.(?:css|js|wasm)$/;
-const officialContainersPackageURL =
-  'https://raw.githubusercontent.com/floegence/redeven/c40d4ade758b465dbe70f693e504cda79fa9e702/spec/redevplugin/catalog-containers-plugin/2.0.0/plugin.redevplugin';
+const officialContainersDistribution = JSON.parse(await readFile(path.join(
+  repoRoot,
+  'internal/envapp/ui_src/src/ui/plugins/officialContainersDistribution.json',
+), 'utf8'));
+const officialContainersPackageURL = `https://raw.githubusercontent.com/${officialContainersDistribution.repository}/${officialContainersDistribution.commit}/${officialContainersDistribution.artifact_path.join('/')}`;
 
 function parseReportPath(args) {
   const index = args.indexOf('--report');

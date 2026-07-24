@@ -51,7 +51,16 @@ Go tests that import their embed packages.
 Redeven consumes only the coordinated ReDevPlugin `v0.6.10` package set. The
 boundary guard rejects local sibling paths, Go workspaces/replacements, npm
 links, copied contracts or runtimes, Rust path overrides, and a second
-platform-core package tree.
+platform-core package tree. Local-wiring scans cover maintained source, scripts,
+and build configuration while excluding generated `dist` and `node_modules`
+trees; a scanner error fails closed instead of being treated as no match.
+
+The Containers catalog distribution manifest separately records repository,
+immutable commit, artifact path segments, and physical SHA-256. Production UI,
+built-renderer smoke, and the URL gate consume that one manifest. The gate
+requires the commit to be an ancestor of the product tip when locally available,
+or downloads the immutable URL in a shallow CI checkout, then compares exact
+bytes with the committed artifact.
 
 The upstream GitHub Release contains exactly one
 `platform-package-publication-v1.json` asset. The verifier binds it to the tag,
@@ -139,10 +148,12 @@ The focused plugin gate covers:
 - static absence of legacy proxy/bootstrap/base64 package and copied platform
   paths.
 
-The built renderer smoke requires the Plugins Activity entry, opens
-the panel, observes the Plugin Center tile, and accepts only the canonical
-ReDevPlugin catalog request envelope. It also verifies content-hashed JS/CSS/WASM,
-non-blank root output, and zero console, page, request, or HTTP failures.
+The built renderer smoke requires the Plugins Activity entry, opens the panel
+and Plugin Center, clicks the Containers install action, and requires the
+external review with the manifest-derived immutable URL without calling the
+release-ref mutation. It accepts only the canonical ReDevPlugin query envelope
+and also verifies content-hashed JS/CSS/WASM, non-blank root output, and zero
+console, page, request, or HTTP failures.
 
 Browser-facing reads use the released POST query contract and retain exact
 Origin, CSRF, action, and query-effect authorization. Session disconnect uses
@@ -181,6 +192,8 @@ not become a fallback, shim, or local artifact path.
 - `redeven:.githooks/pre-push:1` - Binds full validation to the exact main push.
 - `redeven:scripts/check_final_integration.sh:1` - Defines the complete local integration gate.
 - `redeven:scripts/check_plugin_integration.sh:1` - Defines focused ReDevPlugin integration coverage.
+- `redeven:scripts/check_redevplugin_dependency_boundary.sh:1` - Rejects maintained local source wiring and fails closed on scan errors.
+- `redeven:scripts/check_catalog_plugin_package_url.mjs:1` - Binds the catalog distribution manifest to immutable package bytes.
 - `redeven:scripts/check_redevplugin_release_artifacts.sh:1` - Verifies the exact-one upstream publication and registry readbacks.
 - `redeven:scripts/check_redevplugin_consumption_gate.sh:1` - Verifies the product runtime marker, evidence, target, and signature.
 - `redeven:scripts/stage_redevplugin_release_artifacts.sh:1` - Builds and signs the Linux runtime from the exact published crate graph.
