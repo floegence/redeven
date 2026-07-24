@@ -133,6 +133,9 @@ The focused plugin gate covers:
   commit admission, strict source provenance, signature assessment, disabled
   zero-grant commit state, bounded query-only reconciliation, and no mutation
   replay after an unknown or in-progress outcome;
+- the exact manifest-derived Containers package URL through the Redeven HTTP
+  integration, including staged package bytes, unsigned review, digest-bound
+  commit, disabled `manual_only` result, user approval, and zero active grants;
 - runtime path/target/hash, ProcessManager health, persistent lease replay, and
   Host storage/network/stream services;
 - the signed Containers capability, operation/cancellation/stream behavior, and
@@ -149,11 +152,14 @@ The focused plugin gate covers:
   paths.
 
 The built renderer smoke requires the Plugins Activity entry, opens the panel
-and Plugin Center, clicks the Containers install action, and requires the
-external review with the manifest-derived immutable URL without calling the
-release-ref mutation. It accepts only the canonical ReDevPlugin query envelope
-and also verifies content-hashed JS/CSS/WASM, non-blank root output, and zero
-console, page, request, or HTTP failures.
+and Plugin Center, clicks the Containers install action, reviews the
+manifest-derived immutable URL, requires explicit digest confirmation, commits
+the unsigned package, and observes completion without calling the release-ref
+mutation. The refreshed installed view must show the package as unsigned and
+disabled with zero active grants. The smoke validates the exact inspect and
+commit request bodies and request sequence, accepts only canonical ReDevPlugin
+envelopes, and also verifies content-hashed JS/CSS/WASM, non-blank root output,
+and zero console, page, request, or HTTP failures.
 
 Browser-facing reads use the released POST query contract and retain exact
 Origin, CSRF, action, and query-effect authorization. Session disconnect uses

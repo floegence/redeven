@@ -42,6 +42,7 @@ type Options struct {
 	Containers         *containers.Adapter
 	releaseTrustNow    func() time.Time
 	newReleaseModule   func(string) (*host.ReleaseModule, host.PluginReleaseRef, func() error, error)
+	newExternalFetcher func(*externalsource.StageStore) (host.ExternalPackageFetcher, error)
 	closeExternalStage func(*externalsource.StageStore) error
 }
 
@@ -115,6 +116,14 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 	if err != nil {
 		closeOnError()
 		return nil, err
+	}
+	var externalPackageFetcher host.ExternalPackageFetcher = externalFetcher
+	if opts.newExternalFetcher != nil {
+		externalPackageFetcher, err = opts.newExternalFetcher(externalStage)
+		if err != nil {
+			closeOnError()
+			return nil, err
+		}
 	}
 	externalGitHubResolver, err := externalsource.NewGitHubRESTReleaseResolver(
 		externalsource.GitHubRESTReleaseClientOptions{
@@ -280,7 +289,7 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		Capability: &host.CapabilityModule{Registry: capabilities},
 		ExternalPackage: &host.ExternalPackageModule{
 			StageStore:        externalStage,
-			PackageFetcher:    externalFetcher,
+			PackageFetcher:    externalPackageFetcher,
 			GitHubResolver:    externalGitHubResolver,
 			SignatureAssessor: packageTrustVerifier,
 		},

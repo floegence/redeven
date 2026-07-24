@@ -5,10 +5,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -17,6 +19,7 @@ import (
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionhop"
 	redevpluginartifacts "github.com/floegence/redeven/spec/redevplugin"
+	"github.com/floegence/redevplugin/pkg/externalsource"
 	"github.com/floegence/redevplugin/pkg/host"
 	"github.com/floegence/redevplugin/pkg/pluginpkg"
 	"github.com/floegence/redevplugin/pkg/registry"
@@ -32,6 +35,23 @@ type externalPackageCommitHTTPResult struct {
 		ExecutionApproval   host.ExternalPackageExecutionApproval   `json:"execution_approval"`
 		UpdateEligibility   host.ExternalPackageUpdateEligibility   `json:"update_eligibility"`
 	} `json:"plugin"`
+}
+
+type staticExternalPackageFetcher struct {
+	stage       *externalsource.StageStore
+	packageURL  string
+	packageData []byte
+}
+
+func (f staticExternalPackageFetcher) FetchPackage(ctx context.Context, request externalsource.FetchRequest) (externalsource.FetchResult, error) {
+	if request.URL != f.packageURL {
+		return externalsource.FetchResult{}, fmt.Errorf("package URL = %q, want %q", request.URL, f.packageURL)
+	}
+	artifact, err := f.stage.StageUpload(ctx, request.QuotaKey, bytes.NewReader(f.packageData), int64(len(f.packageData)))
+	if err != nil {
+		return externalsource.FetchResult{}, err
+	}
+	return externalsource.FetchResult{Artifact: artifact, Source: request.URL, Final: request.URL}, nil
 }
 
 func TestExternalPackageUploadInspectCommitAndQueryThroughHTTP(t *testing.T) {
@@ -214,6 +234,87 @@ func TestContainersCatalogPackageInstallsThroughExternalUploadAtCurrentTime(t *t
 	}
 	if permissionsResponse.Code != http.StatusOK || !permissionsEnvelope.OK || len(permissionsEnvelope.Data.Permissions) != 0 {
 		t.Fatalf("unsigned catalog install permissions status=%d response=%#v", permissionsResponse.Code, permissionsEnvelope)
+	}
+}
+
+func TestContainersCatalogPackageInstallsThroughExternalURLAtCurrentTime(t *testing.T) {
+	packageURL := catalogContainersPackageURL(t)
+	packageBytes, err := redevpluginartifacts.CatalogContainersPluginPackage()
+	if err != nil {
+		t.Fatal(err)
+	}
+	integration, _, _, access := newExternalPackageTestIntegrationWithClockAndOptions(t, time.Now, func(options *Options) {
+		options.newExternalFetcher = func(stage *externalsource.StageStore) (host.ExternalPackageFetcher, error) {
+			return staticExternalPackageFetcher{stage: stage, packageURL: packageURL, packageData: packageBytes}, nil
+		}
+	})
+	t.Cleanup(func() { _ = integration.Close() })
+
+	inspectResponse := postExternalPackageJSON(t, integration,
+		"/_redevplugin/api/plugins/external-packages/inspect", map[string]any{
+			"intent": map[string]string{"action": "install"},
+			"source": map[string]string{"kind": "package_url", "url": packageURL},
+		})
+	if inspectResponse.Code != http.StatusOK {
+		t.Fatalf("inspect catalog URL status = %d body=%s", inspectResponse.Code, inspectResponse.Body.String())
+	}
+	var inspectionEnvelope struct {
+		OK   bool                           `json:"ok"`
+		Data host.ExternalPackageInspection `json:"data"`
+	}
+	if err := json.Unmarshal(inspectResponse.Body.Bytes(), &inspectionEnvelope); err != nil {
+		t.Fatalf("decode catalog URL inspection: %v body=%s", err, inspectResponse.Body.String())
+	}
+	inspection := inspectionEnvelope.Data
+	if !inspectionEnvelope.OK || inspection.SourceProvenance.Kind != string(registry.PackageSourcePackageURL) ||
+		inspection.SourceProvenance.SourceOrigin != "https://raw.githubusercontent.com" ||
+		inspection.SignatureAssessment.State != string(registry.SignatureAbsent) ||
+		inspection.ExecutionApproval.State != string(registry.ExecutionApprovalPending) ||
+		inspection.UpdateEligibility.State != string(registry.UpdateManualOnly) {
+		t.Fatalf("catalog URL inspection = %#v", inspection)
+	}
+
+	commitResponse := postExternalPackageJSON(t, integration,
+		"/_redevplugin/api/plugins/external-packages/commit", map[string]string{
+			"inspection_id":       inspection.InspectionID,
+			"confirmation_digest": inspection.ConfirmationDigest,
+		})
+	if commitResponse.Code != http.StatusOK {
+		t.Fatalf("commit catalog URL status = %d body=%s", commitResponse.Code, commitResponse.Body.String())
+	}
+	var commitEnvelope struct {
+		OK   bool                            `json:"ok"`
+		Data externalPackageCommitHTTPResult `json:"data"`
+	}
+	if err := json.Unmarshal(commitResponse.Body.Bytes(), &commitEnvelope); err != nil {
+		t.Fatalf("decode catalog URL commit: %v body=%s", err, commitResponse.Body.String())
+	}
+	plugin := commitEnvelope.Data.Plugin
+	if !commitEnvelope.OK || commitEnvelope.Data.Status != string(registry.ExternalPackageCommitted) ||
+		plugin == nil || plugin.EnableState != registry.EnableDisabled ||
+		plugin.SignatureAssessment.State != string(registry.SignatureAbsent) ||
+		plugin.ExecutionApproval.State != string(registry.ExecutionApprovalUserApproved) ||
+		plugin.UpdateEligibility.State != string(registry.UpdateManualOnly) {
+		t.Fatalf("catalog URL commit = %#v", commitEnvelope.Data)
+	}
+
+	access.set(sessionPermissions{read: true})
+	permissionsResponse := postExternalPackageJSON(t, integration,
+		"/_redevplugin/api/plugins/permissions/query", map[string]any{
+			"plugin_instance_id": plugin.PluginInstanceID,
+			"active_only":        true,
+		})
+	var permissionsEnvelope struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			Permissions []json.RawMessage `json:"permissions"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(permissionsResponse.Body.Bytes(), &permissionsEnvelope); err != nil {
+		t.Fatalf("decode catalog URL permissions: %v body=%s", err, permissionsResponse.Body.String())
+	}
+	if permissionsResponse.Code != http.StatusOK || !permissionsEnvelope.OK || len(permissionsEnvelope.Data.Permissions) != 0 {
+		t.Fatalf("catalog URL install permissions status=%d response=%#v", permissionsResponse.Code, permissionsEnvelope)
 	}
 }
 
@@ -431,10 +532,18 @@ func newExternalPackageTestIntegration(t *testing.T) (*Integration, string, []by
 }
 
 func newExternalPackageTestIntegrationWithClock(t *testing.T, now func() time.Time) (*Integration, string, []byte, *externalPackageTestAccess) {
+	return newExternalPackageTestIntegrationWithClockAndOptions(t, now, nil)
+}
+
+func newExternalPackageTestIntegrationWithClockAndOptions(
+	t *testing.T,
+	now func() time.Time,
+	configure func(*Options),
+) (*Integration, string, []byte, *externalPackageTestAccess) {
 	t.Helper()
 	stateDir := t.TempDir()
 	access := &externalPackageTestAccess{permissions: sessionPermissions{admin: true}}
-	integration, err := New(context.Background(), Options{
+	options := Options{
 		StateDir:         stateDir,
 		PermissionPolicy: testPermissionPolicy(t, "execute_read_write"),
 		RuntimePath:      testRuntimePath(t, stateDir),
@@ -451,7 +560,11 @@ func newExternalPackageTestIntegrationWithClock(t *testing.T, now func() time.Ti
 				CanExecute: permissions.execute, CanAdmin: permissions.admin,
 			}, true
 		},
-	})
+	}
+	if configure != nil {
+		configure(&options)
+	}
+	integration, err := New(context.Background(), options)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -461,6 +574,28 @@ func newExternalPackageTestIntegrationWithClock(t *testing.T, now func() time.Ti
 		t.Fatal(err)
 	}
 	return integration, stateDir, release.PackageBytes, access
+}
+
+func catalogContainersPackageURL(t *testing.T) string {
+	t.Helper()
+	path := filepath.Join("..", "envapp", "ui_src", "src", "ui", "plugins", "officialContainersDistribution.json")
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var distribution struct {
+		Repository   string   `json:"repository"`
+		Commit       string   `json:"commit"`
+		ArtifactPath []string `json:"artifact_path"`
+	}
+	if err := json.Unmarshal(raw, &distribution); err != nil {
+		t.Fatal(err)
+	}
+	if distribution.Repository == "" || distribution.Commit == "" || len(distribution.ArtifactPath) == 0 {
+		t.Fatalf("invalid Containers distribution manifest: %#v", distribution)
+	}
+	return "https://raw.githubusercontent.com/" + distribution.Repository + "/" +
+		distribution.Commit + "/" + strings.Join(distribution.ArtifactPath, "/")
 }
 
 func postExternalPackageJSON(t *testing.T, integration *Integration, path string, body any) *httptest.ResponseRecorder {
