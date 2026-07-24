@@ -40,6 +40,10 @@
   <a href="https://github.com/floegence/redeven/releases"><img alt="リリース" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
 </p>
 
+<p align="center">
+  <img src="assets/readme/redeven-demo.gif" alt="Redeven デモ：ファイル、ターミナル、Git、Workbench、Code Server を 1 つのブラウザータブで利用" width="100%">
+</p>
+
 <!-- readme-section:what-is-redeven -->
 <a id="what-is-redeven"></a>
 

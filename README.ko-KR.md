@@ -40,6 +40,10 @@
   <a href="https://github.com/floegence/redeven/releases"><img alt="릴리스" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
 </p>
 
+<p align="center">
+  <img src="assets/readme/redeven-demo.gif" alt="Redeven 데모: 파일, 터미널, Git, Workbench, Code Server를 하나의 브라우저 탭에서 사용" width="100%">
+</p>
+
 <!-- readme-section:what-is-redeven -->
 <a id="what-is-redeven"></a>
 
