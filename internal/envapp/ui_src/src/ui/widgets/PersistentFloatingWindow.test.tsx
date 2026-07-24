@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import { render } from 'solid-js/web';
+import { createSignal } from 'solid-js';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createUIStorageAdapter, readUIStorageJSON, removeUIStorageItem, writeUIStorageJSON } from '../services/uiStorage';
@@ -169,6 +170,44 @@ describe('PersistentFloatingWindow', () => {
     const root = host.querySelector('[data-testid="floating-root"]') as HTMLDivElement | null;
     expect(root).toBeTruthy();
     expect(surfaceRef).toHaveBeenCalledWith(root);
+  });
+
+  it('keeps reactive surfaceRef implementations outside the binding effect', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const [surface, setSurface] = createSignal<HTMLElement | null>(null);
+    const surfaceRef = vi.fn((next: HTMLElement | null) => {
+      surface();
+      setSurface(next);
+    });
+
+    let dispose!: () => void;
+    expect(() => {
+      dispose = render(() => (
+        <PersistentFloatingWindow
+          open
+          onOpenChange={() => undefined}
+          title="Demo"
+          persistenceKey="demo"
+          surfaceRef={surfaceRef}
+        >
+          <div>content</div>
+        </PersistentFloatingWindow>
+      ), host);
+    }).not.toThrow();
+
+    await Promise.resolve();
+    vi.advanceTimersByTime(1);
+    await Promise.resolve();
+
+    const root = host.querySelector('[data-testid="floating-root"]') as HTMLDivElement | null;
+    expect(surface()).toBe(root);
+    expect(surfaceRef).toHaveBeenCalledTimes(1);
+
+    dispose();
+    expect(surface()).toBeNull();
+    expect(surfaceRef).toHaveBeenCalledTimes(2);
+    expect(surfaceRef).toHaveBeenLastCalledWith(null);
   });
 
   it('marks both the geometry root and the visible floating surface as local input surfaces', async () => {

@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, createUniqueId, onCleanup, type JSX } from 'solid-js';
+import { createEffect, createMemo, createSignal, createUniqueId, onCleanup, untrack, type JSX } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import {
   FloatingWindow,
@@ -297,7 +297,7 @@ export function PersistentFloatingWindow(props: PersistentFloatingWindowProps): 
   createEffect(() => {
     const surfaceRef = props.surfaceRef;
     if (!surfaceRef || !props.open || typeof document === 'undefined') {
-      surfaceRef?.(null);
+      if (surfaceRef) untrack(() => surfaceRef(null));
       return;
     }
 
@@ -313,7 +313,7 @@ export function PersistentFloatingWindow(props: PersistentFloatingWindowProps): 
         cancelBind = scheduleAfterFrame(bindSurface);
         return;
       }
-      surfaceRef(root);
+      untrack(() => surfaceRef(root));
     };
 
     bindSurface();
@@ -321,7 +321,7 @@ export function PersistentFloatingWindow(props: PersistentFloatingWindowProps): 
     onCleanup(() => {
       disposed = true;
       cancelBind?.();
-      surfaceRef(null);
+      untrack(() => surfaceRef(null));
     });
   });
 
