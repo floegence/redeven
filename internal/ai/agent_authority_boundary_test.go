@@ -62,7 +62,6 @@ func TestFloretRunCapabilityShapesAreExact(t *testing.T) {
 		field("childPermissionSnapshot", (func(context.Context, string, string, string) (threadstore.PermissionSnapshotRecord, bool, error))(nil)),
 		field("insertPermissionSnapshot", (func(context.Context, threadstore.PermissionSnapshotRecord) error)(nil)),
 		field("finalizedChildSnapshot", (func(context.Context, string) (threadstore.ChildPermissionSnapshotRecord, bool, error))(nil)),
-		field("getThreadOwnedUpload", (func(context.Context, string) (*threadstore.UploadRecord, error))(nil)),
 		field("getQueuedTurnOwnedUpload", (func(context.Context, string, string) (*threadstore.UploadRecord, error))(nil)),
 		field("preparePublication", (func(context.Context, threadstore.SubAgentPublicationOperation, threadstore.ChildPermissionSnapshotRecord) error)(nil)),
 		field("finalizePublication", (func(context.Context, string, string, string, string, int64) (bool, error))(nil)),

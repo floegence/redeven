@@ -39,26 +39,6 @@ func attachmentAdmissionContractForTest(t *testing.T, svc *Service, ownerHash, m
 	}
 }
 
-func saveTestUpload(t *testing.T, svc *Service, meta *session.Meta, body string, name string, mimeType string) *UploadResponse {
-	t.Helper()
-	owner, err := NewUploadOwner(meta.EndpointID, meta.UserPublicID, meta.ChannelID)
-	if err != nil {
-		t.Fatal(err)
-	}
-	digest := sha256.Sum256([]byte(body))
-	nameDigest := sha256.Sum256([]byte(name))
-	out, err := svc.SaveUpload(context.Background(), SaveUploadRequest{
-		Owner: owner, Reader: strings.NewReader(body), DisplayName: name, DeclaredMediaType: mimeType,
-		Source: threadstore.UploadSourceFile, UploadRequestID: "req_" + name, DraftID: "draft_" + name,
-		ExpectedContentSHA256: fmt.Sprintf("%x", digest[:]), ExpectedSizeBytes: int64(len(body)),
-		DisplayNameSHA256: fmt.Sprintf("%x", nameDigest[:]),
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return out
-}
-
 func TestStartupInterruptsReceivingUploadAttemptsWithoutRecoveryDelay(t *testing.T) {
 	t.Parallel()
 	svc := newTestService(t, nil)
@@ -98,11 +78,6 @@ func TestStartupInterruptsReceivingUploadAttemptsWithoutRecoveryDelay(t *testing
 	if err != nil || created || reserved.Status != threadstore.UploadAttemptFailed {
 		t.Fatalf("interrupted attempt=%#v created=%v err=%v", reserved, created, err)
 	}
-}
-
-func stageTestDraftAttachment(t *testing.T, svc *Service, meta *session.Meta, draftID string, body string, name string, mimeType string) (*UploadResponse, int64) {
-	t.Helper()
-	return stageTestDraftAttachmentValue(t, svc, meta, draftID, "", threadstore.ComposerDraftModeOrdinary, "", "", body, name, mimeType)
 }
 
 func stageTestAdmissionDraftAttachment(t *testing.T, svc *Service, meta *session.Meta, draftID string, turnID string, text string, modelID string, body string, name string, mimeType string) (*UploadResponse, int64) {

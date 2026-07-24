@@ -5198,7 +5198,8 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if r.MultipartForm != nil {
-			defer r.MultipartForm.RemoveAll()
+			form := r.MultipartForm
+			defer func() { _ = form.RemoveAll() }()
 		}
 		if r.MultipartForm == nil || len(r.MultipartForm.File) != 1 || len(r.MultipartForm.File["file"]) != 1 || len(r.MultipartForm.Value) > 1 {
 			writeUploadError(w, ai.NewUploadError(ai.UploadErrorInvalidRequest, false, errors.New("multipart body must contain exactly one file and optional source")))
