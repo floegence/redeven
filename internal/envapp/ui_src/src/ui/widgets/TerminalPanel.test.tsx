@@ -943,6 +943,7 @@ vi.mock('@floegence/floeterm-terminal-web', async () => {
     getResourceEstimate = vi.fn(() => ({
       bufferBytes: 256 * 1024,
       cellCount: 2_000,
+      wasmMemoryBytes: 512 * 1024,
       estimatedBytes: 1024 * 1024,
       rendererType: 'webgl' as const,
     }));

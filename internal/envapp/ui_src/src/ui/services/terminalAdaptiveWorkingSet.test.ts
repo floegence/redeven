@@ -81,6 +81,7 @@ function resourceEstimate(estimatedBytes: number): TerminalResourceEstimate {
   return {
     bufferBytes: Math.floor(estimatedBytes / 4),
     cellCount: 2_000,
+    wasmMemoryBytes: Math.floor(estimatedBytes / 2),
     estimatedBytes,
     rendererType: 'webgl',
   };

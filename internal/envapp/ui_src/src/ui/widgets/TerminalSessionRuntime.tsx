@@ -1400,6 +1400,7 @@ export function TerminalSessionRuntime(props: TerminalSessionRuntimeProps) {
     getResourceEstimate: () => term?.getResourceEstimate() ?? {
       bufferBytes: 0,
       cellCount: 0,
+      wasmMemoryBytes: 0,
       estimatedBytes: 0,
       rendererType: 'webgl',
     },
