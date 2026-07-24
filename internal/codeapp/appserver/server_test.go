@@ -3168,6 +3168,33 @@ func seedFloretThreadTurn(t *testing.T, stateDir string, threadID string, turnID
 	}
 }
 
+func TestParseThreadDeleteForceQuery(t *testing.T) {
+	t.Parallel()
+	for _, testCase := range []struct {
+		raw       string
+		wantForce bool
+		wantErr   bool
+	}{
+		{raw: ""},
+		{raw: "force=true", wantForce: true},
+		{raw: "force=false"},
+		{raw: "force=1", wantErr: true},
+		{raw: "force=True", wantErr: true},
+		{raw: "force=", wantErr: true},
+		{raw: "force=true&force=false", wantErr: true},
+		{raw: "force=true&extra=value", wantErr: true},
+		{raw: "extra=value", wantErr: true},
+		{raw: "force=%74rue", wantErr: true},
+	} {
+		t.Run(testCase.raw, func(t *testing.T) {
+			force, err := parseThreadDeleteForceQuery(testCase.raw)
+			if force != testCase.wantForce || (err != nil) != testCase.wantErr {
+				t.Fatalf("parseThreadDeleteForceQuery(%q) force=%v err=%v", testCase.raw, force, err)
+			}
+		})
+	}
+}
+
 func TestServer_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 	t.Parallel()
 
@@ -3178,14 +3205,19 @@ func TestServer_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 
 	cfgPath := writeTestConfig(t)
 	store := openTestThreadReadStateStore(t)
+	stateDir := t.TempDir()
 	aiSvc, err := ai.NewService(ai.Options{
-		StateDir:               t.TempDir(),
+		StateDir:               stateDir,
 		AgentHomeDir:           t.TempDir(),
 		Shell:                  "/bin/sh",
 		FlowerReadStateCleaner: store,
 	})
 	if err != nil {
 		t.Fatalf("ai.NewService: %v", err)
+	}
+	auditStore, err := auditlog.New(auditlog.Options{StateDir: stateDir})
+	if err != nil {
+		t.Fatal(err)
 	}
 	t.Cleanup(func() {
 		_ = aiSvc.Close()
@@ -3249,6 +3281,7 @@ func TestServer_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 		DistFS:               dist,
 		ListenAddr:           "127.0.0.1:0",
 		AI:                   aiSvc,
+		Audit:                auditStore,
 		ConfigPath:           cfgPath,
 		ThreadReadStateStore: store,
 		ResolveSessionMeta:   resolveMeta,
@@ -3261,6 +3294,10 @@ func TestServer_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 	rr := performServerRequest(srv, http.MethodDelete, "/_redeven_proxy/api/ai/threads/"+url.PathEscape(thread.ThreadID), originUser1, "")
 	if rr.Code != http.StatusOK {
 		t.Fatalf("DELETE /api/ai/threads/:id status=%d body=%s", rr.Code, rr.Body.String())
+	}
+	auditEntries, err := auditStore.List(1)
+	if err != nil || len(auditEntries) != 1 || auditEntries[0].Action != "ai_thread_delete" || auditEntries[0].Status != "success" {
+		t.Fatalf("delete audit=%+v err=%v", auditEntries, err)
 	}
 
 	_, err = store.EnsureFlower(context.Background(), creatorMeta.EndpointID, creatorMeta.UserPublicID, map[string]threadreadstate.FlowerSnapshot{
@@ -3294,6 +3331,10 @@ func TestServer_AIThreadDeleteReturnsAcceptedForPersistedPendingOperation(t *tes
 	if err != nil {
 		t.Fatalf("ai.NewService: %v", err)
 	}
+	auditStore, err := auditlog.New(auditlog.Options{StateDir: stateDir})
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(func() { _ = aiSvc.Close() })
 	meta := session.Meta{EndpointID: "env_delete_pending", UserPublicID: "user_1", CanRead: true, CanWrite: true, CanExecute: true}
 	thread, err := aiSvc.CreateThread(context.Background(), &meta, "Pending delete", "", "", "")
@@ -3306,6 +3347,7 @@ func TestServer_AIThreadDeleteReturnsAcceptedForPersistedPendingOperation(t *tes
 		DistFS:               dist,
 		ListenAddr:           "127.0.0.1:0",
 		AI:                   aiSvc,
+		Audit:                auditStore,
 		ConfigPath:           writeTestConfig(t),
 		ThreadReadStateStore: store,
 		ResolveSessionMeta: func(raw string) (*session.Meta, bool) {
@@ -3322,6 +3364,10 @@ func TestServer_AIThreadDeleteReturnsAcceptedForPersistedPendingOperation(t *tes
 	}
 
 	deletePath := "/_redeven_proxy/api/ai/threads/" + url.PathEscape(thread.ThreadID)
+	invalidQuery := performServerRequest(srv, http.MethodDelete, deletePath+"?force=1", envOriginWithChannel(channelID), "")
+	if invalidQuery.Code != http.StatusBadRequest || !strings.Contains(invalidQuery.Body.String(), "invalid_thread_delete_query") {
+		t.Fatalf("invalid force query status=%d body=%s", invalidQuery.Code, invalidQuery.Body.String())
+	}
 	first := performServerRequest(srv, http.MethodDelete, deletePath, envOriginWithChannel(channelID), "")
 	if first.Code != http.StatusAccepted {
 		t.Fatalf("first DELETE status=%d body=%s", first.Code, first.Body.String())
@@ -3332,8 +3378,12 @@ func TestServer_AIThreadDeleteReturnsAcceptedForPersistedPendingOperation(t *tes
 	if err := json.Unmarshal(first.Body.Bytes(), &firstBody); err != nil {
 		t.Fatalf("decode first DELETE: %v", err)
 	}
-	if firstBody.Data.OperationID == "" || firstBody.Data.Status != ai.ThreadDeleteStatusPending {
+	if firstBody.Data.OperationID == "" || firstBody.Data.Status != ai.ThreadDeleteStatusPending || !firstBody.Data.IntentPersisted {
 		t.Fatalf("first DELETE body=%s", first.Body.String())
+	}
+	auditEntries, err := auditStore.List(1)
+	if err != nil || len(auditEntries) != 1 || auditEntries[0].Status != "accepted" {
+		t.Fatalf("pending delete audit=%+v err=%v", auditEntries, err)
 	}
 
 	second := performServerRequest(srv, http.MethodDelete, deletePath, envOriginWithChannel(channelID), "")
@@ -3367,14 +3417,19 @@ func TestServer_AIThreadDeleteReturnsAcceptedForPersistedPendingOperation(t *tes
 		t.Fatalf("failed DELETE status=%d body=%s", failedResponse.Code, failedResponse.Body.String())
 	}
 	var failedBody struct {
-		OK   bool                  `json:"ok"`
-		Data ai.ThreadDeleteResult `json:"data"`
+		OK        bool                  `json:"ok"`
+		ErrorCode string                `json:"error_code"`
+		Data      ai.ThreadDeleteResult `json:"data"`
 	}
 	if err := json.Unmarshal(failedResponse.Body.Bytes(), &failedBody); err != nil {
 		t.Fatalf("decode failed DELETE: %v", err)
 	}
-	if failedBody.OK || failedBody.Data.OperationID != firstBody.Data.OperationID || failedBody.Data.Status != ai.ThreadDeleteStatusFailed {
+	if failedBody.OK || failedBody.ErrorCode != "AI_THREAD_DELETE_OPERATION_FAILED" || failedBody.Data.OperationID != firstBody.Data.OperationID || failedBody.Data.Status != ai.ThreadDeleteStatusFailed || !failedBody.Data.IntentPersisted {
 		t.Fatalf("failed DELETE body=%s, want failed operation %s", failedResponse.Body.String(), firstBody.Data.OperationID)
+	}
+	auditEntries, err = auditStore.List(1)
+	if err != nil || len(auditEntries) != 1 || auditEntries[0].Status != "failure" {
+		t.Fatalf("failed delete audit=%+v err=%v", auditEntries, err)
 	}
 
 	missing := performServerRequest(srv, http.MethodDelete, "/_redeven_proxy/api/ai/threads/thread_missing_delete_operation", envOriginWithChannel(channelID), "")

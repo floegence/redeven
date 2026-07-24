@@ -315,6 +315,13 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 	}
 
 	endpointID := strings.TrimSpace(meta.EndpointID)
+	deleteOperation, err := db.GetThreadDeleteOperation(ctx, endpointID, threadID)
+	if err != nil {
+		return nil, err
+	}
+	if deleteOperation != nil {
+		return nil, nil
+	}
 	th, err := db.GetThreadSettings(ctx, endpointID, threadID)
 	if err != nil {
 		return nil, err
@@ -1093,7 +1100,7 @@ func (s *Service) DeleteThread(ctx context.Context, meta *session.Meta, threadID
 	if runtime := s.removeThreadSubagentRuntime(thKey); runtime != nil {
 		runtime.release()
 	}
-	operation, replayErr := s.replayThreadDeleteOperation(ctx, operation)
+	operation, replayErr := s.advanceThreadDeleteOperation(ctx, operation.OperationID, operation.EndpointID, operation.ThreadID)
 	if operation.ProductDataDeletedAtUnixMs > 0 {
 		s.scheduleThreadstoreCompaction("thread_delete")
 	}
