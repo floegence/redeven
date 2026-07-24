@@ -6,7 +6,36 @@ import (
 	"testing"
 
 	flruntime "github.com/floegence/floret/runtime"
+	"github.com/floegence/redeven/internal/ai"
 )
+
+type staticAIServiceProvider struct {
+	service *ai.Service
+}
+
+func newStaticAIServiceProvider(service *ai.Service) AIServiceProvider {
+	return staticAIServiceProvider{service: service}
+}
+
+func (p staticAIServiceProvider) AcquireAIService(ctx context.Context) (*ai.Service, context.Context, uint64, func(), error) {
+	if p.service == nil {
+		return nil, nil, 0, nil, ErrAIServiceUnavailable
+	}
+	return p.service, ctx, 1, func() {}, nil
+}
+
+func (p staticAIServiceProvider) AIReadiness() AIReadinessSnapshot {
+	if p.service == nil {
+		return AIReadinessSnapshot{State: AIReadinessUnavailable}
+	}
+	return AIReadinessSnapshot{State: AIReadinessReady}
+}
+
+func (p staticAIServiceProvider) RetryAIReadiness() error {
+	return nil
+}
+
+func (p staticAIServiceProvider) UpdateAIServiceStartupOptions(AIServiceStartupOptions) {}
 
 func openTestFloretStore(t *testing.T, path string) (*flruntime.Store, error) {
 	t.Helper()

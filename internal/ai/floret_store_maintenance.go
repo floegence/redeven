@@ -13,6 +13,14 @@ import (
 
 type FloretStoreStartupClass string
 
+type FloretStoreStartupPhase string
+
+const (
+	FloretStoreStartupInspecting FloretStoreStartupPhase = "inspecting"
+	FloretStoreStartupMigrating  FloretStoreStartupPhase = "migrating"
+	FloretStoreStartupVerifying  FloretStoreStartupPhase = "verifying"
+)
+
 const (
 	FloretStoreStartupTemporarilyBlocked         FloretStoreStartupClass = "temporarily_blocked"
 	FloretStoreStartupUpdateRequired             FloretStoreStartupClass = "update_required"
@@ -64,6 +72,36 @@ type floretStoreMaintenanceAPI interface {
 }
 
 type publicFloretStoreMaintenanceAPI struct{}
+
+type observingFloretStoreMaintenanceAPI struct {
+	next     floretStoreMaintenanceAPI
+	progress func(FloretStoreStartupPhase)
+}
+
+func (a observingFloretStoreMaintenanceAPI) report(phase FloretStoreStartupPhase) {
+	if a.progress != nil {
+		a.progress(phase)
+	}
+}
+
+func (a observingFloretStoreMaintenanceAPI) Inspect(ctx context.Context, path string, options ...flruntime.SQLiteStoreOption) (flruntime.SQLiteStoreInspection, error) {
+	a.report(FloretStoreStartupInspecting)
+	return a.next.Inspect(ctx, path, options...)
+}
+
+func (a observingFloretStoreMaintenanceAPI) Verify(ctx context.Context, path string, options ...flruntime.SQLiteStoreOption) (flruntime.SQLiteStoreVerification, error) {
+	a.report(FloretStoreStartupVerifying)
+	return a.next.Verify(ctx, path, options...)
+}
+
+func (a observingFloretStoreMaintenanceAPI) Migrate(ctx context.Context, path string, request flruntime.SQLiteStoreMigrationRequest, options ...flruntime.SQLiteStoreOption) (flruntime.SQLiteStoreMigrationResult, error) {
+	a.report(FloretStoreStartupMigrating)
+	return a.next.Migrate(ctx, path, request, options...)
+}
+
+func (a observingFloretStoreMaintenanceAPI) Open(ctx context.Context, path string, request flruntime.SQLiteStoreOpenRequest, options ...flruntime.SQLiteStoreOption) (*flruntime.Store, error) {
+	return a.next.Open(ctx, path, request, options...)
+}
 
 func (publicFloretStoreMaintenanceAPI) Inspect(ctx context.Context, path string, options ...flruntime.SQLiteStoreOption) (flruntime.SQLiteStoreInspection, error) {
 	return flruntime.InspectSQLiteStore(ctx, path, options...)

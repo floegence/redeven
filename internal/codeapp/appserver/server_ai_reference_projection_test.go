@@ -56,7 +56,7 @@ func TestServer_AIThreadLiveBootstrapProjectsCanonicalReferencesWithoutHostSecre
 		DistFS:               fstest.MapFS{"env/index.html": {Data: []byte("<html>env</html>")}, "inject.js": {Data: []byte("console.log('inject');")}},
 		ListenAddr:           "127.0.0.1:0",
 		Logger:               logger,
-		AI:                   aiSvc,
+		AIServiceProvider:    newStaticAIServiceProvider(aiSvc),
 		ConfigPath:           writeTestConfig(t),
 		ThreadReadStateStore: openTestThreadReadStateStore(t),
 		ResolveSessionMeta:   resolveMetaForTest(channelID, meta),

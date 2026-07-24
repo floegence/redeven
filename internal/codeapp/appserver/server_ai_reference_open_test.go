@@ -87,7 +87,7 @@ func TestServer_AIReferenceOpenTargetAcceptsOnlyCanonicalIdentity(t *testing.T) 
 	channelID := "ch_reference_open"
 	srv, err := New(Options{
 		Backend: &stubBackend{}, DistFS: fstest.MapFS{"env/index.html": {Data: []byte("<html>env</html>")}, "inject.js": {Data: []byte("console.log('inject');")}},
-		ListenAddr: "127.0.0.1:0", Logger: logger, AI: aiSvc, ConfigPath: writeTestConfig(t),
+		ListenAddr: "127.0.0.1:0", Logger: logger, AIServiceProvider: newStaticAIServiceProvider(aiSvc), ConfigPath: writeTestConfig(t),
 		ThreadReadStateStore: openTestThreadReadStateStore(t), ResolveSessionMeta: resolveMetaForTest(channelID, meta),
 		AgentHomeDir: home, FilesystemScope: scope,
 	})
@@ -213,7 +213,7 @@ func TestServer_AIReferenceOpenTargetRejectsCanonicalReferenceAfterTargetChanges
 	channelID := "ch_reference_target_change"
 	srv, err := New(Options{
 		Backend: &stubBackend{}, DistFS: fstest.MapFS{"env/index.html": {Data: []byte("<html>env</html>")}, "inject.js": {Data: []byte("console.log('inject');")}},
-		ListenAddr: "127.0.0.1:0", Logger: logger, AI: aiSvc, ConfigPath: writeTestConfig(t),
+		ListenAddr: "127.0.0.1:0", Logger: logger, AIServiceProvider: newStaticAIServiceProvider(aiSvc), ConfigPath: writeTestConfig(t),
 		ThreadReadStateStore: openTestThreadReadStateStore(t), ResolveSessionMeta: resolveMetaForTest(channelID, meta),
 		AgentHomeDir: home, FilesystemScope: scope,
 	})

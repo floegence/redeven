@@ -51,20 +51,25 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 		DesktopModelSource: runtimeservice.Binding{State: runtimeservice.BindingStateUnsupported},
 		ProviderLink:       a.ProviderLinkBinding(),
 	}
+	var aiSvcAvailable bool
+	var aiTaskCount int
 	if a.code != nil {
-		if aiSvc := a.code.AI(); aiSvc != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+		aiSvc, leaseCtx, _, release, err := a.code.AcquireAIService(ctx)
+		if err == nil && aiSvc != nil && release != nil {
+			aiSvcAvailable = true
+			defer release()
 			capabilities.DesktopModelSource = runtimeservice.Capability{
 				Supported:  true,
 				BindMethod: runtimeservice.RuntimeControlBindMethodV1,
 			}
-			ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
-			bindings.DesktopModelSource = aiSvc.DesktopModelSourceBindingStatus(ctx)
-			cancel()
+			bindings.DesktopModelSource = aiSvc.DesktopModelSourceBindingStatus(leaseCtx)
+			aiTaskCount = aiSvc.ActiveRunCount("")
 		}
+		cancel()
 	}
-	taskCount := 0
-	if a.code != nil && a.code.AI() != nil {
-		taskCount = a.code.AI().ActiveRunCount("")
+	if !aiSvcAvailable {
+		bindings.DesktopModelSource = runtimeservice.Binding{State: runtimeservice.BindingStateUnsupported}
 	}
 
 	return runtimeservice.ApplyCompatibilityContract(runtimeservice.Snapshot{
@@ -84,7 +89,7 @@ func (a *Agent) RuntimeServiceSnapshot() runtimeservice.Snapshot {
 		ActiveWorkload: runtimeservice.Workload{
 			TerminalCount:    terminalCount,
 			SessionCount:     len(sessions),
-			TaskCount:        taskCount,
+			TaskCount:        aiTaskCount,
 			PortForwardCount: portForwardCount,
 		},
 		Capabilities: capabilities,

@@ -75,7 +75,7 @@ func TestServer_AI_ThreadTodosEndpoint(t *testing.T) {
 		ListenAddr:         "127.0.0.1:0",
 		ConfigPath:         writeTestConfigWithAI(t),
 		ResolveSessionMeta: resolveMeta,
-		AI:                 aiSvc,
+		AIServiceProvider:  newStaticAIServiceProvider(aiSvc),
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)

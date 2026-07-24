@@ -217,7 +217,23 @@ func newRuntimeHealthTestAgent(t *testing.T, cfgPath string) *agent.Agent {
 	if err != nil {
 		t.Fatalf("agent.New() error = %v", err)
 	}
+	runTestAgentUntilCleanup(t, a)
 	return a
+}
+
+func runTestAgentUntilCleanup(t *testing.T, a *agent.Agent) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- a.Run(ctx) }()
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			t.Fatal("agent lifecycle did not stop")
+		}
+	})
 }
 
 func newDiagnosticsStoreForConfig(t *testing.T, cfgPath string) *diagnostics.Store {

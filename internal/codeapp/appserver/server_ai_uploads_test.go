@@ -19,7 +19,7 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
-func newUploadRouteServerWithAIConfig(t *testing.T, aiConfig *config.AIConfig) (*Server, string, string) {
+func newUploadRouteServerWithAIConfig(t *testing.T, aiConfig *config.AIConfig) (*Server, *ai.Service, string, string) {
 	t.Helper()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	stateDir := t.TempDir()
@@ -39,7 +39,7 @@ func newUploadRouteServerWithAIConfig(t *testing.T, aiConfig *config.AIConfig) (
 		otherChannel: {ChannelID: otherChannel, EndpointID: "env_upload", UserPublicID: "user_other", CanRead: true, CanWrite: true, CanExecute: true},
 	}
 	srv, err := New(Options{
-		Logger: logger, Backend: &stubBackend{}, ListenAddr: "127.0.0.1:0", AI: aiSvc,
+		Logger: logger, Backend: &stubBackend{}, ListenAddr: "127.0.0.1:0", AIServiceProvider: newStaticAIServiceProvider(aiSvc),
 		DistFS:             fstest.MapFS{"env/index.html": {Data: []byte("<html>env</html>")}, "inject.js": {Data: []byte("ok")}},
 		ConfigPath:         writeTestConfigWithAI(t),
 		ResolveSessionMeta: func(channelID string) (*session.Meta, bool) { meta, ok := metas[channelID]; return meta, ok },
@@ -47,17 +47,18 @@ func newUploadRouteServerWithAIConfig(t *testing.T, aiConfig *config.AIConfig) (
 	if err != nil {
 		t.Fatal(err)
 	}
-	return srv, envOriginWithChannel(ownerChannel), envOriginWithChannel(otherChannel)
+	return srv, aiSvc, envOriginWithChannel(ownerChannel), envOriginWithChannel(otherChannel)
 }
 
 func newUploadRouteServer(t *testing.T) (*Server, string, string) {
 	t.Helper()
-	return newUploadRouteServerWithAIConfig(t, &config.AIConfig{
+	srv, _, ownerOrigin, otherOrigin := newUploadRouteServerWithAIConfig(t, &config.AIConfig{
 		CurrentModelID: "openai/test",
 		Providers: []config.AIProvider{{
 			ID: "openai", Type: "openai", Models: []config.AIProviderModel{{ModelName: "test"}},
 		}},
 	})
+	return srv, ownerOrigin, otherOrigin
 }
 
 func uploadMultipartRequest(t *testing.T, body []byte, requestID string, origin string) *http.Request {
@@ -283,8 +284,8 @@ func TestAIComposerDraftRoutesRedactLeaseSecretsFromPublicConflictAndErrorRespon
 
 func TestAIComposerDraftStorageRemainsAvailableWithoutConfiguredModel(t *testing.T) {
 	t.Parallel()
-	srv, ownerOrigin, _ := newUploadRouteServerWithAIConfig(t, &config.AIConfig{})
-	if srv.ai.Enabled() {
+	srv, aiSvc, ownerOrigin, _ := newUploadRouteServerWithAIConfig(t, &config.AIConfig{})
+	if aiSvc.Enabled() {
 		t.Fatal("AI service unexpectedly has a configured model")
 	}
 	const scopePath = "/_redeven_proxy/api/ai/composer-drafts/unconfigured_model_draft"

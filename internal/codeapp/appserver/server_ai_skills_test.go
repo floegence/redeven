@@ -75,7 +75,7 @@ description: test skill
 		ListenAddr:         "127.0.0.1:0",
 		ConfigPath:         cfgPath,
 		ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanAdmin: true}),
-		AI:                 aiSvc,
+		AIServiceProvider:  newStaticAIServiceProvider(aiSvc),
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -202,7 +202,7 @@ func TestServer_AISkills_PermissionModel(t *testing.T) {
 		ListenAddr:         "127.0.0.1:0",
 		ConfigPath:         cfgPath,
 		ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanAdmin: false}),
-		AI:                 aiSvc,
+		AIServiceProvider:  newStaticAIServiceProvider(aiSvc),
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -319,7 +319,7 @@ description: Install Codex skills
 		ListenAddr:         "127.0.0.1:0",
 		ConfigPath:         cfgPath,
 		ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanAdmin: true}),
-		AI:                 aiSvc,
+		AIServiceProvider:  newStaticAIServiceProvider(aiSvc),
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)

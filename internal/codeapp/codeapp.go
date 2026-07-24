@@ -68,6 +68,9 @@ type Options struct {
 	LocalUIEnabled          bool
 	ResolveSessionMeta      func(channelID string) (*session.Meta, bool)
 	ResolveSessionTunnelURL func(channelID string) (string, bool)
+
+	newAIService   aiServiceFactory
+	closeAIService aiServiceCloser
 }
 
 type Service struct {
@@ -91,7 +94,7 @@ type Service struct {
 	runtime *codeserver.RuntimeManager
 	notes   *notes.Service
 	layouts *workbenchlayout.Service
-	ai      *ai.Service
+	aiReady *aiReadinessController
 	codex   *codexbridge.Manager
 	reads   *threadreadstate.Store
 	appSrv  *appserver.Server
@@ -226,7 +229,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		return nil, err
 	}
 
-	aiSvc, err := ai.NewServiceContext(ctx, ai.Options{
+	aiReady := newAIReadinessController(ctx, ai.Options{
 		Logger:                 logger,
 		StateDir:               stateAbs,
 		AgentHomeDir:           agentHomeDir,
@@ -240,13 +243,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		ResolveWebSearchProviderAPIKey: func(providerID string) (string, bool, error) {
 			return secrets.GetWebSearchProviderAPIKey(providerID)
 		},
-	})
-	if err != nil {
-		_ = reg.Close()
-		_ = pfSvc.Close()
-		_ = threadReadStateStore.Close()
-		return nil, err
-	}
+	}, opts.newAIService, opts.closeAIService)
 
 	codexSvc, err := codexbridge.NewManager(codexbridge.Options{
 		Logger:       logger,
@@ -257,7 +254,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	if err != nil {
 		_ = reg.Close()
 		_ = pfSvc.Close()
-		_ = aiSvc.Close()
+		_ = aiReady.Close()
 		_ = threadReadStateStore.Close()
 		return nil, err
 	}
@@ -267,7 +264,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	if err != nil {
 		_ = reg.Close()
 		_ = pfSvc.Close()
-		_ = aiSvc.Close()
+		_ = aiReady.Close()
 		_ = codexSvc.Close()
 		_ = threadReadStateStore.Close()
 		return nil, err
@@ -278,7 +275,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = reg.Close()
 		_ = pfSvc.Close()
 		_ = notesSvc.Close()
-		_ = aiSvc.Close()
+		_ = aiReady.Close()
 		_ = codexSvc.Close()
 		_ = threadReadStateStore.Close()
 		return nil, err
@@ -288,7 +285,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = pfSvc.Close()
 		_ = notesSvc.Close()
 		_ = workbenchLayoutSvc.Close()
-		_ = aiSvc.Close()
+		_ = aiReady.Close()
 		_ = codexSvc.Close()
 		_ = threadReadStateStore.Close()
 		return nil, err
@@ -310,7 +307,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = pfSvc.Close()
 		_ = notesSvc.Close()
 		_ = workbenchLayoutSvc.Close()
-		_ = aiSvc.Close()
+		_ = aiReady.Close()
 		_ = codexSvc.Close()
 		_ = threadReadStateStore.Close()
 		return nil, err
@@ -321,7 +318,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		DistFS:                  mergedFS{primary: ui.DistFS(), secondary: envui.DistFS()},
 		Backend:                 svc,
 		PortForward:             pfSvc,
-		AI:                      aiSvc,
+		AIServiceProvider:       aiReady,
 		Notes:                   notesSvc,
 		WorkbenchLayout:         workbenchLayoutSvc,
 		Terminal:                opts.Terminal,
@@ -345,7 +342,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = pfSvc.Close()
 		_ = notesSvc.Close()
 		_ = workbenchLayoutSvc.Close()
-		_ = aiSvc.Close()
+		_ = aiReady.Close()
 		_ = codexSvc.Close()
 		_ = threadReadStateStore.Close()
 		return nil, err
@@ -357,7 +354,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		_ = pfSvc.Close()
 		_ = notesSvc.Close()
 		_ = workbenchLayoutSvc.Close()
-		_ = aiSvc.Close()
+		_ = aiReady.Close()
 		_ = codexSvc.Close()
 		_ = threadReadStateStore.Close()
 		return nil, err
@@ -365,11 +362,12 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 	svc.appSrv = appSrv
 	svc.notes = notesSvc
 	svc.layouts = workbenchLayoutSvc
-	svc.ai = aiSvc
+	svc.aiReady = aiReady
 	svc.codex = codexSvc
 	svc.reads = threadReadStateStore
 	svc.pluginIntegration = pluginIntegration
 	svc.terminalLayoutCleanup = terminalLayoutCleanup
+	aiReady.Start()
 
 	return svc, nil
 }
@@ -399,8 +397,8 @@ func (s *Service) Close() error {
 	if s.layouts != nil {
 		_ = s.layouts.Close()
 	}
-	if s.ai != nil {
-		_ = s.ai.Close()
+	if s.aiReady != nil {
+		_ = s.aiReady.Close()
 	}
 	if s.reads != nil {
 		_ = s.reads.Close()
@@ -504,11 +502,18 @@ func migrateSQLiteStoreIfCurrentMissing(legacyPath string, currentPath string) e
 	return nil
 }
 
-func (s *Service) AI() *ai.Service {
-	if s == nil {
-		return nil
+func (s *Service) AcquireAIService(ctx context.Context) (*ai.Service, context.Context, uint64, func(), error) {
+	if s == nil || s.aiReady == nil {
+		return nil, nil, 0, nil, appserver.ErrAIServiceUnavailable
 	}
-	return s.ai
+	return s.aiReady.AcquireAIService(ctx)
+}
+
+func (s *Service) AIReadiness() appserver.AIReadinessSnapshot {
+	if s == nil || s.aiReady == nil {
+		return appserver.AIReadinessSnapshot{State: appserver.AIReadinessUnavailable}
+	}
+	return s.aiReady.AIReadiness()
 }
 
 func ValidateControlplaneBaseURL(raw string) error {

@@ -68,6 +68,7 @@ type ResolveOptions struct {
 
 type Registry struct {
 	mu            sync.RWMutex
+	revision      uint64
 	homeAbs       string
 	defaultRootID string
 	roots         []Root
@@ -80,6 +81,7 @@ func NewRegistry(cfg *config.Config) (*Registry, error) {
 		return nil, err
 	}
 	return &Registry{
+		revision:      1,
 		homeAbs:       snapshot.homeAbs,
 		defaultRootID: snapshot.defaultRootID,
 		roots:         snapshot.roots,
@@ -100,8 +102,18 @@ func (r *Registry) UpdateFromConfig(cfg *config.Config) error {
 	r.defaultRootID = snapshot.defaultRootID
 	r.roots = snapshot.roots
 	r.byID = snapshot.byID
+	r.revision++
 	r.mu.Unlock()
 	return nil
+}
+
+func (r *Registry) Revision() uint64 {
+	if r == nil {
+		return 0
+	}
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.revision
 }
 
 type registrySnapshot struct {

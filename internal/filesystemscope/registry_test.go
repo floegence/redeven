@@ -27,6 +27,29 @@ func TestDefaultRegistryExposesHomeAndComputer(t *testing.T) {
 	}
 }
 
+func TestRegistryRevisionAdvancesOnlyAfterSuccessfulUpdate(t *testing.T) {
+	home := t.TempDir()
+	reg, err := NewDefaultRegistry(home)
+	if err != nil {
+		t.Fatalf("NewDefaultRegistry: %v", err)
+	}
+	if got := reg.Revision(); got != 1 {
+		t.Fatalf("initial revision = %d, want 1", got)
+	}
+	if err := reg.UpdateFromConfig(&config.Config{AgentHomeDir: home}); err != nil {
+		t.Fatalf("UpdateFromConfig: %v", err)
+	}
+	if got := reg.Revision(); got != 2 {
+		t.Fatalf("updated revision = %d, want 2", got)
+	}
+	if err := reg.UpdateFromConfig(nil); err == nil {
+		t.Fatal("nil config update succeeded")
+	}
+	if got := reg.Revision(); got != 2 {
+		t.Fatalf("failed update revision = %d, want 2", got)
+	}
+}
+
 func TestRegistryUsesLongestRootMatch(t *testing.T) {
 	home := t.TempDir()
 	project := filepath.Join(home, "project")
