@@ -19,15 +19,13 @@ import (
 	"github.com/floegence/redeven/internal/session"
 )
 
-func newUploadRouteServer(t *testing.T) (*Server, string, string) {
+func newUploadRouteServerWithAIConfig(t *testing.T, aiConfig *config.AIConfig) (*Server, string, string) {
 	t.Helper()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 	stateDir := t.TempDir()
 	aiSvc, err := ai.NewService(ai.Options{
 		Logger: logger, StateDir: stateDir, AgentHomeDir: stateDir,
-		Config: &config.AIConfig{CurrentModelID: "openai/test", Providers: []config.AIProvider{{
-			ID: "openai", Type: "openai", Models: []config.AIProviderModel{{ModelName: "test"}},
-		}}},
+		Config:                aiConfig,
 		ResolveProviderAPIKey: func(string) (string, bool, error) { return "test", true, nil },
 	})
 	if err != nil {
@@ -50,6 +48,16 @@ func newUploadRouteServer(t *testing.T) (*Server, string, string) {
 		t.Fatal(err)
 	}
 	return srv, envOriginWithChannel(ownerChannel), envOriginWithChannel(otherChannel)
+}
+
+func newUploadRouteServer(t *testing.T) (*Server, string, string) {
+	t.Helper()
+	return newUploadRouteServerWithAIConfig(t, &config.AIConfig{
+		CurrentModelID: "openai/test",
+		Providers: []config.AIProvider{{
+			ID: "openai", Type: "openai", Models: []config.AIProviderModel{{ModelName: "test"}},
+		}},
+	})
 }
 
 func uploadMultipartRequest(t *testing.T, body []byte, requestID string, origin string) *http.Request {
@@ -271,6 +279,49 @@ func TestAIComposerDraftRoutesRedactLeaseSecretsFromPublicConflictAndErrorRespon
 		t.Fatalf("lease-lost mutation status=%d body=%s", leaseLostMutation.Code, leaseLostMutation.Body.String())
 	}
 	assertRedacted("lease-lost mutation", leaseLostMutation)
+}
+
+func TestAIComposerDraftStorageRemainsAvailableWithoutConfiguredModel(t *testing.T) {
+	t.Parallel()
+	srv, ownerOrigin, _ := newUploadRouteServerWithAIConfig(t, &config.AIConfig{})
+	if srv.ai.Enabled() {
+		t.Fatal("AI service unexpectedly has a configured model")
+	}
+	const scopePath = "/_redeven_proxy/api/ai/composer-drafts/unconfigured_model_draft"
+
+	loaded := performServerRequest(srv, http.MethodGet, scopePath, ownerOrigin, "")
+	if loaded.Code != http.StatusOK {
+		t.Fatalf("load status=%d body=%s", loaded.Code, loaded.Body.String())
+	}
+
+	acquired := performServerRequest(srv, http.MethodPost, scopePath+"/lease", ownerOrigin, `{"action":"acquire","holder_id":"surface_without_model"}`)
+	if acquired.Code != http.StatusOK {
+		t.Fatalf("acquire status=%d body=%s", acquired.Code, acquired.Body.String())
+	}
+	var acquireBody struct {
+		Data struct {
+			Draft struct {
+				LeaseID string `json:"lease_id"`
+			} `json:"draft"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(acquired.Body.Bytes(), &acquireBody); err != nil {
+		t.Fatal(err)
+	}
+	leaseID := acquireBody.Data.Draft.LeaseID
+	if leaseID == "" {
+		t.Fatalf("acquire response=%s", acquired.Body.String())
+	}
+
+	committed := performServerRequest(srv, http.MethodPut, scopePath, ownerOrigin, `{"holder_id":"surface_without_model","lease_id":"`+leaseID+`","expected_revision":0,"value":{"text":"saved before model setup","attachments":[],"mode":"ordinary"}}`)
+	if committed.Code != http.StatusOK || !bytes.Contains(committed.Body.Bytes(), []byte(`"state":"committed"`)) {
+		t.Fatalf("commit status=%d body=%s", committed.Code, committed.Body.String())
+	}
+
+	admission := performServerRequest(srv, http.MethodPost, scopePath+"/thread", ownerOrigin, `{}`)
+	if admission.Code != http.StatusServiceUnavailable || !bytes.Contains(admission.Body.Bytes(), []byte("ai not configured")) {
+		t.Fatalf("admission status=%d body=%s", admission.Code, admission.Body.String())
+	}
 }
 
 func TestAIUploadRouteRejectsUnknownMultipartPartsWithTypedError(t *testing.T) {

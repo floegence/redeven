@@ -5057,8 +5057,8 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		if g.ai == nil || !g.ai.Enabled() {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
+		if g.ai == nil {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
 			return
 		}
 		rest := strings.TrimPrefix(r.URL.Path, "/_redeven_proxy/api/ai/composer-drafts/")
@@ -5122,6 +5122,10 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if r.Method == http.MethodPost && threadAction {
+			if !g.ai.Enabled() {
+				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
+				return
+			}
 			dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
 			dec.DisallowUnknownFields()
 			var body ai.ComposerDraftThreadRequest
