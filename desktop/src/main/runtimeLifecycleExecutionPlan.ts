@@ -119,7 +119,6 @@ function stopSteps(terminal: DesktopRuntimeLifecycleStepID = 'runtime_stopped'):
     'discovering_runtime_instances',
     'stopping_runtime_process',
     'verifying_runtime_inventory',
-    'verifying_runtime_stopped',
     terminal,
   ];
 }

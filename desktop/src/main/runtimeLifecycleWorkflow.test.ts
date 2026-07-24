@@ -31,6 +31,44 @@ function containerWorkflow(): RuntimeLifecycleWorkflow {
 }
 
 describe('RuntimeLifecycleWorkflow', () => {
+  it('completes an explicit local stop after runtime inventory verification', () => {
+    const subject = new RuntimeLifecycleWorkflow({
+      location: 'local_host',
+      operation: 'stop',
+      target_id: 'local:default',
+      target_label: 'Local Environment',
+      target_detail: 'This device',
+    });
+
+    subject.observeStep('checking_existing_runtime', 'Checking existing runtime');
+    const plan = runtimeLifecyclePlanIncludingStep({
+      location: 'local_host',
+      operation: 'stop',
+      currentSteps: subject.currentStepIDs(),
+      step: 'discovering_runtime_instances',
+    });
+    subject.ensureStepPlanned('discovering_runtime_instances', {
+      state: plan.state,
+      steps: plan.steps.map((step) => step.id),
+      omitted_steps: plan.omitted_steps,
+    });
+    subject.advanceToStep('discovering_runtime_instances', 'Discovering runtime processes');
+    subject.advanceToStep('stopping_runtime_process', 'Stopping runtime');
+    subject.advanceToStep('verifying_runtime_inventory', 'Verifying runtime process inventory');
+
+    expect(() => subject.beginStep('runtime_stopped', 'Runtime stopped')).not.toThrow();
+    subject.completeStep('runtime_stopped');
+
+    expect(subject.progress().plan_state).toBe('terminal');
+    expect(subject.progress().steps.map((step) => [step.id, step.status])).toEqual([
+      ['checking_existing_runtime', 'succeeded'],
+      ['discovering_runtime_instances', 'succeeded'],
+      ['stopping_runtime_process', 'succeeded'],
+      ['verifying_runtime_inventory', 'succeeded'],
+      ['runtime_stopped', 'succeeded'],
+    ]);
+  });
+
   it('requires explicit plan commits before helper observations can move to later steps', () => {
     const subject = workflow();
 

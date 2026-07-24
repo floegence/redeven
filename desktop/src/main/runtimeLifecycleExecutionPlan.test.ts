@@ -188,6 +188,24 @@ describe('runtimeLifecycleExecutionPlan', () => {
     ]);
   });
 
+  it('finishes an explicit stop directly after the final runtime inventory verification', () => {
+    const plan = runtimeLifecyclePlanIncludingStep({
+      location: 'local_host',
+      operation: 'stop',
+      currentSteps: ['checking_existing_runtime'],
+      step: 'discovering_runtime_instances',
+    });
+
+    expect(plan.steps.map((step) => step.id)).toEqual([
+      'checking_existing_runtime',
+      'discovering_runtime_instances',
+      'stopping_runtime_process',
+      'verifying_runtime_inventory',
+      'runtime_stopped',
+    ]);
+    expect(plan.steps.map((step) => step.id)).not.toContain('verifying_runtime_stopped');
+  });
+
   it('keeps restart without a running process as start-from-stopped instead of package install', () => {
     const plan = runtimeLifecyclePlanAfterDecision({
       location: 'local_host',
