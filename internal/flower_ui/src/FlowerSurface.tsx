@@ -5778,6 +5778,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     expectedSessionKey = currentComposerSessionKey(),
     expectedValue?: string,
     expectedCurrentSelection?: Readonly<{ start: number; end: number }>,
+    focusOwnerAtRequest = typeof document === 'undefined' ? null : document.activeElement,
   ) => {
     if (composerSelectionFrame) cancelTranscriptAnimationFrame(composerSelectionFrame);
     composerSelectionFrame = requestTranscriptAnimationFrame(() => {
@@ -5790,6 +5791,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         && (composerRef.selectionStart !== expectedCurrentSelection.start
           || composerRef.selectionEnd !== expectedCurrentSelection.end)
       ) return;
+      if (typeof document !== 'undefined') {
+        const activeElement = document.activeElement;
+        const focusStillOwned = activeElement == null
+          || activeElement === document.body
+          || activeElement === focusOwnerAtRequest
+          || activeElement === composerRef;
+        if (!focusStillOwned) return;
+      }
       composerRef.focus();
       composerRef.setSelectionRange(start, end);
     });
@@ -5832,6 +5841,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     event.preventDefault();
     if (decision.kind === 'attach_payload') {
       const retainedSessionKey = currentComposerSessionKey();
+      const focusOwner = typeof document === 'undefined' ? null : document.activeElement;
       updateComposerText(retainedPaste.value);
       scheduleComposerSelection(
         retainedPaste.selectionStart,
@@ -5867,7 +5877,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           && (!(composerRef instanceof HTMLTextAreaElement) || composerRef.value === retainedPaste.value);
         if (unchanged) {
           updateComposerText(decision.value);
-          scheduleComposerSelection(decision.selectionStart, decision.selectionEnd, retainedSessionKey, decision.value);
+          scheduleComposerSelection(
+            decision.selectionStart,
+            decision.selectionEnd,
+            retainedSessionKey,
+            decision.value,
+            undefined,
+            focusOwner,
+          );
           return;
         }
         const shared = operation.session.snapshot();
@@ -5897,6 +5914,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     withComposerDraftLease(() => undefined);
   };
   const restoreLongTextAttachment = async (localID: string) => {
+    const focusOwner = typeof document === 'undefined' ? null : document.activeElement;
     try {
       const operation = await acquireComposerDraftOperation();
       if (!operation || !composerDraftOperationCurrent(operation)) return;
@@ -5917,7 +5935,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       if (committed.kind !== 'committed' || !composerDraftOperationCurrent(operation)) return;
       updateComposerSessionDraft(operation.sessionKey, (draft) => ({ ...draft, chatDraft: restored.value }));
       operation.controller.remove(localID);
-      scheduleComposerSelection(restored.selectionStart, restored.selectionEnd, operation.sessionKey, restored.value);
+      scheduleComposerSelection(
+        restored.selectionStart,
+        restored.selectionEnd,
+        operation.sessionKey,
+        restored.value,
+        undefined,
+        focusOwner,
+      );
     } catch {
       notifyComposerError(attachmentCopy().restoreFailed);
     }

@@ -1,5 +1,5 @@
 import type { Component, JSX } from 'solid-js';
-import { For, Show, createEffect, createMemo, createSignal, onCleanup } from 'solid-js';
+import { For, Show, createEffect, createMemo, createSignal, on, onCleanup } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import { Copy, Folder, GitBranch, MoreHorizontal, Pencil, Pin, Refresh, Search, Trash } from '@floegence/floe-webapp-core/icons';
 import { Input, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
@@ -317,6 +317,7 @@ export type FlowerThreadListProps = Readonly<{
 }>;
 
 export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
+  let listRef: HTMLDivElement | undefined;
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY.threadList;
   const filtered = createMemo(() => filterFlowerThreadItems(props.items, props.query));
   const itemByID = createMemo(() => new Map(filtered().map((item) => [item.thread_id, item] as const)));
@@ -327,7 +328,19 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
   )));
   const groupByKey = createMemo(() => new Map(groups().map((group) => [group.key, group] as const)));
   const groupKeys = createMemo(() => groups().map((group) => group.key));
-  const [menu, setMenu] = createSignal<{ item: FlowerThreadListItem; x: number; y: number; restore?: HTMLElement } | null>(null);
+  const [menu, setMenu] = createSignal<{
+    threadID: string;
+    x: number;
+    y: number;
+    restore?: HTMLElement;
+    restoreControl: 'menu' | 'select';
+  } | null>(null);
+  const menuPresentation = createMemo(() => {
+    const state = menu();
+    if (!state) return null;
+    const item = itemByID().get(state.threadID);
+    return item ? { ...state, item } : null;
+  });
   const warmupRows = [0, 1, 2, 3, 4, 5] as const;
   const showWarmupSkeleton = createMemo(() => props.warmup === true && props.items.length === 0);
   const searchDisabled = createMemo(() => props.warmup === true && props.items.length === 0);
@@ -338,6 +351,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
     let x = 0;
     let y = 0;
     let restore: HTMLElement | undefined;
+    let restoreControl: 'menu' | 'select' = 'select';
     if (event instanceof MouseEvent && event.clientX > 0 && event.clientY > 0) {
       x = event.clientX;
       y = event.clientY;
@@ -349,26 +363,41 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
     }
     if (event.currentTarget instanceof HTMLButtonElement) {
       restore = event.currentTarget;
+      restoreControl = event.currentTarget.classList.contains('flower-thread-card-menu-button') ? 'menu' : 'select';
     } else if (event.currentTarget instanceof HTMLElement) {
       restore = event.currentTarget.querySelector('button') ?? undefined;
     }
-    setMenu({ item, x, y, restore });
+    setMenu({ threadID: item.thread_id, x, y, restore, restoreControl });
+  };
+
+  const resolveMenuRestore = (state: NonNullable<ReturnType<typeof menu>>): HTMLElement | undefined => {
+    if (state.restore?.isConnected) return state.restore;
+    const card = Array.from(listRef?.querySelectorAll<HTMLElement>('[data-flower-thread-card]') ?? [])
+      .find((candidate) => candidate.getAttribute('data-thread-id') === state.threadID);
+    return card?.querySelector<HTMLElement>(state.restoreControl === 'menu'
+      ? '.flower-thread-card-menu-button'
+      : '.flower-thread-card-select-button') ?? undefined;
   };
 
   const closeMenu = () => {
-    const restore = menu()?.restore;
+    const state = menu();
+    const restore = state ? resolveMenuRestore(state) : undefined;
     setMenu(null);
     restore?.focus();
   };
 
+  createEffect(on(
+    () => [props.query, props.activeThreadID].join('\x00'),
+    () => setMenu(null),
+    { defer: true },
+  ));
+
   createEffect(() => {
-    const closeKey = [props.query, props.activeThreadID, props.items.length].join('\x00');
-    void closeKey;
-    setMenu(null);
+    if (menu() && !menuPresentation()) setMenu(null);
   });
 
   return (
-    <div class="flower-thread-list flex min-h-0 flex-col gap-3 p-3">
+    <div ref={listRef} class="flower-thread-list flex min-h-0 flex-col gap-3 p-3">
       <div class="flex items-center gap-2">
         <div class="min-w-0 flex-1">
           <h2 class="flower-thread-list-title truncate text-sm font-semibold">{copy().title}</h2>
@@ -454,7 +483,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
           </Show>
         </Show>
       </div>
-      <Show when={menu()}>
+      <Show when={menuPresentation()}>
         {(state) => (
           <FlowerThreadContextMenu
             item={state().item}
@@ -466,10 +495,10 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
             canPin={!!props.canPin}
             showDeleteAction={props.showDeleteAction === true}
             actionsBusy={!!props.actionsBusy}
-            busyAction={props.busyThreadID === state().item.thread_id ? props.busyAction ?? null : null}
+            busyAction={props.busyThreadID === state().threadID ? props.busyAction ?? null : null}
             onClose={closeMenu}
             onAction={(action, item) => {
-              const restore = state().restore;
+              const restore = resolveMenuRestore(state());
               setMenu(null);
               props.onMenuAction?.(action, item, restore);
             }}
