@@ -44,14 +44,14 @@ The Service live fence is endpoint/thread scoped and protects only in-memory pre
 
 # Evidence
 
-- `redeven:internal/ai/threadstore/thread_delete_operation.go:57` - Preparation records intent without deleting settings or resources.
-- `redeven:internal/ai/thread_delete_operation.go:66` - Replay deletes Floret first, then product state, read state, and files.
-- `redeven:internal/ai/threads.go:978` - Delete preparation releases the lifecycle gate before the serialized replay executor is entered.
+- `redeven:internal/ai/threadstore/thread_delete_operation.go:117` - Preparation records intent without deleting settings or resources.
+- `redeven:internal/ai/thread_delete_operation.go:135` - The serialized replay executor rereads the operation and advances its fixed cleanup order.
+- `redeven:internal/ai/threads.go:985` - The authenticated service operation prepares intent before entering the serialized replay executor.
 - `redeven:internal/ai/threadstore/store.go:255` - Product list pagination excludes durable delete intent in SQL.
-- `redeven:internal/ai/threadstore/thread_delete_operation.go:113` - Product deletion requires durable Floret confirmation.
-- `redeven:internal/ai/thread_delete_operation_test.go:129` - Restart tests cover every durable step and Floret failure retention.
-- `redeven:internal/ai/threadstore/thread_delete_operation_test.go:10` - Store tests cover intent, retirement, and confirmation order.
-- `redeven:internal/codeapp/appserver/server_test.go:3168` - API tests cover strict force parsing, durable receipts, and audit outcomes.
-- `redeven:internal/flower_ui/src/FlowerSurface.tsx:4299` - The surface retirement fence clears product presentation and rejects stale responses.
-- `redeven:internal/ai/flower_live_projection.go:124` - Live list, append, and retirement share the Service lock and preserve endpoint-scoped presentation isolation.
+- `redeven:internal/ai/threadstore/thread_delete_operation.go:201` - Product deletion requires durable Floret confirmation.
+- `redeven:internal/ai/thread_delete_operation_test.go:446` - Restart tests cover every durable step and Floret failure retention.
+- `redeven:internal/ai/threadstore/thread_delete_operation_test.go:302` - Store tests cover intent and confirmation order through final commit.
+- `redeven:internal/codeapp/appserver/server_test.go:3316` - API tests cover strict force parsing, durable pending receipts, and accepted audit outcomes.
+- `redeven:internal/flower_ui/src/FlowerSurface.tsx:4300` - The surface retirement fence clears product presentation and rejects stale responses.
+- `redeven:internal/ai/flower_live_projection.go:1115` - Live retirement shares the Service lock with list and append access.
 - `redeven:internal/ai/flower_live_memory_test.go:72` - Focused tests cover endpoint isolation, retirement ordering, detached responses, late append rejection, and concurrent access.

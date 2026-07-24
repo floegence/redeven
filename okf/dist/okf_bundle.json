@@ -1916,7 +1916,7 @@
         "title": "Flower thread deletion coordination",
         "type": "AI Persistence Contract"
       },
-      "body_length": 7054,
+      "body_length": 7064,
       "summary": "- Authority: Floret deletes the canonical Agent thread tree; Redeven deletes host settings, queue/routing/read state, upload ownership, audit-linked product rows, and physical upload files.\n- Outcome: one stable delete operation records user intent, immediately retires product visibility, and replays the same ordered steps after any crash.\n- Invariants: resources remain owned while Floret deletion is unconfirmed, every replay uses one per-thread executor, and no compensation restores deleted canonical or product data.\n- Failure boundary: transient external failures keep the operation pending; invalid durable snapshots or canonical identity failures become terminally failed and block every startup until repaired.",
       "sections": [
         {
@@ -1936,22 +1936,22 @@
       ],
       "evidence": [
         {
-          "id": "redeven:internal/ai/threadstore/thread_delete_operation.go:57:preparation records intent without deleting settings or resources.",
+          "id": "redeven:internal/ai/threadstore/thread_delete_operation.go:117:preparation records intent without deleting settings or resources.",
           "source": "redeven:internal/ai/threadstore/thread_delete_operation.go",
-          "line": 57,
+          "line": 117,
           "description": "Preparation records intent without deleting settings or resources."
         },
         {
-          "id": "redeven:internal/ai/thread_delete_operation.go:66:replay deletes floret first, then product state, read state, and files.",
+          "id": "redeven:internal/ai/thread_delete_operation.go:135:the serialized replay executor rereads the operation and advances its fixed cleanup order.",
           "source": "redeven:internal/ai/thread_delete_operation.go",
-          "line": 66,
-          "description": "Replay deletes Floret first, then product state, read state, and files."
+          "line": 135,
+          "description": "The serialized replay executor rereads the operation and advances its fixed cleanup order."
         },
         {
-          "id": "redeven:internal/ai/threads.go:978:delete preparation releases the lifecycle gate before the serialized replay executor is entered.",
+          "id": "redeven:internal/ai/threads.go:985:the authenticated service operation prepares intent before entering the serialized replay executor.",
           "source": "redeven:internal/ai/threads.go",
-          "line": 978,
-          "description": "Delete preparation releases the lifecycle gate before the serialized replay executor is entered."
+          "line": 985,
+          "description": "The authenticated service operation prepares intent before entering the serialized replay executor."
         },
         {
           "id": "redeven:internal/ai/threadstore/store.go:255:product list pagination excludes durable delete intent in sql.",
@@ -1960,40 +1960,40 @@
           "description": "Product list pagination excludes durable delete intent in SQL."
         },
         {
-          "id": "redeven:internal/ai/threadstore/thread_delete_operation.go:113:product deletion requires durable floret confirmation.",
+          "id": "redeven:internal/ai/threadstore/thread_delete_operation.go:201:product deletion requires durable floret confirmation.",
           "source": "redeven:internal/ai/threadstore/thread_delete_operation.go",
-          "line": 113,
+          "line": 201,
           "description": "Product deletion requires durable Floret confirmation."
         },
         {
-          "id": "redeven:internal/ai/thread_delete_operation_test.go:129:restart tests cover every durable step and floret failure retention.",
+          "id": "redeven:internal/ai/thread_delete_operation_test.go:446:restart tests cover every durable step and floret failure retention.",
           "source": "redeven:internal/ai/thread_delete_operation_test.go",
-          "line": 129,
+          "line": 446,
           "description": "Restart tests cover every durable step and Floret failure retention."
         },
         {
-          "id": "redeven:internal/ai/threadstore/thread_delete_operation_test.go:10:store tests cover intent, retirement, and confirmation order.",
+          "id": "redeven:internal/ai/threadstore/thread_delete_operation_test.go:302:store tests cover intent and confirmation order through final commit.",
           "source": "redeven:internal/ai/threadstore/thread_delete_operation_test.go",
-          "line": 10,
-          "description": "Store tests cover intent, retirement, and confirmation order."
+          "line": 302,
+          "description": "Store tests cover intent and confirmation order through final commit."
         },
         {
-          "id": "redeven:internal/codeapp/appserver/server_test.go:3168:api tests cover strict force parsing, durable receipts, and audit outcomes.",
+          "id": "redeven:internal/codeapp/appserver/server_test.go:3316:api tests cover strict force parsing, durable pending receipts, and accepted audit outcomes.",
           "source": "redeven:internal/codeapp/appserver/server_test.go",
-          "line": 3168,
-          "description": "API tests cover strict force parsing, durable receipts, and audit outcomes."
+          "line": 3316,
+          "description": "API tests cover strict force parsing, durable pending receipts, and accepted audit outcomes."
         },
         {
-          "id": "redeven:internal/flower_ui/src/FlowerSurface.tsx:4299:the surface retirement fence clears product presentation and rejects stale responses.",
+          "id": "redeven:internal/flower_ui/src/FlowerSurface.tsx:4300:the surface retirement fence clears product presentation and rejects stale responses.",
           "source": "redeven:internal/flower_ui/src/FlowerSurface.tsx",
-          "line": 4299,
+          "line": 4300,
           "description": "The surface retirement fence clears product presentation and rejects stale responses."
         },
         {
-          "id": "redeven:internal/ai/flower_live_projection.go:124:live list, append, and retirement share the service lock and preserve endpoint-scoped presentation isolation.",
+          "id": "redeven:internal/ai/flower_live_projection.go:1115:live retirement shares the service lock with list and append access.",
           "source": "redeven:internal/ai/flower_live_projection.go",
-          "line": 124,
-          "description": "Live list, append, and retirement share the Service lock and preserve endpoint-scoped presentation isolation."
+          "line": 1115,
+          "description": "Live retirement shares the Service lock with list and append access."
         },
         {
           "id": "redeven:internal/ai/flower_live_memory_test.go:72:focused tests cover endpoint isolation, retirement ordering, detached responses, late append rejection, and concurrent access.",
@@ -8323,5 +8323,5 @@
       ]
     }
   ],
-  "source_sha256": "b959aeead061b81462636b41d7de6068f6d1a99f3ae394453a610e39d83f7810"
+  "source_sha256": "5772c083918886c1a4f81c2fcb35f389d2217dcc852e70723b7d4b9d72517ee7"
 }
