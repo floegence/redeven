@@ -121,6 +121,7 @@ describe('FlowerSurface thread deletion', () => {
 
     expect(runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id')).toBe(current.thread_id);
     expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('Keep this draft');
+    await waitFor(() => document.activeElement === runtime.querySelector('textarea'));
     expect(flowerSurfaceNotifications()).toContainEqual(expect.objectContaining({
       tone: 'info',
       message: DEFAULT_FLOWER_SURFACE_COPY.threadList.deletePendingNotification,

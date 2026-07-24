@@ -4341,6 +4341,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
     if (retiringSelected) {
       startCompose();
+    } else {
+      requestComposerFocus();
     }
     void refreshThreads();
   };
