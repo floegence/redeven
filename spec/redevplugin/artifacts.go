@@ -24,6 +24,7 @@ import (
 const (
 	containersCapabilityRoot = "official-containers-capability"
 	containersPluginRoot     = "official-containers-plugin"
+	containersCatalogRoot    = "catalog-containers-plugin"
 
 	officialSourceID             = "redeven-official"
 	officialPublisherID          = "com.redeven.official"
@@ -45,10 +46,11 @@ const (
 	officialLedgerRoot           = "sources/redeven-official/signing-ledger"
 )
 
-// artifactFS contains only public, signed ReDevPlugin artifacts. Private
-// signing keys are never part of the repository or the product binary.
+// artifactFS contains public signed release artifacts and the unsigned catalog
+// package derived from the same verified content. Private signing keys are
+// never part of the repository or the product binary.
 //
-//go:embed redeven-official-v1.public.json official-containers-capability/** official-containers-plugin/**
+//go:embed redeven-official-v1.public.json official-containers-capability/** official-containers-plugin/** catalog-containers-plugin/**
 var artifactFS embed.FS
 
 type signingPublicKey struct {
@@ -79,6 +81,39 @@ type ContainersPluginRelease struct {
 	SigningLedgerArtifacts   map[string][]byte
 	RootTrustAnchor          ReleaseTrustPublicKey
 	SigningLedgerAnchor      ReleaseTrustPublicKey
+}
+
+func OfficialSigningPublicKey() (ReleaseTrustPublicKey, error) {
+	key, err := readSigningPublicKey("redeven-official-v1.public.json", officialSigningKeyID)
+	if err != nil {
+		return ReleaseTrustPublicKey{}, err
+	}
+	return ReleaseTrustPublicKey{KeyID: key.KeyID, PublicKey: append(ed25519.PublicKey(nil), key.PublicKey...)}, nil
+}
+
+func CatalogContainersPluginPackage() ([]byte, error) {
+	value, err := artifactFS.ReadFile(path.Join(containersCatalogRoot, officialContainersVersion, "plugin.redevplugin"))
+	if err != nil {
+		return nil, err
+	}
+	pkg, err := pluginpkg.Read(context.Background(), bytes.NewReader(value), int64(len(value)), pluginpkg.DefaultReadLimits())
+	if err != nil {
+		return nil, err
+	}
+	if pkg.PackageSignature != nil || pkg.Manifest.Publisher.PublisherID != officialPublisherID ||
+		pkg.Manifest.PluginID() != officialContainersPluginID || pkg.Manifest.Version() != officialContainersVersion {
+		return nil, errors.New("catalog Containers package identity is invalid")
+	}
+	release, err := OfficialContainersPluginRelease()
+	if err != nil {
+		return nil, err
+	}
+	if !equalHash(pkg.PackageHash, release.Ref.ExpectedHashes.PackageSHA256) ||
+		!equalHash(pkg.ManifestHash, release.Ref.ExpectedHashes.ManifestSHA256) ||
+		!equalHash(pkg.EntriesHash, release.Ref.ExpectedHashes.EntriesSHA256) {
+		return nil, errors.New("catalog Containers package content is invalid")
+	}
+	return append([]byte(nil), value...), nil
 }
 
 func ContainersCapabilityBundle() (capabilitycontract.Bundle, capabilitycontract.TrustedKey, error) {
