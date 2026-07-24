@@ -71,7 +71,7 @@ function thread(): FlowerThreadListItem {
   };
 }
 
-function renderList() {
+function renderList(showDeleteAction = true) {
   const host = document.createElement('div');
   document.body.appendChild(host);
   const onMenuAction = vi.fn();
@@ -87,6 +87,7 @@ function renderList() {
       canFork
       canRename
       canPin
+      showDeleteAction={showDeleteAction}
     />
   ), host));
   return { host, onMenuAction };
@@ -109,6 +110,15 @@ describe('FlowerThreadList deletion entry', () => {
     (destructiveItems[0] as HTMLButtonElement).click();
     expect(onMenuAction).toHaveBeenCalledTimes(1);
     expect(onMenuAction.mock.calls[0]?.[0]).toBe('delete');
+  });
+
+  it('does not offer deletion when the surface adapter lacks that capability', async () => {
+    const { host } = renderList(false);
+    (host.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement).click();
+    await Promise.resolve();
+
+    expect(host.querySelector('[role="menuitem"][data-destructive="true"]')).toBeNull();
+    expect(host.querySelector('[data-icon="trash"]')).toBeNull();
   });
 
   it('opens the same menu from the keyboard and exposes its trigger while focused', async () => {

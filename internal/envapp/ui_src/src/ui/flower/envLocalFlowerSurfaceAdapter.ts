@@ -521,12 +521,15 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       }),
       deleteThread: async (threadID) => {
         try {
-          return await fetchLocalApiJSON<unknown>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}?force=true`, {
-            method: 'DELETE',
-          });
+          return {
+            kind: 'success' as const,
+            receipt: await fetchLocalApiJSON<unknown>(`/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}?force=true`, {
+              method: 'DELETE',
+            }),
+          };
         } catch (error) {
           if (error instanceof LocalApiError && error.code === FLOWER_THREAD_DELETE_OPERATION_FAILED_CODE) {
-            return error.data;
+            return { kind: 'terminal_failure' as const, receipt: error.data };
           }
           throw error;
         }

@@ -14,7 +14,7 @@ type TimeGroup = FlowerThreadTimeGroup;
 export type FlowerThreadMenuAction = 'copy_thread_id' | 'fork' | 'copy_workdir' | 'pin' | 'rename' | 'delete';
 export type { FlowerThreadGroup };
 
-const THREAD_CONTEXT_MENU_ESTIMATED_SIZE = { width: 212, height: 276 } as const;
+const THREAD_CONTEXT_MENU_WIDTH = 212;
 
 type FlowerThreadRenderGroup = Readonly<{
   key: string;
@@ -162,6 +162,7 @@ type FlowerThreadContextMenuProps = Readonly<{
   canFork: boolean;
   canRename: boolean;
   canPin: boolean;
+  showDeleteAction: boolean;
   actionsBusy: boolean;
   busyAction: FlowerThreadMenuAction | null;
   onAction: (action: FlowerThreadMenuAction, item: FlowerThreadListItem) => void;
@@ -269,7 +270,7 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
   return (
     <SurfaceFloatingLayer
       position={{ x: props.x, y: props.y }}
-      estimatedSize={THREAD_CONTEXT_MENU_ESTIMATED_SIZE}
+      estimatedSize={{ width: THREAD_CONTEXT_MENU_WIDTH, height: props.showDeleteAction ? 276 : 232 }}
       class="flower-thread-context-menu-layer"
       data-flower-floating-layer="true"
     >
@@ -286,8 +287,10 @@ const FlowerThreadContextMenu: Component<FlowerThreadContextMenuProps> = (props)
         <div class="flower-thread-menu-separator" />
         {itemButton('pin', props.item.pinned ? props.copy.unpin : props.copy.pin, <Pin class={cn('h-3.5 w-3.5', props.item.pinned && 'text-primary')} />, !props.canPin || !canPinThreadItem(props.item))}
         {itemButton('rename', props.copy.rename, <Pencil class="h-3.5 w-3.5" />, !props.canRename || !canRenameThreadItem(props.item))}
-        <div class="flower-thread-menu-separator" />
-        {itemButton('delete', props.copy.deleteMenuAction, <Trash class="h-3.5 w-3.5" />)}
+        <Show when={props.showDeleteAction}>
+          <div class="flower-thread-menu-separator" />
+          {itemButton('delete', props.copy.deleteMenuAction, <Trash class="h-3.5 w-3.5" />)}
+        </Show>
       </div>
     </SurfaceFloatingLayer>
   );
@@ -307,6 +310,7 @@ export type FlowerThreadListProps = Readonly<{
   canFork?: boolean;
   canRename?: boolean;
   canPin?: boolean;
+  showDeleteAction?: boolean;
   busyThreadID?: string;
   busyAction?: FlowerThreadMenuAction | null;
   actionsBusy?: boolean;
@@ -460,6 +464,7 @@ export const FlowerThreadList: Component<FlowerThreadListProps> = (props) => {
             canFork={!!props.canFork}
             canRename={!!props.canRename}
             canPin={!!props.canPin}
+            showDeleteAction={props.showDeleteAction === true}
             actionsBusy={!!props.actionsBusy}
             busyAction={props.busyThreadID === state().item.thread_id ? props.busyAction ?? null : null}
             onClose={closeMenu}

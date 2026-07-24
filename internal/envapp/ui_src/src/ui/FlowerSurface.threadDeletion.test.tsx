@@ -237,4 +237,37 @@ describe('FlowerSurface thread deletion', () => {
 
     expect(runtime.querySelector(`[data-thread-id="${target.thread_id}"]`)).toBeNull();
   });
+
+  it('ignores a late compaction failure after the selected thread is retired', async () => {
+    const target = thread({ thread_id: 'thread-delete-compacting', title: 'Compacting deletion' });
+    const compaction = deferred<FlowerLiveBootstrap>();
+    const compactThreadContext = vi.fn(() => compaction.promise);
+    const runtime = renderSurfaceWithAdapter({
+      ...adapter(true),
+      listThreads: vi.fn(async () => [target]),
+      loadThread: vi.fn(async () => liveBootstrap(target)),
+      compactThreadContext,
+      deleteThread: vi.fn(async () => ({ status: 'committed' as const })),
+    });
+
+    await waitFor(() => Boolean(runtime.querySelector(`[data-thread-id="${target.thread_id}"]`)));
+    (runtime.querySelector(`[data-thread-id="${target.thread_id}"] .flower-thread-card-select-button`) as HTMLButtonElement).click();
+    await waitFor(() => runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-loading') === 'false');
+    const composer = runtime.querySelector('textarea') as HTMLTextAreaElement;
+    composer.value = '/compact';
+    composer.dispatchEvent(new InputEvent('input', { bubbles: true }));
+    await waitFor(() => (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement | null)?.getAttribute('aria-label') === 'Compact context');
+    (runtime.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
+    await waitFor(() => compactThreadContext.mock.calls.length === 1);
+
+    (await openThreadDeleteDialog(runtime, target.thread_id)).click();
+    await waitFor(() => !runtime.querySelector(`[data-thread-id="${target.thread_id}"]`));
+    compaction.reject(new Error('late compaction failure'));
+    await flush();
+    await wait(20);
+
+    expect(runtime.querySelector('#redeven-flower-surface')?.getAttribute('data-flower-selected-thread-id')).toBe('');
+    expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).toBe('');
+    expect(document.body.textContent).not.toContain('late compaction failure');
+  });
 });
