@@ -3,7 +3,7 @@ type: Architecture Contract
 title: Container resources capability
 description: Redeven-owned Docker and Podman business capability registered through the released ReDevPlugin host contract.
 tags: [architecture, plugins, containers, capability]
-timestamp: 2026-07-19T00:00:00Z
+timestamp: 2026-07-24T00:00:00Z
 ---
 # Summary
 
@@ -12,7 +12,7 @@ the plugin identity, permission, confirmation, operation, stream, quota,
 revocation, and audit lifecycle around every call. The active capability is
 `redeven.capability.container_resources@1.0.0`, described by the signed
 `redeven.container_resources.v2@2.0.0` host-capability contract and consumed
-through ReDevPlugin v0.6.7. Requests never enter a Redeven-local manifest,
+through ReDevPlugin v0.6.10. Requests never enter a Redeven-local manifest,
 token, operation, stream, or runtime protocol.
 
 # Contract
@@ -94,6 +94,14 @@ the iframe, bootstrap document, bridge, asset session, or surface instance.
 Activity and Workbench are host placement choices and never become capability
 or plugin manifest fields.
 
+Installation and enablement do not grant container access. The initial surface
+calls engine-status and container-list methods, so an active `containers.read`
+grant is required before open. Plugin Center projects that requirement from the
+verified capability contract and lets an administrator grant or revoke it with
+management, policy, and revoke-revision fences. Missing `containers.read` is a
+permission state, not an engine connection error. Execute, delete, image-write,
+and method-deny policy remain separate from the initial read requirement.
+
 # Boundaries
 
 - Identity, ownership scope, permissions, confirmation, tokens, quotas,
@@ -127,3 +135,4 @@ or plugin manifest fields.
 - `redeven:internal/redevpluginintegration/containers_capability_test.go:19` - Tests bind registration, projection, contract validation, cancellation, streaming, terminal failures, and close behavior to verified artifacts.
 - `redeven:internal/redevpluginintegration/release_module.go:51` - The official release module closes source policy, artifact resolution, capability pin, signing key, and revocation evidence.
 - `redeven:internal/redevpluginintegration/release_module_test.go:107` - The official package is installed through the released ReDevPlugin HTTP lifecycle.
+- `redeven:internal/envapp/ui_src/src/ui/plugins/pluginInventoryProjection.ts:1` - Projects `containers.read` as the exact initial-open requirement without collapsing other grants or policy.

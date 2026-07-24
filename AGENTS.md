@@ -441,9 +441,10 @@ The current released platform contract also fixes the host-integration shape:
 - Activity and Workbench are Redeven placement choices, not manifest surface
   kinds. ReDevPlugin manifests remain host-neutral. Activity places each
   SDK-owned surface in a stable Shell-root floating window; responsive desktop
-  and mobile chrome must not remount or reuse its slot. Workbench placement uses
-  the standard projected widget surface only after a released, source/port-bound
-  interaction-ownership callback can drive Redeven's local-interaction policy.
+  and mobile chrome must not remount or reuse its slot. Workbench places the
+  SDK-owned surface in the standard projected `redeven.plugin` widget and uses
+  only the released, source/port-bound interaction-ownership callback to drive
+  Redeven's local-interaction policy.
   Manifest surface kinds remain the closed
   `view|command|background` set with `primary|secondary|utility` roles; do not
   add Activity, Workbench, widget, settings-placement, or other Redeven layout
@@ -456,29 +457,55 @@ The current released platform contract also fixes the host-integration shape:
   the released `hidden` lifecycle.
 - Moving a plugin surface between Activity and Workbench must await closure of
   the old slot and open a fresh slot lease and iframe. Redeven must not move,
-  adopt, or reuse an existing iframe or `surface_instance_id`.
+  adopt, or reuse an existing iframe or `surface_instance_id`. Placement changes
+  are globally serialized, and the new placement or persisted Workbench widget
+  state must not commit until the old slot has closed successfully.
 - Workbench wheel, text-selection, action, activation, focus, and floating-layer
   markers remain Redeven-owned product interaction policy around the SDK-owned
   element. They must not be encoded into the plugin manifest or implemented by
   a second bridge layer.
 - Redeven projects visibility with the released `visible` and `hidden`
   lifecycle. `PluginSurfaceSlot.close()` owns graceful quiesce and server
-  revocation; `dispose()` is irreversible local teardown. Disable, update,
-  downgrade, uninstall, owner-scope revocation, session teardown, and shell
-  disposal must close every affected slot through the shared
-  `PluginSurfaceScope`. Do not add compatibility shims, fallback surface paths,
-  or best-effort local teardown that leaves platform state active.
-- If an exact surface close has an unknown outcome and the consumed release has
-  no single-surface reconciliation API, Redeven must keep an error shell and
-  must not reopen or silently discard the target. A user-confirmed recovery may
-  revoke the entire authenticated plugin session, close every plugin window,
-  and permanently retire that client/scope; it must not pretend that local
-  iframe disposal proved server revocation.
+  revocation for placement moves, explicit window/widget removal, and orderly
+  Shell disposal; `dispose()` is irreversible local teardown. Disable, update,
+  downgrade, uninstall, permission/policy mutation, and owner-scope mutation use
+  the released Host mutation contract: the server revokes affected authority and
+  the SDK invalidates or disposes the shared `PluginSurfaceScope` for committed
+  and unknown outcomes. Redeven must not call `close()` after that SDK teardown
+  or present local disposal as revocation evidence. Session teardown uses the
+  released session-scope revoke and drain contract. Do not add compatibility
+  shims, fallback surface paths, or local teardown that leaves platform state
+  active.
+- `PluginSurfaceSlot.close()` must use the released idempotent exact-surface
+  reconciliation contract when a close response is lost. Redeven must not infer
+  server revocation from local iframe disposal, widen one uncertain close into
+  session-scope revocation, or affect sibling surfaces.
 - Redeven may maintain product copy and risk grouping for exact official-plugin
   permissions, but grant, deny, policy, revision, and effective enforcement stay
   in ReDevPlugin. Generic permission discovery must come from a released
   Host-verified capability-contract projection and must not parse manifest
   claims, runtime files, or copied contracts in Redeven.
+- Redeven may expose external package admission from validated public HTTPS
+  package URLs, GitHub Releases, and local `.redevplugin` uploads through the
+  released `inspect -> commit -> query` transaction. Inspection must present the
+  immutable package identity, source provenance, signature assessment, execution
+  approval, update eligibility, full security summary, and confirmation digest.
+  Absent, unknown-signer, or temporarily unavailable signatures may be installed
+  only after explicit confirmation; invalid or revoked signatures fail closed.
+  A committed external plugin starts disabled with zero grants and remains
+  manual-update-only unless released trust evidence makes it eligible. Signature
+  status determines trust and automatic-update eligibility, not basic install
+  eligibility. Redeven must not add a second package parser, fetcher, trust-state
+  machine, receipt store, or signing flow; the existing official signed-release
+  path remains supported but is not expanded by ordinary external installation.
+- Plugin inventory and navigation must identify every installed instance by the
+  exact product `inventoryKey`, not by plugin id or instance id alone. Official
+  catalog presentation additionally requires verified trust. The current release
+  must match the catalog version and exact signed release hashes. A historical
+  release without external-source provenance must instead carry a signature from
+  an explicit catalog-trusted official key and exact agreement between its
+  registry hashes and Host-verified hashes. An external package cannot borrow
+  official identity or copy.
 
 The front-end and back-end platform implementation must arrive in Redeven as
 released ReDevPlugin library/runtime artifacts, not as Redeven-local platform

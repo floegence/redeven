@@ -15,15 +15,15 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Runtime session permission gates](architecture/runtime-session-permission-gates.md) - Runtime validation and local permission clamping before sessions open.
 - [Runtime transport dependencies](architecture/runtime-transport-dependencies.md) - Flowersec and Floeterm dependency boundaries.
 - [Env App upstream web dependencies](architecture/env-app-upstream-web-dependencies.md) - Published web package contracts consumed by Env App.
-- [ReDevPlugin host integration boundary](architecture/redevplugin-boundary.md) - Published plugin-platform dependency and Redeven adapter ownership.
-- [Plugin platform integration](architecture/plugin-platform-integration.md) - Local UI, AppServer, released ReDevPlugin Host mounting, product adapters, and Flower orchestration boundaries.
-- [Container resources capability](architecture/container-resources-capability.md) - Redeven-owned Docker and Podman business capability contract for plugin adapter registration.
+- [ReDevPlugin host integration boundary](architecture/redevplugin-boundary.md) - Separate released platform ownership from Redeven source policy, placement, runtime build, and business adapters.
+- [Plugin platform integration](architecture/plugin-platform-integration.md) - Mount the released Host, admit reviewed external packages, and coordinate exact Activity and Workbench placements.
+- [Container resources capability](architecture/container-resources-capability.md) - Register Docker and Podman business access while preserving explicit `containers.read` admission.
 
 ## Security
 
 - [Local UI network exposure](security/local-ui-network-exposure.md) - Fixed-port plaintext exposure admission, exact authority checks, acknowledgement, and warning preferences.
 - [Permission policy and filesystem scope](security/permission-policy-and-filesystem-scope.md) - Local caps and directory-level file access policy.
-- [Plugin platform integration security](security/plugin-platform-integration-security.md) - Session, route, permission, and capability boundaries for ReDevPlugin adapters.
+- [Plugin platform integration security](security/plugin-platform-integration-security.md) - Keep authenticated ownership, package provenance, signature trust, permissions, and runtime authority independent.
 
 ## Desktop
 
@@ -50,7 +50,7 @@ This top-level OKF corpus is the maintained repository knowledge surface for the
 - [Workbench input ownership](ui/workbench-input-ownership.md) - Distinguish canvas, local-scroll, pointer, text, and terminal input ownership.
 - [Workbench terminal interaction](ui/workbench-terminal-interaction.md) - Preserve attachment, input-plane, focus, retained-history, and performance ownership.
 - [Workbench surface lifecycle](ui/workbench-surface-lifecycle.md) - Preserve selection, recovery, lazy widgets, and shared floating-surface ownership.
-- [Plugin surfaces](ui/plugin-surfaces.md) - Redeven placement rules for sandboxed ReDevPlugin surfaces in product chrome.
+- [Plugin surfaces](ui/plugin-surfaces.md) - Review exact plugin inventory and place SDK surfaces in Activity windows or Workbench widgets.
 - [Flower turn launcher](ui/flower-turn-launcher.md) - Contextual first-turn Ask Flower launchers and host handoff responsibilities.
 - [Flower Activity companion](ui/flower-activity-companion.md) - Present one stable Activity Flower surface as a dedicated page, fixed work-detail overlay, or centered bottom-bar presence while preserving canonical authority and Workbench isolation.
 - [Flower live timeline](ui/flower-live-timeline.md) - Canonical live thread timeline projection, replacement events, and cursor ownership.
