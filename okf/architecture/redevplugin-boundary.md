@@ -8,7 +8,7 @@ timestamp: 2026-07-24T00:00:00Z
 # Summary
 
 ReDevPlugin is an independently released plugin platform. Redeven consumes its
-coordinated `v0.6.10` Go, npm, Rust source-crate, and machine-contract artifacts;
+coordinated `v0.6.13` Go, npm, Rust source-crate, and machine-contract artifacts;
 it does not fork platform mechanics. Redeven owns authenticated session mapping,
 product source policy and review UX, UI placement, product runtime builds, and
 concrete business adapters. Missing or unverifiable upstream identity, lifecycle,
@@ -42,12 +42,12 @@ external-package receipt store.
 
 ## Published dependency set
 
-The current integration consumes the coordinated ReDevPlugin `v0.6.10` set:
+The current integration consumes the coordinated ReDevPlugin `v0.6.13` set:
 
-- `github.com/floegence/redevplugin v0.6.10`;
-- `@floegence/redevplugin-contracts@0.6.10` and
-  `@floegence/redevplugin-ui@0.6.10`;
-- the exact six `0.6.10` Rust source crates ending in `redevplugin-runtime`;
+- `github.com/floegence/redevplugin v0.6.13`;
+- `@floegence/redevplugin-contracts@0.6.13` and
+  `@floegence/redevplugin-ui@0.6.13`;
+- the exact six `0.6.13` Rust source crates ending in `redevplugin-runtime`;
 - the released contract registry, package-set contract, contract hashes, and
   attested `platform-package-publication-v1.json` registry readback.
 

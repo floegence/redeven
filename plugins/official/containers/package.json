@@ -7,7 +7,7 @@
     "build": "tsc -p tsconfig.json --noEmit && node build.mjs"
   },
   "dependencies": {
-    "@floegence/redevplugin-ui": "0.6.10"
+    "@floegence/redevplugin-ui": "0.6.13"
   },
   "devDependencies": {
     "esbuild": "0.28.1",

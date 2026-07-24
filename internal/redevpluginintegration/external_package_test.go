@@ -258,6 +258,18 @@ func TestContainersCatalogPackageInstallsThroughExternalURLAtCurrentTime(t *test
 	if inspectResponse.Code != http.StatusOK {
 		t.Fatalf("inspect catalog URL status = %d body=%s", inspectResponse.Code, inspectResponse.Body.String())
 	}
+	var rawInspectionEnvelope struct {
+		Data struct {
+			SourceProvenance map[string]json.RawMessage `json:"source_provenance"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(inspectResponse.Body.Bytes(), &rawInspectionEnvelope); err != nil {
+		t.Fatalf("decode raw catalog URL inspection: %v body=%s", err, inspectResponse.Body.String())
+	}
+	redirectChainJSON, ok := rawInspectionEnvelope.Data.SourceProvenance["redirect_chain"]
+	if !ok || !bytes.Equal(bytes.TrimSpace(redirectChainJSON), []byte("[]")) {
+		t.Fatalf("catalog URL inspection redirect_chain must be a present empty array: %s", redirectChainJSON)
+	}
 	var inspectionEnvelope struct {
 		OK   bool                           `json:"ok"`
 		Data host.ExternalPackageInspection `json:"data"`
