@@ -117,6 +117,7 @@ check_package_boundary() {
 
 check_local_source_wiring() {
   local matches
+  local rg_exit
   local scan_paths=()
 
   for candidate in .github scripts cmd internal desktop go.mod; do
@@ -125,9 +126,29 @@ check_local_source_wiring() {
     fi
   done
 
-  if [ "${#scan_paths[@]}" -gt 0 ] && matches=$(rg -n --pcre2 --glob '!scripts/check_redevplugin_dependency_boundary.sh' --glob '!scripts/check_redevplugin_release_artifacts.sh' --glob '!scripts/check_redevplugin_consumption_gate.sh' --glob '!scripts/stage_redevplugin_release_artifacts.sh' '(?i)(\.\./redevplugin(?:/|$)|(?:^|[[:space:]"'"'"'(:=])/(?:[^\n[:space:]"'"'"']+/)*redevplugin(?:/|$)|file:[^\n]*redevplugin|link:[^\n]*redevplugin|workspace:[^\n]*redevplugin|portal:[^\n]*redevplugin)' "${scan_paths[@]}" 2>/dev/null); then
-    printf '%s\n' "$matches"
-    fail "Build, script, and source files must not point at a local ReDevPlugin checkout."
+  if [ "${#scan_paths[@]}" -gt 0 ]; then
+    set +e
+    matches=$(rg -n --pcre2 \
+      --glob '!**/dist/**' \
+      --glob '!**/node_modules/**' \
+      --glob '!scripts/check_redevplugin_dependency_boundary.sh' \
+      --glob '!scripts/check_redevplugin_release_artifacts.sh' \
+      --glob '!scripts/check_redevplugin_consumption_gate.sh' \
+      --glob '!scripts/stage_redevplugin_release_artifacts.sh' \
+      '(?i)(\.\./redevplugin(?:/|$)|(?:^|[[:space:]"'"'"'(:=])/(?:[^\n[:space:]"'"'"']+/)*redevplugin(?:/|$)|file:[^\n]*redevplugin|link:[^\n]*redevplugin|workspace:[^\n]*redevplugin|portal:[^\n]*redevplugin)' "${scan_paths[@]}" 2>/dev/null)
+    rg_exit=$?
+    set -e
+    case "$rg_exit" in
+      0)
+        printf '%s\n' "$matches"
+        fail "Build, script, and source files must not point at a local ReDevPlugin checkout."
+        ;;
+      1)
+        ;;
+      *)
+        fail "ReDevPlugin local source wiring scan failed with ripgrep status $rg_exit."
+        ;;
+    esac
   fi
 
   echo "[INFO] local source wiring checked"
