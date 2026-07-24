@@ -16,6 +16,7 @@ import (
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redevplugin/pkg/bridge"
 	"github.com/floegence/redevplugin/pkg/connectivity"
+	"github.com/floegence/redevplugin/pkg/externalsource"
 	"github.com/floegence/redevplugin/pkg/host"
 	"github.com/floegence/redevplugin/pkg/httpadapter"
 	"github.com/floegence/redevplugin/pkg/installstage"
@@ -40,6 +41,8 @@ type Options struct {
 	Diagnostics        *diagnostics.Store
 	Containers         *containers.Adapter
 	releaseTrustNow    func() time.Time
+	newReleaseModule   func(string) (*host.ReleaseModule, host.PluginReleaseRef, func() error, error)
+	closeExternalStage func(*externalsource.StageStore) error
 }
 
 type Integration struct {
@@ -94,14 +97,48 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 
 	var closers []func() error
 	closeOnError := func() { _ = closeAll(closers) }
-	newReleaseModule := newOfficialReleaseModule
-	if opts.releaseTrustNow != nil {
+	externalStage, err := externalsource.NewStageStore(filepath.Join(root, "external-package-stage"))
+	if err != nil {
+		return nil, err
+	}
+	// The Host owns pending inspection cleanup, so the shared stage closes only
+	// after Host.Close has revoked and removed all process-local inspections.
+	externalStageCloser := externalStage.Close
+	if opts.closeExternalStage != nil {
+		externalStageCloser = func() error { return opts.closeExternalStage(externalStage) }
+	}
+	closers = append(closers, externalStageCloser)
+	externalFetcher, err := externalsource.NewFetcher(externalsource.FetcherOptions{
+		Stage:    externalStage,
+		SourceID: "redeven.external-package",
+	})
+	if err != nil {
+		closeOnError()
+		return nil, err
+	}
+	externalGitHubResolver, err := externalsource.NewGitHubRESTReleaseResolver(
+		externalsource.GitHubRESTReleaseClientOptions{
+			Token:     "",
+			UserAgent: "Redeven",
+		},
+		externalFetcher,
+	)
+	if err != nil {
+		closeOnError()
+		return nil, err
+	}
+	newReleaseModule := opts.newReleaseModule
+	if newReleaseModule == nil && opts.releaseTrustNow != nil {
 		newReleaseModule = func(stateDir string) (*host.ReleaseModule, host.PluginReleaseRef, func() error, error) {
 			return newOfficialReleaseModuleWithClock(stateDir, opts.releaseTrustNow)
 		}
 	}
+	if newReleaseModule == nil {
+		newReleaseModule = newOfficialReleaseModule
+	}
 	releaseModule, _, closeReleaseTrust, err := newReleaseModule(filepath.Join(root, "trust"))
 	if err != nil {
+		closeOnError()
 		return nil, err
 	}
 	closers = append(closers, closeReleaseTrust)
@@ -241,6 +278,12 @@ func New(ctx context.Context, opts Options) (*Integration, error) {
 		},
 		Secrets:    &host.SecretsModule{Store: secretStore},
 		Capability: &host.CapabilityModule{Registry: capabilities},
+		ExternalPackage: &host.ExternalPackageModule{
+			StageStore:        externalStage,
+			PackageFetcher:    externalFetcher,
+			GitHubResolver:    externalGitHubResolver,
+			SignatureAssessor: packageTrustVerifier,
+		},
 	})
 	if err != nil {
 		var configErr *host.HostConfigError

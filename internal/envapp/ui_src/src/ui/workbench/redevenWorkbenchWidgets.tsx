@@ -3,8 +3,9 @@ import type {
   WorkbenchWidgetDefinition,
   WorkbenchWidgetType,
 } from '@floegence/floe-webapp-core/workbench';
-import { DockCpu, DockFolder, DockTerminal, Search } from '@floegence/floe-webapp-core/icons';
-import { Show, lazy, type JSX } from 'solid-js';
+import { DockCpu, DockFolder, DockLayers, DockTerminal, Search } from '@floegence/floe-webapp-core/icons';
+import { WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR } from '@floegence/floe-webapp-core/ui';
+import { Show, createMemo, lazy, type JSX } from 'solid-js';
 
 import { CodexWorkbenchIcon } from '../icons/CodexIcon';
 import { CodespacesWorkbenchIcon } from '../icons/CodespacesIcon';
@@ -12,8 +13,12 @@ import { FlowerWorkbenchIcon } from '../icons/FlowerSoftAuraIcon';
 import { useI18n, type I18nHelpers } from '../i18n';
 import { useEnvContext } from '../pages/EnvContext';
 import { hasRWXPermissions } from '../pages/aiPermissions';
+import { PluginSurfaceBody } from '../plugins/PluginSurfaceFrame';
 import { useEnvWorkbenchInstancesContext } from './EnvWorkbenchInstancesContext';
+import { useWorkbenchPluginSurfaceContext } from './WorkbenchPluginSurfaceContext';
 import { WorkbenchFilePreviewWidget } from './WorkbenchFilePreviewWidget';
+import { REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS } from './surface/workbenchActionSurface';
+import { REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS } from './surface/workbenchTextSelectionSurface';
 import { REDEVEN_WORKBENCH_WHEEL_LAYOUT_ONLY_PROPS } from './surface/workbenchWheelInteractive';
 import { buildWorkbenchFileBrowserStateScope } from './workbenchInstanceState';
 
@@ -120,6 +125,77 @@ function TerminalWidget(props: RedevenWorkbenchWidgetBodyProps) {
 
 function MonitorWidget() {
   return <RuntimeMonitorPanel variant="workbench" />;
+}
+
+function PluginWidget(props: RedevenWorkbenchWidgetBodyProps) {
+  const i18n = useI18n();
+  const workbench = useEnvWorkbenchInstancesContext();
+  const pluginHost = useWorkbenchPluginSurfaceContext();
+  const state = () => workbench.pluginSurfaceState(props.widgetId);
+  const currentTarget = createMemo(() => {
+    const current = state();
+    if (!current || !pluginHost) return null;
+    return pluginHost.resolveTarget({
+      pluginID: current.plugin_id,
+      pluginInstanceID: current.plugin_instance_id,
+      surfaceID: current.surface_id,
+      displayName: current.display_name,
+      expectedManagementRevision: current.expected_management_revision,
+      preferredPlacement: 'workbench',
+    });
+  });
+  const surfaceLease = createMemo((previous: { mountKey: string } | undefined) => {
+    const target = currentTarget();
+    const persisted = state();
+    if (!target || !persisted || target.expectedManagementRevision !== persisted.expected_management_revision) return undefined;
+    const mountKey = [
+      target.pluginID,
+      target.pluginInstanceID,
+      target.surfaceID,
+      target.expectedManagementRevision,
+    ].join('\u0000');
+    return previous?.mountKey === mountKey ? previous : { mountKey };
+  });
+
+  return (
+    <Show
+      keyed
+      when={pluginHost && surfaceLease()}
+      fallback={(
+        <WorkbenchBodyNotice
+          eyebrow={state()?.display_name ?? props.title}
+          title={i18n.t('uiCopy.plugin.needsAttention')}
+          description={i18n.t('uiCopy.plugin.unavailable')}
+        />
+      )}
+    >
+      {(_lease) => {
+        return (
+        <div
+          {...REDEVEN_WORKBENCH_TEXT_SELECTION_SCROLL_VIEWPORT_PROPS}
+          {...REDEVEN_WORKBENCH_ACTION_SURFACE_PROPS}
+          {...{ [WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR]: 'true' }}
+          class="redeven-workbench-body-surface h-full min-h-0 overflow-hidden"
+          data-redeven-plugin-workbench-surface
+        >
+          <PluginSurfaceBody
+            coordinator={pluginHost!.coordinator}
+            confirmationQueue={pluginHost!.confirmationQueue}
+            target={currentTarget()!}
+            visible={pluginHost!.workbenchVisible() && props.lifecycle !== 'cold' && !props.filtered}
+            registerClose={(close) => workbench.registerPluginSurfaceClose(props.widgetId, close)}
+            onInteraction={(event) => {
+              if (event.kind === 'activation' || event.kind === 'focus' || event.kind === 'action') {
+                props.requestActivate?.();
+              }
+            }}
+            onRetirementError={pluginHost!.onRetirementError}
+          />
+        </div>
+        );
+      }}
+    </Show>
+  );
 }
 
 function CodespacesWidget() {
@@ -253,6 +329,17 @@ export const redevenWorkbenchWidgets: readonly WorkbenchWidgetDefinition[] = [
     renderMode: FRONTABLE_WORKBENCH_RENDER_MODE,
   },
   {
+    type: 'redeven.plugin',
+    label: 'Plugin',
+    icon: DockLayers,
+    body: PluginWidget,
+    defaultTitle: 'Plugin',
+    defaultSize: { width: 1120, height: 760 },
+    group: 'workspace',
+    singleton: false,
+    renderMode: FRONTABLE_WORKBENCH_RENDER_MODE,
+  },
+  {
     type: 'redeven.monitor',
     label: 'Monitoring',
     icon: DockCpu,
@@ -322,6 +409,8 @@ function localizedWorkbenchWidgetCopy(
       return { label: t('workbench.widgets.terminal.label'), defaultTitle: t('workbench.widgets.terminal.defaultTitle') };
     case 'redeven.preview':
       return { label: t('workbench.widgets.preview.label'), defaultTitle: t('workbench.widgets.preview.defaultTitle') };
+    case 'redeven.plugin':
+      return { label: 'Plugin', defaultTitle: 'Plugin' };
     case 'redeven.monitor':
       return { label: t('workbench.widgets.monitor.label'), defaultTitle: t('workbench.widgets.monitor.defaultTitle') };
     case 'redeven.codespaces':

@@ -1,4 +1,4 @@
-import type { PluginPlatformClient } from '@floegence/redevplugin-ui';
+import { PluginTransportError, type PluginPlatformClient } from '@floegence/redevplugin-ui';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createPluginLifecycleAPI } from './pluginApi';
@@ -19,6 +19,15 @@ function createClientHarness() {
     uninstallPlugin: vi.fn(async () => ({})),
     grantPermission: vi.fn(async () => ({})),
     revokePermission: vi.fn(async () => ({})),
+    getPermissionRequirements: vi.fn(async ({ plugin_instance_id }: { plugin_instance_id: string }) => ({
+      plugin_instance_id,
+      required_permissions: [],
+      contracts: [],
+    })),
+    inspectExternalPackage: vi.fn(async () => ({})),
+    inspectUploadedExternalPackage: vi.fn(async () => ({})),
+    commitExternalPackage: vi.fn(async () => ({})),
+    queryExternalPackageCommit: vi.fn(async () => ({})),
   };
   return {
     mocks,
@@ -35,7 +44,7 @@ describe('v0.6.7 plugin lifecycle client integration', () => {
     expect(mocks.catalog).toHaveBeenCalledWith({});
   });
 
-  it('loads catalog, active grants, and security policies concurrently into one projection', async () => {
+  it('loads catalog before projecting grants, policies, and per-instance permission requirements', async () => {
     const { lifecycle, mocks } = createClientHarness();
     let releaseCatalog!: () => void;
     mocks.catalog.mockImplementation(() => new Promise((resolve) => {
@@ -46,10 +55,13 @@ describe('v0.6.7 plugin lifecycle client integration', () => {
     await Promise.resolve();
 
     expect(mocks.catalog).toHaveBeenCalledWith({});
-    expect(mocks.listPermissions).toHaveBeenCalledWith({ active_only: true }, {});
-    expect(mocks.listSecurityPolicies).toHaveBeenCalledWith({});
+    expect(mocks.listPermissions).not.toHaveBeenCalled();
+    expect(mocks.listSecurityPolicies).not.toHaveBeenCalled();
     releaseCatalog();
     await expect(loading).resolves.toMatchObject({ items: expect.any(Array) });
+    expect(mocks.listPermissions).toHaveBeenCalledWith({ active_only: true }, {});
+    expect(mocks.listSecurityPolicies).toHaveBeenCalledWith({});
+    expect(mocks.getPermissionRequirements).not.toHaveBeenCalled();
   });
 
   it('installs the generated signed release under the fixed official identity', async () => {
@@ -174,6 +186,170 @@ describe('v0.6.7 plugin lifecycle client integration', () => {
       expected_management_revision: 17,
       expected_revoke_epoch: 4,
       reason: 'user_revoked',
+    }, {});
+  });
+
+  it('maps package URL and GitHub selections to closed platform inspection requests', async () => {
+    const { lifecycle, mocks } = createClientHarness();
+    const signal = new AbortController().signal;
+    await lifecycle.inspectExternalPackage({
+      sourceKind: 'package_url',
+      url: 'https://plugins.example.com/toolbox.redevplugin',
+      intent: { action: 'install' },
+    }, { signal });
+    await lifecycle.inspectExternalPackage({
+      sourceKind: 'github_repository',
+      url: 'https://github.com/example/toolbox',
+      tag: ' v1.2.3 ',
+      intent: {
+        action: 'update',
+        plugin_instance_id: 'plugini_external_12345678',
+        expected_management_revision: 9,
+      },
+    }, { signal });
+
+    expect(mocks.inspectExternalPackage).toHaveBeenNthCalledWith(1, {
+      intent: { action: 'install' },
+      source: { kind: 'package_url', url: 'https://plugins.example.com/toolbox.redevplugin' },
+    }, { signal });
+    expect(mocks.inspectExternalPackage).toHaveBeenNthCalledWith(2, {
+      intent: {
+        action: 'update',
+        plugin_instance_id: 'plugini_external_12345678',
+        expected_management_revision: 9,
+      },
+      source: { kind: 'github_repository', url: 'https://github.com/example/toolbox', tag: 'v1.2.3' },
+    }, { signal });
+  });
+
+  it('passes uploaded packages through the dedicated binary inspection API', async () => {
+    const { lifecycle, mocks } = createClientHarness();
+    const file = new File(['package'], 'toolbox.redevplugin', { type: 'application/vnd.redevplugin.package+zip' });
+    const signal = new AbortController().signal;
+    const intent = {
+      action: 'update' as const,
+      plugin_instance_id: 'plugini_external_12345678',
+      expected_management_revision: 9,
+    };
+
+    await lifecycle.inspectExternalPackage({ sourceKind: 'package_upload', file, intent }, { signal });
+
+    expect(mocks.inspectUploadedExternalPackage).toHaveBeenCalledWith(intent, file, { signal });
+    expect(mocks.inspectExternalPackage).not.toHaveBeenCalled();
+  });
+
+  it('commits only the immutable server inspection id and confirmation digest', async () => {
+    const { lifecycle, mocks } = createClientHarness();
+    const inspection = {
+      inspection_id: 'inspection_external_12345678',
+      confirmation_digest: 'sha256:684a09cfd858448baa7d52c3d30932d7684a09cfd858448baa7d52c3d30932d7',
+    };
+    const committed = { status: 'committed', inspection_id: inspection.inspection_id };
+    mocks.commitExternalPackage.mockResolvedValue(committed);
+
+    await expect(lifecycle.commitExternalPackage(inspection as never)).resolves.toBe(committed);
+
+    expect(mocks.commitExternalPackage).toHaveBeenCalledWith({
+      inspection_id: inspection.inspection_id,
+      confirmation_digest: inspection.confirmation_digest,
+    }, {});
+    expect(mocks.queryExternalPackageCommit).not.toHaveBeenCalled();
+  });
+
+  it('queries an in-progress commit to its terminal result without repeating the mutation', async () => {
+    vi.useFakeTimers();
+    try {
+      const { lifecycle, mocks } = createClientHarness();
+      const inspection = {
+        inspection_id: 'inspection_external_12345678',
+        confirmation_digest: 'sha256:684a09cfd858448baa7d52c3d30932d7684a09cfd858448baa7d52c3d30932d7',
+      };
+      const inProgress = {
+        status: 'in_progress',
+        inspection_id: inspection.inspection_id,
+        intent: { action: 'install', plugin_instance_id: 'plugini_external_12345678' },
+        retry_after_ms: 250,
+      };
+      const committed = { status: 'committed', inspection_id: inspection.inspection_id };
+      mocks.commitExternalPackage.mockResolvedValue(inProgress);
+      mocks.queryExternalPackageCommit.mockResolvedValue(committed);
+      const onProgress = vi.fn();
+
+      const result = lifecycle.commitExternalPackage(inspection as never, {}, onProgress);
+      await Promise.resolve();
+      expect(mocks.commitExternalPackage).toHaveBeenCalledOnce();
+      expect(mocks.queryExternalPackageCommit).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(250);
+
+      await expect(result).resolves.toBe(committed);
+      expect(mocks.commitExternalPackage).toHaveBeenCalledOnce();
+      expect(mocks.queryExternalPackageCommit).toHaveBeenCalledWith({
+        inspection_id: inspection.inspection_id,
+      }, {});
+      expect(onProgress).toHaveBeenNthCalledWith(1, inProgress);
+      expect(onProgress).toHaveBeenNthCalledWith(2, committed);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('retries a timed-out in-progress reconciliation by query without repeating the mutation', async () => {
+    vi.useFakeTimers();
+    try {
+      const { lifecycle, mocks } = createClientHarness();
+      const inspection = {
+        inspection_id: 'inspection_external_12345678',
+        confirmation_digest: 'sha256:684a09cfd858448baa7d52c3d30932d7684a09cfd858448baa7d52c3d30932d7',
+      };
+      const inProgress = {
+        status: 'in_progress',
+        inspection_id: inspection.inspection_id,
+        intent: { action: 'install', plugin_instance_id: 'plugini_external_12345678' },
+        retry_after_ms: 5_000,
+      };
+      mocks.commitExternalPackage.mockResolvedValue(inProgress);
+      mocks.queryExternalPackageCommit.mockResolvedValue(inProgress);
+
+      const result = lifecycle.commitExternalPackage(inspection as never);
+      const rejection = expect(result).rejects.toThrow('reconciliation timed out');
+      await vi.advanceTimersByTimeAsync(60_000);
+      await rejection;
+      expect(mocks.commitExternalPackage).toHaveBeenCalledOnce();
+      expect(mocks.queryExternalPackageCommit.mock.calls.length).toBeGreaterThan(1);
+
+      const committed = { status: 'committed', inspection_id: inspection.inspection_id };
+      mocks.queryExternalPackageCommit.mockResolvedValue(committed);
+
+      await expect(lifecycle.commitExternalPackage(inspection as never)).resolves.toBe(committed);
+      expect(mocks.commitExternalPackage).toHaveBeenCalledOnce();
+      expect(mocks.queryExternalPackageCommit).toHaveBeenLastCalledWith({
+        inspection_id: inspection.inspection_id,
+      }, {});
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('reconciles an unknown commit outcome by query instead of retrying the mutation', async () => {
+    const { lifecycle, mocks } = createClientHarness();
+    const inspection = {
+      inspection_id: 'inspection_external_12345678',
+      confirmation_digest: 'sha256:684a09cfd858448baa7d52c3d30932d7684a09cfd858448baa7d52c3d30932d7',
+    };
+    const committed = { status: 'committed', inspection_id: inspection.inspection_id };
+    mocks.commitExternalPackage.mockRejectedValue(new PluginTransportError(
+      'response was lost after request transmission',
+      new TypeError('network disconnected'),
+      'unknown',
+    ));
+    mocks.queryExternalPackageCommit.mockResolvedValue(committed);
+
+    await expect(lifecycle.commitExternalPackage(inspection as never)).resolves.toBe(committed);
+
+    expect(mocks.commitExternalPackage).toHaveBeenCalledOnce();
+    expect(mocks.queryExternalPackageCommit).toHaveBeenCalledOnce();
+    expect(mocks.queryExternalPackageCommit).toHaveBeenCalledWith({
+      inspection_id: inspection.inspection_id,
     }, {});
   });
 });

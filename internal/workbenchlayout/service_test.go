@@ -1014,6 +1014,91 @@ func TestServicePutWidgetStateCAS(t *testing.T) {
 	}
 }
 
+func TestServicePutPluginWidgetStateUsesClosedValidatedContract(t *testing.T) {
+	t.Parallel()
+
+	svc := openTestService(t)
+	ctx := context.Background()
+	_, err := svc.Replace(ctx, PutLayoutRequest{
+		Widgets: []WidgetLayout{{
+			WidgetID: "widget-plugin-1", WidgetType: WidgetTypePlugin,
+			X: 40, Y: 60, Width: 960, Height: 680, ZIndex: 1,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("Replace() error = %v", err)
+	}
+
+	state, err := svc.PutWidgetState(ctx, "widget-plugin-1", PutWidgetStateRequest{
+		WidgetType: WidgetTypePlugin,
+		State: WidgetStateData{
+			Kind:                       WidgetStateKindPlugin,
+			PluginInstanceID:           " instance-containers ",
+			PluginID:                   " io.redeven.containers ",
+			SurfaceID:                  " containers ",
+			DisplayName:                " Containers ",
+			ExpectedManagementRevision: 7,
+		},
+	})
+	if err != nil {
+		t.Fatalf("PutWidgetState() error = %v", err)
+	}
+	wantState := WidgetStateData{
+		Kind:                       WidgetStateKindPlugin,
+		PluginInstanceID:           "instance-containers",
+		PluginID:                   "io.redeven.containers",
+		SurfaceID:                  "containers",
+		DisplayName:                "Containers",
+		ExpectedManagementRevision: 7,
+	}
+	if !reflect.DeepEqual(state.State, wantState) {
+		t.Fatalf("plugin state = %#v", state.State)
+	}
+
+	invalid := []WidgetStateData{
+		{Kind: WidgetStateKindPlugin, PluginID: "io.redeven.containers", SurfaceID: "containers", ExpectedManagementRevision: 7},
+		{Kind: WidgetStateKindPlugin, PluginInstanceID: "instance-containers", SurfaceID: "containers", ExpectedManagementRevision: 7},
+		{Kind: WidgetStateKindPlugin, PluginInstanceID: "instance-containers", PluginID: "io.redeven.containers", ExpectedManagementRevision: 7},
+		{Kind: WidgetStateKindPlugin, PluginInstanceID: "instance-containers", PluginID: "io.redeven.containers", SurfaceID: "containers"},
+		{Kind: WidgetStateKindPlugin, PluginInstanceID: "instance-containers", PluginID: "io.redeven.containers", SurfaceID: "containers", ExpectedManagementRevision: 7},
+		{Kind: WidgetStateKindPlugin, PluginInstanceID: "instance-containers", PluginID: "io.redeven.containers", SurfaceID: "containers", DisplayName: "Containers", ExpectedManagementRevision: 7, CurrentPath: "/not-allowed"},
+		{Kind: WidgetStateKindFiles, PluginInstanceID: "instance-containers", PluginID: "io.redeven.containers", SurfaceID: "containers", ExpectedManagementRevision: 7},
+	}
+	for index, invalidState := range invalid {
+		_, err := svc.PutWidgetState(ctx, "widget-plugin-1", PutWidgetStateRequest{
+			BaseRevision: state.Revision,
+			WidgetType:   WidgetTypePlugin,
+			State:        invalidState,
+		})
+		var validation *ValidationError
+		if !errors.As(err, &validation) {
+			t.Fatalf("invalid[%d] error = %v, want ValidationError", index, err)
+		}
+	}
+
+	var polluted PutWidgetStateRequest
+	if err := json.Unmarshal([]byte(`{
+  "base_revision": 1,
+  "widget_type": "redeven.plugin",
+  "state": {
+    "kind": "plugin",
+    "plugin_instance_id": "instance-containers",
+    "plugin_id": "io.redeven.containers",
+    "surface_id": "containers",
+    "display_name": "Containers",
+    "expected_management_revision": 7,
+    "current_path": "/must-not-be-accepted"
+  }
+}`), &polluted); err != nil {
+		t.Fatalf("json.Unmarshal() error = %v", err)
+	}
+	_, err = svc.PutWidgetState(ctx, "widget-plugin-1", polluted)
+	var validation *ValidationError
+	if !errors.As(err, &validation) {
+		t.Fatalf("polluted plugin state error = %v, want ValidationError", err)
+	}
+}
+
 func TestServiceReplaceDeletesRemovedWidgetStates(t *testing.T) {
 	t.Parallel()
 

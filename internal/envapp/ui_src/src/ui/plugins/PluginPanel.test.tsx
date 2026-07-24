@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import { createSignal } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -16,6 +17,7 @@ afterEach(() => {
 
 function pluginItem(overrides: Partial<PluginInventoryItem> = {}): PluginInventoryItem {
   return {
+    inventoryKey: 'instance:plugininst_containers',
     pluginID: 'com.redeven.official.containers',
     pluginInstanceID: 'plugininst_containers',
     displayName: 'Containers',
@@ -114,7 +116,7 @@ describe('PluginPanel', () => {
     ), mount);
 
     (mount.querySelectorAll('[data-plugin-panel-tile]')[1] as HTMLButtonElement).click();
-    expect(onOpenPluginDetails).toHaveBeenCalledWith('com.redeven.official.containers');
+    expect(onOpenPluginDetails).toHaveBeenCalledWith('instance:plugininst_containers');
   });
 
   it('closes on Escape and exposes pointer cursor classes for tiles', () => {
@@ -160,5 +162,67 @@ describe('PluginPanel', () => {
     expect(onClose).not.toHaveBeenCalled();
     document.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('moves focus into the panel, traps Tab, and restores the opening control', async () => {
+    const trigger = document.createElement('button');
+    document.body.append(trigger);
+    trigger.focus();
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const [open, setOpen] = createSignal(true);
+
+    dispose = render(() => (
+      <PluginPanel
+        open={open()}
+        model={panelModel()}
+        onClose={() => setOpen(false)}
+        onOpenCenter={vi.fn()}
+        onOpenPluginDetails={vi.fn()}
+        onOpenPluginSurface={vi.fn()}
+      />
+    ), mount);
+    await Promise.resolve();
+
+    const focusable = [...mount.querySelectorAll<HTMLButtonElement>('button')];
+    expect(document.activeElement).toBe(focusable[0]);
+    focusable.at(-1)!.focus();
+    const forward = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    document.dispatchEvent(forward);
+    expect(forward.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(focusable[0]);
+
+    const backward = new KeyboardEvent('keydown', { key: 'Tab', shiftKey: true, bubbles: true, cancelable: true });
+    document.dispatchEvent(backward);
+    expect(backward.defaultPrevented).toBe(true);
+    expect(document.activeElement).toBe(focusable.at(-1));
+
+    setOpen(false);
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('does not restore the opening control after navigating to a plugin surface', async () => {
+    const trigger = document.createElement('button');
+    const target = document.createElement('button');
+    document.body.append(trigger, target);
+    trigger.focus();
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    const [open, setOpen] = createSignal(true);
+    dispose = render(() => (
+      <PluginPanel
+        open={open()}
+        model={panelModel()}
+        onClose={() => setOpen(false)}
+        onOpenCenter={vi.fn()}
+        onOpenPluginDetails={vi.fn()}
+        onOpenPluginSurface={() => target.focus()}
+      />
+    ), mount);
+    await Promise.resolve();
+
+    (mount.querySelectorAll('[data-plugin-panel-tile]')[1] as HTMLButtonElement).click();
+    expect(document.activeElement).toBe(target);
+    expect(document.activeElement).not.toBe(trigger);
   });
 });

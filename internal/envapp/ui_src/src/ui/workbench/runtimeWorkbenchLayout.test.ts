@@ -988,6 +988,20 @@ describe('runtimeWorkbenchLayout', () => {
             },
           },
         },
+        {
+          widget_id: 'widget-plugin-1',
+          widget_type: 'redeven.plugin',
+          revision: 4,
+          updated_at_unix_ms: 212,
+          state: {
+            kind: 'plugin',
+            plugin_instance_id: ' instance-containers ',
+            plugin_id: ' io.redeven.containers ',
+            surface_id: ' containers ',
+            display_name: ' Containers ',
+            expected_management_revision: 7,
+          },
+        },
       ],
     });
 
@@ -1007,6 +1021,56 @@ describe('runtimeWorkbenchLayout', () => {
         name: 'demo.txt',
       },
     });
+    expect(states['widget-plugin-1']?.state).toEqual({
+      kind: 'plugin',
+      plugin_instance_id: 'instance-containers',
+      plugin_id: 'io.redeven.containers',
+      surface_id: 'containers',
+      display_name: 'Containers',
+      expected_management_revision: 7,
+    });
+  });
+
+  it('rejects incomplete or stale plugin widget state', () => {
+    const states = normalizeRuntimeWorkbenchLayoutSnapshot({
+      widget_states: [
+        {
+          widget_id: 'fractional-revision',
+          widget_type: 'redeven.plugin',
+          state: {
+            kind: 'plugin',
+            plugin_instance_id: 'instance',
+            plugin_id: 'demo',
+            surface_id: 'main',
+            display_name: 'Demo',
+            expected_management_revision: 1.5,
+          },
+        },
+        {
+          widget_id: 'missing-instance',
+          widget_type: 'redeven.plugin',
+          state: { kind: 'plugin', plugin_id: 'demo', surface_id: 'main', expected_management_revision: 1 },
+        },
+        {
+          widget_id: 'missing-revision',
+          widget_type: 'redeven.plugin',
+          state: { kind: 'plugin', plugin_instance_id: 'instance', plugin_id: 'demo', surface_id: 'main' },
+        },
+        {
+          widget_id: 'polluted-state',
+          widget_type: 'redeven.plugin',
+          state: {
+            kind: 'plugin',
+            plugin_instance_id: 'instance',
+            plugin_id: 'demo',
+            surface_id: 'main',
+            expected_management_revision: 1,
+            current_path: '/not-a-plugin-field',
+          },
+        },
+      ],
+    }).widget_states;
+    expect(states).toEqual([]);
   });
 
   it('normalizes authoritative workbench preview open responses', () => {

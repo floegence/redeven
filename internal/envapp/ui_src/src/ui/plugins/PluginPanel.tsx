@@ -5,23 +5,47 @@ import { Grid3x3, Plus, Settings, X } from '@floegence/floe-webapp-core/icons';
 import type { PluginInventoryItem, PluginPanelModel, PluginPanelTile, PluginSurfaceLaunchTarget } from './pluginTypes';
 import { useI18n, type I18nHelpers } from '../i18n';
 
+const PANEL_FOCUSABLE_SELECTOR = 'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 export type PluginPanelProps = {
   open: boolean;
   model: PluginPanelModel;
   onClose: () => void;
   onOpenCenter: () => void;
   onOpenPluginSurface: (target: PluginSurfaceLaunchTarget) => void;
-  onOpenPluginDetails: (pluginID: string) => void;
+  onOpenPluginDetails: (inventoryKey: string) => void;
 };
 
 export function PluginPanel(props: PluginPanelProps): JSX.Element {
   const i18n = useI18n();
   let panelRef: HTMLDivElement | undefined;
+  let restoreFocusAfterClose = true;
 
   createEffect(() => {
     if (!props.open) return;
+    restoreFocusAfterClose = true;
+    const restoreFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') props.onClose();
+      if (event.key === 'Escape') {
+        props.onClose();
+        return;
+      }
+      if (event.key !== 'Tab' || !panelRef) return;
+      const focusable = [...panelRef.querySelectorAll<HTMLElement>(PANEL_FOCUSABLE_SELECTOR)];
+      if (focusable.length === 0) {
+        event.preventDefault();
+        panelRef.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     const onClick = (event: MouseEvent) => {
       if (panelRef && event.target instanceof Node && !panelRef.contains(event.target)) {
@@ -30,13 +54,16 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
     };
     document.addEventListener('keydown', onKeyDown);
     document.addEventListener('click', onClick);
+    queueMicrotask(() => panelRef?.querySelector<HTMLElement>(PANEL_FOCUSABLE_SELECTOR)?.focus());
     onCleanup(() => {
       document.removeEventListener('keydown', onKeyDown);
       document.removeEventListener('click', onClick);
+      if (restoreFocusAfterClose && restoreFocus?.isConnected) restoreFocus.focus();
     });
   });
 
   const activateTile = (tile: PluginPanelTile) => {
+    restoreFocusAfterClose = false;
     if (tile.kind === 'open_center') {
       props.onOpenCenter();
       props.onClose();
@@ -47,7 +74,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
       props.onClose();
       return;
     }
-    props.onOpenPluginDetails(tile.item.pluginID);
+    props.onOpenPluginDetails(tile.item.inventoryKey);
     props.onClose();
   };
 
@@ -56,7 +83,9 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
       <div
         ref={panelRef}
         role="dialog"
+        aria-modal="false"
         aria-label={i18n.t('uiCopy.plugin.panelTitle')}
+        tabIndex={-1}
         class="fixed left-14 top-28 z-50 w-[min(420px,calc(100vw-4.5rem))] rounded-lg border bg-popover/98 p-3 text-popover-foreground shadow-xl backdrop-blur"
       >
         <div class="mb-2 flex items-center justify-between gap-2">
@@ -88,7 +117,7 @@ export function PluginPanel(props: PluginPanelProps): JSX.Element {
             {(tile) => (
               <button
                 type="button"
-                data-plugin-panel-tile={tile.kind === 'open_center' ? tile.id : tile.item.pluginID}
+                data-plugin-panel-tile={tile.kind === 'open_center' ? tile.id : tile.item.inventoryKey}
                 class="group flex h-24 cursor-pointer flex-col items-center justify-center gap-1 rounded-md border bg-background/85 p-2 text-center transition hover:border-primary/40 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 onClick={() => activateTile(tile)}
               >

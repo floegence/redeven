@@ -16,6 +16,7 @@ afterEach(() => {
 });
 
 const containersPlugin = {
+  inventoryKey: 'catalog:containers',
   pluginID: 'com.redeven.official.containers',
   displayName: 'Containers',
   description: 'Manage Docker and Podman resources.',
@@ -38,6 +39,7 @@ const containersPlugin = {
     rolloutState: 'stable',
     defaultSurfaceID: 'containers.dashboard',
     iconFallback: 'containers',
+    trustedSigningKeyIDs: ['redeven-official-signing-2026'],
     distribution: {
       releaseRef: OFFICIAL_CONTAINERS_RELEASE_REF,
     },
@@ -46,6 +48,7 @@ const containersPlugin = {
 
 const databasePlugin = {
   ...containersPlugin,
+  inventoryKey: 'catalog:database',
   pluginID: 'com.redeven.official.database',
   displayName: 'Database Tools',
   description: 'Inspect local database connections.',
@@ -154,8 +157,33 @@ describe('PluginCenterView', () => {
     search.value = 'database';
     search.dispatchEvent(new InputEvent('input', { bubbles: true }));
 
-    expect(mount.querySelector('[data-plugin-center-item="com.redeven.official.database"]')).not.toBeNull();
-    expect(mount.querySelector('[data-plugin-center-item="com.redeven.official.containers"]')).toBeNull();
+    expect(mount.querySelector('[data-plugin-center-item="catalog:database"]')).not.toBeNull();
+    expect(mount.querySelector('[data-plugin-center-item="catalog:containers"]')).toBeNull();
+  });
+
+  it('keeps header controls within narrow viewports by wrapping search onto its own row', () => {
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={projection}
+        loading={false}
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces={false}
+      />
+    ), mount);
+
+    const search = mount.querySelector('[data-plugin-center-search]') as HTMLInputElement;
+    const searchField = search.parentElement as HTMLElement;
+    const actions = searchField.parentElement as HTMLElement;
+    expect(actions.classList).toContain('w-full');
+    expect(actions.classList).toContain('min-w-0');
+    expect(actions.classList).toContain('flex-wrap');
+    expect(searchField.classList).toContain('order-first');
+    expect(searchField.classList).toContain('w-full');
+    expect(searchField.classList).toContain('min-w-0');
   });
 
   it('selects a plugin details inspector from an explicit shell request', () => {
@@ -179,7 +207,7 @@ describe('PluginCenterView', () => {
         projection={installedProjection}
         loading={false}
         error={null}
-        selectedPluginID="com.redeven.official.containers"
+        selectedInventoryKey="catalog:containers"
         onCommand={vi.fn()}
         onRefresh={vi.fn()}
         canManagePlugins
@@ -220,7 +248,8 @@ describe('PluginCenterView', () => {
     }, expect.any(AbortSignal));
   });
 
-  it('disables management actions when the runtime user cannot manage plugins', () => {
+  it('lets read-only users open surfaces while keeping management actions disabled', async () => {
+    const onCommand = vi.fn();
     const installedProjection: PluginInventoryProjection = {
       items: [
         {
@@ -248,16 +277,25 @@ describe('PluginCenterView', () => {
         projection={installedProjection}
         loading={false}
         error={null}
-        onCommand={vi.fn()}
+        onCommand={onCommand}
         onRefresh={vi.fn()}
         canManagePlugins={false}
         canOpenPluginSurfaces
       />
     ), mount);
 
-    expect((mount.querySelector('[data-plugin-action="open"]') as HTMLButtonElement).disabled).toBe(true);
+    const openActivity = mount.querySelector('[data-plugin-action="open"]') as HTMLButtonElement;
+    const openWorkbench = mount.querySelector('[data-plugin-action="open-workbench"]') as HTMLButtonElement;
+    expect(openActivity.disabled).toBe(false);
+    expect(openWorkbench.disabled).toBe(false);
     expect((mount.querySelector('[data-plugin-action="disable"]') as HTMLButtonElement).disabled).toBe(true);
     expect((mount.querySelector('[data-plugin-action="uninstall"]') as HTMLButtonElement).disabled).toBe(true);
+    openActivity.click();
+    await Promise.resolve();
+    await Promise.resolve();
+    openWorkbench.click();
+    expect(onCommand).toHaveBeenNthCalledWith(1, expect.objectContaining({ type: 'open_surface', placement: 'activity' }), expect.any(AbortSignal));
+    expect(onCommand).toHaveBeenNthCalledWith(2, expect.objectContaining({ type: 'open_surface', placement: 'workbench' }), expect.any(AbortSignal));
   });
 
   it('keeps Disable available for an enabled plugin that needs permission attention', () => {
@@ -299,7 +337,7 @@ describe('PluginCenterView', () => {
         projection={containersPermissionProjection()}
         loading={false}
         error={null}
-        selectedPluginID="com.redeven.official.containers"
+        selectedInventoryKey="catalog:containers"
         onCommand={onCommand}
         onRefresh={vi.fn()}
         canManagePlugins
@@ -334,6 +372,88 @@ describe('PluginCenterView', () => {
     expect(permissionSwitch.getAttribute('aria-checked')).toBe('false');
   });
 
+  it('names the actual plugin in permission disclosure and confirmation', async () => {
+    const externalProjection = containersPermissionProjection();
+    externalProjection.items[0] = {
+      ...externalProjection.items[0],
+      inventoryKey: 'instance:plugininst_toolbox',
+      pluginID: 'com.example.toolbox',
+      pluginInstanceID: 'plugininst_toolbox',
+      displayName: 'Example Toolbox',
+      trustBadge: 'unsigned',
+      officialCatalog: undefined,
+    };
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={externalProjection}
+        loading={false}
+        selectedInventoryKey="instance:plugininst_toolbox"
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    expect(mount.textContent).toContain('Example Toolbox permissions');
+    (mount.querySelector('[data-plugin-permission="containers.read"] [role="switch"]') as HTMLButtonElement).click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(document.body.textContent).toContain('Grant View containers to Example Toolbox?');
+    expect(document.body.textContent).not.toContain('Grant View containers to Containers?');
+  });
+
+  it('distinguishes generic permission IDs in switches and confirmation', async () => {
+    const externalProjection = containersPermissionProjection();
+    const base = externalProjection.items[0];
+    externalProjection.items[0] = {
+      ...base,
+      inventoryKey: 'instance:plugininst_toolbox',
+      pluginID: 'com.example.toolbox',
+      pluginInstanceID: 'plugininst_toolbox',
+      displayName: 'Example Toolbox',
+      trustBadge: 'unsigned',
+      officialCatalog: undefined,
+      authorization: {
+        ...base.authorization!,
+        permissions: [
+          { ...base.authorization!.permissions[0], permissionID: 'workspace.read', group: 'other', methods: ['workspace.list'] },
+          { ...base.authorization!.permissions[0], permissionID: 'workspace.write', group: 'other', methods: ['workspace.write'] },
+        ],
+      },
+    };
+    const onCommand = vi.fn();
+    const mount = document.createElement('div');
+    document.body.append(mount);
+    dispose = render(() => (
+      <PluginCenterView
+        projection={externalProjection}
+        loading={false}
+        selectedInventoryKey="instance:plugininst_toolbox"
+        onCommand={onCommand}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces
+      />
+    ), mount);
+
+    const readSwitch = mount.querySelector('[data-plugin-permission="workspace.read"] [role="switch"]') as HTMLButtonElement;
+    const writeSwitch = mount.querySelector('[data-plugin-permission="workspace.write"] [role="switch"]') as HTMLButtonElement;
+    expect(readSwitch.getAttribute('aria-label')).toBe('Change workspace.read permission');
+    expect(writeSwitch.getAttribute('aria-label')).toBe('Change workspace.write permission');
+    writeSwitch.click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(document.body.textContent).toContain('Grant workspace.write to Example Toolbox?');
+    findDocumentButton('Grant').click();
+    await Promise.resolve();
+    expect(onCommand).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'grant_permission',
+      pluginInstanceID: 'plugininst_toolbox',
+      permissionID: 'workspace.write',
+    }), expect.any(AbortSignal));
+  });
+
   it('keeps the projected permission state unchanged when a confirmed mutation fails', async () => {
     const onCommand = vi.fn(async () => {
       throw new Error('permission update failed');
@@ -346,7 +466,7 @@ describe('PluginCenterView', () => {
         projection={containersPermissionProjection()}
         loading={false}
         error={null}
-        selectedPluginID="com.redeven.official.containers"
+        selectedInventoryKey="catalog:containers"
         onCommand={onCommand}
         onRefresh={vi.fn()}
         canManagePlugins
@@ -569,5 +689,59 @@ describe('PluginCenterView', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(install.disabled).toBe(false);
+  });
+
+  it('selects same-plugin-id instances independently by inventory key', () => {
+    const first = {
+      ...containersPlugin,
+      inventoryKey: 'instance:plugini_toolbox_alpha',
+      pluginID: 'com.example.toolbox',
+      pluginInstanceID: 'plugini_toolbox_alpha',
+      displayName: 'Toolbox Alpha',
+      description: 'First independently installed instance.',
+      publisher: 'Example Publisher',
+      version: '1.0.0',
+      managementRevision: 3,
+      lifecycleState: 'disabled',
+      trustBadge: 'unsigned',
+      officialCatalog: undefined,
+    } satisfies PluginInventoryProjection['items'][number];
+    const second = {
+      ...first,
+      inventoryKey: 'instance:plugini_toolbox_beta',
+      pluginInstanceID: 'plugini_toolbox_beta',
+      displayName: 'Toolbox Beta',
+      description: 'Second independently installed instance.',
+      managementRevision: 8,
+    } satisfies PluginInventoryProjection['items'][number];
+    const mount = document.createElement('div');
+    document.body.append(mount);
+
+    const matchingCatalog = {
+      ...containersPlugin,
+      inventoryKey: 'catalog:toolbox',
+      pluginID: 'com.example.toolbox',
+      displayName: 'Toolbox Catalog',
+      officialCatalog: undefined,
+    } satisfies PluginInventoryProjection['items'][number];
+
+    dispose = render(() => (
+      <PluginCenterView
+        projection={{ items: [matchingCatalog, first, second] }}
+        loading={false}
+        error={null}
+        selectedInventoryKey="instance:plugini_toolbox_beta"
+        onCommand={vi.fn()}
+        onRefresh={vi.fn()}
+        canManagePlugins
+        canOpenPluginSurfaces={false}
+      />
+    ), mount);
+
+    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Toolbox Beta');
+    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).not.toContain('Toolbox Catalog');
+    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).not.toContain('Toolbox Alpha');
+    (mount.querySelector('[data-plugin-center-item="instance:plugini_toolbox_alpha"]') as HTMLButtonElement).click();
+    expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Toolbox Alpha');
   });
 });

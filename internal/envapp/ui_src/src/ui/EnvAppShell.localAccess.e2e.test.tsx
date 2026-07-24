@@ -57,19 +57,34 @@ const pluginLifecycleMocks = vi.hoisted(() => {
   const listInstalledPlugins = vi.fn(async () => []);
   const loadInventoryProjection = vi.fn();
   const execute = vi.fn(async (_command: any) => ({}));
+  const inspectExternalPackage = vi.fn(async (_request: any) => ({}));
+  const commitExternalPackage = vi.fn(async (_inspection: any, _options: any, _onProgress?: (result: any) => void) => ({}));
   return {
     listInstalledPlugins,
     loadInventoryProjection,
     execute,
+    inspectExternalPackage,
+    commitExternalPackage,
     createPluginLifecycleAPI: vi.fn(() => ({
       listInstalledPlugins,
       loadInventoryProjection,
       execute,
+      inspectExternalPackage,
+      commitExternalPackage,
     })),
   };
 });
 const pluginSurfaceFrameState = vi.hoisted(() => ({
   lastProps: null as any,
+  propsByInstanceID: new Map<string, any>(),
+  closeOverrides: new Map<string, () => Promise<void>>(),
+}));
+const workbenchPluginSurfaceState = vi.hoisted(() => ({
+  open: vi.fn(async () => undefined),
+  close: vi.fn(async () => undefined),
+  closePlugin: vi.fn(async () => undefined),
+  closeAll: vi.fn(async () => undefined),
+  listPluginTargets: vi.fn(() => []),
 }));
 const pluginPanelState = vi.hoisted(() => ({
   lastProps: null as any,
@@ -123,6 +138,7 @@ const officialContainersCatalog = {
   rolloutState: 'stable',
   defaultSurfaceID: 'containers.dashboard',
   iconFallback: 'containers',
+  trustedSigningKeyIDs: ['redeven-official-signing-2026'],
   distribution: {
     releaseRef: OFFICIAL_CONTAINERS_RELEASE_REF,
   },
@@ -134,6 +150,7 @@ function officialContainersProjection(
   const installed = state !== 'not_installed';
   return {
     items: [{
+      inventoryKey: installed ? `instance:${officialContainersCatalog.pluginInstanceID}` : 'catalog:containers',
       pluginID: officialContainersCatalog.pluginID,
       ...(installed ? {
         pluginInstanceID: officialContainersCatalog.pluginInstanceID,
@@ -159,6 +176,38 @@ function officialContainersProjection(
       } : {}),
       officialCatalog: officialContainersCatalog,
     }],
+  };
+}
+
+function activityPluginProjection(count: number): PluginInventoryProjection {
+  return {
+    items: Array.from({ length: count }, (_, index) => {
+      const ordinal = index + 1;
+      const pluginID = `com.example.activity-${ordinal}`;
+      const pluginInstanceID = `plugini_activity_${ordinal}`;
+      const surfaceID = `surface-${ordinal}`;
+      return {
+        inventoryKey: `instance:${pluginInstanceID}`,
+        pluginID,
+        pluginInstanceID,
+        displayName: `Activity plugin ${ordinal}`,
+        description: `Activity plugin ${ordinal}`,
+        iconFallback: 'generic' as const,
+        publisher: 'Example',
+        version: '1.0.0',
+        managementRevision: 1,
+        lifecycleState: 'enabled' as const,
+        trustBadge: 'unsigned' as const,
+        pinned: false,
+        defaultLaunchTarget: {
+          pluginID,
+          pluginInstanceID,
+          surfaceID,
+          expectedManagementRevision: 1,
+          preferredPlacement: 'activity' as const,
+        },
+      };
+    }),
   };
 }
 
@@ -619,6 +668,17 @@ vi.mock('./plugins/PluginSurfaceFrame', () => ({
 vi.mock('./plugins/ActivityPluginSurfaceWindow', () => ({
   ActivityPluginSurfaceWindow: (props: any) => {
     pluginSurfaceFrameState.lastProps = props;
+    pluginSurfaceFrameState.propsByInstanceID.set(props.instanceID, props);
+    const requestClose = async () => {
+      const override = pluginSurfaceFrameState.closeOverrides.get(props.instanceID);
+      if (override) return override();
+      props.onClosed?.(props.instanceID);
+    };
+    props.registerRequestClose?.(props.instanceID, requestClose);
+    onCleanup(() => {
+      pluginSurfaceFrameState.propsByInstanceID.delete(props.instanceID);
+      props.registerRequestClose?.(props.instanceID, null);
+    });
     return (
       <section
         data-plugin-surface-host
@@ -628,8 +688,13 @@ vi.mock('./plugins/ActivityPluginSurfaceWindow', () => ({
         data-placement={props.target?.preferredPlacement ?? ''}
         data-management-revision={String(props.target?.expectedManagementRevision ?? '')}
         data-visible={String(Boolean(props.visible))}
+        data-z-index={String(props.zIndex)}
       >
-        <button type="button" aria-label="Close Plugin Surface" onClick={() => props.onClosed?.(props.instanceID)}>Close</button>
+        <button
+          type="button"
+          aria-label="Close Plugin Surface"
+          onClick={() => void (props.serializeClose?.(requestClose) ?? requestClose())}
+        >Close</button>
         <iframe data-plugin-surface-iframe />
       </section>
     );
@@ -641,7 +706,7 @@ vi.mock('./plugins/PluginPanel', () => ({
     return <Show when={props.open}>
       <div>
         {props.model?.tiles?.map((tile: any) => {
-          const tileID = tile.kind === 'open_center' ? tile.id : tile.item?.pluginID;
+          const tileID = tile.kind === 'open_center' ? tile.id : tile.item?.inventoryKey;
           return (
             <button
               type="button"
@@ -653,7 +718,7 @@ vi.mock('./plugins/PluginPanel', () => ({
                 } else if (tile.action === 'open_surface' && tile.item?.defaultLaunchTarget) {
                   props.onOpenPluginSurface?.(tile.item.defaultLaunchTarget);
                 } else {
-                  props.onOpenPluginDetails?.(tile.item?.pluginID);
+                  props.onOpenPluginDetails?.(tile.item?.inventoryKey);
                 }
                 props.onClose?.();
               }}
@@ -669,10 +734,15 @@ vi.mock('./plugins/PluginPanel', () => ({
 vi.mock('./plugins/PluginCenterView', () => ({
   PluginCenterView: (props: any) => {
     pluginCenterViewState.lastProps = props;
+    let rootRef: HTMLElement | undefined;
+    createEffect(() => {
+      if (!(props.focusRequest > 0)) return;
+      queueMicrotask(() => rootRef?.focus());
+    });
     return (
-      <section data-plugin-center-view data-plugin-center-shell>
-        <Show when={props.selectedPluginID}>
-          <div data-plugin-center-item={props.selectedPluginID}>Selected plugin</div>
+      <section ref={rootRef} data-plugin-center-view data-plugin-center-shell tabIndex={-1}>
+        <Show when={props.selectedInventoryKey}>
+          <div data-plugin-center-item={props.selectedInventoryKey}>Selected plugin</div>
           <div data-plugin-center-details>Disabled</div>
         </Show>
         <button type="button" aria-label="Close Plugin Center" onClick={() => props.onClose?.()}>Close</button>
@@ -762,7 +832,13 @@ vi.mock('./accessResume', () => ({
 
 vi.mock('./icons/FlowerIcon', () => ({ FlowerIcon: () => <span /> }));
 vi.mock('./icons/CodexIcon', () => ({ CodexIcon: () => <span />, CodexNavigationIcon: () => <span /> }));
-vi.mock('./workbench/EnvWorkbenchPage', () => ({ EnvWorkbenchPage: () => <MockDisplayModeSurface testId="workbench-page" /> }));
+vi.mock('./workbench/EnvWorkbenchPage', () => ({
+  EnvWorkbenchPage: (props: any) => {
+    props.registerPluginSurfaceController?.(workbenchPluginSurfaceState);
+    onCleanup(() => props.registerPluginSurfaceController?.(null));
+    return <MockDisplayModeSurface testId="workbench-page" />;
+  },
+}));
 vi.mock('./pages/EnvTerminalPage', () => ({ EnvTerminalPage: () => <div>activity main</div> }));
 vi.mock('./pages/EnvMonitorPage', () => ({ EnvMonitorPage: () => <div>activity main</div> }));
 vi.mock('./pages/EnvFileBrowserPage', () => ({
@@ -1118,7 +1194,16 @@ beforeEach(() => {
   pluginLifecycleMocks.loadInventoryProjection.mockReset();
   pluginLifecycleMocks.execute.mockReset();
   pluginLifecycleMocks.execute.mockImplementation(async (_command: any) => ({}));
+  pluginLifecycleMocks.inspectExternalPackage.mockReset();
+  pluginLifecycleMocks.commitExternalPackage.mockReset();
   pluginSurfaceFrameState.lastProps = null;
+  pluginSurfaceFrameState.propsByInstanceID.clear();
+  pluginSurfaceFrameState.closeOverrides.clear();
+  workbenchPluginSurfaceState.open.mockClear();
+  workbenchPluginSurfaceState.close.mockClear();
+  workbenchPluginSurfaceState.closePlugin.mockClear();
+  workbenchPluginSurfaceState.closeAll.mockClear();
+  workbenchPluginSurfaceState.listPluginTargets.mockClear();
   pluginPanelState.lastProps = null;
   pluginCenterViewState.lastProps = null;
   pluginPlatformMocks.createRedevenPluginPlatform.mockClear();
@@ -1558,6 +1643,7 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(host.querySelector('[data-testid="settings-page"]')).toBeNull();
       expect(settingsPageState.focusSection).not.toBe('plugins');
       expect(sidebarActiveTabValue).toBe('plugin-center');
+      expect((host.querySelector('[data-plugin-center-view]') as HTMLElement).contains(document.activeElement)).toBe(true);
     } finally {
       dispose();
     }
@@ -1566,7 +1652,7 @@ describe('EnvAppShell environment entry affordances', () => {
   it('keeps an unknown-outcome mutation lane closed until local surface invalidation completes', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
-    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('not_installed'));
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
     const unknownOutcome = new Error('plugin mutation outcome is unknown');
     let finishDisposal!: () => void;
@@ -1586,6 +1672,7 @@ describe('EnvAppShell environment entry affordances', () => {
     try {
       await flushAsync();
       await flushAsync();
+      await flushUntil(() => Boolean(host.querySelector('[data-activity-id="plugins"]')));
       (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
       await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="plugin-center"]')), 40);
       (host.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement | null)?.click();
@@ -1602,8 +1689,71 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(pluginPlatformMocks.coordinator.closeAll).toHaveBeenCalledTimes(1);
       expect(settled).toBe(false);
 
+      const queuedOpen = pluginCenterViewState.lastProps.onCommand({
+        type: 'open_surface',
+        pluginID: officialContainersCatalog.pluginID,
+        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
+        surfaceID: officialContainersCatalog.defaultSurfaceID,
+        expectedManagementRevision: 11,
+        placement: 'workbench',
+      }, new AbortController().signal);
+      await flushAsync();
+      expect(workbenchPluginSurfaceState.open).not.toHaveBeenCalled();
+
       finishDisposal();
       await expect(command).rejects.toBe(unknownOutcome);
+      await expect(queuedOpen).rejects.toThrow();
+      expect(workbenchPluginSurfaceState.open).not.toHaveBeenCalled();
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('keeps a successful management mutation ahead of a queued stale Workbench open', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    let finishExecute!: () => void;
+    pluginLifecycleMocks.execute.mockImplementationOnce(() => new Promise((resolve) => {
+      finishExecute = () => resolve({});
+    }));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushAsync();
+      await flushUntil(() => Boolean(host.querySelector('[data-activity-id="plugins"]')));
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="plugin-center"]')));
+      (host.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement).click();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand));
+
+      const command = pluginCenterViewState.lastProps.onCommand({
+        type: 'disable',
+        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
+        expectedManagementRevision: 11,
+      }, new AbortController().signal);
+      const queuedOpen = pluginCenterViewState.lastProps.onCommand({
+        type: 'open_surface',
+        pluginID: officialContainersCatalog.pluginID,
+        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
+        surfaceID: officialContainersCatalog.defaultSurfaceID,
+        expectedManagementRevision: 11,
+        placement: 'workbench',
+      }, new AbortController().signal);
+      await flushAsync();
+      expect(workbenchPluginSurfaceState.open).not.toHaveBeenCalled();
+
+      pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('disabled'));
+      finishExecute();
+      await expect(command).resolves.toBeUndefined();
+      await expect(queuedOpen).rejects.toThrow();
+      expect(workbenchPluginSurfaceState.open).not.toHaveBeenCalled();
     } finally {
       dispose();
     }
@@ -1613,6 +1763,7 @@ describe('EnvAppShell environment entry affordances', () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
     window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
     const committedError = new PluginPlatformRequestError(
       'PLUGIN_INVALID_REQUEST',
@@ -1629,12 +1780,17 @@ describe('EnvAppShell environment entry affordances', () => {
     try {
       await flushAsync();
       await flushAsync();
-      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
-      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="com.redeven.official.containers"]')));
+      await flushUntil(() => Boolean(host.querySelector('[data-activity-id="plugins"]')));
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement).click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="instance:plugini_redeven_official_containers"]')));
       await pluginPanelState.lastProps.onOpenPluginSurface(officialContainersProjection('enabled').items[0].defaultLaunchTarget);
       await flushUntil(() => Boolean(document.querySelector('[data-plugin-surface-host]')));
 
       pluginLifecycleMocks.execute.mockRejectedValueOnce(committedError);
+      let finishCommittedCleanup!: () => void;
+      pluginPlatformMocks.coordinator.invalidatePlugin.mockImplementationOnce(() => new Promise<undefined>((resolve) => {
+        finishCommittedCleanup = () => resolve(undefined);
+      }));
       (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
       await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="plugin-center"]')));
       (host.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement | null)?.click();
@@ -1647,8 +1803,22 @@ describe('EnvAppShell environment entry affordances', () => {
         expectedManagementRevision: 11,
       }, new AbortController().signal);
 
+      const queuedOpen = pluginCenterViewState.lastProps.onCommand({
+        type: 'open_surface',
+        pluginID: officialContainersCatalog.pluginID,
+        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
+        surfaceID: officialContainersCatalog.defaultSurfaceID,
+        expectedManagementRevision: 11,
+        placement: 'workbench',
+      }, new AbortController().signal);
+      await flushAsync();
+      expect(workbenchPluginSurfaceState.open).not.toHaveBeenCalled();
+
+      finishCommittedCleanup();
       await expect(command).rejects.toBe(committedError);
+      await expect(queuedOpen).rejects.toThrow();
       expect(pluginPlatformMocks.coordinator.invalidatePlugin).toHaveBeenCalledWith(officialContainersCatalog.pluginInstanceID);
+      expect(workbenchPluginSurfaceState.open).not.toHaveBeenCalled();
       expect(document.querySelector('[data-plugin-surface-host]')).toBeNull();
       expect(pluginLifecycleMocks.loadInventoryProjection.mock.calls.length).toBeGreaterThan(inventoryRequestsBeforeCommand);
     } finally {
@@ -1711,17 +1881,18 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushAsync();
 
       (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
-      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="com.redeven.official.containers"]')));
-      (host.querySelector('[data-plugin-panel-tile="com.redeven.official.containers"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="instance:plugini_redeven_official_containers"]')));
+      (host.querySelector('[data-plugin-panel-tile="instance:plugini_redeven_official_containers"]') as HTMLButtonElement | null)?.click();
       await flushUntil(() => Boolean(host.querySelector('[data-plugin-center-view]')));
-      await flushUntil(() => Boolean(host.querySelector('[data-plugin-center-item="com.redeven.official.containers"]')));
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-center-item="instance:plugini_redeven_official_containers"]')));
 
-      expect(host.querySelector('[data-plugin-center-item="com.redeven.official.containers"]')).toBeTruthy();
+      expect(host.querySelector('[data-plugin-center-item="instance:plugini_redeven_official_containers"]')).toBeTruthy();
       expect(host.querySelector('[data-plugin-center-details]')?.textContent).toContain('Disabled');
       expectPluginCenterMountedInActivityMain(host);
       expect(host.querySelector('[data-testid="settings-page"]')).toBeNull();
       expect(settingsPageState.focusSection).not.toBe('plugins');
       expect(sidebarActiveTabValue).toBe('plugin-center');
+      expect((host.querySelector('[data-plugin-center-view]') as HTMLElement).contains(document.activeElement)).toBe(true);
     } finally {
       dispose();
     }
@@ -1744,7 +1915,7 @@ describe('EnvAppShell environment entry affordances', () => {
       await flushAsync();
 
       (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
-      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="com.redeven.official.containers"]')));
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="instance:plugini_redeven_official_containers"]')));
       await pluginPanelState.lastProps.onOpenPluginSurface(officialContainersProjection('enabled').items[0].defaultLaunchTarget);
       await flushUntil(() => Boolean(document.querySelector('[data-plugin-surface-host]')));
       await flushUntil(() => (
@@ -1791,10 +1962,359 @@ describe('EnvAppShell environment entry affordances', () => {
       expect(settingsPageState.focusSection).not.toBe('plugins');
       expect(sidebarActiveTabValue).toBe('terminal');
 
+      const firstInstanceID = pluginSurfaceFrameState.lastProps.instanceID;
+      const revisionTwelveProjection = officialContainersProjection('enabled');
+      revisionTwelveProjection.items[0] = {
+        ...revisionTwelveProjection.items[0],
+        managementRevision: 12,
+        defaultLaunchTarget: {
+          ...revisionTwelveProjection.items[0].defaultLaunchTarget!,
+          expectedManagementRevision: 12,
+        },
+      };
+      pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(revisionTwelveProjection);
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onRefresh));
+      await pluginCenterViewState.lastProps.onRefresh();
+      await pluginPanelState.lastProps.onOpenPluginSurface({
+        ...revisionTwelveProjection.items[0].defaultLaunchTarget,
+      });
+      await flushUntil(() => (
+        document.querySelector('[data-plugin-surface-host]')?.getAttribute('data-management-revision') === '12'
+      ));
+      expect(pluginSurfaceFrameState.lastProps.instanceID).not.toBe(firstInstanceID);
+
+      const refreshedProps = pluginSurfaceFrameState.lastProps;
+      let finishUserClose!: () => void;
+      const pendingUserClose = refreshedProps.serializeClose(() => new Promise<void>((resolve) => {
+        finishUserClose = () => {
+          refreshedProps.onClosed(refreshedProps.instanceID);
+          resolve();
+        };
+      }));
+      const queuedReopen = pluginPanelState.lastProps.onOpenPluginSurface({
+        ...officialContainersProjection('enabled').items[0].defaultLaunchTarget,
+        expectedManagementRevision: 12,
+      });
+      await flushAsync();
+      expect(pluginSurfaceFrameState.lastProps.instanceID).toBe(refreshedProps.instanceID);
+      finishUserClose();
+      await Promise.all([pendingUserClose, queuedReopen]);
+      await flushUntil(() => pluginSurfaceFrameState.lastProps.instanceID !== refreshedProps.instanceID);
+
       (host.querySelector('[aria-label="Close Plugin Surface"]') as HTMLButtonElement | null)?.click();
       await flushUntil(() => !host.querySelector('[data-plugin-surface-host]'));
       expect(host.querySelector('[data-plugin-surface-host]')).toBeNull();
       expect(sidebarActiveTabValue).toBe('terminal');
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('replaces the least recently active Activity plugin window without duplicating z-indexes', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    const projection = activityPluginProjection(10);
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(projection);
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushAsync();
+      await flushUntil(() => Boolean(host.querySelector('[data-activity-id="plugins"]')));
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(pluginPanelState.lastProps));
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand));
+      for (const [index, item] of projection.items.slice(0, 9).entries()) {
+        await pluginCenterViewState.lastProps.onCommand({
+          type: 'open_surface',
+          ...item.defaultLaunchTarget,
+          placement: 'activity',
+        }, new AbortController().signal);
+        await flushUntil(() => document.querySelectorAll('[data-plugin-surface-host]').length === index + 1);
+      }
+      const first = [...pluginSurfaceFrameState.propsByInstanceID.values()]
+        .find((props) => props.target.pluginInstanceID === 'plugini_activity_1');
+      first.onActivate(first.instanceID);
+      await flushAsync();
+
+      await pluginCenterViewState.lastProps.onCommand({
+        type: 'open_surface',
+        ...projection.items[9].defaultLaunchTarget,
+        placement: 'activity',
+      }, new AbortController().signal);
+      await flushAsync();
+
+      const windows = [...document.querySelectorAll<HTMLElement>('[data-plugin-surface-host]')];
+      expect(windows).toHaveLength(9);
+      expect(windows.some((window) => window.dataset.pluginInstanceId === 'plugini_activity_1')).toBe(true);
+      expect(windows.some((window) => window.dataset.pluginInstanceId === 'plugini_activity_2')).toBe(false);
+      expect(windows.some((window) => window.dataset.pluginInstanceId === 'plugini_activity_10')).toBe(true);
+      expect(new Set(windows.map((window) => window.dataset.zIndex))).toHaveLength(9);
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('keeps the Activity LRU recovery window when its exact-slot close fails', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    const projection = activityPluginProjection(10);
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(projection);
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushAsync();
+      await flushUntil(() => Boolean(host.querySelector('[data-activity-id="plugins"]')));
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
+      await flushUntil(() => Boolean(pluginPanelState.lastProps));
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand));
+      for (const [index, item] of projection.items.slice(0, 9).entries()) {
+        await pluginCenterViewState.lastProps.onCommand({
+          type: 'open_surface',
+          ...item.defaultLaunchTarget,
+          placement: 'activity',
+        }, new AbortController().signal);
+        await flushUntil(() => document.querySelectorAll('[data-plugin-surface-host]').length === index + 1);
+      }
+      const oldest = [...pluginSurfaceFrameState.propsByInstanceID.values()]
+        .find((props) => props.target.pluginInstanceID === 'plugini_activity_1');
+      pluginSurfaceFrameState.closeOverrides.set(oldest.instanceID, async () => undefined);
+
+      await expect(pluginCenterViewState.lastProps.onCommand({
+        type: 'open_surface',
+        ...projection.items[9].defaultLaunchTarget,
+        placement: 'activity',
+      }, new AbortController().signal)).rejects.toThrow();
+
+      const windows = [...document.querySelectorAll<HTMLElement>('[data-plugin-surface-host]')];
+      expect(windows).toHaveLength(9);
+      expect(windows.some((window) => window.dataset.pluginInstanceId === 'plugini_activity_1')).toBe(true);
+      expect(windows.some((window) => window.dataset.pluginInstanceId === 'plugini_activity_10')).toBe(false);
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('attempts exact-slot cleanup before revoking the entire plugin session', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    let finishLocalCleanup!: () => void;
+    pluginPlatformMocks.coordinator.dispose.mockImplementationOnce(() => new Promise<undefined>((resolve) => {
+      finishLocalCleanup = () => resolve(undefined);
+    }));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushAsync();
+      await flushUntil(() => Boolean(host.querySelector('[data-activity-id="plugins"]')));
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement).click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="instance:plugini_redeven_official_containers"]')));
+      await pluginPanelState.lastProps.onOpenPluginSurface(officialContainersProjection('enabled').items[0].defaultLaunchTarget);
+      await flushUntil(() => Boolean(pluginSurfaceFrameState.lastProps?.onEndPluginSession));
+
+      const ending = pluginSurfaceFrameState.lastProps.onEndPluginSession();
+      await flushAsync();
+      expect(pluginPlatformMocks.coordinator.dispose).toHaveBeenCalledOnce();
+      expect(workbenchPluginSurfaceState.closeAll).toHaveBeenCalledOnce();
+      expect(pluginPlatformMocks.close).not.toHaveBeenCalled();
+
+      finishLocalCleanup();
+      await expect(ending).resolves.toBe(true);
+      expect(pluginPlatformMocks.close).toHaveBeenCalledOnce();
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('keeps an external update terminal when projected surface cleanup fails', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const inspection = {
+      inspection_id: 'inspection_external_update_12345678',
+      intent: {
+        action: 'update',
+        plugin_instance_id: officialContainersCatalog.pluginInstanceID,
+        expected_management_revision: 11,
+      },
+    };
+    const committed = {
+      status: 'committed',
+      inspection_id: inspection.inspection_id,
+      intent: inspection.intent,
+      plugin: { plugin_instance_id: officialContainersCatalog.pluginInstanceID },
+    };
+    pluginLifecycleMocks.commitExternalPackage.mockResolvedValue(committed);
+    pluginPlatformMocks.coordinator.invalidatePlugin.mockRejectedValueOnce(new Error('local cleanup failed'));
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushAsync();
+      await flushUntil(() => Boolean(host.querySelector('[data-activity-id="plugins"]')));
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement).click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="instance:plugini_redeven_official_containers"]')));
+      await pluginPanelState.lastProps.onOpenPluginSurface(officialContainersProjection('enabled').items[0].defaultLaunchTarget);
+      await flushUntil(() => Boolean(document.querySelector('[data-plugin-surface-host]')));
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement).click();
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="plugin-center"]')));
+      (host.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement).click();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommitExternal));
+
+      await expect(pluginCenterViewState.lastProps.onCommitExternal(
+        inspection,
+        new AbortController().signal,
+      )).resolves.toBe(committed);
+
+      expect(pluginLifecycleMocks.commitExternalPackage).toHaveBeenCalledOnce();
+      expect(pluginPlatformMocks.coordinator.invalidatePlugin)
+        .toHaveBeenCalledWith(officialContainersCatalog.pluginInstanceID);
+      expect(document.querySelector('[data-plugin-surface-host]')).toBeNull();
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('allows the current plugin revision to reopen after an external update reaches failed terminal state', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const updateFailed = new Error('external update failed');
+    pluginLifecycleMocks.commitExternalPackage.mockImplementationOnce(async (
+      _inspection: any,
+      _options: any,
+      onProgress?: (result: any) => void,
+    ) => {
+      onProgress?.({ status: 'in_progress' });
+      onProgress?.({ status: 'failed' });
+      throw updateFailed;
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushUntil(() => Boolean(host.querySelector('[data-activity-id="plugins"]')));
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement).click();
+      await flushUntil(() => Boolean(pluginPanelState.lastProps));
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommitExternal));
+      const inspection = {
+        inspection_id: 'inspection_external_failed_12345678',
+        intent: {
+          action: 'update',
+          plugin_instance_id: officialContainersCatalog.pluginInstanceID,
+          expected_management_revision: 11,
+        },
+      };
+
+      await expect(pluginCenterViewState.lastProps.onCommitExternal(
+        inspection,
+        new AbortController().signal,
+      )).rejects.toBe(updateFailed);
+      await expect(pluginCenterViewState.lastProps.onCommand({
+        type: 'open_surface',
+        pluginID: officialContainersCatalog.pluginID,
+        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
+        surfaceID: officialContainersCatalog.defaultSurfaceID,
+        expectedManagementRevision: 11,
+        placement: 'workbench',
+      }, new AbortController().signal)).resolves.toBeUndefined();
+      expect(workbenchPluginSurfaceState.open).toHaveBeenCalledOnce();
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
+  it('blocks a queued stale open when an in-progress external update times out', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+    const timeout = new Error('external update reconciliation timed out');
+    const activityCleanupError = new Error('activity cleanup failed');
+    pluginPlatformMocks.coordinator.invalidatePlugin.mockRejectedValueOnce(activityCleanupError);
+    let rejectCommit!: (error: unknown) => void;
+    pluginLifecycleMocks.commitExternalPackage.mockImplementationOnce((
+      _inspection: any,
+      _options: any,
+      onProgress?: (result: any) => void,
+    ) => {
+      onProgress?.({ status: 'in_progress' });
+      return new Promise((_resolve, reject) => { rejectCommit = reject; });
+    });
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushUntil(() => Boolean(host.querySelector('[data-activity-id="plugins"]')));
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement).click();
+      await flushUntil(() => Boolean(pluginPanelState.lastProps));
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommitExternal));
+      const inspection = {
+        inspection_id: 'inspection_external_timeout_12345678',
+        intent: {
+          action: 'update',
+          plugin_instance_id: officialContainersCatalog.pluginInstanceID,
+          expected_management_revision: 11,
+        },
+      };
+      const commit = pluginCenterViewState.lastProps.onCommitExternal(
+        inspection,
+        new AbortController().signal,
+      );
+      const queuedOpen = pluginCenterViewState.lastProps.onCommand({
+        type: 'open_surface',
+        pluginID: officialContainersCatalog.pluginID,
+        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
+        surfaceID: officialContainersCatalog.defaultSurfaceID,
+        expectedManagementRevision: 11,
+        placement: 'workbench',
+      }, new AbortController().signal);
+      await flushAsync();
+      expect(workbenchPluginSurfaceState.open).not.toHaveBeenCalled();
+
+      rejectCommit(timeout);
+      await expect(commit).rejects.toMatchObject({ name: 'AggregateError' });
+      await expect(queuedOpen).rejects.toThrow();
+      expect(workbenchPluginSurfaceState.open).not.toHaveBeenCalled();
+      expect(workbenchPluginSurfaceState.closePlugin)
+        .toHaveBeenCalledWith(officialContainersCatalog.pluginInstanceID);
     } finally {
       dispose();
     }
@@ -1814,7 +2334,7 @@ describe('EnvAppShell environment entry affordances', () => {
     try {
       await flushAsync();
       (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement | null)?.click();
-      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="com.redeven.official.containers"]')));
+      await flushUntil(() => Boolean(host.querySelector('[data-plugin-panel-tile="instance:plugini_redeven_official_containers"]')));
       await pluginPanelState.lastProps.onOpenPluginSurface(officialContainersProjection('enabled').items[0].defaultLaunchTarget);
       await flushUntil(() => Boolean(document.querySelector('[data-plugin-surface-host]')));
 
@@ -1841,7 +2361,7 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
-  it('rejects Workbench plugin placement until the released SDK owns cross-iframe interaction events', async () => {
+  it('opens Workbench plugin placement through the standard plugin widget controller', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
@@ -1860,17 +2380,53 @@ describe('EnvAppShell environment entry affordances', () => {
       (host.querySelector('[data-plugin-panel-tile="plugin-center"]') as HTMLButtonElement | null)?.click();
       await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand));
 
-      await expect(pluginCenterViewState.lastProps.onCommand({
+      const target = {
         type: 'open_surface',
         pluginID: officialContainersCatalog.pluginID,
         pluginInstanceID: officialContainersCatalog.pluginInstanceID,
         surfaceID: officialContainersCatalog.defaultSurfaceID,
         expectedManagementRevision: 11,
         placement: 'workbench',
-      })).rejects.toThrow('Plugin surface failed');
+      } as const;
+      await expect(pluginCenterViewState.lastProps.onCommand(target)).resolves.toBeUndefined();
 
-      expect(pluginSurfaceFrameState.lastProps).toBeNull();
-      expect(host.querySelector('[data-plugin-surface-host]')).toBeNull();
+      expect(workbenchPluginSurfaceState.open).toHaveBeenCalledWith({
+        pluginID: target.pluginID,
+        pluginInstanceID: target.pluginInstanceID,
+        surfaceID: target.surfaceID,
+        expectedManagementRevision: 11,
+        preferredPlacement: 'workbench',
+      });
+      expect(host.querySelector('[data-testid="workbench-page"]')).not.toBeNull();
+
+      await expect(pluginCenterViewState.lastProps.onCommand({ ...target, placement: 'activity' })).resolves.toBeUndefined();
+      expect(workbenchPluginSurfaceState.close).toHaveBeenCalledWith({
+        pluginID: target.pluginID,
+        pluginInstanceID: target.pluginInstanceID,
+        surfaceID: target.surfaceID,
+        expectedManagementRevision: 11,
+        preferredPlacement: 'activity',
+      });
+      await flushUntil(() => Boolean(document.querySelector('[data-plugin-surface-host][data-placement="activity"]')));
+      expect(document.querySelector('[data-plugin-surface-host][data-placement="activity"]')).not.toBeNull();
+
+      await expect(pluginCenterViewState.lastProps.onCommand(target)).resolves.toBeUndefined();
+      expect(document.querySelector('[data-plugin-surface-host]')).toBeNull();
+      expect(workbenchPluginSurfaceState.open).toHaveBeenCalledTimes(2);
+
+      let resolveWorkbenchOpen!: () => void;
+      workbenchPluginSurfaceState.open.mockImplementationOnce(() => new Promise<undefined>((resolve) => {
+        resolveWorkbenchOpen = () => resolve(undefined);
+      }));
+      const pendingWorkbench = pluginCenterViewState.lastProps.onCommand(target);
+      await flushAsync();
+      const closeCallsBeforeQueuedActivity = workbenchPluginSurfaceState.close.mock.calls.length;
+      const queuedActivity = pluginCenterViewState.lastProps.onCommand({ ...target, placement: 'activity' });
+      await flushAsync();
+      expect(workbenchPluginSurfaceState.close).toHaveBeenCalledTimes(closeCallsBeforeQueuedActivity);
+      resolveWorkbenchOpen();
+      await Promise.all([pendingWorkbench, queuedActivity]);
+      expect(workbenchPluginSurfaceState.close).toHaveBeenCalledTimes(closeCallsBeforeQueuedActivity + 1);
     } finally {
       dispose();
     }

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { createRoot, createSignal } from 'solid-js';
+import { createRoot, createSignal, onCleanup } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -36,11 +36,22 @@ const workbenchMocks = vi.hoisted(() => ({
   createTerminalSession: vi.fn(),
   deleteTerminalSession: vi.fn(),
   updateWidgetTitle: vi.fn(),
+  pluginSurfaceState: vi.fn(() => ({
+    kind: 'plugin' as const,
+    plugin_instance_id: 'instance-containers',
+    plugin_id: 'io.redeven.containers',
+    surface_id: 'containers',
+    display_name: 'Containers',
+    expected_management_revision: 7,
+  })),
+  registerPluginSurfaceClose: vi.fn(),
 }));
 
 const terminalPanelMocks = vi.hoisted(() => ({
   render: vi.fn(),
 }));
+
+const pluginSurfaceMocks = vi.hoisted(() => ({ render: vi.fn(), cleanup: vi.fn() }));
 
 vi.mock('./EnvWorkbenchInstancesContext', () => ({
   useEnvWorkbenchInstancesContext: () => workbenchMocks,
@@ -75,7 +86,17 @@ vi.mock('../widgets/TerminalPanel', async () => {
   };
 });
 
+vi.mock('../plugins/PluginSurfaceFrame', () => ({
+  PluginSurfaceBody: (props: any) => {
+    pluginSurfaceMocks.render(props);
+    onCleanup(pluginSurfaceMocks.cleanup);
+    props.registerClose?.(async () => true);
+    return <div data-testid="plugin-surface-body" data-revision={props.target.expectedManagementRevision} />;
+  },
+}));
+
 import { redevenWorkbenchWidgets } from './redevenWorkbenchWidgets';
+import { WorkbenchPluginSurfaceContext } from './WorkbenchPluginSurfaceContext';
 
 function terminalBody() {
   const entry = redevenWorkbenchWidgets.find((widget) => widget.type === 'redeven.terminal');
@@ -159,6 +180,7 @@ describe('redevenWorkbenchWidgets default geometry', () => {
       'redeven.files': { width: 1200, height: 800 },
       'redeven.terminal': { width: 1120, height: 780 },
       'redeven.preview': { width: 1080, height: 700 },
+      'redeven.plugin': { width: 1120, height: 760 },
       'redeven.monitor': { width: 1040, height: 800 },
       'redeven.codespaces': { width: 1040, height: 660 },
       'redeven.ports': { width: 1000, height: 620 },
@@ -325,6 +347,122 @@ describe('redevenWorkbenchWidgets terminal behavior', () => {
       })
     );
   });
+});
+
+describe('redevenWorkbenchWidgets plugin behavior', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+    vi.clearAllMocks();
+  });
+
+  it('projects the persisted plugin target into one standard Workbench surface', () => {
+    const definition = redevenWorkbenchWidgets.find((widget) => widget.type === 'redeven.plugin');
+    if (!definition) throw new Error('missing plugin widget definition');
+    const Body = definition.body;
+    const requestActivate = vi.fn();
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <WorkbenchPluginSurfaceContext.Provider value={{
+        coordinator: {} as any,
+        confirmationQueue: {} as any,
+        workbenchVisible: () => true,
+        resolveTarget: (target) => target,
+        onRetirementError: vi.fn(),
+      }}>
+        <Body widgetId="widget-plugin-1" title="Containers" type={'redeven.plugin' as any} lifecycle="hot" requestActivate={requestActivate} />
+      </WorkbenchPluginSurfaceContext.Provider>
+    ), host);
+
+    expect(pluginSurfaceMocks.render).toHaveBeenCalledWith(expect.objectContaining({
+      target: {
+        pluginID: 'io.redeven.containers',
+        pluginInstanceID: 'instance-containers',
+        surfaceID: 'containers',
+        displayName: 'Containers',
+        expectedManagementRevision: 7,
+        preferredPlacement: 'workbench',
+      },
+      visible: true,
+    }));
+    const wrapper = host.querySelector('[data-redeven-plugin-workbench-surface]');
+    expect(wrapper?.getAttribute('data-floe-canvas-wheel-interactive')).toBe('true');
+    expect(wrapper?.getAttribute('data-redeven-workbench-text-selection-surface')).toBe('true');
+    expect(wrapper?.getAttribute('data-redeven-workbench-action-surface')).toBe('true');
+    expect(wrapper?.getAttribute(WORKBENCH_WIDGET_ACTIVATION_SURFACE_ATTR)).toBe('true');
+    expect(workbenchMocks.registerPluginSurfaceClose).toHaveBeenCalledWith('widget-plugin-1', expect.any(Function));
+    pluginSurfaceMocks.render.mock.calls.at(-1)?.[0]?.onInteraction({
+      kind: 'activation', sequence: 1, localScroll: false, selectionActive: false,
+    });
+    expect(requestActivate).toHaveBeenCalledTimes(1);
+    dispose();
+  });
+
+  it('keeps the iframe mounted for unrelated state replacement and remounts for target revisions', async () => {
+    const definition = redevenWorkbenchWidgets.find((widget) => widget.type === 'redeven.plugin');
+    if (!definition) throw new Error('missing plugin widget definition');
+    const Body = definition.body;
+    const [pluginState, setPluginState] = createSignal(workbenchMocks.pluginSurfaceState());
+    workbenchMocks.pluginSurfaceState.mockImplementation(() => pluginState());
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const dispose = render(() => (
+      <WorkbenchPluginSurfaceContext.Provider value={{
+        coordinator: {} as any,
+        confirmationQueue: {} as any,
+        workbenchVisible: () => true,
+        resolveTarget: (target) => target,
+        onRetirementError: vi.fn(),
+      }}>
+        <Body widgetId="widget-plugin-1" title="Containers" type={'redeven.plugin' as any} lifecycle="hot" />
+      </WorkbenchPluginSurfaceContext.Provider>
+    ), host);
+    const initialSurface = host.querySelector('[data-testid="plugin-surface-body"]');
+    expect(initialSurface).not.toBeNull();
+
+    setPluginState((current) => ({ ...current, display_name: 'Containers renamed' }));
+    await Promise.resolve();
+    expect(host.querySelector('[data-testid="plugin-surface-body"]')).toBe(initialSurface);
+
+    setPluginState((current) => ({ ...current, expected_management_revision: 8 }));
+    await Promise.resolve();
+    const revisedSurface = host.querySelector('[data-testid="plugin-surface-body"]');
+    expect(revisedSurface).not.toBe(initialSurface);
+    expect(revisedSurface?.getAttribute('data-revision')).toBe('8');
+    expect(pluginSurfaceMocks.render.mock.calls.at(-1)?.[0]?.target.expectedManagementRevision).toBe(8);
+    dispose();
+  });
+
+  it.each(['stale', 'disabled', 'uninstalled'] as const)(
+    'does not mount a restored %s plugin target before inventory reconciliation',
+    (state) => {
+      const definition = redevenWorkbenchWidgets.find((widget) => widget.type === 'redeven.plugin');
+      if (!definition) throw new Error('missing plugin widget definition');
+      const Body = definition.body;
+      const host = document.createElement('div');
+      document.body.appendChild(host);
+      const dispose = render(() => (
+        <WorkbenchPluginSurfaceContext.Provider value={{
+          coordinator: {} as any,
+          confirmationQueue: {} as any,
+          workbenchVisible: () => true,
+          resolveTarget: (target) => state === 'stale'
+            ? { ...target, expectedManagementRevision: target.expectedManagementRevision + 1 }
+            : null,
+          onRetirementError: vi.fn(),
+        }}>
+          <Body widgetId="widget-plugin-1" title="Containers" type={'redeven.plugin' as any} lifecycle="hot" />
+        </WorkbenchPluginSurfaceContext.Provider>
+      ), host);
+
+      expect(pluginSurfaceMocks.render).not.toHaveBeenCalled();
+      expect(host.querySelector('[data-testid="plugin-surface-body"]')).toBeNull();
+      expect(host.textContent).toContain('Containers');
+      expect(host.textContent).toContain('Needs attention');
+      expect(host.textContent).toContain('Unavailable');
+      dispose();
+    },
+  );
 });
 
 describe('redevenWorkbenchWidgets assistant metadata', () => {

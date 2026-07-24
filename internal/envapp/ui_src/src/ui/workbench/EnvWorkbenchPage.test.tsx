@@ -200,6 +200,7 @@ const widgetBodyMocks = vi.hoisted(() => ({
   renderFilesBody: null as null | ((props: any) => any),
   renderTerminalBody: null as null | ((props: any) => any),
   renderPreviewBody: null as null | ((props: any) => any),
+  renderPluginBody: null as null | ((props: any) => any),
 }));
 
 const contextProbeState = vi.hoisted(() => ({
@@ -208,6 +209,7 @@ const contextProbeState = vi.hoisted(() => ({
   terminalPanelState: null as any,
   previewItem: null as any,
   previewOpenRequest: null as any,
+  pluginState: null as any,
 }));
 
 const [envId, setEnvId] = createSignal('env-123');
@@ -599,6 +601,15 @@ vi.mock('./redevenWorkbenchWidgets', () => ({
       defaultSize: { width: 900, height: 620 },
       singleton: false,
     },
+    {
+      type: 'redeven.plugin',
+      label: 'Plugin',
+      icon: () => null,
+      body: (props: any) => widgetBodyMocks.renderPluginBody?.(props) ?? null,
+      defaultTitle: 'Plugin',
+      defaultSize: { width: 1120, height: 760 },
+      singleton: false,
+    },
   ],
   localizedRedevenWorkbenchWidgets: (t: (key: string) => string) => [
     {
@@ -635,6 +646,15 @@ vi.mock('./redevenWorkbenchWidgets', () => ({
       body: (props: any) => widgetBodyMocks.renderPreviewBody?.(props) ?? null,
       defaultTitle: t('workbench.widgets.preview.defaultTitle'),
       defaultSize: { width: 900, height: 620 },
+      singleton: false,
+    },
+    {
+      type: 'redeven.plugin',
+      label: 'Plugin',
+      icon: () => null,
+      body: (props: any) => widgetBodyMocks.renderPluginBody?.(props) ?? null,
+      defaultTitle: 'Plugin',
+      defaultSize: { width: 1120, height: 760 },
       singleton: false,
     },
   ],
@@ -918,11 +938,13 @@ describe('EnvWorkbenchPage', () => {
     widgetBodyMocks.renderFilesBody = null;
     widgetBodyMocks.renderTerminalBody = null;
     widgetBodyMocks.renderPreviewBody = null;
+    widgetBodyMocks.renderPluginBody = null;
     contextProbeState.fileOpenRequest = null;
     contextProbeState.terminalOpenRequest = null;
     contextProbeState.terminalPanelState = null;
     contextProbeState.previewItem = null;
     contextProbeState.previewOpenRequest = null;
+    contextProbeState.pluginState = null;
   });
 
   afterEach(() => {
@@ -3860,5 +3882,316 @@ describe('EnvWorkbenchPage', () => {
     expect(surface?.dataset.selectedWidgetId).toBe(filesWidget.id);
     expect(surface?.dataset.viewportX).toBe('80');
     expect(surface?.dataset.viewportY).toBe('60');
+  });
+
+  it('creates, persists, reuses, and revision-refreshes plugin widgets through the real controller', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const pluginWidget = persistedWidget('widget-plugin-1', 'redeven.plugin', 'Plugin', 1, 500);
+    const closeSurface = vi.fn(async () => true);
+    widgetBodyMocks.renderPluginBody = (bodyProps: any) => {
+      const workbench = useEnvWorkbenchInstancesContext();
+      workbench.registerPluginSurfaceClose(bodyProps.widgetId, closeSurface);
+      createEffect(() => {
+        contextProbeState.pluginState = workbench.pluginSurfaceState(bodyProps.widgetId);
+      });
+      return null;
+    };
+    surfaceApiMocks.createWidget.mockImplementation(() => {
+      surfaceApiMocks.lastSetState((previous: any) => ({
+        ...previous,
+        widgets: [...previous.widgets, pluginWidget],
+        selectedWidgetId: pluginWidget.id,
+      }));
+      return pluginWidget;
+    });
+    surfaceApiMocks.findWidgetById.mockImplementation((widgetID?: unknown) => (
+      typeof widgetID === 'string'
+        ? surfaceApiMocks.lastStateAccessor?.().widgets.find((widget: any) => widget.id === widgetID) ?? null
+        : null
+    ));
+    let controller: any;
+    mount(() => (
+      <EnvWorkbenchPage
+        pluginSurfaceHost={{} as any}
+        registerPluginSurfaceController={(next) => { controller = next; }}
+      />
+    ), host);
+    await flushMicrotasks();
+
+    const target = {
+      pluginID: 'io.redeven.containers',
+      pluginInstanceID: 'instance-containers',
+      surfaceID: 'containers',
+      displayName: 'Containers',
+      expectedManagementRevision: 7,
+      preferredPlacement: 'workbench' as const,
+    };
+    const firstOpen = controller.open(target);
+    await vi.advanceTimersByTimeAsync(200);
+    await flushMicrotasks();
+    await firstOpen;
+
+    expect(surfaceApiMocks.createWidget).toHaveBeenCalledTimes(1);
+    expect(layoutApiMocks.putWorkbenchWidgetState).toHaveBeenCalledWith('widget-plugin-1', {
+      base_revision: 0,
+      widget_type: 'redeven.plugin',
+      state: {
+        kind: 'plugin',
+        plugin_instance_id: 'instance-containers',
+        plugin_id: 'io.redeven.containers',
+        surface_id: 'containers',
+        display_name: 'Containers',
+        expected_management_revision: 7,
+      },
+    });
+    expect(contextProbeState.pluginState).toEqual(expect.objectContaining({
+      kind: 'plugin',
+      expected_management_revision: 7,
+    }));
+
+    await controller.open(target);
+    expect(surfaceApiMocks.createWidget).toHaveBeenCalledTimes(1);
+    expect(layoutApiMocks.putWorkbenchWidgetState).toHaveBeenCalledTimes(1);
+
+    const renamedTarget = { ...target, displayName: 'Containers renamed' };
+    await controller.open(renamedTarget);
+    expect(closeSurface).not.toHaveBeenCalled();
+    expect(layoutApiMocks.putWorkbenchWidgetState).toHaveBeenCalledTimes(2);
+    expect(layoutApiMocks.putWorkbenchWidgetState).toHaveBeenLastCalledWith('widget-plugin-1', expect.objectContaining({
+      base_revision: 1,
+      state: expect.objectContaining({ display_name: 'Containers renamed' }),
+    }));
+
+    let resolveClose!: (closed: boolean) => void;
+    closeSurface.mockImplementationOnce(() => new Promise<boolean>((resolve) => { resolveClose = resolve; }));
+    const refreshed = controller.open({ ...renamedTarget, expectedManagementRevision: 8 });
+    await flushMicrotasks();
+    expect(closeSurface).toHaveBeenCalledTimes(1);
+    expect(layoutApiMocks.putWorkbenchWidgetState).toHaveBeenCalledTimes(2);
+    resolveClose(true);
+    await refreshed;
+    expect(layoutApiMocks.putWorkbenchWidgetState).toHaveBeenLastCalledWith('widget-plugin-1', expect.objectContaining({
+      base_revision: 2,
+      state: expect.objectContaining({ expected_management_revision: 8 }),
+    }));
+  });
+
+  it('keeps a plugin widget when its standard close cannot retire the slot', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const pluginWidget = persistedWidget('widget-plugin-1', 'redeven.plugin', 'Containers', 1, 500);
+    const pluginState = {
+      widget_id: 'widget-plugin-1',
+      widget_type: 'redeven.plugin',
+      revision: 1,
+      updated_at_unix_ms: 500,
+      state: {
+        kind: 'plugin',
+        plugin_instance_id: 'instance-containers',
+        plugin_id: 'io.redeven.containers',
+        surface_id: 'containers',
+        display_name: 'Containers',
+        expected_management_revision: 7,
+      },
+    };
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 500,
+      widgets: [runtimeWidget('widget-plugin-1', 'redeven.plugin', 1, 500)],
+      widget_states: [pluginState],
+      sticky_notes: [],
+      annotations: [],
+      background_layers: [],
+    });
+    const closeSurface = vi.fn(async () => false);
+    widgetBodyMocks.renderPluginBody = (bodyProps: any) => {
+      useEnvWorkbenchInstancesContext().registerPluginSurfaceClose(bodyProps.widgetId, closeSurface);
+      return null;
+    };
+
+    let controller: any;
+    mount(() => (
+      <EnvWorkbenchPage
+        pluginSurfaceHost={{} as any}
+        registerPluginSurfaceController={(next) => { controller = next; }}
+      />
+    ), host);
+    await flushMicrotasks();
+    surfaceApiMocks.lastSurfaceProps.onRequestDelete(pluginWidget.id);
+    await flushMicrotasks();
+
+    expect(closeSurface).toHaveBeenCalledTimes(1);
+    expect(host.querySelector('[data-testid="env-workbench-surface"]')?.getAttribute('data-widget-ids'))
+      .toBe('widget-plugin-1');
+    expect(layoutApiMocks.putWorkbenchLayout).not.toHaveBeenCalledWith(expect.objectContaining({ widgets: [] }));
+
+    closeSurface.mockResolvedValueOnce(true);
+    await controller.closeAll();
+    expect(closeSurface).toHaveBeenCalledTimes(2);
+    expect(host.querySelector('[data-testid="env-workbench-surface"]')?.getAttribute('data-widget-ids')).toBe('');
+  });
+
+  it('reconciles a restored plugin widget to the current inventory revision before mounting', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const pluginWidget = persistedWidget('widget-plugin-1', 'redeven.plugin', 'Containers', 1, 500);
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 500,
+      widgets: [runtimeWidget('widget-plugin-1', 'redeven.plugin', 1, 500)],
+      widget_states: [{
+        widget_id: 'widget-plugin-1',
+        widget_type: 'redeven.plugin',
+        revision: 1,
+        updated_at_unix_ms: 500,
+        state: {
+          kind: 'plugin',
+          plugin_instance_id: 'instance-containers',
+          plugin_id: 'io.redeven.containers',
+          surface_id: 'containers',
+          display_name: 'Containers old',
+          expected_management_revision: 7,
+        },
+      }],
+      sticky_notes: [],
+      annotations: [],
+      background_layers: [],
+    });
+    surfaceApiMocks.findWidgetById.mockReturnValue(pluginWidget);
+    widgetBodyMocks.renderPluginBody = (bodyProps: any) => {
+      const workbench = useEnvWorkbenchInstancesContext();
+      createEffect(() => { contextProbeState.pluginState = workbench.pluginSurfaceState(bodyProps.widgetId); });
+      return null;
+    };
+
+    mount(() => (
+      <EnvWorkbenchPage pluginSurfaceHost={{
+        coordinator: {} as any,
+        confirmationQueue: {} as any,
+        workbenchVisible: () => true,
+        resolveTarget: (target) => ({
+          ...target,
+          displayName: 'Containers current',
+          expectedManagementRevision: 8,
+        }),
+        onRetirementError: vi.fn(),
+      }} />
+    ), host);
+    await flushMicrotasks();
+    await vi.advanceTimersByTimeAsync(200);
+    await flushMicrotasks();
+
+    expect(surfaceApiMocks.createWidget).not.toHaveBeenCalled();
+    expect(layoutApiMocks.putWorkbenchWidgetState).toHaveBeenCalledWith('widget-plugin-1', {
+      base_revision: 1,
+      widget_type: 'redeven.plugin',
+      state: {
+        kind: 'plugin',
+        plugin_instance_id: 'instance-containers',
+        plugin_id: 'io.redeven.containers',
+        surface_id: 'containers',
+        display_name: 'Containers current',
+        expected_management_revision: 8,
+      },
+    });
+    expect(contextProbeState.pluginState).toEqual(expect.objectContaining({
+      display_name: 'Containers current',
+      expected_management_revision: 8,
+    }));
+  });
+
+  it('waits for direct plugin widget removal before reopening the same target', async () => {
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const pluginWidget = persistedWidget('widget-plugin-1', 'redeven.plugin', 'Containers', 1, 500);
+    const pluginState = {
+      widget_id: 'widget-plugin-1',
+      widget_type: 'redeven.plugin',
+      revision: 1,
+      updated_at_unix_ms: 500,
+      state: {
+        kind: 'plugin',
+        plugin_instance_id: 'instance-containers',
+        plugin_id: 'io.redeven.containers',
+        surface_id: 'containers',
+        display_name: 'Containers',
+        expected_management_revision: 7,
+      },
+    };
+    layoutApiMocks.getWorkbenchLayoutSnapshot.mockResolvedValue({
+      seq: 1,
+      revision: 1,
+      updated_at_unix_ms: 500,
+      widgets: [runtimeWidget('widget-plugin-1', 'redeven.plugin', 1, 500)],
+      widget_states: [pluginState],
+      sticky_notes: [],
+      annotations: [],
+      background_layers: [],
+    });
+    const pendingClose = deferred<boolean>();
+    const closeSurface = vi.fn(() => pendingClose.promise);
+    widgetBodyMocks.renderPluginBody = (bodyProps: any) => {
+      useEnvWorkbenchInstancesContext().registerPluginSurfaceClose(bodyProps.widgetId, closeSurface);
+      return null;
+    };
+    surfaceApiMocks.findWidgetById.mockImplementation((widgetID?: unknown) => (
+      typeof widgetID === 'string'
+        ? surfaceApiMocks.lastStateAccessor?.().widgets.find((widget: any) => widget.id === widgetID) ?? null
+        : null
+    ));
+    surfaceApiMocks.createWidget.mockImplementation(() => {
+      surfaceApiMocks.lastSetState((previous: any) => ({
+        ...previous,
+        widgets: [...previous.widgets, pluginWidget],
+        selectedWidgetId: pluginWidget.id,
+      }));
+      return pluginWidget;
+    });
+
+    let controller: any;
+    mount(() => (
+      <EnvWorkbenchPage
+        pluginSurfaceHost={{} as any}
+        registerPluginSurfaceController={(next) => { controller = next; }}
+      />
+    ), host);
+    await flushMicrotasks();
+
+    const target = {
+      pluginID: 'io.redeven.containers',
+      pluginInstanceID: 'instance-containers',
+      surfaceID: 'containers',
+      displayName: 'Containers',
+      expectedManagementRevision: 7,
+      preferredPlacement: 'workbench' as const,
+    };
+    surfaceApiMocks.lastSurfaceProps.onRequestDelete(pluginWidget.id);
+    const reopened = controller.open(target);
+    let reopenedSettled = false;
+    void reopened.finally(() => { reopenedSettled = true; });
+    await flushMicrotasks();
+
+    expect(closeSurface).toHaveBeenCalledOnce();
+    expect(reopenedSettled).toBe(false);
+    expect(surfaceApiMocks.createWidget).not.toHaveBeenCalled();
+
+    pendingClose.resolve(true);
+    await vi.advanceTimersByTimeAsync(200);
+    await flushMicrotasks();
+    await reopened;
+
+    expect(surfaceApiMocks.createWidget).toHaveBeenCalledOnce();
+    expect(layoutApiMocks.putWorkbenchWidgetState).toHaveBeenCalledWith(
+      'widget-plugin-1',
+      expect.objectContaining({
+        widget_type: 'redeven.plugin',
+        state: expect.objectContaining({ expected_management_revision: 7 }),
+      }),
+    );
+    expect(host.querySelector('[data-testid="env-workbench-surface"]')?.getAttribute('data-widget-ids'))
+      .toBe('widget-plugin-1');
   });
 });

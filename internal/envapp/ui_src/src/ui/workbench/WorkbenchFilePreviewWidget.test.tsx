@@ -202,6 +202,8 @@ function renderPreviewWidget(options: {
           dispatchPreviewOpenRequest: vi.fn(),
           consumePreviewOpenRequest: workbenchStore.consumePreviewOpenRequest,
           registerWidgetRemoveGuard: workbenchStore.registerWidgetRemoveGuard,
+          pluginSurfaceState: () => null,
+          registerPluginSurfaceClose: vi.fn(),
           removeWidget: workbenchStore.removeWidget,
           requestWidgetRemoval: vi.fn(),
           updateWidgetTitle: vi.fn(),

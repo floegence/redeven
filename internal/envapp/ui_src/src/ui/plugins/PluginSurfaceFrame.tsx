@@ -6,7 +6,7 @@ import { Show, createEffect, createSignal, onCleanup, onMount, type JSX } from '
 
 import { useI18n } from '../i18n';
 import type { PluginConfirmationOwner, PluginConfirmationQueue } from './PluginConfirmationQueue';
-import type { PluginSurfacePlacementCoordinator } from './pluginPlatform';
+import type { PluginSurfaceInteractionEvent, PluginSurfacePlacementCoordinator } from './pluginPlatform';
 import type { PluginSurfaceLaunchTarget } from './pluginTypes';
 
 export type PluginSurfaceBodyProps = {
@@ -15,6 +15,7 @@ export type PluginSurfaceBodyProps = {
   target: PluginSurfaceLaunchTarget;
   visible: boolean;
   registerClose?: (close: (() => Promise<boolean>) | null) => void;
+  onInteraction?: (event: PluginSurfaceInteractionEvent) => void;
   onRetirementError: (error: unknown) => void;
 };
 
@@ -25,6 +26,7 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
   let stage!: HTMLDivElement;
   let slot: PluginSurfaceSlot | undefined;
   let mounted = true;
+  let closePromise: Promise<boolean> | undefined;
   const [host, setHost] = createSignal<PluginSurfaceHost>();
   const [pageVisible, setPageVisible] = createSignal(!document.hidden);
   const [loadState, setLoadState] = createSignal<SurfaceLoadState>('opening');
@@ -56,6 +58,7 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
       expected_management_revision: props.target.expectedManagementRevision,
     }, {
       confirm: props.confirmationQueue.createHandler(confirmationOwner),
+      onInteraction: props.onInteraction,
       onError(error) {
         if (!mounted) return;
         setLoadState('error');
@@ -67,12 +70,6 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
       },
     }).then((openedHost) => {
       if (!mounted) return;
-      openedHost.element.title = i18n.t('uiCopy.plugin.surfaceIframeTitle', {
-        plugin: props.target.displayName ?? props.target.pluginID,
-        surface: props.target.surfaceDisplayNameKey
-          ? i18n.t(props.target.surfaceDisplayNameKey)
-          : props.target.surfaceID,
-      });
       openedHost.element.dataset.pluginSurfaceIframe = '';
       setHost(openedHost);
       setLoadState('ready');
@@ -97,19 +94,35 @@ export function PluginSurfaceBody(props: PluginSurfaceBodyProps): JSX.Element {
     if (!visible) props.confirmationQueue.cancelOwner(confirmationOwner);
   });
 
+  createEffect(() => {
+    const openedHost = host();
+    if (!openedHost) return;
+    openedHost.element.title = i18n.t('uiCopy.plugin.surfaceIframeTitle', {
+      plugin: props.target.displayName ?? props.target.pluginID,
+      surface: props.target.surfaceDisplayNameKey
+        ? i18n.t(props.target.surfaceDisplayNameKey)
+        : props.target.surfaceID,
+    });
+  });
+
   const closeSurface = async () => {
-    if (!slot || loadState() === 'closing') return false;
-    setLoadState('closing');
-    setErrorMessage('');
-    props.confirmationQueue.cancelOwner(confirmationOwner);
-    try {
-      await props.coordinator.release(slot);
-      return true;
-    } catch (error) {
-      setLoadState('error');
-      setErrorMessage(error instanceof Error ? error.message : i18n.t('uiCopy.plugin.surfaceFailed'));
-      return false;
-    }
+    if (!slot) return false;
+    if (closePromise) return closePromise;
+    closePromise = (async () => {
+      setLoadState('closing');
+      setErrorMessage('');
+      props.confirmationQueue.cancelOwner(confirmationOwner);
+      try {
+        await props.coordinator.release(slot!);
+        return true;
+      } catch (error) {
+        setLoadState('error');
+        setErrorMessage(error instanceof Error ? error.message : i18n.t('uiCopy.plugin.surfaceFailed'));
+        closePromise = undefined;
+        return false;
+      }
+    })();
+    return closePromise;
   };
 
   onMount(() => props.registerClose?.(closeSurface));
