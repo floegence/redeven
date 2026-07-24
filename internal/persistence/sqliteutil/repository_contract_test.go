@@ -31,7 +31,7 @@ func TestRedevenOwnedSQLiteOpeningsUseMigrationEngine(t *testing.T) {
 		"internal/persistence/sqliteutil/engine.go":   {}, // The migration engine owns the physical connection.
 	}
 	wantFloretOpeners := map[string]struct{}{
-		"internal/ai/floret_bootstrap.go": {},
+		"internal/ai/floret_store_maintenance.go": {},
 	}
 
 	gotMigratingOpeners := make(map[string]struct{})
