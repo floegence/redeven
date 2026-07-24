@@ -1210,6 +1210,10 @@ export type FlowerSurfaceRuntimeDescriptor = Readonly<{
   subtitle: string;
 }>;
 
+export type FlowerThreadDeleteOutcome = Readonly<{
+  status: 'pending' | 'committed' | 'failed';
+}>;
+
 export type FlowerSurfaceAdapter = Readonly<{
   runtime: FlowerSurfaceRuntimeDescriptor;
   loadSettings: () => Promise<FlowerSettingsSnapshot>;
@@ -1227,6 +1231,7 @@ export type FlowerSurfaceAdapter = Readonly<{
   setThreadModel?: (threadID: string, modelID: string) => Promise<FlowerLiveBootstrap>;
   setThreadReasoningSelection?: (threadID: string, selection: FlowerReasoningSelection | undefined) => Promise<FlowerLiveBootstrap>;
   forkThread?: (threadID: string) => Promise<FlowerLiveBootstrap>;
+  deleteThread?: (threadID: string) => Promise<FlowerThreadDeleteOutcome>;
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;
   compactThreadContext: (input: FlowerCompactThreadContextInput) => Promise<FlowerLiveBootstrap>;

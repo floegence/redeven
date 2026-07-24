@@ -6,6 +6,10 @@ export type RuntimeFlowerHTTPResponse = Readonly<{
   headers: IncomingHttpHeaders;
 }>;
 
+export function runtimeFlowerDeleteQuery(parsed: URL): boolean {
+  return parsed.search === '?force=true';
+}
+
 export function readRuntimeFlowerHTTPResponse(response: IncomingMessage): Promise<RuntimeFlowerHTTPResponse> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];

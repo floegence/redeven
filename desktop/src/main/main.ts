@@ -175,7 +175,11 @@ import {
   type RuntimeLifecycleIntent,
 } from './runtimeLifecycleCoordinator';
 import { LauncherOperationRegistry, launcherOperationProgress, type LauncherOperationAttemptIdentity } from './launcherOperations';
-import { readRuntimeFlowerHTTPResponse, type RuntimeFlowerHTTPResponse } from './runtimeFlowerHTTP';
+import {
+  readRuntimeFlowerHTTPResponse,
+  runtimeFlowerDeleteQuery,
+  type RuntimeFlowerHTTPResponse,
+} from './runtimeFlowerHTTP';
 import {
   requireLocalUIBridgeURL,
   resolveDesktopSessionTransport,
@@ -911,23 +915,25 @@ function runtimeFlowerRetryAfterMs(value: unknown): number | undefined {
   return Number.isFinite(retryAfterMs) && retryAfterMs >= 0 ? Math.floor(retryAfterMs) : undefined;
 }
 
-function runtimeFlowerError(code: string, message: string, status?: number, retryAfterMs?: number): RuntimeFlowerError {
+function runtimeFlowerError(code: string, message: string, status?: number, retryAfterMs?: number, data?: unknown): RuntimeFlowerError {
   return {
     code: compact(code) || 'runtime_flower_error',
     message: compact(message) || 'Flower request failed.',
     ...(Number.isInteger(status) ? { status } : {}),
     ...(typeof retryAfterMs === 'number' ? { retryAfterMs } : {}),
+    ...(data === undefined ? {} : { data }),
   };
 }
 
 function runtimeFlowerErrorFromUnknown(error: unknown): RuntimeFlowerError {
-  const record = error as { code?: unknown; message?: unknown; status?: unknown; statusCode?: unknown; retryAfterMs?: unknown };
+  const record = error as { code?: unknown; message?: unknown; status?: unknown; statusCode?: unknown; retryAfterMs?: unknown; data?: unknown };
   const status = Number(record?.status ?? record?.statusCode);
   return runtimeFlowerError(
     compact(record?.code) || 'runtime_flower_error',
     error instanceof Error ? error.message : compact(record?.message) || String(error),
     Number.isInteger(status) ? status : undefined,
     runtimeFlowerRetryAfterMs(record?.retryAfterMs),
+    record?.data,
   );
 }
 
@@ -8680,7 +8686,8 @@ const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
   { path: '/_redeven_proxy/api/ai/models', methods: ['GET'] },
   { path: '/_redeven_proxy/api/ai/uploads', methods: ['POST'] },
   { path: '/_redeven_proxy/api/ai/threads', methods: ['GET', 'POST'], allowsQuery: runtimeFlowerLimitQuery },
-  { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u, methods: ['GET', 'PATCH', 'DELETE'] },
+  { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u, methods: ['GET', 'PATCH'] },
+  { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u, methods: ['DELETE'], allowsQuery: runtimeFlowerDeleteQuery },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live\/bootstrap$/u, methods: ['GET'] },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/live\/events$/u, methods: ['GET'], allowsQuery: runtimeFlowerLiveEventsQuery },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/subagents\/[^/]+\/detail$/u, methods: ['GET'], allowsQuery: runtimeFlowerSubagentDetailQuery },
@@ -8874,6 +8881,7 @@ function runtimeFlowerEnvelopeError(parsed: unknown, status: number): RuntimeFlo
       compact(error.message) || compact(error.redacted_detail) || `Flower request failed with HTTP ${status}.`,
       status,
       runtimeFlowerRetryAfterMs(error.retry_after_ms),
+      record.data,
     );
   }
   return runtimeFlowerError(
@@ -8881,6 +8889,7 @@ function runtimeFlowerEnvelopeError(parsed: unknown, status: number): RuntimeFlo
     compact(rawError) || `Flower request failed with HTTP ${status}.`,
     status,
     runtimeFlowerRetryAfterMs(record.retry_after_ms),
+    record.data,
   );
 }
 

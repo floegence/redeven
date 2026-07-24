@@ -42,7 +42,10 @@ import {
   mapFlowerThread,
   mapFlowerLiveBootstrap,
 } from '../../../../internal/flower_ui/src/flowerLiveMapper';
-import { createRuntimeFlowerSurfaceAdapter } from '../../../../internal/flower_ui/src/runtimeFlowerSurfaceAdapter';
+import {
+  createRuntimeFlowerSurfaceAdapter,
+  FLOWER_THREAD_DELETE_OPERATION_FAILED_CODE,
+} from '../../../../internal/flower_ui/src/runtimeFlowerSurfaceAdapter';
 import {
   normalizeFlowerReasoningCapability,
   serializeFlowerReasoningSelection,
@@ -185,16 +188,18 @@ class RuntimeFlowerResponseError extends Error {
   code?: string;
   status?: number;
   retryAfterMs?: number;
+  readonly data: unknown;
   readonly failureKind: RuntimeFlowerFailureKind;
 
-  constructor(message: string, failureKind: RuntimeFlowerFailureKind) {
+  constructor(message: string, failureKind: RuntimeFlowerFailureKind, data?: unknown) {
     super(message);
     this.failureKind = failureKind;
+    this.data = data;
   }
 }
 
 function runtimeFlowerError(error: RuntimeFlowerError, failureKind: RuntimeFlowerFailureKind): RuntimeFlowerResponseError {
-  const out = new RuntimeFlowerResponseError(trim(error.message) || 'Flower request failed.', failureKind);
+  const out = new RuntimeFlowerResponseError(trim(error.message) || 'Flower request failed.', failureKind, error.data);
   if (trim(error.code)) out.code = trim(error.code);
   if (typeof error.status === 'number') out.status = error.status;
   if (typeof error.retryAfterMs === 'number') out.retryAfterMs = error.retryAfterMs;
@@ -544,6 +549,22 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
         `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/fork`,
         {},
       ),
+      deleteThread: async (threadID) => {
+        try {
+          return await runtimeJSON<unknown>(
+            bridge,
+            'DELETE',
+            `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}?force=true`,
+          );
+        } catch (error) {
+          if (error instanceof RuntimeFlowerResponseError &&
+            error.failureKind === 'response' &&
+            error.code === FLOWER_THREAD_DELETE_OPERATION_FAILED_CODE) {
+            return error.data;
+          }
+          throw error;
+        }
+      },
       submitApproval: (body) => runtimeJSON(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(body.thread_id)}/approvals`, body),
     },
     mapperOptions: localEnvironmentLiveMapperOptions(),

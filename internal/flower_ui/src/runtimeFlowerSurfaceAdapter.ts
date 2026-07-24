@@ -23,6 +23,7 @@ import type {
   FlowerSurfaceRuntimeDescriptor,
   FlowerTerminalProcessSnapshot,
   FlowerThreadActivitySnapshot,
+  FlowerThreadDeleteOutcome,
   FlowerThreadReadStatus,
   FlowerThreadSnapshot,
   FlowerLiveBootstrap,
@@ -74,6 +75,14 @@ type ThreadPatchInput = Readonly<{
   reasoning_selection?: FlowerReasoningSelection | null;
 }>;
 
+type ThreadDeleteReceipt = Readonly<{
+  operation_id?: unknown;
+  status?: unknown;
+  intent_persisted?: unknown;
+}>;
+
+export const FLOWER_THREAD_DELETE_OPERATION_FAILED_CODE = 'AI_THREAD_DELETE_OPERATION_FAILED';
+
 type RuntimeApprovalSubmitBase = Readonly<{
   thread_id: string;
   action_id: string;
@@ -102,6 +111,7 @@ export type FlowerRuntimeTransport = Readonly<{
   markThreadRead(threadID: string, input: MarkThreadReadInput): Promise<MarkThreadReadResponse>;
   patchThread(threadID: string, input: ThreadPatchInput): Promise<LoadThreadResponse>;
   forkThread(threadID: string): Promise<LoadThreadResponse>;
+  deleteThread?(threadID: string): Promise<unknown>;
   submitApproval(input: RuntimeApprovalSubmitInput): Promise<FlowerApprovalDecisionReceipt>;
 }>;
 
@@ -153,6 +163,17 @@ function mapRuntimeEvents(raw: unknown): FlowerLiveEventsResponse {
 function mapSubagentDetail(raw: LoadSubagentDetailResponse): FlowerSubagentDetail {
   if (!raw.detail) throw new Error('Missing subagent detail.');
   return raw.detail;
+}
+
+function mapThreadDeleteReceipt(raw: unknown): FlowerThreadDeleteOutcome {
+  const receipt = raw && typeof raw === 'object' ? raw as ThreadDeleteReceipt : null;
+  const operationID = trim(receipt?.operation_id);
+  const status = trim(receipt?.status);
+  if (!operationID || receipt?.intent_persisted !== true ||
+    (status !== 'pending' && status !== 'committed' && status !== 'failed')) {
+    throw new Error('Flower thread delete returned an invalid receipt.');
+  }
+  return { status };
 }
 
 export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceAdapterOptions): FlowerSurfaceAdapter {
@@ -256,6 +277,13 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       if (!nextID) throw new Error(trim(options.failedToCreateThread) || 'Failed to create Flower chat.');
       return loadThread(nextID);
     },
+    ...(options.transport.deleteThread ? {
+      deleteThread: async (threadID) => {
+        const tid = trim(threadID);
+        if (!tid) throw new Error(missingThreadIDMessage(options));
+        return mapThreadDeleteReceipt(await options.transport.deleteThread!(tid));
+      },
+    } : {}),
     resolveHandler: options.resolveHandler,
     launchTurn: options.launchTurn,
     compactThreadContext: async (input) => {

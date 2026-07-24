@@ -20,12 +20,14 @@ export type LocalUploadResponse = {
 export class LocalApiError extends Error {
   readonly status: number;
   readonly code: string;
+  readonly data: unknown;
 
-  constructor(args: Readonly<{ message: string; status?: number; code?: string }>) {
+  constructor(args: Readonly<{ message: string; status?: number; code?: string; data?: unknown }>) {
     super(String(args.message ?? 'Local API request failed'));
     this.name = 'LocalApiError';
     this.status = Number.isFinite(args.status) ? Math.max(0, Math.floor(args.status!)) : 0;
     this.code = String(args.code ?? '').trim();
+    this.data = args.data;
   }
 }
 
@@ -101,7 +103,7 @@ export async function fetchLocalApiJSON<T>(url: string, init: RequestInit): Prom
     if (retryAfterMs > 0 || isKnownAccessUnlockErrorCode(code)) {
       throw new AccessUnlockError({ message, status: resp.status, code, retryAfterMs });
     }
-    throw new LocalApiError({ message, status: resp.status, code });
+    throw new LocalApiError({ message, status: resp.status, code, data: data?.data });
   }
   if (data?.ok === false) {
     const message = localApiErrorMessage(data, resp.status || 400);
@@ -110,7 +112,7 @@ export async function fetchLocalApiJSON<T>(url: string, init: RequestInit): Prom
     if (retryAfterMs > 0 || isKnownAccessUnlockErrorCode(code)) {
       throw new AccessUnlockError({ message, status: resp.status || 400, code, retryAfterMs });
     }
-    throw new LocalApiError({ message, status: resp.status || 400, code });
+    throw new LocalApiError({ message, status: resp.status || 400, code, data: data?.data });
   }
   return (data?.data ?? data) as T;
 }

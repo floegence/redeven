@@ -35,6 +35,8 @@ main() {
       src/ui/FlowerSurface.navigation.launchSend.test.tsx \
       src/ui/FlowerSurface.desktopModelSource.e2e.test.tsx \
       src/ui/FlowerSurface.navigation.threads.test.tsx \
+      src/ui/FlowerSurface.threadDeletion.test.tsx \
+      src/ui/FlowerThreadList.delete.test.tsx \
       src/ui/FlowerSurface.navigation.structuredInput.test.tsx \
       src/ui/FlowerSurface.canonicalReferences.test.tsx \
       src/ui/flower/FlowerChatContextChips.test.tsx \

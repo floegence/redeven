@@ -5729,7 +5729,9 @@ html.dark .flower-component-shell {
     color 150ms ease;
 }
 
-.flower-thread-card:hover .flower-thread-card-menu-button {
+.flower-thread-card:hover .flower-thread-card-menu-button,
+.flower-thread-card:focus-within .flower-thread-card-menu-button,
+.flower-thread-card-menu-button:focus-visible {
   opacity: 1;
 }
 
@@ -5823,10 +5825,86 @@ html.dark .flower-component-shell {
   background: color-mix(in srgb, var(--primary) 8%, transparent);
 }
 
+.flower-thread-menu-item-destructive {
+  color: var(--redeven-status-error-foreground, var(--destructive));
+}
+
+.flower-thread-menu-item-destructive:hover,
+.flower-thread-menu-item-destructive:focus-visible {
+  background: color-mix(in srgb, var(--destructive) 10%, transparent);
+  color: var(--destructive);
+}
+
 .flower-thread-menu-separator {
   height: 1px;
   margin: 0.25rem 0.375rem;
   background: color-mix(in srgb, var(--border) 72%, transparent);
+}
+
+.flower-thread-delete-copy {
+  display: grid;
+  gap: 0.625rem;
+  color: var(--foreground);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.flower-thread-delete-copy p {
+  margin: 0;
+}
+
+.flower-thread-delete-active-warning {
+  color: var(--muted-foreground);
+}
+
+.flower-thread-delete-active-warning[data-active="true"] {
+  color: var(--redeven-status-warning-foreground);
+  font-weight: 650;
+}
+
+.flower-thread-delete-workspace-note {
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+
+.flower-thread-delete-error {
+  border: 1px solid var(--redeven-status-error-border);
+  border-radius: 0.375rem;
+  background: var(--redeven-status-error-soft);
+  padding: 0.5rem 0.625rem;
+  color: var(--redeven-status-error-foreground);
+  font-size: 0.75rem;
+}
+
+@media (hover: none), (pointer: coarse) {
+  .flower-thread-card {
+    min-height: 2.75rem;
+  }
+
+  .flower-thread-card-select-button {
+    min-height: 2.75rem;
+    padding-right: 3.25rem;
+  }
+
+  .flower-thread-card-menu-button {
+    top: 0;
+    right: 0;
+    width: 2.75rem;
+    height: 2.75rem;
+    opacity: 1;
+  }
+
+  .flower-thread-card-time {
+    opacity: 0;
+  }
+
+  .flower-thread-card-pin-button {
+    display: none;
+  }
+
+  .flower-thread-menu-item {
+    min-height: 2.75rem;
+  }
 }
 
 .flower-rename-backdrop {

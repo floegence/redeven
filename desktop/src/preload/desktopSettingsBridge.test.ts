@@ -58,4 +58,30 @@ describe('bootstrapDesktopSettingsBridge', () => {
     expect(ipcRendererSend).toHaveBeenCalledWith('redeven-desktop:cancel-settings');
     expect(Object.keys(bridge).sort()).toEqual(['cancel', 'requestRuntimeFlower', 'save']);
   });
+
+  it('passes structured runtime Flower error data through IPC unchanged', async () => {
+    const { bootstrapDesktopSettingsBridge } = await import('./desktopSettingsBridge');
+    const result = {
+      ok: false as const,
+      error: {
+        code: 'AI_THREAD_DELETE_OPERATION_FAILED',
+        message: 'Thread delete failed.',
+        status: 500,
+        data: {
+          operation_id: 'delete_operation_1',
+          status: 'failed',
+          intent_persisted: true,
+        },
+      },
+      failureKind: 'response' as const,
+    };
+    ipcRendererInvoke.mockResolvedValueOnce(result);
+    bootstrapDesktopSettingsBridge();
+
+    const [, bridge] = exposeInMainWorld.mock.calls[0] ?? [];
+    await expect(bridge.requestRuntimeFlower({
+      method: 'DELETE',
+      path: '/_redeven_proxy/api/ai/threads/thread-1?force=true',
+    })).resolves.toEqual(result);
+  });
 });
