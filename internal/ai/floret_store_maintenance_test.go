@@ -282,7 +282,7 @@ func TestFloretStoreMaintenanceMigrationFailuresRemainTypedAndClosed(t *testing.
 				},
 			}
 			_, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", api)
-			assertFloretStoreStartupClass(t, err, test.wantClass)
+			_ = assertFloretStoreStartupClass(t, err, test.wantClass)
 			if api.verifyCalls != 0 || api.openCalls != 0 {
 				t.Fatalf("failure proceeded to verify/open: verify=%d open=%d", api.verifyCalls, api.openCalls)
 			}
@@ -377,7 +377,7 @@ func TestFloretStoreMaintenanceRejectsInvalidVerificationAndMigrationContracts(t
 			verifyResult:   verification,
 		}
 		_, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", api)
-		assertFloretStoreStartupClass(t, err, FloretStoreStartupContractError)
+		_ = assertFloretStoreStartupClass(t, err, FloretStoreStartupContractError)
 		if api.openCalls != 0 {
 			t.Fatal("invalid verification proceeded to open")
 		}
@@ -401,7 +401,7 @@ func TestFloretStoreMaintenanceRejectsInvalidVerificationAndMigrationContracts(t
 				verifyResult:   verification,
 			}
 			_, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", api)
-			assertFloretStoreStartupClass(t, err, FloretStoreStartupContractError)
+			_ = assertFloretStoreStartupClass(t, err, FloretStoreStartupContractError)
 			if api.openCalls != 0 {
 				t.Fatal("inconsistent verification inspection proceeded to open")
 			}
@@ -419,7 +419,7 @@ func TestFloretStoreMaintenanceRejectsInvalidVerificationAndMigrationContracts(t
 			},
 		}
 		_, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", api)
-		assertFloretStoreStartupClass(t, err, FloretStoreStartupContractError)
+		_ = assertFloretStoreStartupClass(t, err, FloretStoreStartupContractError)
 		if api.verifyCalls != 0 || api.openCalls != 0 {
 			t.Fatal("invalid migration result proceeded to verify/open")
 		}
@@ -441,7 +441,7 @@ func TestFloretStoreMaintenanceRejectsInvalidVerificationAndMigrationContracts(t
 			verifyResult: verification,
 		}
 		_, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", api)
-		assertFloretStoreStartupClass(t, err, FloretStoreStartupPostCommitVerification)
+		_ = assertFloretStoreStartupClass(t, err, FloretStoreStartupPostCommitVerification)
 		if api.inspectCalls != 2 || api.openCalls != 0 {
 			t.Fatalf("divergent verification inspect=%d open=%d", api.inspectCalls, api.openCalls)
 		}
@@ -462,7 +462,7 @@ func TestFloretStoreMaintenanceRejectsInvalidVerificationAndMigrationContracts(t
 			},
 		}
 		_, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", api)
-		assertFloretStoreStartupClass(t, err, FloretStoreStartupContractError)
+		_ = assertFloretStoreStartupClass(t, err, FloretStoreStartupContractError)
 		if api.inspectCalls != 1 || api.verifyCalls != 0 || api.openCalls != 0 {
 			t.Fatalf("invalid failure continued: inspect=%d verify=%d open=%d", api.inspectCalls, api.verifyCalls, api.openCalls)
 		}
@@ -494,7 +494,7 @@ func TestFloretStoreMaintenanceRejectsInvalidVerificationAndMigrationContracts(t
 				migrateErr: maintenanceErr,
 			}
 			_, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", api)
-			assertFloretStoreStartupClass(t, err, FloretStoreStartupContractError)
+			_ = assertFloretStoreStartupClass(t, err, FloretStoreStartupContractError)
 			if api.inspectCalls != 1 || api.verifyCalls != 0 || api.openCalls != 0 {
 				t.Fatalf("inconsistent failure continued: inspect=%d verify=%d open=%d", api.inspectCalls, api.verifyCalls, api.openCalls)
 			}
@@ -514,7 +514,7 @@ func TestFloretStoreMaintenanceReinspectsOpenFailureWithoutReusingThePlan(t *tes
 		},
 	}
 	_, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", api)
-	assertFloretStoreStartupClass(t, err, FloretStoreStartupTemporarilyBlocked)
+	_ = assertFloretStoreStartupClass(t, err, FloretStoreStartupTemporarilyBlocked)
 	if api.inspectCalls != 2 || api.openCalls != 1 {
 		t.Fatalf("calls inspect=%d open=%d", api.inspectCalls, api.openCalls)
 	}
@@ -533,7 +533,7 @@ func TestFloretStoreMaintenanceReinspectsInitializeOpenFailure(t *testing.T) {
 		},
 	}
 	_, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", api)
-	assertFloretStoreStartupClass(t, err, FloretStoreStartupTemporarilyBlocked)
+	_ = assertFloretStoreStartupClass(t, err, FloretStoreStartupTemporarilyBlocked)
 	if api.inspectCalls != 2 || api.verifyCalls != 0 || api.migrateCalls != 0 || api.openCalls != 1 {
 		t.Fatalf("calls inspect=%d verify=%d migrate=%d open=%d", api.inspectCalls, api.verifyCalls, api.migrateCalls, api.openCalls)
 	}
@@ -572,7 +572,7 @@ func TestFloretStoreMaintenanceRejectsMalformedInspectionFacts(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			api := &fakeFloretStoreMaintenanceAPI{inspectResults: []flruntime.SQLiteStoreInspection{test.inspection}}
 			_, err := openMaintainedFloretStore(context.Background(), "/opaque/floret.sqlite", api)
-			assertFloretStoreStartupClass(t, err, FloretStoreStartupContractError)
+			_ = assertFloretStoreStartupClass(t, err, FloretStoreStartupContractError)
 			if api.verifyCalls != 0 || api.migrateCalls != 0 || api.openCalls != 0 {
 				t.Fatal("malformed inspection reached a Store operation")
 			}
@@ -585,11 +585,12 @@ func TestNewServiceContextCancelsBeforeStoreOrProductRecovery(t *testing.T) {
 	cancel()
 	stateDir := t.TempDir()
 	_, err := NewServiceContext(ctx, Options{StateDir: stateDir, AgentHomeDir: t.TempDir()})
-	assertFloretStoreStartupClass(t, err, FloretStoreStartupCancelled)
+	_ = assertFloretStoreStartupClass(t, err, FloretStoreStartupCancelled)
 	if _, statErr := os.Stat(filepath.Join(stateDir, "ai", "threads.sqlite")); !errors.Is(statErr, os.ErrNotExist) {
 		t.Fatalf("cancelled startup reached product thread recovery Store: %v", statErr)
 	}
-	if _, err := NewServiceContext(nil, Options{}); err == nil {
+	var nilContext context.Context
+	if _, err := NewServiceContext(nilContext, Options{}); err == nil {
 		t.Fatal("nil startup context was accepted")
 	}
 }
