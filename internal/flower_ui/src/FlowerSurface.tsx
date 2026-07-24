@@ -3221,15 +3221,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       }
       let mergedThreads: readonly FlowerThreadSnapshot[] = [];
       setThreads((current) => {
+        const currentWithoutRetired = current.some((thread) => retiredThreadIDs.has(trimString(thread.thread_id)))
+          ? current.filter((thread) => !retiredThreadIDs.has(trimString(thread.thread_id)))
+          : current;
         mergedThreads = mergeFlowerThreadListRefresh(
-          current.filter((thread) => !retiredThreadIDs.has(trimString(thread.thread_id))),
+          currentWithoutRetired,
           next,
           {
             selectedThreadID: pendingSelectedMissing ? '' : selectedID,
             preserveMissingCurrentThreads: startedMutationRevision !== threadLocalMutationRevision && !pendingSelectedMissing,
             sameThreadSnapshot,
           },
-        ).filter((thread) => !retiredThreadIDs.has(trimString(thread.thread_id)));
+        );
+        if (mergedThreads.some((thread) => retiredThreadIDs.has(trimString(thread.thread_id)))) {
+          mergedThreads = mergedThreads.filter((thread) => !retiredThreadIDs.has(trimString(thread.thread_id)));
+        }
         return mergedThreads;
       });
       const mergedSelected = mergedThreads.find((thread) => thread.thread_id === selectedID) ?? null;
