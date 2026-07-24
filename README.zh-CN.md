@@ -40,6 +40,10 @@
   <a href="https://github.com/floegence/redeven/releases"><img alt="发行版本" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
 </p>
 
+<p align="center">
+  <img src="assets/readme/redeven-demo.gif" alt="Redeven 演示：在一个浏览器标签页中使用文件、终端、Git、Workbench 和 Code Server" width="100%">
+</p>
+
 <!-- readme-section:what-is-redeven -->
 <a id="what-is-redeven"></a>
 

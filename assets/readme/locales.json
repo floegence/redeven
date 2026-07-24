@@ -5,19 +5,58 @@
     "file": "README.md"
   },
   "sections": [
-    { "id": "what-is-redeven", "level": 2 },
-    { "id": "quick-start", "level": 2 },
-    { "id": "desktop-app", "level": 3 },
-    { "id": "cli", "level": 3 },
-    { "id": "what-you-can-do", "level": 2 },
-    { "id": "security", "level": 2 },
-    { "id": "documentation", "level": 2 },
-    { "id": "for-developers", "level": 2 },
-    { "id": "prerequisites", "level": 3 },
-    { "id": "build", "level": 3 },
-    { "id": "local-guardrails", "level": 3 },
-    { "id": "license", "level": 2 },
-    { "id": "open-source-scope", "level": 2 }
+    {
+      "id": "what-is-redeven",
+      "level": 2
+    },
+    {
+      "id": "quick-start",
+      "level": 2
+    },
+    {
+      "id": "desktop-app",
+      "level": 3
+    },
+    {
+      "id": "cli",
+      "level": 3
+    },
+    {
+      "id": "what-you-can-do",
+      "level": 2
+    },
+    {
+      "id": "security",
+      "level": 2
+    },
+    {
+      "id": "documentation",
+      "level": 2
+    },
+    {
+      "id": "for-developers",
+      "level": 2
+    },
+    {
+      "id": "prerequisites",
+      "level": 3
+    },
+    {
+      "id": "build",
+      "level": 3
+    },
+    {
+      "id": "local-guardrails",
+      "level": 3
+    },
+    {
+      "id": "license",
+      "level": 2
+    },
+    {
+      "id": "open-source-scope",
+      "level": 2
+    }
   ],
   "required_literals": [
     "Redeven",
@@ -47,7 +86,12 @@
     "fixed_english_term_families": [
       {
         "canonical": "Provider",
-        "forms": ["Provider", "Providers", "provider", "providers"]
+        "forms": [
+          "Provider",
+          "Providers",
+          "provider",
+          "providers"
+        ]
       }
     ]
   },
@@ -57,6 +101,12 @@
       "language": "en-US",
       "used_by": "all-locales",
       "reason": "The existing branded architecture image has no editable source; each localized README provides localized surrounding copy and alternative text."
+    },
+    {
+      "path": "assets/readme/redeven-demo.gif",
+      "language": "en-US",
+      "used_by": "all-locales",
+      "reason": "The README demo is a shared product recording with English UI and captions; each localized README provides localized alternative text and keeps surrounding localized copy."
     }
   ],
   "tracked_markdown_exceptions": [
@@ -79,11 +129,11 @@
       "file": "README.zh-CN.md",
       "review": {
         "status": "reviewed",
-        "source_sha256": "8530aaf3fdb200c26acada4480150045c0fcae75e8f14b4ba99375808546ede0",
-        "content_sha256": "262b1ee0616841f3e5a04386f300ab04228833811197af4005ce5d6417a18a39",
+        "source_sha256": "81d9bafa9790c3784e846074ca8b80ac70440cfe597265019e3a987000d7bbb8",
+        "content_sha256": "da524de727e3c6c13ca680b788f2c0888a644077cdbfaccdb191383839c6639c",
         "method": "subagent",
-        "reviewed_by": "subagent:review_zh_cn_027",
-        "reviewed_at": "2026-07-20"
+        "reviewed_by": "subagent:review_readme_zh_cn",
+        "reviewed_at": "2026-07-24"
       }
     },
     {
@@ -93,11 +143,11 @@
       "file": "README.zh-TW.md",
       "review": {
         "status": "reviewed",
-        "source_sha256": "8530aaf3fdb200c26acada4480150045c0fcae75e8f14b4ba99375808546ede0",
-        "content_sha256": "3afe162d47074bce1e2f72a5a8db9a8ac7f7f90935b50f7cdcdb6a76e300f5b2",
+        "source_sha256": "81d9bafa9790c3784e846074ca8b80ac70440cfe597265019e3a987000d7bbb8",
+        "content_sha256": "d3a1ce135b1988f1aebf8121d09ad0cfeab7aa320c35ebf0f428405b87008360",
         "method": "subagent",
-        "reviewed_by": "subagent:review_zh_tw_027",
-        "reviewed_at": "2026-07-20"
+        "reviewed_by": "subagent:review_readme_zh_tw",
+        "reviewed_at": "2026-07-24"
       }
     },
     {
@@ -107,11 +157,11 @@
       "file": "README.ja-JP.md",
       "review": {
         "status": "reviewed",
-        "source_sha256": "8530aaf3fdb200c26acada4480150045c0fcae75e8f14b4ba99375808546ede0",
-        "content_sha256": "6f0af32f04bcf8960277aac7a29bef930336b6ebfceaa4a746624737ac07a3fd",
+        "source_sha256": "81d9bafa9790c3784e846074ca8b80ac70440cfe597265019e3a987000d7bbb8",
+        "content_sha256": "68a8f4bee3bbb63bc2342742dd01491cf790754a69808d0830b600f989a7c13f",
         "method": "subagent",
-        "reviewed_by": "subagent:review_ja_jp_027",
-        "reviewed_at": "2026-07-20"
+        "reviewed_by": "subagent:review_readme_ja_jp",
+        "reviewed_at": "2026-07-24"
       }
     },
     {
@@ -121,11 +171,11 @@
       "file": "README.ko-KR.md",
       "review": {
         "status": "reviewed",
-        "source_sha256": "8530aaf3fdb200c26acada4480150045c0fcae75e8f14b4ba99375808546ede0",
-        "content_sha256": "52cedbef6260c5ef3e7d01740ab0ba0097c1d4a7d13380edbe8aae3aaef1476f",
+        "source_sha256": "81d9bafa9790c3784e846074ca8b80ac70440cfe597265019e3a987000d7bbb8",
+        "content_sha256": "632e47091af521016f9bec6b53f4d0604b5def4c62df2bea7483da7f12158d61",
         "method": "subagent",
-        "reviewed_by": "subagent:review_ko_kr_027",
-        "reviewed_at": "2026-07-20"
+        "reviewed_by": "subagent:review_readme_ko_kr",
+        "reviewed_at": "2026-07-24"
       }
     },
     {
@@ -135,11 +185,11 @@
       "file": "README.de-DE.md",
       "review": {
         "status": "reviewed",
-        "source_sha256": "8530aaf3fdb200c26acada4480150045c0fcae75e8f14b4ba99375808546ede0",
-        "content_sha256": "a32a21b00dca0899e1d1da1d7d21270c71b4c7b5c373e5dab0c45270e84ea159",
+        "source_sha256": "81d9bafa9790c3784e846074ca8b80ac70440cfe597265019e3a987000d7bbb8",
+        "content_sha256": "4ed8f969935af48b7f91cc92768fd7ed684b0ae1e9872b37c1cfa12bdc6d33b4",
         "method": "subagent",
-        "reviewed_by": "subagent:review_de_de_027",
-        "reviewed_at": "2026-07-20"
+        "reviewed_by": "subagent:review_readme_de_de",
+        "reviewed_at": "2026-07-24"
       }
     },
     {
@@ -149,11 +199,11 @@
       "file": "README.fr-FR.md",
       "review": {
         "status": "reviewed",
-        "source_sha256": "8530aaf3fdb200c26acada4480150045c0fcae75e8f14b4ba99375808546ede0",
-        "content_sha256": "cde702d62e65fcd72668d3eba59944d5fb2579346b569139142b1f5a21860db3",
+        "source_sha256": "81d9bafa9790c3784e846074ca8b80ac70440cfe597265019e3a987000d7bbb8",
+        "content_sha256": "2938cd1d03efff7a40748a1bda35de6afdecca33725b6d9e62cfe0d9ea34191d",
         "method": "subagent",
-        "reviewed_by": "subagent:review_fr_fr_027",
-        "reviewed_at": "2026-07-20"
+        "reviewed_by": "subagent:review_readme_fr_fr",
+        "reviewed_at": "2026-07-24"
       }
     },
     {
@@ -163,11 +213,11 @@
       "file": "README.es-ES.md",
       "review": {
         "status": "reviewed",
-        "source_sha256": "8530aaf3fdb200c26acada4480150045c0fcae75e8f14b4ba99375808546ede0",
-        "content_sha256": "95ad2e2b9b90f9b3bca3cce39ca5c92ed734b3a588f439a13a554f6ef6c944f1",
+        "source_sha256": "81d9bafa9790c3784e846074ca8b80ac70440cfe597265019e3a987000d7bbb8",
+        "content_sha256": "e3190f66df506c8820ccb9f3dfcf47abb97b6d00154b873e39a33f96001c0806",
         "method": "subagent",
-        "reviewed_by": "subagent:review_es_es_027",
-        "reviewed_at": "2026-07-20"
+        "reviewed_by": "subagent:review_readme_es_es",
+        "reviewed_at": "2026-07-24"
       }
     },
     {
@@ -177,11 +227,11 @@
       "file": "README.pt-BR.md",
       "review": {
         "status": "reviewed",
-        "source_sha256": "8530aaf3fdb200c26acada4480150045c0fcae75e8f14b4ba99375808546ede0",
-        "content_sha256": "86f825dfb3fc1dd1a3ac8dca86c425ff6346a070f04425639398dcdf6812a6be",
+        "source_sha256": "81d9bafa9790c3784e846074ca8b80ac70440cfe597265019e3a987000d7bbb8",
+        "content_sha256": "4ff15de76d610c70beaecefe6d7094466f42463666a011a77367fb1a9109233d",
         "method": "subagent",
-        "reviewed_by": "subagent:review_pt_br_027",
-        "reviewed_at": "2026-07-20"
+        "reviewed_by": "subagent:review_readme_pt_br",
+        "reviewed_at": "2026-07-24"
       }
     },
     {
@@ -191,11 +241,11 @@
       "file": "README.ru-RU.md",
       "review": {
         "status": "reviewed",
-        "source_sha256": "8530aaf3fdb200c26acada4480150045c0fcae75e8f14b4ba99375808546ede0",
-        "content_sha256": "dcdd77a90c8a3d47779bfd2bee35125b1818e8bf337f4a6958584d48622d57c6",
+        "source_sha256": "81d9bafa9790c3784e846074ca8b80ac70440cfe597265019e3a987000d7bbb8",
+        "content_sha256": "867b5536c46673d1d75db1b7627b30f1df964aee83363bb9cd5e7eea38427d3c",
         "method": "subagent",
-        "reviewed_by": "subagent:review_ru_ru_027",
-        "reviewed_at": "2026-07-20"
+        "reviewed_by": "subagent:review_readme_ru_ru",
+        "reviewed_at": "2026-07-24"
       }
     }
   ]

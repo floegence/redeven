@@ -40,6 +40,10 @@
   <a href="https://github.com/floegence/redeven/releases"><img alt="Versiones publicadas" src="https://img.shields.io/badge/Releases-GitHub-181717?style=flat-square&logo=github"></a>
 </p>
 
+<p align="center">
+  <img src="assets/readme/redeven-demo.gif" alt="Demostración de Redeven: archivos, terminales, Git, Workbench y Code Server en una sola pestaña del navegador" width="100%">
+</p>
+
 <!-- readme-section:what-is-redeven -->
 <a id="what-is-redeven"></a>
 
