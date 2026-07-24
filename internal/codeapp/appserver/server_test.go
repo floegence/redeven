@@ -3133,7 +3133,7 @@ func seedFloretForkSourceThread(t *testing.T, stateDir string, threadID string) 
 func seedFloretThreadTurn(t *testing.T, stateDir string, threadID string, turnID string, runID string, input string, output string) {
 	t.Helper()
 
-	store, err := flruntime.OpenSQLiteStore(filepath.Join(stateDir, "ai", "floret_threads.sqlite"))
+	store, err := openTestFloretStore(t, filepath.Join(stateDir, "ai", "floret_threads.sqlite"))
 	if err != nil {
 		t.Fatalf("OpenSQLiteStore: %v", err)
 	}

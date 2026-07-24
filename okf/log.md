@@ -1,5 +1,8 @@
 # Redeven OKF Update Log
 
+## 2026-07-25
+* **Dependency**: Upgraded to published Floret v0.27.1 and adopted its inspection-bound open contract with typed, fail-closed Store startup orchestration and published-version restart fixtures.
+
 ## 2026-07-24
 * **Dependency**: Upgraded to published Floret v0.26.0 and aligned dependency contracts, notices, compatibility review, and current-state OKF ownership before adopting the public Store maintenance workflow.
 * **Feature**: Added Flower conversation deletion to Env App and Desktop through one confirmed destructive menu action, durable receipt handling, and a non-persistent stale-response retirement fence.

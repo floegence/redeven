@@ -226,6 +226,13 @@ func runThreadKey(endpointID string, threadID string) string {
 }
 
 func NewService(opts Options) (*Service, error) {
+	return NewServiceContext(context.Background(), opts)
+}
+
+func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
+	if ctx == nil {
+		return nil, errors.New("AI service startup context is required")
+	}
 	if strings.TrimSpace(opts.StateDir) == "" {
 		return nil, errors.New("missing StateDir")
 	}
@@ -263,7 +270,7 @@ func NewService(opts Options) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	floretBootstrap, floretRecovery, err := openFloretRuntime(floretStorePath)
+	floretBootstrap, floretRecovery, err := openFloretRuntime(ctx, floretStorePath)
 	if err != nil {
 		return nil, err
 	}
@@ -394,7 +401,7 @@ func NewService(opts Options) (*Service, error) {
 		svc.skillManager.Discover()
 	}
 	svc.threadMgr = newThreadManager(svc)
-	deleteReplayCtx, cancelDeleteReplay := context.WithTimeout(context.Background(), persistTO)
+	deleteReplayCtx, cancelDeleteReplay := context.WithTimeout(ctx, persistTO)
 	deleteReplayCount, deleteReplayErr := svc.replayAllPendingThreadDeletesForStartup(deleteReplayCtx, threadDeleteReplayBatchSize)
 	cancelDeleteReplay()
 	if deleteReplayErr != nil {
@@ -403,21 +410,21 @@ func NewService(opts Options) (*Service, error) {
 	} else if deleteReplayCount > 0 {
 		logger.Info("ai: pending thread delete recovery completed", "count", deleteReplayCount)
 	}
-	createReplayCtx, cancelCreateReplay := context.WithTimeout(context.Background(), persistTO)
+	createReplayCtx, cancelCreateReplay := context.WithTimeout(ctx, persistTO)
 	createReplayErr := svc.recoverPreTurnStartupOperations(createReplayCtx)
 	cancelCreateReplay()
 	if createReplayErr != nil {
 		closeServiceBeforeMaintenance(svc)
 		return nil, createReplayErr
 	}
-	recoveryTargetsCtx, recoveryTargetsCancel := context.WithTimeout(context.Background(), persistTO)
+	recoveryTargetsCtx, recoveryTargetsCancel := context.WithTimeout(ctx, persistTO)
 	recoveryTargets, recoveryTargetsErr := buildFloretStartupRecoveryTargets(recoveryTargetsCtx, ts, floretRecovery)
 	recoveryTargetsCancel()
 	if recoveryTargetsErr != nil {
 		closeServiceBeforeMaintenance(svc)
 		return nil, fmt.Errorf("bind exact Floret startup recovery targets: %w", recoveryTargetsErr)
 	}
-	if err := svc.startFloretStartupRecovery(recoveryTargets); err != nil {
+	if err := svc.startFloretStartupRecovery(ctx, recoveryTargets); err != nil {
 		closeServiceBeforeMaintenance(svc)
 		return nil, err
 	}

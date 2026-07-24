@@ -226,7 +226,7 @@ func New(ctx context.Context, opts Options) (*Service, error) {
 		return nil, err
 	}
 
-	aiSvc, err := ai.NewService(ai.Options{
+	aiSvc, err := ai.NewServiceContext(ctx, ai.Options{
 		Logger:                 logger,
 		StateDir:               stateAbs,
 		AgentHomeDir:           agentHomeDir,

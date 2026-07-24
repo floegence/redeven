@@ -212,7 +212,7 @@ func seedAppserverWaitingPrompt(t *testing.T, stateDir string, threadID string, 
 	if err != nil {
 		t.Fatal(err)
 	}
-	store, err := flruntime.OpenSQLiteStore(filepath.Join(stateDir, "ai", "floret_threads.sqlite"))
+	store, err := openTestFloretStore(t, filepath.Join(stateDir, "ai", "floret_threads.sqlite"))
 	if err != nil {
 		t.Fatalf("OpenSQLiteStore: %v", err)
 	}
