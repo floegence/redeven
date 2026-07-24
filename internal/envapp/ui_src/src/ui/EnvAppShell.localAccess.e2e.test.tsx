@@ -1767,6 +1767,54 @@ describe('EnvAppShell environment entry affordances', () => {
     }
   }, 10000);
 
+  it('keeps the current management revision openable after a permission grant', async () => {
+    getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
+    pluginLifecycleMocks.loadInventoryProjection.mockResolvedValue(officialContainersProjection('enabled'));
+    window.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+
+    const host = document.createElement('div');
+    document.body.appendChild(host);
+    const { EnvAppShell } = await import('./EnvAppShell');
+    const dispose = render(() => <EnvAppShell />, host);
+
+    try {
+      await flushAsync();
+      await flushUntil(() => Boolean(host.querySelector('[data-activity-id="plugins"]')));
+      (host.querySelector('[data-activity-id="plugins"]') as HTMLButtonElement).click();
+      await flushUntil(() => Boolean(pluginPanelState.lastProps));
+      await pluginPanelState.lastProps.onOpenCenter();
+      await flushUntil(() => Boolean(pluginCenterViewState.lastProps?.onCommand));
+
+      await expect(pluginCenterViewState.lastProps.onCommand({
+        type: 'grant_permission',
+        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
+        permissionID: 'containers.read',
+        expectedPolicyRevision: 7,
+        expectedManagementRevision: 11,
+        expectedRevokeEpoch: 3,
+      }, new AbortController().signal)).resolves.toBeUndefined();
+
+      await expect(pluginCenterViewState.lastProps.onCommand({
+        type: 'open_surface',
+        pluginID: officialContainersCatalog.pluginID,
+        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
+        surfaceID: officialContainersCatalog.defaultSurfaceID,
+        expectedManagementRevision: 11,
+        placement: 'workbench',
+      }, new AbortController().signal)).resolves.toBeUndefined();
+      expect(workbenchPluginSurfaceState.open).toHaveBeenCalledWith({
+        pluginID: officialContainersCatalog.pluginID,
+        pluginInstanceID: officialContainersCatalog.pluginInstanceID,
+        surfaceID: officialContainersCatalog.defaultSurfaceID,
+        expectedManagementRevision: 11,
+        preferredPlacement: 'workbench',
+      });
+    } finally {
+      dispose();
+    }
+  }, 10000);
+
   it('removes a plugin window when a lifecycle mutation reports a committed error', async () => {
     getLocalAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });
     getEnvAppAccessStatusMock.mockResolvedValue({ password_required: false, unlocked: true });

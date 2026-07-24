@@ -1302,6 +1302,11 @@ export function EnvAppShell() {
     command: Exclude<PluginLifecycleCommand, { type: 'open_surface' }>,
     signal: AbortSignal,
   ) => {
+    const invalidatesManagementRevision = (
+      command.type !== 'install'
+      && command.type !== 'grant_permission'
+      && command.type !== 'revoke_permission'
+    );
     const invalidatesPluginSurfaces = (
       command.type !== 'install'
       && (
@@ -1326,7 +1331,8 @@ export function EnvAppShell() {
       mutationError = error;
     }
     if (
-      'pluginInstanceID' in command
+      invalidatesManagementRevision
+      && 'pluginInstanceID' in command
       && 'expectedManagementRevision' in command
       && (mutationError === undefined || pluginMutationOutcome(mutationError) !== 'not_committed')
     ) {
