@@ -93,6 +93,7 @@ const GIT_PANEL_FRAME_CLASS = cn(
 
 const GIT_TABLE_FRAME_CLASS = cn(
   'overflow-hidden rounded-md border',
+  'git-table-frame',
   redevenDividerRoleClass(),
   redevenSurfaceRoleClass('panel'),
 );
