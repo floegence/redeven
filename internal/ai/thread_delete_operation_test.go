@@ -161,6 +161,14 @@ func TestServiceDeleteThreadPersistsPendingOperationAndReplaysTransientFailure(t
 	if cleaner.deleteCount() != 1 {
 		t.Fatalf("read-state delete count=%d, want 1", cleaner.deleteCount())
 	}
+	floretDeleteCount := host.deleteCount()
+	replayed, err := service.advanceThreadDeleteOperation(context.Background(), operation.OperationID, operation.EndpointID, operation.ThreadID)
+	if err != nil || replayed.Status != threadstore.ThreadDeleteOperationCommitted {
+		t.Fatalf("replay committed operation=%+v err=%v", replayed, err)
+	}
+	if host.deleteCount() != floretDeleteCount || cleaner.deleteCount() != 1 {
+		t.Fatalf("committed replay repeated cleanup: Floret=%d/%d read-state=%d", host.deleteCount(), floretDeleteCount, cleaner.deleteCount())
+	}
 }
 
 func TestClassifyFloretThreadDeleteError(t *testing.T) {
@@ -232,6 +240,13 @@ func TestServiceDeleteThreadMarksMissingCanonicalThreadTerminal(t *testing.T) {
 	view, err := service.GetThread(context.Background(), meta, thread.ThreadID)
 	if err != nil || view != nil || canonicalReadCount != 0 {
 		t.Fatalf("failed retired detail view=%#v reads=%d err=%v", view, canonicalReadCount, err)
+	}
+	replayed, err := service.advanceThreadDeleteOperation(context.Background(), operation.OperationID, operation.EndpointID, operation.ThreadID)
+	if !errors.Is(err, ErrThreadDeleteOperationFailed) || replayed.Status != threadstore.ThreadDeleteOperationFailed {
+		t.Fatalf("replay failed operation=%+v err=%v", replayed, err)
+	}
+	if host.deleteCount() != 1 || cleaner.deleteCount() != 0 {
+		t.Fatalf("failed replay repeated cleanup: Floret=%d read-state=%d", host.deleteCount(), cleaner.deleteCount())
 	}
 }
 
