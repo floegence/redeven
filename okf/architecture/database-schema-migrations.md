@@ -10,7 +10,7 @@ timestamp: 2026-07-22T00:00:00Z
 - Authority: each repository migrates the schemas it owns; Redeven owns product databases, while Floret and ReDevPlugin own their internal stores.
 - Outcome: a Redeven upgrade opens every product SQLite store through the versioned migration engine before dependent services accept requests.
 - Invariants: supported forward migrations are contiguous, atomic, verified, and preserve product data; future, drifted, wrong-kind, and unsupported schemas fail closed.
-- Failure boundary: migration failure stops the affected startup path with the previous supported database intact; no reset, replacement database, or direct upstream SQL is allowed.
+- Failure boundary: migration failure stops only the affected service generation with the previous supported database intact; no reset, replacement database, or direct upstream SQL is allowed.
 
 # Contract
 
@@ -25,8 +25,10 @@ existing supported store advances automatically during application startup
 before the service is returned to callers.
 
 The current startup composition opens the Code App registry, port-forward
-registry, thread read state, AI product threadstore, Notes, Workbench layout,
-and release-trust state through this contract. Their individual migration tests
+registry, thread read state, Notes, Workbench layout, and release-trust state
+before returning the product service. The AI product threadstore opens inside
+the isolated AI readiness generation, so its failure blocks Agent surfaces
+without preventing unrelated Code App capabilities from starting. Their individual migration tests
 remain responsible for historical shape validation and preservation of their
 domain records. The shared engine rejects incomplete migration chains,
 unsupported old versions, future versions, malformed metadata, wrong database
@@ -45,8 +47,9 @@ canonical-schema verification.
 ## Upstream-owned schemas
 
 Floret owns Agent journal storage and its schema lifecycle. Redeven supplies a
-path only to the published `flruntime.OpenSQLiteStore` entrypoint in the AI
-composition root; it does not query, patch, version, or migrate Floret tables.
+path only to the published Inspect, Verify, Migrate, and inspection-bound Open
+entrypoints in the AI composition root; it does not query, patch, version, or
+migrate Floret tables.
 Redeven migrations may call public Floret maintenance APIs only when moving a
 Redeven-owned field across the ownership boundary, and must complete their
 product preflight before making such an upstream effect.
@@ -75,6 +78,7 @@ opens an upstream database directly to manufacture a cross-store transaction.
 - `redeven:internal/persistence/sqliteutil/engine_test.go:13` - Covers fresh initialization, atomic rollback, unsupported versions, kind checks, malformed metadata, and concurrent opens.
 - `redeven:internal/persistence/sqliteutil/repository_contract_test.go:14` - Locks the reviewed Redeven, direct, and Floret SQLite opening inventories.
 - `redeven:internal/codeapp/codeapp.go:156` - Opens product stores during service composition before returning the Code App service.
+- `redeven:okf/architecture/ai-readiness-lifecycle.md:1` - Defines isolated AI startup and generation failure behavior.
 - `redeven:internal/ai/threadstore/store.go:43` - Preflights and automatically migrates the Redeven-owned AI product database.
 - `redeven:internal/ai/floret_bootstrap.go:432` - Opens the Floret-owned store only through the published runtime API.
 - `redeven:scripts/check_floret_dependency_boundary.sh:118` - Rejects Redeven access to Floret-owned storage schemas and raw SQL.

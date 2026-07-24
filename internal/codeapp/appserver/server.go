@@ -54,7 +54,7 @@ type Options struct {
 	DistFS                  stdfs.FS
 	Backend                 Backend
 	PortForward             PortForwardBackend
-	AI                      *ai.Service
+	AIServiceProvider       AIServiceProvider
 	Notes                   *notes.Service
 	WorkbenchLayout         *workbenchlayout.Service
 	Terminal                *terminal.Manager
@@ -217,15 +217,15 @@ func codeRuntimeSetupChunkIndexFromPath(rawPath string) (int64, bool) {
 type Server struct {
 	log *slog.Logger
 
-	backend Backend
-	pf      PortForwardBackend
-	ai      *ai.Service
-	notes   *notes.Service
-	layouts *workbenchlayout.Service
-	term    workbenchTerminalSessionManager
-	codex   CodexBackend
-	audit   *auditlog.Store
-	diag    *diagnostics.Store
+	backend    Backend
+	pf         PortForwardBackend
+	aiProvider AIServiceProvider
+	notes      *notes.Service
+	layouts    *workbenchlayout.Service
+	term       workbenchTerminalSessionManager
+	codex      CodexBackend
+	audit      *auditlog.Store
+	diag       *diagnostics.Store
 
 	resolveSessionMeta      func(channelID string) (*session.Meta, bool)
 	resolveSessionTunnelURL func(channelID string) (string, bool)
@@ -357,7 +357,7 @@ func New(opts Options) (*Server, error) {
 		fs:                      runtimefs.NewServiceWithScope(scope),
 		backend:                 opts.Backend,
 		pf:                      opts.PortForward,
-		ai:                      opts.AI,
+		aiProvider:              opts.AIServiceProvider,
 		notes:                   opts.Notes,
 		layouts:                 opts.WorkbenchLayout,
 		term:                    opts.Terminal,
@@ -1052,6 +1052,7 @@ type settingsView struct {
 	PermissionPolicy *config.PermissionPolicy `json:"permission_policy"`
 	AI               *config.AIConfig         `json:"ai"`
 	AIRuntime        *ai.AIRuntimeStatus      `json:"ai_runtime,omitempty"`
+	AIReadiness      AIReadinessSnapshot      `json:"ai_readiness"`
 	AISecrets        *settingsAISecretsView   `json:"ai_secrets,omitempty"`
 }
 
@@ -1257,6 +1258,7 @@ func (e aiProviderBundleSaveError) Unwrap() error {
 }
 
 func (g *Server) saveAIProviderBundle(
+	aiSvc *ai.Service,
 	modelProfile config.AIModelProfile,
 	aiKeyPatches []settings.AIProviderAPIKeyPatch,
 	webSearchKeyPatches []settings.WebSearchProviderAPIKeyPatch,
@@ -1276,7 +1278,7 @@ func (g *Server) saveAIProviderBundle(
 
 	restore := func() error {
 		return errors.Join(
-			g.restoreAIProviderBundleModelProfile(prevConfig.AI),
+			g.restoreAIProviderBundleModelProfile(aiSvc, prevConfig.AI),
 			restoreAIProviderAPIKeys(g.secrets, prevAIKeys),
 			restoreWebSearchProviderAPIKeys(g.secrets, prevWebSearchKeys),
 		)
@@ -1294,7 +1296,7 @@ func (g *Server) saveAIProviderBundle(
 		updated = cfg
 		return nil
 	}
-	if err := g.ai.SetModelProfile(&modelProfile, persist); err != nil {
+	if err := aiSvc.SetModelProfile(&modelProfile, persist); err != nil {
 		return nil, aiProviderBundleSaveError{status: http.StatusBadRequest, err: err}
 	}
 	if err := g.secrets.ApplyAIProviderAPIKeyPatches(aiKeyPatches); err != nil {
@@ -1312,13 +1314,13 @@ func (g *Server) saveAIProviderBundle(
 	return updated, nil
 }
 
-func (g *Server) restoreAIProviderBundleModelProfile(prevAI *config.AIConfig) error {
+func (g *Server) restoreAIProviderBundleModelProfile(aiSvc *ai.Service, prevAI *config.AIConfig) error {
 	var profile *config.AIModelProfile
 	if prevAI.HasModelProfile() {
 		value := prevAI.ModelProfile()
 		profile = &value
 	}
-	return g.ai.SetModelProfile(profile, func(nextAI *config.AIConfig) error {
+	return aiSvc.SetModelProfile(profile, func(nextAI *config.AIConfig) error {
 		_, err := g.updateConfigLocked(func(c *config.Config) error {
 			c.AI = nextAI
 			return nil
@@ -1772,14 +1774,12 @@ func writeCodexSSEEvent(w io.Writer, ev codexbridge.Event) error {
 	return err
 }
 
-func (g *Server) toSettingsView(cfg *config.Config) settingsView {
+func (g *Server) toSettingsView(cfg *config.Config, aiSvc *ai.Service) settingsView {
 	configPath := ""
 	secrets := (*settings.SecretsStore)(nil)
-	aiSvc := (*ai.Service)(nil)
 	if g != nil {
 		configPath = g.configPath
 		secrets = g.secrets
-		aiSvc = g.ai
 	}
 	var direct settingsDirectView
 	if cfg != nil && cfg.Direct != nil {
@@ -1794,6 +1794,7 @@ func (g *Server) toSettingsView(cfg *config.Config) settingsView {
 
 	var out settingsView
 	out.ConfigPath = strings.TrimSpace(configPath)
+	out.AIReadiness = g.aiReadinessSnapshot()
 	if cfg != nil {
 		out.Connection = settingsConnectionView{
 			ControlplaneBaseURL: strings.TrimSpace(cfg.ControlplaneBaseURL),
@@ -1886,7 +1887,24 @@ func (g *Server) updateConfigLocked(mut func(cfg *config.Config) error) (*config
 	if err := config.Save(path, cfg); err != nil {
 		return nil, err
 	}
+	g.updateAIServiceStartupOptions(cfg)
 	return cfg, nil
+}
+
+func (g *Server) updateAIServiceStartupOptions(cfg *config.Config) {
+	if g == nil || g.aiProvider == nil || cfg == nil {
+		return
+	}
+	agentHomeDir := strings.TrimSpace(g.agentHomeDir)
+	if configured := strings.TrimSpace(cfg.AgentHomeDir); configured != "" {
+		agentHomeDir = configured
+	}
+	g.aiProvider.UpdateAIServiceStartupOptions(AIServiceStartupOptions{
+		Config:          cfg.AI,
+		AgentHomeDir:    agentHomeDir,
+		Shell:           strings.TrimSpace(cfg.Shell),
+		FilesystemScope: g.scope,
+	})
 }
 
 type requiredPermission int
@@ -1949,6 +1967,7 @@ func (g *Server) requirePermission(w http.ResponseWriter, r *http.Request, perm 
 		if !requireSessionPermission(w, meta, perm) {
 			return nil, false
 		}
+		acquireAIServiceAfterPermission(r.Context())
 		return meta, true
 	}
 
@@ -1973,6 +1992,7 @@ func (g *Server) requirePermission(w http.ResponseWriter, r *http.Request, perm 
 		return nil, false
 	}
 
+	acquireAIServiceAfterPermission(r.Context())
 	return meta, true
 }
 
@@ -1995,6 +2015,7 @@ func (g *Server) requireLocalAppPermission(w http.ResponseWriter, r *http.Reques
 	if !requireSessionPermission(w, meta, perm) {
 		return nil, false
 	}
+	acquireAIServiceAfterPermission(r.Context())
 	return meta, true
 }
 
@@ -2343,6 +2364,32 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 	if g.handleNotesAPI(w, r) {
 		return
 	}
+	var aiSvc *ai.Service
+	releaseAI := func() {}
+	aiAcquireAttempted := false
+	routeNeedsAI := routeRequiresAIService(r)
+	acquireAI := func() {
+		if aiAcquireAttempted || g == nil || g.aiProvider == nil {
+			return
+		}
+		aiAcquireAttempted = true
+		service, leaseCtx, _, release, err := g.aiProvider.AcquireAIService(r.Context())
+		if err != nil || service == nil || leaseCtx == nil || release == nil {
+			if release != nil {
+				release()
+			}
+			return
+		}
+		aiSvc = service
+		releaseAI = release
+		r = r.WithContext(withAIService(leaseCtx, service))
+	}
+	r = r.WithContext(withAIServiceAcquireHook(r.Context(), func() {
+		if routeNeedsAI {
+			acquireAI()
+		}
+	}))
+	defer func() { releaseAI() }()
 	switch {
 	case r.Method == http.MethodGet && r.URL.Path == localAPIFSPathContextEndpointPath:
 		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
@@ -2494,12 +2541,13 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
 			return
 		}
+		acquireAI()
 		cfg, err := g.loadConfigLocked()
 		if err != nil {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: err.Error()})
 			return
 		}
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: g.toSettingsView(cfg)})
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: g.toSettingsView(cfg, aiSvc)})
 		return
 
 	case r.Method == http.MethodPut && r.URL.Path == "/_redeven_proxy/api/settings":
@@ -2507,6 +2555,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
+		acquireAI()
 		type settingsUpdateReq struct {
 			AgentHomeDir    *string                 `json:"agent_home_dir,omitempty"`
 			Shell           *string                 `json:"shell,omitempty"`
@@ -2649,11 +2698,12 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 					return fmt.Errorf("invalid filesystem_scope: %w", err)
 				}
 				g.agentHomeDir = g.scope.HomePathAbs()
-				if g.ai != nil {
-					if err := g.ai.UpdateFilesystemScope(g.scope); err != nil {
+				if aiSvc != nil {
+					if err := aiSvc.UpdateFilesystemScope(g.scope); err != nil {
 						return err
 					}
 				}
+				g.updateAIServiceStartupOptions(cfg)
 			}
 			updated = cfg
 			return nil
@@ -2669,7 +2719,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{
 			OK: true,
 			Data: settingsUpdateView{
-				Settings: g.toSettingsView(updated),
+				Settings: g.toSettingsView(updated, aiSvc),
 			},
 		})
 		return
@@ -3242,13 +3292,42 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/readiness":
+		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: g.aiReadinessSnapshot()})
+		return
+
+	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/readiness/retry":
+		if _, ok := g.requirePermission(w, r, requiredPermissionAdmin); !ok {
+			return
+		}
+		if g == nil || g.aiProvider == nil {
+			writeAIServiceUnavailable(w, g.aiReadinessSnapshot())
+			return
+		}
+		if err := g.aiProvider.RetryAIReadiness(); err != nil {
+			status := http.StatusServiceUnavailable
+			code := AIServiceUnavailableErrorCode
+			message := ErrAIServiceUnavailable.Error()
+			if errors.Is(err, ErrAIRetryInProgress) {
+				status = http.StatusConflict
+				code = "AI_READINESS_RETRY_IN_PROGRESS"
+				message = ErrAIRetryInProgress.Error()
+			}
+			writeJSON(w, status, apiResp{OK: false, Error: message, ErrorCode: code, Data: map[string]any{"readiness": g.aiReadinessSnapshot()}})
+			return
+		}
+		writeJSON(w, http.StatusAccepted, apiResp{OK: true, Data: g.aiReadinessSnapshot()})
+		return
+
 	case r.Method == http.MethodPut && r.URL.Path == "/_redeven_proxy/api/ai/default_permission":
 		meta, ok := g.requirePermission(w, r, requiredPermissionAdmin)
 		if !ok {
 			return
 		}
-		if g.ai == nil {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+		if !g.requireAIService(w, aiSvc) {
 			return
 		}
 		dec := json.NewDecoder(r.Body)
@@ -3266,7 +3345,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 
 		permissionType := strings.ToLower(strings.TrimSpace(body.PermissionType))
-		activeRunCount := g.ai.ActiveRunCount(strings.TrimSpace(meta.EndpointID))
+		activeRunCount := aiSvc.ActiveRunCount(strings.TrimSpace(meta.EndpointID))
 		aiUpdate := &settingsAIUpdateView{
 			ApplyScope:     "future_threads",
 			ActiveRunCount: activeRunCount,
@@ -3288,7 +3367,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			updated = cfg
 			return nil
 		}
-		if err := g.ai.SetDefaultPermissionType(permissionType, persist); err != nil {
+		if err := aiSvc.SetDefaultPermissionType(permissionType, persist); err != nil {
 			g.appendAudit(meta, "ai_default_permission_update", "failure", auditDetail, err)
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 			return
@@ -3297,7 +3376,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{
 			OK: true,
 			Data: settingsUpdateView{
-				Settings: g.toSettingsView(updated),
+				Settings: g.toSettingsView(updated, aiSvc),
 				AIUpdate: aiUpdate,
 			},
 		})
@@ -3308,8 +3387,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		if g.ai == nil {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+		if !g.requireAIService(w, aiSvc) {
 			return
 		}
 		if g.secrets == nil {
@@ -3400,7 +3478,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		activeRunCount := g.ai.ActiveRunCount(strings.TrimSpace(meta.EndpointID))
+		activeRunCount := aiSvc.ActiveRunCount(strings.TrimSpace(meta.EndpointID))
 		aiUpdate := &settingsAIUpdateView{
 			ApplyScope:     "future_runs",
 			ActiveRunCount: activeRunCount,
@@ -3413,7 +3491,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			"ai_active_run_count":  activeRunCount,
 		}
 
-		updated, saveErr := g.saveAIProviderBundle(modelProfile, aiKeyPatches, webSearchKeyPatches)
+		updated, saveErr := g.saveAIProviderBundle(aiSvc, modelProfile, aiKeyPatches, webSearchKeyPatches)
 		if saveErr != nil {
 			status := http.StatusBadRequest
 			var bundleErr aiProviderBundleSaveError
@@ -3428,7 +3506,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{
 			OK: true,
 			Data: settingsUpdateView{
-				Settings: g.toSettingsView(updated),
+				Settings: g.toSettingsView(updated, aiSvc),
 				AIUpdate: aiUpdate,
 			},
 		})
@@ -3617,11 +3695,10 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		if g.ai == nil {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+		if !g.requireAIService(w, aiSvc) {
 			return
 		}
-		catalog, err := g.ai.ListSkillsCatalog()
+		catalog, err := aiSvc.ListSkillsCatalog()
 		if err != nil {
 			g.appendAudit(meta, "ai_skills_list", "failure", nil, err)
 			writeAISkillError(w, http.StatusServiceUnavailable, err)
@@ -3636,11 +3713,10 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		if g.ai == nil {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+		if !g.requireAIService(w, aiSvc) {
 			return
 		}
-		catalog, err := g.ai.ReloadSkillsCatalog()
+		catalog, err := aiSvc.ReloadSkillsCatalog()
 		if err != nil {
 			g.appendAudit(meta, "ai_skills_reload", "failure", nil, err)
 			writeAISkillError(w, http.StatusServiceUnavailable, err)
@@ -3655,8 +3731,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		if g.ai == nil {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+		if !g.requireAIService(w, aiSvc) {
 			return
 		}
 		var body struct {
@@ -3676,7 +3751,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing patches"})
 			return
 		}
-		catalog, err := g.ai.PatchSkillToggles(body.Patches)
+		catalog, err := aiSvc.PatchSkillToggles(body.Patches)
 		if err != nil {
 			g.appendAudit(meta, "ai_skills_toggle_update", "failure", map[string]any{"patches": len(body.Patches)}, err)
 			writeAISkillError(w, http.StatusBadRequest, err)
@@ -3691,8 +3766,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		if g.ai == nil {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+		if !g.requireAIService(w, aiSvc) {
 			return
 		}
 		var body struct {
@@ -3711,7 +3785,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 			return
 		}
-		catalog, err := g.ai.CreateSkill(body.Scope, body.Name, body.Description, body.Body)
+		catalog, err := aiSvc.CreateSkill(body.Scope, body.Name, body.Description, body.Body)
 		if err != nil {
 			g.appendAudit(meta, "ai_skills_create", "failure", map[string]any{"scope": strings.TrimSpace(body.Scope), "name": strings.TrimSpace(body.Name)}, err)
 			writeAISkillError(w, http.StatusBadRequest, err)
@@ -3726,8 +3800,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		if g.ai == nil {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+		if !g.requireAIService(w, aiSvc) {
 			return
 		}
 		var body struct {
@@ -3744,7 +3817,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 			return
 		}
-		catalog, err := g.ai.DeleteSkill(body.Scope, body.Name)
+		catalog, err := aiSvc.DeleteSkill(body.Scope, body.Name)
 		if err != nil {
 			g.appendAudit(meta, "ai_skills_delete", "failure", map[string]any{"scope": strings.TrimSpace(body.Scope), "name": strings.TrimSpace(body.Name)}, err)
 			writeAISkillError(w, http.StatusBadRequest, err)
@@ -3759,8 +3832,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		if g.ai == nil {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+		if !g.requireAIService(w, aiSvc) {
 			return
 		}
 		query := r.URL.Query()
@@ -3770,7 +3842,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			BasePath:    strings.TrimSpace(query.Get("base_path")),
 			ForceReload: strings.EqualFold(strings.TrimSpace(query.Get("force_reload")), "true"),
 		}
-		out, err := g.ai.ListGitHubSkillCatalog(req)
+		out, err := aiSvc.ListGitHubSkillCatalog(req)
 		if err != nil {
 			g.appendAudit(meta, "ai_skills_github_catalog_list", "failure", map[string]any{"repo": req.Repo, "ref": req.Ref, "base_path": req.BasePath}, err)
 			writeAISkillError(w, http.StatusServiceUnavailable, err)
@@ -3785,8 +3857,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		if g.ai == nil {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+		if !g.requireAIService(w, aiSvc) {
 			return
 		}
 		dec := json.NewDecoder(r.Body)
@@ -3800,7 +3871,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 			return
 		}
-		out, err := g.ai.ValidateGitHubSkillImport(body)
+		out, err := aiSvc.ValidateGitHubSkillImport(body)
 		if err != nil {
 			g.appendAudit(meta, "ai_skills_github_validate", "failure", map[string]any{"scope": strings.TrimSpace(body.Scope), "repo": strings.TrimSpace(body.Repo), "ref": strings.TrimSpace(body.Ref), "paths": len(body.Paths), "url": strings.TrimSpace(body.URL) != ""}, err)
 			writeAISkillError(w, http.StatusBadRequest, err)
@@ -3815,8 +3886,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		if g.ai == nil {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+		if !g.requireAIService(w, aiSvc) {
 			return
 		}
 		dec := json.NewDecoder(r.Body)
@@ -3830,7 +3900,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 			return
 		}
-		out, err := g.ai.ImportGitHubSkills(body)
+		out, err := aiSvc.ImportGitHubSkills(body)
 		if err != nil {
 			g.appendAudit(meta, "ai_skills_github_import", "failure", map[string]any{"scope": strings.TrimSpace(body.Scope), "repo": strings.TrimSpace(body.Repo), "ref": strings.TrimSpace(body.Ref), "paths": len(body.Paths), "url": strings.TrimSpace(body.URL) != ""}, err)
 			writeAISkillError(w, http.StatusBadRequest, err)
@@ -3845,11 +3915,10 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		if g.ai == nil {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+		if !g.requireAIService(w, aiSvc) {
 			return
 		}
-		out, err := g.ai.ListSkillSources()
+		out, err := aiSvc.ListSkillSources()
 		if err != nil {
 			g.appendAudit(meta, "ai_skills_sources_list", "failure", nil, err)
 			writeAISkillError(w, http.StatusServiceUnavailable, err)
@@ -3864,8 +3933,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		if g.ai == nil {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+		if !g.requireAIService(w, aiSvc) {
 			return
 		}
 		dec := json.NewDecoder(r.Body)
@@ -3882,7 +3950,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 			return
 		}
-		out, err := g.ai.ReinstallSkills(body.Paths, body.Overwrite)
+		out, err := aiSvc.ReinstallSkills(body.Paths, body.Overwrite)
 		if err != nil {
 			g.appendAudit(meta, "ai_skills_reinstall", "failure", map[string]any{"paths": len(body.Paths), "overwrite": body.Overwrite}, err)
 			writeAISkillError(w, http.StatusBadRequest, err)
@@ -3897,14 +3965,13 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		if g.ai == nil {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+		if !g.requireAIService(w, aiSvc) {
 			return
 		}
 		query := r.URL.Query()
 		skillPath := strings.TrimSpace(query.Get("skill_path"))
 		dir := strings.TrimSpace(query.Get("dir"))
-		out, err := g.ai.BrowseSkillTree(skillPath, dir)
+		out, err := aiSvc.BrowseSkillTree(skillPath, dir)
 		if err != nil {
 			g.appendAudit(meta, "ai_skills_browse_tree", "failure", map[string]any{"skill_path": skillPath, "dir": dir}, err)
 			writeAISkillError(w, http.StatusBadRequest, err)
@@ -3919,8 +3986,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		if g.ai == nil {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+		if !g.requireAIService(w, aiSvc) {
 			return
 		}
 		query := r.URL.Query()
@@ -3936,7 +4002,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			}
 			maxBytes = n
 		}
-		out, err := g.ai.BrowseSkillFile(skillPath, filePath, encoding, maxBytes)
+		out, err := aiSvc.BrowseSkillFile(skillPath, filePath, encoding, maxBytes)
 		if err != nil {
 			g.appendAudit(meta, "ai_skills_browse_file", "failure", map[string]any{"skill_path": skillPath, "file": filePath, "encoding": encoding}, err)
 			writeAISkillError(w, http.StatusBadRequest, err)
@@ -3950,11 +4016,14 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if _, ok := g.requirePermission(w, r, requiredPermissionFull); !ok {
 			return
 		}
-		if g.ai == nil || !g.ai.Enabled() {
+		if !g.requireAIService(w, aiSvc) {
+			return
+		}
+		if !aiSvc.Enabled() {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
 			return
 		}
-		models, err := g.ai.ListModels()
+		models, err := aiSvc.ListModels()
 		if err != nil {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: err.Error()})
 			return
@@ -3967,7 +4036,10 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		if g.ai == nil || !g.ai.Enabled() {
+		if !g.requireAIService(w, aiSvc) {
+			return
+		}
+		if !aiSvc.Enabled() {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
 			return
 		}
@@ -4002,12 +4074,12 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return err
 		}
 
-		if err := g.ai.SetCurrentModelID(modelID, persist); err != nil {
+		if err := aiSvc.SetCurrentModelID(modelID, persist); err != nil {
 			g.appendAudit(meta, "ai_current_model_update", "failure", map[string]any{"model_id": modelID}, err)
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 			return
 		}
-		models, err := g.ai.ListModels()
+		models, err := aiSvc.ListModels()
 		if err != nil {
 			g.appendAudit(meta, "ai_current_model_update", "failure", map[string]any{"model_id": modelID}, err)
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: err.Error()})
@@ -4022,8 +4094,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		if g.ai == nil {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+		if !g.requireAIService(w, aiSvc) {
 			return
 		}
 		dec := json.NewDecoder(r.Body)
@@ -4039,7 +4110,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 			return
 		}
-		cleaned, err := g.ai.ValidateWorkingDir(body.WorkingDir)
+		cleaned, err := aiSvc.ValidateWorkingDir(body.WorkingDir)
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 			return
@@ -4052,8 +4123,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		if g.ai == nil {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+		if !g.requireAIService(w, aiSvc) {
 			return
 		}
 
@@ -4065,7 +4135,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		cursor := strings.TrimSpace(r.URL.Query().Get("cursor"))
 
-		out, err := g.ai.ListThreads(r.Context(), meta, limit, cursor)
+		out, err := aiSvc.ListThreads(r.Context(), meta, limit, cursor)
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 			return
@@ -4083,8 +4153,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		if g.ai == nil {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+		if !g.requireAIService(w, aiSvc) {
 			return
 		}
 		dec := json.NewDecoder(r.Body)
@@ -4099,7 +4168,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		th, err := g.ai.CreateThreadWithOptions(r.Context(), meta, body)
+		th, err := aiSvc.CreateThreadWithOptions(r.Context(), meta, body)
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 			return
@@ -4137,11 +4206,10 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if g.ai == nil {
-				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			if !g.requireAIService(w, aiSvc) {
 				return
 			}
-			th, err := g.ai.GetThread(r.Context(), meta, threadID)
+			th, err := aiSvc.GetThread(r.Context(), meta, threadID)
 			if err != nil {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 				return
@@ -4163,11 +4231,10 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if g.ai == nil {
-				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			if !g.requireAIService(w, aiSvc) {
 				return
 			}
-			snapshot, err := g.ai.GetFlowerThreadLiveBootstrap(r.Context(), meta, threadID)
+			snapshot, err := aiSvc.GetFlowerThreadLiveBootstrap(r.Context(), meta, threadID)
 			if err != nil {
 				status := http.StatusBadRequest
 				if errors.Is(err, sql.ErrNoRows) {
@@ -4189,8 +4256,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if g.ai == nil {
-				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			if !g.requireAIService(w, aiSvc) {
 				return
 			}
 			afterSeq := int64(0)
@@ -4208,7 +4274,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 					limit = v
 				}
 			}
-			resp, err := g.ai.ListFlowerThreadLiveEvents(r.Context(), meta, threadID, afterSeq, limit)
+			resp, err := aiSvc.ListFlowerThreadLiveEvents(r.Context(), meta, threadID, afterSeq, limit)
 			if err != nil {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 				return
@@ -4226,8 +4292,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if g.ai == nil {
-				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			if !g.requireAIService(w, aiSvc) {
 				return
 			}
 			childID := strings.TrimSpace(parts[2])
@@ -4246,7 +4311,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 					limit = v
 				}
 			}
-			resp, err := g.ai.GetFlowerSubagentDetail(r.Context(), meta, threadID, childID, afterOrdinal, limit)
+			resp, err := aiSvc.GetFlowerSubagentDetail(r.Context(), meta, threadID, childID, afterOrdinal, limit)
 			if err != nil {
 				status := http.StatusBadRequest
 				if errors.Is(err, sql.ErrNoRows) {
@@ -4263,8 +4328,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if g.ai == nil {
-				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			if !g.requireAIService(w, aiSvc) {
 				return
 			}
 			dec := json.NewDecoder(r.Body)
@@ -4284,7 +4348,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			if body.Title != nil {
-				if err := g.ai.RenameThread(r.Context(), meta, threadID, *body.Title); err != nil {
+				if err := aiSvc.RenameThread(r.Context(), meta, threadID, *body.Title); err != nil {
 					status := http.StatusBadRequest
 					if errors.Is(err, sql.ErrNoRows) {
 						status = http.StatusNotFound
@@ -4294,7 +4358,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if body.ModelID != nil {
-				if err := g.ai.SetThreadModel(r.Context(), meta, threadID, *body.ModelID); err != nil {
+				if err := aiSvc.SetThreadModel(r.Context(), meta, threadID, *body.ModelID); err != nil {
 					status := http.StatusBadRequest
 					if errors.Is(err, sql.ErrNoRows) {
 						status = http.StatusNotFound
@@ -4306,7 +4370,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if body.PermissionType != nil {
-				if err := g.ai.SetThreadPermissionType(r.Context(), meta, threadID, *body.PermissionType); err != nil {
+				if err := aiSvc.SetThreadPermissionType(r.Context(), meta, threadID, *body.PermissionType); err != nil {
 					status := http.StatusBadRequest
 					if errors.Is(err, sql.ErrNoRows) {
 						status = http.StatusNotFound
@@ -4321,14 +4385,14 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				raw := bytes.TrimSpace(body.ReasoningSelection)
 				var err error
 				if bytes.Equal(raw, []byte("null")) {
-					err = g.ai.ClearThreadReasoningSelection(r.Context(), meta, threadID)
+					err = aiSvc.ClearThreadReasoningSelection(r.Context(), meta, threadID)
 				} else {
 					var selection config.AIReasoningSelection
 					if len(raw) == 0 || raw[0] != '{' || json.Unmarshal(raw, &selection) != nil {
 						writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid reasoning_selection"})
 						return
 					}
-					err = g.ai.SetThreadReasoningSelection(r.Context(), meta, threadID, selection)
+					err = aiSvc.SetThreadReasoningSelection(r.Context(), meta, threadID, selection)
 				}
 				if err != nil {
 					status := http.StatusBadRequest
@@ -4340,7 +4404,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if body.Pinned != nil {
-				if _, err := g.ai.SetThreadPinned(r.Context(), meta, threadID, *body.Pinned); err != nil {
+				if _, err := aiSvc.SetThreadPinned(r.Context(), meta, threadID, *body.Pinned); err != nil {
 					status := http.StatusBadRequest
 					if errors.Is(err, sql.ErrNoRows) {
 						status = http.StatusNotFound
@@ -4349,7 +4413,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 			}
-			th, err := g.ai.GetThread(r.Context(), meta, threadID)
+			th, err := aiSvc.GetThread(r.Context(), meta, threadID)
 			if err != nil {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
 				return
@@ -4371,8 +4435,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if g.ai == nil {
-				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			if !g.requireAIService(w, aiSvc) {
 				return
 			}
 			dec := json.NewDecoder(r.Body)
@@ -4388,7 +4451,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 				return
 			}
-			th, err := g.ai.ForkThread(r.Context(), meta, threadID, body.Title)
+			th, err := aiSvc.ForkThread(r.Context(), meta, threadID, body.Title)
 			if err != nil {
 				status := http.StatusBadRequest
 				if errors.Is(err, sql.ErrNoRows) {
@@ -4440,7 +4503,10 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if g.ai == nil || !g.ai.Enabled() {
+			if !g.requireAIService(w, aiSvc) {
+				return
+			}
+			if !aiSvc.Enabled() {
 				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
 				return
 			}
@@ -4465,7 +4531,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "draft identity is required"})
 				return
 			}
-			resp, err := g.ai.SendUserTurn(r.Context(), meta, body)
+			resp, err := aiSvc.SendUserTurn(r.Context(), meta, body)
 			if err != nil {
 				errorCode := ""
 				if errors.Is(err, ai.ErrLongTextAttachmentRequired) {
@@ -4488,7 +4554,10 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if g.ai == nil || !g.ai.Enabled() {
+			if !g.requireAIService(w, aiSvc) {
+				return
+			}
+			if !aiSvc.Enabled() {
 				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
 				return
 			}
@@ -4509,7 +4578,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			body.ThreadID = threadID
-			resp, err := g.ai.CompactThreadContext(r.Context(), meta, body)
+			resp, err := aiSvc.CompactThreadContext(r.Context(), meta, body)
 			if err != nil {
 				g.appendAudit(meta, "ai_thread_context_compact", "failure", map[string]any{
 					"thread_id":     threadID,
@@ -4532,8 +4601,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if g.ai == nil {
-				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			if !g.requireAIService(w, aiSvc) {
 				return
 			}
 			dec := json.NewDecoder(r.Body)
@@ -4553,7 +4621,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			body.ThreadID = threadID
-			resp, err := g.ai.SubmitFlowerApproval(meta, body)
+			resp, err := aiSvc.SubmitFlowerApproval(meta, body)
 			if err != nil {
 				g.appendAudit(meta, "ai_tool_approval", "failure", map[string]any{
 					"thread_id":    threadID,
@@ -4582,8 +4650,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if g.ai == nil {
-				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: ai.ErrFlowerCanonicalReferenceUnavailable.Error(), ErrorCode: ai.FlowerCanonicalReferenceUnavailableErrorCode})
+			if !g.requireAIService(w, aiSvc) {
 				return
 			}
 			dec := json.NewDecoder(r.Body)
@@ -4598,7 +4665,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			body.ThreadID = threadID
-			target, err := g.ai.ResolveFlowerCanonicalReferenceOpenTarget(r.Context(), meta, body)
+			target, err := aiSvc.ResolveFlowerCanonicalReferenceOpenTarget(r.Context(), meta, body)
 			if err != nil {
 				status, code := aiCanonicalReferenceOpenHTTPError(err)
 				writeJSON(w, status, apiResp{OK: false, Error: err.Error(), ErrorCode: code})
@@ -4616,8 +4683,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if g.ai == nil {
-				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			if !g.requireAIService(w, aiSvc) {
 				return
 			}
 			dec := json.NewDecoder(r.Body)
@@ -4632,7 +4698,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			body.ThreadID = threadID
-			target, err := g.ai.ResolveFlowerFileActionOpenTarget(r.Context(), meta, body)
+			target, err := aiSvc.ResolveFlowerFileActionOpenTarget(r.Context(), meta, body)
 			if err != nil {
 				status := http.StatusBadRequest
 				if errors.Is(err, ai.ErrFlowerFileActionNotFound) {
@@ -4649,8 +4715,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if g.ai == nil {
-				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			if !g.requireAIService(w, aiSvc) {
 				return
 			}
 			dec := json.NewDecoder(r.Body)
@@ -4670,7 +4735,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			body.ThreadID = threadID
-			resp, err := g.ai.SubmitRequestUserInputResponse(r.Context(), meta, body)
+			resp, err := aiSvc.SubmitRequestUserInputResponse(r.Context(), meta, body)
 			if err != nil {
 				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
 				return
@@ -4683,11 +4748,10 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if g.ai == nil {
-				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			if !g.requireAIService(w, aiSvc) {
 				return
 			}
-			resp, err := g.ai.StopThread(r.Context(), meta, threadID)
+			resp, err := aiSvc.StopThread(r.Context(), meta, threadID)
 			if err != nil {
 				g.appendAudit(meta, "ai_thread_cancel", "failure", map[string]any{"thread_id": threadID}, err)
 				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
@@ -4702,8 +4766,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if g.ai == nil {
-				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			if !g.requireAIService(w, aiSvc) {
 				return
 			}
 			force, err := parseThreadDeleteForceQuery(r.URL.RawQuery)
@@ -4711,7 +4774,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error(), ErrorCode: "invalid_thread_delete_query"})
 				return
 			}
-			result, err := g.ai.DeleteThread(r.Context(), meta, threadID, force)
+			result, err := aiSvc.DeleteThread(r.Context(), meta, threadID, force)
 			if err != nil {
 				status := http.StatusBadRequest
 				if errors.Is(err, ai.ErrThreadBusy) {
@@ -4759,11 +4822,10 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if g.ai == nil {
-				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			if !g.requireAIService(w, aiSvc) {
 				return
 			}
-			out, err := g.ai.GetThreadTodos(r.Context(), meta, threadID)
+			out, err := aiSvc.GetThreadTodos(r.Context(), meta, threadID)
 			if err != nil {
 				status := http.StatusBadRequest
 				if errors.Is(err, sql.ErrNoRows) {
@@ -4780,11 +4842,10 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if g.ai == nil {
-				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			if !g.requireAIService(w, aiSvc) {
 				return
 			}
-			out, err := g.ai.ListFollowups(r.Context(), meta, threadID, 100)
+			out, err := aiSvc.ListFollowups(r.Context(), meta, threadID, 100)
 			if err != nil {
 				status := http.StatusBadRequest
 				if errors.Is(err, sql.ErrNoRows) {
@@ -4801,8 +4862,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if g.ai == nil {
-				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			if !g.requireAIService(w, aiSvc) {
 				return
 			}
 			dec := json.NewDecoder(r.Body)
@@ -4816,7 +4876,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 				return
 			}
-			if err := g.ai.ReorderFollowups(r.Context(), meta, threadID, body); err != nil {
+			if err := aiSvc.ReorderFollowups(r.Context(), meta, threadID, body); err != nil {
 				status := http.StatusBadRequest
 				if errors.Is(err, ai.ErrFollowupsRevisionChanged) {
 					status = http.StatusConflict
@@ -4832,8 +4892,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if g.ai == nil {
-				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			if !g.requireAIService(w, aiSvc) {
 				return
 			}
 			followupID := strings.TrimSpace(parts[2])
@@ -4856,7 +4915,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing fields"})
 				return
 			}
-			if err := g.ai.UpdateFollowup(r.Context(), meta, threadID, followupID, body); err != nil {
+			if err := aiSvc.UpdateFollowup(r.Context(), meta, threadID, followupID, body); err != nil {
 				status := http.StatusBadRequest
 				if errors.Is(err, sql.ErrNoRows) {
 					status = http.StatusNotFound
@@ -4872,8 +4931,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if g.ai == nil {
-				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			if !g.requireAIService(w, aiSvc) {
 				return
 			}
 			followupID := strings.TrimSpace(parts[2])
@@ -4881,7 +4939,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 				return
 			}
-			if err := g.ai.DeleteFollowup(r.Context(), meta, threadID, followupID); err != nil {
+			if err := aiSvc.DeleteFollowup(r.Context(), meta, threadID, followupID); err != nil {
 				status := http.StatusBadRequest
 				if errors.Is(err, sql.ErrNoRows) {
 					status = http.StatusNotFound
@@ -4897,8 +4955,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			if !ok {
 				return
 			}
-			if g.ai == nil {
-				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
+			if !g.requireAIService(w, aiSvc) {
 				return
 			}
 
@@ -4915,7 +4972,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 
-			out, err := g.ai.ListThreadMessages(r.Context(), meta, threadID, limit, beforeID)
+			out, err := aiSvc.ListThreadMessages(r.Context(), meta, threadID, limit, beforeID)
 			if err != nil {
 				status := http.StatusBadRequest
 				code := ""
@@ -4935,11 +4992,44 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		return
 
 	case (r.Method == http.MethodGet || r.Method == http.MethodPost) && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/runs/"):
+		rest := strings.TrimPrefix(r.URL.Path, "/_redeven_proxy/api/ai/runs/")
+		rest = strings.TrimPrefix(rest, "/")
+		parts := strings.Split(rest, "/")
+		if len(parts) != 4 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) != "terminal" {
+			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+			return
+		}
+		runID := strings.TrimSpace(parts[0])
+		processID := strings.TrimSpace(parts[2])
+		terminalAction := strings.TrimSpace(parts[3])
+		if processID == "" {
+			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing process_id"})
+			return
+		}
+		switch terminalAction {
+		case "read":
+			if r.Method != http.MethodGet {
+				writeJSON(w, http.StatusMethodNotAllowed, apiResp{OK: false, Error: "method not allowed"})
+				return
+			}
+		case "write", "terminate":
+			if r.Method != http.MethodPost {
+				writeJSON(w, http.StatusMethodNotAllowed, apiResp{OK: false, Error: "method not allowed"})
+				return
+			}
+		default:
+			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+			return
+		}
+
 		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 		if !ok {
 			return
 		}
-		if g.ai == nil || !g.ai.Enabled() {
+		if !g.requireAIService(w, aiSvc) {
+			return
+		}
+		if !aiSvc.Enabled() {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
 			return
 		}
@@ -4949,129 +5039,89 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		rest := strings.TrimPrefix(r.URL.Path, "/_redeven_proxy/api/ai/runs/")
-		rest = strings.TrimPrefix(rest, "/")
-		if rest == "" {
-			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
-			return
-		}
-		parts := strings.Split(rest, "/")
-		runID := strings.TrimSpace(parts[0])
-		action := ""
-		if len(parts) > 1 {
-			action = strings.TrimSpace(parts[1])
-		}
-		if runID == "" {
-			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
-			return
-		}
-
-		if len(parts) == 4 && action == "terminal" {
-			processID := strings.TrimSpace(parts[2])
-			terminalAction := strings.TrimSpace(parts[3])
-			if processID == "" {
-				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing process_id"})
+		switch terminalAction {
+		case "read":
+			query := r.URL.Query()
+			if len(query) != 1 || len(query["after_seq"]) != 1 || strings.TrimSpace(query.Get("after_seq")) == "" {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "after_seq is required"})
 				return
 			}
-			switch terminalAction {
-			case "read":
-				if r.Method != http.MethodGet {
-					writeJSON(w, http.StatusMethodNotAllowed, apiResp{OK: false, Error: "method not allowed"})
-					return
-				}
-				query := r.URL.Query()
-				if len(query) != 1 || len(query["after_seq"]) != 1 || strings.TrimSpace(query.Get("after_seq")) == "" {
-					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "after_seq is required"})
-					return
-				}
-				afterSeq, err := parseOptionalInt64Query(r, "after_seq")
-				if err != nil {
-					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid after_seq"})
-					return
-				}
-				out, err := g.ai.ReadTerminalProcess(r.Context(), meta, runID, processID, afterSeq)
-				if err != nil {
-					g.appendAudit(meta, "ai_terminal_process_read", "failure", terminalProcessAuditDetail(processID, nil), err)
-					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "terminal live output unavailable"})
-					return
-				}
-				g.appendAudit(meta, "ai_terminal_process_read", "success", terminalProcessAuditDetail(processID, nil), nil)
-				writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
-				return
-
-			case "write":
-				if r.Method != http.MethodPost {
-					writeJSON(w, http.StatusMethodNotAllowed, apiResp{OK: false, Error: "method not allowed"})
-					return
-				}
-				dec := json.NewDecoder(r.Body)
-				dec.DisallowUnknownFields()
-				var body struct {
-					Input string `json:"input"`
-				}
-				if err := dec.Decode(&body); err != nil {
-					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-					return
-				}
-				if err := dec.Decode(&struct{}{}); err != io.EOF {
-					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
-					return
-				}
-				out, err := g.ai.WriteTerminalProcess(r.Context(), meta, runID, processID, body.Input)
-				inputBytes := len(body.Input)
-				if err != nil {
-					g.appendAudit(meta, "ai_terminal_process_write", "failure", terminalProcessAuditDetail(processID, &inputBytes), err)
-					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "terminal action failed"})
-					return
-				}
-				g.appendAudit(meta, "ai_terminal_process_write", "success", terminalProcessAuditDetail(processID, &inputBytes), nil)
-				writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
-				return
-
-			case "terminate":
-				if r.Method != http.MethodPost {
-					writeJSON(w, http.StatusMethodNotAllowed, apiResp{OK: false, Error: "method not allowed"})
-					return
-				}
-				out, err := g.ai.TerminateTerminalProcess(r.Context(), meta, runID, processID)
-				if err != nil {
-					g.appendAudit(meta, "ai_terminal_process_terminate", "failure", terminalProcessAuditDetail(processID, nil), err)
-					writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "terminal action failed"})
-					return
-				}
-				g.appendAudit(meta, "ai_terminal_process_terminate", "success", terminalProcessAuditDetail(processID, nil), nil)
-				writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
-				return
-
-			default:
-				writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+			afterSeq, err := parseOptionalInt64Query(r, "after_seq")
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid after_seq"})
 				return
 			}
-		}
+			out, err := aiSvc.ReadTerminalProcess(r.Context(), meta, runID, processID, afterSeq)
+			if err != nil {
+				g.appendAudit(meta, "ai_terminal_process_read", "failure", terminalProcessAuditDetail(processID, nil), err)
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "terminal live output unavailable"})
+				return
+			}
+			g.appendAudit(meta, "ai_terminal_process_read", "success", terminalProcessAuditDetail(processID, nil), nil)
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
+			return
 
-		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
-		return
+		case "write":
+			dec := json.NewDecoder(r.Body)
+			dec.DisallowUnknownFields()
+			var body struct {
+				Input string `json:"input"`
+			}
+			if err := dec.Decode(&body); err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			if err := dec.Decode(&struct{}{}); err != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			out, err := aiSvc.WriteTerminalProcess(r.Context(), meta, runID, processID, body.Input)
+			inputBytes := len(body.Input)
+			if err != nil {
+				g.appendAudit(meta, "ai_terminal_process_write", "failure", terminalProcessAuditDetail(processID, &inputBytes), err)
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "terminal action failed"})
+				return
+			}
+			g.appendAudit(meta, "ai_terminal_process_write", "success", terminalProcessAuditDetail(processID, &inputBytes), nil)
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
+			return
+
+		case "terminate":
+			out, err := aiSvc.TerminateTerminalProcess(r.Context(), meta, runID, processID)
+			if err != nil {
+				g.appendAudit(meta, "ai_terminal_process_terminate", "failure", terminalProcessAuditDetail(processID, nil), err)
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "terminal action failed"})
+				return
+			}
+			g.appendAudit(meta, "ai_terminal_process_terminate", "success", terminalProcessAuditDetail(processID, nil), nil)
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
+			return
+
+		}
 
 	case strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/composer-drafts/"):
+		rest := strings.TrimPrefix(r.URL.Path, "/_redeven_proxy/api/ai/composer-drafts/")
+		parts := strings.Split(rest, "/")
+		if len(parts) < 1 || len(parts) > 2 || strings.TrimSpace(parts[0]) == "" || (len(parts) == 2 && parts[1] != "lease" && parts[1] != "thread") {
+			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+			return
+		}
+		leaseAction := len(parts) == 2 && parts[1] == "lease"
+		threadAction := len(parts) == 2 && parts[1] == "thread"
+		validMethod := r.Method == http.MethodGet || r.Method == http.MethodPut
+		if leaseAction || threadAction {
+			validMethod = r.Method == http.MethodPost
+		}
+		if !validMethod {
+			writeJSON(w, http.StatusMethodNotAllowed, apiResp{OK: false, Error: "method not allowed"})
+			return
+		}
+		scopeID := strings.TrimSpace(parts[0])
 		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 		if !ok {
 			return
 		}
-		if g.ai == nil {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai service not ready"})
-			return
-		}
-		rest := strings.TrimPrefix(r.URL.Path, "/_redeven_proxy/api/ai/composer-drafts/")
-		leaseAction := strings.HasSuffix(rest, "/lease")
-		threadAction := strings.HasSuffix(rest, "/thread")
-		if leaseAction {
-			rest = strings.TrimSuffix(rest, "/lease")
-		} else if threadAction {
-			rest = strings.TrimSuffix(rest, "/thread")
-		}
-		scopeID := strings.TrimSpace(rest)
-		if scopeID == "" || strings.Contains(scopeID, "/") {
-			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+		if !g.requireAIService(w, aiSvc) {
 			return
 		}
 		owner, err := ai.NewUploadOwner(meta.EndpointID, meta.UserPublicID, meta.ChannelID)
@@ -5080,7 +5130,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if r.Method == http.MethodGet && !leaseAction && !threadAction {
-			draft, err := g.ai.LoadComposerDraft(r.Context(), owner, scopeID)
+			draft, err := aiSvc.LoadComposerDraft(r.Context(), owner, scopeID)
 			if err != nil {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "composer draft read failed"})
 				return
@@ -5103,13 +5153,13 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			var result any
 			switch strings.TrimSpace(body.Action) {
 			case "acquire":
-				result, err = g.ai.AcquireComposerDraftLease(r.Context(), owner, scopeID, body.HolderID, false)
+				result, err = aiSvc.AcquireComposerDraftLease(r.Context(), owner, scopeID, body.HolderID, false)
 			case "take_over":
-				result, err = g.ai.AcquireComposerDraftLease(r.Context(), owner, scopeID, body.HolderID, true)
+				result, err = aiSvc.AcquireComposerDraftLease(r.Context(), owner, scopeID, body.HolderID, true)
 			case "renew":
-				result, err = g.ai.RenewComposerDraftLease(r.Context(), owner, scopeID, body.HolderID, body.LeaseID)
+				result, err = aiSvc.RenewComposerDraftLease(r.Context(), owner, scopeID, body.HolderID, body.LeaseID)
 			case "release":
-				err = g.ai.ReleaseComposerDraftLease(r.Context(), owner, scopeID, body.HolderID, body.LeaseID)
+				err = aiSvc.ReleaseComposerDraftLease(r.Context(), owner, scopeID, body.HolderID, body.LeaseID)
 				result = map[string]any{"state": "released"}
 			default:
 				err = errors.New("invalid lease action")
@@ -5122,7 +5172,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if r.Method == http.MethodPost && threadAction {
-			if !g.ai.Enabled() {
+			if !aiSvc.Enabled() {
 				writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
 				return
 			}
@@ -5133,7 +5183,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
 				return
 			}
-			prepared, err := g.ai.PrepareComposerDraftThread(r.Context(), meta, owner, scopeID, body)
+			prepared, err := aiSvc.PrepareComposerDraftThread(r.Context(), meta, owner, scopeID, body)
 			if err != nil {
 				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: "composer draft thread preparation failed"})
 				return
@@ -5150,7 +5200,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			body.ScopeID = scopeID
-			draft, err := g.ai.MutateComposerDraft(r.Context(), owner, body)
+			draft, err := aiSvc.MutateComposerDraft(r.Context(), owner, body)
 			if errors.Is(err, threadstore.ErrComposerDraftRevisionConflict) {
 				writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"state": "revision_conflict", "draft": draft}})
 				return
@@ -5173,7 +5223,10 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
 			return
 		}
-		if g.ai == nil || !g.ai.Enabled() {
+		if !g.requireAIService(w, aiSvc) {
+			return
+		}
+		if !aiSvc.Enabled() {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
 			return
 		}
@@ -5182,15 +5235,22 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeUploadError(w, ai.NewUploadError(ai.UploadErrorInvalidRequest, false, errors.New("model_id is required")))
 			return
 		}
-		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: g.ai.AttachmentCapabilities(r.Context(), modelID)})
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: aiSvc.AttachmentCapabilities(r.Context(), modelID)})
 		return
 
-	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/uploads":
+	case r.URL.Path == "/_redeven_proxy/api/ai/uploads":
+		if r.Method != http.MethodPost {
+			writeJSON(w, http.StatusMethodNotAllowed, apiResp{OK: false, Error: "method not allowed"})
+			return
+		}
 		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 		if !ok {
 			return
 		}
-		if g.ai == nil || !g.ai.Enabled() {
+		if !g.requireAIService(w, aiSvc) {
+			return
+		}
+		if !aiSvc.Enabled() {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
 			return
 		}
@@ -5236,7 +5296,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		if values := r.MultipartForm.Value["source"]; len(values) == 1 {
 			source = values[0]
 		}
-		out, err := g.ai.SaveUpload(r.Context(), ai.SaveUploadRequest{
+		out, err := aiSvc.SaveUpload(r.Context(), ai.SaveUploadRequest{
 			Owner: owner, DraftID: r.Header.Get("Upload-Draft-ID"), Reader: f, DisplayName: fh.Filename, DeclaredMediaType: fh.Header.Get("Content-Type"),
 			Source: source, UploadRequestID: r.Header.Get("Idempotency-Key"),
 			ExpectedContentSHA256: r.Header.Get("Upload-Content-SHA256"), ExpectedSizeBytes: expectedSize,
@@ -5255,24 +5315,32 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
 		return
 
-	case (r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodDelete) && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/uploads/"):
+	case strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/uploads/"):
+		rest := strings.TrimPrefix(r.URL.Path, "/_redeven_proxy/api/ai/uploads/")
+		parts := strings.Split(rest, "/")
+		if len(parts) < 1 || len(parts) > 2 || strings.TrimSpace(parts[0]) == "" || (len(parts) == 2 && parts[1] != "long_text") {
+			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+			return
+		}
+		readLongText := len(parts) == 2
+		validMethod := r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodDelete
+		if readLongText {
+			validMethod = r.Method == http.MethodGet
+		}
+		if !validMethod {
+			writeJSON(w, http.StatusMethodNotAllowed, apiResp{OK: false, Error: "method not allowed"})
+			return
+		}
+		uploadID := strings.TrimSpace(parts[0])
 		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 		if !ok {
 			return
 		}
-		if g.ai == nil || !g.ai.Enabled() {
-			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
+		if !g.requireAIService(w, aiSvc) {
 			return
 		}
-		rest := strings.TrimPrefix(r.URL.Path, "/_redeven_proxy/api/ai/uploads/")
-		rest = strings.TrimPrefix(rest, "/")
-		readLongText := r.Method == http.MethodGet && strings.HasSuffix(rest, "/long_text")
-		if readLongText {
-			rest = strings.TrimSuffix(rest, "/long_text")
-		}
-		uploadID := strings.TrimSpace(rest)
-		if uploadID == "" {
-			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+		if !aiSvc.Enabled() {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
 			return
 		}
 		owner, err := ai.NewUploadOwner(meta.EndpointID, meta.UserPublicID, meta.ChannelID)
@@ -5281,7 +5349,7 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if readLongText {
-			out, err := g.ai.ReadStagedLongText(r.Context(), owner, strings.TrimSpace(r.URL.Query().Get("draft_id")), uploadID)
+			out, err := aiSvc.ReadStagedLongText(r.Context(), owner, strings.TrimSpace(r.URL.Query().Get("draft_id")), uploadID)
 			if err != nil {
 				writeUploadError(w, err)
 				return
@@ -5293,9 +5361,9 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			draftID := strings.TrimSpace(r.URL.Query().Get("draft_id"))
 			var err error
 			if draftID != "" {
-				err = g.ai.DeleteDraftUpload(r.Context(), owner, draftID, uploadID)
+				err = aiSvc.DeleteDraftUpload(r.Context(), owner, draftID, uploadID)
 			} else {
-				err = g.ai.DeleteStagedUpload(r.Context(), owner, uploadID)
+				err = aiSvc.DeleteStagedUpload(r.Context(), owner, uploadID)
 			}
 			if err != nil {
 				writeUploadError(w, err)
@@ -5311,11 +5379,11 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		var opened *ai.OpenUploadResult
 		switch {
 		case draftID != "" && threadID == "" && turnID == "" && queueID == "":
-			opened, err = g.ai.OpenUpload(r.Context(), owner, draftID, uploadID)
+			opened, err = aiSvc.OpenUpload(r.Context(), owner, draftID, uploadID)
 		case draftID == "" && threadID != "" && turnID != "" && queueID == "":
-			opened, err = g.ai.OpenCanonicalLiveAttachmentForTurn(r.Context(), owner, threadID, turnID, uploadID)
+			opened, err = aiSvc.OpenCanonicalLiveAttachmentForTurn(r.Context(), owner, threadID, turnID, uploadID)
 		case draftID == "" && threadID != "" && turnID == "" && queueID != "":
-			opened, err = g.ai.OpenQueuedUpload(r.Context(), owner, threadID, queueID, uploadID)
+			opened, err = aiSvc.OpenQueuedUpload(r.Context(), owner, threadID, queueID, uploadID)
 		default:
 			err = ai.NewUploadError(ai.UploadErrorNotFound, false, errors.New("attachment not found"))
 		}

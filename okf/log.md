@@ -1,6 +1,7 @@
 # Redeven OKF Update Log
 
 ## 2026-07-25
+* **Architecture**: Isolated AI startup behind a process-local readiness controller with typed unavailability, request-scoped generation leases, serialized retry, and drain-before-close replacement while keeping unrelated Code App surfaces available.
 * **Dependency**: Upgraded to published Floret v0.27.1 and adopted its inspection-bound open contract with typed, fail-closed Store startup orchestration and published-version restart fixtures.
 
 ## 2026-07-24

@@ -41,6 +41,7 @@ func newDesktopManagedTestAgent(t *testing.T, cfgPath string) *agent.Agent {
 	if err != nil {
 		t.Fatalf("agent.New() error = %v", err)
 	}
+	runTestAgentUntilCleanup(t, a)
 	return a
 }
 

@@ -1755,7 +1755,7 @@ func TestServer_AIDefaultPermissionUpdate_PreservesModelProfile(t *testing.T) {
 		Backend:            &stubBackend{},
 		DistFS:             dist,
 		ListenAddr:         "127.0.0.1:0",
-		AI:                 aiSvc,
+		AIServiceProvider:  newStaticAIServiceProvider(aiSvc),
 		ConfigPath:         cfgPath,
 		ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanAdmin: true}),
 	})
@@ -1851,12 +1851,12 @@ func TestServer_AIDefaultPermissionUpdate_CreatesPermissionOnlyConfig(t *testing
 	adminChannelID := "ch_default_permission_admin"
 	readChannelID := "ch_default_permission_read"
 	srv, err := New(Options{
-		Backend:    &stubBackend{},
-		DistFS:     dist,
-		ListenAddr: "127.0.0.1:0",
-		AI:         aiSvc,
-		Audit:      auditStore,
-		ConfigPath: cfgPath,
+		Backend:           &stubBackend{},
+		DistFS:            dist,
+		ListenAddr:        "127.0.0.1:0",
+		AIServiceProvider: newStaticAIServiceProvider(aiSvc),
+		Audit:             auditStore,
+		ConfigPath:        cfgPath,
 		ResolveSessionMeta: func(channelID string) (*session.Meta, bool) {
 			switch channelID {
 			case adminChannelID:
@@ -1991,6 +1991,7 @@ func TestServer_SettingsFilesystemScopeRefreshesSharedRegistry(t *testing.T) {
 	if _, err := scope.ResolveTarget(filepath.Join(custom, "next.txt"), filesystemscope.ResolveOptions{ForWrite: true}); err == nil {
 		t.Fatalf("custom path unexpectedly writable before scope update")
 	}
+	provider := &controlledAIServiceProvider{snapshot: AIReadinessSnapshot{State: AIReadinessUnavailable}}
 
 	srv, err := New(Options{
 		Backend:            &stubBackend{},
@@ -1999,6 +2000,7 @@ func TestServer_SettingsFilesystemScopeRefreshesSharedRegistry(t *testing.T) {
 		ConfigPath:         cfgPath,
 		AgentHomeDir:       home,
 		FilesystemScope:    scope,
+		AIServiceProvider:  provider,
 		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
 	})
 	if err != nil {
@@ -2052,6 +2054,17 @@ func TestServer_SettingsFilesystemScopeRefreshesSharedRegistry(t *testing.T) {
 	if resolved.RootID != "custom" {
 		t.Fatalf("RootID = %q, want custom", resolved.RootID)
 	}
+	updates, scopeRevisions := provider.startupUpdates()
+	if len(updates) < 2 || len(scopeRevisions) < 2 {
+		t.Fatalf("startup option updates = %d, scope revisions = %v", len(updates), scopeRevisions)
+	}
+	latest := updates[len(updates)-1]
+	if latest.FilesystemScope != scope || latest.AgentHomeDir != home {
+		t.Fatalf("latest startup options = %#v", latest)
+	}
+	if scopeRevisions[len(scopeRevisions)-1] <= scopeRevisions[0] {
+		t.Fatalf("scope revision chain = %v, want final revision to advance", scopeRevisions)
+	}
 }
 
 func TestServer_LocalUIDoesNotExposeLegacyDesktopModelBinding(t *testing.T) {
@@ -2073,7 +2086,7 @@ func TestServer_LocalUIDoesNotExposeLegacyDesktopModelBinding(t *testing.T) {
 		Backend:            &stubBackend{},
 		DistFS:             fstest.MapFS{"env/index.html": {Data: []byte("<html><div id=\"root\"></div></html>")}},
 		ListenAddr:         "127.0.0.1:0",
-		AI:                 aiSvc,
+		AIServiceProvider:  newStaticAIServiceProvider(aiSvc),
 		ConfigPath:         writeTestConfig(t),
 		ResolveSessionMeta: func(string) (*session.Meta, bool) { return nil, false },
 	})
@@ -2306,7 +2319,7 @@ func TestServer_AIProviderBundle_SavesConfigAndSecretTogether(t *testing.T) {
 		Backend:            &stubBackend{},
 		DistFS:             dist,
 		ListenAddr:         "127.0.0.1:0",
-		AI:                 aiSvc,
+		AIServiceProvider:  newStaticAIServiceProvider(aiSvc),
 		ConfigPath:         cfgPath,
 		ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanAdmin: true}),
 	})
@@ -2461,7 +2474,7 @@ func TestServer_AIProviderBundle_CleansSecretsOutsideCurrentProfile(t *testing.T
 		Backend:            &stubBackend{},
 		DistFS:             dist,
 		ListenAddr:         "127.0.0.1:0",
-		AI:                 aiSvc,
+		AIServiceProvider:  newStaticAIServiceProvider(aiSvc),
 		ConfigPath:         cfgPath,
 		ResolveSessionMeta: resolveMetaForTest(channelID, session.Meta{CanRead: true, CanAdmin: true}),
 	})
@@ -2677,7 +2690,7 @@ func TestServer_AIThreadReadState_ListDetailAndReadArePerUser(t *testing.T) {
 		Backend:              &stubBackend{},
 		DistFS:               dist,
 		ListenAddr:           "127.0.0.1:0",
-		AI:                   aiSvc,
+		AIServiceProvider:    newStaticAIServiceProvider(aiSvc),
 		ConfigPath:           cfgPath,
 		ThreadReadStateStore: store,
 		ResolveSessionMeta:   resolveMeta,
@@ -2955,7 +2968,7 @@ func TestServer_AIThreadLiveEventsIncludeReadStatus(t *testing.T) {
 		Backend:              &stubBackend{},
 		DistFS:               dist,
 		ListenAddr:           "127.0.0.1:0",
-		AI:                   aiSvc,
+		AIServiceProvider:    newStaticAIServiceProvider(aiSvc),
 		ConfigPath:           cfgPath,
 		ThreadReadStateStore: store,
 		ResolveSessionMeta:   resolveMetaForTest(channelID, meta),
@@ -3081,7 +3094,7 @@ func TestServer_AIThreadForkDecodesBodyStrictly(t *testing.T) {
 		Backend:            &stubBackend{},
 		DistFS:             dist,
 		ListenAddr:         "127.0.0.1:0",
-		AI:                 aiSvc,
+		AIServiceProvider:  newStaticAIServiceProvider(aiSvc),
 		ConfigPath:         writeTestConfig(t),
 		ResolveSessionMeta: resolveMetaForTest(channelID, meta),
 	})
@@ -3280,7 +3293,7 @@ func TestServer_AIThreadDeleteRemovesReadStateForAllUsers(t *testing.T) {
 		Backend:              &stubBackend{},
 		DistFS:               dist,
 		ListenAddr:           "127.0.0.1:0",
-		AI:                   aiSvc,
+		AIServiceProvider:    newStaticAIServiceProvider(aiSvc),
 		Audit:                auditStore,
 		ConfigPath:           cfgPath,
 		ThreadReadStateStore: store,
@@ -3346,7 +3359,7 @@ func TestServer_AIThreadDeleteReturnsAcceptedForPersistedPendingOperation(t *tes
 		Backend:              &stubBackend{},
 		DistFS:               dist,
 		ListenAddr:           "127.0.0.1:0",
-		AI:                   aiSvc,
+		AIServiceProvider:    newStaticAIServiceProvider(aiSvc),
 		Audit:                auditStore,
 		ConfigPath:           writeTestConfig(t),
 		ThreadReadStateStore: store,

@@ -160,11 +160,12 @@ func (g *Server) buildAIFlowerLiveEventsView(
 	if resp == nil {
 		return nil, nil
 	}
-	if g == nil || g.ai == nil {
+	aiSvc := aiServiceFromContext(ctx)
+	if g == nil || aiSvc == nil {
 		return resp, nil
 	}
 	return decorateAIFlowerLiveEventsReadStatus(resp, func() (ai.FlowerThreadReadView, error) {
-		thread, err := g.ai.GetThread(ctx, meta, threadID)
+		thread, err := aiSvc.GetThread(ctx, meta, threadID)
 		if err != nil {
 			return ai.FlowerThreadReadView{}, err
 		}
@@ -314,8 +315,9 @@ func (g *Server) markAIThreadRead(
 		return aiMarkThreadReadResponse{}, err
 	}
 	current := snapshot
-	if g != nil && g.ai != nil && meta != nil {
-		thread, err := g.ai.GetThread(ctx, meta, threadID)
+	aiSvc := aiServiceFromContext(ctx)
+	if g != nil && aiSvc != nil && meta != nil {
+		thread, err := aiSvc.GetThread(ctx, meta, threadID)
 		if err != nil {
 			return aiMarkThreadReadResponse{}, err
 		}
@@ -417,10 +419,11 @@ func (g *Server) validateFlowerReadSnapshot(
 	if snapshot.ActivitySignature == "" {
 		return threadreadstate.FlowerSnapshot{}, errors.New("missing read snapshot activity signature")
 	}
-	if g == nil || g.ai == nil || meta == nil {
+	aiSvc := aiServiceFromContext(ctx)
+	if g == nil || aiSvc == nil || meta == nil {
 		return snapshot, nil
 	}
-	thread, err := g.ai.GetThread(ctx, meta, threadID)
+	thread, err := aiSvc.GetThread(ctx, meta, threadID)
 	if err != nil {
 		return threadreadstate.FlowerSnapshot{}, err
 	}

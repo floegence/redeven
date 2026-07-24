@@ -96,6 +96,7 @@ type Options struct {
 	ResolveWebSearchProviderAPIKey func(providerID string) (string, bool, error)
 
 	FlowerReadStateCleaner FlowerReadStateCleaner
+	StoreStartupProgress   func(FloretStoreStartupPhase)
 }
 
 type Service struct {
@@ -270,7 +271,7 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	floretBootstrap, floretRecovery, err := openFloretRuntime(ctx, floretStorePath)
+	floretBootstrap, floretRecovery, err := openFloretRuntime(ctx, floretStorePath, opts.StoreStartupProgress)
 	if err != nil {
 		return nil, err
 	}

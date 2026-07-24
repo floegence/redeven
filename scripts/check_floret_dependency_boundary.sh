@@ -504,6 +504,32 @@ check_exact_run_capability_shapes() {
 	echo "[INFO] exact run capability shapes checked"
 }
 
+check_ai_readiness_lease_boundary() {
+	local matches
+
+	if matches=$(rg -n --pcre2 --glob '*.go' --glob '!**/*_test.go' '\.AI\(\)' internal 2>/dev/null); then
+		printf '%s\n' "$matches"
+		fail "Code App must not expose or consume a raw AI Service pointer."
+	fi
+
+	if matches=$(rg -n --pcre2 '\bAI[[:space:]]+\*ai\.Service|\bai[[:space:]]+\*ai\.Service|g\.ai\b' internal/codeapp/appserver 2>/dev/null); then
+		printf '%s\n' "$matches"
+		fail "AppServer must acquire request-scoped AI service leases instead of retaining a fixed pointer."
+	fi
+
+	if matches=$(rg -n --pcre2 --glob '*.go' --glob '!**/*_test.go' --glob '!internal/codeapp/ai_readiness.go' 'ai\.NewService(Context)?\b' internal 2>/dev/null); then
+		printf '%s\n' "$matches"
+		fail "Only the Code App readiness controller may construct an AI service generation."
+	fi
+
+	if matches=$(rg -n --pcre2 'github\.com/floegence/floret|database/sql|modernc\.org/sqlite|threadstore|Thread(View|ID|Snapshot)|Turn(ID|Snapshot)|Approval|Todo' internal/codeapp/ai_readiness.go 2>/dev/null); then
+		printf '%s\n' "$matches"
+		fail "The AI readiness controller must not inspect or retain Store or Agent lifecycle facts."
+	fi
+
+	echo "[INFO] AI readiness lease boundary checked"
+}
+
 check_no_go_workspace_files
 check_go_module_boundary
 check_local_source_wiring
@@ -514,6 +540,7 @@ check_floret_capability_bootstrap_boundary
 check_floret_thread_creation_boundary
 check_removed_product_schema_paths
 check_exact_run_capability_shapes
+check_ai_readiness_lease_boundary
 
 if [ "$failed" -ne 0 ]; then
   exit 1

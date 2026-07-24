@@ -8,10 +8,10 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/floegence/redeven/internal/ai/threadstore"
+	"github.com/floegence/redeven/internal/codeapp/appserver"
 	"github.com/floegence/redeven/internal/config"
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/terminal"
@@ -88,7 +88,7 @@ func TestAppServerThreadReadStatePathMigratesLegacyStore(t *testing.T) {
 	}
 }
 
-func TestNewRejectsUnsupportedThreadstoreVersionWithoutMutation(t *testing.T) {
+func TestNewKeepsProductAvailableWhenAIThreadstoreVersionIsUnsupported(t *testing.T) {
 	t.Parallel()
 
 	stateDir := t.TempDir()
@@ -113,14 +113,13 @@ func TestNewRejectsUnsupportedThreadstoreVersionWithoutMutation(t *testing.T) {
 			return "", false
 		},
 	})
-	if err == nil {
-		if svc != nil {
-			_ = svc.Close()
-		}
-		t.Fatal("New accepted unsupported threadstore version 15")
+	if err != nil {
+		t.Fatalf("New: %v", err)
 	}
-	if !strings.Contains(err.Error(), "15") || !strings.Contains(err.Error(), "schemas v2 through v6") {
-		t.Fatalf("New error=%v, want actual version and supported v2-through-v6 contract", err)
+	defer func() { _ = svc.Close() }()
+	waitForAIReadinessState(t, svc.aiReady, appserver.AIReadinessBlocked)
+	if got := svc.AIReadiness().ReasonCode; got != "ai_service_startup_error" {
+		t.Fatalf("AI readiness reason = %q, want sanitized startup error", got)
 	}
 
 	raw, err := sql.Open("sqlite", dbPath)
@@ -159,7 +158,7 @@ func TestNewRejectsUnsupportedThreadstoreVersionWithoutMutation(t *testing.T) {
 	}
 }
 
-func TestNewRejectsCurrentThreadstoreSchemaDrift(t *testing.T) {
+func TestNewKeepsProductAvailableWhenAIThreadstoreSchemaDrifts(t *testing.T) {
 	t.Parallel()
 
 	stateDir := t.TempDir()
@@ -195,11 +194,13 @@ func TestNewRejectsCurrentThreadstoreSchemaDrift(t *testing.T) {
 			return "", false
 		},
 	})
-	if err == nil {
-		if svc != nil {
-			_ = svc.Close()
-		}
-		t.Fatal("New succeeded, want current threadstore schema drift error")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	defer func() { _ = svc.Close() }()
+	waitForAIReadinessState(t, svc.aiReady, appserver.AIReadinessBlocked)
+	if got := svc.AIReadiness().ReasonCode; got != "ai_service_startup_error" {
+		t.Fatalf("AI readiness reason = %q, want sanitized startup error", got)
 	}
 
 	raw, err := sql.Open("sqlite", dbPath)

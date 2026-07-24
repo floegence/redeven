@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/floegence/flowersec/flowersec-go/rpc"
 	"github.com/floegence/redeven/internal/accessgate"
@@ -121,21 +123,38 @@ func (s *Service) RegisterRPC(r *rpc.Router, meta *session.Meta, streamServer *r
 }
 
 func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, streamServer *rpc.Server, gate *accessgate.Gate) {
-	if s == nil || r == nil {
+	if s == nil {
 		return
 	}
+	RegisterRPCServiceProviderWithAccessGate(r, meta, streamServer, gate, func(ctx context.Context) (*Service, context.Context, uint64, func(), error) {
+		return s, ctx, 0, func() {}, nil
+	})
+}
+
+type RPCServiceAcquire func(context.Context) (*Service, context.Context, uint64, func(), error)
+
+func RegisterRPCServiceProviderWithAccessGate(r *rpc.Router, meta *session.Meta, streamServer *rpc.Server, gate *accessgate.Gate, acquire RPCServiceAcquire) func() {
+	if r == nil || acquire == nil {
+		return func() {}
+	}
+	realtimeSubscriptions := newRPCRealtimeSubscriptions(meta, streamServer, acquire)
 
 	accessgate.RegisterTyped[aiSendUserTurnReq, aiSendUserTurnResp](r, TypeID_AI_SEND_USER_TURN, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *aiSendUserTurnReq) (*aiSendUserTurnResp, error) {
 		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
 			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
-		if !s.Enabled() {
-			return nil, &rpc.Error{Code: 503, Message: "ai not configured"}
-		}
 		if req == nil {
 			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
 		}
-		resp, err := s.SendUserTurn(ctx, meta, SendUserTurnRequest{
+		service, leaseCtx, release, acquireErr := acquireRPCService(ctx, acquire)
+		if acquireErr != nil {
+			return nil, acquireErr
+		}
+		defer release()
+		if !service.Enabled() {
+			return nil, &rpc.Error{Code: 503, Message: "ai not configured"}
+		}
+		resp, err := service.SendUserTurn(leaseCtx, meta, SendUserTurnRequest{
 			ThreadID:              strings.TrimSpace(req.ThreadID),
 			Model:                 strings.TrimSpace(req.Model),
 			Input:                 req.Input,
@@ -162,13 +181,18 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
 			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
-		if !s.Enabled() {
-			return nil, &rpc.Error{Code: 503, Message: "ai not configured"}
-		}
 		if req == nil {
 			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
 		}
-		resp, err := s.SubmitRequestUserInputResponse(ctx, meta, SubmitRequestUserInputResponseRequest{
+		service, leaseCtx, release, acquireErr := acquireRPCService(ctx, acquire)
+		if acquireErr != nil {
+			return nil, acquireErr
+		}
+		defer release()
+		if !service.Enabled() {
+			return nil, &rpc.Error{Code: 503, Message: "ai not configured"}
+		}
+		resp, err := service.SubmitRequestUserInputResponse(leaseCtx, meta, SubmitRequestUserInputResponseRequest{
 			ThreadID:         strings.TrimSpace(req.ThreadID),
 			Model:            strings.TrimSpace(req.Model),
 			Response:         req.Response,
@@ -193,9 +217,6 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
 			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
-		if !s.Enabled() {
-			return nil, &rpc.Error{Code: 503, Message: "ai not configured"}
-		}
 		if req == nil {
 			return nil, &rpc.Error{Code: 400, Message: "invalid payload"}
 		}
@@ -203,7 +224,15 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 		if threadID == "" {
 			return nil, &rpc.Error{Code: 400, Message: "missing thread_id"}
 		}
-		resp, err := s.CompactThreadContext(ctx, meta, CompactThreadContextRequest{
+		service, leaseCtx, release, acquireErr := acquireRPCService(ctx, acquire)
+		if acquireErr != nil {
+			return nil, acquireErr
+		}
+		defer release()
+		if !service.Enabled() {
+			return nil, &rpc.Error{Code: 503, Message: "ai not configured"}
+		}
+		resp, err := service.CompactThreadContext(leaseCtx, meta, CompactThreadContextRequest{
 			ThreadID:    threadID,
 			ActiveRunID: strings.TrimSpace(req.ActiveRunID),
 		})
@@ -217,21 +246,21 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 		}, nil
 	})
 
-	accessgate.RegisterTyped[aiSubscribeSummaryReq, aiSubscribeSummaryResp](r, TypeID_AI_SUBSCRIBE_SUMMARY, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, _ *aiSubscribeSummaryReq) (*aiSubscribeSummaryResp, error) {
+	accessgate.RegisterTyped[aiSubscribeSummaryReq, aiSubscribeSummaryResp](r, TypeID_AI_SUBSCRIBE_SUMMARY, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, _ *aiSubscribeSummaryReq) (*aiSubscribeSummaryResp, error) {
 		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
 			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
 		if streamServer == nil {
 			return nil, &rpc.Error{Code: 500, Message: "stream not ready"}
 		}
-		activeRuns, err := s.SubscribeSummary(strings.TrimSpace(meta.EndpointID), streamServer)
-		if err != nil {
-			return nil, toAIRPCError(err)
+		activeRuns, subscribeErr := realtimeSubscriptions.SubscribeSummary()
+		if subscribeErr != nil {
+			return nil, subscribeErr
 		}
 		return &aiSubscribeSummaryResp{ActiveRuns: activeRuns}, nil
 	})
 
-	accessgate.RegisterTyped[aiSubscribeThreadReq, aiSubscribeThreadResp](r, TypeID_AI_SUBSCRIBE_THREAD, gate, meta, accessgate.RPCAccessProtected, func(_ context.Context, req *aiSubscribeThreadReq) (*aiSubscribeThreadResp, error) {
+	accessgate.RegisterTyped[aiSubscribeThreadReq, aiSubscribeThreadResp](r, TypeID_AI_SUBSCRIBE_THREAD, gate, meta, accessgate.RPCAccessProtected, func(ctx context.Context, req *aiSubscribeThreadReq) (*aiSubscribeThreadResp, error) {
 		if meta == nil || !meta.CanRead || !meta.CanWrite || !meta.CanExecute {
 			return nil, &rpc.Error{Code: 403, Message: "read/write/execute permission denied"}
 		}
@@ -245,9 +274,9 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 		if threadID == "" {
 			return nil, &rpc.Error{Code: 400, Message: "missing thread_id"}
 		}
-		runID, err := s.SubscribeThread(strings.TrimSpace(meta.EndpointID), threadID, streamServer)
-		if err != nil {
-			return nil, toAIRPCError(err)
+		runID, subscribeErr := realtimeSubscriptions.SubscribeThread(threadID)
+		if subscribeErr != nil {
+			return nil, subscribeErr
 		}
 		return &aiSubscribeThreadResp{RunID: strings.TrimSpace(runID)}, nil
 	})
@@ -263,7 +292,12 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 		if threadID == "" {
 			return nil, &rpc.Error{Code: 400, Message: "missing thread_id"}
 		}
-		out, err := s.StopThread(ctx, meta, threadID)
+		service, leaseCtx, release, acquireErr := acquireRPCService(ctx, acquire)
+		if acquireErr != nil {
+			return nil, acquireErr
+		}
+		defer release()
+		out, err := service.StopThread(leaseCtx, meta, threadID)
 		if err != nil {
 			return nil, toAIRPCError(err)
 		}
@@ -281,10 +315,16 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 		if threadID == "" {
 			return nil, &rpc.Error{Code: 400, Message: "missing thread_id"}
 		}
+		service, leaseCtx, release, acquireErr := acquireRPCService(ctx, acquire)
+		if acquireErr != nil {
+			return nil, acquireErr
+		}
+		defer release()
+		ctx = leaseCtx
 
-		s.mu.Lock()
-		db := s.threadsDB
-		s.mu.Unlock()
+		service.mu.Lock()
+		db := service.threadsDB
+		service.mu.Unlock()
 		if db == nil {
 			return nil, &rpc.Error{Code: 503, Message: "threads store not ready"}
 		}
@@ -305,7 +345,7 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 		}
 
 		endpointID := strings.TrimSpace(meta.EndpointID)
-		msgs, nextAfter, hasMore, err := s.listThreadTimelineMessagesAfter(ctx, endpointID, threadID, limit, req.AfterRowID, req.Tail)
+		msgs, nextAfter, hasMore, err := service.listThreadTimelineMessagesAfter(ctx, endpointID, threadID, limit, req.AfterRowID, req.Tail)
 		if err != nil {
 			return nil, toAIRPCError(err)
 		}
@@ -331,7 +371,262 @@ func (s *Service) RegisterRPCWithAccessGate(r *rpc.Router, meta *session.Meta, s
 		}
 		return out, nil
 	})
+	return realtimeSubscriptions.Close
+}
 
+type rpcRealtimeSubscriptions struct {
+	mu sync.Mutex
+
+	ctx          context.Context
+	cancel       context.CancelFunc
+	acquire      RPCServiceAcquire
+	streamServer *rpc.Server
+	endpointID   string
+
+	closed   bool
+	summary  bool
+	threadID string
+
+	current    *Service
+	leaseCtx   context.Context
+	release    func()
+	bindingSeq uint64
+	closeOnce  sync.Once
+	watchers   sync.WaitGroup
+}
+
+func newRPCRealtimeSubscriptions(meta *session.Meta, streamServer *rpc.Server, acquire RPCServiceAcquire) *rpcRealtimeSubscriptions {
+	ctx, cancel := context.WithCancel(context.Background())
+	endpointID := ""
+	if meta != nil {
+		endpointID = strings.TrimSpace(meta.EndpointID)
+	}
+	return &rpcRealtimeSubscriptions{
+		ctx: ctx, cancel: cancel, acquire: acquire, streamServer: streamServer, endpointID: endpointID,
+	}
+}
+
+func (s *rpcRealtimeSubscriptions) SubscribeSummary() ([]ActiveThreadRun, *rpc.Error) {
+	if s == nil {
+		return nil, &rpc.Error{Code: 503, Message: "AI service is unavailable"}
+	}
+	service, leaseCtx, release, rpcErr := acquireRPCService(s.ctx, s.acquire)
+	if rpcErr != nil {
+		return nil, rpcErr
+	}
+	activeRuns, _, bindErr := s.bindAcquired(service, leaseCtx, release, true, "")
+	return activeRuns, bindErr
+}
+
+func (s *rpcRealtimeSubscriptions) SubscribeThread(threadID string) (string, *rpc.Error) {
+	if s == nil {
+		return "", &rpc.Error{Code: 503, Message: "AI service is unavailable"}
+	}
+	service, leaseCtx, release, rpcErr := acquireRPCService(s.ctx, s.acquire)
+	if rpcErr != nil {
+		return "", rpcErr
+	}
+	_, runID, bindErr := s.bindAcquired(service, leaseCtx, release, false, strings.TrimSpace(threadID))
+	return runID, bindErr
+}
+
+func (s *rpcRealtimeSubscriptions) bindAcquired(
+	service *Service,
+	leaseCtx context.Context,
+	release func(),
+	addSummary bool,
+	addThreadID string,
+) ([]ActiveThreadRun, string, *rpc.Error) {
+	if release == nil {
+		return nil, "", &rpc.Error{Code: 503, Message: "AI service is unavailable"}
+	}
+
+	s.mu.Lock()
+	if s.closed || service == nil || leaseCtx == nil || s.streamServer == nil || s.endpointID == "" {
+		s.mu.Unlock()
+		release()
+		return nil, "", &rpc.Error{Code: 503, Message: "AI service is unavailable"}
+	}
+
+	requestedThreadID := strings.TrimSpace(addThreadID)
+	if service == s.current {
+		var activeRuns []ActiveThreadRun
+		var runID string
+		if addSummary && !s.summary {
+			var err error
+			activeRuns, err = service.SubscribeSummary(s.endpointID, s.streamServer)
+			if err != nil {
+				s.mu.Unlock()
+				release()
+				return nil, "", toAIRPCError(err)
+			}
+			s.summary = true
+		} else if addSummary {
+			activeRuns = service.ListActiveThreadRuns(s.endpointID)
+		}
+		if requestedThreadID != "" && requestedThreadID != s.threadID {
+			var err error
+			runID, err = service.SubscribeThread(s.endpointID, requestedThreadID, s.streamServer)
+			if err != nil {
+				s.mu.Unlock()
+				release()
+				return nil, "", toAIRPCError(err)
+			}
+			s.threadID = requestedThreadID
+		} else if requestedThreadID != "" {
+			service.mu.Lock()
+			runID = strings.TrimSpace(service.activeRunByTh[runThreadKey(s.endpointID, requestedThreadID)])
+			service.mu.Unlock()
+		}
+		s.mu.Unlock()
+		release()
+		return activeRuns, runID, nil
+	}
+
+	wantSummary := s.summary || addSummary
+	wantThreadID := s.threadID
+	if requestedThreadID != "" {
+		wantThreadID = requestedThreadID
+	}
+	var activeRuns []ActiveThreadRun
+	var runID string
+	if wantSummary {
+		var err error
+		activeRuns, err = service.SubscribeSummary(s.endpointID, s.streamServer)
+		if err != nil {
+			s.mu.Unlock()
+			release()
+			return nil, "", toAIRPCError(err)
+		}
+	}
+	if wantThreadID != "" {
+		var err error
+		runID, err = service.SubscribeThread(s.endpointID, wantThreadID, s.streamServer)
+		if err != nil {
+			service.DetachRealtimeSink(s.streamServer)
+			s.mu.Unlock()
+			release()
+			return nil, "", toAIRPCError(err)
+		}
+	}
+
+	previous := s.current
+	previousRelease := s.release
+	s.current = service
+	s.leaseCtx = leaseCtx
+	s.release = release
+	s.summary = wantSummary
+	s.threadID = wantThreadID
+	s.bindingSeq++
+	seq := s.bindingSeq
+	s.watchers.Add(1)
+	s.mu.Unlock()
+
+	if previous != nil {
+		previous.DetachRealtimeSink(s.streamServer)
+	}
+	if previousRelease != nil {
+		previousRelease()
+	}
+	go func() {
+		defer s.watchers.Done()
+		s.watchGeneration(service, seq, leaseCtx)
+	}()
+	return activeRuns, runID, nil
+}
+
+func (s *rpcRealtimeSubscriptions) watchGeneration(service *Service, seq uint64, leaseCtx context.Context) {
+	select {
+	case <-leaseCtx.Done():
+		s.releaseGeneration(service, seq)
+	case <-s.ctx.Done():
+	}
+}
+
+func (s *rpcRealtimeSubscriptions) releaseGeneration(service *Service, seq uint64) {
+	s.mu.Lock()
+	if s.closed || s.current != service || s.bindingSeq != seq {
+		s.mu.Unlock()
+		return
+	}
+	release := s.release
+	s.current = nil
+	s.leaseCtx = nil
+	s.release = nil
+	s.bindingSeq++
+	shouldRebind := s.summary || s.threadID != ""
+	s.mu.Unlock()
+
+	service.DetachRealtimeSink(s.streamServer)
+	if release != nil {
+		release()
+	}
+	if shouldRebind {
+		s.rebind()
+	}
+}
+
+func (s *rpcRealtimeSubscriptions) rebind() {
+	for {
+		s.mu.Lock()
+		active := !s.closed && s.current == nil && (s.summary || s.threadID != "")
+		s.mu.Unlock()
+		if !active {
+			return
+		}
+
+		service, leaseCtx, release, rpcErr := acquireRPCService(s.ctx, s.acquire)
+		if rpcErr == nil {
+			_, _, bindErr := s.bindAcquired(service, leaseCtx, release, false, "")
+			if bindErr == nil {
+				return
+			}
+		}
+
+		timer := time.NewTimer(50 * time.Millisecond)
+		select {
+		case <-timer.C:
+		case <-s.ctx.Done():
+			timer.Stop()
+			return
+		}
+	}
+}
+
+func (s *rpcRealtimeSubscriptions) Close() {
+	if s == nil {
+		return
+	}
+	s.closeOnce.Do(func() {
+		s.cancel()
+		s.mu.Lock()
+		s.closed = true
+		service := s.current
+		release := s.release
+		s.current = nil
+		s.leaseCtx = nil
+		s.release = nil
+		s.bindingSeq++
+		s.mu.Unlock()
+		if service != nil {
+			service.DetachRealtimeSink(s.streamServer)
+		}
+		if release != nil {
+			release()
+		}
+		s.watchers.Wait()
+	})
+}
+
+func acquireRPCService(ctx context.Context, acquire RPCServiceAcquire) (*Service, context.Context, func(), *rpc.Error) {
+	service, leaseCtx, _, release, err := acquire(ctx)
+	if err != nil || service == nil || leaseCtx == nil || release == nil {
+		if release != nil {
+			release()
+		}
+		return nil, nil, nil, &rpc.Error{Code: 503, Message: "AI service is unavailable"}
+	}
+	return service, leaseCtx, release, nil
 }
 
 func toAIRPCError(err error) *rpc.Error {

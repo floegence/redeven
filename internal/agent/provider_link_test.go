@@ -110,6 +110,11 @@ func newProviderLinkTestAgent(t *testing.T, cfgPath string, cfg *config.Config) 
 	if err != nil {
 		t.Fatalf("agent.New() error = %v", err)
 	}
+	t.Cleanup(func() {
+		if a.code != nil {
+			_ = a.code.Close()
+		}
+	})
 	return a
 }
 

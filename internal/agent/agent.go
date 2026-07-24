@@ -31,6 +31,7 @@ import (
 	"github.com/floegence/redeven/internal/accessgate"
 	"github.com/floegence/redeven/internal/accessproxy"
 	"github.com/floegence/redeven/internal/accessrpc"
+	"github.com/floegence/redeven/internal/ai"
 	"github.com/floegence/redeven/internal/auditlog"
 	"github.com/floegence/redeven/internal/codeapp"
 	"github.com/floegence/redeven/internal/config"
@@ -1359,10 +1360,8 @@ func (a *Agent) serveRPCStream(ctx context.Context, stream io.ReadWriteCloser, m
 	a.mon.RegisterWithAccessGate(router, meta, a.accessGate)
 
 	if a.code != nil {
-		if aiSvc := a.code.AI(); aiSvc != nil {
-			defer aiSvc.DetachRealtimeSink(srv)
-			aiSvc.RegisterRPCWithAccessGate(router, meta, srv, a.accessGate)
-		}
+		detachAIRealtimeSinks := ai.RegisterRPCServiceProviderWithAccessGate(router, meta, srv, a.accessGate, a.code.AcquireAIService)
+		defer detachAIRealtimeSinks()
 	}
 
 	// Sessions domain (active Flowersec channel sessions).

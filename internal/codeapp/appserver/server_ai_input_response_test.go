@@ -96,7 +96,7 @@ func TestServer_AIThreadInputResponseUsesURLThreadID(t *testing.T) {
 		ListenAddr:         "127.0.0.1:0",
 		ConfigPath:         writeTestConfigWithAI(t),
 		ResolveSessionMeta: resolveMetaForTest(channelID, meta),
-		AI:                 aiSvc,
+		AIServiceProvider:  newStaticAIServiceProvider(aiSvc),
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
