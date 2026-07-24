@@ -421,7 +421,7 @@ func TestFloretDependencyUsesPublishedRelease(t *testing.T) {
 
 	const (
 		floretModule  = "github.com/floegence/floret"
-		floretVersion = "v0.23.0"
+		floretVersion = "v0.24.0"
 	)
 	root := repoRootForTest(t)
 	goMod := readRepoFile(t, root, "go.mod")
@@ -499,7 +499,7 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"TurnInput.References",
 			"MessageReference",
 			"raw `ResourceRef` never reaches the browser",
-			"v0.23.0",
+			"v0.24.0",
 		},
 		filepath.Join("okf", "ui", "flower-turn-launcher.md"): {
 			"file_path",
@@ -525,13 +525,16 @@ func TestFlowerDocumentationMatchesPublishedFloretBoundaries(t *testing.T) {
 			"complete immutable snapshot",
 		},
 		filepath.Join("internal", "runtimeservice", "compatibility_contract.json"): {
-			"Floret v0.23.0",
+			"Floret v0.24.0",
+			"floret-v0-24-0-thread-deletion",
 			"single persistent source of truth",
 			"provider-owned thread titles",
 			"public contracts",
 			"parent-scoped SubAgent validation",
 			"turn_projection_unavailable",
 			"Thread deletion persists an immutable user-intent and upload cleanup snapshot",
+			"only Floret's exact tombstone replay returns success",
+			"a missing canonical thread without that tombstone fails terminally and preserves product data",
 			"redeven-runtime-v1",
 		},
 	}
