@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { render } from 'solid-js/web';
+import { createSignal } from 'solid-js';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { FlowerThreadListItem, FlowerThreadReadStatus } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
@@ -71,13 +72,14 @@ function thread(): FlowerThreadListItem {
   };
 }
 
-function renderList(showDeleteAction = true) {
+function renderList(showDeleteAction = true, initialItems: readonly FlowerThreadListItem[] = [thread()]) {
   const host = document.createElement('div');
   document.body.appendChild(host);
   const onMenuAction = vi.fn();
+  const [items, setItems] = createSignal(initialItems);
   disposers.push(render(() => (
     <FlowerThreadList
-      items={[thread()]}
+      items={items()}
       activeThreadID="thread-delete"
       query=""
       onQueryChange={() => undefined}
@@ -90,7 +92,7 @@ function renderList(showDeleteAction = true) {
       showDeleteAction={showDeleteAction}
     />
   ), host));
-  return { host, onMenuAction };
+  return { host, onMenuAction, setItems };
 }
 
 describe('FlowerThreadList deletion entry', () => {
@@ -119,6 +121,59 @@ describe('FlowerThreadList deletion entry', () => {
 
     expect(host.querySelector('[role="menuitem"][data-destructive="true"]')).toBeNull();
     expect(host.querySelector('[data-icon="trash"]')).toBeNull();
+  });
+
+  it('keeps an open menu on the latest thread metadata', async () => {
+    const { host, onMenuAction, setItems } = renderList();
+    (host.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement).click();
+    await Promise.resolve();
+
+    setItems([{ ...thread(), title: 'Updated release review', working_dir: '/workspace/latest', pinned: true }]);
+    await Promise.resolve();
+
+    const menu = host.querySelector('[role="menu"]');
+    expect(menu?.getAttribute('aria-label')).toContain('Updated release review');
+    expect(menu?.textContent).toContain('Unpin');
+    const copyWorkdir = Array.from(host.querySelectorAll<HTMLButtonElement>('[role="menuitem"]'))
+      .find((item) => item.textContent?.includes('Copy working directory'));
+    copyWorkdir?.click();
+    expect(onMenuAction).toHaveBeenCalledWith(
+      'copy_workdir',
+      expect.objectContaining({ title: 'Updated release review', working_dir: '/workspace/latest', pinned: true }),
+      expect.any(HTMLElement),
+    );
+    const restore = onMenuAction.mock.calls[0]?.[2] as HTMLElement | undefined;
+    expect(restore?.isConnected).toBe(true);
+    expect(restore?.classList.contains('flower-thread-card-menu-button')).toBe(true);
+  });
+
+  it('restores focus to the current trigger after metadata moves a thread between groups', async () => {
+    const { host, setItems } = renderList();
+    const originalTrigger = host.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement;
+    originalTrigger.click();
+    await Promise.resolve();
+
+    setItems([{ ...thread(), pinned: true }]);
+    await Promise.resolve();
+    expect(originalTrigger.isConnected).toBe(false);
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    await Promise.resolve();
+
+    const currentTrigger = host.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement;
+    expect(host.querySelector('[role="menu"]')).toBeNull();
+    expect(document.activeElement).toBe(currentTrigger);
+  });
+
+  it('closes an open menu when a same-length refresh replaces its thread', async () => {
+    const { host, setItems } = renderList();
+    (host.querySelector('.flower-thread-card-menu-button') as HTMLButtonElement).click();
+    await Promise.resolve();
+    expect(host.querySelector('[role="menu"]')).toBeTruthy();
+
+    setItems([{ ...thread(), thread_id: 'thread-replacement', title: 'Replacement' }]);
+    await Promise.resolve();
+
+    expect(host.querySelector('[role="menu"]')).toBeNull();
   });
 
   it('opens the same menu from the keyboard and exposes its trigger while focused', async () => {

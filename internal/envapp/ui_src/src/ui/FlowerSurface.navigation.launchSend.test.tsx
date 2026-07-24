@@ -260,6 +260,7 @@ it('keeps an exact over-limit paste in the editor until its attachment is staged
   await waitFor(() => Boolean(runtime.querySelector('input[type="file"]')));
   const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
   const payload = 'x'.repeat(50_001);
+  textarea.focus();
   textarea.value = 'before after';
   textarea.setSelectionRange(7, 7);
   const paste = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent;
@@ -278,7 +279,47 @@ it('keeps an exact over-limit paste in the editor until its attachment is staged
     locator: 'attachment://v1/upl_long_paste/long.txt',
   });
   await waitFor(() => textarea.value === 'before after');
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   expect(runtime.querySelector('[data-attachment-status="staged_ready"]')).not.toBeNull();
+  expect(document.activeElement).toBe(textarea);
+  expect(textarea.selectionStart).toBe(7);
+  expect(textarea.selectionEnd).toBe(7);
+});
+
+it('does not reclaim focus after an over-limit paste finishes staging', async () => {
+  const capability: FlowerAttachmentCapability = {
+    model_id: 'openai/gpt-5.2', revision: 'capability-long-paste-focus', enabled: true, supports_long_text: true,
+    max_attachments: 4, max_file_size_bytes: 1_000_000, max_total_size_bytes: 2_000_000,
+    routes: { 'text/plain': 'tool_read', 'text/plain; charset=utf-8': 'tool_read' },
+  };
+  const completion = deferred<FlowerStagedAttachment>();
+  const uploadAttachment = vi.fn(() => completion.promise);
+  const runtime = renderSurfaceWithDraftCoordinator({
+    ...adapter(), loadAttachmentCapability: vi.fn(async () => capability), uploadAttachment,
+  }, createFlowerComposerDraftCoordinator(), 'activity');
+  await waitFor(() => Boolean(runtime.querySelector('textarea')));
+  const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+  const payload = 'y'.repeat(50_001);
+  textarea.focus();
+  const paste = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent;
+  Object.defineProperty(paste, 'clipboardData', {
+    value: { files: [], getData: (type: string) => type === 'text/plain' ? payload : '' },
+  });
+  textarea.dispatchEvent(paste);
+  await waitFor(() => uploadAttachment.mock.calls.length === 1);
+  const modelTrigger = runtime.querySelector('.flower-model-reasoning-model-trigger') as HTMLButtonElement;
+  modelTrigger.focus();
+
+  completion.resolve({
+    attachment_id: 'upl_long_paste_focus______', name: 'long.txt', mime_type: 'text/plain; charset=utf-8',
+    size_bytes: payload.length, digest_sha256: 'e'.repeat(64), source: 'long_text',
+    text_stats: { code_points: payload.length, lines: 1 }, capability_revision: capability.revision,
+    locator: 'attachment://v1/upl_long_paste_focus/long.txt',
+  });
+  await waitFor(() => textarea.value === '');
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+  expect(document.activeElement).toBe(modelTrigger);
 });
 
 it('preserves an exact over-limit paste when staging fails', async () => {
@@ -542,6 +583,47 @@ it('does not restore or delete a long-text attachment after navigating to anothe
   expect(deleteStagedAttachment).not.toHaveBeenCalled();
   expect(coordinator.read('__new_thread__').value).toMatchObject({ text: 'draft A' });
   expect(coordinator.read('__new_thread__').value.attachments).toHaveLength(1);
+});
+
+it('does not reclaim focus after restoring long text into the current editor', async () => {
+  const text = 'restored exact text';
+  const attachment: FlowerStagedAttachment = {
+    attachment_id: 'upl_restore_focus_________', name: 'long-text.txt',
+    mime_type: 'text/plain; charset=utf-8', size_bytes: new TextEncoder().encode(text).byteLength,
+    digest_sha256: 'f'.repeat(64), source: 'long_text', capability_revision: 'capability-1',
+    locator: 'attachment://v1/upl_restore_focus/long-text.txt',
+    text_stats: { code_points: Array.from(text).length, lines: 1 },
+  };
+  const coordinator = createFlowerComposerDraftCoordinator({
+    initialDraft: () => ({
+      text: 'draft ', mode: 'ordinary',
+      attachments: [{
+        local_id: 'local-restore-focus', source: 'long_text', name: attachment.name,
+        mime_type: attachment.mime_type, size_bytes: attachment.size_bytes,
+        upload_request_id: 'draft-restore-focus', attempt_state: 'staged_ready', staged: attachment,
+      }],
+    }),
+  });
+  const restored = deferred<FlowerStagedLongTextReadResult>();
+  const runtime = renderSurfaceWithDraftCoordinator({
+    ...adapter(),
+    readStagedLongText: vi.fn(() => restored.promise),
+    deleteStagedAttachment: vi.fn(async () => undefined),
+  }, coordinator, 'activity');
+  const restoreSelector = 'button[aria-label="Restore to editor"]';
+  await waitFor(() => Boolean(runtime.querySelector(restoreSelector)));
+  const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+  textarea.focus();
+  textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+  (runtime.querySelector(restoreSelector) as HTMLButtonElement).click();
+  const modelTrigger = runtime.querySelector('.flower-model-reasoning-model-trigger') as HTMLButtonElement;
+  modelTrigger.focus();
+
+  restored.resolve({ attachment, text });
+  await waitFor(() => textarea.value === `draft ${text}`);
+  await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
+  expect(document.activeElement).toBe(modelTrigger);
 });
 
 function withCanonicalUserTurnID<T extends { readonly messages: readonly { readonly id: string }[] }>(threadValue: T, userEntryID: string, turnID: string): T {
