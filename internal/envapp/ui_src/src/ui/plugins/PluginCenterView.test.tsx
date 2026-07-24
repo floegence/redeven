@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { PluginCenterView } from './PluginCenterView';
 import { OFFICIAL_CONTAINERS_RELEASE_REF } from './officialContainersRelease.generated';
+import { OFFICIAL_CONTAINERS_PACKAGE_URL } from './officialPluginCatalog';
 import type { PluginInventoryProjection } from './pluginTypes';
 
 let dispose: (() => void) | undefined;
@@ -42,6 +43,10 @@ const containersPlugin = {
     trustedSigningKeyIDs: ['redeven-official-signing-2026'],
     distribution: {
       releaseRef: OFFICIAL_CONTAINERS_RELEASE_REF,
+      installSource: {
+        sourceKind: 'package_url',
+        url: OFFICIAL_CONTAINERS_PACKAGE_URL,
+      },
     },
   },
 } satisfies PluginInventoryProjection['items'][number];
@@ -219,8 +224,11 @@ describe('PluginCenterView', () => {
     expect(mount.querySelector('[data-plugin-center-details]')?.textContent).toContain('Disabled');
   });
 
-  it('allows official catalog installation through the bundled lifecycle API', () => {
+  it('opens official catalog installation through the reviewed package URL flow', async () => {
     const onCommand = vi.fn();
+    const onInspectExternal = vi.fn(async () => {
+      throw new Error('stop after request capture');
+    });
     const mount = document.createElement('div');
     document.body.append(mount);
 
@@ -230,6 +238,7 @@ describe('PluginCenterView', () => {
         loading={false}
         error={null}
         onCommand={onCommand}
+        onInspectExternal={onInspectExternal}
         onRefresh={vi.fn()}
         canManagePlugins
         canOpenPluginSurfaces
@@ -241,10 +250,17 @@ describe('PluginCenterView', () => {
     expect(install.textContent).toContain('Install');
     expect(containersPlugin.officialCatalog.distribution.releaseRef).toBe(OFFICIAL_CONTAINERS_RELEASE_REF);
     install.click();
-    expect(onCommand).toHaveBeenCalledWith({
-      type: 'install',
-      pluginID: 'com.redeven.official.containers',
-      source: 'official_catalog',
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onCommand).not.toHaveBeenCalled();
+    expect(document.querySelector('[data-external-plugin-dialog]')).not.toBeNull();
+    expect((document.querySelector('[data-external-plugin-dialog] input[type="url"]') as HTMLInputElement).value)
+      .toBe(OFFICIAL_CONTAINERS_PACKAGE_URL);
+    findDocumentButton('Review package').click();
+    await Promise.resolve();
+    expect(onInspectExternal).toHaveBeenCalledWith({
+      sourceKind: 'package_url',
+      url: OFFICIAL_CONTAINERS_PACKAGE_URL,
+      intent: { action: 'install' },
     }, expect.any(AbortSignal));
   });
 
@@ -533,7 +549,7 @@ describe('PluginCenterView', () => {
     }, expect.any(AbortSignal));
   });
 
-  it('updates official catalog packages through the bundled lifecycle API', () => {
+  it('updates official catalog packages through the reviewed package URL flow', async () => {
     const onCommand = vi.fn();
     const updatesProjection: PluginInventoryProjection = {
       items: [
@@ -561,16 +577,13 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    const update = mount.querySelector('[data-plugin-action="update"]') as HTMLButtonElement;
+    const update = mount.querySelector('[data-plugin-action="update-external"]') as HTMLButtonElement;
     expect(update.disabled).toBe(false);
     update.click();
-    expect(onCommand).toHaveBeenCalledWith({
-      type: 'update',
-      pluginID: 'com.redeven.official.containers',
-      pluginInstanceID: 'plugininst_containers',
-      expectedManagementRevision: 13,
-      targetVersion: '2.0.0',
-    }, expect.any(AbortSignal));
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(onCommand).not.toHaveBeenCalled();
+    expect((document.querySelector('[data-external-plugin-dialog] input[type="url"]') as HTMLInputElement).value)
+      .toBe(OFFICIAL_CONTAINERS_PACKAGE_URL);
   });
 
   it('does not offer enable for plugins that need trust attention or updates', () => {
@@ -631,7 +644,7 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    expect(mount.querySelector('[data-plugin-action="update"]')).not.toBeNull();
+    expect(mount.querySelector('[data-plugin-action="update-external"]')).not.toBeNull();
     expect(mount.querySelector('[data-plugin-action="enable"]')).toBeNull();
   });
 
@@ -667,9 +680,19 @@ describe('PluginCenterView', () => {
     const mount = document.createElement('div');
     document.body.append(mount);
 
+    const installedProjection: PluginInventoryProjection = {
+      items: [{
+        ...containersPlugin,
+        pluginInstanceID: 'plugininst_containers',
+        version: '2.0.0',
+        managementRevision: 7,
+        canDisable: true,
+        lifecycleState: 'enabled',
+      }],
+    };
     dispose = render(() => (
       <PluginCenterView
-        projection={projection}
+        projection={installedProjection}
         loading={false}
         error={null}
         canManagePlugins
@@ -679,16 +702,16 @@ describe('PluginCenterView', () => {
       />
     ), mount);
 
-    const install = mount.querySelector('[data-plugin-action="install"]') as HTMLButtonElement;
-    install.click();
-    install.click();
+    const disable = mount.querySelector('[data-plugin-action="disable"]') as HTMLButtonElement;
+    disable.click();
+    disable.click();
     expect(onCommand).toHaveBeenCalledTimes(1);
-    expect(install.disabled).toBe(true);
+    expect(disable.disabled).toBe(true);
 
     finish();
     await Promise.resolve();
     await Promise.resolve();
-    expect(install.disabled).toBe(false);
+    expect(disable.disabled).toBe(false);
   });
 
   it('selects same-plugin-id instances independently by inventory key', () => {

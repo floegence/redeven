@@ -9,6 +9,7 @@ import type {
   ExternalPluginCommitResult,
   ExternalPluginInspection,
   ExternalPluginInspectionRequest,
+  ExternalPluginSourcePreset,
   ExternalPluginSourceKind,
   PluginExternalPackageSecuritySummary,
   PluginInventoryItem,
@@ -17,6 +18,7 @@ import type {
 type ExternalPluginInstallDialogProps = {
   open: boolean;
   updateItem?: PluginInventoryItem;
+  sourcePreset?: ExternalPluginSourcePreset;
   onOpenChange: (open: boolean) => void;
   onInspect: (request: ExternalPluginInspectionRequest, signal: AbortSignal) => Promise<ExternalPluginInspection>;
   onCommit: (inspection: ExternalPluginInspection, signal: AbortSignal) => Promise<ExternalPluginCommitResult>;
@@ -48,12 +50,13 @@ export function ExternalPluginInstallDialog(props: ExternalPluginInstallDialogPr
     if (!props.open) return;
     operation?.abort('External plugin dialog reset');
     const provenance = props.updateItem?.externalPackage?.sourceProvenance;
+    const preset = props.sourcePreset;
     setStage('source');
-    setSourceKind(provenance?.kind === 'github_repository' ? 'github_repository' : provenance?.kind === 'package_upload' ? 'package_upload' : 'package_url');
+    setSourceKind(preset?.sourceKind ?? (provenance?.kind === 'github_repository' ? 'github_repository' : provenance?.kind === 'package_upload' ? 'package_upload' : 'package_url'));
     // Package provenance intentionally omits query strings and credentials, so it
     // cannot safely reconstruct the source URL for a later update.
-    setURL(provenance?.kind === 'github_repository' ? provenance.repository_url : '');
-    setTag('');
+    setURL(preset?.url ?? (provenance?.kind === 'github_repository' ? provenance.repository_url : ''));
+    setTag(preset?.sourceKind === 'github_repository' ? preset.tag ?? '' : '');
     setFile(null);
     setInspection(null);
     setCommitted(null);

@@ -220,3 +220,109 @@ func TestOfficialContainersReleaseInstallsThroughHTTP(t *testing.T) {
 		t.Fatalf("installed release metadata = %#v", installed.Metadata)
 	}
 }
+
+func TestExpiredOfficialContainersReleaseIsRejectedThroughHTTP(t *testing.T) {
+	release, err := redevpluginartifacts.OfficialContainersPluginRelease()
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := releasecontract.DecodeRootDelegation(release.ReleaseTrustDocuments["sources/redeven-official/root/current.json"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	expiresAt, err := time.Parse(time.RFC3339, root.ExpiresAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expiredAt := expiresAt.Add(time.Second)
+	stateDir := t.TempDir()
+	integration, err := New(context.Background(), Options{
+		StateDir:         stateDir,
+		PermissionPolicy: testPermissionPolicy(t, "execute_read_write"),
+		RuntimePath:      testRuntimePath(t, stateDir),
+		Containers:       mustContainersAdapter(t, &capabilityEngineClient{}),
+		releaseTrustNow:  func() time.Time { return expiredAt },
+		ResolveSessionMeta: func(channelID string) (*session.Meta, bool) {
+			if channelID != "ch_release" {
+				return nil, false
+			}
+			return &session.Meta{
+				ChannelID: channelID, EndpointID: "env_release", UserPublicID: "user_release",
+				CanRead: true, CanWrite: true, CanExecute: true, CanAdmin: true,
+			}, true
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = integration.Close() })
+
+	body, err := json.Marshal(map[string]any{
+		"plugin_instance_id": "plugini_official_containers",
+		"release_ref":        release.Ref,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/_redevplugin/api/plugins/install-release-ref", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set(sessionhop.HeaderChannelID, "ch_release")
+	req.Header.Set("Origin", "https://env.example.test")
+	req.Header.Set(csrfHeader, csrfProof)
+	req.Host = "env.example.test"
+	req = WithRouteRole(req, RouteRoleEnvTrusted)
+	req, err = WithTrustedOrigin(req, "https://env.example.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	response := httptest.NewRecorder()
+	integration.Handler().ServeHTTP(response, req)
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("expired release install status = %d body=%s", response.Code, response.Body.String())
+	}
+	var envelope struct {
+		OK    bool `json:"ok"`
+		Error struct {
+			Code            string `json:"code"`
+			Message         string `json:"message"`
+			MutationOutcome string `json:"mutation_outcome"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil {
+		t.Fatalf("decode expired release response: %v body=%s", err, response.Body.String())
+	}
+	if envelope.OK || envelope.Error.Code != "PLUGIN_PERMISSION_DENIED" ||
+		envelope.Error.Message != "plugin permission was denied" ||
+		envelope.Error.MutationOutcome != "not_committed" {
+		t.Fatalf("expired release response = %#v", envelope)
+	}
+
+	catalogRequest := httptest.NewRequest(http.MethodPost, "/_redevplugin/api/plugins/catalog/query", bytes.NewReader([]byte("{}")))
+	catalogRequest.Header.Set("Content-Type", "application/json")
+	catalogRequest.Header.Set(sessionhop.HeaderChannelID, "ch_release")
+	catalogRequest.Header.Set("Origin", "https://env.example.test")
+	catalogRequest.Header.Set(csrfHeader, csrfProof)
+	catalogRequest.Host = "env.example.test"
+	catalogRequest = WithRouteRole(catalogRequest, RouteRoleEnvTrusted)
+	catalogRequest, err = WithTrustedOrigin(catalogRequest, "https://env.example.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	catalogResponse := httptest.NewRecorder()
+	integration.Handler().ServeHTTP(catalogResponse, catalogRequest)
+	if catalogResponse.Code != http.StatusOK {
+		t.Fatalf("catalog after expired release status = %d body=%s", catalogResponse.Code, catalogResponse.Body.String())
+	}
+	var catalogEnvelope struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			Plugins []json.RawMessage `json:"plugins"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(catalogResponse.Body.Bytes(), &catalogEnvelope); err != nil {
+		t.Fatalf("decode catalog after expired release: %v body=%s", err, catalogResponse.Body.String())
+	}
+	if !catalogEnvelope.OK || len(catalogEnvelope.Data.Plugins) != 0 {
+		t.Fatalf("catalog after expired release = %#v", catalogEnvelope)
+	}
+}

@@ -13,6 +13,8 @@ const terminalAgentIconManifestPath = path.join(repoRoot, 'assets/terminal_agent
 const entryPath = '/_redeven_proxy/env/';
 const assetPrefix = `${entryPath}assets/`;
 const hashedAssetPattern = /-[A-Za-z0-9_-]{8,}\.(?:css|js|wasm)$/;
+const officialContainersPackageURL =
+  'https://raw.githubusercontent.com/floegence/redeven/c40d4ade758b465dbe70f693e504cda79fa9e702/spec/redevplugin/catalog-containers-plugin/2.0.0/plugin.redevplugin';
 
 function parseReportPath(args) {
   const index = args.indexOf('--report');
@@ -318,6 +320,86 @@ async function verifyBuiltFlowerLifecycle(browser) {
   }
 }
 
+async function verifyBuiltPluginInstallRouting(browser) {
+  const server = await createBuiltDistServer({ accessReady: true });
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 } });
+  await page.addInitScript(() => {
+    globalThis.localStorage.setItem('redeven_envapp_desktop_view_mode', 'activity');
+  });
+  const pluginRequests = [];
+  const pageErrors = [];
+  page.on('pageerror', (error) => pageErrors.push(error.message));
+  page.on('request', (request) => {
+    const requestPath = new URL(request.url()).pathname;
+    if (requestPath.startsWith('/_redevplugin/api/plugins')) {
+      pluginRequests.push({ method: request.method(), path: requestPath });
+    }
+  });
+
+  try {
+    const entryURL = new URL(entryPath.slice(1), server.baseURL).toString();
+    await page.goto(entryURL, { waitUntil: 'load', timeout: 30_000 });
+    await page.locator('#root > *').first().waitFor({ state: 'visible', timeout: 10_000 });
+
+    await page.getByRole('button', { name: 'Plugins', exact: true }).click();
+    const pluginCenterTile = page.locator('[data-plugin-panel-tile="plugin-center"]');
+    await pluginCenterTile.waitFor({ state: 'visible', timeout: 10_000 });
+    await pluginCenterTile.click();
+
+    const pluginCenter = page.locator('[data-plugin-center-view]');
+    await pluginCenter.waitFor({ state: 'visible', timeout: 10_000 });
+    const containersInstall = pluginCenter.locator('[data-plugin-action="install"]');
+    if (await containersInstall.count() !== 1) {
+      throw new Error(`built Containers Install action count = ${await containersInstall.count()}, expected 1`);
+    }
+    // This static HTTP harness cannot complete the encrypted direct WebSocket
+    // handshake, so management controls remain disabled even with admin access.
+    // Enable only the located control to exercise the production click route.
+    await containersInstall.evaluate((button) => { button.disabled = false; });
+    await containersInstall.click();
+
+    const externalPluginDialog = page.locator('[data-external-plugin-dialog]');
+    await externalPluginDialog.waitFor({ state: 'visible', timeout: 10_000 });
+    const packageURL = await externalPluginDialog.locator('input[type="url"]').inputValue();
+    if (packageURL !== officialContainersPackageURL) {
+      throw new Error(`built Containers package URL mismatch: ${JSON.stringify({
+        expected: officialContainersPackageURL,
+        actual: packageURL,
+      })}`);
+    }
+    const reviewPackageActionCount = await page.getByRole('button', { name: 'Review package', exact: true }).count();
+    if (reviewPackageActionCount !== 1) {
+      throw new Error(`built external package review action count = ${reviewPackageActionCount}, expected 1`);
+    }
+    if (pluginRequests.some((request) => request.path.endsWith('/install-release-ref'))) {
+      throw new Error(`built Containers Install called install-release-ref: ${JSON.stringify(pluginRequests)}`);
+    }
+    const pluginInventoryRequests = [
+      { method: 'POST', path: '/_redevplugin/api/plugins/catalog/query' },
+      { method: 'POST', path: '/_redevplugin/api/plugins/permissions/query' },
+      { method: 'POST', path: '/_redevplugin/api/plugins/security-policies/query' },
+    ];
+    const expectedPluginRequests = [...pluginInventoryRequests, ...pluginInventoryRequests];
+    if (JSON.stringify(pluginRequests) !== JSON.stringify(expectedPluginRequests)) {
+      throw new Error(`built Containers Install emitted an unexpected plugin request: ${JSON.stringify({
+        expected: expectedPluginRequests,
+        actual: pluginRequests,
+      })}`);
+    }
+    if (pageErrors.length > 0) throw new Error(`built plugin install page errors: ${JSON.stringify(pageErrors)}`);
+
+    return {
+      external_review_opened: true,
+      package_url: packageURL,
+      install_release_ref_called: false,
+      request_count: pluginRequests.length,
+    };
+  } finally {
+    await page.close();
+    await server.close();
+  }
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const reportPath = parseReportPath(args);
@@ -515,6 +597,7 @@ async function main() {
     if (requestFailures.length > 0) throw new Error(`renderer request failures: ${JSON.stringify(requestFailures)}`);
     if (badResponses.length > 0) throw new Error(`renderer HTTP failures: ${JSON.stringify(badResponses)}`);
 
+    const pluginInstall = await verifyBuiltPluginInstallRouting(browser);
     const flowerLifecycle = await verifyBuiltFlowerLifecycle(browser);
 
     report = {
@@ -527,6 +610,7 @@ async function main() {
         entry_count: pluginEntryCount,
         panel_center_tile_count: pluginPanelTileCount,
         request_count: pluginRequests.length,
+        containers_install: pluginInstall,
       },
       assets: {
         css: loadedKinds.css.map((value) => path.basename(value)),

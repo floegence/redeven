@@ -61,6 +61,9 @@ require_embedded_assets() {
 log "checking ReDevPlugin published dependency boundary"
 ./scripts/check_redevplugin_dependency_boundary.sh --ci
 
+log "checking immutable catalog plugin package URL"
+node ./scripts/check_catalog_plugin_package_url.mjs
+
 log "checking controlled release archive extraction"
 python3 -c 'from pathlib import Path; [compile(Path(name).read_text(encoding="utf-8"), name, "exec") for name in ("scripts/safe_extract_tar.py", "scripts/extract_desktop_runtime.py")]'
 ./scripts/safe_extract_tar.py --self-test

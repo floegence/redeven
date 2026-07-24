@@ -34,13 +34,15 @@ commands carry that exact key. Plugin id is not unique, and instance id alone is
 not used to select catalog presentation. This keeps an official catalog entry
 and multiple external instances with identical manifest ids independent.
 
-Official Containers projection requires exact publisher/plugin/instance identity
-and verified trust. Its current version requires exact catalog release hashes;
-a historical version requires an explicit catalog-trusted official signing key,
-no external provenance, and registry hashes equal to Host-verified hashes. An
-external record with official-looking ids or source provenance remains an
-external item and cannot inherit official copy, permission grouping, update
-controls, or release-ref identity.
+Official Containers catalog projection requires exact publisher, plugin, version,
+package, manifest, and entries identity. The current unsigned catalog transaction
+creates a generated instance id; exact current content receives catalog copy and
+permission grouping, replaces the Discover card, and retains its real unsigned
+trust badge and manual update state. A historical version requires the fixed
+catalog instance, an explicit catalog-trusted official signing key, no external
+provenance, and registry hashes equal to Host-verified hashes. Official-looking
+ids without the exact content cannot inherit catalog presentation or update
+controls.
 
 Lifecycle commands carry the current management revision. Permission mutations
 also carry policy revision and revoke epoch. Unknown mutation outcomes invalidate
@@ -54,6 +56,12 @@ package URL, public GitHub repository Release with optional tag, or local
 `.redevplugin` file. The product submits the source and intent to the released
 inspection API; it never downloads remote bytes in the browser, parses the
 package, chooses trust state, or invents provenance.
+
+The Containers Discover action opens this same dialog with the unsigned catalog
+package URL prefilled. The URL is pinned to the immutable commit that contains the
+artifact; the dialog still shows the full inspection and requires explicit
+confirmation. It never calls the retained `installReleaseRef` path or silently
+retries through it when official trust evidence is expired.
 
 Update source entry preserves only reusable public identity. GitHub updates may
 prefill the stored public repository URL and resolve a newly eligible Release.

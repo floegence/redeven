@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/floegence/redeven/internal/session"
 	"github.com/floegence/redeven/internal/sessionhop"
@@ -140,6 +141,144 @@ func TestExternalPackageUploadInspectCommitAndQueryThroughHTTP(t *testing.T) {
 		requirementsEnvelope.Data.PluginInstanceID != pluginID ||
 		len(requirementsEnvelope.Data.RequiredPermissions) == 0 {
 		t.Fatalf("permission requirements status=%d response=%#v", requirementsResponse.Code, requirementsEnvelope)
+	}
+}
+
+func TestContainersCatalogPackageInstallsThroughExternalUploadAtCurrentTime(t *testing.T) {
+	integration, _, _, access := newExternalPackageTestIntegrationWithClock(t, time.Now)
+	t.Cleanup(func() { _ = integration.Close() })
+	packageBytes, err := redevpluginartifacts.CatalogContainersPluginPackage()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	uploadRequest := trustedExternalPackageRequest(t, http.MethodPost,
+		"/_redevplugin/api/plugins/external-packages/upload/inspect", bytes.NewReader(packageBytes))
+	uploadRequest.Header.Set("Content-Type", "application/vnd.redevplugin.package+zip")
+	uploadResponse := httptest.NewRecorder()
+	integration.Handler().ServeHTTP(uploadResponse, uploadRequest)
+	if uploadResponse.Code != http.StatusOK {
+		t.Fatalf("inspect unsigned catalog upload status = %d body=%s", uploadResponse.Code, uploadResponse.Body.String())
+	}
+	var inspectionEnvelope struct {
+		OK   bool                           `json:"ok"`
+		Data host.ExternalPackageInspection `json:"data"`
+	}
+	if err := json.Unmarshal(uploadResponse.Body.Bytes(), &inspectionEnvelope); err != nil {
+		t.Fatalf("decode unsigned catalog inspection: %v body=%s", err, uploadResponse.Body.String())
+	}
+	inspection := inspectionEnvelope.Data
+	if !inspectionEnvelope.OK || inspection.SignatureAssessment.State != string(registry.SignatureAbsent) ||
+		inspection.ExecutionApproval.State != string(registry.ExecutionApprovalPending) ||
+		inspection.UpdateEligibility.State != string(registry.UpdateManualOnly) {
+		t.Fatalf("unsigned catalog inspection = %#v", inspection)
+	}
+
+	commitResponse := postExternalPackageJSON(t, integration,
+		"/_redevplugin/api/plugins/external-packages/commit", map[string]string{
+			"inspection_id":       inspection.InspectionID,
+			"confirmation_digest": inspection.ConfirmationDigest,
+		})
+	if commitResponse.Code != http.StatusOK {
+		t.Fatalf("commit unsigned catalog upload status = %d body=%s", commitResponse.Code, commitResponse.Body.String())
+	}
+	var commitEnvelope struct {
+		OK   bool                            `json:"ok"`
+		Data externalPackageCommitHTTPResult `json:"data"`
+	}
+	if err := json.Unmarshal(commitResponse.Body.Bytes(), &commitEnvelope); err != nil {
+		t.Fatalf("decode unsigned catalog commit: %v body=%s", err, commitResponse.Body.String())
+	}
+	if !commitEnvelope.OK || commitEnvelope.Data.Status != string(registry.ExternalPackageCommitted) ||
+		commitEnvelope.Data.Plugin == nil || commitEnvelope.Data.Plugin.EnableState != registry.EnableDisabled ||
+		commitEnvelope.Data.Plugin.SignatureAssessment.State != string(registry.SignatureAbsent) ||
+		commitEnvelope.Data.Plugin.ExecutionApproval.State != string(registry.ExecutionApprovalUserApproved) ||
+		commitEnvelope.Data.Plugin.UpdateEligibility.State != string(registry.UpdateManualOnly) {
+		t.Fatalf("unsigned catalog commit = %#v", commitEnvelope.Data)
+	}
+
+	access.set(sessionPermissions{read: true})
+	permissionsResponse := postExternalPackageJSON(t, integration,
+		"/_redevplugin/api/plugins/permissions/query", map[string]any{
+			"plugin_instance_id": commitEnvelope.Data.Plugin.PluginInstanceID,
+			"active_only":        true,
+		})
+	var permissionsEnvelope struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			Permissions []json.RawMessage `json:"permissions"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(permissionsResponse.Body.Bytes(), &permissionsEnvelope); err != nil {
+		t.Fatalf("decode unsigned catalog permissions: %v body=%s", err, permissionsResponse.Body.String())
+	}
+	if permissionsResponse.Code != http.StatusOK || !permissionsEnvelope.OK || len(permissionsEnvelope.Data.Permissions) != 0 {
+		t.Fatalf("unsigned catalog install permissions status=%d response=%#v", permissionsResponse.Code, permissionsEnvelope)
+	}
+}
+
+func TestOfficialReleaseContextSignatureIsBlockedAsExternalPackage(t *testing.T) {
+	integration, _, signedPackage, access := newExternalPackageTestIntegrationWithClock(t, time.Now)
+	t.Cleanup(func() { _ = integration.Close() })
+
+	inspectRequest := trustedExternalPackageRequest(t, http.MethodPost,
+		"/_redevplugin/api/plugins/external-packages/upload/inspect", bytes.NewReader(signedPackage))
+	inspectRequest.Header.Set("Content-Type", "application/vnd.redevplugin.package+zip")
+	inspectResponse := httptest.NewRecorder()
+	integration.Handler().ServeHTTP(inspectResponse, inspectRequest)
+	if inspectResponse.Code != http.StatusOK {
+		t.Fatalf("inspect release-context package status = %d body=%s", inspectResponse.Code, inspectResponse.Body.String())
+	}
+	var inspectionEnvelope struct {
+		OK   bool                           `json:"ok"`
+		Data host.ExternalPackageInspection `json:"data"`
+	}
+	if err := json.Unmarshal(inspectResponse.Body.Bytes(), &inspectionEnvelope); err != nil {
+		t.Fatalf("decode release-context inspection: %v body=%s", err, inspectResponse.Body.String())
+	}
+	inspection := inspectionEnvelope.Data
+	if !inspectionEnvelope.OK || inspection.SignatureAssessment.State != string(registry.SignatureInvalid) ||
+		inspection.ExecutionApproval.State != string(registry.ExecutionApprovalPolicyBlocked) {
+		t.Fatalf("release-context inspection = %#v", inspection)
+	}
+
+	commitResponse := postExternalPackageJSON(t, integration,
+		"/_redevplugin/api/plugins/external-packages/commit", map[string]string{
+			"inspection_id":       inspection.InspectionID,
+			"confirmation_digest": inspection.ConfirmationDigest,
+		})
+	if commitResponse.Code != http.StatusForbidden {
+		t.Fatalf("commit release-context package status = %d body=%s", commitResponse.Code, commitResponse.Body.String())
+	}
+	var commitEnvelope struct {
+		OK    bool `json:"ok"`
+		Error struct {
+			Code            string `json:"code"`
+			MutationOutcome string `json:"mutation_outcome"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(commitResponse.Body.Bytes(), &commitEnvelope); err != nil {
+		t.Fatalf("decode blocked release-context commit: %v body=%s", err, commitResponse.Body.String())
+	}
+	if commitEnvelope.OK || commitEnvelope.Error.Code != "PLUGIN_SIGNATURE_INVALID" ||
+		commitEnvelope.Error.MutationOutcome != "not_committed" {
+		t.Fatalf("blocked release-context commit = %#v", commitEnvelope)
+	}
+
+	access.set(sessionPermissions{read: true, admin: true})
+	catalogResponse := postExternalPackageJSON(t, integration,
+		"/_redevplugin/api/plugins/catalog/query", map[string]any{})
+	var catalogEnvelope struct {
+		OK   bool `json:"ok"`
+		Data struct {
+			Plugins []json.RawMessage `json:"plugins"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(catalogResponse.Body.Bytes(), &catalogEnvelope); err != nil {
+		t.Fatalf("decode catalog after blocked release-context commit: %v body=%s", err, catalogResponse.Body.String())
+	}
+	if catalogResponse.Code != http.StatusOK || !catalogEnvelope.OK || len(catalogEnvelope.Data.Plugins) != 0 {
+		t.Fatalf("catalog after blocked release-context commit status=%d response=%#v", catalogResponse.Code, catalogEnvelope)
 	}
 }
 
@@ -287,6 +426,11 @@ func (a *externalPackageTestAccess) set(permissions sessionPermissions) {
 }
 
 func newExternalPackageTestIntegration(t *testing.T) (*Integration, string, []byte, *externalPackageTestAccess) {
+	integration, stateDir, signedPackage, access := newExternalPackageTestIntegrationWithClock(t, officialReleaseFixtureTime)
+	return integration, stateDir, packageWithoutSignature(t, signedPackage), access
+}
+
+func newExternalPackageTestIntegrationWithClock(t *testing.T, now func() time.Time) (*Integration, string, []byte, *externalPackageTestAccess) {
 	t.Helper()
 	stateDir := t.TempDir()
 	access := &externalPackageTestAccess{permissions: sessionPermissions{admin: true}}
@@ -295,7 +439,7 @@ func newExternalPackageTestIntegration(t *testing.T) (*Integration, string, []by
 		PermissionPolicy: testPermissionPolicy(t, "execute_read_write"),
 		RuntimePath:      testRuntimePath(t, stateDir),
 		Containers:       mustContainersAdapter(t, &capabilityEngineClient{}),
-		releaseTrustNow:  officialReleaseFixtureTime,
+		releaseTrustNow:  now,
 		ResolveSessionMeta: func(channelID string) (*session.Meta, bool) {
 			if channelID != "ch_external" {
 				return nil, false
@@ -316,7 +460,7 @@ func newExternalPackageTestIntegration(t *testing.T) (*Integration, string, []by
 		_ = integration.Close()
 		t.Fatal(err)
 	}
-	return integration, stateDir, packageWithoutSignature(t, release.PackageBytes), access
+	return integration, stateDir, release.PackageBytes, access
 }
 
 func postExternalPackageJSON(t *testing.T, integration *Integration, path string, body any) *httptest.ResponseRecorder {
