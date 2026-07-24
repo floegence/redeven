@@ -1,6 +1,7 @@
 # Redeven OKF Update Log
 
 ## 2026-07-24
+* **Dependency**: Upgraded to published Floret v0.26.0 and aligned dependency contracts, notices, compatibility review, and current-state OKF ownership before adopting the public Store maintenance workflow.
 * **Feature**: Added Flower conversation deletion to Env App and Desktop through one confirmed destructive menu action, durable receipt handling, and a non-persistent stale-response retirement fence.
 * **Fix**: Serialized every delete replay through the thread lifecycle gate, treated missing Floret authority as terminal, excluded durable intent from product reads, and made failed delete integrity block every startup.
 * **Dependency**: Upgraded to published Floret v0.24.0 after removal of its obsolete single-thread deletion primitive.
