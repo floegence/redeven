@@ -291,14 +291,6 @@ func (r *run) preflightFloretTurnAttachments(ctx context.Context, input flruntim
 	return input, frozen, nil
 }
 
-func providerContentPartAndDigestForPath(attachment flruntime.MessageAttachment, record threadstore.UploadRecord, path string) (ContentPart, string, error) {
-	_, expectedDigest, err := immutableUploadIdentityFromFloretResourceRef(attachment.ResourceRef)
-	if err != nil {
-		return ContentPart{}, "", err
-	}
-	return providerContentPartAndDigestForPathWithDigest(attachment, record, path, expectedDigest)
-}
-
 func providerContentPartAndDigestForPathWithDigest(attachment flruntime.MessageAttachment, record threadstore.UploadRecord, path string, expectedDigest string) (ContentPart, string, error) {
 	if err := validateFloretAttachmentRecord(attachment, record, expectedDigest); err != nil {
 		return ContentPart{}, "", err

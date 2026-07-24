@@ -475,7 +475,6 @@ func (s *Service) SaveUpload(ctx context.Context, req SaveUploadRequest) (*Uploa
 			if restarted {
 				_ = os.Remove(filepath.Join(dir, attempt.UploadID+".data.tmp"))
 				_ = os.Remove(filepath.Join(dir, attempt.UploadID+".data"))
-				created = true
 				break
 			}
 			return nil, NewUploadError(UploadErrorInProgress, true, threadstore.ErrUploadInProgress)

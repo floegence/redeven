@@ -15,7 +15,6 @@ type runProductCapabilities struct {
 	childPermissionSnapshot  func(context.Context, string, string, string) (threadstore.PermissionSnapshotRecord, bool, error)
 	insertPermissionSnapshot func(context.Context, threadstore.PermissionSnapshotRecord) error
 	finalizedChildSnapshot   func(context.Context, string) (threadstore.ChildPermissionSnapshotRecord, bool, error)
-	getThreadOwnedUpload     func(context.Context, string) (*threadstore.UploadRecord, error)
 	getQueuedTurnOwnedUpload func(context.Context, string, string) (*threadstore.UploadRecord, error)
 	preparePublication       func(context.Context, threadstore.SubAgentPublicationOperation, threadstore.ChildPermissionSnapshotRecord) error
 	finalizePublication      func(context.Context, string, string, string, string, int64) (bool, error)
@@ -84,9 +83,6 @@ func bindRootRunProductCapabilities(store *threadstore.Store, endpointID string,
 				return threadstore.ChildPermissionSnapshotRecord{}, false, errors.New("child permission audit authority mismatch")
 			}
 			return record, true, nil
-		},
-		getThreadOwnedUpload: func(ctx context.Context, uploadID string) (*threadstore.UploadRecord, error) {
-			return store.GetThreadOwnedUpload(ctx, endpointID, threadID, strings.TrimSpace(uploadID))
 		},
 		getQueuedTurnOwnedUpload: func(ctx context.Context, commandID string, uploadID string) (*threadstore.UploadRecord, error) {
 			return store.GetQueuedTurnOwnedUpload(ctx, endpointID, threadID, strings.TrimSpace(commandID), strings.TrimSpace(uploadID))
@@ -158,9 +154,6 @@ func bindChildRunProductCapabilities(store *threadstore.Store, endpointID string
 			}
 			return store.InsertPermissionSnapshot(ctx, record)
 		},
-		getThreadOwnedUpload: func(ctx context.Context, uploadID string) (*threadstore.UploadRecord, error) {
-			return store.GetThreadOwnedUpload(ctx, endpointID, childThreadID, strings.TrimSpace(uploadID))
-		},
 	}, nil
 }
 
@@ -204,13 +197,6 @@ func (c runProductCapabilities) loadFinalizedChildSnapshot(ctx context.Context, 
 		return threadstore.ChildPermissionSnapshotRecord{}, false, errors.New("child permission audit capability is unavailable")
 	}
 	return c.finalizedChildSnapshot(ctx, childThreadID)
-}
-
-func (c runProductCapabilities) loadThreadOwnedUpload(ctx context.Context, uploadID string) (*threadstore.UploadRecord, error) {
-	if c.getThreadOwnedUpload == nil {
-		return nil, errors.New("thread upload read capability is unavailable")
-	}
-	return c.getThreadOwnedUpload(ctx, uploadID)
 }
 
 func (c runProductCapabilities) loadQueuedTurnOwnedUpload(ctx context.Context, commandID string, uploadID string) (*threadstore.UploadRecord, error) {
