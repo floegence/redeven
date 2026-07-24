@@ -349,6 +349,7 @@
   --redeven-stroke-control: color-mix(in srgb, var(--redeven-stroke-panel) 72%, var(--foreground) 28%);
   --redeven-stroke-control-strong: color-mix(in srgb, var(--redeven-stroke-control) 72%, var(--foreground) 28%);
   --redeven-stroke-divider: color-mix(in srgb, var(--redeven-stroke-panel) 72%, transparent);
+  --git-table-gridline: var(--redeven-stroke-divider);
   --redeven-shadow-color: color-mix(in srgb, var(--redeven-surface-shadow-source) 18%, transparent);
   --redeven-shadow-soft: 0 1px 2px color-mix(in srgb, var(--redeven-surface-shadow-source) 10%, transparent), 0 10px 24px -20px color-mix(in srgb, var(--redeven-surface-shadow-source) 22%, transparent);
   --redeven-overlay-scrim: color-mix(in srgb, var(--redeven-surface-shadow-source) 46%, transparent);
@@ -582,6 +583,7 @@
   --redeven-stroke-control: color-mix(in srgb, var(--redeven-stroke-panel) 68%, var(--foreground) 32%);
   --redeven-stroke-control-strong: color-mix(in srgb, var(--redeven-stroke-control) 68%, var(--foreground) 32%);
   --redeven-stroke-divider: color-mix(in srgb, var(--redeven-stroke-panel) 74%, transparent);
+  --git-table-gridline: color-mix(in srgb, var(--redeven-stroke-panel) 88%, var(--foreground) 12%);
   --redeven-link-fg: var(--color-sky-400);
   --redeven-link-hover-fg: var(--color-sky-300);
   --redeven-link-underline: color-mix(in srgb, var(--redeven-link-fg) 46%, transparent);
@@ -2082,6 +2084,11 @@ html.dark .git-changes-table-skeleton__row > span {
 
 .redeven-divider--strong {
   border-color: var(--redeven-stroke-control) !important;
+}
+
+.git-table-frame,
+.git-table-frame .redeven-divider {
+  border-color: var(--git-table-gridline) !important;
 }
 
 .redeven-settings-shell {

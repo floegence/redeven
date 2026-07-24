@@ -36,6 +36,17 @@ function contrastRatio(first: string, second: string): number {
 }
 
 describe('Redeven Env App surface theme contract', () => {
+  it('strengthens Git table gridlines only for Classic Dark', () => {
+    const src = readRedevenCss();
+
+    expect(src).toContain('--git-table-gridline: var(--redeven-stroke-divider);');
+    expect(src).toMatch(
+      /:root\[data-floe-shell-theme='classic-dark'\],[\s\S]*?--git-table-gridline: color-mix\(in srgb, var\(--redeven-stroke-panel\) 88%, var\(--foreground\) 12%\);/,
+    );
+    expect(src).toContain('.git-table-frame .redeven-divider {');
+    expect(src).toContain('border-color: var(--git-table-gridline) !important;');
+  });
+
   it('scopes desktop theme transition suppression to shell chrome instead of the full Workbench tree', () => {
     const src = readEnvAppEntryCss();
 

@@ -126,7 +126,7 @@ function CommitFilesCompactList(props: CommitFilesCompactListProps) {
     <div
       {...GIT_WORKBENCH_SCROLL_REGION_PROPS}
       role="list"
-      class="min-h-0 flex-1 overflow-auto divide-y divide-border/45"
+      class="git-table-frame min-h-0 flex-1 overflow-auto divide-y divide-[var(--git-table-gridline)]"
       data-git-commit-files-list-layout="compact"
     >
       <For each={props.items}>
