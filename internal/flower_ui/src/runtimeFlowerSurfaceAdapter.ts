@@ -83,6 +83,11 @@ type ThreadDeleteReceipt = Readonly<{
 
 export const FLOWER_THREAD_DELETE_OPERATION_FAILED_CODE = 'AI_THREAD_DELETE_OPERATION_FAILED';
 
+export type FlowerThreadDeleteTransportOutcome = Readonly<
+  | { kind: 'success'; receipt: unknown }
+  | { kind: 'terminal_failure'; receipt: unknown }
+>;
+
 type RuntimeApprovalSubmitBase = Readonly<{
   thread_id: string;
   action_id: string;
@@ -111,7 +116,7 @@ export type FlowerRuntimeTransport = Readonly<{
   markThreadRead(threadID: string, input: MarkThreadReadInput): Promise<MarkThreadReadResponse>;
   patchThread(threadID: string, input: ThreadPatchInput): Promise<LoadThreadResponse>;
   forkThread(threadID: string): Promise<LoadThreadResponse>;
-  deleteThread?(threadID: string): Promise<unknown>;
+  deleteThread?(threadID: string): Promise<FlowerThreadDeleteTransportOutcome>;
   submitApproval(input: RuntimeApprovalSubmitInput): Promise<FlowerApprovalDecisionReceipt>;
 }>;
 
@@ -165,15 +170,20 @@ function mapSubagentDetail(raw: LoadSubagentDetailResponse): FlowerSubagentDetai
   return raw.detail;
 }
 
-function mapThreadDeleteReceipt(raw: unknown): FlowerThreadDeleteOutcome {
-  const receipt = raw && typeof raw === 'object' ? raw as ThreadDeleteReceipt : null;
+function mapThreadDeleteReceipt(outcome: FlowerThreadDeleteTransportOutcome): FlowerThreadDeleteOutcome {
+  const receipt = outcome?.receipt && typeof outcome.receipt === 'object'
+    ? outcome.receipt as ThreadDeleteReceipt
+    : null;
   const operationID = trim(receipt?.operation_id);
   const status = trim(receipt?.status);
+  const validStatus = outcome?.kind === 'success'
+    ? status === 'pending' || status === 'committed'
+    : outcome?.kind === 'terminal_failure' && status === 'failed';
   if (!operationID || receipt?.intent_persisted !== true ||
-    (status !== 'pending' && status !== 'committed' && status !== 'failed')) {
+    !validStatus) {
     throw new Error('Flower thread delete returned an invalid receipt.');
   }
-  return { status };
+  return { status: status as FlowerThreadDeleteOutcome['status'] };
 }
 
 export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceAdapterOptions): FlowerSurfaceAdapter {

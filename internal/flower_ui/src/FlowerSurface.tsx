@@ -1528,6 +1528,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const updateComposerSessionDraft = (sessionKey: string, updater: (draft: FlowerComposerSessionDraft) => FlowerComposerSessionDraft) => {
     const key = trimString(sessionKey) || PENDING_NEW_THREAD_ID;
     setComposerSessionDrafts((current) => {
+      if (key !== PENDING_NEW_THREAD_ID && retiredThreadIDs.has(key)) return current;
       const previous = current[key] ?? emptyFlowerComposerSessionDraft();
       const next = updater(previous);
       if (sameFlowerComposerSessionDraft(previous, next)) return current;
@@ -8426,6 +8427,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
           canFork={!!props.adapter.forkThread}
           canRename={!!props.adapter.renameThread}
           canPin={!!props.adapter.setThreadPinned}
+          showDeleteAction={typeof props.adapter.deleteThread === 'function'}
           busyThreadID={threadActionBusy()?.threadID}
           busyAction={threadActionBusy()?.action}
           actionsBusy={threadActionBusy() !== null}
