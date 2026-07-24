@@ -25,6 +25,7 @@ type runHostCapabilities struct {
 	resolveRunModel                       func(context.Context, *config.AIConfig, string, string, *run) (resolvedRunModel, error)
 	subagentRuntime                       func() *floretSubagentRuntime
 	publishSubagentsPatch                 func(context.Context)
+	openLiveAttachment                    func(context.Context, UploadOwner, string) (openedCanonicalAttachment, error)
 	terminal                              runTerminalHost
 }
 
@@ -71,6 +72,12 @@ func (s *Service) bindRunHostCapabilities(endpointID string, threadID string) (r
 	}
 	host.publishSubagentsPatch = func(ctx context.Context) {
 		s.publishFlowerSubagentsPatch(ctx, endpointID, threadID)
+	}
+	host.openLiveAttachment = func(ctx context.Context, owner UploadOwner, attachmentID string) (openedCanonicalAttachment, error) {
+		if owner.EndpointID != endpointID {
+			return openedCanonicalAttachment{}, errors.New("attachment authority mismatch")
+		}
+		return s.openCanonicalLiveAttachment(ctx, owner, threadID, attachmentID)
 	}
 	return host, nil
 }

@@ -1050,13 +1050,32 @@ function mapFlowerQueuedTurns(raw: unknown): FlowerThreadSnapshot['queued_turns'
     const attachments = Array.isArray(record.attachments)
       ? record.attachments.map((value, attachmentIndex) => {
           const attachment = recordValue(value);
+          const attachmentID = trim(attachment?.attachment_id);
           const name = trim(attachment?.name);
           const mimeType = trim(attachment?.mime_type);
+          const sizeBytes = Number(attachment?.size_bytes);
+          const locator = trim(attachment?.locator);
           const url = trim(attachment?.url);
-          if (!name || !mimeType || !url) {
+          const textStatsRecord = recordValue(attachment?.text_stats);
+          const codePoints = Number(textStatsRecord?.code_points);
+          const lines = Number(textStatsRecord?.lines);
+          if (!attachmentID || !name || !mimeType || !Number.isFinite(sizeBytes) || sizeBytes < 0) {
             throw new Error(`Flower contract error: queued turn ${index} attachment ${attachmentIndex} is invalid.`);
           }
-          return { name, mime_type: mimeType, url };
+          const textStats = textStatsRecord
+            && Number.isFinite(codePoints) && codePoints >= 0
+            && Number.isFinite(lines) && lines >= 0
+            ? { code_points: Math.floor(codePoints), lines: Math.floor(lines) }
+            : undefined;
+          return {
+            attachment_id: attachmentID,
+            name,
+            mime_type: mimeType,
+            size_bytes: Math.floor(sizeBytes),
+            ...(textStats ? { text_stats: textStats } : {}),
+            ...(locator ? { locator } : {}),
+            ...(url ? { url } : {}),
+          };
         })
       : undefined;
     return {

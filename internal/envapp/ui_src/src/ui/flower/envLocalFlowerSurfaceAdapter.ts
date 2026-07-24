@@ -1,9 +1,11 @@
 import type { RedevenV1Rpc } from '../protocol/redeven_v1';
-import { ProtocolNotConnectedError, RpcError } from '@floegence/floe-webapp-protocol';
-import { fetchLocalApiJSON, LocalApiError } from '../services/localApi';
+import { fetchLocalApiJSON, LocalApiError, uploadLocalApiAttachment } from '../services/localApi';
+import { appendLocalAccessResumeQuery } from '../services/localAccessAuth';
 import type { AgentSettingsResponse, AIConfig, AIModelProfile } from '../pages/settings/types';
 import type {
   FlowerApprovalDecisionReceipt,
+  FlowerAttachmentUploadInput,
+  FlowerAttachmentCapability,
   FlowerCanonicalReferenceOpenRequest,
   FlowerProvider,
   FlowerProviderDraft,
@@ -16,6 +18,8 @@ import type {
   FlowerModelSourceModel,
   FlowerModelSourceRecovery,
   FlowerSurfaceAdapter,
+  FlowerStagedAttachment,
+  FlowerStagedLongTextReadResult,
   FlowerTerminalProcessSnapshot,
   FlowerThreadReadStatus,
   FlowerLiveBootstrap,
@@ -36,6 +40,15 @@ import {
   normalizeFlowerReasoningCapability,
   serializeFlowerReasoningSelection,
 } from '../../../../../flower_ui/src/reasoning';
+import { normalizeFlowerAttachmentCapability } from '../../../../../flower_ui/src/attachments/flowerAttachmentModel';
+import { createRedevenFlowerDraftPersistence } from '../../../../../flower_host_ui/src/redevenFlowerDraftPersistence';
+
+export function createEnvLocalFlowerDraftPersistence() {
+  return createRedevenFlowerDraftPersistence(async (method, path, body) => fetchLocalApiJSON<unknown>(path, {
+    method,
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  }));
+}
 
 type EnvLocalFlowerSurfaceAdapterOptions = Readonly<{
   envPublicID: string;
@@ -44,7 +57,7 @@ type EnvLocalFlowerSurfaceAdapterOptions = Readonly<{
   rpc: RedevenV1Rpc;
   copy?: EnvLocalFlowerSurfaceAdapterCopy;
   onSettingsChanged?: () => void | Promise<unknown>;
-  uploadAttachment?: (file: File) => Promise<string>;
+  uploadAttachment?: FlowerSurfaceAdapter['uploadAttachment'];
   openFileBrowser?: FlowerSurfaceAdapter['openFileBrowser'];
   openFilePreview?: FlowerSurfaceAdapter['openFilePreview'];
   openCanonicalReferenceTarget?: (target: FlowerCanonicalReferenceNavigationTarget) => Promise<void>;
@@ -89,12 +102,19 @@ type ThreadView = Readonly<{
 
 type ThreadReadStatus = FlowerThreadReadStatus;
 
-type CreateThreadResponse = Readonly<{
-  thread?: ThreadView;
+type PreparedDraftThreadResponse = Readonly<{
+  thread_id?: string;
+  draft_revision?: number;
 }>;
 
 type LoadThreadResponse = Readonly<{
   thread?: ThreadView;
+}>;
+
+type SendTurnResponse = Readonly<{
+  run_id?: string;
+  turn_id?: string;
+  kind?: string;
 }>;
 
 type MarkThreadReadResponse = Readonly<{
@@ -104,6 +124,97 @@ type FlowerSecretPatch = Readonly<{ provider_id: string; api_key: string | null 
 
 function trim(value: unknown): string {
   return String(value ?? '').trim();
+}
+
+function hexDigest(bytes: ArrayBuffer): string {
+  return Array.from(new Uint8Array(bytes), (value) => value.toString(16).padStart(2, '0')).join('');
+}
+
+async function sha256Hex(bytes: BufferSource): Promise<string> {
+  return hexDigest(await globalThis.crypto.subtle.digest('SHA-256', bytes));
+}
+
+async function uploadEnvLocalFlowerAttachment(input: FlowerAttachmentUploadInput): Promise<FlowerStagedAttachment> {
+  if (input.signal.aborted) {
+    const error = new Error('Attachment upload was cancelled.');
+    error.name = 'AbortError';
+    throw error;
+  }
+  const canonicalName = input.file.name.normalize('NFC');
+  const [contentSHA256, displayNameSHA256] = await Promise.all([
+    input.file.arrayBuffer().then(sha256Hex),
+    sha256Hex(new TextEncoder().encode(canonicalName)),
+  ]);
+  const response = await uploadLocalApiAttachment({
+    file: new File([input.file], canonicalName, { type: input.file.type }),
+    source: input.source === 'long_text' ? 'long_text' : 'uploaded_file',
+    requestID: input.request_id,
+    draftID: input.draft_id,
+    contentSHA256,
+    displayNameSHA256,
+    signal: input.signal,
+    onProgress: (loaded, total) => input.on_progress({
+      attempt_id: input.attempt_id,
+      loaded,
+      ...(total === undefined ? {} : { total }),
+      indeterminate: total === undefined,
+    }),
+  });
+  const attachmentID = trim(response.attachment_id);
+  const name = trim(response.display_name);
+  const mimeType = trim(response.detected_media_type);
+  const digest = trim(response.content_sha256).toLowerCase();
+  const locator = trim(response.logical_locator);
+  const sizeBytes = Number(response.size_bytes);
+  if (!attachmentID || !name || !mimeType || !locator.startsWith('attachment://v1/') || !/^[0-9a-f]{64}$/u.test(digest) ||
+      !Number.isSafeInteger(sizeBytes) || sizeBytes < 0) {
+    throw new Error('Attachment upload returned invalid metadata.');
+  }
+  const codePoints = Number(response.unicode_code_points);
+  const lines = Number(response.logical_line_count);
+  return {
+    attachment_id: attachmentID,
+    name,
+    mime_type: mimeType,
+    size_bytes: sizeBytes,
+    digest_sha256: digest,
+    locator,
+    source: input.source,
+    ...(Number.isSafeInteger(codePoints) && codePoints >= 0 && Number.isSafeInteger(lines) && lines >= 0
+      ? { text_stats: { code_points: codePoints, lines } }
+      : {}),
+    capability_revision: trim(response.capability_revision) || input.capability_revision,
+    ...(Number.isSafeInteger(Number(response.created_at_unix_ms)) && Number(response.created_at_unix_ms) > 0
+      ? { created_at_unix_ms: Math.floor(Number(response.created_at_unix_ms)) }
+      : {}),
+  };
+}
+
+function mapEnvStagedLongText(raw: unknown, expected: FlowerStagedAttachment): FlowerStagedLongTextReadResult {
+  const record = raw && typeof raw === 'object' ? raw as Readonly<{
+    attachment?: unknown;
+    text?: unknown;
+    content_sha256?: unknown;
+  }> : {};
+  const attachment = record.attachment && typeof record.attachment === 'object'
+    ? record.attachment as Readonly<{
+      attachment_id?: unknown;
+      display_name?: unknown;
+      detected_media_type?: unknown;
+      size_bytes?: unknown;
+      content_sha256?: unknown;
+    }>
+    : {};
+  const digest = trim(record.content_sha256 ?? attachment.content_sha256).toLowerCase();
+  if (trim(attachment.attachment_id) !== expected.attachment_id
+    || trim(attachment.display_name) !== expected.name
+    || trim(attachment.detected_media_type) !== expected.mime_type
+    || Number(attachment.size_bytes) !== expected.size_bytes
+    || digest !== expected.digest_sha256
+    || typeof record.text !== 'string') {
+    throw new Error('Flower long-text restore returned mismatched attachment metadata.');
+  }
+  return { attachment: expected, text: record.text };
 }
 
 function parseCanonicalReferenceOpenTarget(raw: unknown): FlowerCanonicalReferenceNavigationTarget {
@@ -597,15 +708,45 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
       return response.entries;
     },
     resolveHandler: async () => decision(options),
+    loadAttachmentCapability: async (modelID): Promise<FlowerAttachmentCapability> => {
+      const capability = normalizeFlowerAttachmentCapability(await fetchLocalApiJSON<unknown>(
+        `/_redeven_proxy/api/ai/attachments/capabilities?model_id=${encodeURIComponent(trim(modelID))}`,
+        { method: 'GET' },
+      ));
+      if (capability.model_id !== trim(modelID)) throw new Error('Flower attachment capability returned a different model identity.');
+      return capability;
+    },
+    uploadAttachment: options.uploadAttachment ?? uploadEnvLocalFlowerAttachment,
+    deleteStagedAttachment: async (attachmentID, draftID) => {
+      await fetchLocalApiJSON<unknown>(
+        `/_redeven_proxy/api/ai/uploads/${encodeURIComponent(trim(attachmentID))}?draft_id=${encodeURIComponent(trim(draftID))}`,
+        { method: 'DELETE' },
+      );
+    },
+    readStagedLongText: async (attachment, draftID) => mapEnvStagedLongText(
+      await fetchLocalApiJSON<unknown>(
+        `/_redeven_proxy/api/ai/uploads/${encodeURIComponent(trim(attachment.attachment_id))}/long_text?draft_id=${encodeURIComponent(trim(draftID))}`,
+        { method: 'GET' },
+      ),
+      attachment,
+    ),
+	previewStagedAttachment: (attachment, draftID) => {
+	  const path = `/_redeven_proxy/api/ai/uploads/${encodeURIComponent(trim(attachment.attachment_id))}`;
+	  const query = new URLSearchParams({ draft_id: trim(draftID), preview: '1' });
+	  window.open(appendLocalAccessResumeQuery(`${path}?${query.toString()}`), '_blank', 'noopener,noreferrer');
+	},
     launchTurn: async (input: FlowerTurnLaunchInput) => {
       const copy = adapterCopy(options);
-      const prompt = trim(input.prompt);
-      if (!prompt) throw new Error(copy.enterMessageBeforeSending);
+      const prompt = input.prompt;
+      const attachmentIDs = (input.attachment_ids ?? []).map(trim).filter(Boolean);
+      if (!prompt.trim() && attachmentIDs.length === 0) throw new Error(copy.enterMessageBeforeSending);
       const snapshot = await loadSettingsSnapshot(options);
       const permissionType = normalizePermissionType(input.permission_type ?? snapshot.defaults.permission_type);
       const contextAction = requireAskFlowerContextActionEnvelope(input.context_action);
       let threadID = trim(input.thread_id);
       let turnModelID = trim(input.model_id);
+      const proposedTurnID = trim(input.turn_id) || createFlowerClientTurnID();
+      let expectedDraftRevision = input.expected_draft_revision;
       if (!threadID) {
         const models = await loadModels();
         turnModelID = turnModelID || currentModelID(snapshot, models);
@@ -622,47 +763,47 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         if (trim(input.working_dir)) {
           createBody.working_dir = trim(input.working_dir);
         }
-        const created = await fetchLocalApiJSON<CreateThreadResponse>('/_redeven_proxy/api/ai/threads', {
+        const draftID = trim(input.draft_id);
+        if (!draftID || expectedDraftRevision === undefined) throw new Error(copy.failedToCreateChat);
+        const created = await fetchLocalApiJSON<PreparedDraftThreadResponse>(
+          `/_redeven_proxy/api/ai/composer-drafts/${encodeURIComponent(draftID)}/thread`, {
           method: 'POST',
-          body: JSON.stringify(createBody),
+          body: JSON.stringify({
+            expected_draft_revision: expectedDraftRevision,
+            turn_id: proposedTurnID,
+            create: createBody,
+          }),
         });
-        threadID = trim(created.thread?.thread_id);
+        threadID = trim(created.thread_id);
+        expectedDraftRevision = Number.isInteger(created.draft_revision) ? created.draft_revision : undefined;
       }
-      if (!threadID) throw new Error(copy.failedToCreateChat);
-      const attachments = (input.attachments ?? [])
-        .map((attachment) => ({
-          name: trim(attachment.name) || 'attachment',
-          mimeType: trim(attachment.mime_type) || 'application/octet-stream',
-          url: trim(attachment.url),
-        }))
-        .filter((attachment) => !!attachment.url);
-      for (const file of (input.pending_files ?? [])) {
-        if (!options.uploadAttachment) throw new Error('Attachment upload is unavailable for this Flower surface.');
-        attachments.push({
-          name: trim(file.name) || 'attachment',
-          mimeType: trim(file.type) || 'application/octet-stream',
-          url: await options.uploadAttachment(file),
-        });
-      }
+      if (!threadID || expectedDraftRevision === undefined) throw new Error(copy.failedToCreateChat);
       await options.rpc.ai.subscribeThread({ threadId: threadID });
-      const proposedTurnID = trim(input.turn_id) || createFlowerClientTurnID();
       try {
-        const response = await options.rpc.ai.sendUserTurn({
-          threadId: threadID,
-          ...(turnModelID ? { model: turnModelID } : {}),
-          input: {
-            turnId: proposedTurnID,
-            text: prompt,
-            attachments,
-            ...(contextAction ? { contextAction } : {}),
+        const response = await fetchLocalApiJSON<SendTurnResponse>(
+          `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/turns`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              thread_id: threadID,
+              draft_id: trim(input.draft_id),
+              expected_draft_revision: expectedDraftRevision,
+              ...(turnModelID ? { model: turnModelID } : {}),
+              input: {
+                turn_id: proposedTurnID,
+                text: prompt,
+                attachment_ids: attachmentIDs,
+                ...(contextAction ? { context_action: contextAction } : {}),
+              },
+              options: {
+                permission_type: permissionType,
+                ...(serializeFlowerReasoningSelection(input.reasoning_selection) ? { reasoning_selection: serializeFlowerReasoningSelection(input.reasoning_selection) } : {}),
+              },
+            }),
           },
-          options: {
-            permissionType,
-            ...(serializeFlowerReasoningSelection(input.reasoning_selection) ? { reasoningSelection: serializeFlowerReasoningSelection(input.reasoning_selection) } : {}),
-          },
-        });
-        const turnID = trim(response.turnId);
-        const runID = trim(response.runId);
+        );
+        const turnID = trim(response.turn_id);
+        const runID = trim(response.run_id);
         const kind = trim(response.kind);
         if (!turnID || !runID || (kind !== 'start' && kind !== 'queued')) {
           throw flowerTurnAdmissionUncertainFailure(
@@ -680,12 +821,7 @@ export function createEnvLocalFlowerSurfaceAdapter(options: EnvLocalFlowerSurfac
         }
         return { thread_id: threadID, turn_id: turnID, run_id: runID, kind };
       } catch (error) {
-        if (error instanceof ProtocolNotConnectedError) {
-          throw error;
-        }
-        if (error instanceof RpcError && error.code !== -1) {
-          throw error;
-        }
+        if (error instanceof LocalApiError) throw error;
         if (flowerTurnAdmissionUncertainIdentity(error)) {
           throw error;
         }

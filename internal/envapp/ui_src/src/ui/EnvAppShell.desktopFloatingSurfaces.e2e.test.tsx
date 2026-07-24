@@ -254,14 +254,18 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
   Tooltip: (props: any) => <>{props.children}</>,
 }));
 
-vi.mock('@floegence/floe-webapp-core/icons', () => {
+vi.mock('@floegence/floe-webapp-core/icons', async () => {
+  const actual = await vi.importActual<typeof import('@floegence/floe-webapp-core/icons')>('@floegence/floe-webapp-core/icons');
   const Icon = () => <span />;
   return {
+    ...actual,
     Activity: Icon,
     Code: Icon,
     Copy: Icon,
     Download: Icon,
     Files: Icon,
+    FolderOpen: Icon,
+    GitBranch: Icon,
     Globe: Icon,
     Grid3x3: Icon,
     Highlighter: Icon,
@@ -536,6 +540,7 @@ vi.mock('./widgets/FlowerTurnLauncherWindow', () => ({
 }));
 vi.mock('./flower/envLocalFlowerSurfaceAdapter', () => ({
   createEnvLocalFlowerSurfaceAdapter: () => ({ launchTurn: flowerLaunchTurnMock }),
+  createEnvLocalFlowerDraftPersistence: () => undefined,
 }));
 vi.mock('./notes/NotesOverlay', () => ({ NotesOverlay: () => <div /> }));
 vi.mock('./maintenance/RuntimeUpdateContext', () => ({ RuntimeUpdateContext: createContext({}) }));

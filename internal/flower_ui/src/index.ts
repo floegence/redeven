@@ -1,10 +1,14 @@
 export * from './FlowerSurface';
 export * from './FlowerTurnLauncherWindow';
+export * from './attachments/createFlowerAttachmentController';
+export * from './attachments/FlowerAttachmentLane';
+export * from './attachments/flowerAttachmentModel';
 export * from './chat/FlowerChatContextChips';
 export * from './chat/FlowerChatContextPreview';
 export { parseChatContextAction } from './chat/flowerChatContextModel';
 export * from './chat/FlowerEmptyState';
 export * from './copy';
+export * from './composer/createFlowerComposerDraftCoordinator';
 export type * from './contracts/flowerChatContextTypes';
 export type * from './contracts/flowerSurfaceContracts';
 export * from './flowerCompanionPresence';

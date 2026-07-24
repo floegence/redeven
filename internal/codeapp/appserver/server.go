@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/floegence/redeven/internal/ai"
+	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/auditlog"
 	"github.com/floegence/redeven/internal/codeapp/codeserver"
 	"github.com/floegence/redeven/internal/codexbridge"
@@ -964,6 +965,67 @@ type apiResp struct {
 	ErrorCode    string      `json:"error_code,omitempty"`
 	ErrorDetails string      `json:"error_details,omitempty"`
 	Data         interface{} `json:"data,omitempty"`
+}
+
+func writeUploadError(w http.ResponseWriter, err error) {
+	status := http.StatusBadRequest
+	code := ai.UploadErrorInvalidRequest
+	retryable := false
+	fallback := "attachment request failed"
+	var maxBytesErr *http.MaxBytesError
+	if errors.As(err, &maxBytesErr) {
+		status = http.StatusRequestEntityTooLarge
+		code = ai.UploadErrorTooLarge
+		writeJSON(w, status, apiResp{OK: false, Error: fallback, ErrorCode: code, Data: map[string]any{"retryable": retryable}})
+		return
+	}
+	var uploadErr *ai.UploadError
+	if errors.As(err, &uploadErr) {
+		code = uploadErr.Code
+		retryable = uploadErr.Retryable
+		switch code {
+		case ai.UploadErrorTooLarge:
+			status = http.StatusRequestEntityTooLarge
+		case ai.UploadErrorUnsupportedMediaType:
+			status = http.StatusUnsupportedMediaType
+		case ai.UploadErrorInvalidTextEncoding:
+			status = http.StatusUnprocessableEntity
+		case ai.UploadErrorIdempotencyConflict, ai.UploadErrorIntegrityMismatch:
+			status = http.StatusConflict
+		case ai.UploadErrorInProgress:
+			status = http.StatusConflict
+		case ai.UploadErrorQuotaExceeded:
+			status = http.StatusTooManyRequests
+		case ai.UploadErrorNotFound:
+			status = http.StatusNotFound
+		case ai.UploadErrorStoreUnavailable:
+			status = http.StatusServiceUnavailable
+		}
+	}
+	writeJSON(w, status, apiResp{OK: false, Error: fallback, ErrorCode: code, Data: map[string]any{"retryable": retryable}})
+}
+
+func safeInlineAttachmentMediaType(raw string) (string, bool) {
+	mediaType, params, err := mime.ParseMediaType(strings.TrimSpace(raw))
+	if err != nil {
+		return "", false
+	}
+	mediaType = strings.ToLower(strings.TrimSpace(mediaType))
+	switch mediaType {
+	case "text/plain":
+		charset := strings.ToLower(strings.TrimSpace(params["charset"]))
+		if charset != "" && charset != "utf-8" && charset != "utf8" {
+			return "", false
+		}
+		return "text/plain; charset=utf-8", true
+	case "image/png", "image/jpeg", "image/gif", "image/webp", "application/pdf":
+		if len(params) != 0 {
+			return "", false
+		}
+		return mediaType, true
+	default:
+		return "", false
+	}
 }
 
 func parseThreadDeleteForceQuery(rawQuery string) (bool, error) {
@@ -4399,9 +4461,17 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 			body.ThreadID = threadID
+			if strings.TrimSpace(body.DraftID) == "" || body.ExpectedDraftRevision == nil || *body.ExpectedDraftRevision < 0 {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "draft identity is required"})
+				return
+			}
 			resp, err := g.ai.SendUserTurn(r.Context(), meta, body)
 			if err != nil {
-				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error()})
+				errorCode := ""
+				if errors.Is(err, ai.ErrLongTextAttachmentRequired) {
+					errorCode = ai.LongTextAttachmentRequiredErrorCode
+				}
+				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: err.Error(), ErrorCode: errorCode})
 				return
 			}
 			g.appendAudit(meta, "ai_thread_turn", "accepted", map[string]any{
@@ -4982,6 +5052,135 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 		return
 
+	case strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/composer-drafts/"):
+		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
+		if !ok {
+			return
+		}
+		if g.ai == nil || !g.ai.Enabled() {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
+			return
+		}
+		rest := strings.TrimPrefix(r.URL.Path, "/_redeven_proxy/api/ai/composer-drafts/")
+		leaseAction := strings.HasSuffix(rest, "/lease")
+		threadAction := strings.HasSuffix(rest, "/thread")
+		if leaseAction {
+			rest = strings.TrimSuffix(rest, "/lease")
+		} else if threadAction {
+			rest = strings.TrimSuffix(rest, "/thread")
+		}
+		scopeID := strings.TrimSpace(rest)
+		if scopeID == "" || strings.Contains(scopeID, "/") {
+			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
+			return
+		}
+		owner, err := ai.NewUploadOwner(meta.EndpointID, meta.UserPublicID, meta.ChannelID)
+		if err != nil {
+			writeUploadError(w, err)
+			return
+		}
+		if r.Method == http.MethodGet && !leaseAction && !threadAction {
+			draft, err := g.ai.LoadComposerDraft(r.Context(), owner, scopeID)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "composer draft read failed"})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: draft})
+			return
+		}
+		if r.Method == http.MethodPost && leaseAction {
+			dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 16<<10))
+			dec.DisallowUnknownFields()
+			var body struct {
+				Action   string `json:"action"`
+				HolderID string `json:"holder_id"`
+				LeaseID  string `json:"lease_id,omitempty"`
+			}
+			if err := dec.Decode(&body); err != nil || dec.Decode(&struct{}{}) != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			var result any
+			switch strings.TrimSpace(body.Action) {
+			case "acquire":
+				result, err = g.ai.AcquireComposerDraftLease(r.Context(), owner, scopeID, body.HolderID, false)
+			case "take_over":
+				result, err = g.ai.AcquireComposerDraftLease(r.Context(), owner, scopeID, body.HolderID, true)
+			case "renew":
+				result, err = g.ai.RenewComposerDraftLease(r.Context(), owner, scopeID, body.HolderID, body.LeaseID)
+			case "release":
+				err = g.ai.ReleaseComposerDraftLease(r.Context(), owner, scopeID, body.HolderID, body.LeaseID)
+				result = map[string]any{"state": "released"}
+			default:
+				err = errors.New("invalid lease action")
+			}
+			if err != nil {
+				writeJSON(w, http.StatusConflict, apiResp{OK: false, Error: "composer draft lease changed"})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: result})
+			return
+		}
+		if r.Method == http.MethodPost && threadAction {
+			dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 64<<10))
+			dec.DisallowUnknownFields()
+			var body ai.ComposerDraftThreadRequest
+			if err := dec.Decode(&body); err != nil || dec.Decode(&struct{}{}) != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			prepared, err := g.ai.PrepareComposerDraftThread(r.Context(), meta, owner, scopeID, body)
+			if err != nil {
+				writeJSON(w, aiThreadActionHTTPStatus(err), apiResp{OK: false, Error: "composer draft thread preparation failed"})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: prepared})
+			return
+		}
+		if r.Method == http.MethodPut && !leaseAction && !threadAction {
+			dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, 12<<20))
+			dec.DisallowUnknownFields()
+			var body ai.ComposerDraftMutationRequest
+			if err := dec.Decode(&body); err != nil || dec.Decode(&struct{}{}) != io.EOF {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid json"})
+				return
+			}
+			body.ScopeID = scopeID
+			draft, err := g.ai.MutateComposerDraft(r.Context(), owner, body)
+			if errors.Is(err, threadstore.ErrComposerDraftRevisionConflict) {
+				writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"state": "revision_conflict", "draft": draft}})
+				return
+			}
+			if errors.Is(err, threadstore.ErrComposerDraftLeaseLost) {
+				writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"state": "lease_lost", "draft": draft}})
+				return
+			}
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "composer draft mutation failed"})
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"state": "committed", "draft": draft}})
+			return
+		}
+		writeJSON(w, http.StatusMethodNotAllowed, apiResp{OK: false, Error: "method not allowed"})
+		return
+
+	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/ai/attachments/capabilities":
+		if _, ok := g.requirePermission(w, r, requiredPermissionRead); !ok {
+			return
+		}
+		if g.ai == nil || !g.ai.Enabled() {
+			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
+			return
+		}
+		modelID := strings.TrimSpace(r.URL.Query().Get("model_id"))
+		if modelID == "" {
+			writeUploadError(w, ai.NewUploadError(ai.UploadErrorInvalidRequest, false, errors.New("model_id is required")))
+			return
+		}
+		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: g.ai.AttachmentCapabilities(r.Context(), modelID)})
+		return
+
 	case r.Method == http.MethodPost && r.URL.Path == "/_redeven_proxy/api/ai/uploads":
 		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 		if !ok {
@@ -4991,54 +5190,67 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusServiceUnavailable, apiResp{OK: false, Error: "ai not configured"})
 			return
 		}
-		// 10 MiB upload cap (aligned with ChatInput defaults).
-		if err := r.ParseMultipartForm(10 << 20); err != nil {
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "invalid multipart form"})
+		const maxUploadBytes = int64(10 << 20)
+		const multipartOverheadBytes = int64(64 << 10)
+		r.Body = http.MaxBytesReader(w, r.Body, maxUploadBytes+multipartOverheadBytes)
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			writeUploadError(w, err)
 			return
 		}
-		f, fh, err := r.FormFile("file")
+		if r.MultipartForm != nil {
+			defer r.MultipartForm.RemoveAll()
+		}
+		if r.MultipartForm == nil || len(r.MultipartForm.File) != 1 || len(r.MultipartForm.File["file"]) != 1 || len(r.MultipartForm.Value) > 1 {
+			writeUploadError(w, ai.NewUploadError(ai.UploadErrorInvalidRequest, false, errors.New("multipart body must contain exactly one file and optional source")))
+			return
+		}
+		for key, values := range r.MultipartForm.Value {
+			if key != "source" || len(values) != 1 || len(values[0]) > 32 {
+				writeUploadError(w, ai.NewUploadError(ai.UploadErrorInvalidRequest, false, errors.New("multipart body contains an unsupported field")))
+				return
+			}
+		}
+		fh := r.MultipartForm.File["file"][0]
+		f, err := fh.Open()
 		if err != nil {
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: "missing file"})
+			writeUploadError(w, ai.NewUploadError(ai.UploadErrorInvalidRequest, false, errors.New("missing file")))
 			return
 		}
 		defer f.Close()
-
-		name := ""
-		mimeType := ""
-		if fh != nil {
-			name = fh.Filename
-			mimeType = fh.Header.Get("Content-Type")
-		}
-
-		out, err := g.ai.SaveUpload(r.Context(), strings.TrimSpace(meta.EndpointID), f, name, mimeType, 10<<20)
-		if err != nil {
-			g.appendAudit(meta, "ai_upload", "failure", map[string]any{
-				"name":      strings.TrimSpace(name),
-				"mime_type": strings.TrimSpace(mimeType),
-			}, err)
-			writeJSON(w, http.StatusBadRequest, apiResp{OK: false, Error: err.Error()})
+		expectedSize, err := strconv.ParseInt(strings.TrimSpace(r.Header.Get("Upload-Content-Length")), 10, 64)
+		if err != nil || expectedSize < 0 {
+			writeUploadError(w, ai.NewUploadError(ai.UploadErrorInvalidRequest, false, errors.New("invalid Upload-Content-Length")))
 			return
 		}
-		uploadID := ""
-		if out != nil {
-			u := strings.TrimSpace(out.URL)
-			if u != "" {
-				u = strings.TrimSuffix(u, "/")
-				if i := strings.LastIndex(u, "/"); i >= 0 {
-					uploadID = strings.TrimSpace(u[i+1:])
-				}
-			}
+		owner, err := ai.NewUploadOwner(meta.EndpointID, meta.UserPublicID, meta.ChannelID)
+		if err != nil {
+			writeUploadError(w, err)
+			return
+		}
+		source := "uploaded_file"
+		if values := r.MultipartForm.Value["source"]; len(values) == 1 {
+			source = values[0]
+		}
+		out, err := g.ai.SaveUpload(r.Context(), ai.SaveUploadRequest{
+			Owner: owner, DraftID: r.Header.Get("Upload-Draft-ID"), Reader: f, DisplayName: fh.Filename, DeclaredMediaType: fh.Header.Get("Content-Type"),
+			Source: source, UploadRequestID: r.Header.Get("Idempotency-Key"),
+			ExpectedContentSHA256: r.Header.Get("Upload-Content-SHA256"), ExpectedSizeBytes: expectedSize,
+			DisplayNameSHA256: r.Header.Get("Upload-Display-Name-SHA256"), MaxBytes: maxUploadBytes,
+		})
+		if err != nil {
+			g.appendAudit(meta, "ai_upload", "failure", map[string]any{"source": strings.TrimSpace(source)}, err)
+			writeUploadError(w, err)
+			return
 		}
 		g.appendAudit(meta, "ai_upload", "success", map[string]any{
-			"upload_id": uploadID,
-			"name":      strings.TrimSpace(out.Name),
+			"upload_id": strings.TrimSpace(out.AttachmentID),
 			"mime_type": strings.TrimSpace(out.MimeType),
-			"size":      out.Size,
+			"size":      out.SizeBytes,
 		}, nil)
 		writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
 		return
 
-	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/uploads/"):
+	case (r.Method == http.MethodGet || r.Method == http.MethodHead || r.Method == http.MethodDelete) && strings.HasPrefix(r.URL.Path, "/_redeven_proxy/api/ai/uploads/"):
 		meta, ok := g.requirePermission(w, r, requiredPermissionFull)
 		if !ok {
 			return
@@ -5049,18 +5261,65 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 		}
 		rest := strings.TrimPrefix(r.URL.Path, "/_redeven_proxy/api/ai/uploads/")
 		rest = strings.TrimPrefix(rest, "/")
+		readLongText := r.Method == http.MethodGet && strings.HasSuffix(rest, "/long_text")
+		if readLongText {
+			rest = strings.TrimSuffix(rest, "/long_text")
+		}
 		uploadID := strings.TrimSpace(rest)
 		if uploadID == "" {
 			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 			return
 		}
-		info, filePath, err := g.ai.OpenUpload(r.Context(), strings.TrimSpace(meta.EndpointID), uploadID)
+		owner, err := ai.NewUploadOwner(meta.EndpointID, meta.UserPublicID, meta.ChannelID)
 		if err != nil {
-			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: err.Error()})
+			writeUploadError(w, err)
+			return
+		}
+		if readLongText {
+			out, err := g.ai.ReadStagedLongText(r.Context(), owner, strings.TrimSpace(r.URL.Query().Get("draft_id")), uploadID)
+			if err != nil {
+				writeUploadError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: out})
+			return
+		}
+		if r.Method == http.MethodDelete {
+			draftID := strings.TrimSpace(r.URL.Query().Get("draft_id"))
+			var err error
+			if draftID != "" {
+				err = g.ai.DeleteDraftUpload(r.Context(), owner, draftID, uploadID)
+			} else {
+				err = g.ai.DeleteStagedUpload(r.Context(), owner, uploadID)
+			}
+			if err != nil {
+				writeUploadError(w, err)
+				return
+			}
+			writeJSON(w, http.StatusOK, apiResp{OK: true, Data: map[string]any{"attachment_id": uploadID, "deleted": true}})
+			return
+		}
+		draftID := strings.TrimSpace(r.URL.Query().Get("draft_id"))
+		threadID := strings.TrimSpace(r.URL.Query().Get("thread_id"))
+		turnID := strings.TrimSpace(r.URL.Query().Get("turn_id"))
+		queueID := strings.TrimSpace(r.URL.Query().Get("queue_id"))
+		var opened *ai.OpenUploadResult
+		switch {
+		case draftID != "" && threadID == "" && turnID == "" && queueID == "":
+			opened, err = g.ai.OpenUpload(r.Context(), owner, draftID, uploadID)
+		case draftID == "" && threadID != "" && turnID != "" && queueID == "":
+			opened, err = g.ai.OpenCanonicalLiveAttachmentForTurn(r.Context(), owner, threadID, turnID, uploadID)
+		case draftID == "" && threadID != "" && turnID == "" && queueID != "":
+			opened, err = g.ai.OpenQueuedUpload(r.Context(), owner, threadID, queueID, uploadID)
+		default:
+			err = ai.NewUploadError(ai.UploadErrorNotFound, false, errors.New("attachment not found"))
+		}
+		if err != nil {
+			writeUploadError(w, err)
 			return
 		}
 
-		f, err := os.Open(filePath)
+		f, err := os.Open(opened.FilePath)
 		if err != nil {
 			writeJSON(w, http.StatusNotFound, apiResp{OK: false, Error: "not found"})
 			return
@@ -5072,9 +5331,22 @@ func (g *Server) handleAPI(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		w.Header().Set("Content-Type", strings.TrimSpace(info.MimeType))
-		w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", info.Name))
-		http.ServeContent(w, r, info.Name, st.ModTime(), f)
+		contentType := strings.TrimSpace(opened.Info.MimeType)
+		disposition := "attachment"
+		if r.URL.Query().Get("preview") == "1" {
+			if previewType, ok := safeInlineAttachmentMediaType(contentType); ok {
+				contentType = previewType
+				disposition = "inline"
+				w.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'; base-uri 'none'; form-action 'none'")
+			} else {
+				contentType = "application/octet-stream"
+			}
+		}
+		w.Header().Set("Content-Type", contentType)
+		w.Header().Set("Content-Disposition", mime.FormatMediaType(disposition, map[string]string{"filename": opened.Info.DisplayName}))
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("Cache-Control", "private, no-store")
+		http.ServeContent(w, r, opened.Info.DisplayName, st.ModTime(), f)
 		return
 
 	case r.Method == http.MethodGet && r.URL.Path == "/_redeven_proxy/api/spaces":

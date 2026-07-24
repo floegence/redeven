@@ -592,6 +592,13 @@ describe('Desktop shared i18n helpers', () => {
     expect(ru.tn('plural.environmentCount', 1)).toBe('1 окружение');
     expect(ru.tn('plural.environmentCount', 2)).toBe('2 окружения');
     expect(ru.tn('plural.environmentCount', 5)).toBe('5 окружений');
+
+    const de = createDesktopI18n('de-DE');
+    expect(de.tn('flowerSurface.attachments.lines', 1)).toBe('1 Zeile');
+    expect(de.tn('flowerSurface.attachments.lines', 2)).toBe('2 Zeilen');
+    expect(ru.tn('flowerSurface.attachments.lines', 1)).toBe('1 строка');
+    expect(ru.tn('flowerSurface.attachments.lines', 2)).toBe('2 строки');
+    expect(ru.tn('flowerSurface.attachments.lines', 5)).toBe('5 строк');
   });
 
   it('formats dates, numbers, and relative times through Intl for the resolved locale', () => {

@@ -1,13 +1,20 @@
-import { Show, createEffect, createSignal, onCleanup } from 'solid-js';
+import { Show, createEffect, createSignal, onCleanup, type Component } from 'solid-js';
 import { Dynamic, render } from 'solid-js/web';
 import { afterEach, vi } from 'vitest';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
 
 import {
-  FlowerSurface,
+  FlowerSurface as FlowerSurfaceComponent,
+  createFlowerComposerDraftCoordinator,
+  type FlowerComposerDraftCoordinator,
+  type FlowerSurfaceProps,
   type FlowerSurfaceNotification,
   type FlowerThreadFocusRequest,
 } from '../../../../flower_ui/src';
+
+const FlowerSurface: Component<Omit<FlowerSurfaceProps, 'draftCoordinator'>> = (props) => (
+  <FlowerSurfaceComponent {...props} draftCoordinator={createFlowerComposerDraftCoordinator()} />
+);
 import type {
   FlowerActivityItem,
   FlowerActivityTimelineBlock,
@@ -826,6 +833,24 @@ export function renderSurface(configured = true): HTMLDivElement {
 
 export function renderSurfaceWithAdapter(surfaceAdapter: FlowerSurfaceAdapter): HTMLDivElement {
   return mountFlowerSurface(surfaceAdapter);
+}
+
+export function renderSurfaceWithDraftCoordinator(
+  surfaceAdapter: FlowerSurfaceAdapter,
+  draftCoordinator: FlowerComposerDraftCoordinator,
+  surfaceInstanceID: string,
+): HTMLDivElement {
+  const runtime = document.createElement('div');
+  document.body.appendChild(runtime);
+  disposers.push(render(() => (
+    <FlowerSurfaceComponent
+      adapter={surfaceAdapter}
+      draftCoordinator={draftCoordinator}
+      surfaceInstanceID={surfaceInstanceID}
+      notify={(notification) => notifications.push(notification)}
+    />
+  ), runtime));
+  return runtime;
 }
 
 export function renderSurfaceWithAdapterProps(

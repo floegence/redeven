@@ -96,6 +96,19 @@ func cleanStringList(values []string) []string {
 }
 
 var builtinDefinitions = map[string]Definition{
+	"attachment.read": {
+		Name:             "attachment.read",
+		Mutating:         false,
+		RequiresApproval: false,
+		Presentation: withPresentationOptions(
+			presentation(ToolPresentationContext, "readonly", "file", "context", "args", "result"),
+			operation("read"),
+			labelFields("name", "locator"),
+			callPayloadFields("locator", "max_bytes", "max_lines"),
+			resultPayloadFields("name", "content", "start_byte", "end_byte_exclusive", "start_line", "end_line", "starts_mid_line", "ends_mid_line", "truncated"),
+			chipFields("operation", "name", "truncated"),
+		),
+	},
 	"file.read": {
 		Name:             "file.read",
 		Mutating:         false,

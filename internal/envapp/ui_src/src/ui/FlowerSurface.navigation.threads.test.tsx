@@ -960,8 +960,8 @@ describe('FlowerSurface navigation threads', () => {
         prompt: 'Inspect these queued files.',
         created_at_ms: 1_000,
         attachments: [
-          { name: 'Screenshot', mime_type: 'image/png', url: '/_redeven_proxy/api/ai/uploads/image-queued' },
-          { name: 'notes.txt', mime_type: 'text/plain', url: '/_redeven_proxy/api/ai/uploads/file-queued' },
+          { attachment_id: 'image-queued', name: 'Screenshot', mime_type: 'image/png', size_bytes: 512, url: '/_redeven_proxy/api/ai/uploads/image-queued' },
+          { attachment_id: 'file-queued', name: 'notes.txt', mime_type: 'text/plain', size_bytes: 128, url: '/_redeven_proxy/api/ai/uploads/file-queued' },
         ],
         context_action: askFlowerContextAction(),
       }],

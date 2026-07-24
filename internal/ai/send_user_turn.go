@@ -5,7 +5,9 @@ import (
 	"errors"
 	"strings"
 	"time"
+	"unicode/utf8"
 
+	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/session"
 )
 
@@ -20,8 +22,17 @@ var ErrNoCompactableContext = errors.New("no compactable context")
 
 const compactThreadContextSourceSlashCommand = "slash_command"
 
+const (
+	LongTextAttachmentRequiredErrorCode = "long_text_attachment_required"
+	inlineTurnTextCodePointLimit        = 50_000
+)
+
+var ErrLongTextAttachmentRequired = threadstore.ErrLongTextAttachmentRequired
+
 type SendUserTurnRequest struct {
 	ThreadID              string     `json:"thread_id"`
+	DraftID               string     `json:"draft_id,omitempty"`
+	ExpectedDraftRevision *int64     `json:"expected_draft_revision,omitempty"`
 	Model                 string     `json:"model,omitempty"`
 	Input                 RunInput   `json:"input"`
 	Options               RunOptions `json:"options"`
@@ -63,9 +74,23 @@ type userTurnAdmissionOutcome struct {
 }
 
 type preparedUserTurn struct {
-	TurnID          string
-	CreatedAtUnixMs int64
-	UploadIDs       []string
+	TurnID                string
+	CreatedAtUnixMs       int64
+	UploadIDs             []string
+	OwnerUserHash         string
+	DraftID               string
+	ExpectedDraftRevision *int64
+	AttachmentAdmission   threadstore.AttachmentAdmission
+}
+
+func validateInlineTurnText(text string) error {
+	if !utf8.ValidString(text) {
+		return errors.New("invalid text content")
+	}
+	if utf8.RuneCountInString(text) > inlineTurnTextCodePointLimit {
+		return ErrLongTextAttachmentRequired
+	}
+	return nil
 }
 
 func (s *Service) SendUserTurn(ctx context.Context, meta *session.Meta, req SendUserTurnRequest) (SendUserTurnResponse, error) {
@@ -76,6 +101,9 @@ func (s *Service) SendUserTurn(ctx context.Context, meta *session.Meta, req Send
 		ctx = context.Background()
 	}
 	if err := requireRWX(meta); err != nil {
+		return SendUserTurnResponse{}, err
+	}
+	if err := validateInlineTurnText(req.Input.Text); err != nil {
 		return SendUserTurnResponse{}, err
 	}
 	endpointID := strings.TrimSpace(meta.EndpointID)
@@ -180,7 +208,7 @@ func normalizeOrCreateTurnID(raw string) (string, error) {
 	return raw, nil
 }
 
-func (s *Service) prepareUserTurn(ctx context.Context, meta *session.Meta, endpointID string, threadID string, input RunInput) (preparedUserTurn, RunInput, error) {
+func (s *Service) prepareUserTurn(ctx context.Context, meta *session.Meta, endpointID string, threadID string, modelID string, input RunInput, draftID string, expectedDraftRevision *int64) (preparedUserTurn, RunInput, error) {
 	if s == nil {
 		return preparedUserTurn{}, input, errors.New("nil service")
 	}
@@ -192,17 +220,30 @@ func (s *Service) prepareUserTurn(ctx context.Context, meta *session.Meta, endpo
 	if meta == nil || endpointID == "" || threadID == "" {
 		return preparedUserTurn{}, input, errors.New("invalid request")
 	}
+	if err := validateInlineTurnText(input.Text); err != nil {
+		return preparedUserTurn{}, input, err
+	}
 
 	turnID, err := normalizeOrCreateTurnID(input.TurnID)
 	if err != nil {
 		return preparedUserTurn{}, input, err
 	}
 	input.TurnID = turnID
-	input, _, uploadIDs, err := s.normalizeInputAttachments(ctx, endpointID, input)
+	owner, err := NewUploadOwner(endpointID, meta.UserPublicID, meta.ChannelID)
+	if err != nil {
+		return preparedUserTurn{}, input, err
+	}
+	draftID = strings.TrimSpace(draftID)
+	if draftID != "" && (expectedDraftRevision == nil || *expectedDraftRevision < 0) {
+		return preparedUserTurn{}, input, errors.New("composer draft revision is required")
+	}
+	input, uploadIDs, attachmentAdmission, err := s.prepareInputAttachmentAdmission(ctx, owner, draftID, strings.TrimSpace(modelID), input)
 	if err != nil {
 		return preparedUserTurn{}, input, err
 	}
 	return preparedUserTurn{
 		TurnID: turnID, CreatedAtUnixMs: time.Now().UnixMilli(), UploadIDs: uploadIDs,
+		OwnerUserHash: owner.OwnerUserHash, DraftID: draftID, ExpectedDraftRevision: expectedDraftRevision,
+		AttachmentAdmission: attachmentAdmission,
 	}, input, nil
 }

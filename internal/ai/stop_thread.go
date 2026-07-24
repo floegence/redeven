@@ -502,7 +502,7 @@ func (a *threadActor) handleStopThread(ctx context.Context, meta *session.Meta, 
 	a.mgr.svc.broadcastThreadSummary(endpointID, threadID)
 	resp := StopThreadResponse{OK: true, RecoveredFollowups: make([]FollowupItemView, 0, len(recovered))}
 	for i, rec := range recovered {
-		view, err := followupRecordToView(rec, i+1)
+		view, err := a.mgr.svc.followupRecordView(ctx, rec, i+1)
 		if err != nil {
 			return StopThreadResponse{}, fmt.Errorf("decode recovered followup %q: %w", rec.QueueID, err)
 		}

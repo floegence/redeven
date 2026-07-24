@@ -13,7 +13,7 @@ func TestQueuedTurnJSONRejectsUnsupportedShapes(t *testing.T) {
 	}{
 		{name: "session unknown field", raw: `{"channel_id":"channel","endpoint_id":"env","unknown":true}`, run: func(raw string) error { _, err := unmarshalQueuedTurnSessionMeta(raw); return err }},
 		{name: "session multiple values", raw: `{"channel_id":"channel","endpoint_id":"env"} {}`, run: func(raw string) error { _, err := unmarshalQueuedTurnSessionMeta(raw); return err }},
-		{name: "attachment unknown field", raw: `[{"url":"/_redeven_proxy/api/ai/uploads/upl_1","unknown":true}]`, run: func(raw string) error { _, err := unmarshalQueuedTurnAttachments(raw); return err }},
+		{name: "attachment unknown field", raw: `[{"attachment_id":"upl_aaaaaaaaaaaaaaaaaaaaaaaa","unknown":true}]`, run: func(raw string) error { _, err := unmarshalQueuedTurnAttachments(raw); return err }},
 		{name: "attachment multiple values", raw: `[] []`, run: func(raw string) error { _, err := unmarshalQueuedTurnAttachments(raw); return err }},
 		{name: "context action unknown field", raw: `{"unknown":true}`, run: func(raw string) error { _, err := unmarshalQueuedTurnContextAction(raw); return err }},
 		{name: "context action multiple values", raw: `{} {}`, run: func(raw string) error { _, err := unmarshalQueuedTurnContextAction(raw); return err }},

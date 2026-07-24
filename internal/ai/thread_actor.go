@@ -705,7 +705,7 @@ func (a *threadActor) handleMaybeStartQueuedTurn(ctx context.Context) error {
 			err:                err,
 		}
 	}
-	if _, _, err := a.mgr.svc.prepareUserTurn(ctx, meta, endpointID, threadID, startReq.Input); err != nil {
+	if _, _, err := a.mgr.svc.prepareUserTurn(ctx, meta, endpointID, threadID, startReq.Model, startReq.Input, "", nil); err != nil {
 		return &queuedTurnStartError{
 			endpointID:         endpointID,
 			threadID:           threadID,
@@ -911,10 +911,12 @@ func (a *threadActor) handleSendUserTurn(ctx context.Context, meta *session.Meta
 	}
 
 	startReq := RunStartRequest{
-		ThreadID: threadID,
-		Model:    strings.TrimSpace(req.Model),
-		Input:    req.Input,
-		Options:  req.Options,
+		ThreadID:              threadID,
+		Model:                 strings.TrimSpace(req.Model),
+		Input:                 req.Input,
+		Options:               req.Options,
+		DraftID:               req.DraftID,
+		ExpectedDraftRevision: req.ExpectedDraftRevision,
 	}
 	admitted, _, err := a.mgr.svc.startUserTurnDetached(ctx, meta, runID, startReq, req.SourceFollowupID)
 	if err != nil {

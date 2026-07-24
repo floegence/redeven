@@ -48,19 +48,21 @@ func migrateLegacyThreadTitles(path string, migrate func(context.Context, Legacy
 	}
 	kind = strings.TrimSpace(kind)
 	if kind != threadstoreSchemaKind {
-		return fmt.Errorf("unsupported threadstore database kind %q version %d; only %q schemas v2, v3, and v4 are supported", kind, version, threadstoreSchemaKind)
+		return fmt.Errorf("unsupported threadstore database kind %q version %d; only %q schemas v2 through v6 are supported", kind, version, threadstoreSchemaKind)
 	}
 	switch version {
 	case threadstoreCurrentSchemaVersion:
 		return nil
 	case 2:
 	case 3:
+	case 4:
+	case 5:
 	case 0:
-		return errors.New("existing threadstore database has unsupported schema version 0; only v2, v3, and v4 are supported")
+		return errors.New("existing threadstore database has unsupported schema version 0; only v2 through v6 are supported")
 	default:
-		return fmt.Errorf("unsupported threadstore database kind %q version %d; only schemas v2, v3, and v4 are supported", kind, version)
+		return fmt.Errorf("unsupported threadstore database kind %q version %d; only schemas v2 through v6 are supported", kind, version)
 	}
-	if version == 3 {
+	if version == 3 || version == 4 || version == 5 {
 		return nil
 	}
 

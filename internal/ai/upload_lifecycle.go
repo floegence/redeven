@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
 	"errors"
 	"os"
@@ -20,12 +21,12 @@ const (
 	uploadCleanupSweepInterval = 15 * time.Minute
 	uploadCleanupSweepTimeout  = 30 * time.Second
 	uploadCleanupBatchSize     = 50
+	uploadAttemptRecoveryTTL   = 24 * time.Hour
 	sqliteCompactionTimeout    = 30 * time.Second
 )
 
 type resolvedUploadAttachment struct {
 	UploadID string
-	URL      string
 	Name     string
 	MimeType string
 	Size     int64
@@ -58,7 +59,19 @@ func uniqueStrings(items []string) []string {
 	return out
 }
 
-func (s *Service) normalizeInputAttachments(ctx context.Context, endpointID string, input RunInput) (RunInput, map[string]resolvedUploadAttachment, []string, error) {
+func normalizeUploadID(raw string) (string, error) {
+	uploadID := strings.TrimSpace(raw)
+	if !validUploadID(uploadID) || uploadID != raw {
+		return "", errors.New("invalid attachment_id")
+	}
+	return uploadID, nil
+}
+
+func (s *Service) normalizeInputAttachments(ctx context.Context, owner UploadOwner, input RunInput) (RunInput, map[string]resolvedUploadAttachment, []string, error) {
+	return s.normalizeInputAttachmentsForDraft(ctx, owner, "", input)
+}
+
+func (s *Service) normalizeInputAttachmentsForDraft(ctx context.Context, owner UploadOwner, draftID string, input RunInput) (RunInput, map[string]resolvedUploadAttachment, []string, error) {
 	input.Attachments = append([]RunAttachmentIn(nil), input.Attachments...)
 	contextAction, err := normalizeAskFlowerContextActionEnvelope(input.ContextAction)
 	if err != nil {
@@ -68,65 +81,131 @@ func (s *Service) normalizeInputAttachments(ctx context.Context, endpointID stri
 	if len(input.Attachments) == 0 {
 		return input, nil, nil, nil
 	}
-	endpointID = strings.TrimSpace(endpointID)
-	if endpointID == "" {
-		return input, nil, nil, errors.New("missing endpoint_id")
+	if strings.TrimSpace(owner.EndpointID) == "" || len(strings.TrimSpace(owner.OwnerUserHash)) != sha256.Size*2 {
+		return input, nil, nil, errors.New("authenticated attachment owner is incomplete")
 	}
-	infoByURL := make(map[string]resolvedUploadAttachment)
+	infoByID := make(map[string]resolvedUploadAttachment)
 	uploadIDs := make([]string, 0, len(input.Attachments))
 	normalized := make([]RunAttachmentIn, 0, len(input.Attachments))
 	for _, item := range input.Attachments {
-		next, info, err := s.resolveAttachmentInfo(ctx, endpointID, item)
+		next, info, err := s.resolveAttachmentInfo(ctx, owner, draftID, item)
 		if err != nil {
 			return input, nil, nil, err
 		}
 		normalized = append(normalized, next)
-		infoByURL[next.URL] = *info
+		infoByID[next.AttachmentID] = *info
 		uploadIDs = append(uploadIDs, info.UploadID)
 	}
 	input.Attachments = normalized
-	return input, infoByURL, uniqueStrings(uploadIDs), nil
+	return input, infoByID, uniqueStrings(uploadIDs), nil
 }
 
-func (s *Service) resolveAttachmentInfo(ctx context.Context, endpointID string, item RunAttachmentIn) (RunAttachmentIn, *resolvedUploadAttachment, error) {
-	out := RunAttachmentIn{
-		Name:     strings.TrimSpace(item.Name),
-		MimeType: strings.TrimSpace(item.MimeType),
-		URL:      strings.TrimSpace(item.URL),
+func (s *Service) prepareInputAttachmentAdmission(
+	ctx context.Context,
+	owner UploadOwner,
+	draftID string,
+	modelID string,
+	input RunInput,
+) (RunInput, []string, threadstore.AttachmentAdmission, error) {
+	contract := threadstore.AttachmentAdmission{OwnerUserHash: owner.OwnerUserHash}
+	if len(input.Attachments) > threadstore.AttachmentAdmissionMaxCount {
+		return input, nil, contract, errors.New("attachment count exceeds turn limit")
 	}
-	if out.URL == "" {
-		return out, nil, errors.New("attachment URL is required")
+	seen := make(map[string]struct{}, len(input.Attachments))
+	for _, attachment := range input.Attachments {
+		id := strings.TrimSpace(attachment.AttachmentID)
+		if _, exists := seen[id]; exists {
+			return input, nil, contract, errors.New("duplicate attachment identity")
+		}
+		seen[id] = struct{}{}
 	}
-	uploadID := parseUploadIDFromURL(out.URL)
-	if uploadID == "" {
-		return out, nil, errors.New("attachment must reference a Redeven upload")
+
+	var (
+		normalized RunInput
+		infoByID   map[string]resolvedUploadAttachment
+		uploadIDs  []string
+		err        error
+	)
+	if strings.TrimSpace(draftID) != "" {
+		normalized, infoByID, uploadIDs, err = s.normalizeInputAttachmentsForDraft(ctx, owner, draftID, input)
+	} else {
+		normalized, infoByID, uploadIDs, err = s.normalizeInputAttachments(ctx, owner, input)
 	}
-	rec, err := s.ensureUploadRecord(ctx, endpointID, uploadID)
 	if err != nil {
-		return out, nil, err
+		return input, nil, contract, err
+	}
+	capability := s.AttachmentCapabilities(ctxOrBackground(ctx), strings.TrimSpace(modelID))
+	contract.CapabilityRevision = capability.Revision
+	contract.MaxCount = capability.MaxCount
+	contract.MaxTurnBytes = capability.MaxTurnBytes
+	contract.SupportsLongText = capability.SupportsLongText
+	contract.Routes = make(map[string]string, len(capability.MediaTypes))
+	for _, route := range capability.MediaTypes {
+		contract.Routes[strings.ToLower(strings.TrimSpace(route.MediaType))] = strings.TrimSpace(route.Mode)
+	}
+	if capability.MaxCount != threadstore.AttachmentAdmissionMaxCount || capability.MaxTurnBytes != threadstore.AttachmentAdmissionMaxTurnBytes {
+		return input, nil, contract, errors.New("invalid attachment admission capability")
+	}
+	if len(uploadIDs) == 0 {
+		return normalized, uploadIDs, contract, nil
+	}
+	if strings.TrimSpace(capability.ModelID) != strings.TrimSpace(modelID) {
+		return input, nil, contract, errors.New("attachment model capability changed")
+	}
+	var totalBytes int64
+	for _, attachment := range normalized.Attachments {
+		info, ok := infoByID[attachment.AttachmentID]
+		if !ok || info.Size < 0 || info.Size > capability.MaxTurnBytes-totalBytes {
+			return input, nil, contract, errors.New("attachment bytes exceed turn limit")
+		}
+		totalBytes += info.Size
+		route := contract.Routes[strings.ToLower(strings.TrimSpace(info.MimeType))]
+		if route != "native_full_content" && route != "tool_read" {
+			return input, nil, contract, errors.New("attachment media route is unsupported for model")
+		}
+	}
+	return normalized, uploadIDs, contract, nil
+}
+
+func (s *Service) resolveAttachmentInfo(ctx context.Context, owner UploadOwner, draftID string, item RunAttachmentIn) (RunAttachmentIn, *resolvedUploadAttachment, error) {
+	uploadID, err := normalizeUploadID(item.AttachmentID)
+	if err != nil {
+		return RunAttachmentIn{}, nil, err
+	}
+	var rec *threadstore.UploadRecord
+	if strings.TrimSpace(draftID) != "" {
+		s.mu.Lock()
+		db := s.threadsDB
+		s.mu.Unlock()
+		if db == nil {
+			return RunAttachmentIn{}, nil, errors.New("threads store not ready")
+		}
+		rec, err = db.GetDraftOwnedUpload(ctxOrBackground(ctx), owner.EndpointID, owner.OwnerUserHash, strings.TrimSpace(draftID), uploadID)
+	} else {
+		rec, err = s.ensureUserOwnedUploadRecord(ctx, owner, uploadID)
+	}
+	if err != nil {
+		return RunAttachmentIn{}, nil, err
 	}
 	if rec == nil {
-		return out, nil, sql.ErrNoRows
+		return RunAttachmentIn{}, nil, sql.ErrNoRows
 	}
-	out.Name = strings.TrimSpace(rec.Name)
-	out.MimeType = strings.TrimSpace(rec.MimeType)
+	out := RunAttachmentIn{AttachmentID: uploadID}
 	info := &resolvedUploadAttachment{
 		UploadID: strings.TrimSpace(rec.UploadID),
-		URL:      out.URL,
 		Name:     strings.TrimSpace(rec.Name),
-		MimeType: strings.TrimSpace(rec.MimeType),
+		MimeType: strings.TrimSpace(rec.DetectedMediaType),
 		Size:     rec.SizeBytes,
 	}
 	return out, info, nil
 }
 
-func (s *Service) ensureUploadRecord(ctx context.Context, endpointID string, uploadID string) (*threadstore.UploadRecord, error) {
+func (s *Service) ensureUserOwnedUploadRecord(ctx context.Context, owner UploadOwner, uploadID string) (*threadstore.UploadRecord, error) {
 	if s == nil {
 		return nil, errors.New("nil service")
 	}
-	endpointID = strings.TrimSpace(endpointID)
-	uploadID = strings.TrimSpace(uploadID)
-	if endpointID == "" || uploadID == "" {
+	uploadID, err := normalizeUploadID(uploadID)
+	if err != nil || strings.TrimSpace(owner.EndpointID) == "" || len(strings.TrimSpace(owner.OwnerUserHash)) != sha256.Size*2 {
 		return nil, errors.New("invalid request")
 	}
 	s.mu.Lock()
@@ -140,7 +219,7 @@ func (s *Service) ensureUploadRecord(ctx context.Context, endpointID string, upl
 		persistTO = defaultPersistOpTimeout
 	}
 	pctx, cancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
-	rec, err := db.GetUpload(pctx, endpointID, uploadID)
+	rec, err := db.GetUserOwnedUpload(pctx, owner.EndpointID, owner.OwnerUserHash, uploadID)
 	cancel()
 	if err == nil {
 		return rec, nil
@@ -247,6 +326,22 @@ func (s *Service) sweepPendingUploads(ctx context.Context) (int64, error) {
 	var total int64
 	for {
 		pctx, cancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
+		drafts, err := db.SweepExpiredComposerDrafts(pctx, time.Now().UnixMilli(), uploadCleanupBatchSize)
+		cancel()
+		if err != nil {
+			return total, err
+		}
+		n, err := s.processUploadCleanupCandidates(ctx, drafts.UploadsToDelete)
+		total += n
+		if err != nil {
+			return total, err
+		}
+		if drafts.DraftsDeleted < uploadCleanupBatchSize {
+			break
+		}
+	}
+	for {
+		pctx, cancel := context.WithTimeout(ctxOrBackground(ctx), persistTO)
 		recs, err := db.PrepareExpiredUploadsForDeletion(pctx, time.Now().UnixMilli(), uploadCleanupBatchSize)
 		cancel()
 		if err != nil {
@@ -264,6 +359,87 @@ func (s *Service) sweepPendingUploads(ctx context.Context) (int64, error) {
 			return total, nil
 		}
 	}
+}
+
+func (s *Service) sweepOrphanUploadArtifacts(ctx context.Context) (int64, error) {
+	if s == nil {
+		return 0, nil
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	uploadsDir := strings.TrimSpace(s.uploadsDir)
+	s.mu.Unlock()
+	if db == nil || uploadsDir == "" {
+		return 0, nil
+	}
+	now := time.Now()
+	if _, err := db.ExpireStaleUploadAttempts(ctxOrBackground(ctx), now.Add(-uploadAttemptRecoveryTTL).UnixMilli()); err != nil {
+		return 0, err
+	}
+	protected, err := db.ProtectedUploadArtifactNames(ctxOrBackground(ctx))
+	if err != nil {
+		return 0, err
+	}
+	entries, err := os.ReadDir(uploadsDir)
+	if err != nil {
+		return 0, err
+	}
+	var removed int64
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if _, ok := protected[name]; ok {
+			continue
+		}
+		uploadID := ""
+		switch {
+		case strings.HasSuffix(name, ".data.tmp"):
+			uploadID = strings.TrimSuffix(name, ".data.tmp")
+		case strings.HasSuffix(name, ".data"):
+			uploadID = strings.TrimSuffix(name, ".data")
+		default:
+			continue
+		}
+		if !validUploadID(uploadID) {
+			continue
+		}
+		if err := os.Remove(filepath.Join(uploadsDir, name)); err != nil && !os.IsNotExist(err) {
+			return removed, err
+		}
+		removed++
+	}
+	return removed, nil
+}
+
+func (s *Service) interruptUploadAttemptsFromPreviousProcess(ctx context.Context) (int64, error) {
+	if s == nil {
+		return 0, nil
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	uploadsDir := strings.TrimSpace(s.uploadsDir)
+	s.mu.Unlock()
+	if db == nil || uploadsDir == "" {
+		return 0, nil
+	}
+	attempts, err := db.InterruptReceivingUploadAttempts(ctxOrBackground(ctx), time.Now().UnixMilli())
+	if err != nil {
+		return 0, err
+	}
+	for _, attempt := range attempts {
+		uploadID := strings.TrimSpace(attempt.UploadID)
+		if !validUploadID(uploadID) {
+			return 0, errors.New("interrupted upload has invalid identity")
+		}
+		for _, suffix := range []string{".data.tmp", ".data"} {
+			if err := os.Remove(filepath.Join(uploadsDir, uploadID+suffix)); err != nil && !os.IsNotExist(err) {
+				return 0, err
+			}
+		}
+	}
+	return int64(len(attempts)), nil
 }
 
 func (s *Service) startBackgroundMaintenance() {
@@ -307,6 +483,19 @@ func (s *Service) runBackgroundMaintenance(reason string) {
 	} else if creates > 0 && s.log != nil {
 		s.log.Info("ai thread create replay completed", "reason", reason, "count", creates)
 	}
+	if createErr == nil {
+		s.mu.Lock()
+		db := s.threadsDB
+		s.mu.Unlock()
+		admissions, admissionErr := s.reconcileStaleComposerDraftAdmissions(ctx, db, uploadCleanupBatchSize)
+		if admissionErr != nil {
+			if s.log != nil {
+				s.log.Warn("ai composer admission recovery incomplete", "reason", reason, "error", admissionErr)
+			}
+		} else if admissions > 0 && s.log != nil {
+			s.log.Info("ai composer admission recovery completed", "reason", reason, "count", admissions)
+		}
+	}
 	deletes, deleteErr := s.replayPendingThreadDeletes(ctx, threadDeleteReplayBatchSize)
 	if deleteErr != nil {
 		if s.log != nil {
@@ -322,6 +511,14 @@ func (s *Service) runBackgroundMaintenance(reason string) {
 		}
 	} else if n > 0 && s.log != nil {
 		s.log.Info("ai upload maintenance reclaimed uploads", "reason", reason, "count", n)
+	}
+	orphans, orphanErr := s.sweepOrphanUploadArtifacts(ctx)
+	if orphanErr != nil {
+		if s.log != nil {
+			s.log.Warn("ai upload orphan recovery failed", "reason", reason, "error", orphanErr)
+		}
+	} else if orphans > 0 && s.log != nil {
+		s.log.Info("ai upload orphan recovery reclaimed artifacts", "reason", reason, "count", orphans)
 	}
 	forks, forkErr := s.replayPendingThreadForkOperations(ctx)
 	if forkErr != nil {

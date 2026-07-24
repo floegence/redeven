@@ -1242,8 +1242,26 @@ describe('main routing', () => {
     expect(httpStart).toBeGreaterThanOrEqual(0);
     expect(httpEnd).toBeGreaterThan(httpStart);
     const httpSrc = mainSrc.slice(httpStart, httpEnd);
-    expect(httpSrc).toContain("Accept: 'application/json'");
+    expect(httpSrc).toContain("Accept: options.accept ?? 'application/json'");
     expect(httpSrc).not.toContain('application/x-ndjson');
+    expect(requestSrc).toContain("accept: '*/*'");
+    expect(requestSrc).toContain("contentType: response.headers['content-type']");
+    expect(requestSrc).not.toContain('displayName: request.display_name');
+
+    const chunkStart = mainSrc.indexOf('async function writeRuntimeFlowerAttachmentChunk(');
+    const commitStart = mainSrc.indexOf('async function commitRuntimeFlowerAttachmentUpload(', chunkStart);
+    const cancelStart = mainSrc.indexOf('function cancelRuntimeFlowerAttachmentUpload(', commitStart);
+    expect(chunkStart).toBeGreaterThanOrEqual(0);
+    expect(commitStart).toBeGreaterThan(chunkStart);
+    expect(cancelStart).toBeGreaterThan(commitStart);
+    const chunkSrc = mainSrc.slice(chunkStart, commitStart);
+    const commitSrc = mainSrc.slice(commitStart, cancelStart);
+    expect(chunkSrc).toContain('beginRuntimeFlowerAttachmentWrite(operation)');
+    expect(chunkSrc).toContain('endRuntimeFlowerAttachmentWrite(operation)');
+    expect(commitSrc).toContain('beginRuntimeFlowerAttachmentWrite(operation)');
+    expect(commitSrc).toContain('endRuntimeFlowerAttachmentWrite(operation)');
+    expect(commitSrc.indexOf('beginRuntimeFlowerAttachmentWrite(operation)'))
+      .toBeLessThan(commitSrc.indexOf('writeRuntimeFlowerAttachmentBytes(operation.request, operation.footer)'));
 
     const errorStart = mainSrc.indexOf('function runtimeFlowerEnvelopeError(');
     const errorEnd = mainSrc.indexOf('async function unlockRuntimeFlowerAccess(', errorStart);

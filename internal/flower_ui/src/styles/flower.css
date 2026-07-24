@@ -1668,6 +1668,32 @@ html.dark .flower-component-shell {
   line-height: 1.35;
 }
 
+.flower-model-menu-attachment-status {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.125rem;
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  line-height: 1.35;
+}
+
+.flower-model-menu-attachment-status[data-state='supported'] {
+  color: var(--redeven-status-success-foreground, var(--primary));
+}
+
+.flower-model-menu-attachment-status[data-state='unsupported'],
+.flower-model-menu-attachment-status[data-state='unavailable'] {
+  color: var(--redeven-status-warning-foreground, var(--muted-foreground));
+}
+
+.flower-model-menu-attachment-status-icon {
+  width: 0.6875rem;
+  height: 0.6875rem;
+  flex: 0 0 auto;
+}
+
 .flower-model-menu-check {
   width: 0.75rem;
   height: 0.75rem;
@@ -6029,6 +6055,184 @@ html.dark .flower-component-shell {
   resize: none;
 }
 
+.flower-composer[data-flower-attachment-drag='true'] {
+  border-color: color-mix(in srgb, var(--primary) 62%, var(--border));
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent),
+    0 12px 28px -20px color-mix(in srgb, var(--redeven-surface-shadow-source) 38%, transparent);
+}
+
+.flower-attachment-lane {
+  display: flex;
+  width: 100%;
+  max-height: min(15rem, 32dvh);
+  min-width: 0;
+  flex-direction: column;
+  gap: 0.375rem;
+  margin-bottom: 0.5rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.flower-attachment-item {
+  display: grid;
+  min-width: 0;
+  grid-template-columns: 2rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.5rem;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, transparent);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--muted) 38%, transparent);
+  padding: 0.375rem 0.5rem;
+}
+
+.flower-attachment-item[data-attachment-status='validation_error'],
+.flower-attachment-item[data-attachment-status='upload_error'],
+.flower-attachment-item[data-attachment-status='incompatible'] {
+  border-color: color-mix(in srgb, var(--destructive) 42%, var(--border));
+}
+
+.flower-attachment-file-icon {
+  display: inline-flex;
+  width: 2rem;
+  height: 2rem;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted-foreground);
+}
+
+.flower-attachment-file-icon > svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.flower-attachment-body,
+.flower-attachment-name,
+.flower-attachment-meta {
+  min-width: 0;
+}
+
+.flower-attachment-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.flower-attachment-name {
+  overflow: hidden;
+  color: var(--foreground);
+  font-size: 0.8125rem;
+  font-weight: 650;
+  line-height: 1.25rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flower-attachment-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 0.5rem;
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.flower-attachment-progress {
+  width: 100%;
+  height: 0.25rem;
+  accent-color: var(--primary);
+}
+
+.flower-attachment-progress-indeterminate,
+.flower-attachment-error {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  line-height: 1rem;
+}
+
+.flower-attachment-error {
+  color: var(--destructive);
+}
+
+.flower-attachment-actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.125rem;
+}
+
+.flower-attachment-icon-button,
+.flower-composer-attachment-button {
+  display: inline-flex;
+  min-width: 2.75rem;
+  min-height: 2.75rem;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+
+.flower-attachment-icon-button:hover,
+.flower-attachment-icon-button:focus-visible,
+.flower-composer-attachment-button:hover,
+.flower-composer-attachment-button:focus-visible {
+  background: color-mix(in srgb, var(--muted) 78%, transparent);
+  color: var(--foreground);
+  outline: none;
+}
+
+.flower-attachment-icon-button:disabled,
+.flower-composer-attachment-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.flower-attachment-icon-button > svg,
+.flower-composer-attachment-button > svg {
+  width: 1rem;
+  height: 1rem;
+}
+
+.flower-composer-over-limit,
+.flower-composer-draft-conflict {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.375rem;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  line-height: 1.125rem;
+}
+
+.flower-composer-over-limit {
+  color: color-mix(in srgb, var(--redeven-status-warning) 78%, var(--foreground));
+}
+
+.flower-composer-draft-conflict button {
+  min-height: 2.75rem;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--muted) 72%, transparent);
+  color: var(--foreground);
+  padding-inline: 0.75rem;
+  cursor: pointer;
+}
+
+.flower-composer[data-flower-companion-compact='true'] .flower-attachment-lane,
+.flower-composer[data-flower-companion-compact='true'] .flower-composer-over-limit,
+.flower-composer[data-flower-companion-compact='true'] .flower-composer-draft-conflict {
+  grid-column: 1 / -1;
+}
+
 .flower-composer input[type='password'] {
   min-height: 2.75rem;
 }
@@ -8058,6 +8262,22 @@ html.dark .redeven-flower-soft-aura-workbench-glow {
 }
 
 @media (max-width: 640px) {
+  .flower-attachment-lane {
+    max-height: min(12rem, 28dvh);
+  }
+
+  .flower-attachment-item {
+    grid-template-columns: 2rem minmax(0, 1fr);
+  }
+
+  .flower-attachment-actions {
+    display: grid;
+    width: 100%;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(auto-fit, 2.75rem);
+    justify-content: flex-end;
+  }
+
   .flower-component-shell {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(9.5rem, 30vh) minmax(0, 1fr);

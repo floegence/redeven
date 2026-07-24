@@ -30,6 +30,8 @@ func toolSuccessSummary(toolName string) string {
 		return "terminal.terminate"
 	case "file.read":
 		return "file.read"
+	case "attachment.read":
+		return "attachment.read"
 	case "file.edit", "file.write":
 		return "file.updated"
 	case "apply_patch":
@@ -192,6 +194,8 @@ func normalizeTruncatedToolPayload(toolName string, payload any) (any, bool) {
 		return m, truncated
 	case "file.read":
 		return normalizeFileReadPayload(payload)
+	case "attachment.read":
+		return normalizeJSONCompatibleToolPayload(payload)
 	case "file.edit", "file.write":
 		return normalizeFileMutationPayload(payload)
 	case "apply_patch":
@@ -541,6 +545,18 @@ func builtInToolDefinitions() []ToolDef {
 	}
 	defs := []ToolDef{
 		{
+			Name:             "attachment.read",
+			Description:      "Read one bounded page from a strict UTF-8 attachment already present in this canonical Flower thread. Use the attachment locator shown in the message manifest and continue with next_cursor until truncated is false.",
+			InputSchema:      toSchema(map[string]any{"type": "object", "properties": map[string]any{"locator": map[string]any{"type": "string", "minLength": 1, "maxLength": 1024}, "cursor": map[string]any{"type": "string", "maxLength": 2048}, "max_bytes": map[string]any{"type": "integer", "minimum": 1}, "max_lines": map[string]any{"type": "integer", "minimum": 1}}, "required": []string{"locator"}, "additionalProperties": false}),
+			Mutating:         false,
+			RequiresApproval: false,
+			Visibility:       ToolVisibilitySharedReadonly,
+			Capabilities:     []ToolCapabilityClass{ToolCapabilityReadonlyLocal},
+			Source:           "builtin",
+			Namespace:        "builtin.attachment",
+			Priority:         100,
+		},
+		{
 			Name:             "file.read",
 			Description:      "Read a project-scoped file from disk. Use this as the primary file inspection tool before editing.",
 			InputSchema:      toSchema(map[string]any{"type": "object", "properties": withTargetID(map[string]any{"file_path": map[string]any{"type": "string", "description": "Path to the file to read. Relative paths resolve from the current working directory; absolute paths must still stay inside the active project root."}, "offset": map[string]any{"type": "integer", "minimum": 0, "description": "Optional 1-based starting line for partial reads."}, "limit": map[string]any{"type": "integer", "minimum": 1, "maximum": maxFileReadLimit, "description": "Optional maximum number of lines to return for partial reads."}}), "required": []string{"file_path"}, "additionalProperties": false}),
@@ -831,6 +847,9 @@ func registerBuiltInTools(reg *InMemoryToolRegistry, r *run) error {
 		return fmt.Errorf("nil tool registry")
 	}
 	for _, def := range builtInToolDefinitions() {
+		if def.Name == "attachment.read" && (r == nil || r.host.openLiveAttachment == nil || !r.attachmentToolReadEnabled) {
+			continue
+		}
 		if def.Name == "web.search" && (r == nil || !r.webSearchToolEnabled) {
 			continue
 		}

@@ -210,7 +210,8 @@ vi.mock('@floegence/floe-webapp-core/layout', async (importOriginal) => ({
   DisplayModePageShell: (props: any) => <div data-testid="display-mode-page-shell">{props.children}</div>,
 }));
 
-vi.mock('@floegence/floe-webapp-core/ui', () => ({
+vi.mock('@floegence/floe-webapp-core/ui', async (importOriginal) => ({
+  ...await importOriginal<typeof import('@floegence/floe-webapp-core/ui')>(),
   Button: (props: any) => (
     <button
       type="button"
@@ -246,13 +247,24 @@ vi.mock('@floegence/floe-webapp-core/ui', () => ({
     </Show>
   ),
   Dropdown: (props: any) => <>{props.trigger}</>,
+  FloatingWindow: (props: any) => (
+    <Show when={props.open}>
+      <div data-floe-geometry-surface="floating-window" class={props.class}>
+        <div>{props.title}</div>
+        <div>{props.children}</div>
+        <div>{props.footer}</div>
+      </div>
+    </Show>
+  ),
   SegmentedControl: () => <div />,
   Tooltip: (props: any) => <>{props.children}</>,
 }));
 
-vi.mock('@floegence/floe-webapp-core/icons', () => {
+vi.mock('@floegence/floe-webapp-core/icons', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@floegence/floe-webapp-core/icons')>();
   const Icon = () => <span />;
   return {
+    ...actual,
     AlertCircle: Icon,
     AlertTriangle: Icon,
     Activity: Icon,
@@ -303,6 +315,7 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     Moon: Icon,
     MoreHorizontal: Icon,
     Package: Icon,
+    Paperclip: Icon,
     Pencil: Icon,
     Play: Icon,
     Plus: Icon,
@@ -690,6 +703,7 @@ vi.mock('./widgets/FlowerTurnLauncherWindow', () => ({
 }));
 vi.mock('./flower/envLocalFlowerSurfaceAdapter', () => ({
   createEnvLocalFlowerSurfaceAdapter: () => ({ launchTurn: flowerLaunchTurnMock }),
+  createEnvLocalFlowerDraftPersistence: () => undefined,
 }));
 vi.mock('./notes/NotesOverlay', () => ({ NotesOverlay: () => <div /> }));
 vi.mock('./maintenance/RuntimeUpdateContext', () => ({ RuntimeUpdateContext: createContext({}) }));

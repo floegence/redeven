@@ -130,7 +130,7 @@ func TestNormalizeAskFlowerContextActionRejectsContextFreePayloads(t *testing.T)
 func TestQueuedTurnContextActionPersistsThroughStoreRoundTrip(t *testing.T) {
 	t.Parallel()
 
-	svc := newTestService(t, nil)
+	svc := newSendTurnTestService(t)
 	meta := testUploadMeta()
 	ctx := context.Background()
 
@@ -138,10 +138,11 @@ func TestQueuedTurnContextActionPersistsThroughStoreRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	upload, err := svc.SaveUpload(ctx, meta.EndpointID, strings.NewReader("attachment body"), "notes.txt", "text/plain", 0)
-	if err != nil {
-		t.Fatalf("SaveUpload: %v", err)
-	}
+	const turnID = "msg_context_action"
+	upload, draftRevision := stageTestAdmissionDraftAttachment(
+		t, svc, meta, thread.ThreadID, turnID, "queued with context", "openai/gpt-5-mini",
+		"attachment body", "notes.txt", "text/plain",
+	)
 	action := &ContextActionEnvelope{
 		SchemaVersion: ContextActionSchemaVersion,
 		ActionID:      "assistant.ask.flower",
@@ -162,17 +163,15 @@ func TestQueuedTurnContextActionPersistsThroughStoreRoundTrip(t *testing.T) {
 	}
 
 	queued, _, err := svc.enqueueQueuedTurn(ctx, meta, SendUserTurnRequest{
-		ThreadID: thread.ThreadID,
-		Model:    "openai/gpt-5.5",
+		ThreadID:              thread.ThreadID,
+		DraftID:               thread.ThreadID,
+		ExpectedDraftRevision: &draftRevision,
+		Model:                 "openai/gpt-5-mini",
 		Input: RunInput{
-			TurnID:        "msg_context_action",
+			TurnID:        turnID,
 			Text:          "queued with context",
 			ContextAction: action,
-			Attachments: []RunAttachmentIn{{
-				Name:     "notes.txt",
-				MimeType: "text/plain",
-				URL:      upload.URL,
-			}},
+			Attachments:   []RunAttachmentIn{{AttachmentID: upload.AttachmentID}},
 		},
 	})
 	if err != nil {
@@ -196,7 +195,11 @@ func TestQueuedTurnContextActionPersistsThroughStoreRoundTrip(t *testing.T) {
 		t.Fatalf("queued context action is not canonical: %s", viewJSON)
 	}
 	attachments := view.QueuedTurns[0].Attachments
-	if len(attachments) != 1 || attachments[0].Name != "notes.txt" || attachments[0].MimeType != "text/plain" || attachments[0].URL != upload.URL {
+	if len(attachments) != 1 || attachments[0].AttachmentID != upload.AttachmentID || attachments[0].Name != "notes.txt" ||
+		!strings.HasPrefix(attachments[0].MimeType, "text/plain") || attachments[0].SizeBytes != int64(len("attachment body")) ||
+		attachments[0].LogicalLocator != upload.LogicalLocator ||
+		!strings.Contains(attachments[0].URL, "thread_id="+thread.ThreadID) ||
+		!strings.Contains(attachments[0].URL, "queue_id="+queued.QueueID) {
 		t.Fatalf("queued thread attachments=%#v, want exact UI-safe attachment snapshot", attachments)
 	}
 

@@ -570,6 +570,8 @@ func floretToolResourceKinds(toolName string) []string {
 		return []string{"command"}
 	case "file.read", "read_file", "read_files", "rgrep", "find", "file.edit", "file.write", "apply_patch":
 		return []string{"file"}
+	case "attachment.read":
+		return []string{"attachment"}
 	case "web_fetch":
 		return []string{"web_url"}
 	case "web.search":
@@ -597,6 +599,10 @@ func floretToolOpenWorld(def ToolDef) bool {
 func floretToolResources(inv fltools.Invocation[map[string]any]) ([]fltools.ResourceRef, error) {
 	args := cloneAnyMap(inv.Args)
 	switch strings.TrimSpace(inv.Name) {
+	case "attachment.read":
+		if locator := strings.TrimSpace(anyToString(args["locator"])); locator != "" {
+			return []fltools.ResourceRef{{Kind: "attachment", Value: locator}}, nil
+		}
 	case "terminal.exec":
 		out := []fltools.ResourceRef{}
 		if command := strings.TrimSpace(anyToString(args["command"])); command != "" {

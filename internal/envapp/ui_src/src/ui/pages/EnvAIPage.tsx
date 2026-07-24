@@ -4,6 +4,7 @@ import { useNotification } from '@floegence/floe-webapp-core';
 import { FlowerSurface } from '../../../../../flower_ui/src';
 import type {
   FlowerCompanionPresenceProjection,
+  FlowerComposerDraftCoordinator,
   FlowerCompanionProgressKind,
   FlowerCompanionPriorityStatus,
   FlowerSurfaceNotification,
@@ -32,11 +33,14 @@ function createEnvFlowerSurfaceCopy(i18n: I18nHelpers, locale: string) {
   const translator: FlowerSurfaceTranslator = {
     locale,
     t: (key, params) => i18n.t(key as EnvAppTranslationKey, params),
+    tn: (key, count, params) => i18n.tn(key as EnvAppTranslationKey, count, params),
   };
   return createLocalizedFlowerSurfaceCopy(translator);
 }
 
 export type EnvAIPageProps = Readonly<{
+  draftCoordinator: FlowerComposerDraftCoordinator;
+  surfaceInstanceID: string;
   presentation?: 'full' | 'companion';
   engaged?: boolean;
   transcriptVisible?: boolean;
@@ -65,7 +69,7 @@ export type EnvAIPageProps = Readonly<{
   class?: string;
 }>;
 
-export function EnvAIPage(props: EnvAIPageProps = {}) {
+export function EnvAIPage(props: EnvAIPageProps) {
   const env = useEnvContext();
   const rpc = useRedevenRpc();
   const i18n = useI18n();
@@ -91,10 +95,6 @@ export function EnvAIPage(props: EnvAIPageProps = {}) {
       failedToCreateChat: i18n.t('flowerChat.router.failedToCreateChat'),
     },
     onSettingsChanged: env.bumpSettingsSeq,
-    uploadAttachment: async (file) => {
-      const { uploadLocalApiFile } = await import('../services/localApi');
-      return uploadLocalApiFile(file);
-    },
     openFileBrowser: env.openFlowerFileBrowser,
     openFilePreview: env.openFlowerFilePreview,
     openCanonicalReferenceTarget: env.openFlowerCanonicalReferenceTarget,
@@ -159,6 +159,8 @@ export function EnvAIPage(props: EnvAIPageProps = {}) {
         }
       }}
       copy={surfaceCopy()}
+      draftCoordinator={props.draftCoordinator}
+      surfaceInstanceID={props.surfaceInstanceID}
       presentation={props.presentation}
       engaged={props.engaged}
       transcriptVisible={props.transcriptVisible}

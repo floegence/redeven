@@ -232,6 +232,49 @@ export type FlowerSubagentsCopy = Readonly<{
 }>;
 
 export type FlowerSurfaceCopy = Readonly<{
+  attachments: Readonly<{
+    listLabel: string;
+    add: string;
+    retry: string;
+    reselect: string;
+    cancel: string;
+    remove: string;
+    restore: string;
+    preview: string;
+    copyReference: string;
+    uploading: string;
+    queued: string;
+    ready: string;
+    failed: string;
+    incompatible: string;
+    reselectRequired: string;
+    errorTooLarge: string;
+    errorCountExceeded: string;
+    errorTotalSizeExceeded: string;
+    errorUnsupported: string;
+    errorInvalidEncoding: string;
+    errorUploadFailed: string;
+    errorUnavailable: string;
+    lines: (count: number) => string;
+    added: (name: string) => string;
+    converted: (name: string) => string;
+    uploaded: (name: string) => string;
+    uploadFailedAnnouncement: (name: string) => string;
+    unavailable: string;
+    overLimit: (limit: number) => string;
+    invalidText: string;
+    restoreFailed: string;
+    compactBlocked: string;
+    leaseConflict: string;
+    takeOver: string;
+    draftUnsaved: string;
+    draftUnavailable: string;
+    pendingDraft: string;
+    modelSupportChecking: string;
+    modelSupported: string;
+    modelUnsupported: string;
+    modelSupportUnavailable: string;
+  }>;
   chat: Readonly<{
     loadingSettings: string;
     warmupTitle: string;
@@ -400,6 +443,49 @@ export type FlowerSurfaceCopy = Readonly<{
 }>;
 
 export const DEFAULT_FLOWER_SURFACE_COPY: FlowerSurfaceCopy = {
+  attachments: {
+    listLabel: 'Attachments',
+    add: 'Add attachments',
+    retry: 'Retry upload',
+    reselect: 'Select file',
+    cancel: 'Cancel upload',
+    remove: 'Remove attachment',
+    restore: 'Restore to editor',
+    preview: 'Preview attachment',
+    copyReference: 'Copy reference',
+    uploading: 'Uploading',
+    queued: 'Waiting to upload',
+    ready: 'Ready',
+    failed: 'Upload failed',
+    incompatible: 'Not supported by this model',
+    reselectRequired: 'Select the file again',
+    errorTooLarge: 'This file is larger than the per-file limit.',
+    errorCountExceeded: 'The attachment count limit has been reached.',
+    errorTotalSizeExceeded: 'These attachments exceed the total size limit.',
+    errorUnsupported: 'This file type is not supported by the selected model.',
+    errorInvalidEncoding: 'This text file is not valid UTF-8.',
+    errorUploadFailed: 'The upload failed. Try again.',
+    errorUnavailable: 'Attachments are unavailable for the selected model.',
+    lines: (count) => `${count.toLocaleString()} lines`,
+    added: (name) => `${name} added.`,
+    converted: (name) => `Long text converted to attachment ${name}.`,
+    uploaded: (name) => `${name} uploaded.`,
+    uploadFailedAnnouncement: (name) => `${name} upload failed.`,
+    unavailable: 'Attachments are unavailable for the selected model.',
+    overLimit: (limit) => `Text longer than ${limit.toLocaleString()} characters will be sent as an attachment.`,
+    invalidText: 'This text contains invalid Unicode and cannot be attached.',
+    restoreFailed: 'Flower could not restore this text attachment.',
+    compactBlocked: 'Remove or send attachments before compacting context.',
+    leaseConflict: 'This draft is being edited in another Flower surface.',
+    takeOver: 'Take over editing',
+    draftUnsaved: 'Draft changes will be saved when the connection recovers.',
+    draftUnavailable: 'Draft editing is unavailable until the connection recovers.',
+    pendingDraft: 'Unsent draft preserved.',
+    modelSupportChecking: 'Checking attachment support',
+    modelSupported: 'Supports current attachments',
+    modelUnsupported: 'Does not support current attachments',
+    modelSupportUnavailable: 'Could not check attachment support',
+  },
   chat: {
     loadingSettings: 'Flower settings are still loading.',
     warmupTitle: 'Preparing Flower',

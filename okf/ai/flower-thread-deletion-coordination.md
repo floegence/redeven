@@ -16,6 +16,8 @@ timestamp: 2026-07-22T00:00:00Z
 
 `PrepareThreadDeleteOperation` runs under the thread lifecycle gate. It first settles queued commands already admitted in Floret, verifies settings and non-forced activity, then persists one fingerprinted snapshot of product cleanup ids and read-state requirements. Preparation deletes nothing. Force deletion stops active work only after intent is durable, so prepare failure has no runtime side effects. Run and compaction admission use the same gate and recheck writability.
 
+Persisted delete intent is also the write fence for every thread-scoped composer path. In the same SQLite write transaction that would acquire or renew a lease, mutate or reconcile a draft, bind an upload, or create a completed upload's `draft_pending` claim, Redeven rechecks that the thread remains writable. Once intent exists, each path fails closed with the retired-thread result and commits no late draft, attachment row, or claim. The reserved new-thread scope remains writable because it has no existing thread identity. This transactional fence closes the interval between deletion snapshot capture and product cleanup, so the snapshot cannot omit resources created after intent.
+
 Delete snapshots accept only strict schema-v1 single-value JSON plus the stored full-payload fingerprint. Unknown fields, trailing values, unsupported schema, invalid cleanup ids, read-state mismatch, or fingerprint drift marks the operation failed before any Floret delete call. Replay never reconstructs a damaged snapshot from current product state.
 
 Replay has one fixed order:
@@ -49,6 +51,9 @@ The Service live fence is endpoint/thread scoped and protects only in-memory pre
 - `redeven:internal/ai/threads.go:985` - The authenticated service operation prepares intent before entering the serialized replay executor.
 - `redeven:internal/ai/threadstore/store.go:255` - Product list pagination excludes durable delete intent in SQL.
 - `redeven:internal/ai/threadstore/thread_delete_operation.go:201` - Product deletion requires durable Floret confirmation.
+- `redeven:internal/ai/threadstore/composer_drafts.go` - Thread-scoped lease, mutation, and reconciliation transactions recheck the durable deletion fence.
+- `redeven:internal/ai/threadstore/uploads.go` - Draft binding and completed-upload claims reject a retired thread in their write transaction.
+- `redeven:internal/ai/threadstore/uploads_test.go` - Transaction-barrier tests cover claim-first and snapshot-first ordering for upload completion, draft binding, and draft mutation, proving every claim is either captured for cleanup or atomically rejected without residue.
 - `redeven:internal/ai/thread_delete_operation_test.go:446` - Restart tests cover every durable step and Floret failure retention.
 - `redeven:internal/ai/threadstore/thread_delete_operation_test.go:302` - Store tests cover intent and confirmation order through final commit.
 - `redeven:internal/codeapp/appserver/server_test.go:3316` - API tests cover strict force parsing, durable pending receipts, and accepted audit outcomes.

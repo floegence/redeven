@@ -431,7 +431,7 @@ func (s *Service) threadSummaryRealtimeEvent(endpointID string, threadID string)
 			return RealtimeEvent{}, listErr
 		}
 		for _, record := range records {
-			view, viewErr := queuedTurnRecordToThreadView(record)
+			view, viewErr := s.queuedTurnThreadView(ctx, record)
 			if viewErr != nil {
 				return RealtimeEvent{}, fmt.Errorf("decode queued turn %q: %w", record.QueueID, viewErr)
 			}

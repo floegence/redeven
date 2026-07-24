@@ -52,6 +52,7 @@ func TestFloretRunCapabilityShapesAreExact(t *testing.T) {
 		field("resolveRunModel", (func(context.Context, *config.AIConfig, string, string, *run) (resolvedRunModel, error))(nil)),
 		field("subagentRuntime", (func() *floretSubagentRuntime)(nil)),
 		field("publishSubagentsPatch", (func(context.Context))(nil)),
+		field("openLiveAttachment", (func(context.Context, UploadOwner, string) (openedCanonicalAttachment, error))(nil)),
 		interfaceField("terminal", (*runTerminalHost)(nil)),
 	})
 	assertExactCapabilityFields("runProductCapabilities", runProductCapabilities{}, []fieldContract{

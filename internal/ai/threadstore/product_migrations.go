@@ -11,6 +11,129 @@ import (
 	"github.com/floegence/redeven/internal/ai/permissionsnapshot"
 )
 
+func migrateProductV5ToV6(tx *sql.Tx) error {
+	if err := verifyProductSchemaVersion(tx, 5); err != nil {
+		return fmt.Errorf("verify product threadstore v5: %w", err)
+	}
+	if err := createComposerDraftsTableTx(tx); err != nil {
+		return err
+	}
+	if err := migrateProductV5DraftUploadRefs(tx); err != nil {
+		return err
+	}
+	return verifyProductSchemaVersion(tx, 6)
+}
+
+func migrateProductV5DraftUploadRefs(tx *sql.Tx) error {
+	rows, err := tx.Query(`
+SELECT r.id, r.ref_id, COALESCE(u.owner_user_hash, ''), u.owner_scope_kind
+FROM ai_upload_refs r
+JOIN ai_uploads u ON u.endpoint_id = r.endpoint_id AND u.upload_id = r.upload_id
+WHERE r.ref_kind IN (?, ?)
+ORDER BY r.id ASC
+`, UploadRefKindDraft, UploadRefKindDraftPending)
+	if err != nil {
+		return err
+	}
+	type legacyDraftRef struct {
+		id            int64
+		scopeID       string
+		ownerUserHash string
+		ownerKind     string
+	}
+	var refs []legacyDraftRef
+	for rows.Next() {
+		var ref legacyDraftRef
+		if err := rows.Scan(&ref.id, &ref.scopeID, &ref.ownerUserHash, &ref.ownerKind); err != nil {
+			_ = rows.Close()
+			return err
+		}
+		refs = append(refs, ref)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	for _, ref := range refs {
+		ref.scopeID = strings.TrimSpace(ref.scopeID)
+		ref.ownerUserHash = strings.ToLower(strings.TrimSpace(ref.ownerUserHash))
+		if ref.scopeID == "" {
+			return fmt.Errorf("draft upload reference %d has invalid owner identity", ref.id)
+		}
+		refID := ref.scopeID
+		switch ref.ownerKind {
+		case UploadOwnerScopeUser:
+			if len(ref.ownerUserHash) != 64 {
+				return fmt.Errorf("draft upload reference %d has invalid owner identity", ref.id)
+			}
+			refID = composerDraftUploadRefID(ref.ownerUserHash, ref.scopeID)
+		case UploadOwnerScopeLegacyThread, UploadOwnerScopeLegacyStagedQuarantine:
+			if ref.ownerUserHash != "" {
+				return fmt.Errorf("draft upload reference %d has invalid legacy owner identity", ref.id)
+			}
+		default:
+			return fmt.Errorf("draft upload reference %d has invalid owner scope", ref.id)
+		}
+		if _, err := tx.Exec(`UPDATE ai_upload_refs SET thread_id = ?, ref_id = ? WHERE id = ?`,
+			ref.scopeID, refID, ref.id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func migrateProductV4ToV5(tx *sql.Tx) error {
+	if err := verifyProductSchemaVersion(tx, 4); err != nil {
+		return fmt.Errorf("verify product threadstore v4: %w", err)
+	}
+	if _, err := tx.Exec(`ALTER TABLE ai_uploads RENAME TO product_v4_ai_uploads;`); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`
+DROP INDEX idx_ai_uploads_endpoint_created;
+DROP INDEX idx_ai_uploads_state_delete_after;
+`); err != nil {
+		return err
+	}
+	if err := createUploadResourcesV5Tx(tx); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`
+INSERT INTO ai_uploads(
+  upload_id, endpoint_id, owner_scope_kind, owner_user_hash, storage_relpath, name,
+  declared_media_type, detected_media_type, size_bytes, content_sha256,
+  unicode_code_points, logical_line_count, source, state,
+  created_at_unix_ms, claimed_at_unix_ms, delete_after_unix_ms
+)
+SELECT
+  old.upload_id,
+  old.endpoint_id,
+  CASE WHEN LOWER(COALESCE(old.state, '')) = 'live' AND EXISTS (
+    SELECT 1 FROM ai_upload_refs ref
+    WHERE ref.endpoint_id = old.endpoint_id AND ref.upload_id = old.upload_id
+      AND ref.ref_kind = 'thread'
+  ) THEN 'legacy_thread' ELSE 'legacy_staged_quarantine' END,
+  NULL,
+  old.storage_relpath,
+  old.name,
+  old.mime_type,
+  old.mime_type,
+  old.size_bytes,
+  '',
+  NULL,
+  NULL,
+  'uploaded_file',
+  old.state,
+  old.created_at_unix_ms,
+  old.claimed_at_unix_ms,
+  old.delete_after_unix_ms
+FROM product_v4_ai_uploads old;
+DROP TABLE product_v4_ai_uploads;
+`); err != nil {
+		return err
+	}
+	return verifyProductSchemaVersion(tx, 5)
+}
+
 func migrateProductV3ToV4(tx *sql.Tx) error {
 	if err := verifyProductSchemaVersion(tx, 3); err != nil {
 		return fmt.Errorf("verify product threadstore v3: %w", err)

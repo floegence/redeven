@@ -2,10 +2,12 @@ package ai
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 
 	flruntime "github.com/floegence/floret/runtime"
 	fltools "github.com/floegence/floret/tools"
@@ -19,18 +21,29 @@ type floretProviderAdapter struct {
 	modelName    string
 	webSearch    string
 
-	controls                  ProviderControls
-	budgets                   TurnBudgets
-	disabledCoreControlTools  map[string]struct{}
-	continuationSupported     bool
-	attachmentResolver        func(context.Context, flruntime.MessageAttachment) (ContentPart, error)
-	requestAttachmentResolver func(context.Context, flruntime.ModelRequest, flruntime.MessageAttachment) (ContentPart, error)
-	supportsImageInput        bool
-	supportsFileInput         bool
-	admitRequest              func(context.Context) (context.Context, func(), error)
+	controls                   ProviderControls
+	budgets                    TurnBudgets
+	disabledCoreControlTools   map[string]struct{}
+	continuationSupported      bool
+	attachmentResolver         func(context.Context, flruntime.MessageAttachment) (ContentPart, error)
+	requestAttachmentResolver  func(context.Context, flruntime.ModelRequest, flruntime.MessageAttachment) (ContentPart, error)
+	supportsImageInput         bool
+	supportsFileInput          bool
+	supportsAttachmentToolRead bool
+	admitRequest               func(context.Context) (context.Context, func(), error)
 }
 
 type floretProviderAdapterOption func(*floretProviderAdapter)
+
+type preparedFloretModelRequest struct {
+	mu          sync.Mutex
+	adapter     *floretProviderAdapter
+	request     ModelGatewayRequest
+	estimate    flruntime.ModelRequestTokenEstimate
+	fingerprint string
+	streamed    bool
+	closed      bool
+}
 
 func newFloretProviderAdapter(base ModelGateway, providerType string, modelName string, controls ProviderControls, budgets TurnBudgets, webSearch string, options ...floretProviderAdapterOption) *floretProviderAdapter {
 	adapter := &floretProviderAdapter{
@@ -78,6 +91,14 @@ func withFloretAttachmentResolver(resolver func(context.Context, flruntime.Messa
 	}
 }
 
+func withFloretAttachmentToolRead(enabled bool) floretProviderAdapterOption {
+	return func(adapter *floretProviderAdapter) {
+		if adapter != nil {
+			adapter.supportsAttachmentToolRead = enabled
+		}
+	}
+}
+
 func withFloretRequestAttachmentResolver(resolver func(context.Context, flruntime.ModelRequest, flruntime.MessageAttachment) (ContentPart, error), supportsImageInput bool, supportsFileInput bool) floretProviderAdapterOption {
 	return func(adapter *floretProviderAdapter) {
 		if adapter == nil {
@@ -101,15 +122,76 @@ func (p *floretProviderAdapter) StreamModel(ctx context.Context, req flruntime.M
 	if p == nil || p.base == nil {
 		return nil, errors.New("nil floret provider adapter")
 	}
+	turnReq, err := p.turnRequest(ctx, req)
+	if err != nil {
+		out := make(chan flruntime.ModelEvent, 1)
+		out <- flruntime.ModelEvent{Type: flruntime.ModelEventError, Err: err, Reason: err.Error()}
+		close(out)
+		return out, nil
+	}
+	return p.streamPreparedTurn(ctx, turnReq), nil
+}
+
+func (p *floretProviderAdapter) PrepareModelRequest(ctx context.Context, req flruntime.ModelRequest) (flruntime.PreparedModelRequest, error) {
+	if p == nil || p.base == nil {
+		return nil, errors.New("nil floret provider adapter")
+	}
+	turnReq, err := p.turnRequest(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	payload, err := json.Marshal(turnReq)
+	if err != nil {
+		return nil, fmt.Errorf("marshal prepared model gateway request: %w", err)
+	}
+	var frozen ModelGatewayRequest
+	if err := json.Unmarshal(payload, &frozen); err != nil {
+		return nil, fmt.Errorf("freeze prepared model gateway request: %w", err)
+	}
+	estimate, err := conservativeRenderedGatewayRequestEstimate(payload, frozen)
+	if err != nil {
+		return nil, err
+	}
+	digest := sha256.Sum256(payload)
+	return &preparedFloretModelRequest{
+		adapter: p, request: frozen, estimate: estimate, fingerprint: fmt.Sprintf("sha256:%x", digest[:]),
+	}, nil
+}
+
+func conservativeRenderedGatewayRequestEstimate(payload []byte, req ModelGatewayRequest) (flruntime.ModelRequestTokenEstimate, error) {
+	if len(payload) == 0 {
+		return flruntime.ModelRequestTokenEstimate{}, errors.New("prepared model gateway request payload is empty")
+	}
+	messages, err := json.Marshal(req.Messages)
+	if err != nil {
+		return flruntime.ModelRequestTokenEstimate{}, fmt.Errorf("marshal prepared model gateway messages: %w", err)
+	}
+	tools, err := json.Marshal(req.Tools)
+	if err != nil {
+		return flruntime.ModelRequestTokenEstimate{}, fmt.Errorf("marshal prepared model gateway tools: %w", err)
+	}
+	total := int64(len(payload))
+	messageTokens := int64(len(messages))
+	toolTokens := int64(len(tools))
+	prefixTokens := total - messageTokens - toolTokens
+	if prefixTokens < 0 {
+		prefixTokens = total
+		messageTokens = 0
+		toolTokens = 0
+	}
+	return flruntime.ModelRequestTokenEstimate{
+		PrefixTokens: prefixTokens, MessageTokens: messageTokens, ToolDefinitionTokens: toolTokens,
+		EstimatedInputTokens: total, Source: "redeven_gateway_rendered_json_utf8_bytes_v1",
+		Method: "provider_rendered_payload", Confidence: "conservative",
+		Coverage: flruntime.ModelRequestTokenEstimateCoverageComplete,
+	}, nil
+}
+
+func (p *floretProviderAdapter) streamPreparedTurn(ctx context.Context, turnReq ModelGatewayRequest) <-chan flruntime.ModelEvent {
 	out := make(chan flruntime.ModelEvent, 32)
 	go func() {
 		defer close(out)
-
-		turnReq, err := p.turnRequest(ctx, req)
-		if err != nil {
-			sendFloretProviderEvent(ctx, out, flruntime.ModelEvent{Type: flruntime.ModelEventError, Err: err, Reason: err.Error()})
-			return
-		}
+		var err error
 		requestContext := ctx
 		releaseRequest := func() {}
 		if p.admitRequest != nil {
@@ -199,8 +281,59 @@ func (p *floretProviderAdapter) StreamModel(ctx context.Context, req flruntime.M
 		}
 		sendFloretProviderEvent(ctx, out, terminal)
 	}()
-	return out, nil
+	return out
 }
+
+func (p *preparedFloretModelRequest) StreamModel(ctx context.Context) (<-chan flruntime.ModelEvent, error) {
+	if p == nil {
+		return nil, errors.New("nil prepared model request")
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed {
+		return nil, errors.New("prepared model request is closed")
+	}
+	if p.streamed {
+		return nil, errors.New("prepared model request was already streamed")
+	}
+	if p.adapter == nil {
+		return nil, errors.New("prepared model request adapter is unavailable")
+	}
+	p.streamed = true
+	return p.adapter.streamPreparedTurn(ctx, p.request), nil
+}
+
+func (p *preparedFloretModelRequest) TokenEstimate() flruntime.ModelRequestTokenEstimate {
+	if p == nil {
+		return flruntime.ModelRequestTokenEstimate{}
+	}
+	return p.estimate
+}
+
+func (p *preparedFloretModelRequest) RenderedPayloadFingerprint() string {
+	if p == nil {
+		return ""
+	}
+	return p.fingerprint
+}
+
+func (p *preparedFloretModelRequest) Close() error {
+	if p == nil {
+		return nil
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed {
+		return nil
+	}
+	p.closed = true
+	p.adapter = nil
+	p.request = ModelGatewayRequest{}
+	return nil
+}
+
+var _ flruntime.ModelGatewayRequestPreparer = (*floretProviderAdapter)(nil)
+var _ flruntime.PreparedModelRequest = (*preparedFloretModelRequest)(nil)
 
 func floretToolCallStreamFromFlower(call *PartialToolCall) *flruntime.ModelToolCallStream {
 	if call == nil {
@@ -379,6 +512,13 @@ func (p *floretProviderAdapter) floretMessagesToFlowerWithResolver(ctx context.C
 			part, err := resolver(ctx, attachment)
 			if err != nil {
 				return nil, fmt.Errorf("resolve Floret model message %d attachment %d: %w", i, attachmentIndex, err)
+			}
+			if strings.EqualFold(strings.TrimSpace(part.Type), "attachment_manifest") {
+				if strings.TrimSpace(part.Text) == "" {
+					return nil, errors.New("attachment resolver returned an empty attachment manifest")
+				}
+				parts = append(parts, ContentPart{Type: "text", Text: part.Text})
+				continue
 			}
 			if err := p.validateResolvedAttachment(part); err != nil {
 				return nil, err

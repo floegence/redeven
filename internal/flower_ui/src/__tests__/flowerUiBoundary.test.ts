@@ -48,6 +48,11 @@ describe('shared Flower UI boundary', () => {
         expect(src, `${path.relative(repoRoot, file)} must not contain ${token}`).not.toContain(token);
       }
     }
+
+    const coordinator = readText(path.join(flowerRoot, 'composer', 'createFlowerComposerDraftCoordinator.ts'));
+    expect(coordinator).not.toContain('createRedevenFlowerDraftPersistence');
+    expect(coordinator).not.toContain("method: 'GET' | 'POST' | 'PUT'");
+    expect(coordinator).not.toContain("action: 'take_over'");
   });
 
   it('keeps Redeven target routing fields out of the shared Flower surface contract', () => {
@@ -156,7 +161,9 @@ describe('shared Flower UI boundary', () => {
 		expect(surfaceSrc).toContain('const composerReasoningSelection = createMemo(() => composerReasoningOverride() ?? selectedWaitingReasoningSelection() ?? selectedThreadReasoningSelection())');
 		expect(surfaceSrc).toContain('const composerLaunchReasoningSelection = createMemo(() => (composerReasoningEnabled() ? composerReasoningSelection() : undefined))');
 		expect(surfaceSrc).toContain('props.adapter.setThreadReasoningSelection(threadID, normalized)');
-		expect(surfaceSrc).toContain('const draftReasoningSelection = !selectedID ? serializeFlowerReasoningSelection(composerLaunchReasoningSelection()) : undefined');
+		expect(surfaceSrc).toContain('const frozenReasoningSelection = serializeFlowerReasoningSelection(composerLaunchReasoningSelection())');
+		expect(surfaceSrc).toContain('reasoning_selection: frozenReasoningSelection');
+		expect(surfaceSrc).toContain('const draftReasoningSelection = !selectedID ? frozenDraft.reasoning_selection : undefined');
 		expect(surfaceSrc).toContain('...(!selectedID && draftReasoningSelection ? { reasoning_selection: draftReasoningSelection } : {})');
 		expect(surfaceSrc).toContain('composerReasoningEnabled() ? composerReasoningOverride() ?? selectedWaitingReasoningSelection() : undefined');
 		expect(surfaceSrc).toContain('...(reasoningSelection ? { reasoning_selection: reasoningSelection } : {})');

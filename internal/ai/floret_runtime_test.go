@@ -2,7 +2,9 @@ package ai
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -277,7 +279,7 @@ func newFloretRuntimeTestRun(t *testing.T, opts runOptions, providedStores ...*t
 		productStore = providedStores[0]
 	}
 	svc := &Service{
-		threadsDB: productStore, persistOpTO: time.Second,
+		threadsDB: productStore, uploadsDir: strings.TrimSpace(opts.UploadsDir), persistOpTO: time.Second,
 		terminalProcesses: newTerminalProcessManager(), flowerLiveByThread: make(map[string]*flowerLiveThreadStream),
 		subagentRuntimes: make(map[string]*floretSubagentRuntime),
 	}
@@ -1011,9 +1013,9 @@ func TestRunFloretHostedTurnKeepsInputAndOutputBudgetsIndependent(t *testing.T) 
 		wantErr       string
 		wantReqOutput int
 	}{
-		{name: "input only", maxInput: 10, usage: TurnUsage{InputTokens: 11, OutputTokens: 100}, wantErr: "input token budget exceeded"},
+		{name: "input only", maxInput: 10, usage: TurnUsage{InputTokens: 11, OutputTokens: 100}, wantErr: "provider request exceeds input token budget"},
 		{name: "output only", maxOutput: 25, usage: TurnUsage{InputTokens: 100, OutputTokens: 100}, wantReqOutput: 25},
-		{name: "both", maxInput: 10, maxOutput: 25, usage: TurnUsage{InputTokens: 10, OutputTokens: 100}, wantReqOutput: 25},
+		{name: "both", maxInput: 10, maxOutput: 25, usage: TurnUsage{InputTokens: 10, OutputTokens: 100}, wantErr: "provider request exceeds input token budget"},
 		{name: "neither", usage: TurnUsage{InputTokens: 100, OutputTokens: 100}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -1048,6 +1050,9 @@ func TestRunFloretHostedTurnKeepsInputAndOutputBudgetsIndependent(t *testing.T) 
 				if err == nil || !strings.Contains(err.Error(), tc.wantErr) {
 					t.Fatalf("err=%v, want %q", err, tc.wantErr)
 				}
+				if req := provider.firstRequest(); req.Model != "" {
+					t.Fatalf("provider received hosted turn after prepared input budget rejection: %#v", req)
+				}
 			} else if err != nil {
 				t.Fatalf("runFloretHostedTurn: %v", err)
 			}
@@ -1077,25 +1082,36 @@ func TestRunFloretHostedTurnInjectsAskFlowerLinkedContext(t *testing.T) {
 			CanExecute: true,
 			CanAdmin:   true,
 		},
-		RunID:     "run_floret_linked_context",
-		ThreadID:  "thread_floret_linked_context",
-		MessageID: "msg_floret_linked_context",
+		ChannelID:    "channel_floret_linked_context",
+		UserPublicID: "user_floret_linked_context",
+		RunID:        "run_floret_linked_context",
+		ThreadID:     "thread_floret_linked_context",
+		MessageID:    "msg_floret_linked_context",
 	})
-	const uploadID = "upl_notes"
+	const uploadID = "upl_hhhhhhhhhhhhhhhhhhhhhhhh"
 	const uploadBody = "linked notes"
+	uploadDigest := sha256.Sum256([]byte(uploadBody))
 	if err := os.WriteFile(filepath.Join(uploadsDir, uploadID+".data"), []byte(uploadBody), 0o600); err != nil {
 		t.Fatalf("write attachment: %v", err)
 	}
 	store := runThreadStoreForTest(t, r)
+	owner, err := NewUploadOwner(r.endpointID, r.userPublicID, r.channelID)
+	if err != nil {
+		t.Fatalf("NewUploadOwner: %v", err)
+	}
 	if err := store.InsertUpload(context.Background(), threadstore.UploadRecord{
-		UploadID:        uploadID,
-		EndpointID:      r.endpointID,
-		StorageRelPath:  uploadID + ".data",
-		Name:            "notes.txt",
-		MimeType:        "text/plain",
-		SizeBytes:       int64(len(uploadBody)),
-		State:           threadstore.UploadStateStaged,
-		CreatedAtUnixMs: time.Now().UnixMilli(),
+		UploadID:          uploadID,
+		EndpointID:        r.endpointID,
+		OwnerScopeKind:    threadstore.UploadOwnerScopeUser,
+		OwnerUserHash:     owner.OwnerUserHash,
+		StorageRelPath:    uploadID + ".data",
+		Name:              "notes.txt",
+		MimeType:          "text/plain",
+		DetectedMediaType: "text/plain",
+		SizeBytes:         int64(len(uploadBody)),
+		ContentSHA256:     hex.EncodeToString(uploadDigest[:]),
+		State:             threadstore.UploadStateLive,
+		CreatedAtUnixMs:   time.Now().UnixMilli(),
 	}); err != nil {
 		t.Fatalf("InsertUpload: %v", err)
 	}
@@ -1109,22 +1125,19 @@ func TestRunFloretHostedTurnInjectsAskFlowerLinkedContext(t *testing.T) {
 		TurnID:          r.turnID,
 		RunID:           r.id,
 		TextContent:     "what is this process",
-		AttachmentsJSON: `[{"name":"notes.txt","mime_type":"text/plain","url":"/_redeven_proxy/api/ai/uploads/upl_notes"}]`,
+		AttachmentsJSON: `[{"attachment_id":"upl_hhhhhhhhhhhhhhhhhhhhhhhh"}]`,
 		CreatedAtUnixMs: time.Now().UnixMilli(),
 	}, []string{uploadID}, time.Now().UnixMilli()); err != nil {
 		t.Fatalf("CreateFollowupWithUploadRefs: %v", err)
 	}
 	r.setPendingTurnCommand(commandID)
+	r.awaitFloretAdmission.Store(true)
 
-	err := r.runFloretHostedTurn(t.Context(), RunRequest{
+	err = r.runFloretHostedTurn(t.Context(), RunRequest{
 		Model: "compat/gpt-5-mini",
 		Input: RunInput{
-			Text: "what is this process",
-			Attachments: []RunAttachmentIn{{
-				Name:     "notes.txt",
-				MimeType: "text/plain",
-				URL:      "/_redeven_proxy/api/ai/uploads/upl_notes",
-			}},
+			Text:        "what is this process",
+			Attachments: []RunAttachmentIn{{AttachmentID: uploadID}},
 			ContextAction: &ContextActionEnvelope{
 				SchemaVersion: ContextActionSchemaVersion,
 				ActionID:      "assistant.ask.flower",
@@ -1475,7 +1488,6 @@ func TestRunFloretHostedTurnNaturalCompactionContinuesStreaming(t *testing.T) {
 		Input: RunInput{Text: "continue after compacting"},
 		Options: RunOptions{
 			PermissionType:  config.AIPermissionApprovalRequired,
-			MaxInputTokens:  48000,
 			MaxOutputTokens: 500,
 		},
 		ModelCapability: contextmodel.ModelCapability{

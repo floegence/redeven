@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -243,18 +244,11 @@ func unmarshalQueuedTurnAttachments(raw string) ([]RunAttachmentIn, error) {
 	}
 	cleaned := make([]RunAttachmentIn, 0, len(out))
 	for index, item := range out {
-		url := strings.TrimSpace(item.URL)
-		if url == "" {
-			return nil, fmt.Errorf("queued turn attachment %d has no URL", index)
+		uploadID, err := normalizeUploadID(item.AttachmentID)
+		if err != nil {
+			return nil, fmt.Errorf("queued turn attachment %d has an invalid attachment_id", index)
 		}
-		if parseUploadIDFromURL(url) == "" {
-			return nil, fmt.Errorf("queued turn attachment %d is not a Redeven upload", index)
-		}
-		cleaned = append(cleaned, RunAttachmentIn{
-			Name:     strings.TrimSpace(item.Name),
-			MimeType: strings.TrimSpace(item.MimeType),
-			URL:      url,
-		})
+		cleaned = append(cleaned, RunAttachmentIn{AttachmentID: uploadID})
 	}
 	return cleaned, nil
 }
@@ -287,18 +281,18 @@ func unmarshalQueuedTurnOptions(raw string) (RunOptions, error) {
 	return out, nil
 }
 
-func followupRecordToView(rec threadstore.QueuedTurn, position int) (FollowupItemView, error) {
+func followupRecordToView(rec threadstore.QueuedTurn, position int, attachmentViews ...[]FollowupAttachmentView) (FollowupItemView, error) {
 	attachments, err := unmarshalQueuedTurnAttachments(rec.AttachmentsJSON)
 	if err != nil {
 		return FollowupItemView{}, err
 	}
 	views := make([]FollowupAttachmentView, 0, len(attachments))
-	for _, item := range attachments {
-		views = append(views, FollowupAttachmentView{
-			Name:     strings.TrimSpace(item.Name),
-			MimeType: strings.TrimSpace(item.MimeType),
-			URL:      strings.TrimSpace(item.URL),
-		})
+	if len(attachmentViews) > 0 {
+		views = append(views, attachmentViews[0]...)
+	} else {
+		for _, item := range attachments {
+			views = append(views, FollowupAttachmentView{AttachmentID: item.AttachmentID, Name: item.AttachmentID})
+		}
 	}
 	options, err := unmarshalQueuedTurnOptions(rec.OptionsJSON)
 	if err != nil {
@@ -325,18 +319,18 @@ func followupRecordToView(rec threadstore.QueuedTurn, position int) (FollowupIte
 	return view, nil
 }
 
-func queuedTurnRecordToThreadView(rec threadstore.QueuedTurn) (QueuedTurnView, error) {
+func queuedTurnRecordToThreadView(rec threadstore.QueuedTurn, attachmentViews ...[]FollowupAttachmentView) (QueuedTurnView, error) {
 	attachments, err := unmarshalQueuedTurnAttachments(rec.AttachmentsJSON)
 	if err != nil {
 		return QueuedTurnView{}, err
 	}
 	views := make([]FollowupAttachmentView, 0, len(attachments))
-	for _, item := range attachments {
-		views = append(views, FollowupAttachmentView{
-			Name:     strings.TrimSpace(item.Name),
-			MimeType: strings.TrimSpace(item.MimeType),
-			URL:      strings.TrimSpace(item.URL),
-		})
+	if len(attachmentViews) > 0 {
+		views = append(views, attachmentViews[0]...)
+	} else {
+		for _, item := range attachments {
+			views = append(views, FollowupAttachmentView{AttachmentID: item.AttachmentID, Name: item.AttachmentID})
+		}
 	}
 	view := QueuedTurnView{
 		TurnID:          strings.TrimSpace(rec.TurnID),
@@ -352,6 +346,55 @@ func queuedTurnRecordToThreadView(rec threadstore.QueuedTurn) (QueuedTurnView, e
 	}
 	view.ContextAction = contextAction
 	return view, nil
+}
+
+func (s *Service) queuedAttachmentViews(ctx context.Context, rec threadstore.QueuedTurn) ([]FollowupAttachmentView, error) {
+	attachments, err := unmarshalQueuedTurnAttachments(rec.AttachmentsJSON)
+	if err != nil {
+		return nil, err
+	}
+	if len(attachments) == 0 {
+		return nil, nil
+	}
+	s.mu.Lock()
+	db := s.threadsDB
+	s.mu.Unlock()
+	if db == nil {
+		return nil, errors.New("threads store not ready")
+	}
+	views := make([]FollowupAttachmentView, 0, len(attachments))
+	for index, item := range attachments {
+		upload, err := db.GetQueuedTurnOwnedUpload(ctxOrBackground(ctx), rec.EndpointID, rec.ThreadID, rec.QueueID, item.AttachmentID)
+		if err != nil {
+			return nil, fmt.Errorf("resolve queued attachment %d: %w", index, err)
+		}
+		views = append(views, FollowupAttachmentView{
+			AttachmentID: upload.UploadID, Name: upload.Name, MimeType: upload.DetectedMediaType,
+			SizeBytes: upload.SizeBytes, UnicodeCodePoints: upload.UnicodeCodePoints,
+			LogicalLineCount: upload.LogicalLineCount,
+			LogicalLocator:   logicalAttachmentLocator(upload.UploadID, upload.Name),
+			URL: uploadURLPrefix + upload.UploadID + "?" + url.Values{
+				"thread_id": {rec.ThreadID}, "queue_id": {rec.QueueID},
+			}.Encode(),
+		})
+	}
+	return views, nil
+}
+
+func (s *Service) followupRecordView(ctx context.Context, rec threadstore.QueuedTurn, position int) (FollowupItemView, error) {
+	views, err := s.queuedAttachmentViews(ctx, rec)
+	if err != nil {
+		return FollowupItemView{}, err
+	}
+	return followupRecordToView(rec, position, views)
+}
+
+func (s *Service) queuedTurnThreadView(ctx context.Context, rec threadstore.QueuedTurn) (QueuedTurnView, error) {
+	views, err := s.queuedAttachmentViews(ctx, rec)
+	if err != nil {
+		return QueuedTurnView{}, err
+	}
+	return queuedTurnRecordToThreadView(rec, views)
 }
 
 func queuedTurnRecordToRunStartRequest(rec threadstore.QueuedTurn, threadPermissionType string) (RunStartRequest, error) {
@@ -415,9 +458,13 @@ func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req
 	if err := requireRWX(meta); err != nil {
 		return threadstore.QueuedTurn{}, 0, err
 	}
+	if err := validateInlineTurnText(req.Input.Text); err != nil {
+		return threadstore.QueuedTurn{}, 0, err
+	}
 
 	s.mu.Lock()
 	db := s.threadsDB
+	cfg := s.cfg
 	persistTO := s.persistOpTO
 	s.mu.Unlock()
 	if db == nil {
@@ -426,6 +473,19 @@ func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req
 	if persistTO <= 0 {
 		persistTO = defaultPersistOpTimeout
 	}
+	threadSettings, err := db.GetThreadSettings(ctx, strings.TrimSpace(meta.EndpointID), strings.TrimSpace(req.ThreadID))
+	if err != nil {
+		return threadstore.QueuedTurn{}, 0, err
+	}
+	threadModelID := ""
+	if threadSettings != nil {
+		threadModelID = strings.TrimSpace(threadSettings.ModelID)
+	}
+	resolvedModel, err := s.resolveRunModel(ctx, cfg, strings.TrimSpace(req.Model), threadModelID, nil)
+	if err != nil {
+		return threadstore.QueuedTurn{}, 0, err
+	}
+	req.Model = resolvedModel.ID
 
 	turnID, err := normalizeOrCreateTurnID(req.Input.TurnID)
 	if err != nil {
@@ -436,7 +496,13 @@ func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req
 	if err != nil {
 		return threadstore.QueuedTurn{}, 0, err
 	}
-	normalizedInput, _, uploadIDs, err := s.normalizeInputAttachments(ctx, strings.TrimSpace(meta.EndpointID), req.Input)
+	owner, err := NewUploadOwner(meta.EndpointID, meta.UserPublicID, meta.ChannelID)
+	if err != nil {
+		return threadstore.QueuedTurn{}, 0, err
+	}
+	normalizedInput, uploadIDs, attachmentAdmission, err := s.prepareInputAttachmentAdmission(
+		ctx, owner, strings.TrimSpace(req.DraftID), strings.TrimSpace(req.Model), req.Input,
+	)
 	if err != nil {
 		return threadstore.QueuedTurn{}, 0, err
 	}
@@ -471,7 +537,7 @@ func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req
 		TurnID:                turnID,
 		RunID:                 runID,
 		ModelID:               strings.TrimSpace(req.Model),
-		TextContent:           strings.TrimSpace(normalizedInput.Text),
+		TextContent:           normalizedInput.Text,
 		AttachmentsJSON:       attachmentsJSON,
 		ContextActionJSON:     contextActionJSON,
 		OptionsJSON:           optionsJSON,
@@ -486,7 +552,16 @@ func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req
 	var queued threadstore.QueuedTurn
 	var position int
 	if sourceFollowupID := strings.TrimSpace(req.SourceFollowupID); sourceFollowupID != "" {
-		result, replaceErr := db.ReplaceFollowupWithUploadRefs(pctx, sourceFollowupID, rec, uploadIDs, createdAtUnixMs)
+		var result threadstore.FollowupReplacementResult
+		var replaceErr error
+		if strings.TrimSpace(req.DraftID) != "" && req.ExpectedDraftRevision != nil {
+			result, replaceErr = db.ReplaceFollowupFromComposerDraft(pctx, sourceFollowupID, rec, uploadIDs, createdAtUnixMs, threadstore.ComposerDraftAdmission{
+				OwnerUserHash: owner.OwnerUserHash, DraftID: strings.TrimSpace(req.DraftID), ExpectedRevision: *req.ExpectedDraftRevision,
+				Attachment: attachmentAdmission,
+			})
+		} else {
+			result, replaceErr = db.ReplaceFollowupWithAttachmentAdmission(pctx, sourceFollowupID, rec, uploadIDs, createdAtUnixMs, attachmentAdmission)
+		}
 		if replaceErr != nil {
 			return threadstore.QueuedTurn{}, 0, replaceErr
 		}
@@ -497,7 +572,16 @@ func (s *Service) enqueueQueuedTurn(ctx context.Context, meta *session.Meta, req
 		}
 	} else {
 		var createErr error
-		queued, position, _, createErr = db.CreateFollowupWithUploadRefs(pctx, rec, uploadIDs, createdAtUnixMs)
+		if strings.TrimSpace(req.DraftID) != "" && req.ExpectedDraftRevision != nil {
+			queued, position, _, createErr = db.CreateFollowupFromComposerDraft(pctx, rec, uploadIDs, createdAtUnixMs, threadstore.ComposerDraftAdmission{
+				OwnerUserHash:    owner.OwnerUserHash,
+				DraftID:          strings.TrimSpace(req.DraftID),
+				ExpectedRevision: *req.ExpectedDraftRevision,
+				Attachment:       attachmentAdmission,
+			})
+		} else {
+			queued, position, _, createErr = db.CreateFollowupWithAttachmentAdmission(pctx, rec, uploadIDs, createdAtUnixMs, attachmentAdmission)
+		}
 		if createErr != nil {
 			return threadstore.QueuedTurn{}, 0, createErr
 		}
@@ -605,14 +689,14 @@ func (s *Service) ListFollowups(ctx context.Context, meta *session.Meta, threadI
 		Drafts:       make([]FollowupItemView, 0, len(drafts)),
 	}
 	for i, rec := range queued {
-		view, err := followupRecordToView(rec, i+1)
+		view, err := s.followupRecordView(ctx, rec, i+1)
 		if err != nil {
 			return nil, fmt.Errorf("decode queued followup %q: %w", rec.QueueID, err)
 		}
 		out.Queued = append(out.Queued, view)
 	}
 	for i, rec := range drafts {
-		view, err := followupRecordToView(rec, i+1)
+		view, err := s.followupRecordView(ctx, rec, i+1)
 		if err != nil {
 			return nil, fmt.Errorf("decode draft followup %q: %w", rec.QueueID, err)
 		}

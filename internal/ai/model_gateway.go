@@ -2087,12 +2087,10 @@ func buildAnthropicMessages(messages []Message) []anthropic.MessageParam {
 					if err != nil {
 						continue
 					}
-					txt := strings.TrimSpace(string(decoded))
-					if txt == "" {
+					if len(decoded) == 0 {
 						continue
 					}
-					txt = truncateRunes(txt, 40_000)
-					blocks = append(blocks, anthropic.NewDocumentBlock(anthropic.PlainTextSourceParam{Data: txt}))
+					blocks = append(blocks, anthropic.NewDocumentBlock(anthropic.PlainTextSourceParam{Data: string(decoded)}))
 				}
 			default:
 				if txt := strings.TrimSpace(part.Text); txt != "" {

@@ -2,10 +2,25 @@ import type { Accessor, Component, JSX } from 'solid-js';
 import { For, Show, batch, createEffect, createMemo, createSignal, on, onCleanup, onMount, untrack } from 'solid-js';
 import { cn } from '@floegence/floe-webapp-core';
 import type { UIFirstSelectionEvent } from '@floegence/floe-webapp-core';
-import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, GitBranch, GripVertical, MoreHorizontal, Plus, Refresh, Settings, Shield, Terminal, XCircle } from '@floegence/floe-webapp-core/icons';
+import { AlertCircle, AlertTriangle, ArrowUp, Bot, Check, ChevronDown, ChevronRight, Clock, Copy, ExternalLink, FileText, FolderOpen, GitBranch, GripVertical, MoreHorizontal, Paperclip, Plus, Refresh, Settings, Shield, Terminal, XCircle } from '@floegence/floe-webapp-core/icons';
 import { Button, ConfirmDialog, SurfaceFloatingLayer } from '@floegence/floe-webapp-core/ui';
 
 import { writeTextToClipboard } from './clipboard';
+import { FlowerAttachmentLane } from './attachments/FlowerAttachmentLane';
+import {
+  createFlowerAttachmentController,
+  type FlowerAttachmentController,
+  type FlowerAttachmentControllerSnapshot,
+  type FlowerAttachmentItem,
+} from './attachments/createFlowerAttachmentController';
+import {
+  FLOWER_INLINE_TEXT_CODE_POINT_LIMIT,
+  decideFlowerTextPaste,
+  flowerAttachmentIDs,
+  flowerAttachmentRoute,
+  inspectFlowerText,
+  replaceFlowerTextSelection,
+} from './attachments/flowerAttachmentModel';
 import { FlowerChatContextChips } from './chat/FlowerChatContextChips';
 import { FlowerChatContextPreview } from './chat/FlowerChatContextPreview';
 import { parseChatContextAction, parseChatMessageReferences } from './chat/flowerChatContextModel';
@@ -51,6 +66,7 @@ import type {
   FlowerActivityStatus,
   FlowerLiveBootstrap,
   FlowerActivityApprovalState,
+  FlowerAttachmentCapability,
   FlowerModelIOPhase,
   FlowerModelIOStatus,
   FlowerModelSourceStatus,
@@ -114,6 +130,10 @@ import { applyFlowerLiveEvent, projectFlowerLiveBootstrap } from './flowerLiveRe
 import { flowerThreadReadSnapshotKey, mergeFlowerThreadListRefresh, sameThreadSnapshot } from './flowerThreadListRefresh';
 import { FlowerProviderBrandIcon, flowerModelSupportsImage, formatFlowerTokenCount } from './settings/providerCatalog';
 import { FlowerReasoningControl } from './ReasoningControl';
+import {
+  type FlowerComposerDraftCoordinator,
+  type FlowerComposerDraftSession,
+} from './composer/createFlowerComposerDraftCoordinator';
 import {
   approvalDecisionProjection,
   flowerComposerApprovalAction,
@@ -703,6 +723,8 @@ export type FlowerSurfaceProps = Readonly<{
   adapter: FlowerSurfaceAdapter;
   notify: (notification: FlowerSurfaceNotification) => void;
   copy?: FlowerSurfaceCopy;
+  draftCoordinator: FlowerComposerDraftCoordinator;
+  surfaceInstanceID?: string;
   warmup?: FlowerSurfaceWarmupState | null;
   focusThreadRequest?: FlowerThreadFocusRequest | null;
   focusComposerRequest?: number;
@@ -794,6 +816,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const foregroundEngagementRequested = () => surfaceEngaged() && transcriptVisible() && documentVisible();
   const effectiveEngagement = () => foregroundEngagementRequested() && engagementBootstrapReady();
   const copy = () => props.copy ?? DEFAULT_FLOWER_SURFACE_COPY;
+  const attachmentCopy = () => copy().attachments;
+  const draftCoordinator = props.draftCoordinator;
+  const surfaceInstanceID = trimString(props.surfaceInstanceID)
+    || `flower_surface_${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)}`;
   const subagentsCopy = (): FlowerSubagentsCopy => copy().subagents ?? DEFAULT_FLOWER_SURFACE_COPY.subagents!;
   const notify = (notification: FlowerSurfaceNotification) => {
     const message = trimString(notification.message);
@@ -859,6 +885,11 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const [workingDirectoryPickerOpen, setWorkingDirectoryPickerOpen] = createSignal(false);
   const [workingDirectoryCopied, setWorkingDirectoryCopied] = createSignal(false);
   const [composerMoreOpen, setComposerMoreOpen] = createSignal(false);
+  const [attachmentStateRevision, setAttachmentStateRevision] = createSignal(0);
+  const [draftCoordinatorRevision, setDraftCoordinatorRevision] = createSignal(0);
+  const [attachmentDragActive, setAttachmentDragActive] = createSignal(false);
+  const [longTextPreparing, setLongTextPreparing] = createSignal(false);
+  let cancelActiveLongTextSubmission: (() => void) | null = null;
   const [composerMorePanelShiftX, setComposerMorePanelShiftX] = createSignal(0);
   const [composerControlLayout, setComposerControlLayout] = createSignal<FlowerComposerControlLayout>({
     availableWidth: 0,
@@ -959,11 +990,22 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let startedFocusThreadRequestID = '';
   let startedFocusComposerRequest = 0;
   let composerRef: HTMLTextAreaElement | HTMLInputElement | undefined;
+  let attachmentPickerRef: HTMLInputElement | undefined;
+  let attachmentPickerButtonRef: HTMLButtonElement | undefined;
+  let attachmentReselectTarget: Readonly<{ sessionKey: string; localID: string }> | null = null;
+  let attachmentPickerSessionKey = '';
+  let surfaceDisposed = false;
   const [composerFocused, setComposerFocused] = createSignal(false);
   let composerApprovalCardRef: HTMLElement | undefined;
   let previousComposerApprovalActionID = '';
   const [modelMenuOpen, setModelMenuOpen] = createSignal(false);
   const [modelMenuShiftX, setModelMenuShiftX] = createSignal(0);
+  const [modelCapabilityRevision, setModelCapabilityRevision] = createSignal(0);
+  type ModelCapabilityLoadState =
+    | Readonly<{ kind: 'loading' }>
+    | Readonly<{ kind: 'ready'; capability: FlowerAttachmentCapability }>
+    | Readonly<{ kind: 'failed' }>;
+  const modelCapabilityCache = new Map<string, ModelCapabilityLoadState>();
   let modelTriggerRef: HTMLButtonElement | undefined;
   let modelMenuRef: HTMLDivElement | undefined;
   let permissionTriggerRef: HTMLButtonElement | undefined;
@@ -1014,6 +1056,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   let copiedApprovalResetTimer: number | undefined;
   let activityClockTimer: number | undefined;
   let composerMorePanelPositionFrame = 0;
+  let composerSelectionFrame = 0;
   let modelMenuPositionFrame = 0;
   let presentedSelectionFrame = 0;
   let presentedSelectionTimer: number | undefined;
@@ -1538,6 +1581,295 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   const updateCurrentComposerSessionDraft = (updater: (draft: FlowerComposerSessionDraft) => FlowerComposerSessionDraft) => {
     updateComposerSessionDraft(currentComposerSessionKey(), updater);
   };
+  const attachmentControllers = new Map<string, FlowerAttachmentController>();
+  const attachmentControllerUnsubscribers = new Map<string, () => void>();
+  const draftSessions = new Map<string, FlowerComposerDraftSession>();
+  const draftSessionUnsubscribers = new Map<string, () => void>();
+  const draftOperationRenewalTimers = new Set<number>();
+  type PendingComposerAttachmentIntent =
+    | Readonly<{ kind: 'add'; files: readonly File[]; source: 'file' | 'paste' | 'drop' }>
+    | Readonly<{ kind: 'reselect'; localID: string; file: File }>;
+  const pendingAttachmentIntents = new Map<string, PendingComposerAttachmentIntent[]>();
+  const pendingAttachmentAcquisitions = new Set<string>();
+  const attachmentControllerFor = (rawSessionKey: string): FlowerAttachmentController => {
+    const sessionKey = trimString(rawSessionKey) || PENDING_NEW_THREAD_ID;
+    const existing = attachmentControllers.get(sessionKey);
+    if (existing) return existing;
+    const controller = createFlowerAttachmentController({
+      draftID: sessionKey,
+      upload: props.adapter.uploadAttachment,
+      deleteStaged: props.adapter.deleteStagedAttachment,
+      readStagedLongText: props.adapter.readStagedLongText,
+    });
+    attachmentControllers.set(sessionKey, controller);
+    attachmentControllerUnsubscribers.set(sessionKey, controller.subscribe(() => {
+      setAttachmentStateRevision((revision) => revision + 1);
+    }));
+    return controller;
+  };
+  const draftSessionFor = (rawSessionKey: string): FlowerComposerDraftSession => {
+    const sessionKey = trimString(rawSessionKey) || PENDING_NEW_THREAD_ID;
+    const existing = draftSessions.get(sessionKey);
+    if (existing) return existing;
+    const session = draftCoordinator.open(sessionKey, surfaceInstanceID);
+    draftSessions.set(sessionKey, session);
+    draftSessionUnsubscribers.set(sessionKey, session.subscribe(() => {
+      setDraftCoordinatorRevision((revision) => revision + 1);
+    }));
+    return session;
+  };
+  const currentAttachmentController = (): FlowerAttachmentController => attachmentControllerFor(currentComposerSessionKey());
+  const currentAttachmentSnapshot = createMemo<FlowerAttachmentControllerSnapshot>(() => {
+    attachmentStateRevision();
+    return currentAttachmentController().snapshot();
+  });
+  const currentDraftSession = (): FlowerComposerDraftSession => draftSessionFor(currentComposerSessionKey());
+  const currentDraftLeaseState = createMemo(() => {
+    draftCoordinatorRevision();
+    return currentDraftSession().leaseState();
+  });
+  const composerDraftLeaseConflict = createMemo(() => currentDraftLeaseState().kind === 'lease_conflict');
+  const composerDraftLeaseAcquiring = createMemo(() => currentDraftLeaseState().kind === 'lease_acquiring');
+  const composerDraftInitiallyUnavailable = createMemo(() => currentDraftLeaseState().kind === 'store_unavailable');
+  const composerDraftStoreUnavailable = createMemo(() => {
+    const state = currentDraftLeaseState();
+    return state.kind === 'lease_owned' && state.persistence === 'store_unavailable';
+  });
+  type ComposerDraftLeaseOperation = Readonly<{
+    sessionKey: string;
+    session: FlowerComposerDraftSession;
+    controller: FlowerAttachmentController;
+    leaseID: string;
+  }>;
+  const composerDraftOperationCurrent = (operation: ComposerDraftLeaseOperation): boolean => {
+    if (surfaceDisposed || currentComposerSessionKey() !== operation.sessionKey) return false;
+    const state = operation.session.leaseState();
+    return state.kind === 'lease_owned' && state.lease.lease_id === operation.leaseID;
+  };
+  const composerDraftOperationOwned = (operation: ComposerDraftLeaseOperation): boolean => {
+    const state = operation.session.leaseState();
+    return state.kind === 'lease_owned' && state.lease.lease_id === operation.leaseID;
+  };
+  const acquireComposerDraftOperation = async (takeOver = false): Promise<ComposerDraftLeaseOperation | null> => {
+    const sessionKey = currentComposerSessionKey();
+    const session = draftSessionFor(sessionKey);
+    const controller = attachmentControllerFor(sessionKey);
+    const before = session.leaseState();
+    const state = before.kind === 'lease_owned'
+      ? before
+      : takeOver
+        ? await session.takeOver()
+        : await session.acquire();
+    setDraftCoordinatorRevision((revision) => revision + 1);
+    if (
+      state.kind !== 'lease_owned'
+      || surfaceDisposed
+      || currentComposerSessionKey() !== sessionKey
+      || session.leaseState().kind !== 'lease_owned'
+    ) return null;
+    const current = session.leaseState();
+    if (current.kind !== 'lease_owned' || current.lease.lease_id !== state.lease.lease_id) return null;
+    const operation = { sessionKey, session, controller, leaseID: state.lease.lease_id };
+    drainPendingAttachmentIntents(operation);
+    return operation;
+  };
+  const drainPendingAttachmentIntents = (operation: ComposerDraftLeaseOperation) => {
+    if (!composerDraftOperationCurrent(operation)) return;
+    const intents = pendingAttachmentIntents.get(operation.sessionKey);
+    if (!intents?.length) return;
+    pendingAttachmentIntents.delete(operation.sessionKey);
+    for (const intent of intents) {
+      if (intent.kind === 'add') operation.controller.addFiles(intent.files, intent.source);
+      else operation.controller.reselect(intent.localID, intent.file);
+    }
+  };
+  const acquireComposerDraftLease = async (takeOver = false): Promise<boolean> => {
+    const operation = await acquireComposerDraftOperation(takeOver);
+    if (!operation) return false;
+    drainPendingAttachmentIntents(operation);
+    return true;
+  };
+  const queueComposerAttachmentIntent = (
+    sessionKey: string,
+    intent: PendingComposerAttachmentIntent,
+  ) => {
+    const session = draftSessionFor(sessionKey);
+    const existing = pendingAttachmentIntents.get(sessionKey) ?? [];
+    pendingAttachmentIntents.set(sessionKey, [...existing, intent]);
+    const state = session.leaseState();
+    if (state.kind === 'lease_owned') {
+      drainPendingAttachmentIntents({
+        sessionKey,
+        session,
+        controller: attachmentControllerFor(sessionKey),
+        leaseID: state.lease.lease_id,
+      });
+      return;
+    }
+    if (state.kind === 'lease_conflict') {
+      notifyComposerError(attachmentCopy().leaseConflict);
+      return;
+    }
+    if (state.kind === 'store_unavailable') {
+      notifyComposerError(attachmentCopy().draftUnavailable);
+      return;
+    }
+    if (pendingAttachmentAcquisitions.has(sessionKey)) return;
+    pendingAttachmentAcquisitions.add(sessionKey);
+    void acquireComposerDraftOperation().then((operation) => {
+      if (operation?.sessionKey === sessionKey) {
+        drainPendingAttachmentIntents(operation);
+        return;
+      }
+      const latest = session.leaseState();
+      notifyComposerError(latest.kind === 'lease_conflict' ? attachmentCopy().leaseConflict : attachmentCopy().draftUnavailable);
+    }).finally(() => pendingAttachmentAcquisitions.delete(sessionKey));
+  };
+  const withComposerDraftLease = (action: (operation: ComposerDraftLeaseOperation) => void) => {
+    const sessionKey = currentComposerSessionKey();
+    const session = draftSessionFor(sessionKey);
+    const before = session.leaseState();
+    const state = before.kind === 'lease_available' ? session.tryAcquire() : before;
+    if (state.kind === 'lease_owned') {
+      const operation = {
+        sessionKey,
+        session,
+        controller: attachmentControllerFor(sessionKey),
+        leaseID: state.lease.lease_id,
+      };
+      if (composerDraftOperationCurrent(operation)) action(operation);
+      return;
+    }
+    void acquireComposerDraftOperation().then((operation) => {
+      if (operation && composerDraftOperationCurrent(operation)) action(operation);
+    });
+  };
+
+  createEffect(() => {
+    const sessionKey = currentComposerSessionKey();
+    const session = draftSessionFor(sessionKey);
+    draftCoordinatorRevision();
+    const lease = session.leaseState();
+    if (lease.kind === 'lease_owned' || lease.kind === 'lease_acquiring' || lease.kind === 'lease_conflict') return;
+    const sharedDraft = session.snapshot().value;
+    const sharedText = sharedDraft.text;
+    updateComposerSessionDraft(sessionKey, (draft) => (
+      draft.chatDraft === sharedText ? draft : { ...draft, chatDraft: sharedText }
+    ));
+    attachmentControllerFor(sessionKey).hydrateDraft(sharedDraft.attachments.map((item) => ({
+      local_id: item.local_id,
+      request_id: item.upload_request_id,
+      source: item.source,
+      name: item.name,
+      mime_type: item.mime_type,
+      size_bytes: item.size_bytes,
+      ...(item.staged ? { staged: item.staged } : {}),
+    })));
+  });
+
+  createEffect(() => {
+    const sessionKey = currentComposerSessionKey();
+    const session = draftSessionFor(sessionKey);
+    const lease = currentDraftLeaseState();
+    const draft = currentComposerSessionDraft();
+    const attachments = currentAttachmentSnapshot().items;
+    const inspection = inspectFlowerText(draft.chatDraft);
+    const shared = session.snapshot();
+    const mode = shared.value.proposed_turn_id
+      ? shared.value.mode
+      : longTextPreparing()
+      ? 'preparing_long_text_submission' as const
+      : chatRunning()
+        ? 'admission_in_flight' as const
+        : inspection && inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT
+          ? 'over_limit_editing' as const
+          : 'ordinary' as const;
+    if (lease.kind !== 'lease_owned') return;
+    const projectedAttachments = attachments.map((item) => ({
+      local_id: item.local_id,
+      source: item.source,
+      name: item.name,
+      mime_type: item.mime_type,
+      size_bytes: item.size_bytes,
+      upload_request_id: item.request_id,
+      attempt_state: item.status,
+      ...(item.staged ? { staged: item.staged } : {}),
+    }));
+    const projectedModelID = selectedComposerModelID();
+    const projectedPermissionType = composerPermissionType();
+    const projectedReasoningSelection = serializeFlowerReasoningSelection(composerLaunchReasoningSelection());
+    const projectedWorkingDir = draftWorkingDirectory();
+    const projectedCapabilityRevision = currentAttachmentSnapshot().capability?.revision;
+    const unchanged = shared.value.text === draft.chatDraft
+      && shared.value.mode === mode
+      && shared.value.model_id === projectedModelID
+      && shared.value.permission_type === projectedPermissionType
+      && JSON.stringify(shared.value.reasoning_selection) === JSON.stringify(projectedReasoningSelection)
+      && shared.value.working_dir === projectedWorkingDir
+      && shared.value.capability_revision === projectedCapabilityRevision
+      && JSON.stringify(shared.value.attachments) === JSON.stringify(projectedAttachments);
+    if (unchanged) return;
+    void session.mutate(shared.revision, (value) => ({
+      ...value,
+      text: draft.chatDraft,
+      attachments: projectedAttachments,
+      mode,
+      model_id: projectedModelID,
+      permission_type: projectedPermissionType,
+      reasoning_selection: projectedReasoningSelection,
+      working_dir: projectedWorkingDir,
+      capability_revision: projectedCapabilityRevision,
+    })).then(() => setDraftCoordinatorRevision((revision) => revision + 1));
+  });
+
+  onMount(() => {
+    const retryDraftPersistence = () => {
+      if (document.visibilityState === 'hidden') return;
+      const session = currentDraftSession();
+      const state = session.leaseState();
+      if (state.kind === 'lease_owned' && (state.persistence === 'store_unavailable' || state.unsaved)) {
+        void session.renew().then(() => setDraftCoordinatorRevision((revision) => revision + 1));
+      } else if (state.kind === 'store_unavailable') {
+        void session.acquire().then(() => setDraftCoordinatorRevision((revision) => revision + 1));
+      }
+    };
+    window.addEventListener('online', retryDraftPersistence);
+    document.addEventListener('visibilitychange', retryDraftPersistence);
+    onCleanup(() => {
+      window.removeEventListener('online', retryDraftPersistence);
+      document.removeEventListener('visibilitychange', retryDraftPersistence);
+    });
+  });
+
+  onCleanup(() => {
+    surfaceDisposed = true;
+    for (const unsubscribe of attachmentControllerUnsubscribers.values()) unsubscribe();
+    for (const controller of attachmentControllers.values()) controller.dispose();
+    pendingAttachmentIntents.clear();
+    pendingAttachmentAcquisitions.clear();
+    for (const unsubscribe of draftSessionUnsubscribers.values()) unsubscribe();
+    for (const timer of draftOperationRenewalTimers) window.clearInterval(timer);
+    draftOperationRenewalTimers.clear();
+    for (const session of draftSessions.values()) {
+      const state = session.leaseState();
+      const snapshot = session.snapshot();
+      if (
+        state.kind === 'lease_owned'
+        && (snapshot.value.mode === 'preparing_long_text_submission' || snapshot.value.mode === 'admission_in_flight')
+        && snapshot.value.admission_started !== true
+      ) {
+        void session.mutate(snapshot.revision, (value) => ({
+          ...value,
+          mode: (inspectFlowerText(value.text)?.codePoints ?? 0) > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT
+            ? 'over_limit_editing'
+            : 'ordinary',
+          proposed_turn_id: undefined,
+          admission_started: undefined,
+        }));
+      }
+      void session.release();
+    }
+  });
   const selectedThreadDetailMatches = (threadID: string): boolean => {
     const tid = trimString(threadID);
     return Boolean(tid && selectedThreadID() === tid && selectedThreadDetailID() === tid);
@@ -1554,6 +1886,14 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
   const warmupState = createMemo(() => props.warmup?.active ? props.warmup : null);
   const surfaceWarmupActive = createMemo(() => warmupState() !== null);
+  createEffect(() => {
+    const ordinaryComposerBlocked = Boolean(selectedInputRequest())
+      || Boolean(selectedComposerApprovalDisplayAction())
+      || selectedThreadReadOnly()
+      || selectedThreadDetailPending()
+      || surfaceWarmupActive();
+    if (longTextPreparing() && ordinaryComposerBlocked) cancelActiveLongTextSubmission?.();
+  });
   const workingDirectoryPickerAvailable = createMemo(() => (
     typeof props.adapter.getWorkingDirectoryPathContext === 'function'
     && typeof props.adapter.listWorkingDirectoryEntries === 'function'
@@ -2349,6 +2689,27 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     const threadModelID = trimString(selectedThread()?.model_id);
     if (threadModelID) return threadModelID;
     return trimString(currentComposerSessionDraft().modelIDOverride) || currentModelID();
+  });
+  let attachmentCapabilitySequence = 0;
+  createEffect(() => {
+    const sessionKey = currentComposerSessionKey();
+    const modelID = selectedComposerModelID();
+    const controller = attachmentControllerFor(sessionKey);
+    const sequence = ++attachmentCapabilitySequence;
+    controller.setCapability(null);
+    if (!modelID || !props.adapter.loadAttachmentCapability || !props.adapter.uploadAttachment) return;
+    void props.adapter.loadAttachmentCapability(modelID).then((capability) => {
+      if (
+        sequence !== attachmentCapabilitySequence
+        || currentComposerSessionKey() !== sessionKey
+        || selectedComposerModelID() !== modelID
+      ) return;
+      controller.setCapability(capability.model_id === modelID ? capability : null);
+    }).catch(() => {
+      if (sequence === attachmentCapabilitySequence && currentComposerSessionKey() === sessionKey) {
+        controller.setCapability(null);
+      }
+    });
   });
   type ComposerModelOption = Readonly<{
     id: string;
@@ -3907,17 +4268,17 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const launchChatTurn = async (promptInput: string) => {
-    const prompt = trimString(promptInput);
+    const inspection = inspectFlowerText(promptInput);
+    if (!inspection) {
+      notifyComposerError(attachmentCopy().invalidText);
+      return;
+    }
     if (!snapshot()) {
       notifyComposerError(copy().chat.loadingSettings);
       return;
     }
     if (!readyForChat()) {
       notifyComposerError(copy().chat.configureProviderBeforeChat);
-      return;
-    }
-    if (!prompt) {
-      notifyComposerError(copy().chat.enterMessageBeforeSending);
       return;
     }
     if (selectedThreadDetailPending()) {
@@ -3933,16 +4294,119 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       notifyComposerError('message' in state ? state.message : copy().chat.handlerStillStarting);
       return;
     }
-    const selectedID = trimString(selectedThreadID());
-    if (selectedID) {
-      cancelDeferredThreadSelection();
-    }
-    const launchSessionKey = currentComposerSessionKey();
-    const draftReasoningSelection = !selectedID ? serializeFlowerReasoningSelection(composerLaunchReasoningSelection()) : undefined;
-    const draftModelID = !selectedID ? selectedComposerModelID() : '';
-    const draftWorkingDir = !selectedID ? draftWorkingDirectory() : '';
     const turnID = createFlowerClientTurnID();
+    const operation = await acquireComposerDraftOperation();
+    if (!operation || !composerDraftOperationCurrent(operation)) {
+      notifyComposerError(attachmentCopy().leaseConflict);
+      return;
+    }
+    const persistenceState = operation.session.leaseState();
+    if (persistenceState.kind === 'lease_owned' && (persistenceState.persistence === 'store_unavailable' || persistenceState.unsaved)) {
+      const recovered = await operation.session.renew();
+      if (recovered.kind !== 'lease_owned' || recovered.persistence === 'store_unavailable' || recovered.unsaved) {
+        notifyComposerError(attachmentCopy().draftUnsaved);
+        return;
+      }
+    }
+    const operationMode = inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT
+      ? 'preparing_long_text_submission' as const
+      : 'admission_in_flight' as const;
+    const selectedID = trimString(selectedThreadID());
+    const frozenModelID = selectedComposerModelID();
+    const frozenPermissionType = composerPermissionType();
+    const frozenReasoningSelection = serializeFlowerReasoningSelection(composerLaunchReasoningSelection());
+    const frozenWorkingDir = draftWorkingDirectory();
+    const frozenCapabilityRevision = currentAttachmentSnapshot().capability?.revision;
+    let operationClaim;
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const operationStart = operation.session.snapshot();
+      operationClaim = await operation.session.mutate(operationStart.revision, (value) => (
+        value.proposed_turn_id && value.proposed_turn_id !== turnID
+          ? value
+          : {
+            ...value,
+            text: promptInput,
+            mode: operationMode,
+            proposed_turn_id: turnID,
+            admission_started: false,
+            model_id: frozenModelID,
+            permission_type: frozenPermissionType,
+            reasoning_selection: frozenReasoningSelection,
+            working_dir: frozenWorkingDir,
+            capability_revision: frozenCapabilityRevision,
+          }
+      ));
+      if (operationClaim.kind !== 'revision_conflict') break;
+      if (!composerDraftOperationCurrent(operation)) break;
+    }
+    if (
+      !operationClaim
+      || operationClaim.kind !== 'committed'
+      || operationClaim.snapshot.value.proposed_turn_id !== turnID
+      || !composerDraftOperationCurrent(operation)
+    ) {
+      notifyComposerError(attachmentCopy().leaseConflict);
+      return;
+    }
+    const launchController = operation.controller;
+    const launchSessionKey = operation.sessionKey;
+    const frozenDraft = operationClaim.snapshot.value;
+    const draftReasoningSelection = !selectedID ? frozenDraft.reasoning_selection : undefined;
+    const draftModelID = !selectedID ? frozenDraft.model_id ?? '' : '';
+    const launchModelID = frozenDraft.model_id ?? frozenModelID;
+    const draftPermissionType = !selectedID ? frozenDraft.permission_type : undefined;
+    const draftWorkingDir = !selectedID ? frozenDraft.working_dir ?? '' : '';
+    const launchContextCurrent = () => (
+      composerDraftOperationCurrent(operation)
+      && trimString(selectedThreadID()) === selectedID
+      && selectedComposerModelID() === launchModelID
+    );
+    const ordinaryTurnContextCurrent = () => (
+      !selectedInputRequest()
+      && !selectedComposerApprovalDisplayAction()
+      && !selectedThreadReadOnly()
+      && !selectedThreadDetailPending()
+      && !surfaceWarmupActive()
+    );
+    let cancelRequested = false;
+    const submissionCurrent = () => (
+      !cancelRequested
+      && launchContextCurrent()
+      && ordinaryTurnContextCurrent()
+      && operation.session.snapshot().value.proposed_turn_id === turnID
+    );
+    const renewalTimer = window.setInterval(() => {
+      if (!submissionCurrent()) {
+        window.clearInterval(renewalTimer);
+        draftOperationRenewalTimers.delete(renewalTimer);
+        return;
+      }
+      void operation.session.renew();
+    }, 5_000);
+    draftOperationRenewalTimers.add(renewalTimer);
+    let preparedLongTextLocalID = '';
+    let consumedAttachmentLocalIDs: readonly string[] = [];
+    const cancelLongTextSubmission = () => {
+      cancelRequested = true;
+      if (preparedLongTextLocalID) launchController.cancel(preparedLongTextLocalID);
+      setLongTextPreparing(false);
+    };
+    cancelActiveLongTextSubmission = cancelLongTextSubmission;
     const clearAcceptedComposerDraft = (...sessionKeys: string[]) => {
+      launchController.consumeReady(consumedAttachmentLocalIDs);
+      const shared = operation.session.snapshot();
+      if (composerDraftOperationOwned(operation)) {
+        void operation.session.mutate(shared.revision, (value) => ({
+          ...value,
+          text: '',
+          attachments: [],
+          mode: 'ordinary',
+          proposed_turn_id: undefined,
+          admission_started: undefined,
+          prepared_long_text_local_id: undefined,
+          prepared_long_text_attachment_id: undefined,
+        }));
+      }
       for (const sessionKey of new Set([launchSessionKey, ...sessionKeys].map((value) => trimString(value) || PENDING_NEW_THREAD_ID))) {
         updateComposerSessionDraft(sessionKey, (draft) => ({
           ...draft,
@@ -3961,23 +4425,131 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         || (thread.queued_turns ?? []).some((turn) => trimString(turn.turn_id) === tid);
     };
     setChatRunning(true);
-    transcriptScroll.startFollowing();
     try {
+      let attachmentSnapshot = launchController.snapshot();
+      if (attachmentSnapshot.items.length > 0 || inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT) {
+        if (!launchModelID || !props.adapter.loadAttachmentCapability || !props.adapter.uploadAttachment) {
+          notifyComposerError(attachmentCopy().unavailable);
+          return;
+        }
+        const capabilitySequence = ++attachmentCapabilitySequence;
+        try {
+          const capability = await props.adapter.loadAttachmentCapability(launchModelID);
+          if (!submissionCurrent() || capabilitySequence !== attachmentCapabilitySequence) return;
+          launchController.setCapability(capability.model_id === launchModelID ? capability : null);
+        } catch {
+          if (submissionCurrent() && capabilitySequence === attachmentCapabilitySequence) {
+            launchController.setCapability(null);
+            notifyComposerError(attachmentCopy().unavailable);
+          }
+          return;
+        }
+        attachmentSnapshot = launchController.snapshot();
+      }
+      if (!submissionCurrent()) return;
+      if (attachmentSnapshot.items.some((item) => item.status !== 'staged_ready')) return;
+      if (inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT) {
+        if (!attachmentSnapshot.capability?.supports_long_text) {
+          notifyComposerError(attachmentCopy().unavailable);
+          return;
+        }
+        setLongTextPreparing(true);
+        const preparedLongText = launchController.addLongText(promptInput);
+        if (preparedLongText.kind !== 'accepted') {
+          notifyComposerError(attachmentCopy().unavailable);
+          return;
+        }
+        preparedLongTextLocalID = preparedLongText.local_id;
+        await launchController.waitForIdle();
+        if (!submissionCurrent()) {
+          launchController.remove(preparedLongTextLocalID);
+          preparedLongTextLocalID = '';
+          return;
+        }
+        attachmentSnapshot = launchController.snapshot();
+        const prepared = attachmentSnapshot.items.find((item) => item.local_id === preparedLongTextLocalID);
+        if (prepared?.status !== 'staged_ready') {
+          launchController.remove(preparedLongTextLocalID);
+          preparedLongTextLocalID = '';
+          notifyComposerError(attachmentCopy().unavailable);
+          return;
+        }
+        const preparing = operation.session.snapshot();
+        const transitioned = await operation.session.mutate(preparing.revision, (value) => (
+          value.proposed_turn_id === turnID
+            ? {
+              ...value,
+              mode: 'admission_in_flight',
+              attachments: attachmentSnapshot.items.map((item) => ({
+                local_id: item.local_id,
+                source: item.source,
+                name: item.name,
+                mime_type: item.mime_type,
+                size_bytes: item.size_bytes,
+                upload_request_id: item.request_id,
+                attempt_state: item.status,
+                ...(item.staged ? { staged: item.staged } : {}),
+              })),
+              prepared_long_text_local_id: prepared.local_id,
+              prepared_long_text_attachment_id: prepared.staged?.attachment_id,
+            }
+            : value
+        ));
+        if (
+          transitioned.kind !== 'committed'
+          || transitioned.snapshot.value.proposed_turn_id !== turnID
+          || !submissionCurrent()
+        ) {
+          launchController.remove(preparedLongTextLocalID);
+          preparedLongTextLocalID = '';
+          return;
+        }
+        setLongTextPreparing(false);
+      }
+      const prompt = inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT ? '' : promptInput;
+      const readyItems = attachmentSnapshot.items.filter((item) => item.status === 'staged_ready');
+      const attachmentIDs = flowerAttachmentIDs(readyItems);
+      if (!prompt && attachmentIDs.length === 0) {
+        notifyComposerError(copy().chat.enterMessageBeforeSending);
+        return;
+      }
+      consumedAttachmentLocalIDs = readyItems.map((item) => item.local_id);
+      if (selectedID) cancelDeferredThreadSelection();
+      if (!submissionCurrent()) return;
+      transcriptScroll.startFollowing();
       let receipt: FlowerTurnLaunchReceipt;
       try {
         const decision = currentHandlerDecision() ?? await resolveHandlerDecision();
+        if (!submissionCurrent()) return;
         if (!decision.selected_handler || decision.blocker || decision.route === 'blocked') {
+          if (preparedLongTextLocalID) launchController.remove(preparedLongTextLocalID);
           if (composerSessionStillCurrent(launchSessionKey)) {
             notifyComposerError(decision.blocker?.message || copy().chat.handlerStillStarting);
           }
           return;
         }
+        if (!submissionCurrent()) return;
+        const beforeAdmission = operation.session.snapshot();
+        const admission = await operation.session.mutate(beforeAdmission.revision, (value) => (
+          value.proposed_turn_id === turnID
+            ? { ...value, admission_started: true }
+            : value
+        ));
+        if (
+          admission.kind !== 'committed'
+          || admission.snapshot.value.proposed_turn_id !== turnID
+          || admission.snapshot.value.admission_started !== true
+          || !submissionCurrent()
+        ) return;
         receipt = await props.adapter.launchTurn({
           thread_id: selectedID || undefined,
           turn_id: turnID,
+          draft_id: launchSessionKey,
+          expected_draft_revision: admission.snapshot.revision,
           prompt,
+          ...(attachmentIDs.length > 0 ? { attachment_ids: attachmentIDs } : {}),
           decision: selectedID ? null : decision,
-          ...(!selectedID ? { permission_type: composerPermissionType() } : {}),
+          ...(!selectedID && draftPermissionType ? { permission_type: draftPermissionType } : {}),
           ...(!selectedID && draftModelID ? { model_id: draftModelID } : {}),
           ...(!selectedID && draftReasoningSelection ? { reasoning_selection: draftReasoningSelection } : {}),
           ...(!selectedID && draftWorkingDir ? { working_dir: draftWorkingDir } : {}),
@@ -3991,6 +4563,22 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         if (uncertain) {
           const uncertainSessionKey = trimString(uncertain.thread_id);
           if (uncertainSessionKey && uncertainSessionKey !== launchSessionKey) {
+            const uncertainSession = draftSessionFor(uncertainSessionKey);
+            const uncertainLease = uncertainSession.tryAcquire();
+            if (uncertainLease.kind === 'lease_owned') {
+              const targetSnapshot = uncertainSession.snapshot();
+              const sourceSnapshot = operation.session.snapshot();
+              await uncertainSession.mutate(targetSnapshot.revision, (value) => ({
+                ...value,
+                text: promptInput,
+                attachments: sourceSnapshot.value.attachments,
+                mode: 'admission_in_flight',
+                proposed_turn_id: uncertain.turn_id,
+                admission_started: true,
+                prepared_long_text_local_id: sourceSnapshot.value.prepared_long_text_local_id,
+                prepared_long_text_attachment_id: sourceSnapshot.value.prepared_long_text_attachment_id,
+              }));
+            }
             updateComposerSessionDraft(uncertainSessionKey, (draft) => ({
               ...draft,
               chatDraft: promptInput,
@@ -4011,6 +4599,20 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         if (composerSessionStillCurrent(launchSessionKey)) {
           notifyComposerError(getErrorMessage(error));
         }
+        if (preparedLongTextLocalID) launchController.remove(preparedLongTextLocalID);
+        if (composerDraftOperationOwned(operation)) {
+          const rejected = operation.session.snapshot();
+          if (rejected.value.proposed_turn_id === turnID) {
+            void operation.session.mutate(rejected.revision, (value) => ({
+              ...value,
+              mode: inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT ? 'over_limit_editing' : 'ordinary',
+              proposed_turn_id: undefined,
+              admission_started: undefined,
+              prepared_long_text_local_id: undefined,
+              prepared_long_text_attachment_id: undefined,
+            }));
+          }
+        }
         return;
       }
       clearAcceptedComposerDraft();
@@ -4021,7 +4623,24 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
         await refreshSelectedThread(receipt.thread_id);
       }
     } finally {
+      if (cancelActiveLongTextSubmission === cancelLongTextSubmission) cancelActiveLongTextSubmission = null;
+      window.clearInterval(renewalTimer);
+      draftOperationRenewalTimers.delete(renewalTimer);
+      setLongTextPreparing(false);
       setChatRunning(false);
+      if (composerDraftOperationOwned(operation)) {
+        const shared = operation.session.snapshot();
+        if (shared.value.proposed_turn_id === turnID && shared.value.admission_started !== true) {
+          void operation.session.mutate(shared.revision, (value) => ({
+            ...value,
+            mode: inspection.codePoints > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT ? 'over_limit_editing' : 'ordinary',
+            proposed_turn_id: undefined,
+            admission_started: undefined,
+            prepared_long_text_local_id: undefined,
+            prepared_long_text_attachment_id: undefined,
+          }));
+        }
+      }
     }
   };
 
@@ -4236,7 +4855,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const submitChat = async () => {
-    const prompt = trimString(composerRef?.value ?? currentComposerSessionDraft().chatDraft);
+    const promptInput = composerRef?.value ?? currentComposerSessionDraft().chatDraft;
+    const prompt = trimString(promptInput);
+    const promptInspection = inspectFlowerText(promptInput);
+    const promptOverLimit = (promptInspection?.codePoints ?? 0) > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT;
     if (selectedThreadReadOnly()) {
       notifyComposerError(selectedThreadReadOnlyDisplay());
       return;
@@ -4251,14 +4873,22 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return;
     }
     if (command.kind === 'suggest') {
+      if (composerHasAttachments()) {
+        notifyComposerError(attachmentCopy().compactBlocked);
+        return;
+      }
       await compactSelectedThreadContext();
       return;
     }
     if (command.kind === 'intent') {
+      if (composerHasAttachments()) {
+        notifyComposerError(attachmentCopy().compactBlocked);
+        return;
+      }
       await compactSelectedThreadContext();
       return;
     }
-    if (selectedThreadCanStop() && !prompt) {
+    if (selectedThreadCanStop() && !promptOverLimit && !prompt && !composerHasAttachments()) {
       if (threadStopping() || chatRunning()) return;
       const stoppingThreadID = trimString(selectedThread()?.thread_id);
       setThreadStopping(true);
@@ -4278,9 +4908,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       return;
     }
     if (chatRunning()) {
+      if (longTextPreparing()) cancelActiveLongTextSubmission?.();
       return;
     }
-    await launchChatTurn(prompt);
+    await launchChatTurn(promptInput);
   };
 
   const startCompose = () => {
@@ -4325,6 +4956,8 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     pendingReadPersistenceSnapshots.delete(tid);
     liveCursors.delete(tid);
     liveStreamGenerations.delete(tid);
+    pendingAttachmentIntents.delete(tid);
+    pendingAttachmentAcquisitions.delete(tid);
 
     setThreads((current) => current.filter((thread) => thread.thread_id !== tid));
     setComposerSessionDrafts((current) => {
@@ -4706,6 +5339,10 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
   };
 
   const executeCompactContextCommand = async () => {
+    if (composerHasAttachments()) {
+      notifyComposerError(attachmentCopy().compactBlocked);
+      return;
+    }
     await compactSelectedThreadContext();
   };
 
@@ -5057,6 +5694,257 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     updateCurrentComposerSessionDraft((draft) => (draft.chatDraft === value ? draft : { ...draft, chatDraft: value }));
   };
 
+  const composerAttachmentItems = createMemo(() => currentAttachmentSnapshot().items);
+  const composerHasAttachments = createMemo(() => composerAttachmentItems().length > 0);
+  const composerAttachmentsReady = createMemo(() => (
+    composerHasAttachments() && composerAttachmentItems().every((item) => item.status === 'staged_ready')
+  ));
+  const composerAttachmentCapabilityEnabled = createMemo(() => (
+    currentAttachmentSnapshot().capability?.enabled === true
+    && typeof props.adapter.uploadAttachment === 'function'
+  ));
+  const composerAttachmentEditingAllowed = createMemo(() => (
+    !selectedComposerApprovalDisplayAction()
+    && !selectedInputRequest()
+    && !selectedThreadDetailPending()
+    && !selectedThreadReadOnly()
+    && !surfaceWarmupActive()
+    && !chatRunning()
+    && !longTextPreparing()
+  ));
+  const composerCanQueueAttachmentIntent = createMemo(() => (
+    composerAttachmentEditingAllowed()
+    && composerAttachmentCapabilityEnabled()
+  ));
+  const composerCanAddAttachments = createMemo(() => (
+    composerAttachmentEditingAllowed()
+    && composerAttachmentCapabilityEnabled()
+    && !composerDraftLeaseConflict()
+    && !composerDraftInitiallyUnavailable()
+  ));
+  const composerTextInspection = createMemo(() => inspectFlowerText(currentComposerSessionDraft().chatDraft));
+  const composerTextOverLimit = createMemo(() => (
+    (composerTextInspection()?.codePoints ?? 0) > FLOWER_INLINE_TEXT_CODE_POINT_LIMIT
+  ));
+  type ModelAttachmentSupportState = 'checking' | 'supported' | 'unsupported' | 'unavailable';
+  const composerNeedsModelAttachmentSupport = createMemo(() => composerHasAttachments() || composerTextOverLimit());
+  const capabilitySupportsComposerAttachments = (capability: FlowerAttachmentCapability): boolean => {
+    const items = composerAttachmentItems();
+    if (!capability.enabled) return false;
+    if ((composerTextOverLimit() || items.some((item) => item.source === 'long_text')) && !capability.supports_long_text) {
+      return false;
+    }
+    if (items.length > capability.max_attachments) return false;
+    if (items.some((item) => item.size_bytes > capability.max_file_size_bytes)) return false;
+    if (items.reduce((total, item) => total + item.size_bytes, 0) > capability.max_total_size_bytes) return false;
+    return items.every((item) => flowerAttachmentRoute(capability, item.mime_type) !== 'unsupported');
+  };
+  const modelAttachmentSupportState = (modelID: string): ModelAttachmentSupportState | null => {
+    if (!composerNeedsModelAttachmentSupport()) return null;
+    modelCapabilityRevision();
+    const state = modelCapabilityCache.get(modelID);
+    if (!state || state.kind === 'loading') return 'checking';
+    if (state.kind === 'failed') return 'unavailable';
+    return capabilitySupportsComposerAttachments(state.capability) ? 'supported' : 'unsupported';
+  };
+  createEffect(() => {
+    const capability = currentAttachmentSnapshot().capability;
+    if (!capability?.model_id) return;
+    modelCapabilityCache.set(capability.model_id, { kind: 'ready', capability });
+    setModelCapabilityRevision((revision) => revision + 1);
+  });
+  createEffect(() => {
+    if (!modelMenuOpen() || !composerNeedsModelAttachmentSupport() || !props.adapter.loadAttachmentCapability) return;
+    for (const option of catalogModelOptions()) {
+      const existing = modelCapabilityCache.get(option.id);
+      if (existing?.kind === 'loading' || existing?.kind === 'ready') continue;
+      modelCapabilityCache.set(option.id, { kind: 'loading' });
+      setModelCapabilityRevision((revision) => revision + 1);
+      void props.adapter.loadAttachmentCapability(option.id).then((capability) => {
+        modelCapabilityCache.set(
+          option.id,
+          capability.model_id === option.id ? { kind: 'ready', capability } : { kind: 'failed' },
+        );
+        setModelCapabilityRevision((revision) => revision + 1);
+      }).catch(() => {
+        modelCapabilityCache.set(option.id, { kind: 'failed' });
+        setModelCapabilityRevision((revision) => revision + 1);
+      });
+    }
+  });
+  const scheduleComposerSelection = (
+    start: number,
+    end = start,
+    expectedSessionKey = currentComposerSessionKey(),
+    expectedValue?: string,
+    expectedCurrentSelection?: Readonly<{ start: number; end: number }>,
+  ) => {
+    if (composerSelectionFrame) cancelTranscriptAnimationFrame(composerSelectionFrame);
+    composerSelectionFrame = requestTranscriptAnimationFrame(() => {
+      composerSelectionFrame = 0;
+      if (surfaceDisposed || currentComposerSessionKey() !== expectedSessionKey) return;
+      if (!(composerRef instanceof HTMLTextAreaElement)) return;
+      if (expectedValue !== undefined && composerRef.value !== expectedValue) return;
+      if (
+        expectedCurrentSelection
+        && (composerRef.selectionStart !== expectedCurrentSelection.start
+          || composerRef.selectionEnd !== expectedCurrentSelection.end)
+      ) return;
+      composerRef.focus();
+      composerRef.setSelectionRange(start, end);
+    });
+  };
+  onCleanup(() => {
+    if (!composerSelectionFrame) return;
+    cancelTranscriptAnimationFrame(composerSelectionFrame);
+    composerSelectionFrame = 0;
+  });
+  const handleComposerPaste = (event: ClipboardEvent & { currentTarget: HTMLTextAreaElement }) => {
+    if (isComposing()) return;
+    const files = Array.from(event.clipboardData?.files ?? []);
+    if (files.length > 0) {
+      if (!composerCanQueueAttachmentIntent()) return;
+      event.preventDefault();
+      queueComposerAttachmentIntent(currentComposerSessionKey(), { kind: 'add', files, source: 'paste' });
+      return;
+    }
+    if (!composerCanAddAttachments()) return;
+    const payload = event.clipboardData?.getData('text/plain') ?? '';
+    if (!payload) return;
+    const target = event.currentTarget;
+    const retainedPaste = replaceFlowerTextSelection(
+      target.value,
+      payload,
+      target.selectionStart,
+      target.selectionEnd,
+    );
+    const decision = decideFlowerTextPaste({
+      value: target.value,
+      payload,
+      selectionStart: target.selectionStart,
+      selectionEnd: target.selectionEnd,
+    });
+    if (decision.kind === 'reject_ill_formed') {
+      event.preventDefault();
+      notifyComposerError(attachmentCopy().invalidText);
+      return;
+    }
+    event.preventDefault();
+    if (decision.kind === 'attach_payload') {
+      const retainedSessionKey = currentComposerSessionKey();
+      updateComposerText(retainedPaste.value);
+      scheduleComposerSelection(
+        retainedPaste.selectionStart,
+        retainedPaste.selectionEnd,
+        retainedSessionKey,
+        retainedPaste.value,
+      );
+      void (async () => {
+        const operation = await acquireComposerDraftOperation();
+        if (!operation || operation.sessionKey !== retainedSessionKey || !composerDraftOperationCurrent(operation)) return;
+        if (currentComposerSessionDraft().chatDraft !== retainedPaste.value) return;
+        const before = operation.session.snapshot();
+        const retained = await operation.session.mutate(before.revision, (value) => ({
+          ...value,
+          text: retainedPaste.value,
+        }));
+        if (retained.kind !== 'committed' || !composerDraftOperationCurrent(operation)) return;
+        if (currentComposerSessionDraft().chatDraft !== retainedPaste.value) return;
+        const capability = operation.controller.snapshot().capability;
+        const added = capability?.supports_long_text
+          ? operation.controller.addLongText(decision.payload)
+          : { kind: 'rejected' as const };
+        if (added.kind !== 'accepted') {
+          notifyComposerError(attachmentCopy().unavailable);
+          return;
+        }
+        await operation.controller.waitForIdle();
+        const item = operation.controller.snapshot().items.find((candidate) => candidate.local_id === added.local_id);
+        if (item?.status !== 'staged_ready') return;
+        const unchanged = composerDraftOperationCurrent(operation)
+          && currentComposerSessionDraft().chatDraft === retainedPaste.value
+          && operation.session.snapshot().value.text === retainedPaste.value
+          && (!(composerRef instanceof HTMLTextAreaElement) || composerRef.value === retainedPaste.value);
+        if (unchanged) {
+          updateComposerText(decision.value);
+          scheduleComposerSelection(decision.selectionStart, decision.selectionEnd, retainedSessionKey, decision.value);
+          return;
+        }
+        const shared = operation.session.snapshot();
+        if (composerDraftOperationOwned(operation)) {
+          await operation.session.mutate(shared.revision, (value) => ({
+            ...value,
+            attachments: value.attachments.filter((attachment) => attachment.local_id !== added.local_id),
+          }));
+        }
+        operation.controller.remove(added.local_id);
+      })();
+      return;
+    }
+    updateComposerText(decision.value);
+    scheduleComposerSelection(decision.selectionStart, decision.selectionEnd, currentComposerSessionKey(), decision.value);
+    withComposerDraftLease(() => undefined);
+  };
+  const handleComposerTextInput = (event: InputEvent & { currentTarget: HTMLTextAreaElement }) => {
+    if (companionCollapsed()) props.onCompanionOpenRequest?.();
+    const value = event.currentTarget.value;
+    if (!inspectFlowerText(value)) {
+      event.currentTarget.value = composerTextValue();
+      notifyComposerError(attachmentCopy().invalidText);
+      return;
+    }
+    updateComposerText(value);
+    withComposerDraftLease(() => undefined);
+  };
+  const restoreLongTextAttachment = async (localID: string) => {
+    try {
+      const operation = await acquireComposerDraftOperation();
+      if (!operation || !composerDraftOperationCurrent(operation)) return;
+      const shared = operation.session.snapshot();
+      const attachment = shared.value.attachments.find((item) => item.local_id === localID);
+      if (!attachment || attachment.source !== 'long_text') throw new Error('attachment_restore_failed');
+      const current = shared.value.text;
+      const start = composerRef instanceof HTMLTextAreaElement ? composerRef.selectionStart : current.length;
+      const end = composerRef instanceof HTMLTextAreaElement ? composerRef.selectionEnd : current.length;
+      const text = await operation.controller.restoreLongText(localID);
+      if (!composerDraftOperationCurrent(operation)) return;
+      const restored = replaceFlowerTextSelection(current, text, start, end);
+      const committed = await operation.session.mutate(shared.revision, (value) => ({
+        ...value,
+        text: restored.value,
+        attachments: value.attachments.filter((item) => item.local_id !== localID),
+      }));
+      if (committed.kind !== 'committed' || !composerDraftOperationCurrent(operation)) return;
+      updateComposerSessionDraft(operation.sessionKey, (draft) => ({ ...draft, chatDraft: restored.value }));
+      operation.controller.remove(localID);
+      scheduleComposerSelection(restored.selectionStart, restored.selectionEnd, operation.sessionKey, restored.value);
+    } catch {
+      notifyComposerError(attachmentCopy().restoreFailed);
+    }
+  };
+  const copyAttachmentReference = async (item: FlowerAttachmentItem) => {
+    const locator = trimString(item.staged?.locator);
+    if (!locator) return;
+    try {
+      await writeTextToClipboard(locator);
+    } catch (error) {
+      notifyComposerError(getErrorMessage(error));
+    }
+  };
+  const previewStagedAttachment = async (item: FlowerAttachmentItem) => {
+    if (!item.staged || !props.adapter.previewStagedAttachment) return;
+    try {
+      await props.adapter.previewStagedAttachment(item.staged, currentComposerSessionKey());
+    } catch (error) {
+      notifyComposerError(getErrorMessage(error));
+    }
+  };
+  const reselectAttachment = (localID: string) => {
+    attachmentPickerSessionKey = currentComposerSessionKey();
+    attachmentReselectTarget = { sessionKey: attachmentPickerSessionKey, localID };
+    attachmentPickerRef?.click();
+  };
+
   const inputTextQuestions = createMemo(() => selectedInputRequest()?.questions.filter(questionAllowsText) ?? []);
 
   const activeInputQuestion = createMemo(() => {
@@ -5081,6 +5969,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     && !composerFocused()
     && !isComposing()
     && !trimString(composerTextValue())
+    && !composerHasAttachments()
     && Boolean(trimString(props.companionSummary?.visualText))
   ));
   const companionDescriptionID = createMemo(() => (
@@ -5113,34 +6002,44 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
     if (selectedComposerApprovalDisplayAction()) return true;
     if (selectedThreadDetailPending()) return true;
     if (selectedThreadReadOnly()) return true;
+    if (composerDraftLeaseConflict() || composerDraftInitiallyUnavailable()) return true;
     if (chatRunning()) return true;
     if (!selectedInputRequest()) return false;
     return inputSubmitting() || !activeInputQuestion();
   });
 
   const composerChatDraftText = createMemo(() => trimString(currentComposerSessionDraft().chatDraft));
+  const composerChatDraftHasRawText = createMemo(() => currentComposerSessionDraft().chatDraft.length > 0);
   const composerSlashCommand = createMemo(() => (selectedInputRequest() || selectedComposerApprovalDisplayAction()) ? { kind: 'none' as const } : parseFlowerSlashCommand(composerChatDraftText()));
   const composerCommandMenuVisible = createMemo(() => (
     !selectedComposerApprovalDisplayAction() && !selectedInputRequest() && composerSlashCommand().kind === 'suggest'
   ));
   const composerPrimaryActionIsCommand = createMemo(() => composerSlashCommand().kind === 'intent');
-  const composerPrimaryActionIsStop = createMemo(() => selectedThreadCanStop() && !composerChatDraftText());
+  const composerPrimaryActionIsStop = createMemo(() => (
+    longTextPreparing()
+    || (selectedThreadCanStop() && !composerTextOverLimit() && !composerChatDraftText() && !composerHasAttachments())
+  ));
   const composerPrimaryActionIcon = createMemo(() => composerPrimaryActionIsStop() ? FlowerStopIcon : composerPrimaryActionIsCommand() ? Clock : ArrowUp);
   const composerPrimaryActionLabel = createMemo(() => composerPrimaryActionIsStop() ? copy().chat.stop : composerPrimaryActionIsCommand() ? copy().chat.compactContext : copy().chat.send);
   const composerPrimaryActionDisabled = createMemo(() => {
     if (selectedComposerApprovalDisplayAction()) return true;
     if (selectedThreadDetailPending()) return true;
+    if (longTextPreparing()) return false;
     if (threadStopping() || chatRunning()) return true;
     if (selectedThreadReadOnly()) return true;
+    if (composerDraftLeaseConflict() || composerDraftLeaseAcquiring() || composerDraftInitiallyUnavailable()) return true;
     if (composerSlashCommand().kind === 'invalid') return true;
     if (composerPrimaryActionIsCommand()) {
-      return compactSubmitting() || !readyForChat() || !!selectedInputRequest() || !selectedThreadID() || !selectedThreadHasContent();
+      return composerHasAttachments() || compactSubmitting() || !readyForChat() || !!selectedInputRequest() || !selectedThreadID() || !selectedThreadHasContent();
     }
-    if (selectedThreadCanStop()) return false;
-    return !readyForChat() || !handlerAllowsSubmitIntent() || !composerChatDraftText();
+    if (composerHasAttachments() && !composerAttachmentsReady()) return true;
+    if (composerTextOverLimit() && !currentAttachmentSnapshot().capability?.supports_long_text) return true;
+    if (selectedThreadCanStop() && !composerTextOverLimit() && !composerHasAttachments()) return false;
+    const hasSendableText = composerTextOverLimit() ? composerChatDraftHasRawText() : Boolean(composerChatDraftText());
+    return !readyForChat() || !handlerAllowsSubmitIntent() || (!hasSendableText && !composerAttachmentsReady());
   });
   const composerPrimaryActionLoading = createMemo(() => (
-    threadStopping() || chatRunning() || (composerPrimaryActionIsCommand() && compactSubmitting())
+    threadStopping() || (chatRunning() && !longTextPreparing()) || (composerPrimaryActionIsCommand() && compactSubmitting())
   ));
 
   const questionAnswer = (question: FlowerInputRequestQuestion): FlowerInputAnswer | null => {
@@ -6736,10 +7635,13 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
       fallback={(
         <a
           class="flower-message-file"
-          href={(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).url}
-          download={(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).name}
-          target="_blank"
-          rel="noreferrer"
+          href={(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).url || undefined}
+          download={(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).url
+            ? (block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).name
+            : undefined}
+          target={(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).url ? '_blank' : undefined}
+          rel={(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).url ? 'noreferrer' : undefined}
+          aria-disabled={(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).url ? undefined : 'true'}
         >
           <FileText class="size-5 shrink-0" aria-hidden="true" />
           <span class="flower-message-file-copy">
@@ -6751,7 +7653,9 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               {(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).mimeType}
             </span>
           </span>
-          <ExternalLink class="size-4 shrink-0" aria-hidden="true" />
+          <Show when={(block() as Extract<FlowerRenderableMessageBlock, { type: 'file' }>).url}>
+            <ExternalLink class="size-4 shrink-0" aria-hidden="true" />
+          </Show>
         </a>
       )}
     >
@@ -7474,6 +8378,16 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
 
   const modelMenuItem = (option: ComposerModelOption) => {
     const selected = () => option.id === selectedComposerModelID();
+    const attachmentSupport = () => modelAttachmentSupportState(option.id);
+    const attachmentSupportLabel = () => {
+      switch (attachmentSupport()) {
+        case 'checking': return copy().attachments.modelSupportChecking;
+        case 'supported': return copy().attachments.modelSupported;
+        case 'unsupported': return copy().attachments.modelUnsupported;
+        case 'unavailable': return copy().attachments.modelSupportUnavailable;
+        default: return '';
+      }
+    };
     return (
       <button
         type="button"
@@ -7504,6 +8418,21 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
               <span> · Image</span>
             </Show>
           </span>
+          <Show when={attachmentSupport()} keyed>
+            {(state) => (
+              <span
+                class="flower-model-menu-attachment-status"
+                data-state={state}
+                aria-label={attachmentSupportLabel()}
+              >
+                {state === 'checking' && <Clock class="flower-model-menu-attachment-status-icon" aria-hidden="true" />}
+                {state === 'supported' && <Check class="flower-model-menu-attachment-status-icon" aria-hidden="true" />}
+                {state === 'unsupported' && <XCircle class="flower-model-menu-attachment-status-icon" aria-hidden="true" />}
+                {state === 'unavailable' && <AlertCircle class="flower-model-menu-attachment-status-icon" aria-hidden="true" />}
+                <span>{attachmentSupportLabel()}</span>
+              </span>
+            )}
+          </Show>
         </span>
         <Show when={selected()}>
           <Check class="flower-model-menu-check" aria-hidden="true" />
@@ -8052,6 +8981,32 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                 data-flower-approval-handoff={selectedComposerApprovalHandoffActive() ? 'true' : undefined}
                 data-flower-approval-handoff-phase={selectedComposerApprovalHandoffActive() ? selectedComposerApprovalHandoffPhase() : undefined}
                 data-flower-companion-compact={companionCompactComposer() ? 'true' : undefined}
+                data-flower-attachment-drag={attachmentDragActive() ? 'true' : undefined}
+                onDragEnter={(event) => {
+                  if (!event.dataTransfer?.types.includes('Files')) return;
+                  event.preventDefault();
+                  if (composerCanQueueAttachmentIntent()) setAttachmentDragActive(true);
+                }}
+                onDragOver={(event) => {
+                  if (!event.dataTransfer?.types.includes('Files')) return;
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = composerCanQueueAttachmentIntent() ? 'copy' : 'none';
+                }}
+                onDragLeave={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setAttachmentDragActive(false);
+                }}
+                onDrop={(event) => {
+                  setAttachmentDragActive(false);
+                  if (!event.dataTransfer?.types.includes('Files')) return;
+                  event.preventDefault();
+                  const files = Array.from(event.dataTransfer?.files ?? []);
+                  if (files.length === 0) return;
+                  if (!composerCanQueueAttachmentIntent()) {
+                    notifyComposerError(attachmentCopy().unavailable);
+                    return;
+                  }
+                  queueComposerAttachmentIntent(currentComposerSessionKey(), { kind: 'add', files, source: 'drop' });
+                }}
               >
                 <Show when={companionCollapsed() && !companionSummaryVisible()}>
                   <span
@@ -8148,6 +9103,95 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                   aria-hidden={companionActionVisible() || companionSummaryVisible() ? 'true' : undefined}
                   inert={companionActionVisible() || companionSummaryVisible()}
                 >
+                <input
+                  ref={attachmentPickerRef}
+                  class="flower-visually-hidden"
+                  type="file"
+                  multiple
+                  tabIndex={-1}
+                  aria-hidden="true"
+                  onChange={(event) => {
+                    const files = Array.from(event.currentTarget.files ?? []);
+                    event.currentTarget.value = '';
+                    const pickerSessionKey = attachmentPickerSessionKey || currentComposerSessionKey();
+                    attachmentPickerSessionKey = '';
+                    const target = attachmentReselectTarget;
+                    attachmentReselectTarget = null;
+                    if (pickerSessionKey && currentComposerSessionKey() === pickerSessionKey) {
+                      scheduleComposerSelection(
+                        composerRef instanceof HTMLTextAreaElement ? composerRef.selectionStart : 0,
+                        composerRef instanceof HTMLTextAreaElement ? composerRef.selectionEnd : 0,
+                        pickerSessionKey,
+                      );
+                    }
+                    if (target) {
+                      if (files[0] && currentComposerSessionKey() === target.sessionKey) {
+                        queueComposerAttachmentIntent(target.sessionKey, {
+                          kind: 'reselect',
+                          localID: target.localID,
+                          file: files[0],
+                        });
+                      }
+                      return;
+                    }
+                    if (files.length === 0) return;
+                    queueComposerAttachmentIntent(pickerSessionKey, { kind: 'add', files, source: 'file' });
+                  }}
+                  onCancel={() => {
+                    const pickerSessionKey = attachmentPickerSessionKey;
+                    attachmentPickerSessionKey = '';
+                    attachmentReselectTarget = null;
+                    if (pickerSessionKey && currentComposerSessionKey() === pickerSessionKey) {
+                      scheduleComposerSelection(
+                        composerRef instanceof HTMLTextAreaElement ? composerRef.selectionStart : 0,
+                        composerRef instanceof HTMLTextAreaElement ? composerRef.selectionEnd : 0,
+                        pickerSessionKey,
+                      );
+                    }
+                  }}
+                />
+                <Show when={composerHasAttachments() && !selectedInputRequest() && !selectedComposerApprovalDisplayAction()}>
+                  <FlowerAttachmentLane
+                    items={composerAttachmentItems()}
+                    copy={attachmentCopy()}
+                    disabled={!composerAttachmentEditingAllowed() || composerDraftLeaseConflict() || composerDraftInitiallyUnavailable()}
+                    onRetry={(localID) => withComposerDraftLease(() => currentAttachmentController().retry(localID))}
+                    onReselect={reselectAttachment}
+                    onCancel={(localID) => withComposerDraftLease(() => currentAttachmentController().cancel(localID))}
+                    onRemove={(localID) => withComposerDraftLease(() => currentAttachmentController().remove(localID))}
+                    onRestore={(localID) => void restoreLongTextAttachment(localID)}
+                    onPreview={props.adapter.previewStagedAttachment ? previewStagedAttachment : undefined}
+                    onCopyReference={(item) => void copyAttachmentReference(item)}
+                    onFocusFallback={() => attachmentPickerButtonRef?.focus()}
+                  />
+                </Show>
+                <Show when={composerDraftLeaseConflict()}>
+                  <div class="flower-composer-draft-conflict" role="status">
+                    <span>{attachmentCopy().leaseConflict}</span>
+                    <button type="button" onClick={() => void acquireComposerDraftLease(true)}>{attachmentCopy().takeOver}</button>
+                  </div>
+                </Show>
+                <Show when={composerDraftStoreUnavailable()}>
+                  <div class="flower-composer-draft-conflict" role="status">
+                    <span>{attachmentCopy().draftUnsaved}</span>
+                  </div>
+                </Show>
+                <Show when={composerDraftInitiallyUnavailable()}>
+                  <div class="flower-composer-draft-conflict" role="status">
+                    <span>{attachmentCopy().draftUnavailable}</span>
+                    <button type="button" onClick={() => void acquireComposerDraftLease()}>{attachmentCopy().retry}</button>
+                  </div>
+                </Show>
+                <Show when={(selectedInputRequest() || selectedComposerApprovalDisplayAction()) && (composerChatDraftHasRawText() || composerHasAttachments())}>
+                  <div class="flower-composer-draft-presence" role="status">
+                    {attachmentCopy().pendingDraft}
+                  </div>
+                </Show>
+                <Show when={composerTextOverLimit() && !selectedInputRequest()}>
+                  <div class="flower-composer-over-limit" role="status">
+                    {attachmentCopy().overLimit(FLOWER_INLINE_TEXT_CODE_POINT_LIMIT)}
+                  </div>
+                </Show>
                 <Show
                   when={trimString(selectedComposerApprovalDisplayAction()?.action_id)}
                   keyed
@@ -8175,15 +9219,29 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                                 : undefined}
                             aria-activedescendant={composerCommandMenuVisible() ? FLOWER_COMPOSER_COMPACT_COMMAND_OPTION_ID : undefined}
                             aria-describedby={companionCollapsed() ? companionDescriptionID() : undefined}
-                            onFocus={() => {
+                            onFocus={(event) => {
                               setComposerFocused(true);
+                              const target = event.currentTarget;
+                              const selectionStart = target.selectionStart;
+                              const selectionEnd = target.selectionEnd;
+                              const sessionKey = currentComposerSessionKey();
+                              void acquireComposerDraftLease().then((owned) => {
+                                if (!owned || currentComposerSessionKey() !== sessionKey) return;
+                                if (document.activeElement !== target && document.activeElement !== document.body) return;
+                                if (target.selectionStart !== selectionStart || target.selectionEnd !== selectionEnd) return;
+                                scheduleComposerSelection(
+                                  selectionStart,
+                                  selectionEnd,
+                                  sessionKey,
+                                  target.value,
+                                  { start: selectionStart, end: selectionEnd },
+                                );
+                              });
                               if (companionCollapsed()) props.onCompanionOpenRequest?.();
                             }}
                             onBlur={() => setComposerFocused(false)}
-                            onInput={(event) => {
-                              if (companionCollapsed()) props.onCompanionOpenRequest?.();
-                              updateComposerText(event.currentTarget.value);
-                            }}
+                            onInput={handleComposerTextInput}
+                            onPaste={handleComposerPaste}
                             onCompositionStart={() => {
                               setIsComposing(true);
                               if (companionCollapsed()) props.onCompanionOpenRequest?.();
@@ -8191,6 +9249,7 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                             onCompositionEnd={(event) => {
                               setIsComposing(false);
                               updateComposerText(event.currentTarget.value);
+                              withComposerDraftLease(() => undefined);
                             }}
                             onKeyDown={handleComposerKeyDown}
                           />
@@ -8285,6 +9344,23 @@ export const FlowerSurface: Component<FlowerSurfaceProps> = (props) => {
                       </Show>
                     </div>
                     <div class="flower-composer-actions">
+                      <Show when={composerAttachmentEditingAllowed()}>
+                        <button
+                          ref={attachmentPickerButtonRef}
+                          type="button"
+                          class="flower-composer-attachment-button"
+                          aria-label={composerCanAddAttachments() ? attachmentCopy().add : attachmentCopy().unavailable}
+                          title={composerCanAddAttachments() ? attachmentCopy().add : attachmentCopy().unavailable}
+                          disabled={!composerCanAddAttachments()}
+                          onClick={() => {
+                            attachmentPickerSessionKey = currentComposerSessionKey();
+                            attachmentReselectTarget = null;
+                            attachmentPickerRef?.click();
+                          }}
+                        >
+                          <Paperclip class="h-4 w-4" aria-hidden="true" />
+                        </button>
+                      </Show>
                       <Show when={!companionCompactComposer() && selectedContextUsage()}>
                         {(contextUsage) => (
                           <FlowerComposerContextIndicator

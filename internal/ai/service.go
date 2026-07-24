@@ -401,6 +401,16 @@ func NewServiceContext(ctx context.Context, opts Options) (*Service, error) {
 		svc.skillManager.Discover()
 	}
 	svc.threadMgr = newThreadManager(svc)
+	uploadRecoveryCtx, cancelUploadRecovery := context.WithTimeout(ctx, persistTO)
+	interruptedUploads, uploadRecoveryErr := svc.interruptUploadAttemptsFromPreviousProcess(uploadRecoveryCtx)
+	cancelUploadRecovery()
+	if uploadRecoveryErr != nil {
+		closeServiceBeforeMaintenance(svc)
+		return nil, fmt.Errorf("recover interrupted uploads: %w", uploadRecoveryErr)
+	}
+	if interruptedUploads > 0 {
+		logger.Info("ai: interrupted upload recovery completed", "count", interruptedUploads)
+	}
 	deleteReplayCtx, cancelDeleteReplay := context.WithTimeout(ctx, persistTO)
 	deleteReplayCount, deleteReplayErr := svc.replayAllPendingThreadDeletesForStartup(deleteReplayCtx, threadDeleteReplayBatchSize)
 	cancelDeleteReplay()
@@ -1656,7 +1666,7 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 		return admittedUserTurn{}, req.Input, errors.New("invalid request")
 	}
 
-	preparedUser, normalizedInput, err := s.prepareUserTurn(ctx, meta, endpointID, threadID, req.Input)
+	preparedUser, normalizedInput, err := s.prepareUserTurn(ctx, meta, endpointID, threadID, req.Model, req.Input, req.DraftID, req.ExpectedDraftRevision)
 	if err != nil {
 		return admittedUserTurn{}, req.Input, err
 	}
@@ -1713,14 +1723,23 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 			QueueID: commandID, EndpointID: endpointID, ThreadID: threadID,
 			ChannelID: strings.TrimSpace(meta.ChannelID), Lane: threadstore.FollowupLaneQueued,
 			TurnID: prepared.turnID, RunID: runID, ModelID: strings.TrimSpace(req.Model),
-			TextContent: strings.TrimSpace(normalizedInput.Text), AttachmentsJSON: attachmentsJSON,
+			TextContent: normalizedInput.Text, AttachmentsJSON: attachmentsJSON,
 			ContextActionJSON: contextActionJSON, OptionsJSON: optionsJSON, SessionMetaJSON: sessionMetaJSON,
 			CreatedByUserPublicID: strings.TrimSpace(meta.UserPublicID), CreatedByUserEmail: strings.TrimSpace(meta.UserEmail),
 			CreatedAtUnixMs: preparedUser.CreatedAtUnixMs,
 		}
 		pctx, cancel := context.WithTimeout(ctx, prepared.persistTO)
 		if sourceID != "" {
-			replacement, replaceErr := prepared.db.ReplaceFollowupWithUploadRefs(pctx, sourceID, record, preparedUser.UploadIDs, preparedUser.CreatedAtUnixMs)
+			var replacement threadstore.FollowupReplacementResult
+			var replaceErr error
+			if preparedUser.DraftID != "" && preparedUser.ExpectedDraftRevision != nil {
+				replacement, replaceErr = prepared.db.ReplaceFollowupFromComposerDraft(pctx, sourceID, record, preparedUser.UploadIDs, preparedUser.CreatedAtUnixMs, threadstore.ComposerDraftAdmission{
+					OwnerUserHash: preparedUser.OwnerUserHash, DraftID: preparedUser.DraftID, ExpectedRevision: *preparedUser.ExpectedDraftRevision,
+					Attachment: preparedUser.AttachmentAdmission,
+				})
+			} else {
+				replacement, replaceErr = prepared.db.ReplaceFollowupWithAttachmentAdmission(pctx, sourceID, record, preparedUser.UploadIDs, preparedUser.CreatedAtUnixMs, preparedUser.AttachmentAdmission)
+			}
 			cancel()
 			if replaceErr != nil {
 				s.releasePreparedRun(prepared)
@@ -1730,7 +1749,16 @@ func (s *Service) startUserTurnDetached(ctx context.Context, meta *session.Meta,
 				s.log.Warn("pending turn replacement physical cleanup deferred", "thread_id", threadID, "source_followup_id", sourceID, "error", cleanupErr)
 			}
 		} else {
-			_, _, _, err = prepared.db.CreateFollowupWithUploadRefs(pctx, record, preparedUser.UploadIDs, preparedUser.CreatedAtUnixMs)
+			if preparedUser.DraftID != "" && preparedUser.ExpectedDraftRevision != nil {
+				_, _, _, err = prepared.db.CreateFollowupFromComposerDraft(pctx, record, preparedUser.UploadIDs, preparedUser.CreatedAtUnixMs, threadstore.ComposerDraftAdmission{
+					OwnerUserHash:    preparedUser.OwnerUserHash,
+					DraftID:          preparedUser.DraftID,
+					ExpectedRevision: *preparedUser.ExpectedDraftRevision,
+					Attachment:       preparedUser.AttachmentAdmission,
+				})
+			} else {
+				_, _, _, err = prepared.db.CreateFollowupWithAttachmentAdmission(pctx, record, preparedUser.UploadIDs, preparedUser.CreatedAtUnixMs, preparedUser.AttachmentAdmission)
+			}
 			cancel()
 			if err != nil {
 				s.releasePreparedRun(prepared)

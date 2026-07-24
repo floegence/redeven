@@ -2,8 +2,11 @@ package ai
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,6 +17,171 @@ import (
 	"github.com/floegence/redeven/internal/ai/threadstore"
 	"github.com/floegence/redeven/internal/session"
 )
+
+func attachmentAdmissionContractForTest(t *testing.T, svc *Service, ownerHash, modelID string) threadstore.AttachmentAdmission {
+	t.Helper()
+	svc.mu.Lock()
+	cfg := svc.cfg
+	svc.mu.Unlock()
+	resolved, err := svc.resolveRunModel(context.Background(), cfg, modelID, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	capability := svc.AttachmentCapabilities(context.Background(), resolved.ID)
+	routes := make(map[string]string, len(capability.MediaTypes))
+	for _, route := range capability.MediaTypes {
+		routes[strings.ToLower(strings.TrimSpace(route.MediaType))] = route.Mode
+	}
+	return threadstore.AttachmentAdmission{
+		OwnerUserHash: ownerHash, CapabilityRevision: capability.Revision,
+		MaxCount: capability.MaxCount, MaxTurnBytes: capability.MaxTurnBytes,
+		SupportsLongText: capability.SupportsLongText, Routes: routes,
+	}
+}
+
+func saveTestUpload(t *testing.T, svc *Service, meta *session.Meta, body string, name string, mimeType string) *UploadResponse {
+	t.Helper()
+	owner, err := NewUploadOwner(meta.EndpointID, meta.UserPublicID, meta.ChannelID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256([]byte(body))
+	nameDigest := sha256.Sum256([]byte(name))
+	out, err := svc.SaveUpload(context.Background(), SaveUploadRequest{
+		Owner: owner, Reader: strings.NewReader(body), DisplayName: name, DeclaredMediaType: mimeType,
+		Source: threadstore.UploadSourceFile, UploadRequestID: "req_" + name, DraftID: "draft_" + name,
+		ExpectedContentSHA256: fmt.Sprintf("%x", digest[:]), ExpectedSizeBytes: int64(len(body)),
+		DisplayNameSHA256: fmt.Sprintf("%x", nameDigest[:]),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func TestStartupInterruptsReceivingUploadAttemptsWithoutRecoveryDelay(t *testing.T) {
+	t.Parallel()
+	svc := newTestService(t, nil)
+	owner, err := NewUploadOwner("env_startup_upload", "user_startup_upload", "channel_startup_upload")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := []byte("renamed before crash")
+	req := uploadRequestForTest(t, owner, "request_startup_interrupted", body, threadstore.UploadSourceFile)
+	uploadID, err := newUploadID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	attempt := threadstore.UploadAttemptRecord{
+		EndpointID: owner.EndpointID, OwnerUserHash: owner.OwnerUserHash,
+		UploadRequestID: req.UploadRequestID, RequestFingerprint: uploadRequestFingerprint(req, req.DisplayName),
+		UploadID: uploadID, CreatedAtUnixMs: time.Now().Add(-time.Second).UnixMilli(),
+	}
+	if _, created, err := svc.threadsDB.ReserveUploadAttempt(t.Context(), attempt); err != nil || !created {
+		t.Fatalf("ReserveUploadAttempt created=%v err=%v", created, err)
+	}
+	for _, suffix := range []string{".data", ".data.tmp"} {
+		if err := os.WriteFile(filepath.Join(svc.uploadsDir, uploadID+suffix), body, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	count, err := svc.interruptUploadAttemptsFromPreviousProcess(t.Context())
+	if err != nil || count != 1 {
+		t.Fatalf("startup recovery count=%d err=%v", count, err)
+	}
+	for _, suffix := range []string{".data", ".data.tmp"} {
+		if _, err := os.Stat(filepath.Join(svc.uploadsDir, uploadID+suffix)); !os.IsNotExist(err) {
+			t.Fatalf("interrupted artifact %s remains: %v", suffix, err)
+		}
+	}
+	reserved, created, err := svc.threadsDB.ReserveUploadAttempt(t.Context(), attempt)
+	if err != nil || created || reserved.Status != threadstore.UploadAttemptFailed {
+		t.Fatalf("interrupted attempt=%#v created=%v err=%v", reserved, created, err)
+	}
+}
+
+func stageTestDraftAttachment(t *testing.T, svc *Service, meta *session.Meta, draftID string, body string, name string, mimeType string) (*UploadResponse, int64) {
+	t.Helper()
+	return stageTestDraftAttachmentValue(t, svc, meta, draftID, "", threadstore.ComposerDraftModeOrdinary, "", "", body, name, mimeType)
+}
+
+func stageTestAdmissionDraftAttachment(t *testing.T, svc *Service, meta *session.Meta, draftID string, turnID string, text string, modelID string, body string, name string, mimeType string) (*UploadResponse, int64) {
+	t.Helper()
+	return stageTestDraftAttachmentValue(t, svc, meta, draftID, text, threadstore.ComposerDraftModeAdmissionInFlight, turnID, modelID, body, name, mimeType)
+}
+
+func stageTestDraftAttachmentValue(t *testing.T, svc *Service, meta *session.Meta, draftID string, text string, mode string, turnID string, modelID string, body string, name string, mimeType string) (*UploadResponse, int64) {
+	t.Helper()
+	svc.mu.Lock()
+	cfg := svc.cfg
+	svc.mu.Unlock()
+	resolvedModel, err := svc.resolveRunModel(context.Background(), cfg, modelID, "", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	modelID = resolvedModel.ID
+	capability := svc.AttachmentCapabilities(context.Background(), modelID)
+	owner, err := NewUploadOwner(meta.EndpointID, meta.UserPublicID, meta.ChannelID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	digest := sha256.Sum256([]byte(body))
+	nameDigest := sha256.Sum256([]byte(name))
+	upload, err := svc.SaveUpload(context.Background(), SaveUploadRequest{
+		Owner: owner, Reader: strings.NewReader(body), DisplayName: name, DeclaredMediaType: mimeType,
+		Source: threadstore.UploadSourceFile, UploadRequestID: "req_" + draftID + "_" + name, DraftID: draftID,
+		ExpectedContentSHA256: fmt.Sprintf("%x", digest[:]), ExpectedSizeBytes: int64(len(body)),
+		DisplayNameSHA256: fmt.Sprintf("%x", nameDigest[:]),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	holderID := "test_surface_" + draftID
+	lease, err := svc.AcquireComposerDraftLease(context.Background(), owner, draftID, holderID, false)
+	if err != nil || lease.State != "owned" || lease.Draft.LeaseID == "" {
+		t.Fatalf("AcquireComposerDraftLease: result=%#v err=%v", lease, err)
+	}
+	draftValue := map[string]any{
+		"text": text, "mode": mode, "model_id": modelID, "capability_revision": capability.Revision,
+		"attachments": []map[string]any{{
+			"local_id": "local_" + upload.AttachmentID, "source": "file", "ordinal": 1,
+			"staged": map[string]any{
+				"attachment_id": upload.AttachmentID, "name": upload.Name, "media_type": upload.MimeType,
+				"size_bytes": upload.SizeBytes, "digest_sha256": upload.ContentSHA256,
+				"locator": upload.LogicalLocator, "source": "file", "capability_revision": capability.Revision,
+			},
+		}},
+	}
+	if mode == threadstore.ComposerDraftModeAdmissionInFlight {
+		draftValue["admission_started"] = true
+		draftValue["proposed_turn_id"] = turnID
+	}
+	value, err := json.Marshal(draftValue)
+	if err != nil {
+		t.Fatal(err)
+	}
+	draft, err := svc.MutateComposerDraft(context.Background(), owner, ComposerDraftMutationRequest{
+		ScopeID: draftID, HolderID: holderID, LeaseID: lease.Draft.LeaseID,
+		ExpectedRevision: lease.Draft.Revision, Value: value,
+	})
+	if err != nil {
+		t.Fatalf("MutateComposerDraft: %v", err)
+	}
+	return upload, draft.Revision
+}
+
+func enqueueTestAdmissionDraftAttachment(t *testing.T, svc *Service, meta *session.Meta, threadID string, draftID string, turnID string, text string, body string, name string, mimeType string) (*UploadResponse, threadstore.QueuedTurn) {
+	t.Helper()
+	upload, revision := stageTestAdmissionDraftAttachment(t, svc, meta, draftID, turnID, text, "", body, name, mimeType)
+	queued, _, err := svc.enqueueQueuedTurn(context.Background(), meta, SendUserTurnRequest{
+		ThreadID: threadID, DraftID: draftID, ExpectedDraftRevision: &revision,
+		Input: RunInput{TurnID: turnID, Text: text, Attachments: []RunAttachmentIn{{AttachmentID: upload.AttachmentID}}},
+	})
+	if err != nil {
+		t.Fatalf("enqueueQueuedTurn from composer draft: %v", err)
+	}
+	return upload, queued
+}
 
 func testUploadMeta() *session.Meta {
 	return &session.Meta{
@@ -31,7 +199,7 @@ func testUploadMeta() *session.Meta {
 func TestService_DeleteThreadRemovesOwnedUploadArtifacts(t *testing.T) {
 	t.Parallel()
 
-	svc := newTestService(t, nil)
+	svc := newSendTurnTestService(t)
 	meta := testUploadMeta()
 	ctx := context.Background()
 
@@ -39,16 +207,13 @@ func TestService_DeleteThreadRemovesOwnedUploadArtifacts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	upload, err := svc.SaveUpload(ctx, meta.EndpointID, strings.NewReader("cleanup"), "cleanup.txt", "text/plain", 0)
-	if err != nil {
-		t.Fatalf("SaveUpload: %v", err)
-	}
+	upload, queued := enqueueTestAdmissionDraftAttachment(t, svc, meta, thread.ThreadID, thread.ThreadID, "turn_cleanup", "cleanup", "cleanup", "cleanup.txt", "text/plain")
 	uploadID := parseUploadIDFromURL(upload.URL)
 	if uploadID == "" {
 		t.Fatalf("missing upload_id in URL %q", upload.URL)
 	}
-	if err := svc.threadsDB.BindUploadsToRef(ctx, meta.EndpointID, thread.ThreadID, threadstore.UploadRefKindThread, thread.ThreadID, []string{uploadID}, time.Now().UnixMilli()); err != nil {
-		t.Fatalf("BindUploadsToRef: %v", err)
+	if err := svc.threadsDB.CommitPendingTurnAdmission(ctx, meta.EndpointID, thread.ThreadID, queued.QueueID, queued.TurnID, []string{uploadID}, time.Now().UnixMilli()); err != nil {
+		t.Fatalf("CommitPendingTurnAdmission: %v", err)
 	}
 
 	dataPath := filepath.Join(svc.uploadsDir, uploadID+".data")
@@ -70,7 +235,7 @@ func TestService_DeleteThreadRemovesOwnedUploadArtifacts(t *testing.T) {
 func TestService_DeleteThreadKeepsSharedUploadUntilLastThread(t *testing.T) {
 	t.Parallel()
 
-	svc := newTestService(t, nil)
+	svc := newSendTurnTestService(t)
 	meta := testUploadMeta()
 	ctx := context.Background()
 
@@ -82,17 +247,15 @@ func TestService_DeleteThreadKeepsSharedUploadUntilLastThread(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateThread B: %v", err)
 	}
-	upload, err := svc.SaveUpload(ctx, meta.EndpointID, strings.NewReader("shared"), "shared.txt", "text/plain", 0)
-	if err != nil {
-		t.Fatalf("SaveUpload: %v", err)
-	}
+	upload, queued := enqueueTestAdmissionDraftAttachment(t, svc, meta, threadA.ThreadID, threadA.ThreadID, "turn_shared", "shared", "shared", "shared.txt", "text/plain")
 	uploadID := parseUploadIDFromURL(upload.URL)
 	dataPath := filepath.Join(svc.uploadsDir, uploadID+".data")
 
-	for _, threadID := range []string{threadA.ThreadID, threadB.ThreadID} {
-		if err := svc.threadsDB.BindUploadsToRef(ctx, meta.EndpointID, threadID, threadstore.UploadRefKindThread, threadID, []string{uploadID}, time.Now().UnixMilli()); err != nil {
-			t.Fatalf("BindUploadsToRef(%s): %v", threadID, err)
-		}
+	if err := svc.threadsDB.CommitPendingTurnAdmission(ctx, meta.EndpointID, threadA.ThreadID, queued.QueueID, queued.TurnID, []string{uploadID}, time.Now().UnixMilli()); err != nil {
+		t.Fatalf("CommitPendingTurnAdmission: %v", err)
+	}
+	if err := svc.threadsDB.BindUploadsToRef(ctx, meta.EndpointID, threadB.ThreadID, threadstore.UploadRefKindThread, threadB.ThreadID, []string{uploadID}, time.Now().UnixMilli()); err != nil {
+		t.Fatalf("BindUploadsToRef(%s): %v", threadB.ThreadID, err)
 	}
 
 	if _, err := svc.DeleteThread(ctx, meta, threadA.ThreadID, false); err != nil {
@@ -116,7 +279,7 @@ func TestService_DeleteThreadKeepsSharedUploadUntilLastThread(t *testing.T) {
 func TestService_DeleteFollowupRemovesUploadArtifacts(t *testing.T) {
 	t.Parallel()
 
-	svc := newTestService(t, nil)
+	svc := newSendTurnTestService(t)
 	meta := testUploadMeta()
 	ctx := context.Background()
 
@@ -124,21 +287,8 @@ func TestService_DeleteFollowupRemovesUploadArtifacts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateThread: %v", err)
 	}
-	upload, err := svc.SaveUpload(ctx, meta.EndpointID, strings.NewReader("followup"), "followup.txt", "text/plain", 0)
-	if err != nil {
-		t.Fatalf("SaveUpload: %v", err)
-	}
+	upload, queued := enqueueTestAdmissionDraftAttachment(t, svc, meta, thread.ThreadID, thread.ThreadID, "turn_followup", "queued", "followup", "followup.txt", "text/plain")
 	uploadID := parseUploadIDFromURL(upload.URL)
-	queued, _, err := svc.enqueueQueuedTurn(ctx, meta, SendUserTurnRequest{
-		ThreadID: thread.ThreadID,
-		Input: RunInput{
-			Text:        "queued",
-			Attachments: []RunAttachmentIn{{URL: upload.URL}},
-		},
-	})
-	if err != nil {
-		t.Fatalf("enqueueQueuedTurn: %v", err)
-	}
 
 	if err := svc.DeleteFollowup(ctx, meta, thread.ThreadID, queued.QueueID); err != nil {
 		t.Fatalf("DeleteFollowup: %v", err)
@@ -159,20 +309,8 @@ func TestQueuedTurnMissingAttachmentPreservesCommandAndOwnership(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	upload, err := svc.SaveUpload(ctx, meta.EndpointID, strings.NewReader("queued"), "queued.txt", "text/plain", 0)
-	if err != nil {
-		t.Fatal(err)
-	}
+	upload, queued := enqueueTestAdmissionDraftAttachment(t, svc, meta, thread.ThreadID, thread.ThreadID, "turn_queued_missing", "inspect queued attachment", "queued", "queued.txt", "text/plain")
 	uploadID := parseUploadIDFromURL(upload.URL)
-	queued, _, err := svc.enqueueQueuedTurn(ctx, meta, SendUserTurnRequest{
-		ThreadID: thread.ThreadID,
-		Input: RunInput{Text: "inspect queued attachment", Attachments: []RunAttachmentIn{{
-			Name: "queued.txt", MimeType: "text/plain", URL: upload.URL,
-		}}},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	db, err := sql.Open("sqlite", "file:"+filepath.Join(svc.stateDir, "ai", "threads.sqlite")+"?_pragma=busy_timeout(3000)")
 	if err != nil {
@@ -180,7 +318,7 @@ func TestQueuedTurnMissingAttachmentPreservesCommandAndOwnership(t *testing.T) {
 	}
 	db.SetMaxOpenConns(1)
 	defer func() { _ = db.Close() }()
-	missingAttachments := `[{"name":"missing.txt","mime_type":"text/plain","url":"/_redeven_proxy/api/ai/uploads/upl_missing"}]`
+	missingAttachments := `[{"attachment_id":"upl_aaaaaaaaaaaaaaaaaaaaaaaa"}]`
 	if _, err := db.ExecContext(ctx, `UPDATE ai_queued_turns SET attachments_json = ? WHERE queue_id = ?`, missingAttachments, queued.QueueID); err != nil {
 		t.Fatal(err)
 	}
@@ -241,8 +379,12 @@ func TestService_OpenUploadRejectsMismatchedEndpoint(t *testing.T) {
 		t.Fatalf("InsertUpload: %v", err)
 	}
 
-	if _, _, err := svc.OpenUpload(ctx, "env_other", uploadID); !errors.Is(err, sql.ErrNoRows) {
-		t.Fatalf("OpenUpload err=%v, want %v", err, sql.ErrNoRows)
+	owner, err := NewUploadOwner("env_other", "u_other", "ch_other")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.OpenUpload(ctx, owner, "draft_cleanup", uploadID); err == nil {
+		t.Fatal("OpenUpload unexpectedly accepted a mismatched owner")
 	}
 }
 

@@ -58,6 +58,60 @@ func TestRunInputRejectsLegacyMessageIdentityField(t *testing.T) {
 	}
 }
 
+func TestInlineTurnTextAdmissionUsesUnicodeCodePointsWithoutTrimming(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		text    string
+		wantErr bool
+	}{
+		{name: "49,999 ascii", text: strings.Repeat("a", 49_999)},
+		{name: "50,000 ascii", text: strings.Repeat("a", 50_000)},
+		{name: "50,001 ascii", text: strings.Repeat("a", 50_001), wantErr: true},
+		{name: "50,001 whitespace", text: strings.Repeat(" ", 50_001), wantErr: true},
+		{name: "50,001 CRLF code points", text: strings.Repeat("\r\n", 25_000) + "x", wantErr: true},
+		{name: "50,000 emoji", text: strings.Repeat("😀", 50_000)},
+		{name: "50,001 emoji", text: strings.Repeat("😀", 50_001), wantErr: true},
+	}
+	for _, testCase := range tests {
+		t.Run(testCase.name, func(t *testing.T) {
+			err := validateInlineTurnText(testCase.text)
+			if testCase.wantErr {
+				if !errors.Is(err, ErrLongTextAttachmentRequired) || err.Error() != LongTextAttachmentRequiredErrorCode {
+					t.Fatalf("error=%v, want stable %q", err, LongTextAttachmentRequiredErrorCode)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("validateInlineTurnText: %v", err)
+			}
+		})
+	}
+}
+
+func TestSendUserTurnRejectsLongInlineTextBeforeAdmissionSideEffects(t *testing.T) {
+	t.Parallel()
+
+	svc := newSendTurnTestService(t)
+	meta := testSendTurnMeta()
+	thread, err := svc.CreateThread(t.Context(), meta, "long inline", "", "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = svc.SendUserTurn(t.Context(), meta, SendUserTurnRequest{
+		ThreadID: thread.ThreadID,
+		Input:    RunInput{TurnID: "turn_long_inline", Text: strings.Repeat("\n", 50_001)},
+	})
+	if !errors.Is(err, ErrLongTextAttachmentRequired) || err.Error() != LongTextAttachmentRequiredErrorCode {
+		t.Fatalf("SendUserTurn error=%v, want %q", err, LongTextAttachmentRequiredErrorCode)
+	}
+	queued, countErr := svc.threadsDB.CountFollowupsByLane(t.Context(), meta.EndpointID, thread.ThreadID, threadstore.FollowupLaneQueued)
+	if countErr != nil || queued != 0 || svc.HasActiveThreadForEndpoint(meta.EndpointID, thread.ThreadID) {
+		t.Fatalf("rejected admission side effects: queued=%d active=%t err=%v", queued, svc.HasActiveThreadForEndpoint(meta.EndpointID, thread.ThreadID), countErr)
+	}
+}
+
 func TestSendUserTurnRejectsInvalidExplicitTurnIDWithoutAdmissionSideEffects(t *testing.T) {
 	t.Parallel()
 
@@ -144,6 +198,21 @@ func TestAdmissionRPCDecodersRejectLegacyAndInvalidTurnIdentityWithoutSideEffect
 
 	callInvalid(TypeID_AI_SEND_USER_TURN, `{"thread_id":"`+thread.ThreadID+`","input":{"message_id":"legacy","text":"must fail","attachments":[]},"options":{}}`)
 	callInvalid(TypeID_AI_SEND_USER_TURN, `{"thread_id":"`+thread.ThreadID+`","input":{"turn_id":"invalid turn id","text":"must fail","attachments":[]},"options":{}}`)
+	longPayload, err := json.Marshal(map[string]any{
+		"thread_id": thread.ThreadID,
+		"input":     map[string]any{"turn_id": "turn_rpc_long", "text": strings.Repeat("😀", 50_001), "attachments": []any{}},
+		"options":   map[string]any{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, rpcErr, err := client.Call(ctx, TypeID_AI_SEND_USER_TURN, longPayload)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rpcErr == nil || rpcErr.Code != 400 || rpcErr.Message == nil || *rpcErr.Message != LongTextAttachmentRequiredErrorCode {
+		t.Fatalf("long text rpc error=%#v, want code=400 message=%q", rpcErr, LongTextAttachmentRequiredErrorCode)
+	}
 	assertState(0)
 
 	prompt := testSingleQuestionPrompt("turn_rpc_waiting", "tool_rpc_waiting", "question_1", "Continue?", nil)

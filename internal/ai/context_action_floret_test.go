@@ -154,12 +154,8 @@ func TestFloretSupplementalContextKeepsFileContextOnly(t *testing.T) {
 	t.Parallel()
 
 	projection, err := floretContextProjectionForInput(RunInput{
-		Text: "review this",
-		Attachments: []RunAttachmentIn{{
-			Name:     "secret.txt",
-			MimeType: "text/plain",
-			URL:      "/_redeven_proxy/api/ai/uploads/upl_secret",
-		}},
+		Text:        "review this",
+		Attachments: []RunAttachmentIn{{AttachmentID: "upl_aaaaaaaaaaaaaaaaaaaaaaaa"}},
 		ContextAction: &ContextActionEnvelope{
 			SchemaVersion:       ContextActionSchemaVersion,
 			ActionID:            "assistant.ask.flower",
