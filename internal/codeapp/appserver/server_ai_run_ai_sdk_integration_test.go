@@ -321,12 +321,78 @@ func TestServer_AI_Run_UsesModelGatewayAndPersistsAssistantMessage(t *testing.T)
 			})
 		}
 
+		longThread, err := aiSvc.CreateThread(t.Context(), &meta, "long inline rejection", "", "", "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		longOwner, err := ai.NewUploadOwner(meta.EndpointID, meta.UserPublicID, meta.ChannelID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		longLease, err := aiSvc.AcquireComposerDraftLease(t.Context(), longOwner, longThread.ThreadID, "appserver-long-inline", false)
+		if err != nil || longLease.State != "owned" {
+			t.Fatalf("acquire long draft lease: result=%#v err=%v", longLease, err)
+		}
+		longText := strings.Repeat("😀", 50_001)
+		longTurnID := "turn_appserver_long_inline"
+		longDraftValue, _ := json.Marshal(map[string]any{
+			"text": longText, "attachments": []any{}, "mode": "admission_in_flight",
+			"model_id": "openai/gpt-5-mini", "proposed_turn_id": longTurnID, "admission_started": true,
+		})
+		longDraft, err := aiSvc.MutateComposerDraft(t.Context(), longOwner, ai.ComposerDraftMutationRequest{
+			ScopeID: longThread.ThreadID, HolderID: "appserver-long-inline", LeaseID: longLease.Draft.LeaseID,
+			ExpectedRevision: longLease.Draft.Revision, Value: longDraftValue,
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		longBody, _ := json.Marshal(map[string]any{
+			"thread_id": longThread.ThreadID, "draft_id": longThread.ThreadID,
+			"expected_draft_revision": longDraft.Revision, "model": "openai/gpt-5-mini",
+			"input":   map[string]any{"turn_id": longTurnID, "text": longText, "attachments": []any{}},
+			"options": map[string]any{},
+		})
+		longResponse := performServerRequest(
+			srv, http.MethodPost, "/_redeven_proxy/api/ai/threads/"+longThread.ThreadID+"/turns", envOrigin, string(longBody),
+		)
+		var longError struct {
+			OK        bool   `json:"ok"`
+			ErrorCode string `json:"error_code"`
+		}
+		if decodeErr := json.Unmarshal(longResponse.Body.Bytes(), &longError); decodeErr != nil {
+			t.Fatal(decodeErr)
+		}
+		if longResponse.Code != http.StatusBadRequest || longError.OK || longError.ErrorCode != ai.LongTextAttachmentRequiredErrorCode {
+			t.Fatalf("long inline response status=%d body=%s", longResponse.Code, longResponse.Body.String())
+		}
+		if stored, loadErr := aiSvc.LoadComposerDraft(t.Context(), longOwner, longThread.ThreadID); loadErr != nil || stored.Revision != longDraft.Revision {
+			t.Fatalf("rejected HTTP admission changed draft: stored=%#v err=%v", stored, loadErr)
+		}
+
 		const turnID = "turn_appserver_receipt"
+		owner, err := ai.NewUploadOwner(meta.EndpointID, meta.UserPublicID, meta.ChannelID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		lease, err := aiSvc.AcquireComposerDraftLease(t.Context(), owner, threadID, "appserver-integration", false)
+		if err != nil || lease.State != "owned" || lease.Draft.LeaseID == "" {
+			t.Fatalf("acquire draft lease: result=%#v err=%v", lease, err)
+		}
+		draft, err := aiSvc.MutateComposerDraft(t.Context(), owner, ai.ComposerDraftMutationRequest{
+			ScopeID: threadID, HolderID: "appserver-integration", LeaseID: lease.Draft.LeaseID,
+			ExpectedRevision: lease.Draft.Revision,
+			Value:            json.RawMessage(`{"text":"hi","attachments":[],"mode":"admission_in_flight","model_id":"openai/gpt-5-mini","proposed_turn_id":"turn_appserver_receipt","admission_started":true}`),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
 		body := map[string]any{
-			"thread_id": threadID,
-			"model":     "openai/gpt-5-mini",
-			"input":     map[string]any{"turn_id": turnID, "text": "hi", "attachments": []any{}},
-			"options":   map[string]any{"permission_type": "approval_required"},
+			"thread_id":               threadID,
+			"draft_id":                threadID,
+			"expected_draft_revision": draft.Revision,
+			"model":                   "openai/gpt-5-mini",
+			"input":                   map[string]any{"turn_id": turnID, "text": "hi", "attachments": []any{}},
+			"options":                 map[string]any{"permission_type": "approval_required"},
 		}
 		b, _ := json.Marshal(body)
 		req := httptest.NewRequest(http.MethodPost, "/_redeven_proxy/api/ai/threads/"+threadID+"/turns", bytes.NewBuffer(b))

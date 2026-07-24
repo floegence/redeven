@@ -115,8 +115,8 @@ describe('buildFlowerTimelineEntries', () => {
         prompt: 'Inspect the attachment',
         created_at_ms: 20,
         attachments: [
-          { name: 'screenshot.png', mime_type: 'image/png', url: '/api/uploads/image-1' },
-          { name: 'notes.txt', mime_type: 'text/plain', url: '/api/uploads/file-1' },
+          { attachment_id: 'image-1', name: 'screenshot.png', mime_type: 'image/png', size_bytes: 512, url: '/api/uploads/image-1' },
+          { attachment_id: 'file-1', name: 'notes.txt', mime_type: 'text/plain', size_bytes: 128, url: '/api/uploads/file-1' },
         ],
         context_action: contextAction,
       }],
@@ -171,7 +171,7 @@ describe('buildFlowerTimelineEntries', () => {
         turn_id: 'turn-invalid-attachment',
         prompt: 'inspect',
         created_at_ms: 20,
-        attachments: [{ name: 'notes.txt', mime_type: 'text/plain', url: '' }],
+        attachments: [{ attachment_id: '', name: 'notes.txt', mime_type: 'text/plain', size_bytes: 128 }],
       }],
     }))).toThrow(/queued turn turn-invalid-attachment attachment 0 is invalid/);
   });

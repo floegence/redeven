@@ -5,6 +5,11 @@
 
 ## 2026-07-24
 * **Dependency**: Upgraded to published Floret v0.26.0 and aligned dependency contracts, notices, compatibility review, and current-state OKF ownership before adopting the public Store maintenance workflow.
+* **Feature**: Added Flower file attachments and lossless automatic attachment staging for composer text above 50,000 Unicode code points.
+* **Security**: Bound provisional and committed draft claims to authenticated user scopes, required audience-specific download context and public Floret membership for canonical reads, and enforced transactional quotas plus digest verification.
+* **Storage**: Advanced threadstore to schema v6 with revisioned composer drafts, 30-day inactive-draft expiry, exact TurnID admission reconciliation, and last-reference cleanup that preserves bytes shared by other drafts, queues, threads, or forks.
+* **Boundary**: Integrated the canonical text statistics and prepared attachment request lifecycle from published Floret v0.26.0.
+* **UI**: Unified Activity, Workbench, Desktop, and mobile attachment drafts through revisioned leases, offline intent replay, upload progress, retry, cancellation, removal, preview, reference copy, and long-text restore.
 * **Feature**: Added Flower conversation deletion to Env App and Desktop through one confirmed destructive menu action, durable receipt handling, and a non-persistent stale-response retirement fence.
 * **Fix**: Serialized every delete replay through the thread lifecycle gate, treated missing Floret authority as terminal, excluded durable intent from product reads, and made failed delete integrity block every startup.
 * **Dependency**: Upgraded to published Floret v0.24.0 after removal of its obsolete single-thread deletion primitive.

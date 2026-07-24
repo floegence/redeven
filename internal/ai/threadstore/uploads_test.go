@@ -3,6 +3,7 @@ package threadstore
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -80,6 +81,363 @@ func TestStore_ThreadDeleteOperationRespectsSharedUploadRefs(t *testing.T) {
 	shared, err = s.GetUpload(ctx, "env_1", "upl_shared")
 	if err != nil || shared == nil || shared.State != UploadStateDeleting {
 		t.Fatalf("shared upload after second delete=%#v err=%v", shared, err)
+	}
+}
+
+func TestStore_ThreadDeleteOperationReleasesSameScopeDraftRefsWithoutDeletingSharedUploads(t *testing.T) {
+	t.Parallel()
+
+	store := openStoreForTest(t)
+	ctx := t.Context()
+	const endpointID = "env_delete_drafts"
+	const deletedThreadID = "thread_delete_drafts"
+	const retainingThreadID = "thread_retain_shared"
+	const otherDraftID = "thread_other_draft"
+	ownerHash := strings.Repeat("f", 64)
+	for _, threadID := range []string{deletedThreadID, retainingThreadID} {
+		if err := store.CreateThreadSettings(ctx, ThreadSettings{ThreadID: threadID, EndpointID: endpointID, PermissionType: "approval_required"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for _, uploadID := range []string{"upload_draft_only", "upload_draft_pending", "upload_shared_thread", "upload_other_draft"} {
+		if err := store.InsertUpload(ctx, composerDraftUploadForTest(endpointID, ownerHash, uploadID)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := store.BindUserUploadsToDraft(ctx, endpointID, ownerHash, deletedThreadID, []string{"upload_draft_only", "upload_shared_thread"}, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.ExecContext(ctx, `
+INSERT INTO ai_upload_refs(endpoint_id, upload_id, thread_id, ref_kind, ref_id, created_at_unix_ms)
+	VALUES(?, 'upload_draft_pending', ?, ?, ?, 1)
+	`, endpointID, deletedThreadID, UploadRefKindDraftPending, composerDraftUploadRefID(ownerHash, deletedThreadID)); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.BindUserUploadsToDraft(ctx, endpointID, ownerHash, otherDraftID, []string{"upload_other_draft"}, 1); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.db.ExecContext(ctx, `UPDATE ai_uploads SET state = ?, claimed_at_unix_ms = 2 WHERE endpoint_id = ? AND upload_id = 'upload_shared_thread'`, UploadStateLive, endpointID); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.BindUploadsToRef(ctx, endpointID, retainingThreadID, UploadRefKindThread, retainingThreadID, []string{"upload_shared_thread"}, 2); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.AcquireComposerDraftLease(ctx, endpointID, ownerHash, deletedThreadID, "surface_deleted", false, 1_000); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.AcquireComposerDraftLease(ctx, endpointID, ownerHash, otherDraftID, "surface_other", false, 1_000); err != nil {
+		t.Fatal(err)
+	}
+
+	operation, err := store.PrepareThreadDeleteOperation(ctx, endpointID, deletedThreadID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(operation.Snapshot.UploadCleanupIDs) != 3 {
+		t.Fatalf("cleanup snapshot=%v, want three same-scope uploads", operation.Snapshot.UploadCleanupIDs)
+	}
+	if _, err := store.ConfirmThreadDeleteFloretDeleted(ctx, operation.OperationID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CommitThreadDeleteProductData(ctx, operation.OperationID); err != nil {
+		t.Fatal(err)
+	}
+
+	if count := countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_composer_drafts WHERE endpoint_id = ? AND scope_id = ?`, endpointID, deletedThreadID); count != 0 {
+		t.Fatalf("deleted-scope composer drafts=%d, want 0", count)
+	}
+	if count := countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_upload_refs WHERE endpoint_id = ? AND thread_id = ? AND ref_kind IN (?, ?)`, endpointID, deletedThreadID, UploadRefKindDraft, UploadRefKindDraftPending); count != 0 {
+		t.Fatalf("deleted-scope draft refs=%d, want 0", count)
+	}
+	for _, uploadID := range []string{"upload_draft_only", "upload_draft_pending"} {
+		record, err := store.GetUpload(ctx, endpointID, uploadID)
+		if err != nil || record.State != UploadStateDeleting {
+			t.Fatalf("unshared upload %q=%#v err=%v, want deleting", uploadID, record, err)
+		}
+	}
+	shared, err := store.GetUpload(ctx, endpointID, "upload_shared_thread")
+	if err != nil || shared.State != UploadStateLive {
+		t.Fatalf("shared upload=%#v err=%v, want live", shared, err)
+	}
+	if count := countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_upload_refs WHERE endpoint_id = ? AND upload_id = 'upload_shared_thread' AND ref_kind = ? AND ref_id = ?`, endpointID, UploadRefKindThread, retainingThreadID); count != 1 {
+		t.Fatalf("retaining thread refs=%d, want 1", count)
+	}
+	other, err := store.GetUpload(ctx, endpointID, "upload_other_draft")
+	if err != nil || other.State != UploadStateStaged {
+		t.Fatalf("other-scope draft upload=%#v err=%v, want staged", other, err)
+	}
+	if count := countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_composer_drafts WHERE endpoint_id = ? AND scope_id = ?`, endpointID, otherDraftID); count != 1 {
+		t.Fatalf("other-scope composer drafts=%d, want 1", count)
+	}
+}
+
+func TestStoreThreadDeleteIntentRejectsLateComposerAndUploadClaims(t *testing.T) {
+	t.Parallel()
+
+	store := openStoreForTest(t)
+	ctx := t.Context()
+	const endpointID = "env_delete_claim_race"
+	const threadID = "thread_delete_claim_race"
+	ownerHash := strings.Repeat("a", 64)
+	if err := store.CreateThreadSettings(ctx, ThreadSettings{
+		ThreadID: threadID, EndpointID: endpointID, PermissionType: "approval_required",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	lease, err := store.AcquireComposerDraftLease(ctx, endpointID, ownerHash, threadID, "surface_delete_race", false, 1_000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	lateUpload := composerDraftUploadForTest(endpointID, ownerHash, "upload_after_delete_intent")
+	if err := store.InsertUpload(ctx, lateUpload); err != nil {
+		t.Fatal(err)
+	}
+	attempt := UploadAttemptRecord{
+		EndpointID: endpointID, OwnerUserHash: ownerHash, UploadRequestID: "request_after_delete_intent",
+		RequestFingerprint: strings.Repeat("b", 64), UploadID: "upload_attempt_after_delete", CreatedAtUnixMs: 1_001,
+	}
+	if _, created, err := store.ReserveUploadAttempt(ctx, attempt); err != nil || !created {
+		t.Fatalf("ReserveUploadAttempt created=%t err=%v", created, err)
+	}
+
+	operation, err := store.PrepareThreadDeleteOperation(ctx, endpointID, threadID, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(operation.Snapshot.UploadCleanupIDs) != 0 {
+		t.Fatalf("initial cleanup snapshot=%v, want empty", operation.Snapshot.UploadCleanupIDs)
+	}
+
+	checks := []struct {
+		name string
+		run  func() error
+	}{
+		{name: "acquire", run: func() error {
+			_, err := store.AcquireComposerDraftLease(ctx, endpointID, ownerHash, threadID, "surface_late", true, 1_002)
+			return err
+		}},
+		{name: "renew", run: func() error {
+			_, err := store.RenewComposerDraftLease(ctx, endpointID, ownerHash, threadID, "surface_delete_race", lease.Draft.LeaseID, 1_002)
+			return err
+		}},
+		{name: "mutate", run: func() error {
+			_, err := store.MutateComposerDraft(ctx, ComposerDraftMutation{
+				EndpointID: endpointID, OwnerUserHash: ownerHash, ScopeID: threadID,
+				HolderID: "surface_delete_race", LeaseID: lease.Draft.LeaseID, ExpectedRevision: lease.Draft.Revision,
+				Value: json.RawMessage(`{"text":"late","attachments":[],"mode":"ordinary"}`), NowUnixMs: 1_002,
+			})
+			return err
+		}},
+		{name: "bind draft claim", run: func() error {
+			return store.BindUserUploadsToDraft(ctx, endpointID, ownerHash, threadID, []string{lateUpload.UploadID}, 1_002)
+		}},
+		{name: "complete upload claim", run: func() error {
+			rec := composerDraftUploadForTest(endpointID, ownerHash, attempt.UploadID)
+			return store.CompleteUploadAttempt(ctx, attempt, rec, threadID)
+		}},
+	}
+	for _, check := range checks {
+		t.Run(check.name, func(t *testing.T) {
+			if err := check.run(); !errors.Is(err, ErrThreadIDRetired) {
+				t.Fatalf("error=%v, want %v", err, ErrThreadIDRetired)
+			}
+		})
+	}
+	if refs := countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_upload_refs WHERE endpoint_id = ? AND thread_id = ?`, endpointID, threadID); refs != 0 {
+		t.Fatalf("late draft refs=%d, want 0", refs)
+	}
+	if uploads := countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_uploads WHERE endpoint_id = ? AND upload_id = ?`, endpointID, attempt.UploadID); uploads != 0 {
+		t.Fatalf("late completed uploads=%d, want 0", uploads)
+	}
+	if _, err := store.ConfirmThreadDeleteFloretDeleted(ctx, operation.OperationID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.CommitThreadDeleteProductData(ctx, operation.OperationID); err != nil {
+		t.Fatal(err)
+	}
+	if drafts := countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_composer_drafts WHERE endpoint_id = ? AND scope_id = ?`, endpointID, threadID); drafts != 0 {
+		t.Fatalf("retired composer drafts=%d, want 0", drafts)
+	}
+}
+
+func TestStoreThreadDeleteSnapshotSerializesConcurrentComposerClaims(t *testing.T) {
+	type claimFixture struct {
+		operation string
+		uploadID  string
+		claim     func(context.Context) error
+	}
+	type prepareResult struct {
+		operation ThreadDeleteOperation
+		err       error
+	}
+
+	waitForBlockedTransaction := func(t *testing.T, store *Store, previousWaitCount int64, release chan struct{}) {
+		t.Helper()
+		deadline := time.Now().Add(5 * time.Second)
+		for store.db.Stats().WaitCount <= previousWaitCount {
+			if time.Now().After(deadline) {
+				close(release)
+				t.Fatal("competing transaction did not block behind the transaction barrier")
+			}
+			time.Sleep(time.Millisecond)
+		}
+	}
+	containsUpload := func(uploadIDs []string, uploadID string) bool {
+		for _, candidate := range uploadIDs {
+			if candidate == uploadID {
+				return true
+			}
+		}
+		return false
+	}
+
+	for _, claimKind := range []string{"complete", "bind", "mutate"} {
+		claimKind := claimKind
+		for _, firstOperation := range []string{"claim", "snapshot"} {
+			firstOperation := firstOperation
+			t.Run(claimKind+"_before_"+map[string]string{"claim": "snapshot", "snapshot": "claim"}[firstOperation], func(t *testing.T) {
+				store := openStoreForTest(t)
+				ctx := t.Context()
+				endpointID := "env_delete_snapshot_race_" + claimKind + "_" + firstOperation
+				threadID := "thread_delete_snapshot_race_" + claimKind + "_" + firstOperation
+				ownerHash := strings.Repeat("d", 64)
+				if err := store.CreateThreadSettings(ctx, ThreadSettings{
+					ThreadID: threadID, EndpointID: endpointID, PermissionType: "approval_required",
+				}); err != nil {
+					t.Fatal(err)
+				}
+
+				fixture := claimFixture{uploadID: "upload_delete_snapshot_race_" + claimKind + "_" + firstOperation}
+				switch claimKind {
+				case "complete":
+					attempt := UploadAttemptRecord{
+						EndpointID: endpointID, OwnerUserHash: ownerHash,
+						UploadRequestID: "request_delete_snapshot_race", RequestFingerprint: strings.Repeat("e", 64),
+						UploadID: fixture.uploadID, CreatedAtUnixMs: 1_001,
+					}
+					if _, created, err := store.ReserveUploadAttempt(ctx, attempt); err != nil || !created {
+						t.Fatalf("ReserveUploadAttempt created=%t err=%v", created, err)
+					}
+					fixture.operation = "complete_upload_attempt"
+					fixture.claim = func(claimCtx context.Context) error {
+						return store.CompleteUploadAttempt(claimCtx, attempt, composerDraftUploadForTest(endpointID, ownerHash, fixture.uploadID), threadID)
+					}
+				case "bind":
+					if err := store.InsertUpload(ctx, composerDraftUploadForTest(endpointID, ownerHash, fixture.uploadID)); err != nil {
+						t.Fatal(err)
+					}
+					fixture.operation = "bind_user_uploads_to_draft"
+					fixture.claim = func(claimCtx context.Context) error {
+						return store.BindUserUploadsToDraft(claimCtx, endpointID, ownerHash, threadID, []string{fixture.uploadID}, 1_002)
+					}
+				case "mutate":
+					if err := store.InsertUpload(ctx, composerDraftUploadForTest(endpointID, ownerHash, fixture.uploadID)); err != nil {
+						t.Fatal(err)
+					}
+					if err := store.BindUserUploadsToDraft(ctx, endpointID, ownerHash, threadID, []string{fixture.uploadID}, 1_002); err != nil {
+						t.Fatal(err)
+					}
+					lease, err := store.AcquireComposerDraftLease(ctx, endpointID, ownerHash, threadID, "surface_delete_snapshot_race", false, 1_003)
+					if err != nil {
+						t.Fatal(err)
+					}
+					fixture.operation = "mutate_composer_draft"
+					fixture.claim = func(claimCtx context.Context) error {
+						_, err := store.MutateComposerDraft(claimCtx, ComposerDraftMutation{
+							EndpointID: endpointID, OwnerUserHash: ownerHash, ScopeID: threadID,
+							HolderID: "surface_delete_snapshot_race", LeaseID: lease.Draft.LeaseID,
+							ExpectedRevision: lease.Draft.Revision,
+							Value:            composerDraftValueForTest("concurrent mutation", ComposerDraftModeOrdinary, fixture.uploadID),
+							NowUnixMs:        1_004,
+						})
+						return err
+					}
+				default:
+					t.Fatalf("unsupported claim fixture %q", claimKind)
+				}
+
+				entered := make(chan struct{})
+				release := make(chan struct{})
+				barrierFor := fixture.operation
+				if firstOperation == "snapshot" {
+					barrierFor = "prepare_thread_delete"
+				}
+				barrierCtx := context.WithValue(ctx, storeTransactionObserverContextKey{}, storeTransactionObserver(func(operation string) {
+					if operation != barrierFor {
+						return
+					}
+					close(entered)
+					<-release
+				}))
+
+				claimDone := make(chan error, 1)
+				prepareDone := make(chan prepareResult, 1)
+				if firstOperation == "claim" {
+					go func() { claimDone <- fixture.claim(barrierCtx) }()
+				} else {
+					go func() {
+						operation, err := store.PrepareThreadDeleteOperation(barrierCtx, endpointID, threadID, false)
+						prepareDone <- prepareResult{operation: operation, err: err}
+					}()
+				}
+				select {
+				case <-entered:
+				case <-time.After(5 * time.Second):
+					t.Fatal("first transaction did not reach the transaction barrier")
+				}
+
+				previousWaitCount := store.db.Stats().WaitCount
+				if firstOperation == "claim" {
+					go func() {
+						operation, err := store.PrepareThreadDeleteOperation(ctx, endpointID, threadID, false)
+						prepareDone <- prepareResult{operation: operation, err: err}
+					}()
+				} else {
+					go func() { claimDone <- fixture.claim(ctx) }()
+				}
+				waitForBlockedTransaction(t, store, previousWaitCount, release)
+				close(release)
+
+				claimErr := <-claimDone
+				prepared := <-prepareDone
+				if prepared.err != nil {
+					t.Fatalf("PrepareThreadDeleteOperation: %v", prepared.err)
+				}
+				if firstOperation == "claim" {
+					if claimErr != nil {
+						t.Fatalf("claim committed before snapshot: %v", claimErr)
+					}
+					if !containsUpload(prepared.operation.Snapshot.UploadCleanupIDs, fixture.uploadID) {
+						t.Fatalf("snapshot cleanup ids=%v, want committed claim %q", prepared.operation.Snapshot.UploadCleanupIDs, fixture.uploadID)
+					}
+				} else if !errors.Is(claimErr, ErrThreadIDRetired) {
+					t.Fatalf("claim after snapshot error=%v, want %v", claimErr, ErrThreadIDRetired)
+				}
+
+				if _, err := store.ConfirmThreadDeleteFloretDeleted(ctx, prepared.operation.OperationID); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := store.CommitThreadDeleteProductData(ctx, prepared.operation.OperationID); err != nil {
+					t.Fatal(err)
+				}
+				if refs := countRowsForTest(t, store.db, `
+SELECT COUNT(1) FROM ai_upload_refs
+WHERE endpoint_id = ? AND thread_id = ? AND ref_kind IN (?, ?)
+`, endpointID, threadID, UploadRefKindDraft, UploadRefKindDraftPending); refs != 0 {
+					t.Fatalf("draft claims escaped thread deletion: %d", refs)
+				}
+				if drafts := countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_composer_drafts WHERE endpoint_id = ? AND scope_id = ?`, endpointID, threadID); drafts != 0 {
+					t.Fatalf("composer draft escaped thread deletion: %d", drafts)
+				}
+				if firstOperation == "claim" {
+					upload, err := store.GetUpload(ctx, endpointID, fixture.uploadID)
+					if err != nil || upload.State != UploadStateDeleting {
+						t.Fatalf("snapshotted upload=%#v err=%v, want deleting after claim cleanup", upload, err)
+					}
+				}
+			})
+		}
 	}
 }
 

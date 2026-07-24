@@ -11,7 +11,7 @@ import (
 
 const (
 	threadstoreSchemaKind           = "ai_threadstore_product_v2"
-	threadstoreCurrentSchemaVersion = 4
+	threadstoreCurrentSchemaVersion = 6
 )
 
 // CurrentSchemaVersion returns the product-only threadstore schema version.
@@ -29,20 +29,33 @@ func threadstoreSchemaSpec() sqliteutil.Spec {
 		Migrations: []sqliteutil.Migration{
 			{FromVersion: 2, ToVersion: 3, Apply: migrateProductV2ToV3},
 			{FromVersion: 3, ToVersion: 4, Apply: migrateProductV3ToV4},
+			{FromVersion: 4, ToVersion: 5, Apply: migrateProductV4ToV5},
+			{FromVersion: 5, ToVersion: 6, Apply: migrateProductV5ToV6},
 		},
 		Verify: verifyThreadstoreSchema,
 	}
 }
 
 func createThreadstoreSchema(tx *sql.Tx) error {
-	return createThreadstoreSchemaWithFlowerTables(tx, createFlowerThreadRoutingTableTx)
+	if err := createThreadstoreSchemaWithFlowerTables(tx, createFlowerThreadRoutingTableTx, createUploadTablesTx); err != nil {
+		return err
+	}
+	return createComposerDraftsTableTx(tx)
+}
+
+func createThreadstoreSchemaV5(tx *sql.Tx) error {
+	return createThreadstoreSchemaWithFlowerTables(tx, createFlowerThreadRoutingTableTx, createUploadTablesTx)
+}
+
+func createThreadstoreSchemaV4(tx *sql.Tx) error {
+	return createThreadstoreSchemaWithFlowerTables(tx, createFlowerThreadRoutingTableTx, createUploadTablesV4Tx)
 }
 
 func createThreadstoreSchemaV3(tx *sql.Tx) error {
-	return createThreadstoreSchemaWithFlowerTables(tx, createLegacyFlowerTablesV3Tx)
+	return createThreadstoreSchemaWithFlowerTables(tx, createLegacyFlowerTablesV3Tx, createUploadTablesV4Tx)
 }
 
-func createThreadstoreSchemaWithFlowerTables(tx *sql.Tx, createFlowerTables func(*sql.Tx) error) error {
+func createThreadstoreSchemaWithFlowerTables(tx *sql.Tx, createFlowerTables func(*sql.Tx) error, createUploadTables func(*sql.Tx) error) error {
 	if _, err := tx.Exec(`
 CREATE TABLE ai_thread_settings (
   thread_id TEXT PRIMARY KEY,
@@ -69,7 +82,7 @@ CREATE INDEX idx_ai_thread_settings_endpoint_pinned_created ON ai_thread_setting
 	builders := []func(*sql.Tx) error{
 		createPendingTurnCommandsTableTx,
 		createProviderCapabilitiesTableTx,
-		createUploadTablesTx,
+		createUploadTables,
 		createFlowerTables,
 		createPermissionSnapshotTablesV3Tx,
 		createSubAgentPublicationOperationsTableTx,
@@ -123,7 +136,7 @@ CREATE INDEX idx_ai_threads_endpoint_pinned_created ON ai_threads(endpoint_id, p
 	builders := []func(*sql.Tx) error{
 		createPendingTurnCommandsTableTx,
 		createProviderCapabilitiesTableTx,
-		createUploadTablesTx,
+		createUploadTablesV4Tx,
 		createLegacyFlowerTablesV3Tx,
 		createPermissionSnapshotTablesV2Tx,
 		createFork,
@@ -185,7 +198,28 @@ CREATE TABLE provider_capabilities (
 	return err
 }
 
-func createUploadTablesTx(tx *sql.Tx) error {
+func createComposerDraftsTableTx(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+CREATE TABLE ai_composer_drafts (
+  endpoint_id TEXT NOT NULL,
+  owner_user_hash TEXT NOT NULL CHECK(length(owner_user_hash) = 64),
+  scope_id TEXT NOT NULL,
+  revision INTEGER NOT NULL DEFAULT 0 CHECK(revision >= 0),
+  value_json TEXT NOT NULL DEFAULT '{"text":"","attachments":[],"mode":"ordinary"}',
+  lease_id TEXT NOT NULL DEFAULT '',
+  lease_holder_id TEXT NOT NULL DEFAULT '',
+  lease_expires_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  created_at_unix_ms INTEGER NOT NULL,
+  updated_at_unix_ms INTEGER NOT NULL,
+  expires_at_unix_ms INTEGER NOT NULL,
+  PRIMARY KEY(endpoint_id, owner_user_hash, scope_id)
+);
+CREATE INDEX idx_ai_composer_drafts_expiry ON ai_composer_drafts(expires_at_unix_ms, endpoint_id, scope_id);
+`)
+	return err
+}
+
+func createUploadTablesV4Tx(tx *sql.Tx) error {
 	_, err := tx.Exec(`
 CREATE TABLE ai_uploads (
   upload_id TEXT PRIMARY KEY,
@@ -213,6 +247,70 @@ CREATE TABLE ai_upload_refs (
 CREATE UNIQUE INDEX idx_ai_upload_refs_unique_ref ON ai_upload_refs(endpoint_id, upload_id, ref_kind, ref_id);
 CREATE INDEX idx_ai_upload_refs_thread_upload ON ai_upload_refs(endpoint_id, thread_id, upload_id);
 CREATE INDEX idx_ai_upload_refs_upload ON ai_upload_refs(endpoint_id, upload_id);
+`)
+	return err
+}
+
+func createUploadTablesTx(tx *sql.Tx) error {
+	if err := createUploadResourcesV5Tx(tx); err != nil {
+		return err
+	}
+	_, err := tx.Exec(`
+CREATE TABLE ai_upload_refs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  endpoint_id TEXT NOT NULL,
+  upload_id TEXT NOT NULL,
+  thread_id TEXT NOT NULL,
+  ref_kind TEXT NOT NULL,
+  ref_id TEXT NOT NULL,
+  created_at_unix_ms INTEGER NOT NULL
+);
+CREATE UNIQUE INDEX idx_ai_upload_refs_unique_ref ON ai_upload_refs(endpoint_id, upload_id, ref_kind, ref_id);
+CREATE INDEX idx_ai_upload_refs_thread_upload ON ai_upload_refs(endpoint_id, thread_id, upload_id);
+CREATE INDEX idx_ai_upload_refs_upload ON ai_upload_refs(endpoint_id, upload_id);
+`)
+	return err
+}
+
+func createUploadResourcesV5Tx(tx *sql.Tx) error {
+	_, err := tx.Exec(`
+CREATE TABLE ai_uploads (
+  upload_id TEXT PRIMARY KEY,
+  endpoint_id TEXT NOT NULL,
+  owner_scope_kind TEXT NOT NULL CHECK(owner_scope_kind IN ('user', 'legacy_thread', 'legacy_staged_quarantine')),
+  owner_user_hash TEXT,
+  storage_relpath TEXT NOT NULL,
+  name TEXT NOT NULL DEFAULT '',
+  declared_media_type TEXT NOT NULL DEFAULT '',
+  detected_media_type TEXT NOT NULL DEFAULT 'application/octet-stream',
+  size_bytes INTEGER NOT NULL DEFAULT 0 CHECK(size_bytes >= 0),
+  content_sha256 TEXT NOT NULL DEFAULT '',
+  unicode_code_points INTEGER CHECK(unicode_code_points IS NULL OR unicode_code_points >= 0),
+  logical_line_count INTEGER CHECK(logical_line_count IS NULL OR logical_line_count >= 0),
+  source TEXT NOT NULL DEFAULT 'uploaded_file' CHECK(source IN ('uploaded_file', 'long_text')),
+  state TEXT NOT NULL DEFAULT 'staged' CHECK(state IN ('staged', 'live', 'deleting')),
+  created_at_unix_ms INTEGER NOT NULL,
+  claimed_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  delete_after_unix_ms INTEGER NOT NULL DEFAULT 0,
+  CHECK((owner_scope_kind = 'user' AND owner_user_hash IS NOT NULL AND length(owner_user_hash) = 64 AND length(content_sha256) = 64) OR
+        (owner_scope_kind <> 'user' AND owner_user_hash IS NULL))
+);
+CREATE INDEX idx_ai_uploads_endpoint_owner_created ON ai_uploads(endpoint_id, owner_user_hash, created_at_unix_ms DESC, upload_id DESC);
+CREATE INDEX idx_ai_uploads_state_delete_after ON ai_uploads(endpoint_id, state, delete_after_unix_ms, created_at_unix_ms);
+CREATE TABLE ai_upload_attempts (
+  endpoint_id TEXT NOT NULL,
+  owner_user_hash TEXT NOT NULL,
+  upload_request_id TEXT NOT NULL,
+  request_fingerprint TEXT NOT NULL,
+  upload_id TEXT NOT NULL,
+  status TEXT NOT NULL CHECK(status IN ('receiving', 'complete', 'failed')),
+  error_code TEXT NOT NULL DEFAULT '',
+  created_at_unix_ms INTEGER NOT NULL,
+  updated_at_unix_ms INTEGER NOT NULL,
+  PRIMARY KEY(endpoint_id, owner_user_hash, upload_request_id),
+  UNIQUE(upload_id)
+);
+CREATE INDEX idx_ai_upload_attempts_status_updated ON ai_upload_attempts(status, updated_at_unix_ms, upload_id);
 `)
 	return err
 }
@@ -596,6 +694,10 @@ func expectedProductSchemaContract(version int) ([]canonicalSchemaObject, error)
 		build = createThreadstoreSchemaV2
 	case 3:
 		build = createThreadstoreSchemaV3
+	case 4:
+		build = createThreadstoreSchemaV4
+	case 5:
+		build = createThreadstoreSchemaV5
 	case threadstoreCurrentSchemaVersion:
 		build = createThreadstoreSchema
 	default:

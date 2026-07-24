@@ -2,7 +2,13 @@ import { plural, type DeepWidenMessages, type DotPathByLeaf, type PluralMessage 
 import flowerSurfaceEnUS from './catalogs/en-US-flower.json';
 
 export const enUS = {
-  flowerSurface: flowerSurfaceEnUS,
+  flowerSurface: {
+    ...flowerSurfaceEnUS,
+    attachments: {
+      ...flowerSurfaceEnUS.attachments,
+      lines: plural(flowerSurfaceEnUS.attachments.lines.forms),
+    },
+  },
   common: {
     open: 'Open',
     back: 'Back',

@@ -1,7 +1,8 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, nativeTheme, powerMonitor, safeStorage, session, shell, type MessageBoxOptions, type Session, type WebContents } from 'electron';
 import crypto from 'node:crypto';
+import { once } from 'node:events';
 import fs from 'node:fs/promises';
-import http from 'node:http';
+import http, { type ClientRequest } from 'node:http';
 import https from 'node:https';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -14,6 +15,12 @@ import {
   ManagedRuntimeStartupCleanupError,
   type ManagedRuntimeProgress,
 } from './runtimeProcess';
+import {
+	beginRuntimeFlowerAttachmentWrite,
+	endRuntimeFlowerAttachmentWrite,
+	finishRuntimeFlowerAttachmentOperation,
+  trackRuntimeFlowerAttachmentOperation,
+} from './runtimeFlowerAttachmentOperationLifecycle';
 import { buildAppMenuTemplate } from './appMenu';
 import {
   buildDesktopLastWindowCloseConfirmationModel,
@@ -176,10 +183,15 @@ import {
 } from './runtimeLifecycleCoordinator';
 import { LauncherOperationRegistry, launcherOperationProgress, type LauncherOperationAttemptIdentity } from './launcherOperations';
 import {
-  readRuntimeFlowerHTTPResponse,
+	invalidateRuntimeFlowerAccessOnStatus,
+	readRuntimeFlowerHTTPResponse,
   runtimeFlowerDeleteQuery,
   type RuntimeFlowerHTTPResponse,
 } from './runtimeFlowerHTTP';
+import {
+  materializeRuntimeFlowerAttachmentPreview,
+  requestRuntimeFlowerAttachmentPreviewWithAccess,
+} from './runtimeFlowerAttachmentPreview';
 import {
   requireLocalUIBridgeURL,
   resolveDesktopSessionTransport,
@@ -334,6 +346,27 @@ import {
   type RuntimeFlowerRequest,
   type RuntimeFlowerRequestResult,
 } from '../shared/runtimeFlowerIPC';
+import {
+  CANCEL_RUNTIME_FLOWER_ATTACHMENT_CHANNEL,
+  COMMIT_RUNTIME_FLOWER_ATTACHMENT_CHANNEL,
+  PREPARE_RUNTIME_FLOWER_ATTACHMENT_CHANNEL,
+  PREVIEW_RUNTIME_FLOWER_ATTACHMENT_CHANNEL,
+  RUNTIME_FLOWER_ATTACHMENT_CHUNK_SIZE_BYTES,
+  RUNTIME_FLOWER_ATTACHMENT_PROGRESS_CHANNEL,
+  WRITE_RUNTIME_FLOWER_ATTACHMENT_CHUNK_CHANNEL,
+  normalizeRuntimeFlowerAttachmentChunkRequest,
+  normalizeRuntimeFlowerAttachmentOperationRequest,
+  normalizeRuntimeFlowerAttachmentPrepareRequest,
+  normalizeRuntimeFlowerAttachmentPreviewRequest,
+  type RuntimeFlowerAttachmentCancelResponse,
+  type RuntimeFlowerAttachmentChunkResponse,
+  type RuntimeFlowerAttachmentCommitResponse,
+  type RuntimeFlowerAttachmentPrepareRequest,
+  type RuntimeFlowerAttachmentPrepareResponse,
+  type RuntimeFlowerAttachmentProgress,
+  type RuntimeFlowerAttachmentPreviewRequest,
+  type RuntimeFlowerAttachmentPreviewResponse,
+} from '../shared/runtimeFlowerAttachmentIPC';
 import {
   DESKTOP_STATE_GET_CHANNEL,
   DESKTOP_STATE_KEYS_CHANNEL,
@@ -946,6 +979,23 @@ class RuntimeFlowerTransportError extends Error {
 
 const LOCAL_UI_ACCESS_COOKIE_NAME = 'redeven_local_access';
 const runtimeFlowerAccessCookies = new Map<string, string>();
+const RUNTIME_FLOWER_ATTACHMENT_MAX_BYTES = 64 * 1024 * 1024;
+
+type RuntimeFlowerAttachmentOperation = {
+  key: string;
+  sender: WebContents;
+  request: ClientRequest;
+  response: Promise<RuntimeFlowerHTTPResponse>;
+  expectedOffset: number;
+  totalBytes: number;
+	footer: Buffer;
+	accessCacheKey: string;
+	settled: boolean;
+	writeInFlight?: boolean;
+  senderDestroyedListener?: () => void;
+};
+
+const runtimeFlowerAttachmentOperations = new Map<string, RuntimeFlowerAttachmentOperation>();
 
 function runtimeFlowerBaseURL(record: LocalEnvironmentRuntimeRecord): string {
   return requireLocalUIBridgeURL(record.startup);
@@ -8675,6 +8725,31 @@ const runtimeFlowerTerminalReadQuery = (parsed: URL): boolean => {
 		&& values.length === 1
 		&& /^\d{1,18}$/u.test(values[0] ?? '');
 };
+const runtimeFlowerAttachmentCapabilityQuery = (parsed: URL): boolean => {
+  const values = parsed.searchParams.getAll('model_id');
+  return [...parsed.searchParams.keys()].every((key) => key === 'model_id')
+    && values.length === 1
+    && values[0]!.trim().length > 0
+    && values[0]!.length <= 512;
+};
+const runtimeFlowerAttachmentDraftQuery = (parsed: URL): boolean => {
+  const values = parsed.searchParams.getAll('draft_id');
+  return [...parsed.searchParams.keys()].every((key) => key === 'draft_id')
+    && values.length === 1
+    && values[0]!.trim().length > 0
+    && values[0]!.length <= 200;
+};
+const runtimeFlowerAttachmentReadQuery = (parsed: URL): boolean => {
+  if (runtimeFlowerAttachmentDraftQuery(parsed)) return true;
+  const draftIDs = parsed.searchParams.getAll('draft_id');
+  const preview = parsed.searchParams.getAll('preview');
+  return [...parsed.searchParams.keys()].join(',') === 'draft_id,preview'
+    && draftIDs.length === 1
+    && draftIDs[0]!.trim().length > 0
+    && draftIDs[0]!.length <= 200
+    && preview.length === 1
+    && preview[0] === '1';
+};
 
 const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
   { path: '/_redeven_proxy/api/settings', methods: ['GET'] },
@@ -8684,6 +8759,9 @@ const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
   { path: '/_redeven_proxy/api/ai/provider_bundle', methods: ['PUT'] },
   { path: '/_redeven_proxy/api/ai/current_model', methods: ['PUT'] },
   { path: '/_redeven_proxy/api/ai/models', methods: ['GET'] },
+  { path: '/_redeven_proxy/api/ai/attachments/capabilities', methods: ['GET'], allowsQuery: runtimeFlowerAttachmentCapabilityQuery },
+  { path: /^\/_redeven_proxy\/api\/ai\/composer-drafts\/[^/]+$/u, methods: ['GET', 'PUT'] },
+  { path: /^\/_redeven_proxy\/api\/ai\/composer-drafts\/[^/]+\/lease$/u, methods: ['POST'] },
   { path: '/_redeven_proxy/api/ai/uploads', methods: ['POST'] },
   { path: '/_redeven_proxy/api/ai/threads', methods: ['GET', 'POST'], allowsQuery: runtimeFlowerLimitQuery },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+$/u, methods: ['GET', 'PATCH'] },
@@ -8699,7 +8777,9 @@ const RUNTIME_FLOWER_ROUTES: readonly RuntimeFlowerRoute[] = [
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/context\/compact$/u, methods: ['POST'] },
   { path: /^\/_redeven_proxy\/api\/ai\/threads\/[^/]+\/cancel$/u, methods: ['POST'] },
   { path: /^\/_redeven_proxy\/api\/ai\/runs\/[^/]+\/terminal\/[^/]+\/read$/u, methods: ['GET'], allowsQuery: runtimeFlowerTerminalReadQuery },
-  { path: /^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+$/u, methods: ['GET'] },
+  { path: /^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+$/u, methods: ['GET'], allowsQuery: runtimeFlowerAttachmentReadQuery },
+  { path: /^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+$/u, methods: ['DELETE'], allowsQuery: runtimeFlowerAttachmentDraftQuery },
+  { path: /^\/_redeven_proxy\/api\/ai\/uploads\/[^/]+\/long_text$/u, methods: ['GET'], allowsQuery: runtimeFlowerAttachmentDraftQuery },
 ];
 
 function runtimeFlowerRouteMatches(route: RuntimeFlowerRoute, parsed: URL): boolean {
@@ -8827,7 +8907,7 @@ async function ensureRuntimeFlowerRecord(): Promise<LocalEnvironmentRuntimeRecor
 function runtimeFlowerRequestHTTP(
   url: URL,
   request: RuntimeFlowerRequest,
-  options: Readonly<{ headers?: Readonly<Record<string, string>> }> = {},
+  options: Readonly<{ headers?: Readonly<Record<string, string>>; accept?: string }> = {},
 ): Promise<RuntimeFlowerHTTPResponse> {
   return new Promise((resolve, reject) => {
     const body = request.body === undefined ? '' : JSON.stringify(request.body);
@@ -8836,7 +8916,7 @@ function runtimeFlowerRequestHTTP(
       method: request.method,
       timeout: 120_000,
       headers: {
-        Accept: 'application/json',
+        Accept: options.accept ?? 'application/json',
         ...(options.headers ?? {}),
         ...(body ? {
           'Content-Type': 'application/json',
@@ -8975,6 +9055,244 @@ async function requestRuntimeFlower(request: RuntimeFlowerRequest): Promise<Runt
     ok: true,
     data: dataRecord && Object.prototype.hasOwnProperty.call(dataRecord, 'data') ? dataRecord.data : parsed,
   };
+}
+
+async function fetchRuntimeFlowerAttachmentPreview(request: RuntimeFlowerAttachmentPreviewRequest): Promise<RuntimeFlowerHTTPResponse> {
+  const preferences = await loadDesktopPreferencesCached();
+  const record = await ensureRuntimeFlowerRecord();
+  const query = new URLSearchParams({ draft_id: request.draft_id, preview: '1' });
+  const requestPath = runtimeFlowerPath(`/_redeven_proxy/api/ai/uploads/${encodeURIComponent(request.attachment_id)}?${query.toString()}`);
+  const url = new URL(requestPath, runtimeFlowerBaseURL(record));
+  const environment = preferences.local_environment;
+  let accessHeaders = await runtimeFlowerAccessHeaders(record, environment);
+  return requestRuntimeFlowerAttachmentPreviewWithAccess({
+    request: () => runtimeFlowerRequestHTTP(url, { method: 'GET', path: requestPath }, {
+      headers: accessHeaders,
+      accept: '*/*',
+    }),
+    invalidateAccess: () => {
+      runtimeFlowerAccessCookies.delete(runtimeFlowerBaseURL(record));
+    },
+    refreshAccess: async () => {
+      const cookie = await unlockRuntimeFlowerAccess(record, environment);
+      accessHeaders = { Cookie: runtimeFlowerAccessCookieHeader(cookie) };
+    },
+  });
+}
+
+async function previewRuntimeFlowerAttachment(request: RuntimeFlowerAttachmentPreviewRequest): Promise<void> {
+  const response = await fetchRuntimeFlowerAttachmentPreview(request);
+  if (response.status < 200 || response.status >= 300) {
+    const parsed = parseRuntimeFlowerJSON(response.body);
+    const error = runtimeFlowerEnvelopeError(parsed, response.status);
+    throw new Error(error?.message || `Flower attachment preview failed with HTTP ${response.status}.`);
+  }
+  await materializeRuntimeFlowerAttachmentPreview({
+    bytes: response.bytes,
+    contentType: response.headers['content-type'],
+    tempRoot: app.getPath('temp'),
+    fileSystem: {
+      createDirectory: (prefix) => fs.mkdtemp(prefix),
+      writeExclusive: (filePath, bytes) => fs.writeFile(filePath, bytes, { mode: 0o600, flag: 'wx' }),
+      removeDirectory: (directoryPath) => fs.rm(directoryPath, { recursive: true, force: true }),
+      openPath: (filePath) => shell.openPath(filePath),
+      scheduleCleanup: (cleanup, delayMS) => {
+        const timer = setTimeout(cleanup, delayMS);
+        timer.unref();
+      },
+    },
+  });
+}
+
+function runtimeFlowerAttachmentOperationKey(senderID: number, operationID: string): string {
+  return `${senderID}:${operationID}`;
+}
+
+function runtimeFlowerMultipartFilename(displayName: string): string {
+  return encodeURIComponent(displayName).replace(/[!'()*]/gu, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+}
+
+async function writeRuntimeFlowerAttachmentBytes(request: ClientRequest, chunk: Buffer): Promise<void> {
+  if (request.destroyed) throw new Error('Flower attachment upload is no longer active.');
+  if (!request.write(chunk)) {
+    await once(request, 'drain');
+  }
+}
+
+function emitRuntimeFlowerAttachmentProgress(
+  operation: RuntimeFlowerAttachmentOperation,
+  state: RuntimeFlowerAttachmentProgress['state'],
+): void {
+  if (operation.sender.isDestroyed()) return;
+  operation.sender.send(RUNTIME_FLOWER_ATTACHMENT_PROGRESS_CHANNEL, {
+    operation_id: operation.key.slice(operation.key.indexOf(':') + 1),
+    loaded_bytes: operation.expectedOffset,
+    total_bytes: operation.totalBytes,
+    state,
+  } satisfies RuntimeFlowerAttachmentProgress);
+}
+
+async function prepareRuntimeFlowerAttachmentUpload(
+  sender: WebContents,
+  input: RuntimeFlowerAttachmentPrepareRequest,
+): Promise<RuntimeFlowerAttachmentPrepareResponse> {
+  if (input.size_bytes > RUNTIME_FLOWER_ATTACHMENT_MAX_BYTES) {
+    return { ok: false, message: 'Flower attachment exceeds the Desktop transfer limit.' };
+  }
+  const key = runtimeFlowerAttachmentOperationKey(sender.id, input.operation_id);
+  if (runtimeFlowerAttachmentOperations.has(key)) {
+    return { ok: false, message: 'A Flower attachment upload with this operation id is already active.' };
+  }
+	const preferences = await loadDesktopPreferencesCached();
+	const record = await ensureRuntimeFlowerRecord();
+	const accessCacheKey = runtimeFlowerBaseURL(record);
+	const accessHeaders = await runtimeFlowerAccessHeaders(record, preferences.local_environment);
+  const boundary = `redeven-${crypto.randomBytes(18).toString('hex')}`;
+  const preamble = Buffer.from(
+    `--${boundary}\r\nContent-Disposition: form-data; name="source"\r\n\r\n${input.source}\r\n` +
+      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="attachment"; filename*=UTF-8''${runtimeFlowerMultipartFilename(input.display_name)}\r\n` +
+      `Content-Type: ${input.media_type}\r\n\r\n`,
+    'utf8',
+  );
+  const footer = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8');
+  const contentLength = preamble.byteLength + input.size_bytes + footer.byteLength;
+  const url = new URL('/_redeven_proxy/api/ai/uploads', runtimeFlowerBaseURL(record));
+  const client = url.protocol === 'https:' ? https : http;
+  let request!: ClientRequest;
+  const response = new Promise<RuntimeFlowerHTTPResponse>((resolve, reject) => {
+    request = client.request(url, {
+      method: 'POST',
+      timeout: 120_000,
+      headers: {
+        Accept: 'application/json',
+        ...accessHeaders,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+        'Content-Length': String(contentLength),
+        'Idempotency-Key': input.upload_request_id,
+        'Upload-Draft-ID': input.draft_id,
+        'Upload-Content-SHA256': input.content_sha256,
+        'Upload-Content-Length': String(input.size_bytes),
+        'Upload-Display-Name-SHA256': input.display_name_sha256,
+      },
+    }, (incoming) => {
+      void readRuntimeFlowerHTTPResponse(incoming).then(resolve, reject);
+    });
+    request.once('timeout', () => request.destroy(new Error('Flower attachment upload timed out.')));
+    request.once('error', reject);
+  });
+  void response.catch(() => undefined);
+  const operation: RuntimeFlowerAttachmentOperation = {
+    key,
+    sender,
+    request,
+    response,
+    expectedOffset: 0,
+    totalBytes: input.size_bytes,
+		footer,
+		accessCacheKey,
+		settled: false,
+  };
+  trackRuntimeFlowerAttachmentOperation(runtimeFlowerAttachmentOperations, operation, (active) => {
+    active.request.destroy(new Error('Flower attachment renderer was closed.'));
+  });
+  try {
+    await writeRuntimeFlowerAttachmentBytes(request, preamble);
+  } catch (error) {
+    request.destroy(error instanceof Error ? error : new Error(String(error)));
+    finishRuntimeFlowerAttachmentOperation(runtimeFlowerAttachmentOperations, operation);
+    throw error;
+  }
+  emitRuntimeFlowerAttachmentProgress(operation, 'uploading');
+  return {
+    ok: true,
+    operation_id: input.operation_id,
+    chunk_size_bytes: RUNTIME_FLOWER_ATTACHMENT_CHUNK_SIZE_BYTES,
+  };
+}
+
+async function writeRuntimeFlowerAttachmentChunk(
+  sender: WebContents,
+  operationID: string,
+  offsetBytes: number,
+  bytes: Uint8Array<ArrayBuffer>,
+): Promise<RuntimeFlowerAttachmentChunkResponse> {
+  const key = runtimeFlowerAttachmentOperationKey(sender.id, operationID);
+	const operation = runtimeFlowerAttachmentOperations.get(key);
+	if (!operation || operation.settled) return { ok: false, message: 'Flower attachment upload is not active.' };
+	if (!beginRuntimeFlowerAttachmentWrite(operation)) return { ok: false, message: 'A Flower attachment upload chunk is already being written.' };
+	try {
+		if (offsetBytes !== operation.expectedOffset || bytes.byteLength <= 0 || operation.expectedOffset + bytes.byteLength > operation.totalBytes) {
+			return { ok: false, message: 'Flower attachment upload chunk is out of sequence.' };
+		}
+		await writeRuntimeFlowerAttachmentBytes(operation.request, Buffer.from(bytes));
+    operation.expectedOffset += bytes.byteLength;
+    emitRuntimeFlowerAttachmentProgress(operation, 'uploading');
+    return { ok: true, next_offset_bytes: operation.expectedOffset };
+  } catch (error) {
+    operation.request.destroy(error instanceof Error ? error : new Error(String(error)));
+    emitRuntimeFlowerAttachmentProgress(operation, 'failed');
+		finishRuntimeFlowerAttachmentOperation(runtimeFlowerAttachmentOperations, operation);
+		return { ok: false, message: error instanceof Error ? error.message : String(error) };
+	} finally {
+		endRuntimeFlowerAttachmentWrite(operation);
+	}
+}
+
+async function commitRuntimeFlowerAttachmentUpload(
+  sender: WebContents,
+  operationID: string,
+): Promise<RuntimeFlowerAttachmentCommitResponse> {
+  const key = runtimeFlowerAttachmentOperationKey(sender.id, operationID);
+  const operation = runtimeFlowerAttachmentOperations.get(key);
+  if (!operation || operation.settled) {
+    return { ok: false, failureKind: 'local', error: { message: 'Flower attachment upload is not active.' } };
+  }
+  if (!beginRuntimeFlowerAttachmentWrite(operation)) {
+    return { ok: false, failureKind: 'local', error: { message: 'Another Flower attachment upload write is already in progress.' } };
+  }
+  if (operation.expectedOffset !== operation.totalBytes) {
+    endRuntimeFlowerAttachmentWrite(operation);
+    return { ok: false, failureKind: 'local', error: { message: 'Flower attachment upload is incomplete.' } };
+  }
+  try {
+    await writeRuntimeFlowerAttachmentBytes(operation.request, operation.footer);
+    operation.request.end();
+		const response = await operation.response;
+		invalidateRuntimeFlowerAccessOnStatus(runtimeFlowerAccessCookies, operation.accessCacheKey, response.status);
+    const parsed = parseRuntimeFlowerJSON(response.body);
+    const error = runtimeFlowerEnvelopeError(parsed, response.status);
+    if (error) {
+      emitRuntimeFlowerAttachmentProgress(operation, 'failed');
+      return { ok: false, error, failureKind: 'response' };
+    }
+    const dataRecord = parsed && typeof parsed === 'object' ? parsed as Record<string, unknown> : null;
+    emitRuntimeFlowerAttachmentProgress(operation, 'completed');
+    return {
+      ok: true,
+      data: dataRecord && Object.prototype.hasOwnProperty.call(dataRecord, 'data') ? dataRecord.data : parsed,
+    };
+  } catch (error) {
+    emitRuntimeFlowerAttachmentProgress(operation, 'failed');
+    return {
+      ok: false,
+      error: runtimeFlowerErrorFromUnknown(error),
+      failureKind: 'transport_unknown',
+    };
+  } finally {
+    if (!operation.request.destroyed) operation.request.destroy();
+    endRuntimeFlowerAttachmentWrite(operation);
+    finishRuntimeFlowerAttachmentOperation(runtimeFlowerAttachmentOperations, operation);
+  }
+}
+
+function cancelRuntimeFlowerAttachmentUpload(sender: WebContents, operationID: string): RuntimeFlowerAttachmentCancelResponse {
+  const key = runtimeFlowerAttachmentOperationKey(sender.id, operationID);
+  const operation = runtimeFlowerAttachmentOperations.get(key);
+  if (!operation || operation.settled) return { ok: true, cancelled: false };
+  emitRuntimeFlowerAttachmentProgress(operation, 'cancelled');
+  operation.request.destroy(new Error('Flower attachment upload was cancelled.'));
+  finishRuntimeFlowerAttachmentOperation(runtimeFlowerAttachmentOperations, operation);
+  return { ok: true, cancelled: true };
 }
 
 async function assertLocalEnvironmentRuntimeStopped(
@@ -17425,6 +17743,47 @@ if (!app.requestSingleInstanceLock()) {
         error: runtimeFlowerErrorFromUnknown(error),
         failureKind: error instanceof RuntimeFlowerTransportError ? 'transport_unknown' : 'local',
       };
+    }
+  });
+  ipcMain.handle(PREPARE_RUNTIME_FLOWER_ATTACHMENT_CHANNEL, async (event, request): Promise<RuntimeFlowerAttachmentPrepareResponse> => {
+    const normalized = normalizeRuntimeFlowerAttachmentPrepareRequest(request);
+    if (!normalized) return { ok: false, message: 'Desktop received an invalid Flower attachment upload request.' };
+    try {
+      return await prepareRuntimeFlowerAttachmentUpload(event.sender, normalized);
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : String(error) };
+    }
+  });
+  ipcMain.handle(WRITE_RUNTIME_FLOWER_ATTACHMENT_CHUNK_CHANNEL, async (event, request): Promise<RuntimeFlowerAttachmentChunkResponse> => {
+    const normalized = normalizeRuntimeFlowerAttachmentChunkRequest(request);
+    if (!normalized) return { ok: false, message: 'Desktop received an invalid Flower attachment upload chunk.' };
+    return writeRuntimeFlowerAttachmentChunk(
+      event.sender,
+      normalized.operation_id,
+      normalized.offset_bytes,
+      normalized.chunk,
+    );
+  });
+  ipcMain.handle(COMMIT_RUNTIME_FLOWER_ATTACHMENT_CHANNEL, async (event, request): Promise<RuntimeFlowerAttachmentCommitResponse> => {
+    const normalized = normalizeRuntimeFlowerAttachmentOperationRequest(request);
+    if (!normalized) {
+      return { ok: false, failureKind: 'local', error: { message: 'Desktop received an invalid Flower attachment upload commit.' } };
+    }
+    return commitRuntimeFlowerAttachmentUpload(event.sender, normalized.operation_id);
+  });
+  ipcMain.handle(CANCEL_RUNTIME_FLOWER_ATTACHMENT_CHANNEL, (event, request): RuntimeFlowerAttachmentCancelResponse => {
+    const normalized = normalizeRuntimeFlowerAttachmentOperationRequest(request);
+    if (!normalized) return { ok: false, cancelled: false, message: 'Desktop received an invalid Flower attachment cancellation.' };
+    return cancelRuntimeFlowerAttachmentUpload(event.sender, normalized.operation_id);
+  });
+  ipcMain.handle(PREVIEW_RUNTIME_FLOWER_ATTACHMENT_CHANNEL, async (_event, request): Promise<RuntimeFlowerAttachmentPreviewResponse> => {
+    const normalized = normalizeRuntimeFlowerAttachmentPreviewRequest(request);
+    if (!normalized) return { ok: false, message: 'Desktop received an invalid Flower attachment preview request.' };
+    try {
+      await previewRuntimeFlowerAttachment(normalized);
+      return { ok: true };
+    } catch (error) {
+      return { ok: false, message: error instanceof Error ? error.message : String(error) };
     }
   });
   ipcMain.handle(DESKTOP_LAUNCHER_GET_SNAPSHOT_CHANNEL, async (event) => (

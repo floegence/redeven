@@ -22,6 +22,20 @@ const (
 
 var ErrThreadIDRetired = errors.New("thread id retired")
 
+type storeTransactionObserverContextKey struct{}
+
+type storeTransactionObserver func(operation string)
+
+func observeStoreTransaction(ctx context.Context, operation string) {
+	if ctx == nil {
+		return
+	}
+	observer, _ := ctx.Value(storeTransactionObserverContextKey{}).(storeTransactionObserver)
+	if observer != nil {
+		observer(operation)
+	}
+}
+
 func requireThreadWritableTx(ctx context.Context, tx *sql.Tx, endpointID string, threadID string) error {
 	if err := requireThreadNotRetiredTx(ctx, tx, endpointID, threadID); err != nil {
 		return err
@@ -132,6 +146,7 @@ func (s *Store) PrepareThreadDeleteOperation(ctx context.Context, endpointID str
 		return ThreadDeleteOperation{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
+	observeStoreTransaction(ctx, "prepare_thread_delete")
 
 	existing, err := loadThreadDeleteOperationByThreadTx(ctx, tx, endpointID, threadID)
 	if err != nil {
@@ -163,9 +178,13 @@ WHERE endpoint_id = ? AND status = ? AND (source_thread_id = ? OR destination_th
 	if err != nil {
 		return ThreadDeleteOperation{}, err
 	}
+	draftUploadIDs, err := listComposerDraftUploadIDsForScopeTx(ctx, tx, endpointID, threadID)
+	if err != nil {
+		return ThreadDeleteOperation{}, err
+	}
 	snapshot := ThreadDeleteSnapshotV1{
 		SchemaVersion:         ThreadDeleteSnapshotSchemaV1,
-		UploadCleanupIDs:      dedupeNonEmptyStrings(uploadIDs),
+		UploadCleanupIDs:      dedupeNonEmptyStrings(append(uploadIDs, draftUploadIDs...)),
 		DeleteFlowerReadState: deleteFlowerReadState,
 	}
 	snapshotJSON, err := json.Marshal(snapshot)
@@ -232,6 +251,9 @@ func (s *Store) CommitThreadDeleteProductData(ctx context.Context, operationID s
 	}
 	now := time.Now().UnixMilli()
 	if _, err := prepareUploadCleanupForThreadTx(ctx, tx, operation.EndpointID, operation.ThreadID, now); err != nil {
+		return ThreadDeleteOperation{}, err
+	}
+	if err := deleteComposerDraftsForScopeTx(ctx, tx, operation.EndpointID, operation.ThreadID, now); err != nil {
 		return ThreadDeleteOperation{}, err
 	}
 	if err := deleteThreadScopedRowsTx(ctx, tx, operation.EndpointID, operation.ThreadID); err != nil {

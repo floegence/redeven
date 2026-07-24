@@ -209,8 +209,9 @@ type run struct {
 	activeManualCompactionID string
 	contextCompactionAnchors map[string]FlowerTimelineAnchor
 
-	webSearchToolEnabled bool
-	webSearchMode        string
+	webSearchToolEnabled      bool
+	webSearchMode             string
+	attachmentToolReadEnabled bool
 
 	collectedWebSources     map[string]SourceRef // url -> source
 	collectedWebSourceOrder []string
@@ -2751,6 +2752,17 @@ func (r *run) execTool(ctx context.Context, meta *session.Meta, toolID string, t
 		return r.execTargetTool(ctx, toolID, toolName, args)
 	}
 	switch toolName {
+	case "attachment.read":
+		if meta == nil || !meta.CanRead {
+			return nil, errors.New("read permission denied")
+		}
+		var p attachmentReadArgs
+		b, _ := json.Marshal(args)
+		if err := json.Unmarshal(b, &p); err != nil {
+			return nil, errors.New("invalid args")
+		}
+		return r.toolAttachmentRead(ctx, meta, p)
+
 	case "read_file":
 		if !r.canExecuteReadonlyExclusiveTool(ctx) {
 			return nil, errors.New("readonly tool unavailable for current permission type")

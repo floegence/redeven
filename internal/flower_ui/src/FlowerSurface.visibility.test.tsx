@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { createSignal } from 'solid-js';
+import { createSignal, type Component } from 'solid-js';
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -23,7 +23,12 @@ import type {
   FlowerThreadSnapshot,
 } from './contracts/flowerSurfaceContracts';
 import type { FlowerCompanionPresenceProjection } from './flowerCompanionPresence';
-import { FlowerSurface } from './FlowerSurface';
+import { FlowerSurface as FlowerSurfaceComponent, type FlowerSurfaceProps } from './FlowerSurface';
+import { createFlowerComposerDraftCoordinator } from './composer/createFlowerComposerDraftCoordinator';
+
+const FlowerSurface: Component<Omit<FlowerSurfaceProps, 'draftCoordinator'>> = (props) => (
+  <FlowerSurfaceComponent {...props} draftCoordinator={createFlowerComposerDraftCoordinator()} />
+);
 
 type Deferred<T> = Readonly<{
   promise: Promise<T>;

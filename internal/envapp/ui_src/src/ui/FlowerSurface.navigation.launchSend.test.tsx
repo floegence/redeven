@@ -3,13 +3,18 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type {
+  FlowerAttachmentUploadInput,
   FlowerLiveBootstrap,
   FlowerLiveEventsResponse,
   FlowerRouterDecision,
+  FlowerAttachmentCapability,
+  FlowerStagedAttachment,
+  FlowerStagedLongTextReadResult,
   FlowerSettingsSnapshot,
   FlowerTurnLaunchReceipt,
 } from '../../../../flower_ui/src/contracts/flowerSurfaceContracts';
 import { flowerTurnAdmissionUncertainFailure } from '../../../../flower_ui/src/flowerTurnAdmission';
+import { createFlowerComposerDraftCoordinator } from '../../../../flower_ui/src/composer/createFlowerComposerDraftCoordinator';
 import {
   adapter,
   decision,
@@ -24,6 +29,7 @@ import {
   modelIOStatus,
   mutableSettingsAdapter,
   renderSurfaceWithAdapter,
+  renderSurfaceWithDraftCoordinator,
   settingsSnapshot,
   subagentSummary,
   thread,
@@ -41,6 +47,502 @@ function selectedThreadReady(root: ParentNode, threadID: string): boolean {
   return surface?.getAttribute('data-flower-selected-thread-id') === threadID
     && surface?.getAttribute('data-flower-selected-thread-loading') === 'false';
 }
+
+it('does not launch after the exact composer lease expires during handler resolution', async () => {
+  let now = 1_000;
+  const coordinator = createFlowerComposerDraftCoordinator({ now: () => now, leaseDurationMS: 1_000 });
+  const handler = deferred<FlowerRouterDecision>();
+  const surfaceAdapter = adapter();
+  const launchTurn = vi.fn(surfaceAdapter.launchTurn);
+  const resolveHandler = vi.fn(() => handler.promise);
+  const runtime = renderSurfaceWithDraftCoordinator({ ...surfaceAdapter, launchTurn, resolveHandler }, coordinator, 'activity');
+  await waitFor(() => Boolean(runtime.querySelector('textarea')));
+  const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+  textarea.value = 'lease-bound send';
+  textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+  await waitFor(() => !(runtime.querySelector('button.flower-composer-submit') as HTMLButtonElement).disabled);
+  const send = runtime.querySelector('button.flower-composer-submit') as HTMLButtonElement;
+  send.click();
+  await waitFor(() => runtime.querySelector('.flower-composer')?.getAttribute('aria-busy') === 'true');
+
+  now = 2_001;
+  expect((await coordinator.open('__new_thread__', 'workbench').acquire()).kind).toBe('lease_owned');
+  handler.resolve(decision());
+  await flush();
+  await flush();
+
+  expect(launchTurn).not.toHaveBeenCalled();
+});
+
+it('admits only one turn when Send and Enter race a fresh attachment capability read', async () => {
+  const coordinator = createFlowerComposerDraftCoordinator();
+  const freshCapability = deferred<FlowerAttachmentCapability>();
+  const capability: FlowerAttachmentCapability = {
+    model_id: 'openai/gpt-5.2', revision: 'capability-1', enabled: true, supports_long_text: true,
+    max_attachments: 20, max_file_size_bytes: 1_000_000, max_total_size_bytes: 10_000_000,
+    routes: { 'text/plain': 'tool_read' },
+  };
+  let capabilityCalls = 0;
+  const surfaceAdapter = adapter();
+  const launchTurn = vi.fn(surfaceAdapter.launchTurn);
+  const uploadAttachment = vi.fn(async (input): Promise<FlowerStagedAttachment> => ({
+    attachment_id: 'upl_double_submit_________', name: input.file.name, mime_type: input.file.type,
+    size_bytes: input.file.size, digest_sha256: 'a'.repeat(64), source: 'file',
+    capability_revision: capability.revision,
+    locator: `attachment://v1/upl_double_submit_________/${input.file.name}`,
+  }));
+  const loadAttachmentCapability = vi.fn(() => {
+    capabilityCalls += 1;
+    return capabilityCalls === 1 ? Promise.resolve(capability) : freshCapability.promise;
+  });
+  const runtime = renderSurfaceWithDraftCoordinator({
+    ...surfaceAdapter, launchTurn, uploadAttachment, loadAttachmentCapability,
+  }, coordinator, 'activity');
+  await waitFor(() => capabilityCalls === 1 && Boolean(runtime.querySelector('input[type="file"]')));
+  const picker = runtime.querySelector('input[type="file"]') as HTMLInputElement;
+  const file = new File(['attachment'], 'notes.txt', { type: 'text/plain' });
+  Object.defineProperty(picker, 'files', { configurable: true, value: [file] });
+  picker.dispatchEvent(new Event('change', { bubbles: true }));
+  await waitFor(() => runtime.querySelector('[data-attachment-status="staged_ready"]') !== null);
+
+  const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+  textarea.value = 'one turn only';
+  textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+  await waitFor(() => !(runtime.querySelector('button.flower-composer-submit') as HTMLButtonElement).disabled);
+  (runtime.querySelector('button.flower-composer-submit') as HTMLButtonElement).click();
+  textarea.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+  await waitFor(() => capabilityCalls === 2);
+  freshCapability.resolve(capability);
+  await waitFor(() => launchTurn.mock.calls.length === 1);
+  expect(launchTurn).toHaveBeenCalledTimes(1);
+});
+
+it('shows which models support the attachments already in the composer', async () => {
+  const supportedCapability: FlowerAttachmentCapability = {
+    model_id: 'openai/gpt-5.2', revision: 'capability-supported', enabled: true, supports_long_text: true,
+    max_attachments: 4, max_file_size_bytes: 1_000_000, max_total_size_bytes: 2_000_000,
+    routes: { 'text/plain': 'tool_read' },
+  };
+  const unsupportedCapability: FlowerAttachmentCapability = {
+    ...supportedCapability,
+    model_id: 'openai/gpt-5.4',
+    revision: 'capability-unsupported',
+    routes: { 'text/plain': 'unsupported' },
+  };
+  const snapshot: FlowerSettingsSnapshot = {
+    ...settingsSnapshot(),
+    model_profile: {
+      ...settingsSnapshot().model_profile!,
+      providers: [{
+        ...settingsSnapshot().model_profile!.providers[0]!,
+        models: [
+          { model_name: 'gpt-5.2', context_window: 400_000, input_modalities: ['text'] },
+          { model_name: 'gpt-5.4', context_window: 400_000, input_modalities: ['text'] },
+        ],
+      }],
+    },
+  };
+  const surfaceAdapter = adapter();
+  const loadAttachmentCapability = vi.fn(async (modelID: string) => (
+    modelID === unsupportedCapability.model_id ? unsupportedCapability : supportedCapability
+  ));
+  const uploadAttachment = vi.fn(async (input: FlowerAttachmentUploadInput): Promise<FlowerStagedAttachment> => ({
+    attachment_id: 'upl_model_support________',
+    name: input.file.name,
+    mime_type: input.file.type,
+    size_bytes: input.file.size,
+    digest_sha256: 'b'.repeat(64),
+    source: 'file',
+    capability_revision: supportedCapability.revision,
+    locator: `attachment://v1/upl_model_support________/${input.file.name}`,
+  }));
+  const runtime = renderSurfaceWithDraftCoordinator({
+    ...surfaceAdapter,
+    loadSettings: vi.fn(async () => snapshot),
+    loadAttachmentCapability,
+    uploadAttachment,
+  }, createFlowerComposerDraftCoordinator(), 'activity');
+
+  await waitFor(() => Boolean(runtime.querySelector('input[type="file"]')));
+  const picker = runtime.querySelector('input[type="file"]') as HTMLInputElement;
+  const file = new File(['release notes'], 'notes.txt', { type: 'text/plain' });
+  Object.defineProperty(picker, 'files', { configurable: true, value: [file] });
+  picker.dispatchEvent(new Event('change', { bubbles: true }));
+  await waitFor(() => runtime.querySelector('[data-attachment-status="staged_ready"]') !== null);
+
+  (runtime.querySelector('.flower-model-reasoning-model-trigger') as HTMLButtonElement).click();
+  await waitFor(() => runtime.querySelectorAll('.flower-model-menu-attachment-status').length === 2);
+  await waitFor(() => Array.from(runtime.querySelectorAll('.flower-model-menu-attachment-status'))
+    .every((status) => status.getAttribute('data-state') !== 'checking'));
+
+  const options = Array.from(runtime.querySelectorAll('.flower-model-menu-item'));
+  const current = options.find((option) => option.textContent?.includes('gpt-5.2'));
+  const alternate = options.find((option) => option.textContent?.includes('gpt-5.4'));
+  expect(current?.querySelector('.flower-model-menu-attachment-status')).toMatchObject({
+    textContent: 'Supports current attachments',
+  });
+  expect(current?.querySelector('.flower-model-menu-attachment-status')?.getAttribute('data-state')).toBe('supported');
+  expect(alternate?.querySelector('.flower-model-menu-attachment-status')).toMatchObject({
+    textContent: 'Does not support current attachments',
+  });
+  expect(alternate?.querySelector('.flower-model-menu-attachment-status')?.getAttribute('data-state')).toBe('unsupported');
+});
+
+it('leaves an over-limit paste to the browser when attachments are unavailable', async () => {
+  const runtime = renderSurfaceWithAdapter(adapter());
+  await waitFor(() => Boolean(runtime.querySelector('textarea')));
+  const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+  textarea.value = 'keep this';
+  textarea.setSelectionRange(4, 4);
+  const paste = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent;
+  Object.defineProperty(paste, 'clipboardData', {
+    value: { files: [], getData: (type: string) => type === 'text/plain' ? 'x'.repeat(50_001) : '' },
+  });
+
+  textarea.dispatchEvent(paste);
+
+  expect(paste.defaultPrevented).toBe(false);
+  expect(textarea.value).toBe('keep this');
+  expect(runtime.querySelector('[data-attachment-item]')).toBeNull();
+});
+
+it('retains an exact over-limit paste and selection when local limits reject conversion', async () => {
+  const capability: FlowerAttachmentCapability = {
+    model_id: 'openai/gpt-5.2', revision: 'capability-small', enabled: true, supports_long_text: true,
+    max_attachments: 4, max_file_size_bytes: 128, max_total_size_bytes: 256,
+    routes: { 'text/plain': 'tool_read' },
+  };
+  const surfaceAdapter = adapter();
+  const runtime = renderSurfaceWithDraftCoordinator({
+    ...surfaceAdapter,
+    loadAttachmentCapability: vi.fn(async () => capability),
+    uploadAttachment: vi.fn(async () => { throw new Error('upload should not start'); }),
+  }, createFlowerComposerDraftCoordinator(), 'activity');
+  await waitFor(() => Boolean(runtime.querySelector('input[type="file"]')));
+  const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+  const payload = 'x'.repeat(50_001);
+  textarea.value = 'keep [replace] ending';
+  textarea.setSelectionRange(5, 14);
+  const paste = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent;
+  Object.defineProperty(paste, 'clipboardData', {
+    value: { files: [], getData: (type: string) => type === 'text/plain' ? payload : '' },
+  });
+
+  textarea.dispatchEvent(paste);
+  await waitFor(() => (
+    textarea.value === `keep ${payload} ending`
+    && textarea.selectionStart === 5 + payload.length
+    && textarea.selectionEnd === 5 + payload.length
+  ));
+
+  expect(paste.defaultPrevented).toBe(true);
+  expect(textarea.selectionStart).toBe(5 + payload.length);
+  expect(textarea.selectionEnd).toBe(5 + payload.length);
+  expect(runtime.querySelector('[data-attachment-item]')).toBeNull();
+});
+
+it('keeps an exact over-limit paste in the editor until its attachment is staged', async () => {
+  const capability: FlowerAttachmentCapability = {
+    model_id: 'openai/gpt-5.2', revision: 'capability-long-paste', enabled: true, supports_long_text: true,
+    max_attachments: 4, max_file_size_bytes: 1_000_000, max_total_size_bytes: 2_000_000,
+    routes: { 'text/plain': 'tool_read', 'text/plain; charset=utf-8': 'tool_read' },
+  };
+  const completion = deferred<FlowerStagedAttachment>();
+  const uploadAttachment = vi.fn((input: FlowerAttachmentUploadInput) => completion.promise.then((staged) => ({
+    ...staged,
+    name: input.file.name,
+  })));
+  const runtime = renderSurfaceWithDraftCoordinator({
+    ...adapter(),
+    loadAttachmentCapability: vi.fn(async () => capability),
+    uploadAttachment,
+  }, createFlowerComposerDraftCoordinator(), 'activity');
+  await waitFor(() => Boolean(runtime.querySelector('input[type="file"]')));
+  const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+  const payload = 'x'.repeat(50_001);
+  textarea.value = 'before after';
+  textarea.setSelectionRange(7, 7);
+  const paste = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent;
+  Object.defineProperty(paste, 'clipboardData', {
+    value: { files: [], getData: (type: string) => type === 'text/plain' ? payload : '' },
+  });
+
+  textarea.dispatchEvent(paste);
+  await waitFor(() => uploadAttachment.mock.calls.length === 1);
+  expect(textarea.value).toBe(`before ${payload}after`);
+
+  completion.resolve({
+    attachment_id: 'upl_long_paste____________', name: 'long.txt', mime_type: 'text/plain; charset=utf-8',
+    size_bytes: payload.length, digest_sha256: 'c'.repeat(64), source: 'long_text',
+    text_stats: { code_points: payload.length, lines: 1 }, capability_revision: capability.revision,
+    locator: 'attachment://v1/upl_long_paste/long.txt',
+  });
+  await waitFor(() => textarea.value === 'before after');
+  expect(runtime.querySelector('[data-attachment-status="staged_ready"]')).not.toBeNull();
+});
+
+it('preserves an exact over-limit paste when staging fails', async () => {
+  const capability: FlowerAttachmentCapability = {
+    model_id: 'openai/gpt-5.2', revision: 'capability-long-paste-failure', enabled: true, supports_long_text: true,
+    max_attachments: 4, max_file_size_bytes: 1_000_000, max_total_size_bytes: 2_000_000,
+    routes: { 'text/plain': 'tool_read', 'text/plain; charset=utf-8': 'tool_read' },
+  };
+  const completion = deferred<FlowerStagedAttachment>();
+  const runtime = renderSurfaceWithDraftCoordinator({
+    ...adapter(),
+    loadAttachmentCapability: vi.fn(async () => capability),
+    uploadAttachment: vi.fn(() => completion.promise),
+  }, createFlowerComposerDraftCoordinator(), 'activity');
+  await waitFor(() => Boolean(runtime.querySelector('input[type="file"]')));
+  const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+  const payload = '失败内容'.repeat(16_667);
+  textarea.value = 'prefix';
+  textarea.setSelectionRange(6, 6);
+  const paste = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent;
+  Object.defineProperty(paste, 'clipboardData', {
+    value: { files: [], getData: (type: string) => type === 'text/plain' ? payload : '' },
+  });
+
+  textarea.dispatchEvent(paste);
+  await waitFor(() => textarea.value === `prefix${payload}`);
+  completion.reject(new Error('offline'));
+  await waitFor(() => runtime.querySelector('[data-attachment-status="upload_error"]') !== null);
+
+  expect(textarea.value).toBe(`prefix${payload}`);
+});
+
+it('keeps concurrent editor changes and discards the staged long-paste duplicate', async () => {
+  const capability: FlowerAttachmentCapability = {
+    model_id: 'openai/gpt-5.2', revision: 'capability-long-paste-edit', enabled: true, supports_long_text: true,
+    max_attachments: 4, max_file_size_bytes: 1_000_000, max_total_size_bytes: 2_000_000,
+    routes: { 'text/plain': 'tool_read', 'text/plain; charset=utf-8': 'tool_read' },
+  };
+  const completion = deferred<FlowerStagedAttachment>();
+  const uploadAttachment = vi.fn(() => completion.promise);
+  const runtime = renderSurfaceWithDraftCoordinator({
+    ...adapter(), loadAttachmentCapability: vi.fn(async () => capability), uploadAttachment,
+  }, createFlowerComposerDraftCoordinator(), 'activity');
+  await waitFor(() => Boolean(runtime.querySelector('input[type="file"]')));
+  const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+  const payload = 'z'.repeat(50_001);
+  const paste = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent;
+  Object.defineProperty(paste, 'clipboardData', {
+    value: { files: [], getData: (type: string) => type === 'text/plain' ? payload : '' },
+  });
+  textarea.dispatchEvent(paste);
+  await waitFor(() => uploadAttachment.mock.calls.length === 1);
+  textarea.value = `${payload} user edit`;
+  textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+  completion.resolve({
+    attachment_id: 'upl_long_paste_edit_______', name: 'long.txt', mime_type: 'text/plain; charset=utf-8',
+    size_bytes: payload.length, digest_sha256: 'd'.repeat(64), source: 'long_text',
+    text_stats: { code_points: payload.length, lines: 1 }, capability_revision: capability.revision,
+    locator: 'attachment://v1/upl_long_paste_edit/long.txt',
+  });
+
+  await waitFor(() => runtime.querySelector('[data-attachment-status]') === null);
+  expect(textarea.value).toBe(`${payload} user edit`);
+});
+
+it('retains a pasted file intent and local text until explicit draft takeover', async () => {
+  const coordinator = createFlowerComposerDraftCoordinator();
+  const activity = coordinator.open('__new_thread__', 'activity');
+  await activity.acquire();
+  await activity.mutate(0, (value) => ({ ...value, text: 'shared text' }));
+  const capability: FlowerAttachmentCapability = {
+    model_id: 'openai/gpt-5.2', revision: 'capability-pending-file', enabled: true, supports_long_text: true,
+    max_attachments: 4, max_file_size_bytes: 1_000_000, max_total_size_bytes: 2_000_000,
+    routes: { 'text/plain': 'tool_read' },
+  };
+  const uploadAttachment = vi.fn(async (input: FlowerAttachmentUploadInput): Promise<FlowerStagedAttachment> => ({
+    attachment_id: 'upl_pending_file__________', name: input.file.name, mime_type: input.file.type,
+    size_bytes: input.file.size, digest_sha256: 'e'.repeat(64), source: input.source,
+    capability_revision: capability.revision, locator: `attachment://v1/upl_pending_file/${input.file.name}`,
+  }));
+  const runtime = renderSurfaceWithDraftCoordinator({
+    ...adapter(), loadAttachmentCapability: vi.fn(async () => capability), uploadAttachment,
+  }, coordinator, 'workbench');
+  await waitFor(() => Boolean(runtime.querySelector('textarea')) && Boolean(runtime.querySelector('.flower-composer-draft-conflict')));
+  const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+  textarea.value = 'local unsaved text';
+  textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
+  const file = new File(['pending'], 'pending.txt', { type: 'text/plain' });
+  const paste = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent;
+  Object.defineProperty(paste, 'clipboardData', { value: { files: [file], getData: () => '' } });
+
+  textarea.dispatchEvent(paste);
+  expect(paste.defaultPrevented).toBe(true);
+  expect(uploadAttachment).not.toHaveBeenCalled();
+  expect(textarea.value).toBe('local unsaved text');
+
+  const takeover = runtime.querySelector('.flower-composer-draft-conflict button') as HTMLButtonElement;
+  takeover.click();
+  await waitFor(() => uploadAttachment.mock.calls.length === 1);
+  expect(textarea.value).toBe('local unsaved text');
+});
+
+it('always prevents a file drop from navigating even when attachments are unavailable', async () => {
+  const runtime = renderSurfaceWithAdapter(adapter());
+  await waitFor(() => Boolean(runtime.querySelector('.flower-composer')));
+  const composer = runtime.querySelector('.flower-composer') as HTMLDivElement;
+  const drop = new Event('drop', { bubbles: true, cancelable: true }) as DragEvent;
+  Object.defineProperty(drop, 'dataTransfer', {
+    value: { types: ['Files'], files: [new File(['blocked'], 'blocked.txt', { type: 'text/plain' })] },
+  });
+
+  composer.dispatchEvent(drop);
+
+  expect(drop.defaultPrevented).toBe(true);
+});
+
+it('treats 50,001 whitespace characters as sendable long text instead of an empty prompt', async () => {
+  const capability: FlowerAttachmentCapability = {
+    model_id: 'openai/gpt-5.2', revision: 'capability-whitespace', enabled: true, supports_long_text: true,
+    max_attachments: 4, max_file_size_bytes: 1_000_000, max_total_size_bytes: 2_000_000,
+    routes: { 'text/plain': 'tool_read' },
+  };
+  const uploadStarted = deferred<FlowerStagedAttachment>();
+  const uploadAttachment = vi.fn((_input: FlowerAttachmentUploadInput) => uploadStarted.promise);
+  const surfaceAdapter = adapter();
+  const runtime = renderSurfaceWithDraftCoordinator({
+    ...surfaceAdapter,
+    loadAttachmentCapability: vi.fn(async () => capability),
+    uploadAttachment,
+  }, createFlowerComposerDraftCoordinator(), 'activity');
+  await waitFor(() => Boolean(runtime.querySelector('textarea')));
+  const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+  textarea.value = ' '.repeat(50_001);
+  textarea.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText' }));
+  const submit = runtime.querySelector('.flower-composer-submit') as HTMLButtonElement;
+
+  await waitFor(() => submit.getAttribute('aria-label') === 'Send' && !submit.disabled);
+  submit.click();
+  await waitFor(() => uploadAttachment.mock.calls.length === 1);
+
+  expect(uploadAttachment.mock.calls[0]?.[0]).toMatchObject({ source: 'long_text' });
+  expect((uploadAttachment.mock.calls[0]?.[0] as FlowerAttachmentUploadInput).file.size).toBe(50_001);
+});
+
+it('cancels an exact long-text upload without losing the editor text and allows retry', async () => {
+  const coordinator = createFlowerComposerDraftCoordinator();
+  const capability: FlowerAttachmentCapability = {
+    model_id: 'openai/gpt-5.2', revision: 'capability-long-text', enabled: true, supports_long_text: true,
+    max_attachments: 4, max_file_size_bytes: 1_000_000, max_total_size_bytes: 2_000_000,
+    routes: { 'text/plain': 'tool_read' },
+  };
+  const uploadAttempts: Array<Readonly<{
+    input: FlowerAttachmentUploadInput;
+    completion: ReturnType<typeof deferred<FlowerStagedAttachment>>;
+  }>> = [];
+  const uploadAttachment = vi.fn((input: FlowerAttachmentUploadInput) => {
+    const completion = deferred<FlowerStagedAttachment>();
+    uploadAttempts.push({ input, completion });
+    input.signal.addEventListener('abort', () => {
+      completion.reject(new DOMException('The upload was canceled.', 'AbortError'));
+    }, { once: true });
+    return completion.promise;
+  });
+  const surfaceAdapter = adapter();
+  const launchTurn = vi.fn(surfaceAdapter.launchTurn);
+  const runtime = renderSurfaceWithDraftCoordinator({
+    ...surfaceAdapter,
+    loadAttachmentCapability: vi.fn(async () => capability),
+    uploadAttachment,
+    launchTurn,
+  }, coordinator, 'activity');
+
+  await waitFor(() => Boolean(runtime.querySelector('textarea')));
+  const textarea = runtime.querySelector('textarea') as HTMLTextAreaElement;
+  const longText = `${'x'.repeat(50_001)}\nkeep this exact ending`;
+  textarea.value = longText;
+  textarea.dispatchEvent(new InputEvent('input', { bubbles: true, inputType: 'insertText' }));
+
+  const submit = runtime.querySelector('button.flower-composer-submit') as HTMLButtonElement;
+  await waitFor(() => !submit.disabled && submit.getAttribute('aria-label') === 'Send');
+  submit.click();
+
+  await waitFor(() => uploadAttempts.length === 1);
+  await waitFor(() => submit.getAttribute('aria-label') === 'Stop');
+  expect(submit.disabled).toBe(false);
+  expect(uploadAttempts[0]?.input.source).toBe('long_text');
+  expect(uploadAttempts[0]?.input.signal.aborted).toBe(false);
+
+  submit.click();
+  await waitFor(() => uploadAttempts[0]?.input.signal.aborted === true);
+  await waitFor(() => !submit.disabled && submit.getAttribute('aria-label') === 'Send');
+  expect(textarea.value).toBe(longText);
+  expect(coordinator.read('__new_thread__').value).toMatchObject({
+    text: longText,
+    mode: 'over_limit_editing',
+  });
+  expect(coordinator.read('__new_thread__').value.attachments).toEqual([]);
+  expect(launchTurn).not.toHaveBeenCalled();
+
+  submit.click();
+  await waitFor(() => uploadAttempts.length === 2);
+  const retry = uploadAttempts[1]!;
+  retry.completion.resolve({
+    attachment_id: 'upl_long_text_retry_______',
+    name: retry.input.file.name,
+    mime_type: retry.input.file.type,
+    size_bytes: retry.input.file.size,
+    digest_sha256: 'a'.repeat(64),
+    locator: `floret-attachment:sha256:${'a'.repeat(64)}`,
+    source: 'long_text',
+    text_stats: { code_points: 50_024, lines: 2 },
+    capability_revision: capability.revision,
+  });
+
+  await waitFor(() => launchTurn.mock.calls.length === 1);
+  expect(launchTurn).toHaveBeenCalledWith(expect.objectContaining({
+    prompt: '',
+    attachment_ids: ['upl_long_text_retry_______'],
+  }));
+});
+
+it('does not restore or delete a long-text attachment after navigating to another thread', async () => {
+  const text = 'restored exact text';
+  const attachment: FlowerStagedAttachment = {
+    attachment_id: 'upl_restore_navigation____', name: 'long-text.txt',
+    mime_type: 'text/plain; charset=utf-8', size_bytes: new TextEncoder().encode(text).byteLength,
+    digest_sha256: 'b'.repeat(64), source: 'long_text', capability_revision: 'capability-1',
+    locator: 'attachment://v1/upl_restore_navigation____/long-text.txt',
+    text_stats: { code_points: Array.from(text).length, lines: 1 },
+  };
+  const coordinator = createFlowerComposerDraftCoordinator({
+    initialDraft: (scopeID) => scopeID === '__new_thread__'
+      ? {
+          text: 'draft A', mode: 'ordinary',
+          attachments: [{
+            local_id: 'local-restore', source: 'long_text', name: attachment.name,
+            mime_type: attachment.mime_type, size_bytes: attachment.size_bytes,
+            upload_request_id: 'draft-restore', attempt_state: 'staged_ready', staged: attachment,
+          }],
+        }
+      : { text: '', attachments: [], mode: 'ordinary' },
+  });
+  const restored = deferred<FlowerStagedLongTextReadResult>();
+  const readStagedLongText = vi.fn(() => restored.promise);
+  const deleteStagedAttachment = vi.fn(async () => undefined);
+  const surfaceAdapter = adapter();
+  const runtime = renderSurfaceWithDraftCoordinator({
+    ...surfaceAdapter, readStagedLongText, deleteStagedAttachment,
+  }, coordinator, 'activity');
+  const restoreSelector = 'button[aria-label="Restore to editor"]';
+  await waitFor(() => Boolean(runtime.querySelector(restoreSelector)));
+  (runtime.querySelector(restoreSelector) as HTMLButtonElement).click();
+  await waitFor(() => readStagedLongText.mock.calls.length === 1);
+  (runtime.querySelector('[data-thread-id="thread-1"] button') as HTMLButtonElement).click();
+  await waitFor(() => selectedThreadReady(runtime, 'thread-1'));
+  restored.resolve({ attachment, text });
+  await flush();
+  await flush();
+
+  expect((runtime.querySelector('textarea') as HTMLTextAreaElement).value).not.toContain(text);
+  expect(deleteStagedAttachment).not.toHaveBeenCalled();
+  expect(coordinator.read('__new_thread__').value).toMatchObject({ text: 'draft A' });
+  expect(coordinator.read('__new_thread__').value.attachments).toHaveLength(1);
+});
 
 function withCanonicalUserTurnID<T extends { readonly messages: readonly { readonly id: string }[] }>(threadValue: T, userEntryID: string, turnID: string): T {
   return {

@@ -38,7 +38,7 @@ export type FlowerRenderableMessageBlock =
     name: string;
     size?: number;
     mimeType: string;
-    url: string;
+    url?: string;
   }>;
 
 export type FlowerTimelineEntry =
@@ -197,19 +197,20 @@ function queuedTurnBlocks(turn: FlowerQueuedTurn): readonly FlowerRenderableMess
   const blocks: FlowerRenderableMessageBlock[] = (turn.attachments ?? []).map((attachment, index) => {
     const mimeType = trimString(attachment.mime_type);
     const url = trimString(attachment.url);
+    const attachmentID = trimString(attachment.attachment_id);
     const name = trimString(attachment.name);
-    if (!name || !mimeType || !url) {
+    if (!attachmentID || !name || !mimeType || !Number.isFinite(attachment.size_bytes) || attachment.size_bytes < 0) {
       throw new Error(`Flower contract error: queued turn ${turnID} attachment ${index} is invalid.`);
     }
-    if (mimeType.toLowerCase().startsWith('image/')) {
+    if (mimeType.toLowerCase().startsWith('image/') && url) {
       return {
-        type: 'image', key: `queued-turn:${turnID}:attachment:${index}`, block_index: index,
+        type: 'image', key: `queued-turn:${turnID}:attachment:${attachmentID}`, block_index: index,
         src: url, alt: name,
       };
     }
     return {
-      type: 'file', key: `queued-turn:${turnID}:attachment:${index}`, block_index: index,
-      name, mimeType, url,
+      type: 'file', key: `queued-turn:${turnID}:attachment:${attachmentID}`, block_index: index,
+      name, size: attachment.size_bytes, mimeType, ...(url ? { url } : {}),
     };
   });
   const prompt = trimString(turn.prompt);

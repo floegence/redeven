@@ -121,6 +121,7 @@ import {
   FlowerSoftAuraIcon,
   FlowerSurface,
   FlowerTurnLauncherWindow,
+  createFlowerComposerDraftCoordinator,
   flowerTurnAdmissionUncertainIdentity,
   type FlowerTurnLauncherAnchor,
   type FlowerTurnLauncherIntent,
@@ -350,6 +351,7 @@ import { runGatewaySourceAction } from './gatewaySourceActionRunner';
 import { createRuntimeLifecycleStepAnimation } from './runtimeLifecycleStepAnimation';
 import { parseRuntimeMaintenanceMessage } from './runtimeMaintenanceMessage';
 import {
+  createLocalEnvironmentFlowerDraftPersistence,
   createLocalEnvironmentFlowerSurfaceAdapter,
   launchLocalEnvironmentFlowerTurn,
   type DesktopSettingsBridge,
@@ -2474,6 +2476,11 @@ function desktopSettingsBridge(): DesktopSettingsBridge | null {
     || typeof candidate.save !== 'function'
     || typeof candidate.cancel !== 'function'
     || typeof candidate.requestRuntimeFlower !== 'function'
+    || typeof candidate.prepareRuntimeFlowerAttachment !== 'function'
+    || typeof candidate.writeRuntimeFlowerAttachmentChunk !== 'function'
+    || typeof candidate.commitRuntimeFlowerAttachment !== 'function'
+    || typeof candidate.cancelRuntimeFlowerAttachment !== 'function'
+    || typeof candidate.subscribeRuntimeFlowerAttachmentProgress !== 'function'
   ) {
     return null;
   }
@@ -2784,6 +2791,9 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
   const theme = useTheme();
   const shellTheme = desktopThemeBridge();
   const shellLanguage = desktopLanguageBridge();
+  const flowerDraftCoordinator = createFlowerComposerDraftCoordinator({
+    persistence: createLocalEnvironmentFlowerDraftPersistence(props.runtime.settings),
+  });
   const [snapshot, setSnapshot] = createSignal(props.snapshot);
   const [languageSnapshot, setLanguageSnapshot] = createSignal<RedevenLanguageSnapshot>(
     shellLanguage?.getSnapshot() ?? FALLBACK_DESKTOP_LANGUAGE_SNAPSHOT,
@@ -6319,6 +6329,8 @@ function DesktopWelcomeShellInner(props: DesktopWelcomeShellProps) {
           )}
         >
           <FlowerSurface
+            draftCoordinator={flowerDraftCoordinator}
+            surfaceInstanceID="desktop-welcome-flower"
             adapter={createLocalEnvironmentFlowerSurfaceAdapter(props.runtime.settings, {
               runtimeDisplayName: i18n().t('flowerSurface.runtime.localEnvironment'),
               runtimeSubtitle: i18n().t('flowerSurface.runtime.subtitle'),

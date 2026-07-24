@@ -68,6 +68,22 @@ function isPluralLike(value: unknown): value is Readonly<Record<string, string>>
   ));
 }
 
+function normalizeDesktopPluralMessages(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(normalizeDesktopPluralMessages);
+  }
+  if (!isRecord(value)) {
+    return value;
+  }
+  if (value.kind === 'plural' && isPluralLike(value.forms)) {
+    return value.forms;
+  }
+  return Object.fromEntries(Object.entries(value).map(([key, child]) => [
+    key,
+    normalizeDesktopPluralMessages(child),
+  ]));
+}
+
 function collectLeaves(value: unknown, prefix = ''): Readonly<Record<string, MessageLeaf>> {
   if (typeof value === 'string' || Array.isArray(value) || isPluralLike(value)) {
     return { [prefix]: value };
@@ -665,6 +681,8 @@ describe('Env App i18n dictionaries', () => {
     expect(deDE.t('chatActivity.command')).toBe('Befehl');
     expect(deDE.t('codespacesSettings.portRange')).toBe('Portbereich');
     expect(deDE.t('codeRuntime.rows.managedEditorSource')).toBe('Quelle des verwalteten Editors');
+    expect(deDE.tn('flowerSurface.attachments.lines', 1)).toBe('1 Zeile');
+    expect(deDE.tn('flowerSurface.attachments.lines', 2)).toBe('2 Zeilen');
 
     const ruRU = createI18nHelpers('ru-RU');
     expect(ruRU.tn('runtimeStatus.workload.tasks', 1)).toBe('1 задача');
@@ -673,6 +691,9 @@ describe('Env App i18n dictionaries', () => {
     expect(ruRU.tn('chatActivity.todoItems', 1)).toBe('1 элемент');
     expect(ruRU.tn('chatActivity.todoItems', 2)).toBe('2 элемента');
     expect(ruRU.tn('chatActivity.todoItems', 5)).toBe('5 элементов');
+    expect(ruRU.tn('flowerSurface.attachments.lines', 1)).toBe('1 строка');
+    expect(ruRU.tn('flowerSurface.attachments.lines', 2)).toBe('2 строки');
+    expect(ruRU.tn('flowerSurface.attachments.lines', 5)).toBe('5 строк');
 
     const esES = createI18nHelpers('es-ES');
     expect(esES.tn('shell.flowerCompanion.summary.withoutTitle.needsAttention', 1)).toBe('Una tarea requiere tu atención');
@@ -872,14 +893,16 @@ describe('Env App and Desktop i18n contract', () => {
       path.resolve(process.cwd(), '../../../desktop/src/shared/i18n/locales/catalogs/en-US-flower.json'),
       'utf8',
     ));
-    expect(enUS.flowerSurface).toEqual(desktopEnglishFlower);
+    expect(enUS.flowerSurface).toEqual(normalizeDesktopPluralMessages(desktopEnglishFlower));
 
     for (const locale of SUPPORTED_LOCALES.filter((candidate) => candidate !== 'en-US')) {
       const desktopCatalog = JSON.parse(fs.readFileSync(
         path.resolve(process.cwd(), `../../../desktop/src/shared/i18n/locales/catalogs/${locale}.json`),
         'utf8',
       )) as { flowerSurface: unknown };
-      expect(dictionaries[locale].flowerSurface, locale).toEqual(desktopCatalog.flowerSurface);
+      expect(dictionaries[locale].flowerSurface, locale).toEqual(
+        normalizeDesktopPluralMessages(desktopCatalog.flowerSurface),
+      );
     }
   });
 

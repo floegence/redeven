@@ -40,6 +40,7 @@ main() {
       src/ui/FlowerSurface.navigation.structuredInput.test.tsx \
       src/ui/FlowerSurface.canonicalReferences.test.tsx \
       src/ui/flower/FlowerChatContextChips.test.tsx \
+      src/ui/flower/FlowerAttachmentLane.test.tsx \
       src/ui/flower/FlowerTurnProjectionUnavailable.test.tsx \
       src/ui/flower/activityDisclosure.test.ts \
       src/ui/flower/SubagentDetailWindow.test.tsx \
@@ -53,6 +54,10 @@ main() {
     ui_pkg_log "Flower UI: shared timeline projection contracts..."
     ui_pkg_run_pnpm exec vitest run --root "$ROOT_DIR" --config "$dir/vite.config.ts" --environment=node --maxWorkers=2 --testTimeout=10000 \
       internal/flower_ui/src/flowerLiveProjection.test.ts \
+      internal/flower_ui/src/attachments/flowerAttachmentModel.test.ts \
+      internal/flower_ui/src/attachments/createFlowerAttachmentController.test.ts \
+      internal/flower_ui/src/composer/createFlowerComposerDraftCoordinator.test.ts \
+      internal/flower_host_ui/src/redevenFlowerDraftPersistence.test.ts \
       internal/flower_ui/src/flowerActivityPresentation.test.ts \
       internal/flower_ui/src/flowerSubagentDetailThread.test.ts \
       internal/flower_ui/src/flowerSubagentProjection.test.ts \
@@ -78,6 +83,12 @@ main() {
       internal/flower_ui/src/FlowerSurface.markdownRendering.test.ts \
       internal/flower_ui/src/FlowerSurface.markdownReadability.test.ts \
       internal/flower_ui/src/shellCommandHighlight.test.ts
+
+    (
+      cd "$ROOT_DIR/internal/flower_host_ui"
+      NODE_PATH="$dir/node_modules" "$dir/node_modules/.bin/eslint" \
+        -c eslint.config.mjs "src/**/*.{ts,tsx}" --max-warnings=0
+    )
 
     ui_pkg_log ""
     ui_pkg_log "Flower UI: Chromium interaction contracts..."

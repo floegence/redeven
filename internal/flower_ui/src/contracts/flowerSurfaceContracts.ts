@@ -468,8 +468,18 @@ export type FlowerQueuedTurn = Readonly<{
   turn_id: string;
   prompt: string;
   created_at_ms: number;
-  attachments?: readonly FlowerTurnAttachment[];
+  attachments?: readonly FlowerQueuedTurnAttachment[];
   context_action?: unknown;
+}>;
+
+export type FlowerQueuedTurnAttachment = Readonly<{
+  attachment_id: string;
+  name: string;
+  mime_type: string;
+  size_bytes: number;
+  text_stats?: FlowerAttachmentTextStats;
+  locator?: string;
+  url?: string;
 }>;
 
 export type FlowerThreadSnapshot = Readonly<{
@@ -1018,11 +1028,12 @@ export type FlowerResolveHandlerInput = Readonly<{
 export type FlowerTurnLaunchInput = Readonly<{
   thread_id?: string;
   turn_id?: string;
+  draft_id?: string;
+  expected_draft_revision?: number;
   prompt: string;
   decision?: FlowerRouterDecision | null;
   context_action?: unknown;
-  attachments?: readonly FlowerTurnAttachment[];
-  pending_files?: readonly File[];
+  attachment_ids?: readonly string[];
   working_dir?: string;
   model_id?: string;
   permission_type?: FlowerPermissionType;
@@ -1049,10 +1060,62 @@ export type FlowerTurnLaunchFailure = Error & Readonly<{
   }>;
 }>;
 
-export type FlowerTurnAttachment = Readonly<{
+export type FlowerAttachmentSource = 'file' | 'paste' | 'drop' | 'long_text';
+
+export type FlowerAttachmentRoute = 'native_full_content' | 'tool_read' | 'unsupported';
+
+export type FlowerAttachmentCapability = Readonly<{
+  model_id: string;
+  revision: string;
+  enabled: boolean;
+  supports_long_text: boolean;
+  max_attachments: number;
+  max_file_size_bytes: number;
+  max_total_size_bytes: number;
+  routes: Readonly<Record<string, FlowerAttachmentRoute>>;
+  expires_at_unix_ms?: number;
+}>;
+
+export type FlowerAttachmentTextStats = Readonly<{
+  code_points: number;
+  lines: number;
+}>;
+
+export type FlowerStagedAttachment = Readonly<{
+  attachment_id: string;
   name: string;
   mime_type: string;
-  url: string;
+  size_bytes: number;
+  digest_sha256: string;
+  locator: string;
+  source: FlowerAttachmentSource;
+  text_stats?: FlowerAttachmentTextStats;
+  capability_revision: string;
+  created_at_unix_ms?: number;
+}>;
+
+export type FlowerAttachmentUploadProgress = Readonly<{
+  attempt_id: string;
+  loaded: number;
+  indeterminate: boolean;
+  total?: number;
+}>;
+
+export type FlowerAttachmentUploadInput = Readonly<{
+  attempt_id: string;
+  request_id: string;
+  draft_id: string;
+  model_id: string;
+  capability_revision: string;
+  source: FlowerAttachmentSource;
+  file: File;
+  signal: AbortSignal;
+  on_progress: (progress: FlowerAttachmentUploadProgress) => void;
+}>;
+
+export type FlowerStagedLongTextReadResult = Readonly<{
+  attachment: FlowerStagedAttachment;
+  text: string;
 }>;
 
 export type FlowerTurnLauncherSourceSurface =
@@ -1233,6 +1296,11 @@ export type FlowerSurfaceAdapter = Readonly<{
   forkThread?: (threadID: string) => Promise<FlowerLiveBootstrap>;
   deleteThread?: (threadID: string) => Promise<FlowerThreadDeleteOutcome>;
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
+  loadAttachmentCapability?: (modelID: string) => Promise<FlowerAttachmentCapability>;
+  uploadAttachment?: (input: FlowerAttachmentUploadInput) => Promise<FlowerStagedAttachment>;
+  deleteStagedAttachment?: (attachmentID: string, draftID: string) => Promise<void>;
+  readStagedLongText?: (attachment: FlowerStagedAttachment, draftID: string) => Promise<FlowerStagedLongTextReadResult>;
+  previewStagedAttachment?: (attachment: FlowerStagedAttachment, draftID: string) => void | Promise<void>;
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;
   compactThreadContext: (input: FlowerCompactThreadContextInput) => Promise<FlowerLiveBootstrap>;
   stopThread: (threadID: string) => Promise<FlowerLiveBootstrap>;

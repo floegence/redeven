@@ -1,5 +1,6 @@
 import { render } from 'solid-js/web';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { createFlowerComposerDraftCoordinator } from '../../../../../flower_ui/src/composer/createFlowerComposerDraftCoordinator';
 
 const mocks = vi.hoisted(() => {
   const state: {
@@ -414,7 +415,12 @@ async function renderPage() {
   const mod = await import('./EnvAIPage');
   const host = document.createElement('div');
   document.body.appendChild(host);
-  const dispose = render(() => <mod.EnvAIPage />, host);
+  const dispose = render(() => (
+    <mod.EnvAIPage
+      draftCoordinator={createFlowerComposerDraftCoordinator()}
+      surfaceInstanceID="env-ai-page-test"
+    />
+  ), host);
   await flush();
   await flush();
   return { host, dispose };

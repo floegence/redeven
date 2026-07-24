@@ -2,7 +2,11 @@ import http from 'node:http';
 
 import { describe, expect, it } from 'vitest';
 
-import { readRuntimeFlowerHTTPResponse, runtimeFlowerDeleteQuery } from './runtimeFlowerHTTP';
+import {
+	invalidateRuntimeFlowerAccessOnStatus,
+	readRuntimeFlowerHTTPResponse,
+	runtimeFlowerDeleteQuery,
+} from './runtimeFlowerHTTP';
 
 function listen(server: http.Server): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -84,4 +88,19 @@ describe('runtimeFlowerDeleteQuery', () => {
   ])('rejects non-canonical delete query %s', (query) => {
     expect(runtimeFlowerDeleteQuery(new URL(`http://runtime.test/thread${query}`))).toBe(false);
   });
+});
+
+describe('invalidateRuntimeFlowerAccessOnStatus', () => {
+	it('invalidates only the challenged runtime cookie after a streamed upload returns 423', () => {
+		const cache = new Map([
+			['http://runtime-a.test', 'expired-cookie'],
+			['http://runtime-b.test', 'other-cookie'],
+		]);
+		expect(invalidateRuntimeFlowerAccessOnStatus(cache, 'http://runtime-a.test', 200)).toBe(false);
+		expect(cache.get('http://runtime-a.test')).toBe('expired-cookie');
+
+		expect(invalidateRuntimeFlowerAccessOnStatus(cache, 'http://runtime-a.test', 423)).toBe(true);
+		expect(cache.has('http://runtime-a.test')).toBe(false);
+		expect(cache.get('http://runtime-b.test')).toBe('other-cookie');
+	});
 });

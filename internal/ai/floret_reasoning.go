@@ -13,7 +13,7 @@ func floretModelGatewayCapabilities(capability config.AIReasoningCapability) flr
 	capability = capability.Normalize()
 	if capability.IsZero() {
 		none := flconfig.ReasoningCapability{Kind: flconfig.ReasoningKindNone}
-		return flruntime.ModelGatewayCapabilities{Reasoning: &none}
+		return flruntime.ModelGatewayCapabilities{Reasoning: &none, AttachmentPayload: flruntime.ModelGatewayAttachmentPayloadExpanded}
 	}
 	kind := capability.Kind
 	if kind == "dynamic" {
@@ -32,5 +32,5 @@ func floretModelGatewayCapabilities(capability config.AIReasoningCapability) flr
 		Budget:            flconfig.ReasoningBudget{MinTokens: int64(capability.MinBudgetTokens), MaxTokens: int64(capability.MaxBudgetTokens)},
 		DynamicModelValue: capability.DynamicProviderMetadata,
 	}
-	return flruntime.ModelGatewayCapabilities{Reasoning: &reasoning}
+	return flruntime.ModelGatewayCapabilities{Reasoning: &reasoning, AttachmentPayload: flruntime.ModelGatewayAttachmentPayloadExpanded}
 }

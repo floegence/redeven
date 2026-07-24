@@ -2,6 +2,7 @@ import { createContext, useContext, type Resource } from 'solid-js';
 import type { FileItem } from '@floegence/floe-webapp-core/file-browser';
 import type {
   FlowerFileOpenRequest,
+  FlowerComposerDraftCoordinator,
   FlowerLinkedContextPathOpenRequest,
   FlowerThreadFocusRequest,
   FlowerTurnLauncherAnchor,
@@ -85,6 +86,7 @@ export type OpenTerminalInDirectoryRequest = {
 };
 
 export type EnvContextValue = {
+  flowerDraftCoordinator?: FlowerComposerDraftCoordinator;
   env_id: () => string;
   env: Resource<EnvironmentDetail | null>;
   localRuntime: () => LocalRuntimeInfo | null;

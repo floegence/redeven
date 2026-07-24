@@ -81,6 +81,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	}
 	r.webSearchMode = webSearchCapability.Mode
 	r.webSearchToolEnabled = webSearchCapability.RegisterTool
+	r.attachmentToolReadEnabled = req.ModelCapability.SupportsTools && r.host.openLiveAttachment != nil
 	r.recordRunDiagnostic("web_search.config", RealtimeStreamKindLifecycle, map[string]any{
 		"resolved":          webSearchCapability.Mode,
 		"reason":            webSearchCapability.Reason,
@@ -142,6 +143,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 		},
 		r.webSearchMode,
 		withFloretAttachmentResolver(r.resolveFloretMessageAttachment, req.ModelCapability.SupportsImageInput, req.ModelCapability.SupportsFileInput),
+		withFloretAttachmentToolRead(r.attachmentToolReadEnabled),
 		withFloretRequestAdmission(r.admitFloretProviderRequest),
 	)
 	completionPolicy := flruntime.TurnCompletionNaturalStop
@@ -174,7 +176,7 @@ func (r *run) runFloretHostedTurn(ctx context.Context, req RunRequest, providerC
 	if err != nil {
 		return r.failRun("Failed to validate message attachments", err)
 	}
-	flProvider.attachmentResolver = r.floretAttachmentResolver(frozenAttachments)
+	flProvider.attachmentResolver = r.floretAttachmentResolver(frozenAttachments, flProvider)
 	host, err := r.floretHostFactory(ctx, flruntime.TurnExecutionHostOptions{
 		Config:                   floretCfg,
 		ModelGateway:             flProvider,

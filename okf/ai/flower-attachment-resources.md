@@ -1,0 +1,52 @@
+---
+type: AI Resource Contract
+title: Flower attachment resources
+description: Owner-scoped uploads, canonical membership, provider reads, quotas, and last-reference cleanup.
+tags: [ai, flower, attachments, storage, security]
+timestamp: 2026-07-24T00:00:00Z
+---
+# Summary
+
+- Authority: Redeven owns attachment bytes, metadata, owner scope, quota, and retention claims; Floret owns the canonical turn and attachment membership.
+- Outcome: clients upload bytes once and send opaque `attachment_id` values, while Flower displays an `attachment://v1/...` locator and providers receive only revalidated canonical resources.
+- Invariants: physical paths never leave the service, user ownership comes only from the authenticated session, and a product claim never substitutes for an exact Floret membership read.
+- Failure boundary: owner mismatch, unsupported media, quota exhaustion, missing canonical membership, metadata drift, digest drift, or missing bytes fails closed without weakening another reference.
+
+# Resource Contract
+
+Redeven threadstore schema v6 stores generated attachment identity, an owner scope, a server-only relative storage name, sanitized display metadata, exact byte size, SHA-256, optional strict UTF-8 code-point and logical-line counts, source, state, idempotency identity, and retention claims. New uploads use the stable `(endpoint_id, owner_user_hash)` scope derived from the authenticated user. Channel and session identities are request credentials, not durable resource owners. Migration retains provable legacy thread resources under the closed `legacy_thread` scope and quarantines unowned staged legacy rows; it never guesses a user owner. A legacy resource is readable only through its closed parser and exact canonical membership. Its first successful read hashes the bytes and atomically seals that digest; every later read rejects same-size or other byte drift.
+
+Legacy queued-only, staged, and staged-with-thread-claim records have no provable stable owner and enter `legacy_staged_quarantine`; they cannot be downloaded or admitted by any user. Only a live resource with an exact thread claim becomes `legacy_thread`. Schema migration retains a legacy draft claim under its closed legacy ref identity and adds only the scope index needed for lifecycle cleanup; it does not create a composer draft or user owner. After public Floret membership succeeds, strict UTF-8 legacy text may be sealed and exposed through the same bounded, cursor-signed `attachment.read` tool path without rewriting Floret history or its canonical ResourceRef.
+
+`attachment_id` is an opaque request identity. The canonical Floret `ResourceRef` is content-addressed and the display locator is `attachment://v1/<attachment-id>/<encoded-name>`. Neither value grants access. The upload directory and relative storage name are never returned. Staged transport requires the exact `draft_id`, owner, and owner-bound provisional or committed draft claim. Queued transport requires exact `thread_id + queue_id`; canonical transport requires exact `thread_id + turn_id`. Preview changes only content disposition. Every request reauthenticates, and every canonical read obtains exact thread, turn, attachment, ResourceRef, name, MIME, size, and digest membership from a public Floret read before checking the matching product claim, owner rule, metadata, file size, and file digest. A logical locator or copied URL pasted into another thread therefore grants nothing.
+
+Uploads are streamed through a bounded multipart request into a `0600` temporary file while Redeven computes size, digest, UTF-8 validity, code-point count, CRLF-aware logical line count, and a closed media classification. Every strict UTF-8 `text/*` upload, including active HTML and XML media, is stored and served canonically as `text/plain; charset=utf-8`; client-declared active text never survives classification. Commit requires the declared length, content digest, normalized display-name digest, and idempotency fingerprint to match. The file and containing directory are synchronized before the resource record commits. Response-loss replay returns the committed record; a conflicting replay fails explicitly. If a retry finds the final file after rename but before metadata commit, it revalidates fingerprint-bound size, digest, text statistics, and media classification before completing the same attempt. Startup marks any prior-process receiving attempt failed and removes its artifacts so the same request can retry immediately instead of waiting for expiry. Commit writes an owner-bound `draft_pending` claim; the exact composer lease/revision transaction alone can promote it to `draft`. That transaction replaces client-projected name, MIME, size, digest, locator, source class, text statistics, creation time, and attachment capability revision with upload-row and draft-snapshot canonical values. Internal draft ref ids bind both the owner hash and scope so one user's expiry, removal, admission, or thread deletion cannot release another user's same-scope attachment.
+
+The authenticated preview route uses a closed inline allowlist: canonical plain text, PNG, JPEG, GIF, WebP, and PDF. Inline responses add a sandboxed content security policy that denies scripts, navigation bases, and form actions. Any unsupported or legacy media value is returned as `application/octet-stream` with attachment disposition, even when old metadata claims HTML, XML, SVG, or another browser-active type. Preview authorization and integrity checks are identical to download; disposition cannot weaken membership or ownership.
+
+Quota checks occur in the same SQLite write transaction as the state change. Staged quota is scoped to unique user-owned resources. First admission into queued or thread ownership checks unique user live quota and unique thread live quota; duplicate claims do not double count. Releasing the final provisional draft, committed draft, queued, thread, or fork claim moves the resource to deleting and immediately releases live quota. Physical deletion and row removal are idempotent and retryable. Drafts expire after 30 days without a mutation, except admission-in-flight drafts that first require exact TurnID reconciliation. Background reconciliation keyset-scans the complete stale candidate ordering in bounded batches; an uncertain canonical read retains that exact draft for retry but cannot prevent later candidates from converging in the same maintenance run. A thread deletion releases its thread claim and same-scope drafts only after Floret deletion succeeds, and preserves bytes still referenced by a fork, another thread, queued command, or other draft.
+
+Every direct, queued, follow-up, replacement, RPC, and service admission path rechecks the exact draft revision, owner, attachment state, count, aggregate 25 MiB limit, model-scoped route, capability revision, and canonical upload metadata in the claiming transaction. Inline text over 50,000 Unicode code points is rejected with the stable `long_text_attachment_required` code even when a client bypasses the composer. A prepared long-text claim is accepted only when its staged bytes, SHA-256, UTF-8 byte count, code-point count, and CRLF-aware line count are freshly derived from and exactly match the frozen draft text. New-thread preflight performs these checks before binding a target, writing settings, or creating Floret intent, so rejection leaves no partial thread.
+
+# Provider Contract
+
+Redeven derives one model-scoped capability snapshot from the selected provider route and model modalities. The revision binds the exact MIME route matrix and product limits. A native image or file route is advertised only when the provider adapter can render and conservatively estimate that complete request. Strict UTF-8 text may instead use the bounded `attachment.read` host tool. Binary, image, and PDF content never use the text fallback.
+
+Floret v0.26.0 receives only canonical descriptors and owns their durable association, replay, fork, retry, SubAgent, and prompt-cache identity. Redeven opens and hashes bytes after Floret selects the exact request and before provider dispatch through the prepared-request contract. The prepared request freezes the fully rendered provider payload, estimate, and fingerprint, is consumed at most once, and is closed on every non-stream path. Historical reads repeat canonical membership and byte-integrity checks rather than trusting admission-time state.
+
+# Boundaries
+
+Redeven does not inspect or migrate Floret storage, persist message ordering, expose a filesystem path, accept a client owner, authorize by locator, or infer canonical membership from its claim table. Floret does not upload, store, classify, quota, download, or delete Redeven resources. Desktop transports attachment bytes in offset-checked binary IPC chunks; Env App uses authenticated multipart XHR with progress and cancellation. Neither transport embeds bytes or a URL identity in a turn JSON body.
+
+# Evidence
+
+- `redeven:internal/ai/threadstore/schema.go` - Product schema v6 declares owner-scoped attachment resources, attempts, claims, and composer drafts.
+- `redeven:internal/ai/threadstore/uploads.go` - Transactional idempotency, quotas, claims, and last-reference deletion are enforced in the resource store.
+- `redeven:internal/ai/uploads.go` - Upload streaming, classification, integrity, locator, staged reads, and canonical live reads are implemented at the host boundary.
+- `redeven:internal/ai/floret_attachments.go` - Canonical descriptors and post-admission byte validation bridge Redeven resources into Floret requests.
+- `redeven:internal/ai/floret_provider.go` - Prepared provider requests freeze rendered attachment payloads and conservative estimates.
+- `redeven:internal/codeapp/appserver/server.go` - Authenticated upload, capability, download, range, restore, and delete routes expose stable envelopes.
+- `redeven:internal/ai/uploads_v2_test.go` - Active UTF-8 text classification is pinned to canonical plain text.
+- `redeven:internal/codeapp/appserver/server_ai_uploads_test.go` - Preview tests pin the closed inline media set, forced download fallback, and sandbox CSP.
+- `redeven:desktop/src/shared/runtimeFlowerAttachmentIPC.ts` - Desktop validates ordered binary attachment operations without JSON or base64 payloads.
+- `redeven:internal/envapp/ui_src/src/ui/services/localApi.ts` - Env App uses authenticated multipart XHR with progress and cancellation.

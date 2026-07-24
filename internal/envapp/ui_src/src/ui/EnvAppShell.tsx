@@ -74,10 +74,12 @@ import {
   type FlowerTurnLauncherAnchor,
   type FlowerTurnLauncherIntent,
   type FlowerTurnLauncherSubmitInput,
+  createFlowerComposerDraftCoordinator,
 } from '../../../../flower_ui/src';
 import { flowerTurnAdmissionUncertainIdentity } from '../../../../flower_ui/src/flowerTurnAdmission';
 import type { ContextActionExecutionContext } from './contextActions/protocol';
 import { createFlowerLinkedContextNavigation } from './flower/linkedContextNavigation';
+import { createEnvLocalFlowerDraftPersistence } from './flower/envLocalFlowerSurfaceAdapter';
 import { buildPluginPanelModel } from './plugins/pluginInventoryProjection';
 import { createPluginLifecycleAPI } from './plugins/pluginApi';
 import {
@@ -152,7 +154,6 @@ import {
 import {
   fetchLocalApiJSON,
   getEnvAppAccessStatus,
-  uploadLocalApiFile,
   unlockEnvAppAccess,
   type EnvAppAccessStatus,
 } from './services/localApi';
@@ -549,6 +550,9 @@ export function EnvAppShell() {
   const rpc = useRedevenRpc();
   const cmd = useCommand();
   const notify = useNotification();
+  const flowerDraftCoordinator = createFlowerComposerDraftCoordinator({
+    persistence: createEnvLocalFlowerDraftPersistence(),
+  });
   const pluginConfirmationQueue = createPluginConfirmationQueue();
   const [pluginSessionRetired, setPluginSessionRetired] = createSignal(false);
   const retiredPluginManagementRevisionByInstanceID = new Map<string, number>();
@@ -2034,18 +2038,34 @@ export function EnvAppShell() {
           failedToCreateChat: i18n.t('flowerChat.router.failedToCreateChat'),
         },
         onSettingsChanged: () => { bumpSettingsSeq(); },
-        uploadAttachment: uploadLocalApiFile,
         openFileBrowser: openFlowerFileBrowser,
         openFilePreview: openFlowerFilePreview,
         openCanonicalReferenceTarget: openFlowerCanonicalReferenceTarget,
         openLinkedFilePreview: openFlowerLinkedFilePreview,
         openLinkedDirectoryBrowser: openFlowerLinkedDirectoryBrowser,
       });
+      const attachmentIDs: string[] = [];
+      for (const [index, file] of (input.intent.pending_attachments ?? []).entries()) {
+        if (!adapter.uploadAttachment) throw new Error('Attachment upload is unavailable for this Flower surface.');
+        const requestID = `${input.intent.id}:attachment:${index}`;
+        const staged = await adapter.uploadAttachment({
+          attempt_id: requestID,
+          request_id: requestID,
+          draft_id: input.intent.id,
+          model_id: '',
+          capability_revision: '',
+          source: 'file',
+          file,
+          signal: new AbortController().signal,
+          on_progress: () => undefined,
+        });
+        attachmentIDs.push(staged.attachment_id);
+      }
       const receipt = await adapter.launchTurn({
         prompt: trimmedPrompt,
         context_action: input.intent.context_action,
         working_dir: input.intent.suggested_working_dir,
-        pending_files: input.intent.pending_attachments,
+        attachment_ids: attachmentIDs,
       });
       const threadId = trimString(receipt.thread_id);
       if (!threadId) {
@@ -4220,6 +4240,8 @@ export function EnvAppShell() {
             inert={!activityFlowerSurfaceVisible()}
           >
             <EnvAIPage
+              draftCoordinator={flowerDraftCoordinator}
+              surfaceInstanceID="env-activity-flower"
               presentation={activityFlowerPlacement() === 'full_page' ? 'full' : 'companion'}
               engaged={activityFlowerEngaged()}
               transcriptVisible={activityFlowerEngaged()}
@@ -4512,6 +4534,7 @@ export function EnvAppShell() {
   return (
     <EnvContext.Provider
       value={{
+        flowerDraftCoordinator,
         env_id: envId,
         env,
         localRuntime,

@@ -3,11 +3,21 @@ import type { IncomingHttpHeaders, IncomingMessage } from 'node:http';
 export type RuntimeFlowerHTTPResponse = Readonly<{
   status: number;
   body: string;
+  bytes: Buffer;
   headers: IncomingHttpHeaders;
 }>;
 
 export function runtimeFlowerDeleteQuery(parsed: URL): boolean {
-  return parsed.search === '?force=true';
+	return parsed.search === '?force=true';
+}
+
+export function invalidateRuntimeFlowerAccessOnStatus(
+	cache: Map<string, string>,
+	cacheKey: string,
+	status: number,
+): boolean {
+	if (status !== 423) return false;
+	return cache.delete(cacheKey);
 }
 
 export function readRuntimeFlowerHTTPResponse(response: IncomingMessage): Promise<RuntimeFlowerHTTPResponse> {
@@ -32,9 +42,11 @@ export function readRuntimeFlowerHTTPResponse(response: IncomingMessage): Promis
     response.once('end', () => {
       if (settled) return;
       settled = true;
+      const bytes = Buffer.concat(chunks);
       resolve({
         status: response.statusCode ?? 0,
-        body: Buffer.concat(chunks).toString('utf8'),
+        body: bytes.toString('utf8'),
+        bytes,
         headers: response.headers,
       });
     });

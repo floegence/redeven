@@ -7,6 +7,7 @@ type TranslationParams = Readonly<Record<string, string | number>>;
 export type FlowerSurfaceTranslator = Readonly<{
   locale: string;
   t: (key: string, params?: TranslationParams) => string;
+  tn: (key: string, count: number, params?: TranslationParams) => string;
 }>;
 
 function t(i18n: FlowerSurfaceTranslator, key: string, params?: TranslationParams): string {
@@ -16,6 +17,49 @@ function t(i18n: FlowerSurfaceTranslator, key: string, params?: TranslationParam
 export function createLocalizedFlowerSurfaceCopy(i18n: FlowerSurfaceTranslator): FlowerSurfaceCopy {
   const k = (suffix: string) => `flowerSurface.${suffix}`;
   return {
+    attachments: {
+      listLabel: t(i18n, k('attachments.listLabel')),
+      add: t(i18n, k('attachments.add')),
+      retry: t(i18n, k('attachments.retry')),
+      reselect: t(i18n, k('attachments.reselect')),
+      cancel: t(i18n, k('attachments.cancel')),
+      remove: t(i18n, k('attachments.remove')),
+      restore: t(i18n, k('attachments.restore')),
+      preview: t(i18n, k('attachments.preview')),
+      copyReference: t(i18n, k('attachments.copyReference')),
+      uploading: t(i18n, k('attachments.uploading')),
+      queued: t(i18n, k('attachments.queued')),
+      ready: t(i18n, k('attachments.ready')),
+      failed: t(i18n, k('attachments.failed')),
+      incompatible: t(i18n, k('attachments.incompatible')),
+      reselectRequired: t(i18n, k('attachments.reselectRequired')),
+      errorTooLarge: t(i18n, k('attachments.errorTooLarge')),
+      errorCountExceeded: t(i18n, k('attachments.errorCountExceeded')),
+      errorTotalSizeExceeded: t(i18n, k('attachments.errorTotalSizeExceeded')),
+      errorUnsupported: t(i18n, k('attachments.errorUnsupported')),
+      errorInvalidEncoding: t(i18n, k('attachments.errorInvalidEncoding')),
+      errorUploadFailed: t(i18n, k('attachments.errorUploadFailed')),
+      errorUnavailable: t(i18n, k('attachments.errorUnavailable')),
+      lines: (count) => i18n.tn(k('attachments.lines'), count),
+      added: (name) => t(i18n, k('attachments.added'), { name }),
+      converted: (name) => t(i18n, k('attachments.converted'), { name }),
+      uploaded: (name) => t(i18n, k('attachments.uploaded'), { name }),
+      uploadFailedAnnouncement: (name) => t(i18n, k('attachments.uploadFailedAnnouncement'), { name }),
+      unavailable: t(i18n, k('attachments.unavailable')),
+      overLimit: (limit) => t(i18n, k('attachments.overLimit'), { limit }),
+      invalidText: t(i18n, k('attachments.invalidText')),
+      restoreFailed: t(i18n, k('attachments.restoreFailed')),
+      compactBlocked: t(i18n, k('attachments.compactBlocked')),
+      leaseConflict: t(i18n, k('attachments.leaseConflict')),
+      takeOver: t(i18n, k('attachments.takeOver')),
+      draftUnsaved: t(i18n, k('attachments.draftUnsaved')),
+      draftUnavailable: t(i18n, k('attachments.draftUnavailable')),
+      pendingDraft: t(i18n, k('attachments.pendingDraft')),
+      modelSupportChecking: t(i18n, k('attachments.modelSupportChecking')),
+      modelSupported: t(i18n, k('attachments.modelSupported')),
+      modelUnsupported: t(i18n, k('attachments.modelUnsupported')),
+      modelSupportUnavailable: t(i18n, k('attachments.modelSupportUnavailable')),
+    },
     chat: {
       loadingSettings: t(i18n, k('chat.loadingSettings')),
       warmupTitle: t(i18n, k('chat.warmupTitle')),

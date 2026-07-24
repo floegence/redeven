@@ -349,7 +349,7 @@ func (s *Service) GetThread(ctx context.Context, meta *session.Meta, threadID st
 			return nil, listErr
 		}
 		for _, record := range queued {
-			queuedView, err := queuedTurnRecordToThreadView(record)
+			queuedView, err := s.queuedTurnThreadView(ctx, record)
 			if err != nil {
 				return nil, fmt.Errorf("decode queued turn %q: %w", record.QueueID, err)
 			}
@@ -437,9 +437,15 @@ func (s *Service) CreateThreadWithOptions(ctx context.Context, meta *session.Met
 		return nil, errors.New("threads store not ready")
 	}
 
-	id, err := NewThreadID()
-	if err != nil {
-		return nil, err
+	id := strings.TrimSpace(req.ThreadID)
+	if id == "" {
+		var err error
+		id, err = NewThreadID()
+		if err != nil {
+			return nil, err
+		}
+	} else if len(id) != 27 || !strings.HasPrefix(id, "th_") || strings.ContainsAny(id, "\r\n\x00") {
+		return nil, errors.New("invalid thread id")
 	}
 
 	modelID := strings.TrimSpace(req.ModelID)

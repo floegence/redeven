@@ -90,6 +90,154 @@ VALUES(1, 'ai_threadstore_product_v2', 3, 3);
 	return db
 }
 
+func createProductV4DatabaseForTest(t *testing.T, path string) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`
+CREATE TABLE __redeven_db_meta (
+  singleton INTEGER PRIMARY KEY CHECK(singleton = 1),
+  db_kind TEXT NOT NULL,
+  created_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  last_migrated_at_unix_ms INTEGER NOT NULL DEFAULT 0,
+  last_migrated_from_version INTEGER NOT NULL DEFAULT 0,
+  last_migrated_to_version INTEGER NOT NULL DEFAULT 0
+);
+INSERT INTO __redeven_db_meta(singleton, db_kind, last_migrated_from_version, last_migrated_to_version)
+VALUES(1, 'ai_threadstore_product_v2', 4, 4);
+`); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if err := createThreadstoreSchemaV4(tx); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`PRAGMA user_version=4`); err != nil {
+		_ = tx.Rollback()
+		t.Fatal(err)
+	}
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+	return db
+}
+
+func TestThreadstoreMigratesV4UploadsToExplicitLegacyScopes(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "threads.sqlite")
+	db := createProductV4DatabaseForTest(t, path)
+	if _, err := db.Exec(`
+INSERT INTO ai_uploads(upload_id, endpoint_id, storage_relpath, name, mime_type, size_bytes, state, created_at_unix_ms)
+VALUES
+  ('upl_legacy_live', 'env_1', 'upl_legacy_live.data', 'live.txt', 'text/plain', 4, 'live', 10),
+  ('upl_legacy_queued', 'env_1', 'upl_legacy_queued.data', 'queued.txt', 'text/plain', 6, 'live', 10),
+  ('upl_legacy_staged', 'env_1', 'upl_legacy_staged.data', 'draft.txt', 'text/plain', 5, 'staged', 11),
+  ('upl_staged_with_thread_ref', 'env_1', 'upl_staged_with_thread_ref.data', 'stale.txt', 'text/plain', 5, 'staged', 11);
+INSERT INTO ai_upload_refs(endpoint_id, upload_id, thread_id, ref_kind, ref_id, created_at_unix_ms)
+VALUES
+  ('env_1', 'upl_legacy_live', 'thread_1', 'thread', 'thread_1', 12),
+  ('env_1', 'upl_legacy_queued', 'thread_1', 'queued_turn', 'queue_1', 12),
+  ('env_1', 'upl_staged_with_thread_ref', 'thread_1', 'thread', 'thread_1', 12);
+`); err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+
+	store, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	live, err := store.GetUpload(context.Background(), "env_1", "upl_legacy_live")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if live.OwnerScopeKind != UploadOwnerScopeLegacyThread || live.OwnerUserHash != "" || live.ContentSHA256 != "" || live.MimeType != "text/plain" {
+		t.Fatalf("legacy live=%#v", live)
+	}
+	queued, err := store.GetQueuedTurnOwnedUpload(context.Background(), "env_1", "thread_1", "queue_1", "upl_legacy_queued")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if queued.OwnerScopeKind != UploadOwnerScopeLegacyStagedQuarantine || queued.OwnerUserHash != "" || queued.ContentSHA256 != "" || queued.State != UploadStateLive {
+		t.Fatalf("legacy queued=%#v", queued)
+	}
+	staged, err := store.GetUpload(context.Background(), "env_1", "upl_legacy_staged")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if staged.OwnerScopeKind != UploadOwnerScopeLegacyStagedQuarantine || staged.OwnerUserHash != "" {
+		t.Fatalf("legacy staged=%#v", staged)
+	}
+	stagedWithThreadRef, err := store.GetUpload(context.Background(), "env_1", "upl_staged_with_thread_ref")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stagedWithThreadRef.OwnerScopeKind != UploadOwnerScopeLegacyStagedQuarantine || stagedWithThreadRef.OwnerUserHash != "" {
+		t.Fatalf("legacy staged with stale thread ref=%#v", stagedWithThreadRef)
+	}
+	if countRowsForTest(t, store.db, `SELECT COUNT(1) FROM ai_upload_attempts`) != 0 {
+		t.Fatal("migration created an upload attempt")
+	}
+}
+
+func TestThreadstoreMigratesV4QuarantinedDraftRefThroughV6(t *testing.T) {
+	t.Parallel()
+	path := filepath.Join(t.TempDir(), "threads.sqlite")
+	raw := createProductV4DatabaseForTest(t, path)
+	if _, err := raw.Exec(`
+INSERT INTO ai_uploads(upload_id, endpoint_id, storage_relpath, name, mime_type, size_bytes, state, created_at_unix_ms)
+VALUES('upload_v4_quarantine', 'env_v4_quarantine', 'upload_v4_quarantine.data', 'legacy.txt', 'text/plain', 7, 'staged', 10);
+INSERT INTO ai_upload_refs(endpoint_id, upload_id, thread_id, ref_kind, ref_id, created_at_unix_ms)
+VALUES('env_v4_quarantine', 'upload_v4_quarantine', '', 'draft', 'legacy_v4_draft_scope', 11);
+`); err != nil {
+		t.Fatal(err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	store, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer store.Close()
+	var version int
+	if err := store.db.QueryRow(`PRAGMA user_version`).Scan(&version); err != nil {
+		t.Fatal(err)
+	}
+	if version != threadstoreCurrentSchemaVersion {
+		t.Fatalf("user_version=%d, want %d", version, threadstoreCurrentSchemaVersion)
+	}
+	upload, err := store.GetUpload(t.Context(), "env_v4_quarantine", "upload_v4_quarantine")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if upload.OwnerScopeKind != UploadOwnerScopeLegacyStagedQuarantine || upload.OwnerUserHash != "" || upload.State != UploadStateStaged {
+		t.Fatalf("migrated v4 quarantine upload=%#v", upload)
+	}
+	var threadID, refID string
+	if err := store.db.QueryRow(`
+SELECT thread_id, ref_id FROM ai_upload_refs
+WHERE endpoint_id = 'env_v4_quarantine' AND upload_id = 'upload_v4_quarantine' AND ref_kind = 'draft'
+`).Scan(&threadID, &refID); err != nil {
+		t.Fatal(err)
+	}
+	if threadID != "legacy_v4_draft_scope" || refID != "legacy_v4_draft_scope" {
+		t.Fatalf("migrated v4 quarantine ref thread_id=%q ref_id=%q", threadID, refID)
+	}
+	if _, err := store.GetDraftOwnedUpload(t.Context(), "env_v4_quarantine", strings.Repeat("a", 64), "legacy_v4_draft_scope", "upload_v4_quarantine"); !errors.Is(err, sql.ErrNoRows) {
+		t.Fatalf("v4 quarantined upload became user-readable: %v", err)
+	}
+}
+
 func TestFreshThreadstoreCreatesCurrentSchemaDirectly(t *testing.T) {
 	t.Parallel()
 
@@ -802,7 +950,7 @@ PRAGMA user_version=40;
 	}
 	_ = db.Close()
 	_, err = Open(path)
-	if err == nil || !strings.Contains(err.Error(), "only") || !strings.Contains(err.Error(), "v2, v3, and v4") {
+	if err == nil || !strings.Contains(err.Error(), "only") || !strings.Contains(err.Error(), "v2 through v6") {
 		t.Fatalf("Open error=%v", err)
 	}
 	db, err = sql.Open("sqlite", path)

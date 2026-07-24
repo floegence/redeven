@@ -129,6 +129,11 @@ export type RuntimeFlowerSurfaceAdapterOptions = Readonly<{
   saveModelProfile: (draft: FlowerSettingsDraft) => Promise<FlowerSettingsSnapshot>;
   persistDefaultModel: (modelID: string) => Promise<FlowerSettingsSnapshot>;
   resolveHandler: (input?: FlowerResolveHandlerInput) => Promise<FlowerRouterDecision>;
+  loadAttachmentCapability?: FlowerSurfaceAdapter['loadAttachmentCapability'];
+  uploadAttachment?: FlowerSurfaceAdapter['uploadAttachment'];
+  deleteStagedAttachment?: FlowerSurfaceAdapter['deleteStagedAttachment'];
+  readStagedLongText?: FlowerSurfaceAdapter['readStagedLongText'];
+  previewStagedAttachment?: FlowerSurfaceAdapter['previewStagedAttachment'];
   launchTurn: (input: FlowerTurnLaunchInput) => Promise<FlowerTurnLaunchReceipt>;
   compactThreadContext: (input: FlowerCompactThreadContextInput) => Promise<FlowerLiveBootstrap>;
   stopThread: (threadID: string) => Promise<FlowerLiveBootstrap>;
@@ -295,6 +300,11 @@ export function createRuntimeFlowerSurfaceAdapter(options: RuntimeFlowerSurfaceA
       },
     } : {}),
     resolveHandler: options.resolveHandler,
+    ...(options.loadAttachmentCapability ? { loadAttachmentCapability: options.loadAttachmentCapability } : {}),
+    ...(options.uploadAttachment ? { uploadAttachment: options.uploadAttachment } : {}),
+    ...(options.deleteStagedAttachment ? { deleteStagedAttachment: options.deleteStagedAttachment } : {}),
+    ...(options.readStagedLongText ? { readStagedLongText: options.readStagedLongText } : {}),
+    ...(options.previewStagedAttachment ? { previewStagedAttachment: options.previewStagedAttachment } : {}),
     launchTurn: options.launchTurn,
     compactThreadContext: async (input) => {
       const tid = trim(input.thread_id);

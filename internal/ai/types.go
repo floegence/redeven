@@ -277,6 +277,7 @@ type FlowerSubagentDetailResponse struct {
 }
 
 type CreateThreadRequest struct {
+	ThreadID           string                      `json:"-"`
 	Title              string                      `json:"title"`
 	ModelID            string                      `json:"model_id,omitempty"`
 	PermissionType     string                      `json:"permission_type,omitempty"`
@@ -305,9 +306,14 @@ type ListThreadMessagesResponse struct {
 }
 
 type FollowupAttachmentView struct {
-	Name     string `json:"name"`
-	MimeType string `json:"mime_type"`
-	URL      string `json:"url,omitempty"`
+	AttachmentID      string `json:"attachment_id"`
+	Name              string `json:"name"`
+	MimeType          string `json:"mime_type"`
+	SizeBytes         int64  `json:"size_bytes"`
+	UnicodeCodePoints *int64 `json:"unicode_code_points,omitempty"`
+	LogicalLineCount  *int64 `json:"logical_line_count,omitempty"`
+	LogicalLocator    string `json:"logical_locator"`
+	URL               string `json:"url,omitempty"`
 }
 
 type FollowupItemView struct {
@@ -359,10 +365,12 @@ type StopThreadResponse struct {
 // - thread_id is mandatory; the agent builds history from the persisted thread store.
 // - history must NOT be provided by clients (agent is the source of truth).
 type RunStartRequest struct {
-	ThreadID string     `json:"thread_id"`
-	Model    string     `json:"model"`
-	Input    RunInput   `json:"input"`
-	Options  RunOptions `json:"options"`
+	ThreadID              string     `json:"thread_id"`
+	Model                 string     `json:"model"`
+	Input                 RunInput   `json:"input"`
+	Options               RunOptions `json:"options"`
+	DraftID               string     `json:"-"`
+	ExpectedDraftRevision *int64     `json:"-"`
 }
 
 // RunRequest is the internal run request for Go runtime execution.
@@ -405,9 +413,7 @@ func (input *RunInput) UnmarshalJSON(data []byte) error {
 }
 
 type RunAttachmentIn struct {
-	Name     string `json:"name"`
-	MimeType string `json:"mime_type"`
-	URL      string `json:"url"`
+	AttachmentID string `json:"attachment_id"`
 }
 
 type RunOptions struct {
@@ -453,10 +459,42 @@ type ToolApprovalRequest struct {
 }
 
 type UploadResponse struct {
-	URL      string `json:"url"`
-	Name     string `json:"name"`
-	Size     int64  `json:"size"`
-	MimeType string `json:"mime_type"`
+	AttachmentID      string `json:"attachment_id"`
+	URL               string `json:"url"`
+	DownloadURL       string `json:"download_url"`
+	LogicalLocator    string `json:"logical_locator"`
+	Name              string `json:"name"`
+	DisplayName       string `json:"display_name"`
+	Size              int64  `json:"size"`
+	SizeBytes         int64  `json:"size_bytes"`
+	MimeType          string `json:"mime_type"`
+	DetectedMediaType string `json:"detected_media_type"`
+	ContentSHA256     string `json:"content_sha256"`
+	UnicodeCodePoints *int64 `json:"unicode_code_points"`
+	LogicalLineCount  *int64 `json:"logical_line_count"`
+	Source            string `json:"source"`
+}
+
+type AttachmentMediaTypeCapability struct {
+	MediaType string `json:"media_type"`
+	Mode      string `json:"mode"`
+}
+
+type AttachmentCapabilities struct {
+	Revision         string                          `json:"revision"`
+	ModelID          string                          `json:"model_id"`
+	Enabled          bool                            `json:"enabled"`
+	MaxCount         int                             `json:"max_count"`
+	MaxItemBytes     int64                           `json:"max_item_bytes"`
+	MaxTurnBytes     int64                           `json:"max_turn_bytes"`
+	MediaTypes       []AttachmentMediaTypeCapability `json:"media_types"`
+	SupportsLongText bool                            `json:"supports_long_text"`
+}
+
+type StagedLongTextResponse struct {
+	Attachment    *UploadResponse `json:"attachment"`
+	Text          string          `json:"text"`
+	ContentSHA256 string          `json:"content_sha256"`
 }
 
 // RunState is the normalized state machine for a single AI run.

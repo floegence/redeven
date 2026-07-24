@@ -755,9 +755,11 @@ vi.mock('./plugins/PluginCenterView', () => ({
   },
 }));
 
-vi.mock('@floegence/floe-webapp-core/icons', () => {
+vi.mock('@floegence/floe-webapp-core/icons', async () => {
+  const actual = await vi.importActual<typeof import('@floegence/floe-webapp-core/icons')>('@floegence/floe-webapp-core/icons');
   const Icon = () => <span />;
   return {
+    ...actual,
     Activity: Icon,
     AlertCircle: Icon,
     AlertTriangle: Icon,
@@ -768,6 +770,8 @@ vi.mock('@floegence/floe-webapp-core/icons', () => {
     Copy: Icon,
     Download: Icon,
     Files: Icon,
+    FolderOpen: Icon,
+    GitBranch: Icon,
     Globe: Icon,
     Grid3x3: Icon,
     Highlighter: Icon,

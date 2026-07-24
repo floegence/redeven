@@ -82,6 +82,7 @@ describe('Flower Desktop model source E2E', () => {
     const deepSeekModelID = `desktop:model_${'1'.repeat(64)}`;
     const flashModelID = `desktop:model_${'2'.repeat(64)}`;
     const createdBodies: unknown[] = [];
+    const turnBodies: unknown[] = [];
     const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
       if (url === '/_redeven_proxy/api/settings' && init?.method === 'GET') {
         return jsonResponse({
@@ -127,12 +128,29 @@ describe('Flower Desktop model source E2E', () => {
           ],
         });
       }
+      if (url === `/_redeven_proxy/api/ai/attachments/capabilities?model_id=${encodeURIComponent(deepSeekModelID)}` && init?.method === 'GET') {
+        return jsonResponse({
+          model_id: deepSeekModelID,
+          revision: 'desktop-model-source-e2e',
+          enabled: true,
+          max_count: 20,
+          max_item_bytes: 25 * 1024 * 1024,
+          max_turn_bytes: 100 * 1024 * 1024,
+          supports_long_text: true,
+          media_types: [{ media_type: 'text/plain', mode: 'tool_read' }],
+        });
+      }
       if (url === '/_redeven_proxy/api/ai/threads?limit=200' && init?.method === 'GET') {
         return jsonResponse({ threads: [] });
       }
-      if (url === '/_redeven_proxy/api/ai/threads' && init?.method === 'POST') {
+      if (/^\/_redeven_proxy\/api\/ai\/composer-drafts\/[^/]+\/thread$/u.test(url) && init?.method === 'POST') {
         createdBodies.push(JSON.parse(String(init.body ?? '{}')));
-        return jsonResponse({ thread: { thread_id: 'thread-desktop-e2e', read_status: readStatus() } });
+        return jsonResponse({ thread_id: 'thread-desktop-e2e', draft_revision: 2 });
+      }
+      if (url === '/_redeven_proxy/api/ai/threads/thread-desktop-e2e/turns' && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body ?? '{}')) as { input?: { turn_id?: string } };
+        turnBodies.push(body);
+        return jsonResponse({ turn_id: body.input?.turn_id, run_id: 'run-desktop-e2e', kind: 'start' });
       }
       if (url === '/_redeven_proxy/api/ai/threads/thread-desktop-e2e/live/bootstrap' && init?.method === 'GET') {
         return jsonResponse(liveBootstrap('thread-desktop-e2e', deepSeekModelID));
@@ -142,7 +160,6 @@ describe('Flower Desktop model source E2E', () => {
     vi.stubGlobal('fetch', fetchMock as unknown as typeof fetch);
 
     const subscribeThread = vi.fn(async () => ({ runId: '' }));
-    const sendUserTurn = vi.fn(async () => ({ runId: 'run-desktop-e2e', kind: 'start' }));
     const desktopSession = desktopSessionContextSnapshotFromTarget(buildSSHDesktopTarget({
       ssh_destination: 'gzcom',
       ssh_port: 22,
@@ -177,7 +194,6 @@ describe('Flower Desktop model source E2E', () => {
         },
         ai: {
           subscribeThread,
-          sendUserTurn,
         },
       } as any,
     }));
@@ -197,18 +213,22 @@ describe('Flower Desktop model source E2E', () => {
     const textarea = surface.querySelector('textarea') as HTMLTextAreaElement;
     textarea.value = 'verify Desktop model capability';
     textarea.dispatchEvent(new InputEvent('input', { bubbles: true }));
-    (surface.querySelector('.flower-composer-submit') as HTMLButtonElement).click();
-    await waitFor(() => sendUserTurn.mock.calls.length === 1);
+    const submit = surface.querySelector('.flower-composer-submit') as HTMLButtonElement;
+    await waitFor(() => submit.disabled === false);
+    submit.click();
+    await waitFor(() => turnBodies.length === 1);
 
     expect(createdBodies).toEqual([expect.objectContaining({
-      model_id: deepSeekModelID,
-      reasoning_selection: { level: 'high' },
+      create: expect.objectContaining({
+        model_id: deepSeekModelID,
+        reasoning_selection: { level: 'high' },
+      }),
     })]);
-    expect(sendUserTurn).toHaveBeenCalledWith(expect.objectContaining({
-      threadId: 'thread-desktop-e2e',
+    expect(turnBodies[0]).toEqual(expect.objectContaining({
+      thread_id: 'thread-desktop-e2e',
       model: deepSeekModelID,
       options: expect.objectContaining({
-        reasoningSelection: { level: 'high' },
+        reasoning_selection: { level: 'high' },
       }),
     }));
     expect(subscribeThread).toHaveBeenCalledWith({ threadId: 'thread-desktop-e2e' });

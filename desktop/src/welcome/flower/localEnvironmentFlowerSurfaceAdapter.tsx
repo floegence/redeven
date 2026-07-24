@@ -9,6 +9,14 @@ import type {
   RuntimeFlowerRequestResult,
 } from '../../shared/runtimeFlowerIPC';
 import type {
+  RuntimeFlowerAttachmentCancelResponse,
+  RuntimeFlowerAttachmentChunkResponse,
+  RuntimeFlowerAttachmentCommitResponse,
+  RuntimeFlowerAttachmentPrepareResponse,
+  RuntimeFlowerAttachmentProgress,
+  RuntimeFlowerAttachmentPreviewResponse,
+} from '../../shared/runtimeFlowerAttachmentIPC';
+import type {
   FlowerProvider,
   FlowerProviderDraft,
   FlowerProviderModel,
@@ -19,6 +27,10 @@ import type {
   FlowerSettingsDraft,
   FlowerSettingsSnapshot,
   FlowerSurfaceAdapter,
+  FlowerAttachmentUploadInput,
+  FlowerAttachmentCapability,
+  FlowerStagedAttachment,
+  FlowerStagedLongTextReadResult,
   FlowerLiveBootstrap,
   FlowerTerminalProcessSnapshot,
   FlowerThreadReadStatus,
@@ -50,10 +62,18 @@ import {
   normalizeFlowerReasoningCapability,
   serializeFlowerReasoningSelection,
 } from '../../../../internal/flower_ui/src/reasoning';
+import { createRedevenFlowerDraftPersistence } from '../../../../internal/flower_host_ui/src/redevenFlowerDraftPersistence';
+import { normalizeFlowerAttachmentCapability } from '../../../../internal/flower_ui/src/attachments/flowerAttachmentModel';
 
 export type DesktopSettingsBridge = Readonly<{
   save: (draft: DesktopSettingsDraft) => Promise<SaveDesktopSettingsResult>;
   requestRuntimeFlower: (request: RuntimeFlowerRequest) => Promise<RuntimeFlowerRequestResult>;
+  prepareRuntimeFlowerAttachment: (request: unknown) => Promise<RuntimeFlowerAttachmentPrepareResponse>;
+  writeRuntimeFlowerAttachmentChunk: (request: unknown) => Promise<RuntimeFlowerAttachmentChunkResponse>;
+  commitRuntimeFlowerAttachment: (request: unknown) => Promise<RuntimeFlowerAttachmentCommitResponse>;
+  cancelRuntimeFlowerAttachment: (request: unknown) => Promise<RuntimeFlowerAttachmentCancelResponse>;
+  subscribeRuntimeFlowerAttachmentProgress: (listener: (progress: RuntimeFlowerAttachmentProgress) => void) => () => void;
+  previewRuntimeFlowerAttachment: (request: unknown) => Promise<RuntimeFlowerAttachmentPreviewResponse>;
   cancel: () => void;
 }>;
 
@@ -82,8 +102,9 @@ type ThreadView = Readonly<{
   read_status: ThreadReadStatus;
 } & Record<string, unknown>>;
 
-type CreateThreadResponse = Readonly<{
-  thread?: ThreadView;
+type PreparedDraftThreadResponse = Readonly<{
+  thread_id?: string;
+  draft_revision?: number;
 }>;
 
 type SendTurnResponse = Readonly<{
@@ -221,6 +242,12 @@ async function runtimeJSON<T>(
     throw runtimeFlowerError(result.error, result.failureKind);
   }
   return result.data as T;
+}
+
+export function createLocalEnvironmentFlowerDraftPersistence(bridge: DesktopSettingsBridge) {
+  return createRedevenFlowerDraftPersistence(
+    (method, path, body) => runtimeJSON<unknown>(bridge, method, path, body),
+  );
 }
 
 function positiveInteger(raw: unknown): number | undefined {
@@ -416,22 +443,172 @@ function mapRuntimeFlowerLiveBootstrap(raw: unknown): FlowerLiveBootstrap {
   return mapFlowerLiveBootstrap(raw, localEnvironmentLiveMapperOptions());
 }
 
+type RuntimeStagedAttachment = Readonly<{
+  attachment_id?: unknown;
+  display_name?: unknown;
+  detected_media_type?: unknown;
+  size_bytes?: unknown;
+  content_sha256?: unknown;
+  logical_locator?: unknown;
+  unicode_code_points?: unknown;
+  logical_line_count?: unknown;
+  source?: unknown;
+  capability_revision?: unknown;
+  created_at_unix_ms?: unknown;
+}>;
+
+function hexDigest(bytes: ArrayBuffer): string {
+  return Array.from(new Uint8Array(bytes), (value) => value.toString(16).padStart(2, '0')).join('');
+}
+
+async function sha256Hex(bytes: BufferSource): Promise<string> {
+  return hexDigest(await globalThis.crypto.subtle.digest('SHA-256', bytes));
+}
+
+function abortError(): Error {
+  const error = new Error('Flower attachment upload was cancelled.');
+  error.name = 'AbortError';
+  return error;
+}
+
+function mapRuntimeStagedAttachment(raw: unknown, input: FlowerAttachmentUploadInput): FlowerStagedAttachment {
+  const record = raw && typeof raw === 'object' ? raw as RuntimeStagedAttachment : {};
+  const attachmentID = trim(record.attachment_id);
+  const name = trim(record.display_name);
+  const mimeType = trim(record.detected_media_type);
+  const digest = trim(record.content_sha256).toLowerCase();
+  const locator = trim(record.logical_locator);
+  const sizeBytes = Number(record.size_bytes);
+  const codePoints = Number(record.unicode_code_points);
+  const lines = Number(record.logical_line_count);
+  if (!attachmentID || !name || !mimeType || !locator.startsWith('attachment://v1/') || !/^[0-9a-f]{64}$/u.test(digest) ||
+      !Number.isSafeInteger(sizeBytes) || sizeBytes < 0) {
+    throw new Error('Flower attachment upload returned invalid metadata.');
+  }
+  const source = input.source;
+  return {
+    attachment_id: attachmentID,
+    name,
+    mime_type: mimeType,
+    size_bytes: sizeBytes,
+    digest_sha256: digest,
+    locator,
+    source,
+    ...(Number.isSafeInteger(codePoints) && codePoints >= 0 && Number.isSafeInteger(lines) && lines >= 0
+      ? { text_stats: { code_points: codePoints, lines } }
+      : {}),
+    capability_revision: trim(record.capability_revision) || input.capability_revision,
+    ...(Number.isSafeInteger(Number(record.created_at_unix_ms)) && Number(record.created_at_unix_ms) > 0
+      ? { created_at_unix_ms: Math.floor(Number(record.created_at_unix_ms)) }
+      : {}),
+  };
+}
+
+function mapRuntimeStagedLongText(
+  raw: unknown,
+  expected: FlowerStagedAttachment,
+): FlowerStagedLongTextReadResult {
+  const record = raw && typeof raw === 'object' ? raw as Readonly<{
+    attachment?: unknown;
+    text?: unknown;
+    content_sha256?: unknown;
+  }> : {};
+  const attachment = record.attachment && typeof record.attachment === 'object'
+    ? record.attachment as RuntimeStagedAttachment
+    : {};
+  const attachmentID = trim(attachment.attachment_id);
+  const name = trim(attachment.display_name);
+  const mimeType = trim(attachment.detected_media_type);
+  const digest = trim(record.content_sha256 ?? attachment.content_sha256).toLowerCase();
+  const sizeBytes = Number(attachment.size_bytes);
+  const text = typeof record.text === 'string' ? record.text : '';
+  if (attachmentID !== expected.attachment_id || name !== expected.name || mimeType !== expected.mime_type
+    || digest !== expected.digest_sha256 || sizeBytes !== expected.size_bytes) {
+    throw new Error('Flower long-text restore returned mismatched attachment metadata.');
+  }
+  return { attachment: expected, text };
+}
+
+async function uploadRuntimeFlowerAttachment(
+  bridge: DesktopSettingsBridge,
+  input: FlowerAttachmentUploadInput,
+): Promise<FlowerStagedAttachment> {
+  if (input.signal.aborted) throw abortError();
+  const fileBytes = await input.file.arrayBuffer();
+  if (input.signal.aborted) throw abortError();
+  const canonicalName = input.file.name.normalize('NFC');
+  const [contentSHA256, displayNameSHA256] = await Promise.all([
+    sha256Hex(fileBytes),
+    sha256Hex(new TextEncoder().encode(canonicalName)),
+  ]);
+  const operationID = trim(input.attempt_id) || trim(input.request_id);
+  const unsubscribe = bridge.subscribeRuntimeFlowerAttachmentProgress((progress) => {
+    if (progress.operation_id !== operationID) return;
+    input.on_progress({
+      attempt_id: input.attempt_id,
+      loaded: progress.loaded_bytes,
+      total: progress.total_bytes,
+      indeterminate: false,
+    });
+  });
+  const cancel = () => {
+    void bridge.cancelRuntimeFlowerAttachment({ operation_id: operationID });
+  };
+  input.signal.addEventListener('abort', cancel, { once: true });
+  try {
+    const prepared = await bridge.prepareRuntimeFlowerAttachment({
+      operation_id: operationID,
+      upload_request_id: input.request_id,
+      draft_id: input.draft_id,
+      source: input.source === 'long_text' ? 'long_text' : 'uploaded_file',
+      display_name: canonicalName,
+      media_type: trim(input.file.type) || 'application/octet-stream',
+      size_bytes: input.file.size,
+      content_sha256: contentSHA256,
+      display_name_sha256: displayNameSHA256,
+    });
+    if (!prepared.ok) throw new Error(trim(prepared.message) || 'Desktop could not start the Flower attachment upload.');
+    const chunkSize = Math.max(1, Math.floor(Number(prepared.chunk_size_bytes) || 256 * 1024));
+    for (let offset = 0; offset < input.file.size; offset += chunkSize) {
+      if (input.signal.aborted) throw abortError();
+      const chunk = new Uint8Array(await input.file.slice(offset, Math.min(input.file.size, offset + chunkSize)).arrayBuffer());
+      const written = await bridge.writeRuntimeFlowerAttachmentChunk({ operation_id: operationID, offset_bytes: offset, chunk });
+      if (!written.ok || written.next_offset_bytes !== offset + chunk.byteLength) {
+        throw new Error(trim(written.message) || 'Desktop could not stream the Flower attachment.');
+      }
+    }
+    if (input.signal.aborted) throw abortError();
+    const committed = await bridge.commitRuntimeFlowerAttachment({ operation_id: operationID });
+    if (!committed.ok) {
+      if (committed.error) throw runtimeFlowerError(committed.error, committed.failureKind ?? 'local');
+      throw new Error('Desktop could not commit the Flower attachment upload.');
+    }
+    return mapRuntimeStagedAttachment(committed.data, input);
+  } catch (error) {
+    cancel();
+    throw error;
+  } finally {
+    input.signal.removeEventListener('abort', cancel);
+    unsubscribe();
+  }
+}
+
 export async function launchLocalEnvironmentFlowerTurn(
   bridge: DesktopSettingsBridge,
   input: FlowerTurnLaunchInput,
 ): Promise<FlowerTurnLaunchReceipt> {
-  const prompt = trim(input.prompt);
-  if (!prompt) throw new Error('Enter a message before sending.');
+  const prompt = input.prompt;
+  const attachmentIDs = (input.attachment_ids ?? []).map(trim).filter(Boolean);
+  if (!prompt.trim() && attachmentIDs.length === 0) throw new Error('Enter a message or add an attachment before sending.');
   const snapshot = await loadSettingsSnapshot(bridge);
   const models = await loadModels(bridge);
   const modelID = currentModelID(snapshot, models);
   if (!modelID) throw new Error('Select a Flower model before starting a chat.');
   const permissionType = normalizePermissionType(input.permission_type ?? snapshot.defaults.permission_type);
   const contextAction = requireAskFlowerContextActionEnvelope(input.context_action);
-  if ((input.pending_files ?? []).length > 0) {
-    throw new Error('Attachment upload is unavailable for Desktop Welcome.');
-  }
   let threadID = trim(input.thread_id);
+  const proposedTurnID = trim(input.turn_id) || createFlowerClientTurnID();
+  let expectedDraftRevision = input.expected_draft_revision;
   if (!threadID) {
     const createBody: Record<string, unknown> = {
       title: '',
@@ -441,26 +618,28 @@ export async function launchLocalEnvironmentFlowerTurn(
     if (trim(input.working_dir)) {
       createBody.working_dir = trim(input.working_dir);
     }
-    const created = await runtimeJSON<CreateThreadResponse>(bridge, 'POST', '/_redeven_proxy/api/ai/threads', createBody);
-    threadID = trim(created.thread?.thread_id);
+    const draftID = trim(input.draft_id);
+    if (!draftID || expectedDraftRevision === undefined) throw new Error('Failed to create Flower chat.');
+    const created = await runtimeJSON<PreparedDraftThreadResponse>(
+      bridge,
+      'POST',
+      `/_redeven_proxy/api/ai/composer-drafts/${encodeURIComponent(draftID)}/thread`,
+      { expected_draft_revision: expectedDraftRevision, turn_id: proposedTurnID, create: createBody },
+    );
+    threadID = trim(created.thread_id);
+    expectedDraftRevision = Number.isInteger(created.draft_revision) ? created.draft_revision : undefined;
   }
-  if (!threadID) throw new Error('Failed to create Flower chat.');
-  const attachments = [
-    ...(input.attachments ?? []).map((attachment) => ({
-      name: trim(attachment.name) || 'attachment',
-      mime_type: trim(attachment.mime_type) || 'application/octet-stream',
-      url: trim(attachment.url),
-    })),
-  ].filter((attachment) => !!attachment.url);
-  const proposedTurnID = trim(input.turn_id) || createFlowerClientTurnID();
+  if (!threadID || expectedDraftRevision === undefined) throw new Error('Failed to create Flower chat.');
   try {
     const response = await runtimeJSON<SendTurnResponse>(bridge, 'POST', `/_redeven_proxy/api/ai/threads/${encodeURIComponent(threadID)}/turns`, {
       thread_id: threadID,
+      draft_id: trim(input.draft_id),
+      expected_draft_revision: expectedDraftRevision,
       model: modelID,
       input: {
         turn_id: proposedTurnID,
         text: prompt,
-        attachments,
+        attachment_ids: attachmentIDs,
         ...(contextAction ? { context_action: contextAction } : {}),
       },
       options: {
@@ -600,6 +779,39 @@ export function createLocalEnvironmentFlowerSurfaceAdapter(
       }),
     ),
     resolveHandler: async () => decision(),
+    loadAttachmentCapability: async (modelID): Promise<FlowerAttachmentCapability> => {
+      const capability = normalizeFlowerAttachmentCapability(await runtimeJSON<unknown>(
+        bridge,
+        'GET',
+        `/_redeven_proxy/api/ai/attachments/capabilities?model_id=${encodeURIComponent(trim(modelID))}`,
+      ));
+      if (capability.model_id !== trim(modelID)) throw new Error('Flower attachment capability returned a different model identity.');
+      return capability;
+    },
+    uploadAttachment: (input) => uploadRuntimeFlowerAttachment(bridge, input),
+    deleteStagedAttachment: async (attachmentID, draftID) => {
+      await runtimeJSON<unknown>(
+        bridge,
+        'DELETE',
+        `/_redeven_proxy/api/ai/uploads/${encodeURIComponent(trim(attachmentID))}?draft_id=${encodeURIComponent(trim(draftID))}`,
+      );
+    },
+    readStagedLongText: async (attachment, draftID) => mapRuntimeStagedLongText(
+      await runtimeJSON<unknown>(
+        bridge,
+        'GET',
+        `/_redeven_proxy/api/ai/uploads/${encodeURIComponent(trim(attachment.attachment_id))}/long_text?draft_id=${encodeURIComponent(trim(draftID))}`,
+      ),
+      attachment,
+    ),
+    previewStagedAttachment: async (attachment, draftID) => {
+      const result = await bridge.previewRuntimeFlowerAttachment({
+        attachment_id: trim(attachment.attachment_id),
+        draft_id: trim(draftID),
+        display_name: attachment.name,
+      });
+      if (!result.ok) throw new Error(result.message || 'Desktop could not preview this attachment.');
+    },
     launchTurn: async (input: FlowerTurnLaunchInput) => {
       return launchLocalEnvironmentFlowerTurn(bridge, input);
     },

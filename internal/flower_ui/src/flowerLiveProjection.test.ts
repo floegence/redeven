@@ -1407,7 +1407,7 @@ describe('Flower live projection', () => {
           turn_id: 'turn-invalid-attachment',
           text: 'Inspect this file',
           created_at_unix_ms: 1_710_000_000_000,
-          attachments: [{ name: 'notes.txt', mime_type: 'text/plain', url: '' }],
+          attachments: [{ attachment_id: '', name: 'notes.txt', mime_type: 'text/plain', size_bytes: 128 }],
         }],
       },
     }, mapperOptions())).toThrow(/queued turn 0 attachment 0 is invalid/);
@@ -1444,7 +1444,7 @@ describe('Flower live projection', () => {
           turn_id: 'turn-linked-file',
           text: 'Inspect this file',
           created_at_unix_ms: 1_710_000_000_000,
-          attachments: [{ name: 'notes.txt', mime_type: 'text/plain', url: '/api/uploads/notes' }],
+          attachments: [{ attachment_id: 'upl_notes', name: 'notes.txt', mime_type: 'text/plain', size_bytes: 128, locator: '/api/uploads/notes' }],
           context_action: contextAction,
         }],
         read_status: readStatus(),
@@ -1464,7 +1464,7 @@ describe('Flower live projection', () => {
       turn_id: 'turn-linked-file',
       prompt: 'Inspect this file',
       created_at_ms: 1_710_000_000_000,
-      attachments: [{ name: 'notes.txt', mime_type: 'text/plain', url: '/api/uploads/notes' }],
+      attachments: [{ attachment_id: 'upl_notes', name: 'notes.txt', mime_type: 'text/plain', size_bytes: 128, locator: '/api/uploads/notes' }],
       context_action: contextAction,
     }]);
   });

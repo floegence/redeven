@@ -237,7 +237,10 @@ function FlowerWidget(_props: RedevenWorkbenchWidgetBodyProps) {
       )}
     >
       <div class="redeven-workbench-body-surface relative h-full min-h-0 min-w-0">
-        <EnvAIPage />
+        <EnvAIPage
+          draftCoordinator={env.flowerDraftCoordinator!}
+          surfaceInstanceID="env-workbench-flower"
+        />
       </div>
     </Show>
   );

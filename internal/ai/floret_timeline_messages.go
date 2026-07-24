@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 
 	flruntime "github.com/floegence/floret/runtime"
@@ -153,7 +154,7 @@ func (s *Service) loadThreadTimelineMessages(ctx context.Context, endpointID str
 			return nil, fmt.Errorf("Floret turn %q has incomplete canonical identity", turnID)
 		}
 		userCreatedAt := turn.StartedAt.UnixMilli()
-		userRaw, err := canonicalUserTimelineMessage(turnID, userEntryID, turn.UserInput, turn.UserAttachments, turn.UserReferences, userCreatedAt)
+		userRaw, err := canonicalUserTimelineMessageForThread(threadID, turnID, userEntryID, turn.UserInput, turn.UserAttachments, turn.UserReferences, userCreatedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -259,6 +260,11 @@ func canonicalTimelineResyncErrorf(format string, args ...any) error {
 }
 
 func canonicalUserTimelineMessage(turnID string, entryID string, input string, attachments []flruntime.MessageAttachment, references []flruntime.MessageReference, createdAt int64) (json.RawMessage, error) {
+	return canonicalUserTimelineMessageForThread("", turnID, entryID, input, attachments, references, createdAt)
+}
+
+func canonicalUserTimelineMessageForThread(threadID string, turnID string, entryID string, input string, attachments []flruntime.MessageAttachment, references []flruntime.MessageReference, createdAt int64) (json.RawMessage, error) {
+	threadID = strings.TrimSpace(threadID)
 	turnID = strings.TrimSpace(turnID)
 	entryID = strings.TrimSpace(entryID)
 	if turnID == "" || entryID == "" {
@@ -270,14 +276,18 @@ func canonicalUserTimelineMessage(turnID string, entryID string, input string, a
 		if err != nil {
 			return nil, fmt.Errorf("canonical user attachment %d: %w", index, err)
 		}
-		url := uploadURLPrefix + uploadID
+		downloadURL := uploadURLPrefix + uploadID
+		if threadID != "" {
+			values := url.Values{"thread_id": {threadID}, "turn_id": {turnID}}
+			downloadURL += "?" + values.Encode()
+		}
 		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(attachment.MIMEType)), "image/") {
-			blocks = append(blocks, persistedImageBlock{Type: "image", Src: url, Alt: strings.TrimSpace(attachment.Name)})
+			blocks = append(blocks, persistedImageBlock{Type: "image", Src: downloadURL, Alt: strings.TrimSpace(attachment.Name)})
 			continue
 		}
 		blocks = append(blocks, persistedFileBlock{
 			Type: "file", Name: strings.TrimSpace(attachment.Name), Size: attachment.SizeBytes,
-			MimeType: strings.TrimSpace(attachment.MIMEType), URL: url,
+			MimeType: strings.TrimSpace(attachment.MIMEType), URL: downloadURL,
 		})
 	}
 	if input = strings.TrimSpace(input); input != "" {
