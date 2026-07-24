@@ -3,9 +3,9 @@ package redevpluginintegration
 import (
 	"context"
 	"crypto/ed25519"
-	"encoding/base64"
 	"fmt"
 
+	redevpluginartifacts "github.com/floegence/redeven/spec/redevplugin"
 	"github.com/floegence/redevplugin/pkg/host"
 	"github.com/floegence/redevplugin/pkg/pluginpkg"
 	"github.com/floegence/redevplugin/pkg/registry"
@@ -13,10 +13,9 @@ import (
 )
 
 const (
-	officialPublisherID            = "com.redeven.official"
-	officialContainersPluginID     = "com.redeven.official.containers"
-	officialSigningKeyID           = "redeven-official-signing-2026"
-	officialSigningPublicKeyBase64 = "fop/x8cYBXzGfLjddDHkxXtB5J/ae1Z7BFauznrGufA="
+	officialPublisherID        = "com.redeven.official"
+	officialContainersPluginID = "com.redeven.official.containers"
+	officialSigningKeyID       = "redeven-official-signing-2026"
 )
 
 // strictPackageTrustVerifier delegates the complete local-import and release
@@ -67,11 +66,11 @@ func (k officialSigningKeyring) LookupPackageSigningKey(_ context.Context, req t
 }
 
 func newPackageTrustVerifier() (strictPackageTrustVerifier, error) {
-	publicKey, err := base64.StdEncoding.DecodeString(officialSigningPublicKeyBase64)
-	if err != nil || len(publicKey) != ed25519.PublicKeySize {
+	signingKey, err := redevpluginartifacts.OfficialSigningPublicKey()
+	if err != nil || signingKey.KeyID != officialSigningKeyID || len(signingKey.PublicKey) != ed25519.PublicKeySize {
 		return strictPackageTrustVerifier{}, fmt.Errorf("official package signing key is invalid")
 	}
 	return strictPackageTrustVerifier{
-		verifier: trust.Ed25519Verifier{Keyring: officialSigningKeyring{publicKey: ed25519.PublicKey(publicKey)}},
+		verifier: trust.Ed25519Verifier{Keyring: officialSigningKeyring{publicKey: append(ed25519.PublicKey(nil), signingKey.PublicKey...)}},
 	}, nil
 }

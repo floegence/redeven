@@ -26,6 +26,15 @@ release metadata, package signature bundle, revocation metadata, and public
 signing key. Private signing material is not present in source or product
 binaries.
 
+Redeven also embeds a separate unsigned catalog distribution generated from the
+same Containers package by removing only `signatures/package.sig`. Its package,
+manifest, and entries hashes must equal the signed release content. Plugin Center
+uses the immutable HTTPS URL for this artifact through the normal external
+inspection and confirmation transaction. The result is unsigned, user-approved,
+manual-update-only, Disabled, and has zero grants. The original signed release
+artifact and strict release-ref verifier remain unchanged, and expired release
+evidence continues to fail closed.
+
 Startup verifies the capability bundle with ReDevPlugin's
 `capabilitycontract.Verify`, registers the verified contract in a ReDevPlugin
 `capability.Registry`, and exposes the official plugin through ReDevPlugin's
@@ -123,7 +132,8 @@ and method-deny policy remain separate from the initial read requirement.
 
 # Evidence
 
-- `redeven:spec/redevplugin/artifacts.go:42` - The embedded set contains only public signed artifacts and materializes closed release and capability bundles.
+- `redeven:spec/redevplugin/artifacts.go:42` - The embedded set materializes closed signed release/capability bundles and the separately validated unsigned catalog package.
+- `redeven:spec/redevplugin/catalog-containers-plugin/2.0.0/plugin.redevplugin` - Unsigned catalog distribution with release-identical logical content.
 - `redeven:spec/redevplugin/official-containers-capability/host-capability.pin.json:1` - The pin fixes the v2 contract identity and every artifact hash.
 - `redeven:spec/redevplugin/official-containers-capability/capabilities/redeven.container_resources.v2/v2.0.0/redeven.container_resources.v2.schema.json:1` - The signed machine contract defines closed methods, effects, permissions, confirmation, quotas, errors, operations, and subscription schemas.
 - `redeven:internal/capabilities/containers/types.go:5` - Redeven business DTOs retain explicit engine and canonical resource identity.

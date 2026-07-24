@@ -117,36 +117,6 @@ describe('v0.6.7 plugin inventory projection', () => {
 
   it.each([
     {
-      label: 'unsigned execution approval',
-      overrides: {
-        trust_state: 'unsigned_local' as const,
-        trust_assessment: {
-          trust_state: 'unsigned_local' as const,
-          verified_hashes: {
-            package_sha256: packageHash,
-            manifest_sha256: manifestHash,
-            entries_sha256: entriesHash,
-          },
-        },
-        signature_assessment: {
-          state: 'absent' as const,
-          reason_codes: ['signature_absent'],
-          assessed_hashes: {
-            package_sha256: packageHash,
-            manifest_sha256: manifestHash,
-            entries_sha256: entriesHash,
-          },
-          assessed_at: '2026-07-24T10:00:00Z',
-        },
-        execution_approval: {
-          state: 'user_approved' as const,
-          reason_codes: [],
-          assessed_at: '2026-07-24T10:00:00Z',
-          approved_at: '2026-07-24T10:01:00Z',
-        },
-      },
-    },
-    {
       label: 'package hash mismatch',
       overrides: {
         active_fingerprint: otherPackageHash,
@@ -232,7 +202,60 @@ describe('v0.6.7 plugin inventory projection', () => {
     expect(externalItem).not.toHaveProperty('officialCatalog');
   });
 
-  it('does not join records with a mismatched publisher or plugin instance', () => {
+  it('binds exact unsigned catalog content to its generated installed instance without upgrading trust', () => {
+    const pluginInstanceID = 'plugin_generated_containers';
+    const projection = projectPluginInventory({
+      officialCatalog: [officialContainers],
+      installedPlugins: [installedRecord({
+        plugin_instance_id: pluginInstanceID,
+        trust_state: 'unsigned_local',
+        trust_assessment: {
+          trust_state: 'unsigned_local',
+          verified_hashes: {
+            package_sha256: packageHash,
+            manifest_sha256: manifestHash,
+            entries_sha256: entriesHash,
+          },
+        },
+        signature_assessment: {
+          state: 'absent',
+          reason_codes: ['signature_not_present'],
+          assessed_hashes: {
+            package_sha256: packageHash,
+            manifest_sha256: manifestHash,
+            entries_sha256: entriesHash,
+          },
+          assessed_at: '2026-07-24T10:00:00Z',
+        },
+        execution_approval: {
+          state: 'user_approved',
+          reason_codes: [],
+          assessed_at: '2026-07-24T10:00:00Z',
+          approved_at: '2026-07-24T10:01:00Z',
+        },
+        enable_state: 'disabled',
+        enabled_at: undefined,
+      })],
+    });
+
+    expect(projection.items).toHaveLength(1);
+    expect(projection.items[0]).toMatchObject({
+      inventoryKey: `instance:${pluginInstanceID}`,
+      pluginInstanceID,
+      displayName: officialContainers.displayName,
+      trustBadge: 'unsigned',
+      lifecycleState: 'disabled',
+      officialCatalog: { pluginID: officialContainers.pluginID },
+      authorization: {
+        permissions: expect.arrayContaining([
+          expect.objectContaining({ permissionID: 'containers.read', requiredToOpen: true }),
+        ]),
+      },
+    });
+    expect(buildPluginCenterModel(projection, 'installed').discover).toHaveLength(0);
+  });
+
+  it('keeps a mismatched publisher separate while binding exact catalog content from any generated instance', () => {
     const projection = projectPluginInventory({
       officialCatalog: [officialContainers],
       installedPlugins: [
@@ -241,14 +264,13 @@ describe('v0.6.7 plugin inventory projection', () => {
       ],
     });
 
-    expect(projection.items).toHaveLength(3);
-    const catalogItem = projection.items.find((item) => item.inventoryKey.startsWith('catalog:'));
+    expect(projection.items).toHaveLength(2);
+    const catalogItem = projection.items.find((item) => item.inventoryKey === 'instance:plugini_different_instance');
     expect(catalogItem).toMatchObject({
       pluginID: officialContainers.pluginID,
-      lifecycleState: 'not_installed',
+      pluginInstanceID: 'plugini_different_instance',
+      officialCatalog: { pluginID: officialContainers.pluginID },
     });
-    expect(catalogItem).not.toHaveProperty('pluginInstanceID');
-    expect(catalogItem).not.toHaveProperty('defaultLaunchTarget');
     expect(projection.items).toEqual(expect.arrayContaining([
       expect.objectContaining({
         inventoryKey: `instance:${officialContainers.pluginInstanceID}`,

@@ -93,15 +93,19 @@ The requirements response is bound to the exact plugin instance, active
 fingerprint, version, management revision, capability contract identity, and
 contract hash. Product inventory and navigation use exact `inventoryKey` so a
 catalog entry and installed external instances with the same plugin id cannot
-select or mutate one another. Official catalog copy additionally requires
-verified trust. The current version requires exact signed catalog release hashes;
-a historical version requires an explicit catalog-trusted official signing key,
-no external provenance, and registry hashes equal to Host-verified hashes.
-Matching ids alone are not official identity.
+select or mutate one another. Catalog presentation requires exact content
+identity. The current version requires exact catalog version and all three
+release hashes; a historical version requires an explicit catalog-trusted
+official signing key, no external provenance, and registry hashes equal to
+Host-verified hashes. Matching ids alone are not catalog identity. A current
+external instance may therefore receive catalog presentation only when
+publisher, plugin, version, and all three content hashes match exactly. Its
+actual trust badge remains unchanged; only verified catalog trust may receive
+the `Official` trust badge.
 
 ## Package admission and trust
 
-Official install/update is release-ref based. Redeven's release module accepts
+The retained official release-ref install/update path accepts
 only the exact official root delegation, channel policy and pointer, revocation
 and pointer, signing-ledger checkpoint/evidence/proofs/receipts, publisher,
 plugin, version, signed release metadata, package hashes, host requirement, and
@@ -109,6 +113,16 @@ capability contract pin. Committed and pending trust state, monotonic counters,
 and locally signed append-only trusted time are durable. Unsigned input,
 browser-supplied trust state, arbitrary package bytes, rollback, unknown
 publisher, expired evidence, and invented fetch provenance are denied.
+
+The current Plugin Center catalog action does not fall back around that boundary.
+It opens the external-package transaction with a package URL pinned to the
+immutable source commit. The referenced catalog artifact contains no package
+signature and is admitted as `signature_absent`; generation and startup tests
+require its package, manifest, and entries hashes to equal the verified official
+release content. Explicit user confirmation produces `user_approved`,
+`manual_only`, Disabled, and zero grants. The signed release artifact is not
+rewritten, and a release-context signature is never reinterpreted as a generic
+external-package signature.
 
 The external-package path is separate from official release admission. A
 validated public HTTPS package URL or GitHub Release is retrieved through the
@@ -179,6 +193,7 @@ tokens, weaken route policy, edit opaque state, or replace released brokers.
 - `redeven:internal/redevpluginintegration/release_module.go:1` - Enforces official source, signature, revocation, and capability pins.
 - `redeven:internal/redevpluginintegration/integration.go:260` - Registers the released staged external-package source and assessment module.
 - `redeven:internal/redevpluginintegration/external_package_test.go:24` - Proves unsigned upload inspection and explicit commit produce a disabled installed record.
+- `redeven:internal/redevpluginintegration/release_module_test.go:1` - Proves expired official release evidence fails without a catalog record.
 - `redeven:internal/redevpluginintegration/runtime_module.go:1` - Binds runtime target, hash, IPC, ABI, leases, and Host services.
 - `redeven:internal/redevpluginintegration/containers_capability.go:1` - Adapts authorized capability invocations to domain behavior.
 - `redeven:internal/codeapp/appserver/server_test.go:810` - Covers canonical route reservation and origin delegation.

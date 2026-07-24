@@ -85,6 +85,7 @@ check_shell_syntax() {
   bash -n scripts/link_redevplugin_runtime_static_pie.sh
   bash -n scripts/stage_redevplugin_release_artifacts.sh
   bash -n scripts/check_plugin_integration.sh
+  node --check scripts/check_catalog_plugin_package_url.mjs
   bash -n scripts/check_runtime_compatibility_contract.sh
   bash -n scripts/check_flower_live_protocol.sh
   bash -n scripts/check_flower_ui.sh

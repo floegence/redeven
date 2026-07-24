@@ -29,6 +29,7 @@ export type PluginAttentionReason =
 
 export type OfficialPluginDistribution = {
   releaseRef: PluginReleaseRef;
+  installSource: ExternalPluginSourcePreset;
 };
 
 export type OfficialPluginPermission = {
@@ -150,6 +151,10 @@ export type PluginCenterModel = {
 };
 
 export type ExternalPluginSourceKind = 'package_url' | 'github_repository' | 'package_upload';
+
+export type ExternalPluginSourcePreset =
+  | { sourceKind: 'package_url'; url: string }
+  | { sourceKind: 'github_repository'; url: string; tag?: string };
 
 export type ExternalPluginInspectionRequest =
   | {

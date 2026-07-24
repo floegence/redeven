@@ -141,6 +141,10 @@ const officialContainersCatalog = {
   trustedSigningKeyIDs: ['redeven-official-signing-2026'],
   distribution: {
     releaseRef: OFFICIAL_CONTAINERS_RELEASE_REF,
+    installSource: {
+      sourceKind: 'package_url',
+      url: 'https://plugins.example.test/containers.redevplugin',
+    },
   },
 } as const;
 

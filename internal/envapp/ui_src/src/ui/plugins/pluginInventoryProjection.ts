@@ -28,11 +28,13 @@ export function projectPluginInventory(input: {
   securityPolicies?: readonly PluginSecurityPolicy[];
 }): PluginInventoryProjection {
   const catalog = [...(input.officialCatalog ?? officialPluginCatalog())];
-  const installedByIdentity = new Map(input.installedPlugins.map((record) => [pluginIdentityKey(
-    record.publisher_id,
-    record.plugin_id,
-    record.plugin_instance_id,
-  ), record]));
+  const installedByPlugin = new Map<string, ReDevPluginRecord[]>();
+  for (const record of input.installedPlugins) {
+    const key = catalogPluginKey(record.publisher_id, record.plugin_id);
+    const records = installedByPlugin.get(key);
+    if (records) records.push(record);
+    else installedByPlugin.set(key, [record]);
+  }
   const items: PluginInventoryItem[] = [];
   const grantsByPlugin = groupByPluginInstance(input.permissionGrants ?? []);
   const requirementsByPlugin = new Map((input.permissionRequirements ?? []).map((requirements) => (
@@ -42,21 +44,21 @@ export function projectPluginInventory(input: {
   const projectedInstances = new Set<string>();
 
   for (const catalogItem of catalog) {
-    const identityMatch = installedByIdentity.get(pluginIdentityKey(
-      catalogItem.publisherID,
-      catalogItem.pluginID,
-      catalogItem.pluginInstanceID,
-    ));
-    const installed = identityMatch && isOfficialCatalogRecord(identityMatch, catalogItem)
-      ? identityMatch
-      : undefined;
-    items.push(projectCatalogItem(
-      catalogItem,
-      installed,
-      installed ? grantsByPlugin.get(installed.plugin_instance_id) ?? [] : [],
-      installed ? policyByPlugin.get(installed.plugin_instance_id) : undefined,
-    ));
-    if (installed) projectedInstances.add(installed.plugin_instance_id);
+    const installed = (installedByPlugin.get(catalogPluginKey(catalogItem.publisherID, catalogItem.pluginID)) ?? [])
+      .filter((record) => isCatalogPackageRecord(record, catalogItem));
+    if (installed.length === 0) {
+      items.push(projectCatalogItem(catalogItem));
+      continue;
+    }
+    for (const record of installed) {
+      items.push(projectCatalogItem(
+        catalogItem,
+        record,
+        grantsByPlugin.get(record.plugin_instance_id) ?? [],
+        policyByPlugin.get(record.plugin_instance_id),
+      ));
+      projectedInstances.add(record.plugin_instance_id);
+    }
   }
 
   for (const installed of input.installedPlugins) {
@@ -254,14 +256,18 @@ function pluginIdentityKey(publisherID: string, pluginID: string, pluginInstance
   return `${publisherID}\u0000${pluginID}\u0000${pluginInstanceID}`;
 }
 
-function isOfficialCatalogRecord(record: ReDevPluginRecord, item: OfficialPluginCatalogItem): boolean {
+function catalogPluginKey(publisherID: string, pluginID: string): string {
+  return `${publisherID}\u0000${pluginID}`;
+}
+
+function isCatalogPackageRecord(record: ReDevPluginRecord, item: OfficialPluginCatalogItem): boolean {
   const release = item.distribution.releaseRef;
-  if (record.trust_state !== 'verified') return false;
   const currentReleaseMatches = record.version === release.version
     && record.package_hash === release.expected_hashes.package_sha256
     && record.manifest_hash === release.expected_hashes.manifest_sha256
     && record.entries_hash === release.expected_hashes.entries_sha256;
-  if (record.version === release.version || record.source_provenance) return currentReleaseMatches;
+  if (record.version === release.version) return currentReleaseMatches;
+  if (record.plugin_instance_id !== item.pluginInstanceID || record.source_provenance || record.trust_state !== 'verified') return false;
   const verifiedHashes = record.trust_assessment?.verified_hashes;
   const verifiedSignature = record.trust_assessment?.verified_signature;
   return verifiedSignature?.algorithm === 'ed25519'

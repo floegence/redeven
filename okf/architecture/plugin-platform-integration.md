@@ -41,11 +41,17 @@ state is removed only after exact drain acknowledgement.
 
 ## Package sources and lifecycle
 
-The signed official Containers release remains available through generated
-`installReleaseRef` and `updateReleaseRef` requests. Its publisher, plugin,
-instance, version, hashes, signing evidence, source policy, host requirement,
-revocation evidence, and capability pin must all match. This official path is
-retained without adding a new official signing or authorization flow.
+The signed official Containers release module remains available through generated
+`installReleaseRef` and `updateReleaseRef` requests, but the current product UI
+does not use that path. Its publisher, plugin, instance, version, hashes, signing
+evidence, source policy, host requirement, revocation evidence, and capability
+pin must all match; expired evidence fails closed without an install record. The
+normal catalog action instead opens external-package review with an HTTPS URL
+pinned to the immutable commit containing an unsigned catalog package. That
+package is deterministically derived from the same release content by removing
+only the release-context signature, and its package, manifest, and entries hashes
+must still equal the catalog release. No new official signing or authorization
+flow is implied.
 
 Administrators may also inspect packages from:
 
@@ -102,13 +108,17 @@ blind mutation retry.
 
 The inventory projects official catalog entries and every installed instance as
 separate records. Navigation, tile selection, and detail state use exact
-`inventoryKey`; plugin id and instance id are not product selection keys. An
-installed item receives official catalog identity only when trust is verified.
-The current version must match its exact catalog release hashes. A historical
+`inventoryKey`; plugin id and instance id are not product selection keys. Every
+installed current-version instance whose publisher, plugin, version, package,
+manifest, and entries hashes exactly match the catalog receives catalog metadata,
+including the Containers permission presentation, while its trust badge remains
+the actual signature assessment. This lets the generated instance created by the
+unsigned catalog transaction replace the Discover card without being mislabeled
+as signed. A historical
 version without external provenance must carry an explicitly catalog-trusted
 official signing key and exact registry-to-Host-verified hash agreement.
 External source provenance prevents an identity collision from borrowing
-official descriptions or update controls.
+historical official identity or update controls.
 
 Active grants and explicit security policy join the exact installed record.
 Generic requirements come only from the released Host projection of the active
@@ -149,6 +159,7 @@ never become manifest fields.
 
 - `redeven:internal/redevpluginintegration/integration.go:1` - Opens Host modules and the canonical handler.
 - `redeven:internal/redevpluginintegration/external_package_test.go:24` - Exercises upload inspect, confirmed commit, query, disabled state, and staged-artifact cleanup.
+- `redeven:spec/redevplugin/artifacts.go:1` - Binds the unsigned catalog package to the exact verified Containers release content.
 - `redeven:internal/redevpluginintegration/session_adapter.go:340` - Maps read and admin external-package actions to explicit product permissions.
 - `redeven:internal/redevpluginintegration/runtime_module.go:1` - Configures the released runtime manager and fixed version.
 - `redeven:internal/envapp/ui_src/src/ui/plugins/pluginApi.ts:1` - Uses generated lifecycle, external-package, and permission-requirement APIs.

@@ -9,6 +9,7 @@ import type {
   ExternalPluginCommitResult,
   ExternalPluginInspection,
   ExternalPluginInspectionRequest,
+  ExternalPluginSourcePreset,
   PluginCenterTab,
   PluginInventoryItem,
   PluginInventoryProjection,
@@ -43,6 +44,7 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
   const [uninstallChoiceFor, setUninstallChoiceFor] = createSignal<string | null>(null);
   const [externalDialogOpen, setExternalDialogOpen] = createSignal(false);
   const [externalUpdateItem, setExternalUpdateItem] = createSignal<PluginInventoryItem | undefined>();
+  const [externalSourcePreset, setExternalSourcePreset] = createSignal<ExternalPluginSourcePreset | undefined>();
   let commandController: AbortController | undefined;
 
   onCleanup(() => commandController?.abort('Plugin Center disposed'));
@@ -110,8 +112,9 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
     visibleItems()[0]
   ));
 
-  const openExternalDialog = (item?: PluginInventoryItem) => {
+  const openExternalDialog = (item?: PluginInventoryItem, sourcePreset?: ExternalPluginSourcePreset) => {
     setExternalUpdateItem(item);
+    setExternalSourcePreset(sourcePreset);
     setExternalDialogOpen(true);
   };
 
@@ -204,15 +207,20 @@ export function PluginCenterView(props: PluginCenterViewProps): JSX.Element {
           uninstallChoiceFor={uninstallChoiceFor()}
           onCommand={(command) => void runCommand(command)}
           onAskUninstall={setUninstallChoiceFor}
-          onExternalUpdate={openExternalDialog}
+          onExternalInstall={(item) => openExternalDialog(undefined, item.officialCatalog?.distribution.installSource)}
+          onExternalUpdate={(item) => openExternalDialog(item, item.officialCatalog?.distribution.installSource)}
         />
       </div>
       <ExternalPluginInstallDialog
         open={externalDialogOpen()}
         updateItem={externalUpdateItem()}
+        sourcePreset={externalSourcePreset()}
         onOpenChange={(open) => {
           setExternalDialogOpen(open);
-          if (!open) setExternalUpdateItem(undefined);
+          if (!open) {
+            setExternalUpdateItem(undefined);
+            setExternalSourcePreset(undefined);
+          }
         }}
         onInspect={props.onInspectExternal ?? (async () => {
           throw new Error(i18n.t('uiCopy.plugin.external.inspectFailed'));
@@ -329,6 +337,7 @@ export function PluginCenterDetails(props: {
   uninstallChoiceFor: string | null;
   onCommand: (command: PluginLifecycleCommand) => void;
   onAskUninstall: (pluginInstanceID: string) => void;
+  onExternalInstall: (item: PluginInventoryItem) => void;
   onExternalUpdate: (item: PluginInventoryItem) => void;
 }): JSX.Element {
   const i18n = useI18n();
@@ -378,6 +387,7 @@ export function PluginCenterDetails(props: {
                   commandPending={props.commandPending}
                   onCommand={props.onCommand}
                   onAskUninstall={props.onAskUninstall}
+                  onExternalInstall={props.onExternalInstall}
                   onExternalUpdate={props.onExternalUpdate}
                 />
               </div>
@@ -644,6 +654,7 @@ function PluginActions(props: {
   commandPending: boolean;
   onCommand: (command: PluginLifecycleCommand) => void;
   onAskUninstall: (pluginInstanceID: string) => void;
+  onExternalInstall: (item: PluginInventoryItem) => void;
   onExternalUpdate: (item: PluginInventoryItem) => void;
 }) {
   const i18n = useI18n();
@@ -658,7 +669,7 @@ function PluginActions(props: {
           data-plugin-action="install"
           class="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
           disabled={disabledManagement()}
-          onClick={() => props.onCommand({ type: 'install', pluginID: item().pluginID, source: 'official_catalog' })}
+          onClick={() => props.onExternalInstall(item())}
         >
           <Download class="h-3.5 w-3.5" />
           {i18n.t('uiCopy.plugin.install')}
@@ -738,25 +749,7 @@ function PluginActions(props: {
           {i18n.t('uiCopy.plugin.disable')}
         </button>
       </Show>
-      <Show when={item().lifecycleState === 'update_available' && item().pluginInstanceID && item().officialCatalog}>
-        <button
-          type="button"
-          data-plugin-action="update"
-          class="inline-flex cursor-pointer items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-50"
-          disabled={disabledManagement()}
-          onClick={() => props.onCommand({
-            type: 'update',
-            pluginID: item().pluginID,
-            pluginInstanceID: item().pluginInstanceID!,
-            expectedManagementRevision: item().managementRevision!,
-            targetVersion: item().officialCatalog?.stableVersion ?? '',
-          })}
-        >
-          <RefreshIcon class="h-3.5 w-3.5" />
-          {i18n.t('uiCopy.plugin.update')}
-        </button>
-      </Show>
-      <Show when={item().pluginInstanceID && item().externalPackage}>
+      <Show when={item().pluginInstanceID && (item().externalPackage || item().officialCatalog)}>
         <button
           type="button"
           data-plugin-action="update-external"
