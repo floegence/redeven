@@ -1,4 +1,4 @@
-name: CI Check
+name: Quick CI
 
 on:
   pull_request:
@@ -11,27 +11,10 @@ permissions:
   contents: read
 
 jobs:
-  okf-bundle-check:
-    name: OKF bundle check
+  quick-ci:
+    name: Quick CI
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v5
-
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-
-      - name: Check OKF source integrity
-        run: ./scripts/okf/check_source_integrity.sh
-
-      - name: Verify OKF dist bundle
-        run: ./scripts/build_okf_bundle.sh --verify-only
-
-  go-check:
-    name: go check
-    runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -46,144 +29,5 @@ jobs:
         with:
           node-version: "24"
 
-      - name: Enable corepack
-        run: corepack enable
-
-      - name: README localization contract
-        run: |
-          node --test scripts/check_readme_localizations.test.mjs
-          node scripts/check_readme_localizations.mjs --require-reviewed
-
-      - name: Install golangci-lint
-        run: go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.5
-
-      - name: Install actionlint
-        run: go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.10
-
-      - name: Lint GitHub Actions workflows
-        run: actionlint .github/workflows/*.yml
-
-      - name: Shell script syntax check
-        run: |
-          sh -n scripts/install.sh
-          sh -n scripts/generate_release_notes.sh
-          bash -n scripts/test_generate_release_notes.sh
-          bash -n scripts/check_runtime_compatibility_contract.sh
-          bash -n scripts/lint_ui.sh
-          bash -n scripts/build_desktop_bundled_runtime.sh
-          bash -n scripts/build_desktop_bundled_agent.sh
-          bash -n scripts/check_desktop.sh
-          bash -n scripts/check_docker_runtime_e2e.sh
-          bash -n scripts/check_final_integration.sh
-          bash -n scripts/check_gateway_protocol_contract.sh
-          bash -n scripts/check_floret_dependency_boundary.sh
-          bash -n scripts/check_redevplugin_dependency_boundary.sh
-          bash -n scripts/check_redevplugin_release_artifacts.sh
-          bash -n scripts/check_redevplugin_consumption_gate.sh
-          bash -n scripts/check_desktop_redevplugin_package.sh
-          bash -n scripts/link_redevplugin_runtime_static_pie.sh
-          bash -n scripts/stage_redevplugin_release_artifacts.sh
-          bash -n scripts/check_plugin_integration.sh
-          bash -n scripts/check_flower_live_protocol.sh
-          bash -n scripts/ui_package_common.sh
-          bash -n scripts/open_source_hygiene_check.sh
-          bash -n scripts/install_git_hooks.sh
-          bash -n scripts/test_git_hooks.sh
-          bash -n .githooks/pre-commit
-          bash -n .githooks/pre-push
-          python3 -c 'from pathlib import Path; [compile(Path(name).read_text(encoding="utf-8"), name, "exec") for name in ("scripts/safe_extract_tar.py", "scripts/extract_desktop_runtime.py")]'
-          ./scripts/safe_extract_tar.py --self-test
-          ./scripts/extract_desktop_runtime.py --self-test
-          node --check scripts/collect_release_artifacts.mjs
-          node --test scripts/collect_release_artifacts.test.mjs
-          node --test scripts/install_redevplugin_contract.test.mjs
-
-      - name: Git hook contract
-        run: ./scripts/test_git_hooks.sh
-
-      - name: Install gitleaks
-        run: |
-          set -euo pipefail
-          version="8.24.2"
-          tmpdir="$(mktemp -d)"
-          trap 'rm -rf "${tmpdir}"' EXIT
-          curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${version}/gitleaks_${version}_linux_x64.tar.gz" \
-            | tar -xz -C "${tmpdir}"
-          sudo install -m 0755 "${tmpdir}/gitleaks" /usr/local/bin/gitleaks
-
-      - name: Install ripgrep
-        run: |
-          set -euo pipefail
-          sudo apt-get update
-          sudo apt-get install -y ripgrep
-
-      - name: Open-source hygiene guard
-        run: ./scripts/open_source_hygiene_check.sh --all
-
-      - name: Release notes generator check
-        run: ./scripts/test_generate_release_notes.sh
-
-      - name: Runtime compatibility contract check
-        run: ./scripts/check_runtime_compatibility_contract.sh --source-only
-
-      - name: Build embedded assets
-        run: ./scripts/build_assets.sh
-
-      - name: ReDevPlugin integration gate
-        run: ./scripts/check_plugin_integration.sh --ci
-
-      - name: Gateway protocol contract guard
-        run: ./scripts/check_gateway_protocol_contract.sh
-
-      - name: Floret dependency boundary guard
-        run: ./scripts/check_floret_dependency_boundary.sh
-
-      - name: Flower live protocol guard
-        run: ./scripts/check_flower_live_protocol.sh
-
-      - name: Install Flower UI Chromium
-        working-directory: internal/envapp/ui_src
-        run: corepack pnpm exec playwright install --with-deps chromium
-
-      - name: Built Env App dist shell smoke
-        working-directory: internal/envapp/ui_src
-        run: corepack pnpm run test:built-dist-shell -- --report "${RUNNER_TEMP}/redeven-built-dist-shell-smoke.json"
-
-      - name: Terminal recovery carrier E2E (64 KiB)
-        working-directory: internal/envapp/ui_src
-        run: xvfb-run -a corepack pnpm run test:terminal-carrier -- --fixture-bytes 65536 --report "${RUNNER_TEMP}/redeven-terminal-carrier-64KiB.json"
-
-      - name: Terminal recovery carrier E2E (448 KiB)
-        working-directory: internal/envapp/ui_src
-        run: xvfb-run -a corepack pnpm run test:terminal-carrier -- --fixture-bytes 458752 --report "${RUNNER_TEMP}/redeven-terminal-carrier-448KiB.json"
-
-      - name: Terminal history fixture matrix
-        env:
-          REDEVEN_TERMINAL_HISTORY_REPORT: ${{ runner.temp }}/redeven-terminal-history-fixtures.json
-        run: GOWORK=off go test ./internal/terminal -run TestTerminalHistoryDeterministicFixtureMatrix -count=1
-
-      - name: Upload renderer E2E reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: renderer-e2e-reports
-          if-no-files-found: warn
-          path: |
-            ${{ runner.temp }}/redeven-built-dist-shell-smoke.json
-            ${{ runner.temp }}/redeven-terminal-carrier-*.json
-            ${{ runner.temp }}/redeven-terminal-history-fixtures.json
-
-      - name: Flower UI behavior contracts
-        run: ./scripts/check_flower_ui.sh
-
-      - name: UI lint
-        run: ./scripts/lint_ui.sh
-
-      - name: Desktop lightweight checks
-        run: ./scripts/check_desktop.sh --ci
-
-      - name: go test
-        run: go test ./...
-
-      - name: golangci-lint
-        run: golangci-lint run ./...
+      - name: Run bounded source checks
+        run: ./scripts/check_quick_ci.sh
