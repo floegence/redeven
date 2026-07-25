@@ -79,6 +79,7 @@ check_shell_syntax() {
   bash -n scripts/check_final_integration.sh
   bash -n scripts/check_quick_ci.sh
   bash -n scripts/check_renderer_e2e.sh
+  bash -n scripts/check_ui_tests.sh
   bash -n scripts/check_gateway_protocol_contract.sh
   bash -n scripts/check_floret_dependency_boundary.sh
   bash -n scripts/check_redevplugin_dependency_boundary.sh
@@ -120,6 +121,7 @@ run_step "testing Git hook contracts" ./scripts/test_git_hooks.sh
 run_step "testing Go packages serially without cache" env GOWORK=off go test -p 1 -count=1 ./...
 run_step "linting Go packages" env GOWORK=off golangci-lint run ./...
 run_step "linting UI packages" ./scripts/lint_ui.sh
+run_step "testing complete UI packages" ./scripts/check_ui_tests.sh
 run_step "testing release note generation" ./scripts/test_generate_release_notes.sh
 run_step "checking Runtime compatibility source" ./scripts/check_runtime_compatibility_contract.sh --source-only
 run_step "checking ReDevPlugin dependency boundary" ./scripts/check_redevplugin_dependency_boundary.sh --ci
@@ -137,7 +139,7 @@ run_step "checking Gateway protocol contract" ./scripts/check_gateway_protocol_c
 run_step "checking Floret dependency boundary" ./scripts/check_floret_dependency_boundary.sh
 run_step "checking Flower live protocol" ./scripts/check_flower_live_protocol.sh
 run_step "checking built renderer and terminal recovery E2E" ./scripts/check_renderer_e2e.sh
-run_step "checking Flower UI" ./scripts/check_flower_ui.sh
+run_step "checking Flower UI" ./scripts/check_flower_ui.sh --skip-browser
 run_step "checking Desktop" ./scripts/check_desktop.sh --full
 run_step "checking Docker Runtime E2E" ./scripts/check_docker_runtime_e2e.sh
 run_step "checking open-source hygiene" ./scripts/open_source_hygiene_check.sh --all
