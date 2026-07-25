@@ -92,6 +92,7 @@ func TestNewKeepsProductAvailableWhenAIThreadstoreVersionIsUnsupported(t *testin
 	t.Parallel()
 
 	stateDir := t.TempDir()
+	runtimePath := testReDevPluginRuntimePath(t, stateDir)
 	dbPath := filepath.Join(stateDir, "ai", "threads.sqlite")
 	if err := legacydb.SeedUnsupportedThreadstore(dbPath, "ai_threadstore_canonical", 15); err != nil {
 		t.Fatalf("SeedUnsupportedThreadstore: %v", err)
@@ -103,7 +104,7 @@ func TestNewKeepsProductAvailableWhenAIThreadstoreVersionIsUnsupported(t *testin
 		StateRoot:              stateDir,
 		ConfigPath:             filepath.Join(stateDir, "config.json"),
 		PermissionPolicy:       testCodeappPermissionPolicy(t),
-		ReDevPluginRuntimePath: filepath.Join(stateDir, "redevplugin-runtime"),
+		ReDevPluginRuntimePath: runtimePath,
 		AgentHomeDir:           stateDir,
 		Shell:                  "/bin/sh",
 		ResolveSessionMeta: func(string) (*session.Meta, bool) {
@@ -162,6 +163,7 @@ func TestNewKeepsProductAvailableWhenAIThreadstoreSchemaDrifts(t *testing.T) {
 	t.Parallel()
 
 	stateDir := t.TempDir()
+	runtimePath := testReDevPluginRuntimePath(t, stateDir)
 	dbPath := filepath.Join(stateDir, "ai", "threads.sqlite")
 	store, err := threadstore.Open(dbPath)
 	if err != nil {
@@ -184,7 +186,7 @@ func TestNewKeepsProductAvailableWhenAIThreadstoreSchemaDrifts(t *testing.T) {
 		StateRoot:              stateDir,
 		ConfigPath:             filepath.Join(stateDir, "config.json"),
 		PermissionPolicy:       testCodeappPermissionPolicy(t),
-		ReDevPluginRuntimePath: filepath.Join(stateDir, "redevplugin-runtime"),
+		ReDevPluginRuntimePath: runtimePath,
 		AgentHomeDir:           stateDir,
 		Shell:                  "/bin/sh",
 		ResolveSessionMeta: func(string) (*session.Meta, bool) {
@@ -259,15 +261,7 @@ func TestNewPrunesStaleWorkbenchTerminalSessions(t *testing.T) {
 
 	term := terminal.NewManager("/bin/sh", stateDir, nil)
 	t.Cleanup(term.Cleanup)
-	cleanupRuntime, err := redevpluginruntime.InstallAt(stateDir)
-	if err != nil {
-		t.Fatalf("install ReDevPlugin runtime fixture: %v", err)
-	}
-	t.Cleanup(func() {
-		if err := cleanupRuntime(); err != nil {
-			t.Errorf("cleanup ReDevPlugin runtime fixture: %v", err)
-		}
-	})
+	runtimePath := testReDevPluginRuntimePath(t, stateDir)
 
 	svc, err := New(context.Background(), Options{
 		Logger:                 slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError})),
@@ -275,7 +269,7 @@ func TestNewPrunesStaleWorkbenchTerminalSessions(t *testing.T) {
 		StateRoot:              stateDir,
 		ConfigPath:             filepath.Join(stateDir, "config.json"),
 		PermissionPolicy:       testCodeappPermissionPolicy(t),
-		ReDevPluginRuntimePath: filepath.Join(stateDir, "redevplugin-runtime"),
+		ReDevPluginRuntimePath: runtimePath,
 		AgentHomeDir:           stateDir,
 		Shell:                  "/bin/sh",
 		Terminal:               term,
@@ -314,4 +308,18 @@ func testCodeappPermissionPolicy(t *testing.T) *config.PermissionPolicy {
 		t.Fatal(err)
 	}
 	return policy
+}
+
+func testReDevPluginRuntimePath(t *testing.T, root string) string {
+	t.Helper()
+	cleanup, err := redevpluginruntime.InstallAt(root)
+	if err != nil {
+		t.Fatalf("install ReDevPlugin runtime fixture: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := cleanup(); err != nil {
+			t.Errorf("cleanup ReDevPlugin runtime fixture: %v", err)
+		}
+	})
+	return filepath.Join(root, "redevplugin-runtime")
 }
