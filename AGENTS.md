@@ -1072,9 +1072,10 @@ fails if any check changes the worktree.
 
 Commands with explicit full modes, especially
 `./scripts/check_desktop.sh --full`, belong only in the final integration script
-and must not be used as routine iteration checks. GitHub Actions keeps its
-documented lightweight Desktop coverage and independently validates the pushed
-main commit.
+and must not be used as routine iteration checks. Ordinary GitHub Actions runs
+only the bounded source checks in `./scripts/check_quick_ci.sh`; the tag release
+workflow performs only release-ref validation and the hosted build, signing,
+attestation, readback, and publication work required for official artifacts.
 
 ## Repository Rule File
 
