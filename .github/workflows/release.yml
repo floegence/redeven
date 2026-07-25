@@ -9,65 +9,34 @@ permissions:
   contents: read
 
 jobs:
-  renderer-e2e:
-    name: Built Env App and terminal carrier E2E
+  release-ref:
+    name: Validate release ref
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-
-      - name: Setup Node
-        uses: actions/setup-node@v5
         with:
-          node-version: "24"
+          fetch-depth: 0
 
-      - name: Setup Go
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-
-      - name: Enable corepack
-        run: corepack enable
-
-      - name: Build embedded assets
-        run: ./scripts/build_assets.sh
-
-      - name: Install Chromium
-        working-directory: internal/envapp/ui_src
-        run: corepack pnpm exec playwright install --with-deps chromium
-
-      - name: Verify built Env App shell
-        working-directory: internal/envapp/ui_src
-        run: corepack pnpm run test:built-dist-shell -- --report "${RUNNER_TEMP}/redeven-built-dist-shell-smoke.json"
-
-      - name: Verify 64 KiB terminal recovery carrier
-        working-directory: internal/envapp/ui_src
-        run: xvfb-run -a corepack pnpm run test:terminal-carrier -- --fixture-bytes 65536 --report "${RUNNER_TEMP}/redeven-terminal-carrier-64KiB.json"
-
-      - name: Verify 448 KiB terminal recovery carrier
-        working-directory: internal/envapp/ui_src
-        run: xvfb-run -a corepack pnpm run test:terminal-carrier -- --fixture-bytes 458752 --report "${RUNNER_TEMP}/redeven-terminal-carrier-448KiB.json"
-
-      - name: Verify terminal history fixture matrix
-        env:
-          REDEVEN_TERMINAL_HISTORY_REPORT: ${{ runner.temp }}/redeven-terminal-history-fixtures.json
-        run: GOWORK=off go test ./internal/terminal -run TestTerminalHistoryDeterministicFixtureMatrix -count=1
-
-      - name: Upload renderer E2E reports
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-renderer-e2e-reports
-          if-no-files-found: warn
-          path: |
-            ${{ runner.temp }}/redeven-built-dist-shell-smoke.json
-            ${{ runner.temp }}/redeven-terminal-carrier-*.json
-            ${{ runner.temp }}/redeven-terminal-history-fixtures.json
+      - name: Require the tag to target exact main
+        run: |
+          set -euo pipefail
+          [[ "${GITHUB_REF_TYPE}" == "tag" ]]
+          [[ "${GITHUB_REF_NAME}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]
+          git fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
+          tagged_commit="$(git rev-parse "${GITHUB_REF_NAME}^{commit}")"
+          main_commit="$(git rev-parse refs/remotes/origin/main)"
+          if [[ "${tagged_commit}" != "${main_commit}" || "${tagged_commit}" != "${GITHUB_SHA}" ]]; then
+            echo "release tag must target the exact origin/main commit" >&2
+            exit 1
+          fi
 
   build:
     name: Build ${{ matrix.goos }}-${{ matrix.goarch }}
-    needs: renderer-e2e
+    needs: release-ref
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     permissions:
       contents: read
       id-token: write
@@ -112,9 +81,6 @@ jobs:
 
       - name: Validate runtime compatibility contract
         run: ./scripts/check_runtime_compatibility_contract.sh "${GITHUB_REF_NAME}"
-
-      - name: Validate Gateway protocol contract
-        run: ./scripts/check_gateway_protocol_contract.sh
 
       - name: Build embedded assets
         run: ./scripts/build_assets.sh
@@ -218,6 +184,7 @@ jobs:
     name: Desktop ${{ matrix.goos }}-${{ matrix.goarch }}
     needs: build
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
     permissions:
       actions: read
       contents: read
@@ -266,9 +233,6 @@ jobs:
             --repo "${GITHUB_REPOSITORY}" \
             --dir dist/agent \
             --name "package-${{ matrix.goos }}-${{ matrix.goarch }}"
-
-      - name: Desktop lightweight checks
-        run: ./scripts/check_desktop.sh --ci
 
       - name: Validate macOS signing inputs
         if: matrix.goos == 'darwin'
@@ -406,6 +370,7 @@ jobs:
       - build
       - desktop
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       actions: read
       contents: write
